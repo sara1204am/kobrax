@@ -1,0 +1,273 @@
+import { Injectable } from '@nestjs/common';
+import type { CollectionCase, Prisma, PrismaClient } from '@prisma/client';
+import { CaseActivityType, CaseStatus } from '@prisma/client';
+import { canTransition, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
+import { PrismaService } from '../../database/prisma.service';
+import { TenantContextService } from '../../common/context/tenant-context.service';
+import { AuditService } from '../../common/audit/audit.service';
+import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
+import { computePriority, slaDueAt, DEFAULT_PRIORITY_PARAMS, type PriorityParams } from './case-priority';
+import { serializeCase } from './cases.serializer';
+import {
+  AssignCaseDto,
+  CreateActivityDto,
+  CreateCaseDto,
+  GenerateCasesDto,
+  ListCasesQueryDto,
+  TransitionCaseDto,
+} from './dto/case.dto';
+import { caseDuplicate, caseNoActivity, invalidAssignee, invalidTransition, resourceNotFound } from './cases.errors';
+
+const TERMINAL: CaseStatus[] = [CaseStatus.CLOSED, CaseStatus.WRITTEN_OFF];
+
+@Injectable()
+export class CasesService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tenant: TenantContextService,
+    private readonly audit: AuditService,
+    private readonly events: EventBusService,
+  ) {}
+
+  private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
+    return this.prisma.withTenant(this.tenant.accountId, fn);
+  }
+
+  private async config(tx: PrismaClient): Promise<{ priority: PriorityParams; minDaysPastDue: number }> {
+    const account = await tx.account.findUnique({ where: { id: this.tenant.accountId } });
+    const cfg = (account?.configuration ?? {}) as { casePriority?: Partial<PriorityParams>; caseGeneration?: { minDaysPastDue?: number } };
+    return {
+      priority: { ...DEFAULT_PRIORITY_PARAMS, ...(cfg.casePriority ?? {}) },
+      minDaysPastDue: cfg.caseGeneration?.minDaysPastDue ?? 1,
+    };
+  }
+
+  // ── Alta / generación ────────────────────────────────────────────────────
+  async create(dto: CreateCaseDto): Promise<ReturnType<typeof serializeCase>> {
+    const created = await this.tx(async (tx) => {
+      const credit = await tx.credit.findFirst({
+        where: { id: dto.creditId, deletedAt: null },
+        include: { client: { select: { riskSegment: true } } },
+      });
+      if (!credit) throw resourceNotFound();
+
+      const open = await tx.collectionCase.findFirst({
+        where: { creditId: dto.creditId, status: { notIn: TERMINAL }, deletedAt: null },
+        select: { id: true },
+      });
+      if (open) throw caseDuplicate();
+
+      const { priority: params } = await this.config(tx);
+      const priority = dto.priority ?? computePriority(
+        { outstandingBalance: Number(credit.outstandingBalance), daysPastDue: credit.daysPastDue, riskSegment: credit.client.riskSegment },
+        params,
+      );
+      const now = new Date();
+      return tx.collectionCase.create({
+        data: {
+          accountId: this.tenant.accountId,
+          creditId: credit.id,
+          clientId: credit.clientId,
+          branchId: credit.branchId,
+          status: CaseStatus.PENDING,
+          priority,
+          slaDueAt: slaDueAt(priority, now, params),
+        },
+      });
+    });
+
+    await this.audit.record({ entity: 'case', entityId: created.id, action: 'CREATE', after: created });
+    this.events.emit(DomainEvent.CASE_UPDATED, { caseId: created.id, accountId: this.tenant.accountId, status: created.status });
+    return serializeCase(created);
+  }
+
+  async generate(dto: GenerateCasesDto): Promise<{ created: number }> {
+    const created = await this.tx(async (tx) => {
+      const { priority: params, minDaysPastDue } = await this.config(tx);
+      const minDays = dto.minDaysPastDue ?? minDaysPastDue;
+
+      const credits = await tx.credit.findMany({
+        where: { status: 'ACTIVE', deletedAt: null, daysPastDue: { gte: minDays } },
+        include: { client: { select: { riskSegment: true } } },
+      });
+      const openCases = await tx.collectionCase.findMany({
+        where: { status: { notIn: TERMINAL }, deletedAt: null },
+        select: { creditId: true },
+      });
+      const withOpenCase = new Set(openCases.map((c) => c.creditId));
+
+      const now = new Date();
+      let n = 0;
+      for (const credit of credits) {
+        if (withOpenCase.has(credit.id)) continue; // idempotente
+        const priority = computePriority(
+          { outstandingBalance: Number(credit.outstandingBalance), daysPastDue: credit.daysPastDue, riskSegment: credit.client.riskSegment },
+          params,
+        );
+        await tx.collectionCase.create({
+          data: {
+            accountId: this.tenant.accountId,
+            creditId: credit.id,
+            clientId: credit.clientId,
+            branchId: credit.branchId,
+            status: CaseStatus.PENDING,
+            priority,
+            slaDueAt: slaDueAt(priority, now, params),
+          },
+        });
+        n++;
+      }
+      return n;
+    });
+
+    if (created > 0) {
+      await this.audit.record({ entity: 'case', entityId: 'batch', action: 'GENERATE', after: { created } });
+    }
+    return { created };
+  }
+
+  // ── Asignación ─────────────────────────────────────────────────────────────
+  async assign(id: string, dto: AssignCaseDto): Promise<ReturnType<typeof serializeCase>> {
+    const { updated, collectorId } = await this.tx(async (tx) => {
+      const found = await tx.collectionCase.findFirst({ where: { id, deletedAt: null } });
+      if (!found) throw resourceNotFound();
+
+      const target = dto.collectorId ?? (dto.auto ? await this.leastLoadedCollector(tx) : null);
+      if (!target) throw invalidAssignee();
+      if (dto.collectorId) {
+        const ua = await tx.userAccount.findFirst({ where: { userId: dto.collectorId, isActive: true }, select: { id: true } });
+        if (!ua) throw invalidAssignee(); // no pertenece al tenant
+      }
+
+      const next = await tx.collectionCase.update({
+        where: { id },
+        data: { assigneeId: target, lastActionAt: new Date() },
+      });
+      await tx.caseActivity.create({
+        data: { accountId: this.tenant.accountId, caseId: id, userId: this.tenant.userId, type: CaseActivityType.ASSIGNMENT, notes: `Asignado a ${target}` },
+      });
+      return { updated: next, collectorId: target };
+    });
+
+    await this.audit.record({ entity: 'case', entityId: id, action: 'ASSIGN', after: { assigneeId: collectorId } });
+    this.events.emit(DomainEvent.CASE_ASSIGNED, { caseId: id, collectorId, accountId: this.tenant.accountId });
+    return serializeCase(updated);
+  }
+
+  /** Colector (rol COLLECTOR del tenant) con menos casos abiertos. */
+  private async leastLoadedCollector(tx: PrismaClient): Promise<string> {
+    const members = await tx.userAccount.findMany({ where: { isActive: true }, include: { role: { select: { name: true } } } });
+    const collectorIds = members.filter((m) => m.role.name === 'COLLECTOR').map((m) => m.userId);
+    if (collectorIds.length === 0) throw invalidAssignee();
+
+    const grouped = await tx.collectionCase.groupBy({
+      by: ['assigneeId'],
+      where: { status: { notIn: TERMINAL }, deletedAt: null, assigneeId: { in: collectorIds } },
+      _count: { _all: true },
+    });
+    const load = new Map<string, number>(collectorIds.map((id) => [id, 0]));
+    for (const g of grouped) if (g.assigneeId) load.set(g.assigneeId, g._count._all);
+
+    let best = collectorIds[0]!;
+    let min = Infinity;
+    for (const id of collectorIds) {
+      const l = load.get(id) ?? 0;
+      if (l < min) { min = l; best = id; }
+    }
+    return best;
+  }
+
+  // ── Máquina de estados ──────────────────────────────────────────────────────
+  async transition(id: string, dto: TransitionCaseDto): Promise<ReturnType<typeof serializeCase>> {
+    const { before, after } = await this.applyTransition(id, dto.status, dto.reason);
+    await this.audit.record({ entity: 'case', entityId: id, action: 'UPDATE', before, after });
+    this.events.emit(DomainEvent.CASE_UPDATED, { caseId: id, accountId: this.tenant.accountId, status: after.status });
+    return serializeCase(after);
+  }
+
+  async close(id: string, reason: string): Promise<ReturnType<typeof serializeCase>> {
+    const { before, after } = await this.applyTransition(id, CaseStatus.CLOSED, reason);
+    await this.audit.record({ entity: 'case', entityId: id, action: 'CLOSE', before, after });
+    this.events.emit(DomainEvent.CASE_UPDATED, { caseId: id, accountId: this.tenant.accountId, status: after.status });
+    return serializeCase(after);
+  }
+
+  private async applyTransition(id: string, to: CaseStatus, reason?: string): Promise<{ before: CollectionCase; after: CollectionCase }> {
+    return this.tx(async (tx) => {
+      const before = await tx.collectionCase.findFirst({ where: { id, deletedAt: null } });
+      if (!before) throw resourceNotFound();
+      if (!canTransition(before.status as never, to as never)) throw invalidTransition(before.status, to);
+
+      const terminal = TERMINAL.includes(to);
+      if (terminal) {
+        // CASE_001: una gestión REAL (no la asignación ni el cambio de estado automático).
+        const activities = await tx.caseActivity.count({
+          where: { caseId: id, type: { notIn: [CaseActivityType.ASSIGNMENT, CaseActivityType.STATUS_CHANGE] } },
+        });
+        if (activities === 0) throw caseNoActivity();
+      }
+
+      const now = new Date();
+      const after = await tx.collectionCase.update({
+        where: { id },
+        data: {
+          status: to,
+          lastActionAt: now,
+          ...(terminal ? { closedAt: now, closedBy: this.tenant.userId, closedReason: reason } : {}),
+        },
+      });
+      await tx.caseActivity.create({
+        data: { accountId: this.tenant.accountId, caseId: id, userId: this.tenant.userId, type: CaseActivityType.STATUS_CHANGE, result: to, notes: reason },
+      });
+      return { before, after };
+    });
+  }
+
+  // ── Bitácora ────────────────────────────────────────────────────────────────
+  async addActivity(id: string, dto: CreateActivityDto) {
+    const activity = await this.tx(async (tx) => {
+      const found = await tx.collectionCase.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+      if (!found) throw resourceNotFound();
+      const created = await tx.caseActivity.create({
+        data: { accountId: this.tenant.accountId, caseId: id, userId: this.tenant.userId, type: dto.type, notes: dto.notes, result: dto.result },
+      });
+      await tx.collectionCase.update({ where: { id }, data: { lastActionAt: new Date() } });
+      return created;
+    });
+    this.events.emit(DomainEvent.CASE_UPDATED, { caseId: id, accountId: this.tenant.accountId, activity: dto.type });
+    return { id: activity.id, type: activity.type, createdAt: activity.createdAt };
+  }
+
+  // ── Lecturas ────────────────────────────────────────────────────────────────
+  async list(query: ListCasesQueryDto): Promise<ApiResponse<ReturnType<typeof serializeCase>[]>> {
+    const { page, limit, skip } = resolvePagination(query);
+    const where: Prisma.CollectionCaseWhereInput = { deletedAt: null };
+    if (query.status) where.status = query.status;
+    if (query.priority) where.priority = query.priority;
+    if (query.assigneeId) where.assigneeId = query.assigneeId;
+    if (query.clientId) where.clientId = query.clientId;
+    if (query.overdue === 'true') {
+      where.slaDueAt = { lt: new Date() };
+      where.status = { notIn: TERMINAL };
+    }
+
+    const [rows, total] = await this.tx((tx) =>
+      Promise.all([
+        tx.collectionCase.findMany({ where, orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }], skip, take: limit }),
+        tx.collectionCase.count({ where }),
+      ]),
+    );
+    return ResponseDto.paginated(rows.map((c) => serializeCase(c)), total, page, limit);
+  }
+
+  async findOne(id: string): Promise<ReturnType<typeof serializeCase>> {
+    const found = await this.tx((tx) =>
+      tx.collectionCase.findFirst({
+        where: { id, deletedAt: null },
+        include: { activities: { orderBy: { createdAt: 'desc' } } },
+      }),
+    );
+    if (!found) throw resourceNotFound();
+    return serializeCase(found);
+  }
+}

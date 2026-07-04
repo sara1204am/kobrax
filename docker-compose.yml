@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: kobrax-postgres
+    # Habilita pg_stat_statements para monitoreo de queries desde el día 1.
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: kobrax
+    ports:
+      # 5434 en el host: 5432/5433 ya están ocupados por PostgreSQL nativos.
+      - '5434:5432'
+    volumes:
+      - kobrax_pgdata:/var/lib/postgresql/data
+      # Crea el rol de aplicación kobrax_app (NOSUPERUSER / NOBYPASSRLS) al iniciar.
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d kobrax']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: kobrax-redis
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '6379:6379'
+    volumes:
+      - kobrax_redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  kobrax_pgdata:
+  kobrax_redisdata:

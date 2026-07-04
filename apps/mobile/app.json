@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "Kobrax",
+    "slug": "kobrax-mobile",
+    "scheme": "kobrax",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "splash": {
+      "backgroundColor": "#1A3A52",
+      "resizeMode": "contain"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "demo.kobrax.mobile",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Kobrax usa Face ID para desbloquear tu sesión de forma segura."
+      }
+    },
+    "android": {
+      "package": "demo.kobrax.mobile"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        { "faceIDPermission": "Kobrax usa Face ID para desbloquear tu sesión de forma segura." }
+      ],
+      [
+        "./plugins/with-ssl-pinning",
+        { "domain": "api.kobrax.com", "pins": [] }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

@@ -1,0 +1,9 @@
+/** Tipo de notificación operativa. */
+export enum NotificationType {
+  CASE_ASSIGNED = 'CASE_ASSIGNED',
+  CASE_UPDATED = 'CASE_UPDATED',
+  PAYMENT_REGISTERED = 'PAYMENT_REGISTERED',
+  ROUTE_ASSIGNED = 'ROUTE_ASSIGNED',
+  PROMISE_DUE = 'PROMISE_DUE',
+  SYSTEM = 'SYSTEM',
+}

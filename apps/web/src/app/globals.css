@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-k-bg text-k-text font-sans antialiased;
+}
+
+/* Error shake (se desactiva con prefers-reduced-motion). */
+@keyframes k-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+.k-shake { animation: k-shake 300ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .k-shake { animation: none; }
+  * { transition: none !important; }
+}

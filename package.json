@@ -1,0 +1,36 @@
+{
+  "name": "kobrax",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kobrax — Plataforma multi-tenant de gestión inteligente de cobranzas",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "test": "turbo run test",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "db:generate": "pnpm --filter @kobrax/database prisma generate",
+    "db:migrate": "pnpm --filter @kobrax/database prisma migrate dev",
+    "db:deploy": "pnpm --filter @kobrax/database prisma migrate deploy",
+    "db:reset": "pnpm --filter @kobrax/database prisma migrate reset",
+    "db:seed": "pnpm --filter @kobrax/database db:seed",
+    "db:studio": "pnpm --filter @kobrax/database prisma studio"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "turbo": "^2.1.3",
+    "typescript": "^5.6.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "react": "18.2.0",
+      "react-dom": "18.2.0"
+    }
+  }
+}

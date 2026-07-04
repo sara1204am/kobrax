@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    // Hereda module/moduleResolution NodeNext del base; con "type":"commonjs"
+    // emite CommonJS (consumible por NestJS y por los bundlers de web/mobile).
+    // DOM: el paquete es isomórfico (Node/navegador/RN) — Web Crypto, TextEncoder, Intl.
+    "lib": ["ES2022", "DOM"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "**/*.spec.ts"]
+}

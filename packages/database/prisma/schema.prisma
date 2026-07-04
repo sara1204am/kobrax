@@ -1,0 +1,979 @@
+// Kobrax — Prisma schema
+// Fuente de verdad técnica del modelo de datos. Reconciliación del diccionario
+// de datos (DB_Architecture_COBRA) con las convenciones del agente de BD:
+//   - Modelos PascalCase singular, columnas snake_case via @map, tablas plural via @@map
+//   - id uuid, created_at / updated_at / deleted_at (soft delete) en entidades maestras
+//   - account_id obligatorio en toda tabla operativa (multi-tenant) + índices
+//   - Enums nativos de PostgreSQL
+//
+// Cobertura: Pilar 1 (Multi-tenant/Acceso) + Pilar 2 (Clientes y Créditos)
+// + Pilar 3 (Casos y Rutas) + Pilar 4 (Pagos) + Notificaciones.
+// Tablas transversales de seguridad (access_log, security_event, BYOK, etc.)
+// se modelan en la fase de Hardening (F12).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PILAR 1 · Multi-tenant, Identidad y Acceso
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum AccountType {
+  FINANCIAL_INSTITUTION
+  COLLECTION_AGENCY
+  RETAIL_CREDIT
+  INDEPENDENT
+}
+
+enum AccountStatus {
+  ACTIVE
+  TRIAL
+  SUSPENDED
+  INACTIVE
+  CANCELLED
+}
+
+enum PlanCode {
+  STARTER
+  PROFESSIONAL
+  BUSINESS
+  ENTERPRISE
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  LOCKED
+  PENDING
+}
+
+enum PermissionAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  EXECUTE
+  APPROVE
+}
+
+enum PermissionScope {
+  GLOBAL
+  ACCOUNT
+  BRANCH
+  OWN
+}
+
+/// Tenant raíz. Toda tabla operativa se filtra por su id (account_id).
+model Account {
+  id            String        @id @default(uuid())
+  code          String?       @unique
+  businessName  String        @map("business_name")
+  taxId         String?       @map("tax_id")
+  accountType   AccountType   @map("account_type")
+  status        AccountStatus @default(TRIAL) @map("account_status")
+  planCode      PlanCode      @default(STARTER) @map("plan_code")
+  maxUsers      Int           @default(5) @map("max_users")
+  countryCode   String        @map("country_code")
+  currencyCode  String        @map("currency_code")
+  timezone      String?
+  settings      Json          @default("{}")
+  configuration Json          @default("{}")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  deletedAt     DateTime?     @map("deleted_at")
+
+  branches        Branch[]
+  userAccounts    UserAccount[]
+  sessions        UserSession[]
+  auditLogs       AuditLog[]
+  overrides       UserPermissionOverride[]
+  clients         Client[]
+  credits         Credit[]
+  collectionCases CollectionCase[]
+  routePlans      RoutePlan[]
+  payments        Payment[]
+  paymentRequests PaymentRequest[]
+  notifications   Notification[]
+  refreshTokens   RefreshToken[]
+
+  @@index([status])
+  @@index([deletedAt])
+  @@map("accounts")
+}
+
+/// Unidad organizacional: sucursal, agencia, regional, oficina o tienda.
+model Branch {
+  id            String    @id @default(uuid())
+  accountId     String    @map("account_id")
+  name          String
+  code          String?
+  city          String?
+  address       String?
+  managerUserId String?   @map("manager_user_id") // referencia suave a users.id
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  account         Account          @relation(fields: [accountId], references: [id])
+  userAccounts    UserAccount[]
+  credits         Credit[]
+  collectionCases CollectionCase[]
+  routePlans      RoutePlan[]
+
+  @@index([accountId])
+  @@index([accountId, active])
+  @@map("branches")
+}
+
+/// Identidad global de acceso. Un usuario puede pertenecer a varios tenants.
+model User {
+  id                     String     @id @default(uuid())
+  email                  String     @unique
+  passwordHash           String     @map("password_hash")
+  salt                   String?
+  failedLoginAttempts    Int        @default(0) @map("failed_login_attempts")
+  lockedUntil            DateTime?  @map("locked_until")
+  requiresPasswordChange Boolean    @default(true) @map("requires_password_change")
+  mfaEnabled             Boolean    @default(false) @map("mfa_enabled")
+  mfaSecret              String?    @map("mfa_secret")
+  status                 UserStatus @default(PENDING) @map("user_status")
+  lastLoginAt            DateTime?  @map("last_login_at")
+  lastKnownLat           Decimal?   @map("last_known_lat") @db.Decimal(10, 8)
+  lastKnownLng           Decimal?   @map("last_known_lng") @db.Decimal(11, 8)
+  lastLocationAt         DateTime?  @map("last_location_at")
+  createdAt              DateTime   @default(now()) @map("created_at")
+  updatedAt              DateTime   @updatedAt @map("updated_at")
+  deletedAt              DateTime?  @map("deleted_at")
+
+  profile             Profile?
+  userAccounts        UserAccount[]
+  sessions            UserSession[]
+  overrides           UserPermissionOverride[]
+  auditLogs           AuditLog[]
+  mfaBackupCodes      MfaBackupCode[]
+  passwordResetTokens PasswordResetToken[]
+
+  @@index([status])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+/// Datos personales del usuario (separados de las credenciales).
+model Profile {
+  id               String    @id @default(uuid())
+  userId           String    @unique @map("user_id")
+  firstName        String    @map("first_name")
+  lastName         String    @map("last_name")
+  phone            String?
+  documentNumber   String?   @map("document_number")
+  photoUrl         String?   @map("photo_url")
+  language         String    @default("es")
+  employeeCode     String?   @map("employee_code")
+  supervisorUserId String?   @map("supervisor_user_id") // referencia suave a users.id
+  hireDate         DateTime? @map("hire_date")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("profiles")
+}
+
+/// Cargo organizacional. Contenedor lógico de permisos (vía role_permissions).
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  level       Int      @default(0)
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  permissions  RolePermission[]
+  userAccounts UserAccount[]
+
+  @@map("roles")
+}
+
+/// Capacidad específica del sistema (RBAC granular). code = `{recurso}:{acción}`.
+model Permission {
+  id          String           @id @default(uuid())
+  name        String
+  code        String           @unique
+  description String?
+  module      String
+  action      PermissionAction
+  resource    String?
+  scope       PermissionScope  @default(GLOBAL)
+  active      Boolean          @default(true)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  roles     RolePermission[]
+  overrides UserPermissionOverride[]
+
+  @@map("permissions")
+}
+
+/// Permisos base asignados a un rol.
+model RolePermission {
+  roleId       String   @map("role_id")
+  permissionId String   @map("permission_id")
+  grantedBy    String?  @map("granted_by")
+  grantedAt    DateTime @default(now()) @map("granted_at")
+
+  role       Role       @relation(fields: [roleId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+/// Excepciones individuales sobre permisos heredados del rol (temporales).
+model UserPermissionOverride {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  accountId    String?   @map("account_id")
+  permissionId String    @map("permission_id")
+  granted      Boolean // true concede / false niega
+  reason       String?
+  expiresAt    DateTime? @map("expires_at")
+  grantedBy    String?   @map("granted_by")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  user       User       @relation(fields: [userId], references: [id])
+  account    Account?   @relation(fields: [accountId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
+
+  @@index([userId])
+  @@map("user_permission_overrides")
+}
+
+/// Tabla central del modelo multi-tenant: usuario ↔ empresa ↔ rol ↔ sucursal.
+model UserAccount {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  accountId String   @map("account_id")
+  roleId    String   @map("role_id")
+  branchId  String?  @map("branch_id")
+  isOwner   Boolean  @default(false) @map("is_owner")
+  isDefault Boolean  @default(false) @map("is_default")
+  isActive  Boolean  @default(true) @map("is_active")
+  joinedAt  DateTime @default(now()) @map("joined_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user    User    @relation(fields: [userId], references: [id])
+  account Account @relation(fields: [accountId], references: [id])
+  role    Role    @relation(fields: [roleId], references: [id])
+  branch  Branch? @relation(fields: [branchId], references: [id])
+
+  @@unique([userId, accountId])
+  @@index([accountId])
+  @@index([accountId, roleId])
+  @@map("user_accounts")
+}
+
+/// Sesiones de usuario para control de acceso, monitoreo y seguridad.
+model UserSession {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  accountId  String    @map("account_id")
+  ipAddress  String?   @map("ip_address")
+  deviceInfo String?   @map("device_info")
+  deviceName String?   @map("device_name")
+  deviceType String?   @map("device_type") // web | mobile | api
+  os         String?
+  city       String?
+  country    String?
+  loginAt    DateTime  @default(now()) @map("login_at")
+  lastSeenAt DateTime? @map("last_seen_at")
+  expiresAt  DateTime? @map("expires_at")
+  logoutAt   DateTime? @map("logout_at")
+  revokedAt  DateTime? @map("revoked_at")
+  isActive   Boolean   @default(true) @map("is_active")
+
+  user          User           @relation(fields: [userId], references: [id])
+  account       Account        @relation(fields: [accountId], references: [id])
+  refreshTokens RefreshToken[]
+
+  @@index([accountId, userId])
+  @@map("user_sessions")
+}
+
+/// Refresh tokens rotatorios. En DB solo el hash; ligados a familia y sesión.
+model RefreshToken {
+  id         String    @id @default(uuid())
+  accountId  String    @map("account_id")
+  userId     String    @map("user_id")
+  tokenHash  String    @map("token_hash") // SHA-256, nunca el token en claro
+  familyId   String    @map("family_id")
+  sessionId  String    @map("session_id")
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  replacedBy String?   @map("replaced_by")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  account Account     @relation(fields: [accountId], references: [id])
+  session UserSession @relation(fields: [sessionId], references: [id])
+
+  @@index([accountId, userId])
+  @@index([familyId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
+}
+
+/// Códigos de respaldo de MFA (usuario global, sin account_id). Un solo uso, hasheados.
+model MfaBackupCode {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  codeHash  String    @map("code_hash") // SHA-256
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("mfa_backup_codes")
+}
+
+/// Tokens de recuperación de contraseña (usuario global, sin account_id).
+/// Un solo uso, expiran a los 30 min; en DB solo su hash SHA-256.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  tokenHash String    @map("token_hash") // SHA-256, nunca el token en claro
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("password_reset_tokens")
+}
+
+/// Auditoría append-only: who / when / what / before / after / ip.
+model AuditLog {
+  id        String   @id @default(uuid())
+  accountId String   @map("account_id")
+  userId    String   @map("user_id")
+  action    String
+  entity    String
+  entityId  String   @map("entity_id")
+  before    Json?
+  after     Json?
+  ip        String?
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([accountId, entity, entityId])
+  @@index([accountId, userId])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PILAR 2 · Clientes y Créditos (Core Financiero)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Corrida de importación masiva/reconciliación de clientes (F4 Fase 5). RLS por tenant.
+model ClientImportRun {
+  id          String   @id @default(uuid())
+  accountId   String   @map("account_id")
+  source      String // csv | json
+  fileHash    String   @map("file_hash") // SHA-256 del contenido (idempotencia)
+  mode        String // RECONCILE | UPSERT_ONLY | REPLACE
+  mapping     Json     @default("{}")
+  status      String   @default("DONE") // DONE | DRY_RUN | FAILED
+  created     Int      @default(0)
+  updated     Int      @default(0)
+  softDeleted Int      @default(0) @map("soft_deleted")
+  needsReview Int      @default(0) @map("needs_review")
+  errors      Int      @default(0)
+  createdBy   String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([accountId, status])
+  @@index([accountId, fileHash])
+  @@map("client_import_runs")
+}
+
+enum ClientType {
+  PERSON
+  COMPANY
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum ContactType {
+  PHONE
+  EMAIL
+  WHATSAPP
+}
+
+enum LocationType {
+  HOME
+  WORK
+  GUARANTOR
+  FAMILY
+  OTHER
+}
+
+enum RelationshipType {
+  GUARANTOR
+  FAMILY
+  COWORKER
+  NEIGHBOR
+  OTHER
+}
+
+enum AttachmentType {
+  ID_CARD
+  PHOTO
+  CONTRACT
+  OTHER
+}
+
+enum CreditStatus {
+  ACTIVE
+  PAID
+  DEFAULTED
+  RESTRUCTURED
+  WRITTEN_OFF
+  CANCELLED
+}
+
+enum InstallmentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+}
+
+/// Maestro de clientes deudores (persona natural o jurídica).
+model Client {
+  id                      String       @id @default(uuid())
+  accountId               String       @map("account_id")
+  firstName               String?      @map("first_name")
+  lastName                String?      @map("last_name")
+  businessName            String?      @map("business_name")
+  gender                  String?
+  nationalId              String?      @map("national_id") // cifrado AES-256-GCM en reposo (F4)
+  nationalIdHash          String?      @map("national_id_hash") // blind index HMAC para buscar/deduplicar
+  taxId                   String?      @map("tax_id") // cifrado AES-256-GCM en reposo (F4)
+  clientType              ClientType   @default(PERSON) @map("client_type")
+  status                  ClientStatus @default(ACTIVE) @map("client_status")
+  preferredContactChannel String?      @map("preferred_contact_channel")
+  riskSegment             String?      @map("risk_segment")
+  metadata                Json         @default("{}")
+  createdAt               DateTime     @default(now()) @map("created_at")
+  updatedAt               DateTime     @updatedAt @map("updated_at")
+  deletedAt               DateTime?    @map("deleted_at")
+
+  account     Account            @relation(fields: [accountId], references: [id])
+  contacts    ClientContact[]
+  locations   ClientLocation[]
+  relations   ClientRelation[]
+  attachments ClientAttachment[]
+  credits     Credit[]
+  cases       CollectionCase[]
+  routeStops  RouteStop[]
+
+  @@unique([accountId, nationalIdHash]) // documento único por tenant (vía blind index)
+  @@index([accountId])
+  @@index([accountId, status])
+  @@index([deletedAt])
+  @@map("clients")
+}
+
+/// Canales de contacto del cliente.
+model ClientContact {
+  id          String      @id @default(uuid())
+  accountId   String      @map("account_id")
+  clientId    String      @map("client_id")
+  contactType ContactType @map("contact_type")
+  value       String
+  isPrimary   Boolean     @default(false) @map("is_primary")
+  isVerified  Boolean     @default(false) @map("is_verified")
+  notes       String?
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  @@index([accountId, clientId])
+  @@map("client_contacts")
+}
+
+/// Puntos físicos de localización del cliente o su red (investigación de campo).
+model ClientLocation {
+  id             String       @id @default(uuid())
+  accountId      String       @map("account_id")
+  clientId       String       @map("client_id")
+  locationType   LocationType @default(HOME) @map("location_type")
+  address        String?
+  zone           String?
+  latitude       Decimal?     @db.Decimal(10, 8)
+  longitude      Decimal?     @db.Decimal(11, 8)
+  referenceNotes String?      @map("reference_notes")
+  photoUrls      Json         @default("[]") @map("photo_urls")
+  visitSchedule  Json?        @map("visit_schedule")
+  riskLevel      String?      @map("risk_level")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  client    Client           @relation(fields: [clientId], references: [id])
+  relations ClientRelation[]
+
+  @@index([accountId, clientId])
+  @@map("client_locations")
+}
+
+/// Red de personas relacionadas al cliente (localización indirecta).
+model ClientRelation {
+  id               String           @id @default(uuid())
+  accountId        String           @map("account_id")
+  clientId         String           @map("client_id")
+  relatedName      String           @map("related_name")
+  relationshipType RelationshipType @map("relationship_type")
+  gender           String?
+  phone            String?
+  locationId       String?          @map("location_id")
+  photoUrls        Json             @default("[]") @map("photo_urls")
+  isContactable    Boolean          @default(true) @map("is_contactable")
+  notes            String?
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  client   Client          @relation(fields: [clientId], references: [id])
+  location ClientLocation? @relation(fields: [locationId], references: [id])
+
+  @@index([accountId, clientId])
+  @@map("client_relations")
+}
+
+/// Evidencia documental del cliente (sellada con hash SHA-256).
+model ClientAttachment {
+  id        String         @id @default(uuid())
+  accountId String         @map("account_id")
+  clientId  String         @map("client_id")
+  fileType  AttachmentType @map("file_type")
+  fileUrl   String         @map("file_url")
+  fileHash  String?        @map("file_hash")
+  encrypted Boolean        @default(false)
+  metadata  Json           @default("{}")
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  @@index([accountId, clientId])
+  @@map("client_attachments")
+}
+
+/// Obligación financiera. Nombres de concepto configurables por tenant.
+model Credit {
+  id                 String       @id @default(uuid())
+  accountId          String       @map("account_id")
+  clientId           String       @map("client_id")
+  branchId           String?      @map("branch_id")
+  code               String?
+  principalAmount    Decimal      @map("principal_amount") @db.Decimal(14, 2)
+  outstandingBalance Decimal      @map("outstanding_balance") @db.Decimal(14, 2)
+  interestRate       Decimal      @default(0) @map("interest_rate") @db.Decimal(7, 4)
+  currency           String
+  installmentsCount  Int          @default(1) @map("installments_count")
+  status             CreditStatus @default(ACTIVE)
+  daysPastDue        Int          @default(0) @map("days_past_due")
+  assignedManagerId  String?      @map("assigned_manager_id") // referencia suave a users.id
+  disbursedAt        DateTime?    @map("disbursed_at")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+  deletedAt          DateTime?    @map("deleted_at")
+
+  account      Account             @relation(fields: [accountId], references: [id])
+  client       Client              @relation(fields: [clientId], references: [id])
+  branch       Branch?             @relation(fields: [branchId], references: [id])
+  installments CreditInstallment[]
+  arrears      Arrear[]
+  cases        CollectionCase[]
+  payments     Payment[]
+
+  @@index([accountId])
+  @@index([accountId, status])
+  @@index([accountId, clientId])
+  @@index([deletedAt])
+  @@map("credits")
+}
+
+/// Cronograma de pagos de un crédito.
+model CreditInstallment {
+  id         String            @id @default(uuid())
+  accountId  String            @map("account_id")
+  creditId   String            @map("credit_id")
+  number     Int
+  dueDate    DateTime          @map("due_date")
+  amount     Decimal           @db.Decimal(14, 2)
+  principal  Decimal           @default(0) @db.Decimal(14, 2) // capital de la cuota
+  interest   Decimal           @default(0) @db.Decimal(14, 2) // interés de la cuota
+  paidAmount Decimal           @default(0) @map("paid_amount") @db.Decimal(14, 2)
+  status     InstallmentStatus @default(PENDING)
+  paidAt     DateTime?         @map("paid_at")
+  createdAt  DateTime          @default(now()) @map("created_at")
+  updatedAt  DateTime          @updatedAt @map("updated_at")
+
+  credit Credit @relation(fields: [creditId], references: [id])
+
+  @@unique([creditId, number])
+  @@index([accountId, creditId])
+  @@index([accountId, status])
+  @@map("credit_installments")
+}
+
+/// Mora: días de atraso, interés y penalización calculados sobre un crédito.
+model Arrear {
+  id            String   @id @default(uuid())
+  accountId     String   @map("account_id")
+  creditId      String   @map("credit_id")
+  daysOverdue   Int      @default(0) @map("days_overdue")
+  overdueAmount Decimal  @default(0) @map("overdue_amount") @db.Decimal(14, 2)
+  interest      Decimal  @default(0) @db.Decimal(14, 2)
+  penalty       Decimal  @default(0) @db.Decimal(14, 2)
+  calculatedAt  DateTime @default(now()) @map("calculated_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  credit Credit @relation(fields: [creditId], references: [id])
+
+  @@index([accountId, creditId])
+  @@map("arrears")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PILAR 3 · Casos y Rutas (Logística de Campo)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum CaseStatus {
+  PENDING
+  ACTIVE
+  IN_NEGOTIATION
+  PROMISE_TO_PAY
+  PAID
+  CLOSED
+  WRITTEN_OFF
+}
+
+enum CasePriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum CaseActivityType {
+  NOTE
+  CALL
+  VISIT
+  PAYMENT
+  STATUS_CHANGE
+  ASSIGNMENT
+  MESSAGE
+}
+
+enum RouteStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum RouteStopStatus {
+  PENDING
+  IN_ROUTE
+  VISITED
+  SKIPPED
+}
+
+enum EvidenceType {
+  PHOTO
+  SIGNATURE
+  DOCUMENT
+  AUDIO
+}
+
+enum VisitOutcome {
+  NO_CONTACT
+  CONTACTED
+  PROMISE_TO_PAY
+  PARTIAL_PAYMENT
+  PAID
+  REFUSAL
+  NOT_FOUND
+  RESCHEDULED
+}
+
+/// Proceso activo de cobranza asociado a un crédito en mora.
+model CollectionCase {
+  id           String       @id @default(uuid())
+  accountId    String       @map("account_id")
+  creditId     String       @map("credit_id")
+  clientId     String       @map("client_id")
+  branchId     String?      @map("branch_id")
+  assigneeId   String?      @map("assignee_id") // collector asignado (users.id, ref suave)
+  status       CaseStatus   @default(PENDING)
+  priority     CasePriority @default(MEDIUM)
+  slaDueAt     DateTime?    @map("sla_due_at")
+  lastActionAt DateTime?    @map("last_action_at")
+  closedAt     DateTime?    @map("closed_at")
+  closedBy     String?      @map("closed_by")
+  closedReason String?      @map("closed_reason")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  deletedAt    DateTime?    @map("deleted_at")
+
+  account    Account        @relation(fields: [accountId], references: [id])
+  credit     Credit         @relation(fields: [creditId], references: [id])
+  client     Client         @relation(fields: [clientId], references: [id])
+  branch     Branch?        @relation(fields: [branchId], references: [id])
+  activities CaseActivity[]
+  visits     FieldVisit[]
+  routeStops RouteStop[]
+  payments   Payment[]
+
+  @@index([accountId, status])
+  @@index([accountId, assigneeId])
+  @@index([accountId, clientId])
+  @@index([deletedAt])
+  @@map("collection_cases")
+}
+
+/// Bitácora del caso (collection_action_log): timeline append-only de acciones.
+model CaseActivity {
+  id        String           @id @default(uuid())
+  accountId String           @map("account_id")
+  caseId    String           @map("case_id")
+  userId    String?          @map("user_id") // autor (users.id, ref suave)
+  type      CaseActivityType
+  result    String?
+  notes     String?
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  case CollectionCase @relation(fields: [caseId], references: [id])
+
+  @@index([accountId, caseId])
+  @@map("case_activities")
+}
+
+/// Plan diario de ruta de cobranza para un collector.
+model RoutePlan {
+  id               String      @id @default(uuid())
+  accountId        String      @map("account_id")
+  branchId         String?     @map("branch_id")
+  collectorId      String      @map("collector_id") // users.id (ref suave)
+  plannedDate      DateTime    @map("planned_date") @db.Date
+  status           RouteStatus @default(PLANNED)
+  totalCases       Int         @default(0) @map("total_cases")
+  totalDistanceKm  Decimal?    @map("total_distance_km") @db.Decimal(8, 2)
+  estimatedMinutes Int?        @map("estimated_minutes")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+
+  account Account     @relation(fields: [accountId], references: [id])
+  branch  Branch?     @relation(fields: [branchId], references: [id])
+  stops   RouteStop[]
+
+  @@index([accountId, status])
+  @@index([accountId, collectorId, plannedDate])
+  @@map("route_plans")
+}
+
+/// Parada (visita planificada) dentro de una ruta.
+model RouteStop {
+  id                     String          @id @default(uuid())
+  accountId              String          @map("account_id")
+  routeId                String          @map("route_id")
+  clientId               String          @map("client_id")
+  caseId                 String?         @map("case_id")
+  sequenceOrder          Int             @map("sequence_order")
+  status                 RouteStopStatus @default(PENDING)
+  predictedRecoveryScore Decimal?        @map("predicted_recovery_score") @db.Decimal(5, 4) // IA futura, nullable
+  visitedAt              DateTime?       @map("visited_at")
+  createdAt              DateTime        @default(now()) @map("created_at")
+  updatedAt              DateTime        @updatedAt @map("updated_at")
+
+  route  RoutePlan       @relation(fields: [routeId], references: [id])
+  client Client          @relation(fields: [clientId], references: [id])
+  case   CollectionCase? @relation(fields: [caseId], references: [id])
+  visits FieldVisit[]
+
+  @@unique([routeId, sequenceOrder])
+  @@index([accountId, routeId])
+  @@map("route_stops")
+}
+
+/// Registro de una visita en campo (CU-04): GPS + resultado. Append-only.
+model FieldVisit {
+  id          String       @id @default(uuid())
+  accountId   String       @map("account_id")
+  caseId      String?      @map("case_id")
+  routeStopId String?      @map("route_stop_id")
+  collectorId String       @map("collector_id") // users.id (ref suave)
+  latitude    Decimal      @db.Decimal(10, 8)
+  longitude   Decimal      @db.Decimal(11, 8)
+  accuracy    Decimal?     @db.Decimal(7, 2)
+  outcome     VisitOutcome
+  notes       String?
+  capturedAt  DateTime     @map("captured_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  // Sin updated_at ni deleted_at → INMUTABLE por diseño.
+
+  case      CollectionCase? @relation(fields: [caseId], references: [id])
+  routeStop RouteStop?      @relation(fields: [routeStopId], references: [id])
+  evidences FieldEvidence[]
+
+  @@index([accountId, caseId])
+  @@index([accountId, collectorId])
+  @@map("field_visits")
+}
+
+/// Evidencia digital de una visita (foto/firma/audio). Inmutable, sellada SHA-256.
+model FieldEvidence {
+  id         String       @id @default(uuid())
+  accountId  String       @map("account_id")
+  visitId    String       @map("visit_id")
+  type       EvidenceType
+  fileUrl    String       @map("file_url")
+  fileHash   String       @map("file_hash") // SHA-256 del buffer original
+  latitude   Decimal?     @db.Decimal(10, 8)
+  longitude  Decimal?     @db.Decimal(11, 8)
+  capturedAt DateTime     @map("captured_at")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  // Sin updated_at ni deleted_at → INMUTABLE por diseño.
+
+  visit FieldVisit @relation(fields: [visitId], references: [id])
+
+  @@index([accountId, visitId])
+  @@map("field_evidences")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PILAR 4 · Pagos (Gestión de Recaudo)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  QR
+  CARD
+  MOBILE_PAYMENT
+}
+
+enum PaymentRequestStatus {
+  PENDING
+  PAID
+  EXPIRED
+  CANCELLED
+}
+
+/// Pago aplicado a un crédito. Ledger INMUTABLE (sin update/delete).
+model Payment {
+  id                    String        @id @default(uuid())
+  accountId             String        @map("account_id")
+  creditId              String        @map("credit_id")
+  branchId              String?       @map("branch_id")
+  caseId                String?       @map("case_id")
+  installmentId         String?       @map("installment_id") // credit_installments.id (ref suave)
+  amount                Decimal       @db.Decimal(14, 2)
+  method                PaymentMethod
+  provider              String?
+  externalTransactionId String?       @map("external_transaction_id")
+  receiptNumber         Int?          @map("receipt_number")
+  idempotencyKey        String?       @map("idempotency_key") // anti doble registro (header Idempotency-Key)
+  paymentDate           DateTime      @default(now()) @map("payment_date")
+  registeredBy          String?       @map("registered_by") // users.id (ref suave)
+  createdAt             DateTime      @default(now()) @map("created_at")
+  // Sin updated_at ni deleted_at → INMUTABLE por diseño.
+
+  account Account         @relation(fields: [accountId], references: [id])
+  credit  Credit          @relation(fields: [creditId], references: [id])
+  case    CollectionCase? @relation(fields: [caseId], references: [id])
+
+  @@unique([accountId, receiptNumber])
+  @@unique([accountId, externalTransactionId])
+  @@unique([accountId, idempotencyKey])
+  @@index([accountId, creditId])
+  @@index([accountId, paymentDate])
+  @@map("payments")
+}
+
+/// Solicitud de pago digital (QR / link) generada para un crédito o caso.
+model PaymentRequest {
+  id            String               @id @default(uuid())
+  accountId     String               @map("account_id")
+  creditId      String?              @map("credit_id")
+  clientId      String?              @map("client_id")
+  caseId        String?              @map("case_id")
+  amount        Decimal              @db.Decimal(14, 2)
+  method        PaymentMethod        @default(QR)
+  status        PaymentRequestStatus @default(PENDING)
+  reference     String?              @unique
+  qrPayload     String?              @map("qr_payload")
+  url           String?
+  expiresAt     DateTime?            @map("expires_at")
+  paidPaymentId String?              @map("paid_payment_id")
+  createdBy     String?              @map("created_by") // users.id (ref suave)
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@index([accountId, status])
+  @@map("payment_requests")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRANSVERSAL · Notificaciones
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum NotificationType {
+  CASE_ASSIGNED
+  CASE_UPDATED
+  PAYMENT_REGISTERED
+  ROUTE_ASSIGNED
+  PROMISE_DUE
+  SYSTEM
+}
+
+/// Notificación operativa dirigida a un usuario dentro de un tenant.
+model Notification {
+  id        String           @id @default(uuid())
+  accountId String           @map("account_id")
+  userId    String           @map("user_id") // destinatario (users.id, ref suave)
+  type      NotificationType @default(SYSTEM)
+  title     String
+  body      String?
+  clientId  String?          @map("client_id")
+  creditId  String?          @map("credit_id")
+  caseId    String?          @map("case_id")
+  readAt    DateTime?        @map("read_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@index([accountId, userId])
+  @@index([accountId, userId, readAt])
+  @@map("notifications")
+}
