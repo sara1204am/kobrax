@@ -11,6 +11,8 @@ export const COLORS = {
   purple: '#7B68D6',
   highlight: '#F0ECFF',
   bg: '#F8F9FB',
+  // Divergencia intencional (P0 D2): shared define `bgWhite:#FAFBFD`, pero en campo usamos
+  // blanco puro para máximo contraste de cards bajo el sol (regla §3.3.1). No es un olvido de parity.
   white: '#FFFFFF',
   text: '#1A2B3E',
   text2: '#5B7795',

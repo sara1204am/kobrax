@@ -1,0 +1,70 @@
+/**
+ * Cliente HTTP autenticado: Bearer desde SecureStore + refresh 401→retry (una vez).
+ * Es la base que consumen los `*.service.ts` de campo (P1–P5) y el `authService`:
+ * nadie reimplementa el baile de auth. Dep unidireccional (api-client → api/session),
+ * sin ciclo: `authService` importa de acá, no al revés.
+ */
+import type { AuthTokens } from '@kobrax/shared';
+import { apiFetch, type ApiResult } from './api';
+import { clearSession, getSession, saveSession } from './session';
+
+export type AuthedFetchResult<T> = ApiResult<T> | { status: 'unauthenticated'; data: null; error: null };
+
+/**
+ * Refresh silencioso (rotatorio). Devuelve los nuevos tokens o null si falló.
+ * Solo limpia la sesión si el server la rechazó (≠ fallo de red, status 0).
+ *
+ * **Single-flight:** varios 401 concurrentes comparten UN solo `/auth/refresh`. Sin esto,
+ * el segundo llega con el refresh token ya rotado → el server lo rechaza como reuso →
+ * `clearSession` → logout espurio a mitad de sesión (crítico: es la base de P1–P5).
+ */
+let refreshInFlight: Promise<AuthTokens | null> | null = null;
+
+export function refreshSession(): Promise<AuthTokens | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = doRefresh().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+async function doRefresh(): Promise<AuthTokens | null> {
+  const session = await getSession();
+  if (!session) return null;
+  const res = await apiFetch<AuthTokens>('/auth/refresh', {
+    method: 'POST',
+    body: { refreshToken: session.refreshToken },
+  });
+  if (res.status !== 200 || !res.data) {
+    if (res.status !== 0) await clearSession();
+    return null;
+  }
+  await saveSession(res.data);
+  return res.data;
+}
+
+/**
+ * Hace la petición con el access token actual; ante 401 refresca y reintenta una vez.
+ * - Sin sesión local → `status: 'unauthenticated'` (el caller manda a login).
+ * - Sin red → `status: 0` (lo propaga `apiFetch`; el caller decide modo offline).
+ * - Refresh rechazado por el server → devuelve el 401 (la sesión ya quedó limpia).
+ */
+export async function authedFetch<T>(
+  path: string,
+  init: { method?: string; body?: unknown } = {},
+): Promise<AuthedFetchResult<T>> {
+  const session = await getSession();
+  if (!session) return { status: 'unauthenticated', data: null, error: null };
+
+  let res = await apiFetch<T>(path, { ...init, token: session.accessToken });
+  if (res.status === 401) {
+    const refreshed = await refreshSession();
+    if (!refreshed) return res;
+    res = await apiFetch<T>(path, { ...init, token: refreshed.accessToken });
+    // Refresh OK pero el server sigue con 401 → sesión revocada (no fue red): limpiar,
+    // así el caller cae en 'unauthenticated' (login) en vez de quedar atrapado en offline.
+    if (res.status === 401) await clearSession();
+  }
+  return res;
+}

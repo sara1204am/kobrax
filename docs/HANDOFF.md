@@ -1,6 +1,25 @@
 # HANDOFF — dónde retomar
 
-_Última sesión: **F8 (Realtime + Notificaciones)** ✅ base — `RealtimeGateway` Socket.io (ns `/events`, handshake por access token + denylist, rooms `tenant`/`user`/`supervisors` derivadas server-side), traductor de eventos de dominio (reusa `EventBusService`) → notificación persistida (siempre) + WS, REST `/notifications` (scope own), `collector.location` throttled → `last_known_*` + broadcast a supervisores, canales push/SMS/email (stubs), job `PROMISE_DUE`. Contrato en `@kobrax/shared` (`types/realtime.ts`). 160 tests (23 nuevos); type-check + build + arranque verificados. **Backbone backend completo: F4✅ F5🚧(base) F6✅ F7✅ F8✅.** Panel web mínimo `/panel/*` ✅._
+> ## 🔵 RETOMAR ACÁ (sesión 2026-07-03): F10 App Mobile — planificación cerrada, listo para código
+> **Las 5 decisiones de plan quedaron TODAS resueltas.** Docs vivos: `docs/epics/EPIC-F10-app-mobile.md` + `docs/epics/F10/ui-screen-map.md`. Figma "Kobrax movil" fileKey `daLWsKQGC4Sd1NacU9fmrP`.
+>
+> | # | Decisión | Resuelto |
+> |---|---|---|
+> | 1 | KPIs Home | **Calcular en cliente** (contadores intradía de acciones offline; server iría atrasado) |
+> | 2 | Tabs | **`Inicio · Agenda · Rutas · Cobranza · Más`** (Figma node `42:3069`, 5 tabs) |
+> | 3 | Mapa | **MapLibre** (`@maplibre/maplibre-react-native`, offline packs, gratis, dev build) |
+> | 4 | Import | **Móvil + web**, gated por capacidad/rol (independiente=móvil, admin=web) |
+> | 5 | Offline retro-encaje | Anclado al **sync de oficina** (checkpoint de hidratación de WatermelonDB) |
+>
+> **Modelo offline "oficina→campo":** en oficina con wifi se importa/sincroniza datos del día + se baja el pack de mapa de la región; luego se sale a cobrar (ciudad con señal / pueblo con mapa ya cargado / zonas sin señal 100% offline). **Regla multi-tenant (principio #1):** UNA app; capacidades por **capacidad/rol (RBAC), nunca por `tenantType`**. F3 diferido → construir con capacidad encendida, guard al final.
+>
+> **PRÓXIMO PASO = Paso 1 (F10 Slice 0, Expo Go, sin nativo, CERO claves):** fundación `components/ui/` sobre tokens (`TabBar`/`Header`/`BottomSheet`/`StatusBadge`/`ListRow`) + Reanimated 3 + expo-haptics + FlashList, y navegador `(tabs)` con los 5 tabs reusando `routeAfterAuth`. Validar UNA pantalla núcleo en Android de gama baja antes de escalar (§3.3). Claves recién después: API arriba (Paso 2 datos), tiles MapTiler-free/OSM (mapas), FCM/Expo push (Slice 5), pins SPKI (Slice 6). La app Expo no corre headless → verificar con `type-check` + `jest` + `expo export`; validación visual la hace la usuaria (emulador).
+>
+> _Estado mobile hoy: solo auth/sesión. Sin tabs, cero features de campo. Backend F4–F8 ✅ cubre los endpoints (se consumen)._
+
+---
+
+_Última sesión previa: **F8 (Realtime + Notificaciones)** ✅ base — `RealtimeGateway` Socket.io (ns `/events`, handshake por access token + denylist, rooms `tenant`/`user`/`supervisors` derivadas server-side), traductor de eventos de dominio (reusa `EventBusService`) → notificación persistida (siempre) + WS, REST `/notifications` (scope own), `collector.location` throttled → `last_known_*` + broadcast a supervisores, canales push/SMS/email (stubs), job `PROMISE_DUE`. Contrato en `@kobrax/shared` (`types/realtime.ts`). 160 tests (23 nuevos); type-check + build + arranque verificados. **Backbone backend completo: F4✅ F5🚧(base) F6✅ F7✅ F8✅.** Panel web mínimo `/panel/*` ✅._
 
 ## Estado del proyecto
 | Fase | Estado |

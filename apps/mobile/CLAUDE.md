@@ -42,30 +42,31 @@ NUNCA bloquear una acción del cobrador esperando respuesta de red.
 ```
 
 ## Estructura de Carpetas
+> **Navegación real: expo-router (file-based).** Tabs = componente nativo `Tabs` de
+> expo-router (cubre el TabBar del diseño, teñido con tokens); no hay renderer de tab bar propio.
+> Set de tabs = **Figma `42:3069`** (ver [`docs/epics/F10/ui-screen-map.md §6`](../../docs/epics/F10/ui-screen-map.md)):
+> **Inicio · Agenda · Rutas · Cobranza · Más** — *no* `route/cases/payments/profile`.
+> "Casos" no es tab (vive bajo Agenda/Inicio); Pagos → "Cobranza"; Perfil → dentro de "Más".
+
 ```
-src/
-├── app/                     # React Navigation screens
-│   ├── (auth)/              # Login, recuperar contraseña
-│   ├── (tabs)/              # Tab navigator
-│   │   ├── route/           # Ruta del día
-│   │   ├── cases/           # Mis casos
-│   │   ├── payments/        # Registrar pago
-│   │   └── profile/         # Perfil y configuración
-│   └── case/[id]/           # Detalle de caso
-├── components/
-│   ├── ui/                  # Componentes base (Button, Input, Badge, Card)
-│   ├── case/                # CaseCard, CaseStatusBadge
-│   ├── payment/             # PaymentForm, AmountInput
-│   ├── evidence/            # CameraCapture, SignatureCapture, LocationBadge
-│   └── route/               # RouteMap, VisitItem
-├── services/
-│   ├── sync.service.ts      # Sync WatermelonDB ↔ API
-│   ├── evidence.service.ts  # Foto + hash + GPS
-│   ├── location.service.ts  # GPS tracking
-│   └── auth.service.ts      # Token storage seguro
-├── store/                   # Zustand stores
-├── database/                # WatermelonDB models y schema
-└── hooks/                   # useSync, useLocation, useCamera, useOfflineQueue
+apps/mobile/
+├── app/                          # expo-router (file-based)
+│   ├── (auth)/                   # login, mfa, mfa-setup, select-account, forgot, unlock, biometric-setup
+│   ├── (app)/                    # offline, force-password-change (fuera de tabs)
+│   ├── (tabs)/                   # shell de campo — 5 tabs (Slice 0)
+│   │   ├── _layout.tsx           # <Tabs> nativo + tokens + íconos Ionicons
+│   │   ├── index.tsx             # Inicio (Home/Jornada)
+│   │   ├── agenda.tsx            # Agenda diaria de gestiones
+│   │   ├── rutas.tsx             # Rutas del día (mapas en dev build)
+│   │   ├── cobranza.tsx          # Pagos / cobros en campo
+│   │   └── mas.tsx               # Overflow: perfil, config, import (gating por rol en F3)
+│   ├── _layout.tsx  index.tsx    # root + splash
+└── src/                          # lógica y UI (layout PLANO, no por dominio)
+    ├── theme.ts                  # tokens (espejo de packages/shared / design-system.md)
+    ├── components.tsx            # UI de auth (Button, Field, Hero, Card, ...)
+    ├── ui.tsx                    # fundación de campo: Header, StatusBadge, ListRow, EmptyState, BottomSheet
+    ├── api.ts  auth-service.ts  session.ts  biometric.ts  post-login.ts
+    └── (por slice) sync.service.ts · evidence.service.ts · location.service.ts · database/ (WatermelonDB) · store/ (Zustand)
 ```
 
 ## Design System Mobile (Kobrax Tokens)

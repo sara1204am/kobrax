@@ -110,7 +110,7 @@ Dar al cobrador una app **offline-first, simple y a prueba de campo** para ejecu
 |---|----------|--------|-----------|--------|
 | H0.1 | Dev build / prebuild | Mobile | `expo prebuild` (Android primero); integrar cámara/GPS/pinning nativos; documentar build local | ⏳ |
 | H0.2 | WatermelonDB local | Mobile | Schema local (espejo subset: cliente, crédito, caso, ruta, parada, visita, evidencia, pago), modelos, migraciones locales | ⏳ |
-| H0.3 | Tab navigator de campo | Mobile | `(tabs)`: Ruta · Casos · Pagos · Perfil; navegación + layout con tokens; reusa `routeAfterAuth` | ⏳ |
+| H0.3 | Tab navigator de campo | Mobile | `(tabs)`: **Inicio · Agenda · Rutas · Cobranza · Más** (set final Figma, ver [ui-screen-map §6](./F10/ui-screen-map.md)); navegación + layout con tokens; reusa `routeAfterAuth` | ⏳ |
 | H0.4 | Capa de red + cola | Mobile | `apiClient` mobile (Bearer desde SecureStore, 401→refresh/login); NetInfo; cola FIFO de operaciones pendientes | ⏳ |
 | H0.5 | `OfflineIndicator` | Mobile | Banner "Sin conexión · N pendientes de sync" — **informativo, nunca bloquea**; estado global (Zustand) | ⏳ |
 | H0.6 | Fundación UI premium | Mobile | `components/ui/` (Button, Card, Badge, AmountInput, CaseCard) sobre tokens + **Reanimated 3** (press/transición/skeleton) + `expo-haptics` + FlashList; **validar una pantalla núcleo en Android de gama baja antes de escalar** (§3.3) | ⏳ |

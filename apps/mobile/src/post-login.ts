@@ -30,5 +30,5 @@ export async function routeAfterAuth(): Promise<void> {
     router.replace('/(auth)/biometric-setup');
     return;
   }
-  router.replace('/(app)/home');
+  router.replace('/(tabs)');
 }

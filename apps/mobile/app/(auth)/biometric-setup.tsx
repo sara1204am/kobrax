@@ -34,12 +34,12 @@ export default function BiometricSetupScreen() {
     }
     await setBiometricEnabled(true);
     await markBiometricPromptShown();
-    router.replace('/(app)/home');
+    router.replace('/(tabs)');
   }
 
   async function skip() {
     await markBiometricPromptShown();
-    router.replace('/(app)/home');
+    router.replace('/(tabs)');
   }
 
   return (

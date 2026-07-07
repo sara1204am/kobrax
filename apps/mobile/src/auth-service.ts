@@ -1,5 +1,6 @@
 import type { AuthAccountOption, AuthTokens, LoginResult } from '@kobrax/shared';
 import { apiFetch, type ApiResult } from './api';
+import { authedFetch } from './api-client';
 import { clearSession, getSession, saveSession, touchSession } from './session';
 
 export type Step = 'done' | 'mfa' | 'mfa_setup' | 'select_account';
@@ -119,24 +120,16 @@ export const authService = {
    * solo cuando el refresh fue rechazado por el servidor.
    */
   async me(): Promise<MeResult> {
-    const session = await getSession();
-    if (!session) return { status: 'unauthenticated' };
-
-    let res = await apiFetch<Me>('/auth/me', { token: session.accessToken });
+    const res = await authedFetch<Me>('/auth/me');
+    if (res.status === 'unauthenticated') return { status: 'unauthenticated' };
     if (res.status === 0) return { status: 'offline' };
-    if (res.status === 401) {
-      const refreshed = await this.refresh();
-      if (!refreshed) {
-        // refresh() limpia la sesión solo si el server la rechazó (≠ network).
-        return (await getSession()) ? { status: 'offline' } : { status: 'unauthenticated' };
-      }
-      res = await apiFetch<Me>('/auth/me', { token: refreshed.accessToken });
-      if (res.status === 0) return { status: 'offline' };
-    }
     if (res.status === 200 && res.data) {
       await touchSession(); // actividad → extiende la ventana de inactividad (8h)
       return { status: 'ok', me: res.data };
     }
+    // Solo un 401 puede venir de "se cayó la red durante el refresh" (sesión intacta) → offline.
+    // Cualquier otro no-200 (403/500) es fallo server-side, no de red → re-login, no varar en offline.
+    if (res.status === 401 && (await getSession())) return { status: 'offline' };
     return { status: 'unauthenticated' };
   },
 
@@ -160,39 +153,15 @@ export const authService = {
     currentPassword: string,
     newPassword: string,
   ): Promise<{ ok: true } | { error: string }> {
-    const session = await getSession();
-    if (!session) return { error: 'Sesión expirada' };
-    const body = { currentPassword, newPassword };
-
-    let res = await apiFetch('/auth/change-password', { method: 'POST', token: session.accessToken, body });
-    if (res.status === 401) {
-      // Puede ser access expirado: refresca y reintenta una vez.
-      const refreshed = await this.refresh();
-      if (refreshed) {
-        res = await apiFetch('/auth/change-password', { method: 'POST', token: refreshed.accessToken, body });
-      }
-    }
+    const res = await authedFetch('/auth/change-password', {
+      method: 'POST',
+      body: { currentPassword, newPassword },
+    });
+    if (res.status === 'unauthenticated') return { error: 'Sesión expirada' };
     if (res.status === 0) return { error: 'Sin conexión. Revisa tu red e intenta de nuevo.' };
     if (res.status !== 200) return { error: errMessage(res) };
     await clearSession(); // sesiones revocadas server-side → re-login
     return { ok: true };
-  },
-
-  /** Refresh silencioso (rotatorio). Devuelve los nuevos tokens o null si falló. */
-  async refresh(): Promise<AuthTokens | null> {
-    const session = await getSession();
-    if (!session) return null;
-    const res = await apiFetch<AuthTokens>('/auth/refresh', {
-      method: 'POST',
-      body: { refreshToken: session.refreshToken },
-    });
-    if (res.status !== 200 || !res.data) {
-      // Refresh revocado/expirado → cerrar sesión local.
-      if (res.status !== 0) await clearSession();
-      return null;
-    }
-    await saveSession(res.data);
-    return res.data;
   },
 
   async logout(): Promise<void> {

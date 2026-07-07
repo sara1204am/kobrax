@@ -7,6 +7,10 @@
 >
 > **Diseño:** Figma "Kobrax movil" · fileKey `daLWsKQGC4Sd1NacU9fmrP` · board raíz `81:2`.
 > Pulls: `get_design_context` / `get_screenshot` con el node-id de cada fila.
+>
+> **⚠ Contrato real (auditoría 2026-07-03, ver [BUILD-PLAN §3](./BUILD-PLAN.md)):** todos los endpoints llevan
+> prefijo **`/api`**; las visitas son **`/api/visits`** (no `/field-visits`); la idempotencia de pago es
+> **`payments.idempotencyKey`** (no `reference` — ese campo vive en `payment_requests`).
 
 ---
 
@@ -18,7 +22,8 @@
 | **Build** | **Expo Go** mientras no haya nativo; **dev build** (`expo prebuild`) al entrar cámara/GPS/firma/pinning **y mapas**. | Split natural: Expo Go = listas/datos; dev build = mapas + evidencia + offline nativo. |
 | **Tokens** | Manda `design-system.md`: **navy primario**, purple solo acento. | Las pantallas Figma usan CTA **morado** → se **normaliza a navy** al construir. |
 | **Mapas** | Librería que funcione **online + offline** (ver §3). | Nativo → cae en la fase dev build, no en Expo Go. |
-| **Roles** | Diferidos (F3). Se construye asumiendo **cobrador**; gating al final. | El import (§4) es de supervisor → se ubica según rol al final. |
+| **Roles** | Diferidos (F3). Se construye asumiendo **cobrador**; gating al final. | El import (§4) sirve a **dos perfiles** (independiente en móvil / admin en web) → se ubica según rol al final. |
+| **Modelo offline** | **Hidratación en oficina → cobro en campo** (ver §4.1). | Sync bulk con wifi de mañana; luego opera sin señal con datos + mapa ya locales. |
 
 ---
 
@@ -50,7 +55,7 @@ Nativo (requiere dev build). `react-native-maps` (Google/Apple) **no** hace tile
 | **Mapbox** (`@rnmapbox/maps`) | ✅ offline tile packs | Free tier + API key | Más pulido; depende de cuenta Mapbox. |
 | react-native-maps | ❌ (solo caché hacky) | Gratis | No cumple offline. Descartado. |
 
-**Recomendación:** MapLibre. Se integra en la **fase dev build**, junto con evidencia.
+**✅ Decisión (confirmada):** MapLibre. Se integra en la **fase dev build**, junto con evidencia.
 
 ---
 
@@ -67,7 +72,7 @@ Leyenda build: 🟢 Expo Go · 🔵 dev build (nativo).
 | Home Jornada Activa | `42:3069` | `GET /routes?collectorId&date` · `GET /cases?assigneeId` · `GET /notifications` | route_plans, collection_cases, notifications | 🟢 |
 | Home Pre-jornada | `42:3247` | idem (estado sin ruta activa) | idem | 🟢 |
 
-> **Gap:** KPIs del home no tienen endpoint de agregación. Opción A: calcular en cliente desde routes/cases. Opción B: agregar `GET /me/summary` (1 query) en API. **Decisión pendiente.**
+> **✅ KPIs del home = calcular en cliente** desde routes/cases/payments locales (incluye acciones offline `pending`). Son contadores intradía; el dispositivo tiene el dato más fresco hasta sincronizar. Sin endpoint de agregación nuevo (§8.1).
 
 ### AGENDA + GESTIONES + NOTIF — sección `81:4` — Slice 3–4
 | Pantalla | node-id | Endpoint | DB | Build |
@@ -111,7 +116,27 @@ Leyenda build: 🟢 Expo Go · 🔵 dev build (nativo).
 | Registrar pago | `POST /payments {creditId,amount,method}` + header `Idempotency-Key` | payments (ledger inmutable) | 🟢 |
 | Solicitud QR/link | `POST /payment-requests` · `POST /payment-requests/:id/confirm` | payment_requests | 🟢 |
 
-### IMPORT / Carga — sección `20:1046` — ⚠️ rol supervisor (ubicar al final)
+### 4.1 Modelo de hidratación offline — "oficina → campo"
+
+> Por qué Import va primero: es la **puerta de entrada de datos del día** para el cobrador independiente/oficina chica.
+
+**Dos perfiles de carga:**
+
+| Perfil | Carga desde | Cuándo |
+|---|---|---|
+| Cobrador independiente / oficina pequeña | **Móvil** (Excel o config ya creada en web) | Primera hora, en oficina con wifi |
+| Empresa mediana/grande (multiusuario) | **Web** (admin) → baja al móvil del cobrador | Admin administra; cobrador recibe |
+
+**Ciclo diario:**
+1. **Oficina (con internet):** importar/actualizar/eliminar datos del día → **sync automático a WatermelonDB** + **descarga del pack de mapa de la región/pueblo** (MapLibre offline pack).
+2. **Salida a cobrar:** ciudad = hay señal; pueblo = mapa ya cargado para la región.
+3. **Zonas sin señal:** datos + mapa **ya locales** → operación 100% offline (regla no-negociable).
+
+> Este "sync de oficina" **es** el checkpoint de hidratación de WatermelonDB (resuelve el punto de retro-encaje offline, §8.5). El pack de mapa cae en fase dev build 🔵 (MapLibre nativo); el import de datos es 🟢 Expo Go.
+
+**Regla multi-tenant (no-negociable, principio #1):** una **sola app** para todos los tenants; las capacidades se **encienden por capacidad/rol (RBAC scope)**, nunca por `tenantType`. El import móvil aparece solo si el tenant/rol tiene la capacidad (ej. `clients.import`); el cobrador de un banco no la ve. Ramificar por capacidad escala sin tocar código; ramificar por tipo de tenant es deuda. F3 diferido → se construye con la capacidad **encendida** y el guard se cablea al final.
+
+### IMPORT / Carga — sección `20:1046` — sirve a 2 perfiles (móvil independiente / web admin); gating por rol al final
 | Pantalla | node-id | Endpoint | DB | Build |
 |---|---|---|---|---|
 | Inicio Sync | `24:1049` | — | — | 🟢 |
@@ -148,11 +173,21 @@ Leyenda build: 🟢 Expo Go · 🔵 dev build (nativo).
 
 ---
 
-## 6. Navegación / Tabs — a confirmar
+## 6. Navegación / Tabs — ✅ RESUELTO (se guía por Figma)
 
-- F10 §H0.3 propone tabs: **Ruta · Casos · Pagos · Perfil**.
-- El Figma muestra tab bar con **Inicio · Agenda · Rutas · …**.
-- **Conflicto a resolver:** ¿tabs = Inicio · Agenda · Rutas · Perfil (con Pagos dentro de gestión/caso)? Confirmar extrayendo un `Header`/`Nav` real (`64:185` / `46:5`) con `get_design_context`. **Decisión pendiente.**
+**Set final = 5 tabs, tal cual el Figma** (verificado en `42:3069`):
+
+**`Inicio · Agenda · Rutas · Cobranza · Más`**
+
+| Tab | Ícono | Contenido |
+|---|---|---|
+| **Inicio** | grid | Home/dashboard: progreso del día, agenda resumida, ruta activa |
+| **Agenda** | calendario | Agenda diaria de gestiones |
+| **Rutas** | ruta | Rutas del día (mapas en dev build 🔵) |
+| **Cobranza** | documento | Pagos / cobros; badge de pendientes |
+| **Más** | ••• | Overflow: Perfil, Import (supervisor), config |
+
+> Reemplaza el `Ruta·Casos·Pagos·Perfil` de F10 §H0.3. Diferencias clave: **"Casos" no es tab** (las gestiones viven bajo Agenda/Inicio); **Pagos → "Cobranza"** como tab de primer nivel; **Perfil → dentro de "Más"**.
 
 ---
 
@@ -179,8 +214,8 @@ Racional: leer antes de escribir · deps baratas primero · mapas/cámara/offlin
 
 ## 8. Decisiones pendientes (para modificar este plan)
 
-1. **KPIs home:** ¿agregar `GET /me/summary` o calcular en cliente? (§4 Home)
-2. **Tabs:** set final de tabs (§6).
-3. **Mapa:** ¿MapLibre (gratis) o Mapbox? (§3)
-4. **Import en móvil:** ¿se queda (supervisor) o se saca a web F9? (§4 Import)
-5. **Offline retro-encaje:** ¿en qué punto exacto se mete WatermelonDB sin re-escribir services? (§7 paso 9)
+1. ~~**KPIs home:** ¿`GET /me/summary` o cliente?~~ ✅ RESUELTO: **calcular en cliente**. Los KPIs del Home son contadores intradía (`cobrado hoy`, `7/18 gestiones`, `progreso`, `en mora`) generados por acciones **offline** del cobrador → solo el dispositivo tiene el dato fresco hasta sincronizar. Un summary del server iría atrasado por diseño. Definiciones de KPI cambiables → config hidratada en oficina, no cálculo en server.
+2. ~~**Tabs:** set final de tabs (§6).~~ ✅ RESUELTO: `Inicio·Agenda·Rutas·Cobranza·Más` (se guía por Figma).
+3. ~~**Mapa:** ¿MapLibre o Mapbox?~~ ✅ RESUELTO: **MapLibre** (`@maplibre/maplibre-react-native`) — offline packs por región (MBTiles), gratis, sin vendor lock. Integra en fase dev build 🔵.
+4. ~~**Import en móvil:** ¿se queda o se saca a web?~~ ✅ RESUELTO: **ambos** — móvil (independiente) + web (admin multiusuario). Un solo import adaptable por tenant/rol (§4.1).
+5. ~~**Offline retro-encaje:** ¿en qué punto?~~ ✅ Anclado: el **sync de oficina** (§4.1) es el checkpoint de hidratación de WatermelonDB. Falta definir el mecanismo técnico exacto (schema espejo + orden de carga).
