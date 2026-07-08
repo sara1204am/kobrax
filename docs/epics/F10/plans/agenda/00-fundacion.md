@@ -1,8 +1,9 @@
 # Agenda · 00 — Fundación backend (catálogos + agenda_items)
 
-> **ESTADO: PLAN EN REVISIÓN (2026-07-08). NO construir hasta OK.**
-> Índice: [README.md](./README.md) · Modelo: [DOMAIN.md](./DOMAIN.md). Va **antes** de toda pantalla.
-> Rama propuesta: `f10/agenda-fundacion`. Solo backend + seed (no UI).
+> **ESTADO: ✅ CONSTRUIDO (2026-07-08, rama `f10/agenda-fundacion`).**
+> Verde: API type-check + 174 tests (+8). Smoke real: login cobrador → catalogs (8) + agenda del día
+> (deudor enriquecido) + overdue (2 de 3). Migración `20260708000000_add_agenda_module` aplicada + seed cargado.
+> Índice: [README.md](./README.md) · Modelo: [DOMAIN.md](./DOMAIN.md).
 
 ## 1. Objetivo
 Dejar el backend listo para el módulo: la tabla del agendado, sus enums, el sistema de catálogos
