@@ -26,6 +26,10 @@ import {
   PaymentMethod,
   ContactType,
   LocationType,
+  AgendaItemType,
+  AgendaItemStatus,
+  ScheduleTimeMode,
+  CatalogType,
 } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { createCipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
@@ -71,6 +75,11 @@ const PERMISSIONS = [
   ['route:write', 'routes', 'UPDATE', 'BRANCH'],
   ['route:assign', 'routes', 'UPDATE', 'BRANCH'],
   ['route:execute', 'routes', 'EXECUTE', 'OWN'],
+  ['agenda:read', 'agenda', 'READ', 'OWN'],
+  ['agenda:write', 'agenda', 'CREATE', 'OWN'],
+  ['agenda:assign', 'agenda', 'UPDATE', 'BRANCH'],
+  ['catalog:read', 'catalogs', 'READ', 'ACCOUNT'],
+  ['catalog:write', 'catalogs', 'UPDATE', 'ACCOUNT'],
   ['client:read', 'clients', 'READ', 'ACCOUNT'],
   ['client:write', 'clients', 'UPDATE', 'ACCOUNT'],
   ['client:pii:read', 'clients', 'READ', 'ACCOUNT'],
@@ -95,15 +104,15 @@ const ROLES: Record<string, { level: number; perms: string[] | '*' }> = {
   ACCOUNT_ADMIN: { level: 90, perms: PERMISSIONS.map((p) => p[0]).filter((c) => c !== 'audit:read') },
   MANAGER: {
     level: 70,
-    perms: ['case:read', 'case:write', 'case:assign', 'case:close', 'payment:read', 'payment:approve', 'route:read', 'route:write', 'route:assign', 'client:read', 'client:write', 'client:pii:read', 'client:import', 'credit:read', 'credit:write', 'credit:pii:read', 'report:read', 'report:export', 'user:read'],
+    perms: ['case:read', 'case:write', 'case:assign', 'case:close', 'payment:read', 'payment:approve', 'route:read', 'route:write', 'route:assign', 'agenda:read', 'agenda:write', 'agenda:assign', 'catalog:read', 'catalog:write', 'client:read', 'client:write', 'client:pii:read', 'client:import', 'credit:read', 'credit:write', 'credit:pii:read', 'report:read', 'report:export', 'user:read'],
   },
   SUPERVISOR: {
     level: 50,
-    perms: ['case:read', 'case:write', 'case:assign', 'payment:read', 'route:read', 'route:write', 'route:assign', 'client:read', 'credit:read', 'report:read'],
+    perms: ['case:read', 'case:write', 'case:assign', 'payment:read', 'route:read', 'route:write', 'route:assign', 'agenda:read', 'agenda:write', 'agenda:assign', 'catalog:read', 'client:read', 'credit:read', 'report:read'],
   },
   COLLECTOR: {
     level: 30,
-    perms: ['case:read', 'case:write', 'payment:read', 'payment:write', 'route:read', 'route:execute', 'client:read', 'credit:read'],
+    perms: ['case:read', 'case:write', 'payment:read', 'payment:write', 'route:read', 'route:execute', 'agenda:read', 'agenda:write', 'catalog:read', 'client:read', 'credit:read'],
   },
   AUDITOR: {
     level: 20,
@@ -392,7 +401,141 @@ async function main() {
     console.log('  ↺ cadena operativa demo ya existe; re-asignada al collector');
   }
 
+  // 5) Módulo Agenda (F10): catálogos + deudores ricos + agendados de la semana.
+  await seedAgenda(acc, collector.id);
+
   console.log('✅ Seed completo.');
+}
+
+/** Catálogos por defecto + clientes con múltiples tel/dirección/crédito + agendados de la semana. */
+async function seedAgenda(acc: string, collectorId: string): Promise<void> {
+  // Catálogos (idempotente por el unique (accountId, catalog, code)).
+  const catalogs: { catalog: CatalogType; code: string; label: string; sortOrder: number; metadata?: object }[] = [
+    { catalog: CatalogType.PAYMENT_METHOD, code: 'CASH', label: 'Efectivo', sortOrder: 1 },
+    { catalog: CatalogType.PAYMENT_METHOD, code: 'DEPOSIT', label: 'Depósito', sortOrder: 2, metadata: { requiresBank: true } },
+    { catalog: CatalogType.PAYMENT_METHOD, code: 'TRANSFER', label: 'Transferencia', sortOrder: 3, metadata: { requiresBank: true } },
+    { catalog: CatalogType.PAYMENT_METHOD, code: 'QR', label: 'QR', sortOrder: 4 },
+    { catalog: CatalogType.PAYMENT_METHOD, code: 'CHECK', label: 'Cheque', sortOrder: 5, metadata: { requiresBank: true } },
+    { catalog: CatalogType.PAYMENT_METHOD, code: 'MOBILE', label: 'Pago móvil', sortOrder: 6 },
+    { catalog: CatalogType.PAYMENT_METHOD, code: 'AGENCY', label: 'Agencia', sortOrder: 7 },
+    { catalog: CatalogType.PAYMENT_METHOD, code: 'COLLECTOR', label: 'Cobrador', sortOrder: 8 },
+    { catalog: CatalogType.BANK, code: 'BNB', label: 'Banco Nacional de Bolivia', sortOrder: 1 },
+    { catalog: CatalogType.BANK, code: 'BCP', label: 'BCP', sortOrder: 2 },
+    { catalog: CatalogType.BANK, code: 'BMSC', label: 'Banco Mercantil Santa Cruz', sortOrder: 3 },
+    { catalog: CatalogType.BANK, code: 'BISA', label: 'Banco BISA', sortOrder: 4 },
+    { catalog: CatalogType.BANK, code: 'UNION', label: 'Banco Unión', sortOrder: 5 },
+    { catalog: CatalogType.BANK, code: 'FIE', label: 'Banco FIE', sortOrder: 6 },
+    { catalog: CatalogType.BANK, code: 'SOL', label: 'Banco Sol', sortOrder: 7 },
+    { catalog: CatalogType.BANK, code: 'ECOFUTURO', label: 'EcoFuturo', sortOrder: 8 },
+    { catalog: CatalogType.PRIORITY, code: 'VERY_HIGH', label: 'Muy alta', sortOrder: 1 },
+    { catalog: CatalogType.PRIORITY, code: 'HIGH', label: 'Alta', sortOrder: 2 },
+    { catalog: CatalogType.PRIORITY, code: 'MEDIUM', label: 'Media', sortOrder: 3 },
+    { catalog: CatalogType.PRIORITY, code: 'LOW', label: 'Baja', sortOrder: 4 },
+    { catalog: CatalogType.EXPECTED_RESULT, code: 'COLLECT', label: 'Cobrar', sortOrder: 1 },
+    { catalog: CatalogType.EXPECTED_RESULT, code: 'REMIND', label: 'Recordar', sortOrder: 2 },
+    { catalog: CatalogType.EXPECTED_RESULT, code: 'CONFIRM_VISIT', label: 'Confirmar visita', sortOrder: 3 },
+    { catalog: CatalogType.EXPECTED_RESULT, code: 'CONFIRM_PAYMENT', label: 'Confirmar pago', sortOrder: 4 },
+    { catalog: CatalogType.EXPECTED_RESULT, code: 'NEGOTIATE', label: 'Negociar', sortOrder: 5 },
+    { catalog: CatalogType.PHONE_TYPE, code: 'MOBILE', label: 'Celular', sortOrder: 1 },
+    { catalog: CatalogType.PHONE_TYPE, code: 'OFFICE', label: 'Oficina', sortOrder: 2 },
+    { catalog: CatalogType.PHONE_TYPE, code: 'HOME', label: 'Casa', sortOrder: 3 },
+    { catalog: CatalogType.PHONE_TYPE, code: 'REFERENCE', label: 'Referencia', sortOrder: 4 },
+    { catalog: CatalogType.ADDRESS_TYPE, code: 'HOME', label: 'Casa', sortOrder: 1 },
+    { catalog: CatalogType.ADDRESS_TYPE, code: 'WORK', label: 'Trabajo', sortOrder: 2 },
+    { catalog: CatalogType.ADDRESS_TYPE, code: 'BUSINESS', label: 'Negocio', sortOrder: 3 },
+    { catalog: CatalogType.REMINDER_CATEGORY, code: 'PAYMENT', label: 'Pago', sortOrder: 1 },
+    { catalog: CatalogType.REMINDER_CATEGORY, code: 'DOCUMENT', label: 'Documento', sortOrder: 2 },
+    { catalog: CatalogType.REMINDER_CATEGORY, code: 'FOLLOWUP', label: 'Seguimiento', sortOrder: 3 },
+    { catalog: CatalogType.CANCEL_REASON, code: 'CLIENT_UNAVAILABLE', label: 'Cliente no disponible', sortOrder: 1 },
+    { catalog: CatalogType.CANCEL_REASON, code: 'WRONG_DATA', label: 'Datos incorrectos', sortOrder: 2 },
+    { catalog: CatalogType.RESCHEDULE_REASON, code: 'CLIENT_REQUEST', label: 'A pedido del cliente', sortOrder: 1 },
+    { catalog: CatalogType.RESCHEDULE_REASON, code: 'NO_ANSWER', label: 'Sin respuesta', sortOrder: 2 },
+    { catalog: CatalogType.CURRENCY, code: 'BOB', label: 'Boliviano', sortOrder: 1 },
+    { catalog: CatalogType.CURRENCY, code: 'USD', label: 'Dólar', sortOrder: 2 },
+  ];
+  await prisma.catalogItem.createMany({
+    data: catalogs.map((c) => ({ accountId: acc, catalog: c.catalog, code: c.code, label: c.label, sortOrder: c.sortOrder, metadata: c.metadata ?? {} })),
+    skipDuplicates: true,
+  });
+
+  // Idempotencia del resto: si ya hay agendados, no re-sembrar deudores/agendados.
+  if ((await prisma.agendaItem.count({ where: { accountId: acc } })) > 0) {
+    console.log('  ↺ agenda ya sembrada; solo catálogos verificados');
+    return;
+  }
+
+  // Deudor con caso, múltiples teléfonos y direcciones. Devuelve el caso creado.
+  async function makeDebtor(opts: {
+    doc: string; firstName: string; lastName: string; balance: number; phones: [string, string][]; addresses: [string, string][];
+  }): Promise<{ caseId: string; clientId: string; creditId: string }> {
+    const client = await prisma.client.create({
+      data: {
+        accountId: acc,
+        firstName: opts.firstName,
+        lastName: opts.lastName,
+        clientType: ClientType.PERSON,
+        nationalId: encryptPII(opts.doc),
+        nationalIdHash: blindHash(opts.doc),
+        riskSegment: 'MEDIUM',
+        contacts: { create: opts.phones.map(([value, label], i) => ({ accountId: acc, contactType: ContactType.PHONE, value: encryptPII(value), isPrimary: i === 0, notes: label })) },
+        locations: { create: opts.addresses.map(([address, zone]) => ({ accountId: acc, locationType: LocationType.HOME, address: encryptPII(address), zone })) },
+      },
+    });
+    const credit = await prisma.credit.create({
+      data: { accountId: acc, clientId: client.id, code: `CRD-${opts.doc}`, principalAmount: opts.balance * 1.5, outstandingBalance: opts.balance, interestRate: 0.025, currency: 'BOB', installmentsCount: 12, status: CreditStatus.ACTIVE, daysPastDue: 20 },
+    });
+    const kase = await prisma.collectionCase.create({
+      data: { accountId: acc, creditId: credit.id, clientId: client.id, assigneeId: collectorId, status: CaseStatus.ACTIVE, priority: CasePriority.HIGH },
+    });
+    return { caseId: kase.id, clientId: client.id, creditId: credit.id };
+  }
+
+  const ana = await makeDebtor({ doc: 'AGN-0002', firstName: 'Ana', lastName: 'Ruiz', balance: 4200, phones: [['70000101', 'Celular'], ['22222201', 'Oficina']], addresses: [['Calle 1 #100', 'Sopocachi'], ['Av. Trabajo 200', 'Miraflores']] });
+  const maria = await makeDebtor({ doc: 'AGN-0003', firstName: 'María', lastName: 'Gómez', balance: 8900, phones: [['70000102', 'Celular'], ['70000112', 'Referencia']], addresses: [['Calle 2 #200', 'Centro']] });
+  const pedro = await makeDebtor({ doc: 'AGN-0004', firstName: 'Pedro', lastName: 'Flores', balance: 1500, phones: [['70000103', 'Celular']], addresses: [['Zona Sur #300', 'Calacoto'], ['Negocio 400', 'Mercado']] });
+
+  // Juan (demo existente) → 2º crédito para probar "¿cuál crédito?".
+  const juan = await prisma.client.findFirst({ where: { accountId: acc, nationalIdHash: blindHash('DEMO-0001') }, select: { id: true } });
+  const juanCase = juan ? await prisma.collectionCase.findFirst({ where: { accountId: acc, clientId: juan.id }, select: { id: true, clientId: true, creditId: true } }) : null;
+  if (juan) {
+    await prisma.credit.create({ data: { accountId: acc, clientId: juan.id, code: 'CRD-DEMO-2', principalAmount: 3000, outstandingBalance: 2500, interestRate: 0.03, currency: 'BOB', installmentsCount: 6, status: CreditStatus.ACTIVE, daysPastDue: 10 } });
+  }
+
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const day = (n: number): Date => { const d = new Date(today); d.setUTCDate(d.getUTCDate() + n); return d; };
+
+  // Agendados: hoy (incl. 1 ejecutado), futuros, y 3 vencidos. Cubren los 5 tipos.
+  const items: {
+    ref: { caseId: string; clientId: string; creditId: string }; type: AgendaItemType; status: AgendaItemStatus;
+    dayOffset: number; time?: string; details: object; observations?: string; priorityCode?: string; expectedResultCode?: string;
+  }[] = [
+    { ref: ana, type: AgendaItemType.CALL, status: AgendaItemStatus.SCHEDULED, dayOffset: 0, time: '09:30', priorityCode: 'HIGH', expectedResultCode: 'COLLECT', details: { phone: '70000101', phoneLabel: 'Celular' }, observations: 'Recordar cuota vencida' },
+    { ref: maria, type: AgendaItemType.VISIT, status: AgendaItemStatus.SCHEDULED, dayOffset: 0, time: '11:00', priorityCode: 'VERY_HIGH', expectedResultCode: 'CONFIRM_VISIT', details: { addressLabel: 'Casa', address: 'Calle 2 #200' } },
+    { ref: pedro, type: AgendaItemType.WHATSAPP, status: AgendaItemStatus.EXECUTED, dayOffset: 0, time: '08:15', expectedResultCode: 'REMIND', details: { phone: '70000103', message: 'Hola {{cliente}}, su saldo es {{saldo}}' } },
+    { ref: ana, type: AgendaItemType.REMINDER, status: AgendaItemStatus.SCHEDULED, dayOffset: 1, time: '10:00', priorityCode: 'MEDIUM', details: { title: 'Enviar comprobante', description: 'Adjuntar depósito', category: 'DOCUMENT' } },
+    { ref: maria, type: AgendaItemType.PROMISE_TO_PAY, status: AgendaItemStatus.SCHEDULED, dayOffset: 2, time: '15:00', expectedResultCode: 'CONFIRM_PAYMENT', details: { amount: 500, paymentMethodCode: 'TRANSFER', bankCode: 'BNB', dueDate: day(2).toISOString().slice(0, 10) } },
+    { ref: pedro, type: AgendaItemType.CALL, status: AgendaItemStatus.SCHEDULED, dayOffset: 3, time: '16:30', priorityCode: 'LOW', details: { phone: '70000103', phoneLabel: 'Celular' } },
+    { ref: ana, type: AgendaItemType.CALL, status: AgendaItemStatus.SCHEDULED, dayOffset: -1, time: '09:00', priorityCode: 'HIGH', details: { phone: '70000101' } },
+    { ref: maria, type: AgendaItemType.VISIT, status: AgendaItemStatus.SCHEDULED, dayOffset: -2, time: '14:00', priorityCode: 'HIGH', details: { addressLabel: 'Casa', address: 'Calle 2 #200' } },
+    { ref: pedro, type: AgendaItemType.PROMISE_TO_PAY, status: AgendaItemStatus.SCHEDULED, dayOffset: -3, time: '10:30', details: { amount: 300, paymentMethodCode: 'CASH', dueDate: day(-3).toISOString().slice(0, 10) } },
+  ];
+  if (juanCase) {
+    items.push({ ref: { caseId: juanCase.id, clientId: juanCase.clientId, creditId: juanCase.creditId }, type: AgendaItemType.WHATSAPP, status: AgendaItemStatus.SCHEDULED, dayOffset: 0, time: '17:00', details: { phone: '70000000', message: 'Hola {{cliente}}' } });
+  }
+
+  for (const it of items) {
+    await prisma.agendaItem.create({
+      data: {
+        accountId: acc, caseId: it.ref.caseId, clientId: it.ref.clientId, creditId: it.ref.creditId, assigneeId: collectorId,
+        type: it.type, status: it.status, priorityCode: it.priorityCode, expectedResultCode: it.expectedResultCode,
+        scheduledDate: day(it.dayOffset), timeMode: ScheduleTimeMode.FIXED, scheduledTime: it.time,
+        observations: it.observations, details: it.details, createdBy: collectorId,
+      },
+    });
+  }
+
+  console.log(`  ✓ agenda: ${catalogs.length} catálogos, 3 deudores nuevos, ${items.length} agendados (hoy/futuro/vencidos)`);
 }
 
 main()

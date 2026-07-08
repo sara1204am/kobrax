@@ -25,6 +25,13 @@ export enum Permission {
   ROUTE_ASSIGN = 'route:assign',
   ROUTE_EXECUTE = 'route:execute',
 
+  AGENDA_READ = 'agenda:read',
+  AGENDA_WRITE = 'agenda:write',
+  AGENDA_ASSIGN = 'agenda:assign', // ver/gestionar agendados de otros cobradores (supervisión)
+
+  CATALOG_READ = 'catalog:read',
+  CATALOG_WRITE = 'catalog:write',
+
   CLIENT_READ = 'client:read',
   CLIENT_WRITE = 'client:write',
   CLIENT_PII_READ = 'client:pii:read', // revelar PII en claro (documento/teléfono/dirección)

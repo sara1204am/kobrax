@@ -34,7 +34,9 @@ DECLARE
     -- Pilar 4 + transversal
     'payments', 'payment_requests', 'notifications',
     -- Auth (F2a)
-    'refresh_tokens'
+    'refresh_tokens',
+    -- Agenda (F10)
+    'agenda_items', 'catalog_items'
   ];
 BEGIN
   FOREACH t IN ARRAY operational LOOP

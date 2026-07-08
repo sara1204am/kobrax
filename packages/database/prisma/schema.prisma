@@ -102,6 +102,8 @@ model Account {
   paymentRequests PaymentRequest[]
   notifications   Notification[]
   refreshTokens   RefreshToken[]
+  agendaItems     AgendaItem[]
+  catalogItems    CatalogItem[]
 
   @@index([status])
   @@index([deletedAt])
@@ -976,4 +978,97 @@ model Notification {
   @@index([accountId, userId])
   @@index([accountId, userId, readAt])
   @@map("notifications")
+}
+
+// ── Agenda (F10) — gestiones agendadas por fecha ────────────────────────────
+
+enum AgendaItemType {
+  CALL
+  VISIT
+  WHATSAPP
+  REMINDER
+  PROMISE_TO_PAY
+}
+
+enum AgendaItemStatus {
+  SCHEDULED
+  EXECUTED
+  CANCELLED
+  RESCHEDULED
+}
+
+enum ScheduleTimeMode {
+  FIXED
+  LAPSE
+  RANGE
+}
+
+enum CatalogType {
+  PAYMENT_METHOD
+  BANK
+  EXPECTED_RESULT
+  PRIORITY
+  ADDRESS_TYPE
+  PHONE_TYPE
+  CANCEL_REASON
+  RESCHEDULE_REASON
+  REMINDER_CATEGORY
+  CAMPAIGN
+  CURRENCY
+}
+
+/// Gestión agendada (llamada/visita/whatsapp/recordatorio/promesa) sobre un caso.
+/// Núcleo en columnas; lo específico por tipo en `details` (validado en la app).
+model AgendaItem {
+  id                 String           @id @default(uuid())
+  accountId          String           @map("account_id")
+  caseId             String           @map("case_id") // ref suave a collection_cases
+  clientId           String           @map("client_id") // ref suave
+  creditId           String           @map("credit_id") // ref suave (cliente puede tener varios)
+  assigneeId         String           @map("assignee_id") // cobrador (users.id, ref suave)
+  type               AgendaItemType
+  status             AgendaItemStatus @default(SCHEDULED)
+  priorityCode       String?          @map("priority_code") // → catalog_items.code (PRIORITY)
+  expectedResultCode String?          @map("expected_result_code") // → catalog_items.code (EXPECTED_RESULT)
+  scheduledDate      DateTime         @map("scheduled_date") @db.Date
+  timeMode           ScheduleTimeMode @default(FIXED) @map("time_mode")
+  scheduledTime      String?          @map("scheduled_time") // HH:mm si FIXED
+  timeSlot           String?          @map("time_slot") // franja (LAPSE) o rango (RANGE)
+  observations       String?
+  details            Json             @default("{}") // campos específicos por tipo
+  resultActivityId   String?          @map("result_activity_id") // case_activities.id (ref suave) al ejecutar
+  createdBy          String?          @map("created_by")
+  updatedBy          String?          @map("updated_by")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+  deletedAt          DateTime?        @map("deleted_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@index([accountId, assigneeId, scheduledDate])
+  @@index([accountId, caseId])
+  @@index([accountId, status])
+  @@index([deletedAt])
+  @@map("agenda_items")
+}
+
+/// Catálogo genérico configurable por tenant (un solo modelo para los 11 tipos).
+model CatalogItem {
+  id        String      @id @default(uuid())
+  accountId String      @map("account_id")
+  catalog   CatalogType
+  code      String
+  label     String
+  sortOrder Int         @default(0) @map("sort_order")
+  isActive  Boolean     @default(true) @map("is_active")
+  metadata  Json        @default("{}") // p.ej. { "requiresBank": true }
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+  deletedAt DateTime?   @map("deleted_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@unique([accountId, catalog, code])
+  @@index([accountId, catalog, isActive])
+  @@map("catalog_items")
 }
