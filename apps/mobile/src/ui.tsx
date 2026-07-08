@@ -160,32 +160,110 @@ export function StatTile({
   );
 }
 
+/** Color sólido por tono (para la barra de acento de la tarjeta de caso). */
+const TONE_SOLID: Record<BadgeTone, string> = {
+  neutral: COLORS.muted,
+  info: COLORS.periwinkle,
+  success: COLORS.success,
+  danger: COLORS.danger,
+  warning: COLORS.warning,
+};
+
 /**
- * Fila de caso para la Agenda (sobre `ListRow`+`StatusBadge`). El dato accionable (título) va
- * en alto contraste; un caso vencido fuerza tono `danger`. Reusada en Agenda (P1), Gestiones (P2)
- * y Rutas (P3). Nota: el listado del API no trae deudor/monto → la pantalla arma el título con
- * lo que hay (ver plan §12).
+ * Tarjeta de caso de la Agenda (diseño Figma `81:4`): barra de acento a la izquierda (roja si
+ * vencida, si no por estado), nombre del deudor en navy, línea secundaria, y a la derecha el monto
+ * (alto contraste) sobre la pill de estado. `action` = botón redondo opcional (llamar/mensaje → P2).
+ * Reusada en Agenda (P1), Gestiones (P2) y Rutas (P3).
  */
 export function CaseCard({
-  title,
+  name,
   subtitle,
+  amount,
   status,
   overdue,
+  action,
   onPress,
 }: {
-  title: string;
+  name: string;
   subtitle?: string;
+  amount?: string;
   status: CaseStatus;
   overdue?: boolean;
+  action?: ReactNode;
   onPress?: () => void;
 }) {
+  const tone: BadgeTone = overdue ? 'danger' : caseStatusTone(status);
   return (
-    <ListRow
-      title={title}
-      subtitle={subtitle}
-      onPress={onPress}
-      right={<StatusBadge label={CASE_STATUS_LABEL[status]} tone={overdue ? 'danger' : caseStatusTone(status)} />}
-    />
+    <View style={styles.caseCard}>
+      <View style={[styles.caseAccent, { backgroundColor: TONE_SOLID[tone] }]} />
+      <Pressable
+        onPress={onPress}
+        disabled={!onPress}
+        style={({ pressed }) => [styles.caseBody, pressed && onPress && styles.rowPressed]}
+      >
+        <View style={{ flex: 1, gap: 3 }}>
+          <Text style={styles.caseName} numberOfLines={1}>
+            {name}
+          </Text>
+          {subtitle && (
+            <Text style={styles.rowSubtitle} numberOfLines={1}>
+              {subtitle}
+            </Text>
+          )}
+        </View>
+        <View style={styles.caseRight}>
+          {amount && (
+            <Text style={styles.caseAmount} numberOfLines={1}>
+              {amount}
+            </Text>
+          )}
+          <StatusBadge label={overdue ? 'Vencida' : CASE_STATUS_LABEL[status]} tone={tone} />
+        </View>
+      </Pressable>
+      {action}
+    </View>
+  );
+}
+
+/** Encabezado gris de sección (uppercase) para agrupar la lista de la Agenda. */
+export function SectionLabel({ children }: { children: string }) {
+  return <Text style={styles.sectionLabel}>{children}</Text>;
+}
+
+/**
+ * Filtro segmentado con contador (diseño Figma de la Agenda: Vencidas · Pendientes · Completadas).
+ * El segmento activo se rellena en navy; el resto en blanco con borde. `tone` tiñe el valor.
+ */
+export function SegmentTabs({
+  items,
+  value,
+  onChange,
+}: {
+  items: { key: string; label: string; count: number | string; tone?: 'neutral' | 'danger' }[];
+  value: string;
+  onChange: (key: string) => void;
+}) {
+  return (
+    <View style={styles.segments}>
+      {items.map((it) => {
+        const active = it.key === value;
+        const valueColor = active ? COLORS.white : it.tone === 'danger' ? COLORS.danger : COLORS.navy;
+        return (
+          <Pressable
+            key={it.key}
+            onPress={() => onChange(it.key)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            style={[styles.segment, active && styles.segmentActive]}
+          >
+            <Text style={[styles.segmentCount, { color: valueColor }]}>{it.count}</Text>
+            <Text style={[styles.segmentLabel, { color: active ? COLORS.white : COLORS.text2 }]} numberOfLines={1}>
+              {it.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -287,6 +365,53 @@ const styles = StyleSheet.create({
   },
   tileValue: { fontSize: 22, fontWeight: '700' },
   tileLabel: { ...TYPE.caption },
+  // Tarjeta de caso (Figma 81:4): barra de acento + cuerpo pulsable + acción opcional.
+  caseCard: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+    minHeight: 64,
+  },
+  caseAccent: { width: 4 },
+  caseBody: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+  },
+  caseName: { ...TYPE.body, fontWeight: '700', color: COLORS.navy },
+  caseRight: { alignItems: 'flex-end', gap: 4 },
+  caseAmount: { ...TYPE.body, fontWeight: '700', color: COLORS.navy },
+  sectionLabel: {
+    ...TYPE.caption,
+    fontWeight: '700',
+    color: COLORS.muted,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: SPACING.sm,
+    marginTop: SPACING.md,
+  },
+  segments: { flexDirection: 'row', gap: SPACING.sm },
+  segment: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+  },
+  segmentActive: { backgroundColor: COLORS.navy, borderColor: COLORS.navy },
+  segmentCount: { fontSize: 20, fontWeight: '700' },
+  segmentLabel: { ...TYPE.caption, fontWeight: '600' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.xl, gap: SPACING.sm },
   emptyIcon: { fontSize: 40 },
   emptyTitle: { ...TYPE.h3, textAlign: 'center' },

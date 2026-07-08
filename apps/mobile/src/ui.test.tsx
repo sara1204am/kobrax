@@ -35,12 +35,18 @@ describe('StatTile', () => {
 });
 
 describe('CaseCard', () => {
-  it('renderiza título, subtítulo y el badge de estado', () => {
+  it('renderiza nombre, subtítulo, monto y el badge de estado', () => {
     const { getByText } = render(
-      <CaseCard title="Caso abc12345" subtitle="HIGH · 3 días de mora" status={CaseStatus.ACTIVE} />,
+      <CaseCard name="García López, Roberto" subtitle="Alta · 3 días de mora" amount="Bs 5.000" status={CaseStatus.ACTIVE} />,
     );
-    expect(getByText('Caso abc12345')).toBeTruthy();
-    expect(getByText('HIGH · 3 días de mora')).toBeTruthy();
+    expect(getByText('García López, Roberto')).toBeTruthy();
+    expect(getByText('Alta · 3 días de mora')).toBeTruthy();
+    expect(getByText('Bs 5.000')).toBeTruthy();
     expect(getByText(CASE_STATUS_LABEL[CaseStatus.ACTIVE])).toBeTruthy();
+  });
+
+  it('un caso vencido muestra la pill "Vencida"', () => {
+    const { getByText } = render(<CaseCard name="Deudor X" status={CaseStatus.ACTIVE} overdue />);
+    expect(getByText('Vencida')).toBeTruthy();
   });
 });

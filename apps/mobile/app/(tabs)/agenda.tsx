@@ -1,59 +1,60 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { CaseStatus, formatCurrency, SUPPORTED_CURRENCIES, type CurrencyCode } from '@kobrax/shared';
-import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
-import { CaseCard, CASE_PRIORITY_LABEL, CASE_STATUS_LABEL, EmptyState, Header } from '@/ui';
+import { COLORS, RADIUS, SPACING } from '@/theme';
+import {
+  CaseCard,
+  CASE_PRIORITY_LABEL,
+  EmptyState,
+  Header,
+  SectionLabel,
+  SegmentTabs,
+} from '@/ui';
 import { authService } from '@/auth-service';
-import { listCases, type CaseListItem } from '@/cases.service';
+import { listCases, type CaseListItem, type ListCasesParams } from '@/cases.service';
 
 type Load =
   | { status: 'loading' }
   | { status: 'offline' }
   | { status: 'error'; message: string }
-  | { status: 'ok'; cases: CaseListItem[]; total: number };
+  | { status: 'ok'; cases: CaseListItem[] };
 
-/** Filtros de la Agenda: por estado operativo o "En mora" (overdue). `key` estable para React. */
-interface Filter {
+/** Segmentos de la Agenda (Figma 81:4): Vencidas · Pendientes · Completadas. */
+interface Segment {
   key: string;
   label: string;
-  status?: CaseStatus;
-  overdue?: boolean;
+  tone?: 'neutral' | 'danger';
+  params: Partial<ListCasesParams>;
 }
-const FILTERS: Filter[] = [
-  { key: 'all', label: 'Todos' },
-  { key: 'overdue', label: 'En mora', overdue: true },
-  { key: 'active', label: CASE_STATUS_LABEL[CaseStatus.ACTIVE], status: CaseStatus.ACTIVE },
-  { key: 'negotiation', label: CASE_STATUS_LABEL[CaseStatus.IN_NEGOTIATION], status: CaseStatus.IN_NEGOTIATION },
-  { key: 'promise', label: CASE_STATUS_LABEL[CaseStatus.PROMISE_TO_PAY], status: CaseStatus.PROMISE_TO_PAY },
-  { key: 'paid', label: CASE_STATUS_LABEL[CaseStatus.PAID], status: CaseStatus.PAID },
+const SEGMENTS: Segment[] = [
+  { key: 'overdue', label: 'Vencidas', tone: 'danger', params: { overdue: true } },
+  { key: 'pending', label: 'Pendientes', params: { open: true } },
+  { key: 'done', label: 'Completadas', params: { status: CaseStatus.PAID } },
 ];
 
 /** Formatea el monto con la moneda del crédito; si no es una moneda soportada, número plano. */
-function formatMoney(amount?: number, currency?: string): string | null {
-  if (amount == null) return null;
+function formatMoney(amount?: number, currency?: string): string | undefined {
+  if (amount == null) return undefined;
   if (currency && currency in SUPPORTED_CURRENCIES) return formatCurrency(amount, currency as CurrencyCode);
   return amount.toLocaleString();
 }
 
-/** Subtítulo del caso: monto + prioridad + días de mora (mora calculada por el server, no por el reloj). */
+/** Línea secundaria de la tarjeta: prioridad + días de mora (mora del server, no del reloj). */
 function caseSubtitle(c: CaseListItem): string {
-  const parts: string[] = [];
-  const money = formatMoney(c.amount, c.currency);
-  if (money) parts.push(money);
-  parts.push(CASE_PRIORITY_LABEL[c.priority]);
+  const parts = [CASE_PRIORITY_LABEL[c.priority]];
   if (c.isOverdue) parts.push(`${c.daysPastDue ?? 0} días de mora`);
   return parts.join(' · ');
 }
 
-/** Agenda Diaria (`64:4`): casos asignados del cobrador + filtro por estado/mora. Solo lectura. */
+/** Agenda Diaria (Figma `81:4`): segmentos con contador + tarjetas de caso agrupadas. Solo lectura. */
 export default function AgendaScreen() {
   const [userId, setUserId] = useState<string | null>(null);
+  const [segment, setSegment] = useState('pending');
+  const [counts, setCounts] = useState<Record<string, number | undefined>>({});
   const [load, setLoad] = useState<Load>({ status: 'loading' });
-  const [filter, setFilter] = useState<Filter>(FILTERS[0]!);
   const [refreshing, setRefreshing] = useState(false);
-  // Descarta respuestas viejas cuando el usuario cambia de filtro rápido (last-write-wins).
   const reqRef = useRef(0);
 
   // La identidad se resuelve UNA vez: la sesión no cambia durante la vida de la pantalla.
@@ -66,76 +67,83 @@ export default function AgendaScreen() {
     })();
   }, []);
 
-  const fetchCases = useCallback(async (uid: string, f: Filter) => {
+  const fetchAll = useCallback(async (uid: string, segKey: string) => {
     const reqId = ++reqRef.current;
-    const res = await listCases({ assigneeId: uid, status: f.status, overdue: f.overdue, limit: 100 });
-    if (reqId !== reqRef.current) return; // llegó una respuesta más nueva → descartar esta
-    if (res.status === 'offline') return setLoad({ status: 'offline' });
-    if (res.status === 'unauthenticated') return router.replace('/(auth)/login');
-    if (res.status === 'error') return setLoad({ status: 'error', message: res.message });
-    setLoad({ status: 'ok', cases: res.data, total: res.total });
+    const seg = SEGMENTS.find((s) => s.key === segKey) ?? SEGMENTS[0]!;
+    const [listRes, ...countRes] = await Promise.all([
+      listCases({ assigneeId: uid, ...seg.params, limit: 100 }),
+      ...SEGMENTS.map((s) => listCases({ assigneeId: uid, ...s.params, limit: 1 })),
+    ]);
+    if (reqId !== reqRef.current) return; // respuesta vieja (cambió el segmento) → descartar
+
+    const nextCounts: Record<string, number | undefined> = {};
+    SEGMENTS.forEach((s, i) => {
+      const r = countRes[i]!;
+      nextCounts[s.key] = r.status === 'ok' ? r.total : undefined;
+    });
+    setCounts(nextCounts);
+
+    if (listRes.status === 'offline') return setLoad({ status: 'offline' });
+    if (listRes.status === 'unauthenticated') return router.replace('/(auth)/login');
+    if (listRes.status === 'error') return setLoad({ status: 'error', message: listRes.message });
+    setLoad({ status: 'ok', cases: listRes.data });
   }, []);
 
   useEffect(() => {
-    if (userId) void fetchCases(userId, filter);
-  }, [userId, filter, fetchCases]);
+    if (userId) void fetchAll(userId, segment);
+  }, [userId, segment, fetchAll]);
 
   const onRefresh = useCallback(async () => {
     if (!userId) return;
     setRefreshing(true);
-    await fetchCases(userId, filter);
+    await fetchAll(userId, segment);
     setRefreshing(false);
-  }, [userId, filter, fetchCases]);
+  }, [userId, segment, fetchAll]);
+
+  const activeSeg = SEGMENTS.find((s) => s.key === segment)!;
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <Header title="Agenda" />
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, gap: SPACING.sm }}
-        style={{ flexGrow: 0 }}
-      >
-        {FILTERS.map((f) => {
-          const active = f.key === filter.key;
-          return (
-            <Pressable
-              key={f.key}
-              onPress={() => setFilter(f)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              style={{
-                paddingHorizontal: SPACING.md,
-                paddingVertical: SPACING.xs,
-                borderRadius: RADIUS.pill,
-                backgroundColor: active ? COLORS.navy : COLORS.white,
-                borderWidth: 1,
-                borderColor: active ? COLORS.navy : COLORS.border,
-              }}
-            >
-              <Text style={{ ...TYPE.secondary, color: active ? COLORS.white : COLORS.text2, fontWeight: '600' }}>
-                {f.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {/* flex:1 acota la altura del FlashList para que virtualice (si no, colapsa a 0). */}
-      <View style={{ flex: 1 }}>
-        <AgendaBody load={load} refreshing={refreshing} onRefresh={onRefresh} />
+      <View style={{ padding: SPACING.lg, paddingBottom: SPACING.sm }}>
+        <SegmentTabs
+          value={segment}
+          onChange={setSegment}
+          items={SEGMENTS.map((s) => ({
+            key: s.key,
+            label: s.label,
+            tone: s.tone,
+            count: counts[s.key] ?? '—',
+          }))}
+        />
       </View>
+
+      <View style={{ flex: 1 }}>
+        <AgendaBody load={load} sectionLabel={activeSeg.label} refreshing={refreshing} onRefresh={onRefresh} />
+      </View>
+
+      {/* FAB "Nueva gestión" (Figma). El flujo de alta es escritura → P2; acá informa. */}
+      <Pressable
+        style={styles.fab}
+        accessibilityRole="button"
+        accessibilityLabel="Nueva gestión"
+        onPress={() => Alert.alert('Nueva gestión', 'El registro de gestiones llega en la próxima etapa.')}
+      >
+        <Text style={styles.fabPlus}>+</Text>
+      </Pressable>
     </View>
   );
 }
 
 function AgendaBody({
   load,
+  sectionLabel,
   refreshing,
   onRefresh,
 }: {
   load: Load;
+  sectionLabel: string;
   refreshing: boolean;
   onRefresh: () => void;
 }) {
@@ -153,24 +161,23 @@ function AgendaBody({
     return <EmptyState icon="⚠️" title="No se pudo cargar" hint={load.message} />;
   }
   if (load.cases.length === 0) {
-    return <EmptyState icon="🗓️" title="Sin casos" hint="No tienes casos asignados con este filtro." />;
+    return <EmptyState icon="🗓️" title="Sin casos" hint="No hay casos en esta vista." />;
   }
-  const shown = load.cases.length;
-  const countLabel = load.total > shown ? `${shown} de ${load.total} casos` : `${shown} ${shown === 1 ? 'caso' : 'casos'}`;
   return (
     <FlashList
       data={load.cases}
       keyExtractor={(c) => c.id}
-      estimatedItemSize={72}
-      contentContainerStyle={{ padding: SPACING.lg }}
-      ListHeaderComponent={<Text style={{ ...TYPE.caption, marginBottom: SPACING.sm }}>{countLabel}</Text>}
+      estimatedItemSize={76}
+      contentContainerStyle={{ paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl }}
+      ListHeaderComponent={<SectionLabel>{sectionLabel}</SectionLabel>}
       ItemSeparatorComponent={() => <View style={{ height: SPACING.sm }} />}
       refreshing={refreshing}
       onRefresh={onRefresh}
       renderItem={({ item }) => (
         <CaseCard
-          title={item.clientName ?? `Caso ${item.id.slice(0, 8)}`}
+          name={item.clientName ?? `Caso ${item.id.slice(0, 8)}`}
           subtitle={caseSubtitle(item)}
+          amount={formatMoney(item.amount, item.currency)}
           status={item.status}
           overdue={item.isOverdue}
         />
@@ -178,3 +185,23 @@ function AgendaBody({
     />
   );
 }
+
+const styles = StyleSheet.create({
+  fab: {
+    position: 'absolute',
+    right: SPACING.lg,
+    bottom: SPACING.lg,
+    width: 56,
+    height: 56,
+    borderRadius: RADIUS.pill,
+    backgroundColor: COLORS.purple,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: COLORS.navy,
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  fabPlus: { color: COLORS.white, fontSize: 30, lineHeight: 32, fontWeight: '400' },
+});
