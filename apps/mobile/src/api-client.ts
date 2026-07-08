@@ -68,3 +68,37 @@ export async function authedFetch<T>(
   }
   return res;
 }
+
+/**
+ * Resultado normalizado de una lectura GET para las pantallas de campo. Distingue los
+ * 4 estados que la UI debe mostrar distinto: dato / offline (banner, no bloquea) /
+ * re-login / error. `total` viene de `meta.total` (KPIs de conteo) o del largo del array.
+ */
+export type QueryResult<T> =
+  | { status: 'ok'; data: T; total: number }
+  | { status: 'offline' }
+  | { status: 'unauthenticated' }
+  | { status: 'error'; message: string };
+
+/** GET autenticado + mapeo a `QueryResult`. Base de los `*.service.ts` (P1–P5): nadie repite este switch. */
+export async function apiQuery<T>(path: string): Promise<QueryResult<T>> {
+  const res = await authedFetch<T>(path);
+  if (res.status === 'unauthenticated') return { status: 'unauthenticated' };
+  if (res.status === 0) return { status: 'offline' };
+  if (res.status === 200 && res.data !== null) {
+    const total = res.meta?.total ?? (Array.isArray(res.data) ? res.data.length : 0);
+    return { status: 'ok', data: res.data, total };
+  }
+  if (res.status === 401) return { status: 'unauthenticated' };
+  return { status: 'error', message: res.error?.message ?? 'Ocurrió un error' };
+}
+
+/** Serializa params a query string, saltando `undefined`/`null`/`''`. */
+export function toQuery(params: Record<string, string | number | boolean | undefined>): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') q.append(k, String(v));
+  }
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}

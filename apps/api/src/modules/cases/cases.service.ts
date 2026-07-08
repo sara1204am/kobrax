@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { CollectionCase, Prisma, PrismaClient } from '@prisma/client';
 import { CaseActivityType, CaseStatus } from '@prisma/client';
-import { canTransition, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
+import { canTransition, Permission, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -244,16 +244,34 @@ export class CasesService {
     const where: Prisma.CollectionCaseWhereInput = { deletedAt: null };
     if (query.status) where.status = query.status;
     if (query.priority) where.priority = query.priority;
-    if (query.assigneeId) where.assigneeId = query.assigneeId;
     if (query.clientId) where.clientId = query.clientId;
     if (query.overdue === 'true') {
       where.slaDueAt = { lt: new Date() };
       where.status = { notIn: TERMINAL };
     }
+    if (query.open === 'true') where.status = { notIn: TERMINAL };
+
+    // Scope por capacidad (no por nombre de rol): quien no puede reasignar casos (CASE_ASSIGN)
+    // solo ve los suyos — un cobrador queda acotado a su assigneeId aunque pida otro o ninguno.
+    // Los supervisores/managers (con CASE_ASSIGN) pueden filtrar por cualquier assigneeId.
+    if (this.tenant.can(Permission.CASE_ASSIGN)) {
+      if (query.assigneeId) where.assigneeId = query.assigneeId;
+    } else {
+      where.assigneeId = this.tenant.userId;
+    }
 
     const [rows, total] = await this.tx((tx) =>
       Promise.all([
-        tx.collectionCase.findMany({ where, orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }], skip, take: limit }),
+        tx.collectionCase.findMany({
+          where,
+          orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
+          skip,
+          take: limit,
+          include: {
+            client: { select: { firstName: true, lastName: true, businessName: true } },
+            credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true } },
+          },
+        }),
         tx.collectionCase.count({ where }),
       ]),
     );
@@ -264,10 +282,18 @@ export class CasesService {
     const found = await this.tx((tx) =>
       tx.collectionCase.findFirst({
         where: { id, deletedAt: null },
-        include: { activities: { orderBy: { createdAt: 'desc' } } },
+        include: {
+          activities: { orderBy: { createdAt: 'desc' } },
+          client: { select: { firstName: true, lastName: true, businessName: true } },
+          credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true } },
+        },
       }),
     );
     if (!found) throw resourceNotFound();
+    // Mismo scope por capacidad que el listado: un cobrador no consulta el caso de otro.
+    if (!this.tenant.can(Permission.CASE_ASSIGN) && found.assigneeId !== this.tenant.userId) {
+      throw resourceNotFound();
+    }
     return serializeCase(found);
   }
 }

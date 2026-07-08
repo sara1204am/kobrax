@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { CaseStatus, RouteStatus, RouteStopStatus } from '@prisma/client';
-import { resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
+import { Permission, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -84,8 +84,14 @@ export class RoutesService {
   async list(query: ListRoutesQueryDto): Promise<ApiResponse<ReturnType<typeof serializeRoute>[]>> {
     const { page, limit, skip } = resolvePagination(query);
     const where: Prisma.RoutePlanWhereInput = {};
-    if (query.collectorId) where.collectorId = query.collectorId;
     if (query.status) where.status = query.status;
+    // Scope por capacidad: sin ROUTE_ASSIGN (cobrador) solo ve sus rutas; los que asignan
+    // rutas pueden filtrar por cualquier collectorId.
+    if (this.tenant.can(Permission.ROUTE_ASSIGN)) {
+      if (query.collectorId) where.collectorId = query.collectorId;
+    } else {
+      where.collectorId = this.tenant.userId;
+    }
     if (query.date) {
       const d = new Date(query.date);
       where.plannedDate = d;
@@ -104,6 +110,10 @@ export class RoutesService {
       tx.routePlan.findFirst({ where: { id }, include: { stops: { orderBy: { sequenceOrder: 'asc' } } } }),
     );
     if (!route) throw resourceNotFound();
+    // Mismo scope que el listado: un cobrador solo accede a su propia ruta.
+    if (!this.tenant.can(Permission.ROUTE_ASSIGN) && route.collectorId !== this.tenant.userId) {
+      throw resourceNotFound();
+    }
     return serializeRoute(route);
   }
 

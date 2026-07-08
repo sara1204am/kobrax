@@ -8,10 +8,12 @@ describe('TenantContextService', () => {
   it('expone el contexto dentro de run() y nada fuera', () => {
     const tc = new TenantContextService();
     assert.equal(tc.get(), undefined);
-    tc.run({ accountId: 'a1', userId: 'u1' }, () => {
+    tc.run({ accountId: 'a1', userId: 'u1', permissions: ['case:read'] }, () => {
       assert.equal(tc.get()?.accountId, 'a1');
       assert.equal(tc.accountId, 'a1');
       assert.equal(tc.userId, 'u1');
+      assert.equal(tc.can('case:read'), true);
+      assert.equal(tc.can('case:assign'), false);
     });
     assert.equal(tc.get(), undefined);
   });
@@ -23,7 +25,7 @@ describe('TenantContextService', () => {
 
   it('propaga el contexto a través de awaits', async () => {
     const tc = new TenantContextService();
-    const seen = await tc.run({ accountId: 'a2', userId: 'u2' }, async () => {
+    const seen = await tc.run({ accountId: 'a2', userId: 'u2', permissions: [] }, async () => {
       await new Promise((r) => setTimeout(r, 5));
       return tc.get()?.accountId;
     });

@@ -32,6 +32,8 @@ export class ListCasesQueryDto {
   @IsOptional() @IsUUID() clientId?: string;
   /** 'true' → solo casos vencidos (sla_due_at < ahora, no cerrados). */
   @IsOptional() @IsIn(['true', 'false']) overdue?: string;
+  /** 'true' → solo casos abiertos (excluye CLOSED/WRITTEN_OFF). Para el KPI de carga del día. */
+  @IsOptional() @IsIn(['true', 'false']) open?: string;
 }
 
 export class TransitionCaseDto {

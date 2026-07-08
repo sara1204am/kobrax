@@ -29,6 +29,7 @@ export class TenantContextInterceptor implements NestInterceptor {
         {
           accountId: user.accountId,
           userId: user.userId,
+          permissions: user.permissions ?? [],
           sessionId: user.sessionId,
           requestId: req.headers['x-request-id'] as string | undefined,
           ip: req.ip,

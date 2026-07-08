@@ -5,6 +5,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 export interface RequestContext {
   accountId: string;
   userId: string;
+  /** Permisos efectivos del JWT; habilitan el scoping por capacidad en los servicios. */
+  permissions: string[];
   sessionId?: string;
   requestId?: string;
   ip?: string;
@@ -41,5 +43,15 @@ export class TenantContextService {
   /** `userId` actual o `undefined`. */
   get userId(): string | undefined {
     return this.als.getStore()?.userId;
+  }
+
+  /** Permisos efectivos del request actual (vacío si no hay contexto). */
+  get permissions(): string[] {
+    return this.als.getStore()?.permissions ?? [];
+  }
+
+  /** `true` si el request tiene el permiso indicado. */
+  can(permission: string): boolean {
+    return this.permissions.includes(permission);
   }
 }

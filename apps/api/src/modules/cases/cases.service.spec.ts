@@ -10,6 +10,8 @@ function makeService(opts: {
   activityCount?: number;
   creditsInMora?: unknown[];
   openCreditIds?: string[];
+  permissions?: string[];
+  listRows?: Record<string, unknown>[];
 } = {}) {
   const calls = {
     create: [] as Record<string, unknown>[],
@@ -17,6 +19,7 @@ function makeService(opts: {
     activity: [] as Record<string, unknown>[],
     audit: [] as { action: string }[],
     events: [] as string[],
+    listWhere: undefined as Record<string, unknown> | undefined,
   };
   const tx = {
     account: { findUnique: async () => ({ configuration: {} }) },
@@ -31,7 +34,13 @@ function makeService(opts: {
         if (w.id) return opts.caseRow ?? null;
         return null;
       },
-      findMany: async () => (opts.openCreditIds ?? []).map((id) => ({ creditId: id })),
+      findMany: async (args: { where?: Record<string, unknown>; include?: unknown }) => {
+        if (args?.include) {
+          calls.listWhere = args.where; // list() incluye client/credit
+          return opts.listRows ?? [];
+        }
+        return (opts.openCreditIds ?? []).map((id) => ({ creditId: id })); // generate()
+      },
       create: async (args: { data: Record<string, unknown> }) => {
         calls.create.push(args.data);
         return { id: 'case1', ...args.data };
@@ -51,7 +60,8 @@ function makeService(opts: {
     },
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
-  const tenant = { accountId: 'acc-A', userId: 'u1' };
+  const perms = opts.permissions ?? [];
+  const tenant = { accountId: 'acc-A', userId: 'u1', permissions: perms, can: (p: string) => perms.includes(p) };
   const audit = { record: async (e: { action: string }) => void calls.audit.push(e) };
   const events = { emit: (name: string) => void calls.events.push(name) };
   const service = new CasesService(prisma as never, tenant as never, audit as never, events as never);
@@ -108,6 +118,41 @@ describe('CasesService.close', () => {
     assert.equal(calls.update[0]!.status, 'CLOSED');
     assert.ok(calls.update[0]!.closedAt instanceof Date);
     assert.equal(calls.update[0]!.closedReason, 'pagado total');
+  });
+});
+
+describe('CasesService.list (scope por capacidad + enriquecimiento)', () => {
+  it('cobrador sin CASE_ASSIGN queda acotado a su propio assigneeId (ignora el pedido)', async () => {
+    const { service, calls } = makeService({});
+    await service.list({ assigneeId: 'otro-cobrador' } as never);
+    assert.equal(calls.listWhere!.assigneeId, 'u1');
+  });
+
+  it('con CASE_ASSIGN respeta el assigneeId pedido', async () => {
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    await service.list({ assigneeId: 'otro-cobrador' } as never);
+    assert.equal(calls.listWhere!.assigneeId, 'otro-cobrador');
+  });
+
+  it('open=true excluye los casos terminales', async () => {
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    await service.list({ open: 'true' } as never);
+    assert.deepEqual(calls.listWhere!.status, { notIn: ['CLOSED', 'WRITTEN_OFF'] });
+  });
+
+  it('enriquece nombre de deudor + monto + mora desde client/credit', async () => {
+    const row = {
+      id: 'c1', creditId: 'cr1', clientId: 'cl1', status: 'ACTIVE', priority: 'HIGH',
+      createdAt: new Date(), updatedAt: new Date(),
+      client: { firstName: 'Ana', lastName: 'Ruiz', businessName: null },
+      credit: { outstandingBalance: 5000, currency: 'BOB', daysPastDue: 12 },
+    };
+    const { service } = makeService({ permissions: ['case:assign'], listRows: [row] });
+    const res = await service.list({} as never);
+    assert.equal(res.data![0]!.clientName, 'Ana Ruiz');
+    assert.equal(res.data![0]!.amount, 5000);
+    assert.equal(res.data![0]!.currency, 'BOB');
+    assert.equal(res.data![0]!.daysPastDue, 12);
   });
 });
 

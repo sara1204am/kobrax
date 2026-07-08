@@ -6,6 +6,7 @@
 import { type ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { CasePriority, CaseStatus } from '@kobrax/shared';
 import { useNetStore } from './store/net';
 import { COLORS, RADIUS, SPACING, TYPE } from './theme';
 
@@ -89,6 +90,102 @@ export function ListRow({
       {right}
       {onPress && <Text style={styles.rowChevron}>›</Text>}
     </Pressable>
+  );
+}
+
+/**
+ * Mapeo presentacional `CaseStatus` → tono de badge. El enum es dominio (shared); el color
+ * es UI y vive acá. Un caso vencido pinta `danger` sin importar el estado (lo decide la pantalla).
+ */
+export function caseStatusTone(status: CaseStatus): BadgeTone {
+  switch (status) {
+    case CaseStatus.PAID:
+    case CaseStatus.CLOSED:
+      return 'success';
+    case CaseStatus.ACTIVE:
+    case CaseStatus.PROMISE_TO_PAY:
+      return 'info';
+    case CaseStatus.IN_NEGOTIATION:
+      return 'warning';
+    case CaseStatus.WRITTEN_OFF:
+      return 'danger';
+    case CaseStatus.PENDING:
+    default:
+      return 'neutral';
+  }
+}
+
+/** Etiqueta corta en español para cada estado de caso. */
+export const CASE_STATUS_LABEL: Record<CaseStatus, string> = {
+  [CaseStatus.PENDING]: 'Pendiente',
+  [CaseStatus.ACTIVE]: 'Activo',
+  [CaseStatus.IN_NEGOTIATION]: 'En negociación',
+  [CaseStatus.PROMISE_TO_PAY]: 'Promesa de pago',
+  [CaseStatus.PAID]: 'Pagado',
+  [CaseStatus.CLOSED]: 'Cerrado',
+  [CaseStatus.WRITTEN_OFF]: 'Incobrable',
+};
+
+/** Etiqueta corta en español para cada prioridad de caso. */
+export const CASE_PRIORITY_LABEL: Record<CasePriority, string> = {
+  [CasePriority.LOW]: 'Baja',
+  [CasePriority.MEDIUM]: 'Media',
+  [CasePriority.HIGH]: 'Alta',
+  [CasePriority.CRITICAL]: 'Crítica',
+};
+
+/**
+ * Tile de KPI del Home (label + valor grande + tono opcional). Sol→contraste: el valor va en
+ * `navy`; el label en `muted`. Reusado en Home (P1) y resumen de jornada (P3).
+ */
+export function StatTile({
+  label,
+  value,
+  tone = 'neutral',
+}: {
+  label: string;
+  value: string;
+  tone?: 'neutral' | 'success' | 'danger';
+}) {
+  const valueColor = tone === 'success' ? COLORS.success : tone === 'danger' ? COLORS.danger : COLORS.navy;
+  return (
+    <View style={styles.tile}>
+      <Text style={[styles.tileValue, { color: valueColor }]} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={styles.tileLabel} numberOfLines={2}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * Fila de caso para la Agenda (sobre `ListRow`+`StatusBadge`). El dato accionable (título) va
+ * en alto contraste; un caso vencido fuerza tono `danger`. Reusada en Agenda (P1), Gestiones (P2)
+ * y Rutas (P3). Nota: el listado del API no trae deudor/monto → la pantalla arma el título con
+ * lo que hay (ver plan §12).
+ */
+export function CaseCard({
+  title,
+  subtitle,
+  status,
+  overdue,
+  onPress,
+}: {
+  title: string;
+  subtitle?: string;
+  status: CaseStatus;
+  overdue?: boolean;
+  onPress?: () => void;
+}) {
+  return (
+    <ListRow
+      title={title}
+      subtitle={subtitle}
+      onPress={onPress}
+      right={<StatusBadge label={CASE_STATUS_LABEL[status]} tone={overdue ? 'danger' : caseStatusTone(status)} />}
+    />
   );
 }
 
@@ -177,6 +274,19 @@ const styles = StyleSheet.create({
   rowTitle: { ...TYPE.body, fontWeight: '600', color: COLORS.text },
   rowSubtitle: { ...TYPE.secondary },
   rowChevron: { color: COLORS.muted, fontSize: 22 },
+  tile: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.lg,
+    gap: 4,
+    minWidth: 0,
+  },
+  tileValue: { fontSize: 22, fontWeight: '700' },
+  tileLabel: { ...TYPE.caption },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.xl, gap: SPACING.sm },
   emptyIcon: { fontSize: 40 },
   emptyTitle: { ...TYPE.h3, textAlign: 'center' },

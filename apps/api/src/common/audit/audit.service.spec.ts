@@ -29,6 +29,7 @@ function makeDeps(ctx: RequestContext | undefined) {
 const CTX: RequestContext = {
   accountId: 'acc-1',
   userId: 'user-1',
+  permissions: [],
   ip: '1.2.3.4',
   userAgent: 'jest',
 };
