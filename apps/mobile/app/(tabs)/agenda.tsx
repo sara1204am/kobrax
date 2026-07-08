@@ -1,17 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { CaseStatus, formatCurrency, SUPPORTED_CURRENCIES, type CurrencyCode } from '@kobrax/shared';
-import { COLORS, RADIUS, SPACING } from '@/theme';
-import {
-  CaseCard,
-  CASE_PRIORITY_LABEL,
-  EmptyState,
-  Header,
-  SectionLabel,
-  SegmentTabs,
-} from '@/ui';
+import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
+import { CaseCard, CASE_PRIORITY_LABEL, EmptyState, SectionLabel, SegmentTabs } from '@/ui';
 import { authService } from '@/auth-service';
 import { listCases, type CaseListItem, type ListCasesParams } from '@/cases.service';
 
@@ -48,10 +42,63 @@ function caseSubtitle(c: CaseListItem): string {
   return parts.join(' · ');
 }
 
+const WEEKDAYS = ['LU', 'MA', 'MI', 'JU', 'VI', 'SA', 'DO'];
+const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+/** Lunes de la semana que contiene `d` (00:00). */
+function startOfWeek(d: Date): Date {
+  const s = new Date(d);
+  const dow = (s.getDay() + 6) % 7; // 0 = lunes
+  s.setDate(s.getDate() - dow);
+  s.setHours(0, 0, 0, 0);
+  return s;
+}
+function sameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+/**
+ * Selector de día de la semana (Figma 81:4), en el header navy. El día activo se marca en
+ * púrpura. // ponytail: navega visualmente; filtrar la agenda por día necesita fecha
+ * agendada en el backend (route stops / visitas = P3) → hoy la lista no cambia por día.
+ */
+function WeekStrip({ selected, onSelect }: { selected: Date; onSelect: (d: Date) => void }) {
+  const week = useMemo(() => {
+    const base = startOfWeek(new Date());
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(base);
+      d.setDate(base.getDate() + i);
+      return d;
+    });
+  }, []);
+  return (
+    <View style={styles.weekRow}>
+      {week.map((d, i) => {
+        const active = sameDay(d, selected);
+        return (
+          <Pressable
+            key={d.toISOString()}
+            onPress={() => onSelect(d)}
+            style={styles.dayCell}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+          >
+            <Text style={styles.dayName}>{WEEKDAYS[i]}</Text>
+            <View style={[styles.dayNum, active && styles.dayNumActive]}>
+              <Text style={[styles.dayNumText, active && styles.dayNumTextActive]}>{d.getDate()}</Text>
+            </View>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 /** Agenda Diaria (Figma `81:4`): segmentos con contador + tarjetas de caso agrupadas. Solo lectura. */
 export default function AgendaScreen() {
   const [userId, setUserId] = useState<string | null>(null);
   const [segment, setSegment] = useState('pending');
+  const [selectedDay, setSelectedDay] = useState(() => new Date());
   const [counts, setCounts] = useState<Record<string, number | undefined>>({});
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
@@ -104,7 +151,15 @@ export default function AgendaScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
-      <Header title="Agenda" />
+      <SafeAreaView edges={['top']} style={styles.header}>
+        <View style={styles.headerBar}>
+          <Text style={styles.headerTitle}>Agenda</Text>
+          <Text style={styles.headerDate}>
+            {selectedDay.getDate()} {MONTHS[selectedDay.getMonth()]}
+          </Text>
+        </View>
+        <WeekStrip selected={selectedDay} onSelect={setSelectedDay} />
+      </SafeAreaView>
 
       <View style={{ padding: SPACING.lg, paddingBottom: SPACING.sm }}>
         <SegmentTabs
@@ -123,12 +178,12 @@ export default function AgendaScreen() {
         <AgendaBody load={load} sectionLabel={activeSeg.label} refreshing={refreshing} onRefresh={onRefresh} />
       </View>
 
-      {/* FAB "Nueva gestión" (Figma). El flujo de alta es escritura → P2; acá informa. */}
+      {/* FAB "Nueva gestión" (Figma) → abre el flujo de alta (pantalla dedicada). */}
       <Pressable
         style={styles.fab}
         accessibilityRole="button"
         accessibilityLabel="Nueva gestión"
-        onPress={() => Alert.alert('Nueva gestión', 'El registro de gestiones llega en la próxima etapa.')}
+        onPress={() => router.push('/nueva-gestion')}
       >
         <Text style={styles.fabPlus}>+</Text>
       </Pressable>
@@ -187,6 +242,29 @@ function AgendaBody({
 }
 
 const styles = StyleSheet.create({
+  header: { backgroundColor: COLORS.navy },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+  },
+  headerTitle: { color: COLORS.white, fontSize: 20, fontWeight: '700' },
+  headerDate: { ...TYPE.secondary, color: COLORS.lightBg, textTransform: 'capitalize' },
+  weekRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.md,
+  },
+  dayCell: { alignItems: 'center', gap: 6, flex: 1 },
+  dayName: { fontSize: 11, fontWeight: '600', color: COLORS.periwinkle },
+  dayNum: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  dayNumActive: { backgroundColor: COLORS.purple },
+  dayNumText: { fontSize: 15, fontWeight: '600', color: COLORS.white },
+  dayNumTextActive: { color: COLORS.white, fontWeight: '700' },
   fab: {
     position: 'absolute',
     right: SPACING.lg,
