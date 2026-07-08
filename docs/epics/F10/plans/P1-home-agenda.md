@@ -1,6 +1,8 @@
 # P1 · Home + Agenda (solo lectura)
 
-> **ESTADO: COMPLETO (2026-07-07) — listo para gate `/f10-validar-plan P1`.**
+> **ESTADO: Home ✅ (funcional). Agenda → PIVOTADA a un módulo propio: ver [plans/agenda/](./agenda/README.md).**
+> La "Agenda de casos read-only" de este plan se reemplaza por el módulo de **agendados por fecha**
+> (calendario + crear/ver/registrar/editar/eliminar). Home queda como quedó.
 > Depende de: **P0** (mergeado). Build: 🟢 Expo Go. Rama: `f10/P1-home-agenda`.
 
 ## 1. Objetivo
