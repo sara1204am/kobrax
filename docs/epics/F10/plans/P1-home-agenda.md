@@ -109,4 +109,8 @@ Verificación verde: **API** type-check + tests 166/166; **Mobile** type-check +
 
 **Code-review high (workflow multi-agente): 9 hallazgos confirmados, TODOS resueltos** — FlashList sin altura (colapsaba la lista), Agenda sin salida a login en sesión expirada, Home expulsado a offline en refresh, KPI contando casos terminales, race de filtros, mora con reloj del dispositivo, `me()` repetido por filtro, prioridad sin traducir, cast inseguro de enum. 1 refutado (duplicación ListRow, aceptada).
 
+**Rediseño de Agenda a Figma `81:4` (2026-07-07, pedido de la usuaria):** segmentos con contador (Vencidas/Pendientes/Completadas), tarjetas con barra de acento + nombre + monto + pill, `SectionLabel`, **selector de día** en header navy, y **FAB → `/nueva-gestion`**. Componentes nuevos en `ui.tsx`: `SegmentTabs`, `CaseCard` (rediseñada), `SectionLabel`. Nueva pantalla `app/nueva-gestion.tsx`.
+- **Decisión (usuaria):** `Nueva gestión` = **scaffold visual**, la escritura real (elegir caso + `POST /cases/:id/activities` + cola offline) es **P2**.
+- **Decisión (usuaria):** selector de día = **visual por ahora**; filtrar la agenda por día (paradas de ruta / visitas programadas) = **P3**.
+
 **Pendiente:** validación visual de la usuaria en dispositivo real → recién ahí merge a `main`.
