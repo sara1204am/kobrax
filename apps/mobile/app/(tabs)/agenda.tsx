@@ -1,285 +1,251 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { router } from 'expo-router';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FlashList } from '@shopify/flash-list';
-import { CaseStatus, formatCurrency, SUPPORTED_CURRENCIES, type CurrencyCode } from '@kobrax/shared';
+import { FlashList, type FlashList as FlashListType } from '@shopify/flash-list';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { AgendaItemStatus } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
-import { CaseCard, CASE_PRIORITY_LABEL, EmptyState, SectionLabel, SegmentTabs } from '@/ui';
+import { AgendaCard, AGENDA_STATUS_LABEL, AGENDA_TYPE_META, EmptyState, SectionLabel } from '@/ui';
 import { authService } from '@/auth-service';
-import { listCases, type CaseListItem, type ListCasesParams } from '@/cases.service';
+import { listByDay, listOverdue, type AgendaListItem } from '@/agenda.service';
 
-type Load =
+const WEEKDAYS = ['DO', 'LU', 'MA', 'MI', 'JU', 'VI', 'SA'];
+const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const RANGE = 180; // días a cada lado de hoy (tira "infinita" práctica; onEndReached bidireccional = futuro)
+
+/** Fecha-calendario en UTC (el backend guarda `scheduledDate` a medianoche UTC). */
+function utcToday(): Date {
+  const n = new Date();
+  return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()));
+}
+function addDays(d: Date, n: number): Date {
+  return new Date(d.getTime() + n * 86_400_000);
+}
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+type DayLoad =
   | { status: 'loading' }
   | { status: 'offline' }
-  | { status: 'error'; message: string }
-  | { status: 'ok'; cases: CaseListItem[] };
+  | { status: 'error' }
+  | { status: 'ok'; items: AgendaListItem[] };
 
-/** Segmentos de la Agenda (Figma 81:4): Vencidas · Pendientes · Completadas. */
-interface Segment {
-  key: string;
-  label: string;
-  tone?: 'neutral' | 'danger';
-  params: Partial<ListCasesParams>;
-}
-const SEGMENTS: Segment[] = [
-  { key: 'overdue', label: 'Vencidas', tone: 'danger', params: { overdue: true } },
-  { key: 'pending', label: 'Pendientes', params: { open: true } },
-  { key: 'done', label: 'Completadas', params: { status: CaseStatus.PAID } },
-];
+type Overdue = { items: AgendaListItem[]; total: number };
 
-/** Formatea el monto con la moneda del crédito; si no es una moneda soportada, número plano. */
-function formatMoney(amount?: number, currency?: string): string | undefined {
-  if (amount == null) return undefined;
-  if (currency && currency in SUPPORTED_CURRENCIES) return formatCurrency(amount, currency as CurrencyCode);
-  return amount.toLocaleString();
-}
-
-/** Línea secundaria de la tarjeta: prioridad + días de mora (mora del server, no del reloj). */
-function caseSubtitle(c: CaseListItem): string {
-  const parts = [CASE_PRIORITY_LABEL[c.priority]];
-  if (c.isOverdue) parts.push(`${c.daysPastDue ?? 0} días de mora`);
-  return parts.join(' · ');
-}
-
-const WEEKDAYS = ['LU', 'MA', 'MI', 'JU', 'VI', 'SA', 'DO'];
-const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-
-/** Lunes de la semana que contiene `d` (00:00). */
-function startOfWeek(d: Date): Date {
-  const s = new Date(d);
-  const dow = (s.getDay() + 6) % 7; // 0 = lunes
-  s.setDate(s.getDate() - dow);
-  s.setHours(0, 0, 0, 0);
-  return s;
-}
-function sameDay(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-}
-
-/**
- * Selector de día de la semana (Figma 81:4), en el header navy. El día activo se marca en
- * púrpura. // ponytail: navega visualmente; filtrar la agenda por día necesita fecha
- * agendada en el backend (route stops / visitas = P3) → hoy la lista no cambia por día.
- */
-function WeekStrip({ selected, onSelect }: { selected: Date; onSelect: (d: Date) => void }) {
-  const week = useMemo(() => {
-    const base = startOfWeek(new Date());
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(base);
-      d.setDate(base.getDate() + i);
-      return d;
-    });
-  }, []);
-  return (
-    <View style={styles.weekRow}>
-      {week.map((d, i) => {
-        const active = sameDay(d, selected);
-        return (
-          <Pressable
-            key={d.toISOString()}
-            onPress={() => onSelect(d)}
-            style={styles.dayCell}
-            accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-          >
-            <Text style={styles.dayName}>{WEEKDAYS[i]}</Text>
-            <View style={[styles.dayNum, active && styles.dayNumActive]}>
-              <Text style={[styles.dayNumText, active && styles.dayNumTextActive]}>{d.getDate()}</Text>
-            </View>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
-/** Agenda Diaria (Figma `81:4`): segmentos con contador + tarjetas de caso agrupadas. Solo lectura. */
+/** Agenda Diaria (Figma `64:4`): tira de calendario + Pendientes / Completados / Vencidos. */
 export default function AgendaScreen() {
   const [userId, setUserId] = useState<string | null>(null);
-  const [segment, setSegment] = useState('pending');
-  const [selectedDay, setSelectedDay] = useState(() => new Date());
-  const [counts, setCounts] = useState<Record<string, number | undefined>>({});
-  const [load, setLoad] = useState<Load>({ status: 'loading' });
+  const [selected, setSelected] = useState<Date>(() => utcToday());
+  const [day, setDay] = useState<DayLoad>({ status: 'loading' });
+  const [overdue, setOverdue] = useState<Overdue | null>(null);
+  const [showAllOverdue, setShowAllOverdue] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const reqRef = useRef(0);
+  const stripRef = useRef<FlashListType<Date> | null>(null);
 
-  // La identidad se resuelve UNA vez: la sesión no cambia durante la vida de la pantalla.
+  const today = useMemo(() => utcToday(), []);
+  const days = useMemo(() => Array.from({ length: RANGE * 2 + 1 }, (_, i) => addDays(today, i - RANGE)), [today]);
+
+  // Identidad una vez.
   useEffect(() => {
     void (async () => {
       const me = await authService.me();
-      if (me.status === 'offline') return setLoad({ status: 'offline' });
-      if (me.status !== 'ok') return router.replace('/(auth)/login');
+      if (me.status === 'offline') return setDay({ status: 'offline' });
+      if (me.status !== 'ok') return setDay({ status: 'error' });
       setUserId(me.me.userId);
     })();
   }, []);
 
-  const fetchAll = useCallback(async (uid: string, segKey: string) => {
+  const fetchDay = useCallback(async (uid: string, date: Date) => {
     const reqId = ++reqRef.current;
-    const seg = SEGMENTS.find((s) => s.key === segKey) ?? SEGMENTS[0]!;
-    const [listRes, ...countRes] = await Promise.all([
-      listCases({ assigneeId: uid, ...seg.params, limit: 100 }),
-      ...SEGMENTS.map((s) => listCases({ assigneeId: uid, ...s.params, limit: 1 })),
-    ]);
-    if (reqId !== reqRef.current) return; // respuesta vieja (cambió el segmento) → descartar
+    const res = await listByDay(isoDate(date));
+    if (reqId !== reqRef.current) return; // día cambió → descartar
+    // Un bache de red en un refresh no debe borrar lo ya cargado (offline-first).
+    if (res.status === 'offline') return setDay((prev) => (prev.status === 'ok' ? prev : { status: 'offline' }));
+    if (res.status !== 'ok') return setDay((prev) => (prev.status === 'ok' ? prev : { status: 'error' }));
+    setDay({ status: 'ok', items: res.data });
+  }, []);
 
-    const nextCounts: Record<string, number | undefined> = {};
-    SEGMENTS.forEach((s, i) => {
-      const r = countRes[i]!;
-      nextCounts[s.key] = r.status === 'ok' ? r.total : undefined;
-    });
-    setCounts(nextCounts);
-
-    if (listRes.status === 'offline') return setLoad({ status: 'offline' });
-    if (listRes.status === 'unauthenticated') return router.replace('/(auth)/login');
-    if (listRes.status === 'error') return setLoad({ status: 'error', message: listRes.message });
-    setLoad({ status: 'ok', cases: listRes.data });
+  const fetchOverdue = useCallback(async () => {
+    const res = await listOverdue(100);
+    if (res.status === 'ok') setOverdue({ items: res.data, total: res.total });
   }, []);
 
   useEffect(() => {
-    if (userId) void fetchAll(userId, segment);
-  }, [userId, segment, fetchAll]);
+    if (userId) void fetchDay(userId, selected);
+  }, [userId, selected, fetchDay]);
+
+  useEffect(() => {
+    if (userId) void fetchOverdue();
+  }, [userId, fetchOverdue]);
 
   const onRefresh = useCallback(async () => {
     if (!userId) return;
     setRefreshing(true);
-    await fetchAll(userId, segment);
+    await Promise.all([fetchDay(userId, selected), fetchOverdue()]);
     setRefreshing(false);
-  }, [userId, segment, fetchAll]);
+  }, [userId, selected, fetchDay, fetchOverdue]);
 
-  const activeSeg = SEGMENTS.find((s) => s.key === segment)!;
+  const selectDate = useCallback(
+    (d: Date) => {
+      setSelected(d);
+      const idx = days.findIndex((x) => isoDate(x) === isoDate(d));
+      if (idx >= 0) stripRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
+    },
+    [days],
+  );
+
+  const onPickerChange = useCallback(
+    (event: DateTimePickerEvent, date?: Date) => {
+      setShowPicker(false);
+      if (event.type === 'set' && date) {
+        selectDate(new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())));
+      }
+    },
+    [selectDate],
+  );
+
+  const pending = day.status === 'ok' ? day.items.filter((i) => i.status === AgendaItemStatus.SCHEDULED) : [];
+  const done = day.status === 'ok' ? day.items.filter((i) => i.status === AgendaItemStatus.EXECUTED) : [];
+  const overdueShown = overdue ? (showAllOverdue ? overdue.items : overdue.items.slice(0, 2)) : [];
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <SafeAreaView edges={['top']} style={styles.header}>
         <View style={styles.headerBar}>
           <Text style={styles.headerTitle}>Agenda</Text>
-          <Text style={styles.headerDate}>
-            {selectedDay.getDate()} {MONTHS[selectedDay.getMonth()]}
-          </Text>
+          <Pressable onPress={() => setShowPicker(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Abrir calendario">
+            <Text style={styles.headerDate}>{MONTHS[selected.getUTCMonth()]} {selected.getUTCFullYear()} ▾</Text>
+          </Pressable>
         </View>
-        <WeekStrip selected={selectedDay} onSelect={setSelectedDay} />
+        <View style={styles.strip}>
+          <FlashList
+            ref={stripRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={days}
+            keyExtractor={isoDate}
+            estimatedItemSize={48}
+            initialScrollIndex={RANGE}
+            extraData={selected}
+            renderItem={({ item }) => {
+              const active = isoDate(item) === isoDate(selected);
+              const isToday = isoDate(item) === isoDate(today);
+              return (
+                <Pressable onPress={() => selectDate(item)} style={styles.dayCell} accessibilityRole="button" accessibilityState={{ selected: active }}>
+                  <Text style={styles.dayName}>{WEEKDAYS[item.getUTCDay()]}</Text>
+                  <View style={[styles.dayNum, active && styles.dayNumActive, isToday && !active && styles.dayNumToday]}>
+                    <Text style={[styles.dayNumText, active && styles.dayNumTextActive]}>{item.getUTCDate()}</Text>
+                  </View>
+                </Pressable>
+              );
+            }}
+          />
+        </View>
       </SafeAreaView>
 
-      <View style={{ padding: SPACING.lg, paddingBottom: SPACING.sm }}>
-        <SegmentTabs
-          value={segment}
-          onChange={setSegment}
-          items={SEGMENTS.map((s) => ({
-            key: s.key,
-            label: s.label,
-            tone: s.tone,
-            count: counts[s.key] ?? '—',
-          }))}
-        />
-      </View>
+      {day.status === 'loading' ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={COLORS.navy} />
+        </View>
+      ) : day.status === 'offline' ? (
+        <EmptyState icon="📴" title="Sin conexión" hint="Tu agenda aparecerá cuando vuelva la red." />
+      ) : day.status === 'error' ? (
+        <EmptyState icon="⚠️" title="No se pudo cargar" hint="Reintentá en un momento." />
+      ) : (
+        <ScrollView
+          contentContainerStyle={{ padding: SPACING.lg, paddingBottom: SPACING.xxl * 2 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.navy} />}
+        >
+          <SectionLabel>Pendientes</SectionLabel>
+          {pending.length === 0 ? (
+            <Text style={styles.emptyLine}>Sin pendientes</Text>
+          ) : (
+            pending.map((it) => <Row key={it.id} item={it} />)
+          )}
 
-      <View style={{ flex: 1 }}>
-        <AgendaBody load={load} sectionLabel={activeSeg.label} refreshing={refreshing} onRefresh={onRefresh} />
-      </View>
+          {done.length > 0 && (
+            <>
+              <SectionLabel>Completados</SectionLabel>
+              {done.map((it) => <Row key={it.id} item={it} />)}
+            </>
+          )}
 
-      {/* FAB "Nueva gestión" (Figma) → abre el flujo de alta (pantalla dedicada). */}
+          {overdue && overdue.total > 0 && (
+            <>
+              <SectionLabel>Vencidos</SectionLabel>
+              {overdueShown.map((it) => <Row key={it.id} item={it} />)}
+              {overdue.total > 2 && (
+                <Pressable onPress={() => setShowAllOverdue((v) => !v)} style={styles.moreBtn} accessibilityRole="button">
+                  <Text style={styles.moreText}>{showAllOverdue ? 'Ver menos' : `Ver más (${overdue.total - 2})`}</Text>
+                </Pressable>
+              )}
+            </>
+          )}
+        </ScrollView>
+      )}
+
       <Pressable
         style={styles.fab}
         accessibilityRole="button"
         accessibilityLabel="Nueva gestión"
-        onPress={() => router.push('/nueva-gestion')}
+        onPress={() => Alert.alert('Nueva gestión', 'El alta de agendados llega en la próxima pantalla (S2).')}
       >
         <Text style={styles.fabPlus}>+</Text>
       </Pressable>
+
+      {showPicker && (
+        <DateTimePicker
+          value={new Date(selected.getUTCFullYear(), selected.getUTCMonth(), selected.getUTCDate())}
+          mode="date"
+          onChange={onPickerChange}
+        />
+      )}
     </View>
   );
 }
 
-function AgendaBody({
-  load,
-  sectionLabel,
-  refreshing,
-  onRefresh,
-}: {
-  load: Load;
-  sectionLabel: string;
-  refreshing: boolean;
-  onRefresh: () => void;
-}) {
-  if (load.status === 'loading') {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator color={COLORS.navy} />
-      </View>
-    );
-  }
-  if (load.status === 'offline') {
-    return <EmptyState icon="📴" title="Sin conexión" hint="Tus casos aparecerán cuando vuelva la red." />;
-  }
-  if (load.status === 'error') {
-    return <EmptyState icon="⚠️" title="No se pudo cargar" hint={load.message} />;
-  }
-  if (load.cases.length === 0) {
-    return <EmptyState icon="🗓️" title="Sin casos" hint="No hay casos en esta vista." />;
-  }
+/** Mapea un agendado a la tarjeta (S3 detalle = placeholder por ahora). */
+function Row({ item }: { item: AgendaListItem }) {
+  const meta = AGENDA_TYPE_META[item.type];
   return (
-    <FlashList
-      data={load.cases}
-      keyExtractor={(c) => c.id}
-      estimatedItemSize={76}
-      contentContainerStyle={{ paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl }}
-      ListHeaderComponent={<SectionLabel>{sectionLabel}</SectionLabel>}
-      ItemSeparatorComponent={() => <View style={{ height: SPACING.sm }} />}
-      refreshing={refreshing}
-      onRefresh={onRefresh}
-      renderItem={({ item }) => (
-        <CaseCard
-          name={item.clientName ?? `Caso ${item.id.slice(0, 8)}`}
-          subtitle={caseSubtitle(item)}
-          amount={formatMoney(item.amount, item.currency)}
-          status={item.status}
-          overdue={item.isOverdue}
-        />
-      )}
-    />
+    <View style={{ marginBottom: SPACING.sm }}>
+      <AgendaCard
+        name={item.clientName ?? 'Sin nombre'}
+        icon={meta.icon}
+        typeLabel={meta.label}
+        time={item.scheduledTime}
+        statusLabel={AGENDA_STATUS_LABEL[item.status]}
+        tone={meta.tone}
+        overdue={item.isOverdue}
+        onPress={() => Alert.alert('Detalle', 'El detalle de la gestión llega en S3.')}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   header: { backgroundColor: COLORS.navy },
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.md,
-  },
+  headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingTop: SPACING.md },
   headerTitle: { color: COLORS.white, fontSize: 20, fontWeight: '700' },
-  headerDate: { ...TYPE.secondary, color: COLORS.lightBg, textTransform: 'capitalize' },
-  weekRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.md,
-    paddingBottom: SPACING.md,
-  },
-  dayCell: { alignItems: 'center', gap: 6, flex: 1 },
+  headerDate: { ...TYPE.secondary, color: COLORS.lightBg, textTransform: 'capitalize', fontWeight: '600' },
+  strip: { paddingVertical: SPACING.md, height: 78 },
+  dayCell: { alignItems: 'center', gap: 6, width: 46 },
   dayName: { fontSize: 11, fontWeight: '600', color: COLORS.periwinkle },
   dayNum: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   dayNumActive: { backgroundColor: COLORS.purple },
+  dayNumToday: { borderWidth: 1.5, borderColor: COLORS.periwinkle },
   dayNumText: { fontSize: 15, fontWeight: '600', color: COLORS.white },
   dayNumTextActive: { color: COLORS.white, fontWeight: '700' },
+  emptyLine: { ...TYPE.secondary, color: COLORS.muted, paddingVertical: SPACING.md },
+  moreBtn: { alignSelf: 'flex-start', paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md },
+  moreText: { ...TYPE.secondary, color: COLORS.purple, fontWeight: '700' },
   fab: {
-    position: 'absolute',
-    right: SPACING.lg,
-    bottom: SPACING.lg,
-    width: 56,
-    height: 56,
-    borderRadius: RADIUS.pill,
-    backgroundColor: COLORS.purple,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: COLORS.navy,
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
+    position: 'absolute', right: SPACING.lg, bottom: SPACING.lg, width: 56, height: 56, borderRadius: RADIUS.pill,
+    backgroundColor: COLORS.purple, alignItems: 'center', justifyContent: 'center',
+    shadowColor: COLORS.navy, shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6,
   },
   fabPlus: { color: COLORS.white, fontSize: 30, lineHeight: 32, fontWeight: '400' },
 });

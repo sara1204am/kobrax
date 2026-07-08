@@ -11,6 +11,7 @@ import { getSession } from './session';
 import { apiQuery, toQuery } from './api-client';
 import { listCases } from './cases.service';
 import { routeProgress, type RouteItem } from './routes.service';
+import { listByDay, listOverdue } from './agenda.service';
 
 const mockFetch = apiFetch as jest.Mock;
 const mockGetSession = getSession as jest.Mock;
@@ -64,6 +65,21 @@ describe('listCases', () => {
     await listCases({ assigneeId: 'u1', open: true, limit: 1 });
     const [path] = mockFetch.mock.calls[0];
     expect(path).toContain('open=true');
+  });
+});
+
+describe('agenda.service', () => {
+  it('listByDay → /agenda?date=YYYY-MM-DD', async () => {
+    mockFetch.mockResolvedValue({ status: 200, data: [], error: null });
+    await listByDay('2026-07-08');
+    expect(mockFetch.mock.calls[0]![0]).toContain('/agenda?date=2026-07-08');
+  });
+
+  it('listOverdue → /agenda/overdue?limit= y devuelve total', async () => {
+    mockFetch.mockResolvedValue({ status: 200, data: [], error: null, meta: { total: 3 } });
+    const res = await listOverdue(100);
+    expect(mockFetch.mock.calls[0]![0]).toContain('/agenda/overdue?limit=100');
+    expect(res.status === 'ok' && res.total).toBe(3);
   });
 });
 

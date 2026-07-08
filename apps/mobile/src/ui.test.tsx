@@ -2,8 +2,8 @@
 jest.mock('./store/net', () => ({ useNetStore: (sel: (s: unknown) => unknown) => sel({ isConnected: true, pendingCount: 0 }) }));
 
 import { render } from '@testing-library/react-native';
-import { CasePriority, CaseStatus } from '@kobrax/shared';
-import { CaseCard, CASE_PRIORITY_LABEL, CASE_STATUS_LABEL, caseStatusTone, StatTile } from './ui';
+import { AgendaItemStatus, AgendaItemType, CasePriority, CaseStatus } from '@kobrax/shared';
+import { AgendaCard, AGENDA_STATUS_LABEL, AGENDA_TYPE_META, CaseCard, CASE_PRIORITY_LABEL, CASE_STATUS_LABEL, caseStatusTone, StatTile } from './ui';
 
 describe('caseStatusTone', () => {
   it('mapea estados a tonos coherentes', () => {
@@ -48,5 +48,21 @@ describe('CaseCard', () => {
   it('un caso vencido muestra la pill "Vencida"', () => {
     const { getByText } = render(<CaseCard name="Deudor X" status={CaseStatus.ACTIVE} overdue />);
     expect(getByText('Vencida')).toBeTruthy();
+  });
+});
+
+describe('Agenda meta + AgendaCard', () => {
+  it('hay ícono/label/tono para cada tipo y etiqueta para cada estado', () => {
+    for (const t of Object.values(AgendaItemType)) expect(AGENDA_TYPE_META[t].label).toBeTruthy();
+    for (const s of Object.values(AgendaItemStatus)) expect(AGENDA_STATUS_LABEL[s]).toBeTruthy();
+  });
+
+  it('AgendaCard renderiza nombre, hora + tipo, y estado', () => {
+    const { getByText } = render(
+      <AgendaCard name="Ana Ruiz" icon="📞" typeLabel="Llamada" time="09:30" statusLabel="Agendada" tone="info" />,
+    );
+    expect(getByText('Ana Ruiz')).toBeTruthy();
+    expect(getByText('09:30 · Llamada')).toBeTruthy();
+    expect(getByText('Agendada')).toBeTruthy();
   });
 });

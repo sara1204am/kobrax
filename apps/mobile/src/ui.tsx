@@ -6,7 +6,7 @@
 import { type ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CasePriority, CaseStatus } from '@kobrax/shared';
+import { AgendaItemStatus, AgendaItemType, CasePriority, CaseStatus } from '@kobrax/shared';
 import { useNetStore } from './store/net';
 import { COLORS, RADIUS, SPACING, TYPE } from './theme';
 
@@ -230,6 +230,69 @@ export function SectionLabel({ children }: { children: string }) {
   return <Text style={styles.sectionLabel}>{children}</Text>;
 }
 
+/** Ícono + etiqueta + tono por tipo de gestión agendada (Figma). */
+export const AGENDA_TYPE_META: Record<AgendaItemType, { icon: string; label: string; tone: BadgeTone }> = {
+  [AgendaItemType.CALL]: { icon: '📞', label: 'Llamada', tone: 'info' },
+  [AgendaItemType.VISIT]: { icon: '📍', label: 'Visita', tone: 'success' },
+  [AgendaItemType.WHATSAPP]: { icon: '💬', label: 'WhatsApp', tone: 'success' },
+  [AgendaItemType.REMINDER]: { icon: '🔔', label: 'Recordatorio', tone: 'warning' },
+  [AgendaItemType.PROMISE_TO_PAY]: { icon: '🤝', label: 'Promesa de pago', tone: 'info' },
+};
+
+/** Etiqueta en español por estado de agendado. */
+export const AGENDA_STATUS_LABEL: Record<AgendaItemStatus, string> = {
+  [AgendaItemStatus.SCHEDULED]: 'Agendada',
+  [AgendaItemStatus.EXECUTED]: 'Completada',
+  [AgendaItemStatus.CANCELLED]: 'Cancelada',
+  [AgendaItemStatus.RESCHEDULED]: 'Reagendada',
+};
+
+/**
+ * Tarjeta de gestión agendada (Agenda S1): barra de acento por tipo (roja si vencida), ícono del tipo,
+ * nombre del deudor, hora + tipo, y pill de estado. Reusada en las secciones Para hoy/Completados/Vencidos.
+ */
+export function AgendaCard({
+  name,
+  icon,
+  typeLabel,
+  time,
+  statusLabel,
+  tone,
+  overdue,
+  onPress,
+}: {
+  name: string;
+  icon: string;
+  typeLabel: string;
+  time?: string;
+  statusLabel: string;
+  tone: BadgeTone;
+  overdue?: boolean;
+  onPress?: () => void;
+}) {
+  return (
+    <View style={styles.caseCard}>
+      <View style={[styles.caseAccent, { backgroundColor: TONE_SOLID[overdue ? 'danger' : tone] }]} />
+      <Pressable
+        onPress={onPress}
+        disabled={!onPress}
+        style={({ pressed }) => [styles.caseBody, pressed && onPress && styles.rowPressed]}
+      >
+        <Text style={styles.agendaIcon}>{icon}</Text>
+        <View style={{ flex: 1, gap: 3 }}>
+          <Text style={styles.caseName} numberOfLines={1}>
+            {name}
+          </Text>
+          <Text style={styles.rowSubtitle} numberOfLines={1}>
+            {[time, typeLabel].filter(Boolean).join(' · ')}
+          </Text>
+        </View>
+        <StatusBadge label={statusLabel} tone={overdue ? 'danger' : tone} />
+      </Pressable>
+    </View>
+  );
+}
+
 /**
  * Filtro segmentado con contador (diseño Figma de la Agenda: Vencidas · Pendientes · Completadas).
  * El segmento activo se rellena en navy; el resto en blanco con borde. `tone` tiñe el valor.
@@ -386,6 +449,7 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.md,
   },
   caseName: { ...TYPE.body, fontWeight: '700', color: COLORS.navy },
+  agendaIcon: { fontSize: 22 },
   caseRight: { alignItems: 'flex-end', gap: 4 },
   caseAmount: { ...TYPE.body, fontWeight: '700', color: COLORS.navy },
   sectionLabel: {
