@@ -1,6 +1,7 @@
 # Agenda · S1 — Pantalla principal
 
-> **ESTADO: PLAN EN REVISIÓN (2026-07-08). NO construir hasta OK.**
+> **ESTADO: ✅ CONSTRUIDO (2026-07-08, rama `f10/agenda-fundacion`, commit 9abbb40).** Verde: mobile
+> type-check + 53 jest + expo export. Pendiente: validación visual de la usuaria en dispositivo.
 > Índice: [README.md](./README.md) · Modelo: [DOMAIN.md](./DOMAIN.md). **Depende de [00-fundacion.md](./00-fundacion.md)**
 > (tabla `agenda_items` + catálogos + seed ya construidos). Acá solo: endpoints de lectura + pantalla.
 > **Pantalla Figma:** Agenda Diaria `64:4` (guía visual; datos = `agenda_items`). **Build:** 🟢 Expo Go

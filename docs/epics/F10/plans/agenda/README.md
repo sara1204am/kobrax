@@ -16,8 +16,8 @@ estas filas están superados por este módulo).
 | # | Pantalla | Figma node-id | Archivo | Capa | Estado |
 |---|---|---|---|---|---|
 | — | Fundación backend (catálogos + agenda_items) | (sin pantalla) | [00-fundacion.md](./00-fundacion.md) | núcleo | ✅ construido |
-| S1 | **Principal** (calendario + secciones) | `64:4` | [main.md](./main.md) | núcleo | 🟡 siguiente |
-| S2 | Crear agendado (5 tipos) | `65:724` Llamada · `65:828` Visita · `65:938` WhatsApp · `65:1047` Recordatorio · `65:1150` Promesa | `crear.md` | núcleo | ⬜ |
+| S1 | **Principal** (calendario + secciones) | `64:4` | [main.md](./main.md) | núcleo | ✅ construido |
+| S2 | Crear agendado (5 tipos) | `65:724` Llamada · `65:828` Visita · `65:938` WhatsApp · `65:1047` Recordatorio · `65:1150` Promesa | `crear.md` | núcleo | 🟡 siguiente |
 | S3 | Ver agendado (detalle) | `64:425` | `ver.md` | núcleo | ⬜ |
 | S4 | Registrar acción (ejecutar) | `66:1763` · `66:2195` · `66:2440` · `66:2531` | `registrar-accion.md` | núcleo | ⬜ |
 | S5 | Editar | (reusa `crear`) | `editar.md` | núcleo | ⬜ |
