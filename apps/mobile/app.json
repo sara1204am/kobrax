@@ -20,7 +20,8 @@
       }
     },
     "android": {
-      "package": "demo.kobrax.mobile"
+      "package": "demo.kobrax.mobile",
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
     },
     "plugins": [
       "expo-router",
@@ -28,6 +29,12 @@
       [
         "expo-local-authentication",
         { "faceIDPermission": "Kobrax usa Face ID para desbloquear tu sesión de forma segura." }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Kobrax necesita tu ubicación para marcar la dirección del deudor en el mapa."
+        }
       ],
       [
         "./plugins/with-ssl-pinning",

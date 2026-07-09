@@ -10,6 +10,8 @@
 
 ## Planes por pantalla (build por CAPAS — núcleo funcional primero)
 Diseño Figma "Kobrax movil" · fileKey `daLWsKQGC4Sd1NacU9fmrP` · sección `81:4`.
+**PNGs exportados en `docs/epics/F10/figma/`** (el MCP de Figma está rate-limited en plan Starter) →
+leer del disco con Read, no pullear.
 **Figma = guía VISUAL; los datos van al nuevo `agenda_items`** (los endpoints del `ui-screen-map` para
 estas filas están superados por este módulo).
 
@@ -17,7 +19,7 @@ estas filas están superados por este módulo).
 |---|---|---|---|---|---|
 | — | Fundación backend (catálogos + agenda_items) | (sin pantalla) | [00-fundacion.md](./00-fundacion.md) | núcleo | ✅ construido |
 | S1 | **Principal** (calendario + secciones) | `64:4` | [main.md](./main.md) | núcleo | ✅ construido |
-| S2 | Crear agendado (5 tipos) | `65:724` Llamada · `65:828` Visita · `65:938` WhatsApp · `65:1047` Recordatorio · `65:1150` Promesa | `crear.md` | núcleo | 🟡 siguiente |
+| S2 | Crear agendado (5 tipos) | `65:724` Llamada · `65:828` Visita · `65:938` WhatsApp · `65:1047` Recordatorio · `65:1150` Promesa | [crear.md](./crear.md) | núcleo | ✅ construido (falta validación visual) |
 | S3 | Ver agendado (detalle) | `64:425` | `ver.md` | núcleo | ⬜ |
 | S4 | Registrar acción (ejecutar) | `66:1763` · `66:2195` · `66:2440` · `66:2531` | `registrar-accion.md` | núcleo | ⬜ |
 | S5 | Editar | (reusa `crear`) | `editar.md` | núcleo | ⬜ |

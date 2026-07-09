@@ -22,6 +22,13 @@ export enum ScheduleTimeMode {
   RANGE = 'RANGE', // rango ("08:00-10:00")
 }
 
+/** Franjas del modo `LAPSE`. Se persisten como texto en `agenda_items.time_slot`. */
+export enum AgendaTimeSlot {
+  MORNING = 'MORNING',
+  AFTERNOON = 'AFTERNOON',
+  NIGHT = 'NIGHT',
+}
+
 /** Tipos de catálogo configurable por tenant (una sola tabla `catalog_items` los cubre). */
 export enum CatalogType {
   PAYMENT_METHOD = 'PAYMENT_METHOD',

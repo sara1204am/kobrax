@@ -1,0 +1,987 @@
+/**
+ * Agenda S2 — "Nueva gestión" (Figma `65:724` y hermanos): elegir tipo, buscar cliente, completar
+ * los campos propios del tipo, programar y guardar. La lógica del formulario vive en `agenda-form.ts`
+ * (reducer puro); acá sólo se despacha y se pinta.
+ */
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Keyboard,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+import * as Location from 'expo-location';
+import MapView, { Marker, type MapPressEvent, type Region } from 'react-native-maps';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { AgendaItemType, AgendaTimeSlot, CatalogType, SUPPORTED_CURRENCIES, ScheduleTimeMode, formatCurrency } from '@kobrax/shared';
+import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
+import { Button, ErrorBanner } from '@/components';
+import { AGENDA_TYPE_META, BottomSheet, Header, SectionLabel } from '@/ui';
+import {
+  buildPayload,
+  canSubmit,
+  formReducer,
+  formatLongDate,
+  initialForm,
+  TIME_SLOT_LABEL,
+  type TimeMode,
+  type TimeSlot,
+} from '@/agenda-form';
+import {
+  addClientContact,
+  addClientLocation,
+  clientContext,
+  createItem,
+  type AgendaClientContext,
+  type ClientLocationType,
+  type PhoneContactType,
+} from '@/agenda.service';
+import { clientDisplayName, searchClients, type ClientHit } from '@/clients.service';
+import { listCatalog, type CatalogOption } from '@/catalogs.service';
+
+const TYPES: AgendaItemType[] = [
+  AgendaItemType.CALL,
+  AgendaItemType.VISIT,
+  AgendaItemType.WHATSAPP,
+  AgendaItemType.REMINDER,
+  AgendaItemType.PROMISE_TO_PAY,
+];
+
+const SLOTS: TimeSlot[] = Object.values(AgendaTimeSlot);
+/** `RANGE` queda fuera del núcleo (ver plans/agenda/crear.md §3). */
+const TIME_MODES: TimeMode[] = [ScheduleTimeMode.FIXED, ScheduleTimeMode.LAPSE];
+
+/** Hoy en UTC (`YYYY-MM-DD`) — mismo anclaje que la pantalla principal y que el server. */
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+/** `YYYY-MM-DD` → `Date` local, para alimentar el picker nativo sin correr un día. */
+function toLocalDate(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y!, m! - 1, d!);
+}
+function toISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function toHHmm(d: Date): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+/** `formatCurrency` explota con una moneda fuera de las soportadas; el saldo no vale una pantalla en blanco. */
+function money(amount: number, currency: string): string {
+  return currency in SUPPORTED_CURRENCIES
+    ? formatCurrency(amount, currency as keyof typeof SUPPORTED_CURRENCIES)
+    : `${amount.toFixed(2)} ${currency}`;
+}
+
+type Sheet = 'contact' | 'location' | 'credit' | 'method' | 'bank' | 'newPhone' | 'newLocation';
+type PickerKind = 'date' | 'time' | 'promiseDate';
+
+const PHONE_TYPES: { key: PhoneContactType; label: string }[] = [
+  { key: 'PHONE', label: 'Teléfono' },
+  { key: 'WHATSAPP', label: 'WhatsApp' },
+];
+
+const LOCATION_TYPES: { key: ClientLocationType; label: string }[] = [
+  { key: 'HOME', label: 'Domicilio' },
+  { key: 'WORK', label: 'Trabajo' },
+  { key: 'GUARANTOR', label: 'Garante' },
+  { key: 'FAMILY', label: 'Familiar' },
+  { key: 'OTHER', label: 'Otro' },
+];
+
+/** Encuadre del mapa cuando no hay ninguna coordenada de referencia (Santa Cruz, tenant demo). */
+const FALLBACK_REGION: Region = {
+  latitude: -17.7833,
+  longitude: -63.1821,
+  latitudeDelta: 0.05,
+  longitudeDelta: 0.05,
+};
+const PIN_ZOOM = { latitudeDelta: 0.004, longitudeDelta: 0.004 };
+
+export default function CrearGestionScreen() {
+  const [form, dispatch] = useReducer(formReducer, undefined, () => initialForm(todayISO()));
+  const [query, setQuery] = useState('');
+  const [hits, setHits] = useState<ClientHit[]>([]);
+  const [ctx, setCtx] = useState<AgendaClientContext | null>(null);
+  const [loadingCtx, setLoadingCtx] = useState(false);
+  const [methods, setMethods] = useState<CatalogOption[]>([]);
+  const [banks, setBanks] = useState<CatalogOption[]>([]);
+  const [sheet, setSheet] = useState<Sheet | null>(null);
+  const [picker, setPicker] = useState<PickerKind | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  /** Lo que el usuario tipeó en el monto; `details.amount` guarda el número derivado. */
+  const [amountText, setAmountText] = useState('');
+  /** Alta de un teléfono que el cliente no tenía cargado. */
+  const [newPhone, setNewPhone] = useState<{ value: string; notes: string; contactType: PhoneContactType }>({
+    value: '',
+    notes: '',
+    contactType: 'PHONE',
+  });
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  /** Alta de una dirección: el pin del mapa es opcional, la dirección escrita no. */
+  const [newLoc, setNewLoc] = useState<{
+    address: string;
+    zone: string;
+    referenceNotes: string;
+    locationType: ClientLocationType;
+    latitude?: number;
+    longitude?: number;
+  }>({ address: '', zone: '', referenceNotes: '', locationType: 'HOME' });
+  const [savingLoc, setSavingLoc] = useState(false);
+  const [locError, setLocError] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
+  const mapRef = useRef<MapView | null>(null);
+
+  const details = form.details as Record<string, string | number | undefined>;
+  const isPromise = form.type === AgendaItemType.PROMISE_TO_PAY;
+
+  const onAmountChange = useCallback((text: string) => {
+    const clean = text.replace(',', '.');
+    setAmountText(clean);
+    const n = Number(clean);
+    dispatch({ t: 'details', patch: { amount: clean === '' || Number.isNaN(n) ? undefined : n } });
+  }, []);
+
+  // Buscador con debounce: en gama baja, una request por tecla mata la lista.
+  useEffect(() => {
+    if (form.clientId || query.trim().length < 2) return setHits([]);
+    const id = setTimeout(async () => {
+      const res = await searchClients(query.trim());
+      setHits(res.status === 'ok' ? res.data : []);
+    }, 300);
+    return () => clearTimeout(id);
+  }, [query, form.clientId]);
+
+  // Catálogos de la promesa: sólo cuando el tipo los pide, y una sola vez.
+  useEffect(() => {
+    if (!isPromise || methods.length > 0) return;
+    void (async () => {
+      const [m, b] = await Promise.all([listCatalog(CatalogType.PAYMENT_METHOD), listCatalog(CatalogType.BANK)]);
+      if (m.status === 'ok') setMethods(m.data);
+      if (b.status === 'ok') setBanks(b.data);
+    })();
+  }, [isPromise, methods.length]);
+
+  const pickClient = useCallback(async (hit: ClientHit) => {
+    Keyboard.dismiss();
+    setError(null);
+    setLoadingCtx(true);
+    dispatch({ t: 'client', clientId: hit.id });
+    const res = await clientContext(hit.id);
+    setLoadingCtx(false);
+    if (res.status !== 'ok') {
+      dispatch({ t: 'clearClient' });
+      // `unauthenticated` no puede quedar mudo: sin mensaje el cobrador reintenta a ciegas.
+      setError(
+        res.status === 'offline'
+          ? 'Sin conexión — no se pudo cargar el cliente.'
+          : res.status === 'unauthenticated'
+            ? 'Tu sesión venció — volvé a entrar.'
+            : res.message,
+      );
+      return;
+    }
+    setCtx(res.data);
+    setQuery('');
+    setHits([]);
+    // Con un solo crédito no hay nada que elegir.
+    if (res.data.credits.length === 1) {
+      const only = res.data.credits[0]!;
+      dispatch({ t: 'credit', caseId: only.caseId, creditId: only.creditId });
+    }
+  }, []);
+
+  const clearClient = useCallback(() => {
+    dispatch({ t: 'clearClient' });
+    setCtx(null);
+    setError(null);
+  }, []);
+
+  /** Guarda el teléfono, lo suma al contexto en memoria y lo deja elegido — sin refetch ni salir del form. */
+  const savePhone = useCallback(async () => {
+    if (!ctx || !newPhone.value.trim()) return;
+    setSavingPhone(true);
+    setPhoneError(null);
+    const res = await addClientContact(ctx.client.id, {
+      contactType: newPhone.contactType,
+      value: newPhone.value.trim(),
+      notes: newPhone.notes.trim() || undefined,
+    });
+    setSavingPhone(false);
+    if (res.status !== 'ok') {
+      setPhoneError(
+        res.status === 'offline'
+          ? 'Sin conexión — el teléfono no se guardó.'
+          : res.status === 'unauthenticated'
+            ? 'Tu sesión venció — volvé a entrar.'
+            : res.message,
+      );
+      return;
+    }
+    setCtx({ ...ctx, contacts: [...ctx.contacts, res.data] });
+    dispatch({ t: 'details', patch: { contactId: res.data.id } }); // queda seleccionado, como pidió el flujo
+    setNewPhone({ value: '', notes: '', contactType: 'PHONE' });
+    setSheet(null);
+  }, [ctx, newPhone]);
+
+  /** Mueve el pin y encuadra el mapa en él. */
+  const setPin = useCallback((latitude: number, longitude: number) => {
+    setNewLoc((p) => ({ ...p, latitude, longitude }));
+    mapRef.current?.animateToRegion({ latitude, longitude, ...PIN_ZOOM });
+  }, []);
+
+  /**
+   * GPS del dispositivo. El cobrador suele estar parado en la puerta del deudor, así que esto da un
+   * punto más exacto que arrastrar el pin a ojo. Si niega el permiso, la dirección se carga igual.
+   */
+  const useMyLocation = useCallback(async () => {
+    setLocating(true);
+    setLocError(null);
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      setLocating(false);
+      setLocError('Sin permiso de ubicación — podés marcar el punto tocando el mapa.');
+      return;
+    }
+    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    setPin(pos.coords.latitude, pos.coords.longitude);
+    setLocating(false);
+  }, [setPin]);
+
+  /** Guarda la dirección, la suma al contexto en memoria y la deja elegida. */
+  const saveLocation = useCallback(async () => {
+    if (!ctx || !newLoc.address.trim()) return;
+    setSavingLoc(true);
+    setLocError(null);
+    const res = await addClientLocation(ctx.client.id, {
+      locationType: newLoc.locationType,
+      address: newLoc.address.trim(),
+      zone: newLoc.zone.trim() || undefined,
+      referenceNotes: newLoc.referenceNotes.trim() || undefined,
+      latitude: newLoc.latitude,
+      longitude: newLoc.longitude,
+    });
+    setSavingLoc(false);
+    if (res.status !== 'ok') {
+      setLocError(
+        res.status === 'offline'
+          ? 'Sin conexión — la dirección no se guardó.'
+          : res.status === 'unauthenticated'
+            ? 'Tu sesión venció — volvé a entrar.'
+            : res.message,
+      );
+      return;
+    }
+    setCtx({ ...ctx, locations: [...ctx.locations, res.data] });
+    dispatch({ t: 'details', patch: { locationId: res.data.id } });
+    setNewLoc({ address: '', zone: '', referenceNotes: '', locationType: 'HOME' });
+    setSheet(null);
+  }, [ctx, newLoc]);
+
+  const onPicked = useCallback(
+    (event: DateTimePickerEvent, date?: Date) => {
+      const kind = picker;
+      setPicker(null);
+      if (event.type !== 'set' || !date || !kind) return;
+      if (kind === 'date') dispatch({ t: 'date', value: toISO(date) });
+      else if (kind === 'time') dispatch({ t: 'time', value: toHHmm(date) });
+      else dispatch({ t: 'details', patch: { promiseDate: toISO(date) } });
+    },
+    [picker],
+  );
+
+  const save = useCallback(async () => {
+    const payload = buildPayload(form);
+    if (!payload) return;
+    setSaving(true);
+    setError(null);
+    const res = await createItem(payload);
+    setSaving(false);
+    if (res.status === 'ok') {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.back(); // la Agenda refetchea al recuperar el foco
+      return;
+    }
+    // Offline: el formulario queda intacto para reintentar (cola real de escritura = P6).
+    setError(res.status === 'offline' ? 'Sin conexión — reintentá.' : res.status === 'error' ? res.message : 'Sesión vencida.');
+  }, [form]);
+
+  const credit = ctx?.credits.find((c) => c.creditId === form.creditId);
+  const contact = ctx?.contacts.find((c) => c.id === details.contactId);
+  const location = ctx?.locations.find((l) => l.id === details.locationId);
+  const method = methods.find((m) => m.code === details.paymentMethodCode);
+  const bank = banks.find((b) => b.code === details.bankCode);
+  const requiresBank = method?.metadata?.requiresBank === true;
+
+  const phones = useMemo(() => (ctx?.contacts ?? []).filter((c) => c.contactType !== 'EMAIL'), [ctx]);
+
+  return (
+    <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+      <Header title="Nueva gestión" onBack={() => router.back()} />
+
+      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        <SectionLabel>Tipo de gestión</SectionLabel>
+        <View style={styles.typeGrid}>
+          {TYPES.map((t) => {
+            const meta = AGENDA_TYPE_META[t];
+            const active = form.type === t;
+            return (
+              <Pressable
+                key={t}
+                onPress={() => {
+                  dispatch({ t: 'type', value: t });
+                  setAmountText(''); // el reducer limpia `details`; el texto del monto lo acompaña
+                }}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                style={[styles.typeChip, active && styles.typeChipActive]}
+              >
+                <Text style={styles.typeIcon}>{meta.icon}</Text>
+                <Text style={[styles.typeLabel, active && styles.typeLabelActive]} numberOfLines={1}>
+                  {meta.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <SectionLabel>Cliente</SectionLabel>
+        {ctx ? (
+          <View style={styles.clientCard}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{ctx.client.displayName.slice(0, 1)}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.clientName} numberOfLines={1}>
+                {ctx.client.displayName}
+              </Text>
+              {ctx.client.nationalId && <Text style={styles.clientDoc}>CI {ctx.client.nationalId}</Text>}
+            </View>
+            <Pressable onPress={clearClient} hitSlop={12} accessibilityRole="button" accessibilityLabel="Quitar cliente">
+              <Text style={styles.remove}>✕</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            <View style={styles.searchBox}>
+              <Text style={styles.searchIcon}>🔍</Text>
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Buscar por nombre o CI…"
+                placeholderTextColor={COLORS.muted}
+                style={styles.searchInput}
+                autoCorrect={false}
+              />
+              {loadingCtx && <ActivityIndicator color={COLORS.navy} />}
+            </View>
+            {hits.map((h) => (
+              <Pressable key={h.id} onPress={() => void pickClient(h)} style={styles.hit} accessibilityRole="button">
+                <Text style={styles.hitName}>{clientDisplayName(h)}</Text>
+                {h.nationalId && <Text style={styles.hitDoc}>CI {h.nationalId}</Text>}
+              </Pressable>
+            ))}
+          </>
+        )}
+
+        {/* Con un solo crédito ya quedó elegido; el selector aparece recién a partir de dos. */}
+        {ctx && ctx.credits.length > 1 && (
+          <>
+            <SectionLabel>Crédito</SectionLabel>
+            <SelectRow
+              icon="💳"
+              value={credit ? `${credit.code ?? 'Crédito'} · ${money(credit.outstandingBalance, credit.currency)}` : undefined}
+              placeholder="Elegí el crédito"
+              onPress={() => setSheet('credit')}
+            />
+          </>
+        )}
+
+        {ctx && (
+          <>
+            {(form.type === AgendaItemType.CALL || form.type === AgendaItemType.WHATSAPP) && (
+              <>
+                <SectionLabel>Teléfono</SectionLabel>
+                <SelectRow icon="📞" value={contact?.value ?? undefined} placeholder="Elegí un teléfono" onPress={() => setSheet('contact')} />
+              </>
+            )}
+
+            {form.type === AgendaItemType.WHATSAPP && (
+              <>
+                <SectionLabel>Mensaje inicial</SectionLabel>
+                <Multiline
+                  value={(details.message as string) ?? ''}
+                  onChangeText={(v) => dispatch({ t: 'details', patch: { message: v } })}
+                  placeholder="Escriba el mensaje…"
+                />
+              </>
+            )}
+
+            {form.type === AgendaItemType.VISIT && (
+              <>
+                <SectionLabel>Dirección</SectionLabel>
+                <SelectRow icon="📍" value={location?.address ?? undefined} placeholder="Elegí una dirección" onPress={() => setSheet('location')} />
+              </>
+            )}
+
+            {form.type === AgendaItemType.REMINDER && (
+              <>
+                <SectionLabel>Descripción (requerido)</SectionLabel>
+                <TextInput
+                  value={(details.description as string) ?? ''}
+                  onChangeText={(v) => dispatch({ t: 'details', patch: { description: v } })}
+                  placeholder="¿Qué hay que recordar?"
+                  placeholderTextColor={COLORS.muted}
+                  style={styles.input}
+                />
+              </>
+            )}
+
+            {isPromise && (
+              <>
+                <SectionLabel>Monto prometido *</SectionLabel>
+                <TextInput
+                  // El texto tipeado es la fuente de verdad, no el número: re-stringificar el parseado
+                  // borraría el `.` apenas se escribe y los centavos serían inalcanzables (150.50 → 15050).
+                  value={amountText}
+                  onChangeText={onAmountChange}
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                  placeholderTextColor={COLORS.muted}
+                  style={styles.input}
+                />
+                {/* Referencia de solo lectura: el cobrador negocia el monto mirando estos dos números. */}
+                {credit && (
+                  <>
+                    <SectionLabel>Capital</SectionLabel>
+                    <ReadOnlyField value={money(credit.principalAmount, credit.currency)} />
+                    <SectionLabel>Cuota en mora</SectionLabel>
+                    <ReadOnlyField value={money(credit.overdueAmount, credit.currency)} />
+                    <Text style={styles.hint}>Saldo pendiente: {money(credit.outstandingBalance, credit.currency)}</Text>
+                  </>
+                )}
+
+                <SectionLabel>El cliente pagará el *</SectionLabel>
+                <SelectRow
+                  icon="📅"
+                  value={details.promiseDate ? formatLongDate(details.promiseDate as string) : undefined}
+                  placeholder="Elegí la fecha"
+                  onPress={() => setPicker('promiseDate')}
+                />
+
+                <SectionLabel>Medio de pago</SectionLabel>
+                <View style={styles.chipWrap}>
+                  {methods.map((m) => {
+                    const active = m.code === details.paymentMethodCode;
+                    return (
+                      <Pressable
+                        key={m.id}
+                        onPress={() => dispatch({ t: 'details', patch: { paymentMethodCode: m.code, bankCode: undefined } })}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                        style={[styles.chip, active && styles.chipActive]}
+                      >
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{m.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {requiresBank && (
+                  <>
+                    <SectionLabel>Banco *</SectionLabel>
+                    <SelectRow icon="🏦" value={bank?.label} placeholder="Elegí el banco" onPress={() => setSheet('bank')} />
+                  </>
+                )}
+              </>
+            )}
+
+            <SectionLabel>Notas (opcional)</SectionLabel>
+            <Multiline
+              value={form.observations}
+              onChangeText={(v) => dispatch({ t: 'observations', value: v })}
+              placeholder="Escriba observaciones aquí…"
+            />
+
+            <SectionLabel>{isPromise ? 'Programación recordatorio' : 'Programación'}</SectionLabel>
+            <SelectRow icon="📅" value={formatLongDate(form.scheduledDate)} onPress={() => setPicker('date')} />
+
+            <View style={styles.toggle}>
+              {TIME_MODES.map((mode) => {
+                const active = form.timeMode === mode;
+                return (
+                  <Pressable
+                    key={mode}
+                    onPress={() => dispatch({ t: 'timeMode', value: mode })}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    style={[styles.toggleItem, active && styles.toggleItemActive]}
+                  >
+                    <Text style={[styles.toggleText, active && styles.toggleTextActive]}>
+                      {mode === ScheduleTimeMode.FIXED ? 'Hora fija' : 'Lapso (AM/PM)'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {form.timeMode === ScheduleTimeMode.FIXED ? (
+              <SelectRow icon="🕐" value={form.scheduledTime || undefined} placeholder="Elegí la hora" onPress={() => setPicker('time')} />
+            ) : (
+              <View style={styles.chipWrap}>
+                {SLOTS.map((slot) => {
+                  const active = form.timeSlot === slot;
+                  return (
+                    <Pressable
+                      key={slot}
+                      onPress={() => dispatch({ t: 'slot', value: slot })}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      style={[styles.chip, active && styles.chipActive]}
+                    >
+                      <Text style={[styles.chipText, active && styles.chipTextActive]}>{TIME_SLOT_LABEL[slot]}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </>
+        )}
+
+        {error && (
+          <View style={{ marginTop: SPACING.md }}>
+            <ErrorBanner message={error} />
+          </View>
+        )}
+      </ScrollView>
+
+      <SafeAreaView edges={['bottom']} style={styles.footer}>
+        <Button label="Guardar gestión" onPress={() => void save()} loading={saving} disabled={!canSubmit(form, requiresBank)} />
+      </SafeAreaView>
+
+      <PickerSheet
+        visible={sheet === 'credit'}
+        onClose={() => setSheet(null)}
+        title="Elegí el crédito"
+        options={(ctx?.credits ?? []).map((c) => ({
+          key: c.creditId,
+          label: c.code ?? 'Crédito',
+          hint: `${money(c.outstandingBalance, c.currency)} · ${c.daysPastDue} días de mora`,
+        }))}
+        onPick={(key) => {
+          const c = ctx!.credits.find((x) => x.creditId === key)!;
+          dispatch({ t: 'credit', caseId: c.caseId, creditId: c.creditId });
+        }}
+      />
+      <PickerSheet
+        visible={sheet === 'contact'}
+        onClose={() => setSheet(null)}
+        title="Elegí un teléfono"
+        options={phones.map((c) => ({ key: c.id, label: c.value ?? '—', hint: c.isPrimary ? 'Principal' : undefined }))}
+        onPick={(key) => dispatch({ t: 'details', patch: { contactId: key } })}
+        addLabel="＋  Agregar teléfono"
+        onAdd={() => {
+          setPhoneError(null);
+          setSheet('newPhone');
+        }}
+      />
+
+      {/* Alta de teléfono sin salir del formulario: al guardar queda elegido. */}
+      <BottomSheet visible={sheet === 'newPhone'} onClose={() => setSheet(null)} title="Agregar teléfono">
+        <View style={styles.chipWrap}>
+          {PHONE_TYPES.map((t) => {
+            const active = newPhone.contactType === t.key;
+            return (
+              <Pressable
+                key={t.key}
+                onPress={() => setNewPhone((p) => ({ ...p, contactType: t.key }))}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                style={[styles.chip, active && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{t.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <TextInput
+          value={newPhone.value}
+          onChangeText={(v) => setNewPhone((p) => ({ ...p, value: v }))}
+          placeholder="Número"
+          placeholderTextColor={COLORS.muted}
+          keyboardType="phone-pad"
+          style={styles.input}
+        />
+        <TextInput
+          value={newPhone.notes}
+          onChangeText={(v) => setNewPhone((p) => ({ ...p, notes: v }))}
+          placeholder="Etiqueta (Celular, Trabajo…)"
+          placeholderTextColor={COLORS.muted}
+          style={styles.input}
+        />
+        <ErrorBanner message={phoneError} />
+        <Button
+          label="Guardar teléfono"
+          onPress={() => void savePhone()}
+          loading={savingPhone}
+          disabled={!newPhone.value.trim()}
+        />
+      </BottomSheet>
+      <PickerSheet
+        visible={sheet === 'location'}
+        onClose={() => setSheet(null)}
+        title="Elegí una dirección"
+        options={(ctx?.locations ?? []).map((l) => ({ key: l.id, label: l.address ?? '—', hint: l.zone }))}
+        onPick={(key) => dispatch({ t: 'details', patch: { locationId: key } })}
+        addLabel="＋  Agregar dirección"
+        onAdd={() => {
+          setLocError(null);
+          setSheet('newLocation');
+        }}
+      />
+
+      {/* Alta de dirección con mapa: tocar o arrastrar fija el pin; el GPS lo pone donde estás parado. */}
+      <BottomSheet visible={sheet === 'newLocation'} onClose={() => setSheet(null)} title="Agregar dirección">
+        <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 460 }} contentContainerStyle={{ gap: SPACING.md }}>
+          <View style={styles.chipWrap}>
+            {LOCATION_TYPES.map((t) => {
+              const active = newLoc.locationType === t.key;
+              return (
+                <Pressable
+                  key={t.key}
+                  onPress={() => setNewLoc((p) => ({ ...p, locationType: t.key }))}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  style={[styles.chip, active && styles.chipActive]}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{t.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <TextInput
+            value={newLoc.address}
+            onChangeText={(v) => setNewLoc((p) => ({ ...p, address: v }))}
+            placeholder="Dirección"
+            placeholderTextColor={COLORS.muted}
+            style={styles.input}
+          />
+          <TextInput
+            value={newLoc.zone}
+            onChangeText={(v) => setNewLoc((p) => ({ ...p, zone: v }))}
+            placeholder="Zona (opcional)"
+            placeholderTextColor={COLORS.muted}
+            style={styles.input}
+          />
+          <TextInput
+            value={newLoc.referenceNotes}
+            onChangeText={(v) => setNewLoc((p) => ({ ...p, referenceNotes: v }))}
+            placeholder="Referencia (portón verde, frente a la cancha…)"
+            placeholderTextColor={COLORS.muted}
+            style={styles.input}
+          />
+
+          <View style={styles.mapBox}>
+            <MapView
+              ref={mapRef}
+              style={styles.map}
+              initialRegion={
+                newLoc.latitude != null && newLoc.longitude != null
+                  ? { latitude: newLoc.latitude, longitude: newLoc.longitude, ...PIN_ZOOM }
+                  : FALLBACK_REGION
+              }
+              onPress={(e: MapPressEvent) => {
+                const { latitude, longitude } = e.nativeEvent.coordinate;
+                setPin(latitude, longitude);
+              }}
+            >
+              {newLoc.latitude != null && newLoc.longitude != null && (
+                <Marker
+                  draggable
+                  coordinate={{ latitude: newLoc.latitude, longitude: newLoc.longitude }}
+                  onDragEnd={(e) => {
+                    const { latitude, longitude } = e.nativeEvent.coordinate;
+                    setNewLoc((p) => ({ ...p, latitude, longitude })); // sin re-encuadrar: ya lo movió el dedo
+                  }}
+                />
+              )}
+            </MapView>
+          </View>
+
+          <Text style={styles.hint}>
+            {newLoc.latitude != null
+              ? `Punto marcado: ${newLoc.latitude.toFixed(5)}, ${newLoc.longitude!.toFixed(5)}`
+              : 'Tocá el mapa para marcar el punto (opcional).'}
+          </Text>
+
+          <Button label="Usar mi ubicación actual" variant="ghost" onPress={() => void useMyLocation()} loading={locating} />
+          <ErrorBanner message={locError} />
+          <Button
+            label="Guardar dirección"
+            onPress={() => void saveLocation()}
+            loading={savingLoc}
+            disabled={!newLoc.address.trim()}
+          />
+        </ScrollView>
+      </BottomSheet>
+      <PickerSheet
+        visible={sheet === 'bank'}
+        onClose={() => setSheet(null)}
+        title="Elegí el banco"
+        options={banks.map((b) => ({ key: b.code, label: b.label }))}
+        onPick={(key) => dispatch({ t: 'details', patch: { bankCode: key } })}
+      />
+
+      {picker && (
+        <DateTimePicker
+          value={
+            picker === 'time'
+              ? new Date(`1970-01-01T${form.scheduledTime || '09:00'}:00`)
+              : toLocalDate(picker === 'date' ? form.scheduledDate : ((details.promiseDate as string) ?? todayISO()))
+          }
+          mode={picker === 'time' ? 'time' : 'date'}
+          minimumDate={picker === 'time' ? undefined : toLocalDate(todayISO())}
+          onChange={onPicked}
+        />
+      )}
+    </View>
+  );
+}
+
+/** Fila-selector (ícono + valor o placeholder + chevron). Abre una hoja o un picker. */
+function SelectRow({
+  icon,
+  value,
+  placeholder,
+  onPress,
+}: {
+  icon: string;
+  value?: string;
+  placeholder?: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.select} accessibilityRole="button">
+      <Text style={styles.selectIcon}>{icon}</Text>
+      <Text style={[styles.selectValue, !value && styles.selectPlaceholder]} numberOfLines={1}>
+        {value ?? placeholder}
+      </Text>
+      <Text style={styles.chevron}>›</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * Campo deshabilitado: dato del crédito que el cobrador consulta pero no edita. Es un `Text`, no un
+ * `TextInput` inerte — no toma foco ni abre teclado, y el lector de pantalla no lo anuncia como editable.
+ */
+function ReadOnlyField({ value }: { value: string }) {
+  return (
+    <View style={[styles.input, styles.readOnly]}>
+      <Text style={styles.readOnlyText} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+/** Caja de texto multilínea (notas, mensaje de WhatsApp). `Field` de components.tsx es de una línea. */
+function Multiline({
+  value,
+  onChangeText,
+  placeholder,
+}: {
+  value: string;
+  onChangeText: (v: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <TextInput
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      placeholderTextColor={COLORS.muted}
+      multiline
+      textAlignVertical="top"
+      style={[styles.input, styles.multiline]}
+    />
+  );
+}
+
+/** Hoja de selección genérica (crédito, teléfono, dirección, banco). Sube a `ui.tsx` cuando S3/S4 la pidan. */
+function PickerSheet({
+  visible,
+  onClose,
+  title,
+  options,
+  onPick,
+  addLabel,
+  onAdd,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  title: string;
+  options: { key: string; label: string; hint?: string }[];
+  onPick: (key: string) => void;
+  /** Acción opcional al pie ("Agregar teléfono"): la lista deja de ser un callejón sin salida. */
+  addLabel?: string;
+  onAdd?: () => void;
+}) {
+  return (
+    <BottomSheet visible={visible} onClose={onClose} title={title}>
+      {options.length === 0 && <Text style={styles.sheetEmpty}>No hay opciones disponibles.</Text>}
+      {options.map((o) => (
+        <Pressable
+          key={o.key}
+          onPress={() => {
+            onPick(o.key);
+            onClose();
+          }}
+          style={styles.sheetRow}
+          accessibilityRole="button"
+        >
+          <Text style={styles.sheetLabel}>{o.label}</Text>
+          {o.hint && <Text style={styles.sheetHint}>{o.hint}</Text>}
+        </Pressable>
+      ))}
+      {onAdd && (
+        <Pressable onPress={onAdd} style={styles.sheetAdd} accessibilityRole="button">
+          <Text style={styles.sheetAddText}>{addLabel}</Text>
+        </Pressable>
+      )}
+    </BottomSheet>
+  );
+}
+
+const styles = StyleSheet.create({
+  body: { padding: SPACING.lg, paddingBottom: SPACING.xxl },
+  typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  typeChip: {
+    flexGrow: 1,
+    flexBasis: '30%',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingVertical: SPACING.md,
+  },
+  typeChipActive: { backgroundColor: COLORS.purple, borderColor: COLORS.purple },
+  typeIcon: { fontSize: 20 },
+  typeLabel: { ...TYPE.caption, fontWeight: '600', color: COLORS.text2 },
+  typeLabelActive: { color: COLORS.white },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    height: 52,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.input,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    paddingHorizontal: SPACING.md,
+  },
+  searchIcon: { fontSize: 16 },
+  searchInput: { flex: 1, ...TYPE.body },
+  hit: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.input,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
+    marginTop: SPACING.sm,
+  },
+  hitName: { ...TYPE.body, fontWeight: '600', color: COLORS.navy },
+  hitDoc: { ...TYPE.caption },
+  clientCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    backgroundColor: COLORS.highlight,
+    borderRadius: RADIUS.card,
+    padding: SPACING.md,
+  },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.purple, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: COLORS.white, fontSize: 17, fontWeight: '700' },
+  clientName: { ...TYPE.body, fontWeight: '700', color: COLORS.navy },
+  clientDoc: { ...TYPE.caption },
+  remove: { color: COLORS.danger, fontSize: 18, fontWeight: '700' },
+  input: {
+    minHeight: 52,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.input,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    ...TYPE.body,
+  },
+  multiline: { minHeight: 96 },
+  readOnly: { backgroundColor: COLORS.lightBg, borderColor: COLORS.border, justifyContent: 'center' },
+  readOnlyText: { ...TYPE.body, fontWeight: '600', color: COLORS.text2 },
+  hint: { ...TYPE.caption, marginTop: SPACING.xs },
+  select: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    minHeight: 52,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.input,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    paddingHorizontal: SPACING.md,
+  },
+  selectIcon: { fontSize: 16 },
+  selectValue: { flex: 1, ...TYPE.body, color: COLORS.text },
+  selectPlaceholder: { color: COLORS.muted },
+  chevron: { color: COLORS.muted, fontSize: 22 },
+  toggle: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.lightBg,
+    borderRadius: RADIUS.input,
+    padding: 3,
+    marginTop: SPACING.sm,
+  },
+  toggleItem: { flex: 1, alignItems: 'center', paddingVertical: SPACING.sm, borderRadius: 8 },
+  toggleItemActive: { backgroundColor: COLORS.navy },
+  toggleText: { ...TYPE.secondary, fontWeight: '600' },
+  toggleTextActive: { color: COLORS.white },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  chip: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.pill,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+  },
+  chipActive: { backgroundColor: COLORS.purple, borderColor: COLORS.purple },
+  chipText: { ...TYPE.secondary, fontWeight: '600' },
+  chipTextActive: { color: COLORS.white },
+  footer: {
+    backgroundColor: COLORS.white,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+  },
+  sheetRow: { paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  sheetLabel: { ...TYPE.body, fontWeight: '600', color: COLORS.text },
+  sheetHint: { ...TYPE.caption },
+  sheetEmpty: { ...TYPE.secondary, textAlign: 'center', paddingVertical: SPACING.lg },
+  mapBox: { height: 200, borderRadius: RADIUS.card, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.border },
+  map: { flex: 1 },
+  sheetAdd: { paddingVertical: SPACING.md, alignItems: 'center' },
+  sheetAddText: { ...TYPE.body, fontWeight: '700', color: COLORS.purple },
+});

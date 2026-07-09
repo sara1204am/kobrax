@@ -498,7 +498,12 @@ async function seedAgenda(acc: string, collectorId: string): Promise<void> {
   const juan = await prisma.client.findFirst({ where: { accountId: acc, nationalIdHash: blindHash('DEMO-0001') }, select: { id: true } });
   const juanCase = juan ? await prisma.collectionCase.findFirst({ where: { accountId: acc, clientId: juan.id }, select: { id: true, clientId: true, creditId: true } }) : null;
   if (juan) {
-    await prisma.credit.create({ data: { accountId: acc, clientId: juan.id, code: 'CRD-DEMO-2', principalAmount: 3000, outstandingBalance: 2500, interestRate: 0.03, currency: 'BOB', installmentsCount: 6, status: CreditStatus.ACTIVE, daysPastDue: 10 } });
+    const credit2 = await prisma.credit.create({ data: { accountId: acc, clientId: juan.id, code: 'CRD-DEMO-2', principalAmount: 3000, outstandingBalance: 2500, interestRate: 0.03, currency: 'BOB', installmentsCount: 6, status: CreditStatus.ACTIVE, daysPastDue: 10 } });
+    // Sin caso abierto, un crédito no es agendable (§8.1) → sin este caso, Juan nunca mostraría
+    // el selector de crédito, que es justo lo que este 2º crédito viene a probar.
+    await prisma.collectionCase.create({
+      data: { accountId: acc, creditId: credit2.id, clientId: juan.id, assigneeId: collectorId, status: CaseStatus.ACTIVE, priority: CasePriority.MEDIUM },
+    });
   }
 
   const today = new Date();

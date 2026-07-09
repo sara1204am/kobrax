@@ -14,5 +14,6 @@ import { ClientImportService } from './import/client-import.service';
   imports: [AuthModule, AuditModule],
   controllers: [ClientsController, ClientImportController],
   providers: [ClientsService, ClientImportService],
+  exports: [ClientsService], // AgendaModule lo usa para revelar PII con auditoría al agendar.
 })
 export class ClientsModule {}

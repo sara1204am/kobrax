@@ -93,6 +93,29 @@ export async function apiQuery<T>(path: string): Promise<QueryResult<T>> {
   return { status: 'error', message: res.error?.message ?? 'Ocurrió un error' };
 }
 
+/**
+ * Resultado de una escritura (POST/PATCH/DELETE). Hermano de `QueryResult`: mismos 4 estados,
+ * pero `offline` acá significa "no se guardó, reintentá" (la cola real de escritura llega en P6).
+ */
+export type MutateResult<T> =
+  | { status: 'ok'; data: T }
+  | { status: 'offline' }
+  | { status: 'unauthenticated' }
+  | { status: 'error'; message: string };
+
+/** Escritura autenticada + mapeo a `MutateResult`. El `message` del server (AGENDA_00x) se propaga tal cual. */
+export async function apiMutate<T>(
+  path: string,
+  method: 'POST' | 'PATCH' | 'DELETE',
+  body?: unknown,
+): Promise<MutateResult<T>> {
+  const res = await authedFetch<T>(path, { method, body });
+  if (res.status === 'unauthenticated' || res.status === 401) return { status: 'unauthenticated' };
+  if (res.status === 0) return { status: 'offline' };
+  if ((res.status === 200 || res.status === 201) && res.data !== null) return { status: 'ok', data: res.data };
+  return { status: 'error', message: res.error?.message ?? 'No se pudo guardar' };
+}
+
 /** Serializa params a query string, saltando `undefined`/`null`/`''`. */
 export function toQuery(params: Record<string, string | number | boolean | undefined>): string {
   const q = new URLSearchParams();

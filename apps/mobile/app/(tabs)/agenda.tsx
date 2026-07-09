@@ -3,14 +3,14 @@ import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleS
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList, type FlashList as FlashListType } from '@shopify/flash-list';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { router, useFocusEffect } from 'expo-router';
 import { AgendaItemStatus } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { AgendaCard, AGENDA_STATUS_LABEL, AGENDA_TYPE_META, EmptyState, SectionLabel } from '@/ui';
 import { authService } from '@/auth-service';
+import { MONTHS, WEEKDAYS_SHORT } from '@/agenda-form';
 import { listByDay, listOverdue, type AgendaListItem } from '@/agenda.service';
 
-const WEEKDAYS = ['DO', 'LU', 'MA', 'MI', 'JU', 'VI', 'SA'];
-const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const RANGE = 180; // días a cada lado de hoy (tira "infinita" práctica; onEndReached bidireccional = futuro)
 
 /** Fecha-calendario en UTC (el backend guarda `scheduledDate` a medianoche UTC). */
@@ -73,13 +73,37 @@ export default function AgendaScreen() {
     if (res.status === 'ok') setOverdue({ items: res.data, total: res.total });
   }, []);
 
-  useEffect(() => {
-    if (userId) void fetchDay(userId, selected);
-  }, [userId, selected, fetchDay]);
+  /** Mueve la selección y deja el día centrado en la tira. */
+  const centerOn = useCallback(
+    (d: Date, animated: boolean) => {
+      setSelected(d);
+      const idx = days.findIndex((x) => isoDate(x) === isoDate(d));
+      if (idx >= 0) stripRef.current?.scrollToIndex({ index: idx, animated, viewPosition: 0.5 });
+    },
+    [days],
+  );
 
-  useEffect(() => {
-    if (userId) void fetchOverdue();
-  }, [userId, fetchOverdue]);
+  const selectDate = useCallback(
+    (d: Date) => {
+      centerOn(d, true);
+      if (userId) void fetchDay(userId, d);
+    },
+    [centerOn, userId, fetchDay],
+  );
+
+  /** Volver a hoy: lo usa el botón del header y el foco de la pantalla. */
+  const goToday = useCallback(() => selectDate(today), [selectDate, today]);
+
+  // Entrar a la Agenda siempre arranca en hoy, centrado — no donde quedó el scroll de la última vez.
+  // También cubre el regreso de "Nueva gestión": el agendado recién creado aparece sin tirar de la lista.
+  useFocusEffect(
+    useCallback(() => {
+      if (!userId) return;
+      centerOn(today, false);
+      void fetchDay(userId, today);
+      void fetchOverdue();
+    }, [userId, today, centerOn, fetchDay, fetchOverdue]),
+  );
 
   const onRefresh = useCallback(async () => {
     if (!userId) return;
@@ -87,15 +111,6 @@ export default function AgendaScreen() {
     await Promise.all([fetchDay(userId, selected), fetchOverdue()]);
     setRefreshing(false);
   }, [userId, selected, fetchDay, fetchOverdue]);
-
-  const selectDate = useCallback(
-    (d: Date) => {
-      setSelected(d);
-      const idx = days.findIndex((x) => isoDate(x) === isoDate(d));
-      if (idx >= 0) stripRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
-    },
-    [days],
-  );
 
   const onPickerChange = useCallback(
     (event: DateTimePickerEvent, date?: Date) => {
@@ -116,6 +131,11 @@ export default function AgendaScreen() {
       <SafeAreaView edges={['top']} style={styles.header}>
         <View style={styles.headerBar}>
           <Text style={styles.headerTitle}>Agenda</Text>
+          {/* Nunca deshabilitado: deslizar la tira NO cambia `selected`, así que aun estando "en hoy"
+              el calendario puede estar mostrando otro mes, y este botón es lo que lo trae de vuelta. */}
+          <Pressable onPress={goToday} hitSlop={8} accessibilityRole="button" accessibilityLabel="Ir a hoy" style={styles.todayBtn}>
+            <Text style={styles.todayText}>Hoy</Text>
+          </Pressable>
           <Pressable onPress={() => setShowPicker(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Abrir calendario">
             <Text style={styles.headerDate}>{MONTHS[selected.getUTCMonth()]} {selected.getUTCFullYear()} ▾</Text>
           </Pressable>
@@ -129,13 +149,16 @@ export default function AgendaScreen() {
             keyExtractor={isoDate}
             estimatedItemSize={48}
             initialScrollIndex={RANGE}
+            // `initialScrollIndex` deja hoy pegado al borde izquierdo; recién con la lista medida
+            // se puede centrar de verdad (el foco solo no alcanza en el primer render).
+            onLoad={() => stripRef.current?.scrollToIndex({ index: RANGE, animated: false, viewPosition: 0.5 })}
             extraData={selected}
             renderItem={({ item }) => {
               const active = isoDate(item) === isoDate(selected);
               const isToday = isoDate(item) === isoDate(today);
               return (
                 <Pressable onPress={() => selectDate(item)} style={styles.dayCell} accessibilityRole="button" accessibilityState={{ selected: active }}>
-                  <Text style={styles.dayName}>{WEEKDAYS[item.getUTCDay()]}</Text>
+                  <Text style={styles.dayName}>{WEEKDAYS_SHORT[item.getUTCDay()]}</Text>
                   <View style={[styles.dayNum, active && styles.dayNumActive, isToday && !active && styles.dayNumToday]}>
                     <Text style={[styles.dayNumText, active && styles.dayNumTextActive]}>{item.getUTCDate()}</Text>
                   </View>
@@ -191,7 +214,7 @@ export default function AgendaScreen() {
         style={styles.fab}
         accessibilityRole="button"
         accessibilityLabel="Nueva gestión"
-        onPress={() => Alert.alert('Nueva gestión', 'El alta de agendados llega en la próxima pantalla (S2).')}
+        onPress={() => router.push('/agenda/crear')}
       >
         <Text style={styles.fabPlus}>+</Text>
       </Pressable>
@@ -231,6 +254,14 @@ const styles = StyleSheet.create({
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingTop: SPACING.md },
   headerTitle: { color: COLORS.white, fontSize: 20, fontWeight: '700' },
   headerDate: { ...TYPE.secondary, color: COLORS.lightBg, textTransform: 'capitalize', fontWeight: '600' },
+  todayBtn: {
+    borderRadius: RADIUS.pill,
+    borderWidth: 1,
+    borderColor: COLORS.periwinkle,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 4,
+  },
+  todayText: { ...TYPE.caption, color: COLORS.white, fontWeight: '700' },
   strip: { paddingVertical: SPACING.md, height: 78 },
   dayCell: { alignItems: 'center', gap: 6, width: 46 },
   dayName: { fontSize: 11, fontWeight: '600', color: COLORS.periwinkle },
