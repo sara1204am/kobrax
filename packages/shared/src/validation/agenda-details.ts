@@ -91,7 +91,10 @@ class Extractor {
       this.errors.push(`${key}: debe ser un monto mayor a cero`);
       return 0;
     }
-    if (Math.abs(v * 100 - Math.round(v * 100)) > 1e-9) {
+    // Redondear y volver, en vez de comparar `v*100` contra una tolerancia: arriba de ~300k el error
+    // de coma flotante de `v*100` supera cualquier epsilon fijo y rechazaba montos legítimos
+    // (663376.93 daba 7.45e-9). `Math.round(v*100)/100 === v` es exacto para todo monto de 2 decimales.
+    if (Math.round(v * 100) / 100 !== v) {
       this.errors.push(`${key}: admite como máximo 2 decimales`);
       return 0;
     }

@@ -5,6 +5,8 @@ import { AgendaService } from './agenda.service';
 const UUID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
 const CONTACT = '11111111-1111-4111-8111-111111111111';
 const LOCATION = '22222222-2222-4222-8222-222222222222';
+/** Segundo teléfono del deudor: el detalle NO debe emitirlo (sólo el que eligió la gestión). */
+const OTHER_CONTACT = '33333333-3333-4333-8333-333333333333';
 
 /** `YYYY-MM-DD` de hoy y de mañana en UTC (el server ancla `scheduledDate` a medianoche UTC). */
 function isoUTC(offsetDays = 0): string {
@@ -40,11 +42,21 @@ interface Opts {
   locations?: unknown[];
   catalog?: Record<string, unknown> | null;
   installments?: unknown[];
+  /** `findOne`: el ítem que resuelve el scope (`null` → 404). */
+  item?: Record<string, unknown> | null;
+  /** `findOne`: las otras gestiones del mismo caso. */
+  history?: unknown[];
+  /** `findOne`: el crédito del ítem. */
+  credit?: Record<string, unknown> | null;
+  /** `findOne`: filas de catálogo que resuelven los `code`s de una promesa. */
+  catalogRows?: { code: string; label: string }[];
 }
 
 function makeService(opts: Opts = {}) {
   const calls = {
     listWhere: undefined as Record<string, unknown> | undefined,
+    itemWhere: undefined as Record<string, unknown> | undefined,
+    historyWhere: undefined as Record<string, unknown> | undefined,
     caseWhere: undefined as Record<string, unknown> | undefined,
     created: undefined as Record<string, unknown> | undefined,
     audits: [] as { entity: string; action: string }[],
@@ -56,8 +68,17 @@ function makeService(opts: Opts = {}) {
   const tx = {
     agendaItem: {
       findMany: async (args: { where?: Record<string, unknown> }) => {
+        // `findOne` pide el historial por `caseId`; el resto de las lecturas listan por día/vencidos.
+        if (args.where?.caseId) {
+          calls.historyWhere = args.where;
+          return opts.history ?? [];
+        }
         calls.listWhere = args.where;
         return opts.rows ?? [];
+      },
+      findFirst: async (args: { where?: Record<string, unknown> }) => {
+        calls.itemWhere = args.where;
+        return opts.item ?? null;
       },
       count: async () => (opts.rows ?? []).length,
       create: async (args: { data: Record<string, unknown> }) => {
@@ -65,6 +86,7 @@ function makeService(opts: Opts = {}) {
         return row(args.data);
       },
     },
+    credit: { findFirst: async () => opts.credit ?? null },
     client: { findMany: async () => opts.clients ?? [] },
     collectionCase: {
       findMany: async () => opts.cases ?? [],
@@ -75,7 +97,10 @@ function makeService(opts: Opts = {}) {
     },
     clientContact: { findFirst: async () => first(opts.contacts as unknown[]) },
     clientLocation: { findFirst: async () => first(opts.locations as unknown[]) },
-    catalogItem: { findFirst: async () => opts.catalog ?? null },
+    catalogItem: {
+      findFirst: async () => opts.catalog ?? null,
+      findMany: async () => opts.catalogRows ?? [],
+    },
     creditInstallment: { groupBy: async () => opts.installments ?? [] },
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
@@ -89,8 +114,13 @@ function makeService(opts: Opts = {}) {
       calls.reveals.push({ id, reveal });
       return {
         id, firstName: 'Ana', lastName: 'Ruiz', nationalId: '8821903',
-        contacts: [{ id: CONTACT, contactType: 'PHONE', value: '78012345', isPrimary: true }],
-        locations: [{ id: LOCATION, locationType: 'HOME', address: 'Av. Siempre Viva 742' }],
+        contacts: [
+          { id: CONTACT, contactType: 'PHONE', value: '78012345', isPrimary: true },
+          { id: OTHER_CONTACT, contactType: 'PHONE', value: '79999999', isPrimary: false },
+        ],
+        locations: [
+          { id: LOCATION, locationType: 'HOME', address: 'Av. Siempre Viva 742', zone: 'Sur', latitude: -17.78, longitude: -63.18 },
+        ],
       };
     },
     // El real cifra el `value`; el mock devuelve ciphertext para probar que el service no lo filtra.
@@ -160,6 +190,112 @@ describe('AgendaService.listOverdue', () => {
     assert.equal(calls.listWhere!.status, 'SCHEDULED');
     assert.ok((calls.listWhere!.scheduledDate as { lt: Date }).lt instanceof Date);
     assert.equal(calls.listWhere!.assigneeId, 'u1');
+  });
+});
+
+describe('AgendaService.findOne (detalle S3)', () => {
+  const CREDIT = { id: 'cr1', code: 'CR-001', outstandingBalance: 8450, currency: 'BOB', daysPastDue: 12 };
+  const detail = (over: Record<string, unknown> = {}) => makeService({ item: row(over), credit: CREDIT });
+
+  it('agendado ajeno o inexistente → 404 sin revelar PII', async () => {
+    const { service, calls } = makeService({ item: null });
+    await expectError(() => service.findOne('a1'), 'AGENDA_NOT_FOUND');
+    assert.deepEqual(calls.reveals, []);
+    assert.deepEqual(calls.audits, []);
+  });
+
+  it('acota al scope del cobrador y excluye los soft-deleted', async () => {
+    const { service, calls } = detail({ details: { contactId: CONTACT } });
+    await service.findOne('a1');
+    assert.equal(calls.itemWhere!.assigneeId, 'u1');
+    assert.equal(calls.itemWhere!.deletedAt, null);
+  });
+
+  it('con AGENDA_ASSIGN no fuerza el assigneeId', async () => {
+    const { service, calls } = makeService({ permissions: ['agenda:assign'], item: row(), credit: CREDIT });
+    await service.findOne('a1');
+    assert.equal(calls.itemWhere!.assigneeId, undefined);
+  });
+
+  it('CALL: emite sólo el teléfono elegido, no la agenda completa del deudor', async () => {
+    const { service } = detail({ type: 'CALL', details: { contactId: CONTACT } });
+    const res = await service.findOne('a1');
+    assert.equal(res.data!.target!.phone, '78012345');
+    assert.equal(JSON.stringify(res.data).includes('79999999'), false); // el otro número no viaja
+  });
+
+  it('VISIT con locationId: dirección y coordenadas del cliente', async () => {
+    const { service } = detail({ type: 'VISIT', details: { locationId: LOCATION } });
+    const res = await service.findOne('a1');
+    assert.equal(res.data!.target!.address, 'Av. Siempre Viva 742');
+    assert.equal(res.data!.target!.latitude, -17.78);
+  });
+
+  it('VISIT con dirección libre: sale de details, no de client_locations', async () => {
+    const { service } = detail({ type: 'VISIT', details: { customAddress: { address: 'Calle Falsa 123', zone: 'Norte' } } });
+    const res = await service.findOne('a1');
+    assert.equal(res.data!.target!.address, 'Calle Falsa 123');
+    assert.equal(res.data!.target!.latitude, undefined); // una dirección tipeada no tiene punto en el mapa
+  });
+
+  it('REMINDER: sin target, pero el CI viene en claro y se audita igual', async () => {
+    const { service, calls } = detail({ type: 'REMINDER', details: { description: 'Llamar al garante' } });
+    const res = await service.findOne('a1');
+    assert.equal(res.data!.target, undefined);
+    assert.equal(res.data!.client.nationalId, '8821903');
+    assert.deepEqual(calls.reveals, [{ id: 'cl1', reveal: true }]);
+    assert.deepEqual(calls.audits, [{ entity: 'agenda_item', action: 'PII_REVEAL' }]);
+  });
+
+  it('PROMISE_TO_PAY: resuelve las etiquetas del medio de pago y del banco', async () => {
+    const { service } = makeService({
+      item: row({ type: 'PROMISE_TO_PAY', details: { amount: 500, promiseDate: '2026-07-20', paymentMethodCode: 'TRANSFER', bankCode: 'BNB' } }),
+      credit: CREDIT,
+      catalogRows: [{ code: 'TRANSFER', label: 'Transferencia bancaria' }, { code: 'BNB', label: 'Banco Nacional de Bolivia' }],
+    });
+    const res = await service.findOne('a1');
+    assert.equal(res.data!.labels!.TRANSFER, 'Transferencia bancaria');
+    assert.equal(res.data!.labels!.BNB, 'Banco Nacional de Bolivia');
+    assert.equal(res.data!.target, undefined);
+  });
+
+  it('los tipos sin códigos de catálogo no emiten labels', async () => {
+    const { service } = detail({ type: 'CALL', details: { contactId: CONTACT } });
+    const res = await service.findOne('a1');
+    assert.equal(res.data!.labels, undefined);
+  });
+
+  it('el historial es del mismo caso, excluye el ítem abierto y los borrados', async () => {
+    const { service, calls } = makeService({
+      item: row(),
+      credit: CREDIT,
+      history: [row({ id: 'a2', status: 'EXECUTED', scheduledDate: new Date('2026-06-21') })],
+    });
+    const res = await service.findOne('a1');
+    assert.equal(calls.historyWhere!.caseId, 'ca1');
+    assert.deepEqual(calls.historyWhere!.id, { not: 'a1' });
+    assert.equal(calls.historyWhere!.deletedAt, null);
+    // El historial es del caso, no del cobrador: un supervisor y su cobrador ven lo mismo.
+    assert.equal(calls.historyWhere!.assigneeId, undefined);
+    assert.equal(res.data!.history[0]!.id, 'a2');
+    assert.equal(res.data!.history[0]!.isOverdue, false); // EXECUTED nunca vence
+  });
+
+  it('un pendiente con fecha pasada aparece vencido en el historial', async () => {
+    const { service } = makeService({
+      item: row(),
+      credit: CREDIT,
+      history: [row({ id: 'a2', status: 'SCHEDULED', scheduledDate: new Date('2020-01-01') })],
+    });
+    const res = await service.findOne('a1');
+    assert.equal(res.data!.history[0]!.isOverdue, true);
+  });
+
+  it('trae el saldo del crédito para la "deuda total"', async () => {
+    const { service } = detail();
+    const res = await service.findOne('a1');
+    assert.equal(res.data!.credit!.outstandingBalance, 8450);
+    assert.equal(res.data!.credit!.currency, 'BOB');
   });
 });
 

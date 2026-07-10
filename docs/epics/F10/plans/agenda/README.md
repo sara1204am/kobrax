@@ -20,7 +20,7 @@ estas filas están superados por este módulo).
 | — | Fundación backend (catálogos + agenda_items) | (sin pantalla) | [00-fundacion.md](./00-fundacion.md) | núcleo | ✅ construido |
 | S1 | **Principal** (calendario + secciones) | `64:4` | [main.md](./main.md) | núcleo | ✅ construido |
 | S2 | Crear agendado (5 tipos) | `65:724` Llamada · `65:828` Visita · `65:938` WhatsApp · `65:1047` Recordatorio · `65:1150` Promesa | [crear.md](./crear.md) | núcleo | ✅ construido (falta validación visual) |
-| S3 | Ver agendado (detalle) | `64:425` | `ver.md` | núcleo | ⬜ |
+| S3 | Ver agendado (detalle) | `64:425` | [ver.md](./ver.md) | núcleo | ✅ construido (falta validación visual) |
 | S4 | Registrar acción (ejecutar) | `66:1763` · `66:2195` · `66:2440` · `66:2531` | `registrar-accion.md` | núcleo | ⬜ |
 | S5 | Editar | (reusa `crear`) | `editar.md` | núcleo | ⬜ |
 | S6 | Eliminar / cancelar / reagendar | (reusa `ver`) | `eliminar.md` | núcleo | ⬜ |
@@ -69,7 +69,8 @@ recordatorio, promesa de pago), qué **completó** y qué quedó **vencido**. Na
 
 ## Endpoints (se construyen por pantalla, no todos de una)
 - `GET /api/agenda?date=YYYY-MM-DD` · `GET /api/agenda/overdue?limit=` → **S1**
-- `POST /api/agenda` → **S2** · `GET /api/agenda/:id` → **S3**
+- `POST /api/agenda` → **S2** ✅ · `GET /api/agenda/:id` → **S3** ✅ (declarada **última** en el controller:
+  antes de `overdue`/`clients/...`, el `ParseUUIDPipe` de `:id` se las come)
 - `POST /api/agenda/:id/complete` → **S4** · `PATCH /api/agenda/:id` → **S5** · `DELETE /api/agenda/:id` → **S6**
 
 ## Estado actual del móvil (lo que YA existe)

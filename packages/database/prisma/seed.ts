@@ -31,6 +31,7 @@ import {
   ScheduleTimeMode,
   CatalogType,
 } from '@prisma/client';
+import { validateAgendaDetails } from '@kobrax/shared';
 import bcrypt from 'bcryptjs';
 import { createCipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
 
@@ -464,10 +465,11 @@ async function seedAgenda(acc: string, collectorId: string): Promise<void> {
     return;
   }
 
-  // Deudor con caso, múltiples teléfonos y direcciones. Devuelve el caso creado.
+  // Deudor con caso, múltiples teléfonos y direcciones. Devuelve el caso creado y los ids de sus
+  // contactos/direcciones: los `details` de un agendado referencian esos ids, no el texto del teléfono.
   async function makeDebtor(opts: {
     doc: string; firstName: string; lastName: string; balance: number; phones: [string, string][]; addresses: [string, string][];
-  }): Promise<{ caseId: string; clientId: string; creditId: string }> {
+  }): Promise<{ caseId: string; clientId: string; creditId: string; contactIds: string[]; locationIds: string[] }> {
     const client = await prisma.client.create({
       data: {
         accountId: acc,
@@ -480,6 +482,7 @@ async function seedAgenda(acc: string, collectorId: string): Promise<void> {
         contacts: { create: opts.phones.map(([value, label], i) => ({ accountId: acc, contactType: ContactType.PHONE, value: encryptPII(value), isPrimary: i === 0, notes: label })) },
         locations: { create: opts.addresses.map(([address, zone]) => ({ accountId: acc, locationType: LocationType.HOME, address: encryptPII(address), zone })) },
       },
+      include: { contacts: true, locations: true },
     });
     const credit = await prisma.credit.create({
       data: { accountId: acc, clientId: client.id, code: `CRD-${opts.doc}`, principalAmount: opts.balance * 1.5, outstandingBalance: opts.balance, interestRate: 0.025, currency: 'BOB', installmentsCount: 12, status: CreditStatus.ACTIVE, daysPastDue: 20 },
@@ -487,7 +490,13 @@ async function seedAgenda(acc: string, collectorId: string): Promise<void> {
     const kase = await prisma.collectionCase.create({
       data: { accountId: acc, creditId: credit.id, clientId: client.id, assigneeId: collectorId, status: CaseStatus.ACTIVE, priority: CasePriority.HIGH },
     });
-    return { caseId: kase.id, clientId: client.id, creditId: credit.id };
+    return {
+      caseId: kase.id,
+      clientId: client.id,
+      creditId: credit.id,
+      contactIds: client.contacts.map((c) => c.id),
+      locationIds: client.locations.map((l) => l.id),
+    };
   }
 
   const ana = await makeDebtor({ doc: 'AGN-0002', firstName: 'Ana', lastName: 'Ruiz', balance: 4200, phones: [['70000101', 'Celular'], ['22222201', 'Oficina']], addresses: [['Calle 1 #100', 'Sopocachi'], ['Av. Trabajo 200', 'Miraflores']] });
@@ -511,25 +520,36 @@ async function seedAgenda(acc: string, collectorId: string): Promise<void> {
   const day = (n: number): Date => { const d = new Date(today); d.setUTCDate(d.getUTCDate() + n); return d; };
 
   // Agendados: hoy (incl. 1 ejecutado), futuros, y 3 vencidos. Cubren los 5 tipos.
+  // `details` sigue el contrato de `validateAgendaDetails` (@kobrax/shared): los tipos con teléfono o
+  // dirección referencian el **id** del contacto/ubicación, no su texto — es lo que el detalle (S3)
+  // resuelve para los botones Llamar/Navegar. Con las claves equivocadas, el demo se ve roto.
   const items: {
     ref: { caseId: string; clientId: string; creditId: string }; type: AgendaItemType; status: AgendaItemStatus;
     dayOffset: number; time?: string; details: object; observations?: string; priorityCode?: string; expectedResultCode?: string;
   }[] = [
-    { ref: ana, type: AgendaItemType.CALL, status: AgendaItemStatus.SCHEDULED, dayOffset: 0, time: '09:30', priorityCode: 'HIGH', expectedResultCode: 'COLLECT', details: { phone: '70000101', phoneLabel: 'Celular' }, observations: 'Recordar cuota vencida' },
-    { ref: maria, type: AgendaItemType.VISIT, status: AgendaItemStatus.SCHEDULED, dayOffset: 0, time: '11:00', priorityCode: 'VERY_HIGH', expectedResultCode: 'CONFIRM_VISIT', details: { addressLabel: 'Casa', address: 'Calle 2 #200' } },
-    { ref: pedro, type: AgendaItemType.WHATSAPP, status: AgendaItemStatus.EXECUTED, dayOffset: 0, time: '08:15', expectedResultCode: 'REMIND', details: { phone: '70000103', message: 'Hola {{cliente}}, su saldo es {{saldo}}' } },
-    { ref: ana, type: AgendaItemType.REMINDER, status: AgendaItemStatus.SCHEDULED, dayOffset: 1, time: '10:00', priorityCode: 'MEDIUM', details: { title: 'Enviar comprobante', description: 'Adjuntar depósito', category: 'DOCUMENT' } },
-    { ref: maria, type: AgendaItemType.PROMISE_TO_PAY, status: AgendaItemStatus.SCHEDULED, dayOffset: 2, time: '15:00', expectedResultCode: 'CONFIRM_PAYMENT', details: { amount: 500, paymentMethodCode: 'TRANSFER', bankCode: 'BNB', dueDate: day(2).toISOString().slice(0, 10) } },
-    { ref: pedro, type: AgendaItemType.CALL, status: AgendaItemStatus.SCHEDULED, dayOffset: 3, time: '16:30', priorityCode: 'LOW', details: { phone: '70000103', phoneLabel: 'Celular' } },
-    { ref: ana, type: AgendaItemType.CALL, status: AgendaItemStatus.SCHEDULED, dayOffset: -1, time: '09:00', priorityCode: 'HIGH', details: { phone: '70000101' } },
-    { ref: maria, type: AgendaItemType.VISIT, status: AgendaItemStatus.SCHEDULED, dayOffset: -2, time: '14:00', priorityCode: 'HIGH', details: { addressLabel: 'Casa', address: 'Calle 2 #200' } },
-    { ref: pedro, type: AgendaItemType.PROMISE_TO_PAY, status: AgendaItemStatus.SCHEDULED, dayOffset: -3, time: '10:30', details: { amount: 300, paymentMethodCode: 'CASH', dueDate: day(-3).toISOString().slice(0, 10) } },
+    { ref: ana, type: AgendaItemType.CALL, status: AgendaItemStatus.SCHEDULED, dayOffset: 0, time: '09:30', priorityCode: 'HIGH', expectedResultCode: 'COLLECT', details: { contactId: ana.contactIds[0] }, observations: 'Recordar cuota vencida' },
+    { ref: maria, type: AgendaItemType.VISIT, status: AgendaItemStatus.SCHEDULED, dayOffset: 0, time: '11:00', priorityCode: 'VERY_HIGH', expectedResultCode: 'CONFIRM_VISIT', details: { locationId: maria.locationIds[0] } },
+    { ref: pedro, type: AgendaItemType.WHATSAPP, status: AgendaItemStatus.EXECUTED, dayOffset: 0, time: '08:15', expectedResultCode: 'REMIND', details: { contactId: pedro.contactIds[0], message: 'Hola, le recordamos su saldo pendiente.' } },
+    { ref: ana, type: AgendaItemType.REMINDER, status: AgendaItemStatus.SCHEDULED, dayOffset: 1, time: '10:00', priorityCode: 'MEDIUM', details: { description: 'Adjuntar comprobante de depósito' } },
+    { ref: maria, type: AgendaItemType.PROMISE_TO_PAY, status: AgendaItemStatus.SCHEDULED, dayOffset: 2, time: '15:00', expectedResultCode: 'CONFIRM_PAYMENT', details: { amount: 500, paymentMethodCode: 'TRANSFER', bankCode: 'BNB', promiseDate: day(2).toISOString().slice(0, 10) } },
+    { ref: pedro, type: AgendaItemType.CALL, status: AgendaItemStatus.SCHEDULED, dayOffset: 3, time: '16:30', priorityCode: 'LOW', details: { contactId: pedro.contactIds[0] } },
+    { ref: ana, type: AgendaItemType.CALL, status: AgendaItemStatus.SCHEDULED, dayOffset: -1, time: '09:00', priorityCode: 'HIGH', details: { contactId: ana.contactIds[0] } },
+    // Dirección libre: el otro camino de `VisitDetails`, para que el detalle lo ejercite también.
+    { ref: maria, type: AgendaItemType.VISIT, status: AgendaItemStatus.SCHEDULED, dayOffset: -2, time: '14:00', priorityCode: 'HIGH', details: { customAddress: { address: 'Feria 16 de Julio, puesto 12', zone: 'El Alto' } } },
+    { ref: pedro, type: AgendaItemType.PROMISE_TO_PAY, status: AgendaItemStatus.SCHEDULED, dayOffset: -3, time: '10:30', details: { amount: 300, paymentMethodCode: 'CASH', promiseDate: day(-3).toISOString().slice(0, 10) } },
   ];
-  if (juanCase) {
-    items.push({ ref: { caseId: juanCase.id, clientId: juanCase.clientId, creditId: juanCase.creditId }, type: AgendaItemType.WHATSAPP, status: AgendaItemStatus.SCHEDULED, dayOffset: 0, time: '17:00', details: { phone: '70000000', message: 'Hola {{cliente}}' } });
+  const juanContact = juan ? await prisma.clientContact.findFirst({ where: { clientId: juan.id }, select: { id: true } }) : null;
+  if (juanCase && juanContact) {
+    items.push({ ref: { caseId: juanCase.id, clientId: juanCase.clientId, creditId: juanCase.creditId }, type: AgendaItemType.WHATSAPP, status: AgendaItemStatus.SCHEDULED, dayOffset: 0, time: '17:00', details: { contactId: juanContact.id, message: 'Hola, ¿coordinamos el pago de esta semana?' } });
   }
 
   for (const it of items) {
+    // El seed escribe `details` directo en la DB, salteándose el DTO del POST. Sin esta guarda, una
+    // clave equivocada (`phone` en vez de `contactId`) pasa desapercibida y el demo se ve roto recién
+    // en la pantalla de detalle. Mismo validador que corre el server.
+    const check = validateAgendaDetails(it.type, it.details);
+    if (!check.ok) throw new Error(`seed: details inválidos para ${it.type}: ${check.errors.join('; ')}`);
+
     await prisma.agendaItem.create({
       data: {
         accountId: acc, caseId: it.ref.caseId, clientId: it.ref.clientId, creditId: it.ref.creditId, assigneeId: collectorId,

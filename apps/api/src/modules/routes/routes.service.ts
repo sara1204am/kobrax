@@ -81,15 +81,25 @@ export class RoutesService {
     return serializeRoute(route);
   }
 
+  /**
+   * `true` para el cobrador: ejecuta rutas (ROUTE_EXECUTE) pero no las asigna (ROUTE_ASSIGN) → solo
+   * ve las suyas. Un rol read-only de cuenta (auditor/viewer: ROUTE_READ sin execute) NO cae acá.
+   */
+  private scopedToOwnRoutes(): boolean {
+    return this.tenant.can(Permission.ROUTE_EXECUTE) && !this.tenant.can(Permission.ROUTE_ASSIGN);
+  }
+
   async list(query: ListRoutesQueryDto): Promise<ApiResponse<ReturnType<typeof serializeRoute>[]>> {
     const { page, limit, skip } = resolvePagination(query);
     const where: Prisma.RoutePlanWhereInput = {};
     if (query.status) where.status = query.status;
-    // Scope por capacidad: sin ROUTE_ASSIGN (cobrador) solo ve sus rutas; los que asignan
-    // rutas pueden filtrar por cualquier collectorId.
+    // Scope por capacidad (no por nombre de rol). Tres casos:
+    //  - ROUTE_ASSIGN (supervisor/manager): ve todo, filtra por cualquier collectorId.
+    //  - ejecutor de campo (ROUTE_EXECUTE sin ROUTE_ASSIGN = cobrador): acotado a sus rutas.
+    //  - observador de cuenta (ROUTE_READ sin execute ni assign = auditor/viewer): ve toda la cuenta.
     if (this.tenant.can(Permission.ROUTE_ASSIGN)) {
       if (query.collectorId) where.collectorId = query.collectorId;
-    } else {
+    } else if (this.scopedToOwnRoutes()) {
       where.collectorId = this.tenant.userId;
     }
     if (query.date) {
@@ -110,8 +120,8 @@ export class RoutesService {
       tx.routePlan.findFirst({ where: { id }, include: { stops: { orderBy: { sequenceOrder: 'asc' } } } }),
     );
     if (!route) throw resourceNotFound();
-    // Mismo scope que el listado: un cobrador solo accede a su propia ruta.
-    if (!this.tenant.can(Permission.ROUTE_ASSIGN) && route.collectorId !== this.tenant.userId) {
+    // Mismo scope que el listado: un cobrador solo accede a su propia ruta, pero un auditor a cualquiera.
+    if (this.scopedToOwnRoutes() && route.collectorId !== this.tenant.userId) {
       throw resourceNotFound();
     }
     return serializeRoute(route);

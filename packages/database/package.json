@@ -26,6 +26,7 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@kobrax/shared": "workspace:*",
     "@prisma/client": "^5.20.0"
   },
   "devDependencies": {

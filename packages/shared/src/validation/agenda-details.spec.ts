@@ -68,6 +68,18 @@ describe('validateAgendaDetails', () => {
     ).toHaveLength(1);
   });
 
+  it('acepta montos grandes con 2 decimales exactos (el error de coma flotante no es un 3er decimal)', () => {
+    // `663376.93 * 100` da 66337692.999999993 → la vieja tolerancia de 1e-9 lo rechazaba.
+    for (const amount of [663376.93, 999999.99, 350000.01, 0.01]) {
+      const res = validateAgendaDetails(AgendaItemType.PROMISE_TO_PAY, {
+        amount,
+        promiseDate: '2026-08-01',
+        paymentMethodCode: 'CASH',
+      });
+      expect(res.ok, `monto ${amount} debería ser válido`).toBe(true);
+    }
+  });
+
   it('acumula todos los errores en vez de cortar en el primero', () => {
     expect(errorsOf(AgendaItemType.PROMISE_TO_PAY, {})).toHaveLength(3);
   });

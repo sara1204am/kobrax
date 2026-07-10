@@ -3,7 +3,15 @@
  * sólo despacha y pinta. Las reglas de `details` NO se reescriben acá — las decide
  * `validateAgendaDetails` de `@kobrax/shared`, el mismo validador que corre el server.
  */
-import { AgendaItemType, AgendaTimeSlot, ScheduleTimeMode, validateAgendaDetails, type AgendaDetails } from '@kobrax/shared';
+import {
+  AgendaItemType,
+  AgendaTimeSlot,
+  ScheduleTimeMode,
+  SUPPORTED_CURRENCIES,
+  formatCurrency,
+  validateAgendaDetails,
+  type AgendaDetails,
+} from '@kobrax/shared';
 import type { CreateAgendaInput } from './agenda.service';
 
 export type TimeSlot = AgendaTimeSlot;
@@ -18,6 +26,16 @@ const WEEKDAYS_LONG = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Vi
 export function formatLongDate(isoDate: string): string {
   const d = new Date(`${isoDate}T00:00:00.000Z`);
   return `${WEEKDAYS_LONG[d.getUTCDay()]}, ${d.getUTCDate()} de ${MONTHS[d.getUTCMonth()]}`;
+}
+
+/**
+ * `formatCurrency` explota con una moneda fuera de las 6 soportadas; el saldo no vale una pantalla
+ * en blanco. Lo usan el alta (S2) y el detalle (S3).
+ */
+export function money(amount: number, currency: string): string {
+  return currency in SUPPORTED_CURRENCIES
+    ? formatCurrency(amount, currency as keyof typeof SUPPORTED_CURRENCIES)
+    : `${amount.toFixed(2)} ${currency}`;
 }
 
 /** El enum es dominio (shared); la etiqueta en español es UI y vive acá. */

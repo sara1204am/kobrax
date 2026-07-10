@@ -38,6 +38,75 @@ export function listOverdue(limit = 100): Promise<QueryResult<AgendaListItem[]>>
   return apiQuery<AgendaListItem[]>(`/agenda/overdue${toQuery({ limit })}`);
 }
 
+/** Con qué se ejecuta la gestión: el teléfono al que llamar o la dirección a la que ir. */
+export interface AgendaTarget {
+  phone?: string;
+  address?: string;
+  zone?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+/** Una fila del historial de gestiones del caso. */
+export interface AgendaHistoryEntry {
+  id: string;
+  type: AgendaItemType;
+  status: AgendaItemStatus;
+  scheduledDate: string;
+  isOverdue: boolean;
+}
+
+export interface AgendaItemDetail {
+  item: AgendaListItem;
+  client: { id: string; displayName: string; nationalId: string | null; zone?: string };
+  credit?: { creditId: string; code?: string; outstandingBalance: number; currency: string; daysPastDue: number };
+  /** Ausente en recordatorios y promesas: no hay a quién llamar ni a dónde ir. */
+  target?: AgendaTarget;
+  /** `code` → etiqueta del catálogo (medio de pago, banco). Sólo en promesas de pago. */
+  labels?: Record<string, string>;
+  history: AgendaHistoryEntry[];
+}
+
+/** Detalle de una gestión (S3). Un round-trip: gestión + deudor + saldo + contacto + historial. */
+export function getItem(id: string): Promise<QueryResult<AgendaItemDetail>> {
+  return apiQuery<AgendaItemDetail>(`/agenda/${id}`);
+}
+
+/**
+ * URLs nativas para los botones del detalle. Sin teléfono no hay `tel:`; sin coordenadas se navega
+ * **por texto**, que es lo que hace Maps cuando la dirección no tiene punto.
+ *
+ * `platform` decide el esquema del mapa: `geo:` sólo existe en Android — en iOS `Linking.openURL`
+ * lo rechaza y el botón Navegar nunca abriría nada. Se pasa por parámetro para que el helper siga
+ * siendo puro y testeable en los dos sistemas.
+ */
+export function actionLinks(
+  target?: AgendaTarget,
+  platform: 'ios' | 'android' | string = 'android',
+): { tel?: string; geo?: string } {
+  if (!target) return {};
+  const tel = target.phone ? `tel:${target.phone.replace(/[^\d+]/g, '')}` : undefined;
+  const ios = platform === 'ios';
+  const geo =
+    target.latitude != null && target.longitude != null
+      ? ios
+        ? `maps:0,0?ll=${target.latitude},${target.longitude}`
+        : `geo:${target.latitude},${target.longitude}?q=${target.latitude},${target.longitude}`
+      : target.address
+        ? `${ios ? 'maps:0,0' : 'geo:0,0'}?q=${encodeURIComponent(target.address)}`
+        : undefined;
+  return { ...(tel && { tel }), ...(geo && { geo }) };
+}
+
+/**
+ * Un agendado de WhatsApp abre WhatsApp con el mensaje ya escrito — no una llamada de voz.
+ * `wa.me` es el enlace universal: si la app no está, cae al navegador.
+ */
+export function whatsappLink(phone: string, message?: string): string {
+  const digits = phone.replace(/[^\d]/g, '');
+  return `https://wa.me/${digits}${message ? `?text=${encodeURIComponent(message)}` : ''}`;
+}
+
 /** Un crédito del cliente con caso abierto asignado a mí: lo que se puede agendar. */
 export interface CreditOption {
   creditId: string;

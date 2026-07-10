@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList, type FlashList as FlashListType } from '@shopify/flash-list';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
@@ -31,7 +31,7 @@ type DayLoad =
   | { status: 'error' }
   | { status: 'ok'; items: AgendaListItem[] };
 
-type Overdue = { items: AgendaListItem[]; total: number };
+type Overdue = { items: AgendaListItem[] };
 
 /** Agenda Diaria (Figma `64:4`): tira de calendario + Pendientes / Completados / Vencidos. */
 export default function AgendaScreen() {
@@ -70,7 +70,7 @@ export default function AgendaScreen() {
 
   const fetchOverdue = useCallback(async () => {
     const res = await listOverdue(100);
-    if (res.status === 'ok') setOverdue({ items: res.data, total: res.total });
+    if (res.status === 'ok') setOverdue({ items: res.data });
   }, []);
 
   /** Mueve la selección y deja el día centrado en la tira. */
@@ -124,7 +124,11 @@ export default function AgendaScreen() {
 
   const pending = day.status === 'ok' ? day.items.filter((i) => i.status === AgendaItemStatus.SCHEDULED) : [];
   const done = day.status === 'ok' ? day.items.filter((i) => i.status === AgendaItemStatus.EXECUTED) : [];
-  const overdueShown = overdue ? (showAllOverdue ? overdue.items : overdue.items.slice(0, 2)) : [];
+  // "Vencidos" es el backlog global, y no depende del día elegido. Al pararse en una fecha pasada, sus
+  // pendientes YA aparecen arriba: sin este filtro la misma tarjeta se pinta dos veces.
+  const dayIds = new Set(pending.map((i) => i.id));
+  const overdueItems = overdue ? overdue.items.filter((i) => !dayIds.has(i.id)) : [];
+  const overdueShown = showAllOverdue ? overdueItems : overdueItems.slice(0, 2);
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
@@ -196,13 +200,16 @@ export default function AgendaScreen() {
             </>
           )}
 
-          {overdue && overdue.total > 0 && (
+          {overdueItems.length > 0 && (
             <>
               <SectionLabel>Vencidos</SectionLabel>
               {overdueShown.map((it) => <Row key={it.id} item={it} />)}
-              {overdue.total > 2 && (
+              {/* Contar sobre lo CARGADO, no sobre `meta.total`: la lista viene capada en 100, así que
+                  `total` prometía filas que "Ver más" no podía mostrar.
+                  ponytail: 100 vencidos alcanzan para un cobrador; si un tenant los supera, paginar acá. */}
+              {overdueItems.length > 2 && (
                 <Pressable onPress={() => setShowAllOverdue((v) => !v)} style={styles.moreBtn} accessibilityRole="button">
-                  <Text style={styles.moreText}>{showAllOverdue ? 'Ver menos' : `Ver más (${overdue.total - 2})`}</Text>
+                  <Text style={styles.moreText}>{showAllOverdue ? 'Ver menos' : `Ver más (${overdueItems.length - 2})`}</Text>
                 </Pressable>
               )}
             </>
@@ -230,7 +237,7 @@ export default function AgendaScreen() {
   );
 }
 
-/** Mapea un agendado a la tarjeta (S3 detalle = placeholder por ahora). */
+/** Mapea un agendado a la tarjeta; tocarla abre el detalle (S3). */
 function Row({ item }: { item: AgendaListItem }) {
   const meta = AGENDA_TYPE_META[item.type];
   return (
@@ -243,7 +250,7 @@ function Row({ item }: { item: AgendaListItem }) {
         statusLabel={AGENDA_STATUS_LABEL[item.status]}
         tone={meta.tone}
         overdue={item.isOverdue}
-        onPress={() => Alert.alert('Detalle', 'El detalle de la gestión llega en S3.')}
+        onPress={() => router.push(`/agenda/${item.id}`)}
       />
     </View>
   );

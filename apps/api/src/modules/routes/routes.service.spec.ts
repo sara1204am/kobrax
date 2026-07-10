@@ -64,10 +64,16 @@ describe('RoutesService.generate', () => {
 });
 
 describe('RoutesService.list (scope por capacidad)', () => {
-  it('cobrador sin ROUTE_ASSIGN solo ve sus rutas (fuerza collectorId al propio)', async () => {
-    const { service, calls } = makeService({ routes: [] });
+  it('cobrador (ROUTE_EXECUTE sin ROUTE_ASSIGN) solo ve sus rutas (fuerza collectorId al propio)', async () => {
+    const { service, calls } = makeService({ permissions: ['route:read', 'route:execute'], routes: [] });
     await service.list({ collectorId: 'otro' } as never);
     assert.equal(calls.listWhere!.collectorId, 'u1');
+  });
+
+  it('observador de cuenta (ROUTE_READ sin execute ni assign = auditor) ve todas las rutas', async () => {
+    const { service, calls } = makeService({ permissions: ['route:read'], routes: [] });
+    await service.list({} as never);
+    assert.equal(calls.listWhere!.collectorId, undefined);
   });
 
   it('con ROUTE_ASSIGN respeta el collectorId pedido', async () => {

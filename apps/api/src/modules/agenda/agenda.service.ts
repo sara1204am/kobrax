@@ -11,6 +11,7 @@ import {
   type ApiResponse,
   type CallDetails,
   type PromiseToPayDetails,
+  type VisitDetails,
   type WhatsAppDetails,
   ResponseDto,
 } from '@kobrax/shared';
@@ -26,6 +27,7 @@ import {
   agendaInvalidDetails,
   agendaInvalidReference,
   agendaInvalidTimeMode,
+  agendaItemNotFound,
   agendaPastDate,
 } from './agenda.errors';
 
@@ -120,6 +122,78 @@ export class AgendaService {
       return { rows, total, names: await this.clientNames(tx, rows.map((r) => r.clientId)) };
     });
     return ResponseDto.paginated(rows.map((r) => serializeAgendaItem(r, names.get(r.clientId), now)), total, page, limit);
+  }
+
+  /**
+   * Detalle de una gestión agendada (S3): la gestión, el deudor con su CI en claro, el saldo del
+   * crédito, el dato con el que se ejecuta (teléfono o dirección) y el historial del caso.
+   *
+   * Fuera de scope o soft-deleted → 404 (no filtra existencia). Revela PII en los 5 tipos y lo
+   * audita: quien puede abrir el detalle de un deudor propio no gana superficie viendo su CI.
+   */
+  async findOne(id: string) {
+    const now = new Date();
+    const { item, credit, history } = await this.tx(async (tx) => {
+      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...this.assigneeScope() } });
+      if (!item) throw agendaItemNotFound();
+      const [credit, history] = await Promise.all([
+        tx.credit.findFirst({ where: { id: item.creditId, deletedAt: null } }),
+        // Sin `assigneeScope`: son gestiones del mismo caso, y el caso ya se validó como propio arriba.
+        tx.agendaItem.findMany({
+          where: { caseId: item.caseId, deletedAt: null, id: { not: id } },
+          orderBy: { scheduledDate: 'desc' },
+          take: 20,
+        }),
+      ]);
+      return { item, credit, history };
+    });
+
+    const client = await this.clients.findOne(item.clientId, true); // audita `client/PII_REVEAL`
+    // Segundo rastro, propio del módulo: distingue esta puerta de las del módulo de clientes.
+    await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'PII_REVEAL' });
+
+    return ResponseDto.ok({
+      item: serializeAgendaItem(item, displayName(client), now),
+      client: {
+        id: client.id,
+        displayName: displayName(client),
+        nationalId: client.nationalId,
+        zone: client.locations?.[0]?.zone,
+      },
+      credit: credit && {
+        creditId: credit.id,
+        code: credit.code ?? undefined,
+        outstandingBalance: Number(credit.outstandingBalance),
+        currency: credit.currency,
+        daysPastDue: credit.daysPastDue,
+      },
+      target: resolveTarget(item.type, item.details as unknown as AgendaDetails, client),
+      labels: await this.detailLabels(item.type, item.details as unknown as AgendaDetails),
+      history: history.map((h) => {
+        const s = serializeAgendaItem(h, undefined, now);
+        return { id: s.id, type: s.type, status: s.status, scheduledDate: s.scheduledDate, isOverdue: s.isOverdue };
+      }),
+    });
+  }
+
+  /**
+   * `details` guarda `code`s de catálogo; la pantalla necesita sus etiquetas ("Transferencia", "BNB")
+   * en vez de `BANK_TRANSFER`. Sólo la promesa de pago los tiene.
+   */
+  private async detailLabels(
+    type: AgendaItemType,
+    details: AgendaDetails,
+  ): Promise<Record<string, string> | undefined> {
+    if (type !== AgendaItemType.PROMISE_TO_PAY) return undefined;
+    const { paymentMethodCode, bankCode } = details as PromiseToPayDetails;
+    const codes = [paymentMethodCode, bankCode].filter((c): c is string => !!c);
+    const rows = await this.tx((tx) =>
+      tx.catalogItem.findMany({
+        where: { catalog: { in: [CatalogType.PAYMENT_METHOD, CatalogType.BANK] }, code: { in: codes }, deletedAt: null },
+        select: { code: true, label: true },
+      }),
+    );
+    return Object.fromEntries(rows.map((r) => [r.code, r.label]));
   }
 
   /**
@@ -358,4 +432,46 @@ function assertTimeMode(dto: CreateAgendaItemDto): void {
 /** Nombre visible del cliente ya serializado (persona o empresa). */
 function displayName(client: { firstName?: string; lastName?: string; businessName?: string }): string {
   return client.businessName || [client.firstName, client.lastName].filter(Boolean).join(' ').trim();
+}
+
+/** Con qué se ejecuta la gestión: el teléfono al que llamar o la dirección a la que ir. */
+export interface AgendaTarget {
+  phone?: string;
+  address?: string;
+  zone?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+interface RevealedClient {
+  contacts?: { id: string; value: string | null }[];
+  locations?: { id: string; address: string | null; zone?: string; latitude?: number; longitude?: number }[];
+}
+
+/**
+ * Extrae del cliente revelado **sólo** la fila que `details` referencia — el resto de sus teléfonos y
+ * direcciones no viaja al móvil. `REMINDER` y `PROMISE_TO_PAY` no tienen con qué contactar → sin target.
+ */
+function resolveTarget(type: AgendaItemType, details: AgendaDetails, client: RevealedClient): AgendaTarget | undefined {
+  switch (type) {
+    case AgendaItemType.CALL:
+    case AgendaItemType.WHATSAPP: {
+      const { contactId } = details as CallDetails | WhatsAppDetails;
+      const phone = client.contacts?.find((c) => c.id === contactId)?.value;
+      return phone ? { phone } : undefined;
+    }
+    case AgendaItemType.VISIT: {
+      const visit = details as VisitDetails;
+      // Dirección libre: la tipeó el cobrador al agendar, ya está en claro dentro de `details`.
+      if ('customAddress' in visit) {
+        const { address, zone } = visit.customAddress;
+        return { address, zone };
+      }
+      const loc = client.locations?.find((l) => l.id === visit.locationId);
+      if (!loc?.address) return undefined;
+      return { address: loc.address, zone: loc.zone, latitude: loc.latitude, longitude: loc.longitude };
+    }
+    default:
+      return undefined;
+  }
 }

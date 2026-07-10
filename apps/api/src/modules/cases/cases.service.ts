@@ -238,6 +238,14 @@ export class CasesService {
     return { id: activity.id, type: activity.type, createdAt: activity.createdAt };
   }
 
+  /**
+   * `true` para el cobrador: opera casos (CASE_WRITE) pero no reasigna (CASE_ASSIGN) → solo ve los
+   * suyos. Un rol read-only de cuenta (auditor/viewer: CASE_READ sin write) NO cae acá → ve todo.
+   */
+  private scopedToOwnCases(): boolean {
+    return this.tenant.can(Permission.CASE_WRITE) && !this.tenant.can(Permission.CASE_ASSIGN);
+  }
+
   // ── Lecturas ────────────────────────────────────────────────────────────────
   async list(query: ListCasesQueryDto): Promise<ApiResponse<ReturnType<typeof serializeCase>[]>> {
     const { page, limit, skip } = resolvePagination(query);
@@ -251,12 +259,13 @@ export class CasesService {
     }
     if (query.open === 'true') where.status = { notIn: TERMINAL };
 
-    // Scope por capacidad (no por nombre de rol): quien no puede reasignar casos (CASE_ASSIGN)
-    // solo ve los suyos — un cobrador queda acotado a su assigneeId aunque pida otro o ninguno.
-    // Los supervisores/managers (con CASE_ASSIGN) pueden filtrar por cualquier assigneeId.
+    // Scope por capacidad (no por nombre de rol). Tres casos:
+    //  - CASE_ASSIGN (supervisor/manager): ve todo, puede filtrar por cualquier assigneeId.
+    //  - operador de campo (CASE_WRITE sin CASE_ASSIGN = cobrador): acotado a lo suyo.
+    //  - observador de cuenta (CASE_READ sin write ni assign = auditor/viewer): ve toda la cuenta.
     if (this.tenant.can(Permission.CASE_ASSIGN)) {
       if (query.assigneeId) where.assigneeId = query.assigneeId;
-    } else {
+    } else if (this.scopedToOwnCases()) {
       where.assigneeId = this.tenant.userId;
     }
 
@@ -290,8 +299,8 @@ export class CasesService {
       }),
     );
     if (!found) throw resourceNotFound();
-    // Mismo scope por capacidad que el listado: un cobrador no consulta el caso de otro.
-    if (!this.tenant.can(Permission.CASE_ASSIGN) && found.assigneeId !== this.tenant.userId) {
+    // Mismo scope que el listado: un cobrador no consulta el caso de otro, pero un auditor sí.
+    if (this.scopedToOwnCases() && found.assigneeId !== this.tenant.userId) {
       throw resourceNotFound();
     }
     return serializeCase(found);

@@ -1,6 +1,5 @@
 import { Type } from 'class-transformer';
 import {
-  IsDateString,
   IsEnum,
   IsIn,
   IsInt,
@@ -19,9 +18,14 @@ import {
 import { AgendaItemType, ContactType, LocationType, ScheduleTimeMode } from '@prisma/client';
 import { AgendaTimeSlot } from '@kobrax/shared';
 
-/** Agendados de un día concreto (la pantalla principal). */
+/**
+ * Agendados de un día concreto (la pantalla principal). Mismo regex estricto que el alta: con
+ * `@IsDateString` pasaba `2026-07-10T12:00:00Z`, y la hora sobrevivía al `new Date(...)` que se
+ * compara por igualdad contra una columna `@db.Date` → cero filas en un día con agendados.
+ */
 export class ListAgendaQueryDto {
-  @IsDateString() date!: string; // YYYY-MM-DD
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'date debe tener formato YYYY-MM-DD' })
+  date!: string;
 }
 
 /** Vencidos (para la sección "máx 2 + ver más"). */

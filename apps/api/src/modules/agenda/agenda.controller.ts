@@ -62,4 +62,14 @@ export class AgendaController {
   create(@Body() dto: CreateAgendaItemDto) {
     return this.agenda.create(dto);
   }
+
+  /**
+   * Detalle de una gestión (S3). **Va último a propósito**: declarado antes que `overdue` o
+   * `clients/:id/context`, el `ParseUUIDPipe` de `:id` se comería esas rutas con un 400.
+   */
+  @Get(':id')
+  @Roles(Permission.AGENDA_READ)
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.agenda.findOne(id);
+  }
 }

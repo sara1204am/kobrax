@@ -1,5 +1,6 @@
 import { AgendaItemType, AgendaTimeSlot, ScheduleTimeMode } from '@kobrax/shared';
-import { buildPayload, canSubmit, formReducer, initialForm, type FormState } from './agenda-form';
+import { buildPayload, canSubmit, formReducer, initialForm, money, type FormState } from './agenda-form';
+import { actionLinks, whatsappLink } from './agenda.service';
 
 const CONTACT = '11111111-1111-4111-8111-111111111111';
 const CASE = '22222222-2222-4222-8222-222222222222';
@@ -13,6 +14,51 @@ function readyCall(): FormState {
   s = formReducer(s, { t: 'details', patch: { contactId: CONTACT } });
   return formReducer(s, { t: 'time', value: '15:30' });
 }
+
+describe('money', () => {
+  it('formatea una moneda soportada y no explota con una que no lo está', () => {
+    expect(money(8450, 'BOB')).toContain('8.450');
+    expect(money(8450, 'GTQ')).toBe('8450.00 GTQ'); // fallback, no una pantalla en blanco
+  });
+});
+
+describe('actionLinks (S3)', () => {
+  it('sin target no hay botones', () => {
+    expect(actionLinks(undefined)).toEqual({});
+  });
+
+  it('teléfono → tel:, limpiando separadores', () => {
+    expect(actionLinks({ phone: '+591 780-12345' }).tel).toBe('tel:+59178012345');
+    expect(actionLinks({ phone: '78012345' }).geo).toBeUndefined();
+  });
+
+  it('con coordenadas navega al punto', () => {
+    expect(actionLinks({ address: 'Av. Siempre Viva 742', latitude: -17.78, longitude: -63.18 }).geo).toBe(
+      'geo:-17.78,-63.18?q=-17.78,-63.18',
+    );
+  });
+
+  it('dirección sin coordenadas navega por texto (S2 las hace opcionales)', () => {
+    expect(actionLinks({ address: 'Calle Falsa 123' }).geo).toBe('geo:0,0?q=Calle%20Falsa%20123');
+  });
+
+  it('en iOS usa maps: — geo: no existe y Linking lo rechazaría', () => {
+    expect(actionLinks({ address: 'Calle Falsa 123' }, 'ios').geo).toBe('maps:0,0?q=Calle%20Falsa%20123');
+    expect(actionLinks({ latitude: -17.78, longitude: -63.18 }, 'ios').geo).toBe('maps:0,0?ll=-17.78,-63.18');
+  });
+});
+
+describe('whatsappLink (S3)', () => {
+  it('abre WhatsApp con el mensaje, no una llamada de voz', () => {
+    expect(whatsappLink('+591 780-12345', 'Hola ¿coordinamos?')).toBe(
+      'https://wa.me/59178012345?text=Hola%20%C2%BFcoordinamos%3F',
+    );
+  });
+
+  it('sin mensaje, sólo el número', () => {
+    expect(whatsappLink('78012345')).toBe('https://wa.me/78012345');
+  });
+});
 
 describe('canSubmit', () => {
   it('exige cliente, crédito, programación y details válido para el tipo', () => {

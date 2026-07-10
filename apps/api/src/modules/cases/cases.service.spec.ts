@@ -122,10 +122,16 @@ describe('CasesService.close', () => {
 });
 
 describe('CasesService.list (scope por capacidad + enriquecimiento)', () => {
-  it('cobrador sin CASE_ASSIGN queda acotado a su propio assigneeId (ignora el pedido)', async () => {
-    const { service, calls } = makeService({});
+  it('cobrador (CASE_WRITE sin CASE_ASSIGN) queda acotado a su propio assigneeId (ignora el pedido)', async () => {
+    const { service, calls } = makeService({ permissions: ['case:read', 'case:write'] });
     await service.list({ assigneeId: 'otro-cobrador' } as never);
     assert.equal(calls.listWhere!.assigneeId, 'u1');
+  });
+
+  it('observador de cuenta (CASE_READ sin write ni assign = auditor) ve toda la cuenta', async () => {
+    const { service, calls } = makeService({ permissions: ['case:read'] });
+    await service.list({} as never);
+    assert.equal(calls.listWhere!.assigneeId, undefined); // no se acota: un auditor audita todo el tenant
   });
 
   it('con CASE_ASSIGN respeta el assigneeId pedido', async () => {

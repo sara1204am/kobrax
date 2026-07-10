@@ -20,7 +20,7 @@ import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import MapView, { Marker, type MapPressEvent, type Region } from 'react-native-maps';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { AgendaItemType, AgendaTimeSlot, CatalogType, SUPPORTED_CURRENCIES, ScheduleTimeMode, formatCurrency } from '@kobrax/shared';
+import { AgendaItemType, AgendaTimeSlot, CatalogType, ScheduleTimeMode } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { Button, ErrorBanner } from '@/components';
 import { AGENDA_TYPE_META, BottomSheet, Header, SectionLabel } from '@/ui';
@@ -30,6 +30,7 @@ import {
   formReducer,
   formatLongDate,
   initialForm,
+  money,
   TIME_SLOT_LABEL,
   type TimeMode,
   type TimeSlot,
@@ -73,13 +74,6 @@ function toISO(d: Date): string {
 function toHHmm(d: Date): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
-/** `formatCurrency` explota con una moneda fuera de las soportadas; el saldo no vale una pantalla en blanco. */
-function money(amount: number, currency: string): string {
-  return currency in SUPPORTED_CURRENCIES
-    ? formatCurrency(amount, currency as keyof typeof SUPPORTED_CURRENCIES)
-    : `${amount.toFixed(2)} ${currency}`;
-}
-
 type Sheet = 'contact' | 'location' | 'credit' | 'method' | 'bank' | 'newPhone' | 'newLocation';
 type PickerKind = 'date' | 'time' | 'promiseDate';
 
