@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { CatalogItem, Credit, Prisma, PrismaClient } from '@prisma/client';
 import { AgendaItemStatus, AgendaItemType, CatalogType, InstallmentStatus, ScheduleTimeMode } from '@prisma/client';
 import {
+  AGENDA_OUTCOMES_BY_TYPE,
   CASE_TRANSITIONS,
   CaseStatus,
   Permission,
@@ -15,21 +16,41 @@ import {
   type WhatsAppDetails,
   ResponseDto,
 } from '@kobrax/shared';
+import { CaseActivityType } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { ClientsService } from '../clients/clients.service';
 import { serializeAgendaItem } from './agenda.serializer';
-import { AddClientContactDto, AddClientLocationDto, CreateAgendaItemDto, ListOverdueQueryDto } from './dto/agenda.dto';
+import {
+  AddClientContactDto,
+  AddClientLocationDto,
+  CompleteAgendaItemDto,
+  CreateAgendaItemDto,
+  ListOverdueQueryDto,
+  PostponeAgendaItemDto,
+} from './dto/agenda.dto';
 import {
   agendaCaseNotFound,
   agendaClientWithoutCases,
   agendaInvalidDetails,
+  agendaInvalidOutcome,
   agendaInvalidReference,
   agendaInvalidTimeMode,
   agendaItemNotFound,
+  agendaNotSchedulable,
   agendaPastDate,
 } from './agenda.errors';
+
+/** Al ejecutar un agendado, qué tipo de actividad queda en la bitácora del caso. */
+const ACTIVITY_TYPE_BY_AGENDA: Record<AgendaItemType, CaseActivityType> = {
+  [AgendaItemType.CALL]: CaseActivityType.CALL,
+  [AgendaItemType.VISIT]: CaseActivityType.VISIT,
+  [AgendaItemType.WHATSAPP]: CaseActivityType.MESSAGE,
+  [AgendaItemType.PROMISE_TO_PAY]: CaseActivityType.NOTE,
+  [AgendaItemType.REMINDER]: CaseActivityType.NOTE,
+};
 
 /** Un caso es terminal cuando ya no admite transiciones (CLOSED / WRITTEN_OFF). Fuente: shared. */
 function isTerminal(status: `${CaseStatus}`): boolean {
@@ -49,6 +70,7 @@ export class AgendaService {
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
     private readonly clients: ClientsService,
+    private readonly events: EventBusService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -174,6 +196,77 @@ export class AgendaService {
         return { id: s.id, type: s.type, status: s.status, scheduledDate: s.scheduledDate, isOverdue: s.isOverdue };
       }),
     });
+  }
+
+  /**
+   * Ejecuta una gestión (S4): deja un `CaseActivity` en la bitácora del caso, apunta el agendado a
+   * esa actividad y lo pasa a EXECUTED. `outcome` debe corresponder al tipo. No transiciona el estado
+   * del **caso** (eso es de F5): registrar la gestión y cobrar son cosas distintas.
+   */
+  async complete(id: string, dto: CompleteAgendaItemDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
+    const { updated, clientName } = await this.tx(async (tx) => {
+      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...this.assigneeScope() } });
+      if (!item) throw agendaItemNotFound();
+      if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
+      if (!AGENDA_OUTCOMES_BY_TYPE[item.type].includes(dto.outcome)) throw agendaInvalidOutcome();
+
+      const activity = await tx.caseActivity.create({
+        data: {
+          accountId: this.tenant.accountId,
+          caseId: item.caseId,
+          userId: this.tenant.userId,
+          type: ACTIVITY_TYPE_BY_AGENDA[item.type],
+          result: dto.outcome,
+          notes: dto.notes,
+        },
+      });
+      await tx.collectionCase.update({ where: { id: item.caseId }, data: { lastActionAt: new Date() } });
+      const updated = await tx.agendaItem.update({
+        where: { id },
+        data: { status: AgendaItemStatus.EXECUTED, resultActivityId: activity.id, updatedBy: this.tenant.userId },
+      });
+      const names = await this.clientNames(tx, [updated.clientId]);
+      return { updated, clientName: names.get(updated.clientId) };
+    });
+
+    await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'EXECUTE', after: updated });
+    this.events.emit(DomainEvent.CASE_UPDATED, { caseId: updated.caseId, accountId: this.tenant.accountId, activity: ACTIVITY_TYPE_BY_AGENDA[updated.type] });
+    return ResponseDto.ok(serializeAgendaItem(updated, clientName));
+  }
+
+  /**
+   * Pospone una gestión en pasos fijos (S4): corre la hora **agendada** hacia adelante y la fija a hora
+   * exacta (posponer da una hora concreta aunque fuera una franja). Sigue SCHEDULED. Reagendar con
+   * motivo y fecha libre es S6.
+   *
+   * La aritmética es sobre la hora de pared naive del agendado (`scheduledDate` + `scheduledTime`), la
+   * MISMA que persiste `create` y que muestra el móvil — no sobre el reloj UTC del server: mezclarlos
+   * corría la hora por el offset del tenant. Un agendado por franja parte del inicio de su franja.
+   * (Posponer "desde ahora" un vencido llegaría con el refinamiento tenant-tz, pendiente en todo el módulo.)
+   */
+  async postpone(id: string, dto: PostponeAgendaItemDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
+    const { updated, clientName } = await this.tx(async (tx) => {
+      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...this.assigneeScope() } });
+      if (!item) throw agendaItemNotFound();
+      if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
+
+      const { dayShift, time } = shiftWallClock(baseMinutes(item), dto.minutes);
+      const updated = await tx.agendaItem.update({
+        where: { id },
+        data: {
+          scheduledDate: addUTCDays(item.scheduledDate, dayShift),
+          scheduledTime: time,
+          timeMode: ScheduleTimeMode.FIXED,
+          timeSlot: null,
+          updatedBy: this.tenant.userId,
+        },
+      });
+      const names = await this.clientNames(tx, [updated.clientId]);
+      return { updated, clientName: names.get(updated.clientId) };
+    });
+
+    await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'POSTPONE', after: updated });
+    return ResponseDto.ok(serializeAgendaItem(updated, clientName));
   }
 
   /**
@@ -432,6 +525,33 @@ function assertTimeMode(dto: CreateAgendaItemDto): void {
 /** Nombre visible del cliente ya serializado (persona o empresa). */
 function displayName(client: { firstName?: string; lastName?: string; businessName?: string }): string {
   return client.businessName || [client.firstName, client.lastName].filter(Boolean).join(' ').trim();
+}
+
+/** Hora de inicio de cada franja, para poder posponer un agendado que sólo tenía franja (no hora exacta). */
+const SLOT_START_MINUTES: Record<string, number> = { MORNING: 8 * 60, AFTERNOON: 13 * 60, NIGHT: 18 * 60 };
+
+/** Minutos-del-día de la hora agendada (naive): `scheduledTime` si hay, si no el inicio de la franja. */
+function baseMinutes(item: { scheduledTime: string | null; timeSlot: string | null }): number {
+  if (item.scheduledTime) {
+    const [h, m] = item.scheduledTime.split(':').map(Number);
+    return (h ?? 0) * 60 + (m ?? 0);
+  }
+  return SLOT_START_MINUTES[item.timeSlot ?? ''] ?? 9 * 60;
+}
+
+/** Suma minutos a una hora-de-pared; devuelve la hora `HH:mm` y cuántos días avanzó (cruce de medianoche). */
+function shiftWallClock(base: number, add: number): { dayShift: number; time: string } {
+  const total = base + add;
+  const dayShift = Math.floor(total / 1440);
+  const minInDay = ((total % 1440) + 1440) % 1440;
+  const hh = String(Math.floor(minInDay / 60)).padStart(2, '0');
+  const mm = String(minInDay % 60).padStart(2, '0');
+  return { dayShift, time: `${hh}:${mm}` };
+}
+
+/** `scheduled_date` (`@db.Date`, medianoche UTC) + N días. */
+function addUTCDays(d: Date, days: number): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + days));
 }
 
 /** Con qué se ejecuta la gestión: el teléfono al que llamar o la dirección a la que ir. */

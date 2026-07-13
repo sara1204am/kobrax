@@ -15,14 +15,14 @@ Racional (confirmado en [ui-screen-map §7](./ui-screen-map.md)): **leer antes d
 |---|---|---|---|---|
 | **P0** | `plans/P0-fundacion.md` | 🟢 | Tokens parity (shared↔`theme.ts`), `components/ui` (Header/StatusBadge/ListRow/BottomSheet ✅ hoy), tabs ✅ hoy, **`apiClient` + NetInfo + `OfflineIndicator` (Zustand)**, install Reanimated/haptics/FlashList | — |
 | **P1** | `plans/P1-home-agenda.md` | 🟢 | Home + Agenda (solo lectura): `GET routes/cases/notifications`, KPIs en cliente, FlashList | P0 |
-| **P2** | `plans/P2-gestiones.md` | 🟢 | Gestiones (escritura online): `POST activities`, transiciones, promesa, BottomSheet de acciones | P1 |
+| **P1.b** | `plans/agenda/` | 🟢 | **Agenda pivotada a módulo propio** (agendados por fecha): fundación + S1–S6, un plan por pantalla | P0 |
+| **P2+P4** | `plans/cartera/` | 🟢 | **Módulo CARTERA (Clientes y Préstamos)** — [spec](../../flows/Cliente_Prestamo.pdf). Absorbe gestiones **y** pagos: la ficha de cobranza (V4) *es* la pantalla de gestión y de pago. Incluye alta cliente+préstamo (3 modos de captura), lista de cartera, y el módulo `uploads` (fotos, hash SHA-256) que P8 reusa | P1 |
 | **P3** | `plans/P3-rutas.md` | 🟢 | Rutas sin mapa: lifecycle, lista de paradas, confirmar/iniciar, resumen jornada | P1 |
-| **P4** | `plans/P4-pagos.md` | 🟢 | Pago en campo: `POST /payments` idempotente, `payment-requests`, `AmountInput` | P2 |
 | **P5** | `plans/P5-import-movil.md` | 🟢 | Import móvil (perfil independiente): bulk + carga rápida. **Gap web: ver §4** | P1 |
 | — | — | 🔵 | **⟰ Frontera dev build (`expo prebuild`) ⟱** | — |
 | **P6** | `plans/P6-offline-sync.md` | 🔵 | Dev build + WatermelonDB (schema espejo) + `SyncService` (FIFO/backoff/conflictos); **retro-encaje** en los services de P1–P5 | P0–P5 |
 | **P7** | `plans/P7-mapas.md` | 🔵 | MapLibre online+offline (packs región); vistas de mapa de Rutas | P3, P6 |
-| **P8** | `plans/P8-evidencia.md` | 🔵 | Cámara + GPS + firma + **SHA-256 sobre buffer original**; `evidence.service` | P6 |
+| **P8** | `plans/P8-evidencia.md` | 🔵 | Cámara + GPS + firma + **SHA-256 sobre buffer original**; `evidence.service`. **Reusa el módulo `uploads` que construye Cartera** (subida + hash); le agrega GPS y el vínculo a `field_evidences` | P6, Cartera |
 | **P9** | `plans/P9-push-pinning.md` | 🔵 | Push (asignaciones) + `collector.location` + **SSL pinning con pins reales** | P6 |
 | **P10** | `plans/P10-rbac-gating.md` | 🔵 | Gating por capacidad/rol (F3): cobrador vs supervisor; capacidad `clients.import` | F3 |
 

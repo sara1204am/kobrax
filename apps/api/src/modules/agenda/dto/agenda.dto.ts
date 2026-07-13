@@ -16,7 +16,7 @@ import {
   Min,
 } from 'class-validator';
 import { AgendaItemType, ContactType, LocationType, ScheduleTimeMode } from '@prisma/client';
-import { AgendaTimeSlot } from '@kobrax/shared';
+import { AGENDA_POSTPONE_STEPS, AgendaOutcome, AgendaTimeSlot } from '@kobrax/shared';
 
 /**
  * Agendados de un día concreto (la pantalla principal). Mismo regex estricto que el alta: con
@@ -58,6 +58,20 @@ export class CreateAgendaItemDto {
   @IsOptional() @IsString() @MaxLength(1000) observations?: string;
 
   @IsObject() details!: Record<string, unknown>;
+}
+
+/**
+ * Registrar la ejecución de una gestión (S4). `outcome` se valida contra el tipo en el servicio
+ * (`AGENDA_OUTCOMES_BY_TYPE`) — acá solo se comprueba que sea un valor del enum.
+ */
+export class CompleteAgendaItemDto {
+  @IsEnum(AgendaOutcome) outcome!: AgendaOutcome;
+  @IsOptional() @IsString() @MaxLength(1000) notes?: string;
+}
+
+/** Posponer una gestión en pasos fijos (Figma: +15 / +30 / +1h). */
+export class PostponeAgendaItemDto {
+  @Type(() => Number) @IsIn(AGENDA_POSTPONE_STEPS as unknown as number[]) minutes!: number;
 }
 
 /**

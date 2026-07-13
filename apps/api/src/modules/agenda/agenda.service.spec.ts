@@ -63,6 +63,9 @@ function makeService(opts: Opts = {}) {
     reveals: [] as { id: string; reveal: boolean }[],
     addedContacts: [] as Record<string, unknown>[],
     addedLocations: [] as Record<string, unknown>[],
+    activity: undefined as Record<string, unknown> | undefined,
+    updated: undefined as Record<string, unknown> | undefined,
+    events: [] as string[],
   };
   const first = <T>(list: T[] | undefined) => (list && list.length > 0 ? list[0] : null);
   const tx = {
@@ -85,6 +88,16 @@ function makeService(opts: Opts = {}) {
         calls.created = args.data;
         return row(args.data);
       },
+      update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+        calls.updated = args.data;
+        return row({ ...(opts.item ?? {}), ...args.data, id: args.where.id });
+      },
+    },
+    caseActivity: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        calls.activity = args.data;
+        return { id: 'act-1', ...args.data };
+      },
     },
     credit: { findFirst: async () => opts.credit ?? null },
     client: { findMany: async () => opts.clients ?? [] },
@@ -94,6 +107,7 @@ function makeService(opts: Opts = {}) {
         calls.caseWhere = args.where;
         return first(opts.cases as Record<string, unknown>[] | undefined);
       },
+      update: async () => ({}),
     },
     clientContact: { findFirst: async () => first(opts.contacts as unknown[]) },
     clientLocation: { findFirst: async () => first(opts.locations as unknown[]) },
@@ -140,7 +154,8 @@ function makeService(opts: Opts = {}) {
       };
     },
   };
-  const service = new AgendaService(prisma as never, tenant as never, audit as never, clientsService as never);
+  const events = { emit: (e: string) => void calls.events.push(e) };
+  const service = new AgendaService(prisma as never, tenant as never, audit as never, clientsService as never, events as never);
   return { service, calls };
 }
 
@@ -296,6 +311,87 @@ describe('AgendaService.findOne (detalle S3)', () => {
     const res = await service.findOne('a1');
     assert.equal(res.data!.credit!.outstandingBalance, 8450);
     assert.equal(res.data!.credit!.currency, 'BOB');
+  });
+});
+
+describe('AgendaService.complete (ejecutar S4)', () => {
+  it('deja un CaseActivity con el outcome, apunta el agendado y lo pasa a EXECUTED', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'CALL', status: 'SCHEDULED' }) });
+    const res = await service.complete('a1', { outcome: 'CONTACTED' } as never);
+    assert.equal(calls.activity!.type, 'CALL'); // mapType CALL -> CALL
+    assert.equal(calls.activity!.result, 'CONTACTED');
+    assert.equal(calls.activity!.caseId, 'ca1');
+    assert.equal(calls.updated!.status, 'EXECUTED');
+    assert.equal(calls.updated!.resultActivityId, 'act-1');
+    assert.equal(res.data!.status, 'EXECUTED');
+    assert.deepEqual(calls.audits, [{ entity: 'agenda_item', action: 'EXECUTE' }]);
+    assert.equal(calls.events.length, 1); // CASE_UPDATED
+  });
+
+  it('mapea el tipo de gestión al tipo de actividad de la bitácora', async () => {
+    for (const [agenda, activity, outcome] of [
+      ['VISIT', 'VISIT', 'CONTACTED'],
+      ['WHATSAPP', 'MESSAGE', 'CONTACTED'],
+      ['PROMISE_TO_PAY', 'NOTE', 'PROMISE_KEPT'],
+      ['REMINDER', 'NOTE', 'DONE'],
+    ] as const) {
+      const { service, calls } = makeService({ item: row({ type: agenda, status: 'SCHEDULED' }) });
+      await service.complete('a1', { outcome } as never);
+      assert.equal(calls.activity!.type, activity, `${agenda} -> ${activity}`);
+    }
+  });
+
+  it('un outcome que no corresponde al tipo → AGENDA_007, sin escribir nada', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'CALL', status: 'SCHEDULED' }) });
+    await expectError(() => service.complete('a1', { outcome: 'PROMISE_KEPT' } as never), 'AGENDA_007');
+    assert.equal(calls.activity, undefined);
+    assert.equal(calls.updated, undefined);
+  });
+
+  it('ejecutar una gestión ya ejecutada → AGENDA_008 (no re-registra)', async () => {
+    const { service } = makeService({ item: row({ type: 'CALL', status: 'EXECUTED' }) });
+    await expectError(() => service.complete('a1', { outcome: 'CONTACTED' } as never), 'AGENDA_008');
+  });
+
+  it('gestión ajena o inexistente → 404', async () => {
+    const { service } = makeService({ item: null });
+    await expectError(() => service.complete('a1', { outcome: 'CONTACTED' } as never), 'AGENDA_NOT_FOUND');
+  });
+
+  it('acota al scope del cobrador', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'REMINDER', status: 'SCHEDULED' }) });
+    await service.complete('a1', { outcome: 'DONE' } as never);
+    assert.equal(calls.itemWhere!.assigneeId, 'u1');
+  });
+});
+
+describe('AgendaService.postpone (S4)', () => {
+  it('corre la hora AGENDADA (naive) +30, sigue SCHEDULED y fija a hora exacta', async () => {
+    const { service, calls } = makeService({ item: row({ status: 'SCHEDULED', scheduledDate: new Date('2026-07-12'), scheduledTime: '09:00' }) });
+    const res = await service.postpone('a1', { minutes: 30 } as never);
+    assert.equal(calls.updated!.scheduledTime, '09:30'); // +30 sobre la hora agendada, no sobre el reloj del server
+    assert.equal(calls.updated!.timeMode, 'FIXED');
+    assert.equal(calls.updated!.timeSlot, null);
+    assert.notEqual(res.data!.status, 'EXECUTED');
+    assert.deepEqual(calls.audits, [{ entity: 'agenda_item', action: 'POSTPONE' }]);
+  });
+
+  it('cruza la medianoche: +60 sobre 23:50 → 00:50 del día siguiente', async () => {
+    const { service, calls } = makeService({ item: row({ status: 'SCHEDULED', scheduledDate: new Date('2026-07-12'), scheduledTime: '23:50' }) });
+    await service.postpone('a1', { minutes: 60 } as never);
+    assert.equal(calls.updated!.scheduledTime, '00:50');
+    assert.equal((calls.updated!.scheduledDate as Date).toISOString().slice(0, 10), '2026-07-13');
+  });
+
+  it('un agendado por franja parte del inicio de la franja (MORNING = 08:00)', async () => {
+    const { service, calls } = makeService({ item: row({ status: 'SCHEDULED', scheduledTime: null, timeSlot: 'MORNING', timeMode: 'LAPSE' }) });
+    await service.postpone('a1', { minutes: 15 } as never);
+    assert.equal(calls.updated!.scheduledTime, '08:15'); // no 00:15
+  });
+
+  it('posponer una gestión ya ejecutada → AGENDA_008', async () => {
+    const { service } = makeService({ item: row({ status: 'EXECUTED' }) });
+    await expectError(() => service.postpone('a1', { minutes: 15 } as never), 'AGENDA_008');
   });
 });
 

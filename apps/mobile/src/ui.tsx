@@ -6,7 +6,7 @@
 import { type ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AgendaItemStatus, AgendaItemType, CasePriority, CaseStatus } from '@kobrax/shared';
+import { AgendaItemStatus, AgendaItemType, AgendaOutcome, CasePriority, CaseStatus } from '@kobrax/shared';
 import { useNetStore } from './store/net';
 import { COLORS, RADIUS, SPACING, TYPE } from './theme';
 
@@ -245,6 +245,18 @@ export const AGENDA_STATUS_LABEL: Record<AgendaItemStatus, string> = {
   [AgendaItemStatus.EXECUTED]: 'Completada',
   [AgendaItemStatus.CANCELLED]: 'Cancelada',
   [AgendaItemStatus.RESCHEDULED]: 'Reagendada',
+};
+
+/** Etiqueta + tono de cada desenlace al registrar una gestión (S4). */
+export const AGENDA_OUTCOME_META: Record<AgendaOutcome, { label: string; tone: BadgeTone }> = {
+  [AgendaOutcome.CONTACTED]: { label: 'Contactado', tone: 'success' },
+  [AgendaOutcome.NO_ANSWER]: { label: 'Sin respuesta', tone: 'warning' },
+  [AgendaOutcome.WRONG_NUMBER]: { label: 'Número equivocado', tone: 'danger' },
+  [AgendaOutcome.NOT_FOUND]: { label: 'No se encontró', tone: 'warning' },
+  [AgendaOutcome.WRONG_ADDRESS]: { label: 'Dirección equivocada', tone: 'danger' },
+  [AgendaOutcome.PROMISE_KEPT]: { label: 'Confirmó pago', tone: 'success' },
+  [AgendaOutcome.PROMISE_BROKEN]: { label: 'No pagó', tone: 'danger' },
+  [AgendaOutcome.DONE]: { label: 'Realizado', tone: 'success' },
 };
 
 /**

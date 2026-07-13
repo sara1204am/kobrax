@@ -2,7 +2,14 @@
  * Gestiones agendadas (lectura S1 + alta S2). Thin sobre `apiQuery`/`apiMutate`. Tipos verificados
  * contra `agenda.serializer.ts` del API (fechas llegan como ISO string vía JSON).
  */
-import type { AgendaDetails, AgendaItemStatus, AgendaItemType, ScheduleTimeMode } from '@kobrax/shared';
+import type {
+  AgendaDetails,
+  AgendaItemStatus,
+  AgendaItemType,
+  AgendaOutcome,
+  AgendaPostponeStep,
+  ScheduleTimeMode,
+} from '@kobrax/shared';
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
 
 export interface AgendaListItem {
@@ -70,6 +77,16 @@ export interface AgendaItemDetail {
 /** Detalle de una gestión (S3). Un round-trip: gestión + deudor + saldo + contacto + historial. */
 export function getItem(id: string): Promise<QueryResult<AgendaItemDetail>> {
   return apiQuery<AgendaItemDetail>(`/agenda/${id}`);
+}
+
+/** Registrar la ejecución (S4): outcome + nota → el ítem pasa a EXECUTED. Devuelve el ítem actualizado. */
+export function completeItem(id: string, outcome: AgendaOutcome, notes?: string): Promise<MutateResult<AgendaListItem>> {
+  return apiMutate<AgendaListItem>(`/agenda/${id}/complete`, 'POST', { outcome, notes });
+}
+
+/** Posponer en pasos fijos (S4). El ítem sigue pendiente, con la hora corrida. */
+export function postponeItem(id: string, minutes: AgendaPostponeStep): Promise<MutateResult<AgendaListItem>> {
+  return apiMutate<AgendaListItem>(`/agenda/${id}/postpone`, 'POST', { minutes });
 }
 
 /**

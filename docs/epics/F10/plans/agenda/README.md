@@ -21,7 +21,7 @@ estas filas están superados por este módulo).
 | S1 | **Principal** (calendario + secciones) | `64:4` | [main.md](./main.md) | núcleo | ✅ construido |
 | S2 | Crear agendado (5 tipos) | `65:724` Llamada · `65:828` Visita · `65:938` WhatsApp · `65:1047` Recordatorio · `65:1150` Promesa | [crear.md](./crear.md) | núcleo | ✅ construido (falta validación visual) |
 | S3 | Ver agendado (detalle) | `64:425` | [ver.md](./ver.md) | núcleo | ✅ construido (falta validación visual) |
-| S4 | Registrar acción (ejecutar) | `66:1763` · `66:2195` · `66:2440` · `66:2531` | `registrar-accion.md` | núcleo | ⬜ |
+| S4 | Registrar acción (ejecutar) | `66:1763` · `66:2195` · `66:2440` · `66:2531` | [registrar-accion.md](./registrar-accion.md) | núcleo | ✅ construido (falta validación visual) |
 | S5 | Editar | (reusa `crear`) | `editar.md` | núcleo | ⬜ |
 | S6 | Eliminar / cancelar / reagendar | (reusa `ver`) | `eliminar.md` | núcleo | ⬜ |
 | + | Plantillas WhatsApp, evidencias visita, lapso/rango horario, adjuntos, campañas, ABM de catálogos | — | (slices) | extras | ⬜ diferido |

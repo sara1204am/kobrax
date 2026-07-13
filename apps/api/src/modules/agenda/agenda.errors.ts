@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 
 export const agendaItemNotFound = () =>
   new NotFoundException({ code: 'AGENDA_NOT_FOUND', message: 'Gestión agendada no encontrada' });
@@ -24,3 +24,11 @@ export const agendaInvalidDetails = (errors: string[]) =>
 /** El `details` es válido en forma, pero no cierra contra la DB (contacto ajeno, monto > saldo, etc.). */
 export const agendaInvalidReference = (message: string) =>
   new BadRequestException({ code: 'AGENDA_006', message });
+
+/** El desenlace elegido no corresponde al tipo de gestión (p.ej. "pagó" en una llamada). */
+export const agendaInvalidOutcome = () =>
+  new BadRequestException({ code: 'AGENDA_007', message: 'El resultado no corresponde al tipo de gestión' });
+
+/** La gestión ya fue ejecutada (o cancelada): no se puede volver a registrar ni posponer. */
+export const agendaNotSchedulable = () =>
+  new ConflictException({ code: 'AGENDA_008', message: 'La gestión ya no está pendiente' });

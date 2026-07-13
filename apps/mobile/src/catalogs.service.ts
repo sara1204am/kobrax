@@ -8,11 +8,25 @@ export interface CatalogOption {
   code: string;
   label: string;
   sortOrder: number;
-  /** `requiresBank` en PAYMENT_METHOD: el formulario de promesa pide banco si está en true. */
-  metadata: { requiresBank?: boolean } | null;
+  /** `requiresBank` (PAYMENT_METHOD) · `body` (WHATSAPP_TEMPLATE, con {{cliente}}/{{saldo}}). */
+  metadata: { requiresBank?: boolean; body?: string } | null;
 }
 
 /** Ítems activos del catálogo, ya ordenados por el server. */
 export function listCatalog(catalog: CatalogType): Promise<QueryResult<CatalogOption[]>> {
   return apiQuery<CatalogOption[]>(`/catalogs/${catalog}`);
+}
+
+/**
+ * Igual que `listCatalog`, pero cachea el resultado en memoria por tipo: los catálogos casi no cambian
+ * y se abren repetidas veces (el sheet de registrar en cada gestión). Evita el round-trip —y el parpadeo
+ * bajo señal débil— en reaperturas. // ponytail: cache de proceso; se limpia al reabrir la app.
+ */
+const catalogCache = new Map<CatalogType, CatalogOption[]>();
+export async function listCatalogCached(catalog: CatalogType): Promise<QueryResult<CatalogOption[]>> {
+  const hit = catalogCache.get(catalog);
+  if (hit) return { status: 'ok', data: hit, total: hit.length };
+  const res = await listCatalog(catalog);
+  if (res.status === 'ok') catalogCache.set(catalog, res.data);
+  return res;
 }

@@ -8,9 +8,11 @@ import { AgendaService } from './agenda.service';
 import {
   AddClientContactDto,
   AddClientLocationDto,
+  CompleteAgendaItemDto,
   CreateAgendaItemDto,
   ListAgendaQueryDto,
   ListOverdueQueryDto,
+  PostponeAgendaItemDto,
 } from './dto/agenda.dto';
 
 @Controller('agenda')
@@ -71,5 +73,19 @@ export class AgendaController {
   @Roles(Permission.AGENDA_READ)
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.agenda.findOne(id);
+  }
+
+  /** Registrar la ejecución de la gestión (S4): deja un CaseActivity y pasa el agendado a EXECUTED. */
+  @Post(':id/complete')
+  @Roles(Permission.AGENDA_WRITE)
+  complete(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CompleteAgendaItemDto) {
+    return this.agenda.complete(id, dto);
+  }
+
+  /** Posponer la gestión en pasos fijos (+15 / +30 / +1h); sigue pendiente. */
+  @Post(':id/postpone')
+  @Roles(Permission.AGENDA_WRITE)
+  postpone(@Param('id', ParseUUIDPipe) id: string, @Body() dto: PostponeAgendaItemDto) {
+    return this.agenda.postpone(id, dto);
   }
 }

@@ -453,6 +453,10 @@ async function seedAgenda(acc: string, collectorId: string): Promise<void> {
     { catalog: CatalogType.RESCHEDULE_REASON, code: 'NO_ANSWER', label: 'Sin respuesta', sortOrder: 2 },
     { catalog: CatalogType.CURRENCY, code: 'BOB', label: 'Boliviano', sortOrder: 1 },
     { catalog: CatalogType.CURRENCY, code: 'USD', label: 'Dólar', sortOrder: 2 },
+    // Plantillas de WhatsApp (S4): el cuerpo va en `metadata.body` con variables {{cliente}}/{{saldo}}.
+    { catalog: CatalogType.WHATSAPP_TEMPLATE, code: 'INITIAL', label: 'Cobro inicial', sortOrder: 1, metadata: { body: 'Hola {{cliente}}, le escribimos de Kobrax para recordarle su saldo pendiente de {{saldo}}. Puede coordinar su pago con nosotros.' } },
+    { catalog: CatalogType.WHATSAPP_TEMPLATE, code: 'REMINDER', label: 'Recordatorio', sortOrder: 2, metadata: { body: 'Hola {{cliente}}, le recordamos que su pago de {{saldo}} vence pronto. Quedamos atentos.' } },
+    { catalog: CatalogType.WHATSAPP_TEMPLATE, code: 'LAST_NOTICE', label: 'Último aviso', sortOrder: 3, metadata: { body: 'Hola {{cliente}}, su deuda de {{saldo}} se encuentra vencida. Le pedimos regularizar su pago a la brevedad para evitar cargos adicionales.' } },
   ];
   await prisma.catalogItem.createMany({
     data: catalogs.map((c) => ({ accountId: acc, catalog: c.catalog, code: c.code, label: c.label, sortOrder: c.sortOrder, metadata: c.metadata ?? {} })),

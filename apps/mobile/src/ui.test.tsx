@@ -2,8 +2,8 @@
 jest.mock('./store/net', () => ({ useNetStore: (sel: (s: unknown) => unknown) => sel({ isConnected: true, pendingCount: 0 }) }));
 
 import { render } from '@testing-library/react-native';
-import { AgendaItemStatus, AgendaItemType, CasePriority, CaseStatus } from '@kobrax/shared';
-import { AgendaCard, AGENDA_STATUS_LABEL, AGENDA_TYPE_META, CaseCard, CASE_PRIORITY_LABEL, CASE_STATUS_LABEL, caseStatusTone, StatTile } from './ui';
+import { AgendaItemStatus, AgendaItemType, AgendaOutcome, CasePriority, CaseStatus } from '@kobrax/shared';
+import { AgendaCard, AGENDA_OUTCOME_META, AGENDA_STATUS_LABEL, AGENDA_TYPE_META, CaseCard, CASE_PRIORITY_LABEL, CASE_STATUS_LABEL, caseStatusTone, StatTile } from './ui';
 
 describe('caseStatusTone', () => {
   it('mapea estados a tonos coherentes', () => {
@@ -23,6 +23,14 @@ describe('caseStatusTone', () => {
     for (const p of Object.values(CasePriority)) {
       expect(CASE_PRIORITY_LABEL[p]).toBeTruthy();
     }
+  });
+
+  it('tiene etiqueta + tono para todos los desenlaces de gestión (S4)', () => {
+    for (const o of Object.values(AgendaOutcome)) {
+      expect(AGENDA_OUTCOME_META[o]?.label).toBeTruthy();
+    }
+    expect(AGENDA_OUTCOME_META[AgendaOutcome.PROMISE_BROKEN].tone).toBe('danger');
+    expect(AGENDA_OUTCOME_META[AgendaOutcome.PROMISE_KEPT].tone).toBe('success');
   });
 });
 

@@ -12,7 +12,8 @@ import { AgendaItemStatus, AgendaItemType } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { AGENDA_STATUS_LABEL, AGENDA_TYPE_META, EmptyState, Header, SectionLabel, StatusBadge } from '@/ui';
 import { MONTHS, TIME_SLOT_LABEL, formatLongDate, money, type TimeSlot } from '@/agenda-form';
-import { actionLinks, getItem, whatsappLink, type AgendaHistoryEntry, type AgendaItemDetail } from '@/agenda.service';
+import { actionLinks, getItem, whatsappLink, type AgendaHistoryEntry, type AgendaItemDetail, type AgendaListItem } from '@/agenda.service';
+import { RegisterSheet } from '@/agenda-register';
 
 type Load =
   | { status: 'loading' }
@@ -74,14 +75,22 @@ export default function AgendaDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [load, setLoad] = useState<Load>({ status: 'loading' });
 
-  useEffect(() => {
+  const reload = useCallback(async () => {
     if (!id) return;
-    void (async () => {
-      const res = await getItem(id);
-      if (res.status === 'ok') return setLoad({ status: 'ok', detail: res.data });
-      setLoad({ status: res.status === 'offline' ? 'offline' : 'error' });
-    })();
+    const res = await getItem(id);
+    if (res.status === 'ok') return setLoad({ status: 'ok', detail: res.data });
+    // Un bache de red tras registrar no debe borrar el detalle ya cargado (offline-first).
+    setLoad((prev) => (prev.status === 'ok' ? prev : { status: res.status === 'offline' ? 'offline' : 'error' }));
   }, [id]);
+
+  /** Aplica el ítem que devolvió la mutación (ejecutar/posponer), sin esperar el refetch. */
+  const applyItem = useCallback((item: AgendaListItem) => {
+    setLoad((prev) => (prev.status === 'ok' ? { status: 'ok', detail: { ...prev.detail, item } } : prev));
+  }, []);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
 
   /** El `tel:`/`geo:` ya está en memoria: llamar no depende de la red. */
   const open = useCallback(async (url: string) => {
@@ -106,16 +115,28 @@ export default function AgendaDetailScreen() {
       ) : load.status === 'error' ? (
         <EmptyState icon="⚠️" title="No se pudo cargar" hint="Reintentá en un momento." />
       ) : (
-        <Detail detail={load.detail} onOpen={open} />
+        <Detail detail={load.detail} onOpen={open} onChanged={reload} onItemUpdated={applyItem} />
       )}
     </View>
   );
 }
 
-function Detail({ detail, onOpen }: { detail: AgendaItemDetail; onOpen: (url: string) => void }) {
+function Detail({
+  detail,
+  onOpen,
+  onChanged,
+  onItemUpdated,
+}: {
+  detail: AgendaItemDetail;
+  onOpen: (url: string) => void;
+  onChanged: () => void;
+  onItemUpdated: (item: AgendaListItem) => void;
+}) {
   const { item, client, credit, history } = detail;
   const meta = AGENDA_TYPE_META[item.type];
   const tone = item.isOverdue ? 'danger' : meta.tone;
+  const [showRegister, setShowRegister] = useState(false);
+  const pending = item.status === AgendaItemStatus.SCHEDULED;
   const { tel, geo } = actionLinks(detail.target, Platform.OS);
   const lines = detailLines(detail);
   // Un agendado de WhatsApp se ejecuta en WhatsApp, con su mensaje: llamar por voz sería otra gestión.
@@ -190,15 +211,27 @@ function Detail({ detail, onOpen }: { detail: AgendaItemDetail; onOpen: (url: st
         ))}
       </ScrollView>
 
-      <SafeAreaView edges={['bottom']} style={styles.footer}>
-        <Pressable
-          style={styles.registerBtn}
-          accessibilityRole="button"
-          onPress={() => Alert.alert('Registrar gestión', 'Registrar la acción llega en S4.')}
-        >
-          <Text style={styles.registerText}>Registrar gestión</Text>
-        </Pressable>
-      </SafeAreaView>
+      {pending && (
+        <SafeAreaView edges={['bottom']} style={styles.footer}>
+          <Pressable style={styles.registerBtn} accessibilityRole="button" onPress={() => setShowRegister(true)}>
+            <Text style={styles.registerText}>Registrar gestión</Text>
+          </Pressable>
+        </SafeAreaView>
+      )}
+
+      <RegisterSheet
+        detail={detail}
+        visible={showRegister}
+        onClose={() => setShowRegister(false)}
+        onOpenLink={onOpen}
+        onUpdated={(updated) => {
+          setShowRegister(false);
+          // El server ya devolvió el ítem actualizado: se aplica directo, sin depender del refetch.
+          // Un bache de red al recargar el resto (historial) no debe revertir la vista a "pendiente".
+          onItemUpdated(updated);
+          onChanged();
+        }}
+      />
     </>
   );
 }

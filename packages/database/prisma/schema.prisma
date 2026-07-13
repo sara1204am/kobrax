@@ -1015,6 +1015,7 @@ enum CatalogType {
   REMINDER_CATEGORY
   CAMPAIGN
   CURRENCY
+  WHATSAPP_TEMPLATE
 }
 
 /// Gestión agendada (llamada/visita/whatsapp/recordatorio/promesa) sobre un caso.
