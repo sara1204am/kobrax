@@ -1,4 +1,5 @@
 import type { Arrear, Credit, CreditInstallment } from '@prisma/client';
+import { creditView } from '@kobrax/shared';
 
 /** Etiquetas de concepto por defecto (las sobreescribe `account.configuration.creditLabels`). */
 export const DEFAULT_CREDIT_LABELS: Record<string, string> = {
@@ -43,6 +44,12 @@ export function serializeCredit(
   credit: CreditWithRelations,
   labels: Record<string, string> = DEFAULT_CREDIT_LABELS,
 ) {
+  // La ficha (§5.4) necesita cuota, frecuencia, próxima fecha y el candado del importado.
+  // Misma función que el listado de casos y que el móvil: una sola regla, tres consumidores.
+  const view = creditView({
+    metadata: credit.metadata,
+    installments: credit.installments?.map((i) => ({ dueDate: i.dueDate, amount: num(i.amount), status: i.status })),
+  });
   return {
     id: credit.id,
     code: credit.code ?? undefined,
@@ -60,6 +67,14 @@ export function serializeCredit(
     createdAt: credit.createdAt,
     updatedAt: credit.updatedAt,
     labels: { ...DEFAULT_CREDIT_LABELS, ...labels },
+    installmentAmount: view.installmentAmount,
+    nextDueDate: view.nextDueDate,
+    frequency: view.frequency,
+    origin: view.origin,
+    locked: view.locked, // candado de los campos financieros (§4.3)
+    externalRef: view.externalRef,
+    notes: view.notes,
+    hasSchedule: view.hasSchedule,
     installments: credit.installments?.map(serializeInstallment),
     arrears: credit.arrears?.map(serializeArrear),
   };
