@@ -1,10 +1,10 @@
 /**
- * Casos de cobranza (solo lectura en P1). Thin sobre `apiQuery`; base de Agenda (P1),
- * Gestiones (P2) y generación de rutas (P3). El tipo refleja el `select` real de
- * `cases.serializer.ts` — OJO: el listado NO trae nombre de deudor ni monto (solo IDs);
- * denormalizar eso es trabajo de backend / P2 (ver plan §12).
+ * Casos de cobranza (solo lectura). Thin sobre `apiQuery`; base de Agenda, Gestiones, Rutas y de la
+ * lista de cartera (§5.3). El tipo refleja el `select` real de `cases.serializer.ts`: el listado SÍ trae
+ * nombre de deudor, monto, cuota y próxima fecha; con `view=portfolio` suma zona, documento enmascarado
+ * y promesa vigente.
  */
-import type { CasePriority, CaseStatus } from '@kobrax/shared';
+import type { CasePriority, CaseStatus, CreditOrigin, PaymentFrequency } from '@kobrax/shared';
 import { apiQuery, toQuery, type QueryResult } from './api-client';
 
 /** Forma verificada contra `serializeCase` (fechas llegan como ISO string vía JSON). */
@@ -24,6 +24,16 @@ export interface CaseListItem {
   currency?: string;
   /** Días de mora calculados por el server (no por el reloj del dispositivo). */
   daysPastDue?: number;
+  /** Cuota/próxima fecha del crédito (fundación: `creditView`). */
+  installmentAmount?: number;
+  nextDueDate?: string;
+  frequency?: PaymentFrequency;
+  origin?: CreditOrigin;
+  locked?: boolean;
+  /** Solo con `view=portfolio` (§5.3). */
+  zone?: string;
+  documentMasked?: string;
+  hasActivePromise?: boolean;
   lastActionAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -35,6 +45,8 @@ export interface ListCasesParams {
   overdue?: boolean;
   /** Solo casos abiertos (excluye CLOSED/WRITTEN_OFF) — para el KPI de carga del día. */
   open?: boolean;
+  /** 'portfolio' → enriquece la respuesta para la lista de cartera (§5.3). */
+  view?: 'portfolio';
   page?: number;
   limit?: number;
 }

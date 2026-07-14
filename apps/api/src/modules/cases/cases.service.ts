@@ -1,13 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import type { CollectionCase, Prisma, PrismaClient } from '@prisma/client';
-import { CaseActivityType, CaseStatus } from '@prisma/client';
-import { canTransition, Permission, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
+import { AgendaItemStatus, AgendaItemType, CaseActivityType, CaseStatus } from '@prisma/client';
+import { canTransition, maskDocument, Permission, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { CryptoService } from '../../common/crypto/crypto.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { computePriority, slaDueAt, DEFAULT_PRIORITY_PARAMS, type PriorityParams } from './case-priority';
-import { serializeCase } from './cases.serializer';
+import { serializeCase, type PortfolioExtra } from './cases.serializer';
 import {
   AssignCaseDto,
   CreateActivityDto,
@@ -27,6 +28,7 @@ export class CasesService {
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
     private readonly events: EventBusService,
+    private readonly crypto: CryptoService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -284,7 +286,73 @@ export class CasesService {
         tx.collectionCase.count({ where }),
       ]),
     );
-    return ResponseDto.paginated(rows.map((c) => serializeCase(c)), total, page, limit);
+    // Lista de cartera (§5.3): zona + documento enmascarado + promesa vigente, opt-in para no cargar a Home.
+    const extra = query.view === 'portfolio' ? await this.portfolioExtra(rows.map((c) => c.clientId)) : undefined;
+    return ResponseDto.paginated(
+      rows.map((c) => serializeCase(c, new Date(), extra?.get(c.clientId))),
+      total,
+      page,
+      limit,
+    );
+  }
+
+  /**
+   * Enriquecimiento de la tarjeta de cartera para un set de clientes (§5.3). Dos queries sobre la página,
+   * no N+1: los datos del cliente (zona + documento enmascarado) y qué clientes tienen una promesa vigente.
+   * El documento va SIEMPRE enmascarado (no es `PII_REVEAL`); la promesa = gestión `PROMISE_TO_PAY` agendada
+   * a hoy o al futuro.
+   */
+  private async portfolioExtra(clientIds: string[]): Promise<Map<string, PortfolioExtra>> {
+    const ids = [...new Set(clientIds)];
+    const map = new Map<string, PortfolioExtra>();
+    if (ids.length === 0) return map;
+
+    const today = new Date();
+    const startOfToday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+
+    const [clients, promises] = await this.tx((tx) =>
+      Promise.all([
+        tx.client.findMany({
+          where: { id: { in: ids } },
+          select: {
+            id: true,
+            nationalId: true,
+            locations: { select: { zone: true }, orderBy: { createdAt: 'asc' }, take: 1 },
+          },
+        }),
+        tx.agendaItem.findMany({
+          where: {
+            clientId: { in: ids },
+            deletedAt: null,
+            type: AgendaItemType.PROMISE_TO_PAY,
+            status: AgendaItemStatus.SCHEDULED,
+            scheduledDate: { gte: startOfToday },
+          },
+          select: { clientId: true },
+        }),
+      ]),
+    );
+
+    const withPromise = new Set(promises.map((p) => p.clientId));
+    for (const c of clients) {
+      const doc = this.safeDecrypt(c.nationalId);
+      map.set(c.id, {
+        zone: c.locations[0]?.zone ?? undefined,
+        documentMasked: doc ? maskDocument(doc) : undefined,
+        hasActivePromise: withPromise.has(c.id),
+      });
+    }
+    return map;
+  }
+
+  /** Descifra tolerando el legado en claro (mismo criterio que `clients.serializer`). */
+  private safeDecrypt(value: string | null): string | null {
+    if (value == null) return null;
+    try {
+      return this.crypto.decrypt(value);
+    } catch {
+      return value;
+    }
   }
 
   async findOne(id: string): Promise<ReturnType<typeof serializeCase>> {

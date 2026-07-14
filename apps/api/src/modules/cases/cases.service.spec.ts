@@ -12,6 +12,8 @@ function makeService(opts: {
   openCreditIds?: string[];
   permissions?: string[];
   listRows?: Record<string, unknown>[];
+  portfolioClients?: Record<string, unknown>[];
+  portfolioPromises?: { clientId: string }[];
 } = {}) {
   const calls = {
     create: [] as Record<string, unknown>[],
@@ -27,6 +29,8 @@ function makeService(opts: {
       findFirst: async () => opts.credit ?? null,
       findMany: async () => opts.creditsInMora ?? [],
     },
+    client: { findMany: async () => opts.portfolioClients ?? [] },
+    agendaItem: { findMany: async () => opts.portfolioPromises ?? [] },
     collectionCase: {
       findFirst: async (args: { where?: Record<string, unknown> }) => {
         const w = args.where ?? {};
@@ -64,7 +68,8 @@ function makeService(opts: {
   const tenant = { accountId: 'acc-A', userId: 'u1', permissions: perms, can: (p: string) => perms.includes(p) };
   const audit = { record: async (e: { action: string }) => void calls.audit.push(e) };
   const events = { emit: (name: string) => void calls.events.push(name) };
-  const service = new CasesService(prisma as never, tenant as never, audit as never, events as never);
+  const crypto = { decrypt: (v: string) => v }; // identidad: el documento del test ya va "en claro"
+  const service = new CasesService(prisma as never, tenant as never, audit as never, events as never, crypto as never);
   return { service, calls };
 }
 
@@ -159,6 +164,34 @@ describe('CasesService.list (scope por capacidad + enriquecimiento)', () => {
     assert.equal(res.data![0]!.amount, 5000);
     assert.equal(res.data![0]!.currency, 'BOB');
     assert.equal(res.data![0]!.daysPastDue, 12);
+    // Sin view=portfolio no se enriquece: nada de zona/documento/promesa (Home no cambia).
+    assert.equal(res.data![0]!.zone, undefined);
+    assert.equal(res.data![0]!.documentMasked, undefined);
+    assert.equal(res.data![0]!.hasActivePromise, undefined);
+  });
+
+  it('view=portfolio agrega zona + documento ENMASCARADO + promesa vigente (§5.3)', async () => {
+    const rows = [
+      { id: 'c1', creditId: 'cr1', clientId: 'cl1', status: 'ACTIVE', priority: 'HIGH', createdAt: new Date(), updatedAt: new Date(), client: { firstName: 'Ana', lastName: 'Ruiz', businessName: null }, credit: null },
+      { id: 'c2', creditId: 'cr2', clientId: 'cl2', status: 'ACTIVE', priority: 'LOW', createdAt: new Date(), updatedAt: new Date(), client: { firstName: 'Beto', lastName: 'Diaz', businessName: null }, credit: null },
+    ];
+    const { service } = makeService({
+      permissions: ['case:assign'],
+      listRows: rows,
+      portfolioClients: [
+        { id: 'cl1', nationalId: '12345678', locations: [{ zone: 'Zona Sur' }] },
+        { id: 'cl2', nationalId: '87654321', locations: [] },
+      ],
+      portfolioPromises: [{ clientId: 'cl1' }], // solo cl1 tiene promesa vigente
+    });
+    const res = await service.list({ view: 'portfolio' } as never);
+    const [a, b] = res.data!;
+    assert.equal(a!.zone, 'Zona Sur');
+    assert.ok(a!.documentMasked && a!.documentMasked !== '12345678'); // enmascarado, no en claro
+    assert.ok(!a!.documentMasked!.includes('5678')); // los últimos dígitos no se filtran
+    assert.equal(a!.hasActivePromise, true);
+    assert.equal(b!.zone, undefined); // sin ubicación
+    assert.equal(b!.hasActivePromise, false);
   });
 });
 

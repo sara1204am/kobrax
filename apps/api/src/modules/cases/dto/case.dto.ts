@@ -34,6 +34,8 @@ export class ListCasesQueryDto {
   @IsOptional() @IsIn(['true', 'false']) overdue?: string;
   /** 'true' → solo casos abiertos (excluye CLOSED/WRITTEN_OFF). Para el KPI de carga del día. */
   @IsOptional() @IsIn(['true', 'false']) open?: string;
+  /** 'portfolio' → enriquece cada caso con zona, documento enmascarado y promesa vigente (lista de cartera V3). */
+  @IsOptional() @IsIn(['portfolio']) view?: 'portfolio';
 }
 
 export class TransitionCaseDto {

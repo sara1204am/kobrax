@@ -41,7 +41,17 @@ type CaseWithActivities = CollectionCase & {
   credit?: CaseCredit | null;
 };
 
-export function serializeCase(c: CaseWithActivities, now: Date = new Date()) {
+/** Campos de la lista de cartera (§5.3), resueltos por el servicio solo con `view=portfolio`. */
+export type PortfolioExtra = {
+  /** Zona de la ubicación primaria del cliente. */
+  zone?: string;
+  /** Documento ENMASCARADO (12345***) — para el buscador local; nunca en claro, sin `PII_REVEAL`. */
+  documentMasked?: string;
+  /** Hay una promesa de pago vigente en agenda → badge PROMESA (§5.3). */
+  hasActivePromise?: boolean;
+};
+
+export function serializeCase(c: CaseWithActivities, now: Date = new Date(), portfolio?: PortfolioExtra) {
   const isOverdue = !!c.slaDueAt && !TERMINAL.includes(c.status) && c.slaDueAt.getTime() < now.getTime();
   // Cuota y próxima fecha: derivadas del cronograma si existe, leídas del metadata si no.
   // Misma función que usa el móvil → la tarjeta dice lo mismo en los dos lados.
@@ -71,6 +81,10 @@ export function serializeCase(c: CaseWithActivities, now: Date = new Date()) {
     frequency: view?.frequency,
     origin: view?.origin, // el móvil pinta el candado con esto (§4.3)
     locked: view?.locked,
+    // Cartera (§5.3): solo presentes con `view=portfolio`; ausentes en agenda/mutaciones.
+    zone: portfolio?.zone,
+    documentMasked: portfolio?.documentMasked,
+    hasActivePromise: portfolio?.hasActivePromise,
     lastActionAt: c.lastActionAt ?? undefined,
     closedAt: c.closedAt ?? undefined,
     closedReason: c.closedReason ?? undefined,

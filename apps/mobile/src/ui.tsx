@@ -6,7 +6,7 @@
 import { type ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AgendaItemStatus, AgendaItemType, AgendaOutcome, CasePriority, CaseStatus } from '@kobrax/shared';
+import { AgendaItemStatus, AgendaItemType, AgendaOutcome, CasePriority, CaseStatus, PortfolioStatus } from '@kobrax/shared';
 import { useNetStore } from './store/net';
 import { COLORS, RADIUS, SPACING, TYPE } from './theme';
 
@@ -177,25 +177,39 @@ const TONE_SOLID: Record<BadgeTone, string> = {
  */
 export function CaseCard({
   name,
+  caption,
   subtitle,
   amount,
+  amountDanger,
   status,
   overdue,
+  badge,
   action,
   onPress,
 }: {
   name: string;
+  /** Línea muted extra bajo el nombre (cartera §5.3: "Zona Sur · 2 préstamos"). */
+  caption?: string;
   subtitle?: string;
   amount?: string;
-  status: CaseStatus;
+  /** Monto en rojo: deuda con mora (§5.3, "cifra dominante en rojo si hay mora"). */
+  amountDanger?: boolean;
+  /** Estado de caso (agenda). Opcional si se pasa `badge` (cartera usa PortfolioStatus). */
+  status?: CaseStatus;
   overdue?: boolean;
+  /** Badge explícito — override del derivado de `status` (cartera §5.3 pasa el de PortfolioStatus). */
+  badge?: { label: string; tone: BadgeTone };
   action?: ReactNode;
   onPress?: () => void;
 }) {
-  const tone: BadgeTone = overdue ? 'danger' : caseStatusTone(status);
+  const b: { label: string; tone: BadgeTone } =
+    badge ??
+    (overdue
+      ? { label: 'Vencida', tone: 'danger' }
+      : { label: CASE_STATUS_LABEL[status ?? CaseStatus.PENDING], tone: caseStatusTone(status ?? CaseStatus.PENDING) });
   return (
     <View style={styles.caseCard}>
-      <View style={[styles.caseAccent, { backgroundColor: TONE_SOLID[tone] }]} />
+      <View style={[styles.caseAccent, { backgroundColor: TONE_SOLID[b.tone] }]} />
       <Pressable
         onPress={onPress}
         disabled={!onPress}
@@ -205,6 +219,11 @@ export function CaseCard({
           <Text style={styles.caseName} numberOfLines={1}>
             {name}
           </Text>
+          {caption && (
+            <Text style={styles.caseCaption} numberOfLines={1}>
+              {caption}
+            </Text>
+          )}
           {subtitle && (
             <Text style={styles.rowSubtitle} numberOfLines={1}>
               {subtitle}
@@ -213,17 +232,29 @@ export function CaseCard({
         </View>
         <View style={styles.caseRight}>
           {amount && (
-            <Text style={styles.caseAmount} numberOfLines={1}>
+            <Text style={[styles.caseAmount, amountDanger && { color: COLORS.danger }]} numberOfLines={1}>
               {amount}
             </Text>
           )}
-          <StatusBadge label={overdue ? 'Vencida' : CASE_STATUS_LABEL[status]} tone={tone} />
+          <StatusBadge label={b.label} tone={b.tone} />
         </View>
       </Pressable>
       {action}
     </View>
   );
 }
+
+/**
+ * Estado de cartera (§5.3) → etiqueta + tono de badge. El enum es dominio (shared); el color es UI.
+ * PROMESA usa `info` (púrpura sobre highlight), el color semántico que pide el §5.3. Lo reusa S3 (ficha).
+ */
+export const PORTFOLIO_STATUS_META: Record<PortfolioStatus, { label: string; tone: BadgeTone }> = {
+  [PortfolioStatus.CURRENT]: { label: 'Al día', tone: 'success' },
+  [PortfolioStatus.DUE_SOON]: { label: 'Por vencer', tone: 'warning' },
+  [PortfolioStatus.OVERDUE]: { label: 'En mora', tone: 'danger' },
+  [PortfolioStatus.PROMISE]: { label: 'Promesa', tone: 'info' },
+  [PortfolioStatus.PAID]: { label: 'Pagado', tone: 'neutral' },
+};
 
 /** Encabezado gris de sección (uppercase) para agrupar la lista de la Agenda. */
 export function SectionLabel({ children }: { children: string }) {
@@ -461,6 +492,7 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.md,
   },
   caseName: { ...TYPE.body, fontWeight: '700', color: COLORS.navy },
+  caseCaption: { ...TYPE.caption },
   agendaIcon: { fontSize: 22 },
   caseRight: { alignItems: 'flex-end', gap: 4 },
   caseAmount: { ...TYPE.body, fontWeight: '700', color: COLORS.navy },
