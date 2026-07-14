@@ -1,5 +1,5 @@
 /** Cliente HTTP a la API Kobrax. El mobile llama directo (no hay BFF). */
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://127.0.0.1:4010/api';
+export const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://127.0.0.1:4010/api';
 
 /** `meta` de la respuesta estándar `{data,meta,error}`; en listados trae la paginación. */
 export interface ApiMeta {

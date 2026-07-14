@@ -52,13 +52,14 @@ export class ClientsService {
     this.assertIdentity(dto.clientType, dto.firstName, dto.lastName, dto.businessName);
     const nationalIdHash = this.blind.hash(dto.nationalId);
 
-    const created = await this.tx(async (tx) => {
+    const { created, subs } = await this.tx(async (tx) => {
       if (nationalIdHash) {
         const dup = await tx.client.findFirst({ where: { nationalIdHash } });
         if (dup) throw clientDuplicate();
       }
+      let client: Awaited<ReturnType<typeof tx.client.create>>;
       try {
-        return await tx.client.create({
+        client = await tx.client.create({
           data: {
             accountId: this.tenant.accountId,
             clientType: dto.clientType,
@@ -79,9 +80,47 @@ export class ClientsService {
         if (this.isUniqueViolation(e)) throw clientDuplicate(); // carrera contra el índice único
         throw e;
       }
+
+      // Alta atómica (§5.1): teléfono + ubicación en la MISMA transacción → sin cliente huérfano si algo falla.
+      const audits: { kind: string; id: string; after: unknown }[] = [];
+      for (const c of dto.contacts ?? []) {
+        const row = await tx.clientContact.create({
+          data: {
+            accountId: this.tenant.accountId,
+            clientId: client.id,
+            contactType: c.contactType,
+            value: this.crypto.encrypt(c.value),
+            isPrimary: c.isPrimary ?? false,
+            notes: c.notes,
+          },
+        });
+        audits.push({ kind: 'contact', id: row.id, after: row });
+      }
+      if (dto.location) {
+        const l = dto.location;
+        const row = await tx.clientLocation.create({
+          data: {
+            accountId: this.tenant.accountId,
+            clientId: client.id,
+            locationType: l.locationType,
+            address: this.enc(l.address),
+            zone: l.zone,
+            latitude: l.latitude,
+            longitude: l.longitude,
+            referenceNotes: l.referenceNotes,
+            photoUrls: (l.photoUrls ?? []) as Prisma.InputJsonValue,
+          },
+        });
+        audits.push({ kind: 'location', id: row.id, after: row });
+      }
+      return { created: client, subs: audits };
     });
 
+    // Audit fuera del tx (audit.record abre su propio withTenant), como en update().
     await this.audit.record({ entity: 'client', entityId: created.id, action: 'CREATE', after: created, redactKeys: CLIENT_REDACT });
+    for (const s of subs) {
+      await this.audit.record({ entity: `client_${s.kind}`, entityId: s.id, action: 'CREATE', after: s.after, redactKeys: CLIENT_REDACT });
+    }
     return serializeClient(created, { crypto: this.crypto, reveal: false });
   }
 

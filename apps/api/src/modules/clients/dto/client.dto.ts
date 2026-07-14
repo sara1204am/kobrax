@@ -10,6 +10,7 @@ import {
   IsString,
   Max,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import {
   AttachmentType,
@@ -19,6 +20,26 @@ import {
   LocationType,
   RelationshipType,
 } from '@prisma/client';
+
+// ── Sub-recursos (declarados antes de CreateClientDto: `emitDecoratorMetadata` evalúa el tipo eager) ──
+export class CreateContactDto {
+  @IsEnum(ContactType) contactType!: ContactType;
+  @IsString() @IsNotEmpty() value!: string; // se cifra en reposo
+  @IsOptional() @IsBoolean() isPrimary?: boolean;
+  @IsOptional() @IsString() notes?: string;
+}
+
+export class CreateLocationDto {
+  @IsOptional() @IsEnum(LocationType) locationType?: LocationType;
+  @IsOptional() @IsString() address?: string; // se cifra en reposo
+  @IsOptional() @IsString() zone?: string;
+  @IsOptional() @Type(() => Number) latitude?: number;
+  @IsOptional() @Type(() => Number) longitude?: number;
+  @IsOptional() @IsString() referenceNotes?: string;
+  @IsOptional() @IsArray() @IsString({ each: true }) photoUrls?: string[];
+  @IsOptional() @IsObject() visitSchedule?: Record<string, unknown>;
+  @IsOptional() @IsString() riskLevel?: string;
+}
 
 // ── Cliente ──────────────────────────────────────────────────────────────────
 export class CreateClientDto {
@@ -36,6 +57,9 @@ export class CreateClientDto {
   @IsOptional() @IsString() preferredContactChannel?: string;
   @IsOptional() @IsString() riskSegment?: string;
   @IsOptional() @IsObject() metadata?: Record<string, unknown>;
+  /** Alta atómica (§5.1): teléfono(s) y ubicación creados en la misma transacción que el cliente. */
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => CreateContactDto) contacts?: CreateContactDto[];
+  @IsOptional() @ValidateNested() @Type(() => CreateLocationDto) location?: CreateLocationDto;
 }
 
 /** Todos los campos opcionales (no extiende PartialType para no depender de mapped-types). */
@@ -62,31 +86,12 @@ export class ListClientsQueryDto {
 }
 
 // ── Sub-recursos ─────────────────────────────────────────────────────────────
-export class CreateContactDto {
-  @IsEnum(ContactType) contactType!: ContactType;
-  @IsString() @IsNotEmpty() value!: string; // se cifra en reposo
-  @IsOptional() @IsBoolean() isPrimary?: boolean;
-  @IsOptional() @IsString() notes?: string;
-}
-
 export class UpdateContactDto {
   @IsOptional() @IsEnum(ContactType) contactType?: ContactType;
   @IsOptional() @IsString() value?: string;
   @IsOptional() @IsBoolean() isPrimary?: boolean;
   @IsOptional() @IsBoolean() isVerified?: boolean;
   @IsOptional() @IsString() notes?: string;
-}
-
-export class CreateLocationDto {
-  @IsOptional() @IsEnum(LocationType) locationType?: LocationType;
-  @IsOptional() @IsString() address?: string; // se cifra en reposo
-  @IsOptional() @IsString() zone?: string;
-  @IsOptional() @Type(() => Number) latitude?: number;
-  @IsOptional() @Type(() => Number) longitude?: number;
-  @IsOptional() @IsString() referenceNotes?: string;
-  @IsOptional() @IsArray() @IsString({ each: true }) photoUrls?: string[];
-  @IsOptional() @IsObject() visitSchedule?: Record<string, unknown>;
-  @IsOptional() @IsString() riskLevel?: string;
 }
 
 export class CreateRelationDto {

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { CasePriority, CaseStatus } from '@prisma/client';
+import { AgendaItemStatus, AgendaItemType, CasePriority, CaseStatus } from '@prisma/client';
 import {
   arrearsFromDueDate,
   CreditOrigin,
@@ -147,14 +147,37 @@ export class CreditsService {
             priority: priorityFromArrears(daysPastDue),
           },
         });
-        return { credit, caseId: kase.id };
+        // Próxima fecha de cobro en la agenda del cobrador (§5.2). Recordatorio de día (sin hora).
+        // Solo por el alta del móvil (`openCase`); la web/import usa `cases/generate` → no genera agenda.
+        let agendaId: string | undefined;
+        if (metadata.nextDueDate && this.tenant.userId) {
+          const item = await tx.agendaItem.create({
+            data: {
+              accountId,
+              caseId: kase.id,
+              clientId: dto.clientId,
+              creditId: credit.id,
+              assigneeId: this.tenant.userId,
+              type: AgendaItemType.REMINDER,
+              status: AgendaItemStatus.SCHEDULED,
+              scheduledDate: new Date(metadata.nextDueDate),
+              details: { description: 'Cobrar cuota' },
+              createdBy: this.tenant.userId,
+            },
+          });
+          agendaId = item.id;
+        }
+        return { credit, caseId: kase.id, agendaId };
       }
-      return { credit, caseId: undefined };
+      return { credit, caseId: undefined, agendaId: undefined };
     });
 
     await this.audit.record({ entity: 'credit', entityId: created.credit.id, action: 'CREATE', after: creditSummary(created.credit) });
     if (created.caseId) {
       await this.audit.record({ entity: 'collection_case', entityId: created.caseId, action: 'CREATE', after: { creditId: created.credit.id, clientId: dto.clientId, source: 'credit_create' } });
+    }
+    if (created.agendaId) {
+      await this.audit.record({ entity: 'agenda_item', entityId: created.agendaId, action: 'CREATE', after: { creditId: created.credit.id, caseId: created.caseId, source: 'credit_create' } });
     }
     return serializeCredit(created.credit, config.labels);
   }

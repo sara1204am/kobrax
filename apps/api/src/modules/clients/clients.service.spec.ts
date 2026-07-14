@@ -4,10 +4,12 @@ import { ClientsService } from './clients.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
 /** Fakes en memoria de las dependencias del servicio. */
-function makeService(opts: { dup?: unknown; client?: unknown; activeCredits?: number } = {}) {
+function makeService(opts: { dup?: unknown; client?: unknown; activeCredits?: number; failContact?: boolean } = {}) {
   const calls = {
     create: [] as Record<string, unknown>[],
     update: [] as { where: { id: string }; data: Record<string, unknown> }[],
+    contact: [] as Record<string, unknown>[],
+    location: [] as Record<string, unknown>[],
     audit: [] as { entity: string; action: string }[],
   };
   const tx = {
@@ -27,6 +29,19 @@ function makeService(opts: { dup?: unknown; client?: unknown; activeCredits?: nu
         return { id: args.where.id, createdAt: new Date(), updatedAt: new Date(), ...(opts.client as object), ...args.data };
       },
       count: async () => 0,
+    },
+    clientContact: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        if (opts.failContact) throw new Error('boom'); // simula fallo del sub-recurso
+        calls.contact.push(args.data);
+        return { id: 'ct1', ...args.data };
+      },
+    },
+    clientLocation: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        calls.location.push(args.data);
+        return { id: 'lo1', ...args.data };
+      },
     },
     credit: { count: async () => opts.activeCredits ?? 0 },
   };
@@ -78,6 +93,31 @@ describe('ClientsService.create', () => {
   it('exige nombre y apellido para PERSON (CLIENT_INVALID)', async () => {
     const { service } = makeService();
     await rejectsWithCode(service.create({ clientType: 'PERSON' } as never), 'CLIENT_INVALID');
+  });
+
+  it('alta atómica (§5.1): crea teléfono cifrado + ubicación y audita cada sub-recurso', async () => {
+    const { service, calls } = makeService();
+    await service.create({
+      ...(PERSON as object),
+      contacts: [{ contactType: 'WHATSAPP', value: '70000000', isPrimary: true }],
+      location: { address: 'Calle Falsa 123', zone: 'Sur', latitude: -17.7, photoUrls: ['u1'] },
+    } as never);
+    assert.equal(calls.contact[0]!.value, 'enc(70000000)'); // teléfono cifrado en reposo
+    assert.equal(calls.contact[0]!.contactType, 'WHATSAPP');
+    assert.equal(calls.location[0]!.address, 'enc(Calle Falsa 123)'); // dirección cifrada
+    assert.deepEqual(calls.location[0]!.photoUrls, ['u1']);
+    assert.deepEqual(
+      calls.audit.map((a) => `${a.action} ${a.entity}`),
+      ['CREATE client', 'CREATE client_contact', 'CREATE client_location'],
+    );
+  });
+
+  it('si un sub-recurso falla, propaga el error y NO audita un alta a medias (rollback)', async () => {
+    const { service, calls } = makeService({ failContact: true });
+    await assert.rejects(
+      service.create({ ...(PERSON as object), contacts: [{ contactType: 'PHONE', value: '7' }] } as never),
+    );
+    assert.equal(calls.audit.length, 0); // ni el cliente ni el sub-recurso quedan auditados
   });
 });
 

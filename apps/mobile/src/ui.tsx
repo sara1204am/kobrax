@@ -4,7 +4,7 @@
  * El TabBar lo cubre el `Tabs` nativo de expo-router (ver app/(tabs)/_layout.tsx).
  */
 import { type ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AgendaItemStatus, AgendaItemType, AgendaOutcome, CasePriority, CaseStatus, PortfolioStatus } from '@kobrax/shared';
 import { useNetStore } from './store/net';
@@ -256,6 +256,73 @@ export const PORTFOLIO_STATUS_META: Record<PortfolioStatus, { label: string; ton
   [PortfolioStatus.PAID]: { label: 'Pagado', tone: 'neutral' },
 };
 
+/**
+ * Input de monto con símbolo de moneda y teclado numérico (§4.1, §5.4). El TEXTO es la fuente de verdad
+ * (no re-stringifica el número → no pierde centavos, el bug de Agenda); el padre parsea con `Number`.
+ * Lo usan el alta de préstamo (V2) y el pago de la ficha (S3).
+ */
+export function AmountInput({
+  value,
+  onChangeText,
+  currencySymbol = 'Bs',
+  placeholder = '0',
+  editable = true,
+  accessibilityLabel,
+}: {
+  value: string;
+  onChangeText: (t: string) => void;
+  currencySymbol?: string;
+  placeholder?: string;
+  editable?: boolean;
+  accessibilityLabel?: string;
+}) {
+  return (
+    <View style={[styles.amountBox, !editable && styles.amountBoxDisabled]}>
+      <Text style={styles.amountSymbol}>{currencySymbol}</Text>
+      <TextInput
+        style={styles.amountInput}
+        value={value}
+        onChangeText={(t) => onChangeText(t.replace(/[^0-9.,]/g, '').replace(',', '.'))}
+        keyboardType="decimal-pad"
+        placeholder={placeholder}
+        placeholderTextColor={COLORS.muted}
+        editable={editable}
+        accessibilityLabel={accessibilityLabel}
+      />
+    </View>
+  );
+}
+
+/** Chips de selección única (frecuencia, base de interés, medio de pago…). Wrap horizontal. */
+export function Chips<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <View style={styles.chipsWrap}>
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <Pressable
+            key={o.value}
+            onPress={() => onChange(o.value)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            style={[styles.chip, active && styles.chipActive]}
+          >
+            <Text style={[styles.chipText, active && styles.chipTextActive]}>{o.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 /** Encabezado gris de sección (uppercase) para agrupar la lista de la Agenda. */
 export function SectionLabel({ children }: { children: string }) {
   return <Text style={styles.sectionLabel}>{children}</Text>;
@@ -493,6 +560,22 @@ const styles = StyleSheet.create({
   },
   caseName: { ...TYPE.body, fontWeight: '700', color: COLORS.navy },
   caseCaption: { ...TYPE.caption },
+  amountBox: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.input,
+    paddingHorizontal: SPACING.md, height: 52, backgroundColor: COLORS.white,
+  },
+  amountBoxDisabled: { backgroundColor: COLORS.lightBg, opacity: 0.7 },
+  amountSymbol: { ...TYPE.secondary, color: COLORS.muted, fontWeight: '700' },
+  amountInput: { flex: 1, ...TYPE.h3, color: COLORS.navy, padding: 0 },
+  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  chip: {
+    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: RADIUS.pill,
+    borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.white,
+  },
+  chipActive: { backgroundColor: COLORS.purple, borderColor: COLORS.purple },
+  chipText: { ...TYPE.secondary, color: COLORS.text2, fontWeight: '600' },
+  chipTextActive: { color: COLORS.white },
   agendaIcon: { fontSize: 22 },
   caseRight: { alignItems: 'flex-end', gap: 4 },
   caseAmount: { ...TYPE.body, fontWeight: '700', color: COLORS.navy },

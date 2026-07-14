@@ -1,8 +1,8 @@
 /**
- * Clientes (lectura). Thin sobre `apiQuery`. El buscador ve **todo el tenant** con la PII
- * enmascarada; el filtro por asignación lo aplica `/agenda/clients/:id/context` al elegirlo.
+ * Clientes (lectura + alta). Thin sobre `apiQuery`/`apiMutate`. El buscador ve **todo el tenant** con la
+ * PII enmascarada; el filtro por asignación lo aplica `/agenda/clients/:id/context` al elegirlo.
  */
-import { apiQuery, toQuery, type QueryResult } from './api-client';
+import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
 
 export interface ClientHit {
   id: string;
@@ -21,4 +21,35 @@ export function clientDisplayName(c: Pick<ClientHit, 'firstName' | 'lastName' | 
 /** Busca por nombre (ILIKE) o documento exacto. Se llama con debounce desde el formulario. */
 export function searchClients(q: string): Promise<QueryResult<ClientHit[]>> {
   return apiQuery<ClientHit[]>(`/clients${toQuery({ q, status: 'ACTIVE', limit: 20 })}`);
+}
+
+/** Payload del alta atómica (§5.1): cliente + teléfono(s) + ubicación en una sola transacción. */
+export interface NewClientInput {
+  clientType: 'PERSON' | 'BUSINESS';
+  firstName?: string;
+  lastName?: string;
+  businessName?: string;
+  nationalId?: string;
+  preferredContactChannel?: string;
+  contacts?: { contactType: 'PHONE' | 'WHATSAPP'; value: string; isPrimary?: boolean }[];
+  location?: {
+    address?: string;
+    zone?: string;
+    latitude?: number;
+    longitude?: number;
+    referenceNotes?: string;
+    photoUrls?: string[];
+  };
+}
+
+export interface CreatedClient {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  businessName?: string;
+}
+
+/** Alta de cliente (+ contacto/ubicación anidados). El server crea todo en una transacción. */
+export function createClient(input: NewClientInput): Promise<MutateResult<CreatedClient>> {
+  return apiMutate<CreatedClient>('/clients', 'POST', input);
 }

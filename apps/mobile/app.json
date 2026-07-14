@@ -37,6 +37,13 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Kobrax usa la cámara para la foto de fachada del cliente y el comprobante de pago.",
+          "photosPermission": "Kobrax accede a tus fotos para adjuntar la fachada del cliente o el comprobante."
+        }
+      ],
+      [
         "./plugins/with-ssl-pinning",
         { "domain": "api.kobrax.com", "pins": [] }
       ]

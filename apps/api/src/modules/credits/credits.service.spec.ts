@@ -8,6 +8,7 @@ function makeService(opts: { client?: unknown; credit?: unknown; config?: unknow
     creditCreate: [] as Record<string, unknown>[],
     creditUpdate: [] as Record<string, unknown>[],
     caseCreate: [] as Record<string, unknown>[],
+    agendaCreate: [] as Record<string, unknown>[],
     arrearCreate: [] as Record<string, unknown>[],
     arrearDeleteMany: 0,
     audit: [] as { action: string; entity: string }[],
@@ -31,6 +32,12 @@ function makeService(opts: { client?: unknown; credit?: unknown; config?: unknow
       create: async (args: { data: Record<string, unknown> }) => {
         calls.caseCreate.push(args.data);
         return { id: 'case1', ...args.data };
+      },
+    },
+    agendaItem: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        calls.agendaCreate.push(args.data);
+        return { id: 'ag1', ...args.data };
       },
     },
     account: { findUnique: async () => ({ currencyCode: 'BOB', configuration: opts.config ?? {} }) },
@@ -110,20 +117,37 @@ describe('CreditsService.create — crédito sin cronograma', () => {
     assert.equal(data.daysPastDue, 45);
   });
 
-  it('openCase abre el caso en la misma transacción, con prioridad derivada de la mora (§5.2)', async () => {
+  it('openCase abre el caso y el recordatorio en la agenda, en la misma transacción (§5.2)', async () => {
     const { service, calls } = makeService({ client: { id: 'c1' } });
     await service.create({ ...(MOVIL as object), daysPastDue: 45, openCase: true } as never);
     const kase = calls.caseCreate[0]!;
     assert.equal(kase.creditId, 'cr1');
     assert.equal(kase.assigneeId, 'user-1'); // el cobrador que lo registró
     assert.equal(kase.priority, 'HIGH'); // 31–90 días
-    assert.deepEqual(calls.audit.map((a) => `${a.action} ${a.entity}`), ['CREATE credit', 'CREATE collection_case']);
+    // Próxima fecha de cobro en la agenda (§5.2): un REMINDER con la fecha del metadata, asignado al cobrador.
+    const ag = calls.agendaCreate[0]!;
+    assert.equal(ag.type, 'REMINDER');
+    assert.equal(ag.assigneeId, 'user-1');
+    assert.equal(ag.caseId, 'case1');
+    assert.equal((ag.scheduledDate as Date).toISOString().slice(0, 10), '2026-07-20');
+    assert.deepEqual(
+      calls.audit.map((a) => `${a.action} ${a.entity}`),
+      ['CREATE credit', 'CREATE collection_case', 'CREATE agenda_item'],
+    );
   });
 
-  it('sin openCase no se crea ningún caso', async () => {
+  it('sin openCase no se crea ni caso ni agenda', async () => {
     const { service, calls } = makeService({ client: { id: 'c1' } });
     await service.create(MOVIL);
     assert.equal(calls.caseCreate.length, 0);
+    assert.equal(calls.agendaCreate.length, 0);
+  });
+
+  it('openCase con cronograma (sin nextDueDate en metadata) crea el caso pero NO el recordatorio', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ ...(BASE as object), openCase: true } as never); // BASE = cuotas, sin cuota congelada
+    assert.equal(calls.caseCreate.length, 1);
+    assert.equal(calls.agendaCreate.length, 0); // sin próxima fecha en metadata → no hay recordatorio
   });
 });
 
