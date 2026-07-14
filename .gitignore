@@ -40,3 +40,6 @@ coverage/
 *.jks
 *.p8
 *.p12
+
+# Archivos subidos en dev (driver de disco de POST /api/uploads)
+apps/api/uploads/
