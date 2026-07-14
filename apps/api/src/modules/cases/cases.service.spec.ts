@@ -21,6 +21,7 @@ function makeService(opts: {
     activity: [] as Record<string, unknown>[],
     audit: [] as { action: string }[],
     events: [] as string[],
+    agenda: [] as Record<string, unknown>[],
     listWhere: undefined as Record<string, unknown> | undefined,
   };
   const tx = {
@@ -30,7 +31,13 @@ function makeService(opts: {
       findMany: async () => opts.creditsInMora ?? [],
     },
     client: { findMany: async () => opts.portfolioClients ?? [] },
-    agendaItem: { findMany: async () => opts.portfolioPromises ?? [] },
+    agendaItem: {
+      findMany: async () => opts.portfolioPromises ?? [],
+      create: async (args: { data: Record<string, unknown> }) => {
+        calls.agenda.push(args.data);
+        return { id: 'ag1', ...args.data };
+      },
+    },
     collectionCase: {
       findFirst: async (args: { where?: Record<string, unknown> }) => {
         const w = args.where ?? {};
@@ -192,6 +199,42 @@ describe('CasesService.list (scope por capacidad + enriquecimiento)', () => {
     assert.equal(a!.hasActivePromise, true);
     assert.equal(b!.zone, undefined); // sin ubicación
     assert.equal(b!.hasActivePromise, false);
+  });
+});
+
+describe('CasesService.addActivity (gestión + promesa §5.4)', () => {
+  const CASE = { id: 'case1', status: 'ACTIVE', clientId: 'cl1', creditId: 'cr1' };
+
+  it('gestión simple: crea el CaseActivity y NO toca la agenda', async () => {
+    const { service, calls } = makeService({ caseRow: CASE as never });
+    await service.addActivity('case1', { type: 'CALL', result: 'NO_CONTACT', notes: 'no atendió' } as never);
+    assert.equal(calls.activity[0]!.type, 'CALL');
+    assert.equal(calls.activity[0]!.result, 'NO_CONTACT');
+    assert.equal(calls.agenda.length, 0);
+  });
+
+  it('promesa: crea el CaseActivity Y un agenda_item PROMISE_TO_PAY con la fecha/monto (§5.4)', async () => {
+    const { service, calls } = makeService({ caseRow: CASE as never });
+    await service.addActivity('case1', {
+      type: 'NOTE',
+      result: 'PROMISE_TO_PAY',
+      promise: { amount: 300, promiseDate: '2026-08-01', paymentMethodCode: 'CASH' },
+    } as never);
+    assert.equal(calls.activity.length, 1); // sigue quedando en el historial
+    const ag = calls.agenda[0]!;
+    assert.equal(ag.type, 'PROMISE_TO_PAY');
+    assert.equal(ag.status, 'SCHEDULED');
+    assert.equal(ag.clientId, 'cl1'); // derivado del caso, no del body
+    assert.equal(ag.creditId, 'cr1');
+    assert.equal(ag.assigneeId, 'u1');
+    assert.equal((ag.scheduledDate as Date).toISOString().slice(0, 10), '2026-08-01');
+    assert.deepEqual(ag.details, { amount: 300, promiseDate: '2026-08-01', paymentMethodCode: 'CASH' });
+    assert.deepEqual(calls.audit.map((a) => `${a.action} ${a.entity}`), ['CREATE agenda_item']);
+  });
+
+  it('404 si el caso no existe / es de otro tenant', async () => {
+    const { service } = makeService({ caseRow: null });
+    await rejectsWithCode(service.addActivity('case1', { type: 'NOTE' } as never), 'RESOURCE_NOT_FOUND');
   });
 });
 

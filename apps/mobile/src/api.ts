@@ -19,11 +19,12 @@ export interface ApiResult<T> {
 
 export async function apiFetch<T>(
   path: string,
-  init: { method?: string; body?: unknown; token?: string } = {},
+  init: { method?: string; body?: unknown; token?: string; headers?: Record<string, string> } = {},
 ): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {
     'content-type': 'application/json',
     'x-client-type': 'mobile',
+    ...init.headers,
   };
   if (init.token) headers.authorization = `Bearer ${init.token}`;
 

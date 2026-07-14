@@ -5,7 +5,7 @@
  * y promesa vigente.
  */
 import type { CasePriority, CaseStatus, CreditOrigin, PaymentFrequency } from '@kobrax/shared';
-import { apiQuery, toQuery, type QueryResult } from './api-client';
+import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
 
 /** Forma verificada contra `serializeCase` (fechas llegan como ISO string vía JSON). */
 export interface CaseListItem {
@@ -60,4 +60,43 @@ export function listCases(params: ListCasesParams): Promise<QueryResult<CaseList
       open: params.open ? 'true' : undefined,
     })}`,
   );
+}
+
+/** Una gestión del historial del caso (`serializeActivity`). */
+export interface CaseActivityItem {
+  id: string;
+  type: string;
+  result?: string;
+  notes?: string;
+  userId?: string;
+  createdAt: string;
+}
+
+/** Detalle del caso para la ficha (§5.4): campos de la lista + el historial de gestiones. */
+export interface CaseDetail extends CaseListItem {
+  activities?: CaseActivityItem[];
+}
+
+export function getCase(id: string): Promise<QueryResult<CaseDetail>> {
+  return apiQuery<CaseDetail>(`/cases/${id}`);
+}
+
+/** Promesa de pago de una gestión (§5.4): crea también un agenda_item PROMISE_TO_PAY. */
+export interface ActivityPromise {
+  amount: number;
+  promiseDate: string; // ISO YYYY-MM-DD
+  paymentMethodCode: string;
+  bankCode?: string;
+}
+
+export interface NewActivity {
+  type: 'NOTE' | 'CALL' | 'VISIT' | 'MESSAGE';
+  result?: string;
+  notes?: string;
+  promise?: ActivityPromise;
+}
+
+/** Registrar una gestión (o el auto-log de Llamar/WhatsApp/Navegar). */
+export function addActivity(caseId: string, input: NewActivity): Promise<MutateResult<{ id: string; type: string; createdAt: string }>> {
+  return apiMutate(`/cases/${caseId}/activities`, 'POST', input);
 }

@@ -52,7 +52,7 @@ async function doRefresh(): Promise<AuthTokens | null> {
  */
 export async function authedFetch<T>(
   path: string,
-  init: { method?: string; body?: unknown } = {},
+  init: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
 ): Promise<AuthedFetchResult<T>> {
   const session = await getSession();
   if (!session) return { status: 'unauthenticated', data: null, error: null };
@@ -108,8 +108,9 @@ export async function apiMutate<T>(
   path: string,
   method: 'POST' | 'PATCH' | 'DELETE',
   body?: unknown,
+  headers?: Record<string, string>,
 ): Promise<MutateResult<T>> {
-  const res = await authedFetch<T>(path, { method, body });
+  const res = await authedFetch<T>(path, { method, body, headers });
   if (res.status === 'unauthenticated' || res.status === 401) return { status: 'unauthenticated' };
   if (res.status === 0) return { status: 'offline' };
   if ((res.status === 200 || res.status === 201) && res.data !== null) return { status: 'ok', data: res.data };

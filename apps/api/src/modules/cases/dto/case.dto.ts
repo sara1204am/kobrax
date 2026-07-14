@@ -1,15 +1,19 @@
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsDateString,
   IsEnum,
   IsIn,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   IsUUID,
   Max,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { CaseActivityType, CasePriority, CaseStatus } from '@prisma/client';
 
@@ -49,10 +53,21 @@ export class AssignCaseDto {
   @IsOptional() @IsBoolean() auto?: boolean;
 }
 
+/** Promesa de pago de una gestión (§5.4). Va ANTES de CreateActivityDto: emitDecoratorMetadata evalúa
+ * `@Type(()=>X)` eager → ReferenceError (TDZ) si se declara después. */
+export class ActivityPromiseDto {
+  @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() amount!: number;
+  @IsDateString() promiseDate!: string; // ISO YYYY-MM-DD
+  @IsString() @IsNotEmpty() paymentMethodCode!: string;
+  @IsOptional() @IsString() bankCode?: string;
+}
+
 export class CreateActivityDto {
   @IsEnum(CaseActivityType) type!: CaseActivityType;
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsString() result?: string;
+  /** Si viene, la gestión es una promesa: crea también un agenda_item PROMISE_TO_PAY (§5.4). */
+  @IsOptional() @ValidateNested() @Type(() => ActivityPromiseDto) promise?: ActivityPromiseDto;
 }
 
 export class CloseCaseDto {

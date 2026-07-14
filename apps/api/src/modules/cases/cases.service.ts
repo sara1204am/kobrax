@@ -227,16 +227,44 @@ export class CasesService {
 
   // ── Bitácora ────────────────────────────────────────────────────────────────
   async addActivity(id: string, dto: CreateActivityDto) {
-    const activity = await this.tx(async (tx) => {
-      const found = await tx.collectionCase.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    const { activity, agendaId } = await this.tx(async (tx) => {
+      const found = await tx.collectionCase.findFirst({ where: { id, deletedAt: null }, select: { id: true, clientId: true, creditId: true } });
       if (!found) throw resourceNotFound();
       const created = await tx.caseActivity.create({
         data: { accountId: this.tenant.accountId, caseId: id, userId: this.tenant.userId, type: dto.type, notes: dto.notes, result: dto.result },
       });
+      // Promesa de pago (§5.4): además del historial, vive en agenda_items → enciende PROMESA en la
+      // cartera (S1) y aparece en la Agenda. Misma transacción que la gestión.
+      let agendaId: string | undefined;
+      if (dto.promise && this.tenant.userId) {
+        const item = await tx.agendaItem.create({
+          data: {
+            accountId: this.tenant.accountId,
+            caseId: id,
+            clientId: found.clientId,
+            creditId: found.creditId,
+            assigneeId: this.tenant.userId,
+            type: AgendaItemType.PROMISE_TO_PAY,
+            status: AgendaItemStatus.SCHEDULED,
+            scheduledDate: new Date(dto.promise.promiseDate),
+            details: {
+              amount: dto.promise.amount,
+              promiseDate: dto.promise.promiseDate,
+              paymentMethodCode: dto.promise.paymentMethodCode,
+              ...(dto.promise.bankCode ? { bankCode: dto.promise.bankCode } : {}),
+            },
+            createdBy: this.tenant.userId,
+          },
+        });
+        agendaId = item.id;
+      }
       await tx.collectionCase.update({ where: { id }, data: { lastActionAt: new Date() } });
-      return created;
+      return { activity: created, agendaId };
     });
     this.events.emit(DomainEvent.CASE_UPDATED, { caseId: id, accountId: this.tenant.accountId, activity: dto.type });
+    if (agendaId) {
+      await this.audit.record({ entity: 'agenda_item', entityId: agendaId, action: 'CREATE', after: { caseId: id, source: 'gestion_promise' } });
+    }
     return { id: activity.id, type: activity.type, createdAt: activity.createdAt };
   }
 
