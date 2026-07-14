@@ -7,6 +7,7 @@ function makeService(opts: { client?: unknown; credit?: unknown; config?: unknow
   const calls = {
     creditCreate: [] as Record<string, unknown>[],
     creditUpdate: [] as Record<string, unknown>[],
+    caseCreate: [] as Record<string, unknown>[],
     arrearCreate: [] as Record<string, unknown>[],
     arrearDeleteMany: 0,
     audit: [] as { action: string; entity: string }[],
@@ -26,6 +27,12 @@ function makeService(opts: { client?: unknown; credit?: unknown; config?: unknow
       },
     },
     creditInstallment: { updateMany: async () => ({ count: 1 }) },
+    collectionCase: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        calls.caseCreate.push(args.data);
+        return { id: 'case1', ...args.data };
+      },
+    },
     account: { findUnique: async () => ({ currencyCode: 'BOB', configuration: opts.config ?? {} }) },
     arrear: {
       deleteMany: async () => {
@@ -41,7 +48,7 @@ function makeService(opts: { client?: unknown; credit?: unknown; config?: unknow
   const prisma = {
     withTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
   };
-  const tenant = { accountId: 'acc-A' };
+  const tenant = { accountId: 'acc-A', userId: 'user-1' };
   const audit = { record: async (e: { action: string; entity: string }) => void calls.audit.push(e) };
   const service = new CreditsService(prisma as never, tenant as never, audit as never);
   return { service, calls };
@@ -72,6 +79,54 @@ describe('CreditsService.create', () => {
   });
 });
 
+/** El crédito de cobranza de la spec (§4): cuota congelada, sin cronograma. */
+describe('CreditsService.create — crédito sin cronograma', () => {
+  const MOVIL = { ...(BASE as object), installmentAmount: 300, frequency: 'WEEKLY', nextDueDate: '2026-07-20' } as never;
+
+  it('con cuota congelada NO genera cronograma y guarda cuota/frecuencia/fecha en metadata', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create(MOVIL);
+    const data = calls.creditCreate[0]!;
+    assert.deepEqual((data.installments as { create: unknown[] }).create, []);
+    assert.deepEqual(data.metadata, {
+      frequency: 'WEEKLY',
+      origin: 'manual',
+      installmentAmount: 300,
+      nextDueDate: '2026-07-20',
+    });
+  });
+
+  it('préstamo abierto: sin número de cuotas se acepta y queda en 0 (§4.1)', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ clientId: BASE.clientId, principalAmount: 1000, installmentAmount: 250 } as never);
+    assert.equal(calls.creditCreate[0]!.installmentsCount, 0);
+  });
+
+  it('"ya está en curso": respeta el saldo y la mora que trae el cobrador (§4.1)', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ ...(MOVIL as object), outstandingBalance: 800, daysPastDue: 45 } as never);
+    const data = calls.creditCreate[0]!;
+    assert.equal(data.outstandingBalance, 800); // no lo pisa con el capital
+    assert.equal(data.daysPastDue, 45);
+  });
+
+  it('openCase abre el caso en la misma transacción, con prioridad derivada de la mora (§5.2)', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ ...(MOVIL as object), daysPastDue: 45, openCase: true } as never);
+    const kase = calls.caseCreate[0]!;
+    assert.equal(kase.creditId, 'cr1');
+    assert.equal(kase.assigneeId, 'user-1'); // el cobrador que lo registró
+    assert.equal(kase.priority, 'HIGH'); // 31–90 días
+    assert.deepEqual(calls.audit.map((a) => `${a.action} ${a.entity}`), ['CREATE credit', 'CREATE collection_case']);
+  });
+
+  it('sin openCase no se crea ningún caso', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create(MOVIL);
+    assert.equal(calls.caseCreate.length, 0);
+  });
+});
+
 describe('CreditsService.recalculateArrears', () => {
   it('calcula mora, actualiza daysPastDue y reemplaza el snapshot (idempotente)', async () => {
     const credit = {
@@ -95,5 +150,33 @@ describe('CreditsService.recalculateArrears', () => {
   it('404 si el crédito no existe', async () => {
     const { service } = makeService({ credit: null });
     await rejectsWithCode(service.recalculateArrears('cr1'), 'RESOURCE_NOT_FOUND');
+  });
+
+  /**
+   * La mora ya NO se pisa con 0 cuando el crédito no tiene cuotas. `computeArrears` sobre un array
+   * vacío devuelve 0, y eso se escribía a ciegas: al crédito del móvil le borraba la mora real, y al
+   * importado le borraba la que trajo el archivo.
+   */
+  it('sin cronograma: la mora sale de nextDueDate, no de las cuotas', async () => {
+    const credit = { id: 'cr1', installments: [], outstandingBalance: 900, daysPastDue: 0, metadata: { origin: 'manual', frequency: 'MONTHLY', nextDueDate: '2026-07-01' } };
+    const { service, calls } = makeService({ credit });
+    const r = await service.recalculateArrears('cr1', '2026-07-13T00:00:00Z');
+    assert.equal(r.daysOverdue, 12);
+    assert.equal(calls.creditUpdate[0]!.daysPastDue, 12);
+  });
+
+  it('sin cronograma y saldado: mora 0 aunque la fecha esté vencida', async () => {
+    const credit = { id: 'cr1', installments: [], outstandingBalance: 0, daysPastDue: 5, metadata: { origin: 'manual', nextDueDate: '2026-07-01' } };
+    const { service } = makeService({ credit });
+    const r = await service.recalculateArrears('cr1', '2026-07-13T00:00:00Z');
+    assert.equal(r.daysOverdue, 0);
+  });
+
+  it('cartera importada: el recálculo es NO-OP — manda el archivo (§6)', async () => {
+    const credit = { id: 'cr1', installments: [], outstandingBalance: 900, daysPastDue: 37, metadata: { origin: 'import', nextDueDate: '2026-07-01' } };
+    const { service, calls } = makeService({ credit });
+    const r = await service.recalculateArrears('cr1', '2026-07-13T00:00:00Z');
+    assert.equal(r.daysOverdue, 37); // conserva el valor del archivo
+    assert.equal(calls.creditUpdate.length, 0); // ni siquiera toca la DB
   });
 });

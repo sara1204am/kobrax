@@ -5,9 +5,14 @@ export function isValidGps(lat: number, lng: number): boolean {
   return Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 }
 
+/** SHA-256 (hex) del buffer **original**, antes de cualquier transformación. */
+export function sha256OfBuffer(content: Buffer): string {
+  return createHash('sha256').update(content).digest('hex');
+}
+
 /** SHA-256 (hex) del contenido recibido en base64. */
 export function sha256OfBase64(contentBase64: string): string {
-  return createHash('sha256').update(Buffer.from(contentBase64, 'base64')).digest('hex');
+  return sha256OfBuffer(Buffer.from(contentBase64, 'base64'));
 }
 
 /**

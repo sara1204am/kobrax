@@ -1,6 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
+import { CasePriority, CaseStatus } from '@prisma/client';
+import {
+  arrearsFromDueDate,
+  CreditOrigin,
+  isExternalOrigin,
+  PaymentFrequency,
+  readCreditMetadata,
+  resolvePagination,
+  type ApiResponse,
+  type CreditMetadata,
+  ResponseDto,
+} from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -56,14 +67,35 @@ export class CreditsService {
     const disbursedAt = dto.disbursedAt ? new Date(dto.disbursedAt) : new Date();
     const firstDueDate = dto.firstDueDate ? new Date(dto.firstDueDate) : addMonths(disbursedAt, 1);
 
-    const schedule = buildSchedule({
-      principal: dto.principalAmount,
-      periodicRate: dto.interestRate ?? 0,
-      count: dto.installmentsCount,
-      type: dto.amortizationType ?? 'FRENCH',
-      firstDueDate,
-    });
-    if (!scheduleIsBalanced(dto.principalAmount, schedule)) throw scheduleInvalid();
+    /**
+     * Dos formas de nacer, y las distingue un solo dato (spec §4, §7, §8):
+     *  · con `installmentAmount` → crédito de cobranza: la cuota viene **congelada** del móvil y
+     *    NO se genera cronograma. Es el único modo que admite el préstamo abierto (sin `n`).
+     *  · sin él → comportamiento de siempre (web/importador): cronograma amortizado.
+     */
+    const frozenInstallment = dto.installmentAmount !== undefined;
+    const schedule = frozenInstallment
+      ? []
+      : buildSchedule({
+          principal: dto.principalAmount,
+          periodicRate: dto.interestRate ?? 0,
+          count: dto.installmentsCount ?? 1,
+          type: dto.amortizationType ?? 'FRENCH',
+          firstDueDate,
+        });
+    if (!frozenInstallment && !scheduleIsBalanced(dto.principalAmount, schedule)) throw scheduleInvalid();
+
+    const metadata: CreditMetadata = {
+      frequency: dto.frequency ?? PaymentFrequency.MONTHLY,
+      origin: dto.origin ?? CreditOrigin.MANUAL,
+      installmentAmount: dto.installmentAmount,
+      nextDueDate: dto.nextDueDate?.slice(0, 10) ?? (frozenInstallment ? isoDate(firstDueDate) : undefined),
+      externalRef: dto.externalRef,
+      notes: dto.notes,
+    };
+    // "Este préstamo ya está en curso" (§4.1): sin el toggle, saldo = capital y mora = 0.
+    const outstandingBalance = dto.outstandingBalance ?? dto.principalAmount;
+    const daysPastDue = dto.daysPastDue ?? 0;
 
     const accountId = this.tenant.accountId;
     const created = await this.tx(async (tx) => {
@@ -73,19 +105,21 @@ export class CreditsService {
       });
       if (!client) throw resourceNotFound(); // cliente inexistente o de otro tenant
 
-      return tx.credit.create({
+      const credit = await tx.credit.create({
         data: {
           accountId,
           clientId: dto.clientId,
           branchId: dto.branchId,
           code: dto.code,
           principalAmount: dto.principalAmount,
-          outstandingBalance: dto.principalAmount, // saldo inicial = principal (recálculo al cobrar = F7)
+          outstandingBalance,
           interestRate: dto.interestRate ?? 0,
           currency,
-          installmentsCount: dto.installmentsCount,
+          installmentsCount: dto.installmentsCount ?? 0, // 0 = préstamo abierto (§4.1)
+          daysPastDue,
           assignedManagerId: dto.assignedManagerId,
           disbursedAt,
+          metadata: stripUndefined(metadata),
           installments: {
             create: schedule.map((s) => ({
               accountId,
@@ -99,10 +133,30 @@ export class CreditsService {
         },
         include: { installments: { orderBy: { number: 'asc' } } },
       });
+
+      // Caso de cobranza automático (§5.2): "para el cobrador, cliente y préstamo son una sola acción".
+      if (dto.openCase) {
+        const kase = await tx.collectionCase.create({
+          data: {
+            accountId,
+            creditId: credit.id,
+            clientId: dto.clientId,
+            branchId: dto.branchId,
+            assigneeId: this.tenant.userId,
+            status: CaseStatus.PENDING,
+            priority: priorityFromArrears(daysPastDue),
+          },
+        });
+        return { credit, caseId: kase.id };
+      }
+      return { credit, caseId: undefined };
     });
 
-    await this.audit.record({ entity: 'credit', entityId: created.id, action: 'CREATE', after: creditSummary(created) });
-    return serializeCredit(created, config.labels);
+    await this.audit.record({ entity: 'credit', entityId: created.credit.id, action: 'CREATE', after: creditSummary(created.credit) });
+    if (created.caseId) {
+      await this.audit.record({ entity: 'collection_case', entityId: created.caseId, action: 'CREATE', after: { creditId: created.credit.id, clientId: dto.clientId, source: 'credit_create' } });
+    }
+    return serializeCredit(created.credit, config.labels);
   }
 
   async list(query: ListCreditsQueryDto): Promise<ApiResponse<ReturnType<typeof serializeCredit>[]>> {
@@ -176,6 +230,22 @@ export class CreditsService {
       });
       if (!credit) throw resourceNotFound();
 
+      const meta = readCreditMetadata(credit.metadata);
+
+      // Cartera de un core ajeno: manda el valor del archivo "hasta la siguiente carga" (spec §6).
+      // Sin esta guarda, un recálculo le borraba la mora que trajo la importación.
+      if (isExternalOrigin(meta.origin)) {
+        return { daysOverdue: credit.daysPastDue, overdueAmount: 0, interest: 0, penalty: 0, overdueInstallmentIds: [], skipped: 'EXTERNAL_ORIGIN' as const };
+      }
+
+      // Crédito sin cronograma (el del móvil): la mora sale de la próxima fecha, no de las cuotas.
+      // `computeArrears` sobre un array vacío devuelve 0 y borraba la mora real.
+      if (credit.installments.length === 0) {
+        const daysOverdue = arrearsFromDueDate(meta.nextDueDate, Number(credit.outstandingBalance), asOf);
+        await tx.credit.update({ where: { id }, data: { daysPastDue: daysOverdue } });
+        return { daysOverdue, overdueAmount: daysOverdue > 0 ? Number(credit.outstandingBalance) : 0, interest: 0, penalty: 0, overdueInstallmentIds: [] };
+      }
+
       const arrear = computeArrears(
         credit.installments.map((i) => ({
           id: i.id,
@@ -221,6 +291,21 @@ function addMonths(date: Date, months: number): Date {
   const d = new Date(date.getTime());
   d.setMonth(d.getMonth() + months);
   return d;
+}
+
+const isoDate = (d: Date): string => d.toISOString().slice(0, 10);
+
+/** Prisma rechaza `undefined` dentro de un JSON. */
+function stripUndefined(meta: CreditMetadata): Prisma.InputJsonObject {
+  return Object.fromEntries(Object.entries(meta).filter(([, v]) => v !== undefined)) as Prisma.InputJsonObject;
+}
+
+/** Prioridad del caso derivada de la mora (spec §5.2). */
+export function priorityFromArrears(days: number): CasePriority {
+  if (days <= 0) return CasePriority.LOW;
+  if (days <= 30) return CasePriority.MEDIUM;
+  if (days <= 90) return CasePriority.HIGH;
+  return CasePriority.CRITICAL;
 }
 
 /** Resumen plano (JSON-safe, sin Decimal/Date crudos de Prisma) para los snapshots de auditoría. */

@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Max, Min } from 'class-validator';
+import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Length, Max, Min } from 'class-validator';
 import { PaymentMethod } from '@prisma/client';
 
 export class CreatePaymentDto {
@@ -9,6 +9,9 @@ export class CreatePaymentDto {
   @IsOptional() @IsUUID() caseId?: string;
   @IsOptional() @IsString() provider?: string;
   @IsOptional() @IsString() externalTransactionId?: string;
+  /** Comprobante (spec §5.4). Los devuelve `POST /api/uploads`; el hash es del buffer original. */
+  @IsOptional() @IsString() receiptUrl?: string;
+  @IsOptional() @IsString() @Length(64, 64) receiptHash?: string;
 }
 
 export class ListPaymentsQueryDto {

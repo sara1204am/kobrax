@@ -1,4 +1,11 @@
-import { InstallmentStatus } from '@prisma/client';
+import { InstallmentStatus, type Prisma } from '@prisma/client';
+import {
+  addPeriods,
+  arrearsFromDueDate,
+  isExternalOrigin,
+  readCreditMetadata,
+  type CreditMetadata,
+} from '@kobrax/shared';
 
 /** Aplicación pura de un pago al cronograma (cuota más antigua primero). Testeable. */
 export interface InstallmentLite {
@@ -56,4 +63,57 @@ export function daysPastDue(installments: InstallmentLite[], asOf: Date): number
   if (overdue.length === 0) return 0;
   const oldest = overdue.reduce((min, i) => (i.dueDate < min ? i.dueDate : min), overdue[0]!.dueDate);
   return Math.max(0, Math.floor((asOf.getTime() - oldest.getTime()) / 86_400_000));
+}
+
+/**
+ * Lo que queda por actualizar del crédito tras un pago, más allá del saldo: la próxima fecha y la mora.
+ * Puro y testeable. El orden importa — la mora se mide contra la fecha YA avanzada, si no, un pago que
+ * cubre la cuota dejaría al crédito en mora contra la fecha que acaba de saldar.
+ */
+export interface CreditPatchAfterPayment {
+  daysPastDue?: number;
+  metadata?: Prisma.InputJsonObject;
+}
+
+export function creditPatchAfterPayment(p: {
+  metadata: unknown;
+  /** Cronograma con el estado YA aplicado del pago. Vacío ⇒ crédito sin cronograma (el del móvil). */
+  installments: InstallmentLite[];
+  amount: number;
+  newBalance: number;
+  creditPaid: boolean;
+  now: Date;
+}): CreditPatchAfterPayment {
+  const meta = readCreditMetadata(p.metadata);
+  const hasSchedule = p.installments.length > 0;
+  const patch: CreditPatchAfterPayment = {};
+
+  // 1) La próxima fecha avanza un período SOLO si la cuota quedó cubierta (spec §5.4). En un pago
+  //    parcial "la cuota permanece vigente por el remanente" y la fecha no se mueve.
+  //    ponytail: avanza un solo período aunque el pago cubra varias cuotas — es lo que dice la spec.
+  //    Si en campo aparece el pago adelantado de 3 cuotas, acá se cambia a dividir por la cuota.
+  let nextDueDate = meta.nextDueDate;
+  const coversInstallment = !!meta.installmentAmount && p.amount >= meta.installmentAmount - 0.005;
+  if (!hasSchedule && !p.creditPaid && nextDueDate && coversInstallment) {
+    nextDueDate = toIsoDate(addPeriods(new Date(nextDueDate), 1, meta.frequency));
+    patch.metadata = stripUndefined({ ...meta, nextDueDate });
+  }
+
+  // 2) La mora. En cartera de un core ajeno manda la fuente: no se recalcula (spec §6).
+  if (isExternalOrigin(meta.origin)) return patch;
+  if (p.creditPaid) {
+    patch.daysPastDue = 0;
+    return patch;
+  }
+  patch.daysPastDue = hasSchedule
+    ? daysPastDue(p.installments, p.now)
+    : arrearsFromDueDate(nextDueDate, p.newBalance, p.now);
+  return patch;
+}
+
+const toIsoDate = (d: Date): string => d.toISOString().slice(0, 10);
+
+/** Prisma rechaza `undefined` dentro de un JSON: se van las claves vacías. */
+function stripUndefined(meta: CreditMetadata): Prisma.InputJsonObject {
+  return Object.fromEntries(Object.entries(meta).filter(([, v]) => v !== undefined)) as Prisma.InputJsonObject;
 }

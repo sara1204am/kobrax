@@ -3,3 +3,4 @@ export * from './currency.utils.js';
 export * from './date.utils.js';
 export * from './tokenize.js';
 export * from './template.js';
+export * from './loan.js';

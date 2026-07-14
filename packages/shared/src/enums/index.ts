@@ -7,5 +7,6 @@ export * from './visit-outcome.enum.js';
 export * from './payment-request-status.enum.js';
 export * from './notification-type.enum.js';
 export * from './agenda.enum.js';
+export * from './credit.enum.js';
 export * from './role.enum.js';
 export * from './permission.enum.js';

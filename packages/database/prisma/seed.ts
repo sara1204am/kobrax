@@ -112,8 +112,10 @@ const ROLES: Record<string, { level: number; perms: string[] | '*' }> = {
     perms: ['case:read', 'case:write', 'case:assign', 'payment:read', 'route:read', 'route:write', 'route:assign', 'agenda:read', 'agenda:write', 'agenda:assign', 'catalog:read', 'client:read', 'credit:read', 'report:read'],
   },
   COLLECTOR: {
+    // `client:write`/`credit:write`: el cobrador independiente da de alta su propia cartera (spec §3).
+    // El gating por tipo de tenant (import-only en ENTERPRISE) es P10, y va por capacidad, no por accountType.
     level: 30,
-    perms: ['case:read', 'case:write', 'payment:read', 'payment:write', 'route:read', 'route:execute', 'agenda:read', 'agenda:write', 'catalog:read', 'client:read', 'credit:read'],
+    perms: ['case:read', 'case:write', 'payment:read', 'payment:write', 'route:read', 'route:execute', 'agenda:read', 'agenda:write', 'catalog:read', 'client:read', 'client:write', 'credit:read', 'credit:write'],
   },
   AUDITOR: {
     level: 20,
@@ -474,6 +476,21 @@ async function seedAgenda(acc: string, collectorId: string): Promise<void> {
   async function makeDebtor(opts: {
     doc: string; firstName: string; lastName: string; balance: number; phones: [string, string][]; addresses: [string, string][];
   }): Promise<{ caseId: string; clientId: string; creditId: string; contactIds: string[]; locationIds: string[] }> {
+    // Idempotente por deudor: una corrida anterior pudo dejar los clientes creados y morir antes de
+    // los agendados (el `count` de arriba da 0 y no frena nada). Sin esto, re-sembrar tira P2002.
+    const prev = await prisma.client.findFirst({
+      where: { accountId: acc, nationalIdHash: blindHash(opts.doc) },
+      include: { contacts: true, locations: true, cases: true, credits: true },
+    });
+    if (prev?.cases[0] && prev.credits[0]) {
+      return {
+        caseId: prev.cases[0].id,
+        clientId: prev.id,
+        creditId: prev.credits[0].id,
+        contactIds: prev.contacts.map((c) => c.id),
+        locationIds: prev.locations.map((l) => l.id),
+      };
+    }
     const client = await prisma.client.create({
       data: {
         accountId: acc,
@@ -510,7 +527,7 @@ async function seedAgenda(acc: string, collectorId: string): Promise<void> {
   // Juan (demo existente) → 2º crédito para probar "¿cuál crédito?".
   const juan = await prisma.client.findFirst({ where: { accountId: acc, nationalIdHash: blindHash('DEMO-0001') }, select: { id: true } });
   const juanCase = juan ? await prisma.collectionCase.findFirst({ where: { accountId: acc, clientId: juan.id }, select: { id: true, clientId: true, creditId: true } }) : null;
-  if (juan) {
+  if (juan && !(await prisma.credit.findFirst({ where: { accountId: acc, code: 'CRD-DEMO-2' }, select: { id: true } }))) {
     const credit2 = await prisma.credit.create({ data: { accountId: acc, clientId: juan.id, code: 'CRD-DEMO-2', principalAmount: 3000, outstandingBalance: 2500, interestRate: 0.03, currency: 'BOB', installmentsCount: 6, status: CreditStatus.ACTIVE, daysPastDue: 10 } });
     // Sin caso abierto, un crédito no es agendable (§8.1) → sin este caso, Juan nunca mostraría
     // el selector de crédito, que es justo lo que este 2º crédito viene a probar.
@@ -522,6 +539,73 @@ async function seedAgenda(acc: string, collectorId: string): Promise<void> {
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
   const day = (n: number): Date => { const d = new Date(today); d.setUTCDate(d.getUTCDate() + n); return d; };
+  const isoDay = (n: number): string => day(n).toISOString().slice(0, 10);
+
+  // ── Cartera (spec docs/flows/Cliente_Prestamo.pdf) ──────────────────────────────────────────
+  // Créditos SIN cronograma: la cuota va congelada en `metadata`, que es como nacen en el móvil.
+  // Cubren los 3 modos de captura (§4) y los estados derivados de la tarjeta (§5.3).
+  // PROMESA no se siembra: su fuente es una promesa vigente en `agenda_items`, y de dónde leerla se
+  // decide en S1 (ver D6 del README de cartera). Los otros 4 estados salen solos de estos datos.
+  async function makeLoan(opts: {
+    doc: string; firstName: string; lastName: string; phone: string; address: string; zone: string;
+    principal: number; balance: number; installmentAmount: number; frequency: string; origin: string;
+    /** Días hasta la próxima cuota (negativo = vencida). */ dueIn: number;
+    daysPastDue: number; installmentsCount?: number; status?: CreditStatus; externalRef?: string; notes?: string;
+  }): Promise<void> {
+    if (await prisma.client.findFirst({ where: { accountId: acc, nationalIdHash: blindHash(opts.doc) }, select: { id: true } })) return;
+    const client = await prisma.client.create({
+      data: {
+        accountId: acc,
+        firstName: opts.firstName,
+        lastName: opts.lastName,
+        clientType: ClientType.PERSON,
+        nationalId: encryptPII(opts.doc),
+        nationalIdHash: blindHash(opts.doc),
+        metadata: { origin: opts.origin }, // §3: el origen también se registra en el cliente
+        contacts: { create: [{ accountId: acc, contactType: ContactType.PHONE, value: encryptPII(opts.phone), isPrimary: true, notes: 'Celular' }] },
+        locations: { create: [{ accountId: acc, locationType: LocationType.HOME, address: encryptPII(opts.address), zone: opts.zone }] },
+      },
+    });
+    const credit = await prisma.credit.create({
+      data: {
+        accountId: acc,
+        clientId: client.id,
+        code: `CRD-${opts.doc}`,
+        principalAmount: opts.principal,
+        outstandingBalance: opts.balance,
+        interestRate: 0, // informativa: con cuota congelada no recalcula nada (§4.3)
+        currency: 'BOB',
+        installmentsCount: opts.installmentsCount ?? 0, // 0 = préstamo abierto (§4.1)
+        status: opts.status ?? CreditStatus.ACTIVE,
+        daysPastDue: opts.daysPastDue,
+        metadata: {
+          frequency: opts.frequency,
+          origin: opts.origin,
+          installmentAmount: opts.installmentAmount,
+          nextDueDate: isoDay(opts.dueIn),
+          ...(opts.externalRef ? { externalRef: opts.externalRef } : {}),
+          ...(opts.notes ? { notes: opts.notes } : {}),
+        },
+      },
+    });
+    const priority = opts.daysPastDue <= 0 ? CasePriority.LOW : opts.daysPastDue <= 30 ? CasePriority.MEDIUM : opts.daysPastDue <= 90 ? CasePriority.HIGH : CasePriority.CRITICAL;
+    await prisma.collectionCase.create({
+      data: { accountId: acc, creditId: credit.id, clientId: client.id, assigneeId: collectorId, status: CaseStatus.ACTIVE, priority },
+    });
+  }
+
+  // AL DÍA — préstamo semanal del cobrador, próxima cuota lejos.
+  await makeLoan({ doc: 'CAR-0001', firstName: 'Lucía', lastName: 'Mamani', phone: '70000201', address: 'Av. Busch 120', zone: 'Miraflores', principal: 3000, balance: 2400, installmentAmount: 300, frequency: 'WEEKLY', origin: 'manual', dueIn: 10, daysPastDue: 0, installmentsCount: 10 });
+  // POR VENCER — gota a gota diario, vence en 2 días (umbral del §5.3 = 3).
+  await makeLoan({ doc: 'CAR-0002', firstName: 'Rubén', lastName: 'Choque', phone: '70000202', address: 'Mercado Rodríguez p. 4', zone: 'Centro', principal: 1000, balance: 400, installmentAmount: 50, frequency: 'DAILY', origin: 'manual', dueIn: 2, daysPastDue: 0, installmentsCount: 20 });
+  // PRÉSTAMO ABIERTO (§4.1) — sin número de cuotas: interés recurrente, el caso que el backend no podía expresar.
+  await makeLoan({ doc: 'CAR-0003', firstName: 'Delia', lastName: 'Quispe', phone: '70000203', address: 'Calle Illampu 55', zone: 'Rosario', principal: 2000, balance: 2000, installmentAmount: 200, frequency: 'MONTHLY', origin: 'manual', dueIn: 5, daysPastDue: 0, notes: 'Renovable mientras pague el interés' });
+  // EN MORA + IMPORTADO (§4.3) — la mora la manda el archivo; el recálculo NO debe pisarla.
+  await makeLoan({ doc: 'CAR-0004', firstName: 'Barbara', lastName: 'Rios', phone: '70000204', address: 'Av. Ballivián 900', zone: 'Calacoto', principal: 859743.98, balance: 841370.06, installmentAmount: 12500, frequency: 'MONTHLY', origin: 'import', dueIn: -37, daysPastDue: 37, installmentsCount: 60, externalRef: '3332088' });
+  // IMPORTADO SIN CUOTA — el archivo no la trajo: la ficha muestra saldo y mora, sin cuota (§4.3).
+  await makeLoan({ doc: 'CAR-0005', firstName: 'Hugo', lastName: 'Vargas', phone: '70000205', address: 'Villa Fátima s/n', zone: 'Villa Fátima', principal: 15000, balance: 9800, installmentAmount: 0, frequency: 'MONTHLY', origin: 'import', dueIn: -95, daysPastDue: 95, externalRef: '3332099' });
+  // PAGADO — saldo 0; se archiva del filtro "Todos" a los 30 días (§5.3).
+  await makeLoan({ doc: 'CAR-0006', firstName: 'Nadia', lastName: 'Poma', phone: '70000206', address: 'El Alto, Ceja', zone: 'El Alto', principal: 1200, balance: 0, installmentAmount: 100, frequency: 'MONTHLY', origin: 'manual', dueIn: -3, daysPastDue: 0, installmentsCount: 12, status: CreditStatus.PAID });
 
   // Agendados: hoy (incl. 1 ejecutado), futuros, y 3 vencidos. Cubren los 5 tipos.
   // `details` sigue el contrato de `validateAgendaDetails` (@kobrax/shared): los tipos con teléfono o

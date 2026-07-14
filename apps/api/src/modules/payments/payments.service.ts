@@ -7,7 +7,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
-import { applyPayment, daysPastDue } from './payment-apply';
+import { applyPayment, creditPatchAfterPayment } from './payment-apply';
 import { serializePayment, serializePaymentRequest } from './payments.serializer';
 import { ConfirmPaymentRequestDto, CreatePaymentDto, CreatePaymentRequestDto, ListPaymentsQueryDto } from './dto/payment.dto';
 import { creditNotActive, paymentDuplicate, paymentInvalid, requestNotPending, resourceNotFound } from './payments.errors';
@@ -22,6 +22,9 @@ interface ApplyParams {
   provider?: string;
   externalTransactionId?: string;
   idempotencyKey?: string;
+  /** Comprobante (§5.4). El hash lo calcula `POST /uploads` sobre el buffer original. */
+  receiptUrl?: string;
+  receiptHash?: string;
 }
 
 @Injectable()
@@ -72,14 +75,31 @@ export class PaymentsService {
       await tx.creditInstallment.update({ where: { id: u.id }, data: { paidAmount: u.paidAmount, status: u.status, paidAt: u.paidAt } });
     }
 
-    // Estado efectivo del cronograma tras el pago → días de mora + saldo.
+    // El pago SIEMPRE descuenta el saldo (spec §5.4). Antes se restaba `result.applied`, que es 0
+    // cuando el crédito no tiene cronograma (el del móvil): el dinero se registraba y la deuda
+    // quedaba intacta. El cronograma dice a qué cuota imputar, no cuánto vale el pago.
+    const now = new Date();
+    const newBalance = round2(Math.max(0, balance - p.amount));
+    const creditPaid = newBalance <= 0.005;
+
+    // Estado efectivo del cronograma tras el pago → días de mora.
     const byId = new Map(result.updates.map((u) => [u.id, u]));
     const effective = lite.map((i) => ({ ...i, status: byId.get(i.id)?.status ?? i.status, paidAmount: byId.get(i.id)?.paidAmount ?? i.paidAmount }));
-    const newBalance = round2(balance - result.applied);
-    const creditPaid = newBalance <= 0.005;
+
     await tx.credit.update({
       where: { id: credit.id },
-      data: { outstandingBalance: newBalance, daysPastDue: creditPaid ? 0 : daysPastDue(effective, new Date()), ...(creditPaid ? { status: CreditStatus.PAID } : {}) },
+      data: {
+        outstandingBalance: newBalance,
+        ...(creditPaid ? { status: CreditStatus.PAID } : {}),
+        ...creditPatchAfterPayment({
+          metadata: credit.metadata,
+          installments: effective,
+          amount: p.amount,
+          newBalance,
+          creditPaid,
+          now,
+        }),
+      },
     });
 
     const agg = await tx.payment.aggregate({ _max: { receiptNumber: true } });
@@ -97,6 +117,8 @@ export class PaymentsService {
           externalTransactionId: p.externalTransactionId,
           idempotencyKey: p.idempotencyKey,
           receiptNumber,
+          receiptUrl: p.receiptUrl,
+          receiptHash: p.receiptHash,
           registeredBy: this.tenant.userId,
         },
       });

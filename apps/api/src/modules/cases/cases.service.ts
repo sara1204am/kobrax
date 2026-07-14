@@ -278,7 +278,7 @@ export class CasesService {
           take: limit,
           include: {
             client: { select: { firstName: true, lastName: true, businessName: true } },
-            credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true } },
+            credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true, metadata: true, installments: { select: { dueDate: true, amount: true, status: true } } } },
           },
         }),
         tx.collectionCase.count({ where }),
@@ -294,7 +294,7 @@ export class CasesService {
         include: {
           activities: { orderBy: { createdAt: 'desc' } },
           client: { select: { firstName: true, lastName: true, businessName: true } },
-          credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true } },
+          credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true, metadata: true, installments: { select: { dueDate: true, amount: true, status: true } } } },
         },
       }),
     );

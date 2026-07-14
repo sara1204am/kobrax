@@ -603,6 +603,10 @@ model Credit {
   daysPastDue        Int          @default(0) @map("days_past_due")
   assignedManagerId  String?      @map("assigned_manager_id") // referencia suave a users.id
   disbursedAt        DateTime?    @map("disbursed_at")
+  /// Campos operativos de cobranza sin columna propia: frequency, origin, installmentAmount,
+  /// nextDueDate, externalRef, notes. Forma y lectura en `@kobrax/shared` (`CreditMetadata`).
+  /// Un crédito nacido en el móvil NO tiene cronograma: su cuota y próxima fecha viven acá.
+  metadata           Json         @default("{}")
   createdAt          DateTime     @default(now()) @map("created_at")
   updatedAt          DateTime     @updatedAt @map("updated_at")
   deletedAt          DateTime?    @map("deleted_at")
@@ -904,10 +908,12 @@ model Payment {
   externalTransactionId String?       @map("external_transaction_id")
   receiptNumber         Int?          @map("receipt_number")
   idempotencyKey        String?       @map("idempotency_key") // anti doble registro (header Idempotency-Key)
+  receiptUrl            String?       @map("receipt_url") // foto del comprobante (opcional)
+  receiptHash           String?       @map("receipt_hash") // SHA-256 del buffer original
   paymentDate           DateTime      @default(now()) @map("payment_date")
   registeredBy          String?       @map("registered_by") // users.id (ref suave)
   createdAt             DateTime      @default(now()) @map("created_at")
-  // Sin updated_at ni deleted_at → INMUTABLE por diseño.
+  // Sin updated_at ni deleted_at → INMUTABLE por diseño. receipt_* se escriben en el INSERT y no se tocan.
 
   account Account         @relation(fields: [accountId], references: [id])
   credit  Credit          @relation(fields: [creditId], references: [id])
