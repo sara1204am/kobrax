@@ -32,6 +32,7 @@ const STATUS = [{ value: 'ACTIVE', label: 'Activo' }, { value: 'INACTIVE', label
 const CONTACT_TYPE = [{ value: 'PHONE', label: 'Teléfono' }, { value: 'EMAIL', label: 'Email' }] as const;
 const LOCATION_TYPE = [{ value: 'HOME', label: 'Casa' }, { value: 'WORK', label: 'Trabajo' }, { value: 'GUARANTOR', label: 'Garante' }, { value: 'FAMILY', label: 'Familia' }, { value: 'OTHER', label: 'Otra' }] as const;
 const RELATION_TYPE = [{ value: 'GUARANTOR', label: 'Garante' }, { value: 'FAMILY', label: 'Familia' }, { value: 'COWORKER', label: 'Compañero' }, { value: 'NEIGHBOR', label: 'Vecino' }, { value: 'OTHER', label: 'Otro' }] as const;
+const COORD_MODE = [{ value: 'manual', label: '✏️ Manual' }, { value: 'gps', label: '📍 Mi ubicación' }, { value: 'map', label: '🗺️ Mapa' }] as const;
 
 /** V1 — Registro de cliente (§5.1), diseño acordeón: identificación + N contactos + N ubicaciones + N relaciones. */
 export default function NuevoClienteScreen() {
@@ -58,7 +59,7 @@ export default function NuevoClienteScreen() {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return setError('Sin permiso de ubicación — podés cargar lat/long a mano.');
     const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-    updLocation(id, { latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+    updLocation(id, { latitude: pos.coords.latitude.toFixed(6), longitude: pos.coords.longitude.toFixed(6) });
   }, []);
 
   const addPhoto = useCallback(async (id: string) => {
@@ -70,6 +71,7 @@ export default function NuevoClienteScreen() {
     if (up.status === 'ok') setForm((s) => ({ ...s, locations: s.locations.map((l) => (l.id === id ? { ...l, photoUrls: [...l.photoUrls, up.url] } : l)) }));
     else setError('No se pudo subir la foto.');
   }, []);
+  const removePhoto = (id: string, url: string) => setForm((s) => ({ ...s, locations: s.locations.map((l) => (l.id === id ? { ...l, photoUrls: l.photoUrls.filter((u) => u !== url) } : l)) }));
 
   // ── Relaciones ──
   const addRelation = () => setForm((s) => ({ ...s, relations: [...s.relations, emptyRelation(genId())] }));
@@ -140,21 +142,48 @@ export default function NuevoClienteScreen() {
               <Chips options={LOCATION_TYPE} value={l.locationType} onChange={(v) => updLocation(l.id, { locationType: v })} />
               <Field label="Dirección" value={l.address} onChangeText={(t) => updLocation(l.id, { address: t })} placeholder="Calle y número" />
               <Field label="Zona / Barrio" value={l.zone} onChangeText={(t) => updLocation(l.id, { zone: t })} placeholder="Zona o barrio" />
-              <Pressable style={styles.capture} onPress={() => captureGps(l.id)} accessibilityRole="button">
-                <Text style={styles.captureText}>{l.latitude != null ? '📍 GPS capturado' : '📍 Capturar mi ubicación'}</Text>
-              </Pressable>
-              <Field label="Referencia / Notas" value={l.referenceNotes} onChangeText={(t) => updLocation(l.id, { referenceNotes: t })} placeholder="Portón verde frente a la cancha" />
-              <SectionLabel>Fotos</SectionLabel>
-              <View style={styles.photoGrid}>
-                {l.photoUrls.map((u, i) => (
-                  <View key={u + i} style={styles.photoThumb}>
-                    <Text style={styles.photoOk}>✓</Text>
+
+              <SectionLabel>Capturar coordenadas</SectionLabel>
+              <Chips options={COORD_MODE} value={l.coordMode} onChange={(v) => updLocation(l.id, { coordMode: v })} />
+              {l.coordMode === 'manual' && (
+                <View style={styles.coordGrid}>
+                  <View style={{ flex: 1 }}>
+                    <Field label="Latitud" value={l.latitude} onChangeText={(t) => updLocation(l.id, { latitude: t })} placeholder="-12.0464" />
                   </View>
-                ))}
-                <Pressable style={styles.photoAdd} onPress={() => addPhoto(l.id)} accessibilityRole="button" accessibilityLabel="Agregar foto">
-                  <Text style={styles.photoAddIcon}>📷</Text>
+                  <View style={{ flex: 1 }}>
+                    <Field label="Longitud" value={l.longitude} onChangeText={(t) => updLocation(l.id, { longitude: t })} placeholder="-77.0428" />
+                  </View>
+                </View>
+              )}
+              {l.coordMode === 'gps' && (
+                <Pressable style={styles.capture} onPress={() => captureGps(l.id)} accessibilityRole="button">
+                  <Text style={styles.captureText}>{l.latitude ? `📍 ${l.latitude}, ${l.longitude}` : '📍 Capturar mi ubicación'}</Text>
                 </Pressable>
-              </View>
+              )}
+              {l.coordMode === 'map' && (
+                <Pressable style={styles.capture} onPress={() => setError('El mapa llega pronto — usá Manual o Mi ubicación.')} accessibilityRole="button">
+                  <Text style={styles.captureText}>🗺️ Abrir mapa (próximamente)</Text>
+                </Pressable>
+              )}
+
+              <Field label="Referencia / Notas" value={l.referenceNotes} onChangeText={(t) => updLocation(l.id, { referenceNotes: t })} placeholder="Portón verde frente a la cancha" />
+              <SectionLabel>Fotos de la ubicación</SectionLabel>
+              {l.photoUrls.length > 0 && (
+                <View style={styles.photoRow}>
+                  {l.photoUrls.map((u, i) => (
+                    <View key={u + i} style={styles.photoThumb}>
+                      <Text style={styles.photoOk}>✓</Text>
+                      <Pressable style={styles.photoDel} onPress={() => removePhoto(l.id, u)} hitSlop={6} accessibilityRole="button" accessibilityLabel="Quitar foto">
+                        <Text style={styles.photoDelText}>×</Text>
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              )}
+              <Pressable style={styles.photoBox} onPress={() => addPhoto(l.id)} accessibilityRole="button" accessibilityLabel="Agregar foto">
+                <Text style={styles.photoBoxIcon}>📷</Text>
+                <Text style={styles.photoBoxHint}>Agregar foto</Text>
+              </Pressable>
             </ItemCard>
           ))}
           <AddButton label="+ Agregar ubicación" onPress={addLocation} />
@@ -266,10 +295,14 @@ const styles = StyleSheet.create({
   toggleLabel: { ...TYPE.body, color: COLORS.text },
   capture: { height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.input, borderWidth: 1, borderColor: COLORS.periwinkle, backgroundColor: COLORS.highlight, marginVertical: SPACING.xs },
   captureText: { ...TYPE.secondary, color: COLORS.navy, fontWeight: '600' },
-  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  coordGrid: { flexDirection: 'row', gap: SPACING.sm },
+  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, marginBottom: SPACING.sm },
   photoThumb: { width: 56, height: 56, borderRadius: RADIUS.input, backgroundColor: COLORS.successBg, alignItems: 'center', justifyContent: 'center' },
   photoOk: { color: COLORS.success, fontSize: 20, fontWeight: '700' },
-  photoAdd: { width: 56, height: 56, borderRadius: RADIUS.input, borderWidth: 1.5, borderColor: COLORS.border, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.bg },
-  photoAddIcon: { fontSize: 22 },
+  photoDel: { position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: 10, backgroundColor: COLORS.dangerBg, alignItems: 'center', justifyContent: 'center' },
+  photoDelText: { color: COLORS.danger, fontSize: 14, lineHeight: 16, fontWeight: '700' },
+  photoBox: { minHeight: 120, borderRadius: RADIUS.card, borderWidth: 2, borderColor: COLORS.periwinkle, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: SPACING.xs, backgroundColor: COLORS.highlight },
+  photoBoxIcon: { fontSize: 34 },
+  photoBoxHint: { ...TYPE.secondary, color: COLORS.purple, fontWeight: '600' },
   footer: { padding: SPACING.lg, gap: SPACING.sm, borderTopWidth: 1, borderTopColor: COLORS.border, backgroundColor: COLORS.white },
 });

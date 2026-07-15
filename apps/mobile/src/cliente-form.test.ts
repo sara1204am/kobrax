@@ -35,7 +35,7 @@ describe('cliente-form', () => {
       lastName: 'Ruiz',
       contacts: [{ ...emptyContact('a'), value: '7' }],
       locations: [
-        { ...emptyLocation('l1'), zone: 'Sur', latitude: -17.7, photoUrls: ['u1'] },
+        { ...emptyLocation('l1'), zone: 'Sur', latitude: '-17.7', photoUrls: ['u1'] },
         { ...emptyLocation('l2') }, // vacía → fuera
       ],
       relations: [

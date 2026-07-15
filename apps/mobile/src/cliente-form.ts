@@ -19,13 +19,16 @@ export interface ContactRow {
   hasWhatsApp: boolean;
   isPrimary: boolean;
 }
+export type CoordMode = 'manual' | 'gps' | 'map';
 export interface LocationRow {
   id: string;
   locationType: LocationTypeValue;
   address: string;
   zone: string;
-  latitude?: number;
-  longitude?: number;
+  /** Texto (lo tipeado / lo capturado); se parsea a número al armar el payload. */
+  latitude: string;
+  longitude: string;
+  coordMode: CoordMode;
   referenceNotes: string;
   photoUrls: string[];
 }
@@ -57,7 +60,15 @@ export function emptyContact(id: string, isPrimary = false): ContactRow {
   return { id, contactType: 'PHONE', value: '', hasWhatsApp: true, isPrimary };
 }
 export function emptyLocation(id: string): LocationRow {
-  return { id, locationType: 'HOME', address: '', zone: '', referenceNotes: '', photoUrls: [] };
+  return { id, locationType: 'HOME', address: '', zone: '', latitude: '', longitude: '', coordMode: 'manual', referenceNotes: '', photoUrls: [] };
+}
+
+/** Coordenada tipeada/capturada → número, o undefined si está vacía o no es válida. */
+function parseCoord(s: string): number | undefined {
+  const t = s.trim();
+  if (!t) return undefined;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : undefined;
 }
 export function emptyRelation(id: string): RelationRow {
   return { id, relatedName: '', relationshipType: 'GUARANTOR', gender: '', phone: '', isContactable: true, notes: '' };
@@ -109,13 +120,13 @@ export function buildClientePayload(s: ClienteForm): NewClientInput {
       })),
     // Solo ubicaciones con algún dato real (no filas vacías).
     locations: s.locations
-      .filter((l) => l.address.trim() || l.zone.trim() || l.latitude != null || l.photoUrls.length > 0 || l.referenceNotes.trim())
+      .filter((l) => l.address.trim() || l.zone.trim() || l.latitude.trim() || l.photoUrls.length > 0 || l.referenceNotes.trim())
       .map((l) => ({
         locationType: l.locationType,
         address: l.address.trim() || undefined,
         zone: l.zone.trim() || undefined,
-        latitude: l.latitude,
-        longitude: l.longitude,
+        latitude: parseCoord(l.latitude),
+        longitude: parseCoord(l.longitude),
         referenceNotes: l.referenceNotes.trim() || undefined,
         photoUrls: l.photoUrls.length > 0 ? l.photoUrls : undefined,
       })),
