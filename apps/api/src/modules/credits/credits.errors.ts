@@ -24,3 +24,10 @@ export const creditNotActive = () =>
     code: 'CREDIT_NOT_ACTIVE',
     message: 'El crédito no está activo',
   });
+
+/** Datos financieros bloqueados: crédito importado (§4.3), su fuente es el archivo. */
+export const creditLocked = () =>
+  new UnprocessableEntityException({
+    code: 'CREDIT_LOCKED',
+    message: 'Los datos financieros de un crédito importado no se editan; actualizá con una nueva importación',
+  });

@@ -151,6 +151,31 @@ describe('CreditsService.create — crédito sin cronograma', () => {
   });
 });
 
+describe('CreditsService.update (editar desde la ficha §4)', () => {
+  it('edita cuota/frecuencia/fecha y hace merge en metadata (crédito manual)', async () => {
+    const credit = { id: 'cr1', metadata: { origin: 'manual', frequency: 'MONTHLY', installmentAmount: 300, nextDueDate: '2026-07-01' } };
+    const { service, calls } = makeService({ credit });
+    await service.update('cr1', { installmentAmount: 350, frequency: 'WEEKLY', nextDueDate: '2026-08-15', principalAmount: 1200 } as never);
+    const data = calls.creditUpdate[0]!;
+    assert.equal(data.principalAmount, 1200);
+    assert.deepEqual(data.metadata, { origin: 'manual', frequency: 'WEEKLY', installmentAmount: 350, nextDueDate: '2026-08-15' });
+    assert.deepEqual(calls.audit.map((a) => `${a.action} ${a.entity}`), ['UPDATE credit']);
+  });
+
+  it('crédito importado: rechaza editar datos financieros (CREDIT_LOCKED, §4.3)', async () => {
+    const credit = { id: 'cr1', metadata: { origin: 'import', installmentAmount: 500 } };
+    const { service } = makeService({ credit });
+    await rejectsWithCode(service.update('cr1', { installmentAmount: 600 } as never), 'CREDIT_LOCKED');
+  });
+
+  it('editar solo status/código NO dispara el candado ni toca metadata', async () => {
+    const credit = { id: 'cr1', metadata: { origin: 'import' } };
+    const { service, calls } = makeService({ credit });
+    await service.update('cr1', { code: 'ABC' } as never);
+    assert.equal(calls.creditUpdate[0]!.metadata, undefined); // no reescribe metadata
+  });
+});
+
 describe('CreditsService.recalculateArrears', () => {
   it('calcula mora, actualiza daysPastDue y reemplaza el snapshot (idempotente)', async () => {
     const credit = {

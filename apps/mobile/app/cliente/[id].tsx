@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { portfolioStatus } from '@kobrax/shared';
 import { choosePhoto } from '@/photo';
@@ -75,10 +75,12 @@ export default function ClienteFichaScreen() {
     }
   }, [clientId, creditId, loadCase]);
 
-  useEffect(() => {
-    void loadAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId]);
+  // Recarga al entrar y al VOLVER (p. ej. de la edición) → la ficha refleja los cambios.
+  useFocusEffect(
+    useCallback(() => {
+      void loadAll();
+    }, [loadAll]),
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -152,6 +154,15 @@ export default function ClienteFichaScreen() {
         <View>
           <View style={styles.headRow}>
             <Text style={styles.name}>{ctx.client.displayName}</Text>
+            <Pressable
+              onPress={() => router.push({ pathname: '/cliente/editar', params: { clientId, creditId: selected.creditId } })}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Editar cliente y crédito"
+              style={styles.editBtn}
+            >
+              <Text style={styles.editIcon}>✏️</Text>
+            </Pressable>
             <StatusBadge label={meta.label} tone={meta.tone} />
           </View>
           <Text style={styles.sub}>{[ctx.client.nationalId, zone].filter(Boolean).join(' · ') || '—'}</Text>
@@ -439,8 +450,10 @@ function GestionSheet({
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   name: { ...TYPE.h2, color: COLORS.navy, flex: 1 },
+  editBtn: { width: 34, height: 34, borderRadius: RADIUS.pill, backgroundColor: COLORS.highlight, alignItems: 'center', justifyContent: 'center' },
+  editIcon: { fontSize: 16 },
   sub: { ...TYPE.secondary, color: COLORS.text2, marginTop: 2 },
   debt: { fontSize: 30, fontWeight: '700', color: COLORS.navy, marginTop: SPACING.sm },
   locked: { ...TYPE.caption, color: COLORS.warningText, backgroundColor: COLORS.warningBg, padding: SPACING.sm, borderRadius: RADIUS.input, marginTop: SPACING.sm },

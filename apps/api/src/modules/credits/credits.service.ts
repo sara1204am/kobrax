@@ -24,7 +24,7 @@ import {
 } from './credit-math';
 import { serializeCredit } from './credits.serializer';
 import { CreateCreditDto, ListCreditsQueryDto, UpdateCreditDto } from './dto/credit.dto';
-import { currencyMismatch, resourceNotFound, scheduleInvalid } from './credits.errors';
+import { creditLocked, currencyMismatch, resourceNotFound, scheduleInvalid } from './credits.errors';
 
 interface AccountConfig {
   currencyCode: string;
@@ -223,9 +223,30 @@ export class CreditsService {
 
   async update(id: string, dto: UpdateCreditDto): Promise<ReturnType<typeof serializeCredit>> {
     const config = await this.accountConfig();
+    // ¿Toca datos financieros/operativos? (los que el candado del importado protege, §4.3)
+    const financialEdit =
+      dto.principalAmount !== undefined ||
+      dto.interestRate !== undefined ||
+      dto.installmentAmount !== undefined ||
+      dto.frequency !== undefined ||
+      dto.nextDueDate !== undefined ||
+      dto.notes !== undefined;
+
     const { before, after } = await this.tx(async (tx) => {
       const prev = await tx.credit.findFirst({ where: { id, deletedAt: null } });
       if (!prev) throw resourceNotFound();
+      const meta = readCreditMetadata(prev.metadata);
+      if (financialEdit && isExternalOrigin(meta.origin)) throw creditLocked();
+
+      // Cuota/frecuencia/próxima fecha/nota viven en metadata (D1); se hace merge preservando el resto.
+      const nextMeta: CreditMetadata = {
+        ...meta,
+        ...(dto.installmentAmount !== undefined ? { installmentAmount: dto.installmentAmount } : {}),
+        ...(dto.frequency !== undefined ? { frequency: dto.frequency } : {}),
+        ...(dto.nextDueDate !== undefined ? { nextDueDate: dto.nextDueDate.slice(0, 10) } : {}),
+        ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
+      };
+
       const next = await tx.credit.update({
         where: { id },
         data: {
@@ -233,6 +254,9 @@ export class CreditsService {
           assignedManagerId: dto.assignedManagerId,
           branchId: dto.branchId,
           code: dto.code,
+          principalAmount: dto.principalAmount,
+          interestRate: dto.interestRate,
+          metadata: financialEdit ? (stripUndefined(nextMeta) as Prisma.InputJsonValue) : undefined,
         },
       });
       return { before: prev, after: next };

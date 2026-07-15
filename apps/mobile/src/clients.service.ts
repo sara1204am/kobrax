@@ -76,3 +76,33 @@ export interface CreatedClient {
 export function createClient(input: NewClientInput): Promise<MutateResult<CreatedClient>> {
   return apiMutate<CreatedClient>('/clients', 'POST', input);
 }
+
+/** Detalle del cliente para prellenar la edición (§5.4). `nationalId` viene enmascarado (PII). */
+export interface ClientDetail {
+  id: string;
+  clientType: 'PERSON' | 'COMPANY';
+  firstName?: string;
+  lastName?: string;
+  businessName?: string;
+  gender?: string;
+  nationalId: string | null;
+  status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
+  riskSegment?: string;
+}
+
+export function getClient(id: string): Promise<QueryResult<ClientDetail>> {
+  return apiQuery<ClientDetail>(`/clients/${id}`);
+}
+
+export interface UpdateClientPatch {
+  firstName?: string;
+  lastName?: string;
+  businessName?: string;
+  gender?: string;
+  riskSegment?: string;
+  status?: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
+}
+
+export function updateClient(id: string, patch: UpdateClientPatch): Promise<MutateResult<ClientDetail>> {
+  return apiMutate<ClientDetail>(`/clients/${id}`, 'PATCH', patch);
+}

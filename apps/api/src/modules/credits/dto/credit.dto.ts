@@ -59,6 +59,13 @@ export class UpdateCreditDto {
   @IsOptional() @IsUUID() assignedManagerId?: string;
   @IsOptional() @IsUUID() branchId?: string;
   @IsOptional() @IsString() code?: string;
+  // ── Datos operativos editables desde la ficha (§4). BLOQUEADOS si el crédito es importado (§4.3).
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() principalAmount?: number;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 6 }) @Min(0) interestRate?: number;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) installmentAmount?: number;
+  @IsOptional() @IsEnum(PaymentFrequency) frequency?: PaymentFrequency;
+  @IsOptional() @IsDateString() nextDueDate?: string;
+  @IsOptional() @IsString() notes?: string;
 }
 
 export class ListCreditsQueryDto {
