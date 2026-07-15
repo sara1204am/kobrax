@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import * as ImagePicker from 'expo-image-picker';
 import { portfolioStatus } from '@kobrax/shared';
+import { choosePhoto } from '@/photo';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { AmountInput, BottomSheet, Chips, EmptyState, Header, PORTFOLIO_STATUS_META, SectionLabel, StatusBadge } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
@@ -329,12 +329,10 @@ function PaySheet({
   }, [visible, defaultAmount]);
 
   const capture = useCallback(async () => {
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) return setError('Sin permiso de cámara — el comprobante es opcional.');
-    const r = await ImagePicker.launchCameraAsync({ quality: 0.6 });
-    if (r.canceled || !r.assets[0]) return;
+    const pick = await choosePhoto();
+    if (!pick) return;
     setUploading(true);
-    const up = await uploadImage(r.assets[0].uri, r.assets[0].mimeType);
+    const up = await uploadImage(pick.uri, pick.mimeType);
     setUploading(false);
     if (up.status === 'ok') setReceipt({ url: up.url, hash: up.hash });
     else setError('No se pudo subir el comprobante.');

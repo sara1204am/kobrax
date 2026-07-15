@@ -2,8 +2,8 @@ import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { LayoutAnimation, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, UIManager, View } from 'react-native';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
-import * as ImagePicker from 'expo-image-picker';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
+import { choosePhoto } from '@/photo';
 import { Chips, Header, SectionLabel } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
 import {
@@ -63,11 +63,9 @@ export default function NuevoClienteScreen() {
   }, []);
 
   const addPhoto = useCallback(async (id: string) => {
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) return setError('Sin permiso de cámara — la foto es opcional.');
-    const r = await ImagePicker.launchCameraAsync({ quality: 0.6 });
-    if (r.canceled || !r.assets[0]) return;
-    const up = await uploadImage(r.assets[0].uri, r.assets[0].mimeType);
+    const pick = await choosePhoto();
+    if (!pick) return;
+    const up = await uploadImage(pick.uri, pick.mimeType);
     if (up.status === 'ok') setForm((s) => ({ ...s, locations: s.locations.map((l) => (l.id === id ? { ...l, photoUrls: [...l.photoUrls, up.url] } : l)) }));
     else setError('No se pudo subir la foto.');
   }, []);
