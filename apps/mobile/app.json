@@ -43,6 +43,7 @@
           "photosPermission": "Kobrax accede a tus fotos para adjuntar la fachada del cliente o el comprobante."
         }
       ],
+      "@maplibre/maplibre-react-native",
       [
         "./plugins/with-ssl-pinning",
         { "domain": "api.kobrax.com", "pins": [] }

@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { Chips, Header, SectionLabel } from '@/ui';
+import { MapPicker } from '@/maps/MapPicker';
 import { Button, ErrorBanner, Field } from '@/components';
 import {
   buildClientePayload,
@@ -27,6 +28,12 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 let _seq = 0;
 const nextId = () => `r${++_seq}`;
+
+/** Coordenada del form (string) → number para el MapPicker; `undefined` si vacía o inválida. */
+const coordNum = (s: string): number | undefined => {
+  const n = Number(s);
+  return s.trim() !== '' && Number.isFinite(n) ? n : undefined;
+};
 
 const GENDER = [{ value: '', label: 'Sin especificar' }, { value: 'M', label: 'Masculino' }, { value: 'F', label: 'Femenino' }, { value: 'O', label: 'Otro' }];
 const CLIENT_TYPE = [{ value: 'PERSON', label: 'Persona' }, { value: 'COMPANY', label: 'Empresa' }] as const;
@@ -207,9 +214,17 @@ function LocationsSection({ locations, setLocations, onError }: { locations: Loc
             </Pressable>
           )}
           {l.coordMode === 'map' && (
-            <Pressable style={styles.capture} onPress={() => onError('El mapa llega pronto — usá Manual o Mi ubicación.')} accessibilityRole="button">
-              <Text style={styles.captureText}>🗺️ Abrir mapa (próximamente)</Text>
-            </Pressable>
+            <>
+              <MapPicker
+                style={styles.mapPick}
+                latitude={coordNum(l.latitude)}
+                longitude={coordNum(l.longitude)}
+                onChange={({ latitude, longitude }) => upd(l.id, { latitude: latitude.toFixed(6), longitude: longitude.toFixed(6) })}
+              />
+              <Text style={styles.captureText}>
+                {l.latitude ? `📍 ${l.latitude}, ${l.longitude}` : 'Tocá el mapa para marcar el punto.'}
+              </Text>
+            </>
           )}
 
           <Field label="Referencia / Notas" value={l.referenceNotes} onChangeText={(t) => upd(l.id, { referenceNotes: t })} placeholder="Portón verde frente a la cancha" />
@@ -320,6 +335,7 @@ const styles = StyleSheet.create({
   capture: { height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.input, borderWidth: 1, borderColor: COLORS.periwinkle, backgroundColor: COLORS.highlight, marginVertical: SPACING.xs },
   captureText: { ...TYPE.secondary, color: COLORS.navy, fontWeight: '600' },
   coordGrid: { flexDirection: 'row', gap: SPACING.sm },
+  mapPick: { height: 200, borderRadius: RADIUS.card, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.border, marginVertical: SPACING.xs },
   photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, marginBottom: SPACING.sm },
   photoThumb: { width: 56, height: 56, borderRadius: RADIUS.input, backgroundColor: COLORS.successBg, alignItems: 'center', justifyContent: 'center' },
   photoOk: { color: COLORS.success, fontSize: 20, fontWeight: '700' },

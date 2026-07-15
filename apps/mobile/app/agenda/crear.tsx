@@ -3,7 +3,7 @@
  * los campos propios del tipo, programar y guardar. La lógica del formulario vive en `agenda-form.ts`
  * (reducer puro); acá sólo se despacha y se pinta.
  */
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
-import MapView, { Marker, type MapPressEvent, type Region } from 'react-native-maps';
+import { MapPicker } from '@/maps/MapPicker';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { AgendaItemType, AgendaTimeSlot, CatalogType, ScheduleTimeMode } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
@@ -90,15 +90,6 @@ const LOCATION_TYPES: { key: ClientLocationType; label: string }[] = [
   { key: 'OTHER', label: 'Otro' },
 ];
 
-/** Encuadre del mapa cuando no hay ninguna coordenada de referencia (Santa Cruz, tenant demo). */
-const FALLBACK_REGION: Region = {
-  latitude: -17.7833,
-  longitude: -63.1821,
-  latitudeDelta: 0.05,
-  longitudeDelta: 0.05,
-};
-const PIN_ZOOM = { latitudeDelta: 0.004, longitudeDelta: 0.004 };
-
 export default function CrearGestionScreen() {
   const [form, dispatch] = useReducer(formReducer, undefined, () => initialForm(todayISO()));
   const [query, setQuery] = useState('');
@@ -133,7 +124,6 @@ export default function CrearGestionScreen() {
   const [savingLoc, setSavingLoc] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
-  const mapRef = useRef<MapView | null>(null);
 
   const details = form.details as Record<string, string | number | undefined>;
   const isPromise = form.type === AgendaItemType.PROMISE_TO_PAY;
@@ -227,10 +217,9 @@ export default function CrearGestionScreen() {
     setSheet(null);
   }, [ctx, newPhone]);
 
-  /** Mueve el pin y encuadra el mapa en él. */
+  /** Fija el pin; el `MapPicker` re-encuadra la cámara al recibir el nuevo punto por props. */
   const setPin = useCallback((latitude: number, longitude: number) => {
     setNewLoc((p) => ({ ...p, latitude, longitude }));
-    mapRef.current?.animateToRegion({ latitude, longitude, ...PIN_ZOOM });
   }, []);
 
   /**
@@ -685,32 +674,12 @@ export default function CrearGestionScreen() {
             style={styles.input}
           />
 
-          <View style={styles.mapBox}>
-            <MapView
-              ref={mapRef}
-              style={styles.map}
-              initialRegion={
-                newLoc.latitude != null && newLoc.longitude != null
-                  ? { latitude: newLoc.latitude, longitude: newLoc.longitude, ...PIN_ZOOM }
-                  : FALLBACK_REGION
-              }
-              onPress={(e: MapPressEvent) => {
-                const { latitude, longitude } = e.nativeEvent.coordinate;
-                setPin(latitude, longitude);
-              }}
-            >
-              {newLoc.latitude != null && newLoc.longitude != null && (
-                <Marker
-                  draggable
-                  coordinate={{ latitude: newLoc.latitude, longitude: newLoc.longitude }}
-                  onDragEnd={(e) => {
-                    const { latitude, longitude } = e.nativeEvent.coordinate;
-                    setNewLoc((p) => ({ ...p, latitude, longitude })); // sin re-encuadrar: ya lo movió el dedo
-                  }}
-                />
-              )}
-            </MapView>
-          </View>
+          <MapPicker
+            style={styles.mapBox}
+            latitude={newLoc.latitude}
+            longitude={newLoc.longitude}
+            onChange={({ latitude, longitude }) => setPin(latitude, longitude)}
+          />
 
           <Text style={styles.hint}>
             {newLoc.latitude != null
@@ -975,7 +944,6 @@ const styles = StyleSheet.create({
   sheetHint: { ...TYPE.caption },
   sheetEmpty: { ...TYPE.secondary, textAlign: 'center', paddingVertical: SPACING.lg },
   mapBox: { height: 200, borderRadius: RADIUS.card, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.border },
-  map: { flex: 1 },
   sheetAdd: { paddingVertical: SPACING.md, alignItems: 'center' },
   sheetAddText: { ...TYPE.body, fontWeight: '700', color: COLORS.purple },
 });
