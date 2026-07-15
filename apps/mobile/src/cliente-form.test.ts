@@ -1,43 +1,58 @@
-import { buildClientePayload, canSubmitCliente, initialCliente } from './cliente-form';
+import { buildClientePayload, canSubmitCliente, emptyContact, emptyLocation, emptyRelation, initialCliente } from './cliente-form';
 
 describe('cliente-form', () => {
-  it('habilita guardar solo con nombre + apellido + teléfono', () => {
-    let s = initialCliente();
+  it('habilita guardar solo con nombre + apellido + un teléfono con valor', () => {
+    let s = initialCliente(); // trae un contacto teléfono vacío
     expect(canSubmitCliente(s)).toBe(false);
     s = { ...s, firstName: 'Ana', lastName: 'Ruiz' };
-    expect(canSubmitCliente(s)).toBe(false); // falta teléfono
-    s = { ...s, phone: '70000000' };
+    expect(canSubmitCliente(s)).toBe(false); // el teléfono sigue vacío
+    s = { ...s, contacts: [{ ...s.contacts[0]!, value: '70000000' }] };
     expect(canSubmitCliente(s)).toBe(true);
   });
 
-  it('manda el contacto como WHATSAPP cuando la casilla está marcada y sin ubicación si está vacía', () => {
-    const s = { ...initialCliente(), firstName: 'Ana', lastName: 'Ruiz', phone: '70000000' };
-    const p = buildClientePayload(s);
-    expect(p.contacts).toEqual([{ contactType: 'WHATSAPP', value: '70000000', isPrimary: true }]);
-    expect(p.preferredContactChannel).toBe('WHATSAPP');
-    expect(p.location).toBeUndefined();
-  });
-
-  it('incluye la ubicación (con foto) solo si hay algún dato de ubicación', () => {
+  it('un teléfono con WhatsApp viaja como WHATSAPP; el email como EMAIL', () => {
     const s = {
       ...initialCliente(),
       firstName: 'Ana',
       lastName: 'Ruiz',
-      phone: '7',
-      hasWhatsapp: false,
-      zone: 'Sur',
-      latitude: -17.7,
-      photoUrl: 'https://x/f.jpg',
+      contacts: [
+        { ...emptyContact('a'), value: '70000000', hasWhatsApp: true, isPrimary: true },
+        { ...emptyContact('b'), contactType: 'EMAIL' as const, value: 'ana@x.com', hasWhatsApp: false },
+        { ...emptyContact('c'), value: '', hasWhatsApp: false }, // vacío → se descarta
+      ],
     };
     const p = buildClientePayload(s);
-    expect(p.contacts![0]!.contactType).toBe('PHONE');
-    expect(p.location).toEqual({
-      address: undefined,
-      zone: 'Sur',
-      latitude: -17.7,
-      longitude: undefined,
-      referenceNotes: undefined,
-      photoUrls: ['https://x/f.jpg'],
-    });
+    expect(p.contacts).toEqual([
+      { contactType: 'WHATSAPP', value: '70000000', isPrimary: true },
+      { contactType: 'EMAIL', value: 'ana@x.com', isPrimary: false },
+    ]);
+  });
+
+  it('descarta ubicaciones vacías y relaciones sin nombre', () => {
+    const s = {
+      ...initialCliente(),
+      firstName: 'Ana',
+      lastName: 'Ruiz',
+      contacts: [{ ...emptyContact('a'), value: '7' }],
+      locations: [
+        { ...emptyLocation('l1'), zone: 'Sur', latitude: -17.7, photoUrls: ['u1'] },
+        { ...emptyLocation('l2') }, // vacía → fuera
+      ],
+      relations: [
+        { ...emptyRelation('r1'), relatedName: 'Carlos', phone: '71234567' },
+        { ...emptyRelation('r2') }, // sin nombre → fuera
+      ],
+    };
+    const p = buildClientePayload(s);
+    expect(p.locations).toHaveLength(1);
+    expect(p.locations![0]).toMatchObject({ zone: 'Sur', latitude: -17.7, photoUrls: ['u1'], locationType: 'HOME' });
+    expect(p.relations).toHaveLength(1);
+    expect(p.relations![0]).toMatchObject({ relatedName: 'Carlos', phone: '71234567', relationshipType: 'GUARANTOR' });
+  });
+
+  it('manda los campos de identidad (tipo, género, segmento, estado)', () => {
+    const s = { ...initialCliente(), firstName: 'Ana', lastName: 'Ruiz', clientType: 'COMPANY' as const, gender: 'F', riskSegment: 'HIGH', businessName: 'Acme', contacts: [{ ...emptyContact('a'), value: '7' }] };
+    const p = buildClientePayload(s);
+    expect(p).toMatchObject({ clientType: 'COMPANY', gender: 'F', riskSegment: 'HIGH', businessName: 'Acme', status: 'ACTIVE' });
   });
 });

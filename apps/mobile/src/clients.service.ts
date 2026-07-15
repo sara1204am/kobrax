@@ -23,23 +23,44 @@ export function searchClients(q: string): Promise<QueryResult<ClientHit[]>> {
   return apiQuery<ClientHit[]>(`/clients${toQuery({ q, status: 'ACTIVE', limit: 20 })}`);
 }
 
-/** Payload del alta atómica (§5.1): cliente + teléfono(s) + ubicación en una sola transacción. */
+/** Sub-recursos del alta anidada (§5.1). Valores = enums de la API (Prisma). */
+export interface NewContactInput {
+  contactType: 'PHONE' | 'WHATSAPP' | 'EMAIL';
+  value: string;
+  isPrimary?: boolean;
+}
+export interface NewLocationInput {
+  locationType?: 'HOME' | 'WORK' | 'GUARANTOR' | 'FAMILY' | 'OTHER';
+  address?: string;
+  zone?: string;
+  latitude?: number;
+  longitude?: number;
+  referenceNotes?: string;
+  photoUrls?: string[];
+}
+export interface NewRelationInput {
+  relatedName: string;
+  relationshipType: 'GUARANTOR' | 'FAMILY' | 'COWORKER' | 'NEIGHBOR' | 'OTHER';
+  gender?: string;
+  phone?: string;
+  isContactable?: boolean;
+  notes?: string;
+}
+
+/** Payload del alta atómica (§5.1): cliente + contactos + ubicaciones + relaciones en una transacción. */
 export interface NewClientInput {
-  clientType: 'PERSON' | 'BUSINESS';
+  clientType: 'PERSON' | 'COMPANY';
   firstName?: string;
   lastName?: string;
   businessName?: string;
   nationalId?: string;
+  gender?: string;
+  riskSegment?: string;
+  status?: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
   preferredContactChannel?: string;
-  contacts?: { contactType: 'PHONE' | 'WHATSAPP'; value: string; isPrimary?: boolean }[];
-  location?: {
-    address?: string;
-    zone?: string;
-    latitude?: number;
-    longitude?: number;
-    referenceNotes?: string;
-    photoUrls?: string[];
-  };
+  contacts?: NewContactInput[];
+  locations?: NewLocationInput[];
+  relations?: NewRelationInput[];
 }
 
 export interface CreatedClient {

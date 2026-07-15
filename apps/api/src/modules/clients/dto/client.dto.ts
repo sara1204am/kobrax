@@ -41,6 +41,15 @@ export class CreateLocationDto {
   @IsOptional() @IsString() riskLevel?: string;
 }
 
+export class CreateRelationDto {
+  @IsString() @IsNotEmpty() relatedName!: string;
+  @IsEnum(RelationshipType) relationshipType!: RelationshipType;
+  @IsOptional() @IsString() gender?: string;
+  @IsOptional() @IsString() phone?: string;
+  @IsOptional() @IsBoolean() isContactable?: boolean;
+  @IsOptional() @IsString() notes?: string;
+}
+
 // ── Cliente ──────────────────────────────────────────────────────────────────
 export class CreateClientDto {
   @IsEnum(ClientType)
@@ -57,9 +66,10 @@ export class CreateClientDto {
   @IsOptional() @IsString() preferredContactChannel?: string;
   @IsOptional() @IsString() riskSegment?: string;
   @IsOptional() @IsObject() metadata?: Record<string, unknown>;
-  /** Alta atómica (§5.1): teléfono(s) y ubicación creados en la misma transacción que el cliente. */
+  /** Alta atómica (§5.1): contactos, ubicaciones y relaciones creados en la misma transacción. */
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => CreateContactDto) contacts?: CreateContactDto[];
-  @IsOptional() @ValidateNested() @Type(() => CreateLocationDto) location?: CreateLocationDto;
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => CreateLocationDto) locations?: CreateLocationDto[];
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => CreateRelationDto) relations?: CreateRelationDto[];
 }
 
 /** Todos los campos opcionales (no extiende PartialType para no depender de mapped-types). */
@@ -91,15 +101,6 @@ export class UpdateContactDto {
   @IsOptional() @IsString() value?: string;
   @IsOptional() @IsBoolean() isPrimary?: boolean;
   @IsOptional() @IsBoolean() isVerified?: boolean;
-  @IsOptional() @IsString() notes?: string;
-}
-
-export class CreateRelationDto {
-  @IsString() @IsNotEmpty() relatedName!: string;
-  @IsEnum(RelationshipType) relationshipType!: RelationshipType;
-  @IsOptional() @IsString() gender?: string;
-  @IsOptional() @IsString() phone?: string;
-  @IsOptional() @IsBoolean() isContactable?: boolean;
   @IsOptional() @IsString() notes?: string;
 }
 

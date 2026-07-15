@@ -96,8 +96,7 @@ export class ClientsService {
         });
         audits.push({ kind: 'contact', id: row.id, after: row });
       }
-      if (dto.location) {
-        const l = dto.location;
+      for (const l of dto.locations ?? []) {
         const row = await tx.clientLocation.create({
           data: {
             accountId: this.tenant.accountId,
@@ -112,6 +111,22 @@ export class ClientsService {
           },
         });
         audits.push({ kind: 'location', id: row.id, after: row });
+      }
+      // Relaciones/garantes (§5.1, red de contactos). `phone` va en claro (no es PII del deudor).
+      for (const r of dto.relations ?? []) {
+        const row = await tx.clientRelation.create({
+          data: {
+            accountId: this.tenant.accountId,
+            clientId: client.id,
+            relatedName: r.relatedName,
+            relationshipType: r.relationshipType,
+            gender: r.gender,
+            phone: r.phone,
+            isContactable: r.isContactable ?? true,
+            notes: r.notes,
+          },
+        });
+        audits.push({ kind: 'relation', id: row.id, after: row });
       }
       return { created: client, subs: audits };
     });

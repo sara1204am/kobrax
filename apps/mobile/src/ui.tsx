@@ -299,7 +299,7 @@ export function Chips<T extends string>({
   value,
   onChange,
 }: {
-  options: { value: T; label: string }[];
+  options: readonly { value: T; label: string }[];
   value: T;
   onChange: (v: T) => void;
 }) {

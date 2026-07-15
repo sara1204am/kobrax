@@ -10,6 +10,7 @@ function makeService(opts: { dup?: unknown; client?: unknown; activeCredits?: nu
     update: [] as { where: { id: string }; data: Record<string, unknown> }[],
     contact: [] as Record<string, unknown>[],
     location: [] as Record<string, unknown>[],
+    relation: [] as Record<string, unknown>[],
     audit: [] as { entity: string; action: string }[],
   };
   const tx = {
@@ -41,6 +42,12 @@ function makeService(opts: { dup?: unknown; client?: unknown; activeCredits?: nu
       create: async (args: { data: Record<string, unknown> }) => {
         calls.location.push(args.data);
         return { id: 'lo1', ...args.data };
+      },
+    },
+    clientRelation: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        calls.relation.push(args.data);
+        return { id: 're1', ...args.data };
       },
     },
     credit: { count: async () => opts.activeCredits ?? 0 },
@@ -95,20 +102,27 @@ describe('ClientsService.create', () => {
     await rejectsWithCode(service.create({ clientType: 'PERSON' } as never), 'CLIENT_INVALID');
   });
 
-  it('alta atómica (§5.1): crea teléfono cifrado + ubicación y audita cada sub-recurso', async () => {
+  it('alta atómica (§5.1): crea teléfono cifrado + múltiples ubicaciones + relación, y audita cada sub-recurso', async () => {
     const { service, calls } = makeService();
     await service.create({
       ...(PERSON as object),
       contacts: [{ contactType: 'WHATSAPP', value: '70000000', isPrimary: true }],
-      location: { address: 'Calle Falsa 123', zone: 'Sur', latitude: -17.7, photoUrls: ['u1'] },
+      locations: [
+        { address: 'Calle Falsa 123', zone: 'Sur', latitude: -17.7, photoUrls: ['u1'] },
+        { locationType: 'WORK', address: 'Oficina 5', zone: 'Centro' },
+      ],
+      relations: [{ relatedName: 'Carlos', relationshipType: 'GUARANTOR', phone: '71234567', isContactable: true }],
     } as never);
     assert.equal(calls.contact[0]!.value, 'enc(70000000)'); // teléfono cifrado en reposo
     assert.equal(calls.contact[0]!.contactType, 'WHATSAPP');
+    assert.equal(calls.location.length, 2); // ambas ubicaciones creadas en la misma transacción
     assert.equal(calls.location[0]!.address, 'enc(Calle Falsa 123)'); // dirección cifrada
     assert.deepEqual(calls.location[0]!.photoUrls, ['u1']);
+    assert.equal(calls.relation[0]!.relatedName, 'Carlos');
+    assert.equal(calls.relation[0]!.phone, '71234567'); // el teléfono de la relación NO se cifra
     assert.deepEqual(
       calls.audit.map((a) => `${a.action} ${a.entity}`),
-      ['CREATE client', 'CREATE client_contact', 'CREATE client_location'],
+      ['CREATE client', 'CREATE client_contact', 'CREATE client_location', 'CREATE client_location', 'CREATE client_relation'],
     );
   });
 
