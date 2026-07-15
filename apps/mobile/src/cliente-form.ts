@@ -3,7 +3,7 @@
  * N ubicaciones + N relaciones/garantes. Sin red, sin React → testeable sola.
  * Mínimo para guardar: nombre + apellido + un teléfono (el modelo exige apellido para PERSON).
  */
-import type { NewClientInput } from './clients.service';
+import type { NewClientInput, NewContactInput, NewLocationInput } from './clients.service';
 
 export type ClientTypeValue = 'PERSON' | 'COMPANY';
 export type ContactTypeValue = 'PHONE' | 'EMAIL';
@@ -37,9 +37,11 @@ export interface RelationRow {
   relatedName: string;
   relationshipType: RelationTypeValue;
   gender: string;
-  phone: string;
   isContactable: boolean;
   notes: string;
+  /** El contacto (persona) tiene sus propios teléfonos y ubicaciones (1..N), misma estructura que el cliente. */
+  contacts: ContactRow[];
+  locations: LocationRow[];
 }
 
 export interface ClienteForm {
@@ -71,7 +73,7 @@ function parseCoord(s: string): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 export function emptyRelation(id: string): RelationRow {
-  return { id, relatedName: '', relationshipType: 'GUARANTOR', gender: '', phone: '', isContactable: true, notes: '' };
+  return { id, relatedName: '', relationshipType: 'GUARANTOR', gender: '', isContactable: true, notes: '', contacts: [], locations: [] };
 }
 
 export function initialCliente(): ClienteForm {
@@ -100,6 +102,32 @@ export function canSubmitCliente(s: ClienteForm): boolean {
   return s.firstName.trim().length >= 2 && s.lastName.trim().length >= 1 && hasPhone(s);
 }
 
+/** Teléfonos → payload. WhatsApp marcado ⇒ tipo WHATSAPP; email ⇒ EMAIL; resto PHONE. Descarta vacíos. */
+function mapContacts(rows: ContactRow[]): NewContactInput[] {
+  return rows
+    .filter((c) => c.value.trim().length > 0)
+    .map((c) => ({
+      contactType: c.contactType === 'EMAIL' ? 'EMAIL' : c.hasWhatsApp ? 'WHATSAPP' : 'PHONE',
+      value: c.value.trim(),
+      isPrimary: c.isPrimary,
+    }));
+}
+
+/** Ubicaciones → payload. Solo las que tienen algún dato real (no filas vacías). */
+function mapLocations(rows: LocationRow[]): NewLocationInput[] {
+  return rows
+    .filter((l) => l.address.trim() || l.zone.trim() || l.latitude.trim() || l.photoUrls.length > 0 || l.referenceNotes.trim())
+    .map((l) => ({
+      locationType: l.locationType,
+      address: l.address.trim() || undefined,
+      zone: l.zone.trim() || undefined,
+      latitude: parseCoord(l.latitude),
+      longitude: parseCoord(l.longitude),
+      referenceNotes: l.referenceNotes.trim() || undefined,
+      photoUrls: l.photoUrls.length > 0 ? l.photoUrls : undefined,
+    }));
+}
+
 export function buildClientePayload(s: ClienteForm): NewClientInput {
   return {
     clientType: s.clientType,
@@ -110,36 +138,20 @@ export function buildClientePayload(s: ClienteForm): NewClientInput {
     gender: s.gender || undefined,
     riskSegment: s.riskSegment || undefined,
     status: s.status,
-    // Un teléfono con WhatsApp viaja como tipo WHATSAPP; email como EMAIL; el resto PHONE.
-    contacts: s.contacts
-      .filter((c) => c.value.trim().length > 0)
-      .map((c) => ({
-        contactType: c.contactType === 'EMAIL' ? 'EMAIL' : c.hasWhatsApp ? 'WHATSAPP' : 'PHONE',
-        value: c.value.trim(),
-        isPrimary: c.isPrimary,
-      })),
-    // Solo ubicaciones con algún dato real (no filas vacías).
-    locations: s.locations
-      .filter((l) => l.address.trim() || l.zone.trim() || l.latitude.trim() || l.photoUrls.length > 0 || l.referenceNotes.trim())
-      .map((l) => ({
-        locationType: l.locationType,
-        address: l.address.trim() || undefined,
-        zone: l.zone.trim() || undefined,
-        latitude: parseCoord(l.latitude),
-        longitude: parseCoord(l.longitude),
-        referenceNotes: l.referenceNotes.trim() || undefined,
-        photoUrls: l.photoUrls.length > 0 ? l.photoUrls : undefined,
-      })),
-    // `relatedName` es obligatorio en el DTO → se descartan las relaciones sin nombre.
+    contacts: mapContacts(s.contacts),
+    locations: mapLocations(s.locations),
+    // `relatedName` es obligatorio en el DTO → se descartan las relaciones sin nombre. Cada contacto
+    // (persona) lleva sus propios teléfonos y ubicaciones con la MISMA estructura que el cliente.
     relations: s.relations
       .filter((r) => r.relatedName.trim().length > 0)
       .map((r) => ({
         relatedName: r.relatedName.trim(),
         relationshipType: r.relationshipType,
         gender: r.gender || undefined,
-        phone: r.phone.trim() || undefined,
         isContactable: r.isContactable,
         notes: r.notes.trim() || undefined,
+        contacts: mapContacts(r.contacts),
+        locations: mapLocations(r.locations),
       })),
   };
 }

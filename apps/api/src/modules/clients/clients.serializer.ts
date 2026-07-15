@@ -62,15 +62,20 @@ export function serializeLocation(l: ClientLocation, { crypto, reveal }: Seriali
   };
 }
 
-export function serializeRelation(r: ClientRelation, { reveal }: SerializeOpts) {
+/** El contacto (persona) devuelve sus propios teléfonos y ubicaciones (mismas tablas, vía relation_id). */
+export function serializeRelation(
+  r: ClientRelation & { contacts?: ClientContact[]; locations?: ClientLocation[] },
+  opts: SerializeOpts,
+) {
   return {
     id: r.id,
     relatedName: r.relatedName,
     relationshipType: r.relationshipType,
     gender: r.gender ?? undefined,
-    phone: r.phone ? (reveal ? r.phone : maskPhone(r.phone)) : undefined,
     isContactable: r.isContactable,
     notes: r.notes ?? undefined,
+    contacts: r.contacts?.map((c) => serializeContact(c, opts)),
+    locations: r.locations?.map((l) => serializeLocation(l, opts)),
   };
 }
 

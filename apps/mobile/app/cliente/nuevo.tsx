@@ -1,9 +1,8 @@
-import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { LayoutAnimation, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, UIManager, View } from 'react-native';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
-import { choosePhoto } from '@/photo';
 import { Chips, Header, SectionLabel } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
 import {
@@ -19,11 +18,15 @@ import {
   type RelationRow,
 } from '@/cliente-form';
 import { createClient } from '@/clients.service';
+import { choosePhoto } from '@/photo';
 import { uploadImage } from '@/uploads.service';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
+
+let _seq = 0;
+const nextId = () => `r${++_seq}`;
 
 const GENDER = [{ value: '', label: 'Sin especificar' }, { value: 'M', label: 'Masculino' }, { value: 'F', label: 'Femenino' }, { value: 'O', label: 'Otro' }];
 const CLIENT_TYPE = [{ value: 'PERSON', label: 'Persona' }, { value: 'COMPANY', label: 'Empresa' }] as const;
@@ -34,47 +37,26 @@ const LOCATION_TYPE = [{ value: 'HOME', label: 'Casa' }, { value: 'WORK', label:
 const RELATION_TYPE = [{ value: 'GUARANTOR', label: 'Garante' }, { value: 'FAMILY', label: 'Familia' }, { value: 'COWORKER', label: 'Compañero' }, { value: 'NEIGHBOR', label: 'Vecino' }, { value: 'OTHER', label: 'Otro' }] as const;
 const COORD_MODE = [{ value: 'manual', label: '✏️ Manual' }, { value: 'gps', label: '📍 Mi ubicación' }, { value: 'map', label: '🗺️ Mapa' }] as const;
 
-/** V1 — Registro de cliente (§5.1), diseño acordeón: identificación + N contactos + N ubicaciones + N relaciones. */
+type Updater<T> = (updater: (rows: T[]) => T[]) => void;
+
+/** V1 — Registro de cliente (§5.1), acordeón. Cliente y cada Contacto (persona) tienen sus propios
+ * teléfonos y ubicaciones con la MISMA estructura reutilizable (ContactsSection / LocationsSection). */
 export default function NuevoClienteScreen() {
   const [form, setForm] = useState<ClienteForm>(initialCliente);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const idRef = useRef(0);
-  const genId = () => `row-${++idRef.current}`;
 
   const set = useCallback((patch: Partial<ClienteForm>) => setForm((s) => ({ ...s, ...patch })), []);
 
-  // ── Contactos ──
-  const addContact = () => setForm((s) => ({ ...s, contacts: [...s.contacts, emptyContact(genId(), s.contacts.length === 0)] }));
-  const removeContact = (id: string) => setForm((s) => ({ ...s, contacts: s.contacts.filter((c) => c.id !== id) }));
-  const updContact = (id: string, patch: Partial<ContactRow>) => setForm((s) => ({ ...s, contacts: s.contacts.map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
-  const setPrimary = (id: string) => setForm((s) => ({ ...s, contacts: s.contacts.map((c) => ({ ...c, isPrimary: c.id === id })) }));
+  const setClientContacts: Updater<ContactRow> = (u) => setForm((s) => ({ ...s, contacts: u(s.contacts) }));
+  const setClientLocations: Updater<LocationRow> = (u) => setForm((s) => ({ ...s, locations: u(s.locations) }));
 
-  // ── Ubicaciones ──
-  const addLocation = () => setForm((s) => ({ ...s, locations: [...s.locations, emptyLocation(genId())] }));
-  const removeLocation = (id: string) => setForm((s) => ({ ...s, locations: s.locations.filter((l) => l.id !== id) }));
-  const updLocation = (id: string, patch: Partial<LocationRow>) => setForm((s) => ({ ...s, locations: s.locations.map((l) => (l.id === id ? { ...l, ...patch } : l)) }));
-
-  const captureGps = useCallback(async (id: string) => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') return setError('Sin permiso de ubicación — podés cargar lat/long a mano.');
-    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-    updLocation(id, { latitude: pos.coords.latitude.toFixed(6), longitude: pos.coords.longitude.toFixed(6) });
-  }, []);
-
-  const addPhoto = useCallback(async (id: string) => {
-    const pick = await choosePhoto();
-    if (!pick) return;
-    const up = await uploadImage(pick.uri, pick.mimeType);
-    if (up.status === 'ok') setForm((s) => ({ ...s, locations: s.locations.map((l) => (l.id === id ? { ...l, photoUrls: [...l.photoUrls, up.url] } : l)) }));
-    else setError('No se pudo subir la foto.');
-  }, []);
-  const removePhoto = (id: string, url: string) => setForm((s) => ({ ...s, locations: s.locations.map((l) => (l.id === id ? { ...l, photoUrls: l.photoUrls.filter((u) => u !== url) } : l)) }));
-
-  // ── Relaciones ──
-  const addRelation = () => setForm((s) => ({ ...s, relations: [...s.relations, emptyRelation(genId())] }));
+  // Relaciones
+  const addRelation = () => setForm((s) => ({ ...s, relations: [...s.relations, emptyRelation(nextId())] }));
   const removeRelation = (id: string) => setForm((s) => ({ ...s, relations: s.relations.filter((r) => r.id !== id) }));
   const updRelation = (id: string, patch: Partial<RelationRow>) => setForm((s) => ({ ...s, relations: s.relations.map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
+  const relContacts = (relId: string): Updater<ContactRow> => (u) => setForm((s) => ({ ...s, relations: s.relations.map((r) => (r.id === relId ? { ...r, contacts: u(r.contacts) } : r)) }));
+  const relLocations = (relId: string): Updater<LocationRow> => (u) => setForm((s) => ({ ...s, relations: s.relations.map((r) => (r.id === relId ? { ...r, locations: u(r.locations) } : r)) }));
 
   const submit = useCallback(
     async (thenLoan: boolean) => {
@@ -118,89 +100,33 @@ export default function NuevoClienteScreen() {
           <Chips options={STATUS} value={form.status} onChange={(v) => set({ status: v })} />
         </Accordion>
 
-        <Accordion icon="📞" title="Contactos" badge={form.contacts.length} defaultOpen>
-          {form.contacts.map((c) => (
-            <ItemCard key={c.id} title={`${c.contactType === 'EMAIL' ? '📧' : '📱'} ${c.contactType === 'EMAIL' ? 'Correo' : 'Teléfono'}`} onRemove={() => removeContact(c.id)}>
-              <SectionLabel>Tipo</SectionLabel>
-              <Chips options={CONTACT_TYPE} value={c.contactType} onChange={(v) => updContact(c.id, { contactType: v })} />
-              <Field label={c.contactType === 'EMAIL' ? 'Correo' : 'Número'} value={c.value} onChangeText={(t) => updContact(c.id, { value: t })} keyboardType={c.contactType === 'EMAIL' ? 'email-address' : 'phone-pad'} autoCapitalize="none" placeholder={c.contactType === 'EMAIL' ? 'correo@ejemplo.com' : '70000000'} />
-              {c.contactType === 'PHONE' && (
-                <ToggleRow label="Tiene WhatsApp" value={c.hasWhatsApp} onValueChange={(v) => updContact(c.id, { hasWhatsApp: v })} />
-              )}
-              <ToggleRow label="Contacto principal" value={c.isPrimary} onValueChange={() => setPrimary(c.id)} />
-            </ItemCard>
-          ))}
-          <AddButton label="+ Agregar contacto" onPress={addContact} />
+        <Accordion icon="📞" title="Teléfonos del cliente" badge={form.contacts.length} defaultOpen>
+          <ContactsSection contacts={form.contacts} setContacts={setClientContacts} />
         </Accordion>
 
-        <Accordion icon="📍" title="Ubicaciones" badge={form.locations.length} defaultOpen>
-          {form.locations.map((l) => (
-            <ItemCard key={l.id} title="🏠 Ubicación" onRemove={() => removeLocation(l.id)}>
-              <SectionLabel>Tipo de ubicación</SectionLabel>
-              <Chips options={LOCATION_TYPE} value={l.locationType} onChange={(v) => updLocation(l.id, { locationType: v })} />
-              <Field label="Dirección" value={l.address} onChangeText={(t) => updLocation(l.id, { address: t })} placeholder="Calle y número" />
-              <Field label="Zona / Barrio" value={l.zone} onChangeText={(t) => updLocation(l.id, { zone: t })} placeholder="Zona o barrio" />
-
-              <SectionLabel>Capturar coordenadas</SectionLabel>
-              <Chips options={COORD_MODE} value={l.coordMode} onChange={(v) => updLocation(l.id, { coordMode: v })} />
-              {l.coordMode === 'manual' && (
-                <View style={styles.coordGrid}>
-                  <View style={{ flex: 1 }}>
-                    <Field label="Latitud" value={l.latitude} onChangeText={(t) => updLocation(l.id, { latitude: t })} placeholder="-12.0464" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Field label="Longitud" value={l.longitude} onChangeText={(t) => updLocation(l.id, { longitude: t })} placeholder="-77.0428" />
-                  </View>
-                </View>
-              )}
-              {l.coordMode === 'gps' && (
-                <Pressable style={styles.capture} onPress={() => captureGps(l.id)} accessibilityRole="button">
-                  <Text style={styles.captureText}>{l.latitude ? `📍 ${l.latitude}, ${l.longitude}` : '📍 Capturar mi ubicación'}</Text>
-                </Pressable>
-              )}
-              {l.coordMode === 'map' && (
-                <Pressable style={styles.capture} onPress={() => setError('El mapa llega pronto — usá Manual o Mi ubicación.')} accessibilityRole="button">
-                  <Text style={styles.captureText}>🗺️ Abrir mapa (próximamente)</Text>
-                </Pressable>
-              )}
-
-              <Field label="Referencia / Notas" value={l.referenceNotes} onChangeText={(t) => updLocation(l.id, { referenceNotes: t })} placeholder="Portón verde frente a la cancha" />
-              <SectionLabel>Fotos de la ubicación</SectionLabel>
-              {l.photoUrls.length > 0 && (
-                <View style={styles.photoRow}>
-                  {l.photoUrls.map((u, i) => (
-                    <View key={u + i} style={styles.photoThumb}>
-                      <Text style={styles.photoOk}>✓</Text>
-                      <Pressable style={styles.photoDel} onPress={() => removePhoto(l.id, u)} hitSlop={6} accessibilityRole="button" accessibilityLabel="Quitar foto">
-                        <Text style={styles.photoDelText}>×</Text>
-                      </Pressable>
-                    </View>
-                  ))}
-                </View>
-              )}
-              <Pressable style={styles.photoBox} onPress={() => addPhoto(l.id)} accessibilityRole="button" accessibilityLabel="Agregar foto">
-                <Text style={styles.photoBoxIcon}>📷</Text>
-                <Text style={styles.photoBoxHint}>Agregar foto</Text>
-              </Pressable>
-            </ItemCard>
-          ))}
-          <AddButton label="+ Agregar ubicación" onPress={addLocation} />
+        <Accordion icon="📍" title="Ubicaciones del cliente" badge={form.locations.length} defaultOpen>
+          <LocationsSection locations={form.locations} setLocations={setClientLocations} onError={setError} />
         </Accordion>
 
         <Accordion icon="👥" title="Garantes y contactos" badge={form.relations.length} defaultOpen>
           {form.relations.map((r) => (
-            <ItemCard key={r.id} title={`👤 ${r.relatedName || 'Nueva relación'}`} onRemove={() => removeRelation(r.id)}>
+            <ItemCard key={r.id} title={`👤 ${r.relatedName || 'Nueva persona'}`} onRemove={() => removeRelation(r.id)}>
               <Field label="Nombre" value={r.relatedName} onChangeText={(t) => updRelation(r.id, { relatedName: t })} autoCapitalize="words" placeholder="Nombre completo" />
               <SectionLabel>Tipo de relación</SectionLabel>
               <Chips options={RELATION_TYPE} value={r.relationshipType} onChange={(v) => updRelation(r.id, { relationshipType: v })} />
               <SectionLabel>Género</SectionLabel>
               <Chips options={GENDER} value={r.gender} onChange={(v) => updRelation(r.id, { gender: v })} />
-              <Field label="Teléfono" value={r.phone} onChangeText={(t) => updRelation(r.id, { phone: t })} keyboardType="phone-pad" placeholder="Opcional" />
               <ToggleRow label="Es contactable" value={r.isContactable} onValueChange={(v) => updRelation(r.id, { isContactable: v })} />
               <Field label="Notas" value={r.notes} onChangeText={(t) => updRelation(r.id, { notes: t })} placeholder="Información adicional" />
+
+              {/* El contacto tiene sus PROPIOS teléfonos y ubicaciones — misma estructura que el cliente. */}
+              <Text style={styles.subHead}>📞 Teléfonos ({r.contacts.length})</Text>
+              <ContactsSection contacts={r.contacts} setContacts={relContacts(r.id)} />
+              <Text style={styles.subHead}>📍 Ubicaciones ({r.locations.length})</Text>
+              <LocationsSection locations={r.locations} setLocations={relLocations(r.id)} onError={setError} />
             </ItemCard>
           ))}
-          <AddButton label="+ Agregar contacto" onPress={addRelation} />
+          <AddButton label="+ Agregar persona" onPress={addRelation} />
         </Accordion>
       </ScrollView>
 
@@ -209,6 +135,105 @@ export default function NuevoClienteScreen() {
         <Button label="Solo guardar cliente" variant="ghost" onPress={() => submit(false)} disabled={disabled} />
       </View>
     </View>
+  );
+}
+
+/** Lista de teléfonos reutilizable (del cliente o de un contacto). */
+function ContactsSection({ contacts, setContacts }: { contacts: ContactRow[]; setContacts: Updater<ContactRow> }) {
+  const add = () => setContacts((rows) => [...rows, emptyContact(nextId(), rows.length === 0)]);
+  const remove = (id: string) => setContacts((rows) => rows.filter((c) => c.id !== id));
+  const upd = (id: string, patch: Partial<ContactRow>) => setContacts((rows) => rows.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  const setPrimary = (id: string) => setContacts((rows) => rows.map((c) => ({ ...c, isPrimary: c.id === id })));
+  return (
+    <>
+      {contacts.map((c) => (
+        <ItemCard key={c.id} title={`${c.contactType === 'EMAIL' ? '📧' : '📱'} ${c.contactType === 'EMAIL' ? 'Correo' : 'Teléfono'}`} onRemove={() => remove(c.id)}>
+          <SectionLabel>Tipo</SectionLabel>
+          <Chips options={CONTACT_TYPE} value={c.contactType} onChange={(v) => upd(c.id, { contactType: v })} />
+          <Field label={c.contactType === 'EMAIL' ? 'Correo' : 'Número'} value={c.value} onChangeText={(t) => upd(c.id, { value: t })} keyboardType={c.contactType === 'EMAIL' ? 'email-address' : 'phone-pad'} autoCapitalize="none" placeholder={c.contactType === 'EMAIL' ? 'correo@ejemplo.com' : '70000000'} />
+          {c.contactType === 'PHONE' && <ToggleRow label="Tiene WhatsApp" value={c.hasWhatsApp} onValueChange={(v) => upd(c.id, { hasWhatsApp: v })} />}
+          <ToggleRow label="Principal" value={c.isPrimary} onValueChange={() => setPrimary(c.id)} />
+        </ItemCard>
+      ))}
+      <AddButton label="+ Agregar teléfono" onPress={add} />
+    </>
+  );
+}
+
+/** Lista de ubicaciones reutilizable (del cliente o de un contacto). */
+function LocationsSection({ locations, setLocations, onError }: { locations: LocationRow[]; setLocations: Updater<LocationRow>; onError: (m: string) => void }) {
+  const add = () => setLocations((rows) => [...rows, emptyLocation(nextId())]);
+  const remove = (id: string) => setLocations((rows) => rows.filter((l) => l.id !== id));
+  const upd = (id: string, patch: Partial<LocationRow>) => setLocations((rows) => rows.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+
+  const captureGps = useCallback(async (id: string) => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') return onError('Sin permiso de ubicación — podés cargar lat/long a mano.');
+    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    upd(id, { latitude: pos.coords.latitude.toFixed(6), longitude: pos.coords.longitude.toFixed(6) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const addPhoto = useCallback(async (id: string) => {
+    const pick = await choosePhoto();
+    if (!pick) return;
+    const up = await uploadImage(pick.uri, pick.mimeType);
+    if (up.status === 'ok') setLocations((rows) => rows.map((l) => (l.id === id ? { ...l, photoUrls: [...l.photoUrls, up.url] } : l)));
+    else onError('No se pudo subir la foto.');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const removePhoto = (id: string, url: string) => setLocations((rows) => rows.map((l) => (l.id === id ? { ...l, photoUrls: l.photoUrls.filter((u) => u !== url) } : l)));
+
+  return (
+    <>
+      {locations.map((l) => (
+        <ItemCard key={l.id} title="🏠 Ubicación" onRemove={() => remove(l.id)}>
+          <SectionLabel>Tipo de ubicación</SectionLabel>
+          <Chips options={LOCATION_TYPE} value={l.locationType} onChange={(v) => upd(l.id, { locationType: v })} />
+          <Field label="Dirección" value={l.address} onChangeText={(t) => upd(l.id, { address: t })} placeholder="Calle y número" />
+          <Field label="Zona / Barrio" value={l.zone} onChangeText={(t) => upd(l.id, { zone: t })} placeholder="Zona o barrio" />
+
+          <SectionLabel>Capturar coordenadas</SectionLabel>
+          <Chips options={COORD_MODE} value={l.coordMode} onChange={(v) => upd(l.id, { coordMode: v })} />
+          {l.coordMode === 'manual' && (
+            <View style={styles.coordGrid}>
+              <View style={{ flex: 1 }}><Field label="Latitud" value={l.latitude} onChangeText={(t) => upd(l.id, { latitude: t })} placeholder="-12.0464" /></View>
+              <View style={{ flex: 1 }}><Field label="Longitud" value={l.longitude} onChangeText={(t) => upd(l.id, { longitude: t })} placeholder="-77.0428" /></View>
+            </View>
+          )}
+          {l.coordMode === 'gps' && (
+            <Pressable style={styles.capture} onPress={() => captureGps(l.id)} accessibilityRole="button">
+              <Text style={styles.captureText}>{l.latitude ? `📍 ${l.latitude}, ${l.longitude}` : '📍 Capturar mi ubicación'}</Text>
+            </Pressable>
+          )}
+          {l.coordMode === 'map' && (
+            <Pressable style={styles.capture} onPress={() => onError('El mapa llega pronto — usá Manual o Mi ubicación.')} accessibilityRole="button">
+              <Text style={styles.captureText}>🗺️ Abrir mapa (próximamente)</Text>
+            </Pressable>
+          )}
+
+          <Field label="Referencia / Notas" value={l.referenceNotes} onChangeText={(t) => upd(l.id, { referenceNotes: t })} placeholder="Portón verde frente a la cancha" />
+          <SectionLabel>Fotos de la ubicación</SectionLabel>
+          {l.photoUrls.length > 0 && (
+            <View style={styles.photoRow}>
+              {l.photoUrls.map((u, i) => (
+                <View key={u + i} style={styles.photoThumb}>
+                  <Text style={styles.photoOk}>✓</Text>
+                  <Pressable style={styles.photoDel} onPress={() => removePhoto(l.id, u)} hitSlop={6} accessibilityRole="button" accessibilityLabel="Quitar foto">
+                    <Text style={styles.photoDelText}>×</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          )}
+          <Pressable style={styles.photoBox} onPress={() => addPhoto(l.id)} accessibilityRole="button" accessibilityLabel="Agregar foto">
+            <Text style={styles.photoBoxIcon}>📷</Text>
+            <Text style={styles.photoBoxHint}>Agregar foto</Text>
+          </Pressable>
+        </ItemCard>
+      ))}
+      <AddButton label="+ Agregar ubicación" onPress={add} />
+    </>
   );
 }
 
@@ -236,7 +261,7 @@ function Accordion({ icon, title, badge, defaultOpen, children }: { icon: string
   );
 }
 
-/** Tarjeta de ítem repetible (contacto/ubicación/relación) con botón de quitar. */
+/** Tarjeta de ítem repetible (teléfono/ubicación/persona) con botón de quitar. */
 function ItemCard({ title, onRemove, children }: { title: string; onRemove: () => void; children: ReactNode }) {
   return (
     <View style={styles.item}>
@@ -282,6 +307,7 @@ const styles = StyleSheet.create({
   accBadgeTextOpen: { color: COLORS.white },
   accChevron: { fontSize: 16, color: COLORS.navy },
   accBody: { padding: SPACING.md, gap: SPACING.xs },
+  subHead: { ...TYPE.secondary, color: COLORS.navy, fontWeight: '700', marginTop: SPACING.sm },
   item: { borderRadius: RADIUS.input, borderWidth: 1, borderColor: COLORS.border, padding: SPACING.md, marginBottom: SPACING.sm, gap: SPACING.xs, backgroundColor: COLORS.bg },
   itemHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: COLORS.border, paddingBottom: SPACING.sm, marginBottom: SPACING.xs },
   itemTitle: { ...TYPE.secondary, color: COLORS.purple, fontWeight: '700' },

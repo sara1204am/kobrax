@@ -45,9 +45,11 @@ export class CreateRelationDto {
   @IsString() @IsNotEmpty() relatedName!: string;
   @IsEnum(RelationshipType) relationshipType!: RelationshipType;
   @IsOptional() @IsString() gender?: string;
-  @IsOptional() @IsString() phone?: string;
   @IsOptional() @IsBoolean() isContactable?: boolean;
   @IsOptional() @IsString() notes?: string;
+  /** El contacto (persona) tiene sus propios teléfonos y ubicaciones (1..N), en las tablas compartidas. */
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => CreateContactDto) contacts?: CreateContactDto[];
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => CreateLocationDto) locations?: CreateLocationDto[];
 }
 
 // ── Cliente ──────────────────────────────────────────────────────────────────

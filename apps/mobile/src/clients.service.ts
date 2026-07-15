@@ -42,9 +42,11 @@ export interface NewRelationInput {
   relatedName: string;
   relationshipType: 'GUARANTOR' | 'FAMILY' | 'COWORKER' | 'NEIGHBOR' | 'OTHER';
   gender?: string;
-  phone?: string;
   isContactable?: boolean;
   notes?: string;
+  /** El contacto (persona) tiene sus propios teléfonos y ubicaciones (1..N). */
+  contacts?: NewContactInput[];
+  locations?: NewLocationInput[];
 }
 
 /** Payload del alta atómica (§5.1): cliente + contactos + ubicaciones + relaciones en una transacción. */

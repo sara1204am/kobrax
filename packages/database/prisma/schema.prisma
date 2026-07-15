@@ -506,11 +506,12 @@ model Client {
   @@map("clients")
 }
 
-/// Canales de contacto del cliente.
+/// Canal de contacto. Pertenece al Cliente (relationId null) o a un Contacto/relación (relationId set).
 model ClientContact {
   id          String      @id @default(uuid())
   accountId   String      @map("account_id")
   clientId    String      @map("client_id")
+  relationId  String?     @map("relation_id") // null = del cliente; set = del contacto/relación
   contactType ContactType @map("contact_type")
   value       String
   isPrimary   Boolean     @default(false) @map("is_primary")
@@ -518,17 +519,20 @@ model ClientContact {
   notes       String?
   createdAt   DateTime    @default(now()) @map("created_at")
 
-  client Client @relation(fields: [clientId], references: [id])
+  client   Client          @relation(fields: [clientId], references: [id])
+  relation ClientRelation? @relation(fields: [relationId], references: [id])
 
   @@index([accountId, clientId])
+  @@index([accountId, relationId])
   @@map("client_contacts")
 }
 
-/// Puntos físicos de localización del cliente o su red (investigación de campo).
+/// Punto físico. Pertenece al Cliente (relationId null) o a un Contacto/relación (relationId set).
 model ClientLocation {
   id             String       @id @default(uuid())
   accountId      String       @map("account_id")
   clientId       String       @map("client_id")
+  relationId     String?      @map("relation_id") // null = del cliente; set = del contacto/relación
   locationType   LocationType @default(HOME) @map("location_type")
   address        String?
   zone           String?
@@ -540,14 +544,16 @@ model ClientLocation {
   riskLevel      String?      @map("risk_level")
   createdAt      DateTime     @default(now()) @map("created_at")
 
-  client    Client           @relation(fields: [clientId], references: [id])
-  relations ClientRelation[]
+  client   Client          @relation(fields: [clientId], references: [id])
+  relation ClientRelation? @relation(fields: [relationId], references: [id])
 
   @@index([accountId, clientId])
+  @@index([accountId, relationId])
   @@map("client_locations")
 }
 
-/// Red de personas relacionadas al cliente (localización indirecta).
+/// Persona relacionada al cliente (garante, familiar, vecino…). Tiene sus propios teléfonos y ubicaciones
+/// (1..N, en las mismas tablas que las del cliente, vía relation_id).
 model ClientRelation {
   id               String           @id @default(uuid())
   accountId        String           @map("account_id")
@@ -555,15 +561,14 @@ model ClientRelation {
   relatedName      String           @map("related_name")
   relationshipType RelationshipType @map("relationship_type")
   gender           String?
-  phone            String?
-  locationId       String?          @map("location_id")
   photoUrls        Json             @default("[]") @map("photo_urls")
   isContactable    Boolean          @default(true) @map("is_contactable")
   notes            String?
   createdAt        DateTime         @default(now()) @map("created_at")
 
-  client   Client          @relation(fields: [clientId], references: [id])
-  location ClientLocation? @relation(fields: [locationId], references: [id])
+  client    Client           @relation(fields: [clientId], references: [id])
+  contacts  ClientContact[]
+  locations ClientLocation[]
 
   @@index([accountId, clientId])
   @@map("client_relations")

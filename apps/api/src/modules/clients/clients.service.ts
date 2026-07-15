@@ -81,52 +81,33 @@ export class ClientsService {
         throw e;
       }
 
-      // Alta atómica (§5.1): teléfono + ubicación en la MISMA transacción → sin cliente huérfano si algo falla.
+      // Alta atómica (§5.1): teléfonos + ubicaciones + relaciones en la MISMA transacción → sin cliente
+      // huérfano si algo falla. Teléfonos/ubicaciones cuelgan del cliente (relationId null) o de un
+      // contacto/relación (relationId set) — mismas tablas, misma lógica.
       const audits: { kind: string; id: string; after: unknown }[] = [];
-      for (const c of dto.contacts ?? []) {
+      const acc = this.tenant.accountId;
+      const mkContact = async (c: CreateContactDto, relationId: string | null) => {
         const row = await tx.clientContact.create({
-          data: {
-            accountId: this.tenant.accountId,
-            clientId: client.id,
-            contactType: c.contactType,
-            value: this.crypto.encrypt(c.value),
-            isPrimary: c.isPrimary ?? false,
-            notes: c.notes,
-          },
+          data: { accountId: acc, clientId: client.id, relationId, contactType: c.contactType, value: this.crypto.encrypt(c.value), isPrimary: c.isPrimary ?? false, notes: c.notes },
         });
         audits.push({ kind: 'contact', id: row.id, after: row });
-      }
-      for (const l of dto.locations ?? []) {
+      };
+      const mkLocation = async (l: CreateLocationDto, relationId: string | null) => {
         const row = await tx.clientLocation.create({
-          data: {
-            accountId: this.tenant.accountId,
-            clientId: client.id,
-            locationType: l.locationType,
-            address: this.enc(l.address),
-            zone: l.zone,
-            latitude: l.latitude,
-            longitude: l.longitude,
-            referenceNotes: l.referenceNotes,
-            photoUrls: (l.photoUrls ?? []) as Prisma.InputJsonValue,
-          },
+          data: { accountId: acc, clientId: client.id, relationId, locationType: l.locationType, address: this.enc(l.address), zone: l.zone, latitude: l.latitude, longitude: l.longitude, referenceNotes: l.referenceNotes, photoUrls: (l.photoUrls ?? []) as Prisma.InputJsonValue },
         });
         audits.push({ kind: 'location', id: row.id, after: row });
-      }
-      // Relaciones/garantes (§5.1, red de contactos). `phone` va en claro (no es PII del deudor).
+      };
+
+      for (const c of dto.contacts ?? []) await mkContact(c, null);
+      for (const l of dto.locations ?? []) await mkLocation(l, null);
       for (const r of dto.relations ?? []) {
-        const row = await tx.clientRelation.create({
-          data: {
-            accountId: this.tenant.accountId,
-            clientId: client.id,
-            relatedName: r.relatedName,
-            relationshipType: r.relationshipType,
-            gender: r.gender,
-            phone: r.phone,
-            isContactable: r.isContactable ?? true,
-            notes: r.notes,
-          },
+        const rel = await tx.clientRelation.create({
+          data: { accountId: acc, clientId: client.id, relatedName: r.relatedName, relationshipType: r.relationshipType, gender: r.gender, isContactable: r.isContactable ?? true, notes: r.notes },
         });
-        audits.push({ kind: 'relation', id: row.id, after: row });
+        audits.push({ kind: 'relation', id: rel.id, after: rel });
+        for (const c of r.contacts ?? []) await mkContact(c, rel.id); // teléfonos del contacto
+        for (const l of r.locations ?? []) await mkLocation(l, rel.id); // ubicaciones del contacto
       }
       return { created: client, subs: audits };
     });
@@ -169,7 +150,14 @@ export class ClientsService {
     const client = await this.tx((tx) =>
       tx.client.findFirst({
         where: { id, deletedAt: null },
-        include: { contacts: true, locations: true, relations: true, attachments: true },
+        include: {
+          // Los teléfonos/ubicaciones del cliente = los que NO cuelgan de una relación (relationId null).
+          contacts: { where: { relationId: null } },
+          locations: { where: { relationId: null } },
+          // Cada contacto/relación trae los suyos.
+          relations: { include: { contacts: true, locations: true } },
+          attachments: true,
+        },
       }),
     );
     if (!client) throw resourceNotFound();
@@ -290,7 +278,6 @@ export class ClientsService {
           relatedName: dto.relatedName,
           relationshipType: dto.relationshipType,
           gender: dto.gender,
-          phone: dto.phone,
           isContactable: dto.isContactable ?? true,
           notes: dto.notes,
         },

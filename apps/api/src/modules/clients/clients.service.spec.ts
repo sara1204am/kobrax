@@ -102,27 +102,37 @@ describe('ClientsService.create', () => {
     await rejectsWithCode(service.create({ clientType: 'PERSON' } as never), 'CLIENT_INVALID');
   });
 
-  it('alta atómica (§5.1): crea teléfono cifrado + múltiples ubicaciones + relación, y audita cada sub-recurso', async () => {
+  it('alta atómica (§5.1): cliente con su teléfono/ubicación + un contacto con SUS propios teléfono/ubicación', async () => {
     const { service, calls } = makeService();
     await service.create({
       ...(PERSON as object),
       contacts: [{ contactType: 'WHATSAPP', value: '70000000', isPrimary: true }],
-      locations: [
-        { address: 'Calle Falsa 123', zone: 'Sur', latitude: -17.7, photoUrls: ['u1'] },
-        { locationType: 'WORK', address: 'Oficina 5', zone: 'Centro' },
+      locations: [{ address: 'Calle Falsa 123', zone: 'Sur', latitude: -17.7, photoUrls: ['u1'] }],
+      relations: [
+        {
+          relatedName: 'Carlos',
+          relationshipType: 'GUARANTOR',
+          isContactable: true,
+          contacts: [{ contactType: 'PHONE', value: '71234567', isPrimary: true }],
+          locations: [{ address: 'Casa de Carlos', zone: 'Norte' }],
+        },
       ],
-      relations: [{ relatedName: 'Carlos', relationshipType: 'GUARANTOR', phone: '71234567', isContactable: true }],
     } as never);
-    assert.equal(calls.contact[0]!.value, 'enc(70000000)'); // teléfono cifrado en reposo
-    assert.equal(calls.contact[0]!.contactType, 'WHATSAPP');
-    assert.equal(calls.location.length, 2); // ambas ubicaciones creadas en la misma transacción
-    assert.equal(calls.location[0]!.address, 'enc(Calle Falsa 123)'); // dirección cifrada
-    assert.deepEqual(calls.location[0]!.photoUrls, ['u1']);
+    // Del cliente: teléfono/ubicación con relationId null.
+    assert.equal(calls.contact[0]!.value, 'enc(70000000)'); // cifrado en reposo
+    assert.equal(calls.contact[0]!.relationId, null);
+    assert.equal(calls.location[0]!.address, 'enc(Calle Falsa 123)');
+    assert.equal(calls.location[0]!.relationId, null);
+    // La relación ya NO tiene phone inline.
     assert.equal(calls.relation[0]!.relatedName, 'Carlos');
-    assert.equal(calls.relation[0]!.phone, '71234567'); // el teléfono de la relación NO se cifra
+    assert.equal(calls.relation[0]!.phone, undefined);
+    // Del contacto/relación: mismo cifrado, con relationId apuntando a la relación (id 're1' del mock).
+    assert.equal(calls.contact[1]!.value, 'enc(71234567)');
+    assert.equal(calls.contact[1]!.relationId, 're1');
+    assert.equal(calls.location[1]!.relationId, 're1');
     assert.deepEqual(
       calls.audit.map((a) => `${a.action} ${a.entity}`),
-      ['CREATE client', 'CREATE client_contact', 'CREATE client_location', 'CREATE client_location', 'CREATE client_relation'],
+      ['CREATE client', 'CREATE client_contact', 'CREATE client_location', 'CREATE client_relation', 'CREATE client_contact', 'CREATE client_location'],
     );
   });
 

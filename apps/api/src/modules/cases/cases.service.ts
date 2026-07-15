@@ -345,7 +345,7 @@ export class CasesService {
           select: {
             id: true,
             nationalId: true,
-            locations: { select: { zone: true }, orderBy: { createdAt: 'asc' }, take: 1 },
+            locations: { where: { relationId: null }, select: { zone: true }, orderBy: { createdAt: 'asc' }, take: 1 },
           },
         }),
         tx.agendaItem.findMany({
