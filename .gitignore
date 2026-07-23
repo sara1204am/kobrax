@@ -43,3 +43,6 @@ coverage/
 
 # Archivos subidos en dev (driver de disco de POST /api/uploads)
 apps/api/uploads/
+
+# Evidencia subida en runtime (no versionar)
+apps/api/uploads/

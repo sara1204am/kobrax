@@ -406,6 +406,12 @@ model ClientImportRun {
   needsReview Int      @default(0) @map("needs_review")
   errors      Int      @default(0)
   createdBy   String?  @map("created_by")
+  // F10 import de CARTERA (reusa esta tabla; null = import de clientes legacy).
+  template          String? // banco-union-pdf | csv | xlsx
+  scope             String? // alcance del archivo, ej. "branch:<id>" | "official:<id>"
+  creditsCreated    Int      @default(0) @map("credits_created")
+  creditsUpdated    Int      @default(0) @map("credits_updated")
+  creditsSetCurrent Int      @default(0) @map("credits_set_current")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -624,6 +630,7 @@ model Credit {
   cases        CollectionCase[]
   payments     Payment[]
 
+  @@unique([accountId, code]) // F10 import: `code` (No.Credito) es la llave de match del extracto
   @@index([accountId])
   @@index([accountId, status])
   @@index([accountId, clientId])
