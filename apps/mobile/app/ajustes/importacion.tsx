@@ -1,0 +1,345 @@
+import { useCallback, useEffect, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { COLORS, SPACING } from '@/theme';
+import { BottomSheet, Chips, EmptyState, Header, ListRow, OfflineIndicator, SectionLabel, StatTile } from '@/ui';
+import { ErrorBanner } from '@/components';
+import {
+  ABSENT_RULE_HINT,
+  ABSENT_RULE_LABEL,
+  importService,
+  lastRunWhen,
+  PROFILE_LABEL,
+  SCOPE_HINT,
+  SCOPE_LABEL,
+  setupProgress,
+  setupStep,
+  type AbsentRule,
+  type ConfigScreen,
+  type ImportConfig,
+  type ProfileKind,
+  type ScopeKind,
+} from '@/import.service';
+
+type Sheet = 'profile' | 'preset' | 'absent' | null;
+
+/**
+ * Ajustes › Importación (FIELD-RULES §6).
+ *
+ * Se define una vez y el import diario no vuelve a preguntar. La pantalla ordena las decisiones
+ * en el orden en que dependen entre sí (§6.9): sin formato no se sabe qué columnas hay para
+ * emparejar, y cambiarlo después resetea el emparejado.
+ */
+export default function ImportacionScreen() {
+  const [screen, setScreen] = useState<ConfigScreen | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [sheet, setSheet] = useState<Sheet>(null);
+
+  const load = useCallback(async () => {
+    const res = await importService.getConfig();
+    if (res.status === 'ok') setScreen(res.data);
+    else if (res.status === 'offline') setError('Sin conexión. La configuración se lee y se guarda en línea.');
+    else if (res.status === 'error') setError(res.message);
+    setLoading(false);
+  }, []);
+
+  // Al volver de "Emparejar columnas" hay que releer: pudo cambiar el emparejado.
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+  useEffect(() => setError(null), [sheet]);
+
+  /** Guarda al toque. Si el backend rechaza por invariante, el control vuelve al valor previo. */
+  async function save(patch: Partial<ImportConfig>) {
+    if (!screen) return;
+    const prev = screen.config;
+    setScreen({ ...screen, config: { ...prev, ...patch } as ImportConfig }); // optimista
+    const res = await importService.patch(patch);
+    if (res.status === 'ok') {
+      setScreen((s) => (s ? { ...s, config: res.data.config } : s));
+      setError(null);
+    } else {
+      setScreen((s) => (s ? { ...s, config: prev } : s)); // revertir: nada de estado que miente
+      setError(
+        res.status === 'offline'
+          ? 'Sin conexión: no se guardó.'
+          : res.status === 'error'
+            ? res.message
+            : 'Tu sesión venció',
+      );
+    }
+  }
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+        <Header title="Importación" onBack={() => router.back()} />
+      </View>
+    );
+  }
+  if (!screen) {
+    return (
+      <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+        <Header title="Importación" onBack={() => router.back()} />
+        <EmptyState icon="⚠️" title="No se pudo cargar" hint={error ?? undefined} />
+      </View>
+    );
+  }
+
+  const { config, lastRun, presets } = screen;
+  const step = setupStep(config);
+  const progress = setupProgress(step);
+  const isFile = config.source === 'file';
+  const mapped = Object.values(config.fields).filter((r) => r.from && r.enabled !== false).length;
+  const daysRule = config.fields.daysPastDue;
+
+  // Bloqueo del asistente: una fila se apaga sólo si su paso todavía no llegó, y siempre dice
+  // POR QUÉ. Un control gris sin motivo es un bug para el usuario.
+  const blocked = (needs: 'scope' | 'profile' | 'fields'): string | undefined => {
+    if (!step) return undefined;
+    if (needs === 'profile' && step === 'scope') return 'Elegí el alcance primero';
+    if (needs === 'fields' && (step === 'scope' || step === 'profile')) return 'Elegí la forma del archivo primero';
+    return undefined;
+  };
+
+  return (
+    <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+      <OfflineIndicator />
+      <Header title="Importación" onBack={() => router.back()} />
+      <ScrollView contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.md }}>
+        {error && <ErrorBanner message={error} />}
+
+        {progress && (
+          <View style={styles.wizard}>
+            <Text style={styles.wizardTitle}>
+              Configurá tu importación · Paso {progress.current} de {progress.total}
+            </Text>
+            <View style={styles.barTrack}>
+              <View style={[styles.barFill, { flex: progress.current }]} />
+              <View style={{ flex: progress.total - progress.current }} />
+            </View>
+          </View>
+        )}
+
+        {lastRun && (
+          <>
+            <SectionLabel>ÚLTIMA IMPORTACIÓN</SectionLabel>
+            <Text style={styles.muted}>
+              {lastRunWhen(lastRun.at)}
+              {lastRun.scope ? ` · ${lastRun.scope}` : ''}
+            </Text>
+            <View style={styles.tiles}>
+              <StatTile label="Agregados" value={String(lastRun.created)} />
+              <StatTile label="Actualizados" value={String(lastRun.updated)} />
+              <StatTile label="Al día" value={String(lastRun.setCurrent)} />
+            </View>
+            {lastRun.errors > 0 && (
+              <Text style={styles.danger}>
+                {lastRun.errors} fila{lastRun.errors === 1 ? '' : 's'} con problemas
+              </Text>
+            )}
+          </>
+        )}
+
+        <SectionLabel>ORIGEN DE DATOS</SectionLabel>
+        <Chips
+          options={[
+            { value: 'manual', label: 'Manual' },
+            { value: 'file', label: 'Archivo' },
+          ]}
+          value={config.source}
+          onChange={(v) => void save({ source: v })}
+        />
+
+        {!isFile ? (
+          // Sin archivo, ninguna de las otras preguntas existe. La pantalla se colapsa (§6.2);
+          // lo ya configurado NO se borra: si vuelve a "Archivo", lo encuentra como lo dejó.
+          <>
+            <Text style={styles.muted}>Los créditos se cargan uno por uno. No se lee ningún archivo.</Text>
+            <ListRow title="Agregar crédito a mano" onPress={() => router.push('/prestamo/nuevo')} />
+          </>
+        ) : (
+          <>
+            <SectionLabel>ALCANCE DEL ARCHIVO</SectionLabel>
+            <Chips
+              options={(['official', 'branch', 'account'] as ScopeKind[]).map((v) => ({ value: v, label: SCOPE_LABEL[v] }))}
+              value={config.scope.kind}
+              onChange={(kind) => void save({ scope: { kind, ref: kind === 'account' ? null : config.scope.ref } })}
+            />
+            <Text style={styles.muted}>{SCOPE_HINT[config.scope.kind]}</Text>
+
+            <ListRow
+              title="Forma del archivo"
+              subtitle={blocked('profile') ?? PROFILE_LABEL[config.profile.kind]}
+              onPress={blocked('profile') ? undefined : () => setSheet('profile')}
+            />
+            <ListRow
+              title="Punto de partida"
+              subtitle={presets.find((p) => p.id === config.preset)?.label ?? 'Opcional · empezar de cero'}
+              onPress={blocked('profile') ? undefined : () => setSheet('preset')}
+            />
+
+            <ListRow
+              title="¿El archivo trae el cobrador?"
+              right={
+                <Switch
+                  value={config.carriesAssignee}
+                  onValueChange={(v) => void save({ carriesAssignee: v })}
+                  accessibilityLabel="El archivo trae el cobrador asignado"
+                />
+              }
+            />
+
+            <ListRow
+              title="Reglas"
+              subtitle={`Ausentes: ${ABSENT_RULE_LABEL[config.absentRule].toLowerCase()}`}
+              onPress={() => setSheet('absent')}
+            />
+            <ListRow
+              title="Emparejar columnas"
+              subtitle={
+                blocked('fields') ??
+                (mapped === 0
+                  ? 'Todavía no emparejaste ningún campo'
+                  : `${mapped} campo${mapped === 1 ? '' : 's'} emparejado${mapped === 1 ? '' : 's'}`)
+              }
+              right={daysRule?.from && !daysRule.calibrated ? <Text style={styles.warn}>⚠</Text> : undefined}
+              onPress={blocked('fields') ? undefined : () => router.push('/ajustes/importacion-columnas')}
+            />
+            <ListRow title="Llave de match" subtitle="N° de crédito" />
+
+            <SectionLabel>AL INICIAR SESIÓN</SectionLabel>
+            <ListRow
+              title="Preguntar al iniciar sesión"
+              subtitle={config.askOnLogin ? undefined : 'Entrás por Más › Importar datos.'}
+              right={
+                <Switch
+                  value={config.askOnLogin}
+                  onValueChange={(v) => void save({ askOnLogin: v })}
+                  accessibilityLabel="Preguntar al iniciar sesión"
+                />
+              }
+            />
+          </>
+        )}
+      </ScrollView>
+
+      <OptionSheet
+        visible={sheet === 'profile'}
+        title="Forma del archivo"
+        onClose={() => setSheet(null)}
+        options={(['rows', 'pdf-blocks'] as ProfileKind[]).map((v) => ({ value: v, label: PROFILE_LABEL[v] }))}
+        value={config.profile.kind}
+        onPick={(kind) => {
+          setSheet(null);
+          // Cambiar la forma resetea el emparejado (invariante 4): las etiquetas de un formato
+          // no significan nada en el otro. Lo hace el backend; acá sólo se avisa con el subtítulo.
+          void save({ profile: { ...config.profile, kind } });
+        }}
+      />
+
+      <OptionSheet
+        visible={sheet === 'preset'}
+        title="Punto de partida"
+        hint="Un preset prellena la configuración de un formato conocido. Después ajustás lo que no coincida con tu archivo."
+        onClose={() => setSheet(null)}
+        options={[
+          { value: '', label: 'Empezar de cero', hint: 'Emparejás todo mirando tu archivo.' },
+          ...presets.map((p) => ({ value: p.id, label: p.label })),
+        ]}
+        value={config.preset ?? ''}
+        onPick={(id) => {
+          setSheet(null);
+          const preset = presets.find((p) => p.id === id);
+          if (!preset) return void save({ preset: undefined });
+          void save({
+            preset: preset.id,
+            profile: { ...preset.profile, kind: preset.kind },
+            fields: Object.fromEntries(Object.entries(preset.fields).map(([f, s]) => [f, { ...s, enabled: true }])),
+          });
+        }}
+      />
+
+      <OptionSheet
+        visible={sheet === 'absent'}
+        title="Reglas de importación"
+        hint="Los créditos que YA tenés y que NO vienen en el archivo, ¿qué hacen?"
+        footer="Ningún crédito se elimina al importar. Los cargados a mano y los de fuera del alcance no se tocan nunca."
+        onClose={() => setSheet(null)}
+        options={(['set-current', 'no-touch', 'ask'] as AbsentRule[]).map((v) => ({
+          value: v,
+          label: ABSENT_RULE_LABEL[v],
+          hint: ABSENT_RULE_HINT[v],
+        }))}
+        value={config.absentRule}
+        onPick={(absentRule) => {
+          setSheet(null);
+          void save({ absentRule });
+        }}
+      />
+    </View>
+  );
+}
+
+/** Hoja de opciones con radio. Se repite en 3 lugares de esta pantalla; no sale de acá. */
+function OptionSheet<T extends string>({
+  visible,
+  title,
+  hint,
+  footer,
+  options,
+  value,
+  onPick,
+  onClose,
+}: {
+  visible: boolean;
+  title: string;
+  hint?: string;
+  footer?: string;
+  options: readonly { value: T; label: string; hint?: string }[];
+  value: T;
+  onPick: (v: T) => void;
+  onClose: () => void;
+}) {
+  return (
+    <BottomSheet visible={visible} onClose={onClose} title={title}>
+      {hint && <Text style={styles.sheetHint}>{hint}</Text>}
+      {options.map((o) => (
+        <Pressable
+          key={o.value}
+          onPress={() => onPick(o.value)}
+          style={styles.option}
+          accessibilityRole="radio"
+          accessibilityState={{ selected: o.value === value }}
+        >
+          <Text style={styles.optionMark}>{o.value === value ? '●' : '○'}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.optionLabel}>{o.label}</Text>
+            {o.hint && <Text style={styles.optionHint}>{o.hint}</Text>}
+          </View>
+        </Pressable>
+      ))}
+      {footer && <Text style={styles.sheetFooter}>{footer}</Text>}
+    </BottomSheet>
+  );
+}
+
+const styles = StyleSheet.create({
+  tiles: { flexDirection: 'row', gap: SPACING.sm },
+  muted: { fontSize: 13, color: COLORS.text2 },
+  danger: { fontSize: 13, color: COLORS.danger, fontWeight: '600' },
+  warn: { fontSize: 16, color: COLORS.warning },
+  wizard: { gap: SPACING.xs },
+  wizardTitle: { fontSize: 15, fontWeight: '600', color: COLORS.navy },
+  barTrack: { flexDirection: 'row', height: 6, borderRadius: 3, backgroundColor: COLORS.border, overflow: 'hidden' },
+  barFill: { backgroundColor: COLORS.navy },
+  sheetHint: { fontSize: 14, color: COLORS.text2, marginBottom: SPACING.sm },
+  sheetFooter: { fontSize: 12, color: COLORS.muted, marginTop: SPACING.sm },
+  option: { flexDirection: 'row', gap: SPACING.sm, paddingVertical: SPACING.sm, alignItems: 'flex-start' },
+  optionMark: { fontSize: 16, color: COLORS.navy, width: 20 },
+  optionLabel: { fontSize: 15, color: COLORS.text, fontWeight: '500' },
+  optionHint: { fontSize: 13, color: COLORS.text2, marginTop: 2 },
+});

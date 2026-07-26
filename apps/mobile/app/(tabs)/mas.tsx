@@ -18,6 +18,11 @@ export default function MasScreen() {
       <Header title="Más" />
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.md }}>
         <ListRow title="Perfil y seguridad" subtitle="Datos de sesión, biometría" onPress={() => {}} />
+        <ListRow
+          title="Importación"
+          subtitle="De dónde salen los créditos y cómo se leen"
+          onPress={() => router.push('/ajustes/importacion')}
+        />
         <ListRow title="Cerrar sesión" onPress={logout} />
       </ScrollView>
     </View>
