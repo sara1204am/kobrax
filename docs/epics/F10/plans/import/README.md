@@ -8,12 +8,14 @@
       (eliminados = 0 por diseño). Incorporado en §6.2 y §14.
 - [x] **R3 verificado (2026-07-22):** 18 créditos, 7 con `code` NULL (inocuo en unique de Postgres),
       **0 duplicados** `(accountId, code)` → la migración N4 pasa tal cual.
-- [~] **R1 — DECIDIDO (2026-07-22): construir con calibración.** El único extracto disponible
+- [x] **R1 — CERRADO (2026-07-25): calibración MANUAL.** El único extracto disponible
       (`docs/flows/mora union.PDF`) está `VIGENTE` con Moratorios=0 y mezcla `Dias Int.` (18/31/31) con
-      `Dias Mora` (30/31/30) en la misma zona → **no valida la columna de mora**. Decisión de la usuaria:
-      se construye `banco-union.parser.ts` ahora leyendo `Dias Mora` por etiqueta/posición, con un
-      **test de calibración** marcado, y **FUNDACION NO se mergea** hasta confirmar `daysPastDue` contra
-      un extracto con mora real (Estado≠VIGENTE, Moratorios>0). Ver §5 y §14.
+      `Dias Mora` (30/31/30) en la misma zona → no valida la columna de mora. **Y no se puede
+      conseguir uno mejor: el extracto lo emite el banco, nosotros sólo lo leemos** → esperar el
+      archivo era esperar para siempre. Decisión de la usuaria: **el usuario elige la columna** en
+      Ajustes, viendo 3 valores reales de su propio archivo por candidata (`FIELD-RULES.md` §6.5.1),
+      con `Dias Mora` sugerida y guarda `MORA_INCONSISTENTE` en la Vista Previa. **FUNDACION ya no
+      está bloqueada para `main`.** Ver §5 y §14.
 - [x] **R7 APROBADO (2026-07-22):** `expo-document-picker` (móvil) · `pdfjs-dist` + `xlsx` (API).
 - [x] **R2 — DECIDIDO (default lazy):** co-titular (2ª línea del bloque `Cliente`) → **`credit.metadata.coHolder`**
       (string, sin tabla nueva, sin migración, reversible). Promover a `client_relations` es refinamiento
@@ -133,7 +135,7 @@ formulario `PRR0785A`.
 | `Fecha Desembolso:` | `Credit.disbursedAt` | `dd/mm/yyyy` |
 | `Fec.Vencimiento:` / `Plazo :` / `Producto :` / `Instrumento :` / `Tipo de Credito :` | `Credit.metadata` | |
 | `MICROCREDITO AGENCIA <X>` (cabecera de página) | **alcance / `branchId`** | Ancla de D-SCOPE |
-| Tabla de movimientos → col. `Dias Mora` (última fila) | `Credit.daysPastDue` | ⚠️ **calibrar — ver R1** |
+| Tabla de movimientos → col. `Dias Mora` (última fila) | `Credit.daysPastDue` | columna **elegible por el usuario**, `Dias Mora` sugerida — R1 |
 
 **Formato de números:** coma = miles, punto = decimal (`859,743.98`). **Paréntesis = negativo**
 (`( 4,767.67)` = amortización de capital).
@@ -144,8 +146,16 @@ parser aísla `daysPastDue` en una función propia (`extractDaysPastDue(block)`)
 1. lectura por **coordenada X** del encabezado `Dias Mora` (vía pdfjs, no por offset fijo);
 2. **guardas de sanidad**: si `Estado=VIGENTE` y `Moratorios=0`, `daysPastDue` esperado ≈ 0 → un valor
    alto ahí es señal de columna equivocada (se loguea, no se importa a ciegas);
-3. un **test de calibración** (`banco-union.calibration.test.ts`) con el caso VIGENTE (espera mora 0) +
-   un `it.todo` para el caso con mora real. **FUNDACION no se mergea hasta cerrar ese `todo`.**
+3. un **test de calibración** (`banco-union.calibration.spec.ts` — el plan decía `.test.ts`, el archivo
+   real es `.spec.ts`) con el caso VIGENTE (espera mora 0) + un `it.todo` para el caso con mora real.
+
+> ✅ **R1 RESUELTO (2026-07-25) — calibración MANUAL, no por archivo.** El extracto lo emite el banco y
+> nosotros sólo lo leemos: **no se puede fabricar uno con mora**, así que esperar el PDF era esperar
+> para siempre. La columna pasa a ser **elegible por el usuario**, mostrándole 3 valores reales de su
+> propio archivo por cada candidata (`FIELD-RULES.md` §6.5.1). `Dias Mora` sigue siendo la sugerida.
+> El `it.todo` se reemplaza por tests que sí corren hoy (que la columna configurada manda), y la
+> guarda de sanidad del punto 2 se hace visible como `MORA_INCONSISTENTE` en la Vista Previa.
+> **FUNDACION deja de estar bloqueada para `main`.**
 
 ---
 
@@ -251,7 +261,7 @@ por CSV. Este módulo **no lo toca ni lo rompe**.
 |---|---|---|
 | N1 | `POST /api/imports/portfolio` (multipart) | `file` + `dryRun`. Plantilla/alcance/reglas salen de `importConfig` del tenant, **no del body** (por eso el import diario es rápido). Devuelve `{ runId?, scope, plan:{toCreate,toUpdate,toSetCurrent,invalid[]}, counts, needsAssignment }` |
 | N2 | `POST /api/imports/portfolio/:runId/assign` | Reparto (D-REPARTO): `[{creditId, assignedManagerId}]` |
-| N3 | `GET`/`PATCH /api/accounts/me/import-config` | Config corta (§9). Permiso: `CLIENT_IMPORT` |
+| N3 | `GET`/`PATCH /api/imports/portfolio/config` | Config corta (§9). Permiso: `CLIENT_IMPORT`. ⚠️ **Reubicado (2026-07-25):** decía `/api/accounts/me/import-config`, pero **no existe módulo `accounts`** en la API → se cuelga del `@Controller('imports/portfolio')` que ya está. Ver `FIELD-RULES.md` §8.2 item 2. |
 | N4 | Migración: `@@unique([accountId, code])` en `credits` | Hace de `code` una llave real (D-KEY). ⚠️ ver R3 |
 | N5 | `client_import_runs` + `template`, `scope`, `creditsCreated`, `creditsUpdated`, `creditsSetCurrent` | EXTENDER, no tabla nueva |
 | N6 | Límite de tamaño en multer = **15 MB** | Lo que promete el mockup |
@@ -262,15 +272,22 @@ por CSV. Este módulo **no lo toca ni lo rompe**.
 
 ## 9. Settings — versión corta en la app
 
+> 📄 **La pantalla completa vive en `FIELD-RULES.md` §6** (ronda 2, 2026-07-25) — es el plan del slice
+> S1 y manda sobre esta tabla. Lo que agregó respecto de acá: tarjeta **Última importación** arriba ·
+> alcance **Empresa (todos)** · **Emparejar columnas** (screen propia, columna → campo) ·
+> `askOnLogin` · asistente de primera vez. `Manual` colapsa la pantalla a *"Agregar crédito a mano"*.
+
 `Más` → Configuración → **Importación**. Se define una vez; el import diario no vuelve a preguntar.
 
 | Campo | Valores | Destino |
 |---|---|---|
 | Origen de datos | `Manual` · `Archivo` | `importConfig.source` — `Manual` **apaga el módulo entero** |
-| Plantilla | `Extracto Banco Unión (PDF)` · `CSV genérico` · `XLSX genérico` | `importConfig.template` |
-| Alcance del archivo | `Oficial` · `Agencia` · `Sucursal` | `importConfig.scope` → §3 |
+| Plantilla ("Formato del archivo") | `Extracto Banco Unión (PDF)` · `Excel` · `CSV` | `importConfig.template` |
+| Alcance del archivo | `Oficial` · `Agencia o sucursal` · `Empresa (todos)` | `importConfig.scope` → §3 · el nuevo `kind:'account'` sirve al independiente y autoasigna si hay un solo cobrador |
 | ¿El archivo trae el cobrador asignado? | Sí / No | `importConfig.carriesAssignee` → dispara (o no) el reparto |
-| Regla de ausentes | `Poner al día (vigente sin mora)` · `No tocar` | `importConfig.absentRule` — default = la premisa |
+| Regla de ausentes | `Poner al día` · `No tocar` · `Decidir en cada importación` | `importConfig.absentRule` — default = la premisa. **No hay opción de eliminar** (§4 sigue en pie) |
+| Campos del archivo | por campo: `Obligatorio` · `Opcional` · `No importar` + columna | `importConfig.fields` → FIELD-RULES §3 |
+| Preguntar al iniciar sesión | Sí / No | `importConfig.askOnLogin` — apagado, sólo se entra por el menú (§6.3) |
 | Llave de match | `N° de crédito` (solo lectura) | D-KEY |
 
 **Fuera de la versión corta** (→ web, §12): mapeo visual de columnas, perfiles múltiples por agencia,
@@ -340,8 +357,10 @@ hacer queda acotado, porque **el backend ya estaría hecho**:
 - Gate: primer login del día → I1; "Ir al Dashboard" → no vuelve a molestar hoy pero **no** marca importado.
 - Verificación: `pnpm --filter @kobrax/mobile type-check` + `test` + `npx expo export --platform android`; API `test`.
 - Revisión: `/code-review` + `/ponytail-review` verdes.
-- **Calibración de mora (R1):** `banco-union.calibration.test.ts` verde con el caso VIGENTE (mora=0) y
-  el `it.todo` de mora real **cerrado contra un extracto con mora antes de mergear FUNDACION**.
+- **Calibración de mora (R1) — manual:** `banco-union.calibration.spec.ts` verde con el caso VIGENTE
+  (mora=0) **y** con `extractDaysPastDue(b,'Int.')===18` / `(b,'Mora')===0` (la columna configurada
+  manda). El usuario confirma la columna en Ajustes viendo valores reales (`FIELD-RULES.md` §6.5.1);
+  sin confirmar, la Vista Previa avisa. Ya **no** se espera un extracto con mora para mergear.
 - Validación visual por la usuaria (emulador / gama baja).
 
 ---
@@ -350,7 +369,7 @@ hacer queda acotado, porque **el backend ya estaría hecho**:
 
 | # | Riesgo | Estado |
 |---|---|---|
-| **R1** | La muestra tiene `Estado: VIGENTE` y **0 días de mora** → no valida la extracción de mora, y el layout mezcla `Dias Int.` con `Dias Mora`. | **DECIDIDO 2026-07-22: construir con calibración** (§5) — `daysPastDue` aislado, guardas de sanidad, test de calibración; **FUNDACION no mergea** hasta cerrar el `it.todo` contra un extracto con mora real. |
+| **R1** | La muestra tiene `Estado: VIGENTE` y **0 días de mora** → no valida la extracción de mora, y el layout mezcla `Dias Int.` con `Dias Mora`. | ✅ **CERRADO 2026-07-25 — calibración manual.** El extracto es de sólo lectura (lo emite el banco), no se puede fabricar uno con mora → el usuario elige la columna viendo 3 valores reales de su archivo (`FIELD-RULES.md` §6.5.1) + guarda `MORA_INCONSISTENTE` en la preview. Ya no bloquea el merge de FUNDACION. |
 | **R2** | La 2ª línea del bloque `Cliente` es un **co-titular** (`MARTINEZ DURAN JUAN ANTONIO`). | **CERRADO: `credit.metadata.coHolder`** (sin tabla/migración, reversible). Relacional = web (§12). |
 | **R3** | `@@unique([accountId, code])` (N4): ¿hay `credits.code` duplicados o nulos hoy? La migración falla si los hay. | Verificar antes de FUNDACION |
 | **R4** | `COLLECTOR` **no** tiene `CLIENT_IMPORT` en el mapa estático de shared. Un cobrador de banco que opera solo (alcance = oficial) no podría importar. | Decidir con F3/P10 |

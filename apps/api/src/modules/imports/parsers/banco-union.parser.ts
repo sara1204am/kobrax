@@ -3,7 +3,12 @@
  * Lee el PDF por **coordenadas** (pdfjs) — no por texto plano — porque el layout es
  * de dos columnas y, sobre todo, porque la columna `Dias Mora` y `Dias Int.` caen
  * contiguas: leerlas por posición X es lo único que distingue mora real de días de interés.
- * Ver la calibración en `banco-union.calibration.test.ts` y el riesgo R1 del plan import.
+ * Ver la calibración en `banco-union.calibration.spec.ts` y el riesgo R1 del plan import.
+ *
+ * R1 se cierra por **calibración manual**: el extracto lo emite el banco (sólo lo leemos, no
+ * podemos conseguir uno con mora para un test), así que la columna de días de atraso es
+ * CONFIGURABLE y el usuario la confirma viendo `columnCandidates` — los valores reales de su
+ * propio archivo. Ver `docs/epics/F10/plans/import/FIELD-RULES.md` §6.5.1.
  *
  * El parser devuelve valores CRUDOS (status "VIGENTE", currency "BOLIVIANOS"): el mapeo
  * a los enums de dominio (ACTIVE / BOB) lo hace el service con la tabla de equivalencias.
@@ -19,14 +24,28 @@ export interface ParsedCreditBlock {
   interestRate: number | null;
   currency: string | null; // crudo, ej. "BOLIVIANOS"
   disbursedAt: string | null; // ISO yyyy-mm-dd
-  daysPastDue: number; // columna Dias Mora (0 si la columna está vacía)
+  // `null` = no se encontró la columna (layout distinto) → el service NO escribe la columna.
+  // `0` = la columna existe y está en blanco, que en este formato significa "sin mora".
+  // La distinción es la que evita que un import ponga toda la cartera en 0 días (§2.1 del plan).
+  daysPastDue: number | null;
+  pastDueAmount: number | null; // columna `Moratorios` del cuadro de movimientos
   branchLabel: string | null; // ej. "SUCRE" (cabecera MICROCREDITO AGENCIA X)
+}
+
+/** Una columna del cuadro de movimientos que podría ser "días de atraso", con valores reales. */
+export interface ColumnCandidate {
+  header: string; // etiqueta tal cual sale del PDF, ej. "Dias Mora"
+  samples: { clientName: string; value: number | null }[];
 }
 
 export interface BancoUnionParseResult {
   template: 'banco-union-pdf';
   blocks: ParsedCreditBlock[];
+  columnCandidates: ColumnCandidate[];
 }
+
+/** Columna de días de atraso por defecto. Es una SUGERENCIA: el usuario la confirma (§6.5.1). */
+export const DEFAULT_DAYS_PAST_DUE_COLUMN = 'Dias Mora';
 
 interface TextItem {
   str: string;
@@ -76,12 +95,15 @@ export async function loadItems(data: Uint8Array): Promise<TextItem[]> {
   return items;
 }
 
-export async function parseBancoUnionPdf(data: Uint8Array): Promise<BancoUnionParseResult> {
+export async function parseBancoUnionPdf(
+  data: Uint8Array,
+  opts: { daysPastDueColumn?: string } = {},
+): Promise<BancoUnionParseResult> {
   const items = await loadItems(data);
   if (!isBancoUnion(items)) {
     throw new Error('NOT_BANCO_UNION_TEMPLATE');
   }
-  return { template: 'banco-union-pdf', blocks: parseBlocks(items) };
+  return { template: 'banco-union-pdf', ...parseBlocks(items, opts) };
 }
 
 // ── Parseo puro sobre los items (testeable) ──────────────────────────────────
@@ -92,24 +114,33 @@ function readingOrder(items: TextItem[]): TextItem[] {
 }
 
 /** Segmenta en bloques de crédito. Delimitador: la etiqueta `Cliente` que abre cada bloque. */
-export function parseBlocks(items: TextItem[]): ParsedCreditBlock[] {
+export function parseBlocks(
+  items: TextItem[],
+  opts: { daysPastDueColumn?: string } = {},
+): { blocks: ParsedCreditBlock[]; columnCandidates: ColumnCandidate[] } {
+  const daysColumn = opts.daysPastDueColumn ?? DEFAULT_DAYS_PAST_DUE_COLUMN;
   const ordered = readingOrder(items);
   const starts: number[] = [];
   ordered.forEach((it, i) => {
     if (it.str === 'Cliente') starts.push(i);
   });
   const blocks: ParsedCreditBlock[] = [];
+  const samples: RawSample[] = [];
   for (let s = 0; s < starts.length; s++) {
     const from = starts[s]!;
     const to = s + 1 < starts.length ? starts[s + 1]! : ordered.length;
     const block = ordered.slice(from, to);
-    const parsed = parseOneBlock(block, items);
-    if (parsed) blocks.push(parsed);
+    const parsed = parseOneBlock(block, items, daysColumn);
+    if (!parsed) continue;
+    blocks.push(parsed);
+    // Muestras para la calibración manual (§6.5.1): 3 créditos alcanzan para que el usuario
+    // reconozca a sus clientes y decida. Más no ayudan y engordan la respuesta.
+    if (blocks.length <= CANDIDATE_SAMPLES) collectSamples(block, parsed.clientName, samples);
   }
-  return blocks;
+  return { blocks, columnCandidates: buildCandidates(samples) };
 }
 
-function parseOneBlock(block: TextItem[], allItems: TextItem[]): ParsedCreditBlock | null {
+function parseOneBlock(block: TextItem[], allItems: TextItem[], daysColumn: string): ParsedCreditBlock | null {
   const code = valueRightOf(block, (s) => s.startsWith('No.Credito'));
   if (!code) return null; // un bloque sin No.Credito no es un crédito
 
@@ -125,7 +156,8 @@ function parseOneBlock(block: TextItem[], allItems: TextItem[]): ParsedCreditBlo
     interestRate: num(valueRightOf(block, (s) => s === 'Tasa Interes')),
     currency: valueRightOf(block, (s) => s === 'Moneda'),
     disbursedAt: toIso(valueRightOf(block, (s) => s.startsWith('Desembolso'))),
-    daysPastDue: extractDaysPastDue(block),
+    daysPastDue: extractDaysPastDue(block, daysColumn),
+    pastDueAmount: num(lastRowValue(block, 'Moratorios')),
     branchLabel: branchForPage(allItems, block[0]!.page),
   };
 }
@@ -152,22 +184,125 @@ function coHolderBelow(block: TextItem[], clienteLabel: TextItem): string | null
   return text === '' ? null : text;
 }
 
+// ── Cuadro de movimientos: columnas por coordenada ───────────────────────────
+// Los encabezados ocupan 2-3 renglones ("Dias"/"Mora" apilados en la misma X) y los valores
+// vienen alineados a la derecha, así que una columna es un RANGO de X, no una X exacta.
+
+const HEADER_ANCHOR = 'Capital'; // primera etiqueta del renglón superior del cuadro
+const HEADER_BAND = 16; // alto del bloque de encabezados (3 renglones)
+const X_GROUP = 8; // dos etiquetas a menos de esto son el mismo encabezado apilado
+const COL_PAD = 12; // los valores arrancan un poco a la izquierda de su etiqueta
+const CANDIDATE_SAMPLES = 3;
+
+interface MovementColumn {
+  header: string;
+  from: number; // x mínimo inclusive
+  to: number; // x máximo exclusivo (Infinity en la última)
+}
+
 /**
- * daysPastDue = columna `Dias Mora` (la más a la derecha del cuadro de movimientos).
- * Se ubica por la X del encabezado `Mora` y se leen solo enteros en esa columna, de la
- * ÚLTIMA fila de movimiento. Si no hay ningún valor en esa X → 0 (columna vacía = sin mora).
- * ⚠️ CALIBRACIÓN R1: la muestra disponible está VIGENTE (mora 0). Confirmar con un extracto
- * con mora real que un valor real cae bajo esta X y no bajo `Dias Int.` (x muy a la izquierda).
+ * Columnas del cuadro de movimientos, con su rango de X. Se ancla en `Capital` (renglón
+ * superior); todo lo que está debajo del bloque de encabezados son filas de movimiento.
  */
-export function extractDaysPastDue(block: TextItem[]): number {
-  const moraHeader = block.find((i) => i.str === 'Mora');
-  if (!moraHeader) return 0;
-  const COL_TOL = 12; // la columna Mora es la última: aceptamos solo lo que cae en/ a la derecha de su X
-  const threshold = moraHeader.x - COL_TOL;
-  const candidates = block
-    .filter((i) => i.y < moraHeader.y - Y_BAND && i.x >= threshold && /^\d{1,4}$/.test(i.str))
-    .sort((a, b) => a.y - b.y); // última fila de movimiento = y más chico
-  return candidates.length > 0 ? Number(candidates[0]!.str) : 0;
+export function movementColumns(block: TextItem[]): MovementColumn[] {
+  const anchor = block.find((i) => i.str === HEADER_ANCHOR);
+  if (!anchor) return [];
+  const heads = block
+    .filter((i) => i.y <= anchor.y && i.y > anchor.y - HEADER_BAND)
+    .sort((a, b) => a.x - b.x || b.y - a.y);
+
+  const groups: { x: number; parts: TextItem[] }[] = [];
+  for (const h of heads) {
+    const last = groups[groups.length - 1];
+    if (last && h.x - last.x <= X_GROUP) last.parts.push(h);
+    else groups.push({ x: h.x, parts: [h] });
+  }
+
+  return groups.map((g, i) => ({
+    header: g.parts
+      .sort((a, b) => b.y - a.y) // de arriba hacia abajo: "Dias" + "Mora"
+      .map((p) => p.str)
+      .join(' '),
+    from: g.x - COL_PAD,
+    to: i + 1 < groups.length ? groups[i + 1]!.x - COL_PAD : Infinity,
+  }));
+}
+
+/** Y por debajo del cual empiezan las filas de movimiento. */
+function dataTop(block: TextItem[]): number | null {
+  const anchor = block.find((i) => i.str === HEADER_ANCHOR);
+  return anchor ? anchor.y - HEADER_BAND : null;
+}
+
+/**
+ * Valor de una columna en la ÚLTIMA fila de movimiento (la más reciente).
+ * `null` = no existe esa columna en el cuadro. `''` = existe y está en blanco.
+ */
+function lastRowValue(block: TextItem[], header: string): string | null {
+  const top = dataTop(block);
+  const col = movementColumns(block).find((c) => c.header === header);
+  if (top === null || !col) return null;
+  const rows = block
+    .filter((i) => i.y < top && i.x >= col.from && i.x < col.to)
+    .sort((a, b) => a.y - b.y); // y más chico = fila más abajo = movimiento más reciente
+  if (rows.length === 0) return '';
+  const y = rows[0]!.y;
+  return rows
+    .filter((r) => Math.abs(r.y - y) <= Y_BAND)
+    .sort((a, b) => a.x - b.x)
+    .map((r) => r.str)
+    .join('')
+    .trim();
+}
+
+/**
+ * Días de atraso de la ÚLTIMA fila de movimiento, leídos de la columna `header`.
+ *
+ * ⚠️ R1: `Dias Mora` y `Dias Int.` caen contiguas en el cuadro, y con el único extracto de
+ * muestra (VIGENTE, sin mora) ningún test puede distinguirlas — leer la equivocada daría el
+ * mismo 0. Por eso la columna es un PARÁMETRO y no una constante: el usuario la confirma en
+ * Ajustes viendo `columnCandidates` (FIELD-RULES §6.5.1). `Dias Mora` es sólo la sugerencia.
+ *
+ * `null` = la columna no está en el cuadro (layout distinto al esperado) → el service NO
+ * escribe `days_past_due`. Blanco → 0: en este formato el banco no imprime nada cuando no
+ * hay mora, así que la columna en blanco SÍ es un cero leído.
+ */
+export function extractDaysPastDue(block: TextItem[], header = DEFAULT_DAYS_PAST_DUE_COLUMN): number | null {
+  const raw = lastRowValue(block, header);
+  if (raw === null) return null;
+  if (raw === '') return 0;
+  return /^\d{1,4}$/.test(raw) ? Number(raw) : null;
+}
+
+interface RawSample {
+  header: string;
+  clientName: string;
+  raw: string;
+}
+
+function collectSamples(block: TextItem[], clientName: string, into: RawSample[]): void {
+  for (const col of movementColumns(block)) {
+    const raw = lastRowValue(block, col.header);
+    if (raw !== null) into.push({ header: col.header, clientName, raw });
+  }
+}
+
+/**
+ * Columnas que podrían ser "días de atraso", con valores reales para que el usuario elija.
+ * Filtro: sólo columnas cuyos valores son enteros de 1-4 dígitos (o que están en blanco, como
+ * `Dias Mora` en un extracto sin mora — que es justamente la que hay que poder elegir).
+ * Deja afuera montos (tienen decimales), fechas, códigos largos y textos.
+ */
+function buildCandidates(samples: RawSample[]): ColumnCandidate[] {
+  const isDayLike = (raw: string): boolean => raw === '' || /^\d{1,4}$/.test(raw);
+  const out: ColumnCandidate[] = [];
+  for (const s of samples) {
+    if (!samples.every((o) => o.header !== s.header || isDayLike(o.raw))) continue;
+    let col = out.find((c) => c.header === s.header);
+    if (!col) out.push((col = { header: s.header, samples: [] }));
+    col.samples.push({ clientName: s.clientName, value: s.raw === '' ? null : Number(s.raw) });
+  }
+  return out;
 }
 
 /** Sucursal/agencia de la página: cabecera "MICROCREDITO AGENCIA <X>". */

@@ -15,6 +15,12 @@ interface ImportConfig {
   template: 'banco-union-pdf' | 'csv' | 'xlsx';
   scope: { kind: 'official' | 'branch'; ref: string };
   absentRule: 'set-current' | 'no-touch';
+  /**
+   * Reglas por campo (FIELD-RULES §3). Hoy sólo la columna de días de atraso, que es la única
+   * que el parser no puede determinar solo (R1 → calibración manual, §6.5.1). El resto de
+   * `fields` llega con el slice S1.
+   */
+  fields?: { daysPastDue?: { column?: string } };
 }
 
 interface PortfolioSummary {
@@ -58,7 +64,11 @@ export class PortfolioImportService {
     // Errores del parser (plantilla equivocada, tope anti-DoS, PDF corrupto) → 400, no 500.
     let blocks: ParsedCreditBlock[];
     try {
-      blocks = (await parseBancoUnionPdf(new Uint8Array(file))).blocks;
+      blocks = (
+        await parseBancoUnionPdf(new Uint8Array(file), {
+          daysPastDueColumn: config.fields?.daysPastDue?.column,
+        })
+      ).blocks;
     } catch (e) {
       throw new BadRequestException({ code: 'PARSE_FAILED', message: e instanceof Error ? e.message : 'No se pudo parsear el archivo' });
     }
@@ -190,6 +200,7 @@ export class PortfolioImportService {
       template: cfg.template ?? 'banco-union-pdf',
       scope: cfg.scope,
       absentRule: cfg.absentRule ?? 'set-current',
+      fields: cfg.fields,
     };
   }
 
@@ -198,12 +209,19 @@ export class PortfolioImportService {
       where: { id },
       data: {
         outstandingBalance: b.outstandingBalance ?? undefined,
-        daysPastDue: b.daysPastDue,
+        // `null` = el parser no encontró la columna → NO se escribe. Escribirla siempre haría que
+        // un archivo con otro layout ponga la cartera entera en 0 días de mora (§2.1 del plan).
+        daysPastDue: b.daysPastDue ?? undefined,
         // Estado desconocido (no mapeado) → NO tocar el status: evita degradar silenciosamente
         // un DEFAULTED/WRITTEN_OFF a ACTIVE en cada import (la tabla de equivalencias completa = web).
         status: mapStatus(b.status) ?? undefined,
         interestRate: b.interestRate ?? undefined,
-        metadata: { ...prevMeta, origin: CreditOrigin.IMPORT, coHolder: b.coHolder ?? prevMeta.coHolder } as Prisma.InputJsonValue,
+        metadata: {
+          ...prevMeta,
+          origin: CreditOrigin.IMPORT,
+          coHolder: b.coHolder ?? prevMeta.coHolder,
+          pastDueAmount: b.pastDueAmount ?? prevMeta.pastDueAmount,
+        } as Prisma.InputJsonValue,
       },
     });
   }
@@ -225,11 +243,15 @@ function creditCreateData(
     interestRate: b.interestRate ?? 0,
     currency: mapCurrency(b.currency),
     status: mapStatus(b.status) ?? CreditStatus.ACTIVE, // crédito nuevo: default razonable si el estado no se mapea
-    daysPastDue: b.daysPastDue,
+    daysPastDue: b.daysPastDue ?? 0, // la columna es NOT NULL: el default aplica sólo al CREAR
     branchId: scope.kind === 'branch' ? scope.ref : undefined,
     assignedManagerId: scope.kind === 'official' ? scope.ref : undefined,
     disbursedAt: b.disbursedAt ? new Date(b.disbursedAt) : undefined,
-    metadata: { origin: CreditOrigin.IMPORT, coHolder: b.coHolder ?? undefined } as Prisma.InputJsonValue,
+    metadata: {
+      origin: CreditOrigin.IMPORT,
+      coHolder: b.coHolder ?? undefined,
+      pastDueAmount: b.pastDueAmount ?? undefined,
+    } as Prisma.InputJsonValue,
   };
 }
 
