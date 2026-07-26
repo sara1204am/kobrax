@@ -31,29 +31,57 @@ Lo pidió la usuaria. Tres tocan decisiones ya cerradas en el README, así que v
 | C9 | Lectura del documento con IA para proponer el match. | Futuro declarado, no se construye (§10). |
 | C10 | **Asistente de primera vez** (§6.9). La misma pantalla, con las secciones bloqueadas hasta contestar la anterior. | No. Cero pantallas nuevas. |
 | C11 | **Calibración manual de la columna de mora** (§6.5.1). El usuario confirma cuál columna son los días de atraso, viendo los valores de **su propio archivo**. | **Cierra R1** — ver §6.5.1. Convierte un bloqueante de datos en un campo de configuración. |
+| C12 | **La app es GENÉRICA: no hay parsers por banco.** Motor de lectura genérico + `profile` (datos) + `fields` (datos). Banco Unión pasa a ser un **preset**, no código. | ⚠️ **Invalida "una plantilla = un archivo de código"** de la ronda 1 (§1, §4) y obliga a renombrar/partir `banco-union.parser.ts`. Ver §1 y §8.3. |
+| C13 | Nombre entero del archivo → **`lastName`** (no `firstName`), porque los listados vienen `APELLIDO APELLIDO NOMBRE`. | Cambia §2.3 y `portfolio-import.service.ts:134`. |
 
 ---
 
-## 1. Principio: el mapeo es catálogo canónico cerrado + plantilla
+## 1. Principio: motor genérico + perfil de lectura (datos) + catálogo cerrado
 
-El móvil **sí** deja emparejar columnas (C5), pero **el destino nunca es libre**: se elige de la lista
-cerrada de §2. Tres capas, cada una en su lugar:
+> **Corrección de fondo (2026-07-25, C12).** La ronda anterior decía *"sumar un banco = un parser
+> nuevo"*. **Está mal.** Kobrax no es una app del Banco Unión: si cada formato nuevo exige código,
+> ningún cliente puede conectar su archivo sin que nosotros publiquemos una versión. Banco Unión es
+> **un ejemplo**, no una categoría del sistema.
+
+Tres capas, y **ninguna de las tres es código por banco**:
 
 ```
-Archivo (columnas/etiquetas distintas por banco)
+Archivo (etiquetas y columnas distintas en cada cliente)
    │
-   ├── PLANTILLA (código, un archivo por formato) ──→ nombra las columnas disponibles
+   ├── MOTOR (código, genérico) ──→ sabe LEER: pdf por coordenadas · filas de excel/csv
+   │                                 no sabe NADA de bancos ni de etiquetas
    │
-   └── importConfig.fields (tenant) ──→ columna → CAMPO CANÓNICO
-                                        + enciende/apaga + marca obligatorios
+   ├── PERFIL DE LECTURA (datos, por tenant) ──→ QUÉ buscar: delimitador de registro,
+   │        importConfig.profile                 anclas de la tabla, firma del archivo
+   │
+   └── MAPA DE CAMPOS (datos, por tenant) ──→ DÓNDE va cada valor:
+            importConfig.fields                 etiqueta/columna → CAMPO CANÓNICO
+                                                + enciende/apaga + obligatorios
    │
    ▼
 Columnas de la DB (`credits` / `clients`) — lista cerrada, §2
 ```
 
-**Regla dura:** el import sólo puede escribir los campos de §2. Una columna del archivo que el usuario
-no empareja con un campo canónico **se descarta** (no va a un JSON basurero). Sumar un banco en PDF
-sigue siendo un parser nuevo; sumar un Excel distinto es sólo re-emparejar columnas.
+**Las dos reglas duras:**
+
+1. **El destino nunca es libre.** El import sólo escribe los campos de §2. Una columna que el usuario
+   no empareja con un campo canónico **se descarta** — no va a un JSON basurero.
+2. **El origen siempre es configurable.** Toda etiqueta, encabezado y ancla que hoy está escrita en el
+   parser sale a `importConfig`. Conectar un formato nuevo = **configurarlo en la app**, sin release.
+
+**Qué es entonces "Banco Unión":** un **preset** — un `profile` + `fields` de fábrica que el usuario
+carga de un toque y después ajusta. Un JSON, no un archivo de código. Sumar un banco = sumar un preset
+(o que el usuario lo configure a mano, que es el caso general).
+
+**Lo que el motor sí necesita saber** (y por eso hay dos motores, no veinte): un PDF no es una tabla.
+Hay dos **formas de archivo**, y son las únicas:
+
+| Forma | `profile.kind` | Cómo lee | Sirve para |
+|---|---|---|---|
+| Filas | `rows` | 1ª fila = encabezados, una fila por crédito | Excel, CSV |
+| Bloques | `pdf-blocks` | un bloque por crédito: etiqueta→valor por coordenadas, + un cuadro de columnas | Extractos PDF |
+
+Elegir entre esas dos es una pregunta de la configuración, no una plantilla nueva.
 
 ---
 
@@ -64,7 +92,9 @@ Esta tabla es la lista que ofrece el botón **+** de "Emparejar columnas" (§6.5
 | Campo canónico | Etiqueta en la app | Destino en DB | Tipo | ¿Columna NOT NULL? | Default al CREAR si no viene | Al ACTUALIZAR si no viene |
 |---|---|---|---|---|---|---|
 | `code` 🔑 | N° de crédito | `credits.code` | string | no (pero `@@unique(accountId,code)`) | — **fila inválida** | — (es la llave) |
-| `clientName` ⭐ | Cliente | `clients.first_name` / `last_name` (§2.3) | string | no | `'SIN NOMBRE'` | no toca |
+| `clientName` ⭐ | Cliente (nombre completo) | `clients.last_name` (§2.3) | string | no | `'SIN NOMBRE'` | no toca |
+| `clientLastName` | Apellidos | `clients.last_name` | string | no | — | no toca |
+| `clientFirstName` | Nombres | `clients.first_name` | string | no | — | no toca |
 | `installmentAmount` ⭐ | Cuota | `credits.metadata.installmentAmount` | number | — | ausente | conserva el previo |
 | `daysPastDue` ⭐⚠️ | Días de retraso | `credits.days_past_due` | Int | **sí** (`@default(0)`) | `0` | **no toca** — ver §2.1 |
 | `outstandingBalance` ⭐ | Saldo | `credits.outstanding_balance` | Decimal(14,2) | **sí** | `0` | no toca |
@@ -105,14 +135,20 @@ GPS · `credit_installments` (cronograma) · `payments` · `agenda_items` · **`
 
 ### 2.3 Nombre del cliente — la pregunta que se hace una sola vez (C6)
 
-El extracto trae `MARTINEZ DURAN JUAN ANTONIO` sin delimitar dónde termina el apellido. Hoy el service
-lo mete entero en `firstName` (`portfolio-import.service.ts:134`). Se le pregunta al usuario **una vez**,
-al emparejar la columna Cliente:
+El archivo trae `MARTINEZ DURAN JUAN ANTONIO` en **una sola columna**, sin delimitar dónde termina el
+apellido; la DB tiene `first_name` y `last_name` separados. Alguien tiene que decidir, y **el archivo
+no lo dice** → se le pregunta al usuario **una vez**, al emparejar la columna Cliente:
 
 | Opción | `nameOrder` | Qué hace | Ejemplo |
 |---|---|---|---|
-| **Todo junto** (default) | `'full'` | `firstName` = la cadena entera, `lastName` = `null` | `firstName: 'MARTINEZ DURAN JUAN ANTONIO'` |
+| **Todo junto** (default) | `'full'` | **`lastName` = la cadena entera**, `firstName` = `null` | `lastName: 'MARTINEZ DURAN JUAN ANTONIO'` |
 | **Apellidos primero** | `'surnames-first'` | 2 primeras palabras → `lastName`; el resto → `firstName` | `lastName: 'MARTINEZ DURAN'`, `firstName: 'JUAN ANTONIO'` |
+| **Columnas separadas** | `'split-columns'` | el archivo ya trae apellido y nombre en columnas distintas → se emparejan por separado, sin adivinar nada | `clientLastName` + `clientFirstName` (§2) |
+
+> **Va a `lastName`, no a `firstName` (C13).** Los listados de cartera vienen ordenados
+> `APELLIDO APELLIDO NOMBRE`: la cadena **empieza** por el apellido. Guardarla en `firstName` haría que
+> toda la app ordene y muestre por un campo que en realidad contiene apellidos. Hoy el service la mete
+> en `firstName` (`portfolio-import.service.ts:134`) — se corrige.
 
 Reglas del split (deterministas, sin heurística — la heurística es la implementación siguiente):
 - Menos de 3 palabras → se ignora la opción y entra como **Todo junto** (no adivina).
@@ -150,16 +186,30 @@ desviaciones**: un campo ausente de `fields` usa el default de la plantilla (§4
 ```jsonc
 {
   "source": "file",                          // 'manual' apaga el módulo entero (§6.2)
-  "template": "banco-union-pdf",             // §4  — en la UI se llama "Formato del archivo"
+
+  // ── CÓMO SE LEE EL ARCHIVO (§1) — datos, no código. Esto es lo que hace la app genérica.
+  "profile": {
+    "kind": "pdf-blocks",                    // 'rows' (excel/csv) | 'pdf-blocks' (extractos pdf)
+    "preset": "banco-union",                 // solo informativo: de qué preset partió (§4)
+    "signature": ["PRR0785A"],               // opcional: textos que deben estar, si no → BAD_FILE
+    "recordStart": "Cliente",                // pdf-blocks: la etiqueta que ABRE cada crédito
+    "tableAnchor": "Capital",                // pdf-blocks: 1ª etiqueta del cuadro de columnas
+    "headerRow": 1                           // rows: en qué fila están los encabezados
+  },
+
   "scope": { "kind": "account", "ref": null },   // 'official' | 'branch' | 'account' (§2.4)
   "absentRule": "set-current",               // 'set-current' | 'no-touch' | 'ask' (§5.2) — nunca borra
   "carriesAssignee": false,                  // false ⇒ sale el paso de reparto (salvo §2.4)
   "askOnLogin": true,                        // C8 — false ⇒ sólo se entra por el menú
   "nameOrder": "full",                       // §2.3
+  // ── DÓNDE VA CADA VALOR. `from` = la etiqueta/encabezado EN EL ARCHIVO. Siempre editable.
   "fields": {
-    "daysPastDue":        { "enabled": true,  "required": true, "column": "Mora", "calibrated": true },
-    "outstandingBalance": { "enabled": true,  "required": true  },
-    "installmentAmount":  { "enabled": true,  "required": true, "column": "Cuota" },
+    "code":               { "enabled": true,  "required": true, "from": "No.Credito" },
+    "clientName":         { "enabled": true,  "required": true, "from": "Cliente" },
+    "outstandingBalance": { "enabled": true,  "required": true, "from": "Saldo Credito" },
+    "daysPastDue":        { "enabled": true,  "required": true, "from": "Dias Mora", "in": "table", "calibrated": true },
+    "pastDueAmount":      { "enabled": true,  "required": false, "from": "Moratorios", "in": "table" },
+    "installmentAmount":  { "enabled": true,  "required": true, "from": "Cuota" },
     "principalAmount":    { "enabled": false },
     "interestRate":       { "enabled": false }
   },
@@ -174,17 +224,18 @@ desviaciones**: un campo ausente de `fields` usa el default de la plantilla (§4
 | `enabled: false` | *"lo que diga el archivo de este campo, ignoralo"* | El campo **no se escribe nunca**. Al crear se usa el default de §2; al actualizar, el valor de la DB queda **intacto**. No genera fila inválida aunque falte. |
 | `required: true` | *"sin este dato la fila no sirve"* | Si el valor llega `null`/vacío → la fila va a `invalid[]` con `MISSING_<CAMPO>` y **no se importa** (ni crea ni actualiza). Cuenta en el balde de advertencias de la Vista Previa. |
 | `required: false` | opcional | El valor se escribe si viene; si no viene, §2 (default al crear / no tocar al actualizar). |
-| `column: "..."` | nombre del encabezado en el archivo | **En `csv`/`xlsx`: siempre editable.** En `banco-union-pdf` se ignora — las etiquetas están fijas en el parser — y la UI lo muestra en gris. **Excepción: `daysPastDue`**, que es editable también en PDF (§6.5.1): es el único campo cuya columna el parser no puede determinar solo. |
+| `from: "..."` | **de dónde sale el valor en el archivo**: encabezado de columna (`rows`) o etiqueta del bloque (`pdf-blocks`) | **Siempre editable, en todo formato** (C12). Es el campo que hace genérica a la app: nada de esto está en el código. Sin `from`, el campo no se lee aunque esté `enabled`. |
+| `in: "table"` | el valor no está en la cabecera del bloque sino en el **cuadro de columnas** | Sólo `pdf-blocks`. Se lee la **última fila** del cuadro (el movimiento más reciente). Default: `"header"`. |
 | `calibrated: true` | *"el usuario miró los valores y confirmó que esta columna es la correcta"* | **Sólo `daysPastDue`** (§6.5.1). En `false` (default en cuenta nueva) el import **corre igual**, pero la Vista Previa muestra el aviso *"Días de atraso sin confirmar"* con acceso a la pantalla. No es un bloqueo: es una deuda visible. Cambiar `column` lo vuelve a poner en `false`. |
 
 **Invariantes (se validan en el `PATCH`, no sólo en la UI):**
 
 1. `enabled: false` + `required: true` → **400 `FIELD_RULE_CONFLICT`**. Es contradictorio.
-2. Sólo se puede marcar `required` un campo que **la plantilla produce** (§4). Marcar `installmentAmount`
-   obligatorio con `banco-union-pdf` → **400 `FIELD_NOT_IN_TEMPLATE`**: reventaría el 100 % de las filas.
+2. Sólo se puede marcar `required` un campo que **tenga `from`** (§4.3). Marcarlo obligatorio sin decir
+   de dónde sale → **400 `FIELD_NOT_MAPPED`**: reventaría el 100 % de las filas.
 3. `code` y `clientName` no se pueden apagar: `code` es la llave; sin `clientName` no hay a quién cobrar.
-4. Cambiar `template` **resetea `fields`** a los defaults de la nueva plantilla (los nombres de columna
-   de un formato no significan nada en otro).
+4. Cambiar `profile.kind` **resetea `fields`** (las etiquetas de un formato no significan nada en otro).
+   Cambiar sólo el preset **no** resetea: propone valores y el usuario confirma.
 5. **Una columna no se puede emparejar con dos campos** → 400 `COLUMN_ALREADY_MAPPED` (C5). Al revés sí
    da igual: un campo tiene una sola columna por definición.
 6. `scope.kind: 'account'` ⇒ `scope.ref` debe ser `null`; `'official'`/`'branch'` ⇒ `ref` obligatorio
@@ -212,53 +263,68 @@ no se pisa (y al crear, quedan en `0`).
 
 ---
 
-## 4. Plantillas — qué archivo lee cada una y qué campos produce
+## 4. Formas de archivo y presets
 
-En la app se llama **"Formato del archivo"** (C7). "Plantilla" es la palabra del código.
+**Ya no hay "plantillas".** Hay **dos formas de archivo** (motores) y **presets** que son datos.
 
-| Plantilla | `template` | Etiqueta en la app | Extensiones | MIME aceptado | Detección | Estado |
+### 4.1 Las dos formas — todo el código de lectura que existe
+
+| Forma | `profile.kind` | Etiqueta en la app | Extensiones | MIME | Cómo lee | Estado |
 |---|---|---|---|---|---|---|
-| Extracto Banco Unión | `banco-union-pdf` | **PDF · Extracto Banco Unión** | `.pdf` | `application/pdf` | texto contiene `REPORTE DE EXTRACTO DE PRESTAMOS` **y** `PRR0785A` | ✅ construida |
-| Excel genérico | `xlsx` | **Excel (.xlsx / .xls)** | `.xlsx`, `.xls` | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `application/vnd.ms-excel` | 1ª hoja, 1ª fila = encabezados | ⬜ pendiente (dep `xlsx` aprobada, **no instalada**) |
-| CSV genérico | `csv` | **CSV (.csv)** | `.csv` | `text/csv`, `text/plain` | 1ª fila = encabezados | ⬜ pendiente (reusa `clients/import/csv.ts`) |
+| **Filas** | `rows` | *"Una fila por crédito (Excel o CSV)"* | `.xlsx`, `.xls`, `.csv` | `…spreadsheetml.sheet`, `…ms-excel`, `text/csv`, `text/plain` | fila `profile.headerRow` = encabezados; cada fila siguiente = un crédito | ⬜ pendiente (dep `xlsx` aprobada, **no instalada**; CSV reusa `clients/import/csv.ts`) |
+| **Bloques** | `pdf-blocks` | *"Un bloque por crédito (extracto PDF)"* | `.pdf` | `application/pdf` | corta por `profile.recordStart`; dentro de cada bloque lee **etiqueta→valor por coordenadas** y, si hay `profile.tableAnchor`, un **cuadro de columnas** | ✅ construida (el motor ya es genérico; falta sacarle los literales — §8.3) |
+
+Estas dos cubren todo lo que un sistema de origen emite. **No se agregan más formas por cliente.**
+
+### 4.2 Presets — datos, no código
+
+Un preset es un `profile` + un `fields` de fábrica. Se ofrece como punto de partida en la
+configuración; el usuario lo carga y **después ajusta lo que no coincida**. Es un JSON en
+`packages/shared` (o una fila de catálogo), **nunca** un archivo de parser.
+
+| Preset | `profile.kind` | Qué trae |
+|---|---|---|
+| **Extracto Banco Unión** (`banco-union`) | `pdf-blocks` | `signature: ['PRR0785A']`, `recordStart: 'Cliente'`, `tableAnchor: 'Capital'` + los `from` de §3 |
+| **Empezar de cero** | el que elija | nada: el usuario empareja todo mirando su archivo (§6.5) |
+
+**Un cliente cuyo banco no tiene preset no está bloqueado**: elige la forma, sube un archivo de
+muestra, la app le lista las etiquetas/columnas que encontró y él las empareja. Ese es el camino
+principal; los presets sólo ahorran trabajo en los formatos que ya vimos.
+
+> **Por qué esto importa más que la comodidad:** con parsers por banco, cada cliente nuevo depende de
+> que nosotros publiquemos una versión. Con perfiles, se conecta solo. Es la diferencia entre vender
+> un producto y vender una integración por cliente.
 
 **Reglas de archivo (las tres capas, las tres obligatorias):**
-1. **Picker del móvil** filtra por las extensiones de la plantilla activa (`expo-document-picker`).
-2. **Multer** en la API: `fileFilter` por MIME **de la plantilla configurada** + tope **15 MB** (N6).
-   Hoy está fijo en `application/pdf` → pasa a depender de `template`.
-3. **El parser verifica su firma.** PDF que no es Banco Unión → `NOT_BANCO_UNION_TEMPLATE` → 400.
-   Renombrar un `.xlsx` a `.pdf` no engaña a nadie.
+1. **Picker del móvil** filtra por las extensiones de la forma activa (`expo-document-picker`).
+2. **Multer** en la API: `fileFilter` por los MIME de **todas** las formas + tope **15 MB** (N6).
+   Hoy está fijo en `application/pdf`. El match contra la forma *configurada* lo hace el service.
+3. **Firma opcional del perfil.** Si `profile.signature` tiene textos, deben aparecer en el archivo;
+   si no → `SIGNATURE_MISMATCH`. **Es opcional a propósito**: exigirla convertiría cada formato nuevo
+   en un pedido de soporte. Un `.xlsx` renombrado a `.pdf` igual muere en el motor (`PARSE_FAILED`).
 
-### 4.1 Campos que produce cada plantilla (defaults de `fields`)
+### 4.3 Qué campos hay para emparejar — lo decide EL ARCHIVO, no una tabla nuestra
 
-`—` = la plantilla no lo trae ⇒ **no se puede habilitar ni marcar obligatorio** (invariante 2).
-En `csv`/`xlsx` "produce" = *hay columnas para emparejar*; cuál, lo decide el usuario en §6.5.
+La ronda anterior tenía acá una tabla *"campos que produce cada plantilla"*. **Se elimina**: era la
+consecuencia de que el código supiera de bancos. Ahora:
 
-| Campo | `banco-union-pdf` | `csv` / `xlsx` |
-|---|---|---|
-| `code` | ✅ `No.Credito` (**req**) | ✅ columna mapeada (**req**) |
-| `clientName` | ✅ `Cliente` (req) | ✅ (req) |
-| `installmentAmount` | — | ⚪ default ON |
-| `daysPastDue` | ✅ col. `Dias Mora` (default) — **columna elegible por el usuario, §6.5.1** | ⚪ default ON |
-| `outstandingBalance` | ✅ `Saldo Credito` (req) | ⚪ default ON |
-| `coHolder` | ✅ 2ª línea de `Cliente` | ⚪ vía **+** |
-| `status` | ✅ `Estado` | ⚪ vía **+** |
-| `principalAmount` | ✅ `Monto` | ⚪ vía **+** |
-| `interestRate` | ✅ `Tasa Interes` | ⚪ vía **+** |
-| `currency` | ✅ `Moneda` | ⚪ vía **+** |
-| `disbursedAt` | ✅ `Fecha Desembolso` | ⚪ vía **+** |
-| `pastDueAmount` | ✅ `Moratorios` (lo extrae F7 — §8.1) | ⚪ vía **+** |
-| `nextDueDate` | — (`Fec.Vencimiento` va a metadata, sin normalizar) | ⚪ vía **+** |
-| `branchLabel` | ✅ cabecera `MICROCREDITO AGENCIA <X>` | ⚪ vía **+** |
-| `assignee` | — | ⚪ vía **+** (habilita `carriesAssignee`) |
+- El motor **lista lo que encontró en el archivo de muestra**: en `rows`, los encabezados; en
+  `pdf-blocks`, las etiquetas de cabecera **y** los encabezados del cuadro (`columnCandidates`).
+- El usuario empareja esa lista contra el catálogo cerrado de §2 (§6.5).
+- **Invariante 2 se redefine:** un campo se puede marcar `required` sólo si tiene `from`. No hay
+  "la plantilla no lo trae" — hay "todavía no lo emparejaste".
+
+Los **cinco por defecto** (⭐ de §2) siguen igual: el asistente los pide primero y el resto entra por
+el botón `+`. Lo único que cambia es que ahora la lista de origen sale del archivo del cliente.
 
 > ✅ **R1 se cierra por calibración manual, no esperando un PDF** (C11). El único extracto de muestra
 > está VIGENTE con mora 0 y `Dias Int.` cae contigua a `Dias Mora`, así que ningún test automático
 > puede distinguirlas con los archivos que hay — **y no se pueden fabricar: el extracto lo emite el
-> banco, nosotros sólo lo leemos**. La columna pasa a ser elegible por el usuario contra los valores
-> de su propio archivo (§6.5.1).
+> banco, nosotros sólo lo leemos**. La columna la elige el usuario contra los valores de su propio
+> archivo (§6.5.1). Con C12 esto deja de ser una excepción: **todos** los campos se eligen así; la
+> mora sólo suma el paso extra de confirmar.
 
-### 4.2 Normalización de valores (igual para toda plantilla)
+### 4.4 Normalización de valores (igual para toda forma de archivo)
 
 | Qué | Regla |
 |---|---|
@@ -281,7 +347,9 @@ En `csv`/`xlsx` "produce" = *hay columnas para emparejar*; cuál, lo decide el u
 | `IMPORT_NOT_CONFIGURED` | falta `scope.ref` con `kind` official/branch (§3.1 inv. 6) |
 | `FILE_TOO_LARGE` | > 15 MB |
 | `BAD_MIME` | extensión/MIME fuera de la plantilla |
-| `PARSE_FAILED` / `NOT_<PLANTILLA>_TEMPLATE` | firma no coincide o PDF corrupto |
+| `PARSE_FAILED` | el motor no pudo leer el archivo (corrupto, o no es de la forma configurada) |
+| `SIGNATURE_MISMATCH` | `profile.signature` está definida y el archivo no la contiene |
+| `NO_RECORDS_MAPPED` | `profile` no encontró ningún registro: `recordStart` / `headerRow` mal configurados. **Manda a §6.5 en vez de decir "archivo inválido"** — el archivo está bien, la config no. |
 | `SCOPE_MISMATCH` | el `branchLabel` de la cabecera ≠ `scope.ref` **(a construir — hoy no se valida)**. No aplica con `kind: 'account'`. |
 | `COLUMN_NOT_FOUND` | una columna emparejada en `fields` no existe en el encabezado del archivo (csv/xlsx). **Nuevo (C5)**: sin esto, un Excel con la columna renombrada importa medio vacío sin avisar. |
 | `EMPTY_FILE` | 0 bloques/filas parseados |
@@ -368,7 +436,8 @@ Todo con componentes que ya existen (`Header`, `SectionLabel`, `Chips`, `ListRow
   ( Oficial │ Agencia o sucursal │ EMPRESA (TODOS) )
   Se asigna a Sara Acha                    (sólo si Empresa + 1 cobrador)
 
-  Formato del archivo    PDF · Extracto Banco Unión  ›   ← §4 · BottomSheet
+  Forma del archivo      Un bloque por crédito (PDF)  ›  ← §4.1 · BottomSheet
+  Punto de partida       Extracto Banco Unión        ›  ← §4.2 · preset, opcional
   ¿El archivo trae el cobrador?                  [OFF]
 
   Reglas                 Ausentes: ponerlos al día   ›   ← §6.6 · modal
@@ -432,15 +501,23 @@ Chips de tres: `Oficial` · `Agencia o sucursal` · `Empresa (todos)`.
 
 ### 6.5 Emparejar columnas — screen propia (C5)
 
-Se entra desde `ListRow`. Título: **Emparejar columnas**. Sirve para PDF y para Excel/CSV, con una
-diferencia: **con PDF las columnas vienen fijas del parser y se muestran en gris**; con Excel/CSV se
-eligen. **Excepción: `Días de retraso` es elegible siempre** — ver §6.5.1.
+Se entra desde `ListRow`. Título: **Emparejar columnas**. **Funciona igual en las dos formas de
+archivo** (C12): lo que cambia es de dónde sale la lista de orígenes —encabezados de columna en
+`rows`, etiquetas del bloque y del cuadro en `pdf-blocks`—, no la mecánica ni qué es editable.
+**Todo campo es editable en todo formato.** Nada viene en gris "porque está fijo en el parser".
+
+**Primero hace falta un archivo de muestra.** Sin él no hay etiquetas que listar, así que la pantalla
+arranca con `EmptyState` + `[ Elegir un archivo de muestra ]` (`expo-document-picker` + dry-run en
+modo `columnsOnly`, §8.2 item 5b). Vale para PDF y para Excel: el motor lee el archivo del cliente y
+devuelve lo que encontró. Si el preset ya llenó los `from`, la muestra sirve igual para **verificar**
+que esas etiquetas existen en su archivo.
 
 ```
 ‹  Emparejar columnas
 ─────────────────────────────────────────────
-  Llave: N° de crédito ← "No.Credito"
-  No se puede cambiar: es lo que identifica a cada crédito.
+  Llave: N° de crédito ← "No.Credito"           ›
+  El campo no se puede cambiar (identifica a cada
+  crédito), pero SÍ de qué etiqueta se lee.
 ─────────────────────────────────────────────
   CAMPOS EMPAREJADOS
   Cliente             "Nombre"          Obligatorio  ›
@@ -473,13 +550,29 @@ tiene sentido: el usuario está mirando su archivo, no la DB):
 
 Esto elimina de raíz el estado contradictorio del invariante 1.
 
-**Para leer los encabezados de un Excel hace falta un archivo.** Sin él no hay nada que emparejar,
-así que la primera vez la pantalla arranca con `EmptyState` + `[ Elegir un archivo de muestra ]`
-(mismo `expo-document-picker`, `dryRun` que devuelve sólo los encabezados). Con PDF no aplica: las
-etiquetas ya las sabe el parser.
+> Cambiar la **forma del archivo** redibuja la lista y resetea los emparejados, con confirmación:
+> *"Se van a restablecer las reglas de campos."* (invariante 4). Cambiar sólo el **preset** propone
+> valores nuevos sin pisar lo que ya confirmaste.
 
-> Sólo se listan los campos que la plantilla produce (§4.1). Cambiar de formato redibuja la lista y
-> resetea a sus defaults, con confirmación: *"Se van a restablecer las reglas de campos."* (invariante 4).
+**El nombre del cliente se pregunta acá** (§2.3), al emparejar `Cliente`, porque es la única decisión
+que el archivo no puede responder: `MARTINEZ DURAN JUAN ANTONIO` no dice dónde termina el apellido.
+Tres opciones, con el resultado a la vista usando **un nombre real del archivo de muestra**:
+
+```
+  ¿Cómo viene el nombre?
+  ─────────────────────────────────────
+  Ejemplo de tu archivo:
+  "MARTINEZ DURAN JUAN ANTONIO"
+
+  ● Todo junto
+      Apellidos: MARTINEZ DURAN JUAN ANTONIO
+      Nombres:   —
+  ○ Dos apellidos y después los nombres
+      Apellidos: MARTINEZ DURAN
+      Nombres:   JUAN ANTONIO
+  ○ Vienen en columnas separadas
+      Emparejás "Apellidos" y "Nombres" por su cuenta.
+```
 
 ### 6.5.1 Calibración de los días de retraso — cierra R1 (C11)
 
@@ -607,22 +700,24 @@ si el usuario las descubre rompiéndose la cara. Se dibujan.
 ```
 ‹  Importación
 ─────────────────────────────────────────────
-  Configurá tu importación · Paso 3 de 4        ← sólo la primera vez
-  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░
+  Configurá tu importación · Paso 3 de 5        ← sólo la primera vez
+  ▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░
 ─────────────────────────────────────────────
   ORIGEN DE DATOS        ✓ Archivo
   ALCANCE DEL ARCHIVO    ✓ Empresa (todos)
 
-  Formato del archivo    Elegí uno              ›   ← activo, resaltado
+  Forma del archivo      Elegí una              ›   ← activo, resaltado
+  Punto de partida       Opcional                ›
 ─────────────────────────────────────────────
   Reglas                 Ausentes: al día       ›   ← gris
-  Emparejar columnas     Elegí el formato primero    ← gris, CON el motivo
+  Emparejar columnas     Elegí la forma primero      ← gris, CON el motivo
 ```
 
 | | |
 |---|---|
-| **Cuándo se activa** | `importConfig` no existe o le falta `scope`/`template`. Se apaga solo al completar los 4 pasos. No vuelve. |
-| **Pasos** | 1 Origen · 2 Alcance · 3 Formato · 4 Emparejar columnas. **Reglas no es paso**: tiene default correcto (§5.2) y se cambia cuando quieras. |
+| **Cuándo se activa** | `importConfig` no existe o le falta `scope` / `profile.kind` / los `from` de los 5 campos ⭐. Se apaga solo al completarlos. No vuelve. |
+| **Pasos** | 1 Origen · 2 Alcance · 3 Forma del archivo (+ preset, opcional) · 4 **Archivo de muestra** · 5 Emparejar columnas. **Reglas no es paso**: tiene default correcto (§5.2) y se cambia cuando quieras. |
+| **Por qué la muestra es un paso** | Es la pieza que hace genérica a la app (C12): sin archivo no hay etiquetas que emparejar, y con archivo el usuario ve **sus** datos en vez de una lista abstracta. El preset sólo adelanta trabajo; la muestra lo verifica. |
 | **Filas bloqueadas** | dicen **por qué**, no sólo se apagan: *"Elegí el formato primero"*. Un control gris sin motivo es un bug para el usuario. |
 | **Volver atrás** | lo contestado queda visible con ✓ y se puede tocar. No secuestra la navegación: es la pantalla final, ordenada. |
 | **Salir a medias** | no hay botón "saltar", pero se sale con el `‹` y lo contestado ya está guardado (guarda al toque, §6.8). Al volver, sigue donde estaba. |
@@ -672,12 +767,45 @@ La tabla grande está en el README §7; acá van sólo las capacidades que **agr
 
 | Artefacto | Path | Por qué no se reusa nada |
 |---|---|---|
-| Catálogo de campos + invariantes | `apps/api/src/modules/imports/template-fields.ts` | La tabla §4.1 y los 6 invariantes de §3.1 los necesitan el `PATCH`, el service y (vía shared) la UI. En un solo lugar o se desincroniza en tres. |
-| Parser `xlsx` | `apps/api/src/modules/imports/parsers/xlsx.parser.ts` | No hay lectura de Excel en el repo (dep `xlsx` aprobada, **no instalada**). Aislado por formato, igual que `banco-union.parser.ts`. |
+| Catálogo de campos + invariantes | `apps/api/src/modules/imports/field-catalog.ts` | El catálogo de §2 y los 7 invariantes de §3.1 los necesitan el `PATCH`, el service y (vía shared) la UI. En un solo lugar o se desincroniza en tres. (Se llamaba `template-fields.ts`; con C12 ya no hay "templates".) |
+| Motor de filas (Excel/CSV) | `apps/api/src/modules/imports/parsers/rows.parser.ts` | La segunda forma de archivo (§4.1). No hay lectura de Excel en el repo (dep `xlsx` aprobada, **no instalada**). **Uno por forma, no por banco** (C12). |
+| Preset Banco Unión (**datos**) | `packages/shared/src/import-presets.ts` | Un `profile` + `from`s exportados como constante. Lo consume la UI como punto de partida; el motor no lo conoce. Sumar un banco = sumar acá, sin tocar el motor. |
 | Screen de Ajustes | `apps/mobile/app/ajustes/importacion.tsx` | `app/ajustes/` no existe todavía (§8.2 item 8). |
 | Screen de emparejado | `apps/mobile/app/ajustes/importacion-columnas.tsx` | §6.5. Se separa de la anterior porque tiene su propio `Header` y ciclo de vida (elegir archivo de muestra). |
 
-### 8.1 Fix de FUNDACION — ausente ≠ cero (§2.1) · va **antes del merge**
+### 8.0.b Lote G · Hacer genérico el motor (C12) — ✅ **hecho**
+
+`8efe283` dejó el motor genérico pero con los literales del Banco Unión adentro y el archivo con su
+nombre. **Ese es el trabajo que falta**, y va antes de S1 porque S1 configura justamente esto.
+Es refactor, no reescritura: `valueRightOf`, `movementColumns` y `lastRowValue` ya no saben de bancos.
+
+| # | Dónde | Qué |
+|---|---|---|
+| G1 | `parsers/banco-union.parser.ts` → `parsers/pdf-blocks.parser.ts` | Renombrar. **Sacar los 8 literales** (`'No.Credito'`, `'Cliente'`, `'Estado'`, `'Monto'`, `'Saldo Credito'`, `'Tasa Interes'`, `'Moneda'`, `'Desembolso'`) y los 2 de estructura (`'Cliente'` como `recordStart`, `'Capital'` como `tableAnchor`) a parámetros del `profile`. |
+| G2 | mismo archivo | `parseOneBlock` deja de devolver un objeto con campos fijos: recorre `fields` y arma `Record<canonical, string \| null>`. El catálogo de §2 pasa a ser la **única** lista de campos, en un solo lugar. |
+| G3 | `isBancoUnion()` → `matchesSignature(items, profile.signature)` | Genérico y **opcional** (§4.2): sin `signature`, no valida nada. Exigirla haría que cada formato nuevo sea un pedido de soporte. |
+| G4 | nuevo `presets/banco-union.ts` (**datos**) | El `profile` + los `from` de §3, como constante exportada. Lo consume la UI (§6.1 "Punto de partida"), no el motor. Sumar un banco = sumar acá, o que el usuario lo configure a mano. |
+| G5 | `parsers/rows.parser.ts` | La otra forma (§4.1): encabezados + una fila por crédito. Mismo contrato de salida que G2 y los mismos `columnCandidates`. Reusa `clients/import/csv.ts`. |
+| G6 | `portfolio-import.service.ts:134` | El nombre entero va a **`lastName`**, no a `firstName` (C13 · §2.3), y respeta `nameOrder`. |
+| G7 | `banco-union.calibration.spec.ts` → `pdf-blocks.parser.spec.ts` | Los mismos 6 tests, pero pasando el preset como **dato**. Es la prueba de que el motor no sabe de bancos: si el preset se pasa por parámetro y el test sigue verde, el acoplamiento se fue. |
+
+**Test mínimo (G):** con `mora union.PDF` y el preset de G4 → los mismos valores que hoy
+(`3332088` / `RIOS LAVARDEN BARBARA` / mora `0` / `Dias Int.` = `30`). Y **un profile inventado**
+(`recordStart` distinto) sobre el mismo archivo → `NO_RECORDS_MAPPED`, no un crash.
+
+**Resultado (2026-07-25): 284/284 verdes, type-check limpio.** Dos desvíos del plan, ambos por lazy:
+
+| Desvío | Por qué |
+|---|---|
+| El preset vive en `apps/api/src/modules/imports/presets.ts`, **no** en `packages/shared` | Su único consumidor (el móvil) los recibe por el endpoint de configuración, así que shared no aporta nada y obliga a rebuildear el paquete. Se mueve si la web algún día los necesita sin pasar por la API. |
+| `rows.parser.ts` arranca **sólo con CSV** | La dep `xlsx` sigue sin instalar (R7). Excel entra por la misma `readRows()` en cuanto la dep aterrice: escribir hoy el adaptador sería código muerto. **La genericidad ya está probada** con un CSV inventado (`NRO`/`DEUDOR`/`SALDO`/`ATRASO`), que es el criterio 10 del DoD. |
+
+**Deuda anotada:** `importConfig()` cae al preset del Banco Unión cuando el tenant no tiene
+`profile`/`fields`. Es un **shim de compatibilidad** para los tenants de FUNDACION (que ya importaron
+con la config vieja), no un caso especial del diseño. **S1 lo borra** en cuanto la pantalla escriba
+`profile` siempre.
+
+### 8.1 Fix de FUNDACION — ausente ≠ cero (§2.1) · ✅ **hecho en `8efe283`**
 
 Es la regla de §2.1 sola, sin `importConfig`. Hoy es destructivo y ya está commiteado (`790de8b`).
 
@@ -712,14 +840,14 @@ en el archivo VIGENTE (y no `null`, que sería "no encontré la columna").
 
 | # | Dónde | Qué |
 |---|---|---|
-| 1 | nuevo `template-fields.ts` | Tabla §4.1 + etiquetas en español de §2 + defaults (los 5 ⭐) + validación de los 6 invariantes §3.1. Un lugar, no tres. |
+| 1 | nuevo `field-catalog.ts` | Catálogo §2 + etiquetas en español + defaults (los 5 ⭐) + validación de los 7 invariantes §3.1. Un lugar, no tres. **No lleva ninguna tabla por banco** (C12): qué campos hay para emparejar sale del archivo (§4.3). |
 | 2 | N3 `GET`/`PATCH /api/imports/portfolio/config` **(reubicado)** | El README lo puso en `/api/accounts/me/import-config`, pero **no existe ningún módulo `accounts`** en la API (13 controllers, cero coincidencias de `@Controller('accounts')`) → montar un módulo entero para un endpoint contradice el reuso. Va en `portfolio-import.controller.ts`, que ya tiene el `@Controller('imports/portfolio')` con `JwtAuthGuard + TenantGuard + RolesGuard` y `Permission.CLIENT_IMPORT` puestos (`:24-31`). Lee/escribe `account.configuration.importConfig` reusando el `importConfig()` privado del service (`:182`); valida invariantes → 400 con código, no guarda basura. El `GET` devuelve además **`lastRun`** (último `client_import_runs` con contadores + `createdAt`/`template`/`scope`) para §6.3 — una sola llamada para toda la pantalla. |
 | 3 | `portfolio-import.service.ts` | Extender `ImportConfig` (hoy 4 llaves, `:13`) con `fields`, `carriesAssignee`, `askOnLogin`, `nameOrder`; `scope.kind` gana `'account'` (§2.4) y `ref` pasa a `string \| null`. Aplicar `fields` antes de escribir: filtro `enabled`, chequeo `required`, `undefined` cuando no viene. Split de nombre según `nameOrder` en el `createMany` de clientes (`:134`). Autoasignación de §2.4. |
 | 4 | `portfolio-plan.ts` | `MISSING_<CAMPO>` en `invalid[]` (recibe las reglas por `opts`, sigue puro). `AbsentRule` gana **sólo `'ask'`** → los ausentes elegibles salen en un balde `toDecide: string[]` y el plan **no** decide por ellos. **`toDelete` no existe** (§5.2): el docblock *"NUNCA borra"* de `:5` queda tal cual. |
 | 5 | `portfolio-import.service.ts` (apply) | Con `'ask'`, el `POST` de confirmación recibe qué ausentes van a `set-current` (los que el usuario marcó) y el resto no se toca. Reusa el `updateMany` que ya existe (`:145`). Sin contadores nuevos, sin migración. |
 | 6 | `portfolio-import.controller.ts:36` | `fileFilter` fijo en `application/pdf` → allowlist de los MIME de **todas** las plantillas (§4). El match contra la plantilla *configurada* (`BAD_MIME`) lo hace el service: `fileFilter` es síncrono y no ve el tenant, meterle una lectura de DB no vale la pena. |
 | 5b | `portfolio-import.controller.ts` / service (respuesta del dry-run) | El `dryRun` devuelve **`columnCandidates`** además de la preview, **para toda plantilla** — es lo único que alimenta §6.5.1 y §6.5. Un modo *sólo encabezados* (`?columnsOnly=true`) evita correr el reconcile entero cuando el usuario sólo está configurando. |
-| 7 | Parsers `csv` / `xlsx` | Nuevos: leen encabezados y devuelven filas por `column` + los mismos `columnCandidates` que F5 (contrato único para las 3 plantillas). `xlsx` = instalar la dep aprobada (R7). |
+| 7 | `rows.parser.ts` (lote G · G5) | La forma `rows`: encabezados + una fila por crédito, mismo contrato de salida y mismos `columnCandidates` que `pdf-blocks`. `xlsx` = instalar la dep aprobada (R7). |
 | 8 | Móvil `app/(tabs)/mas.tsx` + `app/ajustes/_layout.tsx` | **Hoy no hay ninguna pantalla de configuración**: `mas.tsx` tiene sólo "Perfil y seguridad" (con `onPress={() => {}}`) y "Cerrar sesión", y `app/ajustes/` no existe. S1 crea la carpeta y la fila **Configuración › Importación** (visible sólo con `CLIENT_IMPORT`). Es la puerta de §6 y del README §9 — sin esto la pantalla es inalcanzable. |
 | 9 | Móvil `app/ajustes/importacion.tsx` | La pantalla de §6.1–§6.4, §6.6–§6.8 **+ el modo primera vez de §6.9** (`step` derivado + `disabled` con motivo). `ListRow` + `Chips` + `StatTile` + `BottomSheet` + `ErrorBanner`/`OfflineIndicator`. Cero componentes nuevos. |
 | 10 | Móvil `app/ajustes/importacion-columnas.tsx` | El screen de §6.5 (emparejado + botón `+` + nombre) **+ el BottomSheet de calibración de §6.5.1** con los valores de muestra. |
@@ -729,7 +857,7 @@ en el archivo VIGENTE (y no `null`, que sería "no encontré la columna").
 | 13 | Móvil Vista Previa (S3) | **Siguen siendo 3 baldes.** Con `absentRule: 'ask'`, la lista de ausentes con dos acciones por crédito (al día / dejar como está) antes de confirmar (§5.2). |
 | 14 | `portfolio-import.service.ts:159` | `scope: \`${scope.kind}:${scope.ref}\`` escribiría **`"account:null"`** con el alcance nuevo (§2.4). Serializar `'account'` a secas; el resto igual. Una línea, pero ensucia toda la tabla de corridas si se pasa por alto. |
 
-**Test mínimo (S1):** `template-fields.spec.ts` — los 6 invariantes + una fila a la que le falta un
+**Test mínimo (S1):** `field-catalog.spec.ts` — los 6 invariantes + una fila a la que le falta un
 campo `required` cae en `invalid` y **no** llega a `toCreate`/`toUpdate`.
 `portfolio-plan.spec.ts` (existente) — `absentRule:'ask'` manda los ausentes elegibles a `toDecide` y
 **nada** a `toSetCurrent`; ningún valor de `absentRule` produce escrituras en `deletedAt`.
@@ -749,7 +877,7 @@ y la migración `@@unique(accountId,code)` viven ahí, no en main).
 **Build:** 🔵 dev build — igual que el resto del módulo (README §10).
 
 **Verificación (headless, la corro yo):**
-- `pnpm --filter @kobrax/api test` — incluye `template-fields.spec.ts`, `portfolio-plan.spec.ts`, `client-name.spec.ts`.
+- `pnpm --filter @kobrax/api test` — incluye `field-catalog.spec.ts`, `portfolio-plan.spec.ts`, `client-name.spec.ts`.
 - `pnpm --filter @kobrax/mobile type-check` + `test` + `npx expo export --platform android`.
 - `/code-review` + `/ponytail-review` en verde.
 
@@ -770,6 +898,12 @@ y la migración `@@unique(accountId,code)` viven ahí, no en main).
 9. **Calibración (§6.5.1):** el BottomSheet de `Días de retraso` lista `Dias Int.` y `Dias Mora` con
    los valores reales de `mora union.PDF` (`30` y vacío); elegir `Dias Int.` y correr un dry-run
    importa `30` en vez de `0` — o sea, la elección **manda de verdad**. Sin confirmar, la preview avisa.
+10. **Genérico de verdad (C12):** con un Excel inventado —encabezados `NRO`, `DEUDOR`, `SALDO`,
+    `ATRASO`, que no se parecen a nada del Banco Unión— se configura el import **sin tocar código** y
+    se importa bien. Es el criterio que separa un producto de una integración por cliente: si para
+    esto hay que escribir un parser, C12 no se cumplió.
+11. **El motor no sabe de bancos:** buscar `banco`/`union` en `apps/api/src/modules/imports/parsers/`
+    no devuelve nada fuera de tests y presets.
 
 **Validación visual por la usuaria** (emulador + gama baja), como todo slice F10.
 

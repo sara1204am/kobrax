@@ -111,7 +111,18 @@ la semántica de `RECONCILE` del motor de clientes (H2). Nada de `toSoftDelete`,
 
 ---
 
-## 5. Parser del extracto Banco Unión (`PRR0785A`)
+## 5. Lectura de archivos — el Banco Unión es UN EJEMPLO, no el diseño
+
+> ⚠️ **CORREGIDO 2026-07-25 (C12).** Esta sección se escribió como *"el parser del Banco Unión"*, y
+> eso estaba mal: **Kobrax es genérico**. Si cada formato nuevo exige un parser, ningún cliente puede
+> conectar su archivo sin un release nuestro. El diseño correcto está en `FIELD-RULES.md` §1 y §4:
+> **un motor genérico por forma de archivo** (`rows` para Excel/CSV, `pdf-blocks` para extractos) +
+> un **perfil de lectura que es DATOS** (`importConfig.profile`) + el mapa de campos (`fields`).
+> Banco Unión pasa a ser un **preset** (un JSON de arranque), no un archivo de código.
+> Lo de abajo se conserva porque describe bien **el caso de ejemplo** y la anatomía de un extracto;
+> leelo como "así se configura este formato", no como "así se programa cada banco".
+
+### 5.bis El ejemplo: extracto Banco Unión (`PRR0785A`)
 
 Muestra: `d:\kobrax\datos\mora union.PDF`. **No es una lista plana**: es un extracto con **un bloque
 por crédito** (cabecera + tabla de movimientos). El parser lee bloques, no filas.
@@ -238,7 +249,7 @@ Tres baldes, con conteo y lista expandible de *cuáles* (el motor nuevo devuelve
 ### Artefactos NUEVOS (justificados + ubicados para reuso)
 | Artefacto | Path | Por qué |
 |---|---|---|
-| Parser Banco Unión | `apps/api/src/modules/imports/parsers/banco-union.parser.ts` | No existe ningún parser de PDF. Aislado por plantilla → agregar otro banco = otro archivo. |
+| ~~Parser Banco Unión~~ → **motor genérico** | `apps/api/src/modules/imports/parsers/pdf-blocks.parser.ts` + `rows.parser.ts` | ⚠️ **Corregido por C12**: decía *"agregar otro banco = otro archivo"*, que es exactamente lo que NO debe pasar. Son **dos motores por forma de archivo**, sin literales de ningún banco; lo específico vive en `importConfig.profile` (datos). Preset Banco Unión → `packages/shared`. Ver `FIELD-RULES.md` §8.0.b (lote G). |
 | Motor de reconcile de cartera | `apps/api/src/modules/imports/portfolio-plan.ts` | H1/H2: el de clientes no sirve. Función **pura** (espejo de `import-plan.ts`) → testeable sin DB. |
 | Endpoint de import de cartera | `apps/api/src/modules/imports/portfolio-import.controller.ts` | multipart + plantilla + créditos. |
 | Config por tenant | `account.metadata.importConfig` (JSONB) | El DB_Architecture §Catálogo Flexible ya define este mecanismo (`credit_configuration JSONB por account`). Sin tabla nueva. |
@@ -282,7 +293,9 @@ por CSV. Este módulo **no lo toca ni lo rompe**.
 | Campo | Valores | Destino |
 |---|---|---|
 | Origen de datos | `Manual` · `Archivo` | `importConfig.source` — `Manual` **apaga el módulo entero** |
-| Plantilla ("Formato del archivo") | `Extracto Banco Unión (PDF)` · `Excel` · `CSV` | `importConfig.template` |
+| Forma del archivo | `Una fila por crédito (Excel/CSV)` · `Un bloque por crédito (PDF)` | `importConfig.profile.kind` — **dos motores genéricos, no una plantilla por banco** (C12) |
+| Punto de partida (preset) | `Extracto Banco Unión` · `Empezar de cero` | rellena `profile` + `fields`; son **datos**, el usuario los ajusta |
+| Archivo de muestra | (se sube una vez) | de él salen las etiquetas/columnas reales para emparejar |
 | Alcance del archivo | `Oficial` · `Agencia o sucursal` · `Empresa (todos)` | `importConfig.scope` → §3 · el nuevo `kind:'account'` sirve al independiente y autoasigna si hay un solo cobrador |
 | ¿El archivo trae el cobrador asignado? | Sí / No | `importConfig.carriesAssignee` → dispara (o no) el reparto |
 | Regla de ausentes | `Poner al día` · `No tocar` · `Decidir en cada importación` | `importConfig.absentRule` — default = la premisa. **No hay opción de eliminar** (§4 sigue en pie) |

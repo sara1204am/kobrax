@@ -6,21 +6,26 @@ import { CreditOrigin, readCreditMetadata } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
-import { parseBancoUnionPdf, type ParsedCreditBlock } from './parsers/banco-union.parser';
+import { parsePdfBlocks, type FieldMap, type PdfBlocksProfile } from './parsers/pdf-blocks.parser';
+import { parseCsvRows, type RowsProfile } from './parsers/rows.parser';
+import { normalizeRecord, type NameOrder, type NormalizedRecord } from './field-catalog';
+import { BANCO_UNION_PRESET } from './presets';
 import { planPortfolioImport, type ExistingCredit, type PortfolioRow } from './portfolio-plan';
 
-/** Config corta del tenant (vive en `account.configuration.importConfig`; la completa es web). */
+/**
+ * Config del tenant (vive en `account.configuration.importConfig`).
+ *
+ * `profile` + `fields` son los que hacen genérica a la app (C12): NO hay plantilla por banco.
+ * `profile.kind` elige el motor (dos, por forma de archivo) y el resto son datos que el usuario
+ * configura en Ajustes. Ver FIELD-RULES §1, §3 y §4.
+ */
 interface ImportConfig {
   source: 'manual' | 'file';
-  template: 'banco-union-pdf' | 'csv' | 'xlsx';
+  profile: { kind: 'pdf-blocks' | 'rows' } & PdfBlocksProfile & RowsProfile;
+  fields: FieldMap;
+  nameOrder: NameOrder;
   scope: { kind: 'official' | 'branch'; ref: string };
   absentRule: 'set-current' | 'no-touch';
-  /**
-   * Reglas por campo (FIELD-RULES §3). Hoy sólo la columna de días de atraso, que es la única
-   * que el parser no puede determinar solo (R1 → calibración manual, §6.5.1). El resto de
-   * `fields` llega con el slice S1.
-   */
-  fields?: { daysPastDue?: { column?: string } };
 }
 
 interface PortfolioSummary {
@@ -56,21 +61,28 @@ export class PortfolioImportService {
       throw new BadRequestException({ code: 'IMPORT_DISABLED', message: 'El tenant carga a mano (source=manual)' });
     }
 
-    // Parseo server-side (fuera de la transacción). Por ahora solo la plantilla Banco Unión;
-    // ponytail: csv/xlsx se enchufan cuando aterrice el slice de settings (reusan csv.ts).
-    if (config.template !== 'banco-union-pdf') {
-      throw new BadRequestException({ code: 'TEMPLATE_NOT_IMPLEMENTED', message: `Plantilla ${config.template} pendiente` });
-    }
-    // Errores del parser (plantilla equivocada, tope anti-DoS, PDF corrupto) → 400, no 500.
-    let blocks: ParsedCreditBlock[];
+    // Parseo server-side (fuera de la transacción), con el motor que pida el perfil.
+    // Errores de lectura (firma, tope anti-DoS, archivo corrupto) → 400, no 500.
+    let blocks: NormalizedRecord[];
     try {
-      blocks = (
-        await parseBancoUnionPdf(new Uint8Array(file), {
-          daysPastDueColumn: config.fields?.daysPastDue?.column,
-        })
-      ).blocks;
+      const { profile, fields } = config;
+      const raw =
+        profile.kind === 'rows'
+          ? parseCsvRows(file.toString('utf8'), profile, fields).records
+          : (await parsePdfBlocks(new Uint8Array(file), profile, fields)).records;
+      blocks = raw.map((r) => normalizeRecord(r, config.nameOrder));
     } catch (e) {
-      throw new BadRequestException({ code: 'PARSE_FAILED', message: e instanceof Error ? e.message : 'No se pudo parsear el archivo' });
+      const message = e instanceof Error ? e.message : 'No se pudo leer el archivo';
+      const code = message.includes('SIGNATURE_MISMATCH') ? 'SIGNATURE_MISMATCH' : 'PARSE_FAILED';
+      throw new BadRequestException({ code, message });
+    }
+    // Cero registros con un archivo que se leyó = el PERFIL está mal, no el archivo. El mensaje
+    // manda a Ajustes en vez de acusar al usuario de subir algo inválido (FIELD-RULES §5).
+    if (blocks.length === 0) {
+      throw new BadRequestException({
+        code: 'NO_RECORDS_MAPPED',
+        message: 'No se encontró ningún crédito. Revisá la configuración de lectura del archivo.',
+      });
     }
 
     const fileHash = createHash('sha256').update(file).digest('hex');
@@ -111,11 +123,15 @@ export class PortfolioImportService {
         eligible: c.deletedAt === null && inScope(c),
       }));
 
-      const rows: PortfolioRow[] = blocks.map((b, index) => ({ index, code: b.code, data: b as unknown as Record<string, unknown> }));
+      const rows: PortfolioRow[] = blocks.map((b, index) => ({
+        index,
+        code: b.code ?? '',
+        data: b as unknown as Record<string, unknown>,
+      }));
       const plan = planPortfolioImport(rows, existingCredits, { absentRule: config.absentRule });
 
       const preview: PortfolioSummary['preview'] = {
-        toCreate: plan.toCreate.map((r) => ({ code: r.code, clientName: (r.data as unknown as ParsedCreditBlock).clientName })),
+        toCreate: plan.toCreate.map((r) => ({ code: r.code, clientName: clientLabel(r.data as unknown as NormalizedRecord) })),
         toUpdate: plan.toUpdate.map((u) => ({ code: u.row.code })),
         toSetCurrent: plan.toSetCurrent.map((id) => ({ code: codeById.get(id) ?? null })),
         invalid: plan.invalid,
@@ -137,18 +153,24 @@ export class PortfolioImportService {
         const clientsData: Prisma.ClientCreateManyInput[] = [];
         const creditsData: Prisma.CreditCreateManyInput[] = [];
         for (const r of plan.toCreate) {
-          const b = r.data as unknown as ParsedCreditBlock;
-          // El extracto no trae carnet → cliente sin nationalId. ponytail: el nombre no se separa
-          // apellido/nombre (el extracto no lo delimita); se guarda entero en firstName.
+          const b = r.data as unknown as NormalizedRecord;
+          // El archivo no trae carnet → cliente sin nationalId. El corte apellido/nombre lo decidió
+          // el usuario con `nameOrder` (§2.3): acá ya viene resuelto por `normalizeRecord`.
           const clientId = randomUUID();
-          clientsData.push({ id: clientId, accountId, clientType: ClientType.PERSON, firstName: b.clientName || 'SIN NOMBRE' });
+          clientsData.push({
+            id: clientId,
+            accountId,
+            clientType: ClientType.PERSON,
+            lastName: b.clientLastName ?? 'SIN NOMBRE',
+            firstName: b.clientFirstName ?? undefined,
+          });
           creditsData.push(creditCreateData(accountId, clientId, b, scope));
         }
         await tx.client.createMany({ data: clientsData });
         await tx.credit.createMany({ data: creditsData });
       }
       for (const u of plan.toUpdate) {
-        await this.updateCredit(tx, u.id, u.row.data as unknown as ParsedCreditBlock, metaById.get(u.id) ?? {});
+        await this.updateCredit(tx, u.id, u.row.data as unknown as NormalizedRecord, metaById.get(u.id) ?? {});
       }
       if (plan.toSetCurrent.length > 0) {
         // Ausente del archivo → al día. Saldo INTACTO (pagó la cuota, no el crédito).
@@ -165,7 +187,7 @@ export class PortfolioImportService {
           fileHash,
           mode: 'RECONCILE',
           status: 'DONE',
-          template: config.template,
+          template: config.profile.kind,
           scope: `${scope.kind}:${scope.ref}`,
           creditsCreated: counts.created,
           creditsUpdated: counts.updated,
@@ -182,7 +204,7 @@ export class PortfolioImportService {
         entity: 'portfolio_import',
         entityId: result.runId ?? fileHash,
         action: 'IMPORT',
-        after: { template: config.template, scope: `${scope.kind}:${scope.ref}`, ...result.counts },
+        after: { template: config.profile.kind, scope: `${scope.kind}:${scope.ref}`, ...result.counts },
       });
     }
     return { dryRun, scope, ...result };
@@ -195,16 +217,21 @@ export class PortfolioImportService {
     if (!cfg?.scope?.ref) {
       throw new BadRequestException({ code: 'IMPORT_NOT_CONFIGURED', message: 'Falta importConfig del tenant' });
     }
+    // Sin `profile`/`fields` configurados se cae al preset del Banco Unión: es lo que ya usaban
+    // los tenants de FUNDACION. ponytail: es un default de compatibilidad, no un caso especial en
+    // el código — el preset es un dato como cualquier otro (C12), y S1 lo va a pisar con lo que
+    // el usuario configure.
     return {
       source: cfg.source ?? 'file',
-      template: cfg.template ?? 'banco-union-pdf',
+      profile: cfg.profile ?? { kind: 'pdf-blocks', ...BANCO_UNION_PRESET.profile },
+      fields: cfg.fields ?? BANCO_UNION_PRESET.fields,
+      nameOrder: cfg.nameOrder ?? 'full',
       scope: cfg.scope,
       absentRule: cfg.absentRule ?? 'set-current',
-      fields: cfg.fields,
     };
   }
 
-  private async updateCredit(tx: PrismaClient, id: string, b: ParsedCreditBlock, prevMeta: Record<string, unknown>): Promise<void> {
+  private async updateCredit(tx: PrismaClient, id: string, b: NormalizedRecord, prevMeta: Record<string, unknown>): Promise<void> {
     await tx.credit.update({
       where: { id },
       data: {
@@ -227,17 +254,22 @@ export class PortfolioImportService {
   }
 }
 
-/** Datos de un crédito nuevo para `createMany` (el extracto no trae carnet → cliente sin nationalId). */
+/** Cómo se muestra el cliente en la Vista Previa. */
+function clientLabel(b: NormalizedRecord): string {
+  return [b.clientLastName, b.clientFirstName].filter(Boolean).join(' ') || 'SIN NOMBRE';
+}
+
+/** Datos de un crédito nuevo para `createMany` (el archivo no trae carnet → cliente sin nationalId). */
 function creditCreateData(
   accountId: string,
   clientId: string,
-  b: ParsedCreditBlock,
+  b: NormalizedRecord,
   scope: ImportConfig['scope'],
 ): Prisma.CreditCreateManyInput {
   return {
     accountId,
     clientId,
-    code: b.code,
+    code: b.code ?? undefined,
     principalAmount: b.principalAmount ?? 0,
     outstandingBalance: b.outstandingBalance ?? 0,
     interestRate: b.interestRate ?? 0,
@@ -263,7 +295,7 @@ const STATUS_MAP: Record<string, CreditStatus> = {
   CASTIGADO: CreditStatus.WRITTEN_OFF,
   CANCELADO: CreditStatus.CANCELLED,
 };
-function mapStatus(raw: string): CreditStatus | null {
+function mapStatus(raw: string | null): CreditStatus | null {
   return STATUS_MAP[(raw ?? '').toUpperCase()] ?? null;
 }
 function mapCurrency(raw: string | null): string {
