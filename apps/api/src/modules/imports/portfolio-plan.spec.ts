@@ -20,6 +20,30 @@ describe('planPortfolioImport — premisa', () => {
     assert.deepEqual(plan.toSetCurrent, ['e2']); // ausente → al día
   });
 
+  it('un campo obligatorio vacío frena la fila entera (MISSING_<CAMPO>)', () => {
+    const rows: PortfolioRow[] = [
+      { index: 0, code: 'C1', data: { installmentAmount: 320.5 } },
+      { index: 1, code: 'C2', data: { installmentAmount: null } }, // no vino la cuota
+      { index: 2, code: 'C3', data: {} }, // ni siquiera la columna
+    ];
+    const plan = planPortfolioImport(rows, [], { required: ['installmentAmount'] });
+    assert.deepEqual(
+      plan.toCreate.map((r) => r.code),
+      ['C1'],
+    );
+    assert.deepEqual(plan.invalid, [
+      { index: 1, reason: 'MISSING_INSTALLMENTAMOUNT' },
+      { index: 2, reason: 'MISSING_INSTALLMENTAMOUNT' },
+    ]);
+  });
+
+  it('cero es un valor válido: no confundir "sin mora" con "sin dato"', () => {
+    const rows: PortfolioRow[] = [{ index: 0, code: 'C1', data: { daysPastDue: 0 } }];
+    const plan = planPortfolioImport(rows, [], { required: ['daysPastDue'] });
+    assert.equal(plan.invalid.length, 0);
+    assert.equal(plan.toCreate.length, 1);
+  });
+
   it('NUNCA borra: el ausente va a toSetCurrent, no existe toSoftDelete', () => {
     const plan = planPortfolioImport([], [imp('e1', 'C1')]);
     assert.deepEqual(plan.toSetCurrent, ['e1']);

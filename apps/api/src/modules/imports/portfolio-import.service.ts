@@ -6,26 +6,35 @@ import { CreditOrigin, readCreditMetadata } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
-import { parsePdfBlocks, type FieldMap, type PdfBlocksProfile } from './parsers/pdf-blocks.parser';
-import { parseCsvRows, type RowsProfile } from './parsers/rows.parser';
-import { normalizeRecord, type NameOrder, type NormalizedRecord } from './field-catalog';
-import { BANCO_UNION_PRESET } from './presets';
+import { parsePdfBlocks, type ColumnCandidate, type FieldMap } from './parsers/pdf-blocks.parser';
+import { parseCsvRows } from './parsers/rows.parser';
+import { FIELD_CATALOG, normalizeRecord, type NormalizedRecord } from './field-catalog';
+import { BANCO_UNION_PRESET, IMPORT_PRESETS, type ImportPreset } from './presets';
+import {
+  ImportConfigError,
+  readImportConfig,
+  requiredFields,
+  scopeLabel,
+  toFieldMap,
+  validateImportConfig,
+  type ImportConfig,
+} from './import-config';
 import { planPortfolioImport, type ExistingCredit, type PortfolioRow } from './portfolio-plan';
 
-/**
- * Config del tenant (vive en `account.configuration.importConfig`).
- *
- * `profile` + `fields` son los que hacen genérica a la app (C12): NO hay plantilla por banco.
- * `profile.kind` elige el motor (dos, por forma de archivo) y el resto son datos que el usuario
- * configura en Ajustes. Ver FIELD-RULES §1, §3 y §4.
- */
-interface ImportConfig {
-  source: 'manual' | 'file';
-  profile: { kind: 'pdf-blocks' | 'rows' } & PdfBlocksProfile & RowsProfile;
-  fields: FieldMap;
-  nameOrder: NameOrder;
-  scope: { kind: 'official' | 'branch'; ref: string };
-  absentRule: 'set-current' | 'no-touch';
+/** La config del tenant + lo derivado que necesita una corrida. */
+interface RunConfig extends ImportConfig {
+  fieldMap: FieldMap;
+  required: string[];
+}
+
+interface LastRun {
+  at: string;
+  template: string | null;
+  scope: string | null;
+  created: number;
+  updated: number;
+  setCurrent: number;
+  errors: number;
 }
 
 interface PortfolioSummary {
@@ -40,6 +49,8 @@ interface PortfolioSummary {
     toUpdate: { code: string }[];
     toSetCurrent: { code: string | null }[];
     invalid: { index: number; reason: string }[];
+    // Advertencias que NO frenan la fila (§5): la fila se importa igual y se avisa.
+    warnings: { index?: number; code: string; detail?: string }[];
   };
 }
 
@@ -65,11 +76,11 @@ export class PortfolioImportService {
     // Errores de lectura (firma, tope anti-DoS, archivo corrupto) → 400, no 500.
     let blocks: NormalizedRecord[];
     try {
-      const { profile, fields } = config;
+      const { profile, fieldMap } = config;
       const raw =
         profile.kind === 'rows'
-          ? parseCsvRows(file.toString('utf8'), profile, fields).records
-          : (await parsePdfBlocks(new Uint8Array(file), profile, fields)).records;
+          ? parseCsvRows(file.toString('utf8'), profile, fieldMap).records
+          : (await parsePdfBlocks(new Uint8Array(file), profile, fieldMap)).records;
       blocks = raw.map((r) => normalizeRecord(r, config.nameOrder));
     } catch (e) {
       const message = e instanceof Error ? e.message : 'No se pudo leer el archivo';
@@ -108,8 +119,13 @@ export class PortfolioImportService {
       // por `deletedAt: null`, un code fuera de alcance o soft-deleted caería en toCreate y estallaría
       // con P2002 abortando la corrida entera. `eligible` = activo (no borrado) y dentro del alcance
       // → único candidato real a update / set-current (D-SCOPE).
+      // `account` = el archivo cubre TODA la cuenta → no filtra por agencia ni por oficial (§2.4).
       const inScope = (c: { branchId: string | null; assignedManagerId: string | null }): boolean =>
-        scope.kind === 'official' ? c.assignedManagerId === scope.ref : c.branchId === scope.ref;
+        scope.kind === 'account'
+          ? true
+          : scope.kind === 'official'
+            ? c.assignedManagerId === scope.ref
+            : c.branchId === scope.ref;
       const existing = await tx.credit.findMany({
         where: { accountId },
         select: { id: true, code: true, deletedAt: true, branchId: true, assignedManagerId: true, metadata: true },
@@ -128,13 +144,17 @@ export class PortfolioImportService {
         code: b.code ?? '',
         data: b as unknown as Record<string, unknown>,
       }));
-      const plan = planPortfolioImport(rows, existingCredits, { absentRule: config.absentRule });
+      const plan = planPortfolioImport(rows, existingCredits, {
+        absentRule: config.absentRule === 'ask' ? 'no-touch' : config.absentRule,
+        required: config.required,
+      });
 
       const preview: PortfolioSummary['preview'] = {
         toCreate: plan.toCreate.map((r) => ({ code: r.code, clientName: clientLabel(r.data as unknown as NormalizedRecord) })),
         toUpdate: plan.toUpdate.map((u) => ({ code: u.row.code })),
         toSetCurrent: plan.toSetCurrent.map((id) => ({ code: codeById.get(id) ?? null })),
         invalid: plan.invalid,
+        warnings: moraWarnings(blocks, config),
       };
       const counts = {
         created: plan.toCreate.length,
@@ -210,25 +230,125 @@ export class PortfolioImportService {
     return { dryRun, scope, ...result };
   }
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  private async importConfig(): Promise<ImportConfig> {
-    const account = await this.tx((tx) => tx.account.findUnique({ where: { id: this.tenant.accountId } }));
-    const cfg = ((account?.configuration ?? {}) as { importConfig?: Partial<ImportConfig> }).importConfig;
-    if (!cfg?.scope?.ref) {
-      throw new BadRequestException({ code: 'IMPORT_NOT_CONFIGURED', message: 'Falta importConfig del tenant' });
-    }
-    // Sin `profile`/`fields` configurados se cae al preset del Banco Unión: es lo que ya usaban
-    // los tenants de FUNDACION. ponytail: es un default de compatibilidad, no un caso especial en
-    // el código — el preset es un dato como cualquier otro (C12), y S1 lo va a pisar con lo que
-    // el usuario configure.
+  // ── Configuración (N3) ─────────────────────────────────────────────────────
+
+  /** Todo lo que la pantalla de Ajustes necesita para dibujarse, en una sola llamada (§6). */
+  async getConfigScreen(): Promise<{
+    config: ImportConfig;
+    catalog: typeof FIELD_CATALOG;
+    presets: ImportPreset[];
+    lastRun: LastRun | null;
+  }> {
+    const accountId = this.tenant.accountId;
+    const [account, run] = await this.tx((tx) =>
+      Promise.all([
+        tx.account.findUnique({ where: { id: accountId } }),
+        tx.clientImportRun.findFirst({
+          where: { accountId, source: 'portfolio' },
+          orderBy: { createdAt: 'desc' },
+        }),
+      ]),
+    );
     return {
-      source: cfg.source ?? 'file',
-      profile: cfg.profile ?? { kind: 'pdf-blocks', ...BANCO_UNION_PRESET.profile },
-      fields: cfg.fields ?? BANCO_UNION_PRESET.fields,
-      nameOrder: cfg.nameOrder ?? 'full',
-      scope: cfg.scope,
-      absentRule: cfg.absentRule ?? 'set-current',
+      config: readImportConfig((account?.configuration as { importConfig?: unknown })?.importConfig),
+      catalog: FIELD_CATALOG,
+      presets: IMPORT_PRESETS,
+      lastRun: run
+        ? {
+            at: run.createdAt.toISOString(),
+            template: run.template,
+            scope: run.scope,
+            created: run.creditsCreated,
+            updated: run.creditsUpdated,
+            setCurrent: run.creditsSetCurrent,
+            errors: run.errors,
+          }
+        : null,
     };
+  }
+
+  /**
+   * Guarda un cambio de configuración. Valida los invariantes de §3.1 **acá**, no sólo en la UI:
+   * la config vive en un JSONB sin esquema, y una regla contradictoria guardada se convierte en
+   * una cartera mal importada. Merge superficial: la pantalla guarda campo por campo.
+   */
+  async patchConfig(patch: Partial<ImportConfig>): Promise<{ config: ImportConfig }> {
+    const accountId = this.tenant.accountId;
+    const account = await this.tx((tx) => tx.account.findUnique({ where: { id: accountId } }));
+    const configuration = (account?.configuration ?? {}) as Record<string, unknown>;
+    const prev = readImportConfig(configuration.importConfig);
+
+    const next = readImportConfig({
+      ...prev,
+      ...patch,
+      profile: { ...prev.profile, ...patch.profile },
+      scope: patch.scope ? { ...patch.scope } : prev.scope,
+      // Cambiar la forma del archivo tira los emparejados: las etiquetas de un formato no
+      // significan nada en el otro (invariante 4). Se resetea acá para que el usuario no tenga
+      // que borrarlos a mano y para que el invariante no sea sólo un error.
+      fields:
+        patch.profile?.kind && patch.profile.kind !== prev.profile.kind ? {} : { ...prev.fields, ...patch.fields },
+    });
+
+    try {
+      validateImportConfig(next, prev);
+    } catch (e) {
+      if (e instanceof ImportConfigError) throw new BadRequestException({ code: e.code, message: e.message });
+      throw e;
+    }
+
+    await this.tx((tx) =>
+      tx.account.update({
+        where: { id: accountId },
+        data: { configuration: { ...configuration, importConfig: next } as unknown as Prisma.InputJsonValue },
+      }),
+    );
+    await this.audit.record({ entity: 'import_config', entityId: accountId, action: 'UPDATE', after: next });
+    return { config: next };
+  }
+
+  /**
+   * Qué etiquetas/columnas trae un archivo de muestra, sin correr el reconcile (§6.5).
+   * Es lo que hace posible configurar un formato que nunca vimos: el usuario sube SU archivo y
+   * la app le muestra lo que encontró para que empareje.
+   */
+  async readColumns(file: Buffer): Promise<{ labels: string[]; columnCandidates: ColumnCandidate[] }> {
+    const config = await this.importConfig();
+    try {
+      if (config.profile.kind === 'rows') {
+        const { labels, columnCandidates } = parseCsvRows(file.toString('utf8'), config.profile, config.fieldMap);
+        return { labels, columnCandidates };
+      }
+      const { labels, columnCandidates } = await parsePdfBlocks(
+        new Uint8Array(file),
+        config.profile,
+        config.fieldMap,
+      );
+      return { labels, columnCandidates };
+    } catch (e) {
+      throw new BadRequestException({
+        code: 'PARSE_FAILED',
+        message: e instanceof Error ? e.message : 'No se pudo leer el archivo',
+      });
+    }
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  private async importConfig(): Promise<RunConfig> {
+    const account = await this.tx((tx) => tx.account.findUnique({ where: { id: this.tenant.accountId } }));
+    const cfg = readImportConfig((account?.configuration as { importConfig?: unknown })?.importConfig);
+
+    // Compat: los tenants de FUNDACION importaron sin `fields` configurados. Sin esto, su
+    // próxima corrida leería cero campos. ponytail: el preset es un dato como cualquier otro
+    // (C12), no un caso especial del motor. **Borrar cuando todos hayan pasado por Ajustes.**
+    if (Object.keys(cfg.fields).length === 0) {
+      cfg.profile = { ...cfg.profile, kind: 'pdf-blocks', ...BANCO_UNION_PRESET.profile };
+      cfg.fields = Object.fromEntries(Object.entries(BANCO_UNION_PRESET.fields).map(([k, v]) => [k, { ...v }]));
+    }
+    if (cfg.scope.kind !== 'account' && !cfg.scope.ref) {
+      throw new BadRequestException({ code: 'IMPORT_NOT_CONFIGURED', message: 'Falta el alcance del archivo' });
+    }
+    return { ...cfg, fieldMap: toFieldMap(cfg.fields), required: requiredFields(cfg.fields) };
   }
 
   private async updateCredit(tx: PrismaClient, id: string, b: NormalizedRecord, prevMeta: Record<string, unknown>): Promise<void> {
@@ -257,6 +377,32 @@ export class PortfolioImportService {
 /** Cómo se muestra el cliente en la Vista Previa. */
 function clientLabel(b: NormalizedRecord): string {
   return [b.clientLastName, b.clientFirstName].filter(Boolean).join(' ') || 'SIN NOMBRE';
+}
+
+/** Umbral a partir del cual la sospecha deja de ser "un caso raro" y pasa a ser "la columna está mal". */
+const MORA_ALERT_RATIO = 0.2;
+
+/**
+ * Guardas de la columna de días de atraso (§5, §6.5.1). **Advierten, no rechazan**: la fila se
+ * importa igual. Frenar por sospecha convertiría un layout raro del banco en una cartera que no
+ * entra nunca; avisar deja que el usuario mire y corrija la columna en Ajustes.
+ */
+function moraWarnings(blocks: NormalizedRecord[], config: RunConfig): PortfolioSummary['preview']['warnings'] {
+  const out: PortfolioSummary['preview']['warnings'] = [];
+  const rule = config.fields.daysPastDue;
+  if (rule?.from && rule.enabled !== false && !rule.calibrated) {
+    out.push({ code: 'MORA_SIN_CONFIRMAR', detail: rule.from });
+  }
+  // Vigente + sin monto en mora, pero con días de atraso: o es un caso raro, o la columna
+  // elegida no son los días de mora (`Dias Int.` cae contigua a `Dias Mora`).
+  const sospechosas = blocks
+    .map((b, index) => ({ b, index }))
+    .filter(({ b }) => (b.daysPastDue ?? 0) > 0 && b.pastDueAmount === 0 && mapStatus(b.status) === CreditStatus.ACTIVE);
+  for (const { index } of sospechosas) out.push({ index, code: 'MORA_INCONSISTENTE' });
+  if (blocks.length > 0 && sospechosas.length / blocks.length > MORA_ALERT_RATIO) {
+    out.push({ code: 'MORA_COLUMNA_SOSPECHOSA', detail: `${sospechosas.length}/${blocks.length}` });
+  }
+  return out;
 }
 
 /** Datos de un crédito nuevo para `createMany` (el archivo no trae carnet → cliente sin nationalId). */
@@ -306,5 +452,5 @@ function mapCurrency(raw: string | null): string {
   return raw;
 }
 function emptyPreview(): PortfolioSummary['preview'] {
-  return { toCreate: [], toUpdate: [], toSetCurrent: [], invalid: [] };
+  return { toCreate: [], toUpdate: [], toSetCurrent: [], invalid: [], warnings: [] };
 }

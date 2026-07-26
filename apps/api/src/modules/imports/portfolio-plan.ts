@@ -46,9 +46,12 @@ export interface PortfolioPlan {
 export function planPortfolioImport(
   rows: PortfolioRow[],
   existingAccount: ExistingCredit[],
-  opts: { absentRule?: AbsentRule } = {},
+  opts: { absentRule?: AbsentRule; required?: string[] } = {},
 ): PortfolioPlan {
   const absentRule = opts.absentRule ?? 'set-current';
+  // Campos que el tenant marcó obligatorios (§3.1): sin ellos la fila no sirve. Llegan por
+  // `opts` para que el motor siga siendo puro — no lee configuración, la recibe.
+  const required = (opts.required ?? []).filter((f) => f !== 'code');
   const plan: PortfolioPlan = { toCreate: [], toUpdate: [], toSetCurrent: [], invalid: [] };
 
   // Índice de existentes por code (solo los que tienen code).
@@ -69,6 +72,17 @@ export function planPortfolioImport(
       continue;
     }
     seenInFile.add(code);
+
+    // Un campo obligatorio vacío frena la fila ENTERA: o entra completa, o no entra. Importar
+    // media fila deja un crédito con datos de dos días distintos, que es peor que no importarlo.
+    const missing = required.find((f) => {
+      const v = row.data[f];
+      return v === undefined || v === null || v === '';
+    });
+    if (missing) {
+      plan.invalid.push({ index: row.index, reason: `MISSING_${missing.toUpperCase()}` });
+      continue;
+    }
 
     const existing = byCode.get(code);
     if (!existing) {
