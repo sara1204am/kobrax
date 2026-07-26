@@ -5,7 +5,10 @@
  * no hay nada de parseo — sólo el contrato con `GET/PATCH /api/imports/portfolio/config`.
  * Ver `docs/epics/F10/plans/import/FIELD-RULES.md` §6.
  */
-import { apiMutate, apiQuery, type MutateResult, type QueryResult } from '@/api-client';
+import * as SecureStore from 'expo-secure-store';
+import { apiMutate, apiQuery, refreshSession, type MutateResult, type QueryResult } from '@/api-client';
+import { API_BASE } from '@/api';
+import { getSession } from '@/session';
 
 export type ProfileKind = 'pdf-blocks' | 'rows';
 export type AbsentRule = 'set-current' | 'no-touch' | 'ask';
@@ -82,7 +85,147 @@ export const importService = {
   patch(patch: Partial<ImportConfig>): Promise<MutateResult<{ config: ImportConfig }>> {
     return apiMutate<{ config: ImportConfig }>(BASE, 'PATCH', patch);
   },
+
+  /**
+   * Sube un archivo de muestra y devuelve QUÉ trae, sin importar nada (`?columnsOnly=true`).
+   * Es la pieza que hace configurable un formato que nunca vimos: el usuario sube SU archivo y
+   * la app le muestra las etiquetas/columnas encontradas para que empareje (§6.5).
+   */
+  readColumns(file: PickedFile): Promise<FileResult<ColumnsPayload>> {
+    return postFile<ColumnsPayload>('?columnsOnly=true', file);
+  },
+
+  /** Sube el archivo del día. `dryRun` = Vista Previa; sin él, se aplica. */
+  run(file: PickedFile, dryRun: boolean): Promise<FileResult<PortfolioSummary>> {
+    return postFile<PortfolioSummary>('', file, dryRun);
+  },
 };
+
+export interface PickedFile {
+  uri: string;
+  name: string;
+  mimeType?: string;
+}
+
+export interface ColumnsPayload {
+  labels: string[];
+  columnCandidates: ColumnCandidate[];
+}
+
+export interface PortfolioSummary {
+  dryRun: boolean;
+  idempotentSkip: boolean;
+  counts: { created: number; updated: number; setCurrent: number; invalid: number };
+  preview: {
+    toCreate: { code: string; clientName: string }[];
+    toUpdate: { code: string }[];
+    toSetCurrent: { code: string | null }[];
+    invalid: { index: number; reason: string }[];
+    warnings: { index?: number; code: string; detail?: string }[];
+  };
+}
+
+export type FileResult<T> =
+  | ({ status: 'ok' } & T)
+  | { status: 'offline' }
+  | { status: 'unauthenticated' }
+  | { status: 'error'; message: string };
+
+/**
+ * POST multipart a `/imports/portfolio`. No pasa por `apiMutate` (que serializa JSON) — mismo
+ * patrón que `uploads.service.ts`, incluido el 401 → refresh → retry una vez.
+ */
+async function postFile<T>(query: string, file: PickedFile, dryRun?: boolean): Promise<FileResult<T>> {
+  const session = await getSession();
+  if (!session) return { status: 'unauthenticated' };
+
+  const post = (token: string) => {
+    const form = new FormData();
+    // En React Native el file part es { uri, name, type } (no un Blob).
+    form.append('file', {
+      uri: file.uri,
+      name: file.name,
+      type: file.mimeType ?? 'application/octet-stream',
+    } as unknown as Blob);
+    if (dryRun !== undefined) form.append('dryRun', String(dryRun));
+    return fetch(`${API_BASE}/imports/portfolio${query}`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'x-client-type': 'mobile' },
+      body: form,
+    });
+  };
+
+  try {
+    let res = await post(session.accessToken);
+    if (res.status === 401) {
+      const refreshed = await refreshSession();
+      if (!refreshed) return { status: 'unauthenticated' };
+      res = await post(refreshed.accessToken);
+    }
+    const json = (await res.json().catch(() => ({ data: null, error: null }))) as {
+      data: T | null;
+      error: { message: string } | null;
+    };
+    if (res.ok && json.data) return { status: 'ok', ...json.data };
+    if (res.status === 401) return { status: 'unauthenticated' };
+    return { status: 'error', message: json.error?.message ?? 'No se pudo leer el archivo' };
+  } catch {
+    return { status: 'offline' };
+  }
+}
+
+// ── Gate post-login (§6.7) ───────────────────────────────────────────────────
+// Flags locales en SecureStore, mismo patrón que `biometric.ts` (cero deps nuevas).
+// Dos claves separadas a propósito: **saltar no es importar**. El gate no vuelve a molestar hoy,
+// pero la app sigue sabiendo que el import está pendiente. El logout NO las borra: son estado
+// operativo, no credencial.
+//
+// ponytail: claves globales, no por usuario — igual que los flags biométricos, que son más
+// sensibles que estos. Un teléfono compartido por dos cobradores haría que el segundo no reciba
+// el ofrecimiento ese día; si eso aparece de verdad, se le sufija el userId y listo.
+
+const LAST_DAY = 'k_import_last_day';
+const SKIP_DAY = 'k_import_skip_day';
+
+const today = (now = new Date()): string =>
+  `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, '0')}-${`${now.getDate()}`.padStart(2, '0')}`;
+
+export async function markImported(now = new Date()): Promise<void> {
+  await SecureStore.setItemAsync(LAST_DAY, today(now));
+}
+
+export async function markImportSkipped(now = new Date()): Promise<void> {
+  await SecureStore.setItemAsync(SKIP_DAY, today(now));
+}
+
+/**
+ * ¿Corresponde ofrecer el import al entrar? Se decide con la config del tenant + los flags del
+ * día. Puro salvo la lectura: la parte decidible se testea en `shouldOfferImport` sin red.
+ */
+export function decideImportGate(
+  config: Pick<ImportConfig, 'source' | 'askOnLogin'>,
+  flags: { lastDay: string | null; skipDay: string | null },
+  now = new Date(),
+): boolean {
+  if (config.source !== 'file') return false; // carga a mano → el módulo no existe para este tenant
+  if (!config.askOnLogin) return false; // se entra sólo por el menú (§6.7)
+  const hoy = today(now);
+  return flags.lastDay !== hoy && flags.skipDay !== hoy;
+}
+
+/** Versión con IO: lee la config del tenant y los flags del día. Falla cerrado (no molesta). */
+export async function shouldOfferImport(now = new Date()): Promise<boolean> {
+  const [lastDay, skipDay] = await Promise.all([
+    SecureStore.getItemAsync(LAST_DAY),
+    SecureStore.getItemAsync(SKIP_DAY),
+  ]);
+  // Si ya importó o saltó hoy, ni se consulta la config: es una llamada de red menos en el
+  // arranque, que es justo donde el cobrador no quiere esperar.
+  if (!decideImportGate({ source: 'file', askOnLogin: true }, { lastDay, skipDay }, now)) return false;
+  const res = await importService.getConfig();
+  if (res.status !== 'ok') return false; // sin config legible (offline, error) no se interrumpe el login
+  return decideImportGate(res.data.config, { lastDay, skipDay }, now);
+}
 
 // ── Derivados para la UI (puros, testeables sin red) ─────────────────────────
 

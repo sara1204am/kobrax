@@ -1,5 +1,6 @@
 import {
   applyFieldState,
+  decideImportGate,
   fieldState,
   lastRunWhen,
   previewName,
@@ -86,6 +87,38 @@ describe('previewName — la decisión que el archivo no puede responder (§2.3)
 
   it('menos de tres palabras: no adivina, deja entero', () => {
     expect(previewName('PEREZ JUAN', 'surnames-first').lastName).toBe('PEREZ JUAN');
+  });
+});
+
+describe('decideImportGate — el toggle "preguntar al iniciar sesión" (§6.7)', () => {
+  const now = new Date('2026-07-25T09:00:00');
+  const sinFlags = { lastDay: null, skipDay: null };
+  const file = { source: 'file' as const, askOnLogin: true };
+
+  it('ofrece el import el primer login del día', () => {
+    expect(decideImportGate(file, sinFlags, now)).toBe(true);
+  });
+
+  it('askOnLogin apagado → nunca interrumpe; se entra por el menú', () => {
+    expect(decideImportGate({ ...file, askOnLogin: false }, sinFlags, now)).toBe(false);
+  });
+
+  it('tenant que carga a mano → el módulo no existe para él', () => {
+    expect(decideImportGate({ source: 'manual', askOnLogin: true }, sinFlags, now)).toBe(false);
+  });
+
+  it('ya importó hoy → no molesta', () => {
+    expect(decideImportGate(file, { lastDay: '2026-07-25', skipDay: null }, now)).toBe(false);
+  });
+
+  it('saltó hoy → no molesta HOY, pero el flag es otro: saltar no es importar', () => {
+    expect(decideImportGate(file, { lastDay: null, skipDay: '2026-07-25' }, now)).toBe(false);
+    // Al día siguiente vuelve a ofrecer, porque nunca se importó.
+    expect(decideImportGate(file, { lastDay: null, skipDay: '2026-07-25' }, new Date('2026-07-26T09:00:00'))).toBe(true);
+  });
+
+  it('lo de ayer no cuenta', () => {
+    expect(decideImportGate(file, { lastDay: '2026-07-24', skipDay: '2026-07-24' }, now)).toBe(true);
   });
 });
 

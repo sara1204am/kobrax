@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
 import { router } from 'expo-router';
 import { COLORS, SPACING } from '@/theme';
 import { BottomSheet, EmptyState, Header, ListRow, SectionLabel } from '@/ui';
@@ -12,6 +13,7 @@ import {
   importService,
   NAME_ORDER_LABEL,
   previewName,
+  type ColumnCandidate,
   type ConfigScreen,
   type FieldRule,
   type FieldState,
@@ -31,6 +33,11 @@ export default function ColumnasScreen() {
   const [editing, setEditing] = useState<string | null>(null); // campo cuyo estado se edita
   const [adding, setAdding] = useState(false);
   const [naming, setNaming] = useState(false);
+  // Lo que el archivo de muestra trajo. Vive sólo en memoria: es material de trabajo para
+  // emparejar, no configuración — guardarlo obligaría a invalidarlo cuando el archivo cambie.
+  const [labels, setLabels] = useState<string[]>([]);
+  const [candidates, setCandidates] = useState<ColumnCandidate[]>([]);
+  const [sourceFor, setSourceFor] = useState<string | null>(null); // campo al que se le elige origen
 
   const load = useCallback(async () => {
     const res = await importService.getConfig();
@@ -38,6 +45,21 @@ export default function ColumnasScreen() {
     else setError(res.status === 'offline' ? 'Sin conexión.' : 'No se pudo cargar la configuración');
   }, []);
   useEffect(() => void load(), [load]);
+
+  /** Sube un archivo de muestra: la app lista lo que encontró para que el usuario empareje. */
+  async function pickSample() {
+    const picked = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
+    if (picked.canceled || !picked.assets?.[0]) return;
+    const a = picked.assets[0];
+    const res = await importService.readColumns({ uri: a.uri, name: a.name, mimeType: a.mimeType });
+    if (res.status === 'ok') {
+      setLabels(res.labels);
+      setCandidates(res.columnCandidates);
+      setError(res.labels.length === 0 ? 'El archivo se leyó pero no se encontraron columnas.' : null);
+    } else {
+      setError(res.status === 'error' ? res.message : 'No se pudo leer el archivo');
+    }
+  }
 
   async function save(fields: Record<string, FieldRule>, extra: Record<string, unknown> = {}) {
     if (!screen) return;
@@ -86,13 +108,20 @@ export default function ColumnasScreen() {
           </Text>
         </View>
 
+        {labels.length > 0 && (
+          <Text style={styles.hint}>
+            Del archivo de muestra: {labels.slice(0, 8).join(' · ')}
+            {labels.length > 8 ? ` y ${labels.length - 8} más` : ''}
+          </Text>
+        )}
+
         {entries.length === 0 ? (
           // Sin archivo de muestra no hay etiquetas que listar: es la pieza que hace configurable
-          // un formato que nunca vimos (§6.5). El picker llega con `expo-document-picker`.
+          // un formato que nunca vimos (§6.5).
           <EmptyState
             icon="📄"
             title="Todavía no hay nada emparejado"
-            hint="Elegí un preset en la pantalla anterior, o subí un archivo de muestra para ver qué columnas trae."
+            hint="Subí un archivo de muestra para ver qué columnas trae, o partí de un preset en la pantalla anterior."
           />
         ) : (
           <>
@@ -122,6 +151,7 @@ export default function ColumnasScreen() {
           </>
         )}
 
+        <Button variant="ghost" label="Elegir un archivo de muestra" onPress={() => void pickSample()} />
         {sinEmparejar.length > 0 && (
           <Button variant="ghost" label="+ Agregar campo del archivo" onPress={() => setAdding(true)} />
         )}
@@ -151,6 +181,69 @@ export default function ColumnasScreen() {
             </View>
           </Pressable>
         ))}
+        <Pressable
+          style={styles.option}
+          onPress={() => {
+            setSourceFor(editing);
+            setEditing(null);
+          }}
+        >
+          <Text style={styles.optionMark}>⇄</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.optionLabel}>De dónde se lee</Text>
+            <Text style={styles.optionHint}>
+              {editing && config.fields[editing]?.from ? `"${config.fields[editing]!.from}"` : 'Sin emparejar'}
+            </Text>
+          </View>
+        </Pressable>
+      </BottomSheet>
+
+      {/*
+        Elegir el ORIGEN de un campo. Para los días de atraso se muestran los valores reales del
+        archivo de muestra (§6.5.1): con `Dias Int.` y `Dias Mora` contiguas, el número al lado del
+        cliente es lo único que deja distinguirlas — el usuario conoce su cartera, el test no.
+      */}
+      <BottomSheet visible={!!sourceFor} onClose={() => setSourceFor(null)} title="¿De dónde se lee?">
+        {labels.length === 0 && candidates.length === 0 ? (
+          <Text style={styles.hint}>Subí un archivo de muestra para ver qué trae.</Text>
+        ) : null}
+        {(sourceFor === 'daysPastDue' ? candidates : []).map((c) => (
+          <Pressable
+            key={c.header}
+            style={styles.option}
+            onPress={() => {
+              const field = sourceFor!;
+              setSourceFor(null);
+              // Cambiar la columna vuelve `calibrated` a false: confirmar es un acto aparte de
+              // elegir (invariante 7). El backend lo rechaza si llegan juntos.
+              void save({ [field]: { ...config.fields[field], from: c.header, in: 'table', calibrated: false } });
+            }}
+          >
+            <Text style={styles.optionMark}>{config.fields[sourceFor!]?.from === c.header ? '●' : '○'}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.optionLabel}>{c.header}</Text>
+              {c.samples.map((s) => (
+                <Text key={s.label} style={styles.optionHint}>
+                  {s.label} — {s.value ?? '(vacío)'}
+                </Text>
+              ))}
+            </View>
+          </Pressable>
+        ))}
+        {labels.map((l) => (
+          <Pressable
+            key={l}
+            style={styles.option}
+            onPress={() => {
+              const field = sourceFor!;
+              setSourceFor(null);
+              void save({ [field]: { ...config.fields[field], from: l, enabled: true, calibrated: undefined } });
+            }}
+          >
+            <Text style={styles.optionMark}>{config.fields[sourceFor!]?.from === l ? '●' : '○'}</Text>
+            <Text style={styles.optionLabel}>{l}</Text>
+          </Pressable>
+        ))}
       </BottomSheet>
 
       {/* Agregar campo: el catálogo es cerrado, el origen lo escribe el usuario mirando su archivo. */}
@@ -165,7 +258,7 @@ export default function ColumnasScreen() {
             onPress={() => {
               setAdding(false);
               void save({ [f]: { enabled: true, required: false } });
-              setEditing(f);
+              setSourceFor(f); // recién agregado: lo primero es decir de dónde sale
             }}
           >
             <Text style={styles.optionMark}>+</Text>
