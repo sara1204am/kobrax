@@ -40,6 +40,17 @@ export interface ImportConfig {
   preset?: string;
 }
 
+/**
+ * Lo que llega en un `PATCH`. Difiere de `Partial<ImportConfig>` en un punto: un campo puesto en
+ * `null` se **quita** del emparejado. Sin eso, un campo agregado por error sólo se puede apagar
+ * —queda en la lista para siempre— porque el merge de `fields` es superficial.
+ */
+export type ImportConfigPatch = Partial<Omit<ImportConfig, 'fields'>> & {
+  fields?: Record<string, FieldRule | null>;
+  /** Volver al estado de fábrica y rehacer el asistente desde cero. Ignora el resto del patch. */
+  reset?: true;
+};
+
 export class ImportConfigError extends Error {
   constructor(
     readonly code: string,
@@ -152,6 +163,32 @@ export function validateImportConfig(next: ImportConfig, prev?: ImportConfig): v
   }
 }
 
+/**
+ * Aplica el patch de campos: merge superficial, y `null` = quitar (§3.1).
+ *
+ * La llave y el cliente no se quitan, por la misma razón por la que no se apagan (invariante 3):
+ * sin `code` no hay con qué emparejar el archivo contra la cartera. Quitar es una forma más
+ * definitiva de apagar, así que cae bajo la misma regla.
+ */
+export function mergeFieldPatch(
+  prev: Record<string, FieldRule>,
+  patch: Record<string, FieldRule | null> | undefined,
+): Record<string, FieldRule> {
+  if (!patch) return { ...prev };
+  const out: Record<string, FieldRule> = { ...prev };
+  for (const [field, rule] of Object.entries(patch)) {
+    if (rule !== null) {
+      out[field] = rule;
+      continue;
+    }
+    if (LOCKED.includes(field)) {
+      throw new ImportConfigError('FIELD_RULE_CONFLICT', `"${label(field)}" no se puede quitar`);
+    }
+    delete out[field];
+  }
+  return out;
+}
+
 /** `fields` listo para el motor: sólo los encendidos y emparejados. */
 export function toFieldMap(fields: Record<string, FieldRule>): FieldMap {
   const out: FieldMap = {};
@@ -167,6 +204,23 @@ export function requiredFields(fields: Record<string, FieldRule>): string[] {
   return Object.entries(fields)
     .filter(([, r]) => r.required && r.enabled !== false)
     .map(([f]) => f);
+}
+
+/**
+ * Qué FORMA tiene el archivo según sus bytes. `profile.kind` es una preferencia guardada; esto
+ * es un hecho del archivo, y cuando se contradicen gana el archivo.
+ *
+ * Importa porque leer un PDF con el parser de planillas no falla: devuelve la primera línea del
+ * binario (`%PDF-1.1`) como si fuera la única columna del archivo. Un error claro es infinitamente
+ * mejor que una columna inventada.
+ *
+ * `null` = sin firma reconocible (un CSV es texto pelado) → se confía en lo configurado.
+ */
+export function detectProfileKind(file: Buffer | Uint8Array): ProfileKind | null {
+  const head = Buffer.from(file.subarray(0, 4)).toString('latin1');
+  if (head.startsWith('%PDF')) return 'pdf-blocks';
+  if (head.startsWith('PK\x03\x04')) return 'rows'; // xlsx = un zip
+  return null;
 }
 
 /** Cómo se serializa el alcance en `client_import_runs.scope`. */

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { COLORS, SPACING } from '@/theme';
 import { BottomSheet, Chips, EmptyState, Header, ListRow, OfflineIndicator, SectionLabel, StatTile } from '@/ui';
@@ -21,6 +21,7 @@ import {
   type AbsentRule,
   type ConfigScreen,
   type ImportConfig,
+  type ImportConfigPatch,
   type ProfileKind,
   type ScopeKind,
 } from '@/import.service';
@@ -57,11 +58,27 @@ export default function ImportacionScreen() {
   );
   useEffect(() => setError(null), [sheet]);
 
+  /**
+   * Volver al estado de fábrica: el asistente arranca de cero. Pide confirmación porque tira el
+   * emparejado, que es lo más caro de rehacer. No toca la cartera ya importada — sólo la config.
+   */
+  function confirmReset() {
+    Alert.alert(
+      'Reiniciar la configuración',
+      'Se borra el formato, el emparejado de columnas y el alcance. La cartera ya importada no se toca.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Reiniciar', style: 'destructive', onPress: () => void save({ reset: true }) },
+      ],
+    );
+  }
+
   /** Guarda al toque. Si el backend rechaza por invariante, el control vuelve al valor previo. */
-  async function save(patch: Partial<ImportConfig>) {
+  async function save(patch: ImportConfigPatch) {
     if (!screen) return;
     const prev = screen.config;
-    setScreen({ ...screen, config: { ...prev, ...patch } as ImportConfig }); // optimista
+    // Optimista, salvo al reiniciar: ahí el valor nuevo lo arma el backend, no el patch.
+    if (!patch.reset) setScreen({ ...screen, config: { ...prev, ...patch } as ImportConfig });
     const res = await importService.patch(patch);
     if (res.status === 'ok') {
       setScreen((s) => (s ? { ...s, config: res.data.config } : s));
@@ -292,6 +309,10 @@ export default function ImportacionScreen() {
             />
           </>
         )}
+
+        {/* Última salida cuando la configuración quedó enredada: empezar de nuevo. Va al final y
+            fuera del `isFile` — se llega acá justamente cuando lo de arriba no sirve. */}
+        <Button variant="ghost" label="Reiniciar la configuración" onPress={confirmReset} />
       </ScrollView>
 
       <OptionSheet

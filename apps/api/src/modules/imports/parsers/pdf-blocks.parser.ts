@@ -50,6 +50,12 @@ export interface PdfBlocksResult {
   labels: string[];
   /** Columnas del cuadro que parecen días, con muestras reales para calibrar (§6.5.1). */
   columnCandidates: ColumnCandidate[];
+  /**
+   * Textos que se repiten a lo largo del archivo, del más frecuente al menos. El que abre cada
+   * registro es siempre uno de ellos, y su cuenta es la cantidad de registros. Es lo que permite
+   * configurar un PDF que nunca vimos sin escribir código para él (C12).
+   */
+  recordStartCandidates: { text: string; count: number }[];
 }
 
 interface TextItem {
@@ -137,6 +143,20 @@ export function readBlocks(
   ordered.forEach((it, i) => {
     if (it.str === profile.recordStart) starts.push(i);
   });
+  const recordStartCandidates = recordStartOptions(ordered);
+
+  // Sin saber dónde empieza cada registro no hay bloques, y por lo tanto no hay registros. Pero
+  // SÍ se puede decir qué trae el archivo: se listan las etiquetas de todo el documento y las
+  // repeticiones que podrían abrirlo, para que el usuario elija. Devolver cero columnas dejaba
+  // sin salida a cualquier formato que no tuviera preset (C12).
+  if (starts.length === 0) {
+    return {
+      records: [],
+      labels: [...new Set(detectLabels(ordered))].sort(),
+      columnCandidates: [],
+      recordStartCandidates,
+    };
+  }
 
   const records: Record<string, string | null>[] = [];
   const labels = new Set<string>();
@@ -164,7 +184,40 @@ export function readBlocks(
     }
   }
 
-  return { records, labels: [...labels].sort(), columnCandidates: buildCandidates(samples) };
+  return { records, labels: [...labels].sort(), columnCandidates: buildCandidates(samples), recordStartCandidates };
+}
+
+/** Hasta acá llega una etiqueta; más largo es un párrafo o un valor, no el rótulo de un registro. */
+const MAX_START_LEN = 40;
+/** Cuántas candidatas se ofrecen: la lista es para elegir de un vistazo, no para leerla entera. */
+const MAX_START_CANDIDATES = 15;
+
+/**
+ * Qué textos pueden abrir un registro, del más frecuente al menos.
+ *
+ * Dos señales, porque una sola no alcanza:
+ *  - **se repite** — aparece una vez por registro, así que su cuenta ES la cantidad de créditos;
+ *  - **parece rótulo** — lo detecta `detectLabels`. Hace falta porque un archivo de UN registro
+ *    tiene su etiqueta de apertura una sola vez: pedir repetición dejaría fuera justo ese caso.
+ *
+ * Sólo se ofrecen textos que existen como item suelto: el corte compara contra `item.str`, así que
+ * una etiqueta compuesta ("Fecha Desembolso") se elegiría para no cortar nunca.
+ * No se adivina cuál es —eso lo sabe el usuario mirando su archivo—, se le acerca la lista corta.
+ */
+export function recordStartOptions(items: TextItem[]): { text: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const it of items) {
+    const t = it.str.trim();
+    if (t.length === 0 || t.length > MAX_START_LEN) continue;
+    if (!/\p{L}/u.test(t)) continue; // sin ninguna letra = número, guión, separador
+    counts.set(t, (counts.get(t) ?? 0) + 1);
+  }
+  const looksLikeLabel = new Set(detectLabels(items));
+  return [...counts]
+    .filter(([text, n]) => n > 1 || looksLikeLabel.has(text))
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, MAX_START_CANDIDATES)
+    .map(([text, count]) => ({ text, count }));
 }
 
 function readField(block: TextItem[], profile: PdfBlocksProfile, src: FieldSource): string | null {

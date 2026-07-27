@@ -17,7 +17,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PortfolioImportService } from './portfolio-import.service';
-import type { ImportConfig } from './import-config';
+import type { ImportConfigPatch } from './import-config';
 
 // Sin @types/multer: solo necesitamos el buffer (FileInterceptor usa memoria por defecto).
 interface UploadedPortfolioFile {
@@ -55,7 +55,7 @@ export class PortfolioImportController {
 
   @Patch('config')
   @Roles(Permission.CLIENT_IMPORT)
-  patchConfig(@Body() body: Partial<ImportConfig>) {
+  patchConfig(@Body() body: ImportConfigPatch) {
     return this.portfolio.patchConfig(body);
   }
 

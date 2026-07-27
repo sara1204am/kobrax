@@ -2,6 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_IMPORT_CONFIG,
+  detectProfileKind,
+  mergeFieldPatch,
   readImportConfig,
   requiredFields,
   scopeLabel,
@@ -84,6 +86,40 @@ describe('import-config — invariantes de §3.1', () => {
 
   it('un campo que no está en el catálogo se rechaza', () => {
     fails(base({ fields: { loQueSea: { from: 'X' } } }), 'UNKNOWN_FIELD');
+  });
+});
+
+describe('detectProfileKind — la forma la dicen los bytes, no la config', () => {
+  it('reconoce un PDF y un xlsx por su firma', () => {
+    assert.equal(detectProfileKind(Buffer.from('%PDF-1.1\n...')), 'pdf-blocks');
+    assert.equal(detectProfileKind(Buffer.from('PK\x03\x04algo')), 'rows');
+  });
+
+  it('un CSV no tiene firma: se confía en lo configurado', () => {
+    // Sin esto, cualquier archivo de texto quedaría acusado de ser de la forma equivocada.
+    assert.equal(detectProfileKind(Buffer.from('NRO,DEUDOR,SALDO\n1,PEREZ,100')), null);
+  });
+});
+
+describe('mergeFieldPatch — agregar, cambiar y QUITAR un campo', () => {
+  const prev = { code: { from: 'NRO' }, coHolder: { from: 'CO-TITULAR' } };
+
+  it('sin patch no toca nada, y un campo nuevo se suma', () => {
+    assert.deepEqual(mergeFieldPatch(prev, undefined), prev);
+    assert.equal(mergeFieldPatch(prev, { status: { from: 'ESTADO' } }).status?.from, 'ESTADO');
+  });
+
+  it('`null` lo saca de la lista — apagarlo lo dejaría ahí para siempre', () => {
+    const out = mergeFieldPatch(prev, { coHolder: null });
+    assert.equal('coHolder' in out, false);
+    assert.equal(out.code?.from, 'NRO'); // los demás quedan intactos
+  });
+
+  it('la llave no se puede quitar: sin `code` no hay con qué emparejar', () => {
+    assert.throws(
+      () => mergeFieldPatch(prev, { code: null }),
+      (e: unknown) => (e as { code: string }).code === 'FIELD_RULE_CONFLICT',
+    );
   });
 });
 

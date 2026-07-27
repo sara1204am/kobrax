@@ -9,6 +9,7 @@ import {
   LIST_LIMIT,
   markImported,
   moreLabel,
+  rejectText,
   warningText,
   type PortfolioSummary,
 } from '@/import.service';
@@ -135,7 +136,7 @@ export default function PreviewScreen() {
                     items={preview.preview.invalid.map((r) => ({
                       key: String(r.index),
                       title: `Registro ${r.index + 1}`,
-                      sub: r.reason,
+                      sub: rejectText(r.reason),
                     }))}
                   />
                 )}

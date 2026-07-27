@@ -35,6 +35,22 @@ describe('pdf-blocks.parser — motor genérico con el preset Banco Unión', () 
     assert.equal(r.pastDueAmount, 0);
   });
 
+  it('un PDF SIN preset igual dice qué trae, y ofrece dónde empieza cada registro', async () => {
+    // El caso del cliente cuyo formato no conocemos: `recordStart` vacío. Antes devolvía cero
+    // columnas y no había salida; ahora lista las etiquetas del documento entero y las
+    // repeticiones entre las que está la que abre cada registro.
+    const sinPreset = { ...profile, recordStart: '', signature: undefined };
+    const { labels, recordStartCandidates } = await parsePdfBlocks(bytes(), sinPreset, fields);
+
+    assert.ok(labels.length > 0, 'sin recordStart tiene que listar igual las etiquetas');
+    assert.ok(
+      recordStartCandidates.some((c) => c.text === 'Cliente'),
+      'la etiqueta que abre el registro tiene que estar entre las candidatas',
+    );
+    // Nada sin letras (números, guiones) se ofrece como inicio de registro.
+    assert.ok(recordStartCandidates.every((c) => /\p{L}/u.test(c.text)));
+  });
+
   it('CALIBRACIÓN mora: Dias Mora vacía → 0, NO confunde con Dias Int (18/31/30)', async () => {
     const { records } = await parsePdfBlocks(bytes(), profile, fields);
     assert.equal(normalizeRecord(records[0]!).daysPastDue, 0);

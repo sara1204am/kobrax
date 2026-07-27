@@ -11,13 +11,17 @@ import { parseCsvRows } from './parsers/rows.parser';
 import { FIELD_CATALOG, normalizeRecord, type NormalizedRecord } from './field-catalog';
 import { BANCO_UNION_PRESET, IMPORT_PRESETS, type ImportPreset } from './presets';
 import {
+  DEFAULT_IMPORT_CONFIG,
+  detectProfileKind,
   ImportConfigError,
+  mergeFieldPatch,
   readImportConfig,
   requiredFields,
   scopeLabel,
   toFieldMap,
   validateImportConfig,
   type ImportConfig,
+  type ImportConfigPatch,
 } from './import-config';
 import { planPortfolioImport, type ExistingCredit, type PortfolioRow } from './portfolio-plan';
 
@@ -83,6 +87,8 @@ export class PortfolioImportService {
     if (config.source === 'manual') {
       throw new BadRequestException({ code: 'IMPORT_DISABLED', message: 'El tenant carga a mano (source=manual)' });
     }
+
+    assertFileShape(file, config.profile.kind);
 
     // Parseo server-side (fuera de la transacción), con el motor que pida el perfil.
     // Errores de lectura (firma, tope anti-DoS, archivo corrupto) → 400, no 500.
@@ -223,7 +229,7 @@ export class PortfolioImportService {
           // Sin `ref` (alcance de empresa) se guarda la clase a secas: `${kind}:${ref}` escribía
           // literalmente "account:null" en el historial, que además ahora se le muestra al usuario
           // en la tarjeta de última importación (FIELD-RULES §8 · item 14).
-          scope: scope.ref ? `${scope.kind}:${scope.ref}` : scope.kind,
+          scope: scopeLabel(scope),
           creditsCreated: counts.created,
           creditsUpdated: counts.updated,
           creditsSetCurrent: counts.setCurrent,
@@ -239,7 +245,7 @@ export class PortfolioImportService {
         entity: 'portfolio_import',
         entityId: result.runId ?? fileHash,
         action: 'IMPORT',
-        after: { template: config.profile.kind, scope: `${scope.kind}:${scope.ref}`, ...result.counts },
+        after: { template: config.profile.kind, scope: scopeLabel(scope), ...result.counts },
       });
     }
     return { dryRun, scope, ...result };
@@ -313,25 +319,31 @@ export class PortfolioImportService {
    * la config vive en un JSONB sin esquema, y una regla contradictoria guardada se convierte en
    * una cartera mal importada. Merge superficial: la pantalla guarda campo por campo.
    */
-  async patchConfig(patch: Partial<ImportConfig>): Promise<{ config: ImportConfig }> {
+  async patchConfig(patch: ImportConfigPatch): Promise<{ config: ImportConfig }> {
     const accountId = this.tenant.accountId;
     const account = await this.tx((tx) => tx.account.findUnique({ where: { id: accountId } }));
     const configuration = (account?.configuration ?? {}) as Record<string, unknown>;
     const prev = readImportConfig(configuration.importConfig);
 
-    const next = readImportConfig({
-      ...prev,
-      ...patch,
-      profile: { ...prev.profile, ...patch.profile },
-      scope: patch.scope ? { ...patch.scope } : prev.scope,
-      // Cambiar la forma del archivo tira los emparejados: las etiquetas de un formato no
-      // significan nada en el otro (invariante 4). Se resetea acá para que el usuario no tenga
-      // que borrarlos a mano y para que el invariante no sea sólo un error.
-      fields:
-        patch.profile?.kind && patch.profile.kind !== prev.profile.kind ? {} : { ...prev.fields, ...patch.fields },
-    });
-
+    let next: ImportConfig;
     try {
+      // Reiniciar es reemplazo, no merge: mergear los defaults sobre lo guardado dejaría los
+      // `fields` viejos y una config a medio camino, que es peor que la que se quería tirar.
+      next = patch.reset
+        ? { ...DEFAULT_IMPORT_CONFIG, fields: {} }
+        : readImportConfig({
+            ...prev,
+            ...patch,
+            profile: { ...prev.profile, ...patch.profile },
+            scope: patch.scope ? { ...patch.scope } : prev.scope,
+            // Cambiar la forma del archivo tira los emparejados: las etiquetas de un formato no
+            // significan nada en el otro (invariante 4). Se resetea acá para que el usuario no
+            // tenga que borrarlos a mano y para que el invariante no sea sólo un error.
+            fields:
+              patch.profile?.kind && patch.profile.kind !== prev.profile.kind
+                ? {}
+                : mergeFieldPatch(prev.fields, patch.fields),
+          });
       validateImportConfig(next, prev);
     } catch (e) {
       if (e instanceof ImportConfigError) throw new BadRequestException({ code: e.code, message: e.message });
@@ -353,19 +365,25 @@ export class PortfolioImportService {
    * Es lo que hace posible configurar un formato que nunca vimos: el usuario sube SU archivo y
    * la app le muestra lo que encontró para que empareje.
    */
-  async readColumns(file: Buffer): Promise<{ labels: string[]; columnCandidates: ColumnCandidate[] }> {
+  async readColumns(file: Buffer): Promise<{
+    labels: string[];
+    columnCandidates: ColumnCandidate[];
+    recordStartCandidates: { text: string; count: number }[];
+  }> {
     const config = await this.importConfig();
+    assertFileShape(file, config.profile.kind);
     try {
       if (config.profile.kind === 'rows') {
         const { labels, columnCandidates } = parseCsvRows(file.toString('utf8'), config.profile, config.fieldMap);
-        return { labels, columnCandidates };
+        // Una planilla no tiene "dónde empieza cada registro": cada fila es un registro.
+        return { labels, columnCandidates, recordStartCandidates: [] };
       }
-      const { labels, columnCandidates } = await parsePdfBlocks(
+      const { labels, columnCandidates, recordStartCandidates } = await parsePdfBlocks(
         new Uint8Array(file),
         config.profile,
         config.fieldMap,
       );
-      return { labels, columnCandidates };
+      return { labels, columnCandidates, recordStartCandidates };
     } catch (e) {
       throw new BadRequestException({
         code: 'PARSE_FAILED',
@@ -416,6 +434,23 @@ export class PortfolioImportService {
 }
 
 /** Cómo se muestra el cliente en la Vista Previa. */
+/**
+ * El archivo tiene que ser de la forma configurada. Leer un PDF con el parser de planillas no
+ * explota: devuelve `%PDF-1.1` como si fuera la única columna del archivo, y el usuario se queda
+ * mirando una pantalla que no le dice nada. El mensaje nombra el arreglo, que está en Ajustes.
+ */
+function assertFileShape(file: Buffer, kind: ImportConfig['profile']['kind']): void {
+  const real = detectProfileKind(file);
+  if (!real || real === kind) return;
+  throw new BadRequestException({
+    code: 'FILE_SHAPE_MISMATCH',
+    message:
+      real === 'pdf-blocks'
+        ? 'Subiste un PDF, pero la configuración dice Excel/CSV. Cambiá "Forma del archivo" en Ajustes › Importación.'
+        : 'Subiste una planilla, pero la configuración dice extracto PDF. Cambiá "Forma del archivo" en Ajustes › Importación.',
+  });
+}
+
 function clientLabel(b: NormalizedRecord): string {
   return [b.clientLastName, b.clientFirstName].filter(Boolean).join(' ') || 'SIN NOMBRE';
 }

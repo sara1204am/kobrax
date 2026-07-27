@@ -7,6 +7,7 @@ import {
   LIST_LIMIT,
   moreLabel,
   previewName,
+  rejectText,
   resultKind,
   scopeRefName,
   setupProgress,
@@ -191,6 +192,22 @@ describe('resultKind — qué pantalla de resultado corresponde', () => {
   it('el archivo ya aplicado manda sobre todo lo demás: no es "no pasó nada"', () => {
     expect(resultKind(0, true)).toBe('skipped');
     expect(resultKind(9, true)).toBe('skipped');
+  });
+});
+
+describe('rejectText — por qué quedó afuera un registro', () => {
+  it('el motivo más común dice además dónde se arregla', () => {
+    // Es el caso real: el identificador del archivo no se llama "N° de crédito" y TODAS las filas
+    // caen acá. Sin la pista, el usuario no tiene forma de saber que es un emparejado mal puesto.
+    expect(rejectText('NO_CODE')).toContain('Emparejar columnas');
+  });
+
+  it('MISSING_<CAMPO> no escupe el nombre interno', () => {
+    expect(rejectText('MISSING_OUTSTANDINGBALANCE')).not.toContain('OUTSTANDING');
+  });
+
+  it('un motivo que la app no conoce se muestra igual, no se esconde', () => {
+    expect(rejectText('MOTIVO_NUEVO')).toBe('MOTIVO_NUEVO');
   });
 });
 

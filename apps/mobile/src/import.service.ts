@@ -23,6 +23,15 @@ export interface FieldRule {
   calibrated?: boolean;
 }
 
+/**
+ * Lo que viaja en un `PATCH`. Dos cosas que `Partial<ImportConfig>` no puede decir:
+ * un campo en `null` se **quita** del emparejado, y `reset` devuelve todo al estado de fábrica.
+ */
+export type ImportConfigPatch = Partial<Omit<ImportConfig, 'fields'>> & {
+  fields?: Record<string, FieldRule | null>;
+  reset?: true;
+};
+
 export interface ImportConfig {
   source: 'manual' | 'file';
   profile: { kind: ProfileKind; signature?: string[]; recordStart?: string; tableAnchor?: string; headerRow?: number };
@@ -96,8 +105,11 @@ export const importService = {
     return apiQuery<ConfigScreen>(BASE);
   },
 
-  /** Guarda al toque. El backend valida los invariantes y devuelve la config resultante. */
-  patch(patch: Partial<ImportConfig>): Promise<MutateResult<{ config: ImportConfig }>> {
+  /**
+   * Guarda al toque. El backend valida los invariantes y devuelve la config resultante.
+   * Un campo en `null` se **quita** del emparejado (apagarlo lo deja en la lista; quitarlo, no).
+   */
+  patch(patch: ImportConfigPatch): Promise<MutateResult<{ config: ImportConfig }>> {
     return apiMutate<{ config: ImportConfig }>(BASE, 'PATCH', patch);
   },
 
@@ -127,6 +139,12 @@ export interface PickedFile {
 export interface ColumnsPayload {
   labels: string[];
   columnCandidates: ColumnCandidate[];
+  /**
+   * Sólo en extractos PDF: textos que se repiten, del más frecuente al menos. Uno de ellos es el
+   * que abre cada registro, y su cuenta es cuántos registros hay. Sin elegirlo, el archivo no se
+   * puede cortar en créditos y no hay columnas que emparejar.
+   */
+  recordStartCandidates?: { text: string; count: number }[];
 }
 
 export interface PortfolioSummary {
@@ -403,6 +421,25 @@ export const WARNING_TEXT: Record<string, string> = {
 export function warningText(code: string, detail?: string): string {
   // Código desconocido = backend más nuevo que la app: se muestra crudo, no se esconde.
   return `${WARNING_TEXT[code] ?? code}${detail ? ` (${detail})` : ''}`;
+}
+
+/**
+ * Por qué un registro quedó afuera, en palabras del usuario. `NO_CODE` no le dice nada a nadie,
+ * y es el motivo más común: el identificador del archivo no siempre se llama "N° de crédito".
+ * Por eso este texto además dice dónde se arregla.
+ */
+const REJECT_TEXT: Record<string, string> = {
+  NO_CODE: 'No se encontró el N° de crédito. Revisá de qué columna se lee en Ajustes › Emparejar columnas.',
+  DUP_IN_FILE: 'El N° de crédito viene repetido en el archivo.',
+  MATCHES_MANUAL: 'Ese N° de crédito ya existe cargado a mano. El import no lo toca.',
+  MATCHES_OUT_OF_SCOPE: 'Ese N° de crédito existe fuera del alcance de este archivo.',
+};
+
+export function rejectText(reason: string): string {
+  // `MISSING_<CAMPO>` viene con el nombre interno en mayúsculas (`MISSING_OUTSTANDINGBALANCE`),
+  // que es peor que no decirlo. Cuáles son obligatorios se ve en Ajustes.
+  if (reason.startsWith('MISSING_')) return 'Le falta un dato que marcaste obligatorio.';
+  return REJECT_TEXT[reason] ?? reason;
 }
 
 /** Qué formatos acepta ESTE tenant — sale de la forma elegida en Ajustes, no de un literal (S3-R5). */

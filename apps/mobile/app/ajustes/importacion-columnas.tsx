@@ -18,6 +18,7 @@ import {
   type FieldRule,
   type FieldState,
   type NameOrder,
+  type PickedFile,
 } from '@/import.service';
 
 /**
@@ -37,6 +38,10 @@ export default function ColumnasScreen() {
   // emparejar, no configuración — guardarlo obligaría a invalidarlo cuando el archivo cambie.
   const [labels, setLabels] = useState<string[]>([]);
   const [candidates, setCandidates] = useState<ColumnCandidate[]>([]);
+  const [starts, setStarts] = useState<{ text: string; count: number }[]>([]);
+  const [pickingStart, setPickingStart] = useState(false);
+  // El archivo de muestra queda a mano para releerlo cuando cambia cómo se corta.
+  const [sample, setSample] = useState<PickedFile | null>(null);
   const [sourceFor, setSourceFor] = useState<string | null>(null); // campo al que se le elige origen
 
   const load = useCallback(async () => {
@@ -46,21 +51,54 @@ export default function ColumnasScreen() {
   }, []);
   useEffect(() => void load(), [load]);
 
+  // Un extracto PDF se corta en registros por una etiqueta que se repite; una planilla no —
+  // cada fila ya es un registro. Sin esa etiqueta el PDF no tiene columnas que ofrecer.
+  const isPdf = screen?.config.profile.kind === 'pdf-blocks';
+  const needsStart = isPdf && !screen?.config.profile.recordStart;
+
   /** Sube un archivo de muestra: la app lista lo que encontró para que el usuario empareje. */
   async function pickSample() {
     const picked = await pickImportFile();
     if (!picked) return;
-    const res = await importService.readColumns(picked);
-    if (res.status === 'ok') {
-      setLabels(res.labels);
-      setCandidates(res.columnCandidates);
-      setError(res.labels.length === 0 ? 'El archivo se leyó pero no se encontraron columnas.' : null);
-    } else {
-      setError(res.status === 'error' ? res.message : 'No se pudo leer el archivo');
-    }
+    setSample(picked);
+    await readSample(picked);
   }
 
-  async function save(fields: Record<string, FieldRule>, extra: Record<string, unknown> = {}) {
+  /**
+   * Elegir dónde empieza cada registro cambia lo que el archivo puede ofrecer: hasta ahora era un
+   * bloque suelto, ahora son N registros con sus etiquetas. Por eso se vuelve a leer la muestra
+   * en vez de dejar en pantalla una lista que ya no corresponde.
+   */
+  async function chooseStart(text: string) {
+    setPickingStart(false);
+    // Va por `profile`, no por `fields`: no es un dato del crédito sino cómo se corta el archivo.
+    // La forma no cambia, así que el emparejado hecho hasta acá se conserva.
+    await save({}, { profile: { ...config.profile, recordStart: text } });
+    if (sample) await readSample(sample);
+  }
+
+  async function readSample(picked: PickedFile) {
+    const res = await importService.readColumns(picked);
+    if (res.status !== 'ok') {
+      setError(res.status === 'error' ? res.message : 'No se pudo leer el archivo');
+      return;
+    }
+    setLabels(res.labels);
+    setCandidates(res.columnCandidates);
+    setStarts(res.recordStartCandidates ?? []);
+    // Sin "dónde empieza cada registro" el PDF no se corta en créditos: no es que el archivo
+    // esté vacío, es que todavía no sabemos leerlo. Se dice eso y se ofrece elegirlo.
+    setError(
+      res.labels.length === 0 && !isPdf
+        ? 'El archivo se leyó pero no se encontraron columnas.'
+        : needsStart && (res.recordStartCandidates?.length ?? 0) > 0
+          ? 'Falta indicar dónde empieza cada registro.'
+          : null,
+    );
+  }
+
+  /** `null` en un campo = quitarlo del emparejado (lo resuelve el backend). */
+  async function save(fields: Record<string, FieldRule | null>, extra: Record<string, unknown> = {}) {
     if (!screen) return;
     const prev = screen.config;
     const res = await importService.patch({ fields, ...extra });
@@ -103,9 +141,27 @@ export default function ColumnasScreen() {
         <View style={styles.keyBox}>
           <Text style={styles.keyTitle}>Llave: N° de crédito {keyFrom ? `← "${keyFrom}"` : ''}</Text>
           <Text style={styles.hint}>
-            El campo no se puede cambiar (identifica a cada crédito), pero sí de qué etiqueta se lee.
+            El campo no se puede cambiar (identifica a cada crédito), pero sí de qué etiqueta se lee:
+            tocá "N° de crédito" en la lista y elegí la columna de tu archivo.
           </Text>
         </View>
+
+        {/* Va ARRIBA del emparejado porque es su precondición: sin saber dónde empieza cada
+            registro, el archivo es un solo bloque y no hay columnas que listar. */}
+        {isPdf && (
+          <ListRow
+            title="Dónde empieza cada registro"
+            subtitle={
+              config.profile.recordStart
+                ? `"${config.profile.recordStart}"`
+                : starts.length > 0
+                  ? 'Sin elegir — tocá para ver las opciones del archivo'
+                  : 'Subí un archivo de muestra para ver las opciones'
+            }
+            right={needsStart ? <Text style={styles.warn}>⚠</Text> : undefined}
+            onPress={starts.length > 0 ? () => setPickingStart(true) : undefined}
+          />
+        )}
 
         {labels.length > 0 && (
           <Text style={styles.hint}>
@@ -136,7 +192,10 @@ export default function ColumnasScreen() {
                     title={def?.label ?? field}
                     subtitle={`${rule.from ? `"${rule.from}"` : 'sin emparejar'} · ${FIELD_STATE_LABEL[state]}`}
                     right={sinConfirmar ? <Text style={styles.warn}>⚠</Text> : undefined}
-                    onPress={def?.locked && field === 'code' ? undefined : () => setEditing(field)}
+                    // La llave no elige estado (siempre obligatoria y encendida), pero SÍ de dónde
+                    // se lee: no todo sistema llama "N° de crédito" a su identificador. Sin esto la
+                    // fila quedaba muerta y un archivo cuya llave está en otra columna era inimportable.
+                    onPress={field === 'code' ? () => setSourceFor('code') : () => setEditing(field)}
                   />
                   {isName && (
                     <Pressable onPress={() => setNaming(true)} style={styles.subAction}>
@@ -195,6 +254,24 @@ export default function ColumnasScreen() {
             </Text>
           </View>
         </Pressable>
+        {/* Quitar ≠ apagar: apagado el campo sigue en la lista para siempre. Un campo agregado
+            por error tiene que poder salir. La llave y el cliente no se quitan (invariante 3). */}
+        {editing && !catalog[editing]?.locked && (
+          <Pressable
+            style={styles.option}
+            onPress={() => {
+              const field = editing;
+              setEditing(null);
+              void save({ [field]: null });
+            }}
+          >
+            <Text style={[styles.optionMark, { color: COLORS.danger }]}>✕</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.optionLabel, { color: COLORS.danger }]}>Quitar del emparejado</Text>
+              <Text style={styles.optionHint}>Sale de la lista. Lo podés volver a agregar cuando quieras.</Text>
+            </View>
+          </Pressable>
+        )}
       </BottomSheet>
 
       {/*
@@ -241,6 +318,34 @@ export default function ColumnasScreen() {
           >
             <Text style={styles.optionMark}>{config.fields[sourceFor!]?.from === l ? '●' : '○'}</Text>
             <Text style={styles.optionLabel}>{l}</Text>
+          </Pressable>
+        ))}
+      </BottomSheet>
+
+      {/*
+        Dónde empieza cada registro. La app no lo adivina: le acerca los textos que se repiten con
+        cuántas veces aparecen —"Cliente · 6 veces" en un archivo de 6 créditos es inconfundible—
+        y el usuario, que conoce su archivo, elige. Es lo que hace configurable un PDF sin preset.
+      */}
+      <BottomSheet
+        visible={pickingStart}
+        onClose={() => setPickingStart(false)}
+        title="¿Con qué texto empieza cada registro?"
+      >
+        <Text style={styles.hint}>
+          Se repite una vez por crédito. Si tu archivo trae 20 créditos, buscá el que aparezca 20 veces.
+        </Text>
+        {starts.map((c) => (
+          <Pressable
+            key={c.text}
+            style={styles.option}
+            onPress={() => void chooseStart(c.text)}
+          >
+            <Text style={styles.optionMark}>{config.profile.recordStart === c.text ? '●' : '○'}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.optionLabel}>{c.text}</Text>
+              <Text style={styles.optionHint}>{c.count} veces en el archivo</Text>
+            </View>
           </Pressable>
         ))}
       </BottomSheet>

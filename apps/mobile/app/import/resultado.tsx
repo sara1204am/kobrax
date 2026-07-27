@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { COLORS, RADIUS, SPACING } from '@/theme';
 import { Header, SectionLabel, StatTile } from '@/ui';
 import { Button } from '@/components';
-import { resultKind } from '@/import.service';
+import { rejectText, resultKind } from '@/import.service';
 
 /**
  * Resultado de la importación (mockups `24:2280` éxito y `24:2164` con advertencias).
@@ -83,7 +83,7 @@ export default function ResultadoScreen() {
             {rejects.map((r) => (
               <View key={r.index} style={styles.reject}>
                 <Text style={styles.rejectTitle}>Registro {r.index + 1}</Text>
-                <Text style={styles.hint}>{r.reason}</Text>
+                <Text style={styles.hint}>{rejectText(r.reason)}</Text>
               </View>
             ))}
             {rejects.length === 0 ? (
