@@ -12,7 +12,7 @@ import { FIELD_CATALOG, normalizeRecord, type NormalizedRecord } from './field-c
 import { BANCO_UNION_PRESET, IMPORT_PRESETS, type ImportPreset } from './presets';
 import {
   DEFAULT_IMPORT_CONFIG,
-  detectProfileKind,
+  detectFileShape,
   ImportConfigError,
   mergeFieldPatch,
   readImportConfig,
@@ -440,15 +440,26 @@ export class PortfolioImportService {
  * mirando una pantalla que no le dice nada. El mensaje nombra el arreglo, que está en Ajustes.
  */
 function assertFileShape(file: Buffer, kind: ImportConfig['profile']['kind']): void {
-  const real = detectProfileKind(file);
-  if (!real || real === kind) return;
-  throw new BadRequestException({
-    code: 'FILE_SHAPE_MISMATCH',
-    message:
-      real === 'pdf-blocks'
-        ? 'Subiste un PDF, pero la configuración dice Excel/CSV. Cambiá "Forma del archivo" en Ajustes › Importación.'
-        : 'Subiste una planilla, pero la configuración dice extracto PDF. Cambiá "Forma del archivo" en Ajustes › Importación.',
-  });
+  const shape = detectFileShape(file);
+  if (shape === 'pdf' && kind !== 'pdf-blocks') {
+    throw new BadRequestException({
+      code: 'FILE_SHAPE_MISMATCH',
+      message: 'Subiste un PDF, pero la configuración dice Excel/CSV. Cambiá "Forma del archivo" en Ajustes › Importación.',
+    });
+  }
+  if (shape === 'zip') {
+    // Todo lo que empaqueta en zip es una planilla binaria (.xlsx, .ods). Dos motivos distintos
+    // para frenar acá, y el mensaje dice cuál es: o el perfil es PDF, o es el correcto pero
+    // todavía no sabemos abrir Excel — la dep `xlsx` no está instalada y `parseCsvRows` leería
+    // los bytes del zip como si fueran texto (mismo defecto que el `%PDF-1.1`).
+    throw new BadRequestException({
+      code: kind === 'pdf-blocks' ? 'FILE_SHAPE_MISMATCH' : 'XLSX_NOT_SUPPORTED',
+      message:
+        kind === 'pdf-blocks'
+          ? 'Subiste una planilla, pero la configuración dice extracto PDF. Cambiá "Forma del archivo" en Ajustes › Importación.'
+          : 'Todavía no se leen archivos de Excel. Guardá la planilla como CSV y subí ese archivo.',
+    });
+  }
 }
 
 function clientLabel(b: NormalizedRecord): string {

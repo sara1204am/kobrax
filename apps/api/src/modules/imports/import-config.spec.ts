@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_IMPORT_CONFIG,
-  detectProfileKind,
+  detectFileShape,
   mergeFieldPatch,
   readImportConfig,
   requiredFields,
@@ -89,15 +89,15 @@ describe('import-config — invariantes de §3.1', () => {
   });
 });
 
-describe('detectProfileKind — la forma la dicen los bytes, no la config', () => {
-  it('reconoce un PDF y un xlsx por su firma', () => {
-    assert.equal(detectProfileKind(Buffer.from('%PDF-1.1\n...')), 'pdf-blocks');
-    assert.equal(detectProfileKind(Buffer.from('PK\x03\x04algo')), 'rows');
+describe('detectFileShape — la forma la dicen los bytes, no la config', () => {
+  it('reconoce un PDF y una planilla binaria por su firma', () => {
+    assert.equal(detectFileShape(Buffer.from('%PDF-1.1\n...')), 'pdf');
+    assert.equal(detectFileShape(Buffer.from('PK\x03\x04algo')), 'zip'); // xlsx
   });
 
-  it('un CSV no tiene firma: se confía en lo configurado', () => {
+  it('un CSV es texto pelado: se confía en lo configurado', () => {
     // Sin esto, cualquier archivo de texto quedaría acusado de ser de la forma equivocada.
-    assert.equal(detectProfileKind(Buffer.from('NRO,DEUDOR,SALDO\n1,PEREZ,100')), null);
+    assert.equal(detectFileShape(Buffer.from('NRO,DEUDOR,SALDO\n1,PEREZ,100')), 'text');
   });
 });
 

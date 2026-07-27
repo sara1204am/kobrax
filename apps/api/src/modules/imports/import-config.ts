@@ -207,20 +207,23 @@ export function requiredFields(fields: Record<string, FieldRule>): string[] {
 }
 
 /**
- * Qué FORMA tiene el archivo según sus bytes. `profile.kind` es una preferencia guardada; esto
- * es un hecho del archivo, y cuando se contradicen gana el archivo.
+ * Qué es el archivo según sus bytes. `profile.kind` es una preferencia guardada; esto es un hecho,
+ * y cuando se contradicen gana el archivo.
  *
- * Importa porque leer un PDF con el parser de planillas no falla: devuelve la primera línea del
- * binario (`%PDF-1.1`) como si fuera la única columna del archivo. Un error claro es infinitamente
- * mejor que una columna inventada.
+ * Importa porque ningún parser falla al recibir lo que no es: el de planillas sobre un PDF
+ * devuelve `%PDF-1.1` como si fuera la única columna, y sobre un xlsx devuelve los bytes del zip.
+ * Un error claro es infinitamente mejor que una columna inventada.
  *
- * `null` = sin firma reconocible (un CSV es texto pelado) → se confía en lo configurado.
+ * `text` = sin firma binaria; es lo que se ve en un CSV, y también en cualquier cosa que no
+ * reconozcamos → se confía en lo configurado.
  */
-export function detectProfileKind(file: Buffer | Uint8Array): ProfileKind | null {
+export type FileShape = 'pdf' | 'zip' | 'text';
+
+export function detectFileShape(file: Buffer | Uint8Array): FileShape {
   const head = Buffer.from(file.subarray(0, 4)).toString('latin1');
-  if (head.startsWith('%PDF')) return 'pdf-blocks';
-  if (head.startsWith('PK\x03\x04')) return 'rows'; // xlsx = un zip
-  return null;
+  if (head.startsWith('%PDF')) return 'pdf';
+  if (head.startsWith('PK\x03\x04')) return 'zip'; // xlsx, ods y todo lo que empaqueta en zip
+  return 'text';
 }
 
 /** Cómo se serializa el alcance en `client_import_runs.scope`. */

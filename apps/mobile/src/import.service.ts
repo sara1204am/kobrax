@@ -365,8 +365,10 @@ export function soleAssignee(members: ScopeMember[]): ScopeMember | null {
   return members.length === 1 ? members[0]! : null;
 }
 
+// Dice CSV y no "Excel o CSV" porque hoy es la verdad: el adaptador de xlsx no existe (la dep
+// nunca se instaló). Prometer Excel manda al usuario a subir un archivo que va a rebotar.
 export const PROFILE_LABEL: Record<ProfileKind, string> = {
-  rows: 'Una fila por crédito (Excel o CSV)',
+  rows: 'Una fila por crédito (CSV)',
   'pdf-blocks': 'Un bloque por crédito (extracto PDF)',
 };
 
@@ -444,7 +446,7 @@ export function rejectText(reason: string): string {
 
 /** Qué formatos acepta ESTE tenant — sale de la forma elegida en Ajustes, no de un literal (S3-R5). */
 export const FORMAT_HINT: Record<ProfileKind, string> = {
-  rows: 'Excel (.xlsx) o CSV · hasta 15 MB',
+  rows: 'CSV · hasta 15 MB. Si tu sistema exporta Excel, guardalo como CSV.',
   'pdf-blocks': 'Extracto PDF · hasta 15 MB',
 };
 
