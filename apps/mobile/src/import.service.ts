@@ -5,7 +5,6 @@
  * no hay nada de parseo — sólo el contrato con `GET/PATCH /api/imports/portfolio/config`.
  * Ver `docs/epics/F10/plans/import/FIELD-RULES.md` §6.
  */
-import * as DocumentPicker from 'expo-document-picker';
 import * as SecureStore from 'expo-secure-store';
 import { apiMutate, apiQuery, refreshSession, type MutateResult, type QueryResult } from '@/api-client';
 import { API_BASE } from '@/api';
@@ -123,20 +122,7 @@ export interface PickedFile {
   mimeType?: string;
 }
 
-/** El motor lee las dos formas (§4.1); el tipo real lo valida el backend, esto sólo acota el picker. */
-const IMPORT_MIME = ['application/pdf', 'text/csv', 'text/comma-separated-values', 'text/plain'];
-
-/**
- * Elegir el archivo del dispositivo. Vive acá y no en cada pantalla porque lo usan tres
- * (archivo del día, archivo de muestra de Ajustes y el modo prueba), y la copia suelta de
- * Ajustes se había quedado sin el filtro de tipo. `null` = el usuario canceló.
- */
-export async function pickImportFile(): Promise<PickedFile | null> {
-  const res = await DocumentPicker.getDocumentAsync({ type: IMPORT_MIME, copyToCacheDirectory: true });
-  if (res.canceled || !res.assets?.[0]) return null;
-  const a = res.assets[0];
-  return { uri: a.uri, name: a.name, mimeType: a.mimeType };
-}
+/** Elegirlo del dispositivo: `pickImportFile()` de `@/file-picker` (aparte, y ahí está el por qué). */
 
 export interface ColumnsPayload {
   labels: string[];

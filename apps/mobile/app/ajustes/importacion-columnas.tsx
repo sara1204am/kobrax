@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { COLORS, SPACING } from '@/theme';
 import { BottomSheet, EmptyState, Header, ListRow, SectionLabel } from '@/ui';
 import { Button, ErrorBanner } from '@/components';
+import { pickImportFile } from '@/file-picker';
 import {
   applyFieldState,
   FIELD_STATE_HINT,
@@ -11,7 +12,6 @@ import {
   fieldState,
   importService,
   NAME_ORDER_LABEL,
-  pickImportFile,
   previewName,
   type ColumnCandidate,
   type ConfigScreen,

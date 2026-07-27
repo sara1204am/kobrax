@@ -1,7 +1,3 @@
-// `expo-document-picker` toca el bridge nativo al importarse (`__fbBatchedBridgeConfig is not set`).
-// Acá se testean los derivados puros del service, no el picker: se corta la dependencia y listo.
-jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
-
 import {
   applyFieldState,
   decideImportGate,

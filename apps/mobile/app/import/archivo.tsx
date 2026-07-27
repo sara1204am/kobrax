@@ -4,7 +4,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { COLORS, RADIUS, SPACING } from '@/theme';
 import { Header, OfflineIndicator } from '@/ui';
 import { Button, ErrorBanner } from '@/components';
-import { FORMAT_HINT, importService, pickImportFile, type PickedFile, type ProfileKind } from '@/import.service';
+import { FORMAT_HINT, importService, type PickedFile, type ProfileKind } from '@/import.service';
+import { pickImportFile } from '@/file-picker';
 import { useNetStore } from '@/store/net';
 
 /**
