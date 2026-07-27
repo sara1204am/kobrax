@@ -21,6 +21,9 @@ const fields = {
   clientName: { from: 'Cliente' },
   outstandingBalance: { from: 'Saldo' },
   daysPastDue: { from: 'Atraso' },
+  phone: { from: 'Telefonos' },
+  address: { from: 'Direccion Dom.' },
+  addressRef: { from: 'Ref. Domicilio' },
 };
 
 describe('pdf-rows.parser — una tabla adentro de un PDF', () => {
@@ -39,6 +42,18 @@ describe('pdf-rows.parser — una tabla adentro de un PDF', () => {
     const last = normalizeRecord(records[9]!);
     assert.equal(last.code, '302-222-9734');
     assert.equal(last.daysPastDue, 391);
+  });
+
+  it('trae también teléfono y dirección, que es lo que sirve en la calle', async () => {
+    const { records } = await parsePdfRows(bytes(), { tableAnchor: 'Cliente' }, fields);
+    const r = normalizeRecord(records[0]!);
+    assert.equal(r.phone, '69081003');
+    assert.equal(r.address, 'Av. Entre Rios No 95 - Zona Santiago II');
+    assert.equal(r.addressRef, 'Pasando el surtidor'); // cómo se llega: para el cobrador vale igual
+
+    // Una celda de direcciones larga se parte en varias líneas dentro de la fila. Si se tomara la
+    // última en vez de concatenarlas, media dirección se perdería sin que nadie lo note.
+    assert.equal(normalizeRecord(records[5]!).addressRef, 'Parada Micro T');
   });
 
   it('el encabezado partido en dos líneas se une, y el pie de página no es un registro', async () => {

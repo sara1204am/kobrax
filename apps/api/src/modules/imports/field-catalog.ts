@@ -29,6 +29,11 @@ export const FIELD_CATALOG: Record<string, FieldDef> = {
   daysPastDue: { label: 'Días de retraso', type: 'int', starred: true },
   outstandingBalance: { label: 'Saldo', type: 'number', starred: true },
   coHolder: { label: 'Co-titular', type: 'text' },
+  // Datos de contacto. No viven en `clients` sino en sus propias tablas (1..N), así que el import
+  // los escribe aparte y con una regla distinta a la de los montos: ver `fillContactGaps`.
+  phone: { label: 'Teléfono', type: 'text' },
+  address: { label: 'Dirección', type: 'text' },
+  addressRef: { label: 'Referencia de la dirección', type: 'text' },
   status: { label: 'Estado', type: 'text' },
   principalAmount: { label: 'Capital', type: 'number' },
   interestRate: { label: 'Tasa de interés', type: 'number' },
@@ -50,6 +55,9 @@ export interface NormalizedRecord {
   clientLastName: string | null;
   clientFirstName: string | null;
   coHolder: string | null;
+  phone: string | null;
+  address: string | null;
+  addressRef: string | null;
   status: string | null;
   currency: string | null;
   branchLabel: string | null;
@@ -93,6 +101,9 @@ export function normalizeRecord(raw: Record<string, string | null>, nameOrder: N
     clientLastName: lastName,
     clientFirstName: firstName,
     coHolder: text('coHolder'),
+    phone: text('phone'),
+    address: text('address'),
+    addressRef: text('addressRef'),
     status: text('status'),
     currency: text('currency'),
     branchLabel: text('branchLabel'),
@@ -134,6 +145,20 @@ export function splitName(
   // Menos de 3 palabras: no alcanza para separar sin adivinar → se deja entero.
   if (words.length < 3 || i >= words.length) return { lastName: full, firstName: null };
   return { lastName: surnames.join(' '), firstName: words.slice(i).join(' ') };
+}
+
+/**
+ * Una celda de teléfonos suele traer dos números ("2468145 - 68401916"). Se separan para que cada
+ * uno entre como su propio contacto y se pueda marcar desde la app: juntos en un solo string no
+ * se puede llamar a ninguno.
+ *
+ * El guion sólo corta con espacios alrededor. Pegado es parte del número ("302-222-2542").
+ */
+export function splitPhones(raw: string): string[] {
+  return raw
+    .split(/\s[-/]\s|[,;/]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 function intOrNull(n: number | null): number | null {

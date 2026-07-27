@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { COLORS, SPACING } from '@/theme';
-import { BottomSheet, EmptyState, Header, ListRow, SectionLabel } from '@/ui';
+import { BottomSheet, Header, ListRow, SectionLabel } from '@/ui';
 import { Button, ErrorBanner } from '@/components';
 import { pickImportFile } from '@/file-picker';
 import {
@@ -150,8 +150,15 @@ export default function ColumnasScreen() {
   }
 
   const { config, catalog } = screen;
-  const entries = Object.entries(config.fields).filter(([, r]) => r.from || r.enabled !== false);
-  const sinEmparejar = Object.keys(catalog).filter((f) => !config.fields[f]?.from);
+  // La llave y el cliente se listan SIEMPRE, estén configurados o no: son los dos que el import no
+  // puede suplir, y no verlos en la lista es exactamente cómo se llega a una cartera entera de
+  // "SIN NOMBRE" sin que nada haya avisado.
+  const locked = Object.keys(catalog).filter((f) => catalog[f]?.locked);
+  const entries = [...new Set([...locked, ...Object.keys(config.fields)])]
+    .map((f) => [f, config.fields[f] ?? {}] as [string, FieldRule])
+    .filter(([f, r]) => catalog[f]?.locked || r.from || r.enabled !== false);
+  // Los bloqueados no se ofrecen para "agregar": ya están arriba, con su aviso si les falta origen.
+  const sinEmparejar = Object.keys(catalog).filter((f) => !config.fields[f]?.from && !catalog[f]?.locked);
   const keyFrom = config.fields.code?.from;
   const daysRule = config.fields.daysPastDue;
 
@@ -193,44 +200,44 @@ export default function ColumnasScreen() {
           </Text>
         )}
 
-        {entries.length === 0 ? (
-          // Sin archivo de muestra no hay etiquetas que listar: es la pieza que hace configurable
-          // un formato que nunca vimos (§6.5).
-          <EmptyState
-            icon="📄"
-            title="Todavía no hay nada emparejado"
-            hint="Subí un archivo de muestra: la app te muestra qué trae y vos decís qué es cada cosa."
-          />
-        ) : (
-          <>
-            <SectionLabel>CAMPOS EMPAREJADOS</SectionLabel>
-            {entries.map(([field, rule]) => {
-              const def = catalog[field];
-              const state = fieldState(rule);
-              const isName = field === 'clientName';
-              const sinConfirmar = field === 'daysPastDue' && rule.from && !rule.calibrated;
-              return (
-                <View key={field}>
-                  <ListRow
-                    title={def?.label ?? field}
-                    subtitle={`${rule.from ? `"${rule.from}"` : 'sin emparejar'} · ${FIELD_STATE_LABEL[state]}`}
-                    right={sinConfirmar ? <Text style={styles.warn}>⚠</Text> : undefined}
-                    // La llave no elige estado (siempre obligatoria y encendida), pero SÍ de dónde
-                    // se lee: no todo sistema llama "N° de crédito" a su identificador. Sin esto la
-                    // fila quedaba muerta y un archivo cuya llave está en otra columna era inimportable.
-                    onPress={field === 'code' ? () => setSourceFor('code') : () => setEditing(field)}
-                  />
-                  {isName && (
-                    <Pressable onPress={() => setNaming(true)} style={styles.subAction}>
-                      <Text style={styles.subActionText}>{NAME_ORDER_LABEL[config.nameOrder]} ›</Text>
-                    </Pressable>
-                  )}
-                  {sinConfirmar && <Text style={styles.warnText}>Sin confirmar — revisá los valores</Text>}
-                </View>
-              );
-            })}
-          </>
+        {labels.length === 0 && (
+          // Sin archivo de muestra no hay etiquetas que ofrecer: subirlo es la pieza que hace
+          // configurable un formato que nunca vimos (§6.5).
+          <Text style={styles.hint}>
+            Subí un archivo de muestra: la app te muestra qué trae y vos decís qué es cada cosa.
+          </Text>
         )}
+        <SectionLabel>CAMPOS</SectionLabel>
+        {entries.map(([field, rule]) => {
+          const def = catalog[field];
+          const state = fieldState(rule);
+          const isName = field === 'clientName';
+          const sinConfirmar = field === 'daysPastDue' && rule.from && !rule.calibrated;
+          // Un campo sin origen no lee nada: el import lo deja vacío y no avisa. Duele más en
+          // los que no se pueden apagar (llave y cliente), que es donde se nota tarde.
+          const sinOrigen = !rule.from;
+          return (
+            <View key={field}>
+              <ListRow
+                title={def?.label ?? field}
+                subtitle={`${rule.from ? `"${rule.from}"` : 'sin emparejar'} · ${FIELD_STATE_LABEL[state]}`}
+                right={sinConfirmar || sinOrigen ? <Text style={styles.warn}>⚠</Text> : undefined}
+                // Sin origen, elegirlo es lo único que tiene sentido hacer: se va derecho ahí en vez
+                // de esconderlo detrás del menú de estado. La llave nunca elige estado (siempre
+                // obligatoria y encendida), pero SÍ de dónde se lee: no todo sistema llama
+                // "N° de crédito" a su identificador.
+                onPress={sinOrigen || field === 'code' ? () => setSourceFor(field) : () => setEditing(field)}
+              />
+              {isName && (
+                <Pressable onPress={() => setNaming(true)} style={styles.subAction}>
+                  <Text style={styles.subActionText}>Cómo viene: {NAME_ORDER_LABEL[config.nameOrder]} ›</Text>
+                </Pressable>
+              )}
+              {sinConfirmar && <Text style={styles.warnText}>Sin confirmar — revisá los valores</Text>}
+              {sinOrigen && <Text style={styles.warnText}>Sin columna: este campo va a llegar vacío</Text>}
+            </View>
+          );
+        })}
 
         <Button variant="ghost" label="Elegir un archivo de muestra" onPress={() => void pickSample()} />
         {sinEmparejar.length > 0 && (
@@ -336,7 +343,9 @@ export default function ColumnasScreen() {
             onPress={() => {
               const field = sourceFor!;
               setSourceFor(null);
-              void save({ [field]: { ...config.fields[field], from: l, enabled: true, calibrated: undefined } });
+              // `?? {}` porque el campo puede no existir todavía: se agrega y se empareja en un
+              // solo paso, que es el único en que la configuración es coherente.
+              void save({ [field]: { required: false, ...(config.fields[field] ?? {}), from: l, enabled: true } });
             }}
           >
             <Text style={styles.optionMark}>{config.fields[sourceFor!]?.from === l ? '●' : '○'}</Text>
@@ -384,8 +393,10 @@ export default function ColumnasScreen() {
             style={styles.option}
             onPress={() => {
               setAdding(false);
-              void save({ [f]: { enabled: true, required: false } });
-              setSourceFor(f); // recién agregado: lo primero es decir de dónde sale
+              // No se guarda nada acá: un campo sin origen no significa nada, y guardarlo abría una
+              // carrera —este PATCH y el de la columna elegida se pisaban, y ganaba el que llegaba
+              // último—. Así el campo nace ya emparejado, de una sola escritura.
+              setSourceFor(f);
             }}
           >
             <Text style={styles.optionMark}>+</Text>

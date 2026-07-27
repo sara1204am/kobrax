@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { ClientType, CreditStatus } from '@prisma/client';
+import { ClientType, ContactType, CreditStatus, LocationType } from '@prisma/client';
 import { CreditOrigin, readCreditMetadata } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
@@ -9,7 +9,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { parsePdfBlocks, type ColumnCandidate, type FieldMap } from './parsers/pdf-blocks.parser';
 import { parsePdfRows } from './parsers/pdf-rows.parser';
 import { parseCsvRows } from './parsers/rows.parser';
-import { FIELD_CATALOG, normalizeRecord, type NormalizedRecord } from './field-catalog';
+import { FIELD_CATALOG, normalizeRecord, splitPhones, type NormalizedRecord } from './field-catalog';
 import {
   DEFAULT_IMPORT_CONFIG,
   detectFileShape,
@@ -143,10 +143,20 @@ export class PortfolioImportService {
             : c.branchId === scope.ref;
       const existing = await tx.credit.findMany({
         where: { accountId },
-        select: { id: true, code: true, deletedAt: true, branchId: true, assignedManagerId: true, metadata: true },
+        select: {
+          id: true,
+          code: true,
+          clientId: true,
+          deletedAt: true,
+          branchId: true,
+          assignedManagerId: true,
+          metadata: true,
+        },
       });
       const metaById = new Map(existing.map((c) => [c.id, (c.metadata ?? {}) as Record<string, unknown>]));
       const codeById = new Map(existing.map((c) => [c.id, c.code]));
+      // Al crédito ya emparejado se llega por el archivo; a SU cliente, sólo por acá.
+      const clientIdByCredit = new Map(existing.map((c) => [c.id, c.clientId]));
       const existingCredits: ExistingCredit[] = existing.map((c) => ({
         id: c.id,
         code: c.code,
@@ -184,6 +194,7 @@ export class PortfolioImportService {
       // Create batcheado: 2 createMany (clientes + créditos) en vez de 2N inserts en serie —
       // un extracto de banco puede traer miles de créditos. Los ids de cliente se pre-generan
       // en app para enlazar crédito↔cliente sin depender del id devuelto por cada insert.
+      const touched: ContactGap[] = [];
       if (plan.toCreate.length > 0) {
         const clientsData: Prisma.ClientCreateManyInput[] = [];
         const creditsData: Prisma.CreditCreateManyInput[] = [];
@@ -200,13 +211,20 @@ export class PortfolioImportService {
             firstName: b.clientFirstName ?? undefined,
           });
           creditsData.push(creditCreateData(accountId, clientId, b, scope));
+          touched.push({ clientId, b });
         }
         await tx.client.createMany({ data: clientsData });
         await tx.credit.createMany({ data: creditsData });
       }
       for (const u of plan.toUpdate) {
-        await this.updateCredit(tx, u.id, u.row.data as unknown as NormalizedRecord, metaById.get(u.id) ?? {});
+        const b = u.row.data as unknown as NormalizedRecord;
+        await this.updateCredit(tx, u.id, b, metaById.get(u.id) ?? {});
+        const clientId = clientIdByCredit.get(u.id);
+        if (clientId) touched.push({ clientId, b });
       }
+      // Contacto y dirección van al final y por una vía aparte: no son campos del crédito, y su
+      // regla es rellenar huecos, no pisar (ver `fillContactGaps`).
+      await fillContactGaps(tx, accountId, touched);
       if (plan.toSetCurrent.length > 0) {
         // Ausente del archivo → al día. Saldo INTACTO (pagó la cuota, no el crédito).
         await tx.credit.updateMany({
@@ -446,6 +464,78 @@ function readWithProfile(
   if (profile.kind === 'rows') return Promise.resolve(parseCsvRows(file.toString('utf8'), profile, fieldMap).records);
   if (profile.kind === 'pdf-rows') return parsePdfRows(new Uint8Array(file), profile, fieldMap).then((r) => r.records);
   return parsePdfBlocks(new Uint8Array(file), profile, fieldMap).then((r) => r.records);
+}
+
+/** Teléfono y dirección que el archivo trae para un cliente ya identificado. */
+interface ContactGap {
+  clientId: string;
+  b: NormalizedRecord;
+}
+
+/**
+ * Escribe teléfono y dirección del archivo, **sólo donde falten**.
+ *
+ * Es una regla distinta a la de los montos, y a propósito. Un saldo del archivo es más nuevo que
+ * el de la DB, así que pisa. Una dirección NO: la que está cargada la puso el cobrador que fue
+ * hasta la casa, y el reporte trae la que el sistema del banco tenía el día que abrieron el
+ * crédito. Pisarla sería reemplazar lo que alguien vio por lo que alguien tipeó hace dos años.
+ *
+ * Por eso: si el cliente ya tiene teléfono, no se toca; si no tiene, se agrega. Ídem dirección.
+ * Nunca borra ni reemplaza (§4). Y por eso rellena huecos en vez de acumular por valor distinto:
+ * un reporte que cada día escribe la misma dirección de otra forma convertiría a un cliente en
+ * veinte direcciones, que es peor que no tener ninguna.
+ */
+async function fillContactGaps(tx: PrismaClient, accountId: string, entries: ContactGap[]): Promise<void> {
+  const wantsPhone = entries.filter((e) => e.b.phone);
+  const wantsAddress = entries.filter((e) => e.b.address ?? e.b.addressRef);
+  if (wantsPhone.length === 0 && wantsAddress.length === 0) return;
+
+  // Quién YA tiene. Los recién creados no aparecen (no tienen nada todavía), así que altas y
+  // existentes pasan por el mismo camino en vez de por dos ramas que se desincronizan.
+  const [withPhone, withAddress] = await Promise.all([
+    wantsPhone.length > 0
+      ? tx.clientContact.findMany({
+          where: { accountId, clientId: { in: wantsPhone.map((e) => e.clientId) } },
+          select: { clientId: true },
+          distinct: ['clientId'],
+        })
+      : [],
+    wantsAddress.length > 0
+      ? tx.clientLocation.findMany({
+          where: { accountId, clientId: { in: wantsAddress.map((e) => e.clientId) } },
+          select: { clientId: true },
+          distinct: ['clientId'],
+        })
+      : [],
+  ]);
+  const hasPhone = new Set(withPhone.map((c) => c.clientId));
+  const hasAddress = new Set(withAddress.map((c) => c.clientId));
+
+  const contacts = wantsPhone
+    .filter((e) => !hasPhone.has(e.clientId))
+    .flatMap((e) =>
+      splitPhones(e.b.phone!).map((value, i) => ({
+        accountId,
+        clientId: e.clientId,
+        contactType: ContactType.PHONE,
+        value,
+        isPrimary: i === 0,
+      })),
+    );
+  const locations = wantsAddress
+    .filter((e) => !hasAddress.has(e.clientId))
+    .map((e) => ({
+      accountId,
+      clientId: e.clientId,
+      locationType: LocationType.HOME,
+      address: e.b.address ?? undefined,
+      // La referencia es cómo se llega ("Frente a la cancha"): para el cobrador vale tanto como
+      // la calle, y va en la misma ubicación, no en otra.
+      referenceNotes: e.b.addressRef ?? undefined,
+    }));
+
+  if (contacts.length > 0) await tx.clientContact.createMany({ data: contacts });
+  if (locations.length > 0) await tx.clientLocation.createMany({ data: locations });
 }
 
 /**

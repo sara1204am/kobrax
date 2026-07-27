@@ -1,6 +1,18 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { num } from './field-catalog';
+import { num, splitPhones } from './field-catalog';
+
+describe('splitPhones — una celda, varios números', () => {
+  it('separa los que vienen juntos para que cada uno se pueda marcar', () => {
+    assert.deepEqual(splitPhones('2468145 - 68401916'), ['2468145', '68401916']);
+    assert.deepEqual(splitPhones('69081003'), ['69081003']);
+  });
+
+  it('el guion pegado es parte del número, no un separador', () => {
+    // "302-222-2542" es UN número. Cortarlo ahí dejaría tres contactos que no llaman a nadie.
+    assert.deepEqual(splitPhones('302-222-2542'), ['302-222-2542']);
+  });
+});
 
 /**
  * Leer plata. Es la función más consecuente del import: un saldo mal leído entra sin que nadie
