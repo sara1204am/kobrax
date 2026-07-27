@@ -66,3 +66,28 @@ export async function clearSession(): Promise<void> {
 export function isSessionValid(session: StoredSession | null): session is StoredSession {
   return !!session && Date.now() < session.validUntil;
 }
+
+/**
+ * Ventana de gracia al volver a primer plano.
+ *
+ * ponytail: 60 s fijos. Android pausa la Activity ante un diálogo de permisos, la cámara, el
+ * selector de fotos o al saltar a WhatsApp, y RN reporta todo eso igual que un background real.
+ * Sin la ventana, volver de cualquiera de esos rebotaba al cobrador al splash → Inicio, perdiendo
+ * el formulario a medio llenar. Si alguna vez hace falta afinarlo por tenant, se vuelve config.
+ */
+export const LOCK_GRACE_MS = 60_000;
+
+/**
+ * ¿Hay que volver al splash (re-login / desbloqueo biométrico) al regresar a primer plano?
+ * Endurecimiento F2b historia 15. La expiración de la ventana de inactividad manda siempre;
+ * la biometría sólo re-bloquea si el usuario estuvo fuera más que `LOCK_GRACE_MS`.
+ */
+export function shouldRelock(opts: {
+  session: StoredSession | null;
+  awayMs: number;
+  biometricEnabled: boolean;
+}): boolean {
+  if (!opts.session) return false; // sin sesión ya está en login; no hay a dónde rebotar
+  if (!isSessionValid(opts.session)) return true;
+  return opts.biometricEnabled && opts.awayMs >= LOCK_GRACE_MS;
+}
