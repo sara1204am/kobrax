@@ -15,7 +15,6 @@ import {
   SCOPE_LABEL,
   SCOPE_REF_TITLE,
   scopeRefName,
-  setupProgress,
   setupStep,
   soleAssignee,
   type AbsentRule,
@@ -114,9 +113,8 @@ export default function ImportacionScreen() {
   // Defaults a [] a propósito: una API más vieja que la app (o una respuesta parcial) no debe
   // tumbar la pantalla entera con "Cannot read property 'find' of undefined". Sin selector se
   // puede vivir; con pantalla azul no.
-  const { config, lastRun, presets = [], members = [], branches = [] } = screen;
+  const { config, lastRun, members = [], branches = [] } = screen;
   const step = setupStep(config);
-  const progress = setupProgress(step);
   const isFile = config.source === 'file';
   const mapped = Object.values(config.fields).filter((r) => r.from && r.enabled !== false).length;
   const daysRule = config.fields.daysPastDue;
@@ -148,18 +146,6 @@ export default function ImportacionScreen() {
         contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.md }}
       >
         {error && <ErrorBanner message={error} />}
-
-        {progress && (
-          <View style={styles.wizard}>
-            <Text style={styles.wizardTitle}>
-              Configurá tu importación · Paso {progress.current} de {progress.total}
-            </Text>
-            <View style={styles.barTrack}>
-              <View style={[styles.barFill, { flex: progress.current }]} />
-              <View style={{ flex: progress.total - progress.current }} />
-            </View>
-          </View>
-        )}
 
         <SectionLabel>ÚLTIMA IMPORTACIÓN</SectionLabel>
         {lastRun ? (
@@ -253,12 +239,6 @@ export default function ImportacionScreen() {
               onPress={blocked('profile') ? undefined : () => setSheet('profile')}
             />
             <ListRow
-              title="Punto de partida"
-              subtitle={presets.find((p) => p.id === config.preset)?.label ?? 'Opcional · empezar de cero'}
-              onPress={blocked('profile') ? undefined : () => setSheet('preset')}
-            />
-
-            <ListRow
               title="¿El archivo trae el cobrador?"
               right={
                 <Switch
@@ -326,28 +306,6 @@ export default function ImportacionScreen() {
           // Cambiar la forma resetea el emparejado (invariante 4): las etiquetas de un formato
           // no significan nada en el otro. Lo hace el backend; acá sólo se avisa con el subtítulo.
           void save({ profile: { ...config.profile, kind } });
-        }}
-      />
-
-      <OptionSheet
-        visible={sheet === 'preset'}
-        title="Punto de partida"
-        hint="Un preset prellena la configuración de un formato conocido. Después ajustás lo que no coincida con tu archivo."
-        onClose={() => setSheet(null)}
-        options={[
-          { value: '', label: 'Empezar de cero', hint: 'Emparejás todo mirando tu archivo.' },
-          ...presets.map((p) => ({ value: p.id, label: p.label })),
-        ]}
-        value={config.preset ?? ''}
-        onPick={(id) => {
-          setSheet(null);
-          const preset = presets.find((p) => p.id === id);
-          if (!preset) return void save({ preset: undefined });
-          void save({
-            preset: preset.id,
-            profile: { ...preset.profile, kind: preset.kind },
-            fields: Object.fromEntries(Object.entries(preset.fields).map(([f, s]) => [f, { ...s, enabled: true }])),
-          });
         }}
       />
 
@@ -450,10 +408,6 @@ const styles = StyleSheet.create({
   muted: { fontSize: 13, color: COLORS.text2 },
   danger: { fontSize: 13, color: COLORS.danger, fontWeight: '600' },
   warn: { fontSize: 16, color: COLORS.warning },
-  wizard: { gap: SPACING.xs },
-  wizardTitle: { fontSize: 15, fontWeight: '600', color: COLORS.navy },
-  barTrack: { flexDirection: 'row', height: 6, borderRadius: 3, backgroundColor: COLORS.border, overflow: 'hidden' },
-  barFill: { backgroundColor: COLORS.navy },
   sheetHint: { fontSize: 14, color: COLORS.text2, marginBottom: SPACING.sm },
   sheetFooter: { fontSize: 12, color: COLORS.muted, marginTop: SPACING.sm },
   option: { flexDirection: 'row', gap: SPACING.sm, paddingVertical: SPACING.sm, alignItems: 'flex-start' },

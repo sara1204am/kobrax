@@ -9,7 +9,6 @@ import { AuditService } from '../../common/audit/audit.service';
 import { parsePdfBlocks, type ColumnCandidate, type FieldMap } from './parsers/pdf-blocks.parser';
 import { parseCsvRows } from './parsers/rows.parser';
 import { FIELD_CATALOG, normalizeRecord, type NormalizedRecord } from './field-catalog';
-import { BANCO_UNION_PRESET, IMPORT_PRESETS, type ImportPreset } from './presets';
 import {
   DEFAULT_IMPORT_CONFIG,
   detectFileShape,
@@ -87,7 +86,7 @@ export class PortfolioImportService {
     if (config.source === 'manual') {
       throw new BadRequestException({ code: 'IMPORT_DISABLED', message: 'El tenant carga a mano (source=manual)' });
     }
-
+    assertRunnable(config);
     assertFileShape(file, config.profile.kind);
 
     // Parseo server-side (fuera de la transacción), con el motor que pida el perfil.
@@ -257,7 +256,6 @@ export class PortfolioImportService {
   async getConfigScreen(): Promise<{
     config: ImportConfig;
     catalog: typeof FIELD_CATALOG;
-    presets: ImportPreset[];
     lastRun: LastRun | null;
     members: ScopeMember[];
     branches: ScopeBranch[];
@@ -288,7 +286,6 @@ export class PortfolioImportService {
     return {
       config: readImportConfig((account?.configuration as { importConfig?: unknown })?.importConfig),
       catalog: FIELD_CATALOG,
-      presets: IMPORT_PRESETS,
       lastRun: run
         ? {
             at: run.createdAt.toISOString(),
@@ -397,16 +394,9 @@ export class PortfolioImportService {
     const account = await this.tx((tx) => tx.account.findUnique({ where: { id: this.tenant.accountId } }));
     const cfg = readImportConfig((account?.configuration as { importConfig?: unknown })?.importConfig);
 
-    // Compat: los tenants de FUNDACION importaron sin `fields` configurados. Sin esto, su
-    // próxima corrida leería cero campos. ponytail: el preset es un dato como cualquier otro
-    // (C12), no un caso especial del motor. **Borrar cuando todos hayan pasado por Ajustes.**
-    if (Object.keys(cfg.fields).length === 0) {
-      cfg.profile = { ...cfg.profile, kind: 'pdf-blocks', ...BANCO_UNION_PRESET.profile };
-      cfg.fields = Object.fromEntries(Object.entries(BANCO_UNION_PRESET.fields).map(([k, v]) => [k, { ...v }]));
-    }
-    if (cfg.scope.kind !== 'account' && !cfg.scope.ref) {
-      throw new BadRequestException({ code: 'IMPORT_NOT_CONFIGURED', message: 'Falta el alcance del archivo' });
-    }
+    // Sin guardas acá: esta función la comparten la corrida y la LECTURA DE UNA MUESTRA, y leer
+    // una muestra es precisamente lo que se hace cuando todavía no hay nada configurado. Lo que
+    // exige config es importar, así que la exigencia vive en `run()` (ver `assertRunnable`).
     return { ...cfg, fieldMap: toFieldMap(cfg.fields), required: requiredFields(cfg.fields) };
   }
 
@@ -434,6 +424,25 @@ export class PortfolioImportService {
 }
 
 /** Cómo se muestra el cliente en la Vista Previa. */
+/**
+ * Lo que hace falta para APLICAR un archivo — no para leer una muestra.
+ *
+ * Acá vivía un fallback al formato de un banco concreto: un tenant sin `fields` importaba con esa
+ * configuración sin haberla pedido, incluido el que acababa de reiniciar la suya. Ahora se dice
+ * qué falta y dónde se arregla, que es lo que el usuario necesita (C12).
+ */
+function assertRunnable(config: RunConfig): void {
+  if (Object.keys(config.fieldMap).length === 0) {
+    throw new BadRequestException({
+      code: 'IMPORT_NOT_CONFIGURED',
+      message: 'Todavía no emparejaste ningún campo. Andá a Ajustes › Importación › Emparejar columnas.',
+    });
+  }
+  if (config.scope.kind !== 'account' && !config.scope.ref) {
+    throw new BadRequestException({ code: 'IMPORT_NOT_CONFIGURED', message: 'Falta el alcance del archivo' });
+  }
+}
+
 /**
  * El archivo tiene que ser de la forma configurada. Leer un PDF con el parser de planillas no
  * explota: devuelve `%PDF-1.1` como si fuera la única columna del archivo, y el usuario se queda

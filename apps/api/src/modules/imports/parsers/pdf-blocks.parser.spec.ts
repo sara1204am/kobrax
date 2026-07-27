@@ -3,21 +3,41 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { parsePdfBlocks } from './pdf-blocks.parser';
-import { BANCO_UNION_PRESET } from '../presets';
+import { parsePdfBlocks, type FieldMap, type PdfBlocksProfile } from './pdf-blocks.parser';
 import { normalizeRecord } from '../field-catalog';
 
 // Muestra real: extracto Banco Unión PRR0785A, VIGENTE, mora 0 (docs/flows/).
-// Es el ÚNICO archivo real que tenemos, así que se queda como fixture — pero el motor no sabe
-// de qué banco es: todo lo específico entra por `BANCO_UNION_PRESET`, que son datos (C12).
+// Es el ÚNICO archivo real que tenemos, así que se queda como fixture.
 const here = dirname(fileURLToPath(import.meta.url));
 const PDF = resolve(here, '../../../../../../docs/flows/mora union.PDF');
 
 // pdfjs se queda con el buffer (lo deja detached) al parsear → bytes frescos por llamada.
 const bytes = (): Uint8Array => new Uint8Array(readFileSync(PDF));
-const { profile, fields } = BANCO_UNION_PRESET;
 
-describe('pdf-blocks.parser — motor genérico con el preset Banco Unión', () => {
+// La configuración con la que se lee ESTE archivo. Vive acá, en el test, y NO en el producto:
+// el motor no sabe de qué banco es nada (C12), y el usuario arma esto mismo desde Ajustes
+// subiendo un archivo de muestra. Que un formato conocido no venga prellenado es deliberado —
+// prellenarlo desde la app significaba mantener un catálogo de bancos en el código.
+const profile: PdfBlocksProfile = {
+  signature: ['REPORTE DE EXTRACTO DE PRESTAMOS', 'PRR0785A'],
+  recordStart: 'Cliente',
+  tableAnchor: 'Capital',
+};
+const fields: FieldMap = {
+  code: { from: 'No.Credito' },
+  clientName: { from: 'Cliente' },
+  coHolder: { from: 'Cliente', in: 'below' },
+  status: { from: 'Estado' },
+  principalAmount: { from: 'Monto' },
+  outstandingBalance: { from: 'Saldo Credito' },
+  interestRate: { from: 'Tasa Interes' },
+  currency: { from: 'Moneda' },
+  disbursedAt: { from: 'Fecha Desembolso' },
+  daysPastDue: { from: 'Dias Mora', in: 'table' },
+  pastDueAmount: { from: 'Moratorios', in: 'table' },
+};
+
+describe('pdf-blocks.parser — motor genérico sobre un extracto real', () => {
   it('lee el registro pasando el formato como DATO, no como código', async () => {
     const { records } = await parsePdfBlocks(bytes(), profile, fields);
     assert.equal(records.length, 1);

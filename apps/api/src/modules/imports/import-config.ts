@@ -36,8 +36,6 @@ export interface ImportConfig {
   absentRule: AbsentRule;
   carriesAssignee: boolean;
   askOnLogin: boolean;
-  /** Sólo informativo: de qué preset partió la configuración. */
-  preset?: string;
 }
 
 /**

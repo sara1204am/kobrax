@@ -10,7 +10,6 @@ import {
   rejectText,
   resultKind,
   scopeRefName,
-  setupProgress,
   setupStep,
   soleAssignee,
   warningText,
@@ -95,7 +94,7 @@ describe('fieldState — un control, tres estados (§6.5)', () => {
   });
 });
 
-describe('setupStep — asistente de primera vez (§6.9)', () => {
+describe('setupStep — qué falta para poder importar (§6.9)', () => {
   it('pide las cosas en el orden en que dependen entre sí', () => {
     expect(setupStep(cfg({ source: 'manual' }))).toBe('source');
     expect(setupStep(cfg({ scope: { kind: 'branch', ref: null } }))).toBe('scope');
@@ -105,11 +104,6 @@ describe('setupStep — asistente de primera vez (§6.9)', () => {
 
   it('con todo configurado se apaga', () => {
     expect(setupStep(cfg())).toBeNull();
-    expect(setupProgress(null)).toBeNull();
-  });
-
-  it('la barra muestra en qué paso va', () => {
-    expect(setupProgress('profile')).toEqual({ current: 3, total: 4 });
   });
 });
 

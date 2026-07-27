@@ -176,7 +176,7 @@ export default function ColumnasScreen() {
           <EmptyState
             icon="📄"
             title="Todavía no hay nada emparejado"
-            hint="Subí un archivo de muestra para ver qué columnas trae, o partí de un preset en la pantalla anterior."
+            hint="Subí un archivo de muestra: la app te muestra qué trae y vos decís qué es cada cosa."
           />
         ) : (
           <>

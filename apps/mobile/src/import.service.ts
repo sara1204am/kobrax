@@ -41,7 +41,6 @@ export interface ImportConfig {
   absentRule: AbsentRule;
   carriesAssignee: boolean;
   askOnLogin: boolean;
-  preset?: string;
 }
 
 export interface FieldDef {
@@ -49,15 +48,6 @@ export interface FieldDef {
   type: 'text' | 'number' | 'int' | 'date';
   starred?: boolean;
   locked?: boolean;
-}
-
-export interface ImportPreset {
-  id: string;
-  label: string;
-  kind: ProfileKind;
-  profile: ImportConfig['profile'];
-  fields: Record<string, { from: string; in?: 'header' | 'table' | 'below' }>;
-  daysPastDueColumn?: string;
 }
 
 export interface LastRun {
@@ -85,7 +75,6 @@ export interface ScopeBranch {
 export interface ConfigScreen {
   config: ImportConfig;
   catalog: Record<string, FieldDef>;
-  presets: ImportPreset[];
   lastRun: LastRun | null;
   members: ScopeMember[];
   branches: ScopeBranch[];
@@ -292,8 +281,11 @@ export const FIELD_STATE_LABEL: Record<FieldState, string> = {
 };
 
 /**
- * Paso del asistente de primera vez (§6.9): el primer dato que falta.
- * `null` = ya está configurado, la pantalla se dibuja normal.
+ * El primer dato que falta para poder importar. `null` = está todo.
+ *
+ * Ya no dibuja una barra de "Paso 3 de 4": la configuración entra en UNA pantalla, así que el
+ * contador era ruido sobre algo que se ve entero de un vistazo. Lo que queda de aquel asistente
+ * es lo único que hacía falta: una fila apagada dice POR QUÉ lo está.
  */
 export type SetupStep = 'source' | 'scope' | 'profile' | 'fields' | null;
 
@@ -304,14 +296,6 @@ export function setupStep(config: ImportConfig): SetupStep {
   // Sin ningún campo emparejado no hay nada que importar: falta el paso de columnas.
   if (Object.values(config.fields).every((r) => !r.from)) return 'fields';
   return null;
-}
-
-export const SETUP_STEPS: Exclude<SetupStep, null>[] = ['source', 'scope', 'profile', 'fields'];
-
-/** "Paso 3 de 4" para la barra del asistente. */
-export function setupProgress(step: SetupStep): { current: number; total: number } | null {
-  if (!step) return null;
-  return { current: SETUP_STEPS.indexOf(step) + 1, total: SETUP_STEPS.length };
 }
 
 export const SCOPE_LABEL: Record<ScopeKind, string> = {
