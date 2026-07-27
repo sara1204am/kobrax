@@ -94,7 +94,10 @@ export default function ImportacionScreen() {
     );
   }
 
-  const { config, lastRun, presets, members, branches } = screen;
+  // Defaults a [] a propósito: una API más vieja que la app (o una respuesta parcial) no debe
+  // tumbar la pantalla entera con "Cannot read property 'find' of undefined". Sin selector se
+  // puede vivir; con pantalla azul no.
+  const { config, lastRun, presets = [], members = [], branches = [] } = screen;
   const step = setupStep(config);
   const progress = setupProgress(step);
   const isFile = config.source === 'file';

@@ -87,7 +87,8 @@ export interface ColumnCandidate {
   samples: { label: string; value: number | null }[];
 }
 
-const BASE = '/api/imports/portfolio/config';
+// API_BASE ya termina en /api (ver `api.ts`) — acá va sólo la ruta.
+const BASE = '/imports/portfolio/config';
 
 export const importService = {
   /** Todo lo que la pantalla necesita para dibujarse, en una sola llamada. */

@@ -41,6 +41,10 @@ coverage/
 *.p8
 *.p12
 
+# Expo prebuild (CNG) — carpetas nativas generadas, no se versionan
+apps/mobile/android/
+apps/mobile/ios/
+
 # Archivos subidos en dev (driver de disco de POST /api/uploads)
 apps/api/uploads/
 

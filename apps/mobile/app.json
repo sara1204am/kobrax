@@ -44,6 +44,7 @@
         }
       ],
       "@maplibre/maplibre-react-native",
+      "./plugins/with-gradle-plugin-dedupe",
       [
         "./plugins/with-ssl-pinning",
         { "domain": "api.kobrax.com", "pins": [] }

@@ -113,9 +113,11 @@ const ROLES: Record<string, { level: number; perms: string[] | '*' }> = {
   },
   COLLECTOR: {
     // `client:write`/`credit:write`: el cobrador independiente da de alta su propia cartera (spec §3).
+    // `client:import`: la misma alta, pero desde archivo — es el módulo Import del móvil (F10), donde
+    // COLLECTOR es el único rol que entra. Sin esto el módulo es 403 para su propio dueño.
     // El gating por tipo de tenant (import-only en ENTERPRISE) es P10, y va por capacidad, no por accountType.
     level: 30,
-    perms: ['case:read', 'case:write', 'payment:read', 'payment:write', 'route:read', 'route:execute', 'agenda:read', 'agenda:write', 'catalog:read', 'client:read', 'client:write', 'credit:read', 'credit:write'],
+    perms: ['case:read', 'case:write', 'payment:read', 'payment:write', 'route:read', 'route:execute', 'agenda:read', 'agenda:write', 'catalog:read', 'client:read', 'client:write', 'client:import', 'credit:read', 'credit:write'],
   },
   AUDITOR: {
     level: 20,
