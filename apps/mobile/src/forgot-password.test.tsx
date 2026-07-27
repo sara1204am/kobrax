@@ -7,8 +7,11 @@ jest.mock('expo-linear-gradient', () => {
 jest.mock('expo-router', () => ({ router: { replace: jest.fn(), push: jest.fn() } }));
 jest.mock('@/auth-service', () => ({ authService: { forgotPassword: jest.fn() } }));
 
+// Vive en `src/` y no junto a la pantalla: todo archivo bajo `app/` lo bundlea expo-router como
+// ruta (su require.context sólo excluye `+api`/`+html`), así que un `.test.tsx` ahí adentro
+// ejecutaba `jest.mock()` en Hermes → "Property 'jest' doesn't exist" al arrancar la app.
 import { authService } from '@/auth-service';
-import ForgotPasswordScreen from './forgot-password';
+import ForgotPasswordScreen from '../app/(auth)/forgot-password';
 
 const mockForgot = authService.forgotPassword as jest.Mock;
 
