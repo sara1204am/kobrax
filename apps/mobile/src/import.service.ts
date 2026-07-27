@@ -7,7 +7,7 @@
  */
 import * as SecureStore from 'expo-secure-store';
 import { apiMutate, apiQuery, refreshSession, type MutateResult, type QueryResult } from '@/api-client';
-import { API_BASE } from '@/api';
+import { postMultipart, uploadFailure } from '@/api';
 import { getSession } from '@/session';
 
 export type ProfileKind = 'pdf-blocks' | 'pdf-rows' | 'rows';
@@ -178,11 +178,7 @@ async function postFile<T>(query: string, file: PickedFile, dryRun?: boolean): P
       type: file.mimeType ?? 'application/octet-stream',
     } as unknown as Blob);
     if (dryRun !== undefined) form.append('dryRun', String(dryRun));
-    return fetch(`${API_BASE}/imports/portfolio${query}`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'x-client-type': 'mobile' },
-      body: form,
-    });
+    return postMultipart(`/imports/portfolio${query}`, form, token);
   };
 
   try {
@@ -199,8 +195,8 @@ async function postFile<T>(query: string, file: PickedFile, dryRun?: boolean): P
     if (res.ok && json.data) return { status: 'ok', ...json.data };
     if (res.status === 401) return { status: 'unauthenticated' };
     return { status: 'error', message: json.error?.message ?? 'No se pudo leer el archivo' };
-  } catch {
-    return { status: 'offline' };
+  } catch (e) {
+    return uploadFailure(e);
   }
 }
 

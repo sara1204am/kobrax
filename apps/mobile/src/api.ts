@@ -28,6 +28,53 @@ export interface ApiResult<T> {
  */
 const TIMEOUT_MS = 15_000;
 
+/**
+ * Techo de espera de una subida. Diez veces el de `apiFetch` a propósito: por acá viajan archivos
+ * de hasta 15 MB por una conexión de campo, y cortar a los 15 s abortaría subidas que iban bien.
+ */
+const UPLOAD_TIMEOUT_MS = 60_000;
+
+/** Marca que la subida la cortamos nosotros por tiempo, no que el `fetch` falló. */
+export class UploadTimeout extends Error {}
+
+/**
+ * POST multipart con techo de espera. Lo comparten la subida de archivos de import y la de
+ * evidencia: son la misma llamada, y sin techo una API muda deja el botón girando para siempre.
+ * El 401 → refresh → reintento queda en cada caller, que es lo único que difiere.
+ */
+export async function postMultipart(path: string, form: FormData, token: string): Promise<Response> {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), UPLOAD_TIMEOUT_MS);
+  try {
+    return await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'x-client-type': 'mobile' },
+      body: form,
+      signal: abort.signal,
+    });
+  } catch (e) {
+    throw abort.signal.aborted ? new UploadTimeout() : e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Por qué falló una subida.
+ *
+ * React Native dice `Network request failed` sólo cuando de verdad no hay red. Cualquier otra
+ * excepción es otra cosa —típicamente un archivo que no se puede abrir, como uno de Drive que
+ * quedó sin copia local— y meterla en el mismo balde manda al usuario a revisar el wifi cuando
+ * el problema está en el archivo, que es lo único que él puede arreglar. El mensaje crudo se
+ * muestra: es feo, pero es la única pista que hay.
+ */
+export function uploadFailure(e: unknown): { status: 'offline' } | { status: 'error'; message: string } {
+  if (e instanceof UploadTimeout) return { status: 'offline' };
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/network request failed/i.test(msg)) return { status: 'offline' };
+  return { status: 'error', message: `No se pudo leer el archivo en el teléfono: ${msg}` };
+}
+
 export async function apiFetch<T>(
   path: string,
   init: { method?: string; body?: unknown; token?: string; headers?: Record<string, string> } = {},

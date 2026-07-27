@@ -1,4 +1,22 @@
-import { apiFetch } from './api';
+import { apiFetch, uploadFailure, UploadTimeout } from './api';
+
+/**
+ * Un archivo que no se puede abrir y una red caída son problemas distintos con arreglos
+ * distintos. El `catch` los metía en el mismo balde: subir un PDF de Drive que había quedado sin
+ * copia local decía "Sin conexión", y la usuaria se fue a revisar el wifi.
+ */
+describe('uploadFailure — no todo lo que falla es falta de red', () => {
+  it('sólo el error de red de RN es "sin conexión"', () => {
+    expect(uploadFailure(new TypeError('Network request failed'))).toEqual({ status: 'offline' });
+    expect(uploadFailure(new UploadTimeout())).toEqual({ status: 'offline' });
+  });
+
+  it('un archivo ilegible se reporta como tal, con el motivo crudo', () => {
+    const res = uploadFailure(new Error('Could not retrieve file for uri content://drive/1234'));
+    expect(res.status).toBe('error');
+    expect(res).toHaveProperty('message', expect.stringContaining('content://drive/1234'));
+  });
+});
 
 /**
  * Regresión del splash clavado: la app se quedaba en la pantalla de arranque para siempre cuando

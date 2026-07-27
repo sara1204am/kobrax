@@ -158,9 +158,26 @@ export default function PreviewScreen() {
           <Button label="Confirmar importación" onPress={() => void confirm()} loading={busy} />
         )}
         {isTest && preview && (
-          <Text style={styles.hint}>
-            Es una prueba: nada se importa. Si los números no cuadran, revisá el emparejado de columnas.
-          </Text>
+          <>
+            <Text style={styles.hint}>
+              Es una prueba: nada se importa. Si los números no cuadran, revisá el emparejado de columnas.
+            </Text>
+            {/* Sin esto la prueba terminaba en un callejón: los números cuadraban y no había cómo
+                aplicarlos sin rehacer el camino desde el principio. Es la misma pantalla sin
+                `test`, así que la Vista Previa se vuelve a leer antes de confirmar nada. */}
+            {!preview.idempotentSkip && (
+              <Button
+                label="Importar de verdad"
+                variant="ghost"
+                onPress={() =>
+                  router.replace({
+                    pathname: '/import/preview',
+                    params: { uri, name, mimeType: mimeType ?? '', test: '' },
+                  })
+                }
+              />
+            )}
+          </>
         )}
         {error && !preview && <Button label="Reintentar" variant="ghost" onPress={() => void dryRun()} />}
       </ScrollView>

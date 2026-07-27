@@ -3,7 +3,7 @@
  * `apiMutate` (que serializa JSON): tiene su propio POST con `FormData` + refresh 401→retry una vez.
  * El server calcula el SHA-256 del buffer original y devuelve `{ url, hash }`.
  */
-import { API_BASE } from './api';
+import { postMultipart, uploadFailure } from './api';
 import { refreshSession } from './api-client';
 import { getSession } from './session';
 
@@ -23,11 +23,7 @@ export async function uploadImage(uri: string, mimeType = 'image/jpeg'): Promise
     const form = new FormData();
     // En React Native el file part es { uri, name, type } (no un Blob).
     form.append('file', { uri, name, type: mimeType } as unknown as Blob);
-    return fetch(`${API_BASE}/uploads`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'x-client-type': 'mobile' },
-      body: form,
-    });
+    return postMultipart('/uploads', form, token);
   };
 
   try {
@@ -46,7 +42,7 @@ export async function uploadImage(uri: string, mimeType = 'image/jpeg'): Promise
     }
     if (res.status === 401) return { status: 'unauthenticated' };
     return { status: 'error', message: json.error?.message ?? 'No se pudo subir la foto' };
-  } catch {
-    return { status: 'offline' };
+  } catch (e) {
+    return uploadFailure(e);
   }
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { COLORS, SPACING } from '@/theme';
 import { BottomSheet, Chips, EmptyState, Header, ListRow, OfflineIndicator, SectionLabel, StatTile } from '@/ui';
@@ -40,6 +40,7 @@ export default function ImportacionScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [sheet, setSheet] = useState<Sheet>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const online = useNetStore((s) => s.isConnected);
 
   const load = useCallback(async () => {
@@ -56,6 +57,12 @@ export default function ImportacionScreen() {
       void load();
     }, [load]),
   );
+
+  async function refresh() {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }
   useEffect(() => setError(null), [sheet]);
 
   /**
@@ -141,10 +148,22 @@ export default function ImportacionScreen() {
           por cada control: cubre también los que se agreguen después. El `‹` queda vivo porque está
           fuera. Guardar reglas offline abriría la puerta a dos dispositivos reconciliando la misma
           cartera con reglas distintas. */}
+      {/* La pantalla apagada no recibe el gesto de tirar para actualizar, y sin conexión es
+          justo cuando hace falta reintentar. Por eso acá sí va un botón, fuera del bloqueo. */}
+      {!online && (
+        <View style={{ padding: SPACING.lg }}>
+          <Button variant="ghost" label="Reintentar" onPress={() => void load()} />
+        </View>
+      )}
       <ScrollView
         style={{ opacity: online ? 1 : 0.5 }}
         pointerEvents={online ? 'auto' : 'none'}
         contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.md }}
+        refreshControl={
+          // Tirar para actualizar: gesto nativo, cero UI. La pantalla ya se relee sola al volver
+          // de otra, esto cubre el caso de estar mirándola cuando el dato cambió en otro lado.
+          <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor={COLORS.navy} />
+        }
       >
         {error && <ErrorBanner message={error} />}
 
