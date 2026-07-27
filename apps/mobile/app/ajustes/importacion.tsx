@@ -4,6 +4,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { COLORS, SPACING } from '@/theme';
 import { BottomSheet, Chips, EmptyState, Header, ListRow, OfflineIndicator, SectionLabel, StatTile } from '@/ui';
 import { ErrorBanner } from '@/components';
+import { useNetStore } from '@/store/net';
 import {
   ABSENT_RULE_HINT,
   ABSENT_RULE_LABEL,
@@ -12,8 +13,11 @@ import {
   PROFILE_LABEL,
   SCOPE_HINT,
   SCOPE_LABEL,
+  SCOPE_REF_TITLE,
+  scopeRefName,
   setupProgress,
   setupStep,
+  soleAssignee,
   type AbsentRule,
   type ConfigScreen,
   type ImportConfig,
@@ -21,7 +25,7 @@ import {
   type ScopeKind,
 } from '@/import.service';
 
-type Sheet = 'profile' | 'preset' | 'absent' | null;
+type Sheet = 'profile' | 'preset' | 'absent' | 'scope-ref' | null;
 
 /**
  * Ajustes › Importación (FIELD-RULES §6).
@@ -35,6 +39,7 @@ export default function ImportacionScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [sheet, setSheet] = useState<Sheet>(null);
+  const online = useNetStore((s) => s.isConnected);
 
   const load = useCallback(async () => {
     const res = await importService.getConfig();
@@ -89,12 +94,16 @@ export default function ImportacionScreen() {
     );
   }
 
-  const { config, lastRun, presets } = screen;
+  const { config, lastRun, presets, members, branches } = screen;
   const step = setupStep(config);
   const progress = setupProgress(step);
   const isFile = config.source === 'file';
   const mapped = Object.values(config.fields).filter((r) => r.from && r.enabled !== false).length;
   const daysRule = config.fields.daysPastDue;
+  const refTitle = SCOPE_REF_TITLE[config.scope.kind];
+  const refName = scopeRefName(config.scope, members, branches);
+  // §2.4: con toda la cartera de la empresa y un solo miembro, no hay reparto que hacer.
+  const sole = config.scope.kind === 'account' ? soleAssignee(members) : null;
 
   // Bloqueo del asistente: una fila se apaga sólo si su paso todavía no llegó, y siempre dice
   // POR QUÉ. Un control gris sin motivo es un bug para el usuario.
@@ -109,7 +118,15 @@ export default function ImportacionScreen() {
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <OfflineIndicator />
       <Header title="Importación" onBack={() => router.back()} />
-      <ScrollView contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.md }}>
+      {/* §6.8: sin conexión la pantalla no se usa. Se apaga entera en vez de enhebrar un `disabled`
+          por cada control: cubre también los que se agreguen después. El `‹` queda vivo porque está
+          fuera. Guardar reglas offline abriría la puerta a dos dispositivos reconciliando la misma
+          cartera con reglas distintas. */}
+      <ScrollView
+        style={{ opacity: online ? 1 : 0.5 }}
+        pointerEvents={online ? 'auto' : 'none'}
+        contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.md }}
+      >
         {error && <ErrorBanner message={error} />}
 
         {progress && (
@@ -124,11 +141,12 @@ export default function ImportacionScreen() {
           </View>
         )}
 
-        {lastRun && (
+        <SectionLabel>ÚLTIMA IMPORTACIÓN</SectionLabel>
+        {lastRun ? (
           <>
-            <SectionLabel>ÚLTIMA IMPORTACIÓN</SectionLabel>
             <Text style={styles.muted}>
               {lastRunWhen(lastRun.at)}
+              {lastRun.template ? ` · ${lastRun.template}` : ''}
               {lastRun.scope ? ` · ${lastRun.scope}` : ''}
             </Text>
             <View style={styles.tiles}>
@@ -141,7 +159,12 @@ export default function ImportacionScreen() {
                 {lastRun.errors} fila{lastRun.errors === 1 ? '' : 's'} con problemas
               </Text>
             )}
+            {/* §6.2: el histórico se mantiene aunque el tenant pase a carga manual; se aclara por qué
+                no se va a actualizar más, en vez de dejar un dato viejo sin contexto. */}
+            {!isFile && <Text style={styles.muted}>Origen cambiado a manual.</Text>}
           </>
+        ) : (
+          <Text style={styles.muted}>Todavía no importaste ningún archivo.</Text>
         )}
 
         <SectionLabel>ORIGEN DE DATOS</SectionLabel>
@@ -170,6 +193,18 @@ export default function ImportacionScreen() {
               onChange={(kind) => void save({ scope: { kind, ref: kind === 'account' ? null : config.scope.ref } })}
             />
             <Text style={styles.muted}>{SCOPE_HINT[config.scope.kind]}</Text>
+
+            {/* Sin esta fila, elegir Oficial o Agencia dejaba `scope.ref` en null y el asistente
+                se trababa en el paso 2 para siempre: pedía un alcance que ningún control podía
+                completar (FIELD-RULES §6.4). */}
+            {refTitle && (
+              <ListRow
+                title={refTitle}
+                subtitle={refName ?? `Elegí cuál · sin esto el import no arranca`}
+                onPress={() => setSheet('scope-ref')}
+              />
+            )}
+            {sole && <Text style={styles.muted}>Se asigna a {sole.name}.</Text>}
 
             <ListRow
               title="Forma del archivo"
@@ -264,6 +299,32 @@ export default function ImportacionScreen() {
       />
 
       <OptionSheet
+        visible={sheet === 'scope-ref'}
+        title={refTitle ?? ''}
+        hint={
+          config.scope.kind === 'official'
+            ? 'El reconcile toca sólo los créditos de esta persona.'
+            : 'El reconcile toca sólo los créditos de esta agencia.'
+        }
+        empty={
+          config.scope.kind === 'official'
+            ? 'No hay usuarios activos en la cuenta.'
+            : 'No hay agencias cargadas. Elegí "Empresa (todos)" mientras tanto.'
+        }
+        onClose={() => setSheet(null)}
+        options={
+          config.scope.kind === 'official'
+            ? members.map((m) => ({ value: m.id, label: m.name, hint: m.role }))
+            : branches.map((b) => ({ value: b.id, label: b.name }))
+        }
+        value={config.scope.ref ?? ''}
+        onPick={(ref) => {
+          setSheet(null);
+          void save({ scope: { kind: config.scope.kind, ref } });
+        }}
+      />
+
+      <OptionSheet
         visible={sheet === 'absent'}
         title="Reglas de importación"
         hint="Los créditos que YA tenés y que NO vienen en el archivo, ¿qué hacen?"
@@ -290,6 +351,7 @@ function OptionSheet<T extends string>({
   title,
   hint,
   footer,
+  empty,
   options,
   value,
   onPick,
@@ -299,6 +361,8 @@ function OptionSheet<T extends string>({
   title: string;
   hint?: string;
   footer?: string;
+  /** Qué decir cuando no hay ninguna opción — una hoja vacía y muda parece un bug. */
+  empty?: string;
   options: readonly { value: T; label: string; hint?: string }[];
   value: T;
   onPick: (v: T) => void;
@@ -307,6 +371,7 @@ function OptionSheet<T extends string>({
   return (
     <BottomSheet visible={visible} onClose={onClose} title={title}>
       {hint && <Text style={styles.sheetHint}>{hint}</Text>}
+      {options.length === 0 && empty && <Text style={styles.optionHint}>{empty}</Text>}
       {options.map((o) => (
         <Pressable
           key={o.value}

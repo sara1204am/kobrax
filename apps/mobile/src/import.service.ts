@@ -61,11 +61,25 @@ export interface LastRun {
   errors: number;
 }
 
+/** Candidatos de `scope.ref` — los devuelve el mismo GET de config (§6.4). */
+export interface ScopeMember {
+  id: string;
+  name: string;
+  role: string;
+}
+
+export interface ScopeBranch {
+  id: string;
+  name: string;
+}
+
 export interface ConfigScreen {
   config: ImportConfig;
   catalog: Record<string, FieldDef>;
   presets: ImportPreset[];
   lastRun: LastRun | null;
+  members: ScopeMember[];
+  branches: ScopeBranch[];
 }
 
 export interface ColumnCandidate {
@@ -290,6 +304,45 @@ export const SCOPE_HINT: Record<ScopeKind, string> = {
   branch: 'El archivo trae la cartera de una agencia. Sólo se reconcilia esa agencia.',
   account: 'El archivo trae toda la cartera de la empresa.',
 };
+
+/** Qué se le pide al usuario después de elegir el alcance (§6.4). `null` = nada. */
+export const SCOPE_REF_TITLE: Record<ScopeKind, string | null> = {
+  official: 'Oficial de crédito',
+  branch: 'Agencia o sucursal',
+  account: null,
+};
+
+/**
+ * Nombre del `scope.ref` elegido, para el subtítulo de la fila. `null` cuando el alcance no pide
+ * ref (`account`); el texto de "todavía no elegiste" lo pone la pantalla.
+ */
+export function scopeRefName(
+  scope: ImportConfig['scope'],
+  members: ScopeMember[],
+  branches: ScopeBranch[],
+): string | null {
+  if (scope.kind === 'account' || !scope.ref) return null;
+  const found =
+    scope.kind === 'official'
+      ? members.find((m) => m.id === scope.ref)?.name
+      : branches.find((b) => b.id === scope.ref)?.name;
+  // Si el ref guardado ya no existe (usuario dado de baja, sucursal cerrada) se dice, en vez de
+  // dibujar una fila vacía que parece configurada.
+  return found ?? 'El elegido ya no está disponible';
+}
+
+/**
+ * §2.4: con alcance `Empresa (todos)` y un solo miembro activo, la cartera se autoasigna a esa
+ * persona y no hay paso de reparto.
+ *
+ * ponytail: "un solo miembro activo", no "un solo usuario con capacidad de cobrar". El rol que
+ * cobra se llama distinto en cada tenant (COLLECTOR, oficial de crédito, gestor) y acá esto sólo
+ * pinta un subtítulo — el autoasignado real lo decide el backend al reconciliar. Si algún día el
+ * subtítulo miente en una cuenta con admin + 1 cobrador, se filtra por rol.
+ */
+export function soleAssignee(members: ScopeMember[]): ScopeMember | null {
+  return members.length === 1 ? members[0]! : null;
+}
 
 export const PROFILE_LABEL: Record<ProfileKind, string> = {
   rows: 'Una fila por crédito (Excel o CSV)',

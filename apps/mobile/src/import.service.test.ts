@@ -4,9 +4,12 @@ import {
   fieldState,
   lastRunWhen,
   previewName,
+  scopeRefName,
   setupProgress,
   setupStep,
+  soleAssignee,
   type ImportConfig,
+  type ScopeMember,
 } from './import.service';
 
 const cfg = (over: Partial<ImportConfig> = {}): ImportConfig => ({
@@ -19,6 +22,47 @@ const cfg = (over: Partial<ImportConfig> = {}): ImportConfig => ({
   carriesAssignee: false,
   askOnLogin: true,
   ...over,
+});
+
+const MEMBERS: ScopeMember[] = [
+  { id: 'u1', name: 'Sara Acha', role: 'COLLECTOR' },
+  { id: 'u2', name: 'Juan Perez', role: 'SUPERVISOR' },
+];
+const BRANCHES = [{ id: 'b1', name: 'Agencia Sucre' }];
+
+describe('scopeRefName — el alcance elegido, en palabras (§6.4)', () => {
+  it('resuelve el nombre del oficial y el de la agencia', () => {
+    expect(scopeRefName({ kind: 'official', ref: 'u2' }, MEMBERS, BRANCHES)).toBe('Juan Perez');
+    expect(scopeRefName({ kind: 'branch', ref: 'b1' }, MEMBERS, BRANCHES)).toBe('Agencia Sucre');
+  });
+
+  it('no pide ref con alcance de empresa, ni cuando todavía no se eligió', () => {
+    expect(scopeRefName({ kind: 'account', ref: null }, MEMBERS, BRANCHES)).toBeNull();
+    expect(scopeRefName({ kind: 'official', ref: null }, MEMBERS, BRANCHES)).toBeNull();
+  });
+
+  it('avisa si el elegido ya no existe, en vez de mostrar la fila vacía como si estuviera lista', () => {
+    expect(scopeRefName({ kind: 'official', ref: 'borrado' }, MEMBERS, BRANCHES)).toBe(
+      'El elegido ya no está disponible',
+    );
+  });
+});
+
+describe('soleAssignee — autoasignado sin paso de reparto (§2.4)', () => {
+  it('con un solo miembro devuelve ese; con dos o más, ninguno', () => {
+    expect(soleAssignee([MEMBERS[0]!])?.name).toBe('Sara Acha');
+    expect(soleAssignee(MEMBERS)).toBeNull();
+    expect(soleAssignee([])).toBeNull();
+  });
+});
+
+describe('setupStep — el asistente no se traba pidiendo lo que ya se eligió', () => {
+  // Regresión: con alcance official/branch el paso 'scope' exige `ref`, y la pantalla no tenía
+  // ningún control que lo pudiera setear → quedaba trabada en el paso 2 para siempre.
+  it('sigue pidiendo el alcance hasta que hay ref, y avanza apenas lo hay', () => {
+    expect(setupStep(cfg({ scope: { kind: 'official', ref: null } }))).toBe('scope');
+    expect(setupStep(cfg({ scope: { kind: 'official', ref: 'u1' } }))).toBeNull();
+  });
 });
 
 describe('fieldState — un control, tres estados (§6.5)', () => {

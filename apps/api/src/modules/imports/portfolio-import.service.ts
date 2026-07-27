@@ -37,6 +37,18 @@ interface LastRun {
   errors: number;
 }
 
+/** Candidatos de `scope.ref` para la pantalla de Ajustes (FIELD-RULES §6.4). */
+interface ScopeMember {
+  id: string;
+  name: string;
+  role: string;
+}
+
+interface ScopeBranch {
+  id: string;
+  name: string;
+}
+
 interface PortfolioSummary {
   dryRun: boolean;
   idempotentSkip: boolean;
@@ -238,14 +250,29 @@ export class PortfolioImportService {
     catalog: typeof FIELD_CATALOG;
     presets: ImportPreset[];
     lastRun: LastRun | null;
+    members: ScopeMember[];
+    branches: ScopeBranch[];
   }> {
     const accountId = this.tenant.accountId;
-    const [account, run] = await this.tx((tx) =>
+    // `members` y `branches` son lo que la pantalla ofrece al elegir el alcance (FIELD-RULES §6.4):
+    // sin ellos, `scope.kind` official/branch queda sin `ref` y el asistente no puede avanzar.
+    // Viajan acá y no en endpoints propios porque no existe módulo `users` ni `branches`, y montar
+    // dos módulos para dos listas de nombres no se paga: esta llamada ya dibuja la pantalla entera.
+    const [account, run, members, branches] = await this.tx((tx) =>
       Promise.all([
         tx.account.findUnique({ where: { id: accountId } }),
         tx.clientImportRun.findFirst({
           where: { accountId, source: 'portfolio' },
           orderBy: { createdAt: 'desc' },
+        }),
+        tx.userAccount.findMany({
+          where: { isActive: true },
+          include: { role: { select: { name: true } }, user: { include: { profile: true } } },
+        }),
+        tx.branch.findMany({
+          where: { accountId, active: true, deletedAt: null },
+          select: { id: true, name: true },
+          orderBy: { name: 'asc' },
         }),
       ]),
     );
@@ -264,6 +291,17 @@ export class PortfolioImportService {
             errors: run.errors,
           }
         : null,
+      // Se devuelven TODOS los miembros activos con su rol, sin filtrar por COLLECTOR: quien lleva
+      // la cartera se llama distinto en cada tenant (oficial de crédito, gestor, cobrador) y
+      // filtrar acá dejaría al banco sin poder elegir a su oficial. El rol viaja como etiqueta.
+      members: members
+        .map((m) => ({
+          id: m.userId,
+          name: m.user.profile ? `${m.user.profile.firstName} ${m.user.profile.lastName}` : m.user.email,
+          role: m.role.name,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      branches,
     };
   }
 
