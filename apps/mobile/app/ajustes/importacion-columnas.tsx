@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import * as DocumentPicker from 'expo-document-picker';
 import { router } from 'expo-router';
 import { COLORS, SPACING } from '@/theme';
 import { BottomSheet, EmptyState, Header, ListRow, SectionLabel } from '@/ui';
@@ -12,6 +11,7 @@ import {
   fieldState,
   importService,
   NAME_ORDER_LABEL,
+  pickImportFile,
   previewName,
   type ColumnCandidate,
   type ConfigScreen,
@@ -48,10 +48,9 @@ export default function ColumnasScreen() {
 
   /** Sube un archivo de muestra: la app lista lo que encontró para que el usuario empareje. */
   async function pickSample() {
-    const picked = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
-    if (picked.canceled || !picked.assets?.[0]) return;
-    const a = picked.assets[0];
-    const res = await importService.readColumns({ uri: a.uri, name: a.name, mimeType: a.mimeType });
+    const picked = await pickImportFile();
+    if (!picked) return;
+    const res = await importService.readColumns(picked);
     if (res.status === 'ok') {
       setLabels(res.labels);
       setCandidates(res.columnCandidates);

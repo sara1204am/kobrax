@@ -5,6 +5,7 @@
  * no hay nada de parseo — sólo el contrato con `GET/PATCH /api/imports/portfolio/config`.
  * Ver `docs/epics/F10/plans/import/FIELD-RULES.md` §6.
  */
+import * as DocumentPicker from 'expo-document-picker';
 import * as SecureStore from 'expo-secure-store';
 import { apiMutate, apiQuery, refreshSession, type MutateResult, type QueryResult } from '@/api-client';
 import { API_BASE } from '@/api';
@@ -120,6 +121,21 @@ export interface PickedFile {
   uri: string;
   name: string;
   mimeType?: string;
+}
+
+/** El motor lee las dos formas (§4.1); el tipo real lo valida el backend, esto sólo acota el picker. */
+const IMPORT_MIME = ['application/pdf', 'text/csv', 'text/comma-separated-values', 'text/plain'];
+
+/**
+ * Elegir el archivo del dispositivo. Vive acá y no en cada pantalla porque lo usan tres
+ * (archivo del día, archivo de muestra de Ajustes y el modo prueba), y la copia suelta de
+ * Ajustes se había quedado sin el filtro de tipo. `null` = el usuario canceló.
+ */
+export async function pickImportFile(): Promise<PickedFile | null> {
+  const res = await DocumentPicker.getDocumentAsync({ type: IMPORT_MIME, copyToCacheDirectory: true });
+  if (res.canceled || !res.assets?.[0]) return null;
+  const a = res.assets[0];
+  return { uri: a.uri, name: a.name, mimeType: a.mimeType };
 }
 
 export interface ColumnsPayload {
@@ -386,6 +402,46 @@ export function previewName(full: string, order: NameOrder): { lastName: string;
   }
   if (words.length < 3 || i >= words.length) return { lastName: full, firstName: '—' };
   return { lastName: surnames.join(' '), firstName: words.slice(i).join(' ') };
+}
+
+/**
+ * Advertencias de corrida, en palabras del usuario. Vive acá porque lo usan la Vista Previa y el
+ * Resultado; el código crudo (`MORA_SIN_CONFIRMAR`) no se le muestra nunca a nadie.
+ */
+export const WARNING_TEXT: Record<string, string> = {
+  MORA_SIN_CONFIRMAR: '⚠ Todavía no confirmaste cuál columna son los días de atraso.',
+  MORA_COLUMNA_SOSPECHOSA: '⚠ Puede que la columna de días de atraso esté mal elegida.',
+  MORA_INCONSISTENTE: '⚠ Hay créditos vigentes y sin cargos, pero con días de atraso.',
+};
+
+export function warningText(code: string, detail?: string): string {
+  // Código desconocido = backend más nuevo que la app: se muestra crudo, no se esconde.
+  return `${WARNING_TEXT[code] ?? code}${detail ? ` (${detail})` : ''}`;
+}
+
+/** Qué formatos acepta ESTE tenant — sale de la forma elegida en Ajustes, no de un literal (S3-R5). */
+export const FORMAT_HINT: Record<ProfileKind, string> = {
+  rows: 'Excel (.xlsx) o CSV · hasta 15 MB',
+  'pdf-blocks': 'Extracto PDF · hasta 15 MB',
+};
+
+/** Cuántos ítems de una lista larga se dibujan antes de ofrecer el resto (gama baja, §9). */
+export const LIST_LIMIT = 8;
+
+/** Texto del "ver el resto", o `null` si entran todos. */
+export function moreLabel(total: number, shown: number): string | null {
+  return total > shown ? `Mostrar ${total - shown} más de ${total}` : null;
+}
+
+/**
+ * Qué pantalla de resultado corresponde. `skipped` NO es "no pasó nada": es "este archivo ya se
+ * había aplicado", y por eso llega con los conteos de aquella corrida y sin listas.
+ */
+export type ResultKind = 'ok' | 'warned' | 'skipped';
+
+export function resultKind(invalid: number, idempotentSkip: boolean): ResultKind {
+  if (idempotentSkip) return 'skipped';
+  return invalid > 0 ? 'warned' : 'ok';
 }
 
 /** Fecha corta para la tarjeta de última importación: "Hoy 08:14" / "24 jul 08:14". */

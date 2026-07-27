@@ -1,13 +1,22 @@
+// `expo-document-picker` toca el bridge nativo al importarse (`__fbBatchedBridgeConfig is not set`).
+// Acá se testean los derivados puros del service, no el picker: se corta la dependencia y listo.
+jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
+
 import {
   applyFieldState,
   decideImportGate,
   fieldState,
+  FORMAT_HINT,
   lastRunWhen,
+  LIST_LIMIT,
+  moreLabel,
   previewName,
+  resultKind,
   scopeRefName,
   setupProgress,
   setupStep,
   soleAssignee,
+  warningText,
   type ImportConfig,
   type ScopeMember,
 } from './import.service';
@@ -163,6 +172,48 @@ describe('decideImportGate — el toggle "preguntar al iniciar sesión" (§6.7)'
 
   it('lo de ayer no cuenta', () => {
     expect(decideImportGate(file, { lastDay: '2026-07-24', skipDay: '2026-07-24' }, now)).toBe(true);
+  });
+});
+
+describe('moreLabel — listas largas en un teléfono de gama baja (§9)', () => {
+  it('no ofrece nada cuando entran todos', () => {
+    expect(moreLabel(3, 3)).toBeNull();
+    expect(moreLabel(0, 0)).toBeNull();
+  });
+
+  it('dice cuántos faltan y sobre cuántos', () => {
+    expect(moreLabel(150, LIST_LIMIT)).toBe(`Mostrar ${150 - LIST_LIMIT} más de 150`);
+  });
+});
+
+describe('resultKind — qué pantalla de resultado corresponde', () => {
+  it('sin rechazos es éxito; con rechazos, advertencias', () => {
+    expect(resultKind(0, false)).toBe('ok');
+    expect(resultKind(3, false)).toBe('warned');
+  });
+
+  it('el archivo ya aplicado manda sobre todo lo demás: no es "no pasó nada"', () => {
+    expect(resultKind(0, true)).toBe('skipped');
+    expect(resultKind(9, true)).toBe('skipped');
+  });
+});
+
+describe('warningText — el usuario nunca ve el código crudo', () => {
+  it('traduce los códigos conocidos y suma el detalle', () => {
+    expect(warningText('MORA_SIN_CONFIRMAR')).toContain('días de atraso');
+    expect(warningText('MORA_COLUMNA_SOSPECHOSA', '34%')).toContain('(34%)');
+  });
+
+  it('un código que la app no conoce se muestra igual, no se esconde', () => {
+    // Backend más nuevo que la app: peor que un código feo es un aviso invisible.
+    expect(warningText('CODIGO_NUEVO')).toBe('CODIGO_NUEVO');
+  });
+});
+
+describe('FORMAT_HINT — el copy sale de la config, no de un literal del mockup (S3-R5)', () => {
+  it('el tenant de extracto PDF no lee "CSV o XLSX"', () => {
+    expect(FORMAT_HINT['pdf-blocks']).toContain('PDF');
+    expect(FORMAT_HINT.rows).toContain('CSV');
   });
 });
 

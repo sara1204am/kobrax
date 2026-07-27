@@ -140,11 +140,16 @@ Leyenda build: 🟢 Expo Go · 🔵 dev build (nativo).
 | Pantalla | node-id | Endpoint | DB | Build |
 |---|---|---|---|---|
 | Inicio Sync | `24:1049` | — | — | 🟢 |
-| Actualizar Archivo | `24:1907` | `POST /clients/imports` | client_import_runs | 🟢 |
-| Seleccionar Archivo | `24:1981` | idem | idem | 🟢 |
-| Vista Previa Importación | `24:2051` | `POST /clients/imports {dryRun:true}` | client_import_runs | 🟢 |
-| Resultado con Advertencias | `24:2164` | idem | idem | 🟢 |
-| Resultado de Importación | `24:2280` | `POST /clients/imports` | client_import_runs, clients | 🟢 |
+| Actualizar Archivo | `24:1907` | `POST /imports/portfolio {dryRun:true}` | client_import_runs | 🟢 |
+| Seleccionar Archivo | `24:1981` | idem (mismo screen, estado "listo") | idem | 🟢 |
+| Vista Previa Importación | `24:2051` | `POST /imports/portfolio {dryRun:true}` | client_import_runs | 🟢 |
+| Resultado con Advertencias | `24:2164` | `POST /imports/portfolio` | client_import_runs, clients, credits | 🟢 |
+| Resultado de Importación | `24:2280` | idem (mismo screen, estado éxito) | idem | 🟢 |
+
+> **`POST /clients/imports` NO sirve para cartera** y por eso no figura acá: sólo escribe `clients`,
+> el reconcile soft-deletea al ausente y matchea por carnet, que el extracto no trae (README del
+> módulo import, hallazgos H1–H3). El endpoint real es N1 `POST /api/imports/portfolio`, que escribe
+> cliente + crédito juntos y nunca borra.
 | Formulario Carga Rápida | `48:1438` | `POST /clients` (+ contacts/locations) | clients | 🟢 |
 | Revisar Lista Carga Rápida | `24:2468` | idem (batch) | clients | 🟢 |
 | Éxito Carga Rápida | `24:2600` | — | — | 🟢 |

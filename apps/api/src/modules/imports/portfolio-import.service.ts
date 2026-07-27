@@ -220,7 +220,10 @@ export class PortfolioImportService {
           mode: 'RECONCILE',
           status: 'DONE',
           template: config.profile.kind,
-          scope: `${scope.kind}:${scope.ref}`,
+          // Sin `ref` (alcance de empresa) se guarda la clase a secas: `${kind}:${ref}` escribía
+          // literalmente "account:null" en el historial, que además ahora se le muestra al usuario
+          // en la tarjeta de última importación (FIELD-RULES §8 · item 14).
+          scope: scope.ref ? `${scope.kind}:${scope.ref}` : scope.kind,
           creditsCreated: counts.created,
           creditsUpdated: counts.updated,
           creditsSetCurrent: counts.setCurrent,

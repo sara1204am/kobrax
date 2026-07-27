@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-nat
 import { router, useFocusEffect } from 'expo-router';
 import { COLORS, SPACING } from '@/theme';
 import { BottomSheet, Chips, EmptyState, Header, ListRow, OfflineIndicator, SectionLabel, StatTile } from '@/ui';
-import { ErrorBanner } from '@/components';
+import { Button, ErrorBanner } from '@/components';
 import { useNetStore } from '@/store/net';
 import {
   ABSENT_RULE_HINT,
@@ -162,6 +162,27 @@ export default function ImportacionScreen() {
                 {lastRun.errors} fila{lastRun.errors === 1 ? '' : 's'} con problemas
               </Text>
             )}
+            {/* §6.3: el detalle de la corrida son estos mismos contadores en grande — la corrida
+                guarda conteos, no el registro por fila. Sin endpoint nuevo: se le pasa el `lastRun`
+                que esta pantalla ya tiene. */}
+            <ListRow
+              title="Ver detalle"
+              onPress={() =>
+                router.push({
+                  pathname: '/import/resultado',
+                  params: {
+                    mode: 'read',
+                    created: String(lastRun.created),
+                    updated: String(lastRun.updated),
+                    setCurrent: String(lastRun.setCurrent),
+                    invalid: String(lastRun.errors),
+                    when: lastRunWhen(lastRun.at),
+                    template: lastRun.template ?? '',
+                    scope: lastRun.scope ?? '',
+                  },
+                })
+              }
+            />
             {/* §6.2: el histórico se mantiene aunque el tenant pase a carga manual; se aclara por qué
                 no se va a actualizar más, en vez de dejar un dato viejo sin contexto. */}
             {!isFile && <Text style={styles.muted}>Origen cambiado a manual.</Text>}
@@ -260,6 +281,14 @@ export default function ImportacionScreen() {
                   accessibilityLabel="Preguntar al iniciar sesión"
                 />
               }
+            />
+
+            {/* §7·P1: es el `dryRun` que ya existe. Sin esto, la única forma de saber si emparejaste
+                bien es importar de verdad y ver la cartera rota. */}
+            <Button
+              variant="ghost"
+              label="Probar con un archivo"
+              onPress={() => router.push({ pathname: '/import/archivo', params: { test: '1' } })}
             />
           </>
         )}
