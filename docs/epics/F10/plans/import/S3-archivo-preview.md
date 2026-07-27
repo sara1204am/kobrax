@@ -1,4 +1,4 @@
-> **ESTADO: ronda 1 cerrada (2026-07-26). Listo para el gate `/f10-validar-plan`.**
+> **ESTADO: ronda 2 (2026-07-27) — correcciones del gate aplicadas (D-N7 se cae, deltas = ninguno).**
 > Plan del slice S3 (+ S4, ver §1). Maestro: `README.md`. S1: `FIELD-RULES.md`.
 
 # F10 · Import · S3 — Archivo + Vista Previa (+ S4 Resultado)
@@ -11,7 +11,7 @@ razonado y quedan acá para que se puedan revertir sabiendo qué se eligió y po
 | # | Decisión | Elegido | Motivo |
 |---|---|---|---|
 | **D-SPLIT-S3** | Reparto de pantallas | **2 para S3 + 1 para S4** | Derivado de los mockups del repo, no asumido: los pares `24:1907`/`24:1981` y `24:2280`/`24:2164` comparten estructura y sólo cambian de estado (§4). |
-| **D-N7** | `GET .../runs/:id` | **Se construye** | La usuaria eligió "todo §6" de FIELD-RULES, y *"Ver detalle"* es §6.3. Endpoint chico: la corrida ya se persiste entera en `client_import_runs`. |
+| **D-N7** | `GET .../runs/:id` | **Se cae — cero backend** | Revisado contra el esquema (gate, 2026-07-27): `client_import_runs` **no guarda los rechazados**, sólo contadores (`schema.prisma:395-421`). Y §6.3 muestra **la última** corrida, no un histórico — `GET config` ya devuelve ese `lastRun` entero. El endpoint devolvería lo que la pantalla ya tiene en memoria. *"Ver detalle"* navega a `resultado.tsx` en modo lectura con ese objeto. Si algún día hace falta el historial o el detalle por fila, es un slice con migración, no un botón. |
 | **D-REPORTE** | "Descargar reporte de errores" | **Se saca del mockup** | No existe generación de reporte, ni librería de salida, ni permiso de escritura a disco. Es un slice propio disfrazado de botón. Los rechazados **igual se ven en pantalla con su motivo**, que es la necesidad real. Queda escrito para la web (§12 del maestro). |
 | **D-KPI-I1** | Tarjeta de KPIs del gate | **Deuda de S2** | Es otro slice. Meterla acá infla S3 sin cerrar nada. Anotada en §11 (S3-R3). |
 
@@ -85,13 +85,17 @@ pantallas necesitan**, sin endpoints nuevos:
 > pantallas. Ese endpoint **no sirve** para cartera (README §1, hallazgos H1–H3) y fue reemplazado por
 > N1. Se corrige el mapa al cerrar el slice.
 
-**Delta nuevo (D-N7, cerrado):**
+**Deltas nuevos: NINGUNO** (D-N7 revisado). El slice es 100% móvil; el backend no se toca.
 
-| # | Delta | Para qué |
-|---|---|---|
-| N7 | `GET /api/imports/portfolio/runs/:id` · `@Roles(CLIENT_IMPORT)` | *"Ver detalle"* de una corrida **pasada** desde Ajustes (§6.3 de FIELD-RULES). El resultado inmediato NO lo necesita: sale de la respuesta del POST. Hoy el controller sólo tiene `GET/PATCH config` y `POST`. Devuelve la fila de `client_import_runs` serializada con la misma forma que `lastRun` + los rechazados que ya se guardan. |
+*"Ver detalle"* de Ajustes usa el `lastRun` que `GET .../config` ya devuelve (`import.service.ts:54-62`).
 
-**Tablas:** `client_import_runs`, `credits`, `clients` — todas con `accountId`.
+⚠️ **`idempotentSkip` viene con `preview` VACÍA** y los conteos de la corrida anterior
+(`portfolio-import.service.ts:118-126` → `emptyPreview()`). No es un archivo sin cambios: es
+"este archivo ya se aplicó". Se dibuja como estado propio (§7.1), **nunca** como tres baldes en
+cero, que se leería como bug.
+
+**Tablas:** `client_import_runs`, `credits`, `clients` — todas con `accountId`. Ninguna se modifica
+en este slice (sólo las escribe el `POST` que ya existe).
 
 ## 6. Auditoría de reuso
 
@@ -126,17 +130,24 @@ pantallas necesitan**, sin endpoints nuevos:
 `app/import/index.tsx` queda **sólo** como I1 Inicio Sync (gate): bienvenida + CTAs. La tarjeta de
 KPIs que pide el mockup es **deuda de S2** — ver §11.
 
+`resultado.tsx` tiene **tres** estados, no dos: éxito · con advertencias · **modo lectura** (llega
+desde *"Ver detalle"* con un `LastRun`, que sólo trae conteos: sin listas y sin CTA de confirmar).
+
 ### 7.2 `BucketList` — local a `preview.tsx`
 Lista colapsable de un balde (título + conteo + primeros N + "Mostrar N de M"). Vive **dentro de
 `preview.tsx`**: la usan los tres baldes de esa pantalla y nadie más. Si el resultado o la web la
 necesitan, se sube a `ui.tsx` entonces — no antes.
+
+**Se copia el patrón que ya existe**, no se inventa otro: `app/(tabs)/agenda.tsx:131,212`
+(`showAll` + `slice(0, N)` + "Ver más (N)"), también local a su pantalla.
 
 ## 8. Tareas
 
 0. **Deduplicar el picker**: extraer `pickImportFile()` a `src/import.service.ts` y hacer que
    `app/import/index.tsx` y `app/ajustes/importacion-columnas.tsx` lo usen. Va **primero** para que
    `archivo.tsx` nazca usándolo en vez de agregar la tercera copia.
-1. Subir `WARNING_TEXT` de `index.tsx` a `src/import.service.ts` (lo van a usar 3 pantallas).
+1. Subir `WARNING_TEXT` de `index.tsx` a `src/import.service.ts` (lo van a usar 3 pantallas), junto
+   con el mapa `ProfileKind → "Formatos soportados: …"` que pide S3-R5.
 2. `app/import/archivo.tsx`: dropzone + caja de requisitos + CTA con los dos estados; al elegir,
    `dryRun` y navegar a preview pasando el archivo. Errores con `ErrorBanner`, sin navegar.
 3. `app/import/preview.tsx`: tres `StatTile` + `BucketList` por balde + rechazados + advertencias de
@@ -146,10 +157,13 @@ necesitan, se sube a `ui.tsx` entonces — no antes.
 5. Adelgazar `app/import/index.tsx` a gate puro (I1).
 6. `[ Probar con un archivo ]` en Ajustes (§7 P1 de FIELD-RULES): navega a `archivo.tsx` en modo
    prueba — llega a preview y **no** ofrece confirmar.
-7. **N7** (D-N7): `GET /api/imports/portfolio/runs/:id` en el controller que ya existe + serializador
-   reusando la forma de `lastRun`; enganchar *"Ver detalle"* de `app/ajustes/importacion.tsx` (la fila
-   que quedó pendiente al cerrar S1) a `resultado.tsx` en modo lectura.
+7. Enganchar *"Ver detalle"* de `app/ajustes/importacion.tsx` (la fila que quedó pendiente al cerrar
+   S1) a `resultado.tsx` **en modo lectura**, pasándole el `lastRun` que la pantalla ya tiene. Sin
+   backend (D-N7).
 8. Tests de los derivados puros nuevos (corte de listas, texto de advertencias, estado del CTA).
+   Al mover el `dryRun` a `archivo.tsx`, **borrar** el `res as unknown as PortfolioSummary` de
+   `app/import/index.tsx:52` — la rama ok de `FileResult<T>` ya es `{ status:'ok' } & T`, el cast
+   sobra y no se copia a tres pantallas.
 9. Corregir `ui-screen-map.md` §4: endpoint real N1 en las 5 filas.
 
 ## 9. Reglas de la fase
@@ -171,7 +185,9 @@ necesitan, se sube a `ui.tsx` entonces — no antes.
 - **Funcional**: elegir `mora union.PDF` → preview muestra los tres baldes **con la lista de cuáles**
   y las filas inválidas con su motivo → confirmar → pantalla de resultado con los conteos reales →
   `markImported` marcado → el gate no vuelve a ofrecer hoy.
-- Re-subir el mismo archivo el mismo día → `idempotentSkip` visible, sin duplicar.
+- Re-subir el mismo archivo el mismo día → `idempotentSkip` con su **estado propio** ("este archivo
+  ya se aplicó", con los conteos de esa corrida), sin duplicar y sin baldes vacíos.
+- *"Ver detalle"* de Ajustes abre el resultado en modo lectura con los conteos de la última corrida.
 - Sin preview cargada, `[Confirmar]` no existe.
 - Un archivo con filas inválidas → estado "con advertencias", con los registros rechazados listados.
 - Sin conexión → mensaje claro ("el import se hace en la oficina, con wifi"), sin romper.
@@ -183,7 +199,7 @@ necesitan, se sube a `ui.tsx` entonces — no antes.
 
 | # | Tema | Estado |
 |---|---|---|
-| **S3-R1** | **N7** (`GET .../runs/:id`). Sin él, *"Ver detalle"* de Ajustes no se puede construir. | **CERRADO (D-N7): se construye.** |
+| **S3-R1** | **N7** (`GET .../runs/:id`). Sin él, *"Ver detalle"* de Ajustes no se puede construir. | **CERRADO (D-N7 revisado en el gate): se cae.** La premisa era falsa — sí se puede construir, con el `lastRun` que `GET config` ya devuelve. Lo único que N7 agregaría es el **detalle por fila de una corrida pasada**, que no está persistido en ningún lado (`client_import_runs` guarda conteos). Eso es un slice con migración. |
 | **S3-R2** | *"Descargar reporte de errores"* (CTA del mockup `24:2164`). No existe generación de reporte en el backend, ni librería de CSV/PDF de salida, ni permiso de escritura a disco en el móvil. Es un slice propio, no un botón. | **CERRADO (D-REPORTE): se saca**, escrito para la web (§12 del maestro). Los rechazados se ven en pantalla con su motivo. |
 | **S3-R3** | La tarjeta de KPIs de I1 (`clientes totales`, `rutas activas`, `saldos pendientes`, `total registros`) no está construida. Es **S2**, no S3. `portfolio.ts` + `cases.service.listCases({view:'portfolio'})` la cubrirían en cliente. | **CERRADO (D-KPI-I1): deuda de S2.** Anotada acá para que no se pierda. |
 | **S3-R4** | El mockup de Vista Previa muestra una tabla plana `nombre · ID · monto`, **no** los tres baldes. El README §6.2 (ronda 1, cerrada con la usuaria) manda los baldes. | **Cerrado: manda el README.** Se toma del mockup la *idea* de la lista de registros, y se aplica **por balde**. |
