@@ -9,9 +9,13 @@
  */
 import { FIELD_CATALOG, type NameOrder } from './field-catalog';
 import type { FieldMap, PdfBlocksProfile } from './parsers/pdf-blocks.parser';
+import type { PdfRowsProfile } from './parsers/pdf-rows.parser';
 import type { RowsProfile } from './parsers/rows.parser';
 
-export type ProfileKind = 'pdf-blocks' | 'rows';
+/** Las tres FORMAS de archivo (§4.1). No son formatos ni bancos: es cómo está dispuesto el dato. */
+export type ProfileKind = 'pdf-blocks' | 'pdf-rows' | 'rows';
+
+export const PROFILE_KINDS: ProfileKind[] = ['rows', 'pdf-rows', 'pdf-blocks'];
 export type AbsentRule = 'set-current' | 'no-touch' | 'ask';
 export type ScopeKind = 'official' | 'branch' | 'account';
 
@@ -29,7 +33,11 @@ export interface FieldRule {
 
 export interface ImportConfig {
   source: 'manual' | 'file';
-  profile: { kind: ProfileKind } & PdfBlocksProfile & RowsProfile;
+  // Las tres formas comparten un solo objeto: cada motor lee las claves que le sirven y las
+  // demás quedan sin efecto. `tableAnchor` hace doble trabajo a propósito — en `pdf-blocks` ancla
+  // el cuadro de movimientos y en `pdf-rows` la fila de encabezados; en ambos casos es "dónde
+  // empieza la tabla", y separarlo en dos claves era el mismo dato con dos nombres.
+  profile: { kind: ProfileKind } & PdfBlocksProfile & PdfRowsProfile & RowsProfile;
   fields: Record<string, FieldRule>;
   nameOrder: NameOrder;
   scope: { kind: ScopeKind; ref: string | null };
@@ -95,7 +103,7 @@ export function validateImportConfig(next: ImportConfig, prev?: ImportConfig): v
   if (!['manual', 'file'].includes(next.source)) {
     throw new ImportConfigError('INVALID_SOURCE', `source inválido: ${next.source}`);
   }
-  if (!['pdf-blocks', 'rows'].includes(next.profile.kind)) {
+  if (!PROFILE_KINDS.includes(next.profile.kind)) {
     throw new ImportConfigError('INVALID_PROFILE_KIND', `Forma de archivo inválida: ${next.profile.kind}`);
   }
 

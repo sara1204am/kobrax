@@ -10,6 +10,7 @@ import {
   ABSENT_RULE_LABEL,
   importService,
   lastRunWhen,
+  PROFILE_HINT,
   PROFILE_LABEL,
   SCOPE_HINT,
   SCOPE_LABEL,
@@ -299,7 +300,11 @@ export default function ImportacionScreen() {
         visible={sheet === 'profile'}
         title="Forma del archivo"
         onClose={() => setSheet(null)}
-        options={(['rows', 'pdf-blocks'] as ProfileKind[]).map((v) => ({ value: v, label: PROFILE_LABEL[v] }))}
+        options={(['rows', 'pdf-rows', 'pdf-blocks'] as ProfileKind[]).map((v) => ({
+          value: v,
+          label: PROFILE_LABEL[v],
+          hint: PROFILE_HINT[v],
+        }))}
         value={config.profile.kind}
         onPick={(kind) => {
           setSheet(null);

@@ -7,6 +7,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { parsePdfBlocks, type ColumnCandidate, type FieldMap } from './parsers/pdf-blocks.parser';
+import { parsePdfRows } from './parsers/pdf-rows.parser';
 import { parseCsvRows } from './parsers/rows.parser';
 import { FIELD_CATALOG, normalizeRecord, type NormalizedRecord } from './field-catalog';
 import {
@@ -94,10 +95,7 @@ export class PortfolioImportService {
     let blocks: NormalizedRecord[];
     try {
       const { profile, fieldMap } = config;
-      const raw =
-        profile.kind === 'rows'
-          ? parseCsvRows(file.toString('utf8'), profile, fieldMap).records
-          : (await parsePdfBlocks(new Uint8Array(file), profile, fieldMap)).records;
+      const raw = await readWithProfile(file, profile, fieldMap);
       blocks = raw.map((r) => normalizeRecord(r, config.nameOrder));
     } catch (e) {
       const message = e instanceof Error ? e.message : 'No se pudo leer el archivo';
@@ -366,21 +364,33 @@ export class PortfolioImportService {
     labels: string[];
     columnCandidates: ColumnCandidate[];
     recordStartCandidates: { text: string; count: number }[];
+    headerCandidates: { anchor: string; preview: string }[];
   }> {
     const config = await this.importConfig();
     assertFileShape(file, config.profile.kind);
+    // Las tres formas devuelven la misma respuesta; lo que cambia es qué pregunta le falta
+    // contestar al usuario, y cada forma trae sólo la suya. Una planilla no tiene ninguna: cada
+    // fila ya es un registro y la primera son los encabezados.
+    const empty = { recordStartCandidates: [], headerCandidates: [] };
     try {
       if (config.profile.kind === 'rows') {
         const { labels, columnCandidates } = parseCsvRows(file.toString('utf8'), config.profile, config.fieldMap);
-        // Una planilla no tiene "dónde empieza cada registro": cada fila es un registro.
-        return { labels, columnCandidates, recordStartCandidates: [] };
+        return { labels, columnCandidates, ...empty };
+      }
+      if (config.profile.kind === 'pdf-rows') {
+        const { labels, columnCandidates, headerCandidates } = await parsePdfRows(
+          new Uint8Array(file),
+          config.profile,
+          config.fieldMap,
+        );
+        return { labels, columnCandidates, recordStartCandidates: [], headerCandidates };
       }
       const { labels, columnCandidates, recordStartCandidates } = await parsePdfBlocks(
         new Uint8Array(file),
         config.profile,
         config.fieldMap,
       );
-      return { labels, columnCandidates, recordStartCandidates };
+      return { labels, columnCandidates, recordStartCandidates, headerCandidates: [] };
     } catch (e) {
       throw new BadRequestException({
         code: 'PARSE_FAILED',
@@ -425,6 +435,20 @@ export class PortfolioImportService {
 
 /** Cómo se muestra el cliente en la Vista Previa. */
 /**
+ * El motor que le toca a esta forma de archivo. Un solo lugar donde están las tres, para que
+ * sumar una cuarta no obligue a acordarse de los dos sitios que las elegían.
+ */
+function readWithProfile(
+  file: Buffer,
+  profile: RunConfig['profile'],
+  fieldMap: FieldMap,
+): Promise<Record<string, string | null>[]> {
+  if (profile.kind === 'rows') return Promise.resolve(parseCsvRows(file.toString('utf8'), profile, fieldMap).records);
+  if (profile.kind === 'pdf-rows') return parsePdfRows(new Uint8Array(file), profile, fieldMap).then((r) => r.records);
+  return parsePdfBlocks(new Uint8Array(file), profile, fieldMap).then((r) => r.records);
+}
+
+/**
  * Lo que hace falta para APLICAR un archivo — no para leer una muestra.
  *
  * Acá vivía un fallback al formato de un banco concreto: un tenant sin `fields` importaba con esa
@@ -450,10 +474,11 @@ function assertRunnable(config: RunConfig): void {
  */
 function assertFileShape(file: Buffer, kind: ImportConfig['profile']['kind']): void {
   const shape = detectFileShape(file);
-  if (shape === 'pdf' && kind !== 'pdf-blocks') {
+  const isPdfProfile = kind === 'pdf-blocks' || kind === 'pdf-rows';
+  if (shape === 'pdf' && !isPdfProfile) {
     throw new BadRequestException({
       code: 'FILE_SHAPE_MISMATCH',
-      message: 'Subiste un PDF, pero la configuración dice Excel/CSV. Cambiá "Forma del archivo" en Ajustes › Importación.',
+      message: 'Subiste un PDF, pero la configuración dice CSV. Cambiá "Forma del archivo" en Ajustes › Importación.',
     });
   }
   if (shape === 'zip') {
@@ -462,11 +487,10 @@ function assertFileShape(file: Buffer, kind: ImportConfig['profile']['kind']): v
     // todavía no sabemos abrir Excel — la dep `xlsx` no está instalada y `parseCsvRows` leería
     // los bytes del zip como si fueran texto (mismo defecto que el `%PDF-1.1`).
     throw new BadRequestException({
-      code: kind === 'pdf-blocks' ? 'FILE_SHAPE_MISMATCH' : 'XLSX_NOT_SUPPORTED',
-      message:
-        kind === 'pdf-blocks'
-          ? 'Subiste una planilla, pero la configuración dice extracto PDF. Cambiá "Forma del archivo" en Ajustes › Importación.'
-          : 'Todavía no se leen archivos de Excel. Guardá la planilla como CSV y subí ese archivo.',
+      code: isPdfProfile ? 'FILE_SHAPE_MISMATCH' : 'XLSX_NOT_SUPPORTED',
+      message: isPdfProfile
+        ? 'Subiste una planilla, pero la configuración dice PDF. Cambiá "Forma del archivo" en Ajustes › Importación.'
+        : 'Todavía no se leen archivos de Excel. Guardá la planilla como CSV y subí ese archivo.',
     });
   }
 }

@@ -39,6 +39,7 @@ export default function ColumnasScreen() {
   const [labels, setLabels] = useState<string[]>([]);
   const [candidates, setCandidates] = useState<ColumnCandidate[]>([]);
   const [starts, setStarts] = useState<{ text: string; count: number }[]>([]);
+  const [headers, setHeaders] = useState<{ anchor: string; preview: string }[]>([]);
   const [pickingStart, setPickingStart] = useState(false);
   // El archivo de muestra queda a mano para releerlo cuando cambia cómo se corta.
   const [sample, setSample] = useState<PickedFile | null>(null);
@@ -51,10 +52,21 @@ export default function ColumnasScreen() {
   }, []);
   useEffect(() => void load(), [load]);
 
-  // Un extracto PDF se corta en registros por una etiqueta que se repite; una planilla no —
-  // cada fila ya es un registro. Sin esa etiqueta el PDF no tiene columnas que ofrecer.
-  const isPdf = screen?.config.profile.kind === 'pdf-blocks';
-  const needsStart = isPdf && !screen?.config.profile.recordStart;
+  // Las dos formas en PDF necesitan que el usuario señale UNA cosa antes de poder ofrecer
+  // columnas, y es la misma pregunta con dos caras: dónde arranca la tabla.
+  //  - bloques → qué etiqueta abre cada registro (`recordStart`), elegida por cuántas veces
+  //    aparece: una por crédito;
+  //  - tabla   → cuál de las filas de arriba son los encabezados (`tableAnchor`), elegida
+  //    viéndolas enteras: un reporte trae título y fecha antes de la tabla.
+  // Una planilla no pregunta nada: cada fila ya es un registro y la primera son los encabezados.
+  const kind = screen?.config.profile.kind;
+  const askStart = kind === 'pdf-blocks' ? 'record' : kind === 'pdf-rows' ? 'header' : null;
+  const anchor = askStart === 'record' ? screen?.config.profile.recordStart : screen?.config.profile.tableAnchor;
+  const needsStart = askStart !== null && !anchor;
+  const startOptions =
+    askStart === 'record'
+      ? starts.map((c) => ({ value: c.text, label: c.text, hint: `${c.count} veces en el archivo` }))
+      : headers.map((c) => ({ value: c.anchor, label: c.anchor, hint: c.preview }));
 
   /** Sube un archivo de muestra: la app lista lo que encontró para que el usuario empareje. */
   async function pickSample() {
@@ -65,34 +77,45 @@ export default function ColumnasScreen() {
   }
 
   /**
-   * Elegir dónde empieza cada registro cambia lo que el archivo puede ofrecer: hasta ahora era un
-   * bloque suelto, ahora son N registros con sus etiquetas. Por eso se vuelve a leer la muestra
+   * Señalar dónde arranca la tabla cambia lo que el archivo puede ofrecer: hasta ahora era un
+   * bloque suelto, ahora son N registros con sus columnas. Por eso se vuelve a leer la muestra
    * en vez de dejar en pantalla una lista que ya no corresponde.
    */
-  async function chooseStart(text: string) {
+  async function chooseStart(value: string) {
     setPickingStart(false);
-    // Va por `profile`, no por `fields`: no es un dato del crédito sino cómo se corta el archivo.
+    // Va por `profile`, no por `fields`: no es un dato del crédito sino cómo se lee el archivo.
     // La forma no cambia, así que el emparejado hecho hasta acá se conserva.
-    await save({}, { profile: { ...config.profile, recordStart: text } });
+    const key = askStart === 'record' ? 'recordStart' : 'tableAnchor';
+    await save({}, { profile: { ...config.profile, [key]: value } });
     if (sample) await readSample(sample);
   }
 
   async function readSample(picked: PickedFile) {
     const res = await importService.readColumns(picked);
     if (res.status !== 'ok') {
-      setError(res.status === 'error' ? res.message : 'No se pudo leer el archivo');
+      // El motivo real viene del backend (forma equivocada, Excel, PDF ilegible) y es lo único
+      // accionable: mostrar "no se pudo leer" en su lugar borra la única pista que había.
+      setError(
+        res.status === 'error'
+          ? res.message
+          : res.status === 'offline'
+            ? 'Sin conexión. El archivo se lee en el servidor.'
+            : 'Tu sesión venció.',
+      );
       return;
     }
     setLabels(res.labels);
     setCandidates(res.columnCandidates);
     setStarts(res.recordStartCandidates ?? []);
-    // Sin "dónde empieza cada registro" el PDF no se corta en créditos: no es que el archivo
+    setHeaders(res.headerCandidates ?? []);
+    // Sin señalar dónde arranca la tabla, el PDF no se corta en créditos: no es que el archivo
     // esté vacío, es que todavía no sabemos leerlo. Se dice eso y se ofrece elegirlo.
+    const offered = (res.recordStartCandidates?.length ?? 0) + (res.headerCandidates?.length ?? 0);
     setError(
-      res.labels.length === 0 && !isPdf
-        ? 'El archivo se leyó pero no se encontraron columnas.'
-        : needsStart && (res.recordStartCandidates?.length ?? 0) > 0
-          ? 'Falta indicar dónde empieza cada registro.'
+      needsStart && offered > 0
+        ? 'Falta indicar dónde arranca la tabla.'
+        : res.labels.length === 0
+          ? 'El archivo se leyó pero no se encontraron columnas.'
           : null,
     );
   }
@@ -148,18 +171,18 @@ export default function ColumnasScreen() {
 
         {/* Va ARRIBA del emparejado porque es su precondición: sin saber dónde empieza cada
             registro, el archivo es un solo bloque y no hay columnas que listar. */}
-        {isPdf && (
+        {askStart && (
           <ListRow
-            title="Dónde empieza cada registro"
+            title={askStart === 'record' ? 'Dónde empieza cada registro' : 'Cuál es la fila de encabezados'}
             subtitle={
-              config.profile.recordStart
-                ? `"${config.profile.recordStart}"`
-                : starts.length > 0
+              anchor
+                ? `"${anchor}"`
+                : startOptions.length > 0
                   ? 'Sin elegir — tocá para ver las opciones del archivo'
                   : 'Subí un archivo de muestra para ver las opciones'
             }
             right={needsStart ? <Text style={styles.warn}>⚠</Text> : undefined}
-            onPress={starts.length > 0 ? () => setPickingStart(true) : undefined}
+            onPress={startOptions.length > 0 ? () => setPickingStart(true) : undefined}
           />
         )}
 
@@ -330,21 +353,21 @@ export default function ColumnasScreen() {
       <BottomSheet
         visible={pickingStart}
         onClose={() => setPickingStart(false)}
-        title="¿Con qué texto empieza cada registro?"
+        title={askStart === 'record' ? '¿Con qué texto empieza cada registro?' : '¿Cuál fila son los encabezados?'}
       >
         <Text style={styles.hint}>
-          Se repite una vez por crédito. Si tu archivo trae 20 créditos, buscá el que aparezca 20 veces.
+          {askStart === 'record'
+            ? 'Se repite una vez por crédito. Si tu archivo trae 20 créditos, buscá el que aparezca 20 veces.'
+            : 'Son las primeras filas del archivo. Elegí la que tiene los nombres de las columnas.'}
         </Text>
-        {starts.map((c) => (
-          <Pressable
-            key={c.text}
-            style={styles.option}
-            onPress={() => void chooseStart(c.text)}
-          >
-            <Text style={styles.optionMark}>{config.profile.recordStart === c.text ? '●' : '○'}</Text>
+        {startOptions.map((o) => (
+          <Pressable key={o.value} style={styles.option} onPress={() => void chooseStart(o.value)}>
+            <Text style={styles.optionMark}>{anchor === o.value ? '●' : '○'}</Text>
             <View style={{ flex: 1 }}>
-              <Text style={styles.optionLabel}>{c.text}</Text>
-              <Text style={styles.optionHint}>{c.count} veces en el archivo</Text>
+              <Text style={styles.optionLabel}>{o.label}</Text>
+              <Text style={styles.optionHint} numberOfLines={2}>
+                {o.hint}
+              </Text>
             </View>
           </Pressable>
         ))}

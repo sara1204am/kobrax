@@ -58,7 +58,7 @@ export interface PdfBlocksResult {
   recordStartCandidates: { text: string; count: number }[];
 }
 
-interface TextItem {
+export interface TextItem {
   str: string;
   x: number;
   y: number;

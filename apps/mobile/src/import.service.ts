@@ -10,7 +10,7 @@ import { apiMutate, apiQuery, refreshSession, type MutateResult, type QueryResul
 import { API_BASE } from '@/api';
 import { getSession } from '@/session';
 
-export type ProfileKind = 'pdf-blocks' | 'rows';
+export type ProfileKind = 'pdf-blocks' | 'pdf-rows' | 'rows';
 export type AbsentRule = 'set-current' | 'no-touch' | 'ask';
 export type ScopeKind = 'official' | 'branch' | 'account';
 export type NameOrder = 'full' | 'surnames-first' | 'split-columns';
@@ -134,6 +134,12 @@ export interface ColumnsPayload {
    * puede cortar en créditos y no hay columnas que emparejar.
    */
   recordStartCandidates?: { text: string; count: number }[];
+  /**
+   * Sólo en tablas dentro de un PDF: las primeras filas del archivo, para que el usuario señale
+   * cuál son los encabezados. Un reporte trae título, asesor y fecha antes de la tabla, y ninguna
+   * regla general distingue eso de una fila de encabezados.
+   */
+  headerCandidates?: { anchor: string; preview: string }[];
 }
 
 export interface PortfolioSummary {
@@ -349,11 +355,20 @@ export function soleAssignee(members: ScopeMember[]): ScopeMember | null {
   return members.length === 1 ? members[0]! : null;
 }
 
-// Dice CSV y no "Excel o CSV" porque hoy es la verdad: el adaptador de xlsx no existe (la dep
-// nunca se instaló). Prometer Excel manda al usuario a subir un archivo que va a rebotar.
+// Se describe cómo está dispuesto el dato, no la extensión: el usuario reconoce su archivo por
+// cómo se ve. Dice CSV y no "Excel o CSV" porque hoy es la verdad — el adaptador de xlsx no
+// existe (la dep nunca se instaló), y prometerlo manda a subir un archivo que va a rebotar.
 export const PROFILE_LABEL: Record<ProfileKind, string> = {
   rows: 'Una fila por crédito (CSV)',
+  'pdf-rows': 'Una tabla adentro de un PDF',
   'pdf-blocks': 'Un bloque por crédito (extracto PDF)',
+};
+
+/** Qué se ve en cada forma. Un ejemplo desambigua mejor que cualquier definición. */
+export const PROFILE_HINT: Record<ProfileKind, string> = {
+  rows: 'Un archivo de texto separado por comas.',
+  'pdf-rows': 'Un reporte con encabezados arriba y una fila por crédito.',
+  'pdf-blocks': 'Un extracto donde cada crédito ocupa su propio bloque, con etiquetas y dos puntos.',
 };
 
 export const ABSENT_RULE_LABEL: Record<AbsentRule, string> = {
@@ -431,6 +446,7 @@ export function rejectText(reason: string): string {
 /** Qué formatos acepta ESTE tenant — sale de la forma elegida en Ajustes, no de un literal (S3-R5). */
 export const FORMAT_HINT: Record<ProfileKind, string> = {
   rows: 'CSV · hasta 15 MB. Si tu sistema exporta Excel, guardalo como CSV.',
+  'pdf-rows': 'Reporte PDF con una tabla · hasta 15 MB',
   'pdf-blocks': 'Extracto PDF · hasta 15 MB',
 };
 

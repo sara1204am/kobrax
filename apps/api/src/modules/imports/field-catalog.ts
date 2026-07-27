@@ -140,7 +140,16 @@ function intOrNull(n: number | null): number | null {
   return n === null || !Number.isFinite(n) ? null : Math.trunc(n);
 }
 
-/** "859,743.98" → 859743.98 · "( 4,767.67)" → -4767.67 · "7.00 %" → 7. */
+/**
+ * "859,743.98" → 859743.98 · "1.996.85" → 1996.85 · "1.682,11" → 1682.11 · "( 4,767.67)" →
+ * -4767.67 · "7.00 %" → 7.
+ *
+ * No se puede fijar una convención de separadores: los reportes de un mismo país mezclan las
+ * tres, y un saldo mal leído es peor que uno que falta —se importa sin que nadie lo note—. La
+ * regla que las cubre a todas: **el último separador es el decimal si lo siguen una o dos
+ * cifras**; cualquier otro agrupa miles. Por eso "1.234" es mil doscientos treinta y cuatro y no
+ * uno con doscientos treinta y cuatro: tres cifras detrás son un grupo de miles, no decimales.
+ */
 export function num(s: string | null): number | null {
   if (!s) return null;
   let t = s.replace(/%/g, '').trim();
@@ -149,7 +158,13 @@ export function num(s: string | null): number | null {
     neg = true;
     t = t.slice(1, -1);
   }
-  t = t.replace(/,/g, '').replace(/\s/g, '');
+  t = t.replace(/\s/g, '');
+  const lastSep = Math.max(t.lastIndexOf('.'), t.lastIndexOf(','));
+  const decimals = t.length - lastSep - 1;
+  t =
+    lastSep !== -1 && decimals >= 1 && decimals <= 2
+      ? `${t.slice(0, lastSep).replace(/[.,]/g, '')}.${t.slice(lastSep + 1)}`
+      : t.replace(/[.,]/g, '');
   const n = Number(t);
   if (Number.isNaN(n)) return null;
   return neg ? -n : n;
