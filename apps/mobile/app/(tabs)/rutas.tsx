@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { RouteStatus, RouteStopStatus } from '@kobrax/shared';
@@ -7,6 +7,7 @@ import { EmptyState, Header, ListRow, ROUTE_STATUS_LABEL, SectionLabel, StatTile
 import { Button } from '@/components';
 import { formatLongDate, todayISO } from '@/agenda-form';
 import { authService } from '@/auth-service';
+import type { MutateResult } from '@/api-client';
 import {
   generateRoute,
   getRoute,
@@ -36,9 +37,16 @@ export default function RutasScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const reqRef = useRef(0);
 
   const fetchRoute = useCallback(async () => {
+    // Foco de tab + pull-to-refresh + recarga post-acción se pisan: sólo el último pedido escribe
+    // (mismo guard que la Cartera).
+    const reqId = ++reqRef.current;
+    const stale = () => reqId !== reqRef.current;
+
     const me = await authService.me();
+    if (stale()) return;
     if (me.status === 'offline') return setLoad((p) => (p.status === 'ok' ? p : { status: 'offline' }));
     if (me.status !== 'ok') return router.replace('/(auth)/login');
     const collectorId = me.me.userId;
@@ -46,6 +54,7 @@ export default function RutasScreen() {
     // ponytail: se filtra por fecha en el móvil, no con `?date=` — el backend compara `plannedDate`
     // por igualdad exacta de datetime y una ruta creada con hora no matchearía nunca.
     const res = await listRoutes({ collectorId });
+    if (stale()) return;
     if (res.status === 'offline') return setLoad((p) => (p.status === 'ok' ? p : { status: 'offline' }));
     if (res.status !== 'ok') return setLoad((p) => (p.status === 'ok' ? p : { status: 'error' }));
 
@@ -53,6 +62,7 @@ export default function RutasScreen() {
     const mine = res.data.find((r) => r.plannedDate.slice(0, 10) === today) ?? null;
     // El listado no trae paradas: el detalle es el que da nombre y dirección de cada una.
     const detail = mine ? await getRoute(mine.id) : null;
+    if (stale()) return;
     setLoad({ status: 'ok', collectorId, route: detail?.status === 'ok' ? detail.data : mine });
   }, []);
 
@@ -70,12 +80,13 @@ export default function RutasScreen() {
 
   /** Envuelve una acción de escritura: bloquea el botón, muestra el error del server y recarga. */
   const run = useCallback(
-    async (action: () => Promise<{ status: string; message?: string }>) => {
+    async (action: () => Promise<MutateResult<RouteItem>>) => {
       setBusy(true);
       setActionError(null);
       const res = await action();
       if (res.status === 'offline') setActionError('Sin conexión. Reintentá cuando vuelva la red.');
-      else if (res.status === 'error') setActionError(res.message ?? 'No se pudo completar');
+      else if (res.status === 'error') setActionError(res.message);
+      // `unauthenticated` cae acá: `fetchRoute` lo detecta con `me()` y manda al login.
       else await fetchRoute();
       setBusy(false);
     },
@@ -228,7 +239,6 @@ function RutaFinalizada({ route }: { route: RouteItem }) {
     <View style={[styles.card, { alignItems: 'center', gap: SPACING.md }]}>
       <Text style={styles.bigIcon}>{cancelled ? '🚫' : '✅'}</Text>
       <Text style={TYPE.h2}>{cancelled ? 'Ruta cancelada' : '¡Ruta finalizada!'}</Text>
-      <Text style={TYPE.secondary}>{ROUTE_STATUS_LABEL[route.status]}</Text>
       <View style={{ flexDirection: 'row', gap: SPACING.md, alignSelf: 'stretch' }}>
         <StatTile label="Visitas" value={`${done}/${total}`} tone={cancelled ? 'neutral' : 'success'} />
         <StatTile label="Cobrado" value="—" />
