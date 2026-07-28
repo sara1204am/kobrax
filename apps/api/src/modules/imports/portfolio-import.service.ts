@@ -486,8 +486,16 @@ interface ContactGap {
  * veinte direcciones, que es peor que no tener ninguna.
  */
 async function fillContactGaps(tx: PrismaClient, accountId: string, entries: ContactGap[]): Promise<void> {
-  const wantsPhone = entries.filter((e) => e.b.phone);
-  const wantsAddress = entries.filter((e) => e.b.address ?? e.b.addressRef);
+  // Un cliente con DOS créditos en el mismo archivo llega dos veces: la llave del import es el
+  // crédito, no el cliente. Sin este corte, ninguna de las dos filas encuentra un teléfono
+  // existente y las dos lo crean → el cliente arranca con el mismo número cargado dos veces.
+  // Gana la primera aparición; son el mismo dato.
+  const byClient = new Map<string, ContactGap>();
+  for (const e of entries) if (!byClient.has(e.clientId)) byClient.set(e.clientId, e);
+  const unique = [...byClient.values()];
+
+  const wantsPhone = unique.filter((e) => e.b.phone);
+  const wantsAddress = unique.filter((e) => e.b.address ?? e.b.addressRef);
   if (wantsPhone.length === 0 && wantsAddress.length === 0) return;
 
   // Quién YA tiene. Los recién creados no aparecen (no tienen nada todavía), así que altas y

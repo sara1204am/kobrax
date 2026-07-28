@@ -2,11 +2,11 @@ import {
   applyFieldState,
   decideImportGate,
   fieldState,
-  FORMAT_HINT,
   lastRunWhen,
   LIST_LIMIT,
   moreLabel,
   previewName,
+  PROFILE_META,
   rejectText,
   resultKind,
   scopeRefName,
@@ -217,10 +217,10 @@ describe('warningText — el usuario nunca ve el código crudo', () => {
   });
 });
 
-describe('FORMAT_HINT — el copy sale de la config, no de un literal del mockup (S3-R5)', () => {
+describe('PROFILE_META — el copy sale de la config, no de un literal del mockup (S3-R5)', () => {
   it('el tenant de extracto PDF no lee "CSV o XLSX"', () => {
-    expect(FORMAT_HINT['pdf-blocks']).toContain('PDF');
-    expect(FORMAT_HINT.rows).toContain('CSV');
+    expect(PROFILE_META['pdf-blocks'].format).toContain('PDF');
+    expect(PROFILE_META.rows.format).toContain('CSV');
   });
 });
 

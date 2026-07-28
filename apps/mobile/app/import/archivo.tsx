@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { COLORS, RADIUS, SPACING } from '@/theme';
 import { Header, OfflineIndicator } from '@/ui';
 import { Button, ErrorBanner } from '@/components';
-import { FORMAT_HINT, importService, type PickedFile, type ProfileKind } from '@/import.service';
+import { importService, PROFILE_META, type PickedFile, type ProfileKind } from '@/import.service';
 import { pickImportFile } from '@/file-picker';
 import { useNetStore } from '@/store/net';
 
@@ -80,7 +80,7 @@ export default function ArchivoScreen() {
 
         <View style={styles.reqs}>
           <Text style={styles.reqTitle}>Requisitos</Text>
-          <Text style={styles.reqLine}>{kind ? FORMAT_HINT[kind] : 'Hasta 15 MB'}</Text>
+          <Text style={styles.reqLine}>{kind ? PROFILE_META[kind].format : 'Hasta 15 MB'}</Text>
           <Text style={styles.reqLine}>Tiene que traer el N° de crédito de cada registro.</Text>
         </View>
 

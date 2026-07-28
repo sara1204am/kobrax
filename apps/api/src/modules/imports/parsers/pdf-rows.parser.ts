@@ -71,7 +71,7 @@ export async function parsePdfRows(
 // ── Parseo puro sobre los items (testeable sin PDF) ──────────────────────────
 
 /** Items agrupados en filas visuales, de arriba hacia abajo. */
-export function visualRows(items: TextItem[]): TextItem[][] {
+function visualRows(items: TextItem[]): TextItem[][] {
   const ordered = [...items].sort((a, b) => a.page - b.page || b.y - a.y || a.x - b.x);
   const rows: TextItem[][] = [];
   let current: TextItem[] = [];
@@ -92,7 +92,7 @@ export function visualRows(items: TextItem[]): TextItem[][] {
   return rows.map((r) => [...r].sort((a, b) => a.x - b.x || b.y - a.y));
 }
 
-export function readTable(
+function readTable(
   items: TextItem[],
   profile: PdfRowsProfile,
   fields: FieldMap,
@@ -149,7 +149,7 @@ interface Column {
  * Recién después se pregunta qué encabezado cae dentro de cada tramo. Los partidos en dos líneas
  * ("No de" + "Oper.") caen en el mismo tramo y se unen solos.
  */
-export function columnRanges(dataRows: TextItem[][], headerRow: TextItem[]): Column[] {
+function columnRanges(dataRows: TextItem[][], headerRow: TextItem[]): Column[] {
   const xs = dataRows.flatMap((r) => r.map((i) => i.x)).sort((a, b) => a - b);
   if (xs.length === 0) return [];
 
@@ -169,16 +169,24 @@ export function columnRanges(dataRows: TextItem[][], headerRow: TextItem[]): Col
   // El corte entre dos columnas es el punto medio: reparte a mitad de camino el desalineo de una
   // fila cuyo valor arranca un poco corrido. La primera y la última se extienden hasta el borde,
   // para que ningún item quede afuera de la tabla por unos pocos píxeles.
+  // Los encabezados son la CLAVE con la que después se empareja cada campo, así que tienen que ser
+  // únicos. Un reporte con dos columnas "Teléfono" (una del cliente y otra del garante) es normal,
+  // y sin desambiguar la segunda pisaría a la primera en el registro: el dato se perdería sin que
+  // nadie lo note, que es el peor final posible para una lectura.
+  const used = new Set<string>();
   return centers.map((c, i) => {
     const from = i === 0 ? -Infinity : (centers[i - 1]! + c) / 2;
     const to = i === centers.length - 1 ? Infinity : (c + centers[i + 1]!) / 2;
-    const header = headerRow
+    const label = headerRow
       .filter((h) => h.x >= from && h.x < to)
       .map((h) => h.str)
       .join(' ');
     // Una columna sin rótulo igual existe y puede traer el dato que al usuario le interesa; se la
     // nombra por su posición para que pueda emparejarla.
-    return { header: header || `Columna ${i + 1}`, from, to };
+    let header = label || `Columna ${i + 1}`;
+    for (let n = 2; used.has(header); n++) header = `${label} (${n})`;
+    used.add(header);
+    return { header, from, to };
   });
 }
 

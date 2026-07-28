@@ -75,6 +75,13 @@ describe('pdf-rows.parser — una tabla adentro de un PDF', () => {
     assert.equal(records[1]!.code, '302-222-2766');
   });
 
+  it('dos columnas con el mismo rótulo no se pisan', async () => {
+    // Un reporte con "Teléfono" del cliente y "Teléfono" del garante es normal. Si la segunda
+    // pisara a la primera en el registro, se perdería un dato sin que nadie lo note.
+    const { labels } = await parsePdfRows(bytes(), { tableAnchor: 'Cliente' }, fields);
+    assert.equal(new Set(labels).size, labels.length, `hay encabezados repetidos: ${labels.join(' · ')}`);
+  });
+
   it('sin señalar la fila de encabezados no inventa nada, pero muestra el archivo', async () => {
     // Un reporte trae título, código de asesor y fecha antes de la tabla: ninguna regla general
     // distingue eso de un encabezado, así que lo señala el usuario.

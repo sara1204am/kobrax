@@ -6,15 +6,11 @@ import { BottomSheet, Chips, EmptyState, Header, ListRow, OfflineIndicator, Sect
 import { Button, ErrorBanner } from '@/components';
 import { useNetStore } from '@/store/net';
 import {
-  ABSENT_RULE_HINT,
-  ABSENT_RULE_LABEL,
+  ABSENT_RULE_META,
   importService,
   lastRunWhen,
-  PROFILE_HINT,
-  PROFILE_LABEL,
-  SCOPE_HINT,
-  SCOPE_LABEL,
-  SCOPE_REF_TITLE,
+  PROFILE_META,
+  SCOPE_META,
   scopeRefName,
   setupStep,
   soleAssignee,
@@ -126,7 +122,7 @@ export default function ImportacionScreen() {
   const isFile = config.source === 'file';
   const mapped = Object.values(config.fields).filter((r) => r.from && r.enabled !== false).length;
   const daysRule = config.fields.daysPastDue;
-  const refTitle = SCOPE_REF_TITLE[config.scope.kind];
+  const refTitle = SCOPE_META[config.scope.kind].refTitle;
   const refName = scopeRefName(config.scope, members, branches);
   // §2.4: con toda la cartera de la empresa y un solo miembro, no hay reparto que hacer.
   const sole = config.scope.kind === 'account' ? soleAssignee(members) : null;
@@ -235,11 +231,11 @@ export default function ImportacionScreen() {
           <>
             <SectionLabel>ALCANCE DEL ARCHIVO</SectionLabel>
             <Chips
-              options={(['official', 'branch', 'account'] as ScopeKind[]).map((v) => ({ value: v, label: SCOPE_LABEL[v] }))}
+              options={(['official', 'branch', 'account'] as ScopeKind[]).map((v) => ({ value: v, label: SCOPE_META[v].label }))}
               value={config.scope.kind}
               onChange={(kind) => void save({ scope: { kind, ref: kind === 'account' ? null : config.scope.ref } })}
             />
-            <Text style={styles.muted}>{SCOPE_HINT[config.scope.kind]}</Text>
+            <Text style={styles.muted}>{SCOPE_META[config.scope.kind].hint}</Text>
 
             {/* Sin esta fila, elegir Oficial o Agencia dejaba `scope.ref` en null y el asistente
                 se trababa en el paso 2 para siempre: pedía un alcance que ningún control podía
@@ -255,7 +251,7 @@ export default function ImportacionScreen() {
 
             <ListRow
               title="Forma del archivo"
-              subtitle={blocked('profile') ?? PROFILE_LABEL[config.profile.kind]}
+              subtitle={blocked('profile') ?? PROFILE_META[config.profile.kind].label}
               onPress={blocked('profile') ? undefined : () => setSheet('profile')}
             />
             <ListRow
@@ -271,7 +267,7 @@ export default function ImportacionScreen() {
 
             <ListRow
               title="Reglas"
-              subtitle={`Ausentes: ${ABSENT_RULE_LABEL[config.absentRule].toLowerCase()}`}
+              subtitle={`Ausentes: ${ABSENT_RULE_META[config.absentRule].label.toLowerCase()}`}
               onPress={() => setSheet('absent')}
             />
             <ListRow
@@ -321,8 +317,8 @@ export default function ImportacionScreen() {
         onClose={() => setSheet(null)}
         options={(['rows', 'pdf-rows', 'pdf-blocks'] as ProfileKind[]).map((v) => ({
           value: v,
-          label: PROFILE_LABEL[v],
-          hint: PROFILE_HINT[v],
+          label: PROFILE_META[v].label,
+          hint: PROFILE_META[v].hint,
         }))}
         value={config.profile.kind}
         onPick={(kind) => {
@@ -367,8 +363,8 @@ export default function ImportacionScreen() {
         onClose={() => setSheet(null)}
         options={(['set-current', 'no-touch', 'ask'] as AbsentRule[]).map((v) => ({
           value: v,
-          label: ABSENT_RULE_LABEL[v],
-          hint: ABSENT_RULE_HINT[v],
+          label: ABSENT_RULE_META[v].label,
+          hint: ABSENT_RULE_META[v].hint,
         }))}
         value={config.absentRule}
         onPick={(absentRule) => {

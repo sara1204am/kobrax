@@ -7,8 +7,7 @@ import { Button, ErrorBanner } from '@/components';
 import { pickImportFile } from '@/file-picker';
 import {
   applyFieldState,
-  FIELD_STATE_HINT,
-  FIELD_STATE_LABEL,
+  FIELD_STATE_META,
   fieldState,
   forgetSampleFile,
   importService,
@@ -248,7 +247,7 @@ export default function ColumnasScreen() {
             <View key={field}>
               <ListRow
                 title={def?.label ?? field}
-                subtitle={`${rule.from ? `"${rule.from}"` : 'sin emparejar'} · ${FIELD_STATE_LABEL[state]}`}
+                subtitle={`${rule.from ? `"${rule.from}"` : 'sin emparejar'} · ${FIELD_STATE_META[state].label}`}
                 right={sinConfirmar || sinOrigen ? <Text style={styles.warn}>⚠</Text> : undefined}
                 // Sin origen, elegirlo es lo único que tiene sentido hacer: se va derecho ahí en vez
                 // de esconderlo detrás del menú de estado. La llave nunca elige estado (siempre
@@ -296,8 +295,8 @@ export default function ColumnasScreen() {
               {editing && fieldState(config.fields[editing]) === s ? '●' : '○'}
             </Text>
             <View style={{ flex: 1 }}>
-              <Text style={styles.optionLabel}>{FIELD_STATE_LABEL[s]}</Text>
-              <Text style={styles.optionHint}>{FIELD_STATE_HINT[s]}</Text>
+              <Text style={styles.optionLabel}>{FIELD_STATE_META[s].label}</Text>
+              <Text style={styles.optionHint}>{FIELD_STATE_META[s].hint}</Text>
             </View>
           </Pressable>
         ))}

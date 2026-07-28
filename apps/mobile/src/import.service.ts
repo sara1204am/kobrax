@@ -297,22 +297,14 @@ export function fieldState(rule: FieldRule | undefined): FieldState {
 }
 
 export function applyFieldState(rule: FieldRule | undefined, state: FieldState): FieldRule {
-  const from = rule?.from;
-  const where = rule?.in;
-  if (state === 'off') return { ...rule, enabled: false, required: false, from, in: where };
-  return { ...rule, enabled: true, required: state === 'required', from, in: where };
+  // `from` e `in` los trae el spread: cambiar el estado nunca desempareja el campo.
+  return { ...rule, enabled: state !== 'off', required: state === 'required' };
 }
 
-export const FIELD_STATE_HINT: Record<FieldState, string> = {
-  required: 'Si el archivo no lo trae, ese crédito no se importa.',
-  optional: 'Si no viene, se deja como está.',
-  off: 'Se ignora lo que diga el archivo.',
-};
-
-export const FIELD_STATE_LABEL: Record<FieldState, string> = {
-  required: 'Obligatorio',
-  optional: 'Opcional',
-  off: 'No importar',
+export const FIELD_STATE_META: Record<FieldState, { label: string; hint: string }> = {
+  required: { label: 'Obligatorio', hint: 'Si el archivo no lo trae, ese crédito no se importa.' },
+  optional: { label: 'Opcional', hint: 'Si no viene, se deja como está.' },
+  off: { label: 'No importar', hint: 'Se ignora lo que diga el archivo.' },
 };
 
 /**
@@ -333,23 +325,26 @@ export function setupStep(config: ImportConfig): SetupStep {
   return null;
 }
 
-export const SCOPE_LABEL: Record<ScopeKind, string> = {
-  official: 'Oficial de crédito',
-  branch: 'Agencia o sucursal',
-  account: 'Empresa (todos)',
-};
-
-export const SCOPE_HINT: Record<ScopeKind, string> = {
-  official: 'El archivo trae la cartera de un solo oficial.',
-  branch: 'El archivo trae la cartera de una agencia. Sólo se reconcilia esa agencia.',
-  account: 'El archivo trae toda la cartera de la empresa.',
-};
-
-/** Qué se le pide al usuario después de elegir el alcance (§6.4). `null` = nada. */
-export const SCOPE_REF_TITLE: Record<ScopeKind, string | null> = {
-  official: 'Oficial de crédito',
-  branch: 'Agencia o sucursal',
-  account: null,
+/**
+ * Todo lo que la pantalla dice de un alcance, en una sola entrada. `refTitle` es qué se le pide
+ * después de elegirlo (§6.4); `null` = nada, el alcance ya está completo.
+ */
+export const SCOPE_META: Record<ScopeKind, { label: string; hint: string; refTitle: string | null }> = {
+  official: {
+    label: 'Oficial de crédito',
+    hint: 'El archivo trae la cartera de un solo oficial.',
+    refTitle: 'Oficial de crédito',
+  },
+  branch: {
+    label: 'Agencia o sucursal',
+    hint: 'El archivo trae la cartera de una agencia. Sólo se reconcilia esa agencia.',
+    refTitle: 'Agencia o sucursal',
+  },
+  account: {
+    label: 'Empresa (todos)',
+    hint: 'El archivo trae toda la cartera de la empresa.',
+    refTitle: null,
+  },
 };
 
 /**
@@ -384,32 +379,39 @@ export function soleAssignee(members: ScopeMember[]): ScopeMember | null {
   return members.length === 1 ? members[0]! : null;
 }
 
-// Se describe cómo está dispuesto el dato, no la extensión: el usuario reconoce su archivo por
-// cómo se ve. Dice CSV y no "Excel o CSV" porque hoy es la verdad — el adaptador de xlsx no
-// existe (la dep nunca se instaló), y prometerlo manda a subir un archivo que va a rebotar.
-export const PROFILE_LABEL: Record<ProfileKind, string> = {
-  rows: 'Una fila por crédito (CSV)',
-  'pdf-rows': 'Una tabla adentro de un PDF',
-  'pdf-blocks': 'Un bloque por crédito (extracto PDF)',
+/**
+ * Todo lo que se dice de una forma de archivo, en una entrada.
+ *
+ * `label` describe cómo está dispuesto el dato y no la extensión: el usuario reconoce su archivo
+ * por cómo se ve. `hint` da el ejemplo, que desambigua mejor que cualquier definición. `format` es
+ * lo que se le pide al momento de subir. Dice CSV y no "Excel o CSV" porque hoy es la verdad — el
+ * adaptador de xlsx no existe, y prometerlo manda a subir un archivo que va a rebotar.
+ */
+export const PROFILE_META: Record<ProfileKind, { label: string; hint: string; format: string }> = {
+  rows: {
+    label: 'Una fila por crédito (CSV)',
+    hint: 'Un archivo de texto separado por comas.',
+    format: 'CSV · hasta 15 MB. Si tu sistema exporta Excel, guardalo como CSV.',
+  },
+  'pdf-rows': {
+    label: 'Una tabla adentro de un PDF',
+    hint: 'Un reporte con encabezados arriba y una fila por crédito.',
+    format: 'Reporte PDF con una tabla · hasta 15 MB',
+  },
+  'pdf-blocks': {
+    label: 'Un bloque por crédito (extracto PDF)',
+    hint: 'Un extracto donde cada crédito ocupa su propio bloque, con etiquetas y dos puntos.',
+    format: 'Extracto PDF · hasta 15 MB',
+  },
 };
 
-/** Qué se ve en cada forma. Un ejemplo desambigua mejor que cualquier definición. */
-export const PROFILE_HINT: Record<ProfileKind, string> = {
-  rows: 'Un archivo de texto separado por comas.',
-  'pdf-rows': 'Un reporte con encabezados arriba y una fila por crédito.',
-  'pdf-blocks': 'Un extracto donde cada crédito ocupa su propio bloque, con etiquetas y dos puntos.',
-};
-
-export const ABSENT_RULE_LABEL: Record<AbsentRule, string> = {
-  'set-current': 'Ponerlos al día',
-  'no-touch': 'Dejarlos como están',
-  ask: 'Decidir en cada importación',
-};
-
-export const ABSENT_RULE_HINT: Record<AbsentRule, string> = {
-  'set-current': 'Quedan vigentes, sin días de retraso. El saldo no se toca y el crédito sigue en tu cartera.',
-  'no-touch': 'No se modifican.',
-  ask: 'Te muestro la lista antes de confirmar y elegís.',
+export const ABSENT_RULE_META: Record<AbsentRule, { label: string; hint: string }> = {
+  'set-current': {
+    label: 'Ponerlos al día',
+    hint: 'Quedan vigentes, sin días de retraso. El saldo no se toca y el crédito sigue en tu cartera.',
+  },
+  'no-touch': { label: 'Dejarlos como están', hint: 'No se modifican.' },
+  ask: { label: 'Decidir en cada importación', hint: 'Te muestro la lista antes de confirmar y elegís.' },
 };
 
 export const NAME_ORDER_LABEL: Record<NameOrder, string> = {
@@ -442,7 +444,7 @@ export function previewName(full: string, order: NameOrder): { lastName: string;
  * Advertencias de corrida, en palabras del usuario. Vive acá porque lo usan la Vista Previa y el
  * Resultado; el código crudo (`MORA_SIN_CONFIRMAR`) no se le muestra nunca a nadie.
  */
-export const WARNING_TEXT: Record<string, string> = {
+const WARNING_TEXT: Record<string, string> = {
   MORA_SIN_CONFIRMAR: '⚠ Todavía no confirmaste cuál columna son los días de atraso.',
   MORA_COLUMNA_SOSPECHOSA: '⚠ Puede que la columna de días de atraso esté mal elegida.',
   MORA_INCONSISTENTE: '⚠ Hay créditos vigentes y sin cargos, pero con días de atraso.',
@@ -471,13 +473,6 @@ export function rejectText(reason: string): string {
   if (reason.startsWith('MISSING_')) return 'Le falta un dato que marcaste obligatorio.';
   return REJECT_TEXT[reason] ?? reason;
 }
-
-/** Qué formatos acepta ESTE tenant — sale de la forma elegida en Ajustes, no de un literal (S3-R5). */
-export const FORMAT_HINT: Record<ProfileKind, string> = {
-  rows: 'CSV · hasta 15 MB. Si tu sistema exporta Excel, guardalo como CSV.',
-  'pdf-rows': 'Reporte PDF con una tabla · hasta 15 MB',
-  'pdf-blocks': 'Extracto PDF · hasta 15 MB',
-};
 
 /** Cuántos ítems de una lista larga se dibujan antes de ofrecer el resto (gama baja, §9). */
 export const LIST_LIMIT = 8;
