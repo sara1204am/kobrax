@@ -76,6 +76,18 @@ export function emptyRelation(id: string): RelationRow {
   return { id, relatedName: '', relationshipType: 'GUARANTOR', gender: '', isContactable: true, notes: '', contacts: [], locations: [] };
 }
 
+/**
+ * Alta con la ubicación ya marcada — el alta desde el mapa de Rutas (S2) entra por acá con el punto
+ * que el cobrador tocó. Sin punto, es el alta de siempre.
+ */
+export function clienteEnPunto(point: { latitude: number; longitude: number }): ClienteForm {
+  const loc = emptyLocation('l0');
+  return {
+    ...initialCliente(),
+    locations: [{ ...loc, coordMode: 'map', latitude: point.latitude.toFixed(6), longitude: point.longitude.toFixed(6) }],
+  };
+}
+
 export function initialCliente(): ClienteForm {
   return {
     clientType: 'PERSON',

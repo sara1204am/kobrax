@@ -1,6 +1,6 @@
 import { useCallback, useState, type ReactNode } from 'react';
 import { LayoutAnimation, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, UIManager, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { Chips, Header, SectionLabel } from '@/ui';
@@ -9,6 +9,7 @@ import { Button, ErrorBanner, Field } from '@/components';
 import {
   buildClientePayload,
   canSubmitCliente,
+  clienteEnPunto,
   emptyContact,
   emptyLocation,
   emptyRelation,
@@ -49,7 +50,12 @@ type Updater<T> = (updater: (rows: T[]) => T[]) => void;
 /** V1 — Registro de cliente (§5.1), acordeón. Cliente y cada Contacto (persona) tienen sus propios
  * teléfonos y ubicaciones con la MISMA estructura reutilizable (ContactsSection / LocationsSection). */
 export default function NuevoClienteScreen() {
-  const [form, setForm] = useState<ClienteForm>(initialCliente);
+  // Alta desde el mapa de Rutas (S2): llega con el punto tocado y la ubicación ya cargada.
+  const { lat, lng } = useLocalSearchParams<{ lat?: string; lng?: string }>();
+  const [form, setForm] = useState<ClienteForm>(() => {
+    const point = { latitude: Number(lat), longitude: Number(lng) };
+    return Number.isFinite(point.latitude) && Number.isFinite(point.longitude) ? clienteEnPunto(point) : initialCliente();
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

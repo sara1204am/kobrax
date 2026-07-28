@@ -1,6 +1,6 @@
 import { PortfolioStatus } from '@kobrax/shared';
 import type { CaseListItem } from './cases.service';
-import { filterPortfolio, groupPortfolio, matchesSearch } from './portfolio';
+import { filterPortfolio, groupPortfolio, matchesSearch, sortPortfolio } from './portfolio';
 
 const ASOF = new Date('2026-07-13T12:00:00Z');
 
@@ -82,6 +82,45 @@ describe('groupPortfolio', () => {
   });
 });
 
+describe('sortPortfolio (S4)', () => {
+  const cards = groupPortfolio(
+    [
+      mk({ clientId: 'zoe', clientName: 'Zoe', amount: 900, nextDueDate: '2026-09-01' }),
+      mk({ clientId: 'ana', clientName: 'Ana', amount: 100, daysPastDue: 20 }),
+      mk({ clientId: 'beto', clientName: 'Beto', amount: 400, nextDueDate: '2026-07-20' }),
+      mk({ clientId: 'caro', clientName: 'Caro', amount: 250, daysPastDue: 3 }),
+    ],
+    ASOF,
+  );
+
+  it('"mora" da EXACTAMENTE el orden que la lista tenía antes de S4 (no-regresión)', () => {
+    expect(sortPortfolio(cards, 'mora').map((c) => c.clientId)).toEqual(['ana', 'caro', 'beto', 'zoe']);
+    // `groupPortfolio` ya devuelve ordenado por mora: elegir el default no cambia nada.
+    expect(sortPortfolio(cards).map((c) => c.clientId)).toEqual(cards.map((c) => c.clientId));
+  });
+
+  it('"deuda" ordena por deuda total desc', () => {
+    expect(sortPortfolio(cards, 'deuda').map((c) => c.clientId)).toEqual(['zoe', 'beto', 'caro', 'ana']);
+  });
+
+  it('"nombre" ordena alfabéticamente', () => {
+    expect(sortPortfolio(cards, 'nombre').map((c) => c.clientId)).toEqual(['ana', 'beto', 'caro', 'zoe']);
+  });
+
+  it('"vencimiento" ordena por fecha asc y deja los SIN fecha al final', () => {
+    // ana y caro están en mora, sin próxima fecha → van al fondo, no al frente.
+    const ids = sortPortfolio(cards, 'vencimiento').map((c) => c.clientId);
+    expect(ids.slice(0, 2)).toEqual(['beto', 'zoe']);
+    expect(ids.slice(2).sort()).toEqual(['ana', 'caro']);
+  });
+
+  it('no muta la lista que recibe (los contadores de los chips la comparten)', () => {
+    const before = cards.map((c) => c.clientId);
+    sortPortfolio(cards, 'nombre');
+    expect(cards.map((c) => c.clientId)).toEqual(before);
+  });
+});
+
 describe('filterPortfolio (chips + búsqueda)', () => {
   const cards = groupPortfolio(
     [
@@ -110,6 +149,17 @@ describe('filterPortfolio (chips + búsqueda)', () => {
 
   it('búsqueda por documento enmascarado (prefijo visible)', () => {
     expect(filterPortfolio(cards, 'all', '12345', ASOF).map((c) => c.clientId)).toEqual(['cl1']);
+  });
+
+  it('búsqueda por zona (S4)', () => {
+    const conZona = groupPortfolio(
+      [
+        mk({ clientId: 'cl1', clientName: 'Ana', amount: 100, zone: 'Zona Sur' }),
+        mk({ clientId: 'cl2', clientName: 'Beto', amount: 100, zone: 'Villa Fátima' }),
+      ],
+      ASOF,
+    );
+    expect(filterPortfolio(conZona, 'all', 'fatima', ASOF).map((c) => c.clientId)).toEqual(['cl2']);
   });
 });
 

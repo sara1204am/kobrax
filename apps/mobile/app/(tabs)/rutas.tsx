@@ -156,10 +156,7 @@ function SinRuta({ busy, onGenerate }: { busy: boolean; onGenerate: () => void }
       </Text>
       <View style={{ alignSelf: 'stretch', gap: SPACING.sm }}>
         <Button label="Generar ruta del día" onPress={onGenerate} loading={busy} />
-        <Button label="Crear desde el mapa" variant="ghost" onPress={() => {}} disabled />
-        <Text style={[TYPE.caption, { textAlign: 'center' }]}>
-          Armar la ruta parada por parada en el mapa llega en la próxima versión.
-        </Text>
+        <Button label="Crear desde el mapa" variant="ghost" onPress={() => router.push('/rutas/crear')} />
       </View>
     </View>
   );
@@ -207,6 +204,10 @@ function RutaEnCurso({ route, busy, onStart }: { route: RouteItem; busy: boolean
             </Text>
           </View>
         )}
+
+        {/* La ruta a medio armar es la ruta del día (D-S2-VIDA): sin esta puerta, el mapa quedaría
+            inalcanzable — el vacío que lo ofrece ya no se muestra. */}
+        <Button label="Agregar paradas en el mapa" variant="ghost" onPress={() => router.push('/rutas/crear')} />
       </View>
 
       {next && (

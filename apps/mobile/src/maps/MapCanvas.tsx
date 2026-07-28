@@ -11,7 +11,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Camera, LineLayer, MapView, PointAnnotation, ShapeSource } from '@maplibre/maplibre-react-native';
 import { COLORS, RADIUS } from '@/theme';
-import { DEFAULT_ZOOM, FALLBACK_CENTER, MAP_STYLE, toLngLat, type LngLat } from './tiles';
+import { DEFAULT_ZOOM, FALLBACK_CENTER, fromLngLat, MAP_STYLE, toLngLat, type LngLat } from './tiles';
 
 export type MarkerTone = 'default' | 'active' | 'done';
 
@@ -32,6 +32,8 @@ export interface MapCanvasProps {
   center?: LngLat;
   zoom?: number;
   onMarkerPress?: (id: string) => void;
+  /** Toque en el mapa donde no hay ningún pin (S2: dar de alta un cliente ahí). */
+  onMapPress?: (point: LngLat) => void;
   /** Muestra +/− y recenter (RT-4). */
   controls?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -50,6 +52,7 @@ export function MapCanvas({
   center,
   zoom = DEFAULT_ZOOM,
   onMarkerPress,
+  onMapPress,
   controls = false,
   style,
   children,
@@ -71,7 +74,14 @@ export function MapCanvas({
 
   return (
     <View style={[styles.container, style]}>
-      <MapView style={styles.map} mapStyle={MAP_STYLE} logoEnabled={false} attributionEnabled={false} compassEnabled={false}>
+      <MapView
+        style={styles.map}
+        mapStyle={MAP_STYLE}
+        logoEnabled={false}
+        attributionEnabled={false}
+        compassEnabled={false}
+        onPress={onMapPress ? (f) => onMapPress(fromLngLat((f.geometry as GeoJSON.Point).coordinates as [number, number])) : undefined}
+      >
         <Camera centerCoordinate={toLngLat(camCenter)} zoomLevel={camZoom} animationDuration={300} />
 
         {line && (

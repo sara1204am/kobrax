@@ -32,6 +32,9 @@ export interface CaseListItem {
   locked?: boolean;
   /** Solo con `view=portfolio` (§5.3). */
   zone?: string;
+  /** Punto de la ubicación primaria — con esto el mapa de Rutas pinta al cliente. Ausente si no la tiene. */
+  latitude?: number;
+  longitude?: number;
   documentMasked?: string;
   hasActivePromise?: boolean;
   lastActionAt?: string;

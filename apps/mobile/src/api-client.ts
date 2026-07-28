@@ -114,6 +114,8 @@ export async function apiMutate<T>(
   if (res.status === 'unauthenticated' || res.status === 401) return { status: 'unauthenticated' };
   if (res.status === 0) return { status: 'offline' };
   if ((res.status === 200 || res.status === 201) && res.data !== null) return { status: 'ok', data: res.data };
+  // 204 = salió bien y no hay nada que devolver (un DELETE). Sin esto se leería como error.
+  if (res.status === 204) return { status: 'ok', data: null as T };
   return { status: 'error', message: res.error?.message ?? 'No se pudo guardar' };
 }
 

@@ -9,10 +9,23 @@ import { money, MONTHS } from './agenda-form';
 
 export type PortfolioChip = 'all' | 'today' | 'overdue' | 'current' | 'paid';
 
+/** Criterios de orden de la lista (S4). `mora` es el de siempre y sigue siendo el default. */
+export type PortfolioSort = 'mora' | 'deuda' | 'nombre' | 'vencimiento';
+
+export const PORTFOLIO_SORT_LABEL: Record<PortfolioSort, string> = {
+  mora: 'Mora',
+  deuda: 'Deuda mayor',
+  nombre: 'Nombre A-Z',
+  vencimiento: 'Próximo vencimiento',
+};
+
 export interface ClientPortfolio {
   clientId: string;
   name: string;
   zone?: string;
+  /** Punto en el mapa (Rutas S2). Sin él, el cliente no se puede pintar — pero sigue en la cartera. */
+  latitude?: number;
+  longitude?: number;
   documentMasked?: string;
   currency: string;
   /** Deuda agregada de todos los créditos del cliente (§5.3, "cifra dominante"). */
@@ -109,6 +122,8 @@ export function groupPortfolio(cases: CaseListItem[], asOf: Date = new Date()): 
       clientId,
       name: first.clientName ?? 'Sin nombre',
       zone: first.zone,
+      latitude: first.latitude,
+      longitude: first.longitude,
       documentMasked: first.documentMasked,
       currency,
       totalDebt,
@@ -121,11 +136,32 @@ export function groupPortfolio(cases: CaseListItem[], asOf: Date = new Date()): 
   }
 
   // Orden por defecto (§5.3): mora desc, luego próxima fecha asc (sin fecha al final).
-  return out.sort((a, b) => {
-    if (b.maxDaysPastDue !== a.maxDaysPastDue) return b.maxDaysPastDue - a.maxDaysPastDue;
-    if (a.nextDueDate && b.nextDueDate) return a.nextDueDate.localeCompare(b.nextDueDate);
-    return a.nextDueDate ? -1 : b.nextDueDate ? 1 : 0;
-  });
+  return sortPortfolio(out, 'mora');
+}
+
+/** Sin fecha va **al final**: "no sé cuándo vence" no es "vence primero". */
+function byNextDue(a: ClientPortfolio, b: ClientPortfolio): number {
+  if (a.nextDueDate && b.nextDueDate) return a.nextDueDate.localeCompare(b.nextDueDate);
+  return a.nextDueDate ? -1 : b.nextDueDate ? 1 : 0;
+}
+
+/**
+ * Ordena la cartera ya agrupada (S4). `mora` es exactamente el orden que la lista tuvo siempre —
+ * está acá, y no suelto al final de `groupPortfolio`, para que elegir criterio sea cambiar un argumento.
+ * Copia antes de ordenar: la lista agrupada se comparte con los contadores de los chips.
+ */
+export function sortPortfolio(list: ClientPortfolio[], sort: PortfolioSort = 'mora'): ClientPortfolio[] {
+  const out = [...list];
+  switch (sort) {
+    case 'mora':
+      return out.sort((a, b) => b.maxDaysPastDue - a.maxDaysPastDue || byNextDue(a, b));
+    case 'deuda':
+      return out.sort((a, b) => b.totalDebt - a.totalDebt);
+    case 'nombre':
+      return out.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    case 'vencimiento':
+      return out.sort(byNextDue);
+  }
 }
 
 /**
@@ -151,11 +187,18 @@ export function matchesChip(p: ClientPortfolio, chip: PortfolioChip, asOf: Date 
   }
 }
 
-/** Búsqueda local por nombre o documento (enmascarado), sin acentos ni mayúsculas (§5.3). */
+/**
+ * Búsqueda local por nombre, documento (enmascarado) o **zona**, sin acentos ni mayúsculas (§5.3).
+ * La zona entra en S4 porque el cobrador piensa la cartera por barrio tanto como por nombre.
+ */
 export function matchesSearch(p: ClientPortfolio, query: string): boolean {
   const q = norm(query.trim());
   if (!q) return true;
-  return norm(p.name).includes(q) || (p.documentMasked ? norm(p.documentMasked).includes(q) : false);
+  return (
+    norm(p.name).includes(q) ||
+    (p.documentMasked ? norm(p.documentMasked).includes(q) : false) ||
+    (p.zone ? norm(p.zone).includes(q) : false)
+  );
 }
 
 /** Aplica chip + búsqueda sobre la cartera ya agrupada. */
