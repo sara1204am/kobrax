@@ -1,6 +1,7 @@
 import { type ReactNode, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -96,6 +97,10 @@ export function ErrorBanner({ message }: { message?: string | null }) {
 export function Hero({ subtitle }: { subtitle?: string }) {
   return (
     <LinearGradient colors={[...HERO_GRADIENT]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+      {/* `logo.png` y no `icon.png`: el del ícono son 1242 px y React Native decodifica el PNG
+          entero aunque se dibuje a 56 — ~6 MB de RAM por una marca, que es exactamente lo que el
+          presupuesto de gama baja no perdona. El chico es el mismo arte a 256. */}
+      <Image source={require('../assets/logo.png')} style={styles.heroLogo} accessibilityLabel="Kobrax" />
       <Text style={styles.heroBrand}>KOBRAX</Text>
       {subtitle && <Text style={styles.heroSubtitle}>{subtitle}</Text>}
     </LinearGradient>
@@ -176,6 +181,7 @@ export const styles = StyleSheet.create({
   },
   errorText: { color: COLORS.danger, fontSize: 13 },
   hero: { paddingTop: 64, paddingBottom: 56, paddingHorizontal: SPACING.xl, alignItems: 'center' },
+  heroLogo: { width: 64, height: 64, borderRadius: RADIUS.card, marginBottom: SPACING.sm },
   heroBrand: { fontSize: 26, fontWeight: '700', color: COLORS.white, letterSpacing: 1 },
   heroSubtitle: { marginTop: 4, fontSize: 13, color: 'rgba(255,255,255,0.75)' },
   card: {
