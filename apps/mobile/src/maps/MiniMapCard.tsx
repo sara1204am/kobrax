@@ -5,7 +5,7 @@
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Camera, MapView, PointAnnotation } from '@maplibre/maplibre-react-native';
 import { COLORS, RADIUS } from '@/theme';
-import { MAP_STYLE_URL, PIN_ZOOM, toLngLat, type LngLat } from './tiles';
+import { MAP_STYLE, PIN_ZOOM, toLngLat, type LngLat } from './tiles';
 
 export interface MiniMapPoint extends LngLat {
   id: string;
@@ -26,7 +26,7 @@ export function MiniMapCard({ center, points, height = 160, zoom = PIN_ZOOM, sty
     <View style={[styles.card, { height }, style]}>
       <MapView
         style={styles.map}
-        mapStyle={MAP_STYLE_URL}
+        mapStyle={MAP_STYLE}
         logoEnabled={false}
         attributionEnabled={false}
         compassEnabled={false}

@@ -11,7 +11,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Camera, LineLayer, MapView, PointAnnotation, ShapeSource } from '@maplibre/maplibre-react-native';
 import { COLORS, RADIUS } from '@/theme';
-import { DEFAULT_ZOOM, FALLBACK_CENTER, MAP_STYLE_URL, toLngLat, type LngLat } from './tiles';
+import { DEFAULT_ZOOM, FALLBACK_CENTER, MAP_STYLE, toLngLat, type LngLat } from './tiles';
 
 export type MarkerTone = 'default' | 'active' | 'done';
 
@@ -71,7 +71,7 @@ export function MapCanvas({
 
   return (
     <View style={[styles.container, style]}>
-      <MapView style={styles.map} mapStyle={MAP_STYLE_URL} logoEnabled={false} attributionEnabled={false} compassEnabled={false}>
+      <MapView style={styles.map} mapStyle={MAP_STYLE} logoEnabled={false} attributionEnabled={false} compassEnabled={false}>
         <Camera centerCoordinate={toLngLat(camCenter)} zoomLevel={camZoom} animationDuration={300} />
 
         {line && (

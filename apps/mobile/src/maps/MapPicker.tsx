@@ -7,7 +7,7 @@
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Camera, MapView, PointAnnotation } from '@maplibre/maplibre-react-native';
 import { COLORS } from '@/theme';
-import { DEFAULT_ZOOM, FALLBACK_CENTER, MAP_STYLE_URL, PIN_ZOOM, toLngLat, type LngLat } from './tiles';
+import { DEFAULT_ZOOM, FALLBACK_CENTER, MAP_STYLE, PIN_ZOOM, toLngLat, type LngLat } from './tiles';
 
 export interface MapPickerProps {
   latitude?: number;
@@ -25,7 +25,7 @@ export function MapPicker({ latitude, longitude, onChange, fallback = FALLBACK_C
     <View style={[styles.container, style]}>
       <MapView
         style={styles.map}
-        mapStyle={MAP_STYLE_URL}
+        mapStyle={MAP_STYLE}
         logoEnabled={false}
         attributionEnabled={false}
         compassEnabled={false}

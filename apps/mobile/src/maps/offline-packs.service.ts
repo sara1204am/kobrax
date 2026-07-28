@@ -42,6 +42,11 @@ export function downloadRegionPack(
   onProgress?: (percentage: number) => void,
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
+    // Un pack necesita una URL de estilo propia: el raster público de OSM del fallback de desarrollo
+    // no se puede descargar en masa (su política lo prohíbe) y `createPack` no acepta un estilo inline.
+    if (!MAP_STYLE_URL) {
+      return reject(new Error('Falta EXPO_PUBLIC_MAP_STYLE_URL: los mapas offline necesitan la fuente propia'));
+    }
     OfflineManager.createPack(
       {
         name,
