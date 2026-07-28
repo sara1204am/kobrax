@@ -10,7 +10,10 @@ import {
   FIELD_STATE_HINT,
   FIELD_STATE_LABEL,
   fieldState,
+  forgetSampleFile,
   importService,
+  recallSampleFile,
+  rememberSampleFile,
   NAME_ORDER_LABEL,
   previewName,
   type ColumnCandidate,
@@ -50,7 +53,22 @@ export default function ColumnasScreen() {
     if (res.status === 'ok') setScreen(res.data);
     else setError(res.status === 'offline' ? 'Sin conexión.' : 'No se pudo cargar la configuración');
   }, []);
-  useEffect(() => void load(), [load]);
+  useEffect(() => {
+    void (async () => {
+      await load();
+      const file = await recallSampleFile();
+      if (!file) return;
+      setSample(file);
+      // El cache de la app lo puede limpiar el sistema: si la muestra recordada ya no se lee, se
+      // olvida y la pantalla queda como si nunca hubiera habido una. En silencio a propósito —
+      // un banner de error al entrar, por un archivo que el usuario no eligió en esta sesión,
+      // es ruido sobre algo que no rompió nada.
+      if (!(await readSample(file, true))) {
+        setSample(null);
+        await forgetSampleFile();
+      }
+    })();
+  }, [load]);
 
   // Las dos formas en PDF necesitan que el usuario señale UNA cosa antes de poder ofrecer
   // columnas, y es la misma pregunta con dos caras: dónde arranca la tabla.
@@ -73,6 +91,7 @@ export default function ColumnasScreen() {
     const picked = await pickImportFile();
     if (!picked) return;
     setSample(picked);
+    await rememberSampleFile(picked);
     await readSample(picked);
   }
 
@@ -90,19 +109,22 @@ export default function ColumnasScreen() {
     if (sample) await readSample(sample);
   }
 
-  async function readSample(picked: PickedFile) {
+  /** Lee la muestra y deja en pantalla lo que trajo. `false` = no se pudo. */
+  async function readSample(picked: PickedFile, silent = false): Promise<boolean> {
     const res = await importService.readColumns(picked);
     if (res.status !== 'ok') {
       // El motivo real viene del backend (forma equivocada, Excel, PDF ilegible) y es lo único
       // accionable: mostrar "no se pudo leer" en su lugar borra la única pista que había.
-      setError(
-        res.status === 'error'
-          ? res.message
-          : res.status === 'offline'
-            ? 'Sin conexión. El archivo se lee en el servidor.'
-            : 'Tu sesión venció.',
-      );
-      return;
+      if (!silent) {
+        setError(
+          res.status === 'error'
+            ? res.message
+            : res.status === 'offline'
+              ? 'Sin conexión. El archivo se lee en el servidor.'
+              : 'Tu sesión venció.',
+        );
+      }
+      return false;
     }
     setLabels(res.labels);
     setCandidates(res.columnCandidates);
@@ -118,6 +140,7 @@ export default function ColumnasScreen() {
           ? 'El archivo se leyó pero no se encontraron columnas.'
           : null,
     );
+    return true;
   }
 
   /** `null` en un campo = quitarlo del emparejado (lo resuelve el backend). */
@@ -200,9 +223,14 @@ export default function ColumnasScreen() {
           </Text>
         )}
 
-        {labels.length === 0 && (
-          // Sin archivo de muestra no hay etiquetas que ofrecer: subirlo es la pieza que hace
-          // configurable un formato que nunca vimos (§6.5).
+        {/* Qué muestra se está usando. La app la recuerda entre visitas, y una lista de columnas
+            que aparece sola sin decir de dónde salió es magia: el usuario tiene que poder ver que
+            sigue siendo SU archivo, y cambiarlo. */}
+        {sample ? (
+          <Text style={styles.hint} numberOfLines={1}>
+            Muestra: {sample.name}
+          </Text>
+        ) : (
           <Text style={styles.hint}>
             Subí un archivo de muestra: la app te muestra qué trae y vos decís qué es cada cosa.
           </Text>
@@ -239,7 +267,11 @@ export default function ColumnasScreen() {
           );
         })}
 
-        <Button variant="ghost" label="Elegir un archivo de muestra" onPress={() => void pickSample()} />
+        <Button
+          variant="ghost"
+          label={sample ? 'Cambiar el archivo de muestra' : 'Elegir un archivo de muestra'}
+          onPress={() => void pickSample()}
+        />
         {sinEmparejar.length > 0 && (
           <Button variant="ghost" label="+ Agregar campo del archivo" onPress={() => setAdding(true)} />
         )}

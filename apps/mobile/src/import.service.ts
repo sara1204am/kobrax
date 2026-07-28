@@ -212,6 +212,39 @@ async function postFile<T>(query: string, file: PickedFile, dryRun?: boolean): P
 
 const LAST_DAY = 'k_import_last_day';
 const SKIP_DAY = 'k_import_skip_day';
+const SAMPLE = 'k_import_sample';
+
+// ── Archivo de muestra recordado ─────────────────────────────────────────────
+
+/**
+ * El archivo de muestra queda a mano entre visitas a Ajustes: emparejar columnas son varias
+ * pasadas, y volver a buscarlo en Drive en cada una es el trabajo aburrido que el teléfono puede
+ * ahorrar.
+ *
+ * Se guarda la RUTA, no el contenido: el picker ya dejó una copia en el cache de la app
+ * (`copyToCacheDirectory`), así que el archivo YA está en el teléfono; guardar los bytes sería
+ * duplicar lo que está al lado. El precio es que el sistema puede limpiar ese cache cuando
+ * necesita espacio y dejar la ruta muerta — no hay forma de saberlo sin intentar leerla, así que
+ * quien la use tiene que estar listo para que falle y llamar a `forgetSampleFile()`.
+ */
+export async function rememberSampleFile(file: PickedFile): Promise<void> {
+  await SecureStore.setItemAsync(SAMPLE, JSON.stringify(file));
+}
+
+export async function recallSampleFile(): Promise<PickedFile | null> {
+  const raw = await SecureStore.getItemAsync(SAMPLE);
+  if (!raw) return null;
+  try {
+    const file = JSON.parse(raw) as PickedFile;
+    return file?.uri && file?.name ? file : null;
+  } catch {
+    return null; // guardado a medias o de una versión vieja: se descarta, no se rompe la pantalla
+  }
+}
+
+export async function forgetSampleFile(): Promise<void> {
+  await SecureStore.deleteItemAsync(SAMPLE);
+}
 
 const today = (now = new Date()): string =>
   `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, '0')}-${`${now.getDate()}`.padStart(2, '0')}`;
