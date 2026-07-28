@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { CollectionCase, Prisma, PrismaClient } from '@prisma/client';
-import { AgendaItemStatus, AgendaItemType, CaseActivityType, CaseStatus } from '@prisma/client';
+import { AgendaItemStatus, AgendaItemType, CaseActivityType, CaseStatus, LocationType } from '@prisma/client';
 import { canTransition, maskDocument, Permission, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
@@ -314,8 +314,14 @@ export class CasesService {
         tx.collectionCase.count({ where }),
       ]),
     );
-    // Lista de cartera (§5.3): zona + documento enmascarado + promesa vigente, opt-in para no cargar a Home.
+    // Lista de cartera (§5.3): zona + punto en el mapa + documento enmascarado + promesa vigente,
+    // opt-in para no cargar a Home.
     const extra = query.view === 'portfolio' ? await this.portfolioExtra(rows.map((c) => c.clientId)) : undefined;
+    // El punto es el domicilio: se audita el revelado, UN registro por consulta (no por cliente),
+    // mismo criterio que agenda y que las direcciones de las paradas en rutas.
+    if (extra?.size) {
+      await this.audit.record({ entity: 'case_portfolio', entityId: this.tenant.userId ?? 'anon', action: 'PII_REVEAL' });
+    }
     return ResponseDto.paginated(
       rows.map((c) => serializeCase(c, new Date(), extra?.get(c.clientId))),
       total,
@@ -326,9 +332,13 @@ export class CasesService {
 
   /**
    * Enriquecimiento de la tarjeta de cartera para un set de clientes (§5.3). Dos queries sobre la página,
-   * no N+1: los datos del cliente (zona + documento enmascarado) y qué clientes tienen una promesa vigente.
-   * El documento va SIEMPRE enmascarado (no es `PII_REVEAL`); la promesa = gestión `PROMISE_TO_PAY` agendada
-   * a hoy o al futuro.
+   * no N+1: los datos del cliente (zona, punto en el mapa y documento enmascarado) y qué clientes tienen
+   * una promesa vigente. El documento va SIEMPRE enmascarado (no es `PII_REVEAL`); la promesa = gestión
+   * `PROMISE_TO_PAY` agendada a hoy o al futuro.
+   *
+   * **Ubicación primaria = la primera `HOME`; si no hay ninguna, la primera cargada** — la misma regla
+   * que usa `routes.serializer` para la dirección de la parada. Con dos criterios distintos, el pin del
+   * mapa y la dirección de la parada podrían apuntar a lugares distintos del mismo cliente.
    */
   private async portfolioExtra(clientIds: string[]): Promise<Map<string, PortfolioExtra>> {
     const ids = [...new Set(clientIds)];
@@ -345,7 +355,11 @@ export class CasesService {
           select: {
             id: true,
             nationalId: true,
-            locations: { where: { relationId: null }, select: { zone: true }, orderBy: { createdAt: 'asc' }, take: 1 },
+            locations: {
+              where: { relationId: null },
+              select: { locationType: true, zone: true, latitude: true, longitude: true },
+              orderBy: { createdAt: 'asc' },
+            },
           },
         }),
         tx.agendaItem.findMany({
@@ -364,8 +378,11 @@ export class CasesService {
     const withPromise = new Set(promises.map((p) => p.clientId));
     for (const c of clients) {
       const doc = this.safeDecrypt(c.nationalId);
+      const loc = c.locations.find((l) => l.locationType === LocationType.HOME) ?? c.locations[0];
       map.set(c.id, {
-        zone: c.locations[0]?.zone ?? undefined,
+        zone: loc?.zone ?? undefined,
+        latitude: loc?.latitude != null ? Number(loc.latitude) : undefined,
+        longitude: loc?.longitude != null ? Number(loc.longitude) : undefined,
         documentMasked: doc ? maskDocument(doc) : undefined,
         hasActivePromise: withPromise.has(c.id),
       });

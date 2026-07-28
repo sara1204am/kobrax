@@ -39,6 +39,12 @@ type CaseWithActivities = CollectionCase & {
 export type PortfolioExtra = {
   /** Zona de la ubicación primaria del cliente. */
   zone?: string;
+  /**
+   * Punto de la ubicación primaria — con esto el mapa de Rutas (S2) pinta al cliente. Ausente si el
+   * cliente no tiene ubicación o la tiene sin coordenadas: existe igual, sólo que no se puede dibujar.
+   */
+  latitude?: number;
+  longitude?: number;
   /** Documento ENMASCARADO (12345***) — para el buscador local; nunca en claro, sin `PII_REVEAL`. */
   documentMasked?: string;
   /** Hay una promesa de pago vigente en agenda → badge PROMESA (§5.3). */
@@ -77,6 +83,8 @@ export function serializeCase(c: CaseWithActivities, now: Date = new Date(), por
     locked: view?.locked,
     // Cartera (§5.3): solo presentes con `view=portfolio`; ausentes en agenda/mutaciones.
     zone: portfolio?.zone,
+    latitude: portfolio?.latitude,
+    longitude: portfolio?.longitude,
     documentMasked: portfolio?.documentMasked,
     hasActivePromise: portfolio?.hasActivePromise,
     lastActionAt: c.lastActionAt ?? undefined,

@@ -10,6 +10,14 @@ export const routeForbidden = (action: string) =>
 export const invalidCollector = () =>
   new UnprocessableEntityException({ code: 'ROUTE_COLLECTOR', message: 'El cobrador no pertenece al tenant' });
 
+/** El mismo caso ya es una parada de esta ruta (dos toques sobre el mismo pin del mapa). */
+export const stopDuplicate = () =>
+  new UnprocessableEntityException({ code: 'ROUTE_STOP_DUPLICATE', message: 'Ese cliente ya está en el recorrido' });
+
+/** Una parada ya gestionada es historia de la jornada: no se quita ni se mueve. */
+export const stopNotPending = () =>
+  new UnprocessableEntityException({ code: 'ROUTE_STOP_DONE', message: 'La parada ya fue gestionada' });
+
 export const noStopsToRoute = () =>
   // El móvil muestra este texto tal cual (sólo propaga `message`): tiene que decirle al cobrador qué hacer.
   new UnprocessableEntityException({

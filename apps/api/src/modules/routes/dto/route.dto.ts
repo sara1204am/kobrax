@@ -39,6 +39,12 @@ export class UpdateRouteDto {
   @IsEnum(RouteStatus) status!: RouteStatus;
 }
 
+/** Agregar una parada desde el mapa (S2). El caso es opcional: un cliente sin caso abierto se visita igual. */
+export class AddStopDto {
+  @IsUUID() clientId!: string;
+  @IsOptional() @IsUUID() caseId?: string;
+}
+
 export class UpdateStopDto {
   @IsOptional() @IsEnum(RouteStopStatus) status?: RouteStopStatus;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) sequenceOrder?: number;

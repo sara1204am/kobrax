@@ -1,11 +1,11 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RoutesService } from './routes.service';
-import { CreateRouteDto, GenerateRouteDto, ListRoutesQueryDto, UpdateRouteDto, UpdateStopDto } from './dto/route.dto';
+import { AddStopDto, CreateRouteDto, GenerateRouteDto, ListRoutesQueryDto, UpdateRouteDto, UpdateStopDto } from './dto/route.dto';
 
 @Controller('routes')
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
@@ -45,8 +45,21 @@ export class RoutesController {
     return this.routes.updateStatus(id, dto);
   }
 
+  @Post(':id/stops')
+  @Roles(Permission.ROUTE_READ)
+  addStop(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AddStopDto) {
+    return this.routes.addStop(id, dto);
+  }
+
+  @Delete(':id/stops/:sid')
+  @HttpCode(204)
+  @Roles(Permission.ROUTE_READ)
+  removeStop(@Param('id', ParseUUIDPipe) id: string, @Param('sid', ParseUUIDPipe) sid: string) {
+    return this.routes.removeStop(id, sid);
+  }
+
   @Patch(':id/stops/:sid')
-  @Roles(Permission.ROUTE_EXECUTE)
+  @Roles(Permission.ROUTE_READ)
   updateStop(@Param('id', ParseUUIDPipe) id: string, @Param('sid', ParseUUIDPipe) sid: string, @Body() dto: UpdateStopDto) {
     return this.routes.updateStop(id, sid, dto);
   }

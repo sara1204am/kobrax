@@ -24,7 +24,8 @@ Reemplaza el placeholder de `app/(tabs)/cobranza.tsx`.
 | S1 | **V3** | Lista de cartera (buscador + chips + tarjetas) | `app/(tabs)/cobranza.tsx` | ⬜ |
 | S2 | **V1 + V2** | Alta: cliente → préstamo (flujo continuo, con foto de fachada) | `app/cliente/nuevo.tsx` → `app/prestamo/nuevo.tsx` | ⬜ |
 | S3 | **V4** | Ficha de cobranza (detalle + pago con comprobante + gestión) | `app/cliente/[id].tsx` | ⬜ |
-| — | **V5** | Importación CSV/XLSX | — | ⛔ **fuera de alcance móvil** |
+| [S4](./S4-menu-busqueda-orden.md) | — | Menú "Clientes" + orden + búsqueda global | `app/(tabs)/mas.tsx` · `cobranza.tsx` | ⬜ |
+| — | **V5** | Importación CSV/XLSX | — | ↪️ **se movió a su propio módulo** ([plans/import](../import/README.md)) |
 
 **Orden:** leer antes de escribir (S1 sobre el seed), después el alta (S2, lo que hace funcional al cobrador
 independiente), y al final la ficha (S3, el slice más grande — subsume gestiones y pagos).

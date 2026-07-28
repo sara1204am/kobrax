@@ -200,6 +200,39 @@ describe('CasesService.list (scope por capacidad + enriquecimiento)', () => {
     assert.equal(b!.zone, undefined); // sin ubicación
     assert.equal(b!.hasActivePromise, false);
   });
+
+  it('view=portfolio agrega el punto del mapa: la casa gana sobre el negocio (S2)', async () => {
+    const rows = [
+      { id: 'c1', creditId: 'cr1', clientId: 'cl1', status: 'ACTIVE', priority: 'HIGH', createdAt: new Date(), updatedAt: new Date(), client: { firstName: 'Ana', lastName: 'Ruiz', businessName: null }, credit: null },
+      { id: 'c2', creditId: 'cr2', clientId: 'cl2', status: 'ACTIVE', priority: 'LOW', createdAt: new Date(), updatedAt: new Date(), client: { firstName: 'Beto', lastName: 'Diaz', businessName: null }, credit: null },
+    ];
+    const { service, calls } = makeService({
+      permissions: ['case:assign'],
+      listRows: rows,
+      portfolioClients: [
+        {
+          id: 'cl1',
+          nationalId: '12345678',
+          // El negocio está cargado primero: igual manda la casa, como en la dirección de la parada.
+          locations: [
+            { locationType: 'WORK', zone: 'Mercado', latitude: -17.1, longitude: -63.1 },
+            { locationType: 'HOME', zone: 'Zona Sur', latitude: -17.8, longitude: -63.2 },
+          ],
+        },
+        { id: 'cl2', nationalId: '87654321', locations: [] },
+      ],
+    });
+    const res = await service.list({ view: 'portfolio' } as never);
+    const [a, b] = res.data!;
+    assert.equal(a!.latitude, -17.8);
+    assert.equal(a!.longitude, -63.2);
+    assert.equal(a!.zone, 'Zona Sur');
+    // Sin ubicación cargada el cliente existe igual: no se puede pintar, no desaparece.
+    assert.equal(b!.latitude, undefined);
+    assert.equal(b!.longitude, undefined);
+    // El domicilio es PII: se registra el revelado, una vez por consulta.
+    assert.equal(calls.audit.filter((a2) => a2.action === 'PII_REVEAL').length, 1);
+  });
 });
 
 describe('CasesService.addActivity (gestión + promesa §5.4)', () => {
