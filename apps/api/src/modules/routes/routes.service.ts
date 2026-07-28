@@ -6,6 +6,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
+import { CryptoService } from '../../common/crypto/crypto.service';
 import { serializeRoute } from './routes.serializer';
 import { CreateRouteDto, GenerateRouteDto, ListRoutesQueryDto, UpdateRouteDto, UpdateStopDto } from './dto/route.dto';
 import { invalidCollector, noStopsToRoute, resourceNotFound } from './routes.errors';
@@ -19,6 +20,7 @@ export class RoutesService {
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
     private readonly events: EventBusService,
+    private readonly crypto: CryptoService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -115,16 +117,42 @@ export class RoutesService {
     return ResponseDto.paginated(rows.map((r) => serializeRoute(r)), total, page, limit);
   }
 
+  /**
+   * Detalle con paradas. Cada parada trae el nombre del deudor y su dirección **en claro**: sin eso
+   * la lista dice `Cliente a1b2c3…` y el cobrador no sabe adónde ir. Se audita el revelado, igual que
+   * la agenda: es la única puerta por la que el cobrador ve direcciones sin `client:pii:read`.
+   */
   async findOne(id: string): Promise<ReturnType<typeof serializeRoute>> {
     const route = await this.tx((tx) =>
-      tx.routePlan.findFirst({ where: { id }, include: { stops: { orderBy: { sequenceOrder: 'asc' } } } }),
+      tx.routePlan.findFirst({
+        where: { id },
+        include: {
+          stops: {
+            orderBy: { sequenceOrder: 'asc' },
+            include: {
+              client: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                  businessName: true,
+                  // `relationId: null` = ubicaciones del cliente, no las de sus garantes/contactos.
+                  locations: { where: { relationId: null }, select: { locationType: true, address: true }, orderBy: { createdAt: 'asc' } },
+                },
+              },
+            },
+          },
+        },
+      }),
     );
     if (!route) throw resourceNotFound();
     // Mismo scope que el listado: un cobrador solo accede a su propia ruta, pero un auditor a cualquiera.
     if (this.scopedToOwnRoutes() && route.collectorId !== this.tenant.userId) {
       throw resourceNotFound();
     }
-    return serializeRoute(route);
+    if (route.stops.length > 0) {
+      await this.audit.record({ entity: 'route', entityId: id, action: 'PII_REVEAL' });
+    }
+    return serializeRoute(route, this.crypto);
   }
 
   async updateStatus(id: string, dto: UpdateRouteDto): Promise<ReturnType<typeof serializeRoute>> {

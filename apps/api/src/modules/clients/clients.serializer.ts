@@ -14,8 +14,23 @@ export interface SerializeOpts {
   reveal: boolean;
 }
 
+/**
+ * Nombre visible del cliente: empresa → razón social; persona → nombre + apellido.
+ * Vive acá porque la regla es del dominio `clients`; la consumen `cases` y `routes`.
+ * ponytail: `clientLabel()` del import (portfolio-import.service.ts) y `displayName()` de agenda
+ * hacen lo mismo — converger cuando se toque cada módulo, no vale un refactor suelto.
+ */
+export function clientDisplayName(c: {
+  firstName?: string | null;
+  lastName?: string | null;
+  businessName?: string | null;
+}): string | undefined {
+  if (c.businessName) return c.businessName;
+  return [c.firstName, c.lastName].filter(Boolean).join(' ').trim() || undefined;
+}
+
 /** Descifra de forma segura: si el valor no es ciphertext (legado en claro), lo devuelve tal cual. */
-function safeDecrypt(crypto: CryptoService, value: string | null): string | null {
+export function safeDecrypt(crypto: CryptoService, value: string | null): string | null {
   if (value == null) return null;
   try {
     return crypto.decrypt(value);

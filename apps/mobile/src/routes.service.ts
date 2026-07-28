@@ -13,6 +13,10 @@ export interface RouteStopItem {
   sequenceOrder: number;
   status: RouteStopStatus;
   visitedAt?: string;
+  /** Sólo en `GET /routes/:id`: el listado no trae paradas, y generar tampoco las enriquece. */
+  clientName?: string;
+  /** Dirección donde se cobra (HOME, si no la primera cargada). Vacía si el cliente no tiene ninguna. */
+  address?: string;
 }
 
 export interface RouteItem {

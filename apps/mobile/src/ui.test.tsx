@@ -2,8 +2,8 @@
 jest.mock('./store/net', () => ({ useNetStore: (sel: (s: unknown) => unknown) => sel({ isConnected: true, pendingCount: 0 }) }));
 
 import { render } from '@testing-library/react-native';
-import { AgendaItemStatus, AgendaItemType, AgendaOutcome, CasePriority, CaseStatus } from '@kobrax/shared';
-import { AgendaCard, AGENDA_OUTCOME_META, AGENDA_STATUS_LABEL, AGENDA_TYPE_META, CaseCard, CASE_PRIORITY_LABEL, CASE_STATUS_LABEL, caseStatusTone, StatTile } from './ui';
+import { AgendaItemStatus, AgendaItemType, AgendaOutcome, CasePriority, CaseStatus, RouteStatus, RouteStopStatus } from '@kobrax/shared';
+import { AgendaCard, AGENDA_OUTCOME_META, AGENDA_STATUS_LABEL, AGENDA_TYPE_META, CaseCard, CASE_PRIORITY_LABEL, CASE_STATUS_LABEL, caseStatusTone, ROUTE_STATUS_LABEL, StatTile, STOP_STATUS_META } from './ui';
 
 describe('caseStatusTone', () => {
   it('mapea estados a tonos coherentes', () => {
@@ -31,6 +31,15 @@ describe('caseStatusTone', () => {
     }
     expect(AGENDA_OUTCOME_META[AgendaOutcome.PROMISE_BROKEN].tone).toBe('danger');
     expect(AGENDA_OUTCOME_META[AgendaOutcome.PROMISE_KEPT].tone).toBe('success');
+  });
+});
+
+describe('Rutas meta (S1)', () => {
+  it('hay etiqueta para todo estado de ruta y etiqueta + tono para toda parada', () => {
+    for (const s of Object.values(RouteStatus)) expect(ROUTE_STATUS_LABEL[s]).toBeTruthy();
+    for (const s of Object.values(RouteStopStatus)) expect(STOP_STATUS_META[s].label).toBeTruthy();
+    expect(STOP_STATUS_META[RouteStopStatus.VISITED].tone).toBe('success');
+    expect(STOP_STATUS_META[RouteStopStatus.SKIPPED].tone).toBe('warning');
   });
 });
 

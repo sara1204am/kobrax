@@ -1,5 +1,6 @@
 import type { CaseActivity, CollectionCase } from '@prisma/client';
 import { creditView } from '@kobrax/shared';
+import { clientDisplayName } from '../clients/clients.serializer';
 
 const TERMINAL = ['CLOSED', 'WRITTEN_OFF'];
 
@@ -16,13 +17,6 @@ type CaseCredit = {
   metadata?: unknown;
   installments?: { dueDate: Date; amount: unknown; status: string }[];
 };
-
-/** Nombre visible del deudor: razón social si es empresa, si no nombre + apellido. */
-function clientDisplayName(c: CaseClient): string | undefined {
-  if (c.businessName) return c.businessName;
-  const full = [c.firstName, c.lastName].filter(Boolean).join(' ').trim();
-  return full || undefined;
-}
 
 export function serializeActivity(a: CaseActivity) {
   return {

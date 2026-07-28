@@ -30,7 +30,7 @@ function makeService(opts: { ua?: unknown; cases?: unknown[]; permissions?: stri
   const tenant = { accountId: 'acc-A', userId: 'u1', permissions: perms, can: (p: string) => perms.includes(p) };
   const audit = { record: async (e: { action: string }) => void calls.audit.push(e.action) };
   const events = { emit: () => {} };
-  const service = new RoutesService(prisma as never, tenant as never, audit as never, events as never);
+  const service = new RoutesService(prisma as never, tenant as never, audit as never, events as never, {} as never);
   return { service, calls };
 }
 

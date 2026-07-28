@@ -7,4 +7,8 @@ export const invalidCollector = () =>
   new UnprocessableEntityException({ code: 'ROUTE_COLLECTOR', message: 'El cobrador no pertenece al tenant' });
 
 export const noStopsToRoute = () =>
-  new UnprocessableEntityException({ code: 'ROUTE_EMPTY', message: 'No hay casos/paradas para la ruta' });
+  // El móvil muestra este texto tal cual (sólo propaga `message`): tiene que decirle al cobrador qué hacer.
+  new UnprocessableEntityException({
+    code: 'ROUTE_EMPTY',
+    message: 'No tenés casos abiertos para armar la ruta de hoy',
+  });

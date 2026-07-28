@@ -22,6 +22,11 @@ export const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'j
 export const WEEKDAYS_SHORT = ['DO', 'LU', 'MA', 'MI', 'JU', 'VI', 'SA'];
 const WEEKDAYS_LONG = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
+/** Hoy como `YYYY-MM-DD` en UTC — el backend guarda las fechas-calendario a medianoche UTC. */
+export function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 /** `2026-06-23` → `Lunes, 23 de junio` (la fecha se lee en UTC, como se guarda). */
 export function formatLongDate(isoDate: string): string {
   const d = new Date(`${isoDate}T00:00:00.000Z`);

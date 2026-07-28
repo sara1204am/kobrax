@@ -6,7 +6,7 @@
 import { type ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AgendaItemStatus, AgendaItemType, AgendaOutcome, CasePriority, CaseStatus, PortfolioStatus } from '@kobrax/shared';
+import { AgendaItemStatus, AgendaItemType, AgendaOutcome, CasePriority, CaseStatus, PortfolioStatus, RouteStatus, RouteStopStatus } from '@kobrax/shared';
 import { useNetStore } from './store/net';
 import { COLORS, RADIUS, SPACING, TYPE } from './theme';
 
@@ -254,6 +254,22 @@ export const PORTFOLIO_STATUS_META: Record<PortfolioStatus, { label: string; ton
   [PortfolioStatus.OVERDUE]: { label: 'En mora', tone: 'danger' },
   [PortfolioStatus.PROMISE]: { label: 'Promesa', tone: 'info' },
   [PortfolioStatus.PAID]: { label: 'Pagado', tone: 'neutral' },
+};
+
+/** Estado de la ruta → etiqueta. El enum es dominio (shared); la etiqueta es UI y vive acá. */
+export const ROUTE_STATUS_LABEL: Record<RouteStatus, string> = {
+  [RouteStatus.PLANNED]: 'Planificada',
+  [RouteStatus.IN_PROGRESS]: 'En curso',
+  [RouteStatus.COMPLETED]: 'Completada',
+  [RouteStatus.CANCELLED]: 'Cancelada',
+};
+
+/** Estado de cada parada → etiqueta + tono. Lo usan Rutas (S1) y el mapa activo (S4). */
+export const STOP_STATUS_META: Record<RouteStopStatus, { label: string; tone: BadgeTone }> = {
+  [RouteStopStatus.PENDING]: { label: 'Pendiente', tone: 'neutral' },
+  [RouteStopStatus.IN_ROUTE]: { label: 'En camino', tone: 'info' },
+  [RouteStopStatus.VISITED]: { label: 'Visitada', tone: 'success' },
+  [RouteStopStatus.SKIPPED]: { label: 'Omitida', tone: 'warning' },
 };
 
 /**
