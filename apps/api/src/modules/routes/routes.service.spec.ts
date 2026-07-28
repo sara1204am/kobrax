@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { RoutesService } from './routes.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
-function makeService(opts: { ua?: unknown; cases?: unknown[]; permissions?: string[]; routes?: unknown[] } = {}) {
+function makeService(
+  opts: { ua?: unknown; cases?: unknown[]; permissions?: string[]; routes?: unknown[]; route?: { id: string; collectorId: string } } = {},
+) {
   const calls = {
     routeCreate: [] as Record<string, unknown>[],
     audit: [] as string[],
@@ -23,6 +25,8 @@ function makeService(opts: { ua?: unknown; cases?: unknown[]; permissions?: stri
         return opts.routes ?? [];
       },
       count: async () => (opts.routes ?? []).length,
+      findFirst: async () => opts.route ?? null,
+      update: async (args: { data: Record<string, unknown> }) => ({ ...opts.route, ...args.data }),
     },
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
@@ -34,7 +38,10 @@ function makeService(opts: { ua?: unknown; cases?: unknown[]; permissions?: stri
   return { service, calls };
 }
 
-const GEN = { collectorId: '11111111-1111-1111-1111-111111111111', plannedDate: '2026-06-20' } as never;
+const COLLECTOR_ID = '11111111-1111-1111-1111-111111111111';
+const GEN = { collectorId: COLLECTOR_ID, plannedDate: '2026-06-20' } as never;
+/** Generar exige capacidad: `assign` (para cualquiera) o `execute` (sólo la propia). */
+const ASSIGN = ['route:read', 'route:assign'];
 
 describe('RoutesService.create', () => {
   it('rechaza un cobrador ajeno al tenant (ROUTE_COLLECTOR)', async () => {
@@ -49,7 +56,7 @@ describe('RoutesService.generate', () => {
       { id: 'caseA', clientId: 'clA' },
       { id: 'caseB', clientId: 'clB' },
     ];
-    const { service, calls } = makeService({ cases });
+    const { service, calls } = makeService({ cases, permissions: ASSIGN });
     const r = await service.generate(GEN);
     assert.equal(r.totalCases, 2);
     const stops = (calls.routeCreate[0]!.stops as { create: { caseId: string; sequenceOrder: number }[] }).create;
@@ -58,8 +65,43 @@ describe('RoutesService.generate', () => {
   });
 
   it('rechaza si no hay casos para la ruta (ROUTE_EMPTY)', async () => {
-    const { service } = makeService({ cases: [] });
+    const { service } = makeService({ cases: [], permissions: ASSIGN });
     await rejectsWithCode(service.generate(GEN), 'ROUTE_EMPTY');
+  });
+
+  it('el cobrador (ROUTE_EXECUTE) genera SU ruta aunque el body pida otro cobrador', async () => {
+    const { service, calls } = makeService({ cases: [{ id: 'c1', clientId: 'cl1' }], permissions: ['route:read', 'route:execute'] });
+    await service.generate(GEN);
+    assert.equal(calls.routeCreate[0]!.collectorId, 'u1');
+  });
+
+  it('con ROUTE_ASSIGN genera para el cobrador pedido', async () => {
+    const { service, calls } = makeService({ cases: [{ id: 'c1', clientId: 'cl1' }], permissions: ASSIGN });
+    await service.generate(GEN);
+    assert.equal(calls.routeCreate[0]!.collectorId, COLLECTOR_ID);
+  });
+
+  it('el observador de cuenta (sin execute ni assign) no genera (AUTH_002)', async () => {
+    const { service } = makeService({ cases: [{ id: 'c1', clientId: 'cl1' }], permissions: ['route:read'] });
+    await rejectsWithCode(service.generate(GEN), 'AUTH_002');
+  });
+});
+
+describe('RoutesService.updateStatus (scope por capacidad)', () => {
+  it('el cobrador arranca SU ruta', async () => {
+    const { service, calls } = makeService({ route: { id: 'r1', collectorId: 'u1' }, permissions: ['route:read', 'route:execute'] });
+    await service.updateStatus('r1', { status: 'IN_PROGRESS' } as never);
+    assert.ok(calls.audit.includes('UPDATE'));
+  });
+
+  it('el cobrador NO toca la ruta de otro (404, no filtra que exista)', async () => {
+    const { service } = makeService({ route: { id: 'r1', collectorId: 'otro' }, permissions: ['route:read', 'route:execute'] });
+    await rejectsWithCode(service.updateStatus('r1', { status: 'IN_PROGRESS' } as never), 'RESOURCE_NOT_FOUND');
+  });
+
+  it('el observador de cuenta no cambia estados (AUTH_002)', async () => {
+    const { service } = makeService({ route: { id: 'r1', collectorId: 'u1' }, permissions: ['route:read'] });
+    await rejectsWithCode(service.updateStatus('r1', { status: 'IN_PROGRESS' } as never), 'AUTH_002');
   });
 });
 

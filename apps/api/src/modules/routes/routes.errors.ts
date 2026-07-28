@@ -1,7 +1,11 @@
-import { NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 
 export const resourceNotFound = () =>
   new NotFoundException({ code: 'RESOURCE_NOT_FOUND', message: 'Recurso no encontrado' });
+
+/** El usuario no tiene ninguna capacidad que habilite la acción (ej. un auditor). */
+export const routeForbidden = (action: string) =>
+  new ForbiddenException({ code: 'AUTH_002', message: `No tenés permiso para ${action}` });
 
 export const invalidCollector = () =>
   new UnprocessableEntityException({ code: 'ROUTE_COLLECTOR', message: 'El cobrador no pertenece al tenant' });

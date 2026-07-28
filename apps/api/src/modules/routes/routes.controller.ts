@@ -18,8 +18,10 @@ export class RoutesController {
     return this.routes.create(dto);
   }
 
+  // Puerta mínima: quién genera y PARA QUIÉN lo decide el service por capacidad
+  // (ROUTE_ASSIGN = para cualquiera; ROUTE_EXECUTE = sólo la propia; ninguna = 403).
   @Post('generate')
-  @Roles(Permission.ROUTE_ASSIGN)
+  @Roles(Permission.ROUTE_READ)
   generate(@Body() dto: GenerateRouteDto) {
     return this.routes.generate(dto);
   }
@@ -36,8 +38,9 @@ export class RoutesController {
     return this.routes.findOne(id);
   }
 
+  // Igual que `generate`: la puerta es mínima y el service decide sobre QUÉ ruta puede cada capacidad.
   @Patch(':id')
-  @Roles(Permission.ROUTE_WRITE)
+  @Roles(Permission.ROUTE_READ)
   updateStatus(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateRouteDto) {
     return this.routes.updateStatus(id, dto);
   }

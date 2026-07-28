@@ -9,7 +9,7 @@ import { EventBusService, DomainEvent } from '../../common/events/event-bus.serv
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { serializeRoute } from './routes.serializer';
 import { CreateRouteDto, GenerateRouteDto, ListRoutesQueryDto, UpdateRouteDto, UpdateStopDto } from './dto/route.dto';
-import { invalidCollector, noStopsToRoute, resourceNotFound } from './routes.errors';
+import { invalidCollector, noStopsToRoute, resourceNotFound, routeForbidden } from './routes.errors';
 
 const OPEN_CASE_STATUSES = { notIn: [CaseStatus.CLOSED, CaseStatus.WRITTEN_OFF] };
 
@@ -49,19 +49,30 @@ export class RoutesService {
     return serializeRoute(route);
   }
 
+  /**
+   * Genera la ruta desde los casos abiertos. Mismo modelo de capacidades que `list`:
+   *  - ROUTE_ASSIGN (supervisor): la genera para el cobrador que pida.
+   *  - ejecutor de campo (ROUTE_EXECUTE sin ASSIGN): **sólo la suya** — es el camino de RT-0a,
+   *    donde el cobrador arma su propia jornada; el `collectorId` del body se ignora.
+   *  - observador de cuenta (ni ejecuta ni asigna): no genera nada.
+   */
   async generate(dto: GenerateRouteDto): Promise<ReturnType<typeof serializeRoute>> {
+    const canAssign = this.tenant.can(Permission.ROUTE_ASSIGN);
+    if (!canAssign && !this.tenant.can(Permission.ROUTE_EXECUTE)) throw routeForbidden('generar rutas');
+    const collectorId = canAssign ? dto.collectorId : this.tenant.userId!;
+
     const route = await this.tx(async (tx) => {
-      await this.assertCollector(tx, dto.collectorId);
+      await this.assertCollector(tx, collectorId);
 
       const cases = dto.caseIds?.length
         ? await tx.collectionCase.findMany({ where: { id: { in: dto.caseIds }, status: OPEN_CASE_STATUSES, deletedAt: null }, orderBy: { priority: 'desc' } })
-        : await tx.collectionCase.findMany({ where: { assigneeId: dto.collectorId, status: OPEN_CASE_STATUSES, deletedAt: null }, orderBy: { priority: 'desc' } });
+        : await tx.collectionCase.findMany({ where: { assigneeId: collectorId, status: OPEN_CASE_STATUSES, deletedAt: null }, orderBy: { priority: 'desc' } });
       if (cases.length === 0) throw noStopsToRoute();
 
       const created = await tx.routePlan.create({
         data: {
           accountId: this.tenant.accountId,
-          collectorId: dto.collectorId,
+          collectorId,
           branchId: dto.branchId,
           plannedDate: new Date(dto.plannedDate),
           status: RouteStatus.PLANNED,
@@ -155,10 +166,19 @@ export class RoutesService {
     return serializeRoute(route, this.crypto);
   }
 
+  /**
+   * Cambia el estado de la ruta. Con ROUTE_WRITE (supervisión), sobre cualquiera del tenant; el
+   * ejecutor de campo sólo sobre la suya — es lo que hace "Iniciar ruta" en RT-0b. Una ruta ajena
+   * responde 404 y no 403: no se filtra que exista, igual que en `findOne`.
+   */
   async updateStatus(id: string, dto: UpdateRouteDto): Promise<ReturnType<typeof serializeRoute>> {
     const route = await this.tx(async (tx) => {
-      const found = await tx.routePlan.findFirst({ where: { id }, select: { id: true } });
+      const found = await tx.routePlan.findFirst({ where: { id }, select: { id: true, collectorId: true } });
       if (!found) throw resourceNotFound();
+      if (!this.tenant.can(Permission.ROUTE_WRITE)) {
+        if (!this.tenant.can(Permission.ROUTE_EXECUTE)) throw routeForbidden('cambiar el estado de la ruta');
+        if (found.collectorId !== this.tenant.userId) throw resourceNotFound();
+      }
       return tx.routePlan.update({ where: { id }, data: { status: dto.status } });
     });
     await this.audit.record({ entity: 'route', entityId: id, action: 'UPDATE', after: { status: route.status } });
