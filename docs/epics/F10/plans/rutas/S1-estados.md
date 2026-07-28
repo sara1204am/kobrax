@@ -1,6 +1,18 @@
-> **ESTADO: ronda 3 (2026-07-27) — PASS del validador. Listo para construir (`/f10-etapa` Paso F).**
-> Ronda 2 dio FAIL por dos ubicaciones mal elegidas (mapas de estado fuera de `ui.tsx`, y un helper
-> de nombre "reusado" que no existía). Corregido en §6/§7/§5.1.
+> **ESTADO: ✅ CONSTRUIDO Y MERGEADO A `main` (2026-07-28, `5d09fdd`).** Validado por cable con datos
+> reales: RT-0a → *Generar ruta del día* → 15 paradas **con nombre y dirección** → *Iniciar ruta*.
+>
+> **Tres correcciones al plan que salieron del recorrido, y que valen para los slices que siguen:**
+> 1. `clientDisplayName()` **ya existía** (privado en `cases.serializer.ts`, más copias en agenda e
+>    import). No se escribió una cuarta: se movió a `clients.serializer.ts` y la consumen cases y routes.
+> 2. La dirección es **PII cifrada**: `serializeStop` la descifra y `findOne` audita `route/PII_REVEAL`,
+>    el mismo camino que ya usa agenda para dar direcciones al cobrador.
+> 3. El código de error es **`ROUTE_EMPTY`**, no `NO_STOPS_TO_ROUTE`; y el móvil sólo propaga `message`,
+>    así que el texto del server ES la UI.
+>
+> **Muro real que sólo aparece por cable:** `generate` exigía `ROUTE_ASSIGN` y `updateStatus`
+> `ROUTE_WRITE` — el rol `COLLECTOR` no tiene ninguna de las dos, así que **las dos acciones de la
+> pantalla estaban muertas para su propio usuario**. Ahora el scope lo resuelve el service por
+> capacidad. Verificar esto en S2–S6 antes de dar un botón por hecho.
 
 # F10 · Rutas · S1 — Estados de ruta (RT-0)
 
