@@ -8,13 +8,15 @@ import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { serializeRoute, serializeStop } from './routes.serializer';
+import { OsrmService, type OsrmRoute } from './osrm.service';
 import { AddStopDto, CreateRouteDto, GenerateRouteDto, ListRoutesQueryDto, UpdateRouteDto, UpdateStopDto } from './dto/route.dto';
 import { invalidCollector, noStopsToRoute, resourceNotFound, routeForbidden, stopDuplicate, stopNotPending } from './routes.errors';
 
 const OPEN_CASE_STATUSES = { notIn: [CaseStatus.CLOSED, CaseStatus.WRITTEN_OFF] };
 
 /**
- * Lo que la parada necesita del cliente para poder pintarse: nombre y dirección.
+ * Lo que la parada necesita del cliente para poder pintarse: nombre, dirección y **el punto en el
+ * mapa** (S3: la polilínea y el cálculo de OSRM salen de acá, sin queries nuevas).
  * `relationId: null` = ubicaciones del cliente, no las de sus garantes/contactos.
  */
 const STOP_CLIENT = {
@@ -22,7 +24,11 @@ const STOP_CLIENT = {
     firstName: true,
     lastName: true,
     businessName: true,
-    locations: { where: { relationId: null }, select: { locationType: true, address: true }, orderBy: { createdAt: 'asc' } },
+    locations: {
+      where: { relationId: null },
+      select: { locationType: true, address: true, latitude: true, longitude: true },
+      orderBy: { createdAt: 'asc' },
+    },
   },
 } satisfies Prisma.ClientDefaultArgs;
 
@@ -34,6 +40,7 @@ export class RoutesService {
     private readonly audit: AuditService,
     private readonly events: EventBusService,
     private readonly crypto: CryptoService,
+    private readonly osrm: OsrmService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -309,4 +316,150 @@ export class RoutesService {
     });
     return { id: stop.id, status: stop.status, sequenceOrder: stop.sequenceOrder };
   }
+
+  // ── Vista previa y optimización (S3) ─────────────────────────────────────
+
+  /**
+   * El recorrido dibujado por las calles, con cuánto se camina y cuánto lleva, y —si da vueltas de
+   * más— en qué orden convendría hacerlo.
+   *
+   * **Se degrada, no falla.** Sin OSRM (caído, o sin red desde el server) devuelve la ruta sin
+   * geometría y con los últimos números calculados: el cobrador igual puede confirmar e iniciar.
+   *
+   * ponytail: un GET que escribe su propio cache (`totalDistanceKm`/`estimatedMinutes`, columnas que
+   * ya existían sin llenarse). Es lo que le deja números reales al camino sin señal; la alternativa
+   * —que el móvil los mande al confirmar— pone en manos del cliente un dato que calculó el server.
+   */
+  async preview(routeId: string): Promise<RoutePreview> {
+    const route = await this.tx(async (tx) => {
+      await this.assertOwnRoute(tx, routeId);
+      return tx.routePlan.findFirst({
+        where: { id: routeId },
+        include: { stops: { orderBy: { sequenceOrder: 'asc' }, include: { client: STOP_CLIENT } } },
+      });
+    });
+    if (!route) throw resourceNotFound();
+    if (route.stops.length > 0) {
+      // Devuelve direcciones y coordenadas en claro, igual que `findOne`: se audita el revelado.
+      await this.audit.record({ entity: 'route', entityId: routeId, action: 'PII_REVEAL' });
+    }
+
+    const stops = route.stops.map((s) => serializeStop(s, this.crypto));
+    const drawable = stops.filter(hasPoint);
+    const path = await this.osrm.route(drawable);
+
+    if (!path) {
+      // Sin motor: la última distancia/duración conocidas, y que el móvil una los puntos con rectas.
+      return {
+        geometry: [],
+        distanceKm: route.totalDistanceKm != null ? Number(route.totalDistanceKm) : undefined,
+        minutes: route.estimatedMinutes ?? undefined,
+        stops: stops.map((s) => ({ id: s.id, sequenceOrder: s.sequenceOrder, etaMinutes: undefined })),
+      };
+    }
+
+    const distanceKm = round1(path.distanceM / 1000);
+    const minutes = Math.round(path.durationS / 60) + DWELL_MIN * stops.length;
+    await this.tx((tx) =>
+      tx.routePlan.update({ where: { id: routeId }, data: { totalDistanceKm: distanceKm, estimatedMinutes: minutes } }),
+    );
+
+    return {
+      geometry: path.geometry,
+      distanceKm,
+      minutes,
+      stops: withEta(stops, drawable, path.legs),
+      suggestion: await this.suggestOrder(drawable, path),
+    };
+  }
+
+  /**
+   * ¿Convendría hacerlo en otro orden? Se le pide a OSRM el recorrido óptimo (la primera parada
+   * queda fija: el cobrador ya salió para allá) y se compara contra el actual.
+   *
+   * **Sólo se sugiere si ahorra de verdad** (§5.3): una alerta que promete 200 metros entrena al
+   * cobrador a ignorarlas todas.
+   */
+  private async suggestOrder(drawable: PointStop[], current: OsrmRoute): Promise<RouteSuggestion | undefined> {
+    if (drawable.length < 3) return undefined; // con dos paradas no hay nada que reordenar
+    const best = await this.osrm.trip(drawable);
+    if (!best) return undefined;
+
+    const savedKm = round1((current.distanceM - best.distanceM) / 1000);
+    const savedMinutes = Math.round((current.durationS - best.durationS) / 60);
+    if (savedKm < MIN_SAVED_KM && savedMinutes < MIN_SAVED_MINUTES) return undefined;
+
+    return { order: best.order.map((i) => drawable[i]!.id), savedKm, savedMinutes };
+  }
+
+  /**
+   * Aplica el orden sugerido. Reusa el mismo `resequence` de S2 —dos pasadas por la restricción
+   * `unique(routeId, sequenceOrder)`— y las paradas sin coordenadas, que no entran al cálculo,
+   * quedan al final conservando su orden relativo: no se pierde ninguna.
+   */
+  async optimize(routeId: string): Promise<ReturnType<typeof serializeRoute>> {
+    const preview = await this.preview(routeId);
+    if (!preview.suggestion) return this.findOne(routeId);
+
+    const ordered = preview.suggestion.order;
+    await this.tx(async (tx) => {
+      await this.assertOwnRoute(tx, routeId);
+      const all = await tx.routeStop.findMany({ where: { routeId }, orderBy: { sequenceOrder: 'asc' }, select: { id: true } });
+      const rest = all.map((s) => s.id).filter((id) => !ordered.includes(id));
+      await this.resequence(tx, [...ordered, ...rest]);
+    });
+    await this.audit.record({ entity: 'route', entityId: routeId, action: 'UPDATE', after: { optimized: ordered.length } });
+    return this.findOne(routeId);
+  }
+}
+
+// ── Preview: tipos y cálculo puro ────────────────────────────────────────────
+
+/** Minutos que el cobrador pasa en cada parada. Sin esto la duración no le sirve para planificar. */
+const DWELL_MIN = 10;
+/** Umbral de la alerta de zigzag: abajo de esto no se sugiere reordenar (§5.3). */
+const MIN_SAVED_KM = 1;
+const MIN_SAVED_MINUTES = 10;
+
+type SerializedStop = ReturnType<typeof serializeStop>;
+type PointStop = SerializedStop & { latitude: number; longitude: number };
+
+export interface RouteSuggestion {
+  /** Ids de parada en el orden propuesto. */
+  order: string[];
+  savedKm: number;
+  savedMinutes: number;
+}
+
+export interface RoutePreview {
+  /** La polilínea por las calles. Vacía = el móvil une los puntos con rectas (sin motor o sin red). */
+  geometry: { latitude: number; longitude: number }[];
+  distanceKm?: number;
+  minutes?: number;
+  /** `etaMinutes` = minutos desde la salida hasta esa parada. Derivado, no guardado. */
+  stops: { id: string; sequenceOrder: number; etaMinutes?: number }[];
+  suggestion?: RouteSuggestion;
+}
+
+const hasPoint = (s: SerializedStop): s is PointStop => s.latitude != null && s.longitude != null;
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
+/**
+ * Cuántos minutos desde la salida hasta cada parada: los tramos anteriores más la permanencia en
+ * cada una de las paradas ya hechas. La primera es 0 — es la hora a la que arranca.
+ * Una parada sin coordenadas no tiene tramo y queda sin estimación, pero no rompe la cuenta.
+ */
+function withEta(
+  stops: SerializedStop[],
+  drawable: PointStop[],
+  legs: { durationS: number }[],
+): RoutePreview['stops'] {
+  const eta = new Map<string, number>();
+  let acc = 0;
+  drawable.forEach((s, i) => {
+    if (i > 0) acc += Math.round((legs[i - 1]?.durationS ?? 0) / 60) + DWELL_MIN;
+    eta.set(s.id, acc);
+  });
+  return stops.map((s) => ({ id: s.id, sequenceOrder: s.sequenceOrder, etaMinutes: eta.get(s.id) }));
 }

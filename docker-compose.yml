@@ -40,6 +40,49 @@ services:
       timeout: 5s
       retries: 10
 
+  # Motor de ruteo por calles (Rutas S3). Se alimenta de un extracto OSM regional — el mismo insumo
+  # que después sirve los tiles del mapa, así que se baja una sola vez.
+  #
+  # Puesta en marcha (una vez, ~10 min):
+  #   1. bajar el extracto a infra/osrm/data/  (Geofabrik, ~90 MB):
+  #      Start-BitsTransfer https://download.geofabrik.de/south-america/bolivia-latest.osm.pbf infra/osrm/data/
+  #   2. docker compose run --rm osrm-build
+  #   3. docker compose up -d osrm
+  # Otra región = otro .pbf + OSRM_REGION. Los archivos de infra/osrm/data/ no van al repo.
+  osrm:
+    # Pin por digest: Docker Hub sólo publica `latest` para esta imagen (es OSRM v5.26.0).
+    image: osrm/osrm-backend@sha256:af5d4a83fb90086a43b1ae2ca22872e6768766ad5fcbb07a29ff90ec644ee409
+    container_name: kobrax-osrm
+    command: osrm-routed --algorithm mld /data/${OSRM_REGION:-bolivia}-latest.osrm
+    ports:
+      - '5000:5000'
+    volumes:
+      - ./infra/osrm/data:/data
+    healthcheck:
+      # `nearest` contra un punto cualquiera: responde sólo si el grafo cargó.
+      test: ['CMD-SHELL', 'osrm-datastore --help > /dev/null']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Preprocesa el .pbf a grafo de ruteo. One-shot: `docker compose run --rm osrm-build`.
+  # Perfil `car`: el cobrador anda en moto, y auto respeta las mismas calles y sentidos.
+  osrm-build:
+    # Pin por digest: Docker Hub sólo publica `latest` para esta imagen (es OSRM v5.26.0).
+    image: osrm/osrm-backend@sha256:af5d4a83fb90086a43b1ae2ca22872e6768766ad5fcbb07a29ff90ec644ee409
+    profiles: ['tools']
+    volumes:
+      - ./infra/osrm/data:/data
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        set -e
+        R=/data/${OSRM_REGION:-bolivia}-latest
+        osrm-extract -p /opt/car.lua $$R.osm.pbf
+        osrm-partition $$R.osrm
+        osrm-customize $$R.osrm
+
 volumes:
   kobrax_pgdata:
   kobrax_redisdata:
