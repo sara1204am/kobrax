@@ -339,6 +339,9 @@ export class CasesService {
    * **Ubicación primaria = la primera `HOME`; si no hay ninguna, la primera cargada** — la misma regla
    * que usa `routes.serializer` para la dirección de la parada. Con dos criterios distintos, el pin del
    * mapa y la dirección de la parada podrían apuntar a lugares distintos del mismo cliente.
+   *
+   * El mapa, en cambio, recibe **todas** las ubicaciones dibujables: las del cliente y las de sus
+   * garantes y familiares (misma tabla, `relationId`). Una deuda se cobra donde esté la persona.
    */
   private async portfolioExtra(clientIds: string[]): Promise<Map<string, PortfolioExtra>> {
     const ids = [...new Set(clientIds)];
@@ -355,9 +358,18 @@ export class CasesService {
           select: {
             id: true,
             nationalId: true,
+            // Sin filtrar por `relationId`: entran también las del garante y la familia (§S5).
             locations: {
-              where: { relationId: null },
-              select: { locationType: true, zone: true, latitude: true, longitude: true },
+              select: {
+                id: true,
+                locationType: true,
+                zone: true,
+                address: true,
+                latitude: true,
+                longitude: true,
+                relationId: true,
+                relation: { select: { relatedName: true, relationshipType: true } },
+              },
               orderBy: { createdAt: 'asc' },
             },
           },
@@ -378,11 +390,23 @@ export class CasesService {
     const withPromise = new Set(promises.map((p) => p.clientId));
     for (const c of clients) {
       const doc = this.safeDecrypt(c.nationalId);
-      const loc = c.locations.find((l) => l.locationType === LocationType.HOME) ?? c.locations[0];
+      // La zona de la tarjeta sigue saliendo de la ubicación primaria DEL CLIENTE (no de un garante).
+      const propias = c.locations.filter((l) => l.relationId == null);
+      const primaria = propias.find((l) => l.locationType === LocationType.HOME) ?? propias[0];
       map.set(c.id, {
-        zone: loc?.zone ?? undefined,
-        latitude: loc?.latitude != null ? Number(loc.latitude) : undefined,
-        longitude: loc?.longitude != null ? Number(loc.longitude) : undefined,
+        zone: primaria?.zone ?? undefined,
+        // Sólo las dibujables: una dirección sin punto existe, pero el mapa no puede pintarla.
+        locations: c.locations
+          .filter((l) => l.latitude != null && l.longitude != null)
+          .map((l) => ({
+            id: l.id,
+            locationType: l.locationType,
+            latitude: Number(l.latitude),
+            longitude: Number(l.longitude),
+            address: this.safeDecrypt(l.address) ?? undefined,
+            ownerName: l.relation?.relatedName,
+            ownerRelation: l.relation?.relationshipType,
+          })),
         documentMasked: doc ? maskDocument(doc) : undefined,
         hasActivePromise: withPromise.has(c.id),
       });

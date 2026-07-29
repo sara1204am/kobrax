@@ -201,6 +201,34 @@ describe('CasesService.list (scope por capacidad + enriquecimiento)', () => {
     assert.equal(b!.hasActivePromise, false);
   });
 
+  it('view=portfolio devuelve TODAS las ubicaciones dibujables, incluidas las del garante', async () => {
+    const rows = [
+      { id: 'c1', creditId: 'cr1', clientId: 'cl1', status: 'ACTIVE', priority: 'HIGH', createdAt: new Date(), updatedAt: new Date(), client: { firstName: 'Ana', lastName: 'Ruiz', businessName: null }, credit: null },
+    ];
+    const { service } = makeService({
+      permissions: ['case:assign'],
+      listRows: rows,
+      portfolioClients: [
+        {
+          id: 'cl1',
+          nationalId: '12345678',
+          locations: [
+            { id: 'l1', locationType: 'HOME', zone: 'Sur', address: 'Villa Fátima', latitude: -17.8, longitude: -63.2, relationId: null, relation: null },
+            { id: 'l2', locationType: 'WORK', zone: 'Mercado', address: 'Puesto 12', latitude: -17.7, longitude: -63.1, relationId: null, relation: null },
+            { id: 'l3', locationType: 'GUARANTOR', address: 'Calle 5', latitude: -17.6, longitude: -63.0, relationId: 'g1', relation: { relatedName: 'Luis Vargas', relationshipType: 'GUARANTOR' } },
+            // Sin coordenadas: existe, pero el mapa no la puede pintar.
+            { id: 'l4', locationType: 'OTHER', address: 'Sin punto', latitude: null, longitude: null, relationId: null, relation: null },
+          ],
+        },
+      ],
+    });
+    const res = await service.list({ view: 'portfolio' } as never);
+    const locs = res.data![0]!.locations!;
+    assert.deepEqual(locs.map((l) => l.id), ['l1', 'l2', 'l3']);
+    assert.equal(locs[2]!.ownerName, 'Luis Vargas'); // la del garante dice de quién es
+    assert.equal(res.data![0]!.zone, 'Sur'); // la zona de la tarjeta sigue siendo la del cliente
+  });
+
   it('view=portfolio agrega el punto del mapa: la casa gana sobre el negocio (S2)', async () => {
     const rows = [
       { id: 'c1', creditId: 'cr1', clientId: 'cl1', status: 'ACTIVE', priority: 'HIGH', createdAt: new Date(), updatedAt: new Date(), client: { firstName: 'Ana', lastName: 'Ruiz', businessName: null }, credit: null },
@@ -213,10 +241,10 @@ describe('CasesService.list (scope por capacidad + enriquecimiento)', () => {
         {
           id: 'cl1',
           nationalId: '12345678',
-          // El negocio está cargado primero: igual manda la casa, como en la dirección de la parada.
+          // El negocio está cargado primero: igual manda la casa para la zona de la tarjeta.
           locations: [
-            { locationType: 'WORK', zone: 'Mercado', latitude: -17.1, longitude: -63.1 },
-            { locationType: 'HOME', zone: 'Zona Sur', latitude: -17.8, longitude: -63.2 },
+            { id: 'l1', locationType: 'WORK', zone: 'Mercado', latitude: -17.1, longitude: -63.1, relationId: null, relation: null },
+            { id: 'l2', locationType: 'HOME', zone: 'Zona Sur', latitude: -17.8, longitude: -63.2, relationId: null, relation: null },
           ],
         },
         { id: 'cl2', nationalId: '87654321', locations: [] },
@@ -224,12 +252,10 @@ describe('CasesService.list (scope por capacidad + enriquecimiento)', () => {
     });
     const res = await service.list({ view: 'portfolio' } as never);
     const [a, b] = res.data!;
-    assert.equal(a!.latitude, -17.8);
-    assert.equal(a!.longitude, -63.2);
     assert.equal(a!.zone, 'Zona Sur');
+    assert.equal(a!.locations!.length, 2);
     // Sin ubicación cargada el cliente existe igual: no se puede pintar, no desaparece.
-    assert.equal(b!.latitude, undefined);
-    assert.equal(b!.longitude, undefined);
+    assert.deepEqual(b!.locations, []);
     // El domicilio es PII: se registra el revelado, una vez por consulta.
     assert.equal(calls.audit.filter((a2) => a2.action === 'PII_REVEAL').length, 1);
   });

@@ -7,6 +7,20 @@
 import type { CasePriority, CaseStatus, CreditOrigin, PaymentFrequency } from '@kobrax/shared';
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
 
+/**
+ * Un punto del cliente en el mapa. `ownerName` presente ⇒ la ubicación es de un garante o familiar,
+ * no del cliente: una deuda se cobra donde esté la persona.
+ */
+export interface PortfolioLocation {
+  id: string;
+  locationType: string;
+  latitude: number;
+  longitude: number;
+  address?: string;
+  ownerName?: string;
+  ownerRelation?: string;
+}
+
 /** Forma verificada contra `serializeCase` (fechas llegan como ISO string vía JSON). */
 export interface CaseListItem {
   id: string;
@@ -32,9 +46,8 @@ export interface CaseListItem {
   locked?: boolean;
   /** Solo con `view=portfolio` (§5.3). */
   zone?: string;
-  /** Punto de la ubicación primaria — con esto el mapa de Rutas pinta al cliente. Ausente si no la tiene. */
-  latitude?: number;
-  longitude?: number;
+  /** Todas las ubicaciones dibujables: las del cliente y las de sus garantes/familiares. */
+  locations?: PortfolioLocation[];
   documentMasked?: string;
   hasActivePromise?: boolean;
   lastActionAt?: string;

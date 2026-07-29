@@ -35,16 +35,29 @@ type CaseWithActivities = CollectionCase & {
   credit?: CaseCredit | null;
 };
 
+/** Un punto dibujable del cliente. `ownerName` presente = es de un garante/familiar, no del cliente. */
+export type PortfolioLocation = {
+  id: string;
+  locationType: string;
+  latitude: number;
+  longitude: number;
+  /** En claro: el listado de cartera ya audita el revelado (`case_portfolio/PII_REVEAL`). */
+  address?: string;
+  ownerName?: string;
+  ownerRelation?: string;
+};
+
 /** Campos de la lista de cartera (§5.3), resueltos por el servicio solo con `view=portfolio`. */
 export type PortfolioExtra = {
   /** Zona de la ubicación primaria del cliente. */
   zone?: string;
   /**
-   * Punto de la ubicación primaria — con esto el mapa de Rutas (S2) pinta al cliente. Ausente si el
-   * cliente no tiene ubicación o la tiene sin coordenadas: existe igual, sólo que no se puede dibujar.
+   * **Todas** las ubicaciones dibujables del cliente: la casa, el negocio, y también las de sus
+   * garantes y familiares (el mapa de Rutas pinta un pin por cada una). Sólo las que tienen
+   * coordenadas — una dirección sin punto existe, pero no se puede dibujar. Vacío = el cliente no
+   * aparece en el mapa y sale en el aviso aparte.
    */
-  latitude?: number;
-  longitude?: number;
+  locations?: PortfolioLocation[];
   /** Documento ENMASCARADO (12345***) — para el buscador local; nunca en claro, sin `PII_REVEAL`. */
   documentMasked?: string;
   /** Hay una promesa de pago vigente en agenda → badge PROMESA (§5.3). */
@@ -83,8 +96,7 @@ export function serializeCase(c: CaseWithActivities, now: Date = new Date(), por
     locked: view?.locked,
     // Cartera (§5.3): solo presentes con `view=portfolio`; ausentes en agenda/mutaciones.
     zone: portfolio?.zone,
-    latitude: portfolio?.latitude,
-    longitude: portfolio?.longitude,
+    locations: portfolio?.locations,
     documentMasked: portfolio?.documentMasked,
     hasActivePromise: portfolio?.hasActivePromise,
     lastActionAt: c.lastActionAt ?? undefined,

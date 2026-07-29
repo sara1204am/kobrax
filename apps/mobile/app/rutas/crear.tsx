@@ -8,21 +8,31 @@ import { MapCanvas, type MapMarker } from '@/maps/MapCanvas';
 import { money, todayISO } from '@/agenda-form';
 import { listCases } from '@/cases.service';
 import { groupPortfolio, type ClientPortfolio } from '@/portfolio';
+import type { PortfolioLocation } from '@/cases.service';
 import { createRoute } from '@/routes.service';
 import { flushDraft, loadDraft, moveStop, saveDraft, withoutStop, withStop, type RouteDraft } from '@/route-draft';
 import { authService } from '@/auth-service';
 import { useNetStore } from '@/store/net';
 
 /** Cliente de la cartera + el caso con el que entra a la ruta (una parada = un caso). */
-interface Punto extends ClientPortfolio {
+interface Cliente extends ClientPortfolio {
   caseId: string;
+}
+
+/**
+ * Un pin del mapa = **una ubicación**, no un cliente: la casa, el negocio, y también la del garante o
+ * la familia. Una deuda se cobra donde esté la persona.
+ */
+interface Pin {
+  loc: PortfolioLocation;
+  cliente: Cliente;
 }
 
 type Load =
   | { status: 'loading' }
   | { status: 'offline' }
   | { status: 'error' }
-  | { status: 'ok'; puntos: Punto[]; sinUbicacion: Punto[] };
+  | { status: 'ok'; pins: Pin[]; sinUbicacion: Cliente[] };
 
 /**
  * RT-1 · Armar la ruta desde el mapa (S2). La cartera del cobrador se pinta sobre el mapa y cada
@@ -55,12 +65,13 @@ export default function CrearRutaScreen() {
     // que es como `groupPortfolio` ya los ordena).
     const caseByClient = new Map<string, string>();
     for (const c of res.data) if (!caseByClient.has(c.clientId)) caseByClient.set(c.clientId, c.id);
-    const todos: Punto[] = groupPortfolio(res.data).map((c) => ({ ...c, caseId: caseByClient.get(c.clientId)! }));
+    const todos: Cliente[] = groupPortfolio(res.data).map((c) => ({ ...c, caseId: caseByClient.get(c.clientId)! }));
 
     setLoad({
       status: 'ok',
-      puntos: todos.filter((c) => c.latitude != null && c.longitude != null),
-      sinUbicacion: todos.filter((c) => c.latitude == null || c.longitude == null),
+      // Un pin por ubicación: un cliente con casa, negocio y garante aporta tres.
+      pins: todos.flatMap((cliente) => cliente.locations.map((loc) => ({ loc, cliente }))),
+      sinUbicacion: todos.filter((c) => c.locations.length === 0),
     });
   }, []);
 
@@ -92,16 +103,16 @@ export default function CrearRutaScreen() {
   );
 
   const enRuta = useMemo(() => new Set(draft?.caseIds ?? []), [draft]);
-  const puntos = load.status === 'ok' ? load.puntos : [];
-  const elegido = puntos.find((p) => p.clientId === selected);
+  const pins = load.status === 'ok' ? load.pins : [];
+  const elegido = pins.find((p) => p.loc.id === selected);
 
-  const markers: MapMarker[] = puntos.map((p) => ({
-    id: p.clientId,
-    latitude: p.latitude!,
-    longitude: p.longitude!,
-    label: enRuta.has(p.caseId) ? String(draft!.caseIds.indexOf(p.caseId) + 1) : undefined,
-    tone: enRuta.has(p.caseId) ? 'active' : p.maxDaysPastDue > 0 ? 'done' : 'default',
-    selected: p.clientId === selected,
+  const markers: MapMarker[] = pins.map((p) => ({
+    id: p.loc.id,
+    latitude: p.loc.latitude,
+    longitude: p.loc.longitude,
+    label: enRuta.has(p.cliente.caseId) ? String(draft!.caseIds.indexOf(p.cliente.caseId) + 1) : undefined,
+    tone: enRuta.has(p.cliente.caseId) ? 'active' : p.cliente.maxDaysPastDue > 0 ? 'done' : 'default',
+    selected: p.loc.id === selected,
   }));
 
   if (load.status !== 'ok') {
@@ -153,23 +164,35 @@ export default function CrearRutaScreen() {
         <View style={styles.card}>
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={styles.nombre} numberOfLines={1}>
-              {elegido.name}
+              {elegido.cliente.name}
+            </Text>
+            {/* De quién es este punto: del cliente, o de su garante/familiar. */}
+            <Text style={styles.lugar} numberOfLines={1}>
+              {lugarLabel(elegido.loc)}
             </Text>
             <Text style={TYPE.secondary} numberOfLines={1}>
-              {[elegido.zone, elegido.secondaryLine].filter(Boolean).join(' · ')}
+              {elegido.loc.address ?? elegido.cliente.secondaryLine}
             </Text>
-            <Text style={[styles.monto, elegido.maxDaysPastDue > 0 && { color: COLORS.danger }]}>
-              {money(elegido.totalDebt, elegido.currency)}
+            <Text style={[styles.monto, elegido.cliente.maxDaysPastDue > 0 && { color: COLORS.danger }]}>
+              {money(elegido.cliente.totalDebt, elegido.cliente.currency)}
             </Text>
           </View>
           <View style={{ gap: SPACING.sm, alignItems: 'flex-end' }}>
-            <StatusBadge {...PORTFOLIO_STATUS_META[elegido.status]} />
-            {enRuta.has(elegido.caseId) ? (
-              <Button label="Quitar" variant="ghost" onPress={() => void commit(withoutStop(draft!, elegido.caseId))} />
+            <StatusBadge {...PORTFOLIO_STATUS_META[elegido.cliente.status]} />
+            {enRuta.has(elegido.cliente.caseId) ? (
+              <Button label="Quitar" variant="ghost" onPress={() => void commit(withoutStop(draft!, elegido.cliente.caseId))} />
             ) : (
               <Button
                 label="Agregar al recorrido"
-                onPress={() => void commit(withStop(draft ?? { routeId: null, date: todayISO(), caseIds: [], clientByCase: {} }, elegido.caseId, elegido.clientId))}
+                onPress={() =>
+                  void commit(
+                    withStop(
+                      draft ?? { routeId: null, date: todayISO(), caseIds: [], clientByCase: {} },
+                      elegido.cliente.caseId,
+                      elegido.cliente.clientId,
+                    ),
+                  )
+                }
               />
             )}
           </View>
@@ -190,7 +213,7 @@ export default function CrearRutaScreen() {
       <BottomSheet visible={sheet === 'recorrido'} onClose={() => setSheet(null)} title="El recorrido">
         <ScrollView style={{ maxHeight: 360 }}>
           {(draft?.caseIds ?? []).map((caseId, i) => {
-            const p = puntos.find((x) => x.caseId === caseId);
+            const p = pins.find((x) => x.cliente.caseId === caseId)?.cliente;
             return (
               <ListRow
                 key={caseId}
@@ -233,6 +256,22 @@ export default function CrearRutaScreen() {
   );
 }
 
+const TIPO_LUGAR: Record<string, string> = {
+  HOME: 'Casa',
+  WORK: 'Trabajo',
+  GUARANTOR: 'Garante',
+  FAMILY: 'Familia',
+  OTHER: 'Otra ubicación',
+};
+
+/** "Casa" · "Casa de Luis Vargas (garante)" — de quién es el punto que tocaste. */
+function lugarLabel(loc: { locationType: string; ownerName?: string; ownerRelation?: string }): string {
+  const tipo = TIPO_LUGAR[loc.locationType] ?? 'Ubicación';
+  if (!loc.ownerName) return tipo;
+  const rel = loc.ownerRelation ? TIPO_LUGAR[loc.ownerRelation]?.toLowerCase() : undefined;
+  return `${tipo} de ${loc.ownerName}${rel ? ` (${rel})` : ''}`;
+}
+
 /** Botoncito cuadrado de la fila del recorrido (subir/bajar/quitar). */
 function Mover({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
   return (
@@ -263,6 +302,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   nombre: { fontSize: 17, fontWeight: '600', color: COLORS.navy },
+  lugar: { ...TYPE.secondary, color: COLORS.purple, fontWeight: '600' },
   monto: { fontSize: 17, fontWeight: '700', color: COLORS.navy },
   barra: { backgroundColor: COLORS.navy, padding: SPACING.lg, alignItems: 'center' },
   barraVacia: { backgroundColor: COLORS.slate },

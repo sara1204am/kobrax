@@ -4,7 +4,7 @@
  * Sin red y sin React → testeable sola. El estado deriva de `portfolioStatus` de shared (fuente única).
  */
 import { PortfolioStatus, portfolioStatus } from '@kobrax/shared';
-import type { CaseListItem } from './cases.service';
+import type { CaseListItem, PortfolioLocation } from './cases.service';
 import { money, MONTHS } from './agenda-form';
 
 export type PortfolioChip = 'all' | 'today' | 'overdue' | 'current' | 'paid';
@@ -23,9 +23,11 @@ export interface ClientPortfolio {
   clientId: string;
   name: string;
   zone?: string;
-  /** Punto en el mapa (Rutas S2). Sin él, el cliente no se puede pintar — pero sigue en la cartera. */
-  latitude?: number;
-  longitude?: number;
+  /**
+   * Puntos en el mapa (Rutas S2): los del cliente y los de sus garantes/familiares. Vacío = no se
+   * puede pintar, pero sigue en la cartera.
+   */
+  locations: PortfolioLocation[];
   documentMasked?: string;
   currency: string;
   /** Deuda agregada de todos los créditos del cliente (§5.3, "cifra dominante"). */
@@ -122,8 +124,8 @@ export function groupPortfolio(cases: CaseListItem[], asOf: Date = new Date()): 
       clientId,
       name: first.clientName ?? 'Sin nombre',
       zone: first.zone,
-      latitude: first.latitude,
-      longitude: first.longitude,
+      // Las ubicaciones vienen iguales en todos los casos del cliente (son del cliente, no del caso).
+      locations: first.locations ?? [],
       documentMasked: first.documentMasked,
       currency,
       totalDebt,
