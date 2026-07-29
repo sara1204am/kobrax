@@ -199,7 +199,14 @@ function Detail({
               ) : (
                 tel && <ActionButton label="Llamar" icon="📞" onPress={() => onOpen(tel)} />
               )}
-              {geo && <ActionButton label="Navegar" icon="🧭" onPress={() => onOpen(geo)} />}
+              {/* Navegar abre el mapa de Kobrax, no el del teléfono: mismo comportamiento que la ficha. */}
+              {geo && (
+                <ActionButton
+                  label="Navegar"
+                  icon="🧭"
+                  onPress={() => router.push(`/cliente/mapa?clientId=${item.clientId}&name=${encodeURIComponent(item.clientName ?? '')}`)}
+                />
+              )}
             </View>
           )}
         </View>

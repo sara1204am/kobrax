@@ -119,14 +119,20 @@ export default function ClienteFichaScreen() {
       const loc = ctx?.locations.find((l) => l.latitude != null);
       let url: string | null = null;
       let type: 'CALL' | 'MESSAGE' | 'NOTE' = 'CALL';
+      // Navegar NO sale de la app: abre el mapa de Kobrax centrado en la dirección (el mismo mapa de
+      // la ruta, que además anda offline con los packs). Google Maps dejaba al cobrador afuera.
+      if (kind === 'navigate') {
+        router.push(`/cliente/mapa?clientId=${clientId}&locationId=${loc?.id ?? ''}&name=${encodeURIComponent(ctx?.client.displayName ?? '')}`);
+        void addActivity(selected.caseId, { type: 'NOTE', notes: 'Navegación' });
+        return;
+      }
       if (kind === 'call' && phone) { url = `tel:${phone}`; type = 'CALL'; }
       else if (kind === 'whatsapp' && phone) { url = `https://wa.me/${phone}`; type = 'MESSAGE'; }
-      else if (kind === 'navigate' && loc) { url = `https://maps.google.com/?q=${loc.latitude},${loc.longitude}`; type = 'NOTE'; }
       if (!url) return;
       void Linking.openURL(url);
-      void addActivity(selected.caseId, { type, notes: kind === 'call' ? 'Llamada' : kind === 'whatsapp' ? 'WhatsApp' : 'Navegación' });
+      void addActivity(selected.caseId, { type, notes: kind === 'call' ? 'Llamada' : 'WhatsApp' });
     },
-    [selected, ctx],
+    [selected, ctx, clientId],
   );
 
   if (load === 'loading') {
