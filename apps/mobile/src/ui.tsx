@@ -527,7 +527,108 @@ export function OfflineIndicator() {
   );
 }
 
+/**
+ * Fila-selector (ícono + valor o placeholder + chevron). Abre una hoja o un picker.
+ * Vivía en `app/agenda/crear.tsx`; subió acá al aparecer el segundo consumidor (CUENTA S1).
+ */
+export function SelectRow({
+  icon,
+  value,
+  placeholder,
+  onPress,
+  disabled,
+}: {
+  icon: string;
+  value?: string;
+  placeholder?: string;
+  onPress: () => void;
+  /** Sólo lectura: sin chevron y sin press (p.ej. sin `account:write`). */
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={disabled ? undefined : onPress}
+      style={styles.select}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
+    >
+      <Text style={styles.selectIcon}>{icon}</Text>
+      <Text style={[styles.selectValue, !value && styles.selectPlaceholder]} numberOfLines={1}>
+        {value ?? placeholder}
+      </Text>
+      {!disabled && <Text style={styles.chevron}>›</Text>}
+    </Pressable>
+  );
+}
+
+/** Hoja de selección genérica (crédito, teléfono, dirección, banco, país+moneda). */
+export function PickerSheet({
+  visible,
+  onClose,
+  title,
+  options,
+  onPick,
+  addLabel,
+  onAdd,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  title: string;
+  options: { key: string; label: string; hint?: string }[];
+  onPick: (key: string) => void;
+  /** Acción opcional al pie ("Agregar teléfono"): la lista deja de ser un callejón sin salida. */
+  addLabel?: string;
+  onAdd?: () => void;
+}) {
+  return (
+    <BottomSheet visible={visible} onClose={onClose} title={title}>
+      {options.length === 0 && <Text style={styles.sheetEmpty}>No hay opciones disponibles.</Text>}
+      {options.map((o) => (
+        <Pressable
+          key={o.key}
+          onPress={() => {
+            onPick(o.key);
+            onClose();
+          }}
+          style={styles.sheetRow}
+          accessibilityRole="button"
+        >
+          <Text style={styles.sheetLabel}>{o.label}</Text>
+          {o.hint && <Text style={styles.sheetHint}>{o.hint}</Text>}
+        </Pressable>
+      ))}
+      {onAdd && (
+        <Pressable onPress={onAdd} style={styles.sheetAdd} accessibilityRole="button">
+          <Text style={styles.sheetAddText}>{addLabel}</Text>
+        </Pressable>
+      )}
+    </BottomSheet>
+  );
+}
+
 const styles = StyleSheet.create({
+  // SelectRow / PickerSheet — subidos desde `app/agenda/crear.tsx` (CUENTA S1).
+  select: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    minHeight: 52,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.input,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    paddingHorizontal: SPACING.md,
+  },
+  selectIcon: { fontSize: 16 },
+  selectValue: { flex: 1, ...TYPE.body, color: COLORS.text },
+  selectPlaceholder: { color: COLORS.muted },
+  chevron: { color: COLORS.muted, fontSize: 22 },
+  sheetRow: { paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  sheetLabel: { ...TYPE.body, fontWeight: '600', color: COLORS.text },
+  sheetHint: { ...TYPE.caption },
+  sheetEmpty: { ...TYPE.secondary, textAlign: 'center', paddingVertical: SPACING.lg },
+  sheetAdd: { paddingVertical: SPACING.md, alignItems: 'center' },
+  sheetAddText: { ...TYPE.body, fontWeight: '700', color: COLORS.purple },
   headerSafe: { backgroundColor: COLORS.navy },
   header: {
     flexDirection: 'row',

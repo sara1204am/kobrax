@@ -60,10 +60,10 @@ export default function MasScreen() {
 
         <SectionLabel>Cuenta</SectionLabel>
         <ListRow
-          title="Perfil y seguridad"
-          subtitle="Datos de sesión, biometría"
+          title="Mi cuenta"
+          subtitle="Perfil, datos del negocio y equipo"
           icon="person-circle-outline"
-          onPress={() => {}}
+          onPress={() => router.push('/cuenta')}
         />
         <ListRow title="Cerrar sesión" icon="log-out-outline" onPress={logout} />
       </ScrollView>

@@ -23,7 +23,7 @@ import DateTimePicker, { type DateTimePickerEvent } from '@react-native-communit
 import { AgendaItemType, AgendaTimeSlot, CatalogType, ScheduleTimeMode } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { Button, ErrorBanner } from '@/components';
-import { AGENDA_TYPE_META, BottomSheet, Header, SectionLabel } from '@/ui';
+import { AGENDA_TYPE_META, BottomSheet, Header, PickerSheet, SectionLabel, SelectRow } from '@/ui';
 import {
   buildPayload,
   canSubmit,
@@ -713,29 +713,6 @@ export default function CrearGestionScreen() {
   );
 }
 
-/** Fila-selector (ícono + valor o placeholder + chevron). Abre una hoja o un picker. */
-function SelectRow({
-  icon,
-  value,
-  placeholder,
-  onPress,
-}: {
-  icon: string;
-  value?: string;
-  placeholder?: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={styles.select} accessibilityRole="button">
-      <Text style={styles.selectIcon}>{icon}</Text>
-      <Text style={[styles.selectValue, !value && styles.selectPlaceholder]} numberOfLines={1}>
-        {value ?? placeholder}
-      </Text>
-      <Text style={styles.chevron}>›</Text>
-    </Pressable>
-  );
-}
-
 /**
  * Campo deshabilitado: dato del crédito que el cobrador consulta pero no edita. Es un `Text`, no un
  * `TextInput` inerte — no toma foco ni abre teclado, y el lector de pantalla no lo anuncia como editable.
@@ -770,51 +747,6 @@ function Multiline({
       textAlignVertical="top"
       style={[styles.input, styles.multiline]}
     />
-  );
-}
-
-/** Hoja de selección genérica (crédito, teléfono, dirección, banco). Sube a `ui.tsx` cuando S3/S4 la pidan. */
-function PickerSheet({
-  visible,
-  onClose,
-  title,
-  options,
-  onPick,
-  addLabel,
-  onAdd,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  title: string;
-  options: { key: string; label: string; hint?: string }[];
-  onPick: (key: string) => void;
-  /** Acción opcional al pie ("Agregar teléfono"): la lista deja de ser un callejón sin salida. */
-  addLabel?: string;
-  onAdd?: () => void;
-}) {
-  return (
-    <BottomSheet visible={visible} onClose={onClose} title={title}>
-      {options.length === 0 && <Text style={styles.sheetEmpty}>No hay opciones disponibles.</Text>}
-      {options.map((o) => (
-        <Pressable
-          key={o.key}
-          onPress={() => {
-            onPick(o.key);
-            onClose();
-          }}
-          style={styles.sheetRow}
-          accessibilityRole="button"
-        >
-          <Text style={styles.sheetLabel}>{o.label}</Text>
-          {o.hint && <Text style={styles.sheetHint}>{o.hint}</Text>}
-        </Pressable>
-      ))}
-      {onAdd && (
-        <Pressable onPress={onAdd} style={styles.sheetAdd} accessibilityRole="button">
-          <Text style={styles.sheetAddText}>{addLabel}</Text>
-        </Pressable>
-      )}
-    </BottomSheet>
   );
 }
 
@@ -886,21 +818,6 @@ const styles = StyleSheet.create({
   readOnly: { backgroundColor: COLORS.lightBg, borderColor: COLORS.border, justifyContent: 'center' },
   readOnlyText: { ...TYPE.body, fontWeight: '600', color: COLORS.text2 },
   hint: { ...TYPE.caption, marginTop: SPACING.xs },
-  select: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.md,
-    minHeight: 52,
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.input,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    paddingHorizontal: SPACING.md,
-  },
-  selectIcon: { fontSize: 16 },
-  selectValue: { flex: 1, ...TYPE.body, color: COLORS.text },
-  selectPlaceholder: { color: COLORS.muted },
-  chevron: { color: COLORS.muted, fontSize: 22 },
   toggle: {
     flexDirection: 'row',
     backgroundColor: COLORS.lightBg,
@@ -931,11 +848,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.md,
   },
-  sheetRow: { paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  sheetLabel: { ...TYPE.body, fontWeight: '600', color: COLORS.text },
-  sheetHint: { ...TYPE.caption },
-  sheetEmpty: { ...TYPE.secondary, textAlign: 'center', paddingVertical: SPACING.lg },
   mapBox: { height: 200, borderRadius: RADIUS.card, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.border },
-  sheetAdd: { paddingVertical: SPACING.md, alignItems: 'center' },
-  sheetAddText: { ...TYPE.body, fontWeight: '700', color: COLORS.purple },
 });
