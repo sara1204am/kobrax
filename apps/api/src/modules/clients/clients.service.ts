@@ -14,6 +14,7 @@ import {
   CreateContactDto,
   CreateLocationDto,
   UpdateLocationDto,
+  UpdateRelationDto,
   CreateRelationDto,
   ListClientsQueryDto,
   UpdateClientDto,
@@ -216,19 +217,52 @@ export class ClientsService {
   }
 
   // ── Sub-recursos ──────────────────────────────────────────────────────────
+  /**
+   * `relationId` cuelga el teléfono de un garante en vez del cliente (misma tabla, así lo modela el
+   * schema). Sin esto, el teléfono de un garante sólo se podía cargar creando al garante entero.
+   */
   async addContact(clientId: string, dto: CreateContactDto) {
-    return this.subCreate(clientId, 'contact', (tx) =>
-      tx.clientContact.create({
+    return this.subCreate(clientId, 'contact', async (tx) => {
+      await this.assertRelationOf(tx, clientId, dto.relationId);
+      return tx.clientContact.create({
         data: {
           accountId: this.tenant.accountId,
           clientId,
+          relationId: dto.relationId,
           contactType: dto.contactType,
           value: this.crypto.encrypt(dto.value),
           isPrimary: dto.isPrimary ?? false,
           notes: dto.notes,
         },
-      }),
-    );
+      });
+    });
+  }
+
+  /** El garante tiene que ser de ESTE cliente: si no, se le colgarían datos a un tercero. */
+  private async assertRelationOf(tx: PrismaClient, clientId: string, relationId?: string): Promise<void> {
+    if (!relationId) return;
+    const rel = await tx.clientRelation.findFirst({ where: { id: relationId, clientId }, select: { id: true } });
+    if (!rel) throw resourceNotFound();
+  }
+
+  /** Edita los datos de un garante (nombre, tipo de relación, notas…). */
+  async updateRelation(clientId: string, relationId: string, dto: UpdateRelationDto) {
+    const updated = await this.tx(async (tx) => {
+      const existing = await tx.clientRelation.findFirst({ where: { id: relationId, clientId }, select: { id: true } });
+      if (!existing) throw resourceNotFound();
+      return tx.clientRelation.update({
+        where: { id: relationId },
+        data: {
+          ...(dto.relatedName !== undefined && { relatedName: dto.relatedName }),
+          ...(dto.relationshipType !== undefined && { relationshipType: dto.relationshipType }),
+          ...(dto.gender !== undefined && { gender: dto.gender }),
+          ...(dto.isContactable !== undefined && { isContactable: dto.isContactable }),
+          ...(dto.notes !== undefined && { notes: dto.notes }),
+        },
+      });
+    });
+    await this.audit.record({ entity: 'client_relation', entityId: relationId, action: 'UPDATE', after: updated, redactKeys: CLIENT_REDACT });
+    return updated;
   }
 
   async updateContact(clientId: string, contactId: string, dto: UpdateContactDto) {
@@ -250,12 +284,15 @@ export class ClientsService {
     return updated;
   }
 
+  /** `relationId`: la ubicación es del garante, no del cliente (ídem `addContact`). */
   async addLocation(clientId: string, dto: CreateLocationDto) {
-    return this.subCreate(clientId, 'location', (tx) =>
-      tx.clientLocation.create({
+    return this.subCreate(clientId, 'location', async (tx) => {
+      await this.assertRelationOf(tx, clientId, dto.relationId);
+      return tx.clientLocation.create({
         data: {
           accountId: this.tenant.accountId,
           clientId,
+          relationId: dto.relationId,
           locationType: dto.locationType,
           address: this.enc(dto.address),
           zone: dto.zone,
@@ -266,8 +303,8 @@ export class ClientsService {
           visitSchedule: dto.visitSchedule as Prisma.InputJsonValue | undefined,
           riskLevel: dto.riskLevel,
         },
-      }),
-    );
+      });
+    });
   }
 
   /**

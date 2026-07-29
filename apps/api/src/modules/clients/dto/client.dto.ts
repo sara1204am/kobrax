@@ -10,6 +10,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   Min,
   ValidateNested,
@@ -29,6 +30,8 @@ export class CreateContactDto {
   @IsString() @IsNotEmpty() value!: string; // se cifra en reposo
   @IsOptional() @IsBoolean() isPrimary?: boolean;
   @IsOptional() @IsString() notes?: string;
+  /** Cuelga el teléfono de un garante del cliente en vez del cliente mismo (misma tabla). */
+  @IsOptional() @IsUUID() relationId?: string;
 }
 
 export class CreateLocationDto {
@@ -41,6 +44,8 @@ export class CreateLocationDto {
   @IsOptional() @IsArray() @IsString({ each: true }) photoUrls?: string[];
   @IsOptional() @IsObject() visitSchedule?: Record<string, unknown>;
   @IsOptional() @IsString() riskLevel?: string;
+  /** Ídem `CreateContactDto`: la ubicación es del garante, no del cliente. */
+  @IsOptional() @IsUUID() relationId?: string;
 }
 
 /** Corrección de una ubicación existente: todo opcional, se escribe sólo lo que viene. */
@@ -51,6 +56,15 @@ export class UpdateLocationDto {
   @IsOptional() @Type(() => Number) @IsLatitude() latitude?: number;
   @IsOptional() @Type(() => Number) @IsLongitude() longitude?: number;
   @IsOptional() @IsString() referenceNotes?: string;
+}
+
+/** Edición de un garante ya guardado: todo opcional. Sus teléfonos y ubicaciones van por su propia vía. */
+export class UpdateRelationDto {
+  @IsOptional() @IsString() @IsNotEmpty() relatedName?: string;
+  @IsOptional() @IsEnum(RelationshipType) relationshipType?: RelationshipType;
+  @IsOptional() @IsString() gender?: string;
+  @IsOptional() @IsBoolean() isContactable?: boolean;
+  @IsOptional() @IsString() notes?: string;
 }
 
 export class CreateRelationDto {

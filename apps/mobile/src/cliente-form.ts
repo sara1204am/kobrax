@@ -11,8 +11,16 @@ export type LocationTypeValue = 'HOME' | 'WORK' | 'GUARANTOR' | 'FAMILY' | 'OTHE
 export type RelationTypeValue = 'GUARANTOR' | 'FAMILY' | 'COWORKER' | 'NEIGHBOR' | 'OTHER';
 export type StatusValue = 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
 
+/**
+ * `serverId` = la fila ya existe en el server (viene de `hydrateCliente`). Sin él, es nueva y se
+ * crea. Es lo que le permite a la edición saber qué actualizar, qué crear y qué borrar.
+ */
+export interface RowFromServer {
+  serverId?: string;
+}
+
 /** El teléfono con WhatsApp se guarda como `ContactType.WHATSAPP` (decisión 2026-07-14). */
-export interface ContactRow {
+export interface ContactRow extends RowFromServer {
   id: string;
   contactType: ContactTypeValue;
   value: string;
@@ -20,7 +28,7 @@ export interface ContactRow {
   isPrimary: boolean;
 }
 export type CoordMode = 'manual' | 'gps' | 'map';
-export interface LocationRow {
+export interface LocationRow extends RowFromServer {
   id: string;
   locationType: LocationTypeValue;
   address: string;
@@ -32,7 +40,7 @@ export interface LocationRow {
   referenceNotes: string;
   photoUrls: string[];
 }
-export interface RelationRow {
+export interface RelationRow extends RowFromServer {
   id: string;
   relatedName: string;
   relationshipType: RelationTypeValue;
@@ -85,6 +93,101 @@ export function clienteEnPunto(point: { latitude: number; longitude: number }): 
   return {
     ...initialCliente(),
     locations: [{ ...loc, coordMode: 'map', latitude: point.latitude.toFixed(6), longitude: point.longitude.toFixed(6) }],
+  };
+}
+
+/**
+ * Server → formulario. Es la vuelta de `buildClientePayload`: hidrata el MISMO formulario que usa el
+ * alta, marcando cada fila con el id que tiene en el server (`serverId`) para que al guardar se sepa
+ * qué actualizar y qué crear. Las filas sin `serverId` son nuevas.
+ */
+export function hydrateCliente(d: {
+  clientType: 'PERSON' | 'COMPANY';
+  firstName?: string;
+  lastName?: string;
+  businessName?: string;
+  nationalId: string | null;
+  gender?: string;
+  riskSegment?: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
+  contacts?: { id: string; contactType: string; value: string | null; isPrimary: boolean }[];
+  locations?: {
+    id: string;
+    locationType: string;
+    address: string | null;
+    zone?: string;
+    latitude?: number;
+    longitude?: number;
+    referenceNotes?: string;
+    photoUrls?: string[];
+  }[];
+  relations?: {
+    id: string;
+    relatedName: string;
+    relationshipType: string;
+    gender?: string;
+    isContactable: boolean;
+    notes?: string;
+    contacts?: { id: string; contactType: string; value: string | null; isPrimary: boolean }[];
+    locations?: {
+      id: string;
+      locationType: string;
+      address: string | null;
+      zone?: string;
+      latitude?: number;
+      longitude?: number;
+      referenceNotes?: string;
+      photoUrls?: string[];
+    }[];
+  }[];
+}): ClienteForm {
+  const contacts = (rows: NonNullable<typeof d.contacts>): ContactRow[] =>
+    rows.map((c) => ({
+      id: c.id,
+      serverId: c.id,
+      // El server modela WhatsApp como un tipo aparte; el formulario lo muestra como un switch.
+      contactType: c.contactType === 'EMAIL' ? 'EMAIL' : 'PHONE',
+      value: c.value ?? '',
+      hasWhatsApp: c.contactType === 'WHATSAPP',
+      isPrimary: c.isPrimary,
+    }));
+  const locations = (rows: NonNullable<typeof d.locations>): LocationRow[] =>
+    rows.map((l) => ({
+      id: l.id,
+      serverId: l.id,
+      locationType: l.locationType as LocationRow['locationType'],
+      address: l.address ?? '',
+      zone: l.zone ?? '',
+      latitude: l.latitude != null ? String(l.latitude) : '',
+      longitude: l.longitude != null ? String(l.longitude) : '',
+      // Con punto cargado se abre en modo mapa: es donde se ve y se corrige.
+      coordMode: l.latitude != null ? 'map' : 'manual',
+      referenceNotes: l.referenceNotes ?? '',
+      photoUrls: l.photoUrls ?? [],
+    }));
+
+  return {
+    clientType: d.clientType,
+    firstName: d.firstName ?? '',
+    lastName: d.lastName ?? '',
+    nationalId: d.nationalId ?? '',
+    gender: d.gender ?? '',
+    businessName: d.businessName ?? '',
+    riskSegment: d.riskSegment ?? '',
+    status: d.status,
+    contacts: contacts(d.contacts ?? []),
+    locations: locations(d.locations ?? []),
+    relations: (d.relations ?? []).map((r) => ({
+      id: r.id,
+      serverId: r.id,
+      relatedName: r.relatedName,
+      relationshipType: r.relationshipType as RelationRow['relationshipType'],
+      gender: r.gender ?? '',
+      isContactable: r.isContactable,
+      notes: r.notes ?? '',
+      contacts: contacts(r.contacts ?? []),
+      locations: locations(r.locations ?? []),
+    })),
   };
 }
 

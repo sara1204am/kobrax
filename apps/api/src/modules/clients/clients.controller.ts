@@ -26,6 +26,8 @@ import {
   ListClientsQueryDto,
   UpdateClientDto,
   UpdateContactDto,
+  UpdateLocationDto,
+  UpdateRelationDto,
 } from './dto/client.dto';
 
 @Controller('clients')
@@ -106,6 +108,17 @@ export class ClientsController {
     return this.clients.addLocation(id, dto);
   }
 
+  /** Corregir una dirección o marcarle el punto sin perder su id, sus fotos ni su referencia. */
+  @Patch(':id/locations/:lid')
+  @Roles(Permission.CLIENT_WRITE)
+  updateLocation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('lid', ParseUUIDPipe) lid: string,
+    @Body() dto: UpdateLocationDto,
+  ) {
+    return this.clients.updateLocation(id, lid, dto);
+  }
+
   @Delete(':id/locations/:lid')
   @Roles(Permission.CLIENT_WRITE)
   @HttpCode(204)
@@ -120,6 +133,17 @@ export class ClientsController {
   @Roles(Permission.CLIENT_WRITE)
   addRelation(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateRelationDto) {
     return this.clients.addRelation(id, dto);
+  }
+
+  /** Editar al garante ya guardado. Sus teléfonos y ubicaciones van por sus propias rutas, con `relationId`. */
+  @Patch(':id/relations/:rid')
+  @Roles(Permission.CLIENT_WRITE)
+  updateRelation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('rid', ParseUUIDPipe) rid: string,
+    @Body() dto: UpdateRelationDto,
+  ) {
+    return this.clients.updateRelation(id, rid, dto);
   }
 
   @Delete(':id/relations/:rid')

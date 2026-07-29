@@ -49,6 +49,10 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     Permission.ROUTE_READ,
     Permission.ROUTE_EXECUTE,
     Permission.CLIENT_READ,
+    // El cobrador da de alta clientes en campo y corrige lo que encuentra mal (una dirección sin
+    // punto, un teléfono viejo). Sin esto, el formulario de edición se ve pero no guarda.
+    // Toda mutación queda auditada; los permisos finos son F3/P10.
+    Permission.CLIENT_WRITE,
     Permission.CREDIT_READ,
   ],
   [RoleType.AUDITOR]: [

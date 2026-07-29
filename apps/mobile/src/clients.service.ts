@@ -77,7 +77,37 @@ export function createClient(input: NewClientInput): Promise<MutateResult<Create
   return apiMutate<CreatedClient>('/clients', 'POST', input);
 }
 
-/** Detalle del cliente para prellenar la edición (§5.4). `nationalId` viene enmascarado (PII). */
+export interface ClientContactDetail {
+  id: string;
+  contactType: 'PHONE' | 'WHATSAPP' | 'EMAIL';
+  value: string | null;
+  isPrimary: boolean;
+}
+export interface ClientLocationDetail {
+  id: string;
+  locationType: 'HOME' | 'WORK' | 'GUARANTOR' | 'FAMILY' | 'OTHER';
+  address: string | null;
+  zone?: string;
+  latitude?: number;
+  longitude?: number;
+  referenceNotes?: string;
+  photoUrls?: string[];
+}
+export interface ClientRelationDetail {
+  id: string;
+  relatedName: string;
+  relationshipType: 'GUARANTOR' | 'FAMILY' | 'COWORKER' | 'NEIGHBOR' | 'OTHER';
+  gender?: string;
+  isContactable: boolean;
+  notes?: string;
+  contacts?: ClientContactDetail[];
+  locations?: ClientLocationDetail[];
+}
+
+/**
+ * Detalle del cliente para prellenar el formulario. Con `reveal` los teléfonos y direcciones vienen
+ * **en claro** (el server lo audita) — sin eso, editar guardaría la máscara encima del dato real.
+ */
 export interface ClientDetail {
   id: string;
   clientType: 'PERSON' | 'COMPANY';
@@ -88,10 +118,44 @@ export interface ClientDetail {
   nationalId: string | null;
   status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
   riskSegment?: string;
+  contacts?: ClientContactDetail[];
+  locations?: ClientLocationDetail[];
+  relations?: ClientRelationDetail[];
 }
 
-export function getClient(id: string): Promise<QueryResult<ClientDetail>> {
-  return apiQuery<ClientDetail>(`/clients/${id}`);
+export function getClient(id: string, reveal = false): Promise<QueryResult<ClientDetail>> {
+  return apiQuery<ClientDetail>(`/clients/${id}${reveal ? '?reveal=true' : ''}`);
+}
+
+// ── Sub-recursos (los usa el formulario único al guardar una edición) ─────────
+export function addContact(clientId: string, input: NewContactInput & { relationId?: string }) {
+  return apiMutate<{ id: string }>(`/clients/${clientId}/contacts`, 'POST', input);
+}
+export function updateContact(clientId: string, contactId: string, input: Partial<NewContactInput>) {
+  return apiMutate<{ id: string }>(`/clients/${clientId}/contacts/${contactId}`, 'PATCH', input);
+}
+export function removeContact(clientId: string, contactId: string) {
+  return apiMutate<null>(`/clients/${clientId}/contacts/${contactId}`, 'DELETE');
+}
+
+export function addLocation(clientId: string, input: NewLocationInput & { relationId?: string }) {
+  return apiMutate<{ id: string }>(`/clients/${clientId}/locations`, 'POST', input);
+}
+export function updateLocation(clientId: string, locationId: string, input: NewLocationInput) {
+  return apiMutate<{ id: string }>(`/clients/${clientId}/locations/${locationId}`, 'PATCH', input);
+}
+export function removeLocation(clientId: string, locationId: string) {
+  return apiMutate<null>(`/clients/${clientId}/locations/${locationId}`, 'DELETE');
+}
+
+export function addRelation(clientId: string, input: NewRelationInput) {
+  return apiMutate<{ id: string }>(`/clients/${clientId}/relations`, 'POST', input);
+}
+export function updateRelation(clientId: string, relationId: string, input: Partial<Omit<NewRelationInput, 'contacts' | 'locations'>>) {
+  return apiMutate<{ id: string }>(`/clients/${clientId}/relations/${relationId}`, 'PATCH', input);
+}
+export function removeRelation(clientId: string, relationId: string) {
+  return apiMutate<null>(`/clients/${clientId}/relations/${relationId}`, 'DELETE');
 }
 
 export interface UpdateClientPatch {
