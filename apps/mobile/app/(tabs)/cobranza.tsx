@@ -1,13 +1,30 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as SecureStore from 'expo-secure-store';
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
+import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
-import { CaseCard, EmptyState, PORTFOLIO_STATUS_META, SegmentTabs } from '@/ui';
+import { BottomSheet, CaseCard, Chips, EmptyState, ListRow, PORTFOLIO_STATUS_META, SectionLabel, SegmentTabs, TONE_SOLID } from '@/ui';
 import { money } from '@/agenda-form';
 import { listCases } from '@/cases.service';
-import { filterPortfolio, groupPortfolio, type ClientPortfolio, type PortfolioChip } from '@/portfolio';
+import {
+  filterPortfolio,
+  groupPortfolio,
+  PORTFOLIO_SORT_LABEL,
+  sortPortfolio,
+  type ClientPortfolio,
+  type PortfolioChip,
+  type PortfolioSort,
+} from '@/portfolio';
+import { clientDisplayName, type ClientHit } from '@/clients.service';
+import { useClientSearch } from '@/use-client-search';
+
+const SORTS = (Object.keys(PORTFOLIO_SORT_LABEL) as PortfolioSort[]).map((value) => ({
+  value,
+  label: PORTFOLIO_SORT_LABEL[value],
+}));
 
 const CHIPS: { key: PortfolioChip; label: string; danger?: boolean }[] = [
   { key: 'all', label: 'Todos' },
@@ -17,6 +34,10 @@ const CHIPS: { key: PortfolioChip; label: string; danger?: boolean }[] = [
   { key: 'paid', label: 'Pagados' },
 ];
 
+// Preferencia de densidad (tarjetas ↔ lista), en SecureStore como los flags de import/biometría:
+// cero deps nuevas. ponytail: clave global, no por usuario — es una preferencia visual, no un dato.
+const VIEW_KEY = 'cartera.compact';
+
 type Load =
   | { status: 'loading' }
   | { status: 'offline' }
@@ -24,14 +45,20 @@ type Load =
   | { status: 'ok'; cards: ClientPortfolio[] };
 
 /**
- * Cartera (V3, §5.3): lista centrada en el cliente con la deuda agregada. Buscador local (nombre +
- * documento) + chips de filtro. Los datos salen de `GET /cases?view=portfolio` (ya scoped al cobrador);
- * agrupar/estado/orden/buscar es lógica pura de `src/portfolio.ts`. Reemplaza el placeholder del Slice 0.
+ * Cartera (V3, §5.3): lista centrada en el cliente con la deuda agregada. Buscador (nombre + documento +
+ * zona) + chips de filtro + orden elegible. Los datos salen de `GET /cases?view=portfolio` (ya scoped al
+ * cobrador); agrupar/estado/orden/buscar es lógica pura de `src/portfolio.ts`.
+ *
+ * **La búsqueda es global (S4)**: además de filtrar lo cargado, consulta `GET /clients?q=`. Sin eso, un
+ * cliente sin préstamo —o más allá de la página de casos— no existe en ninguna pantalla de la app.
  */
 export default function CobranzaScreen() {
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [chip, setChip] = useState<PortfolioChip>('all');
   const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<PortfolioSort>('mora');
+  const [sortSheet, setSortSheet] = useState(false);
+  const [compact, setCompact] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const reqRef = useRef(0);
 
@@ -52,6 +79,16 @@ export default function CobranzaScreen() {
     }, [fetchCartera]),
   );
 
+  useEffect(() => {
+    void SecureStore.getItemAsync(VIEW_KEY).then((v) => setCompact(v === '1'));
+  }, []);
+
+  function toggleView() {
+    const next = !compact;
+    setCompact(next);
+    void SecureStore.setItemAsync(VIEW_KEY, next ? '1' : '0');
+  }
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchCartera();
@@ -69,7 +106,15 @@ export default function CobranzaScreen() {
       })),
     [cards, query],
   );
-  const visible = useMemo(() => filterPortfolio(cards, chip, query), [cards, chip, query]);
+  const visible = useMemo(() => sortPortfolio(filterPortfolio(cards, chip, query), sort), [cards, chip, query, sort]);
+
+  // Búsqueda global: los clientes del tenant que NO están en la cartera cargada (sin préstamo, de otro
+  // cobrador, o más allá de la página). El hook trae el debounce; acá sólo se descarta lo repetido.
+  const remoteHits = useClientSearch(query);
+  const others = useMemo(() => {
+    const known = new Set(cards.map((c) => c.clientId));
+    return remoteHits.filter((h) => !known.has(h.id));
+  }, [remoteHits, cards]);
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
@@ -90,6 +135,24 @@ export default function CobranzaScreen() {
       {load.status === 'ok' && (
         <View style={styles.chips}>
           <SegmentTabs items={chipItems} value={chip} onChange={(k) => setChip(k as PortfolioChip)} />
+          <View style={styles.tools}>
+            <Pressable
+              style={styles.sortPill}
+              onPress={toggleView}
+              accessibilityRole="button"
+              accessibilityLabel={compact ? 'Ver en tarjetas' : 'Ver en lista compacta'}
+            >
+              <Ionicons name={compact ? 'grid-outline' : 'list-outline'} size={16} color={COLORS.navy} />
+            </Pressable>
+            <Pressable
+              style={styles.sortPill}
+              onPress={() => setSortSheet(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Ordenar por ${PORTFOLIO_SORT_LABEL[sort]}`}
+            >
+              <Text style={styles.sortText}>⇅ {PORTFOLIO_SORT_LABEL[sort]}</Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -101,7 +164,7 @@ export default function CobranzaScreen() {
         <EmptyState icon="📴" title="Sin conexión" hint="Tu cartera aparecerá cuando vuelva la red." />
       ) : load.status === 'error' ? (
         <EmptyState icon="⚠️" title="No se pudo cargar" hint="Reintentá en un momento." />
-      ) : visible.length === 0 ? (
+      ) : visible.length === 0 && others.length === 0 ? (
         <EmptyState
           icon="🔍"
           title={query || chip !== 'all' ? 'Sin resultados' : 'Cartera vacía'}
@@ -109,14 +172,29 @@ export default function CobranzaScreen() {
         />
       ) : (
         <FlashList
+          // FlashList recicla las celdas y cachea el alto: al cambiar de densidad no basta con que
+          // `renderItem` devuelva otro componente — hay que remontar la lista.
+          key={compact ? 'compact' : 'cards'}
           data={visible}
           keyExtractor={(c) => c.clientId}
-          estimatedItemSize={92}
+          estimatedItemSize={compact ? 48 : 92}
           contentContainerStyle={{ padding: SPACING.lg, paddingBottom: SPACING.xxl * 2 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.navy} />}
-          renderItem={({ item }) => <Card card={item} />}
+          renderItem={({ item }) => (compact ? <CompactRow card={item} /> : <Card card={item} />)}
+          ListFooterComponent={others.length > 0 ? <Others hits={others} /> : null}
         />
       )}
+
+      <BottomSheet visible={sortSheet} onClose={() => setSortSheet(false)} title="Ordenar por">
+        <Chips
+          options={SORTS}
+          value={sort}
+          onChange={(v) => {
+            setSort(v);
+            setSortSheet(false);
+          }}
+        />
+      </BottomSheet>
 
       <Pressable
         style={styles.fab}
@@ -126,6 +204,27 @@ export default function CobranzaScreen() {
       >
         <Text style={styles.fabPlus}>+</Text>
       </Pressable>
+    </View>
+  );
+}
+
+/**
+ * Resultados de la búsqueda global que **no** están en la cartera cargada. Sin deuda ni estado a propósito:
+ * `GET /clients` no los trae, e inventar un "Bs 0" sería mentirle al cobrador.
+ */
+function Others({ hits }: { hits: ClientHit[] }) {
+  return (
+    <View style={{ marginTop: SPACING.lg, gap: SPACING.sm }}>
+      <SectionLabel>Otros clientes</SectionLabel>
+      <Text style={styles.othersHint}>No están en tu cartera de hoy.</Text>
+      {hits.map((h) => (
+        <ListRow
+          key={h.id}
+          title={clientDisplayName(h)}
+          subtitle={h.nationalId ? `CI ${h.nationalId}` : undefined}
+          onPress={() => router.push(`/cliente/${h.id}`)}
+        />
+      ))}
     </View>
   );
 }
@@ -151,6 +250,32 @@ function Card({ card }: { card: ClientPortfolio }) {
   );
 }
 
+/**
+ * Fila compacta (una línea por cliente): punto de estado + nombre + monto. Misma info accionable que la
+ * tarjeta pero ~4x más clientes por pantalla; el detalle sigue a un toque. Sin zona ni línea secundaria
+ * a propósito — ponytail: si hace falta más contexto, está la vista en tarjetas.
+ */
+function CompactRow({ card }: { card: ClientPortfolio }) {
+  const overdue = card.maxDaysPastDue > 0;
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.compactRow, pressed && { backgroundColor: COLORS.bg }]}
+      accessibilityRole="button"
+      accessibilityLabel={`${card.name}, ${PORTFOLIO_STATUS_META[card.status].label}, ${money(card.totalDebt, card.currency)}`}
+      onPress={() => router.push(`/cliente/${card.clientId}`)}
+    >
+      <View style={[styles.dot, { backgroundColor: TONE_SOLID[PORTFOLIO_STATUS_META[card.status].tone] }]} />
+      <Text style={styles.compactName} numberOfLines={1}>
+        {card.name}
+      </Text>
+      {overdue && <Text style={styles.compactDays}>{card.maxDaysPastDue}d</Text>}
+      <Text style={[styles.compactAmount, overdue && { color: COLORS.danger }]} numberOfLines={1}>
+        {money(card.totalDebt, card.currency)}
+      </Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   header: { backgroundColor: COLORS.navy, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md, gap: SPACING.md },
   headerTitle: { color: COLORS.white, fontSize: 20, fontWeight: '700', paddingTop: SPACING.md },
@@ -162,7 +287,33 @@ const styles = StyleSheet.create({
     ...TYPE.body,
     color: COLORS.text,
   },
-  chips: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md },
+  chips: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, gap: SPACING.sm },
+  sortPill: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.pill,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
+  },
+  sortText: { ...TYPE.caption, color: COLORS.navy, fontWeight: '600' },
+  tools: { flexDirection: 'row', justifyContent: 'flex-end', gap: SPACING.sm },
+  compactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    paddingHorizontal: SPACING.md,
+    minHeight: 48, // toque cómodo con guantes, sin desperdiciar alto
+  },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  compactName: { ...TYPE.body, flex: 1, color: COLORS.text, fontWeight: '600' },
+  compactDays: { ...TYPE.caption, color: COLORS.danger, fontWeight: '700' },
+  compactAmount: { ...TYPE.body, color: COLORS.navy, fontWeight: '700' },
+  othersHint: { ...TYPE.caption, color: COLORS.muted, marginTop: -SPACING.xs },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   fab: {
     position: 'absolute', right: SPACING.lg, bottom: SPACING.lg, width: 56, height: 56, borderRadius: RADIUS.pill,

@@ -12,13 +12,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
-import { JwtAuthGuard, type AuthenticatedUser } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ClientsService } from './clients.service';
-import { insufficientPiiPermission } from './clients.errors';
 import {
   CreateAttachmentDto,
   CreateClientDto,
@@ -50,16 +48,16 @@ export class ClientsController {
 
   @Get(':id')
   @Roles(Permission.CLIENT_READ)
-  findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: AuthenticatedUser,
-    @Query('reveal') reveal?: string,
-  ) {
-    const wantReveal = reveal === 'true';
-    if (wantReveal && !user.permissions.includes(Permission.CLIENT_PII_READ)) {
-      throw insufficientPiiPermission();
-    }
-    return this.clients.findOne(id, wantReveal);
+  /**
+   * Quien puede ver al cliente puede verlo completo, y el revelado queda auditado
+   * (`client/PII_REVEAL`). Antes exigía `CLIENT_PII_READ`, que el cobrador NO tiene: el formulario de
+   * edición mostraba la PII enmascarada y guardarlo escribía la máscara encima del dato real.
+   *
+   * ponytail: los permisos finos son F3/P10 — se construye con la capacidad encendida y el guard se
+   * cablea al final; no se ramifica por rol ahora.
+   */
+  findOne(@Param('id', ParseUUIDPipe) id: string, @Query('reveal') reveal?: string) {
+    return this.clients.findOne(id, reveal === 'true');
   }
 
   @Patch(':id')

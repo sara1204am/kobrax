@@ -13,6 +13,7 @@ import {
   CreateClientDto,
   CreateContactDto,
   CreateLocationDto,
+  UpdateLocationDto,
   CreateRelationDto,
   ListClientsQueryDto,
   UpdateClientDto,
@@ -267,6 +268,31 @@ export class ClientsService {
         },
       }),
     );
+  }
+
+  /**
+   * Corrige una ubicación existente. Sin esto, arreglar una dirección o marcarle el punto obliga a
+   * borrarla y crear otra: cambia el id y se pierden sus fotos y su referencia. Sólo se escriben los
+   * campos que vienen — `address` se cifra como en el alta.
+   */
+  async updateLocation(clientId: string, locationId: string, dto: UpdateLocationDto) {
+    const updated = await this.tx(async (tx) => {
+      const found = await tx.clientLocation.findFirst({ where: { id: locationId, clientId }, select: { id: true } });
+      if (!found) throw resourceNotFound();
+      return tx.clientLocation.update({
+        where: { id: locationId },
+        data: {
+          ...(dto.locationType !== undefined && { locationType: dto.locationType }),
+          ...(dto.address !== undefined && { address: this.enc(dto.address) }),
+          ...(dto.zone !== undefined && { zone: dto.zone }),
+          ...(dto.latitude !== undefined && { latitude: dto.latitude }),
+          ...(dto.longitude !== undefined && { longitude: dto.longitude }),
+          ...(dto.referenceNotes !== undefined && { referenceNotes: dto.referenceNotes }),
+        },
+      });
+    });
+    await this.audit.record({ entity: 'client_location', entityId: locationId, action: 'UPDATE', after: updated, redactKeys: CLIENT_REDACT });
+    return updated;
   }
 
   async addRelation(clientId: string, dto: CreateRelationDto) {

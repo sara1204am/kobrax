@@ -4,6 +4,8 @@ import {
   IsBoolean,
   IsEnum,
   IsInt,
+  IsLatitude,
+  IsLongitude,
   IsNotEmpty,
   IsObject,
   IsOptional,
@@ -39,6 +41,16 @@ export class CreateLocationDto {
   @IsOptional() @IsArray() @IsString({ each: true }) photoUrls?: string[];
   @IsOptional() @IsObject() visitSchedule?: Record<string, unknown>;
   @IsOptional() @IsString() riskLevel?: string;
+}
+
+/** Corrección de una ubicación existente: todo opcional, se escribe sólo lo que viene. */
+export class UpdateLocationDto {
+  @IsOptional() @IsEnum(LocationType) locationType?: LocationType;
+  @IsOptional() @IsString() address?: string;
+  @IsOptional() @IsString() zone?: string;
+  @IsOptional() @Type(() => Number) @IsLatitude() latitude?: number;
+  @IsOptional() @Type(() => Number) @IsLongitude() longitude?: number;
+  @IsOptional() @IsString() referenceNotes?: string;
 }
 
 export class CreateRelationDto {

@@ -1,5 +1,8 @@
 // ui.tsx importa el net store (NetInfo nativo) para OfflineIndicator; acá no lo renderizamos.
 jest.mock('./store/net', () => ({ useNetStore: (sel: (s: unknown) => unknown) => sel({ isConnected: true, pendingCount: 0 }) }));
+// Los íconos cargan expo-font, que toca módulos nativos y revienta en jest ("__fbBatchedBridgeConfig
+// is not set"). Acá sólo importan las etiquetas y los tonos, no el glifo.
+jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 
 import { render } from '@testing-library/react-native';
 import { AgendaItemStatus, AgendaItemType, AgendaOutcome, CasePriority, CaseStatus, RouteStatus, RouteStopStatus } from '@kobrax/shared';

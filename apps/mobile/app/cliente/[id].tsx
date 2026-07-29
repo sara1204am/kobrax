@@ -9,6 +9,7 @@ import { AmountInput, BottomSheet, Chips, EmptyState, Header, PORTFOLIO_STATUS_M
 import { Button, ErrorBanner, Field } from '@/components';
 import { money, MONTHS } from '@/agenda-form';
 import { clientContext, type AgendaClientContext, type CreditOption } from '@/agenda.service';
+import { clientDisplayName, getClient, type ClientDetail } from '@/clients.service';
 import { addActivity, getCase, type CaseDetail } from '@/cases.service';
 import { createPayment, listPayments, type PaymentItem, type PaymentMethod } from '@/payments.service';
 import { uploadImage } from '@/uploads.service';
@@ -45,7 +46,9 @@ function onlyDigits(s?: string | null): string {
 export default function ClienteFichaScreen() {
   const { id: clientId } = useLocalSearchParams<{ id: string }>();
   const [ctx, setCtx] = useState<AgendaClientContext | null>(null);
-  const [load, setLoad] = useState<'loading' | 'ok' | 'offline' | 'error'>('loading');
+  const [load, setLoad] = useState<'loading' | 'ok' | 'offline' | 'error' | 'sin-creditos'>('loading');
+  /** Identidad mínima cuando no hay contexto de cobranza que mostrar (ver `loadAll`). */
+  const [basic, setBasic] = useState<ClientDetail | null>(null);
   const [creditId, setCreditId] = useState<string | null>(null);
   const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [payments, setPayments] = useState<PaymentItem[]>([]);
@@ -65,7 +68,17 @@ export default function ClienteFichaScreen() {
   const loadAll = useCallback(async () => {
     const res = await clientContext(clientId);
     if (res.status === 'offline') return setLoad('offline');
-    if (res.status !== 'ok') return setLoad('error');
+    if (res.status === 'unauthenticated') return setLoad('error');
+    // Un cliente sin préstamos asignados a mí NO es un error: la búsqueda global (S4) lo encuentra y
+    // `clientContext` responde AGENDA_002. Antes caía en "No se pudo cargar", que era mentira y un
+    // callejón sin salida. Se degrada a la identidad, que `client:read` sí puede leer sin caso.
+    if (res.status !== 'ok' || res.data.credits.length === 0) {
+      const only = await getClient(clientId);
+      if (only.status === 'offline') return setLoad('offline');
+      if (only.status !== 'ok') return setLoad('error');
+      setBasic(only.data);
+      return setLoad('sin-creditos');
+    }
     setCtx(res.data);
     setLoad('ok');
     const first = res.data.credits.find((c) => c.creditId === creditId) ?? res.data.credits[0];
@@ -124,6 +137,30 @@ export default function ClienteFichaScreen() {
       </View>
     );
   }
+  if (load === 'sin-creditos' && basic) {
+    const name = clientDisplayName(basic);
+    return (
+      <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+        <Header title="Ficha" onBack={() => router.back()} />
+        <View style={{ padding: SPACING.lg }}>
+          <Text style={[styles.name, { flex: 0 }]}>{name}</Text>
+          <Text style={styles.sub}>{basic.nationalId ?? '—'}</Text>
+        </View>
+        <EmptyState
+          icon="📄"
+          title="Sin préstamos registrados"
+          hint="Este cliente está en el sistema, pero todavía no tiene un préstamo con vos."
+        />
+        <View style={{ padding: SPACING.lg }}>
+          <Button
+            label="Registrar préstamo"
+            onPress={() => router.push({ pathname: '/prestamo/nuevo', params: { clientId, name } })}
+          />
+        </View>
+      </View>
+    );
+  }
+
   if (load !== 'ok' || !ctx || !selected) {
     return (
       <View style={{ flex: 1, backgroundColor: COLORS.bg }}>

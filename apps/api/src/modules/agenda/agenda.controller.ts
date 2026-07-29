@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { UpdateLocationDto } from '../clients/dto/client.dto';
 import { Permission } from '@kobrax/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -51,6 +52,17 @@ export class AgendaController {
   @Roles(Permission.AGENDA_WRITE)
   addClientLocation(@Param('clientId', ParseUUIDPipe) clientId: string, @Body() dto: AddClientLocationDto) {
     return this.agenda.addClientLocation(clientId, dto);
+  }
+
+  /** Corrige una dirección ya cargada (marcarle el punto a una importada). Mismo scope que el alta. */
+  @Patch('clients/:clientId/locations/:locationId')
+  @Roles(Permission.AGENDA_WRITE)
+  updateClientLocation(
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Body() dto: UpdateLocationDto,
+  ) {
+    return this.agenda.updateClientLocation(clientId, locationId, dto);
   }
 
   @Get()

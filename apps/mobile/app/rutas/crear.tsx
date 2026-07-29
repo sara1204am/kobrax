@@ -212,7 +212,7 @@ export default function CrearRutaScreen() {
 
       <BottomSheet visible={sheet === 'sin-ubicacion'} onClose={() => setSheet(null)} title="Sin ubicación cargada">
         <Text style={[TYPE.secondary, { marginBottom: SPACING.md }]}>
-          Estos clientes no se pueden pintar en el mapa. Cargales la ubicación desde su ficha y aparecen acá.
+          Estos clientes no se pueden pintar en el mapa. Tocá uno para cargarle el punto y aparece acá.
         </Text>
         <ScrollView style={{ maxHeight: 320 }}>
           {load.sinUbicacion.map((p) => (
@@ -222,7 +222,7 @@ export default function CrearRutaScreen() {
               subtitle={p.secondaryLine || undefined}
               onPress={() => {
                 setSheet(null);
-                router.push(`/cliente/${p.clientId}`);
+                router.push(`/cliente/ubicacion?clientId=${p.clientId}&name=${encodeURIComponent(p.name)}`);
               }}
             />
           ))}

@@ -222,3 +222,16 @@ export interface NewClientLocation {
 export function addClientLocation(clientId: string, input: NewClientLocation): Promise<MutateResult<LocationOption>> {
   return apiMutate<LocationOption>(`/agenda/clients/${clientId}/locations`, 'POST', input);
 }
+
+/**
+ * Corrige una dirección ya cargada — sobre todo, marcarle el punto a una importada, que llega sin
+ * coordenadas. Se edita la que existe en vez de crear una segunda: el mapa dibuja la ubicación
+ * primaria, así que una copia nueva no serviría de nada.
+ */
+export function updateClientLocation(
+  clientId: string,
+  locationId: string,
+  input: Partial<NewClientLocation>,
+): Promise<MutateResult<LocationOption>> {
+  return apiMutate<LocationOption>(`/agenda/clients/${clientId}/locations/${locationId}`, 'PATCH', input);
+}

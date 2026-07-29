@@ -44,7 +44,8 @@ import {
   type ClientLocationType,
   type PhoneContactType,
 } from '@/agenda.service';
-import { clientDisplayName, searchClients, type ClientHit } from '@/clients.service';
+import { clientDisplayName, type ClientHit } from '@/clients.service';
+import { useClientSearch } from '@/use-client-search';
 import { listCatalog, type CatalogOption } from '@/catalogs.service';
 
 const TYPES: AgendaItemType[] = [
@@ -93,7 +94,6 @@ const LOCATION_TYPES: { key: ClientLocationType; label: string }[] = [
 export default function CrearGestionScreen() {
   const [form, dispatch] = useReducer(formReducer, undefined, () => initialForm(todayISO()));
   const [query, setQuery] = useState('');
-  const [hits, setHits] = useState<ClientHit[]>([]);
   const [ctx, setCtx] = useState<AgendaClientContext | null>(null);
   const [loadingCtx, setLoadingCtx] = useState(false);
   const [methods, setMethods] = useState<CatalogOption[]>([]);
@@ -135,15 +135,8 @@ export default function CrearGestionScreen() {
     dispatch({ t: 'details', patch: { amount: clean === '' || Number.isNaN(n) ? undefined : n } });
   }, []);
 
-  // Buscador con debounce: en gama baja, una request por tecla mata la lista.
-  useEffect(() => {
-    if (form.clientId || query.trim().length < 2) return setHits([]);
-    const id = setTimeout(async () => {
-      const res = await searchClients(query.trim());
-      setHits(res.status === 'ok' ? res.data : []);
-    }, 300);
-    return () => clearTimeout(id);
-  }, [query, form.clientId]);
+  // Buscador con debounce (compartido con la cartera): en gama baja, una request por tecla mata la lista.
+  const hits = useClientSearch(query, { enabled: !form.clientId });
 
   // Catálogos de la promesa: sólo cuando el tipo los pide, y una sola vez.
   useEffect(() => {
@@ -176,7 +169,6 @@ export default function CrearGestionScreen() {
     }
     setCtx(res.data);
     setQuery('');
-    setHits([]);
     // Con un solo crédito no hay nada que elegir.
     if (res.data.credits.length === 1) {
       const only = res.data.credits[0]!;

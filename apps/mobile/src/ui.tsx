@@ -5,6 +5,7 @@
  */
 import { type ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AgendaItemStatus, AgendaItemType, AgendaOutcome, CasePriority, CaseStatus, PortfolioStatus, RouteStatus, RouteStopStatus } from '@kobrax/shared';
 import { useNetStore } from './store/net';
@@ -64,11 +65,16 @@ export function ListRow({
   title,
   subtitle,
   right,
+  icon,
+  expanded,
   onPress,
 }: {
   title: string;
   subtitle?: string;
   right?: ReactNode;
+  icon?: keyof typeof Ionicons.glyphMap;
+  /** Fila que despliega sub-filas: cambia el `›` de la derecha por un caret arriba/abajo. */
+  expanded?: boolean;
   onPress?: () => void;
 }) {
   return (
@@ -77,6 +83,11 @@ export function ListRow({
       disabled={!onPress}
       style={({ pressed }) => [styles.row, pressed && onPress && styles.rowPressed]}
     >
+      {icon && (
+        <View style={styles.rowIcon}>
+          <Ionicons name={icon} size={20} color={COLORS.slate} />
+        </View>
+      )}
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={styles.rowTitle} numberOfLines={1}>
           {title}
@@ -88,7 +99,11 @@ export function ListRow({
         )}
       </View>
       {right}
-      {onPress && <Text style={styles.rowChevron}>›</Text>}
+      {expanded !== undefined ? (
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={COLORS.muted} />
+      ) : (
+        onPress && <Text style={styles.rowChevron}>›</Text>
+      )}
     </Pressable>
   );
 }
@@ -160,8 +175,8 @@ export function StatTile({
   );
 }
 
-/** Color sólido por tono (para la barra de acento de la tarjeta de caso). */
-const TONE_SOLID: Record<BadgeTone, string> = {
+/** Color sólido por tono (barra de acento de la tarjeta de caso, punto de la lista compacta). */
+export const TONE_SOLID: Record<BadgeTone, string> = {
   neutral: COLORS.muted,
   info: COLORS.periwinkle,
   success: COLORS.success,
@@ -538,6 +553,14 @@ const styles = StyleSheet.create({
     minHeight: 56,
   },
   rowPressed: { backgroundColor: COLORS.bg },
+  rowIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.lightBg,
+  },
   rowTitle: { ...TYPE.body, fontWeight: '600', color: COLORS.text },
   rowSubtitle: { ...TYPE.secondary },
   rowChevron: { color: COLORS.muted, fontSize: 22 },

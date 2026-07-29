@@ -22,10 +22,12 @@ import { TenantContextService } from '../../common/context/tenant-context.servic
 import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { ClientsService } from '../clients/clients.service';
+import { UpdateLocationDto } from '../clients/dto/client.dto';
 import { serializeAgendaItem } from './agenda.serializer';
 import {
   AddClientContactDto,
   AddClientLocationDto,
+
   CompleteAgendaItemDto,
   CreateAgendaItemDto,
   ListOverdueQueryDto,
@@ -402,6 +404,24 @@ export class AgendaService {
       zone: created.zone ?? undefined,
       latitude: created.latitude != null ? Number(created.latitude) : undefined,
       longitude: created.longitude != null ? Number(created.longitude) : undefined,
+    });
+  }
+
+  /**
+   * Corrige una dirección que el cliente ya tenía — típicamente marcarle el punto en el mapa a una
+   * dirección importada, que llega sin coordenadas. Mismo scope que el alta: sólo clientes con un caso
+   * del cobrador.
+   */
+  async updateClientLocation(clientId: string, locationId: string, dto: UpdateLocationDto) {
+    await this.agendableCases(clientId);
+    const updated = await this.clients.updateLocation(clientId, locationId, dto);
+    return ResponseDto.ok({
+      id: updated.id,
+      locationType: updated.locationType,
+      address: dto.address, // `updated.address` viene cifrado
+      zone: updated.zone ?? undefined,
+      latitude: updated.latitude != null ? Number(updated.latitude) : undefined,
+      longitude: updated.longitude != null ? Number(updated.longitude) : undefined,
     });
   }
 
