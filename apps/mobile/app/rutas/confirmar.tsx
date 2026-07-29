@@ -3,7 +3,7 @@ import { ActivityIndicator, Linking, StyleSheet, ScrollView, Text, View } from '
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { RouteStopStatus } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
-import { EmptyState, Header, ListRow, SectionLabel } from '@/ui';
+import { EmptyState, Header, ListRow, SectionLabel, StatTile } from '@/ui';
 import { Button } from '@/components';
 import { humanDistance, humanDuration } from '@/route-eta';
 import { actionLinks, clientContext } from '@/agenda.service';
@@ -73,9 +73,9 @@ export default function ConfirmarRutaScreen() {
         </View>
 
         <View style={styles.resumen}>
-          <Resumen label="CLIENTES" value={String(route.totalCases || (route.stops ?? []).length)} />
-          <Resumen label="RECORRIDO" value={humanDistance(route.totalDistanceKm)} />
-          <Resumen label="ESTIMADOS" value={humanDuration(route.estimatedMinutes)} />
+          <StatTile label="CLIENTES" value={String(route.totalCases || (route.stops ?? []).length)} />
+          <StatTile label="RECORRIDO" value={humanDistance(route.totalDistanceKm)} />
+          <StatTile label="ESTIMADOS" value={humanDuration(route.estimatedMinutes)} />
         </View>
 
         {next ? (
@@ -139,15 +139,6 @@ function pending(route: RouteItem): RouteStopItem[] {
   return (route.stops ?? []).filter((s) => s.status === RouteStopStatus.PENDING);
 }
 
-function Resumen({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
-      <Text style={styles.resumenValue}>{value}</Text>
-      <Text style={TYPE.caption}>{label}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLORS.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -160,7 +151,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  resumenValue: { ...TYPE.h2, color: COLORS.navy },
   nextCard: { backgroundColor: COLORS.navy, borderRadius: RADIUS.card, padding: SPACING.lg, gap: SPACING.xs },
   nextName: { fontSize: 19, fontWeight: '600', color: COLORS.white },
   nextAddress: { ...TYPE.secondary, color: COLORS.lightBg },

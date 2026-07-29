@@ -3,7 +3,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-nat
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { RouteStatus } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
-import { EmptyState, Header, ListRow, SectionLabel } from '@/ui';
+import { EmptyState, Header, ListRow, SectionLabel, StatTile } from '@/ui';
 import { Button } from '@/components';
 import { MapCanvas, type MapMarker } from '@/maps/MapCanvas';
 import { clockAt, humanDistance, humanDuration, straightLine } from '@/route-eta';
@@ -117,9 +117,9 @@ export default function PreviewRutaScreen() {
       </View>
 
       <View style={styles.stats}>
-        <Stat label="PARADAS" value={String(stops.length)} />
-        <Stat label="DISTANCIA" value={humanDistance(preview?.distanceKm)} />
-        <Stat label="DURACIÓN" value={humanDuration(preview?.minutes)} />
+        <StatTile label="PARADAS" value={String(stops.length)} />
+        <StatTile label="DISTANCIA" value={humanDistance(preview?.distanceKm)} />
+        <StatTile label="DURACIÓN" value={humanDuration(preview?.minutes)} />
       </View>
 
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.md, paddingBottom: SPACING.xxl }}>
@@ -175,15 +175,6 @@ export default function PreviewRutaScreen() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={{ flex: 1, alignItems: 'center' }}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLORS.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -198,8 +189,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  statLabel: { ...TYPE.caption, letterSpacing: 0.5 },
-  statValue: { ...TYPE.h3, color: COLORS.navy },
   aviso: {
     backgroundColor: COLORS.warningBg,
     borderRadius: RADIUS.card,
