@@ -1,5 +1,4 @@
 import type { Profile, Role, User, UserAccount } from '@prisma/client';
-import { ROLE_LABEL, type RoleType } from '@kobrax/shared';
 
 export type MemberRow = UserAccount & {
   user: User & { profile: Profile | null };
@@ -7,8 +6,11 @@ export type MemberRow = UserAccount & {
 };
 
 /**
- * Miembro del tenant. Los campos de nombre van sueltos (igual que `GET /auth/me`),
- * no concatenados: quien pinta compone.
+ * Miembro del tenant. Dos cosas van sueltas a propósito:
+ * - el nombre, sin concatenar (igual que `GET /auth/me`): quien pinta compone;
+ * - el rol como `roleName`, sin etiqueta. La etiqueta es presentación y sale de
+ *   `ROLE_LABEL` (`packages/shared`) en el cliente. Mandarla acá sería una segunda
+ *   fuente de la misma cadena.
  */
 export function serializeMember(m: MemberRow) {
   return {
@@ -20,11 +22,9 @@ export function serializeMember(m: MemberRow) {
     photoUrl: m.user.profile?.photoUrl ?? null,
     roleId: m.roleId,
     roleName: m.role.name,
-    roleLabel: ROLE_LABEL[m.role.name as RoleType] ?? m.role.name,
     isOwner: m.isOwner,
     isActive: m.isActive,
     userStatus: m.user.status,
-    lastLoginAt: m.user.lastLoginAt,
   };
 }
 
@@ -40,10 +40,5 @@ export function serializeProfile(user: User & { profile: Profile | null }) {
 }
 
 export function serializeRole(role: Role) {
-  return {
-    id: role.id,
-    name: role.name,
-    label: ROLE_LABEL[role.name as RoleType] ?? role.name,
-    level: role.level,
-  };
+  return { id: role.id, name: role.name, level: role.level };
 }

@@ -34,25 +34,22 @@ export class AccountsService {
   }
 
   async update(dto: UpdateAccountDto): Promise<ReturnType<typeof serializeAccount>> {
-    const { before, updated, memberCount } = await this.tx(async (tx) => {
+    const { before, updated } = await this.tx(async (tx) => {
       const before = await tx.account.findFirst({
         where: { id: this.tenant.accountId, deletedAt: null },
       });
       if (!before) throw accountNotFound();
-      const [updated, memberCount] = await Promise.all([
-        tx.account.update({
-          where: { id: before.id },
-          data: {
-            businessName: dto.businessName,
-            taxId: dto.taxId,
-            countryCode: dto.countryCode,
-            currencyCode: dto.currencyCode,
-            timezone: dto.timezone,
-          },
-        }),
-        tx.userAccount.count({ where: { isActive: true } }),
-      ]);
-      return { before, updated, memberCount };
+      const updated = await tx.account.update({
+        where: { id: before.id },
+        data: {
+          businessName: dto.businessName,
+          taxId: dto.taxId,
+          countryCode: dto.countryCode,
+          currencyCode: dto.currencyCode,
+          timezone: dto.timezone,
+        },
+      });
+      return { before, updated };
     });
 
     await this.audit.record({
@@ -63,6 +60,6 @@ export class AccountsService {
       after: updated,
       redactKeys: ['taxId'],
     });
-    return serializeAccount(updated, memberCount);
+    return this.findMine();
   }
 }

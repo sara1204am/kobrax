@@ -58,8 +58,12 @@ Miembros del tenant.
 
 ```
 [{ userId, email, firstName, lastName, phone, photoUrl, roleId, roleName,
-   isOwner, isActive, userStatus, lastLoginAt }]
+   isOwner, isActive, userStatus }]
 ```
+
+**El servidor no manda etiquetas.** `roleName` viaja crudo (`COLLECTOR`) y el cliente lo pinta con
+`ROLE_LABEL` de `packages/shared`. Mandar `roleLabel` sería una segunda fuente de la misma cadena. Por lo
+mismo `GET /roles` devuelve `{ id, name, level }` sin `label`.
 
 🔴 **La trampa de este slice, y es de seguridad.** `users`, `profiles` y `roles` son **tablas globales sin
 RLS** — así lo dice `prisma/rls/001_enable_rls.sql:71-74` y lo repite `auth.service.ts:251`. Un

@@ -101,7 +101,8 @@ describe('UsersService.list — aislamiento por tenant', () => {
     // Si el service tocara `tx.user.findMany`, el fake lanza y este test falla.
     assert.equal(rows.length, 1);
     assert.equal(rows[0]!.userId, OTHER);
-    assert.equal(rows[0]!.roleLabel, 'Cobrador');
+    // El nombre del rol viaja crudo; la etiqueta la pone el cliente con ROLE_LABEL.
+    assert.equal(rows[0]!.roleName, 'COLLECTOR');
   });
 
   it('no filtra por accountId a mano: el scope lo pone la RLS', async () => {
@@ -169,6 +170,6 @@ describe('UsersService.listRoles', () => {
     assert.deepEqual(calls.rolesWhere!.name, {
       in: ['ACCOUNT_ADMIN', 'SUPERVISOR', 'COLLECTOR'],
     });
-    assert.equal(roles[0]!.label, 'Administrador');
+    assert.equal(roles[0]!.name, 'ACCOUNT_ADMIN');
   });
 });
