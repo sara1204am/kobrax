@@ -61,3 +61,12 @@
 - ✅ **Import** pobló: `src/import.service.ts` (contrato + derivados puros + flags del gate + memoria del archivo de muestra), `src/file-picker.ts` (`pickImportFile`, aparte porque `expo-document-picker` toca nativo al importarse y está en el camino del login), y en `src/api.ts` → **`postMultipart` + `uploadFailure`**, que comparten las DOS subidas de la app (import y evidencia fotográfica): techo de espera de 60 s y la distinción entre "no hay red" y "el archivo no se puede abrir". Backend: `modules/imports/` con **tres motores por FORMA de archivo** (`rows` CSV · `pdf-rows` tabla en PDF · `pdf-blocks` bloques etiquetados), `field-catalog.ts` (`num()` con separadores mezclados, `splitName`, `splitPhones`) e `import-config.ts` (invariantes + `detectFileShape`).
   - ⚠ **No hay parsers por banco** (C12). Sumar un formato = configurarlo desde Ajustes, no escribir código.
   - ⚠ Excel **no se lee**: la dep `xlsx` nunca se instaló y `rows.parser` sólo hace CSV.
+- ✅ **Cartera S4** pobló: `src/use-client-search.ts` → **`useClientSearch(query, { enabled })`**, el buscador
+  de clientes con debounce (300 ms / ≥2 caracteres / race-guard por `reqId`). Estaba suelto dentro de
+  `app/agenda/crear.tsx`; ahora lo usan **agenda y cartera** — *no escribir un tercero*. Y en `src/portfolio.ts`
+  → `sortPortfolio()` + `PORTFOLIO_SORT_LABEL` (4 criterios; `mora` es el orden histórico de la lista).
+  - ⚠ El menú `Más` ahora tiene sección **Clientes** (ver cartera · nuevo · **importar** · reglas): la fila
+    del importador que pedía `plans/import/README.md §6.3` y nunca se había cableado. `/import` acepta
+    `?from=menu` → vuelve sin marcar `skip_day`.
+  - ⚠ `app/cliente/[id].tsx` ya **no** rompe con un cliente sin préstamos asignados (`AGENDA_002`): degrada a
+    `getClient` + vacío con CTA al alta de préstamo. Es el camino que abre la búsqueda global.

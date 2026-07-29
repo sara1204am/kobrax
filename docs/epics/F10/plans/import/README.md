@@ -222,6 +222,11 @@ Tres baldes, con conteo y lista expandible de *cuáles* (el motor nuevo devuelve
 ### 6.3 Desde el menú
 `Más` → **Importar datos** → entra por I1, **mismo flujo, mismo código**. Sin gate, sin flags de día.
 
+> ⏳ **Sin cablear.** La fila del menú no existe: hoy a `/import` sólo se llega por el gate post-login, y el
+> botón secundario de I1 marca `skip_day` siempre — lo que contradice el "sin flags de día" de arriba cuando
+> se entra a mano. Lo paga **[cartera/S4](../cartera/S4-menu-busqueda-orden.md) §3** (fila del menú +
+> `?from=menu`), que es donde se arma la sección *Clientes*.
+
 ---
 
 ## 7. Auditoría de reuso (Paso B) — verificada contra código

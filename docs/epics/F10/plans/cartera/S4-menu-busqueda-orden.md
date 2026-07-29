@@ -39,17 +39,24 @@ cambios de backend: **S4 no toca la API**.
 |---|---|---|---|
 | Ver cartera | Todos tus clientes y su deuda | `/(tabs)/cobranza` | pantalla ya construida (S1) |
 | Nuevo cliente | Alta manual, con o sin préstamo | `/cliente/nuevo` | pantalla ya construida (S2) |
-| **Importar clientes** | Subí el archivo de tu sistema | `/import` | **entrada nueva** — la pantalla existe, nadie podía abrirla |
+| **Importar datos** | Subí el archivo de tu sistema | `/import` | **deuda del módulo import** — ver abajo |
 | Reglas de importación | Cómo se leen las columnas del archivo | `/ajustes/importacion` | fila existente, **se renombra** |
 
 La fila de hoy se llama *"Importación"* y va a las **reglas**, no al import. Con las dos juntas el nombre
 actual es ambiguo → pasa a *"Reglas de importación"*.
 
-`/import` (`ImportGateScreen`) ya está escrito para las dos entradas: su propio comentario dice *"Entra acá el
-primer login del día si el tenant tiene `askOnLogin`, y también desde Más › Importación"*. La segunda mitad
-de esa frase nunca se cableó. **Ojo:** su botón secundario hace `router.replace('/(tabs)')` + `markImportSkipped()`,
-que es lo correcto viniendo del gate pero raro viniendo del menú → entrando desde el menú el botón debe ser
-`router.back()` sin marcar el salto. Se distingue con un param (`?from=menu`).
+> ⚠️ **Esto no lo decide S4: ya estaba decidido.** El módulo import lo especifica en su
+> [§6.3 "Desde el menú"](../import/README.md): *"`Más` → **Importar datos** → entra por I1, mismo flujo,
+> mismo código. **Sin gate, sin flags de día**"*. Nunca se cableó. S4 sólo **paga esa deuda** — y por eso
+> usa la etiqueta que ese plan ya eligió (*Importar datos*, no "Importar clientes": el archivo trae créditos
+> con su cliente, y el ancla es el crédito). `app/import/index.tsx` es **I1 Inicio Sync** (`24:1049`) y
+> pertenece a ese módulo, no a cartera. Sin pull de Figma: el cambio es de navegación, no de diseño.
+
+El código de la pantalla también lo esperaba: su comentario dice *"Entra acá el primer login del día si el
+tenant tiene `askOnLogin`, y también desde Más › Importación"*. La segunda mitad de esa frase nunca se cableó.
+**Lo único a resolver** es el botón secundario: hoy hace `router.replace('/(tabs)')` + `markImportSkipped()`,
+correcto viniendo del gate y erróneo viniendo del menú (marcaría el día como "saltado" sin que hubiera gate,
+justo lo que el §6.3 excluye con "sin flags de día") → con `?from=menu` es `router.back()` sin marcar nada.
 
 ## 4. Búsqueda global (`app/(tabs)/cobranza.tsx` + `src/clients.service.ts`)
 
@@ -57,14 +64,18 @@ Dos capas, sin romper lo que hoy funciona:
 
 1. **Local, instantánea** (lo de hoy, D6 del README): filtra la cartera cargada. Se le agrega **zona** a los
    campos que matchea (`matchesSearch` en `src/portfolio.ts` ya normaliza acentos/mayúsculas).
-2. **Servidor, en diferido**: con `query.trim().length >= 3`, debounce **350 ms**, se llama a
-   `searchClients(q)` — **ya existe** (`GET /clients?q=&status=ACTIVE&limit=20`, blind index sobre documento +
-   ILIKE sobre nombre). Los hits que **no** están en la cartera cargada se pintan al pie de la misma
+2. **Servidor, en diferido**: `useClientSearch(query)` — **hook nuevo, extraído de código que ya existe**
+   (ver §4.1). Umbral y debounce **los de hoy: ≥ 2 caracteres, 300 ms**; no se inventan valores nuevos.
+   Por debajo llama a `searchClients(q)` (`GET /clients?q=&status=ACTIVE&limit=20`, blind index sobre
+   documento + ILIKE sobre nombre). Los hits que **no** están en la cartera cargada se pintan al pie de la misma
    `FlashList` (`ListFooterComponent`), bajo un separador **"Otros clientes"**, como fila simple
    (nombre + documento enmascarado, sin deuda: esos datos no vienen de este endpoint).
-   - **Race-guard** por `reqId`, igual que `fetchCartera`.
+   - **Race-guard** por `reqId` **dentro del hook**, igual que `fetchCartera`.
    - **Offline / error** → la sección simplemente no aparece. Nunca rompe la lista local (offline-first).
-     `unauthenticated` **sí** manda a login, como el resto de las pantallas — no se traga.
+     Tampoco `unauthenticated`: ninguna pantalla de campo rutea a login por su cuenta (Home, cartera y ficha
+     muestran su estado; `api-client` ya limpió la sesión si el server la revocó), y la propia lista está
+     pidiendo datos con **la misma sesión** — así que el aviso sale de ahí. Un redirect disparado desde un
+     hook de búsqueda taparía ese mensaje.
    - **Permiso:** `COLLECTOR` ya tiene `client:read` con scope **ACCOUNT** (`seed.ts:120`), así que el
      buscador ve **todo el tenant**, no sólo lo asignado a mí. No es exposición nueva: es exactamente lo que
      ya hace el buscador del alta de agenda (`app/agenda/crear.tsx`), con la misma PII enmascarada.
@@ -74,7 +85,25 @@ Dos capas, sin romper lo que hoy funciona:
      `client.status` en `view=portfolio`.
    - La búsqueda global **ignora el chip activo** (si es global, es global). El chip sigue rigiendo la cartera local.
 
-### 4.1 🔴 Lo que destapa la búsqueda global — la ficha se cae
+### 4.1 🟡 El buscador remoto ya está escrito — se consolida, no se copia
+`app/agenda/crear.tsx:138-146` ya tiene **exactamente** este buscador: `searchClients` + `setTimeout` de
+**300 ms** + `>= 2` caracteres + `clearTimeout` en el cleanup + descarte del resultado si ya hay cliente
+elegido. Escribirlo de nuevo en `cobranza.tsx` sería la segunda copia → viola la regla de oro del
+[BASE-INVENTORY](../BASE-INVENTORY.md) ("si algo se usa en ≥2 lugares, vive acá y se importa; si encontrás un
+near-duplicado, se **consolida**, no se suma").
+
+→ **`src/use-client-search.ts` (NUEVO, mínimo):** `useClientSearch(query, { enabled })` → `ClientHit[]`.
+Encapsula debounce + umbral + cleanup + race-guard. Lo consumen **las dos** pantallas; `agenda/crear.tsx` se
+refactoriza para usarlo en la misma pasada y queda **más corto** que hoy. Es un hook, no un componente: no
+entra a `ui.tsx`; vive al lado de `clients.service.ts`, que es de donde sale su dato. Se registra en el
+BASE-INVENTORY al cerrar la etapa (tarea 9).
+
+**El hook arregla un bug latente de paso:** el `clearTimeout` de hoy cancela el **timer**, no el `fetch` ya
+lanzado — dos búsquedas rápidas pueden resolver fuera de orden y dejar en pantalla los hits de la consulta
+vieja. Por eso el guard va por `reqId` dentro del hook, no por `clearTimeout` solo. Es el tipo de arreglo
+que sólo aparece cuando se consolida en un lugar en vez de copiar.
+
+### 4.2 🔴 Lo que destapa la búsqueda global — la ficha se cae
 `app/cliente/[id].tsx` carga con `clientContext(clientId)`, que **devuelve error `AGENDA_002` si el cliente no
 tiene casos asignados a mí**, y además la pantalla exige `credits[0]` para renderizar. Un resultado de la
 búsqueda global —cliente sin préstamo, o de otro cobrador— cae hoy en **"No se pudo cargar"**, que es
@@ -115,6 +144,7 @@ array que hoy (no-regresión).
 | Filas del menú + etiqueta de sección | REUSAR | `src/ui.tsx` (`ListRow`, `SectionLabel`) |
 | Hoja de opciones + chips del selector de orden | REUSAR | `src/ui.tsx` (`BottomSheet`, `Chips`) |
 | Buscar clientes en todo el tenant | **REUSAR (ya existe)** | `src/clients.service.ts` → `searchClients()` + `clientDisplayName()` |
+| **Debounce + umbral del buscador remoto** | **CONSOLIDAR** (hoy vive suelto en una screen) | `app/agenda/crear.tsx:138-146` → sube a `src/use-client-search.ts`; las 2 pantallas lo importan |
 | Detalle de cliente sin caso asignado | **REUSAR (ya existe)** | `src/clients.service.ts` → `getClient()` |
 | Vacío / lista / tarjeta / tokens | REUSAR | `src/ui.tsx`, `src/theme.ts`, `FlashList` |
 | Alta de préstamo con cliente ya elegido | REUSAR | `app/prestamo/nuevo.tsx` (`?clientId=&name=`) |
@@ -128,9 +158,14 @@ array que hoy (no-regresión).
 2. `import/index.tsx`: `?from=menu` → botón secundario `router.back()` sin `markImportSkipped()`.
 3. `portfolio.ts`: extraer el orden actual → `sortPortfolio` con las 4 claves; `matchesSearch` + zona. Tests.
 4. `cobranza.tsx`: píldora + `BottomSheet` de orden, cableado a `sortPortfolio`.
-5. `cobranza.tsx`: búsqueda diferida (debounce + race-guard) + sección "Otros clientes" en el footer.
-6. `cliente/[id].tsx`: degradado a `getClient` + `EmptyState` "Sin préstamos" + CTA préstamo.
-7. Verificar (móvil type-check + jest + `expo export`) + handoff visual a la usuaria.
+5. **`src/use-client-search.ts`**: extraer el hook de `agenda/crear.tsx` y **refactorizar esa pantalla** para
+   consumirlo (consolidar, no sumar — §4.1). Sin cambio de comportamiento en agenda.
+6. `cobranza.tsx`: sección "Otros clientes" en el footer, alimentada por el hook.
+7. `cliente/[id].tsx`: degradado a `getClient` + `EmptyState` "Sin préstamos" + CTA préstamo.
+8. Verificar (móvil type-check + jest + `expo export`) → **`/code-review` + `/ponytail-review`** (workflow
+   §2 del [BUILD-PLAN](../../BUILD-PLAN.md), aplicar findings y re-verificar) → handoff visual a la usuaria.
+9. Al cerrar: registrar `sortPortfolio` y `use-client-search.ts` en el
+   [BASE-INVENTORY](../BASE-INVENTORY.md) y marcar S4 ✅ en el [README](./README.md).
 
 ## 8. Reglas de la fase (epic §3.3 + no-negociables)
 **Sol → contraste**: nombre y deuda en `navy`; "Otros clientes" y el criterio de orden en `muted`.
@@ -168,4 +203,7 @@ toca `(tabs)/_layout.tsx` y el mapa de pantallas del epic; se decide aparte.
 - Escribiendo el nombre de un cliente **que no está en la cartera cargada**, aparece bajo "Otros clientes" y
   **su ficha abre** — mostrando "Sin préstamos registrados" y el CTA de registrar préstamo si no tiene ninguno.
 - Sin conexión: la lista local y el menú siguen funcionando; la sección remota simplemente no aparece.
-- Verificación verde (type-check + jest + `expo export`) + **validación visual de la usuaria**.
+- **El buscador de `agenda/crear.tsx` sigue comportándose igual** después de pasarlo al hook compartido
+  (mismo umbral, mismo debounce, sin request por tecla) — es la prueba de que se consolidó y no se duplicó.
+- Verificación verde (type-check + jest + `expo export`) + **`/code-review` y `/ponytail-review` aplicados**
+  + **validación visual de la usuaria** + BASE-INVENTORY actualizado.
