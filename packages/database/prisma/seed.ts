@@ -91,6 +91,8 @@ const PERMISSIONS = [
   ['credit:pii:read', 'credits', 'READ', 'ACCOUNT'],
   ['report:read', 'reports', 'READ', 'ACCOUNT'],
   ['report:export', 'reports', 'EXECUTE', 'ACCOUNT'],
+  ['account:read', 'accounts', 'READ', 'ACCOUNT'],
+  ['account:write', 'accounts', 'UPDATE', 'ACCOUNT'],
   ['user:read', 'users', 'READ', 'ACCOUNT'],
   ['user:write', 'users', 'UPDATE', 'ACCOUNT'],
   ['user:invite', 'users', 'CREATE', 'ACCOUNT'],
@@ -105,7 +107,7 @@ const ROLES: Record<string, { level: number; perms: string[] | '*' }> = {
   ACCOUNT_ADMIN: { level: 90, perms: PERMISSIONS.map((p) => p[0]).filter((c) => c !== 'audit:read') },
   MANAGER: {
     level: 70,
-    perms: ['case:read', 'case:write', 'case:assign', 'case:close', 'payment:read', 'payment:approve', 'route:read', 'route:write', 'route:assign', 'agenda:read', 'agenda:write', 'agenda:assign', 'catalog:read', 'catalog:write', 'client:read', 'client:write', 'client:pii:read', 'client:import', 'credit:read', 'credit:write', 'credit:pii:read', 'report:read', 'report:export', 'user:read'],
+    perms: ['case:read', 'case:write', 'case:assign', 'case:close', 'payment:read', 'payment:approve', 'route:read', 'route:write', 'route:assign', 'agenda:read', 'agenda:write', 'agenda:assign', 'catalog:read', 'catalog:write', 'client:read', 'client:write', 'client:pii:read', 'client:import', 'credit:read', 'credit:write', 'credit:pii:read', 'report:read', 'report:export', 'account:read', 'user:read'],
   },
   SUPERVISOR: {
     level: 50,

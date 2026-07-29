@@ -45,6 +45,11 @@ export enum Permission {
   REPORT_READ = 'report:read',
   REPORT_EXPORT = 'report:export',
 
+  // Datos del propio tenant (razón social, país, moneda, zona horaria).
+  // NO cubren plan ni límite de usuarios: eso no se toca desde el producto.
+  ACCOUNT_READ = 'account:read',
+  ACCOUNT_WRITE = 'account:write',
+
   USER_READ = 'user:read',
   USER_WRITE = 'user:write',
   USER_INVITE = 'user:invite',

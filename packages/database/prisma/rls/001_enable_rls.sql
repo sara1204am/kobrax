@@ -28,6 +28,9 @@ DECLARE
     -- Pilar 2
     'clients', 'client_contacts', 'client_locations', 'client_relations',
     'client_attachments', 'credits', 'credit_installments', 'arrears',
+    -- Corridas de importación (clientes y cartera). Llevan account_id desde
+    -- 20260618160000 y quedaron fuera de esta lista hasta 2026-07-29.
+    'client_import_runs',
     -- Pilar 3
     'collection_cases', 'case_activities', 'route_plans', 'route_stops',
     'field_visits', 'field_evidences',
