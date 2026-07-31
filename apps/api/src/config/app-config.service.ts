@@ -44,6 +44,18 @@ export class AppConfigService {
   get blindIndexKey() {
     return this.get('APP_BLIND_INDEX_KEY');
   }
+  get smtpUser() {
+    return this.get('SMTP_USER');
+  }
+  get smtpPass() {
+    return this.get('SMTP_PASS');
+  }
+  get mailFrom() {
+    return this.get('MAIL_FROM');
+  }
+  get appUrl() {
+    return this.get('APP_URL');
+  }
   get corsOrigins(): string[] {
     return [...new Set([this.get('APP_URL'), this.get('SOCKET_CORS_ORIGIN')])];
   }

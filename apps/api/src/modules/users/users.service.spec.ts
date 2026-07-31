@@ -41,6 +41,11 @@ interface Opts {
   /** Otros ACCOUNT_ADMIN activos que quedan en el tenant. */
   otherAdmins?: number;
   roles?: { id: string; name: string; level: number }[];
+  /** Miembros activos que ya ocupan asiento (para el techo de `maxUsers`). */
+  seats?: number;
+  maxUsers?: number;
+  /** Simula el choque del @unique de `users.email`. */
+  emailTaken?: boolean;
 }
 
 function makeService(opts: Opts = {}) {
@@ -50,8 +55,26 @@ function makeService(opts: Opts = {}) {
     countWhere: undefined as Record<string, unknown> | undefined,
     rolesWhere: undefined as Record<string, unknown> | undefined,
     audit: [] as string[],
+    userCreated: undefined as Record<string, unknown> | undefined,
+    tokenCreated: [] as { data: { tokenHash: string; expiresAt: Date } }[],
+    tokenInvalidated: 0,
+    deleted: [] as string[],
+    mail: [] as { to: string; text: string }[],
   };
   const tx = {
+    account: {
+      findFirst: async () => ({
+        id: 'acc-A',
+        businessName: 'Cobranzas Rosa',
+        maxUsers: opts.maxUsers ?? 5,
+      }),
+    },
+    passwordResetToken: {
+      create: async (args: { data: { tokenHash: string; expiresAt: Date } }) =>
+        void calls.tokenCreated.push(args),
+      updateMany: async () => void calls.tokenInvalidated++,
+      deleteMany: async () => void calls.deleted.push('token'),
+    },
     userAccount: {
       findMany: async (args: Record<string, unknown>) => {
         calls.listArgs = args;
@@ -60,12 +83,18 @@ function makeService(opts: Opts = {}) {
       findFirst: async () => (opts.found === undefined ? member() : opts.found),
       count: async (args: { where?: Record<string, unknown> }) => {
         calls.countWhere = args.where;
-        return opts.otherAdmins ?? 1;
+        // `invite` cuenta asientos ocupados; `updateMember` cuenta otros admins.
+        return args.where?.userId === undefined && opts.seats !== undefined
+          ? opts.seats
+          : (opts.otherAdmins ?? 1);
       },
+      create: async (args: { data: Record<string, unknown> }) =>
+        member({ ...args.data, role: ROLES[(args.data.roleId as string) ?? ROLE_COLLECTOR] }),
       update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
         calls.updated = args.data;
         return member({ ...args.data, role: ROLES[(args.data.roleId as string) ?? ROLE_COLLECTOR] });
       },
+      delete: async () => void calls.deleted.push('userAccount'),
     },
     role: {
       findUnique: async (args: { where: { id: string } }) => ROLES[args.where.id] ?? null,
@@ -80,17 +109,38 @@ function makeService(opts: Opts = {}) {
       findMany: async () => {
         throw new Error('users es global: la lista de miembros DEBE partir de user_accounts');
       },
-      findUnique: async () => ({ id: SELF, email: 'yo@kobrax.demo', profile: { firstName: 'Ana' } }),
+      findUnique: async () => ({
+        id: SELF,
+        email: 'yo@kobrax.demo',
+        profile: { firstName: 'Ana', lastName: 'Gómez' },
+      }),
+      create: async (args: { data: Record<string, unknown> }) => {
+        if (opts.emailTaken) throw Object.assign(new Error('unique'), { code: 'P2002' });
+        calls.userCreated = args.data;
+        return { id: OTHER, email: args.data.email };
+      },
+      delete: async () => void calls.deleted.push('user'),
     },
     profile: {
       findUnique: async () => ({ id: 'p1', userId: SELF, firstName: 'Ana', lastName: 'Gómez' }),
       update: async () => ({ id: 'p1', userId: SELF }),
+      deleteMany: async () => void calls.deleted.push('profile'),
     },
   };
-  const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
+  const prisma = {
+    withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
+    role: { findUnique: async (args: { where: { id: string } }) => ROLES[args.where.id] ?? null },
+    user: tx.user,
+  };
   const tenant = { accountId: 'acc-A', userId: SELF };
   const audit = { record: async (e: { action: string }) => void calls.audit.push(e.action) };
-  const service = new UsersService(prisma as never, tenant as never, audit as never);
+  const mail = { send: async (to: string, _s: string, text: string) => void calls.mail.push({ to, text }) };
+  const service = new UsersService(
+    prisma as never,
+    tenant as never,
+    audit as never,
+    mail as never,
+  );
   return { service, calls };
 }
 
@@ -160,6 +210,99 @@ describe('UsersService.updateMember — guardas', () => {
   it('404 si el miembro no está en este tenant', async () => {
     const { service } = makeService({ found: null });
     await rejectsWithCode(service.updateMember(OTHER, { isActive: false }), 'USER_NOT_FOUND');
+  });
+});
+
+const INVITE = {
+  firstName: 'Rosa',
+  lastName: 'Quispe',
+  email: 'Rosa@Kobrax.Demo',
+  roleId: ROLE_COLLECTOR,
+};
+
+describe('UsersService.invite — alta por invitación (S2)', () => {
+  it('crea al invitado PENDING, su membresía y el token, y manda el correo', async () => {
+    const { service, calls } = makeService({ seats: 2 });
+    await service.invite(INVITE);
+
+    assert.equal(calls.userCreated!.status, 'PENDING'); // no puede entrar hasta aceptar
+    assert.equal(calls.userCreated!.email, 'rosa@kobrax.demo'); // normalizado
+    assert.equal(calls.tokenCreated.length, 1);
+    assert.match(calls.tokenCreated[0]!.data.tokenHash, /^[a-f0-9]{64}$/); // nunca el código en claro
+    assert.deepEqual(calls.audit, ['CREATE']);
+    assert.equal(calls.mail[0]!.to, 'rosa@kobrax.demo');
+    assert.match(calls.mail[0]!.text, /kobrax:\/\/invitacion\?c=/);
+  });
+
+  it('devuelve el código en claro una sola vez, para dictarlo o mandarlo por WhatsApp (S2-D9)', async () => {
+    const { service, calls } = makeService({ seats: 0 });
+    const created = await service.invite(INVITE);
+    assert.match(created.invitationCode, /^[0-9A-Z]{5}-[0-9A-Z]{5}$/);
+    // Y es el mismo que viajó en el correo.
+    assert.ok(calls.mail[0]!.text.includes(created.invitationCode));
+  });
+
+  it('el token vive 7 días: el invitado puede estar en campo sin ver el correo', async () => {
+    const { service, calls } = makeService({ seats: 0 });
+    const before = Date.now();
+    await service.invite(INVITE);
+    const ttl = calls.tokenCreated[0]!.data.expiresAt.getTime() - before;
+    assert.ok(ttl > 6.9 * 86_400_000 && ttl <= 7 * 86_400_000 + 1000, `TTL fuera de rango: ${ttl}`);
+  });
+
+  it('rechaza al llegar al techo del plan, y cuenta DENTRO de la transacción', async () => {
+    const { service, calls } = makeService({ seats: 5, maxUsers: 5 });
+    await rejectsWithCode(service.invite(INVITE), 'USER_SEAT_LIMIT');
+    assert.equal(calls.userCreated, undefined);
+    assert.equal(calls.mail.length, 0);
+  });
+
+  it('rechaza un rol que el móvil no administra', async () => {
+    const { service } = makeService({ seats: 0 });
+    await rejectsWithCode(service.invite({ ...INVITE, roleId: ROLE_MANAGER }), 'USER_ROLE_NOT_ALLOWED');
+  });
+
+  it('correo ya registrado → 409 (lo caza el @unique, no un chequeo previo)', async () => {
+    const { service } = makeService({ seats: 0, emailTaken: true });
+    await rejectsWithCode(service.invite(INVITE), 'AUTH_EMAIL_TAKEN');
+  });
+});
+
+describe('UsersService.resendInvitation', () => {
+  it('invalida el código anterior y crea uno nuevo', async () => {
+    const { service, calls } = makeService({
+      found: member({ user: { ...member().user, status: 'PENDING' } }),
+    });
+    await service.resendInvitation(OTHER);
+    assert.equal(calls.tokenInvalidated, 1); // uno vigente a la vez
+    assert.equal(calls.tokenCreated.length, 1);
+    assert.equal(calls.mail.length, 1);
+  });
+
+  it('no aplica a quien ya aceptó', async () => {
+    const { service } = makeService(); // el miembro por defecto está ACTIVE
+    await rejectsWithCode(service.resendInvitation(OTHER), 'USER_NOT_PENDING');
+  });
+});
+
+describe('UsersService.remove — cancelar la invitación (S2-D5)', () => {
+  it('borra al pendiente entero: libera el asiento y el correo', async () => {
+    const { service, calls } = makeService({
+      found: member({ user: { ...member().user, status: 'PENDING' } }),
+    });
+    await service.remove(OTHER);
+    assert.deepEqual(calls.deleted, ['token', 'userAccount', 'profile', 'user']);
+    assert.deepEqual(calls.audit, ['DELETE']);
+  });
+
+  it('a un miembro que ya entró no se lo elimina, se lo desactiva', async () => {
+    const { service } = makeService();
+    await rejectsWithCode(service.remove(OTHER), 'USER_NOT_PENDING');
+  });
+
+  it('no deja borrarse a uno mismo', async () => {
+    const { service } = makeService();
+    await rejectsWithCode(service.remove(SELF), 'USER_CANNOT_EDIT_SELF');
   });
 });
 

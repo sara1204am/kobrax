@@ -186,6 +186,17 @@ Idéntico a S4-D1, y por lo mismo: hereda gratis MFA obligatorio, selección de 
 `requiresPasswordChange`. La pantalla llama a `authService.login()` con el correo que devolvió el `GET` y
 la contraseña recién elegida, y pasa por `goToStep()`.
 
+### S2-D9. El alta **devuelve el código en claro** a quien invitó, una sola vez
+Salió del smoke: en la base sólo vive el hash, así que si el correo no llega **nadie** puede ver el
+código — y la mitigación que prometen R1/R5 ("se dicta por teléfono", "queda el Reenviar") era mentira.
+`POST /users/invite` y el reenvío devuelven `invitationCode` en la respuesta. Con eso la pantalla puede
+mostrarlo y compartirlo por WhatsApp, que en campo es el canal real (el módulo Agenda ya manda plantillas
+por ahí).
+
+No amplía el poder de nadie: quien lo recibe es el mismo admin autenticado con `USER_INVITE` que puede
+reenviar, borrar la invitación o invitar a un correo suyo. La base sigue guardando sólo el hash y la lista
+(`GET /users`) **no** lo expone: se ve una vez, cuando se crea.
+
 ## 8. Auditoría de reuso
 
 | Capacidad | Decisión | Path |
@@ -257,7 +268,27 @@ Las 3 del epic §3.3 + las del README §8, y las de este slice:
 - `/code-review` + `/ponytail-review`.
 - **Validación visual de la usuaria** en el teléfono ([[kobrax-mobile-verify-limits]]).
 
-## 12. Riesgos
+## 12. Cómo quedó — API (construida 2026-07-31)
+
+Tres cosas salieron distinto de lo planeado en §6 y §9:
+
+1. **El código de aceptar viaja en el body, no en la URL.** El plan decía
+   `POST /auth/invitation/:code/accept`; quedó `POST /auth/invitation/accept` con
+   `{ code, password }`. Un secreto en el path se escribe en los access logs de cualquier proxy. El `GET`
+   sí lo lleva en la URL porque no hay otra forma, y sólo devuelve lo que el invitado ya sabe.
+2. **S2-D9**: el alta devuelve el código en claro. Lo destapó el smoke, no el plan.
+3. **Aceptar también deja fila de audit**, a mano dentro del `withTenant` (la excepción de S4-D7): §10
+   listaba la auditoría sólo de las mutaciones autenticadas, pero activar un usuario es una mutación.
+
+`GET /auth/invitation/:code` reusa **`auth_memberships()`**, la función `SECURITY DEFINER` que ya usaba el
+login, para saber a qué cuenta pertenece el invitado sin abrir un contexto de tenant que todavía no se
+puede abrir. Cero SQL nuevo.
+
+**Smoke real contra la base de dev: 27/27 verde** — registro → invitar → aceptar → el invitado entra
+**en el tenant correcto** (RLS), techo del plan a los 5, borrado del pendiente que libera el correo,
+código de un solo uso y reenvío que invalida el anterior. API: **396 tests** (base 365).
+
+## 13. Riesgos
 
 | # | Riesgo | Mitigación |
 |---|---|---|
