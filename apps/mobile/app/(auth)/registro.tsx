@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { router } from 'expo-router';
-import { KeyboardAvoidingView, Platform, ScrollView, Text } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import {
   Button,
   Card,
@@ -14,8 +14,9 @@ import {
 } from '@/components';
 import { validateSignup, type SignupForm } from '@/account-form';
 import { signup } from '@/account.service';
-import { authService } from '@/auth-service';
+import { authService, type Step } from '@/auth-service';
 import { goToStep } from '@/route-step';
+import { COLORS, SPACING, TYPE } from '@/theme';
 
 /**
  * Registro público (CUENTA · S4). Crea el tenant y entra de una: el alta no devuelve
@@ -37,6 +38,8 @@ export default function RegistroScreen() {
   const [loading, setLoading] = useState(false);
   /** La cuenta quedó creada pero el login posterior falló: reintentar el alta sería un 409 (S4-R4). */
   const [created, setCreated] = useState(false);
+  /** Alta OK y sesión resuelta: se confirma antes de mandarla al paso siguiente. */
+  const [done, setDone] = useState<Step | null>(null);
 
   const set = (k: keyof SignupForm) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -69,7 +72,48 @@ export default function RegistroScreen() {
       setError(`Tu cuenta se creó, pero no pudimos iniciar sesión: ${login.error}`);
       return;
     }
-    goToStep(login.step);
+    // No se salta directo: confirmar el alta antes de encajarle una pantalla de seguridad
+    // que no pidió. El paso siguiente (casi siempre MFA) queda esperando el toque.
+    setDone(login.step);
+  }
+
+  if (done) {
+    return (
+      <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+        <Hero subtitle="Tu cuenta ya está lista" />
+        <Card>
+          <View style={{ alignItems: 'center', gap: SPACING.sm }}>
+            <View
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 32,
+                backgroundColor: COLORS.successBg,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 30, color: COLORS.success }}>✓</Text>
+            </View>
+            <Text style={styles.title}>¡Cuenta creada!</Text>
+          </View>
+          <Text style={styles.subtitle}>
+            Ya podés entrar y cargar tu cartera. Antes te ofrecemos proteger la cuenta con un
+            segundo paso de seguridad — si preferís, lo dejás para después.
+          </Text>
+          <View style={{ backgroundColor: COLORS.bg, borderRadius: 10, padding: SPACING.lg }}>
+            <Text style={{ ...TYPE.secondary }}>
+              Tu correo: <Text style={{ fontWeight: '600' }}>{form.email.trim().toLowerCase()}</Text>
+            </Text>
+            <Text style={{ ...TYPE.secondary, marginTop: 2 }}>
+              Negocio: <Text style={{ fontWeight: '600' }}>{form.businessName.trim()}</Text>
+            </Text>
+          </View>
+          <Button label="Continuar" onPress={() => goToStep(done)} />
+        </Card>
+        <SecurityFooter />
+      </ScrollView>
+    );
   }
 
   return (

@@ -89,6 +89,37 @@ describe('AuthService.login — MFA obligatorio (enforcement F2b)', () => {
   });
 });
 
+describe('AuthService.mfaSetupSkip — postergar el MFA obligatorio', () => {
+  // Decisión de producto (31/07): se puede postergar indefinidamente. El recordatorio es
+  // blando (`me.mfaEnabled === false` → aviso en el Home), no hay segundo muro.
+  it('completa el login sin activar MFA', async () => {
+    const { service } = makeAuth({
+      user: { id: 'u1', status: 'ACTIVE', mfaEnabled: false },
+      // Dos empresas → el flujo corta en `select_account` y no toca la emisión de tokens.
+      memberships: [memb('ACCOUNT_ADMIN', 'a1'), memb('ACCOUNT_ADMIN', 'a2')],
+    });
+    const pre = token.signPreAuth({ sub: 'u1', purpose: 'mfa_enroll' });
+    const res = await service.mfaSetupSkip(pre, META);
+    assert.equal(res.step, 'select_account');
+  });
+
+  it('deja marcado que el segundo factor NO se verificó', async () => {
+    const { service } = makeAuth({
+      user: { id: 'u1', status: 'ACTIVE', mfaEnabled: false },
+      memberships: [memb('ACCOUNT_ADMIN', 'a1'), memb('ACCOUNT_ADMIN', 'a2')],
+    });
+    const pre = token.signPreAuth({ sub: 'u1', purpose: 'mfa_enroll' });
+    const res = await service.mfaSetupSkip(pre, META);
+    assert.equal(token.verifyPreAuth(res.preAuthToken!, 'select_account').mfaVerified, false);
+  });
+
+  it('no acepta un pre-auth token de otro paso', async () => {
+    const { service } = makeAuth({ user: { id: 'u1', status: 'ACTIVE', mfaEnabled: false } });
+    const wrong = token.signPreAuth({ sub: 'u1', purpose: 'mfa' });
+    await rejectsWithCode(service.mfaSetupSkip(wrong, META), AUTH_ERR.INVALID_TOKEN);
+  });
+});
+
 describe('AuthService.login — credenciales y lockout', () => {
   it('contraseña incorrecta en el 5º intento → bloquea la cuenta y lanza AUTH_001', async () => {
     const passwordHash = await hash('Right1!', KOBRAX.BCRYPT_WORK_FACTOR);

@@ -18,9 +18,16 @@ import { CreateAccountDto } from './dto/create-account.dto';
 export class AccountsController {
   constructor(private readonly accounts: AccountsService) {}
 
-  /** Registro público (S4). Sin guards a propósito; la guarda es el DTO + el rate limit. */
+  /**
+   * Registro público (S4). Sin guards a propósito; la guarda es el DTO + el rate limit.
+   *
+   * 10/hora y no 3: **una IP no es una persona.** Detrás de un NAT de oficina —o de un
+   * `adb reverse`, donde todo el teléfono sale como 127.0.0.1— varios usuarios legítimos
+   * comparten IP y se bloquean entre ellos. Diez sigue haciendo inviable el alta masiva de
+   * tenants, que es el riesgo real (README R1); contra el duplicado ya está el `@unique`.
+   */
   @Post()
-  @RateLimit({ limit: 3, windowSec: 3600, by: 'ip' })
+  @RateLimit({ limit: 10, windowSec: 3600, by: 'ip' })
   create(@Body() dto: CreateAccountDto, @Req() req: Request) {
     return this.accounts.create(dto, { ip: req.ip, userAgent: req.headers['user-agent'] });
   }

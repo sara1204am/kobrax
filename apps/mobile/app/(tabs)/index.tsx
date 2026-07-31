@@ -98,6 +98,17 @@ export default function InicioScreen() {
           <Text style={{ ...TYPE.secondary, marginTop: 4 }}>Tu jornada de hoy</Text>
         </View>
 
+        {/* Recordatorio blando del segundo factor: se puede postergar indefinidamente
+            (decisión 31/07), así que el aviso queda hasta que lo active. */}
+        {!home.me.mfaEnabled && (
+          <ListRow
+            title="Protegé tu cuenta"
+            subtitle="Activá la verificación en dos pasos"
+            right={<StatusBadge label="Pendiente" tone="warning" />}
+            onPress={() => router.push('/(auth)/mfa-setup?authed=1')}
+          />
+        )}
+
         <View style={{ flexDirection: 'row', gap: SPACING.md }}>
           <StatTile label="Cobrado hoy" value="—" />
           <StatTile label="Casos asignados" value={home.assigned} />

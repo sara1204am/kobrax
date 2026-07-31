@@ -79,6 +79,13 @@ export class AuthController {
     return this.auth.mfaSetupVerify(dto.preAuthToken, dto.code, this.meta(req));
   }
 
+  /** "Lo hago después": entra sin activar MFA. El recordatorio queda en el Home. */
+  @Post('mfa/setup/skip')
+  @HttpCode(HttpStatus.OK)
+  mfaSetupSkip(@Body() dto: MfaSetupStartDto, @Req() req: Request) {
+    return this.auth.mfaSetupSkip(dto.preAuthToken, this.meta(req));
+  }
+
   // ── MFA self-service (Bearer) ──────────────────────────────────────────────
   @Post('mfa/enroll')
   @HttpCode(HttpStatus.OK)
