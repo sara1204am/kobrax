@@ -69,13 +69,11 @@ export default function CuentaScreen() {
           title="Miembros"
           subtitle={
             account
-              ? `${account.memberCount} de ${account.maxUsers} · próximamente`
+              ? `${account.memberCount} de ${account.maxUsers}`
               : 'Invitar y administrar tu equipo'
           }
           icon="people-outline"
-          // S2 construye la pantalla. Deshabilitada a propósito: mostrar el conteo hoy
-          // hace visible el límite del plan sin llevar a una pantalla vacía (S1-R4).
-          onPress={undefined}
+          onPress={() => router.push('/cuenta/miembros')}
         />
 
         {!puedeEditar && (

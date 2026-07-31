@@ -8,7 +8,13 @@
  * Es la misma idea que `cliente-diff.ts`, no el mismo código: allá son sub-recursos con
  * altas y bajas por fila (`RowOps`); acá son campos escalares.
  */
-import { SUPPORTED_CURRENCIES, isPasswordValid, type CurrencyCode } from '@kobrax/shared';
+import {
+  ROLE_LABEL,
+  SUPPORTED_CURRENCIES,
+  isPasswordValid,
+  type CurrencyCode,
+  type RoleType,
+} from '@kobrax/shared';
 import type { AccountPatch, ProfilePatch } from './account.service';
 
 /** País + moneda son un solo selector: acoplados en el producto (S1-D1). */
@@ -98,6 +104,44 @@ export function validateSignup(f: SignupForm): string | null {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) return 'Correo inválido';
   // La política vive en shared: acá no se reescribe ninguna regla de contraseña.
   if (!isPasswordValid(f.password)) return 'La contraseña no cumple los requisitos';
+  return null;
+}
+
+/** Invitar a un miembro (S2). El nombre lo pone quien invita (S2-D4). */
+export interface InviteForm {
+  firstName: string;
+  lastName: string;
+  email: string;
+  roleId: string;
+}
+
+/**
+ * Qué hace cada rol, en criollo. La **etiqueta** vive en `ROLE_LABEL` de shared (fuente
+ * única con la web); esto es la explicación de una línea que va debajo, y es copy de la
+ * app: quien invita no sabe qué es un "SUPERVISOR" hasta que se lo dicen así.
+ */
+const ROLE_HINT: Record<string, string> = {
+  COLLECTOR: 'Cobra en campo: su cartera, sus rutas y sus pagos',
+  SUPERVISOR: 'Supervisa cobradores y reparte cartera',
+  ACCOUNT_ADMIN: 'Administra la cuenta, el equipo y los datos del negocio',
+};
+
+/** Opciones para el `PickerSheet` de rol. El recorte a 3 lo hace el servidor (`GET /roles`). */
+export function roleOptions(
+  roles: { id: string; name: string }[],
+): { key: string; label: string; hint?: string }[] {
+  return roles.map((r) => ({
+    key: r.id,
+    label: ROLE_LABEL[r.name as RoleType] ?? r.name,
+    hint: ROLE_HINT[r.name],
+  }));
+}
+
+export function validateInvite(f: InviteForm): string | null {
+  if (f.firstName.trim().length < 1) return 'El nombre es obligatorio';
+  if (f.lastName.trim().length < 1) return 'El apellido es obligatorio';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) return 'Correo inválido';
+  if (!f.roleId) return 'Elegí qué va a hacer en el equipo';
   return null;
 }
 

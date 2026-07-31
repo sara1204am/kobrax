@@ -6,7 +6,7 @@
  * (que trae `planCode`, `maxUsers`, `memberCount`…) es un **400**, no un no-op.
  * El payload lo arma `account-form.ts`.
  */
-import { apiFetch } from './api';
+import { publicCall, type PublicResult } from './api';
 import { apiMutate, apiQuery, type MutateResult, type QueryResult } from './api-client';
 
 export interface AccountInfo {
@@ -56,27 +56,14 @@ export interface SignupPayload {
   password: string;
 }
 
-/**
- * Hermano de `MutateResult` sin `unauthenticated`: registrarse es justamente lo que se hace
- * sin sesión, así que ese estado no existe acá y no debería poder escribirse.
- */
-export type SignupResult =
-  | { status: 'ok'; data: { accountId: string } }
-  | { status: 'offline' }
-  | { status: 'error'; message: string };
+export type SignupResult = PublicResult<{ accountId: string }>;
 
 /**
- * Registro público (S4). Va por `apiFetch` y **no** por `apiMutate`: éste último pasa por
- * `authedFetch`, que sin sesión local corta con `unauthenticated` antes de salir a la red —
- * justo el estado en el que está quien se está registrando.
- *
- * No devuelve tokens (S4-D1): la pantalla hace `authService.login()` a continuación.
+ * Registro público (S4). No devuelve tokens (S4-D1): la pantalla hace
+ * `authService.login()` a continuación.
  */
-export async function signup(payload: SignupPayload): Promise<SignupResult> {
-  const res = await apiFetch<{ accountId: string }>('/accounts', { method: 'POST', body: payload });
-  if (res.status === 0) return { status: 'offline' };
-  if (res.status === 201 && res.data) return { status: 'ok', data: res.data };
-  return { status: 'error', message: res.error?.message ?? 'No se pudo crear la cuenta' };
+export function signup(payload: SignupPayload): Promise<SignupResult> {
+  return publicCall('/accounts', { method: 'POST', body: payload }, 'No se pudo crear la cuenta');
 }
 
 export function getAccount(): Promise<QueryResult<AccountInfo>> {

@@ -4,13 +4,24 @@ import {
   diffProfile,
   findCountry,
   hasChanges,
+  roleOptions,
   validateAccount,
+  validateInvite,
   validateProfile,
   validateSignup,
   type AccountForm,
+  type InviteForm,
   type ProfileForm,
   type SignupForm,
 } from './account-form';
+
+const invite = (over: Partial<InviteForm> = {}): InviteForm => ({
+  firstName: 'Rosa',
+  lastName: 'Quispe',
+  email: 'rosa@ejemplo.com',
+  roleId: 'role-collector',
+  ...over,
+});
 
 const account = (over: Partial<AccountForm> = {}): AccountForm => ({
   businessName: 'Cobranzas Pérez',
@@ -135,5 +146,41 @@ describe('diff — sólo lo que cambió', () => {
 
   it('permite vaciar un campo opcional', () => {
     expect(diffProfile(profile(), profile({ phone: '' }))).toEqual({ phone: '' });
+  });
+});
+
+describe('validateInvite (S2)', () => {
+  it('acepta una invitacion completa', () => {
+    expect(validateInvite(invite())).toBeNull();
+  });
+
+  it('exige nombre y apellido: la lista muestra a la persona, no un correo suelto', () => {
+    expect(validateInvite(invite({ firstName: '  ' }))).toMatch(/nombre/i);
+    expect(validateInvite(invite({ lastName: '' }))).toMatch(/apellido/i);
+  });
+
+  it('rechaza un correo mal escrito antes de quemar un asiento del plan', () => {
+    expect(validateInvite(invite({ email: 'rosa@' }))).toMatch(/correo/i);
+  });
+
+  it('exige elegir el rol: sin roleId el server responde 400', () => {
+    expect(validateInvite(invite({ roleId: '' }))).toMatch(/equipo/i);
+  });
+});
+
+describe('roleOptions (S2)', () => {
+  it('traduce el roleName crudo del server a la etiqueta de shared', () => {
+    const [admin, collector] = roleOptions([
+      { id: 'r1', name: 'ACCOUNT_ADMIN' },
+      { id: 'r2', name: 'COLLECTOR' },
+    ]);
+    expect(admin).toEqual({ key: 'r1', label: 'Administrador', hint: expect.any(String) });
+    expect(collector!.label).toBe('Cobrador');
+  });
+
+  it('no rompe con un rol de la web (el server no lo manda, pero no se asume)', () => {
+    const [manager] = roleOptions([{ id: 'r3', name: 'MANAGER' }]);
+    expect(manager!.label).toBe('Gerente');
+    expect(manager!.hint).toBeUndefined();
   });
 });
