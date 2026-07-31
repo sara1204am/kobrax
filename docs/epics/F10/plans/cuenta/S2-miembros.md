@@ -176,10 +176,16 @@ Es la única guarda de plan del producto (README D3) y hoy la columna no se lee 
 antes y crear después, en dos queries sueltas, es una carrera que dos invitaciones simultáneas ganan
 (README R4). El conteo va adentro del `withTenant` junto al insert.
 
-### S2-D7. El correo del invitado se manda **después** de commitear la transacción
+### S2-D7. El correo se manda **después** de commitear, y **no se espera**
 Si el SMTP tarda o falla adentro del `$transaction`, se cae la creación entera del miembro por algo que
-no es la base. Primero se persiste, después se envía; si el envío falla, se loguea y el miembro queda
-pendiente con su botón de "Reenviar". Es la misma tolerancia que ya declara README R5.
+no es la base. Primero se persiste, después se envía.
+
+**Corregido con el envío real andando (31/07):** tampoco se espera. Medido contra Gmail, el handshake SMTP
+son **~3,4 s** pegados a la respuesta de una pantalla que se usa parada en la calle; sin esperarlo, el alta
+tarda **~0,6 s**. La invitación ya está persistida y el código ya viaja en la respuesta (S2-D9), así que el
+correo es un extra, no el resultado. Un fallo se loguea y el miembro queda "Pendiente" con su botón de
+"Reenviar" — que es exactamente lo que promete README R5. Esperarlo tenía el peor de los dos mundos: lento
+**y** un 500 con el miembro ya creado.
 
 ### S2-D8. Aceptar la invitación **no emite tokens**: el móvil hace login normal justo después
 Idéntico a S4-D1, y por lo mismo: hereda gratis MFA obligatorio, selección de empresa y
@@ -283,6 +289,11 @@ Tres cosas salieron distinto de lo planeado en §6 y §9:
 `GET /auth/invitation/:code` reusa **`auth_memberships()`**, la función `SECURITY DEFINER` que ya usaba el
 login, para saber a qué cuenta pertenece el invitado sin abrir un contexto de tenant que todavía no se
 puede abrir. Cero SQL nuevo.
+
+4. **El envío no se espera** (S2-D7, corregido con SMTP real): 3,4 s → 0,6 s por invitación.
+
+**Correo real verificado (31/07)** con las credenciales de Gmail en el `.env` de la raíz: la invitación
+sale y Gmail la acepta.
 
 **Smoke real contra la base de dev: 27/27 verde** — registro → invitar → aceptar → el invitado entra
 **en el tenant correcto** (RLS), techo del plan a los 5, borrado del pendiente que libera el correo,

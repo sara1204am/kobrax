@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { hash } from 'bcryptjs';
 import type { PrismaClient } from '@prisma/client';
@@ -36,6 +36,8 @@ const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  */
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenant: TenantContextService,
@@ -238,7 +240,16 @@ export class UsersService {
     });
   }
 
-  /** El envío va DESPUÉS del commit (S2-D7): un SMTP lento no puede tumbar el alta. */
+  /**
+   * El envío va DESPUÉS del commit (S2-D7) y **no se espera**: medido contra Gmail, el
+   * handshake SMTP son ~3,4 s pegados a la respuesta, en una pantalla que se usa parada
+   * en la calle. La invitación ya está persistida y el código ya viaja en la respuesta
+   * (S2-D9), así que el correo es un extra, no el resultado.
+   *
+   * Un fallo del envío se loguea y no rompe el alta — que es justo lo que dice R5: la
+   * invitación queda "Pendiente" con su botón de Reenviar. Esperar el envío tenía el
+   * peor de los dos mundos: lento **y** un 500 con el miembro ya creado.
+   */
   private async sendInvitation(email: string, code: string, businessName: string): Promise<void> {
     const inviter = await this.prisma.user.findUnique({
       where: { id: this.selfId },
@@ -248,7 +259,9 @@ export class UsersService {
       ? `${inviter.profile.firstName} ${inviter.profile.lastName}`.trim()
       : (inviter?.email ?? 'Tu equipo');
     const { subject, text } = invitationBody({ businessName, invitedBy, code });
-    await this.mail.send(email, subject, text);
+    void this.mail.send(email, subject, text).catch((err: Error) => {
+      this.logger.error(`No se pudo enviar la invitación a ${email}: ${err.message}`);
+    });
   }
 
   async getMyProfile() {
