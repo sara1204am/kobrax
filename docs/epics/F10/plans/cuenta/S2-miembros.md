@@ -299,7 +299,28 @@ sale y Gmail la acepta.
 **en el tenant correcto** (RLS), techo del plan a los 5, borrado del pendiente que libera el correo,
 código de un solo uso y reenvío que invalida el anterior. API: **396 tests** (base 365).
 
-## 13. Riesgos
+## 13. Cómo quedó — móvil (construido 2026-07-31)
+
+Cuatro pantallas y **ningún componente nuevo**: la fila de miembro es el `ListRow` de siempre con un
+`StatusBadge` a la derecha, y el selector de rol es el `SelectRow` + `PickerSheet` que ya usa
+`cuenta/datos.tsx`. Lo que sí apareció:
+
+- **`publicCall` subió a `api.ts`.** El registro de S4 ya había descubierto que las llamadas sin sesión
+  no pueden ir por `apiMutate`; la invitación era el segundo caso. En vez de repetir el mapeo, el
+  primitivo subió y `signup()` pasó a usarlo (`SignupResult = PublicResult<{accountId}>`).
+- **No hay `GET /users/:id`.** El detalle busca en la lista, que son ≤ 5 filas por el techo del plan. Un
+  endpoint para releer una fila que ya está en memoria sería trabajo del servidor para ahorrar un `find`.
+- **El estado se pinta sólo cuando no es el normal**: un miembro activo muestra su rol y nada más; el
+  badge queda para "Pendiente" e "Inactivo", que son los que piden acción.
+- **`variant="danger"` no existe** en el `Button` compartido y no se agregó: las dos acciones
+  destructivas usan `ghost`, y la guarda contra el borrado accidental es el `Alert` de confirmación.
+- **El deep link no necesitó nada.** `kobrax://invitacion?c=…` cae en `app/(auth)/invitacion.tsx` por el
+  nombre del archivo (el grupo `(auth)` es transparente) y `app/index.tsx` no se monta cuando la ruta
+  inicial es otra, así que no rebota al login.
+
+Móvil: **191 tests**, type-check y `expo export --platform android` en verde.
+
+## 14. Riesgos
 
 | # | Riesgo | Mitigación |
 |---|---|---|
