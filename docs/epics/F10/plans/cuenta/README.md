@@ -142,8 +142,8 @@ Para el independiente, "miembros" es una lista de uno — y está bien así, no 
 |---|---|---|---|---|---|
 | **S0** | Fundación backend (sin pantalla) | — | 1 · 2 · 3 · 4 · 10 | 🟠 medio | **ninguna** |
 | **S1** | Hub + datos de la cuenta + mi perfil | `app/cuenta/index.tsx` · `datos.tsx` · `perfil.tsx` | — (consume S0) | 🟢 bajo | **ninguna** |
-| **S2** | Miembros: lista · invitar · rol · activar/desactivar | `app/cuenta/miembros.tsx` · `miembro/[id].tsx` · `invitar.tsx` | 5 · 6 · 7 · 11 | 🔴 alto | Q1 |
-| **S3** | Aceptar invitación (deep link) | `app/(auth)/invitacion.tsx` | — (consume S2) | 🟢 bajo | — |
+| **S2** | Miembros: lista · invitar · rol · activar/desactivar → [S2-miembros.md](./S2-miembros.md) | `app/cuenta/miembros.tsx` · `miembro/[id].tsx` · `invitar.tsx` | 6 · 7 · 11 (**5 no: ver S2-D2**) | 🔴 alto | ~~Q1~~ |
+| **S3** | Aceptar invitación — **va en el mismo slice que S2** | `app/(auth)/invitacion.tsx` | — (consume S2) | 🟢 bajo | — |
 | **S4** | Registro (self-signup) | `app/(auth)/registro.tsx` | 8 | 🟠 medio | Q2 · Q3 |
 | **S5** | Cartera del miembro (asignación por lote) | `app/cuenta/miembro/[id]/cartera.tsx` | 9 | 🟠 medio | Q4 |
 
