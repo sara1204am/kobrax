@@ -8,7 +8,7 @@
  * Es la misma idea que `cliente-diff.ts`, no el mismo código: allá son sub-recursos con
  * altas y bajas por fila (`RowOps`); acá son campos escalares.
  */
-import { SUPPORTED_CURRENCIES, type CurrencyCode } from '@kobrax/shared';
+import { SUPPORTED_CURRENCIES, isPasswordValid, type CurrencyCode } from '@kobrax/shared';
 import type { AccountPatch, ProfilePatch } from './account.service';
 
 /** País + moneda son un solo selector: acoplados en el producto (S1-D1). */
@@ -77,6 +77,27 @@ export function validateProfile(f: ProfileForm): string | null {
   const phone = f.phone.trim();
   // Sólo forma, no país: los teléfonos de LatAm varían y el server no los valida.
   if (phone && !/^[\d+][\d\s-]{4,}$/.test(phone)) return 'Teléfono inválido';
+  return null;
+}
+
+/** Registro público (S4). País y moneda no se piden acá: arrancan en el default (S4-D8). */
+export interface SignupForm {
+  businessName: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+}
+
+export function validateSignup(f: SignupForm): string | null {
+  if (f.businessName.trim().length < 2) return 'El nombre del negocio es obligatorio';
+  if (f.businessName.trim().length > 160) return 'El nombre del negocio es demasiado largo';
+  if (f.firstName.trim().length < 1) return 'El nombre es obligatorio';
+  if (f.lastName.trim().length < 1) return 'El apellido es obligatorio';
+  // Misma forma mínima que valida `@IsEmail` del lado del server; el server manda igual.
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) return 'Correo inválido';
+  // La política vive en shared: acá no se reescribe ninguna regla de contraseña.
+  if (!isPasswordValid(f.password)) return 'La contraseña no cumple los requisitos';
   return null;
 }
 

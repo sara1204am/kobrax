@@ -31,10 +31,16 @@ Confirmado. Implicación dura y hoy inexistente: **el proyecto no tiene ninguna 
 `POST /auth/forgot-password` genera el token y **nada lo envía** (grep de `nodemailer|sendgrid|resend|smtp`
 en toda la API: cero resultados). Este módulo tiene que construirla.
 
-`ponytail:` **cero dependencias nuevas.** El runtime de la API es Node 18+, que trae `fetch` nativo; Resend
-es un `POST https://api.resend.com/emails` con un bearer. Un `mail.service.ts` de ~30 líneas cubre el caso.
-No entra ningún SDK. Techo conocido: sin reintentos ni cola — si el envío falla, la invitación queda creada
-y se muestra "Reenviar" en la lista. Upgrade a cola cuando haya volumen que lo justifique.
+**Proveedor (Q1, respondida 2026-07-31): SMTP de Gmail.** Corrige el supuesto original de este plan, que
+era Resend por HTTP.
+
+`ponytail:` **una dependencia, y es inevitable.** SMTP es un protocolo sobre socket, no un `POST`: con
+Gmail el `fetch` nativo no alcanza y entra **`nodemailer`** (la librería SMTP de Node, sin transitivas
+pesadas). Sigue siendo un `mail.service.ts` chico: un transport + un `sendMail`. Env nuevas:
+`SMTP_USER`, `SMTP_PASS` (**contraseña de aplicación de Google, no la del correo**), `MAIL_FROM`.
+Techo conocido y aceptado: Gmail limita ~500 envíos/día y puede marcar spam si el volumen crece — cuando
+eso moleste se cambia el transport, que es el único lugar que lo sabe. Sin reintentos ni cola: si el envío
+falla, la invitación queda creada y la lista muestra "Reenviar".
 
 **Root cause, no síntoma:** `forgot-password` es el otro llamador del mismo agujero. El `mail.service` se
 construye una vez y **los dos** lo usan. Arreglar sólo la invitación dejaría el reset de contraseña roto.
@@ -242,7 +248,7 @@ Se contestan **al empezar el slice que las consume**, no antes. S0 y S1 no tiene
 
 | # | Pregunta | Bloquea |
 |---|---|---|
-| **Q1** | **Proveedor de correo** — el plan asume **Resend** (un POST, cero SDK). ¿Se confirma, o producción ya tiene SES/SMTP al que enchufarse? | S2 |
+| ~~Q1~~ | ~~Proveedor de correo~~ → **RESPONDIDA 2026-07-31: SMTP de Gmail.** Ver D1 | ~~S2~~ |
 | **Q2** | **Verificación de email en el registro** — D4 la deja **no bloqueante** (el usuario entra y opera, con banner). ¿Se confirma? | S4 |
 | **Q3** | **El registro, ¿pide país/moneda?** ¿O es mínimo (email, nombre, contraseña, negocio) y eso se configura después en S1? | S4 |
 | **Q4** | **Qué se asigna en el lote** — "cartera" = los **casos** de un cliente. Si tiene 2 créditos con 2 casos, van los dos. ¿Correcto, o se reparte por crédito? | S5 |

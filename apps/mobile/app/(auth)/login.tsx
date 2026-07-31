@@ -92,6 +92,8 @@ export default function LoginScreen() {
 
           <Button label="Iniciar sesión" onPress={submit} loading={loading} disabled={!email || !password} />
 
+          <TextLink label="Crear una cuenta" onPress={() => router.push('/(auth)/registro')} />
+
           {bio && (
             <>
               <View style={s.dividerRow}>

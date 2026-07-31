@@ -6,8 +6,10 @@ import {
   hasChanges,
   validateAccount,
   validateProfile,
+  validateSignup,
   type AccountForm,
   type ProfileForm,
+  type SignupForm,
 } from './account-form';
 
 const account = (over: Partial<AccountForm> = {}): AccountForm => ({
@@ -24,6 +26,40 @@ const profile = (over: Partial<ProfileForm> = {}): ProfileForm => ({
   phone: '77712345',
   photoUrl: '',
   ...over,
+});
+
+const signup = (over: Partial<SignupForm> = {}): SignupForm => ({
+  businessName: 'Cobranzas Pérez',
+  firstName: 'Sara',
+  lastName: 'Pérez',
+  email: 'sara@ejemplo.com',
+  password: 'Kobrax123!',
+  ...over,
+});
+
+describe('validateSignup', () => {
+  it('acepta un registro completo', () => {
+    expect(validateSignup(signup())).toBeNull();
+  });
+
+  it('exige negocio, nombre y apellido', () => {
+    expect(validateSignup(signup({ businessName: ' ' }))).toMatch(/negocio/);
+    expect(validateSignup(signup({ firstName: '' }))).toMatch(/nombre/);
+    expect(validateSignup(signup({ lastName: '  ' }))).toMatch(/apellido/);
+  });
+
+  it('rechaza correos sin forma de correo', () => {
+    for (const email of ['sara', 'sara@', 'sara@ejemplo', 'a b@c.com']) {
+      expect(validateSignup(signup({ email }))).toMatch(/[Cc]orreo/);
+    }
+  });
+
+  // La política es la de shared: acá sólo se comprueba que se está usando, no se re-testea.
+  it('rechaza contraseñas que no cumplen la política', () => {
+    for (const password of ['kobrax123!', 'Kobraxxx!', 'Kobrax1234', 'Kbx1!']) {
+      expect(validateSignup(signup({ password }))).toMatch(/contraseña/);
+    }
+  });
 });
 
 describe('COUNTRY_OPTIONS', () => {
