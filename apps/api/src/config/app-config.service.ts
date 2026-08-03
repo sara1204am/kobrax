@@ -53,9 +53,6 @@ export class AppConfigService {
   get mailFrom() {
     return this.get('MAIL_FROM');
   }
-  get appUrl() {
-    return this.get('APP_URL');
-  }
   get corsOrigins(): string[] {
     return [...new Set([this.get('APP_URL'), this.get('SOCKET_CORS_ORIGIN')])];
   }

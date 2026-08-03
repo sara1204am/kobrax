@@ -1,11 +1,12 @@
 import { useCallback, useState } from 'react';
-import { Alert, ScrollView, Share, Text, View } from 'react-native';
+import { Alert, ScrollView, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ROLE_LABEL, isMobileRole, type RoleType } from '@kobrax/shared';
 import { COLORS, SPACING, TYPE } from '@/theme';
 import { Header, OfflineIndicator, PickerSheet, SectionLabel, SelectRow, StatusBadge } from '@/ui';
 import { Button, ErrorBanner } from '@/components';
 import { roleOptions } from '@/account-form';
+import { CodigoInvitacion } from '@/codigo-invitacion';
 import { authService } from '@/auth-service';
 import {
   listMembers,
@@ -165,22 +166,7 @@ export default function MiembroScreen() {
                 <Text style={{ ...TYPE.secondary }}>
                   Código nuevo (el anterior dejó de servir). Vence en 7 días.
                 </Text>
-                <View style={styles.codeBox}>
-                  <Text style={styles.code} selectable>
-                    {codigo}
-                  </Text>
-                </View>
-                <Button
-                  label="Compartir por WhatsApp"
-                  onPress={() =>
-                    void Share.share({
-                      message:
-                        `Te invité a Kobrax. Abrí este link desde tu teléfono: ` +
-                        `kobrax://invitacion?c=${codigo.replace('-', '')}\n\n` +
-                        `Si no abre, entrá a la app, tocá "Tengo una invitación" y escribí este código: ${codigo}`,
-                    })
-                  }
-                />
+                <CodigoInvitacion code={codigo} />
               </>
             ) : (
               <Button label="Reenviar invitación" onPress={() => void reenviar()} loading={busy} />
@@ -223,17 +209,4 @@ export default function MiembroScreen() {
 
 const styles = {
   value: { ...TYPE.body, fontWeight: '600' as const, color: COLORS.text },
-  codeBox: {
-    backgroundColor: COLORS.highlight,
-    borderRadius: 12,
-    paddingVertical: SPACING.lg,
-    alignItems: 'center' as const,
-  },
-  code: {
-    fontFamily: 'monospace',
-    fontSize: 26,
-    fontWeight: '700' as const,
-    letterSpacing: 2,
-    color: COLORS.navy,
-  },
 };

@@ -68,18 +68,18 @@ export function invitationBody(params: {
   };
 }
 
-export function passwordResetBody(params: { token: string; appUrl: string }): {
-  subject: string;
-  text: string;
-} {
+/**
+ * Sin respaldo web a propósito: `APP_URL` no sirve ninguna página de reset todavía, y un
+ * link muerto en un correo de recuperación es peor que no ponerlo. Cuando exista la web,
+ * se agrega acá.
+ */
+export function passwordResetBody(token: string): { subject: string; text: string } {
   return {
     subject: 'Recuperá tu contraseña de Kobrax',
     text: [
       'Pediste recuperar tu contraseña.',
       '',
-      `Abrí este link desde tu teléfono:  kobrax://reset?token=${params.token}`,
-      '',
-      `Si el link no abre:  ${params.appUrl}/reset?token=${params.token}`,
+      `Abrí este link desde tu teléfono:  kobrax://reset?token=${token}`,
       '',
       'El link vence en 30 minutos. Si no fuiste vos, ignorá este correo.',
     ].join('\n'),

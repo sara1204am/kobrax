@@ -54,7 +54,7 @@ export class PasswordService {
     if (!this.config.isProduction) {
       this.logger.warn(`[DEV] Reset token para ${user.email}: ${token}`);
     }
-    const { subject, text } = passwordResetBody({ token, appUrl: this.config.appUrl });
+    const { subject, text } = passwordResetBody(token);
     await this.mail.send(user.email, subject, text);
   }
 

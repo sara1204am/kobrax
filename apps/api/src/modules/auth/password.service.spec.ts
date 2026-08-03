@@ -54,7 +54,7 @@ function makeDeps(opts: {
       return 0;
     },
   };
-  const config = { isProduction: false, appUrl: 'http://localhost:3000' };
+  const config = { isProduction: false };
   const mail = {
     send: async (to: string, subject: string, text: string) => void calls.mail.push({ to, subject, text }),
   };

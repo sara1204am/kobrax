@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, Share, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { COLORS, SPACING, TYPE } from '@/theme';
 import { Header, OfflineIndicator, PickerSheet, SectionLabel, SelectRow } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
 import { useNetStore } from '@/store/net';
 import { roleOptions, validateInvite, type InviteForm } from '@/account-form';
+import { CodigoInvitacion } from '@/codigo-invitacion';
 import { inviteMember, listRoles, type InvitedMember, type Role } from '@/users.service';
 
 const EMPTY: InviteForm = { firstName: '', lastName: '', email: '', roleId: '' };
@@ -66,11 +67,6 @@ export default function InvitarScreen() {
   }
 
   if (invitado) {
-    const mensaje =
-      `Te invité a Kobrax. Abrí este link desde tu teléfono: ` +
-      `kobrax://invitacion?c=${invitado.invitationCode.replace('-', '')}\n\n` +
-      `Si no abre, entrá a la app, tocá "Tengo una invitación" y escribí este código: ` +
-      `${invitado.invitationCode}`;
     return (
       <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
         <Header title="Invitación enviada" onBack={() => router.back()} />
@@ -81,16 +77,7 @@ export default function InvitarScreen() {
             días.
           </Text>
 
-          <View style={styles.codeBox}>
-            <Text style={styles.code} selectable>
-              {invitado.invitationCode}
-            </Text>
-          </View>
-
-          <Button
-            label="Compartir por WhatsApp"
-            onPress={() => void Share.share({ message: mensaje })}
-          />
+          <CodigoInvitacion code={invitado.invitationCode} />
           <Button label="Listo" variant="ghost" onPress={() => router.back()} />
         </ScrollView>
       </View>
@@ -153,19 +140,6 @@ export default function InvitarScreen() {
 
 const styles = {
   ok: { ...TYPE.body, fontWeight: '600' as const, color: COLORS.success },
-  codeBox: {
-    backgroundColor: COLORS.highlight,
-    borderRadius: 12,
-    paddingVertical: SPACING.lg,
-    alignItems: 'center' as const,
-  },
-  code: {
-    fontFamily: 'monospace',
-    fontSize: 26,
-    fontWeight: '700' as const,
-    letterSpacing: 2,
-    color: COLORS.navy,
-  },
   footer: {
     backgroundColor: COLORS.white,
     borderTopWidth: 1,
