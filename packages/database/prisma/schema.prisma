@@ -1056,6 +1056,11 @@ model AgendaItem {
   observations       String?
   details            Json             @default("{}") // campos específicos por tipo
   resultActivityId   String?          @map("result_activity_id") // case_activities.id (ref suave) al ejecutar
+  /// Motivo del desenlace no ejecutado → catalog_items.code. CANCEL_REASON si quedó CANCELLED,
+  /// RESCHEDULE_REASON si quedó RESCHEDULED: son excluyentes, por eso una sola columna.
+  reasonCode         String?          @map("reason_code")
+  /// Ref suave al agendado del que nació al reagendar (sólo en el nuevo; se escribe una vez).
+  rescheduledFromId  String?          @map("rescheduled_from_id")
   createdBy          String?          @map("created_by")
   updatedBy          String?          @map("updated_by")
   createdAt          DateTime         @default(now()) @map("created_at")

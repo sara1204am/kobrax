@@ -510,6 +510,89 @@ export function BottomSheet({
 }
 
 /**
+ * Fila-selector: muestra lo elegido y abre una hoja al tocarla. Nació en el alta de agenda (S2) y
+ * subió acá con su segundo consumidor, el menú del detalle (S6).
+ */
+export function SelectRow({
+  icon,
+  value,
+  placeholder,
+  onPress,
+  disabled,
+}: {
+  icon: string;
+  value?: string;
+  placeholder?: string;
+  onPress: () => void;
+  /** Sólo lectura: sin chevron y sin press (p.ej. la fecha en modo edición — mover el día es reagendar). */
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={disabled ? undefined : onPress}
+      disabled={disabled}
+      style={[styles.select, disabled && styles.selectDisabled]}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled) }}
+    >
+      <Text style={styles.selectIcon}>{icon}</Text>
+      <Text style={[styles.selectValue, !value && styles.selectPlaceholder]} numberOfLines={1}>
+        {value ?? placeholder}
+      </Text>
+      {!disabled && <Text style={styles.chevron}>›</Text>}
+    </Pressable>
+  );
+}
+
+/**
+ * Hoja de opciones de una lista corta (teléfono, crédito, motivo…). Misma historia que `SelectRow`:
+ * vivía en el alta de agenda y subió al aparecer el segundo consumidor.
+ */
+export function PickerSheet({
+  visible,
+  onClose,
+  title,
+  options,
+  onPick,
+  addLabel,
+  onAdd,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  title: string;
+  options: { key: string; label: string; hint?: string }[];
+  onPick: (key: string) => void;
+  /** Acción opcional al pie ("Agregar teléfono"): la lista deja de ser un callejón sin salida. */
+  addLabel?: string;
+  onAdd?: () => void;
+}) {
+  return (
+    <BottomSheet visible={visible} onClose={onClose} title={title}>
+      {options.length === 0 && <Text style={styles.pickerEmpty}>No hay opciones disponibles.</Text>}
+      {options.map((o) => (
+        <Pressable
+          key={o.key}
+          onPress={() => {
+            onPick(o.key);
+            onClose();
+          }}
+          style={styles.pickerRow}
+          accessibilityRole="button"
+        >
+          <Text style={styles.pickerLabel}>{o.label}</Text>
+          {o.hint && <Text style={styles.pickerHint}>{o.hint}</Text>}
+        </Pressable>
+      ))}
+      {onAdd && (
+        <Pressable onPress={onAdd} style={styles.pickerAdd} accessibilityRole="button">
+          <Text style={styles.pickerAddText}>{addLabel}</Text>
+        </Pressable>
+      )}
+    </BottomSheet>
+  );
+}
+
+/**
  * Banner de conectividad. Informativo, **nunca bloquea** ninguna acción (principio offline-first).
  * Aparece/desaparece según el estado de red; `SafeAreaView` top para no quedar bajo el notch.
  * Se monta una vez sobre las tabs. // ponytail: slide con Reanimated = polish de P1, no bloquea.
@@ -657,6 +740,29 @@ const styles = StyleSheet.create({
   },
   sheetGrip: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.border },
   sheetTitle: { ...TYPE.h3, textAlign: 'center' },
+  select: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    minHeight: 52,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.input,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    paddingHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
+  },
+  selectDisabled: { backgroundColor: COLORS.lightBg },
+  selectIcon: { fontSize: 16 },
+  selectValue: { flex: 1, ...TYPE.body, color: COLORS.text },
+  selectPlaceholder: { color: COLORS.muted },
+  chevron: { color: COLORS.muted, fontSize: 22 },
+  pickerRow: { paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  pickerLabel: { ...TYPE.body, fontWeight: '600', color: COLORS.text },
+  pickerHint: { ...TYPE.caption },
+  pickerEmpty: { ...TYPE.secondary, textAlign: 'center', paddingVertical: SPACING.lg },
+  pickerAdd: { paddingVertical: SPACING.md, alignItems: 'center' },
+  pickerAddText: { ...TYPE.body, fontWeight: '700', color: COLORS.purple },
   offline: { backgroundColor: COLORS.warningBg, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
   offlineText: { ...TYPE.secondary, color: COLORS.warningText, textAlign: 'center', fontWeight: '600' },
 });

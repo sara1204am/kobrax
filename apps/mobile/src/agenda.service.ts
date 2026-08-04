@@ -29,6 +29,10 @@ export interface AgendaListItem {
   observations?: string;
   details: Record<string, unknown>;
   resultActivityId?: string;
+  /** Motivo del desenlace no ejecutado: cancelación si está CANCELLED, reprogramación si RESCHEDULED. */
+  reasonCode?: string;
+  /** El agendado del que nació al reagendar (S6) — con esto se arma la cadena en el historial. */
+  rescheduledFromId?: string;
   clientName?: string;
   isOverdue: boolean;
   createdAt: string;
@@ -61,6 +65,10 @@ export interface AgendaHistoryEntry {
   status: AgendaItemStatus;
   scheduledDate: string;
   isOverdue: boolean;
+  /** Motivo de la cancelación o de la reprogramación (S6). */
+  reasonCode?: string;
+  /** Si nació al reagendar otra, cuál — con esto se pinta la cadena. */
+  rescheduledFromId?: string;
 }
 
 export interface AgendaItemDetail {
@@ -186,6 +194,48 @@ export interface CreateAgendaInput {
 /** Alta. Devuelve el ítem serializado → la pantalla lo inserta sin refetch. */
 export function createItem(input: CreateAgendaInput): Promise<MutateResult<AgendaListItem>> {
   return apiMutate<AgendaListItem>('/agenda', 'POST', input);
+}
+
+/**
+ * Cuerpo de `PATCH /agenda/:id` (S5). **Sin `scheduledDate` ni deudor**: mover el día es reagendar
+ * (deja rastro) y el cliente es el ancla del agendado. Se manda sólo lo que cambió.
+ */
+export interface UpdateAgendaInput {
+  type?: AgendaItemType;
+  timeMode?: ScheduleTimeMode;
+  scheduledTime?: string;
+  timeSlot?: string;
+  observations?: string;
+  details?: AgendaDetails;
+}
+
+/** Edita una gestión pendiente (S5). Devuelve el ítem actualizado. */
+export function updateItem(id: string, input: UpdateAgendaInput): Promise<MutateResult<AgendaListItem>> {
+  return apiMutate<AgendaListItem>(`/agenda/${id}`, 'PATCH', input);
+}
+
+/** Cancela con motivo del catálogo `CANCEL_REASON` (S6). Sigue visible, con estado Cancelada. */
+export function cancelItem(id: string, reasonCode: string): Promise<MutateResult<AgendaListItem>> {
+  return apiMutate<AgendaListItem>(`/agenda/${id}/cancel`, 'POST', { reasonCode });
+}
+
+/** Cuerpo de `POST /agenda/:id/reschedule`. El motivo sale del catálogo `RESCHEDULE_REASON`. */
+export interface RescheduleAgendaInput {
+  scheduledDate: string;
+  timeMode: ScheduleTimeMode;
+  scheduledTime?: string;
+  timeSlot?: string;
+  reasonCode: string;
+}
+
+/** Reagenda a otro día (S6): cierra ésta como Reagendada y **devuelve la nueva**. */
+export function rescheduleItem(id: string, input: RescheduleAgendaInput): Promise<MutateResult<AgendaListItem>> {
+  return apiMutate<AgendaListItem>(`/agenda/${id}/reschedule`, 'POST', input);
+}
+
+/** Elimina (soft-delete) una gestión cargada por error (S6). Responde 200 con el ítem, no 204. */
+export function deleteItem(id: string): Promise<MutateResult<AgendaListItem>> {
+  return apiMutate<AgendaListItem>(`/agenda/${id}`, 'DELETE');
 }
 
 /** Canales que sirven para llamar o escribir. El endpoint rechaza `EMAIL`. */

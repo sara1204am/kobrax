@@ -70,3 +70,13 @@
     `?from=menu` → vuelve sin marcar `skip_day`.
   - ⚠ `app/cliente/[id].tsx` ya **no** rompe con un cliente sin préstamos asignados (`AGENDA_002`): degrada a
     `getClient` + vacío con CTA al alta de préstamo. Es el camino que abre la búsqueda global.
+- ✅ **Agenda S5+S6** pobló: en `ui.tsx` → **`SelectRow`** (fila "campo → valor elegido", con `disabled`) y
+  **`PickerSheet`** (hoja de selección de una opción). Vivían dentro de `app/agenda/crear.tsx`; ahora los
+  usan también el modo edición y el menú `⋯` del detalle — *no escribir un tercero*. En `agenda-form.ts` →
+  **`hydrateForm(item)`** (ítem del server → estado del reducer del alta, para `crear.tsx?id=`),
+  **`buildPatch(inicial, actual)`** (sólo lo que cambió, para el `PATCH`) y **`partitionDay(items)`**.
+  - ⚠ **`partitionDay` es la única regla de reparto del día**: `done = status !== SCHEDULED`. La pantalla
+    usaba `status === EXECUTED`, así que un ítem **CANCELLED/RESCHEDULED desaparecía del día**. Tiene test
+    de no-regresión — cualquier sección nueva del día se reparte con esta función, no con un `===` propio.
+  - ⚠ `DELETE /agenda/:id` responde **200 con el ítem**, no 204: `apiMutate` trata el 204 como error.
+    Cualquier endpoint de borrado que consuma el móvil tiene que devolver cuerpo.
