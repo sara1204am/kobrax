@@ -77,6 +77,9 @@ describe('OsrmService.trip', () => {
     assert.deepEqual(t!.order, [0, 2, 1]);
     assert.ok(urls[0]!.includes('source=first'));
     assert.ok(urls[0]!.includes('roundtrip=false'));
+    // Sin `destination=last`, OSRM responde NotImplemented (400) y no hay sugerencia. Se rompió una
+    // vez contra el motor real y el mock no lo vio: por eso la URL se afirma acá.
+    assert.ok(urls[0]!.includes('destination=last'));
   });
 
   it('una respuesta con waypoints incompletos devuelve null (no se inventa un orden)', async () => {

@@ -47,11 +47,16 @@ export class OsrmService {
   }
 
   /**
-   * El mismo recorrido, reordenado óptimamente. `source=first` deja la primera parada donde está —el
-   * cobrador ya salió para allá— y `roundtrip=false` no lo obliga a volver al inicio.
+   * El mismo recorrido, reordenado óptimamente. `roundtrip=false` no obliga al cobrador a volver al
+   * inicio, y `source=first` deja la primera parada donde está: ya salió para allá.
+   *
+   * **`destination=last` no es opcional:** de las 8 combinaciones de `roundtrip`/`source`/`destination`,
+   * OSRM v5.26 sólo implementa `false` con `first`+`last`; sin `destination` responde
+   * `NotImplemented` (400) y la sugerencia de reordenar no aparece nunca. El precio es que la última
+   * parada también queda fija — se reordena el medio, que es donde está el zigzag.
    */
   async trip(points: LatLng[]): Promise<OsrmTrip | null> {
-    const body = await this.get('trip', points, 'source=first&roundtrip=false&overview=full&geometries=geojson');
+    const body = await this.get('trip', points, 'source=first&destination=last&roundtrip=false&overview=full&geometries=geojson');
     const found = body?.trips?.[0];
     if (!found || !body?.waypoints) return null;
     // `waypoints[i].waypoint_index` = en qué posición del viaje quedó el punto i. Se invierte para
