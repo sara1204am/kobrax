@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { RoutesService } from './routes.service';
+import type { OsrmService } from './osrm.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
 /** Parada del falso de Prisma: lo mínimo que el service lee y escribe. */
@@ -19,12 +20,16 @@ function makeService(
     cases?: unknown[];
     permissions?: string[];
     routes?: unknown[];
-    route?: { id: string; collectorId: string };
+    route?: { id: string; collectorId: string; totalDistanceKm?: number; estimatedMinutes?: number };
     stops?: FakeStop[];
+    /** Punto de cada parada (`null` = cliente sin ubicación cargada). Sólo lo usa el preview. */
+    points?: Record<string, { latitude: number; longitude: number } | null>;
+    osrm?: Partial<OsrmService>;
   } = {},
 ) {
   const calls = {
     routeCreate: [] as Record<string, unknown>[],
+    routeUpdate: [] as Record<string, unknown>[],
     audit: [] as string[],
     listWhere: undefined as Record<string, unknown> | undefined,
   };
@@ -75,16 +80,44 @@ function makeService(
         return opts.routes ?? [];
       },
       count: async () => (opts.routes ?? []).length,
-      findFirst: async () => opts.route ?? null,
-      update: async (args: { data: Record<string, unknown> }) => ({ ...opts.route, ...args.data }),
+      // Las paradas salen del MISMO store en memoria, así un reordenamiento se ve en la lectura
+      // siguiente. `client` se sintetiza desde `opts.points`.
+      findFirst: async () =>
+        opts.route ? { ...opts.route, stops: sorted({ routeId: opts.route.id }).map(withClient) } : null,
+      update: async (args: { data: Record<string, unknown> }) => {
+        calls.routeUpdate.push(args.data);
+        return { ...opts.route, ...args.data };
+      },
     },
   };
+  function withClient(s: FakeStop) {
+    const p = opts.points?.[s.id];
+    return {
+      ...s,
+      visitedAt: null,
+      client: {
+        firstName: 'Ana',
+        lastName: 'Ruiz',
+        businessName: null,
+        locations: p ? [{ locationType: 'HOME', address: null, latitude: p.latitude, longitude: p.longitude }] : [],
+      },
+    };
+  }
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
   const perms = opts.permissions ?? [];
   const tenant = { accountId: 'acc-A', userId: 'u1', permissions: perms, can: (p: string) => perms.includes(p) };
   const audit = { record: async (e: { action: string }) => void calls.audit.push(e.action) };
   const events = { emit: () => {} };
-  const service = new RoutesService(prisma as never, tenant as never, audit as never, events as never, {} as never);
+  // Sin motor por defecto: el preview se degrada, que es el camino sin OSRM.
+  const osrm = { route: async () => null, trip: async () => null, ...opts.osrm };
+  const service = new RoutesService(
+    prisma as never,
+    tenant as never,
+    audit as never,
+    events as never,
+    { decrypt: (v: string) => v } as never,
+    osrm as never,
+  );
   /** El orden real del recorrido, para asertar contra él. */
   const order = () => stops.slice().sort((a, b) => a.sequenceOrder - b.sequenceOrder).map((s) => s.id);
   return { service, calls, stops, order };
@@ -232,6 +265,147 @@ describe('RoutesService.updateStop (mover de posición)', () => {
   it('no se toca la parada de una ruta ajena', async () => {
     const { service } = makeService({ route: { id: 'r1', collectorId: 'otro' }, permissions: FIELD, stops: threeStops() });
     await rejectsWithCode(service.updateStop('r1', 's1', { sequenceOrder: 2 } as never), 'RESOURCE_NOT_FOUND');
+  });
+});
+
+// ── Preview y optimización (S3) ──────────────────────────────────────────────
+
+/** Las tres paradas, cada una con su punto en el mapa. */
+const THREE_POINTS = {
+  s1: { latitude: -17.78, longitude: -63.18 },
+  s2: { latitude: -17.76, longitude: -63.19 },
+  s3: { latitude: -17.75, longitude: -63.2 },
+};
+/** Un recorrido de OSRM de 12 km / 45 min, en tres tramos. */
+const fakePath = (km: number, min: number) => ({
+  distanceM: km * 1000,
+  durationS: min * 60,
+  geometry: [{ latitude: -17.78, longitude: -63.18 }, { latitude: -17.75, longitude: -63.2 }],
+  legs: [
+    { distanceM: (km * 1000) / 2, durationS: (min * 60) / 2 },
+    { distanceM: (km * 1000) / 2, durationS: (min * 60) / 2 },
+  ],
+});
+
+describe('RoutesService.preview (S3)', () => {
+  const setup = (osrm: Record<string, unknown>, route = OWN_ROUTE) =>
+    makeService({ route, permissions: FIELD, stops: threeStops(), points: THREE_POINTS, osrm: osrm as never });
+
+  it('la duración suma la permanencia en cada parada, no sólo el manejo', async () => {
+    const { service } = setup({ route: async () => fakePath(12.4, 45) });
+    const p = await service.preview('r1');
+    assert.equal(p.distanceKm, 12.4);
+    assert.equal(p.minutes, 45 + 10 * 3); // 3 paradas × 10 min de permanencia
+  });
+
+  it('la hora estimada de cada parada corre con los tramos reales', async () => {
+    const { service } = setup({ route: async () => fakePath(12, 40) });
+    const p = await service.preview('r1');
+    // Salida = 0; después cada tramo (20 min) más la permanencia de la parada anterior (10).
+    assert.deepEqual(p.stops.map((s) => s.etaMinutes), [0, 30, 60]);
+  });
+
+  it('cachea distancia y duración en la ruta (es lo que se muestra sin señal)', async () => {
+    const { service, calls } = setup({ route: async () => fakePath(12.4, 45) });
+    await service.preview('r1');
+    assert.deepEqual(calls.routeUpdate[0], { totalDistanceKm: 12.4, estimatedMinutes: 75 });
+  });
+
+  it('sin motor devuelve los últimos números conocidos y ninguna geometría', async () => {
+    const { service } = setup({}, { ...OWN_ROUTE, totalDistanceKm: 9.1, estimatedMinutes: 60 });
+    const p = await service.preview('r1');
+    assert.deepEqual(p.geometry, []);
+    assert.equal(p.distanceKm, 9.1);
+    assert.equal(p.minutes, 60);
+    assert.equal(p.suggestion, undefined);
+  });
+
+  it('sugiere reordenar cuando el ahorro pasa el umbral', async () => {
+    const { service } = setup({
+      route: async () => fakePath(12.4, 45),
+      trip: async () => ({ ...fakePath(9.9, 30), order: [0, 2, 1] }),
+    });
+    const p = await service.preview('r1');
+    assert.equal(p.suggestion!.savedKm, 2.5);
+    assert.equal(p.suggestion!.savedMinutes, 15);
+    assert.deepEqual(p.suggestion!.order, ['s1', 's3', 's2']);
+  });
+
+  it('NO sugiere nada por un ahorro insignificante (la alerta se vuelve ruido)', async () => {
+    const { service } = setup({
+      route: async () => fakePath(12.4, 45),
+      trip: async () => ({ ...fakePath(12.2, 44), order: [0, 2, 1] }),
+    });
+    const p = await service.preview('r1');
+    assert.equal(p.suggestion, undefined);
+  });
+
+  it('una parada sin coordenadas queda en la lista, sin estimación y sin romper el cálculo', async () => {
+    const { service } = makeService({
+      route: OWN_ROUTE,
+      permissions: FIELD,
+      stops: threeStops(),
+      points: { ...THREE_POINTS, s2: null },
+      osrm: { route: async () => fakePath(8, 20) } as never,
+    });
+    const p = await service.preview('r1');
+    assert.equal(p.stops.length, 3);
+    assert.equal(p.stops.find((s) => s.id === 's2')!.etaMinutes, undefined);
+    assert.equal(p.distanceKm, 8);
+  });
+
+  it('no se previsualiza la ruta de otro cobrador', async () => {
+    const { service } = setup({}, { id: 'r1', collectorId: 'otro' });
+    await rejectsWithCode(service.preview('r1'), 'RESOURCE_NOT_FOUND');
+  });
+});
+
+describe('RoutesService.optimize (S3)', () => {
+  it('aplica el orden sugerido y la secuencia queda sin huecos', async () => {
+    const { service, order, stops } = makeService({
+      route: OWN_ROUTE,
+      permissions: FIELD,
+      stops: threeStops(),
+      points: THREE_POINTS,
+      osrm: {
+        route: async () => fakePath(12.4, 45),
+        trip: async () => ({ ...fakePath(9.9, 30), order: [0, 2, 1] }),
+      } as never,
+    });
+    await service.optimize('r1');
+    assert.deepEqual(order(), ['s1', 's3', 's2']);
+    assert.deepEqual(stops.map((s) => s.sequenceOrder).sort(), [1, 2, 3]);
+  });
+
+  it('sin sugerencia no toca el orden', async () => {
+    const { service, order } = makeService({
+      route: OWN_ROUTE,
+      permissions: FIELD,
+      stops: threeStops(),
+      points: THREE_POINTS,
+      osrm: { route: async () => fakePath(12.4, 45) } as never,
+    });
+    await service.optimize('r1');
+    assert.deepEqual(order(), ['s1', 's2', 's3']);
+  });
+
+  it('la parada sin coordenadas no se pierde: queda al final', async () => {
+    const { service, order } = makeService({
+      route: OWN_ROUTE,
+      permissions: FIELD,
+      stops: [
+        ...threeStops(),
+        { id: 's4', routeId: 'r1', clientId: 'cl4', caseId: 'ca4', sequenceOrder: 4, status: 'PENDING' },
+      ],
+      // s2 no tiene punto: no entra al cálculo, pero sigue siendo una parada del recorrido.
+      points: { s1: THREE_POINTS.s1, s2: null, s3: THREE_POINTS.s3, s4: { latitude: -17.74, longitude: -63.21 } },
+      osrm: {
+        route: async () => fakePath(12.4, 45),
+        trip: async () => ({ ...fakePath(9.9, 30), order: [0, 2, 1] }), // s1, s4, s3
+      } as never,
+    });
+    await service.optimize('r1');
+    assert.deepEqual(order(), ['s1', 's4', 's3', 's2']);
   });
 });
 

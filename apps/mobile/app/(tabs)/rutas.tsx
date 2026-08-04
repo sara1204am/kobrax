@@ -130,11 +130,8 @@ export default function RutasScreen() {
         ) : finished ? (
           <RutaFinalizada route={route} />
         ) : (
-          <RutaEnCurso
-            route={route}
-            busy={busy}
-            onStart={() => run(() => updateRouteStatus(route.id, RouteStatus.IN_PROGRESS))}
-          />
+          // Iniciar pasa por la vista previa (S3): ahí se ve el recorrido, se mide y se confirma.
+          <RutaEnCurso route={route} onStart={() => router.push(`/rutas/preview?routeId=${route.id}`)} />
         )}
 
         {actionError && <Text style={styles.error}>{actionError}</Text>}
@@ -163,7 +160,7 @@ function SinRuta({ busy, onGenerate }: { busy: boolean; onGenerate: () => void }
 }
 
 /** RT-0b: ruta planificada o en curso — progreso, métricas y la acción del día. */
-function RutaEnCurso({ route, busy, onStart }: { route: RouteItem; busy: boolean; onStart: () => void }) {
+function RutaEnCurso({ route, onStart }: { route: RouteItem; onStart: () => void }) {
   const { done, total } = routeProgress(route);
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   const planned = route.status === RouteStatus.PLANNED;
@@ -195,7 +192,7 @@ function RutaEnCurso({ route, busy, onStart }: { route: RouteItem; busy: boolean
         </View>
 
         {planned ? (
-          <Button label="Iniciar ruta" onPress={onStart} loading={busy} />
+          <Button label="Iniciar ruta" onPress={onStart} />
         ) : (
           <View style={{ gap: SPACING.xs }}>
             <Button label="Continuar ruta" onPress={() => {}} disabled />

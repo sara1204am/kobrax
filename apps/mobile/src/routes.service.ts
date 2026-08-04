@@ -17,6 +17,9 @@ export interface RouteStopItem {
   clientName?: string;
   /** Dirección donde se cobra (HOME, si no la primera cargada). Vacía si el cliente no tiene ninguna. */
   address?: string;
+  /** El punto de esa misma ubicación (S3). Sin él la parada existe pero no se puede dibujar. */
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface RouteItem {
@@ -103,17 +106,24 @@ export function updateStop(routeId: string, stopId: string, patch: UpdateStopPat
   return apiMutate<RouteStopItem>(`/routes/${routeId}/stops/${stopId}`, 'PATCH', patch);
 }
 
-/**
- * Resuelve coordenadas de cada parada contra un lookup `clientId → {lat,lng}` (armado desde
- * `GET /clients`). Pura y testeable. Paradas sin coordenada conocida salen con lat/lng `undefined`.
- */
-export type StopWithCoords = RouteStopItem & Partial<LngLat>;
-export function resolveStopCoords(
-  stops: RouteStopItem[],
-  coordsByClientId: Record<string, LngLat | undefined>,
-): StopWithCoords[] {
-  return stops.map((s) => {
-    const c = coordsByClientId[s.clientId];
-    return c ? { ...s, latitude: c.latitude, longitude: c.longitude } : { ...s };
-  });
+// ── Vista previa y optimización (S3) ─────────────────────────────────────────
+
+export interface RoutePreview {
+  /** La polilínea por las calles. **Vacía = hay que unir las paradas con rectas** (sin motor o sin red). */
+  geometry: LngLat[];
+  distanceKm?: number;
+  minutes?: number;
+  stops: { id: string; sequenceOrder: number; etaMinutes?: number }[];
+  /** Ausente si el orden actual ya está bien, o si no se pudo medir. */
+  suggestion?: { order: string[]; savedKm: number; savedMinutes: number };
+}
+
+/** El recorrido dibujado, medido y con el orden sugerido (S3). `GET /routes/:id/preview`. */
+export function getRoutePreview(routeId: string): Promise<QueryResult<RoutePreview>> {
+  return apiQuery<RoutePreview>(`/routes/${routeId}/preview`);
+}
+
+/** Aplica el orden sugerido. Devuelve la ruta ya reordenada. `POST /routes/:id/optimize`. */
+export function optimizeRoute(routeId: string): Promise<MutateResult<RouteItem>> {
+  return apiMutate<RouteItem>(`/routes/${routeId}/optimize`, 'POST', {});
 }

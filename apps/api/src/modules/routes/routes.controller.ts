@@ -45,6 +45,20 @@ export class RoutesController {
     return this.routes.updateStatus(id, dto);
   }
 
+  /** Vista previa (S3): la polilínea por las calles, distancia, duración y el orden sugerido. */
+  @Get(':id/preview')
+  @Roles(Permission.ROUTE_READ)
+  preview(@Param('id', ParseUUIDPipe) id: string) {
+    return this.routes.preview(id);
+  }
+
+  /** Aplica el orden sugerido por el preview. Puerta mínima + scope en el service, como las paradas. */
+  @Post(':id/optimize')
+  @Roles(Permission.ROUTE_READ)
+  optimize(@Param('id', ParseUUIDPipe) id: string) {
+    return this.routes.optimize(id);
+  }
+
   @Post(':id/stops')
   @Roles(Permission.ROUTE_READ)
   addStop(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AddStopDto) {

@@ -1,4 +1,4 @@
-import type { RoutePlan, RouteStop } from '@prisma/client';
+import type { Prisma, RoutePlan, RouteStop } from '@prisma/client';
 import { LocationType } from '@prisma/client';
 import type { CryptoService } from '../../common/crypto/crypto.service';
 import { clientDisplayName, safeDecrypt } from '../clients/clients.serializer';
@@ -8,16 +8,22 @@ type StopClient = {
   firstName: string | null;
   lastName: string | null;
   businessName: string | null;
-  locations: { locationType: LocationType; address: string | null }[];
+  locations: {
+    locationType: LocationType;
+    address: string | null;
+    latitude?: Prisma.Decimal | null;
+    longitude?: Prisma.Decimal | null;
+  }[];
 };
 
 /**
- * Dirección donde se cobra: la primera HOME; si no hay ninguna, la primera que exista.
- * Un cliente puede tener domicilio y negocio, y la casa es donde se cobra.
+ * Dónde se cobra: la primera HOME; si no hay ninguna, la primera que exista. Un cliente puede tener
+ * domicilio y negocio, y la casa es donde se cobra. **Misma regla que la cartera** (`portfolioExtra`
+ * de cases): con dos criterios distintos el pin del mapa y la dirección de la parada podrían apuntar
+ * a lugares distintos del mismo cliente.
  */
-function primaryAddress(client: StopClient, crypto: CryptoService): string | undefined {
-  const loc = client.locations.find((l) => l.locationType === LocationType.HOME) ?? client.locations[0];
-  return safeDecrypt(crypto, loc?.address ?? null) ?? undefined;
+function primaryLocation(client: StopClient) {
+  return client.locations.find((l) => l.locationType === LocationType.HOME) ?? client.locations[0];
 }
 
 /**
@@ -25,6 +31,7 @@ function primaryAddress(client: StopClient, crypto: CryptoService): string | und
  * y quien la pide la audita (`findOne`). Sin eso, la parada devuelve ids como siempre.
  */
 export function serializeStop(s: RouteStop & { client?: StopClient }, crypto?: CryptoService) {
+  const loc = s.client ? primaryLocation(s.client) : undefined;
   return {
     id: s.id,
     clientId: s.clientId,
@@ -33,7 +40,11 @@ export function serializeStop(s: RouteStop & { client?: StopClient }, crypto?: C
     status: s.status,
     visitedAt: s.visitedAt ?? undefined,
     clientName: s.client ? clientDisplayName(s.client) : undefined,
-    address: s.client && crypto ? primaryAddress(s.client, crypto) : undefined,
+    address: loc && crypto ? (safeDecrypt(crypto, loc.address) ?? undefined) : undefined,
+    // El punto de la parada (S3): sin él no entra a la polilínea ni al cálculo de OSRM, pero la
+    // parada sigue existiendo y numerada en la lista.
+    latitude: loc?.latitude != null ? Number(loc.latitude) : undefined,
+    longitude: loc?.longitude != null ? Number(loc.longitude) : undefined,
   };
 }
 
