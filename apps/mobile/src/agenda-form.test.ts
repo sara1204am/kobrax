@@ -1,6 +1,16 @@
-import { AgendaItemType, AgendaTimeSlot, ScheduleTimeMode } from '@kobrax/shared';
-import { buildPayload, canSubmit, formReducer, initialForm, money, type FormState } from './agenda-form';
-import { actionLinks, whatsappLink } from './agenda.service';
+import { AgendaItemStatus, AgendaItemType, AgendaTimeSlot, ScheduleTimeMode } from '@kobrax/shared';
+import {
+  buildPatch,
+  buildPayload,
+  canSubmit,
+  formReducer,
+  hydrateForm,
+  initialForm,
+  money,
+  partitionDay,
+  type FormState,
+} from './agenda-form';
+import { actionLinks, whatsappLink, type AgendaListItem } from './agenda.service';
 
 const CONTACT = '11111111-1111-4111-8111-111111111111';
 const CASE = '22222222-2222-4222-8222-222222222222';
@@ -131,5 +141,83 @@ describe('buildPayload', () => {
     expect(buildPayload(readyCall())?.observations).toBeUndefined();
     expect(buildPayload(formReducer(readyCall(), { t: 'observations', value: '  Insiste  ' }))?.observations).toBe('Insiste');
     expect(buildPayload(initialForm('2026-07-10'))).toBeNull();
+  });
+});
+
+/** Agendado tal como lo devuelve el API, para hidratar el formulario en modo edición (S5). */
+function savedItem(over: Partial<AgendaListItem> = {}): AgendaListItem {
+  return {
+    id: 'a1', caseId: CASE, clientId: 'cl1', creditId: CREDIT, assigneeId: 'u1',
+    type: AgendaItemType.CALL, status: AgendaItemStatus.SCHEDULED,
+    scheduledDate: '2026-07-10T00:00:00.000Z', timeMode: ScheduleTimeMode.FIXED, scheduledTime: '15:30',
+    details: { contactId: CONTACT }, isOverdue: false,
+    createdAt: '2026-07-09T10:00:00.000Z', updatedAt: '2026-07-09T10:00:00.000Z',
+    ...over,
+  };
+}
+
+describe('hydrateForm + buildPatch (S5 — editar)', () => {
+  it('reconstruye el formulario desde el agendado guardado', () => {
+    const state = hydrateForm(savedItem({ observations: 'insistir' }));
+    expect(state).toMatchObject({
+      type: AgendaItemType.CALL,
+      clientId: 'cl1',
+      caseId: CASE,
+      creditId: CREDIT,
+      scheduledDate: '2026-07-10',
+      scheduledTime: '15:30',
+      observations: 'insistir',
+      details: { contactId: CONTACT },
+    });
+    expect(canSubmit(state)).toBe(true);
+  });
+
+  it('hidrata una promesa con su monto y su medio de pago', () => {
+    const details = { amount: 500.5, promiseDate: '2026-07-20', paymentMethodCode: 'CASH' };
+    const state = hydrateForm(savedItem({ type: AgendaItemType.PROMISE_TO_PAY, details }));
+    expect(state.details).toEqual(details);
+    expect(canSubmit(state)).toBe(true);
+  });
+
+  it('hidrata un agendado por franja sin perder el lapso', () => {
+    const state = hydrateForm(savedItem({ timeMode: ScheduleTimeMode.LAPSE, scheduledTime: undefined, timeSlot: 'NIGHT' }));
+    expect(state).toMatchObject({ timeMode: ScheduleTimeMode.LAPSE, timeSlot: 'NIGHT', scheduledTime: '' });
+    expect(canSubmit(state)).toBe(true); // por franja no hace falta hora exacta
+  });
+
+  it('el parche NUNCA lleva fecha ni deudor: mover el día es reagendar (D5)', () => {
+    const patch = buildPatch(hydrateForm(savedItem()))!;
+    expect(patch).not.toHaveProperty('scheduledDate');
+    expect(patch).not.toHaveProperty('caseId');
+    expect(patch).not.toHaveProperty('clientId');
+    expect(patch).toMatchObject({ type: AgendaItemType.CALL, scheduledTime: '15:30', timeSlot: undefined });
+  });
+
+  it('cambiar el tipo limpia los details y bloquea el guardado hasta completarlos', () => {
+    const edited = formReducer(hydrateForm(savedItem()), { t: 'type', value: AgendaItemType.REMINDER });
+    expect(edited.details).toEqual({});
+    expect(canSubmit(edited)).toBe(false);
+    expect(buildPatch(edited)).toBeNull();
+    // Con la descripción cargada, vuelve a poder guardarse — sin haber tocado cliente ni fecha.
+    const ready = formReducer(edited, { t: 'details', patch: { description: 'Llevar el comprobante' } });
+    expect(canSubmit(ready)).toBe(true);
+    expect(ready.clientId).toBe('cl1');
+    expect(ready.scheduledDate).toBe('2026-07-10');
+  });
+});
+
+describe('partitionDay (D6 — secciones del día)', () => {
+  const item = (id: string, status: AgendaItemStatus) => savedItem({ id, status });
+
+  it('lo cancelado y lo reagendado siguen visibles, del lado de "Completadas"', () => {
+    const { pending, done } = partitionDay([
+      item('a', AgendaItemStatus.SCHEDULED),
+      item('b', AgendaItemStatus.EXECUTED),
+      item('c', AgendaItemStatus.CANCELLED),
+      item('d', AgendaItemStatus.RESCHEDULED),
+    ]);
+    expect(pending.map((i) => i.id)).toEqual(['a']);
+    // Sin esto una gestión cancelada desaparecía de la app y cancelar era igual que eliminar.
+    expect(done.map((i) => i.id)).toEqual(['b', 'c', 'd']);
   });
 });

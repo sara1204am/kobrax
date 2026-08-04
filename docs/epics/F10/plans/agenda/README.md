@@ -22,8 +22,8 @@ estas filas están superados por este módulo).
 | S2 | Crear agendado (5 tipos) | `65:724` Llamada · `65:828` Visita · `65:938` WhatsApp · `65:1047` Recordatorio · `65:1150` Promesa | [crear.md](./crear.md) | núcleo | ✅ construido (falta validación visual) |
 | S3 | Ver agendado (detalle) | `64:425` | [ver.md](./ver.md) | núcleo | ✅ construido (falta validación visual) |
 | S4 | Registrar acción (ejecutar) | `66:1763` · `66:2195` · `66:2440` · `66:2531` | [registrar-accion.md](./registrar-accion.md) | núcleo | ✅ construido (falta validación visual) |
-| S5 | Editar | (reusa `crear`) | `editar.md` | núcleo | ⬜ |
-| S6 | Eliminar / cancelar / reagendar | (reusa `ver`) | `eliminar.md` | núcleo | ⬜ |
+| S5 | Editar | (reusa `crear` en modo `?id=`) | [editar-eliminar.md](./editar-eliminar.md) | núcleo | 📝 plan en borrador |
+| S6 | Reagendar / cancelar / eliminar | (menú `…` de `ver`) | [editar-eliminar.md](./editar-eliminar.md) | núcleo | 📝 plan en borrador |
 | + | Plantillas WhatsApp, evidencias visita, lapso/rango horario, adjuntos, campañas, ABM de catálogos | — | (slices) | extras | ⬜ diferido |
 
 Cada archivo se crea **just-in-time** al llegar a esa pantalla (no todos de una).

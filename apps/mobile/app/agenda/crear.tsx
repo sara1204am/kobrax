@@ -2,6 +2,10 @@
  * Agenda S2 — "Nueva gestión" (Figma `65:724` y hermanos): elegir tipo, buscar cliente, completar
  * los campos propios del tipo, programar y guardar. La lógica del formulario vive en `agenda-form.ts`
  * (reducer puro); acá sólo se despacha y se pinta.
+ *
+ * **Modo edición (S5)**: con `?id=<agendaItemId>` la misma pantalla edita en vez de crear — hidrata el
+ * reducer desde el agendado, fija el deudor (es el ancla, no se cambia editando) y **bloquea la fecha**:
+ * mover el día es *reagendar* y deja rastro (`plans/agenda/editar-eliminar.md` D5).
  */
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import {
@@ -15,7 +19,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { MapPicker } from '@/maps/MapPicker';
@@ -23,15 +27,21 @@ import DateTimePicker, { type DateTimePickerEvent } from '@react-native-communit
 import { AgendaItemType, AgendaTimeSlot, CatalogType, ScheduleTimeMode } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { Button, ErrorBanner } from '@/components';
-import { AGENDA_TYPE_META, BottomSheet, Header, SectionLabel } from '@/ui';
+// `SelectRow` y `PickerSheet` nacieron en esta pantalla y subieron a `ui.tsx` con su 2º consumidor (S6).
+import { AGENDA_TYPE_META, BottomSheet, Header, PickerSheet, SectionLabel, SelectRow } from '@/ui';
 import {
+  buildPatch,
   buildPayload,
   canSubmit,
   formReducer,
   formatLongDate,
+  hydrateForm,
   initialForm,
   money,
   TIME_SLOT_LABEL,
+  toHHmm,
+  toISO,
+  toLocalDate,
   type TimeMode,
   type TimeSlot,
 } from '@/agenda-form';
@@ -40,6 +50,8 @@ import {
   addClientLocation,
   clientContext,
   createItem,
+  getItem,
+  updateItem,
   type AgendaClientContext,
   type ClientLocationType,
   type PhoneContactType,
@@ -64,17 +76,6 @@ const TIME_MODES: TimeMode[] = [ScheduleTimeMode.FIXED, ScheduleTimeMode.LAPSE];
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
-/** `YYYY-MM-DD` → `Date` local, para alimentar el picker nativo sin correr un día. */
-function toLocalDate(iso: string): Date {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(y!, m! - 1, d!);
-}
-function toISO(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-function toHHmm(d: Date): string {
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
 type Sheet = 'contact' | 'location' | 'credit' | 'method' | 'bank' | 'newPhone' | 'newLocation';
 type PickerKind = 'date' | 'time' | 'promiseDate';
 
@@ -92,10 +93,15 @@ const LOCATION_TYPES: { key: ClientLocationType; label: string }[] = [
 ];
 
 export default function CrearGestionScreen() {
+  /** Con `?id=` la pantalla edita ese agendado; sin él, crea uno nuevo. */
+  const { id: editId } = useLocalSearchParams<{ id?: string }>();
+  const editing = Boolean(editId);
   const [form, dispatch] = useReducer(formReducer, undefined, () => initialForm(todayISO()));
   const [query, setQuery] = useState('');
   const [ctx, setCtx] = useState<AgendaClientContext | null>(null);
   const [loadingCtx, setLoadingCtx] = useState(false);
+  /** Modo edición: hasta que la hidratación termina no hay nada que pintar. */
+  const [loadingItem, setLoadingItem] = useState(editing);
   const [methods, setMethods] = useState<CatalogOption[]>([]);
   const [banks, setBanks] = useState<CatalogOption[]>([]);
   const [sheet, setSheet] = useState<Sheet | null>(null);
@@ -137,6 +143,39 @@ export default function CrearGestionScreen() {
 
   // Buscador con debounce (compartido con la cartera): en gama baja, una request por tecla mata la lista.
   const hits = useClientSearch(query, { enabled: !form.clientId });
+
+  /**
+   * Modo edición: trae el agendado, hidrata el formulario y recarga el contexto del deudor para que
+   * los selectores (teléfonos, direcciones, créditos) tengan de dónde elegir. Dos lecturas que ya
+   * existen (S3 y S2); ningún endpoint nuevo.
+   */
+  useEffect(() => {
+    if (!editId) return;
+    void (async () => {
+      const res = await getItem(editId);
+      if (res.status !== 'ok') {
+        setLoadingItem(false);
+        setError(
+          res.status === 'offline'
+            ? 'Sin conexión — no se pudo abrir la gestión.'
+            : res.status === 'unauthenticated'
+              ? 'Tu sesión venció — volvé a entrar.'
+              : res.message,
+        );
+        return;
+      }
+      const { item } = res.data;
+      dispatch({ t: 'hydrate', state: hydrateForm(item) });
+      // El monto se pinta desde su texto (el número es el derivado, no al revés — lección de S2).
+      const amount = (item.details as { amount?: number }).amount;
+      if (amount != null) setAmountText(String(amount));
+
+      const ctxRes = await clientContext(item.clientId);
+      setLoadingItem(false);
+      if (ctxRes.status === 'ok') setCtx(ctxRes.data);
+      else setError(ctxRes.status === 'offline' ? 'Sin conexión — faltan los datos del cliente.' : 'No se pudieron cargar los datos del cliente.');
+    })();
+  }, [editId]);
 
   // Catálogos de la promesa: sólo cuando el tipo los pide, y una sola vez.
   useEffect(() => {
@@ -275,20 +314,22 @@ export default function CrearGestionScreen() {
   );
 
   const save = useCallback(async () => {
-    const payload = buildPayload(form);
-    if (!payload) return;
+    // Editar manda sólo lo editable (sin fecha ni deudor); crear manda el alta completa.
+    const patch = editId ? buildPatch(form) : null;
+    const payload = editId ? null : buildPayload(form);
+    if (!patch && !payload) return;
     setSaving(true);
     setError(null);
-    const res = await createItem(payload);
+    const res = patch ? await updateItem(editId!, patch) : await createItem(payload!);
     setSaving(false);
     if (res.status === 'ok') {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.back(); // la Agenda refetchea al recuperar el foco
+      router.back(); // la Agenda y el detalle refetchean al recuperar el foco
       return;
     }
     // Offline: el formulario queda intacto para reintentar (cola real de escritura = P6).
     setError(res.status === 'offline' ? 'Sin conexión — reintentá.' : res.status === 'error' ? res.message : 'Sesión vencida.');
-  }, [form]);
+  }, [editId, form]);
 
   const credit = ctx?.credits.find((c) => c.creditId === form.creditId);
   const contact = ctx?.contacts.find((c) => c.id === details.contactId);
@@ -301,7 +342,7 @@ export default function CrearGestionScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
-      <Header title="Nueva gestión" onBack={() => router.back()} />
+      <Header title={editing ? 'Editar gestión' : 'Nueva gestión'} onBack={() => router.back()} />
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <SectionLabel>Tipo de gestión</SectionLabel>
@@ -341,9 +382,12 @@ export default function CrearGestionScreen() {
               </Text>
               {ctx.client.nationalId && <Text style={styles.clientDoc}>CI {ctx.client.nationalId}</Text>}
             </View>
-            <Pressable onPress={clearClient} hitSlop={12} accessibilityRole="button" accessibilityLabel="Quitar cliente">
-              <Text style={styles.remove}>✕</Text>
-            </Pressable>
+            {/* Editando no se cambia de deudor: es el ancla del agendado (D1). Para otro, se crea otra. */}
+            {!editing && (
+              <Pressable onPress={clearClient} hitSlop={12} accessibilityRole="button" accessibilityLabel="Quitar cliente">
+                <Text style={styles.remove}>✕</Text>
+              </Pressable>
+            )}
           </View>
         ) : (
           <>
@@ -488,7 +532,14 @@ export default function CrearGestionScreen() {
             />
 
             <SectionLabel>{isPromise ? 'Programación recordatorio' : 'Programación'}</SectionLabel>
-            <SelectRow icon="📅" value={formatLongDate(form.scheduledDate)} onPress={() => setPicker('date')} />
+            {/* Editando, la fecha no se toca: mover el día es reagendar y deja rastro (D5). */}
+            <SelectRow
+              icon="📅"
+              value={formatLongDate(form.scheduledDate)}
+              onPress={() => setPicker('date')}
+              disabled={editing}
+            />
+            {editing && <Text style={styles.hint}>Para moverla de día, usá Reagendar.</Text>}
 
             <View style={styles.toggle}>
               {TIME_MODES.map((mode) => {
@@ -540,7 +591,12 @@ export default function CrearGestionScreen() {
       </ScrollView>
 
       <SafeAreaView edges={['bottom']} style={styles.footer}>
-        <Button label="Guardar gestión" onPress={() => void save()} loading={saving} disabled={!canSubmit(form, requiresBank)} />
+        <Button
+          label={editing ? 'Guardar cambios' : 'Guardar gestión'}
+          onPress={() => void save()}
+          loading={saving}
+          disabled={loadingItem || !canSubmit(form, requiresBank)}
+        />
       </SafeAreaView>
 
       <PickerSheet
@@ -714,28 +770,6 @@ export default function CrearGestionScreen() {
 }
 
 /** Fila-selector (ícono + valor o placeholder + chevron). Abre una hoja o un picker. */
-function SelectRow({
-  icon,
-  value,
-  placeholder,
-  onPress,
-}: {
-  icon: string;
-  value?: string;
-  placeholder?: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={styles.select} accessibilityRole="button">
-      <Text style={styles.selectIcon}>{icon}</Text>
-      <Text style={[styles.selectValue, !value && styles.selectPlaceholder]} numberOfLines={1}>
-        {value ?? placeholder}
-      </Text>
-      <Text style={styles.chevron}>›</Text>
-    </Pressable>
-  );
-}
-
 /**
  * Campo deshabilitado: dato del crédito que el cobrador consulta pero no edita. Es un `Text`, no un
  * `TextInput` inerte — no toma foco ni abre teclado, y el lector de pantalla no lo anuncia como editable.
@@ -774,50 +808,6 @@ function Multiline({
 }
 
 /** Hoja de selección genérica (crédito, teléfono, dirección, banco). Sube a `ui.tsx` cuando S3/S4 la pidan. */
-function PickerSheet({
-  visible,
-  onClose,
-  title,
-  options,
-  onPick,
-  addLabel,
-  onAdd,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  title: string;
-  options: { key: string; label: string; hint?: string }[];
-  onPick: (key: string) => void;
-  /** Acción opcional al pie ("Agregar teléfono"): la lista deja de ser un callejón sin salida. */
-  addLabel?: string;
-  onAdd?: () => void;
-}) {
-  return (
-    <BottomSheet visible={visible} onClose={onClose} title={title}>
-      {options.length === 0 && <Text style={styles.sheetEmpty}>No hay opciones disponibles.</Text>}
-      {options.map((o) => (
-        <Pressable
-          key={o.key}
-          onPress={() => {
-            onPick(o.key);
-            onClose();
-          }}
-          style={styles.sheetRow}
-          accessibilityRole="button"
-        >
-          <Text style={styles.sheetLabel}>{o.label}</Text>
-          {o.hint && <Text style={styles.sheetHint}>{o.hint}</Text>}
-        </Pressable>
-      ))}
-      {onAdd && (
-        <Pressable onPress={onAdd} style={styles.sheetAdd} accessibilityRole="button">
-          <Text style={styles.sheetAddText}>{addLabel}</Text>
-        </Pressable>
-      )}
-    </BottomSheet>
-  );
-}
-
 const styles = StyleSheet.create({
   body: { padding: SPACING.lg, paddingBottom: SPACING.xxl },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
@@ -886,21 +876,6 @@ const styles = StyleSheet.create({
   readOnly: { backgroundColor: COLORS.lightBg, borderColor: COLORS.border, justifyContent: 'center' },
   readOnlyText: { ...TYPE.body, fontWeight: '600', color: COLORS.text2 },
   hint: { ...TYPE.caption, marginTop: SPACING.xs },
-  select: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.md,
-    minHeight: 52,
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.input,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    paddingHorizontal: SPACING.md,
-  },
-  selectIcon: { fontSize: 16 },
-  selectValue: { flex: 1, ...TYPE.body, color: COLORS.text },
-  selectPlaceholder: { color: COLORS.muted },
-  chevron: { color: COLORS.muted, fontSize: 22 },
   toggle: {
     flexDirection: 'row',
     backgroundColor: COLORS.lightBg,
@@ -931,11 +906,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.md,
   },
-  sheetRow: { paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  sheetLabel: { ...TYPE.body, fontWeight: '600', color: COLORS.text },
-  sheetHint: { ...TYPE.caption },
-  sheetEmpty: { ...TYPE.secondary, textAlign: 'center', paddingVertical: SPACING.lg },
   mapBox: { height: 200, borderRadius: RADIUS.card, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.border },
-  sheetAdd: { paddingVertical: SPACING.md, alignItems: 'center' },
-  sheetAddText: { ...TYPE.body, fontWeight: '700', color: COLORS.purple },
 });

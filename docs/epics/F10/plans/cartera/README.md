@@ -20,11 +20,12 @@ Reemplaza el placeholder de `app/(tabs)/cobranza.tsx`.
 
 | # | Vista PDF | Pantalla | Ruta móvil | Estado |
 |---|---|---|---|---|
-| — | — | Fundación backend (incluye subida de archivos) | (sin pantalla) | ⬜ |
-| S1 | **V3** | Lista de cartera (buscador + chips + tarjetas) | `app/(tabs)/cobranza.tsx` | ⬜ |
-| S2 | **V1 + V2** | Alta: cliente → préstamo (flujo continuo, con foto de fachada) | `app/cliente/nuevo.tsx` → `app/prestamo/nuevo.tsx` | ⬜ |
-| S3 | **V4** | Ficha de cobranza (detalle + pago con comprobante + gestión) | `app/cliente/[id].tsx` | ⬜ |
-| [S4](./S4-menu-busqueda-orden.md) | — | Menú "Clientes" + orden + búsqueda global | `app/(tabs)/mas.tsx` · `cobranza.tsx` | ⬜ |
+| — | — | Fundación backend (incluye subida de archivos) | (sin pantalla) | ✅ `3d90f19` |
+| S1 | **V3** | Lista de cartera (buscador + chips + tarjetas) | `app/(tabs)/cobranza.tsx` | ✅ `12144d6` |
+| S2 | **V1 + V2** | Alta: cliente → préstamo (flujo continuo, con foto de fachada) | `app/cliente/nuevo.tsx` → `app/prestamo/nuevo.tsx` | ✅ `a94d0d1` |
+| S3 | **V4** | Ficha de cobranza (detalle + pago con comprobante + gestión) | `app/cliente/[id].tsx` | ✅ `33a8588` |
+| [S4](./S4-menu-busqueda-orden.md) | — | Menú "Clientes" + orden + búsqueda global (+ vista tarjetas/lista, extra) | `app/(tabs)/mas.tsx` · `cobranza.tsx` | ✅ `1a1a76b` |
+| [S5](./S5-cliente-unificado.md) | — | Un solo formulario de cliente (alta = edición) + "Navegar" dentro de la app | `app/cliente/nuevo.tsx` · `mapa.tsx` | ✅ `1a1a76b` · `b9e4921` |
 | — | **V5** | Importación CSV/XLSX | — | ↪️ **se movió a su propio módulo** ([plans/import](../import/README.md)) |
 
 **Orden:** leer antes de escribir (S1 sobre el seed), después el alta (S2, lo que hace funcional al cobrador
