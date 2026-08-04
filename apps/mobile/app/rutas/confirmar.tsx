@@ -58,7 +58,7 @@ export default function ConfirmarRutaScreen() {
 
   const stops = pending(route);
   const [next, ...resto] = stops;
-  const tel = actionLinks({ phone } as never).tel;
+  const tel = actionLinks({ phone }).tel;
 
   return (
     <View style={styles.screen}>
