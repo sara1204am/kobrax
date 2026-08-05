@@ -81,8 +81,16 @@ export class UsersService {
       const dropsThisAdmin =
         before.role.name === RoleType.ACCOUNT_ADMIN && (dto.isActive === false || changesRole);
       if (dropsThisAdmin) {
+        // `user.status` ACTIVE además de `isActive`: un admin invitado que nunca aceptó
+        // sigue siendo un `userAccount` activo, y contarlo dejaba pasar la jugada que este
+        // chequeo existe para frenar — quedarse sin ningún administrador que pueda entrar.
         const otherAdmins = await tx.userAccount.count({
-          where: { isActive: true, userId: { not: userId }, role: { name: RoleType.ACCOUNT_ADMIN } },
+          where: {
+            isActive: true,
+            userId: { not: userId },
+            role: { name: RoleType.ACCOUNT_ADMIN },
+            user: { status: 'ACTIVE' },
+          },
         });
         if (otherAdmins === 0) throw lastAdmin();
       }
@@ -162,6 +170,11 @@ export class UsersService {
       // `users.email` es @unique. Ese choque es la guarda real; chequear antes sería una
       // carrera con mejor cara. Si el correo ya está tomado, la salida es cancelar la
       // invitación vieja (S2-D5) o que esa persona inicie sesión.
+      //
+      // ponytail: como acá SIEMPRE se crea un `User` nuevo, esto también implica que **no se
+      // puede invitar a alguien que ya tiene cuenta en otro tenant**, aunque el modelo lo
+      // soporte (el login tiene paso de selección de empresa). Para habilitarlo hay que
+      // buscar al usuario por email y, si existe, crear sólo el `userAccount`. Nadie lo pidió.
       if ((err as { code?: string }).code === 'P2002') throw emailTaken();
       throw err;
     }

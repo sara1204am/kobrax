@@ -194,6 +194,18 @@ describe('UsersService.updateMember — guardas', () => {
     assert.deepEqual(calls.countWhere!.userId, { not: OTHER });
   });
 
+  // Un admin invitado que nunca aceptó es un `userAccount` activo con un `User` PENDING.
+  // Contarlo como respaldo dejaba pasar justo lo que esta guarda existe para frenar:
+  // quedarse sin ningún administrador capaz de iniciar sesión.
+  it('no cuenta como respaldo a un admin invitado que todavía no aceptó', async () => {
+    const { service, calls } = makeService({
+      found: member({ roleId: ROLE_ADMIN, role: ROLES[ROLE_ADMIN] }),
+      otherAdmins: 1,
+    });
+    await service.updateMember(OTHER, { isActive: false });
+    assert.deepEqual(calls.countWhere!.user, { status: 'ACTIVE' });
+  });
+
   it('rechaza un rol que el móvil no administra (MANAGER es de la web)', async () => {
     const { service } = makeService();
     await rejectsWithCode(service.updateMember(OTHER, { roleId: ROLE_MANAGER }), 'USER_ROLE_NOT_ALLOWED');

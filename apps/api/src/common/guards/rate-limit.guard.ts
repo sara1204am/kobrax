@@ -28,7 +28,10 @@ export class RateLimitGuard implements CanActivate {
     if (path.includes('/health')) return true;
 
     const ip = req.ip ?? 'unknown';
-    const route = `${req.method}:${path}`;
+    // La clave del límite por endpoint sale del HANDLER, no de `req.path`. Con la URL
+    // concreta, una ruta con parámetro (`/auth/invitation/:code`) le daba a cada valor su
+    // propio cubo: 10 intentos POR CÓDIGO en vez de 10 por IP, o sea ningún límite útil.
+    const route = `${context.getClass().name}.${context.getHandler().name}`;
     await this.enforce(`rl:global:${ip}`, GLOBAL_LIMIT, GLOBAL_WINDOW);
 
     const cfg = this.reflector.get<RateLimitConfig>(RATE_LIMIT_KEY, context.getHandler());

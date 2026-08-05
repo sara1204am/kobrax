@@ -110,6 +110,10 @@ export class PasswordService {
     meta: { ip?: string; userAgent?: string },
   ): Promise<{ email: string }> {
     if (!isPasswordValid(password)) throw weakPassword();
+    // ponytail: leer el token acá y marcarlo usado más abajo es una ventana en la que dos
+    // POST simultáneos con el mismo código pasan los dos (gana la última contraseña). Hace
+    // falta tener el código, así que se vive con eso; si aparece un caso real, la salida es
+    // un `updateMany` condicional sobre `usedAt: null` y abortar si actualizó 0 filas.
     const record = await this.findInvitation(rawCode);
     const passwordHash = await hash(password, KOBRAX.BCRYPT_WORK_FACTOR);
     const rows = await this.prisma.$queryRaw<{ account_id: string }[]>`
@@ -151,8 +155,14 @@ export class PasswordService {
 
     const record = await this.prisma.passwordResetToken.findFirst({
       where: { tokenHash: this.hashToken(token), usedAt: null, expiresAt: { gt: new Date() } },
+      include: { user: true },
     });
-    if (!record) throw resetTokenInvalid();
+    // El código de invitación vive en esta MISMA tabla (S2-D2), así que hay que rechazarlo
+    // acá: gastado por este camino, el invitado quedaba con contraseña nueva pero todavía
+    // PENDING —sin poder entrar y sin código— y la única salida era pedir un reenvío.
+    // Simétrico a `findInvitation`, que rechaza los tokens de quien no está PENDING.
+    // `forgotPassword` sólo emite para usuarios ACTIVE, así que el filtro no deja a nadie afuera.
+    if (!record || record.user.status !== 'ACTIVE') throw resetTokenInvalid();
 
     const passwordHash = await hash(newPassword, KOBRAX.BCRYPT_WORK_FACTOR);
     await this.prisma.$transaction([

@@ -200,8 +200,21 @@ describe('PasswordService.resetPassword', () => {
     await rejectsWithCode(service.resetPassword('tok', 'Kobrax123!'), AUTH_ERR.RESET_TOKEN_INVALID);
   });
 
+  // Un código de invitación vive en la misma tabla que un token de reset (S2-D2). Gastarlo
+  // por acá dejaba al invitado con contraseña nueva pero todavía PENDING: sin poder entrar
+  // (login corta por status) y sin código, obligado a pedir un reenvío.
+  it('rechaza un código de invitación usado como token de reset (AUTH_005)', async () => {
+    const { service, calls } = makeDeps({
+      resetRecord: { id: 't1', userId: 'u1', user: { status: 'PENDING' } },
+    });
+    await rejectsWithCode(service.resetPassword('tok', 'Kobrax123!'), AUTH_ERR.RESET_TOKEN_INVALID);
+    assert.equal(calls.userUpdate.length, 0);
+  });
+
   it('en éxito: limpia requiresPasswordChange, invalida tokens y revoca todas las sesiones', async () => {
-    const { service, calls } = makeDeps({ resetRecord: { id: 't1', userId: 'u1' } });
+    const { service, calls } = makeDeps({
+      resetRecord: { id: 't1', userId: 'u1', user: { status: 'ACTIVE' } },
+    });
     await service.resetPassword('tok', 'Kobrax123!');
 
     assert.equal(calls.userUpdate.length, 1);
