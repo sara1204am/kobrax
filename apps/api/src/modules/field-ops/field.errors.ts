@@ -11,6 +11,10 @@ export const invalidGps = () =>
 export const visitNeedsTarget = () =>
   new BadRequestException({ code: 'VISIT_TARGET', message: 'La visita requiere caseId o routeStopId' });
 
+/** Los campos propios de la variante no cierran con el `outcome` (S5 · RT-6). */
+export const invalidVisitDetails = (errors: string[]) =>
+  new BadRequestException({ code: 'VISIT_DETAILS', message: 'Faltan datos de la gestión', details: errors });
+
 /** El hash declarado de la evidencia no coincide con el contenido (integridad). */
 export const evidenceHashInvalid = () =>
   new UnprocessableEntityException({ code: 'EVIDENCE_001', message: 'El hash de la evidencia no coincide con el contenido' });

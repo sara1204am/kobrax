@@ -134,7 +134,7 @@ export default function MapaRutaScreen() {
               : undefined
           }
           daysPastDue={selected.daysPastDue}
-          onPrimary={() => setError('Registrar el resultado llega en S5.')}
+          onPrimary={() => router.push(`/rutas/resultado?routeId=${routeId}&stopId=${selected.id}`)}
           actions={
             <View style={styles.acciones}>
               <View style={{ flex: 1 }}>

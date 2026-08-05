@@ -11,7 +11,9 @@ Es el slice que convierte la ruta en trabajo registrado: sin él, la jornada se 
 nada escrito.
 
 ## 2. Rama
-`f10/rutas-s5-resultado`, desde `main` **con S4 ya mergeado**.
+`f10/rutas-s5-resultado`, **apilada sobre `f10/rutas-s4-mapa-activo`** (todavía sin mergear): S5 le
+cambia el `onPrimary` del `StopCard` que dejó S4, así que no puede salir de `main`. Se mergea después
+de S4, o los dos juntos.
 
 ## 3. Build
 Dev build por cable (MapLibre + cámara + GPS no corren en Expo Go).

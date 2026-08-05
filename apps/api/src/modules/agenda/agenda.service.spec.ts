@@ -59,6 +59,8 @@ function makeService(opts: Opts = {}) {
     historyWhere: undefined as Record<string, unknown> | undefined,
     caseWhere: undefined as Record<string, unknown> | undefined,
     created: undefined as Record<string, unknown> | undefined,
+    /** Todas las altas, en orden: la promesa crea DOS agendados (ella y su recordatorio, S5·D2). */
+    createdAll: [] as Record<string, unknown>[],
     audits: [] as { entity: string; action: string }[],
     reveals: [] as { id: string; reveal: boolean }[],
     addedContacts: [] as Record<string, unknown>[],
@@ -85,7 +87,10 @@ function makeService(opts: Opts = {}) {
       },
       count: async () => (opts.rows ?? []).length,
       create: async (args: { data: Record<string, unknown> }) => {
-        calls.created = args.data;
+        // `created` sigue siendo la PRIMERA alta (lo que esperan los tests de S2); `createdAll`
+        // guarda todas, porque la promesa además crea su recordatorio.
+        calls.created ??= args.data;
+        calls.createdAll.push(args.data);
         return row(args.data);
       },
       update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
@@ -486,6 +491,57 @@ describe('AgendaService.create', () => {
     assert.equal(calls.caseWhere!.assigneeId, 'u1'); // scope del cobrador
     assert.deepEqual(calls.audits, [{ entity: 'agenda_item', action: 'CREATE' }]);
     assert.equal(res.data!.type, 'CALL');
+  });
+
+  // ── El recordatorio de la promesa (Rutas S5 · D2) ────────────────────────
+  // El sheet de RT-6 le promete al cobrador un recordatorio 24h antes. Esto lo cumple.
+
+  /** Alta de una promesa de pago para dentro de `days` días. */
+  const promiseDto = (days: number) =>
+    createDto({
+      type: 'PROMISE_TO_PAY',
+      scheduledDate: isoUTC(days),
+      details: { amount: 500, promiseDate: isoUTC(days), paymentMethodCode: 'CASH' },
+    });
+
+  it('una promesa crea TAMBIÉN su recordatorio, el día anterior', async () => {
+    const { service, calls } = makeService({
+      cases: [openCase()],
+      catalog: { code: 'CASH', label: 'Efectivo' }, // el medio de pago que valida `assertPaymentMethod`
+    });
+    await service.create(promiseDto(5));
+
+    assert.equal(calls.createdAll.length, 2);
+    const [promesa, recordatorio] = calls.createdAll;
+    assert.equal(promesa!.type, 'PROMISE_TO_PAY');
+    assert.equal(recordatorio!.type, 'REMINDER');
+    // Un día antes, exacto.
+    const dif = (recordatorio!.scheduledDate as Date).getTime() - (promesa!.scheduledDate as Date).getTime();
+    assert.equal(dif, -24 * 60 * 60 * 1000);
+    // Del mismo cobrador: es él quien tiene que acordarse.
+    assert.equal(recordatorio!.assigneeId, promesa!.assigneeId);
+    assert.equal(recordatorio!.caseId, promesa!.caseId);
+    // Y queda auditado como cualquier alta.
+    assert.deepEqual(calls.audits, [
+      { entity: 'agenda_item', action: 'CREATE' },
+      { entity: 'agenda_item', action: 'CREATE' },
+    ]);
+  });
+
+  it('una promesa para MAÑANA no crea recordatorio: caería hoy y no recuerda nada', async () => {
+    const { service, calls } = makeService({
+      cases: [openCase()],
+      catalog: { code: 'CASH', label: 'Efectivo' }, // el medio de pago que valida `assertPaymentMethod`
+    });
+    await service.create(promiseDto(1));
+    assert.equal(calls.createdAll.length, 1);
+    assert.equal(calls.createdAll[0]!.type, 'PROMISE_TO_PAY');
+  });
+
+  it('el resto de los tipos no crean recordatorio', async () => {
+    const { service, calls } = makeService({ cases: [openCase()], contacts: [{ id: CONTACT }] });
+    await service.create(createDto());
+    assert.equal(calls.createdAll.length, 1);
   });
 
   it('un supervisor agendando sobre un caso ajeno lo asigna al cobrador del caso, no a sí mismo', async () => {

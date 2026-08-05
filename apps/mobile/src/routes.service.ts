@@ -20,6 +20,8 @@ export interface RouteStopItem {
   /** El punto de esa misma ubicación (S3). Sin él la parada existe pero no se puede dibujar. */
   latitude?: number;
   longitude?: number;
+  /** El crédito del caso de la parada: contra él se cobra y se promete al registrar el resultado (S5). */
+  creditId?: string;
   /**
    * La deuda del crédito **de esta parada** (S4), no la suma del deudor: un cliente puede tener más
    * de un crédito y la parada apunta a uno. Ausentes si la parada no tiene caso o crédito.

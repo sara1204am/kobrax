@@ -31,7 +31,10 @@ function primaryLocation(client: StopClient) {
  * no de la suma del deudor: un cliente puede tener más de un crédito (cartera D1) y la parada apunta
  * a uno solo. Sólo viene cuando el query incluye el caso.
  */
-type StopCase = { credit: { outstandingBalance: unknown; currency: string; daysPastDue: number } | null };
+type StopCase = {
+  creditId?: string;
+  credit: { outstandingBalance: unknown; currency: string; daysPastDue: number } | null;
+};
 
 /**
  * `clientName`/`address` sólo salen con `crypto` y el cliente incluido: la dirección es PII en claro
@@ -47,6 +50,8 @@ export function serializeStop(
     id: s.id,
     clientId: s.clientId,
     caseId: s.caseId ?? undefined,
+    // El crédito del caso: contra él se cobra y se promete al registrar el resultado (S5).
+    creditId: s.case?.creditId,
     sequenceOrder: s.sequenceOrder,
     status: s.status,
     visitedAt: s.visitedAt ?? undefined,

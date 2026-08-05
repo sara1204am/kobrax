@@ -38,7 +38,8 @@ const STOP_CLIENT = {
  * parada desde el móvil, que sería una llamada por pin.
  */
 const STOP_CASE = {
-  select: { credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true } } },
+  // `creditId` va también: el registro de resultado (S5) cobra y promete contra ESE crédito.
+  select: { creditId: true, credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true } } },
 } satisfies Prisma.CollectionCaseDefaultArgs;
 
 @Injectable()

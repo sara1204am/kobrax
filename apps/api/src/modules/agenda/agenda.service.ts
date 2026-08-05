@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import type { CatalogItem, Credit, Prisma, PrismaClient } from '@prisma/client';
+import type { AgendaItem, CatalogItem, Credit, Prisma, PrismaClient } from '@prisma/client';
 import { AgendaItemStatus, AgendaItemType, CatalogType, InstallmentStatus, ScheduleTimeMode } from '@prisma/client';
 import {
   AGENDA_OUTCOMES_BY_TYPE,
+  AgendaTimeSlot,
   CASE_TRANSITIONS,
   CaseStatus,
   Permission,
@@ -484,7 +485,7 @@ export class AgendaService {
     if (scheduledDate < today) throw agendaPastDate();
     assertTimeMode(dto);
 
-    const { created, clientName } = await this.tx(async (tx) => {
+    const { created, reminder, clientName } = await this.tx(async (tx) => {
       const found = await tx.collectionCase.findFirst({
         where: { id: dto.caseId, deletedAt: null, ...this.caseScope() },
         include: { credit: true },
@@ -513,12 +514,49 @@ export class AgendaService {
           createdBy: this.tenant.userId,
         },
       });
+      const reminder = await this.promiseReminder(tx, created, scheduledDate);
       const names = await this.clientNames(tx, [found.clientId]);
-      return { created, clientName: names.get(found.clientId) };
+      return { created, reminder, clientName: names.get(found.clientId) };
     });
 
     await this.audit.record({ entity: 'agenda_item', entityId: created.id, action: 'CREATE', after: created });
+    if (reminder) {
+      await this.audit.record({ entity: 'agenda_item', entityId: reminder.id, action: 'CREATE', after: reminder });
+    }
     return ResponseDto.ok(serializeAgendaItem(created, clientName));
+  }
+
+  /**
+   * El recordatorio de la promesa (Rutas S5 · D2). El sheet de RT-6 promete al cobrador que "se
+   * generará un recordatorio automático 24h antes": esto es ese recordatorio, hecho con la agenda
+   * que ya existe en vez de con infraestructura de notificaciones nueva.
+   *
+   * Devuelve `null` cuando no corresponde: si la promesa es para mañana o antes, el recordatorio
+   * caería hoy o en el pasado — y un recordatorio en el pasado no le recuerda nada a nadie.
+   */
+  private async promiseReminder(tx: PrismaClient, promise: AgendaItem, scheduledDate: Date) {
+    if (promise.type !== AgendaItemType.PROMISE_TO_PAY) return null;
+
+    const dayBefore = new Date(scheduledDate);
+    dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
+    if (dayBefore <= this.startOfTodayUTC()) return null;
+
+    return tx.agendaItem.create({
+      data: {
+        accountId: this.tenant.accountId,
+        caseId: promise.caseId,
+        clientId: promise.clientId,
+        creditId: promise.creditId,
+        // Del MISMO cobrador que la promesa: es él quien tiene que acordarse, no quien la cargó.
+        assigneeId: promise.assigneeId,
+        type: AgendaItemType.REMINDER,
+        scheduledDate: dayBefore,
+        timeMode: ScheduleTimeMode.LAPSE,
+        timeSlot: AgendaTimeSlot.MORNING,
+        details: { description: 'Recordar la promesa de pago de mañana' },
+        createdBy: this.tenant.userId,
+      },
+    });
   }
 
   /**
