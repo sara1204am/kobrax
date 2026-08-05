@@ -77,6 +77,26 @@
     hora recomendada + garantes). Abierta desde cartera es la misma ficha de siempre.
   - ⚠ **La mora de la parada es la del crédito de SU caso**, no la suma del deudor (un cliente puede
     tener varios créditos). Si algún día se quiere el total, es otro campo, no este.
+- ✅ **Rutas S5** pobló: **`src/location.ts` → `currentLocation()`**, la ÚNICA puerta al GPS de la app
+  (devuelve `accuracy` y distingue `denied` de `unavailable`; el copy del respaldo lo pone la pantalla).
+  **Consolidó dos copias inline** que estaban en `agenda/crear.tsx` y `cliente-form-view.tsx` — *no
+  escribir una tercera ni volver a importar `expo-location` en una pantalla*. Además:
+  `src/field.service.ts` (`createVisit`/`addVisitEvidence`/**`resolveVisitCoords`**), `src/visit-result.ts`
+  (las 6 variantes de RT-6, `buildDetails`, `canSubmitResult`, `paymentOutcome`), y en `shared`
+  **`validateVisitDetails`** (espejo de `validateAgendaDetails`; el tipo se llama `VisitResultDetails`
+  porque `VisitDetails` ya lo usa la visita **agendada**).
+  - ⚠ **`POST /visits` ya hacía casi todo**: crea el `FieldVisit` append-only, **marca la parada
+    `VISITED`**, escribe el `CaseActivity` y actualiza la ubicación del cobrador — todo en una
+    transacción. Antes de tocar rutas o visitas, mirar `field-ops`, que es donde vive (no `visits/`).
+    Su DTO usa **`lat`/`lng`**, no `latitude`/`longitude`.
+  - ⚠ `field_visits.details` es JSONB y la tabla es **inmutable**: se escribe SOLO en el INSERT.
+  - ⚠ **`ALTER TYPE ... ADD VALUE` va en su propia migración** (Postgres no deja usar el valor en la
+    misma transacción que lo agrega, y Prisma corre cada migración en una). Por eso S5 tiene dos.
+  - ⚠ **Una migración de enum NO siembra filas**: el catálogo `SPECIAL_CATEGORY` quedó vacío en la
+    base ya sembrada y hubo que insertarlo aparte. El COLLECTOR tiene `catalog:read` pero **no**
+    `catalog:write`, y el owner tiene MFA (su login no devuelve `accessToken` directo).
+  - ⚠ El "número de recibo" del mockup **no se implementó**: `payments.receipt_number` es `Int?` del
+    sistema, no texto libre. Se usa la foto del comprobante, que sí viaja punta a punta.
 - ✅ **Cartera S4** pobló: `src/use-client-search.ts` → **`useClientSearch(query, { enabled })`**, el buscador
   de clientes con debounce (300 ms / ≥2 caracteres / race-guard por `reqId`). Estaba suelto dentro de
   `app/agenda/crear.tsx`; ahora lo usan **agenda y cartera** — *no escribir un tercero*. Y en `src/portfolio.ts`

@@ -21,7 +21,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import * as Location from 'expo-location';
+import { currentLocation } from '@/location';
 import { MapPicker } from '@/maps/MapPicker';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { AgendaItemType, AgendaTimeSlot, CatalogType, ScheduleTimeMode } from '@kobrax/shared';
@@ -260,15 +260,17 @@ export default function CrearGestionScreen() {
   const useMyLocation = useCallback(async () => {
     setLocating(true);
     setLocError(null);
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      setLocating(false);
-      setLocError('Sin permiso de ubicación — podés marcar el punto tocando el mapa.');
+    const res = await currentLocation();
+    setLocating(false);
+    if (res.status !== 'ok') {
+      setLocError(
+        res.status === 'denied'
+          ? 'Sin permiso de ubicación — podés marcar el punto tocando el mapa.'
+          : 'No se pudo obtener tu ubicación — podés marcar el punto tocando el mapa.',
+      );
       return;
     }
-    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-    setPin(pos.coords.latitude, pos.coords.longitude);
-    setLocating(false);
+    setPin(res.coords.latitude, res.coords.longitude);
   }, [setPin]);
 
   /** Guarda la dirección, la suma al contexto en memoria y la deja elegida. */

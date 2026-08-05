@@ -96,4 +96,5 @@ export enum CatalogType {
   CAMPAIGN = 'CAMPAIGN',
   CURRENCY = 'CURRENCY',
   WHATSAPP_TEMPLATE = 'WHATSAPP_TEMPLATE', // plantillas de mensaje (metadata.body con {{cliente}}/{{saldo}})
+  SPECIAL_CATEGORY = 'SPECIAL_CATEGORY', // categorías de "gestión especial" en campo (RT-6)
 }

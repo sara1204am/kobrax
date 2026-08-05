@@ -741,6 +741,8 @@ enum VisitOutcome {
   REFUSAL
   NOT_FOUND
   RESCHEDULED
+  WRONG_ADDRESS // la dirección no corresponde (distinto de NOT_FOUND: fue y no lo encontró) — RT-6
+  SPECIAL // gestión especial (fallecimiento, enfermedad grave…), con su categoría en `details` — RT-6
 }
 
 /// Proceso activo de cobranza asociado a un crédito en mora.
@@ -854,6 +856,10 @@ model FieldVisit {
   accuracy    Decimal?     @db.Decimal(7, 2)
   outcome     VisitOutcome
   notes       String?
+  /// Campos propios de cada variante de RT-6 (canal intentado, aviso dejado, categoría especial…).
+  /// Mismo patrón que `agenda_items.details`: JSONB validado en shared, no una columna por qualifier.
+  /// Se escribe SOLO en el INSERT — la visita sigue siendo inmutable.
+  details     Json?
   capturedAt  DateTime     @map("captured_at")
   createdAt   DateTime     @default(now()) @map("created_at")
   // Sin updated_at ni deleted_at → INMUTABLE por diseño.
@@ -1034,6 +1040,7 @@ enum CatalogType {
   CAMPAIGN
   CURRENCY
   WHATSAPP_TEMPLATE
+  SPECIAL_CATEGORY // categorías de "gestión especial" en campo (fallecimiento, enfermedad…) — RT-6
 }
 
 /// Gestión agendada (llamada/visita/whatsapp/recordatorio/promesa) sobre un caso.

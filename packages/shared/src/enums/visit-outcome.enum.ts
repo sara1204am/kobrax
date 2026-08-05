@@ -9,6 +9,8 @@ export enum VisitOutcome {
   PARTIAL_PAYMENT = 'PARTIAL_PAYMENT', // pagó una parte en el acto
   PAID = 'PAID', // pagó el total en el acto
   REFUSAL = 'REFUSAL', // se niega a pagar
-  NOT_FOUND = 'NOT_FOUND', // domicilio no existe / dirección errónea
+  NOT_FOUND = 'NOT_FOUND', // fue al domicilio y no lo encontró
   RESCHEDULED = 'RESCHEDULED', // se reagenda la visita
+  WRONG_ADDRESS = 'WRONG_ADDRESS', // la dirección no corresponde (RT-6) — el domicilio hay que corregirlo
+  SPECIAL = 'SPECIAL', // gestión especial (fallecimiento, enfermedad…); la categoría va en `details`
 }

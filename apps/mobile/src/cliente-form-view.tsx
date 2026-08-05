@@ -11,7 +11,7 @@
  */
 import { useCallback, useState, type ReactNode } from 'react';
 import { LayoutAnimation, Platform, Pressable, StyleSheet, Switch, Text, UIManager, View } from 'react-native';
-import * as Location from 'expo-location';
+import { currentLocation } from './location';
 import { COLORS, RADIUS, SPACING, TYPE } from './theme';
 import { Chips, SectionLabel } from './ui';
 import { Field } from './components';
@@ -143,10 +143,10 @@ function LocationsSection({ locations, setLocations, onError }: { locations: Loc
   const upd = (id: string, patch: Partial<LocationRow>) => setLocations((rows) => rows.map((l) => (l.id === id ? { ...l, ...patch } : l)));
 
   const captureGps = useCallback(async (id: string) => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') return onError('Sin permiso de ubicación — podés cargar lat/long a mano.');
-    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-    upd(id, { latitude: pos.coords.latitude.toFixed(6), longitude: pos.coords.longitude.toFixed(6) });
+    const res = await currentLocation();
+    if (res.status === 'denied') return onError('Sin permiso de ubicación — podés cargar lat/long a mano.');
+    if (res.status !== 'ok') return onError('No se pudo obtener tu ubicación — podés cargar lat/long a mano.');
+    upd(id, { latitude: res.coords.latitude.toFixed(6), longitude: res.coords.longitude.toFixed(6) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

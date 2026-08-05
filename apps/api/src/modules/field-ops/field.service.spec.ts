@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { FieldService } from './field.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
-function makeService(opts: { visit?: unknown; stop?: unknown; case?: unknown } = {}) {
+function makeService(opts: { visit?: unknown; stop?: unknown; case?: unknown; category?: unknown } = {}) {
   const calls = { visitCreate: [] as Record<string, unknown>[], stopUpdate: 0, evidence: [] as Record<string, unknown>[], events: [] as string[], audit: [] as string[] };
   const tx = {
     collectionCase: { findFirst: async () => opts.case ?? { id: 'c1' }, update: async () => ({}) },
@@ -23,6 +23,8 @@ function makeService(opts: { visit?: unknown; stop?: unknown; case?: unknown } =
         return { id: 'e1', ...args.data };
       },
     },
+    // Catálogo del tenant: sólo lo consulta la gestión especial (S5). `null` = categoría inexistente.
+    catalogItem: { findFirst: async () => ('category' in opts ? opts.category : { id: 'cat-1' }) },
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
   const tenant = { accountId: 'acc-A', userId: 'collector-1' };
@@ -69,5 +71,54 @@ describe('FieldService.addEvidence', () => {
     assert.equal(calls.evidence[0]!.fileHash, HELLO_SHA);
     assert.deepEqual(calls.audit, ['CREATE']);
     assert.equal(r.fileHash, HELLO_SHA);
+  });
+});
+
+/** Campos propios de cada variante del sheet de resultado (Rutas S5 · RT-6). */
+describe('FieldService.createVisit · details por variante', () => {
+  const base = { routeStopId: 's1', lat: -16.5, lng: -68.15 };
+
+  it('NO_CONTACT sin canal no se registra: lo rechaza el server, no sólo la pantalla', async () => {
+    const { service, calls } = makeService();
+    await rejectsWithCode(service.createVisit({ ...base, outcome: 'NO_CONTACT' } as never), 'VISIT_DETAILS');
+    assert.equal(calls.visitCreate.length, 0); // no escribe nada
+  });
+
+  it('NO_CONTACT guarda el canal y el aviso dejado', async () => {
+    const { service, calls } = makeService();
+    await service.createVisit({ ...base, outcome: 'NO_CONTACT', details: { channel: 'DOOR', noticeLeft: true } } as never);
+    assert.deepEqual(calls.visitCreate[0]!.details, { channel: 'DOOR', noticeLeft: true });
+  });
+
+  it('descarta lo que el cliente mande de más', async () => {
+    const { service, calls } = makeService();
+    await service.createVisit({ ...base, outcome: 'NO_CONTACT', details: { channel: 'CALL', colado: 'x' } } as never);
+    assert.deepEqual(calls.visitCreate[0]!.details, { channel: 'CALL' });
+  });
+
+  it('la categoría especial tiene que existir en el catálogo del tenant', async () => {
+    const { service, calls } = makeService({ category: null });
+    await rejectsWithCode(
+      service.createVisit({ ...base, outcome: 'SPECIAL', details: { categoryCode: 'INVENTADA' } } as never),
+      'VISIT_DETAILS',
+    );
+    assert.equal(calls.visitCreate.length, 0);
+  });
+
+  it('con una categoría válida sí registra', async () => {
+    const { service, calls } = makeService();
+    await service.createVisit({ ...base, outcome: 'SPECIAL', details: { categoryCode: 'DECEASED' } } as never);
+    assert.deepEqual(calls.visitCreate[0]!.details, { categoryCode: 'DECEASED' });
+  });
+
+  it('el GPS estimado lo marca el server, y el body no puede fingirlo', async () => {
+    const { service, calls } = makeService();
+    await service.createVisit({ ...base, outcome: 'PAID', gpsFallback: true } as never);
+    assert.deepEqual(calls.visitCreate[0]!.details, { gpsFallback: true });
+
+    // Mandarlo dentro de `details` no alcanza: el validador lo descarta.
+    const otro = makeService();
+    await otro.service.createVisit({ ...base, outcome: 'PAID', details: { gpsFallback: true } } as never);
+    assert.deepEqual(otro.calls.visitCreate[0]!.details, {});
   });
 });

@@ -461,6 +461,12 @@ async function seedAgenda(acc: string, collectorId: string): Promise<void> {
     { catalog: CatalogType.WHATSAPP_TEMPLATE, code: 'INITIAL', label: 'Cobro inicial', sortOrder: 1, metadata: { body: 'Hola {{cliente}}, le escribimos de Kobrax para recordarle su saldo pendiente de {{saldo}}. Puede coordinar su pago con nosotros.' } },
     { catalog: CatalogType.WHATSAPP_TEMPLATE, code: 'REMINDER', label: 'Recordatorio', sortOrder: 2, metadata: { body: 'Hola {{cliente}}, le recordamos que su pago de {{saldo}} vence pronto. Quedamos atentos.' } },
     { catalog: CatalogType.WHATSAPP_TEMPLATE, code: 'LAST_NOTICE', label: 'Último aviso', sortOrder: 3, metadata: { body: 'Hola {{cliente}}, su deuda de {{saldo}} se encuentra vencida. Le pedimos regularizar su pago a la brevedad para evitar cargos adicionales.' } },
+    // Gestión especial en campo (S5 · RT-6): situaciones que sacan el caso del cobro normal.
+    { catalog: CatalogType.SPECIAL_CATEGORY, code: 'DECEASED', label: 'Fallecimiento', sortOrder: 1 },
+    { catalog: CatalogType.SPECIAL_CATEGORY, code: 'SERIOUS_ILLNESS', label: 'Enfermedad grave', sortOrder: 2 },
+    { catalog: CatalogType.SPECIAL_CATEGORY, code: 'LONG_TRIP', label: 'Viaje prolongado', sortOrder: 3 },
+    { catalog: CatalogType.SPECIAL_CATEGORY, code: 'LEGAL_DISPUTE', label: 'Conflicto legal', sortOrder: 4 },
+    { catalog: CatalogType.SPECIAL_CATEGORY, code: 'OTHER', label: 'Otro', sortOrder: 5 },
   ];
   await prisma.catalogItem.createMany({
     data: catalogs.map((c) => ({ accountId: acc, catalog: c.catalog, code: c.code, label: c.label, sortOrder: c.sortOrder, metadata: c.metadata ?? {} })),
