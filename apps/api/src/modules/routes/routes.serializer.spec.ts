@@ -88,6 +88,19 @@ describe('serializeStop', () => {
     assert.equal(s.daysPastDue, undefined);
   });
 
+  // ── Cómo terminó la parada (S6) ────────────────────────────────────────────
+
+  it('devuelve el resultado de la última visita', () => {
+    // El query pide `take: 1` ordenado desc, así que la primera del array ES la última en el tiempo.
+    const s = serializeStop({ ...(STOP as object), visits: [{ outcome: 'PROMISE_TO_PAY' }] } as never);
+    assert.equal(s.lastOutcome, 'PROMISE_TO_PAY');
+  });
+
+  it('una parada sin visitar no tiene resultado (y no entra en ninguna categoría)', () => {
+    assert.equal(serializeStop({ ...(STOP as object), visits: [] } as never).lastOutcome, undefined);
+    assert.equal(serializeStop(STOP).lastOutcome, undefined);
+  });
+
   it('mora en cero es un dato, no un hueco: se devuelve 0', () => {
     const s = serializeStop(
       { ...(STOP as object), case: { credit: { outstandingBalance: '0', currency: 'BOB', daysPastDue: 0 } } } as never,

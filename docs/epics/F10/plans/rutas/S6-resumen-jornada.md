@@ -48,13 +48,16 @@ sumarlo al lado de `STOP_CLIENT`/`STOP_CASE` (una constante `STOP_VISIT` con
 Una parada sin visitar lo devuelve `undefined`. **Sirve además a S4**: el pin del mapa puede
 colorearse por resultado en vez de sólo por `VISITED`.
 
-### 5.2 Delta B — el pago dice de qué caso es
-`GET /payments?from=&to=` ya filtra por día (`ListPaymentsQueryDto`), pero el item serializado **no
-trae `caseId`**, así que el cliente no puede quedarse con los pagos *de esta ruta*.
+### 5.2 Delta B — el pago dice de qué caso es (**sólo tipos del móvil**)
+`GET /payments?from=&to=` ya filtra por día (`ListPaymentsQueryDto`) y **`serializePayment` YA
+devuelve `caseId` y `registeredBy`** (`payments.serializer.ts:9,17`). El hueco está sólo en el móvil:
+`PaymentItem` no los declara y `listPayments()` sólo acepta un `caseId`.
 
 ```
-PaymentItem += caseId?: string
+PaymentItem += caseId?, registeredBy?     // el server ya los manda
+listPayments(params)                      // acepta from/to además de caseId
 ```
+**Cero cambios en la API para este delta.**
 Con eso el total del día es una suma en el cliente: **un** `GET /payments` del día, filtrado por los
 `caseId` de la ruta. Sin llamada por parada y sin endpoint de agregación.
 

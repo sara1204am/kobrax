@@ -3,11 +3,14 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, T
 import { router, useFocusEffect } from 'expo-router';
 import { RouteStatus, RouteStopStatus } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
-import { EmptyState, Header, ListRow, ROUTE_STATUS_LABEL, SectionLabel, StatTile, StatusBadge, STOP_STATUS_META } from '@/ui';
+import { EmptyState, Header, ListRow, ProgressBar, ROUTE_STATUS_LABEL, SectionLabel, StatTile, StatusBadge, STOP_STATUS_META } from '@/ui';
 import { Button } from '@/components';
 import { formatLongDate, todayISO } from '@/agenda-form';
 import { authService } from '@/auth-service';
 import type { MutateResult } from '@/api-client';
+import { money } from '@/agenda-form';
+import { listPaymentsByDay, type PaymentItem } from '@/payments.service';
+import { summarizeDay } from '@/route-summary';
 import {
   generateRoute,
   getRoute,
@@ -37,6 +40,7 @@ export default function RutasScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [payments, setPayments] = useState<PaymentItem[]>([]);
   const reqRef = useRef(0);
 
   const fetchRoute = useCallback(async () => {
@@ -64,6 +68,12 @@ export default function RutasScreen() {
     const detail = mine ? await getRoute(mine.id) : null;
     if (stale()) return;
     setLoad({ status: 'ok', collectorId, route: detail?.status === 'ok' ? detail.data : mine });
+
+    // Lo cobrado hoy, para la tarjeta de la jornada cerrada. Se calcula en el cliente (§8.1) y no
+    // bloquea: si falla, la tarjeta muestra 0 y el resto de la pantalla sigue igual.
+    const pays = mine ? await listPaymentsByDay(today) : null;
+    if (stale() || pays?.status !== 'ok') return;
+    setPayments(pays.data);
   }, []);
 
   useFocusEffect(
@@ -128,7 +138,7 @@ export default function RutasScreen() {
             onGenerate={() => run(() => generateRoute({ collectorId, plannedDate: todayISO() }))}
           />
         ) : finished ? (
-          <RutaFinalizada route={route} />
+          <RutaFinalizada route={route} payments={payments} />
         ) : (
           // Iniciar pasa por la vista previa (S3): ahí se ve el recorrido, se mide y se confirma.
           <RutaEnCurso route={route} onStart={() => router.push(`/rutas/preview?routeId=${route.id}`)} />
@@ -179,9 +189,7 @@ function RutaEnCurso({ route, onStart }: { route: RouteItem; onStart: () => void
             <Text style={TYPE.secondary}>Progreso de ruta</Text>
             <Text style={styles.pct}>{pct}%</Text>
           </View>
-          <View style={styles.barTrack}>
-            <View style={[styles.barFill, { width: `${pct}%` }]} />
-          </View>
+          <ProgressBar percent={pct} />
         </View>
 
         <View style={{ flexDirection: 'row', gap: SPACING.md }}>
@@ -226,17 +234,19 @@ function RutaEnCurso({ route, onStart }: { route: RouteItem; onStart: () => void
 }
 
 /** RT-0c: la jornada cerrada — métricas del día y las paradas en modo lectura. */
-function RutaFinalizada({ route }: { route: RouteItem }) {
-  const { done, total } = routeProgress(route);
+function RutaFinalizada({ route, payments }: { route: RouteItem; payments: PaymentItem[] }) {
   const cancelled = route.status === RouteStatus.CANCELLED;
+  // La MISMA cuenta que el resumen (S6): dos pantallas del mismo día no pueden decir cosas distintas.
+  const s = summarizeDay(route, payments);
   return (
     <View style={[styles.card, { alignItems: 'center', gap: SPACING.md }]}>
       <Text style={styles.bigIcon}>{cancelled ? '🚫' : '✅'}</Text>
       <Text style={TYPE.h2}>{cancelled ? 'Ruta cancelada' : '¡Ruta finalizada!'}</Text>
       <View style={{ flexDirection: 'row', gap: SPACING.md, alignSelf: 'stretch' }}>
-        <StatTile label="Visitas" value={`${done}/${total}`} tone={cancelled ? 'neutral' : 'success'} />
-        <StatTile label="Cobrado" value="—" />
+        <StatTile label="Visitas" value={`${s.done}/${s.total}`} tone={cancelled ? 'neutral' : 'success'} />
+        <StatTile label="Cobrado" value={money(s.collected, s.currency)} tone={cancelled ? 'neutral' : 'success'} />
       </View>
+      <Button label="Ver resumen de la jornada" variant="ghost" onPress={() => router.push(`/rutas/resumen?routeId=${route.id}`)} />
     </View>
   );
 }
@@ -271,8 +281,6 @@ const styles = StyleSheet.create({
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   bigIcon: { fontSize: 40 },
   pct: { ...TYPE.h3, color: COLORS.navy },
-  barTrack: { height: 8, borderRadius: RADIUS.pill, backgroundColor: COLORS.lightBg, marginTop: SPACING.sm, overflow: 'hidden' },
-  barFill: { height: 8, borderRadius: RADIUS.pill, backgroundColor: COLORS.success },
   nextCard: { backgroundColor: COLORS.navy, borderRadius: RADIUS.card, padding: SPACING.lg, gap: SPACING.xs },
   nextName: { fontSize: 17, fontWeight: '600', color: COLORS.white },
   nextAddress: { ...TYPE.secondary, color: COLORS.lightBg },

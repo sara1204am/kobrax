@@ -37,6 +37,17 @@ const STOP_CLIENT = {
  * camino que `STOP_CLIENT` — ensanchar el `include` que ya existe — y no con un `GET /credits` por
  * parada desde el móvil, que sería una llamada por pin.
  */
+/**
+ * La última visita de la parada, para saber **cómo** terminó y no sólo que se visitó (S6: las
+ * categorías del resumen). `take: 1` a propósito: una parada puede tener varias visitas y acá
+ * interesa la que vale, no el historial entero de cada una de las 16 paradas.
+ */
+const STOP_VISIT = {
+  select: { outcome: true },
+  orderBy: { capturedAt: 'desc' },
+  take: 1,
+} satisfies Prisma.RouteStop$visitsArgs;
+
 const STOP_CASE = {
   // `creditId` va también: el registro de resultado (S5) cobra y promete contra ESE crédito.
   select: { creditId: true, credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true } } },
@@ -208,7 +219,7 @@ export class RoutesService {
     const route = await this.tx((tx) =>
       tx.routePlan.findFirst({
         where: { id },
-        include: { stops: { orderBy: { sequenceOrder: 'asc' }, include: { client: STOP_CLIENT, case: STOP_CASE } } },
+        include: { stops: { orderBy: { sequenceOrder: 'asc' }, include: { client: STOP_CLIENT, case: STOP_CASE, visits: STOP_VISIT } } },
       }),
     );
     if (!route) throw resourceNotFound();
@@ -264,7 +275,7 @@ export class RoutesService {
           caseId: dto.caseId,
           sequenceOrder: (last?.sequenceOrder ?? 0) + 1,
         },
-        include: { client: STOP_CLIENT, case: STOP_CASE },
+        include: { client: STOP_CLIENT, case: STOP_CASE, visits: STOP_VISIT },
       });
       await tx.routePlan.update({ where: { id: routeId }, data: { totalCases: { increment: 1 } } });
       return created;
@@ -345,7 +356,7 @@ export class RoutesService {
       await this.assertOwnRoute(tx, routeId);
       return tx.routePlan.findFirst({
         where: { id: routeId },
-        include: { stops: { orderBy: { sequenceOrder: 'asc' }, include: { client: STOP_CLIENT, case: STOP_CASE } } },
+        include: { stops: { orderBy: { sequenceOrder: 'asc' }, include: { client: STOP_CLIENT, case: STOP_CASE, visits: STOP_VISIT } } },
       });
     });
     if (!route) throw resourceNotFound();

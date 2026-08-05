@@ -2,7 +2,7 @@
  * Rutas de campo (solo lectura en P1). Thin sobre `apiQuery`; base del resumen de jornada
  * del Home (P1) y de la pantalla de Rutas (P3). Tipos según `routes.serializer.ts`.
  */
-import { RouteStopStatus, type RouteStatus } from '@kobrax/shared';
+import { RouteStopStatus, type RouteStatus, type VisitOutcome } from '@kobrax/shared';
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
 import type { LngLat } from './maps/tiles';
 
@@ -29,6 +29,8 @@ export interface RouteStopItem {
   overdueAmount?: number;
   currency?: string;
   daysPastDue?: number;
+  /** Cómo terminó la parada (S6). `undefined` = todavía no se visitó. */
+  lastOutcome?: VisitOutcome;
 }
 
 export interface RouteItem {

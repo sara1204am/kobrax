@@ -1,4 +1,4 @@
-import type { Prisma, RoutePlan, RouteStop } from '@prisma/client';
+import type { Prisma, RoutePlan, RouteStop, VisitOutcome } from '@prisma/client';
 import { LocationType } from '@prisma/client';
 import type { CryptoService } from '../../common/crypto/crypto.service';
 import { clientDisplayName, safeDecrypt } from '../clients/clients.serializer';
@@ -41,7 +41,7 @@ type StopCase = {
  * y quien la pide la audita (`findOne`). Sin eso, la parada devuelve ids como siempre.
  */
 export function serializeStop(
-  s: RouteStop & { client?: StopClient; case?: StopCase | null },
+  s: RouteStop & { client?: StopClient; case?: StopCase | null; visits?: { outcome: VisitOutcome }[] },
   crypto?: CryptoService,
 ) {
   const loc = s.client ? primaryLocation(s.client) : undefined;
@@ -66,11 +66,14 @@ export function serializeStop(
     overdueAmount: credit != null ? Number(credit.outstandingBalance) : undefined,
     currency: credit?.currency,
     daysPastDue: credit?.daysPastDue,
+    // Cómo terminó la parada (S6). `status: VISITED` dice que se visitó; esto dice qué pasó.
+    // Una parada sin visitar lo deja en `undefined`, y así no entra en ninguna categoría del resumen.
+    lastOutcome: s.visits?.[0]?.outcome,
   };
 }
 
 type RouteWithStops = RoutePlan & {
-  stops?: (RouteStop & { client?: StopClient; case?: StopCase | null })[];
+  stops?: (RouteStop & { client?: StopClient; case?: StopCase | null; visits?: { outcome: VisitOutcome }[] })[];
 };
 
 export function serializeRoute(r: RouteWithStops, crypto?: CryptoService) {
