@@ -59,6 +59,20 @@ export function initialResult(todayIso: string): ResultForm {
   };
 }
 
+/**
+ * Qué avisarle al cobrador cuando la visita SÍ se registró pero algo posterior falló (la foto, el
+ * pago, la promesa). `null` = salió todo bien y la pantalla puede navegar.
+ *
+ * Vive acá y no en la pantalla porque es la regla que decide si se navega, y navegar de más fue
+ * exactamente el bug: los tres avisos se pintaban con `setError` y `router.replace` corría igual,
+ * así que la pantalla se desmontaba antes de mostrarlos. Un pago que no se guardó desaparecía sin
+ * que nadie se enterara — el cobrador ya había cobrado el efectivo.
+ */
+export function postVisitWarning(failed: string[]): string | null {
+  if (failed.length === 0) return null;
+  return `La visita quedó registrada, pero ${failed.join(' y ')}. Anotalo y avisá a tu supervisor.`;
+}
+
 /** El `details` que viaja al server, por variante. Lo que no corresponde no se manda. */
 export function buildDetails(key: VariantKey, f: ResultForm): Record<string, unknown> {
   if (key === 'NO_ANSWER') return { channel: f.channel };

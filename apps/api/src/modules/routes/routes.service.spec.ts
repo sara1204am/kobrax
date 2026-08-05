@@ -18,6 +18,10 @@ function makeService(
   opts: {
     ua?: unknown;
     cases?: unknown[];
+    /** Cliente que resuelve `addStop` (`null` = id de otro tenant, la RLS no lo devuelve). */
+    stopClient?: unknown;
+    /** Caso que resuelve `addStop` (`null` = id de otro tenant). */
+    stopCase?: unknown;
     permissions?: string[];
     routes?: unknown[];
     route?: { id: string; collectorId: string; totalDistanceKm?: number; estimatedMinutes?: number };
@@ -44,7 +48,13 @@ function makeService(
 
   const tx = {
     userAccount: { findFirst: async () => (opts.ua === undefined ? { id: 'ua1' } : opts.ua) },
-    collectionCase: { findMany: async () => opts.cases ?? [] },
+    // `addStop` valida que el cliente y el caso sean del tenant antes de insertar: bajo RLS un
+    // `findFirst` que no encuentra es exactamente "no es tuyo". `null` simula el id ajeno.
+    client: { findFirst: async () => (opts.stopClient === undefined ? { id: 'c1' } : opts.stopClient) },
+    collectionCase: {
+      findMany: async () => opts.cases ?? [],
+      findFirst: async () => (opts.stopCase === undefined ? { id: 'case1' } : opts.stopCase),
+    },
     routeStop: {
       findFirst: async (args: { where: Record<string, unknown>; orderBy?: { sequenceOrder?: 'asc' | 'desc' } }) =>
         sorted(args.where, args.orderBy?.sequenceOrder ?? 'asc')[0] ?? null,
@@ -222,6 +232,18 @@ describe('RoutesService.addStop', () => {
   it('no se le agregan paradas a la ruta de otro (404, no filtra que exista)', async () => {
     const { service } = makeService({ route: { id: 'r1', collectorId: 'otro' }, permissions: FIELD, stops: [] });
     await rejectsWithCode(service.addStop('r1', ADD), 'RESOURCE_NOT_FOUND');
+  });
+
+  // La RLS no alcanza sola: el chequeo de la FK lo hace Postgres saltándola, así que sin este
+  // `findFirst` explícito un id de otro tenant entraba y dejaba la parada apuntando a su cartera.
+  it('rechaza un cliente que no es del tenant', async () => {
+    const { service } = makeService({ route: OWN_ROUTE, permissions: FIELD, stops: [], stopClient: null });
+    await rejectsWithCode(service.addStop('r1', ADD), 'RESOURCE_NOT_FOUND');
+  });
+
+  it('rechaza un caso que no es del tenant', async () => {
+    const { service } = makeService({ route: OWN_ROUTE, permissions: FIELD, stops: [], stopCase: null });
+    await rejectsWithCode(service.addStop('r1', { clientId: 'cl9', caseId: 'ajeno' } as never), 'RESOURCE_NOT_FOUND');
   });
 });
 

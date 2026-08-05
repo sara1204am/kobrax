@@ -19,6 +19,7 @@ import {
   canSubmitResult,
   initialResult,
   paymentOutcome,
+  postVisitWarning,
   VISIT_VARIANTS,
   variantMeta,
   type ResultForm,
@@ -41,6 +42,12 @@ export default function ResultadoScreen() {
   const [showDate, setShowDate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * La visita ya está creada en el server. Bloquea reenviarla —repetir duplicaría la parada
+   * visitada— y cambia el botón por uno de salida, para que un aviso de "el pago no se guardó"
+   * se pueda leer sin que la pantalla se vaya sola.
+   */
+  const [registered, setRegistered] = useState(false);
 
   const set = useCallback((patch: Partial<ResultForm>) => setForm((f) => ({ ...f, ...patch })), []);
   const meta = variantMeta(key);
@@ -115,11 +122,18 @@ export default function ResultadoScreen() {
       );
     }
 
+    setRegistered(true);
+
+    // Lo que falle de acá en adelante se ACUMULA y se muestra sin navegar. Antes cada uno hacía
+    // `setError` y abajo se llamaba a `router.replace` igual: la pantalla se desmontaba antes de
+    // pintar el banner, así que un pago que no se guardó se perdía sin que el cobrador se enterara.
+    const pendientes: string[] = [];
+
     // La foto se sella contra la visita ya creada. Si falla, la visita YA quedó: se avisa y no se
     // reintenta sola — repetir el registro duplicaría la parada visitada.
     if (form.photo) {
       const ev = await addVisitEvidence(visit.data.id, { type: 'PHOTO', fileUrl: form.photo.url, fileHash: form.photo.hash });
-      if (ev.status !== 'ok') setError('La visita quedó registrada, pero la foto no se pudo adjuntar.');
+      if (ev.status !== 'ok') pendientes.push('la foto no se pudo adjuntar');
     }
 
     if (key === 'PAID' && stop.creditId) {
@@ -136,7 +150,7 @@ export default function ResultadoScreen() {
         // el server creó una sola vez, así que reintentar no puede cobrarle dos veces al deudor.
         `visit-${visit.data.id}`,
       );
-      if (pay.status !== 'ok') setError('La visita quedó registrada, pero el pago no se pudo guardar.');
+      if (pay.status !== 'ok') pendientes.push(`el pago de ${money(amount, currency)} NO se guardó`);
     }
 
     if (key === 'PROMISE' && stop.caseId && stop.creditId) {
@@ -150,12 +164,18 @@ export default function ResultadoScreen() {
         timeSlot: AgendaTimeSlot.MORNING,
         details: { amount, promiseDate: form.promiseDate, paymentMethodCode: form.paymentMethodCode },
       });
-      if (prom.status !== 'ok') setError('La visita quedó registrada, pero la promesa no se pudo agendar.');
+      if (prom.status !== 'ok') pendientes.push('la promesa no se pudo agendar');
     }
 
     setBusy(false);
+    const aviso = postVisitWarning(pendientes);
+    if (aviso) {
+      // Se queda en la pantalla a propósito: es lo único que hace que el cobrador lo lea.
+      setError(aviso);
+      return;
+    }
     router.replace(`/rutas/mapa?routeId=${routeId}`);
-  }, [stop, key, form, outstanding, meta, routeId]);
+  }, [stop, key, form, outstanding, meta, routeId, currency]);
 
   return (
     <View style={styles.screen}>
@@ -277,7 +297,11 @@ export default function ResultadoScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <Button label={meta.cta} onPress={submit} loading={busy} disabled={busy || !valid || !stop} />
+        {registered ? (
+          <Button label="Volver a la ruta" onPress={() => router.replace(`/rutas/mapa?routeId=${routeId}`)} />
+        ) : (
+          <Button label={meta.cta} onPress={submit} loading={busy} disabled={busy || !valid || !stop} />
+        )}
       </View>
     </View>
   );

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
-import { CatalogType, RouteStopStatus } from '@prisma/client';
+import { CatalogType, LocationType, RouteStopStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -39,9 +39,20 @@ export class FieldService {
         const c = await tx.collectionCase.findFirst({ where: { id: dto.caseId, deletedAt: null }, select: { id: true } });
         if (!c) throw resourceNotFound();
       }
+      // Además de existir, la parada trae su punto conocido: es lo que deja al server DERIVAR el
+      // flag de GPS estimado en vez de creerle al body (ver `gpsEstimado` más abajo).
+      let stopPoint: { latitude: number; longitude: number } | undefined;
       if (dto.routeStopId) {
-        const s = await tx.routeStop.findFirst({ where: { id: dto.routeStopId }, select: { id: true } });
+        const s = await tx.routeStop.findFirst({
+          where: { id: dto.routeStopId },
+          select: { id: true, client: { select: { locations: { select: { locationType: true, latitude: true, longitude: true } } } } },
+        });
         if (!s) throw resourceNotFound();
+        const loc =
+          s.client?.locations.find((l) => l.locationType === LocationType.HOME) ?? s.client?.locations[0];
+        if (loc?.latitude != null && loc.longitude != null) {
+          stopPoint = { latitude: Number(loc.latitude), longitude: Number(loc.longitude) };
+        }
       }
       // El cruce que el validador puro no puede hacer: que la categoría exista en el catálogo de
       // ESTE tenant y esté activa. Mismo criterio que los motivos de agenda S6.
@@ -52,6 +63,10 @@ export class FieldService {
         });
         if (!cat) throw invalidVisitDetails(['categoryCode: la categoría no existe o está inactiva']);
       }
+      const gpsEstimado =
+        dto.gpsFallback === true ||
+        (stopPoint != null && stopPoint.latitude === dto.lat && stopPoint.longitude === dto.lng);
+
       const created = await tx.fieldVisit.create({
         data: {
           accountId: this.tenant.accountId,
@@ -63,9 +78,12 @@ export class FieldService {
           accuracy: dto.accuracy,
           outcome: dto.outcome,
           notes: dto.notes,
-          // El flag de GPS estimado lo pone el server, no el body de `details`: así no se puede
-          // borrar mandando un `details` limpio, y vale para todas las variantes por igual.
-          details: { ...validated.value, ...(dto.gpsFallback ? { [GPS_FALLBACK_KEY]: true } : {}) },
+          // El flag va fuera de `details` (el validador descarta lo que venga ahí) y lo escribe el
+          // server. `dto.gpsFallback` es lo que DECLARA el cliente, y por sí solo no alcanza: quien
+          // mande una coordenada inventada y omita el flag produciría una visita que una auditoría
+          // lee como GPS real. Por eso también se DERIVA: en el camino de respaldo el móvil manda
+          // exactamente el punto de la parada, y eso el server lo puede comprobar contra su base.
+          details: { ...validated.value, ...(gpsEstimado ? { [GPS_FALLBACK_KEY]: true } : {}) },
           capturedAt: dto.capturedAt ? new Date(dto.capturedAt) : new Date(),
         },
       });

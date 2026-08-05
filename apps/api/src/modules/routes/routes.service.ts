@@ -8,7 +8,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { serializeRoute, serializeStop } from './routes.serializer';
-import { OsrmService, type OsrmRoute } from './osrm.service';
+import { OsrmService, type OsrmRoute, type OsrmTrip } from './osrm.service';
 import { AddStopDto, CreateRouteDto, GenerateRouteDto, ListRoutesQueryDto, UpdateRouteDto, UpdateStopDto } from './dto/route.dto';
 import { invalidCollector, noStopsToRoute, resourceNotFound, routeForbidden, stopDuplicate, stopNotPending } from './routes.errors';
 
@@ -258,7 +258,14 @@ export class RoutesService {
   async addStop(routeId: string, dto: AddStopDto) {
     const stop = await this.tx(async (tx) => {
       await this.assertOwnRoute(tx, routeId);
+      // Que el cliente y el caso sean de ESTE tenant. La RLS no alcanza sola: el chequeo de la FK
+      // lo hace Postgres por dentro, saltándola, así que un id ajeno entraba igual y dejaba una
+      // parada apuntando a la cartera de otro. Mismo criterio que `FieldService.createVisit`.
+      const client = await tx.client.findFirst({ where: { id: dto.clientId, deletedAt: null }, select: { id: true } });
+      if (!client) throw resourceNotFound();
       if (dto.caseId) {
+        const found = await tx.collectionCase.findFirst({ where: { id: dto.caseId, deletedAt: null }, select: { id: true } });
+        if (!found) throw resourceNotFound();
         const dup = await tx.routeStop.findFirst({ where: { routeId, caseId: dto.caseId }, select: { id: true } });
         if (dup) throw stopDuplicate();
       }
@@ -367,7 +374,13 @@ export class RoutesService {
 
     const stops = route.stops.map((s) => serializeStop(s, this.crypto));
     const drawable = stops.filter(hasPoint);
-    const path = await this.osrm.route(drawable);
+    // En paralelo y no en serie: son dos llamadas independientes de 5 s de timeout cada una, y
+    // encadenadas dejaban la pantalla colgada hasta 10 s con OSRM lento. `trip` sólo necesita los
+    // puntos; la comparación contra el recorrido actual se hace acá abajo, con los dos resueltos.
+    const [path, best] = await Promise.all([
+      this.osrm.route(drawable),
+      drawable.length >= 3 ? this.osrm.trip(drawable) : Promise.resolve(null),
+    ]);
 
     if (!path) {
       // Sin motor: la última distancia/duración conocidas, y que el móvil una los puntos con rectas.
@@ -390,7 +403,7 @@ export class RoutesService {
       distanceKm,
       minutes,
       stops: withEta(stops, drawable, path.legs),
-      suggestion: await this.suggestOrder(drawable, path),
+      suggestion: this.suggestOrder(drawable, path, best),
     };
   }
 
@@ -401,10 +414,13 @@ export class RoutesService {
    * **Sólo se sugiere si ahorra de verdad** (§5.3): una alerta que promete 200 metros entrena al
    * cobrador a ignorarlas todas.
    */
-  private async suggestOrder(drawable: PointStop[], current: OsrmRoute): Promise<RouteSuggestion | undefined> {
-    if (drawable.length < 3) return undefined; // con dos paradas no hay nada que reordenar
-    const best = await this.osrm.trip(drawable);
-    if (!best) return undefined;
+  private suggestOrder(
+    drawable: PointStop[],
+    current: OsrmRoute,
+    best: OsrmTrip | null,
+  ): RouteSuggestion | undefined {
+    // Con dos paradas no hay nada que reordenar; `preview` ni siquiera le pide el viaje a OSRM.
+    if (drawable.length < 3 || !best) return undefined;
 
     const savedKm = round1((current.distanceM - best.distanceM) / 1000);
     const savedMinutes = Math.round((current.durationS - best.durationS) / 60);

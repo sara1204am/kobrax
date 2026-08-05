@@ -4,12 +4,33 @@ import {
   canSubmitResult,
   initialResult,
   paymentOutcome,
+  postVisitWarning,
   VISIT_VARIANTS,
   type ResultForm,
 } from './visit-result';
 
 const HOY = '2026-08-05';
 const form = (over: Partial<ResultForm> = {}): ResultForm => ({ ...initialResult(HOY), ...over });
+
+describe('postVisitWarning', () => {
+  it('sin fallas devuelve null: la pantalla puede navegar', () => {
+    expect(postVisitWarning([])).toBeNull();
+  });
+
+  // El caso que importa: la visita quedó, el efectivo lo tiene el cobrador y el pago no se guardó.
+  // Devolver un mensaje es lo que frena el `router.replace` y hace que alguien se entere.
+  it('con el pago fallado devuelve un aviso que menciona el pago', () => {
+    const aviso = postVisitWarning(['el pago de Bs 250 NO se guardó']);
+    expect(aviso).toContain('el pago de Bs 250 NO se guardó');
+    expect(aviso).toContain('La visita quedó registrada');
+  });
+
+  it('junta las fallas en un solo aviso', () => {
+    expect(postVisitWarning(['la foto no se pudo adjuntar', 'el pago NO se guardó'])).toBe(
+      'La visita quedó registrada, pero la foto no se pudo adjuntar y el pago NO se guardó. Anotalo y avisá a tu supervisor.',
+    );
+  });
+});
 
 describe('VISIT_VARIANTS', () => {
   it('son las 6 del mockup y ninguna se quedó sin outcome', () => {

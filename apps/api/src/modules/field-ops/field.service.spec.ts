@@ -111,7 +111,7 @@ describe('FieldService.createVisit · details por variante', () => {
     assert.deepEqual(calls.visitCreate[0]!.details, { categoryCode: 'DECEASED' });
   });
 
-  it('el GPS estimado lo marca el server, y el body no puede fingirlo', async () => {
+  it('el flag de GPS estimado se escribe fuera de `details`, que el validador descarta', async () => {
     const { service, calls } = makeService();
     await service.createVisit({ ...base, outcome: 'PAID', gpsFallback: true } as never);
     assert.deepEqual(calls.visitCreate[0]!.details, { gpsFallback: true });
@@ -120,5 +120,22 @@ describe('FieldService.createVisit · details por variante', () => {
     const otro = makeService();
     await otro.service.createVisit({ ...base, outcome: 'PAID', details: { gpsFallback: true } } as never);
     assert.deepEqual(otro.calls.visitCreate[0]!.details, {});
+  });
+
+  // El flag que manda el cliente es una declaración, no una prueba: quien mande una coordenada
+  // inventada y lo omita produciría una visita que una auditoría lee como GPS real. Lo que el
+  // server SÍ puede comprobar es que la coordenada sea calcada al punto que él tiene de la parada.
+  it('deriva el GPS estimado cuando la coordenada es calcada a la de la parada, aunque el body lo omita', async () => {
+    const stop = { id: 's1', client: { locations: [{ locationType: 'HOME', latitude: -16.5, longitude: -68.15 }] } };
+    const { service, calls } = makeService({ stop });
+    await service.createVisit({ routeStopId: 's1', lat: -16.5, lng: -68.15, outcome: 'PAID' } as never);
+    assert.deepEqual(calls.visitCreate[0]!.details, { gpsFallback: true });
+  });
+
+  it('una lectura real cerca de la parada NO se marca como estimada', async () => {
+    const stop = { id: 's1', client: { locations: [{ locationType: 'HOME', latitude: -16.5, longitude: -68.15 }] } };
+    const { service, calls } = makeService({ stop });
+    await service.createVisit({ routeStopId: 's1', lat: -16.500012, lng: -68.150004, outcome: 'PAID' } as never);
+    assert.deepEqual(calls.visitCreate[0]!.details, {});
   });
 });
