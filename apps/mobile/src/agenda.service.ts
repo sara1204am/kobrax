@@ -8,6 +8,7 @@ import type {
   AgendaItemType,
   AgendaOutcome,
   AgendaPostponeStep,
+  AgendaTimeSlot,
   ScheduleTimeMode,
 } from '@kobrax/shared';
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
@@ -168,6 +169,11 @@ export interface AgendaClientContext {
   credits: CreditOption[];
   contacts: ContactOption[];
   locations: LocationOption[];
+  /**
+   * En qué franja se contactó efectivamente a este deudor antes (Rutas S4). **Ausente cuando el
+   * historial no alcanza** — la regla la decide el server; acá sólo se pinta lo que llega.
+   */
+  contactHint?: { timeSlot: AgendaTimeSlot; basedOn: number };
 }
 
 /**

@@ -63,4 +63,36 @@ describe('serializeStop', () => {
     assert.equal(s.address, undefined);
     assert.equal(s.clientId, 'cl1');
   });
+
+  // ── La mora de la tarjeta de RT-4 (S4) ─────────────────────────────────────
+
+  it('la mora sale del crédito del caso de la parada', () => {
+    const s = serializeStop(
+      { ...(STOP as object), case: { credit: { outstandingBalance: '450.5', currency: 'BOB', daysPastDue: 45 } } } as never,
+    );
+    assert.equal(s.overdueAmount, 450.5); // Decimal de Prisma → number, como el resto del módulo
+    assert.equal(s.currency, 'BOB');
+    assert.equal(s.daysPastDue, 45);
+  });
+
+  it('una parada sin caso no trae mora, y no rompe', () => {
+    const s = serializeStop({ ...(STOP as object), case: null } as never);
+    assert.equal(s.overdueAmount, undefined);
+    assert.equal(s.currency, undefined);
+    assert.equal(s.daysPastDue, undefined);
+  });
+
+  it('un caso sin crédito tampoco trae mora', () => {
+    const s = serializeStop({ ...(STOP as object), case: { credit: null } } as never);
+    assert.equal(s.overdueAmount, undefined);
+    assert.equal(s.daysPastDue, undefined);
+  });
+
+  it('mora en cero es un dato, no un hueco: se devuelve 0', () => {
+    const s = serializeStop(
+      { ...(STOP as object), case: { credit: { outstandingBalance: '0', currency: 'BOB', daysPastDue: 0 } } } as never,
+    );
+    assert.equal(s.overdueAmount, 0);
+    assert.equal(s.daysPastDue, 0);
+  });
 });

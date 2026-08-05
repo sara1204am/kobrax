@@ -57,6 +57,31 @@ export enum AgendaTimeSlot {
   NIGHT = 'NIGHT',
 }
 
+/**
+ * En qué horas cae cada franja (`from` inclusive, `to` exclusivo, salvo NIGHT que cierra el día).
+ *
+ * Vive acá porque lo usan **los dos lados**: la API agrupa por franja las gestiones de hora fija
+ * (`slotOfTime`) y el móvil pinta el rango legible del chip. Con la frontera duplicada, el chip
+ * podría decir una franja distinta de la que la API contó.
+ */
+export const TIME_SLOT_HOURS: Record<AgendaTimeSlot, { from: number; to: number }> = {
+  [AgendaTimeSlot.MORNING]: { from: 8, to: 12 },
+  [AgendaTimeSlot.AFTERNOON]: { from: 12, to: 18 },
+  [AgendaTimeSlot.NIGHT]: { from: 18, to: 24 },
+};
+
+/**
+ * A qué franja pertenece una hora `HH:mm`. Todo lo anterior a la mañana (una gestión de madrugada)
+ * cae en `MORNING`: es la primera del día, no una cuarta franja.
+ */
+export function slotOfTime(hhmm: string): AgendaTimeSlot {
+  const hour = Number(hhmm.slice(0, 2));
+  if (!Number.isFinite(hour)) return AgendaTimeSlot.MORNING;
+  if (hour >= TIME_SLOT_HOURS[AgendaTimeSlot.NIGHT].from) return AgendaTimeSlot.NIGHT;
+  if (hour >= TIME_SLOT_HOURS[AgendaTimeSlot.AFTERNOON].from) return AgendaTimeSlot.AFTERNOON;
+  return AgendaTimeSlot.MORNING;
+}
+
 /** Tipos de catálogo configurable por tenant (una sola tabla `catalog_items` los cubre). */
 export enum CatalogType {
   PAYMENT_METHOD = 'PAYMENT_METHOD',

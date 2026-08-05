@@ -24,6 +24,7 @@ import { EventBusService, DomainEvent } from '../../common/events/event-bus.serv
 import { ClientsService } from '../clients/clients.service';
 import { UpdateLocationDto } from '../clients/dto/client.dto';
 import { serializeAgendaItem } from './agenda.serializer';
+import { recommendedSlot, type ContactHint } from './recommended-slot';
 import {
   AddClientContactDto,
   AddClientLocationDto,
@@ -356,6 +357,7 @@ export class AgendaService {
   async clientContext(clientId: string) {
     const agendable = await this.agendableCases(clientId);
     const overdue = await this.overdueByCredit(agendable.map((c) => c.creditId));
+    const contactHint = await this.contactHint(clientId);
 
     const client = await this.clients.findOne(clientId, true); // registra `PII_REVEAL` sobre `client`
 
@@ -391,7 +393,32 @@ export class AgendaService {
         latitude: l.latitude,
         longitude: l.longitude,
       })),
+      /** En qué franja conviene buscarlo (Rutas S4). Ausente si el historial no alcanza. */
+      contactHint,
     });
+  }
+
+  /**
+   * La franja en la que a este deudor se le contactó efectivamente antes (Rutas S4 §5.3).
+   *
+   * «Contacto efectivo» = la gestión se ejecutó **y dejó una gestión real en la bitácora**
+   * (`resultActivityId`). Una agendada que se marcó ejecutada sin producir nada no prueba que el
+   * deudor estuviera del otro lado. La regla de conteo es pura y vive en `recommendedSlot`.
+   */
+  private async contactHint(clientId: string): Promise<ContactHint | undefined> {
+    const executed = await this.tx((tx) =>
+      tx.agendaItem.findMany({
+        where: {
+          clientId,
+          deletedAt: null,
+          status: AgendaItemStatus.EXECUTED,
+          resultActivityId: { not: null },
+          ...this.assigneeScope(),
+        },
+        select: { timeSlot: true, scheduledTime: true },
+      }),
+    );
+    return recommendedSlot(executed);
   }
 
   /**

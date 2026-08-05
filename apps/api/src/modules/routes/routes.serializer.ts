@@ -27,11 +27,22 @@ function primaryLocation(client: StopClient) {
 }
 
 /**
+ * La deuda que el cobrador va a reclamar en esa parada. Sale del crédito **del caso de la parada**,
+ * no de la suma del deudor: un cliente puede tener más de un crédito (cartera D1) y la parada apunta
+ * a uno solo. Sólo viene cuando el query incluye el caso.
+ */
+type StopCase = { credit: { outstandingBalance: unknown; currency: string; daysPastDue: number } | null };
+
+/**
  * `clientName`/`address` sólo salen con `crypto` y el cliente incluido: la dirección es PII en claro
  * y quien la pide la audita (`findOne`). Sin eso, la parada devuelve ids como siempre.
  */
-export function serializeStop(s: RouteStop & { client?: StopClient }, crypto?: CryptoService) {
+export function serializeStop(
+  s: RouteStop & { client?: StopClient; case?: StopCase | null },
+  crypto?: CryptoService,
+) {
   const loc = s.client ? primaryLocation(s.client) : undefined;
+  const credit = s.case?.credit ?? undefined;
   return {
     id: s.id,
     clientId: s.clientId,
@@ -45,10 +56,17 @@ export function serializeStop(s: RouteStop & { client?: StopClient }, crypto?: C
     // parada sigue existiendo y numerada en la lista.
     latitude: loc?.latitude != null ? Number(loc.latitude) : undefined,
     longitude: loc?.longitude != null ? Number(loc.longitude) : undefined,
+    // La mora de la tarjeta de RT-4 (S4). Una parada sin caso o sin crédito los deja en `undefined`
+    // y la tarjeta oculta los recuadros — mismo criterio que `address`: la parada existe igual.
+    overdueAmount: credit != null ? Number(credit.outstandingBalance) : undefined,
+    currency: credit?.currency,
+    daysPastDue: credit?.daysPastDue,
   };
 }
 
-type RouteWithStops = RoutePlan & { stops?: (RouteStop & { client?: StopClient })[] };
+type RouteWithStops = RoutePlan & {
+  stops?: (RouteStop & { client?: StopClient; case?: StopCase | null })[];
+};
 
 export function serializeRoute(r: RouteWithStops, crypto?: CryptoService) {
   return {

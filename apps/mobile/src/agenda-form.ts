@@ -9,6 +9,7 @@ import {
   AgendaTimeSlot,
   ScheduleTimeMode,
   SUPPORTED_CURRENCIES,
+  TIME_SLOT_HOURS,
   formatCurrency,
   validateAgendaDetails,
   type AgendaDetails,
@@ -64,6 +65,16 @@ export const TIME_SLOT_LABEL: Record<AgendaTimeSlot, string> = {
   [AgendaTimeSlot.AFTERNOON]: 'Tarde',
   [AgendaTimeSlot.NIGHT]: 'Noche',
 };
+
+/**
+ * El rango horario de la franja, para el chip de «hora recomendada» (Rutas S4). Se **deriva** de
+ * `TIME_SLOT_HOURS` de shared, que es con lo que la API agrupa: si se escribiera a mano, el chip
+ * podría anunciar un horario distinto del que se contó.
+ */
+export function timeSlotRange(slot: AgendaTimeSlot): string {
+  const { from, to } = TIME_SLOT_HOURS[slot];
+  return `${String(from).padStart(2, '0')}:00 - ${String(to).padStart(2, '0')}:00`;
+}
 
 export interface FormState {
   type: AgendaItemType;

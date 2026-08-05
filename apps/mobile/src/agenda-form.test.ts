@@ -1,4 +1,4 @@
-import { AgendaItemStatus, AgendaItemType, AgendaTimeSlot, ScheduleTimeMode } from '@kobrax/shared';
+import { AgendaItemStatus, AgendaItemType, AgendaTimeSlot, ScheduleTimeMode, slotOfTime } from '@kobrax/shared';
 import {
   buildPatch,
   buildPayload,
@@ -8,6 +8,7 @@ import {
   initialForm,
   money,
   partitionDay,
+  timeSlotRange,
   type FormState,
 } from './agenda-form';
 import { actionLinks, whatsappLink, type AgendaListItem } from './agenda.service';
@@ -219,5 +220,24 @@ describe('partitionDay (D6 — secciones del día)', () => {
     expect(pending.map((i) => i.id)).toEqual(['a']);
     // Sin esto una gestión cancelada desaparecía de la app y cancelar era igual que eliminar.
     expect(done.map((i) => i.id)).toEqual(['b', 'c', 'd']);
+  });
+});
+
+describe('timeSlotRange (S4 — chip de hora recomendada)', () => {
+  it('pinta el rango de cada franja con dos dígitos', () => {
+    expect(timeSlotRange(AgendaTimeSlot.MORNING)).toBe('08:00 - 12:00');
+    expect(timeSlotRange(AgendaTimeSlot.AFTERNOON)).toBe('12:00 - 18:00');
+    expect(timeSlotRange(AgendaTimeSlot.NIGHT)).toBe('18:00 - 24:00');
+  });
+
+  // El chip promete un horario y la API agrupó con `slotOfTime`. Si las dos fronteras se separan,
+  // el chip anuncia una franja distinta de la que se contó — este test es esa costura.
+  it('el rango que se muestra coincide con la franja que agrupa la API', () => {
+    for (const slot of Object.values(AgendaTimeSlot)) {
+      const [from, to] = timeSlotRange(slot).split(' - ').map((h) => Number(h.slice(0, 2)));
+      expect(slotOfTime(`${String(from!).padStart(2, '0')}:00`)).toBe(slot);
+      // El minuto anterior al cierre sigue siendo de la misma franja.
+      expect(slotOfTime(`${String(to! - 1).padStart(2, '0')}:59`)).toBe(slot);
+    }
   });
 });

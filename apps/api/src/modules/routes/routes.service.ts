@@ -32,6 +32,15 @@ const STOP_CLIENT = {
   },
 } satisfies Prisma.ClientDefaultArgs;
 
+/**
+ * El crédito del caso de la parada, para la mora que pinta la tarjeta de RT-4 (S4). Va por el mismo
+ * camino que `STOP_CLIENT` — ensanchar el `include` que ya existe — y no con un `GET /credits` por
+ * parada desde el móvil, que sería una llamada por pin.
+ */
+const STOP_CASE = {
+  select: { credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true } } },
+} satisfies Prisma.CollectionCaseDefaultArgs;
+
 @Injectable()
 export class RoutesService {
   constructor(
@@ -198,7 +207,7 @@ export class RoutesService {
     const route = await this.tx((tx) =>
       tx.routePlan.findFirst({
         where: { id },
-        include: { stops: { orderBy: { sequenceOrder: 'asc' }, include: { client: STOP_CLIENT } } },
+        include: { stops: { orderBy: { sequenceOrder: 'asc' }, include: { client: STOP_CLIENT, case: STOP_CASE } } },
       }),
     );
     if (!route) throw resourceNotFound();
@@ -254,7 +263,7 @@ export class RoutesService {
           caseId: dto.caseId,
           sequenceOrder: (last?.sequenceOrder ?? 0) + 1,
         },
-        include: { client: STOP_CLIENT },
+        include: { client: STOP_CLIENT, case: STOP_CASE },
       });
       await tx.routePlan.update({ where: { id: routeId }, data: { totalCases: { increment: 1 } } });
       return created;
@@ -335,7 +344,7 @@ export class RoutesService {
       await this.assertOwnRoute(tx, routeId);
       return tx.routePlan.findFirst({
         where: { id: routeId },
-        include: { stops: { orderBy: { sequenceOrder: 'asc' }, include: { client: STOP_CLIENT } } },
+        include: { stops: { orderBy: { sequenceOrder: 'asc' }, include: { client: STOP_CLIENT, case: STOP_CASE } } },
       });
     });
     if (!route) throw resourceNotFound();

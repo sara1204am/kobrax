@@ -194,12 +194,8 @@ function RutaEnCurso({ route, onStart }: { route: RouteItem; onStart: () => void
         {planned ? (
           <Button label="Iniciar ruta" onPress={onStart} />
         ) : (
-          <View style={{ gap: SPACING.xs }}>
-            <Button label="Continuar ruta" onPress={() => {}} disabled />
-            <Text style={[TYPE.caption, { textAlign: 'center' }]}>
-              El mapa de la ruta activa llega en la próxima versión.
-            </Text>
-          </View>
+          // Ruta ya en curso: se sigue en el mapa activo (S4).
+          <Button label="Continuar ruta" onPress={() => router.push(`/rutas/mapa?routeId=${route.id}`)} />
         )}
 
         {/* La ruta a medio armar es la ruta del día (D-S2-VIDA): sin esta puerta, el mapa quedaría

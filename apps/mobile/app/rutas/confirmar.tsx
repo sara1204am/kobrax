@@ -128,6 +128,8 @@ export default function ConfirmarRutaScreen() {
           </View>
         )}
 
+        {/* La jornada ya arrancó: el paso natural es el mapa activo (S4), no volver al listado. */}
+        <Button label="Ir al mapa de la ruta" onPress={() => router.replace(`/rutas/mapa?routeId=${routeId}`)} />
         <Button label="Ver mi ruta" variant="ghost" onPress={() => router.replace('/(tabs)/rutas')} />
       </ScrollView>
     </View>
