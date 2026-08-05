@@ -288,6 +288,58 @@ export const STOP_STATUS_META: Record<RouteStopStatus, { label: string; tone: Ba
 };
 
 /**
+ * La tarjeta de la parada seleccionada en el mapa activo (Rutas S4 · RT-4): a quién tengo enfrente,
+ * cuánto debe y qué puedo hacer. Vive acá y no dentro de la pantalla porque **S5 la reusa** debajo
+ * del sheet de registrar resultado.
+ *
+ * Los recuadros de mora se ocultan solos cuando la parada no tiene crédito: una parada sin caso
+ * sigue siendo una visita válida, y un `Bs 0.00` inventado es peor que no mostrar nada.
+ */
+export function StopCard({
+  title,
+  address,
+  overdue,
+  daysPastDue,
+  onPrimary,
+  primaryLabel = 'Registrar resultado  →',
+  actions,
+}: {
+  title: string;
+  address?: string;
+  /** Ya formateado por el llamador (`money` conoce la moneda). */
+  overdue?: string;
+  daysPastDue?: number;
+  onPrimary?: () => void;
+  primaryLabel?: string;
+  actions?: ReactNode;
+}) {
+  return (
+    <View style={styles.stopCard}>
+      <Text style={styles.stopTitle} numberOfLines={1}>
+        {title}
+      </Text>
+      <Text style={styles.stopAddress} numberOfLines={2}>
+        {address ?? 'Sin dirección cargada'}
+      </Text>
+
+      {(overdue != null || daysPastDue != null) && (
+        <View style={styles.stopStats}>
+          {overdue != null && <StatTile label="MONTO EN MORA" value={overdue} tone="danger" />}
+          {daysPastDue != null && <StatTile label="DÍAS DE MORA" value={`${daysPastDue} días`} />}
+        </View>
+      )}
+
+      {onPrimary && (
+        <Pressable style={styles.stopPrimary} onPress={onPrimary} accessibilityRole="button">
+          <Text style={styles.stopPrimaryText}>{primaryLabel}</Text>
+        </Pressable>
+      )}
+      {actions}
+    </View>
+  );
+}
+
+/**
  * Input de monto con símbolo de moneda y teclado numérico (§4.1, §5.4). El TEXTO es la fuente de verdad
  * (no re-stringifica el número → no pierde centavos, el bug de Agenda); el padre parsea con `Number`.
  * Lo usan el alta de préstamo (V2) y el pago de la ficha (S3).
@@ -611,6 +663,28 @@ export function OfflineIndicator() {
 }
 
 const styles = StyleSheet.create({
+  // ── StopCard (Rutas S4 · RT-4) ──
+  stopCard: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: RADIUS.card,
+    borderTopRightRadius: RADIUS.card,
+    padding: SPACING.lg,
+    gap: SPACING.xs,
+  },
+  stopTitle: { ...TYPE.h2, color: COLORS.navy },
+  stopAddress: { ...TYPE.secondary },
+  stopStats: { flexDirection: 'row', marginTop: SPACING.sm, marginBottom: SPACING.xs },
+  stopPrimary: {
+    backgroundColor: COLORS.navy,
+    borderRadius: RADIUS.card,
+    // 52 = el mínimo de la guía: el cobrador toca con guantes y bajo el sol.
+    minHeight: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: SPACING.sm,
+  },
+  stopPrimaryText: { ...TYPE.body, color: COLORS.white, fontWeight: '600' },
+
   headerSafe: { backgroundColor: COLORS.navy },
   header: {
     flexDirection: 'row',

@@ -61,6 +61,22 @@
 - ✅ **Import** pobló: `src/import.service.ts` (contrato + derivados puros + flags del gate + memoria del archivo de muestra), `src/file-picker.ts` (`pickImportFile`, aparte porque `expo-document-picker` toca nativo al importarse y está en el camino del login), y en `src/api.ts` → **`postMultipart` + `uploadFailure`**, que comparten las DOS subidas de la app (import y evidencia fotográfica): techo de espera de 60 s y la distinción entre "no hay red" y "el archivo no se puede abrir". Backend: `modules/imports/` con **tres motores por FORMA de archivo** (`rows` CSV · `pdf-rows` tabla en PDF · `pdf-blocks` bloques etiquetados), `field-catalog.ts` (`num()` con separadores mezclados, `splitName`, `splitPhones`) e `import-config.ts` (invariantes + `detectFileShape`).
   - ⚠ **No hay parsers por banco** (C12). Sumar un formato = configurarlo desde Ajustes, no escribir código.
   - ⚠ Excel **no se lee**: la dep `xlsx` nunca se instaló y `rows.parser` sólo hace CSV.
+- ✅ **Rutas S4** pobló: en `ui.tsx` → **`StopCard`** (la tarjeta de la parada seleccionada: nombre,
+  dirección, los dos recuadros de mora y las acciones; **S5 la reusa** bajo el sheet). En `shared` →
+  **`TIME_SLOT_HOURS` + `slotOfTime()`**, la frontera horaria de cada franja: la usan **los dos lados**
+  (la API agrupa las gestiones de hora fija, el móvil deriva el rango del chip con `timeSlotRange()`
+  de `agenda-form.ts`, pegado a `TIME_SLOT_LABEL`). En la API → **`recommendedSlot()`**
+  (`modules/agenda/recommended-slot.ts`), la regla pura de «hora recomendada», y **`contactHint`** en
+  la respuesta de `clientContext`. `serializeStop` sumó `overdueAmount`/`currency`/`daysPastDue`.
+  - ⚠ **Los garantes NO son una entidad**: `GUARANTOR` es un valor de **`LocationType`**, así que ya
+    viven en `client_locations` con lat/lng y `clientContext` los devuelve. Para "garantes de X" se
+    filtra `locations` por tipo — *no* buscar una tabla de garantes ni escribir un endpoint.
+  - ⚠ **`MiniMapCard` ya tenía `tone: 'primary' | 'nearby'`**: se construyó en la fundación de rutas
+    justo para el mini-mapa de garantes. Reusarlo, no hacer un mapa chico nuevo.
+  - ⚠ La ficha `app/cliente/[id].tsx` acepta **`?routeId=&stopId=`**: con eso pinta lo de RT-5 (chip de
+    hora recomendada + garantes). Abierta desde cartera es la misma ficha de siempre.
+  - ⚠ **La mora de la parada es la del crédito de SU caso**, no la suma del deudor (un cliente puede
+    tener varios créditos). Si algún día se quiere el total, es otro campo, no este.
 - ✅ **Cartera S4** pobló: `src/use-client-search.ts` → **`useClientSearch(query, { enabled })`**, el buscador
   de clientes con debounce (300 ms / ≥2 caracteres / race-guard por `reqId`). Estaba suelto dentro de
   `app/agenda/crear.tsx`; ahora lo usan **agenda y cartera** — *no escribir un tercero*. Y en `src/portfolio.ts`
