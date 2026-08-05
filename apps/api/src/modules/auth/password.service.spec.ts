@@ -6,16 +6,20 @@ import { PasswordService } from './password.service';
 import { AUTH_ERR } from './auth.errors';
 import { rejectsWithCode } from './auth-test-utils';
 
-/** Fake mínimo de PrismaService + SessionService para PasswordService. */
+/** Fake mínimo de PrismaService + SessionService + MailService para PasswordService. */
 function makeDeps(opts: {
   users?: Record<string, unknown>;
-  resetRecord?: { id: string; userId: string } | null;
+  resetRecord?: { id: string; userId: string; user?: Record<string, unknown> } | null;
+  /** Filas que devuelve `auth_memberships()` (la cuenta a la que pertenece el invitado). */
+  memberships?: { account_id: string; account_name: string }[];
 } = {}) {
   const calls = {
     resetCreate: [] as unknown[],
     userUpdate: [] as { where: { id: string }; data: Record<string, unknown> }[],
     resetUpdateMany: [] as unknown[],
     revokeAll: [] as { userId: string; except?: string }[],
+    mail: [] as { to: string; subject: string; text: string }[],
+    audit: [] as Record<string, unknown>[],
   };
   const prisma = {
     user: {
@@ -37,7 +41,12 @@ function makeDeps(opts: {
         return { count: 1 };
       },
     },
+    auditLog: {
+      create: async (args: { data: Record<string, unknown> }) => void calls.audit.push(args.data),
+    },
     $transaction: async (ops: Promise<unknown>[]) => Promise.all(ops),
+    $queryRaw: async () => opts.memberships ?? [],
+    withTenant: async (_a: string, fn: (tx: unknown) => Promise<unknown>) => fn(prisma),
   };
   const sessions = {
     revokeAll: async (userId: string, except?: string) => {
@@ -46,9 +55,23 @@ function makeDeps(opts: {
     },
   };
   const config = { isProduction: false };
-  const service = new PasswordService(prisma as never, sessions as never, config as never);
+  const mail = {
+    send: async (to: string, subject: string, text: string) => void calls.mail.push({ to, subject, text }),
+  };
+  const service = new PasswordService(
+    prisma as never,
+    sessions as never,
+    config as never,
+    mail as never,
+  );
   return { service, calls };
 }
+
+const INVITED = {
+  id: 't1',
+  userId: 'u9',
+  user: { id: 'u9', email: 'nuevo@kobrax.demo', status: 'PENDING', profile: { firstName: 'Rosa' } },
+};
 
 describe('PasswordService.forgotPassword (anti-enumeration)', () => {
   it('no crea token si el usuario no existe', async () => {
@@ -77,6 +100,92 @@ describe('PasswordService.forgotPassword (anti-enumeration)', () => {
     assert.match(data.tokenHash, /^[a-f0-9]{64}$/); // SHA-256 hex, nunca el token en claro
     const ttl = data.expiresAt.getTime() - before;
     assert.ok(ttl > 29 * 60_000 && ttl <= 30 * 60_000 + 1000, `TTL fuera de rango: ${ttl}ms`);
+  });
+});
+
+describe('PasswordService.forgotPassword — el correo que nunca se enviaba', () => {
+  it('manda el mail con el token (el TODO(F8) que estuvo roto desde siempre)', async () => {
+    const { service, calls } = makeDeps({
+      users: { 'ana@kobrax.demo': { id: 'u1', email: 'ana@kobrax.demo', status: 'ACTIVE' } },
+    });
+    await service.forgotPassword('ana@kobrax.demo');
+    assert.equal(calls.mail.length, 1);
+    assert.equal(calls.mail[0]!.to, 'ana@kobrax.demo');
+    assert.match(calls.mail[0]!.text, /kobrax:\/\/reset\?token=/);
+  });
+
+  it('no manda nada si el usuario no existe (anti-enumeration)', async () => {
+    const { service, calls } = makeDeps({ users: {} });
+    await service.forgotPassword('ghost@kobrax.demo');
+    assert.equal(calls.mail.length, 0);
+  });
+});
+
+describe('PasswordService — invitación (S2)', () => {
+  it('normaliza el código: guiones, minúsculas y O/I confundidas dan el mismo hash', async () => {
+    const { service } = makeDeps({
+      resetRecord: INVITED,
+      memberships: [{ account_id: 'acc-A', account_name: 'Cobranzas Rosa' }],
+    });
+    // El fake devuelve el mismo registro para cualquier hash: lo que se verifica es que
+    // ninguna de las formas explote y que las tres lleguen al mismo lugar.
+    for (const raw of ['K7F29-QX3TM', 'k7f29qx3tm', 'K7F29 QX3TM']) {
+      const inv = await service.getInvitation(raw);
+      assert.equal(inv.email, 'nuevo@kobrax.demo');
+    }
+  });
+
+  it('devuelve el negocio para pintar la pantalla', async () => {
+    const { service } = makeDeps({
+      resetRecord: INVITED,
+      memberships: [{ account_id: 'acc-A', account_name: 'Cobranzas Rosa' }],
+    });
+    const inv = await service.getInvitation('K7F29-QX3TM');
+    assert.equal(inv.businessName, 'Cobranzas Rosa');
+    assert.equal(inv.firstName, 'Rosa');
+  });
+
+  it('rechaza un código que no existe, venció o ya se usó (AUTH_010)', async () => {
+    const { service } = makeDeps({ resetRecord: null });
+    await rejectsWithCode(service.getInvitation('K7F29-QX3TM'), AUTH_ERR.INVITATION_INVALID);
+  });
+
+  it('rechaza el código de alguien que ya aceptó', async () => {
+    const { service } = makeDeps({
+      resetRecord: { ...INVITED, user: { ...INVITED.user, status: 'ACTIVE' } },
+    });
+    await rejectsWithCode(service.getInvitation('K7F29-QX3TM'), AUTH_ERR.INVITATION_INVALID);
+  });
+
+  it('aceptar activa al usuario, limpia el cambio de contraseña forzado y consume el token', async () => {
+    const { service, calls } = makeDeps({
+      resetRecord: INVITED,
+      memberships: [{ account_id: 'acc-A', account_name: 'Cobranzas Rosa' }],
+    });
+    await service.acceptInvitation('K7F29-QX3TM', 'Kobrax123!', { ip: '10.0.0.1' });
+
+    const data = calls.userUpdate[0]!.data;
+    assert.equal(data.status, 'ACTIVE');
+    assert.equal(data.requiresPasswordChange, false);
+    assert.equal(typeof data.passwordHash, 'string');
+    assert.equal(calls.resetUpdateMany.length, 1);
+  });
+
+  it('deja fila de audit con la IP (endpoint público: AuditService no-opearía)', async () => {
+    const { service, calls } = makeDeps({
+      resetRecord: INVITED,
+      memberships: [{ account_id: 'acc-A', account_name: 'Cobranzas Rosa' }],
+    });
+    await service.acceptInvitation('K7F29-QX3TM', 'Kobrax123!', { ip: '10.0.0.1' });
+    assert.equal(calls.audit.length, 1);
+    assert.equal(calls.audit[0]!.accountId, 'acc-A');
+    assert.equal(calls.audit[0]!.ip, '10.0.0.1');
+  });
+
+  it('rechaza una contraseña débil antes de tocar nada', async () => {
+    const { service, calls } = makeDeps({ resetRecord: INVITED });
+    await rejectsWithCode(service.acceptInvitation('K7F29-QX3TM', 'weak', {}), AUTH_ERR.WEAK_PASSWORD);
+    assert.equal(calls.userUpdate.length, 0);
   });
 });
 

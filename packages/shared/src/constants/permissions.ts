@@ -27,6 +27,7 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     Permission.CREDIT_PII_READ,
     Permission.REPORT_READ,
     Permission.REPORT_EXPORT,
+    Permission.ACCOUNT_READ,
     Permission.USER_READ,
   ],
   [RoleType.SUPERVISOR]: [

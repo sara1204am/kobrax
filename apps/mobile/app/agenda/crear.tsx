@@ -771,7 +771,6 @@ export default function CrearGestionScreen() {
   );
 }
 
-/** Fila-selector (ícono + valor o placeholder + chevron). Abre una hoja o un picker. */
 /**
  * Campo deshabilitado: dato del crédito que el cobrador consulta pero no edita. Es un `Text`, no un
  * `TextInput` inerte — no toma foco ni abre teclado, y el lector de pantalla no lo anuncia como editable.
@@ -809,7 +808,6 @@ function Multiline({
   );
 }
 
-/** Hoja de selección genérica (crédito, teléfono, dirección, banco). Sube a `ui.tsx` cuando S3/S4 la pidan. */
 const styles = StyleSheet.create({
   body: { padding: SPACING.lg, paddingBottom: SPACING.xxl },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },

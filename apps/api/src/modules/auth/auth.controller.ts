@@ -28,6 +28,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { MfaDisableDto } from './dto/mfa-disable.dto';
 import { MfaSetupStartDto, MfaSetupVerifyDto } from './dto/mfa-setup.dto';
+import { AcceptInvitationDto } from './dto/accept-invitation.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -77,6 +78,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   mfaSetupVerify(@Body() dto: MfaSetupVerifyDto, @Req() req: Request) {
     return this.auth.mfaSetupVerify(dto.preAuthToken, dto.code, this.meta(req));
+  }
+
+  /** "Lo hago después": entra sin activar MFA. El recordatorio queda en el Home. */
+  @Post('mfa/setup/skip')
+  @HttpCode(HttpStatus.OK)
+  mfaSetupSkip(@Body() dto: MfaSetupStartDto, @Req() req: Request) {
+    return this.auth.mfaSetupSkip(dto.preAuthToken, this.meta(req));
   }
 
   // ── MFA self-service (Bearer) ──────────────────────────────────────────────
@@ -136,6 +144,26 @@ export class AuthController {
   async resetPassword(@Body() dto: ResetPasswordDto): Promise<{ ok: true }> {
     await this.passwords.resetPassword(dto.token, dto.newPassword);
     return { ok: true };
+  }
+
+  // ── Invitación: los dos endpoints públicos del slice (CUENTA · S2) ─────────
+  //
+  // El código viaja en la URL sólo para pintar la pantalla; para aceptar va en el body,
+  // que no queda escrito en los access logs de nadie.
+  @Get('invitation/:code')
+  @RateLimit({ limit: 10, windowSec: 60, by: 'ip' })
+  getInvitation(@Param('code') code: string) {
+    return this.passwords.getInvitation(code);
+  }
+
+  @Post('invitation/accept')
+  @HttpCode(HttpStatus.OK)
+  @RateLimit({ limit: 10, windowSec: 3600, by: 'ip' })
+  acceptInvitation(@Body() dto: AcceptInvitationDto, @Req() req: Request) {
+    return this.passwords.acceptInvitation(dto.code, dto.password, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
   }
 
   @Post('change-password')

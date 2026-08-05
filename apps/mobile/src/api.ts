@@ -75,6 +75,32 @@ export function uploadFailure(e: unknown): { status: 'offline' } | { status: 'er
   return { status: 'error', message: `No se pudo leer el archivo en el teléfono: ${msg}` };
 }
 
+/**
+ * Resultado de una llamada **sin sesión** (registro, invitación). Es el hermano de
+ * `MutateResult` sin `unauthenticated`: ese estado no existe cuando justamente todavía no
+ * hay con qué autenticarse, y dejarlo tipado invitaba a manejar un caso imposible.
+ */
+export type PublicResult<T> =
+  | { status: 'ok'; data: T }
+  | { status: 'offline' }
+  | { status: 'error'; message: string };
+
+/**
+ * Llamada pública + mapeo a `PublicResult`. Va por `apiFetch` y **no** por `apiMutate`:
+ * ése pasa por `authedFetch`, que sin sesión local corta con `unauthenticated` antes de
+ * salir a la red — justo el estado de quien se registra o acepta una invitación.
+ */
+export async function publicCall<T>(
+  path: string,
+  init: { method?: string; body?: unknown } = {},
+  fallback = 'No se pudo completar la operación',
+): Promise<PublicResult<T>> {
+  const res = await apiFetch<T>(path, init);
+  if (res.status === 0) return { status: 'offline' };
+  if ((res.status === 200 || res.status === 201) && res.data) return { status: 'ok', data: res.data };
+  return { status: 'error', message: res.error?.message ?? fallback };
+}
+
 export async function apiFetch<T>(
   path: string,
   init: { method?: string; body?: unknown; token?: string; headers?: Record<string, string> } = {},

@@ -5,6 +5,8 @@ import { PrismaModule } from './database/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { AccountsModule } from './modules/accounts/accounts.module';
+import { UsersModule } from './modules/users/users.module';
 import { ClientsModule } from './modules/clients/clients.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { CreditsModule } from './modules/credits/credits.module';
@@ -35,6 +37,8 @@ import { RateLimitGuard } from './common/guards/rate-limit.guard';
     EventBusModule,
     HealthModule,
     AuthModule,
+    AccountsModule,
+    UsersModule,
     ClientsModule,
     ImportsModule,
     CreditsModule,

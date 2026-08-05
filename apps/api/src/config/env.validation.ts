@@ -18,6 +18,12 @@ export const envSchema = z.object({
   APP_ENCRYPTION_KEY: z.string().optional(),
   // Blind index (HMAC) para documentos cifrados (F4). El BlindIndexService valida 32 bytes al boot.
   APP_BLIND_INDEX_KEY: z.string().optional(),
+  // SMTP de Gmail (CUENTA · S2). Opcionales a propósito: sin ellas el MailService
+  // loguea el correo en vez de enviarlo, así que el módulo corre sin credenciales.
+  // SMTP_PASS es una **contraseña de aplicación** de Google, no la del correo.
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  MAIL_FROM: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

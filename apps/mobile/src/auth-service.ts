@@ -102,6 +102,38 @@ export const authService = {
     return { step, backupCodes };
   },
 
+  /** "Lo hago después": entra sin activar MFA. El recordatorio queda en el Home. */
+  async mfaSetupSkip(): Promise<{ step: Step } | { error: string }> {
+    if (!flow.preAuthToken) return { error: 'Sesión de login expirada' };
+    const res = await apiFetch<LoginResult>('/auth/mfa/setup/skip', {
+      method: 'POST',
+      body: { preAuthToken: flow.preAuthToken },
+    });
+    if (res.status !== 200 || !res.data) return { error: errMessage(res) };
+    return { step: await handleResult(res.data) };
+  },
+
+  /**
+   * Enrolar MFA **ya con sesión** (desde el aviso del Home, no durante el login).
+   * Son los endpoints self-service que ya existían; acá sólo se les pone el envoltorio.
+   */
+  async mfaEnroll(): Promise<{ otpauthUrl: string; secret: string } | { error: string }> {
+    const res = await authedFetch<{ otpauthUrl: string; secret: string }>('/auth/mfa/enroll', {
+      method: 'POST',
+    });
+    if (res.status !== 200 || !res.data) return { error: errMessage(res as ApiResult<unknown>) };
+    return res.data;
+  },
+
+  async mfaVerify(code: string): Promise<{ backupCodes: string[] } | { error: string }> {
+    const res = await authedFetch<{ enabled: true; backupCodes: string[] }>('/auth/mfa/verify', {
+      method: 'POST',
+      body: { code },
+    });
+    if (res.status !== 200 || !res.data) return { error: errMessage(res as ApiResult<unknown>) };
+    return { backupCodes: res.data.backupCodes };
+  },
+
   async selectAccount(accountId: string): Promise<{ step: Step } | { error: string }> {
     if (!flow.preAuthToken) return { error: 'Sesión de login expirada' };
     const res = await apiFetch<AuthTokens>('/auth/select-account', {

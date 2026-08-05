@@ -215,6 +215,22 @@ export class AuthService implements OnModuleInit {
     return { ...result, backupCodes };
   }
 
+  /**
+   * Postergar el MFA obligatorio: **completa el login sin activarlo**.
+   *
+   * Decisión de producto (2026-07-31, explícita de la dueña): se puede postergar
+   * indefinidamente. El recordatorio es blando y vive en el cliente — `GET /auth/me` ya
+   * devuelve `mfaEnabled`, y el Home pinta un aviso mientras siga en false.
+   *
+   * Consecuencia asumida: un `ACCOUNT_ADMIN` puede operar sin segundo factor, así que la
+   * contraseña vuelve a ser la única barrera para quien administra el tenant y cobra. El
+   * `mfaVerified: false` que viaja al paso de empresa deja el rastro de que no se verificó.
+   */
+  async mfaSetupSkip(preAuthToken: string, meta: SessionMeta): Promise<LoginResult> {
+    const pre = this.verifyEnrollToken(preAuthToken);
+    return this.proceedToAccountStep(pre.sub, meta, false);
+  }
+
   private verifyEnrollToken(preAuthToken: string) {
     try {
       return this.token.verifyPreAuth(preAuthToken, 'mfa_enroll');

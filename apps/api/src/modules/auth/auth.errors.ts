@@ -20,6 +20,7 @@ export const AUTH_ERR = {
   ACCOUNT_NOT_ALLOWED: 'AUTH_007',
   WEAK_PASSWORD: 'AUTH_008',
   MFA_REQUIRED: 'AUTH_009',
+  INVITATION_INVALID: 'AUTH_010',
 } as const;
 
 export const invalidCredentials = () =>
@@ -89,6 +90,17 @@ export const resetTokenInvalid = () =>
   new BadRequestException({
     code: AUTH_ERR.RESET_TOKEN_INVALID,
     message: 'Token de recuperación inválido o expirado',
+  });
+
+/**
+ * Código de invitación inválido, vencido, ya usado — o de alguien que ya aceptó (S2).
+ * Un solo mensaje para los cuatro casos a propósito: distinguirlos le diría a quien
+ * prueba códigos cuál existe.
+ */
+export const invitationInvalid = () =>
+  new BadRequestException({
+    code: AUTH_ERR.INVITATION_INVALID,
+    message: 'La invitación no es válida o ya venció. Pedí que te la reenvíen.',
   });
 
 /** La nueva contraseña no cumple la política (F2b). */
