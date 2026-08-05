@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import type { CatalogItem, Credit, Prisma, PrismaClient } from '@prisma/client';
+import type { AgendaItem, CatalogItem, Credit, Prisma, PrismaClient } from '@prisma/client';
 import { AgendaItemStatus, AgendaItemType, CatalogType, InstallmentStatus, ScheduleTimeMode } from '@prisma/client';
 import {
   AGENDA_OUTCOMES_BY_TYPE,
+  AgendaTimeSlot,
   CASE_TRANSITIONS,
   CaseStatus,
   Permission,
@@ -24,14 +25,17 @@ import { EventBusService, DomainEvent } from '../../common/events/event-bus.serv
 import { ClientsService } from '../clients/clients.service';
 import { UpdateLocationDto } from '../clients/dto/client.dto';
 import { serializeAgendaItem } from './agenda.serializer';
+import { recommendedSlot, type ContactHint } from './recommended-slot';
 import {
   AddClientContactDto,
   AddClientLocationDto,
-
+  CancelAgendaItemDto,
   CompleteAgendaItemDto,
   CreateAgendaItemDto,
   ListOverdueQueryDto,
   PostponeAgendaItemDto,
+  RescheduleAgendaItemDto,
+  UpdateAgendaItemDto,
 } from './dto/agenda.dto';
 import {
   agendaCaseNotFound,
@@ -64,7 +68,8 @@ function toUTCDate(dateStr: string): Date {
   return new Date(`${dateStr}T00:00:00.000Z`);
 }
 
-/** Gestiones agendadas (lectura S1 + alta S2). Completar/editar/eliminar llegan en S4–S6. */
+/** Gestiones agendadas: lectura (S1), alta (S2), detalle (S3), ejecutar/posponer (S4), editar (S5) y
+ *  reagendar/cancelar/eliminar (S6). */
 @Injectable()
 export class AgendaService {
   constructor(
@@ -192,10 +197,23 @@ export class AgendaService {
         daysPastDue: credit.daysPastDue,
       },
       target: resolveTarget(item.type, item.details as unknown as AgendaDetails, client),
-      labels: await this.detailLabels(item.type, item.details as unknown as AgendaDetails),
+      labels: await this.detailLabels(
+        item.type,
+        item.details as unknown as AgendaDetails,
+        [item.reasonCode, ...history.map((h) => h.reasonCode)].filter((c): c is string => !!c),
+      ),
       history: history.map((h) => {
         const s = serializeAgendaItem(h, undefined, now);
-        return { id: s.id, type: s.type, status: s.status, scheduledDate: s.scheduledDate, isOverdue: s.isOverdue };
+        return {
+          id: s.id,
+          type: s.type,
+          status: s.status,
+          scheduledDate: s.scheduledDate,
+          isOverdue: s.isOverdue,
+          // Con esto el móvil arma la cadena de reprogramaciones sin otra query (S6).
+          reasonCode: s.reasonCode,
+          rescheduledFromId: s.rescheduledFromId,
+        };
       }),
     });
   }
@@ -278,13 +296,19 @@ export class AgendaService {
   private async detailLabels(
     type: AgendaItemType,
     details: AgendaDetails,
+    /** Motivos de cancelación/reprogramación del ítem y de su historial (S6), para pintarlos con su etiqueta. */
+    reasonCodes: string[] = [],
   ): Promise<Record<string, string> | undefined> {
-    if (type !== AgendaItemType.PROMISE_TO_PAY) return undefined;
-    const { paymentMethodCode, bankCode } = details as PromiseToPayDetails;
-    const codes = [paymentMethodCode, bankCode].filter((c): c is string => !!c);
+    const promise = type === AgendaItemType.PROMISE_TO_PAY ? (details as PromiseToPayDetails) : undefined;
+    const codes = [...new Set([promise?.paymentMethodCode, promise?.bankCode, ...reasonCodes].filter((c): c is string => !!c))];
+    if (codes.length === 0) return undefined;
     const rows = await this.tx((tx) =>
       tx.catalogItem.findMany({
-        where: { catalog: { in: [CatalogType.PAYMENT_METHOD, CatalogType.BANK] }, code: { in: codes }, deletedAt: null },
+        where: {
+          catalog: { in: [CatalogType.PAYMENT_METHOD, CatalogType.BANK, CatalogType.CANCEL_REASON, CatalogType.RESCHEDULE_REASON] },
+          code: { in: codes },
+          deletedAt: null,
+        },
         select: { code: true, label: true },
       }),
     );
@@ -334,6 +358,7 @@ export class AgendaService {
   async clientContext(clientId: string) {
     const agendable = await this.agendableCases(clientId);
     const overdue = await this.overdueByCredit(agendable.map((c) => c.creditId));
+    const contactHint = await this.contactHint(clientId);
 
     const client = await this.clients.findOne(clientId, true); // registra `PII_REVEAL` sobre `client`
 
@@ -369,7 +394,32 @@ export class AgendaService {
         latitude: l.latitude,
         longitude: l.longitude,
       })),
+      /** En qué franja conviene buscarlo (Rutas S4). Ausente si el historial no alcanza. */
+      contactHint,
     });
+  }
+
+  /**
+   * La franja en la que a este deudor se le contactó efectivamente antes (Rutas S4 §5.3).
+   *
+   * «Contacto efectivo» = la gestión se ejecutó **y dejó una gestión real en la bitácora**
+   * (`resultActivityId`). Una agendada que se marcó ejecutada sin producir nada no prueba que el
+   * deudor estuviera del otro lado. La regla de conteo es pura y vive en `recommendedSlot`.
+   */
+  private async contactHint(clientId: string): Promise<ContactHint | undefined> {
+    const executed = await this.tx((tx) =>
+      tx.agendaItem.findMany({
+        where: {
+          clientId,
+          deletedAt: null,
+          status: AgendaItemStatus.EXECUTED,
+          resultActivityId: { not: null },
+          ...this.assigneeScope(),
+        },
+        select: { timeSlot: true, scheduledTime: true },
+      }),
+    );
+    return recommendedSlot(executed);
   }
 
   /**
@@ -435,7 +485,7 @@ export class AgendaService {
     if (scheduledDate < today) throw agendaPastDate();
     assertTimeMode(dto);
 
-    const { created, clientName } = await this.tx(async (tx) => {
+    const { created, reminder, clientName } = await this.tx(async (tx) => {
       const found = await tx.collectionCase.findFirst({
         where: { id: dto.caseId, deletedAt: null, ...this.caseScope() },
         include: { credit: true },
@@ -464,12 +514,204 @@ export class AgendaService {
           createdBy: this.tenant.userId,
         },
       });
+      const reminder = await this.promiseReminder(tx, created, scheduledDate);
       const names = await this.clientNames(tx, [found.clientId]);
-      return { created, clientName: names.get(found.clientId) };
+      return { created, reminder, clientName: names.get(found.clientId) };
     });
 
     await this.audit.record({ entity: 'agenda_item', entityId: created.id, action: 'CREATE', after: created });
+    if (reminder) {
+      await this.audit.record({ entity: 'agenda_item', entityId: reminder.id, action: 'CREATE', after: reminder });
+    }
     return ResponseDto.ok(serializeAgendaItem(created, clientName));
+  }
+
+  /**
+   * El recordatorio de la promesa (Rutas S5 · D2). El sheet de RT-6 promete al cobrador que "se
+   * generará un recordatorio automático 24h antes": esto es ese recordatorio, hecho con la agenda
+   * que ya existe en vez de con infraestructura de notificaciones nueva.
+   *
+   * Devuelve `null` cuando no corresponde: si la promesa es para mañana o antes, el recordatorio
+   * caería hoy o en el pasado — y un recordatorio en el pasado no le recuerda nada a nadie.
+   */
+  private async promiseReminder(tx: PrismaClient, promise: AgendaItem, scheduledDate: Date) {
+    if (promise.type !== AgendaItemType.PROMISE_TO_PAY) return null;
+
+    const dayBefore = new Date(scheduledDate);
+    dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
+    if (dayBefore <= this.startOfTodayUTC()) return null;
+
+    return tx.agendaItem.create({
+      data: {
+        accountId: this.tenant.accountId,
+        caseId: promise.caseId,
+        clientId: promise.clientId,
+        creditId: promise.creditId,
+        // Del MISMO cobrador que la promesa: es él quien tiene que acordarse, no quien la cargó.
+        assigneeId: promise.assigneeId,
+        type: AgendaItemType.REMINDER,
+        scheduledDate: dayBefore,
+        timeMode: ScheduleTimeMode.LAPSE,
+        timeSlot: AgendaTimeSlot.MORNING,
+        details: { description: 'Recordar la promesa de pago de mañana' },
+        createdBy: this.tenant.userId,
+      },
+    });
+  }
+
+  /**
+   * Edita una gestión pendiente (S5): tipo, campos propios, observaciones y **hora**. La fecha no:
+   * mover el día es reagendar y deja rastro (§D5 del plan). El deudor tampoco: es el ancla del agendado.
+   */
+  async update(id: string, dto: UpdateAgendaItemDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
+    const { before, updated, clientName } = await this.tx(async (tx) => {
+      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...this.assigneeScope() } });
+      if (!item) throw agendaItemNotFound();
+      if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
+
+      const data: Prisma.AgendaItemUpdateInput = { updatedBy: this.tenant.userId };
+
+      // Tipo y `details` son un par: el `contactId` de una llamada no sirve para una visita, así que
+      // cualquiera de los dos que cambie revalida la combinación completa.
+      if (dto.type !== undefined || dto.details !== undefined) {
+        const type = dto.type ?? item.type;
+        const raw = dto.details ?? (item.details as Record<string, unknown>);
+        const validated = validateAgendaDetails(type, raw);
+        if (!validated.ok) throw agendaInvalidDetails(validated.errors);
+
+        const credit = await tx.credit.findFirst({ where: { id: item.creditId } });
+        if (!credit) throw agendaCaseNotFound();
+        await this.assertReferences(tx, type, validated.value, item.clientId, credit, this.startOfTodayUTC());
+
+        data.type = type;
+        data.details = validated.value as unknown as Prisma.InputJsonValue;
+      }
+
+      // La hora se valida sobre la combinación resultante, no sobre el parche: mandar sólo
+      // `timeMode: LAPSE` sin franja tiene que fallar aunque el ítem guardado tuviera hora fija.
+      if (dto.timeMode !== undefined || dto.scheduledTime !== undefined || dto.timeSlot !== undefined) {
+        const timeMode = dto.timeMode ?? item.timeMode;
+        const scheduledTime = dto.scheduledTime ?? item.scheduledTime;
+        const timeSlot = dto.timeSlot ?? item.timeSlot;
+        assertTimeMode({ timeMode, scheduledTime, timeSlot });
+        data.timeMode = timeMode;
+        // Se normaliza igual que en el alta: el modo que gana limpia el campo del otro.
+        data.scheduledTime = timeMode === ScheduleTimeMode.FIXED ? scheduledTime : null;
+        data.timeSlot = timeMode === ScheduleTimeMode.LAPSE ? timeSlot : null;
+      }
+
+      if (dto.observations !== undefined) data.observations = dto.observations;
+
+      const updated = await tx.agendaItem.update({ where: { id }, data });
+      const names = await this.clientNames(tx, [updated.clientId]);
+      return { before: item, updated, clientName: names.get(updated.clientId) };
+    });
+
+    await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'UPDATE', before, after: updated });
+    return ResponseDto.ok(serializeAgendaItem(updated, clientName));
+  }
+
+  /**
+   * Cancela una gestión pendiente (S6): no se hizo y no se va a hacer. Queda visible en el día y en el
+   * historial del caso — para que desaparezca está eliminar. El motivo sale del catálogo del tenant.
+   */
+  async cancel(id: string, dto: CancelAgendaItemDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
+    const { updated, clientName } = await this.tx(async (tx) => {
+      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...this.assigneeScope() } });
+      if (!item) throw agendaItemNotFound();
+      if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
+
+      const reason = await this.activeCatalogItem(tx, CatalogType.CANCEL_REASON, dto.reasonCode);
+      if (!reason) throw agendaInvalidReference('El motivo de cancelación no existe o está inactivo');
+
+      const updated = await tx.agendaItem.update({
+        where: { id },
+        data: { status: AgendaItemStatus.CANCELLED, reasonCode: reason.code, updatedBy: this.tenant.userId },
+      });
+      const names = await this.clientNames(tx, [updated.clientId]);
+      return { updated, clientName: names.get(updated.clientId) };
+    });
+
+    await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'CANCEL', after: updated });
+    return ResponseDto.ok(serializeAgendaItem(updated, clientName));
+  }
+
+  /**
+   * Reagenda a otro día (S6): cierra la original como RESCHEDULED con su motivo y crea una nueva con la
+   * fecha pedida, apuntando a la anterior. Así el historial del caso muestra la cadena completa —
+   * posponer (S4) mueve la hora del mismo ítem; reagendar deja rastro.
+   *
+   * Devuelve **el ítem nuevo**: es el que el cobrador va a ejecutar.
+   */
+  async reschedule(id: string, dto: RescheduleAgendaItemDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
+    const today = this.startOfTodayUTC();
+    const scheduledDate = toUTCDate(dto.scheduledDate);
+    if (scheduledDate < today) throw agendaPastDate();
+    assertTimeMode(dto);
+
+    const { created, previousId, clientName } = await this.tx(async (tx) => {
+      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...this.assigneeScope() } });
+      if (!item) throw agendaItemNotFound();
+      if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
+
+      const reason = await this.activeCatalogItem(tx, CatalogType.RESCHEDULE_REASON, dto.reasonCode);
+      if (!reason) throw agendaInvalidReference('El motivo de reprogramación no existe o está inactivo');
+
+      const created = await tx.agendaItem.create({
+        data: {
+          accountId: this.tenant.accountId,
+          caseId: item.caseId,
+          clientId: item.clientId,
+          creditId: item.creditId,
+          // Se copia del original, NO se recalcula: si un supervisor reagenda, la gestión tiene que
+          // seguir siendo del cobrador que la va a ejecutar (misma lección que el alta de S2).
+          assigneeId: item.assigneeId,
+          type: item.type,
+          scheduledDate,
+          timeMode: dto.timeMode,
+          scheduledTime: dto.timeMode === ScheduleTimeMode.FIXED ? dto.scheduledTime : null,
+          timeSlot: dto.timeMode === ScheduleTimeMode.LAPSE ? dto.timeSlot : null,
+          observations: item.observations,
+          details: item.details as Prisma.InputJsonValue,
+          rescheduledFromId: item.id,
+          createdBy: this.tenant.userId,
+        },
+      });
+      await tx.agendaItem.update({
+        where: { id },
+        data: { status: AgendaItemStatus.RESCHEDULED, reasonCode: reason.code, updatedBy: this.tenant.userId },
+      });
+      const names = await this.clientNames(tx, [created.clientId]);
+      return { created, previousId: item.id, clientName: names.get(created.clientId) };
+    });
+
+    await this.audit.record({ entity: 'agenda_item', entityId: previousId, action: 'RESCHEDULE', after: created });
+    await this.audit.record({ entity: 'agenda_item', entityId: created.id, action: 'CREATE', after: created });
+    return ResponseDto.ok(serializeAgendaItem(created, clientName));
+  }
+
+  /**
+   * Elimina una gestión pendiente (S6): soft-delete, para la que no debió existir (se cargó al cliente
+   * equivocado). Una ya ejecutada no se borra — tiene un `CaseActivity` colgando en la bitácora del caso.
+   *
+   * Responde 200 con el ítem, no 204: `apiMutate` del móvil trata el 204 como error.
+   */
+  async remove(id: string): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
+    const { before, updated, clientName } = await this.tx(async (tx) => {
+      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...this.assigneeScope() } });
+      if (!item) throw agendaItemNotFound();
+      if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
+
+      const updated = await tx.agendaItem.update({
+        where: { id },
+        data: { deletedAt: new Date(), updatedBy: this.tenant.userId },
+      });
+      const names = await this.clientNames(tx, [updated.clientId]);
+      return { before: item, updated, clientName: names.get(updated.clientId) };
+    });
+
+    await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'DELETE', before });
+    return ResponseDto.ok(serializeAgendaItem(updated, clientName));
   }
 
   /**
@@ -532,12 +774,17 @@ export class AgendaService {
   }
 }
 
-/** `FIXED` exige hora exacta; `LAPSE` exige franja. Mezclarlos deja el agendado sin hora legible. */
-function assertTimeMode(dto: CreateAgendaItemDto): void {
-  if (dto.timeMode === ScheduleTimeMode.FIXED && !dto.scheduledTime) {
+/**
+ * `FIXED` exige hora exacta; `LAPSE` exige franja. Mezclarlos deja el agendado sin hora legible.
+ *
+ * Firma estructural (no `CreateAgendaItemDto`) porque la comparten el alta, la edición y el reagendado;
+ * la edición además la llama con la combinación *resultante* de mezclar el parche con lo guardado.
+ */
+function assertTimeMode(schedule: { timeMode: ScheduleTimeMode; scheduledTime?: string | null; timeSlot?: string | null }): void {
+  if (schedule.timeMode === ScheduleTimeMode.FIXED && !schedule.scheduledTime) {
     throw agendaInvalidTimeMode('Con hora fija hay que indicar la hora (HH:mm)');
   }
-  if (dto.timeMode === ScheduleTimeMode.LAPSE && !dto.timeSlot) {
+  if (schedule.timeMode === ScheduleTimeMode.LAPSE && !schedule.timeSlot) {
     throw agendaInvalidTimeMode('Con lapso hay que elegir la franja horaria');
   }
 }

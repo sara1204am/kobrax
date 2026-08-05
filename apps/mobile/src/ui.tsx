@@ -288,6 +288,74 @@ export const STOP_STATUS_META: Record<RouteStopStatus, { label: string; tone: Ba
 };
 
 /**
+ * Barra de progreso (Rutas S1 y S6). Estaba escrita a mano dentro de `(tabs)/rutas.tsx`; ahora la
+ * usan la tarjeta de la ruta en curso y el resumen de la jornada.
+ *
+ * `percent` llega ya calculado y se acota a 0–100: una ruta sin paradas daba `NaN`, y un `NaN` en un
+ * `width` deja la barra llena.
+ */
+export function ProgressBar({ percent, tone = 'success' }: { percent: number; tone?: 'success' | 'navy' }) {
+  const pct = Math.max(0, Math.min(100, Math.round(percent) || 0));
+  return (
+    <View style={styles.barTrack}>
+      <View style={[styles.barFill, { width: `${pct}%`, backgroundColor: tone === 'navy' ? COLORS.navy : COLORS.success }]} />
+    </View>
+  );
+}
+
+/**
+ * La tarjeta de la parada seleccionada en el mapa activo (Rutas S4 · RT-4): a quién tengo enfrente,
+ * cuánto debe y qué puedo hacer. Vive acá y no dentro de la pantalla porque **S5 la reusa** debajo
+ * del sheet de registrar resultado.
+ *
+ * Los recuadros de mora se ocultan solos cuando la parada no tiene crédito: una parada sin caso
+ * sigue siendo una visita válida, y un `Bs 0.00` inventado es peor que no mostrar nada.
+ */
+export function StopCard({
+  title,
+  address,
+  overdue,
+  daysPastDue,
+  onPrimary,
+  primaryLabel = 'Registrar resultado  →',
+  actions,
+}: {
+  title: string;
+  address?: string;
+  /** Ya formateado por el llamador (`money` conoce la moneda). */
+  overdue?: string;
+  daysPastDue?: number;
+  onPrimary?: () => void;
+  primaryLabel?: string;
+  actions?: ReactNode;
+}) {
+  return (
+    <View style={styles.stopCard}>
+      <Text style={styles.stopTitle} numberOfLines={1}>
+        {title}
+      </Text>
+      <Text style={styles.stopAddress} numberOfLines={2}>
+        {address ?? 'Sin dirección cargada'}
+      </Text>
+
+      {(overdue != null || daysPastDue != null) && (
+        <View style={styles.stopStats}>
+          {overdue != null && <StatTile label="MONTO EN MORA" value={overdue} tone="danger" />}
+          {daysPastDue != null && <StatTile label="DÍAS DE MORA" value={`${daysPastDue} días`} />}
+        </View>
+      )}
+
+      {onPrimary && (
+        <Pressable style={styles.stopPrimary} onPress={onPrimary} accessibilityRole="button">
+          <Text style={styles.stopPrimaryText}>{primaryLabel}</Text>
+        </Pressable>
+      )}
+      {actions}
+    </View>
+  );
+}
+
+/**
  * Input de monto con símbolo de moneda y teclado numérico (§4.1, §5.4). El TEXTO es la fuente de verdad
  * (no re-stringifica el número → no pierde centavos, el bug de Agenda); el padre parsea con `Number`.
  * Lo usan el alta de préstamo (V2) y el pago de la ficha (S3).
@@ -510,6 +578,89 @@ export function BottomSheet({
 }
 
 /**
+ * Fila-selector: muestra lo elegido y abre una hoja al tocarla. Nació en el alta de agenda (S2) y
+ * subió acá con su segundo consumidor, el menú del detalle (S6).
+ */
+export function SelectRow({
+  icon,
+  value,
+  placeholder,
+  onPress,
+  disabled,
+}: {
+  icon: string;
+  value?: string;
+  placeholder?: string;
+  onPress: () => void;
+  /** Sólo lectura: sin chevron y sin press (p.ej. la fecha en modo edición — mover el día es reagendar). */
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={disabled ? undefined : onPress}
+      disabled={disabled}
+      style={[styles.select, disabled && styles.selectDisabled]}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled) }}
+    >
+      <Text style={styles.selectIcon}>{icon}</Text>
+      <Text style={[styles.selectValue, !value && styles.selectPlaceholder]} numberOfLines={1}>
+        {value ?? placeholder}
+      </Text>
+      {!disabled && <Text style={styles.chevron}>›</Text>}
+    </Pressable>
+  );
+}
+
+/**
+ * Hoja de opciones de una lista corta (teléfono, crédito, motivo…). Misma historia que `SelectRow`:
+ * vivía en el alta de agenda y subió al aparecer el segundo consumidor.
+ */
+export function PickerSheet({
+  visible,
+  onClose,
+  title,
+  options,
+  onPick,
+  addLabel,
+  onAdd,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  title: string;
+  options: { key: string; label: string; hint?: string }[];
+  onPick: (key: string) => void;
+  /** Acción opcional al pie ("Agregar teléfono"): la lista deja de ser un callejón sin salida. */
+  addLabel?: string;
+  onAdd?: () => void;
+}) {
+  return (
+    <BottomSheet visible={visible} onClose={onClose} title={title}>
+      {options.length === 0 && <Text style={styles.pickerEmpty}>No hay opciones disponibles.</Text>}
+      {options.map((o) => (
+        <Pressable
+          key={o.key}
+          onPress={() => {
+            onPick(o.key);
+            onClose();
+          }}
+          style={styles.pickerRow}
+          accessibilityRole="button"
+        >
+          <Text style={styles.pickerLabel}>{o.label}</Text>
+          {o.hint && <Text style={styles.pickerHint}>{o.hint}</Text>}
+        </Pressable>
+      ))}
+      {onAdd && (
+        <Pressable onPress={onAdd} style={styles.pickerAdd} accessibilityRole="button">
+          <Text style={styles.pickerAddText}>{addLabel}</Text>
+        </Pressable>
+      )}
+    </BottomSheet>
+  );
+}
+
+/**
  * Banner de conectividad. Informativo, **nunca bloquea** ninguna acción (principio offline-first).
  * Aparece/desaparece según el estado de red; `SafeAreaView` top para no quedar bajo el notch.
  * Se monta una vez sobre las tabs. // ponytail: slide con Reanimated = polish de P1, no bloquea.
@@ -629,6 +780,32 @@ const styles = StyleSheet.create({
   sheetEmpty: { ...TYPE.secondary, textAlign: 'center', paddingVertical: SPACING.lg },
   sheetAdd: { paddingVertical: SPACING.md, alignItems: 'center' },
   sheetAddText: { ...TYPE.body, fontWeight: '700', color: COLORS.purple },
+
+  barTrack: { height: 8, borderRadius: RADIUS.pill, backgroundColor: COLORS.lightBg, marginTop: SPACING.sm, overflow: 'hidden' },
+  barFill: { height: 8, borderRadius: RADIUS.pill },
+
+  // ── StopCard (Rutas S4 · RT-4) ──
+  stopCard: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: RADIUS.card,
+    borderTopRightRadius: RADIUS.card,
+    padding: SPACING.lg,
+    gap: SPACING.xs,
+  },
+  stopTitle: { ...TYPE.h2, color: COLORS.navy },
+  stopAddress: { ...TYPE.secondary },
+  stopStats: { flexDirection: 'row', marginTop: SPACING.sm, marginBottom: SPACING.xs },
+  stopPrimary: {
+    backgroundColor: COLORS.navy,
+    borderRadius: RADIUS.card,
+    // 52 = el mínimo de la guía: el cobrador toca con guantes y bajo el sol.
+    minHeight: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: SPACING.sm,
+  },
+  stopPrimaryText: { ...TYPE.body, color: COLORS.white, fontWeight: '600' },
+
   headerSafe: { backgroundColor: COLORS.navy },
   header: {
     flexDirection: 'row',
@@ -758,6 +935,29 @@ const styles = StyleSheet.create({
   },
   sheetGrip: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.border },
   sheetTitle: { ...TYPE.h3, textAlign: 'center' },
+  select: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    minHeight: 52,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.input,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    paddingHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
+  },
+  selectDisabled: { backgroundColor: COLORS.lightBg },
+  selectIcon: { fontSize: 16 },
+  selectValue: { flex: 1, ...TYPE.body, color: COLORS.text },
+  selectPlaceholder: { color: COLORS.muted },
+  chevron: { color: COLORS.muted, fontSize: 22 },
+  pickerRow: { paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  pickerLabel: { ...TYPE.body, fontWeight: '600', color: COLORS.text },
+  pickerHint: { ...TYPE.caption },
+  pickerEmpty: { ...TYPE.secondary, textAlign: 'center', paddingVertical: SPACING.lg },
+  pickerAdd: { paddingVertical: SPACING.md, alignItems: 'center' },
+  pickerAddText: { ...TYPE.body, fontWeight: '700', color: COLORS.purple },
   offline: { backgroundColor: COLORS.warningBg, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
   offlineText: { ...TYPE.secondary, color: COLORS.warningText, textAlign: 'center', fontWeight: '600' },
 });

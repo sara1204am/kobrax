@@ -20,6 +20,9 @@ build/
 # Prisma
 packages/database/prisma/*.db
 
+# Extractos OSM y grafo de ruteo (se generan con `docker compose run --rm osrm-build`)
+infra/osrm/data/
+
 # Logs
 *.log
 npm-debug.log*

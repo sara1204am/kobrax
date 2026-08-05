@@ -2,7 +2,7 @@
  * Rutas de campo (solo lectura en P1). Thin sobre `apiQuery`; base del resumen de jornada
  * del Home (P1) y de la pantalla de Rutas (P3). Tipos según `routes.serializer.ts`.
  */
-import { RouteStopStatus, type RouteStatus } from '@kobrax/shared';
+import { RouteStopStatus, type RouteStatus, type VisitOutcome } from '@kobrax/shared';
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
 import type { LngLat } from './maps/tiles';
 
@@ -17,6 +17,20 @@ export interface RouteStopItem {
   clientName?: string;
   /** Dirección donde se cobra (HOME, si no la primera cargada). Vacía si el cliente no tiene ninguna. */
   address?: string;
+  /** El punto de esa misma ubicación (S3). Sin él la parada existe pero no se puede dibujar. */
+  latitude?: number;
+  longitude?: number;
+  /** El crédito del caso de la parada: contra él se cobra y se promete al registrar el resultado (S5). */
+  creditId?: string;
+  /**
+   * La deuda del crédito **de esta parada** (S4), no la suma del deudor: un cliente puede tener más
+   * de un crédito y la parada apunta a uno. Ausentes si la parada no tiene caso o crédito.
+   */
+  overdueAmount?: number;
+  currency?: string;
+  daysPastDue?: number;
+  /** Cómo terminó la parada (S6). `undefined` = todavía no se visitó. */
+  lastOutcome?: VisitOutcome;
 }
 
 export interface RouteItem {
@@ -103,17 +117,24 @@ export function updateStop(routeId: string, stopId: string, patch: UpdateStopPat
   return apiMutate<RouteStopItem>(`/routes/${routeId}/stops/${stopId}`, 'PATCH', patch);
 }
 
-/**
- * Resuelve coordenadas de cada parada contra un lookup `clientId → {lat,lng}` (armado desde
- * `GET /clients`). Pura y testeable. Paradas sin coordenada conocida salen con lat/lng `undefined`.
- */
-export type StopWithCoords = RouteStopItem & Partial<LngLat>;
-export function resolveStopCoords(
-  stops: RouteStopItem[],
-  coordsByClientId: Record<string, LngLat | undefined>,
-): StopWithCoords[] {
-  return stops.map((s) => {
-    const c = coordsByClientId[s.clientId];
-    return c ? { ...s, latitude: c.latitude, longitude: c.longitude } : { ...s };
-  });
+// ── Vista previa y optimización (S3) ─────────────────────────────────────────
+
+export interface RoutePreview {
+  /** La polilínea por las calles. **Vacía = hay que unir las paradas con rectas** (sin motor o sin red). */
+  geometry: LngLat[];
+  distanceKm?: number;
+  minutes?: number;
+  stops: { id: string; sequenceOrder: number; etaMinutes?: number }[];
+  /** Ausente si el orden actual ya está bien, o si no se pudo medir. */
+  suggestion?: { order: string[]; savedKm: number; savedMinutes: number };
+}
+
+/** El recorrido dibujado, medido y con el orden sugerido (S3). `GET /routes/:id/preview`. */
+export function getRoutePreview(routeId: string): Promise<QueryResult<RoutePreview>> {
+  return apiQuery<RoutePreview>(`/routes/${routeId}/preview`);
+}
+
+/** Aplica el orden sugerido. Devuelve la ruta ya reordenada. `POST /routes/:id/optimize`. */
+export function optimizeRoute(routeId: string): Promise<MutateResult<RouteItem>> {
+  return apiMutate<RouteItem>(`/routes/${routeId}/optimize`, 'POST', {});
 }

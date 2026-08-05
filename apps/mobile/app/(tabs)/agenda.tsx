@@ -4,11 +4,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList, type FlashList as FlashListType } from '@shopify/flash-list';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { router, useFocusEffect } from 'expo-router';
-import { AgendaItemStatus } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { AgendaCard, AGENDA_STATUS_LABEL, AGENDA_TYPE_META, EmptyState, SectionLabel } from '@/ui';
 import { authService } from '@/auth-service';
-import { MONTHS, WEEKDAYS_SHORT } from '@/agenda-form';
+import { MONTHS, partitionDay, WEEKDAYS_SHORT } from '@/agenda-form';
 import { listByDay, listOverdue, type AgendaListItem } from '@/agenda.service';
 
 const RANGE = 180; // días a cada lado de hoy (tira "infinita" práctica; onEndReached bidireccional = futuro)
@@ -122,8 +121,9 @@ export default function AgendaScreen() {
     [selectDate],
   );
 
-  const pending = day.status === 'ok' ? day.items.filter((i) => i.status === AgendaItemStatus.SCHEDULED) : [];
-  const done = day.status === 'ok' ? day.items.filter((i) => i.status === AgendaItemStatus.EXECUTED) : [];
+  // El reparto vive en `agenda-form.ts` (puro, con test): "Completadas" incluye canceladas y
+  // reagendadas, y la tarjeta las distingue por su etiqueta.
+  const { pending, done } = partitionDay(day.status === 'ok' ? day.items : []);
   // "Vencidos" es el backlog global, y no depende del día elegido. Al pararse en una fecha pasada, sus
   // pendientes YA aparecen arriba: sin este filtro la misma tarjeta se pinta dos veces.
   const dayIds = new Set(pending.map((i) => i.id));

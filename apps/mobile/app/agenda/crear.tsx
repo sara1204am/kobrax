@@ -2,6 +2,10 @@
  * Agenda S2 — "Nueva gestión" (Figma `65:724` y hermanos): elegir tipo, buscar cliente, completar
  * los campos propios del tipo, programar y guardar. La lógica del formulario vive en `agenda-form.ts`
  * (reducer puro); acá sólo se despacha y se pinta.
+ *
+ * **Modo edición (S5)**: con `?id=<agendaItemId>` la misma pantalla edita en vez de crear — hidrata el
+ * reducer desde el agendado, fija el deudor (es el ancla, no se cambia editando) y **bloquea la fecha**:
+ * mover el día es *reagendar* y deja rastro (`plans/agenda/editar-eliminar.md` D5).
  */
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import {
@@ -15,23 +19,29 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import * as Location from 'expo-location';
+import { currentLocation } from '@/location';
 import { MapPicker } from '@/maps/MapPicker';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { AgendaItemType, AgendaTimeSlot, CatalogType, ScheduleTimeMode } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { Button, ErrorBanner } from '@/components';
+// `SelectRow` y `PickerSheet` nacieron en esta pantalla y subieron a `ui.tsx` con su 2º consumidor (S6).
 import { AGENDA_TYPE_META, BottomSheet, Header, PickerSheet, SectionLabel, SelectRow } from '@/ui';
 import {
+  buildPatch,
   buildPayload,
   canSubmit,
   formReducer,
   formatLongDate,
+  hydrateForm,
   initialForm,
   money,
   TIME_SLOT_LABEL,
+  toHHmm,
+  toISO,
+  toLocalDate,
   type TimeMode,
   type TimeSlot,
 } from '@/agenda-form';
@@ -40,6 +50,8 @@ import {
   addClientLocation,
   clientContext,
   createItem,
+  getItem,
+  updateItem,
   type AgendaClientContext,
   type ClientLocationType,
   type PhoneContactType,
@@ -64,17 +76,6 @@ const TIME_MODES: TimeMode[] = [ScheduleTimeMode.FIXED, ScheduleTimeMode.LAPSE];
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
-/** `YYYY-MM-DD` → `Date` local, para alimentar el picker nativo sin correr un día. */
-function toLocalDate(iso: string): Date {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(y!, m! - 1, d!);
-}
-function toISO(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-function toHHmm(d: Date): string {
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
 type Sheet = 'contact' | 'location' | 'credit' | 'method' | 'bank' | 'newPhone' | 'newLocation';
 type PickerKind = 'date' | 'time' | 'promiseDate';
 
@@ -92,10 +93,15 @@ const LOCATION_TYPES: { key: ClientLocationType; label: string }[] = [
 ];
 
 export default function CrearGestionScreen() {
+  /** Con `?id=` la pantalla edita ese agendado; sin él, crea uno nuevo. */
+  const { id: editId } = useLocalSearchParams<{ id?: string }>();
+  const editing = Boolean(editId);
   const [form, dispatch] = useReducer(formReducer, undefined, () => initialForm(todayISO()));
   const [query, setQuery] = useState('');
   const [ctx, setCtx] = useState<AgendaClientContext | null>(null);
   const [loadingCtx, setLoadingCtx] = useState(false);
+  /** Modo edición: hasta que la hidratación termina no hay nada que pintar. */
+  const [loadingItem, setLoadingItem] = useState(editing);
   const [methods, setMethods] = useState<CatalogOption[]>([]);
   const [banks, setBanks] = useState<CatalogOption[]>([]);
   const [sheet, setSheet] = useState<Sheet | null>(null);
@@ -137,6 +143,39 @@ export default function CrearGestionScreen() {
 
   // Buscador con debounce (compartido con la cartera): en gama baja, una request por tecla mata la lista.
   const hits = useClientSearch(query, { enabled: !form.clientId });
+
+  /**
+   * Modo edición: trae el agendado, hidrata el formulario y recarga el contexto del deudor para que
+   * los selectores (teléfonos, direcciones, créditos) tengan de dónde elegir. Dos lecturas que ya
+   * existen (S3 y S2); ningún endpoint nuevo.
+   */
+  useEffect(() => {
+    if (!editId) return;
+    void (async () => {
+      const res = await getItem(editId);
+      if (res.status !== 'ok') {
+        setLoadingItem(false);
+        setError(
+          res.status === 'offline'
+            ? 'Sin conexión — no se pudo abrir la gestión.'
+            : res.status === 'unauthenticated'
+              ? 'Tu sesión venció — volvé a entrar.'
+              : res.message,
+        );
+        return;
+      }
+      const { item } = res.data;
+      dispatch({ t: 'hydrate', state: hydrateForm(item) });
+      // El monto se pinta desde su texto (el número es el derivado, no al revés — lección de S2).
+      const amount = (item.details as { amount?: number }).amount;
+      if (amount != null) setAmountText(String(amount));
+
+      const ctxRes = await clientContext(item.clientId);
+      setLoadingItem(false);
+      if (ctxRes.status === 'ok') setCtx(ctxRes.data);
+      else setError(ctxRes.status === 'offline' ? 'Sin conexión — faltan los datos del cliente.' : 'No se pudieron cargar los datos del cliente.');
+    })();
+  }, [editId]);
 
   // Catálogos de la promesa: sólo cuando el tipo los pide, y una sola vez.
   useEffect(() => {
@@ -221,15 +260,17 @@ export default function CrearGestionScreen() {
   const useMyLocation = useCallback(async () => {
     setLocating(true);
     setLocError(null);
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      setLocating(false);
-      setLocError('Sin permiso de ubicación — podés marcar el punto tocando el mapa.');
+    const res = await currentLocation();
+    setLocating(false);
+    if (res.status !== 'ok') {
+      setLocError(
+        res.status === 'denied'
+          ? 'Sin permiso de ubicación — podés marcar el punto tocando el mapa.'
+          : 'No se pudo obtener tu ubicación — podés marcar el punto tocando el mapa.',
+      );
       return;
     }
-    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-    setPin(pos.coords.latitude, pos.coords.longitude);
-    setLocating(false);
+    setPin(res.coords.latitude, res.coords.longitude);
   }, [setPin]);
 
   /** Guarda la dirección, la suma al contexto en memoria y la deja elegida. */
@@ -275,20 +316,22 @@ export default function CrearGestionScreen() {
   );
 
   const save = useCallback(async () => {
-    const payload = buildPayload(form);
-    if (!payload) return;
+    // Editar manda sólo lo editable (sin fecha ni deudor); crear manda el alta completa.
+    const patch = editId ? buildPatch(form) : null;
+    const payload = editId ? null : buildPayload(form);
+    if (!patch && !payload) return;
     setSaving(true);
     setError(null);
-    const res = await createItem(payload);
+    const res = patch ? await updateItem(editId!, patch) : await createItem(payload!);
     setSaving(false);
     if (res.status === 'ok') {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.back(); // la Agenda refetchea al recuperar el foco
+      router.back(); // la Agenda y el detalle refetchean al recuperar el foco
       return;
     }
     // Offline: el formulario queda intacto para reintentar (cola real de escritura = P6).
     setError(res.status === 'offline' ? 'Sin conexión — reintentá.' : res.status === 'error' ? res.message : 'Sesión vencida.');
-  }, [form]);
+  }, [editId, form]);
 
   const credit = ctx?.credits.find((c) => c.creditId === form.creditId);
   const contact = ctx?.contacts.find((c) => c.id === details.contactId);
@@ -301,7 +344,7 @@ export default function CrearGestionScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
-      <Header title="Nueva gestión" onBack={() => router.back()} />
+      <Header title={editing ? 'Editar gestión' : 'Nueva gestión'} onBack={() => router.back()} />
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <SectionLabel>Tipo de gestión</SectionLabel>
@@ -341,9 +384,12 @@ export default function CrearGestionScreen() {
               </Text>
               {ctx.client.nationalId && <Text style={styles.clientDoc}>CI {ctx.client.nationalId}</Text>}
             </View>
-            <Pressable onPress={clearClient} hitSlop={12} accessibilityRole="button" accessibilityLabel="Quitar cliente">
-              <Text style={styles.remove}>✕</Text>
-            </Pressable>
+            {/* Editando no se cambia de deudor: es el ancla del agendado (D1). Para otro, se crea otra. */}
+            {!editing && (
+              <Pressable onPress={clearClient} hitSlop={12} accessibilityRole="button" accessibilityLabel="Quitar cliente">
+                <Text style={styles.remove}>✕</Text>
+              </Pressable>
+            )}
           </View>
         ) : (
           <>
@@ -488,7 +534,14 @@ export default function CrearGestionScreen() {
             />
 
             <SectionLabel>{isPromise ? 'Programación recordatorio' : 'Programación'}</SectionLabel>
-            <SelectRow icon="📅" value={formatLongDate(form.scheduledDate)} onPress={() => setPicker('date')} />
+            {/* Editando, la fecha no se toca: mover el día es reagendar y deja rastro (D5). */}
+            <SelectRow
+              icon="📅"
+              value={formatLongDate(form.scheduledDate)}
+              onPress={() => setPicker('date')}
+              disabled={editing}
+            />
+            {editing && <Text style={styles.hint}>Para moverla de día, usá Reagendar.</Text>}
 
             <View style={styles.toggle}>
               {TIME_MODES.map((mode) => {
@@ -540,7 +593,12 @@ export default function CrearGestionScreen() {
       </ScrollView>
 
       <SafeAreaView edges={['bottom']} style={styles.footer}>
-        <Button label="Guardar gestión" onPress={() => void save()} loading={saving} disabled={!canSubmit(form, requiresBank)} />
+        <Button
+          label={editing ? 'Guardar cambios' : 'Guardar gestión'}
+          onPress={() => void save()}
+          loading={saving}
+          disabled={loadingItem || !canSubmit(form, requiresBank)}
+        />
       </SafeAreaView>
 
       <PickerSheet

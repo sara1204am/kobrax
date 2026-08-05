@@ -11,6 +11,10 @@ export type PaymentMethod = 'CASH' | 'TRANSFER' | 'QR' | 'CARD' | 'MOBILE_PAYMEN
 export interface PaymentItem {
   id: string;
   creditId: string;
+  /** De qué caso es el pago. El server ya lo mandaba; lo usa el resumen de jornada (Rutas S6). */
+  caseId?: string;
+  /** Quién lo registró: `GET /payments` devuelve los del tenant, no los de un cobrador. */
+  registeredBy?: string;
   amount: number;
   method: PaymentMethod;
   receiptUrl?: string;
@@ -20,6 +24,15 @@ export interface PaymentItem {
 
 export function listPayments(caseId: string): Promise<QueryResult<PaymentItem[]>> {
   return apiQuery<PaymentItem[]>(`/payments${toQuery({ caseId, limit: 100 })}`);
+}
+
+/**
+ * Los pagos de un día (Rutas S6). Devuelve los de **todo el tenant**: acotarlos a la ruta —y al
+ * cobrador— es responsabilidad de quien llama, porque el KPI se calcula en el cliente
+ * (`ui-screen-map §8.1`). `summarizeDay` es quien lo hace.
+ */
+export function listPaymentsByDay(day: string): Promise<QueryResult<PaymentItem[]>> {
+  return apiQuery<PaymentItem[]>(`/payments${toQuery({ from: day, to: `${day}T23:59:59.999Z`, limit: 100 })}`);
 }
 
 export interface NewPayment {

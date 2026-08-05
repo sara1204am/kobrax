@@ -4,15 +4,17 @@
  * `validateAgendaDetails` de `@kobrax/shared`, el mismo validador que corre el server.
  */
 import {
+  AgendaItemStatus,
   AgendaItemType,
   AgendaTimeSlot,
   ScheduleTimeMode,
   SUPPORTED_CURRENCIES,
+  TIME_SLOT_HOURS,
   formatCurrency,
   validateAgendaDetails,
   type AgendaDetails,
 } from '@kobrax/shared';
-import type { CreateAgendaInput } from './agenda.service';
+import type { AgendaListItem, CreateAgendaInput, UpdateAgendaInput } from './agenda.service';
 
 export type TimeSlot = AgendaTimeSlot;
 export type TimeMode = ScheduleTimeMode.FIXED | ScheduleTimeMode.LAPSE;
@@ -25,6 +27,20 @@ const WEEKDAYS_LONG = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Vi
 /** Hoy como `YYYY-MM-DD` en UTC — el backend guarda las fechas-calendario a medianoche UTC. */
 export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** `YYYY-MM-DD` → `Date` local, para alimentar el picker nativo sin correr un día. */
+export function toLocalDate(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y!, m! - 1, d!);
+}
+
+/** Lo que devuelve el picker nativo (hora local) → `YYYY-MM-DD` / `HH:mm`. Los usan el alta y el reagendado. */
+export function toISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+export function toHHmm(d: Date): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 /** `2026-06-23` → `Lunes, 23 de junio` (la fecha se lee en UTC, como se guarda). */
@@ -50,6 +66,16 @@ export const TIME_SLOT_LABEL: Record<AgendaTimeSlot, string> = {
   [AgendaTimeSlot.NIGHT]: 'Noche',
 };
 
+/**
+ * El rango horario de la franja, para el chip de «hora recomendada» (Rutas S4). Se **deriva** de
+ * `TIME_SLOT_HOURS` de shared, que es con lo que la API agrupa: si se escribiera a mano, el chip
+ * podría anunciar un horario distinto del que se contó.
+ */
+export function timeSlotRange(slot: AgendaTimeSlot): string {
+  const { from, to } = TIME_SLOT_HOURS[slot];
+  return `${String(from).padStart(2, '0')}:00 - ${String(to).padStart(2, '0')}:00`;
+}
+
 export interface FormState {
   type: AgendaItemType;
   /** Cliente elegido en el buscador. */
@@ -68,6 +94,8 @@ export interface FormState {
 }
 
 export type FormAction =
+  /** Modo edición (S5): reemplaza el estado entero con el del agendado que se abre. */
+  | { t: 'hydrate'; state: FormState }
   | { t: 'type'; value: AgendaItemType }
   | { t: 'client'; clientId: string }
   | { t: 'clearClient' }
@@ -96,6 +124,9 @@ export function initialForm(todayISO: string): FormState {
 
 export function formReducer(state: FormState, action: FormAction): FormState {
   switch (action.t) {
+    case 'hydrate':
+      return action.state;
+
     // Cambiar de tipo invalida los campos propios (un contactId no sirve para una visita),
     // pero conserva cliente, crédito, fecha y hora: es lo que el cobrador ya eligió.
     case 'type':
@@ -146,6 +177,58 @@ export function canSubmit(state: FormState, requiresBank = false): boolean {
   if (!state.clientId || !state.caseId || !state.creditId) return false;
   if (!scheduleReady(state) || validDetails(state) === null) return false;
   return !requiresBank || Boolean(state.details.bankCode);
+}
+
+/**
+ * Estado inicial del formulario en **modo edición** (S5): el ítem ya elegido, con su cliente, su
+ * crédito y sus campos. El deudor no se puede cambiar editando, así que se toma tal cual viene.
+ */
+export function hydrateForm(item: AgendaListItem): FormState {
+  const fixed = item.timeMode === ScheduleTimeMode.FIXED;
+  return {
+    type: item.type,
+    clientId: item.clientId,
+    caseId: item.caseId,
+    creditId: item.creditId,
+    details: { ...(item.details as Record<string, unknown>) },
+    observations: item.observations ?? '',
+    scheduledDate: item.scheduledDate.slice(0, 10),
+    timeMode: fixed ? ScheduleTimeMode.FIXED : ScheduleTimeMode.LAPSE,
+    scheduledTime: item.scheduledTime ?? '',
+    timeSlot: (item.timeSlot as TimeSlot) ?? AgendaTimeSlot.MORNING,
+  };
+}
+
+/**
+ * Cuerpo de `PATCH /agenda/:id`, o `null` si el formulario no está completo.
+ *
+ * **Nunca emite `scheduledDate`, `caseId` ni `clientId`**: mover el día es reagendar (deja rastro) y
+ * el deudor es el ancla del agendado. El server ni siquiera los acepta; esto lo hace explícito acá.
+ */
+export function buildPatch(state: FormState): UpdateAgendaInput | null {
+  const details = validDetails(state);
+  if (!details || !scheduleReady(state)) return null;
+  const fixed = state.timeMode === ScheduleTimeMode.FIXED;
+  return {
+    type: state.type,
+    timeMode: state.timeMode,
+    scheduledTime: fixed ? state.scheduledTime : undefined,
+    timeSlot: fixed ? undefined : state.timeSlot,
+    observations: state.observations.trim(),
+    details,
+  };
+}
+
+/**
+ * Reparto de la pantalla del día. `done` es **todo lo que ya no está pendiente** — ejecutadas,
+ * canceladas y reagendadas —, no sólo las ejecutadas: si no, una gestión cancelada desaparecería de
+ * la app y cancelar sería indistinguible de eliminar. La tarjeta las distingue con su etiqueta.
+ */
+export function partitionDay<T extends { status: AgendaItemStatus }>(items: T[]): { pending: T[]; done: T[] } {
+  return {
+    pending: items.filter((i) => i.status === AgendaItemStatus.SCHEDULED),
+    done: items.filter((i) => i.status !== AgendaItemStatus.SCHEDULED),
+  };
 }
 
 /** Cuerpo de `POST /agenda`, o `null` si el formulario todavía no está completo. */

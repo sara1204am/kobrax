@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { UpdateLocationDto } from '../clients/dto/client.dto';
 import { Permission } from '@kobrax/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -9,11 +9,14 @@ import { AgendaService } from './agenda.service';
 import {
   AddClientContactDto,
   AddClientLocationDto,
+  CancelAgendaItemDto,
   CompleteAgendaItemDto,
   CreateAgendaItemDto,
   ListAgendaQueryDto,
   ListOverdueQueryDto,
   PostponeAgendaItemDto,
+  RescheduleAgendaItemDto,
+  UpdateAgendaItemDto,
 } from './dto/agenda.dto';
 
 @Controller('agenda')
@@ -99,5 +102,33 @@ export class AgendaController {
   @Roles(Permission.AGENDA_WRITE)
   postpone(@Param('id', ParseUUIDPipe) id: string, @Body() dto: PostponeAgendaItemDto) {
     return this.agenda.postpone(id, dto);
+  }
+
+  /** Editar una gestión pendiente (S5). Sin fecha ni deudor: eso es reagendar y dar de alta. */
+  @Patch(':id')
+  @Roles(Permission.AGENDA_WRITE)
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateAgendaItemDto) {
+    return this.agenda.update(id, dto);
+  }
+
+  /** Cancelar con motivo del catálogo (S6): sigue visible, con estado Cancelada. */
+  @Post(':id/cancel')
+  @Roles(Permission.AGENDA_WRITE)
+  cancel(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CancelAgendaItemDto) {
+    return this.agenda.cancel(id, dto);
+  }
+
+  /** Reagendar a otro día (S6): cierra ésta como Reagendada y devuelve la nueva. */
+  @Post(':id/reschedule')
+  @Roles(Permission.AGENDA_WRITE)
+  reschedule(@Param('id', ParseUUIDPipe) id: string, @Body() dto: RescheduleAgendaItemDto) {
+    return this.agenda.reschedule(id, dto);
+  }
+
+  /** Eliminar (soft-delete) una gestión cargada por error (S6). Responde 200 con el ítem, no 204. */
+  @Delete(':id')
+  @Roles(Permission.AGENDA_WRITE)
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.agenda.remove(id);
   }
 }

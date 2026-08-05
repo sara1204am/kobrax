@@ -1,13 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
-import { RouteStopStatus } from '@prisma/client';
+import { CatalogType, RouteStopStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService } from '../../common/events/event-bus.service';
+import { GPS_FALLBACK_KEY, validateVisitDetails } from '@kobrax/shared';
 import { isValidGps, verifyEvidenceHash } from './field-integrity';
 import { AddEvidenceDto, CreateVisitDto } from './dto/field.dto';
-import { evidenceHashInvalid, invalidGps, resourceNotFound, visitNeedsTarget } from './field.errors';
+import { evidenceHashInvalid, invalidGps, invalidVisitDetails, resourceNotFound, visitNeedsTarget } from './field.errors';
 
 @Injectable()
 export class FieldService {
@@ -27,6 +28,11 @@ export class FieldService {
     if (!dto.caseId && !dto.routeStopId) throw visitNeedsTarget();
     if (!isValidGps(dto.lat, dto.lng)) throw invalidGps();
 
+    // Los campos propios de la variante (S5) se validan contra el `outcome` con la MISMA función que
+    // corre el móvil antes de enviar: el mensaje que ve el cobrador es el que aplica el server.
+    const validated = validateVisitDetails(dto.outcome, dto.details);
+    if (!validated.ok) throw invalidVisitDetails(validated.errors);
+
     const collectorId = this.tenant.userId!;
     const visit = await this.tx(async (tx) => {
       if (dto.caseId) {
@@ -36,6 +42,15 @@ export class FieldService {
       if (dto.routeStopId) {
         const s = await tx.routeStop.findFirst({ where: { id: dto.routeStopId }, select: { id: true } });
         if (!s) throw resourceNotFound();
+      }
+      // El cruce que el validador puro no puede hacer: que la categoría exista en el catálogo de
+      // ESTE tenant y esté activa. Mismo criterio que los motivos de agenda S6.
+      if ('categoryCode' in validated.value) {
+        const cat = await tx.catalogItem.findFirst({
+          where: { catalog: CatalogType.SPECIAL_CATEGORY, code: validated.value.categoryCode, isActive: true, deletedAt: null },
+          select: { id: true },
+        });
+        if (!cat) throw invalidVisitDetails(['categoryCode: la categoría no existe o está inactiva']);
       }
       const created = await tx.fieldVisit.create({
         data: {
@@ -48,6 +63,9 @@ export class FieldService {
           accuracy: dto.accuracy,
           outcome: dto.outcome,
           notes: dto.notes,
+          // El flag de GPS estimado lo pone el server, no el body de `details`: así no se puede
+          // borrar mandando un `details` limpio, y vale para todas las variantes por igual.
+          details: { ...validated.value, ...(dto.gpsFallback ? { [GPS_FALLBACK_KEY]: true } : {}) },
           capturedAt: dto.capturedAt ? new Date(dto.capturedAt) : new Date(),
         },
       });

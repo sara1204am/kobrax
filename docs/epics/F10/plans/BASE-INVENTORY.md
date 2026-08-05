@@ -61,6 +61,56 @@
 - ✅ **Import** pobló: `src/import.service.ts` (contrato + derivados puros + flags del gate + memoria del archivo de muestra), `src/file-picker.ts` (`pickImportFile`, aparte porque `expo-document-picker` toca nativo al importarse y está en el camino del login), y en `src/api.ts` → **`postMultipart` + `uploadFailure`**, que comparten las DOS subidas de la app (import y evidencia fotográfica): techo de espera de 60 s y la distinción entre "no hay red" y "el archivo no se puede abrir". Backend: `modules/imports/` con **tres motores por FORMA de archivo** (`rows` CSV · `pdf-rows` tabla en PDF · `pdf-blocks` bloques etiquetados), `field-catalog.ts` (`num()` con separadores mezclados, `splitName`, `splitPhones`) e `import-config.ts` (invariantes + `detectFileShape`).
   - ⚠ **No hay parsers por banco** (C12). Sumar un formato = configurarlo desde Ajustes, no escribir código.
   - ⚠ Excel **no se lee**: la dep `xlsx` nunca se instaló y `rows.parser` sólo hace CSV.
+- ✅ **Rutas S4** pobló: en `ui.tsx` → **`StopCard`** (la tarjeta de la parada seleccionada: nombre,
+  dirección, los dos recuadros de mora y las acciones; **S5 la reusa** bajo el sheet). En `shared` →
+  **`TIME_SLOT_HOURS` + `slotOfTime()`**, la frontera horaria de cada franja: la usan **los dos lados**
+  (la API agrupa las gestiones de hora fija, el móvil deriva el rango del chip con `timeSlotRange()`
+  de `agenda-form.ts`, pegado a `TIME_SLOT_LABEL`). En la API → **`recommendedSlot()`**
+  (`modules/agenda/recommended-slot.ts`), la regla pura de «hora recomendada», y **`contactHint`** en
+  la respuesta de `clientContext`. `serializeStop` sumó `overdueAmount`/`currency`/`daysPastDue`.
+  - ⚠ **Los garantes NO son una entidad**: `GUARANTOR` es un valor de **`LocationType`**, así que ya
+    viven en `client_locations` con lat/lng y `clientContext` los devuelve. Para "garantes de X" se
+    filtra `locations` por tipo — *no* buscar una tabla de garantes ni escribir un endpoint.
+  - ⚠ **`MiniMapCard` ya tenía `tone: 'primary' | 'nearby'`**: se construyó en la fundación de rutas
+    justo para el mini-mapa de garantes. Reusarlo, no hacer un mapa chico nuevo.
+  - ⚠ La ficha `app/cliente/[id].tsx` acepta **`?routeId=&stopId=`**: con eso pinta lo de RT-5 (chip de
+    hora recomendada + garantes). Abierta desde cartera es la misma ficha de siempre.
+  - ⚠ **La mora de la parada es la del crédito de SU caso**, no la suma del deudor (un cliente puede
+    tener varios créditos). Si algún día se quiere el total, es otro campo, no este.
+- ✅ **Rutas S5** pobló: **`src/location.ts` → `currentLocation()`**, la ÚNICA puerta al GPS de la app
+  (devuelve `accuracy` y distingue `denied` de `unavailable`; el copy del respaldo lo pone la pantalla).
+  **Consolidó dos copias inline** que estaban en `agenda/crear.tsx` y `cliente-form-view.tsx` — *no
+  escribir una tercera ni volver a importar `expo-location` en una pantalla*. Además:
+  `src/field.service.ts` (`createVisit`/`addVisitEvidence`/**`resolveVisitCoords`**), `src/visit-result.ts`
+  (las 6 variantes de RT-6, `buildDetails`, `canSubmitResult`, `paymentOutcome`), y en `shared`
+  **`validateVisitDetails`** (espejo de `validateAgendaDetails`; el tipo se llama `VisitResultDetails`
+  porque `VisitDetails` ya lo usa la visita **agendada**).
+  - ⚠ **`POST /visits` ya hacía casi todo**: crea el `FieldVisit` append-only, **marca la parada
+    `VISITED`**, escribe el `CaseActivity` y actualiza la ubicación del cobrador — todo en una
+    transacción. Antes de tocar rutas o visitas, mirar `field-ops`, que es donde vive (no `visits/`).
+    Su DTO usa **`lat`/`lng`**, no `latitude`/`longitude`.
+  - ⚠ `field_visits.details` es JSONB y la tabla es **inmutable**: se escribe SOLO en el INSERT.
+  - ⚠ **`ALTER TYPE ... ADD VALUE` va en su propia migración** (Postgres no deja usar el valor en la
+    misma transacción que lo agrega, y Prisma corre cada migración en una). Por eso S5 tiene dos.
+  - ⚠ **Una migración de enum NO siembra filas**: el catálogo `SPECIAL_CATEGORY` quedó vacío en la
+    base ya sembrada y hubo que insertarlo aparte. El COLLECTOR tiene `catalog:read` pero **no**
+    `catalog:write`, y el owner tiene MFA (su login no devuelve `accessToken` directo).
+  - ⚠ El "número de recibo" del mockup **no se implementó**: `payments.receipt_number` es `Int?` del
+    sistema, no texto libre. Se usa la foto del comprobante, que sí viaja punta a punta.
+- ✅ **Rutas S6** pobló: **`src/route-summary.ts` → `summarizeDay(route, payments)`**, la ÚNICA cuenta
+  del día (recaudado, progreso y las categorías del resumen) — la usan el resumen **y** la tarjeta de
+  jornada cerrada de la pestaña Rutas: *dos pantallas del mismo día no pueden decir cosas distintas*.
+  Más `CATEGORY_LABEL`/`CATEGORY_TONE`/`categoryOf`, y en `ui.tsx` **`ProgressBar`**, que **consolidó**
+  la barra escrita a mano dentro de `(tabs)/rutas.tsx`. En la API: `serializeStop` sumó **`lastOutcome`**
+  (la última visita de la parada, vía `STOP_VISIT` con `take: 1`).
+  - ⚠ **Los KPIs se calculan en el CLIENTE** (`ui-screen-map §8.1`, decisión cerrada): son contadores
+    intradía de acciones del cobrador y el server iría atrasado por diseño. **No crear endpoints de
+    agregación** — el server manda campos de dato y el móvil los suma.
+  - ⚠ **`GET /payments` devuelve los del TENANT**, no los de un cobrador: hay que filtrar por los
+    `caseId` de la ruta o el "recaudado hoy" muestra lo que cobró otra persona. `serializePayment` ya
+    devolvía `caseId` y `registeredBy`; lo que faltaba era declararlos en el móvil.
+  - ⚠ `NOT_FOUND` y `WRONG_ADDRESS` se agrupan en «Inubicables` **sólo en `categoryOf`**; el dato fino
+    sigue entero en `field_visits`.
 - ✅ **Cartera S4** pobló: `src/use-client-search.ts` → **`useClientSearch(query, { enabled })`**, el buscador
   de clientes con debounce (300 ms / ≥2 caracteres / race-guard por `reqId`). Estaba suelto dentro de
   `app/agenda/crear.tsx`; ahora lo usan **agenda y cartera** — *no escribir un tercero*. Y en `src/portfolio.ts`
@@ -70,3 +120,13 @@
     `?from=menu` → vuelve sin marcar `skip_day`.
   - ⚠ `app/cliente/[id].tsx` ya **no** rompe con un cliente sin préstamos asignados (`AGENDA_002`): degrada a
     `getClient` + vacío con CTA al alta de préstamo. Es el camino que abre la búsqueda global.
+- ✅ **Agenda S5+S6** pobló: en `ui.tsx` → **`SelectRow`** (fila "campo → valor elegido", con `disabled`) y
+  **`PickerSheet`** (hoja de selección de una opción). Vivían dentro de `app/agenda/crear.tsx`; ahora los
+  usan también el modo edición y el menú `⋯` del detalle — *no escribir un tercero*. En `agenda-form.ts` →
+  **`hydrateForm(item)`** (ítem del server → estado del reducer del alta, para `crear.tsx?id=`),
+  **`buildPatch(inicial, actual)`** (sólo lo que cambió, para el `PATCH`) y **`partitionDay(items)`**.
+  - ⚠ **`partitionDay` es la única regla de reparto del día**: `done = status !== SCHEDULED`. La pantalla
+    usaba `status === EXECUTED`, así que un ítem **CANCELLED/RESCHEDULED desaparecía del día**. Tiene test
+    de no-regresión — cualquier sección nueva del día se reparte con esta función, no con un `===` propio.
+  - ⚠ `DELETE /agenda/:id` responde **200 con el ítem**, no 204: `apiMutate` trata el 204 como error.
+    Cualquier endpoint de borrado que consuma el móvil tiene que devolver cuerpo.

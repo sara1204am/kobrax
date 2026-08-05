@@ -32,9 +32,9 @@ mockups** `docs/epics/F10/figma/rutas/` (14 pantallas), normalizando tokens a la
 | **S1 · Estados de ruta** | RT-0a Sin ruta `46:4` · RT-0b Ruta activa `46:108` · RT-0c Ruta completada `46:282` | no | `ListRow`,`StatusBadge`,`StatTile`,`Header`,`EmptyState` |
 | **S2 · Crear desde mapa** | RT-1.1 Selección vacío `47:471` · RT-1.2 +card `47:586` · RT-1.3 Crear cliente `47:767` | **sí** | `MapCanvas`,`MiniMapCard` + alta cliente de **cartera** |
 | **S3 · Preview + confirmar** | RT-2.1 Preview `49:1857` · RT-2.2 Zigzag `49:2012` · RT-3 Confirmar `49:2185` | **sí** (polyline) | `MapCanvas`,`StatTile`,`ListRow` (reorder) |
-| **S4 · Mapa activo + parada** | RT-4 Mapa activo `51:541` · RT-5 Detalle parada `51:915` | **sí** | `MapCanvas` + ficha de **cartera** |
-| **S5 · Registrar resultado** | RT-6 Sheet variantes `51:676` | no | `BottomSheet` + pago/gestión/foto **cartera** + promesa **agenda** |
-| **S6 · Resumen jornada** | RT-7 Resumen `51:1053` | no | `StatTile`,`ListRow` |
+| **S4 · Mapa activo + parada** ✅ | RT-4 Mapa activo `51:541` · RT-5 Detalle parada `51:915` | **sí** | `MapCanvas` + ficha de **cartera** ([S4-mapa-activo.md](./S4-mapa-activo.md)) |
+| **S5 · Registrar resultado** ✅ | RT-6 Sheet variantes `51:676` | no | `AmountInput`/`Chips` + pago/foto **cartera** + promesa **agenda** ([S5-registrar-resultado.md](./S5-registrar-resultado.md)) |
+| **S6 · Resumen jornada** ✅ | RT-7 Resumen `51:1053` | no | `StatTile`,`ListRow`,`ProgressBar` ([S6-resumen-jornada.md](./S6-resumen-jornada.md)) |
 | — | Wrappers a ignorar: `Edit ruta 50:404`, `Group 1 48:1427`, `Group 2 49:1854` | — | — |
 
 ## Orden de construcción

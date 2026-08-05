@@ -230,7 +230,15 @@ export default function CrearRutaScreen() {
             );
           })}
         </ScrollView>
-        <Button label="Listo" onPress={() => { setSheet(null); router.back(); }} />
+        {/* Terminar de armar lleva a la vista previa (S3): ahí se mide el recorrido y se confirma. */}
+        <Button
+          label="Ver el recorrido en el mapa"
+          disabled={!draft?.routeId}
+          onPress={() => {
+            setSheet(null);
+            router.push(`/rutas/preview?routeId=${draft!.routeId}`);
+          }}
+        />
       </BottomSheet>
 
       <BottomSheet visible={sheet === 'sin-ubicacion'} onClose={() => setSheet(null)} title="Sin ubicación cargada">

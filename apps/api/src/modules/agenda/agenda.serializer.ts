@@ -28,6 +28,8 @@ export function serializeAgendaItem(a: AgendaItem, clientName: string | undefine
     observations: a.observations ?? undefined,
     details: a.details,
     resultActivityId: a.resultActivityId ?? undefined,
+    reasonCode: a.reasonCode ?? undefined,
+    rescheduledFromId: a.rescheduledFromId ?? undefined,
     clientName,
     isOverdue: a.status === AgendaItemStatus.SCHEDULED && a.scheduledDate.getTime() < startOfDayUTC(now).getTime(),
     createdAt: a.createdAt,

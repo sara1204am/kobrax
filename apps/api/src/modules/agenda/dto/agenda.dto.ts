@@ -61,6 +61,51 @@ export class CreateAgendaItemDto {
 }
 
 /**
+ * Editar una gestión pendiente (S5). Todo opcional: se manda sólo lo que cambia.
+ *
+ * **No lleva `scheduledDate`** a propósito: mover el día es *reagendar* y deja rastro
+ * (`plans/agenda/editar-eliminar.md` D5). Tampoco `caseId`/`creditId`/`clientId`: el deudor es el
+ * ancla del agendado y no se cambia editando (D1).
+ */
+export class UpdateAgendaItemDto {
+  @IsOptional() @IsEnum(AgendaItemType) type?: AgendaItemType;
+
+  @IsOptional() @IsIn([ScheduleTimeMode.FIXED, ScheduleTimeMode.LAPSE]) timeMode?: ScheduleTimeMode;
+
+  @IsOptional() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'scheduledTime debe tener formato HH:mm' })
+  scheduledTime?: string;
+
+  @IsOptional() @IsEnum(AgendaTimeSlot) timeSlot?: AgendaTimeSlot;
+
+  @IsOptional() @IsString() @MaxLength(1000) observations?: string;
+
+  @IsOptional() @IsObject() details?: Record<string, unknown>;
+}
+
+/** Cancelar una gestión (S6). El motivo sale del catálogo `CANCEL_REASON` del tenant. */
+export class CancelAgendaItemDto {
+  @IsString() @IsNotEmpty() @MaxLength(50) reasonCode!: string;
+}
+
+/**
+ * Reagendar a otro día (S6): cierra la original como `RESCHEDULED` y crea una nueva. El motivo sale
+ * del catálogo `RESCHEDULE_REASON`. `type`/`details`/observaciones se copian: reagendar no es editar.
+ */
+export class RescheduleAgendaItemDto {
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'scheduledDate debe tener formato YYYY-MM-DD' })
+  scheduledDate!: string;
+
+  @IsIn([ScheduleTimeMode.FIXED, ScheduleTimeMode.LAPSE]) timeMode!: ScheduleTimeMode;
+
+  @IsOptional() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'scheduledTime debe tener formato HH:mm' })
+  scheduledTime?: string;
+
+  @IsOptional() @IsEnum(AgendaTimeSlot) timeSlot?: AgendaTimeSlot;
+
+  @IsString() @IsNotEmpty() @MaxLength(50) reasonCode!: string;
+}
+
+/**
  * Registrar la ejecución de una gestión (S4). `outcome` se valida contra el tipo en el servicio
  * (`AGENDA_OUTCOMES_BY_TYPE`) — acá solo se comprueba que sea un valor del enum.
  */

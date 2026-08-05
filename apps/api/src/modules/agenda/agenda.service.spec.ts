@@ -59,6 +59,8 @@ function makeService(opts: Opts = {}) {
     historyWhere: undefined as Record<string, unknown> | undefined,
     caseWhere: undefined as Record<string, unknown> | undefined,
     created: undefined as Record<string, unknown> | undefined,
+    /** Todas las altas, en orden: la promesa crea DOS agendados (ella y su recordatorio, S5·D2). */
+    createdAll: [] as Record<string, unknown>[],
     audits: [] as { entity: string; action: string }[],
     reveals: [] as { id: string; reveal: boolean }[],
     addedContacts: [] as Record<string, unknown>[],
@@ -85,7 +87,10 @@ function makeService(opts: Opts = {}) {
       },
       count: async () => (opts.rows ?? []).length,
       create: async (args: { data: Record<string, unknown> }) => {
-        calls.created = args.data;
+        // `created` sigue siendo la PRIMERA alta (lo que esperan los tests de S2); `createdAll`
+        // guarda todas, porque la promesa además crea su recordatorio.
+        calls.created ??= args.data;
+        calls.createdAll.push(args.data);
         return row(args.data);
       },
       update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
@@ -488,6 +493,57 @@ describe('AgendaService.create', () => {
     assert.equal(res.data!.type, 'CALL');
   });
 
+  // ── El recordatorio de la promesa (Rutas S5 · D2) ────────────────────────
+  // El sheet de RT-6 le promete al cobrador un recordatorio 24h antes. Esto lo cumple.
+
+  /** Alta de una promesa de pago para dentro de `days` días. */
+  const promiseDto = (days: number) =>
+    createDto({
+      type: 'PROMISE_TO_PAY',
+      scheduledDate: isoUTC(days),
+      details: { amount: 500, promiseDate: isoUTC(days), paymentMethodCode: 'CASH' },
+    });
+
+  it('una promesa crea TAMBIÉN su recordatorio, el día anterior', async () => {
+    const { service, calls } = makeService({
+      cases: [openCase()],
+      catalog: { code: 'CASH', label: 'Efectivo' }, // el medio de pago que valida `assertPaymentMethod`
+    });
+    await service.create(promiseDto(5));
+
+    assert.equal(calls.createdAll.length, 2);
+    const [promesa, recordatorio] = calls.createdAll;
+    assert.equal(promesa!.type, 'PROMISE_TO_PAY');
+    assert.equal(recordatorio!.type, 'REMINDER');
+    // Un día antes, exacto.
+    const dif = (recordatorio!.scheduledDate as Date).getTime() - (promesa!.scheduledDate as Date).getTime();
+    assert.equal(dif, -24 * 60 * 60 * 1000);
+    // Del mismo cobrador: es él quien tiene que acordarse.
+    assert.equal(recordatorio!.assigneeId, promesa!.assigneeId);
+    assert.equal(recordatorio!.caseId, promesa!.caseId);
+    // Y queda auditado como cualquier alta.
+    assert.deepEqual(calls.audits, [
+      { entity: 'agenda_item', action: 'CREATE' },
+      { entity: 'agenda_item', action: 'CREATE' },
+    ]);
+  });
+
+  it('una promesa para MAÑANA no crea recordatorio: caería hoy y no recuerda nada', async () => {
+    const { service, calls } = makeService({
+      cases: [openCase()],
+      catalog: { code: 'CASH', label: 'Efectivo' }, // el medio de pago que valida `assertPaymentMethod`
+    });
+    await service.create(promiseDto(1));
+    assert.equal(calls.createdAll.length, 1);
+    assert.equal(calls.createdAll[0]!.type, 'PROMISE_TO_PAY');
+  });
+
+  it('el resto de los tipos no crean recordatorio', async () => {
+    const { service, calls } = makeService({ cases: [openCase()], contacts: [{ id: CONTACT }] });
+    await service.create(createDto());
+    assert.equal(calls.createdAll.length, 1);
+  });
+
   it('un supervisor agendando sobre un caso ajeno lo asigna al cobrador del caso, no a sí mismo', async () => {
     const { service, calls } = makeService({
       permissions: ['agenda:assign'],
@@ -586,5 +642,149 @@ describe('AgendaService.create', () => {
     const { service, calls } = makeService({ cases: [openCase()], catalog: { code: 'CASH', metadata: {} } });
     await service.create(promise());
     assert.equal((calls.created!.details as { amount: number }).amount, 500);
+  });
+});
+
+/** Crédito del ítem que edita/reagenda (saldo 1000 BOB), para los cruces de `assertReferences`. */
+const ITEM_CREDIT = { id: 'cr1', code: 'CR-001', outstandingBalance: 1000, currency: 'BOB', deletedAt: null };
+
+describe('AgendaService.update (S5 — editar)', () => {
+  it('ítem ajeno o inexistente → 404 sin filtrar existencia', async () => {
+    const { service } = makeService({ item: null });
+    await expectError(() => service.update('a1', { observations: 'x' } as never), 'AGENDA_NOT_FOUND');
+  });
+
+  it('una gestión ya ejecutada no se edita → AGENDA_008', async () => {
+    const { service } = makeService({ item: row({ status: 'EXECUTED' }) });
+    await expectError(() => service.update('a1', { observations: 'x' } as never), 'AGENDA_008');
+  });
+
+  it('cambiar de tipo sin mandar details nuevos → AGENDA_005', async () => {
+    // El `contactId` de la llamada no sirve para una visita: la combinación se revalida entera.
+    const { service } = makeService({ item: row({ details: { contactId: CONTACT } }), credit: ITEM_CREDIT });
+    await expectError(() => service.update('a1', { type: 'VISIT' } as never), 'AGENDA_005');
+  });
+
+  it('teléfono que no es del cliente → AGENDA_006 (reusa assertReferences)', async () => {
+    const { service } = makeService({ item: row(), credit: ITEM_CREDIT, contacts: [] });
+    await expectError(() => service.update('a1', { details: { contactId: OTHER_CONTACT } } as never), 'AGENDA_006');
+  });
+
+  it('la fecha NO se puede mover editando (D5): el campo se ignora', async () => {
+    const { service, calls } = makeService({ item: row(), credit: ITEM_CREDIT });
+    await service.update('a1', { observations: 'llamar temprano', scheduledDate: isoUTC(5) } as never);
+    assert.equal(calls.updated!.scheduledDate, undefined);
+    assert.equal(calls.updated!.observations, 'llamar temprano');
+  });
+
+  it('pasar a hora fija sin hora → AGENDA_004 (valida la combinación resultante)', async () => {
+    const { service } = makeService({ item: row({ timeMode: 'LAPSE', scheduledTime: null, timeSlot: 'MORNING' }) });
+    await expectError(() => service.update('a1', { timeMode: 'FIXED' } as never), 'AGENDA_004');
+  });
+
+  it('pasar a lapso limpia la hora exacta', async () => {
+    const { service, calls } = makeService({ item: row() });
+    await service.update('a1', { timeMode: 'LAPSE', timeSlot: 'AFTERNOON' } as never);
+    assert.equal(calls.updated!.scheduledTime, null);
+    assert.equal(calls.updated!.timeSlot, 'AFTERNOON');
+  });
+
+  it('audita el cambio con before y after', async () => {
+    const { service, calls } = makeService({ item: row() });
+    await service.update('a1', { observations: 'ok' } as never);
+    assert.deepEqual(calls.audits, [{ entity: 'agenda_item', action: 'UPDATE' }]);
+  });
+});
+
+describe('AgendaService.cancel (S6)', () => {
+  it('motivo inexistente o inactivo en el catálogo → AGENDA_006', async () => {
+    const { service } = makeService({ item: row(), catalog: null });
+    await expectError(() => service.cancel('a1', { reasonCode: 'NOPE' } as never), 'AGENDA_006');
+  });
+
+  it('una gestión ya cancelada no se vuelve a cancelar → AGENDA_008', async () => {
+    const { service } = makeService({ item: row({ status: 'CANCELLED' }), catalog: { code: 'WRONG_DATA' } });
+    await expectError(() => service.cancel('a1', { reasonCode: 'WRONG_DATA' } as never), 'AGENDA_008');
+  });
+
+  it('guarda estado, motivo y audit', async () => {
+    const { service, calls } = makeService({ item: row(), catalog: { code: 'CLIENT_UNAVAILABLE' } });
+    const res = await service.cancel('a1', { reasonCode: 'CLIENT_UNAVAILABLE' } as never);
+    assert.equal(calls.updated!.status, 'CANCELLED');
+    assert.equal(calls.updated!.reasonCode, 'CLIENT_UNAVAILABLE');
+    assert.equal(res.data!.status, 'CANCELLED');
+    assert.deepEqual(calls.audits, [{ entity: 'agenda_item', action: 'CANCEL' }]);
+  });
+});
+
+describe('AgendaService.reschedule (S6)', () => {
+  const dto = (over: Record<string, unknown> = {}) =>
+    ({ scheduledDate: isoUTC(1), timeMode: 'FIXED', scheduledTime: '10:00', reasonCode: 'NO_ANSWER', ...over }) as never;
+
+  it('a una fecha pasada → AGENDA_003', async () => {
+    const { service } = makeService({ item: row(), catalog: { code: 'NO_ANSWER' } });
+    await expectError(() => service.reschedule('a1', dto({ scheduledDate: isoUTC(-1) })), 'AGENDA_003');
+  });
+
+  it('motivo fuera del catálogo → AGENDA_006', async () => {
+    const { service } = makeService({ item: row(), catalog: null });
+    await expectError(() => service.reschedule('a1', dto()), 'AGENDA_006');
+  });
+
+  it('crea el nuevo apuntando al viejo y deja el viejo RESCHEDULED con su motivo', async () => {
+    const { service, calls } = makeService({ item: row(), catalog: { code: 'NO_ANSWER' } });
+    await service.reschedule('a1', dto());
+    assert.equal(calls.created!.rescheduledFromId, 'a1');
+    assert.equal(calls.created!.scheduledTime, '10:00');
+    assert.equal(calls.updated!.status, 'RESCHEDULED');
+    assert.equal(calls.updated!.reasonCode, 'NO_ANSWER');
+    assert.deepEqual(calls.audits, [
+      { entity: 'agenda_item', action: 'RESCHEDULE' },
+      { entity: 'agenda_item', action: 'CREATE' },
+    ]);
+  });
+
+  it('el nuevo queda del cobrador del original, no de quien reagenda', async () => {
+    // Un supervisor (AGENDA_ASSIGN) reagenda una gestión de otro: si se tomara `tenant.userId`,
+    // el cobrador que debe ejecutarla dejaría de verla (misma lección que el alta de S2).
+    const { service, calls } = makeService({
+      permissions: ['agenda:assign'],
+      item: row({ assigneeId: 'u9' }),
+      catalog: { code: 'CLIENT_REQUEST' },
+    });
+    await service.reschedule('a1', dto({ reasonCode: 'CLIENT_REQUEST' }));
+    assert.equal(calls.created!.assigneeId, 'u9');
+  });
+
+  it('copia tipo, details y observaciones: reagendar no es editar', async () => {
+    const { service, calls } = makeService({
+      item: row({ type: 'WHATSAPP', details: { contactId: CONTACT, message: 'hola' }, observations: 'insistir' }),
+      catalog: { code: 'NO_ANSWER' },
+    });
+    await service.reschedule('a1', dto());
+    assert.equal(calls.created!.type, 'WHATSAPP');
+    assert.deepEqual(calls.created!.details, { contactId: CONTACT, message: 'hola' });
+    assert.equal(calls.created!.observations, 'insistir');
+  });
+});
+
+describe('AgendaService.remove (S6 — eliminar)', () => {
+  it('marca deletedAt y audita el borrado', async () => {
+    const { service, calls } = makeService({ item: row() });
+    const res = await service.remove('a1');
+    assert.ok(calls.updated!.deletedAt instanceof Date);
+    assert.equal(res.data!.id, 'a1'); // responde 200 con el ítem, no 204 (apiMutate trata el 204 como error)
+    assert.deepEqual(calls.audits, [{ entity: 'agenda_item', action: 'DELETE' }]);
+  });
+
+  it('una gestión ejecutada no se borra → AGENDA_008 (su actividad quedaría huérfana)', async () => {
+    const { service } = makeService({ item: row({ status: 'EXECUTED' }) });
+    await expectError(() => service.remove('a1'), 'AGENDA_008');
+  });
+
+  it('respeta el scope: ítem ajeno → 404', async () => {
+    const { service, calls } = makeService({ item: null });
+    await expectError(() => service.remove('a1'), 'AGENDA_NOT_FOUND');
+    assert.equal(calls.itemWhere!.assigneeId, 'u1');
   });
 });

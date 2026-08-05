@@ -7,7 +7,8 @@ import { choosePhoto } from '@/photo';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { AmountInput, BottomSheet, Chips, EmptyState, Header, PORTFOLIO_STATUS_META, SectionLabel, StatusBadge } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
-import { money, MONTHS } from '@/agenda-form';
+import { money, MONTHS, timeSlotRange } from '@/agenda-form';
+import { MiniMapCard, type MiniMapPoint } from '@/maps/MiniMapCard';
 import { clientContext, type AgendaClientContext, type CreditOption } from '@/agenda.service';
 import { clientDisplayName, getClient, type ClientDetail } from '@/clients.service';
 import { addActivity, getCase, type CaseDetail } from '@/cases.service';
@@ -44,7 +45,9 @@ function onlyDigits(s?: string | null): string {
 
 /** V4 — Ficha de cobranza (§5.4): detalle + acciones + pago + gestión + timeline. */
 export default function ClienteFichaScreen() {
-  const { id: clientId } = useLocalSearchParams<{ id: string }>();
+  // `routeId` presente = la ficha se abrió desde el mapa de una ruta (RT-5, Rutas S4).
+  const { id: clientId, routeId } = useLocalSearchParams<{ id: string; routeId?: string }>();
+  const fromRoute = !!routeId;
   const [ctx, setCtx] = useState<AgendaClientContext | null>(null);
   const [load, setLoad] = useState<'loading' | 'ok' | 'offline' | 'error' | 'sin-creditos'>('loading');
   /** Identidad mínima cuando no hay contexto de cobranza que mostrar (ver `loadAll`). */
@@ -58,6 +61,23 @@ export default function ClienteFichaScreen() {
   const [gestSheet, setGestSheet] = useState(false);
 
   const selected = useMemo(() => ctx?.credits.find((c) => c.creditId === creditId) ?? ctx?.credits[0], [ctx, creditId]);
+
+  /**
+   * Los garantes con punto en el mapa (RT-5). `GUARANTOR` es un `LocationType`, no una entidad
+   * aparte: ya vienen en el contexto del cliente, sin pedir nada más.
+   */
+  const garantes = useMemo<MiniMapPoint[]>(
+    () =>
+      (ctx?.locations ?? [])
+        .filter((l) => l.locationType === 'GUARANTOR' && l.latitude != null && l.longitude != null)
+        .map((l) => ({ id: l.id, latitude: Number(l.latitude), longitude: Number(l.longitude), tone: 'nearby' })),
+    [ctx],
+  );
+  /** El deudor, para que el mini-mapa muestre a quién están cerca los garantes. */
+  const deudorPoint = useMemo<MiniMapPoint | undefined>(() => {
+    const l = (ctx?.locations ?? []).find((x) => x.locationType !== 'GUARANTOR' && x.latitude != null && x.longitude != null);
+    return l ? { id: l.id, latitude: Number(l.latitude), longitude: Number(l.longitude), tone: 'primary' } : undefined;
+  }, [ctx]);
 
   const loadCase = useCallback(async (caseId: string) => {
     const [c, p] = await Promise.all([getCase(caseId), listPayments(caseId)]);
@@ -268,6 +288,32 @@ export default function ClienteFichaScreen() {
             <DataRow label="Frecuencia" value={detail.frequency ?? '—'} />
             <DataRow label="Próxima fecha" value={prettyDate(detail.nextDueDate)} />
             <DataRow label="Origen" value={detail.origin ?? 'manual'} />
+          </View>
+        )}
+
+        {/*
+          RT-5 (Rutas S4): sólo cuando la ficha se abre DESDE una ruta. Abierta desde cartera es la
+          misma ficha de siempre — el cobrador parado en la puerta necesita esto; el de escritorio no.
+        */}
+        {fromRoute && (
+          <View style={{ gap: SPACING.sm }}>
+            {ctx.contactHint && (
+              <View style={styles.hint}>
+                <Text style={styles.hintTitle}>
+                  🕘 Hora recomendada · {timeSlotRange(ctx.contactHint.timeSlot)}
+                </Text>
+                {/* Se dice en qué se basa: una recomendación sin respaldo no se puede juzgar. */}
+                <Text style={TYPE.caption}>
+                  {`Es la franja en la que lo contactaste ${ctx.contactHint.basedOn} veces.`}
+                </Text>
+              </View>
+            )}
+            {garantes.length > 0 && (
+              <View style={{ gap: SPACING.xs }}>
+                <SectionLabel>{`Garantes cerca (${garantes.length})`}</SectionLabel>
+                <MiniMapCard center={deudorPoint ?? garantes[0]!} points={[...(deudorPoint ? [deudorPoint] : []), ...garantes]} />
+              </View>
+            )}
           </View>
         )}
 
@@ -500,6 +546,9 @@ const styles = StyleSheet.create({
   sub: { ...TYPE.secondary, color: COLORS.text2, marginTop: 2 },
   debt: { fontSize: 30, fontWeight: '700', color: COLORS.navy, marginTop: SPACING.sm },
   locked: { ...TYPE.caption, color: COLORS.warningText, backgroundColor: COLORS.warningBg, padding: SPACING.sm, borderRadius: RADIUS.input, marginTop: SPACING.sm },
+  // Chip de hora recomendada (RT-5). Highlight y no warning: es una ayuda, no una alerta.
+  hint: { backgroundColor: COLORS.highlight, borderRadius: RADIUS.card, padding: SPACING.md, gap: 2 },
+  hintTitle: { ...TYPE.body, color: COLORS.navy, fontWeight: '700' },
   actions: { flexDirection: 'row', gap: SPACING.sm },
   action: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: SPACING.md, backgroundColor: COLORS.white, borderRadius: RADIUS.card, borderWidth: 1, borderColor: COLORS.border },
   actionIcon: { fontSize: 22 },

@@ -8,11 +8,35 @@ import { ActivityIndicator, Alert, Linking, Platform, Pressable, ScrollView, Sty
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { AgendaItemStatus, AgendaItemType } from '@kobrax/shared';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { AgendaItemStatus, AgendaItemType, CatalogType, ScheduleTimeMode } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
-import { AGENDA_STATUS_LABEL, AGENDA_TYPE_META, EmptyState, Header, SectionLabel, StatusBadge } from '@/ui';
-import { MONTHS, TIME_SLOT_LABEL, formatLongDate, money, type TimeSlot } from '@/agenda-form';
-import { actionLinks, getItem, whatsappLink, type AgendaHistoryEntry, type AgendaItemDetail, type AgendaListItem } from '@/agenda.service';
+import { Button } from '@/components';
+import {
+  AGENDA_STATUS_LABEL,
+  AGENDA_TYPE_META,
+  BottomSheet,
+  EmptyState,
+  Header,
+  ListRow,
+  PickerSheet,
+  SectionLabel,
+  SelectRow,
+  StatusBadge,
+} from '@/ui';
+import { MONTHS, TIME_SLOT_LABEL, formatLongDate, money, toHHmm, toISO, toLocalDate, todayISO, type TimeSlot } from '@/agenda-form';
+import {
+  actionLinks,
+  cancelItem,
+  deleteItem,
+  getItem,
+  rescheduleItem,
+  whatsappLink,
+  type AgendaHistoryEntry,
+  type AgendaItemDetail,
+  type AgendaListItem,
+} from '@/agenda.service';
+import { listCatalog, type CatalogOption } from '@/catalogs.service';
 import { RegisterSheet } from '@/agenda-register';
 
 type Load =
@@ -74,6 +98,7 @@ function detailLines(detail: AgendaItemDetail): string[] {
 export default function AgendaDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [load, setLoad] = useState<Load>({ status: 'loading' });
+  const [menu, setMenu] = useState(false);
 
   const reload = useCallback(async () => {
     if (!id) return;
@@ -102,9 +127,33 @@ export default function AgendaDetailScreen() {
     }
   }, []);
 
+  // El menú sólo existe mientras la gestión está pendiente: editar, reagendar, cancelar o eliminar
+  // una ya ejecutada no tiene sentido (y el server las rechaza con AGENDA_008).
+  const editable = load.status === 'ok' && load.detail.item.status === AgendaItemStatus.SCHEDULED;
+
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
-      <Header title="Detalle de gestión" onBack={() => router.back()} />
+      <Header
+        title="Detalle de gestión"
+        onBack={() => router.back()}
+        right={
+          editable ? (
+            <Pressable onPress={() => setMenu(true)} hitSlop={12} accessibilityRole="button" accessibilityLabel="Más opciones">
+              <Text style={styles.menuDots}>⋯</Text>
+            </Pressable>
+          ) : undefined
+        }
+      />
+
+      {load.status === 'ok' && (
+        <ItemMenu
+          item={load.detail.item}
+          visible={menu}
+          onClose={() => setMenu(false)}
+          onGone={() => router.back()}
+          onReplaced={(next) => router.replace(`/agenda/${next.id}`)}
+        />
+      )}
 
       {load.status === 'loading' ? (
         <View style={styles.center}>
@@ -212,9 +261,15 @@ function Detail({
         </View>
 
         <SectionLabel>Historial de gestiones</SectionLabel>
-        <TimelineRow label="Gestión Actual" hint={`${dayLabel(item.scheduledDate)} · ${statusLabel(item)}`} current />
+        <TimelineRow
+          label="Gestión Actual"
+          hint={[dayLabel(item.scheduledDate), statusLabel(item), reasonOf(item, detail.labels), fromLabel(item, history)]
+            .filter(Boolean)
+            .join(' · ')}
+          current
+        />
         {history.map((h) => (
-          <TimelineRow key={h.id} label={AGENDA_TYPE_META[h.type].label} hint={historyHint(h)} />
+          <TimelineRow key={h.id} label={AGENDA_TYPE_META[h.type].label} hint={historyHint(h, detail.labels, history, item)} />
         ))}
       </ScrollView>
 
@@ -243,9 +298,231 @@ function Detail({
   );
 }
 
-function historyHint(h: AgendaHistoryEntry): string {
+/**
+ * S5+S6 — el menú `⋯`: editar, reagendar, cancelar o eliminar. Cada acción tiene su forma:
+ * editar reusa el formulario del alta (`crear?id=`), reagendar pide día + motivo, cancelar sólo el
+ * motivo, y eliminar pregunta con el diálogo nativo porque no se puede deshacer.
+ */
+function ItemMenu({
+  item,
+  visible,
+  onClose,
+  onGone,
+  onReplaced,
+}: {
+  item: AgendaListItem;
+  visible: boolean;
+  onClose: () => void;
+  /** La gestión dejó de estar acá (cancelada o eliminada) → volver. */
+  onGone: () => void;
+  /** Reagendada: el server devolvió la nueva, que es la que hay que mirar. */
+  onReplaced: (next: AgendaListItem) => void;
+}) {
+  const [sheet, setSheet] = useState<'reschedule' | 'cancel' | null>(null);
+  const [reasons, setReasons] = useState<CatalogOption[]>([]);
+  const [reason, setReason] = useState<CatalogOption | null>(null);
+  const [reasonSheet, setReasonSheet] = useState(false);
+  const [date, setDate] = useState(() => item.scheduledDate.slice(0, 10));
+  const [time, setTime] = useState(() => item.scheduledTime ?? '');
+  const [picker, setPicker] = useState<'date' | 'time' | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const fixed = item.timeMode === ScheduleTimeMode.FIXED;
+
+  const fail = useCallback((res: { status: string; message?: string }) => {
+    Alert.alert(
+      'No se pudo',
+      res.status === 'offline'
+        ? 'Sin conexión — reintentá cuando vuelva la red.'
+        : res.status === 'unauthenticated'
+          ? 'Tu sesión venció — volvé a entrar.'
+          : (res.message ?? 'Intentá de nuevo en un momento.'),
+    );
+  }, []);
+
+  /** Abre una hoja con su catálogo de motivos ya cargado (sin motivo no se puede confirmar). */
+  const openWithReasons = useCallback(
+    async (which: 'reschedule' | 'cancel') => {
+      onClose();
+      setReason(null);
+      const res = await listCatalog(which === 'cancel' ? CatalogType.CANCEL_REASON : CatalogType.RESCHEDULE_REASON);
+      if (res.status !== 'ok') return fail(res);
+      setReasons(res.data);
+      setSheet(which);
+    },
+    [fail, onClose],
+  );
+
+  const doCancel = useCallback(
+    async (code: string) => {
+      setBusy(true);
+      const res = await cancelItem(item.id, code);
+      setBusy(false);
+      if (res.status !== 'ok') return fail(res);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setSheet(null);
+      onGone();
+    },
+    [fail, item.id, onGone],
+  );
+
+  const doReschedule = useCallback(async () => {
+    if (!reason) return;
+    setBusy(true);
+    const res = await rescheduleItem(item.id, {
+      scheduledDate: date,
+      timeMode: item.timeMode,
+      scheduledTime: fixed ? time : undefined,
+      timeSlot: fixed ? undefined : item.timeSlot,
+      reasonCode: reason.code,
+    });
+    setBusy(false);
+    if (res.status !== 'ok') return fail(res);
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setSheet(null);
+    onReplaced(res.data);
+  }, [date, fail, fixed, item.id, item.timeMode, item.timeSlot, onReplaced, reason, time]);
+
+  const confirmDelete = useCallback(() => {
+    onClose();
+    // Diálogo nativo: eliminar no se deshace, y es la única acción del menú que no deja rastro visible.
+    Alert.alert('¿Eliminar la gestión?', 'Se quita de la agenda. Para dejar constancia de que no se hizo, cancelala.', [
+      { text: 'Volver', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            const res = await deleteItem(item.id);
+            if (res.status !== 'ok') return fail(res);
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            onGone();
+          })();
+        },
+      },
+    ]);
+  }, [fail, item.id, onClose, onGone]);
+
+  const onPicked = useCallback(
+    (event: DateTimePickerEvent, picked?: Date) => {
+      const kind = picker;
+      setPicker(null);
+      if (event.type !== 'set' || !picked || !kind) return;
+      if (kind === 'date') setDate(toISO(picked));
+      else setTime(toHHmm(picked));
+    },
+    [picker],
+  );
+
+  return (
+    <>
+      <BottomSheet visible={visible} onClose={onClose} title="Opciones">
+        <ListRow
+          title="Editar"
+          subtitle="Cambiar los datos de la gestión"
+          icon="create-outline"
+          onPress={() => {
+            onClose();
+            router.push({ pathname: '/agenda/crear', params: { id: item.id } });
+          }}
+        />
+        <ListRow
+          title="Reagendar"
+          subtitle="Moverla a otro día, con motivo"
+          icon="calendar-outline"
+          onPress={() => void openWithReasons('reschedule')}
+        />
+        <ListRow
+          title="Cancelar gestión"
+          subtitle="No se hizo: queda registrada como cancelada"
+          icon="close-circle-outline"
+          onPress={() => void openWithReasons('cancel')}
+        />
+        <ListRow title="Eliminar" subtitle="Se cargó por error" icon="trash-outline" onPress={confirmDelete} />
+      </BottomSheet>
+
+      {/* Cancelar: el motivo ES la acción, así que la hoja de motivos alcanza. */}
+      <PickerSheet
+        visible={sheet === 'cancel'}
+        onClose={() => setSheet(null)}
+        title="¿Por qué se cancela?"
+        options={reasons.map((r) => ({ key: r.code, label: r.label }))}
+        onPick={(code) => void doCancel(code)}
+      />
+
+      <BottomSheet visible={sheet === 'reschedule'} onClose={() => setSheet(null)} title="Reagendar">
+        <SectionLabel>Nueva fecha</SectionLabel>
+        <SelectRow icon="📅" value={formatLongDate(date)} onPress={() => setPicker('date')} />
+
+        {fixed ? (
+          <>
+            <SectionLabel>Hora</SectionLabel>
+            <SelectRow icon="🕐" value={time || undefined} placeholder="Elegí la hora" onPress={() => setPicker('time')} />
+          </>
+        ) : (
+          <Text style={styles.rescheduleHint}>
+            Se mantiene la franja: {TIME_SLOT_LABEL[item.timeSlot as TimeSlot]}.
+          </Text>
+        )}
+
+        <SectionLabel>Motivo</SectionLabel>
+        <SelectRow icon="💬" value={reason?.label} placeholder="Elegí el motivo" onPress={() => setReasonSheet(true)} />
+
+        <View style={{ marginTop: SPACING.lg }}>
+          <Button
+            label="Reagendar"
+            onPress={() => void doReschedule()}
+            loading={busy}
+            disabled={!reason || (fixed && !time)}
+          />
+        </View>
+      </BottomSheet>
+
+      <PickerSheet
+        visible={reasonSheet}
+        onClose={() => setReasonSheet(false)}
+        title="Motivo de la reprogramación"
+        options={reasons.map((r) => ({ key: r.code, label: r.label }))}
+        onPick={(code) => setReason(reasons.find((r) => r.code === code) ?? null)}
+      />
+
+      {picker && (
+        <DateTimePicker
+          value={picker === 'date' ? toLocalDate(date) : new Date(`${date}T${time || '09:00'}:00`)}
+          mode={picker === 'date' ? 'date' : 'time'}
+          minimumDate={picker === 'date' ? toLocalDate(todayISO()) : undefined}
+          onChange={onPicked}
+        />
+      )}
+    </>
+  );
+}
+
+/** El motivo por el que no se ejecutó, con la etiqueta del catálogo si vino resuelta. */
+function reasonOf(row: { reasonCode?: string }, labels?: Record<string, string>): string | undefined {
+  return row.reasonCode ? (labels?.[row.reasonCode] ?? row.reasonCode) : undefined;
+}
+
+/** "Reagendada desde el 21 jun": el eslabón anterior de la cadena, si está en el historial. */
+function fromLabel(
+  row: { rescheduledFromId?: string },
+  siblings: (AgendaHistoryEntry | AgendaListItem)[],
+): string | undefined {
+  if (!row.rescheduledFromId) return undefined;
+  const parent = siblings.find((s) => s.id === row.rescheduledFromId);
+  return parent ? `viene del ${shortDate(parent.scheduledDate)}` : 'reagendada';
+}
+
+function historyHint(
+  h: AgendaHistoryEntry,
+  labels: Record<string, string> | undefined,
+  siblings: AgendaHistoryEntry[],
+  current: AgendaListItem,
+): string {
   const state = h.isOverdue ? 'Vencida' : AGENDA_STATUS_LABEL[h.status];
-  return `${shortDate(h.scheduledDate)} · ${state}`;
+  return [shortDate(h.scheduledDate), state, reasonOf(h, labels), fromLabel(h, [...siblings, current])]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 function ActionButton({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) {
@@ -278,6 +555,8 @@ function TimelineRow({ label, hint, current }: { label: string; hint: string; cu
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   pillRow: { alignItems: 'center', marginBottom: SPACING.lg },
+  menuDots: { ...TYPE.h2, color: COLORS.white, lineHeight: 24 },
+  rescheduleHint: { ...TYPE.caption, color: COLORS.muted, marginTop: SPACING.sm },
   card: {
     backgroundColor: COLORS.white,
     borderRadius: RADIUS.card,
