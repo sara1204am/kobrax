@@ -100,6 +100,7 @@ export default function MapaRutaScreen() {
     }));
 
   const links = actionLinks({ phone });
+  const sinPendientes = stops.length > 0 && !stops.some((s) => s.status === RouteStopStatus.PENDING);
   const center = selected?.latitude != null && selected.longitude != null
     ? { latitude: selected.latitude, longitude: selected.longitude }
     : undefined;
@@ -155,6 +156,12 @@ export default function MapaRutaScreen() {
             </View>
           }
         />
+      ) : sinPendientes ? (
+        // No queda nada por hacer: el paso siguiente es cerrar el día (S6), no seguir en el mapa.
+        <View style={styles.cierre}>
+          <Text style={TYPE.h2}>¡Terminaste tus paradas!</Text>
+          <Button label="Ver resumen de la jornada" onPress={() => router.push(`/rutas/resumen?routeId=${routeId}`)} />
+        </View>
       ) : (
         <EmptyState icon="📍" title="Ruta sin paradas ubicadas" hint="Cargá la dirección de tus clientes para verlos en el mapa." />
       )}
@@ -172,6 +179,7 @@ function firstPending(route: RouteItem): RouteStopItem | undefined {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLORS.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  cierre: { padding: SPACING.lg, gap: SPACING.md, alignItems: 'center', backgroundColor: COLORS.white },
   zigzag: { backgroundColor: COLORS.navy, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
   zigzagText: { ...TYPE.secondary, color: COLORS.white, fontWeight: '700' },
   acciones: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm },

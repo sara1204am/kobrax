@@ -288,6 +288,22 @@ export const STOP_STATUS_META: Record<RouteStopStatus, { label: string; tone: Ba
 };
 
 /**
+ * Barra de progreso (Rutas S1 y S6). Estaba escrita a mano dentro de `(tabs)/rutas.tsx`; ahora la
+ * usan la tarjeta de la ruta en curso y el resumen de la jornada.
+ *
+ * `percent` llega ya calculado y se acota a 0–100: una ruta sin paradas daba `NaN`, y un `NaN` en un
+ * `width` deja la barra llena.
+ */
+export function ProgressBar({ percent, tone = 'success' }: { percent: number; tone?: 'success' | 'navy' }) {
+  const pct = Math.max(0, Math.min(100, Math.round(percent) || 0));
+  return (
+    <View style={styles.barTrack}>
+      <View style={[styles.barFill, { width: `${pct}%`, backgroundColor: tone === 'navy' ? COLORS.navy : COLORS.success }]} />
+    </View>
+  );
+}
+
+/**
  * La tarjeta de la parada seleccionada en el mapa activo (Rutas S4 · RT-4): a quién tengo enfrente,
  * cuánto debe y qué puedo hacer. Vive acá y no dentro de la pantalla porque **S5 la reusa** debajo
  * del sheet de registrar resultado.
@@ -663,6 +679,9 @@ export function OfflineIndicator() {
 }
 
 const styles = StyleSheet.create({
+  barTrack: { height: 8, borderRadius: RADIUS.pill, backgroundColor: COLORS.lightBg, marginTop: SPACING.sm, overflow: 'hidden' },
+  barFill: { height: 8, borderRadius: RADIUS.pill },
+
   // ── StopCard (Rutas S4 · RT-4) ──
   stopCard: {
     backgroundColor: COLORS.white,

@@ -97,6 +97,20 @@
     `catalog:write`, y el owner tiene MFA (su login no devuelve `accessToken` directo).
   - ⚠ El "número de recibo" del mockup **no se implementó**: `payments.receipt_number` es `Int?` del
     sistema, no texto libre. Se usa la foto del comprobante, que sí viaja punta a punta.
+- ✅ **Rutas S6** pobló: **`src/route-summary.ts` → `summarizeDay(route, payments)`**, la ÚNICA cuenta
+  del día (recaudado, progreso y las categorías del resumen) — la usan el resumen **y** la tarjeta de
+  jornada cerrada de la pestaña Rutas: *dos pantallas del mismo día no pueden decir cosas distintas*.
+  Más `CATEGORY_LABEL`/`CATEGORY_TONE`/`categoryOf`, y en `ui.tsx` **`ProgressBar`**, que **consolidó**
+  la barra escrita a mano dentro de `(tabs)/rutas.tsx`. En la API: `serializeStop` sumó **`lastOutcome`**
+  (la última visita de la parada, vía `STOP_VISIT` con `take: 1`).
+  - ⚠ **Los KPIs se calculan en el CLIENTE** (`ui-screen-map §8.1`, decisión cerrada): son contadores
+    intradía de acciones del cobrador y el server iría atrasado por diseño. **No crear endpoints de
+    agregación** — el server manda campos de dato y el móvil los suma.
+  - ⚠ **`GET /payments` devuelve los del TENANT**, no los de un cobrador: hay que filtrar por los
+    `caseId` de la ruta o el "recaudado hoy" muestra lo que cobró otra persona. `serializePayment` ya
+    devolvía `caseId` y `registeredBy`; lo que faltaba era declararlos en el móvil.
+  - ⚠ `NOT_FOUND` y `WRONG_ADDRESS` se agrupan en «Inubicables` **sólo en `categoryOf`**; el dato fino
+    sigue entero en `field_visits`.
 - ✅ **Cartera S4** pobló: `src/use-client-search.ts` → **`useClientSearch(query, { enabled })`**, el buscador
   de clientes con debounce (300 ms / ≥2 caracteres / race-guard por `reqId`). Estaba suelto dentro de
   `app/agenda/crear.tsx`; ahora lo usan **agenda y cartera** — *no escribir un tercero*. Y en `src/portfolio.ts`
