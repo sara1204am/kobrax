@@ -29,6 +29,13 @@ jest.mock('./queue', () => ({
   }),
 }));
 
+jest.mock('../route-draft', () => ({
+  flushPendingDraft: jest.fn(async () => {
+    mockOps.push('flushDraft');
+    return 'nothing';
+  }),
+}));
+
 import { drain } from './sync.service';
 
 const item = (id: number, kind = 'payment', attempts = 0) => ({
@@ -93,6 +100,20 @@ describe('drain', () => {
     mockCola.push(item(1, 'visit', 5));
     await drain('u1', { force: true });
     expect(mockOps).toContain('send:visit');
+  });
+
+  // El recorrido armado en el mapa sin señal se quedaba en el teléfono hasta que el cobrador
+  // volviera a la pantalla y tocara un pin.
+  it('también sincroniza el borrador de ruta pendiente', async () => {
+    await drain('u1');
+    expect(mockOps).toContain('flushDraft');
+  });
+
+  it('si se cortó por falta de red, ni intenta el borrador', async () => {
+    mockCola.push(item(1));
+    mockSend.result = { status: 'offline' };
+    await drain('u1');
+    expect(mockOps).not.toContain('flushDraft');
   });
 
   // Dos drenajes en paralelo subirían la misma acción dos veces; la idempotencia salva al pago,

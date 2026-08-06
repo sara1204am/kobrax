@@ -145,7 +145,13 @@ notificaciones. Más la **cola** y el **registro de hidratación** (cuándo se b
    **Se toca cada `*.service.ts`, no cada pantalla** (las pantallas ya manejan `status: 'offline'`).
 4. **Cola** — `queue.ts` + `sync.service.ts`: encolar, drenar, backoff, marcar. Con test.
 5. **Escribir offline** — enchufar la cola en las escrituras de D3 (visita, evidencia, pago, agenda).
-6. **Absorber `route-draft`** — su flush pasa a la cola; se conserva `diffStops` y su test.
+6. ~~**Absorber `route-draft`**~~ → **corregido al construir (2026-08-06): NO se absorbe.** La cola
+   sube *acciones puntuales*; el borrador de ruta es un *estado* que se edita muchas veces y se
+   sincroniza **por diferencia**, que es justo lo que lo hace idempotente — encolar cada toque como
+   una acción desharía eso. Lo que sí faltaba, y era un problema real que la usuaria vivió por
+   cable: el borrador **sólo se reintentaba al volver a la pantalla y tocar un pin**. Ahora
+   `flushPendingDraft` corre en cada drenaje. La persistencia queda en SecureStore (640 B una ruta
+   de 16 paradas; el techo son ~2 KB): mudarla sería churn sin ganancia.
 7. **UI** — `OfflineIndicator` con contador + hoja de pendientes + sello "sin subir" en las tarjetas.
 8. **Verificar** — `type-check` + `test` + `expo export`; **smoke real en modo avión** con el teléfono.
 

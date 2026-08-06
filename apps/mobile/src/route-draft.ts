@@ -9,13 +9,19 @@
  * contra lo que tiene el server y se aplican las diferencias. Eso la hace idempotente —reintentar no
  * duplica— y evita ordenar una cola de operaciones y resolver conflictos entre ellas.
  *
- * ponytail: cola chica y propia porque la general (WatermelonDB) es P6. Cuando llegue, esto se
- * enchufa ahí y se borra. Se guarda en SecureStore, el mismo mecanismo de `biometric.ts` e
- * `import.service.ts` (cero deps nuevas); son sólo ids, ~40 bytes por parada. Si una ruta llegara a
- * cientos de paradas, mudarlo a `expo-file-system` antes de que SecureStore se queje del tamaño.
+ * **P6 lo enganchó al motor de sync, y NO lo absorbió en la cola de acciones.** El plan decía
+ * "se enchufa ahí y se borra", pero al llegar se vio que no correspondía: la cola sube *acciones
+ * puntuales* (un pago, una visita) y esto es un *estado* que se edita muchas veces y se sincroniza
+ * por diferencia. Encolar cada toque como una acción desharía justo lo que lo hace idempotente.
+ * Lo que sí faltaba —y era un problema real— es que el borrador **sólo se reintentaba cuando el
+ * cobrador volvía a la pantalla y tocaba algo**: ahora `flushPendingDraft` corre en cada drenaje.
+ *
+ * ponytail: la persistencia sigue en SecureStore y no se mudó a SQLite. Son ids, ~40 bytes por
+ * parada (una ruta de 16 son 640 B), así que el techo de ~2 KB no está cerca. Mudarlo por prolijidad
+ * sería churn sin ganancia. Si una ruta llegara a cientos de paradas, ahí sí va a `db.ts`.
  */
 import * as SecureStore from 'expo-secure-store';
-import { addStop, getRoute, removeStop, updateStop, type RouteStopItem } from './routes.service';
+import { addStop, createRoute, getRoute, removeStop, updateStop, type RouteStopItem } from './routes.service';
 
 const KEY = 'kobrax.route.draft';
 
@@ -171,4 +177,23 @@ export async function flushDraft(
   const synced: RouteDraft = { ...draft, routeId };
   await saveDraft(synced);
   return { status: 'ok', draft: synced };
+}
+
+/**
+ * Sincroniza el borrador de hoy sin que haya una pantalla abierta. Lo llama el motor de sync en
+ * cada drenaje: antes, un recorrido armado sin señal se quedaba en el teléfono hasta que el
+ * cobrador volviera a Crear ruta y tocara un pin.
+ *
+ * Devuelve `'nothing'` cuando no hay nada que hacer — que es el caso normal y no cuesta red.
+ */
+export async function flushPendingDraft(
+  collectorId: string,
+  date: string,
+): Promise<'ok' | 'nothing' | 'offline' | 'error'> {
+  const draft = await loadDraft(date);
+  if (draft.caseIds.length === 0) return 'nothing';
+  // Con `routeId` ya existe en el server; igual se corre el flush, porque puede haber quedado a
+  // medias (paradas agregadas y el orden sin aplicar). El diff resuelve qué falta y no duplica.
+  const res = await flushDraft(draft, () => createRoute({ collectorId, plannedDate: date }));
+  return res.status === 'ok' ? 'ok' : res.status === 'offline' ? 'offline' : 'error';
 }

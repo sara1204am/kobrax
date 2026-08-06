@@ -14,6 +14,8 @@
  * si algo está mal de verdad, martillar el servidor cada minuto no lo va a arreglar.
  */
 import * as db from '../db';
+import { todayISO } from '../agenda-form';
+import { flushPendingDraft } from '../route-draft';
 import { getUserId } from '../session';
 import { useNetStore } from '../store/net';
 import { enqueue, pendingActions, send, type QueuedAction } from './queue';
@@ -58,6 +60,14 @@ export async function drain(userId: string, opts: { force?: boolean } = {}): Pro
       }
       await db.markFailed(item.id, r.message);
       res.failed += 1;
+    }
+
+    // El recorrido armado en el mapa no viaja por la cola —es un estado que se sincroniza por
+    // diferencia, no una acción—, pero sí tiene que reintentarse solo. Antes se quedaba en el
+    // teléfono hasta que el cobrador volviera a la pantalla y tocara un pin.
+    if (!res.stopped) {
+      const draft = await flushPendingDraft(userId, todayISO());
+      if (draft === 'offline') res.stopped = 'offline';
     }
   } finally {
     corriendo = false;
