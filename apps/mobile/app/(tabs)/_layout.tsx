@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { View } from 'react-native';
-import { Tabs } from 'expo-router';
+import { router, Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { OfflineIndicator } from '@/ui';
 import { subscribeConnectivity } from '@/store/net';
@@ -43,7 +43,7 @@ export default function TabsLayout() {
 
   return (
     <View style={{ flex: 1 }}>
-      <OfflineIndicator />
+      <OfflineIndicator onPressPending={() => router.push('/pendientes')} />
       <Tabs
       screenOptions={{
         headerShown: false,

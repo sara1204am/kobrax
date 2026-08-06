@@ -669,7 +669,7 @@ export function PickerSheet({
  * Aparece/desaparece según el estado de red; `SafeAreaView` top para no quedar bajo el notch.
  * Se monta una vez sobre las tabs. // ponytail: slide con Reanimated = polish de P1, no bloquea.
  */
-export function OfflineIndicator() {
+export function OfflineIndicator({ onPressPending }: { onPressPending?: () => void } = {}) {
   const isConnected = useNetStore((s) => s.isConnected);
   const pending = useNetStore((s) => s.pendingCount);
   // Con cola pendiente el banner se muestra **aunque haya red**: algo que el cobrador dio por
@@ -677,17 +677,24 @@ export function OfflineIndicator() {
   // conexión y está subiendo; el rojo es para cuando no hay red.
   if (isConnected && pending === 0) return null;
   const soloPendientes = isConnected && pending > 0;
+  const texto = soloPendientes
+    ? `Subiendo · ${pending} pendiente${pending === 1 ? '' : 's'}`
+    : `Sin conexión${pending > 0 ? ` · ${pending} pendiente${pending === 1 ? '' : 's'} de sync` : ''}`;
+  // Con cola, el banner se puede tocar para ver QUÉ falta subir: un número que no se puede
+  // auditar no genera confianza. Sin cola no lleva a ningún lado (no habría nada que mostrar).
+  const abrible = pending > 0 && !!onPressPending;
   return (
     <SafeAreaView
       edges={['top']}
       style={[styles.offline, soloPendientes && styles.offlinePending]}
       accessibilityRole="alert"
     >
-      <Text style={styles.offlineText}>
-        {soloPendientes
-          ? `Subiendo · ${pending} pendiente${pending === 1 ? '' : 's'}`
-          : `Sin conexión${pending > 0 ? ` · ${pending} pendiente${pending === 1 ? '' : 's'} de sync` : ''}`}
-      </Text>
+      <Pressable onPress={abrible ? onPressPending : undefined} disabled={!abrible} accessibilityRole="button">
+        <Text style={styles.offlineText}>
+          {texto}
+          {abrible ? '  ›' : ''}
+        </Text>
+      </Pressable>
     </SafeAreaView>
   );
 }
