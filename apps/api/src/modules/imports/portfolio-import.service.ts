@@ -8,7 +8,7 @@ import { TenantContextService } from '../../common/context/tenant-context.servic
 import { AuditService } from '../../common/audit/audit.service';
 import { parsePdfBlocks, type ColumnCandidate, type FieldMap } from './parsers/pdf-blocks.parser';
 import { parsePdfRows } from './parsers/pdf-rows.parser';
-import { parseCsvRows } from './parsers/rows.parser';
+import { parseRowsFile } from './parsers/rows.parser';
 import { FIELD_CATALOG, normalizeRecord, splitPhones, type NormalizedRecord } from './field-catalog';
 import {
   DEFAULT_IMPORT_CONFIG,
@@ -392,7 +392,7 @@ export class PortfolioImportService {
     const empty = { recordStartCandidates: [], headerCandidates: [] };
     try {
       if (config.profile.kind === 'rows') {
-        const { labels, columnCandidates } = parseCsvRows(file.toString('utf8'), config.profile, config.fieldMap);
+        const { labels, columnCandidates } = await parseRowsFile(file, config.profile, config.fieldMap);
         return { labels, columnCandidates, ...empty };
       }
       if (config.profile.kind === 'pdf-rows') {
@@ -461,7 +461,7 @@ function readWithProfile(
   profile: RunConfig['profile'],
   fieldMap: FieldMap,
 ): Promise<Record<string, string | null>[]> {
-  if (profile.kind === 'rows') return Promise.resolve(parseCsvRows(file.toString('utf8'), profile, fieldMap).records);
+  if (profile.kind === 'rows') return parseRowsFile(file, profile, fieldMap).then((r) => r.records);
   if (profile.kind === 'pdf-rows') return parsePdfRows(new Uint8Array(file), profile, fieldMap).then((r) => r.records);
   return parsePdfBlocks(new Uint8Array(file), profile, fieldMap).then((r) => r.records);
 }
@@ -579,16 +579,20 @@ function assertFileShape(file: Buffer, kind: ImportConfig['profile']['kind']): v
       message: 'Subiste un PDF, pero la configuración dice CSV. Cambiá "Forma del archivo" en Ajustes › Importación.',
     });
   }
-  if (shape === 'zip') {
-    // Todo lo que empaqueta en zip es una planilla binaria (.xlsx, .ods). Dos motivos distintos
-    // para frenar acá, y el mensaje dice cuál es: o el perfil es PDF, o es el correcto pero
-    // todavía no sabemos abrir Excel — la dep `xlsx` no está instalada y `parseCsvRows` leería
-    // los bytes del zip como si fueran texto (mismo defecto que el `%PDF-1.1`).
+  // Una planilla binaria (.xlsx, .ods) empaqueta en zip. Con perfil `rows` es válida y la abre
+  // `parseRowsFile`; con perfil PDF es el archivo equivocado.
+  if (shape === 'zip' && isPdfProfile) {
     throw new BadRequestException({
-      code: isPdfProfile ? 'FILE_SHAPE_MISMATCH' : 'XLSX_NOT_SUPPORTED',
-      message: isPdfProfile
-        ? 'Subiste una planilla, pero la configuración dice PDF. Cambiá "Forma del archivo" en Ajustes › Importación.'
-        : 'Todavía no se leen archivos de Excel. Guardá la planilla como CSV y subí ese archivo.',
+      code: 'FILE_SHAPE_MISMATCH',
+      message: 'Subiste una planilla, pero la configuración dice PDF. Cambiá "Forma del archivo" en Ajustes › Importación.',
+    });
+  }
+  // `.xls` de Excel 97-2003: el picker lo deja elegir y el motor sólo abre el formato moderno.
+  // El arreglo está en manos del usuario y es de un minuto, así que el mensaje lo nombra.
+  if (shape === 'ole2') {
+    throw new BadRequestException({
+      code: 'XLS_LEGACY_NOT_SUPPORTED',
+      message: 'Ese archivo es de una versión vieja de Excel (.xls). Abrilo y guardalo como .xlsx o CSV, y volvé a subirlo.',
     });
   }
 }

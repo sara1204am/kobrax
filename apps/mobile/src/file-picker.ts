@@ -12,8 +12,19 @@
 import * as DocumentPicker from 'expo-document-picker';
 import type { PickedFile } from '@/import.service';
 
-/** El motor lee las dos formas (§4.1); el tipo real lo valida el backend, esto sólo acota el picker. */
-const IMPORT_MIME = ['application/pdf', 'text/csv', 'text/comma-separated-values', 'text/plain'];
+/**
+ * El motor lee las dos formas (§4.1); el tipo real lo valida el backend, esto sólo acota el picker.
+ * Excel entra en la forma `rows` igual que el CSV — sin estos dos mimetypes el archivo del usuario
+ * ni siquiera se puede seleccionar, por más que el backend sepa abrirlo.
+ */
+const IMPORT_MIME = [
+  'application/pdf',
+  'text/csv',
+  'text/comma-separated-values',
+  'text/plain',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.ms-excel', // .xls viejo — el backend lo rechaza al abrirlo, pero se ve en la lista
+];
 
 /** `null` = el usuario canceló. */
 export async function pickImportFile(): Promise<PickedFile | null> {

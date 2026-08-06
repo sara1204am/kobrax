@@ -88,7 +88,44 @@ Notas de sync (relevantes para P6): `case_activities`, `field_visits`, `field_ev
 
 ---
 
-## 5. Índice rápido
+## 5. 🔜 ORDEN DE TRABAJO ACORDADO (2026-08-06) — empezar por acá
+
+> **Esta es la cola vigente.** Decidida con la usuaria el 2026-08-06, después de cerrar los módulos
+> Cartera / Agenda / Rutas / Import / Cuenta y de barrer los permisos. Al retomar una sesión, seguir
+> **este orden**, de arriba hacia abajo. Marcar cada ítem al terminarlo.
+
+| # | Qué | Estado | Notas |
+|---|---|---|---|
+| **1** | **Los 4 sueltos** (abajo el detalle) | ⬜ | Cosas chicas y dispersas que hoy dejan huecos visibles |
+| 1.a | "Cobrado hoy" del Home deja de ser `—` | ⬜ | KPI en cliente; `listPaymentsByDay` **ya existe** (lo usa Rutas S6) |
+| 1.b | **Pantalla de notificaciones** | ⬜ | El badge 🔔 del Home no navega. Endpoints listos (`GET /notifications`, `POST /:id/read`, `POST /read-all`). Figma `64:538` |
+| 1.c | **Cobro por QR/link** (`payment-requests`) | ⬜ | Existe en la API, cero en el móvil. ⚠️ `confirmRequest` exige `PAYMENT_APPROVE`, que el COLLECTOR **no tiene** → definir el flujo antes de construir |
+| 1.d | **Leer Excel en el import** | ⬜ | La dep `xlsx` nunca se instaló (aprobada en import R7). Hoy sólo entra CSV y PDF |
+| **2** | **Home más funcional** | ⬜ | Cierra la tanda de sueltos: el Home es la primera pantalla del día y hoy es casi sólo contadores |
+| **3** | **P6 · offline / WatermelonDB** | ⬜ | El hueco más grande: hoy la app es 100% online contra el principio no negociable #4. Incluye el retro-encaje en los services de todos los módulos ya construidos |
+| **4** | **P9 · push + SSL pinning** | ⬜ | `expo-notifications` sin instalar; el pinning corre en NO-OP (lo avisa Metro en cada arranque) |
+| **5** | **Limpieza y orden de todo el módulo celular** | ⬜ | Pasada final: `/ponytail-review` pendiente de cuenta e import, deduplicar, `BASE-INVENTORY` al día |
+
+### Diferido a la **segunda versión** (decisión de la usuaria, 2026-08-06)
+- **P8 · firma digital** — la evidencia sigue funcionando sin ella: foto + **SHA-256** + GPS ya están
+  construidos (`uploads` + `field-integrity`). Lo único que se posterga es el canvas de firma y su
+  hash. **No bloquea nada del orden de arriba**; cuando entre, reusa el mismo módulo `uploads`.
+
+### Sigue fuera de esta cola (sin fecha, ya estaba así)
+- **Import S5 (reparto)** y **S6 (carga rápida)** · la tarjeta de KPIs de Import S2.
+- **Cuenta S5** (cartera por lote): falta `POST /cases/assign-bulk` + pantalla; tiene la Q4 abierta.
+- **P10 · gating RBAC** (F3) · extras de Agenda (plantillas WhatsApp, adjuntos, campañas, ABM).
+- **Import web (admin)**: es F9, fuera del alcance móvil (ver §4).
+
+### Deuda de verificación que arrastra la cola
+La **validación visual por cable** de agenda S5+S6, rutas S3–S6, cuenta S0–S4 e import. La hace la
+usuaria (la app no corre headless). Y un bug **sin reproducir**: error nativo de MapLibre
+`easeTo` en el mapa — descartado que sea por coordenadas nulas (el backend ya las filtra en
+`cases.service.ts`) y no está en el JS de la lib.
+
+---
+
+## 6. Índice rápido
 
 - Qué/por qué por slice → [`EPIC-F10-app-mobile.md`](../EPIC-F10-app-mobile.md)
 - Pantallas Figma → endpoint → DB → [`ui-screen-map.md`](./ui-screen-map.md)

@@ -223,12 +223,15 @@ export function requiredFields(fields: Record<string, FieldRule>): string[] {
  * `text` = sin firma binaria; es lo que se ve en un CSV, y también en cualquier cosa que no
  * reconozcamos → se confía en lo configurado.
  */
-export type FileShape = 'pdf' | 'zip' | 'text';
+export type FileShape = 'pdf' | 'zip' | 'ole2' | 'text';
 
 export function detectFileShape(file: Buffer | Uint8Array): FileShape {
-  const head = Buffer.from(file.subarray(0, 4)).toString('latin1');
+  const head = Buffer.from(file.subarray(0, 8)).toString('latin1');
   if (head.startsWith('%PDF')) return 'pdf';
   if (head.startsWith('PK\x03\x04')) return 'zip'; // xlsx, ods y todo lo que empaqueta en zip
+  // `.xls` anterior a 2007 (OLE2/CFB). NO es un zip, así que sin esta rama caería en `text` y el
+  // parser de planillas leería los bytes crudos como si fueran columnas.
+  if (head.startsWith('\xd0\xcf\x11\xe0')) return 'ole2';
   return 'text';
 }
 

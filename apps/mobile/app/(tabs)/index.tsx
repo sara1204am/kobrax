@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import { router } from 'expo-router';
-import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { RouteStatus } from '@kobrax/shared';
 import { COLORS, SPACING, TYPE } from '@/theme';
 import { Header, ListRow, StatTile, StatusBadge } from '@/ui';
 import { authService, type Me } from '@/auth-service';
 import { listCases } from '@/cases.service';
 import { getRoute, listRoutes, routeProgress, type RouteItem } from '@/routes.service';
+import { listPaymentsByDay } from '@/payments.service';
+import { money, todayISO } from '@/agenda-form';
 import { unreadCount } from '@/notifications.service';
 
 /** KPIs de la jornada (calculados en cliente — decisión cerrada). `—` = dato no disponible aún. */
 interface Home {
   me: Me;
+  collected: string;
   assigned: string;
   overdue: string;
   route: RouteItem | null;
@@ -38,11 +41,12 @@ export default function InicioScreen() {
 
     // KPIs en paralelo; cada uno degrada a "—"/null si falla (offline/error no bloquea el Home).
     // "Casos asignados" cuenta solo ABIERTOS (open) → no infla con casos ya cerrados/pagados.
-    const [assignedRes, overdueRes, routesRes, unread] = await Promise.all([
+    const [assignedRes, overdueRes, routesRes, unread, paysRes] = await Promise.all([
       listCases({ assigneeId: me.userId, open: true, limit: 1 }),
       listCases({ assigneeId: me.userId, overdue: true, limit: 1 }),
       listRoutes({ collectorId: me.userId, status: RouteStatus.IN_PROGRESS }),
       unreadCount(),
+      listPaymentsByDay(todayISO()),
     ]);
 
     // ponytail: filtro por status IN_PROGRESS (no por fecha) — un cobrador tiene a lo sumo una
@@ -52,8 +56,21 @@ export default function InicioScreen() {
     const detail = active ? await getRoute(active.id) : null;
     const route = detail && detail.status === 'ok' ? detail.data : active;
 
+    // Cobrado hoy: `GET /payments` devuelve los del TENANT, así que se filtra por quién lo registró
+    // — si no, el Home mostraría lo que cobró otro. Cuenta todo lo suyo, con ruta o sin ella (un
+    // cobro desde la ficha del cliente también es plata cobrada hoy).
+    // ponytail: el techo de 100 pagos/día de `listPaymentsByDay` alcanza para un cobrador; si un
+    // tenant grande lo supera, hace falta paginar o un `registeredBy` en el query.
+    const collected =
+      paysRes.status === 'ok'
+        ? paysRes.data.filter((p) => p.registeredBy === me.userId).reduce((sum, p) => sum + p.amount, 0)
+        : null;
+    // La moneda sale de la cartera: `payments` no la trae y `GET /accounts/me` es 403 para el cobrador.
+    const currency = (assignedRes.status === 'ok' ? assignedRes.data[0]?.currency : undefined) ?? 'BOB';
+
     setHome({
       me,
+      collected: collected === null ? '—' : money(collected, currency),
       assigned: assignedRes.status === 'ok' ? String(assignedRes.total) : '—',
       overdue: overdueRes.status === 'ok' ? String(overdueRes.total) : '—',
       route,
@@ -87,7 +104,13 @@ export default function InicioScreen() {
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <Header
         title="Inicio"
-        right={home.unread > 0 ? <StatusBadge label={`🔔 ${home.unread}`} tone="info" /> : undefined}
+        // El 🔔 siempre lleva al buzón, tenga o no pendientes: si sólo apareciera con no leídas,
+        // no habría forma de volver a leer una vez marcadas.
+        right={
+          <Pressable onPress={() => router.push('/notificaciones')} hitSlop={8} accessibilityRole="button">
+            <StatusBadge label={home.unread > 0 ? `🔔 ${home.unread}` : '🔔'} tone={home.unread > 0 ? 'info' : 'neutral'} />
+          </Pressable>
+        }
       />
       <ScrollView
         contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.lg }}
@@ -110,7 +133,7 @@ export default function InicioScreen() {
         )}
 
         <View style={{ flexDirection: 'row', gap: SPACING.md }}>
-          <StatTile label="Cobrado hoy" value="—" />
+          <StatTile label="Cobrado hoy" value={home.collected} />
           <StatTile label="Casos asignados" value={home.assigned} />
           <StatTile
             label="En mora"
@@ -138,9 +161,6 @@ export default function InicioScreen() {
           />
         )}
 
-        <Text style={{ ...TYPE.caption }}>
-          "Cobrado hoy" se activa con los pagos en campo (P4).
-        </Text>
       </ScrollView>
     </View>
   );

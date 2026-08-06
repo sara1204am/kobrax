@@ -93,6 +93,8 @@ describe('detectFileShape — la forma la dicen los bytes, no la config', () => 
   it('reconoce un PDF y una planilla binaria por su firma', () => {
     assert.equal(detectFileShape(Buffer.from('%PDF-1.1\n...')), 'pdf');
     assert.equal(detectFileShape(Buffer.from('PK\x03\x04algo')), 'zip'); // xlsx
+    // .xls viejo (OLE2): no es zip, y sin su propia rama se leería como texto → columnas basura.
+    assert.equal(detectFileShape(Buffer.from('\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1', 'latin1')), 'ole2');
   });
 
   it('un CSV es texto pelado: se confía en lo configurado', () => {
