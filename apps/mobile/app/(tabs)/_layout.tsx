@@ -4,6 +4,8 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { OfflineIndicator } from '@/ui';
 import { subscribeConnectivity } from '@/store/net';
+import { authService } from '@/auth-service';
+import { hydrate } from '@/sync/hydrate';
 import { COLORS } from '@/theme';
 
 /**
@@ -19,6 +21,18 @@ function tab(name: IconName) {
 
 export default function TabsLayout() {
   useEffect(subscribeConnectivity, []);
+
+  // Hidratación de oficina (P6): al entrar al shell se baja la jornada a la base local, para que
+  // después opere sin señal. Va acá y no en `routeAfterAuth` a propósito — es un efecto, no una
+  // decisión de ruteo, y **nunca se espera**: si no hay red, falla en silencio y se reintenta al
+  // volver a entrar. El cobrador no mira una pantalla de carga por esto.
+  useEffect(() => {
+    void (async () => {
+      const me = await authService.me();
+      if (me.status === 'ok') await hydrate(me.me.userId);
+    })();
+  }, []);
+
   return (
     <View style={{ flex: 1 }}>
       <OfflineIndicator />
