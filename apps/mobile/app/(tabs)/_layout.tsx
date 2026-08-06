@@ -6,6 +6,7 @@ import { OfflineIndicator } from '@/ui';
 import { subscribeConnectivity } from '@/store/net';
 import { authService } from '@/auth-service';
 import { hydrate } from '@/sync/hydrate';
+import { startSync } from '@/sync/sync.service';
 import { COLORS } from '@/theme';
 
 /**
@@ -27,10 +28,17 @@ export default function TabsLayout() {
   // decisión de ruteo, y **nunca se espera**: si no hay red, falla en silencio y se reintenta al
   // volver a entrar. El cobrador no mira una pantalla de carga por esto.
   useEffect(() => {
+    let stopSync: (() => void) | undefined;
     void (async () => {
       const me = await authService.me();
-      if (me.status === 'ok') await hydrate(me.me.userId);
+      if (me.status !== 'ok') return;
+      // El motor de sync arranca ANTES de hidratar: lo que el cobrador hizo ayer sin señal sube
+      // primero, y recién después se baja lo nuevo. Al revés, una hidratación lenta retrasaría
+      // un pago que ya está esperando.
+      stopSync = startSync(me.me.userId);
+      await hydrate(me.me.userId);
     })();
+    return () => stopSync?.();
   }, []);
 
   return (
