@@ -12,8 +12,11 @@ import { AddStopDto, CreateRouteDto, GenerateRouteDto, ListRoutesQueryDto, Updat
 export class RoutesController {
   constructor(private readonly routes: RoutesService) {}
 
+  // Puerta mínima, igual que `generate`: el cobrador arma SU ruta desde el mapa (RT-1) y no tiene
+  // ROUTE_WRITE — con esa puerta el flujo entero moría en 403. Para quién es la ruta lo decide
+  // `collectorFor` en el service, que ya 403ea a quien no ejecuta ni asigna.
   @Post()
-  @Roles(Permission.ROUTE_WRITE)
+  @Roles(Permission.ROUTE_READ)
   create(@Body() dto: CreateRouteDto) {
     return this.routes.create(dto);
   }
