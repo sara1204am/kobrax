@@ -20,7 +20,7 @@ Racional (confirmado en [ui-screen-map §7](./ui-screen-map.md)): **leer antes d
 | **P3** | `plans/P3-rutas.md` | 🟢 | Rutas sin mapa: lifecycle, lista de paradas, confirmar/iniciar, resumen jornada | P1 |
 | **P5** | `plans/P5-import-movil.md` | 🟢 | Import móvil (perfil independiente): bulk + carga rápida. **Gap web: ver §4** | P1 |
 | — | — | 🔵 | **⟰ Frontera dev build (`expo prebuild`) ⟱** | — |
-| **P6** | `plans/P6-offline-sync.md` | 🔵 | Dev build + WatermelonDB (schema espejo) + `SyncService` (FIFO/backoff/conflictos); **retro-encaje** en los services de P1–P5 | P0–P5 |
+| **P6** | `plans/P6-offline-sync.md` | 🔵 | Caché local + cola de escritura + `SyncService` (FIFO/backoff); **retro-encaje** en los services de P1–P5. ⚠️ **El motor ya NO es WatermelonDB** — ver `plans/P6-offline-sync.md §4 D1` | P0–P5 |
 | **P7** | `plans/P7-mapas.md` | 🔵 | MapLibre online+offline (packs región); vistas de mapa de Rutas | P3, P6 |
 | **P8** | `plans/P8-evidencia.md` | 🔵 | Cámara + GPS + firma + **SHA-256 sobre buffer original**; `evidence.service`. **Reusa el módulo `uploads` que construye Cartera** (subida + hash); le agrega GPS y el vínculo a `field_evidences` | P6, Cartera |
 | **P9** | `plans/P9-push-pinning.md` | 🔵 | Push (asignaciones) + `collector.location` + **SSL pinning con pins reales** | P6 |

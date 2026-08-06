@@ -51,7 +51,13 @@ Dar al cobrador una app **offline-first, simple y a prueba de campo** para ejecu
 
 ### 3.1 Incluye ✅
 
-- **Motor offline-first**: WatermelonDB local (schema espejo del subset operativo), cola de sync FIFO, optimistic updates, `OfflineIndicator`.
+- **Motor offline-first**: caché local del subset operativo, cola de sync FIFO, optimistic updates, `OfflineIndicator`.
+  > **Corrección 2026-08-06 (al planificar P6):** decía *WatermelonDB*. Se cambió a **caché en
+  > `expo-file-system` + cola propia**. Motivo medido: el protocolo de sync de WatermelonDB exige
+  > endpoints `pullChanges`/`pushChanges` que **no existen en la API**, y `payments`/`field_visits`
+  > no tienen `updated_at` (son append-only) → no encajan en su modelo. Además el producto no
+  > necesita sync bidireccional: el ciclo es *oficina → campo → vuelta*, un solo dispositivo edita
+  > lo suyo. Razones completas y el techo declarado en [`F10/plans/P6-offline-sync.md §4`](./F10/plans/P6-offline-sync.md).
 - **`SyncService`**: subida de cambios pendientes cada ~30 s con red, retry con backoff exponencial (3 intentos), resolución de conflictos last-write-wins por timestamp del servidor, redirección a login ante error de auth — **nunca pierde datos locales**.
 - **Ruta del día** (F6): lista ordenada de paradas por prioridad, mapa de la ruta, navegación a cada parada, estado de visita.
 - **Mis casos** (F5): casos asignados al cobrador, detalle, gestión/actividad, transiciones permitidas en campo.
