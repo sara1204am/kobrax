@@ -19,16 +19,25 @@
 import * as SQLite from 'expo-sqlite';
 
 /** Sube cuando cambia la forma de `cache`. Al no coincidir se borra el caché — nunca la cola. */
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const DB_NAME = 'kobrax.db';
 
-/** Qué guarda cada fila del caché. Un valor por recurso que el móvil lee. */
+/**
+ * Qué guarda cada fila del caché.
+ *
+ * Los `*.detail` van aparte **porque no son la misma forma que su lista**: `AgendaItemDetail` es un
+ * compuesto (gestión + deudor + saldo + historial), no un `AgendaListItem`. Bajo una sola clave, una
+ * lectura de detalle devolvería a veces la fila de la lista y el objeto llegaría mutilado.
+ * `route` no necesita split: el listado y el detalle son el mismo `RouteItem`.
+ */
 export type CacheKind =
   | 'client'
   | 'case'
+  | 'case.detail'
   | 'credit'
   | 'route'
   | 'agenda'
+  | 'agenda.detail'
   | 'catalog'
   | 'notification';
 
@@ -62,13 +71,17 @@ function open(): Promise<SQLite.SQLiteDatabase> {
       PRAGMA journal_mode = WAL;
       CREATE TABLE IF NOT EXISTS cache (
         kind       TEXT    NOT NULL,
+        scope      TEXT    NOT NULL DEFAULT '',
         id         TEXT    NOT NULL,
-        scope      TEXT,
         json       TEXT    NOT NULL,
         fetched_at INTEGER NOT NULL,
-        PRIMARY KEY (kind, id)
+        -- El scope entra en la clave porque una misma entidad vive en varias listas a la vez (un
+        -- caso está en la cartera Y en el conteo del Home). Con PK (kind,id) la segunda lista
+        -- le pisaba el scope a la primera y la entidad desaparecía de aquella.
+        PRIMARY KEY (kind, scope, id)
       );
       CREATE INDEX IF NOT EXISTS idx_cache_scope ON cache (kind, scope);
+      CREATE INDEX IF NOT EXISTS idx_cache_id ON cache (kind, id);
       CREATE TABLE IF NOT EXISTS queue (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id         TEXT    NOT NULL,
@@ -114,10 +127,10 @@ export async function putAll<T extends { id: string }>(
   const now = Date.now();
   await db.withTransactionAsync(async () => {
     for (const item of items) {
-      await db.runAsync('INSERT OR REPLACE INTO cache (kind, id, scope, json, fetched_at) VALUES (?, ?, ?, ?, ?)', [
+      await db.runAsync('INSERT OR REPLACE INTO cache (kind, scope, id, json, fetched_at) VALUES (?, ?, ?, ?, ?)', [
         kind,
+        scopeOf?.(item) ?? '',
         item.id,
-        scopeOf?.(item) ?? null,
         JSON.stringify(item),
         now,
       ]);
@@ -125,14 +138,32 @@ export async function putAll<T extends { id: string }>(
   });
 }
 
-/** Una ficha por id — sin cargar el resto de la cartera. */
+/** Guarda un valor suelto que no tiene forma de entidad (el compuesto de un detalle, por ejemplo). */
+export async function putOne(kind: CacheKind, id: string, value: unknown): Promise<void> {
+  const db = await open();
+  await db.runAsync('INSERT OR REPLACE INTO cache (kind, scope, id, json, fetched_at) VALUES (?, ?, ?, ?, ?)', [
+    kind,
+    '',
+    id,
+    JSON.stringify(value),
+    Date.now(),
+  ]);
+}
+
+/**
+ * Una ficha por id, **sin importar de qué lista vino** — por eso no filtra por scope. Es lo que
+ * permite abrir el detalle de un cliente que sólo se vio dentro de la cartera.
+ */
 export async function getOne<T>(kind: CacheKind, id: string): Promise<T | null> {
   const db = await open();
-  const row = await db.getFirstAsync<{ json: string }>('SELECT json FROM cache WHERE kind = ? AND id = ?', [kind, id]);
+  const row = await db.getFirstAsync<{ json: string }>(
+    'SELECT json FROM cache WHERE kind = ? AND id = ? ORDER BY fetched_at DESC LIMIT 1',
+    [kind, id],
+  );
   return row ? (JSON.parse(row.json) as T) : null;
 }
 
-/** Todo lo de un recurso, o sólo lo de un `scope` (ej. la agenda de un día). */
+/** Todo lo de un recurso, o sólo lo de un `scope` (la respuesta guardada de una consulta). */
 export async function getMany<T>(kind: CacheKind, scope?: string): Promise<T[]> {
   const db = await open();
   const rows =
@@ -165,7 +196,7 @@ export async function replaceAll<T extends { id: string }>(
   const db = await open();
   if (scope === undefined) await db.runAsync('DELETE FROM cache WHERE kind = ?', [kind]);
   else await db.runAsync('DELETE FROM cache WHERE kind = ? AND scope = ?', [kind, scope]);
-  await putAll(kind, items, scopeOf ?? (() => scope ?? null));
+  await putAll(kind, items, scopeOf ?? (() => scope ?? ''));
 }
 
 /** El logout borra la copia de datos del tenant. **No toca la cola** (plan §Q3). */

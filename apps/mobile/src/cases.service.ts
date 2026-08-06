@@ -6,6 +6,7 @@
  */
 import type { CasePriority, CaseStatus, CreditOrigin, PaymentFrequency } from '@kobrax/shared';
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
+import { cachedList, cachedOne } from './sync/cached';
 
 /**
  * Un punto del cliente en el mapa. `ownerName` presente ⇒ la ubicación es de un garante o familiar,
@@ -69,13 +70,14 @@ export interface ListCasesParams {
 
 export function listCases(params: ListCasesParams): Promise<QueryResult<CaseListItem[]>> {
   // `overdue`/`open` viajan como 'true'/'false' (el DTO del API los valida como string, no boolean).
-  return apiQuery<CaseListItem[]>(
-    `/cases${toQuery({
-      ...params,
-      overdue: params.overdue ? 'true' : undefined,
-      open: params.open ? 'true' : undefined,
-    })}`,
-  );
+  const query = toQuery({
+    ...params,
+    overdue: params.overdue ? 'true' : undefined,
+    open: params.open ? 'true' : undefined,
+  });
+  // La query ES la clave del respaldo local: cada combinación de filtros guarda su propia
+  // respuesta, porque quien decide qué casos entran es el servidor (P6 · `sync/cached.ts`).
+  return cachedList<CaseListItem>('case', query || 'all', () => apiQuery<CaseListItem[]>(`/cases${query}`));
 }
 
 /** Una gestión del historial del caso (`serializeActivity`). */
@@ -94,7 +96,7 @@ export interface CaseDetail extends CaseListItem {
 }
 
 export function getCase(id: string): Promise<QueryResult<CaseDetail>> {
-  return apiQuery<CaseDetail>(`/cases/${id}`);
+  return cachedOne<CaseDetail>('case.detail', id, () => apiQuery<CaseDetail>(`/cases/${id}`));
 }
 
 /** Promesa de pago de una gestión (§5.4): crea también un agenda_item PROMISE_TO_PAY. */

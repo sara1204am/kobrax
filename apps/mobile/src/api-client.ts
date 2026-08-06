@@ -75,7 +75,13 @@ export async function authedFetch<T>(
  * re-login / error. `total` viene de `meta.total` (KPIs de conteo) o del largo del array.
  */
 export type QueryResult<T> =
-  | { status: 'ok'; data: T; total: number }
+  /**
+   * `localAt` (P6): el dato salió de la base local porque no había red, y es de ese momento. Ausente
+   * = viene del servidor, recién horneado. Sirve para que la pantalla pueda decir "datos de las
+   * 08:15" en vez de mostrarlos como si fueran de ahora. Opcional a propósito: quien no lo mire
+   * sigue funcionando igual.
+   */
+  | { status: 'ok'; data: T; total: number; localAt?: number | null }
   | { status: 'offline' }
   | { status: 'unauthenticated' }
   | { status: 'error'; message: string };

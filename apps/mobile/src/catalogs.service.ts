@@ -1,6 +1,7 @@
 /** Catálogos configurables por tenant (medios de pago, bancos, …). Thin sobre `apiQuery`. */
 import type { CatalogType } from '@kobrax/shared';
 import { apiQuery, type QueryResult } from './api-client';
+import { cachedList } from './sync/cached';
 
 export interface CatalogOption {
   id: string;
@@ -12,9 +13,10 @@ export interface CatalogOption {
   metadata: { requiresBank?: boolean; body?: string } | null;
 }
 
-/** Ítems activos del catálogo, ya ordenados por el server. */
+/** Ítems activos del catálogo, ya ordenados por el server. Con respaldo local: sin medios de pago
+ * en la base, el sheet de registrar un cobro se abre vacío en medio del campo. */
 export function listCatalog(catalog: CatalogType): Promise<QueryResult<CatalogOption[]>> {
-  return apiQuery<CatalogOption[]>(`/catalogs/${catalog}`);
+  return cachedList<CatalogOption>('catalog', catalog, () => apiQuery<CatalogOption[]>(`/catalogs/${catalog}`));
 }
 
 /**

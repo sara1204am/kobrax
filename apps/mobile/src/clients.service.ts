@@ -3,6 +3,7 @@
  * PII enmascarada; el filtro por asignación lo aplica `/agenda/clients/:id/context` al elegirlo.
  */
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
+import { cachedOne } from './sync/cached';
 
 export interface ClientHit {
   id: string;
@@ -124,7 +125,10 @@ export interface ClientDetail {
 }
 
 export function getClient(id: string, reveal = false): Promise<QueryResult<ClientDetail>> {
-  return apiQuery<ClientDetail>(`/clients/${id}${reveal ? '?reveal=true' : ''}`);
+  // `reveal` pide PII en claro y queda auditado en el server: **eso nunca sale del caché**, se
+  // pide en línea siempre. Sin `reveal` es la ficha normal y sí tiene respaldo local.
+  if (reveal) return apiQuery<ClientDetail>(`/clients/${id}?reveal=true`);
+  return cachedOne<ClientDetail>('client', id, () => apiQuery<ClientDetail>(`/clients/${id}`));
 }
 
 // ── Sub-recursos (los usa el formulario único al guardar una edición) ─────────
