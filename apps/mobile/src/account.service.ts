@@ -39,6 +39,8 @@ export interface MyProfile {
   lastName: string | null;
   phone: string | null;
   photoUrl: string | null;
+  /** QR bancario propio, el que se le muestra al deudor para que pague desde su app del banco. */
+  paymentQrUrl: string | null;
 }
 
 export interface ProfilePatch {
@@ -46,6 +48,8 @@ export interface ProfilePatch {
   lastName?: string;
   phone?: string;
   photoUrl?: string;
+  /** `null` = quitarlo. Ausente = no tocarlo. */
+  paymentQrUrl?: string | null;
 }
 
 export interface SignupPayload {

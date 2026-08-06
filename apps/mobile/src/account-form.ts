@@ -66,6 +66,8 @@ export interface ProfileForm {
   lastName: string;
   phone: string;
   photoUrl: string;
+  /** URL del QR de cobro. `''` = no tiene, y quitarlo se traduce a `null` en `diffProfile`. */
+  paymentQrUrl: string;
 }
 
 /** `null` = válido. El mensaje es el que se pinta bajo el campo. */
@@ -160,7 +162,11 @@ export function diffAccount(before: AccountForm, after: AccountForm): AccountPat
 }
 
 export function diffProfile(before: ProfileForm, after: ProfileForm): ProfilePatch {
-  return diffFields(before, after);
+  const patch: ProfilePatch = diffFields(before, after);
+  // Vaciar el QR es QUITARLO, y eso viaja como `null`: el server distingue `null` (borrar) de
+  // ausente (no tocar), y `''` no pasaría su validación de longitud.
+  if (patch.paymentQrUrl === '') patch.paymentQrUrl = null;
+  return patch;
 }
 
 export function hasChanges(patch: object): boolean {

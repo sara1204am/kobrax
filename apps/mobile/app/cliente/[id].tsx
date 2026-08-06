@@ -14,6 +14,7 @@ import { clientDisplayName, getClient, type ClientDetail } from '@/clients.servi
 import { addActivity, getCase, type CaseDetail } from '@/cases.service';
 import { createPayment, listPayments, type PaymentItem, type PaymentMethod } from '@/payments.service';
 import { uploadImage } from '@/uploads.service';
+import { MiQrCobro } from '@/qr-cobro';
 import { buildTimeline, promiseReady, recovered, type TimelineEntry } from '@/ficha';
 
 const METHODS: { value: PaymentMethod; label: string }[] = [
@@ -456,6 +457,7 @@ function PaySheet({
       <AmountInput value={amount} onChangeText={setAmount} currencySymbol={currency} accessibilityLabel="Monto del pago" />
       <SectionLabel>Método</SectionLabel>
       <Chips options={METHODS} value={method} onChange={setMethod} />
+      {method === 'QR' && <MiQrCobro />}
       <Pressable style={styles.receiptBtn} onPress={capture} disabled={uploading} accessibilityRole="button">
         <Text style={styles.receiptText}>{uploading ? 'Subiendo…' : receipt ? '📷 Comprobante listo' : '📷 Foto de comprobante'}</Text>
       </Pressable>

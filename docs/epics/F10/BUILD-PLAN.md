@@ -96,15 +96,29 @@ Notas de sync (relevantes para P6): `case_activities`, `field_visits`, `field_ev
 
 | # | Qué | Estado | Notas |
 |---|---|---|---|
-| **1** | **Los 4 sueltos** (abajo el detalle) | ⬜ | Cosas chicas y dispersas que hoy dejan huecos visibles |
-| 1.a | "Cobrado hoy" del Home deja de ser `—` | ⬜ | KPI en cliente; `listPaymentsByDay` **ya existe** (lo usa Rutas S6) |
-| 1.b | **Pantalla de notificaciones** | ⬜ | El badge 🔔 del Home no navega. Endpoints listos (`GET /notifications`, `POST /:id/read`, `POST /read-all`). Figma `64:538` |
-| 1.c | **Cobro por QR/link** (`payment-requests`) | ⬜ | Existe en la API, cero en el móvil. ⚠️ `confirmRequest` exige `PAYMENT_APPROVE`, que el COLLECTOR **no tiene** → definir el flujo antes de construir |
-| 1.d | **Leer Excel en el import** | ⬜ | La dep `xlsx` nunca se instaló (aprobada en import R7). Hoy sólo entra CSV y PDF |
+| **1** | **Los 4 sueltos** | ✅ **2026-08-06** | |
+| 1.a | "Cobrado hoy" del Home deja de ser `—` | ✅ | Suma los pagos del día **filtrando por quién los registró**: `GET /payments` devuelve los del tenant |
+| 1.b | **Pantalla de notificaciones** | ✅ | `app/notificaciones.tsx`; el 🔔 del Home lleva siempre, tenga o no pendientes |
+| 1.c | **Cobro por QR** | ✅ | **Sin pasarela, por decisión:** el cobrador muestra la foto del QR de SU banco (`Profile.paymentQrUrl`, se carga en Mi perfil) y registra el pago a mano con método QR. Ver abajo |
+| 1.d | **Leer Excel en el import** | ✅ | Va **`exceljs`, no `xlsx`** (corrige import R7): SheetJS quedó en 0.18.5 en npm con CVEs sin arreglar, y esto parsea archivos que sube el usuario |
 | **2** | **Home más funcional** | ⬜ | Cierra la tanda de sueltos: el Home es la primera pantalla del día y hoy es casi sólo contadores |
 | **3** | **P6 · offline / WatermelonDB** | ⬜ | El hueco más grande: hoy la app es 100% online contra el principio no negociable #4. Incluye el retro-encaje en los services de todos los módulos ya construidos |
 | **4** | **P9 · push + SSL pinning** | ⬜ | `expo-notifications` sin instalar; el pinning corre en NO-OP (lo avisa Metro en cada arranque) |
 | **5** | **Limpieza y orden de todo el módulo celular** | ⬜ | Pasada final: `/ponytail-review` pendiente de cuenta e import, deduplicar, `BASE-INVENTORY` al día |
+
+### El cobro por QR, y por qué no usa `payment_requests` (2026-08-06)
+
+El backend tiene `payment_requests` (`POST /payment-requests` + `/confirm`), y **queda sin usar a
+propósito**. Genera un `qrPayload` con formato propio (`KOBRAX|ref|monto`) que no es EMVCo ni el
+estándar del BCB — **ningún banco ni billetera lo lee** — y una URL `pay.kobrax.demo` que no existe;
+además `confirmRequest`, que es lo que realmente crea el pago, exige `PAYMENT_APPROVE`, que el
+COLLECTOR no tiene. Construirlo habría dado una pantalla que no cobra un peso.
+
+Lo que se construyó es lo que ya se hace en la calle: el cobrador carga la foto del QR de su cuenta
+bancaria en **Mi perfil** (`Profile.paymentQrUrl`), la muestra a pantalla completa desde la hoja de
+pago cuando elige método QR, el deudor paga desde su banco y el cobro **se registra a mano**. Cero
+pasarela. Cuando haya una integración real, `src/qr-cobro.tsx` es la pantalla que la consume y
+`payment_requests` el backend que la respalda.
 
 ### Diferido a la **segunda versión** (decisión de la usuaria, 2026-08-06)
 - **P8 · firma digital** — la evidencia sigue funcionando sin ella: foto + **SHA-256** + GPS ya están

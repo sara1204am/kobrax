@@ -12,7 +12,7 @@ import { uploadImage } from '@/uploads.service';
 import { getMyProfile, updateMyProfile } from '@/account.service';
 import { diffProfile, hasChanges, validateProfile, type ProfileForm } from '@/account-form';
 
-const EMPTY: ProfileForm = { firstName: '', lastName: '', phone: '', photoUrl: '' };
+const EMPTY: ProfileForm = { firstName: '', lastName: '', phone: '', photoUrl: '', paymentQrUrl: '' };
 
 /**
  * Mi perfil (CUENTA S1). **Sin gating por permiso** (S1-D4): es de uno mismo, y exigir
@@ -29,6 +29,7 @@ export default function PerfilScreen() {
   const [rol, setRol] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [subiendo, setSubiendo] = useState(false);
+  const [subiendoQr, setSubiendoQr] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
   const online = useNetStore((s) => s.isConnected);
@@ -41,6 +42,7 @@ export default function PerfilScreen() {
         lastName: res.data.lastName ?? '',
         phone: res.data.phone ?? '',
         photoUrl: res.data.photoUrl ?? '',
+        paymentQrUrl: res.data.paymentQrUrl ?? '',
       };
       setBefore(f);
       setForm(f);
@@ -70,6 +72,17 @@ export default function PerfilScreen() {
     setSubiendo(false);
     if (res.status === 'ok') setForm((f) => ({ ...f, photoUrl: res.url }));
     else setError(res.status === 'offline' ? 'Sin conexión: la foto no se subió.' : 'No se pudo subir la foto.');
+  }
+
+  /** Mismo camino que la foto: la captura del QR del banco sale de la galería o de la cámara. */
+  async function cambiarQr() {
+    const picked = await choosePhoto();
+    if (!picked) return;
+    setSubiendoQr(true);
+    const res = await uploadImage(picked.uri, picked.mimeType);
+    setSubiendoQr(false);
+    if (res.status === 'ok') setForm((f) => ({ ...f, paymentQrUrl: res.url }));
+    else setError(res.status === 'offline' ? 'Sin conexión: el QR no se subió.' : 'No se pudo subir el QR.');
   }
 
   async function guardar() {
@@ -139,6 +152,37 @@ export default function PerfilScreen() {
           placeholder="77712345"
         />
 
+        <SectionLabel>Mi QR de cobro</SectionLabel>
+        <Text style={styles.hint}>
+          Subí la foto del QR de tu cuenta bancaria. Se lo mostrás al deudor, él paga desde su banco
+          y vos registrás el pago con método QR.
+        </Text>
+        <View style={styles.qrWrap}>
+          <Pressable onPress={() => void cambiarQr()} accessibilityRole="button" disabled={subiendoQr}>
+            {form.paymentQrUrl ? (
+              <Image source={{ uri: form.paymentQrUrl }} style={styles.qr} accessibilityLabel="Tu QR de cobro" />
+            ) : (
+              <View style={[styles.qr, styles.qrEmpty]}>
+                <Text style={styles.qrIcon}>⬛</Text>
+                <Text style={styles.hint}>Sin QR cargado</Text>
+              </View>
+            )}
+          </Pressable>
+          {subiendoQr ? (
+            <Text style={styles.hint}>Subiendo…</Text>
+          ) : form.paymentQrUrl ? (
+            <Pressable
+              onPress={() => setForm((f) => ({ ...f, paymentQrUrl: '' }))}
+              hitSlop={8}
+              accessibilityRole="button"
+            >
+              <Text style={styles.quitar}>Quitar</Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.hint}>Tocá el cuadro para cargarlo</Text>
+          )}
+        </View>
+
         <SectionLabel>Sesión</SectionLabel>
         <Text style={styles.readonlyValue}>{email}</Text>
         <Text style={styles.hint}>{rol ? `Tu rol: ${rol}` : ''}</Text>
@@ -169,6 +213,19 @@ const styles = {
     borderColor: COLORS.border,
   },
   iniciales: { ...TYPE.h1, color: COLORS.navy },
+  qrWrap: { alignItems: 'center' as const, gap: SPACING.sm },
+  qr: { width: 160, height: 160, borderRadius: RADIUS.card },
+  qrEmpty: {
+    backgroundColor: COLORS.lightBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: SPACING.sm,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed' as const,
+  },
+  qrIcon: { fontSize: 32, color: COLORS.muted },
+  quitar: { ...TYPE.secondary, color: COLORS.danger, fontWeight: '600' as const },
   readonlyValue: { ...TYPE.body, fontWeight: '600' as const, color: COLORS.text },
   hint: { ...TYPE.caption },
   footer: {

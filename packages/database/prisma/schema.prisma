@@ -177,6 +177,9 @@ model Profile {
   phone            String?
   documentNumber   String?   @map("document_number")
   photoUrl         String?   @map("photo_url")
+  /// QR de cobro propio: la imagen del QR bancario que el cobrador le muestra al deudor para que
+  /// pague desde su banco. No es una pasarela — el pago se registra a mano con método QR.
+  paymentQrUrl     String?   @map("payment_qr_url")
   language         String    @default("es")
   employeeCode     String?   @map("employee_code")
   supervisorUserId String?   @map("supervisor_user_id") // referencia suave a users.id

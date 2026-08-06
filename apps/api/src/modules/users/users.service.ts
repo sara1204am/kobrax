@@ -297,6 +297,7 @@ export class UsersService {
           lastName: dto.lastName,
           phone: dto.phone,
           photoUrl: dto.photoUrl,
+          paymentQrUrl: dto.paymentQrUrl,
         },
       });
       const user = await tx.user.findUnique({ where: { id: userId }, include: { profile: true } });

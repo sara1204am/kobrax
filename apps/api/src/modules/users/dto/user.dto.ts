@@ -24,4 +24,9 @@ export class UpdateProfileDto {
   @IsOptional() @IsString() @Length(1, 80) lastName?: string;
   @IsOptional() @IsString() @Length(5, 32) phone?: string;
   @IsOptional() @IsString() @Length(1, 500) photoUrl?: string;
+  /**
+   * QR de cobro propio. Acepta `null` a propósito: es la forma de QUITARLO. `@IsOptional` deja
+   * pasar el null sin validar el string, y `undefined` (campo ausente) significa "no lo toques".
+   */
+  @IsOptional() @IsString() @Length(1, 500) paymentQrUrl?: string | null;
 }

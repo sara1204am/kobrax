@@ -36,6 +36,7 @@ export function serializeProfile(user: User & { profile: Profile | null }) {
     lastName: user.profile?.lastName ?? null,
     phone: user.profile?.phone ?? null,
     photoUrl: user.profile?.photoUrl ?? null,
+    paymentQrUrl: user.profile?.paymentQrUrl ?? null,
   };
 }
 

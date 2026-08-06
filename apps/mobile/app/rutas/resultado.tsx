@@ -8,6 +8,7 @@ import { AmountInput, Chips, Header, SectionLabel } from '@/ui';
 import { Button, ErrorBanner } from '@/components';
 import { choosePhoto } from '@/photo';
 import { uploadImage } from '@/uploads.service';
+import { MiQrCobro } from '@/qr-cobro';
 import { money, todayISO } from '@/agenda-form';
 import { listCatalogCached, type CatalogOption } from '@/catalogs.service';
 import { createItem } from '@/agenda.service';
@@ -226,6 +227,7 @@ export default function ResultadoScreen() {
               value={form.paymentMethodCode as (typeof PAY_METHODS)[number]['value']}
               onChange={(v) => set({ paymentMethodCode: v })}
             />
+            {form.paymentMethodCode === 'QR' && <MiQrCobro />}
             {/*
               El mockup pide un "número de recibo" escrito a mano, pero `payments.receipt_number` es
               un entero del sistema, no un texto libre: no hay dónde guardarlo. Se usa la foto del
