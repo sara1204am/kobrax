@@ -31,7 +31,7 @@ import {
   ScheduleTimeMode,
   CatalogType,
 } from '@prisma/client';
-import { validateAgendaDetails } from '@kobrax/shared';
+import { ROLE_PERMISSIONS, RoleType, validateAgendaDetails } from '@kobrax/shared';
 import bcrypt from 'bcryptjs';
 import { createCipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
 
@@ -101,31 +101,20 @@ const PERMISSIONS = [
   ['audit:read', 'audit', 'READ', 'ACCOUNT'],
 ] as const;
 
-// Roles del sistema → permisos base. '*' = todos.
-const ROLES: Record<string, { level: number; perms: string[] | '*' }> = {
-  SUPER_ADMIN: { level: 100, perms: '*' },
-  ACCOUNT_ADMIN: { level: 90, perms: PERMISSIONS.map((p) => p[0]).filter((c) => c !== 'audit:read') },
-  MANAGER: {
-    level: 70,
-    perms: ['case:read', 'case:write', 'case:assign', 'case:close', 'payment:read', 'payment:approve', 'route:read', 'route:write', 'route:assign', 'agenda:read', 'agenda:write', 'agenda:assign', 'catalog:read', 'catalog:write', 'client:read', 'client:write', 'client:pii:read', 'client:import', 'credit:read', 'credit:write', 'credit:pii:read', 'report:read', 'report:export', 'account:read', 'user:read'],
-  },
-  SUPERVISOR: {
-    level: 50,
-    perms: ['case:read', 'case:write', 'case:assign', 'payment:read', 'route:read', 'route:write', 'route:assign', 'agenda:read', 'agenda:write', 'agenda:assign', 'catalog:read', 'client:read', 'credit:read', 'report:read'],
-  },
-  COLLECTOR: {
-    // `client:write`/`credit:write`: el cobrador independiente da de alta su propia cartera (spec §3).
-    // `client:import`: la misma alta, pero desde archivo — es el módulo Import del móvil (F10), donde
-    // COLLECTOR es el único rol que entra. Sin esto el módulo es 403 para su propio dueño.
-    // El gating por tipo de tenant (import-only en ENTERPRISE) es P10, y va por capacidad, no por accountType.
-    level: 30,
-    perms: ['case:read', 'case:write', 'payment:read', 'payment:write', 'route:read', 'route:execute', 'agenda:read', 'agenda:write', 'catalog:read', 'client:read', 'client:write', 'client:import', 'credit:read', 'credit:write'],
-  },
-  AUDITOR: {
-    level: 20,
-    perms: ['case:read', 'payment:read', 'route:read', 'client:read', 'client:pii:read', 'credit:read', 'credit:pii:read', 'report:read', 'report:export', 'audit:read'],
-  },
-  VIEWER: { level: 10, perms: ['case:read', 'payment:read', 'route:read', 'client:read', 'report:read'] },
+/**
+ * Roles del sistema → nivel. **Los permisos NO se listan acá**: salen de `ROLE_PERMISSIONS` de
+ * `@kobrax/shared`, que es la fuente única. Hasta 2026-08-06 este archivo tenía su propia lista y
+ * las dos se separaron en silencio (shared quedó sin agenda/catálogos/import/credit:write). El JWT
+ * sale de la DB, así que la app andaba y la divergencia sólo se veía en `realtime.helpers.ts`.
+ */
+const ROLES: Record<RoleType, { level: number }> = {
+  [RoleType.SUPER_ADMIN]: { level: 100 },
+  [RoleType.ACCOUNT_ADMIN]: { level: 90 },
+  [RoleType.MANAGER]: { level: 70 },
+  [RoleType.SUPERVISOR]: { level: 50 },
+  [RoleType.COLLECTOR]: { level: 30 },
+  [RoleType.AUDITOR]: { level: 20 },
+  [RoleType.VIEWER]: { level: 10 },
 };
 
 async function main() {
@@ -148,7 +137,7 @@ async function main() {
       update: { level: def.level, isSystem: true },
       create: { name, level: def.level, isSystem: true },
     });
-    const codes = def.perms === '*' ? PERMISSIONS.map((p) => p[0]) : def.perms;
+    const codes = ROLE_PERMISSIONS[name as RoleType] as string[];
     const perms = await prisma.permission.findMany({ where: { code: { in: codes as string[] } } });
     for (const perm of perms) {
       await prisma.rolePermission.upsert({

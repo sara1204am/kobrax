@@ -21,13 +21,19 @@ export default function CuentaScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [acc, meRes] = await Promise.all([getAccount(), authService.me()]);
+    const meRes = await authService.me();
+    if (meRes.status !== 'ok') return;
+    setMe(meRes.me);
+    // Sin `account:read` no se pide: el cobrador no administra la cuenta y `GET /accounts/me` le
+    // contesta 403. Pedirlo igual le pintaba un banner de error en su propio perfil (S1-D4: el
+    // gating es por capacidad, y vale para leer, no sólo para escribir).
+    if (!meRes.me.permissions.includes('account:read')) return;
+    const acc = await getAccount();
     if (acc.status === 'ok') {
       setAccount(acc.data);
       setError(null);
     } else if (acc.status === 'offline') setError('Sin conexión. Los datos de la cuenta se leen en línea.');
     else if (acc.status === 'error') setError(acc.message);
-    if (meRes.status === 'ok') setMe(meRes.me);
   }, []);
 
   // Al volver de datos/perfil hay que releer: pudieron cambiar.
@@ -42,6 +48,10 @@ export default function CuentaScreen() {
   // Sin `account:write` la cuenta se ve pero no se toca (S1-D4). El gating es por
   // capacidad, nunca por tipo de cuenta ni por plan.
   const puedeEditar = !!me?.permissions.includes('account:write');
+  // Y sin `account:read` directamente no hay sección "Mi negocio": las dos filas llevaban a
+  // pantallas que le contestan 403 (`/accounts/me` y `/users`). Al cobrador le queda su perfil,
+  // que es lo único de acá que le pertenece.
+  const puedeVerNegocio = !!me?.permissions.includes('account:read');
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
@@ -58,26 +68,30 @@ export default function CuentaScreen() {
           onPress={() => router.push('/cuenta/perfil')}
         />
 
-        <SectionLabel>Mi negocio</SectionLabel>
-        <ListRow
-          title="Datos de la cuenta"
-          subtitle={account ? `${account.businessName} · ${account.currencyCode}` : 'Nombre, país y moneda'}
-          icon="business-outline"
-          onPress={() => router.push('/cuenta/datos')}
-        />
-        <ListRow
-          title="Miembros"
-          subtitle={
-            account
-              ? `${account.memberCount} de ${account.maxUsers}`
-              : 'Invitar y administrar tu equipo'
-          }
-          icon="people-outline"
-          onPress={() => router.push('/cuenta/miembros')}
-        />
+        {puedeVerNegocio && (
+          <>
+            <SectionLabel>Mi negocio</SectionLabel>
+            <ListRow
+              title="Datos de la cuenta"
+              subtitle={account ? `${account.businessName} · ${account.currencyCode}` : 'Nombre, país y moneda'}
+              icon="business-outline"
+              onPress={() => router.push('/cuenta/datos')}
+            />
+            <ListRow
+              title="Miembros"
+              subtitle={
+                account
+                  ? `${account.memberCount} de ${account.maxUsers}`
+                  : 'Invitar y administrar tu equipo'
+              }
+              icon="people-outline"
+              onPress={() => router.push('/cuenta/miembros')}
+            />
 
-        {!puedeEditar && (
-          <SectionLabel>Tu rol no permite editar los datos del negocio</SectionLabel>
+            {!puedeEditar && (
+              <SectionLabel>Tu rol no permite editar los datos del negocio</SectionLabel>
+            )}
+          </>
         )}
       </ScrollView>
     </View>
