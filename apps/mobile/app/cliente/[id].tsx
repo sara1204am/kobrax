@@ -15,6 +15,7 @@ import { addActivity, getCase, type CaseDetail } from '@/cases.service';
 import { createPayment, listPayments, type PaymentItem, type PaymentMethod } from '@/payments.service';
 import { uploadImage } from '@/uploads.service';
 import { MiQrCobro } from '@/qr-cobro';
+import { queueForLater } from '@/sync/sync.service';
 import { buildTimeline, promiseReady, recovered, type TimelineEntry } from '@/ficha';
 
 const METHODS: { value: PaymentMethod; label: string }[] = [
@@ -347,9 +348,18 @@ export default function ClienteFichaScreen() {
         defaultAmount={detail?.installmentAmount ?? selected.outstandingBalance}
         maxAmount={selected.outstandingBalance}
         onSubmit={async (amount, method, receiptUrl, receiptHash, idemKey) => {
-          const res = await createPayment({ creditId: selected.creditId, caseId: selected.caseId, amount, method, receiptUrl, receiptHash }, idemKey);
+          const input = { creditId: selected.creditId, caseId: selected.caseId, amount, method, receiptUrl, receiptHash };
+          const res = await createPayment(input, idemKey);
           if (res.status === 'ok') { setPaySheet(false); await loadCase(selected.caseId); return null; }
-          if (res.status === 'offline') return 'Sin conexión — no se registró. Reintentá.';
+          if (res.status === 'offline') {
+            // El cobro se guarda en el teléfono y sube solo. La clave de idempotencia es la que ya
+            // generó el sheet, así que cuando salga no puede cobrarle dos veces al deudor.
+            const guardado = await queueForLater({ kind: 'payment', input, idempotencyKey: idemKey });
+            if (!guardado) return 'Sin conexión y no se pudo guardar en el teléfono. Reintentá.';
+            setPaySheet(false);
+            await loadCase(selected.caseId);
+            return null;
+          }
           if (res.status === 'unauthenticated') return 'Tu sesión venció.';
           return res.message;
         }}

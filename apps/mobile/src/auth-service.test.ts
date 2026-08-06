@@ -4,6 +4,8 @@ jest.mock('./session', () => ({
   saveSession: jest.fn(),
   clearSession: jest.fn(),
   touchSession: jest.fn(),
+  // `me()` guarda quién es para poder encolar acciones sin red (P6).
+  saveUserId: jest.fn(),
 }));
 
 import { apiFetch } from './api';

@@ -1,7 +1,7 @@
 import type { AuthAccountOption, AuthTokens, LoginResult } from '@kobrax/shared';
 import { apiFetch, type ApiResult } from './api';
 import { authedFetch } from './api-client';
-import { clearSession, getSession, saveSession, touchSession } from './session';
+import { clearSession, getSession, saveSession, saveUserId, touchSession } from './session';
 
 export type Step = 'done' | 'mfa' | 'mfa_setup' | 'select_account';
 
@@ -157,6 +157,8 @@ export const authService = {
     if (res.status === 0) return { status: 'offline' };
     if (res.status === 200 && res.data) {
       await touchSession(); // actividad → extiende la ventana de inactividad (8h)
+      // Quién es, para poder encolar acciones cuando no haya red y no se le pueda preguntar (P6).
+      await saveUserId(res.data.userId);
       return { status: 'ok', me: res.data };
     }
     // Solo un 401 puede venir de "se cayó la red durante el refresh" (sesión intacta) → offline.

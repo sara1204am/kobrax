@@ -15,6 +15,7 @@ import { uploadImage } from '../uploads.service';
 import { addVisitEvidence, createVisit, type CreateVisitInput } from '../field.service';
 import { createPayment, type NewPayment } from '../payments.service';
 import { completeItem, createItem, postponeItem, type CreateAgendaInput } from '../agenda.service';
+import { getUserId } from '../session';
 
 /** Una foto todavía en el teléfono. Se sube al drenar; **se guarda la ruta, no los bytes**. */
 export interface PendingPhoto {
@@ -23,7 +24,19 @@ export interface PendingPhoto {
 }
 
 export type QueuedAction =
-  | { kind: 'visit'; input: CreateVisitInput; photo?: PendingPhoto }
+  /**
+   * La visita lleva **adentro** lo que cierra la parada: la foto, el cobro y la promesa. Es una
+   * sola acción y no tres porque el pago necesita el id de la visita para su clave de idempotencia
+   * (`visit-<id>`), y ese id no existe hasta que la visita sale. Encolándolas juntas, la clave se
+   * arma al enviar y reintentar sigue sin poder cobrarle dos veces al deudor.
+   */
+  | {
+      kind: 'visit';
+      input: CreateVisitInput;
+      photo?: PendingPhoto;
+      payment?: Omit<NewPayment, 'receiptUrl' | 'receiptHash'>;
+      promise?: CreateAgendaInput;
+    }
   | { kind: 'payment'; input: NewPayment; idempotencyKey: string; photo?: PendingPhoto }
   | { kind: 'agenda.create'; input: CreateAgendaInput }
   | { kind: 'agenda.complete'; id: string; outcome: AgendaOutcome; notes?: string }
@@ -40,14 +53,23 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'agenda.postpone': 'Gestión pospuesta',
 };
 
-/** Guarda la acción para subirla después. Devuelve el id de la fila (su orden en la cola). */
-export function enqueue(userId: string, action: QueuedAction): Promise<number> {
-  return db.enqueue({
+/**
+ * Guarda la acción para subirla después. **No recibe el userId**: lo saca de la sesión guardada,
+ * que es lo único disponible en modo avión — preguntarle al server quién es no es una opción.
+ *
+ * Devuelve `false` si no hay sesión: sin dueño no se encola nada, porque después no habría forma
+ * de saber de quién es ese pago.
+ */
+export async function enqueue(action: QueuedAction): Promise<boolean> {
+  const userId = await getUserId();
+  if (!userId) return false;
+  await db.enqueue({
     userId,
     kind: action.kind,
     payload: action,
     idempotencyKey: action.kind === 'payment' ? action.idempotencyKey : undefined,
   });
+  return true;
 }
 
 /** Lo que puede pasarle a un envío. `auth` corta el drenaje entero: sin sesión no sube nada más. */
@@ -62,14 +84,28 @@ export async function send(action: QueuedAction): Promise<SendResult> {
     case 'visit': {
       const visita = await createVisit(action.input);
       if (visita.status !== 'ok') return mapMutate(visita);
-      // La foto va después de la visita porque cuelga de ella. Si falla, la visita YA quedó
-      // registrada: se devuelve ok igual — perder la foto es malo, perder la visita es peor.
+
+      // Desde acá, la visita YA quedó registrada en el server. Nada de lo que siga puede devolver
+      // un fallo que haga reintentar toda la acción: repetirla duplicaría la parada visitada.
+      let foto: { url: string; hash: string } | undefined;
       if (action.photo) {
         const subida = await uploadImage(action.photo.uri, action.photo.mimeType);
         if (subida.status === 'ok') {
-          await addVisitEvidence(visita.data.id, { type: 'PHOTO', fileUrl: subida.url, fileHash: subida.hash });
+          foto = { url: subida.url, hash: subida.hash };
+          await addVisitEvidence(visita.data.id, { type: 'PHOTO', fileUrl: foto.url, fileHash: foto.hash });
         }
       }
+
+      if (action.payment) {
+        // La llave sale de la visita, que el server creó una sola vez: reintentar no cobra dos veces.
+        await createPayment(
+          { ...action.payment, receiptUrl: foto?.url, receiptHash: foto?.hash },
+          `visit-${visita.data.id}`,
+        );
+      }
+
+      if (action.promise) await createItem(action.promise);
+
       return { status: 'ok' };
     }
     case 'payment': {

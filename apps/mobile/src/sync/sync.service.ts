@@ -14,8 +14,9 @@
  * si algo está mal de verdad, martillar el servidor cada minuto no lo va a arreglar.
  */
 import * as db from '../db';
+import { getUserId } from '../session';
 import { useNetStore } from '../store/net';
-import { pendingActions, send } from './queue';
+import { enqueue, pendingActions, send, type QueuedAction } from './queue';
 
 /** Después de esto, el ítem queda esperando un reintento manual. */
 const MAX_ATTEMPTS = 3;
@@ -63,6 +64,21 @@ export async function drain(userId: string, opts: { force?: boolean } = {}): Pro
     await refreshPendingCount(userId);
   }
   return res;
+}
+
+/**
+ * Lo que usan las pantallas: guardar la acción para más tarde y dejar el contador al día.
+ *
+ * `true` = quedó guardada y el cobrador puede seguir trabajando; `false` = no se pudo (sin sesión),
+ * y ahí sí hay que decírselo, porque su trabajo NO está a salvo.
+ */
+export async function queueForLater(action: QueuedAction): Promise<boolean> {
+  const guardada = await enqueue(action);
+  if (guardada) {
+    const userId = await getUserId();
+    if (userId) await refreshPendingCount(userId);
+  }
+  return guardada;
 }
 
 /** Deja el contador del indicador al día. Se llama al encolar y al terminar un drenaje. */

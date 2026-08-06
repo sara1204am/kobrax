@@ -6,13 +6,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { AGENDA_OUTCOMES_BY_TYPE, AGENDA_POSTPONE_STEPS, AgendaItemType, CatalogType, renderTemplate, type AgendaOutcome, type AgendaPostponeStep } from '@kobrax/shared';
+import { AGENDA_OUTCOMES_BY_TYPE, AGENDA_POSTPONE_STEPS, AgendaItemStatus, AgendaItemType, CatalogType, renderTemplate, type AgendaOutcome, type AgendaPostponeStep } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from './theme';
 import { Button, ErrorBanner } from './components';
 import { AGENDA_OUTCOME_META, BottomSheet, SectionLabel } from './ui';
 import { money } from './agenda-form';
 import { completeItem, postponeItem, whatsappLink, type AgendaItemDetail, type AgendaListItem } from './agenda.service';
 import { listCatalogCached, type CatalogOption } from './catalogs.service';
+import { queueForLater } from './sync/sync.service';
+import type { QueuedAction } from './sync/queue';
 
 const POSTPONE_LABEL: Record<AgendaPostponeStep, string> = { 15: '+15 min', 30: '+30 min', 60: '+1 h' };
 
@@ -54,8 +56,12 @@ export function RegisterSheet({
     [client.displayName, credit],
   );
 
+  /**
+   * `accion` es la misma operación descrita para la cola. Se pasa junto con la llamada porque sin
+   * red hay que poder guardarla, y una función ya invocada no se puede serializar.
+   */
   const submit = useCallback(
-    async (fn: () => ReturnType<typeof completeItem>) => {
+    async (fn: () => ReturnType<typeof completeItem>, accion: QueuedAction) => {
       setBusy(true);
       setError(null);
       const res = await fn();
@@ -65,15 +71,27 @@ export function RegisterSheet({
         onUpdated(res.data);
         return;
       }
+      if (res.status === 'offline') {
+        // La gestión queda registrada en el teléfono y sube sola. Para el cobrador está hecha:
+        // frenarlo por falta de señal es justo lo que el módulo existe para evitar.
+        const guardada = await queueForLater(accion);
+        if (guardada) {
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          // El ítem local se marca como ejecutado aunque el server todavía no lo sepa: es lo que
+          // el cobrador acaba de hacer, y el estado real llega cuando la cola drene.
+          onUpdated({ ...item, status: AgendaItemStatus.EXECUTED });
+          return;
+        }
+        setError('Sin conexión y no se pudo guardar en el teléfono. Reintentá.');
+        return;
+      }
       setError(
-        res.status === 'offline'
-          ? 'Sin conexión — reintentá.'
-          : res.status === 'unauthenticated'
-            ? 'Tu sesión venció. Volvé a entrar.'
-            : res.message ?? 'No se pudo registrar.',
+        res.status === 'unauthenticated'
+          ? 'Tu sesión venció. Volvé a entrar.'
+          : res.message ?? 'No se pudo registrar.',
       );
     },
-    [onUpdated],
+    [item, onUpdated],
   );
 
   return (
@@ -117,7 +135,7 @@ export function RegisterSheet({
           {AGENDA_POSTPONE_STEPS.map((m) => (
             <Pressable
               key={m}
-              onPress={() => submit(() => postponeItem(item.id, m))}
+              onPress={() => submit(() => postponeItem(item.id, m), { kind: 'agenda.postpone', id: item.id, minutes: m })}
               disabled={busy}
               accessibilityRole="button"
               style={[styles.chip, busy && { opacity: 0.5 }]}
@@ -133,7 +151,15 @@ export function RegisterSheet({
             label="Registrar gestión"
             loading={busy}
             disabled={!outcome}
-            onPress={() => outcome && submit(() => completeItem(item.id, outcome, notes.trim() || undefined))}
+            onPress={() =>
+              outcome &&
+              submit(() => completeItem(item.id, outcome, notes.trim() || undefined), {
+                kind: 'agenda.complete',
+                id: item.id,
+                outcome,
+                notes: notes.trim() || undefined,
+              })
+            }
           />
         </View>
       </ScrollView>

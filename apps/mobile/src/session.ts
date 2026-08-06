@@ -11,6 +11,7 @@ const KEY = {
   access: 'k_access',
   refresh: 'k_refresh',
   validUntil: 'k_session_valid_until',
+  userId: 'k_user_id',
 } as const;
 
 const INACTIVITY_MS = 8 * 60 * 60 * 1000; // 8h
@@ -54,11 +55,28 @@ export async function touchSession(): Promise<void> {
   await SecureStore.setItemAsync(KEY.validUntil, String(validUntil));
 }
 
+/**
+ * Quién es el cobrador de esta sesión. Se guarda cuando `me()` responde, y hace falta **sin red**:
+ * la cola de acciones pendientes es de una persona, y al abrir la app en modo avión no hay a quién
+ * preguntárselo. El token lo lleva adentro, pero decodificar un JWT a mano para esto es más frágil
+ * que persistir el dato.
+ */
+export async function saveUserId(userId: string): Promise<void> {
+  await SecureStore.setItemAsync(KEY.userId, userId);
+}
+
+export function getUserId(): Promise<string | null> {
+  return SecureStore.getItemAsync(KEY.userId);
+}
+
 export async function clearSession(): Promise<void> {
   await Promise.all([
     SecureStore.deleteItemAsync(KEY.access),
     SecureStore.deleteItemAsync(KEY.refresh),
     SecureStore.deleteItemAsync(KEY.validUntil),
+    // El userId se va con la sesión. **La cola NO** (plan §Q3): queda guardada con su dueño y se
+    // drena cuando esa persona vuelva a entrar.
+    SecureStore.deleteItemAsync(KEY.userId),
   ]);
 }
 
