@@ -101,7 +101,7 @@ Notas de sync (relevantes para P6): `case_activities`, `field_visits`, `field_ev
 | 1.b | **Pantalla de notificaciones** | ✅ | `app/notificaciones.tsx`; el 🔔 del Home lleva siempre, tenga o no pendientes |
 | 1.c | **Cobro por QR** | ✅ | **Sin pasarela, por decisión:** el cobrador muestra la foto del QR de SU banco (`Profile.paymentQrUrl`, se carga en Mi perfil) y registra el pago a mano con método QR. Ver abajo |
 | 1.d | **Leer Excel en el import** | ✅ | Va **`exceljs`, no `xlsx`** (corrige import R7): SheetJS quedó en 0.18.5 en npm con CVEs sin arreglar, y esto parsea archivos que sube el usuario |
-| **2** | **Home más funcional** | ⬜ | Cierra la tanda de sueltos: el Home es la primera pantalla del día y hoy es casi sólo contadores |
+| **2** | **Home más funcional** | ✅ **2026-08-06** | Rehecho contra el mockup: bloque navy con progreso del día + pendientes/vencidos/cobrado, banda de urgencia ("N gestiones en los próximos 30 min"), agenda de hoy y ruta de hoy. **Todo pulsable.** Cuentas puras en `src/home.ts` (con test). Falta el monto en las tarjetas de agenda: `AgendaListItem` no lo trae |
 | **3** | **P6 · offline / WatermelonDB** | ⬜ | El hueco más grande: hoy la app es 100% online contra el principio no negociable #4. Incluye el retro-encaje en los services de todos los módulos ya construidos |
 | **4** | **P9 · push + SSL pinning** | ⬜ | `expo-notifications` sin instalar; el pinning corre en NO-OP (lo avisa Metro en cada arranque) |
 | **5** | **Limpieza y orden de todo el módulo celular** | ⬜ | Pasada final: `/ponytail-review` pendiente de cuenta e import, deduplicar, `BASE-INVENTORY` al día |

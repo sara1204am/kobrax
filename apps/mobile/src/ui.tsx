@@ -157,18 +157,22 @@ export function StatTile({
   label,
   value,
   tone = 'neutral',
+  onDark = false,
 }: {
   label: string;
   value: string;
   tone?: 'neutral' | 'success' | 'danger';
+  /** Sobre el bloque navy del Inicio: el mismo dato, invertido. Sin esto el valor sale navy sobre navy. */
+  onDark?: boolean;
 }) {
-  const valueColor = tone === 'success' ? COLORS.success : tone === 'danger' ? COLORS.danger : COLORS.navy;
+  const valueColor =
+    tone === 'success' ? COLORS.success : tone === 'danger' ? COLORS.danger : onDark ? COLORS.white : COLORS.navy;
   return (
-    <View style={styles.tile}>
+    <View style={[styles.tile, onDark && styles.tileDark]}>
       <Text style={[styles.tileValue, { color: valueColor }]} numberOfLines={1}>
         {value}
       </Text>
-      <Text style={styles.tileLabel} numberOfLines={2}>
+      <Text style={[styles.tileLabel, onDark && styles.tileLabelDark]} numberOfLines={2}>
         {label}
       </Text>
     </View>
@@ -753,6 +757,9 @@ const styles = StyleSheet.create({
   },
   tileValue: { fontSize: 22, fontWeight: '700' },
   tileLabel: { ...TYPE.caption },
+  // Sobre navy: el recuadro se hunde en vez de resaltar, y la etiqueta sube de contraste.
+  tileDark: { backgroundColor: COLORS.slate, borderColor: COLORS.slate },
+  tileLabelDark: { color: COLORS.lightBg },
   // Tarjeta de caso (Figma 81:4): barra de acento + cuerpo pulsable + acción opcional.
   caseCard: {
     flexDirection: 'row',
