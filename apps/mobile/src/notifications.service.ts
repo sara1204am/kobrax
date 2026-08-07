@@ -4,6 +4,7 @@
  */
 import type { NotificationPayload } from '@kobrax/shared';
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
+import { cachedList } from './sync/cached';
 import { formatLongDate, toHHmm, toISO } from './agenda-form';
 
 /** Nº de notificaciones no leídas (usa `meta.total`; pide 1 fila, solo importa el conteo). */
@@ -14,7 +15,10 @@ export async function unreadCount(): Promise<number> {
 
 /** El buzón. `unread` filtra a las pendientes; sin él vienen todas, leídas incluidas. */
 export function listNotifications(unread?: boolean): Promise<QueryResult<NotificationPayload[]>> {
-  return apiQuery<NotificationPayload[]>(`/notifications${toQuery({ unread, limit: 50 })}`);
+  const query = toQuery({ unread, limit: 50 });
+  return cachedList<NotificationPayload>('notification', query || 'todas', () =>
+    apiQuery<NotificationPayload[]>(`/notifications${query}`),
+  );
 }
 
 /** Ambas responden 204 (sin cuerpo) — `apiMutate` ya lo trata como éxito. */

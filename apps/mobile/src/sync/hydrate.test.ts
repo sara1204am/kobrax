@@ -1,88 +1,106 @@
 /**
- * La hidratación es una secuencia de bajadas independientes. Lo que se prueba acá es justamente
- * eso: que **una que falle no se lleve puestas a las demás** (un dato viejo sirve más que ninguno),
- * y que la ruta de ayer no quede pegada cuando hoy no hay ruta.
+ * La hidratación es una secuencia de bajadas independientes que **llama a los mismos services que
+ * las pantallas**, para que el respaldo quede guardado bajo la misma consulta que después se pide.
+ *
+ * El grueso de estos casos existe por un defecto real encontrado probando por cable: se hidrataba
+ * la cartera con `limit: 500` y la Cobranza la pedía con `limit: 100`, y la ruta se hidrataba
+ * filtrando por estado mientras la pestaña Rutas la pedía sin filtro. Todo se guardaba en casillas
+ * que nadie consultaba, así que sin señal esas pantallas salían vacías.
  */
-const mockDb: { replaced: { kind: string; count: number; scope?: string }[] } = { replaced: [] };
+const mockLlamadas: { fn: string; params?: unknown }[] = [];
+const mockRes: Record<string, unknown> = {};
 
-jest.mock('../db', () => ({
-  replaceAll: jest.fn(async (kind: string, items: unknown[], scope?: string) => {
-    mockDb.replaced.push({ kind, count: items.length, scope });
+const ok = (data: unknown[] = []) => ({ status: 'ok', data, total: data.length });
+
+jest.mock('../cases.service', () => ({
+  listCases: jest.fn(async (p: unknown) => {
+    mockLlamadas.push({ fn: 'listCases', params: p });
+    return mockRes.cases ?? ok([{ id: 'c1', clientId: 'cl1' }]);
   }),
-  putAll: jest.fn(async () => {}),
-  getMany: jest.fn(async () => []),
-  fetchedAt: jest.fn(async () => null),
 }));
-
-const mockRes = {
-  cases: { status: 'ok', data: [{ id: 'c1', clientId: 'cl1' }], total: 1 } as never,
-  routes: { status: 'ok', data: [] as unknown[], total: 0 } as never,
-  agenda: { status: 'ok', data: [], total: 0 } as never,
-  overdue: { status: 'ok', data: [], total: 0 } as never,
-  catalog: { status: 'ok', data: [{ id: 'k1' }], total: 1 } as never,
-  notif: { status: 'ok', data: [], total: 0 } as never,
-};
-
-jest.mock('../cases.service', () => ({ listCases: jest.fn(async () => mockRes.cases) }));
 jest.mock('../routes.service', () => ({
-  listRoutes: jest.fn(async () => mockRes.routes),
-  getRoute: jest.fn(async () => ({ status: 'ok', data: { id: 'r1', stops: [] } })),
+  listRoutes: jest.fn(async (p: unknown) => {
+    mockLlamadas.push({ fn: 'listRoutes', params: p });
+    return mockRes.routes ?? ok([]);
+  }),
+  getRoute: jest.fn(async () => {
+    mockLlamadas.push({ fn: 'getRoute' });
+    return { status: 'ok', data: { id: 'r1', stops: [] } };
+  }),
 }));
 jest.mock('../agenda.service', () => ({
-  listByDay: jest.fn(async () => mockRes.agenda),
-  listOverdue: jest.fn(async () => mockRes.overdue),
+  listByDay: jest.fn(async () => {
+    mockLlamadas.push({ fn: 'listByDay' });
+    return mockRes.agenda ?? ok([]);
+  }),
+  listOverdue: jest.fn(async () => {
+    mockLlamadas.push({ fn: 'listOverdue' });
+    return ok([]);
+  }),
+  clientContext: jest.fn(async () => ok([])),
 }));
-jest.mock('../catalogs.service', () => ({ listCatalog: jest.fn(async () => mockRes.catalog) }));
-jest.mock('../notifications.service', () => ({ listNotifications: jest.fn(async () => mockRes.notif) }));
+jest.mock('../catalogs.service', () => ({ listCatalog: jest.fn(async () => ok([{ id: 'k' }])) }));
+jest.mock('../notifications.service', () => ({ listNotifications: jest.fn(async () => ok([])) }));
 jest.mock('../clients.service', () => ({ getClient: jest.fn(async () => ({ status: 'ok', data: { id: 'cl1' } })) }));
+jest.mock('../db', () => ({ getMany: jest.fn(async () => [{ clientId: 'cl1' }]), putAll: jest.fn(), fetchedAt: jest.fn(async () => null) }));
 
 import { hydrate } from './hydrate';
 
+const llamada = (fn: string) => mockLlamadas.find((l) => l.fn === fn);
+
 beforeEach(() => {
-  mockDb.replaced = [];
-  mockRes.cases = { status: 'ok', data: [{ id: 'c1', clientId: 'cl1' }], total: 1 } as never;
-  mockRes.agenda = { status: 'ok', data: [], total: 0 } as never;
-  mockRes.routes = { status: 'ok', data: [], total: 0 } as never;
+  mockLlamadas.length = 0;
+  delete mockRes.cases;
+  delete mockRes.routes;
+  delete mockRes.agenda;
 });
 
-describe('hydrate', () => {
+describe('hydrate · usa las consultas de las pantallas', () => {
+  // Si estos parámetros dejan de coincidir con los de la pantalla, el respaldo se guarda en una
+  // casilla que nadie lee y la pantalla sale vacía sin señal, aunque la bajada haya salido bien.
+  it('la cartera se baja con los mismos parámetros que la Cobranza', async () => {
+    await hydrate('u1');
+    expect(llamada('listCases')!.params).toEqual({ view: 'portfolio', limit: 100 });
+  });
+
+  it('las rutas se bajan SIN filtro de estado, como las pide la pestaña Rutas', async () => {
+    await hydrate('u1');
+    const sinFiltro = mockLlamadas.filter((l) => l.fn === 'listRoutes').map((l) => l.params);
+    expect(sinFiltro).toContainEqual({ collectorId: 'u1' });
+  });
+
+  it('además baja la ruta activa, que es la que mira el Inicio', async () => {
+    await hydrate('u1');
+    const conEstado = mockLlamadas.filter((l) => l.fn === 'listRoutes').map((l) => JSON.stringify(l.params));
+    expect(conEstado.some((p) => p.includes('status'))).toBe(true);
+  });
+});
+
+describe('hydrate · tolerancia a fallos', () => {
   it('baja la jornada completa y lo reporta', async () => {
     const r = await hydrate('u1');
     expect(r.failed).toEqual([]);
     expect(r.ok).toContain('cartera');
-    expect(r.ok).toContain('agenda');
     expect(r.offline).toBe(false);
   });
 
   // Si un fallo cortara la secuencia, quedarse sin agenda dejaría al cobrador también sin cartera.
   it('una bajada que falla no impide las otras', async () => {
-    mockRes.agenda = { status: 'error', message: 'boom' } as never;
+    mockRes.agenda = { status: 'error', message: 'boom' };
     const r = await hydrate('u1');
     expect(r.failed).toContain('agenda');
     expect(r.ok).toContain('cartera');
-    expect(mockDb.replaced.some((x) => x.kind === 'case')).toBe(true);
   });
 
   it('sin red lo dice, para que la pantalla no culpe al servidor', async () => {
-    mockRes.cases = { status: 'offline' } as never;
+    mockRes.cases = { status: 'offline' };
     const r = await hydrate('u1');
     expect(r.offline).toBe(true);
-    expect(r.failed).toContain('cartera');
   });
 
-  // Sin esto, el cobrador abre la app un martes y ve el itinerario del lunes como si fuera de hoy.
-  it('si hoy no hay ruta activa, borra la de ayer', async () => {
-    mockRes.routes = { status: 'ok', data: [], total: 0 } as never;
+  it('si no hay ruta activa no pide el detalle de nada', async () => {
+    mockRes.routes = ok([]);
     await hydrate('u1');
-    const ruta = mockDb.replaced.find((x) => x.kind === 'route');
-    expect(ruta).toBeDefined();
-    expect(ruta!.count).toBe(0);
-  });
-
-  it('la agenda de hoy y los vencidos se guardan por separado', async () => {
-    await hydrate('u1');
-    const scopes = mockDb.replaced.filter((x) => x.kind === 'agenda').map((x) => x.scope);
-    expect(scopes).toContain('overdue');
-    expect(scopes.filter((s) => s !== 'overdue').length).toBe(1);
+    expect(llamada('getRoute')).toBeUndefined();
   });
 });

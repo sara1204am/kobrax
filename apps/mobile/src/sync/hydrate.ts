@@ -4,17 +4,16 @@
  *
  * Se hace con wifi, antes de salir. Es la mitad de lectura del offline; la de escritura es la cola.
  *
- * `ponytail:` baja **listas**, no fichas de a una. La ficha de un cliente cualquiera se cachea sola
- * cuando se abre con red (eso lo hace la capa de lectura), así que gastar N llamadas acá para
- * pre-bajar toda la cartera en detalle sería pagar dos veces por lo mismo. La excepción son los
- * clientes de la ruta del día: a esos seguro los va a visitar, y ahí no puede quedarse sin datos.
+ * **No escribe en la base: llama a los services.** El guardado lo hace `sync/cached`, igual que
+ * cuando la pantalla pide el dato. Esa es la única forma de que el respaldo quede bajo la misma
+ * consulta que después va a consultarse — hidratar con otros parámetros llena casillas que nadie
+ * mira, que es exactamente el defecto que destapó la prueba de campo.
  */
-import { CatalogType } from '@kobrax/shared';
-import { RouteStatus } from '@kobrax/shared';
+import { CatalogType, RouteStatus } from '@kobrax/shared';
 import { listCases, type CaseListItem } from '../cases.service';
-import { getRoute, listRoutes, type RouteItem } from '../routes.service';
-import { clientContext, listByDay, listOverdue, type AgendaListItem } from '../agenda.service';
-import { listCatalog, type CatalogOption } from '../catalogs.service';
+import { getRoute, listRoutes } from '../routes.service';
+import { clientContext, listByDay, listOverdue } from '../agenda.service';
+import { listCatalog } from '../catalogs.service';
 import { listNotifications } from '../notifications.service';
 import { getClient, type ClientDetail } from '../clients.service';
 import { todayISO } from '../agenda-form';
@@ -57,6 +56,12 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
   let offline = false;
   const hoy = todayISO();
 
+  /** De `QueryResult` al resultado del paso: sólo interesa si se pudo bajar o no. */
+  const estado = async (p: Promise<{ status: string }>): Promise<'ok' | 'offline' | 'error'> => {
+    const r = await p;
+    return r.status === 'ok' ? 'ok' : r.status === 'offline' ? 'offline' : 'error';
+  };
+
   const paso = async (nombre: string, fn: () => Promise<'ok' | 'offline' | 'error'>): Promise<void> => {
     const r = await fn();
     if (r === 'ok') ok.push(nombre);
@@ -66,63 +71,42 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
     }
   };
 
-  // 1. La cartera entera (decisión Q1 del plan): el deudor que aparece fuera de ruta también
-  //    tiene que poder cobrarse. Son cientos de filas, una sola llamada.
-  await paso('cartera', async () => {
-    const res = await listCases({ view: 'portfolio', limit: 500 });
-    if (res.status !== 'ok') return res.status === 'offline' ? 'offline' : 'error';
-    await db.replaceAll<CaseListItem>('case', res.data, undefined, (c) => c.clientId);
-    return 'ok';
-  });
+  // 1–4. Se llaman **los mismos services que usan las pantallas, con los mismos parámetros**, y el
+  //       guardado lo hace `cachedList` solo. Antes esto escribía en la base por su cuenta, y ahí
+  //       estaba el defecto que destapó la prueba de campo: el respaldo de una lista se guarda bajo
+  //       LA CONSULTA que la pidió, así que hidratar con `limit: 500` no le servía a la Cobranza,
+  //       que pide `limit: 100`, ni hidratar la ruta filtrando por estado le servía a la pestaña
+  //       Rutas, que pide sin filtro. Se llenaban casillas que nadie consultaba.
+  //
+  //       Por eso cada línea de acá abajo **copia exactamente** la llamada de su pantalla. Si una
+  //       pantalla cambia sus parámetros, tiene que cambiar acá — y es el precio de que el respaldo
+  //       sea la respuesta del server tal cual, sin reimplementar sus filtros en el teléfono.
+  await paso('cartera', () => estado(listCases({ view: 'portfolio', limit: 100 }))); // Cobranza · Crear ruta
+  await paso('casos abiertos', () => estado(listCases({ assigneeId: collectorId, open: true, limit: 1 }))); // Inicio
+  await paso('rutas', () => estado(listRoutes({ collectorId }))); // pestaña Rutas
+  await paso('agenda', () => estado(listByDay(hoy)));
+  await paso('vencidos', () => estado(listOverdue(100)));
+  await paso('notificaciones', () => estado(listNotifications()));
 
-  // 2. La ruta activa CON sus paradas: el listado no las trae, y son el itinerario del día.
-  await paso('ruta', async () => {
-    const res = await listRoutes({ collectorId, status: RouteStatus.IN_PROGRESS });
+  // La ruta activa, y **su detalle con las paradas**: el listado no las trae y son el itinerario.
+  await paso('ruta del día', async () => {
+    const res = await listRoutes({ collectorId, status: RouteStatus.IN_PROGRESS }); // Inicio
     if (res.status !== 'ok') return res.status === 'offline' ? 'offline' : 'error';
     const activa = res.data[0];
-    if (!activa) {
-      await db.replaceAll<RouteItem>('route', []); // sin ruta hoy: que no quede la de ayer
-      return 'ok';
-    }
-    const detalle = await getRoute(activa.id);
-    if (detalle.status !== 'ok') return detalle.status === 'offline' ? 'offline' : 'error';
-    await db.replaceAll<RouteItem>('route', [detalle.data]);
-    return 'ok';
+    if (!activa) return 'ok'; // sin ruta hoy no hay nada que bajar
+    return estado(getRoute(activa.id));
   });
 
-  // 3. Agenda de hoy + lo vencido. Se guardan con `scope` distinto para poder leerlas por separado.
-  await paso('agenda', async () => {
-    const res = await listByDay(hoy);
-    if (res.status !== 'ok') return res.status === 'offline' ? 'offline' : 'error';
-    await db.replaceAll<AgendaListItem>('agenda', res.data, hoy);
-    return 'ok';
-  });
-
-  await paso('vencidos', async () => {
-    const res = await listOverdue(100);
-    if (res.status !== 'ok') return res.status === 'offline' ? 'offline' : 'error';
-    await db.replaceAll<AgendaListItem>('agenda', res.data, 'overdue');
-    return 'ok';
-  });
-
-  // 4. Catálogos: sin ellos, el sheet de registrar un pago se abre vacío en el campo.
+  // Catálogos: sin ellos, el sheet de registrar un pago se abre vacío en el campo.
   await paso('catálogos', async () => {
     let hubo = false;
     for (const catalog of CATALOGOS) {
       const res = await listCatalog(catalog);
       if (res.status === 'offline') return 'offline';
       if (res.status !== 'ok') continue; // un catálogo que falla no tumba a los otros
-      await db.replaceAll<CatalogOption>('catalog', res.data, catalog);
       hubo = true;
     }
     return hubo ? 'ok' : 'error';
-  });
-
-  await paso('notificaciones', async () => {
-    const res = await listNotifications();
-    if (res.status !== 'ok') return res.status === 'offline' ? 'offline' : 'error';
-    await db.replaceAll('notification', res.data);
-    return 'ok';
   });
 
   // 5. Las fichas y el contexto de **toda la cartera**, no sólo de la ruta.
