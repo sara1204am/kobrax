@@ -13,7 +13,7 @@ import { CatalogType } from '@kobrax/shared';
 import { RouteStatus } from '@kobrax/shared';
 import { listCases, type CaseListItem } from '../cases.service';
 import { getRoute, listRoutes, type RouteItem } from '../routes.service';
-import { listByDay, listOverdue, type AgendaListItem } from '../agenda.service';
+import { clientContext, listByDay, listOverdue, type AgendaListItem } from '../agenda.service';
 import { listCatalog, type CatalogOption } from '../catalogs.service';
 import { listNotifications } from '../notifications.service';
 import { getClient, type ClientDetail } from '../clients.service';
@@ -26,6 +26,9 @@ import * as db from '../db';
  *   PAYMENT_METHOD/BANK → registrar pago · SPECIAL_CATEGORY → resultado de parada (RT-6)
  *   CANCEL_REASON/RESCHEDULE_REASON → menú ⋯ del detalle de gestión · WHATSAPP_TEMPLATE → envío
  */
+/** Techo de fichas que se bajan de a una. Con más que esto, la hidratación deja de ser un trámite. */
+const MAX_FICHAS = 150;
+
 const CATALOGOS: CatalogType[] = [
   CatalogType.PAYMENT_METHOD,
   CatalogType.BANK,
@@ -122,22 +125,29 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
     return 'ok';
   });
 
-  // 5. Las fichas de los clientes de la ruta. Es lo único que se baja de a uno, y se justifica:
-  //    son los que va a tener enfrente. Si alguna falla, la parada igual tiene nombre y dirección.
-  await paso('fichas de la ruta', async () => {
-    const rutas = await db.getMany<RouteItem>('route');
-    const clientIds = [...new Set((rutas[0]?.stops ?? []).map((s) => s.clientId).filter(Boolean))] as string[];
+  // 5. Las fichas y el contexto de **toda la cartera**, no sólo de la ruta.
+  //
+  //    Empezó bajando sólo los clientes de la ruta y la prueba de campo mostró que no alcanza: el
+  //    cobrador busca a un deudor que no estaba en el itinerario —se lo cruzó, o lo llamó— y sin
+  //    señal lo encontraba en la lista pero no podía abrirlo ni agendarle nada. Ver el nombre y que
+  //    la pantalla siguiente no cargue es peor que no encontrarlo.
+  //
+  //    ponytail: es lo único que se baja de a uno, y se paga UNA vez, en la oficina y con wifi
+  //    (§4.1). El tope evita que una cartera enorme convierta la hidratación en algo eterno; si
+  //    aparece un tenant que lo supere, el arreglo es un endpoint que devuelva el lote, no subirlo.
+  await paso('fichas de la cartera', async () => {
+    const casos = await db.getMany<CaseListItem>('case');
+    const clientIds = [...new Set(casos.map((c) => c.clientId).filter(Boolean))].slice(0, MAX_FICHAS);
     if (clientIds.length === 0) return 'ok';
-    let algunaOffline = false;
     for (const id of clientIds) {
-      const res = await getClient(id);
-      if (res.status === 'offline') {
-        algunaOffline = true;
-        break;
-      }
-      if (res.status === 'ok') await db.putAll<ClientDetail>('client', [res.data]);
+      const ficha = await getClient(id);
+      if (ficha.status === 'offline') return 'offline';
+      if (ficha.status === 'ok') await db.putAll<ClientDetail>('client', [ficha.data]);
+      // El contexto es lo que consume el alta de gestión (créditos + contactos + ubicaciones).
+      const ctx = await clientContext(id);
+      if (ctx.status === 'offline') return 'offline';
     }
-    return algunaOffline ? 'offline' : 'ok';
+    return 'ok';
   });
 
   return { ok, failed, offline };

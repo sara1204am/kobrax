@@ -187,7 +187,11 @@ export interface AgendaClientContext {
  * teléfonos y direcciones en claro. `error` si el cliente no tiene casos asignados a mí (AGENDA_002).
  */
 export function clientContext(clientId: string): Promise<QueryResult<AgendaClientContext>> {
-  return apiQuery<AgendaClientContext>(`/agenda/clients/${clientId}/context`);
+  // Con respaldo local: sin esto, sin señal se puede BUSCAR al deudor pero no abrirlo, que es
+  // peor que no encontrarlo — se ve el nombre y la pantalla siguiente no carga.
+  return cachedOne<AgendaClientContext>('client.context', clientId, () =>
+    apiQuery<AgendaClientContext>(`/agenda/clients/${clientId}/context`),
+  );
 }
 
 /** Cuerpo de `POST /agenda`. El server deriva `clientId` y `assigneeId` — no van acá. */

@@ -34,6 +34,8 @@ export type CacheKind =
   /** Quién es el cobrador (`GET /auth/me`). Sin esto, abrir la app sin señal no pasa del splash. */
   | 'session'
   | 'client'
+  /** Lo que el alta de gestión necesita del cliente: créditos, teléfonos y direcciones. */
+  | 'client.context'
   | 'case'
   | 'case.detail'
   | 'credit'
