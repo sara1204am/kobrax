@@ -15,6 +15,7 @@ import { getRoute, listRoutes } from '../routes.service';
 import { clientContext, listByDay, listOverdue } from '../agenda.service';
 import { listCatalog } from '../catalogs.service';
 import { listNotifications } from '../notifications.service';
+import { listPaymentsByDay } from '../payments.service';
 import { getClient, type ClientDetail } from '../clients.service';
 import { todayISO } from '../agenda-form';
 import * as db from '../db';
@@ -87,6 +88,7 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
   await paso('agenda', () => estado(listByDay(hoy)));
   await paso('vencidos', () => estado(listOverdue(100)));
   await paso('notificaciones', () => estado(listNotifications()));
+  await paso('cobrado hoy', () => estado(listPaymentsByDay(hoy))); // Inicio · pestaña Rutas · resumen
 
   // La ruta activa, y **su detalle con las paradas**: el listado no las trae y son el itinerario.
   await paso('ruta del día', async () => {

@@ -1,8 +1,7 @@
 import { useEffect } from 'react';
 import { View } from 'react-native';
-import { router, Tabs } from 'expo-router';
+import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { OfflineIndicator } from '@/ui';
 import { subscribeConnectivity } from '@/store/net';
 import { authService } from '@/auth-service';
 import { hydrate } from '@/sync/hydrate';
@@ -43,7 +42,8 @@ export default function TabsLayout() {
 
   return (
     <View style={{ flex: 1 }}>
-      <OfflineIndicator onPressPending={() => router.push('/pendientes')} />
+      {/* El `OfflineIndicator` se montó en el layout RAÍZ: así también aparece en la ficha del
+          deudor y en el resultado de una parada, que es donde se encolan pagos y visitas. */}
       <Tabs
       screenOptions={{
         headerShown: false,

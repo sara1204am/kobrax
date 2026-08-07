@@ -43,7 +43,9 @@ export type CacheKind =
   | 'agenda'
   | 'agenda.detail'
   | 'catalog'
-  | 'notification';
+  | 'notification'
+  /** Los pagos del día: sin ellos, el cierre de jornada sin señal informaría cero cobrado. */
+  | 'payment';
 
 /** Qué espera subir la cola. Cada uno mapea a un endpoint idempotente o append-only (plan §D3). */
 export type QueueKind =

@@ -16,7 +16,6 @@ import {
   getRoute,
   listRoutes,
   routeProgress,
-  updateRouteStatus,
   type RouteItem,
   type RouteStopItem,
 } from '@/routes.service';
@@ -141,7 +140,7 @@ export default function RutasScreen() {
           <RutaFinalizada route={route} payments={payments} />
         ) : (
           // Iniciar pasa por la vista previa (S3): ahí se ve el recorrido, se mide y se confirma.
-          <RutaEnCurso route={route} onStart={() => router.push(`/rutas/preview?routeId=${route.id}`)} />
+          <RutaEnCurso route={route} payments={payments} onStart={() => router.push(`/rutas/preview?routeId=${route.id}`)} />
         )}
 
         {actionError && <Text style={styles.error}>{actionError}</Text>}
@@ -170,9 +169,12 @@ function SinRuta({ busy, onGenerate }: { busy: boolean; onGenerate: () => void }
 }
 
 /** RT-0b: ruta planificada o en curso — progreso, métricas y la acción del día. */
-function RutaEnCurso({ route, onStart }: { route: RouteItem; onStart: () => void }) {
+function RutaEnCurso({ route, payments, onStart }: { route: RouteItem; payments: PaymentItem[]; onStart: () => void }) {
   const { done, total } = routeProgress(route);
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  // Lo cobrado sale de la MISMA cuenta que usa la jornada cerrada y el Home: dos pantallas del
+  // mismo día no pueden decir cosas distintas.
+  const { collected, currency } = summarizeDay(route, payments);
   const planned = route.status === RouteStatus.PLANNED;
   const next = (route.stops ?? []).find((s) => s.status === RouteStopStatus.PENDING);
 
@@ -195,8 +197,7 @@ function RutaEnCurso({ route, onStart }: { route: RouteItem; onStart: () => void
         <View style={{ flexDirection: 'row', gap: SPACING.md }}>
           <StatTile label="Visitas" value={`${done}/${total}`} />
           <StatTile label="Pendientes" value={String(total - done)} />
-          {/* "Cobrado" se activa con los pagos en campo (P4), igual que en el Home. */}
-          <StatTile label="Cobrado" value="—" />
+          <StatTile label="Cobrado" value={money(collected, currency)} tone={collected > 0 ? 'success' : 'neutral'} />
         </View>
 
         {planned ? (

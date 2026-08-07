@@ -41,6 +41,12 @@ jest.mock('../agenda.service', () => ({
 }));
 jest.mock('../catalogs.service', () => ({ listCatalog: jest.fn(async () => ok([{ id: 'k' }])) }));
 jest.mock('../notifications.service', () => ({ listNotifications: jest.fn(async () => ok([])) }));
+jest.mock('../payments.service', () => ({
+  listPaymentsByDay: jest.fn(async () => {
+    mockLlamadas.push({ fn: 'listPaymentsByDay' });
+    return ok([]);
+  }),
+}));
 jest.mock('../clients.service', () => ({ getClient: jest.fn(async () => ({ status: 'ok', data: { id: 'cl1' } })) }));
 jest.mock('../db', () => ({ getMany: jest.fn(async () => [{ clientId: 'cl1' }]), putAll: jest.fn(), fetchedAt: jest.fn(async () => null) }));
 
@@ -67,6 +73,12 @@ describe('hydrate · usa las consultas de las pantallas', () => {
     await hydrate('u1');
     const sinFiltro = mockLlamadas.filter((l) => l.fn === 'listRoutes').map((l) => l.params);
     expect(sinFiltro).toContainEqual({ collectorId: 'u1' });
+  });
+
+  // Sin esto, el cierre de jornada sin señal anunciaba "recaudado hoy Bs 0,00", que es mentira.
+  it('baja lo cobrado hoy, que es lo que muestran el Inicio, Rutas y el resumen', async () => {
+    await hydrate('u1');
+    expect(llamada('listPaymentsByDay')).toBeDefined();
   });
 
   it('además baja la ruta activa, que es la que mira el Inicio', async () => {

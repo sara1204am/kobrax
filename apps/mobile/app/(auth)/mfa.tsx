@@ -4,6 +4,7 @@ import { Button, Card, ErrorBanner, Field, Hero, SecurityFooter, styles } from '
 import { OtpInput } from '@/otp-input';
 import { authService } from '@/auth-service';
 import { goToStep } from '@/route-step';
+import { COLORS } from '@/theme';
 
 export default function MfaScreen() {
   const [code, setCode] = useState('');
@@ -36,7 +37,7 @@ export default function MfaScreen() {
           <>
             <OtpInput value={code} onChange={setCode} error={!!error} />
             <Button label="Verificar" onPress={() => submit(code)} loading={loading} disabled={code.length !== 6} />
-            <Text style={[styles.footer, { color: '#7B68D6' }]} onPress={() => setUseBackup(true)}>
+            <Text style={[styles.footer, { color: COLORS.purple }]} onPress={() => setUseBackup(true)}>
               Usar un código de respaldo
             </Text>
           </>
@@ -51,7 +52,7 @@ export default function MfaScreen() {
               error={!!error}
             />
             <Button label="Verificar" onPress={() => submit(backup)} loading={loading} disabled={backup.length < 6} />
-            <Text style={[styles.footer, { color: '#7B68D6' }]} onPress={() => setUseBackup(false)}>
+            <Text style={[styles.footer, { color: COLORS.purple }]} onPress={() => setUseBackup(false)}>
               Volver al código del authenticator
             </Text>
           </View>

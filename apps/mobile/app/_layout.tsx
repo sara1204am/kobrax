@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { AppState, type AppStateStatus } from 'react-native';
+import { AppState, View, type AppStateStatus } from 'react-native';
 import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getSession, shouldRelock } from '@/session';
 import { isBiometricEnabled } from '@/biometric';
+import { OfflineIndicator } from '@/ui';
+import { COLORS } from '@/theme';
 
 const AWAY = /inactive|background/;
 
@@ -41,7 +43,14 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#F8F9FB' } }} />
+      {/* El aviso de sin-conexión / pendientes vive acá y no sobre las tabs: se encolan pagos y
+          visitas desde la ficha del deudor y desde el resultado de una parada, que son pantallas
+          fuera del shell. Montado ahí, el cobrador cobraba sin señal y no veía ninguna señal de
+          que eso quedó guardado hasta volver a una tab. Se oculta solo cuando no hay nada que decir. */}
+      <View style={{ flex: 1 }}>
+        <OfflineIndicator onPressPending={() => router.push('/pendientes')} />
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: COLORS.bg } }} />
+      </View>
     </SafeAreaProvider>
   );
 }

@@ -50,7 +50,7 @@ export default function InicioScreen() {
   const [home, setHome] = useState<Home | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async (initial: boolean) => {
+  const load = useCallback(async () => {
     const res = await authService.me();
     if (res.status === 'offline') {
       // Ya no expulsa a la pantalla de offline ni en el arranque: desde P6, `me()` responde con la
@@ -110,13 +110,13 @@ export default function InicioScreen() {
   // Al volver de registrar una gestión o un pago los números cambiaron: se relee al enfocar.
   useFocusEffect(
     useCallback(() => {
-      void load(true);
+      void load();
     }, [load]),
   );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await load(false);
+    await load();
     setRefreshing(false);
   }, [load]);
 
