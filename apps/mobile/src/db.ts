@@ -48,11 +48,11 @@ export type CacheKind =
 /** Qué espera subir la cola. Cada uno mapea a un endpoint idempotente o append-only (plan §D3). */
 export type QueueKind =
   | 'visit'
-  | 'visit.evidence'
   | 'payment'
   | 'agenda.create'
   | 'agenda.complete'
-  | 'agenda.postpone';
+  | 'agenda.postpone'
+  | 'case.activity';
 
 export interface QueueRow {
   id: number;

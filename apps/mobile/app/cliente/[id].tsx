@@ -372,7 +372,15 @@ export default function ClienteFichaScreen() {
         onSubmit={async (payload) => {
           const res = await addActivity(selected.caseId, payload);
           if (res.status === 'ok') { setGestSheet(false); await loadCase(selected.caseId); return null; }
-          if (res.status === 'offline') return 'Sin conexión — no se registró. Reintentá.';
+          if (res.status === 'offline') {
+            // La gestión queda guardada y sube sola: `case_activities` es append-only, así que
+            // reintentarla no puede pisar nada.
+            const guardada = await queueForLater({ kind: 'case.activity', caseId: selected.caseId, input: payload });
+            if (!guardada) return 'Sin conexión y no se pudo guardar en el teléfono. Reintentá.';
+            setGestSheet(false);
+            await loadCase(selected.caseId);
+            return null;
+          }
           if (res.status === 'unauthenticated') return 'Tu sesión venció.';
           return res.message;
         }}

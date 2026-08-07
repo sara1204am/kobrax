@@ -14,6 +14,7 @@ import * as db from '../db';
 import { uploadImage } from '../uploads.service';
 import { addVisitEvidence, createVisit, type CreateVisitInput } from '../field.service';
 import { createPayment, type NewPayment } from '../payments.service';
+import { addActivity, type NewActivity } from '../cases.service';
 import { completeItem, createItem, postponeItem, type CreateAgendaInput } from '../agenda.service';
 import { getUserId } from '../session';
 
@@ -39,6 +40,8 @@ export type QueuedAction =
     }
   | { kind: 'payment'; input: NewPayment; idempotencyKey: string; photo?: PendingPhoto }
   | { kind: 'agenda.create'; input: CreateAgendaInput }
+  /** Gestión registrada desde la ficha del deudor. `case_activities` es append-only. */
+  | { kind: 'case.activity'; caseId: string; input: NewActivity }
   | { kind: 'agenda.complete'; id: string; outcome: AgendaOutcome; notes?: string }
   // `AgendaPostponeStep` y no `number`: posponer es en pasos fijos, y el tipo del dominio ya lo
   // dice. Guardar un número libre dejaría entrar a la cola algo que el server va a rechazar.
@@ -51,6 +54,7 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'agenda.create': 'Gestión agendada',
   'agenda.complete': 'Gestión ejecutada',
   'agenda.postpone': 'Gestión pospuesta',
+  'case.activity': 'Gestión registrada',
 };
 
 /**
@@ -120,6 +124,8 @@ export async function send(action: QueuedAction): Promise<SendResult> {
     }
     case 'agenda.create':
       return mapMutate(await createItem(action.input));
+    case 'case.activity':
+      return mapMutate(await addActivity(action.caseId, action.input));
     case 'agenda.complete':
       return mapMutate(await completeItem(action.id, action.outcome, action.notes));
     case 'agenda.postpone':

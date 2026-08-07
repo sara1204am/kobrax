@@ -58,6 +58,7 @@ import {
 } from '@/agenda.service';
 import { clientDisplayName, type ClientHit } from '@/clients.service';
 import { useClientSearch } from '@/use-client-search';
+import { queueForLater } from '@/sync/sync.service';
 import { listCatalog, type CatalogOption } from '@/catalogs.service';
 
 const TYPES: AgendaItemType[] = [
@@ -329,8 +330,28 @@ export default function CrearGestionScreen() {
       router.back(); // la Agenda y el detalle refetchean al recuperar el foco
       return;
     }
-    // Offline: el formulario queda intacto para reintentar (cola real de escritura = P6).
-    setError(res.status === 'offline' ? 'Sin conexión — reintentá.' : res.status === 'error' ? res.message : 'Sesión vencida.');
+    if (res.status === 'offline') {
+      // Sin señal, el ALTA se guarda y sube sola: agendar una visita o una promesa parado frente al
+      // deudor es el caso más común del módulo, y frenarlo por cobertura es lo que P6 vino a evitar.
+      //
+      // La EDICIÓN no se encola: es un PATCH sobre algo que vive en el servidor, y encolar cambios
+      // parciales de un ítem que pudo cambiar de otro lado es pedir un conflicto. Se reintenta.
+      if (payload) {
+        const guardada = await queueForLater({ kind: 'agenda.create', input: payload });
+        if (guardada) {
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          router.back();
+          return;
+        }
+      }
+      setError(
+        payload
+          ? 'Sin conexión y no se pudo guardar en el teléfono. Reintentá.'
+          : 'Sin conexión — los cambios se guardan cuando vuelva la señal. Reintentá.',
+      );
+      return;
+    }
+    setError(res.status === 'error' ? res.message : 'Sesión vencida.');
   }, [editId, form]);
 
   const credit = ctx?.credits.find((c) => c.creditId === form.creditId);
