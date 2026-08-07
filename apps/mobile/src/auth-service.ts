@@ -225,5 +225,10 @@ export const authService = {
       await apiFetch('/auth/logout', { method: 'POST', body: { refreshToken: session.refreshToken } });
     }
     await clearSession();
+    // La copia local de la cartera —nombres, teléfonos y direcciones de deudores— se va con la
+    // sesión: en un teléfono compartido, el próximo que entre no puede quedarse con los datos del
+    // anterior. **La cola NO se borra** (plan §Q3): es trabajo sin entregar, puede ser un pago, y
+    // queda guardada con su dueño para cuando vuelva a entrar.
+    await db.clearCache();
   },
 };
