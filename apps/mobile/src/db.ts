@@ -31,6 +31,8 @@ const DB_NAME = 'kobrax.db';
  * `route` no necesita split: el listado y el detalle son el mismo `RouteItem`.
  */
 export type CacheKind =
+  /** Quién es el cobrador (`GET /auth/me`). Sin esto, abrir la app sin señal no pasa del splash. */
+  | 'session'
   | 'client'
   | 'case'
   | 'case.detail'

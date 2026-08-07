@@ -53,10 +53,10 @@ export default function InicioScreen() {
   const load = useCallback(async (initial: boolean) => {
     const res = await authService.me();
     if (res.status === 'offline') {
-      // ponytail: en el mount inicial (sin datos locales aún, WatermelonDB = P6) vamos a la
-      // pantalla offline; en un refresh el Home YA está en pantalla → un bache de red no debe
-      // expulsar al cobrador (offline-first: nunca sacarlo del shell por conectividad).
-      if (initial) router.replace('/(app)/offline');
+      // Ya no expulsa a la pantalla de offline ni en el arranque: desde P6, `me()` responde con la
+      // identidad guardada mientras la sesión local siga vigente, así que llegar acá significa que
+      // de verdad no hay con qué trabajar (sesión vencida o teléfono nuevo). El Home se queda como
+      // está y el banner explica lo que pasa — nunca se saca al cobrador del shell por conectividad.
       return;
     }
     if (res.status !== 'ok') return router.replace('/(auth)/login');
