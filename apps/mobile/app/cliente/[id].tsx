@@ -11,7 +11,7 @@ import { money, MONTHS, timeSlotRange } from '@/agenda-form';
 import { MiniMapCard, type MiniMapPoint } from '@/maps/MiniMapCard';
 import { clientContext, type AgendaClientContext, type CreditOption } from '@/agenda.service';
 import { clientDisplayName, getClient, type ClientDetail } from '@/clients.service';
-import { addActivity, getCase, type CaseDetail } from '@/cases.service';
+import { addActivity, getCase, type CaseDetail, type NewActivity } from '@/cases.service';
 import { createPayment, listPayments, type PaymentItem, type PaymentMethod } from '@/payments.service';
 import { uploadImage } from '@/uploads.service';
 import { MiQrCobro } from '@/qr-cobro';
@@ -145,14 +145,14 @@ export default function ClienteFichaScreen() {
       // la ruta, que además anda offline con los packs). Google Maps dejaba al cobrador afuera.
       if (kind === 'navigate') {
         router.push(`/cliente/mapa?clientId=${clientId}&locationId=${loc?.id ?? ''}&name=${encodeURIComponent(ctx?.client.displayName ?? '')}`);
-        void addActivity(selected.caseId, { type: 'NOTE', notes: 'Navegación' });
+        void registrarRastro(selected.caseId, { type: 'NOTE', notes: 'Navegación' });
         return;
       }
       if (kind === 'call' && phone) { url = `tel:${phone}`; type = 'CALL'; }
       else if (kind === 'whatsapp' && phone) { url = `https://wa.me/${phone}`; type = 'MESSAGE'; }
       if (!url) return;
       void Linking.openURL(url);
-      void addActivity(selected.caseId, { type, notes: kind === 'call' ? 'Llamada' : 'WhatsApp' });
+      void registrarRastro(selected.caseId, { type, notes: kind === 'call' ? 'Llamada' : 'WhatsApp' });
     },
     [selected, ctx, clientId],
   );
@@ -347,14 +347,27 @@ export default function ClienteFichaScreen() {
         currency={currency}
         defaultAmount={detail?.installmentAmount ?? selected.outstandingBalance}
         maxAmount={selected.outstandingBalance}
-        onSubmit={async (amount, method, receiptUrl, receiptHash, idemKey) => {
-          const input = { creditId: selected.creditId, caseId: selected.caseId, amount, method, receiptUrl, receiptHash };
+        onSubmit={async (amount, method, receipt, idemKey) => {
+          const input = {
+            creditId: selected.creditId,
+            caseId: selected.caseId,
+            amount,
+            method,
+            receiptUrl: receipt?.url,
+            receiptHash: receipt?.hash,
+          };
           const res = await createPayment(input, idemKey);
           if (res.status === 'ok') { setPaySheet(false); await loadCase(selected.caseId); return null; }
           if (res.status === 'offline') {
             // El cobro se guarda en el teléfono y sube solo. La clave de idempotencia es la que ya
-            // generó el sheet, así que cuando salga no puede cobrarle dos veces al deudor.
-            const guardado = await queueForLater({ kind: 'payment', input, idempotencyKey: idemKey });
+            // generó el sheet, así que cuando salga no puede cobrarle dos veces al deudor. Si la
+            // foto quedó sin subir, viaja con él y la sube la cola.
+            const guardado = await queueForLater({
+              kind: 'payment',
+              input,
+              idempotencyKey: idemKey,
+              photo: receipt?.local,
+            });
             if (!guardado) return 'Sin conexión y no se pudo guardar en el teléfono. Reintentá.';
             setPaySheet(false);
             await loadCase(selected.caseId);
@@ -387,6 +400,25 @@ export default function ClienteFichaScreen() {
       />
     </View>
   );
+}
+
+/**
+ * El comprobante del pago. Con señal se sube al sacarlo y quedan `url`+`hash`; sin señal queda
+ * `local`, la ruta del archivo en el teléfono, y lo sube la cola junto con el cobro.
+ */
+type Comprobante = { url?: string; hash?: string; local?: { uri: string; mimeType?: string } };
+
+/**
+ * Deja constancia de que se llamó, se escribió por WhatsApp o se fue a la dirección. Sin señal se
+ * encola: son las tres acciones más usadas en la calle, y perderlas dejaba el historial del deudor
+ * sin rastro de que el cobrador lo intentó — que es justo lo que después se le reclama.
+ *
+ * No espera ni avisa: es un rastro, no la acción principal. Lo que el cobrador pidió (llamar, abrir
+ * el mapa) ya está pasando.
+ */
+async function registrarRastro(caseId: string, input: NewActivity): Promise<void> {
+  const res = await addActivity(caseId, input);
+  if (res.status === 'offline') await queueForLater({ kind: 'case.activity', caseId, input });
 }
 
 function ActionBtn({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) {
@@ -427,11 +459,12 @@ function PaySheet({
   visible, onClose, currency, defaultAmount, maxAmount, onSubmit,
 }: {
   visible: boolean; onClose: () => void; currency: string; defaultAmount: number; maxAmount: number;
-  onSubmit: (amount: number, method: PaymentMethod, receiptUrl: string | undefined, receiptHash: string | undefined, idemKey: string) => Promise<string | null>;
+  /** `receipt` viaja entero: con señal trae `url`+`hash`, sin señal la ruta local de la foto. */
+  onSubmit: (amount: number, method: PaymentMethod, receipt: Comprobante | null, idemKey: string) => Promise<string | null>;
 }) {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('CASH');
-  const [receipt, setReceipt] = useState<{ url: string; hash: string } | null>(null);
+  const [receipt, setReceipt] = useState<Comprobante | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -453,8 +486,12 @@ function PaySheet({
     setUploading(true);
     const up = await uploadImage(pick.uri, pick.mimeType);
     setUploading(false);
-    if (up.status === 'ok') setReceipt({ url: up.url, hash: up.hash });
-    else setError('No se pudo subir el comprobante.');
+    if (up.status === 'ok') return setReceipt({ url: up.url, hash: up.hash });
+    // Sin señal la foto queda en el teléfono y viaja con el pago cuando haya red — mismo criterio
+    // que el resultado de una parada. Antes, el mismo "comprobante" se perdía o no según por qué
+    // pantalla hubiera entrado el cobrador.
+    if (up.status === 'offline') return setReceipt({ local: { uri: pick.uri, mimeType: pick.mimeType } });
+    setError('No se pudo subir el comprobante.');
   }, []);
 
   const num = Number(amount);
@@ -463,7 +500,7 @@ function PaySheet({
   const submit = useCallback(async () => {
     setSaving(true);
     setError(null);
-    const err = await onSubmit(num, method, receipt?.url, receipt?.hash, idemRef.current);
+    const err = await onSubmit(num, method, receipt, idemRef.current);
     setSaving(false);
     if (err) setError(err);
   }, [num, method, receipt, onSubmit]);

@@ -9,12 +9,13 @@
  * hubiera salido bien, y una cola con dependencias entre ítems necesita un grafo, reintentos
  * encadenados y un orden que respetar. Acá el que falla se saltea y no arrastra a nadie.
  */
-import type { AgendaOutcome, AgendaPostponeStep } from '@kobrax/shared';
+import type { AgendaOutcome, AgendaPostponeStep, RouteStatus } from '@kobrax/shared';
 import * as db from '../db';
 import { uploadImage } from '../uploads.service';
 import { addVisitEvidence, createVisit, type CreateVisitInput } from '../field.service';
 import { createPayment, type NewPayment } from '../payments.service';
 import { addActivity, type NewActivity } from '../cases.service';
+import { updateRouteStatus } from '../routes.service';
 import { completeItem, createItem, postponeItem, type CreateAgendaInput } from '../agenda.service';
 import { getUserId } from '../session';
 
@@ -42,6 +43,12 @@ export type QueuedAction =
   | { kind: 'agenda.create'; input: CreateAgendaInput }
   /** Gestión registrada desde la ficha del deudor. `case_activities` es append-only. */
   | { kind: 'case.activity'; caseId: string; input: NewActivity }
+  /**
+   * Iniciar o cerrar la jornada. Idempotente porque lleva el **estado destino**, no un incremento:
+   * reintentarlo deja la ruta donde ya estaba. Sin esto, una jornada iniciada sin señal quedaba
+   * `PLANNED` en el servidor y la app volvía a ofrecer "Iniciar ruta" al reconectar.
+   */
+  | { kind: 'route.status'; routeId: string; status: RouteStatus }
   | { kind: 'agenda.complete'; id: string; outcome: AgendaOutcome; notes?: string }
   // `AgendaPostponeStep` y no `number`: posponer es en pasos fijos, y el tipo del dominio ya lo
   // dice. Guardar un número libre dejaría entrar a la cola algo que el server va a rechazar.
@@ -55,6 +62,7 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'agenda.complete': 'Gestión ejecutada',
   'agenda.postpone': 'Gestión pospuesta',
   'case.activity': 'Gestión registrada',
+  'route.status': 'Estado de la jornada',
 };
 
 /**
@@ -126,6 +134,8 @@ export async function send(action: QueuedAction): Promise<SendResult> {
       return mapMutate(await createItem(action.input));
     case 'case.activity':
       return mapMutate(await addActivity(action.caseId, action.input));
+    case 'route.status':
+      return mapMutate(await updateRouteStatus(action.routeId, action.status));
     case 'agenda.complete':
       return mapMutate(await completeItem(action.id, action.outcome, action.notes));
     case 'agenda.postpone':

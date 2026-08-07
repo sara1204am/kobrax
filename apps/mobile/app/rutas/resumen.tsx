@@ -9,6 +9,7 @@ import { formatLongDate, money } from '@/agenda-form';
 import { listPaymentsByDay, type PaymentItem } from '@/payments.service';
 import { getRoute, updateRouteStatus, type RouteItem } from '@/routes.service';
 import { CATEGORY_LABEL, CATEGORY_TONE, summarizeDay } from '@/route-summary';
+import { queueForLater } from '@/sync/sync.service';
 
 /**
  * RT-7 · Resumen de la jornada (Rutas S6). Cierra el día: cuánto recaudó, cuántas paradas completó y
@@ -46,8 +47,12 @@ export default function ResumenJornadaScreen() {
   const close = useCallback(async () => {
     setBusy(true);
     const res = await updateRouteStatus(routeId, RouteStatus.COMPLETED);
+    // Sin red la jornada se cierra igual **y el cierre sube solo** (mismo criterio que al iniciar):
+    // antes se perdía y la jornada reaparecía abierta al reconectar.
+    if (res.status === 'offline') {
+      await queueForLater({ kind: 'route.status', routeId, status: RouteStatus.COMPLETED });
+    }
     setBusy(false);
-    // Sin red la jornada se cierra igual: el estado sube cuando vuelva (mismo criterio que S3).
     if (res.status === 'error') return setError(res.message);
     router.replace('/(tabs)/rutas');
   }, [routeId]);
@@ -122,10 +127,14 @@ export default function ResumenJornadaScreen() {
         )}
 
         <SectionLabel>PRÓXIMAS ACCIONES</SectionLabel>
+        {/* Antes era un botón muerto que pintaba "llega en su propia etapa (P6)" como si fuera un
+            error: jerga interna, en rojo, en la pantalla de cierre del día. La sincronización ya
+            existe y su lugar es la lista de pendientes. */}
         <ListRow
-          title="Sincronizar con oficina"
-          subtitle="Envía el cierre de caja diario"
-          onPress={() => setError('La sincronización con oficina llega en su propia etapa (P6).')}
+          title="Ver lo que falta subir"
+          subtitle="Lo que registraste sin señal y todavía no llegó a oficina"
+          icon="cloud-upload-outline"
+          onPress={() => router.push('/pendientes')}
         />
         <ListRow
           title="Revisar ruta de mañana"

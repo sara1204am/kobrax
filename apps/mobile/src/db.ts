@@ -52,7 +52,8 @@ export type QueueKind =
   | 'agenda.create'
   | 'agenda.complete'
   | 'agenda.postpone'
-  | 'case.activity';
+  | 'case.activity'
+  | 'route.status';
 
 export interface QueueRow {
   id: number;
