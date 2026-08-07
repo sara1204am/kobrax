@@ -7,6 +7,7 @@ import { authService } from '@/auth-service';
 import { goToStep } from '@/route-step';
 import { biometricLabel, isBiometricEnabled } from '@/biometric';
 import { getSession, isSessionValid } from '@/session';
+import { API_BASE } from '@/api';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -125,9 +126,14 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          <View style={s.footerPill}>
-            <Text style={s.footerText}>Acceso seguro · SSL 256-bit</Text>
-          </View>
+          {/* El sello aparece sólo si la app de verdad habla por HTTPS. "SSL 256-bit" era una
+              frase de marketing que se mostraba igual apuntando a `http://`: prometía un cifrado
+              que en ese caso no existía. */}
+          {API_BASE.startsWith('https://') && (
+            <View style={s.footerPill}>
+              <Text style={s.footerText}>🔒 Acceso cifrado</Text>
+            </View>
+          )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

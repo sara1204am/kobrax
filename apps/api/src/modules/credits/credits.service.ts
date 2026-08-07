@@ -99,6 +99,16 @@ export class CreditsService {
 
     const accountId = this.tenant.accountId;
     const created = await this.tx(async (tx) => {
+      // Alta idempotente (igual que en clientes): si el móvil propuso un id y ese préstamo ya
+      // existe, esta llamada es el reintento de una alta encolada sin señal. Devolverlo evita
+      // darle dos préstamos al mismo deudor por un problema de cobertura.
+      if (dto.id) {
+        const previo = await tx.credit.findFirst({ where: { id: dto.id, deletedAt: null } });
+        // Sin `caseId`/`agendaId`: el caso y el recordatorio se crearon en el intento que sí entró,
+        // y lo único que hacen acá abajo es auditarse. Un reintento no vuelve a auditar nada.
+        if (previo) return { credit: previo, caseId: undefined, agendaId: undefined, reintento: true };
+      }
+
       const client = await tx.client.findFirst({
         where: { id: dto.clientId, deletedAt: null },
         select: { id: true },
@@ -107,6 +117,9 @@ export class CreditsService {
 
       const credit = await tx.credit.create({
         data: {
+          // Sólo si el móvil lo propuso: mandar `id: undefined` haría que el default del schema
+          // no se aplique en algunos clientes, y deja la clave presente con valor vacío.
+          ...(dto.id ? { id: dto.id } : {}),
           accountId,
           clientId: dto.clientId,
           branchId: dto.branchId,
@@ -167,10 +180,13 @@ export class CreditsService {
           });
           agendaId = item.id;
         }
-        return { credit, caseId: kase.id, agendaId };
+        return { credit, caseId: kase.id, agendaId, reintento: false };
       }
-      return { credit, caseId: undefined, agendaId: undefined };
+      return { credit, caseId: undefined, agendaId: undefined, reintento: false };
     });
+
+    // El alta ya se auditó cuando entró de verdad: un reintento de la cola no la registra dos veces.
+    if (created.reintento) return serializeCredit(created.credit, config.labels);
 
     await this.audit.record({ entity: 'credit', entityId: created.credit.id, action: 'CREATE', after: creditSummary(created.credit) });
     if (created.caseId) {

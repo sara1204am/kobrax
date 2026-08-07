@@ -54,7 +54,15 @@ export class ClientsService {
     this.assertIdentity(dto.clientType, dto.firstName, dto.lastName, dto.businessName);
     const nationalIdHash = this.blind.hash(dto.nationalId);
 
-    const { created, subs } = await this.tx(async (tx) => {
+    const { created, subs, yaExistia } = await this.tx(async (tx) => {
+      // Alta idempotente: si el móvil propuso un id y ese cliente ya está, esta llamada es el
+      // reintento de una alta encolada sin señal — se devuelve el existente en vez de crear un
+      // duplicado. Se chequea ANTES que el documento para no confundir "es el mismo alta" con
+      // "ya hay otro cliente con ese CI", que sí es un error que el cobrador tiene que ver.
+      if (dto.id) {
+        const previo = await tx.client.findFirst({ where: { id: dto.id, deletedAt: null } });
+        if (previo) return { created: previo, subs: [], yaExistia: true };
+      }
       if (nationalIdHash) {
         const dup = await tx.client.findFirst({ where: { nationalIdHash } });
         if (dup) throw clientDuplicate();
@@ -63,6 +71,8 @@ export class ClientsService {
       try {
         client = await tx.client.create({
           data: {
+            // Sólo si el móvil lo propuso (ver `CreateClientDto.id`).
+            ...(dto.id ? { id: dto.id } : {}),
             accountId: this.tenant.accountId,
             clientType: dto.clientType,
             firstName: dto.firstName,
@@ -111,8 +121,11 @@ export class ClientsService {
         for (const c of r.contacts ?? []) await mkContact(c, rel.id); // teléfonos del contacto
         for (const l of r.locations ?? []) await mkLocation(l, rel.id); // ubicaciones del contacto
       }
-      return { created: client, subs: audits };
+      return { created: client, subs: audits, yaExistia: false };
     });
+
+    // Un reintento no vuelve a auditar: el alta ya quedó registrada la primera vez.
+    if (yaExistia) return serializeClient(created, { crypto: this.crypto, reveal: false });
 
     // Audit fuera del tx (audit.record abre su propio withTenant), como en update().
     await this.audit.record({ entity: 'client', entityId: created.id, action: 'CREATE', after: created, redactKeys: CLIENT_REDACT });

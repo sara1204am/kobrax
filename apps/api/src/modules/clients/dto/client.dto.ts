@@ -80,6 +80,14 @@ export class CreateRelationDto {
 
 // ── Cliente ──────────────────────────────────────────────────────────────────
 export class CreateClientDto {
+  /**
+   * Id propuesto por el cliente (móvil). **Es lo que hace el alta idempotente**: el cobrador da de
+   * alta a un deudor sin señal, la acción queda en cola y si se reintenta, el server reconoce que
+   * esa alta ya entró en vez de crear un segundo cliente. Opcional: la web no lo manda y el server
+   * genera el suyo.
+   */
+  @IsOptional() @IsUUID() id?: string;
+
   @IsEnum(ClientType)
   clientType!: ClientType;
 
