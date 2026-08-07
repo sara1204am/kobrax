@@ -9,6 +9,7 @@ import { Button, ErrorBanner } from '@/components';
 import { choosePhoto } from '@/photo';
 import { uploadImage } from '@/uploads.service';
 import { MiQrCobro } from '@/qr-cobro';
+import { queueForLater } from '@/sync/sync.service';
 import { money, todayISO } from '@/agenda-form';
 import { listCatalogCached, type CatalogOption } from '@/catalogs.service';
 import { createItem } from '@/agenda.service';
@@ -82,8 +83,11 @@ export default function ResultadoScreen() {
     setBusy(true);
     const up = await uploadImage(pick.uri, pick.mimeType);
     setBusy(false);
-    if (up.status === 'ok') set({ photo: { url: up.url, hash: up.hash } });
-    else setError('No se pudo subir la foto.');
+    if (up.status === 'ok') return set({ photo: { url: up.url, hash: up.hash } });
+    // Sin señal la foto queda en el teléfono y viaja con la visita cuando haya red. El cobrador
+    // ya sacó la foto: perderla por falta de cobertura sería perder la evidencia de que estuvo ahí.
+    if (up.status === 'offline') return set({ photo: { local: { uri: pick.uri, mimeType: pick.mimeType } } });
+    setError('No se pudo subir la foto.');
   }, [set]);
 
   const submit = useCallback(async () => {
@@ -101,7 +105,8 @@ export default function ResultadoScreen() {
     const amount = Number(form.amount);
     const outcome = key === 'PAID' ? paymentOutcome(amount, outstanding) : meta.outcome;
 
-    const visit = await createVisit({
+    // Se arman una sola vez y sirven a los dos caminos: enviarlas ahora, o encolarlas si no hay red.
+    const visitInput = {
       routeStopId: stop.id,
       caseId: stop.caseId,
       lat: coords.latitude,
@@ -111,16 +116,42 @@ export default function ResultadoScreen() {
       outcome,
       notes: form.notes.trim() || undefined,
       details: buildDetails(key, form),
-    });
+    };
+    const promesaInput =
+      key === 'PROMISE' && stop.caseId && stop.creditId
+        ? {
+            caseId: stop.caseId,
+            creditId: stop.creditId,
+            type: AgendaItemType.PROMISE_TO_PAY,
+            scheduledDate: form.promiseDate,
+            timeMode: ScheduleTimeMode.LAPSE,
+            timeSlot: AgendaTimeSlot.MORNING,
+            details: { amount, promiseDate: form.promiseDate, paymentMethodCode: form.paymentMethodCode },
+          }
+        : undefined;
+
+    const visit = await createVisit(visitInput);
+    // Sin señal la parada se cierra IGUAL: se guarda entera (visita + foto + cobro + promesa) y
+    // sube sola después. Es el caso normal del cobrador en zona sin cobertura, no una excepción.
+    if (visit.status === 'offline') {
+      const guardada = await queueForLater({
+        kind: 'visit',
+        input: visitInput,
+        photo: form.photo?.local,
+        payment:
+          key === 'PAID' && stop.creditId
+            ? { creditId: stop.creditId, caseId: stop.caseId, amount, method: form.paymentMethodCode as PaymentMethod }
+            : undefined,
+        promise: promesaInput,
+      });
+      setBusy(false);
+      if (!guardada) return setError('No se pudo guardar en el teléfono. Reintentá con señal.');
+      router.replace(`/rutas/mapa?routeId=${routeId}`);
+      return;
+    }
     if (visit.status !== 'ok') {
       setBusy(false);
-      return setError(
-        visit.status === 'offline'
-          ? 'Sin conexión: no se pudo registrar.'
-          : visit.status === 'error'
-            ? visit.message
-            : 'Tu sesión venció. Volvé a entrar.',
-      );
+      return setError(visit.status === 'error' ? visit.message : 'Tu sesión venció. Volvé a entrar.');
     }
 
     setRegistered(true);
@@ -132,9 +163,17 @@ export default function ResultadoScreen() {
 
     // La foto se sella contra la visita ya creada. Si falla, la visita YA quedó: se avisa y no se
     // reintenta sola — repetir el registro duplicaría la parada visitada.
-    if (form.photo) {
-      const ev = await addVisitEvidence(visit.data.id, { type: 'PHOTO', fileUrl: form.photo.url, fileHash: form.photo.hash });
+    // Si quedó sólo en el teléfono (se sacó sin señal y la red volvió recién ahora), se sube acá.
+    let foto = form.photo?.url ? { url: form.photo.url, hash: form.photo.hash! } : undefined;
+    if (!foto && form.photo?.local) {
+      const up = await uploadImage(form.photo.local.uri, form.photo.local.mimeType);
+      if (up.status === 'ok') foto = { url: up.url, hash: up.hash };
+    }
+    if (foto) {
+      const ev = await addVisitEvidence(visit.data.id, { type: 'PHOTO', fileUrl: foto.url, fileHash: foto.hash });
       if (ev.status !== 'ok') pendientes.push('la foto no se pudo adjuntar');
+    } else if (form.photo) {
+      pendientes.push('la foto no se pudo adjuntar');
     }
 
     if (key === 'PAID' && stop.creditId) {
@@ -144,8 +183,8 @@ export default function ResultadoScreen() {
           caseId: stop.caseId,
           amount,
           method: form.paymentMethodCode as PaymentMethod,
-          receiptUrl: form.photo?.url,
-          receiptHash: form.photo?.hash,
+          receiptUrl: foto?.url,
+          receiptHash: foto?.hash,
         },
         // Anti doble cobro si el cobrador reintenta con señal mala: la llave sale de la visita, que
         // el server creó una sola vez, así que reintentar no puede cobrarle dos veces al deudor.
@@ -154,17 +193,9 @@ export default function ResultadoScreen() {
       if (pay.status !== 'ok') pendientes.push(`el pago de ${money(amount, currency)} NO se guardó`);
     }
 
-    if (key === 'PROMISE' && stop.caseId && stop.creditId) {
+    if (promesaInput) {
       // La promesa vive en la agenda (patrón cartera/agenda), y el server le agrega su recordatorio.
-      const prom = await createItem({
-        caseId: stop.caseId,
-        creditId: stop.creditId,
-        type: AgendaItemType.PROMISE_TO_PAY,
-        scheduledDate: form.promiseDate,
-        timeMode: ScheduleTimeMode.LAPSE,
-        timeSlot: AgendaTimeSlot.MORNING,
-        details: { amount, promiseDate: form.promiseDate, paymentMethodCode: form.paymentMethodCode },
-      });
+      const prom = await createItem(promesaInput);
       if (prom.status !== 'ok') pendientes.push('la promesa no se pudo agendar');
     }
 

@@ -43,8 +43,12 @@ export interface ResultForm {
   noticeLeft: boolean;
   categoryCode: string;
   notes: string;
-  /** URL + hash de la foto ya subida (visita sin contacto). */
-  photo?: { url: string; hash: string };
+  /**
+   * La foto de la visita. Con señal se sube al tomarla y quedan `url`+`hash`; **sin señal queda
+   * sólo `local`**, la ruta del archivo en el teléfono, y la sube el motor de sync al drenar.
+   * Que no haya red no puede impedir sacar la foto: es la evidencia de que estuvo ahí.
+   */
+  photo?: { url?: string; hash?: string; local?: { uri: string; mimeType?: string } };
 }
 
 export function initialResult(todayIso: string): ResultForm {

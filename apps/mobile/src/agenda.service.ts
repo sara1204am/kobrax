@@ -12,6 +12,7 @@ import type {
   ScheduleTimeMode,
 } from '@kobrax/shared';
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
+import { cachedList, cachedOne } from './sync/cached';
 
 export interface AgendaListItem {
   id: string;
@@ -42,12 +43,17 @@ export interface AgendaListItem {
 
 /** Agendados de un día (`YYYY-MM-DD`). El móvil separa secciones por `status`. */
 export function listByDay(dateISO: string): Promise<QueryResult<AgendaListItem[]>> {
-  return apiQuery<AgendaListItem[]>(`/agenda${toQuery({ date: dateISO })}`);
+  // El scope es el día: la agenda de hoy y la de mañana no se pisan en la base local.
+  return cachedList<AgendaListItem>('agenda', dateISO, () =>
+    apiQuery<AgendaListItem[]>(`/agenda${toQuery({ date: dateISO })}`),
+  );
 }
 
 /** Vencidos (SCHEDULED con fecha < hoy), desc. `total` = `meta.total` (para "ver más"). */
 export function listOverdue(limit = 100): Promise<QueryResult<AgendaListItem[]>> {
-  return apiQuery<AgendaListItem[]>(`/agenda/overdue${toQuery({ limit })}`);
+  return cachedList<AgendaListItem>('agenda', 'overdue', () =>
+    apiQuery<AgendaListItem[]>(`/agenda/overdue${toQuery({ limit })}`),
+  );
 }
 
 /** Con qué se ejecuta la gestión: el teléfono al que llamar o la dirección a la que ir. */
@@ -85,7 +91,7 @@ export interface AgendaItemDetail {
 
 /** Detalle de una gestión (S3). Un round-trip: gestión + deudor + saldo + contacto + historial. */
 export function getItem(id: string): Promise<QueryResult<AgendaItemDetail>> {
-  return apiQuery<AgendaItemDetail>(`/agenda/${id}`);
+  return cachedOne<AgendaItemDetail>('agenda.detail', id, () => apiQuery<AgendaItemDetail>(`/agenda/${id}`));
 }
 
 /** Registrar la ejecución (S4): outcome + nota → el ítem pasa a EXECUTED. Devuelve el ítem actualizado. */
@@ -181,7 +187,11 @@ export interface AgendaClientContext {
  * teléfonos y direcciones en claro. `error` si el cliente no tiene casos asignados a mí (AGENDA_002).
  */
 export function clientContext(clientId: string): Promise<QueryResult<AgendaClientContext>> {
-  return apiQuery<AgendaClientContext>(`/agenda/clients/${clientId}/context`);
+  // Con respaldo local: sin esto, sin señal se puede BUSCAR al deudor pero no abrirlo, que es
+  // peor que no encontrarlo — se ve el nombre y la pantalla siguiente no carga.
+  return cachedOne<AgendaClientContext>('client.context', clientId, () =>
+    apiQuery<AgendaClientContext>(`/agenda/clients/${clientId}/context`),
+  );
 }
 
 /** Cuerpo de `POST /agenda`. El server deriva `clientId` y `assigneeId` — no van acá. */

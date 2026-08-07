@@ -63,6 +63,33 @@ function makeService(opts: { client?: unknown; credit?: unknown; config?: unknow
 
 const BASE = { clientId: '11111111-1111-1111-1111-111111111111', principalAmount: 1200, installmentsCount: 12 } as never;
 
+/**
+ * Alta idempotente del préstamo, para que una encolada sin señal no le dé dos créditos al mismo
+ * deudor si la cola reintenta. Mismo mecanismo que en clientes.
+ */
+describe('CreditsService.create — idempotencia del alta offline', () => {
+  it('con un id ya existente devuelve ese préstamo y NO crea otro', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' }, credit: { id: 'ya-existe', currency: 'BOB', metadata: {} } });
+    const res = await service.create({ ...(BASE as object), id: 'ya-existe' } as never);
+    assert.equal(res.id, 'ya-existe');
+    assert.equal(calls.creditCreate.length, 0, 'no debe insertar de nuevo');
+  });
+
+  it('el reintento no crea un segundo caso ni otro recordatorio en la agenda', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' }, credit: { id: 'ya-existe', currency: 'BOB', metadata: {} } });
+    await service.create({ ...(BASE as object), id: 'ya-existe', openCase: true } as never);
+    assert.equal(calls.caseCreate.length, 0);
+    assert.equal(calls.agendaCreate.length, 0);
+    assert.deepEqual(calls.audit, []);
+  });
+
+  it('con un id nuevo crea normalmente y lo usa', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ ...(BASE as object), id: 'id-propuesto' } as never);
+    assert.equal(calls.creditCreate[0]!.id, 'id-propuesto');
+  });
+});
+
 describe('CreditsService.create', () => {
   it('genera el cronograma y deja outstandingBalance = principal', async () => {
     const { service, calls } = makeService({ client: { id: 'c1' } });

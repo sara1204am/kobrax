@@ -1,7 +1,8 @@
 import type { AuthAccountOption, AuthTokens, LoginResult } from '@kobrax/shared';
 import { apiFetch, type ApiResult } from './api';
 import { authedFetch } from './api-client';
-import { clearSession, getSession, saveSession, touchSession } from './session';
+import { clearSession, getSession, isSessionValid, saveSession, saveUserId, touchSession } from './session';
+import * as db from './db';
 
 export type Step = 'done' | 'mfa' | 'mfa_setup' | 'select_account';
 
@@ -61,6 +62,21 @@ async function handleResult(data: LoginResult): Promise<Step> {
 /** Convierte un error de la API en un mensaje legible. */
 function errMessage(res: ApiResult<unknown>): string {
   return res.error?.message ?? 'Ocurrió un error, intenta de nuevo';
+}
+
+/**
+ * El último `me` guardado, si la sesión offline sigue vigente. `null` si nunca hubo uno o si la
+ * ventana venció — ahí sí corresponde mandar a la pantalla de sin conexión, porque ya no se puede
+ * confiar en una identidad vieja.
+ *
+ * `ponytail:` no se re-valida nada contra el token. La ventana de 8 h de `session.ts` ya es la
+ * regla de cuánto vale una sesión sin poder preguntarle al servidor; agregar una segunda sería
+ * tener dos relojes que se contradicen.
+ */
+async function meLocal(): Promise<MeResult | null> {
+  if (!isSessionValid(await getSession())) return null;
+  const me = await db.getOne<Me>('session', 'me');
+  return me ? { status: 'ok', me } : null;
 }
 
 export const authService = {
@@ -154,14 +170,28 @@ export const authService = {
   async me(): Promise<MeResult> {
     const res = await authedFetch<Me>('/auth/me');
     if (res.status === 'unauthenticated') return { status: 'unauthenticated' };
-    if (res.status === 0) return { status: 'offline' };
+    // Sin red: si la sesión local sigue vigente, se responde con el último `me` guardado. Es lo que
+    // permite ABRIR la app sin señal y llegar a los datos locales (P6 · riesgo R3 del plan). Antes,
+    // el arranque moría en la pantalla de offline aunque el teléfono tuviera la jornada entera
+    // guardada — que es el caso normal del cobrador que sale a la calle.
+    if (res.status === 0) return (await meLocal()) ?? { status: 'offline' };
     if (res.status === 200 && res.data) {
       await touchSession(); // actividad → extiende la ventana de inactividad (8h)
+      // **Cambió la persona o el tenant** → el caché de antes no es suyo y se tira. Segunda barrera
+      // del mismo problema que resuelve `clearSession`: si una sesión murió sin pasar por ahí, el
+      // que entra no puede heredar la cartera del anterior. Cuesta una comparación por arranque.
+      const previo = await db.getOne<Me>('session', 'me');
+      if (previo && (previo.userId !== res.data.userId || previo.accountId !== res.data.accountId)) {
+        await db.clearCache();
+      }
+      // Quién es, para poder encolar acciones cuando no haya red y no se le pueda preguntar (P6).
+      await saveUserId(res.data.userId);
+      await db.putOne('session', 'me', res.data);
       return { status: 'ok', me: res.data };
     }
     // Solo un 401 puede venir de "se cayó la red durante el refresh" (sesión intacta) → offline.
     // Cualquier otro no-200 (403/500) es fallo server-side, no de red → re-login, no varar en offline.
-    if (res.status === 401 && (await getSession())) return { status: 'offline' };
+    if (res.status === 401 && (await getSession())) return (await meLocal()) ?? { status: 'offline' };
     return { status: 'unauthenticated' };
   },
 
@@ -201,6 +231,8 @@ export const authService = {
     if (session) {
       await apiFetch('/auth/logout', { method: 'POST', body: { refreshToken: session.refreshToken } });
     }
+    // `clearSession` borra también la copia local de los datos del tenant: es el punto único por el
+    // que pasan TODOS los finales de sesión, no sólo este botón.
     await clearSession();
   },
 };

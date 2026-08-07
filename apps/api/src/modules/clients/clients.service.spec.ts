@@ -77,6 +77,39 @@ function makeService(opts: { dup?: unknown; client?: unknown; activeCredits?: nu
 
 const PERSON = { clientType: 'PERSON', firstName: 'Juan', lastName: 'Pérez', nationalId: 'DEMO-0001' } as never;
 
+/**
+ * Alta idempotente: el móvil propone el id para que un alta encolada sin señal, si se reintenta,
+ * no termine creando dos veces al mismo deudor.
+ */
+describe('ClientsService.create — idempotencia del alta offline', () => {
+  it('con un id ya existente devuelve ese cliente y NO crea otro', async () => {
+    const { service, calls } = makeService({ client: { id: 'ya-existe', clientType: 'PERSON', firstName: 'Ana' } });
+    const res = await service.create({ ...(PERSON as object), id: 'ya-existe' } as never);
+    assert.equal(res.id, 'ya-existe');
+    assert.equal(calls.create.length, 0, 'no debe insertar de nuevo');
+  });
+
+  // Auditar dos veces la misma alta ensucia el rastro con un evento que nunca ocurrió.
+  it('el reintento no vuelve a auditar', async () => {
+    const { service, calls } = makeService({ client: { id: 'ya-existe', clientType: 'PERSON' } });
+    await service.create({ ...(PERSON as object), id: 'ya-existe' } as never);
+    assert.deepEqual(calls.audit, []);
+  });
+
+  it('con un id nuevo crea normalmente y lo usa', async () => {
+    const { service, calls } = makeService();
+    await service.create({ ...(PERSON as object), id: 'id-propuesto' } as never);
+    assert.equal(calls.create[0]!.id, 'id-propuesto');
+  });
+
+  // El id repetido es "la misma alta"; el documento repetido es "otro deudor con ese CI", que el
+  // cobrador tiene que ver como error. Confundirlos le haría creer que guardó algo que rebotó.
+  it('sin id, un documento duplicado sigue siendo error', async () => {
+    const { service } = makeService({ dup: { id: 'otro' } });
+    await assert.rejects(() => service.create(PERSON));
+  });
+});
+
 describe('ClientsService.create', () => {
   it('cifra el documento, calcula el hash y tokeniza la respuesta', async () => {
     const { service, calls } = makeService();

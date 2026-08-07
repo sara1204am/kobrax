@@ -3,6 +3,8 @@
  * PII enmascarada; el filtro por asignación lo aplica `/agenda/clients/:id/context` al elegirlo.
  */
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
+import { cachedOne } from './sync/cached';
+import * as db from './db';
 
 export interface ClientHit {
   id: string;
@@ -19,8 +21,45 @@ export function clientDisplayName(c: Pick<ClientHit, 'firstName' | 'lastName' | 
 }
 
 /** Busca por nombre (ILIKE) o documento exacto. Se llama con debounce desde el formulario. */
-export function searchClients(q: string): Promise<QueryResult<ClientHit[]>> {
-  return apiQuery<ClientHit[]>(`/clients${toQuery({ q, status: 'ACTIVE', limit: 20 })}`);
+export async function searchClients(q: string): Promise<QueryResult<ClientHit[]>> {
+  const res = await apiQuery<ClientHit[]>(`/clients${toQuery({ q, status: 'ACTIVE', limit: 20 })}`);
+  return res.status === 'offline' ? searchLocal(q) : res;
+}
+
+/** Sin acentos y en minúsculas: "MARTINEZ" tiene que encontrar a "Martínez". */
+function normalizar(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '');
+}
+
+/**
+ * Buscar sin señal. **No va contra el caché de esta consulta** —cada texto tecleado sería una
+ * consulta distinta y nunca habría un resultado guardado para lo que el cobrador escribe ahora—
+ * sino contra la CARTERA ya bajada, que es la lista completa de su gente.
+ *
+ * `ponytail:` sale de los casos cacheados y no de un caché de clientes propio, porque la cartera
+ * ya se hidrata entera y trae `clientName`. Bajar además todas las fichas sería pagar dos veces
+ * por el mismo dato. El documento no viaja en esa lista, así que sin señal se busca por nombre.
+ */
+async function searchLocal(q: string): Promise<QueryResult<ClientHit[]>> {
+  const term = normalizar(q.trim());
+  if (!term) return { status: 'offline' };
+
+  const casos = await db.getMany<{ clientId?: string; clientName?: string }>('case');
+  const vistos = new Set<string>();
+  const hits: ClientHit[] = [];
+  for (const c of casos) {
+    if (!c.clientId || !c.clientName || vistos.has(c.clientId)) continue;
+    if (!normalizar(c.clientName).includes(term)) continue;
+    vistos.add(c.clientId);
+    // El nombre viene entero (no separado en nombre/apellido) y `clientDisplayName` lee primero
+    // `businessName`, así que se muestra tal cual lo devolvió el server.
+    hits.push({ id: c.clientId, businessName: c.clientName, nationalId: null });
+  }
+  if (hits.length === 0) return { status: 'offline' };
+  return { status: 'ok', data: hits.slice(0, 20), total: hits.length, localAt: await db.fetchedAt('case') };
 }
 
 /** Sub-recursos del alta anidada (§5.1). Valores = enums de la API (Prisma). */
@@ -124,7 +163,10 @@ export interface ClientDetail {
 }
 
 export function getClient(id: string, reveal = false): Promise<QueryResult<ClientDetail>> {
-  return apiQuery<ClientDetail>(`/clients/${id}${reveal ? '?reveal=true' : ''}`);
+  // `reveal` pide PII en claro y queda auditado en el server: **eso nunca sale del caché**, se
+  // pide en línea siempre. Sin `reveal` es la ficha normal y sí tiene respaldo local.
+  if (reveal) return apiQuery<ClientDetail>(`/clients/${id}?reveal=true`);
+  return cachedOne<ClientDetail>('client', id, () => apiQuery<ClientDetail>(`/clients/${id}`));
 }
 
 // ── Sub-recursos (los usa el formulario único al guardar una edición) ─────────

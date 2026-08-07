@@ -145,9 +145,39 @@ notificaciones. Más la **cola** y el **registro de hidratación** (cuándo se b
    **Se toca cada `*.service.ts`, no cada pantalla** (las pantallas ya manejan `status: 'offline'`).
 4. **Cola** — `queue.ts` + `sync.service.ts`: encolar, drenar, backoff, marcar. Con test.
 5. **Escribir offline** — enchufar la cola en las escrituras de D3 (visita, evidencia, pago, agenda).
-6. **Absorber `route-draft`** — su flush pasa a la cola; se conserva `diffStops` y su test.
+6. ~~**Absorber `route-draft`**~~ → **corregido al construir (2026-08-06): NO se absorbe.** La cola
+   sube *acciones puntuales*; el borrador de ruta es un *estado* que se edita muchas veces y se
+   sincroniza **por diferencia**, que es justo lo que lo hace idempotente — encolar cada toque como
+   una acción desharía eso. Lo que sí faltaba, y era un problema real que la usuaria vivió por
+   cable: el borrador **sólo se reintentaba al volver a la pantalla y tocar un pin**. Ahora
+   `flushPendingDraft` corre en cada drenaje. La persistencia queda en SecureStore (640 B una ruta
+   de 16 paradas; el techo son ~2 KB): mudarla sería churn sin ganancia.
 7. **UI** — `OfflineIndicator` con contador + hoja de pendientes + sello "sin subir" en las tarjetas.
-8. **Verificar** — `type-check` + `test` + `expo export`; **smoke real en modo avión** con el teléfono.
+8. **Verificar** — `type-check` + `test` + `expo export`; **smoke real** con el teléfono. ✅ **HECHO
+   2026-08-06/07.** Circuito completo verde: leer sin servidor · escribir (visita, gestión, promesa)
+   · sobrevivir al cierre de la app · drenar solo al volver la conexión · sin duplicados.
+
+### Lo que encontró el smoke y NINGÚN test veía (7 defectos)
+
+Todos de la misma familia: las piezas funcionaban y el recorrido completo no. Quedan como el
+argumento de por qué esta etapa no se podía cerrar sin dispositivo.
+
+| # | Defecto | Por qué no lo vio la suite |
+|---|---|---|
+| 1 | **Deadlock de SQLite**: `putAll` en transacción + hidratación y pantallas escribiendo a la vez → el Inicio cargaba para siempre | El mock de `expo-sqlite` ejecuta `withTransactionAsync` como una función común; el bloqueo sólo existe contra SQLite real con dos escrituras concurrentes |
+| 2 | **Abrir la app sin señal** terminaba en la pantalla de offline (riesgo R3, identificado y no implementado) | Ningún test recorría el arranque completo sin red |
+| 3 | **Buscar clientes** sin señal no devolvía nada | La búsqueda no estaba en la lista de lecturas cacheadas |
+| 4 | **Guardar una gestión** sin señal fallaba en vez de encolar | `agenda.create` estaba definida en la cola y sin cablear en la pantalla |
+| 5 | **Abrir un cliente fuera de la ruta** sin señal fallaba | La hidratación bajaba sólo los clientes del itinerario |
+| 6 | **La hidratación llenaba casillas que nadie lee** (`limit: 500` vs `limit: 100`, ruta con filtro vs sin filtro), y su `replaceAll` sin scope borraba lo que la capa de lectura había guardado bien | Los tests verificaban que escribiera en la base, no que coincidiera con lo que la pantalla pide |
+| 7 | **La foto se perdía** al sacarla sin señal | La subida fallaba y no había respaldo local del archivo |
+
+### Falso positivo que casi da por bueno el offline
+
+La primera corrida "pasó" sin cola porque **`adb reverse tcp:4010` hace que el teléfono llegue a la
+API por el cable USB, y el modo avión no apaga el USB**. La app nunca estuvo sin servidor: escribía
+directo. Para probar offline por cable hay que **cortar el túnel de la API** y dejar sólo el de
+Metro — el avioncito no alcanza.
 
 ---
 

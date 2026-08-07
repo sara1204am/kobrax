@@ -3,6 +3,7 @@
  * (fundación); acá solo se dispara con `Idempotency-Key` para que un reintento no duplique el cobro.
  */
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
+import { cachedList } from './sync/cached';
 
 /** Valores del enum `PaymentMethod` de la API (Prisma, MAYÚSCULA — el `PaymentMethod` de shared es otro,
  * minúscula y legacy; no sirve para el payload). */
@@ -23,7 +24,8 @@ export interface PaymentItem {
 }
 
 export function listPayments(caseId: string): Promise<QueryResult<PaymentItem[]>> {
-  return apiQuery<PaymentItem[]>(`/payments${toQuery({ caseId, limit: 100 })}`);
+  const query = toQuery({ caseId, limit: 100 });
+  return cachedList<PaymentItem>('payment', query, () => apiQuery<PaymentItem[]>(`/payments${query}`));
 }
 
 /**
@@ -32,7 +34,10 @@ export function listPayments(caseId: string): Promise<QueryResult<PaymentItem[]>
  * (`ui-screen-map §8.1`). `summarizeDay` es quien lo hace.
  */
 export function listPaymentsByDay(day: string): Promise<QueryResult<PaymentItem[]>> {
-  return apiQuery<PaymentItem[]>(`/payments${toQuery({ from: day, to: `${day}T23:59:59.999Z`, limit: 100 })}`);
+  const query = toQuery({ from: day, to: `${day}T23:59:59.999Z`, limit: 100 });
+  // Con respaldo local: sin esto, el cierre de jornada sin señal anunciaba "TOTAL RECAUDADO HOY
+  // Bs 0,00" — que es mentira, el cobrador sí cobró — en vez de admitir que no pudo leerlo.
+  return cachedList<PaymentItem>('payment', query, () => apiQuery<PaymentItem[]>(`/payments${query}`));
 }
 
 export interface NewPayment {

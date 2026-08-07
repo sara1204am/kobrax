@@ -12,6 +12,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { checkPassword } from '@kobrax/shared';
 import { COLORS, HERO_GRADIENT, RADIUS, SPACING, TYPE } from './theme';
+import { API_BASE } from './api';
 
 /** Botón primario navy, alto 52 (cobrador con guantes). */
 export function Button({
@@ -114,7 +115,12 @@ export function Card({ children }: { children: ReactNode }) {
 
 /** Footer de confianza fintech — siempre visible. */
 export function SecurityFooter() {
-  return <Text style={styles.footer}>🔒 Conexión cifrada TLS 1.3</Text>;
+  // Sólo se afirma lo que se puede verificar: que la app habla por HTTPS. Antes decía "TLS 1.3",
+  // una versión que el cliente no elige ni conoce, y lo decía **siempre** — también cuando la app
+  // apunta a `http://` y no hay ningún cifrado. Un sello de seguridad que miente es peor que
+  // ninguno. El pinning real es P9; cuando esté, acá se podrá decir más.
+  if (!API_BASE.startsWith('https://')) return null;
+  return <Text style={styles.footer}>🔒 Conexión cifrada</Text>;
 }
 
 /** Link de texto (acciones secundarias: "Olvidé mi contraseña", "Volver", etc.). */

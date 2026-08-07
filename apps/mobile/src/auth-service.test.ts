@@ -4,10 +4,18 @@ jest.mock('./session', () => ({
   saveSession: jest.fn(),
   clearSession: jest.fn(),
   touchSession: jest.fn(),
+  // `me()` guarda quién es para poder encolar acciones sin red (P6).
+  saveUserId: jest.fn(),
+  // Desde P6, sin red `me()` responde con la identidad guardada si la ventana sigue vigente.
+  isSessionValid: jest.fn(() => false),
 }));
 
+/** La base local. Por defecto vacía: sin `me` guardado, sin red se sigue cayendo a offline. */
+jest.mock('./db', () => ({ putOne: jest.fn(), getOne: jest.fn(async () => null) }));
+
 import { apiFetch } from './api';
-import { clearSession, getSession, touchSession } from './session';
+import { clearSession, getSession, isSessionValid, touchSession } from './session';
+import { getOne } from './db';
 import { authService, type Me } from './auth-service';
 
 const mockFetch = apiFetch as jest.Mock;
@@ -33,8 +41,30 @@ describe('authService.me — distingue offline de no autenticado (historia 14)',
     expect(await authService.me()).toEqual({ status: 'unauthenticated' });
   });
 
-  it('fallo de red (status 0) con sesión vigente → offline (no manda al login)', async () => {
+  it('fallo de red (status 0) sin nada guardado → offline (no manda al login)', async () => {
     mockGetSession.mockResolvedValue(SESSION);
+    mockFetch.mockResolvedValue({ status: 0, data: null, error: null });
+    expect(await authService.me()).toEqual({ status: 'offline' });
+  });
+
+  /**
+   * El caso que hace usable la app en el campo (P6 · R3): sin red, con la ventana de 8 h vigente y
+   * el `me` ya guardado, se entra igual. Antes el arranque moría en la pantalla de sin conexión
+   * aunque el teléfono tuviera la jornada entera descargada.
+   */
+  it('sin red, con sesión vigente y `me` guardado → ok (se puede trabajar offline)', async () => {
+    mockGetSession.mockResolvedValue(SESSION);
+    (isSessionValid as unknown as jest.Mock).mockReturnValue(true);
+    (getOne as jest.Mock).mockResolvedValue(ME);
+    mockFetch.mockResolvedValue({ status: 0, data: null, error: null });
+    expect(await authService.me()).toEqual({ status: 'ok', me: ME });
+  });
+
+  // Una identidad vieja no vale para siempre: vencida la ventana, hay que volver a entrar.
+  it('sin red y con la ventana vencida → offline aunque haya `me` guardado', async () => {
+    mockGetSession.mockResolvedValue(SESSION);
+    (isSessionValid as unknown as jest.Mock).mockReturnValue(false);
+    (getOne as jest.Mock).mockResolvedValue(ME);
     mockFetch.mockResolvedValue({ status: 0, data: null, error: null });
     expect(await authService.me()).toEqual({ status: 'offline' });
   });

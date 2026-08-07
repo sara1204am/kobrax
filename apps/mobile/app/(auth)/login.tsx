@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, ErrorBanner, Field, TextLink } from '@/components';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { authService } from '@/auth-service';
 import { goToStep } from '@/route-step';
 import { biometricLabel, isBiometricEnabled } from '@/biometric';
 import { getSession, isSessionValid } from '@/session';
+import { API_BASE } from '@/api';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -45,9 +46,15 @@ export default function LoginScreen() {
         {/* Header navy con marca y encabezado */}
         <View style={s.header}>
           <View style={s.brandRow}>
-            <View style={s.logoBadge}>
-              <Text style={s.logoText}>K</Text>
-            </View>
+            {/* `logo.png` y no `icon.png`: el del ícono son 1242 px y React Native decodifica el
+                PNG entero aunque se dibuje a 40 — ~6 MB de RAM por una marca. Mismo criterio que
+                `Hero` en `components.tsx`. */}
+            <Image
+              source={require('../../assets/logo.png')}
+              style={s.logoBadge}
+              resizeMode="contain"
+              accessibilityLabel="Kobrax"
+            />
             <View style={{ flex: 1 }}>
               <Text style={s.brand}>Kobrax</Text>
               <Text style={s.brandSub}>Gestión de cobranzas en campo</Text>
@@ -119,9 +126,14 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          <View style={s.footerPill}>
-            <Text style={s.footerText}>Acceso seguro · SSL 256-bit</Text>
-          </View>
+          {/* El sello aparece sólo si la app de verdad habla por HTTPS. "SSL 256-bit" era una
+              frase de marketing que se mostraba igual apuntando a `http://`: prometía un cifrado
+              que en ese caso no existía. */}
+          {API_BASE.startsWith('https://') && (
+            <View style={s.footerPill}>
+              <Text style={s.footerText}>🔒 Acceso cifrado</Text>
+            </View>
+          )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -133,14 +145,13 @@ const s = StyleSheet.create({
   header: { backgroundColor: COLORS.navy, paddingTop: 48, paddingBottom: 56, paddingHorizontal: SPACING.xl, gap: SPACING.xxl },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   logoBadge: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: RADIUS.button,
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoText: { color: COLORS.white, fontSize: 20, fontWeight: '700' },
   brand: { color: COLORS.white, fontSize: 18, fontWeight: '700' },
   brandSub: { color: 'rgba(255,255,255,0.7)', fontSize: 12 },
   title: { color: COLORS.white, fontSize: 30, fontWeight: '700' },

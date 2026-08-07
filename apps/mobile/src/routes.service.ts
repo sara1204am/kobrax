@@ -4,6 +4,7 @@
  */
 import { RouteStopStatus, type RouteStatus, type VisitOutcome } from '@kobrax/shared';
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
+import { cachedList, cachedOne } from './sync/cached';
 import type { LngLat } from './maps/tiles';
 
 export interface RouteStopItem {
@@ -62,11 +63,13 @@ export interface ListRoutesParams {
 }
 
 export function listRoutes(params: ListRoutesParams): Promise<QueryResult<RouteItem[]>> {
-  return apiQuery<RouteItem[]>(`/routes${toQuery({ ...params })}`);
+  const query = toQuery({ ...params });
+  return cachedList<RouteItem>('route', query || 'all', () => apiQuery<RouteItem[]>(`/routes${query}`));
 }
 
 export function getRoute(id: string): Promise<QueryResult<RouteItem>> {
-  return apiQuery<RouteItem>(`/routes/${id}`);
+  // La ruta con sus paradas es el itinerario del día: es lo que MÁS tiene que estar sin señal.
+  return cachedOne<RouteItem>('route', id, () => apiQuery<RouteItem>(`/routes/${id}`));
 }
 
 // ── Lifecycle (P3 Rutas) ──────────────────────────────────────────────────────

@@ -19,6 +19,13 @@ import { CreditOrigin, PaymentFrequency } from '@kobrax/shared';
 import type { AmortizationType } from '../credit-math';
 
 export class CreateCreditDto {
+  /**
+   * Id propuesto por el móvil, para que el alta sea idempotente cuando viaja en la cola offline.
+   * Mismo mecanismo que en `CreateClientDto`: un reintento reconoce el préstamo ya creado en vez
+   * de darle dos al mismo deudor.
+   */
+  @IsOptional() @IsUUID() id?: string;
+
   @IsUUID() clientId!: string;
   @IsOptional() @IsUUID() branchId?: string;
   @IsOptional() @IsString() code?: string;

@@ -7,6 +7,7 @@ import { EmptyState, Header, ListRow, SectionLabel, StatTile } from '@/ui';
 import { Button } from '@/components';
 import { MapCanvas, type MapMarker } from '@/maps/MapCanvas';
 import { clockAt, humanDistance, humanDuration, straightLine } from '@/route-eta';
+import { queueForLater } from '@/sync/sync.service';
 import {
   getRoute,
   getRoutePreview,
@@ -68,8 +69,12 @@ export default function PreviewRutaScreen() {
     setBusy(true);
     setError(null);
     const res = await updateRouteStatus(routeId, RouteStatus.IN_PROGRESS);
+    // Sin conexión la jornada arranca igual **y ahora sí sube sola**: antes esto se ignoraba y la
+    // ruta quedaba PLANNED en el servidor, así que al reconectar la app volvía a ofrecer "Iniciar".
+    if (res.status === 'offline') {
+      await queueForLater({ kind: 'route.status', routeId, status: RouteStatus.IN_PROGRESS });
+    }
     setBusy(false);
-    // Sin conexión la jornada arranca igual: el estado sube cuando vuelva la red.
     if (res.status === 'error') return setError(res.message);
     router.replace(`/rutas/confirmar?routeId=${routeId}`);
   }, [routeId]);

@@ -1,7 +1,7 @@
 /**
  * Store de conectividad (fuente única). Zustand + NetInfo.
- * `pendingCount` = acciones encoladas sin sincronizar; **0 fijo en P0** (la cola real
- * llega con el SyncService en P6, que hará `setPending`). El `OfflineIndicator` lo lee.
+ * `pendingCount` = acciones encoladas sin sincronizar. Lo escribe el `sync.service` (P6) y lo
+ * lee el `OfflineIndicator`.
  */
 import NetInfo from '@react-native-community/netinfo';
 import { create } from 'zustand';
@@ -10,12 +10,14 @@ interface NetState {
   isConnected: boolean;
   pendingCount: number;
   setConnected: (v: boolean) => void;
+  setPending: (n: number) => void;
 }
 
 export const useNetStore = create<NetState>((set) => ({
   isConnected: true, // optimista hasta el primer evento de NetInfo
-  pendingCount: 0, // 0 fijo en P0; el setter lo agrega el SyncService en P6
+  pendingCount: 0,
   setConnected: (v) => set({ isConnected: v }),
+  setPending: (n) => set({ pendingCount: n }),
 }));
 
 /**
