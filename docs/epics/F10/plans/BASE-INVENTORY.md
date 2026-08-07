@@ -128,5 +128,24 @@
   - ⚠ **`partitionDay` es la única regla de reparto del día**: `done = status !== SCHEDULED`. La pantalla
     usaba `status === EXECUTED`, así que un ítem **CANCELLED/RESCHEDULED desaparecía del día**. Tiene test
     de no-regresión — cualquier sección nueva del día se reparte con esta función, no con un `===` propio.
-  - ⚠ `DELETE /agenda/:id` responde **200 con el ítem**, no 204: `apiMutate` trata el 204 como error.
-    Cualquier endpoint de borrado que consuma el móvil tiene que devolver cuerpo.
+  - ⚠ `DELETE /agenda/:id` responde **200 con el ítem**, no 204. (La nota decía que `apiMutate` trata
+    el 204 como error: **ya no** — `api-client.ts` lo mapea a éxito sin cuerpo.)
+- ✅ **P6 Offline** pobló `src/db.ts` (**el único archivo con SQL**: caché descartable + cola de
+  escritura, sobre `expo-sqlite`), `src/sync/` → **`cached.ts`** (`cachedList`/`cachedOne`: con red
+  guarda, sin red devuelve lo guardado), **`queue.ts`** (qué se encola y cómo se envía),
+  **`sync.service.ts`** (`drain` · `queueForLater` · `startSync`) y **`hydrate.ts`** (el sync de
+  oficina). Más `app/pendientes.tsx` y, en `session.ts`, `saveUserId`/`getUserId`.
+  - ⚠ **El motor NO es WatermelonDB.** Su protocolo de sync exige endpoints `pullChanges`/`pushChanges`
+    que la API no tiene, y `payments`/`field_visits` no llevan `updated_at`. Ver `P6-offline-sync.md §4`.
+  - ⚠ **Las listas se cachean POR CONSULTA y las fichas por entidad.** Corolario que ya costó un bug:
+    **la hidratación llama a los services con los MISMOS parámetros que la pantalla**, o guarda en una
+    casilla que nadie lee. `hydrate` **no escribe en `db`**.
+  - ⚠ **Nada de `withTransactionAsync` en el caché**: la hidratación y las pantallas escriben a la vez
+    sobre la misma conexión y dos transacciones concurrentes se bloquean (el Inicio quedaba cargando
+    para siempre). El caché es descartable; la atomicidad importa en `queue`, que escribe de a una fila.
+  - ⚠ **Lista y detalle van en `kind` distintos** (`case` / `case.detail`): sus formas no coinciden.
+  - ⚠ **Sólo `offline` cae al respaldo local.** Un 500 o una sesión vencida llegan a la pantalla tal cual.
+  - ⚠ **`me()` responde desde la base local** mientras la ventana de 8 h siga vigente: es lo que permite
+    ABRIR la app sin señal. Sin eso, todo el caché es inútil porque no se llega a verlo.
+  - ⚠ **Probar offline por cable exige cortar `adb reverse tcp:4010`**: el modo avión no apaga el USB,
+    así que con el túnel puesto la app sigue hablando con la API y la cola nunca se usa.
