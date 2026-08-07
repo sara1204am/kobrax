@@ -7,6 +7,8 @@ import { apiMutate, apiQuery, type MutateResult, type QueryResult } from './api-
 
 /** Payload del alta de préstamo (§4.1/§4.2). `openCase` siempre true desde el móvil (§5.2). */
 export interface NewCreditInput {
+  /** Id propuesto por el teléfono, por lo mismo que en `NewClientInput`: alta idempotente. */
+  id?: string;
   clientId: string;
   principalAmount: number;
   installmentAmount: number; // cuota congelada (Modo A directa, Modo B calculada y editada)

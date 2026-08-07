@@ -16,6 +16,8 @@ import { addVisitEvidence, createVisit, type CreateVisitInput } from '../field.s
 import { createPayment, type NewPayment } from '../payments.service';
 import { addActivity, type NewActivity } from '../cases.service';
 import { updateRouteStatus } from '../routes.service';
+import { createClient, type NewClientInput } from '../clients.service';
+import { createCredit, type NewCreditInput } from '../credits.service';
 import { completeItem, createItem, postponeItem, type CreateAgendaInput } from '../agenda.service';
 import { getUserId } from '../session';
 
@@ -49,6 +51,16 @@ export type QueuedAction =
    * `PLANNED` en el servidor y la app volvía a ofrecer "Iniciar ruta" al reconectar.
    */
   | { kind: 'route.status'; routeId: string; status: RouteStatus }
+  /**
+   * Alta de cliente y de préstamo en la calle. Idempotentes porque **el id lo pone el teléfono**
+   * (`nuevoId()`): si la cola reintenta, el server reconoce esa alta en vez de crear otra.
+   *
+   * El préstamo se encola DESPUÉS del cliente y la cola es FIFO, así que cuando le toca, su
+   * cliente ya subió. Si el cliente falla, el préstamo también falla —el server no encuentra al
+   * dueño— y ambos quedan para el próximo intento: nada se pierde y nada queda huérfano.
+   */
+  | { kind: 'client.create'; input: NewClientInput }
+  | { kind: 'credit.create'; input: NewCreditInput }
   | { kind: 'agenda.complete'; id: string; outcome: AgendaOutcome; notes?: string }
   // `AgendaPostponeStep` y no `number`: posponer es en pasos fijos, y el tipo del dominio ya lo
   // dice. Guardar un número libre dejaría entrar a la cola algo que el server va a rechazar.
@@ -63,6 +75,8 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'agenda.postpone': 'Gestión pospuesta',
   'case.activity': 'Gestión registrada',
   'route.status': 'Estado de la jornada',
+  'client.create': 'Cliente nuevo',
+  'credit.create': 'Préstamo nuevo',
 };
 
 /**
@@ -136,6 +150,10 @@ export async function send(action: QueuedAction): Promise<SendResult> {
       return mapMutate(await addActivity(action.caseId, action.input));
     case 'route.status':
       return mapMutate(await updateRouteStatus(action.routeId, action.status));
+    case 'client.create':
+      return mapMutate(await createClient(action.input));
+    case 'credit.create':
+      return mapMutate(await createCredit(action.input));
     case 'agenda.complete':
       return mapMutate(await completeItem(action.id, action.outcome, action.notes));
     case 'agenda.postpone':

@@ -17,6 +17,8 @@ import {
   type PrestamoForm,
 } from '@/prestamo-form';
 import { createCredit } from '@/credits.service';
+import { nuevoId } from '@/ids';
+import { queueForLater } from '@/sync/sync.service';
 
 const FREQ: { value: PaymentFrequency; label: string }[] = [
   { value: PaymentFrequency.DAILY, label: 'Diario' },
@@ -66,14 +68,21 @@ export default function NuevoPrestamoScreen() {
     if (!clientId) return;
     setSaving(true);
     setError(null);
-    const res = await createCredit(buildPrestamoPayload(form, clientId));
+    const input = { id: nuevoId(), ...buildPrestamoPayload(form, clientId) };
+    const res = await createCredit(input);
     setSaving(false);
-    if (res.status === 'ok') {
+
+    if (res.status === 'ok' || res.status === 'offline') {
+      // Sin señal el préstamo queda guardado y sube solo. Si el cliente también está en la cola,
+      // va antes (es FIFO), así que cuando le toque a este su dueño ya existe en el servidor.
+      if (res.status === 'offline') {
+        const guardado = await queueForLater({ kind: 'credit.create', input });
+        if (!guardado) return setError('Sin conexión y no se pudo guardar en el teléfono. Reintentá.');
+      }
       setDoneMsg({ installment: currentInstallment(form), nextDueDate: form.nextDueDate });
       return;
     }
     if (res.status === 'unauthenticated') return setError('Tu sesión venció. Volvé a iniciar sesión.');
-    if (res.status === 'offline') return setError('Sin conexión — no se guardó. Reintentá.');
     setError(res.message);
   }, [clientId, form]);
 

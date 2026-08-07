@@ -7,6 +7,8 @@ import { Button, ErrorBanner } from '@/components';
 import { ClienteFormView } from '@/cliente-form-view';
 import { buildClientePayload, canSubmitCliente, clienteEnPunto, initialCliente, type ClienteForm } from '@/cliente-form';
 import { createClient } from '@/clients.service';
+import { nuevoId } from '@/ids';
+import { queueForLater } from '@/sync/sync.service';
 
 /**
  * V1 — Alta de cliente (§5.1). El formulario es `ClienteFormView`, **el mismo que usa la edición**:
@@ -26,16 +28,26 @@ export default function NuevoClienteScreen() {
     async (thenLoan: boolean) => {
       setSaving(true);
       setError(null);
-      const res = await createClient(buildClientePayload(form));
+      // El id se genera acá y no lo devuelve el server: es lo que permite seguir al préstamo sin
+      // esperar respuesta, y lo que hace que reintentar el alta desde la cola no cree dos clientes.
+      const id = nuevoId();
+      const name = [form.firstName, form.lastName].filter(Boolean).join(' ').trim();
+      const input = { id, ...buildClientePayload(form) };
+      const res = await createClient(input);
       setSaving(false);
-      if (res.status === 'ok') {
-        const name = [form.firstName, form.lastName].filter(Boolean).join(' ').trim();
-        if (thenLoan) router.replace({ pathname: '/prestamo/nuevo', params: { clientId: res.data.id, name } });
+
+      if (res.status === 'ok' || res.status === 'offline') {
+        // Sin señal el alta queda guardada y sube sola. Para el cobrador el cliente ya existe:
+        // frenarlo en la puerta del deudor es lo que este módulo vino a evitar.
+        if (res.status === 'offline') {
+          const guardado = await queueForLater({ kind: 'client.create', input });
+          if (!guardado) return setError('Sin conexión y no se pudo guardar en el teléfono. Reintentá.');
+        }
+        if (thenLoan) router.replace({ pathname: '/prestamo/nuevo', params: { clientId: id, name } });
         else router.back();
         return;
       }
       if (res.status === 'unauthenticated') return setError('Tu sesión venció. Volvé a iniciar sesión.');
-      if (res.status === 'offline') return setError('Sin conexión — no se guardó. Reintentá.');
       setError(res.message); // "Ya existe un cliente con ese documento" en duplicado (§5.1)
     },
     [form],
