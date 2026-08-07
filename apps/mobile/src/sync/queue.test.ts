@@ -41,9 +41,31 @@ jest.mock('../agenda.service', () => ({
   }),
   completeItem: jest.fn(async () => ({ status: 'ok', data: {} })),
   postponeItem: jest.fn(async () => ({ status: 'ok', data: {} })),
+  cancelItem: jest.fn(async (id: string, reasonCode: string) => {
+    mockCalls.push(`cancelItem:${id}:${reasonCode}`);
+    return { status: 'ok', data: {} };
+  }),
+  rescheduleItem: jest.fn(async (id: string, input: { scheduledDate: string }) => {
+    mockCalls.push(`rescheduleItem:${id}:${input.scheduledDate}`);
+    return { status: 'ok', data: {} };
+  }),
 }));
 jest.mock('../db', () => ({ enqueue: jest.fn(async () => 1), pending: jest.fn(async () => []) }));
 jest.mock('../session', () => ({ getUserId: jest.fn(async () => 'u1') }));
+jest.mock('../routes.service', () => ({ updateRouteStatus: jest.fn(async () => ({ status: 'ok', data: {} })) }));
+jest.mock('../cases.service', () => ({ addActivity: jest.fn(async () => ({ status: 'ok', data: {} })) }));
+jest.mock('../clients.service', () => ({
+  createClient: jest.fn(async (input: { id?: string }) => {
+    mockCalls.push(`createClient:${input.id}`);
+    return { status: 'ok', data: { id: input.id } };
+  }),
+}));
+jest.mock('../credits.service', () => ({
+  createCredit: jest.fn(async (input: { id?: string; clientId?: string }) => {
+    mockCalls.push(`createCredit:${input.id}:cliente=${input.clientId}`);
+    return { status: 'ok', data: { id: input.id } };
+  }),
+}));
 
 import { send } from './queue';
 
@@ -107,5 +129,37 @@ describe('send · visita compuesta', () => {
     const r = await send({ kind: 'visit', input: visitInput, photo: { uri: 'file:///f.jpg' } });
     expect(r.status).toBe('ok');
     expect(mockCalls).not.toContain('addVisitEvidence');
+  });
+});
+
+/**
+ * El alta en la calle: cliente y préstamo se dan de alta sin señal y suben después. Lo que hace
+ * que esto funcione es que **el id lo pone el teléfono**, así el préstamo puede nombrar a un
+ * cliente que todavía no llegó al servidor.
+ */
+describe('send · altas offline', () => {
+  it('sube el alta de cliente con el id que se generó en el teléfono', async () => {
+    await send({ kind: 'client.create', input: { id: 'cli-1', clientType: 'PERSON', firstName: 'Ana' } });
+    expect(mockCalls).toContain('createClient:cli-1');
+  });
+
+  // Sin esto, el préstamo tendría que esperar la respuesta del alta del cliente para saber de
+  // quién es — imposible sin señal, que es justo cuando hace falta.
+  it('el préstamo viaja apuntando al cliente creado offline', async () => {
+    await send({
+      kind: 'credit.create',
+      input: { id: 'cre-1', clientId: 'cli-1', principalAmount: 1000, installmentAmount: 100 } as never,
+    });
+    expect(mockCalls).toContain('createCredit:cre-1:cliente=cli-1');
+  });
+
+  it('cancelar y reagendar viajan con su motivo', async () => {
+    await send({ kind: 'agenda.cancel', id: 'a1', reasonCode: 'NO_ESTABA' });
+    await send({
+      kind: 'agenda.reschedule',
+      id: 'a2',
+      input: { scheduledDate: '2026-08-20', timeMode: 'LAPSE', timeSlot: 'MORNING', reasonCode: 'PIDIO_OTRO_DIA' } as never,
+    });
+    expect(mockCalls).toEqual(['cancelItem:a1:NO_ESTABA', 'rescheduleItem:a2:2026-08-20']);
   });
 });

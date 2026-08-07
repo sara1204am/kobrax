@@ -16,7 +16,17 @@ import { addVisitEvidence, createVisit, type CreateVisitInput } from '../field.s
 import { createPayment, type NewPayment } from '../payments.service';
 import { addActivity, type NewActivity } from '../cases.service';
 import { updateRouteStatus } from '../routes.service';
-import { completeItem, createItem, postponeItem, type CreateAgendaInput } from '../agenda.service';
+import { createClient, type NewClientInput } from '../clients.service';
+import { createCredit, type NewCreditInput } from '../credits.service';
+import {
+  cancelItem,
+  completeItem,
+  createItem,
+  postponeItem,
+  rescheduleItem,
+  type CreateAgendaInput,
+  type RescheduleAgendaInput,
+} from '../agenda.service';
 import { getUserId } from '../session';
 
 /** Una foto todavía en el teléfono. Se sube al drenar; **se guarda la ruta, no los bytes**. */
@@ -49,10 +59,36 @@ export type QueuedAction =
    * `PLANNED` en el servidor y la app volvía a ofrecer "Iniciar ruta" al reconectar.
    */
   | { kind: 'route.status'; routeId: string; status: RouteStatus }
+  /**
+   * Alta de cliente y de préstamo en la calle. Idempotentes porque **el id lo pone el teléfono**
+   * (`nuevoId()`): si la cola reintenta, el server reconoce esa alta en vez de crear otra.
+   *
+   * El préstamo se encola DESPUÉS del cliente y la cola es FIFO, así que cuando le toca, su
+   * cliente ya subió. Si el cliente falla, el préstamo también falla —el server no encuentra al
+   * dueño— y ambos quedan para el próximo intento: nada se pierde y nada queda huérfano.
+   */
+  | { kind: 'client.create'; input: NewClientInput }
+  | { kind: 'credit.create'; input: NewCreditInput }
   | { kind: 'agenda.complete'; id: string; outcome: AgendaOutcome; notes?: string }
   // `AgendaPostponeStep` y no `number`: posponer es en pasos fijos, y el tipo del dominio ya lo
   // dice. Guardar un número libre dejaría entrar a la cola algo que el server va a rechazar.
-  | { kind: 'agenda.postpone'; id: string; minutes: AgendaPostponeStep };
+  | { kind: 'agenda.postpone'; id: string; minutes: AgendaPostponeStep }
+  /**
+   * Cancelar y reagendar. Un reintento no puede duplicar nada porque el server **sólo las acepta
+   * sobre una gestión SCHEDULED**: si la primera ya entró, la segunda rebota con "no se puede
+   * ejecutar" en vez de cancelar de nuevo o crear una segunda gestión reagendada.
+   */
+  | { kind: 'agenda.cancel'; id: string; reasonCode: string }
+  | { kind: 'agenda.reschedule'; id: string; input: RescheduleAgendaInput };
+
+/**
+ * `ponytail:` **editar la ficha NO se encola** y la pantalla lo dice sin adornos. Un guardado de
+ * `cliente/editar` no es una llamada: es hasta 16 (contactos, direcciones, relaciones — alta, cambio
+ * y baja de cada uno), y las altas devuelven ids que los cambios posteriores usan. Encolar sólo el
+ * PATCH de los campos sueltos subiría el nombre y perdería el teléfono nuevo del mismo guardado, que
+ * es peor que avisar. Para hacerlo bien hay que llevar el id propuesto por el teléfono a esas cuatro
+ * entidades, como se hizo con cliente y préstamo.
+ */
 
 /** Cómo se llama cada cosa en la lista de pendientes que ve el cobrador. */
 export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
@@ -63,6 +99,10 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'agenda.postpone': 'Gestión pospuesta',
   'case.activity': 'Gestión registrada',
   'route.status': 'Estado de la jornada',
+  'client.create': 'Cliente nuevo',
+  'credit.create': 'Préstamo nuevo',
+  'agenda.cancel': 'Gestión cancelada',
+  'agenda.reschedule': 'Gestión reagendada',
 };
 
 /**
@@ -136,10 +176,18 @@ export async function send(action: QueuedAction): Promise<SendResult> {
       return mapMutate(await addActivity(action.caseId, action.input));
     case 'route.status':
       return mapMutate(await updateRouteStatus(action.routeId, action.status));
+    case 'client.create':
+      return mapMutate(await createClient(action.input));
+    case 'credit.create':
+      return mapMutate(await createCredit(action.input));
     case 'agenda.complete':
       return mapMutate(await completeItem(action.id, action.outcome, action.notes));
     case 'agenda.postpone':
       return mapMutate(await postponeItem(action.id, action.minutes));
+    case 'agenda.cancel':
+      return mapMutate(await cancelItem(action.id, action.reasonCode));
+    case 'agenda.reschedule':
+      return mapMutate(await rescheduleItem(action.id, action.input));
   }
 }
 

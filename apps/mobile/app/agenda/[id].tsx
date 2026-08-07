@@ -38,6 +38,8 @@ import {
 } from '@/agenda.service';
 import { listCatalog, type CatalogOption } from '@/catalogs.service';
 import { RegisterSheet } from '@/agenda-register';
+import { queueForLater } from '@/sync/sync.service';
+import type { QueuedAction } from '@/sync/queue';
 
 type Load =
   | { status: 'loading' }
@@ -353,35 +355,50 @@ function ItemMenu({
     [fail, onClose],
   );
 
+  /**
+   * Sin señal, la acción se guarda y sube sola; para el cobrador la gestión ya dejó de estar acá,
+   * así que se sale igual que con red. Se vuelve a la agenda en vez de mostrar la gestión nueva
+   * porque esa la crea el servidor y todavía no existe.
+   */
+  const done = useCallback(
+    async (res: { status: string; message?: string }, accion: QueuedAction, ok: () => void) => {
+      if (res.status !== 'ok' && res.status !== 'offline') return fail(res);
+      if (res.status === 'offline' && !(await queueForLater(accion))) {
+        return fail({ status: 'error', message: 'Sin conexión y no se pudo guardar en el teléfono.' });
+      }
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setSheet(null);
+      ok();
+    },
+    [fail],
+  );
+
   const doCancel = useCallback(
     async (code: string) => {
       setBusy(true);
       const res = await cancelItem(item.id, code);
       setBusy(false);
-      if (res.status !== 'ok') return fail(res);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setSheet(null);
-      onGone();
+      await done(res, { kind: 'agenda.cancel', id: item.id, reasonCode: code }, onGone);
     },
-    [fail, item.id, onGone],
+    [done, item.id, onGone],
   );
 
   const doReschedule = useCallback(async () => {
     if (!reason) return;
-    setBusy(true);
-    const res = await rescheduleItem(item.id, {
+    const input = {
       scheduledDate: date,
       timeMode: item.timeMode,
       scheduledTime: fixed ? time : undefined,
       timeSlot: fixed ? undefined : item.timeSlot,
       reasonCode: reason.code,
-    });
+    };
+    setBusy(true);
+    const res = await rescheduleItem(item.id, input);
     setBusy(false);
-    if (res.status !== 'ok') return fail(res);
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setSheet(null);
-    onReplaced(res.data);
-  }, [date, fail, fixed, item.id, item.timeMode, item.timeSlot, onReplaced, reason, time]);
+    await done(res, { kind: 'agenda.reschedule', id: item.id, input }, () =>
+      res.status === 'ok' ? onReplaced(res.data) : onGone(),
+    );
+  }, [date, done, fixed, item.id, item.timeMode, item.timeSlot, onGone, onReplaced, reason, time]);
 
   const confirmDelete = useCallback(() => {
     onClose();

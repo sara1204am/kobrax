@@ -90,6 +90,12 @@ export interface NewRelationInput {
 
 /** Payload del alta atómica (§5.1): cliente + contactos + ubicaciones + relaciones en una transacción. */
 export interface NewClientInput {
+  /**
+   * Id propuesto por el teléfono (`nuevoId()`). Hace el alta **idempotente** —reintentarla desde la
+   * cola no crea un segundo cliente— y permite que el préstamo se cuelgue de un cliente que todavía
+   * no subió. El server lo respeta; si no viene, genera el suyo.
+   */
+  id?: string;
   clientType: 'PERSON' | 'COMPANY';
   firstName?: string;
   lastName?: string;
