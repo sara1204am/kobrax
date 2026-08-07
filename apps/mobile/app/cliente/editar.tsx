@@ -223,7 +223,7 @@ async function applyOps(clientId: string, ops: ClienteOps): Promise<string | nul
     r.status === 'ok'
       ? null
       : r.status === 'offline'
-        ? 'Sin conexión — no se guardó. Reintentá.'
+        ? 'Sin conexión: los cambios de la ficha se guardan en línea. Volvé cuando haya señal.'
         : r.status === 'unauthenticated'
           ? 'Tu sesión venció. Volvé a iniciar sesión.'
           : (r.message ?? 'No se pudo guardar');

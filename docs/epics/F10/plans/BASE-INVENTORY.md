@@ -149,3 +149,14 @@
     ABRIR la app sin señal. Sin eso, todo el caché es inútil porque no se llega a verlo.
   - ⚠ **Probar offline por cable exige cortar `adb reverse tcp:4010`**: el modo avión no apaga el USB,
     así que con el túnel puesto la app sigue hablando con la API y la cola nunca se usa.
+- ✅ **Altas y agenda sin señal** (post-P6) sumaron a la cola `client.create`, `credit.create`,
+  `agenda.cancel` y `agenda.reschedule`, más `src/ids.ts` (`nuevoId()`, UUID v4).
+  - ⚠ **El id de un alta lo pone el TELÉFONO**, no el server (`id?` opcional en `POST /clients` y
+    `POST /credits`, chequeado **antes** del control de documento duplicado). Es lo que hace el alta
+    idempotente y lo que permite que el préstamo nombre a un cliente que todavía no subió.
+  - ⚠ **Cancelar/reagendar no necesitan llave de idempotencia**: el server sólo las acepta sobre una
+    gestión `SCHEDULED`, así que un reintento rebota en vez de duplicar.
+  - ⚠ **Editar la ficha NO se encola, a propósito** (y la pantalla lo dice): un guardado de
+    `cliente/editar` son hasta 16 llamadas —contactos, direcciones, relaciones— y las altas devuelven
+    ids que los cambios posteriores usan. Encolar sólo el PATCH suelto perdería el resto del mismo
+    guardado. Para hacerlo bien hay que llevar el id propuesto a esas cuatro entidades.

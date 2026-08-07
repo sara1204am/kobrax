@@ -41,6 +41,14 @@ jest.mock('../agenda.service', () => ({
   }),
   completeItem: jest.fn(async () => ({ status: 'ok', data: {} })),
   postponeItem: jest.fn(async () => ({ status: 'ok', data: {} })),
+  cancelItem: jest.fn(async (id: string, reasonCode: string) => {
+    mockCalls.push(`cancelItem:${id}:${reasonCode}`);
+    return { status: 'ok', data: {} };
+  }),
+  rescheduleItem: jest.fn(async (id: string, input: { scheduledDate: string }) => {
+    mockCalls.push(`rescheduleItem:${id}:${input.scheduledDate}`);
+    return { status: 'ok', data: {} };
+  }),
 }));
 jest.mock('../db', () => ({ enqueue: jest.fn(async () => 1), pending: jest.fn(async () => []) }));
 jest.mock('../session', () => ({ getUserId: jest.fn(async () => 'u1') }));
@@ -143,5 +151,15 @@ describe('send · altas offline', () => {
       input: { id: 'cre-1', clientId: 'cli-1', principalAmount: 1000, installmentAmount: 100 } as never,
     });
     expect(mockCalls).toContain('createCredit:cre-1:cliente=cli-1');
+  });
+
+  it('cancelar y reagendar viajan con su motivo', async () => {
+    await send({ kind: 'agenda.cancel', id: 'a1', reasonCode: 'NO_ESTABA' });
+    await send({
+      kind: 'agenda.reschedule',
+      id: 'a2',
+      input: { scheduledDate: '2026-08-20', timeMode: 'LAPSE', timeSlot: 'MORNING', reasonCode: 'PIDIO_OTRO_DIA' } as never,
+    });
+    expect(mockCalls).toEqual(['cancelItem:a1:NO_ESTABA', 'rescheduleItem:a2:2026-08-20']);
   });
 });
