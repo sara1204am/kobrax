@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import type { AuthTokens } from '@kobrax/shared';
+import { clearCache } from './db';
 
 /**
  * Almacenamiento seguro de la sesión (SecureStore, hardware-backed; nunca AsyncStorage).
@@ -69,14 +70,26 @@ export function getUserId(): Promise<string | null> {
   return SecureStore.getItemAsync(KEY.userId);
 }
 
+/**
+ * Cierra la sesión y **borra la copia local de los datos del tenant**.
+ *
+ * El borrado vive acá y no en `authService.logout()` por una razón concreta: hay cuatro caminos que
+ * terminan una sesión y sólo uno es el botón de "cerrar sesión" — el refresh rechazado por el
+ * servidor (`api-client`), el logout desde la pantalla de sin conexión, el "usar contraseña" del
+ * desbloqueo y el cambio de contraseña. Todos pasan por acá. Con el borrado en `logout()`, un
+ * cobrador cuya sesión moría por cualquiera de los otros tres le dejaba su cartera —nombres,
+ * teléfonos y direcciones— al siguiente que entrara en ese teléfono, que puede ser de otro tenant.
+ *
+ * **La cola NO se borra** (plan §Q3): es trabajo sin entregar, puede ser un pago, y queda guardada
+ * con su dueño para cuando vuelva a entrar.
+ */
 export async function clearSession(): Promise<void> {
   await Promise.all([
     SecureStore.deleteItemAsync(KEY.access),
     SecureStore.deleteItemAsync(KEY.refresh),
     SecureStore.deleteItemAsync(KEY.validUntil),
-    // El userId se va con la sesión. **La cola NO** (plan §Q3): queda guardada con su dueño y se
-    // drena cuando esa persona vuelva a entrar.
     SecureStore.deleteItemAsync(KEY.userId),
+    clearCache(),
   ]);
 }
 

@@ -177,6 +177,13 @@ export const authService = {
     if (res.status === 0) return (await meLocal()) ?? { status: 'offline' };
     if (res.status === 200 && res.data) {
       await touchSession(); // actividad → extiende la ventana de inactividad (8h)
+      // **Cambió la persona o el tenant** → el caché de antes no es suyo y se tira. Segunda barrera
+      // del mismo problema que resuelve `clearSession`: si una sesión murió sin pasar por ahí, el
+      // que entra no puede heredar la cartera del anterior. Cuesta una comparación por arranque.
+      const previo = await db.getOne<Me>('session', 'me');
+      if (previo && (previo.userId !== res.data.userId || previo.accountId !== res.data.accountId)) {
+        await db.clearCache();
+      }
       // Quién es, para poder encolar acciones cuando no haya red y no se le pueda preguntar (P6).
       await saveUserId(res.data.userId);
       await db.putOne('session', 'me', res.data);
@@ -224,11 +231,8 @@ export const authService = {
     if (session) {
       await apiFetch('/auth/logout', { method: 'POST', body: { refreshToken: session.refreshToken } });
     }
+    // `clearSession` borra también la copia local de los datos del tenant: es el punto único por el
+    // que pasan TODOS los finales de sesión, no sólo este botón.
     await clearSession();
-    // La copia local de la cartera —nombres, teléfonos y direcciones de deudores— se va con la
-    // sesión: en un teléfono compartido, el próximo que entre no puede quedarse con los datos del
-    // anterior. **La cola NO se borra** (plan §Q3): es trabajo sin entregar, puede ser un pago, y
-    // queda guardada con su dueño para cuando vuelva a entrar.
-    await db.clearCache();
   },
 };
