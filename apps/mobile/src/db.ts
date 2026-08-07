@@ -117,6 +117,15 @@ async function ensureVersion(db: SQLite.SQLiteDatabase): Promise<void> {
  * Guarda un lote de un recurso. `scope` es la clave por la que después se filtra (la fecha de la
  * agenda, el id del cliente de un caso); `null` cuando el recurso se lee entero.
  */
+/**
+ * `ponytail:` **sin `withTransactionAsync` a propósito.** Envolver esto en una transacción provocó
+ * un deadlock real: la hidratación y las pantallas escriben a la vez sobre la misma conexión, y dos
+ * transacciones concurrentes se bloquean mutuamente — el Home se quedaba en el spinner para siempre.
+ *
+ * No se pierde nada: el caché es **descartable**. Si una escritura queda a medias, la próxima
+ * hidratación la sobrescribe. La atomicidad importa donde hay dinero, y eso vive en `queue`, cuyas
+ * operaciones son de una sola fila (atómicas por sí mismas).
+ */
 export async function putAll<T extends { id: string }>(
   kind: CacheKind,
   items: T[],
@@ -125,17 +134,15 @@ export async function putAll<T extends { id: string }>(
   if (items.length === 0) return;
   const db = await open();
   const now = Date.now();
-  await db.withTransactionAsync(async () => {
-    for (const item of items) {
-      await db.runAsync('INSERT OR REPLACE INTO cache (kind, scope, id, json, fetched_at) VALUES (?, ?, ?, ?, ?)', [
-        kind,
-        scopeOf?.(item) ?? '',
-        item.id,
-        JSON.stringify(item),
-        now,
-      ]);
-    }
-  });
+  for (const item of items) {
+    await db.runAsync('INSERT OR REPLACE INTO cache (kind, scope, id, json, fetched_at) VALUES (?, ?, ?, ?, ?)', [
+      kind,
+      scopeOf?.(item) ?? '',
+      item.id,
+      JSON.stringify(item),
+      now,
+    ]);
+  }
 }
 
 /** Guarda un valor suelto que no tiene forma de entidad (el compuesto de un detalle, por ejemplo). */
