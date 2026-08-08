@@ -1,6 +1,7 @@
 'use client';
 
 import { type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, forwardRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 
 /**
  * Botón.
@@ -62,11 +63,12 @@ function IconArrow({ className = '' }: { className?: string }) {
 }
 
 function Spinner() {
+  const t = useTranslations('common');
   return (
     <span
       className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white"
       role="status"
-      aria-label="Cargando"
+      aria-label={t('loading')}
     />
   );
 }
@@ -89,6 +91,7 @@ export const Input = forwardRef<
   InputHTMLAttributes<HTMLInputElement> & { icon?: ReactNode; error?: boolean; reveal?: boolean }
 >(function Input({ icon, error, reveal, className = '', type, ...props }, ref) {
   const [shown, setShown] = useState(false);
+  const t = useTranslations('common');
   return (
     <div className="relative">
       {icon && (
@@ -110,7 +113,7 @@ export const Input = forwardRef<
         <button
           type="button"
           onClick={() => setShown((v) => !v)}
-          aria-label={shown ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+          aria-label={shown ? t('hidePassword') : t('showPassword')}
           className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-k-muted transition-colors hover:text-k-text-2"
         >
           <IconEye off={shown} />

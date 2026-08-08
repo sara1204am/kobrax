@@ -1,6 +1,26 @@
 import '@testing-library/jest-dom/vitest';
-import { afterAll, afterEach, beforeAll } from 'vitest';
+import { afterAll, afterEach, beforeAll, vi } from 'vitest';
 import { server } from './src/test/msw-server';
+import es from './src/messages/es.json';
+
+/**
+ * `useTranslations` fuera de Next no tiene de dónde sacar la config del request, así que los
+ * componentes tirarían "No intl context found". En vez de envolver cada `render()` en un provider
+ * (tocaría todos los tests), se reemplaza el hook por el **traductor de verdad** de next-intl
+ * atado a `es.json`.
+ *
+ * Efecto de lado buscado: los tests siguen afirmando sobre el texto en español real, así que una
+ * clave que no exista en `es.json` rompe la prueba en vez de pasar desapercibida.
+ */
+vi.mock('next-intl', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('next-intl')>();
+  return {
+    ...actual,
+    useLocale: () => 'es',
+    useTranslations: (namespace?: string) =>
+      actual.createTranslator({ locale: 'es', messages: es, namespace }),
+  };
+});
 
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });

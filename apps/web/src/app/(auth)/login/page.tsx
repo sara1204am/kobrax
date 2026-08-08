@@ -3,12 +3,14 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { AuthShell } from '@/components/auth-shell';
 import { Button, ErrorBanner, Field, Input } from '@/components/ui';
 import { postJson, routeByStep, type AccountOption, type Step } from '@/lib/client';
 
 export default function LoginPage() {
   const router = useRouter();
+  const t = useTranslations('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -24,22 +26,22 @@ export default function LoginPage() {
     });
     setLoading(false);
     if (!ok) {
-      setError(data.error?.message ?? 'No se pudo iniciar sesión');
+      setError(data.error?.message ?? t('error'));
       return;
     }
     routeByStep(router, data.step, data.accounts);
   }
 
   return (
-    <AuthShell eyebrow="Bienvenido de vuelta" title="Inicia sesión" subtitle="Accede a tu panel de cobranzas">
+    <AuthShell eyebrow={t('eyebrow')} title={t('title')} subtitle={t('subtitle')}>
       <form onSubmit={onSubmit} className="space-y-5" noValidate>
         <ErrorBanner message={error} />
 
-        <Field label="Correo electrónico">
+        <Field label={t('email')}>
           <Input
             type="email"
             autoComplete="email"
-            placeholder="ejemplo@empresa.com"
+            placeholder={t('emailPlaceholder')}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             icon={<IconMail />}
@@ -49,12 +51,12 @@ export default function LoginPage() {
         </Field>
 
         <div className="space-y-2">
-          <Field label="Contraseña">
+          <Field label={t('password')}>
             <Input
               type="password"
               reveal
               autoComplete="current-password"
-              placeholder="Ingresa tu contraseña"
+              placeholder={t('passwordPlaceholder')}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               icon={<IconLock />}
@@ -63,12 +65,12 @@ export default function LoginPage() {
             />
           </Field>
           <Link href="/forgot-password" className="inline-block text-[13px] font-medium text-k-purple hover:underline">
-            ¿Olvidaste tu contraseña?
+            {t('forgot')}
           </Link>
         </div>
 
         <Button type="submit" variant="cta" loading={loading}>
-          Iniciar sesión
+          {t('submit')}
         </Button>
       </form>
 

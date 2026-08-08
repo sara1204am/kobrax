@@ -211,10 +211,12 @@ rediseño, el i18n, el registro y la invitación no dependen de Google.
 
 ## 9. Tareas (en orden — lo que no depende de Google va primero)
 
-- [ ] 1. `AuthShell` split-screen + panel de marca + barra de sellos. Las 6 pantallas existentes
+- [x] 1. `AuthShell` split-screen + panel de marca + barra de sellos. Las 6 pantallas existentes
       quedan con piel nueva sin tocarles el flujo.
-- [ ] 2. `/login` con el layout del diseño (ojo en la contraseña, botón con flecha, links).
-- [ ] 3. i18n: `next-intl`, `es.json`/`en.json`, `LocaleSwitch`, traducir las pantallas de W0.
+- [x] 2. `/login` con el layout del diseño (ojo en la contraseña, botón con flecha, links).
+- [x] 3. i18n: `next-intl`, `es.json`/`en.json`, `LocaleSwitch`, traducir las pantallas de W0.
+      El idioma va en la cookie `k_locale` (sin prefijo en la URL). **Efecto que hay que saber:
+      leer la cookie en el layout raíz vuelve dinámicas todas las rutas del panel.**
 - [ ] 4. `/registro` + su handler BFF (`POST /accounts`).
 - [ ] 5. `/invitacion` + sus dos handlers BFF.
 - [ ] 6. **API:** extraer `completeLogin()` y probar que el login por contraseña no cambió.

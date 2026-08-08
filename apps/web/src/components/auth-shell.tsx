@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { useTranslations } from 'next-intl';
+import { LocaleSwitch } from './locale-switch';
 
 /**
  * Contenedor de todas las pantallas de auth. Split-screen del diseño
@@ -28,7 +30,11 @@ export function AuthShell({
       <div className="flex flex-1 flex-col lg:flex-row">
         <BrandPanel />
 
-        <section className="flex flex-1 items-center justify-center px-6 py-10 lg:py-14">
+        <section className="flex flex-1 flex-col items-center justify-center px-6 py-10 lg:py-14">
+          <div className="mb-5 flex w-full max-w-[440px] justify-end">
+            <LocaleSwitch />
+          </div>
+
           <div className="w-full max-w-[440px] rounded-2xl border border-k-border bg-white p-7 shadow-k-card sm:p-9">
             {eyebrow && <p className="text-[15px] font-medium text-k-purple">{eyebrow}</p>}
             <h1 className="mt-0.5 text-[30px] font-semibold leading-tight tracking-tight text-k-navy">
@@ -51,6 +57,8 @@ export function AuthShell({
  * escritorio, pero perder la marca entera en un teléfono sería peor que mostrarla chica.
  */
 function BrandPanel() {
+  const t = useTranslations('shell');
+
   return (
     <aside className="relative overflow-hidden bg-k-hero px-6 py-7 lg:w-[54%] lg:rounded-br-[48px] lg:px-14 lg:py-12">
       {/*
@@ -78,48 +86,51 @@ function BrandPanel() {
         <span className="hidden items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3 py-2 lg:inline-flex">
           <IconShield className="h-5 w-5 shrink-0 text-k-soft-periw" />
           <span className="leading-tight">
-            <span className="block text-[13px] font-medium text-white">Plataforma segura</span>
-            <span className="block text-[11px] text-white/70">Conexión y datos cifrados</span>
+            <span className="block text-[13px] font-medium text-white">{t('chipTitle')}</span>
+            <span className="block text-[11px] text-white/70">{t('chipText')}</span>
           </span>
         </span>
       </div>
 
       <div className="relative mt-14 hidden max-w-[520px] lg:block">
+        {/*
+          El titular va entero en UN mensaje con el corte y el acento adentro. Partirlo en tres
+          claves obligaría al traductor a poner «tiempo real» al final de la frase, que es donde
+          cae en español y no necesariamente en otro idioma.
+
+          El acento va en `k-soft-periw` y no en `k-purple`: sobre el navy del panel, `k-purple`
+          da 2.70:1 y no pasa ni el mínimo de texto grande (3:1). Este da 4.51:1.
+        */}
         <h2 className="text-[40px] font-semibold leading-[1.15] tracking-tight text-white">
-          Cobranza en campo,
-          <br />
-          resultados en{' '}
-          {/*
-            El acento va en `k-soft-periw` y no en `k-purple`: sobre el navy del panel, `k-purple`
-            da 2.70:1 y no pasa ni el mínimo de texto grande (3:1). Este da 4.51:1.
-          */}
-          <span className="text-k-soft-periw">tiempo real</span>
+          {t.rich('headline', {
+            br: () => <br />,
+            accent: (chunks) => <span className="text-k-soft-periw">{chunks}</span>,
+          })}
         </h2>
         <p className="mt-5 max-w-[380px] text-[15px] leading-relaxed text-white/70">
-          Kobrax es la plataforma que transforma tu gestión de cobranzas en eficiencia y
-          resultados.
+          {t('tagline')}
         </p>
 
         <ul className="mt-10 space-y-6">
           <Feature
             icon={<IconPin />}
-            title="Rutas optimizadas"
-            text="Ahorra tiempo y recorre más."
+            title={t('features.routesTitle')}
+            text={t('features.routesText')}
           />
           <Feature
             icon={<IconUsers />}
-            title="Gestión de clientes"
-            text="Toda la información que necesitas, siempre a mano."
+            title={t('features.clientsTitle')}
+            text={t('features.clientsText')}
           />
           <Feature
             icon={<IconChart />}
-            title="Reportes en tiempo real"
-            text="Toma decisiones con datos actualizados al instante."
+            title={t('features.reportsTitle')}
+            text={t('features.reportsText')}
           />
           <Feature
             icon={<IconShield />}
-            title="Seguro y confiable"
-            text="Tu información y la de tus clientes, siempre protegida."
+            title={t('features.securityTitle')}
+            text={t('features.securityText')}
           />
         </ul>
       </div>
@@ -147,13 +158,15 @@ function Feature({ icon, title, text }: { icon: ReactNode; title: string; text: 
  * inventada que ya salió del panel. Estos cuatro son verificables contra el código.
  */
 function TrustBar() {
+  const t = useTranslations('shell.trust');
+
   return (
     <footer className="border-t border-k-border bg-white">
       <ul className="mx-auto grid max-w-6xl gap-5 px-6 py-5 sm:grid-cols-2 lg:grid-cols-4">
-        <TrustItem icon={<IconLock />} title="Conexión cifrada" text="TLS 1.3 en todo el tráfico" />
-        <TrustItem icon={<IconShield />} title="Datos protegidos" text="Cifrado en la base de datos" />
-        <TrustItem icon={<IconEye />} title="Acceso auditado" text="Toda acción queda registrada" />
-        <TrustItem icon={<IconBuilding />} title="Aislamiento por empresa" text="Tus datos no se cruzan" />
+        <TrustItem icon={<IconLock />} title={t('tlsTitle')} text={t('tlsText')} />
+        <TrustItem icon={<IconShield />} title={t('dbTitle')} text={t('dbText')} />
+        <TrustItem icon={<IconEye />} title={t('auditTitle')} text={t('auditText')} />
+        <TrustItem icon={<IconBuilding />} title={t('tenantTitle')} text={t('tenantText')} />
       </ul>
     </footer>
   );

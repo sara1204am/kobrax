@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { AuthShell } from '@/components/auth-shell';
 import { Button, ErrorBanner, Field, Input } from '@/components/ui';
 import { OtpInput } from '@/components/otp-input';
@@ -9,6 +10,7 @@ import { postJson, routeByStep, type AccountOption, type Step } from '@/lib/clie
 
 export default function MfaPage() {
   const router = useRouter();
+  const t = useTranslations('mfa');
   const [code, setCode] = useState('');
   const [backup, setBackup] = useState('');
   const [useBackup, setUseBackup] = useState(false);
@@ -25,7 +27,7 @@ export default function MfaPage() {
     );
     setLoading(false);
     if (!ok) {
-      setError(data.error?.message ?? 'Código inválido');
+      setError(data.error?.message ?? t('invalid'));
       setCode('');
       return;
     }
@@ -33,7 +35,7 @@ export default function MfaPage() {
   }
 
   return (
-    <AuthShell title="Verificación en dos pasos" subtitle="Ingresa el código de tu aplicación de autenticación">
+    <AuthShell title={t('title')} subtitle={t('subtitle')}>
       <div className="space-y-5">
         <ErrorBanner message={error} />
         {!useBackup ? (
@@ -42,19 +44,19 @@ export default function MfaPage() {
               <OtpInput value={code} onChange={setCode} error={!!error} autoFocus />
             </div>
             <Button onClick={() => submit(code)} loading={loading} disabled={code.length !== 6}>
-              Verificar
+              {t('verify')}
             </Button>
             <button
               type="button"
               onClick={() => setUseBackup(true)}
               className="w-full text-center text-[13px] font-medium text-k-purple"
             >
-              Usar un código de respaldo
+              {t('useBackup')}
             </button>
           </>
         ) : (
           <>
-            <Field label="Código de respaldo">
+            <Field label={t('backupLabel')}>
               <Input
                 placeholder="xxxxx-xxxxx"
                 value={backup}
@@ -64,14 +66,14 @@ export default function MfaPage() {
               />
             </Field>
             <Button onClick={() => submit(backup)} loading={loading} disabled={backup.length < 6}>
-              Verificar
+              {t('verify')}
             </Button>
             <button
               type="button"
               onClick={() => setUseBackup(false)}
               className="w-full text-center text-[13px] font-medium text-k-purple"
             >
-              Volver al código del authenticator
+              {t('backToApp')}
             </button>
           </>
         )}

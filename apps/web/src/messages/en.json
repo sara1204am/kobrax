@@ -1,0 +1,109 @@
+{
+  "common": {
+    "loading": "Loading",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "backToLogin": "Back to sign in"
+  },
+  "locale": {
+    "label": "Language",
+    "es": "Spanish",
+    "en": "English"
+  },
+  "password": {
+    "length": "At least {min} characters",
+    "uppercase": "At least one uppercase letter",
+    "number": "At least one number",
+    "symbol": "At least one symbol"
+  },
+  "shell": {
+    "chipTitle": "Secure platform",
+    "chipText": "Encrypted connection and data",
+    "headline": "Collections in the field,<br></br>results in <accent>real time</accent>",
+    "tagline": "Kobrax is the platform that turns your collections operation into efficiency and results.",
+    "features": {
+      "routesTitle": "Optimized routes",
+      "routesText": "Save time and cover more ground.",
+      "clientsTitle": "Client management",
+      "clientsText": "Every piece of information you need, always at hand.",
+      "reportsTitle": "Real-time reports",
+      "reportsText": "Make decisions with data updated instantly.",
+      "securityTitle": "Safe and reliable",
+      "securityText": "Your data and your clients' data, always protected."
+    },
+    "trust": {
+      "tlsTitle": "Encrypted connection",
+      "tlsText": "TLS 1.3 on all traffic",
+      "dbTitle": "Protected data",
+      "dbText": "Encrypted in the database",
+      "auditTitle": "Audited access",
+      "auditText": "Every action is recorded",
+      "tenantTitle": "Per-company isolation",
+      "tenantText": "Your data never mixes"
+    }
+  },
+  "login": {
+    "eyebrow": "Welcome back",
+    "title": "Sign in",
+    "subtitle": "Access your collections panel",
+    "email": "Email address",
+    "emailPlaceholder": "example@company.com",
+    "password": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "forgot": "Forgot your password?",
+    "submit": "Sign in",
+    "error": "Could not sign in"
+  },
+  "mfa": {
+    "title": "Two-step verification",
+    "subtitle": "Enter the code from your authenticator app",
+    "verify": "Verify",
+    "useBackup": "Use a backup code",
+    "backupLabel": "Backup code",
+    "backToApp": "Back to the authenticator code",
+    "invalid": "Invalid code"
+  },
+  "mfaSetup": {
+    "title": "Set up two-step verification",
+    "subtitle": "Your role requires MFA. Scan or enter this key in your authenticator app.",
+    "manualKey": "Manual key",
+    "thenEnter": "Then enter the 6-digit code the app generates:",
+    "activate": "Activate and continue",
+    "startError": "Could not start the setup",
+    "invalid": "Invalid code",
+    "backupTitle": "Save your backup codes",
+    "backupSubtitle": "Use them if you lose access to your authenticator. Each one works only once.",
+    "download": "Download codes",
+    "saved": "I saved them, continue",
+    "fileHeader": "Kobrax backup codes"
+  },
+  "selectAccount": {
+    "title": "Choose your company",
+    "subtitle": "You have access to several companies. Select which one to work with.",
+    "error": "Could not select the company",
+    "loading": "Loading companies…"
+  },
+  "forgot": {
+    "title": "Recover password",
+    "subtitle": "We'll send you a link to reset it.",
+    "email": "Email",
+    "emailPlaceholder": "you@company.com",
+    "submit": "Send link",
+    "error": "Could not process the request",
+    "sentTitle": "Check your email",
+    "sentSubtitle": "If the address exists, we sent you a link to reset your password."
+  },
+  "reset": {
+    "title": "New password",
+    "subtitle": "Choose a strong password.",
+    "newPassword": "New password",
+    "confirm": "Confirm password",
+    "mismatch": "The passwords don't match.",
+    "submit": "Reset password",
+    "error": "Could not reset the password",
+    "missingToken": "The link is missing its recovery token",
+    "doneTitle": "Password updated",
+    "doneSubtitle": "You can now sign in with your new password.",
+    "doneLink": "Go to sign in"
+  }
+}

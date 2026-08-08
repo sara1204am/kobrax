@@ -39,6 +39,7 @@ apuntan `app/page.tsx`, `lib/client.ts`, `login/select-account` y
 | Data fetching | `fetch` nativo. Server components para lectura, `postJson()` para mutar |
 | Estado | Ninguno global. `useState` local; `sessionStorage` sólo para el selector de empresa |
 | Tests | Vitest + Testing Library + MSW (`src/test/msw-server.ts`) |
+| i18n | `next-intl` — es/en, **sin ruteo por idioma** (ver abajo) |
 | Otras deps | `qrcode` (sólo para pintar el QR del alta de MFA) |
 
 **No hay** librería de componentes, ni cliente de cache, ni store global, ni
@@ -72,6 +73,31 @@ route handler del mismo origen. Los handlers que mutan validan `sameOrigin()`.
 
 ---
 
+## Idiomas (es/en)
+
+El locale **vive en una cookie, no en la URL**. Prefijos `/es` y `/en` obligarían
+a tocar todas las rutas y el matcher del middleware — mucho ruido para dos
+idiomas.
+
+- `src/i18n/config.ts` — locales, default y el nombre de la cookie (`k_locale`).
+  Es la **única cookie de este panel que no pasa por el BFF**: no es httpOnly
+  porque la escribe el navegador (`components/locale-switch.tsx`).
+- `src/i18n/request.ts` — lee la cookie por request; un valor inventado cae al
+  default. Esa guarda (`isLocale`) no es cosmética: abajo hay un `import()`
+  dinámico armado con el valor de la cookie.
+- `src/messages/{es,en}.json` — un archivo por idioma. `src/i18n/messages.test.ts`
+  falla si una clave existe en uno y no en el otro.
+- En componentes: `useTranslations('namespace')`, **igual en server y en client**
+  components (next-intl lo soporta en los dos; el `AuthShell` es server).
+- ⚠️ Al leer la cookie, el layout raíz vuelve dinámicas **todas** las rutas
+  (`ƒ` en la salida del build). Es el precio del idioma sin prefijo en la URL.
+- En Vitest `next-intl` está mockeado en `vitest.setup.ts` con el traductor real
+  atado a `es.json`: los tests afirman sobre el español de verdad, y una clave
+  que no exista rompe la prueba.
+
+**Alcance traducido hoy: sólo las pantallas de auth.** Cada módulo traduce lo
+suyo en su etapa; traducir todo de una es traducir texto que va a cambiar.
+
 ## Estructura actual
 
 ```
@@ -85,7 +111,9 @@ src/
 │   ├── layout.tsx · page.tsx · globals.css
 │   └── middleware.ts
 ├── components/                     # ui.tsx, auth-shell.tsx, otp-input.tsx,
-│                                   # password-checklist.tsx
+│                                   # password-checklist.tsx, locale-switch.tsx
+├── i18n/                           # config.ts, request.ts
+├── messages/                       # es.json, en.json
 ├── lib/                            # bff.ts, auth-flow.ts, client.ts, format.ts
 └── test/msw-server.ts
 ```

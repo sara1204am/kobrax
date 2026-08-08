@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { AuthShell } from '@/components/auth-shell';
-import { Button, ErrorBanner } from '@/components/ui';
+import { ErrorBanner } from '@/components/ui';
 import { postJson, type AccountOption } from '@/lib/client';
 
 export default function SelectAccountPage() {
   const router = useRouter();
+  const t = useTranslations('selectAccount');
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -31,7 +33,7 @@ export default function SelectAccountPage() {
     const { ok, data } = await postJson('/api/auth/select-account', { accountId });
     if (!ok) {
       setBusy(null);
-      setError(data.error?.message ?? 'No se pudo seleccionar la empresa');
+      setError(data.error?.message ?? t('error'));
       return;
     }
     sessionStorage.removeItem('k_accounts');
@@ -39,7 +41,7 @@ export default function SelectAccountPage() {
   }
 
   return (
-    <AuthShell title="Elige tu empresa" subtitle="Tienes acceso a varias empresas. Selecciona con cuál operar.">
+    <AuthShell title={t('title')} subtitle={t('subtitle')}>
       <div className="space-y-3">
         <ErrorBanner message={error} />
         {accounts.map((a) => (
@@ -58,7 +60,7 @@ export default function SelectAccountPage() {
             </span>
           </button>
         ))}
-        {accounts.length === 0 && <p className="text-[13px] text-k-text-2">Cargando empresas…</p>}
+        {accounts.length === 0 && <p className="text-[13px] text-k-text-2">{t('loading')}</p>}
       </div>
     </AuthShell>
   );

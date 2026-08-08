@@ -1,0 +1,109 @@
+{
+  "common": {
+    "loading": "Cargando",
+    "showPassword": "Mostrar contraseña",
+    "hidePassword": "Ocultar contraseña",
+    "backToLogin": "Volver a iniciar sesión"
+  },
+  "locale": {
+    "label": "Idioma",
+    "es": "Español",
+    "en": "Inglés"
+  },
+  "password": {
+    "length": "Mínimo {min} caracteres",
+    "uppercase": "Al menos una mayúscula",
+    "number": "Al menos un número",
+    "symbol": "Al menos un símbolo"
+  },
+  "shell": {
+    "chipTitle": "Plataforma segura",
+    "chipText": "Conexión y datos cifrados",
+    "headline": "Cobranza en campo,<br></br>resultados en <accent>tiempo real</accent>",
+    "tagline": "Kobrax es la plataforma que transforma tu gestión de cobranzas en eficiencia y resultados.",
+    "features": {
+      "routesTitle": "Rutas optimizadas",
+      "routesText": "Ahorra tiempo y recorre más.",
+      "clientsTitle": "Gestión de clientes",
+      "clientsText": "Toda la información que necesitas, siempre a mano.",
+      "reportsTitle": "Reportes en tiempo real",
+      "reportsText": "Toma decisiones con datos actualizados al instante.",
+      "securityTitle": "Seguro y confiable",
+      "securityText": "Tu información y la de tus clientes, siempre protegida."
+    },
+    "trust": {
+      "tlsTitle": "Conexión cifrada",
+      "tlsText": "TLS 1.3 en todo el tráfico",
+      "dbTitle": "Datos protegidos",
+      "dbText": "Cifrado en la base de datos",
+      "auditTitle": "Acceso auditado",
+      "auditText": "Toda acción queda registrada",
+      "tenantTitle": "Aislamiento por empresa",
+      "tenantText": "Tus datos no se cruzan"
+    }
+  },
+  "login": {
+    "eyebrow": "Bienvenido de vuelta",
+    "title": "Inicia sesión",
+    "subtitle": "Accede a tu panel de cobranzas",
+    "email": "Correo electrónico",
+    "emailPlaceholder": "ejemplo@empresa.com",
+    "password": "Contraseña",
+    "passwordPlaceholder": "Ingresa tu contraseña",
+    "forgot": "¿Olvidaste tu contraseña?",
+    "submit": "Iniciar sesión",
+    "error": "No se pudo iniciar sesión"
+  },
+  "mfa": {
+    "title": "Verificación en dos pasos",
+    "subtitle": "Ingresa el código de tu aplicación de autenticación",
+    "verify": "Verificar",
+    "useBackup": "Usar un código de respaldo",
+    "backupLabel": "Código de respaldo",
+    "backToApp": "Volver al código del authenticator",
+    "invalid": "Código inválido"
+  },
+  "mfaSetup": {
+    "title": "Configura la verificación en dos pasos",
+    "subtitle": "Tu rol requiere MFA. Escanea o ingresa esta clave en tu app de autenticación.",
+    "manualKey": "Clave manual",
+    "thenEnter": "Luego ingresa el código de 6 dígitos que genera la app:",
+    "activate": "Activar y continuar",
+    "startError": "No se pudo iniciar la configuración",
+    "invalid": "Código inválido",
+    "backupTitle": "Guarda tus códigos de respaldo",
+    "backupSubtitle": "Úsalos si pierdes acceso a tu authenticator. Cada uno sirve una sola vez.",
+    "download": "Descargar códigos",
+    "saved": "Ya los guardé, continuar",
+    "fileHeader": "Códigos de respaldo Kobrax"
+  },
+  "selectAccount": {
+    "title": "Elige tu empresa",
+    "subtitle": "Tienes acceso a varias empresas. Selecciona con cuál operar.",
+    "error": "No se pudo seleccionar la empresa",
+    "loading": "Cargando empresas…"
+  },
+  "forgot": {
+    "title": "Recuperar contraseña",
+    "subtitle": "Te enviaremos un enlace para restablecerla.",
+    "email": "Correo",
+    "emailPlaceholder": "tu@empresa.com",
+    "submit": "Enviar enlace",
+    "error": "No se pudo procesar la solicitud",
+    "sentTitle": "Revisa tu correo",
+    "sentSubtitle": "Si la dirección existe, te enviamos un enlace para restablecer tu contraseña."
+  },
+  "reset": {
+    "title": "Nueva contraseña",
+    "subtitle": "Elige una contraseña segura.",
+    "newPassword": "Nueva contraseña",
+    "confirm": "Confirmar contraseña",
+    "mismatch": "Las contraseñas no coinciden.",
+    "submit": "Restablecer contraseña",
+    "error": "No se pudo restablecer la contraseña",
+    "missingToken": "Falta el token de recuperación en el enlace",
+    "doneTitle": "Contraseña actualizada",
+    "doneSubtitle": "Ya puedes iniciar sesión con tu nueva contraseña.",
+    "doneLink": "Ir a iniciar sesión"
+  }
+}
