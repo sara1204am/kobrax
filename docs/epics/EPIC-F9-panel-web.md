@@ -1,11 +1,31 @@
 # KOBRAX · EPIC F9 — Panel Web (Supervisión & Gerencia)
 > *El centro de mando de la cobranza: todo el tenant, en una sola pantalla.*
 
-**ID:** EPIC-F9 · **Estado:** ⏳ Pendiente
+**ID:** EPIC-F9 · **Estado:** 🚧 En curso (W0 — identidad)
 **Owner:** Web + Shared + Testing (consume API de F4–F8)
 **Depende de:** F2a/F2b (BFF + auth web ya operativos) · F4 (clientes/créditos) · F5 (casos) · F6 (rutas/visitas) · F7 (pagos) · F8 (realtime/notifs)
 **Desbloquea:** operación real de supervisores/gerencia · F11 (analítica avanzada se monta sobre este panel)
 **Requisitos:** RF-10 (reportes/visualización) · RNF-05 (usabilidad) · refuerza RNF-01 (RBAC en UI) y RNF-04 (rendimiento percibido)
+
+> ## ⚠️ Re-encuadre 2026-08-07 — leer antes que el resto
+>
+> Este epic se escribió cuando la única superficie del producto era la API, y sus slices 1–5
+> apuntaban a los **endpoints genéricos** `/clients`, `/credits`, `/cases`. Entre medio se
+> construyó todo el móvil (F10) y ahí el negocio quedó definido de verdad: cartera, agenda,
+> rutas, import y cuenta, cada uno con sus endpoints y sus decisiones cerradas.
+>
+> Por eso se borró `src/app/panel/**` (el CRUD genérico) y el build se re-ordenó: **el panel web
+> se construye sobre los mismos contratos que ya usa el móvil.**
+>
+> **El orden de ejecución vigente NO es el §4 de abajo, es
+> [`F9/BUILD-PLAN.md`](./F9/BUILD-PLAN.md) (W0–W9).** El inventario de lo que existe y no se
+> reconstruye está en [`F9/plans/BASE-INVENTORY.md`](./F9/plans/BASE-INVENTORY.md).
+> El §4 de este documento se conserva como catálogo de historias — su numeración de slices
+> quedó obsoleta.
+>
+> **Alcance que este epic NO cubría y ahora sí (etapa W0):** refactor visual de todo el auth
+> contra el diseño de `docs/epics-web/login/`, **login con Google (OAuth real, no adorno)**,
+> **i18n es/en**, registro público e ingreso por invitación desde la web.
 
 ---
 
@@ -70,7 +90,8 @@ Dar a gerencia y supervisión una **superficie única, en tiempo real y gobernad
 - **Vistas materializadas / KPIs pesados < 300 ms** y exportes ejecutivos avanzados → **F11**. F9 entrega los dashboards base con queries directas.
 - **Nuevos endpoints de negocio**: F9 **no** crea lógica de dominio nueva. Si una pantalla necesita un agregado que la API no expone, se levanta un gap contra el EPIC dueño (F4–F8), no se resuelve en el BFF.
 - **PWA/offline del panel**: el panel asume conectividad (es de oficina). Offline-first es exclusivo de mobile (F10).
-- **i18n completa**: F9 fija es-LA (textos en español). El andamiaje i18n se documenta como diferido.
+- ~~**i18n completa**: F9 fija es-LA~~ → **revertido el 2026-08-07**: i18n real (es/en) entra en W0.
+- **SSO más allá de Google**: Microsoft y Apple salen del diseño. Google se construye completo en W0.
 
 ---
 
