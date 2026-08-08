@@ -84,9 +84,6 @@ export function ErrorBanner({ message }: { message?: string | null }) {
   );
 }
 
-/** Footer de confianza fintech — siempre visible. */
-export function SecurityFooter() {
-  return (
-    <p className="mt-6 text-center text-[11px] text-k-muted">🔒 Conexión cifrada TLS 1.3</p>
-  );
-}
+// El `SecurityFooter` de una línea se lo llevó `auth-shell.tsx`, que ahora pinta la barra de
+// confianza del diseño. Vive allá y no acá porque este archivo es `'use client'` y esa barra no
+// tiene una sola interacción: desde el shell (server component) no viaja al navegador.

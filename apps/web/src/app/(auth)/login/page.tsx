@@ -31,7 +31,7 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthShell title="Inicia sesión" subtitle="Accede a tu panel de cobranzas">
+    <AuthShell eyebrow="Bienvenido de vuelta" title="Inicia sesión" subtitle="Accede a tu panel de cobranzas">
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         <ErrorBanner message={error} />
         <Field label="Correo">
