@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AuthShell } from '@/components/auth-shell';
 import { Button, ErrorBanner, Field, Input } from '@/components/ui';
@@ -10,7 +11,6 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -32,65 +32,69 @@ export default function LoginPage() {
 
   return (
     <AuthShell eyebrow="Bienvenido de vuelta" title="Inicia sesión" subtitle="Accede a tu panel de cobranzas">
-      <form onSubmit={onSubmit} className="space-y-4" noValidate>
+      <form onSubmit={onSubmit} className="space-y-5" noValidate>
         <ErrorBanner message={error} />
-        <Field label="Correo">
+
+        <Field label="Correo electrónico">
           <Input
             type="email"
             autoComplete="email"
-            placeholder="tu@empresa.com"
+            placeholder="ejemplo@empresa.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            icon={<IconUser />}
+            icon={<IconMail />}
             error={!!error}
             required
           />
         </Field>
-        <Field label="Contraseña">
-          <div className="relative">
+
+        <div className="space-y-2">
+          <Field label="Contraseña">
             <Input
-              type={showPw ? 'text' : 'password'}
+              type="password"
+              reveal
               autoComplete="current-password"
-              placeholder="••••••••"
+              placeholder="Ingresa tu contraseña"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               icon={<IconLock />}
               error={!!error}
               required
             />
-            <button
-              type="button"
-              onClick={() => setShowPw((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] font-medium text-k-purple"
-            >
-              {showPw ? 'Ocultar' : 'Ver'}
-            </button>
-          </div>
-        </Field>
-        <Button type="submit" loading={loading}>
-          Entrar
+          </Field>
+          <Link href="/forgot-password" className="inline-block text-[13px] font-medium text-k-purple hover:underline">
+            ¿Olvidaste tu contraseña?
+          </Link>
+        </div>
+
+        <Button type="submit" variant="cta" loading={loading}>
+          Iniciar sesión
         </Button>
-        <a href="/forgot-password" className="block text-center text-[13px] font-medium text-k-purple">
-          ¿Olvidaste tu contraseña?
-        </a>
       </form>
+
+      {/*
+        El diseño sigue acá con «O continúa con» + Google y los enlaces a crear cuenta y unirse
+        por invitación. No se dibujan todavía porque las tres cosas no existen: Google llega en la
+        tarea 9 (necesita credenciales de Google Cloud) y /registro e /invitacion en las 4 y 5.
+        Regla de la fase: no se pinta lo que no funciona.
+      */}
     </AuthShell>
   );
 }
 
-function IconUser() {
+function IconMail() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="8" r="4" />
-      <path d="M4 20c0-4 4-6 8-6s8 2 8 6" />
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" />
+      <path d="M3.5 7l8.5 6 8.5-6" />
     </svg>
   );
 }
 function IconLock() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <rect x="5" y="11" width="14" height="9" rx="2" />
-      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+      <path d="M8 11V7.5a4 4 0 0 1 8 0V11" />
     </svg>
   );
 }

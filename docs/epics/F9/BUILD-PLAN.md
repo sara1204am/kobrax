@@ -149,3 +149,9 @@ pnpm --filter @kobrax/web dev        # :3000 — necesita la API en :4010
 
 La validación visual la hace la usuaria en navegador real. Las etapas que tocan la API suman
 `pnpm --filter @kobrax/api type-check` y `test`.
+
+⚠️ **`build` y `dev` comparten `.next/` y se pisan.** Correr `next build` con el servidor de
+desarrollo levantado deja al `dev` sirviendo 500 con `Cannot find module './283.js'` — y lo
+confuso es que **no** es un error del código: la página que devuelve es una de error que puede
+pasar cualquier chequeo ingenuo del HTML. Si aparece: matar el `dev`, borrar `apps/web/.next`,
+levantarlo de nuevo. La verificación se corre con el `dev` apagado.

@@ -57,6 +57,7 @@ export default function ResetPasswordPage() {
         <Field label="Nueva contraseña">
           <Input
             type="password"
+            reveal
             autoComplete="new-password"
             placeholder="••••••••"
             value={password}
@@ -68,6 +69,7 @@ export default function ResetPasswordPage() {
         <Field label="Confirmar contraseña">
           <Input
             type="password"
+            reveal
             autoComplete="new-password"
             placeholder="••••••••"
             value={confirm}
