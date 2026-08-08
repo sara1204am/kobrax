@@ -75,11 +75,24 @@ export default function LoginPage() {
       </form>
 
       {/*
-        El diseño sigue acá con «O continúa con» + Google y los enlaces a crear cuenta y unirse
-        por invitación. No se dibujan todavía porque las tres cosas no existen: Google llega en la
-        tarea 9 (necesita credenciales de Google Cloud) y /registro e /invitacion en las 4 y 5.
-        Regla de la fase: no se pinta lo que no funciona.
+        Falta el «O continúa con» + Google del diseño: no se pinta porque todavía no funciona
+        (tarea 9, bloqueada por las credenciales de Google Cloud). Regla de la fase: no se dibuja
+        lo que no anda.
       */}
+      <div className="mt-6 space-y-2 border-t border-k-border pt-5 text-center text-[13px] text-k-text-2">
+        <p>
+          {t('noAccount')}{' '}
+          <Link href="/registro" className="font-medium text-k-purple hover:underline">
+            {t('createAccount')}
+          </Link>
+        </p>
+        <p>
+          {t('haveInvitation')}{' '}
+          <Link href="/invitacion" className="font-medium text-k-purple hover:underline">
+            {t('joinTeam')}
+          </Link>
+        </p>
+      </div>
     </AuthShell>
   );
 }

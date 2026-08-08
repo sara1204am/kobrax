@@ -100,6 +100,24 @@ costó ahí y va a costar acá si se olvida:
 - **El owner de demo tiene MFA.** Su login no devuelve `accessToken` directo — para probar el
   camino corto usar `collector@kobrax.demo`.
 
+## 5-ter. `validateSignup` del móvil: por qué NO se promovió a `shared`
+
+La regla §3.9 del BUILD-PLAN dice que una regla de negocio no se re-implementa, se promueve. El
+móvil tiene `validateSignup()` en `src/account-form.ts` y el registro de la web valida lo mismo.
+No se movió, y el motivo importa:
+
+1. **Devuelve mensajes en español.** Moverla tal cual haría que el panel en inglés muestre errores
+   en español. Cambiarla para que devuelva códigos rompería los tests del móvil, y §3.9 exige que
+   pasen **sin tocarlos**.
+2. **No es una regla de negocio, es el espejo del DTO.** `@Length(2,160)`, `@IsEmail`, campos
+   obligatorios. La única regla de verdad ahí es la política de contraseña, y **esa ya vive en
+   `shared`** (`isPasswordValid` / `checkPassword`) y la web la usa vía `allPassed`.
+
+Así que la web no reescribe nada: deja el «requerido» y la forma del correo al navegador
+(`required` + `type="email"`, sin `noValidate` en ese formulario), la contraseña a `shared`, y el
+resto al servidor, que es la frontera real. El día que aparezca una regla de negocio de verdad en
+esta etapa —no la hay— se promueve.
+
 ## 5-bis. Reglas del móvil que W0 hereda
 
 W0 es la única etapa que **no** promueve reglas de negocio a `shared`: la identidad ya vive
@@ -217,14 +235,24 @@ rediseño, el i18n, el registro y la invitación no dependen de Google.
 - [x] 3. i18n: `next-intl`, `es.json`/`en.json`, `LocaleSwitch`, traducir las pantallas de W0.
       El idioma va en la cookie `k_locale` (sin prefijo en la URL). **Efecto que hay que saber:
       leer la cookie en el layout raíz vuelve dinámicas todas las rutas del panel.**
-- [ ] 4. `/registro` + su handler BFF (`POST /accounts`).
-- [ ] 5. `/invitacion` + sus dos handlers BFF.
+- [x] 4. `/registro` + su handler BFF (`POST /accounts`). El alta no devuelve tokens: la pantalla
+      encadena un `POST /api/auth/login` con los datos del formulario y delega en `routeByStep`
+      (S4-D1 del móvil). Si ese login falla, la cuenta **ya existe** y la pantalla deja de ofrecer
+      crear otra — reintentar sería un 409 (S4-R4).
+- [x] 5. `/invitacion` + sus dos handlers BFF. Dos pasos en una pantalla (buscar el código → fijar
+      contraseña); el código entra por `?c=`, el mismo parámetro que comparte el móvil por
+      WhatsApp. Mismo cierre que el registro: aceptar no emite tokens (S2-D8), así que enseguida
+      va el login normal.
+      **El código se manda TAL CUAL lo escribió la persona** (con guiones o en minúscula):
+      normalizarlo es del servidor, que es quien conoce el formato del token.
 - [ ] 6. **API:** extraer `completeLogin()` y probar que el login por contraseña no cambió.
 - [ ] 7. **API:** `google.service.ts` + `POST /auth/google` + specs.
 - [ ] 8. **BFF:** `google/start` y `google/callback` (cookie `lax`, validación de `state`).
 - [ ] 9. Botón de Google en `/login` y cableado punta a punta.
 - [ ] 10. Sumar las rutas nuevas al matcher de `middleware.ts` — **sólo las privadas**; `/registro`
       e `/invitacion` son públicas y NO van al matcher.
+      → Verificado para las tareas 4 y 5: el matcher sigue siendo `/dashboard` + `/settings` y así
+      queda. Pendiente sólo por si Google suma alguna ruta privada.
 
 ## 10. Reglas de la fase
 

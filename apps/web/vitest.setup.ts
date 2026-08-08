@@ -11,14 +11,26 @@ import es from './src/messages/es.json';
  *
  * Efecto de lado buscado: los tests siguen afirmando sobre el texto en español real, así que una
  * clave que no exista en `es.json` rompe la prueba en vez de pasar desapercibida.
+ *
+ * ⚠️ El traductor se cachea por namespace. next-intl memoiza el suyo, y devolver uno nuevo en cada
+ * render acá haría que un `useCallback([t])` o un `useEffect([t])` se re-dispare para siempre: el
+ * componente entra en bucle y la suite **se cuelga sin mensaje de error**. Costó encontrarlo una
+ * vez; que no cueste dos.
  */
+const translators = new Map<string, unknown>();
+
 vi.mock('next-intl', async (importOriginal) => {
   const actual = await importOriginal<typeof import('next-intl')>();
   return {
     ...actual,
     useLocale: () => 'es',
-    useTranslations: (namespace?: string) =>
-      actual.createTranslator({ locale: 'es', messages: es, namespace }),
+    useTranslations: (namespace?: string) => {
+      const key = namespace ?? '';
+      if (!translators.has(key)) {
+        translators.set(key, actual.createTranslator({ locale: 'es', messages: es, namespace }));
+      }
+      return translators.get(key);
+    },
   };
 });
 
