@@ -46,4 +46,4 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
   return res;
 }
 
-export const config = { matcher: ['/dashboard/:path*', '/settings/:path*', '/panel/:path*'] };
+export const config = { matcher: ['/dashboard/:path*', '/settings/:path*'] };
