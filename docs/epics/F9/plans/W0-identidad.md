@@ -83,6 +83,34 @@ POST /auth/invitation/accept  → { code (8-24), password }
 GET  /auth/invitation/:code   → datos de la invitación para pintarla antes de aceptar
 ```
 
+### 5.5 ⚠️ Trampas que el móvil ya pagó en estas dos pantallas
+El módulo de Cuenta del móvil construyó **exactamente** el registro y la invitación. Lo que
+costó ahí y va a costar acá si se olvida:
+
+- **No existe tabla `account_invitations`.** Un invitado es un `User` en estado `PENDING` + token.
+  La pantalla de invitación no consulta invitaciones: consulta al usuario pendiente.
+- **Los defaults rompen el alta.** `PENDING` y `requiresPasswordChange` puestos por defecto hacen
+  que el usuario recién creado no pueda entrar. Ya está resuelto en la API; no re-introducirlo.
+- **El insert público choca con RLS.** El registro crea la cuenta antes de que exista contexto de
+  tenant: el uuid lo pone la aplicación y el insert va dentro de `withTenant`.
+- **`AuditService` no-opea sin contexto.** En el registro público no hay usuario todavía, así que
+  no esperar un `audit_log` de esa alta.
+- **El rate limit del registro se agota a las 3 corridas.** Probar el alta cuatro veces seguidas
+  da un falso negativo: no es el código, es el throttler.
+- **El owner de demo tiene MFA.** Su login no devuelve `accessToken` directo — para probar el
+  camino corto usar `collector@kobrax.demo`.
+
+## 5-bis. Reglas del móvil que W0 hereda
+
+W0 es la única etapa que **no** promueve reglas de negocio a `shared`: la identidad ya vive
+entera en el backend y en `packages/shared/src/types/auth.types.ts` (`LoginStep`, `LoginResult`).
+Lo único compartido que toca es `src/validation/password-policy.ts`, que `password-checklist.tsx`
+**ya importa** — el registro y la invitación la reusan tal cual, sin escribir una segunda lista de
+requisitos.
+
+Las promociones a `shared` arrancan en W3 (cotización de préstamo) — ver
+[`BASE-INVENTORY §1-bis.2`](./BASE-INVENTORY.md).
+
 ## 6. Cómo funciona el login con Google
 
 ### 6.1 La forma elegida: authorization code a través del BFF

@@ -55,6 +55,15 @@ funcional*. Nada de andamios "para después".
 7. **No pintar lo que no existe.** Regla traída del móvil: si un botón no tiene respaldo en la
    API, no se dibuja. Vale para SSO, para métricas y para cualquier "próximamente".
 8. **Un test de Vitest por lógica no trivial**, no por componente.
+9. 🔴 **Una regla de negocio NO se re-implementa: se promueve a `packages/shared`.**
+   El móvil dejó las reglas del dominio escritas como funciones puras dentro de
+   `apps/mobile/src` (cotizar un préstamo, repartir el día de la agenda, ordenar la cartera,
+   contar la jornada). **La web no las copia ni las reescribe**: se suben a `shared` y las
+   consumen los dos. Si el escritorio cotiza un préstamo distinto que el teléfono, es un bug de
+   plata, y aparece meses después. Ver el detalle por etapa en
+   [`plans/BASE-INVENTORY.md §2`](./plans/BASE-INVENTORY.md).
+   Promover = mover el archivo a `shared`, dejar el móvil importando de ahí, y verificar que sus
+   tests siguen pasando **sin tocarlos**.
 
 ---
 
@@ -72,6 +81,13 @@ funcional*. Nada de andamios "para después".
 | W7 | Pagos | `/payments`: ledger inmutable, conciliación, solicitud de pago (QR/link), aprobación | W3 | ⏳ |
 | W8 | Dashboard | KPIs de cartera + gráficos. Va **tarde a propósito**: necesita que los módulos de arriba produzcan datos reales para no medir el vacío | W2–W7 | ⏳ |
 | W9 | Realtime y notificaciones | WebSocket (`collector.location`, `case.updated`, `payment.registered`) + centro de notificaciones | W6, W8 | ⏳ |
+
+> **Cada etapa arranca promoviendo a `shared` las reglas que el móvil ya escribió para ese
+> dominio** (regla §3.9). El detalle de qué promueve cada una está en
+> [`plans/BASE-INVENTORY.md §1-bis.2`](./plans/BASE-INVENTORY.md). Las tres que más duelen si se
+> olvidan: **W3 la cotización de préstamo** (es plata), **W5 el reparto del día** (`partitionDay`,
+> que ya tuvo un bug donde una gestión cancelada desaparecía), y **W6 la cuenta de la jornada**
+> (`summarizeDay`, que existe porque dos pantallas del mismo día decían cosas distintas).
 
 ### Por qué este orden
 
@@ -97,6 +113,16 @@ funcional*. Nada de andamios "para después".
 | C4 | Import de cartera ≠ import de clientes | `/imports/portfolio` (el bueno, con 3 formas de archivo) vs `/clients/imports` (el viejo, que **no sirve**: matchea por carnet y borra al ausente). |
 | C5 | `DELETE /agenda/:id` responde **200 con el ítem**, no 204 | |
 | C6 | Sin endpoints de agregación | Los KPIs se calculan en cliente, igual que en el móvil (decisión cerrada). W8 lo hereda. |
+| C7 | **`PaymentMethod` de `shared` es legacy y NO sirve** | `PAYMENT_METHODS` son minúsculas (`'cash'`, `'transfer'`…); el enum de Prisma que la API espera es MAYÚSCULA (`CASH`, `TRANSFER`, `QR`, `CARD`, `MOBILE_PAYMENT`). Mandar el de shared hace rebotar el pago. Afecta W7. |
+| C8 | **Los garantes NO son una entidad** | `GUARANTOR` es un valor de `LocationType`: viven en `client_locations` con lat/lng. Para "garantes de X" se filtra `locations` por tipo — no hay tabla ni endpoint de garantes. Afecta W3. |
+| C9 | **El nombre visible tiene una sola regla** | `clientDisplayName()` en `apps/api/src/modules/clients/clients.serializer.ts`. No inventar un `${firstName} ${lastName}` en la web. Afecta W3, W5, W6. |
+| C10 | `POST /visits` vive en `field-ops`, no en `visits/` | Su DTO usa **`lat`/`lng`**, no `latitude`/`longitude`. `field_visits` es **inmutable**: se escribe sólo en el INSERT. Afecta W6. |
+| C11 | La mora de una parada es la de **su** caso | No la suma del deudor: un cliente puede tener varios créditos. Afecta W6. |
+| C12 | No hay parsers por banco | Sumar un formato al import = configurarlo desde Ajustes, no escribir código. Tres formas: `rows` (CSV) · `pdf-rows` · `pdf-blocks`. Afecta W4. |
+| C13 | **Excel no se lee** | La dep `xlsx` nunca se instaló y `rows.parser` sólo hace CSV. En el móvil se dejó así por peso de bundle; **en la web ese motivo no aplica** — W4 es el lugar natural para instalarla de verdad. |
+| C14 | El crédito creado desde el móvil **no tiene cronograma** | Decisión D1 de cartera: la cuota queda congelada en `credit.metadata`. La web va a encontrarse créditos sin `schedule` y no puede asumir que siempre hay uno. Afecta W3, W7. |
+| C15 | Las promesas de pago viven en `agenda_items` | No hay tabla de promesas: son ítems de agenda de tipo `PROMESA`. Afecta W5, W7. |
+| C16 | No existe `account_invitations` | Un invitado es un `User` en estado `PENDING` + token. Afecta W0 (`/invitacion`) y W2. |
 
 ---
 

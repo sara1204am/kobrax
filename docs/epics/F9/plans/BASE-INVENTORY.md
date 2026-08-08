@@ -72,6 +72,70 @@ Ya hay specs de `forgot-password`, `reset-password`, `sessions`, `auth-flow`, `c
 
 ---
 
+## 1-bis. 🔴 Lo que el móvil ya resolvió y la web NO puede reescribir
+
+> **La sección más importante de este documento.** El móvil no sólo consumió la API: dejó las
+> **reglas del negocio** escritas como funciones puras. Están en `apps/mobile/src`, o sea en un
+> lugar donde la web no las ve. Si cada etapa las reescribe, el escritorio y el teléfono van a
+> decir cosas distintas sobre la misma plata.
+>
+> **La regla (BUILD-PLAN §3.9): se promueven a `packages/shared` y las consumen los dos.**
+> Promover = mover el archivo, dejar el móvil importando de ahí, y verificar que **sus tests
+> siguen pasando sin tocarlos**. Si un test hay que cambiarlo, se cambió comportamiento.
+
+### 1-bis.1 Lo que ya está en `shared` — se importa, no se re-declara
+
+| Qué | Path | Lo usa |
+|---|---|---|
+| Enums de dominio | `src/enums/*` | `CaseStatus`, `CasePriority`, `CaseActivityType`, `VisitOutcome`, `EvidenceType`, `NotificationType`, `RouteStatus`, `Role`, `Permission` |
+| Transiciones de caso | `src/constants/case-transitions.ts` | `CASE_TRANSITIONS` — W5 valida las transiciones con esto, no con un `switch` propio |
+| Permisos RBAC | `src/constants/permissions.ts` | **Fuente única**: el seed la consume. W1 arma `usePermissions()` sobre esto |
+| Franjas horarias | `TIME_SLOT_HOURS` + `slotOfTime()` | La frontera de cada franja, que **la API y el móvil ya comparten**. W5 la hereda |
+| Validación de gestión / visita | `validateAgendaDetails` · `validateVisitDetails` | W5, W6 |
+| Política de contraseña | `src/validation/password-policy.ts` | Ya la usa `password-checklist.tsx` de la web |
+| Moneda, fecha, hash, tokenize | `src/utils/*` | W3, W6, W7 |
+| Tokens de diseño | `src/design/tokens.ts` | Fuente del `tailwind.config.ts` |
+
+⚠️ **`PAYMENT_METHODS` / `PaymentMethod` de `shared` está podrido** (minúsculas legacy). La API
+espera el enum de Prisma en MAYÚSCULA. Ver BUILD-PLAN C7. W7 lo arregla o lo esquiva, pero no lo
+usa tal cual.
+
+### 1-bis.2 Reglas que hay que PROMOVER (viven sólo en el móvil hoy)
+
+| Regla | Dónde vive hoy | Qué decide | Promover en |
+|---|---|---|---|
+| **Cotización de préstamo** | `prestamo-form.ts` → `quoteFor`, `currentInstallment`, `totalBelowCapital`, `canSubmitPrestamo` | Cuota, total, ganancia, y cuándo el alta es válida. **Es plata: dos implementaciones = dos números** | **W3** |
+| Alta/edición de cliente | `cliente-form.ts` → `buildClientePayload`, `canSubmitCliente` · `cliente-diff.ts` → `diffCliente` | Qué se manda y qué cambió | W3 |
+| Orden de la cartera | `portfolio.ts` → `sortPortfolio`, `PORTFOLIO_SORT_LABEL` | Los 4 criterios; `mora` es el histórico | W3 |
+| Búsqueda de clientes | `use-client-search.ts` | Debounce 300 ms, ≥2 caracteres, race-guard por `reqId` | W3 — *evaluar*: es un hook de React, y `shared` hoy no depende de React |
+| **Reparto del día** | `agenda-form.ts` → `partitionDay` | `done = status !== SCHEDULED`. **Tiene test de no-regresión**: la pantalla usaba `=== EXECUTED` y un ítem cancelado desaparecía del día | **W5** |
+| Formulario de gestión | `agenda-form.ts` → `hydrateForm`, `buildPatch`, `timeSlotRange`, `todayISO`, `MONTHS`, `money` | Alta, edición y PATCH parcial | W5 |
+| **Cuenta de la jornada** | `route-summary.ts` → `summarizeDay(route, payments)` | Recaudado, progreso y categorías. **Es la ÚNICA cuenta**: se hizo así porque dos pantallas del mismo día decían cosas distintas | **W6, W8** |
+| Categorías del resumen | `route-summary.ts` → `CATEGORY_LABEL`, `CATEGORY_TONE`, `categoryOf` | `NOT_FOUND` + `WRONG_ADDRESS` se agrupan en «Inubicables» sólo acá; el dato fino sigue entero en `field_visits` | W6 |
+| Progreso de ruta / ETA | `routes.service.ts` → `routeProgress`, `resolveStopCoords` · `route-eta.ts` | W6 |
+| Resultado de visita | `visit-result.ts` → las 6 variantes, `buildDetails`, `canSubmitResult`, `paymentOutcome` | W6 (lectura) |
+| **Contrato del import** | `import.service.ts` (21 KB) — derivados puros, flags del gate, memoria del archivo de muestra | W4 |
+| KPIs del inicio | `home.ts` | Los contadores intradía. Ojo: en la web el "hoy" es del tenant, no de un cobrador | W8 |
+| Etiquetas de estado | `ui.tsx` → `ROUTE_STATUS_LABEL`, `STOP_STATUS_META`, `AGENDA_STATUS_LABEL`, `AGENDA_TYPE_META` | Estado → etiqueta + tono. Van a `shared` como datos; el color lo resuelve cada plataforma | W1 (los mapas) |
+
+### 1-bis.3 Lo que NO se lleva del móvil (y por qué)
+
+| Qué | Por qué no |
+|---|---|
+| `db.ts` (SQLite) · `sync/*` (`cached`, `queue`, `sync.service`, `hydrate`) · `ids.ts` | **El panel es de oficina y asume conexión** (BUILD-PLAN D4). Todo el aparato offline es del campo. |
+| `store/net.ts` + `OfflineIndicator` | Idem. |
+| `location.ts` (GPS) · `photo.ts` · captura de evidencia | La evidencia la captura el cobrador. La web la **mira**, no la produce (F9 §3.2). |
+| `biometric.ts` · `session-lock` · `post-login` con biometría | Del teléfono. |
+| `file-picker.ts` | Es `expo-document-picker`. La web usa `<input type="file">`. |
+| Reanimated · expo-haptics · FlashList | Nativas. |
+| Packs offline de MapLibre (`offline-packs.service`) | El panel no descarga tiles. |
+
+⚠️ **Los mapas sí se comparten en concepto**: el móvil cerró MapLibre como única librería de
+mapas y `src/maps/tiles.ts` fija la fuente de tiles y la conversión `[lng,lat]`↔`{lat,lng}`.
+W6/W9 usan **`maplibre-gl`** (la hermana web, mismos tiles), no otra librería.
+
+---
+
 ## 2. Lo que NO hay (y el doc viejo decía que sí)
 
 `apps/web/CLAUDE.md` describía un stack que **nunca se instaló**. Las deps reales son cuatro:
