@@ -12,6 +12,12 @@ import { InviteButton } from './invite-button';
  * plan son pocas filas. Por eso el orden se resuelve acá, en memoria, con los mismos
  * `searchParams` que escribe el `DataTable` — la vista sigue siendo compartible por link sin
  * pedirle al servidor algo que no ofrece.
+ *
+ * ponytail: sin caja de búsqueda. El techo es el del plan (pocas filas), así que filtrar no
+ * hace falta todavía. **El `q` se construye en W3**, donde `/clients` sí busca del lado del
+ * servidor y le da el primer contrato real; ahí se cablea también acá. Escribirlo antes sería
+ * adivinar la forma del parámetro — que es exactamente lo que el code-review le marcó al
+ * `DataTable` por haber nacido sin consumidor.
  */
 export default async function EquipoPage({
   searchParams,

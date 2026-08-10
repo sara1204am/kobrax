@@ -250,3 +250,11 @@ español, espejo del DTO) ni `ROLE_HINT` / `roleOptions()` / `ROLE_LABEL` (copy)
 de rol del panel salen de i18n; `ROLE_LABEL` de `shared` se queda para el móvil.
 
 Ajustes (Seguridad) quedó **traducido**: al cerrar W2 el panel entero funciona en es y en en.
+
+⏸️ **La búsqueda (`q`) del `DataTable` se construye en W3, no antes** (decisión del 2026-08-10).
+`/users` devuelve el equipo entero y son pocas filas por el techo del plan, así que en `/equipo`
+el orden se resuelve en memoria y no hace falta filtrar. El primer consumidor real es
+`/clients`, que **sí busca del lado del servidor**: recién ahí se conoce la forma del parámetro.
+Escribirlo antes es adivinar el contrato — el mismo error que el code-review le marcó al
+`DataTable` por haber nacido sin consumidor. Cuando W3 lo construya, se cablea también en
+`/equipo`.
