@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
-  RoleType,
   memberName,
   memberStatus,
   type AssignableRole,
@@ -18,7 +17,7 @@ import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
 import { postJson, sendJson } from '@/lib/client';
-import { memberActions } from '@/lib/team';
+import { isKnownRole, memberActions } from '@/lib/team';
 import { InvitationCode } from './invitation-code';
 
 const TONE = { active: 'success', pending: 'warning', inactive: 'neutral' } as const;
@@ -250,9 +249,7 @@ function RoleCell({
   busy: boolean;
 }) {
   const t = useTranslations('team.roles');
-  // Un rol que el enum no conoce se muestra crudo en vez de reventar el render.
-  const label = (name: string) =>
-    (Object.values(RoleType) as string[]).includes(name) ? t(name) : name;
+  const label = (name: string) => (isKnownRole(name) ? t(name) : name);
 
   if (!editable) return <span className="text-k-text-2">{label(member.roleName)}</span>;
 

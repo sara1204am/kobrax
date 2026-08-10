@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { RoleType, type AssignableRole, type InvitedMember } from '@kobrax/shared';
+import type { AssignableRole, InvitedMember } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Input } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
 import { postJson } from '@/lib/client';
+import { isKnownRole } from '@/lib/team';
 import { InvitationCode } from './invitation-code';
 
 const EMPTY = { firstName: '', lastName: '', email: '', roleId: '' };
@@ -67,8 +68,7 @@ export function InviteButton({
     setInvited(data);
   }
 
-  const label = (name: string) =>
-    (Object.values(RoleType) as string[]).includes(name) ? tr(name) : name;
+  const label = (name: string) => (isKnownRole(name) ? tr(name) : name);
 
   return (
     <>

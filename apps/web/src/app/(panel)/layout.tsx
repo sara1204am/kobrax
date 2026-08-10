@@ -1,20 +1,11 @@
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
-import type { AuthAccountOption } from '@kobrax/shared';
+import type { AuthAccountOption, MeInfo } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { PanelShell } from '@/components/panel-shell';
 import { PermissionsProvider } from '@/components/permissions';
 import { ToastProvider } from '@/components/toast';
 import { visibleNav } from '@/lib/nav';
-
-interface Me {
-  userId: string;
-  email: string;
-  profile: { firstName: string; lastName: string; photoUrl?: string } | null;
-  accountId: string;
-  role: string;
-  permissions: string[];
-}
 
 /**
  * Layout de todo lo que vive detrás del login.
@@ -29,7 +20,7 @@ interface Me {
  */
 export default async function PanelLayout({ children }: { children: ReactNode }) {
   const [me, accounts] = await Promise.all([
-    apiCall<Me>('/auth/me', { method: 'GET', auth: true }),
+    apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
     apiCall<AuthAccountOption[]>('/auth/accounts', { method: 'GET', auth: true }),
   ]);
 
