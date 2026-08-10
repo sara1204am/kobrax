@@ -6,8 +6,12 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { AuthAccountOption } from '@kobrax/shared';
 import { LocaleSwitch } from './locale-switch';
-import { crumbsFor, type NavItem } from '@/lib/nav';
+import { crumbsFor, type NavItem, type NavKey } from '@/lib/nav';
 import { postJson } from '@/lib/client';
+
+/** Fila de cualquiera de los dos menús de la topbar: 44 px de toque, ancho completo. */
+const MENU_ITEM =
+  'flex min-h-[44px] w-full items-center gap-2 px-3 text-left text-[14px] text-k-text hover:bg-k-bg disabled:opacity-60';
 
 export interface ShellUser {
   name: string;
@@ -346,7 +350,7 @@ function AccountList({ accounts, activeId }: { accounts: AuthAccountOption[]; ac
               onClick={() => void pick(account.id)}
               disabled={busy !== null}
               aria-current={account.id === activeId ? 'true' : undefined}
-              className="flex min-h-[44px] w-full items-center gap-2 px-3 text-left text-[14px] text-k-text hover:bg-k-bg disabled:opacity-60"
+              className={MENU_ITEM}
             >
               <span className="min-w-0 flex-1">
                 <span className="block truncate">{account.name}</span>
@@ -380,7 +384,7 @@ function LogoutItem() {
         router.replace('/login');
       }}
       disabled={busy}
-      className="flex min-h-[44px] w-full items-center gap-2 px-3 text-left text-[14px] text-k-text hover:bg-k-bg disabled:opacity-60"
+      className={MENU_ITEM}
     >
       <Icon name="logout" className="h-[18px] w-[18px] text-k-muted" />
       {t('logout')}
@@ -398,7 +402,8 @@ function initials(name: string): string {
 // ── Íconos ───────────────────────────────────────────────────────────────────
 // Inline y no una librería: son trazos sueltos que heredan `currentColor`.
 
-const ICONS: Record<string, string> = {
+// Tipado contra `NavKey`: sumar un ítem al menú sin darle ícono lo agarra el type-check.
+const ICONS: Record<NavKey | 'menu' | 'chevron' | 'check' | 'logout', string> = {
   home: 'M4 10.5 12 4l8 6.5M6.5 9.5V20h11V9.5',
   portfolio: 'M3 8h15a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8zm0 0a2 2 0 0 1 2-2h11M16 13.5h1.5',
   import: 'M12 3.5v9.5m0 0 3.5-3.5M12 13 8.5 9.5M4.5 15.5V18a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2.5',
@@ -415,7 +420,13 @@ const ICONS: Record<string, string> = {
   logout: 'M15 7.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-1.5M10 12h10m0 0-3-3m3 3-3 3',
 };
 
-function Icon({ name, className = 'h-[19px] w-[19px] shrink-0' }: { name: string; className?: string }) {
+function Icon({
+  name,
+  className = 'h-[19px] w-[19px] shrink-0',
+}: {
+  name: keyof typeof ICONS;
+  className?: string;
+}) {
   return (
     <svg
       className={className}
@@ -427,7 +438,7 @@ function Icon({ name, className = 'h-[19px] w-[19px] shrink-0' }: { name: string
       strokeLinejoin="round"
       aria-hidden
     >
-      <path d={ICONS[name] ?? ICONS.home!} />
+      <path d={ICONS[name]} />
     </svg>
   );
 }

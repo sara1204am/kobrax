@@ -6,8 +6,20 @@ import { Permission } from '@kobrax/shared';
  * `label` es la clave dentro del namespace `panel.nav` de i18n, no el texto: el panel es
  * bilingüe y un rótulo hardcodeado acá saldría en español en la versión en inglés.
  */
+export type NavKey =
+  | 'home'
+  | 'portfolio'
+  | 'import'
+  | 'cases'
+  | 'agenda'
+  | 'routes'
+  | 'payments'
+  | 'team'
+  | 'account'
+  | 'security';
+
 export interface NavItem {
-  label: string;
+  label: NavKey;
   href: string;
   /** Permiso necesario para verlo. `null` = lo ve cualquiera con sesión. */
   permission: Permission | null;
@@ -62,14 +74,15 @@ export interface Crumb {
 /**
  * Rastro de navegación para una ruta.
  *
- * La primera miga sale del ítem del menú que cubre la ruta (el más largo que la prefija, para
- * que `/settings/security` gane sobre un hipotético `/settings`). Lo que sobra se agrega
- * como migas sueltas, con su clave en `panel.crumbs`.
+ * La primera miga sale del ítem del menú que cubre la ruta; lo que sobra se agrega como migas
+ * sueltas, con su clave en `panel.crumbs`.
+ *
+ * ponytail: `find` y no «el prefijo más largo» porque hoy ningún ítem del `NAV` es prefijo de
+ * otro. El día que existan `/cuenta` y `/cuenta/facturacion`, gana el que esté primero en el
+ * `NAV` — y ahí se ordena por largo.
  */
 export function crumbsFor(pathname: string): Crumb[] {
-  const match = NAV.filter((i) => i.built && (pathname === i.href || pathname.startsWith(`${i.href}/`))).sort(
-    (a, b) => b.href.length - a.href.length,
-  )[0];
+  const match = NAV.find((i) => i.built && (pathname === i.href || pathname.startsWith(`${i.href}/`)));
   if (!match) return [];
 
   const rest = pathname
