@@ -32,6 +32,24 @@ describe('Modal', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('cerrarlo por código NO vuelve a llamar a `onClose`', () => {
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <Modal open onClose={onClose} title="Borrar cliente">
+        ¿Seguro?
+      </Modal>,
+    );
+
+    // Lo que pasa al tocar la X: el llamador ya corrió su `onClose` y bajó `open`. Si el
+    // cierre que eso provoca volviera a avisar, cada efecto del llamador saldría duplicado.
+    rerender(
+      <Modal open={false} onClose={onClose} title="Borrar cliente">
+        ¿Seguro?
+      </Modal>,
+    );
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('el título nombra al diálogo', () => {
     render(
       <Modal open onClose={() => {}} title="Borrar cliente">

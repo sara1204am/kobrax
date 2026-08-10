@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { compare, hash } from 'bcryptjs';
 import { KOBRAX, type AuthAccountOption, type AuthTokens, type LoginResult } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
+import { AuditService } from '../../common/audit/audit.service';
 import { TokenService } from './token.service';
 import { PermissionsService } from './permissions.service';
 import { SessionService } from './session.service';
@@ -56,6 +57,7 @@ export class AuthService implements OnModuleInit {
     private readonly permissions: PermissionsService,
     private readonly sessions: SessionService,
     private readonly mfa: MfaService,
+    private readonly audit: AuditService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -191,6 +193,24 @@ export class AuthService implements OnModuleInit {
 
     const tokens = await this.issueTokens(userId, membership.account_id, membership.role_id, meta);
     await this.sessions.revokeOne(userId, currentSessionId);
+
+    /*
+     * El único endpoint que emite credenciales operativas para un tenant en el que quien
+     * llama no estaba un momento antes: sin este registro, si mañana la empresa destino
+     * pregunta quién bajó su cartera a las 03:12, el rastro empieza y termina dentro de ella
+     * y no hay nada que lo ate a la identidad de origen ni al momento del salto.
+     *
+     * Se escribe con el contexto todavía en la empresa de ORIGEN (lo fija el JWT del
+     * request), así que la fila responde las cuatro preguntas: quién, desde dónde, adónde y
+     * cuándo.
+     */
+    await this.audit.record({
+      entity: 'account',
+      entityId: membership.account_id,
+      action: 'SWITCH_ACCOUNT',
+      after: { toAccountId: membership.account_id, role: membership.role_name },
+    });
+
     return tokens;
   }
 

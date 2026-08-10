@@ -69,8 +69,21 @@ function makeAuth(opts: { user: Record<string, unknown>; memberships?: ReturnTyp
     },
   };
   const mfa = {};
-  const service = new AuthService(prisma as never, token, permissions as never, sessions as never, mfa as never);
-  return { service, calls };
+  const audited: Record<string, unknown>[] = [];
+  const audit = {
+    record: async (entry: Record<string, unknown>) => {
+      audited.push(entry);
+    },
+  };
+  const service = new AuthService(
+    prisma as never,
+    token,
+    permissions as never,
+    sessions as never,
+    mfa as never,
+    audit as never,
+  );
+  return { service, calls, audited };
 }
 
 const META = { ip: '1.2.3.4', deviceType: 'mobile' };
@@ -208,6 +221,24 @@ describe('AuthService — cambio de empresa con la sesión ya iniciada (W1)', ()
       service.switchAccount('u9', 'sess-vieja', 'a2', META),
       AUTH_ERR.ACCOUNT_NOT_ALLOWED,
     );
+  });
+
+  it('deja el salto en el audit trail: quién, adónde y con qué rol', async () => {
+    const { service, audited } = makeAuth({
+      user,
+      memberships: [memb('SUPERVISOR', 'a1'), memb('COLLECTOR', 'a2')],
+    });
+    await service.switchAccount('u9', 'sess-vieja', 'a2', META);
+
+    // El «desde dónde» lo pone el contexto de tenant, que sigue siendo el de origen.
+    assert.deepEqual(audited, [
+      {
+        entity: 'account',
+        entityId: 'a2',
+        action: 'SWITCH_ACCOUNT',
+        after: { toAccountId: 'a2', role: 'COLLECTOR' },
+      },
+    ]);
   });
 
   it('emite tokens de la empresa destino y revoca la sesión anterior', async () => {
