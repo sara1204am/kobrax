@@ -1,21 +1,30 @@
 /**
  * Lógica pura de los formularios de CUENTA S1: qué es válido y qué mandar.
  *
- * Sin red y sin React, como `cliente-form.ts`. El diff es el corazón: la API corre con
- * `forbidNonWhitelisted: true`, así que mandar el objeto entero es un 400 — y además,
- * guardar sin tocar nada no debe disparar ni una llamada.
+ * Sin red y sin React, como `cliente-form.ts`.
  *
- * Es la misma idea que `cliente-diff.ts`, no el mismo código: allá son sub-recursos con
- * altas y bajas por fila (`RowOps`); acá son campos escalares.
+ * ⚠️ **El diff se mudó a `@kobrax/shared`** (F9 · W2): la web edita los mismos campos contra
+ * los mismos endpoints, y dos implementaciones se separan justo en el borde raro — quitar el
+ * QR, que viaja como `null` y no como `''`. Acá se re-exporta para no tocar a quien ya lo
+ * importaba de este archivo. Lo que sí se quedó son los **validadores**: devuelven mensajes en
+ * español y el panel web es bilingüe.
  */
 import {
+  COUNTRY_CURRENCIES,
   ROLE_LABEL,
-  SUPPORTED_CURRENCIES,
   isPasswordValid,
   type CurrencyCode,
   type RoleType,
 } from '@kobrax/shared';
-import type { AccountPatch, ProfilePatch } from './account.service';
+
+export {
+  diffAccount,
+  diffProfile,
+  hasChanges,
+  type AccountForm,
+  type ProfileForm,
+} from '@kobrax/shared';
+import type { AccountForm, ProfileForm } from '@kobrax/shared';
 
 /** País + moneda son un solo selector: acoplados en el producto (S1-D1). */
 export interface CountryOption {
@@ -25,6 +34,7 @@ export interface CountryOption {
   label: string;
 }
 
+/** El rótulo es local: `shared` no lleva nombres de país porque la web los muestra en dos idiomas. */
 const COUNTRY_NAME: Record<string, string> = {
   BO: 'Bolivia',
   CO: 'Colombia',
@@ -34,40 +44,14 @@ const COUNTRY_NAME: Record<string, string> = {
   US: 'Estados Unidos',
 };
 
-/**
- * Las 6 combinaciones país+moneda que el producto soporta, derivadas de
- * `SUPPORTED_CURRENCIES` (su `locale` ya trae el país: `es-BO` → `BO`).
- * No se instala ninguna librería de países para un producto que opera en 6.
- */
-export const COUNTRY_OPTIONS: CountryOption[] = Object.entries(SUPPORTED_CURRENCIES).map(
-  ([currency, meta]) => {
-    const code = meta.locale.split('-')[1]!;
-    return {
-      code,
-      currency: currency as CurrencyCode,
-      label: `${COUNTRY_NAME[code] ?? code} · ${meta.symbol}`,
-    };
-  },
-);
+/** Los países salen de `shared` (la regla); acá sólo se les pone el rótulo en español. */
+export const COUNTRY_OPTIONS: CountryOption[] = COUNTRY_CURRENCIES.map((c) => ({
+  ...c,
+  label: `${COUNTRY_NAME[c.code] ?? c.code} · ${c.symbol}`,
+}));
 
 export function findCountry(countryCode: string): CountryOption | undefined {
   return COUNTRY_OPTIONS.find((c) => c.code === countryCode);
-}
-
-export interface AccountForm {
-  businessName: string;
-  taxId: string;
-  countryCode: string;
-  currencyCode: string;
-}
-
-export interface ProfileForm {
-  firstName: string;
-  lastName: string;
-  phone: string;
-  photoUrl: string;
-  /** URL del QR de cobro. `''` = no tiene, y quitarlo se traduce a `null` en `diffProfile`. */
-  paymentQrUrl: string;
 }
 
 /** `null` = válido. El mensaje es el que se pinta bajo el campo. */
@@ -147,28 +131,5 @@ export function validateInvite(f: InviteForm): string | null {
   return null;
 }
 
-/** Campos escalares que cambiaron, recortados. Vacío = no hay nada que guardar. */
-function diffFields<T extends object>(before: T, after: T): Partial<T> {
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(after) as [string, string][]) {
-    const a = value.trim();
-    if (a !== ((before as Record<string, string>)[key] ?? '').trim()) out[key] = a;
-  }
-  return out as Partial<T>;
-}
-
-export function diffAccount(before: AccountForm, after: AccountForm): AccountPatch {
-  return diffFields(before, after);
-}
-
-export function diffProfile(before: ProfileForm, after: ProfileForm): ProfilePatch {
-  const patch: ProfilePatch = diffFields(before, after);
-  // Vaciar el QR es QUITARLO, y eso viaja como `null`: el server distingue `null` (borrar) de
-  // ausente (no tocar), y `''` no pasaría su validación de longitud.
-  if (patch.paymentQrUrl === '') patch.paymentQrUrl = null;
-  return patch;
-}
-
-export function hasChanges(patch: object): boolean {
-  return Object.keys(patch).length > 0;
-}
+// El diff (`diffAccount`, `diffProfile`, `hasChanges`) vive ahora en `@kobrax/shared` y se
+// re-exporta arriba. Ver el encabezado del archivo.
