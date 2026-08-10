@@ -8,29 +8,12 @@
 import { publicCall, type PublicResult } from './api';
 import { apiMutate, apiQuery, type MutateResult, type QueryResult } from './api-client';
 
-export interface Member {
-  userId: string;
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-  phone: string | null;
-  photoUrl: string | null;
-  roleId: string;
-  roleName: string;
-  isOwner: boolean;
-  isActive: boolean;
-  /** `PENDING` = invitado que todavía no aceptó (S2-D2). */
-  userStatus: string;
-}
-
-/** El alta devuelve además el código, una sola vez, para poder compartirlo (S2-D9). */
-export type InvitedMember = Member & { invitationCode: string };
-
-export interface Role {
-  id: string;
-  name: string;
-  level: number;
-}
+// El contrato de `/users` y `/roles` y la regla del nombre visible viven en `@kobrax/shared`
+// (F9 · W2): el panel web consume los mismos endpoints. Se re-exportan para no tocar a quien
+// ya los importaba de este archivo.
+export type { Member, InvitedMember, AssignableRole as Role } from '@kobrax/shared';
+export { memberName } from '@kobrax/shared';
+import type { Member, InvitedMember, AssignableRole as Role } from '@kobrax/shared';
 
 export interface InvitePayload {
   firstName: string;
@@ -94,8 +77,4 @@ export function acceptInvitation(
   );
 }
 
-/** Nombre para pintar: el correo es el respaldo si el perfil viniera vacío. */
-export function memberName(m: Pick<Member, 'firstName' | 'lastName' | 'email'>): string {
-  const full = `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim();
-  return full || m.email;
-}
+// `memberName` se mudó a `@kobrax/shared` y se re-exporta arriba.

@@ -65,6 +65,62 @@
     "saveError": "No se pudieron guardar los datos",
     "noAccess": "No tienes acceso a los datos de la cuenta"
   },
+  "team": {
+    "title": "Equipo",
+    "subtitle": "Quién trabaja en tu cuenta y qué puede hacer.",
+    "seats": "{used} de {max} miembros",
+    "noAccess": "No tienes acceso al equipo",
+    "empty": "Todavía no hay nadie más",
+    "emptyHint": "Invita a tu equipo por correo y aparecerán acá.",
+    "cancel": "Cancelar",
+    "actionError": "No se pudo completar la acción",
+    "roleChanged": "Rol actualizado",
+    "deactivated": "Miembro desactivado",
+    "reactivated": "Miembro reactivado",
+    "removed": "Invitación cancelada",
+    "columns": {
+      "member": "Miembro",
+      "role": "Rol",
+      "status": "Estado",
+      "actions": "Acciones"
+    },
+    "status": {
+      "active": "Activo",
+      "pending": "Pendiente",
+      "inactive": "Inactivo"
+    },
+    "actions": {
+      "deactivate": "Desactivar",
+      "reactivate": "Reactivar",
+      "remove": "Cancelar invitación"
+    },
+    "confirm": {
+      "deactivate": {
+        "title": "Desactivar a {name}",
+        "text": "No va a poder entrar, pero su historial de casos y pagos se conserva. Puedes reactivarlo cuando quieras.",
+        "ok": "Desactivar"
+      },
+      "reactivate": {
+        "title": "Reactivar a {name}",
+        "text": "Vuelve a entrar con su contraseña de siempre y con el mismo rol.",
+        "ok": "Reactivar"
+      },
+      "remove": {
+        "title": "Cancelar la invitación de {name}",
+        "text": "Todavía no aceptó, así que se elimina por completo y su lugar queda libre. El código que recibió deja de servir.",
+        "ok": "Cancelar invitación"
+      }
+    },
+    "roles": {
+      "SUPER_ADMIN": "Super administrador",
+      "ACCOUNT_ADMIN": "Administrador",
+      "MANAGER": "Gerente",
+      "SUPERVISOR": "Supervisor",
+      "COLLECTOR": "Cobrador",
+      "AUDITOR": "Auditor",
+      "VIEWER": "Consulta"
+    }
+  },
   "password": {
     "length": "Mínimo {min} caracteres",
     "uppercase": "Al menos una mayúscula",

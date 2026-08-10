@@ -65,6 +65,62 @@
     "saveError": "Could not save the details",
     "noAccess": "You do not have access to the account details"
   },
+  "team": {
+    "title": "Team",
+    "subtitle": "Who works in your account and what they can do.",
+    "seats": "{used} of {max} members",
+    "noAccess": "You do not have access to the team",
+    "empty": "Nobody else yet",
+    "emptyHint": "Invite your team by email and they will show up here.",
+    "cancel": "Cancel",
+    "actionError": "Could not complete the action",
+    "roleChanged": "Role updated",
+    "deactivated": "Member deactivated",
+    "reactivated": "Member reactivated",
+    "removed": "Invitation cancelled",
+    "columns": {
+      "member": "Member",
+      "role": "Role",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "status": {
+      "active": "Active",
+      "pending": "Pending",
+      "inactive": "Inactive"
+    },
+    "actions": {
+      "deactivate": "Deactivate",
+      "reactivate": "Reactivate",
+      "remove": "Cancel invitation"
+    },
+    "confirm": {
+      "deactivate": {
+        "title": "Deactivate {name}",
+        "text": "They will not be able to sign in, but their case and payment history is kept. You can reactivate them any time.",
+        "ok": "Deactivate"
+      },
+      "reactivate": {
+        "title": "Reactivate {name}",
+        "text": "They sign in again with their usual password and the same role.",
+        "ok": "Reactivate"
+      },
+      "remove": {
+        "title": "Cancel {name}'s invitation",
+        "text": "They have not accepted yet, so they are removed entirely and their seat is freed. The code they received stops working.",
+        "ok": "Cancel invitation"
+      }
+    },
+    "roles": {
+      "SUPER_ADMIN": "Super admin",
+      "ACCOUNT_ADMIN": "Administrator",
+      "MANAGER": "Manager",
+      "SUPERVISOR": "Supervisor",
+      "COLLECTOR": "Collector",
+      "AUDITOR": "Auditor",
+      "VIEWER": "Viewer"
+    }
+  },
   "password": {
     "length": "At least {min} characters",
     "uppercase": "At least one uppercase letter",
