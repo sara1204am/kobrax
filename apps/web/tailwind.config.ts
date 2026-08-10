@@ -34,6 +34,13 @@ const config: Config = {
       },
       backgroundImage: {
         'k-hero': 'linear-gradient(160deg, #1A3A52 0%, #2B5A7D 60%, #5B7DBE 100%)',
+        /**
+         * Botón de acción principal. No es un color nuevo: son los dos extremos de la marca
+         * (`k-navy` → `k-purple`) puestos en horizontal, como en el diseño.
+         * Contraste del blanco encima: 7.2:1 en el centro (donde va la etiqueta) y 4.38:1 en el
+         * extremo derecho, donde sólo vive la flecha — que es un gráfico y le alcanza con 3:1.
+         */
+        'k-cta': 'linear-gradient(90deg, #1A3A52 0%, #7B68D6 100%)',
       },
       boxShadow: {
         'k-focus': '0 0 0 3px rgba(91,125,190,.15)',

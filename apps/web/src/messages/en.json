@@ -1,0 +1,198 @@
+{
+  "common": {
+    "loading": "Loading",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "backToLogin": "Back to sign in",
+    "close": "Close"
+  },
+  "locale": {
+    "label": "Language",
+    "es": "Spanish",
+    "en": "English"
+  },
+  "panel": {
+    "nav": {
+      "label": "Main navigation",
+      "home": "Home",
+      "portfolio": "Portfolio",
+      "import": "Import",
+      "cases": "Cases",
+      "agenda": "Schedule",
+      "routes": "Routes",
+      "payments": "Payments",
+      "team": "Team",
+      "account": "Account",
+      "security": "Security"
+    },
+    "crumbs": {
+      "password": "Password",
+      "mfa": "Two-step verification",
+      "sessions": "Active sessions"
+    },
+    "soon": "Soon",
+    "openMenu": "Open menu",
+    "breadcrumb": "You are here",
+    "company": "Company",
+    "switchError": "Could not switch company. Please try again.",
+    "logout": "Sign out",
+    "home": {
+      "title": "Home",
+      "subtitle": "Your collections panel.",
+      "building": "Modules show up in the menu as they get built."
+    },
+    "error": {
+      "title": "Something went wrong",
+      "text": "We could not load this screen. The rest of the panel still works.",
+      "retry": "Retry"
+    },
+    "table": {
+      "range": "{from}–{to} of {total}",
+      "previous": "Previous",
+      "next": "Next"
+    }
+  },
+  "password": {
+    "length": "At least {min} characters",
+    "uppercase": "At least one uppercase letter",
+    "number": "At least one number",
+    "symbol": "At least one symbol"
+  },
+  "shell": {
+    "chipTitle": "Secure platform",
+    "chipText": "Encrypted connection and data",
+    "headline": "Collections in the field,<br></br>results in <accent>real time</accent>",
+    "tagline": "Kobrax is the platform that turns your collections operation into efficiency and results.",
+    "features": {
+      "routesTitle": "Optimized routes",
+      "routesText": "Save time and cover more ground.",
+      "clientsTitle": "Client management",
+      "clientsText": "Every piece of information you need, always at hand.",
+      "reportsTitle": "Real-time reports",
+      "reportsText": "Make decisions with data updated instantly.",
+      "securityTitle": "Safe and reliable",
+      "securityText": "Your data and your clients' data, always protected."
+    },
+    "trust": {
+      "tlsTitle": "Encrypted connection",
+      "tlsText": "TLS 1.3 on all traffic",
+      "dbTitle": "Protected data",
+      "dbText": "Encrypted in the database",
+      "auditTitle": "Audited access",
+      "auditText": "Every action is recorded",
+      "tenantTitle": "Per-company isolation",
+      "tenantText": "Your data never mixes"
+    }
+  },
+  "login": {
+    "eyebrow": "Welcome back",
+    "title": "Sign in",
+    "subtitle": "Access your collections panel",
+    "email": "Email address",
+    "emailPlaceholder": "example@company.com",
+    "password": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "forgot": "Forgot your password?",
+    "submit": "Sign in",
+    "error": "Could not sign in",
+    "noAccount": "No account yet?",
+    "createAccount": "Create an account",
+    "haveInvitation": "Got an invitation?",
+    "joinTeam": "Join your team"
+  },
+  "registro": {
+    "eyebrow": "Start collecting with Kobrax",
+    "title": "Create an account",
+    "subtitle": "This is enough to load your portfolio. Country and currency are set up later.",
+    "businessName": "Business name",
+    "businessNamePlaceholder": "Perez Collections",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "email": "Email address",
+    "emailPlaceholder": "you@company.com",
+    "password": "Password",
+    "submit": "Create account",
+    "haveAccount": "I already have an account",
+    "error": "Could not create the account",
+    "createdButLoginFailed": "Your account was created, but we couldn't sign you in: {detail}",
+    "goToLogin": "Go to sign in",
+    "doneTitle": "Account created!",
+    "doneSubtitle": "You can go in and load your portfolio. First we'll offer to protect the account with a second security step.",
+    "yourEmail": "Your email:",
+    "yourBusiness": "Business:",
+    "continue": "Continue"
+  },
+  "invitacion": {
+    "title": "Join your team",
+    "subtitle": "Enter the code you were given to get into Kobrax.",
+    "code": "Invitation code",
+    "codePlaceholder": "XXXXXXXX",
+    "lookup": "Continue",
+    "backToLogin": "Back to sign in",
+    "notFound": "That code is not valid or was already used",
+    "greeting": "Hi, {name}",
+    "joinTitle": "You joined {business}",
+    "joinSubtitle": "Choose a password for {email} and go in.",
+    "yourTeam": "your team",
+    "newPassword": "Password",
+    "confirm": "Confirm password",
+    "mismatch": "The passwords don't match.",
+    "submit": "Enter Kobrax",
+    "acceptError": "Could not accept the invitation",
+    "acceptedButLoginFailed": "Your password was saved, but we couldn't sign you in: {detail}",
+    "goToLogin": "Go to sign in"
+  },
+  "mfa": {
+    "title": "Two-step verification",
+    "subtitle": "Enter the code from your authenticator app",
+    "verify": "Verify",
+    "useBackup": "Use a backup code",
+    "backupLabel": "Backup code",
+    "backToApp": "Back to the authenticator code",
+    "invalid": "Invalid code"
+  },
+  "mfaSetup": {
+    "title": "Set up two-step verification",
+    "subtitle": "Your role requires MFA. Scan or enter this key in your authenticator app.",
+    "qrAlt": "QR code to set up two-step verification",
+    "manualKey": "Manual key",
+    "thenEnter": "Then enter the 6-digit code the app generates:",
+    "activate": "Activate and continue",
+    "startError": "Could not start the setup",
+    "invalid": "Invalid code",
+    "backupTitle": "Save your backup codes",
+    "backupSubtitle": "Use them if you lose access to your authenticator. Each one works only once.",
+    "download": "Download codes",
+    "saved": "I saved them, continue",
+    "fileHeader": "Kobrax backup codes"
+  },
+  "selectAccount": {
+    "title": "Choose your company",
+    "subtitle": "You have access to several companies. Select which one to work with.",
+    "error": "Could not select the company",
+    "loading": "Loading companies…"
+  },
+  "forgot": {
+    "title": "Recover password",
+    "subtitle": "We'll send you a link to reset it.",
+    "email": "Email",
+    "emailPlaceholder": "you@company.com",
+    "submit": "Send link",
+    "error": "Could not process the request",
+    "sentTitle": "Check your email",
+    "sentSubtitle": "If the address exists, we sent you a link to reset your password."
+  },
+  "reset": {
+    "title": "New password",
+    "subtitle": "Choose a strong password.",
+    "newPassword": "New password",
+    "confirm": "Confirm password",
+    "mismatch": "The passwords don't match.",
+    "submit": "Reset password",
+    "error": "Could not reset the password",
+    "missingToken": "The link is missing its recovery token",
+    "doneTitle": "Password updated",
+    "doneSubtitle": "You can now sign in with your new password.",
+    "doneLink": "Go to sign in"
+  }
+}

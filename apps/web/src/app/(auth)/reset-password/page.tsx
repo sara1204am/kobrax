@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { AuthShell } from '@/components/auth-shell';
 import { Button, ErrorBanner, Field, Input } from '@/components/ui';
 import { allPassed, PasswordChecklist } from '@/components/password-checklist';
@@ -10,6 +11,7 @@ import { postJson } from '@/lib/client';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
+  const t = useTranslations('reset');
   const [token, setToken] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -33,7 +35,7 @@ export default function ResetPasswordPage() {
     const { ok, data } = await postJson('/api/auth/reset-password', { token, newPassword: password });
     setLoading(false);
     if (!ok) {
-      setError(data.error?.message ?? 'No se pudo restablecer la contraseña');
+      setError(data.error?.message ?? t('error'));
       return;
     }
     setDone(true);
@@ -42,21 +44,22 @@ export default function ResetPasswordPage() {
 
   if (done) {
     return (
-      <AuthShell title="Contraseña actualizada" subtitle="Ya puedes iniciar sesión con tu nueva contraseña.">
+      <AuthShell title={t('doneTitle')} subtitle={t('doneSubtitle')}>
         <Link href="/login" className="text-[13px] font-medium text-k-purple">
-          Ir a iniciar sesión
+          {t('doneLink')}
         </Link>
       </AuthShell>
     );
   }
 
   return (
-    <AuthShell title="Nueva contraseña" subtitle="Elige una contraseña segura.">
+    <AuthShell title={t('title')} subtitle={t('subtitle')}>
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
-        <ErrorBanner message={error ?? (!token ? 'Falta el token de recuperación en el enlace' : null)} />
-        <Field label="Nueva contraseña">
+        <ErrorBanner message={error ?? (!token ? t('missingToken') : null)} />
+        <Field label={t('newPassword')}>
           <Input
             type="password"
+            reveal
             autoComplete="new-password"
             placeholder="••••••••"
             value={password}
@@ -65,9 +68,10 @@ export default function ResetPasswordPage() {
           />
         </Field>
         <PasswordChecklist password={password} />
-        <Field label="Confirmar contraseña">
+        <Field label={t('confirm')}>
           <Input
             type="password"
+            reveal
             autoComplete="new-password"
             placeholder="••••••••"
             value={confirm}
@@ -76,9 +80,9 @@ export default function ResetPasswordPage() {
             required
           />
         </Field>
-        {mismatch && <p className="text-[12px] text-k-danger">Las contraseñas no coinciden.</p>}
+        {mismatch && <p className="text-[12px] text-k-danger">{t('mismatch')}</p>}
         <Button type="submit" loading={loading} disabled={!canSubmit}>
-          Restablecer contraseña
+          {t('submit')}
         </Button>
       </form>
     </AuthShell>

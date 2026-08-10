@@ -34,7 +34,11 @@ function memb(roleName: string, accountId = 'a1', status = 'ACTIVE') {
 }
 
 function makeAuth(opts: { user: Record<string, unknown>; memberships?: ReturnType<typeof memb>[] }) {
-  const calls = { userUpdate: [] as { where: { id: string }; data: Record<string, unknown> }[] };
+  const calls = {
+    userUpdate: [] as { where: { id: string }; data: Record<string, unknown> }[],
+    forRole: [] as string[],
+    revokedSessions: [] as string[],
+  };
   const prisma = {
     user: {
       findUnique: async () => opts.user,
@@ -44,9 +48,26 @@ function makeAuth(opts: { user: Record<string, unknown>; memberships?: ReturnTyp
       },
     },
     $queryRaw: async () => opts.memberships ?? [],
+    // `issueTokens` escribe la sesión y el refresh dentro del tenant destino.
+    withTenant: async <T>(_accountId: string, fn: (tx: unknown) => Promise<T>): Promise<T> =>
+      fn({
+        userSession: { create: async () => ({ id: 'sess-nueva' }) },
+        refreshToken: { create: async () => ({}) },
+      }),
   };
-  const permissions = { forRole: async () => ['case:read'] };
-  const sessions = { denylist: async () => {}, revokeAll: async () => 0 };
+  const permissions = {
+    forRole: async (roleId: string) => {
+      calls.forRole.push(roleId);
+      return ['case:read'];
+    },
+  };
+  const sessions = {
+    denylist: async () => {},
+    revokeAll: async () => 0,
+    revokeOne: async (_userId: string, sessionId: string) => {
+      calls.revokedSessions.push(sessionId);
+    },
+  };
   const mfa = {};
   const service = new AuthService(prisma as never, token, permissions as never, sessions as never, mfa as never);
   return { service, calls };
@@ -117,6 +138,68 @@ describe('AuthService.mfaSetupSkip — postergar el MFA obligatorio', () => {
     const { service } = makeAuth({ user: { id: 'u1', status: 'ACTIVE', mfaEnabled: false } });
     const wrong = token.signPreAuth({ sub: 'u1', purpose: 'mfa' });
     await rejectsWithCode(service.mfaSetupSkip(wrong, META), AUTH_ERR.INVALID_TOKEN);
+  });
+});
+
+describe('AuthService — cambio de empresa con la sesión ya iniciada (W1)', () => {
+  const user = { id: 'u9', status: 'ACTIVE', mfaEnabled: false };
+
+  it('lista sólo las empresas donde el usuario puede operar', async () => {
+    const { service } = makeAuth({
+      user,
+      memberships: [memb('SUPERVISOR', 'a1'), memb('ACCOUNT_ADMIN', 'a2')],
+    });
+    const accounts = await service.listAccounts('u9');
+    assert.deepEqual(
+      accounts.map((a) => [a.id, a.role]),
+      [
+        ['a1', 'SUPERVISOR'],
+        ['a2', 'ACCOUNT_ADMIN'],
+      ],
+    );
+  });
+
+  it('un tenant suspendido no aparece en la lista', async () => {
+    const { service } = makeAuth({
+      user,
+      memberships: [memb('SUPERVISOR', 'a1'), memb('ACCOUNT_ADMIN', 'a2', 'SUSPENDED')],
+    });
+    assert.deepEqual((await service.listAccounts('u9')).map((a) => a.id), ['a1']);
+  });
+
+  it('una empresa donde no hay membresía → AUTH_007', async () => {
+    const { service } = makeAuth({ user, memberships: [memb('SUPERVISOR', 'a1')] });
+    await rejectsWithCode(
+      service.switchAccount('u9', 'sess-vieja', 'ajena', META),
+      AUTH_ERR.ACCOUNT_NOT_ALLOWED,
+    );
+  });
+
+  it('nombrar un tenant suspendido no lo destraba (CU-01 también vale en caliente)', async () => {
+    const { service } = makeAuth({
+      user,
+      memberships: [memb('SUPERVISOR', 'a1'), memb('ACCOUNT_ADMIN', 'a2', 'SUSPENDED')],
+    });
+    await rejectsWithCode(
+      service.switchAccount('u9', 'sess-vieja', 'a2', META),
+      AUTH_ERR.ACCOUNT_NOT_ALLOWED,
+    );
+  });
+
+  it('emite tokens de la empresa destino y revoca la sesión anterior', async () => {
+    const { service, calls } = makeAuth({
+      user,
+      memberships: [memb('SUPERVISOR', 'a1'), memb('COLLECTOR', 'a2')],
+    });
+    const tokens = await service.switchAccount('u9', 'sess-vieja', 'a2', META);
+
+    const claims = token.verifyAccess(tokens.accessToken);
+    assert.equal(claims.accountId, 'a2', 'el token tiene que quedar apuntando a la empresa nueva');
+    // Los permisos se re-derivan del rol de DESTINO; arrastrar los del token viejo sería
+    // llevarse los permisos de una empresa a otra.
+    assert.deepEqual(calls.forRole, ['role-COLLECTOR']);
+    // Sin esto queda vivo un refresh token que sigue devolviendo tokens de la empresa vieja.
+    assert.deepEqual(calls.revokedSessions, ['sess-vieja']);
   });
 });
 

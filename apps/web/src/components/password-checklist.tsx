@@ -1,17 +1,29 @@
 'use client';
 
-import { checkPassword } from '@kobrax/shared';
+import { useTranslations } from 'next-intl';
+import { checkPassword, PASSWORD_POLICY } from '@kobrax/shared';
 
-/** Checklist de política de contraseña en tiempo real (fuente: @kobrax/shared). */
+/**
+ * Checklist de política de contraseña en tiempo real.
+ *
+ * La **regla** viene de `@kobrax/shared` (fuente única con la API y el móvil); el **texto** sale de
+ * los mensajes de la web, indexado por `check.id`. El `label` que trae shared se ignora a
+ * propósito: está sólo en español y traducirlo allá arrastraría i18n al paquete compartido, que
+ * también consume la API — donde nadie muestra nada.
+ */
 export function PasswordChecklist({ password }: { password: string }) {
+  const t = useTranslations('password');
   if (!password) return null;
-  const checks = checkPassword(password);
+
   return (
     <ul className="space-y-1">
-      {checks.map((c) => (
-        <li key={c.id} className={`flex items-center gap-2 text-[12px] ${c.passed ? 'text-k-success' : 'text-k-muted'}`}>
+      {checkPassword(password).map((c) => (
+        <li
+          key={c.id}
+          className={`flex items-center gap-2 text-[12px] ${c.passed ? 'text-k-success' : 'text-k-muted'}`}
+        >
           <span aria-hidden>{c.passed ? '✓' : '○'}</span>
-          {c.label}
+          {t(c.id, { min: PASSWORD_POLICY.minLength })}
         </li>
       ))}
     </ul>

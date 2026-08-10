@@ -2,11 +2,14 @@
 
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { AuthShell } from '@/components/auth-shell';
 import { Button, ErrorBanner, Field, Input } from '@/components/ui';
 import { postJson } from '@/lib/client';
 
 export default function ForgotPasswordPage() {
+  const t = useTranslations('forgot');
+  const tc = useTranslations('common');
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -19,7 +22,7 @@ export default function ForgotPasswordPage() {
     const { ok, data } = await postJson('/api/auth/forgot-password', { email });
     setLoading(false);
     if (!ok) {
-      setError(data.error?.message ?? 'No se pudo procesar la solicitud');
+      setError(data.error?.message ?? t('error'));
       return;
     }
     setSent(true);
@@ -27,33 +30,33 @@ export default function ForgotPasswordPage() {
 
   if (sent) {
     return (
-      <AuthShell title="Revisa tu correo" subtitle="Si la dirección existe, te enviamos un enlace para restablecer tu contraseña.">
+      <AuthShell title={t('sentTitle')} subtitle={t('sentSubtitle')}>
         <Link href="/login" className="text-[13px] font-medium text-k-purple">
-          ← Volver a iniciar sesión
+          ← {tc('backToLogin')}
         </Link>
       </AuthShell>
     );
   }
 
   return (
-    <AuthShell title="Recuperar contraseña" subtitle="Te enviaremos un enlace para restablecerla.">
+    <AuthShell title={t('title')} subtitle={t('subtitle')}>
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         <ErrorBanner message={error} />
-        <Field label="Correo">
+        <Field label={t('email')}>
           <Input
             type="email"
             autoComplete="email"
-            placeholder="tu@empresa.com"
+            placeholder={t('emailPlaceholder')}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
           />
         </Field>
         <Button type="submit" loading={loading} disabled={!email}>
-          Enviar enlace
+          {t('submit')}
         </Button>
         <Link href="/login" className="block text-center text-[13px] font-medium text-k-purple">
-          Volver a iniciar sesión
+          {tc('backToLogin')}
         </Link>
       </form>
     </AuthShell>
