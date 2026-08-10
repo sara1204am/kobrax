@@ -3,15 +3,23 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { RoleType, memberName, memberStatus, type AssignableRole, type Member } from '@kobrax/shared';
+import {
+  RoleType,
+  memberName,
+  memberStatus,
+  type AssignableRole,
+  type InvitedMember,
+  type Member,
+} from '@kobrax/shared';
 import { Badge, EmptyState } from '@/components/panel-ui';
 import { Button } from '@/components/ui';
 import { DataTable, type Column } from '@/components/data-table';
 import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
-import { sendJson } from '@/lib/client';
+import { postJson, sendJson } from '@/lib/client';
 import { memberActions } from '@/lib/team';
+import { InvitationCode } from './invitation-code';
 
 const TONE = { active: 'success', pending: 'warning', inactive: 'neutral' } as const;
 
@@ -33,9 +41,21 @@ export function MembersTable({
   const router = useRouter();
   const toast = useToast();
   const { can } = usePermissions();
-  const canWrite = can('user:write');
+  const perms = { canWrite: can('user:write'), canInvite: can('user:invite') };
   const [pending, setPending] = useState<Pending>(null);
+  const [resent, setResent] = useState<InvitedMember | null>(null);
   const [busy, setBusy] = useState(false);
+
+  async function resend(member: Member) {
+    setBusy(true);
+    const { ok, data } = await postJson<InvitedMember>(`/api/users/${member.userId}/resend`, {});
+    setBusy(false);
+    if (!ok) {
+      toast(data.error?.message ?? t('actionError'), 'error');
+      return;
+    }
+    setResent(data);
+  }
 
   async function run(path: string, body: unknown, method: 'PATCH' | 'DELETE', okMessage: string) {
     setBusy(true);
@@ -72,7 +92,7 @@ export function MembersTable({
         <RoleCell
           member={m}
           roles={roles}
-          editable={memberActions(m, meId, canWrite).changeRole}
+          editable={memberActions(m, meId, perms).changeRole}
           onPick={(roleId) => run(`/api/users/${m.userId}`, { roleId }, 'PATCH', t('roleChanged'))}
           busy={busy}
         />
@@ -91,7 +111,7 @@ export function MembersTable({
       header: t('columns.actions'),
       numeric: true,
       render: (m) => {
-        const a = memberActions(m, meId, canWrite);
+        const a = memberActions(m, meId, perms);
         return (
           <span className="flex justify-end gap-3 whitespace-nowrap">
             {a.deactivate && (
@@ -103,6 +123,9 @@ export function MembersTable({
               <RowAction onClick={() => setPending({ kind: 'reactivate', member: m })}>
                 {t('actions.reactivate')}
               </RowAction>
+            )}
+            {a.resend && (
+              <RowAction onClick={() => void resend(m)}>{t('actions.resend')}</RowAction>
             )}
             {a.remove && (
               <RowAction danger onClick={() => setPending({ kind: 'remove', member: m })}>
@@ -161,6 +184,26 @@ export function MembersTable({
         }
       >
         {pending ? t(`confirm.${pending.kind}.text`, { name: memberName(pending.member) }) : ''}
+      </Modal>
+
+      {/* El reenvío devuelve un código NUEVO y mata el anterior: hay que decirlo, o se
+          terminan mandando dos y el primero ya no sirve. */}
+      <Modal
+        open={resent !== null}
+        onClose={() => setResent(null)}
+        title={t('resentTitle')}
+        actions={
+          <span className="sm:w-40">
+            <Button onClick={() => setResent(null)}>{t('close')}</Button>
+          </span>
+        }
+      >
+        {resent && (
+          <div className="space-y-3">
+            <p className="text-[14px] text-k-warning-text">{t('resentWarning')}</p>
+            <InvitationCode code={resent.invitationCode} email={resent.email} />
+          </div>
+        )}
       </Modal>
     </>
   );

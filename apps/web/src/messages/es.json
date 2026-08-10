@@ -92,7 +92,30 @@
     "actions": {
       "deactivate": "Desactivar",
       "reactivate": "Reactivar",
+      "resend": "Reenviar",
       "remove": "Cancelar invitación"
+    },
+    "close": "Cerrar",
+    "resentTitle": "Invitación reenviada",
+    "resentWarning": "El código anterior dejó de servir. Comparte este.",
+    "invite": {
+      "open": "Invitar a alguien",
+      "full": "Llegaste al tope de tu plan",
+      "title": "Invitar al equipo",
+      "firstName": "Nombre",
+      "lastName": "Apellido",
+      "email": "Correo electrónico",
+      "role": "¿Qué va a hacer?",
+      "rolePlaceholder": "Elige un rol",
+      "cancel": "Cancelar",
+      "send": "Enviar invitación",
+      "error": "No se pudo invitar",
+      "doneTitle": "Invitación creada",
+      "done": "Listo",
+      "sentTo": "Le enviamos un correo a {email}. Este es su código:",
+      "copy": "Copiar",
+      "copied": "Copiado",
+      "howTo": "Si el correo no llega, puede entrar con este código desde <link>la página de invitación</link>."
     },
     "confirm": {
       "deactivate": {

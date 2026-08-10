@@ -3,6 +3,7 @@ import { memberName, type AccountInfo, type AssignableRole, type MeInfo, type Me
 import { apiCall } from '@/lib/bff';
 import { EmptyState, PageHeader, Badge } from '@/components/panel-ui';
 import { MembersTable } from './members-table';
+import { InviteButton } from './invite-button';
 
 /**
  * El equipo de la cuenta.
@@ -39,11 +40,17 @@ export default async function EquipoPage({
         title={t('title')}
         subtitle={t('subtitle')}
         actions={
-          seats && (
-            <Badge tone={seats.memberCount >= seats.maxUsers ? 'warning' : 'neutral'}>
-              {t('seats', { used: seats.memberCount, max: seats.maxUsers })}
-            </Badge>
-          )
+          <>
+            {seats && (
+              <Badge tone={seats.memberCount >= seats.maxUsers ? 'warning' : 'neutral'}>
+                {t('seats', { used: seats.memberCount, max: seats.maxUsers })}
+              </Badge>
+            )}
+            <InviteButton
+              roles={roles.body.data ?? []}
+              full={seats ? seats.memberCount >= seats.maxUsers : false}
+            />
+          </>
         }
       />
       {/* Los roles pueden venir vacíos si el rol de quien mira no tiene `role:read`: en ese

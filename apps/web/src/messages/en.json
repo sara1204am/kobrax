@@ -92,7 +92,30 @@
     "actions": {
       "deactivate": "Deactivate",
       "reactivate": "Reactivate",
+      "resend": "Resend",
       "remove": "Cancel invitation"
+    },
+    "close": "Close",
+    "resentTitle": "Invitation resent",
+    "resentWarning": "The previous code stopped working. Share this one.",
+    "invite": {
+      "open": "Invite someone",
+      "full": "You reached your plan limit",
+      "title": "Invite to the team",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "email": "Email",
+      "role": "What will they do?",
+      "rolePlaceholder": "Pick a role",
+      "cancel": "Cancel",
+      "send": "Send invitation",
+      "error": "Could not send the invitation",
+      "doneTitle": "Invitation created",
+      "done": "Done",
+      "sentTo": "We emailed {email}. This is their code:",
+      "copy": "Copy",
+      "copied": "Copied",
+      "howTo": "If the email does not arrive, they can join with this code from <link>the invitation page</link>."
     },
     "confirm": {
       "deactivate": {

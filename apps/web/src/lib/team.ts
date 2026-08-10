@@ -8,6 +8,16 @@ export interface MemberActions {
   reactivate: boolean;
   /** Eliminar de verdad. **Sólo pendientes** (§6.1 del plan). */
   remove: boolean;
+  /** Reenviar la invitación con un código nuevo. Sólo pendientes. */
+  resend: boolean;
+}
+
+/** Los dos permisos que gobiernan la fila. Son distintos y la API los pide por separado. */
+export interface TeamPermissions {
+  /** `user:write` — rol, activar/desactivar y eliminar. */
+  canWrite: boolean;
+  /** `user:invite` — invitar y reenviar. */
+  canInvite: boolean;
 }
 
 /**
@@ -27,15 +37,21 @@ export interface MemberActions {
  *    decisión D2 que tomó el móvil, al revés.
  * 3. **Tu propia fila no ofrece nada**: la API lo rechaza y no hay forma de deshacerlo.
  */
-export function memberActions(member: Member, meId: string, canWrite: boolean): MemberActions {
+export function memberActions(
+  member: Member,
+  meId: string,
+  { canWrite, canInvite }: TeamPermissions,
+): MemberActions {
   const self = member.userId === meId;
   const pending = memberStatus(member) === 'pending';
-  const base = canWrite && !self;
+  const base = !self && canWrite;
 
   return {
     changeRole: base && isMobileRole(member.roleName),
     deactivate: base && !pending && member.isActive,
     reactivate: base && !pending && !member.isActive,
     remove: base && pending,
+    // Reenviar pide `user:invite`, no `user:write`: es la misma acción que invitar.
+    resend: !self && canInvite && pending,
   };
 }
