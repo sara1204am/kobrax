@@ -1,4 +1,8 @@
-> **ESTADO: EN BORRADOR — ronda 1 (2026-08-10). NO construir hasta PASS.**
+> **ESTADO: EN BORRADOR — ronda 2 (2026-08-10). NO construir hasta PASS.**
+>
+> Ronda 2 cierra las tres decisiones de la dueña: **la mora va en la lista** y la lista **abre
+> por mora, lo peor primero** · **la cartera es por cliente, y sus créditos viven dentro** ·
+> **la supervisora da de alta créditos** · **los adjuntos entran**. Ver §5 y §13.
 
 # W3 — Cartera
 
@@ -122,10 +126,10 @@ transacción — el alta del móvil siempre lo pide.
 los pide el server component de cada pantalla con `apiCall(..., { auth: true })`. Un handler
 para leer sería un salto del servidor a sí mismo.
 
-## 5. 🔴 Los tres huecos del contrato (lo que W3 tiene que decidir y construir)
+## 5. 🔴 Los huecos del contrato (lo que W3 tiene que decidir y construir)
 
-Esto es el corazón del plan. Los tres salen de comparar lo que el `DataTable` de W1 manda con
-lo que `GET /clients` acepta.
+Esto es el corazón del plan. Los dos primeros salen de comparar lo que el `DataTable` de W1
+manda con lo que `GET /clients` acepta; los otros dos, de las decisiones de la dueña.
 
 ### 5.1 La búsqueda (`q`) — **ya está en el servidor, sólo falta la caja**
 
@@ -149,43 +153,141 @@ Next descarta la respuesta vieja solo.
 → Y **se cablea también en `/equipo`**, que es la deuda que W2 dejó anotada. Ahí filtra en
 memoria (son pocas filas y `/users` no busca): misma caja, distinto consumidor.
 
-### 5.2 El orden (`sort`/`dir`) — **el `DataTable` lo manda y nadie lo escucha**
+### 5.2 La lista ordenada por mora — `GET /clients?view=portfolio`
 
-`data-table.tsx` escribe `?sort=<key>&dir=asc|desc` en la URL al tocar un encabezado.
-`GET /clients` **no acepta ninguno de los dos**: ordena siempre por `createdAt desc`. Hoy no se
-nota porque `/equipo` ordena en memoria; con paginación server-side, ordenar en memoria ordena
-**la página**, no la lista — y eso es una mentira en pantalla.
+**Decisión de la dueña (2026-08-10): la mora va en la lista, y la lista abre por mora, lo peor
+primero.** Es como abre la del móvil, y es lo que la oficina va a mirar todos los días.
 
-**Propuesta:** sumar `sort` + `dir` a `ListClientsQueryDto`, aceptando **sólo columnas que la
-tabla `clients` tiene**: `name` (`lastName`, `firstName`, `businessName`), `createdAt`,
-`status`. Las columnas derivadas (deuda, mora) **no se marcan `sortable`**, con su comentario
-`ponytail:` diciendo por qué y cuál es el camino de salida.
+Eso junta dos problemas en uno solo, porque tienen la misma solución:
 
-### 5.3 La mora coloreada — **`GET /clients` no sabe nada de plata**
+- **`GET /clients` no sabe nada de plata.** `serializeClient` devuelve identidad y PII: ni
+  deuda, ni mora, ni cuántos créditos.
+- **El `DataTable` manda `?sort=&dir=` y nadie lo escucha.** `/clients` ordena siempre por
+  `createdAt desc`. Hoy no se nota porque `/equipo` ordena en memoria; con paginación
+  server-side, ordenar en memoria ordena **la página**, no la lista, y eso es una mentira en
+  pantalla.
 
-`serializeClient` devuelve identidad y PII. Ni deuda, ni mora, ni próximo vencimiento. La
-cartera del móvil no tiene este problema porque **no se arma sobre `/clients`**: se arma sobre
-`GET /cases?view=portfolio`, que sí trae `daysPastDue`, `nextDueDate` y monto, y los agrupa por
-cliente con `groupPortfolio`.
+Y **ordenar por mora no se puede resolver después de paginar**: la mora del cliente es el
+máximo de sus créditos, y la deuda es su suma. Si primero se traen 20 clientes y después se los
+enriquece, se ordenaron 20 cualesquiera. **El orden y la agregación son la misma consulta.**
 
-Copiar eso en la web **no sirve**, por dos razones que sólo se ven de cerca:
+#### Por qué no se copia la cartera del móvil
 
-1. La paginación es **por caso**. Agrupar por cliente después de paginar parte a un cliente
+La del móvil no se arma sobre `/clients` sino sobre `GET /cases?view=portfolio`, agrupando con
+`groupPortfolio`. En la web eso falla por dos razones que sólo se ven de cerca:
+
+1. La paginación es **por caso**: agrupar por cliente después de paginar parte a un cliente
    entre dos páginas y le muestra media deuda.
-2. Un cliente **sin caso abierto no aparece**. En el teléfono da igual (el cobrador ve su
+2. **Un cliente sin caso abierto no aparece.** En el teléfono da igual (el cobrador ve su
    trabajo del día); en la oficina no: el cliente que acabás de dar de alta desaparecería de la
    cartera hasta que alguien le abra un caso.
 
-**Propuesta:** `GET /clients?view=portfolio` — mismo patrón que `cases` ya usa, y una sola
-consulta extra por página:
+#### La consulta
 
-```
-groupBy(credit) by clientId, where clientId IN (los 20 de esta página), deletedAt: null
-  → _sum: outstandingBalance · _max: daysPastDue · _count · min(nextDueDate) · currency
+Una sola, cruda, dentro de `withTenant`. **Es el único SQL crudo del panel** y se paga a
+propósito: Prisma sabe ordenar por `_count` de una relación, pero no por `SUM` ni por `MAX`.
+
+```sql
+SELECT c.id,
+       COALESCE(SUM(cr.outstanding_balance), 0) AS total_debt,
+       COALESCE(MAX(cr.days_past_due), 0)       AS max_days_past_due,
+       COUNT(cr.id)                             AS credit_count
+FROM clients c
+LEFT JOIN credits cr ON cr.client_id = c.id AND cr.deleted_at IS NULL   -- ← en el ON, no en el WHERE
+WHERE c.deleted_at IS NULL AND <status / risk / q>
+GROUP BY c.id
+ORDER BY max_days_past_due DESC, total_debt DESC, c.last_name, c.business_name
+LIMIT $limit OFFSET $skip
 ```
 
-Sin N+1 y sin tocar el orden. La web colorea con **`portfolioStatus` de `shared`**, que ya es
-la fuente única del badge en el móvil: mismo estado, mismo color, las dos pantallas.
+Después, un `findMany({ where: { id: { in: ids } } })` normal de Prisma para serializar (que es
+donde vive el descifrado y el enmascarado de la PII), reordenado según los ids que devolvió la
+consulta. Total = `COUNT(DISTINCT c.id)` con el mismo `WHERE`.
+
+🔴 **`cr.deleted_at IS NULL` va en el `ON`, no en el `WHERE`.** En el `WHERE` convierte el
+`LEFT JOIN` en un `INNER JOIN` y **los clientes sin créditos desaparecen** — que es exactamente
+el bug que estamos evitando al no copiar la cartera del móvil. El DoD lo prueba (§12).
+
+Tres cosas más que la consulta tiene que respetar:
+
+- **RLS.** `clients` y `credits` tienen `tenant_isolation` — pero definida en
+  `packages/database/prisma/rls/001_enable_rls.sql`, **no** en `migrations/`: se aplica aparte
+  con `psql`. Buscarla entre las migraciones y no encontrarla hace pensar que no existe. La
+  consulta **no filtra `account_id` a mano**: corre como `kobrax_app` dentro de `withTenant`, y
+  ahí RLS la cubre. Fuera de `withTenant` no hay contexto y no devuelve nada.
+- **`q` se parametriza, no se interpola.** `$queryRaw` con template etiquetado. Es texto que
+  escribe cualquiera en una caja de búsqueda.
+- **El `WHERE` queda duplicado** entre el camino Prisma y el crudo. Se asume: son seis líneas y
+  el camino de siempre no se toca. La red que lo agarra es un spec: *la misma búsqueda devuelve
+  los mismos clientes con y sin `view=portfolio`*.
+
+#### Lo que la lista NO puede mostrar: el próximo vencimiento
+
+`nextDueDate` e `installmentAmount` **no son columnas**. Viven en `credit.metadata` (crédito
+nacido en el móvil, sin cronograma) o se derivan de `credit_installments` (crédito con
+cronograma), y quien los resuelve es **`creditView()` de `shared`** — la misma función que usa
+la API para la tarjeta del móvil.
+
+O sea: no hay nada que ordenar ni agregar en SQL. Por eso el desempate del orden es **mora desc
+→ deuda desc → nombre**, y no «mora desc → próximo vencimiento asc» como en el teléfono. La
+próxima fecha se ve **en la ficha**, donde cada crédito la calcula con `creditView()`.
+
+Es una diferencia deliberada con el móvil y hay que dejarla escrita, porque desde afuera parece
+un olvido.
+
+#### Las columnas y su orden
+
+| Columna | Ordenable | De dónde sale |
+|---|---|---|
+| Cliente | sí (`name`) | `clientDisplayName` — apellido, nombre / razón social |
+| Documento | no | Enmascarado siempre (§4.3.1) |
+| Deuda | sí (`debt`) | `SUM(outstanding_balance)` |
+| Mora | **sí — y es el default, desc** | `MAX(days_past_due)` |
+| Créditos | no | `COUNT` |
+| Estado | sí (`status`) | `portfolioStatus` de `shared` → mismo color que en el teléfono |
+
+`portfolioStatus` ya es la fuente única del badge en el móvil: mismo estado, mismo color, las
+dos pantallas. **No se reimplementa el semáforo en la web.**
+
+> `ponytail:` la deuda se suma **sin mirar la moneda**. Hoy una cuenta tiene una sola moneda
+> (W2, `currencyCode`), así que la suma es honesta. El día que un tenant preste en dos, esta
+> celda miente y hay que partirla por moneda.
+
+### 5.3 El alta de crédito desde la oficina
+
+**Decisión de la dueña: sí, la supervisora da de alta créditos, con la cotización en vivo.**
+
+La cotización es **la misma que la del teléfono** — por eso `prestamo-form.ts` se promueve a
+`shared` (§7) y no se reescribe. Si el escritorio cotiza distinto que el teléfono, es un bug de
+plata y aparece meses después, en la boca de un cliente.
+
+Dos cosas que el alta de oficina define y la del móvil no tenía que definir:
+
+1. **`assignedManagerId` = el cobrador que se elija en el formulario**, no quien lo crea. En el
+   teléfono coinciden (el cobrador se lo asigna a sí mismo); en la oficina, no: la supervisora
+   carga el préstamo y se lo reparte a alguien. La lista de cobradores sale de `GET /users`, que
+   W2 ya consume en `/equipo`.
+2. **`openCase: true`**, igual que el alta del móvil. Sin caso, el crédito no le llega a nadie:
+   queda cargado y nadie lo cobra.
+
+El resto del contrato no cambia — los dos modos del §4.4 valen igual, y la web va a usar sobre
+todo el de **cuota congelada**, que es como está cargada la cartera que ya existe.
+
+### 5.4 Los adjuntos
+
+**Decisión de la dueña: entran.** Con un techo que hay que decir en voz alta:
+
+- **Subir sí se puede**, y sin nada nuevo: `POST /uploads` + `GET /uploads/:name` ya existen y
+  W2 les dejó handler (`/api/account/upload`, `/api/uploads/[name]`) para la foto de perfil y el
+  QR de cobro. El nombre que devuelve se guarda como `fileUrl` del adjunto.
+- **Listar y borrar sí**: tipo, fecha y hash.
+- 🔴 **Abrirlos no.** `serializeAttachment` **no devuelve la URL a propósito** — el comentario
+  dice que se pide con un endpoint firmado, que es F6. La web sabe que el archivo existe, no
+  cuál es. Se listan con su tipo y su fecha, y **no se dibuja un botón de «ver» que no funciona**
+  (regla §3.7 del BUILD-PLAN).
+
+Queda anotado para F6: exponer el adjunto por endpoint firmado enciende el «ver» sin tocar nada
+más de esta pantalla.
 
 ## 6. La PII y el revelado auditado
 
@@ -212,11 +314,11 @@ que deja rastro, disparada por un click, no una lectura de página.
 | `quoteFor` · `currentInstallment` · `totalBelowCapital` · `canSubmitPrestamo` · `initialPrestamo` · `buildPrestamoPayload` + el tipo `PrestamoForm` | `prestamo-form.ts` | 🔴 **Es plata.** Dos implementaciones = dos cuotas para el mismo préstamo, y la diferencia aparece meses después en la boca de un cliente. La matemática de abajo (`quoteLoan`, `quoteFromInstallment`) **ya está en `shared/utils/loan.ts`**: lo que falta subir es la capa que decide *cuál* se usa y *cuándo* el alta es válida |
 | `buildClientePayload` · `canSubmitCliente` · `hydrateCliente` · `initialCliente` · `emptyContact/Location/Relation` + sus tipos | `cliente-form.ts` | Acá viven tres reglas del modelo que la web volvería a descubrir a los golpes: **WhatsApp es un `ContactType` aparte** (el switch del formulario), las filas vacías **se descartan**, y `serverId` es lo que hace que editar sepa qué actualizar y qué crear |
 | `diffCliente` | `cliente-diff.ts` | El `PATCH` parcial del cliente y sus sub-recursos. Hermano de `diffAccount`, que W2 ya subió a `utils/patch.ts` |
-| `sortPortfolio` + el tipo `PortfolioSort` | `portfolio.ts` | **Sólo si §5.2 se resuelve en cliente.** Con orden server-side no hace falta — ver §13 |
 
 | NO se promueve | Por qué |
 |---|---|
-| `groupPortfolio` · `matchesChip` · `matchesSearch` · `filterPortfolio` | Están escritos sobre `CaseListItem` (la cartera del cobrador, agrupada desde casos). La web arma la suya desde `/clients` con la agregación del servidor (§5.3): no es la misma entrada. `portfolioStatus`, que es **la** regla del estado, ya está en `shared` y sí se usa |
+| `groupPortfolio` · `matchesChip` · `matchesSearch` · `filterPortfolio` | Están escritos sobre `CaseListItem` (la cartera del cobrador, agrupada desde casos). La web arma la suya desde `/clients` con la agregación del servidor (§5.2): no es la misma entrada. `portfolioStatus`, que es **la** regla del estado, ya está en `shared` y sí se usa |
+| `sortPortfolio` · `PortfolioSort` | Ordena una lista **ya traída entera**. En la web ordena el servidor porque la lista viene paginada (§5.2): subirlo sería subir código que la web no puede usar |
 | `PORTFOLIO_SORT_LABEL` · `PAYMENT_METHODS`-style labels | Copy en español. Mismo criterio que W1 con las etiquetas de estado y W2 con `ROLE_HINT` |
 | `use-client-search.ts` | Es un hook de React y `shared` no depende de React. Además la web no lo necesita: **busca el servidor** (§5.1). Lo que se hereda es el número (300 ms), no el código |
 
@@ -237,8 +339,11 @@ pasan sin tocarlos** (`prestamo-form.test.ts`, `cliente-form.test.ts`, `cliente-
 | Máscara de documento / teléfono / correo | **REUSAR** | `shared/utils/tokenize.ts` — la API ya manda enmascarado; esto es por si la web tiene que enmascarar algo propio |
 | Moneda y fechas | **REUSAR** | `shared/utils/currency.utils.ts` · `date.utils.ts` · `lib/format.ts` |
 | Cotización del préstamo · formulario de cliente · diff | **PROMOVER** | del móvil a `shared` (§7) |
+| Próxima fecha y cuota de un crédito | **REUSAR** | `creditView()` de `@kobrax/shared` — la misma que usa la API para la tarjeta del móvil (§5.2) |
+| Subir y servir un archivo | **REUSAR** | `POST /uploads` · `GET /uploads/:name` y sus handlers de W2 (§5.4) |
+| Lista de cobradores para asignar | **REUSAR** | `GET /users`, que W2 ya consume en `/equipo` (§5.3) |
 | Caja de búsqueda | **NUEVO** | `components/search-box.tsx` — y se cablea en `/equipo` |
-| `sort`/`dir` y `view=portfolio` en `GET /clients` | **NUEVO (API)** | §5.2 y §5.3 |
+| `sort`/`dir` y `view=portfolio` en `GET /clients` | **NUEVO (API)** | §5.2 — el único SQL crudo del panel |
 | Formulario acordeón de cliente (contactos, ubicaciones, garantes) | **NUEVO** | la pantalla; la lógica viene de `shared` |
 | Ficha con pestañas y lista de créditos | **NUEVO** | la pantalla |
 
@@ -259,20 +364,24 @@ enum se traducen acá**, no se suben a `shared`.
 
 - [ ] 1. Promover a `shared` la cotización, el formulario de cliente y el diff (§7); dejar el
       móvil importando de ahí y correr **sus** tests sin tocarlos.
-- [ ] 2. API: `sort`/`dir` y `view=portfolio` en `GET /clients` (§5.2, §5.3), con sus specs.
-- [ ] 3. `/cartera`: lista con `DataTable`, mora coloreada con `portfolioStatus`, filtros de
-      estado y riesgo, y el vacío.
+- [ ] 2. API: `sort`/`dir` y `view=portfolio` en `GET /clients` (§5.2), con sus specs — incluida
+      la del `LEFT JOIN` (un cliente sin créditos sigue en la lista) y la de los dos caminos
+      devolviendo los mismos ids.
+- [ ] 3. `/cartera`: lista con `DataTable`, mora coloreada con `portfolioStatus`, orden por mora
+      desc por defecto, filtros de estado y riesgo, y el vacío.
 - [ ] 4. `components/search-box.tsx` + cablearlo en `/cartera` **y en `/equipo`** (§5.1).
 - [ ] 5. `/cartera/[id]`: ficha del cliente, con el revelado auditado detrás de un click (§6).
 - [ ] 6. `/cartera/nuevo` y `/cartera/[id]/editar`: alta y edición, con sus sub-recursos. La
       edición carga con `reveal=true` (§6.1) y manda **sólo lo que cambió**.
-- [ ] 7. Créditos: lista dentro de la ficha, alta con el panel de cotización en vivo, ficha del
-      crédito y edición de lo operativo. El cronograma puede no existir (§4.4).
-- [ ] 8. Baja del cliente, con la regla de los créditos activos (§4.3.2).
-- [ ] 9. Sumar `/cartera` al matcher de `middleware.ts` y a sus handlers del BFF; encender
+- [ ] 7. Créditos: lista dentro de la ficha, ficha del crédito con su cronograma (que puede no
+      existir, §4.4) y edición de lo operativo.
+- [ ] 8. Alta de crédito con la cotización en vivo, el cobrador asignado y `openCase` (§5.3).
+- [ ] 9. Adjuntos: listar por tipo/fecha/hash, subir por `/uploads` y borrar. Sin «ver» (§5.4).
+- [ ] 10. Baja del cliente, con la regla de los créditos activos (§4.3.2).
+- [ ] 11. Sumar `/cartera` al matcher de `middleware.ts` y a sus handlers del BFF; encender
       `portfolio` en el menú (`built: true`).
-- [ ] 10. i18n del namespace `portfolio`.
-- [ ] 11. Actualizar `BASE-INVENTORY` (lo promovido + los artefactos de W3) y el estado de la
+- [ ] 12. i18n del namespace `portfolio`.
+- [ ] 13. Actualizar `BASE-INVENTORY` (lo promovido + los artefactos de W3) y el estado de la
       etapa en el BUILD-PLAN.
 
 ## 11. Reglas de la fase
@@ -293,10 +402,16 @@ enum se traducen acá**, no se suben a `shared`.
 - [ ] Los tests del móvil pasan **sin modificarse** tras la promoción a `shared`.
 - [ ] Buscar por nombre parcial encuentra; por documento **completo** encuentra; por documento
       parcial **no** — y la pantalla lo explica.
+- [ ] **La cartera abre con el de más mora arriba**, sin tocar nada.
 - [ ] Ordenar por una columna cambia la lista **entera**, no la página: la fila 1 de la página 1
       es distinta al invertir el orden.
-- [ ] Un cliente **sin créditos** aparece en la cartera (el bug que tendría copiar la del móvil).
+- [ ] 🔴 Un cliente **sin créditos** aparece en la cartera, con deuda 0 y mora 0 (la trampa del
+      `LEFT JOIN` del §5.2, y el bug que tendría copiar la cartera del móvil).
+- [ ] La misma búsqueda devuelve los mismos clientes con y sin `view=portfolio`.
 - [ ] Un cliente en mora se ve del mismo color que en el teléfono (`portfolioStatus`).
+- [ ] El crédito dado de alta desde la web le aparece **al cobrador que se eligió**, no a quien
+      lo cargó, y con su caso abierto.
+- [ ] Un adjunto se sube, se lista con su hash y se borra. **No hay botón de «ver»** (§5.4).
 - [ ] Editar un cliente y guardar **no borra su carnet** (la trampa del §6.1).
 - [ ] Dar de alta con un documento ya existente muestra el mensaje del servidor, no un 500.
 - [ ] Un crédito dado de alta desde el móvil (sin cronograma) abre su ficha sin romperse.
@@ -306,23 +421,24 @@ enum se traducen acá**, no se suben a `shared`.
 - [ ] La cartera funciona en es y en en.
 - [ ] Validación visual en 1440, 1280, 1024, 768 y 390.
 
-## 13. ⏸️ Pendiente de confirmar (ronda 2)
+## 13. Decisiones de la dueña (2026-08-10)
 
-- [ ] **§5.2 — ¿el orden va al servidor o se deja fijo?** La propuesta lo manda al servidor para
-      columnas reales y no ofrece ordenar por deuda/mora. La alternativa lazy es no ordenar nada
-      (`sortable: false` en todas) y resolverlo con filtros. ¿Cuál?
-- [ ] **§5.3 — ¿la cartera necesita la mora en la lista, o alcanza con verla en la ficha?** Si
-      alcanza con la ficha, el `view=portfolio` no se construye y la etapa se acorta bastante.
-- [ ] **¿Qué es «la cartera» para la oficina: una fila por cliente o una fila por crédito?** El
-      plan asume **por cliente** (como el móvil). Por crédito sería `/credits`, que hoy no busca
-      ni trae el nombre del cliente.
-- [ ] **¿Los adjuntos (`attachments`) entran en W3?** Hay `POST`/`DELETE`, pero la URL del
-      archivo **no se expone** (el endpoint firmado es F6). Sin eso sólo se pueden listar y
-      borrar, no ver. Propuesta: **quedan fuera**, y se anotan para F6.
-- [ ] **¿La supervisora puede dar de alta un crédito, o eso es sólo del cobrador?** El alta web
-      cambia quién queda como `assignedManagerId`.
+| # | Decisión | Dónde vive |
+|---|---|---|
+| D1 | **La mora va en la lista, y la lista abre por mora — lo peor primero** | §5.2. Es lo que obliga al `view=portfolio` y al único SQL crudo del panel |
+| D2 | **La cartera es por cliente; sus créditos viven dentro de la ficha** | §3. Descarta la lista por crédito (`/credits`, que no busca ni trae el nombre del cliente) |
+| D3 | **La supervisora da de alta créditos, con la cotización en vivo** | §5.3. El cobrador asignado se elige en el formulario |
+| D4 | **Los adjuntos entran**, sabiendo que no se pueden abrir hasta F6 | §5.4 |
+
+### ⏸️ Pendiente de confirmar (ronda 3)
+
 - [ ] Copy del aviso de búsqueda por documento («el documento se busca completo»): ¿va como
       texto de ayuda fijo bajo la caja, o sólo cuando no hay resultados?
+- [ ] La ficha del cliente: ¿pestañas (Datos · Créditos · Garantes · Adjuntos) o todo en una
+      sola columna larga? Con 4 secciones, una columna larga puede alcanzar.
+- [ ] ¿Un cliente dado de baja (`INACTIVE` + `deletedAt`) sigue apareciendo en la cartera detrás
+      de un filtro, o desaparece? Hoy `GET /clients` **no lo devuelve nunca** — mostrarlo sería
+      trabajo de API.
 
 ## 14. Verificación
 
