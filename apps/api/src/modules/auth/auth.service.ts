@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { compare, hash } from 'bcryptjs';
-import { KOBRAX, type AuthTokens, type LoginResult } from '@kobrax/shared';
+import { KOBRAX, type AuthAccountOption, type AuthTokens, type LoginResult } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TokenService } from './token.service';
 import { PermissionsService } from './permissions.service';
@@ -135,6 +135,53 @@ export class AuthService implements OnModuleInit {
     const membership = active.find((m) => m.account_id === accountId);
     if (!membership) throw accountNotAllowed();
     return this.issueTokens(pre.sub, membership.account_id, membership.role_id, meta);
+  }
+
+  // ── Cambio de empresa con la sesión ya iniciada (Bearer) ─────────────────────
+  //
+  // `selectAccount` de arriba resuelve el paso del login: exige un pre-auth token que vive 5
+  // minutos y sólo existe *entre* pasos. Una vez dentro del panel no queda nada con qué
+  // cambiar de empresa, y hasta hoy la única salida era cerrar sesión y volver a entrar.
+
+  /** Empresas donde el usuario puede operar hoy. Misma forma que el selector del login. */
+  async listAccounts(userId: string): Promise<AuthAccountOption[]> {
+    const active = await this.activeMemberships(userId);
+    return active.map((m) => ({
+      id: m.account_id,
+      name: m.account_name,
+      role: m.role_name,
+      status: m.account_status,
+    }));
+  }
+
+  /**
+   * Emite un par de tokens para otra empresa del usuario y **revoca la sesión anterior**.
+   *
+   * Lo segundo no es cosmético: sin revocar queda vivo un refresh token que sigue devolviendo
+   * tokens de la empresa vieja, o sea una puerta de atrás al tenant que la persona acaba de
+   * dejar. `revokeOne` es idempotente y también lo mete en la denylist, así que el access
+   * token anterior muere ya, sin esperar sus 15 minutos.
+   *
+   * El rol y los permisos salen de la membresía destino (`issueTokens` los re-deriva): nunca
+   * se arrastran los del token viejo.
+   *
+   * El MFA no se vuelve a pedir — ya se verificó en este login. Cambiar de empresa es
+   * re-alcanzar la misma sesión, no autenticarse de nuevo.
+   */
+  async switchAccount(
+    userId: string,
+    currentSessionId: string,
+    accountId: string,
+    meta: SessionMeta,
+  ): Promise<AuthTokens> {
+    const active = await this.activeMemberships(userId);
+    const membership = active.find((m) => m.account_id === accountId);
+    // Mismo error que `selectAccount`: no distingue «no existe» de «no sos miembro».
+    if (!membership) throw accountNotAllowed();
+
+    const tokens = await this.issueTokens(userId, membership.account_id, membership.role_id, meta);
+    await this.sessions.revokeOne(userId, currentSessionId);
+    return tokens;
   }
 
   /** Membresías del usuario en tenants que permiten login (cross-tenant, SECURITY DEFINER). */

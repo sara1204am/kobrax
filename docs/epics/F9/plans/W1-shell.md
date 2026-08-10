@@ -114,7 +114,7 @@ requiresPasswordChange }`. Es la fuente de la identidad y de los permisos del sh
 
 | Endpoint | Guard | Cuerpo | Devuelve |
 |---|---|---|---|
-| `GET /auth/accounts` | `JwtAuthGuard` | — | `[{ id, name, role, status, current }]` |
+| `GET /auth/accounts` | `JwtAuthGuard` | — | `AuthAccountOption[]` — `{ id, name, role, status }` |
 | `POST /auth/switch-account` | `JwtAuthGuard` | `{ accountId }` | `AuthTokens` (mismo par que el login) |
 
 **Por qué hace falta un endpoint nuevo y no alcanza con lo que hay.** `POST
@@ -133,6 +133,10 @@ Las dos reusan lo que ya está escrito en `auth.service.ts`:
   membresía destino. Nunca se copian los del token viejo.
 - `accountNotAllowed()` para una empresa donde no hay membresía activa. Mismo error que
   `selectAccount`, sin distinguir «no existe» de «no sos miembro».
+
+**La lista no marca cuál es la activa** y no hace falta un campo `current`: el layout ya trae
+`me.accountId` de `/auth/me`. Es el mismo `AuthAccountOption` que ya devuelve el selector del
+login — cero tipos nuevos.
 
 **La sesión anterior se revoca.** Al cambiar de empresa se emite un par nuevo y se invalida
 el refresh token de la sesión actual (`sessionId` viene en el `@CurrentUser()`). Si no, queda
@@ -315,8 +319,11 @@ nativo, no un `<Suspense>` a mano en cada página.
 - [ ] Los tests existentes pasan **sin modificarse**.
 - [ ] `/dashboard` y `/settings/security` viven en el mismo shell y no hay dos barras.
 - [ ] Un `COLLECTOR` no ve «Equipo» ni «Cuenta»; un `ACCOUNT_ADMIN` sí.
-- [ ] `multi@kobrax.demo` cambia de empresa desde la topbar, el panel se repinta con el rol
-      nuevo, y el refresh token viejo **ya no sirve**.
+- [ ] `supervisor@kobrax.demo` cambia de empresa desde la topbar, el panel se repinta con el
+      rol nuevo, y el refresh token viejo **ya no sirve**.
+      ℹ️ El 2026-08-10 se le sumó a ese usuario una membresía en **Kobrax Demo Norte** en la
+      base de desarrollo: `multi@` servía para lo mismo, pero ya tiene MFA activo y cada
+      prueba pedía un código del authenticator. `supervisor@` entra con contraseña sola.
 - [ ] Los ítems en gris no navegan a ningún lado.
 - [ ] El shell está entero en es/en y sobrevive al refresh.
 - [ ] Recorrido con teclado del sidebar y los dos menús de la topbar.

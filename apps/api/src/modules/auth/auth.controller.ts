@@ -23,6 +23,7 @@ import { LogoutDto } from './dto/logout.dto';
 import { MfaVerifyDto } from './dto/mfa-verify.dto';
 import { MfaChallengeDto } from './dto/mfa-challenge.dto';
 import { SelectAccountDto } from './dto/select-account.dto';
+import { SwitchAccountDto } from './dto/switch-account.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -182,6 +183,24 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   me(@CurrentUser() user: AuthenticatedUser) {
     return this.auth.me(user);
+  }
+
+  // ── Cambio de empresa con sesión iniciada (W1 del panel web) ───────────────
+  @Get('accounts')
+  @UseGuards(JwtAuthGuard)
+  listAccounts(@CurrentUser() user: AuthenticatedUser) {
+    return this.auth.listAccounts(user.userId);
+  }
+
+  @Post('switch-account')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  switchAccount(
+    @Body() dto: SwitchAccountDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    return this.auth.switchAccount(user.userId, user.sessionId, dto.accountId, this.meta(req));
   }
 
   // ── Gestión de sesiones (F2b) ──────────────────────────────────────────────
