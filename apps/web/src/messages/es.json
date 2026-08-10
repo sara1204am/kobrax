@@ -112,6 +112,7 @@
   "mfaSetup": {
     "title": "Configura la verificación en dos pasos",
     "subtitle": "Tu rol requiere MFA. Escanea o ingresa esta clave en tu app de autenticación.",
+    "qrAlt": "Código QR para configurar la verificación en dos pasos",
     "manualKey": "Clave manual",
     "thenEnter": "Luego ingresa el código de 6 dígitos que genera la app:",
     "activate": "Activar y continuar",

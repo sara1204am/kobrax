@@ -112,6 +112,7 @@
   "mfaSetup": {
     "title": "Set up two-step verification",
     "subtitle": "Your role requires MFA. Scan or enter this key in your authenticator app.",
+    "qrAlt": "QR code to set up two-step verification",
     "manualKey": "Manual key",
     "thenEnter": "Then enter the 6-digit code the app generates:",
     "activate": "Activate and continue",

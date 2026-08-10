@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import QRCode from 'qrcode';
 import { AuthShell } from '@/components/auth-shell';
 import { Button, ErrorBanner } from '@/components/ui';
 import { OtpInput } from '@/components/otp-input';
@@ -12,6 +13,7 @@ export default function MfaSetupPage() {
   const router = useRouter();
   const t = useTranslations('mfaSetup');
   const [secret, setSecret] = useState('');
+  const [qr, setQr] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -22,9 +24,17 @@ export default function MfaSetupPage() {
   // generaría un secreto nuevo y dejaría inservible el QR que la usuaria ya escaneó.
   useEffect(() => {
     void (async () => {
-      const { ok, data } = await postJson<{ secret: string }>('/api/auth/mfa/setup', { action: 'start' });
-      if (ok) setSecret(data.secret);
-      else setError(data.error?.message ?? t('startError'));
+      const { ok, data } = await postJson<{ otpauthUrl: string; secret: string }>('/api/auth/mfa/setup', {
+        action: 'start',
+      });
+      if (!ok) {
+        setError(data.error?.message ?? t('startError'));
+        return;
+      }
+      setSecret(data.secret);
+      // La clave manual se pinta igual aunque el QR falle: es el camino de respaldo para escribirla
+      // a mano, no un adorno del QR.
+      setQr(await QRCode.toDataURL(data.otpauthUrl, { margin: 1, width: 200 }).catch(() => ''));
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -86,6 +96,16 @@ export default function MfaSetupPage() {
     <AuthShell title={t('title')} subtitle={t('subtitle')}>
       <div className="space-y-5">
         <ErrorBanner message={error} />
+        {qr && (
+          // eslint-disable-next-line @next/next/no-img-element -- data: URI generada en el navegador
+          <img
+            src={qr}
+            alt={t('qrAlt')}
+            width={200}
+            height={200}
+            className="mx-auto rounded-lg border border-k-border bg-white p-1"
+          />
+        )}
         <div className="rounded-lg border border-k-border bg-k-bg p-3 text-center">
           <p className="text-[11px] font-semibold uppercase text-k-text-2">{t('manualKey')}</p>
           <p className="mt-1 select-all break-all font-mono text-[15px] font-semibold text-k-navy">
