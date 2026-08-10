@@ -52,6 +52,19 @@
       "next": "Next"
     }
   },
+  "account": {
+    "title": "Account",
+    "subtitle": "Your business details. They show up on receipts and invitations.",
+    "seats": "{used} of {max} members",
+    "businessName": "Business name",
+    "taxId": "Tax ID",
+    "taxIdPlaceholder": "Optional",
+    "country": "Country and currency",
+    "save": "Save changes",
+    "saved": "Details saved",
+    "saveError": "Could not save the details",
+    "noAccess": "You do not have access to the account details"
+  },
   "password": {
     "length": "At least {min} characters",
     "uppercase": "At least one uppercase letter",

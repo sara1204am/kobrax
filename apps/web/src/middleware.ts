@@ -46,4 +46,8 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
   return res;
 }
 
-export const config = { matcher: ['/dashboard/:path*', '/settings/:path*'] };
+// ⚠️ Toda ruta privada nueva entra acá. Es el error más fácil de cometer y el más difícil de
+// notar: la pantalla anda perfecto hasta que expira el access token, 15 minutos después.
+export const config = {
+  matcher: ['/dashboard/:path*', '/settings/:path*', '/cuenta/:path*', '/equipo/:path*'],
+};

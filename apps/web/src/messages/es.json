@@ -52,6 +52,19 @@
       "next": "Siguiente"
     }
   },
+  "account": {
+    "title": "Cuenta",
+    "subtitle": "Los datos de tu negocio. Aparecen en los comprobantes y en las invitaciones.",
+    "seats": "{used} de {max} miembros",
+    "businessName": "Nombre del negocio",
+    "taxId": "NIT",
+    "taxIdPlaceholder": "Opcional",
+    "country": "País y moneda",
+    "save": "Guardar cambios",
+    "saved": "Datos guardados",
+    "saveError": "No se pudieron guardar los datos",
+    "noAccess": "No tienes acceso a los datos de la cuenta"
+  },
   "password": {
     "length": "Mínimo {min} caracteres",
     "uppercase": "Al menos una mayúscula",

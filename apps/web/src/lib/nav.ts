@@ -44,7 +44,7 @@ export const NAV: NavItem[] = [
   { label: 'routes', href: '/rutas', permission: Permission.ROUTE_READ, built: false },
   { label: 'payments', href: '/pagos', permission: Permission.PAYMENT_READ, built: false },
   { label: 'team', href: '/equipo', permission: Permission.USER_READ, built: false },
-  { label: 'account', href: '/cuenta', permission: Permission.ACCOUNT_READ, built: false },
+  { label: 'account', href: '/cuenta', permission: Permission.ACCOUNT_READ, built: true },
   { label: 'security', href: '/settings/security', permission: null, built: true },
 ];
 
