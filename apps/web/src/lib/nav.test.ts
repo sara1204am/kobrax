@@ -20,11 +20,11 @@ describe('visibleNav', () => {
   });
 
   it('sin ningún permiso quedan sólo los ítems que no piden ninguno', () => {
-    expect(labels([])).toEqual(['home', 'security']);
+    expect(labels([])).toEqual(['home', 'profile', 'security']);
   });
 
   it('un permiso de más no cuela un ítem que no existe en el menú', () => {
-    expect(labels([Permission.AUDIT_READ])).toEqual(['home', 'security']);
+    expect(labels([Permission.AUDIT_READ])).toEqual(['home', 'profile', 'security']);
   });
 });
 

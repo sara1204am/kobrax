@@ -23,6 +23,7 @@
       "payments": "Payments",
       "team": "Team",
       "account": "Account",
+      "profile": "My profile",
       "security": "Security"
     },
     "crumbs": {
@@ -142,6 +143,83 @@
       "COLLECTOR": "Collector",
       "AUDITOR": "Auditor",
       "VIEWER": "Viewer"
+    }
+  },
+  "profile": {
+    "title": "My profile",
+    "subtitle": "How your team sees you and how debtors pay you.",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "phone": "Phone",
+    "phonePlaceholder": "Optional",
+    "emailFixed": "Your sign-in email is {email}. To change it, write to us.",
+    "photo": "Photo",
+    "photoHint": "Shown in your session and next to what you register.",
+    "paymentQr": "Payment QR",
+    "paymentQrHint": "The one you show debtors so they can pay from their bank.",
+    "remove": "Remove",
+    "uploading": "Uploading…",
+    "uploadError": "Could not upload the file",
+    "save": "Save changes",
+    "saved": "Profile updated",
+    "saveError": "Could not save your profile",
+    "error": "We could not load your profile"
+  },
+  "security": {
+    "title": "Security",
+    "back": "Security",
+    "loading": "Loading…",
+    "options": {
+      "password": "Password",
+      "passwordDesc": "Change your sign-in password.",
+      "mfa": "Two-step verification (MFA)",
+      "mfaDesc": "Protect your account with a second factor.",
+      "sessions": "Active sessions",
+      "sessionsDesc": "Review and close sessions on other devices."
+    },
+    "changePassword": {
+      "title": "Change password",
+      "current": "Current password",
+      "new": "New password",
+      "confirm": "Confirm new password",
+      "mismatch": "The passwords do not match.",
+      "submit": "Update password",
+      "error": "Could not change the password",
+      "doneTitle": "Password updated",
+      "doneText": "For your safety we closed all your sessions. Sign in again…"
+    },
+    "mfa": {
+      "title": "Two-step verification",
+      "intro": "Two-step verification adds a temporary code from your authenticator app when you sign in.",
+      "activate": "Turn on MFA",
+      "scan": "Scan the code with your authenticator app:",
+      "qrAlt": "QR code to set up two-step verification",
+      "manualKey": "Manual key",
+      "enterCode": "Enter the 6-digit code:",
+      "verify": "Verify and activate",
+      "codesTitle": "Save your backup codes",
+      "codesText": "Each code works only once. Keep them somewhere safe.",
+      "download": "Download codes",
+      "fileHeader": "Kobrax backup codes",
+      "done": "Done",
+      "active": "MFA is active on your account.",
+      "regenerate": "Regenerate backup codes",
+      "disableTitle": "Turn off MFA",
+      "disableHint": "Confirm with your password.",
+      "password": "Password",
+      "disable": "Turn off two-step verification",
+      "startError": "Could not start the enrollment",
+      "invalidCode": "Invalid code",
+      "regenerateError": "Could not regenerate the codes",
+      "disableError": "Could not turn off MFA"
+    },
+    "sessions": {
+      "title": "Active sessions",
+      "device": "Device",
+      "current": "This session",
+      "close": "Close",
+      "closeOthers": "Close all other sessions",
+      "loadError": "Could not load the sessions"
     }
   },
   "password": {

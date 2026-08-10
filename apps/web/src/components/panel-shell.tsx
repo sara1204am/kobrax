@@ -274,6 +274,15 @@ function Topbar({
           <LocaleSwitch />
         </div>
 
+        <Link href="/settings/perfil" className={MENU_ITEM}>
+          <Icon name="profile" className="h-[18px] w-[18px] text-k-muted" />
+          {t('nav.profile')}
+        </Link>
+        <Link href="/settings/security" className={MENU_ITEM}>
+          <Icon name="security" className="h-[18px] w-[18px] text-k-muted" />
+          {t('nav.security')}
+        </Link>
+
         <LogoutItem />
       </Dropdown>
     </header>
@@ -413,6 +422,7 @@ const ICONS: Record<NavKey | 'menu' | 'chevron' | 'check' | 'logout', string> = 
   payments: 'M3 8h18v9H3zM3 11.5h18M6.5 14.5h2.5',
   team: 'M9 11.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4zM2.8 19.5c0-3.4 2.8-5.2 6.2-5.2s6.2 1.8 6.2 5.2M17 8.4a2.8 2.8 0 0 1 0 4.6M18.5 14.6c2 .6 3.2 2 3.2 3.9',
   account: 'M4.5 20V5.5h9V20M13.5 10.5H20V20M7.5 9h3M7.5 12.5h3M7.5 16h3',
+  profile: 'M12 12.2a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2zM4.8 20.5c0-3.7 3.2-5.8 7.2-5.8s7.2 2.1 7.2 5.8',
   security: 'M12 3.5l7 2.8v5.4c0 3.9-2.9 6.8-7 8.6-4.1-1.8-7-4.7-7-8.6V6.3zM9.2 11.8l2 2 3.6-3.6',
   menu: 'M4 7h16M4 12h16M4 17h16',
   chevron: 'M7 10l5 5 5-5',

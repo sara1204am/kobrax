@@ -50,6 +50,18 @@ export async function apiCall<T>(
   return { status: res.status, body };
 }
 
+/**
+ * Los headers de autenticación sueltos, para lo que **no es JSON**: subir un archivo
+ * (`FormData`, cuyo `content-type` lo pone el navegador con su boundary) y descargarlo
+ * (binario, que no pasa por `res.json()`). `apiCall` no sirve para esos dos casos.
+ */
+export function bearerHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'x-client-type': 'web' };
+  const access = cookies().get(COOKIE.access)?.value;
+  if (access) headers.authorization = `Bearer ${access}`;
+  return headers;
+}
+
 // ── Cookies (se setean sobre la NextResponse del route handler/middleware) ─────
 export function setAuthCookies(
   res: NextResponse,

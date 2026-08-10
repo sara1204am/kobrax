@@ -144,21 +144,21 @@ terminar W2 el panel tiene que estar entero en los dos idiomas.
 
 ## 9. Tareas (en orden)
 
-- [ ] 1. Promover a `shared` el diff y los países (§5); dejar el móvil importando de ahí y
+- [x] 1. Promover a `shared` el diff y los países (§5); dejar el móvil importando de ahí y
       correr **sus** tests sin tocarlos.
-- [ ] 2. `/cuenta`: datos del negocio + contador de asientos + su handler BFF. El guardado
+- [x] 2. `/cuenta`: datos del negocio + contador de asientos + su handler BFF. El guardado
       manda **sólo lo que cambió**.
-- [ ] 3. `/equipo`: lista con `DataTable`, estado en `Badge`, y las acciones por fila según
+- [x] 3. `/equipo`: lista con `DataTable`, estado en `Badge`, y las acciones por fila según
       §6.1 y §6.2.
-- [ ] 4. Invitar: modal, `POST`, y la pantalla del código con copiar (§6.3). Reenviar avisa
+- [x] 4. Invitar: modal, `POST`, y la pantalla del código con copiar (§6.3). Reenviar avisa
       que el código anterior deja de servir.
-- [ ] 5. Cambiar rol · activar/desactivar · eliminar pendiente, cada uno con su confirmación
+- [x] 5. Cambiar rol · activar/desactivar · eliminar pendiente, cada uno con su confirmación
       y su toast.
-- [ ] 6. `/settings/perfil` + subida de foto y QR. Vaciar el QR manda `null`.
-- [ ] 7. Sumar `/cuenta` y `/equipo` al matcher de `middleware.ts` y encender sus ítems del
+- [x] 6. `/settings/perfil` + subida de foto y QR. Vaciar el QR manda `null`.
+- [x] 7. Sumar `/cuenta` y `/equipo` al matcher de `middleware.ts` y encender sus ítems del
       menú (`built: true`).
-- [ ] 8. i18n del namespace `account` **y traducción de Seguridad** (§8).
-- [ ] 9. Actualizar `BASE-INVENTORY` (lo promovido a `shared` + los artefactos de W2) y el
+- [x] 8. i18n del namespace `account` **y traducción de Seguridad** (§8).
+- [x] 9. Actualizar `BASE-INVENTORY` (lo promovido a `shared` + los artefactos de W2) y el
       estado de la etapa en el BUILD-PLAN.
 
 ## 10. Reglas de la fase

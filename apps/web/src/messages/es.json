@@ -23,6 +23,7 @@
       "payments": "Pagos",
       "team": "Equipo",
       "account": "Cuenta",
+      "profile": "Mi perfil",
       "security": "Seguridad"
     },
     "crumbs": {
@@ -142,6 +143,83 @@
       "COLLECTOR": "Cobrador",
       "AUDITOR": "Auditor",
       "VIEWER": "Consulta"
+    }
+  },
+  "profile": {
+    "title": "Mi perfil",
+    "subtitle": "Cómo te ve tu equipo y cómo te cobran los deudores.",
+    "firstName": "Nombre",
+    "lastName": "Apellido",
+    "phone": "Teléfono",
+    "phonePlaceholder": "Opcional",
+    "emailFixed": "Tu correo de acceso es {email}. Para cambiarlo, escríbenos.",
+    "photo": "Foto",
+    "photoHint": "Se ve en tu sesión y junto a lo que registras.",
+    "paymentQr": "QR de cobro",
+    "paymentQrHint": "El que le muestras al deudor para que pague desde su banco.",
+    "remove": "Quitar",
+    "uploading": "Subiendo…",
+    "uploadError": "No se pudo subir el archivo",
+    "save": "Guardar cambios",
+    "saved": "Perfil actualizado",
+    "saveError": "No se pudo guardar el perfil",
+    "error": "No pudimos cargar tu perfil"
+  },
+  "security": {
+    "title": "Seguridad",
+    "back": "Seguridad",
+    "loading": "Cargando…",
+    "options": {
+      "password": "Contraseña",
+      "passwordDesc": "Cambia tu contraseña de acceso.",
+      "mfa": "Verificación en dos pasos (MFA)",
+      "mfaDesc": "Protege tu cuenta con un segundo factor.",
+      "sessions": "Sesiones activas",
+      "sessionsDesc": "Revisa y cierra sesiones en otros dispositivos."
+    },
+    "changePassword": {
+      "title": "Cambiar contraseña",
+      "current": "Contraseña actual",
+      "new": "Nueva contraseña",
+      "confirm": "Confirmar nueva contraseña",
+      "mismatch": "Las contraseñas no coinciden.",
+      "submit": "Actualizar contraseña",
+      "error": "No se pudo cambiar la contraseña",
+      "doneTitle": "Contraseña actualizada",
+      "doneText": "Por seguridad cerramos todas tus sesiones. Inicia sesión de nuevo…"
+    },
+    "mfa": {
+      "title": "Verificación en dos pasos",
+      "intro": "La verificación en dos pasos añade un código temporal de tu app de autenticación al iniciar sesión.",
+      "activate": "Activar MFA",
+      "scan": "Escanea el código con tu app de autenticación:",
+      "qrAlt": "Código QR para configurar la verificación en dos pasos",
+      "manualKey": "Clave manual",
+      "enterCode": "Ingresa el código de 6 dígitos:",
+      "verify": "Verificar y activar",
+      "codesTitle": "Guarda tus códigos de respaldo",
+      "codesText": "Cada código sirve una sola vez. Guárdalos en un lugar seguro.",
+      "download": "Descargar códigos",
+      "fileHeader": "Códigos de respaldo Kobrax",
+      "done": "Listo",
+      "active": "MFA está activo en tu cuenta.",
+      "regenerate": "Regenerar códigos de respaldo",
+      "disableTitle": "Desactivar MFA",
+      "disableHint": "Confirma con tu contraseña.",
+      "password": "Contraseña",
+      "disable": "Desactivar verificación en dos pasos",
+      "startError": "No se pudo iniciar el enrolamiento",
+      "invalidCode": "Código inválido",
+      "regenerateError": "No se pudieron regenerar los códigos",
+      "disableError": "No se pudo desactivar MFA"
+    },
+    "sessions": {
+      "title": "Sesiones activas",
+      "device": "Dispositivo",
+      "current": "Esta sesión",
+      "close": "Cerrar",
+      "closeOthers": "Cerrar todas las demás sesiones",
+      "loadError": "No se pudieron cargar las sesiones"
     }
   },
   "password": {
