@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { compare, hash } from 'bcryptjs';
 import { KOBRAX, type AuthAccountOption, type AuthTokens, type LoginResult } from '@kobrax/shared';
@@ -48,6 +48,8 @@ const CRITICAL_ROLES = ['SUPER_ADMIN', 'ACCOUNT_ADMIN'];
 
 @Injectable()
 export class AuthService implements OnModuleInit {
+  private readonly logger = new Logger(AuthService.name);
+
   /** Hash dummy para comparar en timing constante cuando el usuario no existe. */
   private dummyHash = '';
 
@@ -192,7 +194,22 @@ export class AuthService implements OnModuleInit {
     if (!membership) throw accountNotAllowed();
 
     const tokens = await this.issueTokens(userId, membership.account_id, membership.role_id, meta);
-    await this.sessions.revokeOne(userId, currentSessionId);
+
+    /*
+     * El par nuevo ya está commiteado, así que a partir de acá **no se puede fallar**: si la
+     * revocación revienta y dejamos subir la excepción, el endpoint responde 500, el navegador
+     * se queda con las cookies viejas… que `revokeRows` ya invalidó en Postgres antes de tocar
+     * Redis. Resultado: a los 15 minutos la persona termina en `/login` en medio del trabajo,
+     * sin entender por qué. Se registra y se sigue: la sesión huérfana la limpia su `expiresAt`.
+     */
+    try {
+      await this.sessions.revokeOne(userId, currentSessionId);
+    } catch (err) {
+      this.logger.error(
+        `No se pudo revocar la sesión ${currentSessionId} al cambiar de empresa`,
+        err instanceof Error ? err.stack : String(err),
+      );
+    }
 
     /*
      * El único endpoint que emite credenciales operativas para un tenant en el que quien

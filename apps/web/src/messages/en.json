@@ -35,6 +35,7 @@
     "openMenu": "Open menu",
     "breadcrumb": "You are here",
     "company": "Company",
+    "companyUnavailable": "Company unavailable",
     "switchError": "Could not switch company. Please try again.",
     "logout": "Sign out",
     "home": {

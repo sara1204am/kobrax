@@ -33,7 +33,12 @@ function memb(roleName: string, accountId = 'a1', status = 'ACTIVE') {
   };
 }
 
-function makeAuth(opts: { user: Record<string, unknown>; memberships?: ReturnType<typeof memb>[] }) {
+function makeAuth(opts: {
+  user: Record<string, unknown>;
+  memberships?: ReturnType<typeof memb>[];
+  /** Simula Redis caído en la revocación de la sesión anterior. */
+  revokeFails?: boolean;
+}) {
   const calls = {
     userUpdate: [] as { where: { id: string }; data: Record<string, unknown> }[],
     forRole: [] as string[],
@@ -65,6 +70,7 @@ function makeAuth(opts: { user: Record<string, unknown>; memberships?: ReturnTyp
     denylist: async () => {},
     revokeAll: async () => 0,
     revokeOne: async (_userId: string, sessionId: string) => {
+      if (opts.revokeFails) throw new Error('redis caído');
       calls.revokedSessions.push(sessionId);
     },
   };
@@ -239,6 +245,19 @@ describe('AuthService — cambio de empresa con la sesión ya iniciada (W1)', ()
         after: { toAccountId: 'a2', role: 'COLLECTOR' },
       },
     ]);
+  });
+
+  it('si la revocación falla, igual entrega el par nuevo', async () => {
+    // El par ya está commiteado y `revokeRows` invalida la sesión vieja en Postgres ANTES de
+    // tocar Redis: dejar subir la excepción devolvía un 500 al navegador, que se quedaba con
+    // unas cookies ya muertas y terminaba en /login a los 15 minutos.
+    const { service } = makeAuth({
+      user,
+      memberships: [memb('SUPERVISOR', 'a1'), memb('COLLECTOR', 'a2')],
+      revokeFails: true,
+    });
+    const tokens = await service.switchAccount('u9', 'sess-vieja', 'a2', META);
+    assert.equal(token.verifyAccess(tokens.accessToken).accountId, 'a2');
   });
 
   it('emite tokens de la empresa destino y revoca la sesión anterior', async () => {

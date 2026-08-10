@@ -35,6 +35,7 @@
     "openMenu": "Abrir el menú",
     "breadcrumb": "Dónde estás",
     "company": "Empresa",
+    "companyUnavailable": "Empresa no disponible",
     "switchError": "No se pudo cambiar de empresa. Intenta de nuevo.",
     "logout": "Cerrar sesión",
     "home": {
