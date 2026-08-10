@@ -150,7 +150,9 @@ export function MembersTable({
       <Modal
         open={pending !== null}
         onClose={() => setPending(null)}
-        title={pending ? t(`confirm.${pending.kind}.title`) : ''}
+        // El `{name}` va también en el título: sin los valores, next-intl no puede formatear
+        // y pinta la ruta cruda de la clave.
+        title={pending ? t(`confirm.${pending.kind}.title`, { name: memberName(pending.member) }) : ''}
         actions={
           <>
             <span className="sm:w-40">

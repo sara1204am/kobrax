@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
 import type { AuthAccountOption, MeInfo } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
@@ -28,13 +29,12 @@ export default async function PanelLayout({ children }: { children: ReactNode })
   // Mandar a `/login` sería mentir —ahí tampoco va a poder entrar— y además esconde el
   // problema real.
   if (me.status === 0) {
+    const t = await getTranslations('panel.offline');
     return (
       <main className="flex min-h-screen items-center justify-center bg-k-bg px-6">
         <div className="max-w-md text-center">
-          <h1 className="text-[20px] font-semibold text-k-navy">{me.body.error?.message}</h1>
-          <p className="mt-2 text-[14px] text-k-text-2">
-            Vuelve a intentarlo en un momento. Si sigue así, avísale a tu administrador.
-          </p>
+          <h1 className="text-[20px] font-semibold text-k-navy">{t('title')}</h1>
+          <p className="mt-2 text-[14px] text-k-text-2">{t('text')}</p>
         </div>
       </main>
     );

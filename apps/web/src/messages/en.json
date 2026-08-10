@@ -48,6 +48,10 @@
       "text": "We could not load this screen. The rest of the panel still works.",
       "retry": "Retry"
     },
+    "offline": {
+      "title": "We could not reach the server",
+      "text": "Try again in a moment. If it keeps happening, let your administrator know."
+    },
     "table": {
       "range": "{from}–{to} of {total}",
       "previous": "Previous",
@@ -117,6 +121,7 @@
       "sentTo": "We emailed {email}. This is their code:",
       "copy": "Copy",
       "copied": "Copied",
+      "copyFailed": "Your browser would not copy. Select the code by hand.",
       "howTo": "If the email does not arrive, they can join with this code from <link>the invitation page</link>."
     },
     "confirm": {
@@ -153,6 +158,7 @@
     "lastName": "Last name",
     "phone": "Phone",
     "phonePlaceholder": "Optional",
+    "phoneHint": "At least 5 digits. It can start with + and include spaces or dashes.",
     "emailFixed": "Your sign-in email is {email}. To change it, write to us.",
     "photo": "Photo",
     "photoHint": "Shown in your session and next to what you register.",

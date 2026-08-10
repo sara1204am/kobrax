@@ -16,6 +16,9 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
   if (req.cookies.get(ACCESS)?.value) return NextResponse.next();
 
   const refresh = req.cookies.get(REFRESH)?.value;
+  /** El servidor dijo que ese refresh ya no vale. Distinto de «no pude preguntarle». */
+  let rejected = false;
+
   if (refresh) {
     try {
       const r = await fetch(`${API_BASE}/auth/refresh`, {
@@ -51,8 +54,15 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
           return res;
         }
       }
+      // 401/403 = el refresh está muerto de verdad (vencido, revocado, reusado).
+      rejected = r.status === 401 || r.status === 403;
     } catch {
-      // cae al redirect de abajo
+      /*
+       * La API no contestó. **No se toca la sesión**: un reinicio de dos segundos o un
+       * parpadeo de red destruía un refresh de 7 días perfectamente válido y mandaba a
+       * escribir contraseña y MFA de nuevo. Se responde que no y se reintenta en el próximo
+       * request, que es cuando la API ya volvió.
+       */
     }
   }
 
@@ -62,8 +72,18 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
     ? NextResponse.json({ error: { code: 'AUTH_003', message: 'Sesión expirada' } }, { status: 401 })
     : NextResponse.redirect(new URL('/login', req.url));
 
-  res.cookies.set(ACCESS, '', { ...cookieBase, maxAge: 0 });
-  res.cookies.set(REFRESH, '', { ...cookieBase, maxAge: 0 });
+  /*
+   * Las cookies se borran SÓLO si el servidor rechazó el refresh.
+   *
+   * Borrarlas siempre tenía dos víctimas: el parpadeo de red de arriba, y —peor— cualquier
+   * página ajena que pusiera un `<img src="https://panel/api/uploads/x">`. Con `SameSite=Strict`
+   * ese request llega sin cookies, así que el middleware no ve sesión… y en la respuesta
+   * mandaba borrar las que el navegador sí tiene: un cierre de sesión a control remoto.
+   */
+  if (rejected) {
+    res.cookies.set(ACCESS, '', { ...cookieBase, maxAge: 0 });
+    res.cookies.set(REFRESH, '', { ...cookieBase, maxAge: 0 });
+  }
   return res;
 }
 

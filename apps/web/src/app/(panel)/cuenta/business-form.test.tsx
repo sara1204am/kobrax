@@ -64,6 +64,24 @@ describe('BusinessForm — sólo se manda lo que cambió', () => {
     expect(refresh).toHaveBeenCalled();
   });
 
+  it('borrar el NIT lo QUITA: manda null, no cadena vacía', async () => {
+    let enviado: unknown;
+    server.use(
+      http.patch('*/api/account/me', async ({ request }) => {
+        enviado = await request.json();
+        return HttpResponse.json({ ...ACCOUNT, taxId: null });
+      }),
+    );
+
+    renderForm();
+    await userEvent.clear(screen.getByLabelText('NIT'));
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    // Con `''` el `@IsOptional() @Length(1,40)` de la API devolvía 400 y se perdía el
+    // guardado entero: no había forma de quitar un NIT mal cargado.
+    expect(enviado).toEqual({ taxId: null });
+  });
+
   it('cambiar el país arrastra la moneda: no se pueden combinar mal', async () => {
     let enviado: unknown;
     server.use(

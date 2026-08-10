@@ -22,12 +22,22 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ error: { code: 'CSRF', message: 'Origen no permitido' } }, { status: 403 });
   }
 
-  const res = await fetch(`${API_BASE}/uploads`, {
-    method: 'POST',
-    headers: bearerHeaders(),
-    body: await req.formData(),
-    cache: 'no-store',
-  });
+  // `fetch` crudo y no `apiCall`, así que el try/catch va a mano: sin él, la API caída tira una
+  // excepción en el handler — justo lo que el arreglo de W1 vino a sacar.
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/uploads`, {
+      method: 'POST',
+      headers: bearerHeaders(),
+      body: await req.formData(),
+      cache: 'no-store',
+    });
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'API_UNREACHABLE', message: 'No pudimos conectar con el servidor' } },
+      { status: 502 },
+    );
+  }
   const body = (await res.json().catch(() => null)) as { data?: Stored; error?: unknown } | null;
   if (!res.ok || !body?.data) {
     return NextResponse.json({ error: body?.error ?? { code: 'UPLOAD', message: 'No se pudo subir el archivo' } }, { status: res.status });

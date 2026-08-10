@@ -10,10 +10,16 @@ import { API_BASE, bearerHeaders } from '@/lib/bff';
  * existe para evitar.
  */
 export async function GET(_req: Request, { params }: { params: { name: string } }): Promise<Response> {
-  const res = await fetch(`${API_BASE}/uploads/${encodeURIComponent(params.name)}`, {
-    headers: bearerHeaders(),
-    cache: 'no-store',
-  });
+  // Idem `account/upload`: `fetch` crudo necesita su propio try/catch.
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/uploads/${encodeURIComponent(params.name)}`, {
+      headers: bearerHeaders(),
+      cache: 'no-store',
+    });
+  } catch {
+    return NextResponse.json({ error: { code: 'API_UNREACHABLE' } }, { status: 502 });
+  }
   if (!res.ok || !res.body) return NextResponse.json({ error: { code: 'NOT_FOUND' } }, { status: res.status });
 
   return new Response(res.body, {

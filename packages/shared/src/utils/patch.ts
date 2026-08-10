@@ -16,14 +16,24 @@ import type {
   ProfilePatch,
 } from '../types/account.types.js';
 
-/** Campos escalares que cambiaron, recortados. Vacío = no hay nada que guardar. */
-function diffFields<T extends object>(before: T, after: T): Partial<T> {
-  const out: Record<string, string> = {};
+/**
+ * Campos escalares que cambiaron, recortados. Vacío = no hay nada que guardar.
+ *
+ * **Vaciar un campo es QUITARLO, y eso viaja como `null`.** No es un detalle de estilo: los
+ * campos opcionales de la API se validan con `@IsOptional() @Length(1, n)`, y `@IsOptional`
+ * saltea la validación cuando el valor es `null` o `undefined` — pero `''` no es ninguno de
+ * los dos, así que choca contra el `@Length` y **rechaza el PATCH entero**. O sea que borrar
+ * el NIT o el teléfono devolvía un 400 y se perdían de paso los otros cambios de la misma
+ * tanda.
+ */
+function diffFields<T extends object>(before: T, after: T): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
   for (const [key, value] of Object.entries(after) as [string, string][]) {
-    const a = value.trim();
-    if (a !== ((before as Record<string, string>)[key] ?? '').trim()) out[key] = a;
+    const now = value.trim();
+    if (now === ((before as Record<string, string>)[key] ?? '').trim()) continue;
+    out[key] = now === '' ? null : now;
   }
-  return out as Partial<T>;
+  return out;
 }
 
 export function diffAccount(before: AccountForm, after: AccountForm): AccountPatch {
@@ -31,11 +41,7 @@ export function diffAccount(before: AccountForm, after: AccountForm): AccountPat
 }
 
 export function diffProfile(before: ProfileForm, after: ProfileForm): ProfilePatch {
-  const patch: ProfilePatch = diffFields(before, after);
-  // Vaciar el QR es QUITARLO, y eso viaja como `null`: el server distingue `null` (borrar) de
-  // ausente (no tocar), y `''` no pasaría su validación de longitud.
-  if (patch.paymentQrUrl === '') patch.paymentQrUrl = null;
-  return patch;
+  return diffFields(before, after);
 }
 
 export function hasChanges(patch: object): boolean {

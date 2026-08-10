@@ -14,10 +14,20 @@ import { useTranslations } from 'next-intl';
 export function InvitationCode({ code, email }: { code: string; email: string }) {
   const t = useTranslations('team.invite');
   const [copied, setCopied] = useState(false);
+  const [failed, setFailed] = useState(false);
 
+  /**
+   * Copiar puede no estar disponible: `navigator.clipboard` no existe fuera de un contexto
+   * seguro y el navegador puede negar el permiso. Si falla no se rompe nada ni se miente con
+   * un «copiado» — el código queda `select-all`, así que se agarra con un triple clic.
+   */
   async function copy() {
-    await navigator.clipboard.writeText(code);
-    setCopied(true);
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+    } catch {
+      setFailed(true);
+    }
   }
 
   return (
@@ -36,6 +46,7 @@ export function InvitationCode({ code, email }: { code: string; email: string })
           {copied ? t('copied') : t('copy')}
         </button>
       </div>
+      {failed && <p className="text-[12px] text-k-text-2">{t('copyFailed')}</p>}
 
       <p className="text-[13px] text-k-text-2">
         {t.rich('howTo', {
