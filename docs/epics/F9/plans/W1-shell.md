@@ -42,9 +42,8 @@ Anatomía, en tres piezas:
 └────────────┴──────────────────────────────────────────────┘
 ```
 
-- **Sidebar** `bg-k-navy`, 240 px, colapsable a 64 px (sólo íconos). Ítem activo con barra
-  `k-soft-periw` a la izquierda y fondo `white/10`. Debajo de 1024 px se vuelve cajón con
-  overlay: el panel es de escritorio, pero no puede quedar inservible en una tablet.
+- **Sidebar** `bg-k-navy`, 240 px. Ítem activo con barra `k-soft-periw` a la izquierda y
+  fondo `white/10`.
 - **Topbar** blanca, 64 px, borde inferior `k-border`: breadcrumb a la izquierda; a la
   derecha selector de empresa, `LocaleSwitch` (ya existe) y menú de usuario (perfil,
   seguridad, cerrar sesión).
@@ -52,6 +51,35 @@ Anatomía, en tres piezas:
 
 Contraste: sobre el navy del sidebar el acento va en `k-soft-periw` (4.51:1), **no** en
 `k-purple` (2.70:1). Es la misma trampa que ya pagó el panel de marca del login.
+
+### 3.1 Responsive — escritorio, tablet y celular
+
+El panel es de oficina, pero se supervisa desde donde sea: una supervisora abriendo el panel
+en la tablet o en el teléfono es un caso real, no un extra. **El shell nace responsive**, no
+se le agrega después.
+
+| Ancho | Sidebar | Topbar | Contenido |
+|---|---|---|---|
+| ≥ 1280 · escritorio | fijo, 240 px, expandido | completa | padding 32, máx. 1440 |
+| 1024–1279 · laptop / tablet apaisada | fijo, colapsado a 64 px (sólo íconos + `title`) | completa | padding 24 |
+| 768–1023 · tablet vertical | **fuera del flujo** — cajón con overlay | **hamburguesa** a la izquierda; el breadcrumb se recorta a la hoja actual | padding 20 |
+| < 768 · celular | ídem cajón | hamburguesa + logo; empresa e idioma **se mudan al menú de usuario** | padding 16, una columna |
+
+**El cajón es un `<dialog>`, el mismo de `Modal` (§7).** `showModal()` regala foco atrapado,
+Esc y backdrop; escribir un cajón a mano sería reescribir las tres cosas peor. Se cierra
+además al elegir un ítem — si no, en el teléfono navegás y te queda el menú tapando la
+pantalla a la que fuiste.
+
+Reglas que no se negocian en chico:
+- **Toque ≥ 44 px** en ítems del menú, hamburguesa y los dos menús de la topbar.
+- La hamburguesa lleva `aria-expanded` y `aria-controls`; es un `<button>`, no un ícono con
+  `onClick`.
+- **Nada de scroll horizontal en la página.** Lo que no entra scrollea adentro de su caja
+  (§7, `DataTable`).
+- El colapso y el cajón respetan `prefers-reduced-motion`.
+
+Se verifica en **1440, 1280, 1024, 768 y 390** (§11). Los tres primeros son los del diseño;
+768 es una tablet vertical y 390 un teléfono de verdad.
 
 ## 4. Rutas y estructura
 
@@ -98,6 +126,9 @@ Las dos reusan lo que ya está escrito en `auth.service.ts`:
 - `activeMemberships(userId)` (hoy privado → pasa a poder llamarse desde los dos métodos
   nuevos). Ya filtra tenants `SUSPENDED` / `CANCELLED` / `INACTIVE`: **CU-01 sigue valiendo
   para el cambio en caliente, no sólo para el login.**
+  ⚠️ Se apoya en la función `auth_memberships(userId)`, que es **`SECURITY DEFINER`** — por
+  eso puede ver tenants distintos al activo. Consultar `accounts` con Prisma a secas devuelve
+  sólo el tenant actual: la RLS lo corta y la lista sale con un único elemento.
 - `issueTokens(userId, accountId, roleId, meta)` — el rol y los permisos se re-derivan de la
   membresía destino. Nunca se copian los del token viejo.
 - `accountNotAllowed()` para una empresa donde no hay membresía activa. Mismo error que
@@ -171,6 +202,10 @@ vuelva a discutir.
 | Cuenta | `/cuenta` | `account:read` | W2 |
 | Seguridad | `/settings/security` | — (propia) | ✅ ya existe |
 
+🔴 **El menú se filtra por permiso, nunca por `tenantType`** (§3.3). Un cobrador
+independiente y un banco ven el mismo menú si tienen los mismos permisos; lo que cambia es
+lo que su rol puede hacer, no de qué tamaño es su empresa.
+
 **Dos filtros distintos, no uno:**
 - **Sin permiso → no se dibuja.** Un cobrador no ve «Equipo» ni en gris. Que un ítem esté
   apagado ya cuenta algo sobre el producto; que aparezca uno que nunca vas a poder abrir
@@ -209,7 +244,7 @@ Decisión de la dueña: se construyen **las siete en W1**, aunque tres nazcan si
 | `Badge` | `panel-ui.tsx` | Tonos `success` / `warning` / `danger` / `neutral` de los tokens |
 | `Modal` | `components/modal.tsx` | **`<dialog>` nativo** + `showModal()`: foco atrapado, Esc y backdrop **gratis**. Nada de recrear un focus trap a mano |
 | `Toast` | `components/toast.tsx` | Provider + `useToast()`. Región `aria-live="polite"`, auto-cierre 5 s |
-| `DataTable` | `components/data-table.tsx` | Orden/paginación/filtros **por `searchParams` de la URL**, no por estado interno: la vista queda compartible y el back del navegador funciona. Consume el `meta.total/page/limit/pages` que `ApiEnvelope` ya tipa |
+| `DataTable` | `components/data-table.tsx` | Orden/paginación/filtros **por `searchParams` de la URL**, no por estado interno: la vista queda compartible y el back del navegador funciona. Consume el `meta.total/page/limit/pages` que `ApiEnvelope` ya tipa. En pantalla chica **scrollea adentro de su contenedor** (`overflow-x-auto`), nunca la página |
 
 `panel-ui.tsx` **no** lleva `'use client'`: esas cuatro no tienen una sola interacción y así
 no viajan al navegador. Las tres interactivas van en archivo propio. `ui.tsx` (Button,
@@ -248,6 +283,8 @@ nativo, no un `<Suspense>` a mano en cada página.
       aparece ni se puede saltar a él; los permisos salen de la membresía destino.
 - [ ] 3. `(panel)/layout.tsx` con sidebar + topbar + breadcrumb. Mover `dashboard` y
       `settings` adentro; borrar `settings/layout.tsx`.
+- [ ] 3-bis. Responsive (§3.1): colapso a íconos, cajón con hamburguesa sobre `<dialog>`, y
+      la mudanza de empresa e idioma al menú de usuario en celular.
 - [ ] 4. `lib/nav.ts` + `visibleNav()` + los dos filtros (§6.1), con su test.
 - [ ] 5. `PermissionsProvider` + `usePermissions()`, con su test de matriz rol→ítems.
 - [ ] 6. Selector de empresa: handler BFF + `router.refresh()`. Test del camino de error.
@@ -267,7 +304,9 @@ nativo, no un `<Suspense>` a mano en cada página.
    deps nuevas en W1.
 5. **AA en todo**: foco visible, navegación por teclado en sidebar y menús, `aria-current`
    en el ítem activo, contraste ≥ 4.5:1 sobre el navy.
-6. **`prefers-reduced-motion`** respetado en el colapso del sidebar y en los toasts.
+6. **`prefers-reduced-motion`** respetado en el colapso del sidebar, el cajón y los toasts.
+7. **Responsive de entrada** (§3.1). Una pantalla que sólo funciona en 1440 no está
+   terminada: el DoD la mide en 768 y en 390.
 
 ## 11. DoD
 
@@ -281,7 +320,10 @@ nativo, no un `<Suspense>` a mano en cada página.
 - [ ] Los ítems en gris no navegan a ningún lado.
 - [ ] El shell está entero en es/en y sobrevive al refresh.
 - [ ] Recorrido con teclado del sidebar y los dos menús de la topbar.
-- [ ] Validación visual de la usuaria en navegador real (1280 y 1440).
+- [ ] **En 768 y en 390**: la hamburguesa abre el cajón, se cierra con Esc, con toque en el
+      overlay y al elegir un ítem; empresa e idioma se alcanzan desde el menú de usuario; y
+      **ninguna pantalla del panel scrollea de costado**.
+- [ ] Validación visual de la usuaria en navegador real: **1440, 1280, 1024, 768 y 390**.
 
 ## 12. Verificación
 
