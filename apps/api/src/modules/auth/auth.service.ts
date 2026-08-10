@@ -167,6 +167,12 @@ export class AuthService implements OnModuleInit {
    *
    * El MFA no se vuelve a pedir — ya se verificó en este login. Cambiar de empresa es
    * re-alcanzar la misma sesión, no autenticarse de nuevo.
+   *
+   * 🔴 **Sí se vuelve a mirar el estado del usuario.** Este endpoint **emite credenciales
+   * nuevas** (una sesión y un refresh de 7 días), así que tiene que aplicar las mismas guardas
+   * que `login()`: nadie revoca las sesiones vivas cuando a alguien se lo suspende, de modo
+   * que una persona dada de baja podía, dentro de los 15 minutos de su access token, saltar a
+   * otra empresa y quedarse operando ahí una semana. El `login()` la habría frenado.
    */
   async switchAccount(
     userId: string,
@@ -174,6 +180,10 @@ export class AuthService implements OnModuleInit {
     accountId: string,
     meta: SessionMeta,
   ): Promise<AuthTokens> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.status !== 'ACTIVE') throw invalidToken();
+    if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) throw accountLocked(user.lockedUntil);
+
     const active = await this.activeMemberships(userId);
     const membership = active.find((m) => m.account_id === accountId);
     // Mismo error que `selectAccount`: no distingue «no existe» de «no sos miembro».

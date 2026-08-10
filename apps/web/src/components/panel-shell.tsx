@@ -52,6 +52,23 @@ export function PanelShell({
   // tapando justo la pantalla a la que fuiste.
   useEffect(() => drawer.current?.close(), [pathname]);
 
+  /*
+   * Cerrarlo también al llegar al ancho de escritorio.
+   *
+   * El cajón se esconde con `lg:hidden`, pero `display:none` **no** saca un `<dialog>` abierto
+   * del top layer ni levanta el bloqueo modal: girar la tablet con el menú abierto dejaba el
+   * panel a la vista y completamente inclicable, sin más salida que Esc —imposible en
+   * táctil— o recargar.
+   */
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 1024px)');
+    const closeOnDesktop = () => {
+      if (desktop.matches) drawer.current?.close();
+    };
+    desktop.addEventListener('change', closeOnDesktop);
+    return () => desktop.removeEventListener('change', closeOnDesktop);
+  }, []);
+
   return (
     <div className="min-h-screen bg-k-bg lg:flex">
       {/*

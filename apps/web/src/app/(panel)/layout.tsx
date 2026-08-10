@@ -33,6 +33,22 @@ export default async function PanelLayout({ children }: { children: ReactNode })
     apiCall<AuthAccountOption[]>('/auth/accounts', { method: 'GET', auth: true }),
   ]);
 
+  // La API no contestó: no es que la sesión se venció, es que del otro lado no hay nadie.
+  // Mandar a `/login` sería mentir —ahí tampoco va a poder entrar— y además esconde el
+  // problema real.
+  if (me.status === 0) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-k-bg px-6">
+        <div className="max-w-md text-center">
+          <h1 className="text-[20px] font-semibold text-k-navy">{me.body.error?.message}</h1>
+          <p className="mt-2 text-[14px] text-k-text-2">
+            Vuelve a intentarlo en un momento. Si sigue así, avísale a tu administrador.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   // El middleware ya refrescó el token si hacía falta; si aun así no hay identidad, la sesión
   // se terminó de verdad.
   if (me.status !== 200 || !me.body.data) redirect('/login');

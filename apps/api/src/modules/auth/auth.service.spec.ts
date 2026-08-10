@@ -144,6 +144,30 @@ describe('AuthService.mfaSetupSkip — postergar el MFA obligatorio', () => {
 describe('AuthService — cambio de empresa con la sesión ya iniciada (W1)', () => {
   const user = { id: 'u9', status: 'ACTIVE', mfaEnabled: false };
 
+  it('un usuario suspendido NO puede saltar a otra empresa', async () => {
+    // Nadie revoca las sesiones vivas al suspender a alguien: sin esta guarda, dentro de los
+    // 15 min de su access token se emitía una sesión nueva de 7 días en el otro tenant.
+    const { service } = makeAuth({
+      user: { id: 'u9', status: 'SUSPENDED' },
+      memberships: [memb('SUPERVISOR', 'a1'), memb('COLLECTOR', 'a2')],
+    });
+    await rejectsWithCode(
+      service.switchAccount('u9', 'sess-vieja', 'a2', META),
+      AUTH_ERR.INVALID_TOKEN,
+    );
+  });
+
+  it('una cuenta bloqueada por intentos fallidos tampoco', async () => {
+    const { service } = makeAuth({
+      user: { id: 'u9', status: 'ACTIVE', lockedUntil: new Date(Date.now() + 10 * 60_000) },
+      memberships: [memb('SUPERVISOR', 'a1'), memb('COLLECTOR', 'a2')],
+    });
+    await rejectsWithCode(
+      service.switchAccount('u9', 'sess-vieja', 'a2', META),
+      AUTH_ERR.ACCOUNT_LOCKED,
+    );
+  });
+
   it('lista sólo las empresas donde el usuario puede operar', async () => {
     const { service } = makeAuth({
       user,
