@@ -34,6 +34,25 @@ vi.mock('next-intl', async (importOriginal) => {
   };
 });
 
+/**
+ * jsdom trae `HTMLDialogElement` pero **sin `showModal()` ni `close()`**. Cualquier
+ * componente que use un `<dialog>` (el cajón del menú, el modal) revienta al montar con
+ * "close is not a function". Es un agujero del entorno de test, no del código, así que va acá
+ * y no una guarda defensiva en producción.
+ *
+ * El doble mantiene coherente el atributo `open`, que es lo único que los tests observan. Lo
+ * que jsdom tampoco da y esto no simula: foco atrapado, Esc y backdrop — eso lo pone el
+ * navegador de verdad y se verifica a mano.
+ */
+if (typeof HTMLDialogElement !== 'undefined' && !HTMLDialogElement.prototype.showModal) {
+  HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
+    this.open = false;
+  };
+}
+
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });
   // jsdom + fetch de Node (undici) NO resuelve URLs relativas; el código llama a

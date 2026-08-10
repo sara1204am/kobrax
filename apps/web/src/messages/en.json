@@ -10,6 +10,42 @@
     "es": "Spanish",
     "en": "English"
   },
+  "panel": {
+    "nav": {
+      "label": "Main navigation",
+      "home": "Home",
+      "portfolio": "Portfolio",
+      "import": "Import",
+      "cases": "Cases",
+      "agenda": "Schedule",
+      "routes": "Routes",
+      "payments": "Payments",
+      "team": "Team",
+      "account": "Account",
+      "security": "Security"
+    },
+    "crumbs": {
+      "password": "Password",
+      "mfa": "Two-step verification",
+      "sessions": "Active sessions"
+    },
+    "soon": "Soon",
+    "openMenu": "Open menu",
+    "breadcrumb": "You are here",
+    "company": "Company",
+    "switchError": "Could not switch company. Please try again.",
+    "logout": "Sign out",
+    "home": {
+      "title": "Home",
+      "subtitle": "Your collections panel.",
+      "building": "Modules show up in the menu as they get built."
+    },
+    "error": {
+      "title": "Something went wrong",
+      "text": "We could not load this screen. The rest of the panel still works.",
+      "retry": "Retry"
+    }
+  },
   "password": {
     "length": "At least {min} characters",
     "uppercase": "At least one uppercase letter",

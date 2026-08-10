@@ -10,6 +10,42 @@
     "es": "Español",
     "en": "Inglés"
   },
+  "panel": {
+    "nav": {
+      "label": "Navegación principal",
+      "home": "Inicio",
+      "portfolio": "Cartera",
+      "import": "Import",
+      "cases": "Casos",
+      "agenda": "Agenda",
+      "routes": "Rutas",
+      "payments": "Pagos",
+      "team": "Equipo",
+      "account": "Cuenta",
+      "security": "Seguridad"
+    },
+    "crumbs": {
+      "password": "Contraseña",
+      "mfa": "Verificación en dos pasos",
+      "sessions": "Sesiones activas"
+    },
+    "soon": "Pronto",
+    "openMenu": "Abrir el menú",
+    "breadcrumb": "Dónde estás",
+    "company": "Empresa",
+    "switchError": "No se pudo cambiar de empresa. Intenta de nuevo.",
+    "logout": "Cerrar sesión",
+    "home": {
+      "title": "Inicio",
+      "subtitle": "Tu panel de cobranzas.",
+      "building": "Los módulos se van sumando al menú a medida que se construyen."
+    },
+    "error": {
+      "title": "Algo salió mal",
+      "text": "No pudimos cargar esta pantalla. El resto del panel sigue funcionando.",
+      "retry": "Reintentar"
+    }
+  },
   "password": {
     "length": "Mínimo {min} caracteres",
     "uppercase": "Al menos una mayúscula",
