@@ -47,6 +47,16 @@ describe('PanelShell — el menú', () => {
     const [inicio] = screen.getAllByRole('link', { name: 'Inicio' });
     expect(inicio).toHaveAttribute('aria-current', 'page');
   });
+
+  it('la hamburguesa dice si el cajón está abierto', async () => {
+    renderShell();
+    const boton = screen.getByRole('button', { name: 'Abrir el menú' });
+    expect(boton).toHaveAttribute('aria-expanded', 'false');
+    expect(boton).toHaveAttribute('aria-controls', 'panel-drawer');
+
+    await userEvent.click(boton);
+    expect(boton).toHaveAttribute('aria-expanded', 'true');
+  });
 });
 
 describe('PanelShell — cambio de empresa', () => {

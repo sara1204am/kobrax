@@ -50,6 +50,9 @@ if (typeof HTMLDialogElement !== 'undefined' && !HTMLDialogElement.prototype.sho
   };
   HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
     this.open = false;
+    // El elemento de verdad dispara `close` acá, y es por donde el navegador avisa que se
+    // cerró con Esc. Sin el evento, un `onClose` no se podría probar.
+    this.dispatchEvent(new Event('close'));
   };
 }
 

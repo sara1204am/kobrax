@@ -39,6 +39,10 @@ export function PanelShell({
 }) {
   const pathname = usePathname();
   const drawer = useRef<HTMLDialogElement>(null);
+  // El estado no abre el cajón — eso lo hace `showModal()`. Existe sólo para que la
+  // hamburguesa pueda decir `aria-expanded`: sin eso, quien navega con lector de pantalla no
+  // sabe si el botón que acaba de tocar abrió algo.
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Cerrar el cajón al navegar. Sin esto, en el teléfono elegís un ítem y el menú te queda
   // tapando justo la pantalla a la que fuiste.
@@ -62,6 +66,9 @@ export function PanelShell({
       */}
       <dialog
         ref={drawer}
+        id="panel-drawer"
+        // `close` llega también desde la tecla Esc: las dos salidas pasan por acá.
+        onClose={() => setMenuOpen(false)}
         onClick={(e) => {
           if (e.target === drawer.current) drawer.current.close();
         }}
@@ -74,7 +81,15 @@ export function PanelShell({
       </dialog>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar user={user} accounts={accounts} onOpenMenu={() => drawer.current?.showModal()} />
+        <Topbar
+          user={user}
+          accounts={accounts}
+          menuOpen={menuOpen}
+          onOpenMenu={() => {
+            drawer.current?.showModal();
+            setMenuOpen(true);
+          }}
+        />
         <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-5 sm:px-5 md:px-6 lg:px-8">
           {children}
         </main>
@@ -168,10 +183,12 @@ function NavList({
 function Topbar({
   user,
   accounts,
+  menuOpen,
   onOpenMenu,
 }: {
   user: ShellUser;
   accounts: AuthAccountOption[];
+  menuOpen: boolean;
   onOpenMenu: () => void;
 }) {
   const t = useTranslations('panel');
@@ -185,6 +202,8 @@ function Topbar({
         type="button"
         onClick={onOpenMenu}
         aria-label={t('openMenu')}
+        aria-expanded={menuOpen}
+        aria-controls="panel-drawer"
         className="-ml-1 flex h-11 w-11 items-center justify-center rounded-xl text-k-text-2 hover:bg-k-bg lg:hidden"
       >
         <Icon name="menu" />

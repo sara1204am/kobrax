@@ -116,7 +116,15 @@ usa tal cual.
 | Resultado de visita | `visit-result.ts` → las 6 variantes, `buildDetails`, `canSubmitResult`, `paymentOutcome` | W6 (lectura) |
 | **Contrato del import** | `import.service.ts` (21 KB) — derivados puros, flags del gate, memoria del archivo de muestra | W4 |
 | KPIs del inicio | `home.ts` | Los contadores intradía. Ojo: en la web el "hoy" es del tenant, no de un cobrador | W8 |
-| Etiquetas de estado | `ui.tsx` → `ROUTE_STATUS_LABEL`, `STOP_STATUS_META`, `AGENDA_STATUS_LABEL`, `AGENDA_TYPE_META` | Estado → etiqueta + tono. Van a `shared` como datos; el color lo resuelve cada plataforma | W1 (los mapas) |
+| Etiquetas de estado | `ui.tsx` → `ROUTE_STATUS_LABEL`, `STOP_STATUS_META`, `AGENDA_STATUS_LABEL`, `AGENDA_TYPE_META` | Estado → etiqueta + tono | ❌ **NO se promueven** (decidido en W1) |
+
+> **Por qué las etiquetas de estado no van a `shared`** (W1, 2026-08-10): son **texto en
+> español** y el panel es bilingüe — subirlas rompería la versión en inglés, y convertirlas a
+> códigos rompería los tests del móvil que §3.9 manda no tocar. Es el mismo razonamiento que
+> dejó `validateSignup` en el móvil (ver `W0-identidad.md §5-ter`). Un estado→etiqueta es
+> presentación; el estado ya vive en `shared` como enum y cada plataforma lo rotula.
+> Lo que **sí** es regla y sí se promueve es el agrupamiento de `categoryOf` (`NOT_FOUND` +
+> `WRONG_ADDRESS` → «Inubicables»), y viaja en W6 **como códigos, no como rótulos**.
 
 ### 1-bis.3 Lo que NO se lleva del móvil (y por qué)
 
@@ -189,4 +197,28 @@ existir. W1 la convierte en el shell de verdad.
 *(se llena al cerrar cada etapa — mismo formato que el inventario del móvil)*
 
 ### W0 — Identidad
-_pendiente de construcción_
+_pendiente de construcción (falta Google, tareas 7–9)_
+
+### W1 — Shell del panel
+
+| Artefacto | Qué es |
+|---|---|
+| `app/(panel)/layout.tsx` | El shell. *Route group*: agrupa **sin** aparecer en la URL, así que `/dashboard` y `/settings/**` no cambiaron y el matcher del middleware sigue igual. Única puerta de la identidad: `/auth/me` + `/auth/accounts` en un `Promise.all` y de ahí baja como props |
+| `app/(panel)/loading.tsx` · `error.tsx` | Carga y error por segmento, con el mecanismo nativo de Next |
+| `app/(panel)/settings/layout.tsx` | Cinco líneas: sólo el ancho de lectura. El anterior (barra navy propia) se borró |
+| `components/panel-shell.tsx` | Sidebar + cajón + topbar + desplegables + selector de empresa. El menú se escribe una vez y se coloca dos |
+| `components/panel-ui.tsx` | `PageHeader` · `Badge` · `Skeleton` · `EmptyState`. **Sin `'use client'`**: no viajan al navegador |
+| `components/modal.tsx` | `Modal` sobre `<dialog>` nativo |
+| `components/toast.tsx` | `ToastProvider` + `useToast()`. Montado una sola vez, en el layout del panel |
+| `components/data-table.tsx` | `DataTable` con orden y página **en la URL** (`searchParams`), no en estado interno |
+| `components/permissions.tsx` | `PermissionsProvider` + `usePermissions()` — siembra lo que el layout ya trajo |
+| `lib/nav.ts` | `NAV` · `visibleNav()` · `crumbsFor()`. **Encender un módulo = cambiar su `built: false`** |
+| `app/api/auth/switch-account/route.ts` | Handler del cambio de empresa (re-setea las dos cookies) |
+| **API** `GET /auth/accounts` · `POST /auth/switch-account` | Listar y cambiar de empresa con Bearer. El cambio **revoca la sesión anterior** |
+
+Mensajes nuevos: namespace `panel` en `es.json`/`en.json` (nav, migas, empresa, vacíos, tabla).
+**Ajustes sigue en español duro** — se traduce en W2, que es donde se re-encuadra ese módulo.
+
+⚠️ `vitest.setup.ts` le pone a jsdom un doble de `showModal()`/`close()`: jsdom trae
+`HTMLDialogElement` **sin sus métodos**, y cualquier componente con un `<dialog>` revienta al
+montar. Es un agujero del entorno de test, no del código.

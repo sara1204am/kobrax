@@ -280,23 +280,23 @@ nativo, no un `<Suspense>` a mano en cada página.
 
 ## 9. Tareas (en orden)
 
-- [ ] 1. Comitear los dos arreglos sueltos de W0 (`resolve.symlinks`, QR del mfa-setup) y
+- [x] 1. Comitear los dos arreglos sueltos de W0 (`resolve.symlinks`, QR del mfa-setup) y
       abrir `web/W1-shell`.
-- [ ] 2. **API:** `GET /auth/accounts` + `POST /auth/switch-account` (revocando la sesión
+- [x] 2. **API:** `GET /auth/accounts` + `POST /auth/switch-account` (revocando la sesión
       anterior) + specs: empresa sin membresía → error genérico; tenant `SUSPENDED` → no
       aparece ni se puede saltar a él; los permisos salen de la membresía destino.
-- [ ] 3. `(panel)/layout.tsx` con sidebar + topbar + breadcrumb. Mover `dashboard` y
+- [x] 3. `(panel)/layout.tsx` con sidebar + topbar + breadcrumb. Mover `dashboard` y
       `settings` adentro; borrar `settings/layout.tsx`.
-- [ ] 3-bis. Responsive (§3.1): colapso a íconos, cajón con hamburguesa sobre `<dialog>`, y
+- [x] 3-bis. Responsive (§3.1): colapso a íconos, cajón con hamburguesa sobre `<dialog>`, y
       la mudanza de empresa e idioma al menú de usuario en celular.
-- [ ] 4. `lib/nav.ts` + `visibleNav()` + los dos filtros (§6.1), con su test.
-- [ ] 5. `PermissionsProvider` + `usePermissions()`, con su test de matriz rol→ítems.
-- [ ] 6. Selector de empresa: handler BFF + `router.refresh()`. Test del camino de error.
-- [ ] 7. Las 7 primitivas (§7).
-- [ ] 8. `loading.tsx` / `error.tsx` del segmento del panel.
-- [ ] 9. i18n: namespace `panel` en `es.json` / `en.json` (nav, menú de usuario, empresa,
+- [x] 4. `lib/nav.ts` + `visibleNav()` + los dos filtros (§6.1), con su test.
+- [x] 5. `PermissionsProvider` + `usePermissions()`, con su test de matriz rol→ítems.
+- [x] 6. Selector de empresa: handler BFF + `router.refresh()`. Test del camino de error.
+- [x] 7. Las 7 primitivas (§7).
+- [x] 8. `loading.tsx` / `error.tsx` del segmento del panel.
+- [x] 9. i18n: namespace `panel` en `es.json` / `en.json` (nav, menú de usuario, empresa,
       vacíos y errores). Sin texto suelto en el shell.
-- [ ] 10. Actualizar `BASE-INVENTORY` (§1-bis.2 y §5) y el estado de la etapa en el
+- [x] 10. Actualizar `BASE-INVENTORY` (§1-bis.2 y §5) y el estado de la etapa en el
       BUILD-PLAN.
 
 ## 10. Reglas de la fase

@@ -3,7 +3,8 @@
     "loading": "Loading",
     "showPassword": "Show password",
     "hidePassword": "Hide password",
-    "backToLogin": "Back to sign in"
+    "backToLogin": "Back to sign in",
+    "close": "Close"
   },
   "locale": {
     "label": "Language",
@@ -44,6 +45,11 @@
       "title": "Something went wrong",
       "text": "We could not load this screen. The rest of the panel still works.",
       "retry": "Retry"
+    },
+    "table": {
+      "range": "{from}–{to} of {total}",
+      "previous": "Previous",
+      "next": "Next"
     }
   },
   "password": {

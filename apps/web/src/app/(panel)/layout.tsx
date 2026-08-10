@@ -4,6 +4,7 @@ import type { AuthAccountOption } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { PanelShell } from '@/components/panel-shell';
 import { PermissionsProvider } from '@/components/permissions';
+import { ToastProvider } from '@/components/toast';
 import { visibleNav } from '@/lib/nav';
 
 interface Me {
@@ -51,7 +52,9 @@ export default async function PanelLayout({ children }: { children: ReactNode })
         accounts={accounts.body.data ?? []}
         nav={visibleNav(user.permissions)}
       >
-        {children}
+        {/* Los avisos se montan una sola vez acá: un provider por pantalla haría que un toast
+            disparado antes de navegar se pierda con el desmontaje. */}
+        <ToastProvider>{children}</ToastProvider>
       </PanelShell>
     </PermissionsProvider>
   );

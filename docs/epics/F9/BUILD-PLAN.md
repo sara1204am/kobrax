@@ -72,7 +72,7 @@ funcional*. Nada de andamios "para después".
 | # | Etapa | Alcance | Depende de | Estado |
 |---|-------|---------|-----------|--------|
 | **W0** | **Identidad** | Refactor visual de todo el auth contra el diseño · **Google OAuth** · **i18n es/en** · registro público · invitación | — | 🚧 en curso |
-| W1 | Shell del panel | Layout autenticado (sidebar navy + topbar + breadcrumb) · `usePermissions` · selector de empresa · estados loading/empty/error · kit de UI (`DataTable`, `Modal`, `Toast`, `Skeleton`, `Badge`, `EmptyState`, `PageHeader`) | W0 | ⏳ |
+| W1 | Shell del panel | Layout autenticado (sidebar navy + topbar + breadcrumb) · `usePermissions` · selector de empresa · estados loading/empty/error · kit de UI (`DataTable`, `Modal`, `Toast`, `Skeleton`, `Badge`, `EmptyState`, `PageHeader`) | W0 | 🚧 construida — falta revisión y validación visual |
 | W2 | Cuenta y equipo | Datos de la cuenta (`/accounts/me`) · miembros e invitaciones (`/users`) · roles (`/roles`, lectura + asignación) · seguridad de la cuenta (ya existe, se re-encuadra en el shell) | W1 | ⏳ |
 | W3 | Cartera | Clientes y créditos (`/clients`, `/credits`): lista, ficha, alta y edición · PII tokenizada con reveal auditado · mora coloreada | W1 | ⏳ |
 | W4 | Import | `/imports/portfolio`: configuración de columnas, preview y conciliación. **Es el gap que el móvil dejó anotado**: el import de oficina se hace en pantalla grande | W3 | ⏳ |

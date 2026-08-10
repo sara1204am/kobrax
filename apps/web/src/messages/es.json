@@ -3,7 +3,8 @@
     "loading": "Cargando",
     "showPassword": "Mostrar contraseña",
     "hidePassword": "Ocultar contraseña",
-    "backToLogin": "Volver a iniciar sesión"
+    "backToLogin": "Volver a iniciar sesión",
+    "close": "Cerrar"
   },
   "locale": {
     "label": "Idioma",
@@ -44,6 +45,11 @@
       "title": "Algo salió mal",
       "text": "No pudimos cargar esta pantalla. El resto del panel sigue funcionando.",
       "retry": "Reintentar"
+    },
+    "table": {
+      "range": "{from}–{to} de {total}",
+      "previous": "Anterior",
+      "next": "Siguiente"
     }
   },
   "password": {
