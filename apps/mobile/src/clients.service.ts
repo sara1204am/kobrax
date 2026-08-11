@@ -92,51 +92,20 @@ export function createClient(input: NewClientInput): Promise<MutateResult<Create
   return apiMutate<CreatedClient>('/clients', 'POST', input);
 }
 
-export interface ClientContactDetail {
-  id: string;
-  contactType: 'PHONE' | 'WHATSAPP' | 'EMAIL';
-  value: string | null;
-  isPrimary: boolean;
-}
-export interface ClientLocationDetail {
-  id: string;
-  locationType: 'HOME' | 'WORK' | 'GUARANTOR' | 'FAMILY' | 'OTHER';
-  address: string | null;
-  zone?: string;
-  latitude?: number;
-  longitude?: number;
-  referenceNotes?: string;
-  photoUrls?: string[];
-}
-export interface ClientRelationDetail {
-  id: string;
-  relatedName: string;
-  relationshipType: 'GUARANTOR' | 'FAMILY' | 'COWORKER' | 'NEIGHBOR' | 'OTHER';
-  gender?: string;
-  isContactable: boolean;
-  notes?: string;
-  contacts?: ClientContactDetail[];
-  locations?: ClientLocationDetail[];
-}
-
 /**
  * Detalle del cliente para prellenar el formulario. Con `reveal` los teléfonos y direcciones vienen
  * **en claro** (el server lo audita) — sin eso, editar guardaría la máscara encima del dato real.
+ *
+ * **Vive en `@kobrax/shared`** desde F9 · W3: la ficha del panel web lee el mismo contrato.
  */
-export interface ClientDetail {
-  id: string;
-  clientType: 'PERSON' | 'COMPANY';
-  firstName?: string;
-  lastName?: string;
-  businessName?: string;
-  gender?: string;
-  nationalId: string | null;
-  status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
-  riskSegment?: string;
-  contacts?: ClientContactDetail[];
-  locations?: ClientLocationDetail[];
-  relations?: ClientRelationDetail[];
-}
+export type {
+  ClientAttachmentDetail,
+  ClientContactDetail,
+  ClientDetail,
+  ClientLocationDetail,
+  ClientRelationDetail,
+} from '@kobrax/shared';
+import type { ClientDetail } from '@kobrax/shared';
 
 export function getClient(id: string, reveal = false): Promise<QueryResult<ClientDetail>> {
   // `reveal` pide PII en claro y queda auditado en el server: **eso nunca sale del caché**, se

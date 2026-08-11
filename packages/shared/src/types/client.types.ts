@@ -85,6 +85,80 @@ export interface NewCreditInput {
   assignedManagerId?: string;
 }
 
+// ── Lo que devuelve la API ───────────────────────────────────────────────────
+export interface ClientContactDetail {
+  id: string;
+  contactType: 'PHONE' | 'WHATSAPP' | 'EMAIL';
+  /** Enmascarado salvo `reveal`. `null` = el registro no tiene valor. */
+  value: string | null;
+  isPrimary: boolean;
+  isVerified?: boolean;
+  notes?: string;
+}
+
+export interface ClientLocationDetail {
+  id: string;
+  locationType: 'HOME' | 'WORK' | 'GUARANTOR' | 'FAMILY' | 'OTHER';
+  /** Enmascarada salvo `reveal`. */
+  address: string | null;
+  zone?: string;
+  latitude?: number;
+  longitude?: number;
+  referenceNotes?: string;
+  photoUrls?: string[];
+  riskLevel?: string;
+}
+
+export interface ClientRelationDetail {
+  id: string;
+  relatedName: string;
+  relationshipType: 'GUARANTOR' | 'FAMILY' | 'COWORKER' | 'NEIGHBOR' | 'OTHER';
+  gender?: string;
+  isContactable: boolean;
+  notes?: string;
+  contacts?: ClientContactDetail[];
+  locations?: ClientLocationDetail[];
+}
+
+/**
+ * El adjunto **no trae su URL**: el serializer de la API la oculta a propósito hasta que exista el
+ * endpoint firmado (F6). Se puede listar y borrar; no abrir.
+ */
+export interface ClientAttachmentDetail {
+  id: string;
+  fileType: string;
+  fileHash?: string;
+  encrypted: boolean;
+  createdAt: string;
+}
+
+/**
+ * Detalle del cliente (`GET /clients/:id`).
+ *
+ * 🔴 Con `?reveal=true` los teléfonos, direcciones y documentos vienen **en claro** y el server lo
+ * audita. **El formulario de edición tiene que cargarse así**: con el valor enmascarado, guardar
+ * escribe la máscara encima del dato real. Ya pasó una vez.
+ */
+export interface ClientDetail {
+  id: string;
+  clientType: ClientTypeValue;
+  firstName?: string;
+  lastName?: string;
+  businessName?: string;
+  gender?: string;
+  nationalId: string | null;
+  taxId?: string | null;
+  status: StatusValue;
+  riskSegment?: string;
+  preferredContactChannel?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  contacts?: ClientContactDetail[];
+  locations?: ClientLocationDetail[];
+  relations?: ClientRelationDetail[];
+  attachments?: ClientAttachmentDetail[];
+}
+
 // ── Formulario en pantalla ───────────────────────────────────────────────────
 export type ClientTypeValue = NewClientInput['clientType'];
 export type ContactTypeValue = 'PHONE' | 'EMAIL';

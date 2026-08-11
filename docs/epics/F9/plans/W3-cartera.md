@@ -371,7 +371,9 @@ enum se traducen acá**, no se suben a `shared`.
       barra de filtros, junto a los chips.
 - [x] 4. `components/search-box.tsx` + cablearlo en `/cartera` **y en `/equipo`** (§5.1).
       *(`8a9be1c`)*
-- [ ] 5. `/cartera/[id]`: ficha del cliente, con el revelado auditado detrás de un click (§6).
+- [x] 5. `/cartera/[id]`: ficha del cliente, con el revelado auditado detrás de un click (§6).
+      El revelado quedó como **`POST`**, no como el `GET` que decía §4.5: tiene efecto (deja
+      rastro), y un `GET` con efecto se cachea, se pre-carga y se dispara desde un `<img>`.
 - [ ] 6. `/cartera/nuevo` y `/cartera/[id]/editar`: alta y edición, con sus sub-recursos. La
       edición carga con `reveal=true` (§6.1) y manda **sólo lo que cambió**.
 - [ ] 7. Créditos: lista dentro de la ficha, ficha del crédito con su cronograma (que puede no

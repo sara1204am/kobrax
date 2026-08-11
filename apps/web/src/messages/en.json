@@ -98,7 +98,51 @@
     "empty": "The portfolio is empty",
     "emptyHint": "Every client you add shows up here, with or without credits.",
     "noResults": "No client matches",
-    "noResultsHint": "Try another name, or the full ID."
+    "noResultsHint": "Try another name, or the full ID.",
+    "edit": "Edit",
+    "reveal": "Show full details",
+    "revealing": "Opening…",
+    "revealed": "Full details shown",
+    "revealError": "Could not show the full details",
+    "maskedHint": "Sensitive data is hidden. Showing it in full is recorded.",
+    "clientType": { "PERSON": "Person", "COMPANY": "Company" },
+    "clientStatus": { "ACTIVE": "Active", "INACTIVE": "Inactive", "BLOCKED": "Blocked" },
+    "sections": {
+      "data": "Details",
+      "contacts": "Phones and emails",
+      "locations": "Addresses",
+      "guarantors": "Guarantors and contacts",
+      "attachments": "Attachments"
+    },
+    "fields": {
+      "document": "ID",
+      "taxId": "Tax ID",
+      "risk": "Risk segment",
+      "createdAt": "Added"
+    },
+    "contactType": { "PHONE": "Phone", "WHATSAPP": "WhatsApp", "EMAIL": "Email" },
+    "locationType": {
+      "HOME": "Home",
+      "WORK": "Work",
+      "GUARANTOR": "Guarantor",
+      "FAMILY": "Family",
+      "OTHER": "Other"
+    },
+    "relationType": {
+      "GUARANTOR": "Guarantor",
+      "FAMILY": "Family",
+      "COWORKER": "Coworker",
+      "NEIGHBOR": "Neighbor",
+      "OTHER": "Other"
+    },
+    "primary": "primary",
+    "noPin": "no map pin",
+    "notContactable": "do not contact",
+    "noContacts": "No phones on file.",
+    "noLocations": "No addresses on file.",
+    "noGuarantors": "No guarantors on file.",
+    "noAttachments": "No attachments.",
+    "attachmentsHint": "Attachments cannot be opened from the panel yet: they are listed by type, date and hash."
   },
   "team": {
     "title": "Team",

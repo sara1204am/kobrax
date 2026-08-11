@@ -111,6 +111,7 @@ export const config = {
     '/api/auth/switch-account',
     '/api/account/:path*',
     '/api/users/:path*',
+    '/api/clients/:path*',
     '/api/uploads/:path*',
   ],
 };
