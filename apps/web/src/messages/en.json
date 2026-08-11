@@ -71,11 +71,46 @@
     "saveError": "Could not save the details",
     "noAccess": "You do not have access to the account details"
   },
+  "portfolio": {
+    "title": "Portfolio",
+    "subtitle": "Who owes you, how much, and for how long.",
+    "noAccess": "You do not have access to the portfolio",
+    "search": {
+      "label": "Search the portfolio",
+      "placeholder": "Name, business name or ID",
+      "hint": "IDs are matched in full: they are encrypted, so a fragment will not do."
+    },
+    "columns": {
+      "client": "Client",
+      "debt": "Debt",
+      "arrears": "Arrears",
+      "credits": "Credits",
+      "status": "Status"
+    },
+    "days": "{count, plural, one {# day} other {# days}}",
+    "status": {
+      "OVERDUE": "Overdue",
+      "DUE_SOON": "Due soon",
+      "PROMISE": "Promise",
+      "CURRENT": "Current",
+      "PAID": "Paid"
+    },
+    "empty": "The portfolio is empty",
+    "emptyHint": "Every client you add shows up here, with or without credits.",
+    "noResults": "No client matches",
+    "noResultsHint": "Try another name, or the full ID."
+  },
   "team": {
     "title": "Team",
     "subtitle": "Who works in your account and what they can do.",
     "seats": "{used} of {max} members",
     "noAccess": "You do not have access to the team",
+    "search": {
+      "label": "Search the team",
+      "placeholder": "Name or email"
+    },
+    "noResults": "Nobody matches that search",
+    "noResultsHint": "Try another name or the email.",
     "empty": "Nobody else yet",
     "emptyHint": "Invite your team by email and they will show up here.",
     "cancel": "Cancel",

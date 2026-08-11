@@ -31,10 +31,13 @@ export function MembersTable({
   members,
   roles,
   meId,
+  filtered,
 }: {
   members: Member[];
   roles: AssignableRole[];
   meId: string;
+  /** Hay una búsqueda puesta: «no hay nadie» y «nadie coincide» no se arreglan igual. */
+  filtered?: boolean;
 }) {
   const t = useTranslations('team');
   const router = useRouter();
@@ -144,7 +147,12 @@ export function MembersTable({
         rows={members}
         rowKey={(m) => m.userId}
         meta={{ total: members.length, page: 1, limit: members.length || 1, pages: 1 }}
-        empty={<EmptyState title={t('empty')} text={t('emptyHint')} />}
+        empty={
+          <EmptyState
+            title={filtered ? t('noResults') : t('empty')}
+            text={filtered ? t('noResultsHint') : t('emptyHint')}
+          />
+        }
       />
 
       <Modal

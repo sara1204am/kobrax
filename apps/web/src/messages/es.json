@@ -71,11 +71,46 @@
     "saveError": "No se pudieron guardar los datos",
     "noAccess": "No tienes acceso a los datos de la cuenta"
   },
+  "portfolio": {
+    "title": "Cartera",
+    "subtitle": "Quién te debe, cuánto y hace cuántos días.",
+    "noAccess": "No tienes acceso a la cartera",
+    "search": {
+      "label": "Buscar en la cartera",
+      "placeholder": "Nombre, razón social o documento",
+      "hint": "El documento se busca completo: está cifrado, así que una parte no alcanza."
+    },
+    "columns": {
+      "client": "Cliente",
+      "debt": "Deuda",
+      "arrears": "Mora",
+      "credits": "Créditos",
+      "status": "Estado"
+    },
+    "days": "{count, plural, one {# día} other {# días}}",
+    "status": {
+      "OVERDUE": "En mora",
+      "DUE_SOON": "Por vencer",
+      "PROMISE": "Promesa",
+      "CURRENT": "Al día",
+      "PAID": "Pagado"
+    },
+    "empty": "La cartera está vacía",
+    "emptyHint": "Cuando des de alta a un cliente va a aparecer acá, tenga créditos o no.",
+    "noResults": "Ningún cliente coincide",
+    "noResultsHint": "Probá con otro nombre, o con el documento completo."
+  },
   "team": {
     "title": "Equipo",
     "subtitle": "Quién trabaja en tu cuenta y qué puede hacer.",
     "seats": "{used} de {max} miembros",
     "noAccess": "No tienes acceso al equipo",
+    "search": {
+      "label": "Buscar en el equipo",
+      "placeholder": "Nombre o correo"
+    },
+    "noResults": "Nadie coincide con esa búsqueda",
+    "noResultsHint": "Probá con otro nombre o con el correo.",
     "empty": "Todavía no hay nadie más",
     "emptyHint": "Invita a tu equipo por correo y aparecerán acá.",
     "cancel": "Cancelar",
