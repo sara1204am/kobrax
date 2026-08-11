@@ -62,53 +62,23 @@ async function searchLocal(q: string): Promise<QueryResult<ClientHit[]>> {
   return { status: 'ok', data: hits.slice(0, 20), total: hits.length, localAt: await db.fetchedAt('case') };
 }
 
-/** Sub-recursos del alta anidada (§5.1). Valores = enums de la API (Prisma). */
-export interface NewContactInput {
-  contactType: 'PHONE' | 'WHATSAPP' | 'EMAIL';
-  value: string;
-  isPrimary?: boolean;
-}
-export interface NewLocationInput {
-  locationType?: 'HOME' | 'WORK' | 'GUARANTOR' | 'FAMILY' | 'OTHER';
-  address?: string;
-  zone?: string;
-  latitude?: number;
-  longitude?: number;
-  referenceNotes?: string;
-  photoUrls?: string[];
-}
-export interface NewRelationInput {
-  relatedName: string;
-  relationshipType: 'GUARANTOR' | 'FAMILY' | 'COWORKER' | 'NEIGHBOR' | 'OTHER';
-  gender?: string;
-  isContactable?: boolean;
-  notes?: string;
-  /** El contacto (persona) tiene sus propios teléfonos y ubicaciones (1..N). */
-  contacts?: NewContactInput[];
-  locations?: NewLocationInput[];
-}
-
-/** Payload del alta atómica (§5.1): cliente + contactos + ubicaciones + relaciones en una transacción. */
-export interface NewClientInput {
-  /**
-   * Id propuesto por el teléfono (`nuevoId()`). Hace el alta **idempotente** —reintentarla desde la
-   * cola no crea un segundo cliente— y permite que el préstamo se cuelgue de un cliente que todavía
-   * no subió. El server lo respeta; si no viene, genera el suyo.
-   */
-  id?: string;
-  clientType: 'PERSON' | 'COMPANY';
-  firstName?: string;
-  lastName?: string;
-  businessName?: string;
-  nationalId?: string;
-  gender?: string;
-  riskSegment?: string;
-  status?: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
-  preferredContactChannel?: string;
-  contacts?: NewContactInput[];
-  locations?: NewLocationInput[];
-  relations?: NewRelationInput[];
-}
+/**
+ * Payload del alta atómica (§5.1) y sus sub-recursos. **Viven en `@kobrax/shared`** desde F9 · W3:
+ * el panel web da de alta contra el mismo endpoint. Se re-exportan para no tocar a quien los
+ * importaba de acá.
+ */
+export type {
+  NewClientInput,
+  NewContactInput,
+  NewLocationInput,
+  NewRelationInput,
+} from '@kobrax/shared';
+import type {
+  NewClientInput,
+  NewContactInput,
+  NewLocationInput,
+  NewRelationInput,
+} from '@kobrax/shared';
 
 export interface CreatedClient {
   id: string;

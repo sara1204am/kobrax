@@ -8,7 +8,7 @@ import { AmountInput, Chips, Header, SectionLabel } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
 import { MONTHS } from '@/agenda-form';
 import { ClienteFormView } from '@/cliente-form-view';
-import { hydrateCliente, type ClienteForm } from '@/cliente-form';
+import { contactPayload, hydrateCliente, locationPayload, relationPayload, type ClienteForm } from '@/cliente-form';
 import { diffCliente, hasChanges, type ClienteOps } from '@/cliente-diff';
 import {
   addContact,
@@ -22,7 +22,6 @@ import {
   updateContact,
   updateLocation,
   updateRelation,
-  type NewContactInput,
 } from '@/clients.service';
 import { getCredit, updateCredit, type CreditDetail } from '@/credits.service';
 
@@ -180,40 +179,6 @@ export default function EditarScreen() {
   );
 }
 
-/** Teléfono del formulario → payload (WhatsApp marcado ⇒ tipo WHATSAPP, como en el alta). */
-function contactPayload(c: { contactType: string; value: string; hasWhatsApp: boolean; isPrimary: boolean }): NewContactInput {
-  return {
-    contactType: c.contactType === 'EMAIL' ? 'EMAIL' : c.hasWhatsApp ? 'WHATSAPP' : 'PHONE',
-    value: c.value.trim(),
-    isPrimary: c.isPrimary,
-  };
-}
-
-const num = (s: string): number | undefined => {
-  const n = Number(s.trim());
-  return s.trim() !== '' && Number.isFinite(n) ? n : undefined;
-};
-
-function locationPayload(l: {
-  locationType: string;
-  address: string;
-  zone: string;
-  latitude: string;
-  longitude: string;
-  referenceNotes: string;
-  photoUrls: string[];
-}) {
-  return {
-    locationType: l.locationType as 'HOME' | 'WORK' | 'GUARANTOR' | 'FAMILY' | 'OTHER',
-    address: l.address.trim() || undefined,
-    zone: l.zone.trim() || undefined,
-    latitude: num(l.latitude),
-    longitude: num(l.longitude),
-    referenceNotes: l.referenceNotes.trim() || undefined,
-    photoUrls: l.photoUrls.length > 0 ? l.photoUrls : undefined,
-  };
-}
-
 /**
  * Aplica la diferencia en orden: primero lo que se borra, después lo nuevo y lo cambiado. Devuelve el
  * mensaje de error de la primera llamada que falla, o `null` si salió todo.
@@ -245,29 +210,13 @@ async function applyOps(clientId: string, ops: ClienteOps): Promise<string | nul
     (await run(ops.contacts.update.map((c) => updateContact(clientId, c.serverId!, contactPayload(c))))) ??
     (await run(ops.locations.add.map((l) => addLocation(clientId, locationPayload(l))))) ??
     (await run(ops.locations.update.map((l) => updateLocation(clientId, l.serverId!, locationPayload(l))))) ??
+    (await run(ops.relations.add.map((r) => addRelation(clientId, relationPayload(r))))) ??
     (await run(
-      ops.relations.add.map((r) =>
-        addRelation(clientId, {
-          relatedName: r.relatedName.trim(),
-          relationshipType: r.relationshipType,
-          gender: r.gender || undefined,
-          isContactable: r.isContactable,
-          notes: r.notes.trim() || undefined,
-          contacts: r.contacts.filter((c) => c.value.trim()).map(contactPayload),
-          locations: r.locations.map(locationPayload),
-        }),
-      ),
-    )) ??
-    (await run(
-      ops.relations.update.map((r) =>
-        updateRelation(clientId, r.serverId!, {
-          relatedName: r.relatedName.trim(),
-          relationshipType: r.relationshipType,
-          gender: r.gender || undefined,
-          isContactable: r.isContactable,
-          notes: r.notes.trim() || undefined,
-        }),
-      ),
+      ops.relations.update.map((r) => {
+        // Los sub-recursos de un garante que ya existe van por su propia ruta, no en su PATCH.
+        const { contacts: _c, locations: _l, ...campos } = relationPayload(r);
+        return updateRelation(clientId, r.serverId!, campos);
+      }),
     )) ??
     (await run(ops.relationContacts.removeIds.map((id) => removeContact(clientId, id)))) ??
     (await run(ops.relationLocations.removeIds.map((id) => removeLocation(clientId, id)))) ??
