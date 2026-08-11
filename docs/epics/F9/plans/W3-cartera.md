@@ -362,14 +362,15 @@ enum se traducen acá**, no se suben a `shared`.
 
 ## 10. Tareas (en orden)
 
-- [ ] 1. Promover a `shared` la cotización, el formulario de cliente y el diff (§7); dejar el
-      móvil importando de ahí y correr **sus** tests sin tocarlos.
-- [ ] 2. API: `sort`/`dir` y `view=portfolio` en `GET /clients` (§5.2), con sus specs — incluida
-      la del `LEFT JOIN` (un cliente sin créditos sigue en la lista) y la de los dos caminos
-      devolviendo los mismos ids.
-- [ ] 3. `/cartera`: lista con `DataTable`, mora coloreada con `portfolioStatus`, orden por mora
-      desc por defecto, filtros de estado y riesgo, y el vacío.
-- [ ] 4. `components/search-box.tsx` + cablearlo en `/cartera` **y en `/equipo`** (§5.1).
+- [x] 1. Promover a `shared` la cotización, el formulario de cliente y el diff (§7); dejar el
+      móvil importando de ahí y correr **sus** tests sin tocarlos. *(`5e58b67`)*
+- [x] 2. API: `sort`/`dir` y `view=portfolio` en `GET /clients` (§5.2), con sus specs — incluida
+      la del `LEFT JOIN` (un cliente sin créditos sigue en la lista). *(`2eae87b`)*
+- [x] 3. `/cartera`: lista con `DataTable`, mora coloreada con `portfolioStatus`, orden por mora
+      desc por defecto, y el vacío. *(`8a9be1c`)* — el filtro por estado y riesgo entra con la
+      barra de filtros, junto a los chips.
+- [x] 4. `components/search-box.tsx` + cablearlo en `/cartera` **y en `/equipo`** (§5.1).
+      *(`8a9be1c`)*
 - [ ] 5. `/cartera/[id]`: ficha del cliente, con el revelado auditado detrás de un click (§6).
 - [ ] 6. `/cartera/nuevo` y `/cartera/[id]/editar`: alta y edición, con sus sub-recursos. La
       edición carga con `reveal=true` (§6.1) y manda **sólo lo que cambió**.
