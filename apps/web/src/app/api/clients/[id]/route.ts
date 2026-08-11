@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { ClienteOps } from '@kobrax/shared';
 import { apiCall, sameOrigin } from '@/lib/bff';
+import { apiError } from '@/lib/auth-flow';
 import { opsRequests } from '@/lib/client-ops';
 
 interface Ctx {
@@ -46,4 +47,23 @@ export async function PATCH(req: Request, { params }: Ctx): Promise<NextResponse
   }
 
   return NextResponse.json({ ok: true, applied });
+}
+
+/**
+ * Dar de baja al cliente.
+ *
+ * **No lo borra**: la API le pone `deletedAt` y lo deja `INACTIVE`, así que su historial —casos,
+ * pagos, gestiones— sigue en pie. Y **rebota si tiene créditos activos** (`CLIENT_HAS_CREDITS`):
+ * un deudor con plata en la calle no se archiva. La pantalla lo anticipa escondiendo el botón,
+ * pero el freno de verdad es el del servidor.
+ */
+export async function DELETE(req: Request, { params }: Ctx): Promise<NextResponse> {
+  if (!sameOrigin(req)) {
+    return NextResponse.json({ error: { code: 'CSRF', message: 'Origen no permitido' } }, { status: 403 });
+  }
+
+  const { status, body } = await apiCall<null>(`/clients/${params.id}`, { method: 'DELETE', auth: true });
+  if (status !== 204 && status !== 200) return apiError(status, body);
+
+  return NextResponse.json({ ok: true });
 }

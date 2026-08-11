@@ -251,6 +251,49 @@ de rol del panel salen de i18n; `ROLE_LABEL` de `shared` se queda para el móvil
 
 Ajustes (Seguridad) quedó **traducido**: al cerrar W2 el panel entero funciona en es y en en.
 
+### W3 — Cartera
+
+| Artefacto | Qué es |
+|---|---|
+| `app/(panel)/cartera/**` | Lista · ficha del cliente · alta y edición · ficha del crédito · alta de préstamo |
+| `components/search-box.tsx` | La caja de búsqueda. Escribe `?q=` en la URL y vuelve a la página 1. Debounce 300 ms, el número que el móvil calibró |
+| `components/client-form.tsx` | El formulario acordeón. Las filas de teléfono y dirección se reusan **tal cual** dentro de cada garante: en el modelo son las mismas tablas, con `relationId` |
+| `lib/portfolio.ts` | `rowStatus()` (llama a `portfolioStatus` de `shared`, no reimplementa el semáforo) · `STATUS_TONE` · `matchesText()` |
+| `lib/client-ops.ts` | El diff → la secuencia de llamadas. **Borra antes de agregar** |
+| `lib/credit-patch.ts` | El `PATCH` del crédito. **Vaciar la cuota NO la borra**: es plata congelada, no un campo opcional |
+| `app/api/clients/**` · `app/api/credits/**` | Los handlers del BFF de W3. El `PATCH` del cliente recibe el **diff entero** y aplica las N llamadas del lado del servidor: el navegador hace una sola |
+| **API** `GET /clients?view=portfolio&sort=&dir=` | La cartera agregada y ordenada. **El único SQL crudo del panel** |
+
+**Promovido a `shared` en W3** (regla §3.9):
+
+| Qué | Dónde quedó |
+|---|---|
+| `quoteFor` · `currentInstallment` · `totalBelowCapital` · `canSubmitPrestamo` · `initialPrestamo` · `buildPrestamoPayload` | `utils/loan-form.ts` — **es plata**: la matemática ya estaba en `loan.ts`, faltaba la capa que decide cuál se usa |
+| `buildClientePayload` · `canSubmitCliente` · `hydrateCliente` · `contactPayload` · `locationPayload` · `relationPayload` … | `utils/client-form.ts` — WhatsApp es un `ContactType` aparte, las filas vacías se descartan, y `serverId` decide qué se actualiza y qué se crea |
+| `diffCliente` · `hasClientChanges` | `utils/client-diff.ts` — se llama distinto que el `hasChanges` de `patch.ts` porque comparten el barril de `utils` |
+| `ClientDetail` · `CreditDetail` y sus sub-recursos · `New*Input` · las filas del formulario | `types/client.types.ts` |
+
+**NO se promovió**: `groupPortfolio` y compañía (están escritos sobre `CaseListItem`, otra entrada)
+ni `sortPortfolio` (ordena una lista ya traída entera; en la web ordena el servidor).
+
+🔴 **Lo que hay que saber antes de tocar la cartera:**
+
+1. **`nextDueDate` e `installmentAmount` no son columnas.** Viven en `credit.metadata` o salen de
+   `credit_installments`, y los resuelve `creditView()` de `shared`. Por eso la lista **no puede
+   ordenar por próximo vencimiento** y nunca dice «Por vencer».
+2. **La RLS de `clients` y `credits` no está en `migrations/`**, sino en
+   `packages/database/prisma/rls/001_enable_rls.sql`, que se aplica aparte con `psql`.
+3. **`hasSchedule` miente en el listado de créditos**: el query no incluye las cuotas, así que
+   viene `false` para todos. Sólo la ficha puede decirlo.
+4. **El estado del cliente es la columna `client_status`**, no `status`.
+5. **La lista de clientes siempre viene enmascarada**: `reveal` sólo existe en `GET /clients/:id`,
+   y **el formulario de edición tiene que cargarse con `reveal=true`** o guarda la máscara encima
+   del dato real.
+
+✅ **La búsqueda (`q`) del `DataTable` se construyó en W3**, con `/clients` como primer consumidor
+real, y quedó cableada también en `/equipo` (ahí filtra en memoria). Lo que sigue es el contexto de
+esa decisión, tomada en W2:
+
 ⏸️ **La búsqueda (`q`) del `DataTable` se construye en W3, no antes** (decisión del 2026-08-10).
 `/users` devuelve el equipo entero y son pocas filas por el techo del plan, así que en `/equipo`
 el orden se resuelve en memoria y no hace falta filtrar. El primer consumidor real es

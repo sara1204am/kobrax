@@ -6,9 +6,10 @@ import { useTranslations } from 'next-intl';
 import type { ClientAttachmentDetail, ClientContactDetail, ClientDetail, ClientLocationDetail } from '@kobrax/shared';
 import { Badge, PageHeader } from '@/components/panel-ui';
 import { Button } from '@/components/ui';
+import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
-import { postJson } from '@/lib/client';
+import { postJson, sendJson } from '@/lib/client';
 import { date, fullName } from '@/lib/format';
 
 const STATUS_TONE = { ACTIVE: 'success', INACTIVE: 'neutral', BLOCKED: 'danger' } as const;
@@ -21,7 +22,16 @@ const STATUS_TONE = { ACTIVE: 'success', INACTIVE: 'neutral', BLOCKED: 'danger' 
  * volvería inútil justo el día que haya que leerlo. La respuesta del revelado **reemplaza al
  * cliente entero**, porque enmascarado y en claro son la misma ficha con distinta profundidad.
  */
-export function ClientCard({ client, credits }: { client: ClientDetail; credits?: ReactNode }) {
+export function ClientCard({
+  client,
+  credits,
+  hasActiveCredits,
+}: {
+  client: ClientDetail;
+  credits?: ReactNode;
+  /** Con plata en la calle no se archiva a nadie: la API lo frena y la pantalla no lo ofrece. */
+  hasActiveCredits?: boolean;
+}) {
   const t = useTranslations('portfolio');
   const router = useRouter();
   const toast = useToast();
@@ -29,6 +39,58 @@ export function ClientCard({ client, credits }: { client: ClientDetail; credits?
   const [shown, setShown] = useState(client);
   const [revealed, setRevealed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [confirmBaja, setConfirmBaja] = useState(false);
+
+  async function subir(file: File) {
+    setBusy(true);
+    // Dos pasos porque son dos cosas: guardar el archivo y decir de quién es. El primero es el
+    // mismo `POST /uploads` que W2 usa para la foto de perfil.
+    const data = new FormData();
+    data.append('file', file);
+    const subida = await fetch('/api/account/upload', { method: 'POST', body: data });
+    const stored = (await subida.json().catch(() => ({}))) as { url?: string; hash?: string; error?: { message: string } };
+    if (!subida.ok || !stored.url) {
+      setBusy(false);
+      toast(stored.error?.message ?? t('uploadError'), 'danger');
+      return;
+    }
+
+    const { ok, data: res } = await postJson(`/api/clients/${client.id}/attachments`, {
+      fileType: 'OTHER',
+      fileUrl: stored.url,
+      fileHash: stored.hash,
+    });
+    setBusy(false);
+    if (!ok) {
+      toast(res.error?.message ?? t('uploadError'), 'danger');
+      return;
+    }
+    toast(t('uploaded'));
+    router.refresh();
+  }
+
+  async function borrarAdjunto(aid: string) {
+    setBusy(true);
+    const { ok, data } = await sendJson(`/api/clients/${client.id}/attachments/${aid}`, null, 'DELETE');
+    setBusy(false);
+    if (!ok) return toast(data.error?.message ?? t('actionError'), 'danger');
+    toast(t('attachmentRemoved'));
+    router.refresh();
+  }
+
+  async function darDeBaja() {
+    setBusy(true);
+    const { ok, data } = await sendJson(`/api/clients/${client.id}`, null, 'DELETE');
+    setBusy(false);
+    setConfirmBaja(false);
+    if (!ok) {
+      // El servidor sabe por qué: tiene créditos activos, no tenés permiso.
+      return toast(data.error?.message ?? t('actionError'), 'danger');
+    }
+    toast(t('archived'));
+    router.push('/cartera');
+    router.refresh();
+  }
 
   async function reveal() {
     setBusy(true);
@@ -50,12 +112,30 @@ export function ClientCard({ client, credits }: { client: ClientDetail; credits?
         actions={
           <>
             <Badge tone={STATUS_TONE[shown.status]}>{t(`clientStatus.${shown.status}`)}</Badge>
+            {can('credit:write') && (
+              <span className="w-44">
+                <Button variant="ghost" onClick={() => router.push(`/cartera/${client.id}/prestamo`)}>
+                  {t('newLoan')}
+                </Button>
+              </span>
+            )}
             {can('client:write') && (
-              <span className="w-40">
+              <span className="w-32">
                 <Button variant="ghost" onClick={() => router.push(`/cartera/${client.id}/editar`)}>
                   {t('edit')}
                 </Button>
               </span>
+            )}
+            {/* La baja no se ofrece si hay plata en la calle: la API la rechaza igual, pero un
+                botón que siempre falla enseña a desconfiar de la pantalla. */}
+            {can('client:write') && !hasActiveCredits && shown.status !== 'INACTIVE' && (
+              <button
+                type="button"
+                onClick={() => setConfirmBaja(true)}
+                className="text-[13px] font-medium text-k-danger hover:underline"
+              >
+                {t('archive')}
+              </button>
             )}
           </>
         }
@@ -149,13 +229,45 @@ export function ClientCard({ client, credits }: { client: ClientDetail; credits?
           />
         </Section>
 
-        <Section title={t('sections.attachments')}>
+        <Section
+          title={t('sections.attachments')}
+          action={
+            can('client:write') && (
+              <label className="cursor-pointer text-[13px] font-medium text-k-purple hover:underline">
+                {busy ? t('uploading') : t('addAttachment')}
+                {/* `<input type="file">` nativo, escondido detrás del label. Ninguna dep. */}
+                <input
+                  type="file"
+                  className="sr-only"
+                  disabled={busy}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = ''; // permite volver a elegir el mismo archivo
+                    if (file) void subir(file);
+                  }}
+                />
+              </label>
+            )
+          }
+        >
           <Rows
             rows={shown.attachments ?? []}
             empty={t('noAttachments')}
             render={(a: ClientAttachmentDetail) => (
               <>
-                <span className="font-medium text-k-text">{a.fileType}</span>
+                <span className="flex items-baseline justify-between gap-3">
+                  <span className="font-medium text-k-text">{a.fileType}</span>
+                  {can('client:write') && (
+                    <button
+                      type="button"
+                      onClick={() => void borrarAdjunto(a.id)}
+                      disabled={busy}
+                      className="text-[13px] font-medium text-k-danger hover:underline disabled:opacity-50"
+                    >
+                      {t('form.remove')}
+                    </button>
+                  )}
+                </span>
                 <span className="text-[13px] text-k-text-2">
                   {date(a.createdAt)}
                   {/* El hash es lo que prueba que el archivo no cambió. Se muestra corto: entero
@@ -170,6 +282,28 @@ export function ClientCard({ client, credits }: { client: ClientDetail; credits?
           <p className="mt-3 text-[12px] text-k-muted">{t('attachmentsHint')}</p>
         </Section>
       </div>
+
+      <Modal
+        open={confirmBaja}
+        onClose={() => setConfirmBaja(false)}
+        title={t('confirmArchive.title', { name: fullName(shown) })}
+        actions={
+          <>
+            <span className="sm:w-40">
+              <Button variant="ghost" onClick={() => setConfirmBaja(false)}>
+                {t('cancel')}
+              </Button>
+            </span>
+            <span className="sm:w-48">
+              <Button loading={busy} onClick={() => void darDeBaja()}>
+                {t('confirmArchive.ok')}
+              </Button>
+            </span>
+          </>
+        }
+      >
+        {t('confirmArchive.text')}
+      </Modal>
     </>
   );
 }

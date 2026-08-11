@@ -387,13 +387,15 @@ enum se traducen acá**, no se suben a `shared`.
       devuelve un recorte de la misma respuesta. ⚠️ Y `hasSchedule` **miente en el listado**: el
       query de `GET /credits` no incluye las cuotas, así que viene `false` para todos — sólo la
       ficha puede decir si un crédito tiene cronograma.
-- [ ] 8. Alta de crédito con la cotización en vivo, el cobrador asignado y `openCase` (§5.3).
-- [ ] 9. Adjuntos: listar por tipo/fecha/hash, subir por `/uploads` y borrar. Sin «ver» (§5.4).
-- [ ] 10. Baja del cliente, con la regla de los créditos activos (§4.3.2).
-- [ ] 11. Sumar `/cartera` al matcher de `middleware.ts` y a sus handlers del BFF; encender
+- [x] 8. Alta de crédito con la cotización en vivo, el cobrador asignado y `openCase` (§5.3).
+      `openCase` y `origin: manual` los pone el **handler**, no el formulario: no son decisiones
+      de quien carga.
+- [x] 9. Adjuntos: listar por tipo/fecha/hash, subir por `/uploads` y borrar. Sin «ver» (§5.4).
+- [x] 10. Baja del cliente, con la regla de los créditos activos (§4.3.2).
+- [x] 11. Sumar `/cartera` al matcher de `middleware.ts` y a sus handlers del BFF; encender
       `portfolio` en el menú (`built: true`).
-- [ ] 12. i18n del namespace `portfolio`.
-- [ ] 13. Actualizar `BASE-INVENTORY` (lo promovido + los artefactos de W3) y el estado de la
+- [x] 12. i18n del namespace `portfolio`.
+- [x] 13. Actualizar `BASE-INVENTORY` (lo promovido + los artefactos de W3) y el estado de la
       etapa en el BUILD-PLAN.
 
 ## 11. Reglas de la fase

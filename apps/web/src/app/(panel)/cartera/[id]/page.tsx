@@ -25,17 +25,16 @@ export default async function ClientePage({ params }: { params: { id: string } }
     return <EmptyState title={t('noAccess')} text={client.body.error?.message} />;
   }
 
+  const creditos = credits.body.data ?? [];
+
   return (
     <ClientCard
       client={client.body.data}
+      hasActiveCredits={creditos.some((c) => c.status === 'ACTIVE')}
       credits={
         // Los créditos van dentro de la ficha (D2): la cartera es por cliente. Si `credit:read`
         // no está, la lista viene vacía y la sección lo dice en vez de mentir con un cero.
-        <CreditsSection
-          clientId={params.id}
-          credits={credits.body.data ?? []}
-          denied={credits.status === 403}
-        />
+        <CreditsSection clientId={params.id} credits={creditos} denied={credits.status === 403} />
       }
     />
   );
