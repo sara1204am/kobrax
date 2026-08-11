@@ -30,10 +30,11 @@ export interface AccountInfo {
  */
 export interface AccountPatch {
   businessName?: string;
-  taxId?: string;
+  /** `null` = quitarlo. Es opcional, así que se puede borrar. */
+  taxId?: string | null;
   countryCode?: string;
   currencyCode?: string;
-  timezone?: string;
+  timezone?: string | null;
 }
 
 /** `GET /users/me/profile`. */
@@ -48,12 +49,12 @@ export interface MyProfile {
   paymentQrUrl: string | null;
 }
 
+/** En los opcionales, `null` = quitarlo y ausente = no tocarlo. Son cosas distintas para el servidor. */
 export interface ProfilePatch {
   firstName?: string;
   lastName?: string;
-  phone?: string;
-  photoUrl?: string;
-  /** `null` = quitarlo. Ausente = no tocarlo. Son cosas distintas para el servidor. */
+  phone?: string | null;
+  photoUrl?: string | null;
   paymentQrUrl?: string | null;
 }
 

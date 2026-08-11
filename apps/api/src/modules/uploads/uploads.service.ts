@@ -22,6 +22,18 @@ const ALLOWED: Record<string, string> = {
   'image/webp': 'webp',
 };
 
+/**
+ * El tipo con el que se sirve un archivo, deducido de su extensión.
+ *
+ * No es cosmético: la app manda `X-Content-Type-Options: nosniff`, y con ese header un
+ * navegador **se niega a pintar** una imagen que llega como `application/octet-stream`. Sin
+ * esto, la foto de perfil descarga bien y no se ve.
+ */
+export function mimeOf(name: string): string {
+  const ext = name.split('.').pop()?.toLowerCase() ?? '';
+  return Object.keys(ALLOWED).find((mime) => ALLOWED[mime] === ext) ?? 'application/octet-stream';
+}
+
 export interface StoredFile {
   url: string;
   hash: string;

@@ -18,6 +18,8 @@ export interface ShellUser {
   email: string;
   role: string;
   accountId: string;
+  /** Vacío = todavía no subió ninguna; se muestran las iniciales. */
+  photoUrl?: string;
 }
 
 /**
@@ -216,6 +218,13 @@ function Topbar({
   const pathname = usePathname();
   const crumbs = crumbsFor(pathname);
   const current = accounts.find((a) => a.id === user.accountId);
+  /*
+   * El selector aparece con más de una empresa **o cuando la activa no está en la lista**.
+   * Ese segundo caso no es raro: `/auth/accounts` filtra los tenants suspendidos, incluido
+   * aquel en el que la persona está parada. Con la condición vieja el desplegable se escondía
+   * justo cuando más falta hacía y la dejaba encerrada, sin más salida que cerrar sesión.
+   */
+  const canSwitch = accounts.length > 1 || (accounts.length > 0 && !current);
 
   return (
     <header className="sticky top-0 z-10 flex h-16 items-center gap-3 border-b border-k-border bg-white px-4 md:px-6">
@@ -253,9 +262,15 @@ function Topbar({
 
       {/* Empresa e idioma viven en la topbar desde tablet vertical; en celular se mudan al
           menú de usuario, que es el único desplegable que queda. */}
-      {accounts.length > 1 && (
+      {canSwitch && (
         <div className="hidden md:block">
-          <Dropdown label={<span className="max-w-[180px] truncate">{current?.name ?? '—'}</span>}>
+          <Dropdown
+            label={
+              <span className={`max-w-[180px] truncate ${current ? '' : 'text-k-warning-text'}`}>
+                {current?.name ?? t('companyUnavailable')}
+              </span>
+            }
+          >
             <AccountList accounts={accounts} activeId={user.accountId} />
           </Dropdown>
         </div>
@@ -264,13 +279,7 @@ function Topbar({
         <LocaleSwitch />
       </div>
 
-      <Dropdown
-        label={
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-k-highlight text-[13px] font-semibold text-k-purple">
-            {initials(user.name)}
-          </span>
-        }
-      >
+      <Dropdown label={<Avatar user={user} />}>
         <div className="border-b border-k-border px-3 py-2.5">
           <p className="truncate text-[14px] font-medium text-k-text">{user.name}</p>
           <p className="truncate text-[12px] text-k-text-2">{user.email}</p>
@@ -279,7 +288,7 @@ function Topbar({
           </p>
         </div>
 
-        {accounts.length > 1 && (
+        {canSwitch && (
           <div className="border-b border-k-border py-1.5 md:hidden">
             <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-k-muted">
               {t('company')}
@@ -345,7 +354,6 @@ function Dropdown({ label, children }: { label: ReactNode; children: ReactNode }
  * topbar y, en celular, adentro del menú de usuario.
  */
 function AccountList({ accounts, activeId }: { accounts: AuthAccountOption[]; activeId: string }) {
-  const router = useRouter();
   const t = useTranslations('panel');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState(false);
@@ -360,10 +368,16 @@ function AccountList({ accounts, activeId }: { accounts: AuthAccountOption[]; ac
       setError(true);
       return;
     }
-    // Refresco del servidor, no navegación del cliente: el shell entero (rol, permisos, menú)
-    // lo pintó el servidor con el token viejo.
-    router.refresh();
-    setBusy(null);
+    /*
+     * Recarga entera, no `router.refresh()`.
+     *
+     * `refresh()` repinta los server components pero **conserva el estado de los de cliente**:
+     * la lista de sesiones seguía mostrando las de la empresa anterior, marcando como «Esta
+     * sesión» una que la API acababa de revocar. Cambiar de empresa cambia la sesión entera —
+     * no hay estado de pantalla que valga la pena preservar, el mismo motivo por el que el
+     * selector de idioma recarga.
+     */
+    window.location.reload();
   }
 
   return (
@@ -415,6 +429,35 @@ function LogoutItem() {
       <Icon name="logout" className="h-[18px] w-[18px] text-k-muted" />
       {t('logout')}
     </button>
+  );
+}
+
+/**
+ * La foto de la persona, con sus iniciales de respaldo.
+ *
+ * Si el archivo no está —`/uploads` guarda por tenant y el perfil es global, así que quien
+ * pertenece a dos empresas no la ve en la otra— se cae a las iniciales en vez de dejar el
+ * ícono de imagen rota.
+ */
+function Avatar({ user }: { user: ShellUser }) {
+  const [broken, setBroken] = useState(false);
+
+  if (user.photoUrl && !broken) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- lo sirve el BFF con la sesión
+      <img
+        src={user.photoUrl}
+        alt=""
+        onError={() => setBroken(true)}
+        className="h-8 w-8 rounded-full border border-k-border object-cover"
+      />
+    );
+  }
+
+  return (
+    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-k-highlight text-[13px] font-semibold text-k-purple">
+      {initials(user.name)}
+    </span>
   );
 }
 

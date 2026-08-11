@@ -35,6 +35,7 @@
     "openMenu": "Abrir el menú",
     "breadcrumb": "Dónde estás",
     "company": "Empresa",
+    "companyUnavailable": "Empresa no disponible",
     "switchError": "No se pudo cambiar de empresa. Intenta de nuevo.",
     "logout": "Cerrar sesión",
     "home": {
@@ -46,6 +47,10 @@
       "title": "Algo salió mal",
       "text": "No pudimos cargar esta pantalla. El resto del panel sigue funcionando.",
       "retry": "Reintentar"
+    },
+    "offline": {
+      "title": "No pudimos conectar con el servidor",
+      "text": "Vuelve a intentarlo en un momento. Si sigue así, avísale a tu administrador."
     },
     "table": {
       "range": "{from}–{to} de {total}",
@@ -116,6 +121,7 @@
       "sentTo": "Le enviamos un correo a {email}. Este es su código:",
       "copy": "Copiar",
       "copied": "Copiado",
+      "copyFailed": "Tu navegador no dejó copiar. Selecciona el código a mano.",
       "howTo": "Si el correo no llega, puede entrar con este código desde <link>la página de invitación</link>."
     },
     "confirm": {
@@ -152,6 +158,7 @@
     "lastName": "Apellido",
     "phone": "Teléfono",
     "phonePlaceholder": "Opcional",
+    "phoneHint": "Al menos 5 dígitos. Puede empezar con + y llevar espacios o guiones.",
     "emailFixed": "Tu correo de acceso es {email}. Para cambiarlo, escríbenos.",
     "photo": "Foto",
     "photoHint": "Se ve en tu sesión y junto a lo que registras.",

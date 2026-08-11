@@ -144,8 +144,12 @@ describe('diff — sólo lo que cambió', () => {
     expect(diffProfile(profile(), profile({ firstName: ' Ana ' }))).toEqual({});
   });
 
-  it('permite vaciar un campo opcional', () => {
-    expect(diffProfile(profile(), profile({ phone: '' }))).toEqual({ phone: '' });
+  it('vaciar un campo opcional lo QUITA: viaja como null, no como cadena vacía', () => {
+    // Cambio de comportamiento deliberado (F9 · W2, code-review). Los campos opcionales de la
+    // API son `@IsOptional() @Length(1, n)`: `@IsOptional` saltea null, pero `''` choca contra
+    // el `@Length` y rechaza el PATCH entero. Con `''` no había forma de borrar un teléfono.
+    expect(diffProfile(profile(), profile({ phone: '' }))).toEqual({ phone: null });
+    expect(diffAccount(account(), account({ taxId: '' }))).toEqual({ taxId: null });
   });
 });
 

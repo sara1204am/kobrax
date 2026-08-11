@@ -1,4 +1,15 @@
-import { isMobileRole, memberStatus, type Member } from '@kobrax/shared';
+import { RoleType, isMobileRole, memberStatus, type Member } from '@kobrax/shared';
+
+/**
+ * ¿El rótulo de este rol sale de i18n, o hay que mostrar el nombre crudo?
+ *
+ * Los rótulos van por i18n y no por `ROLE_LABEL` de `shared`, que está en español: el panel
+ * se muestra en dos idiomas. Un rol que el enum no conoce se pinta tal cual en vez de reventar
+ * el render.
+ */
+export function isKnownRole(roleName: string): boolean {
+  return (Object.values(RoleType) as string[]).includes(roleName);
+}
 
 export interface MemberActions {
   /** Cambiar el rol. */

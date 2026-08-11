@@ -11,6 +11,13 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh, replace }),
   usePathname: () => '/dashboard',
 }));
+
+// jsdom no navega: `location.reload` tira «Not implemented». Se reemplaza por un espía.
+const reload = vi.fn();
+Object.defineProperty(window, 'location', {
+  configurable: true,
+  value: { ...window.location, reload },
+});
 vi.mock('next/link', () => ({
   default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
     <a href={href} {...props}>
@@ -73,8 +80,9 @@ describe('PanelShell — cambio de empresa', () => {
     await userEvent.click(screen.getAllByRole('button', { name: 'Kobrax Demo Norte SUPERVISOR' })[0]!);
 
     expect(enviado).toEqual({ accountId: 'a2' });
-    // `refresh` y no `push`: el shell entero lo pintó el servidor con el token viejo.
-    expect(refresh).toHaveBeenCalled();
+    // Recarga entera y no `refresh()`: éste conserva el estado de los componentes cliente, y
+    // esas pantallas seguirían mostrando datos de la empresa anterior.
+    expect(reload).toHaveBeenCalled();
   });
 
   it('si el cambio falla lo dice y no refresca', async () => {
@@ -85,15 +93,23 @@ describe('PanelShell — cambio de empresa', () => {
     );
 
     renderShell();
-    refresh.mockClear();
+    reload.mockClear();
     await userEvent.click(screen.getAllByRole('button', { name: 'Kobrax Demo Norte SUPERVISOR' })[0]!);
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/no se pudo cambiar de empresa/i);
-    expect(refresh).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
   });
 
   it('con una sola empresa no se ofrece cambiar', () => {
     renderShell([ACCOUNTS[0]!]);
     expect(screen.queryByText('Kobrax Demo Norte')).not.toBeInTheDocument();
+  });
+
+  it('si la empresa activa no está en la lista, el selector aparece igual', () => {
+    // `/auth/accounts` filtra los tenants suspendidos, incluido aquel donde estás parada:
+    // esconder el desplegable ahí te deja encerrada, sin más salida que cerrar sesión.
+    renderShell([ACCOUNTS[1]!]);
+    expect(screen.getAllByText('Empresa no disponible').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Kobrax Demo Norte SUPERVISOR' }).length).toBeGreaterThan(0);
   });
 });

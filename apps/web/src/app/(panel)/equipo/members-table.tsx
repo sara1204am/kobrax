@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
-  RoleType,
   memberName,
   memberStatus,
   type AssignableRole,
@@ -18,7 +17,7 @@ import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
 import { postJson, sendJson } from '@/lib/client';
-import { memberActions } from '@/lib/team';
+import { isKnownRole, memberActions } from '@/lib/team';
 import { InvitationCode } from './invitation-code';
 
 const TONE = { active: 'success', pending: 'warning', inactive: 'neutral' } as const;
@@ -51,7 +50,7 @@ export function MembersTable({
     const { ok, data } = await postJson<InvitedMember>(`/api/users/${member.userId}/resend`, {});
     setBusy(false);
     if (!ok) {
-      toast(data.error?.message ?? t('actionError'), 'error');
+      toast(data.error?.message ?? t('actionError'), 'danger');
       return;
     }
     setResent(data);
@@ -65,7 +64,7 @@ export function MembersTable({
     if (!ok) {
       // El mensaje del servidor es el que sabe por qué: último administrador, no es tuyo,
       // ya aceptó la invitación. Re-escribirlo acá sería adivinar.
-      toast(data.error?.message ?? t('actionError'), 'error');
+      toast(data.error?.message ?? t('actionError'), 'danger');
       return;
     }
     toast(okMessage);
@@ -151,7 +150,9 @@ export function MembersTable({
       <Modal
         open={pending !== null}
         onClose={() => setPending(null)}
-        title={pending ? t(`confirm.${pending.kind}.title`) : ''}
+        // El `{name}` va también en el título: sin los valores, next-intl no puede formatear
+        // y pinta la ruta cruda de la clave.
+        title={pending ? t(`confirm.${pending.kind}.title`, { name: memberName(pending.member) }) : ''}
         actions={
           <>
             <span className="sm:w-40">
@@ -250,9 +251,7 @@ function RoleCell({
   busy: boolean;
 }) {
   const t = useTranslations('team.roles');
-  // Un rol que el enum no conoce se muestra crudo en vez de reventar el render.
-  const label = (name: string) =>
-    (Object.values(RoleType) as string[]).includes(name) ? t(name) : name;
+  const label = (name: string) => (isKnownRole(name) ? t(name) : name);
 
   if (!editable) return <span className="text-k-text-2">{label(member.roleName)}</span>;
 

@@ -1,8 +1,9 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { compare, hash } from 'bcryptjs';
 import { KOBRAX, type AuthAccountOption, type AuthTokens, type LoginResult } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
+import { AuditService } from '../../common/audit/audit.service';
 import { TokenService } from './token.service';
 import { PermissionsService } from './permissions.service';
 import { SessionService } from './session.service';
@@ -47,6 +48,8 @@ const CRITICAL_ROLES = ['SUPER_ADMIN', 'ACCOUNT_ADMIN'];
 
 @Injectable()
 export class AuthService implements OnModuleInit {
+  private readonly logger = new Logger(AuthService.name);
+
   /** Hash dummy para comparar en timing constante cuando el usuario no existe. */
   private dummyHash = '';
 
@@ -56,6 +59,7 @@ export class AuthService implements OnModuleInit {
     private readonly permissions: PermissionsService,
     private readonly sessions: SessionService,
     private readonly mfa: MfaService,
+    private readonly audit: AuditService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -190,7 +194,40 @@ export class AuthService implements OnModuleInit {
     if (!membership) throw accountNotAllowed();
 
     const tokens = await this.issueTokens(userId, membership.account_id, membership.role_id, meta);
-    await this.sessions.revokeOne(userId, currentSessionId);
+
+    /*
+     * El par nuevo ya está commiteado, así que a partir de acá **no se puede fallar**: si la
+     * revocación revienta y dejamos subir la excepción, el endpoint responde 500, el navegador
+     * se queda con las cookies viejas… que `revokeRows` ya invalidó en Postgres antes de tocar
+     * Redis. Resultado: a los 15 minutos la persona termina en `/login` en medio del trabajo,
+     * sin entender por qué. Se registra y se sigue: la sesión huérfana la limpia su `expiresAt`.
+     */
+    try {
+      await this.sessions.revokeOne(userId, currentSessionId);
+    } catch (err) {
+      this.logger.error(
+        `No se pudo revocar la sesión ${currentSessionId} al cambiar de empresa`,
+        err instanceof Error ? err.stack : String(err),
+      );
+    }
+
+    /*
+     * El único endpoint que emite credenciales operativas para un tenant en el que quien
+     * llama no estaba un momento antes: sin este registro, si mañana la empresa destino
+     * pregunta quién bajó su cartera a las 03:12, el rastro empieza y termina dentro de ella
+     * y no hay nada que lo ate a la identidad de origen ni al momento del salto.
+     *
+     * Se escribe con el contexto todavía en la empresa de ORIGEN (lo fija el JWT del
+     * request), así que la fila responde las cuatro preguntas: quién, desde dónde, adónde y
+     * cuándo.
+     */
+    await this.audit.record({
+      entity: 'account',
+      entityId: membership.account_id,
+      action: 'SWITCH_ACCOUNT',
+      after: { toAccountId: membership.account_id, role: membership.role_name },
+    });
+
     return tokens;
   }
 

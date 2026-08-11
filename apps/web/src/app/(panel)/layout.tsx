@@ -1,20 +1,12 @@
 import { redirect } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
-import type { AuthAccountOption } from '@kobrax/shared';
+import type { AuthAccountOption, MeInfo } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { PanelShell } from '@/components/panel-shell';
 import { PermissionsProvider } from '@/components/permissions';
 import { ToastProvider } from '@/components/toast';
 import { visibleNav } from '@/lib/nav';
-
-interface Me {
-  userId: string;
-  email: string;
-  profile: { firstName: string; lastName: string; photoUrl?: string } | null;
-  accountId: string;
-  role: string;
-  permissions: string[];
-}
 
 /**
  * Layout de todo lo que vive detrás del login.
@@ -29,7 +21,7 @@ interface Me {
  */
 export default async function PanelLayout({ children }: { children: ReactNode }) {
   const [me, accounts] = await Promise.all([
-    apiCall<Me>('/auth/me', { method: 'GET', auth: true }),
+    apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
     apiCall<AuthAccountOption[]>('/auth/accounts', { method: 'GET', auth: true }),
   ]);
 
@@ -37,13 +29,12 @@ export default async function PanelLayout({ children }: { children: ReactNode })
   // Mandar a `/login` sería mentir —ahí tampoco va a poder entrar— y además esconde el
   // problema real.
   if (me.status === 0) {
+    const t = await getTranslations('panel.offline');
     return (
       <main className="flex min-h-screen items-center justify-center bg-k-bg px-6">
         <div className="max-w-md text-center">
-          <h1 className="text-[20px] font-semibold text-k-navy">{me.body.error?.message}</h1>
-          <p className="mt-2 text-[14px] text-k-text-2">
-            Vuelve a intentarlo en un momento. Si sigue así, avísale a tu administrador.
-          </p>
+          <h1 className="text-[20px] font-semibold text-k-navy">{t('title')}</h1>
+          <p className="mt-2 text-[14px] text-k-text-2">{t('text')}</p>
         </div>
       </main>
     );
@@ -62,6 +53,7 @@ export default async function PanelLayout({ children }: { children: ReactNode })
           email: user.email,
           role: user.role,
           accountId: user.accountId,
+          photoUrl: user.profile?.photoUrl,
         }}
         // Si la lista falla, el panel funciona igual: el selector de empresa simplemente no
         // aparece. Es un adorno de la topbar, no la puerta de entrada.

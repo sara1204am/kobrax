@@ -4,7 +4,7 @@ import { ResponseDto } from '@kobrax/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
-import { MAX_UPLOAD_BYTES, UploadsService, type UploadedFileLike } from './uploads.service';
+import { MAX_UPLOAD_BYTES, UploadsService, mimeOf, type UploadedFileLike } from './uploads.service';
 
 /**
  * Subida de archivos. Sin `@Roles`: cualquiera con sesión puede subir, porque el objeto no es nada
@@ -24,6 +24,6 @@ export class UploadsController {
 
   @Get(':name')
   download(@Param('name') name: string): StreamableFile {
-    return new StreamableFile(this.uploads.streamOf(name));
+    return new StreamableFile(this.uploads.streamOf(name), { type: mimeOf(name) });
   }
 }
