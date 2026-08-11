@@ -33,7 +33,12 @@ function memb(roleName: string, accountId = 'a1', status = 'ACTIVE') {
   };
 }
 
-function makeAuth(opts: { user: Record<string, unknown>; memberships?: ReturnType<typeof memb>[] }) {
+function makeAuth(opts: {
+  user: Record<string, unknown>;
+  memberships?: ReturnType<typeof memb>[];
+  /** Simula Redis caído en la revocación de la sesión anterior. */
+  revokeFails?: boolean;
+}) {
   const calls = {
     userUpdate: [] as { where: { id: string }; data: Record<string, unknown> }[],
     forRole: [] as string[],
@@ -65,12 +70,26 @@ function makeAuth(opts: { user: Record<string, unknown>; memberships?: ReturnTyp
     denylist: async () => {},
     revokeAll: async () => 0,
     revokeOne: async (_userId: string, sessionId: string) => {
+      if (opts.revokeFails) throw new Error('redis caído');
       calls.revokedSessions.push(sessionId);
     },
   };
   const mfa = {};
-  const service = new AuthService(prisma as never, token, permissions as never, sessions as never, mfa as never);
-  return { service, calls };
+  const audited: Record<string, unknown>[] = [];
+  const audit = {
+    record: async (entry: Record<string, unknown>) => {
+      audited.push(entry);
+    },
+  };
+  const service = new AuthService(
+    prisma as never,
+    token,
+    permissions as never,
+    sessions as never,
+    mfa as never,
+    audit as never,
+  );
+  return { service, calls, audited };
 }
 
 const META = { ip: '1.2.3.4', deviceType: 'mobile' };
@@ -144,6 +163,30 @@ describe('AuthService.mfaSetupSkip — postergar el MFA obligatorio', () => {
 describe('AuthService — cambio de empresa con la sesión ya iniciada (W1)', () => {
   const user = { id: 'u9', status: 'ACTIVE', mfaEnabled: false };
 
+  it('un usuario suspendido NO puede saltar a otra empresa', async () => {
+    // Nadie revoca las sesiones vivas al suspender a alguien: sin esta guarda, dentro de los
+    // 15 min de su access token se emitía una sesión nueva de 7 días en el otro tenant.
+    const { service } = makeAuth({
+      user: { id: 'u9', status: 'SUSPENDED' },
+      memberships: [memb('SUPERVISOR', 'a1'), memb('COLLECTOR', 'a2')],
+    });
+    await rejectsWithCode(
+      service.switchAccount('u9', 'sess-vieja', 'a2', META),
+      AUTH_ERR.INVALID_TOKEN,
+    );
+  });
+
+  it('una cuenta bloqueada por intentos fallidos tampoco', async () => {
+    const { service } = makeAuth({
+      user: { id: 'u9', status: 'ACTIVE', lockedUntil: new Date(Date.now() + 10 * 60_000) },
+      memberships: [memb('SUPERVISOR', 'a1'), memb('COLLECTOR', 'a2')],
+    });
+    await rejectsWithCode(
+      service.switchAccount('u9', 'sess-vieja', 'a2', META),
+      AUTH_ERR.ACCOUNT_LOCKED,
+    );
+  });
+
   it('lista sólo las empresas donde el usuario puede operar', async () => {
     const { service } = makeAuth({
       user,
@@ -184,6 +227,37 @@ describe('AuthService — cambio de empresa con la sesión ya iniciada (W1)', ()
       service.switchAccount('u9', 'sess-vieja', 'a2', META),
       AUTH_ERR.ACCOUNT_NOT_ALLOWED,
     );
+  });
+
+  it('deja el salto en el audit trail: quién, adónde y con qué rol', async () => {
+    const { service, audited } = makeAuth({
+      user,
+      memberships: [memb('SUPERVISOR', 'a1'), memb('COLLECTOR', 'a2')],
+    });
+    await service.switchAccount('u9', 'sess-vieja', 'a2', META);
+
+    // El «desde dónde» lo pone el contexto de tenant, que sigue siendo el de origen.
+    assert.deepEqual(audited, [
+      {
+        entity: 'account',
+        entityId: 'a2',
+        action: 'SWITCH_ACCOUNT',
+        after: { toAccountId: 'a2', role: 'COLLECTOR' },
+      },
+    ]);
+  });
+
+  it('si la revocación falla, igual entrega el par nuevo', async () => {
+    // El par ya está commiteado y `revokeRows` invalida la sesión vieja en Postgres ANTES de
+    // tocar Redis: dejar subir la excepción devolvía un 500 al navegador, que se quedaba con
+    // unas cookies ya muertas y terminaba en /login a los 15 minutos.
+    const { service } = makeAuth({
+      user,
+      memberships: [memb('SUPERVISOR', 'a1'), memb('COLLECTOR', 'a2')],
+      revokeFails: true,
+    });
+    const tokens = await service.switchAccount('u9', 'sess-vieja', 'a2', META);
+    assert.equal(token.verifyAccess(tokens.accessToken).accountId, 'a2');
   });
 
   it('emite tokens de la empresa destino y revoca la sesión anterior', async () => {

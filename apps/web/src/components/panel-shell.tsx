@@ -18,6 +18,8 @@ export interface ShellUser {
   email: string;
   role: string;
   accountId: string;
+  /** Vacío = todavía no subió ninguna; se muestran las iniciales. */
+  photoUrl?: string;
 }
 
 /**
@@ -51,6 +53,23 @@ export function PanelShell({
   // Cerrar el cajón al navegar. Sin esto, en el teléfono elegís un ítem y el menú te queda
   // tapando justo la pantalla a la que fuiste.
   useEffect(() => drawer.current?.close(), [pathname]);
+
+  /*
+   * Cerrarlo también al llegar al ancho de escritorio.
+   *
+   * El cajón se esconde con `lg:hidden`, pero `display:none` **no** saca un `<dialog>` abierto
+   * del top layer ni levanta el bloqueo modal: girar la tablet con el menú abierto dejaba el
+   * panel a la vista y completamente inclicable, sin más salida que Esc —imposible en
+   * táctil— o recargar.
+   */
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 1024px)');
+    const closeOnDesktop = () => {
+      if (desktop.matches) drawer.current?.close();
+    };
+    desktop.addEventListener('change', closeOnDesktop);
+    return () => desktop.removeEventListener('change', closeOnDesktop);
+  }, []);
 
   return (
     <div className="min-h-screen bg-k-bg lg:flex">
@@ -199,6 +218,13 @@ function Topbar({
   const pathname = usePathname();
   const crumbs = crumbsFor(pathname);
   const current = accounts.find((a) => a.id === user.accountId);
+  /*
+   * El selector aparece con más de una empresa **o cuando la activa no está en la lista**.
+   * Ese segundo caso no es raro: `/auth/accounts` filtra los tenants suspendidos, incluido
+   * aquel en el que la persona está parada. Con la condición vieja el desplegable se escondía
+   * justo cuando más falta hacía y la dejaba encerrada, sin más salida que cerrar sesión.
+   */
+  const canSwitch = accounts.length > 1 || (accounts.length > 0 && !current);
 
   return (
     <header className="sticky top-0 z-10 flex h-16 items-center gap-3 border-b border-k-border bg-white px-4 md:px-6">
@@ -236,9 +262,15 @@ function Topbar({
 
       {/* Empresa e idioma viven en la topbar desde tablet vertical; en celular se mudan al
           menú de usuario, que es el único desplegable que queda. */}
-      {accounts.length > 1 && (
+      {canSwitch && (
         <div className="hidden md:block">
-          <Dropdown label={<span className="max-w-[180px] truncate">{current?.name ?? '—'}</span>}>
+          <Dropdown
+            label={
+              <span className={`max-w-[180px] truncate ${current ? '' : 'text-k-warning-text'}`}>
+                {current?.name ?? t('companyUnavailable')}
+              </span>
+            }
+          >
             <AccountList accounts={accounts} activeId={user.accountId} />
           </Dropdown>
         </div>
@@ -247,13 +279,7 @@ function Topbar({
         <LocaleSwitch />
       </div>
 
-      <Dropdown
-        label={
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-k-highlight text-[13px] font-semibold text-k-purple">
-            {initials(user.name)}
-          </span>
-        }
-      >
+      <Dropdown label={<Avatar user={user} />}>
         <div className="border-b border-k-border px-3 py-2.5">
           <p className="truncate text-[14px] font-medium text-k-text">{user.name}</p>
           <p className="truncate text-[12px] text-k-text-2">{user.email}</p>
@@ -262,7 +288,7 @@ function Topbar({
           </p>
         </div>
 
-        {accounts.length > 1 && (
+        {canSwitch && (
           <div className="border-b border-k-border py-1.5 md:hidden">
             <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-k-muted">
               {t('company')}
@@ -273,6 +299,15 @@ function Topbar({
         <div className="border-b border-k-border px-3 py-2 md:hidden">
           <LocaleSwitch />
         </div>
+
+        <Link href="/settings/perfil" className={MENU_ITEM}>
+          <Icon name="profile" className="h-[18px] w-[18px] text-k-muted" />
+          {t('nav.profile')}
+        </Link>
+        <Link href="/settings/security" className={MENU_ITEM}>
+          <Icon name="security" className="h-[18px] w-[18px] text-k-muted" />
+          {t('nav.security')}
+        </Link>
 
         <LogoutItem />
       </Dropdown>
@@ -319,7 +354,6 @@ function Dropdown({ label, children }: { label: ReactNode; children: ReactNode }
  * topbar y, en celular, adentro del menú de usuario.
  */
 function AccountList({ accounts, activeId }: { accounts: AuthAccountOption[]; activeId: string }) {
-  const router = useRouter();
   const t = useTranslations('panel');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState(false);
@@ -334,10 +368,16 @@ function AccountList({ accounts, activeId }: { accounts: AuthAccountOption[]; ac
       setError(true);
       return;
     }
-    // Refresco del servidor, no navegación del cliente: el shell entero (rol, permisos, menú)
-    // lo pintó el servidor con el token viejo.
-    router.refresh();
-    setBusy(null);
+    /*
+     * Recarga entera, no `router.refresh()`.
+     *
+     * `refresh()` repinta los server components pero **conserva el estado de los de cliente**:
+     * la lista de sesiones seguía mostrando las de la empresa anterior, marcando como «Esta
+     * sesión» una que la API acababa de revocar. Cambiar de empresa cambia la sesión entera —
+     * no hay estado de pantalla que valga la pena preservar, el mismo motivo por el que el
+     * selector de idioma recarga.
+     */
+    window.location.reload();
   }
 
   return (
@@ -392,6 +432,35 @@ function LogoutItem() {
   );
 }
 
+/**
+ * La foto de la persona, con sus iniciales de respaldo.
+ *
+ * Si el archivo no está —`/uploads` guarda por tenant y el perfil es global, así que quien
+ * pertenece a dos empresas no la ve en la otra— se cae a las iniciales en vez de dejar el
+ * ícono de imagen rota.
+ */
+function Avatar({ user }: { user: ShellUser }) {
+  const [broken, setBroken] = useState(false);
+
+  if (user.photoUrl && !broken) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- lo sirve el BFF con la sesión
+      <img
+        src={user.photoUrl}
+        alt=""
+        onError={() => setBroken(true)}
+        className="h-8 w-8 rounded-full border border-k-border object-cover"
+      />
+    );
+  }
+
+  return (
+    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-k-highlight text-[13px] font-semibold text-k-purple">
+      {initials(user.name)}
+    </span>
+  );
+}
+
 /** Iniciales para el avatar. Con un nombre vacío devuelve `?` en vez de romper. */
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -413,6 +482,7 @@ const ICONS: Record<NavKey | 'menu' | 'chevron' | 'check' | 'logout', string> = 
   payments: 'M3 8h18v9H3zM3 11.5h18M6.5 14.5h2.5',
   team: 'M9 11.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4zM2.8 19.5c0-3.4 2.8-5.2 6.2-5.2s6.2 1.8 6.2 5.2M17 8.4a2.8 2.8 0 0 1 0 4.6M18.5 14.6c2 .6 3.2 2 3.2 3.9',
   account: 'M4.5 20V5.5h9V20M13.5 10.5H20V20M7.5 9h3M7.5 12.5h3M7.5 16h3',
+  profile: 'M12 12.2a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2zM4.8 20.5c0-3.7 3.2-5.8 7.2-5.8s7.2 2.1 7.2 5.8',
   security: 'M12 3.5l7 2.8v5.4c0 3.9-2.9 6.8-7 8.6-4.1-1.8-7-4.7-7-8.6V6.3zM9.2 11.8l2 2 3.6-3.6',
   menu: 'M4 7h16M4 12h16M4 17h16',
   chevron: 'M7 10l5 5 5-5',

@@ -45,9 +45,39 @@ export async function apiCall<T>(
     const access = cookies().get(COOKIE.access)?.value;
     if (access) headers.set('authorization', `Bearer ${access}`);
   }
-  const res = await fetch(`${API_BASE}${path}`, { ...init, headers, cache: 'no-store' });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...init, headers, cache: 'no-store' });
+  } catch {
+    /*
+     * La API no contesta (caída, DNS, `KOBRAX_API_URL` mal puesta). Se devuelve como estado y
+     * no como excepción: un `throw` acá sube hasta el layout del panel, y **un layout que
+     * revienta no lo atrapa su propio `error.tsx`** — dejaba la pantalla en blanco de Next,
+     * sin shell y sin forma de volver. `status: 0` = ni siquiera hubo respuesta.
+     */
+    return {
+      status: 0,
+      body: {
+        data: null,
+        error: { code: 'API_UNREACHABLE', message: 'No pudimos conectar con el servidor' },
+        meta: { timestamp: new Date().toISOString(), version: '1' },
+      },
+    };
+  }
   const body = (await res.json().catch(() => ({ data: null, error: null, meta: {} }))) as ApiEnvelope<T>;
   return { status: res.status, body };
+}
+
+/**
+ * Los headers de autenticación sueltos, para lo que **no es JSON**: subir un archivo
+ * (`FormData`, cuyo `content-type` lo pone el navegador con su boundary) y descargarlo
+ * (binario, que no pasa por `res.json()`). `apiCall` no sirve para esos dos casos.
+ */
+export function bearerHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'x-client-type': 'web' };
+  const access = cookies().get(COOKIE.access)?.value;
+  if (access) headers.authorization = `Bearer ${access}`;
+  return headers;
 }
 
 // ── Cookies (se setean sobre la NextResponse del route handler/middleware) ─────

@@ -1,15 +1,27 @@
-/** Helper de cliente: POST JSON a un route handler del BFF (mismo origen). */
-export async function postJson<T = unknown>(
+interface JsonResult<T> {
+  ok: boolean;
+  status: number;
+  data: T & { error?: { code: string; message: string } };
+}
+
+/** Helper de cliente: manda JSON a un route handler del BFF (mismo origen). */
+export async function sendJson<T = unknown>(
   path: string,
   body: unknown,
-): Promise<{ ok: boolean; status: number; data: T & { error?: { code: string; message: string } } }> {
+  method: 'POST' | 'PATCH' | 'DELETE' = 'POST',
+): Promise<JsonResult<T>> {
   const res = await fetch(path, {
-    method: 'POST',
+    method,
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };
+}
+
+/** El caso de siempre. Se queda con su nombre porque lo usan 18 llamadas. */
+export function postJson<T = unknown>(path: string, body: unknown): Promise<JsonResult<T>> {
+  return sendJson<T>(path, body, 'POST');
 }
 
 /** Tipo del paso devuelto por el BFF en el flujo de login. */

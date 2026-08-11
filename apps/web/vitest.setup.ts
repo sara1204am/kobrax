@@ -56,6 +56,24 @@ if (typeof HTMLDialogElement !== 'undefined' && !HTMLDialogElement.prototype.sho
   };
 }
 
+/**
+ * Otro agujero del entorno: jsdom **no implementa `matchMedia`**, así que cualquier componente
+ * que consulte el ancho de la ventana revienta al montar. El doble responde «no coincide»,
+ * que en los tests equivale a una pantalla angosta.
+ */
+if (typeof window !== 'undefined' && !window.matchMedia) {
+  window.matchMedia = ((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  })) as typeof window.matchMedia;
+}
+
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });
   // jsdom + fetch de Node (undici) NO resuelve URLs relativas; el código llama a

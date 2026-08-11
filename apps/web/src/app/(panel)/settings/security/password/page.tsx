@@ -2,11 +2,13 @@
 
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { Button, ErrorBanner, Field, Input } from '@/components/ui';
 import { allPassed, PasswordChecklist } from '@/components/password-checklist';
 import { postJson } from '@/lib/client';
 
 export default function ChangePasswordPage() {
+  const t = useTranslations('security');
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -27,7 +29,7 @@ export default function ChangePasswordPage() {
     });
     setLoading(false);
     if (!ok) {
-      setError(data.error?.message ?? 'No se pudo cambiar la contraseña');
+      setError(data.error?.message ?? t('changePassword.error'));
       return;
     }
     // El backend revocó todas las sesiones → el BFF limpió las cookies. Redirige al login.
@@ -40,10 +42,8 @@ export default function ChangePasswordPage() {
   if (done) {
     return (
       <div className="rounded-2xl border border-k-border bg-white p-6 shadow-k-card">
-        <h1 className="text-xl font-semibold text-k-navy">Contraseña actualizada</h1>
-        <p className="mt-2 text-[14px] text-k-text-2">
-          Por seguridad cerramos todas tus sesiones. Inicia sesión de nuevo…
-        </p>
+        <h1 className="text-xl font-semibold text-k-navy">{t('changePassword.doneTitle')}</h1>
+        <p className="mt-2 text-[14px] text-k-text-2">{t('changePassword.doneText')}</p>
       </div>
     );
   }
@@ -51,24 +51,47 @@ export default function ChangePasswordPage() {
   return (
     <div className="space-y-4">
       <Link href="/settings/security" className="text-[13px] font-medium text-k-purple">
-        ← Seguridad
+        ← {t('back')}
       </Link>
-      <h1 className="text-2xl font-semibold text-k-navy">Cambiar contraseña</h1>
-      <form onSubmit={onSubmit} className="space-y-4 rounded-2xl border border-k-border bg-white p-6 shadow-k-card" noValidate>
+      <h1 className="text-2xl font-semibold text-k-navy">{t('changePassword.title')}</h1>
+      <form
+        onSubmit={onSubmit}
+        className="space-y-4 rounded-2xl border border-k-border bg-white p-6 shadow-k-card"
+        noValidate
+      >
         <ErrorBanner message={error} />
-        <Field label="Contraseña actual">
-          <Input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
+        <Field label={t('changePassword.current')}>
+          <Input
+            type="password"
+            autoComplete="current-password"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+            required
+          />
         </Field>
-        <Field label="Nueva contraseña">
-          <Input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} required />
+        <Field label={t('changePassword.new')}>
+          <Input
+            type="password"
+            autoComplete="new-password"
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+            required
+          />
         </Field>
         <PasswordChecklist password={next} />
-        <Field label="Confirmar nueva contraseña">
-          <Input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} error={mismatch} required />
+        <Field label={t('changePassword.confirm')}>
+          <Input
+            type="password"
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            error={mismatch}
+            required
+          />
         </Field>
-        {mismatch && <p className="text-[12px] text-k-danger">Las contraseñas no coinciden.</p>}
+        {mismatch && <p className="text-[12px] text-k-danger">{t('changePassword.mismatch')}</p>}
         <Button type="submit" loading={loading} disabled={!canSubmit}>
-          Actualizar contraseña
+          {t('changePassword.submit')}
         </Button>
       </form>
     </div>

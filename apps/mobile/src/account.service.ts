@@ -9,48 +9,10 @@
 import { publicCall, type PublicResult } from './api';
 import { apiMutate, apiQuery, type MutateResult, type QueryResult } from './api-client';
 
-export interface AccountInfo {
-  id: string;
-  businessName: string;
-  taxId: string | null;
-  accountType: string;
-  status: string;
-  planCode: string;
-  countryCode: string;
-  currencyCode: string;
-  timezone: string | null;
-  maxUsers: number;
-  memberCount: number;
-}
-
-/** Los 5 campos que la API acepta editar. El formulario sólo expone los primeros 4. */
-export interface AccountPatch {
-  businessName?: string;
-  taxId?: string;
-  countryCode?: string;
-  currencyCode?: string;
-  timezone?: string;
-}
-
-export interface MyProfile {
-  userId: string;
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-  phone: string | null;
-  photoUrl: string | null;
-  /** QR bancario propio, el que se le muestra al deudor para que pague desde su app del banco. */
-  paymentQrUrl: string | null;
-}
-
-export interface ProfilePatch {
-  firstName?: string;
-  lastName?: string;
-  phone?: string;
-  photoUrl?: string;
-  /** `null` = quitarlo. Ausente = no tocarlo. */
-  paymentQrUrl?: string | null;
-}
+// Las cuatro formas del contrato viven en `@kobrax/shared` (F9 · W2): son las mismas que
+// edita la web. Se re-exportan para no tocar a quien ya las importaba de este archivo.
+export type { AccountInfo, AccountPatch, MyProfile, ProfilePatch } from '@kobrax/shared';
+import type { AccountInfo, AccountPatch, MyProfile, ProfilePatch } from '@kobrax/shared';
 
 export interface SignupPayload {
   businessName: string;

@@ -29,20 +29,39 @@ export function Modal({
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const t = useTranslations('common');
+  /**
+   * Marca que el cierre lo pedimos nosotros.
+   *
+   * `dialog.close()` dispara el evento nativo `close`, que está cableado a `onClose` — así
+   * que cerrar con la X llamaba a `onClose` **dos veces**: una por el clic y otra por el
+   * cierre que ese clic provocó. Cualquier efecto del llamador (un toast, un `router.push`,
+   * un POST que descarta un borrador) salía duplicado. El evento nativo sólo tiene que avisar
+   * cuando quien cerró fue el navegador, o sea la tecla Esc.
+   */
+  const closingByCode = useRef(false);
 
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
     if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
+    if (!open && dialog.open) {
+      closingByCode.current = true;
+      dialog.close();
+    }
   }, [open]);
 
   return (
     <dialog
       ref={ref}
       aria-labelledby={titleId}
-      // `close` lo dispara también la tecla Esc: por acá entran las dos salidas.
-      onClose={onClose}
+      // Por acá entra la tecla Esc, que cierra el diálogo sin pasar por ningún handler nuestro.
+      onClose={() => {
+        if (closingByCode.current) {
+          closingByCode.current = false;
+          return;
+        }
+        onClose();
+      }}
       onClick={(e) => {
         if (e.target === ref.current) onClose();
       }}

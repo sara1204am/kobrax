@@ -178,3 +178,11 @@ pnpm --filter @kobrax/web type-check
 pnpm --filter @kobrax/web test
 pnpm --filter @kobrax/web dev      # :3000, necesita la API en :4010
 ```
+
+⚠️ **Si tocaste `packages/shared`, reiniciá el `dev`.** `next.config.mjs` usa
+`resolve.symlinks = false` (sin eso react-refresh rompe el paquete CJS y todas
+las pantallas que importan de `shared` dan 500). El precio es que Next resuelve
+`@kobrax/shared` dentro de `node_modules` y **no vigila sus cambios**: después de
+`pnpm --filter @kobrax/shared build` el dev sigue sirviendo el módulo viejo. El
+síntoma es claro y desconcierta igual: `X is not a function` sobre algo que
+acabás de exportar.

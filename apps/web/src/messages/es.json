@@ -23,6 +23,7 @@
       "payments": "Pagos",
       "team": "Equipo",
       "account": "Cuenta",
+      "profile": "Mi perfil",
       "security": "Seguridad"
     },
     "crumbs": {
@@ -34,6 +35,7 @@
     "openMenu": "Abrir el menú",
     "breadcrumb": "Dónde estás",
     "company": "Empresa",
+    "companyUnavailable": "Empresa no disponible",
     "switchError": "No se pudo cambiar de empresa. Intenta de nuevo.",
     "logout": "Cerrar sesión",
     "home": {
@@ -46,10 +48,185 @@
       "text": "No pudimos cargar esta pantalla. El resto del panel sigue funcionando.",
       "retry": "Reintentar"
     },
+    "offline": {
+      "title": "No pudimos conectar con el servidor",
+      "text": "Vuelve a intentarlo en un momento. Si sigue así, avísale a tu administrador."
+    },
     "table": {
       "range": "{from}–{to} de {total}",
       "previous": "Anterior",
       "next": "Siguiente"
+    }
+  },
+  "account": {
+    "title": "Cuenta",
+    "subtitle": "Los datos de tu negocio. Aparecen en los comprobantes y en las invitaciones.",
+    "seats": "{used} de {max} miembros",
+    "businessName": "Nombre del negocio",
+    "taxId": "NIT",
+    "taxIdPlaceholder": "Opcional",
+    "country": "País y moneda",
+    "save": "Guardar cambios",
+    "saved": "Datos guardados",
+    "saveError": "No se pudieron guardar los datos",
+    "noAccess": "No tienes acceso a los datos de la cuenta"
+  },
+  "team": {
+    "title": "Equipo",
+    "subtitle": "Quién trabaja en tu cuenta y qué puede hacer.",
+    "seats": "{used} de {max} miembros",
+    "noAccess": "No tienes acceso al equipo",
+    "empty": "Todavía no hay nadie más",
+    "emptyHint": "Invita a tu equipo por correo y aparecerán acá.",
+    "cancel": "Cancelar",
+    "actionError": "No se pudo completar la acción",
+    "roleChanged": "Rol actualizado",
+    "deactivated": "Miembro desactivado",
+    "reactivated": "Miembro reactivado",
+    "removed": "Invitación cancelada",
+    "columns": {
+      "member": "Miembro",
+      "role": "Rol",
+      "status": "Estado",
+      "actions": "Acciones"
+    },
+    "status": {
+      "active": "Activo",
+      "pending": "Pendiente",
+      "inactive": "Inactivo"
+    },
+    "actions": {
+      "deactivate": "Desactivar",
+      "reactivate": "Reactivar",
+      "resend": "Reenviar",
+      "remove": "Cancelar invitación"
+    },
+    "close": "Cerrar",
+    "resentTitle": "Invitación reenviada",
+    "resentWarning": "El código anterior dejó de servir. Comparte este.",
+    "invite": {
+      "open": "Invitar a alguien",
+      "full": "Llegaste al tope de tu plan",
+      "title": "Invitar al equipo",
+      "firstName": "Nombre",
+      "lastName": "Apellido",
+      "email": "Correo electrónico",
+      "role": "¿Qué va a hacer?",
+      "rolePlaceholder": "Elige un rol",
+      "cancel": "Cancelar",
+      "send": "Enviar invitación",
+      "error": "No se pudo invitar",
+      "doneTitle": "Invitación creada",
+      "done": "Listo",
+      "sentTo": "Le enviamos un correo a {email}. Este es su código:",
+      "copy": "Copiar",
+      "copied": "Copiado",
+      "copyFailed": "Tu navegador no dejó copiar. Selecciona el código a mano.",
+      "howTo": "Si el correo no llega, puede entrar con este código desde <link>la página de invitación</link>."
+    },
+    "confirm": {
+      "deactivate": {
+        "title": "Desactivar a {name}",
+        "text": "No va a poder entrar, pero su historial de casos y pagos se conserva. Puedes reactivarlo cuando quieras.",
+        "ok": "Desactivar"
+      },
+      "reactivate": {
+        "title": "Reactivar a {name}",
+        "text": "Vuelve a entrar con su contraseña de siempre y con el mismo rol.",
+        "ok": "Reactivar"
+      },
+      "remove": {
+        "title": "Cancelar la invitación de {name}",
+        "text": "Todavía no aceptó, así que se elimina por completo y su lugar queda libre. El código que recibió deja de servir.",
+        "ok": "Cancelar invitación"
+      }
+    },
+    "roles": {
+      "SUPER_ADMIN": "Super administrador",
+      "ACCOUNT_ADMIN": "Administrador",
+      "MANAGER": "Gerente",
+      "SUPERVISOR": "Supervisor",
+      "COLLECTOR": "Cobrador",
+      "AUDITOR": "Auditor",
+      "VIEWER": "Consulta"
+    }
+  },
+  "profile": {
+    "title": "Mi perfil",
+    "subtitle": "Cómo te ve tu equipo y cómo te cobran los deudores.",
+    "firstName": "Nombre",
+    "lastName": "Apellido",
+    "phone": "Teléfono",
+    "phonePlaceholder": "Opcional",
+    "phoneHint": "Al menos 5 dígitos. Puede empezar con + y llevar espacios o guiones.",
+    "emailFixed": "Tu correo de acceso es {email}. Para cambiarlo, escríbenos.",
+    "photo": "Foto",
+    "photoHint": "Se ve en tu sesión y junto a lo que registras.",
+    "paymentQr": "QR de cobro",
+    "paymentQrHint": "El que le muestras al deudor para que pague desde su banco.",
+    "remove": "Quitar",
+    "uploading": "Subiendo…",
+    "uploadError": "No se pudo subir el archivo",
+    "save": "Guardar cambios",
+    "saved": "Perfil actualizado",
+    "saveError": "No se pudo guardar el perfil",
+    "error": "No pudimos cargar tu perfil"
+  },
+  "security": {
+    "title": "Seguridad",
+    "back": "Seguridad",
+    "loading": "Cargando…",
+    "options": {
+      "password": "Contraseña",
+      "passwordDesc": "Cambia tu contraseña de acceso.",
+      "mfa": "Verificación en dos pasos (MFA)",
+      "mfaDesc": "Protege tu cuenta con un segundo factor.",
+      "sessions": "Sesiones activas",
+      "sessionsDesc": "Revisa y cierra sesiones en otros dispositivos."
+    },
+    "changePassword": {
+      "title": "Cambiar contraseña",
+      "current": "Contraseña actual",
+      "new": "Nueva contraseña",
+      "confirm": "Confirmar nueva contraseña",
+      "mismatch": "Las contraseñas no coinciden.",
+      "submit": "Actualizar contraseña",
+      "error": "No se pudo cambiar la contraseña",
+      "doneTitle": "Contraseña actualizada",
+      "doneText": "Por seguridad cerramos todas tus sesiones. Inicia sesión de nuevo…"
+    },
+    "mfa": {
+      "title": "Verificación en dos pasos",
+      "intro": "La verificación en dos pasos añade un código temporal de tu app de autenticación al iniciar sesión.",
+      "activate": "Activar MFA",
+      "scan": "Escanea el código con tu app de autenticación:",
+      "qrAlt": "Código QR para configurar la verificación en dos pasos",
+      "manualKey": "Clave manual",
+      "enterCode": "Ingresa el código de 6 dígitos:",
+      "verify": "Verificar y activar",
+      "codesTitle": "Guarda tus códigos de respaldo",
+      "codesText": "Cada código sirve una sola vez. Guárdalos en un lugar seguro.",
+      "download": "Descargar códigos",
+      "fileHeader": "Códigos de respaldo Kobrax",
+      "done": "Listo",
+      "active": "MFA está activo en tu cuenta.",
+      "regenerate": "Regenerar códigos de respaldo",
+      "disableTitle": "Desactivar MFA",
+      "disableHint": "Confirma con tu contraseña.",
+      "password": "Contraseña",
+      "disable": "Desactivar verificación en dos pasos",
+      "startError": "No se pudo iniciar el enrolamiento",
+      "invalidCode": "Código inválido",
+      "regenerateError": "No se pudieron regenerar los códigos",
+      "disableError": "No se pudo desactivar MFA"
+    },
+    "sessions": {
+      "title": "Sesiones activas",
+      "device": "Dispositivo",
+      "current": "Esta sesión",
+      "close": "Cerrar",
+      "closeOthers": "Cerrar todas las demás sesiones",
+      "loadError": "No se pudieron cargar las sesiones"
     }
   },
   "password": {

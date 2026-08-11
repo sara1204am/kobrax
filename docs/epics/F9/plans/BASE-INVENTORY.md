@@ -222,3 +222,39 @@ Mensajes nuevos: namespace `panel` en `es.json`/`en.json` (nav, migas, empresa, 
 ⚠️ `vitest.setup.ts` le pone a jsdom un doble de `showModal()`/`close()`: jsdom trae
 `HTMLDialogElement` **sin sus métodos**, y cualquier componente con un `<dialog>` revienta al
 montar. Es un agujero del entorno de test, no del código.
+
+### W2 — Cuenta y equipo
+
+| Artefacto | Qué es |
+|---|---|
+| `app/(panel)/cuenta/**` | Datos del negocio + contador de asientos. Guarda **sólo lo que cambió** |
+| `app/(panel)/equipo/**` | Miembros, invitación con código a la vista, rol, activar/desactivar, cancelar |
+| `app/(panel)/settings/perfil/**` | Mi perfil, con foto y QR de cobro |
+| `lib/team.ts` | `memberActions()` — **la única que decide qué ofrece cada fila** |
+| `app/api/account/{me,profile,upload}` · `app/api/users/**` · `app/api/uploads/[name]` | Los handlers del BFF de W2 |
+| `lib/bff.ts` → `bearerHeaders()` | Los headers sueltos para lo que **no es JSON**: subir (FormData con su boundary) y descargar (binario) |
+| `lib/client.ts` → `sendJson()` | `postJson` con verbo. W2 necesitaba `PATCH` y `DELETE`; las 18 llamadas viejas no se tocaron |
+
+**Promovido a `shared` en W2** (regla §3.9):
+
+| Qué | Dónde quedó |
+|---|---|
+| `diffAccount` · `diffProfile` · `hasChanges` | `utils/patch.ts` — la API corre con `forbidNonWhitelisted`; y **vaciar el QR viaja como `null`**, no como `''` |
+| `AccountInfo` · `AccountPatch` · `MyProfile` · `ProfilePatch` · `AccountForm` · `ProfileForm` | `types/account.types.ts` |
+| `Member` · `InvitedMember` · `AssignableRole` · `MeInfo` | `types/user.types.ts` |
+| `memberName()` · `memberStatus()` | `utils/member.ts` — el nombre visible tiene **una** regla (con el correo de respaldo); el estado viaja como **código**, no como rótulo |
+| `COUNTRY_CURRENCIES` | `constants/countries.ts` — **sin el nombre del país**: sería una cadena en un idioma. La web los rotula con `Intl.DisplayNames` |
+
+**NO se promovió**: `validateAccount` / `validateProfile` / `validateInvite` (mensajes en
+español, espejo del DTO) ni `ROLE_HINT` / `roleOptions()` / `ROLE_LABEL` (copy). Los rótulos
+de rol del panel salen de i18n; `ROLE_LABEL` de `shared` se queda para el móvil.
+
+Ajustes (Seguridad) quedó **traducido**: al cerrar W2 el panel entero funciona en es y en en.
+
+⏸️ **La búsqueda (`q`) del `DataTable` se construye en W3, no antes** (decisión del 2026-08-10).
+`/users` devuelve el equipo entero y son pocas filas por el techo del plan, así que en `/equipo`
+el orden se resuelve en memoria y no hace falta filtrar. El primer consumidor real es
+`/clients`, que **sí busca del lado del servidor**: recién ahí se conoce la forma del parámetro.
+Escribirlo antes es adivinar el contrato — el mismo error que el code-review le marcó al
+`DataTable` por haber nacido sin consumidor. Cuando W3 lo construya, se cablea también en
+`/equipo`.
