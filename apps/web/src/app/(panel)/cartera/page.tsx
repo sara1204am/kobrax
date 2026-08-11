@@ -5,6 +5,7 @@ import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { SearchBox } from '@/components/search-box';
 import type { PortfolioRow } from '@/lib/portfolio';
 import { PortfolioTable } from './portfolio-table';
+import { NewClientButton } from './new-client-button';
 
 const LIMIT = 20;
 
@@ -47,7 +48,7 @@ export default async function CarteraPage({
 
   return (
     <>
-      <PageHeader title={t('title')} subtitle={t('subtitle')} />
+      <PageHeader title={t('title')} subtitle={t('subtitle')} actions={<NewClientButton />} />
       {/* El documento está cifrado: se busca completo o no matchea. Decirlo evita que alguien
           escriba medio carnet y concluya que el cliente no existe. */}
       <SearchBox label={t('search.label')} placeholder={t('search.placeholder')} hint={t('search.hint')} />

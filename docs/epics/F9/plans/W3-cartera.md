@@ -374,8 +374,13 @@ enum se traducen acá**, no se suben a `shared`.
 - [x] 5. `/cartera/[id]`: ficha del cliente, con el revelado auditado detrás de un click (§6).
       El revelado quedó como **`POST`**, no como el `GET` que decía §4.5: tiene efecto (deja
       rastro), y un `GET` con efecto se cachea, se pre-carga y se dispara desde un `<img>`.
-- [ ] 6. `/cartera/nuevo` y `/cartera/[id]/editar`: alta y edición, con sus sub-recursos. La
+- [x] 6. `/cartera/nuevo` y `/cartera/[id]/editar`: alta y edición, con sus sub-recursos. La
       edición carga con `reveal=true` (§6.1) y manda **sólo lo que cambió**.
+      El navegador hace **una** llamada: manda el diff y el handler del BFF lo aplica, en vez de
+      N idas y vueltas. 🐞 De paso salió un defecto que era de los dos lados: en la edición, una
+      fila nueva y vacía se mandaba como alta (el alta sí las filtraba). Arreglado en
+      `diffCliente`, o sea en `shared`, así el móvil también deja de crear direcciones sin
+      dirección.
 - [ ] 7. Créditos: lista dentro de la ficha, ficha del crédito con su cronograma (que puede no
       existir, §4.4) y edición de lo operativo.
 - [ ] 8. Alta de crédito con la cotización en vivo, el cobrador asignado y `openCase` (§5.3).

@@ -10,6 +10,7 @@
  * campos escalares, acá son filas con altas y bajas.
  */
 import type { ClienteForm, ContactRow, LocationRow, RelationRow } from '../types/client.types.js';
+import { hasLocationData } from './client-form.js';
 
 export interface RowOps<T> {
   add: T[];
@@ -48,10 +49,22 @@ export function hasClientChanges(ops: ClienteOps): boolean {
   );
 }
 
-/** Filas nuevas / cambiadas / borradas, comparando por `serverId`. */
-function diffRows<T extends { serverId?: string }>(before: T[], after: T[], same: (a: T, b: T) => boolean): RowOps<T> {
+/**
+ * Filas nuevas / cambiadas / borradas, comparando por `serverId`.
+ *
+ * `tieneDatos` descarta las filas **nuevas y vacías**: agregar un teléfono y no escribirlo es
+ * arrepentirse, no cargar un teléfono en blanco. Sin esto, el alta las filtra (`mapContacts`) pero
+ * la edición las mandaba igual — y el server, que no exige contenido en el `POST` de una ubicación,
+ * creaba una dirección sin dirección.
+ */
+function diffRows<T extends { serverId?: string }>(
+  before: T[],
+  after: T[],
+  same: (a: T, b: T) => boolean,
+  tieneDatos: (row: T) => boolean = () => true,
+): RowOps<T> {
   const byId = new Map(before.filter((r) => r.serverId).map((r) => [r.serverId!, r]));
-  const add = after.filter((r) => !r.serverId);
+  const add = after.filter((r) => !r.serverId && tieneDatos(r));
   const update = after.filter((r) => {
     const prev = r.serverId ? byId.get(r.serverId) : undefined;
     return prev != null && !same(prev, r);
@@ -72,6 +85,10 @@ const sameLocation = (a: LocationRow, b: LocationRow) =>
   a.longitude.trim() === b.longitude.trim() &&
   a.referenceNotes.trim() === b.referenceNotes.trim() &&
   a.photoUrls.join('|') === b.photoUrls.join('|');
+
+/** Una fila nueva sin nada escrito no es un alta. Espejo de lo que filtra `buildClientePayload`. */
+const hasContactData = (c: ContactRow) => c.value.trim().length > 0;
+const hasRelationData = (r: RelationRow) => r.relatedName.trim().length > 0;
 
 const sameRelation = (a: RelationRow, b: RelationRow) =>
   a.relatedName.trim() === b.relatedName.trim() &&
@@ -103,8 +120,8 @@ export function diffCliente(before: ClienteForm, after: ClienteForm): ClienteOps
   const relLocations: RowOps<LocationRow & { relationId: string }> = { add: [], update: [], removeIds: [] };
   for (const rel of existentes) {
     const prev = previas.get(rel.serverId!);
-    const c = diffRows(prev?.contacts ?? [], rel.contacts, sameContact);
-    const l = diffRows(prev?.locations ?? [], rel.locations, sameLocation);
+    const c = diffRows(prev?.contacts ?? [], rel.contacts, sameContact, hasContactData);
+    const l = diffRows(prev?.locations ?? [], rel.locations, sameLocation, hasLocationData);
     relContacts.add.push(...c.add.map((r) => ({ ...r, relationId: rel.serverId! })));
     relContacts.update.push(...c.update.map((r) => ({ ...r, relationId: rel.serverId! })));
     relContacts.removeIds.push(...c.removeIds);
@@ -115,9 +132,9 @@ export function diffCliente(before: ClienteForm, after: ClienteForm): ClienteOps
 
   return {
     client: diffClient(before, after),
-    contacts: diffRows(before.contacts, after.contacts, sameContact),
-    locations: diffRows(before.locations, after.locations, sameLocation),
-    relations: diffRows(before.relations, after.relations, sameRelation),
+    contacts: diffRows(before.contacts, after.contacts, sameContact, hasContactData),
+    locations: diffRows(before.locations, after.locations, sameLocation, hasLocationData),
+    relations: diffRows(before.relations, after.relations, sameRelation, hasRelationData),
     relationContacts: relContacts,
     relationLocations: relLocations,
   };
