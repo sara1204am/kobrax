@@ -1,13 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import type { Prisma, PrismaClient } from '@prisma/client';
-import { ClientType } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
+// `Prisma` entra como valor y no sólo como tipo: la cartera arma su SQL con `Prisma.sql` (§W3).
+import { ClientType, Prisma } from '@prisma/client';
 import { resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { BlindIndexService } from '../../common/crypto/blind-index.service';
 import { AuditService } from '../../common/audit/audit.service';
-import { serializeClient } from './clients.serializer';
+import { serializeClient, type PortfolioClient, type PortfolioTotals } from './clients.serializer';
 import {
   CreateAttachmentDto,
   CreateClientDto,
@@ -29,6 +30,14 @@ import {
 
 /** PII del cliente que se redacta en los snapshots de auditoría. */
 const CLIENT_REDACT = ['nationalId', 'taxId', 'value', 'address', 'phone'];
+
+/** Fila cruda de la cartera: nombres de columna de PostgreSQL, sin pasar por Prisma. */
+interface PortfolioRow {
+  id: string;
+  total_debt: number;
+  max_days_past_due: number;
+  credit_count: number;
+}
 
 @Injectable()
 export class ClientsService {
@@ -135,8 +144,13 @@ export class ClientsService {
     return serializeClient(created, { crypto: this.crypto, reveal: false });
   }
 
-  async list(query: ListClientsQueryDto): Promise<ApiResponse<ReturnType<typeof serializeClient>[]>> {
+  /** Los totales son `Partial` porque sólo vienen con `view=portfolio` (§W3). */
+  async list(
+    query: ListClientsQueryDto,
+  ): Promise<ApiResponse<(ReturnType<typeof serializeClient> & Partial<PortfolioTotals>)[]>> {
     const { page, limit, skip } = resolvePagination(query);
+    if (query.view === 'portfolio') return this.listPortfolio(query, page, limit, skip);
+
     const where: Prisma.ClientWhereInput = { deletedAt: null };
     if (query.status) where.status = query.status;
     if (query.risk) where.riskSegment = query.risk;
@@ -159,6 +173,112 @@ export class ClientsService {
 
     const data = rows.map((c) => serializeClient(c, { crypto: this.crypto, reveal: false }));
     return ResponseDto.paginated(data, total, page, limit);
+  }
+
+  /**
+   * La cartera del panel web: cada cliente con su deuda agregada, su peor mora y cuántos créditos
+   * tiene, **ordenada por eso**.
+   *
+   * Va en SQL crudo porque no se puede resolver de otra forma: la mora de un cliente es el `MAX` de
+   * sus créditos y la deuda su `SUM`, así que si primero se paginan 20 clientes y después se los
+   * enriquece, se ordenaron 20 cualesquiera. Prisma sabe ordenar por el `_count` de una relación,
+   * pero no por `SUM` ni por `MAX`: el orden y la agregación son la misma consulta.
+   *
+   * Corre dentro de `withTenant`, o sea bajo la policy `tenant_isolation` de `clients` y `credits`
+   * (definida en `prisma/rls/001_enable_rls.sql`, **no** entre las migraciones). Por eso no filtra
+   * `account_id` a mano; fuera de ese contexto no devuelve nada.
+   */
+  private async listPortfolio(
+    query: ListClientsQueryDto,
+    page: number,
+    limit: number,
+    skip: number,
+  ): Promise<ApiResponse<PortfolioClient[]>> {
+    const where = this.portfolioWhere(query);
+    // 🔴 El filtro de créditos va en el `ON` y NO en el `WHERE`: en el `WHERE`, este `LEFT JOIN` se
+    // comporta como `INNER` y los clientes sin créditos desaparecen de la cartera. Hay un spec que
+    // lo mira, porque el síntoma —una lista a la que le faltan los clientes recién dados de alta—
+    // no se parece en nada a su causa.
+    const página = Prisma.sql`
+      SELECT c.id,
+             COALESCE(SUM(cr.outstanding_balance), 0)::float8 AS total_debt,
+             COALESCE(MAX(cr.days_past_due), 0)::int          AS max_days_past_due,
+             COUNT(cr.id)::int                                AS credit_count
+      FROM clients c
+      LEFT JOIN credits cr ON cr.client_id = c.id AND cr.deleted_at IS NULL
+      WHERE ${where}
+      GROUP BY c.id
+      ORDER BY ${this.portfolioOrder(query)}
+      LIMIT ${limit} OFFSET ${skip}`;
+    const cuenta = Prisma.sql`SELECT COUNT(*)::int AS total FROM clients c WHERE ${where}`;
+
+    const [rows, totals] = await this.tx((tx) =>
+      Promise.all([tx.$queryRaw<PortfolioRow[]>(página), tx.$queryRaw<{ total: number }[]>(cuenta)]),
+    );
+
+    const ids = rows.map((r) => r.id);
+    const clients = await this.tx((tx) => tx.client.findMany({ where: { id: { in: ids } } }));
+    // Prisma no garantiza el orden del `IN`, y el orden es justamente lo que pidió la consulta.
+    const byId = new Map(clients.map((c) => [c.id, c]));
+    const data = rows.flatMap((r) => {
+      const client = byId.get(r.id);
+      if (!client) return []; // borrado entre las dos consultas
+      return [
+        {
+          ...serializeClient(client, { crypto: this.crypto, reveal: false }),
+          totalDebt: Math.round(r.total_debt * 100) / 100,
+          maxDaysPastDue: r.max_days_past_due,
+          creditCount: r.credit_count,
+        },
+      ];
+    });
+    return ResponseDto.paginated(data, totals[0]?.total ?? 0, page, limit);
+  }
+
+  /**
+   * El `WHERE` de la cartera. Es el espejo en SQL del `where` de `list()` — se escribe dos veces
+   * porque los dos caminos hablan idiomas distintos, y un spec verifica que devuelvan los mismos
+   * clientes para los mismos filtros.
+   *
+   * `q` va parametrizado, nunca interpolado: es texto que escribe cualquiera en una caja de búsqueda.
+   */
+  private portfolioWhere(query: ListClientsQueryDto): Prisma.Sql {
+    const conds: Prisma.Sql[] = [Prisma.sql`c.deleted_at IS NULL`];
+    // El estado del cliente es la columna `client_status`, no `status`.
+    if (query.status) conds.push(Prisma.sql`c.client_status = ${query.status}::"ClientStatus"`);
+    if (query.risk) conds.push(Prisma.sql`c.risk_segment = ${query.risk}`);
+    if (query.q) {
+      const like = `%${query.q}%`;
+      const docHash = this.blind.hash(query.q);
+      const porNombre = Prisma.sql`c.first_name ILIKE ${like} OR c.last_name ILIKE ${like} OR c.business_name ILIKE ${like}`;
+      // El documento está cifrado: matchea exacto por blind index o no matchea.
+      conds.push(docHash ? Prisma.sql`(c.national_id_hash = ${docHash} OR ${porNombre})` : Prisma.sql`(${porNombre})`);
+    }
+    return Prisma.join(conds, ' AND ');
+  }
+
+  /**
+   * El orden. Siempre termina en `c.id`: sin un desempate determinista, dos clientes con la misma
+   * mora pueden intercambiarse entre página y página, y con `LIMIT/OFFSET` eso repite o saltea filas.
+   */
+  private portfolioOrder(query: ListClientsQueryDto): Prisma.Sql {
+    const desc = (query.dir ?? 'desc') === 'desc';
+    const dir = desc ? Prisma.raw('DESC') : Prisma.raw('ASC');
+    switch (query.sort ?? 'dpd') {
+      case 'debt':
+        return Prisma.sql`total_debt ${dir}, c.id`;
+      case 'name':
+        return Prisma.sql`COALESCE(c.business_name, c.last_name, c.first_name) ${dir}, c.id`;
+      case 'status':
+        return Prisma.sql`c.client_status ${dir}, c.id`;
+      case 'createdAt':
+        return Prisma.sql`c.created_at ${dir}, c.id`;
+      case 'dpd':
+      default:
+        // La mora manda y la deuda desempata: entre dos que deben hace los mismos días, primero el
+        // que debe más. Es el orden con el que abre la pantalla.
+        return Prisma.sql`max_days_past_due ${dir}, total_debt ${dir}, c.id`;
+    }
   }
 
   async findOne(id: string, reveal: boolean): Promise<ReturnType<typeof serializeClient>> {
