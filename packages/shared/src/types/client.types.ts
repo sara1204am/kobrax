@@ -159,6 +159,61 @@ export interface ClientDetail {
   attachments?: ClientAttachmentDetail[];
 }
 
+export interface CreditInstallmentDetail {
+  id: string;
+  number: number;
+  dueDate: string;
+  amount: number;
+  principal: number;
+  interest: number;
+  paidAmount: number;
+  status: string;
+  paidAt?: string;
+}
+
+/**
+ * Detalle del crédito (`GET /credits/:id`).
+ *
+ * ⚠️ **`hasSchedule` e `installments` sólo son de fiar en la ficha.** El listado
+ * (`GET /credits?clientId=`) no incluye las cuotas, así que ahí `hasSchedule` viene `false`
+ * siempre — no porque el crédito no tenga cronograma, sino porque no se las pidieron.
+ *
+ * `locked` es el candado del dato importado: si el crédito vino de un archivo o de otro core, sus
+ * campos financieros **no se editan** y la API rechaza el `PATCH` con `CREDIT_LOCKED`.
+ */
+export interface CreditDetail {
+  id: string;
+  code?: string;
+  clientId?: string;
+  principalAmount: number;
+  interestRate: number;
+  currency: string;
+  outstandingBalance: number;
+  installmentsCount?: number;
+  installmentAmount?: number;
+  frequency?: PaymentFrequency;
+  nextDueDate?: string;
+  origin?: CreditOrigin;
+  locked?: boolean;
+  notes?: string;
+  status?: string;
+  daysPastDue?: number;
+  hasSchedule?: boolean;
+  disbursedAt?: string;
+  assignedManagerId?: string;
+  installments?: CreditInstallmentDetail[];
+}
+
+/** Lo único editable después del desembolso. El monto y las cuotas no: eso es una reestructura. */
+export interface UpdateCreditPatch {
+  principalAmount?: number;
+  interestRate?: number;
+  installmentAmount?: number;
+  frequency?: PaymentFrequency;
+  nextDueDate?: string;
+  notes?: string;
+}
+
 // ── Formulario en pantalla ───────────────────────────────────────────────────
 export type ClientTypeValue = NewClientInput['clientType'];
 export type ContactTypeValue = 'PHONE' | 'EMAIL';

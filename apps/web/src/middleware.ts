@@ -112,6 +112,7 @@ export const config = {
     '/api/account/:path*',
     '/api/users/:path*',
     '/api/clients/:path*',
+    '/api/credits/:path*',
     '/api/uploads/:path*',
   ],
 };

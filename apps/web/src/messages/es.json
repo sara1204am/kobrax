@@ -119,10 +119,53 @@
     "sections": {
       "identity": "Identificación",
       "data": "Datos",
+      "credits": "Créditos",
+      "creditFixed": "El préstamo",
+      "creditEditable": "Datos de cobro",
+      "schedule": "Cronograma",
       "contacts": "Teléfonos y correos",
       "locations": "Direcciones",
       "guarantors": "Garantes y contactos",
       "attachments": "Adjuntos"
+    },
+    "noCredits": "Este cliente no tiene créditos.",
+    "creditsDenied": "Tu rol no puede ver los créditos.",
+    "ofPrincipal": "de {amount}",
+    "installmentOf": "cuota {amount}",
+    "dueOn": "vence {date}",
+    "noCode": "sin código",
+    "imported": "Importado",
+    "openLoan": "Préstamo abierto",
+    "backToClient": "Volver al cliente",
+    "creditSubtitle": "Capital {principal} · {code}",
+    "lockedHint": "Este crédito vino de otra fuente: sus números los manda esa fuente, no se editan acá.",
+    "noSchedule": "Este crédito no tiene cronograma, y está bien.",
+    "noScheduleHint": "Lleva la cuota congelada ({amount}) y su próximo cobro es una fecha, no una derivación: {date}.",
+    "creditStatus": {
+      "ACTIVE": "Vigente",
+      "PAID": "Pagado",
+      "DEFAULTED": "En mora",
+      "RESTRUCTURED": "Reestructurado",
+      "WRITTEN_OFF": "Castigado",
+      "CANCELLED": "Anulado"
+    },
+    "installmentStatus": {
+      "PENDING": "Pendiente",
+      "PARTIAL": "Parcial",
+      "PAID": "Pagada",
+      "OVERDUE": "Vencida"
+    },
+    "frequency": {
+      "DAILY": "Diario",
+      "WEEKLY": "Semanal",
+      "BIWEEKLY": "Quincenal",
+      "MONTHLY": "Mensual"
+    },
+    "schedule": {
+      "number": "Cuota",
+      "dueDate": "Vence",
+      "amount": "Monto",
+      "paid": "Pagado"
     },
     "form": {
       "clientType": "Tipo",
@@ -158,7 +201,15 @@
       "document": "Documento",
       "taxId": "NIT",
       "risk": "Segmento de riesgo",
-      "createdAt": "Alta"
+      "createdAt": "Alta",
+      "principal": "Capital",
+      "rate": "Tasa",
+      "installments": "Cuotas",
+      "currency": "Moneda",
+      "disbursedAt": "Desembolso",
+      "installment": "Cuota",
+      "frequency": "Frecuencia",
+      "nextDue": "Próximo cobro"
     },
     "contactType": { "PHONE": "Teléfono", "WHATSAPP": "WhatsApp", "EMAIL": "Correo" },
     "locationType": {

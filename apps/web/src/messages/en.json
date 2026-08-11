@@ -119,10 +119,53 @@
     "sections": {
       "identity": "Identification",
       "data": "Details",
+      "credits": "Credits",
+      "creditFixed": "The loan",
+      "creditEditable": "Collection details",
+      "schedule": "Schedule",
       "contacts": "Phones and emails",
       "locations": "Addresses",
       "guarantors": "Guarantors and contacts",
       "attachments": "Attachments"
+    },
+    "noCredits": "This client has no credits.",
+    "creditsDenied": "Your role cannot see credits.",
+    "ofPrincipal": "of {amount}",
+    "installmentOf": "instalment {amount}",
+    "dueOn": "due {date}",
+    "noCode": "no code",
+    "imported": "Imported",
+    "openLoan": "Open loan",
+    "backToClient": "Back to client",
+    "creditSubtitle": "Principal {principal} · {code}",
+    "lockedHint": "This credit came from another source: its numbers come from there and are not edited here.",
+    "noSchedule": "This credit has no schedule, and that is fine.",
+    "noScheduleHint": "It carries a frozen instalment ({amount}) and its next collection is a date, not a derivation: {date}.",
+    "creditStatus": {
+      "ACTIVE": "Active",
+      "PAID": "Paid",
+      "DEFAULTED": "Defaulted",
+      "RESTRUCTURED": "Restructured",
+      "WRITTEN_OFF": "Written off",
+      "CANCELLED": "Cancelled"
+    },
+    "installmentStatus": {
+      "PENDING": "Pending",
+      "PARTIAL": "Partial",
+      "PAID": "Paid",
+      "OVERDUE": "Overdue"
+    },
+    "frequency": {
+      "DAILY": "Daily",
+      "WEEKLY": "Weekly",
+      "BIWEEKLY": "Fortnightly",
+      "MONTHLY": "Monthly"
+    },
+    "schedule": {
+      "number": "Instalment",
+      "dueDate": "Due",
+      "amount": "Amount",
+      "paid": "Paid"
     },
     "form": {
       "clientType": "Type",
@@ -158,7 +201,15 @@
       "document": "ID",
       "taxId": "Tax ID",
       "risk": "Risk segment",
-      "createdAt": "Added"
+      "createdAt": "Added",
+      "principal": "Principal",
+      "rate": "Rate",
+      "installments": "Instalments",
+      "currency": "Currency",
+      "disbursedAt": "Disbursed",
+      "installment": "Instalment",
+      "frequency": "Frequency",
+      "nextDue": "Next collection"
     },
     "contactType": { "PHONE": "Phone", "WHATSAPP": "WhatsApp", "EMAIL": "Email" },
     "locationType": {

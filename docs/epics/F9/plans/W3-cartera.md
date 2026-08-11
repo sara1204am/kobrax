@@ -381,8 +381,12 @@ enum se traducen acá**, no se suben a `shared`.
       fila nueva y vacía se mandaba como alta (el alta sí las filtraba). Arreglado en
       `diffCliente`, o sea en `shared`, así el móvil también deja de crear direcciones sin
       dirección.
-- [ ] 7. Créditos: lista dentro de la ficha, ficha del crédito con su cronograma (que puede no
+- [x] 7. Créditos: lista dentro de la ficha, ficha del crédito con su cronograma (que puede no
       existir, §4.4) y edición de lo operativo.
+      La ficha **no llama a `/schedule`**: `GET /credits/:id` ya trae las cuotas, y ese endpoint
+      devuelve un recorte de la misma respuesta. ⚠️ Y `hasSchedule` **miente en el listado**: el
+      query de `GET /credits` no incluye las cuotas, así que viene `false` para todos — sólo la
+      ficha puede decir si un crédito tiene cronograma.
 - [ ] 8. Alta de crédito con la cotización en vivo, el cobrador asignado y `openCase` (§5.3).
 - [ ] 9. Adjuntos: listar por tipo/fecha/hash, subir por `/uploads` y borrar. Sin «ver» (§5.4).
 - [ ] 10. Baja del cliente, con la regla de los créditos activos (§4.3.2).

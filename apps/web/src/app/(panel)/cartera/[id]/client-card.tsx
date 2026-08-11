@@ -21,7 +21,7 @@ const STATUS_TONE = { ACTIVE: 'success', INACTIVE: 'neutral', BLOCKED: 'danger' 
  * volvería inútil justo el día que haya que leerlo. La respuesta del revelado **reemplaza al
  * cliente entero**, porque enmascarado y en claro son la misma ficha con distinta profundidad.
  */
-export function ClientCard({ client }: { client: ClientDetail }) {
+export function ClientCard({ client, credits }: { client: ClientDetail; credits?: ReactNode }) {
   const t = useTranslations('portfolio');
   const router = useRouter();
   const toast = useToast();
@@ -87,6 +87,10 @@ export function ClientCard({ client }: { client: ClientDetail }) {
           </dl>
           {!revealed && <p className="mt-3 text-[12px] text-k-muted">{t('maskedHint')}</p>}
         </Section>
+
+        {/* Los créditos los pinta el servidor y bajan como children: esta tarjeta es cliente por
+            el revelado, y no hay razón para que esa lista viaje como JavaScript. */}
+        {credits && <Section title={t('sections.credits')}>{credits}</Section>}
 
         <Section title={t('sections.contacts')}>
           <Rows

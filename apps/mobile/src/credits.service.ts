@@ -23,32 +23,15 @@ export function createCredit(input: NewCreditInput): Promise<MutateResult<Create
   return apiMutate<CreatedCredit>('/credits', 'POST', { openCase: true, origin: 'manual', ...input });
 }
 
-/** Detalle del crédito para prellenar la edición (§5.4). */
-export interface CreditDetail {
-  id: string;
-  principalAmount: number;
-  interestRate: number;
-  currency: string;
-  outstandingBalance: number;
-  installmentAmount?: number;
-  frequency?: PaymentFrequency;
-  nextDueDate?: string;
-  origin?: CreditOrigin;
-  locked?: boolean; // candado del importado (§4.3)
-  notes?: string;
-}
+/**
+ * Detalle del crédito para prellenar la edición (§5.4).
+ * **Vive en `@kobrax/shared`** desde F9 · W3: la ficha del panel web lee el mismo contrato.
+ */
+export type { CreditDetail, CreditInstallmentDetail, UpdateCreditPatch } from '@kobrax/shared';
+import type { CreditDetail, UpdateCreditPatch } from '@kobrax/shared';
 
 export function getCredit(id: string): Promise<QueryResult<CreditDetail>> {
   return apiQuery<CreditDetail>(`/credits/${id}`);
-}
-
-export interface UpdateCreditPatch {
-  principalAmount?: number;
-  interestRate?: number;
-  installmentAmount?: number;
-  frequency?: PaymentFrequency;
-  nextDueDate?: string;
-  notes?: string;
 }
 
 export function updateCredit(id: string, patch: UpdateCreditPatch): Promise<MutateResult<CreditDetail>> {
