@@ -50,7 +50,7 @@ export function MembersTable({
     const { ok, data } = await postJson<InvitedMember>(`/api/users/${member.userId}/resend`, {});
     setBusy(false);
     if (!ok) {
-      toast(data.error?.message ?? t('actionError'), 'error');
+      toast(data.error?.message ?? t('actionError'), 'danger');
       return;
     }
     setResent(data);
@@ -64,7 +64,7 @@ export function MembersTable({
     if (!ok) {
       // El mensaje del servidor es el que sabe por qué: último administrador, no es tuyo,
       // ya aceptó la invitación. Re-escribirlo acá sería adivinar.
-      toast(data.error?.message ?? t('actionError'), 'error');
+      toast(data.error?.message ?? t('actionError'), 'danger');
       return;
     }
     toast(okMessage);

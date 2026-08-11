@@ -53,6 +53,7 @@ export default async function PanelLayout({ children }: { children: ReactNode })
           email: user.email,
           role: user.role,
           accountId: user.accountId,
+          photoUrl: user.profile?.photoUrl,
         }}
         // Si la lista falla, el panel funciona igual: el selector de empresa simplemente no
         // aparece. Es un adorno de la topbar, no la puerta de entrada.

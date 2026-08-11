@@ -18,6 +18,8 @@ export interface ShellUser {
   email: string;
   role: string;
   accountId: string;
+  /** Vacío = todavía no subió ninguna; se muestran las iniciales. */
+  photoUrl?: string;
 }
 
 /**
@@ -277,13 +279,7 @@ function Topbar({
         <LocaleSwitch />
       </div>
 
-      <Dropdown
-        label={
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-k-highlight text-[13px] font-semibold text-k-purple">
-            {initials(user.name)}
-          </span>
-        }
-      >
+      <Dropdown label={<Avatar user={user} />}>
         <div className="border-b border-k-border px-3 py-2.5">
           <p className="truncate text-[14px] font-medium text-k-text">{user.name}</p>
           <p className="truncate text-[12px] text-k-text-2">{user.email}</p>
@@ -433,6 +429,35 @@ function LogoutItem() {
       <Icon name="logout" className="h-[18px] w-[18px] text-k-muted" />
       {t('logout')}
     </button>
+  );
+}
+
+/**
+ * La foto de la persona, con sus iniciales de respaldo.
+ *
+ * Si el archivo no está —`/uploads` guarda por tenant y el perfil es global, así que quien
+ * pertenece a dos empresas no la ve en la otra— se cae a las iniciales en vez de dejar el
+ * ícono de imagen rota.
+ */
+function Avatar({ user }: { user: ShellUser }) {
+  const [broken, setBroken] = useState(false);
+
+  if (user.photoUrl && !broken) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- lo sirve el BFF con la sesión
+      <img
+        src={user.photoUrl}
+        alt=""
+        onError={() => setBroken(true)}
+        className="h-8 w-8 rounded-full border border-k-border object-cover"
+      />
+    );
+  }
+
+  return (
+    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-k-highlight text-[13px] font-semibold text-k-purple">
+      {initials(user.name)}
+    </span>
   );
 }
 
