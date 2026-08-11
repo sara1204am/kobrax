@@ -6,3 +6,6 @@ export * from './template.js';
 export * from './loan.js';
 export * from './patch.js';
 export * from './member.js';
+export * from './client-form.js';
+export * from './client-diff.js';
+export * from './loan-form.js';

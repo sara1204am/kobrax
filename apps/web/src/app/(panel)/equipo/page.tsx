@@ -2,6 +2,8 @@ import { getTranslations } from 'next-intl/server';
 import { memberName, type AccountInfo, type AssignableRole, type MeInfo, type Member } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { EmptyState, PageHeader, Badge } from '@/components/panel-ui';
+import { SearchBox } from '@/components/search-box';
+import { matchesText } from '@/lib/portfolio';
 import { MembersTable } from './members-table';
 import { InviteButton } from './invite-button';
 
@@ -13,16 +15,14 @@ import { InviteButton } from './invite-button';
  * `searchParams` que escribe el `DataTable` — la vista sigue siendo compartible por link sin
  * pedirle al servidor algo que no ofrece.
  *
- * ponytail: sin caja de búsqueda. El techo es el del plan (pocas filas), así que filtrar no
- * hace falta todavía. **El `q` se construye en W3**, donde `/clients` sí busca del lado del
- * servidor y le da el primer contrato real; ahí se cablea también acá. Escribirlo antes sería
- * adivinar la forma del parámetro — que es exactamente lo que el code-review le marcó al
- * `DataTable` por haber nacido sin consumidor.
+ * La caja de búsqueda es la misma que la de la cartera (W3), pero acá **filtra en memoria**: el
+ * servidor devuelve el equipo entero y no sabe buscar. Lo que se comparte es el `?q=` en la URL,
+ * no el mecanismo — y por eso se escribió recién cuando `/clients` le dio su primer contrato real.
  */
 export default async function EquipoPage({
   searchParams,
 }: {
-  searchParams: { sort?: string; dir?: string };
+  searchParams: { sort?: string; dir?: string; q?: string };
 }) {
   const t = await getTranslations('team');
 
@@ -37,7 +37,11 @@ export default async function EquipoPage({
     return <EmptyState title={t('noAccess')} text={list.body.error?.message} />;
   }
 
-  const members = sortMembers(list.body.data, searchParams.sort, searchParams.dir);
+  const q = searchParams.q?.trim() ?? '';
+  const found = q
+    ? list.body.data.filter((m) => matchesText(memberName(m), q) || matchesText(m.email, q))
+    : list.body.data;
+  const members = sortMembers(found, searchParams.sort, searchParams.dir);
   const seats = account.body.data;
 
   return (
@@ -59,12 +63,14 @@ export default async function EquipoPage({
           </>
         }
       />
+      <SearchBox label={t('search.label')} placeholder={t('search.placeholder')} />
       {/* Los roles pueden venir vacíos si el rol de quien mira no tiene `role:read`: en ese
           caso el selector no se dibuja y la lista sigue siendo legible. */}
       <MembersTable
         members={members}
         roles={roles.body.data ?? []}
         meId={me.body.data.userId}
+        filtered={q.length > 0}
       />
     </>
   );

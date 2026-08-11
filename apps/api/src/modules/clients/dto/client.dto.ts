@@ -3,6 +3,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsLatitude,
   IsLongitude,
@@ -122,6 +123,10 @@ export class UpdateClientDto {
   @IsOptional() @IsObject() metadata?: Record<string, unknown>;
 }
 
+/** Criterios de orden de la cartera. `dpd` (mora) es el default y el que abre la pantalla. */
+export const CLIENT_SORTS = ['dpd', 'debt', 'name', 'status', 'createdAt'] as const;
+export type ClientSort = (typeof CLIENT_SORTS)[number];
+
 export class ListClientsQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit?: number;
@@ -129,6 +134,18 @@ export class ListClientsQueryDto {
   @IsOptional() @IsString() q?: string;
   @IsOptional() @IsEnum(ClientStatus) status?: ClientStatus;
   @IsOptional() @IsString() risk?: string;
+  /**
+   * `portfolio` → cada cliente viene con su deuda agregada, su peor mora y cuántos créditos tiene,
+   * y **la lista se puede ordenar por eso**. Es la cartera del panel web (F9 · W3).
+   */
+  @IsOptional() @IsIn(['portfolio']) view?: 'portfolio';
+  /**
+   * ⚠️ **Sólo con `view=portfolio`.** `debt` y `dpd` se calculan agregando los créditos, así que
+   * ordenar por ellos es parte de la misma consulta: sin la vista no hay nada que ordenar. La lista
+   * de siempre sigue saliendo por fecha de alta.
+   */
+  @IsOptional() @IsIn(CLIENT_SORTS) sort?: ClientSort;
+  @IsOptional() @IsIn(['asc', 'desc']) dir?: 'asc' | 'desc';
 }
 
 // ── Sub-recursos ─────────────────────────────────────────────────────────────

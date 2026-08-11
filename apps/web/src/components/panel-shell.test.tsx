@@ -32,7 +32,7 @@ const ACCOUNTS = [
   { id: 'a2', name: 'Kobrax Demo Norte', role: 'SUPERVISOR', status: 'ACTIVE' },
 ];
 
-function renderShell(accounts = ACCOUNTS, permissions = ['client:read', 'user:read']) {
+function renderShell(accounts = ACCOUNTS, permissions = ['client:read', 'user:read', 'case:read']) {
   return render(
     <PanelShell user={USER} accounts={accounts} nav={visibleNav(permissions)}>
       <p>contenido</p>
@@ -45,7 +45,9 @@ describe('PanelShell — el menú', () => {
     renderShell();
     // El sidebar y el cajón pintan la misma lista, así que cada rótulo aparece dos veces.
     expect(screen.getAllByRole('link', { name: 'Inicio' }).length).toBeGreaterThan(0);
-    expect(screen.queryByRole('link', { name: /^Cartera/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /^Cartera/ }).length).toBeGreaterThan(0); // W3
+    // Casos todavía no existe: se pinta en gris y no navega.
+    expect(screen.queryByRole('link', { name: /^Casos/ })).not.toBeInTheDocument();
     expect(screen.getAllByText('Pronto').length).toBeGreaterThan(0);
   });
 

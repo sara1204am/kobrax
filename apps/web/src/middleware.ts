@@ -106,10 +106,13 @@ export const config = {
     '/settings/:path*',
     '/cuenta/:path*',
     '/equipo/:path*',
+    '/cartera/:path*',
     '/api/auth/me',
     '/api/auth/switch-account',
     '/api/account/:path*',
     '/api/users/:path*',
+    '/api/clients/:path*',
+    '/api/credits/:path*',
     '/api/uploads/:path*',
   ],
 };

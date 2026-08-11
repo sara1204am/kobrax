@@ -105,6 +105,20 @@ export function serializeAttachment(a: ClientAttachment) {
   };
 }
 
+/**
+ * Lo que la cartera del panel agrega por cliente (F9 · W3). Presente **sólo** con `view=portfolio`.
+ * No lleva moneda: una cuenta opera en una sola (`account.currencyCode`), y el panel formatea con esa.
+ */
+export interface PortfolioTotals {
+  /** Suma del saldo de todos sus créditos vivos. */
+  totalDebt: number;
+  /** La peor mora entre sus créditos — de acá sale el color de la fila. */
+  maxDaysPastDue: number;
+  creditCount: number;
+}
+
+export type PortfolioClient = ReturnType<typeof serializeClient> & PortfolioTotals;
+
 type ClientWithRelations = Client & {
   contacts?: ClientContact[];
   locations?: ClientLocation[];

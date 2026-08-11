@@ -4,7 +4,18 @@ import { ClientsService } from './clients.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
 /** Fakes en memoria de las dependencias del servicio. */
-function makeService(opts: { dup?: unknown; client?: unknown; activeCredits?: number; failContact?: boolean } = {}) {
+function makeService(
+  opts: {
+    dup?: unknown;
+    client?: unknown;
+    activeCredits?: number;
+    failContact?: boolean;
+    /** Filas crudas que devuelve la consulta de cartera (`view=portfolio`). */
+    rows?: { id: string; total_debt: number; max_days_past_due: number; credit_count: number }[];
+    /** Lo que Prisma trae para hidratar esas filas — a propósito en otro orden. */
+    clients?: Record<string, unknown>[];
+  } = {},
+) {
   const calls = {
     create: [] as Record<string, unknown>[],
     update: [] as { where: { id: string }; data: Record<string, unknown> }[],
@@ -12,9 +23,16 @@ function makeService(opts: { dup?: unknown; client?: unknown; activeCredits?: nu
     location: [] as Record<string, unknown>[],
     relation: [] as Record<string, unknown>[],
     audit: [] as { entity: string; action: string }[],
+    sql: [] as { sql: string; values: unknown[] }[],
   };
   const tx = {
+    // La cartera no pasa por Prisma: arma su SQL y lo manda entero (ver `listPortfolio`).
+    $queryRaw: async (q: { sql: string; values: unknown[] }) => {
+      calls.sql.push(q);
+      return q.sql.includes('COUNT(*)') ? [{ total: opts.rows?.length ?? 0 }] : (opts.rows ?? []);
+    },
     client: {
+      findMany: async () => opts.clients ?? [],
       findFirst: async (args: { where?: Record<string, unknown> }) => {
         const w = args.where ?? {};
         if (w.nationalIdHash !== undefined) return opts.dup ?? null;
@@ -224,5 +242,114 @@ describe('ClientsService.remove', () => {
     assert.equal(calls.update[0]!.data.status, 'INACTIVE');
     assert.ok(calls.update[0]!.data.deletedAt instanceof Date);
     assert.deepEqual(calls.audit.map((a) => `${a.action} ${a.entity}`), ['DELETE client']);
+  });
+});
+
+// ── Cartera del panel web (F9 · W3) ──────────────────────────────────────────
+const fila = (over: Partial<{ id: string; total_debt: number; max_days_past_due: number; credit_count: number }> = {}) => ({
+  id: 'c1',
+  total_debt: 1000,
+  max_days_past_due: 12,
+  credit_count: 2,
+  ...over,
+});
+
+const cliente = (id: string) => ({
+  id,
+  clientType: 'PERSON',
+  firstName: 'Ana',
+  lastName: 'Ruiz',
+  nationalId: null,
+  taxId: null,
+  status: 'ACTIVE',
+  metadata: {},
+  createdAt: new Date(),
+  updatedAt: new Date(),
+});
+
+/** El SQL de la página (el primero); el segundo es el COUNT. */
+const pageSql = (calls: { sql: { sql: string; values: unknown[] }[] }) => calls.sql[0]!;
+
+describe('ClientsService.list — cartera (view=portfolio)', () => {
+  /**
+   * El bug que este spec existe para evitar: con `cr.deleted_at IS NULL` en el WHERE, el LEFT JOIN
+   * se comporta como INNER y **los clientes sin créditos desaparecen** — o sea, el que acabás de dar
+   * de alta no aparece en la cartera. El síntoma no se parece en nada a su causa.
+   */
+  it('el filtro de créditos va en el ON del LEFT JOIN, nunca en el WHERE', async () => {
+    const { service, calls } = makeService({ rows: [fila()], clients: [cliente('c1')] });
+    await service.list({ view: 'portfolio' } as never);
+
+    const sql = pageSql(calls).sql;
+    const [join, resto] = sql.split(/\bWHERE\b/);
+    assert.match(join!, /LEFT JOIN credits cr ON cr\.client_id = c\.id AND cr\.deleted_at IS NULL/);
+    const filtro = resto!.split(/\bGROUP BY\b/)[0]!;
+    assert.doesNotMatch(filtro, /cr\.deleted_at/, 'el LEFT JOIN se volvería INNER');
+  });
+
+  it('abre por mora desc, desempata por deuda, y cierra con el id', async () => {
+    const { service, calls } = makeService({ rows: [fila()], clients: [cliente('c1')] });
+    await service.list({ view: 'portfolio' } as never);
+    // Sin `c.id` al final, dos clientes con la misma mora se intercambian entre páginas y
+    // `LIMIT/OFFSET` repite o saltea filas.
+    assert.match(pageSql(calls).sql, /ORDER BY max_days_past_due DESC, total_debt DESC, c\.id/);
+  });
+
+  it('ordena por nombre con la misma regla que el nombre visible (empresa antes que persona)', async () => {
+    const { service, calls } = makeService({ rows: [], clients: [] });
+    await service.list({ view: 'portfolio', sort: 'name', dir: 'asc' } as never);
+    assert.match(pageSql(calls).sql, /ORDER BY COALESCE\(c\.business_name, c\.last_name, c\.first_name\) ASC, c\.id/);
+  });
+
+  it('filtra por el estado del cliente usando su columna real (`client_status`)', async () => {
+    const { service, calls } = makeService({ rows: [], clients: [] });
+    await service.list({ view: 'portfolio', status: 'ACTIVE' } as never);
+    assert.match(pageSql(calls).sql, /c\.client_status = \?::"ClientStatus"/);
+    assert.ok(pageSql(calls).values.includes('ACTIVE'));
+  });
+
+  it('la búsqueda viaja parametrizada: el documento exacto por hash, el nombre como ILIKE', async () => {
+    const { service, calls } = makeService({ rows: [], clients: [] });
+    await service.list({ view: 'portfolio', q: "ana' OR 1=1--" } as never);
+
+    const { sql, values } = pageSql(calls);
+    assert.doesNotMatch(sql, /OR 1=1/, 'el texto de búsqueda nunca se interpola');
+    assert.ok(values.includes("%ana' OR 1=1--%"));
+    assert.ok(values.includes("h(ANA' OR 1=1--)")); // blind index del documento
+  });
+
+  it('un cliente sin créditos entra igual, con deuda y mora en cero', async () => {
+    const { service } = makeService({
+      rows: [fila({ id: 'nuevo', total_debt: 0, max_days_past_due: 0, credit_count: 0 })],
+      clients: [cliente('nuevo')],
+    });
+    const res = await service.list({ view: 'portfolio' } as never);
+    assert.equal(res.data!.length, 1);
+    assert.deepEqual(
+      { d: res.data![0]!.totalDebt, m: res.data![0]!.maxDaysPastDue, n: res.data![0]!.creditCount },
+      { d: 0, m: 0, n: 0 },
+    );
+  });
+
+  // Prisma no garantiza el orden del `IN`, y el orden es justamente lo que se le pidió a la consulta.
+  it('respeta el orden de la consulta aunque Prisma devuelva las filas al revés', async () => {
+    const { service } = makeService({
+      rows: [fila({ id: 'a', max_days_past_due: 30 }), fila({ id: 'b', max_days_past_due: 5 })],
+      clients: [cliente('b'), cliente('a')],
+    });
+    const res = await service.list({ view: 'portfolio' } as never);
+    assert.deepEqual(res.data!.map((c) => c.id), ['a', 'b']);
+  });
+
+  it('la deuda vuelve redondeada a dos decimales', async () => {
+    const { service } = makeService({ rows: [fila({ total_debt: 1234.5600000000001 })], clients: [cliente('c1')] });
+    const res = await service.list({ view: 'portfolio' } as never);
+    assert.equal(res.data![0]!.totalDebt, 1234.56);
+  });
+
+  it('sin `view` sigue saliendo la lista de siempre, por Prisma y sin agregados', async () => {
+    const { service, calls } = makeService({ rows: [], clients: [] });
+    await service.list({ q: 'ana' } as never);
+    assert.deepEqual(calls.sql, [], 'la lista de siempre no toca el SQL crudo');
   });
 });
