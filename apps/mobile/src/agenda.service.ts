@@ -2,44 +2,33 @@
  * Gestiones agendadas (lectura S1 + alta S2). Thin sobre `apiQuery`/`apiMutate`. Tipos verificados
  * contra `agenda.serializer.ts` del API (fechas llegan como ISO string vía JSON).
  */
+// Se importan además de re-exportarse: un `export ... from` no trae los nombres al scope local.
 import type {
-  AgendaDetails,
-  AgendaItemStatus,
-  AgendaItemType,
+  AgendaItemDetail,
+  AgendaListItem,
   AgendaOutcome,
   AgendaPostponeStep,
+  AgendaTarget,
   AgendaTimeSlot,
+  CreateAgendaInput,
   ScheduleTimeMode,
+  UpdateAgendaInput,
 } from '@kobrax/shared';
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
 import { cachedList, cachedOne } from './sync/cached';
 
-export interface AgendaListItem {
-  id: string;
-  caseId: string;
-  clientId: string;
-  creditId: string;
-  assigneeId: string;
-  type: AgendaItemType;
-  status: AgendaItemStatus;
-  priorityCode?: string;
-  expectedResultCode?: string;
-  scheduledDate: string;
-  timeMode: ScheduleTimeMode;
-  scheduledTime?: string;
-  timeSlot?: string;
-  observations?: string;
-  details: Record<string, unknown>;
-  resultActivityId?: string;
-  /** Motivo del desenlace no ejecutado: cancelación si está CANCELLED, reprogramación si RESCHEDULED. */
-  reasonCode?: string;
-  /** El agendado del que nació al reagendar (S6) — con esto se arma la cadena en el historial. */
-  rescheduledFromId?: string;
-  clientName?: string;
-  isOverdue: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
+/**
+ * Los tipos del contrato viven en `@kobrax/shared` (F9 W5 T1): los consume también el panel web.
+ * Acá se re-exportan para que las pantallas sigan importando de un solo lado.
+ */
+export type {
+  AgendaHistoryEntry,
+  AgendaItemDetail,
+  AgendaListItem,
+  AgendaTarget,
+  CreateAgendaInput,
+  UpdateAgendaInput,
+} from '@kobrax/shared';
 
 /** Agendados de un día (`YYYY-MM-DD`). El móvil separa secciones por `status`. */
 export function listByDay(dateISO: string): Promise<QueryResult<AgendaListItem[]>> {
@@ -57,38 +46,6 @@ export function listOverdue(limit = 100): Promise<QueryResult<AgendaListItem[]>>
 }
 
 /** Con qué se ejecuta la gestión: el teléfono al que llamar o la dirección a la que ir. */
-export interface AgendaTarget {
-  phone?: string;
-  address?: string;
-  zone?: string;
-  latitude?: number;
-  longitude?: number;
-}
-
-/** Una fila del historial de gestiones del caso. */
-export interface AgendaHistoryEntry {
-  id: string;
-  type: AgendaItemType;
-  status: AgendaItemStatus;
-  scheduledDate: string;
-  isOverdue: boolean;
-  /** Motivo de la cancelación o de la reprogramación (S6). */
-  reasonCode?: string;
-  /** Si nació al reagendar otra, cuál — con esto se pinta la cadena. */
-  rescheduledFromId?: string;
-}
-
-export interface AgendaItemDetail {
-  item: AgendaListItem;
-  client: { id: string; displayName: string; nationalId: string | null; zone?: string };
-  credit?: { creditId: string; code?: string; outstandingBalance: number; currency: string; daysPastDue: number };
-  /** Ausente en recordatorios y promesas: no hay a quién llamar ni a dónde ir. */
-  target?: AgendaTarget;
-  /** `code` → etiqueta del catálogo (medio de pago, banco). Sólo en promesas de pago. */
-  labels?: Record<string, string>;
-  history: AgendaHistoryEntry[];
-}
-
 /** Detalle de una gestión (S3). Un round-trip: gestión + deudor + saldo + contacto + historial. */
 export function getItem(id: string): Promise<QueryResult<AgendaItemDetail>> {
   return cachedOne<AgendaItemDetail>('agenda.detail', id, () => apiQuery<AgendaItemDetail>(`/agenda/${id}`));
@@ -195,18 +152,6 @@ export function clientContext(clientId: string): Promise<QueryResult<AgendaClien
 }
 
 /** Cuerpo de `POST /agenda`. El server deriva `clientId` y `assigneeId` — no van acá. */
-export interface CreateAgendaInput {
-  caseId: string;
-  creditId: string;
-  type: AgendaItemType;
-  scheduledDate: string;
-  timeMode: ScheduleTimeMode;
-  scheduledTime?: string;
-  timeSlot?: string;
-  observations?: string;
-  details: AgendaDetails;
-}
-
 /** Alta. Devuelve el ítem serializado → la pantalla lo inserta sin refetch. */
 export function createItem(input: CreateAgendaInput): Promise<MutateResult<AgendaListItem>> {
   return apiMutate<AgendaListItem>('/agenda', 'POST', input);
@@ -216,15 +161,6 @@ export function createItem(input: CreateAgendaInput): Promise<MutateResult<Agend
  * Cuerpo de `PATCH /agenda/:id` (S5). **Sin `scheduledDate` ni deudor**: mover el día es reagendar
  * (deja rastro) y el cliente es el ancla del agendado. Se manda sólo lo que cambió.
  */
-export interface UpdateAgendaInput {
-  type?: AgendaItemType;
-  timeMode?: ScheduleTimeMode;
-  scheduledTime?: string;
-  timeSlot?: string;
-  observations?: string;
-  details?: AgendaDetails;
-}
-
 /** Edita una gestión pendiente (S5). Devuelve el ítem actualizado. */
 export function updateItem(id: string, input: UpdateAgendaInput): Promise<MutateResult<AgendaListItem>> {
   return apiMutate<AgendaListItem>(`/agenda/${id}`, 'PATCH', input);
