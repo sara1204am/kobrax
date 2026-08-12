@@ -115,6 +115,8 @@ export const config = {
     '/api/clients/:path*',
     '/api/credits/:path*',
     '/api/imports/:path*',
+    '/api/cases/:path*',
+    '/api/agenda/:path*',
     '/api/uploads/:path*',
   ],
 };
