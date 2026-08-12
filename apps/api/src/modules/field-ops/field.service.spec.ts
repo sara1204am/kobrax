@@ -3,8 +3,25 @@ import assert from 'node:assert/strict';
 import { FieldService } from './field.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
-function makeService(opts: { visit?: unknown; stop?: unknown; case?: unknown; category?: unknown } = {}) {
-  const calls = { visitCreate: [] as Record<string, unknown>[], stopUpdate: 0, evidence: [] as Record<string, unknown>[], events: [] as string[], audit: [] as string[] };
+function makeService(
+  opts: {
+    visit?: unknown;
+    stop?: unknown;
+    case?: unknown;
+    category?: unknown;
+    permissions?: string[];
+    listRows?: Record<string, unknown>[];
+  } = {},
+) {
+  const calls = {
+    visitCreate: [] as Record<string, unknown>[],
+    stopUpdate: 0,
+    evidence: [] as Record<string, unknown>[],
+    events: [] as string[],
+    audit: [] as string[],
+    listWhere: undefined as Record<string, unknown> | undefined,
+    listOrderBy: undefined as Record<string, unknown>[] | undefined,
+  };
   const tx = {
     collectionCase: { findFirst: async () => opts.case ?? { id: 'c1' }, update: async () => ({}) },
     routeStop: { findFirst: async () => opts.stop ?? { id: 's1' }, update: async () => { calls.stopUpdate += 1; return {}; } },
@@ -12,6 +29,12 @@ function makeService(opts: { visit?: unknown; stop?: unknown; case?: unknown; ca
     user: { update: async () => ({}) },
     fieldVisit: {
       findFirst: async () => opts.visit ?? { id: 'v1', latitude: -16.5, longitude: -68.15 },
+      findMany: async (args: { where?: Record<string, unknown>; orderBy?: Record<string, unknown>[] }) => {
+        calls.listWhere = args.where;
+        calls.listOrderBy = args.orderBy;
+        return opts.listRows ?? [];
+      },
+      count: async () => opts.listRows?.length ?? 0,
       create: async (args: { data: Record<string, unknown> }) => {
         calls.visitCreate.push(args.data);
         return { id: 'v1', ...args.data };
@@ -27,12 +50,131 @@ function makeService(opts: { visit?: unknown; stop?: unknown; case?: unknown; ca
     catalogItem: { findFirst: async () => ('category' in opts ? opts.category : { id: 'cat-1' }) },
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
-  const tenant = { accountId: 'acc-A', userId: 'collector-1' };
+  const perms = opts.permissions ?? [];
+  const tenant = { accountId: 'acc-A', userId: 'collector-1', permissions: perms, can: (p: string) => perms.includes(p) };
   const audit = { record: async (e: { action: string }) => void calls.audit.push(e.action) };
   const events = { emit: (name: string) => void calls.events.push(name) };
   const service = new FieldService(prisma as never, tenant as never, audit as never, events as never);
   return { service, calls };
 }
+
+const ROW = {
+  id: 'v1',
+  caseId: 'c1',
+  routeStopId: 's1',
+  collectorId: 'collector-1',
+  latitude: -16.5,
+  longitude: -68.15,
+  accuracy: 12.5,
+  outcome: 'CONTACTED',
+  notes: null,
+  details: {},
+  capturedAt: new Date('2026-08-12T14:30:00.000Z'),
+};
+
+describe('FieldService.list (lectura de visitas — W6 T0)', () => {
+  it('el cobrador (ROUTE_EXECUTE sin ROUTE_ASSIGN) queda acotado a lo suyo, ignorando lo que pida', async () => {
+    const { service, calls } = makeService({ permissions: ['route:read', 'route:execute'] });
+    await service.list({ collectorId: 'otro' } as never);
+    assert.equal(calls.listWhere!.collectorId, 'collector-1');
+  });
+
+  it('con ROUTE_ASSIGN respeta el cobrador pedido', async () => {
+    const { service, calls } = makeService({ permissions: ['route:read', 'route:assign'] });
+    await service.list({ collectorId: 'otro' } as never);
+    assert.equal(calls.listWhere!.collectorId, 'otro');
+  });
+
+  it('un auditor (ROUTE_READ a secas) ve todo el tenant, no sólo lo suyo', async () => {
+    const { service, calls } = makeService({ permissions: ['route:read'] });
+    await service.list({} as never);
+    assert.equal(calls.listWhere!.collectorId, undefined);
+  });
+
+  it('las visitas de una ruta se buscan por sus paradas, que es de donde cuelgan', async () => {
+    const { service, calls } = makeService({ permissions: ['route:assign'] });
+    await service.list({ routeId: 'r1' } as never);
+    assert.deepEqual(calls.listWhere!.routeStop, { routeId: 'r1' });
+  });
+
+  it('un día es el día entero en UTC, no un instante', async () => {
+    const { service, calls } = makeService({ permissions: ['route:assign'] });
+    await service.list({ date: '2026-08-12' } as never);
+    const range = calls.listWhere!.capturedAt as { gte: Date; lt: Date };
+    assert.equal(range.gte.toISOString(), '2026-08-12T00:00:00.000Z');
+    assert.equal(range.lt.toISOString(), '2026-08-13T00:00:00.000Z');
+  });
+
+  it('🔴 el orden termina en id: en una ruta las visitas se registran seguidas', async () => {
+    // Sin desempate único, dos visitas del mismo instante hacen que LIMIT/OFFSET repita y saltee.
+    const { service, calls } = makeService({ permissions: ['route:assign'] });
+    await service.list({} as never);
+    assert.deepEqual(calls.listOrderBy, [{ capturedAt: 'desc' }, { id: 'asc' }]);
+  });
+
+  it('audita el revelado UNA vez por consulta, no una por fila', async () => {
+    // El punto de la visita dice dónde vive el deudor. Una entrada por fila llenaría el log.
+    const { service, calls } = makeService({ permissions: ['route:assign'], listRows: [ROW, { ...ROW, id: 'v2' }] });
+    await service.list({} as never);
+    assert.deepEqual(calls.audit, ['PII_REVEAL']);
+  });
+
+  it('sin resultados no audita nada: no se reveló nada', async () => {
+    const { service, calls } = makeService({ permissions: ['route:assign'] });
+    await service.list({} as never);
+    assert.deepEqual(calls.audit, []);
+  });
+
+  it('las coordenadas salen como número, no como el Decimal de Prisma', async () => {
+    // Serializado a JSON, un Decimal viaja como string y el mapa del panel no dibujaría nada.
+    const { service } = makeService({ permissions: ['route:assign'], listRows: [ROW] });
+    const res = await service.list({} as never);
+    assert.equal(typeof res.data![0]!.latitude, 'number');
+    assert.equal(typeof res.data![0]!.accuracy, 'number');
+  });
+});
+
+describe('FieldService.findOne (la visita con su evidencia)', () => {
+  const WITH_EVIDENCE = {
+    ...ROW,
+    evidences: [
+      {
+        id: 'e1',
+        type: 'PHOTO',
+        fileUrl: 'abc123.jpg',
+        fileHash: 'a'.repeat(64),
+        latitude: -16.5,
+        longitude: -68.15,
+        capturedAt: new Date('2026-08-12T14:31:00.000Z'),
+      },
+    ],
+  };
+
+  it('devuelve la evidencia con el hash ENTERO: recortado sería decorativo', async () => {
+    const { service } = makeService({ permissions: ['route:assign'], visit: WITH_EVIDENCE });
+    const visit = await service.findOne('v1');
+    assert.equal(visit.evidences[0]!.fileHash.length, 64);
+    // `fileUrl` es el nombre del archivo: se sirve por `GET /uploads/:name`, la única puerta que
+    // valida el tenant.
+    assert.equal(visit.evidences[0]!.fileUrl, 'abc123.jpg');
+  });
+
+  it('la visita de otro cobrador responde 404, no 403: no se filtra que exista', async () => {
+    const { service } = makeService({
+      permissions: ['route:read', 'route:execute'],
+      visit: { ...WITH_EVIDENCE, collectorId: 'otro' },
+    });
+    await rejectsWithCode(service.findOne('v1'), 'RESOURCE_NOT_FOUND');
+  });
+
+  it('un auditor sí puede abrir la visita de cualquiera', async () => {
+    const { service } = makeService({
+      permissions: ['route:read'],
+      visit: { ...WITH_EVIDENCE, collectorId: 'otro' },
+    });
+    assert.equal((await service.findOne('v1')).id, 'v1');
+  });
+});
 
 describe('FieldService.createVisit', () => {
   it('exige un objetivo (caso o parada)', async () => {

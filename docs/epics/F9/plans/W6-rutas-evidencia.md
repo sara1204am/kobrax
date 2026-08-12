@@ -140,6 +140,32 @@ listado, que no dibuja ningún mapa, es pagar el peso donde no se usa.
 **No van**: `CATEGORY_LABEL` ni `CATEGORY_TONE` (texto y color en un idioma), ni nada de
 `visit-result.ts` que sea del registro en campo — el panel **lee** resultados, no los escribe.
 
+## 6-bis. Auditoría de reuso
+
+Cada capacidad de las tres pantallas contra lo que ya existe. **Sin esta tabla, W6 reescribía dos
+cosas que W5 acababa de dejar hechas** (lo encontró el gate del plan).
+
+| Capacidad | Qué hacer | Dónde está |
+|---|---|---|
+| **Filtros del listado** (cobrador · fecha · estado, escritos a la URL) | 🔵 **EXTENDER** | `app/(panel)/casos/case-filters.tsx` — mismos `<select>`, mismo `set()` a los searchParams, misma vuelta a la página 1. Se sube a `components/url-filters.tsx` y lo usan casos y rutas |
+| **Navegación por día** (‹ › · `input[type=date]` · «Hoy») | 🟢 **REUSAR** | `app/(panel)/agenda/day-picker.tsx`, tal cual. Se mueve a `components/` porque pasa a tener dos llamadores |
+| Aritmética de fechas UTC (`shiftDay`, `dayOr`) | 🟢 **REUSAR** | `lib/agenda.ts`, con sus tests de fin de mes, año y bisiesto |
+| Tabla paginada con orden por URL | 🟢 REUSAR | `components/data-table.tsx` (+ `Column.defaultDir`, de W5) |
+| `meta` del sobre con respaldo | 🟢 REUSAR | `pageMeta` de `lib/bff.ts` |
+| Ficha: caja, dato con rótulo, bajada, vacío, encabezado | 🟢 REUSAR | `Card`, `Fact`, `Hint`, `EmptyState`, `PageHeader` de `components/panel-ui.tsx` |
+| Etiqueta de estado con tono | 🟢 REUSAR | `Badge` de `panel-ui`. El mapa código→tono es nuevo (`ROUTE_STATUS_TONE`), como `STATUS_TONE` en casos y cartera |
+| Handlers que mutan | 🟢 REUSAR | `proxyMutation` de `lib/proxy.ts` |
+| Traducir el error de la API | 🟢 REUSAR | `errorText` de `lib/api-error.ts` |
+| Fechas y plata con locale | 🟢 REUSAR | `date`, `dateTime`, `money` de `lib/format.ts` |
+| Agrupar por cobrador | 🟢 REUSAR | `groupByAssignee` de `lib/agenda.ts` — si el listado agrupa; si no, no se toca |
+| **La cuenta de la jornada** | 🔵 EXTENDER (promover) | `summarizeDay` del móvil → `shared` (§6) |
+| **El mapa del recorrido** | 🔴 **NUEVO** | `components/route-map.tsx` — **en `components/`, no dentro de la pantalla**: W9 lo va a querer para el seguimiento en vivo, y naciendo adentro de `/rutas/[id]` habría que reescribirlo |
+| Lógica de rutas (acciones por estado, agrupado de paradas) | 🔴 NUEVO | `lib/routes.ts`, con tests. Mismo lugar y forma que `lib/cases.ts` y `lib/agenda.ts` |
+| `GET /visits` y `GET /visits/:id` | 🔴 NUEVO | API (T0, §4.4) |
+
+⚠️ Los dos 🔵 mueven código que hoy usa W5: al extraerlos hay que dejar **casos y agenda pasando
+sus tests sin tocarlos**, igual que se exige con el móvil al promover a `shared`.
+
 ## 7. i18n
 
 Namespace nuevo `panel.routes`. Los `VisitOutcome` (10 valores), `RouteStatus` (4) y
@@ -153,9 +179,10 @@ variante son JSON del móvil: se muestran los que el panel sabe nombrar y **el r
 | T0 | **API**: `GET /visits` y `GET /visits/:id` con scope, auditoría del revelado y desempate por `id` | `api` type-check + spec en `field.service.spec.ts` (ya está en la lista de `package.json`) |
 | T1 | Promover a `shared` `summarizeDay`, `categoryOf`, `routeProgress` y los tipos | shared + móvil **310 sin tocar un test** |
 | T2 | BFF de lo que muta (estado de la ruta) + matcher + `nav.ts` + esqueleto de i18n | type-check + `nav.test.ts` + `messages.test.ts` |
-| T3 | `/rutas`: la lista del día con filtros de cobrador, fecha y estado | pantalla + `lib/routes.ts` con tests |
+| T2-bis | **Subir a `components/` los dos 🔵 de §6-bis**: los filtros por URL (de `CaseFilters`) y el `DayPicker` | **casos y agenda verdes sin tocar sus tests** |
+| T3 | `/rutas`: la lista del día, reusando lo de T2-bis | pantalla + `lib/routes.ts` con tests |
 | T4 | `/rutas/[id]`: paradas en orden + la cuenta de la jornada con `summarizeDay` | pantalla |
-| T5 | El mapa (D2): recorrido, paradas numeradas y el punto de cada visita | pantalla + dep anotada |
+| T5 | El mapa (D2) en `components/route-map.tsx`: recorrido, paradas numeradas y el punto de cada visita | pantalla + dep anotada en `apps/web/CLAUDE.md` |
 | T6 | `/rutas/[id]/parada/[sid]`: la visita, su evidencia y el hash | pantalla |
 
 ## 9. Tests
@@ -179,7 +206,18 @@ pnpm --filter @kobrax/web build      # ⚠️ con el `dev` APAGADO: comparten `.
 
 Y el recorrido por cable con **dos sesiones**, supervisora y cobrador, como en W5.
 
-## 11. Trampas y riesgos
+## 11. Reglas de la etapa
+
+Las transversales del BUILD-PLAN §3 valen todas; las que esta etapa toca de cerca:
+
+1. **Multi-tenant por capacidad, nunca por rol** — acá pega doble, porque la puerta `@Roles` de
+   rutas es mínima a propósito (§4.2) y el permiso declarado no dice quién puede.
+2. **Ocultar ≠ autorizar**: el scope real lo aplica el service; la pantalla sólo evita ofrecer.
+3. **Una regla de negocio no se re-implementa, se promueve** — `summarizeDay` es el caso (§6).
+4. **No pintar lo que no existe**: sin T0, la evidencia no se dibuja «pronto», no se dibuja.
+5. **La evidencia es inmutable**: ni editar ni borrar, ni siquiera para quien tiene todo.
+
+## 12. Trampas y riesgos
 
 - 🔴 **Sin T0 no hay evidencia** (§4.3). Es lo primero y bloquea T6.
 - 🔴 **La puerta `@Roles` de rutas miente** (§4.2): dice `ROUTE_READ` en endpoints que escriben.
@@ -194,11 +232,11 @@ Y el recorrido por cable con **dos sesiones**, supervisora y cobrador, como en W
 - ⚠️ **PowerShell**: `[id]` es comodín (usar `-LiteralPath`) y `Set-Content -Encoding utf8` escribe
   BOM. Para editar código, las herramientas de edición.
 
-## 12. Fuera de alcance
+## 13. Fuera de alcance
 
 - **Armar o reordenar la ruta desde el panel** (`create`, `generate`, `optimize`, alta y baja de
   paradas): el cobrador arma la suya desde el teléfono, con el mapa en la mano.
 - **Registrar una visita o subir evidencia** desde el panel: son `ROUTE_EXECUTE` y se hacen en la
-  calle. El panel **lee**.
+  calle. El panel **lee**. (§11.5: tampoco se edita ni se borra lo que ya se registró.)
 - **El seguimiento en vivo del cobrador** (`collector.location` por WebSocket): es W9.
 - **Los KPIs de la jornada agregados por equipo**: es W8, que mide lo que esta etapa produce.

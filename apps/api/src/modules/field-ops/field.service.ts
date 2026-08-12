@@ -1,13 +1,21 @@
 import { Injectable } from '@nestjs/common';
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { CatalogType, LocationType, RouteStopStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService } from '../../common/events/event-bus.service';
-import { GPS_FALLBACK_KEY, validateVisitDetails } from '@kobrax/shared';
+import {
+  GPS_FALLBACK_KEY,
+  Permission,
+  resolvePagination,
+  validateVisitDetails,
+  type ApiResponse,
+  ResponseDto,
+} from '@kobrax/shared';
 import { isValidGps, verifyEvidenceHash } from './field-integrity';
-import { AddEvidenceDto, CreateVisitDto } from './dto/field.dto';
+import { serializeVisit, serializeVisitDetail } from './field.serializer';
+import { AddEvidenceDto, CreateVisitDto, ListVisitsQueryDto } from './dto/field.dto';
 import { evidenceHashInvalid, invalidGps, invalidVisitDetails, resourceNotFound, visitNeedsTarget } from './field.errors';
 
 @Injectable()
@@ -21,6 +29,82 @@ export class FieldService {
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
+  }
+
+  /**
+   * `true` para el cobrador: ejecuta rutas (`ROUTE_EXECUTE`) pero no las asigna (`ROUTE_ASSIGN`) →
+   * sólo ve sus propias visitas. Un rol de sólo lectura de la cuenta (auditor) **no** cae acá:
+   * audita todo el tenant. Mismo criterio que rutas, casos y agenda — la capacidad, no el rol.
+   */
+  private scopedToOwnVisits(): boolean {
+    return this.tenant.can(Permission.ROUTE_EXECUTE) && !this.tenant.can(Permission.ROUTE_ASSIGN);
+  }
+
+  /**
+   * Las visitas registradas (F9 W6-T0). **Sin evidencias**: es un listado, y traer las fotos de 40
+   * visitas para dibujar una tabla es tráfico que nadie mira. El detalle las trae.
+   */
+  async list(query: ListVisitsQueryDto): Promise<ApiResponse<ReturnType<typeof serializeVisit>[]>> {
+    const { page, limit, skip } = resolvePagination(query);
+    const where: Prisma.FieldVisitWhereInput = {};
+    if (query.caseId) where.caseId = query.caseId;
+    // Las visitas de una ruta no cuelgan de la ruta: cuelgan de sus paradas.
+    if (query.routeId) where.routeStop = { routeId: query.routeId };
+    if (query.date) {
+      const from = new Date(`${query.date}T00:00:00.000Z`);
+      const to = new Date(from);
+      to.setUTCDate(to.getUTCDate() + 1);
+      where.capturedAt = { gte: from, lt: to };
+    }
+
+    if (this.tenant.can(Permission.ROUTE_ASSIGN)) {
+      if (query.collectorId) where.collectorId = query.collectorId;
+    } else if (this.scopedToOwnVisits()) {
+      where.collectorId = this.tenant.userId;
+    }
+
+    const [rows, total] = await this.tx((tx) =>
+      Promise.all([
+        tx.fieldVisit.findMany({
+          where,
+          // 🔴 El desempate por `id` va SIEMPRE: sin él, `LIMIT/OFFSET` repite y saltea filas entre
+          // páginas cuando dos visitas comparten el instante — y en una ruta se registran seguidas.
+          orderBy: [{ capturedAt: 'desc' }, { id: 'asc' }],
+          skip,
+          take: limit,
+        }),
+        tx.fieldVisit.count({ where }),
+      ]),
+    );
+
+    /*
+     * El punto donde se registró la visita es PII: dice dónde vive el deudor. Se audita el
+     * revelado **una vez por consulta**, no una por fila — mismo criterio que el detalle de ruta y
+     * el de agenda, que si no llenarían el log con una entrada por deudor mirado de reojo.
+     */
+    if (rows.length > 0) {
+      await this.audit.record({ entity: 'field_visit', entityId: this.tenant.userId ?? 'anon', action: 'PII_REVEAL' });
+    }
+    return ResponseDto.paginated(rows.map(serializeVisit), total, page, limit);
+  }
+
+  /**
+   * Una visita con **sus evidencias**: la foto, el punto y el hash que la sellan.
+   *
+   * Fuera de scope → 404 y no 403: no se filtra que exista, igual que en rutas y en casos.
+   */
+  async findOne(id: string): Promise<ReturnType<typeof serializeVisitDetail>> {
+    const visit = await this.tx((tx) =>
+      tx.fieldVisit.findFirst({
+        where: { id },
+        include: { evidences: { orderBy: [{ capturedAt: 'asc' }, { id: 'asc' }] } },
+      }),
+    );
+    if (!visit) throw resourceNotFound();
+    if (this.scopedToOwnVisits() && visit.collectorId !== this.tenant.userId) throw resourceNotFound();
+
+    await this.audit.record({ entity: 'field_visit', entityId: id, action: 'PII_REVEAL' });
+    return serializeVisitDetail(visit);
   }
 
   /** Registra una visita de campo (append-only). GPS obligatorio. */
