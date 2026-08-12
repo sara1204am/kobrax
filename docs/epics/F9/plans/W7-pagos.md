@@ -104,6 +104,14 @@ la cuota 3 y deja 200 a cuenta»—, ahí sí, y con el consumidor a la vista.
 
 - **`GET /payments` devuelve los del TENANT, no los de un cobrador** (lección de Rutas). Con
   `registeredBy` se ve quién lo cargó; si hiciera falta filtrar por persona, **no hay parámetro**.
+- 🔴 **El ledger no trae el nombre del deudor**: devuelve `creditId` y `caseId`. Resolverlo por fila
+  serían dos llamadas por pago —crédito y cliente— o **cuarenta por página**. Por eso la lista
+  **no tiene columna de deudor** y el nombre sale en el detalle, que es una fila sola y se lo puede
+  permitir. No es un olvido; si algún día molesta, el arreglo es un `view=` que enriquezca la
+  respuesta, como hizo casos.
+- **El total de la pantalla es el de la PÁGINA**, no el del período: no hay endpoint de agregación
+  y sumar el período entero exigiría traerlo entero. El rótulo dice cuántos pagos está contando,
+  para que el número no se lea como «lo cobrado en el mes».
 - Sin `user:read` no hay nombres: `registeredBy` es un id, y **sin nombre no es «sin nadie»** (W5).
 - Los `POST` responden **201**: `proxyMutation` ya lo sabe.
 - El comprobante (`receiptUrl`) sale por `/api/uploads/…` **tal cual viene**: es una ruta, no un
