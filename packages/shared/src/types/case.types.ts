@@ -8,6 +8,16 @@ import type { CasePriority, CaseStatus } from '../enums/index.js';
 import type { CreditOrigin, PaymentFrequency } from '../enums/credit.enum.js';
 
 /**
+ * Cómo se puede ordenar `GET /cases`. La primera es el default.
+ *
+ * Vive acá porque es contrato: la API decide qué sabe ordenar y el panel decide qué columnas
+ * ofrece. Con una copia a mano en cada lado, agregar una clave allá y olvidarla acá deja una
+ * flecha de orden que no ordena nada — y sacarla allá, un 500 esperando a que alguien la use.
+ */
+export const CASE_SORTS = ['priority', 'daysPastDue', 'balance', 'slaDueAt', 'createdAt'] as const;
+export type CaseSort = (typeof CASE_SORTS)[number];
+
+/**
  * Un punto del cliente en el mapa. `ownerName` presente ⇒ la ubicación es de un garante o
  * familiar, no del cliente: una deuda se cobra donde esté la persona.
  */

@@ -1,17 +1,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import {
-  AgendaItemStatus,
-  Permission,
-  ScheduleTimeMode,
-  todayISO,
-  type AgendaItemDetail,
-  type MeInfo,
-} from '@kobrax/shared';
+import { AgendaItemStatus, Permission, todayISO, type AgendaItemDetail, type MeInfo } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
-import { AGENDA_STATUS_TONE, itemActions } from '@/lib/agenda';
-import { Badge, Card, EmptyState, PageHeader } from '@/components/panel-ui';
+import { AGENDA_STATUS_TONE, itemActions, itemWhen } from '@/lib/agenda';
+import { Badge, Card, EmptyState, Fact, PageHeader } from '@/components/panel-ui';
 import { date, money } from '@/lib/format';
 import { ItemActions } from './item-actions';
 
@@ -57,12 +50,7 @@ export default async function GestionPage({ params }: { params: { id: string } }
       : [],
   );
 
-  const when =
-    item.timeMode === ScheduleTimeMode.FIXED
-      ? (item.scheduledTime ?? t('noTime'))
-      : item.timeSlot
-        ? t(`timeSlot.${item.timeSlot}`)
-        : t('noTime');
+  const when = itemWhen(item, t);
 
   return (
     <>
@@ -146,14 +134,5 @@ export default async function GestionPage({ params }: { params: { id: string } }
         </section>
       </div>
     </>
-  );
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
-      <dd className="mt-1 text-[15px] text-k-text">{value}</dd>
-    </div>
   );
 }

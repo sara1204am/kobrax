@@ -10,7 +10,7 @@ import {
   type Member,
 } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
-import { Badge, Card, EmptyState, PageHeader } from '@/components/panel-ui';
+import { Badge, Card, EmptyState, Fact, PageHeader } from '@/components/panel-ui';
 import { PRIORITY_TONE, STATUS_TONE } from '@/lib/cases';
 import { date, dateTime, money } from '@/lib/format';
 import { CaseActions } from './case-actions';
@@ -117,14 +117,5 @@ export default async function CasoPage({ params }: { params: { id: string } }) {
         </section>
       </div>
     </>
-  );
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
-      <dd className="mt-1 text-[15px] text-k-text">{value}</dd>
-    </div>
   );
 }

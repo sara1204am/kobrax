@@ -285,7 +285,6 @@
       "noAssignee": "—",
       "unknownAssignee": "Assigned",
       "overdueBadge": "Overdue",
-      "rowMenu": "Case actions",
       "actions": {
         "open": "Open the case",
         "activity": "Record activity",
@@ -349,8 +348,7 @@
         "assignee": "Collector",
         "openClient": "Open the debtor's file",
         "timeline": "Activity",
-        "timelineEmpty": "No activity recorded yet.",
-        "activityBy": "by {name}"
+        "timelineEmpty": "No activity recorded yet."
       },
       "status": {
         "PENDING": "Pending",

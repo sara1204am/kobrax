@@ -1,4 +1,4 @@
-import { CASE_TRANSITIONS, CasePriority, CaseStatus } from '@kobrax/shared';
+import { CASE_SORTS, CASE_TRANSITIONS, CasePriority, CaseStatus } from '@kobrax/shared';
 
 /** Los tonos que sabe pintar el `Badge` del panel. */
 type Tone = 'neutral' | 'success' | 'warning' | 'danger';
@@ -45,12 +45,11 @@ export const PRIORITY_TONE: Record<CasePriority, Tone> = {
 };
 
 /**
- * Las claves de orden que `GET /cases` sabe resolver.
- *
- * Una que no esté acá **no viaja**: el servidor la ignoraría y caería a su orden por defecto, así
- * que la tabla mostraría una flecha de orden que no ordena nada.
+ * Las claves de orden que `GET /cases` sabe resolver — salen de `shared`, que es donde vive el
+ * contrato. Una que no esté ahí **no viaja**: el servidor caería a su orden por defecto y la tabla
+ * mostraría una flecha de orden que no ordenó nada.
  */
-export const CASE_SORTS = ['priority', 'daysPastDue', 'balance', 'slaDueAt', 'createdAt'];
+export { CASE_SORTS } from '@kobrax/shared';
 
 /**
  * La query para `GET /cases` a partir de lo que hay en la URL.
@@ -75,7 +74,9 @@ export function caseQuery(
    * Con un estado elegido manda ése, incluso si es terminal: pedir «Cerrados» tiene que traerlos.
    */
   if (!params.status) query.set('open', 'true');
-  if (params.sort && CASE_SORTS.includes(params.sort)) {
+  // El `as` es porque `CASE_SORTS` es una tupla de literales y lo que llega es lo que había en la
+  // URL: la comprobación es justamente para saber si es una de ellas.
+  if (params.sort && (CASE_SORTS as readonly string[]).includes(params.sort)) {
     query.set('sort', params.sort);
     query.set('dir', params.dir === 'asc' ? 'asc' : 'desc');
   }

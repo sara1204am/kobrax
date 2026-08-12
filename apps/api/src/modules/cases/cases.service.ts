@@ -1,7 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import type { CollectionCase, Prisma, PrismaClient } from '@prisma/client';
 import { AgendaItemStatus, AgendaItemType, CaseActivityType, CaseStatus, LocationType } from '@prisma/client';
-import { canTransition, maskDocument, Permission, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
+import {
+  canTransition,
+  maskDocument,
+  Permission,
+  resolvePagination,
+  type ApiResponse,
+  type CaseSort,
+  ResponseDto,
+} from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -28,16 +36,13 @@ const TERMINAL: CaseStatus[] = [CaseStatus.CLOSED, CaseStatus.WRITTEN_OFF];
  * relación — Prisma sabe hacerlo, a diferencia de un `SUM` o un `_count`, que es lo que obligó a
  * escribir SQL crudo en la cartera del panel.
  */
-const CASE_ORDER: Record<string, (dir: Prisma.SortOrder) => Prisma.CollectionCaseOrderByWithRelationInput> = {
+const CASE_ORDER: Record<CaseSort, (dir: Prisma.SortOrder) => Prisma.CollectionCaseOrderByWithRelationInput> = {
   priority: (dir) => ({ priority: dir }),
   daysPastDue: (dir) => ({ credit: { daysPastDue: dir } }),
   balance: (dir) => ({ credit: { outstandingBalance: dir } }),
   slaDueAt: (dir) => ({ slaDueAt: dir }),
   createdAt: (dir) => ({ createdAt: dir }),
 };
-
-/** Las claves de orden que acepta `GET /cases`. La primera es el default. */
-export const CASE_SORTS = Object.keys(CASE_ORDER);
 
 /**
  * El `orderBy` del listado.
@@ -57,8 +62,8 @@ function caseOrderBy(sort?: string, dir?: string): Prisma.CollectionCaseOrderByW
    * El DTO no valida la clave a propósito (una URL vieja no tiene por qué reventar), así que la
    * guarda de verdad es ésta.
    */
-  const key = sort && Object.hasOwn(CASE_ORDER, sort) ? sort : 'priority';
-  const primary = CASE_ORDER[key]!(dir === 'asc' ? 'asc' : 'desc');
+  const key: CaseSort = sort && Object.hasOwn(CASE_ORDER, sort) ? (sort as CaseSort) : 'priority';
+  const primary = CASE_ORDER[key](dir === 'asc' ? 'asc' : 'desc');
   // Entre iguales, primero el caso más viejo: es el que lleva más tiempo esperando.
   const byAge: Prisma.CollectionCaseOrderByWithRelationInput[] =
     sort === 'createdAt' ? [] : [{ createdAt: 'asc' }];

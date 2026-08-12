@@ -19,7 +19,9 @@ import { apiError } from './auth-flow';
 export async function proxyMutation<T>(
   req: Request,
   path: string,
-  method: 'POST' | 'PATCH' | 'DELETE' = 'POST',
+  // Sin `DELETE`: ningún endpoint de casos ni de agenda borra, y un método que nadie usa es una
+  // puerta abierta esperando a que alguien la empuje.
+  method: 'POST' | 'PATCH' = 'POST',
 ): Promise<NextResponse> {
   if (!sameOrigin(req)) {
     return NextResponse.json({ error: { code: 'CSRF', message: 'Origen no permitido' } }, { status: 403 });

@@ -1,4 +1,4 @@
-import { AgendaItemStatus } from '@kobrax/shared';
+import { AgendaItemStatus, ScheduleTimeMode } from '@kobrax/shared';
 
 type Tone = 'neutral' | 'success' | 'warning' | 'danger';
 
@@ -80,4 +80,19 @@ export function groupByAssignee<T extends { assigneeId?: string }>(
  */
 export function itemActions(status: AgendaItemStatus): ('complete' | 'reschedule' | 'cancel')[] {
   return status === AgendaItemStatus.SCHEDULED ? ['complete', 'reschedule', 'cancel'] : [];
+}
+
+/**
+ * Cuándo se hace la gestión: la hora exacta o el nombre de la franja.
+ *
+ * Son **dos formas de programar**, no una hora que a veces falta; por eso «Sin hora» es el último
+ * recurso y no el caso normal de una gestión por franja.
+ */
+export function itemWhen(
+  item: { timeMode: ScheduleTimeMode; scheduledTime?: string; timeSlot?: string },
+  t: { (key: string): string; has: (key: string) => boolean },
+): string {
+  if (item.timeMode === ScheduleTimeMode.FIXED) return item.scheduledTime ?? t('noTime');
+  const key = `timeSlot.${item.timeSlot}`;
+  return item.timeSlot && t.has(key) ? t(key) : t('noTime');
 }

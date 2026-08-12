@@ -1,6 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 import type { AccountInfo } from '@kobrax/shared';
-import { apiCall, type ApiEnvelope } from '@/lib/bff';
+import { apiCall, pageMeta } from '@/lib/bff';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { SearchBox } from '@/components/search-box';
 import type { PortfolioRow } from '@/lib/portfolio';
@@ -54,21 +54,10 @@ export default async function CarteraPage({
       <SearchBox label={t('search.label')} placeholder={t('search.placeholder')} hint={t('search.hint')} />
       <PortfolioTable
         rows={list.body.data}
-        meta={pageMeta(list.body, page)}
+        meta={pageMeta(list.body, searchParams.page, LIMIT)}
         currency={account.body.data?.currencyCode ?? 'BOB'}
         hasFilters={Boolean(searchParams.q?.trim() || searchParams.status)}
       />
     </>
   );
-}
-
-/** El `meta` del sobre, con respaldo por si la respuesta no lo trae. */
-function pageMeta(body: ApiEnvelope<PortfolioRow[]>, page: number) {
-  const total = body.meta?.total ?? body.data?.length ?? 0;
-  return {
-    total,
-    page: body.meta?.page ?? page,
-    limit: body.meta?.limit ?? LIMIT,
-    pages: body.meta?.pages ?? Math.max(1, Math.ceil(total / LIMIT)),
-  };
 }

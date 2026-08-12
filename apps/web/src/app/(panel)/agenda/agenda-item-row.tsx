@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
-import { AgendaItemStatus, ScheduleTimeMode, type AgendaListItem } from '@kobrax/shared';
+import { AgendaItemStatus, type AgendaListItem } from '@kobrax/shared';
 import { Badge } from '@/components/panel-ui';
-import { AGENDA_STATUS_TONE } from '@/lib/agenda';
+import { AGENDA_STATUS_TONE, itemWhen } from '@/lib/agenda';
 
 /**
  * Una gestión en la lista del día. Server component: la fila no tiene interacción propia —lo que
@@ -11,13 +11,7 @@ import { AGENDA_STATUS_TONE } from '@/lib/agenda';
 export async function AgendaItemRow({ item }: { item: AgendaListItem }) {
   const t = await getTranslations('panel.agenda');
 
-  // Hora exacta o franja: son dos formas de programar, no una hora que a veces falta.
-  const when =
-    item.timeMode === ScheduleTimeMode.FIXED
-      ? (item.scheduledTime ?? t('noTime'))
-      : item.timeSlot
-        ? t(`timeSlot.${item.timeSlot}`)
-        : t('noTime');
+  const when = itemWhen(item, t);
 
   return (
     <li>

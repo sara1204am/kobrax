@@ -1,6 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 import { Permission, type AccountInfo, type CaseListItem, type MeInfo, type Member } from '@kobrax/shared';
-import { apiCall, type ApiEnvelope } from '@/lib/bff';
+import { apiCall, pageMeta } from '@/lib/bff';
 import { caseQuery, hasCaseFilters } from '@/lib/cases';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { CaseFilters } from './case-filters';
@@ -68,23 +68,11 @@ export default async function CasosPage({ searchParams }: { searchParams: CasesS
       <CaseFilters members={members} showAssignee={supervises && members.length > 0} />
       <CasesTable
         rows={list.body.data}
-        meta={pageMeta(list.body, searchParams.page)}
+        meta={pageMeta(list.body, searchParams.page, LIMIT)}
         members={members}
         currency={account.body.data?.currencyCode ?? 'BOB'}
         filtered={hasCaseFilters(searchParams)}
       />
     </>
   );
-}
-
-/** El `meta` del sobre, con respaldo por si la respuesta no lo trae. */
-function pageMeta(body: ApiEnvelope<CaseListItem[]>, pageParam?: string) {
-  const page = Math.max(1, Number(pageParam) || 1);
-  const total = body.meta?.total ?? body.data?.length ?? 0;
-  return {
-    total,
-    page: body.meta?.page ?? page,
-    limit: body.meta?.limit ?? LIMIT,
-    pages: body.meta?.pages ?? Math.max(1, Math.ceil(total / LIMIT)),
-  };
 }

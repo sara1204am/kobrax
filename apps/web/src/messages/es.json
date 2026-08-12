@@ -285,7 +285,6 @@
       "noAssignee": "—",
       "unknownAssignee": "Asignado",
       "overdueBadge": "Vencido",
-      "rowMenu": "Acciones del caso",
       "actions": {
         "open": "Ver el caso",
         "activity": "Registrar gestión",
@@ -349,8 +348,7 @@
         "assignee": "Cobrador",
         "openClient": "Ver la ficha del deudor",
         "timeline": "Gestiones",
-        "timelineEmpty": "Todavía no hay gestiones registradas.",
-        "activityBy": "por {name}"
+        "timelineEmpty": "Todavía no hay gestiones registradas."
       },
       "status": {
         "PENDING": "Pendiente",
