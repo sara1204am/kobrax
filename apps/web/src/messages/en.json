@@ -507,10 +507,9 @@
       "columns": {
         "collector": "Collector",
         "status": "Status",
-        "progress": "Progress",
         "stops": "Stops",
         "distance": "Distance",
-        "collected": "Collected"
+        "duration": "Duration"
       },
       "unknownCollector": "Collector",
       "progress": "{done} of {total}",

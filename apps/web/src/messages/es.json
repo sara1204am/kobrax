@@ -507,10 +507,9 @@
       "columns": {
         "collector": "Cobrador",
         "status": "Estado",
-        "progress": "Avance",
         "stops": "Paradas",
         "distance": "Distancia",
-        "collected": "Recaudado"
+        "duration": "Duración"
       },
       "unknownCollector": "Cobrador",
       "progress": "{done} de {total}",
