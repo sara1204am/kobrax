@@ -8,7 +8,15 @@ import { resultKind, setupStep, type ImportConfig, type PortfolioSummary } from 
 import { Button, ErrorBanner } from '@/components/ui';
 import { DataTable, type Column } from '@/components/data-table';
 import { EmptyState } from '@/components/panel-ui';
-import { errorText, postImportFile, rejectText, warningText, type Translator } from '@/lib/import';
+import {
+  ACCEPTED_FILES,
+  errorText,
+  groupWarnings,
+  postImportFile,
+  rejectText,
+  warningText,
+  type Translator,
+} from '@/lib/import';
 
 /**
  * El import del día, en tres estados sobre el mismo `File` en memoria.
@@ -139,6 +147,10 @@ export function ImportRunner({ config }: { config: ImportConfig }) {
         onDrop={(e) => {
           e.preventDefault();
           setDragging(false);
+          // El `busy` no es cosmético: soltar un segundo archivo encima del primero deja dos
+          // lecturas en vuelo, y si la vieja contesta última, la vista previa muestra el nombre de
+          // un archivo con los conteos del otro — y confirmar aplica el que nadie revisó.
+          if (busy) return;
           const dropped = e.dataTransfer.files?.[0];
           if (dropped) choose(dropped);
         }}
@@ -151,6 +163,7 @@ export function ImportRunner({ config }: { config: ImportConfig }) {
         <input
           ref={filePicker}
           type="file"
+          accept={ACCEPTED_FILES}
           className="hidden"
           onChange={(e) => {
             const chosen = e.target.files?.[0];
@@ -227,8 +240,14 @@ function Buckets({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
         <section className="rounded-2xl border-l-[3px] border-k-warning bg-k-warning-bg px-4 py-3">
           <h2 className="text-[14px] font-semibold text-k-warning-text">{t('run.warnings')}</h2>
           <ul className="mt-1 space-y-1 text-[13px] text-k-warning-text">
-            {warnings.map((warning, i) => (
-              <li key={`${warning.code}-${i}`}>{warningText(warning, t)}</li>
+            {/* Agrupados: `MORA_INCONSISTENTE` sale una vez por FILA, así que sin esto 700 filas
+                sospechosas dibujan 700 renglones iguales y empujan fuera de la pantalla a los dos
+                avisos accionables — justo donde se decide si confirmar. */}
+            {groupWarnings(warnings).map((warning) => (
+              <li key={`${warning.code}-${warning.detail ?? ''}`}>
+                {warningText(warning, t)}
+                {warning.count > 1 && <span className="tabular-nums"> ×{warning.count}</span>}
+              </li>
             ))}
           </ul>
         </section>

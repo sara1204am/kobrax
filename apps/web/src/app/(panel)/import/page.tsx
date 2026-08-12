@@ -34,7 +34,7 @@ export default async function ImportPage() {
             href="/import/ajustes"
             className="min-h-[40px] rounded-xl border border-k-border px-4 py-2 text-[14px] font-medium text-k-text-2 hover:bg-k-bg"
           >
-            {t('settings')}
+            {t('settings.link')}
           </Link>
         }
       />

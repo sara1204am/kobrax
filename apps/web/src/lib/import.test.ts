@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import es from '@/messages/es.json';
 import en from '@/messages/en.json';
 import {
+  ACCEPTED_FILES,
   confirmDaysPastDue,
   errorText,
+  groupWarnings,
   pickDaysPastDue,
   rejectText,
   scopeRefName,
@@ -104,6 +106,52 @@ describe('la calibración de la mora, en dos pasos', () => {
   it('la regla anterior viaja entera: el merge del servidor reemplaza, no fusiona', () => {
     const patch = pickDaysPastDue(rule, 'OTRA');
     expect(patch.fields?.daysPastDue).toMatchObject({ enabled: true, required: true });
+  });
+
+  it('una columna del cuadro de un extracto viaja marcada como tal', () => {
+    // Sin `in: 'table'` el motor la busca como etiqueta del encabezado del bloque, no la
+    // encuentra, y TODA la cartera entra con cero días de atraso — con el cartel «Confirmada».
+    expect(pickDaysPastDue(rule, 'DIAS_MORA', 'table').fields?.daysPastDue).toMatchObject({
+      from: 'DIAS_MORA',
+      in: 'table',
+    });
+  });
+
+  it('elegir una etiqueta del encabezado BORRA el marcador de cuadro que hubiera', () => {
+    const deTabla = { ...rule, in: 'table' as const };
+    expect(pickDaysPastDue(deTabla, 'DIAS').fields?.daysPastDue?.in).toBeUndefined();
+  });
+});
+
+describe('groupWarnings', () => {
+  it('junta los avisos que dicen exactamente lo mismo y los cuenta', () => {
+    // `MORA_INCONSISTENTE` se emite una vez por fila sospechosa y no lleva detalle: sin agrupar,
+    // un archivo grande dibuja cientos de renglones idénticos.
+    const grouped = groupWarnings([
+      { code: 'MORA_SIN_CONFIRMAR' },
+      { code: 'MORA_INCONSISTENTE', detail: undefined },
+      { code: 'MORA_INCONSISTENTE' },
+      { code: 'MORA_INCONSISTENTE' },
+    ]);
+
+    expect(grouped).toEqual([
+      { code: 'MORA_SIN_CONFIRMAR', detail: undefined, count: 1 },
+      { code: 'MORA_INCONSISTENTE', detail: undefined, count: 3 },
+    ]);
+  });
+
+  it('dos avisos del mismo código con detalles distintos NO se juntan', () => {
+    const grouped = groupWarnings([
+      { code: 'MORA_COLUMNA_SOSPECHOSA', detail: 'DIAS' },
+      { code: 'MORA_COLUMNA_SOSPECHOSA', detail: 'ATRASO' },
+    ]);
+    expect(grouped).toHaveLength(2);
+  });
+});
+
+describe('ACCEPTED_FILES', () => {
+  it('nombra las extensiones que la API acepta, para filtrar antes de subir 15 MB', () => {
+    expect(ACCEPTED_FILES.split(',')).toEqual(['.csv', '.txt', '.pdf', '.xlsx', '.xls']);
   });
 });
 

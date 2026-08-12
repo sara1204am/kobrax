@@ -44,6 +44,14 @@ const PARTICLES = new Set(['DE', 'DEL', 'LA', 'LAS', 'LOS', 'Y']);
  * hueco a dibujar cuando la regla no separa nada.
  */
 export function previewName(full: string, order: NameOrder): { lastName: string; firstName: string } {
+  /*
+   * Con columnas separadas el nombre completo **no se usa**: `splitName` devuelve las columnas
+   * `clientLastName` y `clientFirstName` emparejadas aparte y descarta esta cadena. Previsualizar
+   * el corte del nombre entero acá decía que todos los clientes iban a entrar sin nombres — lo
+   * contrario de lo que hace esa opción, y esta función existe justamente para que las dos
+   * pantallas no previean el corte distinto.
+   */
+  if (order === 'split-columns') return { lastName: '—', firstName: '—' };
   if (order !== 'surnames-first') return { lastName: full, firstName: '—' };
   const words = full.split(/\s+/).filter(Boolean);
   const surnames: string[] = [];

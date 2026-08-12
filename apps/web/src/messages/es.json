@@ -62,7 +62,6 @@
     "import": {
       "title": "Import de cartera",
       "subtitle": "Subí el archivo del día, mirá qué va a cambiar y recién ahí confirmá.",
-      "settings": "Ajustes",
       "backToRun": "Volver al import",
       "run": {
         "dropTitle": "Arrastrá el archivo acá",
@@ -108,6 +107,7 @@
         }
       },
       "settings": {
+        "link": "Ajustes",
         "title": "Ajustes del import",
         "subtitle": "Cómo se lee el archivo de tu sistema. Se guarda al momento.",
         "source": "De dónde sale la cartera",

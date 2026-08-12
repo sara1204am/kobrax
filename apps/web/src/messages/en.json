@@ -62,7 +62,6 @@
     "import": {
       "title": "Portfolio import",
       "subtitle": "Upload today's file, see what will change, and only then confirm.",
-      "settings": "Settings",
       "backToRun": "Back to import",
       "run": {
         "dropTitle": "Drop the file here",
@@ -108,6 +107,7 @@
         }
       },
       "settings": {
+        "link": "Settings",
         "title": "Import settings",
         "subtitle": "How your system's file gets read. Saved as you go.",
         "source": "Where the portfolio comes from",

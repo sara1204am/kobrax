@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import es from '@/messages/es.json';
 import en from '@/messages/en.json';
@@ -26,6 +27,31 @@ describe('mensajes', () => {
         return typeof value !== 'string' || value.trim() === '';
       });
       expect(empty, `claves vacías en ${locale}.json`).toEqual([]);
+    }
+  });
+
+  /**
+   * Una clave declarada **dos veces dentro del mismo objeto** no la ve nadie: `JSON.parse` se
+   * queda con la última sin chistar, el type-check pasa y el test de arriba también, porque los
+   * dos idiomas quedan rotos igual. Se cobró a `panel.import.settings`, que era el rótulo de un
+   * botón y además el namespace de una pantalla: ganó el objeto y el botón dibujó la ruta cruda
+   * de la clave, en los dos idiomas.
+   *
+   * En JSON el único string seguido de `:` es una clave, así que contarlos en el texto y
+   * compararlos con los que sobrevivieron al parseo delata cualquier duplicado.
+   */
+  it('ninguna clave está declarada dos veces', () => {
+    const countKeys = (node: unknown): number =>
+      typeof node === 'object' && node !== null
+        ? Object.keys(node).length + Object.values(node).reduce<number>((n, v) => n + countKeys(v), 0)
+        : 0;
+
+    for (const [locale, messages] of [['es', es], ['en', en]] as const) {
+      // Relativo al cwd (`apps/web`, donde corre vitest): `import.meta.url` acá resuelve contra
+      // la raíz del disco y no contra el archivo.
+      const raw = readFileSync(`src/messages/${locale}.json`, 'utf8');
+      const declared = raw.match(/"(?:[^"\\]|\\.)*"\s*:/g)?.length ?? 0;
+      expect(declared, `claves duplicadas en ${locale}.json`).toBe(countKeys(messages));
     }
   });
 });

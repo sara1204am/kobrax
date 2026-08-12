@@ -41,6 +41,14 @@ export function SettingsForm({ screen }: { screen: ConfigScreen }) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [askReset, setAskReset] = useState(false);
+  /*
+   * El TIPO de alcance se elige antes de tener a quién, así que vive un rato acá y no en la
+   * config: `official` y `branch` **exigen** un `ref` y el servidor rechaza el par incompleto
+   * (`IMPORT_NOT_CONFIGURED`). Guardando en cada cambio, elegir «Un oficial» rebotaba, el select
+   * volvía a «Empresa» y el selector de persona —que se dibuja según el tipo— no aparecía nunca:
+   * el alcance por oficial o por agencia era **inalcanzable** desde el panel.
+   */
+  const [scopeKind, setScopeKind] = useState<ScopeKind>(screen.config.scope.kind);
 
   async function save(patch: ImportConfigPatch) {
     setError(null);
@@ -52,10 +60,14 @@ export function SettingsForm({ screen }: { screen: ConfigScreen }) {
       return;
     }
     setConfig(data.config);
+    setScopeKind(data.config.scope.kind);
     toast(t('settings.saved'));
   }
 
-  const refOptions = config.scope.kind === 'official' ? screen.members : screen.branches;
+  const refOptions = scopeKind === 'official' ? screen.members : screen.branches;
+  // El ref guardado sólo vale si es del mismo tipo que se está eligiendo ahora: una persona no
+  // sirve de agencia.
+  const refValue = config.scope.kind === scopeKind ? (config.scope.ref ?? '') : '';
   const sole = soleAssignee(screen.members);
 
   return (
@@ -82,13 +94,15 @@ export function SettingsForm({ screen }: { screen: ConfigScreen }) {
           <Card>
             <Field label={t('settings.scope')}>
               <Select
-                value={config.scope.kind}
+                value={scopeKind}
                 disabled={saving}
-                onChange={(e) =>
-                  // El alcance `account` no lleva `ref` y los otros dos lo exigen: al cambiar de
-                  // tipo, el ref viejo deja de tener sentido y se limpia.
-                  save({ scope: { kind: e.target.value as ScopeKind, ref: null } })
-                }
+                onChange={(e) => {
+                  const kind = e.target.value as ScopeKind;
+                  setScopeKind(kind);
+                  // «Toda la empresa» ya está completo y se guarda al toque. Los otros dos esperan
+                  // a que se elija a quién: el par incompleto lo rechaza el servidor.
+                  if (kind === 'account') void save({ scope: { kind, ref: null } });
+                }}
               >
                 {SCOPE_KINDS.map((kind) => (
                   <option key={kind} value={kind}>
@@ -97,15 +111,17 @@ export function SettingsForm({ screen }: { screen: ConfigScreen }) {
                 ))}
               </Select>
             </Field>
-            <Hint>{t(`scopes.${config.scope.kind}.hint`)}</Hint>
+            <Hint>{t(`scopes.${scopeKind}.hint`)}</Hint>
 
-            {config.scope.kind !== 'account' && (
+            {scopeKind !== 'account' && (
               <div className="mt-4">
-                <Field label={t(`scopes.${config.scope.kind}.refTitle`)}>
+                <Field label={t(`scopes.${scopeKind}.refTitle`)}>
                   <Select
-                    value={config.scope.ref ?? ''}
+                    value={refValue}
                     disabled={saving}
-                    onChange={(e) => save({ scope: { kind: config.scope.kind, ref: e.target.value || null } })}
+                    onChange={(e) =>
+                      e.target.value && save({ scope: { kind: scopeKind, ref: e.target.value } })
+                    }
                   >
                     <option value="">{t('settings.scopeRefMissing')}</option>
                     {refOptions.map((option) => (
@@ -115,12 +131,15 @@ export function SettingsForm({ screen }: { screen: ConfigScreen }) {
                     ))}
                   </Select>
                 </Field>
-                <Hint>{scopeRefName(config.scope, screen.members, screen.branches, t) ?? t('settings.scopeHint')}</Hint>
+                <Hint>
+                  {(refValue && scopeRefName(config.scope, screen.members, screen.branches, t)) ||
+                    t('settings.scopeHint')}
+                </Hint>
               </div>
             )}
 
             {/* Empresa + una sola persona activa = la cartera se autoasigna y no hay reparto. */}
-            {config.scope.kind === 'account' && sole && <Hint>{t('settings.scopeSole', { name: sole.name })}</Hint>}
+            {scopeKind === 'account' && sole && <Hint>{t('settings.scopeSole', { name: sole.name })}</Hint>}
           </Card>
 
           <Card>
