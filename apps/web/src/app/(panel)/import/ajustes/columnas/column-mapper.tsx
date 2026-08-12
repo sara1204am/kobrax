@@ -23,11 +23,11 @@ import {
   ACCEPTED_FILES,
   DAYS_PAST_DUE,
   confirmDaysPastDue,
-  errorText,
   patchConfig,
   pickDaysPastDue,
   postImportFile,
 } from '@/lib/import';
+import { errorText } from '@/lib/api-error';
 
 const FIELD_STATES: FieldState[] = ['required', 'optional', 'off'];
 const NAME_ORDERS: NameOrder[] = ['full', 'surnames-first', 'split-columns'];
@@ -58,7 +58,7 @@ export function ColumnMapper({ screen }: { screen: ConfigScreen }) {
     const result = await patchConfig(patch);
     setBusy(false);
     if (!result.ok || !result.config) {
-      setError(errorText(result.error, t, locale) || t('settings.saveError'));
+      setError(errorText(result.error, t, locale));
       return false;
     }
     setConfig(result.config);

@@ -40,8 +40,8 @@ export const NAV: NavItem[] = [
   { label: 'home', href: '/dashboard', permission: null, built: true },
   { label: 'portfolio', href: '/cartera', permission: Permission.CLIENT_READ, built: true },
   { label: 'import', href: '/import', permission: Permission.CLIENT_IMPORT, built: true },
-  { label: 'cases', href: '/casos', permission: Permission.CASE_READ, built: false },
-  { label: 'agenda', href: '/agenda', permission: Permission.AGENDA_READ, built: false },
+  { label: 'cases', href: '/casos', permission: Permission.CASE_READ, built: true },
+  { label: 'agenda', href: '/agenda', permission: Permission.AGENDA_READ, built: true },
   { label: 'routes', href: '/rutas', permission: Permission.ROUTE_READ, built: false },
   { label: 'payments', href: '/pagos', permission: Permission.PAYMENT_READ, built: false },
   { label: 'team', href: '/equipo', permission: Permission.USER_READ, built: true },
@@ -73,6 +73,9 @@ export interface Crumb {
   href?: string;
 }
 
+/** Un segmento que es un id (uuid), no una sección con nombre traducible. */
+const IS_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Rastro de navegación para una ruta.
  *
@@ -87,13 +90,22 @@ export function crumbsFor(pathname: string): Crumb[] {
   const match = NAV.find((i) => i.built && (pathname === i.href || pathname.startsWith(`${i.href}/`)));
   if (!match) return [];
 
-  const rest = pathname
-    .slice(match.href.length)
-    .split('/')
-    .filter(Boolean);
+  const segments = pathname.slice(match.href.length).split('/').filter(Boolean);
+  // Un id no es una clave de i18n: `crumbs.<uuid>` no existe en ningún idioma y la miga terminaba
+  // dibujando la ruta cruda de la clave. Se cae la miga, no el rastro: `/cartera/<id>` sigue
+  // diciendo «Cartera», y `/cartera/<id>/editar`, «Cartera / Editar».
+  const rest = segments.filter((segment) => !IS_ID.test(segment));
 
   return [
-    { label: `nav.${match.label}`, href: rest.length > 0 ? match.href : undefined },
+    {
+      label: `nav.${match.label}`,
+      /*
+       * La sección es enlace si la ruta baja de ella, **aunque lo que baje sea sólo un id**: en
+       * un detalle es el único camino de vuelta a la lista para quien llegó por un link. Mirar
+       * `rest` en vez de `segments` dejaba la miga como texto plano en toda ficha.
+       */
+      href: segments.length > 0 ? match.href : undefined,
+    },
     ...rest.map((segment, i) => ({
       label: `crumbs.${segment}`,
       href: i < rest.length - 1 ? `${match.href}/${rest.slice(0, i + 1).join('/')}` : undefined,

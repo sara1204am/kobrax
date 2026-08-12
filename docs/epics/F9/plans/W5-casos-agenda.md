@@ -1,9 +1,9 @@
-> **ESTADO: EN BORRADOR — ronda 1 (2026-08-11). NO construir hasta PASS.**
+> **ESTADO: APROBADO — ronda 1 (2026-08-11). En construcción en `web/W5-casos-agenda`.**
 >
-> Ronda 1 deja el contrato verificado contra el controller y el service, y **las cuatro decisiones
-> de la dueña ya cerradas** (§5, 11/08): tabla con filtros · el día · generar casos con
-> confirmación · `sort` a la API. La última hace que W5 **toque la API**, cosa que ninguna etapa
-> del panel había hecho hasta ahora — ver §4.4 y T0.
+> El contrato está verificado contra el controller y el service, y **las cuatro decisiones de la
+> dueña están cerradas** (§5, 11/08): tabla con filtros · el día · generar casos con confirmación ·
+> `sort` a la API. La última hace que W5 **toque la API**, cosa que ninguna etapa del panel había
+> hecho hasta ahora — ver §4.4 y T0.
 
 # W5 — Casos y agenda
 
@@ -72,7 +72,7 @@ En `lib/nav.ts` se les da vuelta el `built: false` a `cases` y `agenda`.
 | `POST /agenda/:id/complete` | `agenda:write` | Deja un `CaseActivity` y pasa el ítem a `EXECUTED` |
 | `POST /agenda/:id/cancel` | `agenda:write` | Motivo del catálogo (`/catalogs`). **Sigue visible** |
 | `POST /agenda/:id/reschedule` | `agenda:write` | Cierra ésta como reagendada y **devuelve la nueva** |
-| `PATCH /agenda/:id` | `agenda:write` | Editar una pendiente. **Sin fecha ni deudor**: eso es reagendar |
+| ~~`PATCH /agenda/:id`~~ | — | **Fuera de W5** (§12): editar una gestión propia es trabajo del teléfono |
 
 Los otros 7 (`clients/:id/context`, alta de teléfono, alta y corrección de dirección, `POST
 /agenda`, `postpone`, `DELETE`) son del flujo de campo. Ver §12.
@@ -277,6 +277,10 @@ que la misma pantalla muestra cosas distintas y que las dos son correctas. Es lo
 - **La agenda por semana** (D2): un día por pantalla, con selector de fecha.
 - **Agendar desde el panel** (`POST /agenda`, `clients/:id/context`, alta de teléfono y dirección):
   es el flujo de campo, y arrastra el mapa y la PII en claro. El panel **supervisa** lo agendado.
+- **Editar una gestión pendiente** (`PATCH /agenda/:id`): corregir la hora o la observación de lo
+  que uno mismo agendó es trabajo del teléfono. El panel **supervisa** lo agendado: lo cierra
+  (ejecutar), lo anula (cancelar) o lo mueve de día (reagendar), que son las tres cosas que dejan
+  rastro. Ronda 1 lo daba por adentro; T7 lo sacó al ver que no tenía pantalla que lo pidiera.
 - **`postpone`** (+15 / +30 / +1h): son los botones del cobrador que ya está en la puerta.
 - **La evidencia de las visitas** (foto, GPS, hash): es W6.
 - **El mapa de casos** (`view=portfolio` trae el punto del domicilio): es W6, con las rutas.

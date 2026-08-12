@@ -65,6 +65,16 @@ export function Card({ children }: { children: ReactNode }) {
   return <div className="rounded-2xl border border-k-border bg-white p-6">{children}</div>;
 }
 
+/** Un dato con su rótulo, para las rejillas de las fichas. */
+export function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
+      <dd className="mt-1 text-[15px] text-k-text">{value}</dd>
+    </div>
+  );
+}
+
 /** La bajada de un control: qué significa lo que acaba de elegir. */
 export function Hint({ children }: { children: ReactNode }) {
   return <p className="mt-2 text-[13px] text-k-text-2">{children}</p>;

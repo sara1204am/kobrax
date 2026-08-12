@@ -8,15 +8,8 @@ import { resultKind, setupStep, type ImportConfig, type PortfolioSummary } from 
 import { Button, ErrorBanner } from '@/components/ui';
 import { DataTable, type Column } from '@/components/data-table';
 import { EmptyState } from '@/components/panel-ui';
-import {
-  ACCEPTED_FILES,
-  errorText,
-  groupWarnings,
-  postImportFile,
-  rejectText,
-  warningText,
-  type Translator,
-} from '@/lib/import';
+import { ACCEPTED_FILES, groupWarnings, postImportFile, rejectText, warningText } from '@/lib/import';
+import { errorText, type Translator } from '@/lib/api-error';
 
 /**
  * El import del día, en tres estados sobre el mismo `File` en memoria.

@@ -69,6 +69,25 @@ export async function apiCall<T>(
 }
 
 /**
+ * El `meta` del sobre en la forma que pide el `DataTable`, con respaldo por si la respuesta no lo
+ * trae: sin `pages` el pie de paginación desaparece y la lista parece terminar en la página 1.
+ */
+export function pageMeta(
+  body: ApiEnvelope<unknown[]>,
+  pageParam: string | undefined,
+  limit: number,
+): { total: number; page: number; limit: number; pages: number } {
+  const page = Math.max(1, Number(pageParam) || 1);
+  const total = body.meta?.total ?? body.data?.length ?? 0;
+  return {
+    total,
+    page: body.meta?.page ?? page,
+    limit: body.meta?.limit ?? limit,
+    pages: body.meta?.pages ?? Math.max(1, Math.ceil(total / limit)),
+  };
+}
+
+/**
  * Los headers de autenticación sueltos, para lo que **no es JSON**: subir un archivo
  * (`FormData`, cuyo `content-type` lo pone el navegador con su boundary) y descargarlo
  * (binario, que no pasa por `res.json()`). `apiCall` no sirve para esos dos casos.

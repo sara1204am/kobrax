@@ -1,7 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import type { CollectionCase, Prisma, PrismaClient } from '@prisma/client';
 import { AgendaItemStatus, AgendaItemType, CaseActivityType, CaseStatus, LocationType } from '@prisma/client';
-import { canTransition, maskDocument, Permission, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
+import {
+  canTransition,
+  maskDocument,
+  Permission,
+  resolvePagination,
+  type ApiResponse,
+  type CaseSort,
+  ResponseDto,
+} from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -20,6 +28,47 @@ import {
 import { caseDuplicate, caseNoActivity, invalidAssignee, invalidTransition, resourceNotFound } from './cases.errors';
 
 const TERMINAL: CaseStatus[] = [CaseStatus.CLOSED, CaseStatus.WRITTEN_OFF];
+
+/**
+ * Cómo se puede ordenar el listado.
+ *
+ * Los dos que miran plata y mora **viven en `credit`**, no en el caso, así que se ordena por la
+ * relación — Prisma sabe hacerlo, a diferencia de un `SUM` o un `_count`, que es lo que obligó a
+ * escribir SQL crudo en la cartera del panel.
+ */
+const CASE_ORDER: Record<CaseSort, (dir: Prisma.SortOrder) => Prisma.CollectionCaseOrderByWithRelationInput> = {
+  priority: (dir) => ({ priority: dir }),
+  daysPastDue: (dir) => ({ credit: { daysPastDue: dir } }),
+  balance: (dir) => ({ credit: { outstandingBalance: dir } }),
+  slaDueAt: (dir) => ({ slaDueAt: dir }),
+  createdAt: (dir) => ({ createdAt: dir }),
+};
+
+/**
+ * El `orderBy` del listado.
+ *
+ * 🔴 **Cierra siempre con `id`.** Sin un desempate único, `LIMIT/OFFSET` repite y saltea filas
+ * entre páginas cuando hay empates — y ordenando por prioridad los empates son la regla, no la
+ * excepción. Se pagó en la cartera del panel.
+ *
+ * Una clave desconocida cae al default en vez de responder 400: viaja en la URL, y una URL vieja
+ * que alguien guardó no tiene por qué reventar la pantalla.
+ */
+function caseOrderBy(sort?: string, dir?: string): Prisma.CollectionCaseOrderByWithRelationInput[] {
+  /*
+   * `Object.hasOwn` y no un simple lookup: `?sort=hasOwnProperty` encuentra el miembro heredado de
+   * `Object.prototype`, el `??` no dispara, y el `orderBy` termina con una función o un `false`
+   * adentro — Prisma lo rechaza y el listado devuelve 500 en vez de caer al orden por defecto.
+   * El DTO no valida la clave a propósito (una URL vieja no tiene por qué reventar), así que la
+   * guarda de verdad es ésta.
+   */
+  const key: CaseSort = sort && Object.hasOwn(CASE_ORDER, sort) ? (sort as CaseSort) : 'priority';
+  const primary = CASE_ORDER[key](dir === 'asc' ? 'asc' : 'desc');
+  // Entre iguales, primero el caso más viejo: es el que lleva más tiempo esperando.
+  const byAge: Prisma.CollectionCaseOrderByWithRelationInput[] =
+    sort === 'createdAt' ? [] : [{ createdAt: 'asc' }];
+  return [primary, ...byAge, { id: 'asc' }];
+}
 
 @Injectable()
 export class CasesService {
@@ -277,17 +326,29 @@ export class CasesService {
   }
 
   // ── Lecturas ────────────────────────────────────────────────────────────────
+  /**
+   * El listado. El orden se pide por `?sort=&dir=` (F9 W5-D4): antes estaba cableado en prioridad
+   * y el panel no podía ordenar por mora ni por vencimiento, que es justo como una supervisora
+   * mira su cartera.
+   */
   async list(query: ListCasesQueryDto): Promise<ApiResponse<ReturnType<typeof serializeCase>[]>> {
     const { page, limit, skip } = resolvePagination(query);
     const where: Prisma.CollectionCaseWhereInput = { deletedAt: null };
-    if (query.status) where.status = query.status;
     if (query.priority) where.priority = query.priority;
     if (query.clientId) where.clientId = query.clientId;
-    if (query.overdue === 'true') {
-      where.slaDueAt = { lt: new Date() };
-      where.status = { notIn: TERMINAL };
-    }
-    if (query.open === 'true') where.status = { notIn: TERMINAL };
+    if (query.overdue === 'true') where.slaDueAt = { lt: new Date() };
+
+    /*
+     * El estado se decide UNA vez.
+     *
+     * `overdue` y `open` significan lo mismo para el estado —«todavía no terminó»— y antes cada
+     * uno escribía `where.status` por su cuenta, **pisando el filtro explícito**: pedir promesas
+     * vencidas devolvía vencidas de cualquier estado, con el desplegable de la pantalla todavía
+     * marcando «Promesa de pago». Un estado pedido a mano gana siempre; si además es terminal, la
+     * lista vuelve vacía, que es la respuesta correcta a «cerrados y sin cerrar a la vez».
+     */
+    if (query.status) where.status = query.status;
+    else if (query.overdue === 'true' || query.open === 'true') where.status = { notIn: TERMINAL };
 
     // Scope por capacidad (no por nombre de rol). Tres casos:
     //  - CASE_ASSIGN (supervisor/manager): ve todo, puede filtrar por cualquier assigneeId.
@@ -303,7 +364,7 @@ export class CasesService {
       Promise.all([
         tx.collectionCase.findMany({
           where,
-          orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
+          orderBy: caseOrderBy(query.sort, query.dir),
           skip,
           take: limit,
           include: {

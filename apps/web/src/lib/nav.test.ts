@@ -40,6 +40,19 @@ describe('crumbsFor', () => {
     ]);
   });
 
+  it('un id no se dibuja como miga: no hay clave que lo traduzca', () => {
+    // `crumbs.<uuid>` no existe en ningún idioma, así que la miga terminaba mostrando la ruta
+    // cruda de la clave en la topbar.
+    const id = '3f2b9c10-1a4d-4b7e-9c8f-0a1b2c3d4e5f';
+    // La sección sigue siendo enlace: en una ficha es el único camino de vuelta a la lista para
+    // quien llegó por un link compartido.
+    expect(crumbsFor(`/cartera/${id}`)).toEqual([{ label: 'nav.portfolio', href: '/cartera' }]);
+    expect(crumbsFor(`/cartera/${id}/editar`)).toEqual([
+      { label: 'nav.portfolio', href: '/cartera' },
+      { label: 'crumbs.editar', href: undefined },
+    ]);
+  });
+
   it('una ruta que ningún ítem cubre no inventa migas', () => {
     expect(crumbsFor('/otra-cosa')).toEqual([]);
   });

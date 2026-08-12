@@ -16,7 +16,8 @@ import { Button, ErrorBanner, Field, Select } from '@/components/ui';
 import { Card, Hint } from '@/components/panel-ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
-import { errorText, scopeRefName } from '@/lib/import';
+import { scopeRefName } from '@/lib/import';
+import { errorText } from '@/lib/api-error';
 import { sendJson } from '@/lib/client';
 
 const PROFILE_KINDS: ProfileKind[] = ['rows', 'pdf-rows', 'pdf-blocks'];
@@ -56,7 +57,7 @@ export function SettingsForm({ screen }: { screen: ConfigScreen }) {
     const { ok, data } = await sendJson<{ config: ImportConfig }>('/api/imports/config', patch, 'PATCH');
     setSaving(false);
     if (!ok || !data.config) {
-      setError(errorText(data.error, t, locale) || t('settings.saveError'));
+      setError(errorText(data.error, t, locale));
       return;
     }
     setConfig(data.config);

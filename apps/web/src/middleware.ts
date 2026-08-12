@@ -108,6 +108,8 @@ export const config = {
     '/equipo/:path*',
     '/cartera/:path*',
     '/import/:path*',
+    '/casos/:path*',
+    '/agenda/:path*',
     '/api/auth/me',
     '/api/auth/switch-account',
     '/api/account/:path*',
@@ -115,6 +117,8 @@ export const config = {
     '/api/clients/:path*',
     '/api/credits/:path*',
     '/api/imports/:path*',
+    '/api/cases/:path*',
+    '/api/agenda/:path*',
     '/api/uploads/:path*',
   ],
 };

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { PaymentFrequency, type CreditDetail } from '@kobrax/shared';
 import { Badge, PageHeader } from '@/components/panel-ui';
 import { Button, ErrorBanner, Field, Input } from '@/components/ui';
@@ -28,6 +28,7 @@ const select =
  */
 export function CreditCard({ credit, clientId }: { credit: CreditDetail; clientId: string }) {
   const t = useTranslations('portfolio');
+  const locale = useLocale();
   const router = useRouter();
   const toast = useToast();
   const { can } = usePermissions();
@@ -88,7 +89,7 @@ export function CreditCard({ credit, clientId }: { credit: CreditDetail; clientI
             <Item label={t('fields.rate')} value={`${credit.interestRate}`} />
             <Item label={t('fields.installments')} value={credit.installmentsCount ? String(credit.installmentsCount) : t('openLoan')} />
             <Item label={t('fields.currency')} value={credit.currency} />
-            <Item label={t('fields.disbursedAt')} value={credit.disbursedAt ? date(credit.disbursedAt) : '—'} />
+            <Item label={t('fields.disbursedAt')} value={credit.disbursedAt ? date(credit.disbursedAt, locale) : '—'} />
             <Item label={t('form.status')} value={credit.status ? t(`creditStatus.${credit.status}`) : '—'} />
           </dl>
         </section>
@@ -163,6 +164,7 @@ export function CreditCard({ credit, clientId }: { credit: CreditDetail; clientI
  */
 function Schedule({ credit }: { credit: CreditDetail }) {
   const t = useTranslations('portfolio');
+  const locale = useLocale();
   const rows = credit.installments ?? [];
 
   if (rows.length === 0) {
@@ -172,7 +174,7 @@ function Schedule({ credit }: { credit: CreditDetail }) {
         <p className="mt-1 text-[12px] text-k-muted">
           {t('noScheduleHint', {
             amount: credit.installmentAmount != null ? money(credit.installmentAmount, credit.currency) : '—',
-            date: credit.nextDueDate ? date(credit.nextDueDate) : '—',
+            date: credit.nextDueDate ? date(credit.nextDueDate, locale) : '—',
           })}
         </p>
       </div>
@@ -195,7 +197,7 @@ function Schedule({ credit }: { credit: CreditDetail }) {
           {rows.map((i) => (
             <tr key={i.id} className="border-b border-k-border last:border-0">
               <td className="py-2 pr-4 text-k-text-2">{i.number}</td>
-              <td className="py-2 pr-4">{date(i.dueDate)}</td>
+              <td className="py-2 pr-4">{date(i.dueDate, locale)}</td>
               <td className="py-2 pr-4 text-right tabular-nums">{money(i.amount, credit.currency)}</td>
               <td className="py-2 pr-4 text-right tabular-nums">{money(i.paidAmount, credit.currency)}</td>
               <td className="py-2">

@@ -32,7 +32,12 @@ const ACCOUNTS = [
   { id: 'a2', name: 'Kobrax Demo Norte', role: 'SUPERVISOR', status: 'ACTIVE' },
 ];
 
-function renderShell(accounts = ACCOUNTS, permissions = ['client:read', 'user:read', 'case:read']) {
+// `route:read` está para que quede a la vista un módulo que TODAVÍA no se construyó (W6): sin
+// alguno apagado, la prueba de «se pinta en gris y no navega» no tendría contra qué correr.
+function renderShell(
+  accounts = ACCOUNTS,
+  permissions = ['client:read', 'user:read', 'case:read', 'route:read'],
+) {
   return render(
     <PanelShell user={USER} accounts={accounts} nav={visibleNav(permissions)}>
       <p>contenido</p>
@@ -46,8 +51,9 @@ describe('PanelShell — el menú', () => {
     // El sidebar y el cajón pintan la misma lista, así que cada rótulo aparece dos veces.
     expect(screen.getAllByRole('link', { name: 'Inicio' }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /^Cartera/ }).length).toBeGreaterThan(0); // W3
-    // Casos todavía no existe: se pinta en gris y no navega.
-    expect(screen.queryByRole('link', { name: /^Casos/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /^Casos/ }).length).toBeGreaterThan(0); // W5
+    // Rutas todavía no existe (W6): se pinta en gris y no navega.
+    expect(screen.queryByRole('link', { name: /^Rutas/ })).not.toBeInTheDocument();
     expect(screen.getAllByText('Pronto').length).toBeGreaterThan(0);
   });
 

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import type { ConfigScreen } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { Card, EmptyState, PageHeader } from '@/components/panel-ui';
@@ -49,7 +49,7 @@ export default async function ImportPage() {
           <p className="text-[14px] font-medium text-k-text">{t('run.lastRun')}</p>
           {lastRun ? (
             <>
-              <p className="mt-1 text-[13px] text-k-text-2">{dateTime(lastRun.at)}</p>
+              <p className="mt-1 text-[13px] text-k-text-2">{dateTime(lastRun.at, await getLocale())}</p>
               <p className="mt-2 text-[13px] text-k-text-2">
                 {t('run.lastRunCounts', {
                   created: lastRun.created,
