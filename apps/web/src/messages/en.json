@@ -258,8 +258,10 @@
       "title": "Cases",
       "subtitle": "The team's open work: who has each case and which ones are running late.",
       "scopedToMine": "You are seeing only the cases assigned to you.",
-      "empty": "No cases match these filters",
-      "emptyText": "Try removing a filter, or generate the cases for the overdue portfolio.",
+      "empty": "There are no cases yet",
+      "emptyText": "They are created by generating them for the overdue portfolio, or one at a time from a credit's file.",
+      "noResults": "No cases match these filters",
+      "noResultsText": "Try removing one.",
       "filters": {
         "status": "Status",
         "priority": "Priority",

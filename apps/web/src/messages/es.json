@@ -258,8 +258,10 @@
       "title": "Casos",
       "subtitle": "El trabajo abierto del equipo: quién tiene cada caso y cuáles se están venciendo.",
       "scopedToMine": "Estás viendo sólo los casos que tenés asignados.",
-      "empty": "No hay casos con esos filtros",
-      "emptyText": "Probá quitando algún filtro, o generá los casos de la cartera en mora.",
+      "empty": "Todavía no hay casos",
+      "emptyText": "Se crean generándolos para la cartera en mora, o de a uno desde la ficha de un crédito.",
+      "noResults": "No hay casos con esos filtros",
+      "noResultsText": "Probá quitando alguno.",
       "filters": {
         "status": "Estado",
         "priority": "Prioridad",

@@ -16,7 +16,8 @@ import { Button, ErrorBanner, Field, Select } from '@/components/ui';
 import { Card, Hint } from '@/components/panel-ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
-import { errorText, scopeRefName } from '@/lib/import';
+import { scopeRefName } from '@/lib/import';
+import { errorText } from '@/lib/api-error';
 import { sendJson } from '@/lib/client';
 
 const PROFILE_KINDS: ProfileKind[] = ['rows', 'pdf-rows', 'pdf-blocks'];

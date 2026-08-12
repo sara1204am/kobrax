@@ -23,11 +23,11 @@ import {
   ACCEPTED_FILES,
   DAYS_PAST_DUE,
   confirmDaysPastDue,
-  errorText,
   patchConfig,
   pickDaysPastDue,
   postImportFile,
 } from '@/lib/import';
+import { errorText } from '@/lib/api-error';
 
 const FIELD_STATES: FieldState[] = ['required', 'optional', 'off'];
 const NAME_ORDERS: NameOrder[] = ['full', 'surnames-first', 'split-columns'];
