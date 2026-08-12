@@ -2,59 +2,17 @@
  * Rutas de campo (solo lectura en P1). Thin sobre `apiQuery`; base del resumen de jornada
  * del Home (P1) y de la pantalla de Rutas (P3). Tipos según `routes.serializer.ts`.
  */
-import { RouteStopStatus, type RouteStatus, type VisitOutcome } from '@kobrax/shared';
+import type { RouteItem, RouteStopItem, RouteStatus, RouteStopStatus } from '@kobrax/shared';
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
 import { cachedList, cachedOne } from './sync/cached';
 import type { LngLat } from './maps/tiles';
 
-export interface RouteStopItem {
-  id: string;
-  clientId: string;
-  caseId?: string;
-  sequenceOrder: number;
-  status: RouteStopStatus;
-  visitedAt?: string;
-  /** Sólo en `GET /routes/:id`: el listado no trae paradas, y generar tampoco las enriquece. */
-  clientName?: string;
-  /** Dirección donde se cobra (HOME, si no la primera cargada). Vacía si el cliente no tiene ninguna. */
-  address?: string;
-  /** El punto de esa misma ubicación (S3). Sin él la parada existe pero no se puede dibujar. */
-  latitude?: number;
-  longitude?: number;
-  /** El crédito del caso de la parada: contra él se cobra y se promete al registrar el resultado (S5). */
-  creditId?: string;
-  /**
-   * La deuda del crédito **de esta parada** (S4), no la suma del deudor: un cliente puede tener más
-   * de un crédito y la parada apunta a uno. Ausentes si la parada no tiene caso o crédito.
-   */
-  overdueAmount?: number;
-  currency?: string;
-  daysPastDue?: number;
-  /** Cómo terminó la parada (S6). `undefined` = todavía no se visitó. */
-  lastOutcome?: VisitOutcome;
-}
-
-export interface RouteItem {
-  id: string;
-  collectorId: string;
-  branchId?: string;
-  plannedDate: string;
-  status: RouteStatus;
-  totalCases: number;
-  totalDistanceKm?: number;
-  estimatedMinutes?: number;
-  createdAt: string;
-  stops?: RouteStopItem[];
-}
-
-/** Estados terminales de una parada = "gestión hecha" (visitada o descartada). */
-const STOP_DONE: RouteStopStatus[] = [RouteStopStatus.VISITED, RouteStopStatus.SKIPPED];
-
-/** Progreso de la ruta: paradas resueltas / total. */
-export function routeProgress(route: RouteItem): { done: number; total: number } {
-  const stops = route.stops ?? [];
-  return { done: stops.filter((s) => STOP_DONE.includes(s.status)).length, total: stops.length };
-}
+/**
+ * Los tipos del contrato y el progreso de la ruta viven en `@kobrax/shared` (F9 W6 T1): los
+ * consume también el panel web. Se re-exportan para que las pantallas importen de un solo lado.
+ */
+export type { RouteItem, RouteStopItem } from '@kobrax/shared';
+export { routeProgress } from '@kobrax/shared';
 
 export interface ListRoutesParams {
   collectorId?: string;

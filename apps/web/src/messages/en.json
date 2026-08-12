@@ -33,6 +33,7 @@
       "ajustes": "Settings",
       "columnas": "Map columns",
       "nuevo": "New",
+      "parada": "Stop",
       "editar": "Edit",
       "prestamo": "New loan",
       "credito": "Credit"
@@ -484,6 +485,104 @@
         "generic": "The action could not be completed.",
         "AGENDA_006": "The promise is missing its bank.",
         "AGENDA_007": "That outcome does not match this kind of item."
+      }
+    },
+    "routes": {
+      "title": "Routes",
+      "subtitle": "The day on the street: what route each collector had and how far they got.",
+      "scopedToMine": "You are seeing only your own routes.",
+      "empty": "There are no routes for this day",
+      "emptyText": "Routes are built by the collector on their phone, map in hand.",
+      "noResults": "No routes match these filters",
+      "noResultsText": "Try removing one.",
+      "previousDay": "Previous day",
+      "nextDay": "Next day",
+      "today": "Today",
+      "date": "Day",
+      "filters": {
+        "collector": "Collector",
+        "status": "Status",
+        "all": "All",
+        "clear": "Clear filters"
+      },
+      "columns": {
+        "collector": "Collector",
+        "status": "Status",
+        "stops": "Stops",
+        "distance": "Distance",
+        "duration": "Duration"
+      },
+      "unknownCollector": "Collector",
+      "progress": "{done} of {total}",
+      "km": "{n} km",
+      "minutes": "{n} min",
+      "detail": {
+        "stops": "Stops",
+        "stopsEmpty": "This route has no stops.",
+        "summary": "The day",
+        "collected": "Collected",
+        "done": "Handled",
+        "percent": "Progress",
+        "distance": "Estimated distance",
+        "duration": "Estimated duration",
+        "noPreview": "We could not compute the route line. The stops are still listed.",
+        "openCase": "Open the case",
+        "openClient": "Open the debtor's file"
+      },
+      "stop": {
+        "sequence": "Stop {n}",
+        "address": "Address",
+        "debt": "Credit balance",
+        "daysPastDue": "Days past due",
+        "notVisited": "Not visited yet",
+        "accuracy": "GPS accuracy",
+        "gpsEstimated": "This point is not a GPS reading: it is the stop's known location.",
+        "notes": "Collector's note",
+        "evidence": "Evidence",
+        "evidenceEmpty": "This visit left no evidence.",
+        "hash": "File fingerprint",
+        "hashHint": "SHA-256 of the original file. If the file changed, this fingerprint would not match.",
+        "immutable": "A visit and its evidence are never edited or deleted: that is what makes them proof."
+      },
+      "category": {
+        "COLLECTED": "Collected",
+        "PROMISED": "Promises",
+        "NO_ANSWER": "No answer",
+        "UNREACHABLE": "Unreachable",
+        "OTHER": "Other"
+      },
+      "status": {
+        "PLANNED": "Planned",
+        "IN_PROGRESS": "In progress",
+        "COMPLETED": "Finished",
+        "CANCELLED": "Cancelled"
+      },
+      "stopStatus": {
+        "PENDING": "Pending",
+        "IN_ROUTE": "On the way",
+        "VISITED": "Visited",
+        "SKIPPED": "Skipped"
+      },
+      "outcome": {
+        "NO_CONTACT": "No answer",
+        "CONTACTED": "Spoke with the debtor",
+        "PROMISE_TO_PAY": "Promised to pay",
+        "PARTIAL_PAYMENT": "Paid part of it",
+        "PAID": "Paid",
+        "REFUSAL": "Refused to pay",
+        "NOT_FOUND": "Not found",
+        "RESCHEDULED": "Rescheduled",
+        "WRONG_ADDRESS": "The address does not match",
+        "SPECIAL": "Special handling"
+      },
+      "evidenceType": {
+        "PHOTO": "Photo",
+        "SIGNATURE": "Signature",
+        "DOCUMENT": "Document",
+        "AUDIO": "Audio"
+      },
+      "errors": {
+        "generic": "The action could not be completed."
       }
     }
   },

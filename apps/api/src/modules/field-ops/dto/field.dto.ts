@@ -1,5 +1,18 @@
 import { Type } from 'class-transformer';
-import { IsBase64, IsBoolean, IsDateString, IsEnum, IsNumber, IsObject, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  IsBase64,
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
 import { EvidenceType, VisitOutcome } from '@prisma/client';
 
 export class CreateVisitDto {
@@ -24,6 +37,24 @@ export class CreateVisitDto {
    * como GPS real. Es un flag aparte y no parte de `details` porque aplica a todas las variantes.
    */
   @IsOptional() @IsBoolean() gpsFallback?: boolean;
+}
+
+/**
+ * Filtros para leer visitas (F9 W6-T0). Antes no había forma de LEERLAS: el módulo tenía dos
+ * endpoints y los dos escribían, así que la foto, el punto y el hash no eran alcanzables desde
+ * ningún lado — y son justamente la prueba de que el cobrador estuvo ahí.
+ */
+export class ListVisitsQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit?: number;
+  /** Todas las visitas de una ruta: se resuelve por las paradas de esa ruta. */
+  @IsOptional() @IsUUID() routeId?: string;
+  /** Las de UNA parada. Una parada puede tener más de una visita: se fue dos veces. */
+  @IsOptional() @IsUUID() routeStopId?: string;
+  @IsOptional() @IsUUID() caseId?: string;
+  @IsOptional() @IsUUID() collectorId?: string;
+  /** Un día concreto (`YYYY-MM-DD`), por `capturedAt`. */
+  @IsOptional() @IsDateString() date?: string;
 }
 
 export class AddEvidenceDto {

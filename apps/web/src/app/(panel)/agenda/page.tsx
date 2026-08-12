@@ -12,8 +12,8 @@ import {
 import { apiCall } from '@/lib/bff';
 import { dayOr, groupByAssignee } from '@/lib/agenda';
 import { Card, EmptyState, PageHeader } from '@/components/panel-ui';
+import { DayPicker } from '@/components/day-picker';
 import { AgendaItemRow } from './agenda-item-row';
-import { DayPicker } from './day-picker';
 
 /** Cuántas vencidas se traen para la tarjeta. `meta.total` dice cuántas hay de verdad. */
 const OVERDUE_LIMIT = 5;
@@ -71,7 +71,11 @@ export default async function AgendaPage({ searchParams }: { searchParams: { dat
         </p>
       )}
 
-      <DayPicker day={day} today={today} />
+      <DayPicker
+        day={day}
+        today={today}
+        labels={{ previous: t('previousDay'), next: t('nextDay'), today: t('today'), date: t('date') }}
+      />
 
       {overdueTotal > 0 && (
         <Card>

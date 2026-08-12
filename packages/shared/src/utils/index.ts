@@ -11,3 +11,4 @@ export * from './client-diff.js';
 export * from './loan-form.js';
 export * from './import.js';
 export * from './agenda.js';
+export * from './route-day.js';
