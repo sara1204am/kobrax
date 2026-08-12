@@ -119,7 +119,7 @@ funcional*. Nada de andamios "para después".
 | C10 | `POST /visits` vive en `field-ops`, no en `visits/` | Su DTO usa **`lat`/`lng`**, no `latitude`/`longitude`. `field_visits` es **inmutable**: se escribe sólo en el INSERT. Afecta W6. |
 | C11 | La mora de una parada es la de **su** caso | No la suma del deudor: un cliente puede tener varios créditos. Afecta W6. |
 | C12 | No hay parsers por banco | Sumar un formato al import = configurarlo desde Ajustes, no escribir código. Tres formas: `rows` (CSV) · `pdf-rows` · `pdf-blocks`. Afecta W4. |
-| C13 | **Excel no se lee** | La dep `xlsx` nunca se instaló y `rows.parser` sólo hace CSV. En el móvil se dejó así por peso de bundle; **en la web ese motivo no aplica** — W4 es el lugar natural para instalarla de verdad. |
+| C13 | ~~**Excel no se lee**~~ → **Excel SÍ se lee** (corregido 11/08) | `exceljs` está instalado en la API y `parseRowsFile` decide por los bytes: `PK\x03\x04` → `.xlsx`, si no CSV. `.xls` de 97-2003 se rechaza a propósito, con el arreglo en el mensaje. **W4 no instala ninguna dep**; lo único que quedaba era el copy del móvil, que todavía dice "guardalo como CSV". Detalle en `plans/W4-import.md §4.6`. |
 | C14 | El crédito creado desde el móvil **no tiene cronograma** | Decisión D1 de cartera: la cuota queda congelada en `credit.metadata`. La web va a encontrarse créditos sin `schedule` y no puede asumir que siempre hay uno. Afecta W3, W7. |
 | C15 | Las promesas de pago viven en `agenda_items` | No hay tabla de promesas: son ítems de agenda de tipo `PROMESA`. Afecta W5, W7. |
 | C16 | No existe `account_invitations` | Un invitado es un `User` en estado `PENDING` + token. Afecta W0 (`/invitacion`) y W2. |
