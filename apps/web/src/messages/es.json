@@ -393,6 +393,8 @@
       },
       "unassigned": "Sin cobrador",
       "noTime": "Sin hora",
+      "overdueBadge": "Vencida",
+      "itemCount": "{n} gestiones",
       "actions": {
         "open": "Ver la gestión",
         "complete": "Registrar la ejecución",

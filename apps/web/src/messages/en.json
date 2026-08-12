@@ -393,6 +393,8 @@
       },
       "unassigned": "No collector",
       "noTime": "No time",
+      "overdueBadge": "Overdue",
+      "itemCount": "{n} items",
       "actions": {
         "open": "Open the item",
         "complete": "Record what happened",
