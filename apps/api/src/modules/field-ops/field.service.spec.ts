@@ -97,6 +97,12 @@ describe('FieldService.list (lectura de visitas — W6 T0)', () => {
     assert.deepEqual(calls.listWhere!.routeStop, { routeId: 'r1' });
   });
 
+  it('las de una parada se piden por su id: una parada puede tener más de una visita', async () => {
+    const { service, calls } = makeService({ permissions: ['route:assign'] });
+    await service.list({ routeStopId: 's1' } as never);
+    assert.equal(calls.listWhere!.routeStopId, 's1');
+  });
+
   it('un día es el día entero en UTC, no un instante', async () => {
     const { service, calls } = makeService({ permissions: ['route:assign'] });
     await service.list({ date: '2026-08-12' } as never);

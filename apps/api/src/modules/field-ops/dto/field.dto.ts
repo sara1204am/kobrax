@@ -49,6 +49,8 @@ export class ListVisitsQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit?: number;
   /** Todas las visitas de una ruta: se resuelve por las paradas de esa ruta. */
   @IsOptional() @IsUUID() routeId?: string;
+  /** Las de UNA parada. Una parada puede tener más de una visita: se fue dos veces. */
+  @IsOptional() @IsUUID() routeStopId?: string;
   @IsOptional() @IsUUID() caseId?: string;
   @IsOptional() @IsUUID() collectorId?: string;
   /** Un día concreto (`YYYY-MM-DD`), por `capturedAt`. */

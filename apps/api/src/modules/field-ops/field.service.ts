@@ -48,6 +48,7 @@ export class FieldService {
     const { page, limit, skip } = resolvePagination(query);
     const where: Prisma.FieldVisitWhereInput = {};
     if (query.caseId) where.caseId = query.caseId;
+    if (query.routeStopId) where.routeStopId = query.routeStopId;
     // Las visitas de una ruta no cuelgan de la ruta: cuelgan de sus paradas.
     if (query.routeId) where.routeStop = { routeId: query.routeId };
     if (query.date) {
