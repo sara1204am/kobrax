@@ -1,7 +1,8 @@
 import { getTranslations } from 'next-intl/server';
-import type { AccountInfo, CreditDetail } from '@kobrax/shared';
+import type { CreditDetail } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
+import { isUuid } from '@/lib/payments';
 import { RequestForm } from './request-form';
 
 /**
@@ -17,24 +18,18 @@ export default async function NuevaSolicitudPage({
   searchParams: { creditId?: string };
 }) {
   const t = await getTranslations('panel.payments');
+  const creditId = searchParams.creditId;
 
-  if (!searchParams.creditId) {
+  if (!creditId || !isUuid(creditId)) {
     return <EmptyState title={t('request.title')} text={t('register.noCredit')} />;
   }
 
-  const [credit, account] = await Promise.all([
-    apiCall<CreditDetail>(`/credits/${searchParams.creditId}`, { method: 'GET', auth: true }),
-    apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
-  ]);
+  const credit = await apiCall<CreditDetail>(`/credits/${creditId}`, { method: 'GET', auth: true });
 
   return (
     <>
       <PageHeader title={t('request.title')} subtitle={t('request.text')} />
-      <RequestForm
-        creditId={searchParams.creditId}
-        creditCode={credit.body.data?.code}
-        currency={credit.body.data?.currency ?? account.body.data?.currencyCode ?? 'BOB'}
-      />
+      <RequestForm creditId={creditId} creditCode={credit.body.data?.code} />
     </>
   );
 }

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import type { AccountInfo, CreditDetail, Member, PaymentItem } from '@kobrax/shared';
 import { apiCall, pageMeta } from '@/lib/bff';
-import { paymentQuery, totalOf } from '@/lib/payments';
+import { isUuid, paymentQuery, totalOf } from '@/lib/payments';
 import { Badge, EmptyState, PageHeader } from '@/components/panel-ui';
 import { money } from '@/lib/format';
 import { PaymentActions } from './payment-actions';
@@ -45,8 +45,9 @@ export default async function PagosPage({
    * pedir un cobro desde acá —las dos acciones lo exigen— y de paso lo nombra por su código en vez
    * de por un uuid. Si no se puede leer, la acción sigue funcionando con el id.
    */
-  const credit = searchParams.creditId
-    ? { id: searchParams.creditId, code: (await apiCall<CreditDetail>(`/credits/${searchParams.creditId}`, { method: 'GET', auth: true })).body.data?.code }
+  const creditId = searchParams.creditId && isUuid(searchParams.creditId) ? searchParams.creditId : undefined;
+  const credit = creditId
+    ? { id: creditId, code: (await apiCall<CreditDetail>(`/credits/${creditId}`, { method: 'GET', auth: true })).body.data?.code }
     : undefined;
 
   return (

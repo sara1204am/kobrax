@@ -36,7 +36,9 @@
       "parada": "Stop",
       "editar": "Edit",
       "prestamo": "New loan",
-      "credito": "Credit"
+      "credito": "Credit",
+      "solicitudes": "Payment requests",
+      "nueva": "New"
     },
     "soon": "Soon",
     "openMenu": "Open menu",
@@ -594,7 +596,6 @@
       "to": "To",
       "columns": {
         "date": "Date",
-        "client": "Debtor",
         "amount": "Amount",
         "method": "Method",
         "registeredBy": "Recorded by",

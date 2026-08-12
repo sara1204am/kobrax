@@ -1,4 +1,4 @@
-import { PAYMENT_METHODS, type PaymentItem } from '@kobrax/shared';
+import type { PaymentItem } from '@kobrax/shared';
 
 /**
  * El período que se está mirando, en `YYYY-MM-DD`. Por defecto, el mes corriente: un ledger se lee
@@ -40,7 +40,14 @@ export function totalOf(payments: PaymentItem[]): number {
   return Math.round(payments.reduce((sum, p) => sum + p.amount, 0) * 100) / 100;
 }
 
-/** ¿El medio que viene de la URL o de un formulario es uno de los que la API acepta? */
-export function isPaymentMethod(value: string): boolean {
-  return (PAYMENT_METHODS as readonly string[]).includes(value);
+/**
+ * ¿Ese id de la URL es un uuid?
+ *
+ * 🔴 Los ids de la URL **entran a la ruta de la API** (`/credits/<id>`, `/payments/<id>`). Sin
+ * mirarlos, un `creditId=../../users` hace que el BFF pida `/users` **con el Bearer de quien mira**:
+ * la normalización de la URL se come el `..` antes de que la API vea nada. Se valida acá y no en
+ * cada pantalla porque son tres las que lo interpolan.
+ */
+export function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }

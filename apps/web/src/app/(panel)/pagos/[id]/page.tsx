@@ -11,6 +11,7 @@ import {
 } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { Card, EmptyState, Fact, PageHeader } from '@/components/panel-ui';
+import { isUuid } from '@/lib/payments';
 import { dateTime, fullName, money } from '@/lib/format';
 
 /**
@@ -26,6 +27,10 @@ import { dateTime, fullName, money } from '@/lib/format';
 export default async function PagoPage({ params }: { params: { id: string } }) {
   const t = await getTranslations('panel.payments');
   const locale = await getLocale();
+
+  // `/pagos/loquesea` cae acá por el segmento dinámico: sin esto se le pedía a la API un id que no
+  // es uno y la pantalla mostraba el texto crudo de una validación. Un id que no existe es un 404.
+  if (!isUuid(params.id)) notFound();
 
   const [detail, team, account] = await Promise.all([
     apiCall<PaymentItem>(`/payments/${params.id}`, { method: 'GET', auth: true }),
@@ -97,6 +102,11 @@ export default async function PagoPage({ params }: { params: { id: string } }) {
               tal cual. Anteponer el prefijo otra vez fue lo que en W6 dejó todas las fotos rotas. Sólo
               se dibuja lo que apunta a nuestro handler, que es el que proxea con el Bearer; una URL
               externa no se puede autenticar, así que va como enlace.
+
+              🔴 Y el enlace **sólo si es http(s)**: `receiptUrl` es un `@IsString()` libre en el DTO,
+              así que quien registra pagos puede guardar `javascript:…` y React no lo frena — lo
+              ejecutaría en el origen del panel al hacer clic. Lo que no es una URL navegable se
+              muestra como texto.
             */}
             {payment.receiptUrl.startsWith('/') ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -105,7 +115,7 @@ export default async function PagoPage({ params }: { params: { id: string } }) {
                 alt={t('columns.receipt')}
                 className="mt-3 max-h-80 w-full rounded-xl border border-k-border object-contain"
               />
-            ) : (
+            ) : /^https?:\/\//i.test(payment.receiptUrl) ? (
               <a
                 href={payment.receiptUrl}
                 rel="noreferrer"
@@ -114,6 +124,8 @@ export default async function PagoPage({ params }: { params: { id: string } }) {
               >
                 {t('detail.openReceipt')}
               </a>
+            ) : (
+              <p className="mt-3 break-all text-[13px] text-k-text-2">{payment.receiptUrl}</p>
             )}
           </Card>
         )}

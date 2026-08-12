@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PAYMENT_METHODS } from '@kobrax/shared';
-import { defaultPeriod, isPaymentMethod, paymentQuery, totalOf } from './payments';
+import { defaultPeriod, isUuid, paymentQuery, totalOf } from './payments';
 
 const TODAY = new Date('2026-08-12T16:00:00.000Z');
 
@@ -52,12 +52,21 @@ describe('totalOf', () => {
   });
 });
 
-describe('isPaymentMethod', () => {
-  it('acepta los que la API espera, en MAYÚSCULA', () => {
-    // El delta C7: en minúscula el pago rebotaba. Arreglado en shared en W7-T0.
+describe('PAYMENT_METHODS', () => {
+  it('viajan en MAYÚSCULA, que es lo que la API espera', () => {
+    // El delta C7: en minúscula el pago rebotaba. Arreglado en shared en W7-T0, y los dos selects
+    // de la etapa pintan esta lista tal cual.
     expect(PAYMENT_METHODS).toEqual(['CASH', 'TRANSFER', 'QR', 'CARD', 'MOBILE_PAYMENT']);
-    expect(isPaymentMethod('CASH')).toBe(true);
-    expect(isPaymentMethod('cash')).toBe(false);
-    expect(isPaymentMethod('BITCOIN')).toBe(false);
+  });
+});
+
+describe('isUuid', () => {
+  it('🔴 corta el id inventado antes de que entre a la ruta de la API', () => {
+    // Sin esto, `creditId=../../users` hacía que el BFF pidiera `/users` con el Bearer de quien
+    // mira: la normalización de la URL se come el `..` antes de que la API vea nada.
+    expect(isUuid('3f2b9c10-1a4d-4b7e-9c8f-0a1b2c3d4e5f')).toBe(true);
+    expect(isUuid('../../users')).toBe(false);
+    expect(isUuid('solicitudes')).toBe(false);
+    expect(isUuid('')).toBe(false);
   });
 });

@@ -36,7 +36,9 @@
       "parada": "Parada",
       "editar": "Editar",
       "prestamo": "Nuevo préstamo",
-      "credito": "Crédito"
+      "credito": "Crédito",
+      "solicitudes": "Cobros pedidos",
+      "nueva": "Nueva"
     },
     "soon": "Pronto",
     "openMenu": "Abrir el menú",
@@ -594,7 +596,6 @@
       "to": "Hasta",
       "columns": {
         "date": "Fecha",
-        "client": "Deudor",
         "amount": "Monto",
         "method": "Medio",
         "registeredBy": "Registró",
