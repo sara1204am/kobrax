@@ -283,13 +283,24 @@
       },
       "days": "{n} d",
       "noAssignee": "—",
+      "unknownAssignee": "Asignado",
       "overdueBadge": "Vencido",
       "rowMenu": "Acciones del caso",
       "actions": {
         "open": "Ver el caso",
+        "activity": "Registrar gestión",
         "transition": "Pasar a…",
         "assign": "Asignar",
         "close": "Cerrar el caso"
+      },
+      "activity": {
+        "title": "Registrar una gestión",
+        "text": "Queda en el historial del caso. Un caso no se puede cerrar sin al menos una.",
+        "type": "Qué se hizo",
+        "notes": "Nota",
+        "confirm": "Registrar",
+        "cancel": "Cancelar",
+        "done": "Gestión registrada"
       },
       "generate": {
         "cta": "Generar casos",
@@ -307,6 +318,7 @@
         "text": "Elegí a quién, o dejá que se asigne al cobrador con menos casos abiertos.",
         "collector": "Cobrador",
         "auto": "Al que tenga menos casos",
+        "noTeam": "No podemos leer el equipo con tu rol, así que el caso se asigna al cobrador que tenga menos casos abiertos.",
         "confirm": "Asignar",
         "cancel": "Cancelar",
         "done": "Caso asignado"

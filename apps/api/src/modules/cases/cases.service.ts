@@ -50,7 +50,15 @@ export const CASE_SORTS = Object.keys(CASE_ORDER);
  * que alguien guardó no tiene por qué reventar la pantalla.
  */
 function caseOrderBy(sort?: string, dir?: string): Prisma.CollectionCaseOrderByWithRelationInput[] {
-  const primary = (CASE_ORDER[sort ?? ''] ?? CASE_ORDER.priority!)(dir === 'asc' ? 'asc' : 'desc');
+  /*
+   * `Object.hasOwn` y no un simple lookup: `?sort=hasOwnProperty` encuentra el miembro heredado de
+   * `Object.prototype`, el `??` no dispara, y el `orderBy` termina con una función o un `false`
+   * adentro — Prisma lo rechaza y el listado devuelve 500 en vez de caer al orden por defecto.
+   * El DTO no valida la clave a propósito (una URL vieja no tiene por qué reventar), así que la
+   * guarda de verdad es ésta.
+   */
+  const key = sort && Object.hasOwn(CASE_ORDER, sort) ? sort : 'priority';
+  const primary = CASE_ORDER[key]!(dir === 'asc' ? 'asc' : 'desc');
   // Entre iguales, primero el caso más viejo: es el que lleva más tiempo esperando.
   const byAge: Prisma.CollectionCaseOrderByWithRelationInput[] =
     sort === 'createdAt' ? [] : [{ createdAt: 'asc' }];
@@ -321,14 +329,21 @@ export class CasesService {
   async list(query: ListCasesQueryDto): Promise<ApiResponse<ReturnType<typeof serializeCase>[]>> {
     const { page, limit, skip } = resolvePagination(query);
     const where: Prisma.CollectionCaseWhereInput = { deletedAt: null };
-    if (query.status) where.status = query.status;
     if (query.priority) where.priority = query.priority;
     if (query.clientId) where.clientId = query.clientId;
-    if (query.overdue === 'true') {
-      where.slaDueAt = { lt: new Date() };
-      where.status = { notIn: TERMINAL };
-    }
-    if (query.open === 'true') where.status = { notIn: TERMINAL };
+    if (query.overdue === 'true') where.slaDueAt = { lt: new Date() };
+
+    /*
+     * El estado se decide UNA vez.
+     *
+     * `overdue` y `open` significan lo mismo para el estado —«todavía no terminó»— y antes cada
+     * uno escribía `where.status` por su cuenta, **pisando el filtro explícito**: pedir promesas
+     * vencidas devolvía vencidas de cualquier estado, con el desplegable de la pantalla todavía
+     * marcando «Promesa de pago». Un estado pedido a mano gana siempre; si además es terminal, la
+     * lista vuelve vacía, que es la respuesta correcta a «cerrados y sin cerrar a la vez».
+     */
+    if (query.status) where.status = query.status;
+    else if (query.overdue === 'true' || query.open === 'true') where.status = { notIn: TERMINAL };
 
     // Scope por capacidad (no por nombre de rol). Tres casos:
     //  - CASE_ASSIGN (supervisor/manager): ve todo, puede filtrar por cualquier assigneeId.

@@ -57,7 +57,7 @@ export function SettingsForm({ screen }: { screen: ConfigScreen }) {
     const { ok, data } = await sendJson<{ config: ImportConfig }>('/api/imports/config', patch, 'PATCH');
     setSaving(false);
     if (!ok || !data.config) {
-      setError(errorText(data.error, t, locale) || t('settings.saveError'));
+      setError(errorText(data.error, t, locale));
       return;
     }
     setConfig(data.config);

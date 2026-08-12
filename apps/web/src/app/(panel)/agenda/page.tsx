@@ -50,7 +50,13 @@ export default async function AgendaPage({ searchParams }: { searchParams: { dat
     const found = members.find((m) => m.userId === id);
     return found ? memberName(found) : undefined;
   };
+  /*
+   * Se agrupa por cobrador sólo si además se pudieron leer los nombres: `GET /users` da 403 sin
+   * `user:read`, y agrupar entonces dibujaba un uuid crudo como título de cada grupo. Sin nombres,
+   * el día se muestra como una lista sola, que dice menos pero no dice nada falso.
+   */
   const supervises = me.body.data?.permissions?.includes(Permission.AGENDA_ASSIGN) ?? false;
+  const grouped = supervises && members.length > 0;
 
   const { pending, done } = partitionDay(list.body.data);
   const overdueTotal = overdue.body.meta?.total ?? overdue.body.data?.length ?? 0;
@@ -93,8 +99,8 @@ export default async function AgendaPage({ searchParams }: { searchParams: { dat
         </div>
       ) : (
         <div className="mt-6 space-y-8">
-          <Section title={t('pending')} items={pending} nameOf={nameOf} unassigned={t('unassigned')} grouped={supervises} />
-          <Section title={t('done')} items={done} nameOf={nameOf} unassigned={t('unassigned')} grouped={supervises} />
+          <Section title={t('pending')} items={pending} nameOf={nameOf} unassigned={t('unassigned')} grouped={grouped} />
+          <Section title={t('done')} items={done} nameOf={nameOf} unassigned={t('unassigned')} grouped={grouped} />
         </div>
       )}
     </>

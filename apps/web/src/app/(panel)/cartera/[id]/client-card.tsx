@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import type { ClientAttachmentDetail, ClientContactDetail, ClientDetail, ClientLocationDetail } from '@kobrax/shared';
 import { Badge, PageHeader } from '@/components/panel-ui';
 import { Button } from '@/components/ui';
@@ -33,6 +33,7 @@ export function ClientCard({
   hasActiveCredits?: boolean;
 }) {
   const t = useTranslations('portfolio');
+  const locale = useLocale();
   const router = useRouter();
   const toast = useToast();
   const { can } = usePermissions();
@@ -163,7 +164,7 @@ export function ClientCard({
             <Item label={t('fields.document')} value={shown.nationalId} />
             <Item label={t('fields.taxId')} value={shown.taxId} />
             <Item label={t('fields.risk')} value={shown.riskSegment} />
-            <Item label={t('fields.createdAt')} value={shown.createdAt ? date(shown.createdAt) : null} />
+            <Item label={t('fields.createdAt')} value={shown.createdAt ? date(shown.createdAt, locale) : null} />
           </dl>
           {!revealed && <p className="mt-3 text-[12px] text-k-muted">{t('maskedHint')}</p>}
         </Section>
@@ -269,7 +270,7 @@ export function ClientCard({
                   )}
                 </span>
                 <span className="text-[13px] text-k-text-2">
-                  {date(a.createdAt)}
+                  {date(a.createdAt, locale)}
                   {/* El hash es lo que prueba que el archivo no cambió. Se muestra corto: entero
                       son 64 caracteres que nadie compara a ojo. */}
                   {a.fileHash && ` · ${a.fileHash.slice(0, 12)}…`}

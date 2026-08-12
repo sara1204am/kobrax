@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import type { CreditDetail } from '@kobrax/shared';
 import { Badge } from '@/components/panel-ui';
 import { money, date } from '@/lib/format';
@@ -31,6 +31,7 @@ export async function CreditsSection({
   denied?: boolean;
 }) {
   const t = await getTranslations('portfolio');
+  const locale = await getLocale();
 
   if (denied) return <p className="text-[14px] text-k-muted">{t('creditsDenied')}</p>;
   if (credits.length === 0) return <p className="text-[14px] text-k-muted">{t('noCredits')}</p>;
@@ -53,7 +54,7 @@ export async function CreditsSection({
               <span className="block text-[13px] text-k-text-2">
                 {c.code ?? t('noCode')}
                 {c.installmentAmount != null && ` · ${t('installmentOf', { amount: money(c.installmentAmount, c.currency) })}`}
-                {c.nextDueDate && ` · ${t('dueOn', { date: date(c.nextDueDate) })}`}
+                {c.nextDueDate && ` · ${t('dueOn', { date: date(c.nextDueDate, locale) })}`}
               </span>
             </span>
             <span className="flex items-center gap-2">

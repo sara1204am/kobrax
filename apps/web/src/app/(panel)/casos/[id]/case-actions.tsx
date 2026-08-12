@@ -11,7 +11,10 @@ import { canClose, nextStates } from '@/lib/cases';
 import { errorText } from '@/lib/api-error';
 import { sendJson } from '@/lib/client';
 
-type Action = 'transition' | 'assign' | 'close' | null;
+type Action = 'activity' | 'transition' | 'assign' | 'close' | null;
+
+/** Lo que se puede registrar a mano desde el panel. Los demás tipos los escribe el sistema. */
+const ACTIVITY_TYPES = ['NOTE', 'CALL', 'VISIT', 'MESSAGE'] as const;
 
 /**
  * Lo que se puede hacer con un caso desde su ficha.
@@ -43,6 +46,8 @@ export function CaseActions({
   const [to, setTo] = useState<CaseStatus | ''>('');
   const [reason, setReason] = useState('');
   const [collectorId, setCollectorId] = useState('');
+  const [activityType, setActivityType] = useState<(typeof ACTIVITY_TYPES)[number]>('NOTE');
+  const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,6 +60,7 @@ export function CaseActions({
     setReason('');
     setTo('');
     setCollectorId('');
+    setNotes('');
   }
 
   async function send(path: string, body: unknown, method: 'POST' | 'PATCH', done: string) {
@@ -63,7 +69,7 @@ export function CaseActions({
     const res = await sendJson(path, body, method);
     setBusy(false);
     if (!res.ok) {
-      setError(errorText(res.data.error, t, locale) || t('errors.generic'));
+      setError(errorText(res.data.error, t, locale));
       return;
     }
     close();
@@ -73,6 +79,16 @@ export function CaseActions({
 
   return (
     <>
+      {/*
+        Registrar una gestión no es un extra: la API **no cierra un caso sin ninguna** (`CASE_001`),
+        y los cambios de estado y las asignaciones no cuentan como tal. Sin esto, un caso trabajado
+        entero desde el panel quedaba imposible de cerrar desde el panel.
+      */}
+      {canWrite && (
+        <Button variant="ghost" onClick={() => setAction('activity')} className="sm:w-auto sm:px-5">
+          {t('actions.activity')}
+        </Button>
+      )}
       {canWrite && states.length > 0 && (
         <Button variant="ghost" onClick={() => setAction('transition')} className="sm:w-auto sm:px-5">
           {t('actions.transition')}
@@ -88,6 +104,54 @@ export function CaseActions({
           {t('actions.close')}
         </Button>
       )}
+
+      <Modal
+        open={action === 'activity'}
+        onClose={close}
+        title={t('activity.title')}
+        actions={
+          <>
+            <Button variant="ghost" onClick={close} disabled={busy} className="sm:w-auto sm:px-5">
+              {t('activity.cancel')}
+            </Button>
+            <Button
+              onClick={() =>
+                send(
+                  `/api/cases/${caseId}/activities`,
+                  { type: activityType, notes: notes.trim() || undefined },
+                  'POST',
+                  t('activity.done'),
+                )
+              }
+              loading={busy}
+              className="sm:w-auto sm:px-5"
+            >
+              {t('activity.confirm')}
+            </Button>
+          </>
+        }
+      >
+        <ErrorBanner message={error} />
+        <p>{t('activity.text')}</p>
+        <div className="mt-4 space-y-4">
+          <Field label={t('activity.type')}>
+            <Select
+              value={activityType}
+              onChange={(e) => setActivityType(e.target.value as (typeof ACTIVITY_TYPES)[number])}
+              disabled={busy}
+            >
+              {ACTIVITY_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {t(`activityType.${type}`)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={t('activity.notes')}>
+            <Input value={notes} onChange={(e) => setNotes(e.target.value)} disabled={busy} maxLength={1000} />
+          </Field>
+        </div>
+      </Modal>
 
       {/* Mover de estado. Sólo se ofrecen los destinos válidos desde el actual: el resto lo
           rechazaría la API con CASE_002. */}
@@ -161,16 +225,23 @@ export function CaseActions({
         <ErrorBanner message={error} />
         <p>{t('assign.text')}</p>
         <div className="mt-4">
-          <Field label={t('assign.collector')}>
-            <Select value={collectorId} onChange={(e) => setCollectorId(e.target.value)} disabled={busy}>
-              <option value="">{t('assign.auto')}</option>
-              {members.map((member) => (
-                <option key={member.userId} value={member.userId}>
-                  {memberName(member)}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          {/* Sin `user:read` no hay a quién elegir, pero «al que menos casos tenga» sigue
+              funcionando: lo resuelve el servidor. Se dice por qué, en vez de dejar un
+              desplegable con una sola opción y sin explicación. */}
+          {members.length > 0 ? (
+            <Field label={t('assign.collector')}>
+              <Select value={collectorId} onChange={(e) => setCollectorId(e.target.value)} disabled={busy}>
+                <option value="">{t('assign.auto')}</option>
+                {members.map((member) => (
+                  <option key={member.userId} value={member.userId}>
+                    {memberName(member)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : (
+            <p className="text-[13px] text-k-text-2">{t('assign.noTeam')}</p>
+          )}
         </div>
       </Modal>
 

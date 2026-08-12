@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import {
   memberName,
   Permission,
@@ -24,6 +24,7 @@ import { CaseActions } from './case-actions';
  */
 export default async function CasoPage({ params }: { params: { id: string } }) {
   const t = await getTranslations('panel.cases');
+  const locale = await getLocale();
 
   const [detail, me, team, account] = await Promise.all([
     apiCall<CaseDetail>(`/cases/${params.id}`, { method: 'GET', auth: true }),
@@ -72,9 +73,15 @@ export default async function CasoPage({ params }: { params: { id: string } }) {
             <Fact label={t('detail.balance')} value={money(item.amount, currency)} />
             <Fact label={t('columns.daysPastDue')} value={item.daysPastDue ? t('days', { n: item.daysPastDue }) : '—'} />
             <Fact label={t('detail.installment')} value={money(item.installmentAmount, currency)} />
-            <Fact label={t('detail.nextDueDate')} value={date(item.nextDueDate)} />
-            <Fact label={t('detail.sla')} value={date(item.slaDueAt)} />
-            <Fact label={t('detail.assignee')} value={assignee ? memberName(assignee) : t('noAssignee')} />
+            <Fact label={t('detail.nextDueDate')} value={date(item.nextDueDate, locale)} />
+            <Fact label={t('detail.sla')} value={date(item.slaDueAt, locale)} />
+            {/* Sin nombre no es sin cobrador: `/users` da 403 sin `user:read`. */}
+            <Fact
+              label={t('detail.assignee')}
+              value={
+                assignee ? memberName(assignee) : item.assigneeId ? t('unknownAssignee') : t('noAssignee')
+              }
+            />
           </dl>
 
           <Link
@@ -97,7 +104,7 @@ export default async function CasoPage({ params }: { params: { id: string } }) {
                           uno nuevo, y esconderlo dejaría un renglón sin decir qué pasó. */}
                       {t.has(`activityType.${activity.type}`) ? t(`activityType.${activity.type}`) : activity.type}
                     </span>
-                    <span className="text-[13px] text-k-text-2">{dateTime(activity.createdAt)}</span>
+                    <span className="text-[13px] text-k-text-2">{dateTime(activity.createdAt, locale)}</span>
                   </div>
                   {activity.result && <p className="mt-1 text-[13px] text-k-text-2">{activity.result}</p>}
                   {activity.notes && <p className="mt-1 text-[14px] text-k-text">{activity.notes}</p>}

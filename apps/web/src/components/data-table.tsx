@@ -10,6 +10,12 @@ export interface Column<T> {
   header: string;
   render: (row: T) => ReactNode;
   sortable?: boolean;
+  /**
+   * Hacia dónde ordena el PRIMER clic. Default `asc`, que es lo que espera un nombre; en una
+   * columna de mora o de plata el default útil es al revés — tocar «Mora» para triar y recibir
+   * primero los de un día de atraso no es lo que nadie quiso.
+   */
+  defaultDir?: 'asc' | 'desc';
   /** Los números se leen alineados a la derecha. */
   numeric?: boolean;
 }
@@ -59,10 +65,13 @@ export function DataTable<T>({
     router.push(`${pathname}?${next.toString()}`);
   }
 
-  function toggleSort(key: string) {
+  function toggleSort(column: Column<T>) {
+    // El primer clic usa el sentido natural de la columna; a partir de ahí, alterna.
+    const next =
+      sort === column.key ? (dir === 'asc' ? 'desc' : 'asc') : (column.defaultDir ?? 'asc');
     // Volver a la página 1: ordenar de nuevo cambia qué filas caen en cada página, y quedarse
     // en la 7 mostraría un pedazo del medio de una lista que la persona no vio empezar.
-    go({ sort: key, dir: sort === key && dir === 'asc' ? 'desc' : 'asc', page: '1' });
+    go({ sort: column.key, dir: next, page: '1' });
   }
 
   if (rows.length === 0) return <>{empty}</>;
@@ -90,7 +99,7 @@ export function DataTable<T>({
                   {column.sortable ? (
                     <button
                       type="button"
-                      onClick={() => toggleSort(column.key)}
+                      onClick={() => toggleSort(column)}
                       className="inline-flex items-center gap-1 uppercase hover:text-k-text"
                     >
                       {column.header}

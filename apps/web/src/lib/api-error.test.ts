@@ -29,8 +29,9 @@ describe('errorText', () => {
     expect(errorText({ code: 'CODIGO_NUEVO' }, ES, 'es')).toBe('CODIGO_NUEVO');
   });
 
-  it('sin error no dice nada', () => {
-    expect(errorText(null, ES, 'es')).toBe('');
+  it('sin objeto de error igual dice algo: se llama porque algo falló', () => {
+    // Devolver vacío dejaba un banner de error en blanco, y cada módulo lo tapaba por su cuenta.
+    expect(errorText(null, ES, 'es')).toBe(es.panel.import.errors.generic);
   });
 
   it('sirve para cualquier módulo, no sólo para el import', () => {

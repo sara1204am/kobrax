@@ -39,7 +39,7 @@ export function GenerateButton() {
     );
     setBusy(false);
     if (!ok) {
-      setError(errorText(data.error, t, locale) || t('errors.generic'));
+      setError(errorText(data.error, t, locale));
       return;
     }
     setOpen(false);

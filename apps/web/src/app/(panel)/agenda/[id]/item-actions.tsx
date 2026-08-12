@@ -24,13 +24,14 @@ type Action = 'complete' | 'cancel' | 'reschedule' | null;
 export function ItemActions({
   itemId,
   type,
-  day,
+  today,
   cancelReasons,
   rescheduleReasons,
 }: {
   itemId: string;
   type: AgendaItemType;
-  day: string;
+  /** Hoy, en `YYYY-MM-DD` UTC. Lo calcula el servidor: el reloj del navegador puede estar corrido. */
+  today: string;
   cancelReasons: CatalogOption[];
   rescheduleReasons: CatalogOption[];
 }) {
@@ -43,7 +44,13 @@ export function ItemActions({
   const [outcome, setOutcome] = useState('');
   const [notes, setNotes] = useState('');
   const [reasonCode, setReasonCode] = useState('');
-  const [newDate, setNewDate] = useState(() => shiftDay(day, 1));
+  /*
+   * Mañana, contado desde HOY y no desde el día del ítem. Con el día del ítem, reagendar una
+   * gestión vencida proponía una fecha ya pasada y la API la rechazaba siempre (`AGENDA_003`) —
+   * justo en el caso más común, porque las vencidas son las que la pantalla promociona.
+   */
+  const tomorrow = shiftDay(today, 1);
+  const [newDate, setNewDate] = useState(tomorrow);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,7 +72,7 @@ export function ItemActions({
     const res = await sendJson(path, body);
     setBusy(false);
     if (!res.ok) {
-      setError(errorText(res.data.error, t, locale) || t('errors.generic'));
+      setError(errorText(res.data.error, t, locale));
       return;
     }
     close();
@@ -162,7 +169,15 @@ export function ItemActions({
         <p>{t('reschedule.text')}</p>
         <div className="mt-4 space-y-4">
           <Field label={t('reschedule.date')}>
-            <Input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} disabled={busy} />
+            {/* `min` en hoy: el calendario del navegador ni siquiera ofrece una fecha que el
+                servidor va a rechazar. */}
+            <Input
+              type="date"
+              min={today}
+              value={newDate}
+              onChange={(e) => setNewDate(e.target.value)}
+              disabled={busy}
+            />
           </Field>
           <ReasonField
             label={t('reschedule.reason')}

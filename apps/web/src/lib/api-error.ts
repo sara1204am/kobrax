@@ -30,7 +30,12 @@ export interface ApiError {
  * `t` tiene que estar atado al namespace del módulo, que es el que trae su tabla `errors.*`.
  */
 export function errorText(error: ApiError | null | undefined, t: Translator, locale: string): string {
-  if (!error) return '';
+  /*
+   * Sin objeto de error tampoco se calla: se llama a esto **porque algo falló**, y devolver vacío
+   * dejaba un `ErrorBanner` en blanco. Los llamadores lo tapaban con un `|| t('errors.generic')`
+   * repetido en cada módulo, hasta que uno se olvidara.
+   */
+  if (!error) return t('errors.generic');
   if (locale === 'es' && error.message) return error.message;
   const key = error.code ? `errors.${error.code}` : null;
   if (key && t.has(key)) return t(key);

@@ -32,9 +32,18 @@ describe('canClose', () => {
 });
 
 describe('caseQuery', () => {
-  it('no manda los filtros vacíos', () => {
+  it('no manda los filtros vacíos, pero sí pide sólo lo abierto', () => {
+    // La lista promete «el trabajo abierto del equipo»: sin `open=true` traía también los
+    // cerrados, y ordenando por prioridad un crítico cerrado quedaba arriba del alto de hoy.
     const query = caseQuery({}, 20);
-    expect(query.toString()).toBe('page=1&limit=20');
+    expect(query.toString()).toBe('page=1&limit=20&open=true');
+  });
+
+  it('con un estado elegido manda ÉSE, aunque sea terminal', () => {
+    // Pedir «Cerrados» tiene que traer cerrados: `open` los excluiría a todos.
+    const query = caseQuery({ status: 'CLOSED' }, 20);
+    expect(query.get('status')).toBe('CLOSED');
+    expect(query.has('open')).toBe(false);
   });
 
   it('overdue viaja como texto, que es como lo valida el DTO', () => {

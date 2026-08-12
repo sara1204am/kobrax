@@ -9,14 +9,22 @@ export function money(amount: number | null | undefined, currency = 'BOB'): stri
   }
 }
 
-export function date(d?: string | null): string {
+/*
+ * ⚠️ El idioma se pasa, no se asume. Con `'es'` cableado, el panel en inglés mostraba «12 ago
+ * 2026» — y en la agenda, esa fecha en español quedaba justo debajo de un encabezado que sí
+ * estaba traducido: la misma pantalla decía la misma fecha en dos idiomas.
+ *
+ * El default sigue siendo `'es'` porque es el idioma por defecto del panel; quien tiene el locale
+ * a mano (`useLocale()` en cliente, `getLocale()` en servidor) lo pasa.
+ */
+export function date(d?: string | null, locale = 'es'): string {
   if (!d) return '—';
-  return new Date(d).toLocaleDateString('es', { year: 'numeric', month: 'short', day: '2-digit' });
+  return new Date(d).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: '2-digit' });
 }
 
-export function dateTime(d?: string | null): string {
+export function dateTime(d?: string | null, locale = 'es'): string {
   if (!d) return '—';
-  return new Date(d).toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' });
+  return new Date(d).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
 }
 
 export function fullName(c: { firstName?: string; lastName?: string; businessName?: string }): string {

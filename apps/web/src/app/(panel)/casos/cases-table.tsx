@@ -1,6 +1,6 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { memberName, type CaseListItem, type Member } from '@kobrax/shared';
 import { Badge, EmptyState } from '@/components/panel-ui';
 import { DataTable, type Column, type PageMeta } from '@/components/data-table';
@@ -28,6 +28,7 @@ export function CasesTable({
   filtered: boolean;
 }) {
   const t = useTranslations('panel.cases');
+  const locale = useLocale();
   const byId = new Map(members.map((m) => [m.userId, memberName(m)]));
 
   const columns: Column<CaseListItem>[] = [
@@ -47,6 +48,7 @@ export function CasesTable({
       key: 'daysPastDue',
       header: t('columns.daysPastDue'),
       sortable: true,
+      defaultDir: 'desc',
       numeric: true,
       render: (c) =>
         c.daysPastDue && c.daysPastDue > 0 ? (
@@ -59,6 +61,7 @@ export function CasesTable({
       key: 'balance',
       header: t('columns.balance'),
       sortable: true,
+      defaultDir: 'desc',
       numeric: true,
       render: (c) => money(c.amount, c.currency ?? currency),
     },
@@ -71,18 +74,30 @@ export function CasesTable({
       key: 'priority',
       header: t('columns.priority'),
       sortable: true,
+      defaultDir: 'desc',
       render: (c) => <Badge tone={PRIORITY_TONE[c.priority]}>{t(`priority.${c.priority}`)}</Badge>,
     },
     {
       key: 'assignee',
       header: t('columns.assignee'),
-      render: (c) => byId.get(c.assigneeId ?? '') ?? <span className="text-k-muted">{t('noAssignee')}</span>,
+      /*
+       * 🔴 Sin nombre NO es sin cobrador. `GET /users` da 403 sin `user:read` —que es justo lo que
+       * le pasa a una supervisora— y también puede faltar quien fue dado de baja. Decir «Sin
+       * cobrador» ahí hacía ver la cartera entera como sin repartir, y lleva a reasignar trabajo
+       * que ya estaba distribuido.
+       */
+      render: (c) =>
+        c.assigneeId ? (
+          (byId.get(c.assigneeId) ?? <span className="text-k-text-2">{t('unknownAssignee')}</span>)
+        ) : (
+          <span className="text-k-muted">{t('noAssignee')}</span>
+        ),
     },
     {
       key: 'slaDueAt',
       header: t('columns.slaDueAt'),
       sortable: true,
-      render: (c) => <span className={c.isOverdue ? 'text-k-danger' : ''}>{date(c.slaDueAt)}</span>,
+      render: (c) => <span className={c.isOverdue ? 'text-k-danger' : ''}>{date(c.slaDueAt, locale)}</span>,
     },
   ];
 

@@ -283,13 +283,24 @@
       },
       "days": "{n} d",
       "noAssignee": "—",
+      "unknownAssignee": "Assigned",
       "overdueBadge": "Overdue",
       "rowMenu": "Case actions",
       "actions": {
         "open": "Open the case",
+        "activity": "Record activity",
         "transition": "Move to…",
         "assign": "Assign",
         "close": "Close the case"
+      },
+      "activity": {
+        "title": "Record an activity",
+        "text": "It goes into the case history. A case cannot be closed without at least one.",
+        "type": "What was done",
+        "notes": "Note",
+        "confirm": "Record",
+        "cancel": "Cancel",
+        "done": "Activity recorded"
       },
       "generate": {
         "cta": "Generate cases",
@@ -307,6 +318,7 @@
         "text": "Pick someone, or let it go to the collector with the fewest open cases.",
         "collector": "Collector",
         "auto": "Whoever has the fewest cases",
+        "noTeam": "Your role cannot read the team, so the case goes to the collector with the fewest open cases.",
         "confirm": "Assign",
         "cancel": "Cancel",
         "done": "Case assigned"

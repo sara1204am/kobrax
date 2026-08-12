@@ -68,6 +68,13 @@ export function caseQuery(
     if (params[key]) query.set(key, params[key]);
   }
   if (params.overdue === 'true') query.set('overdue', 'true');
+  /*
+   * Sin estado pedido a mano, la lista es **la del trabajo abierto**, que es lo que promete su
+   * propio subtítulo. Sin esto, en un tenant con historia la primera página mezcla cerrados con
+   * vivos y —ordenando por prioridad— un crítico cerrado hace meses queda arriba del alto de hoy.
+   * Con un estado elegido manda ése, incluso si es terminal: pedir «Cerrados» tiene que traerlos.
+   */
+  if (!params.status) query.set('open', 'true');
   if (params.sort && CASE_SORTS.includes(params.sort)) {
     query.set('sort', params.sort);
     query.set('dir', params.dir === 'asc' ? 'asc' : 'desc');

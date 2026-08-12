@@ -188,6 +188,31 @@ describe('CasesService.list (scope por capacidad + enriquecimiento)', () => {
     assert.deepEqual(calls.listOrderBy![0], { priority: 'desc' });
   });
 
+  it('🔴 una clave heredada de Object.prototype tampoco cuela', async () => {
+    // `CASE_ORDER['hasOwnProperty']` existe por herencia: con un lookup simple el `??` no dispara
+    // y el orderBy termina con una función adentro → Prisma lo rechaza y el listado da 500.
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    for (const sort of ['hasOwnProperty', 'toString', 'valueOf', 'constructor', '__proto__']) {
+      await service.list({ sort } as never);
+      assert.deepEqual(calls.listOrderBy![0], { priority: 'desc' }, `sort=${sort} se coló`);
+    }
+  });
+
+  it('«sólo vencidos» NO pisa el estado pedido a mano', async () => {
+    // Son dos controles independientes en la pantalla, así que la combinación está a un clic: el
+    // filtro de estado se perdía sin decirlo y la tabla mostraba vencidos de cualquier estado.
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    await service.list({ status: 'PROMISE_TO_PAY', overdue: 'true' } as never);
+    assert.equal(calls.listWhere!.status, 'PROMISE_TO_PAY');
+    assert.ok(calls.listWhere!.slaDueAt, 'se perdió el filtro de vencidos');
+  });
+
+  it('sin estado pedido, vencidos y abiertos siguen excluyendo los terminales', async () => {
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    await service.list({ overdue: 'true' } as never);
+    assert.deepEqual(calls.listWhere!.status, { notIn: ['CLOSED', 'WRITTEN_OFF'] });
+  });
+
   it('🔴 el orden SIEMPRE termina en id, con cualquier sort', async () => {
     // Sin desempate único, LIMIT/OFFSET repite y saltea filas entre páginas — y ordenando por
     // prioridad los empates son la regla, no la excepción.

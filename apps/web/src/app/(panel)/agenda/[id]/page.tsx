@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import {
   AgendaItemStatus,
   Permission,
   ScheduleTimeMode,
+  todayISO,
   type AgendaItemDetail,
   type MeInfo,
 } from '@kobrax/shared';
@@ -29,6 +30,7 @@ export interface CatalogOption {
  */
 export default async function GestionPage({ params }: { params: { id: string } }) {
   const t = await getTranslations('panel.agenda');
+  const locale = await getLocale();
 
   const [detail, me] = await Promise.all([
     apiCall<AgendaItemDetail>(`/agenda/${params.id}`, { method: 'GET', auth: true }),
@@ -72,7 +74,7 @@ export default async function GestionPage({ params }: { params: { id: string } }
             <ItemActions
               itemId={item.id}
               type={item.type}
-              day={item.scheduledDate.slice(0, 10)}
+              today={todayISO()}
               cancelReasons={cancelReasons?.body.data ?? []}
               rescheduleReasons={rescheduleReasons?.body.data ?? []}
             />
@@ -132,7 +134,7 @@ export default async function GestionPage({ params }: { params: { id: string } }
                   className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-k-border bg-white px-5 py-3.5"
                 >
                   <span className="text-[14px] text-k-text">
-                    {t(`type.${entry.type}`)} · {date(entry.scheduledDate)}
+                    {t(`type.${entry.type}`)} · {date(entry.scheduledDate, locale)}
                   </span>
                   <Badge tone={AGENDA_STATUS_TONE[entry.status]}>{t(`status.${entry.status}`)}</Badge>
                 </li>

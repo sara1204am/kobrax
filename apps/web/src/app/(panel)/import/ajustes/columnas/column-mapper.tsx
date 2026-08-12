@@ -58,7 +58,7 @@ export function ColumnMapper({ screen }: { screen: ConfigScreen }) {
     const result = await patchConfig(patch);
     setBusy(false);
     if (!result.ok || !result.config) {
-      setError(errorText(result.error, t, locale) || t('settings.saveError'));
+      setError(errorText(result.error, t, locale));
       return false;
     }
     setConfig(result.config);
