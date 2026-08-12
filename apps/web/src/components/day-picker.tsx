@@ -31,6 +31,13 @@ export function DayPicker({
   function go(next: string) {
     const query = new URLSearchParams(params.toString());
     query.set('date', next);
+    /*
+     * 🔴 Vuelve a la página 1. Nació en la agenda, que no pagina, y al reusarlo en rutas se
+     * arrastraba el `page=2` al cambiar de día: la API devolvía vacío y la pantalla decía «no hay
+     * rutas para este día» sobre un día que sí las tenía. Mentir sobre un día vacío es peor que
+     * cualquier error visible.
+     */
+    query.set('page', '1');
     router.push(`${pathname}?${query.toString()}`);
   }
 

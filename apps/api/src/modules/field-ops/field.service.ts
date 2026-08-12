@@ -58,11 +58,16 @@ export class FieldService {
       where.capturedAt = { gte: from, lt: to };
     }
 
-    if (this.tenant.can(Permission.ROUTE_ASSIGN)) {
-      if (query.collectorId) where.collectorId = query.collectorId;
-    } else if (this.scopedToOwnVisits()) {
-      where.collectorId = this.tenant.userId;
-    }
+    /*
+     * El cobrador queda acotado a lo suyo y se ignora lo que pida; **cualquier otro rol puede
+     * filtrar**, incluido el auditor de sólo lectura.
+     *
+     * Antes el filtro vivía dentro de la rama de `ROUTE_ASSIGN`, así que un auditor que pedía
+     * `?collectorId=x` recibía las visitas de TODO el tenant creyendo que miraba las de una
+     * persona — y el DTO acepta el parámetro, o sea que nada avisaba que se había ignorado.
+     */
+    if (this.scopedToOwnVisits()) where.collectorId = this.tenant.userId;
+    else if (query.collectorId) where.collectorId = query.collectorId;
 
     const [rows, total] = await this.tx((tx) =>
       Promise.all([
@@ -84,7 +89,17 @@ export class FieldService {
      * el de agenda, que si no llenarían el log con una entrada por deudor mirado de reojo.
      */
     if (rows.length > 0) {
-      await this.audit.record({ entity: 'field_visit', entityId: this.tenant.userId ?? 'anon', action: 'PII_REVEAL' });
+      /*
+       * Entidad **`field_visit_list`**, no `field_visit`: el `entityId` de un revelado de listado es
+       * quién miró, no qué se miró. Bajo el mismo nombre, cruzar el rastro contra `field_visits`
+       * dejaba filas huérfanas y quien auditara una visita concreta se perdía todos los listados
+       * que la revelaron. Casos ya lo resuelve así, con `case_portfolio`.
+       */
+      await this.audit.record({
+        entity: 'field_visit_list',
+        entityId: this.tenant.userId ?? 'anon',
+        action: 'PII_REVEAL',
+      });
     }
     return ResponseDto.paginated(rows.map(serializeVisit), total, page, limit);
   }

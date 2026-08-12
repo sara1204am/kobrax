@@ -120,8 +120,6 @@ export const config = {
     '/api/imports/:path*',
     '/api/cases/:path*',
     '/api/agenda/:path*',
-    '/api/routes/:path*',
-    '/api/visits/:path*',
     '/api/uploads/:path*',
   ],
 };

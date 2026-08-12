@@ -18,7 +18,7 @@ function makeService(
     stopUpdate: 0,
     evidence: [] as Record<string, unknown>[],
     events: [] as string[],
-    audit: [] as string[],
+    audit: [] as { entity: string; action: string }[],
     listWhere: undefined as Record<string, unknown> | undefined,
     listOrderBy: undefined as Record<string, unknown>[] | undefined,
   };
@@ -52,7 +52,9 @@ function makeService(
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
   const perms = opts.permissions ?? [];
   const tenant = { accountId: 'acc-A', userId: 'collector-1', permissions: perms, can: (p: string) => perms.includes(p) };
-  const audit = { record: async (e: { action: string }) => void calls.audit.push(e.action) };
+  const audit = {
+    record: async (e: { action: string; entity: string }) => void calls.audit.push({ entity: e.entity, action: e.action }),
+  };
   const events = { emit: (name: string) => void calls.events.push(name) };
   const service = new FieldService(prisma as never, tenant as never, audit as never, events as never);
   return { service, calls };
@@ -91,6 +93,14 @@ describe('FieldService.list (lectura de visitas — W6 T0)', () => {
     assert.equal(calls.listWhere!.collectorId, undefined);
   });
 
+  it('🔴 y el auditor SÍ puede filtrar por cobrador', async () => {
+    // El filtro vivía dentro de la rama de ROUTE_ASSIGN: un auditor pedía `?collectorId=x` y
+    // recibía todo el tenant creyendo que miraba a una persona, sin nada que avisara.
+    const { service, calls } = makeService({ permissions: ['route:read'] });
+    await service.list({ collectorId: 'u9' } as never);
+    assert.equal(calls.listWhere!.collectorId, 'u9');
+  });
+
   it('las visitas de una ruta se buscan por sus paradas, que es de donde cuelgan', async () => {
     const { service, calls } = makeService({ permissions: ['route:assign'] });
     await service.list({ routeId: 'r1' } as never);
@@ -118,11 +128,12 @@ describe('FieldService.list (lectura de visitas — W6 T0)', () => {
     assert.deepEqual(calls.listOrderBy, [{ capturedAt: 'desc' }, { id: 'asc' }]);
   });
 
-  it('audita el revelado UNA vez por consulta, no una por fila', async () => {
+  it('audita el revelado UNA vez por consulta, no una por fila, y bajo su propia entidad', async () => {
     // El punto de la visita dice dónde vive el deudor. Una entrada por fila llenaría el log.
+    // Y la entidad es `field_visit_list`: el id de un revelado de listado es QUIÉN miró, no qué.
     const { service, calls } = makeService({ permissions: ['route:assign'], listRows: [ROW, { ...ROW, id: 'v2' }] });
     await service.list({} as never);
-    assert.deepEqual(calls.audit, ['PII_REVEAL']);
+    assert.deepEqual(calls.audit, [{ entity: 'field_visit_list', action: 'PII_REVEAL' }]);
   });
 
   it('sin resultados no audita nada: no se reveló nada', async () => {
@@ -217,7 +228,7 @@ describe('FieldService.addEvidence', () => {
     const { service, calls } = makeService();
     const r = await service.addEvidence('v1', { type: 'PHOTO' as never, fileUrl: 'u', fileHash: HELLO_SHA, content: HELLO_B64 });
     assert.equal(calls.evidence[0]!.fileHash, HELLO_SHA);
-    assert.deepEqual(calls.audit, ['CREATE']);
+    assert.deepEqual(calls.audit, [{ entity: 'field_evidence', action: 'CREATE' }]);
     assert.equal(r.fileHash, HELLO_SHA);
   });
 });

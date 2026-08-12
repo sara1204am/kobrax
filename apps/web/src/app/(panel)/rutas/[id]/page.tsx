@@ -41,22 +41,36 @@ export default async function RutaPage({ params }: { params: { id: string } }) {
   const route = detail.body.data;
   const day = route.plannedDate.slice(0, 10);
 
-  const [team, payments, preview, visits] = await Promise.all([
+  /*
+   * Los pagos se piden **por caso**, uno por parada, y no con una ventana del día.
+   *
+   * Dos motivos, los dos aprendidos a los golpes: `from`/`to` con la misma fecha arman una ventana
+   * de ancho CERO —`paymentDate` es un timestamp, así que sólo entraría un pago hecho a medianoche
+   * exacta— y el «recaudado» daba siempre 0. Y pidiendo el día entero del tenant, una sola página
+   * de 100 puede dejar afuera pagos de esta ruta y mostrar MENOS plata de la que entró, sin avisar.
+   *
+   * Por caso es exacto y acotado: son tantas llamadas como paradas con caso, y una parada no junta
+   * cien pagos en un día. Sin `payment:read` vuelven vacías y se muestra cero cobrado, que es lo
+   * que ese rol puede saber.
+   */
+  const caseIds = [...new Set((route.stops ?? []).map((s) => s.caseId).filter((id): id is string => !!id))];
+
+  const [team, paymentsByCase, preview, visits] = await Promise.all([
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
-    /*
-     * Los pagos del día **de todo el tenant**: así los devuelve la API, y `summarizeDay` se queda
-     * sólo con los de las paradas de esta ruta. Sin ese filtro, el «recaudado» mostraría lo que
-     * cobró otra persona. Sin `payment:read` la lista viene vacía y la cuenta muestra cero cobrado,
-     * que es lo que este rol puede saber.
-     */
-    apiCall<DayPayment[]>(`/payments?from=${day}&to=${day}&limit=${DAY_LIMIT}`, {
-      method: 'GET',
-      auth: true,
-    }),
+    Promise.all(
+      caseIds.map((caseId) =>
+        apiCall<DayPayment[]>(`/payments?caseId=${caseId}&limit=${DAY_LIMIT}`, { method: 'GET', auth: true }),
+      ),
+    ),
     /*
      * El recorrido por las calles. Sale de un motor de ruteo que corre en su propio contenedor, así
      * que **puede no estar**: si falla, las paradas se siguen listando y el mapa une los puntos con
      * rectas punteadas. El mapa es un extra, no el contenido.
+     *
+     * ponytail: se pide en cada visita a la ficha, y del otro lado ese GET **escribe** la distancia
+     * en la ruta y registra un segundo revelado de PII. Se acepta porque el recorrido por calles es
+     * lo que justifica el mapa; el arreglo de fondo es que `preview` no escriba ni audite —es una
+     * lectura— y eso es de la API, no del panel.
      */
     apiCall<{ geometry: { latitude: number; longitude: number }[] }>(`/routes/${params.id}/preview`, {
       method: 'GET',
@@ -68,7 +82,7 @@ export default async function RutaPage({ params }: { params: { id: string } }) {
 
   const members = team.body.data ?? [];
   const collector = members.find((m) => m.userId === route.collectorId);
-  const summary = summarizeDay(route, payments.body.data ?? []);
+  const summary = summarizeDay(route, paymentsByCase.flatMap((r) => r.body.data ?? []));
   const stops = route.stops ?? [];
 
   return (
@@ -117,9 +131,14 @@ export default async function RutaPage({ params }: { params: { id: string } }) {
           visits={(visits.body.data ?? []).map((v) => ({ latitude: v.latitude, longitude: v.longitude }))}
           line={preview.body.data?.geometry ?? []}
         />
-        {/* El motor de ruteo vive en otro contenedor y puede no estar levantado. Se dice, en vez de
-            dejar un mapa con rectas sin explicar por qué. */}
-        {preview.status !== 200 && <p className="text-[13px] text-k-text-2">{t('detail.noPreview')}</p>}
+        {/*
+          🔴 Se mira la GEOMETRÍA, no el status: cuando el motor de ruteo está caído la API **degrada
+          con 200 y una geometría vacía**, así que preguntar por el status dejaba el aviso sin
+          dibujarse nunca — justo el «mapa con rectas y sin explicación» que se quería evitar.
+        */}
+        {!preview.body.data?.geometry?.length && (
+          <p className="text-[13px] text-k-text-2">{t('detail.noPreview')}</p>
+        )}
 
         <section>
           <h2 className="mb-3 text-[18px] font-semibold text-k-navy">{t('detail.stops')}</h2>

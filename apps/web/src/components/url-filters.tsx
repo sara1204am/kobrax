@@ -87,7 +87,17 @@ export function UrlFilters({
       {dirty && (
         <button
           type="button"
-          onClick={() => router.push(pathname)}
+          /*
+           * 🔴 Limpia SÓLO lo que este control maneja. Empujando el pathname pelado se llevaba
+           * también el `?date=`, así que quien revisaba el lunes pasado y quitaba un filtro
+           * terminaba mirando hoy, sin nada que dijera por qué.
+           */
+          onClick={() => {
+            const next = new URLSearchParams(params.toString());
+            for (const key of keys) next.delete(key);
+            next.set('page', '1');
+            router.push(`${pathname}?${next.toString()}`);
+          }}
           className="min-h-[40px] text-[14px] font-medium text-k-purple hover:underline"
         >
           {clearLabel}
