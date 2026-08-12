@@ -40,6 +40,7 @@ apuntan `app/page.tsx`, `lib/client.ts`, `login/select-account` y
 | Estado | Ninguno global. `useState` local; `sessionStorage` sólo para el selector de empresa |
 | Tests | Vitest + Testing Library + MSW (`src/test/msw-server.ts`) |
 | i18n | `next-intl` — es/en, **sin ruteo por idioma** (ver abajo) |
+| Mapas | `maplibre-gl` — misma familia y mismos tiles que el móvil. **Sólo en `/rutas/[id]`**: son 250 kB, y el listado que no dibuja mapa no los paga |
 | Otras deps | `qrcode` (sólo para pintar el QR del alta de MFA) |
 
 **No hay** librería de componentes, ni cliente de cache, ni store global, ni
@@ -163,11 +164,17 @@ small 12/400 muted. Labels de campo: 11px, uppercase, tracking-wide.
 ## Variables de entorno
 
 ```
-KOBRAX_API_URL   # default http://127.0.0.1:4010/api — server-side, nunca al navegador
+KOBRAX_API_URL             # default http://127.0.0.1:4010/api — server-side, nunca al navegador
+NEXT_PUBLIC_MAP_STYLE_URL  # el style.json self-hosted de los tiles (W6). Sin él, raster de OSM
 ```
 
-Sin prefijo `NEXT_PUBLIC_`: si aparece uno, es un error de diseño (el navegador no
-tiene que saber dónde vive la API).
+`KOBRAX_API_URL` va **sin** prefijo `NEXT_PUBLIC_`: el navegador no tiene que saber
+dónde vive la API, y si aparece uno ahí es un error de diseño.
+
+La del mapa es la única `NEXT_PUBLIC_`, y con motivo: **la pide el navegador** para
+bajar los tiles, así que no puede resolverse del lado del servidor. Mientras no esté,
+el mapa cae a los tiles raster de openstreetmap.org, que son **sólo para desarrollo**
+(su política de uso prohíbe producción).
 
 ---
 

@@ -8,7 +8,9 @@ import {
   type Member,
   type RouteItem,
   type RouteStopItem,
+  type VisitItem,
 } from '@kobrax/shared';
+import { RouteMap } from '@/components/route-map';
 import { apiCall } from '@/lib/bff';
 import { CATEGORY_TONE, ROUTE_STATUS_TONE, STOP_STATUS_TONE } from '@/lib/routes';
 import { Badge, Card, EmptyState, Fact, PageHeader } from '@/components/panel-ui';
@@ -39,7 +41,7 @@ export default async function RutaPage({ params }: { params: { id: string } }) {
   const route = detail.body.data;
   const day = route.plannedDate.slice(0, 10);
 
-  const [team, payments] = await Promise.all([
+  const [team, payments, preview, visits] = await Promise.all([
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
     /*
      * Los pagos del día **de todo el tenant**: así los devuelve la API, y `summarizeDay` se queda
@@ -51,6 +53,17 @@ export default async function RutaPage({ params }: { params: { id: string } }) {
       method: 'GET',
       auth: true,
     }),
+    /*
+     * El recorrido por las calles. Sale de un motor de ruteo que corre en su propio contenedor, así
+     * que **puede no estar**: si falla, las paradas se siguen listando y el mapa une los puntos con
+     * rectas punteadas. El mapa es un extra, no el contenido.
+     */
+    apiCall<{ geometry: { latitude: number; longitude: number }[] }>(`/routes/${params.id}/preview`, {
+      method: 'GET',
+      auth: true,
+    }),
+    // Las visitas de esta ruta: el punto donde se registró cada una (W6-T0).
+    apiCall<VisitItem[]>(`/visits?routeId=${params.id}&limit=${PAYMENTS_LIMIT}`, { method: 'GET', auth: true }),
   ]);
 
   const members = team.body.data ?? [];
@@ -92,6 +105,25 @@ export default async function RutaPage({ params }: { params: { id: string } }) {
             </ul>
           )}
         </Card>
+
+        <RouteMap
+          stops={stops.map((s) => ({
+            id: s.id,
+            sequenceOrder: s.sequenceOrder,
+            latitude: s.latitude,
+            longitude: s.longitude,
+            label: s.clientName,
+          }))}
+          visits={(visits.body.data ?? []).map((v) => ({
+            id: v.id,
+            latitude: v.latitude,
+            longitude: v.longitude,
+          }))}
+          line={preview.body.data?.geometry ?? []}
+        />
+        {/* El motor de ruteo vive en otro contenedor y puede no estar levantado. Se dice, en vez de
+            dejar un mapa con rectas sin explicar por qué. */}
+        {preview.status !== 200 && <p className="text-[13px] text-k-text-2">{t('detail.noPreview')}</p>}
 
         <section>
           <h2 className="mb-3 text-[18px] font-semibold text-k-navy">{t('detail.stops')}</h2>
