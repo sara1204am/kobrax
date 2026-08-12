@@ -395,6 +395,7 @@
       "noTime": "No time",
       "overdueBadge": "Overdue",
       "itemCount": "{n} items",
+      "noReasons": "This company has not loaded any reasons yet. They are managed in the catalogs.",
       "actions": {
         "open": "Open the item",
         "complete": "Record what happened",

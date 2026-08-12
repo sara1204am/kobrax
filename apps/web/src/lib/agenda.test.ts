@@ -79,8 +79,9 @@ describe('partitionDay + itemActions', () => {
     expect(done.map((i) => i.id)).toEqual(['2', '3', '4']);
   });
 
-  it('sólo una gestión pendiente ofrece acciones', () => {
-    expect(itemActions(AgendaItemStatus.SCHEDULED)).toEqual(['complete', 'reschedule', 'cancel', 'edit']);
+  it('sólo una gestión pendiente ofrece acciones, y editar no es una de ellas', () => {
+    // Editar la hora o la observación es trabajo del teléfono, que es donde se agendó.
+    expect(itemActions(AgendaItemStatus.SCHEDULED)).toEqual(['complete', 'reschedule', 'cancel']);
     for (const status of [AgendaItemStatus.EXECUTED, AgendaItemStatus.CANCELLED, AgendaItemStatus.RESCHEDULED]) {
       expect(itemActions(status)).toEqual([]);
     }

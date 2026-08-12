@@ -395,6 +395,7 @@
       "noTime": "Sin hora",
       "overdueBadge": "Vencida",
       "itemCount": "{n} gestiones",
+      "noReasons": "Esta empresa todavía no cargó motivos. Se administran en los catálogos.",
       "actions": {
         "open": "Ver la gestión",
         "complete": "Registrar la ejecución",

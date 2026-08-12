@@ -74,7 +74,10 @@ export function groupByAssignee<T extends { assigneeId?: string }>(
 /**
  * Qué se puede hacer con una gestión. Sólo las pendientes se tocan: una ejecutada, cancelada o
  * reagendada ya contó lo que pasó, y cambiarla después reescribiría el día.
+ *
+ * **Editar no está**: el panel supervisa lo agendado, y corregir la hora o la observación de una
+ * gestión propia es trabajo del teléfono, que es donde se agendó. Ver §12 del plan.
  */
-export function itemActions(status: AgendaItemStatus): ('complete' | 'reschedule' | 'cancel' | 'edit')[] {
-  return status === AgendaItemStatus.SCHEDULED ? ['complete', 'reschedule', 'cancel', 'edit'] : [];
+export function itemActions(status: AgendaItemStatus): ('complete' | 'reschedule' | 'cancel')[] {
+  return status === AgendaItemStatus.SCHEDULED ? ['complete', 'reschedule', 'cancel'] : [];
 }
