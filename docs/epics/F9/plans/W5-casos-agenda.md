@@ -1,4 +1,8 @@
-> **ESTADO: APROBADO — ronda 1 (2026-08-11). En construcción en `web/W5-casos-agenda`.**
+> **ESTADO: ✅ COMPLETA Y MERGEADA a `main` (12/08).** T0–T7 (T8 quedó dentro de T4), con
+> code-review, ponytail-review y validación visual hechos.
+>
+> Verde al mergear: shared build + 46 · móvil type-check + **310 sin tocar un test** · API
+> type-check + **549** · web type-check + **172** + build.
 >
 > El contrato está verificado contra el controller y el service, y **las cuatro decisiones de la
 > dueña están cerradas** (§5, 11/08): tabla con filtros · el día · generar casos con confirmación ·
