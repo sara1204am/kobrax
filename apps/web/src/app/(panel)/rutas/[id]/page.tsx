@@ -16,8 +16,8 @@ import { CATEGORY_TONE, ROUTE_STATUS_TONE, STOP_STATUS_TONE } from '@/lib/routes
 import { Badge, Card, EmptyState, Fact, PageHeader } from '@/components/panel-ui';
 import { date, money } from '@/lib/format';
 
-/** Techo de pagos del día que se traen para la cuenta. Un día de un tenant no llega a tanto. */
-const PAYMENTS_LIMIT = 100;
+/** Techo de lo que se trae de un día —pagos y visitas—. Un día de un tenant no llega a tanto. */
+const DAY_LIMIT = 100;
 
 /**
  * El detalle de una ruta: sus paradas en orden y cómo terminó el día.
@@ -49,7 +49,7 @@ export default async function RutaPage({ params }: { params: { id: string } }) {
      * cobró otra persona. Sin `payment:read` la lista viene vacía y la cuenta muestra cero cobrado,
      * que es lo que este rol puede saber.
      */
-    apiCall<DayPayment[]>(`/payments?from=${day}&to=${day}&limit=${PAYMENTS_LIMIT}`, {
+    apiCall<DayPayment[]>(`/payments?from=${day}&to=${day}&limit=${DAY_LIMIT}`, {
       method: 'GET',
       auth: true,
     }),
@@ -63,7 +63,7 @@ export default async function RutaPage({ params }: { params: { id: string } }) {
       auth: true,
     }),
     // Las visitas de esta ruta: el punto donde se registró cada una (W6-T0).
-    apiCall<VisitItem[]>(`/visits?routeId=${params.id}&limit=${PAYMENTS_LIMIT}`, { method: 'GET', auth: true }),
+    apiCall<VisitItem[]>(`/visits?routeId=${params.id}&limit=${DAY_LIMIT}`, { method: 'GET', auth: true }),
   ]);
 
   const members = team.body.data ?? [];
@@ -114,11 +114,7 @@ export default async function RutaPage({ params }: { params: { id: string } }) {
             longitude: s.longitude,
             label: s.clientName,
           }))}
-          visits={(visits.body.data ?? []).map((v) => ({
-            id: v.id,
-            latitude: v.latitude,
-            longitude: v.longitude,
-          }))}
+          visits={(visits.body.data ?? []).map((v) => ({ latitude: v.latitude, longitude: v.longitude }))}
           line={preview.body.data?.geometry ?? []}
         />
         {/* El motor de ruteo vive en otro contenedor y puede no estar levantado. Se dice, en vez de

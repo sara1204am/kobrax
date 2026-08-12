@@ -534,9 +534,7 @@
         "address": "Address",
         "debt": "Credit balance",
         "daysPastDue": "Days past due",
-        "outcome": "How it ended",
         "notVisited": "Not visited yet",
-        "visitedAt": "Visited on",
         "accuracy": "GPS accuracy",
         "gpsEstimated": "This point is not a GPS reading: it is the stop's known location.",
         "notes": "Collector's note",
@@ -544,7 +542,6 @@
         "evidenceEmpty": "This visit left no evidence.",
         "hash": "File fingerprint",
         "hashHint": "SHA-256 of the original file. If the file changed, this fingerprint would not match.",
-        "capturedAt": "Recorded on",
         "immutable": "A visit and its evidence are never edited or deleted: that is what makes them proof."
       },
       "category": {

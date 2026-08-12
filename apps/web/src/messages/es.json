@@ -534,9 +534,7 @@
         "address": "Dirección",
         "debt": "Deuda del crédito",
         "daysPastDue": "Días de atraso",
-        "outcome": "Cómo terminó",
         "notVisited": "Todavía no se visitó",
-        "visitedAt": "Visitada el",
         "accuracy": "Precisión del GPS",
         "gpsEstimated": "El punto no es una lectura del GPS: es la ubicación conocida de la parada.",
         "notes": "Nota del cobrador",
@@ -544,7 +542,6 @@
         "evidenceEmpty": "Esta visita no dejó evidencia.",
         "hash": "Huella del archivo",
         "hashHint": "SHA-256 del archivo original. Si el archivo cambiara, esta huella no coincidiría.",
-        "capturedAt": "Registrada el",
         "immutable": "Una visita y su evidencia no se editan ni se borran: es lo que las vuelve prueba."
       },
       "category": {

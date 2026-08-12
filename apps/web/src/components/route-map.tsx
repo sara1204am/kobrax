@@ -17,7 +17,6 @@ export interface MapStop {
 
 /** Dónde se registró una visita: lo que deja ver si el cobrador estuvo donde dijo. */
 export interface MapVisit {
-  id: string;
   latitude: number;
   longitude: number;
 }
