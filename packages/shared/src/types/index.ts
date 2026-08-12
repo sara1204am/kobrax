@@ -3,3 +3,4 @@ export * from './client.types.js';
 export * from './auth.types.js';
 export * from './user.types.js';
 export * from './realtime.js';
+export * from './import.types.js';
