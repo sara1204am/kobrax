@@ -9,81 +9,49 @@ import * as SecureStore from 'expo-secure-store';
 import { apiMutate, apiQuery, refreshSession, type MutateResult, type QueryResult } from '@/api-client';
 import { postMultipart, uploadFailure } from '@/api';
 import { getSession } from '@/session';
-
-export type ProfileKind = 'pdf-blocks' | 'pdf-rows' | 'rows';
-export type AbsentRule = 'set-current' | 'no-touch' | 'ask';
-export type ScopeKind = 'official' | 'branch' | 'account';
-export type NameOrder = 'full' | 'surnames-first' | 'split-columns';
-
-export interface FieldRule {
-  enabled?: boolean;
-  required?: boolean;
-  from?: string;
-  in?: 'header' | 'table' | 'below';
-  calibrated?: boolean;
-}
+import type {
+  AbsentRule,
+  ColumnsPayload,
+  ConfigScreen,
+  FieldState,
+  ImportConfig,
+  ImportConfigPatch,
+  NameOrder,
+  PortfolioSummary,
+  ProfileKind,
+  ScopeBranch,
+  ScopeKind,
+  ScopeMember,
+} from '@kobrax/shared';
 
 /**
- * Lo que viaja en un `PATCH`. Dos cosas que `Partial<ImportConfig>` no puede decir:
- * un campo en `null` se **quita** del emparejado, y `reset` devuelve todo al estado de fábrica.
+ * El contrato del import y sus derivados puros viven en `packages/shared`: los consumen el móvil
+ * y el panel web, y una segunda copia acá haría que el escritorio y el teléfono dijeran cosas
+ * distintas sobre la misma cartera (BUILD-PLAN F9 §3.9).
+ *
+ * Se re-exportan para que las pantallas sigan importando de un solo lado.
  */
-export type ImportConfigPatch = Partial<Omit<ImportConfig, 'fields'>> & {
-  fields?: Record<string, FieldRule | null>;
-  reset?: true;
-};
-
-export interface ImportConfig {
-  source: 'manual' | 'file';
-  profile: { kind: ProfileKind; signature?: string[]; recordStart?: string; tableAnchor?: string; headerRow?: number };
-  fields: Record<string, FieldRule>;
-  nameOrder: NameOrder;
-  scope: { kind: ScopeKind; ref: string | null };
-  absentRule: AbsentRule;
-  carriesAssignee: boolean;
-  askOnLogin: boolean;
-}
-
-export interface FieldDef {
-  label: string;
-  type: 'text' | 'number' | 'int' | 'date';
-  starred?: boolean;
-  locked?: boolean;
-}
-
-export interface LastRun {
-  at: string;
-  template: string | null;
-  scope: string | null;
-  created: number;
-  updated: number;
-  setCurrent: number;
-  errors: number;
-}
-
-/** Candidatos de `scope.ref` — los devuelve el mismo GET de config (§6.4). */
-export interface ScopeMember {
-  id: string;
-  name: string;
-  role: string;
-}
-
-export interface ScopeBranch {
-  id: string;
-  name: string;
-}
-
-export interface ConfigScreen {
-  config: ImportConfig;
-  catalog: Record<string, FieldDef>;
-  lastRun: LastRun | null;
-  members: ScopeMember[];
-  branches: ScopeBranch[];
-}
-
-export interface ColumnCandidate {
-  header: string;
-  samples: { label: string; value: number | null }[];
-}
+export { applyFieldState, fieldState, previewName, resultKind, setupStep, soleAssignee } from '@kobrax/shared';
+export type {
+  AbsentRule,
+  ColumnCandidate,
+  ColumnsPayload,
+  ConfigScreen,
+  FieldDef,
+  FieldRule,
+  FieldState,
+  ImportConfig,
+  ImportConfigPatch,
+  LastRun,
+  NameOrder,
+  PortfolioSummary,
+  ProfileKind,
+  ResultKind,
+  ScopeBranch,
+  ScopeKind,
+  ScopeMember,
+  SetupStep,
+} from '@kobrax/shared';
 
 // API_BASE ya termina en /api (ver `api.ts`) — acá va sólo la ruta.
 const BASE = '/imports/portfolio/config';
@@ -124,36 +92,6 @@ export interface PickedFile {
 }
 
 /** Elegirlo del dispositivo: `pickImportFile()` de `@/file-picker` (aparte, y ahí está el por qué). */
-
-export interface ColumnsPayload {
-  labels: string[];
-  columnCandidates: ColumnCandidate[];
-  /**
-   * Sólo en extractos PDF: textos que se repiten, del más frecuente al menos. Uno de ellos es el
-   * que abre cada registro, y su cuenta es cuántos registros hay. Sin elegirlo, el archivo no se
-   * puede cortar en créditos y no hay columnas que emparejar.
-   */
-  recordStartCandidates?: { text: string; count: number }[];
-  /**
-   * Sólo en tablas dentro de un PDF: las primeras filas del archivo, para que el usuario señale
-   * cuál son los encabezados. Un reporte trae título, asesor y fecha antes de la tabla, y ninguna
-   * regla general distingue eso de una fila de encabezados.
-   */
-  headerCandidates?: { anchor: string; preview: string }[];
-}
-
-export interface PortfolioSummary {
-  dryRun: boolean;
-  idempotentSkip: boolean;
-  counts: { created: number; updated: number; setCurrent: number; invalid: number };
-  preview: {
-    toCreate: { code: string; clientName: string }[];
-    toUpdate: { code: string }[];
-    toSetCurrent: { code: string | null }[];
-    invalid: { index: number; reason: string }[];
-    warnings: { index?: number; code: string; detail?: string }[];
-  };
-}
 
 export type FileResult<T> =
   | ({ status: 'ok' } & T)
@@ -288,42 +226,11 @@ export async function shouldOfferImport(now = new Date()): Promise<boolean> {
 
 // ── Derivados para la UI (puros, testeables sin red) ─────────────────────────
 
-/** Los tres estados de un campo (§6.5). Un solo control, no dos toggles. */
-export type FieldState = 'required' | 'optional' | 'off';
-
-export function fieldState(rule: FieldRule | undefined): FieldState {
-  if (!rule || rule.enabled === false) return 'off';
-  return rule.required ? 'required' : 'optional';
-}
-
-export function applyFieldState(rule: FieldRule | undefined, state: FieldState): FieldRule {
-  // `from` e `in` los trae el spread: cambiar el estado nunca desempareja el campo.
-  return { ...rule, enabled: state !== 'off', required: state === 'required' };
-}
-
 export const FIELD_STATE_META: Record<FieldState, { label: string; hint: string }> = {
   required: { label: 'Obligatorio', hint: 'Si el archivo no lo trae, ese crédito no se importa.' },
   optional: { label: 'Opcional', hint: 'Si no viene, se deja como está.' },
   off: { label: 'No importar', hint: 'Se ignora lo que diga el archivo.' },
 };
-
-/**
- * El primer dato que falta para poder importar. `null` = está todo.
- *
- * Ya no dibuja una barra de "Paso 3 de 4": la configuración entra en UNA pantalla, así que el
- * contador era ruido sobre algo que se ve entero de un vistazo. Lo que queda de aquel asistente
- * es lo único que hacía falta: una fila apagada dice POR QUÉ lo está.
- */
-export type SetupStep = 'source' | 'scope' | 'profile' | 'fields' | null;
-
-export function setupStep(config: ImportConfig): SetupStep {
-  if (config.source !== 'file') return 'source';
-  if (config.scope.kind !== 'account' && !config.scope.ref) return 'scope';
-  if (!config.profile.kind) return 'profile';
-  // Sin ningún campo emparejado no hay nada que importar: falta el paso de columnas.
-  if (Object.values(config.fields).every((r) => !r.from)) return 'fields';
-  return null;
-}
 
 /**
  * Todo lo que la pantalla dice de un alcance, en una sola entrada. `refTitle` es qué se le pide
@@ -367,31 +274,19 @@ export function scopeRefName(
 }
 
 /**
- * §2.4: con alcance `Empresa (todos)` y un solo miembro activo, la cartera se autoasigna a esa
- * persona y no hay paso de reparto.
- *
- * ponytail: "un solo miembro activo", no "un solo usuario con capacidad de cobrar". El rol que
- * cobra se llama distinto en cada tenant (COLLECTOR, oficial de crédito, gestor) y acá esto sólo
- * pinta un subtítulo — el autoasignado real lo decide el backend al reconciliar. Si algún día el
- * subtítulo miente en una cuenta con admin + 1 cobrador, se filtra por rol.
- */
-export function soleAssignee(members: ScopeMember[]): ScopeMember | null {
-  return members.length === 1 ? members[0]! : null;
-}
-
-/**
  * Todo lo que se dice de una forma de archivo, en una entrada.
  *
  * `label` describe cómo está dispuesto el dato y no la extensión: el usuario reconoce su archivo
  * por cómo se ve. `hint` da el ejemplo, que desambigua mejor que cualquier definición. `format` es
- * lo que se le pide al momento de subir. Dice CSV y no "Excel o CSV" porque hoy es la verdad — el
- * adaptador de xlsx no existe, y prometerlo manda a subir un archivo que va a rebotar.
+ * lo que se le pide al momento de subir, y nombra las dos extensiones que la API lee de verdad:
+ * `parseRowsFile` decide por los bytes (`PK\x03\x04` → Excel, si no CSV). El `.xls` de 97-2003 se
+ * rechaza a propósito y con el arreglo adentro del mensaje, así que no se nombra acá.
  */
 export const PROFILE_META: Record<ProfileKind, { label: string; hint: string; format: string }> = {
   rows: {
-    label: 'Una fila por crédito (CSV)',
-    hint: 'Un archivo de texto separado por comas.',
-    format: 'CSV · hasta 15 MB. Si tu sistema exporta Excel, guardalo como CSV.',
+    label: 'Una fila por crédito (CSV o Excel)',
+    hint: 'Una planilla o un archivo de texto separado por comas.',
+    format: 'CSV o Excel (.xlsx) · hasta 15 MB',
   },
   'pdf-rows': {
     label: 'Una tabla adentro de un PDF',
@@ -419,26 +314,6 @@ export const NAME_ORDER_LABEL: Record<NameOrder, string> = {
   'surnames-first': 'Dos apellidos y después los nombres',
   'split-columns': 'Vienen en columnas separadas',
 };
-
-/**
- * Cómo quedaría un nombre según la regla elegida — se muestra con un nombre REAL del archivo
- * de muestra, que es lo único que deja decidir sin adivinar (§2.3). Espejo de `splitName` de la
- * API; acá es sólo para la vista previa del BottomSheet.
- */
-const PARTICLES = new Set(['DE', 'DEL', 'LA', 'LAS', 'LOS', 'Y']);
-
-export function previewName(full: string, order: NameOrder): { lastName: string; firstName: string } {
-  if (order !== 'surnames-first') return { lastName: full, firstName: '—' };
-  const words = full.split(/\s+/).filter(Boolean);
-  const surnames: string[] = [];
-  let i = 0;
-  while (i < words.length && surnames.filter((w) => !PARTICLES.has(w)).length < 2) {
-    surnames.push(words[i]!);
-    i++;
-  }
-  if (words.length < 3 || i >= words.length) return { lastName: full, firstName: '—' };
-  return { lastName: surnames.join(' '), firstName: words.slice(i).join(' ') };
-}
 
 /**
  * Advertencias de corrida, en palabras del usuario. Vive acá porque lo usan la Vista Previa y el
@@ -480,17 +355,6 @@ export const LIST_LIMIT = 8;
 /** Texto del "ver el resto", o `null` si entran todos. */
 export function moreLabel(total: number, shown: number): string | null {
   return total > shown ? `Mostrar ${total - shown} más de ${total}` : null;
-}
-
-/**
- * Qué pantalla de resultado corresponde. `skipped` NO es "no pasó nada": es "este archivo ya se
- * había aplicado", y por eso llega con los conteos de aquella corrida y sin listas.
- */
-export type ResultKind = 'ok' | 'warned' | 'skipped';
-
-export function resultKind(invalid: number, idempotentSkip: boolean): ResultKind {
-  if (idempotentSkip) return 'skipped';
-  return invalid > 0 ? 'warned' : 'ok';
 }
 
 /** Fecha corta para la tarjeta de última importación: "Hoy 08:14" / "24 jul 08:14". */

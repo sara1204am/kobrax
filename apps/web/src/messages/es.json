@@ -29,7 +29,9 @@
     "crumbs": {
       "password": "Contraseña",
       "mfa": "Verificación en dos pasos",
-      "sessions": "Sesiones activas"
+      "sessions": "Sesiones activas",
+      "ajustes": "Ajustes",
+      "columnas": "Emparejar columnas"
     },
     "soon": "Pronto",
     "openMenu": "Abrir el menú",
@@ -56,6 +58,197 @@
       "range": "{from}–{to} de {total}",
       "previous": "Anterior",
       "next": "Siguiente"
+    },
+    "import": {
+      "title": "Import de cartera",
+      "subtitle": "Subí el archivo del día, mirá qué va a cambiar y recién ahí confirmá.",
+      "backToRun": "Volver al import",
+      "run": {
+        "dropTitle": "Arrastrá el archivo acá",
+        "pick": "Elegir archivo",
+        "file": "Archivo",
+        "change": "Cambiar archivo",
+        "reading": "Leyendo el archivo…",
+        "previewTitle": "Esto es lo que va a cambiar",
+        "previewNote": "Todavía no se guardó nada. El archivo se vuelve a subir al confirmar.",
+        "confirm": "Confirmar e importar",
+        "cancel": "Cancelar",
+        "created": "Nuevos",
+        "createdHint": "Créditos que todavía no tenías.",
+        "updated": "Se actualizan",
+        "updatedHint": "Ya los tenías: se les actualiza el saldo y los días de atraso.",
+        "setCurrent": "Quedan al día",
+        "setCurrentHint": "Los tenés y el archivo no los trae. Quedan vigentes y sin atraso; el saldo no se toca.",
+        "invalid": "No se importan",
+        "invalidHint": "Al archivo le falta algo que marcaste obligatorio.",
+        "colCode": "N° de crédito",
+        "colClient": "Cliente",
+        "colRow": "Fila",
+        "colReason": "Motivo",
+        "warnings": "Avisos",
+        "emptyBucket": "Ninguno",
+        "resultTitle": "Importación terminada",
+        "resultOk": "Listo. La cartera quedó actualizada.",
+        "resultWarned": "Se importó, y {n} registros quedaron afuera.",
+        "resultSkipped": "Este archivo ya se había importado. No se volvió a aplicar.",
+        "again": "Importar otro archivo",
+        "lastRun": "Última importación",
+        "lastRunNever": "Todavía no importaste ningún archivo.",
+        "lastRunCounts": "{created} nuevos · {updated} actualizados · {setCurrent} al día · {errors} afuera",
+        "disabledTitle": "El import está apagado",
+        "disabledText": "Esta empresa carga la cartera a mano. Se enciende en Ajustes.",
+        "setupTitle": "Falta configurar el import",
+        "setupCta": "Ir a Ajustes",
+        "setup": {
+          "source": "Todavía no dijiste que la cartera sale de un archivo.",
+          "scope": "Falta decir de quién es la cartera que trae el archivo.",
+          "profile": "Falta decir cómo se ve el archivo.",
+          "fields": "Falta emparejar las columnas del archivo con tus datos."
+        }
+      },
+      "settings": {
+        "link": "Ajustes",
+        "title": "Ajustes del import",
+        "subtitle": "Cómo se lee el archivo de tu sistema. Se guarda al momento.",
+        "source": "De dónde sale la cartera",
+        "sourceFile": "De un archivo que sube la oficina",
+        "sourceManual": "Se carga a mano",
+        "sourceManualHint": "Con esta opción el import queda apagado para toda la empresa.",
+        "scope": "Qué cartera trae el archivo",
+        "scopeHint": "Marca hasta dónde llega la importación: fuera de ese alcance no se toca nada.",
+        "scopeRefMissing": "Todavía no elegiste",
+        "scopeRefGone": "El elegido ya no está disponible",
+        "scopeSole": "Toda la cartera queda a nombre de {name}.",
+        "shape": "Cómo se ve el archivo",
+        "shapeWarning": "Cambiar la forma borra el emparejado de columnas y hay que hacerlo de nuevo.",
+        "carriesAssignee": "El archivo dice de quién es cada crédito",
+        "carriesAssigneeHint": "Si no lo trae, el reparto entre cobradores se hace desde Cartera.",
+        "absent": "Los créditos que el archivo no trae",
+        "askOnLogin": "Ofrecer importar al iniciar sesión",
+        "askOnLoginHint": "Aplica a la app del cobrador, no a este panel.",
+        "columns": "Emparejar columnas",
+        "columnsHint": "De qué columna del archivo sale cada dato.",
+        "columnsCta": "Emparejar",
+        "reset": "Volver a la configuración de fábrica",
+        "resetTitle": "¿Volver a la configuración de fábrica?",
+        "resetText": "Se borra el emparejado de columnas, el alcance y la forma del archivo. Lo que ya importaste no se toca.",
+        "resetCta": "Sí, reiniciar",
+        "cancel": "Cancelar",
+        "saved": "Guardado",
+        "saveError": "No se pudo guardar."
+      },
+      "columns": {
+        "title": "Emparejar columnas",
+        "subtitle": "Subí un archivo de muestra y decile de dónde sale cada dato.",
+        "sample": "Archivo de muestra",
+        "pickSample": "Subir un archivo de muestra",
+        "changeSample": "Cambiar la muestra",
+        "reading": "Leyendo el archivo…",
+        "noSample": "Sin un archivo de muestra no hay columnas que emparejar.",
+        "noSampleText": "Subí uno de los archivos que te manda tu sistema. No se importa nada: sólo se mira qué trae.",
+        "field": "Dato",
+        "from": "Sale de",
+        "state": "Cómo se trata",
+        "notMapped": "Sin emparejar",
+        "locked": "Siempre se importa",
+        "add": "Agregar un dato",
+        "remove": "Quitar",
+        "nameOrder": "Cómo viene el nombre",
+        "namePreview": "Quedaría: apellidos «{lastName}», nombres «{firstName}»",
+        "namePreviewNone": "Subí una muestra para ver cómo quedaría un nombre real.",
+        "recordStart": "Dónde arranca cada crédito",
+        "recordStartHint": "El texto que se repite al principio de cada bloque. Su cuenta es cuántos créditos hay.",
+        "recordStartCount": "{n} créditos",
+        "headerRow": "Cuál fila son los encabezados",
+        "headerRowHint": "El reporte trae título y fecha antes de la tabla; señalá la fila de encabezados.",
+        "calibrate": "Días de atraso",
+        "calibrateHint": "Elegí la columna, mirá los valores y recién después confirmá. Es lo que decide quién está en mora.",
+        "calibrateConfirm": "Sí, esos son los días de atraso",
+        "calibrated": "Confirmada",
+        "noCandidates": "El archivo de muestra no trae ninguna columna numérica que sirva."
+      },
+      "profiles": {
+        "rows": {
+          "label": "Una fila por crédito",
+          "hint": "Una planilla o un archivo de texto separado por comas.",
+          "format": "CSV o Excel (.xlsx) · hasta 15 MB"
+        },
+        "pdf-rows": {
+          "label": "Una tabla adentro de un PDF",
+          "hint": "Un reporte con encabezados arriba y una fila por crédito.",
+          "format": "Reporte PDF con una tabla · hasta 15 MB"
+        },
+        "pdf-blocks": {
+          "label": "Un bloque por crédito",
+          "hint": "Un extracto donde cada crédito ocupa su propio bloque, con etiquetas y dos puntos.",
+          "format": "Extracto PDF · hasta 15 MB"
+        }
+      },
+      "scopes": {
+        "official": {
+          "label": "Un oficial de crédito",
+          "hint": "El archivo trae la cartera de una sola persona.",
+          "refTitle": "Oficial de crédito"
+        },
+        "branch": {
+          "label": "Una agencia o sucursal",
+          "hint": "El archivo trae la cartera de una agencia. Sólo se reconcilia esa agencia.",
+          "refTitle": "Agencia o sucursal"
+        },
+        "account": {
+          "label": "Toda la empresa",
+          "hint": "El archivo trae toda la cartera."
+        }
+      },
+      "absent": {
+        "set-current": {
+          "label": "Ponerlos al día",
+          "hint": "Quedan vigentes, sin días de atraso. El saldo no se toca y el crédito sigue en tu cartera."
+        },
+        "no-touch": { "label": "Dejarlos como están", "hint": "No se modifican." },
+        "ask": { "label": "Decidir en cada importación", "hint": "Se muestra la lista antes de confirmar." }
+      },
+      "fieldStates": {
+        "required": { "label": "Obligatorio", "hint": "Si el archivo no lo trae, ese crédito no se importa." },
+        "optional": { "label": "Opcional", "hint": "Si no viene, se deja como está." },
+        "off": { "label": "No importar", "hint": "Se ignora lo que diga el archivo." }
+      },
+      "nameOrder": {
+        "full": "Todo junto",
+        "surnames-first": "Dos apellidos y después los nombres",
+        "split-columns": "Vienen en columnas separadas"
+      },
+      "errors": {
+        "generic": "No se pudo procesar el archivo.",
+        "IMPORT_DISABLED": "El import está apagado: esta empresa carga la cartera a mano.",
+        "IMPORT_NOT_CONFIGURED": "Todavía no configuraste el import.",
+        "FILE_SHAPE_MISMATCH": "Ese archivo no tiene la forma que configuraste.",
+        "XLS_LEGACY_NOT_SUPPORTED": "Los .xls viejos no se pueden leer. Guardalo como .xlsx o CSV.",
+        "NO_RECORDS_MAPPED": "No se leyó ningún registro: la configuración no le calza a este archivo.",
+        "PARSE_FAILED": "No pudimos leer el archivo.",
+        "SIGNATURE_MISMATCH": "El archivo no trae las columnas que configuraste.",
+        "FILE_REQUIRED": "Ese tipo de archivo no se acepta.",
+        "FIELD_RULE_CONFLICT": "Esas dos opciones se contradicen.",
+        "FIELD_NOT_MAPPED": "Un dato obligatorio no está emparejado con ninguna columna.",
+        "COLUMN_ALREADY_MAPPED": "Esa columna ya alimenta otro dato.",
+        "UNKNOWN_FIELD": "Ese dato no existe.",
+        "PROFILE_CHANGED": "Cambió la forma del archivo: hay que emparejar las columnas de nuevo.",
+        "CALIBRATION_STALE": "Confirmá la columna de días de atraso después de elegirla.",
+        "INVALID_SOURCE": "Origen inválido.",
+        "INVALID_PROFILE_KIND": "Forma de archivo inválida."
+      },
+      "warnings": {
+        "MORA_SIN_CONFIRMAR": "Todavía no confirmaste cuál columna son los días de atraso.",
+        "MORA_COLUMNA_SOSPECHOSA": "Puede que la columna de días de atraso esté mal elegida.",
+        "MORA_INCONSISTENTE": "Hay créditos vigentes y sin cargos, pero con días de atraso."
+      },
+      "rejects": {
+        "MISSING": "Le falta un dato que marcaste obligatorio.",
+        "NO_CODE": "No se encontró el N° de crédito. Revisá de qué columna se lee en Ajustes › Emparejar columnas.",
+        "DUP_IN_FILE": "El N° de crédito viene repetido en el archivo.",
+        "MATCHES_MANUAL": "Ese N° de crédito ya existe cargado a mano. El import no lo toca.",
+        "MATCHES_OUT_OF_SCOPE": "Ese N° de crédito existe fuera del alcance de este archivo."
+      }
     }
   },
   "account": {

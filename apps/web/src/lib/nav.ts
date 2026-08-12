@@ -39,7 +39,7 @@ export interface NavItem {
 export const NAV: NavItem[] = [
   { label: 'home', href: '/dashboard', permission: null, built: true },
   { label: 'portfolio', href: '/cartera', permission: Permission.CLIENT_READ, built: true },
-  { label: 'import', href: '/import', permission: Permission.CLIENT_IMPORT, built: false },
+  { label: 'import', href: '/import', permission: Permission.CLIENT_IMPORT, built: true },
   { label: 'cases', href: '/casos', permission: Permission.CASE_READ, built: false },
   { label: 'agenda', href: '/agenda', permission: Permission.AGENDA_READ, built: false },
   { label: 'routes', href: '/rutas', permission: Permission.ROUTE_READ, built: false },

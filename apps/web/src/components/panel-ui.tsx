@@ -60,6 +60,16 @@ export function Skeleton({ className = 'h-4 w-full' }: { className?: string }) {
   return <span aria-hidden className={`block animate-pulse rounded-lg bg-k-light-bg ${className}`} />;
 }
 
+/** La caja blanca en la que vive un bloque de contenido. */
+export function Card({ children }: { children: ReactNode }) {
+  return <div className="rounded-2xl border border-k-border bg-white p-6">{children}</div>;
+}
+
+/** La bajada de un control: qué significa lo que acaba de elegir. */
+export function Hint({ children }: { children: ReactNode }) {
+  return <p className="mt-2 text-[13px] text-k-text-2">{children}</p>;
+}
+
 /** Qué mostrar cuando no hay nada que mostrar. */
 export function EmptyState({
   title,

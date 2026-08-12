@@ -29,7 +29,9 @@
     "crumbs": {
       "password": "Password",
       "mfa": "Two-step verification",
-      "sessions": "Active sessions"
+      "sessions": "Active sessions",
+      "ajustes": "Settings",
+      "columnas": "Map columns"
     },
     "soon": "Soon",
     "openMenu": "Open menu",
@@ -56,6 +58,197 @@
       "range": "{from}–{to} of {total}",
       "previous": "Previous",
       "next": "Next"
+    },
+    "import": {
+      "title": "Portfolio import",
+      "subtitle": "Upload today's file, see what will change, and only then confirm.",
+      "backToRun": "Back to import",
+      "run": {
+        "dropTitle": "Drop the file here",
+        "pick": "Choose a file",
+        "file": "File",
+        "change": "Change file",
+        "reading": "Reading the file…",
+        "previewTitle": "This is what will change",
+        "previewNote": "Nothing has been saved yet. The file is uploaded again when you confirm.",
+        "confirm": "Confirm and import",
+        "cancel": "Cancel",
+        "created": "New",
+        "createdHint": "Credits you did not have yet.",
+        "updated": "Updated",
+        "updatedHint": "You already had them: balance and days past due get updated.",
+        "setCurrent": "Set current",
+        "setCurrentHint": "You have them and the file does not. They stay active with no arrears; the balance is untouched.",
+        "invalid": "Not imported",
+        "invalidHint": "The file is missing something you marked as required.",
+        "colCode": "Credit no.",
+        "colClient": "Client",
+        "colRow": "Row",
+        "colReason": "Reason",
+        "warnings": "Warnings",
+        "emptyBucket": "None",
+        "resultTitle": "Import finished",
+        "resultOk": "Done. The portfolio is up to date.",
+        "resultWarned": "Imported, and {n} records were left out.",
+        "resultSkipped": "This file had already been imported. It was not applied again.",
+        "again": "Import another file",
+        "lastRun": "Last import",
+        "lastRunNever": "You have not imported any file yet.",
+        "lastRunCounts": "{created} new · {updated} updated · {setCurrent} set current · {errors} left out",
+        "disabledTitle": "The import is off",
+        "disabledText": "This company loads its portfolio by hand. You can turn it on in Settings.",
+        "setupTitle": "The import is not set up yet",
+        "setupCta": "Go to Settings",
+        "setup": {
+          "source": "You have not said that the portfolio comes from a file.",
+          "scope": "You still have to say whose portfolio the file carries.",
+          "profile": "You still have to say what the file looks like.",
+          "fields": "The file columns are not mapped to your fields yet."
+        }
+      },
+      "settings": {
+        "link": "Settings",
+        "title": "Import settings",
+        "subtitle": "How your system's file gets read. Saved as you go.",
+        "source": "Where the portfolio comes from",
+        "sourceFile": "From a file the office uploads",
+        "sourceManual": "Loaded by hand",
+        "sourceManualHint": "With this option the import is off for the whole company.",
+        "scope": "What portfolio the file carries",
+        "scopeHint": "It sets how far the import reaches: nothing outside that scope is touched.",
+        "scopeRefMissing": "Not chosen yet",
+        "scopeRefGone": "The one you chose is no longer available",
+        "scopeSole": "The whole portfolio goes to {name}.",
+        "shape": "What the file looks like",
+        "shapeWarning": "Changing the shape clears the column mapping and you have to do it again.",
+        "carriesAssignee": "The file says who each credit belongs to",
+        "carriesAssigneeHint": "If it does not, you assign collectors from Portfolio.",
+        "absent": "Credits the file does not carry",
+        "askOnLogin": "Offer to import at sign-in",
+        "askOnLoginHint": "Applies to the collector's app, not to this panel.",
+        "columns": "Map columns",
+        "columnsHint": "Which column of the file each field comes from.",
+        "columnsCta": "Map",
+        "reset": "Reset to factory settings",
+        "resetTitle": "Reset to factory settings?",
+        "resetText": "The column mapping, the scope and the file shape are cleared. What you already imported is untouched.",
+        "resetCta": "Yes, reset",
+        "cancel": "Cancel",
+        "saved": "Saved",
+        "saveError": "Could not save."
+      },
+      "columns": {
+        "title": "Map columns",
+        "subtitle": "Upload a sample file and tell us where each field comes from.",
+        "sample": "Sample file",
+        "pickSample": "Upload a sample file",
+        "changeSample": "Change the sample",
+        "reading": "Reading the file…",
+        "noSample": "Without a sample file there are no columns to map.",
+        "noSampleText": "Upload one of the files your system sends you. Nothing gets imported: we only look at what it carries.",
+        "field": "Field",
+        "from": "Comes from",
+        "state": "How it is treated",
+        "notMapped": "Not mapped",
+        "locked": "Always imported",
+        "add": "Add a field",
+        "remove": "Remove",
+        "nameOrder": "How the name comes",
+        "namePreview": "It would be: surnames “{lastName}”, first names “{firstName}”",
+        "namePreviewNone": "Upload a sample to see how a real name would be split.",
+        "recordStart": "Where each credit starts",
+        "recordStartHint": "The text repeated at the top of each block. Its count is how many credits there are.",
+        "recordStartCount": "{n} credits",
+        "headerRow": "Which row holds the headers",
+        "headerRowHint": "The report has a title and a date before the table; point at the header row.",
+        "calibrate": "Days past due",
+        "calibrateHint": "Choose the column, look at the values and only then confirm. This is what decides who is in arrears.",
+        "calibrateConfirm": "Yes, those are the days past due",
+        "calibrated": "Confirmed",
+        "noCandidates": "The sample file has no numeric column that would work."
+      },
+      "profiles": {
+        "rows": {
+          "label": "One row per credit",
+          "hint": "A spreadsheet or a comma-separated text file.",
+          "format": "CSV or Excel (.xlsx) · up to 15 MB"
+        },
+        "pdf-rows": {
+          "label": "A table inside a PDF",
+          "hint": "A report with headers on top and one row per credit.",
+          "format": "PDF report with a table · up to 15 MB"
+        },
+        "pdf-blocks": {
+          "label": "One block per credit",
+          "hint": "A statement where each credit takes its own block, with labels and colons.",
+          "format": "PDF statement · up to 15 MB"
+        }
+      },
+      "scopes": {
+        "official": {
+          "label": "One loan officer",
+          "hint": "The file carries a single person's portfolio.",
+          "refTitle": "Loan officer"
+        },
+        "branch": {
+          "label": "One branch",
+          "hint": "The file carries a branch's portfolio. Only that branch is reconciled.",
+          "refTitle": "Branch"
+        },
+        "account": {
+          "label": "The whole company",
+          "hint": "The file carries the entire portfolio."
+        }
+      },
+      "absent": {
+        "set-current": {
+          "label": "Set them current",
+          "hint": "They stay active, with no days past due. The balance is untouched and the credit stays in your portfolio."
+        },
+        "no-touch": { "label": "Leave them as they are", "hint": "They are not modified." },
+        "ask": { "label": "Decide on every import", "hint": "The list is shown before you confirm." }
+      },
+      "fieldStates": {
+        "required": { "label": "Required", "hint": "If the file does not carry it, that credit is not imported." },
+        "optional": { "label": "Optional", "hint": "If it is missing, it is left as it is." },
+        "off": { "label": "Do not import", "hint": "Whatever the file says is ignored." }
+      },
+      "nameOrder": {
+        "full": "All together",
+        "surnames-first": "Two surnames, then the first names",
+        "split-columns": "They come in separate columns"
+      },
+      "errors": {
+        "generic": "We could not process the file.",
+        "IMPORT_DISABLED": "The import is off: this company loads its portfolio by hand.",
+        "IMPORT_NOT_CONFIGURED": "The import is not set up yet.",
+        "FILE_SHAPE_MISMATCH": "That file does not match the shape you configured.",
+        "XLS_LEGACY_NOT_SUPPORTED": "Old .xls files cannot be read. Save it as .xlsx or CSV.",
+        "NO_RECORDS_MAPPED": "No records were read: your settings do not match this file.",
+        "PARSE_FAILED": "We could not read the file.",
+        "SIGNATURE_MISMATCH": "The file does not carry the columns you configured.",
+        "FILE_REQUIRED": "That kind of file is not accepted.",
+        "FIELD_RULE_CONFLICT": "Those two options contradict each other.",
+        "FIELD_NOT_MAPPED": "A required field is not mapped to any column.",
+        "COLUMN_ALREADY_MAPPED": "That column already feeds another field.",
+        "UNKNOWN_FIELD": "That field does not exist.",
+        "PROFILE_CHANGED": "The file shape changed: map the columns again.",
+        "CALIBRATION_STALE": "Confirm the days past due column after choosing it.",
+        "INVALID_SOURCE": "Invalid source.",
+        "INVALID_PROFILE_KIND": "Invalid file shape."
+      },
+      "warnings": {
+        "MORA_SIN_CONFIRMAR": "You have not confirmed which column holds the days past due.",
+        "MORA_COLUMNA_SOSPECHOSA": "The days past due column may be the wrong one.",
+        "MORA_INCONSISTENTE": "There are active credits with no charges but with days past due."
+      },
+      "rejects": {
+        "MISSING": "It is missing a field you marked as required.",
+        "NO_CODE": "No credit number was found. Check which column it is read from in Settings › Map columns.",
+        "DUP_IN_FILE": "The credit number is repeated in the file.",
+        "MATCHES_MANUAL": "That credit number already exists, loaded by hand. The import does not touch it.",
+        "MATCHES_OUT_OF_SCOPE": "That credit number exists outside this file's scope."
+      }
     }
   },
   "account": {

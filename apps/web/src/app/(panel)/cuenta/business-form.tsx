@@ -10,7 +10,7 @@ import {
   type AccountForm,
   type AccountInfo,
 } from '@kobrax/shared';
-import { Button, ErrorBanner, Field, Input } from '@/components/ui';
+import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
 import { sendJson } from '@/lib/client';
@@ -102,21 +102,20 @@ export function BusinessForm({ account }: { account: AccountInfo }) {
         para seis opciones.
       */}
       <Field label={t('country')}>
-        <select
+        <Select
           value={form.countryCode}
           onChange={(e) => {
             const picked = countries.find((c) => c.code === e.target.value);
             if (picked) setForm({ ...form, countryCode: picked.code, currencyCode: picked.currency });
           }}
           disabled={!editable}
-          className="h-[52px] w-full rounded-xl border-[1.5px] border-k-light-bg bg-white px-3.5 text-[15px] text-k-text outline-none transition-all focus:border-k-periwinkle focus:shadow-k-focus disabled:opacity-60"
         >
           {countries.map((c) => (
             <option key={c.code} value={c.code}>
               {c.name} · {c.currency} ({c.symbol})
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
 
       {editable && (
