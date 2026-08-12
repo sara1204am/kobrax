@@ -32,11 +32,11 @@ const ACCOUNTS = [
   { id: 'a2', name: 'Kobrax Demo Norte', role: 'SUPERVISOR', status: 'ACTIVE' },
 ];
 
-// `route:read` está para que quede a la vista un módulo que TODAVÍA no se construyó (W6): sin
+// `payment:read` está para que quede a la vista un módulo que TODAVÍA no se construyó (W7): sin
 // alguno apagado, la prueba de «se pinta en gris y no navega» no tendría contra qué correr.
 function renderShell(
   accounts = ACCOUNTS,
-  permissions = ['client:read', 'user:read', 'case:read', 'route:read'],
+  permissions = ['client:read', 'user:read', 'case:read', 'payment:read'],
 ) {
   return render(
     <PanelShell user={USER} accounts={accounts} nav={visibleNav(permissions)}>
@@ -52,8 +52,8 @@ describe('PanelShell — el menú', () => {
     expect(screen.getAllByRole('link', { name: 'Inicio' }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /^Cartera/ }).length).toBeGreaterThan(0); // W3
     expect(screen.getAllByRole('link', { name: /^Casos/ }).length).toBeGreaterThan(0); // W5
-    // Rutas todavía no existe (W6): se pinta en gris y no navega.
-    expect(screen.queryByRole('link', { name: /^Rutas/ })).not.toBeInTheDocument();
+    // Pagos todavía no existe (W7): se pinta en gris y no navega.
+    expect(screen.queryByRole('link', { name: /^Pagos/ })).not.toBeInTheDocument();
     expect(screen.getAllByText('Pronto').length).toBeGreaterThan(0);
   });
 

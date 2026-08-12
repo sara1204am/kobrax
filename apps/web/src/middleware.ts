@@ -110,6 +110,7 @@ export const config = {
     '/import/:path*',
     '/casos/:path*',
     '/agenda/:path*',
+    '/rutas/:path*',
     '/api/auth/me',
     '/api/auth/switch-account',
     '/api/account/:path*',
@@ -119,6 +120,8 @@ export const config = {
     '/api/imports/:path*',
     '/api/cases/:path*',
     '/api/agenda/:path*',
+    '/api/routes/:path*',
+    '/api/visits/:path*',
     '/api/uploads/:path*',
   ],
 };

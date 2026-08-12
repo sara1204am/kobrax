@@ -485,6 +485,108 @@
         "AGENDA_006": "Falta el banco de la promesa.",
         "AGENDA_007": "Ese desenlace no corresponde a este tipo de gestión."
       }
+    },
+    "routes": {
+      "title": "Rutas",
+      "subtitle": "El día en la calle: qué ruta tenía cada cobrador y hasta dónde llegó.",
+      "scopedToMine": "Estás viendo sólo tus rutas.",
+      "empty": "No hay rutas para este día",
+      "emptyText": "Las rutas las arma el cobrador desde su teléfono, con el mapa en la mano.",
+      "noResults": "No hay rutas con esos filtros",
+      "noResultsText": "Probá quitando alguno.",
+      "previousDay": "Día anterior",
+      "nextDay": "Día siguiente",
+      "today": "Hoy",
+      "date": "Día",
+      "filters": {
+        "collector": "Cobrador",
+        "status": "Estado",
+        "all": "Todas",
+        "clear": "Limpiar filtros"
+      },
+      "columns": {
+        "collector": "Cobrador",
+        "status": "Estado",
+        "progress": "Avance",
+        "stops": "Paradas",
+        "distance": "Distancia",
+        "collected": "Recaudado"
+      },
+      "unknownCollector": "Cobrador",
+      "progress": "{done} de {total}",
+      "km": "{n} km",
+      "minutes": "{n} min",
+      "detail": {
+        "stops": "Paradas",
+        "stopsEmpty": "Esta ruta no tiene paradas.",
+        "summary": "La jornada",
+        "collected": "Recaudado",
+        "done": "Gestionadas",
+        "percent": "Avance",
+        "distance": "Distancia estimada",
+        "duration": "Duración estimada",
+        "noPreview": "No pudimos calcular el recorrido. Las paradas se ven igual.",
+        "openCase": "Ver el caso",
+        "openClient": "Ver la ficha del deudor"
+      },
+      "stop": {
+        "sequence": "Parada {n}",
+        "address": "Dirección",
+        "debt": "Deuda del crédito",
+        "daysPastDue": "Días de atraso",
+        "outcome": "Cómo terminó",
+        "notVisited": "Todavía no se visitó",
+        "visitedAt": "Visitada el",
+        "accuracy": "Precisión del GPS",
+        "gpsEstimated": "El punto no es una lectura del GPS: es la ubicación conocida de la parada.",
+        "notes": "Nota del cobrador",
+        "evidence": "Evidencia",
+        "evidenceEmpty": "Esta visita no dejó evidencia.",
+        "hash": "Huella del archivo",
+        "hashHint": "SHA-256 del archivo original. Si el archivo cambiara, esta huella no coincidiría.",
+        "capturedAt": "Registrada el",
+        "immutable": "Una visita y su evidencia no se editan ni se borran: es lo que las vuelve prueba."
+      },
+      "category": {
+        "COLLECTED": "Cobrados",
+        "PROMISED": "Promesas",
+        "NO_ANSWER": "No contesta",
+        "UNREACHABLE": "Inubicables",
+        "OTHER": "Otros"
+      },
+      "status": {
+        "PLANNED": "Planificada",
+        "IN_PROGRESS": "En curso",
+        "COMPLETED": "Terminada",
+        "CANCELLED": "Cancelada"
+      },
+      "stopStatus": {
+        "PENDING": "Pendiente",
+        "IN_ROUTE": "En camino",
+        "VISITED": "Visitada",
+        "SKIPPED": "Salteada"
+      },
+      "outcome": {
+        "NO_CONTACT": "No contestó",
+        "CONTACTED": "Habló con el deudor",
+        "PROMISE_TO_PAY": "Prometió pagar",
+        "PARTIAL_PAYMENT": "Pagó una parte",
+        "PAID": "Pagó",
+        "REFUSAL": "Se negó a pagar",
+        "NOT_FOUND": "No lo encontró",
+        "RESCHEDULED": "Reagendada",
+        "WRONG_ADDRESS": "La dirección no corresponde",
+        "SPECIAL": "Gestión especial"
+      },
+      "evidenceType": {
+        "PHOTO": "Foto",
+        "SIGNATURE": "Firma",
+        "DOCUMENT": "Documento",
+        "AUDIO": "Audio"
+      },
+      "errors": {
+        "generic": "No se pudo completar la acción."
+      }
     }
   },
   "account": {
