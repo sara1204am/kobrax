@@ -28,9 +28,9 @@ export function serializeVisit(v: FieldVisit) {
 /**
  * Una evidencia sellada.
  *
- * `fileUrl` es el NOMBRE del archivo, no una URL completa: se sirve por `GET /uploads/:name`, que
- * es la única puerta que valida el tenant. El hash se manda entero —64 caracteres— porque es lo
- * que prueba que el archivo no cambió; recortarlo lo volvería decorativo.
+ * `fileUrl` viaja tal cual se guardó: `uploads` devuelve `/api/uploads/<nombre>` —una ruta, no un
+ * nombre suelto— y esa ruta existe igual en el móvil y en el panel. El hash se manda entero —64
+ * caracteres— porque es lo que prueba que el archivo no cambió; recortarlo lo volvería decorativo.
  */
 export function serializeEvidence(e: FieldEvidence) {
   return {

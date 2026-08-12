@@ -71,7 +71,13 @@ export interface VisitItem {
 export interface EvidenceItem {
   id: string;
   type: EvidenceType;
-  /** El NOMBRE del archivo: se sirve por `GET /uploads/:name`, la única puerta que valida el tenant. */
+  /**
+   * La **ruta** del archivo, no su nombre: `uploads` devuelve `/api/uploads/<nombre>` y es lo que
+   * se guarda tal cual. Sirve igual en el móvil y en el panel, porque los dos tienen esa ruta —
+   * en el panel pega en su BFF, que proxea con el Bearer.
+   *
+   * Puede ser una URL externa en datos viejos, anteriores al módulo de subida.
+   */
   fileUrl: string;
   /** SHA-256 del buffer original, entero. */
   fileHash: string;

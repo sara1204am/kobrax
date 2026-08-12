@@ -146,18 +146,35 @@ async function Evidence({ evidence, locale }: { evidence: EvidenceItem; locale: 
       </div>
 
       {/*
-        `fileUrl` es el NOMBRE del archivo y se sirve por el handler del BFF, que es la única puerta
-        que valida el tenant. `img` a secas y no `next/image`: son archivos privados servidos por
-        nuestra ruta, no assets optimizables.
+        🔴 `fileUrl` ya ES la ruta: `uploads` devuelve `/api/uploads/<nombre>` y el móvil guarda eso
+        tal cual. Anteponer el prefijo otra vez daba `/api/uploads//api/uploads/...` y ninguna foto
+        se veía. Y en el panel esa misma ruta pega en SU handler, que proxea con el Bearer — la
+        única puerta que valida el tenant.
+
+        Sólo se dibuja lo que apunta a nuestra ruta: una evidencia vieja con una URL externa no se
+        puede autenticar, así que se muestra el enlace en vez de una imagen rota.
+
+        `img` a secas y no `next/image`: son archivos privados servidos por nuestro handler, no
+        assets optimizables.
       */}
-      {isImage && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={`/api/uploads/${evidence.fileUrl}`}
-          alt={t(`evidenceType.${evidence.type}`)}
-          className="mt-3 max-h-64 w-full rounded-xl border border-k-border object-cover"
-        />
-      )}
+      {isImage &&
+        (evidence.fileUrl.startsWith('/') ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={evidence.fileUrl}
+            alt={t(`evidenceType.${evidence.type}`)}
+            className="mt-3 max-h-64 w-full rounded-xl border border-k-border object-cover"
+          />
+        ) : (
+          <a
+            href={evidence.fileUrl}
+            rel="noreferrer"
+            target="_blank"
+            className="mt-3 block break-all text-[13px] text-k-purple hover:underline"
+          >
+            {evidence.fileUrl}
+          </a>
+        ))}
 
       <p className="mt-3 text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{t('stop.hash')}</p>
       {/* Entero y en monoespaciada: sus 64 caracteres son lo que prueba que el archivo no cambió,

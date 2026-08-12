@@ -147,7 +147,7 @@ describe('FieldService.findOne (la visita con su evidencia)', () => {
       {
         id: 'e1',
         type: 'PHOTO',
-        fileUrl: 'abc123.jpg',
+        fileUrl: '/api/uploads/abc123.jpg',
         fileHash: 'a'.repeat(64),
         latitude: -16.5,
         longitude: -68.15,
@@ -160,9 +160,9 @@ describe('FieldService.findOne (la visita con su evidencia)', () => {
     const { service } = makeService({ permissions: ['route:assign'], visit: WITH_EVIDENCE });
     const visit = await service.findOne('v1');
     assert.equal(visit.evidences[0]!.fileHash.length, 64);
-    // `fileUrl` es el nombre del archivo: se sirve por `GET /uploads/:name`, la única puerta que
-    // valida el tenant.
-    assert.equal(visit.evidences[0]!.fileUrl, 'abc123.jpg');
+    // `fileUrl` es la RUTA que devolvió `uploads`, no un nombre suelto: el panel la usa tal cual y
+    // pega en su propio handler, que proxea con el Bearer.
+    assert.equal(visit.evidences[0]!.fileUrl, '/api/uploads/abc123.jpg');
   });
 
   it('la visita de otro cobrador responde 404, no 403: no se filtra que exista', async () => {
