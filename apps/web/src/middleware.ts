@@ -108,6 +108,8 @@ export const config = {
     '/equipo/:path*',
     '/cartera/:path*',
     '/import/:path*',
+    '/casos/:path*',
+    '/agenda/:path*',
     '/api/auth/me',
     '/api/auth/switch-account',
     '/api/account/:path*',

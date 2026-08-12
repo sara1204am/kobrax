@@ -31,7 +31,11 @@
       "mfa": "Verificación en dos pasos",
       "sessions": "Sesiones activas",
       "ajustes": "Ajustes",
-      "columnas": "Emparejar columnas"
+      "columnas": "Emparejar columnas",
+      "nuevo": "Nuevo",
+      "editar": "Editar",
+      "prestamo": "Nuevo préstamo",
+      "credito": "Crédito"
     },
     "soon": "Pronto",
     "openMenu": "Abrir el menú",
@@ -248,6 +252,223 @@
         "DUP_IN_FILE": "El N° de crédito viene repetido en el archivo.",
         "MATCHES_MANUAL": "Ese N° de crédito ya existe cargado a mano. El import no lo toca.",
         "MATCHES_OUT_OF_SCOPE": "Ese N° de crédito existe fuera del alcance de este archivo."
+      }
+    },
+    "cases": {
+      "title": "Casos",
+      "subtitle": "El trabajo abierto del equipo: quién tiene cada caso y cuáles se están venciendo.",
+      "scopedToMine": "Estás viendo sólo los casos que tenés asignados.",
+      "empty": "No hay casos con esos filtros",
+      "emptyText": "Probá quitando algún filtro, o generá los casos de la cartera en mora.",
+      "filters": {
+        "status": "Estado",
+        "priority": "Prioridad",
+        "assignee": "Cobrador",
+        "all": "Todos",
+        "unassigned": "Sin asignar",
+        "overdue": "Sólo vencidos",
+        "clear": "Limpiar filtros"
+      },
+      "columns": {
+        "client": "Deudor",
+        "daysPastDue": "Mora",
+        "balance": "Saldo",
+        "status": "Estado",
+        "priority": "Prioridad",
+        "assignee": "Cobrador",
+        "slaDueAt": "Vence",
+        "actions": "Acciones"
+      },
+      "days": "{n} d",
+      "noAssignee": "—",
+      "overdueBadge": "Vencido",
+      "rowMenu": "Acciones del caso",
+      "actions": {
+        "open": "Ver el caso",
+        "transition": "Pasar a…",
+        "assign": "Asignar",
+        "close": "Cerrar el caso"
+      },
+      "generate": {
+        "cta": "Generar casos",
+        "title": "¿Generar los casos de la cartera en mora?",
+        "text": "Se va a crear un caso por cada crédito con atraso que todavía no tenga uno abierto.",
+        "warning": "No hay forma de deshacerlo en bloque.",
+        "minDays": "Desde cuántos días de atraso",
+        "confirm": "Sí, generar",
+        "cancel": "Cancelar",
+        "done": "Se crearon {n} casos.",
+        "none": "No había créditos en mora sin caso abierto."
+      },
+      "assign": {
+        "title": "Asignar el caso",
+        "text": "Elegí a quién, o dejá que se asigne al cobrador con menos casos abiertos.",
+        "collector": "Cobrador",
+        "auto": "Al que tenga menos casos",
+        "confirm": "Asignar",
+        "cancel": "Cancelar",
+        "done": "Caso asignado"
+      },
+      "transition": {
+        "title": "Mover el caso",
+        "text": "Sólo se ofrecen los estados a los que este caso puede pasar.",
+        "reason": "Motivo (opcional)",
+        "confirm": "Mover",
+        "cancel": "Cancelar",
+        "done": "Caso actualizado",
+        "none": "Este caso ya no se puede mover: está cerrado."
+      },
+      "close": {
+        "title": "Cerrar el caso",
+        "text": "Cerrar es definitivo. El caso deja de contar como trabajo abierto.",
+        "reason": "Motivo del cierre",
+        "confirm": "Cerrar el caso",
+        "cancel": "Cancelar",
+        "done": "Caso cerrado"
+      },
+      "detail": {
+        "credit": "Crédito",
+        "balance": "Saldo",
+        "installment": "Cuota",
+        "nextDueDate": "Próximo vencimiento",
+        "sla": "Vence el",
+        "assignee": "Cobrador",
+        "openClient": "Ver la ficha del deudor",
+        "timeline": "Gestiones",
+        "timelineEmpty": "Todavía no hay gestiones registradas.",
+        "activityBy": "por {name}"
+      },
+      "status": {
+        "PENDING": "Pendiente",
+        "ACTIVE": "En gestión",
+        "IN_NEGOTIATION": "En negociación",
+        "PROMISE_TO_PAY": "Promesa de pago",
+        "PAID": "Pagado",
+        "CLOSED": "Cerrado",
+        "WRITTEN_OFF": "Incobrable"
+      },
+      "priority": {
+        "LOW": "Baja",
+        "MEDIUM": "Media",
+        "HIGH": "Alta",
+        "CRITICAL": "Crítica"
+      },
+      "activityType": {
+        "NOTE": "Nota",
+        "CALL": "Llamada",
+        "VISIT": "Visita",
+        "MESSAGE": "Mensaje",
+        "PAYMENT": "Pago",
+        "PROMISE": "Promesa de pago",
+        "STATUS_CHANGE": "Cambio de estado",
+        "ASSIGNMENT": "Asignación"
+      },
+      "errors": {
+        "generic": "No se pudo completar la acción.",
+        "CASE_001": "Un caso no se cierra sin ninguna gestión registrada.",
+        "CASE_002": "Ese cambio de estado no está permitido desde el estado actual.",
+        "INVALID_ASSIGNEE": "Esa persona no pertenece a esta empresa.",
+        "AUTH_002": "No tenés permiso para esta acción."
+      }
+    },
+    "agenda": {
+      "title": "Agenda",
+      "subtitle": "Lo que el equipo tiene agendado para el día.",
+      "scopedToMine": "Estás viendo sólo tus gestiones.",
+      "today": "Hoy",
+      "previousDay": "Día anterior",
+      "nextDay": "Día siguiente",
+      "date": "Día",
+      "pending": "Pendiente",
+      "done": "Hecho",
+      "empty": "No hay nada agendado para este día",
+      "emptyText": "Las gestiones se agendan desde la app del cobrador.",
+      "overdue": {
+        "title": "Vencidas",
+        "text": "Gestiones de días anteriores que siguen pendientes.",
+        "count": "{n} vencidas",
+        "empty": "No hay gestiones vencidas."
+      },
+      "unassigned": "Sin cobrador",
+      "noTime": "Sin hora",
+      "actions": {
+        "open": "Ver la gestión",
+        "complete": "Registrar la ejecución",
+        "cancel": "Cancelar",
+        "reschedule": "Reagendar",
+        "edit": "Editar"
+      },
+      "complete": {
+        "title": "Registrar la ejecución",
+        "outcome": "Qué pasó",
+        "notes": "Nota (opcional)",
+        "confirm": "Registrar",
+        "cancel": "Cancelar",
+        "done": "Gestión registrada"
+      },
+      "cancelItem": {
+        "title": "Cancelar la gestión",
+        "text": "La gestión sigue visible en su día, con el estado Cancelada.",
+        "reason": "Motivo",
+        "confirm": "Cancelar la gestión",
+        "back": "Volver",
+        "done": "Gestión cancelada"
+      },
+      "reschedule": {
+        "title": "Reagendar",
+        "text": "La gestión de hoy queda marcada como reagendada y sigue visible en este día. Se crea una nueva en la fecha que elijas.",
+        "date": "Nueva fecha",
+        "reason": "Motivo",
+        "confirm": "Reagendar",
+        "cancel": "Cancelar",
+        "done": "Gestión reagendada"
+      },
+      "detail": {
+        "client": "Deudor",
+        "document": "Documento",
+        "credit": "Crédito",
+        "balance": "Saldo",
+        "daysPastDue": "Días de atraso",
+        "phone": "Teléfono",
+        "address": "Dirección",
+        "observations": "Observaciones",
+        "history": "Historial del caso",
+        "historyEmpty": "No hay otras gestiones para este caso.",
+        "rescheduledFrom": "Nació al reagendar otra gestión.",
+        "openCase": "Ver el caso"
+      },
+      "type": {
+        "CALL": "Llamada",
+        "VISIT": "Visita",
+        "WHATSAPP": "WhatsApp",
+        "REMINDER": "Recordatorio",
+        "PROMISE_TO_PAY": "Promesa de pago"
+      },
+      "status": {
+        "SCHEDULED": "Pendiente",
+        "EXECUTED": "Ejecutada",
+        "CANCELLED": "Cancelada",
+        "RESCHEDULED": "Reagendada"
+      },
+      "outcome": {
+        "CONTACTED": "Hablé con el deudor",
+        "NO_ANSWER": "No respondió",
+        "WRONG_NUMBER": "El número no es del deudor",
+        "NOT_FOUND": "No lo encontré en el domicilio",
+        "WRONG_ADDRESS": "La dirección no corresponde",
+        "PROMISE_KEPT": "Confirmó el pago",
+        "PROMISE_BROKEN": "No pagó",
+        "DONE": "Realizado"
+      },
+      "timeSlot": {
+        "MORNING": "Mañana",
+        "AFTERNOON": "Tarde",
+        "NIGHT": "Noche"
+      },
+      "errors": {
+        "generic": "No se pudo completar la acción.",
+        "AGENDA_006": "Falta el banco de la promesa.",
+        "AGENDA_007": "Ese desenlace no corresponde a este tipo de gestión."
       }
     }
   },

@@ -31,7 +31,11 @@
       "mfa": "Two-step verification",
       "sessions": "Active sessions",
       "ajustes": "Settings",
-      "columnas": "Map columns"
+      "columnas": "Map columns",
+      "nuevo": "New",
+      "editar": "Edit",
+      "prestamo": "New loan",
+      "credito": "Credit"
     },
     "soon": "Soon",
     "openMenu": "Open menu",
@@ -248,6 +252,223 @@
         "DUP_IN_FILE": "The credit number is repeated in the file.",
         "MATCHES_MANUAL": "That credit number already exists, loaded by hand. The import does not touch it.",
         "MATCHES_OUT_OF_SCOPE": "That credit number exists outside this file's scope."
+      }
+    },
+    "cases": {
+      "title": "Cases",
+      "subtitle": "The team's open work: who has each case and which ones are running late.",
+      "scopedToMine": "You are seeing only the cases assigned to you.",
+      "empty": "No cases match these filters",
+      "emptyText": "Try removing a filter, or generate the cases for the overdue portfolio.",
+      "filters": {
+        "status": "Status",
+        "priority": "Priority",
+        "assignee": "Collector",
+        "all": "All",
+        "unassigned": "Unassigned",
+        "overdue": "Overdue only",
+        "clear": "Clear filters"
+      },
+      "columns": {
+        "client": "Debtor",
+        "daysPastDue": "Past due",
+        "balance": "Balance",
+        "status": "Status",
+        "priority": "Priority",
+        "assignee": "Collector",
+        "slaDueAt": "Due",
+        "actions": "Actions"
+      },
+      "days": "{n} d",
+      "noAssignee": "—",
+      "overdueBadge": "Overdue",
+      "rowMenu": "Case actions",
+      "actions": {
+        "open": "Open the case",
+        "transition": "Move to…",
+        "assign": "Assign",
+        "close": "Close the case"
+      },
+      "generate": {
+        "cta": "Generate cases",
+        "title": "Generate the cases for the overdue portfolio?",
+        "text": "One case will be created for every overdue credit that does not have an open one yet.",
+        "warning": "There is no way to undo this in bulk.",
+        "minDays": "From how many days past due",
+        "confirm": "Yes, generate",
+        "cancel": "Cancel",
+        "done": "{n} cases were created.",
+        "none": "There were no overdue credits without an open case."
+      },
+      "assign": {
+        "title": "Assign the case",
+        "text": "Pick someone, or let it go to the collector with the fewest open cases.",
+        "collector": "Collector",
+        "auto": "Whoever has the fewest cases",
+        "confirm": "Assign",
+        "cancel": "Cancel",
+        "done": "Case assigned"
+      },
+      "transition": {
+        "title": "Move the case",
+        "text": "Only the states this case can move to are offered.",
+        "reason": "Reason (optional)",
+        "confirm": "Move",
+        "cancel": "Cancel",
+        "done": "Case updated",
+        "none": "This case cannot be moved any more: it is closed."
+      },
+      "close": {
+        "title": "Close the case",
+        "text": "Closing is final. The case stops counting as open work.",
+        "reason": "Reason for closing",
+        "confirm": "Close the case",
+        "cancel": "Cancel",
+        "done": "Case closed"
+      },
+      "detail": {
+        "credit": "Credit",
+        "balance": "Balance",
+        "installment": "Installment",
+        "nextDueDate": "Next due date",
+        "sla": "Due on",
+        "assignee": "Collector",
+        "openClient": "Open the debtor's file",
+        "timeline": "Activity",
+        "timelineEmpty": "No activity recorded yet.",
+        "activityBy": "by {name}"
+      },
+      "status": {
+        "PENDING": "Pending",
+        "ACTIVE": "In progress",
+        "IN_NEGOTIATION": "In negotiation",
+        "PROMISE_TO_PAY": "Promise to pay",
+        "PAID": "Paid",
+        "CLOSED": "Closed",
+        "WRITTEN_OFF": "Written off"
+      },
+      "priority": {
+        "LOW": "Low",
+        "MEDIUM": "Medium",
+        "HIGH": "High",
+        "CRITICAL": "Critical"
+      },
+      "activityType": {
+        "NOTE": "Note",
+        "CALL": "Call",
+        "VISIT": "Visit",
+        "MESSAGE": "Message",
+        "PAYMENT": "Payment",
+        "PROMISE": "Promise to pay",
+        "STATUS_CHANGE": "Status change",
+        "ASSIGNMENT": "Assignment"
+      },
+      "errors": {
+        "generic": "The action could not be completed.",
+        "CASE_001": "A case cannot be closed without any recorded activity.",
+        "CASE_002": "That status change is not allowed from the current status.",
+        "INVALID_ASSIGNEE": "That person does not belong to this company.",
+        "AUTH_002": "You do not have permission for this action."
+      }
+    },
+    "agenda": {
+      "title": "Schedule",
+      "subtitle": "What the team has scheduled for the day.",
+      "scopedToMine": "You are seeing only your own items.",
+      "today": "Today",
+      "previousDay": "Previous day",
+      "nextDay": "Next day",
+      "date": "Day",
+      "pending": "Pending",
+      "done": "Done",
+      "empty": "Nothing is scheduled for this day",
+      "emptyText": "Items are scheduled from the collector's app.",
+      "overdue": {
+        "title": "Overdue",
+        "text": "Items from earlier days that are still pending.",
+        "count": "{n} overdue",
+        "empty": "There are no overdue items."
+      },
+      "unassigned": "No collector",
+      "noTime": "No time",
+      "actions": {
+        "open": "Open the item",
+        "complete": "Record what happened",
+        "cancel": "Cancel",
+        "reschedule": "Reschedule",
+        "edit": "Edit"
+      },
+      "complete": {
+        "title": "Record what happened",
+        "outcome": "What happened",
+        "notes": "Note (optional)",
+        "confirm": "Record",
+        "cancel": "Cancel",
+        "done": "Item recorded"
+      },
+      "cancelItem": {
+        "title": "Cancel the item",
+        "text": "The item stays visible on its day, marked as Cancelled.",
+        "reason": "Reason",
+        "confirm": "Cancel the item",
+        "back": "Back",
+        "done": "Item cancelled"
+      },
+      "reschedule": {
+        "title": "Reschedule",
+        "text": "Today's item is marked as rescheduled and stays visible on this day. A new one is created on the date you pick.",
+        "date": "New date",
+        "reason": "Reason",
+        "confirm": "Reschedule",
+        "cancel": "Cancel",
+        "done": "Item rescheduled"
+      },
+      "detail": {
+        "client": "Debtor",
+        "document": "Document",
+        "credit": "Credit",
+        "balance": "Balance",
+        "daysPastDue": "Days past due",
+        "phone": "Phone",
+        "address": "Address",
+        "observations": "Notes",
+        "history": "Case history",
+        "historyEmpty": "There are no other items for this case.",
+        "rescheduledFrom": "Born from rescheduling another item.",
+        "openCase": "Open the case"
+      },
+      "type": {
+        "CALL": "Call",
+        "VISIT": "Visit",
+        "WHATSAPP": "WhatsApp",
+        "REMINDER": "Reminder",
+        "PROMISE_TO_PAY": "Promise to pay"
+      },
+      "status": {
+        "SCHEDULED": "Pending",
+        "EXECUTED": "Done",
+        "CANCELLED": "Cancelled",
+        "RESCHEDULED": "Rescheduled"
+      },
+      "outcome": {
+        "CONTACTED": "Spoke with the debtor",
+        "NO_ANSWER": "No answer",
+        "WRONG_NUMBER": "The number is not the debtor's",
+        "NOT_FOUND": "Not found at the address",
+        "WRONG_ADDRESS": "The address does not match",
+        "PROMISE_KEPT": "Confirmed the payment",
+        "PROMISE_BROKEN": "Did not pay",
+        "DONE": "Done"
+      },
+      "timeSlot": {
+        "MORNING": "Morning",
+        "AFTERNOON": "Afternoon",
+        "NIGHT": "Night"
+      },
+      "errors": {
+        "generic": "The action could not be completed.",
+        "AGENDA_006": "The promise is missing its bank.",
+        "AGENDA_007": "That outcome does not match this kind of item."
       }
     }
   },
