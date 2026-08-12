@@ -1,8 +1,8 @@
-> **ESTADO: EN BORRADOR — ronda 1 (2026-08-12). NO construir hasta PASS.**
+> **ESTADO: APROBADO — ronda 1 (2026-08-12).** Las dos decisiones de la dueña están cerradas (§5):
+> **`PaymentMethod` se arregla en `shared`** —y el arreglo es limpio, porque hoy no lo consume
+> nadie— y **el panel sí registra pagos**, con el aviso de que no se pueden corregir.
 >
-> Trae **una decisión abierta y una sola** (§5): qué se hace con `PaymentMethod` de `shared`, que
-> hoy es legacy y hace rebotar cualquier pago (§4.4). Todo lo demás está verificado contra el
-> controller, el service y el schema.
+> Todo lo demás está verificado contra el controller, el service y el schema.
 
 # W7 — Pagos
 
@@ -82,12 +82,23 @@ así que hay que decidirlo — §5.
 
 | Qué | Por qué |
 |---|---|
+| **`PaymentMethod` arreglado** | D1. Hoy es minúscula legacy y **no lo consume nadie**: el móvil se escribió su propio tipo local. Se arregla, el móvil importa de ahí y se borra la copia |
 | `PaymentItem`, `NewPayment`, `PaymentRequestItem` | Contrato, mismo criterio que agenda, casos y rutas |
-| **`applyPayment`** (de la API) | Cómo se reparte un pago entre las cuotas. **Es plata**: si el panel previera un reparto distinto del que el servidor aplica, la persona confirma una cosa y pasa otra |
-| `creditPatchAfterPayment` | Qué queda del crédito después: próximo vencimiento y mora. ⚠️ El orden importa — la mora se mide contra la fecha YA avanzada |
 
-⚠️ Las dos viven hoy **en la API**, no en el móvil: es la primera promoción que va en esa dirección.
-Hay que verificar que sus specs siguen pasando sin tocarse, igual que se hace con el móvil.
+### 4.5-bis 🔴 `applyPayment` NO se promueve (corrección de la ronda 1)
+
+La ronda 1 lo daba por promovible «porque es plata». Verificado contra el código, **no se puede y
+además no hace falta**:
+
+- `payment-apply.ts` importa `InstallmentStatus` y `Prisma` de `@prisma/client`. **`shared` tiene
+  cero dependencias de runtime** —es lo que le permite correr en el teléfono— así que meterlo ahí
+  significaría o agregar Prisma a `shared`, o aflojarle los tipos al enum para que entre.
+- Y sobre todo: **el panel no reparte pagos.** Registra el monto y el servidor decide cómo se
+  aplica al cronograma. Aflojar tipos buenos para un consumidor que no existe es justo la
+  promoción especulativa que la regla §3.9 quiere evitar.
+
+Se queda en la API, con sus specs. Si algún día el panel previsualiza el reparto —«este pago cubre
+la cuota 3 y deja 200 a cuenta»—, ahí sí, y con el consumidor a la vista.
 
 ### 4.6 Lo que ya se sabe y acá se hereda
 
@@ -98,17 +109,18 @@ Hay que verificar que sus specs siguen pasando sin tocarse, igual que se hace co
 - El comprobante (`receiptUrl`) sale por `/api/uploads/…` **tal cual viene**: es una ruta, no un
   nombre. Lo pagó W6 y no se vuelve a pagar.
 
-## 5. Decisión abierta
+## 5. Las dos decisiones de la dueña (12/08) — cerradas
 
-| # | Pregunta | Opciones |
+| # | Decisión | Qué implica |
 |---|---|---|
-| D1 | **¿Qué se hace con `PaymentMethod` de `shared`?** | **(a) Arreglarlo**: pasa a MAYÚSCULA y se alinea con Prisma. Es lo correcto, pero hay que revisar quién lo consume hoy — si el móvil ya manda el valor bueno por su cuenta, el arreglo es limpio; si alguien depende del minúscula, se rompe. **(b) Esquivarlo**: W7 usa el enum de Prisma vía un tipo propio y deja `PAYMENT_METHODS` marcado como muerto. Más barato, deja la trampa armada para la próxima |
+| D1 | **`PaymentMethod` se ARREGLA en `shared`** | Pasa a MAYÚSCULA y queda alineado con Prisma. ✅ **El arreglo es limpio: hoy no lo consume nadie** — el móvil se escribió su propio tipo local (con un comentario diciendo que el de `shared` «es otro») y la API usa el de Prisma. Así que además de arreglarlo, el móvil pasa a importarlo y se borra la copia. Queda **una sola verdad**, y el próximo módulo que toque pagos no vuelve a pisar la mina |
+| D2 | **El panel SÍ registra pagos** | La oficina carga el que llega por transferencia o al mostrador. La confirmación dice, **antes** de registrar, que un pago no se puede editar ni anular y que un error se corrige con otro asiento (§4.2). Es el único momento en que se puede evitar |
 
 ## 6. Tareas
 
 | # | Tarea | Sale verde con |
 |---|---|---|
-| T0 | Resolver D1 y promover a `shared` el contrato + `applyPayment` + `creditPatchAfterPayment` | shared + **API con sus specs sin tocar** + móvil 310 |
+| T0 | Arreglar `PaymentMethod` en `shared` (D1) y promover el contrato de pagos. El móvil borra su copia | shared + móvil **310 sin tocar un test** + API |
 | T1 | BFF: `payments` (registrar, con el header de idempotencia) y `payment-requests` | tests de handler, incluido **que el header viaja** |
 | T2 | Matcher + `nav.ts` + esqueleto de `panel.payments` en los dos idiomas | `nav.test.ts` + `messages.test.ts` |
 | T3 | `/pagos`: el ledger con filtros de período y crédito | pantalla + `lib/payments.ts` con tests |
@@ -119,7 +131,7 @@ Hay que verificar que sus specs siguen pasando sin tocarse, igual que se hace co
 
 | Qué | Dónde |
 |---|---|
-| `applyPayment` y `creditPatchAfterPayment` | ya tienen spec en la API — **tienen que seguir pasando sin tocarse** |
+| `applyPayment` y `creditPatchAfterPayment` | se quedan en la API (§4.5-bis); sus specs **no se tocan** |
 | 🔴 Que el `Idempotency-Key` viaje **como header** | test del handler, con MSW |
 | Que el medio de pago viaje como la API lo espera | `lib/payments.test.ts` |
 | El período por defecto y uno inválido en la URL | idem |
@@ -143,8 +155,8 @@ entró UNO solo. Los datos salen de `db:seed:day` (W6).
   veces y el ledger no se puede corregir.
 - 🔴 **El ledger no se edita ni se borra** (§4.2). Ninguna pantalla ofrece lo contrario.
 - 🔴 **`PaymentMethod` de `shared` hace rebotar el pago** (§4.4). Es D1 y va antes de todo.
-- ⚠️ **Promover desde la API es nuevo**: hasta ahora todo salía del móvil. Los specs de la API que
-  cubren `applyPayment` tienen que seguir pasando sin tocarse.
+- ⚠️ **`shared` no tiene NINGUNA dependencia de runtime** y es lo que le permite correr en el
+  teléfono. Nada que importe de `@prisma/client` puede mudarse ahí (§4.5-bis).
 - ⚠️ `confirm` pide `payment:approve`, que **ni el supervisor tiene por defecto**: verificar contra
   `ROLE_PERMISSIONS` antes de dibujar el botón, o queda un 403 esperando.
 - ⚠️ Las trampas del entorno de siempre: `next build` con el `dev` apagado, `-LiteralPath` en
