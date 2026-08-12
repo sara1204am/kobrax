@@ -22,15 +22,30 @@ export async function proxyMutation<T>(
   // Sin `DELETE`: ningún endpoint de casos ni de agenda borra, y un método que nadie usa es una
   // puerta abierta esperando a que alguien la empuje.
   method: 'POST' | 'PATCH' = 'POST',
+  /**
+   * Headers del navegador que hay que **reenviar** a la API.
+   *
+   * 🔴 Existe por `Idempotency-Key`, que `POST /payments` lee del header y no del cuerpo. `apiCall`
+   * arma los suyos, así que sin esto la clave se pierde en el camino y un doble clic cobra dos
+   * veces — sobre un ledger que no se puede corregir.
+   */
+  forwardHeaders: string[] = [],
 ): Promise<NextResponse> {
   if (!sameOrigin(req)) {
     return NextResponse.json({ error: { code: 'CSRF', message: 'Origen no permitido' } }, { status: 403 });
+  }
+
+  const headers: Record<string, string> = {};
+  for (const name of forwardHeaders) {
+    const value = req.headers.get(name);
+    if (value) headers[name] = value;
   }
 
   const body = await req.text();
   const { status, body: res } = await apiCall<T>(path, {
     method,
     auth: true,
+    headers,
     ...(body ? { body } : {}),
   });
   if (status < 200 || status >= 300 || !res.data) return apiError(status, res);

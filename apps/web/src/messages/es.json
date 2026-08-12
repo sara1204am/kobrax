@@ -584,6 +584,84 @@
       "errors": {
         "generic": "No se pudo completar la acción."
       }
+    },
+    "payments": {
+      "title": "Pagos",
+      "subtitle": "Lo que entró: cuánto, cómo y contra qué crédito.",
+      "empty": "No hay pagos en este período",
+      "emptyText": "Probá con otro rango de fechas.",
+      "from": "Desde",
+      "to": "Hasta",
+      "columns": {
+        "date": "Fecha",
+        "client": "Deudor",
+        "amount": "Monto",
+        "method": "Medio",
+        "registeredBy": "Registró",
+        "receipt": "Comprobante"
+      },
+      "unknownUser": "—",
+      "total": "{n} pagos · {amount}",
+      "register": {
+        "cta": "Registrar un pago",
+        "title": "Registrar un pago",
+        "credit": "Crédito",
+        "amount": "Monto",
+        "method": "Medio de pago",
+        "receipt": "N° de comprobante",
+        "confirm": "Registrar",
+        "cancel": "Volver",
+        "done": "Pago registrado",
+        "immutable": "Un pago registrado no se puede editar ni anular. Si está mal, se corrige con otro asiento.",
+        "noCredit": "Elegí primero el crédito desde la ficha del deudor."
+      },
+      "detail": {
+        "title": "El pago",
+        "credit": "Crédito",
+        "case": "Caso",
+        "registeredBy": "Registró",
+        "receiptNumber": "N° de comprobante",
+        "openReceipt": "Ver el comprobante",
+        "provider": "Proveedor",
+        "externalId": "Id externo",
+        "immutable": "Los pagos no se editan ni se borran: el ledger es la fuente de la plata."
+      },
+      "request": {
+        "cta": "Pedir un cobro",
+        "title": "Pedir un cobro",
+        "text": "Se genera un QR y un link para mandarle al deudor. El cobro entra cuando él paga.",
+        "amount": "Monto",
+        "method": "Medio de pago",
+        "confirm": "Generar",
+        "cancel": "Cancelar",
+        "done": "Cobro generado",
+        "qr": "QR para mostrar o mandar",
+        "link": "Link de pago",
+        "copy": "Copiar",
+        "copied": "Copiado",
+        "confirmEntry": "Confirmar que entró",
+        "confirmHint": "Sólo si ya viste la plata acreditada. Confirmar crea el pago y no se deshace.",
+        "confirmed": "Cobro confirmado",
+        "noApprove": "Tu rol no puede confirmar cobros."
+      },
+      "method": {
+        "CASH": "Efectivo",
+        "TRANSFER": "Transferencia",
+        "QR": "QR",
+        "CARD": "Tarjeta",
+        "MOBILE_PAYMENT": "Pago móvil"
+      },
+      "status": {
+        "PENDING": "Pendiente",
+        "PAID": "Pagado",
+        "EXPIRED": "Vencido",
+        "CANCELLED": "Cancelado"
+      },
+      "errors": {
+        "generic": "No se pudo completar la acción.",
+        "PAYMENT_001": "El monto no puede ser negativo.",
+        "AUTH_002": "No tenés permiso para esta acción."
+      }
     }
   },
   "account": {
