@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type ReactNode } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import {
@@ -17,7 +17,7 @@ import {
 } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Select } from '@/components/ui';
 import { DataTable } from '@/components/data-table';
-import { EmptyState } from '@/components/panel-ui';
+import { Card, EmptyState, Hint } from '@/components/panel-ui';
 import { useToast } from '@/components/toast';
 import {
   DAYS_PAST_DUE,
@@ -365,12 +365,4 @@ export function ColumnMapper({ screen }: { screen: ConfigScreen }) {
       </Link>
     </div>
   );
-}
-
-function Card({ children }: { children: ReactNode }) {
-  return <div className="rounded-2xl border border-k-border bg-white p-6">{children}</div>;
-}
-
-function Hint({ children }: { children: ReactNode }) {
-  return <p className="mt-2 text-[13px] text-k-text-2">{children}</p>;
 }

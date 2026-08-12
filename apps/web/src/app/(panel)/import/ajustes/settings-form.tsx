@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import {
@@ -13,6 +13,7 @@ import {
   type ScopeKind,
 } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Select } from '@/components/ui';
+import { Card, Hint } from '@/components/panel-ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
 import { errorText, scopeRefName } from '@/lib/import';
@@ -54,10 +55,7 @@ export function SettingsForm({ screen }: { screen: ConfigScreen }) {
     toast(t('settings.saved'));
   }
 
-  const refOptions =
-    config.scope.kind === 'official'
-      ? screen.members.map((m) => ({ id: m.id, name: m.name }))
-      : screen.branches.map((b) => ({ id: b.id, name: b.name }));
+  const refOptions = config.scope.kind === 'official' ? screen.members : screen.branches;
   const sole = soleAssignee(screen.members);
 
   return (
@@ -231,14 +229,6 @@ export function SettingsForm({ screen }: { screen: ConfigScreen }) {
       </Modal>
     </div>
   );
-}
-
-function Card({ children }: { children: ReactNode }) {
-  return <div className="rounded-2xl border border-k-border bg-white p-6">{children}</div>;
-}
-
-function Hint({ children }: { children: ReactNode }) {
-  return <p className="mt-2 text-[13px] text-k-text-2">{children}</p>;
 }
 
 /** Casilla nativa con su rótulo y su bajada, en una fila. */

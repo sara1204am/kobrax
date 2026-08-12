@@ -2,9 +2,9 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import type { ConfigScreen } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
-import { EmptyState, PageHeader } from '@/components/panel-ui';
+import { Card, EmptyState, PageHeader } from '@/components/panel-ui';
+import { dateTime } from '@/lib/format';
 import { ImportRunner } from './import-runner';
-import { LastRunCard } from './last-run-card';
 
 /**
  * El import del día. Una sola pantalla con tres estados (elegir · vista previa · resultado) y no
@@ -40,7 +40,29 @@ export default async function ImportPage() {
       />
       <div className="space-y-6">
         <ImportRunner config={config} />
-        <LastRunCard lastRun={lastRun} />
+
+        {/*
+          La última corrida. La API guarda **conteos, no el detalle por fila**, y sólo expone la
+          última: un histórico de verdad es un endpoint nuevo, así que acá no se finge tenerlo.
+        */}
+        <Card>
+          <p className="text-[14px] font-medium text-k-text">{t('run.lastRun')}</p>
+          {lastRun ? (
+            <>
+              <p className="mt-1 text-[13px] text-k-text-2">{dateTime(lastRun.at)}</p>
+              <p className="mt-2 text-[13px] text-k-text-2">
+                {t('run.lastRunCounts', {
+                  created: lastRun.created,
+                  updated: lastRun.updated,
+                  setCurrent: lastRun.setCurrent,
+                  errors: lastRun.errors,
+                })}
+              </p>
+            </>
+          ) : (
+            <p className="mt-1 text-[13px] text-k-text-2">{t('run.lastRunNever')}</p>
+          )}
+        </Card>
       </div>
     </>
   );

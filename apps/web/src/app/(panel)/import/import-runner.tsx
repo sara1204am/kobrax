@@ -24,7 +24,6 @@ export function ImportRunner({ config }: { config: ImportConfig }) {
 
   const [file, setFile] = useState<File | null>(null);
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
-  const [applied, setApplied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +38,6 @@ export function ImportRunner({ config }: { config: ImportConfig }) {
       return;
     }
     setSummary(result.data);
-    setApplied(!dryRun);
     // La tarjeta de la última corrida la pintó el servidor: sin esto sigue mostrando la anterior.
     if (!dryRun) router.refresh();
   }
@@ -47,14 +45,12 @@ export function ImportRunner({ config }: { config: ImportConfig }) {
   function choose(chosen: File) {
     setFile(chosen);
     setSummary(null);
-    setApplied(false);
     void run(chosen, true);
   }
 
   function reset() {
     setFile(null);
     setSummary(null);
-    setApplied(false);
     setError(null);
   }
 
@@ -64,11 +60,13 @@ export function ImportRunner({ config }: { config: ImportConfig }) {
   }
   const step = setupStep(config);
   if (step) {
-    return <Gate title={t('run.setupTitle')} text={t(`run.setup${cap(step)}`)} cta={t('run.setupCta')} />;
+    return <Gate title={t('run.setupTitle')} text={t(`run.setup.${step}`)} cta={t('run.setupCta')} />;
   }
 
   // ── Resultado ──────────────────────────────────────────────────────────────
-  if (summary && applied) {
+  // Qué corrida es la que volvió lo dice el servidor (`dryRun` viaja de vuelta en el summary):
+  // un estado propio acá sería una segunda verdad sobre lo mismo, y podría desincronizarse.
+  if (summary && !summary.dryRun) {
     const kind = resultKind(summary.counts.invalid, summary.idempotentSkip);
     return (
       <div className="space-y-6">
@@ -240,7 +238,6 @@ function Buckets({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
         title={t('run.created')}
         hint={t('run.createdHint')}
         rows={toCreate}
-        rowKey={(row) => row.code}
         columns={[
           { key: 'code', header: t('run.colCode'), sortable: false, render: (row) => row.code },
           { key: 'name', header: t('run.colClient'), sortable: false, render: (row) => row.clientName },
@@ -252,7 +249,6 @@ function Buckets({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
         title={t('run.updated')}
         hint={t('run.updatedHint')}
         rows={toUpdate}
-        rowKey={(row) => row.code}
         columns={[{ key: 'code', header: t('run.colCode'), sortable: false, render: (row) => row.code }]}
         empty={t('run.emptyBucket')}
       />
@@ -261,7 +257,6 @@ function Buckets({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
         title={t('run.setCurrent')}
         hint={t('run.setCurrentHint')}
         rows={toSetCurrent}
-        rowKey={(row, i) => row.code ?? `sin-codigo-${i}`}
         columns={[{ key: 'code', header: t('run.colCode'), sortable: false, render: (row) => row.code ?? '—' }]}
         empty={t('run.emptyBucket')}
       />
@@ -270,7 +265,6 @@ function Buckets({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
         title={t('run.invalid')}
         hint={t('run.invalidHint')}
         rows={invalid}
-        rowKey={(row) => String(row.index)}
         columns={[
           { key: 'index', header: t('run.colRow'), sortable: false, numeric: true, render: (row) => row.index },
           { key: 'reason', header: t('run.colReason'), sortable: false, render: (row) => rejectText(row.reason, t) },
@@ -285,20 +279,18 @@ function Bucket<R>({
   title,
   hint,
   rows,
-  rowKey,
   columns,
   empty,
 }: {
   title: string;
   hint: string;
   rows: R[];
-  rowKey: (row: R, index: number) => string;
   columns: Column<R>[];
   empty: string;
 }) {
-  // La llave se calcula una vez por fila: `DataTable` la pide sin el índice, y `toSetCurrent`
-  // puede traer códigos nulos o repetidos.
-  const keys = new Map<R, string>(rows.map((row, i) => [row, rowKey(row, i)]));
+  // La llave es la posición: estas listas están en memoria, no se ordenan ni se filtran, y el
+  // código del crédito no sirve — `toSetCurrent` lo trae nulo y el archivo puede repetirlo.
+  const keys = new Map<R, string>(rows.map((row, i) => [row, String(i)]));
 
   return (
     <section className="space-y-2">
@@ -321,8 +313,4 @@ function Bucket<R>({
       />
     </section>
   );
-}
-
-function cap(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
 }

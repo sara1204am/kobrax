@@ -66,13 +66,10 @@
       "backToRun": "Volver al import",
       "run": {
         "dropTitle": "Arrastrá el archivo acá",
-        "dropOr": "o",
         "pick": "Elegir archivo",
-        "size": "Hasta 15 MB",
         "file": "Archivo",
         "change": "Cambiar archivo",
         "reading": "Leyendo el archivo…",
-        "applying": "Importando…",
         "previewTitle": "Esto es lo que va a cambiar",
         "previewNote": "Todavía no se guardó nada. El archivo se vuelve a subir al confirmar.",
         "confirm": "Confirmar e importar",
@@ -102,11 +99,13 @@
         "disabledTitle": "El import está apagado",
         "disabledText": "Esta empresa carga la cartera a mano. Se enciende en Ajustes.",
         "setupTitle": "Falta configurar el import",
-        "setupSource": "Todavía no dijiste que la cartera sale de un archivo.",
-        "setupScope": "Falta decir de quién es la cartera que trae el archivo.",
-        "setupProfile": "Falta decir cómo se ve el archivo.",
-        "setupFields": "Falta emparejar las columnas del archivo con tus datos.",
-        "setupCta": "Ir a Ajustes"
+        "setupCta": "Ir a Ajustes",
+        "setup": {
+          "source": "Todavía no dijiste que la cartera sale de un archivo.",
+          "scope": "Falta decir de quién es la cartera que trae el archivo.",
+          "profile": "Falta decir cómo se ve el archivo.",
+          "fields": "Falta emparejar las columnas del archivo con tus datos."
+        }
       },
       "settings": {
         "title": "Ajustes del import",
@@ -166,7 +165,6 @@
         "calibrateHint": "Elegí la columna, mirá los valores y recién después confirmá. Es lo que decide quién está en mora.",
         "calibrateConfirm": "Sí, esos son los días de atraso",
         "calibrated": "Confirmada",
-        "notCalibrated": "Sin confirmar",
         "noCandidates": "El archivo de muestra no trae ninguna columna numérica que sirva."
       },
       "profiles": {

@@ -66,13 +66,10 @@
       "backToRun": "Back to import",
       "run": {
         "dropTitle": "Drop the file here",
-        "dropOr": "or",
         "pick": "Choose a file",
-        "size": "Up to 15 MB",
         "file": "File",
         "change": "Change file",
         "reading": "Reading the file…",
-        "applying": "Importing…",
         "previewTitle": "This is what will change",
         "previewNote": "Nothing has been saved yet. The file is uploaded again when you confirm.",
         "confirm": "Confirm and import",
@@ -102,11 +99,13 @@
         "disabledTitle": "The import is off",
         "disabledText": "This company loads its portfolio by hand. You can turn it on in Settings.",
         "setupTitle": "The import is not set up yet",
-        "setupSource": "You have not said that the portfolio comes from a file.",
-        "setupScope": "You still have to say whose portfolio the file carries.",
-        "setupProfile": "You still have to say what the file looks like.",
-        "setupFields": "The file columns are not mapped to your fields yet.",
-        "setupCta": "Go to Settings"
+        "setupCta": "Go to Settings",
+        "setup": {
+          "source": "You have not said that the portfolio comes from a file.",
+          "scope": "You still have to say whose portfolio the file carries.",
+          "profile": "You still have to say what the file looks like.",
+          "fields": "The file columns are not mapped to your fields yet."
+        }
       },
       "settings": {
         "title": "Import settings",
@@ -166,7 +165,6 @@
         "calibrateHint": "Choose the column, look at the values and only then confirm. This is what decides who is in arrears.",
         "calibrateConfirm": "Yes, those are the days past due",
         "calibrated": "Confirmed",
-        "notCalibrated": "Not confirmed",
         "noCandidates": "The sample file has no numeric column that would work."
       },
       "profiles": {
