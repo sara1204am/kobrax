@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RouteStatus, RouteStopStatus, summarizeDay, type RouteItem } from '@kobrax/shared';
-import { ROUTE_STATUS_TONE, STOP_STATUS_TONE, hasRouteFilters, routeQuery } from './routes';
+import { CATEGORY_TONE, ROUTE_STATUS_TONE, STOP_STATUS_TONE, hasRouteFilters, routeQuery } from './routes';
 
 describe('routeQuery', () => {
   it('no manda los filtros vacíos', () => {
@@ -39,6 +39,15 @@ describe('los tonos cubren todos los estados', () => {
   it('ninguno queda sin color', () => {
     for (const status of Object.values(RouteStatus)) expect(ROUTE_STATUS_TONE[status]).toBeTruthy();
     for (const status of Object.values(RouteStopStatus)) expect(STOP_STATUS_TONE[status]).toBeTruthy();
+  });
+
+  it('cada categoría del resumen tiene el suyo, y ninguna queda afuera', () => {
+    // `summarizeDay` sólo devuelve categorías con al menos una parada, pero las cinco existen y
+    // una sin color se dibujaría como neutra sin que nadie lo haya decidido.
+    const all = ['COLLECTED', 'PROMISED', 'NO_ANSWER', 'UNREACHABLE', 'OTHER'] as const;
+    for (const key of all) expect(CATEGORY_TONE[key]).toBeTruthy();
+    expect(CATEGORY_TONE.COLLECTED).toBe('success');
+    expect(CATEGORY_TONE.NO_ANSWER).toBe('danger');
   });
 });
 

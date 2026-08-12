@@ -1,6 +1,19 @@
-import { RouteStatus, RouteStopStatus } from '@kobrax/shared';
+import { RouteStatus, RouteStopStatus, type ResultCategory } from '@kobrax/shared';
 
 type Tone = 'neutral' | 'success' | 'warning' | 'danger';
+
+/**
+ * El color de cada categoría del resumen. Es el mismo mapa que el móvil, pero **no se promueve**:
+ * un color es presentación, y cada app tiene su paleta. Lo que sí se comparte es `categoryOf`, que
+ * decide en qué categoría cae cada resultado.
+ */
+export const CATEGORY_TONE: Record<ResultCategory, Tone> = {
+  COLLECTED: 'success',
+  PROMISED: 'warning',
+  NO_ANSWER: 'danger',
+  UNREACHABLE: 'neutral',
+  OTHER: 'neutral',
+};
 
 /**
  * El color del estado de una ruta. **Cancelada no es roja**: no salió mal, no salió. El rojo del
