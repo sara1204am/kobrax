@@ -1,9 +1,9 @@
-> **ESTADO: EN BORRADOR — ronda 1 (2026-08-11). NO construir hasta PASS.**
+> **ESTADO: APROBADO — ronda 1 (2026-08-11). En construcción en `web/W5-casos-agenda`.**
 >
-> Ronda 1 deja el contrato verificado contra el controller y el service, y **las cuatro decisiones
-> de la dueña ya cerradas** (§5, 11/08): tabla con filtros · el día · generar casos con
-> confirmación · `sort` a la API. La última hace que W5 **toque la API**, cosa que ninguna etapa
-> del panel había hecho hasta ahora — ver §4.4 y T0.
+> El contrato está verificado contra el controller y el service, y **las cuatro decisiones de la
+> dueña están cerradas** (§5, 11/08): tabla con filtros · el día · generar casos con confirmación ·
+> `sort` a la API. La última hace que W5 **toque la API**, cosa que ninguna etapa del panel había
+> hecho hasta ahora — ver §4.4 y T0.
 
 # W5 — Casos y agenda
 

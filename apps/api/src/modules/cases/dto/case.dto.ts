@@ -40,6 +40,15 @@ export class ListCasesQueryDto {
   @IsOptional() @IsIn(['true', 'false']) open?: string;
   /** 'portfolio' → enriquece cada caso con zona, documento enmascarado y promesa vigente (lista de cartera V3). */
   @IsOptional() @IsIn(['portfolio']) view?: 'portfolio';
+  /**
+   * Cómo ordenar: `priority` (default) · `daysPastDue` · `balance` · `slaDueAt` · `createdAt`.
+   *
+   * A propósito **sin `@IsIn`**: una clave desconocida cae al orden por defecto en el service en
+   * vez de responder 400. Viaja en la URL, y una URL vieja que alguien guardó o compartió no
+   * tiene por qué reventar la pantalla.
+   */
+  @IsOptional() @IsString() sort?: string;
+  @IsOptional() @IsString() dir?: string;
 }
 
 export class TransitionCaseDto {

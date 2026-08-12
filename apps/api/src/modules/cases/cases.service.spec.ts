@@ -23,6 +23,7 @@ function makeService(opts: {
     events: [] as string[],
     agenda: [] as Record<string, unknown>[],
     listWhere: undefined as Record<string, unknown> | undefined,
+    listOrderBy: undefined as Record<string, unknown>[] | undefined,
   };
   const tx = {
     account: { findUnique: async () => ({ configuration: {} }) },
@@ -45,9 +46,14 @@ function makeService(opts: {
         if (w.id) return opts.caseRow ?? null;
         return null;
       },
-      findMany: async (args: { where?: Record<string, unknown>; include?: unknown }) => {
+      findMany: async (args: {
+        where?: Record<string, unknown>;
+        include?: unknown;
+        orderBy?: Record<string, unknown>[];
+      }) => {
         if (args?.include) {
           calls.listWhere = args.where; // list() incluye client/credit
+          calls.listOrderBy = args.orderBy;
           return opts.listRows ?? [];
         }
         return (opts.openCreditIds ?? []).map((id) => ({ creditId: id })); // generate()
@@ -156,6 +162,46 @@ describe('CasesService.list (scope por capacidad + enriquecimiento)', () => {
     const { service, calls } = makeService({ permissions: ['case:assign'] });
     await service.list({ open: 'true' } as never);
     assert.deepEqual(calls.listWhere!.status, { notIn: ['CLOSED', 'WRITTEN_OFF'] });
+  });
+
+  it('sin sort ordena como siempre: prioridad, después el más viejo', async () => {
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    await service.list({} as never);
+    assert.deepEqual(calls.listOrderBy!.slice(0, 2), [{ priority: 'desc' }, { createdAt: 'asc' }]);
+  });
+
+  it('ordena por mora y por saldo a través de la relación con el crédito', async () => {
+    // Los dos viven en `credit`, no en el caso: si se ordenara por una columna del caso, el orden
+    // saldría de un dato que no es el que la pantalla muestra.
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    await service.list({ sort: 'daysPastDue' } as never);
+    assert.deepEqual(calls.listOrderBy![0], { credit: { daysPastDue: 'desc' } });
+
+    await service.list({ sort: 'balance', dir: 'asc' } as never);
+    assert.deepEqual(calls.listOrderBy![0], { credit: { outstandingBalance: 'asc' } });
+  });
+
+  it('una clave de orden desconocida cae al default y NO revienta', async () => {
+    // Viaja en la URL: una vieja que alguien guardó no tiene por qué dejar la pantalla en error.
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    await service.list({ sort: 'inventado', dir: 'raro' } as never);
+    assert.deepEqual(calls.listOrderBy![0], { priority: 'desc' });
+  });
+
+  it('🔴 el orden SIEMPRE termina en id, con cualquier sort', async () => {
+    // Sin desempate único, LIMIT/OFFSET repite y saltea filas entre páginas — y ordenando por
+    // prioridad los empates son la regla, no la excepción.
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    for (const sort of [undefined, 'priority', 'daysPastDue', 'balance', 'slaDueAt', 'createdAt']) {
+      await service.list({ sort } as never);
+      assert.deepEqual(calls.listOrderBy!.at(-1), { id: 'asc' }, `sort=${sort} quedó sin desempate`);
+    }
+  });
+
+  it('ordenando por antigüedad no se pide createdAt dos veces', async () => {
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    await service.list({ sort: 'createdAt', dir: 'asc' } as never);
+    assert.deepEqual(calls.listOrderBy, [{ createdAt: 'asc' }, { id: 'asc' }]);
   });
 
   it('enriquece nombre de deudor + monto + mora desde client/credit', async () => {

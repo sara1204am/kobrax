@@ -21,6 +21,42 @@ import { caseDuplicate, caseNoActivity, invalidAssignee, invalidTransition, reso
 
 const TERMINAL: CaseStatus[] = [CaseStatus.CLOSED, CaseStatus.WRITTEN_OFF];
 
+/**
+ * Cómo se puede ordenar el listado.
+ *
+ * Los dos que miran plata y mora **viven en `credit`**, no en el caso, así que se ordena por la
+ * relación — Prisma sabe hacerlo, a diferencia de un `SUM` o un `_count`, que es lo que obligó a
+ * escribir SQL crudo en la cartera del panel.
+ */
+const CASE_ORDER: Record<string, (dir: Prisma.SortOrder) => Prisma.CollectionCaseOrderByWithRelationInput> = {
+  priority: (dir) => ({ priority: dir }),
+  daysPastDue: (dir) => ({ credit: { daysPastDue: dir } }),
+  balance: (dir) => ({ credit: { outstandingBalance: dir } }),
+  slaDueAt: (dir) => ({ slaDueAt: dir }),
+  createdAt: (dir) => ({ createdAt: dir }),
+};
+
+/** Las claves de orden que acepta `GET /cases`. La primera es el default. */
+export const CASE_SORTS = Object.keys(CASE_ORDER);
+
+/**
+ * El `orderBy` del listado.
+ *
+ * 🔴 **Cierra siempre con `id`.** Sin un desempate único, `LIMIT/OFFSET` repite y saltea filas
+ * entre páginas cuando hay empates — y ordenando por prioridad los empates son la regla, no la
+ * excepción. Se pagó en la cartera del panel.
+ *
+ * Una clave desconocida cae al default en vez de responder 400: viaja en la URL, y una URL vieja
+ * que alguien guardó no tiene por qué reventar la pantalla.
+ */
+function caseOrderBy(sort?: string, dir?: string): Prisma.CollectionCaseOrderByWithRelationInput[] {
+  const primary = (CASE_ORDER[sort ?? ''] ?? CASE_ORDER.priority!)(dir === 'asc' ? 'asc' : 'desc');
+  // Entre iguales, primero el caso más viejo: es el que lleva más tiempo esperando.
+  const byAge: Prisma.CollectionCaseOrderByWithRelationInput[] =
+    sort === 'createdAt' ? [] : [{ createdAt: 'asc' }];
+  return [primary, ...byAge, { id: 'asc' }];
+}
+
 @Injectable()
 export class CasesService {
   constructor(
@@ -277,6 +313,11 @@ export class CasesService {
   }
 
   // ── Lecturas ────────────────────────────────────────────────────────────────
+  /**
+   * El listado. El orden se pide por `?sort=&dir=` (F9 W5-D4): antes estaba cableado en prioridad
+   * y el panel no podía ordenar por mora ni por vencimiento, que es justo como una supervisora
+   * mira su cartera.
+   */
   async list(query: ListCasesQueryDto): Promise<ApiResponse<ReturnType<typeof serializeCase>[]>> {
     const { page, limit, skip } = resolvePagination(query);
     const where: Prisma.CollectionCaseWhereInput = { deletedAt: null };
@@ -303,7 +344,7 @@ export class CasesService {
       Promise.all([
         tx.collectionCase.findMany({
           where,
-          orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
+          orderBy: caseOrderBy(query.sort, query.dir),
           skip,
           take: limit,
           include: {
