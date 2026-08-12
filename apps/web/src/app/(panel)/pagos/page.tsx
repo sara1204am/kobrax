@@ -1,9 +1,11 @@
+import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
-import type { AccountInfo, Member, PaymentItem } from '@kobrax/shared';
+import type { AccountInfo, CreditDetail, Member, PaymentItem } from '@kobrax/shared';
 import { apiCall, pageMeta } from '@/lib/bff';
 import { paymentQuery, totalOf } from '@/lib/payments';
 import { Badge, EmptyState, PageHeader } from '@/components/panel-ui';
 import { money } from '@/lib/format';
+import { PaymentActions } from './payment-actions';
 import { PaymentsTable } from './payments-table';
 import { PeriodPicker } from './period-picker';
 
@@ -38,17 +40,39 @@ export default async function PagosPage({
   const rows = list.body.data;
   const currency = account.body.data?.currencyCode ?? 'BOB';
 
+  /*
+   * El crédito sólo se pide cuando se está mirando uno: es lo que hace posible registrar un pago o
+   * pedir un cobro desde acá —las dos acciones lo exigen— y de paso lo nombra por su código en vez
+   * de por un uuid. Si no se puede leer, la acción sigue funcionando con el id.
+   */
+  const credit = searchParams.creditId
+    ? { id: searchParams.creditId, code: (await apiCall<CreditDetail>(`/credits/${searchParams.creditId}`, { method: 'GET', auth: true })).body.data?.code }
+    : undefined;
+
   return (
     <>
       <PageHeader
         title={t('title')}
         subtitle={t('subtitle')}
         actions={
-          rows.length > 0 ? (
-            <Badge tone="neutral">{t('total', { n: rows.length, amount: money(totalOf(rows), currency) })}</Badge>
-          ) : undefined
+          <>
+            {rows.length > 0 && (
+              <Badge tone="neutral">{t('total', { n: rows.length, amount: money(totalOf(rows), currency) })}</Badge>
+            )}
+            <PaymentActions credit={credit} />
+          </>
         }
       />
+
+      {/* Filtrado por un crédito la lista parece vacía sin serlo: la salida tiene que estar a la
+          vista, o se lee como «no hay pagos». */}
+      {credit && (
+        <p className="mb-4 text-[14px] text-k-text-2">
+          <Link href="/pagos" className="font-medium text-k-purple hover:underline">
+            {t('allPayments')}
+          </Link>
+        </p>
+      )}
 
       <PeriodPicker />
       <PaymentsTable

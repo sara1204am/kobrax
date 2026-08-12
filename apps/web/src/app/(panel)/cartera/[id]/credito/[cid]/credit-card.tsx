@@ -72,6 +72,11 @@ export function CreditCard({ credit, clientId }: { credit: CreditDetail; clientI
           <>
             {credit.locked && <Badge tone="warning">{t('imported')}</Badge>}
             {(credit.daysPastDue ?? 0) > 0 && <Badge tone="danger">{t('days', { count: credit.daysPastDue! })}</Badge>}
+            {/* La única puerta a los pagos de ESTE crédito: registrar y pedir un cobro los exigen,
+                y el ledger no elige el crédito — se lo tiene que traer quien llega. */}
+            <Link href={`/pagos?creditId=${credit.id}`} className="text-[13px] font-medium text-k-purple hover:underline">
+              {t('creditPayments')}
+            </Link>
             <Link href={`/cartera/${clientId}`} className="text-[13px] font-medium text-k-purple hover:underline">
               {t('backToClient')}
             </Link>

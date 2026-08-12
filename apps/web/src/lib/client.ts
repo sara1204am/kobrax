@@ -4,15 +4,21 @@ interface JsonResult<T> {
   data: T & { error?: { code: string; message: string } };
 }
 
-/** Helper de cliente: manda JSON a un route handler del BFF (mismo origen). */
+/**
+ * Helper de cliente: manda JSON a un route handler del BFF (mismo origen).
+ *
+ * `headers` existe por `Idempotency-Key`, que `POST /payments` lee del header y no del cuerpo: sin
+ * poder mandarlo, un doble clic registra el pago dos veces sobre un ledger que no se corrige.
+ */
 export async function sendJson<T = unknown>(
   path: string,
   body: unknown,
   method: 'POST' | 'PATCH' | 'DELETE' = 'POST',
+  headers: Record<string, string> = {},
 ): Promise<JsonResult<T>> {
   const res = await fetch(path, {
     method,
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));

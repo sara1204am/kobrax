@@ -117,6 +117,20 @@ la cuota 3 y deja 200 a cuenta»—, ahí sí, y con el consumidor a la vista.
 - El comprobante (`receiptUrl`) sale por `/api/uploads/…` **tal cual viene**: es una ruta, no un
   nombre. Lo pagó W6 y no se vuelve a pagar.
 
+### 4.7 🔴 Registrar y pedir un cobro **exigen un crédito**, y el ledger no lo elige (T4/T5)
+
+`POST /payments` pide `creditId` obligatorio. Y `POST /payment-requests` lo acepta **opcional** —pero
+`confirmRequest` tira `paymentInvalid('La solicitud no tiene crédito asociado')`: una solicitud sin
+crédito genera un QR que **nunca se va a poder conciliar**. Así que las dos pantallas lo exigen igual.
+
+Consecuencia de diseño: `/pagos` no elige el crédito (no tiene buscador de deudores, y armarlo sería
+un módulo). **La puerta es la ficha del crédito**, que ahora lleva a `/pagos?creditId=…`; con el
+crédito en la URL aparecen las dos acciones. Sin él, el botón de registrar sigue estando y dice a
+dónde ir (`register.noCredit`) — esconderlo dejaría a la persona buscando algo que existe.
+
+Por eso el alta de pago **no es una ruta**: es un modal sobre el ledger, que es donde ya está el
+crédito y donde el pago recién registrado se ve aparecer.
+
 ## 5. Las dos decisiones de la dueña (12/08) — cerradas
 
 | # | Decisión | Qué implica |
