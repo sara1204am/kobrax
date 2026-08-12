@@ -1,8 +1,13 @@
-> **ESTADO: EN BORRADOR — ronda 1 (2026-08-12). NO construir hasta PASS.**
+> **ESTADO: ✅ COMPLETA Y MERGEADA a `main` (12/08).** T0–T6, con code-review, ponytail-review y
+> validación visual hechos. El gate del plan (§6-bis) evitó que se reescribieran dos componentes
+> que W5 acababa de dejar.
 >
-> Las tres decisiones de la dueña ya están cerradas (§5, 12/08): **se le agrega el GET a la API** ·
-> **mapa de verdad con `maplibre-gl`** · **W6 antes que W7**. La primera nace de un hallazgo que
-> cambia la etapa entera: **hoy la evidencia no se puede leer desde ningún lado** (§4.3).
+> Verde al mergear: shared build + 46 · móvil type-check + **310 sin tocar un test** · API
+> type-check + **563** · web type-check + **180** + build.
+>
+> Las tres decisiones de la dueña (§5, 12/08): **se le agregó el GET a la API** · **mapa de verdad
+> con `maplibre-gl`** · **W6 antes que W7**. La primera nació del hallazgo que cambió la etapa
+> entera: la evidencia no se podía leer desde ningún lado (§4.3).
 
 # W6 — Rutas y evidencia
 
