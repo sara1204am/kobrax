@@ -1,8 +1,9 @@
 > **ESTADO: EN BORRADOR — ronda 1 (2026-08-11). NO construir hasta PASS.**
 >
-> Ronda 1 deja el contrato verificado contra el controller y el service, y **cuatro decisiones
-> abiertas para la dueña** (§5). Las dos que cambian la forma del trabajo son la 1 (tablero o
-> tabla) y la 2 (el día o la semana).
+> Ronda 1 deja el contrato verificado contra el controller y el service, y **las cuatro decisiones
+> de la dueña ya cerradas** (§5, 11/08): tabla con filtros · el día · generar casos con
+> confirmación · `sort` a la API. La última hace que W5 **toque la API**, cosa que ninguna etapa
+> del panel había hecho hasta ahora — ver §4.4 y T0.
 
 # W5 — Casos y agenda
 
@@ -35,9 +36,9 @@ De W4 se hereda de verdad: `Card` y `Hint` en `panel-ui`, el `Select` de `ui.tsx
 
 | Ruta | Permiso | Qué hace |
 |---|---|---|
-| `/casos` | `case:read` | El listado con filtros (estado, prioridad, cobrador, vencidos) |
+| `/casos` | `case:read` | La tabla con filtros (estado, prioridad, cobrador, vencidos), orden por URL y el botón de generar |
 | `/casos/[id]` | `case:read` | La ficha: deudor, crédito, estado, y el timeline de gestiones |
-| `/agenda` | `agenda:read` | Lo agendado de un día, separado en pendiente y hecho |
+| `/agenda` | `agenda:read` | Lo agendado de **un día** (con selector de fecha), separado en pendiente y hecho, más los vencidos |
 | `/agenda/[id]` | `agenda:read` | El detalle de una gestión y su historial |
 
 🔴 **`/casos/:path*` y `/agenda/:path*` al matcher de `middleware.ts`**, y también
@@ -91,21 +92,36 @@ La consecuencia incómoda: **la misma pantalla le muestra cosas distintas a dos 
 nada en la respuesta que lo diga. Un cobrador que abra `/casos` va a ver una lista corta y correcta
 sin ninguna señal de que está filtrada. §7 le pone un rótulo.
 
-### 4.4 🔴 `GET /cases` tiene el orden FIJO y no acepta `?sort`
+### 4.4 🔴 `GET /cases` tiene el orden FIJO — **D4: se le agrega `sort`**
 
-`orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }]`, cableado en el service.
+Hoy es `orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }]`, cableado en el service, y el
+`DataTable` de W1 ordena empujando `?sort=&dir=` a la URL: sin tocar la API, ninguna columna
+ordena.
 
-El `DataTable` de W1 ordena empujando `?sort=&dir=` a la URL, así que **las columnas no pueden ser
-`sortable`** salvo que se toque la API. Tres salidas, y hay que elegir una en §5:
+**Decidido (D4): se le agrega `sort` a `GET /cases`.** Ordenar en cliente quedaba descartado —
+ordena **sólo la página visible**, que es la trampa que W3 ya documentó: parece que ordenó la
+lista y ordenó 20 filas, y la fila de 200 días de mora sigue escondida en la página 4.
 
-1. **Vivir con el orden fijo** (prioridad y antigüedad es un orden razonable para cobranza) y
-   dejar todas las columnas sin ordenar. Cero código.
-2. **Ordenar en cliente**, que ordena **sólo la página visible** — es exactamente la trampa que
-   W3 documentó: parece que ordena la lista y ordena 20 filas.
-3. **Agregar `sort` a `GET /cases`**, que es tocar la API en una etapa del panel.
+Alcance del cambio en la API (T0), chico y con spec propio:
 
-Misma pregunta, y peor, para «vencimiento del SLA»: `slaDueAt` se filtra (`overdue=true`) pero no
-se ordena.
+| `sort` | Ordena por | Por qué |
+|---|---|---|
+| `priority` | `priority` (el actual) | Sigue siendo el **default**: sin `sort`, nada cambia |
+| `daysPastDue` | `credit.daysPastDue` | Es como una supervisora mira su cartera |
+| `balance` | `credit.outstandingBalance` | «Los que más plata deben» |
+| `slaDueAt` | `slaDueAt` | Se filtra con `overdue=true` pero no se podía ordenar |
+| `createdAt` | `createdAt` | Antigüedad del caso |
+
+Dos cosas que no se pueden olvidar, y las dos las pagó W3:
+
+1. **El orden termina siempre en `id`.** Sin desempate, `LIMIT/OFFSET` repite y saltea filas
+   entre páginas cuando hay empates — y en `priority` los empates son la regla, no la excepción.
+2. `daysPastDue` y `outstandingBalance` **viven en `credit`**, no en `collection_cases`: se ordena
+   por la relación (`orderBy: { credit: { daysPastDue: 'desc' } }`), que Prisma sí soporta —
+   distinto de `_count`/`SUM`, que fue lo que obligó al SQL crudo en W3.
+
+`sort` desconocido → se cae al default, **no** 400: es un parámetro que viaja en la URL y una URL
+vieja compartida por chat no tiene que reventar la pantalla.
 
 ### 4.5 🔴 `GET /agenda` no filtra por cobrador
 
@@ -138,14 +154,14 @@ esto es para no ofrecer un botón que va a rebotar.
 `CLOSED` no se ofrece en ese control: tiene su propio endpoint y **exige motivo**
 (`case:close`, que es un permiso aparte).
 
-## 5. Decisiones abiertas para la dueña
+## 5. Las cuatro decisiones de la dueña (11/08) — cerradas
 
-| # | Pregunta | Por qué importa |
+| # | Decisión | Qué implica |
 |---|---|---|
-| D1 | **¿`/casos` es un tablero por estado (kanban) o una tabla con filtros?** | El BUILD-PLAN dice «tablero». Un kanban con arrastrar y soltar es una etapa entera; una tabla con filtro por estado reusa el `DataTable` que ya existe y sale en un tercio del tiempo. Las transiciones válidas se ofrecen igual, con un menú por fila |
-| D2 | **¿La agenda del panel es un día o una semana?** | La API entrega **un día por llamada**. Una semana son 7 llamadas (o un endpoint nuevo). Para supervisar quizás importe más «qué hay esta semana» que «qué hay hoy» |
-| D3 | **¿Entra `POST /cases/generate`?** | Es el botón que **crea casos en lote** para toda la cartera en mora. Es potente y es el que más rápido llena el tablero, pero genera muchas filas de una y no hay «deshacer» |
-| D4 | **¿El orden de la lista de casos se queda fijo (prioridad) o se le agrega `sort` a la API?** | §4.4. Si se queda fijo, no se puede ordenar por mora ni por vencimiento — que es justo como una supervisora mira su cartera |
+| D1 | **`/casos` es una TABLA con filtros**, no un tablero kanban | Reusa el `DataTable` de W1 sin tocarlo. Filtros de estado, prioridad, cobrador y vencidos; las transiciones válidas se ofrecen con un menú por fila (`⋮` → pasar a… / asignar / cerrar). **El kanban con arrastrar y soltar queda fuera** (§12): no hay librería de drag&drop instalada y es una etapa entera. El BUILD-PLAN decía «tablero» — esta decisión lo corrige |
+| D2 | **La agenda es de UN DÍA**, con selector de fecha | Una llamada, igual que el móvil, y los vencidos aparte con su propio endpoint. Es lo que la API entrega tal cual: la semana serían 7 llamadas o un endpoint nuevo |
+| D3 | **Entra `POST /cases/generate`**, con confirmación | Es el botón que llena el tablero de golpe. El modal dice **cuántos días de atraso** se van a tomar y que **no hay forma de deshacerlo en bloque**; al volver se muestra el conteo (`{ created }`) |
+| D4 | **Se le agrega `sort` a `GET /cases`** | §4.4. W5 **toca la API**, cosa que ninguna etapa del panel había hecho: es un cambio chico y con spec, y es la única forma de que ordenar ordene la lista entera y no la página |
 
 ## 6. Lo que se promueve a `shared`
 
@@ -191,14 +207,15 @@ un idioma y no en el otro, y **una clave vacía también falla** (lo pagó W4).
 
 | # | Tarea | Sale verde con |
 |---|---|---|
+| T0 | **API**: `sort` en `ListCasesQueryDto` + `GET /cases` (D4, §4.4), con el desempate por `id` | `api` type-check + **su spec en `cases.service.spec.ts`** (que ya está en la lista de `package.json`) |
 | T1 | Promover a `shared` `partitionDay` + la máquina del formulario + los helpers de fecha. El móvil importa de ahí | `shared` build + test · móvil type-check + **310 sin tocar un test** |
-| T2 | BFF: `api/cases/**` (lista, ficha, transición, asignar, actividad, cerrar) y `api/agenda/**` (día, vencidos, detalle, completar, cancelar, reagendar, editar) | type-check + tests de handler |
+| T2 | BFF: `api/cases/**` (lista, ficha, transición, asignar, actividad, cerrar, generar) y `api/agenda/**` (día, vencidos, detalle, completar, cancelar, reagendar, editar) | type-check + tests de handler |
 | T3 | Matcher del middleware, `nav.ts` → `built: true` ×2, esqueleto de los dos namespaces | `nav.test.ts` + `messages.test.ts` |
-| T4 | `/casos`: la lista con sus filtros (según **D1**) | pantalla + `lib/cases.ts` con tests |
+| T4 | `/casos`: la tabla con sus filtros y el orden por URL (D1 + D4) | pantalla + `lib/cases.ts` con tests |
 | T5 | `/casos/[id]`: ficha + timeline + transición (sólo las válidas) + asignar + cerrar con motivo | pantalla |
-| T6 | `/agenda`: el día, `partitionDay`, agrupado por cobrador (§4.5) + los vencidos | pantalla |
+| T6 | `/agenda`: el día con su selector de fecha, `partitionDay`, agrupado por cobrador (§4.5) + los vencidos | pantalla |
 | T7 | `/agenda/[id]`: detalle + completar / cancelar / reagendar | pantalla |
-| T8 | Según **D3**: el botón de generar casos, con confirmación y el conteo de vuelta | pantalla |
+| T8 | El botón de generar casos (D3): confirmación con los días de atraso, el aviso de que no se deshace, y el conteo de vuelta | pantalla |
 
 ## 9. Tests
 
@@ -207,6 +224,7 @@ Vitest, **por lógica no trivial, no por componente**.
 | Qué | Dónde |
 |---|---|
 | `partitionDay` | ya tiene su test de no-regresión en el móvil — **tiene que seguir pasando sin tocarse** |
+| El `sort` nuevo: cada clave ordena por lo suyo, el desconocido cae al default y **el desempate por `id` está siempre** | `apps/api/.../cases.service.spec.ts` (T0) |
 | Qué transiciones ofrece la ficha para cada estado (y que `CLOSED` nunca sale por ahí) | `lib/cases.test.ts` |
 | Qué acciones ofrece una gestión según su estado | `lib/agenda.test.ts` |
 | Código de error → texto, con el fallback y el código crudo | idem |
@@ -230,8 +248,11 @@ que la misma pantalla muestra cosas distintas y que las dos son correctas. Es lo
 
 - 🔴 **El scope es invisible en la respuesta** (§4.3). Dos personas ven listas distintas y nada lo
   dice. Es el equivalente de W5 al «`GET /payments` devuelve los del tenant» de Rutas.
-- 🔴 **El orden de casos está cableado en el service** (§4.4): las columnas del `DataTable` no
-  ordenan hasta que D4 se decida.
+- 🔴 **Los spec de la API se listan A MANO** en su `package.json`. T0 usa `cases.service.spec.ts`,
+  que ya está en esa lista — pero si el `sort` termina en un archivo nuevo, **hay que sumarlo o no
+  corre**, y el verde miente.
+- 🔴 **El orden nuevo tiene que terminar en `id`** (§4.4). Sin desempate, `LIMIT/OFFSET` repite y
+  saltea filas entre páginas, y con `priority` los empates son la regla. Lo pagó W3.
 - 🔴 **`GET /agenda/:id` revela el CI en claro y lo audita.** No es una lectura más: si se llama
   para pintar una lista, se auditan N revelados por pantalla. Se llama **sólo al abrir el detalle**.
 - **`GET /agenda/clients/:id/context` exige `AGENDA_WRITE`, no `AGENDA_READ`**, justamente porque
@@ -250,6 +271,10 @@ que la misma pantalla muestra cosas distintas y que las dos son correctas. Es lo
 
 ## 12. Fuera de alcance (dicho para que no se pida después)
 
+- **El tablero kanban con arrastrar y soltar** (D1). `/casos` es una tabla con filtros. No hay
+  librería de drag&drop instalada y hacerlo a mano —con teclado y lector de pantalla, que es lo
+  que lo vuelve caro— es una etapa entera.
+- **La agenda por semana** (D2): un día por pantalla, con selector de fecha.
 - **Agendar desde el panel** (`POST /agenda`, `clients/:id/context`, alta de teléfono y dirección):
   es el flujo de campo, y arrastra el mapa y la PII en claro. El panel **supervisa** lo agendado.
 - **`postpone`** (+15 / +30 / +1h): son los botones del cobrador que ya está en la puerta.
