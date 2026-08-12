@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import es from '@/messages/es.json';
 import en from '@/messages/en.json';
-import { errorText, rejectText, scopeRefName, warningText, type Translator } from './import';
+import {
+  confirmDaysPastDue,
+  errorText,
+  pickDaysPastDue,
+  rejectText,
+  scopeRefName,
+  warningText,
+  withDeducedType,
+  type Translator,
+} from './import';
 
 /** El traductor de verdad de un idioma, atado al namespace `panel.import`. */
 function translator(messages: Record<string, unknown>): Translator {
@@ -73,6 +82,47 @@ describe('warningText', () => {
 
   it('un aviso nuevo se muestra crudo', () => {
     expect(warningText({ code: 'AVISO_NUEVO' }, ES)).toBe('AVISO_NUEVO');
+  });
+});
+
+describe('la calibración de la mora, en dos pasos', () => {
+  const rule = { enabled: true, required: true, from: 'DIAS', calibrated: true };
+
+  it('elegir la columna NUNCA la deja confirmada', () => {
+    // Si elegir y confirmar cupieran en una llamada, «confirmado» no significaría nada: nadie
+    // habría visto los valores de la columna nueva. El servidor lo rechaza con CALIBRATION_STALE.
+    const patch = pickDaysPastDue(rule, 'DIAS_MORA');
+    expect(patch.fields?.daysPastDue).toEqual({ ...rule, from: 'DIAS_MORA', calibrated: false });
+  });
+
+  it('confirmar es un patch aparte, y no toca la columna elegida', () => {
+    const picked = pickDaysPastDue(rule, 'DIAS_MORA').fields?.daysPastDue ?? undefined;
+    const patch = confirmDaysPastDue(picked);
+    expect(patch.fields?.daysPastDue).toEqual({ ...rule, from: 'DIAS_MORA', calibrated: true });
+  });
+
+  it('la regla anterior viaja entera: el merge del servidor reemplaza, no fusiona', () => {
+    const patch = pickDaysPastDue(rule, 'OTRA');
+    expect(patch.fields?.daysPastDue).toMatchObject({ enabled: true, required: true });
+  });
+});
+
+describe('withDeducedType', () => {
+  it('le pone tipo al archivo que el navegador dejó sin tipo', () => {
+    // En Windows un .csv llega con `type: ''` y la API lo rechaza con FILE_REQUIRED.
+    const file = withDeducedType(new File(['a;b'], 'cartera.csv', { type: '' }));
+    expect(file.type).toBe('text/csv');
+    expect(file.name).toBe('cartera.csv');
+  });
+
+  it('no toca el archivo que ya trae tipo', () => {
+    const original = new File(['%PDF'], 'extracto.pdf', { type: 'application/pdf' });
+    expect(withDeducedType(original)).toBe(original);
+  });
+
+  it('una extensión que no se acepta se deja pasar tal cual: quien rechaza es la API', () => {
+    const original = new File(['x'], 'cartera.docx', { type: '' });
+    expect(withDeducedType(original)).toBe(original);
   });
 });
 

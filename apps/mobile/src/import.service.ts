@@ -278,14 +278,15 @@ export function scopeRefName(
  *
  * `label` describe cómo está dispuesto el dato y no la extensión: el usuario reconoce su archivo
  * por cómo se ve. `hint` da el ejemplo, que desambigua mejor que cualquier definición. `format` es
- * lo que se le pide al momento de subir. Dice CSV y no "Excel o CSV" porque hoy es la verdad — el
- * adaptador de xlsx no existe, y prometerlo manda a subir un archivo que va a rebotar.
+ * lo que se le pide al momento de subir, y nombra las dos extensiones que la API lee de verdad:
+ * `parseRowsFile` decide por los bytes (`PK\x03\x04` → Excel, si no CSV). El `.xls` de 97-2003 se
+ * rechaza a propósito y con el arreglo adentro del mensaje, así que no se nombra acá.
  */
 export const PROFILE_META: Record<ProfileKind, { label: string; hint: string; format: string }> = {
   rows: {
-    label: 'Una fila por crédito (CSV)',
-    hint: 'Un archivo de texto separado por comas.',
-    format: 'CSV · hasta 15 MB. Si tu sistema exporta Excel, guardalo como CSV.',
+    label: 'Una fila por crédito (CSV o Excel)',
+    hint: 'Una planilla o un archivo de texto separado por comas.',
+    format: 'CSV o Excel (.xlsx) · hasta 15 MB',
   },
   'pdf-rows': {
     label: 'Una tabla adentro de un PDF',

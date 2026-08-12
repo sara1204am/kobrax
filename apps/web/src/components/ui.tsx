@@ -1,6 +1,13 @@
 'use client';
 
-import { type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, forwardRef, useState } from 'react';
+import {
+  type ButtonHTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  forwardRef,
+  useState,
+} from 'react';
 import { useTranslations } from 'next-intl';
 
 /**
@@ -142,6 +149,24 @@ function IconEye({ off }: { off: boolean }) {
     </svg>
   );
 }
+
+/**
+ * `<select>` nativo con la misma caja que el `Input`.
+ *
+ * Nativo y no un dropdown propio: el del sistema ya trae teclado, búsqueda por letra, foco y la
+ * rueda de iOS. Escribir uno sería peor en las cuatro cosas.
+ */
+export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
+  function Select({ className = '', ...props }, ref) {
+    return (
+      <select
+        ref={ref}
+        {...props}
+        className={`h-[52px] w-full rounded-xl border-[1.5px] border-k-light-bg bg-white px-3.5 text-[15px] text-k-text outline-none transition-all focus:border-k-periwinkle focus:shadow-k-focus disabled:opacity-60 ${className}`}
+      />
+    );
+  },
+);
 
 /** Campo con su label arriba (14px, sentence case — §3 tipografía del diseño nuevo). */
 export function Field({ label, children }: { label: string; children: ReactNode }) {
