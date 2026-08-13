@@ -161,11 +161,12 @@
       },
       "map": {
         "done": "{n} visitadas",
-        "pending": "{n} pendientes"
+        "pending": "{n} pendientes",
+        "day": "paradas del {day}"
       },
       "noOverdue": "No hay cartera en mora en este filtro.",
       "noAgenda": "No hay agendados en este período.",
-      "noVisits": "No hay paradas con ubicación para este día.",
+      "noVisits": "No hay paradas con ubicación para el {day}.",
       "noTrend": "El período es muy corto para dibujar una tendencia.",
       "noCollectors": "No hay casos asignados en este filtro.",
       "unknownCollector": "Sin nombre",

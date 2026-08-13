@@ -72,7 +72,13 @@ export function DashboardGrid({
         toast(t('saveError'), 'danger');
         return;
       }
-      if (!dashboardId) router.refresh();
+      /*
+       * 🔴 **Siempre se refresca, no sólo al crear.** El botón de quitar, el de duplicar y el de
+       * agregar arman su pedido con los widgets que mandó el servidor: si acá no se refresca, esa
+       * lista sigue teniendo las posiciones de ANTES del arrastre y el siguiente clic las vuelve a
+       * escribir. Se arrastraba un widget, se borraba otro, y el primero saltaba a donde estaba.
+       */
+      router.refresh();
     },
     [dashboardId, router, t, toast, widgets],
   );

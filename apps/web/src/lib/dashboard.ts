@@ -1,4 +1,4 @@
-import type { DashboardFilters, KpiValue } from '@kobrax/shared';
+import { CasePriority, CaseStatus, type DashboardFilters, type KpiValue } from '@kobrax/shared';
 import { isUuid } from './uuid';
 
 /**
@@ -64,10 +64,18 @@ export function dashboardFilters(
     dateTo: from <= to ? to : from,
     ...(params.collectorId && isUuid(params.collectorId) ? { collectorId: params.collectorId } : {}),
     ...(params.branchId && isUuid(params.branchId) ? { branchId: params.branchId } : {}),
-    ...(params.caseStatus ? { caseStatus: params.caseStatus } : {}),
-    ...(params.priority ? { priority: params.priority } : {}),
+    // Los dos enums se validan por el mismo motivo que los ids: la API los valida con `@IsEnum` y un
+    // valor inventado en la URL le contesta 400 **a los seis endpoints**, no a uno.
+    ...(isCaseStatus(params.caseStatus) ? { caseStatus: params.caseStatus } : {}),
+    ...(isPriority(params.priority) ? { priority: params.priority } : {}),
   };
 }
+
+const isCaseStatus = (value?: string): value is CaseStatus =>
+  !!value && (Object.values(CaseStatus) as string[]).includes(value);
+
+const isPriority = (value?: string): value is CasePriority =>
+  !!value && (Object.values(CasePriority) as string[]).includes(value);
 
 /** Los mismos filtros, como query para la API. Los seis endpoints reciben exactamente esto. */
 export function analyticsQuery(filters: DashboardFilters): URLSearchParams {

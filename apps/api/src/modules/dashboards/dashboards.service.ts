@@ -54,14 +54,38 @@ export class DashboardsService {
     if (!mine && !this.tenant.can(Permission.ACCOUNT_WRITE)) throw notYours();
   }
 
-  /** Los widgets, listos para `createMany`. El orden de la grilla lo dan `x/y`, no el del array. */
+  /**
+   * 🔴 **Marcar un tablero como predeterminado le cambia la pantalla de entrada a TODA la empresa.**
+   *
+   * Crear un tablero propio lo puede hacer cualquiera que entre al dashboard —para eso está—, pero
+   * `isDefault` no es una preferencia personal: apaga el anterior y todo el mundo aterriza en el
+   * nuevo. Sin esta guarda, un VIEWER —un rol de sólo lectura— creaba uno con `isDefault: true` y se
+   * quedaba con la portada del tenant.
+   *
+   * La excepción es el arranque: mientras **no haya ninguno**, el primero que se guarde puede serlo.
+   * Es el camino normal del panel, donde el tablero por defecto vive en el código hasta que alguien
+   * mueve algo.
+   */
+  private async assertCanSetDefault(tx: PrismaClient): Promise<void> {
+    if (this.tenant.can(Permission.ACCOUNT_WRITE)) return;
+    const existing = await tx.dashboard.findFirst({ where: { isDefault: true, deletedAt: null } });
+    if (existing) throw notYours();
+  }
+
+  /**
+   * Los widgets, listos para `createMany`. El orden de la grilla lo dan `x/y`, no el del array.
+   *
+   * 🔴 **`x` se recorta contra el ancho.** El DTO valida `x ≤ 11` y `w ≤ 12` por separado, así que
+   * `{ x: 11, w: 12 }` pasa y deja el widget colgando fuera de las doce columnas — y ahí **no hay
+   * forma de volver a agarrarlo** para moverlo. Dos rangos correctos no hacen una posición válida.
+   */
   private widgetRows(dashboardId: string, widgets: WidgetDto[] = []) {
     return widgets.map((w) => ({
       accountId: this.tenant.accountId,
       dashboardId,
       type: w.type,
       title: w.title ?? null,
-      x: w.x,
+      x: Math.max(0, Math.min(w.x, 12 - w.w)),
       y: w.y,
       w: w.w,
       h: w.h,
@@ -89,7 +113,10 @@ export class DashboardsService {
 
   async create(dto: CreateDashboardDto): Promise<DashboardDefinition> {
     const row = await this.tx(async (tx) => {
-      if (dto.isDefault) await this.clearDefault(tx);
+      if (dto.isDefault) {
+        await this.assertCanSetDefault(tx);
+        await this.clearDefault(tx);
+      }
       const dashboard = await tx.dashboard.create({
         data: {
           accountId: this.tenant.accountId,
@@ -113,7 +140,10 @@ export class DashboardsService {
       if (!current) throw notFound();
       this.assertCanWrite(current);
 
-      if (dto.isDefault) await this.clearDefault(tx, id);
+      if (dto.isDefault) {
+        await this.assertCanSetDefault(tx);
+        await this.clearDefault(tx, id);
+      }
       await tx.dashboard.update({
         where: { id },
         data: {

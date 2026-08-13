@@ -161,11 +161,12 @@
       },
       "map": {
         "done": "{n} visited",
-        "pending": "{n} pending"
+        "pending": "{n} pending",
+        "day": "stops for {day}"
       },
       "noOverdue": "No overdue portfolio under this filter.",
       "noAgenda": "No scheduled work in this period.",
-      "noVisits": "No stops with a location for this day.",
+      "noVisits": "No stops with a location for {day}.",
       "noTrend": "The period is too short to draw a trend.",
       "noCollectors": "No cases assigned under this filter.",
       "unknownCollector": "No name",

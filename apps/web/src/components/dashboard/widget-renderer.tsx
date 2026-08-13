@@ -30,6 +30,8 @@ export interface DashboardData {
   trend?: TrendPoint[];
   members: Member[];
   currency: string;
+  /** El día que dibuja el mapa: es el final del período, no el período entero. */
+  day: string;
   errors: Record<string, string | undefined>;
 }
 
@@ -109,7 +111,11 @@ export async function WidgetRenderer({
       );
 
     case 'map':
-      return frame(t('widgets.map'), data.visits ? <VisitMapWidget points={data.visits} /> : null, data.errors.visits);
+      return frame(
+        t('widgets.map'),
+        data.visits ? <VisitMapWidget points={data.visits} day={data.day} /> : null,
+        data.errors.visits,
+      );
 
     case 'list':
       return frame(

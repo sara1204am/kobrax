@@ -44,6 +44,20 @@ describe('dashboardFilters', () => {
     expect(dashboardFilters({ collectorId: id }, TODAY).collectorId).toBe(id);
   });
 
+  it('🔴 un estado o una prioridad inventados tampoco viajan', () => {
+    // La API los valida con `@IsEnum` y contesta 400 **a los seis endpoints**: el tablero entero se
+    // vuelve seis cajas de error por un valor pegado en la URL.
+    const out = dashboardFilters({ caseStatus: 'INVENTADO', priority: 'URGENTISIMA' }, TODAY);
+    expect(out.caseStatus).toBeUndefined();
+    expect(out.priority).toBeUndefined();
+  });
+
+  it('un estado y una prioridad de verdad sí viajan', () => {
+    const out = dashboardFilters({ caseStatus: 'ACTIVE', priority: 'HIGH' }, TODAY);
+    expect(out.caseStatus).toBe('ACTIVE');
+    expect(out.priority).toBe('HIGH');
+  });
+
   it('una fecha inventada cae al rango por defecto', () => {
     expect(dashboardFilters({ from: 'ayer', to: '13/08/2026' }, TODAY)).toEqual({
       dateFrom: '2026-08-07',

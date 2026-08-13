@@ -20,9 +20,9 @@ const RouteMap = dynamic(() => import('@/components/route-map').then((m) => m.Ro
   loading: () => <div className="h-[300px] w-full animate-pulse rounded-2xl bg-k-light-bg" />,
 });
 
-export function VisitMapWidget({ points }: { points: VisitMapPoint[] }) {
+export function VisitMapWidget({ points, day }: { points: VisitMapPoint[]; day: string }) {
   const t = useTranslations('panel.dashboard');
-  if (points.length === 0) return <p className="text-[13px] text-k-text-2">{t('noVisits')}</p>;
+  if (points.length === 0) return <p className="text-[13px] text-k-text-2">{t('noVisits', { day })}</p>;
 
   const done = points.filter((p) => p.status === 'VISITED').length;
 
@@ -39,7 +39,7 @@ export function VisitMapWidget({ points }: { points: VisitMapPoint[] }) {
           tone: p.status === 'VISITED' ? 'done' : 'pending',
         }))}
       />
-      <div className="mt-3 flex flex-wrap gap-4 text-[12px] text-k-text-2">
+      <div className="mt-3 flex flex-wrap items-center gap-4 text-[12px] text-k-text-2">
         <span className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-k-success" aria-hidden />
           {t('map.done', { n: done })}
@@ -48,6 +48,10 @@ export function VisitMapWidget({ points }: { points: VisitMapPoint[] }) {
           <span className="h-2.5 w-2.5 rounded-full bg-k-muted" aria-hidden />
           {t('map.pending', { n: points.length - done })}
         </span>
+        {/* 🔴 **El mapa es de UN día**, aunque el filtro diga «período»: treinta días son 2600 pines
+            encimados y no se lee nada. Se dice cuál, o el mapa parece vacío al lado de widgets que
+            cuentan un mes. */}
+        <span className="text-k-muted">{t('map.day', { day })}</span>
       </div>
     </>
   );

@@ -586,9 +586,22 @@ async function reset(acc: string): Promise<void> {
 
   await prisma.agendaItem.deleteMany({ where: { caseId: { in: caseIds } } });
   await prisma.fieldVisit.deleteMany({ where: { caseId: { in: caseIds } } });
+
+  /*
+   * 🔴 Las rutas se anotan **antes** de borrar sus paradas. Borrando primero y buscando después las
+   * que quedaron vacías, se llevaba puesta cualquier ruta sin paradas del tenant —una de `seed-day`,
+   * una de una prueba, una hecha a mano—. «Las vacías eran mías porque nacieron con ocho» es una
+   * suposición que la consulta no verificaba.
+   */
+  const routeIds = [
+    ...new Set(
+      (await prisma.routeStop.findMany({ where: { caseId: { in: caseIds } }, select: { routeId: true } })).map(
+        (s) => s.routeId,
+      ),
+    ),
+  ];
   await prisma.routeStop.deleteMany({ where: { caseId: { in: caseIds } } });
-  // Las rutas que quedaron sin ninguna parada eran de este seed: nacieron con ocho.
-  await prisma.routePlan.deleteMany({ where: { accountId: acc, stops: { none: {} } } });
+  await prisma.routePlan.deleteMany({ where: { id: { in: routeIds }, stops: { none: {} } } });
   await prisma.payment.deleteMany({ where: { creditId: { in: creditIds } } });
   await prisma.collectionCase.deleteMany({ where: { id: { in: caseIds } } });
   await prisma.creditInstallment.deleteMany({ where: { creditId: { in: creditIds } } });

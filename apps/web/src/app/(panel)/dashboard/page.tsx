@@ -71,7 +71,12 @@ export default async function DashboardPage({
   const dashboards = boards.body.data ?? [];
   const current =
     dashboards.find((d) => d.id === searchParams.view) ?? dashboards.find((d) => d.isDefault) ?? dashboards[0];
-  const widgets = current?.widgets.length ? current.widgets : DEFAULT_WIDGETS;
+  /*
+   * 🔴 La condición es «¿hay tablero?», **no «¿tiene widgets?»**. Mirando el largo, quitar el último
+   * widget hacía **resucitar los doce del código**: la persona borraba uno por uno, el guardado
+   * salía bien, y la pantalla volvía llena — igual que si el guardado hubiera fallado.
+   */
+  const widgets = current ? current.widgets : DEFAULT_WIDGETS;
 
   const data: DashboardData = {
     summary: summary.body.data ?? undefined,
@@ -82,6 +87,8 @@ export default async function DashboardPage({
     trend: trend.body.data ?? undefined,
     members: team.body.data ?? [],
     currency: summary.body.data?.currency ?? 'BOB',
+    // El mapa mira el último día del período, no el período: hay que decir cuál.
+    day: filters.dateTo ?? '',
     errors: {
       summary: summary.body.error?.message,
       aging: aging.body.error?.message,

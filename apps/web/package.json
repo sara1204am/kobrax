@@ -28,7 +28,6 @@
     "@types/qrcode": "^1.5.5",
     "@types/react": "~18.2.79",
     "@types/react-dom": "~18.2.25",
-    "@types/react-grid-layout": "^2.1.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
     "jsdom": "^25.0.1",

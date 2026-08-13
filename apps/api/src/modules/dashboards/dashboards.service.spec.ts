@@ -26,7 +26,12 @@ function makeService(opts: { current?: Record<string, unknown>; userId?: string;
   let created: Record<string, unknown> | null = null;
   const tx = {
     dashboard: {
-      findFirst: async () => (opts.current === null ? null : dashboard),
+      findFirst: async (args?: { where?: { isDefault?: boolean } }) => {
+        // La búsqueda de «¿ya hay un predeterminado?» es distinta de «traeme este tablero»: un doble
+        // que devolviera lo mismo a las dos haría pasar la guarda de la portada sin probarla.
+        if (args?.where?.isDefault) return dashboard.isDefault ? dashboard : null;
+        return opts.current === null ? null : dashboard;
+      },
       findFirstOrThrow: async () => created ?? dashboard,
       findMany: async () => [dashboard],
       create: async (args: { data: Record<string, unknown> }) => {
@@ -95,6 +100,30 @@ describe('el layout se reemplaza entero', () => {
     assert.equal(calls.deleteWidgets.length, 1);
     assert.equal(calls.createWidgets[0]!.length, 2);
     assert.equal(calls.createWidgets[0]![0]!.accountId, 'acc-1');
+  });
+});
+
+describe('quién puede cambiar el tablero de entrada de la empresa', () => {
+  it('🔴 un rol de sólo lectura NO se queda con la portada del tenant', async () => {
+    // `report:read` lo tienen VIEWER y AUDITOR. Sin esta guarda, creaban un tablero con
+    // `isDefault: true`, eso apagaba el anterior, y toda la empresa aterrizaba en el suyo.
+    const { service } = makeService({ current: { isDefault: true } });
+    await rejectsWithCode(
+      () => service.create({ name: 'el mío', isDefault: true }),
+      'AUTH_002',
+    );
+  });
+
+  it('el admin de la cuenta sí puede', async () => {
+    const { service } = makeService({ current: { isDefault: true }, permissions: ['account:write'] });
+    await service.create({ name: 'la portada', isDefault: true });
+  });
+
+  it('mientras no haya ninguno, el primero puede serlo', async () => {
+    // Es el camino normal del panel: el tablero por defecto vive en el código hasta que alguien
+    // mueve algo, y ese primer guardado lo crea.
+    const { service } = makeService({ current: null as never });
+    await service.create({ name: 'Vista general', isDefault: true });
   });
 });
 

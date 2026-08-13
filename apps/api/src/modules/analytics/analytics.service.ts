@@ -22,6 +22,9 @@ const money = (n: unknown): number => Math.round(Number(n ?? 0) * 100) / 100;
 /** Los tres intervalos posibles, escritos acá y no armados con lo que llegó (ver `collectionTrend`). */
 const STEP_INTERVAL: Record<string, string> = { day: "'1 day'", week: "'1 week'", month: "'1 month'" };
 
+/** Un año. Más que eso no entra en una transacción de Prisma con granularidad diaria (ver `window`). */
+const MAX_SPAN = 366 * 86_400_000;
+
 /** Una ventana de fechas, con la anterior de igual largo para poder comparar. */
 interface Window {
   from: Date;
@@ -57,7 +60,7 @@ export class AnalyticsService {
    */
   private window(query: AnalyticsQueryDto): Window {
     const to = query.dateTo ? new Date(`${query.dateTo}T23:59:59.999Z`) : new Date();
-    const from = query.dateFrom
+    let from = query.dateFrom
       ? new Date(`${query.dateFrom}T00:00:00.000Z`)
       : new Date(to.getTime() - 6 * 86_400_000);
     /*
@@ -65,8 +68,15 @@ export class AnalyticsService {
      * que empiece el actual y arranca un `span` más atrás. Con `prevFrom = from - span` medía un
      * milisegundo menos que el actual: invisible en la pantalla y suficiente para que un pago del
      * borde se cayera de la comparación.
+     *
+     * 🔴 **El rango tiene techo de un año.** Nada lo acotaba: los dos `<input type="date">` aceptan
+     * cualquier fecha, y un rango de tres años con granularidad diaria genera ~1100 puntos cruzados
+     * contra todos los pagos del tenant **dentro de la transacción interactiva de Prisma** — que
+     * corta a los 5 segundos y devuelve 500. Se recorta el arranque en vez de rechazar el pedido:
+     * quien pidió tres años quiere ver la serie, no un error.
      */
-    const span = Math.max(86_400_000, to.getTime() - from.getTime());
+    const span = Math.min(MAX_SPAN, Math.max(86_400_000, to.getTime() - from.getTime()));
+    if (to.getTime() - from.getTime() > MAX_SPAN) from = new Date(to.getTime() - MAX_SPAN);
     return {
       from,
       to,
@@ -227,6 +237,14 @@ export class AnalyticsService {
   }
 
   // ── 3 · Ranking de cobradores ──────────────────────────────────────────────
+  /**
+   * Cuánta cartera lleva cada cobrador y cuánto recuperó.
+   *
+   * ⚠️ **La suma de esta tabla es un poco menor que el KPI de saldo, y está bien**: acá sólo entra
+   * la cartera que tiene un caso abierto **con cobrador asignado**. Un crédito activo sin caso no es
+   * de nadie todavía. Lo que sí tienen que compartir es el universo de créditos —activos, ni
+   * pagados ni castigados—, o serían dos números rotulados «saldo» que no dan lo mismo.
+   */
   async collectorPerformance(query: AnalyticsQueryDto): Promise<CollectorPerformanceRow[]> {
     const w = this.window(query);
     const cases = this.caseWhere(query);
@@ -243,7 +261,10 @@ export class AnalyticsService {
                  COALESCE(SUM(cr.outstanding_balance), 0)::float8                                     AS outstanding,
                  COALESCE(SUM(cr.outstanding_balance) FILTER (WHERE cr.days_past_due > 0), 0)::float8 AS overdue
           FROM collection_cases k
-          LEFT JOIN credits cr ON cr.id = k.credit_id AND cr.deleted_at IS NULL
+          -- El filtro de ACTIVE es el mismo que usa el KPI de saldo: sin eso, el ranking sumaba
+          -- también los créditos pagados y castigados, y en la misma pantalla convivían dos números
+          -- rotulados «saldo» que no daban lo mismo, sin forma de saber cuál era el bueno.
+          LEFT JOIN credits cr ON cr.id = k.credit_id AND cr.deleted_at IS NULL AND cr.status = 'ACTIVE'::"CreditStatus"
           WHERE ${cases} AND k.assignee_id IS NOT NULL AND k.status::text NOT IN (${Prisma.join(TERMINAL)})
           GROUP BY k.assignee_id`),
         tx.$queryRaw<{ collector: string; collected: number }[]>(Prisma.sql`
@@ -397,7 +418,11 @@ export class AnalyticsService {
                  COALESCE(SUM(p.amount) FILTER (WHERE p.payment_date >= s.d AND p.payment_date < s.d + ${interval}::interval), 0)::float8 AS collected,
                  COALESCE(SUM(p.amount) FILTER (WHERE p.payment_date >= s.d), 0)::float8 AS after
           FROM puntos s
-          LEFT JOIN payments p ON ${payments} AND p.payment_date <= ${w.to}
+          -- El tope es HOY y no el fin del rango: el saldo de cada punto se reconstruye con todo lo
+          -- cobrado desde esa fecha hasta el saldo actual, que es el único que conocemos. Cortando
+          -- en el fin del rango, mirar «mes anterior» dibujaba la curva por debajo de lo real, sin
+          -- todo lo cobrado entre esa fecha y hoy.
+          LEFT JOIN payments p ON ${payments} AND p.payment_date <= now()
           GROUP BY s.d
           ORDER BY s.d`),
         tx.$queryRaw<{ outstanding: number }[]>(Prisma.sql`
