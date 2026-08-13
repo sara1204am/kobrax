@@ -79,7 +79,7 @@ funcional*. Nada de andamios "para después".
 | W5 | Casos y agenda | `/cases` y `/agenda`: ~~tablero~~ **tabla con filtros** (decisión D1 del 11/08 — el kanban queda fuera), asignación, transiciones, timeline, agenda de un día. La cara de supervisión del trabajo del cobrador. **Es la primera etapa del panel que toca la API**: `sort` en `GET /cases` (D4) | W3 | ✅ mergeada (12/08) |
 | W6 | Rutas y evidencia | `/routes` y `/visits`: planes del día, paradas, evidencia capturada en campo (foto + GPS + hash). **Sólo lectura/supervisión**. 🔴 La evidencia **no se podía leer**: el módulo de campo sólo tenía dos endpoints de escritura, así que W6 le agregó `GET /visits` y `GET /visits/:id`. Estrena `maplibre-gl` | W5 | ✅ mergeada (12/08) |
 | W7 | Pagos | `/payments`: ledger inmutable, conciliación, solicitud de pago (QR/link), aprobación. **Con ella todos los módulos del menú quedan construidos** | W3 | ✅ mergeada (12/08) — falta el recorrido por cable y la validación visual |
-| W8 | Dashboard | KPIs de cartera + gráficos. Va **tarde a propósito**: necesita que los módulos de arriba produzcan datos reales para no medir el vacío | W2–W7 | ⏳ |
+| W8 | Dashboard | KPIs de cartera + gráficos. Va **tarde a propósito**: necesita que los módulos de arriba produzcan datos reales para no medir el vacío. **Media etapa fue backend: la API no tenía ni un endpoint de agregación** | W2–W7 | ✅ mergeada (13/08) — falta ponytail-review y validación visual |
 | W9 | Realtime y notificaciones | WebSocket (`collector.location`, `case.updated`, `payment.registered`) + centro de notificaciones | W6, W8 | ⏳ |
 
 > **Cada etapa arranca promoviendo a `shared` las reglas que el móvil ya escribió para ese
