@@ -1,10 +1,25 @@
 import { getTranslations } from 'next-intl/server';
-import { Permission, type AnalyticsSummary, type MeInfo, type Member } from '@kobrax/shared';
+import {
+  Permission,
+  type AgendaSummary,
+  type AgingBucketRow,
+  type AnalyticsSummary,
+  type CollectorPerformanceRow,
+  type MeInfo,
+  type Member,
+  type TrendPoint,
+  type VisitMapPoint,
+} from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { analyticsQuery, dashboardFilters } from '@/lib/dashboard';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { DashboardFilters } from '@/components/dashboard/dashboard-filters';
 import { KpiWidget } from '@/components/dashboard/widgets/kpi-widget';
+import { AgingBars, AgingDonut } from '@/components/dashboard/widgets/aging-widgets';
+import { AgendaDonut, IndicatorsList } from '@/components/dashboard/widgets/agenda-widgets';
+import { CollectorsTable } from '@/components/dashboard/widgets/collectors-table';
+import { TrendChart } from '@/components/dashboard/widgets/trend-chart';
+import { VisitMapWidget } from '@/components/dashboard/widgets/visit-map-widget';
 import { WidgetFrame } from '@/components/dashboard/widget-frame';
 import { money, percent } from '@/lib/format';
 
@@ -28,8 +43,18 @@ export default async function DashboardPage({
   const filters = dashboardFilters(searchParams);
   const query = analyticsQuery(filters);
 
-  const [summary, me, team] = await Promise.all([
+  /*
+   * Los seis endpoints **en paralelo**, no uno detrás de otro: encadenados, la pantalla tardaría
+   * la suma de los seis en vez del más lento. Y cada uno se maneja solo — si uno falla, su widget
+   * muestra el error y los otros siguen mostrando su dato.
+   */
+  const [summary, aging, collectors, agenda, visits, trend, me, team] = await Promise.all([
     apiCall<AnalyticsSummary>(`/analytics/summary?${query}`, { method: 'GET', auth: true }),
+    apiCall<AgingBucketRow[]>(`/analytics/portfolio-aging?${query}`, { method: 'GET', auth: true }),
+    apiCall<CollectorPerformanceRow[]>(`/analytics/collector-performance?${query}`, { method: 'GET', auth: true }),
+    apiCall<AgendaSummary>(`/analytics/agenda-summary?${query}`, { method: 'GET', auth: true }),
+    apiCall<VisitMapPoint[]>(`/analytics/visit-map?${query}`, { method: 'GET', auth: true }),
+    apiCall<TrendPoint[]>(`/analytics/collection-trend?${query}`, { method: 'GET', auth: true }),
     apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
   ]);
@@ -66,16 +91,35 @@ export default async function DashboardPage({
           </div>
         )}
 
-        {/* Los seis widgets de datos llegan en T5. Se dibujan sus marcos para que la grilla se
-            pueda mirar y medir de verdad, y cada uno dice que todavía no tiene su dato — que es
-            distinto de decir que no hay datos. */}
-        <WidgetFrame title={t('widgets.aging')} span={4} empty={t('soon')} />
-        <WidgetFrame title={t('widgets.agingBars')} span={4} empty={t('soon')} />
-        <WidgetFrame title={t('widgets.agenda')} span={4} empty={t('soon')} />
-        <WidgetFrame title={t('widgets.collectors')} span={5} empty={t('soon')} />
-        <WidgetFrame title={t('widgets.map')} span={4} empty={t('soon')} />
-        <WidgetFrame title={t('widgets.indicators')} span={3} empty={t('soon')} />
-        <WidgetFrame title={t('widgets.trend')} span={12} empty={t('soon')} />
+        <WidgetFrame title={t('widgets.aging')} span={4} error={aging.body.error?.message}>
+          {aging.body.data && <AgingDonut rows={aging.body.data} currency={currency} />}
+        </WidgetFrame>
+
+        <WidgetFrame title={t('widgets.agingBars')} span={4} error={aging.body.error?.message}>
+          {aging.body.data && <AgingBars rows={aging.body.data} />}
+        </WidgetFrame>
+
+        <WidgetFrame title={t('widgets.agenda')} span={4} error={agenda.body.error?.message}>
+          {agenda.body.data && <AgendaDonut summary={agenda.body.data} />}
+        </WidgetFrame>
+
+        <WidgetFrame title={t('widgets.collectors')} span={5} error={collectors.body.error?.message}>
+          {collectors.body.data && (
+            <CollectorsTable rows={collectors.body.data} members={team.body.data ?? []} currency={currency} />
+          )}
+        </WidgetFrame>
+
+        <WidgetFrame title={t('widgets.map')} span={4} error={visits.body.error?.message}>
+          {visits.body.data && <VisitMapWidget points={visits.body.data} />}
+        </WidgetFrame>
+
+        <WidgetFrame title={t('widgets.indicators')} span={3} error={agenda.body.error?.message}>
+          {agenda.body.data && <IndicatorsList summary={agenda.body.data} />}
+        </WidgetFrame>
+
+        <WidgetFrame title={t('widgets.trend')} span={12} error={trend.body.error?.message}>
+          {trend.body.data && <TrendChart points={trend.body.data} currency={currency} />}
+        </WidgetFrame>
       </div>
     </>
   );

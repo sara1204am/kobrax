@@ -94,7 +94,47 @@
         "map": "Visit map",
         "indicators": "Management indicators",
         "trend": "Portfolio and collection trend"
-      }
+      },
+      "buckets": {
+        "D1_30": "1 to 30 days",
+        "D31_90": "31 to 90 days",
+        "D91_180": "91 to 180 days",
+        "D181_360": "181 to 360 days",
+        "D361_450": "361 to 450 days",
+        "D450_PLUS": "over 450 days"
+      },
+      "indicators": {
+        "VISITS_DONE": "Visits made",
+        "CALLS_DONE": "Calls made",
+        "CONTACTS": "Actions completed",
+        "PROMISES": "Payment promises",
+        "PAYMENTS": "Payments recorded"
+      },
+      "table": {
+        "collector": "Collector",
+        "cases": "Cases",
+        "balance": "Balance",
+        "overdue": "Overdue",
+        "overdueRate": "% overdue",
+        "collected": "Collected",
+        "seeAll": "See all {n} collectors →"
+      },
+      "trend": {
+        "outstanding": "Portfolio balance",
+        "collected": "Collected",
+        "reconstructed": "Each date's balance is reconstructed from what was collected afterwards: it shows what collections brought down, and does not include new disbursements."
+      },
+      "map": {
+        "done": "{n} visited",
+        "pending": "{n} pending"
+      },
+      "noOverdue": "No overdue portfolio under this filter.",
+      "noAgenda": "No scheduled work in this period.",
+      "noVisits": "No stops with a location for this day.",
+      "noTrend": "The period is too short to draw a trend.",
+      "noCollectors": "No cases assigned under this filter.",
+      "unknownCollector": "No name",
+      "creditsInBucket": "Credits in each range"
     },
     "error": {
       "title": "Something went wrong",

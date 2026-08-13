@@ -9,13 +9,14 @@
  *
  * Lo que deja:
  *   · 1200 deudores en Sucre, cada uno con 2-3 teléfonos y su ubicación con punto
- *   · ~1750 créditos (algunos tienen 2 o 3), TODOS en mora: de 1 a 450 días
- *   · un caso de cobranza por crédito, con prioridad según la mora
+ *   · ~1570 créditos (algunos tienen 2 o 3). **Un tercio en mora, de 1 a 450 días; el resto al día**
+ *   · un caso por crédito, en los seis estados, con prioridad según la mora
+ *   · ~2600 pagos de los últimos 90 días que **bajan el saldo de verdad**
  *   · ~5500 agendados repartidos 80/20 entre visitas y llamadas, sobre 50 días hábiles
  *   · una ruta por cobrador y por día, de EXACTAMENTE 8 paradas
  *
- * **Es aditivo e idempotente**: si ya hay créditos `BLK-`, no hace nada. No toca lo que sembraron
- * los otros dos.
+ * **Es aditivo e idempotente**: si ya hay créditos `BLK-`, no hace nada. Con `--reset` borra lo
+ * suyo y vuelve a sembrar. No toca lo que sembraron los otros dos.
  *
  * ponytail: `createMany` por lotes y los uuid generados acá. Con `create` fila por fila esto son
  * ~31.000 viajes a la base; así son unas decenas.
@@ -422,6 +423,17 @@ async function main(): Promise<void> {
               ? CaseStatus.IN_NEGOTIATION
               : CaseStatus.PROMISE_TO_PAY;
       const closed = status === CaseStatus.PAID || status === CaseStatus.CLOSED;
+      /*
+       * 🔴 **Cuándo se abrió el caso.** Sin esto `created_at` cae en `now()` para los 1600 casos, y
+       * entonces «cuántos casos había abiertos hace una semana» da 0 → `deltaOf` devuelve `null` y
+       * el KPI muestra «sin período anterior para comparar». No era el KPI: era el seed.
+       * El 6 % de la última semana es lo que hace que la flecha marque un crecimiento creíble en vez
+       * de un 0 % plano.
+       */
+      const openedAt = addDays(TODAY, -(rnd() < 0.06 ? int(0, 6) : int(7, 180)));
+      /** El cierre va DESPUÉS de la apertura y nunca en el futuro: un caso cerrado antes de existir
+       *  rompe la misma reconstrucción que `created_at` viene a arreglar. */
+      const closedAt = new Date(Math.min(TODAY.getTime(), addDays(openedAt, int(3, 60)).getTime()));
 
       caseRows.push({
         id: caseId,
@@ -431,11 +443,11 @@ async function main(): Promise<void> {
         assigneeId: collectorId,
         status,
         priority: priorityOf(dpd),
+        createdAt: openedAt,
         slaDueAt: addDays(TODAY, int(1, 10)),
-        lastActionAt: addDays(TODAY, -int(0, 20)),
-        ...(closed
-          ? { closedAt: addDays(TODAY, -int(1, 60)), closedBy: collectorId, closedReason: 'Crédito cancelado' }
-          : {}),
+        // Nunca antes de que el caso existiera.
+        lastActionAt: new Date(Math.max(openedAt.getTime(), addDays(TODAY, -int(0, 20)).getTime())),
+        ...(closed ? { closedAt, closedBy: collectorId, closedReason: 'Crédito cancelado' } : {}),
       });
 
       // Sólo los que siguen en gestión entran a la agenda y a las rutas: mandar a un cobrador a
