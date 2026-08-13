@@ -18,6 +18,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { AgendaModule } from './modules/agenda/agenda.module';
 import { CatalogsModule } from './modules/catalogs/catalogs.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { DashboardsModule } from './modules/dashboards/dashboards.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { CryptoModule } from './common/crypto/crypto.module';
 import { TenantContextModule } from './common/context/tenant-context.module';
@@ -51,6 +52,7 @@ import { RateLimitGuard } from './common/guards/rate-limit.guard';
     AgendaModule,
     CatalogsModule,
     AnalyticsModule,
+    DashboardsModule,
     UploadsModule,
   ],
   // Rate limiting de borde para toda la API (los endpoints sensibles lo endurecen con @RateLimit).

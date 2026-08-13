@@ -39,7 +39,11 @@ DECLARE
     -- Auth (F2a)
     'refresh_tokens',
     -- Agenda (F10)
-    'agenda_items', 'catalog_items'
+    'agenda_items', 'catalog_items',
+    -- Dashboards (W8). `dashboard_widgets` lleva `account_id` propio aunque cuelgue de un tablero:
+    -- sin él, su aislamiento dependería del JOIN que escriba cada consulta, y basta que una se
+    -- olvide para que un tenant vea los widgets de otro.
+    'dashboards', 'dashboard_widgets'
   ];
 BEGIN
   FOREACH t IN ARRAY operational LOOP
