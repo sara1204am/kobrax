@@ -28,13 +28,20 @@ export interface DashboardFilters {
 /**
  * Un número del encabezado con su comparación.
  *
- * `previous` es el MISMO número en el período anterior de igual largo, y viene del servidor: es de
- * donde sale el «↑ 7,4 % vs semana anterior». Calcular la variación en el panel obligaría a pedir
- * el período viejo por separado desde cada widget.
+ * `previous` es el MISMO número en el período anterior de igual largo, y lo calcula el servidor: es
+ * de donde sale el «↑ 7,4 % vs semana anterior». Pedirlo desde cada widget sería pedir dos veces.
+ *
+ * 🔴 **`null` = no se puede saber, y no es lo mismo que cero.** Los saldos son una FOTO de hoy: la
+ * base no guarda cuánto se debía la semana pasada, así que reconstruirlo sería inventar el número
+ * que la pantalla presenta como dato duro. Con `null` la flecha no se dibuja.
+ *
+ * ponytail: la comparación honesta de un saldo necesita una foto diaria (`portfolio_snapshots`).
+ * Es su propia etapa; hasta entonces, sólo comparan los flujos —lo recaudado— y los casos activos,
+ * que sí se pueden reconstruir con `created_at`/`closed_at`.
  */
 export interface KpiValue {
   value: number;
-  previous: number;
+  previous: number | null;
 }
 
 export interface AnalyticsSummary {
@@ -84,8 +91,15 @@ export interface VisitMapPoint {
 export interface TrendPoint {
   /** `YYYY-MM-DD` — el primer día del punto, sea día, semana o mes. */
   date: string;
-  outstanding: number;
   collected: number;
+  /**
+   * El saldo **reconstruido hacia atrás**: el de hoy más todo lo que se cobró después de esa fecha.
+   *
+   * ⚠️ Es la curva de lo que la cobranza bajó, no la historia del saldo: **ignora los desembolsos y
+   * los castigos posteriores**. Con una foto diaria dejaría de ser una reconstrucción — misma
+   * deuda que `KpiValue.previous`.
+   */
+  outstanding: number;
 }
 
 export type TrendGranularity = 'day' | 'week' | 'month';
