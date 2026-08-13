@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { DashboardWidget } from '@kobrax/shared';
 import { useToast } from '@/components/toast';
-import { sendJson } from '@/lib/client';
+import { saveWidgets } from '@/lib/dashboard-save';
 
 /**
  * Quitar o duplicar un widget. **Sólo en modo Editar**.
@@ -26,20 +26,7 @@ export function WidgetActions({
   const toast = useToast();
 
   async function save(next: DashboardWidget[]) {
-    const body = {
-      widgets: next.map((w) => ({
-        type: w.type,
-        title: w.title || undefined,
-        x: w.layout.x,
-        y: w.layout.y,
-        w: w.layout.w,
-        h: w.layout.h,
-        config: w.config,
-      })),
-    };
-    const res = dashboardId
-      ? await sendJson(`/api/dashboards/${dashboardId}`, body, 'PATCH')
-      : await sendJson('/api/dashboards', { name: t('defaultName'), isDefault: true, ...body }, 'POST');
+    const res = await saveWidgets(dashboardId, next, t('defaultName'));
     if (!res.ok) {
       toast(t('saveError'), 'danger');
       return;

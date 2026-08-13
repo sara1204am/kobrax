@@ -8,6 +8,7 @@ import { Button, ErrorBanner, Field, Input } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
 import { sendJson } from '@/lib/client';
+import { saveWidgets } from '@/lib/dashboard-save';
 import { WIDGET_DEFINITIONS, widgetDefinition } from '@/lib/widget-registry';
 
 /**
@@ -51,23 +52,10 @@ export function DashboardToolbar({
   }
 
   /** Guardar la lista completa de widgets. Es la misma llamada que usa el arrastre. */
-  async function saveWidgets(next: DashboardWidget[], done: string) {
+  async function save(next: DashboardWidget[], done: string) {
     setError(null);
     setBusy(true);
-    const body = {
-      widgets: next.map((w) => ({
-        type: w.type,
-        title: w.title || undefined,
-        x: w.layout.x,
-        y: w.layout.y,
-        w: w.layout.w,
-        h: w.layout.h,
-        config: w.config,
-      })),
-    };
-    const res = current
-      ? await sendJson(`/api/dashboards/${current.id}`, body, 'PATCH')
-      : await sendJson('/api/dashboards', { name: t('defaultName'), isDefault: true, ...body }, 'POST');
+    const res = await saveWidgets(current?.id, next, t('defaultName'));
     setBusy(false);
     if (!res.ok) {
       setError(t('saveError'));
@@ -88,7 +76,7 @@ export function DashboardToolbar({
     const def = widgetDefinition(type);
     if (!def) return;
     const bottom = widgets.reduce((max, w) => Math.max(max, w.layout.y + w.layout.h), 0);
-    void saveWidgets(
+    void save(
       [
         ...widgets,
         {

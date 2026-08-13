@@ -7,7 +7,7 @@ import GridLayout, { useContainerWidth, type Layout, type LayoutItem } from 'rea
 import 'react-grid-layout/css/styles.css';
 import type { DashboardWidget } from '@kobrax/shared';
 import { useToast } from '@/components/toast';
-import { sendJson } from '@/lib/client';
+import { saveWidgets } from '@/lib/dashboard-save';
 import { widgetDefinition } from '@/lib/widget-registry';
 
 /** Lo que tarda en guardarse un arrastre después de soltarlo. */
@@ -56,27 +56,17 @@ export function DashboardGrid({
 
   const save = useCallback(
     async (next: readonly LayoutItem[]) => {
-      const body = {
-        widgets: next.map((l) => {
-          const widget = widgets.find((w) => w.id === l.i);
-          return {
-            type: widget?.type ?? 'text',
-            title: widget?.title || undefined,
-            x: l.x,
-            y: l.y,
-            w: l.w,
-            h: l.h,
-            config: widget?.config ?? {},
-          };
-        }),
-      };
+      /*
+       * La grilla devuelve posiciones, no widgets: se le vuelve a pegar su tipo y su config antes de
+       * guardar. Un widget que la grilla reporte y que ya no esté en la lista se descarta —pasa al
+       * borrar uno mientras había un guardado pendiente— en vez de viajar como un `text` vacío.
+       */
+      const moved = next.flatMap((l) => {
+        const widget = widgets.find((w) => w.id === l.i);
+        return widget ? [{ ...widget, layout: { x: l.x, y: l.y, w: l.w, h: l.h } }] : [];
+      });
 
-      const res = dashboardId
-        ? await sendJson(`/api/dashboards/${dashboardId}`, body, 'PATCH')
-        : // Todavía no existe: el primer cambio lo crea con su nombre y la marca de predeterminado,
-          // así el tablero por defecto deja de ser un valor del código y pasa a ser una fila.
-          await sendJson('/api/dashboards', { name: t('defaultName'), isDefault: true, ...body }, 'POST');
-
+      const res = await saveWidgets(dashboardId, moved, t('defaultName'));
       dirty.current = false;
       if (!res.ok) {
         toast(t('saveError'), 'danger');
