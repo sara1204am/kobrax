@@ -21,6 +21,7 @@
     "db:reset": "prisma migrate reset",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:day": "tsx prisma/seed-day.ts",
+    "db:seed:bulk": "tsx prisma/seed-bulk.ts",
     "db:studio": "prisma studio"
   },
   "prisma": {

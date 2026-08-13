@@ -12,7 +12,7 @@
  * **Es aditivo e idempotente por día**: si ya hay una ruta de ese día para el cobrador demo, no
  * hace nada. No toca ni borra lo que creó el seed principal.
  */
-import { createCipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import {
@@ -29,38 +29,9 @@ import {
   VisitOutcome,
 } from '@prisma/client';
 
+import { blindHash, encryptPII } from './pii';
+
 const prisma = new PrismaClient();
-
-/*
- * PII cifrada y con su blind index, **igual que el seed principal y que la API**. Sembrar el valor
- * en claro no es un atajo inocuo: al leerlo, `CryptoService` intenta descifrar y la ficha del
- * cliente revienta.
- */
-function encKey(): Buffer {
-  const k = Buffer.from(process.env.APP_ENCRYPTION_KEY ?? '', 'hex');
-  if (k.length !== 32) throw new Error('APP_ENCRYPTION_KEY (32 bytes hex) requerida para sembrar PII cifrada');
-  return k;
-}
-
-function blindKey(): Buffer {
-  const k = Buffer.from(process.env.APP_BLIND_INDEX_KEY ?? '', 'hex');
-  if (k.length !== 32) throw new Error('APP_BLIND_INDEX_KEY (32 bytes hex) requerida para el blind index');
-  return k;
-}
-
-/** Cifra a `iv.tag.ct`, el mismo formato que `CryptoService`. */
-function encryptPII(plain: string): string {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', encKey(), iv);
-  const ct = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
-  return `${iv.toString('base64')}.${cipher.getAuthTag().toString('base64')}.${ct.toString('base64')}`;
-}
-
-/** Blind index determinista, con la misma normalización que `BlindIndexService`. */
-function blindHash(value: string): string {
-  const norm = value.trim().toUpperCase().replace(/[\s.\-/]/g, '');
-  return createHmac('sha256', blindKey()).update(norm).digest('hex');
-}
 
 /**
  * Cuatro deudores repartidos por Santa Cruz, **con punto**: sin coordenadas el mapa no dibuja nada,

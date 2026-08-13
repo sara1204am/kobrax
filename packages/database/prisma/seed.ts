@@ -33,35 +33,14 @@ import {
 } from '@prisma/client';
 import { ROLE_PERMISSIONS, RoleType, validateAgendaDetails } from '@kobrax/shared';
 import bcrypt from 'bcryptjs';
-import { createCipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { blindHash, encryptPII } from './pii';
 
 const prisma = new PrismaClient();
 
 // ── PII: cifrado AES-256-GCM + blind index HMAC (F4 Fase 0) ──────────────────
-// El seed siembra la PII ya cifrada y con su hash, igual que lo hará la API.
-// Las claves se leen en cada llamada (process.env ya poblado tras instanciar Prisma).
-function encKey(): Buffer {
-  const k = Buffer.from(process.env.APP_ENCRYPTION_KEY ?? '', 'hex');
-  if (k.length !== 32) throw new Error('APP_ENCRYPTION_KEY (32 bytes hex) requerida para sembrar PII cifrada');
-  return k;
-}
-function blindKey(): Buffer {
-  const k = Buffer.from(process.env.APP_BLIND_INDEX_KEY ?? '', 'hex');
-  if (k.length !== 32) throw new Error('APP_BLIND_INDEX_KEY (32 bytes hex) requerida para el blind index');
-  return k;
-}
-/** Cifra a `iv.tag.ct` (mismo formato que CryptoService de la API). */
-function encryptPII(plain: string): string {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', encKey(), iv);
-  const ct = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
-  return `${iv.toString('base64')}.${cipher.getAuthTag().toString('base64')}.${ct.toString('base64')}`;
-}
-/** Blind index determinista (mismo algoritmo/normalización que BlindIndexService). */
-function blindHash(value: string): string {
-  const norm = value.trim().toUpperCase().replace(/[\s.\-/]/g, '');
-  return createHmac('sha256', blindKey()).update(norm).digest('hex');
-}
+// El seed siembra la PII ya cifrada y con su hash, igual que lo hará la API. El algoritmo vive en
+// `pii.ts` porque lo comparten los tres seeds.
 
 // Catálogo de permisos: code = `{recurso}:{acción}`.
 const PERMISSIONS = [
