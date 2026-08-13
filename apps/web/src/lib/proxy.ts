@@ -19,9 +19,12 @@ import { apiError } from './auth-flow';
 export async function proxyMutation<T>(
   req: Request,
   path: string,
-  // Sin `DELETE`: ningún endpoint de casos ni de agenda borra, y un método que nadie usa es una
-  // puerta abierta esperando a que alguien la empuje.
-  method: 'POST' | 'PATCH' = 'POST',
+  /**
+   * `DELETE` entra en W8, y sólo porque **hay algo que borrar de verdad**: un tablero que alguien
+   * armó y ya no quiere. Hasta entonces ningún endpoint borraba, y un método que nadie usa es una
+   * puerta abierta esperando a que alguien la empuje.
+   */
+  method: 'POST' | 'PATCH' | 'DELETE' = 'POST',
   /**
    * Headers del navegador que hay que **reenviar** a la API.
    *

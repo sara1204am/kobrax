@@ -5,6 +5,7 @@ import {
   type AgingBucketRow,
   type AnalyticsSummary,
   type CollectorPerformanceRow,
+  type DashboardDefinition,
   type MeInfo,
   type Member,
   type TrendPoint,
@@ -12,16 +13,13 @@ import {
 } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { analyticsQuery, dashboardFilters } from '@/lib/dashboard';
+import { DEFAULT_WIDGETS } from '@/lib/widget-registry';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { DashboardFilters } from '@/components/dashboard/dashboard-filters';
-import { KpiWidget } from '@/components/dashboard/widgets/kpi-widget';
-import { AgingBars, AgingDonut } from '@/components/dashboard/widgets/aging-widgets';
-import { AgendaDonut, IndicatorsList } from '@/components/dashboard/widgets/agenda-widgets';
-import { CollectorsTable } from '@/components/dashboard/widgets/collectors-table';
-import { TrendChart } from '@/components/dashboard/widgets/trend-chart';
-import { VisitMapWidget } from '@/components/dashboard/widgets/visit-map-widget';
-import { WidgetFrame } from '@/components/dashboard/widget-frame';
-import { money, percent } from '@/lib/format';
+import { DashboardGrid } from '@/components/dashboard/dashboard-grid';
+import { DashboardToolbar } from '@/components/dashboard/dashboard-toolbar';
+import { WidgetActions } from '@/components/dashboard/widget-actions';
+import { WidgetRenderer, type DashboardData } from '@/components/dashboard/widget-renderer';
 
 /**
  * El tablero de la gerencia.
@@ -30,9 +28,9 @@ import { money, percent } from '@/lib/format';
  * empresa. Si esta pantalla revienta, el panel entero parece roto — por eso ningún fallo de un
  * widget tumba la página: cada uno muestra su propio error y los demás siguen mostrando su dato.
  *
- * La grilla es **CSS puro de 12 columnas**. Arrastrar y redimensionar llegan con el modo Editar
- * (T7), y recién ahí se justifica la librería de grid: en modo Ver no hay nada que arrastrar, y
- * pagarla igual sería 30 kB para dibujar cajas.
+ * **Un tablero es una fila de la base, no este archivo.** Lo que hay acá es el reparto: pedir los
+ * datos una vez, y dejar que el renderer decida qué componente le toca a cada widget guardado. Por
+ * eso «Vista general», «Cobranza» y «Campo» son el mismo código.
  */
 export default async function DashboardPage({
   searchParams,
@@ -42,85 +40,85 @@ export default async function DashboardPage({
   const t = await getTranslations('panel.dashboard');
   const filters = dashboardFilters(searchParams);
   const query = analyticsQuery(filters);
+  const editable = searchParams.edit === '1';
 
   /*
-   * Los seis endpoints **en paralelo**, no uno detrás de otro: encadenados, la pantalla tardaría
-   * la suma de los seis en vez del más lento. Y cada uno se maneja solo — si uno falla, su widget
-   * muestra el error y los otros siguen mostrando su dato.
+   * Todo en paralelo, no encadenado: la pantalla tarda lo que el más lento y no la suma de los ocho.
    */
-  const [summary, aging, collectors, agenda, visits, trend, me, team] = await Promise.all([
+  const [summary, aging, collectors, agenda, visits, trend, boards, me, team] = await Promise.all([
     apiCall<AnalyticsSummary>(`/analytics/summary?${query}`, { method: 'GET', auth: true }),
     apiCall<AgingBucketRow[]>(`/analytics/portfolio-aging?${query}`, { method: 'GET', auth: true }),
     apiCall<CollectorPerformanceRow[]>(`/analytics/collector-performance?${query}`, { method: 'GET', auth: true }),
     apiCall<AgendaSummary>(`/analytics/agenda-summary?${query}`, { method: 'GET', auth: true }),
     apiCall<VisitMapPoint[]>(`/analytics/visit-map?${query}`, { method: 'GET', auth: true }),
     apiCall<TrendPoint[]>(`/analytics/collection-trend?${query}`, { method: 'GET', auth: true }),
+    apiCall<DashboardDefinition[]>('/dashboards', { method: 'GET', auth: true }),
     apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
   ]);
 
-  // Sin `report:read` no hay tablero, y decirlo es mejor que dibujar seis cajas vacías.
+  // Sin `report:read` no hay tablero, y decirlo es mejor que dibujar doce cajas vacías.
   if (!(me.body.data?.permissions ?? []).includes(Permission.REPORT_READ)) {
     return <EmptyState title={t('title')} text={t('noAccess')} />;
   }
 
-  const kpi = summary.body.data;
-  const currency = kpi?.currency ?? 'BOB';
-  const amount = (value: number): string => money(value, currency);
-  const count = (value: number): string => value.toLocaleString('es-BO');
+  /*
+   * Qué tablero se mira: el pedido por la URL, el predeterminado, o el primero. Y si la cuenta
+   * **todavía no guardó ninguno**, el del código — que se vuelve fila recién cuando alguien toca
+   * algo. Sembrarlo en la base haría que una cuenta nueva arranque con filas que nadie pidió, y que
+   * borrarlo deje la pantalla vacía para siempre.
+   */
+  const dashboards = boards.body.data ?? [];
+  const current =
+    dashboards.find((d) => d.id === searchParams.view) ?? dashboards.find((d) => d.isDefault) ?? dashboards[0];
+  const widgets = current?.widgets.length ? current.widgets : DEFAULT_WIDGETS;
+
+  const data: DashboardData = {
+    summary: summary.body.data ?? undefined,
+    aging: aging.body.data ?? undefined,
+    collectors: collectors.body.data ?? undefined,
+    agenda: agenda.body.data ?? undefined,
+    visits: visits.body.data ?? undefined,
+    trend: trend.body.data ?? undefined,
+    members: team.body.data ?? [],
+    currency: summary.body.data?.currency ?? 'BOB',
+    errors: {
+      summary: summary.body.error?.message,
+      aging: aging.body.error?.message,
+      collectors: collectors.body.error?.message,
+      agenda: agenda.body.error?.message,
+      visits: visits.body.error?.message,
+      trend: trend.body.error?.message,
+    },
+  };
 
   return (
     <>
-      <PageHeader title={t('title')} subtitle={t('subtitle')} />
+      <PageHeader title={current?.name ?? t('title')} subtitle={t('subtitle')} />
+
+      <DashboardToolbar dashboards={dashboards} current={current} widgets={widgets} editable={editable} />
 
       {/* Los filtros van ANTES de los números: primero se elige qué se mira. */}
       <DashboardFilters collectors={team.body.data ?? []} />
 
-      <div className="grid grid-cols-12 gap-4">
-        {kpi ? (
-          <>
-            <KpiWidget label={t('kpi.outstanding')} kpi={kpi.outstanding} format={amount} />
-            <KpiWidget label={t('kpi.overdue')} kpi={kpi.overdue} format={amount} />
-            <KpiWidget label={t('kpi.overdueRate')} kpi={kpi.overdueRate} format={percent} />
-            <KpiWidget label={t('kpi.activeCases')} kpi={kpi.activeCases} format={count} />
-            <KpiWidget label={t('kpi.collected')} kpi={kpi.collected} format={amount} />
-          </>
-        ) : (
-          <div className="col-span-12">
-            <EmptyState title={t('title')} text={summary.body.error?.message ?? t('error')} />
+      <DashboardGrid dashboardId={current?.id} widgets={widgets} editable={editable}>
+        {widgets.map((widget) => (
+          // El `div` es de la grilla, que le pone posición y medida; el marco vive adentro.
+          <div key={widget.id}>
+            {/* @ts-expect-error — server component asíncrono dentro de un client component: Next lo
+                soporta (los children se renderizan en el servidor), pero los tipos de React 18 no
+                lo expresan todavía. */}
+            <WidgetRenderer
+              widget={widget}
+              data={data}
+              editable={editable}
+              actions={
+                editable ? <WidgetActions widget={widget} widgets={widgets} dashboardId={current?.id} /> : undefined
+              }
+            />
           </div>
-        )}
-
-        <WidgetFrame title={t('widgets.aging')} span={4} error={aging.body.error?.message}>
-          {aging.body.data && <AgingDonut rows={aging.body.data} currency={currency} />}
-        </WidgetFrame>
-
-        <WidgetFrame title={t('widgets.agingBars')} span={4} error={aging.body.error?.message}>
-          {aging.body.data && <AgingBars rows={aging.body.data} />}
-        </WidgetFrame>
-
-        <WidgetFrame title={t('widgets.agenda')} span={4} error={agenda.body.error?.message}>
-          {agenda.body.data && <AgendaDonut summary={agenda.body.data} />}
-        </WidgetFrame>
-
-        <WidgetFrame title={t('widgets.collectors')} span={5} error={collectors.body.error?.message}>
-          {collectors.body.data && (
-            <CollectorsTable rows={collectors.body.data} members={team.body.data ?? []} currency={currency} />
-          )}
-        </WidgetFrame>
-
-        <WidgetFrame title={t('widgets.map')} span={4} error={visits.body.error?.message}>
-          {visits.body.data && <VisitMapWidget points={visits.body.data} />}
-        </WidgetFrame>
-
-        <WidgetFrame title={t('widgets.indicators')} span={3} error={agenda.body.error?.message}>
-          {agenda.body.data && <IndicatorsList summary={agenda.body.data} />}
-        </WidgetFrame>
-
-        <WidgetFrame title={t('widgets.trend')} span={12} error={trend.body.error?.message}>
-          {trend.body.data && <TrendChart points={trend.body.data} currency={currency} />}
-        </WidgetFrame>
-      </div>
+        ))}
+      </DashboardGrid>
     </>
   );
 }

@@ -121,6 +121,7 @@ export const config = {
     '/api/imports/:path*',
     '/api/cases/:path*',
     '/api/agenda/:path*',
+    '/api/dashboards/:path*',
     '/api/payments/:path*',
     '/api/payment-requests/:path*',
     '/api/uploads/:path*',
