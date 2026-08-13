@@ -68,11 +68,9 @@ export default async function PagosPage({
       {/* Filtrado por un crédito la lista parece vacía sin serlo: la salida tiene que estar a la
           vista, o se lee como «no hay pagos». */}
       {credit && (
-        <p className="mb-4 text-[14px] text-k-text-2">
-          <Link href="/pagos" className="font-medium text-k-purple hover:underline">
-            {t('allPayments')}
-          </Link>
-        </p>
+        <Link href="/pagos" className="mb-4 block text-[14px] font-medium text-k-purple hover:underline">
+          {t('allPayments')}
+        </Link>
       )}
 
       <PeriodPicker />

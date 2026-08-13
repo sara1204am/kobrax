@@ -4,19 +4,13 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { PAYMENT_METHODS, type PaymentItem, type PaymentMethod } from '@kobrax/shared';
+import { PAYMENT_METHODS, type PaymentMethod } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
 import { errorText } from '@/lib/api-error';
 import { sendJson } from '@/lib/client';
-
-/** El crédito contra el que se cobra. Sin él no hay nada que registrar: la API lo exige. */
-export interface CreditTarget {
-  id: string;
-  code?: string;
-}
 
 /**
  * Lo que se puede hacer con la plata desde el ledger: **registrar un pago** que llegó por
@@ -26,7 +20,7 @@ export interface CreditTarget {
  * del crédito (`/pagos?creditId=…`). Sin crédito el botón sigue estando y dice dónde ir — esconderlo
  * dejaría a la persona buscando una acción que existe.
  */
-export function PaymentActions({ credit }: { credit?: CreditTarget }) {
+export function PaymentActions({ credit }: { credit?: { id: string; code?: string } }) {
   const t = useTranslations('panel.payments');
   const locale = useLocale();
   const router = useRouter();
@@ -62,7 +56,7 @@ export function PaymentActions({ credit }: { credit?: CreditTarget }) {
     if (!credit || !valid) return;
     setError(null);
     setBusy(true);
-    const res = await sendJson<PaymentItem>(
+    const res = await sendJson(
       '/api/payments',
       { creditId: credit.id, amount: value, method },
       'POST',
