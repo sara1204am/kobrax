@@ -13,6 +13,8 @@ export interface MapStop {
   latitude?: number;
   longitude?: number;
   label?: string;
+  /** Visitada o pendiente. El dashboard pinta 90 paradas de 11 rutas: sin esto son 90 pines iguales. */
+  tone?: 'done' | 'pending';
 }
 
 /** Dónde se registró una visita: lo que deja ver si el cobrador estuvo donde dijo. */
@@ -34,11 +36,19 @@ export function RouteMap({
   stops,
   visits = [],
   line = [],
+  height = 420,
+  connect = true,
 }: {
   stops: MapStop[];
   visits?: MapVisit[];
   /** La polilínea por las calles. Vacía = las paradas se unen con rectas (sin motor o sin red). */
   line?: { latitude: number; longitude: number }[];
+  height?: number;
+  /**
+   * Unir las paradas con una línea. En una ruta es el recorrido; en el dashboard son **once rutas
+   * distintas** y unirlas dibujaría un camino que nadie hizo.
+   */
+  connect?: boolean;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const located = stops.filter(
@@ -62,8 +72,8 @@ export function RouteMap({
 
     for (const stop of located) {
       const pin = document.createElement('div');
-      pin.className =
-        'flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-k-navy text-[12px] font-semibold text-white shadow';
+      const bg = stop.tone === 'done' ? 'bg-k-success' : stop.tone === 'pending' ? 'bg-k-muted' : 'bg-k-navy';
+      pin.className = `flex h-7 w-7 items-center justify-center rounded-full border-2 border-white ${bg} text-[12px] font-semibold text-white shadow`;
       pin.textContent = String(stop.sequenceOrder);
       const marker = new Marker({ element: pin }).setLngLat([stop.longitude, stop.latitude]);
       if (stop.label) marker.setPopup(new Popup({ offset: 16 }).setText(stop.label));
@@ -84,7 +94,7 @@ export function RouteMap({
         : located.map((s) => [s.longitude, s.latitude]);
 
     map.on('load', () => {
-      if (path.length > 1) {
+      if (connect && path.length > 1) {
         map.addSource('route', {
           type: 'geojson',
           data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: path } },
@@ -120,5 +130,7 @@ export function RouteMap({
 
   if (located.length === 0) return null;
 
-  return <div ref={container} className="h-[420px] w-full overflow-hidden rounded-2xl border border-k-border" />;
+  return (
+    <div ref={container} style={{ height }} className="w-full overflow-hidden rounded-2xl border border-k-border" />
+  );
 }

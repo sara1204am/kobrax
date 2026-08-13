@@ -52,6 +52,126 @@
       "subtitle": "Your collections panel.",
       "building": "Modules show up in the menu as they get built."
     },
+    "dashboard": {
+      "title": "Dashboard",
+      "subtitle": "How the portfolio, the work and the money are doing.",
+      "noAccess": "Your role cannot see the management dashboard.",
+      "error": "The indicators could not be loaded.",
+      "soon": "This widget arrives in the next task.",
+      "vsPrevious": "vs previous period",
+      "noHistory": "no previous period to compare",
+      "filters": {
+        "date": "Period",
+        "from": "From",
+        "to": "To",
+        "collector": "Collector",
+        "status": "Status",
+        "priority": "Priority",
+        "all": "All",
+        "clear": "Clear filters"
+      },
+      "presets": {
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "d7": "Last 7 days",
+        "d30": "Last 30 days",
+        "month": "This month",
+        "prevMonth": "Previous month",
+        "custom": "Custom"
+      },
+      "kpi": {
+        "outstanding": "Total portfolio balance",
+        "overdue": "Overdue portfolio",
+        "overdueRate": "% portfolio overdue",
+        "activeCases": "Active cases",
+        "collected": "Collected"
+      },
+      "widgets": {
+        "aging": "Portfolio by days past due",
+        "agingBars": "Overdue by day range",
+        "agenda": "Agenda for the period",
+        "collectors": "Portfolio by collector",
+        "map": "Visit map",
+        "indicators": "Management indicators",
+        "trend": "Portfolio and collection trend"
+      },
+      "defaultName": "Overview",
+      "edit": "Edit",
+      "done": "Done",
+      "addWidget": "Add widget",
+      "searchWidgets": "Search widgets",
+      "widgetAdded": "Widget added",
+      "removeWidget": "Remove widget",
+      "duplicateWidget": "Duplicate widget",
+      "rename": "Rename",
+      "dashboardName": "Dashboard name",
+      "duplicate": "Duplicate",
+      "duplicated": "Dashboard duplicated",
+      "delete": "Delete",
+      "deleted": "Dashboard deleted",
+      "deleteConfirm": "Delete «{name}»? It stops being available for the whole company.",
+      "save": "Save",
+      "cancel": "Cancel",
+      "saveError": "The dashboard could not be saved.",
+      "noSource": "This widget has no data behind it yet.",
+      "noSourceShort": "no data yet",
+      "unknownWidget": "This panel does not know this widget type.",
+      "catalog": {
+        "kpi": "KPI",
+        "line": "Line chart",
+        "bars": "Bar chart",
+        "donut": "Donut chart",
+        "table": "Table",
+        "map": "Map",
+        "funnel": "Funnel",
+        "gauge": "Gauge",
+        "calendar": "Calendar",
+        "list": "List",
+        "histogram": "Histogram",
+        "text": "Text / Note"
+      },
+      "buckets": {
+        "D1_30": "1 to 30 days",
+        "D31_90": "31 to 90 days",
+        "D91_180": "91 to 180 days",
+        "D181_360": "181 to 360 days",
+        "D361_450": "361 to 450 days",
+        "D450_PLUS": "over 450 days"
+      },
+      "indicators": {
+        "VISITS_DONE": "Visits made",
+        "CALLS_DONE": "Calls made",
+        "CONTACTS": "Actions completed",
+        "PROMISES": "Payment promises",
+        "PAYMENTS": "Payments recorded"
+      },
+      "table": {
+        "collector": "Collector",
+        "cases": "Cases",
+        "balance": "Balance",
+        "overdue": "Overdue",
+        "overdueRate": "% overdue",
+        "collected": "Collected",
+        "seeAll": "See all {n} collectors →"
+      },
+      "trend": {
+        "outstanding": "Portfolio balance",
+        "collected": "Collected",
+        "reconstructed": "Each date's balance is reconstructed from what was collected afterwards: it shows what collections brought down, and does not include new disbursements."
+      },
+      "map": {
+        "done": "{n} visited",
+        "pending": "{n} pending",
+        "day": "stops for {day}"
+      },
+      "noOverdue": "No overdue portfolio under this filter.",
+      "noAgenda": "No scheduled work in this period.",
+      "noVisits": "No stops with a location for {day}.",
+      "noTrend": "The period is too short to draw a trend.",
+      "noCollectors": "No cases assigned under this filter.",
+      "unknownCollector": "No name",
+      "creditsInBucket": "Credits in each range"
+    },
     "error": {
       "title": "Something went wrong",
       "text": "We could not load this screen. The rest of the panel still works.",

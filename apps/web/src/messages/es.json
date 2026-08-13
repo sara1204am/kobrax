@@ -52,6 +52,126 @@
       "subtitle": "Tu panel de cobranzas.",
       "building": "Los módulos se van sumando al menú a medida que se construyen."
     },
+    "dashboard": {
+      "title": "Dashboard",
+      "subtitle": "Cómo viene la cartera, el trabajo y la plata.",
+      "noAccess": "Tu rol no ve el tablero de gestión.",
+      "error": "No se pudieron traer los indicadores.",
+      "soon": "Este widget llega en la próxima tarea.",
+      "vsPrevious": "vs período anterior",
+      "noHistory": "sin período anterior para comparar",
+      "filters": {
+        "date": "Período",
+        "from": "Desde",
+        "to": "Hasta",
+        "collector": "Cobrador",
+        "status": "Estado",
+        "priority": "Prioridad",
+        "all": "Todos",
+        "clear": "Limpiar filtros"
+      },
+      "presets": {
+        "today": "Hoy",
+        "yesterday": "Ayer",
+        "d7": "Últimos 7 días",
+        "d30": "Últimos 30 días",
+        "month": "Este mes",
+        "prevMonth": "Mes anterior",
+        "custom": "Personalizado"
+      },
+      "kpi": {
+        "outstanding": "Saldo total cartera",
+        "overdue": "Cartera en mora",
+        "overdueRate": "% cartera en mora",
+        "activeCases": "Casos activos",
+        "collected": "Recaudado"
+      },
+      "widgets": {
+        "aging": "Cartera por días de mora",
+        "agingBars": "Mora por rango de días",
+        "agenda": "Agenda del período",
+        "collectors": "Cartera por cobrador",
+        "map": "Mapa de visitas",
+        "indicators": "Indicadores de gestión",
+        "trend": "Evolución de cartera y recaudación"
+      },
+      "defaultName": "Vista general",
+      "edit": "Editar",
+      "done": "Listo",
+      "addWidget": "Añadir widget",
+      "searchWidgets": "Buscar widgets",
+      "widgetAdded": "Widget agregado",
+      "removeWidget": "Quitar widget",
+      "duplicateWidget": "Duplicar widget",
+      "rename": "Renombrar",
+      "dashboardName": "Nombre del tablero",
+      "duplicate": "Duplicar",
+      "duplicated": "Tablero duplicado",
+      "delete": "Eliminar",
+      "deleted": "Tablero eliminado",
+      "deleteConfirm": "¿Eliminar «{name}»? Deja de estar disponible para toda la empresa.",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "saveError": "No se pudo guardar el tablero.",
+      "noSource": "Este widget todavía no tiene datos detrás.",
+      "noSourceShort": "sin datos aún",
+      "unknownWidget": "Este panel no conoce este tipo de widget.",
+      "catalog": {
+        "kpi": "KPI",
+        "line": "Gráfico de líneas",
+        "bars": "Gráfico de barras",
+        "donut": "Gráfico de dona",
+        "table": "Tabla",
+        "map": "Mapa",
+        "funnel": "Embudo",
+        "gauge": "Medidor",
+        "calendar": "Calendario",
+        "list": "Lista",
+        "histogram": "Histograma",
+        "text": "Texto / Nota"
+      },
+      "buckets": {
+        "D1_30": "1 a 30 días",
+        "D31_90": "31 a 90 días",
+        "D91_180": "91 a 180 días",
+        "D181_360": "181 a 360 días",
+        "D361_450": "361 a 450 días",
+        "D450_PLUS": "más de 450 días"
+      },
+      "indicators": {
+        "VISITS_DONE": "Visitas realizadas",
+        "CALLS_DONE": "Llamadas realizadas",
+        "CONTACTS": "Gestiones ejecutadas",
+        "PROMISES": "Promesas de pago",
+        "PAYMENTS": "Pagos registrados"
+      },
+      "table": {
+        "collector": "Cobrador",
+        "cases": "Casos",
+        "balance": "Saldo",
+        "overdue": "En mora",
+        "overdueRate": "% mora",
+        "collected": "Recaudado",
+        "seeAll": "Ver los {n} cobradores →"
+      },
+      "trend": {
+        "outstanding": "Saldo de cartera",
+        "collected": "Recaudado",
+        "reconstructed": "El saldo de cada fecha se reconstruye con lo cobrado después: muestra lo que bajó la cobranza, no incluye desembolsos nuevos."
+      },
+      "map": {
+        "done": "{n} visitadas",
+        "pending": "{n} pendientes",
+        "day": "paradas del {day}"
+      },
+      "noOverdue": "No hay cartera en mora en este filtro.",
+      "noAgenda": "No hay agendados en este período.",
+      "noVisits": "No hay paradas con ubicación para el {day}.",
+      "noTrend": "El período es muy corto para dibujar una tendencia.",
+      "noCollectors": "No hay casos asignados en este filtro.",
+      "unknownCollector": "Sin nombre",
+      "creditsInBucket": "Créditos en cada tramo"
+    },
     "error": {
       "title": "Algo salió mal",
       "text": "No pudimos cargar esta pantalla. El resto del panel sigue funcionando.",

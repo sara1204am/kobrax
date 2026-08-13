@@ -27,6 +27,16 @@ export function dateTime(d?: string | null, locale = 'es'): string {
   return new Date(d).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
 }
 
+/**
+ * Un porcentaje que ya viene en 0-100.
+ *
+ * Con `${v}%` a secas salía «99.9%» —punto decimal inglés— al lado de «Bs 17.892.273,30», que sí
+ * está localizado. La misma tarjeta mostraba dos convenciones de número.
+ */
+export function percent(value: number, digits = 1): string {
+  return `${new Intl.NumberFormat('es-BO', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value)} %`;
+}
+
 export function fullName(c: { firstName?: string; lastName?: string; businessName?: string }): string {
   if (c.businessName) return c.businessName;
   return [c.firstName, c.lastName].filter(Boolean).join(' ') || '—';

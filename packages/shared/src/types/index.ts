@@ -8,3 +8,5 @@ export * from './agenda.types.js';
 export * from './case.types.js';
 export * from './route.types.js';
 export * from './payment.types.js';
+export * from './analytics.types.js';
+export * from './dashboard.types.js';

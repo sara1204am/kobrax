@@ -104,6 +104,7 @@ model Account {
   refreshTokens   RefreshToken[]
   agendaItems     AgendaItem[]
   catalogItems    CatalogItem[]
+  dashboards      Dashboard[]
 
   @@index([status])
   @@index([deletedAt])
@@ -1105,4 +1106,61 @@ model CatalogItem {
   @@unique([accountId, catalog, code])
   @@index([accountId, catalog, isActive])
   @@map("catalog_items")
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// W8 · Dashboards configurables
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Un tablero: una lista de widgets con su posición. "Vista general", "Cobranza" y "Campo" son
+/// filas de esta tabla, no pantallas distintas.
+model Dashboard {
+  id          String    @id @default(uuid())
+  accountId   String    @map("account_id")
+  name        String
+  description String?
+  /// El que abre por defecto. Uno solo por cuenta: marcarlo apaga al anterior (lo hace el service).
+  isDefault   Boolean   @default(false) @map("is_default")
+  /// Quién lo armó (users.id, ref suave). Decide quién puede editarlo.
+  createdBy   String?   @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  account Account           @relation(fields: [accountId], references: [id])
+  widgets DashboardWidget[]
+
+  @@index([accountId])
+  @@index([deletedAt])
+  @@map("dashboards")
+}
+
+/// Un widget dentro de un tablero.
+///
+/// `x/y/w/h` son COLUMNAS y no parte de `config`: son lo que más se escribe (cada arrastre) y lo
+/// único que se va a querer consultar. `config` es Json porque es distinto por tipo de widget.
+///
+/// `type` es texto y no un enum de PostgreSQL a propósito: la lista de widgets es una decisión de
+/// producto que cambia seguido, y en este esquema agregar un valor a un enum obliga a una migración
+/// propia (`ALTER TYPE ADD VALUE` no corre dentro de una transacción). El DTO valida contra
+/// `WIDGET_TYPES` de `shared`, que es la fuente de verdad.
+model DashboardWidget {
+  id          String   @id @default(uuid())
+  accountId   String   @map("account_id")
+  dashboardId String   @map("dashboard_id")
+  type        String
+  title       String?
+  x           Int      @default(0)
+  y           Int      @default(0)
+  w           Int      @default(3)
+  h           Int      @default(2)
+  config      Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  dashboard Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, dashboardId])
+  @@map("dashboard_widgets")
 }

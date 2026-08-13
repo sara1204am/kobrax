@@ -1,6 +1,12 @@
 # W8 — Dashboard (builder de widgets)
 
-> **ESTADO: ronda 1, para leer y decidir.** Cero código escrito. La guía visual es
+> **ESTADO: CONSTRUIDA (T0–T8), 13/08.** Verde: shared build + 49 · API type-check + 585 · web
+> type-check + 215 + build. Falta `/ponytail-review`, la validación visual y el merge.
+>
+> **Las cinco decisiones se tomaron como recomendaba §5**, salvo que se agregó una sexta que
+> apareció construyendo (D6). Lo que cambió respecto del plan, y por qué, está en §13.
+
+> **Ronda 1 (para leer y decidir).** La guía visual es
 > `docs/epics-web/dashboard.png` y el pedido largo del 13/08.
 >
 > ⚠️ **El pedido dice «empecemos con W9», pero lo que describe es W8.** El propio texto lo aclara
@@ -38,10 +44,17 @@ vacío. Con la cartera grande sembrada (12/08) esa condición ya se cumple.
 | Grid con arrastre y redimensión | D2 |
 | `analytics.types.ts` en `shared` (el CLAUDE.md lo lista, **pero no está**) | Se crea en T0 |
 
-## 3. 🔴 El hallazgo que ordena la etapa: la API no agrega nada
+## 3. 🔴 El hallazgo que ordena la etapa: la API no agrega nada *para nadie*
 
-Los 14 módulos de la API son de CRUD y listados. **No hay una sola consulta de agregación en todo
-el backend**, y `report:read` existe como permiso pero **no lo usa ningún endpoint**.
+Los 14 módulos son de CRUD y listados: **no hay módulo `analytics` ni un solo endpoint que
+devuelva un agregado**, y `report:read` existe como permiso pero **no lo usa ningún endpoint**
+(cero apariciones en toda la API).
+
+⚠️ Corrección de la ronda 1, que decía «ninguna consulta de agregación»: **sí hay dos `groupBy`**,
+pero son internos y no los ve nadie —elegir el cobrador con menos casos abiertos
+(`cases.service.ts:214`) y contar cuotas para la agenda (`agenda.service.ts:349`)—. Sirven de
+precedente del patrón, no de contrato. Y hay `$queryRaw` en producción (la cartera de W3), así que
+el SQL crudo no estrena nada.
 
 Y la regla del móvil —«los KPIs se calculan siempre en el cliente», cerrada en `ui-screen-map §8.1`—
 **no se puede portar acá**: la tomó un teléfono que mira la jornada de UN cobrador. El dashboard
@@ -112,8 +125,9 @@ otra, el gráfico miente y nadie lo nota.
 
 ## 6. Pantalla
 
-`/dashboard` — **ya existe** como aterrizaje mínimo y **es el destino post-login** de `app/page.tsx`,
-`lib/client.ts`, `login/select-account` y `settings/layout`. W8 la reemplaza.
+`/dashboard` — **ya existe** como aterrizaje mínimo y **es el destino post-login**: lo apuntan
+`app/page.tsx`, `lib/client.ts` (`routeByStep`), `login/select-account`, la invitación y el ítem
+`home` del menú. W8 la reemplaza.
 
 ⚠️ Es la ruta a la que cae **todo el mundo al entrar**: si revienta, el panel entero parece roto.
 Su `error.tsx` y sus estados vacíos no son adorno.
@@ -198,3 +212,44 @@ pedido (§6) y se puede comprobar el primer día.
 - **Widgets sin dato detrás**: `funnel`, `gauge`, `calendar`, `histogram` y `text` entran al
   catálogo y al registry, pero el dashboard por defecto no los usa. Prometer un embudo sin definir
   de qué es el embudo es dibujar un widget vacío.
+
+## 13. Lo que cambió al construirla (13/08)
+
+Seis cosas se apartaron del plan o del boceto. Las tres primeras son decisiones de diseño con
+consecuencia visible; las otras tres son trampas que aparecieron con el código en la mano.
+
+| # | Qué | Por qué |
+|---|---|---|
+| **D6** | 🔴 **El gráfico de evolución NO tiene dos ejes** | El boceto ponía saldo y recaudación con una escala a cada lado. Con 13 millones de un lado y 300 mil del otro, **mover una escala hace que las curvas se crucen donde uno quiera**. Son dos gráficos apilados que comparten el eje del tiempo |
+| **D7** | **Los colores se midieron, no se eligieron** | Los dos azules de la marca —periwinkle y púrpura— dan **ΔE 4.9 en deuteranopía** (el piso es 15): en la dona de agenda, un daltónico no distinguía visitas de llamadas. Va periwinkle + verde (ΔE 19.3). Y la mora es una **rampa secuencial**, no seis categorías: 1-30 y >450 son la misma cosa peor |
+| **D8** | **Los tres KPI de saldo no tienen flecha de variación** | La base **no guarda cuánto se debía la semana pasada**. La API devuelve `previous: null` y la pantalla dice «sin período anterior» en vez de inventar un ↑7,4 % sobre plata. Los dos que sí comparan son flujos: lo recaudado y los casos activos (reconstruidos con `created_at`/`closed_at`). El arreglo de verdad es una foto diaria, y es su propia etapa |
+
+**Correcciones al §3 y §4 del plan:**
+
+- La ronda 1 decía «ninguna consulta de agregación»: **falso**, hay dos `groupBy` internos. Lo que
+  no hay es ningún **endpoint** que devuelva un agregado, ni módulo `analytics`.
+- **Dos de las seis lecturas SÍ se pueden hacer con Prisma** (la agenda entera y los conteos del
+  resumen). Sólo cuatro necesitan SQL crudo, y por motivos concretos: `CASE` como clave de grupo,
+  `groupBy` con join, `generate_series` y `DISTINCT ON`.
+- **La dependencia nueva entra en T7, no en T4**: en modo Ver no hay nada que arrastrar. Y ⚠️
+  `react-grid-layout` **v2 cambió la API entera** —no existe más `WidthProvider`, el ancho lo da un
+  hook y las opciones van agrupadas—: escrito contra la v1 compila y recién falla corriendo.
+
+**Rendimiento, medido y no supuesto** (1600 créditos, 5600 agendados): los seis endpoints en 242 ms
+secuenciales; el panel los pide en paralelo. Tres índices de cobertura nuevos: el de agenda pasó a
+**Index Only Scan** (el que existía lleva `assignee_id` en el medio y no sirve para un rango de
+fechas sin cobrador, que es como abre el tablero); el de créditos es usable pero hoy el planificador
+elige Seq Scan **y hace bien**, porque el tenant es toda la tabla. El techo real: cuando un tenant
+llegue a cientos de miles de créditos, lo que sigue no es otro índice sino la foto diaria de D8.
+
+**Seguridad:** `@Roles` a nivel de clase con su spec propio (un spec que mire sólo el método daría
+verde sobre un controlador abierto) · el cobrador **no entra** al tablero y los cuatro roles de
+supervisión sí · el único fragmento SQL que no puede ir parametrizado se busca en una tabla fija ·
+**aislamiento probado contra la base**: el mismo usuario, que pertenece a dos empresas, ve 17,9 M en
+una y 0 en la otra · un tablero lo edita quien lo creó o el admin (`report:read` lo tienen VIEWER y
+AUDITOR, que son de sólo lectura).
+
+**T3 (el seed) fue más importante de lo que parecía**: con el 100 % de la cartera en mora, el KPI
+daba 99,9 % y no medía nada. Ahora el 68 % está al día, hay 2600 pagos que **bajan el saldo de
+verdad** y los casos cerrados llevan `closed_at`, que es lo único que hace que «casos activos vs
+período anterior» compare contra algo.

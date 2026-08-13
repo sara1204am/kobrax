@@ -12,6 +12,7 @@ import { FieldController } from './field-ops/field.controller';
 import { PaymentsController } from './payments/payments.controller';
 import { PortfolioImportController } from './imports/portfolio-import.controller';
 import { RoutesController } from './routes/routes.controller';
+import { AnalyticsController } from './analytics/analytics.controller';
 
 /**
  * Las puertas (`@Roles`) del camino del cobrador, contra los permisos que realmente tiene.
@@ -89,6 +90,41 @@ describe('Puertas que el cobrador NO debe pasar', () => {
       assert.ok(
         requeridos.some((p) => !collector.includes(p)),
         `${modulo}.${metodo} quedó abierto al cobrador`,
+      );
+    });
+  }
+});
+
+/**
+ * La puerta del dashboard (W8).
+ *
+ * Va aparte porque su `@Roles` está en la **clase** y no en cada método: el `RolesGuard` los lee con
+ * `getAllAndOverride([handler, class])`, así que protege igual — pero un spec que mirara sólo el
+ * método daría verde sobre un controlador completamente abierto.
+ *
+ * Verifica las dos mitades: que la gerencia entre y que el cobrador no. Un tablero con la cartera
+ * entera del tenant, el ranking de sus compañeros y lo recaudado por cada uno **no es una pantalla
+ * de campo**.
+ */
+describe('Puerta del dashboard', () => {
+  const requeridos = (Reflect.getMetadata(ROLES_KEY, AnalyticsController) as string[] | undefined) ?? [];
+
+  it('analytics exige report:read a nivel de clase', () => {
+    assert.deepEqual(requeridos, ['report:read']);
+  });
+
+  it('el cobrador NO entra al tablero de la gerencia', () => {
+    assert.ok(!(ROLE_PERMISSIONS[RoleType.COLLECTOR] as string[]).includes('report:read'));
+  });
+
+  for (const rol of [RoleType.MANAGER, RoleType.SUPERVISOR, RoleType.AUDITOR, RoleType.VIEWER]) {
+    it(`${rol} sí entra`, () => {
+      // Si un día alguien le saca `report:read` a uno de estos cuatro, la pantalla entera se le
+      // vuelve un 403 y el síntoma aparece lejos de la causa.
+      const permisos = ROLE_PERMISSIONS[rol] as string[];
+      assert.deepEqual(
+        requeridos.filter((p) => !permisos.includes(p)),
+        [],
       );
     });
   }
