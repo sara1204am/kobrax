@@ -38,10 +38,17 @@ vacío. Con la cartera grande sembrada (12/08) esa condición ya se cumple.
 | Grid con arrastre y redimensión | D2 |
 | `analytics.types.ts` en `shared` (el CLAUDE.md lo lista, **pero no está**) | Se crea en T0 |
 
-## 3. 🔴 El hallazgo que ordena la etapa: la API no agrega nada
+## 3. 🔴 El hallazgo que ordena la etapa: la API no agrega nada *para nadie*
 
-Los 14 módulos de la API son de CRUD y listados. **No hay una sola consulta de agregación en todo
-el backend**, y `report:read` existe como permiso pero **no lo usa ningún endpoint**.
+Los 14 módulos son de CRUD y listados: **no hay módulo `analytics` ni un solo endpoint que
+devuelva un agregado**, y `report:read` existe como permiso pero **no lo usa ningún endpoint**
+(cero apariciones en toda la API).
+
+⚠️ Corrección de la ronda 1, que decía «ninguna consulta de agregación»: **sí hay dos `groupBy`**,
+pero son internos y no los ve nadie —elegir el cobrador con menos casos abiertos
+(`cases.service.ts:214`) y contar cuotas para la agenda (`agenda.service.ts:349`)—. Sirven de
+precedente del patrón, no de contrato. Y hay `$queryRaw` en producción (la cartera de W3), así que
+el SQL crudo no estrena nada.
 
 Y la regla del móvil —«los KPIs se calculan siempre en el cliente», cerrada en `ui-screen-map §8.1`—
 **no se puede portar acá**: la tomó un teléfono que mira la jornada de UN cobrador. El dashboard
@@ -112,8 +119,9 @@ otra, el gráfico miente y nadie lo nota.
 
 ## 6. Pantalla
 
-`/dashboard` — **ya existe** como aterrizaje mínimo y **es el destino post-login** de `app/page.tsx`,
-`lib/client.ts`, `login/select-account` y `settings/layout`. W8 la reemplaza.
+`/dashboard` — **ya existe** como aterrizaje mínimo y **es el destino post-login**: lo apuntan
+`app/page.tsx`, `lib/client.ts` (`routeByStep`), `login/select-account`, la invitación y el ítem
+`home` del menú. W8 la reemplaza.
 
 ⚠️ Es la ruta a la que cae **todo el mundo al entrar**: si revienta, el panel entero parece roto.
 Su `error.tsx` y sus estados vacíos no son adorno.
