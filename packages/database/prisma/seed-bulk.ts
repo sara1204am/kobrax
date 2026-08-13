@@ -31,6 +31,7 @@ import {
   CreditStatus,
   InstallmentStatus,
   LocationType,
+  PaymentMethod,
   Prisma,
   PrismaClient,
   RouteStatus,
@@ -53,6 +54,27 @@ const FUTURE_DAYS = 5;
 const STOPS_PER_ROUTE = 8;
 /** Una llamada cada cuatro visitas → las visitas quedan en el 80 % de la agenda. */
 const CALLS_PER_VISIT = 0.25;
+/**
+ * Qué parte de la cartera está en mora. El resto está al día.
+ *
+ * 🔴 No es un número decorativo: **con el 100 % en mora, el KPI «% cartera en mora» daba 99,9 %** y
+ * no medía nada. Una cartera real tiene una parte sana, y el tablero existe para ver cuánta no lo
+ * está.
+ */
+const OVERDUE_SHARE = 0.32;
+/** Los medios de pago que se ven en campo, con su frecuencia real: el efectivo manda. */
+const PAYMENT_MIX = [
+  PaymentMethod.CASH,
+  PaymentMethod.CASH,
+  PaymentMethod.CASH,
+  PaymentMethod.CASH,
+  PaymentMethod.CASH,
+  PaymentMethod.TRANSFER,
+  PaymentMethod.TRANSFER,
+  PaymentMethod.QR,
+  PaymentMethod.QR,
+  PaymentMethod.CARD,
+] as const;
 
 // ── Aleatoriedad reproducible ────────────────────────────────────────────────
 // Sembrada y determinista: dos corridas dan la misma cartera, así un número raro en pantalla se
@@ -166,9 +188,12 @@ async function main(): Promise<void> {
   if (!account) throw new Error('No existe el tenant DEMO. Corré primero `pnpm db:seed`.');
   const acc = account.id;
 
+  if (process.argv.includes('--reset')) await reset(acc);
+
   const already = await prisma.credit.findFirst({ where: { accountId: acc, code: { startsWith: 'BLK-' } } });
   if (already) {
     console.log('  ↷ la cartera grande ya está sembrada (créditos BLK-). Nada que hacer.');
+    console.log('    Para volver a sembrarla: `db:seed:bulk --reset` (borra SÓLO lo que sembró este archivo).');
     return;
   }
 
@@ -265,13 +290,16 @@ async function main(): Promise<void> {
   await write('teléfonos', contactRows, (c) => prisma.clientContact.createMany({ data: c }));
   await write('ubicaciones', locationRows, (c) => prisma.clientLocation.createMany({ data: c }));
 
-  // ── Créditos, cronogramas y casos ──────────────────────────────────────────
+  // ── Créditos, cronogramas, casos y pagos ───────────────────────────────────
   const creditRows: Prisma.CreditCreateManyInput[] = [];
   const installmentRows: Prisma.CreditInstallmentCreateManyInput[] = [];
   const caseRows: Prisma.CollectionCaseCreateManyInput[] = [];
-  /** Los casos, para repartirlos después entre agenda y rutas. */
+  const paymentRows: Prisma.PaymentCreateManyInput[] = [];
+  /** Los casos EN GESTIÓN, que son los que se agendan y se visitan. Un caso pagado no se visita. */
   const cases: { id: string; clientId: string; creditId: string; dpd: number }[] = [];
   let code = 0;
+  // El número de comprobante es único por cuenta: se sigue desde el último que exista.
+  let receipt = ((await prisma.payment.aggregate({ _max: { receiptNumber: true } }))._max.receiptNumber ?? 0) + 1;
 
   for (const [ci, client] of clients.entries()) {
     // Algunos deudores tienen dos o tres préstamos: es lo normal cuando el crédito se renueva
@@ -281,14 +309,21 @@ async function main(): Promise<void> {
     for (let k = 0; k < howMany; k++) {
       const creditId = randomUUID();
       const caseId = randomUUID();
-      const dpd = daysPastDue(code);
+      const collectorId = collectorIds[ci % collectorIds.length]!;
+      /*
+       * 🔴 **La mayoría de la cartera está AL DÍA**, y eso no es un detalle cosmético: con todos
+       * los créditos en mora el «% cartera en mora» daba 99,9 % y el KPI no medía nada. Una cartera
+       * real tiene una parte sana; el tablero existe justamente para ver qué proporción no lo está.
+       * Los que sí están en mora cubren el rango entero, de 1 a 450 días.
+       */
+      const overdue = rnd() < OVERDUE_SHARE;
+      const dpd = overdue ? daysPastDue(code) : 0;
       const installments = pick([6, 12, 12, 18, 24] as const);
       const principal = int(8, 600) * 50;
       const installmentAmount = round2((principal * 1.18) / installments);
-      const paid = int(0, Math.max(0, installments - 2));
-      const outstanding = round2(Math.max(installmentAmount, installmentAmount * (installments - paid)));
-      /** La cuota más vieja sin pagar vence hace `dpd` días: es lo que hace que la mora sea real. */
-      const oldestDue = addDays(TODAY, -dpd);
+      const paidCount = int(0, Math.max(0, installments - 2));
+      /** La cuota más vieja sin pagar: vencida hace `dpd` días, o por vencer si está al día. */
+      const nextDue = overdue ? addDays(TODAY, -dpd) : addDays(TODAY, int(1, 30));
       /*
        * 🔴 Sólo el 60 % lleva cronograma, y no es pereza: un crédito nacido en el móvil **no
        * tiene cuotas**, lleva la cuota congelada en `metadata` (C14). Sembrar los dos casos es lo
@@ -296,33 +331,59 @@ async function main(): Promise<void> {
        */
       const hasSchedule = rnd() < 0.6;
 
+      /*
+       * Los pagos de este crédito, repartidos en los últimos 90 días. **Bajan el saldo de verdad**:
+       * un pago que no descuenta es un ledger que miente, y era justo el número que el dashboard
+       * iba a mostrar como «recaudado».
+       */
+      const base = round2(Math.max(installmentAmount, installmentAmount * (installments - paidCount)));
+      let outstanding = base;
+      const howManyPayments = overdue ? int(0, 2) : int(0, 4);
+      for (let p = 0; p < howManyPayments && outstanding > installmentAmount * 0.5; p++) {
+        // Alguno paga la cuota entera y otro paga lo que puede: los dos casos existen en campo.
+        const amount = round2(rnd() < 0.7 ? installmentAmount : installmentAmount * (0.2 + rnd() * 0.6));
+        if (amount <= 0) continue;
+        outstanding = round2(outstanding - amount);
+        paymentRows.push({
+          accountId: acc,
+          creditId,
+          caseId,
+          amount,
+          method: pick(PAYMENT_MIX),
+          registeredBy: collectorId,
+          receiptNumber: receipt++,
+          paymentDate: addDays(TODAY, -int(0, 89)),
+        });
+      }
+      const creditPaid = outstanding <= 0.5;
+
       creditRows.push({
         id: creditId,
         accountId: acc,
         clientId: client.id,
         code: `BLK-${String(++code).padStart(6, '0')}`,
         principalAmount: principal,
-        outstandingBalance: outstanding,
+        outstandingBalance: Math.max(0, outstanding),
         interestRate: round2(int(15, 42) / 10) / 100,
         currency: 'BOB',
         installmentsCount: installments,
-        status: CreditStatus.ACTIVE,
+        status: creditPaid ? CreditStatus.PAID : CreditStatus.ACTIVE,
         daysPastDue: dpd,
-        disbursedAt: addDays(oldestDue, -30 * paid - 30),
+        disbursedAt: addDays(nextDue, -30 * paidCount - 30),
         metadata: {
           frequency: 'MONTHLY',
           installmentAmount,
-          nextDueDate: oldestDue.toISOString().slice(0, 10),
+          nextDueDate: nextDue.toISOString().slice(0, 10),
           origin: hasSchedule ? 'OFFICE' : 'MOBILE',
         },
       });
 
       if (hasSchedule) {
         for (let n = 1; n <= installments; n++) {
-          // Las `paid` primeras están pagadas; la siguiente es la vencida de hace `dpd` días.
-          const dueDate = addDays(oldestDue, (n - 1 - paid) * 30);
-          const isPaid = n <= paid;
-          const isOverdue = !isPaid && dueDate <= TODAY;
+          // Las `paidCount` primeras están pagadas; la siguiente es `nextDue`.
+          const dueDate = addDays(nextDue, (n - 1 - paidCount) * 30);
+          const isPaid = n <= paidCount;
+          const isOverdue = !isPaid && dueDate < TODAY;
           installmentRows.push({
             accountId: acc,
             creditId,
@@ -338,25 +399,55 @@ async function main(): Promise<void> {
         }
       }
 
+      /*
+       * El estado del caso sale de la realidad del crédito, no de un sorteo suelto: el que terminó
+       * de pagar queda PAID o CLOSED, el que está al día casi no se trabaja, y el que debe está en
+       * alguno de los tres estados de gestión.
+       *
+       * 🔴 Los cerrados llevan `closed_at` **repartido en los últimos 60 días**, y es lo que hace
+       * que «casos activos vs período anterior» compare contra algo: sin fecha de cierre, la
+       * reconstrucción de cuántos casos había abiertos hace una semana da siempre lo mismo.
+       */
+      const status = creditPaid
+        ? rnd() < 0.5
+          ? CaseStatus.PAID
+          : CaseStatus.CLOSED
+        : !overdue
+          ? rnd() < 0.5
+            ? CaseStatus.PENDING
+            : CaseStatus.ACTIVE
+          : rnd() < 0.55
+            ? CaseStatus.ACTIVE
+            : rnd() < 0.75
+              ? CaseStatus.IN_NEGOTIATION
+              : CaseStatus.PROMISE_TO_PAY;
+      const closed = status === CaseStatus.PAID || status === CaseStatus.CLOSED;
+
       caseRows.push({
         id: caseId,
         accountId: acc,
         creditId,
         clientId: client.id,
-        assigneeId: collectorIds[ci % collectorIds.length]!,
-        status: rnd() < 0.6 ? CaseStatus.ACTIVE : rnd() < 0.7 ? CaseStatus.IN_NEGOTIATION : CaseStatus.PROMISE_TO_PAY,
+        assigneeId: collectorId,
+        status,
         priority: priorityOf(dpd),
         slaDueAt: addDays(TODAY, int(1, 10)),
         lastActionAt: addDays(TODAY, -int(0, 20)),
+        ...(closed
+          ? { closedAt: addDays(TODAY, -int(1, 60)), closedBy: collectorId, closedReason: 'Crédito cancelado' }
+          : {}),
       });
 
-      cases.push({ id: caseId, clientId: client.id, creditId, dpd });
+      // Sólo los que siguen en gestión entran a la agenda y a las rutas: mandar a un cobrador a
+      // visitar a alguien que ya pagó es exactamente lo que un tablero tiene que evitar.
+      if (!closed) cases.push({ id: caseId, clientId: client.id, creditId, dpd });
     }
   }
 
   await write('créditos', creditRows, (c) => prisma.credit.createMany({ data: c }));
   await write('cuotas', installmentRows, (c) => prisma.creditInstallment.createMany({ data: c }));
   await write('casos', caseRows, (c) => prisma.collectionCase.createMany({ data: c }));
+  await write('pagos', paymentRows, (c) => prisma.payment.createMany({ data: c }));
 
   // ── Agenda y rutas ─────────────────────────────────────────────────────────
   // Una ruta por cobrador y por día, de 8 paradas. Cada parada nace de un agendado de VISITA: la
@@ -450,14 +541,52 @@ async function main(): Promise<void> {
   await write('agendados', agendaRows, (c) => prisma.agendaItem.createMany({ data: c }));
 
   const visits = agendaRows.filter((a) => a.type === AgendaItemType.VISIT).length;
+  const saldo = creditRows.reduce((s, c) => s + Number(c.outstandingBalance), 0);
+  const mora = creditRows.filter((c) => Number(c.daysPastDue) > 0).reduce((s, c) => s + Number(c.outstandingBalance), 0);
+  const cobrado = paymentRows.reduce((s, p) => s + Number(p.amount), 0);
+
   console.log('');
   console.log(`  ✓ ${CLIENTS} deudores en Sucre · ${creditRows.length} créditos (mora de 1 a 450 días) · ${caseRows.length} casos`);
+  console.log(`  ✓ saldo ${saldo.toLocaleString('es-BO', { maximumFractionDigits: 0 })} · en mora ${Math.round((mora / saldo) * 1000) / 10} % · ${paymentRows.length} pagos por ${cobrado.toLocaleString('es-BO', { maximumFractionDigits: 0 })}`);
   console.log(`  ✓ ${agendaRows.length} agendados: ${visits} visitas (${Math.round((visits / agendaRows.length) * 100)} %) y ${agendaRows.length - visits} llamadas`);
   console.log(`  ✓ ${routeRows.length} rutas de ${STOPS_PER_ROUTE} paradas, ${collectorIds.length} cobradores, ${days.length} días hábiles`);
   console.log('  · los cobradores nuevos son cobrador1..cobrador10@kobrax.demo (pass: Kobrax123!)');
 }
 
 const round6 = (n: number): number => Math.round(n * 1e6) / 1e6;
+
+/**
+ * Borra **sólo lo que sembró este archivo**, para poder volver a sembrarlo con otros parámetros.
+ *
+ * 🔴 El ancla es `credits.code LIKE 'BLK-%'`: de ahí salen los créditos, y de los créditos los
+ * clientes, los casos, los pagos y las paradas. Lo que sembraron `seed` y `seed-day` **no se toca**
+ * —tienen otros códigos— y los cobradores creados quedan, que no molestan a nadie.
+ *
+ * El orden importa: primero lo que apunta y al final lo apuntado, o las claves foráneas lo frenan.
+ */
+async function reset(acc: string): Promise<void> {
+  const credits = await prisma.credit.findMany({ where: { accountId: acc, code: { startsWith: 'BLK-' } }, select: { id: true, clientId: true } });
+  if (credits.length === 0) return;
+  const creditIds = credits.map((c) => c.id);
+  const clientIds = [...new Set(credits.map((c) => c.clientId))];
+  const cases = await prisma.collectionCase.findMany({ where: { creditId: { in: creditIds } }, select: { id: true } });
+  const caseIds = cases.map((c) => c.id);
+
+  await prisma.agendaItem.deleteMany({ where: { caseId: { in: caseIds } } });
+  await prisma.fieldVisit.deleteMany({ where: { caseId: { in: caseIds } } });
+  await prisma.routeStop.deleteMany({ where: { caseId: { in: caseIds } } });
+  // Las rutas que quedaron sin ninguna parada eran de este seed: nacieron con ocho.
+  await prisma.routePlan.deleteMany({ where: { accountId: acc, stops: { none: {} } } });
+  await prisma.payment.deleteMany({ where: { creditId: { in: creditIds } } });
+  await prisma.collectionCase.deleteMany({ where: { id: { in: caseIds } } });
+  await prisma.creditInstallment.deleteMany({ where: { creditId: { in: creditIds } } });
+  await prisma.credit.deleteMany({ where: { id: { in: creditIds } } });
+  await prisma.clientContact.deleteMany({ where: { clientId: { in: clientIds } } });
+  await prisma.clientLocation.deleteMany({ where: { clientId: { in: clientIds } } });
+  await prisma.client.deleteMany({ where: { id: { in: clientIds } } });
+
+  console.log(`  ⌫ borrados ${clientIds.length} deudores y ${creditIds.length} créditos de la corrida anterior`);
+}
 
 /** Inserta por lotes y lo cuenta. Un `createMany` de 30.000 filas se come el límite de parámetros. */
 async function write<T>(name: string, rows: T[], insert: (chunk: T[]) => Promise<unknown>): Promise<void> {
