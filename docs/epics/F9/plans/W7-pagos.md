@@ -6,6 +6,12 @@
 
 # W7 — Pagos
 
+> **CERRADA: mergeada a `main` el 12/08.** Verde antes de mergear: shared build + 46 · móvil
+> type-check + 310 · API type-check + 563 · web type-check + 194 + build. Con `/code-review` (seis
+> hallazgos, arreglados) y `/ponytail-review` (−11 líneas) hechos.
+>
+> **Falta el recorrido por cable —el doble clic en confirmar— y la validación visual.**
+
 ## 1. Objetivo
 
 Que la oficina vea **la plata**: qué se cobró, quién lo registró y contra qué crédito se aplicó. Y
