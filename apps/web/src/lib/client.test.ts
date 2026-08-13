@@ -1,7 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { routeByStep, type AccountOption } from './client';
+import { routeByStep, sendJson, type AccountOption } from './client';
 
 beforeEach(() => sessionStorage.clear());
+
+describe('sendJson', () => {
+  it('🔴 manda los headers que se le pidan además del content-type', async () => {
+    // Por acá viaja `Idempotency-Key`, que `POST /payments` lee del header y no del cuerpo: sin
+    // esto un doble clic registra el pago dos veces sobre un ledger que no se puede corregir.
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await sendJson('/api/payments', { amount: 100 }, 'POST', { 'idempotency-key': 'k-1' });
+
+    expect(fetchMock.mock.calls[0][1].headers).toEqual({
+      'content-type': 'application/json',
+      'idempotency-key': 'k-1',
+    });
+    vi.unstubAllGlobals();
+  });
+});
 
 describe('routeByStep', () => {
   it('done → replace a /dashboard', () => {

@@ -90,6 +90,50 @@ describe('proxyMutation', () => {
     expect((await res.json()).error.code).toBe('API_UNREACHABLE');
   });
 
+  it('🔴 reenvía el Idempotency-Key COMO HEADER', async () => {
+    /*
+     * `POST /payments` lo lee del header y no del cuerpo, y `apiCall` arma los suyos: sin
+     * reenviarlo, la clave se pierde acá y un doble clic registra el pago DOS veces, sobre un
+     * ledger que la API no deja corregir ni anular.
+     */
+    let seen: string | null = null;
+    server.use(
+      http.post(`${API}/payments`, ({ request }) => {
+        seen = request.headers.get('idempotency-key');
+        return HttpResponse.json({ data: { id: 'p1' }, error: null, meta: {} }, { status: 201 });
+      }),
+    );
+
+    const req = new Request('http://localhost/api/payments', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'idempotency-key': 'clave-del-formulario' },
+      body: JSON.stringify({ creditId: 'c1', amount: 100, method: 'CASH' }),
+    });
+    await proxyMutation(req, '/payments', 'POST', ['idempotency-key']);
+
+    expect(seen).toBe('clave-del-formulario');
+  });
+
+  it('sólo reenvía los headers que se le piden, no todo lo que trae el navegador', async () => {
+    let cookie: string | null = null;
+    server.use(
+      http.post(`${API}/payments`, ({ request }) => {
+        cookie = request.headers.get('cookie');
+        return HttpResponse.json({ data: { id: 'p1' }, error: null, meta: {} }, { status: 201 });
+      }),
+    );
+
+    const req = new Request('http://localhost/api/payments', {
+      method: 'POST',
+      headers: { cookie: 'k_access=secreto', 'idempotency-key': 'x' },
+      body: '{}',
+    });
+    await proxyMutation(req, '/payments', 'POST', ['idempotency-key']);
+
+    // Las cookies del panel no son las de la API: quien autentica es el Bearer que pone `apiCall`.
+    expect(cookie).toBeNull();
+  });
+
   it('rechaza el origen cruzado antes de tocar la API', async () => {
     const req = new Request('http://localhost/api/cases/c1/assign', {
       method: 'POST',

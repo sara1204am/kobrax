@@ -43,7 +43,7 @@ export const NAV: NavItem[] = [
   { label: 'cases', href: '/casos', permission: Permission.CASE_READ, built: true },
   { label: 'agenda', href: '/agenda', permission: Permission.AGENDA_READ, built: true },
   { label: 'routes', href: '/rutas', permission: Permission.ROUTE_READ, built: true },
-  { label: 'payments', href: '/pagos', permission: Permission.PAYMENT_READ, built: false },
+  { label: 'payments', href: '/pagos', permission: Permission.PAYMENT_READ, built: true },
   { label: 'team', href: '/equipo', permission: Permission.USER_READ, built: true },
   { label: 'account', href: '/cuenta', permission: Permission.ACCOUNT_READ, built: true },
   { label: 'profile', href: '/settings/perfil', permission: null, built: true },

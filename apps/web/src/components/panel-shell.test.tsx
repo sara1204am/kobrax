@@ -32,27 +32,40 @@ const ACCOUNTS = [
   { id: 'a2', name: 'Kobrax Demo Norte', role: 'SUPERVISOR', status: 'ACTIVE' },
 ];
 
-// `payment:read` está para que quede a la vista un módulo que TODAVÍA no se construyó (W7): sin
-// alguno apagado, la prueba de «se pinta en gris y no navega» no tendría contra qué correr.
 function renderShell(
   accounts = ACCOUNTS,
   permissions = ['client:read', 'user:read', 'case:read', 'payment:read'],
+  nav = visibleNav(permissions),
 ) {
   return render(
-    <PanelShell user={USER} accounts={accounts} nav={visibleNav(permissions)}>
+    <PanelShell user={USER} accounts={accounts} nav={nav}>
       <p>contenido</p>
     </PanelShell>,
   );
 }
 
 describe('PanelShell — el menú', () => {
-  it('un módulo construido navega; uno que todavía no existe no es un enlace', () => {
+  it('los módulos construidos navegan', () => {
     renderShell();
     // El sidebar y el cajón pintan la misma lista, así que cada rótulo aparece dos veces.
     expect(screen.getAllByRole('link', { name: 'Inicio' }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /^Cartera/ }).length).toBeGreaterThan(0); // W3
     expect(screen.getAllByRole('link', { name: /^Casos/ }).length).toBeGreaterThan(0); // W5
-    // Pagos todavía no existe (W7): se pinta en gris y no navega.
+    expect(screen.getAllByRole('link', { name: /^Pagos/ }).length).toBeGreaterThan(0); // W7
+  });
+
+  it('uno que todavía no existe se pinta en gris y NO navega', () => {
+    /*
+     * Con un ítem sintético y no con uno del `NAV` real: desde W7 **todos los módulos del menú
+     * están construidos**, así que atarla a uno de verdad obligaba a reescribir esta prueba en
+     * cada etapa —ya pasó tres veces— y la dejaba sin sujeto al encenderse el último. Lo que se
+     * prueba es el contrato del componente: un ítem apagado no es un enlace.
+     */
+    renderShell(ACCOUNTS, [], [
+      { label: 'home', href: '/dashboard', permission: null, built: true },
+      { label: 'payments', href: '/futuro', permission: null, built: false },
+    ]);
+
     expect(screen.queryByRole('link', { name: /^Pagos/ })).not.toBeInTheDocument();
     expect(screen.getAllByText('Pronto').length).toBeGreaterThan(0);
   });

@@ -15,6 +15,13 @@ export const KOBRAX = {
   SYNC_INTERVAL_SECONDS: 30,
 } as const;
 
-/** Métodos de pago soportados (tabla payment.method). */
-export const PAYMENT_METHODS = ['cash', 'transfer', 'qr', 'card', 'mobile_payment'] as const;
+/**
+ * Medios de pago (`payments.method`).
+ *
+ * 🔴 **En MAYÚSCULA porque así los guarda y los espera la API**: es el enum `PaymentMethod` de
+ * Prisma. Hasta W7 esta lista estaba en minúscula y mandarla **hacía rebotar el pago** — el delta
+ * C7 del BUILD-PLAN. Sobrevivió seis etapas porque nadie la usaba: el móvil se escribió su propia
+ * copia al lado y la API leía la de Prisma. Ahora hay una sola verdad, y es ésta.
+ */
+export const PAYMENT_METHODS = ['CASH', 'TRANSFER', 'QR', 'CARD', 'MOBILE_PAYMENT'] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];

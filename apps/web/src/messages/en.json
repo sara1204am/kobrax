@@ -36,7 +36,9 @@
       "parada": "Stop",
       "editar": "Edit",
       "prestamo": "New loan",
-      "credito": "Credit"
+      "credito": "Credit",
+      "solicitudes": "Payment requests",
+      "nueva": "New"
     },
     "soon": "Soon",
     "openMenu": "Open menu",
@@ -584,6 +586,83 @@
       "errors": {
         "generic": "The action could not be completed."
       }
+    },
+    "payments": {
+      "title": "Payments",
+      "subtitle": "What came in: how much, how, and against which credit.",
+      "empty": "No payments in this period",
+      "emptyText": "Try a different date range.",
+      "from": "From",
+      "to": "To",
+      "columns": {
+        "date": "Date",
+        "amount": "Amount",
+        "method": "Method",
+        "registeredBy": "Recorded by",
+        "receipt": "Receipt"
+      },
+      "unknownUser": "—",
+      "total": "{n} payments · {amount}",
+      "allPayments": "See all payments",
+      "register": {
+        "cta": "Record a payment",
+        "title": "Record a payment",
+        "credit": "Credit",
+        "amount": "Amount",
+        "method": "Payment method",
+        "confirm": "Record",
+        "cancel": "Back",
+        "done": "Payment recorded",
+        "immutable": "A recorded payment cannot be edited or voided. If it is wrong, it is corrected with another entry.",
+        "noCredit": "Pick the credit first, from the debtor's file."
+      },
+      "detail": {
+        "title": "The payment",
+        "credit": "Credit",
+        "case": "Case",
+        "registeredBy": "Recorded by",
+        "receiptNumber": "Receipt no.",
+        "openReceipt": "Open the receipt",
+        "provider": "Provider",
+        "externalId": "External id",
+        "immutable": "Payments are never edited or deleted: the ledger is the source of truth for the money."
+      },
+      "request": {
+        "cta": "Request a payment",
+        "title": "Request a payment",
+        "text": "A QR and a link are generated to send to the debtor. The payment lands when they pay.",
+        "amount": "Amount",
+        "method": "Payment method",
+        "confirm": "Generate",
+        "cancel": "Cancel",
+        "done": "Request generated",
+        "qr": "QR to show or send",
+        "link": "Payment link",
+        "copy": "Copy",
+        "copied": "Copied",
+        "confirmEntry": "Confirm it came in",
+        "confirmHint": "Only if you already saw the money credited. Confirming creates the payment and cannot be undone.",
+        "confirmed": "Request confirmed",
+        "noApprove": "Your role cannot confirm requests."
+      },
+      "method": {
+        "CASH": "Cash",
+        "TRANSFER": "Transfer",
+        "QR": "QR",
+        "CARD": "Card",
+        "MOBILE_PAYMENT": "Mobile payment"
+      },
+      "status": {
+        "PENDING": "Pending",
+        "PAID": "Paid",
+        "EXPIRED": "Expired",
+        "CANCELLED": "Cancelled"
+      },
+      "errors": {
+        "generic": "The action could not be completed.",
+        "PAYMENT_001": "The amount cannot be negative.",
+        "AUTH_002": "You do not have permission for this action."
+      }
     }
   },
   "account": {
@@ -691,6 +770,7 @@
     "imported": "Imported",
     "openLoan": "Open loan",
     "backToClient": "Back to client",
+    "creditPayments": "Credit payments",
     "creditSubtitle": "Principal {principal} · {code}",
     "lockedHint": "This credit came from another source: its numbers come from there and are not edited here.",
     "noSchedule": "This credit has no schedule, and that is fine.",

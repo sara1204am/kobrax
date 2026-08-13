@@ -7,3 +7,4 @@ export * from './import.types.js';
 export * from './agenda.types.js';
 export * from './case.types.js';
 export * from './route.types.js';
+export * from './payment.types.js';
