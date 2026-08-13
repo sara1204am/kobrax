@@ -1,4 +1,5 @@
 import { Permission } from '@kobrax/shared';
+import { isUuid } from './uuid';
 
 /**
  * Un ítem del menú lateral.
@@ -73,8 +74,6 @@ export interface Crumb {
   href?: string;
 }
 
-/** Un segmento que es un id (uuid), no una sección con nombre traducible. */
-const IS_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Rastro de navegación para una ruta.
@@ -94,7 +93,7 @@ export function crumbsFor(pathname: string): Crumb[] {
   // Un id no es una clave de i18n: `crumbs.<uuid>` no existe en ningún idioma y la miga terminaba
   // dibujando la ruta cruda de la clave. Se cae la miga, no el rastro: `/cartera/<id>` sigue
   // diciendo «Cartera», y `/cartera/<id>/editar`, «Cartera / Editar».
-  const rest = segments.filter((segment) => !IS_ID.test(segment));
+  const rest = segments.filter((segment) => !isUuid(segment));
 
   return [
     {

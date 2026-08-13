@@ -52,6 +52,50 @@
       "subtitle": "Tu panel de cobranzas.",
       "building": "Los módulos se van sumando al menú a medida que se construyen."
     },
+    "dashboard": {
+      "title": "Dashboard",
+      "subtitle": "Cómo viene la cartera, el trabajo y la plata.",
+      "noAccess": "Tu rol no ve el tablero de gestión.",
+      "error": "No se pudieron traer los indicadores.",
+      "soon": "Este widget llega en la próxima tarea.",
+      "vsPrevious": "vs período anterior",
+      "noHistory": "sin período anterior para comparar",
+      "filters": {
+        "date": "Período",
+        "from": "Desde",
+        "to": "Hasta",
+        "collector": "Cobrador",
+        "status": "Estado",
+        "priority": "Prioridad",
+        "all": "Todos",
+        "clear": "Limpiar filtros"
+      },
+      "presets": {
+        "today": "Hoy",
+        "yesterday": "Ayer",
+        "d7": "Últimos 7 días",
+        "d30": "Últimos 30 días",
+        "month": "Este mes",
+        "prevMonth": "Mes anterior",
+        "custom": "Personalizado"
+      },
+      "kpi": {
+        "outstanding": "Saldo total cartera",
+        "overdue": "Cartera en mora",
+        "overdueRate": "% cartera en mora",
+        "activeCases": "Casos activos",
+        "collected": "Recaudado"
+      },
+      "widgets": {
+        "aging": "Cartera por días de mora",
+        "agingBars": "Mora por rango de días",
+        "agenda": "Agenda del período",
+        "collectors": "Cartera por cobrador",
+        "map": "Mapa de visitas",
+        "indicators": "Indicadores de gestión",
+        "trend": "Evolución de cartera y recaudación"
+      }
+    },
     "error": {
       "title": "Algo salió mal",
       "text": "No pudimos cargar esta pantalla. El resto del panel sigue funcionando.",

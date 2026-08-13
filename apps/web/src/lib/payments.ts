@@ -40,14 +40,6 @@ export function totalOf(payments: PaymentItem[]): number {
   return Math.round(payments.reduce((sum, p) => sum + p.amount, 0) * 100) / 100;
 }
 
-/**
- * ¿Ese id de la URL es un uuid?
- *
- * 🔴 Los ids de la URL **entran a la ruta de la API** (`/credits/<id>`, `/payments/<id>`). Sin
- * mirarlos, un `creditId=../../users` hace que el BFF pida `/users` **con el Bearer de quien mira**:
- * la normalización de la URL se come el `..` antes de que la API vea nada. Se valida acá y no en
- * cada pantalla porque son tres las que lo interpolan.
- */
-export function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
-}
+// `isUuid` se mudó a `lib/uuid.ts` cuando apareció su tercer consumidor (el dashboard). Se
+// re-exporta para no tocar las tres pantallas de pagos que ya lo importan de acá.
+export { isUuid } from './uuid';

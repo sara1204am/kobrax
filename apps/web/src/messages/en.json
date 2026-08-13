@@ -52,6 +52,50 @@
       "subtitle": "Your collections panel.",
       "building": "Modules show up in the menu as they get built."
     },
+    "dashboard": {
+      "title": "Dashboard",
+      "subtitle": "How the portfolio, the work and the money are doing.",
+      "noAccess": "Your role cannot see the management dashboard.",
+      "error": "The indicators could not be loaded.",
+      "soon": "This widget arrives in the next task.",
+      "vsPrevious": "vs previous period",
+      "noHistory": "no previous period to compare",
+      "filters": {
+        "date": "Period",
+        "from": "From",
+        "to": "To",
+        "collector": "Collector",
+        "status": "Status",
+        "priority": "Priority",
+        "all": "All",
+        "clear": "Clear filters"
+      },
+      "presets": {
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "d7": "Last 7 days",
+        "d30": "Last 30 days",
+        "month": "This month",
+        "prevMonth": "Previous month",
+        "custom": "Custom"
+      },
+      "kpi": {
+        "outstanding": "Total portfolio balance",
+        "overdue": "Overdue portfolio",
+        "overdueRate": "% portfolio overdue",
+        "activeCases": "Active cases",
+        "collected": "Collected"
+      },
+      "widgets": {
+        "aging": "Portfolio by days past due",
+        "agingBars": "Overdue by day range",
+        "agenda": "Agenda for the period",
+        "collectors": "Portfolio by collector",
+        "map": "Visit map",
+        "indicators": "Management indicators",
+        "trend": "Portfolio and collection trend"
+      }
+    },
     "error": {
       "title": "Something went wrong",
       "text": "We could not load this screen. The rest of the panel still works.",
