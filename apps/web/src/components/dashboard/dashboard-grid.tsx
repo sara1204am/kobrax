@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import GridLayout, { useContainerWidth, type Layout, type LayoutItem } from 'react-grid-layout';
@@ -46,13 +46,23 @@ export function DashboardGrid({
   const [layout, setLayout] = useState<LayoutItem[]>(() => toLayout(widgets));
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const dirty = useRef(false);
+  const seen = useRef(widgets);
 
-  // Si el servidor manda otro tablero (se cambió de vista, se agregó un widget), el estado local
-  // deja de mandar: lo que vale es lo que vino.
-  useEffect(() => {
+  /*
+   * Si el servidor manda otro tablero (se cambió de vista, se agregó un widget), el estado local
+   * deja de mandar: lo que vale es lo que vino.
+   *
+   * 🔴 **Se sincroniza durante el render, no en un `useEffect`.** Guardar borra y vuelve a crear los
+   * widgets en la base, así que cada `router.refresh()` los devuelve **con ids nuevos** — y esos ids
+   * son las `key` de los hijos de la grilla. Con un efecto queda un render con los hijos nuevos y el
+   * layout viejo: la grilla no encuentra ni una posición y le da a cada widget su default de 1×1
+   * apilado en la columna cero. Se veía como un parpadeo con todos los widgets hechos cajitas.
+   */
+  if (seen.current !== widgets) {
+    seen.current = widgets;
     setLayout(toLayout(widgets));
     dirty.current = false;
-  }, [widgets]);
+  }
 
   const save = useCallback(
     async (next: readonly LayoutItem[]) => {
@@ -65,6 +75,13 @@ export function DashboardGrid({
         const widget = widgets.find((w) => w.id === l.i);
         return widget ? [{ ...widget, layout: { x: l.x, y: l.y, w: l.w, h: l.h } }] : [];
       });
+      /*
+       * Si no coincidió ninguno, el arrastre quedó viejo: los ids cambian en cada guardado, así que
+       * un refresh entre soltar y los 600 ms deja este `next` apuntando a widgets que ya no existen.
+       * Guardar igual mandaría la lista vacía y **borraría el tablero entero**. No se puede arrastrar
+       * un tablero sin widgets: cero coincidencias nunca es un cambio legítimo.
+       */
+      if (!moved.length) return;
 
       const res = await saveWidgets(dashboardId, moved, t('defaultName'));
       dirty.current = false;

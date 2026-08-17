@@ -9,8 +9,8 @@
  * nada no dispara ni una llamada. Hermano de `diffAccount` (`patch.ts`), que W2 promovió: allá son
  * campos escalares, acá son filas con altas y bajas.
  */
-import type { ClienteForm, ContactRow, LocationRow, RelationRow } from '../types/client.types.js';
-import { hasLocationData } from './client-form.js';
+import type { ClienteForm, CollateralRow, ContactRow, LocationRow, RelationRow } from '../types/client.types.js';
+import { hasCollateralData, hasLocationData } from './client-form.js';
 
 export interface RowOps<T> {
   add: T[];
@@ -21,10 +21,14 @@ export interface RowOps<T> {
 
 export interface ClienteOps {
   /** Campos del cliente que cambiaron. Ausente si no cambió ninguno. */
-  client?: Partial<Pick<ClienteForm, 'clientType' | 'firstName' | 'lastName' | 'businessName' | 'gender' | 'riskSegment' | 'status'>>;
+  client?: Partial<
+    Pick<ClienteForm, 'clientType' | 'firstName' | 'lastName' | 'businessName' | 'nationalId' | 'gender' | 'riskSegment' | 'status'>
+  >;
   contacts: RowOps<ContactRow>;
   locations: RowOps<LocationRow>;
   relations: RowOps<RelationRow>;
+  /** Las garantías no personales. Sin sub-recursos: son una fila y sus fotos. */
+  collaterals: RowOps<CollateralRow>;
   /** Teléfonos y ubicaciones de garantes que YA existían (los del garante nuevo van en su alta). */
   relationContacts: RowOps<ContactRow & { relationId: string }>;
   relationLocations: RowOps<LocationRow & { relationId: string }>;
@@ -44,6 +48,7 @@ export function hasClientChanges(ops: ClienteOps): boolean {
     some(ops.contacts) ||
     some(ops.locations) ||
     some(ops.relations) ||
+    some(ops.collaterals) ||
     some(ops.relationContacts) ||
     some(ops.relationLocations)
   );
@@ -90,20 +95,52 @@ const sameLocation = (a: LocationRow, b: LocationRow) =>
 const hasContactData = (c: ContactRow) => c.value.trim().length > 0;
 const hasRelationData = (r: RelationRow) => r.relatedName.trim().length > 0;
 
+/**
+ * Dos listas de créditos con lo mismo adentro, sin importar el orden.
+ *
+ * 🔴 **Ordenado y no `join()` a secas.** El server devuelve los vínculos en el orden que quiere, y
+ * la pantalla en el que se fueron tildando: comparar sin ordenar hacía que **abrir el formulario y
+ * guardar sin tocar nada** contara como un cambio y mandara un PATCH por cada garante.
+ */
+const sameIds = (a: string[] = [], b: string[] = []) =>
+  a.length === b.length && [...a].sort().join('|') === [...b].sort().join('|');
+
 const sameRelation = (a: RelationRow, b: RelationRow) =>
   a.relatedName.trim() === b.relatedName.trim() &&
   a.relationshipType === b.relationshipType &&
   a.gender === b.gender &&
   a.isContactable === b.isContactable &&
-  a.notes.trim() === b.notes.trim();
+  a.notes.trim() === b.notes.trim() &&
+  sameIds(a.creditIds, b.creditIds);
 
-/** Campos del cliente que cambiaron (sin el documento: no se edita una vez cargado). */
+const sameCollateral = (a: CollateralRow, b: CollateralRow) =>
+  a.type === b.type &&
+  a.description.trim() === b.description.trim() &&
+  a.estimatedValue.trim() === b.estimatedValue.trim() &&
+  a.currency === b.currency &&
+  a.photoUrls.join('|') === b.photoUrls.join('|') &&
+  sameIds(a.creditIds, b.creditIds);
+
+/**
+ * Campos del cliente que cambiaron.
+ *
+ * 🔴 **El documento SÍ entra.** Estaba excluido —«no se edita una vez cargado»— pero el formulario
+ * lo dibujaba igual, editable: se corregía un CI mal tipeado, se guardaba, y no pasaba nada. Peor,
+ * si era el único cambio el botón de guardar ni se encendía. El servidor lo soporta entero
+ * (`ClientsService.update` re-cifra, re-calcula el blind index y rebota el duplicado), y un CI mal
+ * cargado es el dato por el que el cobrador busca a la persona: tiene que poder arreglarse.
+ *
+ * ⚠️ Quien llame a este diff **tiene que haber hidratado con la PII en claro** (`?reveal=true`). Con
+ * la máscara, esto ahora manda `1234***` como documento. Las dos pantallas que lo usan revelan antes
+ * de abrir los campos, y hay una prueba en cada una que lo sostiene.
+ */
 function diffClient(before: ClienteForm, after: ClienteForm): ClienteOps['client'] {
   const patch: ClienteOps['client'] = {};
   if (after.clientType !== before.clientType) patch.clientType = after.clientType;
   if (after.firstName.trim() !== before.firstName.trim()) patch.firstName = after.firstName.trim();
   if (after.lastName.trim() !== before.lastName.trim()) patch.lastName = after.lastName.trim();
   if (after.businessName.trim() !== before.businessName.trim()) patch.businessName = after.businessName.trim();
+  if (after.nationalId.trim() !== before.nationalId.trim()) patch.nationalId = after.nationalId.trim();
   if (after.gender !== before.gender) patch.gender = after.gender;
   if (after.riskSegment !== before.riskSegment) patch.riskSegment = after.riskSegment;
   if (after.status !== before.status) patch.status = after.status;
@@ -135,6 +172,7 @@ export function diffCliente(before: ClienteForm, after: ClienteForm): ClienteOps
     contacts: diffRows(before.contacts, after.contacts, sameContact, hasContactData),
     locations: diffRows(before.locations, after.locations, sameLocation, hasLocationData),
     relations: diffRows(before.relations, after.relations, sameRelation, hasRelationData),
+    collaterals: diffRows(before.collaterals, after.collaterals, sameCollateral, hasCollateralData),
     relationContacts: relContacts,
     relationLocations: relLocations,
   };

@@ -1,10 +1,17 @@
-import { contactPayload, locationPayload, relationPayload, type ClienteOps } from '@kobrax/shared';
+import { collateralPayload, contactPayload, locationPayload, relationPayload, type ClienteOps } from '@kobrax/shared';
 
 export interface ApiRequest {
   path: string;
   method: 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
 }
+
+/*
+ * Acá vivía `emptyOps`, que armaba un `ClienteOps` con un solo cambio adentro para el alta suelta de
+ * un teléfono o una dirección desde la ficha. Se fue con esos dos mini-formularios: ahora la sección
+ * entera se edita con los mismos campos que el resto del cliente, así que todo cambio sale del
+ * mismo `diffCliente` y no hay una segunda forma de armar el mismo cuerpo.
+ */
 
 /**
  * El diff del formulario → la secuencia de llamadas a la API.
@@ -34,6 +41,7 @@ export function opsRequests(id: string, ops: ClienteOps): ApiRequest[] {
   for (const rid of ops.contacts.removeIds) out.push({ path: sub('contacts', `/${rid}`), method: 'DELETE' });
   for (const rid of ops.locations.removeIds) out.push({ path: sub('locations', `/${rid}`), method: 'DELETE' });
   for (const rid of ops.relations.removeIds) out.push({ path: sub('relations', `/${rid}`), method: 'DELETE' });
+  for (const rid of ops.collaterals.removeIds) out.push({ path: sub('collaterals', `/${rid}`), method: 'DELETE' });
 
   for (const c of ops.contacts.add) out.push({ path: sub('contacts'), method: 'POST', body: contactPayload(c) });
   for (const c of ops.contacts.update) {
@@ -49,6 +57,12 @@ export function opsRequests(id: string, ops: ClienteOps): ApiRequest[] {
     // El PATCH de un garante no lleva sus sub-recursos: tienen su propia vía.
     const { contacts: _c, locations: _l, ...campos } = relationPayload(r);
     out.push({ path: sub('relations', `/${r.serverId!}`), method: 'PATCH', body: campos });
+  }
+
+  // Las garantías son una fila y nada más: no tienen sub-recursos que ordenar.
+  for (const g of ops.collaterals.add) out.push({ path: sub('collaterals'), method: 'POST', body: collateralPayload(g) });
+  for (const g of ops.collaterals.update) {
+    out.push({ path: sub('collaterals', `/${g.serverId!}`), method: 'PATCH', body: collateralPayload(g) });
   }
 
   // Los del garante que ya existía. Se borran primero, igual que arriba.

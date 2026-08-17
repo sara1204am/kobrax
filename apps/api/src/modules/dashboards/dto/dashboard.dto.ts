@@ -23,6 +23,15 @@ import { WIDGET_TYPES } from '@kobrax/shared';
  * rompe de una manera que la persona no puede deshacer.
  */
 export class WidgetDto {
+  /**
+   * El id que el widget ya tenía, para que **sobreviva al guardado**.
+   *
+   * El layout se reemplaza entero (borrar + crear), así que sin esto cada guardado le da un id nuevo
+   * a todo. El panel los usa como `key` de la grilla: al volver del servidor con ids distintos, la
+   * grilla se queda sin posiciones para sus hijos y **deja de dibujarlos**. Se respeta sólo si el id
+   * ya es de ESTE tablero; uno inventado —o de otro— se ignora y la fila nace con uno nuevo.
+   */
+  @IsOptional() @IsString() @Length(1, 64) id?: string;
   @IsIn(WIDGET_TYPES as unknown as string[]) type!: string;
   @IsOptional() @IsString() @Length(0, 80) title?: string;
   @IsInt() @Min(0) @Max(11) x!: number;

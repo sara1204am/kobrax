@@ -16,7 +16,7 @@ import { COLORS, RADIUS, SPACING, TYPE } from './theme';
 import { Chips, SectionLabel } from './ui';
 import { Field } from './components';
 import { MapPicker } from './maps/MapPicker';
-import { emptyContact, emptyLocation, emptyRelation, type ClienteForm, type ContactRow, type LocationRow, type RelationRow } from './cliente-form';
+import { emptyCollateral, emptyContact, emptyLocation, emptyRelation, locationTypeChoices, type ClienteForm, type CollateralRow, type ContactRow, type CreditOption, type LocationRow, type RelationRow } from './cliente-form';
 import { choosePhoto } from './photo';
 import { uploadImage } from './uploads.service';
 
@@ -38,7 +38,14 @@ const CLIENT_TYPE = [{ value: 'PERSON', label: 'Persona' }, { value: 'COMPANY', 
 const RISK = [{ value: '', label: '—' }, { value: 'LOW', label: 'Bajo' }, { value: 'MEDIUM', label: 'Medio' }, { value: 'HIGH', label: 'Alto' }];
 const STATUS = [{ value: 'ACTIVE', label: 'Activo' }, { value: 'INACTIVE', label: 'Inactivo' }, { value: 'BLOCKED', label: 'Bloqueado' }] as const;
 const CONTACT_TYPE = [{ value: 'PHONE', label: 'Teléfono' }, { value: 'EMAIL', label: 'Email' }] as const;
-const LOCATION_TYPE = [{ value: 'HOME', label: 'Casa' }, { value: 'WORK', label: 'Trabajo' }, { value: 'GUARANTOR', label: 'Garante' }, { value: 'FAMILY', label: 'Familia' }, { value: 'OTHER', label: 'Otra' }] as const;
+/**
+ * El rótulo de cada tipo de dirección. **Cuáles se ofrecen lo decide `shared`**, no esta lista:
+ * `GUARANTOR` sigue acá con su nombre porque hay direcciones ya guardadas así y hay que poder
+ * leerlas, pero `locationTypeChoices` ya no lo ofrece para una fila nueva.
+ */
+const LOCATION_LABEL: Record<string, string> = { HOME: 'Casa', WORK: 'Trabajo', GUARANTOR: 'Garante', FAMILY: 'Familia', OTHER: 'Otra' };
+const locationTypeOptions = (current: string) =>
+  locationTypeChoices(current).map((value) => ({ value, label: LOCATION_LABEL[value] ?? value }));
 const RELATION_TYPE = [{ value: 'GUARANTOR', label: 'Garante' }, { value: 'FAMILY', label: 'Familia' }, { value: 'COWORKER', label: 'Compañero' }, { value: 'NEIGHBOR', label: 'Vecino' }, { value: 'OTHER', label: 'Otro' }] as const;
 const COORD_MODE = [{ value: 'manual', label: '✏️ Manual' }, { value: 'gps', label: '📍 Mi ubicación' }, { value: 'map', label: '🗺️ Mapa' }] as const;
 
@@ -48,10 +55,18 @@ export function ClienteFormView({
   form,
   setForm,
   onError,
+  credits = [],
 }: {
   form: ClienteForm;
   setForm: (updater: (s: ClienteForm) => ClienteForm) => void;
   onError: (message: string) => void;
+  /**
+   * Los préstamos de este cliente, para decir a cuál respalda cada garante y cada garantía.
+   *
+   * Vacío en el ALTA y está bien: el préstamo se carga después. El garante se guarda igual y el
+   * vínculo se arma al editar — pedir el préstamo primero sería no poder dar de alta a nadie.
+   */
+  credits?: CreditOption[];
 }) {
   const set = useCallback((patch: Partial<ClienteForm>) => setForm((s) => ({ ...s, ...patch })), [setForm]);
 
@@ -63,6 +78,11 @@ export function ClienteFormView({
   const updRelation = (id: string, patch: Partial<RelationRow>) => setForm((s) => ({ ...s, relations: s.relations.map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
   const relContacts = (relId: string): Updater<ContactRow> => (u) => setForm((s) => ({ ...s, relations: s.relations.map((r) => (r.id === relId ? { ...r, contacts: u(r.contacts) } : r)) }));
   const relLocations = (relId: string): Updater<LocationRow> => (u) => setForm((s) => ({ ...s, relations: s.relations.map((r) => (r.id === relId ? { ...r, locations: u(r.locations) } : r)) }));
+
+  const addCollateral = () => setForm((s) => ({ ...s, collaterals: [...s.collaterals, emptyCollateral(nextId())] }));
+  const removeCollateral = (id: string) => setForm((s) => ({ ...s, collaterals: s.collaterals.filter((g) => g.id !== id) }));
+  const updCollateral = (id: string, patch: Partial<CollateralRow>) =>
+    setForm((s) => ({ ...s, collaterals: s.collaterals.map((g) => (g.id === id ? { ...g, ...patch } : g)) }));
 
   const isCompany = form.clientType === 'COMPANY';
 
@@ -101,6 +121,10 @@ export function ClienteFormView({
             <ToggleRow label="Es contactable" value={r.isContactable} onValueChange={(v) => updRelation(r.id, { isContactable: v })} />
             <Field label="Notas" value={r.notes} onChangeText={(t) => updRelation(r.id, { notes: t })} placeholder="Información adicional" />
 
+            {/* Qué préstamos garantiza. Es lo que separa a un garante de un contacto cualquiera. */}
+            <SectionLabel>Garantiza los préstamos</SectionLabel>
+            <CreditPicker credits={credits} selected={r.creditIds} onChange={(creditIds) => updRelation(r.id, { creditIds })} />
+
             {/* El garante tiene sus PROPIOS teléfonos y ubicaciones — misma estructura que el cliente. */}
             <Text style={styles.subHead}>📞 Teléfonos ({r.contacts.length})</Text>
             <ContactsSection contacts={r.contacts} setContacts={relContacts(r.id)} />
@@ -109,6 +133,22 @@ export function ClienteFormView({
           </ItemCard>
         ))}
         <AddButton label="+ Agregar persona" onPress={addRelation} />
+      </Accordion>
+
+      {/* La otra mitad de la misma pregunta: qué respalda esta deuda. La personal va arriba porque
+          es la que más se carga; el bien, acá. */}
+      <Accordion icon="🏷️" title="Garantías" badge={form.collaterals.length}>
+        {form.collaterals.map((g) => (
+          <ItemCard key={g.id} title={`🏷️ ${g.description || 'Nueva garantía'}`} onRemove={() => removeCollateral(g.id)}>
+            <Field label="Tipo" value={g.type} onChangeText={(t) => updCollateral(g.id, { type: t })} placeholder="Vehículo, inmueble, maquinaria…" />
+            <Field label="Qué es" value={g.description} onChangeText={(t) => updCollateral(g.id, { description: t })} placeholder="Marca, modelo, ubicación, nº de serie" />
+            <Field label="Valor estimado" value={g.estimatedValue} onChangeText={(t) => updCollateral(g.id, { estimatedValue: t })} keyboardType="decimal-pad" placeholder="0.00" />
+            <Field label="Moneda" value={g.currency} onChangeText={(t) => updCollateral(g.id, { currency: t.toUpperCase().slice(0, 3) })} autoCapitalize="characters" placeholder="BOB" />
+            <SectionLabel>Respalda los préstamos</SectionLabel>
+            <CreditPicker credits={credits} selected={g.creditIds} onChange={(creditIds) => updCollateral(g.id, { creditIds })} />
+          </ItemCard>
+        ))}
+        <AddButton label="+ Agregar garantía" onPress={addCollateral} />
       </Accordion>
     </>
   );
@@ -165,7 +205,11 @@ function LocationsSection({ locations, setLocations, onError }: { locations: Loc
       {locations.map((l) => (
         <ItemCard key={l.id} title="🏠 Ubicación" onRemove={() => remove(l.id)}>
           <SectionLabel>Tipo de ubicación</SectionLabel>
-          <Chips options={LOCATION_TYPE} value={l.locationType} onChange={(v) => upd(l.id, { locationType: v })} />
+          <Chips
+            options={locationTypeOptions(l.locationType)}
+            value={l.locationType}
+            onChange={(v) => upd(l.id, { locationType: v as LocationRow['locationType'] })}
+          />
           <Field label="Dirección" value={l.address} onChangeText={(t) => upd(l.id, { address: t })} placeholder="Calle y número" />
           <Field label="Zona / Barrio" value={l.zone} onChangeText={(t) => upd(l.id, { zone: t })} placeholder="Zona o barrio" />
 
@@ -277,8 +321,60 @@ function ToggleRow({ label, value, onValueChange }: { label: string; value: bool
   );
 }
 
+/**
+ * A qué préstamos aplica esta persona o este bien. **Selección múltiple**, a diferencia de `Chips`.
+ *
+ * Se escribe acá y no en `ui.tsx` porque es la única pantalla que elige varios de una lista corta:
+ * promoverlo a la fundación sería inventar una primitiva con un solo uso. Si aparece un segundo, se
+ * muda tal cual.
+ */
+function CreditPicker({
+  credits,
+  selected,
+  onChange,
+}: {
+  credits: CreditOption[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  // Sin préstamos no hay nada que elegir, y hay que decir por qué: un espacio en blanco se lee como
+  // que la pantalla se rompió.
+  if (credits.length === 0) {
+    return <Text style={styles.pickerEmpty}>Todavía no tiene préstamos cargados. Se puede vincular después.</Text>;
+  }
+
+  return (
+    <View style={styles.chipsWrap}>
+      {credits.map((c) => {
+        const active = selected.includes(c.id);
+        return (
+          <Pressable
+            key={c.id}
+            onPress={() => onChange(active ? selected.filter((x) => x !== c.id) : [...selected, c.id])}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: active }}
+            style={[styles.creditChip, active && styles.creditChipActive]}
+          >
+            {/* El saldo va junto al código: dos préstamos del mismo deudor se parecen, y el número
+                es lo que la persona reconoce. */}
+            <Text style={[styles.creditChipText, active && styles.creditChipTextActive]}>
+              {(c.code || 'Sin código') + ` · ${c.currency} ${c.outstandingBalance}`}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   acc: { borderRadius: RADIUS.card, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.white, overflow: 'hidden' },
+  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs },
+  creditChip: { paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md, borderRadius: RADIUS.input, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white },
+  creditChipActive: { borderColor: COLORS.purple, backgroundColor: COLORS.highlight },
+  creditChipText: { ...TYPE.secondary, color: COLORS.text2 },
+  creditChipTextActive: { color: COLORS.purple, fontWeight: '700' },
+  pickerEmpty: { ...TYPE.caption, color: COLORS.muted },
   accHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, padding: SPACING.md, backgroundColor: COLORS.lightBg },
   accHeaderOpen: { backgroundColor: COLORS.purple },
   accIcon: { fontSize: 18 },

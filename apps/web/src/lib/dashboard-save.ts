@@ -19,6 +19,14 @@ export function saveWidgets(
 ): Promise<{ ok: boolean }> {
   const body = {
     widgets: widgets.map((w) => ({
+      /*
+       * 🔴 **El id viaja para que el widget siga siendo el mismo después de guardar.** El servidor
+       * reemplaza el layout entero, así que sin mandarlo todo vuelve con ids nuevos — y esos ids son
+       * la `key` de la grilla: si cambian mientras alguien está arrastrando, la grilla se queda sin
+       * posición para sus hijos y **desaparecen todos**, dejando sólo el recuadro del arrastre.
+       * El servidor lo respeta sólo si ya era de este tablero.
+       */
+      id: w.id,
       type: w.type,
       title: w.title || undefined,
       x: w.layout.x,

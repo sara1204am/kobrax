@@ -19,6 +19,15 @@ const TERMINAL = [CaseStatus.PAID, CaseStatus.CLOSED, CaseStatus.WRITTEN_OFF];
 
 const money = (n: unknown): number => Math.round(Number(n ?? 0) * 100) / 100;
 
+/**
+ * Un filtro de varios valores que **de verdad filtra algo**.
+ *
+ * No es lo mismo que `!!lista`: una lista vacía es un objeto y pasa cualquier `if`. Y ahí abajo hay
+ * un `Prisma.join`, que con cero elementos escribe `IN ()` — un error de sintaxis de Postgres, no un
+ * «sin filtro». Basta un `?collectorId=` en la URL para llegar con la lista vacía.
+ */
+const some = <T>(list?: T[]): list is T[] => !!list?.length;
+
 /** Los tres intervalos posibles, escritos acá y no armados con lo que llegó (ver `collectionTrend`). */
 const STEP_INTERVAL: Record<string, string> = { day: "'1 day'", week: "'1 week'", month: "'1 month'" };
 
@@ -42,6 +51,11 @@ interface Window {
  *
  * Todo corre dentro de `withTenant`, o sea bajo la policy `tenant_isolation`: por eso ninguna
  * consulta filtra `account_id` a mano. Fuera de ese contexto no devuelven nada.
+ *
+ * 🔴 **Ningún id se castea a `::uuid`.** Los ids del esquema son `text` —Prisma los genera con
+ * `@default(uuid())`, pero la columna es `text`—, así que `assignee_id = $1::uuid` no compara: es
+ * `operator does not exist: text = uuid`, un 500 en los seis endpoints apenas alguien elige un
+ * cobrador. Los parámetros de Prisma ya llegan como texto; el cast sobra y rompe.
  */
 @Injectable()
 export class AnalyticsService {
@@ -94,12 +108,12 @@ export class AnalyticsService {
    */
   private creditWhere(q: AnalyticsQueryDto): Prisma.Sql {
     const conds: Prisma.Sql[] = [Prisma.sql`cr.deleted_at IS NULL`, Prisma.sql`cr.status = 'ACTIVE'::"CreditStatus"`];
-    if (q.branchId) conds.push(Prisma.sql`cr.branch_id = ${q.branchId}::uuid`);
-    if (q.collectorId || q.caseStatus || q.priority) {
+    if (q.branchId) conds.push(Prisma.sql`cr.branch_id = ${q.branchId}`);
+    if (some(q.collectorId) || some(q.caseStatus) || some(q.priority)) {
       const inner: Prisma.Sql[] = [Prisma.sql`k.credit_id = cr.id`, Prisma.sql`k.deleted_at IS NULL`];
-      if (q.collectorId) inner.push(Prisma.sql`k.assignee_id = ${q.collectorId}::uuid`);
-      if (q.caseStatus) inner.push(Prisma.sql`k.status = ${q.caseStatus}::"CaseStatus"`);
-      if (q.priority) inner.push(Prisma.sql`k.priority = ${q.priority}::"CasePriority"`);
+      if (some(q.collectorId)) inner.push(Prisma.sql`k.assignee_id IN (${Prisma.join(q.collectorId)})`);
+      if (some(q.caseStatus)) inner.push(Prisma.sql`k.status::text IN (${Prisma.join(q.caseStatus)})`);
+      if (some(q.priority)) inner.push(Prisma.sql`k.priority::text IN (${Prisma.join(q.priority)})`);
       conds.push(Prisma.sql`EXISTS (SELECT 1 FROM collection_cases k WHERE ${Prisma.join(inner, ' AND ')})`);
     }
     return Prisma.join(conds, ' AND ');
@@ -108,10 +122,10 @@ export class AnalyticsService {
   /** El `WHERE` del lado de los casos. */
   private caseWhere(q: AnalyticsQueryDto): Prisma.Sql {
     const conds: Prisma.Sql[] = [Prisma.sql`k.deleted_at IS NULL`];
-    if (q.branchId) conds.push(Prisma.sql`k.branch_id = ${q.branchId}::uuid`);
-    if (q.collectorId) conds.push(Prisma.sql`k.assignee_id = ${q.collectorId}::uuid`);
-    if (q.caseStatus) conds.push(Prisma.sql`k.status = ${q.caseStatus}::"CaseStatus"`);
-    if (q.priority) conds.push(Prisma.sql`k.priority = ${q.priority}::"CasePriority"`);
+    if (q.branchId) conds.push(Prisma.sql`k.branch_id = ${q.branchId}`);
+    if (some(q.collectorId)) conds.push(Prisma.sql`k.assignee_id IN (${Prisma.join(q.collectorId)})`);
+    if (some(q.caseStatus)) conds.push(Prisma.sql`k.status::text IN (${Prisma.join(q.caseStatus)})`);
+    if (some(q.priority)) conds.push(Prisma.sql`k.priority::text IN (${Prisma.join(q.priority)})`);
     return Prisma.join(conds, ' AND ');
   }
 
@@ -124,8 +138,8 @@ export class AnalyticsService {
    */
   private paymentWhere(q: AnalyticsQueryDto): Prisma.Sql {
     const conds: Prisma.Sql[] = [Prisma.sql`TRUE`];
-    if (q.collectorId) conds.push(Prisma.sql`p.registered_by = ${q.collectorId}::uuid`);
-    if (q.branchId) conds.push(Prisma.sql`p.branch_id = ${q.branchId}::uuid`);
+    if (some(q.collectorId)) conds.push(Prisma.sql`p.registered_by IN (${Prisma.join(q.collectorId)})`);
+    if (q.branchId) conds.push(Prisma.sql`p.branch_id = ${q.branchId}`);
     return Prisma.join(conds, ' AND ');
   }
 
@@ -142,15 +156,15 @@ export class AnalyticsService {
     return {
       deletedAt: null,
       ...(q.branchId ? { branchId: q.branchId } : {}),
-      ...(q.collectorId ? { assigneeId: q.collectorId } : {}),
-      ...(q.caseStatus ? { status: q.caseStatus } : {}),
-      ...(q.priority ? { priority: q.priority } : {}),
+      ...(some(q.collectorId) ? { assigneeId: { in: q.collectorId } } : {}),
+      ...(some(q.caseStatus) ? { status: { in: q.caseStatus } } : {}),
+      ...(some(q.priority) ? { priority: { in: q.priority } } : {}),
     };
   }
 
   private paymentFilter(q: AnalyticsQueryDto): Prisma.PaymentWhereInput {
     return {
-      ...(q.collectorId ? { registeredBy: q.collectorId } : {}),
+      ...(some(q.collectorId) ? { registeredBy: { in: q.collectorId } } : {}),
       ...(q.branchId ? { branchId: q.branchId } : {}),
     };
   }
@@ -302,7 +316,7 @@ export class AnalyticsService {
     const where: Prisma.AgendaItemWhereInput = {
       deletedAt: null,
       scheduledDate: { gte: w.from, lte: w.to },
-      ...(query.collectorId ? { assigneeId: query.collectorId } : {}),
+      ...(some(query.collectorId) ? { assigneeId: { in: query.collectorId } } : {}),
     };
     const payments = this.paymentFilter(query);
 
@@ -353,8 +367,8 @@ export class AnalyticsService {
   async visitMap(query: AnalyticsQueryDto): Promise<VisitMapPoint[]> {
     const day = query.dateTo ?? query.dateFrom ?? new Date().toISOString().slice(0, 10);
     const conds: Prisma.Sql[] = [Prisma.sql`rp.planned_date = ${day}::date`];
-    if (query.collectorId) conds.push(Prisma.sql`rp.collector_id = ${query.collectorId}::uuid`);
-    if (query.branchId) conds.push(Prisma.sql`rp.branch_id = ${query.branchId}::uuid`);
+    if (some(query.collectorId)) conds.push(Prisma.sql`rp.collector_id IN (${Prisma.join(query.collectorId)})`);
+    if (query.branchId) conds.push(Prisma.sql`rp.branch_id = ${query.branchId}`);
 
     const rows = await this.tx((tx) =>
       tx.$queryRaw<

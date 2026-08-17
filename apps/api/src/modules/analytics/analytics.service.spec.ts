@@ -89,9 +89,43 @@ describe('summary', () => {
     // Un crédito puede tener más de un caso: con un JOIN su saldo se sumaría una vez por caso y el
     // KPI daría de más sin que nada se vea roto. Por eso va con EXISTS.
     const { service, find } = makeService(() => []);
-    await service.summary({ collectorId: '11111111-2222-3333-4444-555555555555' });
+    await service.summary({ collectorId: ['11111111-2222-3333-4444-555555555555'] });
     const sql = find('FROM credits');
     assert.match(sql!, /EXISTS \(SELECT 1 FROM collection_cases/);
+  });
+
+  it('🔴 ningún id se castea a ::uuid', async () => {
+    // Los ids del esquema son `text`. `assignee_id = $1::uuid` es `operator does not exist:
+    // text = uuid`: un 500 en los seis endpoints apenas alguien elige un cobrador. Este fake no
+    // ejecuta SQL —por eso el defecto vivió hasta que se probó contra Postgres—, así que lo que se
+    // mira es que el cast no esté escrito.
+    const { service, sqls } = makeService(() => []);
+    const filtros = {
+      collectorId: ['11111111-2222-3333-4444-555555555555'],
+      branchId: '22222222-3333-4444-5555-666666666666',
+    };
+    await service.summary(filtros);
+    await service.collectorPerformance(filtros);
+    await service.visitMap(filtros);
+    await service.collectionTrend(filtros);
+    assert.equal(sqls.filter((s) => s.includes('::uuid')).length, 0);
+  });
+
+  it('varios cobradores entran al mismo filtro', async () => {
+    // Multiselect: la pantalla manda una lista y la consulta usa `IN`. Con `=` sólo miraría el
+    // primero y la pantalla mostraría menos de lo que la persona eligió, sin decir nada.
+    const { service, find } = makeService(() => []);
+    await service.collectorPerformance({ collectorId: ['u1', 'u2'] });
+    // Dos marcadores adentro del `IN`: los valores viajan parametrizados, no escritos en el SQL.
+    assert.match(find('FROM collection_cases')!, /k\.assignee_id IN \([^)]+,[^)]+\)/);
+  });
+
+  it('🔴 una lista vacía no filtra (y no escribe `IN ()`)', async () => {
+    // `?collectorId=` llega como lista vacía, que es un objeto y pasa cualquier `if`. Con un
+    // `Prisma.join` de cero elementos la consulta sale `IN ()`: error de sintaxis, no «sin filtro».
+    const { service, find } = makeService(() => []);
+    await service.collectorPerformance({ collectorId: [], caseStatus: [] });
+    assert.doesNotMatch(find('FROM collection_cases')!, /IN \(\)/);
   });
 });
 

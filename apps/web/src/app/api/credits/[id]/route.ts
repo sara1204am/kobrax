@@ -8,10 +8,11 @@ interface Ctx {
 }
 
 /**
- * Editar lo operativo de un crédito: cuota, frecuencia, próxima fecha y notas.
+ * Editar un crédito: capital, tasa, cuota, frecuencia, próxima fecha, estado, código, tipo,
+ * responsable y notas — todo lo que acepta `UpdateCreditDto`.
  *
- * Monto, tasa, número de cuotas y moneda **no entran acá**: no están en `UpdateCreditDto` porque
- * cambiarlos después del desembolso es una reestructura, no una corrección.
+ * Número de cuotas, moneda y fecha de desembolso **no entran acá**: cambiarlos sin regenerar el
+ * cronograma deja una tabla de cuotas que no cierra con el préstamo. Eso es una reestructura.
  *
  * Si el crédito vino de un archivo o de otro core, la API rechaza el cambio con `CREDIT_LOCKED`.
  * La pantalla ya lo anticipa deshabilitando los campos, pero el freno de verdad es el del servidor.

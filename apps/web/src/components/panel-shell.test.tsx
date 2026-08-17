@@ -50,7 +50,7 @@ describe('PanelShell — el menú', () => {
     // El sidebar y el cajón pintan la misma lista, así que cada rótulo aparece dos veces.
     expect(screen.getAllByRole('link', { name: 'Inicio' }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /^Cartera/ }).length).toBeGreaterThan(0); // W3
-    expect(screen.getAllByRole('link', { name: /^Casos/ }).length).toBeGreaterThan(0); // W5
+    expect(screen.getAllByRole('link', { name: /^Mora/ }).length).toBeGreaterThan(0); // W5
     expect(screen.getAllByRole('link', { name: /^Pagos/ }).length).toBeGreaterThan(0); // W7
   });
 

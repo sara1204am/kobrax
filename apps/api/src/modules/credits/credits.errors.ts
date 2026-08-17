@@ -31,3 +31,16 @@ export const creditLocked = () =>
     code: 'CREDIT_LOCKED',
     message: 'Los datos financieros de un crédito importado no se editan; actualizá con una nueva importación',
   });
+
+/**
+ * Poner al día con una fecha que ya pasó.
+ *
+ * No es una formalidad: con una fecha vencida el crédito queda en mora igual, el trabajo diario le
+ * vuelve a abrir el caso esta misma noche, y quien lo puso al día ve reaparecer lo que creyó haber
+ * resuelto. Es exactamente el ciclo que el módulo existe para evitar.
+ */
+export const arrearsDateNotFuture = () =>
+  new UnprocessableEntityException({
+    code: 'ARREARS_DATE_PAST',
+    message: 'La nueva fecha de vencimiento tiene que ser futura, o el crédito vuelve a quedar en mora',
+  });

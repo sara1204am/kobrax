@@ -8,22 +8,25 @@ import { AmountInput, Chips, Header, SectionLabel } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
 import { MONTHS } from '@/agenda-form';
 import { ClienteFormView } from '@/cliente-form-view';
-import { contactPayload, hydrateCliente, locationPayload, relationPayload, type ClienteForm } from '@/cliente-form';
+import { collateralPayload, contactPayload, hydrateCliente, locationPayload, relationPayload, type ClienteForm } from '@/cliente-form';
 import { diffCliente, hasChanges, type ClienteOps } from '@/cliente-diff';
 import {
+  addCollateral,
   addContact,
   addLocation,
   addRelation,
   getClient,
+  removeCollateral,
   removeContact,
   removeLocation,
   removeRelation,
   updateClient,
+  updateCollateral,
   updateContact,
   updateLocation,
   updateRelation,
 } from '@/clients.service';
-import { getCredit, updateCredit, type CreditDetail } from '@/credits.service';
+import { getCredit, listClientCredits, updateCredit, type CreditDetail, type CreditOption } from '@/credits.service';
 
 const FREQ: { value: PaymentFrequency; label: string }[] = [
   { value: PaymentFrequency.DAILY, label: 'Diario' },
@@ -58,6 +61,8 @@ export default function EditarScreen() {
   const [original, setOriginal] = useState<ClienteForm | null>(null);
   const [form, setForm] = useState<ClienteForm | null>(null);
 
+  /** Los préstamos del cliente, para vincular garantes y garantías. */
+  const [credits, setCredits] = useState<CreditOption[]>([]);
   const [cr, setCr] = useState<CreditDetail | null>(null);
   const [principal, setPrincipal] = useState('');
   const [interest, setInterest] = useState('');
@@ -66,12 +71,19 @@ export default function EditarScreen() {
   useEffect(() => {
     void (async () => {
       // `reveal`: teléfonos y direcciones en claro. Sin esto se editaría la máscara.
-      const [c, k] = await Promise.all([getClient(clientId, true), creditId ? getCredit(creditId) : Promise.resolve(null)]);
+      const [c, k, cs] = await Promise.all([
+        getClient(clientId, true),
+        creditId ? getCredit(creditId) : Promise.resolve(null),
+        listClientCredits(clientId),
+      ]);
       if (c.status === 'offline' || k?.status === 'offline') return setLoad('offline');
       if (c.status !== 'ok') return setLoad('error');
       const hydrated = hydrateCliente(c.data);
       setOriginal(hydrated);
       setForm(hydrated);
+      // La lista de préstamos es para vincular garantes y garantías: si no llega, el formulario se
+      // dibuja igual y lo dice. Sin ella no se puede vincular, pero sí corregir todo lo demás.
+      if (cs.status === 'ok') setCredits(cs.data);
       if (k?.status === 'ok') {
         setCr(k.data);
         setPrincipal(String(k.data.principalAmount ?? ''));
@@ -141,7 +153,7 @@ export default function EditarScreen() {
       <Header title="Editar cliente" onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <ErrorBanner message={error} />
-        <ClienteFormView form={form} setForm={setForm as (u: (s: ClienteForm) => ClienteForm) => void} onError={setError} />
+        <ClienteFormView form={form} setForm={setForm as (u: (s: ClienteForm) => ClienteForm) => void} onError={setError} credits={credits} />
 
         {cr && (
           <View style={styles.creditCard}>
@@ -223,7 +235,11 @@ async function applyOps(clientId: string, ops: ClienteOps): Promise<string | nul
     (await run(ops.relationContacts.add.map((c) => addContact(clientId, { ...contactPayload(c), relationId: c.relationId })))) ??
     (await run(ops.relationContacts.update.map((c) => updateContact(clientId, c.serverId!, contactPayload(c))))) ??
     (await run(ops.relationLocations.add.map((l) => addLocation(clientId, { ...locationPayload(l), relationId: l.relationId })))) ??
-    (await run(ops.relationLocations.update.map((l) => updateLocation(clientId, l.serverId!, locationPayload(l)))))
+    (await run(ops.relationLocations.update.map((l) => updateLocation(clientId, l.serverId!, locationPayload(l))))) ??
+    // Las garantías: una fila y nada más, sin sub-recursos que ordenar.
+    (await run(ops.collaterals.removeIds.map((id) => removeCollateral(clientId, id)))) ??
+    (await run(ops.collaterals.add.map((g) => addCollateral(clientId, collateralPayload(g))))) ??
+    (await run(ops.collaterals.update.map((g) => updateCollateral(clientId, g.serverId!, collateralPayload(g)))))
   );
 }
 

@@ -12,6 +12,7 @@ import {
   InterestBase,
   PaymentFrequency,
   PortfolioStatus,
+  type ArrearsSource,
 } from '../enums/credit.enum.js';
 
 const DAY_MS = 86_400_000;
@@ -122,6 +123,34 @@ export function arrearsFromDueDate(
   return Math.max(0, Math.floor((asOf.getTime() - due.getTime()) / DAY_MS));
 }
 
+/**
+ * Días de mora de un crédito marcado **a mano**: desde el día en que alguien dijo que estaba en mora.
+ *
+ * 🔴 **Se guarda la FECHA, no los días, y esa es la pieza que hace que esto funcione.** Guardando
+ * `daysPastDue: 15` el número queda congelado en 15 para siempre, y para que envejezca el trabajo
+ * diario tendría que sumarle uno cada noche — o sea, tendría que escribir encima de la mora manual,
+ * que es justo lo que la regla de un dueño por origen prohíbe. Con `moraSince` el número se deriva,
+ * envejece solo y el job nunca puede cambiar la respuesta: sólo vuelve a calcular la misma función.
+ *
+ * Si quien la marca dice «15 días», se guarda `hoy − 15`. Sin saldo no hay mora, igual que arriba.
+ */
+export function manualArrears(
+  moraSince: Date | string | null | undefined,
+  outstandingBalance: number,
+  asOf: Date = new Date(),
+): number {
+  if (outstandingBalance <= 0.005) return 0;
+  const since = toDate(moraSince);
+  if (!since) return 0;
+  return Math.max(0, Math.floor((asOf.getTime() - since.getTime()) / DAY_MS));
+}
+
+/** La fecha a guardar cuando alguien marca en mora diciendo cuántos días lleva. */
+export function moraSinceFromDays(days: number, asOf: Date = new Date()): string {
+  const d = Math.max(0, Math.floor(days));
+  return new Date(asOf.getTime() - d * DAY_MS).toISOString().slice(0, 10);
+}
+
 function toDate(v: Date | string | null | undefined): Date | null {
   if (!v) return null;
   const d = v instanceof Date ? v : new Date(v);
@@ -144,6 +173,14 @@ export interface CreditMetadata {
   /** No.Crédito del archivo — clave de upsert junto al documento (§4.3). */
   externalRef?: string;
   notes?: string;
+  /**
+   * ISO date. Desde cuándo alguien declaró **a mano** que este crédito está en mora.
+   *
+   * Su presencia es lo que hace que la mora sea de origen MANUAL (`arrearsSourceOf`): mientras esté,
+   * el trabajo diario no la calcula desde la fecha de vencimiento — la deriva de acá. Ponerlo al día
+   * es borrarlo.
+   */
+  moraSince?: string;
 }
 
 export function readCreditMetadata(raw: unknown): CreditMetadata {
@@ -157,7 +194,20 @@ export function readCreditMetadata(raw: unknown): CreditMetadata {
     nextDueDate: typeof m.nextDueDate === 'string' ? m.nextDueDate : undefined,
     externalRef: typeof m.externalRef === 'string' ? m.externalRef : undefined,
     notes: typeof m.notes === 'string' ? m.notes : undefined,
+    moraSince: typeof m.moraSince === 'string' ? m.moraSince : undefined,
   };
+}
+
+/**
+ * De quién es la mora de este crédito. **Se deriva, no se guarda** — así no puede quedar
+ * desincronizada de los datos que la definen.
+ *
+ * El orden importa: el importado gana sobre todo lo demás, porque su archivo manda hasta la próxima
+ * carga aunque alguien le haya puesto una marca encima.
+ */
+export function arrearsSourceOf(meta: CreditMetadata): ArrearsSource {
+  if (isExternalOrigin(meta.origin)) return 'IMPORTED';
+  return meta.moraSince ? 'MANUAL' : 'CALCULATED';
 }
 
 /**

@@ -1,5 +1,5 @@
 import type { CaseActivity, CollectionCase } from '@prisma/client';
-import { creditView } from '@kobrax/shared';
+import { arrearsSourceOf, creditView, readCreditMetadata } from '@kobrax/shared';
 import { clientDisplayName } from '../clients/clients.serializer';
 
 const TERMINAL = ['CLOSED', 'WRITTEN_OFF'];
@@ -14,6 +14,7 @@ type CaseCredit = {
   outstandingBalance: unknown;
   currency: string;
   daysPastDue: number;
+  code?: string | null;
   metadata?: unknown;
   installments?: { dueDate: Date; amount: unknown; status: string }[];
 };
@@ -82,6 +83,12 @@ export function serializeCase(c: CaseWithActivities, now: Date = new Date(), por
     assigneeId: c.assigneeId ?? undefined,
     status: c.status,
     priority: c.priority,
+    /*
+     * 🔴 **Que la prioridad está fijada a mano tiene que verse.** Si no, un préstamo de 200 días en
+     * prioridad baja es inexplicable desde la pantalla: parece que el cálculo está roto, cuando lo
+     * que pasa es que alguien la bajó a propósito. Y sin verlo, tampoco hay cómo soltarla.
+     */
+    priorityPinned: c.priorityPinnedAt !== null,
     slaDueAt: c.slaDueAt ?? undefined,
     isOverdue, // derivado (el catálogo "overdue" del doc se modela vía SLA)
     // Enriquecido cuando el query incluye client/credit (listado de agenda); ausente en mutaciones.
@@ -89,6 +96,16 @@ export function serializeCase(c: CaseWithActivities, now: Date = new Date(), por
     amount: c.credit ? Number(c.credit.outstandingBalance) : undefined,
     currency: c.credit?.currency,
     daysPastDue: c.credit?.daysPastDue, // mora calculada por el server (no por el reloj del móvil)
+    creditCode: c.credit?.code ?? undefined,
+    /*
+     * 🔴 **De dónde sale ese número de días.** No es un adorno: dice cuánto confiar en él. La
+     * calculada la mantiene el trabajo diario todas las noches; la del archivo vale hasta la próxima
+     * importación; la marcada a mano la puso una persona y nadie la revisa. Sin esto, tres números
+     * que significan cosas distintas se leen como si fueran el mismo.
+     *
+     * Se **deriva** de la metadata (no es columna), así que no puede quedar desincronizado.
+     */
+    arrearsSource: c.credit ? arrearsSourceOf(readCreditMetadata(c.credit.metadata)) : undefined,
     installmentAmount: view?.installmentAmount,
     nextDueDate: view?.nextDueDate,
     frequency: view?.frequency,

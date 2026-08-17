@@ -1,32 +1,59 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { PaymentFrequency, type CreditDetail } from '@kobrax/shared';
-import { Badge, PageHeader } from '@/components/panel-ui';
-import { Button, ErrorBanner, Field, Input } from '@/components/ui';
+import {
+  CREDIT_STATUSES,
+  hydratePrestamo,
+  memberName,
+  type CreditDetail,
+  type Member,
+  type PrestamoForm,
+} from '@kobrax/shared';
+import type { CatalogOption } from '@/components/client-form';
+import { Badge, PageHeader, Section } from '@/components/panel-ui';
+import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
+import { LoanFields, LoanQuotePanel } from '@/components/loan-fields';
+import { ArrearsActions } from './arrears-actions';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
 import { sendJson } from '@/lib/client';
 import { money, date } from '@/lib/format';
-import { creditPatch, hasCreditChanges, type CreditForm } from '@/lib/credit-patch';
-
-const select =
-  'h-[52px] w-full rounded-xl border-[1.5px] border-k-light-bg bg-white px-3.5 text-[15px] text-k-text outline-none transition-all focus:border-k-periwinkle focus:shadow-k-focus disabled:opacity-60';
+import { creditExtras, creditPatch, hasCreditChanges, type CreditExtras } from '@/lib/credit-patch';
 
 /**
- * La ficha del crédito: lo que no se toca, lo que sí, y el cronograma si existe.
+ * La ficha del crédito: **el mismo formulario que lo dio de alta, ya cargado**.
+ *
+ * 🔴 **Antes eran dos pantallas distintas.** El alta preguntaba modo, capital, interés y cuota con
+ * el panel de cotización en vivo; la ficha mostraba capital y tasa **de sólo lectura**, con un
+ * comentario que decía que «la API no lo acepta en su DTO» — y `UpdateCreditDto` los acepta desde
+ * siempre. Un préstamo con el capital mal tipeado no tenía arreglo desde ninguna parte. Ahora los
+ * campos salen del mismo `LoanFields`, así que no se pueden volver a separar.
+ *
+ * Lo que de verdad **no** se toca después del desembolso —nº de cuotas, moneda, fecha de desembolso—
+ * queda arriba, de sólo lectura y dicho: cambiarlos sin regenerar el cronograma deja una tabla de
+ * cuotas que no cierra con el préstamo. Eso es una reestructura, y es otra operación.
  *
  * 🔴 **Puede no haber cronograma, y eso no es un error.** Un crédito dado de alta desde el móvil
- * lleva la cuota congelada en `metadata` y su próxima fecha es un dato, no una derivación: no tiene
- * cuotas que listar. Asumir que siempre hay una tabla es el bug que C14 avisa.
+ * lleva la cuota congelada en `metadata` y su próxima fecha es un dato, no una derivación.
  *
- * Y si el crédito vino de un archivo o de otro core (`locked`), sus campos financieros no se
- * editan: la pantalla los apaga para no ofrecer lo que la API va a rechazar.
+ * Y si el crédito vino de un archivo o de otro core (`locked`), sus campos financieros no se editan:
+ * la pantalla los apaga para no ofrecer lo que la API va a rechazar.
  */
-export function CreditCard({ credit, clientId }: { credit: CreditDetail; clientId: string }) {
+export function CreditCard({
+  credit,
+  clientId,
+  team,
+  types,
+}: {
+  credit: CreditDetail;
+  clientId: string;
+  /** El equipo, para reasignar el préstamo. Vacío si el rol no puede leer `/users`. */
+  team: Member[];
+  /** Catálogo `CREDIT_TYPE` del tenant. Vacío = el tipo no se ofrece. */
+  types: CatalogOption[];
+}) {
   const t = useTranslations('portfolio');
   const locale = useLocale();
   const router = useRouter();
@@ -34,16 +61,13 @@ export function CreditCard({ credit, clientId }: { credit: CreditDetail; clientI
   const { can } = usePermissions();
   const editable = can('credit:write') && !credit.locked;
 
-  const [form, setForm] = useState<CreditForm>({
-    installmentAmount: credit.installmentAmount != null ? String(credit.installmentAmount) : '',
-    frequency: credit.frequency ?? PaymentFrequency.MONTHLY,
-    nextDueDate: credit.nextDueDate ?? '',
-    notes: credit.notes ?? '',
-  });
+  const [form, setForm] = useState<PrestamoForm>(() => hydratePrestamo(credit));
+  const [extras, setExtras] = useState<CreditExtras>(() => creditExtras(credit));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const patch = creditPatch(credit, form);
+  const patch = creditPatch(credit, form, extras);
+  const setExtra = (p: Partial<CreditExtras>) => setExtras({ ...extras, ...p });
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -61,103 +85,131 @@ export function CreditCard({ credit, clientId }: { credit: CreditDetail; clientI
   }
 
   return (
-    <>
+    <form onSubmit={save} className="space-y-4">
       <PageHeader
         title={money(credit.outstandingBalance, credit.currency)}
         subtitle={t('creditSubtitle', {
           principal: money(credit.principalAmount, credit.currency),
           code: credit.code ?? t('noCode'),
         })}
-        actions={
+        /* Las etiquetas van pegadas al saldo que califican, no a media pantalla entre los botones. */
+        badge={
           <>
             {credit.locked && <Badge tone="warning">{t('imported')}</Badge>}
             {(credit.daysPastDue ?? 0) > 0 && <Badge tone="danger">{t('days', { count: credit.daysPastDue! })}</Badge>}
-            {/* La única puerta a los pagos de ESTE crédito: registrar y pedir un cobro los exigen,
-                y el ledger no elige el crédito — se lo tiene que traer quien llega. */}
-            <Link href={`/pagos?creditId=${credit.id}`} className="text-[13px] font-medium text-k-purple hover:underline">
-              {t('creditPayments')}
-            </Link>
-            <Link href={`/cartera/${clientId}`} className="text-[13px] font-medium text-k-purple hover:underline">
-              {t('backToClient')}
-            </Link>
+            {/* Marcar en mora / poner al día: al lado de los días, que es el dato que cambian. */}
+            {can('credit:write') && (
+              <ArrearsActions creditId={credit.id} daysPastDue={credit.daysPastDue ?? 0} locked={credit.locked} />
+            )}
           </>
         }
-      />
-
-      <div className="space-y-4">
-        {/* Lo que no se edita después del desembolso: cambiarlo es una reestructura, y la API
-            directamente no lo acepta en su DTO. */}
-        <section className="rounded-2xl border border-k-border bg-white p-5">
-          <h2 className="mb-4 text-[16px] font-semibold text-k-navy">{t('sections.creditFixed')}</h2>
-          <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
-            <Item label={t('fields.principal')} value={money(credit.principalAmount, credit.currency)} />
-            <Item label={t('fields.rate')} value={`${credit.interestRate}`} />
-            <Item label={t('fields.installments')} value={credit.installmentsCount ? String(credit.installmentsCount) : t('openLoan')} />
-            <Item label={t('fields.currency')} value={credit.currency} />
-            <Item label={t('fields.disbursedAt')} value={credit.disbursedAt ? date(credit.disbursedAt, locale) : '—'} />
-            <Item label={t('form.status')} value={credit.status ? t(`creditStatus.${credit.status}`) : '—'} />
-          </dl>
-        </section>
-
-        <form onSubmit={save} className="space-y-5 rounded-2xl border border-k-border bg-white p-5">
-          <h2 className="text-[16px] font-semibold text-k-navy">{t('sections.creditEditable')}</h2>
-          <ErrorBanner message={error} />
-          {credit.locked && <p className="text-[13px] text-k-warning-text">{t('lockedHint')}</p>}
-
-          <div className="grid gap-5 sm:grid-cols-2">
-            <Field label={t('fields.installment')}>
-              <Input
-                value={form.installmentAmount}
-                onChange={(e) => setForm({ ...form, installmentAmount: e.target.value })}
-                disabled={!editable}
-                inputMode="decimal"
-              />
-            </Field>
-            <Field label={t('fields.frequency')}>
-              <select
-                value={form.frequency}
-                onChange={(e) => setForm({ ...form, frequency: e.target.value as PaymentFrequency })}
-                disabled={!editable}
-                className={select}
-              >
-                {Object.values(PaymentFrequency).map((f) => (
-                  <option key={f} value={f}>
-                    {t(`frequency.${f}`)}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label={t('fields.nextDue')}>
-              {/* `<input type="date">` nativo: no hace falta ninguna librería de calendario. */}
-              <Input
-                type="date"
-                value={form.nextDueDate}
-                onChange={(e) => setForm({ ...form, nextDueDate: e.target.value })}
-                disabled={!editable}
-              />
-            </Field>
-            <Field label={t('form.notes')}>
-              <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} disabled={!editable} maxLength={500} />
-            </Field>
-          </div>
-
-          {editable && (
-            <div className="flex justify-end">
-              <span className="w-full sm:w-48">
+        actions={
+          <>
+            {/* Botones y no links de texto: son las dos salidas de esta pantalla y hay que verlas.
+                La de pagos es además la ÚNICA puerta a los de ESTE crédito — registrar y pedir un
+                cobro los exigen, y el ledger no elige el crédito: se lo tiene que traer quien llega. */}
+            <span className="w-44">
+              <Button type="button" variant="ghost" onClick={() => router.push(`/pagos?creditId=${credit.id}`)}>
+                {t('creditPayments')}
+              </Button>
+            </span>
+            <span className="w-44">
+              <Button type="button" variant="ghost" onClick={() => router.push(`/cartera/${clientId}`)}>
+                {t('backToClient')}
+              </Button>
+            </span>
+            {editable && (
+              <span className="w-40">
                 <Button type="submit" loading={saving} disabled={!hasCreditChanges(patch)}>
                   {t('save')}
                 </Button>
               </span>
-            </div>
-          )}
-        </form>
+            )}
+          </>
+        }
+      />
 
-        <section className="rounded-2xl border border-k-border bg-white p-5">
-          <h2 className="mb-4 text-[16px] font-semibold text-k-navy">{t('sections.schedule')}</h2>
-          <Schedule credit={credit} />
-        </section>
-      </div>
-    </>
+      <ErrorBanner message={error} />
+      {credit.locked && <p className="text-[13px] text-k-warning-text">{t('lockedHint')}</p>}
+
+      <Section title={t('sections.creditFixed')}>
+        <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
+          <Item label={t('fields.currency')} value={credit.currency} />
+          <Item label={t('fields.disbursedAt')} value={credit.disbursedAt ? date(credit.disbursedAt, locale) : '—'} />
+          <Item
+            label={t('fields.installments')}
+            value={credit.installmentsCount ? String(credit.installmentsCount) : t('openLoan')}
+          />
+        </dl>
+        <p className="mt-3 text-[12px] text-k-muted">{t('creditFixedHint')}</p>
+      </Section>
+
+      <Section title={t('sections.creditEditable')}>
+        {/* Los mismos campos que el alta. El nº de cuotas se dibuja apagado: el cálculo lo necesita
+            y quien mira lo quiere ver, pero cambiarlo es reestructurar. */}
+        <LoanFields form={form} onChange={setForm} disabled={!editable} installmentsCountEditable={false} />
+
+        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+          <Field label={t('form.status')}>
+            <Select value={extras.status} onChange={(e) => setExtra({ status: e.target.value })} disabled={!can('credit:write')}>
+              {CREDIT_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {t(`creditStatus.${s}`)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field label={t('fields.code')}>
+            <Input value={extras.code} onChange={(e) => setExtra({ code: e.target.value })} disabled={!can('credit:write')} maxLength={64} />
+          </Field>
+
+          {types.length > 0 && (
+            <Field label={t('fields.creditType')}>
+              <Select value={extras.typeCode} onChange={(e) => setExtra({ typeCode: e.target.value })} disabled={!can('credit:write')}>
+                <option value="">{t('creditNoType')}</option>
+                {types.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.label || c.code}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+
+          {team.length > 0 && (
+            <Field label={t('form.assignedTo')}>
+              <Select
+                value={extras.assignedManagerId}
+                onChange={(e) => setExtra({ assignedManagerId: e.target.value })}
+                disabled={!can('credit:write')}
+              >
+                <option value="">{t('form.unassigned')}</option>
+                {team.map((m) => (
+                  <option key={m.userId} value={m.userId}>
+                    {memberName(m)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+
+          <div className="sm:col-span-2">
+            <Field label={t('form.notes')}>
+              <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} disabled={!editable} maxLength={500} />
+            </Field>
+          </div>
+        </div>
+      </Section>
+
+      {/* El panel en vivo, igual que en el alta: al recotizar en modo B se ve qué cambia antes de
+          guardar. Es el mismo cálculo de `shared` que usa el teléfono. */}
+      <LoanQuotePanel form={form} currency={credit.currency} />
+
+      <Section title={t('sections.schedule')}>
+        <Schedule credit={credit} />
+      </Section>
+    </form>
   );
 }
 

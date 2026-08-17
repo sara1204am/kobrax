@@ -11,20 +11,66 @@ import type { ReactNode } from 'react';
 export function PageHeader({
   title,
   subtitle,
+  badge,
   actions,
 }: {
   title: string;
   subtitle?: string;
+  /**
+   * Etiqueta de estado, **al lado del título**.
+   *
+   * 🔴 Va acá y no en `actions` porque no es una acción: es parte de quién es esto. Puesta a la
+   * derecha con los botones, «Activo» quedaba a media pantalla del nombre al que califica, y en un
+   * monitor ancho había que cruzar la pantalla para leer el estado del cliente que se está mirando.
+   */
+  badge?: ReactNode;
   actions?: ReactNode;
 }) {
   return (
     <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
-        <h1 className="text-[26px] font-semibold tracking-tight text-k-navy">{title}</h1>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <h1 className="text-[26px] font-semibold tracking-tight text-k-navy">{title}</h1>
+          {badge}
+        </div>
         {subtitle && <p className="mt-1 text-[14px] text-k-text-2">{subtitle}</p>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </div>
+  );
+}
+
+/**
+ * El bloque estándar del panel: **rótulo arriba en versalitas, caja blanca abajo**.
+ *
+ * 🔴 **Uno solo, usado por la ficha y por la edición.** Antes había tres cáscaras casi iguales —una
+ * por archivo— y el resultado era que mirar un cliente y editarlo parecían dos productos distintos.
+ * Cuando las dos pantallas comparten el bloque, la diferencia entre ver y editar es la única que
+ * queda: los campos.
+ *
+ * El título va **afuera** de la caja: adentro competía con el contenido, y en una pantalla con ocho
+ * secciones eso es ocho títulos peleando con lo que importa.
+ */
+export function Section({
+  title,
+  action,
+  children,
+  /** El padding de la caja. `''` para listas que ya paginan su propio espacio. */
+  inner = 'p-4',
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+  inner?: string;
+}) {
+  return (
+    <section aria-label={title}>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 className="text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{title}</h2>
+        {action}
+      </div>
+      <div className={`rounded-2xl border border-k-border bg-white ${inner}`}>{children}</div>
+    </section>
   );
 }
 
@@ -35,18 +81,33 @@ const TONES = {
   danger: 'bg-k-danger-bg text-k-danger',
 } as const;
 
+/** El punto de color de una etiqueta con `dot`. Es decoración: el texto ya dice lo mismo. */
+const DOTS = {
+  neutral: 'bg-k-muted',
+  success: 'bg-k-success',
+  warning: 'bg-k-warning',
+  danger: 'bg-k-danger',
+} as const;
+
 /** Etiqueta de estado. El tono lo elige quien la usa; acá sólo viven los cuatro. */
 export function Badge({
   children,
   tone = 'neutral',
+  dot,
 }: {
   children: ReactNode;
   tone?: keyof typeof TONES;
+  /**
+   * Punto de color antes del texto. 🔴 **Nunca reemplaza al texto**: el estado se lee, no se
+   * adivina por el color — hay quien no distingue el rojo del verde.
+   */
+  dot?: boolean;
 }) {
   return (
     <span
-      className={`inline-flex items-center rounded-lg px-2 py-1 text-[12px] font-medium ${TONES[tone]}`}
+      className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] font-medium ${TONES[tone]}`}
     >
+      {dot && <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${DOTS[tone]}`} />}
       {children}
     </span>
   );

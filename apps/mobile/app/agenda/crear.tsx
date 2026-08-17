@@ -24,7 +24,7 @@ import * as Haptics from 'expo-haptics';
 import { currentLocation } from '@/location';
 import { MapPicker } from '@/maps/MapPicker';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { AgendaItemType, AgendaTimeSlot, CatalogType, ScheduleTimeMode } from '@kobrax/shared';
+import { AgendaItemType, AgendaTimeSlot, CatalogType, ScheduleTimeMode, locationTypeChoices } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { Button, ErrorBanner } from '@/components';
 // `SelectRow` y `PickerSheet` nacieron en esta pantalla y subieron a `ui.tsx` con su 2º consumidor (S6).
@@ -85,13 +85,19 @@ const PHONE_TYPES: { key: PhoneContactType; label: string }[] = [
   { key: 'WHATSAPP', label: 'WhatsApp' },
 ];
 
-const LOCATION_TYPES: { key: ClientLocationType; label: string }[] = [
-  { key: 'HOME', label: 'Domicilio' },
-  { key: 'WORK', label: 'Trabajo' },
-  { key: 'GUARANTOR', label: 'Garante' },
-  { key: 'FAMILY', label: 'Familiar' },
-  { key: 'OTHER', label: 'Otro' },
-];
+/**
+ * Los tipos que se ofrecen al **agregar** una dirección desde acá.
+ *
+ * La lista sale de `shared` y no de una copia: acá siempre es una dirección nueva, así que no hay
+ * nada viejo que respetar. `GUARANTOR` ya no está —la dirección del garante es la del garante, que
+ * es un contacto con sus propias direcciones—; el rótulo lo pone esta pantalla porque es suyo
+ * («Domicilio», no «Casa»).
+ */
+const LOCATION_LABEL: Record<string, string> = { HOME: 'Domicilio', WORK: 'Trabajo', FAMILY: 'Familiar', OTHER: 'Otro' };
+const LOCATION_TYPES: { key: ClientLocationType; label: string }[] = locationTypeChoices().map((key) => ({
+  key: key as ClientLocationType,
+  label: LOCATION_LABEL[key] ?? key,
+}));
 
 export default function CrearGestionScreen() {
   /** Con `?id=` la pantalla edita ese agendado; sin él, crea uno nuevo. */

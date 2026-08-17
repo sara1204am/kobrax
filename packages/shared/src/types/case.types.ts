@@ -5,7 +5,7 @@
  * `serializeCase` de la API (las fechas llegan como ISO string vía JSON).
  */
 import type { CasePriority, CaseStatus } from '../enums/index.js';
-import type { CreditOrigin, PaymentFrequency } from '../enums/credit.enum.js';
+import type { ArrearsSource, CreditOrigin, PaymentFrequency } from '../enums/credit.enum.js';
 
 /**
  * Cómo se puede ordenar `GET /cases`. La primera es el default.
@@ -40,6 +40,11 @@ export interface CaseListItem {
   status: CaseStatus;
   priority: CasePriority;
   slaDueAt?: string;
+  /**
+   * La prioridad la fijó una persona: **el trabajo diario no la recalcula**. Tiene que verse, o un
+   * préstamo de 200 días en prioridad baja parece un cálculo roto en vez de una decisión.
+   */
+  priorityPinned?: boolean;
   isOverdue: boolean;
   /** Enriquecidos por el backend en el listado (ausentes en respuestas de mutación). */
   clientName?: string;
@@ -47,6 +52,13 @@ export interface CaseListItem {
   currency?: string;
   /** Días de mora calculados por el server (no por el reloj del dispositivo). */
   daysPastDue?: number;
+  /** Código del préstamo: dos créditos del mismo deudor se distinguen por esto. */
+  creditCode?: string;
+  /**
+   * De dónde sale `daysPastDue`. Dice **cuánto confiar en él**: la calculada la mantiene el trabajo
+   * diario, la del archivo vale hasta la próxima importación, la marcada a mano la puso una persona.
+   */
+  arrearsSource?: ArrearsSource;
   /** Cuota/próxima fecha del crédito (`creditView`). */
   installmentAmount?: number;
   nextDueDate?: string;

@@ -61,7 +61,7 @@ export async function CollectorsTable({
       </table>
 
       {rows.length > 8 && (
-        <Link href="/casos" className="mt-3 inline-block text-[13px] font-medium text-k-purple hover:underline">
+        <Link href="/mora" className="mt-3 inline-block text-[13px] font-medium text-k-purple hover:underline">
           {t('table.seeAll', { n: rows.length })}
         </Link>
       )}

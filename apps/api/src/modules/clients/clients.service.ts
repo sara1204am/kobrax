@@ -2,8 +2,9 @@ import { Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 // `Prisma` entra como valor y no sólo como tipo: la cartera arma su SQL con `Prisma.sql` (§W3).
 import { ClientType, Prisma } from '@prisma/client';
-import { resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
+import { Permission, resolvePagination, searchTerms, type ApiResponse, type ClientTimelineEntry, ResponseDto } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
+import { nameTerms } from '../../common/name-search';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { BlindIndexService } from '../../common/crypto/blind-index.service';
@@ -12,12 +13,16 @@ import { serializeClient, type PortfolioClient, type PortfolioTotals } from './c
 import {
   CreateAttachmentDto,
   CreateClientDto,
+  CreateCollateralDto,
   CreateContactDto,
   CreateLocationDto,
+  UpdateAttachmentDto,
+  UpdateCollateralDto,
   UpdateLocationDto,
   UpdateRelationDto,
   CreateRelationDto,
   ListClientsQueryDto,
+  TimelineQueryDto,
   UpdateClientDto,
   UpdateContactDto,
 } from './dto/client.dto';
@@ -30,6 +35,28 @@ import {
 
 /** PII del cliente que se redacta en los snapshots de auditoría. */
 const CLIENT_REDACT = ['nationalId', 'taxId', 'value', 'address', 'phone'];
+
+/** Una fila cruda de la bitácora, antes de volverse `ClientTimelineEntry`. */
+interface TimelineRow {
+  kind: ClientTimelineEntry['kind'];
+  id: string;
+  at: Date;
+  code: string;
+  status: string | null;
+  amount: number | null;
+  currency: string | null;
+  notes: string | null;
+  credit_id: string | null;
+  case_id: string | null;
+  user_id: string | null;
+}
+
+/*
+ * Acá vivía un techo para el conteo de la cartera («10.000+»), porque contar exacto obligaba a
+ * agregar el tenant entero. Con los agregados denormalizados el `COUNT(*)` es un scan de `clients`:
+ * 18 ms sin filtros y 72 ms con el peor de ellos, sobre 100.000 personas. El número exacto salió
+ * más barato que la complejidad de esconderlo.
+ */
 
 /** Fila cruda de la cartera: nombres de columna de PostgreSQL, sin pasar por Prisma. */
 interface PortfolioRow {
@@ -129,6 +156,20 @@ export class ClientsService {
         audits.push({ kind: 'relation', id: rel.id, after: rel });
         for (const c of r.contacts ?? []) await mkContact(c, rel.id); // teléfonos del contacto
         for (const l of r.locations ?? []) await mkLocation(l, rel.id); // ubicaciones del contacto
+        await this.linkGuarantor(tx, client.id, rel.id, r.creditIds);
+      }
+      /*
+       * Las garantías van al final del alta, después de las relaciones, por una razón práctica: en un
+       * alta el crédito **todavía no existe** —se carga después, desde la ficha—, así que `creditIds`
+       * casi siempre llega vacío acá y el vínculo se arma al editar. La garantía igual se guarda: el
+       * bien es del cliente, no del crédito.
+       */
+      for (const g of dto.collaterals ?? []) {
+        const row = await tx.collateral.create({
+          data: { accountId: acc, clientId: client.id, type: g.type, description: g.description, estimatedValue: g.estimatedValue, currency: g.currency, photoUrls: (g.photoUrls ?? []) as Prisma.InputJsonValue },
+        });
+        audits.push({ kind: 'collateral', id: row.id, after: row });
+        await this.linkCollateral(tx, client.id, row.id, g.creditIds);
       }
       return { created: client, subs: audits, yaExistia: false };
     });
@@ -157,10 +198,9 @@ export class ClientsService {
     if (query.q) {
       const docHash = this.blind.hash(query.q);
       where.OR = [
+        // El documento matchea la búsqueda ENTERA por blind index: está cifrado, o es exacto o nada.
         ...(docHash ? [{ nationalIdHash: docHash }] : []),
-        { firstName: { contains: query.q, mode: 'insensitive' } },
-        { lastName: { contains: query.q, mode: 'insensitive' } },
-        { businessName: { contains: query.q, mode: 'insensitive' } },
+        { AND: nameTerms(query.q) },
       ];
     }
 
@@ -187,6 +227,19 @@ export class ClientsService {
    * Corre dentro de `withTenant`, o sea bajo la policy `tenant_isolation` de `clients` y `credits`
    * (definida en `prisma/rls/001_enable_rls.sql`, **no** entre las migraciones). Por eso no filtra
    * `account_id` a mano; fuera de ese contexto no devuelve nada.
+   *
+   * 🔴 **Los tres números NO se calculan acá: se leen.** `total_debt`, `max_days_past_due` y
+   * `credit_count` son columnas de `clients` que mantiene el trigger `credits_totals_*` (migración
+   * `20260814210000`). Por eso esta consulta no tiene `JOIN`, ni `GROUP BY`, ni `HAVING`: es un
+   * `WHERE` y un `ORDER BY` que caen en índice.
+   *
+   * Antes agregaba el tenant entero en cada request, porque ordenar por un agregado obliga a
+   * calcular todos los grupos antes de saber cuáles son los 50 primeros. Con 100.000 personas y
+   * 300.000 créditos (`prisma/seed-perf.sql`) eso medía **768 ms** la primera página; ahora,
+   * **menos de 1 ms**.
+   *
+   * Sigue en SQL crudo por una sola razón: el orden por nombre es
+   * `COALESCE(business_name, last_name, first_name)`, y eso Prisma no lo sabe ordenar.
    */
   private async listPortfolio(
     query: ListClientsQueryDto,
@@ -195,19 +248,13 @@ export class ClientsService {
     skip: number,
   ): Promise<ApiResponse<PortfolioClient[]>> {
     const where = this.portfolioWhere(query);
-    // 🔴 El filtro de créditos va en el `ON` y NO en el `WHERE`: en el `WHERE`, este `LEFT JOIN` se
-    // comporta como `INNER` y los clientes sin créditos desaparecen de la cartera. Hay un spec que
-    // lo mira, porque el síntoma —una lista a la que le faltan los clientes recién dados de alta—
-    // no se parece en nada a su causa.
     const página = Prisma.sql`
       SELECT c.id,
-             COALESCE(SUM(cr.outstanding_balance), 0)::float8 AS total_debt,
-             COALESCE(MAX(cr.days_past_due), 0)::int          AS max_days_past_due,
-             COUNT(cr.id)::int                                AS credit_count
+             c.total_debt::float8  AS total_debt,
+             c.max_days_past_due   AS max_days_past_due,
+             c.credit_count        AS credit_count
       FROM clients c
-      LEFT JOIN credits cr ON cr.client_id = c.id AND cr.deleted_at IS NULL
       WHERE ${where}
-      GROUP BY c.id
       ORDER BY ${this.portfolioOrder(query)}
       LIMIT ${limit} OFFSET ${skip}`;
     const cuenta = Prisma.sql`SELECT COUNT(*)::int AS total FROM clients c WHERE ${where}`;
@@ -247,12 +294,60 @@ export class ClientsService {
     // El estado del cliente es la columna `client_status`, no `status`.
     if (query.status) conds.push(Prisma.sql`c.client_status = ${query.status}::"ClientStatus"`);
     if (query.risk) conds.push(Prisma.sql`c.risk_segment = ${query.risk}`);
+    /*
+     * 🔴 **El cobrador se filtra con `EXISTS`, no con un `JOIN`.**
+     *
+     * Vive en `collection_cases`, y un cliente puede tener varios casos: con un join, su saldo se
+     * sumaría una vez por caso y la deuda de la fila daría de más. Es el mismo defecto que ya se
+     * pagó en analytics. `EXISTS` sólo pregunta «¿alguno?» y no multiplica filas.
+     */
+    if (query.collectorId) {
+      conds.push(Prisma.sql`EXISTS (
+        SELECT 1 FROM collection_cases k
+        WHERE k.client_id = c.id AND k.deleted_at IS NULL AND k.assignee_id = ${query.collectorId})`);
+    }
+    /*
+     * La sucursal es del CRÉDITO, así que también va con `EXISTS`: «tiene algún crédito vivo de esta
+     * sucursal». Con un `JOIN`, el cliente con dos créditos de la misma sucursal aparecería dos
+     * veces en la lista.
+     */
+    if (query.branchId) {
+      conds.push(Prisma.sql`EXISTS (
+        SELECT 1 FROM credits k
+        WHERE k.client_id = c.id AND k.deleted_at IS NULL AND k.branch_id = ${query.branchId})`);
+    }
+    /*
+     * 🔴 **Los filtros de agregado son un `WHERE` común, no un `HAVING`.**
+     *
+     * Y siguen significando lo mismo que antes: «mora > 90» es sobre la PERSONA —su peor mora—, no
+     * «tiene algún crédito con más de 90». Quien tiene uno de 400 días y otro al día entra; quien
+     * tiene tres de 30, no. La diferencia es que ahora la columna ya está calculada, así que la
+     * condición cae en el índice en vez de obligar a agrupar la cartera entera.
+     */
+    if (query.debtMin != null) conds.push(Prisma.sql`c.total_debt >= ${query.debtMin}`);
+    if (query.debtMax != null) conds.push(Prisma.sql`c.total_debt <= ${query.debtMax}`);
+    if (query.dpdMin != null) conds.push(Prisma.sql`c.max_days_past_due >= ${query.dpdMin}`);
+    if (query.dpdMax != null) conds.push(Prisma.sql`c.max_days_past_due <= ${query.dpdMax}`);
+    if (query.creditsMin != null) conds.push(Prisma.sql`c.credit_count >= ${query.creditsMin}`);
+    if (query.creditsMax != null) conds.push(Prisma.sql`c.credit_count <= ${query.creditsMax}`);
     if (query.q) {
-      const like = `%${query.q}%`;
       const docHash = this.blind.hash(query.q);
-      const porNombre = Prisma.sql`c.first_name ILIKE ${like} OR c.last_name ILIKE ${like} OR c.business_name ILIKE ${like}`;
+      /*
+       * 🔴 **Palabra por palabra, y todas tienen que estar.** Con la frase entera, «Teresa Mama» no
+       * encontraba a «Teresa Mamani Padilla»: el espacio cae justo entre el nombre y el apellido, y
+       * ningún campo contiene la frase. Cada palabra puede matchear en un campo distinto.
+       *
+       * Sigue parametrizado: los `%…%` los arma `Prisma.sql`, nunca se concatena en el texto.
+       */
+      const porNombre = Prisma.join(
+        searchTerms(query.q).map((term) => {
+          const like = `%${term}%`;
+          return Prisma.sql`(c.first_name ILIKE ${like} OR c.last_name ILIKE ${like} OR c.business_name ILIKE ${like})`;
+        }),
+        ' AND ',
+      );
       // El documento está cifrado: matchea exacto por blind index o no matchea.
-      conds.push(docHash ? Prisma.sql`(c.national_id_hash = ${docHash} OR ${porNombre})` : Prisma.sql`(${porNombre})`);
+      conds.push(docHash ? Prisma.sql`(c.national_id_hash = ${docHash} OR (${porNombre}))` : Prisma.sql`(${porNombre})`);
     }
     return Prisma.join(conds, ' AND ');
   }
@@ -266,7 +361,7 @@ export class ClientsService {
     const dir = desc ? Prisma.raw('DESC') : Prisma.raw('ASC');
     switch (query.sort ?? 'dpd') {
       case 'debt':
-        return Prisma.sql`total_debt ${dir}, c.id`;
+        return Prisma.sql`c.total_debt ${dir}, c.id`;
       case 'name':
         return Prisma.sql`COALESCE(c.business_name, c.last_name, c.first_name) ${dir}, c.id`;
       case 'status':
@@ -276,8 +371,8 @@ export class ClientsService {
       case 'dpd':
       default:
         // La mora manda y la deuda desempata: entre dos que deben hace los mismos días, primero el
-        // que debe más. Es el orden con el que abre la pantalla.
-        return Prisma.sql`max_days_past_due ${dir}, total_debt ${dir}, c.id`;
+        // que debe más. Es el orden con el que abre la pantalla, y el que tiene índice propio.
+        return Prisma.sql`c.max_days_past_due ${dir}, c.total_debt ${dir}, c.id`;
     }
   }
 
@@ -289,8 +384,9 @@ export class ClientsService {
           // Los teléfonos/ubicaciones del cliente = los que NO cuelgan de una relación (relationId null).
           contacts: { where: { relationId: null } },
           locations: { where: { relationId: null } },
-          // Cada contacto/relación trae los suyos.
-          relations: { include: { contacts: true, locations: true } },
+          // Cada contacto/relación trae los suyos, y a qué créditos respalda.
+          relations: { include: { contacts: true, locations: true, credits: { select: { creditId: true } } } },
+          collaterals: { include: { credits: { select: { creditId: true } } } },
           attachments: true,
         },
       }),
@@ -304,12 +400,104 @@ export class ClientsService {
     return serializeClient(client, { crypto: this.crypto, reveal });
   }
 
+  /**
+   * La bitácora del cliente: **todo lo que se hizo con esta persona**, de todos sus créditos.
+   *
+   * 🔴 **Un `UNION ALL`, no tres listas mezcladas en Node.** Las tres fuentes tienen su propia
+   * paginación: traer «las 20 últimas de cada una» y ordenarlas después da una primera página que
+   * puede estar bien de casualidad, y una segunda que directamente miente —falta lo que quedó
+   * afuera del corte de cada fuente—. Ordenar y paginar es trabajo de la base.
+   *
+   * 🔴 **Cada fuente entra sólo si quien mira puede verla.** La bitácora cruza tres dominios con
+   * tres permisos: sin esta guarda, la ficha del cliente se volvería la puerta de atrás para leer
+   * pagos sin `payment:read`. Lo que no se puede ver no aparece —y no se avisa que falta, porque
+   * eso también es información—.
+   *
+   * Las fechas: el pago vale por `payment_date` (cuándo se cobró, no cuándo se cargó), el agendado
+   * por cuándo se actualizó (es cuando se ejecutó o se canceló) y la gestión por su alta.
+   */
+  async timeline(clientId: string, query: TimelineQueryDto): Promise<ApiResponse<ClientTimelineEntry[]>> {
+    const { page, limit, skip } = resolvePagination(query);
+    const partes: Prisma.Sql[] = [];
+
+    if (this.tenant.can(Permission.PAYMENT_READ)) {
+      partes.push(Prisma.sql`
+        SELECT 'PAYMENT' AS kind, p.id, p.payment_date AS at, p.method::text AS code, NULL AS status,
+               p.amount::float8 AS amount, cr.currency AS currency, NULL AS notes,
+               p.credit_id AS credit_id, p.case_id AS case_id, p.registered_by AS user_id
+        FROM payments p
+        JOIN credits cr ON cr.id = p.credit_id
+        WHERE cr.client_id = ${clientId}`);
+    }
+    if (this.tenant.can(Permission.AGENDA_READ)) {
+      partes.push(Prisma.sql`
+        SELECT 'AGENDA' AS kind, a.id, a.updated_at AS at, a.type::text AS code, a.status::text AS status,
+               NULL AS amount, NULL AS currency, a.observations AS notes,
+               a.credit_id AS credit_id, a.case_id AS case_id, a.assignee_id AS user_id
+        FROM agenda_items a
+        WHERE a.client_id = ${clientId} AND a.deleted_at IS NULL`);
+    }
+    if (this.tenant.can(Permission.CASE_READ)) {
+      partes.push(Prisma.sql`
+        SELECT 'ACTIVITY' AS kind, ac.id, ac.created_at AS at, ac.type::text AS code, ac.result AS status,
+               NULL AS amount, NULL AS currency, ac.notes AS notes,
+               NULL AS credit_id, ac.case_id AS case_id, ac.user_id AS user_id
+        FROM case_activities ac
+        JOIN collection_cases k ON k.id = ac.case_id
+        WHERE k.client_id = ${clientId}`);
+    }
+    // Sin ningún permiso no hay consulta que hacer: `UNION ALL` de cero partes no es SQL válido.
+    if (partes.length === 0) return ResponseDto.paginated([], 0, page, limit);
+
+    const union = Prisma.join(partes, ' UNION ALL ');
+    const [rows, totals] = await this.tx((tx) =>
+      Promise.all([
+        tx.$queryRaw<TimelineRow[]>(
+          // El desempate por `id` es el mismo cuidado que en la cartera: dos gestiones del mismo
+          // segundo se intercambiarían entre páginas, y con `LIMIT/OFFSET` eso repite o saltea.
+          Prisma.sql`SELECT * FROM (${union}) t ORDER BY t.at DESC, t.id LIMIT ${limit} OFFSET ${skip}`,
+        ),
+        tx.$queryRaw<{ total: number }[]>(Prisma.sql`SELECT COUNT(*)::int AS total FROM (${union}) t`),
+      ]),
+    );
+
+    const data = rows.map((r) => ({
+      kind: r.kind,
+      id: r.id,
+      at: r.at.toISOString(),
+      code: r.code,
+      status: r.status ?? undefined,
+      amount: r.amount ?? undefined,
+      currency: r.currency ?? undefined,
+      notes: r.notes ?? undefined,
+      creditId: r.credit_id ?? undefined,
+      caseId: r.case_id ?? undefined,
+      userId: r.user_id ?? undefined,
+    }));
+    return ResponseDto.paginated(data, totals[0]?.total ?? 0, page, limit);
+  }
+
   async update(id: string, dto: UpdateClientDto): Promise<ReturnType<typeof serializeClient>> {
     const { before, after } = await this.tx(async (tx) => {
       const prev = await tx.client.findFirst({ where: { id, deletedAt: null } });
       if (!prev) throw resourceNotFound();
 
+      /*
+       * 🔴 **La identidad se valida contra lo que QUEDA, no contra lo que llegó.** El PATCH manda
+       * sólo lo que cambió: pasar a `COMPANY` sin tocar el nombre, o vaciar el apellido de una
+       * persona, dejaba un cliente que el alta nunca habría aceptado. Se mezcla con lo guardado y
+       * se aplica el mismo corte que en `create`.
+       */
+      const clientType = dto.clientType ?? prev.clientType;
+      this.assertIdentity(
+        clientType,
+        dto.firstName ?? prev.firstName ?? undefined,
+        dto.lastName ?? prev.lastName ?? undefined,
+        dto.businessName ?? prev.businessName ?? undefined,
+      );
+
       const data: Prisma.ClientUpdateInput = {
+        clientType: dto.clientType,
         firstName: dto.firstName,
         lastName: dto.lastName,
         businessName: dto.businessName,
@@ -383,6 +571,9 @@ export class ClientsService {
     const updated = await this.tx(async (tx) => {
       const existing = await tx.clientRelation.findFirst({ where: { id: relationId, clientId }, select: { id: true } });
       if (!existing) throw resourceNotFound();
+      // El vínculo con los créditos va en la MISMA transacción que el resto del garante: si el
+      // segundo paso falla, no queda un garante renombrado que además perdió a quién respaldaba.
+      await this.linkGuarantor(tx, clientId, relationId, dto.creditIds);
       return tx.clientRelation.update({
         where: { id: relationId },
         data: {
@@ -458,6 +649,7 @@ export class ClientsService {
           ...(dto.latitude !== undefined && { latitude: dto.latitude }),
           ...(dto.longitude !== undefined && { longitude: dto.longitude }),
           ...(dto.referenceNotes !== undefined && { referenceNotes: dto.referenceNotes }),
+          ...(dto.photoUrls !== undefined && { photoUrls: dto.photoUrls as Prisma.InputJsonValue }),
         },
       });
     });
@@ -466,8 +658,8 @@ export class ClientsService {
   }
 
   async addRelation(clientId: string, dto: CreateRelationDto) {
-    return this.subCreate(clientId, 'relation', (tx) =>
-      tx.clientRelation.create({
+    return this.subCreate(clientId, 'relation', async (tx) => {
+      const rel = await tx.clientRelation.create({
         data: {
           accountId: this.tenant.accountId,
           clientId,
@@ -477,8 +669,99 @@ export class ClientsService {
           isContactable: dto.isContactable ?? true,
           notes: dto.notes,
         },
-      }),
-    );
+      });
+      await this.linkGuarantor(tx, clientId, rel.id, dto.creditIds);
+      return rel;
+    });
+  }
+
+  // ── Garantías (el bien, no la persona) ──────────────────────────────────────
+  /**
+   * 🔴 **Los créditos tienen que ser de ESTE cliente.**
+   *
+   * Sin esto, mandar el id de un crédito ajeno ata la garantía —o el garante— a la deuda de otra
+   * persona. Es el mismo cuidado que `assertRelationOf`, y acá pesa más: el vínculo es lo que hace
+   * que alguien vaya a ejecutar un bien.
+   *
+   * Devuelve la lista tal como quedó. `undefined` significa «no lo toques»; `[]`, «sacá todos».
+   */
+  private async assertCreditsOf(tx: PrismaClient, clientId: string, creditIds: string[]): Promise<void> {
+    if (creditIds.length === 0) return;
+    const found = await tx.credit.findMany({
+      where: { id: { in: creditIds }, clientId, deletedAt: null },
+      select: { id: true },
+    });
+    if (found.length !== new Set(creditIds).size) throw resourceNotFound();
+  }
+
+  /**
+   * Deja el vínculo garante ↔ créditos **igual a la lista que llegó**: borrar y volver a escribir.
+   *
+   * Es el mismo trato que el layout del tablero (W8): mandar diferencias por vínculo obligaría a
+   * resolver qué se agregó y qué se quitó en el cliente, y lo que la pantalla sabe es el estado
+   * final. `undefined` es «no vino el campo» y no toca nada.
+   */
+  private async linkGuarantor(tx: PrismaClient, clientId: string, relationId: string, creditIds?: string[]): Promise<void> {
+    if (!creditIds) return;
+    await this.assertCreditsOf(tx, clientId, creditIds);
+    await tx.creditGuarantor.deleteMany({ where: { relationId } });
+    if (creditIds.length > 0) {
+      await tx.creditGuarantor.createMany({
+        data: creditIds.map((creditId) => ({ accountId: this.tenant.accountId, relationId, creditId })),
+        skipDuplicates: true,
+      });
+    }
+  }
+
+  /** Ídem `linkGuarantor`, del lado de la garantía. */
+  private async linkCollateral(tx: PrismaClient, clientId: string, collateralId: string, creditIds?: string[]): Promise<void> {
+    if (!creditIds) return;
+    await this.assertCreditsOf(tx, clientId, creditIds);
+    await tx.collateralCredit.deleteMany({ where: { collateralId } });
+    if (creditIds.length > 0) {
+      await tx.collateralCredit.createMany({
+        data: creditIds.map((creditId) => ({ accountId: this.tenant.accountId, collateralId, creditId })),
+        skipDuplicates: true,
+      });
+    }
+  }
+
+  async addCollateral(clientId: string, dto: CreateCollateralDto) {
+    return this.subCreate(clientId, 'collateral', async (tx) => {
+      const row = await tx.collateral.create({
+        data: {
+          accountId: this.tenant.accountId,
+          clientId,
+          type: dto.type,
+          description: dto.description,
+          estimatedValue: dto.estimatedValue,
+          currency: dto.currency,
+          photoUrls: (dto.photoUrls ?? []) as Prisma.InputJsonValue,
+        },
+      });
+      await this.linkCollateral(tx, clientId, row.id, dto.creditIds);
+      return row;
+    });
+  }
+
+  async updateCollateral(clientId: string, collateralId: string, dto: UpdateCollateralDto) {
+    const updated = await this.tx(async (tx) => {
+      const found = await tx.collateral.findFirst({ where: { id: collateralId, clientId }, select: { id: true } });
+      if (!found) throw resourceNotFound();
+      await this.linkCollateral(tx, clientId, collateralId, dto.creditIds);
+      return tx.collateral.update({
+        where: { id: collateralId },
+        data: {
+          ...(dto.type !== undefined && { type: dto.type }),
+          ...(dto.description !== undefined && { description: dto.description }),
+          ...(dto.estimatedValue !== undefined && { estimatedValue: dto.estimatedValue }),
+          ...(dto.currency !== undefined && { currency: dto.currency }),
+          ...(dto.photoUrls !== undefined && { photoUrls: dto.photoUrls as Prisma.InputJsonValue }),
+        },
+      });
+    });
+    await this.audit.record({ entity: 'client_collateral', entityId: collateralId, action: 'UPDATE', after: updated, redactKeys: CLIENT_REDACT });
+    return updated;
   }
 
   async addAttachment(clientId: string, dto: CreateAttachmentDto) {
@@ -496,10 +779,21 @@ export class ClientsService {
     );
   }
 
-  /** Baja de un sub-recurso (contact/location/relation/attachment). Scoped por cliente + RLS. */
+  /** Reclasificar un adjunto. El archivo no se toca: su hash es la prueba de que no cambió. */
+  async updateAttachment(clientId: string, attachmentId: string, dto: UpdateAttachmentDto) {
+    const updated = await this.tx(async (tx) => {
+      const found = await tx.clientAttachment.findFirst({ where: { id: attachmentId, clientId }, select: { id: true } });
+      if (!found) throw resourceNotFound();
+      return tx.clientAttachment.update({ where: { id: attachmentId }, data: { fileType: dto.fileType } });
+    });
+    await this.audit.record({ entity: 'client_attachment', entityId: attachmentId, action: 'UPDATE', after: updated, redactKeys: CLIENT_REDACT });
+    return updated;
+  }
+
+  /** Baja de un sub-recurso (contact/location/relation/collateral/attachment). Scoped por cliente + RLS. */
   async removeSub(
     clientId: string,
-    kind: 'contact' | 'location' | 'relation' | 'attachment',
+    kind: 'contact' | 'location' | 'relation' | 'collateral' | 'attachment',
     subId: string,
   ): Promise<void> {
     const res = await this.tx((tx) => {
@@ -510,7 +804,10 @@ export class ClientsService {
         case 'location':
           return tx.clientLocation.deleteMany({ where });
         case 'relation':
+          // Sus vínculos con créditos se van con él: la FK es `ON DELETE CASCADE`.
           return tx.clientRelation.deleteMany({ where });
+        case 'collateral':
+          return tx.collateral.deleteMany({ where });
         case 'attachment':
           return tx.clientAttachment.deleteMany({ where });
       }

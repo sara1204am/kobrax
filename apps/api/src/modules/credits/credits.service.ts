@@ -1,10 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { AgendaItemStatus, AgendaItemType, CasePriority, CaseStatus } from '@prisma/client';
+import { AgendaItemStatus, AgendaItemType, CasePriority, CaseStatus, CreditStatus } from '@prisma/client';
 import {
+  addPeriods,
   arrearsFromDueDate,
   CreditOrigin,
   isExternalOrigin,
+  manualArrears,
+  moraSinceFromDays,
   PaymentFrequency,
   readCreditMetadata,
   resolvePagination,
@@ -23,8 +26,10 @@ import {
   type ArrearParams,
 } from './credit-math';
 import { serializeCredit } from './credits.serializer';
-import { CreateCreditDto, ListCreditsQueryDto, UpdateCreditDto } from './dto/credit.dto';
-import { creditLocked, currencyMismatch, resourceNotFound, scheduleInvalid } from './credits.errors';
+import { ClearArrearsDto, CreateCreditDto, ListCreditsQueryDto, UpdateCreditDto } from './dto/credit.dto';
+import { arrearsDateNotFuture, creditLocked, creditNotActive, currencyMismatch, resourceNotFound, scheduleInvalid } from './credits.errors';
+import { computePriority, slaDueAt, DEFAULT_PRIORITY_PARAMS } from '../cases/case-priority';
+import { closeOpenCases, openCaseIfNone } from '../arrears/case-lifecycle';
 
 interface AccountConfig {
   currencyCode: string;
@@ -124,6 +129,7 @@ export class CreditsService {
           clientId: dto.clientId,
           branchId: dto.branchId,
           code: dto.code,
+          typeCode: dto.typeCode,
           principalAmount: dto.principalAmount,
           outstandingBalance,
           interestRate: dto.interestRate ?? 0,
@@ -270,6 +276,7 @@ export class CreditsService {
           assignedManagerId: dto.assignedManagerId,
           branchId: dto.branchId,
           code: dto.code,
+          typeCode: dto.typeCode,
           principalAmount: dto.principalAmount,
           interestRate: dto.interestRate,
           metadata: financialEdit ? (stripUndefined(nextMeta) as Prisma.InputJsonValue) : undefined,
@@ -279,6 +286,107 @@ export class CreditsService {
     });
     await this.audit.record({ entity: 'credit', entityId: id, action: 'UPDATE', before: creditSummary(before), after: creditSummary(after) });
     return serializeCredit(after, config.labels);
+  }
+
+  // ── Mora declarada a mano ──────────────────────────────────────────────────
+  /**
+   * «Este préstamo está en mora», dicho por una persona.
+   *
+   * Es para quien presta sin cronograma y sabe que le deben sin mirar una fecha. Hace dos cosas y
+   * las dos importan: guarda **desde cuándo** (no cuántos días — `moraSince`, para que el número
+   * envejezca solo) y **abre el caso en el acto**. Lo segundo es lo que hace que el crédito aparezca
+   * en Mora al instante: esperar al trabajo diario sería decirle a esa persona que su decisión vale
+   * dentro de seis horas.
+   *
+   * 🔴 El importado no se puede marcar: su mora la manda el archivo (`arrearsSourceOf` le da
+   * prioridad), así que la marca se guardaría y no haría nada. Mejor rebotar que mentir.
+   */
+  async markArrears(id: string, days?: number) {
+    const asOf = new Date();
+    const { credit, opened } = await this.tx(async (tx) => {
+      const found = await tx.credit.findFirst({ where: { id, deletedAt: null }, include: { client: { select: { riskSegment: true } } } });
+      if (!found) throw resourceNotFound();
+      if (found.status !== CreditStatus.ACTIVE) throw creditNotActive();
+      const meta = readCreditMetadata(found.metadata);
+      if (isExternalOrigin(meta.origin)) throw creditLocked();
+
+      const moraSince = moraSinceFromDays(days ?? 0, asOf);
+      const daysPastDue = manualArrears(moraSince, Number(found.outstandingBalance), asOf);
+      const updated = await tx.credit.update({
+        where: { id },
+        data: { daysPastDue, metadata: stripUndefined({ ...meta, moraSince }) as Prisma.InputJsonValue },
+      });
+
+      const priority = computePriority(
+        { outstandingBalance: Number(found.outstandingBalance), daysPastDue, riskSegment: found.client.riskSegment },
+        DEFAULT_PRIORITY_PARAMS,
+      );
+      const opened = await openCaseIfNone(tx, {
+        accountId: this.tenant.accountId,
+        creditId: id,
+        clientId: found.clientId,
+        branchId: found.branchId,
+        assigneeId: found.assignedManagerId,
+        priority,
+        slaDueAt: slaDueAt(priority, asOf, DEFAULT_PRIORITY_PARAMS),
+      });
+      return { credit: updated, opened };
+    });
+
+    await this.audit.record({ entity: 'credit', entityId: id, action: 'ARREARS_MARK', after: { days: credit.daysPastDue, caseOpened: opened } });
+    return serializeCredit(credit, (await this.accountConfig()).labels);
+  }
+
+  /**
+   * Poner al día. **Es mover la fecha, no borrar el síntoma.**
+   *
+   * Un botón que sólo pusiera la mora en cero sería mentirle al sistema: la fecha seguiría vencida y
+   * el trabajo diario volvería a abrir el caso esta misma noche. Así que se resuelve en una de tres
+   * acciones reales, y las tres dejan el crédito con una fecha que **no** está vencida:
+   *
+   * · `next_period` — avanza un período según su frecuencia. Pagó la cuota, o se acordó la próxima.
+   * · `date` — la fecha que se acordó. Tiene que ser futura, o esto no sirvió de nada.
+   * · `none` — sin vencimiento: préstamo abierto. Sin fecha no hay mora que contar.
+   *
+   * Y borra la marca manual si la había: quien la puso es quien la saca. El caso se cierra con
+   * motivo `CURRENT`, que es lo que después deja contar por qué se vaciaron cuarenta un martes.
+   */
+  async clearArrears(id: string, dto: ClearArrearsDto) {
+    const asOf = new Date();
+    const { credit, closed } = await this.tx(async (tx) => {
+      const found = await tx.credit.findFirst({ where: { id, deletedAt: null } });
+      if (!found) throw resourceNotFound();
+      if (found.status !== CreditStatus.ACTIVE) throw creditNotActive();
+      const meta = readCreditMetadata(found.metadata);
+      if (isExternalOrigin(meta.origin)) throw creditLocked();
+
+      let nextDueDate: string | undefined;
+      if (dto.mode === 'next_period') {
+        // Desde la fecha que tenía; sin ninguna, desde hoy — avanzar sobre una fecha vencida de hace
+        // meses dejaría la nueva también vencida, y el caso reaparecería esta noche.
+        const base = meta.nextDueDate && new Date(meta.nextDueDate) > asOf ? new Date(meta.nextDueDate) : asOf;
+        nextDueDate = addPeriods(base, 1, meta.frequency).toISOString().slice(0, 10);
+      } else if (dto.mode === 'date') {
+        if (!dto.date) throw arrearsDateNotFuture();
+        const elegida = new Date(dto.date.slice(0, 10));
+        if (arrearsFromDueDate(elegida, Number(found.outstandingBalance), asOf) > 0) throw arrearsDateNotFuture();
+        nextDueDate = dto.date.slice(0, 10);
+      }
+      // `none` deja `nextDueDate` en `undefined` → `stripUndefined` lo saca del JSON.
+
+      const updated = await tx.credit.update({
+        where: { id },
+        data: {
+          daysPastDue: 0,
+          metadata: stripUndefined({ ...meta, nextDueDate, moraSince: undefined }) as Prisma.InputJsonValue,
+        },
+      });
+      const closed = await closeOpenCases(tx, id, 'CURRENT', asOf);
+      return { credit: updated, closed };
+    });
+
+    await this.audit.record({ entity: 'credit', entityId: id, action: 'ARREARS_CLEAR', after: { mode: dto.mode, casesClosed: closed } });
+    return serializeCredit(credit, (await this.accountConfig()).labels);
   }
 
   // ── Mora ──────────────────────────────────────────────────────────────────
@@ -299,6 +407,20 @@ export class CreditsService {
       // Sin esta guarda, un recálculo le borraba la mora que trajo la importación.
       if (isExternalOrigin(meta.origin)) {
         return { daysOverdue: credit.daysPastDue, overdueAmount: 0, interest: 0, penalty: 0, overdueInstallmentIds: [], skipped: 'EXTERNAL_ORIGIN' as const };
+      }
+
+      /*
+       * 🔴 **Mora declarada a mano: tampoco se recalcula.** Es la misma idea que la guarda de arriba,
+       * con otro dueño — acá el dueño es la persona que dijo «este préstamo está en mora», y la fecha
+       * de vencimiento puede no existir siquiera (el prestamista que presta sin cronograma). Sin
+       * esto, el recálculo le devolvía cero y el caso se cerraba solo al día siguiente de marcarlo.
+       *
+       * Los días igual avanzan: se derivan de `moraSince` (`manualArrears`), no se congelan.
+       */
+      if (meta.moraSince) {
+        const daysOverdue = manualArrears(meta.moraSince, Number(credit.outstandingBalance), asOf);
+        await tx.credit.update({ where: { id }, data: { daysPastDue: daysOverdue } });
+        return { daysOverdue, overdueAmount: daysOverdue > 0 ? Number(credit.outstandingBalance) : 0, interest: 0, penalty: 0, overdueInstallmentIds: [], skipped: 'MANUAL_ARREARS' as const };
       }
 
       // Crédito sin cronograma (el del móvil): la mora sale de la próxima fecha, no de las cuotas.

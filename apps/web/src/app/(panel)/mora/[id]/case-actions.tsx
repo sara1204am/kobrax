@@ -7,11 +7,11 @@ import { memberName, CaseStatus, type Member } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
-import { canClose, nextStates } from '@/lib/cases';
+import { canClose } from '@/lib/cases';
 import { errorText } from '@/lib/api-error';
 import { sendJson } from '@/lib/client';
 
-type Action = 'activity' | 'transition' | 'assign' | 'close' | null;
+type Action = 'activity' | 'assign' | 'close' | null;
 
 /** Lo que se puede registrar a mano desde el panel. Los demás tipos los escribe el sistema. */
 const ACTIVITY_TYPES = ['NOTE', 'CALL', 'VISIT', 'MESSAGE'] as const;
@@ -43,7 +43,6 @@ export function CaseActions({
   const toast = useToast();
 
   const [action, setAction] = useState<Action>(null);
-  const [to, setTo] = useState<CaseStatus | ''>('');
   const [reason, setReason] = useState('');
   const [collectorId, setCollectorId] = useState('');
   const [activityType, setActivityType] = useState<(typeof ACTIVITY_TYPES)[number]>('NOTE');
@@ -51,14 +50,12 @@ export function CaseActions({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const states = nextStates(status);
   const closable = mayClose && canClose(status);
 
   function close() {
     setAction(null);
     setError(null);
     setReason('');
-    setTo('');
     setCollectorId('');
     setNotes('');
   }
@@ -89,11 +86,8 @@ export function CaseActions({
           {t('actions.activity')}
         </Button>
       )}
-      {canWrite && states.length > 0 && (
-        <Button variant="ghost" onClick={() => setAction('transition')} className="sm:w-auto sm:px-5">
-          {t('actions.transition')}
-        </Button>
-      )}
+      {/* Mover de estado ya no es un botón acá: se toca la etiqueta de estado, que es el dato que
+          cambia (`status-control.tsx`). Un botón a media pantalla del dato no decía cuál tocaba. */}
       {canAssign && (
         <Button variant="ghost" onClick={() => setAction('assign')} className="sm:w-auto sm:px-5">
           {t('actions.assign')}
@@ -149,47 +143,6 @@ export function CaseActions({
           </Field>
           <Field label={t('activity.notes')}>
             <Input value={notes} onChange={(e) => setNotes(e.target.value)} disabled={busy} maxLength={1000} />
-          </Field>
-        </div>
-      </Modal>
-
-      {/* Mover de estado. Sólo se ofrecen los destinos válidos desde el actual: el resto lo
-          rechazaría la API con CASE_002. */}
-      <Modal
-        open={action === 'transition'}
-        onClose={close}
-        title={t('transition.title')}
-        actions={
-          <>
-            <Button variant="ghost" onClick={close} disabled={busy} className="sm:w-auto sm:px-5">
-              {t('transition.cancel')}
-            </Button>
-            <Button
-              onClick={() => send(`/api/cases/${caseId}`, { status: to, reason: reason.trim() || undefined }, 'PATCH', t('transition.done'))}
-              loading={busy}
-              disabled={!to}
-              className="sm:w-auto sm:px-5"
-            >
-              {t('transition.confirm')}
-            </Button>
-          </>
-        }
-      >
-        <ErrorBanner message={error} />
-        <p>{t('transition.text')}</p>
-        <div className="mt-4 space-y-4">
-          <Field label={t('columns.status')}>
-            <Select value={to} onChange={(e) => setTo(e.target.value as CaseStatus)} disabled={busy}>
-              <option value="">—</option>
-              {states.map((next) => (
-                <option key={next} value={next}>
-                  {t(`status.${next}`)}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={t('transition.reason')}>
-            <Input value={reason} onChange={(e) => setReason(e.target.value)} disabled={busy} maxLength={200} />
           </Field>
         </div>
       </Modal>

@@ -64,9 +64,11 @@ beforeEach(() => {
 describe('hydrate · usa las consultas de las pantallas', () => {
   // Si estos parámetros dejan de coincidir con los de la pantalla, el respaldo se guarda en una
   // casilla que nadie lee y la pantalla sale vacía sin señal, aunque la bajada haya salido bien.
+  // 🔴 `open: true` incluido: el trabajo diario de la mora cierra el caso del que pagó, y sin ese
+  // filtro la Cobranza y el armador de rutas lo seguirían mostrando para ir a cobrarle.
   it('la cartera se baja con los mismos parámetros que la Cobranza', async () => {
     await hydrate('u1');
-    expect(llamada('listCases')!.params).toEqual({ view: 'portfolio', limit: 100 });
+    expect(llamada('listCases')!.params).toEqual({ view: 'portfolio', open: true, limit: 100 });
   });
 
   it('las rutas se bajan SIN filtro de estado, como las pide la pestaña Rutas', async () => {

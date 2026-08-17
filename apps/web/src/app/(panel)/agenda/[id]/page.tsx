@@ -105,7 +105,7 @@ export default async function GestionPage({ params }: { params: { id: string } }
           {item.rescheduledFromId && <p className="mt-4 text-[13px] text-k-text-2">{t('detail.rescheduledFrom')}</p>}
 
           <Link
-            href={`/casos/${item.caseId}`}
+            href={`/mora/${item.caseId}`}
             className="mt-5 inline-block text-[14px] font-medium text-k-purple hover:underline"
           >
             {t('detail.openCase')}

@@ -1,34 +1,66 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import type { ClientAttachmentDetail, ClientContactDetail, ClientDetail, ClientLocationDetail } from '@kobrax/shared';
-import { Badge, PageHeader } from '@/components/panel-ui';
+import type { ClientDetail, CreditOption } from '@kobrax/shared';
+import type { CatalogOption } from '@/components/client-form';
+import { Badge, PageHeader, Section } from '@/components/panel-ui';
 import { Button } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
 import { postJson, sendJson } from '@/lib/client';
 import { date, fullName } from '@/lib/format';
+import { ContactList, LocationList } from './client-contacts';
+import { CollateralsSection, GuarantorsSection } from './backing-sections';
+import { AttachmentsSection } from './attachments-section';
+import { SectionModal, type SectionContext, type SectionKey } from './section-editor';
 
 const STATUS_TONE = { ACTIVE: 'success', INACTIVE: 'neutral', BLOCKED: 'danger' } as const;
 
 /**
- * La ficha, en una columna con secciones.
+ * La ficha, en secciones — **y es la única pantalla del cliente**.
+ *
+ * 🔴 **No hay ruta de edición.** La había, y era el problema: `/cartera/:id/editar` repetía las
+ * mismas secciones con otro título, otro orden y otro ancho, así que mirar un cliente y corregirlo
+ * se sentían dos productos. Peor, «Agregar garante» —un botón de una sección de la derecha— saltaba
+ * a esa pantalla entera. Ahora cada sección se corrige desde su propio encabezado, en un modal
+ * centrado que deja la ficha detrás: las cinco igual, y ninguna manda a otra ruta.
  *
  * 🔴 **La PII arranca enmascarada y se revela con un click.** El `reveal` deja rastro en la
  * auditoría (`client/PII_REVEAL`): revelar solo al abrir llenaría el registro de ruido y lo
- * volvería inútil justo el día que haya que leerlo. La respuesta del revelado **reemplaza al
- * cliente entero**, porque enmascarado y en claro son la misma ficha con distinta profundidad.
+ * volvería inútil justo el día que haya que leerlo. **Tocar «Editar» revela primero** —editar es
+ * pedir los datos completos, y con la máscara cargada guardar la escribiría encima del carnet real,
+ * que es el bug que ya ocurrió una vez en el móvil.
  */
 export function ClientCard({
   client,
   credits,
+  creditOptions,
+  summary,
+  timeline,
+  cases,
+  currency,
+  collateralTypes,
   hasActiveCredits,
 }: {
   client: ClientDetail;
+  /*
+   * Las cuatro secciones que arma el servidor y bajan como `children`. Lo que no se edita —créditos,
+   * casos, resumen, bitácora— no tiene por qué viajar como JavaScript al navegador.
+   */
   credits?: ReactNode;
+  summary?: ReactNode;
+  timeline?: ReactNode;
+  cases?: ReactNode;
+  /** Los mismos créditos, crudos: el modal necesita ofrecerlos para vincular garantes y garantías. */
+  creditOptions: CreditOption[];
+  /** La moneda de la cuenta (Configuración), para las garantías que no traen la suya. */
+  currency: string;
+  /** Catálogo `COLLATERAL_TYPE` del tenant: código → rótulo. */
+  collateralTypes: CatalogOption[];
   /** Con plata en la calle no se archiva a nadie: la API lo frena y la pantalla no lo ofrece. */
   hasActiveCredits?: boolean;
 }) {
@@ -41,43 +73,9 @@ export function ClientCard({
   const [revealed, setRevealed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmBaja, setConfirmBaja] = useState(false);
+  const [editando, setEditando] = useState<SectionKey | null>(null);
 
-  async function subir(file: File) {
-    setBusy(true);
-    // Dos pasos porque son dos cosas: guardar el archivo y decir de quién es. El primero es el
-    // mismo `POST /uploads` que W2 usa para la foto de perfil.
-    const data = new FormData();
-    data.append('file', file);
-    const subida = await fetch('/api/account/upload', { method: 'POST', body: data });
-    const stored = (await subida.json().catch(() => ({}))) as { url?: string; hash?: string; error?: { message: string } };
-    if (!subida.ok || !stored.url) {
-      setBusy(false);
-      toast(stored.error?.message ?? t('uploadError'), 'danger');
-      return;
-    }
-
-    const { ok, data: res } = await postJson(`/api/clients/${client.id}/attachments`, {
-      fileType: 'OTHER',
-      fileUrl: stored.url,
-      fileHash: stored.hash,
-    });
-    setBusy(false);
-    if (!ok) {
-      toast(res.error?.message ?? t('uploadError'), 'danger');
-      return;
-    }
-    toast(t('uploaded'));
-    router.refresh();
-  }
-
-  async function borrarAdjunto(aid: string) {
-    setBusy(true);
-    const { ok, data } = await sendJson(`/api/clients/${client.id}/attachments/${aid}`, null, 'DELETE');
-    setBusy(false);
-    if (!ok) return toast(data.error?.message ?? t('actionError'), 'danger');
-    toast(t('attachmentRemoved'));
-    router.refresh();
-  }
+  const canWrite = can('client:write');
 
   async function darDeBaja() {
     setBusy(true);
@@ -93,43 +91,77 @@ export function ClientCard({
     router.refresh();
   }
 
-  async function reveal() {
+  /** Trae la ficha en claro y la deja en pantalla. Devuelve el cliente revelado, o `null` si falló. */
+  async function reveal(): Promise<ClientDetail | null> {
     setBusy(true);
     const { ok, data } = await postJson<ClientDetail>(`/api/clients/${client.id}/reveal`, {});
     setBusy(false);
     if (!ok) {
       toast(data.error?.message ?? t('revealError'), 'danger');
-      return;
+      return null;
     }
     setShown(data);
     setRevealed(true);
+    return data;
   }
+
+  /**
+   * Abrir una sección para corregirla.
+   *
+   * 🔴 **Revela primero si hace falta.** No es una comodidad: el formulario se hidrata de `shown`, y
+   * con la máscara cargada guardar escribiría `1234***` encima del carnet. Sale **una** entrada de
+   * auditoría, la misma que deja el «Mostrar» de la lista de teléfonos — es el mismo acto.
+   */
+  async function editar(section: SectionKey) {
+    if (!revealed && !(await reveal())) return;
+    setEditando(section);
+  }
+
+  /**
+   * Después de guardar: **volver a leer la ficha en claro** y refrescar lo que pinta el servidor.
+   *
+   * Cuesta una segunda entrada de `PII_REVEAL` por sesión de edición, y es el precio correcto: la
+   * alternativa era dejar en pantalla los datos viejos, o re-enmascarar justo lo que la persona
+   * acaba de corregir y no la deja verificar que quedó bien. El `refresh` es por la bitácora, que
+   * la arma el servidor y donde la corrección tiene que aparecer.
+   */
+  async function recargar() {
+    await reveal();
+    router.refresh();
+  }
+
+  const ctx: SectionContext = {
+    client: shown,
+    credits: creditOptions,
+    collateralTypes,
+    currency,
+    onSaved: recargar,
+  };
+
+  /** El botón «Editar» de un encabezado de sección. Sin permiso de escritura no se dibuja. */
+  const editarAction = (section: SectionKey) =>
+    canWrite ? (
+      <button
+        type="button"
+        onClick={() => void editar(section)}
+        disabled={busy}
+        className="text-[13px] font-medium text-k-periwinkle hover:underline disabled:opacity-50"
+      >
+        {t('edit')}
+      </button>
+    ) : undefined;
 
   return (
     <>
       <PageHeader
         title={fullName(shown)}
         subtitle={t(`clientType.${shown.clientType}`)}
+        badge={<Badge tone={STATUS_TONE[shown.status]}>{t(`clientStatus.${shown.status}`)}</Badge>}
         actions={
           <>
-            <Badge tone={STATUS_TONE[shown.status]}>{t(`clientStatus.${shown.status}`)}</Badge>
-            {can('credit:write') && (
-              <span className="w-44">
-                <Button variant="ghost" onClick={() => router.push(`/cartera/${client.id}/prestamo`)}>
-                  {t('newLoan')}
-                </Button>
-              </span>
-            )}
-            {can('client:write') && (
-              <span className="w-32">
-                <Button variant="ghost" onClick={() => router.push(`/cartera/${client.id}/editar`)}>
-                  {t('edit')}
-                </Button>
-              </span>
-            )}
             {/* La baja no se ofrece si hay plata en la calle: la API la rechaza igual, pero un
                 botón que siempre falla enseña a desconfiar de la pantalla. */}
-            {can('client:write') && !hasActiveCredits && shown.status !== 'INACTIVE' && (
+            {canWrite && !hasActiveCredits && shown.status !== 'INACTIVE' && (
               <button
                 type="button"
                 onClick={() => setConfirmBaja(true)}
@@ -142,147 +174,113 @@ export function ClientCard({
         }
       />
 
-      <div className="space-y-4">
-        <Section
-          title={t('sections.data')}
-          action={
-            revealed ? (
-              <span className="text-[13px] text-k-muted">{t('revealed')}</span>
-            ) : (
-              <button
-                type="button"
-                onClick={() => void reveal()}
-                disabled={busy}
-                className="text-[13px] font-medium text-k-purple hover:underline disabled:opacity-50"
-              >
-                {busy ? t('revealing') : t('reveal')}
-              </button>
-            )
-          }
-        >
-          <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-            <Item label={t('fields.document')} value={shown.nationalId} />
-            <Item label={t('fields.taxId')} value={shown.taxId} />
-            <Item label={t('fields.risk')} value={shown.riskSegment} />
-            <Item label={t('fields.createdAt')} value={shown.createdAt ? date(shown.createdAt, locale) : null} />
-          </dl>
-          {!revealed && <p className="mt-3 text-[12px] text-k-muted">{t('maskedHint')}</p>}
-        </Section>
+      {/*
+       * Dos columnas: a la izquierda lo que se trabaja —quién es, los créditos, con quién hablar,
+       * dónde buscarlo—, a la derecha lo que se consulta. La ficha antes era una sola columna donde
+       * el saldo y los adjuntos pesaban lo mismo, y había que scrollear para saber cuánto debe.
+       */}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="space-y-5">
+          {/*
+           * 🔴 **La identificación es una sección, no una fila de texto suelta bajo el título.**
+           * Como línea corrida no tenía dónde colgar su «Editar», y era la única parte del cliente
+           * que obligaba a irse a otra pantalla para corregir una letra del apellido.
+           *
+           * Cada dato es su propio elemento, no una frase armada con `join(' · ')`: pegados en un
+           * solo texto no se puede seleccionar el documento para copiarlo, y un lector de pantalla
+           * lee «Persona 1234 asterisco asterisco» de corrido. Los separadores son de CSS.
+           */}
+          <Section title={t('sections.identity')} action={editarAction('identity')}>
+            <dl className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-[13px]">
+              <Dato label={t('fields.document')} value={shown.nationalId || '—'} />
+              {shown.taxId && <Dato label={t('fields.taxId')} value={shown.taxId} />}
+              {shown.riskSegment && <Dato label={t('fields.risk')} value={shown.riskSegment} />}
+              {shown.createdAt && <Dato label={t('fields.createdAt')} value={date(shown.createdAt, locale)} />}
+            </dl>
+          </Section>
 
-        {/* Los créditos los pinta el servidor y bajan como children: esta tarjeta es cliente por
-            el revelado, y no hay razón para que esa lista viaje como JavaScript. */}
-        {credits && <Section title={t('sections.credits')}>{credits}</Section>}
+          {/*
+           * Los créditos los pinta el servidor y bajan como children: esta tarjeta es cliente por
+           * el revelado, y no hay razón para que esa lista viaje como JavaScript.
+           *
+           * 🔴 **«Nuevo préstamo» vive acá, en el encabezado de su sección, y no arriba en la barra
+           * de la ficha.** Ahí compitía con «Dar de baja» y con el estado del cliente, tres cosas sin
+           * relación entre sí en una misma fila; y sobre todo, dar un préstamo es una acción **sobre
+           * esta lista** — el lugar donde se busca es el mismo donde se ve que no hay ninguno.
+           */}
+          {credits && (
+            <Section
+              title={t('sections.credits')}
+              action={
+                can('credit:write') && (
+                  <Link
+                    href={`/cartera/${client.id}/prestamo`}
+                    className="inline-flex min-h-[32px] items-center rounded-lg bg-k-highlight px-3 text-[13px] font-medium text-k-periwinkle hover:bg-k-light-bg"
+                  >
+                    + {t('newLoan')}
+                  </Link>
+                )
+              }
+            >
+              {credits}
+            </Section>
+          )}
 
-        <Section title={t('sections.contacts')}>
-          <Rows
-            rows={shown.contacts ?? []}
-            empty={t('noContacts')}
-            render={(c: ClientContactDetail) => (
-              <>
-                <span className="font-medium text-k-text">{c.value ?? '—'}</span>
-                <span className="text-[13px] text-k-text-2">
-                  {t(`contactType.${c.contactType}`)}
-                  {c.isPrimary && ` · ${t('primary')}`}
-                </span>
-              </>
-            )}
+          {/*
+           * Con quién hablar y dónde buscarlo, **lado a lado**: son la misma pregunta y en una
+           * columna quedaban una debajo de la otra, obligando a scrollear para cruzarlas.
+           *
+           * 🔴 El «Mostrar» de cada fila **revela la ficha entera** —una sola entrada de auditoría,
+           * que es la verdad de lo que pasó—; por eso las dos listas comparten el mismo `reveal`.
+           */}
+          <div className="grid gap-5 sm:grid-cols-2">
+            <ContactList
+              rows={shown.contacts ?? []}
+              revealed={revealed}
+              onReveal={() => void reveal()}
+              busy={busy}
+              canWrite={canWrite}
+              onEdit={() => void editar('contacts')}
+            />
+            <LocationList
+              rows={shown.locations ?? []}
+              revealed={revealed}
+              onReveal={() => void reveal()}
+              busy={busy}
+              onEdit={() => void editar('locations')}
+              canWrite={canWrite}
+            />
+          </div>
+
+          <AttachmentsSection clientId={client.id} rows={shown.attachments ?? []} canWrite={canWrite} />
+
+          {/* Los casos cierran la columna: son cómo la empresa organiza el trabajo, no un dato del
+              deudor. Bajan del servidor como los créditos. */}
+          {cases}
+        </div>
+
+        {/* La columna de consulta: cuánto debe, qué se hizo, y quién responde si no paga. */}
+        <div className="space-y-5">
+          {summary}
+          {timeline}
+
+          {/*
+           * Quién y qué respalda la deuda. Se pintan con `shown`, no con `client`: **el revelado
+           * también destapa los teléfonos del garante** —es a quien se llama cuando el deudor no
+           * aparece—, y con el cliente original quedarían tapados para siempre.
+           */}
+          <GuarantorsSection client={shown} canWrite={canWrite} onEdit={() => void editar('guarantors')} />
+          <CollateralsSection
+            client={shown}
+            currency={currency}
+            types={collateralTypes}
+            canWrite={canWrite}
+            onEdit={() => void editar('collaterals')}
           />
-        </Section>
-
-        <Section title={t('sections.locations')}>
-          <Rows
-            rows={shown.locations ?? []}
-            empty={t('noLocations')}
-            render={(l: ClientLocationDetail) => (
-              <>
-                <span className="font-medium text-k-text">{l.address ?? '—'}</span>
-                <span className="text-[13px] text-k-text-2">
-                  {t(`locationType.${l.locationType}`)}
-                  {l.zone && ` · ${l.zone}`}
-                  {/* Sin punto no se puede dibujar en el mapa; la dirección igual existe. */}
-                  {l.latitude == null && ` · ${t('noPin')}`}
-                </span>
-              </>
-            )}
-          />
-        </Section>
-
-        {/* Los garantes NO son una entidad: son `relations`, y sus teléfonos y direcciones cuelgan
-            de ellos por `relationId` (misma tabla que los del cliente). */}
-        <Section title={t('sections.guarantors')}>
-          <Rows
-            rows={shown.relations ?? []}
-            empty={t('noGuarantors')}
-            render={(r) => (
-              <>
-                <span className="font-medium text-k-text">{r.relatedName}</span>
-                <span className="text-[13px] text-k-text-2">
-                  {t(`relationType.${r.relationshipType}`)}
-                  {!r.isContactable && ` · ${t('notContactable')}`}
-                </span>
-                {(r.contacts?.length || r.locations?.length) && (
-                  <span className="mt-1 block text-[13px] text-k-text-2">
-                    {[...(r.contacts ?? []).map((c) => c.value ?? '—'), ...(r.locations ?? []).map((l) => l.address ?? '—')].join(' · ')}
-                  </span>
-                )}
-              </>
-            )}
-          />
-        </Section>
-
-        <Section
-          title={t('sections.attachments')}
-          action={
-            can('client:write') && (
-              <label className="cursor-pointer text-[13px] font-medium text-k-purple hover:underline">
-                {busy ? t('uploading') : t('addAttachment')}
-                {/* `<input type="file">` nativo, escondido detrás del label. Ninguna dep. */}
-                <input
-                  type="file"
-                  className="sr-only"
-                  disabled={busy}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = ''; // permite volver a elegir el mismo archivo
-                    if (file) void subir(file);
-                  }}
-                />
-              </label>
-            )
-          }
-        >
-          <Rows
-            rows={shown.attachments ?? []}
-            empty={t('noAttachments')}
-            render={(a: ClientAttachmentDetail) => (
-              <>
-                <span className="flex items-baseline justify-between gap-3">
-                  <span className="font-medium text-k-text">{a.fileType}</span>
-                  {can('client:write') && (
-                    <button
-                      type="button"
-                      onClick={() => void borrarAdjunto(a.id)}
-                      disabled={busy}
-                      className="text-[13px] font-medium text-k-danger hover:underline disabled:opacity-50"
-                    >
-                      {t('form.remove')}
-                    </button>
-                  )}
-                </span>
-                <span className="text-[13px] text-k-text-2">
-                  {date(a.createdAt, locale)}
-                  {/* El hash es lo que prueba que el archivo no cambió. Se muestra corto: entero
-                      son 64 caracteres que nadie compara a ojo. */}
-                  {a.fileHash && ` · ${a.fileHash.slice(0, 12)}…`}
-                </span>
-              </>
-            )}
-          />
-          {/* No hay botón de «ver»: la API no expone la URL del archivo hasta el endpoint
-              firmado (F6). Un botón que no funciona es peor que no tenerlo. */}
-          <p className="mt-3 text-[12px] text-k-muted">{t('attachmentsHint')}</p>
-        </Section>
+        </div>
       </div>
+
+      <SectionModal section={editando} ctx={ctx} onClose={() => setEditando(null)} />
 
       <Modal
         open={confirmBaja}
@@ -309,44 +307,18 @@ export function ClientCard({
   );
 }
 
-function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+function Dato({ label, value }: { label: string; value: string }) {
   return (
-    <section className="rounded-2xl border border-k-border bg-white p-5">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-[16px] font-semibold text-k-navy">{title}</h2>
-        {action}
-      </div>
-      {children}
-    </section>
+    <span className="flex items-baseline gap-1.5">
+      <dt className="text-k-muted">{label}</dt>
+      <dd className="font-medium text-k-text">{value}</dd>
+    </span>
   );
 }
 
-function Item({ label, value }: { label: string; value?: string | null }) {
-  return (
-    <div>
-      <dt className="text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
-      <dd className="mt-0.5 text-[14px] text-k-text">{value || '—'}</dd>
-    </div>
-  );
-}
-
-function Rows<T extends { id: string }>({
-  rows,
-  empty,
-  render,
-}: {
-  rows: T[];
-  empty: string;
-  render: (row: T) => ReactNode;
-}) {
-  if (rows.length === 0) return <p className="text-[14px] text-k-muted">{empty}</p>;
-  return (
-    <ul className="divide-y divide-k-border">
-      {rows.map((row) => (
-        <li key={row.id} className="flex flex-col py-2.5 first:pt-0 last:pb-0">
-          {render(row)}
-        </li>
-      ))}
-    </ul>
-  );
-}
+/*
+ * Acá vivía `Rows`, la lista genérica que pintaba teléfonos, direcciones, garantes, garantías y
+ * adjuntos todos iguales. Se fue con ellos: cada sección ahora se dibuja como lo que es —una con
+ * íconos y botón de revelar, otra con vacío ilustrado, otra con zona de arrastre— y una lista
+ * genérica que ya no usa nadie es una invitación a volver a hacerlos todos iguales.
+ */

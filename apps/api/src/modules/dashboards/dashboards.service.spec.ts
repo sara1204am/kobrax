@@ -3,12 +3,15 @@ import assert from 'node:assert/strict';
 import { DashboardsService } from './dashboards.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
-function makeService(opts: { current?: Record<string, unknown>; userId?: string; permissions?: string[] } = {}) {
+function makeService(
+  opts: { current?: Record<string, unknown>; userId?: string; permissions?: string[]; widgetIds?: string[] } = {},
+) {
   const calls = {
     updateMany: [] as Record<string, unknown>[],
     deleteWidgets: [] as unknown[],
     createWidgets: [] as Record<string, unknown>[][],
     update: [] as Record<string, unknown>[],
+    lock: [] as unknown[],
   };
   const dashboard = {
     id: 'd1',
@@ -25,6 +28,11 @@ function makeService(opts: { current?: Record<string, unknown>; userId?: string;
   // estas pruebas miran (el nombre de la copia, el predeterminado apagado).
   let created: Record<string, unknown> | null = null;
   const tx = {
+    // El `select ... for update` que traba el tablero antes de reemplazarle el layout.
+    $queryRaw: async (...args: unknown[]) => {
+      calls.lock.push(args);
+      return [];
+    },
     dashboard: {
       findFirst: async (args?: { where?: { isDefault?: boolean } }) => {
         // La búsqueda de «¿ya hay un predeterminado?» es distinta de «traeme este tablero»: un doble
@@ -48,6 +56,8 @@ function makeService(opts: { current?: Record<string, unknown>; userId?: string;
       },
     },
     dashboardWidget: {
+      // Los ids que el tablero YA tiene: son los únicos que un pedido puede conservar.
+      findMany: async () => (opts.widgetIds ?? []).map((id) => ({ id })),
       deleteMany: async (args: unknown) => {
         calls.deleteWidgets.push(args);
         return { count: 0 };
@@ -100,6 +110,30 @@ describe('el layout se reemplaza entero', () => {
     assert.equal(calls.deleteWidgets.length, 1);
     assert.equal(calls.createWidgets[0]!.length, 2);
     assert.equal(calls.createWidgets[0]![0]!.accountId, 'acc-1');
+  });
+
+  it('el widget conserva su id, y uno ajeno no se cuela', async () => {
+    // Los ids son la `key` de la grilla del panel. Si cambian en cada guardado, un refresh caído en
+    // mitad de un arrastre deja a la grilla sin posiciones y NO dibuja ni un widget.
+    const { service, calls } = makeService({ widgetIds: ['w-mio'] });
+    await service.update('d1', {
+      widgets: [
+        { id: 'w-mio', type: 'kpi', x: 0, y: 0, w: 2, h: 2 },
+        { id: 'w-de-otro-tablero', type: 'kpi', x: 2, y: 0, w: 2, h: 2 },
+      ],
+    });
+    assert.equal(calls.createWidgets[0]![0]!.id, 'w-mio');
+    // Sin id propio: lo pone la base. Que un pedido pudiera fijarlo sería chocar la clave primaria
+    // —o pisar el widget de otro tablero— desde afuera.
+    assert.equal(calls.createWidgets[0]![1]!.id, undefined);
+  });
+
+  it('traba el tablero antes de reemplazarlo', async () => {
+    // Sin la traba, dos parches del mismo tablero a la vez borran cada uno las filas viejas sin ver
+    // las del otro, y las dos tandas quedan: el tablero se ve DUPLICADO entero.
+    const { service, calls } = makeService();
+    await service.update('d1', { widgets: [{ type: 'kpi', x: 0, y: 0, w: 2, h: 2 }] });
+    assert.equal(calls.lock.length, 1);
   });
 });
 

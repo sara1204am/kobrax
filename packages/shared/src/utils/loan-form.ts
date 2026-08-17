@@ -29,6 +29,44 @@ export function initialPrestamo(todayIso: string): PrestamoForm {
   };
 }
 
+/**
+ * Crédito guardado → el MISMO formulario que lo dio de alta. La vuelta de `buildPrestamoPayload`.
+ *
+ * 🔴 **Abre en modo A a propósito**, con la cuota tal como está guardada. Es la que se está cobrando:
+ * abrir en B la recalcularía sola desde la tasa y la ficha mostraría un número que nadie pidió — y
+ * bastaría con guardar cualquier otro campo para que ese número reemplace al real. Pasar a B es un
+ * acto explícito: «recotizame este préstamo».
+ *
+ * ⚠️ `base` arranca en `PER_PERIOD` porque **no se guarda**: es cómo se interpretó el porcentaje al
+ * cotizar, no un dato del préstamo. Sólo afecta el recálculo del modo B, nunca lo ya guardado.
+ */
+export function hydratePrestamo(c: {
+  principalAmount: number;
+  interestRate?: number;
+  installmentAmount?: number;
+  installmentsCount?: number;
+  frequency?: PaymentFrequency;
+  nextDueDate?: string;
+  notes?: string;
+}): PrestamoForm {
+  return {
+    mode: 'A',
+    principal: String(c.principalAmount ?? ''),
+    installment: c.installmentAmount != null ? String(c.installmentAmount) : '',
+    installmentEdited: false,
+    interestPercent: c.interestRate ? String(c.interestRate) : '',
+    base: InterestBase.PER_PERIOD,
+    installmentsCount: c.installmentsCount != null ? String(c.installmentsCount) : '',
+    frequency: c.frequency ?? PaymentFrequency.MONTHLY,
+    nextDueDate: c.nextDueDate?.slice(0, 10) ?? '',
+    // Sólo del alta: son para digitalizar cartera vieja, y este préstamo ya existe.
+    inProgress: false,
+    outstandingBalance: '',
+    daysPastDue: '',
+    notes: c.notes ?? '',
+  };
+}
+
 const num = (s: string): number => {
   const n = Number(s);
   return Number.isFinite(n) ? n : 0;

@@ -3,7 +3,14 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { CasePriority, CaseStatus, memberName, type Member } from '@kobrax/shared';
+import { Dropdown } from '@/components/panel-shell';
 import { DATE_PRESETS, presetRange, type DatePreset } from '@/lib/dashboard';
+
+/** Lo que se elige en un filtro múltiple: el valor que viaja y el rótulo que se lee. */
+interface Option {
+  value: string;
+  label: string;
+}
 
 /**
  * Los filtros globales, **arriba de los KPI y no debajo**: primero se elige qué se está mirando y
@@ -77,51 +84,33 @@ export function DashboardFilters({ collectors }: { collectors: Member[] }) {
       </Field>
 
       {collectors.length > 1 && (
-        <Field label={t('filters.collector')}>
-          <select
-            value={params.get('collectorId') ?? ''}
-            onChange={(e) => set({ collectorId: e.target.value || null })}
-            className={SELECT}
-          >
-            <option value="">{t('filters.all')}</option>
-            {collectors.map((c) => (
-              <option key={c.userId} value={c.userId}>
-                {memberName(c)}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <Multi
+          label={t('filters.collector')}
+          value={params.get('collectorId')}
+          options={collectors.map((c) => ({ value: c.userId, label: memberName(c) }))}
+          onChange={(v) => set({ collectorId: v })}
+          allLabel={t('filters.all')}
+          countLabel={(count) => t('filters.selected', { count })}
+        />
       )}
 
-      <Field label={t('filters.status')}>
-        <select
-          value={params.get('caseStatus') ?? ''}
-          onChange={(e) => set({ caseStatus: e.target.value || null })}
-          className={SELECT}
-        >
-          <option value="">{t('filters.all')}</option>
-          {Object.values(CaseStatus).map((s) => (
-            <option key={s} value={s}>
-              {tc(`status.${s}`)}
-            </option>
-          ))}
-        </select>
-      </Field>
+      <Multi
+        label={t('filters.status')}
+        value={params.get('caseStatus')}
+        options={Object.values(CaseStatus).map((s) => ({ value: s, label: tc(`status.${s}`) }))}
+        onChange={(v) => set({ caseStatus: v })}
+        allLabel={t('filters.all')}
+        countLabel={(count) => t('filters.selected', { count })}
+      />
 
-      <Field label={t('filters.priority')}>
-        <select
-          value={params.get('priority') ?? ''}
-          onChange={(e) => set({ priority: e.target.value || null })}
-          className={SELECT}
-        >
-          <option value="">{t('filters.all')}</option>
-          {Object.values(CasePriority).map((p) => (
-            <option key={p} value={p}>
-              {tc(`priority.${p}`)}
-            </option>
-          ))}
-        </select>
-      </Field>
+      <Multi
+        label={t('filters.priority')}
+        value={params.get('priority')}
+        options={Object.values(CasePriority).map((p) => ({ value: p, label: tc(`priority.${p}`) }))}
+        onChange={(v) => set({ priority: v })}
+        allLabel={t('filters.all')}
+        countLabel={(count) => t('filters.selected', { count })}
+      />
 
       {filtered && (
         <button
@@ -132,6 +121,76 @@ export function DashboardFilters({ collectors }: { collectors: Member[] }) {
           {t('filters.clear')}
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * Un filtro que acepta **varios valores a la vez**.
+ *
+ * 🔴 **Con checkboxes y no con `<select multiple>`.** El múltiple nativo se opera con Ctrl+clic
+ * —invisible, y en el teléfono directamente no existe—, y perder toda la selección por soltar la
+ * tecla es la clase de detalle que hace que un filtro no se use nunca. El desplegable es el mismo
+ * `<details>` de la topbar, así que trae cerrar con Esc y con un clic afuera sin escribirlo dos veces.
+ *
+ * 🔴 **Va acá afuera y no adentro de `DashboardFilters`.** Definido adentro, React ve un componente
+ * distinto en cada render: al tildar una opción la URL cambia, el desplegable se **desmonta** y se
+ * cierra solo — o sea que elegir dos cosas obligaría a abrirlo dos veces, que es justo lo que este
+ * control viene a resolver.
+ *
+ * La lista viaja en la URL separada por coma (`?collectorId=a,b`): el link abre lo mismo para quien
+ * lo reciba.
+ */
+function Multi({
+  label,
+  value,
+  options,
+  onChange,
+  allLabel,
+  countLabel,
+}: {
+  label: string;
+  /** Lo que hay hoy en la URL: `null` o `'a,b'`. */
+  value: string | null;
+  options: Option[];
+  onChange: (next: string) => void;
+  allLabel: string;
+  countLabel: (count: number) => string;
+}) {
+  const selected = (value ?? '').split(',').filter(Boolean);
+  const toggle = (v: string) =>
+    onChange((selected.includes(v) ? selected.filter((s) => s !== v) : [...selected, v]).join(','));
+
+  return (
+    <div>
+      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{label}</span>
+      <Dropdown
+        summaryClass={`${SELECT} flex min-w-[140px] cursor-pointer list-none items-center justify-between gap-2 [&::-webkit-details-marker]:hidden`}
+        panelClass="absolute left-0 z-20 mt-1 max-h-72 w-[240px] overflow-y-auto rounded-xl border border-k-border bg-white py-1 shadow-k-card"
+        label={
+          // Un nombre completo no entra en una barra de filtros: uno solo se lee entero, y de dos en
+          // adelante el número dice más que dos nombres cortados por la mitad.
+          <span className="truncate">
+            {selected.length === 0
+              ? allLabel
+              : selected.length === 1
+                ? (options.find((o) => o.value === selected[0])?.label ?? selected[0])
+                : countLabel(selected.length)}
+          </span>
+        }
+      >
+        {options.map((o) => (
+          <label key={o.value} className="flex min-h-[36px] cursor-pointer items-center gap-2 px-3 hover:bg-k-bg">
+            <input
+              type="checkbox"
+              checked={selected.includes(o.value)}
+              onChange={() => toggle(o.value)}
+              className="h-4 w-4 accent-k-purple"
+            />
+            <span className="text-[13px] text-k-text">{o.label}</span>
+          </label>
+        ))}
+      </Dropdown>
     </div>
   );
 }

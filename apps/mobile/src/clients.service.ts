@@ -69,12 +69,14 @@ async function searchLocal(q: string): Promise<QueryResult<ClientHit[]>> {
  */
 export type {
   NewClientInput,
+  NewCollateralInput,
   NewContactInput,
   NewLocationInput,
   NewRelationInput,
 } from '@kobrax/shared';
 import type {
   NewClientInput,
+  NewCollateralInput,
   NewContactInput,
   NewLocationInput,
   NewRelationInput,
@@ -143,6 +145,17 @@ export function updateRelation(clientId: string, relationId: string, input: Part
 }
 export function removeRelation(clientId: string, relationId: string) {
   return apiMutate<null>(`/clients/${clientId}/relations/${relationId}`, 'DELETE');
+}
+
+// Garantías: el bien que respalda el crédito (la personal es el garante, arriba).
+export function addCollateral(clientId: string, input: NewCollateralInput) {
+  return apiMutate<{ id: string }>(`/clients/${clientId}/collaterals`, 'POST', input);
+}
+export function updateCollateral(clientId: string, collateralId: string, input: NewCollateralInput) {
+  return apiMutate<{ id: string }>(`/clients/${clientId}/collaterals/${collateralId}`, 'PATCH', input);
+}
+export function removeCollateral(clientId: string, collateralId: string) {
+  return apiMutate<null>(`/clients/${clientId}/collaterals/${collateralId}`, 'DELETE');
 }
 
 export interface UpdateClientPatch {

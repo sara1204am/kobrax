@@ -41,7 +41,16 @@ describe('dashboardFilters', () => {
 
   it('un uuid de verdad sí viaja', () => {
     const id = '3f2b9c10-1a4d-4b7e-9c8f-0a1b2c3d4e5f';
-    expect(dashboardFilters({ collectorId: id }, TODAY).collectorId).toBe(id);
+    expect(dashboardFilters({ collectorId: id }, TODAY).collectorId).toEqual([id]);
+  });
+
+  it('🔴 de varios valores se descarta el inválido, no la lista entera', () => {
+    // Un valor pegado a mano no puede arruinar la elección de los otros tres: quien mira la pantalla
+    // vería su filtro vacío sin ninguna forma de saber por qué.
+    const id = '3f2b9c10-1a4d-4b7e-9c8f-0a1b2c3d4e5f';
+    const out = dashboardFilters({ collectorId: `${id},../../users`, caseStatus: 'ACTIVE,INVENTADO' }, TODAY);
+    expect(out.collectorId).toEqual([id]);
+    expect(out.caseStatus).toEqual(['ACTIVE']);
   });
 
   it('🔴 un estado o una prioridad inventados tampoco viajan', () => {
@@ -54,8 +63,8 @@ describe('dashboardFilters', () => {
 
   it('un estado y una prioridad de verdad sí viajan', () => {
     const out = dashboardFilters({ caseStatus: 'ACTIVE', priority: 'HIGH' }, TODAY);
-    expect(out.caseStatus).toBe('ACTIVE');
-    expect(out.priority).toBe('HIGH');
+    expect(out.caseStatus).toEqual(['ACTIVE']);
+    expect(out.priority).toEqual(['HIGH']);
   });
 
   it('una fecha inventada cae al rango por defecto', () => {
@@ -75,8 +84,18 @@ describe('dashboardFilters', () => {
 
 describe('analyticsQuery', () => {
   it('manda sólo lo que tiene valor', () => {
-    const query = analyticsQuery({ dateFrom: '2026-08-01', dateTo: '2026-08-13', collectorId: 'u1' });
+    const query = analyticsQuery({ dateFrom: '2026-08-01', dateTo: '2026-08-13', collectorId: ['u1'] });
     expect(query.toString()).toBe('dateFrom=2026-08-01&dateTo=2026-08-13&collectorId=u1');
+  });
+
+  it('varios valores viajan separados por coma', () => {
+    expect(analyticsQuery({ collectorId: ['u1', 'u2'] }).get('collectorId')).toBe('u1,u2');
+  });
+
+  it('🔴 una lista vacía no viaja', () => {
+    // `[]` es un objeto y pasa cualquier `if`: sin la guarda saldría `collectorId=` y la API armaría
+    // un `IN ()`, que es un error de sintaxis de Postgres y no «sin filtro».
+    expect(analyticsQuery({ collectorId: [] }).has('collectorId')).toBe(false);
   });
 });
 

@@ -17,7 +17,7 @@
       "home": "Home",
       "portfolio": "Portfolio",
       "import": "Import",
-      "cases": "Cases",
+      "cases": "Overdue",
       "agenda": "Schedule",
       "routes": "Routes",
       "payments": "Payments",
@@ -38,7 +38,8 @@
       "prestamo": "New loan",
       "credito": "Credit",
       "solicitudes": "Payment requests",
-      "nueva": "New"
+      "nueva": "New",
+      "bitacora": "Activity log"
     },
     "soon": "Soon",
     "openMenu": "Open menu",
@@ -68,6 +69,7 @@
         "status": "Status",
         "priority": "Priority",
         "all": "All",
+        "selected": "{count} selected",
         "clear": "Clear filters"
       },
       "presets": {
@@ -83,7 +85,7 @@
         "outstanding": "Total portfolio balance",
         "overdue": "Overdue portfolio",
         "overdueRate": "% portfolio overdue",
-        "activeCases": "Active cases",
+        "activeCases": "Overdue loans",
         "collected": "Collected"
       },
       "widgets": {
@@ -147,7 +149,7 @@
       },
       "table": {
         "collector": "Collector",
-        "cases": "Cases",
+        "cases": "Overdue",
         "balance": "Balance",
         "overdue": "Overdue",
         "overdueRate": "% overdue",
@@ -168,7 +170,7 @@
       "noAgenda": "No scheduled work in this period.",
       "noVisits": "No stops with a location for {day}.",
       "noTrend": "The period is too short to draw a trend.",
-      "noCollectors": "No cases assigned under this filter.",
+      "noCollectors": "No overdue loans in this filter.",
       "unknownCollector": "No name",
       "creditsInBucket": "Credits in each range"
     },
@@ -184,7 +186,29 @@
     "table": {
       "range": "{from}–{to} of {total}",
       "previous": "Previous",
-      "next": "Next"
+      "next": "Next",
+      "showing": "Showing {from} - {to} of {total} {entity}",
+      "perPage": "Per page",
+      "columns": "Columns",
+      "filters": "Filters",
+      "appliedFilters": "Applied filters",
+      "closeFilters": "Close filters",
+      "clear": "Clear",
+      "reorderHint": "drag to reorder, or Alt + arrows",
+      "showColumn": "Show",
+      "hideColumn": "Hide",
+      "all": "All",
+      "selected": "{count} selected",
+      "min": "Min",
+      "max": "Max",
+      "moreFilters": "+ More filters",
+      "lessFilters": "− Fewer filters",
+      "removeFilter": "Remove filter",
+      "clearAll": "Clear all",
+      "retry": "Retry",
+      "selectAll": "Select all on this page",
+      "selectRow": "Select this loan",
+      "clearSelection": "Clear selection"
     },
     "import": {
       "title": "Portfolio import",
@@ -332,13 +356,28 @@
           "label": "Set them current",
           "hint": "They stay active, with no days past due. The balance is untouched and the credit stays in your portfolio."
         },
-        "no-touch": { "label": "Leave them as they are", "hint": "They are not modified." },
-        "ask": { "label": "Decide on every import", "hint": "The list is shown before you confirm." }
+        "no-touch": {
+          "label": "Leave them as they are",
+          "hint": "They are not modified."
+        },
+        "ask": {
+          "label": "Decide on every import",
+          "hint": "The list is shown before you confirm."
+        }
       },
       "fieldStates": {
-        "required": { "label": "Required", "hint": "If the file does not carry it, that credit is not imported." },
-        "optional": { "label": "Optional", "hint": "If it is missing, it is left as it is." },
-        "off": { "label": "Do not import", "hint": "Whatever the file says is ignored." }
+        "required": {
+          "label": "Required",
+          "hint": "If the file does not carry it, that credit is not imported."
+        },
+        "optional": {
+          "label": "Optional",
+          "hint": "If it is missing, it is left as it is."
+        },
+        "off": {
+          "label": "Do not import",
+          "hint": "Whatever the file says is ignored."
+        }
       },
       "nameOrder": {
         "full": "All together",
@@ -378,12 +417,12 @@
       }
     },
     "cases": {
-      "title": "Cases",
-      "subtitle": "The team's open work: who has each case and which ones are running late.",
-      "scopedToMine": "You are seeing only the cases assigned to you.",
-      "empty": "There are no cases yet",
-      "emptyText": "They are created by generating them for the overdue portfolio, or one at a time from a credit's file.",
-      "noResults": "No cases match these filters",
+      "title": "Overdue portfolio",
+      "subtitle": "Overdue loans, who works them and how long they have been due. It fills and empties on its own: a loan enters on its first day overdue and leaves when it is paid or brought up to date.",
+      "scopedToMine": "You are only seeing what is assigned to you.",
+      "empty": "Nobody owes you",
+      "emptyText": "No overdue loans. When one passes its due date it shows up here on its own.",
+      "noResults": "No loans match these filters",
       "noResultsText": "Try removing one.",
       "filters": {
         "status": "Status",
@@ -392,7 +431,12 @@
         "all": "All",
         "unassigned": "Unassigned",
         "overdue": "Overdue only",
-        "clear": "Clear filters"
+        "clear": "Clear filters",
+        "arrearsRange": "Days overdue",
+        "scope": "Scope",
+        "includeCurrent": "Include those up to date",
+        "sla": "Handling time",
+        "slaOverdue": "Only those past the deadline"
       },
       "columns": {
         "client": "Debtor",
@@ -402,65 +446,58 @@
         "priority": "Priority",
         "assignee": "Collector",
         "slaDueAt": "Due",
-        "actions": "Actions"
+        "actions": "Actions",
+        "arrearsSource": "Arrears source"
       },
       "days": "{n} d",
       "noAssignee": "—",
       "unknownAssignee": "Assigned",
       "overdueBadge": "Overdue",
       "actions": {
-        "open": "Open the case",
+        "open": "View in Overdue",
         "activity": "Record activity",
-        "transition": "Move to…",
         "assign": "Assign",
-        "close": "Close the case"
+        "close": "Close collection"
       },
       "activity": {
         "title": "Record an activity",
-        "text": "It goes into the case history. A case cannot be closed without at least one.",
+        "text": "It stays in the collection history. It cannot be closed without at least one.",
         "type": "What was done",
         "notes": "Note",
         "confirm": "Record",
         "cancel": "Cancel",
         "done": "Activity recorded"
       },
-      "generate": {
-        "cta": "Generate cases",
-        "title": "Generate the cases for the overdue portfolio?",
-        "text": "One case will be created for every overdue credit that does not have an open one yet.",
-        "warning": "There is no way to undo this in bulk.",
-        "minDays": "From how many days past due",
-        "confirm": "Yes, generate",
-        "cancel": "Cancel",
-        "done": "{n} cases were created.",
-        "none": "There were no overdue credits without an open case."
-      },
       "assign": {
-        "title": "Assign the case",
-        "text": "Pick someone, or let it go to the collector with the fewest open cases.",
+        "title": "Assign collection",
+        "text": "Pick someone, or let it go to the collector with the lightest load.",
         "collector": "Collector",
-        "auto": "Whoever has the fewest cases",
-        "noTeam": "Your role cannot read the team, so the case goes to the collector with the fewest open cases.",
+        "auto": "To the lightest load",
+        "noTeam": "We cannot read the team with your role, so it goes to the collector with the lightest load.",
         "confirm": "Assign",
         "cancel": "Cancel",
-        "done": "Case assigned"
+        "done": "Collection assigned"
       },
       "transition": {
-        "title": "Move the case",
-        "text": "Only the states this case can move to are offered.",
+        "title": "Move collection",
+        "text": "Only the states it can move to are offered.",
         "reason": "Reason (optional)",
         "confirm": "Move",
         "cancel": "Cancel",
-        "done": "Case updated",
-        "none": "This case cannot be moved any more: it is closed."
+        "done": "Collection updated",
+        "none": "It can no longer be moved: it is closed.",
+        "tooltip": "Change the collection status",
+        "from": "Currently in",
+        "to": "Moves to",
+        "pick": "Pick the new status"
       },
       "close": {
-        "title": "Close the case",
-        "text": "Closing is final. The case stops counting as open work.",
+        "title": "Close collection",
+        "text": "Closing is final. It stops counting as open work.",
         "reason": "Reason for closing",
-        "confirm": "Close the case",
+        "confirm": "Close collection",
         "cancel": "Cancel",
-        "done": "Case closed"
+        "done": "Collection closed"
       },
       "detail": {
         "credit": "Credit",
@@ -500,10 +537,60 @@
       },
       "errors": {
         "generic": "The action could not be completed.",
-        "CASE_001": "A case cannot be closed without any recorded activity.",
+        "CASE_001": "A collection cannot be closed without any activity recorded.",
         "CASE_002": "That status change is not allowed from the current status.",
         "INVALID_ASSIGNEE": "That person does not belong to this company.",
         "AUTH_002": "You do not have permission for this action."
+      },
+      "entity": "loans",
+      "noCreditCode": "no code",
+      "search": {
+        "label": "Search debtor",
+        "placeholder": "First or last name",
+        "hint": "Searches by name. Search by ID document from Portfolio."
+      },
+      "arrearsSource": {
+        "CALCULATED": "Calculated",
+        "IMPORTED": "From file",
+        "MANUAL": "Manual"
+      },
+      "arrearsMode": "How do they end up?",
+      "bulk": {
+        "assign": "Assign to a collector",
+        "assignTitle": "Assign {count} loans to a collector",
+        "clear": "Bring up to date",
+        "clearTitle": "Bring {count} loans up to date",
+        "clearText": "{count} loans will be brought up to date and their collections closed.",
+        "clearOk": "Bring up to date",
+        "warning": "This cannot be undone in bulk. Each one keeps its close reason.",
+        "cancel": "Cancel",
+        "done": "Done: {count} loans",
+        "partial": "{done} went through and {failed} failed. {reason}",
+        "error": "Could not apply.",
+        "date": "New due date",
+        "modes": {
+          "next_period": "Move to the next period",
+          "date": "On the date I pick",
+          "none": "No due date"
+        },
+        "priority": "Priority",
+        "priorityTitle": "Change priority of {count} loans",
+        "priorityText": "It stays pinned: the daily calculation stops touching it until you release it.",
+        "priorityOk": "Change priority"
+      },
+      "priorityChange": "Change priority",
+      "prioritySet": "Priority pinned",
+      "priorityAuto": "Back to automatic priority",
+      "priorityError": "Could not change the priority.",
+      "priorityPinned": "Priority pinned by hand: the daily calculation leaves it alone",
+      "priorityBackToAuto": "Back to automatic",
+      "priorityAutoText": "Right now the system calculates it from the balance, days overdue and risk. Picking one pins it, and the daily calculation stops touching it.",
+      "priorityPinnedText": "Pinned by hand: the daily calculation leaves it alone.",
+      "priorityHint": {
+        "CRITICAL": "Go today",
+        "HIGH": "This week",
+        "MEDIUM": "Normal pace",
+        "LOW": "Can wait"
       }
     },
     "agenda": {
@@ -570,10 +657,10 @@
         "phone": "Phone",
         "address": "Address",
         "observations": "Notes",
-        "history": "Case history",
-        "historyEmpty": "There are no other items for this case.",
+        "history": "Collection history",
+        "historyEmpty": "No other activity for this loan.",
         "rescheduledFrom": "Born from rescheduling another item.",
-        "openCase": "Open the case"
+        "openCase": "View in Overdue"
       },
       "type": {
         "CALL": "Call",
@@ -648,7 +735,7 @@
         "distance": "Estimated distance",
         "duration": "Estimated duration",
         "noPreview": "We could not compute the route line. The stops are still listed.",
-        "openCase": "Open the case",
+        "openCase": "View in Overdue",
         "openClient": "Open the debtor's file"
       },
       "stop": {
@@ -739,7 +826,7 @@
       "detail": {
         "title": "The payment",
         "credit": "Credit",
-        "case": "Case",
+        "case": "Collection",
         "registeredBy": "Recorded by",
         "receiptNumber": "Receipt no.",
         "openReceipt": "Open the receipt",
@@ -812,7 +899,18 @@
       "debt": "Debt",
       "arrears": "Arrears",
       "credits": "Credits",
-      "status": "Status"
+      "status": "Status",
+      "risk": "Risk",
+      "clientStatus": "Client status"
+    },
+    "entity": "clients",
+    "filters": {
+      "collector": "Collector",
+      "branch": "Branch",
+      "allCollectors": "All collectors",
+      "allBranches": "All branches",
+      "arrearsRange": "Arrears range",
+      "debtRange": "Debt range"
     },
     "days": "{count, plural, one {# day} other {# days}}",
     "status": {
@@ -832,8 +930,15 @@
     "revealed": "Full details shown",
     "revealError": "Could not show the full details",
     "maskedHint": "Sensitive data is hidden. Showing it in full is recorded.",
-    "clientType": { "PERSON": "Person", "COMPANY": "Company" },
-    "clientStatus": { "ACTIVE": "Active", "INACTIVE": "Inactive", "BLOCKED": "Blocked" },
+    "clientType": {
+      "PERSON": "Person",
+      "COMPANY": "Company"
+    },
+    "clientStatus": {
+      "ACTIVE": "Active",
+      "INACTIVE": "Inactive",
+      "BLOCKED": "Blocked"
+    },
     "new": "New client",
     "newTitle": "New client",
     "newSubtitle": "A first name, a last name and one phone is enough to save.",
@@ -850,18 +955,28 @@
       "creditFixed": "The loan",
       "creditEditable": "Collection details",
       "schedule": "Schedule",
-      "contacts": "Phones and emails",
+      "contacts": "Contact",
       "locations": "Addresses",
       "guarantors": "Guarantors and contacts",
-      "attachments": "Attachments"
+      "collaterals": "Collateral",
+      "attachments": "Attachments",
+      "summary": "Account summary",
+      "timeline": "Activity log",
+      "cases": "Overdue"
     },
     "newLoan": "New loan",
     "loanTitle": "New loan",
     "loanSubtitle": "For {name}",
     "loanSave": "Grant the loan",
     "loanCreated": "Loan registered",
-    "loanMode": { "A": "I know the instalment", "B": "Work out the instalment" },
-    "interestBase": { "PER_PERIOD": "% per instalment", "TOTAL": "% of the total" },
+    "loanMode": {
+      "A": "I know the instalment",
+      "B": "Work out the instalment"
+    },
+    "interestBase": {
+      "PER_PERIOD": "% per instalment",
+      "TOTAL": "% of the total"
+    },
     "quote": {
       "installment": "Instalment",
       "total": "Total to collect",
@@ -872,7 +987,7 @@
     "archived": "Client archived",
     "confirmArchive": {
       "title": "Archive {name}?",
-      "text": "They become inactive and leave the portfolio, but their history — cases, payments and activity — stays.",
+      "text": "They stay inactive and leave the portfolio, but their history —collections, payments and activity— remains.",
       "ok": "Archive"
     },
     "actionError": "Could not complete the action",
@@ -929,6 +1044,7 @@
       "businessName": "Business name",
       "status": "Status",
       "minimum": "Saving needs a first name, a last name and at least one phone.",
+      "gender": "Gender",
       "addContact": "Add phone",
       "addLocation": "Add address",
       "addRelation": "Add guarantor",
@@ -959,7 +1075,20 @@
       "relationLocations": "Their addresses",
       "remove": "Remove",
       "removeLocation": "Remove address",
-      "removeRelation": "Remove guarantor"
+      "removeRelation": "Remove guarantor",
+      "addCollateral": "Add collateral",
+      "removeCollateral": "Remove collateral",
+      "collateralType": "Type (vehicle, property…)",
+      "collateralDescription": "What it is (make, model, location, serial no.…)",
+      "collateralValue": "Estimated value",
+      "collateralCurrency": "Currency",
+      "guarantees": "Guarantees the loans",
+      "appliesTo": "Backs the loans",
+      "noCreditsYet": "This client has no loans on file yet. It can be linked later.",
+      "creditNoCode": "Loan without code",
+      "phoneHint": "At least 5 digits. May start with + and contain spaces or hyphens.",
+      "collateralTypeUnset": "Unclassified",
+      "attachmentType": "Attachment type"
     },
     "fields": {
       "document": "ID",
@@ -973,9 +1102,15 @@
       "disbursedAt": "Disbursed",
       "installment": "Instalment",
       "frequency": "Frequency",
-      "nextDue": "Next collection"
+      "nextDue": "Next collection",
+      "code": "Code",
+      "creditType": "Credit type"
     },
-    "contactType": { "PHONE": "Phone", "WHATSAPP": "WhatsApp", "EMAIL": "Email" },
+    "contactType": {
+      "PHONE": "Phone",
+      "WHATSAPP": "WhatsApp",
+      "EMAIL": "Email"
+    },
     "locationType": {
       "HOME": "Home",
       "WORK": "Work",
@@ -996,8 +1131,108 @@
     "noContacts": "No phones on file.",
     "noLocations": "No addresses on file.",
     "noGuarantors": "No guarantors on file.",
+    "noCollaterals": "No collateral on file.",
+    "gender": {
+      "unset": "Unspecified",
+      "M": "Male",
+      "F": "Female",
+      "O": "Other"
+    },
+    "creditNoType": "Unclassified",
+    "noOpenCredits": "No open credits.",
+    "show": "Show",
+    "seeOnMap": "See on map",
+    "seeAll": "See all",
+    "attachmentsEmptyHint": "Upload copies of the ID, employment certificates or utility bills to complete the client file. You can also drag them here.",
+    "page": "Page {page} of {pages}",
+    "previous": "Previous",
+    "next": "Next",
+    "showHistory": "See history ({count})",
+    "hideHistory": "Hide history",
+    "importedHint": "Imported credit: the financial data comes from the source and is not edited here.",
+    "credit": {
+      "principal": "Total amount",
+      "installment": "Instalment",
+      "outstanding": "Outstanding balance",
+      "progress": "Payment progress"
+    },
+    "noTimeline": "No activity or payments recorded yet.",
+    "noCases": "No open collections.",
+    "casesDenied": "You do not have permission to view collections.",
+    "unassigned": "Unassigned",
+    "unknownCollector": "Collector",
+    "summary": {
+      "balance": "Total outstanding balance",
+      "credits": "Total credits",
+      "overdue": "Overdue"
+    },
+    "timeline": {
+      "payment": "Payment recorded",
+      "agenda": {
+        "CALL": "Call",
+        "VISIT": "Home visit",
+        "WHATSAPP": "WhatsApp",
+        "REMINDER": "Reminder",
+        "PROMISE_TO_PAY": "Promise to pay"
+      },
+      "activity": {
+        "NOTE": "Note",
+        "CALL": "Call",
+        "VISIT": "Visit",
+        "PAYMENT": "Payment",
+        "STATUS_CHANGE": "Status change",
+        "ASSIGNMENT": "Reassignment",
+        "MESSAGE": "Message"
+      },
+      "status": {
+        "SCHEDULED": "Scheduled",
+        "EXECUTED": "Done",
+        "CANCELLED": "Cancelled",
+        "RESCHEDULED": "Rescheduled"
+      }
+    },
+    "guaranteesCount": "Guarantees {count, plural, one {# loan} other {# loans}}",
+    "backsCount": "Backs {count, plural, one {# loan} other {# loans}}",
     "noAttachments": "No attachments.",
-    "attachmentsHint": "Attachments cannot be opened from the panel yet: they are listed by type, date and hash."
+    "attachmentsHint": "Attachments cannot be opened from the panel yet: they are listed by type, date and hash.",
+    "preview": "View",
+    "download": "Download",
+    "attachmentType": {
+      "ID_CARD": "ID document",
+      "PHOTO": "Photo",
+      "CONTRACT": "Contract",
+      "OTHER": "Other"
+    },
+    "confirmAttachmentRemove": {
+      "title": "Remove this attachment?",
+      "text": "The file leaves the record along with its hash, which is what proved the document existed. This cannot be undone.",
+      "ok": "Remove attachment"
+    },
+    "creditFixedHint": "Changing the number of installments, the currency or the disbursement date is a restructure: close this loan and create a new one.",
+    "arrears": {
+      "markCta": "Mark as overdue",
+      "markTitle": "Mark this loan as overdue?",
+      "markText": "The collection opens right away and the loan shows up under Overdue. This is for a loan with no schedule that you know is unpaid.",
+      "markOk": "Mark as overdue",
+      "marked": "Marked as overdue",
+      "days": "Days overdue so far",
+      "clearCta": "Bring up to date",
+      "clearTitle": "Bring this loan up to date",
+      "clearText": "Currently showing",
+      "clearOk": "Bring up to date",
+      "cleared": "Brought up to date",
+      "mode": "How does it end up?",
+      "modes": {
+        "next_period": "Moves to the next period",
+        "date": "On the date we agreed",
+        "none": "No due date"
+      },
+      "modeHint": {
+        "next_period": "The next collection date moves forward one period, following the loan frequency.",
+        "date": "The next collection date becomes the one you pick. It must be in the future.",
+        "none": "It becomes an open loan: with no agreed due date there are no overdue days to count."
+      }
+    }
   },
   "team": {
     "title": "Team",
@@ -1061,7 +1296,7 @@
     "confirm": {
       "deactivate": {
         "title": "Deactivate {name}",
-        "text": "They will not be able to sign in, but their case and payment history is kept. You can reactivate them any time.",
+        "text": "They will not be able to sign in, but their collection and payment history is kept. You can reactivate them at any time.",
         "ok": "Deactivate"
       },
       "reactivate": {

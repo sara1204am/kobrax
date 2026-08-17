@@ -44,6 +44,15 @@ export function presetRange(preset: DatePreset, today = new Date()): { from: str
 }
 
 /**
+ * Los filtros de selección múltiple viajan separados por coma (`collectorId=u1,u2`).
+ *
+ * 🔴 **Se filtra valor por valor, no se descarta la lista entera.** Un solo valor pegado a mano
+ * arruinaría la elección de los otros tres, y quien mira no tendría forma de saber por qué.
+ */
+const many = (value: string | undefined, valid: (v: string) => boolean): string[] =>
+  (value?.split(',') ?? []).map((v) => v.trim()).filter(valid);
+
+/**
  * Lo que llegó por la URL, ya limpio.
  *
  * 🔴 **Un id inventado no viaja.** `collectorId` y `branchId` entran a la query de la API, que los
@@ -58,16 +67,20 @@ export function dashboardFilters(
   const from = params.from && IS_DAY.test(params.from) ? params.from : fallback.from;
   const to = params.to && IS_DAY.test(params.to) ? params.to : fallback.to;
 
+  const collectorId = many(params.collectorId, isUuid);
+  // Los dos enums se validan por el mismo motivo que los ids: la API los valida con `@IsEnum` y un
+  // valor inventado en la URL le contesta 400 **a los seis endpoints**, no a uno.
+  const caseStatus = many(params.caseStatus, isCaseStatus);
+  const priority = many(params.priority, isPriority);
+
   return {
     // Un rango al revés no es un error del que haya que avisar: se da vuelta y listo.
     dateFrom: from <= to ? from : to,
     dateTo: from <= to ? to : from,
-    ...(params.collectorId && isUuid(params.collectorId) ? { collectorId: params.collectorId } : {}),
+    ...(collectorId.length ? { collectorId } : {}),
     ...(params.branchId && isUuid(params.branchId) ? { branchId: params.branchId } : {}),
-    // Los dos enums se validan por el mismo motivo que los ids: la API los valida con `@IsEnum` y un
-    // valor inventado en la URL le contesta 400 **a los seis endpoints**, no a uno.
-    ...(isCaseStatus(params.caseStatus) ? { caseStatus: params.caseStatus } : {}),
-    ...(isPriority(params.priority) ? { priority: params.priority } : {}),
+    ...(caseStatus.length ? { caseStatus } : {}),
+    ...(priority.length ? { priority } : {}),
   };
 }
 
@@ -77,10 +90,18 @@ const isCaseStatus = (value?: string): value is CaseStatus =>
 const isPriority = (value?: string): value is CasePriority =>
   !!value && (Object.values(CasePriority) as string[]).includes(value);
 
-/** Los mismos filtros, como query para la API. Los seis endpoints reciben exactamente esto. */
+/**
+ * Los mismos filtros, como query para la API. Los seis endpoints reciben exactamente esto.
+ *
+ * Las listas se escriben solas: `String(['u1','u2'])` es `'u1,u2'`, que es la forma que la API
+ * parte de vuelta. Una lista vacía **no viaja**: es un objeto y pasa cualquier `if`, así que sin la
+ * guarda saldría `collectorId=` y la API armaría un `IN ()`.
+ */
 export function analyticsQuery(filters: DashboardFilters): URLSearchParams {
   const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(filters)) if (value) query.set(key, String(value));
+  for (const [key, value] of Object.entries(filters)) {
+    if (Array.isArray(value) ? value.length : value) query.set(key, String(value));
+  }
   return query;
 }
 

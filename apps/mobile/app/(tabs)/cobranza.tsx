@@ -65,7 +65,10 @@ export default function CobranzaScreen() {
   const fetchCartera = useCallback(async () => {
     const reqId = ++reqRef.current;
     // La cartera de un cobrador cabe en memoria (§5.3): una página amplia, sin paginar en el móvil.
-    const res = await listCases({ view: 'portfolio', limit: 100 });
+    // 🔴 `open: true` no es opcional: sin él entran los casos CERRADOS. Mientras nada los cerraba
+    // daba igual; ahora el trabajo diario cierra al que pagó, y esta lista lo seguiría mostrando
+    // para cobrar. Lo mismo en `rutas/crear` y en el hidratado offline.
+    const res = await listCases({ view: 'portfolio', open: true, limit: 100 });
     if (reqId !== reqRef.current) return;
     // Un bache de red en un refresh no borra lo ya cargado (offline-first).
     if (res.status === 'offline') return setLoad((prev) => (prev.status === 'ok' ? prev : { status: 'offline' }));

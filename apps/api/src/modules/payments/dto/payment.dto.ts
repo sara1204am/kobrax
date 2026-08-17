@@ -19,6 +19,8 @@ export class ListPaymentsQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit?: number;
   @IsOptional() @IsUUID() creditId?: string;
   @IsOptional() @IsUUID() caseId?: string;
+  /** Todos los pagos de una persona, de todos sus créditos. Es el historial de la ficha. */
+  @IsOptional() @IsUUID() clientId?: string;
   @IsOptional() @IsDateString() from?: string;
   @IsOptional() @IsDateString() to?: string;
 }

@@ -97,4 +97,6 @@ export enum CatalogType {
   CURRENCY = 'CURRENCY',
   WHATSAPP_TEMPLATE = 'WHATSAPP_TEMPLATE', // plantillas de mensaje (metadata.body con {{cliente}}/{{saldo}})
   SPECIAL_CATEGORY = 'SPECIAL_CATEGORY', // categorías de "gestión especial" en campo (RT-6)
+  COLLATERAL_TYPE = 'COLLATERAL_TYPE', // qué clase de bien es una garantía (vehículo, inmueble…)
+  CREDIT_TYPE = 'CREDIT_TYPE', // qué clase de crédito es (consumo, microcrédito, vivienda…)
 }

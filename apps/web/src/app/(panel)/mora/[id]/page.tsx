@@ -11,9 +11,10 @@ import {
 } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { Badge, Card, EmptyState, Fact, PageHeader } from '@/components/panel-ui';
-import { PRIORITY_TONE, STATUS_TONE } from '@/lib/cases';
 import { date, dateTime, money } from '@/lib/format';
 import { CaseActions } from './case-actions';
+import { StatusControl } from './status-control';
+import { PriorityCell } from '../priority-cell';
 
 /**
  * La ficha del caso: de quién es, en qué estado está y qué se hizo.
@@ -43,6 +44,7 @@ export default async function CasoPage({ params }: { params: { id: string } }) {
   const permissions = me.body.data?.permissions ?? [];
   const currency = item.currency ?? account.body.data?.currencyCode ?? 'BOB';
   const assignee = members.find((m) => m.userId === item.assigneeId);
+  const canWrite = permissions.includes(Permission.CASE_WRITE);
 
   return (
     <>
@@ -54,7 +56,7 @@ export default async function CasoPage({ params }: { params: { id: string } }) {
             caseId={item.id}
             status={item.status}
             members={members}
-            canWrite={permissions.includes(Permission.CASE_WRITE)}
+            canWrite={canWrite}
             canAssign={permissions.includes(Permission.CASE_ASSIGN)}
             canClose={permissions.includes(Permission.CASE_CLOSE)}
           />
@@ -63,9 +65,16 @@ export default async function CasoPage({ params }: { params: { id: string } }) {
 
       <div className="space-y-6">
         <Card>
+          {/* Estado y prioridad son **controles**, no etiquetas: se tocan y se cambian acá mismo.
+              Cada uno lleva su señal —el lápiz, el candado— para que se note que se puede. */}
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={STATUS_TONE[item.status]}>{t(`status.${item.status}`)}</Badge>
-            <Badge tone={PRIORITY_TONE[item.priority]}>{t(`priority.${item.priority}`)}</Badge>
+            <StatusControl caseId={item.id} status={item.status} canWrite={canWrite} />
+            <PriorityCell
+              caseId={item.id}
+              priority={item.priority}
+              pinned={item.priorityPinned}
+              canWrite={canWrite}
+            />
             {item.isOverdue && <Badge tone="danger">{t('overdueBadge')}</Badge>}
           </div>
 

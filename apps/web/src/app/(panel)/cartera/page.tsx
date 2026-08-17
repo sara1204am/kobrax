@@ -1,62 +1,77 @@
 import { getTranslations } from 'next-intl/server';
-import type { AccountInfo } from '@kobrax/shared';
+import { CatalogType, type AccountInfo, type MeInfo, type Member } from '@kobrax/shared';
 import { apiCall, pageMeta } from '@/lib/bff';
-import { EmptyState, PageHeader } from '@/components/panel-ui';
-import { SearchBox } from '@/components/search-box';
+import { RetryState } from '@/components/retry-state';
 import type { PortfolioRow } from '@/lib/portfolio';
+import { carteraQuery, DEFAULT_PAGE_SIZE, hasCarteraFilters } from '@/lib/cartera-query';
 import { PortfolioTable } from './portfolio-table';
 import { NewClientButton } from './new-client-button';
-
-const LIMIT = 20;
-
-/** Los que el servidor sabe ordenar. Uno inventado en la URL no viaja: la API lo rechazaría. */
-const SORTS = ['dpd', 'debt', 'name', 'status', 'createdAt'];
 
 /**
  * La cartera del negocio.
  *
  * Pide `view=portfolio`, que agrega la deuda y la mora de los créditos de cada cliente **en la
- * misma consulta que ordena** — ordenar por mora después de paginar ordenaría 20 clientes
- * cualesquiera. Por eso el orden, la página y la búsqueda viajan a la API y no se resuelven acá.
+ * misma consulta que ordena y filtra** — ordenar por mora después de paginar ordenaría 50 clientes
+ * cualesquiera, y filtrar por mora en el navegador filtraría sólo la página visible. Por eso todo
+ * el estado de la tabla viaja a la API y nada se resuelve acá.
  *
  * Abre por mora descendente: lo peor primero, como la lista del teléfono.
  */
 export default async function CarteraPage({
   searchParams,
 }: {
-  searchParams: { q?: string; sort?: string; dir?: string; page?: string; status?: string };
+  searchParams: Record<string, string | undefined>;
 }) {
   const t = await getTranslations('portfolio');
+  const query = carteraQuery(searchParams);
 
-  const page = Math.max(1, Number(searchParams.page) || 1);
-  const query = new URLSearchParams({ view: 'portfolio', page: String(page), limit: String(LIMIT) });
-  if (searchParams.q?.trim()) query.set('q', searchParams.q.trim());
-  if (searchParams.status) query.set('status', searchParams.status);
-  if (searchParams.sort && SORTS.includes(searchParams.sort)) {
-    query.set('sort', searchParams.sort);
-    query.set('dir', searchParams.dir === 'asc' ? 'asc' : 'desc');
-  }
-
-  const [list, account] = await Promise.all([
+  /*
+   * Todo en paralelo. Los tres de al lado son para los filtros globales y las preferencias, y
+   * **ninguno puede tumbar la pantalla**: un rol sin `user:read` recibe 403 en `/users` y la cartera
+   * tiene que seguir abriendo igual, con el selector de cobrador vacío.
+   */
+  const [list, account, me, team, collateralTypes] = await Promise.all([
     apiCall<PortfolioRow[]>(`/clients?${query}`, { method: 'GET', auth: true }),
     apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
+    apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
+    apiCall<Member[]>('/users', { method: 'GET', auth: true }),
+    // Para el modal de alta: sin catálogo, el tipo de garantía se escribe libre y no pasa nada.
+    apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.COLLATERAL_TYPE}`, { method: 'GET', auth: true }),
   ]);
 
   if (list.status !== 200 || !list.body.data) {
-    return <EmptyState title={t('noAccess')} text={list.body.error?.message} />;
+    // Con `[Reintentar]`: si la API se cayó un segundo, recargar a mano perdería los filtros que la
+    // persona venía armando. El mensaje lo pone el servidor, que es el que sabe qué falló.
+    return (
+      <>
+        <p className="mb-4 text-[14px] text-k-text-2">{t('subtitle')}</p>
+        <RetryState title={t('noAccess')} text={list.body.error?.message} />
+      </>
+    );
   }
 
   return (
     <>
-      <PageHeader title={t('title')} subtitle={t('subtitle')} actions={<NewClientButton />} />
-      {/* El documento está cifrado: se busca completo o no matchea. Decirlo evita que alguien
-          escriba medio carnet y concluya que el cliente no existe. */}
-      <SearchBox label={t('search.label')} placeholder={t('search.placeholder')} hint={t('search.hint')} />
+      {/* Sin título: la pantalla ya se llama «Cartera» en el menú de la izquierda, y repetirlo en
+          26 px empuja la tabla —que es a lo que se viene— media pantalla hacia abajo. Queda la
+          bajada, que sí dice algo que el menú no dice. */}
+      <p className="mb-4 text-[14px] text-k-text-2">{t('subtitle')}</p>
       <PortfolioTable
         rows={list.body.data}
-        meta={pageMeta(list.body, searchParams.page, LIMIT)}
+        meta={pageMeta(list.body, searchParams.page, Number(query.get('limit')) || DEFAULT_PAGE_SIZE)}
         currency={account.body.data?.currencyCode ?? 'BOB'}
-        hasFilters={Boolean(searchParams.q?.trim() || searchParams.status)}
+        hasFilters={hasCarteraFilters(searchParams)}
+        userId={me.body.data?.userId}
+        collectors={team.body.data ?? []}
+        action={
+          <NewClientButton
+            currency={account.body.data?.currencyCode ?? 'BOB'}
+            collateralTypes={collateralTypes.body.data ?? []}
+          />
+        }
+        // Las sucursales todavía no existen como endpoint: cuando exista, entra acá y el filtro ya
+        // está cableado. Mientras tanto se dibuja apagado en vez de esconderse y reaparecer un día.
+        branches={[]}
       />
     </>
   );

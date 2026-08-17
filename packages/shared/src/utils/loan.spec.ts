@@ -3,14 +3,100 @@ import { InterestBase, PaymentFrequency, PortfolioStatus, CreditOrigin } from '.
 import {
   addPeriods,
   arrearsFromDueDate,
+  arrearsSourceOf,
   creditView,
+  manualArrears,
+  moraSinceFromDays,
   portfolioStatus,
   quoteFromInstallment,
   quoteLoan,
   readCreditMetadata,
 } from './loan.js';
+import { searchTerms } from './client-form.js';
 
 const d = (iso: string): Date => new Date(`${iso}T00:00:00.000Z`);
+
+/**
+ * Una mora, tres orígenes, **un dueño cada uno**. Esta es la regla que sostiene todo el módulo:
+ * si el trabajo diario pudiera decidir la mora manual o la importada, aparecería el ciclo de
+ * «lo puse al día y volvió a mora a la mañana».
+ */
+/**
+ * 🔴 El caso que la motivó: **«Teresa Mama» tiene que encontrar a «Teresa Mamani Padilla»**. Con la
+ * frase entera no la encuentra nunca — el espacio cae justo entre el nombre y el apellido.
+ */
+describe('searchTerms — buscar como se escribe un nombre', () => {
+  it('parte la búsqueda en palabras', () => {
+    expect(searchTerms('Teresa Mama')).toEqual(['Teresa', 'Mama']);
+  });
+
+  it('aguanta los espacios de más y los bordes', () => {
+    expect(searchTerms('  Teresa   Mama  ')).toEqual(['Teresa', 'Mama']);
+    expect(searchTerms('')).toEqual([]);
+    expect(searchTerms(undefined)).toEqual([]);
+    expect(searchTerms('   ')).toEqual([]);
+  });
+
+  // Cada palabra suma un OR de tres ILIKE: una frase pegada armaría un WHERE que no termina.
+  it('corta en cinco palabras', () => {
+    expect(searchTerms('a b c d e f g')).toHaveLength(5);
+  });
+});
+
+describe('arrearsSourceOf — de quién es la mora', () => {
+  const meta = (over: Record<string, unknown> = {}) => readCreditMetadata({ origin: CreditOrigin.MANUAL, ...over });
+
+  it('sin marca a mano, la calcula el sistema', () => {
+    expect(arrearsSourceOf(meta())).toBe('CALCULATED');
+  });
+
+  it('con `moraSince`, el dueño es quien la marcó', () => {
+    expect(arrearsSourceOf(meta({ moraSince: '2026-08-01' }))).toBe('MANUAL');
+  });
+
+  it('el importado gana sobre la marca a mano: su archivo manda hasta la próxima carga', () => {
+    expect(arrearsSourceOf(meta({ origin: CreditOrigin.IMPORT, moraSince: '2026-08-01' }))).toBe('IMPORTED');
+    expect(arrearsSourceOf(meta({ origin: CreditOrigin.API }))).toBe('IMPORTED');
+  });
+
+  // `quick_batch` es carga rápida del propio cobrador: dato suyo, se calcula como cualquier otro.
+  it('la carga rápida por lote NO es importada', () => {
+    expect(arrearsSourceOf(meta({ origin: CreditOrigin.QUICK_BATCH }))).toBe('CALCULATED');
+  });
+});
+
+/**
+ * 🔴 Se guarda la FECHA, no los días. Guardando `15` el número queda congelado y para envejecerlo el
+ * job tendría que escribir encima de la mora manual — rompiendo la regla de un dueño por origen.
+ */
+describe('manualArrears — la mora marcada a mano envejece sola', () => {
+  it('cuenta los días desde que alguien la marcó', () => {
+    expect(manualArrears('2026-08-01', 900, d('2026-08-01'))).toBe(0);
+    expect(manualArrears('2026-08-01', 900, d('2026-08-11'))).toBe(10);
+    // Diez días después, sin que nadie haya escrito nada.
+    expect(manualArrears('2026-08-01', 900, d('2026-08-21'))).toBe(20);
+  });
+
+  it('sin saldo no hay mora, aunque la marca siga puesta', () => {
+    expect(manualArrears('2026-08-01', 0, d('2026-08-21'))).toBe(0);
+  });
+
+  it('sin marca no hay mora manual', () => {
+    expect(manualArrears(undefined, 900, d('2026-08-21'))).toBe(0);
+  });
+
+  it('«lleva 15 días» se guarda como una fecha, y vuelve a leerse como 15', () => {
+    const since = moraSinceFromDays(15, d('2026-08-17'));
+    expect(since).toBe('2026-08-02');
+    expect(manualArrears(since, 900, d('2026-08-17'))).toBe(15);
+  });
+
+  it('marcar sin decir días arranca en cero y suma uno mañana', () => {
+    const since = moraSinceFromDays(0, d('2026-08-17'));
+    expect(manualArrears(since, 900, d('2026-08-17'))).toBe(0);
+    expect(manualArrears(since, 900, d('2026-08-18'))).toBe(1);
+  });
+});
 
 describe('quoteLoan — las dos bases del §4.2', () => {
   it('el ejemplo literal del PDF: 1.000 al 10% por período en 5 cuotas → 300 / 1.500 / 500', () => {

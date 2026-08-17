@@ -58,6 +58,9 @@ export type QueueKind =
   | 'route.status'
   | 'client.create'
   | 'credit.create'
+  /** Marcar en mora y poner al día. Ver `queue.ts`: «poner al día» viaja con la fecha ya resuelta. */
+  | 'arrears.mark'
+  | 'arrears.clear'
   | 'agenda.cancel'
   | 'agenda.reschedule';
 

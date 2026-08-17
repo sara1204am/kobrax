@@ -12,6 +12,7 @@ import {
   CreateCaseDto,
   GenerateCasesDto,
   ListCasesQueryDto,
+  SetPriorityDto,
   TransitionCaseDto,
 } from './dto/case.dto';
 
@@ -54,6 +55,18 @@ export class CasesController {
   @Roles(Permission.CASE_ASSIGN)
   assign(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AssignCaseDto) {
     return this.cases.assign(id, dto);
+  }
+
+  /**
+   * Subir o bajar la prioridad a mano, o devolverla a la automática.
+   *
+   * `CASE_WRITE` y no `CASE_ASSIGN`: decir «a éste hay que ir hoy» es parte de gestionar la cobranza,
+   * no de repartirla — el cobrador que conoce a su deudor tiene que poder hacerlo sin ser supervisor.
+   */
+  @Post(':id/priority')
+  @Roles(Permission.CASE_WRITE)
+  setPriority(@Param('id', ParseUUIDPipe) id: string, @Body() dto: SetPriorityDto) {
+    return this.cases.setPriority(id, dto);
   }
 
   @Post(':id/activities')

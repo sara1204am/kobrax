@@ -57,7 +57,8 @@ export default function CrearRutaScreen() {
     setDraft(await loadDraft(todayISO()));
 
     // La cartera del cobrador ya viene acotada a él y con el punto de cada cliente (§5.1).
-    const res = await listCases({ view: 'portfolio', limit: 100 });
+    // 🔴 `open: true`: sin él se arma la ruta con casos cerrados y se sale a visitar a quien ya pagó.
+    const res = await listCases({ view: 'portfolio', open: true, limit: 100 });
     if (res.status === 'offline') return setLoad((p) => (p.status === 'ok' ? p : { status: 'offline' }));
     if (res.status !== 'ok') return setLoad((p) => (p.status === 'ok' ? p : { status: 'error' }));
 

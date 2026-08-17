@@ -318,8 +318,23 @@ function Topbar({
 /**
  * Desplegable sobre `<details>`: abrir y cerrar con teclado y el estado los pone el navegador.
  * Lo único que se agrega es cerrarlo al hacer clic afuera o con Esc, que `details` no trae.
+ *
+ * Se exporta porque los filtros del tablero necesitan exactamente esto. Lo que cambia entre los dos
+ * usos es el aspecto del disparador y el ancho del panel, y para eso están las dos clases: escribir
+ * un segundo desplegable sería escribir de nuevo el clic-afuera y el Esc, que es la parte que
+ * cuesta y la que se olvida.
  */
-function Dropdown({ label, children }: { label: ReactNode; children: ReactNode }) {
+export function Dropdown({
+  label,
+  children,
+  summaryClass = 'flex min-h-[44px] cursor-pointer list-none items-center gap-2 rounded-xl px-2 text-[14px] text-k-text-2 hover:bg-k-bg [&::-webkit-details-marker]:hidden',
+  panelClass = 'absolute right-0 z-20 mt-1 w-[260px] overflow-hidden rounded-xl border border-k-border bg-white shadow-k-card',
+}: {
+  label: ReactNode;
+  children: ReactNode;
+  summaryClass?: string;
+  panelClass?: string;
+}) {
   const ref = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
@@ -338,13 +353,11 @@ function Dropdown({ label, children }: { label: ReactNode; children: ReactNode }
 
   return (
     <details ref={ref} className="relative">
-      <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-2 rounded-xl px-2 text-[14px] text-k-text-2 hover:bg-k-bg [&::-webkit-details-marker]:hidden">
+      <summary className={summaryClass}>
         {label}
         <Icon name="chevron" className="h-4 w-4 text-k-muted" />
       </summary>
-      <div className="absolute right-0 z-20 mt-1 w-[260px] overflow-hidden rounded-xl border border-k-border bg-white shadow-k-card">
-        {children}
-      </div>
+      <div className={panelClass}>{children}</div>
     </details>
   );
 }
@@ -472,7 +485,21 @@ function initials(name: string): string {
 // Inline y no una librería: son trazos sueltos que heredan `currentColor`.
 
 // Tipado contra `NavKey`: sumar un ítem al menú sin darle ícono lo agarra el type-check.
-const ICONS: Record<NavKey | 'menu' | 'chevron' | 'check' | 'logout', string> = {
+const ICONS: Record<
+  | NavKey
+  | 'menu'
+  | 'chevron'
+  | 'check'
+  | 'logout'
+  | 'eye'
+  | 'eyeOff'
+  | 'grip'
+  | 'phone'
+  | 'mail'
+  | 'file'
+  | 'upload',
+  string
+> = {
   home: 'M4 10.5 12 4l8 6.5M6.5 9.5V20h11V9.5',
   portfolio: 'M3 8h15a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8zm0 0a2 2 0 0 1 2-2h11M16 13.5h1.5',
   import: 'M12 3.5v9.5m0 0 3.5-3.5M12 13 8.5 9.5M4.5 15.5V18a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2.5',
@@ -488,9 +515,20 @@ const ICONS: Record<NavKey | 'menu' | 'chevron' | 'check' | 'logout', string> = 
   chevron: 'M7 10l5 5 5-5',
   check: 'M5 12.5l4.5 4.5L19 7.5',
   logout: 'M15 7.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-1.5M10 12h10m0 0-3-3m3 3-3 3',
+  // Ojo abierto / tachado: una columna se ve o no se ve, y el ícono lo dice sin leer.
+  eye: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12zM12 14.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+  eyeOff: 'M4 4l16 16M9.9 5.7A9.5 9.5 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-3.4 4.2M6.5 8A17 17 0 0 0 2.5 12S6 18.5 12 18.5c1 0 1.9-.2 2.7-.5M9.9 9.9a3 3 0 0 0 4.2 4.2',
+  // Los seis puntitos del agarre: la señal universal de «esto se arrastra».
+  grip: 'M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01',
+  // Canales de contacto: el ícono dice de qué se trata antes de leer el rótulo.
+  phone: 'M6.5 3.5h3l1.5 4-2 1.5a12 12 0 0 0 6 6l1.5-2 4 1.5v3a1.5 1.5 0 0 1-1.6 1.5A16.5 16.5 0 0 1 5 5.1 1.5 1.5 0 0 1 6.5 3.5z',
+  mail: 'M3.5 6.5h17v11h-17zM3.5 7l8.5 6 8.5-6',
+  // Documentos: la hoja con la esquina doblada, y la nube con la flecha para subir.
+  file: 'M13.5 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9zM13.5 3.5V9H19',
+  upload: 'M7 16.5a3.5 3.5 0 0 1-.4-7A5 5 0 0 1 16.5 9a3.5 3.5 0 0 1 .5 7M12 20v-8m0 0-2.5 2.5M12 12l2.5 2.5',
 };
 
-function Icon({
+export function Icon({
   name,
   className = 'h-[19px] w-[19px] shrink-0',
 }: {

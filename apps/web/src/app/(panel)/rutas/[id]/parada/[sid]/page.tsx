@@ -73,7 +73,7 @@ export default async function ParadaPage({ params }: { params: { id: string; sid
               {t('detail.openClient')}
             </Link>
             {stop.caseId && (
-              <Link href={`/casos/${stop.caseId}`} className="text-[14px] font-medium text-k-purple hover:underline">
+              <Link href={`/mora/${stop.caseId}`} className="text-[14px] font-medium text-k-purple hover:underline">
                 {t('detail.openCase')}
               </Link>
             )}

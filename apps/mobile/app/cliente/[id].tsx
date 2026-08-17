@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { portfolioStatus } from '@kobrax/shared';
+import { addPeriods, PaymentFrequency, portfolioStatus } from '@kobrax/shared';
 import { choosePhoto } from '@/photo';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { AmountInput, BottomSheet, Chips, EmptyState, Header, PORTFOLIO_STATUS_META, SectionLabel, StatusBadge } from '@/ui';
@@ -13,10 +13,15 @@ import { clientContext, type AgendaClientContext, type CreditOption } from '@/ag
 import { clientDisplayName, getClient, type ClientDetail } from '@/clients.service';
 import { addActivity, getCase, type CaseDetail, type NewActivity } from '@/cases.service';
 import { createPayment, listPayments, type PaymentItem, type PaymentMethod } from '@/payments.service';
+import { clearArrears, markArrears } from '@/credits.service';
+import type { QueuedAction } from '@/sync/queue';
 import { uploadImage } from '@/uploads.service';
 import { MiQrCobro } from '@/qr-cobro';
 import { queueForLater } from '@/sync/sync.service';
 import { buildTimeline, promiseReady, recovered, type TimelineEntry } from '@/ficha';
+
+/** Las dos acciones de mora, ya en la forma en la que viajan por la cola. */
+type QueuedArrears = Extract<QueuedAction, { kind: 'arrears.mark' | 'arrears.clear' }>;
 
 const METHODS: { value: PaymentMethod; label: string }[] = [
   { value: 'CASH', label: 'Efectivo' },
@@ -61,6 +66,7 @@ export default function ClienteFichaScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [paySheet, setPaySheet] = useState(false);
   const [gestSheet, setGestSheet] = useState(false);
+  const [moraSheet, setMoraSheet] = useState<'mark' | 'clear' | null>(null);
 
   const selected = useMemo(() => ctx?.credits.find((c) => c.creditId === creditId) ?? ctx?.credits[0], [ctx, creditId]);
 
@@ -257,6 +263,20 @@ export default function ClienteFichaScreen() {
           <View style={{ gap: SPACING.sm, marginTop: SPACING.sm }}>
             <Button label="Registrar pago" onPress={() => setPaySheet(true)} />
             <Button label="Registrar gestión" variant="ghost" onPress={() => setGestSheet(true)} />
+            {/*
+             * 🔴 **Marcar en mora es para el préstamo sin cronograma.** Sin fecha que se venza sola,
+             * el trabajo diario del servidor no tiene de dónde sacar la mora y ese préstamo nunca
+             * entra a cobranza: lo tiene que decir quien lo prestó. Poner al día mueve la fecha —no
+             * baja un número—, o el servidor lo vuelve a marcar esta misma noche.
+             *
+             * No se ofrecen sobre un préstamo importado: su mora la manda el archivo.
+             */}
+            {!detail?.locked &&
+              (selected.daysPastDue > 0 ? (
+                <Button label="Poner al día" variant="ghost" onPress={() => setMoraSheet('clear')} />
+              ) : (
+                <Button label="Marcar en mora" variant="ghost" onPress={() => setMoraSheet('mark')} />
+              ))}
           </View>
         </View>
 
@@ -398,7 +418,115 @@ export default function ClienteFichaScreen() {
           return res.message;
         }}
       />
+
+      <MoraSheet
+        mode={moraSheet}
+        onClose={() => setMoraSheet(null)}
+        daysPastDue={selected.daysPastDue}
+        nextDueDate={detail?.nextDueDate}
+        frequency={detail?.frequency}
+        onSubmit={async (accion) => {
+          const res =
+            accion.kind === 'arrears.mark'
+              ? await markArrears(accion.creditId, accion.days)
+              : await clearArrears(accion.creditId, accion.input);
+          if (res.status === 'ok') { setMoraSheet(null); await onRefresh(); return null; }
+          if (res.status === 'offline') {
+            /*
+             * Se guarda y sube sola. Marcar es idempotente (escribe la misma fecha de arranque);
+             * poner al día viaja con la **fecha ya resuelta**, nunca con «siguiente período», que
+             * reintentado correría el vencimiento dos veces.
+             */
+            const guardada = await queueForLater(accion);
+            if (!guardada) return 'Sin conexión y no se pudo guardar en el teléfono. Reintentá.';
+            setMoraSheet(null);
+            return null;
+          }
+          if (res.status === 'unauthenticated') return 'Tu sesión venció.';
+          return res.message;
+        }}
+        creditId={selected.creditId}
+      />
     </View>
+  );
+}
+
+/**
+ * Marcar en mora / poner al día.
+ *
+ * 🔴 **«Poner al día» resuelve la fecha ACÁ, no manda el modo.** El servidor entiende
+ * `next_period`, pero ese modo avanza un período *desde donde esté*: si la acción se encola sin
+ * señal y se reintenta, el vencimiento se corre dos veces y el deudor se gana un mes. Se calcula con
+ * `addPeriods` —la misma función que usa el servidor— y viaja como fecha fija.
+ */
+function MoraSheet({
+  mode,
+  onClose,
+  creditId,
+  daysPastDue,
+  nextDueDate,
+  frequency,
+  onSubmit,
+}: {
+  mode: 'mark' | 'clear' | null;
+  onClose: () => void;
+  creditId: string;
+  daysPastDue: number;
+  nextDueDate?: string;
+  frequency?: PaymentFrequency;
+  onSubmit: (accion: QueuedArrears) => Promise<string | null>;
+}) {
+  const [days, setDays] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const hoy = new Date();
+  // Desde la fecha que tenía si todavía no venció; si no, desde hoy — avanzar sobre una vencida de
+  // hace meses dejaría la nueva también vencida.
+  const base = nextDueDate && new Date(nextDueDate) > hoy ? new Date(nextDueDate) : hoy;
+  const proxima = addPeriods(base, 1, frequency ?? PaymentFrequency.MONTHLY).toISOString().slice(0, 10);
+
+  async function enviar(accion: QueuedArrears) {
+    setError(null);
+    setBusy(true);
+    const msg = await onSubmit(accion);
+    setBusy(false);
+    if (msg) setError(msg);
+    else setDays('');
+  }
+
+  return (
+    <BottomSheet visible={mode !== null} onClose={onClose} title={mode === 'clear' ? 'Poner al día' : 'Marcar en mora'}>
+      <ErrorBanner message={error} />
+      {mode === 'clear' ? (
+        <View style={{ gap: SPACING.sm }}>
+          <Text style={styles.cardSub}>{`Hoy figura con ${daysPastDue} días de mora.`}</Text>
+          <Button
+            label={`Corre al ${prettyDate(proxima)}`}
+            disabled={busy}
+            onPress={() => void enviar({ kind: 'arrears.clear', creditId, input: { mode: 'date', date: proxima } })}
+          />
+          <Button
+            label="Sin fecha de vencimiento"
+            variant="ghost"
+            disabled={busy}
+            onPress={() => void enviar({ kind: 'arrears.clear', creditId, input: { mode: 'none' } })}
+          />
+        </View>
+      ) : (
+        <View style={{ gap: SPACING.sm }}>
+          <Text style={styles.cardSub}>Se abre la cobranza y el préstamo entra a Mora.</Text>
+          <Field label="Días que lleva en mora (opcional)">
+            <AmountInput value={days} onChangeText={setDays} placeholder="0" />
+          </Field>
+          <Button
+            label="Marcar en mora"
+            disabled={busy}
+            onPress={() => void enviar({ kind: 'arrears.mark', creditId, days: Number(days) || 0 })}
+          />
+        </View>
+      )}
+    </BottomSheet>
   );
 }
 

@@ -65,6 +65,14 @@ jest.mock('../credits.service', () => ({
     mockCalls.push(`createCredit:${input.id}:cliente=${input.clientId}`);
     return { status: 'ok', data: { id: input.id } };
   }),
+  markArrears: jest.fn(async (creditId: string, days?: number) => {
+    mockCalls.push(`markArrears:${creditId}:${days ?? '-'}`);
+    return { status: 'ok', data: {} };
+  }),
+  clearArrears: jest.fn(async (creditId: string, input: { mode: string; date?: string }) => {
+    mockCalls.push(`clearArrears:${creditId}:${input.mode}:${input.date ?? '-'}`);
+    return { status: 'ok', data: {} };
+  }),
 }));
 
 import { send } from './queue';
@@ -161,5 +169,32 @@ describe('send · altas offline', () => {
       input: { scheduledDate: '2026-08-20', timeMode: 'LAPSE', timeSlot: 'MORNING', reasonCode: 'PIDIO_OTRO_DIA' } as never,
     });
     expect(mockCalls).toEqual(['cancelItem:a1:NO_ESTABA', 'rescheduleItem:a2:2026-08-20']);
+  });
+
+  it('marcar en mora viaja con los días que puso el cobrador', async () => {
+    await send({ kind: 'arrears.mark', creditId: 'cr1', days: 15 });
+    expect(mockCalls).toContain('markArrears:cr1:15');
+  });
+
+  /**
+   * 🔴 **La prueba que evita regalarle un mes al deudor.**
+   *
+   * El servidor entiende `next_period`, que avanza un período *desde donde esté el crédito*. Encolado
+   * así, un reintento —lo normal en una cola offline: se manda, se corta la señal antes de la
+   * respuesta, se vuelve a mandar— correría el vencimiento **dos veces**. La pantalla resuelve la
+   * fecha con `addPeriods` (la misma función que usa el servidor) y encola `date`, que escribe un
+   * valor fijo: mandarlo diez veces deja la misma fecha.
+   */
+  it('poner al día se reintenta sin correr la fecha dos veces', async () => {
+    const accion = { kind: 'arrears.clear', creditId: 'cr1', input: { mode: 'date', date: '2026-09-17' } } as const;
+    await send(accion);
+    await send(accion); // el reintento de la cola
+    expect(mockCalls).toEqual(['clearArrears:cr1:date:2026-09-17', 'clearArrears:cr1:date:2026-09-17']);
+    expect(mockCalls.some((c) => c.includes('next_period'))).toBe(false);
+  });
+
+  it('«sin fecha de vencimiento» también es idempotente', async () => {
+    await send({ kind: 'arrears.clear', creditId: 'cr1', input: { mode: 'none' } });
+    expect(mockCalls).toContain('clearArrears:cr1:none:-');
   });
 });

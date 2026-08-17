@@ -427,6 +427,17 @@ async function seedAgenda(acc: string, collectorId: string): Promise<void> {
     { catalog: CatalogType.RESCHEDULE_REASON, code: 'NO_ANSWER', label: 'Sin respuesta', sortOrder: 2 },
     { catalog: CatalogType.CURRENCY, code: 'BOB', label: 'Boliviano', sortOrder: 1 },
     { catalog: CatalogType.CURRENCY, code: 'USD', label: 'Dólar', sortOrder: 2 },
+    // Clases de crédito y de garantía: cada empresa las edita, pero el catálogo no arranca vacío —
+    // un desplegable sin opciones el primer día es un campo que no se puede llenar.
+    { catalog: CatalogType.CREDIT_TYPE, code: 'CONSUMER', label: 'Crédito de consumo', sortOrder: 1 },
+    { catalog: CatalogType.CREDIT_TYPE, code: 'PERSONAL', label: 'Préstamo personal', sortOrder: 2 },
+    { catalog: CatalogType.CREDIT_TYPE, code: 'MICRO', label: 'Microcrédito', sortOrder: 3 },
+    { catalog: CatalogType.CREDIT_TYPE, code: 'HOUSING', label: 'Vivienda', sortOrder: 4 },
+    { catalog: CatalogType.COLLATERAL_TYPE, code: 'VEHICLE', label: 'Vehículo', sortOrder: 1 },
+    { catalog: CatalogType.COLLATERAL_TYPE, code: 'PROPERTY', label: 'Inmueble', sortOrder: 2 },
+    { catalog: CatalogType.COLLATERAL_TYPE, code: 'MACHINERY', label: 'Maquinaria', sortOrder: 3 },
+    { catalog: CatalogType.COLLATERAL_TYPE, code: 'APPLIANCE', label: 'Electrodoméstico', sortOrder: 4 },
+    { catalog: CatalogType.COLLATERAL_TYPE, code: 'OTHER', label: 'Otro', sortOrder: 5 },
     // Plantillas de WhatsApp (S4): el cuerpo va en `metadata.body` con variables {{cliente}}/{{saldo}}.
     { catalog: CatalogType.WHATSAPP_TEMPLATE, code: 'INITIAL', label: 'Cobro inicial', sortOrder: 1, metadata: { body: 'Hola {{cliente}}, le escribimos de Kobrax para recordarle su saldo pendiente de {{saldo}}. Puede coordinar su pago con nosotros.' } },
     { catalog: CatalogType.WHATSAPP_TEMPLATE, code: 'REMINDER', label: 'Recordatorio', sortOrder: 2, metadata: { body: 'Hola {{cliente}}, le recordamos que su pago de {{saldo}} vence pronto. Quedamos atentos.' } },

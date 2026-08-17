@@ -12,6 +12,7 @@ import {
   IsString,
   IsUUID,
   Max,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -34,8 +35,33 @@ export class ListCasesQueryDto {
   @IsOptional() @IsEnum(CasePriority) priority?: CasePriority;
   @IsOptional() @IsUUID() assigneeId?: string;
   @IsOptional() @IsUUID() clientId?: string;
-  /** 'true' → solo casos vencidos (sla_due_at < ahora, no cerrados). */
+  /**
+   * 'true' → solo casos cuyo **SLA** venció (`sla_due_at < ahora`), no cerrados.
+   *
+   * ⚠️ **No es la mora del deudor.** Son dos cosas distintas que en castellano se dicen igual: acá
+   * «vencido» es que se pasó el tiempo que la empresa se dio para gestionar el caso; la mora del
+   * crédito se filtra con `dpdMin`/`dpdMax`. Confundirlas hacía que la pantalla dijera «vencidos» y
+   * mostrara casos de gente al día.
+   */
   @IsOptional() @IsIn(['true', 'false']) overdue?: string;
+
+  /**
+   * Rango de días de mora **del crédito** (§ la pantalla de Mora abre con `dpdMin=1`).
+   *
+   * Va sobre la relación y no sobre el caso porque la mora vive en `credits.days_past_due`: es del
+   * préstamo, no del expediente que lo gestiona.
+   */
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) dpdMin?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) dpdMax?: number;
+
+  /**
+   * Búsqueda por nombre del deudor.
+   *
+   * Sólo el nombre: el documento y los teléfonos están cifrados y se buscan por blind index, que es
+   * otro camino (el de la cartera). Con novecientas filas, encontrar a una persona no puede depender
+   * de recordar en qué página estaba.
+   */
+  @IsOptional() @IsString() @MaxLength(80) q?: string;
   /** 'true' → solo casos abiertos (excluye CLOSED/WRITTEN_OFF). Para el KPI de carga del día. */
   @IsOptional() @IsIn(['true', 'false']) open?: string;
   /** 'portfolio' → enriquece cada caso con zona, documento enmascarado y promesa vigente (lista de cartera V3). */
@@ -54,6 +80,24 @@ export class ListCasesQueryDto {
 export class TransitionCaseDto {
   @IsEnum(CaseStatus) status!: CaseStatus;
   @IsOptional() @IsString() reason?: string;
+}
+
+/**
+ * Fijar la prioridad a mano, o devolverla a la automática.
+ *
+ * 🔴 **Existe porque el cálculo no puede saber todo.** La prioridad sale del saldo, los días de mora
+ * y el segmento de riesgo — y eso está bien para el caso general. Falla justo en el que motivó esto:
+ * un deudor con dos días de atraso cae en prioridad baja aunque quien lo conoce sepa que es moroso
+ * frecuente y hay que ir hoy. Al revés pasa menos, pero pasa.
+ *
+ * Mientras esté fijada, **el trabajo diario no la recalcula**: es la misma regla que gobierna la
+ * mora — cada dato tiene un dueño, y el de esta prioridad es la persona que la puso.
+ */
+export class SetPriorityDto {
+  /** La prioridad elegida. Ausente con `auto: true`. */
+  @IsOptional() @IsEnum(CasePriority) priority?: CasePriority;
+  /** `true` = volver a la automática: se suelta y el job la recalcula en la próxima pasada. */
+  @IsOptional() @IsBoolean() auto?: boolean;
 }
 
 export class AssignCaseDto {

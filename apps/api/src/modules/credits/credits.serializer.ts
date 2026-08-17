@@ -53,6 +53,7 @@ export function serializeCredit(
   return {
     id: credit.id,
     code: credit.code ?? undefined,
+    typeCode: credit.typeCode ?? undefined,
     clientId: credit.clientId,
     branchId: credit.branchId ?? undefined,
     principalAmount: num(credit.principalAmount),

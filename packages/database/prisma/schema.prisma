@@ -496,6 +496,20 @@ model Client {
   preferredContactChannel String?      @map("preferred_contact_channel")
   riskSegment             String?      @map("risk_segment")
   metadata                Json         @default("{}")
+  /// ─── Agregados de la cartera. **Los mantiene un TRIGGER, no la aplicación.** ───
+  ///
+  /// Son la suma del saldo, la peor mora y cuántos créditos vivos tiene la persona. Se guardan acá
+  /// porque la cartera **ordena y filtra por ellos**, y ordenar por un agregado obliga a calcular
+  /// todos los grupos antes de saber cuáles son los 50 primeros: con 100.000 personas eso medía
+  /// 768 ms por página, contra 0,43 ms leyendo estas columnas por índice.
+  ///
+  /// 🔴 **No los escribas desde el código.** El trigger `credits_touch_client_totals` los recalcula
+  /// ante cualquier alta, baja o cambio de un crédito, venga de donde venga —la app, un import
+  /// masivo o un `UPDATE` a mano—. Escribirlos aparte crearía una segunda verdad que un día deja de
+  /// coincidir, y nadie sabría cuál mirar.
+  totalDebt               Decimal      @default(0) @map("total_debt") @db.Decimal(14, 2)
+  maxDaysPastDue          Int          @default(0) @map("max_days_past_due")
+  creditCount             Int          @default(0) @map("credit_count")
   createdAt               DateTime     @default(now()) @map("created_at")
   updatedAt               DateTime     @updatedAt @map("updated_at")
   deletedAt               DateTime?    @map("deleted_at")
@@ -504,6 +518,7 @@ model Client {
   contacts    ClientContact[]
   locations   ClientLocation[]
   relations   ClientRelation[]
+  collaterals Collateral[]
   attachments ClientAttachment[]
   credits     Credit[]
   cases       CollectionCase[]
@@ -513,6 +528,10 @@ model Client {
   @@index([accountId])
   @@index([accountId, status])
   @@index([deletedAt])
+  // Los dos órdenes con los que abre la cartera. El desempate por `id` va en el índice porque va en
+  // el `ORDER BY`: sin él, `LIMIT/OFFSET` repite o saltea filas entre página y página.
+  @@index([accountId, maxDaysPastDue(sort: Desc), totalDebt(sort: Desc), id])
+  @@index([accountId, totalDebt(sort: Desc), id])
   @@map("clients")
 }
 
@@ -576,12 +595,76 @@ model ClientRelation {
   notes            String?
   createdAt        DateTime         @default(now()) @map("created_at")
 
-  client    Client           @relation(fields: [clientId], references: [id])
+  client    Client            @relation(fields: [clientId], references: [id])
   contacts  ClientContact[]
   locations ClientLocation[]
+  credits   CreditGuarantor[]
 
   @@index([accountId, clientId])
   @@map("client_relations")
+}
+
+/// A qué créditos respalda esta persona. N:N a propósito: un cliente puede tener dos créditos con
+/// garantes distintos, y la misma persona puede garantizar los dos.
+///
+/// Es una tabla y no un `credit_id` en `client_relations` porque el vínculo es del PAR, no de la
+/// persona: con una columna, garantizar el segundo crédito obligaba a cargar al garante dos veces —
+/// dos filas con el mismo nombre, el mismo teléfono y la misma dirección, que después hay que
+/// mantener sincronizadas a mano.
+model CreditGuarantor {
+  relationId String   @map("relation_id")
+  creditId   String   @map("credit_id")
+  accountId  String   @map("account_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  relation ClientRelation @relation(fields: [relationId], references: [id], onDelete: Cascade)
+  credit   Credit         @relation(fields: [creditId], references: [id], onDelete: Cascade)
+
+  @@id([relationId, creditId])
+  @@index([accountId, creditId])
+  @@map("credit_guarantors")
+}
+
+/// Garantía **no personal**: el bien que respalda uno o más créditos (un vehículo, un inmueble, una
+/// máquina). La garantía personal es el garante, que vive en `client_relations`.
+///
+/// Cuelga del CLIENTE y no del crédito porque el mismo bien puede respaldar dos créditos: atada al
+/// crédito habría que cargarla —y fotografiarla— una vez por cada uno.
+model Collateral {
+  id             String   @id @default(uuid())
+  accountId      String   @map("account_id")
+  clientId       String   @map("client_id")
+  /// Código del catálogo `COLLATERAL_TYPE` del tenant. Texto suelto y no enum: cada empresa arma su
+  /// lista (vehículo, inmueble, electrodoméstico…) sin que eso sea una migración.
+  type           String?
+  description    String
+  estimatedValue Decimal? @map("estimated_value") @db.Decimal(14, 2)
+  /// Moneda del valor estimado. Puede no ser la del crédito: una garantía tasada en dólares respalda
+  /// igual un crédito en bolivianos.
+  currency       String?
+  photoUrls      Json     @default("[]") @map("photo_urls")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  client  Client             @relation(fields: [clientId], references: [id])
+  credits CollateralCredit[]
+
+  @@index([accountId, clientId])
+  @@map("collaterals")
+}
+
+/// Qué garantía respalda qué crédito (N:N).
+model CollateralCredit {
+  collateralId String   @map("collateral_id")
+  creditId     String   @map("credit_id")
+  accountId    String   @map("account_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  collateral Collateral @relation(fields: [collateralId], references: [id], onDelete: Cascade)
+  credit     Credit     @relation(fields: [creditId], references: [id], onDelete: Cascade)
+
+  @@id([collateralId, creditId])
+  @@index([accountId, creditId])
+  @@map("collateral_credits")
 }
 
 /// Evidencia documental del cliente (sellada con hash SHA-256).
@@ -609,6 +692,9 @@ model Credit {
   clientId           String       @map("client_id")
   branchId           String?      @map("branch_id")
   code               String?
+  /// Qué clase de crédito es → `catalog_items.code` del catálogo `CREDIT_TYPE`. Texto suelto y no
+  /// enum: cada empresa arma su lista (consumo, microcrédito, vivienda…) sin que eso sea una migración.
+  typeCode           String?      @map("type_code")
   principalAmount    Decimal      @map("principal_amount") @db.Decimal(14, 2)
   outstandingBalance Decimal      @map("outstanding_balance") @db.Decimal(14, 2)
   interestRate       Decimal      @default(0) @map("interest_rate") @db.Decimal(7, 4)
@@ -633,6 +719,8 @@ model Credit {
   arrears      Arrear[]
   cases        CollectionCase[]
   payments     Payment[]
+  guarantors   CreditGuarantor[]
+  collaterals  CollateralCredit[]
 
   @@unique([accountId, code]) // F10 import: `code` (No.Credito) es la llave de match del extracto
   @@index([accountId])
@@ -759,6 +847,10 @@ model CollectionCase {
   assigneeId   String?      @map("assignee_id") // collector asignado (users.id, ref suave)
   status       CaseStatus   @default(PENDING)
   priority     CasePriority @default(MEDIUM)
+  /// Prioridad fijada a mano: el trabajo diario de mora NO la recalcula mientras esté puesta.
+  /// Guarda cuándo, no un sí/no — la fecha contesta «¿esto lo decidió alguien hace un año?».
+  /// Volver a la automática es ponerla en NULL.
+  priorityPinnedAt DateTime? @map("priority_pinned_at")
   slaDueAt     DateTime?    @map("sla_due_at")
   lastActionAt DateTime?    @map("last_action_at")
   closedAt     DateTime?    @map("closed_at")
@@ -1045,6 +1137,8 @@ enum CatalogType {
   CURRENCY
   WHATSAPP_TEMPLATE
   SPECIAL_CATEGORY // categorías de "gestión especial" en campo (fallecimiento, enfermedad…) — RT-6
+  COLLATERAL_TYPE // qué clase de bien es la garantía (vehículo, inmueble, maquinaria…)
+  CREDIT_TYPE // qué clase de crédito es (consumo, microcrédito, vivienda…)
 }
 
 /// Gestión agendada (llamada/visita/whatsapp/recordatorio/promesa) sobre un caso.

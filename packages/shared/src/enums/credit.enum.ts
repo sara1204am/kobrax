@@ -42,3 +42,40 @@ export enum PortfolioStatus {
 
 /** Umbral por defecto de "POR VENCER" en días (§5.3: "≤ 3 días, configurable por tenant"). */
 export const DUE_SOON_DAYS = 3;
+
+/**
+ * Los estados que un crédito puede tener guardados (`CreditStatus` de la base).
+ *
+ * ⚠️ **No confundir con `PortfolioStatus`**, que está justo arriba y es lo contrario: aquél se
+ * calcula de la mora y el saldo y nadie lo edita; éste es una columna que alguien elige. Los dos
+ * tienen un `PAID` y significan cosas distintas.
+ *
+ * Es una lista y no un enum de TypeScript porque acá va la **regla** —cuáles hay y en qué orden se
+ * ofrecen—, no el rótulo: eso lo pone cada app en su idioma.
+ */
+export const CREDIT_STATUSES = ['ACTIVE', 'PAID', 'DEFAULTED', 'RESTRUCTURED', 'WRITTEN_OFF', 'CANCELLED'] as const;
+
+/**
+ * De dónde salen los días de mora de un crédito. **Una mora, tres orígenes.**
+ *
+ * 🔴 **Cada origen tiene un solo dueño, y esa es toda la regla**: el trabajo diario nunca decide la
+ * importada ni la manual, y una persona nunca edita a mano la calculada. Mezclar dueños produce el
+ * ciclo de «lo puse al día y a la mañana volvió a mora», que es la forma más rápida de que quien
+ * supervisa deje de creerle a la pantalla.
+ *
+ * No es una columna: se **deriva** de lo que ya hay (`arrearsSourceOf`), así que no puede quedar
+ * desincronizada de los datos que la definen.
+ */
+export const ARREARS_SOURCES = ['CALCULATED', 'IMPORTED', 'MANUAL'] as const;
+export type ArrearsSource = (typeof ARREARS_SOURCES)[number];
+
+/**
+ * Por qué se cerró un caso. Es texto libre en la base (`closed_reason`); acá viven **los que pone
+ * el sistema**, que son los que después hay que poder contar.
+ *
+ * `PAID` y `CURRENT` los escribe el trabajo diario y **no exigen gestión registrada**: si el deudor
+ * pagó por transferencia nunca hubo visita, y cobrado es cobrado. `MANUAL` es el cierre de una
+ * persona desde la ficha, que sí la exige (`CASE_001`).
+ */
+export const CASE_CLOSE_REASONS = ['PAID', 'CURRENT', 'MANUAL'] as const;
+export type CaseCloseReason = (typeof CASE_CLOSE_REASONS)[number];

@@ -20,9 +20,16 @@ export interface DashboardFilters {
   dateFrom?: string;
   dateTo?: string;
   branchId?: string;
-  collectorId?: string;
-  caseStatus?: string;
-  priority?: string;
+  /**
+   * Los tres de selección múltiple: **una lista, no un valor**.
+   *
+   * Mirar la cobranza es comparar —dos cobradores de la misma zona, los casos vencidos *y* los que
+   * prometieron pagar—, y con un solo valor por filtro eso obliga a mirar de a uno y sumar de
+   * memoria. Viajan a la API separados por coma, que es lo que `String(lista)` ya escribe.
+   */
+  collectorId?: string[];
+  caseStatus?: string[];
+  priority?: string[];
 }
 
 /**

@@ -4,6 +4,7 @@ import type {
   ClientContact,
   ClientLocation,
   ClientRelation,
+  Collateral,
 } from '@prisma/client';
 import { maskDocument, maskEmail, maskPhone } from '@kobrax/shared';
 import type { CryptoService } from '../../common/crypto/crypto.service';
@@ -77,9 +78,12 @@ export function serializeLocation(l: ClientLocation, { crypto, reveal }: Seriali
   };
 }
 
+/** Las filas de la tabla puente → la lista de ids que espera el formulario. */
+const creditIds = (rows?: { creditId: string }[]): string[] | undefined => rows?.map((c) => c.creditId);
+
 /** El contacto (persona) devuelve sus propios teléfonos y ubicaciones (mismas tablas, vía relation_id). */
 export function serializeRelation(
-  r: ClientRelation & { contacts?: ClientContact[]; locations?: ClientLocation[] },
+  r: ClientRelation & { contacts?: ClientContact[]; locations?: ClientLocation[]; credits?: { creditId: string }[] },
   opts: SerializeOpts,
 ) {
   return {
@@ -91,14 +95,44 @@ export function serializeRelation(
     notes: r.notes ?? undefined,
     contacts: r.contacts?.map((c) => serializeContact(c, opts)),
     locations: r.locations?.map((l) => serializeLocation(l, opts)),
+    creditIds: creditIds(r.credits),
+  };
+}
+
+/**
+ * La garantía no personal.
+ *
+ * ⚠️ **No lleva máscara.** No es PII de nadie: es un bien —una moto, un terreno— y su descripción es
+ * justamente lo que quien va a cobrar necesita leer. El domicilio del deudor sí se enmascara; «Moto
+ * Honda roja 2019» no dice quién es nadie.
+ */
+export function serializeCollateral(g: Collateral & { credits?: { creditId: string }[] }) {
+  return {
+    id: g.id,
+    type: g.type ?? undefined,
+    description: g.description,
+    estimatedValue: g.estimatedValue != null ? Number(g.estimatedValue) : undefined,
+    currency: g.currency ?? undefined,
+    photoUrls: g.photoUrls,
+    creditIds: creditIds(g.credits),
   };
 }
 
 export function serializeAttachment(a: ClientAttachment) {
-  // No expone la URL directa: el cliente la pide con un endpoint firmado (F6). Sí el hash.
+  /*
+   * 🔴 **La URL vuelve.** Estuvo oculta esperando el endpoint firmado de F6, y mientras tanto el
+   * legajo se podía llenar y nunca mirar — lo único que un legajo tiene que dejar hacer.
+   *
+   * No es una URL pública: es `/api/uploads/<hash>.<ext>`, que sirve `UploadsService.streamOf()`
+   * **dentro de la carpeta del tenant en sesión** y con el nombre validado contra el hash. Quien no
+   * tenga sesión no la abre, y quien tenga la de otra empresa recibe un 404. El endpoint firmado
+   * sigue teniendo sentido el día que el archivo salga a un bucket; hasta entonces, esto es lo que
+   * hay y alcanza.
+   */
   return {
     id: a.id,
     fileType: a.fileType,
+    fileUrl: a.fileUrl,
     fileHash: a.fileHash ?? undefined,
     encrypted: a.encrypted,
     createdAt: a.createdAt,
@@ -122,7 +156,8 @@ export type PortfolioClient = ReturnType<typeof serializeClient> & PortfolioTota
 type ClientWithRelations = Client & {
   contacts?: ClientContact[];
   locations?: ClientLocation[];
-  relations?: ClientRelation[];
+  relations?: (ClientRelation & { contacts?: ClientContact[]; locations?: ClientLocation[]; credits?: { creditId: string }[] })[];
+  collaterals?: (Collateral & { credits?: { creditId: string }[] })[];
   attachments?: ClientAttachment[];
 };
 
@@ -143,12 +178,24 @@ export function serializeClient(client: ClientWithRelations, opts: SerializeOpts
     status: client.status,
     preferredContactChannel: client.preferredContactChannel ?? undefined,
     riskSegment: client.riskSegment ?? undefined,
+    /*
+     * Los agregados de la cartera, tal como los mantiene el trigger.
+     *
+     * 🔴 **Van acá para que la ficha y la lista digan el MISMO número.** Sumarlos en la ficha a
+     * partir de los créditos que trajo la pantalla daría otra cifra en cuanto alguien tenga más
+     * créditos que el `limit` de esa consulta — y serían dos pantallas, a un clic de distancia,
+     * contradiciéndose sobre cuánta plata debe una persona.
+     */
+    totalDebt: Number(client.totalDebt),
+    maxDaysPastDue: client.maxDaysPastDue,
+    creditCount: client.creditCount,
     metadata: client.metadata,
     createdAt: client.createdAt,
     updatedAt: client.updatedAt,
     contacts: client.contacts?.map((c) => serializeContact(c, opts)),
     locations: client.locations?.map((l) => serializeLocation(l, opts)),
     relations: client.relations?.map((r) => serializeRelation(r, opts)),
+    collaterals: client.collaterals?.map((g) => serializeCollateral(g)),
     attachments: client.attachments?.map((a) => serializeAttachment(a)),
   };
 }

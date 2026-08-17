@@ -17,7 +17,7 @@ import { createPayment, type NewPayment } from '../payments.service';
 import { addActivity, type NewActivity } from '../cases.service';
 import { updateRouteStatus } from '../routes.service';
 import { createClient, type NewClientInput } from '../clients.service';
-import { createCredit, type NewCreditInput } from '../credits.service';
+import { clearArrears, createCredit, markArrears, type ClearArrearsInput, type NewCreditInput } from '../credits.service';
 import {
   cancelItem,
   completeItem,
@@ -69,6 +69,18 @@ export type QueuedAction =
    */
   | { kind: 'client.create'; input: NewClientInput }
   | { kind: 'credit.create'; input: NewCreditInput }
+  /**
+   * Marcar en mora y poner al día, desde la ficha del deudor.
+   *
+   * Marcar es idempotente: escribe la misma fecha de arranque y no abre una segunda cobranza.
+   *
+   * 🔴 **Poner al día viaja con la fecha ya resuelta, nunca con el modo `next_period`.** Ese modo
+   * avanza un período *desde donde esté*, así que reintentarlo correría el vencimiento dos veces y
+   * el deudor se ganaría un mes. La pantalla calcula la fecha con `addPeriods` de shared —la misma
+   * que usa el server— y encola `date`, que escribe un valor fijo.
+   */
+  | { kind: 'arrears.mark'; creditId: string; days?: number }
+  | { kind: 'arrears.clear'; creditId: string; input: ClearArrearsInput }
   | { kind: 'agenda.complete'; id: string; outcome: AgendaOutcome; notes?: string }
   // `AgendaPostponeStep` y no `number`: posponer es en pasos fijos, y el tipo del dominio ya lo
   // dice. Guardar un número libre dejaría entrar a la cola algo que el server va a rechazar.
@@ -101,6 +113,8 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'route.status': 'Estado de la jornada',
   'client.create': 'Cliente nuevo',
   'credit.create': 'Préstamo nuevo',
+  'arrears.mark': 'Préstamo marcado en mora',
+  'arrears.clear': 'Préstamo puesto al día',
   'agenda.cancel': 'Gestión cancelada',
   'agenda.reschedule': 'Gestión reagendada',
 };
@@ -180,6 +194,10 @@ export async function send(action: QueuedAction): Promise<SendResult> {
       return mapMutate(await createClient(action.input));
     case 'credit.create':
       return mapMutate(await createCredit(action.input));
+    case 'arrears.mark':
+      return mapMutate(await markArrears(action.creditId, action.days));
+    case 'arrears.clear':
+      return mapMutate(await clearArrears(action.creditId, action.input));
     case 'agenda.complete':
       return mapMutate(await completeItem(action.id, action.outcome, action.notes));
     case 'agenda.postpone':

@@ -108,7 +108,7 @@ export const config = {
     '/equipo/:path*',
     '/cartera/:path*',
     '/import/:path*',
-    '/casos/:path*',
+    '/mora/:path*',
     '/agenda/:path*',
     '/rutas/:path*',
     '/pagos/:path*',

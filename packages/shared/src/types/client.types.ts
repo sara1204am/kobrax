@@ -33,6 +33,31 @@ export interface NewRelationInput {
   /** El contacto (persona) tiene sus propios teléfonos y ubicaciones (1..N). */
   contacts?: NewContactInput[];
   locations?: NewLocationInput[];
+  /**
+   * A qué créditos del cliente respalda esta persona. **Varios, o ninguno.**
+   *
+   * Un cliente puede tener dos créditos con garantes distintos, y la misma persona puede garantizar
+   * los dos: por eso es una lista y no un `creditId`. Vacío es lo normal en un familiar o un vecino,
+   * que están para ubicar al deudor y no para responder por la deuda.
+   */
+  creditIds?: string[];
+}
+
+/**
+ * Garantía **no personal**: el bien que respalda el crédito. La personal es el garante.
+ *
+ * `creditIds` es multiselect por lo mismo que el garante: el mismo vehículo puede respaldar dos
+ * créditos, y atado a uno solo habría que cargarlo —y fotografiarlo— dos veces.
+ */
+export interface NewCollateralInput {
+  /** Código del catálogo `COLLATERAL_TYPE` del tenant. Vacío = sin clasificar. */
+  type?: string;
+  /** Qué es. Texto libre: es lo que le sirve a quien va a buscarla. */
+  description: string;
+  estimatedValue?: number;
+  currency?: string;
+  photoUrls?: string[];
+  creditIds?: string[];
 }
 
 /** Alta atómica: cliente + contactos + ubicaciones + relaciones en una transacción. */
@@ -55,6 +80,7 @@ export interface NewClientInput {
   contacts?: NewContactInput[];
   locations?: NewLocationInput[];
   relations?: NewRelationInput[];
+  collaterals?: NewCollateralInput[];
 }
 
 /** Payload del alta de préstamo. La cuota viaja **congelada** (Modo A directa, Modo B calculada). */
@@ -83,6 +109,8 @@ export interface NewCreditInput {
    * supervisora carga el préstamo y se lo reparte a un cobrador (F9 · W3 §5.3).
    */
   assignedManagerId?: string;
+  /** Qué clase de crédito es → catálogo `CREDIT_TYPE`. Opcional: el móvil no lo pregunta. */
+  typeCode?: string;
 }
 
 // ── Lo que devuelve la API ───────────────────────────────────────────────────
@@ -118,19 +146,76 @@ export interface ClientRelationDetail {
   notes?: string;
   contacts?: ClientContactDetail[];
   locations?: ClientLocationDetail[];
+  /** Los créditos que respalda. Vacío = no responde por ninguno. */
+  creditIds?: string[];
 }
 
 /**
- * El adjunto **no trae su URL**: el serializer de la API la oculta a propósito hasta que exista el
- * endpoint firmado (F6). Se puede listar y borrar; no abrir.
+ * Una entrada de la bitácora del cliente: **todo lo que se hizo con esta persona**, sin importar por
+ * cuál de sus créditos pasó.
+ *
+ * 🔴 **Viaja en códigos, nunca en frases.** El panel es bilingüe y el móvil escribe distinto: acá va
+ * la regla —qué pasó, cuándo y con qué dato— y el texto lo arma cada app en su idioma. Es lo mismo
+ * que se decidió para los estados de la cartera.
+ *
+ * Las tres fuentes son tres tablas y en la base **ya están atadas al cliente**: `agenda_items` lo
+ * lleva propio, el pago llega por su crédito y la gestión por su caso. Por eso esto es una consulta,
+ * no un recorrido crédito por crédito.
+ */
+export type TimelineKind = 'PAYMENT' | 'AGENDA' | 'ACTIVITY';
+
+export interface ClientTimelineEntry {
+  kind: TimelineKind;
+  id: string;
+  /** ISO. Es la fecha por la que se ordena, y significa lo suyo en cada fuente. */
+  at: string;
+  /**
+   * Qué fue: el medio de pago (`CASH`…), el tipo de agendado (`VISIT`, `CALL`, `PROMISE_TO_PAY`…) o
+   * el tipo de gestión (`CaseActivityType`).
+   */
+  code: string;
+  /** Sólo agenda: si se ejecutó, se canceló o se reagendó. Sin esto, «llamada» no dice si atendió. */
+  status?: string;
+  amount?: number;
+  currency?: string;
+  /** Lo que escribió quien la registró. Texto libre, tal cual. */
+  notes?: string;
+  creditId?: string;
+  caseId?: string;
+  /** Quién. `users.id`: el nombre lo resuelve quien dibuja, que ya tiene el equipo cargado. */
+  userId?: string;
+}
+
+export interface CollateralDetail {
+  id: string;
+  type?: string;
+  description: string;
+  estimatedValue?: number;
+  currency?: string;
+  photoUrls?: string[];
+  creditIds?: string[];
+}
+
+/**
+ * Un adjunto del legajo.
+ *
+ * 🔴 **`fileUrl` es la ruta interna (`/api/uploads/<hash>.<ext>`), no una URL pública.** El que la
+ * sirve es el mismo endpoint que ya se usaba para la foto de perfil y la evidencia de campo: valida
+ * la sesión y sirve **sólo dentro del tenant** (`uploads.service.ts`). Estuvo oculta un tiempo
+ * esperando el endpoint firmado de F6, y el resultado fue un legajo que se podía llenar y nunca
+ * mirar — que es la única cosa que un legajo tiene que dejar hacer.
  */
 export interface ClientAttachmentDetail {
   id: string;
   fileType: string;
+  fileUrl?: string;
   fileHash?: string;
   encrypted: boolean;
   createdAt: string;
 }
+
+/** Los tipos de adjunto del legajo (`AttachmentType` en la base). La regla, no el rótulo. */
+export const ATTACHMENT_TYPES = ['ID_CARD', 'PHOTO', 'CONTRACT', 'OTHER'] as const;
 
 /**
  * Detalle del cliente (`GET /clients/:id`).
@@ -153,9 +238,20 @@ export interface ClientDetail {
   preferredContactChannel?: string;
   createdAt?: string;
   updatedAt?: string;
+  /**
+   * Los agregados de su cartera: cuánto debe, su peor mora y cuántos créditos vivos tiene.
+   *
+   * 🔴 **Es el MISMO número que ordena la lista de cartera** —los mantiene un trigger sobre
+   * `credits`—, no una suma hecha en la pantalla. Sumar en el cliente daría otra cifra en cuanto
+   * alguien tenga más créditos que el `limit` de la consulta que los trajo.
+   */
+  totalDebt?: number;
+  maxDaysPastDue?: number;
+  creditCount?: number;
   contacts?: ClientContactDetail[];
   locations?: ClientLocationDetail[];
   relations?: ClientRelationDetail[];
+  collaterals?: CollateralDetail[];
   attachments?: ClientAttachmentDetail[];
 }
 
@@ -184,6 +280,8 @@ export interface CreditInstallmentDetail {
 export interface CreditDetail {
   id: string;
   code?: string;
+  /** Código del catálogo `CREDIT_TYPE` del tenant. El rótulo lo resuelve quien dibuja. */
+  typeCode?: string;
   clientId?: string;
   principalAmount: number;
   interestRate: number;
@@ -204,7 +302,16 @@ export interface CreditDetail {
   installments?: CreditInstallmentDetail[];
 }
 
-/** Lo único editable después del desembolso. El monto y las cuotas no: eso es una reestructura. */
+/**
+ * Lo editable después del desembolso — **todo lo que acepta `UpdateCreditDto`, ni uno menos**.
+ *
+ * 🔴 Lo que NO entra, y por qué: **nº de cuotas, moneda y fecha de desembolso**. Cambiar el número
+ * de cuotas sin regenerar el cronograma deja una tabla que no cierra con el préstamo; la moneda
+ * reinterpretaría todos los pagos ya registrados. Eso es una reestructura, y es otra operación.
+ *
+ * El capital y la tasa **sí** entran: la API los acepta desde siempre y la pantalla los dibujaba de
+ * sólo lectura diciendo que no — un préstamo mal tipeado no tenía arreglo.
+ */
 export interface UpdateCreditPatch {
   principalAmount?: number;
   interestRate?: number;
@@ -212,6 +319,16 @@ export interface UpdateCreditPatch {
   frequency?: PaymentFrequency;
   nextDueDate?: string;
   notes?: string;
+  status?: string;
+  /**
+   * 🔴 `null` **borra**, `''` no. Son columnas anulables: mandando la cadena vacía el crédito queda
+   * con un código de cero caracteres —que la ficha dibuja como un hueco en vez de «sin código»— y
+   * cualquier consulta que busque `IS NULL` no lo encuentra. El `@IsOptional()` del DTO deja pasar
+   * el `null` y Prisma lo escribe como NULL.
+   */
+  code?: string | null;
+  typeCode?: string | null;
+  assignedManagerId?: string;
 }
 
 // ── Formulario en pantalla ───────────────────────────────────────────────────
@@ -263,6 +380,25 @@ export interface RelationRow extends RowFromServer {
   /** Sus propios teléfonos y ubicaciones, con la MISMA estructura que el cliente. */
   contacts: ContactRow[];
   locations: LocationRow[];
+  /** Ids de los créditos que respalda. Vacío es válido: no todo contacto es garante. */
+  creditIds: string[];
+}
+
+/**
+ * La garantía no personal en el formulario.
+ *
+ * El valor va como **texto** —igual que las coordenadas— porque un `<input>` a medio escribir no es
+ * un número: con `number`, borrar el último dígito deja `NaN` y el campo se vacía solo mientras la
+ * persona escribe.
+ */
+export interface CollateralRow extends RowFromServer {
+  id: string;
+  type: string;
+  description: string;
+  estimatedValue: string;
+  currency: string;
+  photoUrls: string[];
+  creditIds: string[];
 }
 
 export interface ClienteForm {
@@ -277,6 +413,28 @@ export interface ClienteForm {
   contacts: ContactRow[];
   locations: LocationRow[];
   relations: RelationRow[];
+  collaterals: CollateralRow[];
+}
+
+/**
+ * Un crédito del cliente, como lo necesita el formulario para ofrecerlo en el selector.
+ *
+ * No es `CreditDetail`: para elegir a qué crédito apunta un garante alcanza con distinguirlo de los
+ * otros dos que pueda tener —su código, su monto y su moneda—, y traer la ficha entera de cada uno
+ * sería pedir el cronograma completo para dibujar una lista de dos ítems.
+ */
+export interface CreditOption {
+  id: string;
+  code?: string;
+  principalAmount: number;
+  outstandingBalance: number;
+  currency: string;
+  /**
+   * Opcional, igual que en `CreditDetail`, del que esto es una proyección. Lo exigía nadie: el
+   * selector distingue dos préstamos por su código y su saldo, y pedirlo obligaba a quien ya tiene
+   * la ficha completa a inventar un `''` para poder pasarla.
+   */
+  status?: string;
 }
 
 /** Modo del alta de préstamo: A = cuota tipeada · B = cuota calculada desde el interés. */

@@ -43,7 +43,11 @@ DECLARE
     -- Dashboards (W8). `dashboard_widgets` lleva `account_id` propio aunque cuelgue de un tablero:
     -- sin él, su aislamiento dependería del JOIN que escriba cada consulta, y basta que una se
     -- olvide para que un tenant vea los widgets de otro.
-    'dashboards', 'dashboard_widgets'
+    'dashboards', 'dashboard_widgets',
+    -- Garantias del credito: la personal (credit_guarantors) y la no personal (collaterals).
+    -- Las dos tablas puente llevan account_id propio aunque cuelguen de otra fila: sin el, su
+    -- aislamiento dependeria del JOIN que escriba cada consulta.
+    'collaterals', 'collateral_credits', 'credit_guarantors'
   ];
 BEGIN
   FOREACH t IN ARRAY operational LOOP

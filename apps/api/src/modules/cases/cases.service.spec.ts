@@ -381,3 +381,39 @@ describe('CasesService.generate', () => {
     assert.equal(calls.create[0]!.creditId, 'c2');
   });
 });
+
+/**
+ * Subir o bajar la prioridad a mano.
+ *
+ * 🔴 **Existe porque el cálculo no puede saber todo.** Sale del saldo, la mora y el riesgo: buena
+ * regla en general, equivocada justo cuando más importa — un deudor con dos días de atraso cae en
+ * baja aunque quien lo conoce sepa que es moroso frecuente y hay que ir hoy.
+ */
+describe('CasesService.setPriority', () => {
+  const abierta = { id: 'k1', priority: 'LOW', priorityPinnedAt: null };
+
+  it('fijarla guarda la prioridad Y la marca: sin la marca, el job la pisa a la noche', async () => {
+    const { service, calls } = makeService({ caseRow: abierta as never });
+    await service.setPriority('k1', { priority: 'CRITICAL' } as never);
+    assert.equal(calls.update[0]!.priority, 'CRITICAL');
+    assert.ok(calls.update[0]!.priorityPinnedAt, 'queda fijada');
+    assert.deepEqual(calls.audit.map((a) => a.action), ['PRIORITY_PIN']);
+  });
+
+  /**
+   * Soltar **no fija «la automática de hoy»**: borra la marca y deja el valor que había. Calcularla
+   * acá la dejaría clavada en el número de este instante, que es lo que se quería dejar de hacer.
+   */
+  it('soltarla borra la marca y deja que el trabajo diario la recalcule', async () => {
+    const { service, calls } = makeService({ caseRow: { ...abierta, priority: 'CRITICAL' } as never });
+    await service.setPriority('k1', { auto: true } as never);
+    assert.equal(calls.update[0]!.priorityPinnedAt, null);
+    assert.equal(calls.update[0]!.priority, undefined, 'no toca el valor: lo recalcula el job');
+    assert.deepEqual(calls.audit.map((a) => a.action), ['PRIORITY_AUTO']);
+  });
+
+  it('404 si la cobranza no existe o es de otro tenant', async () => {
+    const { service } = makeService({ caseRow: null });
+    await rejectsWithCode(service.setPriority('k1', { priority: 'HIGH' } as never), 'RESOURCE_NOT_FOUND');
+  });
+});

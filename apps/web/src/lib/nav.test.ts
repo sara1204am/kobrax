@@ -47,9 +47,9 @@ describe('crumbsFor', () => {
     // La sección sigue siendo enlace: en una ficha es el único camino de vuelta a la lista para
     // quien llegó por un link compartido.
     expect(crumbsFor(`/cartera/${id}`)).toEqual([{ label: 'nav.portfolio', href: '/cartera' }]);
-    expect(crumbsFor(`/cartera/${id}/editar`)).toEqual([
+    expect(crumbsFor(`/cartera/${id}/bitacora`)).toEqual([
       { label: 'nav.portfolio', href: '/cartera' },
-      { label: 'crumbs.editar', href: undefined },
+      { label: 'crumbs.bitacora', href: undefined },
     ]);
   });
 

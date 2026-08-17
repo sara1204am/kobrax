@@ -14,6 +14,8 @@ function makeService(
     rows?: { id: string; total_debt: number; max_days_past_due: number; credit_count: number }[];
     /** Lo que Prisma trae para hidratar esas filas — a propósito en otro orden. */
     clients?: Record<string, unknown>[];
+    /** Los permisos de quien mira. Sin esto, puede todo. */
+    permissions?: string[];
   } = {},
 ) {
   const calls = {
@@ -71,7 +73,8 @@ function makeService(
     credit: { count: async () => opts.activeCredits ?? 0 },
   };
   const prisma = { withTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
-  const tenant = { accountId: 'acc-A' };
+  // `can` por defecto dice que sí a todo; los tests de la bitácora le pasan la lista que quieren.
+  const tenant = { accountId: 'acc-A', can: (p: string) => opts.permissions?.includes(p) ?? true };
   const crypto = {
     encrypt: (v: string) => `enc(${v})`,
     decrypt: (v: string) => {
@@ -230,6 +233,48 @@ describe('ClientsService.findOne', () => {
   });
 });
 
+/**
+ * 🔴 **El PATCH manda sólo lo que cambió**, así que la identidad hay que validarla contra lo que
+ * QUEDA. `clientType` ni siquiera estaba en el DTO: el desplegable Persona/Empresa del formulario de
+ * edición hacía rebotar el guardado entero con «property clientType should not exist».
+ */
+describe('ClientsService.update — la identidad se valida sobre el resultado', () => {
+  const GUARDADO = {
+    id: 'c1',
+    clientType: 'PERSON',
+    firstName: 'Juan',
+    lastName: 'Pérez',
+    businessName: null,
+    nationalId: 'enc(DEMO-0001)',
+    taxId: null,
+    status: 'ACTIVE',
+    metadata: {},
+  };
+
+  it('pasar a empresa exige la razón social, aunque no venga en este PATCH', async () => {
+    const { service } = makeService({ client: GUARDADO });
+    await rejectsWithCode(service.update('c1', { clientType: 'COMPANY' } as never), 'CLIENT_INVALID');
+  });
+
+  it('pasar a empresa con razón social sí se guarda', async () => {
+    const { service, calls } = makeService({ client: GUARDADO });
+    await service.update('c1', { clientType: 'COMPANY', businessName: 'Ferretería Sur' } as never);
+    assert.equal(calls.update[0]!.data.clientType, 'COMPANY');
+  });
+
+  it('vaciar el apellido de una persona no pasa: el alta nunca lo habría aceptado', async () => {
+    const { service } = makeService({ client: GUARDADO });
+    await rejectsWithCode(service.update('c1', { lastName: '' } as never), 'CLIENT_INVALID');
+  });
+
+  it('corregir el documento re-cifra y re-calcula el hash de búsqueda', async () => {
+    const { service, calls } = makeService({ client: GUARDADO });
+    await service.update('c1', { nationalId: 'DEMO-0002' } as never);
+    assert.equal(calls.update[0]!.data.nationalId, 'enc(DEMO-0002)');
+    assert.equal(calls.update[0]!.data.nationalIdHash, 'h(DEMO-0002)');
+  });
+});
+
 describe('ClientsService.remove', () => {
   it('bloquea la baja si el cliente tiene créditos activos', async () => {
     const { service } = makeService({ client: { id: 'c1' }, activeCredits: 2 });
@@ -272,19 +317,23 @@ const pageSql = (calls: { sql: { sql: string; values: unknown[] }[] }) => calls.
 
 describe('ClientsService.list — cartera (view=portfolio)', () => {
   /**
-   * El bug que este spec existe para evitar: con `cr.deleted_at IS NULL` en el WHERE, el LEFT JOIN
-   * se comporta como INNER y **los clientes sin créditos desaparecen** — o sea, el que acabás de dar
-   * de alta no aparece en la cartera. El síntoma no se parece en nada a su causa.
+   * 🔴 **La cartera LEE los agregados, no los calcula.**
+   *
+   * `total_debt`, `max_days_past_due` y `credit_count` son columnas de `clients` que mantiene un
+   * trigger. Si alguien vuelve a meter acá un `JOIN` con `GROUP BY`, vuelven los dos problemas que
+   * eso traía: 768 ms por página con 100.000 personas, y el riesgo de que el filtro de créditos
+   * caiga en el `WHERE` —donde el `LEFT JOIN` se comporta como `INNER` y **los clientes sin créditos
+   * desaparecen de la cartera**, o sea que el que acabás de dar de alta no aparece—.
    */
-  it('el filtro de créditos va en el ON del LEFT JOIN, nunca en el WHERE', async () => {
+  it('lee los agregados de las columnas, sin JOIN ni GROUP BY', async () => {
     const { service, calls } = makeService({ rows: [fila()], clients: [cliente('c1')] });
     await service.list({ view: 'portfolio' } as never);
 
     const sql = pageSql(calls).sql;
-    const [join, resto] = sql.split(/\bWHERE\b/);
-    assert.match(join!, /LEFT JOIN credits cr ON cr\.client_id = c\.id AND cr\.deleted_at IS NULL/);
-    const filtro = resto!.split(/\bGROUP BY\b/)[0]!;
-    assert.doesNotMatch(filtro, /cr\.deleted_at/, 'el LEFT JOIN se volvería INNER');
+    assert.match(sql, /c\.total_debt/);
+    assert.doesNotMatch(sql, /\bJOIN\b/);
+    assert.doesNotMatch(sql, /\bGROUP BY\b/);
+    assert.doesNotMatch(sql, /\bHAVING\b/);
   });
 
   it('abre por mora desc, desempata por deuda, y cierra con el id', async () => {
@@ -292,7 +341,32 @@ describe('ClientsService.list — cartera (view=portfolio)', () => {
     await service.list({ view: 'portfolio' } as never);
     // Sin `c.id` al final, dos clientes con la misma mora se intercambian entre páginas y
     // `LIMIT/OFFSET` repite o saltea filas.
-    assert.match(pageSql(calls).sql, /ORDER BY max_days_past_due DESC, total_debt DESC, c\.id/);
+    assert.match(pageSql(calls).sql, /ORDER BY c\.max_days_past_due DESC, c\.total_debt DESC, c\.id/);
+  });
+
+  it('los filtros de deuda y mora son sobre la PERSONA, no sobre un crédito suyo', async () => {
+    // «Mora ≥ 90» quiere decir que la peor mora de esta persona pasa de 90 — el que tiene un crédito
+    // de 400 días y otro al día entra; el que tiene tres de 30, no. Sobre la columna agregada eso
+    // sale solo; sobre `credits` habría que agrupar y filtrar después.
+    const { service, calls } = makeService({ rows: [], clients: [] });
+    await service.list({ view: 'portfolio', dpdMin: 90, debtMin: 10000, creditsMin: 2 } as never);
+
+    const { sql, values } = pageSql(calls);
+    assert.match(sql, /c\.max_days_past_due >= \?/);
+    assert.match(sql, /c\.total_debt >= \?/);
+    assert.match(sql, /c\.credit_count >= \?/);
+    assert.ok([90, 10000, 2].every((v) => values.includes(v)));
+  });
+
+  it('cobrador y sucursal filtran con EXISTS, para no multiplicar la fila', async () => {
+    // Con un JOIN, el cliente con dos casos —o dos créditos de la misma sucursal— saldría dos veces.
+    const { service, calls } = makeService({ rows: [], clients: [] });
+    await service.list({ view: 'portfolio', collectorId: 'u1', branchId: 'b1' } as never);
+
+    const sql = pageSql(calls).sql;
+    assert.match(sql, /EXISTS \(\s*SELECT 1 FROM collection_cases k/);
+    assert.match(sql, /EXISTS \(\s*SELECT 1 FROM credits k/);
+    assert.doesNotMatch(sql, /\bJOIN\b/);
   });
 
   it('ordena por nombre con la misma regla que el nombre visible (empresa antes que persona)', async () => {
@@ -310,12 +384,36 @@ describe('ClientsService.list — cartera (view=portfolio)', () => {
 
   it('la búsqueda viaja parametrizada: el documento exacto por hash, el nombre como ILIKE', async () => {
     const { service, calls } = makeService({ rows: [], clients: [] });
-    await service.list({ view: 'portfolio', q: "ana' OR 1=1--" } as never);
+    await service.list({ view: 'portfolio', q: "ana'--" } as never);
 
     const { sql, values } = pageSql(calls);
-    assert.doesNotMatch(sql, /OR 1=1/, 'el texto de búsqueda nunca se interpola');
-    assert.ok(values.includes("%ana' OR 1=1--%"));
-    assert.ok(values.includes("h(ANA' OR 1=1--)")); // blind index del documento
+    assert.doesNotMatch(sql, /ana'/, 'el texto de búsqueda nunca se interpola');
+    assert.ok(values.includes("%ana'--%"));
+    assert.ok(values.includes("h(ANA'--)")); // blind index del documento
+  });
+
+  /**
+   * 🔴 **«Teresa Mama» tiene que encontrar a «Teresa Mamani Padilla».** Buscando la frase entera no
+   * la encuentra nunca: el espacio cae justo entre el nombre y el apellido, así que ningún campo
+   * contiene esa cadena. Cada palabra va por su cuenta y **todas** tienen que estar.
+   */
+  it('busca palabra por palabra, y las exige todas', async () => {
+    const { service, calls } = makeService({ rows: [], clients: [] });
+    await service.list({ view: 'portfolio', q: 'Teresa Mama' } as never);
+
+    const { sql, values } = pageSql(calls);
+    assert.ok(values.includes('%Teresa%'), 'el nombre va suelto');
+    assert.ok(values.includes('%Mama%'), 'el arranque del apellido también');
+    // Unidas por AND: una palabra sola no alcanza para entrar.
+    assert.match(sql, /ILIKE \?\) AND \(/);
+  });
+
+  it('cada palabra sigue viajando como parámetro, no pegada al SQL', async () => {
+    const { service, calls } = makeService({ rows: [], clients: [] });
+    await service.list({ view: 'portfolio', q: "ana' OR 1=1--" } as never);
+    const { sql, values } = pageSql(calls);
+    assert.doesNotMatch(sql, /1=1/, 'ni partida en palabras se interpola');
+    assert.ok(values.includes('%1=1--%'));
   });
 
   it('un cliente sin créditos entra igual, con deuda y mora en cero', async () => {
@@ -345,6 +443,45 @@ describe('ClientsService.list — cartera (view=portfolio)', () => {
     const { service } = makeService({ rows: [fila({ total_debt: 1234.5600000000001 })], clients: [cliente('c1')] });
     const res = await service.list({ view: 'portfolio' } as never);
     assert.equal(res.data![0]!.totalDebt, 1234.56);
+  });
+
+  it('la bitácora junta las tres fuentes y las ordena por fecha, no una detrás de otra', async () => {
+    // Traer «las 20 últimas de cada fuente» y mezclarlas en memoria da una primera página que puede
+    // estar bien de casualidad y una segunda que miente: falta lo que quedó afuera del corte de cada
+    // una. Ordenar y paginar es trabajo de la base.
+    const { service, calls } = makeService({ rows: [] });
+    await service.timeline('c1', {});
+
+    const sql = calls.sql[0]!.sql;
+    assert.equal((sql.match(/UNION ALL/g) ?? []).length, 2, 'las tres fuentes en una sola consulta');
+    assert.match(sql, /FROM payments p/);
+    assert.match(sql, /FROM agenda_items a/);
+    assert.match(sql, /FROM case_activities ac/);
+    assert.match(sql, /ORDER BY t\.at DESC, t\.id/);
+  });
+
+  it('🔴 la fuente que no se puede ver no entra en la consulta', async () => {
+    // La bitácora cruza tres dominios con tres permisos. Sin esta guarda, la ficha del cliente sería
+    // la puerta de atrás para leer pagos sin `payment:read`.
+    const { service, calls } = makeService({ rows: [], permissions: ['client:read', 'agenda:read'] });
+    await service.timeline('c1', {});
+
+    const sql = calls.sql[0]!.sql;
+    assert.match(sql, /FROM agenda_items a/);
+    assert.doesNotMatch(sql, /FROM payments p/);
+    assert.doesNotMatch(sql, /FROM case_activities ac/);
+    assert.doesNotMatch(sql, /UNION ALL/, 'con una sola fuente no hay nada que unir');
+  });
+
+  it('🔴 sin ninguno de los tres permisos no se consulta nada', async () => {
+    // `UNION ALL` de cero partes no es SQL válido: sin la guarda, la ficha reventaría con un 500 en
+    // vez de mostrar una bitácora vacía.
+    const { service, calls } = makeService({ rows: [], permissions: ['client:read'] });
+    const res = await service.timeline('c1', {});
+
+    assert.deepEqual(calls.sql, []);
+    assert.deepEqual(res.data, []);
+    assert.equal(res.meta.total, 0);
   });
 
   it('sin `view` sigue saliendo la lista de siempre, por Prisma y sin agregados', async () => {

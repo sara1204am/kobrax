@@ -82,7 +82,7 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
   //       Por eso cada línea de acá abajo **copia exactamente** la llamada de su pantalla. Si una
   //       pantalla cambia sus parámetros, tiene que cambiar acá — y es el precio de que el respaldo
   //       sea la respuesta del server tal cual, sin reimplementar sus filtros en el teléfono.
-  await paso('cartera', () => estado(listCases({ view: 'portfolio', limit: 100 }))); // Cobranza · Crear ruta
+  await paso('cartera', () => estado(listCases({ view: 'portfolio', open: true, limit: 100 }))); // Cobranza · Crear ruta
   await paso('casos abiertos', () => estado(listCases({ assigneeId: collectorId, open: true, limit: 1 }))); // Inicio
   await paso('rutas', () => estado(listRoutes({ collectorId }))); // pestaña Rutas
   await paso('agenda', () => estado(listByDay(hoy)));

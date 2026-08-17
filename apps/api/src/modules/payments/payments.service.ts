@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import type { Payment, PaymentMethod, Prisma, PrismaClient } from '@prisma/client';
-import { CreditStatus } from '@prisma/client';
+import { CaseStatus, CreditStatus } from '@prisma/client';
 import { resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
@@ -102,6 +102,26 @@ export class PaymentsService {
       },
     });
 
+    /*
+     * 🔴 **Saldada la deuda, el caso se cierra acá mismo.** Antes el pago dejaba el crédito en `PAID`
+     * y **no tocaba el caso**: quedaba abierto, seguía entrando a las rutas y el cobrador volvía a
+     * visitar a quien ya había pagado. Cerrarlo era tres pasos a mano, con permiso `case:close` y
+     * una gestión registrada — que si cobró por transferencia nunca existió.
+     *
+     * Va en la misma transacción que el pago, no en el trabajo diario: entre que se cobra y que
+     * corre el job hay horas, y en esas horas el caso sigue en la ruta de alguien.
+     *
+     * Sin `CASE_TRANSITIONS` y sin exigir gestión, por lo mismo que el cierre automático del job:
+     * la máquina de estados gobierna la negociación, y acá no hay negociación — hay una deuda que
+     * dejó de existir. `closedBy` nulo: no lo cerró una persona.
+     */
+    if (creditPaid) {
+      await tx.collectionCase.updateMany({
+        where: { creditId: credit.id, deletedAt: null, status: { notIn: [CaseStatus.CLOSED, CaseStatus.WRITTEN_OFF] } },
+        data: { status: CaseStatus.CLOSED, closedAt: now, closedReason: 'PAID', lastActionAt: now },
+      });
+    }
+
     const agg = await tx.payment.aggregate({ _max: { receiptNumber: true } });
     const receiptNumber = (agg._max.receiptNumber ?? 0) + 1;
     try {
@@ -134,6 +154,13 @@ export class PaymentsService {
     const where: Prisma.PaymentWhereInput = {};
     if (query.creditId) where.creditId = query.creditId;
     if (query.caseId) where.caseId = query.caseId;
+    /*
+     * 🔴 **El pago no tiene `client_id`, y no hace falta que lo tenga.** Cuelga del crédito, y el
+     * crédito del cliente: preguntar «los pagos de esta persona» es un `JOIN`, no una llamada por
+     * cada crédito suyo. La ficha del cliente muestra las últimas cobranzas de TODOS sus créditos
+     * juntos, que es como se mira un historial — nadie pregunta «cuánto pagó del crédito 2».
+     */
+    if (query.clientId) where.credit = { clientId: query.clientId };
     if (query.from || query.to) where.paymentDate = { ...(query.from ? { gte: new Date(query.from) } : {}), ...(query.to ? { lte: new Date(query.to) } : {}) };
 
     const [rows, total] = await this.tx((tx) =>

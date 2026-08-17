@@ -51,22 +51,46 @@ export const PRIORITY_TONE: Record<CasePriority, Tone> = {
  */
 export { CASE_SORTS } from '@kobrax/shared';
 
+/** Lo que la pantalla de Mora sabe leer de la URL. Las claves son las que escribe el `DataTable`. */
+export interface MoraParams {
+  status?: string;
+  priority?: string;
+  assigneeId?: string;
+  /** SLA del caso vencido — **no** la mora del deudor. Son dos cosas distintas. */
+  overdue?: string;
+  /** Rango de días de mora del crédito. Vacío = el default de la pantalla (`1`, sólo vencidos). */
+  dpdMin?: string;
+  dpdMax?: string;
+  /** `'0'` explícito = «mostrar también los que están al día». */
+  todos?: string;
+  q?: string;
+  sort?: string;
+  dir?: string;
+  page?: string;
+}
+
 /**
  * La query para `GET /cases` a partir de lo que hay en la URL.
  *
  * `overdue` viaja como `'true'`, no como booleano: el DTO lo valida como string. Y un filtro
  * vacío **no se manda**, o la API lo tomaría como un filtro de verdad.
+ *
+ * 🔴 **Abre por vencidos: `dpdMin=1` si nadie dijo otra cosa.** La pantalla se llama Mora, y sin
+ * esto listaba todo el trabajo abierto — incluyendo a quien está al día y sólo tiene el expediente
+ * sin cerrar. «Ver también los que están al día» es un filtro que se saca, no el estado inicial.
  */
-export function caseQuery(
-  params: { status?: string; priority?: string; assigneeId?: string; overdue?: string; sort?: string; dir?: string; page?: string },
-  limit: number,
-): URLSearchParams {
+export function moraQuery(params: MoraParams, limit: number): URLSearchParams {
   const page = Math.max(1, Number(params.page) || 1);
   const query = new URLSearchParams({ page: String(page), limit: String(limit) });
-  for (const key of ['status', 'priority', 'assigneeId'] as const) {
-    if (params[key]) query.set(key, params[key]);
+  for (const key of ['status', 'priority', 'assigneeId', 'q'] as const) {
+    if (params[key]) query.set(key, params[key]!);
   }
   if (params.overdue === 'true') query.set('overdue', 'true');
+
+  if (params.dpdMin) query.set('dpdMin', params.dpdMin);
+  else if (params.todos !== '1') query.set('dpdMin', '1'); // el default de la pantalla
+  if (params.dpdMax) query.set('dpdMax', params.dpdMax);
+
   /*
    * Sin estado pedido a mano, la lista es **la del trabajo abierto**, que es lo que promete su
    * propio subtítulo. Sin esto, en un tenant con historia la primera página mezcla cerrados con
@@ -83,7 +107,16 @@ export function caseQuery(
   return query;
 }
 
-/** ¿Hay algún filtro puesto? Decide si el vacío se cuenta como «no hay» o como «no encontré». */
-export function hasCaseFilters(params: { status?: string; priority?: string; assigneeId?: string; overdue?: string }): boolean {
-  return Boolean(params.status || params.priority || params.assigneeId || params.overdue === 'true');
+/**
+ * ¿Hay algún filtro puesto? Decide si el vacío se cuenta como «no hay» o como «no encontré».
+ *
+ * El `dpdMin=1` que la pantalla pone sola **no cuenta**: es cómo abre, no algo que alguien eligió.
+ * Contarlo haría que una cartera sin mora dijera «no encontré nada con esos filtros» cuando la
+ * respuesta verdadera es «nadie te debe», que es una noticia distinta y mejor.
+ */
+export function hasMoraFilters(params: MoraParams): boolean {
+  return Boolean(
+    params.status || params.priority || params.assigneeId || params.q || params.dpdMin || params.dpdMax ||
+      params.overdue === 'true' || params.todos === '1',
+  );
 }

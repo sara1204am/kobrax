@@ -20,11 +20,15 @@ import { ClientsService } from './clients.service';
 import {
   CreateAttachmentDto,
   CreateClientDto,
+  CreateCollateralDto,
   CreateContactDto,
   CreateLocationDto,
   CreateRelationDto,
   ListClientsQueryDto,
+  TimelineQueryDto,
+  UpdateAttachmentDto,
   UpdateClientDto,
+  UpdateCollateralDto,
   UpdateContactDto,
   UpdateLocationDto,
   UpdateRelationDto,
@@ -156,10 +160,61 @@ export class ClientsController {
     await this.clients.removeSub(id, 'relation', rid);
   }
 
+  /**
+   * La bitácora: qué se hizo con esta persona, de todos sus créditos.
+   *
+   * Pide `client:read` porque es la ficha del cliente, pero **cada fuente entra sólo si quien mira
+   * puede verla** (lo decide el service). Un solo permiso para las tres sería la puerta de atrás
+   * para leer pagos sin `payment:read`.
+   */
+  @Get(':id/timeline')
+  @Roles(Permission.CLIENT_READ)
+  timeline(@Param('id', ParseUUIDPipe) id: string, @Query() query: TimelineQueryDto) {
+    return this.clients.timeline(id, query);
+  }
+
+  // ── Garantías (el bien; la personal es el garante, que va arriba) ──────────
+  @Post(':id/collaterals')
+  @Roles(Permission.CLIENT_WRITE)
+  addCollateral(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateCollateralDto) {
+    return this.clients.addCollateral(id, dto);
+  }
+
+  @Patch(':id/collaterals/:gid')
+  @Roles(Permission.CLIENT_WRITE)
+  updateCollateral(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('gid', ParseUUIDPipe) gid: string,
+    @Body() dto: UpdateCollateralDto,
+  ) {
+    return this.clients.updateCollateral(id, gid, dto);
+  }
+
+  @Delete(':id/collaterals/:gid')
+  @Roles(Permission.CLIENT_WRITE)
+  @HttpCode(204)
+  async removeCollateral(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('gid', ParseUUIDPipe) gid: string,
+  ): Promise<void> {
+    await this.clients.removeSub(id, 'collateral', gid);
+  }
+
   @Post(':id/attachments')
   @Roles(Permission.CLIENT_WRITE)
   addAttachment(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateAttachmentDto) {
     return this.clients.addAttachment(id, dto);
+  }
+
+  /** Reclasificar un adjunto (el archivo no se toca; su hash es la prueba de que no cambió). */
+  @Patch(':id/attachments/:aid')
+  @Roles(Permission.CLIENT_WRITE)
+  updateAttachment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('aid', ParseUUIDPipe) aid: string,
+    @Body() dto: UpdateAttachmentDto,
+  ) {
+    return this.clients.updateAttachment(id, aid, dto);
   }
 
   @Delete(':id/attachments/:aid')

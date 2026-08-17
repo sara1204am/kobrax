@@ -15,6 +15,7 @@ import { TenantContextService } from '../../common/context/tenant-context.servic
 import { AuditService } from '../../common/audit/audit.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
+import { nameTerms } from '../../common/name-search';
 import { computePriority, slaDueAt, DEFAULT_PRIORITY_PARAMS, type PriorityParams } from './case-priority';
 import { serializeCase, type PortfolioExtra } from './cases.serializer';
 import {
@@ -23,6 +24,7 @@ import {
   CreateCaseDto,
   GenerateCasesDto,
   ListCasesQueryDto,
+  SetPriorityDto,
   TransitionCaseDto,
 } from './dto/case.dto';
 import { caseDuplicate, caseNoActivity, invalidAssignee, invalidTransition, resourceNotFound } from './cases.errors';
@@ -228,6 +230,43 @@ export class CasesService {
     return best;
   }
 
+  // ── Prioridad ───────────────────────────────────────────────────────────────
+  /**
+   * Fijar la prioridad a mano, o devolverla a la automática.
+   *
+   * 🔴 **La fecha (`priorityPinnedAt`) es lo que hace que esto sirva de algo.** Sin ella, subir la
+   * prioridad de un deudor con dos días de atraso duraba hasta la noche: el trabajo diario la
+   * recalcula desde el saldo y la mora, y se la devolvía a baja. Con la fecha puesta el job saltea
+   * esa cobranza, que es la misma regla que ya gobierna la mora — cada dato tiene un solo dueño.
+   *
+   * 🔴 **Soltar no fija «la automática de hoy»: la suelta y ya.** Deja el valor que había y borra la
+   * marca; el job la recalcula en la próxima pasada. Calcularla acá la dejaría clavada en el número
+   * de este instante, que es exactamente lo que se quería dejar de hacer.
+   */
+  async setPriority(id: string, dto: SetPriorityDto): Promise<ReturnType<typeof serializeCase>> {
+    const { before, after } = await this.tx(async (tx) => {
+      const found = await tx.collectionCase.findFirst({ where: { id, deletedAt: null } });
+      if (!found) throw resourceNotFound();
+
+      const next = await tx.collectionCase.update({
+        where: { id },
+        data: dto.auto
+          ? { priorityPinnedAt: null }
+          : { priority: dto.priority ?? found.priority, priorityPinnedAt: new Date() },
+      });
+      return { before: found, after: next };
+    });
+
+    await this.audit.record({
+      entity: 'case',
+      entityId: id,
+      action: dto.auto ? 'PRIORITY_AUTO' : 'PRIORITY_PIN',
+      before: { priority: before.priority, pinned: before.priorityPinnedAt !== null },
+      after: { priority: after.priority, pinned: after.priorityPinnedAt !== null },
+    });
+    return serializeCase(after);
+  }
+
   // ── Máquina de estados ──────────────────────────────────────────────────────
   async transition(id: string, dto: TransitionCaseDto): Promise<ReturnType<typeof serializeCase>> {
     const { before, after } = await this.applyTransition(id, dto.status, dto.reason);
@@ -339,6 +378,32 @@ export class CasesService {
     if (query.overdue === 'true') where.slaDueAt = { lt: new Date() };
 
     /*
+     * La mora es del **crédito**, no del caso: se filtra sobre la relación. Es lo que hace que la
+     * pantalla de Mora pueda abrir con «sólo los vencidos» (`dpdMin=1`) en vez de con todo el
+     * trabajo abierto, que incluye a quien está al día y sólo tiene el expediente sin cerrar.
+     */
+    if (query.dpdMin != null || query.dpdMax != null) {
+      where.credit = {
+        daysPastDue: {
+          ...(query.dpdMin != null ? { gte: query.dpdMin } : {}),
+          ...(query.dpdMax != null ? { lte: query.dpdMax } : {}),
+        },
+      };
+    }
+
+    /*
+     * Búsqueda por nombre del deudor, **palabra por palabra**: «Teresa Mama» encuentra a «Teresa
+     * Mamani Padilla». La regla vive en `common/name-search`, compartida con la cartera — dos
+     * buscadores que se comportan distinto sobre los mismos nombres son dos productos.
+     *
+     * El documento no entra: está cifrado y se busca por blind index, que es el camino de la
+     * cartera y no éste.
+     */
+    if (query.q?.trim()) {
+      where.client = { AND: nameTerms(query.q) };
+    }
+
+    /*
      * El estado se decide UNA vez.
      *
      * `overdue` y `open` significan lo mismo para el estado —«todavía no terminó»— y antes cada
@@ -369,7 +434,7 @@ export class CasesService {
           take: limit,
           include: {
             client: { select: { firstName: true, lastName: true, businessName: true } },
-            credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true, metadata: true, installments: { select: { dueDate: true, amount: true, status: true } } } },
+            credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true, code: true, metadata: true, installments: { select: { dueDate: true, amount: true, status: true } } } },
           },
         }),
         tx.collectionCase.count({ where }),

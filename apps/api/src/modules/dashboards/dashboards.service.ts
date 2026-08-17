@@ -78,9 +78,14 @@ export class DashboardsService {
    * 🔴 **`x` se recorta contra el ancho.** El DTO valida `x ≤ 11` y `w ≤ 12` por separado, así que
    * `{ x: 11, w: 12 }` pasa y deja el widget colgando fuera de las doce columnas — y ahí **no hay
    * forma de volver a agarrarlo** para moverlo. Dos rangos correctos no hacen una posición válida.
+   *
+   * `keep` son los ids que hoy tiene este tablero: los que vuelvan en el pedido conservan el suyo.
+   * Un id que no esté ahí —uno nuevo, una copia, o el de otro tablero— se descarta y la fila nace
+   * con uno propio, así que **no hay forma de chocar la clave primaria desde afuera**.
    */
-  private widgetRows(dashboardId: string, widgets: WidgetDto[] = []) {
+  private widgetRows(dashboardId: string, widgets: WidgetDto[] = [], keep: ReadonlySet<string> = new Set()) {
     return widgets.map((w) => ({
+      ...(w.id && keep.has(w.id) ? { id: w.id } : {}),
       accountId: this.tenant.accountId,
       dashboardId,
       type: w.type,
@@ -136,6 +141,20 @@ export class DashboardsService {
 
   async update(id: string, dto: UpdateDashboardDto): Promise<DashboardDefinition> {
     const row = await this.tx(async (tx) => {
+      /*
+       * 🔴 **El tablero se traba antes de tocarlo.** El layout se reemplaza entero (borrar + crear),
+       * y dos parches del mismo tablero a la vez se pisan de la peor forma posible: el segundo
+       * arranca su `deleteMany` antes de que el primero confirme, así que borra las filas viejas y no
+       * ve las nuevas — y las dos tandas quedan. El panel manda dos guardados seguidos todo el
+       * tiempo (el botón guarda al toque, el arrastre 600 ms después), y el tablero aparecía
+       * DUPLICADO: cada KPI y cada gráfico dos veces.
+       *
+       * `for update` serializa: el segundo espera, y recién ahí borra lo que el primero escribió.
+       * Gana el último, que es lo que la persona espera.
+       */
+      // `id` es `text` en el esquema, no `uuid`: castear el parámetro tira «operator does not exist».
+      await tx.$queryRaw`select id from dashboards where id = ${id} for update`;
+
       const current = await tx.dashboard.findFirst({ where: { id, deletedAt: null } });
       if (!current) throw notFound();
       this.assertCanWrite(current);
@@ -162,8 +181,11 @@ export class DashboardsService {
        * están. Los ids de widget son internos: nadie los guarda afuera.
        */
       if (dto.widgets) {
+        const before = await tx.dashboardWidget.findMany({ where: { dashboardId: id }, select: { id: true } });
         await tx.dashboardWidget.deleteMany({ where: { dashboardId: id } });
-        await tx.dashboardWidget.createMany({ data: this.widgetRows(id, dto.widgets) });
+        await tx.dashboardWidget.createMany({
+          data: this.widgetRows(id, dto.widgets, new Set(before.map((w) => w.id))),
+        });
       }
 
       return tx.dashboard.findFirstOrThrow({ where: { id }, include: { widgets: true } });

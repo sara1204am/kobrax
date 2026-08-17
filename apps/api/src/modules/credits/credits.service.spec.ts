@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import { CreditsService } from './credits.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
-function makeService(opts: { client?: unknown; credit?: unknown; config?: unknown } = {}) {
+function makeService(opts: { client?: unknown; credit?: unknown; config?: unknown; openCase?: unknown } = {}) {
   const calls = {
     creditCreate: [] as Record<string, unknown>[],
     creditUpdate: [] as Record<string, unknown>[],
     caseCreate: [] as Record<string, unknown>[],
+    caseClose: [] as Record<string, unknown>[],
     agendaCreate: [] as Record<string, unknown>[],
     arrearCreate: [] as Record<string, unknown>[],
     arrearDeleteMany: 0,
@@ -32,6 +33,11 @@ function makeService(opts: { client?: unknown; credit?: unknown; config?: unknow
       create: async (args: { data: Record<string, unknown> }) => {
         calls.caseCreate.push(args.data);
         return { id: 'case1', ...args.data };
+      },
+      findFirst: async () => opts.openCase ?? null,
+      updateMany: async (args: { data: Record<string, unknown> }) => {
+        calls.caseClose.push(args.data);
+        return { count: opts.openCase ? 1 : 0 };
       },
     },
     agendaItem: {
@@ -254,5 +260,116 @@ describe('CreditsService.recalculateArrears', () => {
     const r = await service.recalculateArrears('cr1', '2026-07-13T00:00:00Z');
     assert.equal(r.daysOverdue, 37); // conserva el valor del archivo
     assert.equal(calls.creditUpdate.length, 0); // ni siquiera toca la DB
+  });
+
+  /** Ídem el importado, con otro dueño: la marcó una persona y el recálculo no le pisa el número. */
+  it('mora marcada a mano: el recálculo la deriva de `moraSince`, no de la fecha de vencimiento', async () => {
+    const credit = { id: 'cr1', installments: [], outstandingBalance: 900, daysPastDue: 0, metadata: { origin: 'manual', nextDueDate: '2026-07-12', moraSince: '2026-07-01' } };
+    const { service, calls } = makeService({ credit });
+    const r = await service.recalculateArrears('cr1', '2026-07-13T00:00:00Z');
+    assert.equal(r.daysOverdue, 12); // desde la marca, no desde el vencimiento (que sería 1)
+    assert.equal(calls.creditUpdate[0]!.daysPastDue, 12);
+  });
+});
+
+/**
+ * «Este préstamo está en mora», dicho por una persona — para quien presta sin cronograma y sabe que
+ * le deben sin mirar una fecha.
+ */
+describe('CreditsService.markArrears', () => {
+  const activo = (over: Record<string, unknown> = {}) => ({
+    id: 'cr1',
+    status: 'ACTIVE',
+    clientId: 'cl1',
+    branchId: null,
+    assignedManagerId: 'u-cobrador',
+    outstandingBalance: 900,
+    daysPastDue: 0,
+    metadata: { origin: 'manual' },
+    client: { riskSegment: null },
+    installments: [],
+    ...over,
+  });
+
+  it('guarda la FECHA desde la que corre, no los días', async () => {
+    const { service, calls } = makeService({ credit: activo() });
+    await service.markArrears('cr1', 15);
+    const meta = calls.creditUpdate[0]!.metadata as { moraSince?: string };
+    assert.ok(meta.moraSince, 'se guarda `moraSince`');
+    assert.equal(calls.creditUpdate[0]!.daysPastDue, 15);
+  });
+
+  /**
+   * 🔴 **Abre el caso en el acto, sin esperar al trabajo diario.** Quien aprieta ese botón quiere ver
+   * el crédito en Mora ahora; esperar al job sería decirle que su decisión vale dentro de seis horas.
+   */
+  it('abre el caso ahí mismo, heredando el responsable del préstamo', async () => {
+    const { service, calls } = makeService({ credit: activo() });
+    await service.markArrears('cr1');
+    assert.equal(calls.caseCreate.length, 1);
+    assert.equal(calls.caseCreate[0]!.assigneeId, 'u-cobrador');
+  });
+
+  it('con un caso ya abierto no crea otro', async () => {
+    const { service, calls } = makeService({ credit: activo(), openCase: { id: 'k1' } });
+    await service.markArrears('cr1');
+    assert.equal(calls.caseCreate.length, 0);
+  });
+
+  /** Su mora la manda el archivo: la marca se guardaría y no haría nada. Mejor rebotar que mentir. */
+  it('el importado no se puede marcar a mano', async () => {
+    const { service } = makeService({ credit: activo({ metadata: { origin: 'import' } }) });
+    await rejectsWithCode(service.markArrears('cr1'), 'CREDIT_LOCKED');
+  });
+
+  it('un crédito que ya no está activo tampoco', async () => {
+    const { service } = makeService({ credit: activo({ status: 'PAID' }) });
+    await rejectsWithCode(service.markArrears('cr1'), 'CREDIT_NOT_ACTIVE');
+  });
+});
+
+/**
+ * 🔴 **Poner al día es mover la fecha, no borrar el síntoma.** Un botón que sólo pusiera la mora en
+ * cero dejaría la fecha vencida, y el trabajo diario volvería a abrir el caso esta misma noche.
+ */
+describe('CreditsService.clearArrears', () => {
+  const enMora = (over: Record<string, unknown> = {}) => ({
+    id: 'cr1',
+    status: 'ACTIVE',
+    clientId: 'cl1',
+    outstandingBalance: 900,
+    daysPastDue: 40,
+    metadata: { origin: 'manual', frequency: 'MONTHLY', nextDueDate: '2026-07-01' },
+    ...over,
+  });
+
+  it('«siguiente período» avanza la fecha y cierra el caso', async () => {
+    const { service, calls } = makeService({ credit: enMora(), openCase: { id: 'k1' } });
+    await service.clearArrears('cr1', { mode: 'next_period' });
+    const meta = calls.creditUpdate[0]!.metadata as { nextDueDate?: string };
+    assert.ok(meta.nextDueDate! > new Date().toISOString().slice(0, 10), 'la nueva fecha es futura');
+    assert.equal(calls.creditUpdate[0]!.daysPastDue, 0);
+    assert.equal(calls.caseClose[0]!.closedReason, 'CURRENT');
+  });
+
+  it('«sin fecha» deja el préstamo abierto: sin vencimiento no hay mora que contar', async () => {
+    const { service, calls } = makeService({ credit: enMora(), openCase: { id: 'k1' } });
+    await service.clearArrears('cr1', { mode: 'none' });
+    const meta = calls.creditUpdate[0]!.metadata as { nextDueDate?: string };
+    assert.equal(meta.nextDueDate, undefined);
+    assert.equal(calls.creditUpdate[0]!.daysPastDue, 0);
+  });
+
+  it('una fecha pasada se rechaza: dejaría el crédito en mora igual', async () => {
+    const { service } = makeService({ credit: enMora() });
+    await rejectsWithCode(service.clearArrears('cr1', { mode: 'date', date: '2020-01-01' }), 'ARREARS_DATE_PAST');
+  });
+
+  it('poner al día también saca la marca manual: quien la puso es quien la saca', async () => {
+    const credit = enMora({ metadata: { origin: 'manual', frequency: 'MONTHLY', moraSince: '2026-01-01' } });
+    const { service, calls } = makeService({ credit, openCase: { id: 'k1' } });
+    await service.clearArrears('cr1', { mode: 'next_period' });
+    const meta = calls.creditUpdate[0]!.metadata as { moraSince?: string };
+    assert.equal(meta.moraSince, undefined);
   });
 });

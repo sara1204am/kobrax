@@ -9,14 +9,43 @@
  */
 import type {
   ClienteForm,
+  CollateralRow,
   ContactRow,
   LocationRow,
   NewClientInput,
+  NewCollateralInput,
   NewContactInput,
   NewLocationInput,
   NewRelationInput,
   RelationRow,
 } from '../types/client.types.js';
+
+/**
+ * Los tipos de dirección que se pueden **elegir** hoy.
+ *
+ * 🔴 **`GUARANTOR` no está, y no es un olvido.** La dirección del garante es la dirección **de esa
+ * persona**, y esa persona ya existe en el formulario como contacto con su relación `GUARANTOR` y
+ * sus propias direcciones. Ofrecerlo también como tipo de dirección del deudor daba dos lugares
+ * para lo mismo, y quien cobra terminaba yendo a la casa del garante creyendo que iba a la del
+ * deudor. El tipo **sigue existiendo en el modelo**: hay filas guardadas así.
+ *
+ * Es una lista y no un enum de TypeScript porque acá va la **regla**, no el texto: el rótulo de
+ * cada código lo pone cada app en su idioma.
+ */
+export const LOCATION_TYPES = ['HOME', 'WORK', 'FAMILY', 'OTHER'] as const;
+
+/**
+ * Las opciones para una fila concreta.
+ *
+ * 🔴 **Un tipo que ya no se ofrece pero que la fila YA tiene sigue apareciendo.** Si no, esas cuatro
+ * direcciones guardadas como `GUARANTOR` se dibujarían como «Casa» —la primera opción— mientras el
+ * dato dice otra cosa: la pantalla mentiría sobre lo que hay guardado, y bastaría con abrir el
+ * formulario para creer que se corrigió algo que no se tocó.
+ */
+export function locationTypeChoices(current?: string): string[] {
+  const base: string[] = [...LOCATION_TYPES];
+  return current && !base.includes(current) ? [...base, current] : base;
+}
 
 export function emptyContact(id: string, isPrimary = false): ContactRow {
   return { id, contactType: 'PHONE', value: '', hasWhatsApp: true, isPrimary };
@@ -37,7 +66,11 @@ export function emptyLocation(id: string): LocationRow {
 }
 
 export function emptyRelation(id: string): RelationRow {
-  return { id, relatedName: '', relationshipType: 'GUARANTOR', gender: '', isContactable: true, notes: '', contacts: [], locations: [] };
+  return { id, relatedName: '', relationshipType: 'GUARANTOR', gender: '', isContactable: true, notes: '', contacts: [], locations: [], creditIds: [] };
+}
+
+export function emptyCollateral(id: string): CollateralRow {
+  return { id, type: '', description: '', estimatedValue: '', currency: '', photoUrls: [], creditIds: [] };
 }
 
 export function initialCliente(): ClienteForm {
@@ -53,6 +86,7 @@ export function initialCliente(): ClienteForm {
     contacts: [emptyContact('c0', true)], // un teléfono principal por defecto, WhatsApp marcado
     locations: [],
     relations: [],
+    collaterals: [],
   };
 }
 
@@ -68,8 +102,13 @@ export function clienteEnPunto(point: { latitude: number; longitude: number }): 
   };
 }
 
-/** Coordenada tipeada/capturada → número, o undefined si está vacía o no es válida. */
-function parseCoord(s: string): number | undefined {
+/**
+ * Campo numérico del formulario → número, o `undefined` si está vacío o a medio escribir.
+ *
+ * Lo usan las coordenadas y el valor de la garantía: los dos se guardan como texto mientras se
+ * tipean —un `<input>` con un `-` o un `1.` no es un número— y se convierten recién al mandar.
+ */
+function parseNum(s: string): number | undefined {
   const t = s.trim();
   if (!t) return undefined;
   const n = Number(t);
@@ -145,6 +184,16 @@ export function hydrateCliente(d: {
     notes?: string;
     contacts?: ServerContact[];
     locations?: ServerLocation[];
+    creditIds?: string[];
+  }[];
+  collaterals?: {
+    id: string;
+    type?: string;
+    description: string;
+    estimatedValue?: number;
+    currency?: string;
+    photoUrls?: string[];
+    creditIds?: string[];
   }[];
 }): ClienteForm {
   return {
@@ -168,6 +217,17 @@ export function hydrateCliente(d: {
       notes: r.notes ?? '',
       contacts: hydrateContacts(r.contacts ?? []),
       locations: hydrateLocations(r.locations ?? []),
+      creditIds: r.creditIds ?? [],
+    })),
+    collaterals: (d.collaterals ?? []).map((g) => ({
+      id: g.id,
+      serverId: g.id,
+      type: g.type ?? '',
+      description: g.description,
+      estimatedValue: g.estimatedValue != null ? String(g.estimatedValue) : '',
+      currency: g.currency ?? '',
+      photoUrls: g.photoUrls ?? [],
+      creditIds: g.creditIds ?? [],
     })),
   };
 }
@@ -177,9 +237,50 @@ function hasPhone(s: ClienteForm): boolean {
   return s.contacts.some((c) => c.contactType === 'PHONE' && c.value.trim().length > 0);
 }
 
-/** Mínimo viable, ajustado al modelo: nombre + apellido + un teléfono. */
+/**
+ * Forma de un teléfono para el `pattern` de un `<input>`: empieza con dígito o `+` y sigue con al
+ * menos cuatro dígitos, espacios o guiones.
+ *
+ * 🔴 **La regla vive acá porque ya estaba escrita en tres lados** —el perfil del panel, el alta del
+ * móvil y el `@Length(5,32)` del servidor— y el navegador no valida nada que no le digamos. Sin
+ * esto, «no me acuerdo» se guarda como teléfono y el día de la cobranza no hay a qué llamar. Vacío
+ * sigue valiendo: el navegador no aplica `pattern` a un campo en blanco, así que borrar un teléfono
+ * lo quita.
+ */
+export const PHONE_PATTERN = '[\\d+][\\d\\s-]{4,}';
+
+/**
+ * Las palabras de una búsqueda por nombre.
+ *
+ * 🔴 **Buscar «Teresa Mama» tiene que encontrar a «Teresa Mamani Padilla».** Con la frase entera no
+ * la encuentra nunca: «Teresa Mama» no está en el nombre («Teresa») ni en el apellido («Mamani
+ * Padilla»), porque el espacio cae justo en el medio. Quien busca escribe el nombre y el arranque
+ * del apellido — es la forma natural de escribir a alguien — y la búsqueda tiene que partirlo.
+ *
+ * La regla que se arma con esto: **cada palabra tiene que aparecer en algún campo del nombre**, y
+ * puede ser en campos distintos. Así «Teresa Mama» pide «Teresa» en alguno y «Mama» en alguno.
+ *
+ * El tope no es capricho: cada palabra suma un `OR` de tres `ILIKE` a la consulta, y una frase
+ * pegada de veinte palabras armaría un `WHERE` que no termina. Cinco alcanzan para nombre completo.
+ */
+export function searchTerms(q: string | undefined | null, max = 5): string[] {
+  return (q ?? '').trim().split(/\s+/).filter(Boolean).slice(0, max);
+}
+
+/**
+ * Mínimo viable, ajustado al modelo: **quién es** + un teléfono.
+ *
+ * 🔴 **Quién es depende del tipo.** Una empresa no tiene nombre ni apellido —tiene razón social— y
+ * exigírselos dejaba el botón de guardar apagado para siempre: el formulario ofrecía «Empresa»,
+ * escondía los dos campos que él mismo estaba exigiendo, y no había forma de darse cuenta. Es el
+ * mismo corte que hace `assertIdentity` en el servidor.
+ */
 export function canSubmitCliente(s: ClienteForm): boolean {
-  return s.firstName.trim().length >= 2 && s.lastName.trim().length >= 1 && hasPhone(s);
+  const identificado =
+    s.clientType === 'COMPANY'
+      ? s.businessName.trim().length >= 2
+      : s.firstName.trim().length >= 2 && s.lastName.trim().length >= 1;
+  return identificado && hasPhone(s);
 }
 
 /**
@@ -203,8 +304,8 @@ export function locationPayload(l: LocationRow): NewLocationInput {
     locationType: l.locationType,
     address: l.address.trim() || undefined,
     zone: l.zone.trim() || undefined,
-    latitude: parseCoord(l.latitude),
-    longitude: parseCoord(l.longitude),
+    latitude: parseNum(l.latitude),
+    longitude: parseNum(l.longitude),
     referenceNotes: l.referenceNotes.trim() || undefined,
     photoUrls: l.photoUrls.length > 0 ? l.photoUrls : undefined,
   };
@@ -239,7 +340,39 @@ export function relationPayload(r: RelationRow): NewRelationInput {
     notes: r.notes.trim() || undefined,
     contacts: mapContacts(r.contacts),
     locations: mapLocations(r.locations),
+    /*
+     * 🔴 **Viaja siempre, incluso vacío.** El server reemplaza el vínculo entero con lo que llegue:
+     * mandarlo sólo cuando hay algo haría que **desmarcar el último crédito no se pudiera guardar**
+     * — la persona lo saca en pantalla, guarda, vuelve, y sigue ahí.
+     */
+    creditIds: r.creditIds,
   };
+}
+
+/** Una garantía → su payload. Ídem `contactPayload`: por fila, porque la edición las manda de a una. */
+export function collateralPayload(g: CollateralRow): NewCollateralInput {
+  return {
+    type: g.type || undefined,
+    description: g.description.trim(),
+    estimatedValue: parseNum(g.estimatedValue),
+    currency: g.currency || undefined,
+    photoUrls: g.photoUrls.length > 0 ? g.photoUrls : undefined,
+    // Ídem `relationPayload`: vacío también viaja, o no se puede desvincular la última.
+    creditIds: g.creditIds,
+  };
+}
+
+/**
+ * ¿La fila de garantía tiene algo? **La descripción es lo que la hace existir**: una garantía que
+ * dice sólo «vehículo» y no cuál no le sirve a nadie que salga a buscarla.
+ */
+export function hasCollateralData(g: CollateralRow): boolean {
+  return g.description.trim().length > 0;
+}
+
+/** Garantías → payload, descartando las filas sin descripción. */
+export function mapCollaterals(rows: CollateralRow[]): NewCollateralInput[] {
+  return rows.filter(hasCollateralData).map(collateralPayload);
 }
 
 export function buildClientePayload(s: ClienteForm): NewClientInput {
@@ -257,5 +390,6 @@ export function buildClientePayload(s: ClienteForm): NewClientInput {
     // `relatedName` es obligatorio en el DTO → se descartan las relaciones sin nombre. Cada contacto
     // (persona) lleva sus propios teléfonos y ubicaciones con la MISMA estructura que el cliente.
     relations: s.relations.filter((r) => r.relatedName.trim().length > 0).map(relationPayload),
+    collaterals: mapCollaterals(s.collaterals),
   };
 }

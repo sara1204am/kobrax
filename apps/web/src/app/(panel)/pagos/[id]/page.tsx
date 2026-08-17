@@ -87,7 +87,7 @@ export default async function PagoPage({ params }: { params: { id: string } }) {
               </Link>
             )}
             {payment.caseId && (
-              <Link href={`/casos/${payment.caseId}`} className="text-[14px] font-medium text-k-purple hover:underline">
+              <Link href={`/mora/${payment.caseId}`} className="text-[14px] font-medium text-k-purple hover:underline">
                 {t('detail.case')}
               </Link>
             )}

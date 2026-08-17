@@ -20,7 +20,22 @@ const DEBOUNCE_MS = 300;
  * descarta la navegación vieja solo; el guard existía porque allá compiten dos `fetch` en el
  * mismo estado.
  */
-export function SearchBox({ label, placeholder, hint }: { label: string; placeholder: string; hint?: string }) {
+export function SearchBox({
+  label,
+  placeholder,
+  hint,
+  wide,
+}: {
+  label: string;
+  placeholder: string;
+  hint?: string;
+  /**
+   * Ancha y con lupa, para cuando la caja vive **dentro** del bloque de la tabla y tiene que
+   * leerse como parte de ella. La angosta sigue siendo el default: en una pantalla sin tabla, una
+   * caja de 1200 px de ancho para escribir un apellido se ve rota.
+   */
+  wide?: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -47,9 +62,14 @@ export function SearchBox({ label, placeholder, hint }: { label: string; placeho
   }, [value, urlQuery, params, pathname, router]);
 
   return (
-    <div className="mb-4">
-      <label className="block">
+    <div className="mb-3">
+      <label className="relative block">
         <span className="sr-only">{label}</span>
+        {wide && (
+          <span aria-hidden className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-k-muted">
+            ⌕
+          </span>
+        )}
         <input
           type="search"
           value={value}
@@ -58,7 +78,9 @@ export function SearchBox({ label, placeholder, hint }: { label: string; placeho
             typed.current = true;
             setValue(e.target.value);
           }}
-          className="h-11 w-full max-w-[420px] rounded-xl border border-k-border bg-white px-4 text-[14px] text-k-text outline-none placeholder:text-k-muted focus:border-k-periwinkle focus:shadow-k-focus"
+          className={`h-11 w-full rounded-xl border border-k-border bg-white text-[14px] text-k-text outline-none placeholder:text-k-muted focus:border-k-periwinkle focus:shadow-k-focus ${
+            wide ? 'pl-10 pr-4' : 'max-w-[420px] px-4'
+          }`}
         />
       </label>
       {hint && <p className="mt-1.5 text-[12px] text-k-muted">{hint}</p>}

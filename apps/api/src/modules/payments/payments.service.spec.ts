@@ -17,8 +17,20 @@ function activeCredit(balance = 200) {
 }
 
 function makeService(opts: { credit?: unknown; idempotentExisting?: unknown; maxReceipt?: number } = {}) {
-  const calls = { create: [] as Record<string, unknown>[], creditUpdate: [] as Record<string, unknown>[], audit: [] as string[], events: [] as string[] };
+  const calls = {
+    create: [] as Record<string, unknown>[],
+    creditUpdate: [] as Record<string, unknown>[],
+    caseClose: [] as { where: Record<string, unknown>; data: Record<string, unknown> }[],
+    audit: [] as string[],
+    events: [] as string[],
+  };
   const tx = {
+    collectionCase: {
+      updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        calls.caseClose.push(args);
+        return { count: 1 };
+      },
+    },
     payment: {
       findFirst: async () => opts.idempotentExisting ?? null,
       aggregate: async () => ({ _max: { receiptNumber: opts.maxReceipt ?? 0 } }),
@@ -63,6 +75,27 @@ describe('PaymentsService.register', () => {
     await service.register({ ...PAY, amount: 200 });
     assert.equal(calls.creditUpdate[0]!.outstandingBalance, 0);
     assert.equal(calls.creditUpdate[0]!.status, 'PAID');
+  });
+
+  /**
+   * 🔴 Antes el pago dejaba el crédito en `PAID` y **no tocaba el caso**: quedaba abierto, seguía
+   * entrando a las rutas, y el cobrador volvía a visitar a quien ya había pagado. Va en la misma
+   * transacción que el pago y no en el trabajo diario: entre cobrar y que corra el job hay horas, y
+   * en esas horas el caso sigue en la ruta de alguien.
+   */
+  it('saldada la deuda, cierra el caso en la misma transacción', async () => {
+    const { service, calls } = makeService();
+    await service.register({ ...PAY, amount: 200 });
+    assert.equal(calls.caseClose.length, 1);
+    assert.equal(calls.caseClose[0]!.data.status, 'CLOSED');
+    assert.equal(calls.caseClose[0]!.data.closedReason, 'PAID');
+    assert.equal(calls.caseClose[0]!.where.creditId, 'cr1');
+  });
+
+  it('un pago parcial NO cierra el caso: todavía se debe', async () => {
+    const { service, calls } = makeService();
+    await service.register({ ...PAY, amount: 100 });
+    assert.equal(calls.caseClose.length, 0);
   });
 
   it('rechaza monto que excede el saldo (PAYMENT_001)', async () => {
