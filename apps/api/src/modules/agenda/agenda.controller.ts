@@ -71,7 +71,7 @@ export class AgendaController {
   @Get()
   @Roles(Permission.AGENDA_READ)
   list(@Query() query: ListAgendaQueryDto) {
-    return this.agenda.listByDay(query.date);
+    return this.agenda.listByDay(query);
   }
 
   @Post()

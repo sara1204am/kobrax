@@ -14,6 +14,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { AgendaItemType, ContactType, LocationType, ScheduleTimeMode } from '@prisma/client';
 import { AGENDA_POSTPONE_STEPS, AgendaOutcome, AgendaTimeSlot } from '@kobrax/shared';
@@ -23,9 +24,27 @@ import { AGENDA_POSTPONE_STEPS, AgendaOutcome, AgendaTimeSlot } from '@kobrax/sh
  * `@IsDateString` pasaba `2026-07-10T12:00:00Z`, y la hora sobrevivía al `new Date(...)` que se
  * compara por igualdad contra una columna `@db.Date` → cero filas en un día con agendados.
  */
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Un día, o un rango.
+ *
+ * 🔴 **`date` dejó de ser obligatorio, y `from`/`to` sólo valen juntos.** El rango es para la tira
+ * semanal y el calendario del mes: pintar cuántas gestiones tiene cada día es una pregunta por 7 o
+ * por 31 días, y de a un día serían 31 llamadas para dibujar una grilla. Mandar `from` sin `to`
+ * pediría «desde el lunes hasta siempre», así que se piden los dos o ninguno.
+ */
 export class ListAgendaQueryDto {
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'date debe tener formato YYYY-MM-DD' })
-  date!: string;
+  @IsOptional() @Matches(ISO_DAY, { message: 'date debe tener formato YYYY-MM-DD' })
+  date?: string;
+
+  @ValidateIf((o: ListAgendaQueryDto) => o.to !== undefined)
+  @Matches(ISO_DAY, { message: 'from debe tener formato YYYY-MM-DD' })
+  from?: string;
+
+  @ValidateIf((o: ListAgendaQueryDto) => o.from !== undefined)
+  @Matches(ISO_DAY, { message: 'to debe tener formato YYYY-MM-DD' })
+  to?: string;
 }
 
 /** Vencidos (para la sección "máx 2 + ver más"). */

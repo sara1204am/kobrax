@@ -609,7 +609,10 @@
         "title": "Overdue",
         "text": "Items from earlier days that are still pending.",
         "count": "{n} overdue",
-        "empty": "There are no overdue items."
+        "empty": "There are no overdue items.",
+        "collapse": "Show less",
+        "expand": "View all {n}",
+        "more": "and {n} more"
       },
       "unassigned": "No collector",
       "noTime": "No time",
@@ -621,7 +624,8 @@
         "complete": "Record what happened",
         "cancel": "Cancel",
         "reschedule": "Reschedule",
-        "edit": "Edit"
+        "edit": "Edit",
+        "call": "Call"
       },
       "complete": {
         "title": "Record what happened",
@@ -694,6 +698,33 @@
         "generic": "The action could not be completed.",
         "AGENDA_006": "The promise is missing its bank.",
         "AGENDA_007": "That outcome does not match this kind of item."
+      },
+      "subtitleTeam": "What your team has scheduled, day by day.",
+      "view": "How the agenda is shown",
+      "views": {
+        "list": "List",
+        "calendar": "Calendar"
+      },
+      "week": "Week",
+      "pickDate": "Pick a date",
+      "previousMonth": "Previous month",
+      "nextMonth": "Next month",
+      "createCta": "+ New task",
+      "addHere": "+ Schedule here",
+      "addShort": "+ Schedule",
+      "more": "+{n} more",
+      "overdueShort": "{n} over.",
+      "groupSummary": "{n} tasks · {done} done",
+      "metrics": {
+        "total": "Tasks today",
+        "done": "Completed",
+        "overdue": "Overdue"
+      },
+      "filters": {
+        "assignee": "Collector",
+        "type": "Type",
+        "all": "All",
+        "clear": "Clear filters"
       }
     },
     "routes": {

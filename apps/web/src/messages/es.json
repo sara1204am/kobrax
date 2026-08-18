@@ -609,7 +609,10 @@
         "title": "Vencidas",
         "text": "Gestiones de días anteriores que siguen pendientes.",
         "count": "{n} vencidas",
-        "empty": "No hay gestiones vencidas."
+        "empty": "No hay gestiones vencidas.",
+        "collapse": "Ver menos",
+        "expand": "Ver las {n}",
+        "more": "y {n} mas"
       },
       "unassigned": "Sin cobrador",
       "noTime": "Sin hora",
@@ -621,7 +624,8 @@
         "complete": "Registrar la ejecución",
         "cancel": "Cancelar",
         "reschedule": "Reagendar",
-        "edit": "Editar"
+        "edit": "Editar",
+        "call": "Llamar"
       },
       "complete": {
         "title": "Registrar la ejecución",
@@ -694,6 +698,33 @@
         "generic": "No se pudo completar la acción.",
         "AGENDA_006": "Falta el banco de la promesa.",
         "AGENDA_007": "Ese desenlace no corresponde a este tipo de gestión."
+      },
+      "subtitleTeam": "Lo agendado por tu equipo, dia por dia.",
+      "view": "Como se ve la agenda",
+      "views": {
+        "list": "Lista",
+        "calendar": "Calendario"
+      },
+      "week": "Semana",
+      "pickDate": "Elegir fecha",
+      "previousMonth": "Mes anterior",
+      "nextMonth": "Mes siguiente",
+      "createCta": "+ Nueva gestion",
+      "addHere": "+ Agendar aqui",
+      "addShort": "+ Agendar",
+      "more": "+{n} mas",
+      "overdueShort": "{n} venc.",
+      "groupSummary": "{n} gestiones · {done} hechas",
+      "metrics": {
+        "total": "Gestiones del dia",
+        "done": "Completadas",
+        "overdue": "Vencidas"
+      },
+      "filters": {
+        "assignee": "Cobrador",
+        "type": "Tipo",
+        "all": "Todos",
+        "clear": "Limpiar filtros"
       }
     },
     "routes": {

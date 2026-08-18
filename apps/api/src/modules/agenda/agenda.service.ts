@@ -119,14 +119,27 @@ export class AgendaService {
     return m;
   }
 
-  /** Agendados de un día (la pantalla principal separa secciones por `status`). */
-  async listByDay(dateStr: string): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>[]>> {
-    const date = new Date(dateStr);
+  /**
+   * Agendados de un día, o **de un rango**.
+   *
+   * 🔴 El rango existe por la tira semanal y el calendario del mes: pintar cuántas gestiones tiene
+   * cada día es una pregunta por 7 o por 31 días, y de a un día serían 31 llamadas para dibujar una
+   * grilla. Con `from`/`to` es una.
+   *
+   * El día suelto (`date`) se queda: lo usa el teléfono, que sólo pide el día de hoy y no tiene por
+   * qué cambiar. Es el mismo endpoint con un parámetro más, no uno nuevo.
+   */
+  async listByDay(query: { date?: string; from?: string; to?: string }): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>[]>> {
     const now = new Date();
+    const scheduledDate =
+      query.from && query.to
+        ? { gte: new Date(query.from), lte: new Date(query.to) }
+        : (query.date ? new Date(query.date) : this.startOfTodayUTC());
+
     const { rows, names } = await this.tx(async (tx) => {
       const rows = await tx.agendaItem.findMany({
-        where: { deletedAt: null, scheduledDate: date, ...this.assigneeScope() },
-        orderBy: [{ scheduledTime: 'asc' }, { createdAt: 'asc' }],
+        where: { deletedAt: null, scheduledDate, ...this.assigneeScope() },
+        orderBy: [{ scheduledDate: 'asc' }, { scheduledTime: 'asc' }, { createdAt: 'asc' }],
       });
       return { rows, names: await this.clientNames(tx, rows.map((r) => r.clientId)) };
     });
