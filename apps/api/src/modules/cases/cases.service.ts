@@ -1,6 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import type { CollectionCase, Prisma, PrismaClient } from '@prisma/client';
-import { AgendaItemStatus, AgendaItemType, CaseActivityType, CaseStatus, LocationType } from '@prisma/client';
+import {
+  AgendaItemStatus,
+  AgendaItemType,
+  CaseActivityType,
+  CasePriority,
+  CaseStatus,
+  LocationType,
+  VisitOutcome,
+} from '@prisma/client';
 import {
   canTransition,
   maskDocument,
@@ -56,6 +64,27 @@ const CASE_ORDER: Record<CaseSort, (dir: Prisma.SortOrder) => Prisma.CollectionC
  * Una clave desconocida cae al default en vez de responder 400: viaja en la URL, y una URL vieja
  * que alguien guardó no tiene por qué reventar la pantalla.
  */
+/**
+ * Una lista separada por comas → los valores que el enum conoce, sin repetidos.
+ *
+ * 🔴 **Lo que no existe se descarta, no rebota con 400.** Estos filtros viajan en la URL de una
+ * pantalla con panel de filtros: un link guardado de cuando había otro estado tiene que abrir la
+ * lista sin ese filtro, no dejar a la persona con una pantalla rota. Es el mismo criterio de `sort`.
+ *
+ * Si NADA de lo que llegó es válido, devuelve vacío y quien llama trata eso como «sin filtro»: pedir
+ * un estado inventado no puede devolver silenciosamente toda la cartera **filtrada por otra cosa**,
+ * pero tampoco un error sobre algo que la persona no escribió.
+ */
+export function enumList<T extends Record<string, string>>(raw: string | undefined, values: T): T[keyof T][] {
+  if (!raw?.trim()) return [];
+  const valid = new Set(Object.values(values));
+  const out = raw
+    .split(',')
+    .map((v) => v.trim())
+    .filter((v) => valid.has(v));
+  return [...new Set(out)] as T[keyof T][];
+}
+
 function caseOrderBy(sort?: string, dir?: string): Prisma.CollectionCaseOrderByWithRelationInput[] {
   /*
    * `Object.hasOwn` y no un simple lookup: `?sort=hasOwnProperty` encuentra el miembro heredado de
@@ -379,7 +408,8 @@ export class CasesService {
   async list(query: ListCasesQueryDto): Promise<ApiResponse<ReturnType<typeof serializeCase>[]>> {
     const { page, limit, skip } = resolvePagination(query);
     const where: Prisma.CollectionCaseWhereInput = { deletedAt: null };
-    if (query.priority) where.priority = query.priority;
+    const priorities = enumList(query.priority, CasePriority);
+    if (priorities.length > 0) where.priority = { in: priorities };
     if (query.clientId) where.clientId = query.clientId;
     if (query.overdue === 'true') where.slaDueAt = { lt: new Date() };
 
@@ -388,14 +418,25 @@ export class CasesService {
      * pantalla de Mora pueda abrir con «sólo los vencidos» (`dpdMin=1`) en vez de con todo el
      * trabajo abierto, que incluye a quien está al día y sólo tiene el expediente sin cerrar.
      */
+    /*
+     * La mora y el saldo son del crédito, así que comparten `where.credit`. Van juntos y no en dos
+     * asignaciones: la segunda pisaba a la primera, y pedir «más de 30 días **y** más de mil pesos»
+     * devolvía sólo el segundo filtro sin que nada lo dijera.
+     */
+    const credit: Prisma.CreditWhereInput = {};
     if (query.dpdMin != null || query.dpdMax != null) {
-      where.credit = {
-        daysPastDue: {
-          ...(query.dpdMin != null ? { gte: query.dpdMin } : {}),
-          ...(query.dpdMax != null ? { lte: query.dpdMax } : {}),
-        },
+      credit.daysPastDue = {
+        ...(query.dpdMin != null ? { gte: query.dpdMin } : {}),
+        ...(query.dpdMax != null ? { lte: query.dpdMax } : {}),
       };
     }
+    if (query.balanceMin != null || query.balanceMax != null) {
+      credit.outstandingBalance = {
+        ...(query.balanceMin != null ? { gte: query.balanceMin } : {}),
+        ...(query.balanceMax != null ? { lte: query.balanceMax } : {}),
+      };
+    }
+    if (Object.keys(credit).length > 0) where.credit = credit;
 
     /*
      * Búsqueda por nombre del deudor, **palabra por palabra**: «Teresa Mama» encuentra a «Teresa
@@ -405,8 +446,41 @@ export class CasesService {
      * El documento no entra: está cifrado y se busca por blind index, que es el camino de la
      * cartera y no éste.
      */
-    if (query.q?.trim()) {
-      where.client = { AND: nameTerms(query.q) };
+    /*
+     * El nombre y la zona son los dos del cliente, así que comparten `where.client` por el mismo
+     * motivo que el crédito comparte el suyo. La zona vive en las direcciones: basta con que UNA lo
+     * sea — un cliente con casa en el Centro y negocio en el Mercado entra por las dos.
+     */
+    const client: Prisma.ClientWhereInput = {};
+    if (query.q?.trim()) client.AND = nameTerms(query.q);
+    if (query.zone?.trim()) client.locations = { some: { zone: query.zone.trim() } };
+    if (Object.keys(client).length > 0) where.client = client;
+
+    /*
+     * ── Filtros de planificación (W11) ───────────────────────────────────────
+     * Todos son «relación que no existe» o «relación que sí»: Prisma los resuelve con EXISTS, sin
+     * traer nada de la otra tabla.
+     */
+
+    // Ninguna visita desde esa fecha. Incluye a los que no tienen ninguna: si no hubo visitas,
+    // tampoco hubo visitas recientes.
+    if (query.notVisitedSince) where.visits = { none: { capturedAt: { gte: new Date(query.notVisitedSince) } } };
+    // Más estricto: ni una vez, nunca. Gana sobre el anterior porque es un subconjunto.
+    if (query.neverVisited === 'true') where.visits = { none: {} };
+
+    const outcomes = enumList(query.outcome, VisitOutcome);
+    if (outcomes.length > 0) {
+      // `some` sobre otra propiedad de la misma relación necesita su propio filtro: con `none` y
+      // `some` en el mismo objeto, el segundo pisa al primero.
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : []), { visits: { some: { outcome: { in: outcomes } } } }];
+    }
+
+    /*
+     * 🔴 «Sólo mora disponible»: fuera los casos que YA son parada de una ruta ese día. Sin esto,
+     * dos supervisores mandan a dos cobradores a la misma puerta la misma mañana.
+     */
+    if (query.excludeRouted) {
+      where.routeStops = { none: { route: { plannedDate: new Date(query.excludeRouted) } } };
     }
 
     /*
@@ -418,7 +492,9 @@ export class CasesService {
      * marcando «Promesa de pago». Un estado pedido a mano gana siempre; si además es terminal, la
      * lista vuelve vacía, que es la respuesta correcta a «cerrados y sin cerrar a la vez».
      */
-    if (query.status) where.status = query.status;
+    // Uno o varios, separados por coma. Uno solo sigue funcionando igual: es lo que manda el móvil.
+    const statuses = enumList(query.status, CaseStatus);
+    if (statuses.length > 0) where.status = { in: statuses };
     else if (query.overdue === 'true' || query.open === 'true') where.status = { notIn: TERMINAL };
 
     // Scope por capacidad (no por nombre de rol). Tres casos:
@@ -429,6 +505,28 @@ export class CasesService {
       if (query.assigneeId) where.assigneeId = query.assigneeId;
     } else if (this.scopedToOwnCases()) {
       where.assigneeId = this.tenant.userId;
+    }
+
+    /*
+     * Promesa vigente. Va aparte porque `agenda_items.case_id` es **ref suave**: no hay relación en
+     * Prisma, así que no se puede preguntar por ella dentro del `where`. Se resuelven primero los
+     * casos con promesa y después se incluyen o se excluyen.
+     *
+     * ponytail: un `IN` con los casos que tienen promesa. Con la cartera más grande de hoy son
+     * cientos; si un tenant llega a decenas de miles, esto pasa a ser una vista o una columna
+     * denormalizada, como ya se hizo con los totales de la cartera.
+     */
+    if (query.hasPromise === 'true' || query.hasPromise === 'false') {
+      /*
+       * 🔴 Va por **cliente**, no por caso, porque `hasActivePromise` —el dato que la pantalla
+       * muestra— también es por cliente. Con dos criterios distintos, filtrar «con promesa» dejaría
+       * afuera filas que la propia lista está marcando con promesa.
+       */
+      const conPromesa = await this.clientsWithPromise();
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : []),
+        { clientId: query.hasPromise === 'true' ? { in: conPromesa } : { notIn: conPromesa } },
+      ];
     }
 
     const [rows, total] = await this.tx((tx) =>
@@ -460,6 +558,31 @@ export class CasesService {
       page,
       limit,
     );
+  }
+
+  /**
+   * Los clientes con una promesa vigente: agendada para hoy o para adelante y todavía sin ejecutar.
+   *
+   * Es la **misma definición** que usa `portfolioExtra` para pintar la marca de promesa en la lista.
+   * Vive en dos lugares porque una es por página y ésta es sobre toda la cartera; si un día se
+   * separan, la lista va a decir «con promesa» sobre filas que el filtro deja afuera.
+   */
+  private async clientsWithPromise(): Promise<string[]> {
+    const now = new Date();
+    const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const rows = await this.tx((tx) =>
+      tx.agendaItem.findMany({
+        where: {
+          deletedAt: null,
+          type: AgendaItemType.PROMISE_TO_PAY,
+          status: AgendaItemStatus.SCHEDULED,
+          scheduledDate: { gte: startOfToday },
+        },
+        select: { clientId: true },
+        distinct: ['clientId'],
+      }),
+    );
+    return rows.map((r) => r.clientId);
   }
 
   /**

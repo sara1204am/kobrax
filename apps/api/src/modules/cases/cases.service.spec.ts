@@ -203,7 +203,8 @@ describe('CasesService.list (scope por capacidad + enriquecimiento)', () => {
     // filtro de estado se perdía sin decirlo y la tabla mostraba vencidos de cualquier estado.
     const { service, calls } = makeService({ permissions: ['case:assign'] });
     await service.list({ status: 'PROMISE_TO_PAY', overdue: 'true' } as never);
-    assert.equal(calls.listWhere!.status, 'PROMISE_TO_PAY');
+    // Un estado solo viaja como lista de uno: el filtro pasó a aceptar varios (W11).
+    assert.deepEqual(calls.listWhere!.status, { in: ['PROMISE_TO_PAY'] });
     assert.ok(calls.listWhere!.slaDueAt, 'se perdió el filtro de vencidos');
   });
 
@@ -211,6 +212,79 @@ describe('CasesService.list (scope por capacidad + enriquecimiento)', () => {
     const { service, calls } = makeService({ permissions: ['case:assign'] });
     await service.list({ overdue: 'true' } as never);
     assert.deepEqual(calls.listWhere!.status, { notIn: ['CLOSED', 'WRITTEN_OFF'] });
+  });
+
+  /*
+   * ── Filtros para planificar rutas (W11) ─────────────────────────────────────
+   * Todos aditivos: sin ellos el listado se comporta como siempre.
+   */
+
+  it('estado y prioridad aceptan VARIOS, separados por coma', async () => {
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    await service.list({ status: 'ACTIVE,PROMISE_TO_PAY', priority: 'HIGH,CRITICAL' } as never);
+    assert.deepEqual(calls.listWhere!.status, { in: ['ACTIVE', 'PROMISE_TO_PAY'] });
+    assert.deepEqual(calls.listWhere!.priority, { in: ['HIGH', 'CRITICAL'] });
+  });
+
+  it('🔴 un valor que el enum no conoce se descarta, no rebota con 400', async () => {
+    // Viaja en la URL: un link guardado de cuando había otro estado tiene que abrir la lista sin
+    // ese filtro, no dejar a la persona con una pantalla rota.
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    await service.list({ status: 'ACTIVE,INVENTADO', priority: 'NINGUNA' } as never);
+    assert.deepEqual(calls.listWhere!.status, { in: ['ACTIVE'] });
+    assert.equal(calls.listWhere!.priority, undefined, 'sin ninguno válido, no filtra por prioridad');
+  });
+
+  it('🔴 la mora y el saldo conviven: el segundo no pisa al primero', async () => {
+    // Iban en dos asignaciones a `where.credit` y la segunda se llevaba puesta a la primera: pedir
+    // «más de 30 días Y más de mil pesos» devolvía sólo el saldo, sin que nada lo dijera.
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    await service.list({ dpdMin: 30, balanceMin: 1000 } as never);
+    assert.deepEqual(calls.listWhere!.credit, {
+      daysPastDue: { gte: 30 },
+      outstandingBalance: { gte: 1000 },
+    });
+  });
+
+  it('🔴 el nombre y la zona conviven, por el mismo motivo', async () => {
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    await service.list({ q: 'tapia', zone: 'Centro' } as never);
+    const client = calls.listWhere!.client as { AND?: unknown[]; locations?: unknown };
+    assert.ok(client.AND, 'se perdió la búsqueda por nombre');
+    // Basta con que UNA dirección sea de esa zona: quien vive en el Centro y trabaja en el Mercado
+    // entra por las dos.
+    assert.deepEqual(client.locations, { some: { zone: 'Centro' } });
+  });
+
+  it('«no visitado desde» incluye a los que nunca se visitaron', async () => {
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    await service.list({ notVisitedSince: '2026-08-01' } as never);
+    // `none` sobre la relación: si no hay ninguna visita, tampoco hay ninguna reciente.
+    const visits = calls.listWhere!.visits as { none: { capturedAt: { gte: Date } } };
+    assert.equal(visits.none.capturedAt.gte.toISOString().slice(0, 10), '2026-08-01');
+  });
+
+  it('«nunca visitado» es más estricto y gana', async () => {
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    await service.list({ notVisitedSince: '2026-08-01', neverVisited: 'true' } as never);
+    assert.deepEqual(calls.listWhere!.visits, { none: {} });
+  });
+
+  it('🔴 «sólo mora disponible»: fuera lo que ya es parada de una ruta ese día', async () => {
+    // Sin esto, dos supervisores mandan a dos cobradores a la misma puerta la misma mañana.
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    await service.list({ excludeRouted: '2026-08-25' } as never);
+    const stops = calls.listWhere!.routeStops as { none: { route: { plannedDate: Date } } };
+    assert.equal(stops.none.route.plannedDate.toISOString().slice(0, 10), '2026-08-25');
+  });
+
+  it('el resultado anterior no pisa al filtro de «no visitado»: van juntos con AND', async () => {
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    // `REFUSED` no existe (el enum dice `REFUSAL`): se descarta sin romper, como cualquier valor viejo.
+    await service.list({ notVisitedSince: '2026-08-01', outcome: 'NOT_FOUND,REFUSAL,REFUSED' } as never);
+    assert.ok(calls.listWhere!.visits, 'se perdió «no visitado desde»');
+    const and = calls.listWhere!.AND as { visits: { some: { outcome: { in: string[] } } } }[];
+    assert.deepEqual(and[0]!.visits.some.outcome.in, ['NOT_FOUND', 'REFUSAL']);
   });
 
   it('🔴 el orden SIEMPRE termina en id, con cualquier sort', async () => {

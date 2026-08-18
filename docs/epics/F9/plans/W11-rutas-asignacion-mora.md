@@ -184,7 +184,36 @@ manual con exceso de capacidad (fase 17), que depende de 4.
 
 ---
 
-## ⛔ Tres preguntas que hay que contestar antes de implementar
+---
+
+# ✅ RESPUESTAS DE LA DUEÑA (18/08) — decisiones cerradas
+
+1. **La ruta se arma con lo que le corresponde a cada cobrador de su lista**, pero **se puede
+   reasignar momentáneamente como ayuda** entre cobradores. → Es la opción **(3)** del Hallazgo 2:
+   la parada va a la ruta de quien ayuda y **el `assigneeId` del caso NO cambia**. La ayuda es de esa
+   jornada, no un traspaso de cartera. Técnicamente ya es posible: `route_stops` guarda `case_id` sin
+   exigir que el caso sea del dueño de la ruta.
+   - Consecuencia buena: el historial por cobrador (W10-F2) cuenta **paradas de la ruta**, así que el
+     trabajo de ayudar se le cuenta a quien lo hizo, y la cartera sigue diciendo de quién es la deuda.
+   - Consecuencia a cuidar: la pantalla tiene que **decir** cuándo una parada es ayuda a otro, o se
+     lee como si le hubieran sacado la cartera a alguien.
+2. **No hay capacidad máxima. Sí un mínimo de asignación por cobrador.** Se da vuelta la fase 11: no
+   se bloquea al noveno cliente, se **avisa cuando un cobrador queda por debajo del mínimo**. Ocho es
+   el número que el negocio usa hoy (es el que arma el seed «cada ruta que se arme es de 8 visitas»).
+3. **Todos los filtros de la sección 3**, incluidos los que necesitan backend.
+
+## Orden de construcción que sale de eso
+
+| Etapa | Qué | Depende de |
+|---|---|---|
+| **A1** | Filtros aditivos en `GET /cases`: `zone`, `balanceMin/Max`, `status` y `priority` **multi**, `hasPromise`, `excludeRouted=<fecha>` | — |
+| **A2** | Última visita y resultado anterior (desde `field_visits`) | — |
+| **A3** | Cercanía: `near=lat,lng` + `radiusKm` | A1 |
+| **B** | La pantalla: por cobrador, lista + mapa, filtros, mínimo y ayuda entre cobradores | A1 |
+
+---
+
+## ⛔ Las preguntas que motivaron esas respuestas
 
 1. **¿La planificación reasigna cartera?** (Hallazgo 2). Si la respuesta es «cada cobrador visita lo
    suyo», el flujo por cobrador se construye sobre lo que ya existe y **sin backend nuevo**. Si es

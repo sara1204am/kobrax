@@ -31,8 +31,13 @@ export class GenerateCasesDto {
 export class ListCasesQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit?: number;
-  @IsOptional() @IsEnum(CaseStatus) status?: CaseStatus;
-  @IsOptional() @IsEnum(CasePriority) priority?: CasePriority;
+  /**
+   * Uno o **varios** separados por coma (`ACTIVE,PROMISE_TO_PAY`). Mandar uno solo se comporta como
+   * siempre, que es lo que hace el móvil. Se validan en el service contra el enum y lo que no exista
+   * se descarta: viaja en la URL, y un link viejo no puede tumbar la pantalla.
+   */
+  @IsOptional() @IsString() @MaxLength(200) status?: string;
+  @IsOptional() @IsString() @MaxLength(120) priority?: string;
   @IsOptional() @IsUUID() assigneeId?: string;
   @IsOptional() @IsUUID() clientId?: string;
   /**
@@ -75,6 +80,51 @@ export class ListCasesQueryDto {
    */
   @IsOptional() @IsString() sort?: string;
   @IsOptional() @IsString() dir?: string;
+
+  /*
+   * ── Filtros para planificar rutas (W11) ──────────────────────────────────
+   *
+   * Todos **aditivos**: sin ellos el listado se comporta igual que siempre. Y todos como `@IsString`
+   * suelto, con la validación real en el service: viajan en la URL de una pantalla con panel de
+   * filtros, y un valor viejo de un link guardado tiene que caer al comportamiento por defecto en
+   * vez de reventar la pantalla entera con un 400. Es el mismo criterio que ya tenía `sort`.
+   */
+
+  /** Zona del cliente (`client_locations.zone`). Texto libre: agrupa sólo si se escribió igual. */
+  @IsOptional() @IsString() @MaxLength(60) zone?: string;
+
+  /** Saldo del crédito, para priorizar por plata. */
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) balanceMin?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) balanceMax?: number;
+
+  /** `'true'` = sólo con promesa vigente · `'false'` = sólo sin promesa. */
+  @IsOptional() @IsIn(['true', 'false']) hasPromise?: string;
+
+  /**
+   * Ninguna visita **desde** esa fecha (`YYYY-MM-DD`). Incluye a los que no se visitaron nunca: si
+   * no hay ninguna visita, tampoco hay ninguna reciente. Es «no vuelvas donde ya fuiste».
+   */
+  @IsOptional() @IsDateString() notVisitedSince?: string;
+  /** `'true'` = **nunca** visitado, ni una vez. Es más estricto que `notVisitedSince`. */
+  @IsOptional() @IsIn(['true', 'false']) neverVisited?: string;
+
+  /**
+   * Cómo terminó **alguna** visita anterior (`VisitOutcome`, uno o varios separados por coma).
+   *
+   * ⚠️ No es «el resultado de la última»: es «alguna vez terminó así». La diferencia importa —
+   * alguien a quien no encontraron hace un mes y pagó la semana pasada entra igual en `NOT_FOUND`.
+   * Filtrar por la última exigiría ordenar visitas por caso dentro de la consulta, y eso ya es SQL
+   * crudo; se hace el día que esta versión moleste.
+   */
+  @IsOptional() @IsString() outcome?: string;
+
+  /**
+   * Excluye los casos que **ya son parada de una ruta ese día** (`YYYY-MM-DD`).
+   *
+   * Es el filtro «sólo mora disponible» de la planificación: sin él, dos supervisores mandan a dos
+   * cobradores a la misma puerta el mismo día.
+   */
+  @IsOptional() @IsDateString() excludeRouted?: string;
 }
 
 export class TransitionCaseDto {
