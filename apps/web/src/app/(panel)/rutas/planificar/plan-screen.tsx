@@ -307,42 +307,69 @@ export function PlanScreen({
                * El tope también mira la ventana (`70vh`): en una laptop chica, 20 filas fijas serían
                * más alto que la pantalla y el scroll de adentro no serviría de nada.
                */
-              <ul className="max-h-[min(55rem,70vh)] divide-y divide-k-border overflow-y-auto rounded-xl border border-k-border">
-                {available.map((c) => {
-                  const marcado = picked.includes(c.id);
-                  const ajeno = c.assigneeId != null && c.assigneeId !== collectorId;
-                  return (
-                    <li key={c.id}>
-                      <label className={`flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 hover:bg-k-bg ${marcado ? 'bg-k-highlight' : ''}`}>
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 accent-k-purple"
-                          checked={marcado}
-                          onChange={(e) =>
-                            setPicked((prev) => (e.target.checked ? [...prev, c.id] : prev.filter((x) => x !== c.id)))
-                          }
-                        />
-                        <span className="min-w-[180px] flex-1 text-[14px] font-medium text-k-text">
-                          {c.clientName ?? '—'}
-                        </span>
-                        <span className="w-28 text-right text-[14px] tabular-nums text-k-text">
-                          {money(c.amount, c.currency ?? 'BOB')}
-                        </span>
-                        <span className="w-24 text-right text-[13px] tabular-nums text-k-danger">
-                          {c.daysPastDue ? t('days', { n: c.daysPastDue }) : '—'}
-                        </span>
-                        <span className="w-28 truncate text-[13px] text-k-text-2">{c.zone ?? '—'}</span>
-                        {/*
-                         * 🔴 Se dice cuándo la parada es AYUDA a otro. Sin esto, una ruta llena de
-                         * clientes ajenos se lee como si le hubieran sacado la cartera a alguien —
-                         * y no: el dueño del caso no cambia, sólo esta jornada la cubre otro.
-                         */}
-                        {ajeno && <Badge tone="warning">{t('help')}</Badge>}
-                      </label>
-                    </li>
-                  );
-                })}
-              </ul>
+              <div className="overflow-hidden rounded-xl border border-k-border">
+                {/* Con seis datos por fila, sin rótulos hay que adivinar cuál es cuál. Los anchos son
+                    los mismos que abajo: si se cambia uno, se cambian los dos. */}
+                <div className="flex items-center gap-x-4 border-b border-k-border bg-k-bg px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
+                  <span className="w-4" aria-hidden />
+                  <span className="min-w-[180px] flex-1">{t('cols.client')}</span>
+                  <span className="w-28 text-right">{t('cols.balance')}</span>
+                  <span className="w-24 text-right">{t('cols.dpd')}</span>
+                  <span className="w-28">{t('cols.zone')}</span>
+                  <span className="w-40">{t('cols.coords')}</span>
+                </div>
+
+                <ul className="max-h-[min(55rem,70vh)] divide-y divide-k-border overflow-y-auto">
+                  {available.map((c) => {
+                    const marcado = picked.includes(c.id);
+                    const ajeno = c.assigneeId != null && c.assigneeId !== collectorId;
+                    // La primera es la principal: la misma que va al mapa, para que la fila y el pin
+                    // hablen del mismo lugar.
+                    const loc = c.locations?.[0];
+                    return (
+                      <li key={c.id}>
+                        <label className={`flex cursor-pointer items-center gap-x-4 px-4 py-3 hover:bg-k-bg ${marcado ? 'bg-k-highlight' : ''}`}>
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 shrink-0 accent-k-purple"
+                            checked={marcado}
+                            onChange={(e) =>
+                              setPicked((prev) => (e.target.checked ? [...prev, c.id] : prev.filter((x) => x !== c.id)))
+                            }
+                          />
+                          <span className="min-w-[180px] flex-1">
+                            <span className="flex items-center gap-2">
+                              <span className="truncate text-[14px] font-medium text-k-text">{c.clientName ?? '—'}</span>
+                              {/*
+                               * 🔴 Se dice cuándo la parada es AYUDA a otro. Sin esto, una ruta llena
+                               * de clientes ajenos se lee como si le hubieran sacado la cartera a
+                               * alguien — y no: el dueño del caso no cambia, sólo esta jornada la
+                               * cubre otro.
+                               */}
+                              {ajeno && <Badge tone="warning">{t('help')}</Badge>}
+                            </span>
+                            {/* La dirección, debajo del nombre: es lo que se lee para saber si vale
+                                la pena ir, y en una columna propia se cortaría en tres palabras. */}
+                            <span className="block truncate text-[12px] text-k-muted">{loc?.address ?? t('noAddress')}</span>
+                          </span>
+                          <span className="w-28 shrink-0 text-right text-[14px] tabular-nums text-k-text">
+                            {money(c.amount, c.currency ?? 'BOB')}
+                          </span>
+                          <span className="w-24 shrink-0 text-right text-[13px] tabular-nums text-k-danger">
+                            {c.daysPastDue ? t('days', { n: c.daysPastDue }) : '—'}
+                          </span>
+                          <span className="w-28 shrink-0 truncate text-[13px] text-k-text-2">{c.zone ?? '—'}</span>
+                          {/* Las coordenadas, tal cual: son las que se copian a un GPS o se comparten
+                              por mensaje, así que van completas y no redondeadas a la vista. */}
+                          <span className="w-40 shrink-0 text-[12px] tabular-nums text-k-muted">
+                            {loc ? `${loc.latitude.toFixed(6)}, ${loc.longitude.toFixed(6)}` : t('noCoords')}
+                          </span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             )}
 
             <div className="mt-5 flex flex-wrap items-center gap-3">

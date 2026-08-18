@@ -824,6 +824,15 @@
         "foundCapped": "{n} para asignar · se muestran {shown}",
         "picked": "{n} elegidas · mínimo {min}",
         "days": "{n} días",
+        "cols": {
+          "client": "Deudor y dirección",
+          "balance": "Saldo",
+          "dpd": "Mora",
+          "zone": "Zona",
+          "coords": "Coordenadas"
+        },
+        "noAddress": "Sin dirección cargada",
+        "noCoords": "Sin ubicación",
         "mapPoints": "{n} de {total} elegidos en el mapa",
         "mapNoPoints": "Los elegidos no tienen ubicación cargada, así que no se pueden dibujar.",
         "mapBig": "Agrandar el mapa",
