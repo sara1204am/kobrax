@@ -10,6 +10,7 @@ import { postJson } from '@/lib/client';
 import { money } from '@/lib/format';
 import { AVAILABLE_LIMIT } from '@/lib/plan';
 import { FilterPanel } from '@/components/data-table-filters';
+import { RouteMap } from '@/components/route-map';
 import { SearchBox } from '@/components/search-box';
 import type { PlanRow } from '@/app/api/routes/plan/route';
 import { planFilterDefs, PLAN_FILTER_KEYS } from './plan-filters';
@@ -61,6 +62,7 @@ export function PlanScreen({
   // El panel abre solo si ya hay un filtro puesto: si no, uno activo quedaría escondido y la lista
   // saldría corta sin que nada lo explique. Mismo criterio que el `DataTable`.
   const [panelOpen, setPanelOpen] = useState(filtered);
+  const [bigMap, setBigMap] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +106,16 @@ export function PlanScreen({
   const pendientes = collectors.filter((c) => !byCollector.has(c.userId));
   const siguiente = pendientes.find((c) => c.userId !== collectorId);
   const corto = picked.length > 0 && picked.length < minStops;
+
+  /*
+   * Un punto por deudor: **la primera ubicación**, que es la principal. Dibujar también las de sus
+   * garantes multiplicaría los pines y el mapa dejaría de contestar «¿esto queda todo junto?».
+   * Quien no tiene ninguna cargada no aparece — y por eso el rótulo dice cuántos de cuántos.
+   */
+  const puntos = available.flatMap((c) => {
+    const loc = c.locations?.[0];
+    return loc ? [{ id: c.id, latitude: loc.latitude, longitude: loc.longitude, label: c.clientName ?? undefined }] : [];
+  });
 
   return (
     <div className="space-y-5">
@@ -174,6 +186,39 @@ export function PlanScreen({
           })}
         </ul>
       </Card>
+
+      {/*
+       * 🔴 **El mapa entre las personas y la lista, y chico.** Dónde está la mora es una pregunta que
+       * se hace mientras se elige —«¿esto queda todo junto?»—, así que va en el camino, no al final.
+       * Chico porque lo que se opera es la lista: se agranda cuando de verdad hay que mirar el mapa.
+       *
+       * ⚠️ Los pines son **los de la lista que se está viendo**, no la selección: `RouteMap` se arma
+       * una vez y no reacciona: la `key` lo remonta cuando cambian los puntos —si no, filtrar dejaba
+       * los pines viejos cuando el nuevo filtro traía la misma cantidad—. Resaltar lo marcado en
+       * vivo necesita otro mapa, y entra cuando se pida.
+       */}
+      {!suRuta && puntos.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[13px] text-k-text-2">{t('mapPoints', { n: puntos.length, total: available.length })}</p>
+            <button
+              type="button"
+              onClick={() => setBigMap((v) => !v)}
+              aria-expanded={bigMap}
+              className="h-8 rounded-lg border border-k-border bg-white px-3 text-[13px] font-medium text-k-text-2 hover:bg-k-bg"
+            >
+              {bigMap ? t('mapSmall') : t('mapBig')}
+            </button>
+          </div>
+          <RouteMap
+            key={puntos.map((p) => p.id).join('|')}
+            stops={puntos}
+            height={bigMap ? 520 : 220}
+            // Unirlos con una línea dibujaría un recorrido que nadie planificó todavía.
+            connect={false}
+          />
+        </div>
+      )}
 
       {/* Ya tiene ruta: no se le arma otra (la base tampoco deja). Se ofrece seguir con el siguiente. */}
       {suRuta ? (

@@ -9,7 +9,12 @@ import { DEFAULT_ZOOM, FALLBACK_CENTER, MAP_STYLE } from '@/lib/map-style';
 
 export interface MapStop {
   id: string;
-  sequenceOrder: number;
+  /**
+   * En qué lugar del recorrido va. **Opcional**: la mora que todavía se está eligiendo no tiene
+   * orden, y numerarla 1, 2, 3 haría pasar por recorrido lo que es sólo un montón de puntos. Sin
+   * número el pin es un punto más chico.
+   */
+  sequenceOrder?: number;
   latitude?: number;
   longitude?: number;
   label?: string;
@@ -73,8 +78,10 @@ export function RouteMap({
     for (const stop of located) {
       const pin = document.createElement('div');
       const bg = stop.tone === 'done' ? 'bg-k-success' : stop.tone === 'pending' ? 'bg-k-muted' : 'bg-k-navy';
-      pin.className = `flex h-7 w-7 items-center justify-center rounded-full border-2 border-white ${bg} text-[12px] font-semibold text-white shadow`;
-      pin.textContent = String(stop.sequenceOrder);
+      // Sin orden, el pin es un punto: más chico y sin número, para no prometer un recorrido.
+      const size = stop.sequenceOrder ? 'h-7 w-7 text-[12px]' : 'h-4 w-4';
+      pin.className = `flex ${size} items-center justify-center rounded-full border-2 border-white ${bg} font-semibold text-white shadow`;
+      if (stop.sequenceOrder) pin.textContent = String(stop.sequenceOrder);
       const marker = new Marker({ element: pin }).setLngLat([stop.longitude, stop.latitude]);
       if (stop.label) marker.setPopup(new Popup({ offset: 16 }).setText(stop.label));
       marker.addTo(map);
