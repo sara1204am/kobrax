@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { memberName, type CaseListItem, type Member, type RouteItem } from '@kobrax/shared';
@@ -8,7 +8,7 @@ import { Badge, Card, EmptyState, InfoTip } from '@/components/panel-ui';
 import { Button, ErrorBanner } from '@/components/ui';
 import { postJson } from '@/lib/client';
 import { money } from '@/lib/format';
-import { AVAILABLE_LIMIT } from '@/lib/plan';
+import { AVAILABLE_LIMIT, sortAvailable, type LocalSort } from '@/lib/plan';
 import { FilterPanel } from '@/components/data-table-filters';
 import { SearchBox } from '@/components/search-box';
 import { PointsMap } from './points-map';
@@ -64,6 +64,17 @@ export function PlanScreen({
   const [panelOpen, setPanelOpen] = useState(filtered);
   const [bigMap, setBigMap] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
+  /**
+   * El orden de las columnas que **el servidor no sabe ordenar** (nombre, zona, ubicación).
+   *
+   * 🔴 Acá ordenar en el navegador es correcto, y en las tablas del panel no lo era: **esta lista no
+   * pagina**. Lo que llegó es lo que se ve y lo que se puede elegir, así que acomodarlo no esconde
+   * nada. El techo —cuántas trajo de cuántas hay— ya está escrito arriba de la lista.
+   *
+   * Saldo y mora **no** pasan por acá: ésas el servidor las sabe ordenar, y mandárselas ordena
+   * sobre el total en vez de sobre las cien que vinieron.
+   */
+  const [localSort, setLocalSort] = useState<{ key: LocalSort; dir: 'asc' | 'desc' } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -121,6 +132,32 @@ export function PlanScreen({
     const loc = c.locations?.[0];
     return loc ? [{ id: c.id, latitude: loc.latitude, longitude: loc.longitude, label: c.clientName ?? undefined }] : [];
   });
+
+  /*
+   * Las filas, en el orden que se está pidiendo. Sin orden local, el que trajo el servidor.
+   *
+   * Quien no tiene el dato va **al final en los dos sentidos**: un cliente sin zona no es «la zona
+   * que va primero alfabéticamente», es uno del que no se sabe dónde está.
+   */
+  const filas = useMemo(
+    () => (localSort ? sortAvailable(available, localSort.key, localSort.dir) : available),
+    [available, localSort],
+  );
+
+  /** Toca una columna que el servidor sabe ordenar: el orden lo resuelve él, sobre TODA la mora. */
+  function sortRemote(key: 'balance' | 'daysPastDue') {
+    const dir = params.get('sort') === key && params.get('dir') === 'desc' ? 'asc' : 'desc';
+    setLocalSort(null);
+    go({ sort: key, dir });
+  }
+
+  /** Toca una que no: se acomoda lo que se está viendo, sin volver a pedir nada. */
+  function sortLocal(key: LocalSort) {
+    setLocalSort((prev) => ({ key, dir: prev?.key === key && prev.dir === 'asc' ? 'desc' : 'asc' }));
+  }
+
+  const remoteSort = params.get('sort');
+  const remoteDir = params.get('dir') === 'asc' ? 'asc' : 'desc';
 
   return (
     <div className="space-y-5">
@@ -312,15 +349,26 @@ export function PlanScreen({
                     los mismos que abajo: si se cambia uno, se cambian los dos. */}
                 <div className="flex items-center gap-x-4 border-b border-k-border bg-k-bg px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
                   <span className="w-4" aria-hidden />
-                  <span className="min-w-[180px] flex-1">{t('cols.client')}</span>
-                  <span className="w-28 text-right">{t('cols.balance')}</span>
-                  <span className="w-24 text-right">{t('cols.dpd')}</span>
-                  <span className="w-28">{t('cols.zone')}</span>
-                  <span className="w-40">{t('cols.coords')}</span>
+                  <Th className="min-w-[180px] flex-1" onClick={() => sortLocal('client')} active={localSort?.key === 'client'} dir={localSort?.dir}>
+                    {t('cols.client')}
+                  </Th>
+                  {/* Saldo y mora las ordena el SERVIDOR: sobre toda la mora, no sobre las que vinieron. */}
+                  <Th className="w-28 justify-end" onClick={() => sortRemote('balance')} active={!localSort && remoteSort === 'balance'} dir={remoteDir}>
+                    {t('cols.balance')}
+                  </Th>
+                  <Th className="w-24 justify-end" onClick={() => sortRemote('daysPastDue')} active={!localSort && remoteSort === 'daysPastDue'} dir={remoteDir}>
+                    {t('cols.dpd')}
+                  </Th>
+                  <Th className="w-28" onClick={() => sortLocal('zone')} active={localSort?.key === 'zone'} dir={localSort?.dir}>
+                    {t('cols.zone')}
+                  </Th>
+                  <Th className="w-40" onClick={() => sortLocal('coords')} active={localSort?.key === 'coords'} dir={localSort?.dir}>
+                    {t('cols.coords')}
+                  </Th>
                 </div>
 
                 <ul className="max-h-[min(55rem,70vh)] divide-y divide-k-border overflow-y-auto">
-                  {available.map((c) => {
+                  {filas.map((c) => {
                     const marcado = picked.includes(c.id);
                     const ajeno = c.assigneeId != null && c.assigneeId !== collectorId;
                     // La primera es la principal: la misma que va al mapa, para que la fila y el pin
@@ -386,6 +434,41 @@ export function PlanScreen({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Un rótulo de columna que ordena.
+ *
+ * La flecha se dibuja **sólo en la columna activa**: una en cada encabezado no dice cuál manda. Y
+ * `aria-sort` lo anuncia, que es lo único que tiene un lector de pantalla para saberlo.
+ */
+function Th({
+  children,
+  className,
+  onClick,
+  active,
+  dir,
+}: {
+  children: ReactNode;
+  className?: string;
+  onClick: () => void;
+  active?: boolean;
+  dir?: 'asc' | 'desc';
+}) {
+  return (
+    <span className={className} role="columnheader" aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      <button
+        type="button"
+        onClick={onClick}
+        className={`inline-flex items-center gap-1 uppercase hover:text-k-text ${className?.includes('justify-end') ? 'w-full justify-end' : ''}`}
+      >
+        {children}
+        <span aria-hidden className={active ? 'text-k-periwinkle' : 'text-k-muted'}>
+          {active && dir === 'desc' ? '↓' : '↑'}
+        </span>
+      </button>
+    </span>
   );
 }
 

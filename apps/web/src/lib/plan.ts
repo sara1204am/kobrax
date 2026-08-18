@@ -152,6 +152,40 @@ export function availableQuery(params: PlanParams, day: string): URLSearchParams
   return query;
 }
 
+/** Las columnas que ordena el navegador, porque la API no las sabe ordenar. */
+export type LocalSort = 'client' | 'zone' | 'coords';
+
+/**
+ * Ordenar la mora que se está viendo por una columna que el servidor no sabe ordenar.
+ *
+ * 🔴 Ordenar en el navegador es correcto **acá y no en las tablas del panel**: esta lista no pagina.
+ * Lo que llegó es lo que se ve y lo que se puede elegir, así que acomodarlo no esconde nada — y
+ * cuántas trajo de cuántas hay ya está escrito arriba de la lista.
+ *
+ * Quien no tiene el dato va **al final en los dos sentidos**: un cliente sin zona no es «la zona que
+ * va primero alfabéticamente», es uno del que no se sabe dónde está. Ponerlo primero al invertir
+ * llenaría la cabecera de filas vacías justo cuando se busca lo contrario.
+ */
+export function sortAvailable<
+  T extends { clientName?: string; zone?: string; locations?: { latitude: number }[] },
+>(rows: T[], key: LocalSort, dir: 'asc' | 'desc'): T[] {
+  const factor = dir === 'asc' ? 1 : -1;
+  const valor = (c: T): string | number | undefined => {
+    if (key === 'client') return c.clientName?.trim().toLowerCase();
+    if (key === 'zone') return c.zone?.trim().toLowerCase();
+    // Por latitud: agrupa de norte a sur, que es lo que sirve para armar una ruta compacta.
+    return c.locations?.[0]?.latitude;
+  };
+
+  return [...rows].sort((a, b) => {
+    const va = valor(a);
+    const vb = valor(b);
+    if (va === undefined || vb === undefined) return va === vb ? 0 : va === undefined ? 1 : -1;
+    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * factor;
+    return String(va).localeCompare(String(vb)) * factor;
+  });
+}
+
 /** Una lista separada por comas → los valores que el enum conoce. Lo inventado se descarta. */
 function list<T extends Record<string, string>>(raw: string | undefined, values: T): string[] {
   if (!raw?.trim()) return [];

@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { AVAILABLE_LIMIT, DEFAULT_MIN_STOPS, availableQuery, hasPlanFilters, helpingOthers, minStops, shiftDays } from './plan';
+import {
+  AVAILABLE_LIMIT,
+  DEFAULT_MIN_STOPS,
+  availableQuery,
+  hasPlanFilters,
+  helpingOthers,
+  minStops,
+  shiftDays,
+  sortAvailable,
+} from './plan';
 
 const DIA = '2026-08-25';
 const JUAN = '11111111-2222-3333-4444-555555555555';
@@ -91,6 +100,44 @@ describe('hasPlanFilters', () => {
     expect(hasPlanFilters({ date: DIA, collectorId: JUAN })).toBe(false);
     expect(hasPlanFilters({ zona: 'Centro' })).toBe(true);
     expect(hasPlanFilters({ cartera: 'todos' })).toBe(true);
+  });
+});
+
+describe('sortAvailable', () => {
+  const fila = (clientName?: string, zone?: string, latitude?: number) => ({
+    clientName,
+    zone,
+    ...(latitude != null ? { locations: [{ latitude }] } : {}),
+  });
+
+  it('por nombre, sin que el acento ni la mayúscula manden', () => {
+    const rows = [fila('zeballos'), fila('Ávila'), fila('Camacho')];
+    expect(sortAvailable(rows, 'client', 'asc').map((r) => r.clientName)).toEqual(['Ávila', 'Camacho', 'zeballos']);
+    expect(sortAvailable(rows, 'client', 'desc').map((r) => r.clientName)).toEqual(['zeballos', 'Camacho', 'Ávila']);
+  });
+
+  it('por zona, para juntar la ruta', () => {
+    const rows = [fila('a', 'Norte'), fila('b', 'Centro'), fila('c', 'Sur')];
+    expect(sortAvailable(rows, 'zone', 'asc').map((r) => r.zone)).toEqual(['Centro', 'Norte', 'Sur']);
+  });
+
+  it('por ubicación ordena de norte a sur, que es lo que agrupa geográficamente', () => {
+    const rows = [fila('a', undefined, -19.05), fila('b', undefined, -19.09), fila('c', undefined, -19.01)];
+    expect(sortAvailable(rows, 'coords', 'asc').map((r) => r.clientName)).toEqual(['b', 'a', 'c']);
+  });
+
+  it('🔴 quien no tiene el dato va al final EN LOS DOS SENTIDOS', () => {
+    // Un cliente sin zona no es «la zona que va primero alfabéticamente»: es uno del que no se sabe
+    // dónde está. Al invertir, ponerlo arriba llenaría la cabecera de filas vacías.
+    const rows = [fila('a', undefined), fila('b', 'Centro'), fila('c', 'Norte')];
+    expect(sortAvailable(rows, 'zone', 'asc').map((r) => r.clientName)).toEqual(['b', 'c', 'a']);
+    expect(sortAvailable(rows, 'zone', 'desc').map((r) => r.clientName)).toEqual(['c', 'b', 'a']);
+  });
+
+  it('no toca el arreglo original', () => {
+    const rows = [fila('z'), fila('a')];
+    sortAvailable(rows, 'client', 'asc');
+    expect(rows.map((r) => r.clientName)).toEqual(['z', 'a']);
   });
 });
 
