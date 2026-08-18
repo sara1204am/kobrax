@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { AgendaItemType, memberName, type AgendaListItem, type Member } from '@kobrax/shared';
 import { dayMetrics, loadByDay, type DayLoad } from '@/lib/agenda';
 import { Select } from '@/components/ui';
+import { Segmented } from '@/components/panel-ui';
 import { DateNav } from './date-nav';
 import { DayList } from './day-list';
 import { MonthCalendar } from './month-calendar';
@@ -163,25 +164,19 @@ export function AgendaScreen({
 }
 
 /** Lista o calendario. `radiogroup` y no dos botones sueltos: se recorre con flechas. */
+/** El mismo control que usa Rutas para Día/Período; vive en `panel-ui` desde que son dos. */
 function ViewToggle({ view, onChange }: { view: 'list' | 'calendar'; onChange: (v: 'list' | 'calendar') => void }) {
   const t = useTranslations('panel.agenda');
   return (
-    <div role="radiogroup" aria-label={t('view')} className="flex rounded-lg border border-k-border bg-white p-0.5">
-      {(['list', 'calendar'] as const).map((v) => (
-        <button
-          key={v}
-          type="button"
-          role="radio"
-          aria-checked={view === v}
-          onClick={() => onChange(v)}
-          className={`h-8 rounded-md px-3 text-[13px] font-medium transition-colors ${
-            view === v ? 'bg-k-navy text-white' : 'text-k-text-2 hover:bg-k-bg'
-          }`}
-        >
-          {t(`views.${v}`)}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      value={view}
+      onChange={onChange}
+      label={t('view')}
+      options={[
+        { value: 'list', label: t('views.list') },
+        { value: 'calendar', label: t('views.calendar') },
+      ]}
+    />
   );
 }
 

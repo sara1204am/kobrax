@@ -4,6 +4,7 @@ import {
   IsBoolean,
   IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsUUID,
@@ -11,6 +12,7 @@ import {
   Min,
 } from 'class-validator';
 import { RouteStatus, RouteStopStatus } from '@prisma/client';
+import { ROUTE_SORTS, type RouteSort } from '@kobrax/shared';
 
 export class CreateRouteDto {
   @IsUUID() collectorId!: string;
@@ -31,8 +33,20 @@ export class ListRoutesQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit?: number;
   @IsOptional() @IsUUID() collectorId?: string;
+  /** Un día exacto. Es lo que pide el teléfono, que trabaja la jornada de hoy. */
   @IsOptional() @IsDateString() date?: string;
+  /**
+   * Un rango de días (`from`/`to`, inclusivos), para el historial por período del panel.
+   *
+   * Convive con `date` y no lo reemplaza: **si vienen los dos, manda `date`**. El móvil pide un día
+   * y tiene que seguir recibiendo ese día, sin enterarse de que esto existe.
+   */
+  @IsOptional() @IsDateString() from?: string;
+  @IsOptional() @IsDateString() to?: string;
   @IsOptional() @IsEnum(RouteStatus) status?: RouteStatus;
+  /** `date` (default) · `collector` · `status`. Lo que no esté en `ROUTE_SORTS` se ignora. */
+  @IsOptional() @IsIn(ROUTE_SORTS as unknown as string[]) sort?: RouteSort;
+  @IsOptional() @IsIn(['asc', 'desc']) dir?: 'asc' | 'desc';
 }
 
 export class UpdateRouteDto {

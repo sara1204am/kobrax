@@ -778,11 +778,43 @@
     },
     "routes": {
       "title": "Rutas",
-      "subtitle": "El día en la calle: qué ruta tenía cada cobrador y hasta dónde llegó.",
+      "subtitle": "Planificá el trabajo en la calle y comprobá qué pasó.",
       "scopedToMine": "Estás viendo sólo tus rutas.",
       "entity": "rutas",
+      "tabs": {
+        "label": "Qué querés hacer",
+        "planning": "Planificación",
+        "history": "Historial"
+      },
+      "views": {
+        "label": "Cómo mirar el historial",
+        "day": "Día",
+        "period": "Período"
+      },
+      "period": {
+        "label": "Período",
+        "from": "Desde",
+        "to": "Hasta",
+        "presets": {
+          "today": "Hoy",
+          "yesterday": "Ayer",
+          "d7": "Últimos 7 días",
+          "d30": "Últimos 30 días",
+          "month": "Este mes",
+          "prevMonth": "Mes pasado",
+          "custom": "Personalizado"
+        }
+      },
+      "planning": {
+        "title": "Planificar rutas",
+        "soon": "Acá vas a armar las rutas del día: elegís la fecha, los cobradores y las visitas, las repartís y las publicás. Se construye en la etapa que sigue.",
+        "today": "Mientras tanto, las rutas las arma cada cobrador desde su teléfono y las ves en el Historial apenas las crea.",
+        "noPermission": "Tu rol no reparte trabajo: vas a poder consultar el historial, pero no planificar."
+      },
       "empty": "No hay rutas para este día",
       "emptyText": "Las rutas las arma el cobrador desde su teléfono, con el mapa en la mano.",
+      "emptyPeriod": "No hay rutas en este período",
+      "emptyPeriodText": "Probá con un rango más amplio.",
       "noResults": "No hay rutas con esos filtros",
       "noResultsText": "Probá quitando alguno.",
       "previousDay": "Día anterior",

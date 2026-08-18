@@ -27,6 +27,8 @@ function makeService(
     route?: { id: string; collectorId: string; totalDistanceKm?: number; estimatedMinutes?: number };
     /** La ruta que ese cobrador YA tiene ese día. `undefined` = no tiene, y se puede armar. */
     routeOfDay?: { id: string };
+    /** Los perfiles del equipo, para el orden por nombre de cobrador. */
+    profiles?: { userId: string; firstName: string | null; lastName: string | null }[];
     stops?: FakeStop[];
     /** Punto de cada parada (`null` = cliente sin ubicación cargada). Sólo lo usa el preview. */
     points?: Record<string, { latitude: number; longitude: number } | null>;
@@ -38,6 +40,7 @@ function makeService(
     routeUpdate: [] as Record<string, unknown>[],
     audit: [] as string[],
     listWhere: undefined as Record<string, unknown> | undefined,
+    listOrderBy: undefined as unknown,
   };
   // Store real en memoria: la secuencia de paradas es la lógica que hay que probar de verdad.
   const stops: FakeStop[] = opts.stops ? opts.stops.map((s) => ({ ...s })) : [];
@@ -50,6 +53,7 @@ function makeService(
 
   const tx = {
     userAccount: { findFirst: async () => (opts.ua === undefined ? { id: 'ua1' } : opts.ua) },
+    profile: { findMany: async () => opts.profiles ?? [] },
     // `addStop` valida que el cliente y el caso sean del tenant antes de insertar: bajo RLS un
     // `findFirst` que no encuentra es exactamente "no es tuyo". `null` simula el id ajeno.
     client: { findFirst: async () => (opts.stopClient === undefined ? { id: 'c1' } : opts.stopClient) },
@@ -66,6 +70,16 @@ function makeService(
         return found;
       },
       findMany: async (args: { where: Record<string, unknown> }) => sorted(args.where),
+      // Cuántas paradas visitadas tiene cada ruta, desde el MISMO store: así el contador del
+      // listado se prueba contra paradas de verdad y no contra un número inventado en el mock.
+      groupBy: async (args: { where: { routeId: { in: string[] }; status: string } }) => {
+        const by = new Map<string, number>();
+        for (const s of stops) {
+          if (!args.where.routeId.in.includes(s.routeId) || s.status !== args.where.status) continue;
+          by.set(s.routeId, (by.get(s.routeId) ?? 0) + 1);
+        }
+        return [...by].map(([routeId, n]) => ({ routeId, _count: { _all: n } }));
+      },
       create: async (args: { data: Record<string, unknown> }) => {
         const created = { ...(args.data as unknown as FakeStop), id: `s${stops.length + 1}`, status: 'PENDING' };
         stops.push(created);
@@ -87,9 +101,14 @@ function makeService(
         const stops = (args.data.stops as { create: unknown[] })?.create ?? [];
         return { id: 'r1', ...args.data, stops };
       },
-      findMany: async (args: { where?: Record<string, unknown> }) => {
+      findMany: async (args: { where?: Record<string, unknown>; orderBy?: unknown; select?: unknown }) => {
         calls.listWhere = args.where;
-        return opts.routes ?? [];
+        if (args.orderBy) calls.listOrderBy = args.orderBy;
+        const all = (opts.routes ?? []) as { id: string }[];
+        // El orden por cobrador vuelve a pedir las filas por id: se devuelven las pedidas, y en el
+        // orden del store, para que el test compruebe el reordenamiento del servicio y no el del mock.
+        const ids = (args.where as { id?: { in?: string[] } })?.id?.in;
+        return ids ? all.filter((r) => ids.includes(r.id)) : all;
       },
       count: async () => (opts.routes ?? []).length,
       // Las paradas salen del MISMO store en memoria, así un reordenamiento se ve en la lectura
@@ -473,5 +492,109 @@ describe('RoutesService.list (scope por capacidad)', () => {
     const { service, calls } = makeService({ permissions: ['route:assign'], routes: [] });
     await service.list({ collectorId: 'otro' } as never);
     assert.equal(calls.listWhere!.collectorId, 'otro');
+  });
+});
+
+describe('RoutesService.list (período)', () => {
+  const ASSIGN_ONLY = ['route:read', 'route:assign'];
+
+  it('un rango pide los dos extremos, inclusivos', async () => {
+    const { service, calls } = makeService({ permissions: ASSIGN_ONLY, routes: [] });
+    await service.list({ from: '2026-08-12', to: '2026-08-18' } as never);
+    const range = calls.listWhere!.plannedDate as { gte: Date; lte: Date };
+    assert.equal(range.gte.toISOString().slice(0, 10), '2026-08-12');
+    // `lte` con el mismo día lo incluye: `planned_date` es un día civil, no un instante.
+    assert.equal(range.lte.toISOString().slice(0, 10), '2026-08-18');
+  });
+
+  it('medio rango también sirve (desde una fecha, sin tope)', async () => {
+    const { service, calls } = makeService({ permissions: ASSIGN_ONLY, routes: [] });
+    await service.list({ from: '2026-08-12' } as never);
+    const range = calls.listWhere!.plannedDate as { gte?: Date; lte?: Date };
+    assert.ok(range.gte);
+    assert.equal(range.lte, undefined);
+  });
+
+  it('🔴 el día exacto GANA sobre el rango: es lo que pide el teléfono', async () => {
+    // El móvil manda `date` y tiene que recibir ese día. Si el rango pisara, una app vieja que
+    // mandara los dos empezaría a recibir una semana entera sin haber cambiado una línea.
+    const { service, calls } = makeService({ permissions: ASSIGN_ONLY, routes: [] });
+    await service.list({ date: '2026-08-20', from: '2026-08-01', to: '2026-08-31' } as never);
+    assert.ok(calls.listWhere!.plannedDate instanceof Date);
+  });
+});
+
+describe('RoutesService.list (orden)', () => {
+  const ASSIGN = ['route:read', 'route:assign'];
+
+  it('por defecto: fecha descendente, y el desempate SIEMPRE termina en id', async () => {
+    // Once cobradores comparten el mismo día. Sin desempate estable, `LIMIT/OFFSET` repite una fila
+    // en la página 1 y se saltea otra en la 2.
+    const { service, calls } = makeService({ permissions: ASSIGN, routes: [] });
+    await service.list({} as never);
+    assert.deepEqual(calls.listOrderBy, [{ plannedDate: 'desc' }, { id: 'asc' }]);
+  });
+
+  it('por estado ordena por estado, pero adentro sigue mandando la fecha', async () => {
+    const { service, calls } = makeService({ permissions: ASSIGN, routes: [] });
+    await service.list({ sort: 'status', dir: 'asc' } as never);
+    assert.deepEqual(calls.listOrderBy, [{ status: 'asc' }, { plannedDate: 'desc' }, { id: 'asc' }]);
+  });
+
+  it('🔴 por cobrador ordena por NOMBRE, no por el uuid', async () => {
+    // Ordenar por `collector_id` agrupa a cada persona pero el orden entre personas es azar: la
+    // flecha diría «alfabético» sobre algo que no lo es.
+    const routes = [
+      { id: 'rA', collectorId: 'u-zeballos', plannedDate: new Date('2026-08-20'), status: 'PLANNED', totalCases: 1, createdAt: new Date() },
+      { id: 'rB', collectorId: 'u-colque', plannedDate: new Date('2026-08-20'), status: 'PLANNED', totalCases: 1, createdAt: new Date() },
+      { id: 'rC', collectorId: 'u-camacho', plannedDate: new Date('2026-08-20'), status: 'PLANNED', totalCases: 1, createdAt: new Date() },
+    ];
+    const profiles = [
+      { userId: 'u-zeballos', firstName: 'María', lastName: 'Zeballos' },
+      // Con acento a propósito: sin normalizar, «Édgar Colque» cae DESPUÉS de «Zeballos».
+      { userId: 'u-colque', firstName: 'Édgar', lastName: 'Colque' },
+      { userId: 'u-camacho', firstName: 'Ana', lastName: 'Camacho' },
+    ];
+    const { service } = makeService({ permissions: ASSIGN, routes, profiles });
+
+    const asc = await service.list({ sort: 'collector', dir: 'asc' } as never);
+    assert.deepEqual(asc.data!.map((r) => r.id), ['rC', 'rB', 'rA']);
+
+    const desc = await service.list({ sort: 'collector', dir: 'desc' } as never);
+    assert.deepEqual(desc.data!.map((r) => r.id), ['rA', 'rB', 'rC']);
+  });
+
+  it('quien no tiene perfil va al final, en los dos sentidos', async () => {
+    // No es «el primero alfabéticamente»: es que no se sabe cómo se llama.
+    const routes = [
+      { id: 'r1', collectorId: 'u-sin-perfil', plannedDate: new Date('2026-08-20'), status: 'PLANNED', totalCases: 1, createdAt: new Date() },
+      { id: 'r2', collectorId: 'u-camacho', plannedDate: new Date('2026-08-20'), status: 'PLANNED', totalCases: 1, createdAt: new Date() },
+    ];
+    const profiles = [{ userId: 'u-camacho', firstName: 'Ana', lastName: 'Camacho' }];
+    const { service } = makeService({ permissions: ASSIGN, routes, profiles });
+
+    assert.deepEqual((await service.list({ sort: 'collector', dir: 'asc' } as never)).data!.map((r) => r.id), ['r2', 'r1']);
+    assert.deepEqual((await service.list({ sort: 'collector', dir: 'desc' } as never)).data!.map((r) => r.id), ['r2', 'r1']);
+  });
+});
+
+describe('RoutesService.list (paradas visitadas)', () => {
+  it('🔴 cuenta las visitadas de cada ruta: sin esto la pantalla sólo puede decir «8», no «2 de 3»', async () => {
+    const stops: FakeStop[] = [
+      { id: 's1', routeId: 'r1', caseId: 'c1', sequenceOrder: 1, status: 'VISITED' },
+      { id: 's2', routeId: 'r1', caseId: 'c2', sequenceOrder: 2, status: 'VISITED' },
+      { id: 's3', routeId: 'r1', caseId: 'c3', sequenceOrder: 3, status: 'PENDING' },
+      { id: 's4', routeId: 'r2', caseId: 'c4', sequenceOrder: 1, status: 'PENDING' },
+    ];
+    const routes = [
+      { id: 'r1', collectorId: 'u1', plannedDate: new Date('2026-08-20'), status: 'COMPLETED', totalCases: 3, createdAt: new Date() },
+      { id: 'r2', collectorId: 'u2', plannedDate: new Date('2026-08-20'), status: 'PLANNED', totalCases: 1, createdAt: new Date() },
+    ];
+    const { service } = makeService({ permissions: ['route:read', 'route:assign'], routes, stops });
+
+    const res = await service.list({} as never);
+    assert.equal(res.data![0]!.visitedCount, 2);
+    // Una ruta sin ninguna visitada vale CERO, no `undefined`: «0 de 1» es un dato, y un hueco no.
+    assert.equal(res.data![1]!.visitedCount, 0);
   });
 });

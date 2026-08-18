@@ -33,13 +33,35 @@ export interface RouteStopItem {
   lastOutcome?: VisitOutcome;
 }
 
+/**
+ * Cómo se puede ordenar `GET /routes`. La primera es el default (fecha, descendente).
+ *
+ * Mismo contrato que `CASE_SORTS`: la API decide qué sabe ordenar y el panel qué columnas ofrece.
+ *
+ * 🔴 **Paradas y distancia no están, y es a propósito.** «Paradas» muestra `visitadas / planificadas`
+ * y las visitadas se cuentan aparte del listado, así que ordenar por esa columna ordenaría por el
+ * total —no por lo que se ve— y la flecha estaría mintiendo. La distancia sólo existe si alguien
+ * previsualizó la ruta: ordenar por ella pondría arriba a quien abrió el mapa, no a quien más anduvo.
+ */
+export const ROUTE_SORTS = ['date', 'collector', 'status'] as const;
+export type RouteSort = (typeof ROUTE_SORTS)[number];
+
 export interface RouteItem {
   id: string;
   collectorId: string;
   branchId?: string;
   plannedDate: string;
   status: RouteStatus;
+  /** Paradas planificadas. Se escribe al armar la ruta. */
   totalCases: number;
+  /**
+   * Paradas ya visitadas, para poder decir «5 de 8» sin traer las paradas.
+   *
+   * Sólo lo llena `GET /routes` (el listado). En el detalle es `undefined` **a propósito**: ahí
+   * están las paradas de verdad, y un contador al lado que se calcule distinto es la forma segura
+   * de que un día dejen de coincidir.
+   */
+  visitedCount?: number;
   totalDistanceKm?: number;
   estimatedMinutes?: number;
   createdAt: string;

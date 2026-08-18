@@ -114,6 +114,46 @@ export function Badge({
 }
 
 /**
+ * Elegir **una** de dos o tres vistas del mismo contenido: Lista/Calendario, Día/Período.
+ *
+ * Nació dentro de la agenda y se promovió al reusarlo Rutas. Es un `radiogroup`, no una botonera:
+ * un lector de pantalla anuncia «1 de 2, seleccionado», que es exactamente lo que el control hace.
+ * No sirve para navegar a otra pantalla —para eso hay links—, sino para cambiar cómo se mira lo
+ * mismo.
+ */
+export function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+  label,
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
+  /** Qué se está eligiendo. Sin esto el grupo se anuncia sin decir de qué es. */
+  label: string;
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="flex rounded-lg border border-k-border bg-white p-0.5">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          role="radio"
+          aria-checked={value === o.value}
+          onClick={() => onChange(o.value)}
+          className={`h-8 rounded-md px-3 text-[13px] font-medium transition-colors ${
+            value === o.value ? 'bg-k-navy text-white' : 'text-k-text-2 hover:bg-k-bg'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
  * Bloque gris mientras carga. `className` fija la medida — un skeleton sin medida no
  * reserva espacio y la pantalla salta cuando llega el dato.
  */

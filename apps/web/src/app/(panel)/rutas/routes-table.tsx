@@ -9,17 +9,18 @@ import { dayDate } from '@/lib/format';
 import { ROUTE_STATUS_TONE } from '@/lib/routes';
 
 /**
- * Las rutas del día.
+ * Las rutas de un día o de un período.
  *
  * 🔴 **Es el formato de la cartera, no una tabla aparte**: mismo `DataTable`, filtros en el panel
  * del costado, columnas configurables y tamaño de página. Antes tenía su propia fila de
  * desplegables encima de la tabla, así que las listas del panel se operaban distinto para hacer lo
  * mismo.
  *
- * **Ninguna columna ordena**: `GET /routes` ordena por fecha planificada y no acepta `?sort=`.
- * Dibujar la flecha igual prometería un orden que el servidor no va a aplicar.
+ * **Ordenan tres columnas: cobrador, estado y fecha** (`ROUTE_SORTS`), y **las resuelve el
+ * servidor** — ordenar acá ordenaría las 25 filas de la página y dejaría al resto del período donde
+ * estaba. Paradas y distancia no ordenan a propósito: el motivo está en `ROUTE_SORTS`.
  *
- * **Y no hay búsqueda**: el listado tampoco acepta `?q=`. Una caja que no busca es peor que ninguna.
+ * **Y no hay búsqueda**: el listado no acepta `?q=`. Una caja que no busca es peor que ninguna.
  */
 export function RoutesTable({
   rows,
@@ -28,6 +29,7 @@ export function RoutesTable({
   filtered,
   userId,
   showCollector,
+  period,
 }: {
   rows: RouteItem[];
   meta: PageMeta;
@@ -36,6 +38,8 @@ export function RoutesTable({
   userId?: string;
   /** Sin `route:assign` la API ya acota a lo propio: el filtro por cobrador no cambiaría nada. */
   showCollector: boolean;
+  /** Se está mirando un rango, no un día: cambia qué vacío corresponde. */
+  period?: boolean;
 }) {
   const t = useTranslations('panel.routes');
   const locale = useLocale();
@@ -48,13 +52,19 @@ export function RoutesTable({
        * escrita en la fila es lo que hace que la vista siga diciendo de qué día es cuando se
        * imprime, se comparte por link o se mira una captura.
        */
-      key: 'plannedDate',
+      key: 'date',
       header: t('columns.date'),
+      sortable: true,
+      // Lo último primero: en un período, la jornada de ayer importa más que la de hace tres semanas.
+      defaultDir: 'desc',
       render: (r) => <span className="whitespace-nowrap text-k-text-2">{dayDate(r.plannedDate, locale)}</span>,
     },
     {
       key: 'collector',
       header: t('columns.collector'),
+      // Alfabético por apellido, que es como se busca a alguien en una lista de gente.
+      sortable: true,
+      defaultDir: 'asc',
       render: (r) => (
         <a href={`/rutas/${r.id}`} className="block font-medium text-k-text hover:underline">
           {/* Sin nombre no es sin cobrador: `/users` da 403 sin `user:read`, que es el caso de una
@@ -66,15 +76,30 @@ export function RoutesTable({
     {
       key: 'status',
       header: t('columns.status'),
+      sortable: true,
+      defaultDir: 'asc',
       render: (r) => <Badge tone={ROUTE_STATUS_TONE[r.status]}>{t(`status.${r.status}`)}</Badge>,
     },
     {
       key: 'stops',
       header: t('columns.stops'),
       numeric: true,
-      // `totalCases` es la cuenta de paradas. El avance NO se puede mostrar acá: el listado no
-      // trae las paradas, y «0 de 0» sería una mentira, no un cero.
-      render: (r) => r.totalCases,
+      /*
+       * **«5 / 8»: lo hecho sobre lo planificado.** `visitedCount` lo agrega el listado desde las
+       * paradas (W10-F1b); antes acá sólo se podía mostrar el total, y una ruta a medias se leía
+       * igual que una terminada.
+       *
+       * Si el contador no viene —una API vieja— se muestra el total solo, que es lo que había. No
+       * se dibuja «0 / 8» sobre un dato que no llegó: eso sería decir que no se visitó nada.
+       */
+      render: (r) =>
+        r.visitedCount == null ? (
+          r.totalCases
+        ) : (
+          <span className={r.visitedCount >= r.totalCases && r.totalCases > 0 ? 'font-semibold text-k-success' : ''}>
+            {r.visitedCount} / {r.totalCases}
+          </span>
+        ),
     },
     {
       key: 'distance',
@@ -124,8 +149,15 @@ export function RoutesTable({
       filtered={filtered}
       entityLabel={t('entity')}
       // Sin rutas ese día y sin resultados con esos filtros no son lo mismo: uno se arregla
-      // cambiando de día, el otro quitando un filtro.
-      empty={<EmptyState title={t('empty')} text={t('emptyText')} />}
+      // cambiando de día, el otro quitando un filtro. Y en período el arreglo es otro todavía:
+      // ampliar el rango, no cambiar de día.
+      empty={
+        period ? (
+          <EmptyState title={t('emptyPeriod')} text={t('emptyPeriodText')} />
+        ) : (
+          <EmptyState title={t('empty')} text={t('emptyText')} />
+        )
+      }
       noResults={<EmptyState title={t('noResults')} text={t('noResultsText')} />}
     />
   );

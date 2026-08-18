@@ -223,17 +223,122 @@ export class RoutesService {
     } else if (this.scopedToOwnRoutes()) {
       where.collectorId = this.tenant.userId;
     }
-    if (query.date) {
-      const d = new Date(query.date);
-      where.plannedDate = d;
+    /*
+     * El día exacto gana sobre el rango: el teléfono manda `date` y tiene que recibir ese día. El
+     * rango es del historial por período del panel, y los dos extremos son inclusivos —
+     * `plannedDate` es un día civil, no un instante, así que `lte` con el mismo día lo incluye.
+     */
+    if (query.date) where.plannedDate = new Date(query.date);
+    else if (query.from || query.to) {
+      where.plannedDate = {
+        ...(query.from ? { gte: new Date(query.from) } : {}),
+        ...(query.to ? { lte: new Date(query.to) } : {}),
+      };
     }
-    const [rows, total] = await this.tx((tx) =>
-      Promise.all([
-        tx.routePlan.findMany({ where, orderBy: { plannedDate: 'desc' }, skip, take: limit }),
-        tx.routePlan.count({ where }),
-      ]),
+
+    const dir = query.dir === 'asc' ? 'asc' : 'desc';
+    /*
+     * El desempate SIEMPRE termina en `id`. Sin él, dos rutas con la misma fecha (que es el caso
+     * normal: once cobradores el mismo día) pueden salir en distinto orden en cada consulta, y con
+     * `LIMIT/OFFSET` eso hace que una fila aparezca dos veces y otra no aparezca nunca.
+     */
+    const orderBy: Prisma.RoutePlanOrderByWithRelationInput[] =
+      query.sort === 'status' ? [{ status: dir }, { plannedDate: 'desc' }, { id: 'asc' }] : [{ plannedDate: dir }, { id: 'asc' }];
+
+    const [rows, total] =
+      query.sort === 'collector'
+        ? await this.pageByCollector(where, dir, skip, limit)
+        : await this.tx((tx) =>
+            Promise.all([
+              tx.routePlan.findMany({ where, orderBy, skip, take: limit }),
+              tx.routePlan.count({ where }),
+            ]),
+          );
+
+    /*
+     * 🔴 **Cuántas paradas se visitaron, por ruta.** El listado no trae las paradas (traerlas sería
+     * una página de cientos de filas anidadas), así que sin esto la pantalla sólo puede mostrar el
+     * total planificado: «8» donde debería decir «5 de 8». Es una consulta agregada sobre las rutas
+     * de ESTA página, no una por fila.
+     */
+    const visited = await this.visitedByRoute(rows.map((r) => r.id));
+    return ResponseDto.paginated(
+      rows.map((r) => ({ ...serializeRoute(r), visitedCount: visited.get(r.id) ?? 0 })),
+      total,
+      page,
+      limit,
     );
-    return ResponseDto.paginated(rows.map((r) => serializeRoute(r)), total, page, limit);
+  }
+
+  /**
+   * La página ordenada **por el nombre del cobrador**.
+   *
+   * 🔴 Ordenar por `collector_id` sería ordenar por uuid: agrupa a cada persona, sí, pero el orden
+   * entre personas es azar puro y la flecha diría «alfabético» sobre algo que no lo es. El nombre
+   * vive en `profiles`, y `route_plans.collector_id` es **ref suave a propósito** (sin FK), así que
+   * Prisma no puede ordenar por la relación: no la hay.
+   *
+   * Por eso se resuelve en dos pasos —traer las rutas que caen en el filtro, ordenarlas por nombre y
+   * recién ahí cortar la página—, y **sólo cuando piden este orden**. El resto sigue ordenando en la
+   * base como siempre.
+   *
+   * ponytail: trae los ids de todo el filtro (no las filas: id + cobrador). Con la cartera más
+   * grande que hay hoy son unos cientos de pares por período. Si un día un tenant tiene años de
+   * rutas en un rango, esto pasa a ser SQL crudo con `JOIN profiles` y `ORDER BY last_name`.
+   */
+  private async pageByCollector(
+    where: Prisma.RoutePlanWhereInput,
+    dir: 'asc' | 'desc',
+    skip: number,
+    limit: number,
+  ): Promise<[Awaited<ReturnType<PrismaClient['routePlan']['findMany']>>, number]> {
+    return this.tx(async (tx) => {
+      const all = await tx.routePlan.findMany({
+        where,
+        select: { id: true, collectorId: true, plannedDate: true },
+        orderBy: [{ plannedDate: 'desc' }, { id: 'asc' }],
+      });
+
+      const names = new Map<string, string>();
+      const profiles = await tx.profile.findMany({
+        where: { userId: { in: [...new Set(all.map((r) => r.collectorId))] } },
+        select: { userId: true, firstName: true, lastName: true },
+      });
+      // Por apellido y después por nombre, que es como se lista gente. En minúsculas y sin acentos
+      // para que «Édgar» no caiga después de «Zeballos».
+      for (const p of profiles) names.set(p.userId, key(`${p.lastName ?? ''} ${p.firstName ?? ''}`));
+
+      const sorted = [...all].sort((a, b) => {
+        // Quien no tiene perfil va al final en los dos sentidos: no es «el primero alfabéticamente»,
+        // es que no se sabe cómo se llama.
+        const na = names.get(a.collectorId);
+        const nb = names.get(b.collectorId);
+        if (na === undefined || nb === undefined) return na === nb ? 0 : na === undefined ? 1 : -1;
+        const cmp = na.localeCompare(nb);
+        if (cmp !== 0) return dir === 'asc' ? cmp : -cmp;
+        // Mismo cobrador: sus rutas quedan en orden de fecha, de la más nueva a la más vieja.
+        return b.plannedDate.getTime() - a.plannedDate.getTime() || a.id.localeCompare(b.id);
+      });
+
+      const ids = sorted.slice(skip, skip + limit).map((r) => r.id);
+      const rows = await tx.routePlan.findMany({ where: { id: { in: ids } } });
+      // `findMany` con `in` no respeta el orden de la lista: se reordena con el que se calculó.
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      return [ids.flatMap((id) => byId.get(id) ?? []), all.length];
+    });
+  }
+
+  /** Paradas ya visitadas de cada ruta. Sin rutas no consulta nada. */
+  private async visitedByRoute(routeIds: string[]): Promise<Map<string, number>> {
+    if (routeIds.length === 0) return new Map();
+    const grouped = await this.tx((tx) =>
+      tx.routeStop.groupBy({
+        by: ['routeId'],
+        where: { routeId: { in: routeIds }, status: RouteStopStatus.VISITED },
+        _count: { _all: true },
+      }),
+    );
+    return new Map(grouped.map((g) => [g.routeId, g._count._all]));
   }
 
   /**
@@ -474,6 +579,11 @@ export class RoutesService {
     await this.audit.record({ entity: 'route', entityId: routeId, action: 'UPDATE', after: { optimized: ordered.length } });
     return this.findOne(routeId);
   }
+}
+
+/** Para comparar nombres: sin acentos y en minúsculas, o «Édgar» cae después de «Zeballos». */
+function key(name: string): string {
+  return name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
 // ── Preview: tipos y cálculo puro ────────────────────────────────────────────

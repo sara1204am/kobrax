@@ -778,11 +778,43 @@
     },
     "routes": {
       "title": "Routes",
-      "subtitle": "The day on the street: what route each collector had and how far they got.",
+      "subtitle": "Plan the work on the street and check what happened.",
       "scopedToMine": "You are seeing only your own routes.",
       "entity": "routes",
+      "tabs": {
+        "label": "What do you want to do",
+        "planning": "Planning",
+        "history": "History"
+      },
+      "views": {
+        "label": "How to view the history",
+        "day": "Day",
+        "period": "Period"
+      },
+      "period": {
+        "label": "Period",
+        "from": "From",
+        "to": "To",
+        "presets": {
+          "today": "Today",
+          "yesterday": "Yesterday",
+          "d7": "Last 7 days",
+          "d30": "Last 30 days",
+          "month": "This month",
+          "prevMonth": "Last month",
+          "custom": "Custom"
+        }
+      },
+      "planning": {
+        "title": "Plan routes",
+        "soon": "This is where you will build the day's routes: pick the date, the collectors and the visits, split them up and publish. It is being built in the next stage.",
+        "today": "In the meantime, each collector builds their route on their phone and you see it in History as soon as they create it.",
+        "noPermission": "Your role does not hand out work: you will be able to check the history, but not to plan."
+      },
       "empty": "There are no routes for this day",
       "emptyText": "Routes are built by the collector on their phone, map in hand.",
+      "emptyPeriod": "There are no routes in this period",
+      "emptyPeriodText": "Try a wider range.",
       "noResults": "No routes match these filters",
       "noResultsText": "Try removing one.",
       "previousDay": "Previous day",

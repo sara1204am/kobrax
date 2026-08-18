@@ -7,7 +7,10 @@ import {
   STOP_STATUS_TONE,
   hasRouteFilters,
   routeLimit,
+  routeMode,
+  routePeriod,
   routeQuery,
+  routeView,
 } from './routes';
 
 const COLLECTOR = '11111111-2222-3333-4444-555555555555';
@@ -43,9 +46,77 @@ describe('routeQuery', () => {
     expect(routeLimit({})).toBe(DEFAULT_PAGE_SIZE);
   });
 
-  it('no manda `sort`: el listado ordena por fecha y no acepta otra cosa', () => {
-    // Mandarlo haría que la tabla dibujara una flecha sobre una columna que no ordenó nada.
-    expect(routeQuery({ date: '2026-08-12' }).has('sort')).toBe(false);
+  it('manda las tres claves que la API sabe ordenar', () => {
+    expect(routeQuery({ sort: 'collector', dir: 'asc' }).get('sort')).toBe('collector');
+    expect(routeQuery({ sort: 'collector', dir: 'asc' }).get('dir')).toBe('asc');
+    expect(routeQuery({ sort: 'status' }).get('sort')).toBe('status');
+    expect(routeQuery({ sort: 'date' }).get('sort')).toBe('date');
+  });
+
+  it('🔴 una clave que el servidor no conoce NO viaja', () => {
+    // La API caería a su orden por defecto y la tabla dibujaría una flecha sobre una columna que no
+    // ordenó nada. `stops` y `distance` son justamente las dos que no se ofrecen.
+    expect(routeQuery({ sort: 'stops' }).has('sort')).toBe(false);
+    expect(routeQuery({ sort: 'distance' }).has('sort')).toBe(false);
+    expect(routeQuery({}).has('sort')).toBe(false);
+  });
+
+  it('sin sentido explícito, descendente', () => {
+    expect(routeQuery({ sort: 'date' }).get('dir')).toBe('desc');
+  });
+});
+
+describe('modo y vista', () => {
+  it('sin nada en la URL: historial, por día', () => {
+    // Es la pantalla que se abre veinte veces al día. Cualquier otra cosa por default sería
+    // hacerle pagar a todo el mundo el camino que se recorre una vez por semana.
+    expect(routeMode({})).toBe('historial');
+    expect(routeView({})).toBe('dia');
+  });
+
+  it('un valor inventado cae al default en vez de dejar la pantalla en blanco', () => {
+    expect(routeMode({ modo: 'cualquiera' })).toBe('historial');
+    expect(routeView({ vista: 'cualquiera' })).toBe('dia');
+    expect(routeMode({ modo: 'planificacion' })).toBe('planificacion');
+    expect(routeView({ vista: 'periodo' })).toBe('periodo');
+  });
+});
+
+describe('routePeriod', () => {
+  const HOY = new Date('2026-08-18T12:00:00.000Z');
+
+  it('sin período en la URL, la última semana contando hoy', () => {
+    expect(routePeriod({}, HOY)).toEqual({ from: '2026-08-12', to: '2026-08-18' });
+  });
+
+  it('una fecha inventada cae al default, no rompe ni viaja', () => {
+    expect(routePeriod({ from: 'ayer', to: '18/08/2026' }, HOY)).toEqual({ from: '2026-08-12', to: '2026-08-18' });
+  });
+
+  it('🔴 un rango al revés se ordena en vez de devolver cero rutas', () => {
+    // Pasa editando la URL a mano, y un rango invertido no da error: da una lista vacía que se
+    // lee como «esta semana nadie trabajó».
+    expect(routePeriod({ from: '2026-08-18', to: '2026-08-12' }, HOY)).toEqual({
+      from: '2026-08-12',
+      to: '2026-08-18',
+    });
+  });
+});
+
+describe('routeQuery con período', () => {
+  it('manda el rango y NO el día: la API le da prioridad al día', () => {
+    // Mandando los dos, la API devuelve una jornada y la pantalla mostraría una semana con una
+    // sola fecha adentro.
+    const q = routeQuery({ date: '2026-08-20', period: { from: '2026-08-12', to: '2026-08-18' } });
+    expect(q.get('from')).toBe('2026-08-12');
+    expect(q.get('to')).toBe('2026-08-18');
+    expect(q.has('date')).toBe(false);
+  });
+
+  it('sin período sigue mandando el día, como siempre', () => {
+    const q = routeQuery({ date: '2026-08-20' });
+    expect(q.get('date')).toBe('2026-08-20');
+    expect(q.has('from')).toBe(false);
   });
 });
 
