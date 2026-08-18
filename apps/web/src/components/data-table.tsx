@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Dropdown, Icon } from '@/components/panel-shell';
@@ -68,6 +68,7 @@ export function DataTable<T>({
   entityLabel,
   actions,
   selection,
+  expand,
 }: {
   columns: Column<T>[];
   rows: T[];
@@ -110,6 +111,19 @@ export function DataTable<T>({
     /** Qué se puede hacer con lo elegido. Recibe los ids y cierra la selección cuando termina. */
     render: (ids: string[], clear: () => void) => ReactNode;
   };
+  /**
+   * Abrir una fila para ver su detalle **sin salir de la tabla**. Opt-in: sin esto no hay flecha ni
+   * columna de más.
+   *
+   * 🔴 **No vive en la URL**, al revés que el orden y los filtros: es una mirada de paso —abro,
+   * miro, cierro— y no una vista que alguien quiera compartir por link. Y se cierra sola cuando
+   * cambian las filas, porque «abierto» sobre una lista que ya no es la misma no significa nada.
+   */
+  expand?: {
+    render: (row: T) => ReactNode;
+    /** Qué se abre, para quien no ve la flecha. Recibe la fila: «Ver los días de Ana Camacho». */
+    label: (row: T) => string;
+  };
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -128,6 +142,10 @@ export function DataTable<T>({
    */
   const visibleIds = rows.map(rowKey).join('|');
   useEffect(() => setPicked([]), [visibleIds]);
+
+  // Lo abierto se cierra por el mismo motivo que se limpia la selección: las filas ya son otras.
+  const [opened, setOpened] = useState<string[]>([]);
+  useEffect(() => setOpened([]), [visibleIds]);
 
   const pickedHere = picked.filter((id) => rows.some((r) => rowKey(r) === id));
   const allPicked = rows.length > 0 && pickedHere.length === rows.length;
@@ -283,6 +301,9 @@ export function DataTable<T>({
                         />
                       </th>
                     )}
+                    {/* La columna de la flecha no lleva rótulo: lo que hace se ve, y un encabezado
+                        acá sólo agregaría una palabra que nadie lee. */}
+                    {expand && <th scope="col" className="w-10 px-2 py-3" />}
                     {shown.map((column) => (
                       <th
                         key={column.key}
@@ -309,12 +330,13 @@ export function DataTable<T>({
                 <tbody>
                   {rows.map((row) => {
                     const id = rowKey(row);
+                    const open = opened.includes(id);
                     return (
+                      <Fragment key={id}>
                       <tr
-                        key={id}
                         className={`border-b border-k-border last:border-0 hover:bg-k-bg ${
                           picked.includes(id) ? 'bg-k-highlight' : ''
-                        }`}
+                        } ${open ? 'bg-k-bg' : ''}`}
                       >
                         {selection && (
                           <td className="px-4 py-4">
@@ -329,6 +351,22 @@ export function DataTable<T>({
                             />
                           </td>
                         )}
+                        {expand && (
+                          <td className="px-2 py-4">
+                            <button
+                              type="button"
+                              onClick={() => setOpened((prev) => (open ? prev.filter((x) => x !== id) : [...prev, id]))}
+                              aria-expanded={open}
+                              aria-controls={`fila-${id}`}
+                              aria-label={expand.label(row)}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg text-k-text-2 hover:bg-k-light-bg"
+                            >
+                              <span aria-hidden className={`transition-transform ${open ? 'rotate-90' : ''}`}>
+                                ›
+                              </span>
+                            </button>
+                          </td>
+                        )}
                         {shown.map((column) => (
                           <td
                             key={column.key}
@@ -340,6 +378,19 @@ export function DataTable<T>({
                           </td>
                         ))}
                       </tr>
+                      {/*
+                       * El detalle va en su propia fila, con `colSpan` sobre toda la tabla: metido
+                       * adentro de una celda heredaría el ancho de esa columna y el alineado a la
+                       * derecha de los números.
+                       */}
+                      {expand && open && (
+                        <tr id={`fila-${id}`} className="border-b border-k-border last:border-0">
+                          <td colSpan={shown.length + 1 + (selection ? 1 : 0)} className="bg-k-bg px-4 pb-4">
+                            {expand.render(row)}
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     );
                   })}
                 </tbody>

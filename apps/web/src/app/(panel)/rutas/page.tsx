@@ -123,6 +123,7 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
           <WorkSummary rows={summarizeByCollector(list.body.data)} />
           <CollectorWorkTable
             rows={summarizeByCollector(list.body.data)}
+            routes={list.body.data}
             members={members}
             filtered={hasRouteFilters(searchParams)}
             // Sólo el camino del período puede venir recortado; el del día trae una página y punto.

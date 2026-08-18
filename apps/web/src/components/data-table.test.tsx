@@ -266,6 +266,72 @@ describe('DataTable — tamaño de página', () => {
 
 });
 
+describe('DataTable — abrir una fila', () => {
+  const EXPAND = {
+    label: (r: Row) => `Ver el detalle de ${r.name}`,
+    render: (r: Row) => <p>{`Detalle de ${r.name}`}</p>,
+  };
+  const renderConExpand = (rows = ROWS) =>
+    render(
+      <DataTable
+        columns={COLUMNS}
+        rows={rows}
+        rowKey={(r) => r.id}
+        meta={META}
+        empty={<p>Sin clientes</p>}
+        expand={EXPAND}
+      />,
+    );
+
+  it('sin `expand` no hay flecha ni columna de más', () => {
+    renderTable();
+    expect(screen.getAllByRole('columnheader')).toHaveLength(2);
+  });
+
+  it('abre y cierra, y lo anuncia', async () => {
+    renderConExpand();
+    const flecha = screen.getByRole('button', { name: 'Ver el detalle de Ana' });
+    expect(flecha).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Detalle de Ana')).not.toBeInTheDocument();
+
+    await userEvent.click(flecha);
+    expect(flecha).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Detalle de Ana')).toBeInTheDocument();
+    // Sólo la que se tocó: abrir una no abre las demás.
+    expect(screen.queryByText('Detalle de Beto')).not.toBeInTheDocument();
+
+    await userEvent.click(flecha);
+    expect(screen.queryByText('Detalle de Ana')).not.toBeInTheDocument();
+  });
+
+  it('🔴 el detalle ocupa el ancho de la tabla, no el de una columna', async () => {
+    // Metido en una celda normal heredaría el ancho de esa columna y el alineado a la derecha de
+    // los números: se leería como una cifra rota, no como un detalle.
+    renderConExpand();
+    await userEvent.click(screen.getByRole('button', { name: 'Ver el detalle de Ana' }));
+    const celda = screen.getByText('Detalle de Ana').closest('td');
+    expect(celda).toHaveAttribute('colspan', '3'); // 2 columnas + la de la flecha
+  });
+
+  it('cambiar las filas cierra lo abierto', async () => {
+    const { rerender } = renderConExpand();
+    await userEvent.click(screen.getByRole('button', { name: 'Ver el detalle de Ana' }));
+    expect(screen.getByText('Detalle de Ana')).toBeInTheDocument();
+
+    rerender(
+      <DataTable
+        columns={COLUMNS}
+        rows={[{ id: '9', name: 'Zoe', debt: 900 }]}
+        rowKey={(r) => r.id}
+        meta={META}
+        empty={<p>Sin clientes</p>}
+        expand={EXPAND}
+      />,
+    );
+    await waitFor(() => expect(screen.queryByText('Detalle de Ana')).not.toBeInTheDocument());
+  });
+});
+
 describe('DataTable — selección de filas', () => {
   const renderConSeleccion = (rows = ROWS) =>
     render(

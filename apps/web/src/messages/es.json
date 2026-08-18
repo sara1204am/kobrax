@@ -818,6 +818,8 @@
         "stops": "Paradas",
         "done": "Completadas",
         "pending": "Sin gestionar",
+        "expand": "Ver los días de {name}",
+        "dayStops": "{done} de {total} paradas",
         "truncated": "El período tiene más rutas de las que se pueden sumar de una vez: los números son de las primeras 500. Probá con un rango más corto.",
         "summary": {
           "collectors": "Cobradores",

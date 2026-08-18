@@ -818,6 +818,8 @@
         "stops": "Stops",
         "done": "Completed",
         "pending": "Not handled",
+        "expand": "See {name}'s days",
+        "dayStops": "{done} of {total} stops",
         "truncated": "This period has more routes than can be added up at once: the numbers cover the first 500. Try a shorter range.",
         "summary": {
           "collectors": "Collectors",
