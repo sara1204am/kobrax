@@ -1,6 +1,7 @@
 # W10 · Rutas: planificación e historial
 
-> **Estado: F0 (auditoría) ✅ · F1 + F1b ✅ (`c424e30`) · lo que sigue es F2.**
+> **Estado: F0 ✅ · F1 + F1b ✅ (`c424e30`) · F2 ✅ (`15f794c`) · F3 ✅ (`e3b8e03`) · F4 ✅
+> (`568180c`) · lo que sigue es F5 (planificación).**
 >
 > Decisiones de la dueña sobre este plan, ya tomadas — **no volver a preguntarlas**:
 > 1. **La distancia queda FUERA del resumen por período** (el dato sólo existe si alguien
@@ -23,6 +24,29 @@
 - **Orden**: `ROUTE_SORTS = ['date','collector','status']` en `shared`. El de cobrador ordena por
   **nombre** (dos pasos en el service, porque `collectorId` es ref suave y Prisma no puede ordenar
   por una relación que no existe); el desempate termina siempre en `id`.
+
+## Lo construido en F2, F3 y F4
+
+- **F2** — el período agrupa **por persona**: días activos, rutas, paradas, completadas y **sin
+  gestionar** (`summarizeByCollector`/`totalWork` en `lib/routes.ts`, puras y con tests), más cuatro
+  indicadores chicos arriba. **Sin distancia**, por decisión. El agregado se hace en la web sobre el
+  período completo, con **techo declarado**: 5 páginas de 100 rutas y, si hay más, la pantalla avisa
+  en vez de recortar en silencio.
+- **F3** — `DataTable` aprende `expand` (opt-in): flecha con `aria-expanded`/`aria-controls` y el
+  detalle en su propia fila con `colSpan`. Lo abierto **no vive en la URL** (es una mirada de paso) y
+  se cierra al cambiar las filas. En rutas, abre los días del cobrador, cada uno con link a la ficha
+  de esa ruta.
+- **F4** — la parada visitada muestra **la hora** en lugar del número de orden (`time()` en
+  `lib/format.ts`, hora local porque es un instante). El resto de lo que pedía la fase ya existía
+  desde W6: cliente, dirección, resultado, mapa y evidencia. **El toggle lista/mapa no hace falta**:
+  los dos están juntos en la misma pantalla.
+
+### ⚠️ Deuda de datos detectada en F4 (no de código)
+
+Las horas de visita del seed se siembran en **UTC** (`08:00 + i`), así que en Bolivia se leen como
+**04:00–08:00**: una jornada que arranca a las cuatro de la mañana. El código está bien —muestra la
+hora local del instante—; lo que está mal es el dato de demo. Se arregla con un `UPDATE` sobre
+`route_stops.visited_at` (y el seed, para las próximas siembras).
 
 ---
 
