@@ -759,7 +759,19 @@
         "cancel": "Cancelar",
         "confirm": "Agendar",
         "done": "Gestion agendada",
-        "error": "No se pudo agendar."
+        "error": "No se pudo agendar.",
+        "addLocation": "＋  Agregar dirección",
+        "saveLocation": "Guardar dirección",
+        "locationError": "No se pudo guardar la dirección.",
+        "seeOnMap": "Ver en el mapa",
+        "hideMap": "Ocultar el mapa",
+        "mapView": "Mapa con la ubicación de la dirección",
+        "mapPick": "Mapa para marcar la ubicación",
+        "useMyLocation": "Usar mi ubicación actual",
+        "noGeo": "Este navegador no puede dar tu ubicación. Marcá el punto en el mapa.",
+        "geoDenied": "No se pudo obtener tu ubicación — marcá el punto tocando el mapa.",
+        "pinAt": "Punto marcado: {lat}, {lng}",
+        "pinHint": "Tocá el mapa para marcar el punto (opcional)."
       }
     },
     "routes": {

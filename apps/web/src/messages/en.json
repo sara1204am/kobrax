@@ -759,7 +759,19 @@
         "cancel": "Cancel",
         "confirm": "Schedule",
         "done": "Task scheduled",
-        "error": "Could not schedule."
+        "error": "Could not schedule.",
+        "addLocation": "＋  Add address",
+        "saveLocation": "Save address",
+        "locationError": "Could not save the address.",
+        "seeOnMap": "See on the map",
+        "hideMap": "Hide the map",
+        "mapView": "Map showing the address location",
+        "mapPick": "Map to mark the location",
+        "useMyLocation": "Use my current location",
+        "noGeo": "This browser cannot provide your location. Mark the point on the map.",
+        "geoDenied": "Could not get your location — mark the point by tapping the map.",
+        "pinAt": "Point marked: {lat}, {lng}",
+        "pinHint": "Tap the map to mark the point (optional)."
       }
     },
     "routes": {

@@ -11,6 +11,7 @@ import { useToast } from '@/components/toast';
 import { postJson } from '@/lib/client';
 import { money } from '@/lib/format';
 import type { PortfolioRow } from '@/lib/portfolio';
+import { LocationPicker, type Loc } from './location-picker';
 
 /**
  * Los cinco tipos, en el mismo orden que el teléfono.
@@ -30,7 +31,11 @@ interface Ctx {
   client: { id: string; displayName: string; nationalId: string | null };
   credits: { creditId: string; caseId: string; code?: string; outstandingBalance: number; currency: string; daysPastDue: number }[];
   contacts: { id: string; contactType: string; value: string; isPrimary: boolean }[];
-  locations: { id: string; locationType: string; address: string | null; zone?: string }[];
+  /**
+   * Direcciones **en claro**. `latitude`/`longitude` pueden faltar: una dirección importada de un
+   * extracto trae texto y nada más, y es justamente la que hay que ir a marcar al mapa.
+   */
+  locations: Loc[];
 }
 
 /**
@@ -309,16 +314,18 @@ export function NewTaskModal({
           )}
 
           {tipo === AgendaItemType.VISIT && (
-            <Field label={t('create.location')}>
-              <Select value={locationId} onChange={(e) => setLocationId(e.target.value)} disabled={saving}>
-                {ctx.locations.length === 0 && <option value="">{t('create.noLocations')}</option>}
-                {ctx.locations.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.address ?? '—'} {l.zone ? `· ${l.zone}` : ''}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+            <LocationPicker
+              locations={ctx.locations}
+              value={locationId}
+              onChange={setLocationId}
+              onAdded={(l) => {
+                // Entra a la lista y queda elegida: se cargó para usarla ahora, no para después.
+                setCtx({ ...ctx, locations: [...ctx.locations, l] });
+                setLocationId(l.id);
+              }}
+              clientId={ctx.client.id}
+              disabled={saving}
+            />
           )}
 
           {tipo === AgendaItemType.REMINDER && (
