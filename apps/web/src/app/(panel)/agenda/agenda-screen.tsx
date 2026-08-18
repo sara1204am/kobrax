@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { AgendaItemType, memberName, type AgendaListItem, type Member } from '@kobrax/shared';
@@ -24,9 +24,6 @@ export interface AgendaEvents {
   onCompleteRequest: (id: string) => void;
   onCallRequest: (id: string) => void;
 }
-
-/** Con qué preferencia abre la pantalla la próxima vez. Es de mirada, no un dato: va en el navegador. */
-const VIEW_KEY = 'kbx.agenda.view';
 
 /**
  * La agenda: **el día, y dónde está el trabajo**.
@@ -85,16 +82,12 @@ export function AgendaScreen({
     router.push(`${pathname}?${next}`);
   }
 
-  // La preferencia de vista sobrevive a cerrar el navegador; el día no, porque el día es hoy.
-  useEffect(() => {
-    if (params.has('view')) localStorage.setItem(VIEW_KEY, view);
-  }, [view, params]);
-  useEffect(() => {
-    if (params.has('view')) return;
-    if (localStorage.getItem(VIEW_KEY) === 'calendar') go({ view: 'calendar' });
-    // Sólo al montar: después manda la URL.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  /*
+   * 🔴 **La agenda abre SIEMPRE en Lista.** Antes recordaba la última vista en `localStorage` y la
+   * reponía al entrar, así que quien miraba el calendario una vez lo recibía todos los días: la
+   * pantalla que se abre veinte veces por día es la del trabajo de hoy, y el mes es una consulta
+   * puntual. El calendario sigue a un clic, y con `?view=calendar` en la URL se comparte por link.
+   */
 
   /** El filtrado, una vez, para la lista y para las métricas — o el porcentaje mentiría. */
   const visibles = useMemo(
