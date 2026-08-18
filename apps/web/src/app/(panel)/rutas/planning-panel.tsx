@@ -1,15 +1,13 @@
+import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { Card } from '@/components/panel-ui';
 
 /**
- * Planificación — **el modo existe, el planificador todavía no**.
+ * Planificación: la puerta al armado de las rutas del día.
  *
- * 🔴 No hay botón de «Planificar rutas» y es a propósito: un botón que no hace nada es peor que no
- * tenerlo. Lo que sí hay es la verdad de hoy —cómo nacen las rutas ahora mismo— para que quien entra
- * no se quede pensando que la pantalla se rompió.
- *
- * Lo que falta es UI, no backend: `POST /routes/generate` ya acepta el cobrador y los casos, y
- * quien tiene `route:assign` puede armarle la ruta a cualquiera. La etapa que sigue lo cablea.
+ * 🔴 **El botón sólo aparece si la persona puede planificar.** Sin `route:assign` la API rechaza
+ * armarle la ruta a otro, así que ofrecerlo sería mandar a alguien a llenar un formulario para que
+ * lo frene un 403 al final.
  */
 export async function PlanningPanel({ canPlan }: { canPlan: boolean }) {
   const t = await getTranslations('panel.routes.planning');
@@ -17,10 +15,19 @@ export async function PlanningPanel({ canPlan }: { canPlan: boolean }) {
   return (
     <Card>
       <h2 className="text-[18px] font-semibold text-k-navy">{t('title')}</h2>
-      <p className="mt-2 max-w-[70ch] text-[14px] text-k-text-2">{t('soon')}</p>
-      {/* Sin `route:assign` no va a poder planificar cuando exista: mejor decirlo ahora que
-          dejar que arme una tanda entera para chocarse con un 403 al confirmar. */}
-      <p className="mt-3 max-w-[70ch] text-[14px] text-k-text-2">{canPlan ? t('today') : t('noPermission')}</p>
+      <p className="mt-2 max-w-[70ch] text-[14px] text-k-text-2">{canPlan ? t('intro') : t('noPermission')}</p>
+
+      {canPlan && (
+        <Link
+          href="/rutas/planificar"
+          className="mt-5 inline-flex h-11 items-center rounded-xl bg-k-navy px-4 text-[14px] font-medium text-white hover:bg-k-slate"
+        >
+          {t('cta')}
+        </Link>
+      )}
+
+      {/* Lo que todavía no hace, dicho acá y no descubierto a mitad del camino. */}
+      <p className="mt-4 max-w-[70ch] text-[13px] text-k-muted">{t('scope')}</p>
     </Card>
   );
 }

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { Permission, todayISO, type MeInfo, type Member, type RouteItem } from '@kobrax/shared';
 import { apiCall, pageMeta } from '@/lib/bff';
@@ -49,7 +50,26 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
 
   const header = (
     <>
-      <PageHeader title={t('title')} subtitle={t('subtitle')} />
+      <PageHeader
+        title={t('title')}
+        subtitle={t('subtitle')}
+        /*
+         * La acción primaria de la pantalla, a la vista desde el historial: quien mira lo que pasó
+         * suele venir justo a preparar lo que viene. Va en el encabezado y no en la barra de la
+         * tabla —al revés que «Nuevo cliente»— porque no actúa sobre la lista que se está mirando:
+         * arma las rutas de otro día.
+         */
+        actions={
+          supervises ? (
+            <Link
+              href="/rutas/planificar"
+              className="inline-flex h-9 shrink-0 items-center rounded-lg bg-k-navy px-3 text-[13px] font-medium text-white hover:bg-k-slate"
+            >
+              {t('planning.cta')}
+            </Link>
+          ) : undefined
+        }
+      />
       <RouteTabs modo={modo} vista={vista} />
     </>
   );
