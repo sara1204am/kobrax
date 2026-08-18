@@ -143,23 +143,40 @@ export function PointsMap({
     for (const p of points) {
       const existente = markers.current.get(p.id);
       if (existente) {
-        // Sólo la clase: recrear el marcador lo haría parpadear sin haberse movido.
-        existente.getElement().className = pinClass(p.picked);
+        // Sólo la clase del punto, no el marcador entero: recrearlo lo haría parpadear sin haberse
+        // movido. El punto es el hijo; el padre es el área que se puede tocar.
+        const dot = existente.getElement().firstElementChild;
+        if (dot) dot.className = pinClass(p.picked);
         continue;
       }
-      const pin = document.createElement('div');
-      pin.className = pinClass(p.picked);
+
+      /*
+       * 🔴 **El área que responde al clic es más grande que el punto.** El disponible mide diez
+       * píxeles: apuntarle exige una puntería que nadie tiene mientras compara diez deudores, y el
+       * cursor recién cambiaba justo encima. El contenedor de 24 px es invisible y lleva la mano —
+       * así se nota que se puede tocar **al acercarse**, no al acertar.
+       *
+       * 24 y no 44 (el mínimo táctil): con puntos de la misma cuadra, áreas más grandes empezarían
+       * a robarse el clic entre vecinos.
+       */
+      const hit = document.createElement('div');
+      hit.className = 'group flex h-6 w-6 cursor-pointer items-center justify-center';
+      const dot = document.createElement('span');
+      dot.className = pinClass(p.picked);
+      hit.appendChild(dot);
+
       /*
        * El nombre va en `title` y no en un popup: el clic ya tiene dueño —marca y desmarca—, y un
        * popup que se abre encima taparía los puntos de al lado justo mientras se elige entre ellos.
        */
-      if (p.label) pin.title = p.label;
-      pin.addEventListener('click', (e) => {
+      if (p.label) hit.title = p.label;
+      hit.addEventListener('click', (e) => {
         // Sin esto, el clic también llega al mapa y arrastra el encuadre bajo el dedo.
         e.stopPropagation();
         click.current?.(p.id);
       });
-      const marker = new Marker({ element: pin }).setLngLat([p.longitude, p.latitude]);
+
+      const marker = new Marker({ element: hit }).setLngLat([p.longitude, p.latitude]);
       marker.addTo(m);
       markers.current.set(p.id, marker);
     }
@@ -249,11 +266,14 @@ function pinClass(picked?: boolean): string {
   /*
    * El elegido es más grande y del color de la marca; el disponible, un punto gris que no compite.
    *
-   * `cursor-pointer` en los dos: **se puede tocar cualquiera**, y sin el cursor nadie lo descubre —
-   * un punto que reacciona al clic y parece decorativo es una función que no existe.
+   * Los dos **crecen y se tiñen al acercarse** (`group-hover`, que dispara el área de toque de
+   * alrededor y no el punto en sí): es la confirmación de que el clic va a caer ahí y no en el
+   * vecino, que con puntos de diez píxeles es la duda real.
    */
-  const base = 'cursor-pointer rounded-full border-white shadow transition-all';
-  return picked ? `${base} h-4 w-4 border-2 bg-k-navy` : `${base} h-2.5 w-2.5 border bg-k-muted hover:bg-k-periwinkle`;
+  const base = 'block rounded-full border-white shadow transition-all group-hover:scale-150';
+  return picked
+    ? `${base} h-4 w-4 border-2 bg-k-navy group-hover:bg-k-slate`
+    : `${base} h-2.5 w-2.5 border bg-k-muted group-hover:bg-k-periwinkle`;
 }
 
 function emptyArea(): GeoJSON.FeatureCollection {
