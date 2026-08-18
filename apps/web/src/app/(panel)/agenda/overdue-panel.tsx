@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import type { AgendaListItem } from '@kobrax/shared';
-import { date as fmtDate } from '@/lib/format';
+// El día de un agendado no tiene hora: en la zona local se corría un día para atrás.
+import { dayDate as fmtDate } from '@/lib/format';
 import type { AgendaEvents } from './agenda-screen';
 
 /** Cuántas se muestran plegado. Dos: las que se pueden mirar sin dejar de ver el día. */

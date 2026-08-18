@@ -1,10 +1,11 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { memberName, RouteStatus, type Member, type RouteItem } from '@kobrax/shared';
 import { Badge, EmptyState } from '@/components/panel-ui';
 import { DataTable, type Column, type PageMeta } from '@/components/data-table';
 import type { FilterDef } from '@/components/data-table-filters';
+import { dayDate } from '@/lib/format';
 import { ROUTE_STATUS_TONE } from '@/lib/routes';
 
 /**
@@ -37,9 +38,20 @@ export function RoutesTable({
   showCollector: boolean;
 }) {
   const t = useTranslations('panel.routes');
+  const locale = useLocale();
   const byId = new Map(members.map((m) => [m.userId, memberName(m)]));
 
   const columns: Column<RouteItem>[] = [
+    {
+      /*
+       * El día de la ruta. Con el selector de arriba puesto son todas el mismo, pero la fecha
+       * escrita en la fila es lo que hace que la vista siga diciendo de qué día es cuando se
+       * imprime, se comparte por link o se mira una captura.
+       */
+      key: 'plannedDate',
+      header: t('columns.date'),
+      render: (r) => <span className="whitespace-nowrap text-k-text-2">{dayDate(r.plannedDate, locale)}</span>,
+    },
     {
       key: 'collector',
       header: t('columns.collector'),

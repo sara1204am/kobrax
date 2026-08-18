@@ -22,6 +22,26 @@ export function date(d?: string | null, locale = 'es'): string {
   return new Date(d).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: '2-digit' });
 }
 
+/**
+ * Un **día civil**: el de una ruta, el de un agendado. Sin hora, porque en la base tampoco la tiene
+ * (`@db.Date`).
+ *
+ * 🔴 **Va en UTC a propósito, y no es lo mismo que `date()`.** Un `@db.Date` llega como
+ * `2026-08-20T00:00:00.000Z`, así que formatearlo en la zona local resta cuatro horas en Bolivia y
+ * lo pinta como **19 de agosto**: la ruta del jueves aparece como la del miércoles. Es el mismo
+ * supuesto que ya había mordido a la agenda del lado del servidor, ahora del lado de quien mira.
+ * `date()` sigue siendo el correcto para lo que sí tiene hora — un pago, una gestión.
+ */
+export function dayDate(d?: string | null, locale = 'es'): string {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString(locale, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    timeZone: 'UTC',
+  });
+}
+
 export function dateTime(d?: string | null, locale = 'es'): string {
   if (!d) return '—';
   return new Date(d).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });

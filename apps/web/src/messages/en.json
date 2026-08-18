@@ -795,6 +795,7 @@
         "all": "All"
       },
       "columns": {
+        "date": "Date",
         "collector": "Collector",
         "status": "Status",
         "stops": "Stops",

@@ -5,7 +5,7 @@ import { AgendaItemStatus, Permission, todayISO, type AgendaItemDetail, type MeI
 import { apiCall } from '@/lib/bff';
 import { AGENDA_STATUS_TONE, itemActions, itemWhen } from '@/lib/agenda';
 import { Badge, Card, EmptyState, Fact, PageHeader } from '@/components/panel-ui';
-import { date, money } from '@/lib/format';
+import { dayDate, money } from '@/lib/format';
 import { ItemActions } from './item-actions';
 
 /** Un ítem del catálogo del tenant (motivos de cancelación y de reprogramación). */
@@ -122,7 +122,8 @@ export default async function GestionPage({ params }: { params: { id: string } }
                   className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-k-border bg-white px-5 py-3.5"
                 >
                   <span className="text-[14px] text-k-text">
-                    {t(`type.${entry.type}`)} · {date(entry.scheduledDate, locale)}
+                    {/* El día del agendado no tiene hora: en la zona local se corría un día atrás. */}
+                    {t(`type.${entry.type}`)} · {dayDate(entry.scheduledDate, locale)}
                   </span>
                   <Badge tone={AGENDA_STATUS_TONE[entry.status]}>{t(`status.${entry.status}`)}</Badge>
                 </li>

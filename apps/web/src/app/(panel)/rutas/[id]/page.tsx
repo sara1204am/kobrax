@@ -14,7 +14,7 @@ import { RouteMap } from '@/components/route-map';
 import { apiCall } from '@/lib/bff';
 import { CATEGORY_TONE, ROUTE_STATUS_TONE, STOP_STATUS_TONE } from '@/lib/routes';
 import { Badge, Card, EmptyState, Fact, PageHeader } from '@/components/panel-ui';
-import { date, money } from '@/lib/format';
+import { dayDate, money } from '@/lib/format';
 
 /** Techo de lo que se trae de un día —pagos y visitas—. Un día de un tenant no llega a tanto. */
 const DAY_LIMIT = 100;
@@ -89,7 +89,8 @@ export default async function RutaPage({ params }: { params: { id: string } }) {
     <>
       <PageHeader
         title={collector ? memberName(collector) : t('unknownCollector')}
-        subtitle={date(route.plannedDate, locale)}
+        // El día de la ruta no tiene hora: formateado en la zona local se corría un día para atrás.
+        subtitle={dayDate(route.plannedDate, locale)}
         actions={<Badge tone={ROUTE_STATUS_TONE[route.status]}>{t(`status.${route.status}`)}</Badge>}
       />
 
