@@ -363,16 +363,36 @@ async function main() {
 
     console.log(`  ✓ cadena operativa demo (cliente→crédito→caso→ruta→visita ${visit.id.slice(0, 8)}→pago)`);
   } else {
-    // Re-asignar la cadena demo al collector (idempotente) por si fue creada
-    // por una versión anterior del seed que asignaba al owner.
-    await prisma.collectionCase.updateMany({
-      where: { accountId: acc, assigneeId: { not: collector.id } },
-      data: { assigneeId: collector.id },
+    /*
+     * Re-asignar **la cadena demo** al collector (idempotente) por si fue creada por una versión
+     * anterior del seed que la asignaba al owner.
+     *
+     * 🔴 **Acotado al caso y a la ruta de la cadena demo, y a nada más.** Sin el `id`, este
+     * `updateMany` decía «todo lo de esta cuenta que no sea del collector demo, pasalo al collector
+     * demo»: correr `db:seed` después de `db:seed:bulk` reasignaba las 568 rutas y los 1628 casos
+     * de los once cobradores a una sola persona. La agenda no se tocaba, así que quedaba una
+     * cartera repartida entre once y todas las rutas de una — que es como se vio: once rutas el
+     * mismo día para la misma cobradora.
+     */
+    const demoCredit = await prisma.credit.findFirst({
+      where: { accountId: acc, code: 'CRD-DEMO-1' },
+      select: { id: true },
     });
-    await prisma.routePlan.updateMany({
-      where: { accountId: acc, collectorId: { not: collector.id } },
-      data: { collectorId: collector.id },
-    });
+    const demoCase = demoCredit
+      ? await prisma.collectionCase.findFirst({ where: { accountId: acc, creditId: demoCredit.id }, select: { id: true } })
+      : null;
+
+    if (demoCase) {
+      await prisma.collectionCase.updateMany({
+        where: { id: demoCase.id, assigneeId: { not: collector.id } },
+        data: { assigneeId: collector.id },
+      });
+      await prisma.routePlan.updateMany({
+        // La ruta demo es la que tiene una parada de ese caso; ninguna otra.
+        where: { accountId: acc, collectorId: { not: collector.id }, stops: { some: { caseId: demoCase.id } } },
+        data: { collectorId: collector.id },
+      });
+    }
     console.log('  ↺ cadena operativa demo ya existe; re-asignada al collector');
   }
 
