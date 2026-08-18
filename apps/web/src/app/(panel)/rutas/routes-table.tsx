@@ -1,27 +1,40 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { memberName, type Member, type RouteItem } from '@kobrax/shared';
+import { memberName, RouteStatus, type Member, type RouteItem } from '@kobrax/shared';
 import { Badge, EmptyState } from '@/components/panel-ui';
 import { DataTable, type Column, type PageMeta } from '@/components/data-table';
+import type { FilterDef } from '@/components/data-table-filters';
 import { ROUTE_STATUS_TONE } from '@/lib/routes';
 
 /**
  * Las rutas del día.
  *
+ * 🔴 **Es el formato de la cartera, no una tabla aparte**: mismo `DataTable`, filtros en el panel
+ * del costado, columnas configurables y tamaño de página. Antes tenía su propia fila de
+ * desplegables encima de la tabla, así que las listas del panel se operaban distinto para hacer lo
+ * mismo.
+ *
  * **Ninguna columna ordena**: `GET /routes` ordena por fecha planificada y no acepta `?sort=`.
  * Dibujar la flecha igual prometería un orden que el servidor no va a aplicar.
+ *
+ * **Y no hay búsqueda**: el listado tampoco acepta `?q=`. Una caja que no busca es peor que ninguna.
  */
 export function RoutesTable({
   rows,
   meta,
   members,
   filtered,
+  userId,
+  showCollector,
 }: {
   rows: RouteItem[];
   meta: PageMeta;
   members: Member[];
   filtered: boolean;
+  userId?: string;
+  /** Sin `route:assign` la API ya acota a lo propio: el filtro por cobrador no cambiaría nada. */
+  showCollector: boolean;
 }) {
   const t = useTranslations('panel.routes');
   const byId = new Map(members.map((m) => [m.userId, memberName(m)]));
@@ -65,20 +78,43 @@ export function RoutesTable({
     },
   ];
 
+  /** Los filtros del panel. **Las claves son las de la URL**; qué significa cada una, `routeQuery`. */
+  const filters: FilterDef[] = [
+    ...(showCollector
+      ? [
+          {
+            keys: ['collectorId'],
+            label: t('filters.collector'),
+            type: 'select' as const,
+            allLabel: t('filters.all'),
+            options: members.map((m) => ({ value: m.userId, label: memberName(m) })),
+          },
+        ]
+      : []),
+    {
+      keys: ['status'],
+      label: t('filters.status'),
+      type: 'select',
+      allLabel: t('filters.all'),
+      options: Object.values(RouteStatus).map((s) => ({ value: s, label: t(`status.${s}`) })),
+    },
+  ];
+
   return (
     <DataTable
+      tableId="rutas"
+      userId={userId}
       columns={columns}
       rows={rows}
       rowKey={(r) => r.id}
       meta={meta}
-      empty={
-        // Sin rutas ese día y sin resultados con esos filtros no son lo mismo: uno se arregla
-        // cambiando de día, el otro quitando un filtro.
-        <EmptyState
-          title={filtered ? t('noResults') : t('empty')}
-          text={filtered ? t('noResultsText') : t('emptyText')}
-        />
-      }
+      filters={filters}
+      filtered={filtered}
+      entityLabel={t('entity')}
+      // Sin rutas ese día y sin resultados con esos filtros no son lo mismo: uno se arregla
+      // cambiando de día, el otro quitando un filtro.
+      empty={<EmptyState title={t('empty')} text={t('emptyText')} />}
+      noResults={<EmptyState title={t('noResults')} text={t('noResultsText')} />}
     />
   );
 }

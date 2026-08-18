@@ -778,6 +778,7 @@
       "title": "Rutas",
       "subtitle": "El día en la calle: qué ruta tenía cada cobrador y hasta dónde llegó.",
       "scopedToMine": "Estás viendo sólo tus rutas.",
+      "entity": "rutas",
       "empty": "No hay rutas para este día",
       "emptyText": "Las rutas las arma el cobrador desde su teléfono, con el mapa en la mano.",
       "noResults": "No hay rutas con esos filtros",
@@ -789,8 +790,7 @@
       "filters": {
         "collector": "Cobrador",
         "status": "Estado",
-        "all": "Todas",
-        "clear": "Limpiar filtros"
+        "all": "Todas"
       },
       "columns": {
         "collector": "Cobrador",

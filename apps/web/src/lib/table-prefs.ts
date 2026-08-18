@@ -19,6 +19,16 @@
 /** Sube cuando el contenido guardado deja de ser compatible. Lo viejo se descarta solo. */
 export const PREFS_VERSION = 1;
 
+/**
+ * Los tamaños de página que ofrecen las tablas. Sin 200: la API valida `limit ≤ 100` y no vale
+ * romper el contrato por una opción.
+ *
+ * Vive acá —y no en `data-table.tsx`— porque lo necesitan los dos lados: la tabla para dibujar el
+ * selector, y el adaptador de cada pantalla (un módulo de servidor) para validar lo que viene en la
+ * URL antes de mandarlo. Un módulo `'use client'` no se puede leer desde un server component.
+ */
+export const PAGE_SIZES = [25, 50, 100];
+
 export interface TablePrefs {
   version: number;
   /** Los filtros y la búsqueda, tal cual viajan en la URL. */

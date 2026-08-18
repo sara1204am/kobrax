@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Dropdown, Icon } from '@/components/panel-shell';
 import { FilterPanel, type FilterDef } from '@/components/data-table-filters';
-import { prefsToParams, readPrefs, writePrefs } from '@/lib/table-prefs';
+import { PAGE_SIZES, prefsToParams, readPrefs, writePrefs } from '@/lib/table-prefs';
 
 export interface Column<T> {
   /** Clave del orden — la que viaja a la API en `?sort=`. También identifica la columna. */
@@ -34,9 +34,6 @@ export interface PageMeta {
   limit: number;
   pages: number;
 }
-
-/** Tamaños de página. Sin 200: la API valida `limit ≤ 100` y no vale romper el contrato por una opción. */
-const PAGE_SIZES = [25, 50, 100];
 
 
 /**

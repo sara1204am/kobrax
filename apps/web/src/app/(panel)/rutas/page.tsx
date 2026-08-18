@@ -2,13 +2,10 @@ import { getTranslations } from 'next-intl/server';
 import { Permission, todayISO, type MeInfo, type Member, type RouteItem } from '@kobrax/shared';
 import { apiCall, pageMeta } from '@/lib/bff';
 import { dayOr } from '@/lib/agenda';
-import { hasRouteFilters, routeQuery } from '@/lib/routes';
+import { hasRouteFilters, routeLimit, routeQuery, type RouteParams } from '@/lib/routes';
 import { DayPicker } from '@/components/day-picker';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
-import { RouteFilters } from './route-filters';
 import { RoutesTable } from './routes-table';
-
-const LIMIT = 20;
 
 /**
  * Las rutas del día.
@@ -18,18 +15,16 @@ const LIMIT = 20;
  * pantalla, porque el contrato no la trae.
  *
  * El día viaja en la URL como en la agenda, y el `DayPicker` es el mismo componente (W6-T2-bis).
+ * **El día no es un filtro más**: siempre hay uno, así que se elige arriba y en grande, no adentro
+ * del panel del costado con los que se pueden sacar.
  */
-export default async function RutasPage({
-  searchParams,
-}: {
-  searchParams: { date?: string; collectorId?: string; status?: string; page?: string };
-}) {
+export default async function RutasPage({ searchParams }: { searchParams: RouteParams }) {
   const t = await getTranslations('panel.routes');
   const today = todayISO();
   const day = dayOr(today, searchParams.date);
 
   const [list, me, team] = await Promise.all([
-    apiCall<RouteItem[]>(`/routes?${routeQuery({ ...searchParams, date: day }, LIMIT)}`, {
+    apiCall<RouteItem[]>(`/routes?${routeQuery({ ...searchParams, date: day })}`, {
       method: 'GET',
       auth: true,
     }),
@@ -59,15 +54,15 @@ export default async function RutasPage({
         today={today}
         labels={{ previous: t('previousDay'), next: t('nextDay'), today: t('today'), date: t('date') }}
       />
-      {/* Sin `route:assign` la API acota a lo propio: el filtro por cobrador no cambiaría nada.
-          Y sin `user:read` no hay nombres que ofrecer. */}
-      <RouteFilters members={members} showCollector={supervises && members.length > 0} />
 
       <RoutesTable
         rows={list.body.data}
-        meta={pageMeta(list.body, searchParams.page, LIMIT)}
+        meta={pageMeta(list.body, searchParams.page, routeLimit(searchParams))}
         members={members}
         filtered={hasRouteFilters(searchParams)}
+        userId={me.body.data?.userId}
+        // Sin `route:assign` la API acota a lo propio, y sin `user:read` no hay nombres que ofrecer.
+        showCollector={supervises && members.length > 0}
       />
     </>
   );

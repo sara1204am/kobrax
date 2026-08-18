@@ -1,4 +1,5 @@
 import { CASE_SORTS, CASE_TRANSITIONS, CasePriority, CaseStatus } from '@kobrax/shared';
+import { PAGE_SIZES } from './table-prefs';
 
 /** Los tonos que sabe pintar el `Badge` del panel. */
 type Tone = 'neutral' | 'success' | 'warning' | 'danger';
@@ -67,6 +68,22 @@ export interface MoraParams {
   sort?: string;
   dir?: string;
   page?: string;
+  pageSize?: string;
+}
+
+/** Cuántos préstamos vencidos por página si nadie eligió otra cosa. */
+export const DEFAULT_PAGE_SIZE = 25;
+
+/**
+ * El tamaño de página pedido, o el default.
+ *
+ * 🔴 **La tabla dibuja el selector de «por página» sola** (lo hace toda tabla con `tableId`), así que
+ * la pantalla tiene que leerlo: con un `limit` fijo, elegir 100 escribía la URL, recargaba y seguían
+ * llegando 20 — un control que no hace nada. Un valor inventado cae al default: la API valida
+ * `limit ≤ 100` y pedir más es un 400 que deja la pantalla entera sin lista.
+ */
+export function moraLimit(params: MoraParams): number {
+  return PAGE_SIZES.includes(Number(params.pageSize)) ? Number(params.pageSize) : DEFAULT_PAGE_SIZE;
 }
 
 /**
@@ -79,9 +96,9 @@ export interface MoraParams {
  * esto listaba todo el trabajo abierto — incluyendo a quien está al día y sólo tiene el expediente
  * sin cerrar. «Ver también los que están al día» es un filtro que se saca, no el estado inicial.
  */
-export function moraQuery(params: MoraParams, limit: number): URLSearchParams {
+export function moraQuery(params: MoraParams): URLSearchParams {
   const page = Math.max(1, Number(params.page) || 1);
-  const query = new URLSearchParams({ page: String(page), limit: String(limit) });
+  const query = new URLSearchParams({ page: String(page), limit: String(moraLimit(params)) });
   for (const key of ['status', 'priority', 'assigneeId', 'q'] as const) {
     if (params[key]) query.set(key, params[key]!);
   }

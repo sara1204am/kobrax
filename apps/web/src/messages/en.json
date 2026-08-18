@@ -778,6 +778,7 @@
       "title": "Routes",
       "subtitle": "The day on the street: what route each collector had and how far they got.",
       "scopedToMine": "You are seeing only your own routes.",
+      "entity": "routes",
       "empty": "There are no routes for this day",
       "emptyText": "Routes are built by the collector on their phone, map in hand.",
       "noResults": "No routes match these filters",
@@ -789,8 +790,7 @@
       "filters": {
         "collector": "Collector",
         "status": "Status",
-        "all": "All",
-        "clear": "Clear filters"
+        "all": "All"
       },
       "columns": {
         "collector": "Collector",

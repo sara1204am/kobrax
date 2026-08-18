@@ -1,11 +1,9 @@
 import { getTranslations } from 'next-intl/server';
 import { Permission, type AccountInfo, type CaseListItem, type MeInfo, type Member } from '@kobrax/shared';
 import { apiCall, pageMeta } from '@/lib/bff';
-import { hasMoraFilters, moraQuery, type MoraParams } from '@/lib/cases';
+import { hasMoraFilters, moraLimit, moraQuery, type MoraParams } from '@/lib/cases';
 import { EmptyState } from '@/components/panel-ui';
 import { ArrearsTable } from './arrears-table';
-
-const LIMIT = 20;
 
 /**
  * La cartera en mora.
@@ -26,7 +24,7 @@ const LIMIT = 20;
  */
 export default async function MoraPage({ searchParams }: { searchParams: MoraParams }) {
   const t = await getTranslations('panel.cases');
-  const query = moraQuery(searchParams, LIMIT);
+  const query = moraQuery(searchParams);
 
   const [list, me, team, account] = await Promise.all([
     apiCall<CaseListItem[]>(`/cases?${query}`, { method: 'GET', auth: true }),
@@ -62,7 +60,7 @@ export default async function MoraPage({ searchParams }: { searchParams: MoraPar
 
       <ArrearsTable
         rows={list.body.data}
-        meta={pageMeta(list.body, searchParams.page, LIMIT)}
+        meta={pageMeta(list.body, searchParams.page, moraLimit(searchParams))}
         members={members}
         currency={account.body.data?.currencyCode ?? 'BOB'}
         filtered={hasMoraFilters(searchParams)}

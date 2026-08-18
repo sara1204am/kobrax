@@ -12,11 +12,13 @@
  * pantalla entera sin cartera. Se descarta antes de salir.
  */
 
+import { PAGE_SIZES } from './table-prefs';
+
 /** Los que el servidor sabe ordenar. `status` NO está: ordenaría por `client_status`, que no es la columna Estado. */
 export const CARTERA_SORTS = ['dpd', 'debt', 'name', 'createdAt'] as const;
 
-/** Los tamaños que ofrece la tabla. La API valida `limit ≤ 100`; pedir más es un 400. */
-export const PAGE_SIZES = [25, 50, 100];
+/** Los tamaños que ofrece la tabla — los mismos para todas, definidos en `table-prefs`. */
+export { PAGE_SIZES };
 export const DEFAULT_PAGE_SIZE = 50;
 
 /** Los filtros de rango: clave en la URL → clave en la API (son la misma, y así queda escrito). */

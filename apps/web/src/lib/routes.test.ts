@@ -1,27 +1,51 @@
 import { describe, expect, it } from 'vitest';
 import { RouteStatus, RouteStopStatus, summarizeDay, type RouteItem } from '@kobrax/shared';
-import { CATEGORY_TONE, ROUTE_STATUS_TONE, STOP_STATUS_TONE, hasRouteFilters, routeQuery } from './routes';
+import {
+  CATEGORY_TONE,
+  DEFAULT_PAGE_SIZE,
+  ROUTE_STATUS_TONE,
+  STOP_STATUS_TONE,
+  hasRouteFilters,
+  routeLimit,
+  routeQuery,
+} from './routes';
+
+const COLLECTOR = '11111111-2222-3333-4444-555555555555';
 
 describe('routeQuery', () => {
   it('no manda los filtros vacíos', () => {
-    expect(routeQuery({}, 20).toString()).toBe('page=1&limit=20');
+    expect(routeQuery({}).toString()).toBe(`page=1&limit=${DEFAULT_PAGE_SIZE}`);
   });
 
   it('manda el día, el cobrador y el estado cuando están', () => {
-    const query = routeQuery({ date: '2026-08-12', collectorId: 'u1', status: 'IN_PROGRESS' }, 20);
+    const query = routeQuery({ date: '2026-08-12', collectorId: COLLECTOR, status: 'IN_PROGRESS' });
     expect(query.get('date')).toBe('2026-08-12');
-    expect(query.get('collectorId')).toBe('u1');
+    expect(query.get('collectorId')).toBe(COLLECTOR);
     expect(query.get('status')).toBe('IN_PROGRESS');
   });
 
   it('una página inválida cae en la primera', () => {
-    expect(routeQuery({ page: '0' }, 20).get('page')).toBe('1');
-    expect(routeQuery({ page: 'x' }, 20).get('page')).toBe('1');
+    expect(routeQuery({ page: '0' }).get('page')).toBe('1');
+    expect(routeQuery({ page: 'x' }).get('page')).toBe('1');
+  });
+
+  it('🔴 un cobrador o un estado inventado NO viajan', () => {
+    // El DTO los valida como uuid y como enum: un valor de más —una preferencia guardada, una URL
+    // tocada a mano— devolvería 400 y dejaría la pantalla entera sin rutas.
+    expect(routeQuery({ collectorId: 'u1' }).has('collectorId')).toBe(false);
+    expect(routeQuery({ status: 'CUALQUIERA' }).has('status')).toBe(false);
+  });
+
+  it('el tamaño de página sale de la URL, y uno inventado cae en el default', () => {
+    expect(routeQuery({ pageSize: '100' }).get('limit')).toBe('100');
+    // La API valida `limit ≤ 100`: pedir 500 es un 400, no una lista más larga.
+    expect(routeLimit({ pageSize: '500' })).toBe(DEFAULT_PAGE_SIZE);
+    expect(routeLimit({})).toBe(DEFAULT_PAGE_SIZE);
   });
 
   it('no manda `sort`: el listado ordena por fecha y no acepta otra cosa', () => {
     // Mandarlo haría que la tabla dibujara una flecha sobre una columna que no ordenó nada.
-    expect(routeQuery({ date: '2026-08-12' }, 20).has('sort')).toBe(false);
+    expect(routeQuery({ date: '2026-08-12' }).has('sort')).toBe(false);
   });
 });
 
