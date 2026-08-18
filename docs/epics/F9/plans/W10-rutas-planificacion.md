@@ -1,9 +1,32 @@
-# W10 · Rutas: planificación e historial — FASE 0, auditoría
+# W10 · Rutas: planificación e historial
 
-> **Estado: diagnóstico. Cero código escrito.** El plan exige detenerse acá y revisar antes de tocar
-> nada estructural.
+> **Estado: F0 (auditoría) ✅ · F1 + F1b ✅ (`c424e30`) · lo que sigue es F2.**
 >
-> Fecha del corte: 2026-08-18 · `main` = `c076667`
+> Decisiones de la dueña sobre este plan, ya tomadas — **no volver a preguntarlas**:
+> 1. **La distancia queda FUERA del resumen por período** (el dato sólo existe si alguien
+>    previsualizó la ruta, y en la demo es un aleatorio del seed).
+> 2. **Ordenan sólo tres columnas: cobrador, estado y fecha.**
+>
+> Fecha del corte de la auditoría: 2026-08-18 · `main` = `c076667`
+
+## Lo construido en F1 + F1b
+
+- `?modo=historial|planificacion` y `?vista=dia|periodo`, con los defaults en historial y día.
+  La vista diaria quedó **intacta**, como pedía el plan.
+- Planificación es un panel que dice qué va a hacer y cómo nacen las rutas hoy. **Sin botón**: uno
+  que no hace nada es peor que ninguno.
+- `Segmented` en `components/panel-ui.tsx` (promovido del `ViewToggle` de la agenda, que ahora lo usa).
+- `period-picker.tsx` sobre `DATE_PRESETS`/`presetRange` de `lib/dashboard` — la regla de qué es
+  «los últimos 7 días» no se reescribió.
+- **API**: `from`/`to` en `GET /routes` (el `date` exacto gana, por el móvil) y **`visitedCount`**
+  por ruta vía `groupBy` de las paradas de la página → la columna dice «5 / 8».
+- **Orden**: `ROUTE_SORTS = ['date','collector','status']` en `shared`. El de cobrador ordena por
+  **nombre** (dos pasos en el service, porque `collectorId` es ref suave y Prisma no puede ordenar
+  por una relación que no existe); el desempate termina siempre en `id`.
+
+---
+
+## FASE 0 — auditoría (referencia)
 
 ---
 
