@@ -1,15 +1,20 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
-import type { AccountInfo, CreditDetail, Member, PaymentItem } from '@kobrax/shared';
+import type { AccountInfo, CreditDetail, MeInfo, Member, PaymentItem } from '@kobrax/shared';
 import { apiCall, pageMeta } from '@/lib/bff';
-import { isUuid, paymentQuery, totalOf } from '@/lib/payments';
+import {
+  defaultPeriod,
+  hasPaymentFilters,
+  isUuid,
+  paymentLimit,
+  paymentQuery,
+  totalOf,
+  type PaymentParams,
+} from '@/lib/payments';
 import { Badge, EmptyState, PageHeader } from '@/components/panel-ui';
 import { money } from '@/lib/format';
 import { PaymentActions } from './payment-actions';
 import { PaymentsTable } from './payments-table';
-import { PeriodPicker } from './period-picker';
-
-const LIMIT = 20;
 
 /**
  * El ledger del período.
@@ -20,17 +25,14 @@ const LIMIT = 20;
  * El total es el de **la página**, no el del período: la API no agrega y sumar el período entero
  * exigiría traerlo entero. Por eso el rótulo dice cuántos pagos está contando.
  */
-export default async function PagosPage({
-  searchParams,
-}: {
-  searchParams: { from?: string; to?: string; creditId?: string; caseId?: string; page?: string };
-}) {
+export default async function PagosPage({ searchParams }: { searchParams: PaymentParams }) {
   const t = await getTranslations('panel.payments');
 
-  const [list, team, account] = await Promise.all([
-    apiCall<PaymentItem[]>(`/payments?${paymentQuery(searchParams, LIMIT)}`, { method: 'GET', auth: true }),
+  const [list, team, account, me] = await Promise.all([
+    apiCall<PaymentItem[]>(`/payments?${paymentQuery(searchParams)}`, { method: 'GET', auth: true }),
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
     apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
+    apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
   ]);
 
   if (list.status !== 200 || !list.body.data) {
@@ -56,12 +58,9 @@ export default async function PagosPage({
         title={t('title')}
         subtitle={t('subtitle')}
         actions={
-          <>
-            {rows.length > 0 && (
-              <Badge tone="neutral">{t('total', { n: rows.length, amount: money(totalOf(rows), currency) })}</Badge>
-            )}
-            <PaymentActions credit={credit} />
-          </>
+          rows.length > 0 ? (
+            <Badge tone="neutral">{t('total', { n: rows.length, amount: money(totalOf(rows), currency) })}</Badge>
+          ) : undefined
         }
       />
 
@@ -73,12 +72,15 @@ export default async function PagosPage({
         </Link>
       )}
 
-      <PeriodPicker />
       <PaymentsTable
         rows={rows}
-        meta={pageMeta(list.body, searchParams.page, LIMIT)}
+        meta={pageMeta(list.body, searchParams.page, paymentLimit(searchParams))}
         members={team.body.data ?? []}
         currency={currency}
+        filtered={hasPaymentFilters(searchParams)}
+        userId={me.body.data?.userId}
+        period={defaultPeriod()}
+        action={<PaymentActions credit={credit} />}
       />
     </>
   );

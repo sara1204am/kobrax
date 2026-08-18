@@ -14,7 +14,7 @@ import { useTranslations } from 'next-intl';
  * valores. Qué significa cada clave lo decide el adaptador de la pantalla.
  */
 
-export type FilterType = 'text' | 'numberRange' | 'select' | 'multiSelect' | 'radio';
+export type FilterType = 'text' | 'numberRange' | 'dateRange' | 'select' | 'multiSelect' | 'radio';
 
 /** Un filtro de la tabla. Todos viven en el panel lateral, ninguno adentro del encabezado. */
 export interface FilterDef {
@@ -25,6 +25,14 @@ export interface FilterDef {
   options?: { value: string; label: string }[];
   /** Rótulo de «sin filtrar» (`Todos los cobradores`). Sin él se usa el genérico. */
   allLabel?: string;
+  /**
+   * Qué mostrar cuando la URL no dice nada, por clave.
+   *
+   * 🔴 Para el filtro que la pantalla aplica **igual sin que nadie lo pida** — el período del mes
+   * corriente en el ledger. Sin esto los campos salen vacíos y la lista aparece recortada sin que
+   * nada explique por qué: lo que se está mirando tiene que estar escrito en algún lado.
+   */
+  defaults?: Record<string, string>;
 }
 
 export interface FilterControlProps {
@@ -57,6 +65,23 @@ function NumberRangeFilter({ value, onChange, def }: FilterControlProps) {
     <div className="flex items-center gap-2">
       <input type="number" inputMode="numeric" min={0} className={INPUT} placeholder={t('min')} aria-label={`${def.label} — ${t('min')}`} value={value[min] ?? ''} onChange={(e) => onChange({ [min]: e.target.value })} />
       <input type="number" inputMode="numeric" min={0} className={INPUT} placeholder={t('max')} aria-label={`${def.label} — ${t('max')}`} value={value[max] ?? ''} onChange={(e) => onChange({ [max]: e.target.value })} />
+    </div>
+  );
+}
+
+/**
+ * Rango de fechas: `Desde` y `Hasta`, cada uno con su clave.
+ *
+ * Va con `<input type="date">` nativo, que ya trae el calendario, el formato del idioma del sistema
+ * y el teclado del teléfono. Vacío se dibuja el default de la pantalla, si lo tiene.
+ */
+function DateRangeFilter({ value, onChange, def }: FilterControlProps) {
+  const t = useTranslations('panel.table');
+  const [from, to] = def.keys as [string, string];
+  return (
+    <div className="space-y-2">
+      <input type="date" className={INPUT} aria-label={`${def.label} — ${t('from')}`} value={value[from] || (def.defaults?.[from] ?? '')} onChange={(e) => onChange({ [from]: e.target.value })} />
+      <input type="date" className={INPUT} aria-label={`${def.label} — ${t('to')}`} value={value[to] || (def.defaults?.[to] ?? '')} onChange={(e) => onChange({ [to]: e.target.value })} />
     </div>
   );
 }
@@ -131,6 +156,7 @@ function RadioFilter({ value, onChange, def }: FilterControlProps) {
 export const FILTER_CONTROLS: Record<FilterType, (props: FilterControlProps) => ReactNode> = {
   text: TextFilter,
   numberRange: NumberRangeFilter,
+  dateRange: DateRangeFilter,
   select: SelectFilter,
   multiSelect: MultiSelectFilter,
   radio: RadioFilter,
@@ -166,7 +192,9 @@ export function Filter({
     if (!typed.current) setDraft(Object.fromEntries(def.keys.map((k, i) => [k, url.split('|')[i] ?? ''])));
   }, [url, def.keys]);
 
-  const debounced = def.type === 'text' || def.type === 'numberRange';
+  // Un `type=date` emite cambios mientras se tipea el año («0002-…» camino a «2026-…»), así que
+  // espera igual que los de escribir: sin eso, cada dígito sería una navegación y un pedido.
+  const debounced = def.type === 'text' || def.type === 'numberRange' || def.type === 'dateRange';
   useEffect(() => {
     if (!typed.current) return;
     const changed = def.keys.filter((k) => (draft[k] ?? '') !== (urlValue[k] ?? ''));

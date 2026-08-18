@@ -201,6 +201,8 @@
       "selected": "{count} selected",
       "min": "Min",
       "max": "Max",
+      "from": "From",
+      "to": "To",
       "moreFilters": "+ More filters",
       "lessFilters": "− Fewer filters",
       "removeFilter": "Remove filter",
@@ -875,10 +877,14 @@
     "payments": {
       "title": "Payments",
       "subtitle": "What came in: how much, how, and against which credit.",
+      "entity": "payments",
       "empty": "No payments in this period",
       "emptyText": "Try a different date range.",
-      "from": "From",
-      "to": "To",
+      "noResults": "No payments match these filters",
+      "noResultsText": "Try a different date range.",
+      "filters": {
+        "period": "Period"
+      },
       "columns": {
         "date": "Date",
         "amount": "Amount",

@@ -201,6 +201,8 @@
       "selected": "{count} seleccionados",
       "min": "Mín",
       "max": "Máx",
+      "from": "Desde",
+      "to": "Hasta",
       "moreFilters": "+ Más filtros",
       "lessFilters": "− Menos filtros",
       "removeFilter": "Quitar filtro",
@@ -875,10 +877,14 @@
     "payments": {
       "title": "Pagos",
       "subtitle": "Lo que entró: cuánto, cómo y contra qué crédito.",
+      "entity": "pagos",
       "empty": "No hay pagos en este período",
       "emptyText": "Probá con otro rango de fechas.",
-      "from": "Desde",
-      "to": "Hasta",
+      "noResults": "No hay pagos con esos filtros",
+      "noResultsText": "Probá con otro rango de fechas.",
+      "filters": {
+        "period": "Período"
+      },
       "columns": {
         "date": "Fecha",
         "amount": "Monto",
