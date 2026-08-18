@@ -10,8 +10,8 @@ import { postJson } from '@/lib/client';
 import { money } from '@/lib/format';
 import { AVAILABLE_LIMIT } from '@/lib/plan';
 import { FilterPanel } from '@/components/data-table-filters';
-import { RouteMap } from '@/components/route-map';
 import { SearchBox } from '@/components/search-box';
+import { PointsMap } from './points-map';
 import type { PlanRow } from '@/app/api/routes/plan/route';
 import { planFilterDefs, PLAN_FILTER_KEYS } from './plan-filters';
 
@@ -108,11 +108,16 @@ export function PlanScreen({
   const corto = picked.length > 0 && picked.length < minStops;
 
   /*
-   * Un punto por deudor: **la primera ubicación**, que es la principal. Dibujar también las de sus
-   * garantes multiplicaría los pines y el mapa dejaría de contestar «¿esto queda todo junto?».
-   * Quien no tiene ninguna cargada no aparece — y por eso el rótulo dice cuántos de cuántos.
+   * En el mapa van **los marcados**, no toda la lista: lo que se quiere ver es la ruta que se está
+   * armando —si queda junta o si manda a alguien de una punta a la otra—, y cien pines de mora que
+   * no se eligió tapan justamente eso.
+   *
+   * Un punto por deudor, el de su **primera ubicación**, que es la principal: dibujar también las de
+   * sus garantes multiplicaría los pines. Quien no tiene ninguna cargada no aparece, y por eso el
+   * rótulo dice cuántos de cuántos.
    */
   const puntos = available.flatMap((c) => {
+    if (!picked.includes(c.id)) return [];
     const loc = c.locations?.[0];
     return loc ? [{ id: c.id, latitude: loc.latitude, longitude: loc.longitude, label: c.clientName ?? undefined }] : [];
   });
@@ -188,19 +193,19 @@ export function PlanScreen({
       </Card>
 
       {/*
-       * 🔴 **El mapa entre las personas y la lista, y chico.** Dónde está la mora es una pregunta que
-       * se hace mientras se elige —«¿esto queda todo junto?»—, así que va en el camino, no al final.
-       * Chico porque lo que se opera es la lista: se agranda cuando de verdad hay que mirar el mapa.
+       * 🔴 **El mapa entre las personas y la lista, y chico.** Dónde queda lo que se está armando es
+       * una pregunta que se hace mientras se elige, así que va en el camino y no al final. Chico
+       * porque lo que se opera es la lista; se agranda cuando de verdad hay que mirar el mapa.
        *
-       * ⚠️ Los pines son **los de la lista que se está viendo**, no la selección: `RouteMap` se arma
-       * una vez y no reacciona: la `key` lo remonta cuando cambian los puntos —si no, filtrar dejaba
-       * los pines viejos cuando el nuevo filtro traía la misma cantidad—. Resaltar lo marcado en
-       * vivo necesita otro mapa, y entra cuando se pida.
+       * Aparece **al primer marcado**: sin ninguno no hay ruta que mirar, y un mapa vacío ocupa
+       * lugar sin decir nada.
        */}
-      {!suRuta && puntos.length > 0 && (
+      {!suRuta && picked.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[13px] text-k-text-2">{t('mapPoints', { n: puntos.length, total: available.length })}</p>
+            {/* Cuántos de los marcados se pueden dibujar: quien no tiene ubicación cargada no
+                aparece, y eso no puede ser invisible — es media ruta que no se ve. */}
+            <p className="text-[13px] text-k-text-2">{t('mapPoints', { n: puntos.length, total: picked.length })}</p>
             <button
               type="button"
               onClick={() => setBigMap((v) => !v)}
@@ -210,13 +215,13 @@ export function PlanScreen({
               {bigMap ? t('mapSmall') : t('mapBig')}
             </button>
           </div>
-          <RouteMap
-            key={puntos.map((p) => p.id).join('|')}
-            stops={puntos}
-            height={bigMap ? 520 : 220}
-            // Unirlos con una línea dibujaría un recorrido que nadie planificó todavía.
-            connect={false}
-          />
+          {puntos.length > 0 ? (
+            <PointsMap points={puntos} height={bigMap ? 520 : 220} />
+          ) : (
+            <p className="rounded-2xl border border-k-border bg-white px-4 py-3 text-[13px] text-k-text-2">
+              {t('mapNoPoints')}
+            </p>
+          )}
         </div>
       )}
 
