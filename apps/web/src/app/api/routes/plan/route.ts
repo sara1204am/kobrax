@@ -31,8 +31,17 @@ const MAX_COLLECTORS = 50;
 
 interface PlanBody {
   plannedDate?: string;
+  /** Modo automático: a cada uno, sus casos más urgentes hasta el tope. */
   collectorIds?: string[];
   stopsPerRoute?: number;
+  /**
+   * Modo elegido a mano: exactamente estos casos para este cobrador.
+   *
+   * 🔴 Los casos **no tienen por qué ser suyos**: un cobrador puede llevarse paradas de la cartera
+   * de otro como ayuda de esa jornada, y el dueño del caso **no cambia** (decisión de la dueña,
+   * W11). La parada guarda el caso; la cartera sigue diciendo de quién es la deuda.
+   */
+  assignments?: { collectorId: string; caseIds: string[] }[];
   dryRun?: boolean;
 }
 
@@ -57,7 +66,11 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   const body = (await req.json().catch(() => null)) as PlanBody | null;
   const day = body?.plannedDate ?? '';
-  const collectorIds = [...new Set(body?.collectorIds ?? [])];
+  // Una fila por cobrador. En el modo a mano trae sus casos; en el automático los elige el handler.
+  const asignaciones: { collectorId: string; caseIds?: string[] }[] = body?.assignments?.length
+    ? body.assignments.filter((a) => a.collectorId && a.caseIds?.length)
+    : [...new Set(body?.collectorIds ?? [])].map((collectorId) => ({ collectorId }));
+  const collectorIds = asignaciones.map((a) => a.collectorId);
 
   if (!IS_DAY.test(day) || collectorIds.length === 0) {
     return NextResponse.json(
@@ -83,8 +96,10 @@ export async function POST(req: Request): Promise<NextResponse> {
   const conRuta = new Set((existing.body.data ?? []).map((r) => r.collectorId));
 
   const rows: PlanRow[] = [];
-  for (const collectorId of collectorIds) {
-    rows.push(await planOne(collectorId, day, stopsPerRoute, conRuta.has(collectorId), body?.dryRun === true));
+  for (const a of asignaciones) {
+    rows.push(
+      await planOne(a.collectorId, day, stopsPerRoute, conRuta.has(a.collectorId), body?.dryRun === true, a.caseIds),
+    );
   }
 
   return NextResponse.json({ rows, stopsPerRoute });
@@ -96,17 +111,22 @@ async function planOne(
   stopsPerRoute: number,
   alreadyHasRoute: boolean,
   dryRun: boolean,
+  /** Los casos elegidos a mano. Sin esto, los elige el handler: los suyos, los más urgentes. */
+  chosen?: string[],
 ): Promise<PlanRow> {
-  // Los suyos, abiertos, lo más urgente primero: es el mismo criterio con el que se mira Mora.
-  const cases = await apiCall<CaseListItem[]>(
-    `/cases?assigneeId=${collectorId}&open=true&sort=priority&dir=desc&limit=${stopsPerRoute}`,
-    { method: 'GET', auth: true },
-  );
-  if (cases.status >= 400) {
-    return { collectorId, stops: 0, error: cases.body.error?.message };
-  }
+  let caseIds = chosen ?? [];
 
-  const caseIds = (cases.body.data ?? []).map((c) => c.id);
+  if (!chosen) {
+    // Los suyos, abiertos, lo más urgente primero: es el mismo criterio con el que se mira Mora.
+    const cases = await apiCall<CaseListItem[]>(
+      `/cases?assigneeId=${collectorId}&open=true&sort=priority&dir=desc&limit=${stopsPerRoute}`,
+      { method: 'GET', auth: true },
+    );
+    if (cases.status >= 400) {
+      return { collectorId, stops: 0, error: cases.body.error?.message };
+    }
+    caseIds = (cases.body.data ?? []).map((c) => c.id);
+  }
   const row: PlanRow = { collectorId, stops: caseIds.length, ...(alreadyHasRoute ? { alreadyHasRoute: true } : {}) };
 
   // Sin casos no se arma una ruta vacía, y con ruta ya armada no se pisa la que hay.
