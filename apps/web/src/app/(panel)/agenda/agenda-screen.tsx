@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { AgendaItemType, memberName, type AgendaListItem, type Member } from '@kobrax/shared';
@@ -104,6 +104,18 @@ export function AgendaScreen({
   const metrics = dayMetrics(visibles);
   const carga: Map<string, DayLoad> = useMemo(() => loadByDay(weekItems), [weekItems]);
 
+  const crear = () => events.onCreateRequest({ date: day, gestorId: gestor || undefined });
+  /*
+   * Dónde vive «Nueva gestión».
+   *
+   * Con el día cargado la acción va **junto a los filtros**, que es donde está la mano: se filtra por
+   * cobrador y se agenda para ese mismo cobrador sin cruzar la pantalla. En un día vacío sobra —el
+   * estado vacío ya ofrece su propio botón, y dos veces lo mismo es una de más—, y en un día pasado
+   * la acción normal no es agendar hacia atrás. En esos dos casos vuelve al encabezado, donde no
+   * compite con nada.
+   */
+  const ctaEnFiltros = view === 'list' && visibles.length > 0 && day >= today;
+
   return (
     <>
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -113,13 +125,7 @@ export function AgendaScreen({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <ViewToggle view={view} onChange={(v) => go({ view: v === 'list' ? null : v })} />
-          <button
-            type="button"
-            onClick={() => events.onCreateRequest({ date: day, gestorId: gestor || undefined })}
-            className="h-9 rounded-lg bg-k-navy px-3 text-[13px] font-medium text-white hover:bg-k-slate active:scale-[.98]"
-          >
-            {t('createCta')}
-          </button>
+          {!ctaEnFiltros && <CreateButton onClick={crear} />}
         </div>
       </div>
 
@@ -137,6 +143,7 @@ export function AgendaScreen({
         gestor={gestor}
         tipo={tipo}
         onChange={(patch) => go(patch)}
+        cta={ctaEnFiltros ? <CreateButton onClick={crear} /> : null}
       />
 
       <OverduePanel items={overdue} total={overdueTotal} events={events} />
@@ -185,18 +192,34 @@ function ViewToggle({ view, onChange }: { view: 'list' | 'calendar'; onChange: (
   );
 }
 
+function CreateButton({ onClick }: { onClick: () => void }) {
+  const t = useTranslations('panel.agenda');
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="h-9 shrink-0 rounded-lg bg-k-navy px-3 text-[13px] font-medium text-white hover:bg-k-slate active:scale-[.98]"
+    >
+      {t('createCta')}
+    </button>
+  );
+}
+
 function Filtros({
   supervises,
   members,
   gestor,
   tipo,
   onChange,
+  cta,
 }: {
   supervises: boolean;
   members: Member[];
   gestor: string;
   tipo: string;
   onChange: (patch: Record<string, string | null>) => void;
+  /** La acción principal, cuando le toca vivir en esta línea. */
+  cta?: ReactNode;
 }) {
   const t = useTranslations('panel.agenda');
   // Sin equipo que mostrar y sin tipo elegido, la barra no tendría nada que ofrecer.
@@ -245,6 +268,8 @@ function Filtros({
           {t('filters.clear')}
         </button>
       )}
+      {/* `ml-auto` y no un contenedor aparte: en pantalla angosta la barra envuelve y el botón baja. */}
+      {cta && <span className="ml-auto">{cta}</span>}
     </div>
   );
 }
