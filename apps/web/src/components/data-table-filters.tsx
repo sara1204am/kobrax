@@ -33,6 +33,18 @@ export interface FilterDef {
    * nada explique por qué: lo que se está mirando tiene que estar escrito en algún lado.
    */
   defaults?: Record<string, string>;
+  /**
+   * Arranca **plegado**: se ve el rótulo y se abre al tocarlo.
+   *
+   * 🔴 Para los que traen muchas opciones —siete estados, diez resultados de visita—: desplegados
+   * empujan a los demás fuera de la pantalla y hay que scrollear el panel para llegar al que se
+   * usa todos los días. **Opt-in**: sin esto el filtro se dibuja abierto, que es como siguen los
+   * de las otras pantallas.
+   *
+   * Si tiene algo puesto **se abre solo**: un filtro activo escondido deja la lista corta sin que
+   * nada lo explique, que es justo lo que el panel vino a evitar.
+   */
+  collapsed?: boolean;
 }
 
 export interface FilterControlProps {
@@ -210,17 +222,44 @@ export function Filter({
     return () => clearTimeout(id);
   });
 
+  const control = (
+    <Control
+      def={def}
+      value={draft}
+      onChange={(patch) => {
+        typed.current = true;
+        setDraft((d) => ({ ...d, ...patch }));
+      }}
+    />
+  );
+
+  /*
+   * Plegado, pero **abierto si tiene algo puesto**: un filtro activo escondido deja la lista corta
+   * sin que nada lo explique. `open` va sin controlar el estado: el navegador se encarga de abrir y
+   * cerrar, y cuando el filtro pasa a tener valor el atributo lo reabre.
+   */
+  if (def.collapsed) {
+    const puestos = def.keys.reduce((n, k) => n + (urlValue[k] ? 1 : 0), 0);
+    const marcados = def.keys.reduce((n, k) => n + (urlValue[k] ? urlValue[k]!.split(',').filter(Boolean).length : 0), 0);
+    return (
+      <details open={puestos > 0}>
+        <summary className="mb-1.5 flex cursor-pointer list-none items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-k-text-2 hover:text-k-text [&::-webkit-details-marker]:hidden">
+          <span aria-hidden className="text-[9px] transition-transform">
+            ▸
+          </span>
+          {def.label}
+          {/* Cuántos hay elegidos ahí adentro: plegado sin esto, el filtro puesto es invisible. */}
+          {marcados > 0 && <span className="text-k-periwinkle">· {marcados}</span>}
+        </summary>
+        {control}
+      </details>
+    );
+  }
+
   return (
     <div>
       <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{def.label}</span>
-      <Control
-        def={def}
-        value={draft}
-        onChange={(patch) => {
-          typed.current = true;
-          setDraft((d) => ({ ...d, ...patch }));
-        }}
-      />
+      {control}
     </div>
   );
 }

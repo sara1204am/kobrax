@@ -70,18 +70,27 @@ export function planFilterDefs(
       keys: ['estado'],
       label: t('status'),
       type: 'multiSelect',
+      // Plegado: siete estados, cuatro prioridades y diez resultados desplegados empujan fuera de
+      // la pantalla a los que se usan todos los días.
+      collapsed: true,
       options: Object.values(CaseStatus).map((s) => ({ value: s, label: tCases(`status.${s}`) })),
     },
     {
       keys: ['prioridad'],
       label: t('priority'),
       type: 'multiSelect',
+      // Plegado: siete estados, cuatro prioridades y diez resultados desplegados empujan fuera de
+      // la pantalla a los que se usan todos los días.
+      collapsed: true,
       options: Object.values(CasePriority).map((p) => ({ value: p, label: tCases(`priority.${p}`) })),
     },
     {
       keys: ['resultado'],
       label: t('outcome'),
       type: 'multiSelect',
+      // Plegado: siete estados, cuatro prioridades y diez resultados desplegados empujan fuera de
+      // la pantalla a los que se usan todos los días.
+      collapsed: true,
       options: Object.values(VisitOutcome).map((o) => ({ value: o, label: tRoutes(`outcome.${o}`) })),
     },
   ];

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { memberName, type CaseListItem, type Member, type RouteItem } from '@kobrax/shared';
-import { Badge, Card, EmptyState } from '@/components/panel-ui';
+import { Badge, Card, EmptyState, InfoTip } from '@/components/panel-ui';
 import { Button, ErrorBanner } from '@/components/ui';
 import { postJson } from '@/lib/client';
 import { money } from '@/lib/format';
@@ -128,9 +128,15 @@ export function PlanScreen({
             />
           </label>
 
-          <label className="block space-y-2">
-            <span className="text-[14px] font-medium text-k-text">{t('minStops')}</span>
+          <div className="space-y-2">
+            {/* La aclaración va detrás del `?`, no debajo del campo: un renglón gris abajo desalinea
+                la fila entera y ocupa lugar todos los días para explicar algo que se lee una vez. */}
+            <span className="flex items-center gap-1.5 text-[14px] font-medium text-k-text">
+              <label htmlFor="minStops">{t('minStops')}</label>
+              <InfoTip label={t('minStops')}>{t('minStopsHint')}</InfoTip>
+            </span>
             <input
+              id="minStops"
               type="number"
               min={1}
               max={50}
@@ -138,8 +144,7 @@ export function PlanScreen({
               onChange={(e) => go({ minStops: e.target.value })}
               className={`${INPUT} w-24`}
             />
-            <span className="block text-[12px] text-k-muted">{t('minStopsHint')}</span>
-          </label>
+          </div>
         </div>
 
         <ul className="mt-5 flex flex-wrap gap-2">
@@ -243,7 +248,16 @@ export function PlanScreen({
                 text={filtered ? t('noResultsText') : t('noAvailableText')}
               />
             ) : (
-              <ul className="divide-y divide-k-border rounded-xl border border-k-border">
+              /*
+               * 🔴 **Veinte filas y de ahí, scroll adentro de la lista.** Con cien deudores la
+               * página se hacía interminable y el botón de armar la ruta quedaba abajo de todo: se
+               * marcaba a ciegas y había que bajar hasta el final para confirmar. Con el alto
+               * acotado, el contador y el botón quedan siempre a la vista.
+               *
+               * El tope también mira la ventana (`70vh`): en una laptop chica, 20 filas fijas serían
+               * más alto que la pantalla y el scroll de adentro no serviría de nada.
+               */
+              <ul className="max-h-[min(55rem,70vh)] divide-y divide-k-border overflow-y-auto rounded-xl border border-k-border">
                 {available.map((c) => {
                   const marcado = picked.includes(c.id);
                   const ajeno = c.assigneeId != null && c.assigneeId !== collectorId;

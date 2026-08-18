@@ -233,6 +233,35 @@ describe('DataTable — panel de filtros', () => {
   });
 });
 
+describe('DataTable — filtros plegables', () => {
+  const CON_PLEGADO: FilterDef[] = [
+    { keys: ['q'], label: 'Cliente', type: 'text' },
+    { keys: ['estado'], label: 'Estado', type: 'multiSelect', collapsed: true, options: [
+      { value: 'ACTIVE', label: 'Activo' },
+      { value: 'PAID', label: 'Pagado' },
+    ] },
+  ];
+
+  /** El `<details>` del filtro, buscado por su rótulo. `getByRole('group')` no lo encuentra en jsdom. */
+  const seccion = (label: string) => screen.getByText(label).closest('details');
+
+  it('un filtro con muchas opciones arranca plegado, y los demás no', () => {
+    // Diez opciones desplegadas empujan fuera de la pantalla a los filtros que se usan todos los días.
+    renderFiltrable({ filters: CON_PLEGADO, filtered: true });
+    // El de texto sigue a la vista, sin plegar: no lo pidió.
+    expect(screen.getByRole('searchbox', { name: 'Cliente' })).toBeInTheDocument();
+    expect(seccion('Estado')).not.toHaveAttribute('open');
+  });
+
+  it('🔴 pero si ya tiene algo elegido se abre solo, y dice cuántos', () => {
+    // Plegado con un filtro activo adentro, la lista sale corta y nada lo explica.
+    search.value = 'estado=ACTIVE,PAID';
+    renderFiltrable({ filters: CON_PLEGADO, filtered: true });
+    expect(seccion('Estado')).toHaveAttribute('open');
+    expect(screen.getByText('· 2')).toBeInTheDocument();
+  });
+});
+
 describe('DataTable — columnas configurables', () => {
   it('una columna apagada no se dibuja hasta que se prende con el ojito', async () => {
     renderFiltrable();

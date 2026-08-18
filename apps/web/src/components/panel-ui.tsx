@@ -154,6 +154,34 @@ export function Segmented<T extends string>({
 }
 
 /**
+ * La aclaración de un campo, **detrás de un `?`**: se lee al tocarlo y no antes.
+ *
+ * 🔴 Existe para sacar los renglones de ayuda de debajo de los campos. Una frase gris bajo cada uno
+ * desalinea la fila entera —los campos dejan de terminar a la misma altura— y ocupa lugar todos los
+ * días para explicar algo que se lee una vez.
+ *
+ * Va con `<details>` nativo: abre y cierra al clic, funciona sin JavaScript y **se puede usar en un
+ * server component**. Con `useState` este archivo entero tendría que volverse cliente, y lo usan
+ * pantallas que se pintan en el servidor.
+ */
+export function InfoTip({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <details className="relative inline-block align-middle">
+      <summary
+        aria-label={label}
+        className="flex h-4 w-4 cursor-pointer list-none items-center justify-center rounded-full border border-k-border text-[10px] font-semibold text-k-text-2 hover:border-k-periwinkle hover:text-k-periwinkle [&::-webkit-details-marker]:hidden"
+      >
+        ?
+      </summary>
+      {/* Absoluto: abrirlo no puede mover de lugar lo que está al lado. */}
+      <span className="absolute left-0 top-6 z-20 block w-64 rounded-xl border border-k-border bg-white p-3 text-[12px] font-normal leading-snug text-k-text-2 shadow-k-card">
+        {children}
+      </span>
+    </details>
+  );
+}
+
+/**
  * Bloque gris mientras carga. `className` fija la medida — un skeleton sin medida no
  * reserva espacio y la pantalla salta cuando llega el dato.
  */
