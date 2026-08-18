@@ -1,7 +1,11 @@
 # W10 · Rutas: planificación e historial
 
-> **Estado: F0 ✅ · F1 + F1b ✅ (`c424e30`) · F2 ✅ (`15f794c`) · F3 ✅ (`e3b8e03`) · F4 ✅
-> (`568180c`) · lo que sigue es F5 (planificación).**
+> **Estado: F0 ✅ · F1+F1b ✅ (`c424e30`) · F2 ✅ (`15f794c`) · F3 ✅ (`e3b8e03`) · F4 ✅ (`568180c`) ·
+> F5 ✅ (`b74506a`) — el historial y la planificación básica están completos.**
+>
+> **Lo que queda del plan**: F6 (elegir visitas de a una), F7 (moverlas entre cobradores, mapa de
+> distribución), F8 (borrador vs publicada — necesita `DRAFT` en el enum, decisión pendiente), y
+> emitir `ROUTE_ASSIGNED` para que el teléfono avise. Ninguna bloquea a las otras.
 >
 > Decisiones de la dueña sobre este plan, ya tomadas — **no volver a preguntarlas**:
 > 1. **La distancia queda FUERA del resumen por período** (el dato sólo existe si alguien
@@ -40,6 +44,31 @@
   `lib/format.ts`, hora local porque es un instante). El resto de lo que pedía la fase ya existía
   desde W6: cliente, dirección, resultado, mapa y evidencia. **El toggle lista/mapa no hace falta**:
   los dos están juntos en la misma pantalla.
+
+## Lo construido en F5
+
+`/rutas/planificar` (pantalla propia, no modal) + `POST /api/routes/plan` en el BFF. **Cero backend
+nuevo**: el handler lee los casos abiertos de cada cobrador (`GET /cases?assigneeId&open&sort=priority`),
+corta en el tope de paradas y llama a `POST /routes/generate` con esos `caseIds`.
+
+- **Dos pasos, no cuatro**: cada cobrador sale con **su** cartera y lo que se decide es hasta dónde
+  llega la jornada. Elegir visitas de a una (F6) y moverlas (F7) entran después **sin tocar esto**,
+  porque el handler ya recibe la lista de casos.
+- **`dryRun` recorre el mismo camino**: la revisión muestra lo que se va a crear, no una cuenta
+  parecida hecha en otro lado.
+- **Avisa quién ya tiene ruta ese día** (una sola consulta para todos), en vez de dejar que se
+  entere con el 422 del `unique` al confirmar.
+- **No es atómico** y lo dice: si una falla, las demás se crean y el resultado detalla quién quedó
+  afuera y por qué.
+- Sin `route:assign` no se muestra el botón **ni se entra a mano** (la página redirige).
+
+### ⚠️ Trampa que costó veinte minutos en F5
+
+**Los textos de i18n del namespace viajan en el payload RSC de la pantalla**, así que grepear el HTML
+por una frase («Para quiénes», «Publicar rutas») da positivo **aunque la página no se haya
+renderizado**: pareció que un cobrador entraba al planificador cuando en realidad lo estaba
+redirigiendo bien. Para verificar hay que buscar markup que sólo produzca el componente —`max="30"`,
+`<tbody>`, `role="radiogroup"`—, nunca un texto.
 
 ### ⚠️ Deuda de datos detectada en F4 (no de código)
 
