@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { date, dayDate } from './format';
+import { date, dayDate, time } from './format';
 
 /**
  * 🔴 Sólo el día civil. Este archivo existe por **un** defecto: una ruta del 20 de agosto se
@@ -24,5 +24,22 @@ describe('dayDate', () => {
   it('sin fecha, una raya', () => {
     expect(dayDate(null)).toBe('—');
     expect(dayDate(undefined)).toBe('—');
+  });
+});
+
+describe('time', () => {
+  it('da la hora y el minuto, con dos dígitos', () => {
+    // Es un instante, no un día civil: va en hora local a propósito. Se compara contra lo que el
+    // propio entorno considera esa hora, que es lo que va a ver quien mira la pantalla.
+    const t = new Date('2026-08-20T13:05:00.000Z');
+    expect(time(t.toISOString(), 'es')).toBe(
+      t.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }),
+    );
+    expect(time(t.toISOString(), 'es')).toMatch(/\d{2}:\d{2}/);
+  });
+
+  it('una parada sin visitar no tiene hora, y se dice con una raya', () => {
+    expect(time(null)).toBe('—');
+    expect(time(undefined)).toBe('—');
   });
 });

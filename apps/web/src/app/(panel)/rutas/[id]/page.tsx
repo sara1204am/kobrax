@@ -14,7 +14,7 @@ import { RouteMap } from '@/components/route-map';
 import { apiCall } from '@/lib/bff';
 import { CATEGORY_TONE, ROUTE_STATUS_TONE, STOP_STATUS_TONE } from '@/lib/routes';
 import { Badge, Card, EmptyState, Fact, PageHeader } from '@/components/panel-ui';
-import { dayDate, money } from '@/lib/format';
+import { dayDate, money, time } from '@/lib/format';
 
 /** Techo de lo que se trae de un día —pagos y visitas—. Un día de un tenant no llega a tanto. */
 const DAY_LIMIT = 100;
@@ -146,7 +146,7 @@ export default async function RutaPage({ params }: { params: { id: string } }) {
           {stops.length > 0 ? (
             <ol className="space-y-2">
               {stops.map((stop) => (
-                <Stop key={stop.id} routeId={route.id} stop={stop} />
+                <Stop key={stop.id} routeId={route.id} stop={stop} locale={locale} />
               ))}
             </ol>
           ) : (
@@ -159,7 +159,7 @@ export default async function RutaPage({ params }: { params: { id: string } }) {
 }
 
 /** Una parada de la ruta. Abre su detalle, que es donde vive la evidencia. */
-async function Stop({ routeId, stop }: { routeId: string; stop: RouteStopItem }) {
+async function Stop({ routeId, stop, locale }: { routeId: string; stop: RouteStopItem; locale: string }) {
   const t = await getTranslations('panel.routes');
 
   return (
@@ -168,7 +168,15 @@ async function Stop({ routeId, stop }: { routeId: string; stop: RouteStopItem })
         href={`/rutas/${routeId}/parada/${stop.id}`}
         className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl border border-k-border bg-white px-5 py-3.5 hover:bg-k-bg"
       >
-        <span className="w-8 shrink-0 text-[14px] font-semibold tabular-nums text-k-navy">{stop.sequenceOrder}</span>
+        {/*
+         * 🔴 **La hora en vez del número, cuando ya se visitó.** El orden planificado deja de
+         * importar apenas la jornada arranca: lo que se viene a mirar es a qué hora se pasó por cada
+         * puerta, que es lo que reconstruye el día —y lo que delata una mañana entera en una zona—.
+         * Sin visitar sigue el número: es lo único que hay, y dice en qué lugar de la fila está.
+         */}
+        <span className="w-12 shrink-0 text-[14px] font-semibold tabular-nums text-k-navy">
+          {stop.visitedAt ? time(stop.visitedAt, locale) : stop.sequenceOrder}
+        </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[15px] font-medium text-k-text">{stop.clientName ?? '—'}</span>
           {/* La dirección viene en claro y su revelado quedó auditado al abrir la ruta. */}

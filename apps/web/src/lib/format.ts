@@ -42,6 +42,18 @@ export function dayDate(d?: string | null, locale = 'es'): string {
   });
 }
 
+/**
+ * La hora sola: «09:05». Para cuando la fecha ya la dice la pantalla y repetirla es ruido —el
+ * recorrido de una jornada, donde todas las paradas son del mismo día.
+ *
+ * A diferencia de `dayDate`, esto **sí va en hora local**: es un instante, no un día civil. Un
+ * timestamp de visita marca el momento en que alguien tocó un timbre.
+ */
+export function time(d?: string | null, locale = 'es'): string {
+  if (!d) return '—';
+  return new Date(d).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+}
+
 export function dateTime(d?: string | null, locale = 'es'): string {
   if (!d) return '—';
   return new Date(d).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
