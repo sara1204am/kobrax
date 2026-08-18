@@ -1,4 +1,4 @@
-import { ROUTE_SORTS, RouteStatus, RouteStopStatus, type ResultCategory } from '@kobrax/shared';
+import { ROUTE_SORTS, RouteStatus, RouteStopStatus, type ResultCategory, type RouteItem } from '@kobrax/shared';
 import { PAGE_SIZES } from './table-prefs';
 import { presetRange } from './dashboard';
 
@@ -142,6 +142,73 @@ export function routePeriod(params: RouteParams, today = new Date()): { from: st
   const to = params.to && IS_DAY.test(params.to) ? params.to : fallback.to;
   // Al revés no es un rango: si alguien edita la URL, se ordena en vez de devolver cero rutas.
   return from <= to ? { from, to } : { from: to, to: from };
+}
+
+/** Lo que hizo un cobrador en el período. Todo sale de las rutas: no hay endpoint que agregue esto. */
+export interface CollectorWork {
+  collectorId: string;
+  /** Días con al menos una ruta. No es «días trabajados»: una ruta armada y no salida cuenta igual. */
+  days: number;
+  routes: number;
+  /** Paradas planificadas en el período. */
+  stops: number;
+  /** Paradas visitadas. */
+  done: number;
+  /**
+   * Paradas que quedaron sin visitar.
+   *
+   * 🔴 Se llama **sin gestionar** y no «no realizadas» a propósito: en un período que incluye hoy o
+   * mañana, una parada sin visitar no es un incumplimiento — todavía no le tocaba. La palabra dice
+   * lo que el dato sabe, y ni una sílaba más.
+   */
+  pending: number;
+}
+
+/**
+ * Qué hizo cada cobrador en el período.
+ *
+ * 🔴 **Se agrega acá, en la web, y es una decisión con techo.** La API no tiene ninguna lectura que
+ * agregue paradas por persona (`collector-performance` agrega casos y plata, no paradas), y sumar
+ * rutas de un período es una cuenta de dos líneas: el endpoint nuevo llega el día que el techo
+ * moleste, no antes. Quien llama tiene que pasarle **todas** las rutas del período — con una página
+ * suelta, esto suma un pedazo y lo muestra como si fuera el total.
+ *
+ * Se ordena por paradas: la pregunta que trae a esta pantalla es quién está cargando más.
+ */
+export function summarizeByCollector(routes: RouteItem[]): CollectorWork[] {
+  const by = new Map<string, CollectorWork & { dias: Set<string> }>();
+
+  for (const r of routes) {
+    const acc = by.get(r.collectorId) ?? {
+      collectorId: r.collectorId,
+      days: 0,
+      routes: 0,
+      stops: 0,
+      done: 0,
+      pending: 0,
+      dias: new Set<string>(),
+    };
+    acc.routes += 1;
+    acc.stops += r.totalCases;
+    // `visitedCount` sólo lo trae el listado; sin él no se inventa un cero, se suma lo que hay.
+    acc.done += r.visitedCount ?? 0;
+    acc.dias.add(r.plannedDate.slice(0, 10));
+    by.set(r.collectorId, acc);
+  }
+
+  return [...by.values()]
+    .map(({ dias, ...w }) => ({ ...w, days: dias.size, pending: Math.max(0, w.stops - w.done) }))
+    .sort((a, b) => b.stops - a.stops || a.collectorId.localeCompare(b.collectorId));
+}
+
+/** Los totales del período, para la línea de indicadores. */
+export function totalWork(rows: CollectorWork[]): { collectors: number; stops: number; done: number; pending: number } {
+  return {
+    collectors: rows.length,
+    stops: rows.reduce((s, r) => s + r.stops, 0),
+    done: rows.reduce((s, r) => s + r.done, 0),
+    pending: rows.reduce((s, r) => s + r.pending, 0),
+  };
 }
 
 /**

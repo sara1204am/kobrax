@@ -11,6 +11,8 @@ import {
   routePeriod,
   routeQuery,
   routeView,
+  summarizeByCollector,
+  totalWork,
 } from './routes';
 
 const COLLECTOR = '11111111-2222-3333-4444-555555555555';
@@ -117,6 +119,64 @@ describe('routeQuery con período', () => {
     const q = routeQuery({ date: '2026-08-20' });
     expect(q.get('date')).toBe('2026-08-20');
     expect(q.has('from')).toBe(false);
+  });
+});
+
+describe('summarizeByCollector', () => {
+  const ruta = (over: Partial<RouteItem>): RouteItem => ({
+    id: 'r',
+    collectorId: 'u1',
+    plannedDate: '2026-08-12T00:00:00.000Z',
+    status: RouteStatus.COMPLETED,
+    totalCases: 8,
+    createdAt: '2026-08-12T08:00:00.000Z',
+    ...over,
+  });
+
+  it('suma paradas, visitadas y días por persona', () => {
+    const rows = summarizeByCollector([
+      ruta({ id: 'a', collectorId: 'ana', plannedDate: '2026-08-12T00:00:00.000Z', totalCases: 8, visitedCount: 7 }),
+      ruta({ id: 'b', collectorId: 'ana', plannedDate: '2026-08-13T00:00:00.000Z', totalCases: 9, visitedCount: 8 }),
+      ruta({ id: 'c', collectorId: 'juan', plannedDate: '2026-08-12T00:00:00.000Z', totalCases: 4, visitedCount: 1 }),
+    ]);
+
+    expect(rows.map((r) => r.collectorId)).toEqual(['ana', 'juan']); // más paradas primero
+    expect(rows[0]).toMatchObject({ days: 2, routes: 2, stops: 17, done: 15, pending: 2 });
+    expect(rows[1]).toMatchObject({ days: 1, routes: 1, stops: 4, done: 1, pending: 3 });
+  });
+
+  it('🔴 dos rutas el mismo día cuentan UN día activo', () => {
+    // No debería pasar (la base lo impide desde el unique), pero si pasara, «días activos» tiene
+    // que seguir contando días y no rutas: son dos preguntas distintas y hay una columna para cada una.
+    const rows = summarizeByCollector([
+      ruta({ id: 'a', plannedDate: '2026-08-12T00:00:00.000Z' }),
+      ruta({ id: 'b', plannedDate: '2026-08-12T00:00:00.000Z' }),
+    ]);
+    expect(rows[0]!.days).toBe(1);
+    expect(rows[0]!.routes).toBe(2);
+  });
+
+  it('sin `visitedCount` no inventa un cero de completadas… pero tampoco un pendiente negativo', () => {
+    const rows = summarizeByCollector([ruta({ totalCases: 5, visitedCount: undefined })]);
+    expect(rows[0]!.done).toBe(0);
+    expect(rows[0]!.pending).toBe(5);
+
+    // Y si un día el contador viniera más alto que el total, «sin gestionar» es cero, no -2.
+    const raro = summarizeByCollector([ruta({ totalCases: 3, visitedCount: 5 })]);
+    expect(raro[0]!.pending).toBe(0);
+  });
+
+  it('sin rutas, sin filas: nadie trabajó, no es un cobrador en cero', () => {
+    expect(summarizeByCollector([])).toEqual([]);
+    expect(totalWork([])).toEqual({ collectors: 0, stops: 0, done: 0, pending: 0 });
+  });
+
+  it('los totales son la suma de las filas que se ven', () => {
+    const rows = summarizeByCollector([
+      ruta({ collectorId: 'ana', totalCases: 8, visitedCount: 7 }),
+      ruta({ collectorId: 'juan', totalCases: 4, visitedCount: 1 }),
+    ]);
+    expect(totalWork(rows)).toEqual({ collectors: 2, stops: 12, done: 8, pending: 4 });
   });
 });
 

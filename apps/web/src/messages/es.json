@@ -811,6 +811,21 @@
         "today": "Mientras tanto, las rutas las arma cada cobrador desde su teléfono y las ves en el Historial apenas las crea.",
         "noPermission": "Tu rol no reparte trabajo: vas a poder consultar el historial, pero no planificar."
       },
+      "work": {
+        "entity": "cobradores",
+        "days": "Días activos",
+        "routes": "Rutas",
+        "stops": "Paradas",
+        "done": "Completadas",
+        "pending": "Sin gestionar",
+        "truncated": "El período tiene más rutas de las que se pueden sumar de una vez: los números son de las primeras 500. Probá con un rango más corto.",
+        "summary": {
+          "collectors": "Cobradores",
+          "stops": "Paradas",
+          "done": "Completadas",
+          "pending": "Sin gestionar"
+        }
+      },
       "empty": "No hay rutas para este día",
       "emptyText": "Las rutas las arma el cobrador desde su teléfono, con el mapa en la mano.",
       "emptyPeriod": "No hay rutas en este período",

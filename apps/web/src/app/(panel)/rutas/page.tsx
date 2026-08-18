@@ -9,6 +9,7 @@ import {
   routePeriod,
   routeQuery,
   routeView,
+  summarizeByCollector,
   type RouteParams,
 } from '@/lib/routes';
 import { DayPicker } from '@/components/day-picker';
@@ -17,6 +18,8 @@ import { RouteTabs } from './route-tabs';
 import { PeriodPicker } from './period-picker';
 import { PlanningPanel } from './planning-panel';
 import { RoutesTable } from './routes-table';
+import { CollectorWorkTable } from './collector-work-table';
+import { WorkSummary } from './work-summary';
 
 /**
  * Rutas: **planificar el trabajo de la calle y comprobar qué pasó**.
@@ -65,12 +68,13 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
    * pide el teléfono— así que mandarlos juntos devolvería una jornada y la pantalla mostraría una
    * semana con una sola fecha adentro.
    */
-  const list = await apiCall<RouteItem[]>(
-    `/routes?${routeQuery(
-      vista === 'periodo' ? { ...searchParams, period } : { ...searchParams, date: day },
-    )}`,
-    { method: 'GET', auth: true },
-  );
+  const list =
+    vista === 'periodo'
+      ? await allRoutes({ ...searchParams, period })
+      : await apiCall<RouteItem[]>(`/routes?${routeQuery({ ...searchParams, date: day })}`, {
+          method: 'GET',
+          auth: true,
+        });
 
   if (list.status !== 200 || !list.body.data) {
     return (
@@ -92,25 +96,80 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
       )}
 
       {vista === 'dia' ? (
-        <DayPicker
-          day={day}
-          today={today}
-          labels={{ previous: t('previousDay'), next: t('nextDay'), today: t('today'), date: t('date') }}
-        />
+        <>
+          <DayPicker
+            day={day}
+            today={today}
+            labels={{ previous: t('previousDay'), next: t('nextDay'), today: t('today'), date: t('date') }}
+          />
+          <RoutesTable
+            rows={list.body.data}
+            meta={pageMeta(list.body, searchParams.page, routeLimit(searchParams))}
+            members={members}
+            filtered={hasRouteFilters(searchParams)}
+            userId={me.body.data?.userId}
+            // Sin `route:assign` la API acota a lo propio, y sin `user:read` no hay nombres que ofrecer.
+            showCollector={supervises && members.length > 0}
+          />
+        </>
       ) : (
-        <PeriodPicker from={period.from} to={period.to} />
+        /*
+         * El período agrupa **por persona**: una semana son ~77 rutas y leerlas de a una no contesta
+         * «¿cuántas paradas hizo cada uno?», que es para lo que se abre esta vista. Las rutas
+         * sueltas del período vuelven al abrir la fila, en la etapa que sigue.
+         */
+        <>
+          <PeriodPicker from={period.from} to={period.to} />
+          <WorkSummary rows={summarizeByCollector(list.body.data)} />
+          <CollectorWorkTable
+            rows={summarizeByCollector(list.body.data)}
+            members={members}
+            filtered={hasRouteFilters(searchParams)}
+            // Sólo el camino del período puede venir recortado; el del día trae una página y punto.
+            truncated={'truncated' in list && list.truncated === true}
+          />
+        </>
       )}
-
-      <RoutesTable
-        rows={list.body.data}
-        meta={pageMeta(list.body, searchParams.page, routeLimit(searchParams))}
-        members={members}
-        filtered={hasRouteFilters(searchParams)}
-        userId={me.body.data?.userId}
-        // Sin `route:assign` la API acota a lo propio, y sin `user:read` no hay nombres que ofrecer.
-        showCollector={supervises && members.length > 0}
-        period={vista === 'periodo'}
-      />
     </>
   );
+}
+
+/** Cuántas páginas de rutas se traen para agregar un período. 5 × 100 = 500 rutas. */
+const MAX_PAGES = 5;
+
+/**
+ * Todas las rutas del período, no una página.
+ *
+ * 🔴 **Agregar sobre una página sería mentir con números redondos**: la tabla diría «Ana: 25
+ * paradas» porque el corte cayó ahí, no porque haya hecho 25. Por eso se pide la primera página al
+ * máximo que la API acepta (`limit ≤ 100`), y si hay más se traen en paralelo.
+ *
+ * ponytail: con un techo de 5 páginas — 500 rutas, o sea unos 45 días de once cobradores. Pasado
+ * eso **se avisa en la pantalla** en vez de recortar en silencio; el día que ese techo moleste, lo
+ * que corresponde es un endpoint que agregue del lado del servidor, no diez llamadas más.
+ */
+async function allRoutes(
+  params: RouteParams & { period: { from: string; to: string } },
+): Promise<Awaited<ReturnType<typeof apiCall<RouteItem[]>>> & { truncated?: boolean }> {
+  // Sin `sort`: el orden del resumen lo decide la tabla, sobre el período ya completo.
+  const query = (page: number) =>
+    routeQuery({ ...params, sort: undefined, dir: undefined, page: String(page), pageSize: '100' });
+
+  const first = await apiCall<RouteItem[]>(`/routes?${query(1)}`, { method: 'GET', auth: true });
+  if (first.status !== 200 || !first.body.data) return first;
+
+  const pages = first.body.meta?.pages ?? 1;
+  if (pages <= 1) return first;
+
+  const rest = await Promise.all(
+    Array.from({ length: Math.min(pages, MAX_PAGES) - 1 }, (_, i) =>
+      apiCall<RouteItem[]>(`/routes?${query(i + 2)}`, { method: 'GET', auth: true }),
+    ),
+  );
+
+  return {
+    ...first,
+    body: { ...first.body, data: [...first.body.data, ...rest.flatMap((r) => r.body.data ?? [])] },
+    truncated: pages > MAX_PAGES,
+  };
 }

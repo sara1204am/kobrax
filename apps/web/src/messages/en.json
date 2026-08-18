@@ -811,6 +811,21 @@
         "today": "In the meantime, each collector builds their route on their phone and you see it in History as soon as they create it.",
         "noPermission": "Your role does not hand out work: you will be able to check the history, but not to plan."
       },
+      "work": {
+        "entity": "collectors",
+        "days": "Active days",
+        "routes": "Routes",
+        "stops": "Stops",
+        "done": "Completed",
+        "pending": "Not handled",
+        "truncated": "This period has more routes than can be added up at once: the numbers cover the first 500. Try a shorter range.",
+        "summary": {
+          "collectors": "Collectors",
+          "stops": "Stops",
+          "done": "Completed",
+          "pending": "Not handled"
+        }
+      },
       "empty": "There are no routes for this day",
       "emptyText": "Routes are built by the collector on their phone, map in hand.",
       "emptyPeriod": "There are no routes in this period",

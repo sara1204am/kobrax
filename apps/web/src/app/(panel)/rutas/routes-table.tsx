@@ -29,7 +29,6 @@ export function RoutesTable({
   filtered,
   userId,
   showCollector,
-  period,
 }: {
   rows: RouteItem[];
   meta: PageMeta;
@@ -38,8 +37,6 @@ export function RoutesTable({
   userId?: string;
   /** Sin `route:assign` la API ya acota a lo propio: el filtro por cobrador no cambiaría nada. */
   showCollector: boolean;
-  /** Se está mirando un rango, no un día: cambia qué vacío corresponde. */
-  period?: boolean;
 }) {
   const t = useTranslations('panel.routes');
   const locale = useLocale();
@@ -149,15 +146,8 @@ export function RoutesTable({
       filtered={filtered}
       entityLabel={t('entity')}
       // Sin rutas ese día y sin resultados con esos filtros no son lo mismo: uno se arregla
-      // cambiando de día, el otro quitando un filtro. Y en período el arreglo es otro todavía:
-      // ampliar el rango, no cambiar de día.
-      empty={
-        period ? (
-          <EmptyState title={t('emptyPeriod')} text={t('emptyPeriodText')} />
-        ) : (
-          <EmptyState title={t('empty')} text={t('emptyText')} />
-        )
-      }
+      // cambiando de día, el otro quitando un filtro.
+      empty={<EmptyState title={t('empty')} text={t('emptyText')} />}
       noResults={<EmptyState title={t('noResults')} text={t('noResultsText')} />}
     />
   );
