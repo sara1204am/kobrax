@@ -166,6 +166,13 @@ export function PlanScreen({
     [area, filas, available, picked],
   );
 
+  /**
+   * Marcar o desmarcar un deudor. **Un solo camino**, lo toque la casilla de la lista o su punto en
+   * el mapa: con dos, un día uno de los dos se olvida de algo y la lista y el mapa dejan de coincidir.
+   */
+  const toggle = (id: string) =>
+    setPicked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
   /** Toca una columna que el servidor sabe ordenar: el orden lo resuelve él, sobre TODA la mora. */
   function sortRemote(key: 'balance' | 'daysPastDue') {
     const dir = params.get('sort') === key && params.get('dir') === 'desc' ? 'asc' : 'desc';
@@ -344,6 +351,8 @@ export function PlanScreen({
               // Al soltar el círculo, no en cada frame: filtrar cien filas sesenta veces por segundo
               // es lo único que puede volver esto lento.
               onCircleMove={(centro) => setArea((prev) => (prev ? { ...prev, ...centro } : prev))}
+              // Tocar un punto es lo mismo que tildar su fila: una sola verdad, la del estado.
+              onPointClick={toggle}
             />
           ) : (
             picked.length > 0 && (
@@ -474,9 +483,7 @@ export function PlanScreen({
                             type="checkbox"
                             className="h-4 w-4 shrink-0 accent-k-purple"
                             checked={marcado}
-                            onChange={(e) =>
-                              setPicked((prev) => (e.target.checked ? [...prev, c.id] : prev.filter((x) => x !== c.id)))
-                            }
+                            onChange={() => toggle(c.id)}
                           />
                           <span className="min-w-[180px] flex-1">
                             <span className="flex items-center gap-2">

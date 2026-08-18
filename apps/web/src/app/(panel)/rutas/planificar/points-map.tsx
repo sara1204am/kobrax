@@ -6,7 +6,6 @@ import {
   Map as MapLibreMap,
   Marker,
   NavigationControl,
-  Popup,
   type GeoJSONSource,
   type LngLatLike,
 } from 'maplibre-gl';
@@ -48,12 +47,20 @@ export function PointsMap({
   height,
   circle,
   onCircleMove,
+  onPointClick,
 }: {
   points: MapPoint[];
   height: number;
   circle?: MapCircle;
   /** Dónde quedó el centro al soltarlo. Sin esto, el círculo se dibuja pero no filtra nada. */
   onCircleMove?: (center: { latitude: number; longitude: number }) => void;
+  /**
+   * Tocar un punto lo marca o lo desmarca, igual que su casilla en la lista.
+   *
+   * 🔴 Es el mismo acto en dos lados: mirando el mapa se decide «éste sí, éste no» por dónde queda,
+   * y obligar a volver a la lista a buscar la fila para tildarla rompe justo ese hilo.
+   */
+  onPointClick?: (id: string) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
@@ -62,9 +69,15 @@ export function PointsMap({
   /** El rótulo con el radio, pegado al borde norte del círculo. */
   const label = useRef<Marker | null>(null);
   const ready = useRef(false);
-  // La última función que avisa: el marcador se crea una vez y no puede quedarse con la vieja.
+  /*
+   * Las últimas funciones que avisan. Los marcadores se crean **una vez** y sus listeners quedarían
+   * atados a la primera versión: con un ref, siempre llaman a la de ahora — que es la que conoce la
+   * selección actual.
+   */
   const notify = useRef(onCircleMove);
   notify.current = onCircleMove;
+  const click = useRef(onPointClick);
+  click.current = onPointClick;
 
   // El mapa, una sola vez. Se destruye al salir de la pantalla, no al cambiar la selección.
   useEffect(() => {
@@ -130,13 +143,23 @@ export function PointsMap({
     for (const p of points) {
       const existente = markers.current.get(p.id);
       if (existente) {
-        (existente.getElement().firstElementChild ?? existente.getElement()).className = pinClass(p.picked);
+        // Sólo la clase: recrear el marcador lo haría parpadear sin haberse movido.
+        existente.getElement().className = pinClass(p.picked);
         continue;
       }
       const pin = document.createElement('div');
       pin.className = pinClass(p.picked);
+      /*
+       * El nombre va en `title` y no en un popup: el clic ya tiene dueño —marca y desmarca—, y un
+       * popup que se abre encima taparía los puntos de al lado justo mientras se elige entre ellos.
+       */
+      if (p.label) pin.title = p.label;
+      pin.addEventListener('click', (e) => {
+        // Sin esto, el clic también llega al mapa y arrastra el encuadre bajo el dedo.
+        e.stopPropagation();
+        click.current?.(p.id);
+      });
       const marker = new Marker({ element: pin }).setLngLat([p.longitude, p.latitude]);
-      if (p.label) marker.setPopup(new Popup({ offset: 12 }).setText(p.label));
       marker.addTo(m);
       markers.current.set(p.id, marker);
     }
@@ -223,10 +246,14 @@ export function PointsMap({
 const AREA = 'plan-area';
 
 function pinClass(picked?: boolean): string {
-  // El elegido es más grande y del color de la marca; el disponible, un punto gris que no compite.
-  return picked
-    ? 'h-4 w-4 rounded-full border-2 border-white bg-k-navy shadow'
-    : 'h-2.5 w-2.5 rounded-full border border-white bg-k-muted shadow';
+  /*
+   * El elegido es más grande y del color de la marca; el disponible, un punto gris que no compite.
+   *
+   * `cursor-pointer` en los dos: **se puede tocar cualquiera**, y sin el cursor nadie lo descubre —
+   * un punto que reacciona al clic y parece decorativo es una función que no existe.
+   */
+  const base = 'cursor-pointer rounded-full border-white shadow transition-all';
+  return picked ? `${base} h-4 w-4 border-2 bg-k-navy` : `${base} h-2.5 w-2.5 border bg-k-muted hover:bg-k-periwinkle`;
 }
 
 function emptyArea(): GeoJSON.FeatureCollection {
