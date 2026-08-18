@@ -1252,6 +1252,8 @@
     },
     "timeline": {
       "payment": "Pago registrado",
+      "assignedTo": "Asignado a",
+      "unknownMember": "alguien que ya no está en el equipo",
       "agenda": {
         "CALL": "Llamada",
         "VISIT": "Visita domiciliaria",

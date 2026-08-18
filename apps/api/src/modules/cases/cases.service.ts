@@ -196,8 +196,14 @@ export class CasesService {
         where: { id },
         data: { assigneeId: target, lastActionAt: new Date() },
       });
+      /*
+       * 🔴 La nota guarda **el id, no una frase**. Antes decía `Asignado a <uuid>`: texto en español
+       * dentro de la base de un producto bilingüe, y con un uuid crudo que la bitácora terminaba
+       * mostrándole a una persona. El id es el dato; «Asignado a Rosa Quispe» lo escribe cada
+       * pantalla, en su idioma y con el nombre resuelto.
+       */
       await tx.caseActivity.create({
-        data: { accountId: this.tenant.accountId, caseId: id, userId: this.tenant.userId, type: CaseActivityType.ASSIGNMENT, notes: `Asignado a ${target}` },
+        data: { accountId: this.tenant.accountId, caseId: id, userId: this.tenant.userId, type: CaseActivityType.ASSIGNMENT, notes: target },
       });
       return { updated: next, collectorId: target };
     });

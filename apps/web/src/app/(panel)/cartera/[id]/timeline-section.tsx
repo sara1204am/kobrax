@@ -3,6 +3,8 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import type { ClientTimelineEntry, Member } from '@kobrax/shared';
 import { memberName } from '@kobrax/shared';
 import { money, relativeDate } from '@/lib/format';
+import { assignedTo } from '@/lib/cases';
+import { isKnownRole } from '@/lib/team';
 
 /** El punto de color por fuente. Es apoyo del texto, nunca su reemplazo. */
 const DOT: Record<ClientTimelineEntry['kind'], string> = {
@@ -35,8 +37,16 @@ export async function TimelineSection({
   seeAllHref?: string;
 }) {
   const t = await getTranslations('portfolio');
+  const tRoles = await getTranslations('team.roles');
   const locale = await getLocale();
-  const byId = new Map(members.map((m) => [m.userId, memberName(m)]));
+  const byId = new Map(members.map((m) => [m.userId, m]));
+  /** Cómo se nombra a alguien del equipo en esta lista: nombre y, entre paréntesis, el cargo. */
+  const named = (id: string): string | undefined => {
+    const m = byId.get(id);
+    if (!m) return undefined;
+    const role = isKnownRole(m.roleName) ? tRoles(m.roleName) : m.roleName;
+    return `${memberName(m)} (${role})`;
+  };
 
   return (
     <section aria-label={t('sections.timeline')}>
@@ -60,7 +70,9 @@ export async function TimelineSection({
               <li key={`${e.kind}-${e.id}`} className="relative pl-5">
                 <span aria-hidden className={`absolute left-0 top-1.5 h-2 w-2 rounded-full ${DOT[e.kind]}`} />
                 <p className="text-[14px] font-medium text-k-text">{title(t, e)}</p>
-                {detail(t, e, byId) && <p className="mt-0.5 text-[13px] text-k-text-2">{detail(t, e, byId)}</p>}
+                {detail(t, e, byId, named) && (
+                  <p className="mt-0.5 text-[13px] text-k-text-2">{detail(t, e, byId, named)}</p>
+                )}
                 <p className="mt-0.5 text-[12px] text-k-muted">{relativeDate(e.at, locale)}</p>
               </li>
             ))}
@@ -92,13 +104,25 @@ function title(t: (k: string) => string, e: ClientTimelineEntry): string {
 function detail(
   t: (k: string) => string,
   e: ClientTimelineEntry,
-  byId: Map<string, string>,
+  byId: Map<string, Member>,
+  named: (id: string) => string | undefined,
 ): string {
   const partes: string[] = [];
   if (e.kind === 'PAYMENT' && e.amount != null) partes.push(money(e.amount, e.currency ?? 'BOB'));
   if (e.kind === 'AGENDA' && e.status) partes.push(t(`timeline.status.${e.status}`));
-  if (e.notes?.trim()) partes.push(e.notes.trim());
+
+  /*
+   * 🔴 **La nota de una asignación es un id, no una frase.** Puesta cruda, la bitácora le mostraba
+   * `Asignado a bf2e039c-…` a quien abría la ficha. Acá se resuelve contra el equipo y sale el
+   * nombre con su cargo; sin nombre se dice que no se pudo identificar, nunca el id.
+   */
+  const asignado = e.kind === 'ACTIVITY' && e.code === 'ASSIGNMENT' ? assignedTo(e.notes) : null;
+  if (asignado) partes.push(`${t('timeline.assignedTo')} ${named(asignado) ?? t('timeline.unknownMember')}`);
+  else if (e.notes?.trim()) partes.push(e.notes.trim());
+
+  // Quién la registró va sin el cargo: el cargo de la fila es el de quien la RECIBE, y dos entre
+  // paréntesis en el mismo renglón se leen como si fueran la misma persona.
   const quien = e.userId ? byId.get(e.userId) : undefined;
-  if (quien) partes.push(quien);
+  if (quien) partes.push(memberName(quien));
   return partes.join(' · ');
 }

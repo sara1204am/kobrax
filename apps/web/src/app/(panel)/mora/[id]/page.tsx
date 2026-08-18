@@ -12,6 +12,8 @@ import {
 import { apiCall } from '@/lib/bff';
 import { Badge, Card, EmptyState, Fact, PageHeader } from '@/components/panel-ui';
 import { date, dateTime, money } from '@/lib/format';
+import { assignedTo } from '@/lib/cases';
+import { isKnownRole } from '@/lib/team';
 import { CaseActions } from './case-actions';
 import { StatusControl } from './status-control';
 import { PriorityCell } from '../priority-cell';
@@ -116,7 +118,17 @@ export default async function CasoPage({ params }: { params: { id: string } }) {
                     <span className="text-[13px] text-k-text-2">{dateTime(activity.createdAt, locale)}</span>
                   </div>
                   {activity.result && <p className="mt-1 text-[13px] text-k-text-2">{activity.result}</p>}
-                  {activity.notes && <p className="mt-1 text-[14px] text-k-text">{activity.notes}</p>}
+                  {/*
+                   * 🔴 La nota de una asignación es **un id**, no una frase: mostrarla cruda le
+                   * ponía `bf2e039c-…` en la cara a quien mira la cobranza. Va el nombre, y al lado
+                   * el cargo — que es lo que dice si el trabajo quedó en manos de un cobrador o de
+                   * una supervisora.
+                   */}
+                  {activity.type === 'ASSIGNMENT' && assignedTo(activity.notes) ? (
+                    <Assignee id={assignedTo(activity.notes)!} members={members} />
+                  ) : (
+                    activity.notes && <p className="mt-1 text-[14px] text-k-text">{activity.notes}</p>
+                  )}
                 </li>
               ))}
             </ol>
@@ -126,5 +138,30 @@ export default async function CasoPage({ params }: { params: { id: string } }) {
         </section>
       </div>
     </>
+  );
+}
+
+/**
+ * A quién quedó asignada la cobranza: **nombre y apellido, y el cargo al lado**.
+ *
+ * El cargo no es decoración: dice si el trabajo quedó en manos de un cobrador de calle o de una
+ * supervisora, que es lo que se está mirando cuando se lee quién lo tiene.
+ *
+ * 🔴 Sin nombre **no se muestra el id**: `/users` da 403 sin `user:read` —el caso de una
+ * supervisora— y también puede faltar quien fue dado de baja. Un uuid no le dice nada a nadie.
+ */
+async function Assignee({ id, members }: { id: string; members: Member[] }) {
+  const t = await getTranslations('panel.cases');
+  const tRoles = await getTranslations('team.roles');
+  const member = members.find((m) => m.userId === id);
+
+  if (!member) return <p className="mt-1 text-[14px] text-k-text-2">{t('unknownAssignee')}</p>;
+
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-2">
+      <span className="text-[14px] font-medium text-k-text">{memberName(member)}</span>
+      {/* Un rol que el diccionario no conoce se pinta crudo: es preferible al renglón sin cargo. */}
+      <Badge tone="neutral">{isKnownRole(member.roleName) ? tRoles(member.roleName) : member.roleName}</Badge>
+    </p>
   );
 }
