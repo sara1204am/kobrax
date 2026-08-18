@@ -1,29 +1,20 @@
 import { getTranslations } from 'next-intl/server';
-import { memberName, type AccountInfo, type AssignableRole, type MeInfo, type Member } from '@kobrax/shared';
+import type { AccountInfo, AssignableRole, MeInfo, Member } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { EmptyState, PageHeader, Badge } from '@/components/panel-ui';
-import { SearchBox } from '@/components/search-box';
-import { matchesText } from '@/lib/portfolio';
+import { hasTeamFilters, teamView, type TeamParams } from '@/lib/team';
 import { MembersTable } from './members-table';
 import { InviteButton } from './invite-button';
 
 /**
  * El equipo de la cuenta.
  *
- * ⚠️ `GET /users` **no pagina ni ordena**: devuelve el equipo entero, que por el techo del
- * plan son pocas filas. Por eso el orden se resuelve acá, en memoria, con los mismos
- * `searchParams` que escribe el `DataTable` — la vista sigue siendo compartible por link sin
+ * ⚠️ `GET /users` **no pagina, no ordena y no busca**: devuelve el equipo entero, que por el techo
+ * del plan son pocas filas. Por eso la vista se arma acá con `teamView`, en memoria, a partir de los
+ * mismos `searchParams` que escribe el `DataTable` — la vista sigue siendo compartible por link sin
  * pedirle al servidor algo que no ofrece.
- *
- * La caja de búsqueda es la misma que la de la cartera (W3), pero acá **filtra en memoria**: el
- * servidor devuelve el equipo entero y no sabe buscar. Lo que se comparte es el `?q=` en la URL,
- * no el mecanismo — y por eso se escribió recién cuando `/clients` le dio su primer contrato real.
  */
-export default async function EquipoPage({
-  searchParams,
-}: {
-  searchParams: { sort?: string; dir?: string; q?: string };
-}) {
+export default async function EquipoPage({ searchParams }: { searchParams: TeamParams }) {
   const t = await getTranslations('team');
 
   const [me, list, roles, account] = await Promise.all([
@@ -37,11 +28,7 @@ export default async function EquipoPage({
     return <EmptyState title={t('noAccess')} text={list.body.error?.message} />;
   }
 
-  const q = searchParams.q?.trim() ?? '';
-  const found = q
-    ? list.body.data.filter((m) => matchesText(memberName(m), q) || matchesText(m.email, q))
-    : list.body.data;
-  const members = sortMembers(found, searchParams.sort, searchParams.dir);
+  const { rows, meta } = teamView(list.body.data, searchParams);
   const seats = account.body.data;
 
   return (
@@ -50,35 +37,31 @@ export default async function EquipoPage({
         title={t('title')}
         subtitle={t('subtitle')}
         actions={
-          <>
-            {seats && (
-              <Badge tone={seats.memberCount >= seats.maxUsers ? 'warning' : 'neutral'}>
-                {t('seats', { used: seats.memberCount, max: seats.maxUsers })}
-              </Badge>
-            )}
-            <InviteButton
-              roles={roles.body.data ?? []}
-              full={seats ? seats.memberCount >= seats.maxUsers : false}
-            />
-          </>
+          seats ? (
+            <Badge tone={seats.memberCount >= seats.maxUsers ? 'warning' : 'neutral'}>
+              {t('seats', { used: seats.memberCount, max: seats.maxUsers })}
+            </Badge>
+          ) : undefined
         }
       />
-      <SearchBox label={t('search.label')} placeholder={t('search.placeholder')} />
       {/* Los roles pueden venir vacíos si el rol de quien mira no tiene `role:read`: en ese
           caso el selector no se dibuja y la lista sigue siendo legible. */}
       <MembersTable
-        members={members}
+        members={rows}
+        meta={meta}
+        // Los roles del filtro salen de QUIÉN HAY, no de `/roles`: ése devuelve sólo los tres
+        // asignables, y filtrar por «Gerente» tiene que ser posible aunque no se pueda asignar.
+        roleNames={[...new Set(list.body.data.map((m) => m.roleName))].sort()}
         roles={roles.body.data ?? []}
         meId={me.body.data.userId}
-        filtered={q.length > 0}
+        filtered={hasTeamFilters(searchParams)}
+        action={
+          <InviteButton
+            roles={roles.body.data ?? []}
+            full={seats ? seats.memberCount >= seats.maxUsers : false}
+          />
+        }
       />
     </>
   );
-}
-
-function sortMembers(members: Member[], sort?: string, dir?: string): Member[] {
-  if (sort !== 'name' && sort !== 'role') return members;
-  const factor = dir === 'desc' ? -1 : 1;
-  const key = (m: Member) => (sort === 'role' ? m.roleName : memberName(m));
-  return [...members].sort((a, b) => key(a).localeCompare(key(b)) * factor);
 }

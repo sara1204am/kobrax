@@ -1327,8 +1327,12 @@
       "label": "Buscar en el equipo",
       "placeholder": "Nombre o correo"
     },
+    "entity": "miembros",
+    "filters": {
+      "allRoles": "Todos los roles"
+    },
     "noResults": "Nadie coincide con esa búsqueda",
-    "noResultsHint": "Probá con otro nombre o con el correo.",
+    "noResultsHint": "Probá con otro nombre, con el correo o quitando un filtro.",
     "empty": "Todavía no hay nadie más",
     "emptyHint": "Invita a tu equipo por correo y aparecerán acá.",
     "cancel": "Cancelar",

@@ -1,4 +1,6 @@
-import { RoleType, isMobileRole, memberStatus, type Member } from '@kobrax/shared';
+import { RoleType, isMobileRole, memberName, memberStatus, type Member } from '@kobrax/shared';
+import { matchesText } from './portfolio';
+import { PAGE_SIZES } from './table-prefs';
 
 /**
  * ¿El rótulo de este rol sale de i18n, o hay que mostrar el nombre crudo?
@@ -9,6 +11,69 @@ import { RoleType, isMobileRole, memberStatus, type Member } from '@kobrax/share
  */
 export function isKnownRole(roleName: string): boolean {
   return (Object.values(RoleType) as string[]).includes(roleName);
+}
+
+/** Lo que la pantalla de Equipo sabe leer de la URL. Las claves son las que escribe el `DataTable`. */
+export interface TeamParams {
+  q?: string;
+  role?: string;
+  status?: string;
+  sort?: string;
+  dir?: string;
+  page?: string;
+  pageSize?: string;
+}
+
+export const DEFAULT_PAGE_SIZE = 25;
+
+export function teamLimit(params: TeamParams): number {
+  return PAGE_SIZES.includes(Number(params.pageSize)) ? Number(params.pageSize) : DEFAULT_PAGE_SIZE;
+}
+
+/** Las columnas que esta tabla sabe ordenar. El estado no: alfabético no dice nada útil. */
+const SORTS = ['name', 'role'] as const;
+
+export function hasTeamFilters(params: TeamParams): boolean {
+  return Boolean(params.q?.trim() || params.role || params.status);
+}
+
+/**
+ * Filtrar, ordenar y paginar el equipo **en memoria**.
+ *
+ * 🔴 `GET /users` no hace nada de eso: devuelve el equipo entero, que por el techo del plan son
+ * pocas filas. Es la única lista del panel que se resuelve acá — las demás lo delegan al servidor
+ * porque ordenan sobre agregados que no viajan en la página. Igual el estado vive en la URL, así
+ * que la vista se comparte por link y «atrás» funciona como en las otras.
+ *
+ * Es pura: la pantalla le pasa lo que trajo la API y lo que hay en la URL, y recibe la página y su
+ * `meta`. Por eso se puede probar sin red y sin DOM.
+ */
+export function teamView(
+  members: Member[],
+  params: TeamParams,
+): { rows: Member[]; meta: { total: number; page: number; limit: number; pages: number } } {
+  const q = params.q?.trim() ?? '';
+  let found = members;
+  if (q) found = found.filter((m) => matchesText(memberName(m), q) || matchesText(m.email, q));
+  if (params.role) found = found.filter((m) => m.roleName === params.role);
+  if (params.status) found = found.filter((m) => memberStatus(m) === params.status);
+
+  if ((SORTS as readonly string[]).includes(params.sort ?? '')) {
+    const factor = params.dir === 'desc' ? -1 : 1;
+    const key = (m: Member) => (params.sort === 'role' ? m.roleName : memberName(m));
+    found = [...found].sort((a, b) => key(a).localeCompare(key(b)) * factor);
+  }
+
+  const limit = teamLimit(params);
+  const pages = Math.max(1, Math.ceil(found.length / limit));
+  // Filtrar puede dejar menos páginas de las que había: quedarse en la 5 mostraría una tabla vacía
+  // con la paginación diciendo que hay filas.
+  const page = Math.min(Math.max(1, Number(params.page) || 1), pages);
+
+  return {
+    rows: found.slice((page - 1) * limit, page * limit),
+    meta: { total: found.length, page, limit, pages },
+  };
 }
 
 export interface MemberActions {

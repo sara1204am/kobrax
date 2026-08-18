@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
@@ -12,7 +12,9 @@ import {
 } from '@kobrax/shared';
 import { Badge, EmptyState } from '@/components/panel-ui';
 import { Button } from '@/components/ui';
-import { DataTable, type Column } from '@/components/data-table';
+import { DataTable, type Column, type PageMeta } from '@/components/data-table';
+import type { FilterDef } from '@/components/data-table-filters';
+import { SearchBox } from '@/components/search-box';
 import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
@@ -29,17 +31,30 @@ type Pending =
 
 export function MembersTable({
   members,
+  meta,
   roles,
+  roleNames,
   meId,
   filtered,
+  userId,
+  action,
 }: {
   members: Member[];
+  meta: PageMeta;
+  /** Los asignables (`GET /roles`), que son los que ofrece el selector de la fila. */
   roles: AssignableRole[];
+  /** Los que de verdad hay en el equipo, para el filtro. Incluye los que no se pueden asignar. */
+  roleNames: string[];
   meId: string;
-  /** Hay una búsqueda puesta: «no hay nadie» y «nadie coincide» no se arreglan igual. */
+  /** Hay una búsqueda o un filtro puesto: «no hay nadie» y «nadie coincide» no se arreglan igual. */
   filtered?: boolean;
+  userId?: string;
+  /** «Invitar a alguien». Va en la barra de la tabla, no en el encabezado. */
+  action?: ReactNode;
 }) {
   const t = useTranslations('team');
+  // Los rótulos de rol salen de i18n y no de `ROLE_LABEL` de `shared`, que está en español.
+  const tRoles = useTranslations('team.roles');
   const router = useRouter();
   const toast = useToast();
   const { can } = usePermissions();
@@ -140,19 +155,42 @@ export function MembersTable({
     },
   ];
 
+  /**
+   * Los filtros del panel. Se aplican **en memoria** (`teamView`), porque `GET /users` no filtra:
+   * las claves son igual las de la URL, así que la vista se comparte por link como en las demás.
+   */
+  const filters: FilterDef[] = [
+    {
+      keys: ['role'],
+      label: t('columns.role'),
+      type: 'select',
+      allLabel: t('filters.allRoles'),
+      options: roleNames.map((name) => ({ value: name, label: isKnownRole(name) ? tRoles(name) : name })),
+    },
+    {
+      keys: ['status'],
+      label: t('columns.status'),
+      type: 'radio',
+      options: (['active', 'pending', 'inactive'] as const).map((s) => ({ value: s, label: t(`status.${s}`) })),
+    },
+  ];
+
   return (
     <>
       <DataTable
+        tableId="equipo"
+        userId={userId}
         columns={columns}
         rows={members}
         rowKey={(m) => m.userId}
-        meta={{ total: members.length, page: 1, limit: members.length || 1, pages: 1 }}
-        empty={
-          <EmptyState
-            title={filtered ? t('noResults') : t('empty')}
-            text={filtered ? t('noResultsHint') : t('emptyHint')}
-          />
-        }
+        meta={meta}
+        filters={filters}
+        filtered={filtered}
+        entityLabel={t('entity')}
+        actions={action}
+        search={<SearchBox wide label={t('search.label')} placeholder={t('search.placeholder')} />}
+        empty={<EmptyState title={t('empty')} text={t('emptyHint')} />}
+        noResults={<EmptyState title={t('noResults')} text={t('noResultsHint')} />}
       />
 
       <Modal

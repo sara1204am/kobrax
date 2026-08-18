@@ -1327,8 +1327,12 @@
       "label": "Search the team",
       "placeholder": "Name or email"
     },
+    "entity": "members",
+    "filters": {
+      "allRoles": "All roles"
+    },
     "noResults": "Nobody matches that search",
-    "noResultsHint": "Try another name or the email.",
+    "noResultsHint": "Try another name, the email, or removing a filter.",
     "empty": "Nobody else yet",
     "emptyHint": "Invite your team by email and they will show up here.",
     "cancel": "Cancel",
