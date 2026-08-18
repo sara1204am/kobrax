@@ -8,7 +8,7 @@ import { Badge, Card, EmptyState, InfoTip } from '@/components/panel-ui';
 import { Button, ErrorBanner } from '@/components/ui';
 import { postJson } from '@/lib/client';
 import { money } from '@/lib/format';
-import { AVAILABLE_LIMIT, sortAvailable, type LocalSort } from '@/lib/plan';
+import { AVAILABLE_LIMIT, RADIUS_KM, sortAvailable, withinRadius, type LocalSort } from '@/lib/plan';
 import { FilterPanel } from '@/components/data-table-filters';
 import { SearchBox } from '@/components/search-box';
 import { PointsMap } from './points-map';
@@ -75,6 +75,15 @@ export function PlanScreen({
    * sobre el total en vez de sobre las cien que vinieron.
    */
   const [localSort, setLocalSort] = useState<{ key: LocalSort; dir: 'asc' | 'desc' } | null>(null);
+  /**
+   * La búsqueda por área: un círculo sobre el mapa que deja en la lista sólo lo que cae adentro.
+   *
+   * 🔴 **Filtra en el navegador, sobre lo que ya está cargado.** Es lo que la vuelve instantánea:
+   * arrastrar el círculo no pide nada al servidor. El precio está declarado arriba de la lista —son
+   * las cien que vinieron, no toda la mora—, y por eso conviene acotar antes con los filtros y
+   * después dibujar el área.
+   */
+  const [area, setArea] = useState<{ latitude: number; longitude: number; radiusKm: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -118,30 +127,43 @@ export function PlanScreen({
   const siguiente = pendientes.find((c) => c.userId !== collectorId);
   const corto = picked.length > 0 && picked.length < minStops;
 
+
   /*
-   * En el mapa van **los marcados**, no toda la lista: lo que se quiere ver es la ruta que se está
-   * armando —si queda junta o si manda a alguien de una punta a la otra—, y cien pines de mora que
-   * no se eligió tapan justamente eso.
+   * Las filas: primero el área —si está puesta—, después el orden. Sin orden local, el que trajo el
+   * servidor.
+   *
+   * Quien no tiene el dato va **al final en los dos sentidos**: un cliente sin zona no es «la zona
+   * que va primero alfabéticamente», es uno del que no se sabe dónde está.
+   */
+  const filas = useMemo(() => {
+    const base = area ? withinRadius(available, area, area.radiusKm) : available;
+    return localSort ? sortAvailable(base, localSort.key, localSort.dir) : base;
+  }, [available, area, localSort]);
+
+  /*
+   * Los pines. **Con área puesta**, los que se pueden elegir ahí adentro: es lo que se está
+   * buscando. **Sin área**, sólo lo marcado — que es la ruta que se arma; cien pines de mora que no
+   * se eligió taparían justamente eso.
    *
    * Un punto por deudor, el de su **primera ubicación**, que es la principal: dibujar también las de
    * sus garantes multiplicaría los pines. Quien no tiene ninguna cargada no aparece, y por eso el
    * rótulo dice cuántos de cuántos.
    */
-  const puntos = available.flatMap((c) => {
-    if (!picked.includes(c.id)) return [];
-    const loc = c.locations?.[0];
-    return loc ? [{ id: c.id, latitude: loc.latitude, longitude: loc.longitude, label: c.clientName ?? undefined }] : [];
-  });
-
-  /*
-   * Las filas, en el orden que se está pidiendo. Sin orden local, el que trajo el servidor.
-   *
-   * Quien no tiene el dato va **al final en los dos sentidos**: un cliente sin zona no es «la zona
-   * que va primero alfabéticamente», es uno del que no se sabe dónde está.
-   */
-  const filas = useMemo(
-    () => (localSort ? sortAvailable(available, localSort.key, localSort.dir) : available),
-    [available, localSort],
+  const puntos = useMemo(
+    () =>
+      (area ? filas : available.filter((c) => picked.includes(c.id))).flatMap((c) => {
+        const loc = c.locations?.[0];
+        return loc
+          ? [{
+              id: c.id,
+              latitude: loc.latitude,
+              longitude: loc.longitude,
+              label: c.clientName ?? undefined,
+              picked: picked.includes(c.id),
+            }]
+          : [];
+      }),
+    [area, filas, available, picked],
   );
 
   /** Toca una columna que el servidor sabe ordenar: el orden lo resuelve él, sobre TODA la mora. */
@@ -158,6 +180,9 @@ export function PlanScreen({
 
   const remoteSort = params.get('sort');
   const remoteDir = params.get('dir') === 'asc' ? 'asc' : 'desc';
+
+  /** «500 m» o «2 km»: media unidad no se dice en decimales cuando hay una unidad más chica. */
+  const radioLabel = (km: number) => (km < 1 ? t('areaMeters', { m: km * 1000 }) : t('areaKm', { km }));
 
   return (
     <div className="space-y-5">
@@ -237,27 +262,95 @@ export function PlanScreen({
        * Aparece **al primer marcado**: sin ninguno no hay ruta que mirar, y un mapa vacío ocupa
        * lugar sin decir nada.
        */}
-      {!suRuta && picked.length > 0 && (
+      {/*
+       * 🔴 El bloque está desde el principio, **no recién cuando hay algo marcado**: buscar por área
+       * es justamente cómo se elige, así que su botón no puede aparecer después de haber elegido.
+       * Sólo desaparece si nadie de la lista tiene ubicación cargada — ahí no hay nada que dibujar.
+       */}
+      {!suRuta && available.some((c) => c.locations?.[0]) && (
         <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            {/* Cuántos de los marcados se pueden dibujar: quien no tiene ubicación cargada no
-                aparece, y eso no puede ser invisible — es media ruta que no se ve. */}
-            <p className="text-[13px] text-k-text-2">{t('mapPoints', { n: puntos.length, total: picked.length })}</p>
-            <button
-              type="button"
-              onClick={() => setBigMap((v) => !v)}
-              aria-expanded={bigMap}
-              className="h-8 rounded-lg border border-k-border bg-white px-3 text-[13px] font-medium text-k-text-2 hover:bg-k-bg"
-            >
-              {bigMap ? t('mapSmall') : t('mapBig')}
-            </button>
-          </div>
-          {puntos.length > 0 ? (
-            <PointsMap points={puntos} height={bigMap ? 520 : 220} />
-          ) : (
-            <p className="rounded-2xl border border-k-border bg-white px-4 py-3 text-[13px] text-k-text-2">
-              {t('mapNoPoints')}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[13px] text-k-text-2">
+              {/* Cuántos se pueden dibujar de los que corresponden: quien no tiene ubicación no
+                  aparece, y eso no puede ser invisible — es media ruta que no se ve. */}
+              {area
+                ? t('mapInArea', { n: puntos.length, km: area.radiusKm })
+                : picked.length > 0
+                  ? t('mapPoints', { n: puntos.length, total: picked.length })
+                  : t('mapEmpty')}
             </p>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/*
+               * 🔴 **Buscar por área.** Se enciende con el botón y aparece un círculo arrastrable en
+               * el centro del mapa; la lista se acota a lo que cae adentro. Filtra en el navegador
+               * sobre lo ya cargado, así que mover el círculo es instantáneo — y por eso también
+               * conviene acotar antes con los filtros: son las cien que vinieron, no toda la mora.
+               */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (area) return setArea(null);
+                  const conPunto = available.find((c) => c.locations?.[0]);
+                  const loc = conPunto?.locations?.[0];
+                  if (loc) setArea({ latitude: loc.latitude, longitude: loc.longitude, radiusKm: 1 });
+                }}
+                aria-pressed={area != null}
+                className={`h-8 rounded-lg border px-3 text-[13px] font-medium ${
+                  area
+                    ? 'border-k-periwinkle bg-k-highlight text-k-periwinkle'
+                    : 'border-k-border bg-white text-k-text-2 hover:bg-k-bg'
+                }`}
+              >
+                {area ? t('areaOff') : t('areaOn')}
+              </button>
+
+              {area && (
+                <label className="flex items-center gap-1.5 text-[13px] text-k-text-2">
+                  {t('areaRadius')}
+                  <select
+                    value={area.radiusKm}
+                    onChange={(e) => setArea({ ...area, radiusKm: Number(e.target.value) })}
+                    className="h-8 rounded-lg border border-k-border bg-white px-2 text-[13px] text-k-text outline-none focus:border-k-periwinkle"
+                  >
+                    {RADIUS_KM.map((km) => (
+                      <option key={km} value={km}>
+                        {radioLabel(km)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setBigMap((v) => !v)}
+                aria-expanded={bigMap}
+                className="h-8 rounded-lg border border-k-border bg-white px-3 text-[13px] font-medium text-k-text-2 hover:bg-k-bg"
+              >
+                {bigMap ? t('mapSmall') : t('mapBig')}
+              </button>
+            </div>
+          </div>
+
+          {/* El mapa se dibuja cuando hay algo que mostrar: los marcados, o el área con lo que caiga
+              adentro. Vacío sería un recuadro de tiles sin una sola respuesta. */}
+          {puntos.length > 0 || area ? (
+            <PointsMap
+              points={puntos}
+              height={bigMap ? 520 : 220}
+              // El radio escrito viaja al mapa: la etiqueta del borde y el select dicen lo mismo.
+              circle={area ? { ...area, label: radioLabel(area.radiusKm) } : undefined}
+              // Al soltar el círculo, no en cada frame: filtrar cien filas sesenta veces por segundo
+              // es lo único que puede volver esto lento.
+              onCircleMove={(centro) => setArea((prev) => (prev ? { ...prev, ...centro } : prev))}
+            />
+          ) : (
+            picked.length > 0 && (
+              <p className="rounded-2xl border border-k-border bg-white px-4 py-3 text-[13px] text-k-text-2">
+                {t('mapNoPoints')}
+              </p>
+            )
           )}
         </div>
       )}

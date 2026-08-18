@@ -8,6 +8,8 @@ import {
   minStops,
   shiftDays,
   sortAvailable,
+  haversineKm,
+  withinRadius,
 } from './plan';
 
 const DIA = '2026-08-25';
@@ -138,6 +140,40 @@ describe('sortAvailable', () => {
     const rows = [fila('z'), fila('a')];
     sortAvailable(rows, 'client', 'asc');
     expect(rows.map((r) => r.clientName)).toEqual(['z', 'a']);
+  });
+});
+
+describe('haversineKm y withinRadius', () => {
+  // Dos puntos reales de Sucre, a unas veinte cuadras.
+  const PLAZA = { latitude: -19.0478, longitude: -65.2593 };
+  const MERCADO = { latitude: -19.0421, longitude: -65.2612 };
+
+  it('mide en kilómetros, y un punto contra sí mismo da cero', () => {
+    expect(haversineKm(PLAZA, PLAZA)).toBe(0);
+    const d = haversineKm(PLAZA, MERCADO);
+    expect(d).toBeGreaterThan(0.5);
+    expect(d).toBeLessThan(0.8);
+  });
+
+  it('es simétrica: la distancia no depende de desde dónde se mide', () => {
+    expect(haversineKm(PLAZA, MERCADO)).toBeCloseTo(haversineKm(MERCADO, PLAZA), 10);
+  });
+
+  it('el radio deja adentro lo que está adentro, y afuera lo de más allá', () => {
+    const rows = [
+      { id: 'cerca', locations: [MERCADO] },
+      { id: 'lejos', locations: [{ latitude: -19.1, longitude: -65.35 }] },
+    ];
+    expect(withinRadius(rows, PLAZA, 1).map((r) => r.id)).toEqual(['cerca']);
+    expect(withinRadius(rows, PLAZA, 20).map((r) => r.id)).toEqual(['cerca', 'lejos']);
+    expect(withinRadius(rows, PLAZA, 0.1)).toEqual([]);
+  });
+
+  it('🔴 quien no tiene ubicación queda AFUERA del área', () => {
+    // El área pregunta «qué hay acá», y de esa persona no se sabe dónde está. Meterla igual dejaría
+    // una ruta armada por zona con una parada en la otra punta.
+    const rows = [{ id: 'sin-ubicacion' }, { id: 'cerca', locations: [MERCADO] }];
+    expect(withinRadius(rows, PLAZA, 5).map((r) => r.id)).toEqual(['cerca']);
   });
 });
 

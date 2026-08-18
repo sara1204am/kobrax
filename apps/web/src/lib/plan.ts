@@ -155,6 +155,48 @@ export function availableQuery(params: PlanParams, day: string): URLSearchParams
 /** Las columnas que ordena el navegador, porque la API no las sabe ordenar. */
 export type LocalSort = 'client' | 'zone' | 'coords';
 
+/** Radios que ofrece la búsqueda por área, en kilómetros. Media cuadra no es un área; 20 km es la ciudad. */
+export const RADIUS_KM = [0.5, 1, 2, 5] as const;
+
+export interface Point {
+  latitude: number;
+  longitude: number;
+}
+
+/**
+ * Distancia en línea recta entre dos puntos, en kilómetros (haversine).
+ *
+ * 🔴 **Es la distancia del pájaro, no la de la calle.** Sirve para «¿esto queda cerca?», que es la
+ * pregunta al armar una ruta; la distancia real por las calles la da OSRM y **cuesta una llamada por
+ * recorrido**, así que no puede correr mientras alguien arrastra un círculo por el mapa.
+ *
+ * ponytail: fórmula esférica, sin corrección por el achatamiento de la Tierra. El error es de metros
+ * en distancias urbanas — irrelevante para decidir si una casa entra en un radio de dos kilómetros.
+ */
+export function haversineKm(a: Point, b: Point): number {
+  const R = 6371; // radio medio de la Tierra
+  const rad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = rad(b.latitude - a.latitude);
+  const dLng = rad(b.longitude - a.longitude);
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.latitude)) * Math.cos(rad(b.latitude)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * Los que caen **dentro del círculo**.
+ *
+ * 🔴 Quien no tiene ubicación cargada **queda afuera**, y no es un descuido: el área pregunta «qué
+ * hay acá», y de esa persona no se sabe dónde está. Meterla igual haría que una ruta armada por
+ * zona termine con una parada en la otra punta.
+ */
+export function withinRadius<T extends { locations?: Point[] }>(rows: T[], center: Point, km: number): T[] {
+  return rows.filter((r) => {
+    const loc = r.locations?.[0];
+    return loc ? haversineKm(center, loc) <= km : false;
+  });
+}
+
 /**
  * Ordenar la mora que se está viendo por una columna que el servidor no sabe ordenar.
  *
