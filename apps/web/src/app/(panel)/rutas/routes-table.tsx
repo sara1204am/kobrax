@@ -82,12 +82,12 @@ export function RoutesTable({
       numeric: true,
       render: (r) => (r.totalDistanceKm != null ? t('km', { n: r.totalDistanceKm.toFixed(1) }) : '—'),
     },
-    {
-      key: 'duration',
-      header: t('columns.duration'),
-      numeric: true,
-      render: (r) => (r.estimatedMinutes != null ? t('minutes', { n: r.estimatedMinutes }) : '—'),
-    },
+    /*
+     * Acá iba «Duración». Se sacó porque el número no se gana la columna: `estimatedMinutes` sólo se
+     * llena cuando alguien abre la vista previa del recorrido en el teléfono (OSRM + 10 min por
+     * parada), así que una ruta que nadie previsualizó no tiene ninguno, y el que se ve en los datos
+     * de demo es un aleatorio del seed. Vuelve el día que el dato se calcule solo.
+     */
   ];
 
   /** Los filtros del panel. **Las claves son las de la URL**; qué significa cada una, `routeQuery`. */

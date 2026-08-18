@@ -799,13 +799,11 @@
         "collector": "Collector",
         "status": "Status",
         "stops": "Stops",
-        "distance": "Distance",
-        "duration": "Duration"
+        "distance": "Distance"
       },
       "unknownCollector": "Collector",
       "progress": "{done} of {total}",
       "km": "{n} km",
-      "minutes": "{n} min",
       "detail": {
         "stops": "Stops",
         "stopsEmpty": "This route has no stops.",
@@ -814,7 +812,6 @@
         "done": "Handled",
         "percent": "Progress",
         "distance": "Estimated distance",
-        "duration": "Estimated duration",
         "noPreview": "We could not compute the route line. The stops are still listed.",
         "openCase": "View in Overdue",
         "openClient": "Open the debtor's file"

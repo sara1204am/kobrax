@@ -799,13 +799,11 @@
         "collector": "Cobrador",
         "status": "Estado",
         "stops": "Paradas",
-        "distance": "Distancia",
-        "duration": "Duración"
+        "distance": "Distancia"
       },
       "unknownCollector": "Cobrador",
       "progress": "{done} de {total}",
       "km": "{n} km",
-      "minutes": "{n} min",
       "detail": {
         "stops": "Paradas",
         "stopsEmpty": "Esta ruta no tiene paradas.",
@@ -814,7 +812,6 @@
         "done": "Gestionadas",
         "percent": "Avance",
         "distance": "Distancia estimada",
-        "duration": "Duración estimada",
         "noPreview": "No pudimos calcular el recorrido. Las paradas se ven igual.",
         "openCase": "Ver en Mora",
         "openClient": "Ver la ficha del deudor"
