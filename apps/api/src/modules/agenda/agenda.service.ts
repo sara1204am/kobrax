@@ -20,6 +20,7 @@ import {
 import { CaseActivityType } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
+import { TenantClockService } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { ClientsService } from '../clients/clients.service';
@@ -78,16 +79,27 @@ export class AgendaService {
     private readonly audit: AuditService,
     private readonly clients: ClientsService,
     private readonly events: EventBusService,
+    private readonly clock: TenantClockService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
   }
 
-  /** Inicio del día en UTC — la referencia de "hoy" para vencidos y para no agendar en el pasado. */
-  private startOfTodayUTC(): Date {
-    const now = new Date();
-    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  /**
+   * "Hoy" **para el tenant**, anclado a medianoche UTC como guarda `scheduledDate`.
+   *
+   * 🔴 Antes esto era el día UTC del servidor, y en toda América eso adelanta el calendario unas
+   * horas antes de medianoche: en Bolivia, a las 20:00, la agenda del día se pintaba vencida y
+   * agendar para hoy respondía «fecha pasada». Ahora lo decide la zona de la cuenta.
+   */
+  private today(): Promise<Date> {
+    return this.clock.today();
+  }
+
+  /** Serializar una gestión suelta con el reloj del tenant puesto. Ahorra repetir el `await` siete veces. */
+  private async view(a: AgendaItem, clientName?: string): Promise<ReturnType<typeof serializeAgendaItem>> {
+    return serializeAgendaItem(a, clientName, await this.today());
   }
 
   /**
@@ -130,11 +142,11 @@ export class AgendaService {
    * qué cambiar. Es el mismo endpoint con un parámetro más, no uno nuevo.
    */
   async listByDay(query: { date?: string; from?: string; to?: string }): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>[]>> {
-    const now = new Date();
+    const today = await this.today();
     const scheduledDate =
       query.from && query.to
         ? { gte: new Date(query.from), lte: new Date(query.to) }
-        : (query.date ? new Date(query.date) : this.startOfTodayUTC());
+        : (query.date ? new Date(query.date) : today);
 
     const { rows, names } = await this.tx(async (tx) => {
       const rows = await tx.agendaItem.findMany({
@@ -143,17 +155,17 @@ export class AgendaService {
       });
       return { rows, names: await this.clientNames(tx, rows.map((r) => r.clientId)) };
     });
-    return ResponseDto.ok(rows.map((r) => serializeAgendaItem(r, names.get(r.clientId), now)));
+    return ResponseDto.ok(rows.map((r) => serializeAgendaItem(r, names.get(r.clientId), today)));
   }
 
   /** Vencidos: SCHEDULED con fecha < hoy, desc por fecha, paginado (`meta.total` → "ver más"). */
   async listOverdue(query: ListOverdueQueryDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>[]>> {
     const { page, limit, skip } = resolvePagination(query);
-    const now = new Date();
+    const today = await this.today();
     const where: Prisma.AgendaItemWhereInput = {
       deletedAt: null,
       status: AgendaItemStatus.SCHEDULED,
-      scheduledDate: { lt: this.startOfTodayUTC() },
+      scheduledDate: { lt: today },
       ...this.assigneeScope(),
     };
     const { rows, total, names } = await this.tx(async (tx) => {
@@ -163,7 +175,7 @@ export class AgendaService {
       ]);
       return { rows, total, names: await this.clientNames(tx, rows.map((r) => r.clientId)) };
     });
-    return ResponseDto.paginated(rows.map((r) => serializeAgendaItem(r, names.get(r.clientId), now)), total, page, limit);
+    return ResponseDto.paginated(rows.map((r) => serializeAgendaItem(r, names.get(r.clientId), today)), total, page, limit);
   }
 
   /**
@@ -174,7 +186,7 @@ export class AgendaService {
    * audita: quien puede abrir el detalle de un deudor propio no gana superficie viendo su CI.
    */
   async findOne(id: string) {
-    const now = new Date();
+    const today = await this.today();
     const { item, credit, history } = await this.tx(async (tx) => {
       const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...this.assigneeScope() } });
       if (!item) throw agendaItemNotFound();
@@ -195,7 +207,7 @@ export class AgendaService {
     await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'PII_REVEAL' });
 
     return ResponseDto.ok({
-      item: serializeAgendaItem(item, displayName(client), now),
+      item: serializeAgendaItem(item, displayName(client), today),
       client: {
         id: client.id,
         displayName: displayName(client),
@@ -216,7 +228,7 @@ export class AgendaService {
         [item.reasonCode, ...history.map((h) => h.reasonCode)].filter((c): c is string => !!c),
       ),
       history: history.map((h) => {
-        const s = serializeAgendaItem(h, undefined, now);
+        const s = serializeAgendaItem(h, undefined, today);
         return {
           id: s.id,
           type: s.type,
@@ -264,7 +276,7 @@ export class AgendaService {
 
     await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'EXECUTE', after: updated });
     this.events.emit(DomainEvent.CASE_UPDATED, { caseId: updated.caseId, accountId: this.tenant.accountId, activity: ACTIVITY_TYPE_BY_AGENDA[updated.type] });
-    return ResponseDto.ok(serializeAgendaItem(updated, clientName));
+    return ResponseDto.ok(await this.view(updated, clientName));
   }
 
   /**
@@ -299,7 +311,7 @@ export class AgendaService {
     });
 
     await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'POSTPONE', after: updated });
-    return ResponseDto.ok(serializeAgendaItem(updated, clientName));
+    return ResponseDto.ok(await this.view(updated, clientName));
   }
 
   /**
@@ -493,7 +505,7 @@ export class AgendaService {
     const validated = validateAgendaDetails(dto.type, dto.details);
     if (!validated.ok) throw agendaInvalidDetails(validated.errors);
 
-    const today = this.startOfTodayUTC();
+    const today = await this.today();
     const scheduledDate = toUTCDate(dto.scheduledDate);
     if (scheduledDate < today) throw agendaPastDate();
     assertTimeMode(dto);
@@ -536,7 +548,7 @@ export class AgendaService {
     if (reminder) {
       await this.audit.record({ entity: 'agenda_item', entityId: reminder.id, action: 'CREATE', after: reminder });
     }
-    return ResponseDto.ok(serializeAgendaItem(created, clientName));
+    return ResponseDto.ok(await this.view(created, clientName));
   }
 
   /**
@@ -552,7 +564,7 @@ export class AgendaService {
 
     const dayBefore = new Date(scheduledDate);
     dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
-    if (dayBefore <= this.startOfTodayUTC()) return null;
+    if (dayBefore <= (await this.today())) return null;
 
     return tx.agendaItem.create({
       data: {
@@ -594,7 +606,7 @@ export class AgendaService {
 
         const credit = await tx.credit.findFirst({ where: { id: item.creditId } });
         if (!credit) throw agendaCaseNotFound();
-        await this.assertReferences(tx, type, validated.value, item.clientId, credit, this.startOfTodayUTC());
+        await this.assertReferences(tx, type, validated.value, item.clientId, credit, await this.today());
 
         data.type = type;
         data.details = validated.value as unknown as Prisma.InputJsonValue;
@@ -621,7 +633,7 @@ export class AgendaService {
     });
 
     await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'UPDATE', before, after: updated });
-    return ResponseDto.ok(serializeAgendaItem(updated, clientName));
+    return ResponseDto.ok(await this.view(updated, clientName));
   }
 
   /**
@@ -646,7 +658,7 @@ export class AgendaService {
     });
 
     await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'CANCEL', after: updated });
-    return ResponseDto.ok(serializeAgendaItem(updated, clientName));
+    return ResponseDto.ok(await this.view(updated, clientName));
   }
 
   /**
@@ -657,7 +669,7 @@ export class AgendaService {
    * Devuelve **el ítem nuevo**: es el que el cobrador va a ejecutar.
    */
   async reschedule(id: string, dto: RescheduleAgendaItemDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
-    const today = this.startOfTodayUTC();
+    const today = await this.today();
     const scheduledDate = toUTCDate(dto.scheduledDate);
     if (scheduledDate < today) throw agendaPastDate();
     assertTimeMode(dto);
@@ -700,7 +712,7 @@ export class AgendaService {
 
     await this.audit.record({ entity: 'agenda_item', entityId: previousId, action: 'RESCHEDULE', after: created });
     await this.audit.record({ entity: 'agenda_item', entityId: created.id, action: 'CREATE', after: created });
-    return ResponseDto.ok(serializeAgendaItem(created, clientName));
+    return ResponseDto.ok(await this.view(created, clientName));
   }
 
   /**
@@ -724,7 +736,7 @@ export class AgendaService {
     });
 
     await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'DELETE', before });
-    return ResponseDto.ok(serializeAgendaItem(updated, clientName));
+    return ResponseDto.ok(await this.view(updated, clientName));
   }
 
   /**

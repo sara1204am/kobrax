@@ -160,7 +160,16 @@ function makeService(opts: Opts = {}) {
     },
   };
   const events = { emit: (e: string) => void calls.events.push(e) };
-  const service = new AgendaService(prisma as never, tenant as never, audit as never, clientsService as never, events as never);
+  // El reloj del tenant, fijado en UTC: los tests arman sus fechas con `isoUTC`, que es la misma vara.
+  const clock = { today: async () => new Date(`${isoUTC(0)}T00:00:00.000Z`) };
+  const service = new AgendaService(
+    prisma as never,
+    tenant as never,
+    audit as never,
+    clientsService as never,
+    events as never,
+    clock as never,
+  );
   return { service, calls };
 }
 

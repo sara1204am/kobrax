@@ -1,16 +1,19 @@
 import type { AgendaItem } from '@prisma/client';
 import { AgendaItemStatus } from '@prisma/client';
 
-/** Inicio del día (UTC) de `now`, para derivar el "vencido". */
-function startOfDayUTC(now: Date): Date {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-}
-
 /**
  * Payload público de una gestión agendada. `clientName` se pasa aparte (clientId es ref suave,
  * el servicio resuelve el nombre). `isOverdue` = derivado: SCHEDULED && fecha < hoy.
+ *
+ * ⚠️ `today` es **la medianoche UTC del día civil del tenant**, no la hora actual: lo calcula
+ * `TenantClockService` y el servicio lo pasa hecho. Derivarlo acá de un `new Date()` era el bug que
+ * pintaba vencido el día entero a las 20:00 en Bolivia. El default es sólo para los tests.
  */
-export function serializeAgendaItem(a: AgendaItem, clientName: string | undefined, now: Date = new Date()) {
+export function serializeAgendaItem(
+  a: AgendaItem,
+  clientName: string | undefined,
+  today: Date = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())),
+) {
   return {
     id: a.id,
     caseId: a.caseId,
@@ -31,7 +34,7 @@ export function serializeAgendaItem(a: AgendaItem, clientName: string | undefine
     reasonCode: a.reasonCode ?? undefined,
     rescheduledFromId: a.rescheduledFromId ?? undefined,
     clientName,
-    isOverdue: a.status === AgendaItemStatus.SCHEDULED && a.scheduledDate.getTime() < startOfDayUTC(now).getTime(),
+    isOverdue: a.status === AgendaItemStatus.SCHEDULED && a.scheduledDate.getTime() < today.getTime(),
     createdAt: a.createdAt,
     updatedAt: a.updatedAt,
   };
