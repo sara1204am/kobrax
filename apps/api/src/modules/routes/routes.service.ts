@@ -10,7 +10,15 @@ import { CryptoService } from '../../common/crypto/crypto.service';
 import { serializeRoute, serializeStop } from './routes.serializer';
 import { OsrmService, type OsrmRoute, type OsrmTrip } from './osrm.service';
 import { AddStopDto, CreateRouteDto, GenerateRouteDto, ListRoutesQueryDto, UpdateRouteDto, UpdateStopDto } from './dto/route.dto';
-import { invalidCollector, noStopsToRoute, resourceNotFound, routeForbidden, stopDuplicate, stopNotPending } from './routes.errors';
+import {
+  invalidCollector,
+  noStopsToRoute,
+  resourceNotFound,
+  routeAlreadyForDay,
+  routeForbidden,
+  stopDuplicate,
+  stopNotPending,
+} from './routes.errors';
 
 const OPEN_CASE_STATUSES = { notIn: [CaseStatus.CLOSED, CaseStatus.WRITTEN_OFF] };
 
@@ -114,11 +122,27 @@ export class RoutesService {
     }
   }
 
+  /**
+   * La ruta que ya tiene ese cobrador ese día, si la hay.
+   *
+   * 🔴 La base lo garantiza con un `unique`, pero la comprobación previa existe igual: sin ella el
+   * choque sale como un P2002 de Prisma —un 500 sin explicación— en vez de decirle al cobrador que
+   * su ruta de hoy ya está armada. El `unique` es la red; esto es el mensaje.
+   */
+  private async routeOfDay(tx: PrismaClient, collectorId: string, plannedDate: Date) {
+    return tx.routePlan.findFirst({
+      where: { accountId: this.tenant.accountId, collectorId, plannedDate },
+      select: { id: true },
+    });
+  }
+
   /** Mismo modelo de capacidades que `generate`: el ejecutor de campo sólo crea rutas para sí mismo. */
   async create(dto: CreateRouteDto): Promise<ReturnType<typeof serializeRoute>> {
     const collectorId = this.collectorFor(dto.collectorId, 'crear rutas');
     const route = await this.tx(async (tx) => {
       await this.assertCollector(tx, collectorId);
+      const already = await this.routeOfDay(tx, collectorId, new Date(dto.plannedDate));
+      if (already) throw routeAlreadyForDay(already.id);
       return tx.routePlan.create({
         data: {
           accountId: this.tenant.accountId,
@@ -145,6 +169,8 @@ export class RoutesService {
 
     const route = await this.tx(async (tx) => {
       await this.assertCollector(tx, collectorId);
+      const already = await this.routeOfDay(tx, collectorId, new Date(dto.plannedDate));
+      if (already) throw routeAlreadyForDay(already.id);
 
       const cases = dto.caseIds?.length
         ? await tx.collectionCase.findMany({ where: { id: { in: dto.caseIds }, status: OPEN_CASE_STATUSES, deletedAt: null }, orderBy: { priority: 'desc' } })

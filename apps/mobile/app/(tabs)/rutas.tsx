@@ -94,7 +94,15 @@ export default function RutasScreen() {
       setActionError(null);
       const res = await action();
       if (res.status === 'offline') setActionError('Sin conexión. Reintentá cuando vuelva la red.');
-      else if (res.status === 'error') setActionError(res.message);
+      else if (res.status === 'error') {
+        setActionError(res.message);
+        /*
+         * Y se recarga igual. El caso que importa es «ya tenés una ruta armada para ese día»
+         * (`ROUTE_DUPLICATE_DAY`): la ruta existe y hay que mostrarla, no dejar al cobrador con un
+         * cartel rojo y la pantalla vacía. Con cualquier otro error, recargar no hace daño.
+         */
+        await fetchRoute();
+      }
       // `unauthenticated` cae acá: `fetchRoute` lo detecta con `me()` y manda al login.
       else await fetchRoute();
       setBusy(false);

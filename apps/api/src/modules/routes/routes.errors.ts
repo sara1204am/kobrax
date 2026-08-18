@@ -18,6 +18,19 @@ export const stopDuplicate = () =>
 export const stopNotPending = () =>
   new UnprocessableEntityException({ code: 'ROUTE_STOP_DONE', message: 'La parada ya fue gestionada' });
 
+/**
+ * Ya hay una ruta de ese cobrador ese día. La jornada de una persona es una sola.
+ *
+ * El `routeId` va en `details` para que la pantalla pueda abrirla, pero **el mensaje se explica solo**:
+ * el móvil sólo propaga `message`, así que si el texto no dice qué pasó, el cobrador ve un error mudo.
+ */
+export const routeAlreadyForDay = (routeId: string) =>
+  new UnprocessableEntityException({
+    code: 'ROUTE_DUPLICATE_DAY',
+    message: 'Ya tenés una ruta armada para ese día. Actualizá para verla.',
+    details: { routeId },
+  });
+
 export const noStopsToRoute = () =>
   // El móvil muestra este texto tal cual (sólo propaga `message`): tiene que decirle al cobrador qué hacer.
   new UnprocessableEntityException({

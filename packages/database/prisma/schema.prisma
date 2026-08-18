@@ -911,8 +911,11 @@ model RoutePlan {
   branch  Branch?     @relation(fields: [branchId], references: [id])
   stops   RouteStop[]
 
+  // Una ruta por cobrador y por día: la jornada de una persona es una sola. Dos rutas el mismo día
+  // son un doble toque en el teléfono o un borrador que se sincronizó dos veces, y dejan la
+  // pantalla del supervisor mostrando once rutas de la misma cobradora.
+  @@unique([accountId, collectorId, plannedDate])
   @@index([accountId, status])
-  @@index([accountId, collectorId, plannedDate])
   @@map("route_plans")
 }
 

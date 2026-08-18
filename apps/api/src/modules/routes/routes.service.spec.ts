@@ -25,6 +25,8 @@ function makeService(
     permissions?: string[];
     routes?: unknown[];
     route?: { id: string; collectorId: string; totalDistanceKm?: number; estimatedMinutes?: number };
+    /** La ruta que ese cobrador YA tiene ese día. `undefined` = no tiene, y se puede armar. */
+    routeOfDay?: { id: string };
     stops?: FakeStop[];
     /** Punto de cada parada (`null` = cliente sin ubicación cargada). Sólo lo usa el preview. */
     points?: Record<string, { latitude: number; longitude: number } | null>;
@@ -92,8 +94,12 @@ function makeService(
       count: async () => (opts.routes ?? []).length,
       // Las paradas salen del MISMO store en memoria, así un reordenamiento se ve en la lectura
       // siguiente. `client` se sintetiza desde `opts.points`.
-      findFirst: async () =>
-        opts.route ? { ...opts.route, stops: sorted({ routeId: opts.route.id }).map(withClient) } : null,
+      findFirst: async (args?: { where?: Record<string, unknown> }) => {
+        // La pregunta «¿este cobrador ya tiene ruta ese día?» es la única que lleva `plannedDate`.
+        // Distinguirla acá es lo que hace que el test falle si la guarda consultara sin el día.
+        if (args?.where?.plannedDate !== undefined) return opts.routeOfDay ?? null;
+        return opts.route ? { ...opts.route, stops: sorted({ routeId: opts.route.id }).map(withClient) } : null;
+      },
       update: async (args: { data: Record<string, unknown> }) => {
         calls.routeUpdate.push(args.data);
         return { ...opts.route, ...args.data };
@@ -149,6 +155,13 @@ describe('RoutesService.create', () => {
     await service.create(GEN);
     assert.equal(calls.routeCreate[0]!.collectorId, 'u1');
   });
+
+  it('🔴 no crea una segunda ruta del mismo día (ROUTE_DUPLICATE_DAY)', async () => {
+    // La jornada de una persona es una sola. Pasaba con un borrador que se sincronizaba dos veces.
+    const { service, calls } = makeService({ permissions: ASSIGN, routeOfDay: { id: 'r-de-hoy' } });
+    await rejectsWithCode(service.create(GEN), 'ROUTE_DUPLICATE_DAY');
+    assert.equal(calls.routeCreate.length, 0, 'no llega a insertar');
+  });
 });
 
 describe('RoutesService.generate', () => {
@@ -168,6 +181,18 @@ describe('RoutesService.generate', () => {
   it('rechaza si no hay casos para la ruta (ROUTE_EMPTY)', async () => {
     const { service } = makeService({ cases: [], permissions: ASSIGN });
     await rejectsWithCode(service.generate(GEN), 'ROUTE_EMPTY');
+  });
+
+  it('🔴 no genera una segunda ruta del mismo día (ROUTE_DUPLICATE_DAY)', async () => {
+    // Dos toques en «armar la ruta de hoy» dejaban dos rutas. Y se corta ANTES de leer los casos:
+    // la ruta ya existe, no hay nada que decidir.
+    const { service, calls } = makeService({
+      cases: [{ id: 'caseA', clientId: 'clA' }],
+      permissions: ASSIGN,
+      routeOfDay: { id: 'r-de-hoy' },
+    });
+    await rejectsWithCode(service.generate(GEN), 'ROUTE_DUPLICATE_DAY');
+    assert.equal(calls.routeCreate.length, 0, 'no llega a insertar');
   });
 
   it('el cobrador (ROUTE_EXECUTE) genera SU ruta aunque el body pida otro cobrador', async () => {
