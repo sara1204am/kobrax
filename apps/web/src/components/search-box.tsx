@@ -25,6 +25,7 @@ export function SearchBox({
   placeholder,
   hint,
   wide,
+  flush,
 }: {
   label: string;
   placeholder: string;
@@ -35,6 +36,13 @@ export function SearchBox({
    * caja de 1200 px de ancho para escribir un apellido se ve rota.
    */
   wide?: boolean;
+  /**
+   * Sin el margen de abajo, para cuando comparte fila con otro control.
+   *
+   * El margen existe porque la caja va **encima** de la tabla en todas las pantallas del panel; en
+   * una fila con un botón al lado, ese mismo margen la desalinea unos píxeles y se nota.
+   */
+  flush?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -62,7 +70,7 @@ export function SearchBox({
   }, [value, urlQuery, params, pathname, router]);
 
   return (
-    <div className="mb-3">
+    <div className={flush ? '' : 'mb-3'}>
       <label className="relative block">
         <span className="sr-only">{label}</span>
         {wide && (

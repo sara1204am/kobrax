@@ -160,6 +160,14 @@ export function PlanScreen({
               latitude: loc.latitude,
               longitude: loc.longitude,
               label: c.clientName ?? undefined,
+              // Lo que decide si vale la pena ir, en el globo: no hay que volver a la lista a buscarlo.
+              detail: [
+                money(c.amount, c.currency ?? 'BOB'),
+                c.daysPastDue ? t('days', { n: c.daysPastDue }) : null,
+                c.zone ?? null,
+              ]
+                .filter(Boolean)
+                .join(' · '),
               picked: orden >= 0,
               // El número de parada: la posición en la que se eligió, que es la que va a viajar.
               order: orden >= 0 ? orden + 1 : undefined,
@@ -223,22 +231,30 @@ export function PlanScreen({
 
       {/* Fecha y progreso del equipo: qué día se está armando y a quién le falta. */}
       <Card>
-        <div className="flex flex-wrap items-end gap-5">
-          <label className="block space-y-2">
-            <span className="text-[14px] font-medium text-k-text">{t('date')}</span>
+        {/*
+         * Los dos campos en una fila, **con la misma medida**: son las dos decisiones de arriba —qué
+         * día y hasta dónde— y con anchos distintos se leen como si uno importara más. El rótulo
+         * tiene alto propio para que los dos campos empiecen a la misma altura, tenga o no el `?`.
+         */}
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="w-full sm:w-52">
+            <label htmlFor="planDate" className="mb-2 flex h-5 items-center text-[14px] font-medium text-k-text">
+              {t('date')}
+            </label>
             <input
+              id="planDate"
               type="date"
               value={day}
               min={today}
               onChange={(e) => e.target.value && go({ date: e.target.value })}
-              className={INPUT}
+              className={`${INPUT} w-full`}
             />
-          </label>
+          </div>
 
-          <div className="space-y-2">
+          <div className="w-full sm:w-52">
             {/* La aclaración va detrás del `?`, no debajo del campo: un renglón gris abajo desalinea
                 la fila entera y ocupa lugar todos los días para explicar algo que se lee una vez. */}
-            <span className="flex items-center gap-1.5 text-[14px] font-medium text-k-text">
+            <span className="mb-2 flex h-5 items-center gap-1.5 text-[14px] font-medium text-k-text">
               <label htmlFor="minStops">{t('minStops')}</label>
               <InfoTip label={t('minStops')}>{t('minStopsHint')}</InfoTip>
             </span>
@@ -249,7 +265,7 @@ export function PlanScreen({
               max={50}
               value={minStops}
               onChange={(e) => go({ minStops: e.target.value })}
-              className={`${INPUT} w-24`}
+              className={`${INPUT} w-full`}
             />
           </div>
         </div>
@@ -418,13 +434,16 @@ export function PlanScreen({
           )}
 
           <div className="min-w-0 flex-1 space-y-4">
+            {/* Los dos, **la misma altura**: comparten fila, y con el botón más bajo que la caja la
+                línea se ve desprolija justo en lo primero que se toca. `flush` le saca a la caja el
+                margen que trae para cuando va encima de una tabla. */}
             <div className="flex flex-wrap items-center gap-3">
               {/* El botón, del mismo lado que el panel que abre. */}
               <button
                 type="button"
                 onClick={() => setPanelOpen((v) => !v)}
                 aria-expanded={panelOpen}
-                className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium ${
+                className={`flex h-11 shrink-0 items-center gap-1.5 rounded-xl border px-4 text-[14px] font-medium ${
                   filtered
                     ? 'border-k-periwinkle bg-k-highlight text-k-periwinkle'
                     : 'border-k-border bg-white text-k-text-2 hover:bg-k-bg'
@@ -433,7 +452,9 @@ export function PlanScreen({
                 <span aria-hidden>⚟</span>
                 {tTable('appliedFilters')}
               </button>
-              <SearchBox wide label={t('filters.search')} placeholder={t('filters.search')} />
+              <span className="min-w-[220px] flex-1">
+                <SearchBox wide flush label={t('filters.search')} placeholder={t('filters.search')} />
+              </span>
             </div>
 
             <Card>

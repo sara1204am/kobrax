@@ -17,6 +17,8 @@ export interface MapPoint {
   latitude: number;
   longitude: number;
   label?: string;
+  /** La segunda línea del globo: saldo y mora, que es lo que decide si vale la pena ir. */
+  detail?: string;
   /** Ya está en la ruta que se arma. Se pinta distinto de los que todavía se pueden elegir. */
   picked?: boolean;
   /**
@@ -189,17 +191,36 @@ export function PointsMap({
        * a robarse el clic entre vecinos.
        */
       const hit = document.createElement('div');
-      hit.className = 'group flex h-6 w-6 cursor-pointer items-center justify-center';
+      hit.className = 'group relative flex h-6 w-6 cursor-pointer items-center justify-center';
       const dot = document.createElement('span');
       dot.className = pinClass(p.picked, p.order);
       if (p.order) dot.textContent = String(p.order);
       hit.appendChild(dot);
 
       /*
-       * El nombre va en `title` y no en un popup: el clic ya tiene dueño —marca y desmarca—, y un
-       * popup que se abre encima taparía los puntos de al lado justo mientras se elige entre ellos.
+       * 🔴 **El globo es de la casa, no el `title` del navegador.** Ése tarda un segundo largo en
+       * aparecer, se dibuja con la tipografía del sistema y no puede mostrar dos líneas: justo
+       * cuando alguien barre el mapa comparando diez deudores, llega tarde y dice poco.
+       *
+       * Aparece con CSS puro (`group-hover`) y **no recibe eventos**: si los recibiera, taparía al
+       * punto de al lado y el clic caería en el globo en vez de en el vecino.
        */
-      if (p.label) hit.title = p.label;
+      if (p.label) {
+        const tip = document.createElement('span');
+        tip.className =
+          'pointer-events-none absolute bottom-full left-1/2 z-30 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded-lg border border-k-border bg-white px-2.5 py-1.5 text-left shadow-k-card group-hover:block';
+        const name = document.createElement('span');
+        name.className = 'block text-[12px] font-semibold text-k-text';
+        name.textContent = p.label;
+        tip.appendChild(name);
+        if (p.detail) {
+          const sub = document.createElement('span');
+          sub.className = 'block text-[11px] text-k-text-2';
+          sub.textContent = p.detail;
+          tip.appendChild(sub);
+        }
+        hit.appendChild(tip);
+      }
       hit.addEventListener('click', (e) => {
         // Sin esto, el clic también llega al mapa y arrastra el encuadre bajo el dedo.
         e.stopPropagation();
