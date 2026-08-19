@@ -847,6 +847,8 @@
         "mapSmall": "Shrink the map",
         "help": "Helping out",
         "routeOrder": "The run · {n} stops, in this order",
+        "showOrder": "Reorder ({n})",
+        "hideOrder": "Hide the order",
         "moveUp": "Move one stop up",
         "moveDown": "Move one stop down",
         "removeStop": "Remove from the route",

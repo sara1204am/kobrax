@@ -63,6 +63,13 @@ export function PlanScreen({
   // saldría corta sin que nada lo explique. Mismo criterio que el `DataTable`.
   const [panelOpen, setPanelOpen] = useState(filtered);
   const [bigMap, setBigMap] = useState(false);
+  /**
+   * Si se ve el panel del recorrido, al lado del mapa.
+   *
+   * Arranca cerrado a propósito: el mapa vale más ancho mientras se elige, y ordenar viene después.
+   * El botón lleva el número de paradas, así que no hay que abrirlo para saber cuántas van.
+   */
+  const [showOrder, setShowOrder] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
   /**
    * El orden de las columnas que **el servidor no sabe ordenar** (nombre, zona, ubicación).
@@ -366,6 +373,26 @@ export function PlanScreen({
                 </label>
               )}
 
+              {/*
+               * 🔴 **El recorrido se muestra y se esconde acá**, al lado de los otros dos: ordenar
+               * es una tarea del mapa —se acomoda mirando dónde queda cada puerta—, así que su
+               * interruptor tiene que estar donde está la vista, no al pie de la pantalla.
+               */}
+              {picked.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowOrder((v) => !v)}
+                  aria-pressed={showOrder}
+                  className={`h-8 rounded-lg border px-3 text-[13px] font-medium ${
+                    showOrder
+                      ? 'border-k-navy bg-k-navy text-white'
+                      : 'border-k-border bg-white text-k-text-2 hover:bg-k-bg'
+                  }`}
+                >
+                  {showOrder ? t('hideOrder') : t('showOrder', { n: picked.length })}
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => setBigMap((v) => !v)}
@@ -377,27 +404,77 @@ export function PlanScreen({
             </div>
           </div>
 
-          {/* El mapa se dibuja cuando hay algo que mostrar: los marcados, o el área con lo que caiga
-              adentro. Vacío sería un recuadro de tiles sin una sola respuesta. */}
-          {puntos.length > 0 || area ? (
-            <PointsMap
-              points={puntos}
-              height={bigMap ? 520 : 220}
-              // El radio escrito viaja al mapa: la etiqueta del borde y el select dicen lo mismo.
-              circle={area ? { ...area, label: radioLabel(area.radiusKm) } : undefined}
-              // Al soltar el círculo, no en cada frame: filtrar cien filas sesenta veces por segundo
-              // es lo único que puede volver esto lento.
-              onCircleMove={(centro) => setArea((prev) => (prev ? { ...prev, ...centro } : prev))}
-              // Tocar un punto es lo mismo que tildar su fila: una sola verdad, la del estado.
-              onPointClick={toggle}
-            />
-          ) : (
-            picked.length > 0 && (
-              <p className="rounded-2xl border border-k-border bg-white px-4 py-3 text-[13px] text-k-text-2">
-                {t('mapNoPoints')}
-              </p>
-            )
-          )}
+          {/*
+           * 🔴 **El recorrido a la izquierda y el mapa a la derecha, a la misma altura.** Ordenar
+           * mirando sólo una lista de nombres es adivinar: lo que dice si el orden sirve es el mapa,
+           * y hay que verlo **mientras** se mueve cada parada. Por eso conviven, y no se turnan.
+           *
+           * La lista no fija su alto: en una fila flex se estira hasta el del mapa sola, y así
+           * agrandar el mapa la agranda con él sin una línea más.
+           */}
+          <div className="flex flex-col items-stretch gap-3 lg:flex-row">
+            {showOrder && picked.length > 0 && (
+              <div className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-k-border bg-white lg:w-80">
+                <p className="border-b border-k-border bg-k-bg px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
+                  {t('routeOrder', { n: picked.length })}
+                </p>
+                {/* El scroll vive acá adentro: la columna ya tiene el alto del mapa. */}
+                <ol className="max-h-64 min-h-0 flex-1 divide-y divide-k-border overflow-y-auto lg:max-h-none">
+                  {picked.map((id, i) => {
+                    const c = available.find((x) => x.id === id);
+                    return (
+                      <li key={id} className="flex items-center gap-2 px-3 py-2 text-[13px]">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-k-navy text-[11px] font-semibold text-white">
+                          {i + 1}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-k-text">{c?.clientName ?? '—'}</span>
+                          <span className="block truncate text-[11px] text-k-muted">{c?.zone ?? ''}</span>
+                        </span>
+                        {/* Con flechas y no arrastrando: arrastrar no existe para quien navega con
+                            teclado, y acá el orden es el dato, no un adorno. */}
+                        <span className="flex shrink-0 items-center gap-1">
+                          <OrderButton onClick={() => move(id, -1)} disabled={i === 0} label={t('moveUp')}>
+                            ↑
+                          </OrderButton>
+                          <OrderButton onClick={() => move(id, 1)} disabled={i === picked.length - 1} label={t('moveDown')}>
+                            ↓
+                          </OrderButton>
+                          <OrderButton onClick={() => toggle(id)} label={t('removeStop')}>
+                            ✕
+                          </OrderButton>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            )}
+
+            {/* El mapa se dibuja cuando hay algo que mostrar: los marcados, o el área con lo que caiga
+                adentro. Vacío sería un recuadro de tiles sin una sola respuesta. */}
+            <div className="min-w-0 flex-1">
+              {puntos.length > 0 || area ? (
+                <PointsMap
+                  points={puntos}
+                  height={bigMap ? 520 : 220}
+                  // El radio escrito viaja al mapa: la etiqueta del borde y el select dicen lo mismo.
+                  circle={area ? { ...area, label: radioLabel(area.radiusKm) } : undefined}
+                  // Al soltar el círculo, no en cada frame: filtrar cien filas sesenta veces por
+                  // segundo es lo único que puede volver esto lento.
+                  onCircleMove={(centro) => setArea((prev) => (prev ? { ...prev, ...centro } : prev))}
+                  // Tocar un punto es lo mismo que tildar su fila: una sola verdad, la del estado.
+                  onPointClick={toggle}
+                />
+              ) : (
+                picked.length > 0 && (
+                  <p className="rounded-2xl border border-k-border bg-white px-4 py-3 text-[13px] text-k-text-2">
+                    {t('mapNoPoints')}
+                  </p>
+                )
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -562,46 +639,8 @@ export function PlanScreen({
               </div>
             )}
 
-            {/*
-             * 🔴 **El recorrido, en orden.** Elegir a quién visitar es media decisión; la otra media
-             * es en qué orden, que es lo que define a qué hora cae cada puerta. Se arma con el orden
-             * en que se fue marcando y se acomoda con las flechas.
-             */}
-            {picked.length > 0 && (
-              <div className="mt-5 rounded-xl border border-k-border">
-                <p className="border-b border-k-border bg-k-bg px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
-                  {t('routeOrder', { n: picked.length })}
-                </p>
-                <ol className="max-h-64 divide-y divide-k-border overflow-y-auto">
-                  {picked.map((id, i) => {
-                    const c = available.find((x) => x.id === id);
-                    return (
-                      <li key={id} className="flex items-center gap-3 px-4 py-2 text-[13px]">
-                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-k-navy text-[11px] font-semibold text-white">
-                          {i + 1}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-k-text">{c?.clientName ?? '—'}</span>
-                        <span className="truncate text-[12px] text-k-muted">{c?.zone ?? ''}</span>
-                        {/* Con flechas y no arrastrando: arrastrar no existe para quien navega con
-                            teclado, y acá el orden es el dato, no un adorno. */}
-                        <span className="flex shrink-0 items-center gap-1">
-                          <OrderButton onClick={() => move(id, -1)} disabled={i === 0} label={t('moveUp')}>
-                            ↑
-                          </OrderButton>
-                          <OrderButton onClick={() => move(id, 1)} disabled={i === picked.length - 1} label={t('moveDown')}>
-                            ↓
-                          </OrderButton>
-                          <OrderButton onClick={() => toggle(id)} label={t('removeStop')}>
-                            ✕
-                          </OrderButton>
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ol>
-              </div>
-            )}
-
+            {/* El recorrido y su orden viven arriba, junto al mapa: se acomodan mirando dónde queda
+                cada puerta, no leyendo una lista de nombres al pie de la pantalla. */}
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <span className="sm:w-64">
                 <Button onClick={() => void confirmar()} loading={busy} disabled={picked.length === 0}>

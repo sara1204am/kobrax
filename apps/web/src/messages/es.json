@@ -847,6 +847,8 @@
         "mapSmall": "Achicar el mapa",
         "help": "Ayuda",
         "routeOrder": "El recorrido · {n} paradas, en este orden",
+        "showOrder": "Ordenar ({n})",
+        "hideOrder": "Ocultar el orden",
         "moveUp": "Subir una parada",
         "moveDown": "Bajar una parada",
         "removeStop": "Sacar de la ruta",

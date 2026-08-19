@@ -190,8 +190,15 @@ export function PointsMap({
        * 24 y no 44 (el mínimo táctil): con puntos de la misma cuadra, áreas más grandes empezarían
        * a robarse el clic entre vecinos.
        */
+      /*
+       * 🔴 **`hover:z-50` va en el MARCADOR, no en el globo.** Cada marcador es un elemento aparte
+       * dentro del mismo contenedor, así que el globo se dibujaba debajo de los puntos que vienen
+       * después en el DOM por mucho z-index que tuviera adentro: el apilado se decide entre
+       * hermanos, y el hermano es el marcador entero. Al pasar por encima, ése sube y su globo va
+       * con él.
+       */
       const hit = document.createElement('div');
-      hit.className = 'group relative flex h-6 w-6 cursor-pointer items-center justify-center';
+      hit.className = 'group relative flex h-6 w-6 cursor-pointer items-center justify-center hover:z-50';
       const dot = document.createElement('span');
       dot.className = pinClass(p.picked, p.order);
       if (p.order) dot.textContent = String(p.order);
@@ -208,7 +215,7 @@ export function PointsMap({
       if (p.label) {
         const tip = document.createElement('span');
         tip.className =
-          'pointer-events-none absolute bottom-full left-1/2 z-30 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded-lg border border-k-border bg-white px-2.5 py-1.5 text-left shadow-k-card group-hover:block';
+          'pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded-lg border border-k-border bg-white px-2.5 py-1.5 text-left shadow-k-card group-hover:block';
         const name = document.createElement('span');
         name.className = 'block text-[12px] font-semibold text-k-text';
         name.textContent = p.label;
