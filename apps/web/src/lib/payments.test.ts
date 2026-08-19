@@ -22,6 +22,23 @@ describe('paymentQuery', () => {
     );
   });
 
+  it('traduce la columna de la tabla al campo que la API sabe ordenar', () => {
+    const query = paymentQuery({ sort: 'receipt', dir: 'asc' }, TODAY);
+    expect(query.get('sort')).toBe('receiptNumber');
+    expect(query.get('dir')).toBe('asc');
+  });
+
+  it('🔴 una columna que la API no ordena NO viaja', () => {
+    // «Registró» es un uuid y el DTO no lo acepta: mandarlo sería un 400 y el ledger entero vacío.
+    const query = paymentQuery({ sort: 'registeredBy', dir: 'asc' }, TODAY);
+    expect(query.get('sort')).toBeNull();
+    expect(query.get('dir')).toBeNull();
+  });
+
+  it('sin orden pedido no manda ninguno: el default lo pone la API', () => {
+    expect(paymentQuery({}, TODAY).get('sort')).toBeNull();
+  });
+
   it('sin período, el mes corriente', () => {
     const query = paymentQuery({}, TODAY);
     expect(query.get('from')).toBe('2026-08-01');

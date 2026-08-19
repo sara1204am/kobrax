@@ -22,7 +22,27 @@ export interface PaymentParams {
   caseId?: string;
   page?: string;
   pageSize?: string;
+  sort?: string;
+  dir?: string;
 }
+
+/**
+ * La columna que toca el `DataTable` → el campo que la API sabe ordenar.
+ *
+ * 🔴 **La traducción existe para que la URL siga hablando el idioma de la pantalla** y, sobre todo,
+ * para que sólo viaje lo que el DTO acepta: una clave de más —una preferencia vieja, alguien
+ * probando— sería un 400 y el ledger entero se vaciaría.
+ *
+ * ⚠️ **«Registró» no está.** Es un uuid de usuario, no un nombre: ordenar por él agrupa los pagos de
+ * cada persona pero deja los grupos en un orden que no es el de ningún nombre, y la tabla se leería
+ * como rota. El día que haga falta, se resuelve en dos pasos como las rutas por cobrador.
+ */
+const SORTS: Record<string, string> = {
+  date: 'paymentDate',
+  amount: 'amount',
+  method: 'method',
+  receipt: 'receiptNumber',
+};
 
 /** Cuántos pagos por página si nadie eligió otra cosa. */
 export const DEFAULT_PAGE_SIZE = 25;
@@ -57,6 +77,14 @@ export function paymentQuery(params: PaymentParams, today = new Date()): URLSear
   });
   if (params.creditId && isUuid(params.creditId)) query.set('creditId', params.creditId);
   if (params.caseId && isUuid(params.caseId)) query.set('caseId', params.caseId);
+
+  // Sin orden pedido no se manda ninguno: el default —lo último cobrado primero— lo pone la API, y
+  // repetirlo acá serían dos lugares donde cambiarlo.
+  const sort = params.sort ? SORTS[params.sort] : undefined;
+  if (sort) {
+    query.set('sort', sort);
+    query.set('dir', params.dir === 'asc' ? 'asc' : 'desc');
+  }
   return query;
 }
 

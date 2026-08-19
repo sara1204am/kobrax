@@ -163,9 +163,26 @@ export class PaymentsService {
     if (query.clientId) where.credit = { clientId: query.clientId };
     if (query.from || query.to) where.paymentDate = { ...(query.from ? { gte: new Date(query.from) } : {}), ...(query.to ? { lte: new Date(query.to) } : {}) };
 
+    /*
+     * El orden. Por defecto, lo último cobrado primero: un ledger se abre para ver qué entró recién.
+     *
+     * 🔴 **Los que faltan van al final en los dos sentidos.** El comprobante es opcional, y en
+     * Postgres los nulos van primero al ordenar descendente: pedir «mayor número de comprobante»
+     * devolvía una página entera de pagos sin comprobante. Un dato que no está no es el más alto ni
+     * el más bajo.
+     */
+    const dir = query.dir ?? 'desc';
+    const orderBy: Prisma.PaymentOrderByWithRelationInput = !query.sort
+      ? { paymentDate: 'desc' }
+      : query.sort === 'receiptNumber'
+        ? // ⚠️ `nulls` va SÓLO en el campo que admite nulos: Prisma lo rechaza en tiempo de
+          // ejecución sobre una columna `NOT NULL`, y el tipado no lo agarra con una clave calculada.
+          { receiptNumber: { sort: dir, nulls: 'last' } }
+        : { [query.sort]: dir };
+
     const [rows, total] = await this.tx((tx) =>
       Promise.all([
-        tx.payment.findMany({ where, orderBy: { paymentDate: 'desc' }, skip, take: limit }),
+        tx.payment.findMany({ where, orderBy, skip, take: limit }),
         tx.payment.count({ where }),
       ]),
     );

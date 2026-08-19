@@ -20,7 +20,10 @@ import { dateTime, money } from '@/lib/format';
  * cuarenta por página, para una tabla que se lee de un vistazo. El deudor sale en el detalle, que
  * es una fila sola y se lo puede permitir.
  *
- * Ninguna columna ordena y no hay búsqueda: `GET /payments` no acepta `sort` ni `q`.
+ * Ordenan cuatro de las cinco columnas. **«Registró» no**, y está explicado en `lib/payments.ts`: es
+ * un uuid de usuario, así que ordenar por él dejaría los nombres en un orden que no es ninguno.
+ *
+ * No hay búsqueda: `GET /payments` no acepta `q`.
  */
 export function PaymentsTable({
   rows,
@@ -51,6 +54,9 @@ export function PaymentsTable({
     {
       key: 'date',
       header: t('columns.date'),
+      sortable: true,
+      // Lo último cobrado primero: es lo que se viene a mirar, y es el orden con el que abre.
+      defaultDir: 'desc',
       render: (p) => (
         <a href={`/pagos/${p.id}`} className="hover:underline">
           {dateTime(p.paymentDate, locale)}
@@ -61,9 +67,12 @@ export function PaymentsTable({
       key: 'amount',
       header: t('columns.amount'),
       numeric: true,
+      sortable: true,
+      // Tocar «Monto» es buscar el pago grande, no los cinco bolivianos de una cuota suelta.
+      defaultDir: 'desc',
       render: (p) => <span className="font-medium text-k-text">{money(p.amount, currency)}</span>,
     },
-    { key: 'method', header: t('columns.method'), render: (p) => t(`method.${p.method}`) },
+    { key: 'method', header: t('columns.method'), sortable: true, render: (p) => t(`method.${p.method}`) },
     {
       key: 'registeredBy',
       header: t('columns.registeredBy'),
@@ -74,6 +83,8 @@ export function PaymentsTable({
       key: 'receipt',
       header: t('columns.receipt'),
       numeric: true,
+      sortable: true,
+      defaultDir: 'desc',
       render: (p) => (p.receiptNumber != null ? `#${p.receiptNumber}` : '—'),
     },
   ];

@@ -121,3 +121,51 @@ describe('PaymentsService.register', () => {
     assert.equal(calls.events.length, 0);
   });
 });
+
+/** Un service que sólo sabe listar: guarda con qué `orderBy` se llamó a Prisma. */
+function makeLister() {
+  const calls: { orderBy?: Record<string, unknown> } = {};
+  const tx = {
+    payment: {
+      findMany: async (args: { orderBy: Record<string, unknown> }) => {
+        calls.orderBy = args.orderBy;
+        return [];
+      },
+      count: async () => 0,
+    },
+  };
+  const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
+  const service = new PaymentsService(prisma as never, { accountId: 'acc-A' } as never, {} as never, {} as never);
+  return { service, calls };
+}
+
+describe('PaymentsService.list — el orden', () => {
+  it('sin pedir nada: lo último cobrado primero', async () => {
+    // Un ledger se abre para ver qué entró recién, no para leerlo desde el principio de los tiempos.
+    const { service, calls } = makeLister();
+    await service.list({});
+    assert.deepEqual(calls.orderBy, { paymentDate: 'desc' });
+  });
+
+  it('ordena por la columna pedida, en el sentido pedido', async () => {
+    const { service, calls } = makeLister();
+    await service.list({ sort: 'amount', dir: 'asc' });
+    assert.deepEqual(calls.orderBy, { amount: 'asc' });
+  });
+
+  it('🔴 lo que falta va al final, no primero', async () => {
+    /*
+     * El comprobante es opcional y en Postgres los nulos van PRIMERO al ordenar descendente: pedir
+     * «mayor número de comprobante» devolvía una página entera de pagos sin comprobante.
+     */
+    const { service, calls } = makeLister();
+    await service.list({ sort: 'receiptNumber', dir: 'desc' });
+    assert.deepEqual(calls.orderBy, { receiptNumber: { sort: 'desc', nulls: 'last' } });
+  });
+
+  it('sin sentido explícito, descendente: es el que sirve en plata y en fechas', async () => {
+    const { service, calls } = makeLister();
+    await service.list({ sort: 'method' });
+    assert.deepEqual(calls.orderBy, { method: 'desc' });
+  });
+});
