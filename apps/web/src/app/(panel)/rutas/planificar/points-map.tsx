@@ -19,6 +19,13 @@ export interface MapPoint {
   label?: string;
   /** Ya está en la ruta que se arma. Se pinta distinto de los que todavía se pueden elegir. */
   picked?: boolean;
+  /**
+   * En qué lugar del recorrido va, si ya está elegido.
+   *
+   * 🔴 Se dibuja **adentro del pin**: el orden es la mitad de lo que se decide al planificar —a qué
+   * hora cae cada puerta— y sin el número el mapa muestra dónde ir pero no en qué orden.
+   */
+  order?: number;
 }
 
 export interface MapCircle {
@@ -105,8 +112,25 @@ export function PointsMap({
         // barrio del mapa base. Cortado se lee como lo que es — algo dibujado encima para medir.
         paint: { 'line-color': '#5B7DBE', 'line-width': 2.5, 'line-dasharray': [2, 2] },
       });
+
+      /*
+       * 🔴 El recorrido posible entre las paradas elegidas, **punteado y en línea recta**: es el
+       * orden, no el camino. El camino real por las calles lo calcula OSRM y sale en la ficha de la
+       * ruta una vez creada; dibujarlo continuo acá haría pasar por «va por acá» algo que sólo dice
+       * «primero ésta, después ésta».
+       */
+      m.addSource(PATH, { type: 'geojson', data: emptyArea() });
+      m.addLayer({
+        id: PATH,
+        type: 'line',
+        source: PATH,
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#1A3A52', 'line-width': 2, 'line-dasharray': [1.5, 1.5], 'line-opacity': 0.7 },
+      });
+
       ready.current = true;
       draw(m, circleRef.current, label.current);
+      drawPath(m, pointsRef.current);
     });
     map.current = m;
 
@@ -120,9 +144,11 @@ export function PointsMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // El círculo vigente, para que el `load` de arriba pueda dibujarlo aunque llegue después.
+  // Lo vigente, para que el `load` de arriba pueda dibujarlo aunque llegue después que los datos.
   const circleRef = useRef(circle);
   circleRef.current = circle;
+  const pointsRef = useRef(points);
+  pointsRef.current = points;
 
   /*
    * Sincronizar los pines: agregar los que entraron, sacar los que se fueron, y repintar el que
@@ -143,10 +169,13 @@ export function PointsMap({
     for (const p of points) {
       const existente = markers.current.get(p.id);
       if (existente) {
-        // Sólo la clase del punto, no el marcador entero: recrearlo lo haría parpadear sin haberse
-        // movido. El punto es el hijo; el padre es el área que se puede tocar.
-        const dot = existente.getElement().firstElementChild;
-        if (dot) dot.className = pinClass(p.picked);
+        // Sólo el punto, no el marcador entero: recrearlo lo haría parpadear sin haberse movido.
+        // El punto es el hijo; el padre es el área que se puede tocar.
+        const dot = existente.getElement().firstElementChild as HTMLElement | null;
+        if (dot) {
+          dot.className = pinClass(p.picked, p.order);
+          dot.textContent = p.order ? String(p.order) : '';
+        }
         continue;
       }
 
@@ -162,7 +191,8 @@ export function PointsMap({
       const hit = document.createElement('div');
       hit.className = 'group flex h-6 w-6 cursor-pointer items-center justify-center';
       const dot = document.createElement('span');
-      dot.className = pinClass(p.picked);
+      dot.className = pinClass(p.picked, p.order);
+      if (p.order) dot.textContent = String(p.order);
       hit.appendChild(dot);
 
       /*
@@ -180,6 +210,8 @@ export function PointsMap({
       marker.addTo(m);
       markers.current.set(p.id, marker);
     }
+
+    if (ready.current) drawPath(m, points);
   }, [points]);
 
   // Encuadre: sólo cuando cambia CUÁNTOS hay. Reencuadrar en cada tilde movería el mapa bajo el dedo.
@@ -261,19 +293,48 @@ export function PointsMap({
 }
 
 const AREA = 'plan-area';
+const PATH = 'plan-path';
 
-function pinClass(picked?: boolean): string {
+/**
+ * El recorrido posible: une las paradas **elegidas**, en su orden.
+ *
+ * Con menos de dos no hay recorrido que dibujar — una línea de un punto a sí mismo no dice nada.
+ */
+function drawPath(m: MapLibreMap, points: MapPoint[]): void {
+  const source = m.getSource(PATH) as GeoJSONSource | undefined;
+  if (!source) return;
+
+  const orden = points
+    .filter((p): p is MapPoint & { order: number } => p.order != null)
+    .sort((a, b) => a.order - b.order)
+    .map((p) => [p.longitude, p.latitude] as [number, number]);
+
+  source.setData(
+    orden.length < 2
+      ? emptyArea()
+      : {
+          type: 'FeatureCollection',
+          features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: orden } }],
+        },
+  );
+}
+
+function pinClass(picked?: boolean, order?: number): string {
   /*
-   * El elegido es más grande y del color de la marca; el disponible, un punto gris que no compite.
+   * El elegido lleva su número y es del color de la marca; el disponible, un punto gris que no
+   * compite. El numerado es más grande porque tiene que caber una cifra adentro.
    *
-   * Los dos **crecen y se tiñen al acercarse** (`group-hover`, que dispara el área de toque de
+   * Los tres **crecen y se tiñen al acercarse** (`group-hover`, que dispara el área de toque de
    * alrededor y no el punto en sí): es la confirmación de que el clic va a caer ahí y no en el
    * vecino, que con puntos de diez píxeles es la duda real.
    */
-  const base = 'block rounded-full border-white shadow transition-all group-hover:scale-150';
+  const base = 'flex items-center justify-center rounded-full border-white shadow transition-all group-hover:scale-125';
+  if (order) {
+    return `${base} h-6 w-6 border-2 bg-k-navy text-[11px] font-semibold text-white group-hover:bg-k-slate`;
+  }
   return picked
     ? `${base} h-4 w-4 border-2 bg-k-navy group-hover:bg-k-slate`
-    : `${base} h-2.5 w-2.5 border bg-k-muted group-hover:bg-k-periwinkle`;
+    : `${base} h-2.5 w-2.5 border bg-k-muted group-hover:bg-k-periwinkle group-hover:scale-150`;
 }
 
 function emptyArea(): GeoJSON.FeatureCollection {

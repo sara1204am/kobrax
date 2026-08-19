@@ -172,9 +172,22 @@ export class RoutesService {
       const already = await this.routeOfDay(tx, collectorId, new Date(dto.plannedDate));
       if (already) throw routeAlreadyForDay(already.id);
 
-      const cases = dto.caseIds?.length
-        ? await tx.collectionCase.findMany({ where: { id: { in: dto.caseIds }, status: OPEN_CASE_STATUSES, deletedAt: null }, orderBy: { priority: 'desc' } })
-        : await tx.collectionCase.findMany({ where: { assigneeId: collectorId, status: OPEN_CASE_STATUSES, deletedAt: null }, orderBy: { priority: 'desc' } });
+      /*
+       * 🔴 **Con `caseIds`, manda el orden en que vinieron.** Antes se reordenaba por prioridad
+       * también en ese caso, así que el recorrido que alguien armó mirando el mapa —esta cuadra,
+       * después la de al lado— se perdía en el camino y el cobrador recibía las paradas en otro
+       * orden. Sin `caseIds` sigue decidiendo la prioridad, que es lo correcto cuando nadie eligió.
+       */
+      const elegidos = dto.caseIds?.length
+        ? await tx.collectionCase.findMany({ where: { id: { in: dto.caseIds }, status: OPEN_CASE_STATUSES, deletedAt: null } })
+        : null;
+      const cases = elegidos
+        ? // `findMany` con `in` devuelve en el orden de la base, no en el del pedido: se reordena acá.
+          dto.caseIds!.flatMap((id) => elegidos.find((c) => c.id === id) ?? [])
+        : await tx.collectionCase.findMany({
+            where: { assigneeId: collectorId, status: OPEN_CASE_STATUSES, deletedAt: null },
+            orderBy: { priority: 'desc' },
+          });
       if (cases.length === 0) throw noStopsToRoute();
 
       const created = await tx.routePlan.create({
@@ -190,7 +203,8 @@ export class RoutesService {
               accountId: this.tenant.accountId,
               clientId: c.clientId,
               caseId: c.id,
-              sequenceOrder: i + 1, // ordenado por prioridad (CRITICAL primero)
+              // El orden que eligió quien planifica; sin elección, el de prioridad (CRITICAL primero).
+              sequenceOrder: i + 1,
             })),
           },
         },

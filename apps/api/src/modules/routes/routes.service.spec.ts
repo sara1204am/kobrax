@@ -197,6 +197,39 @@ describe('RoutesService.generate', () => {
     assert.ok(calls.audit.includes('GENERATE'));
   });
 
+  it('🔴 con casos elegidos, las paradas quedan EN ESE ORDEN', async () => {
+    // El recorrido que alguien armó mirando el mapa —esta cuadra, después la de al lado— se perdía:
+    // se reordenaba por prioridad y el cobrador recibía las paradas en otro orden.
+    const cases = [
+      { id: 'caseA', clientId: 'clA' },
+      { id: 'caseB', clientId: 'clB' },
+      { id: 'caseC', clientId: 'clC' },
+    ];
+    const { service, calls } = makeService({ cases, permissions: ASSIGN });
+    await service.generate({ ...GEN, caseIds: ['caseC', 'caseA', 'caseB'] } as never);
+
+    const stops = (calls.routeCreate[0]!.stops as { create: { caseId: string; sequenceOrder: number }[] }).create;
+    assert.deepEqual(stops.map((s) => [s.caseId, s.sequenceOrder]), [
+      ['caseC', 1],
+      ['caseA', 2],
+      ['caseB', 3],
+    ]);
+  });
+
+  it('un caso pedido que ya no está abierto se saltea, y el resto conserva su orden', async () => {
+    // El que se cerró entre que se armó la lista y se confirmó no puede correr a los demás ni
+    // dejar un hueco en la numeración.
+    const cases = [{ id: 'caseA', clientId: 'clA' }, { id: 'caseB', clientId: 'clB' }];
+    const { service, calls } = makeService({ cases, permissions: ASSIGN });
+    await service.generate({ ...GEN, caseIds: ['caseB', 'caseCerrado', 'caseA'] } as never);
+
+    const stops = (calls.routeCreate[0]!.stops as { create: { caseId: string; sequenceOrder: number }[] }).create;
+    assert.deepEqual(stops.map((s) => [s.caseId, s.sequenceOrder]), [
+      ['caseB', 1],
+      ['caseA', 2],
+    ]);
+  });
+
   it('rechaza si no hay casos para la ruta (ROUTE_EMPTY)', async () => {
     const { service } = makeService({ cases: [], permissions: ASSIGN });
     await rejectsWithCode(service.generate(GEN), 'ROUTE_EMPTY');

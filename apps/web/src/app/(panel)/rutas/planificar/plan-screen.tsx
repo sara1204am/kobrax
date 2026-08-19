@@ -153,13 +153,16 @@ export function PlanScreen({
     () =>
       (area ? filas : available.filter((c) => picked.includes(c.id))).flatMap((c) => {
         const loc = c.locations?.[0];
+        const orden = picked.indexOf(c.id);
         return loc
           ? [{
               id: c.id,
               latitude: loc.latitude,
               longitude: loc.longitude,
               label: c.clientName ?? undefined,
-              picked: picked.includes(c.id),
+              picked: orden >= 0,
+              // El número de parada: la posición en la que se eligió, que es la que va a viajar.
+              order: orden >= 0 ? orden + 1 : undefined,
             }]
           : [];
       }),
@@ -172,6 +175,24 @@ export function PlanScreen({
    */
   const toggle = (id: string) =>
     setPicked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  /**
+   * Mover una parada en el recorrido.
+   *
+   * 🔴 **El orden de `picked` ES el orden de la ruta**: viaja así a la API, que desde ahora lo
+   * respeta en vez de reordenar por prioridad. Por eso mover acá es mover la jornada del cobrador,
+   * no acomodar una lista en pantalla.
+   */
+  function move(id: string, delta: number) {
+    setPicked((prev) => {
+      const i = prev.indexOf(id);
+      const j = i + delta;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j]!, next[i]!];
+      return next;
+    });
+  }
 
   /** Toca una columna que el servidor sabe ordenar: el orden lo resuelve él, sobre TODA la mora. */
   function sortRemote(key: 'balance' | 'daysPastDue') {
@@ -520,6 +541,46 @@ export function PlanScreen({
               </div>
             )}
 
+            {/*
+             * 🔴 **El recorrido, en orden.** Elegir a quién visitar es media decisión; la otra media
+             * es en qué orden, que es lo que define a qué hora cae cada puerta. Se arma con el orden
+             * en que se fue marcando y se acomoda con las flechas.
+             */}
+            {picked.length > 0 && (
+              <div className="mt-5 rounded-xl border border-k-border">
+                <p className="border-b border-k-border bg-k-bg px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
+                  {t('routeOrder', { n: picked.length })}
+                </p>
+                <ol className="max-h-64 divide-y divide-k-border overflow-y-auto">
+                  {picked.map((id, i) => {
+                    const c = available.find((x) => x.id === id);
+                    return (
+                      <li key={id} className="flex items-center gap-3 px-4 py-2 text-[13px]">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-k-navy text-[11px] font-semibold text-white">
+                          {i + 1}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-k-text">{c?.clientName ?? '—'}</span>
+                        <span className="truncate text-[12px] text-k-muted">{c?.zone ?? ''}</span>
+                        {/* Con flechas y no arrastrando: arrastrar no existe para quien navega con
+                            teclado, y acá el orden es el dato, no un adorno. */}
+                        <span className="flex shrink-0 items-center gap-1">
+                          <OrderButton onClick={() => move(id, -1)} disabled={i === 0} label={t('moveUp')}>
+                            ↑
+                          </OrderButton>
+                          <OrderButton onClick={() => move(id, 1)} disabled={i === picked.length - 1} label={t('moveDown')}>
+                            ↓
+                          </OrderButton>
+                          <OrderButton onClick={() => toggle(id)} label={t('removeStop')}>
+                            ✕
+                          </OrderButton>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            )}
+
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <span className="sm:w-64">
                 <Button onClick={() => void confirmar()} loading={busy} disabled={picked.length === 0}>
@@ -534,6 +595,31 @@ export function PlanScreen({
         </div>
       )}
     </div>
+  );
+}
+
+/** Mover o quitar una parada. Chico, pero con nombre: la flecha sola no dice qué hace. */
+function OrderButton({
+  children,
+  onClick,
+  disabled,
+  label,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className="flex h-6 w-6 items-center justify-center rounded-lg border border-k-border text-[12px] text-k-text-2 hover:bg-k-bg disabled:opacity-30"
+    >
+      <span aria-hidden>{children}</span>
+    </button>
   );
 }
 
