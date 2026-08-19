@@ -485,13 +485,25 @@ export function PlanScreen({
             {t('alreadyPlanned', { name: actual ? memberName(actual) : '', n: suRuta.totalCases })}
           </h2>
           <p className="mt-1 text-[14px] text-k-text-2">{t('alreadyPlannedHint')}</p>
-          {siguiente && (
-            <div className="mt-4 sm:w-72">
-              <Button onClick={() => go({ collectorId: siguiente.userId })}>
-                {t('next', { name: memberName(siguiente) })}
-              </Button>
-            </div>
-          )}
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            {/* 🔴 El camino a esa ruta, acá mismo: decirle a alguien «entrá desde el historial» y
+                hacerle buscar el día y la persona de nuevo es mandarlo a rehacer a mano lo que la
+                pantalla ya sabe. */}
+            <a
+              href={`/rutas/${suRuta.id}`}
+              className="inline-flex h-12 items-center rounded-xl bg-k-navy px-5 text-[15px] font-semibold text-white hover:bg-k-slate"
+            >
+              {t('goToRoute')}
+            </a>
+            {siguiente && (
+              <span className="sm:w-64">
+                <Button variant="ghost" onClick={() => go({ collectorId: siguiente.userId })}>
+                  {t('next', { name: memberName(siguiente) })}
+                </Button>
+              </span>
+            )}
+          </div>
         </Card>
       ) : (
         /*

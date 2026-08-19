@@ -548,9 +548,9 @@
       "entity": "préstamos",
       "noCreditCode": "sin código",
       "search": {
-        "label": "Buscar deudor",
-        "placeholder": "Nombre o apellido",
-        "hint": "Busca por nombre. El documento se busca desde Cartera."
+        "label": "Buscar deudor o zona",
+        "placeholder": "Nombre, apellido o zona",
+        "hint": "Busca por nombre y por zona. El documento se busca desde Cartera."
       },
       "arrearsSource": {
         "CALCULATED": "Calculada",
@@ -856,7 +856,8 @@
         "belowMin": "Queda por debajo del mínimo de {min}.",
         "routeDone": "Ruta de {name} armada con {n} paradas.",
         "alreadyPlanned": "{name} ya tiene su ruta de ese día, con {n} paradas",
-        "alreadyPlannedHint": "Para cambiarla, entrá a la ruta desde el historial.",
+        "alreadyPlannedHint": "Abrila para ver sus paradas y el recorrido.",
+        "goToRoute": "Ir a la ruta",
         "next": "Seguir con {name}",
         "noAvailable": "No hay mora para asignar",
         "noAvailableText": "Todo lo abierto de esta persona ya está en una ruta de ese día.",
@@ -865,7 +866,7 @@
         "loadError": "No pudimos cargar la mora",
         "error": "No se pudo armar la ruta.",
         "filters": {
-          "search": "Buscar por nombre",
+          "search": "Buscar por nombre o zona",
           "help": "De quién es la mora",
           "onlyOwn": "Sólo la suya",
           "allPortfolios": "De todo el equipo (ayuda)",

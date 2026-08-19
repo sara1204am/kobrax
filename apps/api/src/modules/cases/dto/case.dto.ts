@@ -60,11 +60,13 @@ export class ListCasesQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) dpdMax?: number;
 
   /**
-   * Búsqueda por nombre del deudor.
+   * Búsqueda por **nombre del deudor o zona**.
    *
-   * Sólo el nombre: el documento y los teléfonos están cifrados y se buscan por blind index, que es
-   * otro camino (el de la cartera). Con novecientas filas, encontrar a una persona no puede depender
-   * de recordar en qué página estaba.
+   * Al armar una ruta se busca de las dos maneras —«los Mamani» y «los del Centro»—, así que las dos
+   * entran por la misma caja: el nombre palabra por palabra, la zona por coincidencia parcial.
+   *
+   * El documento y los teléfonos **no**: están cifrados y se buscan por blind index, que es otro
+   * camino (el de la cartera).
    */
   @IsOptional() @IsString() @MaxLength(80) q?: string;
   /** 'true' → solo casos abiertos (excluye CLOSED/WRITTEN_OFF). Para el KPI de carga del día. */

@@ -452,7 +452,24 @@ export class CasesService {
      * sea — un cliente con casa en el Centro y negocio en el Mercado entra por las dos.
      */
     const client: Prisma.ClientWhereInput = {};
-    if (query.q?.trim()) client.AND = nameTerms(query.q);
+    if (query.q?.trim()) {
+      /*
+       * 🔴 **Nombre o zona, en la misma caja.** Al armar una ruta se busca de las dos maneras —«los
+       * Mamani» y «los del Centro»— y obligar a elegir el campo antes de escribir hace que la mitad
+       * de las búsquedas devuelvan vacío sin que nada explique por qué.
+       *
+       * El nombre va palabra por palabra (`nameTerms`, compartido con la cartera); la zona, por
+       * coincidencia parcial y sin distinguir mayúsculas, porque es texto libre y nadie recuerda si
+       * quedó cargada como «Centro» o «centro».
+       */
+      const q = query.q.trim();
+      client.OR = [
+        { AND: nameTerms(q) },
+        { locations: { some: { zone: { contains: q, mode: 'insensitive' } } } },
+      ];
+    }
+    // El filtro de zona del panel es aparte y **exacto**: elegir «Centro» de una lista no puede
+    // traer también «Centro Norte».
     if (query.zone?.trim()) client.locations = { some: { zone: query.zone.trim() } };
     if (Object.keys(client).length > 0) where.client = client;
 

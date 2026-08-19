@@ -548,9 +548,9 @@
       "entity": "loans",
       "noCreditCode": "no code",
       "search": {
-        "label": "Search debtor",
-        "placeholder": "First or last name",
-        "hint": "Searches by name. Search by ID document from Portfolio."
+        "label": "Search debtor or zone",
+        "placeholder": "Name, last name or zone",
+        "hint": "Searches by name and by zone. Search by ID document from Portfolio."
       },
       "arrearsSource": {
         "CALCULATED": "Calculated",
@@ -856,7 +856,8 @@
         "belowMin": "That is below the minimum of {min}.",
         "routeDone": "{name}'s route built with {n} stops.",
         "alreadyPlanned": "{name} already has a route that day, with {n} stops",
-        "alreadyPlannedHint": "To change it, open the route from the history.",
+        "alreadyPlannedHint": "Open it to see its stops and the run.",
+        "goToRoute": "Go to the route",
         "next": "Continue with {name}",
         "noAvailable": "No overdue loans to assign",
         "noAvailableText": "Everything open for this person is already in a route that day.",
@@ -865,7 +866,7 @@
         "loadError": "We could not load the overdue loans",
         "error": "The route could not be built.",
         "filters": {
-          "search": "Search by name",
+          "search": "Search by name or zone",
           "help": "Whose overdue loans",
           "onlyOwn": "Only their own",
           "allPortfolios": "The whole team (helping out)",

@@ -246,13 +246,23 @@ describe('CasesService.list (scope por capacidad + enriquecimiento)', () => {
     });
   });
 
-  it('🔴 el nombre y la zona conviven, por el mismo motivo', async () => {
+  it('🔴 el buscador encuentra por nombre O por zona', async () => {
+    // Al armar una ruta se busca de las dos maneras —«los Mamani» y «los del Centro»—; obligar a
+    // elegir el campo antes de escribir hace que la mitad de las búsquedas devuelvan vacío.
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    await service.list({ q: 'centro' } as never);
+    const client = calls.listWhere!.client as { OR?: { locations?: unknown }[] };
+    assert.equal(client.OR?.length, 2, 'la búsqueda tiene que mirar los dos lados');
+    // La zona, parcial y sin distinguir mayúsculas: es texto libre y nadie recuerda cómo se cargó.
+    assert.deepEqual(client.OR![1]!.locations, { some: { zone: { contains: 'centro', mode: 'insensitive' } } });
+  });
+
+  it('🔴 el buscador y el filtro de zona conviven, y el filtro es EXACTO', async () => {
+    // Elegir «Centro» de una lista no puede traer también «Centro Norte»; escribirlo en la caja, sí.
     const { service, calls } = makeService({ permissions: ['case:assign'] });
     await service.list({ q: 'tapia', zone: 'Centro' } as never);
-    const client = calls.listWhere!.client as { AND?: unknown[]; locations?: unknown };
-    assert.ok(client.AND, 'se perdió la búsqueda por nombre');
-    // Basta con que UNA dirección sea de esa zona: quien vive en el Centro y trabaja en el Mercado
-    // entra por las dos.
+    const client = calls.listWhere!.client as { OR?: unknown[]; locations?: unknown };
+    assert.ok(client.OR, 'se perdió la búsqueda');
     assert.deepEqual(client.locations, { some: { zone: 'Centro' } });
   });
 
