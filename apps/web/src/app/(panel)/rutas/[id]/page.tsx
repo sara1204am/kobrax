@@ -218,14 +218,14 @@ export default async function RutaPage({
 /**
  * Los tres colores del resumen: la plata, el trabajo y el mapa.
  *
- * 🔴 El color va en el **fondo y en la barra lateral**, nunca en el número: sobre estos tintes, un
+ * 🔴 El color va en el **fondo y en la línea de abajo**, nunca en el número: sobre estos tintes, un
  * verde de 24 px queda por debajo del contraste mínimo. El dato se lee en navy en las tres, y el
  * color sirve para encontrar la tarjeta de un vistazo, no para decir qué dice.
  */
 const STAT_TONES = {
-  money: 'border-l-k-success bg-k-success-bg',
-  work: 'border-l-k-purple bg-k-highlight',
-  map: 'border-l-k-periwinkle bg-k-light-bg',
+  money: 'border-b-k-success bg-k-success-bg',
+  work: 'border-b-k-purple bg-k-highlight',
+  map: 'border-b-k-periwinkle bg-k-light-bg',
 } as const;
 
 /**
@@ -246,11 +246,11 @@ function Stat({
   strong?: boolean;
   tone: keyof typeof STAT_TONES;
 }) {
-  // Los bordes se declaran por lado: `border-k-border` pinta los cuatro, y que el color de la
-  // izquierda lo pise dependería del orden en el que Tailwind emita las reglas.
+  // Los bordes se declaran por lado: `border-k-border` pinta los cuatro, y que el color de abajo lo
+  // pise dependería del orden en el que Tailwind emita las reglas.
   return (
     <div
-      className={`rounded-xl border-y border-r border-l-4 border-y-k-border border-r-k-border px-4 py-3.5 ${STAT_TONES[tone]}`}
+      className={`rounded-xl border-x border-t border-b-4 border-x-k-border border-t-k-border px-4 py-3.5 ${STAT_TONES[tone]}`}
     >
       <dt className="text-[11px] font-semibold uppercase tracking-wide text-k-slate">{label}</dt>
       <dd
