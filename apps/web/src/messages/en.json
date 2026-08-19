@@ -852,6 +852,7 @@
         "moveUp": "Move one stop up",
         "moveDown": "Move one stop down",
         "removeStop": "Remove from the route",
+        "lockedStop": "Already handled",
         "confirmRoute": "Build the route with {n}",
         "belowMin": "That is below the minimum of {min}.",
         "routeDone": "{name}'s route built with {n} stops.",
@@ -949,6 +950,14 @@
       "unknownCollector": "Collector",
       "progress": "{done} of {total}",
       "km": "{n} km",
+      "edit": {
+        "start": "Edit stops",
+        "done": "Done",
+        "hint": "You can reorder or remove the stops that are still pending, and add debtors from the list below. Handled ones stay as they are: they are the day that already happened.",
+        "addTitle": "Add stops",
+        "mapCount": "{n} stops on the map",
+        "error": "The stop could not be changed."
+      },
       "detail": {
         "stops": "Stops",
         "stopsEmpty": "This route has no stops.",

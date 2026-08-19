@@ -4,17 +4,18 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import {
   memberName,
   summarizeDay,
+  type CaseListItem,
   type DayPayment,
   type Member,
   type RouteItem,
-  type RouteStopItem,
   type VisitItem,
 } from '@kobrax/shared';
-import { RouteMap } from '@/components/route-map';
 import { apiCall } from '@/lib/bff';
-import { CATEGORY_TONE, ROUTE_STATUS_TONE, STOP_STATUS_TONE } from '@/lib/routes';
+import { CATEGORY_TONE, ROUTE_STATUS_TONE } from '@/lib/routes';
+import { availableQuery, hasPlanFilters, type PlanParams } from '@/lib/plan';
 import { Badge, Card, EmptyState, Fact, PageHeader } from '@/components/panel-ui';
-import { dayDate, money, time } from '@/lib/format';
+import { dayDate, money } from '@/lib/format';
+import { RouteEditor } from './route-editor';
 
 /** Techo de lo que se trae de un día —pagos y visitas—. Un día de un tenant no llega a tanto. */
 const DAY_LIMIT = 100;
@@ -29,7 +30,13 @@ const DAY_LIMIT = 100;
  * La cuenta la hace `summarizeDay` de `shared`, la MISMA que corre el teléfono: es la única cuenta
  * del día, y existe porque dos pantallas del mismo día decían cosas distintas.
  */
-export default async function RutaPage({ params }: { params: { id: string } }) {
+export default async function RutaPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: PlanParams & { editar?: string };
+}) {
   const t = await getTranslations('panel.routes');
   const locale = await getLocale();
 
@@ -55,7 +62,16 @@ export default async function RutaPage({ params }: { params: { id: string } }) {
    */
   const caseIds = [...new Set((route.stops ?? []).map((s) => s.caseId).filter((id): id is string => !!id))];
 
-  const [team, paymentsByCase, preview, visits] = await Promise.all([
+  /*
+   * 🔴 La mora que se puede sumar **sólo se pide al editar**: son cien casos con sus ubicaciones, y
+   * quien entra a mirar cómo terminó la jornada no los necesita. Es la misma consulta que arma la
+   * ruta la primera vez —incluido `excludeRouted`, que deja fuera lo que ya es parada de ese día—,
+   * acotada a la cartera del cobrador de ESTA ruta salvo que se pida ayuda de todo el equipo.
+   */
+  const editing = searchParams.editar === '1';
+  const planParams: PlanParams = { ...searchParams, collectorId: route.collectorId };
+
+  const [team, paymentsByCase, preview, visits, available] = await Promise.all([
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
     Promise.all(
       caseIds.map((caseId) =>
@@ -78,6 +94,9 @@ export default async function RutaPage({ params }: { params: { id: string } }) {
     }),
     // Las visitas de esta ruta: el punto donde se registró cada una (W6-T0).
     apiCall<VisitItem[]>(`/visits?routeId=${params.id}&limit=${DAY_LIMIT}`, { method: 'GET', auth: true }),
+    editing
+      ? apiCall<CaseListItem[]>(`/cases?${availableQuery(planParams, day)}`, { method: 'GET', auth: true })
+      : null,
   ]);
 
   const members = team.body.data ?? [];
@@ -121,74 +140,35 @@ export default async function RutaPage({ params }: { params: { id: string } }) {
           )}
         </Card>
 
-        <RouteMap
-          stops={stops.map((s) => ({
-            id: s.id,
-            sequenceOrder: s.sequenceOrder,
-            latitude: s.latitude,
-            longitude: s.longitude,
-            label: s.clientName,
-          }))}
-          visits={(visits.body.data ?? []).map((v) => ({ latitude: v.latitude, longitude: v.longitude }))}
-          line={preview.body.data?.geometry ?? []}
-        />
         {/*
-          🔴 Se mira la GEOMETRÍA, no el status: cuando el motor de ruteo está caído la API **degrada
-          con 200 y una geometría vacía**, así que preguntar por el status dejaba el aviso sin
-          dibujarse nunca — justo el «mapa con rectas y sin explicación» que se quería evitar.
-        */}
-        {!preview.body.data?.geometry?.length && (
-          <p className="text-[13px] text-k-text-2">{t('detail.noPreview')}</p>
-        )}
-
-        <section>
-          <h2 className="mb-3 text-[18px] font-semibold text-k-navy">{t('detail.stops')}</h2>
-          {stops.length > 0 ? (
-            <ol className="space-y-2">
-              {stops.map((stop) => (
-                <Stop key={stop.id} routeId={route.id} stop={stop} locale={locale} />
-              ))}
-            </ol>
-          ) : (
+         * El mapa, las paradas y su edición: todo junto en el cliente. El orden, el quitar y el
+         * sumar necesitan estado, y media lista pintada en el servidor y media acá son dos lugares
+         * donde arreglar el mismo detalle.
+         */}
+        {stops.length > 0 || editing ? (
+          <RouteEditor
+            routeId={route.id}
+            stops={stops}
+            visits={(visits.body.data ?? []).map((v) => ({ latitude: v.latitude, longitude: v.longitude }))}
+            line={preview.body.data?.geometry ?? []}
+            editing={editing}
+            available={available?.body.data ?? []}
+            total={available?.body.meta?.total ?? available?.body.data?.length ?? 0}
+            filtered={hasPlanFilters(planParams)}
+          />
+        ) : (
+          <section>
+            <h2 className="mb-3 text-[18px] font-semibold text-k-navy">{t('detail.stops')}</h2>
             <EmptyState title={t('detail.stopsEmpty')} />
-          )}
-        </section>
+          </section>
+        )}
       </div>
     </>
   );
 }
 
-/** Una parada de la ruta. Abre su detalle, que es donde vive la evidencia. */
-async function Stop({ routeId, stop, locale }: { routeId: string; stop: RouteStopItem; locale: string }) {
-  const t = await getTranslations('panel.routes');
-
-  return (
-    <li>
-      <Link
-        href={`/rutas/${routeId}/parada/${stop.id}`}
-        className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl border border-k-border bg-white px-5 py-3.5 hover:bg-k-bg"
-      >
-        {/*
-         * 🔴 **La hora en vez del número, cuando ya se visitó.** El orden planificado deja de
-         * importar apenas la jornada arranca: lo que se viene a mirar es a qué hora se pasó por cada
-         * puerta, que es lo que reconstruye el día —y lo que delata una mañana entera en una zona—.
-         * Sin visitar sigue el número: es lo único que hay, y dice en qué lugar de la fila está.
-         */}
-        <span className="w-12 shrink-0 text-[14px] font-semibold tabular-nums text-k-navy">
-          {stop.visitedAt ? time(stop.visitedAt, locale) : stop.sequenceOrder}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[15px] font-medium text-k-text">{stop.clientName ?? '—'}</span>
-          {/* La dirección viene en claro y su revelado quedó auditado al abrir la ruta. */}
-          <span className="block truncate text-[13px] text-k-text-2">{stop.address ?? '—'}</span>
-        </span>
-        {/* Cómo terminó pesa más que en qué estado quedó la parada: es lo que se vino a mirar. */}
-        {stop.lastOutcome ? (
-          <Badge tone="neutral">{t(`outcome.${stop.lastOutcome}`)}</Badge>
-        ) : (
-          <Badge tone={STOP_STATUS_TONE[stop.status]}>{t(`stopStatus.${stop.status}`)}</Badge>
-        )}
-      </Link>
-    </li>
-  );
-}
+/*
+ * Acá vivía `Stop`, que pintaba cada parada en el servidor. Se mudó entera a `StopsEditor`: el orden
+ * y el quitar necesitan estado, y media lista en el servidor y media en el cliente son dos lugares
+ * donde arreglar el mismo detalle.
+ */

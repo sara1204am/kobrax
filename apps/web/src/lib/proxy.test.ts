@@ -37,6 +37,28 @@ describe('proxyMutation', () => {
     expect(await res.json()).toEqual({ id: 'c1', assigneeId: 'u9' });
   });
 
+  it('🔴 un 204 también es éxito: «hecho, no hay nada que devolver»', async () => {
+    /*
+     * Los borrados de la API contestan 204 sin cuerpo. Exigir `data` los convertía en un 400: la
+     * parada se borraba de verdad y la pantalla decía que no se pudo. Se vio en un smoke, no en un
+     * test — el servidor había hecho su trabajo, así que sólo aparecía mirando las dos cosas juntas.
+     */
+    server.use(http.delete(`${API}/routes/r1/stops/s1`, () => new HttpResponse(null, { status: 204 })));
+
+    const req = new Request('http://localhost/api/routes/r1/stops/s1', { method: 'DELETE' });
+    const res = await proxyMutation(req, '/routes/r1/stops/s1', 'DELETE');
+
+    expect(res.status).toBe(204);
+  });
+
+  it('un 2xx con el cuerpo vacío SIGUE siendo un error: prometió datos y no los mandó', async () => {
+    // Distinto del 204: ahí el contrato es «sin cuerpo». Un 200 vacío es una respuesta rota.
+    server.use(http.post(`${API}/cases/c1/assign`, () => HttpResponse.json({ data: null, error: null, meta: {} })));
+
+    const res = await proxyMutation(post({ collectorId: 'u9' }), '/cases/c1/assign');
+    expect(res.status).toBeGreaterThanOrEqual(400);
+  });
+
   it('reenvía el cuerpo tal cual llegó', async () => {
     let seen: unknown;
     server.use(

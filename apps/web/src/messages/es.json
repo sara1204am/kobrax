@@ -852,6 +852,7 @@
         "moveUp": "Subir una parada",
         "moveDown": "Bajar una parada",
         "removeStop": "Sacar de la ruta",
+        "lockedStop": "Ya gestionada",
         "confirmRoute": "Armar la ruta con {n}",
         "belowMin": "Queda por debajo del mínimo de {min}.",
         "routeDone": "Ruta de {name} armada con {n} paradas.",
@@ -949,6 +950,14 @@
       "unknownCollector": "Cobrador",
       "progress": "{done} de {total}",
       "km": "{n} km",
+      "edit": {
+        "start": "Editar paradas",
+        "done": "Listo",
+        "hint": "Podés reordenar o sacar las paradas que todavía están pendientes, y sumar deudores de la lista de abajo. Las gestionadas quedan como están: son la jornada que ya pasó.",
+        "addTitle": "Sumar paradas",
+        "mapCount": "{n} paradas en el mapa",
+        "error": "No se pudo cambiar la parada."
+      },
       "detail": {
         "stops": "Paradas",
         "stopsEmpty": "Esta ruta no tiene paradas.",

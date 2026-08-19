@@ -51,7 +51,16 @@ export async function proxyMutation<T>(
     headers,
     ...(body ? { body } : {}),
   });
-  if (status < 200 || status >= 300 || !res.data) return apiError(status, res);
+  if (status < 200 || status >= 300) return apiError(status, res);
+
+  /*
+   * 🔴 **Un 204 es éxito, no un error sin mensaje.** Los borrados de la API contestan «hecho, no hay
+   * nada que devolver» (`@HttpCode(204)`), y exigir `data` los convertía en un 400: la parada se
+   * borraba de verdad y la pantalla decía que no se pudo. Lo destapó el smoke, no un test —el
+   * servidor había hecho su trabajo, así que sólo se veía mirando las dos cosas a la vez.
+   */
+  if (status === 204) return new NextResponse(null, { status: 204 });
+  if (!res.data) return apiError(status, res);
 
   return NextResponse.json(res.data);
 }
