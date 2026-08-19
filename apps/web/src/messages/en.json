@@ -966,6 +966,7 @@
         "done": "Handled",
         "percent": "Progress",
         "distance": "Estimated distance",
+        "noDistance": "Not computed",
         "noPreview": "We could not compute the route line. The stops are still listed.",
         "openCase": "View in Overdue",
         "openClient": "Open the debtor's file"

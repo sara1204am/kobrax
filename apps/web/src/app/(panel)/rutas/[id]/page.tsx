@@ -12,8 +12,8 @@ import {
 } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { CATEGORY_TONE, ROUTE_STATUS_TONE } from '@/lib/routes';
-import { availableQuery, hasPlanFilters, type PlanParams } from '@/lib/plan';
-import { Badge, Card, EmptyState, Fact, PageHeader } from '@/components/panel-ui';
+import { availableQuery, hasPlanFilters, shiftDays, type PlanParams } from '@/lib/plan';
+import { Badge, Card, EmptyState, PageHeader } from '@/components/panel-ui';
 import { dayDate, money } from '@/lib/format';
 import { RouteEditor } from './route-editor';
 
@@ -59,6 +59,15 @@ export default async function RutaPage({
    * Por caso es exacto y acotado: son tantas llamadas como paradas con caso, y una parada no junta
    * cien pagos en un día. Sin `payment:read` vuelven vacías y se muestra cero cobrado, que es lo
    * que ese rol puede saber.
+   *
+   * 🔴 **Pero acotado AL DÍA de la ruta.** Sin `from`/`to`, «Recaudado» sumaba todos los pagos que
+   * ese caso tuvo alguna vez: una ruta planificada para mañana, con cero paradas gestionadas, decía
+   * que había recaudado mil cuatrocientos bolivianos. `summarizeDay` filtra por caso, no por fecha —
+   * da por hecho que los pagos que recibe son los del día.
+   *
+   * ponytail: la ventana es en UTC y el día del tenant es el de Bolivia (UTC−4). Un pago después de
+   * las 20:00 cae en el día siguiente de esta cuenta. Se arregla el día que `TenantClockService`
+   * —que ya existe y usa la agenda— llegue a pagos; hasta entonces el error es de horas, no de meses.
    */
   const caseIds = [...new Set((route.stops ?? []).map((s) => s.caseId).filter((id): id is string => !!id))];
 
@@ -75,7 +84,10 @@ export default async function RutaPage({
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
     Promise.all(
       caseIds.map((caseId) =>
-        apiCall<DayPayment[]>(`/payments?caseId=${caseId}&limit=${DAY_LIMIT}`, { method: 'GET', auth: true }),
+        apiCall<DayPayment[]>(`/payments?caseId=${caseId}&from=${day}&to=${shiftDays(day, 1)}&limit=${DAY_LIMIT}`, {
+          method: 'GET',
+          auth: true,
+        }),
       ),
     ),
     /*
@@ -110,34 +122,70 @@ export default async function RutaPage({
         title={collector ? memberName(collector) : t('unknownCollector')}
         // El día de la ruta no tiene hora: formateado en la zona local se corría un día para atrás.
         subtitle={dayDate(route.plannedDate, locale)}
-        actions={<Badge tone={ROUTE_STATUS_TONE[route.status]}>{t(`status.${route.status}`)}</Badge>}
+        // El estado va al lado del nombre: dice QUÉ ES esta ruta, no es una acción. A la derecha
+        // quedaba a media pantalla de aquello que califica.
+        badge={<Badge tone={ROUTE_STATUS_TONE[route.status]} dot>{t(`status.${route.status}`)}</Badge>}
       />
 
       <div className="space-y-6">
         <Card>
-          <p className="text-[15px] font-semibold text-k-navy">{t('detail.summary')}</p>
-          <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Fact label={t('detail.collected')} value={money(summary.collected, summary.currency)} />
-            <Fact label={t('detail.done')} value={t('progress', { done: summary.done, total: summary.total })} />
-            <Fact label={t('detail.percent')} value={`${summary.percent}%`} />
-            <Fact
+          {/*
+           * 🔴 **Tres números y una barra, no cuatro rótulos iguales.** Antes el avance era un «0%»
+           * suelto al lado de «0 de 4», con el mismo peso que el resto: había que leer los cuatro
+           * para saber cómo venía el día. Lo que se viene a mirar es cuánto entró y cuánto falta.
+           */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[15px] font-semibold text-k-navy">{t('detail.summary')}</p>
+
+            {/* Sólo las categorías con al menos una parada: un cero no cuenta nada y ocupa lugar. */}
+            {summary.categories.length > 0 && (
+              <ul className="flex flex-wrap gap-2">
+                {summary.categories.map((c) => (
+                  <li key={c.key}>
+                    <Badge tone={CATEGORY_TONE[c.key]}>
+                      {t(`category.${c.key}`)} · {c.count}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <dl className="mt-5 grid gap-3 sm:grid-cols-3">
+            <Stat tone="money" label={t('detail.collected')} value={money(summary.collected, summary.currency)} strong />
+            <Stat tone="work" label={t('detail.done')} value={t('progress', { done: summary.done, total: summary.total })} />
+            <Stat
+              tone="map"
               label={t('detail.distance')}
-              value={route.totalDistanceKm != null ? t('km', { n: route.totalDistanceKm.toFixed(1) }) : '—'}
+              value={route.totalDistanceKm != null ? t('km', { n: route.totalDistanceKm.toFixed(1) }) : null}
+              // Sin distancia se dice por qué no la hay: un «—» parece un cero o un dato perdido.
+              empty={t('detail.noDistance')}
             />
           </dl>
 
-          {/* Sólo las categorías con al menos una parada: un cero no cuenta nada y ocupa lugar. */}
-          {summary.categories.length > 0 && (
-            <ul className="mt-5 flex flex-wrap gap-2">
-              {summary.categories.map((c) => (
-                <li key={c.key}>
-                  <Badge tone={CATEGORY_TONE[c.key]}>
-                    {t(`category.${c.key}`)} · {c.count}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          )}
+          {/*
+           * La barra dice de un vistazo lo que el «0 de 4» dice leyendo. 🔴 El número va igual al
+           * lado: el color no es el dato —hay quien no lo distingue—, y una barra sin cifra obliga a
+           * calcular a ojo cuántas paradas faltan.
+           */}
+          <div className="mt-5 flex items-center gap-3">
+            <div
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={summary.percent}
+              aria-label={t('detail.percent')}
+              className="h-2.5 flex-1 overflow-hidden rounded-full bg-k-light-bg"
+            >
+              <div
+                className={`h-full rounded-full ${
+                  summary.percent === 100 ? 'bg-k-success' : 'bg-gradient-to-r from-k-periwinkle to-k-purple'
+                }`}
+                style={{ width: `${summary.percent}%` }}
+              />
+            </div>
+            <span className="shrink-0 text-[13px] font-medium tabular-nums text-k-text-2">{summary.percent}%</span>
+          </div>
         </Card>
 
         {/*
@@ -167,8 +215,61 @@ export default async function RutaPage({
   );
 }
 
+/**
+ * Los tres colores del resumen: la plata, el trabajo y el mapa.
+ *
+ * 🔴 El color va en el **fondo y en la barra lateral**, nunca en el número: sobre estos tintes, un
+ * verde de 24 px queda por debajo del contraste mínimo. El dato se lee en navy en las tres, y el
+ * color sirve para encontrar la tarjeta de un vistazo, no para decir qué dice.
+ */
+const STAT_TONES = {
+  money: 'border-l-k-success bg-k-success-bg',
+  work: 'border-l-k-purple bg-k-highlight',
+  map: 'border-l-k-periwinkle bg-k-light-bg',
+} as const;
+
+/**
+ * Un número del resumen del día. Distinto de `Fact`: acá el valor **es** lo que se viene a mirar, así
+ * que se lee de lejos, y el que falta se explica en vez de mostrar un guión.
+ */
+function Stat({
+  label,
+  value,
+  empty,
+  strong,
+  tone,
+}: {
+  label: string;
+  value: string | null;
+  empty?: string;
+  /** El número principal de la tarjeta. Uno solo: si todos gritan, ninguno destaca. */
+  strong?: boolean;
+  tone: keyof typeof STAT_TONES;
+}) {
+  // Los bordes se declaran por lado: `border-k-border` pinta los cuatro, y que el color de la
+  // izquierda lo pise dependería del orden en el que Tailwind emita las reglas.
+  return (
+    <div
+      className={`rounded-xl border-y border-r border-l-4 border-y-k-border border-r-k-border px-4 py-3.5 ${STAT_TONES[tone]}`}
+    >
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-k-slate">{label}</dt>
+      <dd
+        className={`mt-1.5 tabular-nums ${
+          value === null
+            ? 'text-[15px] text-k-text-2'
+            : strong
+              ? 'text-[24px] font-semibold leading-tight text-k-navy'
+              : 'text-[20px] font-medium leading-tight text-k-navy'
+        }`}
+      >
+        {value ?? empty}
+      </dd>
+    </div>
+  );
+}
+
 /*
- * Acá vivía `Stop`, que pintaba cada parada en el servidor. Se mudó entera a `StopsEditor`: el orden
- * y el quitar necesitan estado, y media lista en el servidor y media en el cliente son dos lugares
- * donde arreglar el mismo detalle.
+ * Acá vivía `Stop`, que pintaba cada parada en el servidor. Se mudó entera a `RouteEditor`: el orden,
+ * el quitar y el sumar necesitan estado, y media lista en el servidor y media en el cliente son dos
+ * lugares donde arreglar el mismo detalle.
  */

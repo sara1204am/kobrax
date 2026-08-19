@@ -966,6 +966,7 @@
         "done": "Gestionadas",
         "percent": "Avance",
         "distance": "Distancia estimada",
+        "noDistance": "Sin calcular",
         "noPreview": "No pudimos calcular el recorrido. Las paradas se ven igual.",
         "openCase": "Ver en Mora",
         "openClient": "Ver la ficha del deudor"
