@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { fakePlanLimits } from '../../common/plan/plan-test-utils';
 import { PLANS, TRIAL_DAYS } from '@kobrax/shared';
 import { AccountsService } from './accounts.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
@@ -44,7 +45,7 @@ function makeService(opts: { found?: Record<string, unknown> | null; members?: n
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
   const tenant = { accountId: 'acc-A', userId: 'u1' };
   const audit = { record: async (e: { action: string }) => void calls.audit.push(e.action) };
-  const service = new AccountsService(prisma as never, tenant as never, audit as never);
+  const service = new AccountsService(prisma as never, tenant as never, audit as never, fakePlanLimits({ usage: { users: opts.members ?? 3 } }));
   return { service, calls };
 }
 
@@ -85,7 +86,7 @@ function makeSignupService(opts: { role?: { id: string } | null; failWith?: unkn
       return fn(tx);
     },
   };
-  const service = new AccountsService(prisma as never, {} as never, {} as never);
+  const service = new AccountsService(prisma as never, {} as never, {} as never, fakePlanLimits());
   return { service, calls };
 }
 

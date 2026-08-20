@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { AuditModule } from '../../common/audit/audit.module';
+import { PlanModule } from '../../common/plan/plan.module';
 import { ClientsController } from './clients.controller';
 import { ClientsService } from './clients.service';
 import { ClientImportController } from './import/client-import.controller';
@@ -11,7 +12,7 @@ import { ClientImportService } from './import/client-import.service';
  * AuditService desde AuditModule; CryptoService/BlindIndexService/TenantContextService desde sus módulos `@Global`.
  */
 @Module({
-  imports: [AuthModule, AuditModule],
+  imports: [AuthModule, AuditModule, PlanModule],
   controllers: [ClientsController, ClientImportController],
   providers: [ClientsService, ClientImportService],
   exports: [ClientsService], // AgendaModule lo usa para revelar PII con auditoría al agendar.

@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { fakePlanLimits } from '../../common/plan/plan-test-utils';
 import { ClientsService } from './clients.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
@@ -92,6 +93,7 @@ function makeService(
     crypto as never,
     blind as never,
     audit as never,
+    fakePlanLimits(),
   );
   return { service, calls };
 }

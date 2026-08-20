@@ -7,6 +7,7 @@ import { Button, ErrorBanner } from '@/components';
 import { ClienteFormView } from '@/cliente-form-view';
 import { buildClientePayload, canSubmitCliente, clienteEnPunto, initialCliente, type ClienteForm } from '@/cliente-form';
 import { createClient } from '@/clients.service';
+import { hayLugar } from '@/account.service';
 import { nuevoId } from '@/ids';
 import { queueForLater } from '@/sync/sync.service';
 
@@ -28,6 +29,16 @@ export default function NuevoClienteScreen() {
     async (thenLoan: boolean) => {
       setSaving(true);
       setError(null);
+
+      // El tope del plan se avisa acá y no al sincronizar: es el único momento en que el cobrador
+      // puede hacer algo al respecto. Ver el mismo caso, explicado entero, en `prestamo/nuevo`.
+      if (!(await hayLugar('clients'))) {
+        setSaving(false);
+        return setError(
+          'Tu plan llegó al tope de clientes. Avisale a tu administrador antes de cargar este.',
+        );
+      }
+
       // El id se genera acá y no lo devuelve el server: es lo que permite seguir al préstamo sin
       // esperar respuesta, y lo que hace que reintentar el alta desde la cola no cree dos clientes.
       const id = nuevoId();

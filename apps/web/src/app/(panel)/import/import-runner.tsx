@@ -94,6 +94,8 @@ export function ImportRunner({ config }: { config: ImportConfig }) {
 
   // ── Vista previa ───────────────────────────────────────────────────────────
   if (summary && file) {
+    // `plan` ausente = el plan no tiene tope de créditos; nada que avisar.
+    const seExcede = (summary.plan?.over ?? 0) > 0;
     return (
       <div className="space-y-6">
         <ErrorBanner message={error} />
@@ -104,6 +106,23 @@ export function ImportRunner({ config }: { config: ImportConfig }) {
             {t('run.file')}: <span className="text-k-text">{file.name}</span>
           </p>
           <Counts summary={summary} t={t} />
+
+          {/*
+            🔴 El tope del plan, ANTES de confirmar. El servidor rechaza el archivo entero si se
+            pasa —importar «hasta llenar» deja al cobrador saliendo a la calle con una cartera
+            incompleta sin enterarse—, así que enterarse acá y no al final es toda la diferencia.
+            El botón se apaga: no se ofrece algo que va a fallar.
+          */}
+          {seExcede && (
+            <p className="mt-4 rounded-xl bg-k-warning-bg px-4 py-3 text-[13px] leading-relaxed text-k-warning-text">
+              {t('run.planOver', {
+                nuevos: summary.counts.created,
+                lugar: summary.plan!.roomLeft,
+                sobran: summary.plan!.over,
+              })}
+            </p>
+          )}
+
           <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
             <span className="sm:w-auto">
               <Button variant="ghost" onClick={reset} disabled={busy} className="sm:w-auto sm:px-5">
@@ -114,6 +133,7 @@ export function ImportRunner({ config }: { config: ImportConfig }) {
               <Button
                 variant="cta"
                 loading={busy}
+                disabled={seExcede}
                 onClick={() => void run(file, false)}
                 className="sm:w-auto sm:px-12"
               >

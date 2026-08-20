@@ -3,15 +3,23 @@ import { nextPlan, planOf, usageLevel, type AccountInfo, type PlanLimit } from '
 import { Section } from '@/components/panel-ui';
 
 /**
- * Los topes que se listan, en el orden en que importan. Los asientos van aparte —arriba y con
- * barra— porque son **el único que el servidor hace cumplir**: el resto describe el plan.
+ * Los topes **que se cuentan**, con barra. Cada fase que agrega un contador agrega su clave acá y
+ * su número aparece solo: el servidor ya lo manda en `usage`.
  */
-const LIMITS = ['credits', 'clients', 'photosPerMonth', 'actionsPerMonth', 'photoRetentionMonths'] as const;
+const CONTADOS = ['users', 'credits', 'clients'] as const;
+
+/**
+ * Los que todavía no se cuentan: se listan como texto, sin barra.
+ *
+ * 🔴 Dibujarles una barra vacía diría «llevás cero fotos este mes», que es mentira — nadie las
+ * está contando. Un tope sin contador se describe, no se mide.
+ */
+const DESCRITOS = ['photosPerMonth', 'actionsPerMonth', 'photoRetentionMonths'] as const;
 
 const BAR = { ok: 'bg-k-periwinkle', near: 'bg-k-warning', full: 'bg-k-danger' } as const;
 
 /**
- * Qué plan tiene la cuenta y qué incluye.
+ * Qué plan tiene la cuenta, cuánto lleva usado y qué incluye.
  *
  * Los topes se pintan con `account.limits`, que es lo que **rige de verdad** para esta cuenta: el
  * plan con su excepción negociada ya aplicada. El catálogo sólo aporta el nombre, el precio y —para
@@ -21,12 +29,9 @@ export async function PlanCard({ account }: { account: AccountInfo }) {
   const t = await getTranslations('plans');
   const plan = planOf(account.planCode);
   const next = nextPlan(account.planCode);
-  const used = account.usage.users;
-  const max = account.limits.users;
-  const level = usageLevel(used, max);
-  const pct = max === null ? 0 : max > 0 ? Math.min(100, (used / max) * 100) : 100;
+  const asientos = account.limits.users;
 
-  const limitText = (key: (typeof LIMITS)[number], value: PlanLimit) => {
+  const limitText = (key: (typeof DESCRITOS)[number], value: PlanLimit) => {
     if (value === null) return t('unlimited');
     return key === 'photoRetentionMonths' ? t('months', { n: value }) : t('count', { n: value });
   };
@@ -44,29 +49,29 @@ export async function PlanCard({ account }: { account: AccountInfo }) {
         )}
       </div>
 
-      <div className="mt-5">
-        <div className="flex items-baseline justify-between gap-3">
-          <span className="text-[13px] font-medium text-k-text">{t('seats')}</span>
-          <span className="text-[13px] tabular-nums text-k-text-2">
-            {max === null ? t('count', { n: used }) : t('seatsValue', { used, max })}
-          </span>
-        </div>
-        {/* Sin tope no hay barra: una barra contra el infinito no dice nada. Y cuando la hay, es
-            decoración —la cifra de arriba ya lo dijo, y un lector de pantalla no gana nada
-            escuchándolo dos veces. */}
-        {max !== null && (
-          <div aria-hidden className="mt-1.5 h-2 overflow-hidden rounded-full bg-k-light-bg">
-            <div className={`h-full rounded-full ${BAR[level]}`} style={{ width: `${pct}%` }} />
-          </div>
-        )}
-        {plan != null && max !== null && plan.limits.users !== max && (
-          // El caso negociado (LIMITES §8.2): esta cuenta tiene un número propio, distinto al de
-          // su plan. Sin esta línea, «Free» arriba y «3 de 5» abajo se leen como un error.
-          <p className="mt-2 text-[13px] text-k-text-2">
-            {t('seatsCustom', { max, plan: plan.limits.users ?? 0 })}
-          </p>
-        )}
+      <div className="mt-5 space-y-4">
+        {CONTADOS.map((key) => (
+          <Medidor
+            key={key}
+            label={key === 'users' ? t('seats') : t(`limits.${key}`)}
+            used={account.usage[key]}
+            max={account.limits[key]}
+            texto={
+              account.limits[key] === null
+                ? t('count', { n: account.usage[key] })
+                : t('seatsValue', { used: account.usage[key], max: account.limits[key] as number })
+            }
+          />
+        ))}
       </div>
+
+      {plan?.limits.users != null && asientos !== null && plan.limits.users !== asientos && (
+        // El caso negociado (LIMITES §8.2): esta cuenta tiene un número propio, distinto al de su
+        // plan. Sin esta línea, «Free» arriba y «3 de 5» abajo se leen como un error.
+        <p className="mt-2 text-[13px] text-k-text-2">
+          {t('seatsCustom', { max: asientos, plan: plan.limits.users })}
+        </p>
+      )}
 
       {plan && (
         <>
@@ -74,7 +79,7 @@ export async function PlanCard({ account }: { account: AccountInfo }) {
             {t('includes')}
           </h3>
           <dl className="mt-3 grid gap-x-8 gap-y-2.5 sm:grid-cols-2">
-            {LIMITS.map((key) => (
+            {DESCRITOS.map((key) => (
               <div key={key} className="flex items-baseline justify-between gap-3">
                 <dt className="text-[13px] text-k-text-2">{t(`limits.${key}`)}</dt>
                 <dd className="text-[14px] font-medium tabular-nums text-k-text">
@@ -106,5 +111,37 @@ export async function PlanCard({ account }: { account: AccountInfo }) {
         </p>
       )}
     </Section>
+  );
+}
+
+/** Un tope con su consumo. Sin tope no hay barra: una barra contra el infinito no dice nada. */
+function Medidor({
+  label,
+  used,
+  max,
+  texto,
+}: {
+  label: string;
+  used: number;
+  max: PlanLimit;
+  texto: string;
+}) {
+  const level = usageLevel(used, max);
+  const pct = max === null ? 0 : max > 0 ? Math.min(100, (used / max) * 100) : 100;
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-[13px] font-medium text-k-text">{label}</span>
+        <span className="text-[13px] tabular-nums text-k-text-2">{texto}</span>
+      </div>
+      {/* Decoración: la cifra de arriba ya lo dijo, y un lector de pantalla no gana nada
+          escuchándolo dos veces. */}
+      {max !== null && (
+        <div aria-hidden className="mt-1.5 h-2 overflow-hidden rounded-full bg-k-light-bg">
+          <div className={`h-full rounded-full ${BAR[level]}`} style={{ width: `${pct}%` }} />
+        </div>
+      )}
+    </div>
   );
 }

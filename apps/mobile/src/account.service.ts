@@ -8,6 +8,7 @@
  */
 import { publicCall, type PublicResult } from './api';
 import { apiMutate, apiQuery, type MutateResult, type QueryResult } from './api-client';
+import { cachedOne } from './sync/cached';
 
 // Las cuatro formas del contrato viven en `@kobrax/shared` (F9 · W2): son las mismas que
 // edita la web. Se re-exportan para no tocar a quien ya las importaba de este archivo.
@@ -38,8 +39,26 @@ export function signup(payload: SignupPayload): Promise<SignupResult> {
   return publicCall('/accounts', { method: 'POST', body: payload }, 'No se pudo crear la cuenta');
 }
 
+/**
+ * La cuenta, con respaldo local.
+ *
+ * Se cachea por los **topes**: el aviso de «tu plan está lleno» tiene que llegarle al cobrador
+ * parado frente al deudor, y ahí casi nunca hay señal. Con la copia local, la pantalla avisa
+ * igual; sin ella, el aviso sólo aparecería con internet, que es justo cuando no hace falta.
+ */
 export function getAccount(): Promise<QueryResult<AccountInfo>> {
-  return apiQuery<AccountInfo>('/accounts/me');
+  return cachedOne('account', 'me', () => apiQuery<AccountInfo>('/accounts/me'));
+}
+
+/**
+ * ¿Entra uno más de este tope? `true` cuando no se sabe: **la duda no frena al cobrador**. El
+ * freno de verdad lo pone el servidor; esto es para avisar donde alguien todavía puede decidir.
+ */
+export async function hayLugar(kind: 'credits' | 'clients'): Promise<boolean> {
+  const res = await getAccount();
+  if (res.status !== 'ok') return true;
+  const max = res.data.limits[kind];
+  return max === null || res.data.usage[kind] < max;
 }
 
 export function updateAccount(patch: AccountPatch): Promise<MutateResult<AccountInfo>> {

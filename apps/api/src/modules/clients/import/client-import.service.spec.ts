@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { fakePlanLimits } from '../../../common/plan/plan-test-utils';
 import { ClientImportService } from './client-import.service';
 
 function makeService(opts: { existing?: { id: string; nationalIdHash: string | null }[]; activeCredits?: { clientId: string }[]; prevRun?: unknown } = {}) {
@@ -34,7 +35,7 @@ function makeService(opts: { existing?: { id: string; nationalIdHash: string | n
   const crypto = { encrypt: (v: string) => `enc(${v})` };
   const blind = { hash: (v?: string | null) => (v ? `h(${v})` : null) };
   const audit = { record: async (e: { action: string }) => void calls.audit.push(e) };
-  const service = new ClientImportService(prisma as never, tenant as never, crypto as never, blind as never, audit as never);
+  const service = new ClientImportService(prisma as never, tenant as never, crypto as never, blind as never, audit as never, fakePlanLimits());
   return { service, calls };
 }
 

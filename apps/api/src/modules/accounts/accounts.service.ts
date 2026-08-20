@@ -6,6 +6,7 @@ import { KOBRAX, PLANS, TRIAL_DAYS, isPasswordValid } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { weakPassword } from '../auth/auth.errors';
 import { serializeAccount } from './accounts.serializer';
 import { UpdateAccountDto } from './dto/account.dto';
@@ -25,6 +26,7 @@ export class AccountsService {
     private readonly prisma: PrismaService,
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
+    private readonly plan: PlanLimitsService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -32,16 +34,17 @@ export class AccountsService {
   }
 
   async findMine(): Promise<ReturnType<typeof serializeAccount>> {
-    const { account, memberCount } = await this.tx(async (tx) => {
+    const { account, usage } = await this.tx(async (tx) => {
       // El id va en el where además de la RLS (policy `tenant_self`): defensa en profundidad.
-      const [account, memberCount] = await Promise.all([
+      // Los tres conteos van en paralelo y caen en índices que ya existían.
+      const [account, usage] = await Promise.all([
         tx.account.findFirst({ where: { id: this.tenant.accountId, deletedAt: null } }),
-        tx.userAccount.count({ where: { isActive: true } }),
+        this.plan.usageAll(tx),
       ]);
-      return { account, memberCount };
+      return { account, usage };
     });
     if (!account) throw accountNotFound();
-    return serializeAccount(account, memberCount);
+    return serializeAccount(account, usage);
   }
 
   /**

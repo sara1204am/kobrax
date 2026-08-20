@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { AuditModule } from '../../common/audit/audit.module';
+import { PlanModule } from '../../common/plan/plan.module';
 import { CreditsController } from './credits.controller';
 import { CreditsService } from './credits.service';
 
 /** Módulo de créditos (cronograma + mora). Guards desde AuthModule; AuditService desde AuditModule. */
 @Module({
-  imports: [AuthModule, AuditModule],
+  imports: [AuthModule, AuditModule, PlanModule],
   controllers: [CreditsController],
   providers: [CreditsService],
 })

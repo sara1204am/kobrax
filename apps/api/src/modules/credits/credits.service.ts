@@ -18,6 +18,7 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import {
   buildSchedule,
   computeArrears,
@@ -43,6 +44,7 @@ export class CreditsService {
     private readonly prisma: PrismaService,
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
+    private readonly plan: PlanLimitsService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -119,6 +121,15 @@ export class CreditsService {
         select: { id: true },
       });
       if (!client) throw resourceNotFound(); // cliente inexistente o de otro tenant
+
+      // 🔴 El tope de créditos del plan. Va DESPUÉS de la guarda de idempotencia: un reintento de
+      // algo que ya entró no vuelve a pedir lugar.
+      //
+      // `soft` cuando el id lo puso el teléfono: ese préstamo **ya se acordó en la calle**, con el
+      // cobrador parado frente al deudor, y llega horas después al reconectar. Rechazarlo acá es
+      // borrar trabajo hecho y el cobrador se entera por un renglón rojo en la hoja de pendientes.
+      // El aviso va donde la persona todavía puede hacer algo: en el teléfono, antes de encolar.
+      await this.plan.assertRoom('credits', tx, { soft: Boolean(dto.id) });
 
       const credit = await tx.credit.create({
         data: {

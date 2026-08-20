@@ -225,6 +225,7 @@
         "reading": "Leyendo el archivo…",
         "previewTitle": "Esto es lo que va a cambiar",
         "previewNote": "Todavía no se guardó nada. El archivo se vuelve a subir al confirmar.",
+        "planOver": "Este archivo trae {nuevos, number} créditos nuevos y en tu plan quedan {lugar, number} lugares: sobran {sobran, number}. El archivo no se importa a medias, así que hay que sacar créditos pagados de la cartera o pasar a un plan más grande.",
         "confirm": "Confirmar e importar",
         "cancel": "Cancelar",
         "created": "Nuevos",

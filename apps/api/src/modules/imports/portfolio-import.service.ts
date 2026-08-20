@@ -6,6 +6,7 @@ import { CreditOrigin, readCreditMetadata } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { parsePdfBlocks, type ColumnCandidate, type FieldMap } from './parsers/pdf-blocks.parser';
 import { parsePdfRows } from './parsers/pdf-rows.parser';
 import { parseRowsFile } from './parsers/rows.parser';
@@ -59,6 +60,11 @@ interface PortfolioSummary {
   runId?: string;
   scope: ImportConfig['scope'];
   counts: { created: number; updated: number; setCurrent: number; invalid: number };
+  /**
+   * El tope de créditos contra lo que este archivo quiere crear. Ausente = el plan no tiene tope.
+   * Va en la vista previa para poder avisar ANTES de confirmar (LIMITES §5.2, Pregunta 10).
+   */
+  plan?: { roomLeft: number; over: number };
   // Baldes para la Vista Previa (obligatoria antes de confirmar). "Eliminados" no existe: nunca borra.
   preview: {
     toCreate: { code: string; clientName: string }[];
@@ -76,6 +82,7 @@ export class PortfolioImportService {
     private readonly prisma: PrismaService,
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
+    private readonly plan: PlanLimitsService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -188,7 +195,25 @@ export class PortfolioImportService {
         invalid: plan.invalid.length,
       };
 
-      if (dryRun) return { idempotentSkip: false, counts, preview };
+      /*
+       * 🔴 El tope de créditos, ANTES de escribir y también en la vista previa.
+       *
+       * Un archivo que se pasa se rechaza entero (LIMITES §5.2, Pregunta 10): importar «hasta
+       * llenar» deja al cobrador saliendo a la calle con una cartera incompleta **sin enterarse**,
+       * y el error se descubre recién cuando el deudor reclama que nunca lo visitaron.
+       *
+       * Que el número viaje en el `dryRun` es lo que convierte el rechazo en un aviso: la pantalla
+       * puede decir «trae 500 y te quedan 80» antes de que nadie confirme nada.
+       */
+      const roomLeft = await this.plan.roomLeft('credits', tx);
+      const planInfo =
+        roomLeft === null ? undefined : { roomLeft, over: Math.max(0, counts.created - roomLeft) };
+
+      if (dryRun) return { idempotentSkip: false, counts, preview, plan: planInfo };
+      // Los dos topes, aunque hoy los planes les den el mismo número: el archivo crea un cliente
+      // por crédito nuevo, y una excepción negociada puede separarlos.
+      await this.plan.assertRoom('credits', tx, { cuantos: counts.created });
+      await this.plan.assertRoom('clients', tx, { cuantos: counts.created });
 
       // Aplicar (atómico dentro del tenant). NUNCA borra (§4 del plan).
       // Create batcheado: 2 createMany (clientes + créditos) en vez de 2N inserts en serie —
@@ -252,7 +277,7 @@ export class PortfolioImportService {
           createdBy: this.tenant.userId,
         },
       });
-      return { idempotentSkip: false, runId: run.id, counts, preview };
+      return { idempotentSkip: false, runId: run.id, counts, preview, plan: planInfo };
     });
 
     if (!dryRun && !result.idempotentSkip) {

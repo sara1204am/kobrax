@@ -27,10 +27,11 @@ export interface AccountInfo {
    */
   limits: PlanLimits;
   /**
-   * Cuánto lleva usado de cada tope **que hoy se cuenta**. Hoy sólo los miembros; créditos, fotos
-   * y gestiones se suman cuando su fase los cuente (LIMITES-BUILD-PLAN §L1 y §L2).
+   * Cuánto lleva usado de cada tope **que hoy se cuenta**. Fotos y gestiones se suman cuando su
+   * fase las cuente (LIMITES-BUILD-PLAN §L2); mientras tanto no están acá, y por eso la pantalla
+   * no les dibuja una barra que no sabría llenar.
    */
-  usage: { users: number };
+  usage: { users: number; credits: number; clients: number };
 }
 
 /**

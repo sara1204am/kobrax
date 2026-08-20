@@ -225,6 +225,7 @@
         "reading": "Reading the file…",
         "previewTitle": "This is what will change",
         "previewNote": "Nothing has been saved yet. The file is uploaded again when you confirm.",
+        "planOver": "This file brings {nuevos, number} new credits and your plan has {lugar, number} slots left: {sobran, number} too many. The file is not imported halfway, so you need to clear paid credits from the portfolio or move to a bigger plan.",
         "confirm": "Confirm and import",
         "cancel": "Cancel",
         "created": "New",

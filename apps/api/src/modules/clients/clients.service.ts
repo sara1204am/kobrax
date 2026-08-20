@@ -9,6 +9,7 @@ import { TenantContextService } from '../../common/context/tenant-context.servic
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { BlindIndexService } from '../../common/crypto/blind-index.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { serializeClient, type PortfolioClient, type PortfolioTotals } from './clients.serializer';
 import {
   CreateAttachmentDto,
@@ -74,6 +75,7 @@ export class ClientsService {
     private readonly crypto: CryptoService,
     private readonly blind: BlindIndexService,
     private readonly audit: AuditService,
+    private readonly plan: PlanLimitsService,
   ) {}
 
   /** Ejecuta `fn` en el contexto RLS del tenant actual (del TenantContextService). */
@@ -103,6 +105,14 @@ export class ClientsService {
         const dup = await tx.client.findFirst({ where: { nationalIdHash } });
         if (dup) throw clientDuplicate();
       }
+
+      // El tope de clientes del plan, después del documento duplicado a propósito: si el CI ya
+      // está cargado, eso es lo que hay que decirle: no hace falta un lugar nuevo para ese deudor.
+      //
+      // `soft` cuando el id lo puso el teléfono: el cliente ya se dio de alta en la calle y llega
+      // al reconectar. Ver el mismo caso en `credits.service.ts`.
+      await this.plan.assertRoom('clients', tx, { soft: Boolean(dto.id) });
+
       let client: Awaited<ReturnType<typeof tx.client.create>>;
       try {
         client = await tx.client.create({

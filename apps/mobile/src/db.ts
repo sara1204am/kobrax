@@ -45,7 +45,15 @@ export type CacheKind =
   | 'catalog'
   | 'notification'
   /** Los pagos del día: sin ellos, el cierre de jornada sin señal informaría cero cobrado. */
-  | 'payment';
+  | 'payment'
+  /**
+   * La cuenta con sus topes y su consumo (`GET /accounts/me`).
+   *
+   * Se guarda **para poder avisar sin señal**: el cobrador que da de alta un préstamo en la puerta
+   * del deudor tiene que enterarse ahí de que el plan está lleno, no tres horas después cuando la
+   * cola falle. Sin caché, el aviso sólo existiría con internet — justo cuando no hace falta.
+   */
+  | 'account';
 
 /** Qué espera subir la cola. Cada uno mapea a un endpoint idempotente o append-only (plan §D3). */
 export type QueueKind =

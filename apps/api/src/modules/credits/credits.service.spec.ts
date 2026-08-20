@@ -1,9 +1,19 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { fakePlanLimits } from '../../common/plan/plan-test-utils';
 import { CreditsService } from './credits.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
-function makeService(opts: { client?: unknown; credit?: unknown; config?: unknown; openCase?: unknown } = {}) {
+function makeService(
+  opts: {
+    client?: unknown;
+    credit?: unknown;
+    config?: unknown;
+    openCase?: unknown;
+    /** Topes del plan. Por defecto no frenan: sólo los usa el test del tope. */
+    plan?: Parameters<typeof fakePlanLimits>[0];
+  } = {},
+) {
   const calls = {
     creditCreate: [] as Record<string, unknown>[],
     creditUpdate: [] as Record<string, unknown>[],
@@ -63,7 +73,7 @@ function makeService(opts: { client?: unknown; credit?: unknown; config?: unknow
   };
   const tenant = { accountId: 'acc-A', userId: 'user-1' };
   const audit = { record: async (e: { action: string; entity: string }) => void calls.audit.push(e) };
-  const service = new CreditsService(prisma as never, tenant as never, audit as never);
+  const service = new CreditsService(prisma as never, tenant as never, audit as never, fakePlanLimits(opts.plan));
   return { service, calls };
 }
 
@@ -93,6 +103,40 @@ describe('CreditsService.create — idempotencia del alta offline', () => {
     const { service, calls } = makeService({ client: { id: 'c1' } });
     await service.create({ ...(BASE as object), id: 'id-propuesto' } as never);
     assert.equal(calls.creditCreate[0]!.id, 'id-propuesto');
+  });
+});
+
+/**
+ * El tope de créditos del plan (LIMITES-BUILD-PLAN §L1).
+ *
+ * Lo que se prueba acá no es la cuenta —eso vive en `plan-limits.service.spec.ts`— sino **de qué
+ * lado del freno queda cada alta**: la de la pantalla se rechaza, y la que llega de la calle no.
+ */
+describe('CreditsService.create — el tope del plan', () => {
+  const LLENO = { plan: { limits: { credits: 20 }, usage: { credits: 20 } } };
+
+  it('con el plan lleno, el alta de la pantalla se rechaza', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' }, ...LLENO });
+    await rejectsWithCode(service.create(BASE), 'PLAN_LIMIT_REACHED');
+    assert.equal(calls.creditCreate.length, 0);
+  });
+
+  it('🔴 el alta que llega de la calle entra igual, aunque el plan esté lleno', async () => {
+    // Viene con id puesto por el teléfono: el préstamo se acordó frente al deudor y sube al
+    // reconectar. Rechazarlo acá borra trabajo hecho y el cobrador se entera horas después.
+    const { service, calls } = makeService({ client: { id: 'c1' }, ...LLENO });
+    await service.create({ ...(BASE as object), id: 'id-del-telefono' } as never);
+    assert.equal(calls.creditCreate.length, 1);
+  });
+
+  it('un reintento de algo que ya entró no vuelve a pedir lugar', async () => {
+    const { service } = makeService({
+      client: { id: 'c1' },
+      credit: { id: 'ya-existe', currency: 'BOB', metadata: {} },
+      ...LLENO,
+    });
+    const res = await service.create({ ...(BASE as object), id: 'ya-existe' } as never);
+    assert.equal(res.id, 'ya-existe');
   });
 });
 

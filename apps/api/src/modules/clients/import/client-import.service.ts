@@ -7,6 +7,7 @@ import { TenantContextService } from '../../../common/context/tenant-context.ser
 import { CryptoService } from '../../../common/crypto/crypto.service';
 import { BlindIndexService } from '../../../common/crypto/blind-index.service';
 import { AuditService } from '../../../common/audit/audit.service';
+import { PlanLimitsService } from '../../../common/plan/plan-limits.service';
 import { parseCsv } from './csv';
 import { planImport, type ImportRow } from './import-plan';
 import { ImportClientsDto } from './import.dto';
@@ -43,6 +44,7 @@ export class ClientImportService {
     private readonly crypto: CryptoService,
     private readonly blind: BlindIndexService,
     private readonly audit: AuditService,
+    private readonly plan: PlanLimitsService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -92,7 +94,9 @@ export class ClientImportService {
         return { idempotentSkip: false, invalid: plan.invalid, ...c };
       }
 
-      // Aplicar (atómico dentro del tenant).
+      // Aplicar (atómico dentro del tenant). El tope de clientes del plan primero: un archivo que
+      // se pasa se rechaza entero, no a medias (LIMITES §5.2, Pregunta 10).
+      await this.plan.assertRoom('clients', tx, { cuantos: plan.toCreate.length });
       for (const row of plan.toCreate) await this.createClient(tx, accountId, row);
       for (const u of plan.toUpdate) await this.updateClient(tx, u.id, u.row);
       if (plan.toSoftDelete.length > 0) {

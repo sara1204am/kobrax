@@ -22,7 +22,7 @@ const ACCOUNT: AccountInfo = {
   currencyCode: 'BOB',
   timezone: 'America/La_Paz',
   limits: PLANS.PROFESSIONAL.limits,
-  usage: { users: 3 },
+  usage: { users: 3, credits: 120, clients: 90 },
 };
 
 function renderForm(permissions = ['account:read', 'account:write']) {

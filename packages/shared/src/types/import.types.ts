@@ -133,6 +133,19 @@ export interface PortfolioSummary {
   dryRun: boolean;
   idempotentSkip: boolean;
   counts: { created: number; updated: number; setCurrent: number; invalid: number };
+  /**
+   * El tope de créditos del plan, contra lo que este archivo quiere crear.
+   *
+   * 🔴 Va en la **vista previa** y no en el error del final: un archivo que se pasa se rechaza
+   * entero (LIMITES §5.2, Pregunta 10), y enterarse recién al confirmar es la peor forma de
+   * descubrirlo. Ausente = el plan no tiene tope de créditos.
+   */
+  plan?: {
+    /** Cuántos créditos más entran hoy. */
+    roomLeft: number;
+    /** Por cuántos se pasa el archivo. `0` = entra. */
+    over: number;
+  };
   preview: {
     toCreate: { code: string; clientName: string }[];
     toUpdate: { code: string }[];

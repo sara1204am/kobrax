@@ -6,7 +6,18 @@ import { TenantContextService } from '../context/tenant-context.service';
 import { planLimitReached } from './plan.errors';
 
 /** Los topes que hoy se cuentan de verdad. Cada fase que agrega un contador agrega su clave acá. */
-export type CountedLimit = 'users';
+export type CountedLimit = 'users' | 'credits' | 'clients';
+
+/**
+ * Qué cuenta como crédito «activo» (LIMITES §5.2, Pregunta 9): con saldo pendiente y sin dar de
+ * baja. `DEFAULTED` es el que está en mora —debe más que nunca— y `RESTRUCTURED` se refinanció,
+ * así que los dos siguen debiendo.
+ *
+ * 🔴 `PAID`, `WRITTEN_OFF` y `CANCELLED` **no cuentan**: el crédito cobrado libera lugar. Si
+ * contaran, el cliente que cobra bien sería castigado por su propio éxito — justo al revés de lo
+ * que vende Kobrax.
+ */
+const CREDITOS_ACTIVOS = ['ACTIVE', 'DEFAULTED', 'RESTRUCTURED'] as const;
 
 /**
  * Los topes del plan de la cuenta del request, y el freno cuando no entra uno más.
@@ -41,14 +52,47 @@ export class PlanLimitsService {
     return effectiveLimits(account?.planCode ?? 'FREE', account?.limitsOverride);
   }
 
-  /** Cuánto hay hoy de lo que el tope mide. */
+  /**
+   * Cuánto hay hoy de lo que el tope mide.
+   *
+   * Las tres consultas caen en índices que ya existían: `idx_credits_analytics`
+   * —`(account_id, status)` parcial por `deleted_at IS NULL`— e `idx_clients_account_active`.
+   */
   async usage(kind: CountedLimit, tx: PrismaClient): Promise<number> {
     switch (kind) {
       case 'users':
         // Un invitado que todavía no aceptó YA ocupa asiento (LIMITES §5.1, Pregunta 6): si no
         // ocupara, alguien invita a 50 personas para reservarse los cupos.
         return tx.userAccount.count({ where: { isActive: true } });
+      case 'credits':
+        return tx.credit.count({
+          where: { deletedAt: null, status: { in: [...CREDITOS_ACTIVOS] } },
+        });
+      case 'clients':
+        return tx.client.count({ where: { deletedAt: null } });
     }
+  }
+
+  /** Lo usado de cada tope contable, para la pantalla. Una consulta por tope, todas indexadas. */
+  async usageAll(tx: PrismaClient): Promise<Record<CountedLimit, number>> {
+    const [users, credits, clients] = await Promise.all([
+      this.usage('users', tx),
+      this.usage('credits', tx),
+      this.usage('clients', tx),
+    ]);
+    return { users, credits, clients };
+  }
+
+  /**
+   * Cuántos más entran. `null` = sin tope.
+   *
+   * Existe para **avisar antes de que alguien confirme**: la vista previa de un import tiene que
+   * poder decir «el archivo trae 500 y te quedan 80» en vez de fallar al final.
+   */
+  async roomLeft(kind: CountedLimit, tx: PrismaClient): Promise<number | null> {
+    const max = (await this.limitsOf(tx))[kind];
+    if (max === null) return null;
+    return Math.max(0, max - (await this.usage(kind, tx)));
   }
 
   /**

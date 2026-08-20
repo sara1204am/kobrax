@@ -17,6 +17,7 @@ import {
   type PrestamoForm,
 } from '@/prestamo-form';
 import { createCredit } from '@/credits.service';
+import { hayLugar } from '@/account.service';
 import { nuevoId } from '@/ids';
 import { queueForLater } from '@/sync/sync.service';
 
@@ -68,6 +69,19 @@ export default function NuevoPrestamoScreen() {
     if (!clientId) return;
     setSaving(true);
     setError(null);
+
+    // 🔴 El tope del plan se avisa ACÁ, no al sincronizar. Este alta sale con id propio, así que
+    // el servidor la acepta aunque el plan esté lleno: si no avisáramos en este momento —con el
+    // cobrador todavía frente al deudor y a tiempo de llamar a su jefe— nadie se enteraría hasta
+    // que el préstamo apareciera de más en la cartera. Funciona sin señal: el tope viene del
+    // último `GET /accounts/me` guardado en el teléfono.
+    if (!(await hayLugar('credits'))) {
+      setSaving(false);
+      return setError(
+        'Tu plan llegó al tope de préstamos activos. Avisale a tu administrador antes de cargar este.',
+      );
+    }
+
     const input = { id: nuevoId(), ...buildPrestamoPayload(form, clientId) };
     const res = await createCredit(input);
     setSaving(false);

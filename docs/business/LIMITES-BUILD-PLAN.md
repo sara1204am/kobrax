@@ -14,8 +14,8 @@
 | Tope | ¿Se hace cumplir? | Dónde está (o dónde falta) |
 |---|---|---|
 | **Usuarios** | ✅ **Sí, y según el plan** *(desde el 20/08)* | `users.service.ts` llama a `PlanLimitsService.assertRoom('users')` en las dos puertas —invitar y reactivar—, y el tope sale del plan de la cuenta con su excepción encima. Antes leía `accounts.max_users`, columna suelta que valía 5 en toda cuenta, fuera FREE o BUSINESS; ya no existe |
-| **Créditos activos** | ❌ No | `credits.service.ts:123` (alta) · `portfolio-import.service.ts:217` (import masivo) |
-| **Clientes** | ❌ No | `clients.service.ts:108` · `portfolio-import.service.ts:216` · `client-import.service.ts:166` |
+| **Créditos activos** | ✅ **Sí** *(desde el 20/08)* | `credits.service.ts` en el alta y `portfolio-import.service.ts` por lote — **y en la vista previa**, para avisar antes de confirmar |
+| **Clientes** | ✅ **Sí** *(desde el 20/08)* | `clients.service.ts` y los dos imports |
 | **Fotos por mes** | ❌ No | `field.service.ts:214` (`fieldEvidence.create`) |
 | **Retención de fotos** | ❌ No | no existe nada que archive ni que venza |
 | **Gestiones por mes** | ❌ No | `field.service.ts:170` (`fieldVisit.create`) + `caseActivity` en agenda y casos |
@@ -273,7 +273,14 @@ que sin `planCode` la cuenta nace FREE con 1 asiento · que `{"planCode":"ENTERP
 
 ---
 
-### L1 · Créditos y clientes — el primer freno de verdad · **1,5 días**
+### L1 · Créditos y clientes — el primer freno de verdad · ✅ **CONSTRUIDO (20/08)**
+
+> **Estado:** hecho y verde — shared 78 · API 687 · web 362 · móvil 323 + `expo export`. Falta la
+> validación visual.
+>
+> **No hizo falta la migración de índices:** `idx_credits_analytics` —`(account_id, status)` parcial
+> por `deleted_at IS NULL`— e `idx_clients_account_active` ya existían y cubren los dos conteos.
+
 
 | Dónde | Qué se agrega |
 |---|---|
@@ -400,7 +407,7 @@ anterior.
 |---|---|---|---|
 | **L0** | ✅ El plan manda. Sin esto no hay nada | **hecho** | — |
 | **L0.5** | ✅ Elegir plan al registrarse, con tarjetas | **hecho** | — |
-| **L1** | El freno que sostiene el precio | **1,5 d** | No — es el tope que empuja a pagar |
+| **L1** | ✅ El freno que sostiene el precio | **hecho** | — |
 | **L2** | Los avisos del 80% | **1 d** | Sí, se puede posponer: no bloquea nada por diseño |
 | **L3** | La palanca sin SQL a mano | **0,5 d** | Sí, mientras haya pocos clientes |
 | **L4** | Prueba, caída al FREE, dormidas | **1 d** | Parcialmente: la caída al FREE conviene tenerla antes del primer cliente que deje de pagar |
@@ -408,9 +415,10 @@ anterior.
 | **L5** | Retención de fotos | 1 d | Bloqueada por S3/R2 |
 | **L6** | Sucursales | 3–5 d | Es otro producto |
 
-**Camino corto para poder cobrar: L0.5 (hecho) + L0 + L1 = 2,5 días de acá en adelante.** Con eso el
-cliente **elige su plan al entrar**, FREE y PROFESSIONAL son planes de verdad, y la diferencia entre
-uno y otro se siente en la primera semana — que es exactamente lo que busca la grilla.
+✅ **El camino corto para poder cobrar está hecho** (L0.5 + L0 + L1): el cliente elige su plan al
+entrar, FREE y PROFESSIONAL son planes de verdad, y la diferencia entre uno y otro se siente en la
+primera semana — que es exactamente lo que busca la grilla. **Lo que queda de esta serie es
+opcional**: avisos (L2), la palanca sin SQL (L3) y el job de vencimientos (L4).
 
 ---
 
