@@ -95,6 +95,16 @@ export class UsersService {
         if (otherAdmins === 0) throw lastAdmin();
       }
 
+      // Reactivar es la otra puerta al techo del plan: `invite()` frena en `maxUsers`, pero
+      // desactivar y volver a activar entraba sin contar asientos. Mismo criterio que allá
+      // —membresías activas— y dentro de la transacción, por la misma carrera (S2-D6).
+      if (dto.isActive === true && !before.isActive) {
+        const account = await tx.account.findFirst({ where: { id: this.tenant.accountId } });
+        if (!account) throw memberNotFound();
+        const taken = await tx.userAccount.count({ where: { isActive: true } });
+        if (taken >= account.maxUsers) throw seatLimitReached(account.maxUsers);
+      }
+
       const updated = await tx.userAccount.update({
         where: { id: before.id },
         data: { roleId: dto.roleId, isActive: dto.isActive },

@@ -27,7 +27,8 @@ export const lastAdmin = () =>
 export const seatLimitReached = (max: number) =>
   new UnprocessableEntityException({
     code: 'USER_SEAT_LIMIT',
-    message: `Tu plan permite ${max} miembros. Desactivá o eliminá a alguien para invitar a otro.`,
+    // Sirve para invitar y para reactivar: el texto no nombra ninguna de las dos.
+    message: `Tu plan permite ${max} miembros activos. Desactivá o eliminá a alguien para sumar otro.`,
   });
 
 /** Reenviar o cancelar una invitación sólo aplica a quien todavía no aceptó (S2-D5). */

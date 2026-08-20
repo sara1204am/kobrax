@@ -223,6 +223,35 @@ describe('UsersService.updateMember — guardas', () => {
     const { service } = makeService({ found: null });
     await rejectsWithCode(service.updateMember(OTHER, { isActive: false }), 'USER_NOT_FOUND');
   });
+
+  // Reactivar ocupa un asiento igual que invitar. Sin esta guarda, desactivar y volver a
+  // activar era la puerta trasera al techo del plan.
+  it('rechaza reactivar si el plan ya está lleno', async () => {
+    const { service } = makeService({
+      found: member({ isActive: false }),
+      seats: 5,
+      maxUsers: 5,
+    });
+    await rejectsWithCode(service.updateMember(OTHER, { isActive: true }), 'USER_SEAT_LIMIT');
+  });
+
+  it('deja reactivar si hay asiento libre', async () => {
+    const { service, calls } = makeService({
+      found: member({ isActive: false }),
+      seats: 4,
+      maxUsers: 5,
+    });
+    await service.updateMember(OTHER, { isActive: true });
+    assert.equal(calls.updated!.isActive, true);
+  });
+
+  // El que ya está activo no vuelve a pagar asiento: cambiarle el rol con el plan lleno
+  // tiene que seguir funcionando.
+  it('no cuenta asientos si el miembro ya estaba activo', async () => {
+    const { service, calls } = makeService({ seats: 5, maxUsers: 5 });
+    await service.updateMember(OTHER, { roleId: ROLE_ADMIN });
+    assert.equal(calls.updated!.roleId, ROLE_ADMIN);
+  });
 });
 
 const INVITE = {
