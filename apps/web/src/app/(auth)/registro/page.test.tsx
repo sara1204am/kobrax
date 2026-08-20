@@ -15,7 +15,16 @@ vi.mock('next/link', () => ({
   ),
 }));
 
+/**
+ * Paso 1: elegir plan. La tarjeta entera es el botón, así que su nombre accesible incluye el
+ * nombre del plan — que es justamente por lo que la persona la elige.
+ */
+async function pickPlan(plan: RegExp = /Free/) {
+  await userEvent.click(screen.getByRole('button', { name: plan }));
+}
+
 async function fillForm() {
+  await pickPlan();
   await userEvent.type(screen.getByLabelText('Nombre del negocio'), 'Cobranzas Pérez');
   await userEvent.type(screen.getByLabelText('Nombre'), 'Sara');
   await userEvent.type(screen.getByLabelText('Apellido'), 'Pérez');
@@ -30,6 +39,47 @@ async function fillForm() {
  * usuaria a reintentar un alta que ya existe y cobrarse un 409.
  */
 describe('RegistroPage', () => {
+  it('🔴 no hay formulario hasta elegir plan, y el elegido viaja en el alta', async () => {
+    let alta: Record<string, unknown> | undefined;
+    server.use(
+      http.post('*/api/auth/registro', async ({ request }) => {
+        alta = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ accountId: 'acc-1', email: 'sara@kobrax.demo' });
+      }),
+      http.post('*/api/auth/login', () => HttpResponse.json({ step: 'done' })),
+    );
+
+    render(<RegistroPage />);
+    // El plan decide lo que la cuenta va a poder hacer: se pregunta antes, no al final.
+    expect(screen.queryByLabelText('Nombre del negocio')).toBeNull();
+
+    await pickPlan(/Professional/);
+    await userEvent.type(screen.getByLabelText('Nombre del negocio'), 'Cobranzas Pérez');
+    await userEvent.type(screen.getByLabelText('Nombre'), 'Sara');
+    await userEvent.type(screen.getByLabelText('Apellido'), 'Pérez');
+    await userEvent.type(screen.getByLabelText('Correo electrónico'), 'sara@kobrax.demo');
+    await userEvent.type(screen.getByLabelText('Contraseña'), 'Kobrax123!');
+    await userEvent.click(screen.getByRole('button', { name: /crear cuenta/i }));
+
+    await screen.findByText(/cuenta creada/i);
+    // El BFF arma el cuerpo campo por campo: lo que no nombre se pierde en silencio.
+    expect(alta).toMatchObject({ planCode: 'PROFESSIONAL' });
+    // Y se le dice qué pasa a los 30 días antes de que se entere el día que vence.
+    expect(screen.getByText(/sigue funcionando en el plan Free/i)).toBeInTheDocument();
+  });
+
+  it('volver a cambiar el plan no borra lo que ya escribió', async () => {
+    render(<RegistroPage />);
+    await pickPlan(/Business/);
+    await userEvent.type(screen.getByLabelText('Nombre del negocio'), 'Cobranzas Pérez');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cambiar' }));
+    await pickPlan(/Free/);
+
+    expect(screen.getByLabelText('Nombre del negocio')).toHaveValue('Cobranzas Pérez');
+    expect(screen.getByText('Plan Free')).toBeInTheDocument();
+  });
+
   it('crea la cuenta, inicia sesión y confirma antes de seguir al paso siguiente', async () => {
     let alta: unknown;
     server.use(

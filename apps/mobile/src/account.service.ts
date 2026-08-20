@@ -12,7 +12,7 @@ import { apiMutate, apiQuery, type MutateResult, type QueryResult } from './api-
 // Las cuatro formas del contrato viven en `@kobrax/shared` (F9 · W2): son las mismas que
 // edita la web. Se re-exportan para no tocar a quien ya las importaba de este archivo.
 export type { AccountInfo, AccountPatch, MyProfile, ProfilePatch } from '@kobrax/shared';
-import type { AccountInfo, AccountPatch, MyProfile, ProfilePatch } from '@kobrax/shared';
+import type { AccountInfo, AccountPatch, MyProfile, ProfilePatch, SignupPlan } from '@kobrax/shared';
 
 export interface SignupPayload {
   businessName: string;
@@ -20,6 +20,12 @@ export interface SignupPayload {
   lastName: string;
   email: string;
   password: string;
+  /**
+   * El plan elegido en las tarjetas. Ausente = FREE. Un plan pago **no se cobra acá**: la cuenta
+   * nace en prueba por 30 días y al vencer cae a FREE. La lista de lo que se puede elegir la
+   * decide el servidor (`SIGNUP_PLANS`), no esta pantalla.
+   */
+  planCode?: SignupPlan;
 }
 
 export type SignupResult = PublicResult<{ accountId: string }>;

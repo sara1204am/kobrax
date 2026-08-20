@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { hash } from 'bcryptjs';
 import type { PrismaClient } from '@prisma/client';
-import { KOBRAX, isPasswordValid } from '@kobrax/shared';
+import { KOBRAX, PLANS, TRIAL_DAYS, isPasswordValid } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -15,6 +15,8 @@ import { accountNotFound, emailTaken, roleCatalogMissing } from './accounts.erro
 /** Mercado inicial. El registro no los pregunta (S4-D8); se cambian en la pantalla de datos. */
 const DEFAULT_COUNTRY = 'BO';
 const DEFAULT_CURRENCY = 'BOB';
+
+const DIA_MS = 24 * 60 * 60 * 1000;
 
 /** Datos del propio tenant (módulo CUENTA · S0) + registro público (S4). */
 @Injectable()
@@ -47,6 +49,11 @@ export class AccountsService {
    * en una sola transacción. **No emite tokens**: el móvil hace `POST /auth/login`
    * justo después y hereda toda la máquina de estados, incluido el MFA obligatorio
    * que le corresponde a `ACCOUNT_ADMIN` (S4-D1, S4-D5).
+   *
+   * El plan sale de las tarjetas del registro (L0.5). Un plan pago **no se regala**: la cuenta nace
+   * en prueba por 30 días y al vencer cae a FREE. Mientras tanto sus topes son los de verdad —
+   * elegir Professional entrega sus 25 asientos hoy mismo, porque los asientos son el único tope
+   * que la API ya hace cumplir.
    */
   async create(
     dto: CreateAccountDto,
@@ -55,6 +62,12 @@ export class AccountsService {
     if (!isPasswordValid(dto.password)) throw weakPassword();
 
     const email = dto.email.toLowerCase();
+    // Sin plan elegido, FREE. El DTO ya rechazó cualquier valor fuera de la lista blanca.
+    const plan = PLANS[dto.planCode ?? 'FREE'];
+    const esPago = plan.code !== 'FREE';
+    // `trialEndsAt` va en `settings` (jsonb que ya existe) y no en una columna nueva: es un dato
+    // que lee un job diario una vez, no algo por lo que se filtre ni se ordene.
+    const trialEndsAt = esPago ? new Date(Date.now() + TRIAL_DAYS * DIA_MS).toISOString() : null;
     const role = await this.prisma.role.findUnique({ where: { name: 'ACCOUNT_ADMIN' } });
     if (!role) throw roleCatalogMissing();
     const passwordHash = await hash(dto.password, KOBRAX.BCRYPT_WORK_FACTOR);
@@ -70,9 +83,16 @@ export class AccountsService {
             id: accountId,
             businessName: dto.businessName,
             accountType: 'INDEPENDENT',
-            status: 'TRIAL',
-            planCode: 'STARTER',
-            maxUsers: 5,
+            // El FREE no es una prueba: es permanente. Sólo el plan pago nace en prueba, y eso
+            // es exactamente lo que el job diario busca para hacerlo caer a FREE al vencer.
+            status: esPago ? 'TRIAL' : 'ACTIVE',
+            // `FREE` se llama `STARTER` en la base hasta que la migración lo renombre
+            // (LIMITES-BUILD-PLAN §L0). `planOf()` de shared traduce el otro sentido.
+            planCode: plan.code === 'FREE' ? 'STARTER' : plan.code,
+            // Antes eran 5 fijos para todos, sin mirar el plan. Los tres elegibles tienen tope,
+            // así que el `?? 1` no llega a usarse: está por el tipo, no por el caso.
+            maxUsers: plan.limits.users ?? 1,
+            settings: trialEndsAt ? { trialEndsAt } : {},
             countryCode: DEFAULT_COUNTRY,
             currencyCode: DEFAULT_CURRENCY,
           },
@@ -101,7 +121,14 @@ export class AccountsService {
             action: 'CREATE',
             entity: 'account',
             entityId: accountId,
-            after: { businessName: dto.businessName, ownerUserId: user.id },
+            // El plan elegido queda en la bitácora: es la métrica más honesta del registro —
+            // qué plan elige la gente ANTES de conocer el producto.
+            after: {
+              businessName: dto.businessName,
+              ownerUserId: user.id,
+              planCode: plan.code,
+              trialEndsAt,
+            },
             ip: meta.ip,
             userAgent: meta.userAgent,
           },

@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { TRIAL_DAYS } from '@kobrax/shared';
 import { AccountsService } from './accounts.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 import { AUTH_ERR } from '../auth/auth.errors';
@@ -103,8 +104,11 @@ describe('AccountsService.create (registro público · S4)', () => {
 
     assert.equal(calls.account!.businessName, 'Cobranzas Pérez');
     assert.equal(calls.account!.accountType, 'INDEPENDENT');
-    assert.equal(calls.account!.status, 'TRIAL');
-    assert.equal(calls.account!.maxUsers, 5);
+    // Sin plan elegido: FREE. Y el FREE **no es una prueba**, es permanente.
+    assert.equal(calls.account!.status, 'ACTIVE');
+    assert.equal(calls.account!.planCode, 'STARTER');
+    assert.equal(calls.account!.maxUsers, 1);
+    assert.deepEqual(calls.account!.settings, {});
     assert.deepEqual((calls.user!.profile as { create: unknown }).create, {
       firstName: 'Sara',
       lastName: 'Pérez',
@@ -115,6 +119,28 @@ describe('AccountsService.create (registro público · S4)', () => {
     assert.equal(calls.audit!.userId, 'u-new');
     assert.equal(calls.audit!.ip, '1.2.3.4');
     assert.equal(res.accountId, calls.account!.id);
+  });
+
+  it('🔴 el plan elegido entrega sus asientos, pero como PRUEBA de 30 días', async () => {
+    const { service, calls } = makeSignupService();
+    await service.create({ ...SIGNUP, planCode: 'PROFESSIONAL' }, {});
+
+    // Los 25 asientos son de verdad desde el minuto uno: es el único tope que la API frena hoy.
+    assert.equal(calls.account!.planCode, 'PROFESSIONAL');
+    assert.equal(calls.account!.maxUsers, 25);
+    // Pero nace en prueba, que es lo que evita regalar un plan pago sin pasarela de cobro.
+    assert.equal(calls.account!.status, 'TRIAL');
+    const vence = new Date((calls.account!.settings as { trialEndsAt: string }).trialEndsAt);
+    const dias = Math.round((vence.getTime() - Date.now()) / 86_400_000);
+    assert.equal(dias, TRIAL_DAYS);
+  });
+
+  it('el plan elegido queda en la bitácora del alta', async () => {
+    // Qué plan elige la gente antes de conocer el producto es la métrica que decide el precio.
+    const { service, calls } = makeSignupService();
+    await service.create({ ...SIGNUP, planCode: 'BUSINESS' }, {});
+    assert.equal((calls.audit!.after as { planCode: string }).planCode, 'BUSINESS');
+    assert.equal(calls.account!.maxUsers, 100);
   });
 
   it('el email se normaliza a minúsculas', async () => {

@@ -72,7 +72,9 @@ export function BusinessForm({ account }: { account: AccountInfo }) {
   }
 
   return (
-    <form onSubmit={save} className="space-y-5 rounded-2xl border border-k-border bg-white p-6">
+    // La caja blanca la pone la `Section` que lo envuelve: dos cajas anidadas se veían como un
+    // recuadro dentro de otro.
+    <form onSubmit={save} className="space-y-5">
       <ErrorBanner message={error} />
 
       <Field label={t('businessName')}>

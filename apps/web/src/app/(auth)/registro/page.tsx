@@ -4,13 +4,20 @@ import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { TRIAL_DAYS, type SignupPlan } from '@kobrax/shared';
 import { AuthShell } from '@/components/auth-shell';
 import { Button, ErrorBanner, Field, Input } from '@/components/ui';
 import { allPassed, PasswordChecklist } from '@/components/password-checklist';
 import { postJson, routeByStep, type AccountOption, type Step } from '@/lib/client';
+import { PlanPicker } from './plan-picker';
 
 /**
  * Registro público (`POST /accounts`). Crea el tenant y entra de una.
+ *
+ * **Dos pasos: primero el plan, después los datos.** El plan va primero porque decide lo que la
+ * cuenta va a poder hacer, y porque preguntarlo al final —después de escribir cinco campos— es
+ * pedirle a alguien que reconsidere cuando ya se comprometió. Elegir uno pago no lo cobra: entra
+ * como prueba de 30 días (`TRIAL_DAYS`) y al vencer la cuenta sigue funcionando en FREE.
  *
  * El alta **no devuelve tokens**, así que acá se hace el login normal con lo que ya está en el
  * formulario y se delega el destino en `routeByStep`. Para un `ACCOUNT_ADMIN` eso significa
@@ -23,6 +30,7 @@ import { postJson, routeByStep, type AccountOption, type Step } from '@/lib/clie
 export default function RegistroPage() {
   const router = useRouter();
   const t = useTranslations('registro');
+  const tPlans = useTranslations('plans');
   const [form, setForm] = useState({
     businessName: '',
     firstName: '',
@@ -30,6 +38,8 @@ export default function RegistroPage() {
     email: '',
     password: '',
   });
+  /** `null` = todavía está en el paso de elegir plan. */
+  const [plan, setPlan] = useState<SignupPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   /** La cuenta quedó creada pero el login posterior falló: reintentar el alta sería un 409. */
@@ -51,6 +61,9 @@ export default function RegistroPage() {
       firstName: form.firstName.trim(),
       lastName: form.lastName.trim(),
       email,
+      // El servidor vuelve a validarlo contra su lista blanca: acá es una preferencia, no una
+      // decisión. Un plan pago le da a la cuenta 30 días de prueba, no una factura.
+      planCode: plan,
     });
     if (!alta.ok) {
       setLoading(false);
@@ -74,6 +87,15 @@ export default function RegistroPage() {
     setDone({ step: login.data.step, accounts: login.data.accounts });
   }
 
+  // Paso 1. Sin plan elegido no hay formulario: es la decisión que ordena todo lo demás.
+  if (!plan) {
+    return (
+      <AuthShell wide title={t('plan.title')} subtitle={t('plan.subtitle')}>
+        <PlanPicker onPick={setPlan} />
+      </AuthShell>
+    );
+  }
+
   if (done) {
     return (
       <AuthShell title={t('doneTitle')} subtitle={t('doneSubtitle')}>
@@ -87,7 +109,19 @@ export default function RegistroPage() {
               <dt>{t('yourBusiness')}</dt>
               <dd className="font-medium text-k-text">{form.businessName.trim()}</dd>
             </div>
+            <div className="mt-1 flex gap-2">
+              <dt>{t('yourPlan')}</dt>
+              <dd className="font-medium text-k-text">{tPlans(`names.${plan}`)}</dd>
+            </div>
           </dl>
+
+          {/* Lo que pasa a los 30 días se dice ACÁ y no en la letra chica: enterarse el día que
+              vence, con la cartera adentro, es la peor forma de descubrir un vencimiento. */}
+          {plan !== 'FREE' && (
+            <p className="rounded-xl bg-k-highlight px-4 py-3 text-[13px] leading-relaxed text-k-text-2">
+              {t('plan.trialNotice', { plan: tPlans(`names.${plan}`), days: TRIAL_DAYS })}
+            </p>
+          )}
           <Button variant="cta" onClick={() => routeByStep(router, done.step, done.accounts)}>
             {t('continue')}
           </Button>
@@ -105,6 +139,21 @@ export default function RegistroPage() {
         y esa la gobierna `allPassed` — la misma de `@kobrax/shared` que valida el servidor.
       */}
       <form onSubmit={onSubmit} className="space-y-4">
+        {/* El plan elegido queda a la vista y se puede cambiar sin perder lo escrito: el estado
+            del formulario no se toca al volver al paso 1. */}
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-k-highlight px-4 py-2.5">
+          <span className="text-[13px] text-k-text-2">
+            {t('plan.chosen', { plan: tPlans(`names.${plan}`) })}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPlan(null)}
+            className="text-[13px] font-medium text-k-purple hover:underline"
+          >
+            {t('plan.change')}
+          </button>
+        </div>
+
         <ErrorBanner message={error} />
 
         <Field label={t('businessName')}>

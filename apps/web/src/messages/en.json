@@ -1111,8 +1111,15 @@
   },
   "account": {
     "title": "Account",
-    "subtitle": "Your business details. They show up on receipts and invitations.",
-    "seats": "{used} of {max} members",
+    "subtitle": "Your plan, and the business details that show up on receipts and invitations.",
+    "businessData": "Business details",
+    "status": {
+      "ACTIVE": "Active",
+      "TRIAL": "Trial",
+      "SUSPENDED": "Suspended",
+      "INACTIVE": "Inactive",
+      "CANCELLED": "Cancelled"
+    },
     "businessName": "Business name",
     "taxId": "Tax ID",
     "taxIdPlaceholder": "Optional",
@@ -1121,6 +1128,46 @@
     "saved": "Details saved",
     "saveError": "Could not save the details",
     "noAccess": "You do not have access to the account details"
+  },
+  "plans": {
+    "title": "Your plan",
+    "unknown": "{code} plan",
+    "names": {
+      "FREE": "Free",
+      "PROFESSIONAL": "Professional",
+      "BUSINESS": "Business",
+      "ENTERPRISE": "Enterprise"
+    },
+    "price": {
+      "FREE": "Free of charge",
+      "PROFESSIONAL": "${perSeat, number} per member per month",
+      "BUSINESS": "${base, number} + ${perSeat, number} per member per month",
+      "ENTERPRISE": "Tailored to you"
+    },
+    "seats": "Team members",
+    "seatsValue": "{used, number} of {max, number}",
+    "seatsCustom": "Your account has a custom limit: {max, number} members instead of {plan, number}.",
+    "includes": "What it includes",
+    "limits": {
+      "credits": "Active credits",
+      "clients": "Clients",
+      "photosPerMonth": "Photos per month",
+      "actionsPerMonth": "Field actions per month",
+      "photoRetentionMonths": "Photos are kept for",
+      "support": "Support"
+    },
+    "support": {
+      "FREE": "Knowledge base and community chat",
+      "PROFESSIONAL": "Email within 24 h and WhatsApp",
+      "BUSINESS": "Training and support during business hours",
+      "ENTERPRISE": "Dedicated account manager"
+    },
+    "unlimited": "Unlimited",
+    "count": "{n, number}",
+    "months": "{n, plural, one {# month} other {# months}}",
+    "upgrade": "{plan} includes {users, number} members and {credits, number} active credits.",
+    "upgradeTop": "{plan} is tailored to you.",
+    "upgradeHow": "We change the plan for you: write to us and it is active the same day."
   },
   "portfolio": {
     "title": "Portfolio",
@@ -1477,6 +1524,11 @@
     "title": "Team",
     "subtitle": "Who works in your account and what they can do.",
     "seats": "{used} of {max} members",
+    "atCapacity": {
+      "text": "Your {plan} plan is at its limit of {max, plural, one {# member} other {# members}}.",
+      "next": "{plan} includes {users, number}.",
+      "link": "See your plan"
+    },
     "noAccess": "You do not have access to the team",
     "search": {
       "label": "Search the team",
@@ -1709,7 +1761,19 @@
     "doneSubtitle": "You can go in and load your portfolio. First we'll offer to protect the account with a second security step.",
     "yourEmail": "Your email:",
     "yourBusiness": "Business:",
-    "continue": "Continue"
+    "yourPlan": "Plan:",
+    "continue": "Continue",
+    "plan": {
+      "title": "How will you use Kobrax?",
+      "subtitle": "Pick the plan that fits. You can start free and grow when you need to.",
+      "forever": "Free forever",
+      "trial": "{days}-day trial",
+      "choose": "Start with this one",
+      "enterprise": "For large operations, Enterprise is tailored to you: the numbers come from how you work. Write to us and we'll put it together with you.",
+      "chosen": "{plan} plan",
+      "change": "Change",
+      "trialNotice": "You are trying {plan} for {days} days. When it ends, your account keeps working on the Free plan: nothing is blocked and you lose no data."
+    }
   },
   "invitacion": {
     "title": "Join your team",

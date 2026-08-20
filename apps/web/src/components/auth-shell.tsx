@@ -17,25 +17,34 @@ export function AuthShell({
   eyebrow,
   title,
   subtitle,
+  wide,
   children,
 }: {
   /** Línea corta arriba del título («Bienvenido de vuelta»). Sólo la usa el login. */
   eyebrow?: string;
   title: string;
   subtitle?: string;
+  /**
+   * Columna ancha. La usa **sólo el paso de elegir plan**: comparar tres planes es una tarea de
+   * lado a lado, y tres tarjetas apiladas en 440 px obligan a recordar la primera para juzgar la
+   * tercera. Los ocho pasos de auth siguen en la medida de siempre.
+   */
+  wide?: boolean;
   children: ReactNode;
 }) {
+  const ancho = wide ? 'max-w-[880px]' : 'max-w-[440px]';
+
   return (
     <main className="flex min-h-screen flex-col bg-k-bg">
       <div className="flex flex-1 flex-col lg:flex-row">
         <BrandPanel />
 
         <section className="flex flex-1 flex-col items-center justify-center px-6 py-10 lg:py-14">
-          <div className="mb-5 flex w-full max-w-[440px] justify-end">
+          <div className={`mb-5 flex w-full ${ancho} justify-end`}>
             <LocaleSwitch />
           </div>
 
-          <div className="w-full max-w-[440px] rounded-2xl border border-k-border bg-white p-7 shadow-k-card sm:p-9">
+          <div className={`w-full ${ancho} rounded-2xl border border-k-border bg-white p-7 shadow-k-card sm:p-9`}>
             {eyebrow && <p className="text-[15px] font-medium text-k-purple">{eyebrow}</p>}
             <h1 className="mt-0.5 text-[30px] font-semibold leading-tight tracking-tight text-k-navy">
               {title}
