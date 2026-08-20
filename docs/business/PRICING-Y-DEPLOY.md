@@ -1,8 +1,10 @@
 # KOBRAX — Precios, Costos y Puesta en Marcha
 ### Explicado sin tecnicismos
 
-> **Fecha:** 2026-08-12 · **Precios de proveedores verificados:** 2026-08-13
+> **Fecha:** 2026-08-12 · **Precios de proveedores verificados:** 2026-08-13 · **Actualizado:** 2026-08-20
 > **Para quién es este documento:** cualquier persona que tenga que tomar o entender una decisión sobre Kobrax — cuánto cobrar, cuánto cuesta operarlo, qué falta para poder vendérselo a alguien. **No hace falta saber de sistemas para leerlo.**
+>
+> **Qué cambió el 2026-08-20:** la escalera de planes se rehízo (§3), apareció un **plan gratuito** y su cuenta económica (§10), y ENTERPRISE dejó de ser «sin límite». Los topes de cada plan viven ahora en **[LIMITES-POR-PLAN.md](./LIMITES-POR-PLAN.md)** y el trabajo para hacerlos cumplir, fase por fase, en **[LIMITES-BUILD-PLAN.md](./LIMITES-BUILD-PLAN.md)**. **Los precios de proveedores no se re-verificaron**: siguen siendo los del 13 de agosto.
 
 ---
 
@@ -37,7 +39,11 @@ Si entendés estos ocho, entendés el documento entero.
 
 **Sobre cuánto cobrar**
 
-Se cobra **por cobrador que usa la app, por mes**. Cuatro planes: Independiente **$15**, Cartera **$12 por cobrador** (mínimo 5), Institucional **$99 fijo + $10 por cobrador**, Enterprise **desde $800**.
+Se cobra **por cobrador que usa la app, por mes**.
+
+🔄 **La escalera se rehízo el 20 de agosto de 2026** y los nombres viejos (Independiente / Cartera / Institucional) se retiran. Ahora son: **FREE $0** · **PROFESSIONAL $12 por cobrador** · **BUSINESS $99 + $10 por cobrador** · **ENTERPRISE $800 + $8 por cobrador**. La grilla completa de topes vive en **[LIMITES-POR-PLAN.md §4-A](./LIMITES-POR-PLAN.md)**, que es la fuente de verdad; acá está sólo lo que hace falta para la cuenta económica.
+
+Dos cambios que mueven este documento: **apareció un plan gratuito** —cuentas que cuestan y no facturan (§10)— y **ENTERPRISE dejó de ser «sin límite» y pasó a cobrar por cobrador**, lo que corrige una inversión de precio que tenía la lista vieja.
 
 ⚠️ **Pero hay un problema nuevo con el precio**: cuando se escribió la primera versión de este documento, el dólar en Bolivia valía Bs 6,96. **Hoy vale Bs 11,71.** Nadie subió el precio, pero en bolivianos el producto se encareció un **68%**: $12 pasó de Bs 84 a **Bs 141**. Y el sueldo del cobrador boliviano no subió 68%. **Hay una decisión comercial pendiente sobre esto** (§3).
 
@@ -95,7 +101,7 @@ Evaluamos cuatro maneras de cobrar:
 | **Por cobrador por mes** | Predecible para los dos lados. Crece junto con el valor que entrega. **Y ya está programado**: el sistema ya sabe limitar cuántos usuarios puede tener una cuenta **[VERIFICADO-CÓDIGO]** | Un cliente chico con pocos cobradores paga poco | ✅ **La elegida** |
 | Por tamaño de cartera (cantidad de créditos) | Se alinea con el tamaño del problema del cliente | La cantidad de créditos sube y baja todo el tiempo. Es difícil de auditar para el cliente. Y peor: **le da un incentivo a no cargar toda la cartera** para pagar menos | Sirve como *límite del plan*, no como precio |
 | Comisión sobre lo recuperado | Vende solo: "gano si vos ganás" | Requiere que cada pago esté perfectamente conciliado, **invita a registrar cobros por fuera del sistema**, y ninguna financiera comparte un porcentaje de su recupero con un proveedor de software | ❌ Descartado como modelo. Sirve sólo como argumento de venta (§4) |
-| Mixto: base fija + por cobrador | La base fija cubre lo que cuesta *tener* al cliente (soporte, capacitación, almacenamiento) más allá de cuántos cobradores tenga | Un número más que explicar en la reunión | ✅ Para el plan Institucional |
+| Mixto: base fija + por cobrador | La base fija cubre lo que cuesta *tener* al cliente (soporte, capacitación, almacenamiento) más allá de cuántos cobradores tenga | Un número más que explicar en la reunión | ✅ Para el plan BUSINESS |
 
 ### El mercado boliviano — quién compra y cómo
 
@@ -142,13 +148,16 @@ Esto último es notable: durante 2024 y 2025 el paralelo llegó a valer el doble
 
 | Plan | Precio en USD | Antes (a Bs 6,96) | **Ahora (a Bs 11,71)** |
 |---|---|---|---|
-| Independiente | $15 | Bs 104 | **Bs 176** |
-| Cartera (por cobrador) | $12 | Bs 84 | **Bs 141** |
-| Institucional (base) | $99 | Bs 689 | **Bs 1.159** |
-| Institucional (por cobrador) | $10 | Bs 70 | **Bs 117** |
-| Enterprise | $800 | Bs 5.570 | **Bs 9.368** |
+| FREE | $0 | — | — |
+| PROFESSIONAL (por cobrador) | $12 | Bs 84 | **Bs 141** |
+| BUSINESS (base) | $99 | Bs 689 | **Bs 1.159** |
+| BUSINESS (por cobrador) | $10 | Bs 70 | **Bs 117** |
+| ENTERPRISE (base) | $800 | Bs 5.570 | **Bs 9.368** |
+| ENTERPRISE (por cobrador) | $8 | Bs 56 | **Bs 94** |
 
 Y el sueldo del cobrador boliviano no subió 68% en bolivianos. **En términos reales, el producto se le encareció al cliente.**
+
+*(El plan Independiente de $15 salió de la lista: lo reemplaza el FREE. Es la mejor noticia de este bloque para el cliente más chico — pasó de Bs 176 a cero.)*
 
 **3. La decisión que se abre.** El margen es tan alto (§10) que hay lugar para bajar el precio en dólares y sostener la lista en bolivianos cerca de donde estaba. Con la infraestructura costando entre el 4% y el 11% de lo facturado, una lista de **Bs 120 por cobrador (≈ $10)** en lugar de Bs 141 **sigue dejando más del 70% de margen bruto.**
 
@@ -156,40 +165,55 @@ Y el sueldo del cobrador boliviano no subió 68% en bolivianos. **En términos r
 
 **Recomendación de fondo (sin cambios):** listar los precios **en bolivianos con IVA incluido** — el cliente boliviano piensa en bolivianos y ASFI exige contratos en moneda local — con una cláusula de revisión anual. No atar el contrato al dólar paralelo: es ilegal facturar en él, y ahora además es innecesario.
 
-### La tabla de planes
+### La tabla de planes *(rehecha el 2026-08-20)*
 
-| | **Independiente** | **Cartera** | **Institucional** | **Enterprise** |
+> **Fuente de verdad: [LIMITES-POR-PLAN.md §4-A](./LIMITES-POR-PLAN.md).** Si esta tabla y esa no coinciden, vale esa. Los números también viven en el código, en un solo lugar: `packages/shared/src/constants/plans.ts` **[VERIFICADO-CÓDIGO]**.
+
+| | **FREE** | **PROFESSIONAL** | **BUSINESS** | **ENTERPRISE** |
 |---|---|---|---|---|
 | **A quién le vendo** | Cobrador que trabaja por su cuenta, prestamista | Agencia de cobranza, casa comercial | Cooperativa, financiera chica | Banco, financiera regulada por ASFI, multi-regional |
-| **Precio** | **$15/mes** (Bs 176) | **$12 por cobrador**, mínimo 5 → desde $60 (Bs 141 c/u) | **$99 + $10 por cobrador** (Bs 1.159 + 117) | **Desde $800/mes**, contrato anual (Bs 9.368+) |
-| Cuántas personas pueden entrar | 2 | hasta 25 | hasta 100 | sin límite |
-| Créditos activos | 300 | 5.000 | 30.000 | sin límite |
-| Fotos por mes | 1.000 | 15.000 | 100.000 | sin límite |
-| Cuánto tiempo se guardan las fotos | 12 meses | 24 meses | 5 años | a medida (según norma ASFI) |
-| Sucursales | 1 | 3 | sin límite | sin límite |
-| Soporte | Email, 48 h | Email 24 h + WhatsApp | Capacitación inicial + horario laboral | Contrato de servicio + un responsable de cuenta |
-| Extras | — | Carga automática de extractos en PDF/CSV | Multi-sucursal, auditoría exportable | Instalación en servidores del cliente, informe de cumplimiento |
+| **Precio** | **$0** | **$12 por cobrador** (Bs 141 c/u) | **$99 + $10 por cobrador** (Bs 1.159 + 117) | **$800 + $8 por cobrador** (Bs 9.368 + 94), contrato anual |
+| Cuántas personas pueden entrar | **1** | 25 | 100 | 500 *(piso)* |
+| Créditos activos | **20** | 1.000 | 5.000 | 50.000 *(piso)* |
+| Clientes | **20** | 1.000 | 5.000 | 50.000 *(piso)* |
+| Fotos por mes | **100** | 5.000 | 25.000 | 250.000 *(piso)* |
+| Cuánto tiempo se guardan las fotos | **6 meses** | 24 meses | 60 meses | 120 meses |
+| Soporte | Base de conocimientos + chat comunitario | Email 24 h + WhatsApp | Capacitación + horario laboral | Responsable de cuenta |
 
-**Un detalle interesante:** el sistema **ya tiene programados** los cuatro nombres de plan **[VERIFICADO-CÓDIGO]**, pero están deliberadamente inactivos. Se decidió en su momento que **la única restricción real fuera la cantidad de usuarios**, y todo lo demás se controlara a mano. Fue una buena decisión: evitó construir un sistema de planes antes de saber qué planes se iban a vender.
+**Tres diferencias con la lista vieja que importan para la venta:**
+
+1. **Todos los planes traen la app completa**, incluida la carga automática de extractos. Ya no hay funciones apagadas por plan: lo único que cambia son los números. Es más simple de programar, de vender y de explicar — y el motivo para subir sigue existiendo solo, porque una agencia que crece se pasa de créditos y de cobradores sin que nadie le ponga una pared.
+2. **ENTERPRISE ya no dice «sin límite».** Sus números son un **piso**: lo que incluye el precio de partida, que el contrato sube en la cuenta del cliente. El motivo no es el costo del almacenamiento —es trivial— sino que **un tope sin número no se cuenta, y lo que no se cuenta no se ve**: nadie se entera de que un cliente consume cinco veces lo cotizado hasta que lo dice la base de datos. Y en un sistema donde todas las empresas comparten la misma base, un inquilino sin techo es riesgo de todos.
+3. 🔴 **ENTERPRISE cobra por cobrador, y eso arregla una inversión de la lista vieja.** Con $800 plano, un cliente BUSINESS de 80 cobradores pagaba **$899** — más caro que el plan de arriba, que además venía sin topes. A partir de ~71 cobradores convenía pedir ENTERPRISE. Ahora **subir de plan nunca sale más barato**, y hay una prueba automática que lo verifica en cada cambio.
+
+⚠️ **Lo que quedó abierto:** la lista vieja pedía **mínimo 5 cobradores** en el plan de $12, y la grilla nueva no lo reafirmó *(Preguntas 2 y 7 de LIMITES-POR-PLAN)*. Con el FREE cubriendo al cobrador independiente, volver a poner un mínimo de facturación de 5 **reabre el hueco entre $0 y $60** — que es exactamente el escalón donde vive el que recién empieza a crecer.
+
+**Y una cosa que cambió desde la primera versión de este documento:** decía que los cuatro nombres de plan estaban programados pero dormidos, y que estaba bien que siguieran así. **Ya no**: el registro pregunta el plan y lo aplica, y hay un plan de construcción por fases para el resto de los topes — ver *«qué se puede cobrar hoy»*, abajo.
 
 ### Qué justifica pasar de un plan al siguiente
 
 - **De Independiente a Cartera**: necesitar más de 2 personas, y sobre todo la **carga automática de extractos**. Un cobrador independiente carga sus créditos a mano; una agencia vive de importar el archivo que le manda la financiera. Esa función **ya está construida [VERIFICADO-CÓDIGO]**.
-- **De Cartera a Institucional**: manejar varias sucursales (ya está en el sistema), guardar las fotos por más años, y tener más de un supervisor mirando el panel.
-- **De Institucional a Enterprise**: un contrato de servicio con penalidades, el informe de cumplimiento para ASFI, la retención según norma, y la conversación sobre instalarlo en los servidores del propio banco.
+- **De PROFESSIONAL a BUSINESS**: manejar varias sucursales (ya está en el sistema), guardar las fotos por más años, y tener más de un supervisor mirando el panel.
+- **De BUSINESS a ENTERPRISE**: un contrato de servicio con penalidades, el informe de cumplimiento para ASFI, la retención según norma, y la conversación sobre instalarlo en los servidores del propio banco.
 
 ### Qué de todo esto se puede cobrar hoy, y qué hay que construir
 
 Esto es importante para no vender algo que el sistema todavía no sabe hacer cumplir:
 
+> **Actualizado al 2026-08-20.** Cada línea de «hay que construirlo» tiene ahora una fase con archivos y costo en **[LIMITES-BUILD-PLAN.md](./LIMITES-BUILD-PLAN.md)**.
+
 | Límite del plan | ¿Funciona hoy? |
 |---|---|
-| Cantidad de usuarios | ✅ **Sí, ya funciona.** El sistema no deja agregar un usuario de más **[VERIFICADO-CÓDIGO]** |
-| Suspender una cuenta que no pagó | 🟡 A medias: el estado "suspendida" existe, pero **nada impide que sigan entrando**. Falta programarlo. **Esfuerzo: medio día.** *(En un software de cobranzas, no poder cortarle el servicio a un moroso tiene su ironía.)* |
-| Máximo de créditos por plan | ❌ Hay que construirlo. Es contar y comparar contra el techo. **Un día.** |
-| Máximo de fotos por mes | ❌ Hay que construirlo. Un contador mensual. **Bajo.** |
-| Borrar fotos viejas según el plan | ❌ Hay que construirlo, **pero es más fácil de lo que parecía.** Ver §7: existe una forma de "archivar" las fotos viejas que las abarata sin borrarlas ni romper la promesa de que la evidencia es inalterable |
+| **Elegir el plan al registrarse** | ✅ **Sí, se construyó el 20/08.** El registro muestra las tarjetas y aplica lo que la persona elige, en la web y en el celular. Un plan pago entra como **prueba de 30 días** y al vencer la cuenta cae a FREE — así no se regala un plan pago mientras no haya pasarela de cobro |
+| Cantidad de usuarios | ✅ **Sí, ya funciona**, y desde el 20/08 **sale del plan elegido** (1 / 25 / 100) y no de un número fijo de 5 igual para todos **[VERIFICADO-CÓDIGO]** |
+| Suspender una cuenta que no pagó | 🟡 A medias: el corte **sí funciona** —una empresa suspendida no deja entrar a nadie, ni al dueño— pero **no hay ninguna pantalla ni comando para marcarla**. Hoy se hace a mano por SQL. Fase **L3**, medio día |
+| Máximo de créditos y de clientes | ❌ Hay que construirlo. Fase **L1**, 1,5 días — incluye el caso difícil: qué pasa cuando un archivo importado trae 500 créditos y quedan 80 lugares *(se rechaza entero, y se avisa en la vista previa antes de confirmar)* |
+| Máximo de fotos y de gestiones por mes | ❌ Hay que construirlo, y **sólo puede avisar, nunca bloquear**: la foto y la visita llegan de la calle, sin internet, ya sucedidas. Rechazarlas es borrar trabajo hecho. Fase **L2**, 1 día |
+| Borrar fotos viejas según el plan | ❌ **Bloqueada**, y no por trabajo: hoy las fotos viven en el disco de la máquina, y el modo «archivo» que las abarata sin borrarlas es una función de la nube (§7). Fase **L5**, 1 día **después** de mudarlas a R2 |
+| Sucursales | ❌ La función entera no existe: la tabla está, pero no hay ninguna pantalla para crear una. **Vender «hasta 3 sucursales» hoy es vender algo que el cliente no va a poder usar.** Fase **L6**, 3 a 5 días |
 | Facturación y cobro automático | ❌ **No existe nada.** Para el piloto: factura a mano y cambio de plan a mano. Alcanza tranquilamente hasta unos 15 clientes. |
+
+**Para poder cobrar de verdad alcanza con las fases L0 + L1: 2,5 días.** Con eso el plan manda en todos los topes y la diferencia entre FREE y PROFESSIONAL se siente en la primera semana.
 
 ---
 
@@ -207,7 +231,7 @@ Esta sección existe para una sola cosa: **poder decir en una reunión de ventas
 | Un juicio perdido o un reclamo en ASFI porque "no hay constancia de la visita" | Bs 10.000–70.000 por caso, más la sanción |
 | Combustible y tiempo perdido en rutas mal armadas | 10–20% de la jornada del cobrador |
 
-**El argumento de venta, en una frase:** el plan Cartera a $12 por cobrador es el **2 a 4% de lo que cuesta ese cobrador**. Si la app le hace recuperar **una sola cuota más por mes**, ya se pagó sola.
+**El argumento de venta, en una frase:** el plan PROFESSIONAL a $12 por cobrador es el **2 a 4% de lo que cuesta ese cobrador**. Si la app le hace recuperar **una sola cuota más por mes**, ya se pagó sola.
 
 **Y el número para la diapositiva:** una agencia externa cobra entre 15% y 30% de lo que recupera. Kobrax cuesta el equivalente a **0,1–0,5% de lo recuperado** por un cobrador típico.
 
@@ -301,7 +325,7 @@ Un cobrador genera: 30 × 1,5 × 22 × 0,8 MB = 792 MB ≈ 0,8 GB por mes
 | Monitoreo (avisarnos si se cae) | Herramientas gratuitas | $0 |
 | **TOTAL** | | **~$23–27/mes** *(con mapas pagos: $43–47)* |
 
-**Costo por cobrador: ~$1,20 por mes.** Con 20 cobradores en plan Cartera se facturan $240 → **la infraestructura es el 10% del ingreso.**
+**Costo por cobrador: ~$1,20 por mes.** Con 20 cobradores en plan PROFESSIONAL se facturan $240 → **la infraestructura es el 10% del ingreso.**
 
 > ⚠️ **Corrección respecto de la primera versión de este documento.** Decía "8 procesadores / 24 GB con disco rápido NVMe por $9–15". Ese precio no existe: el disco rápido es otra línea de producto de Contabo y **cuesta el doble** (~$34/mes). Para 20 cobradores el disco común alcanza perfectamente. El disco rápido es el paso siguiente, cuando la base de datos empiece a sentirlo — o directamente cuando se mude a su propia máquina en la etapa B.
 
@@ -413,7 +437,7 @@ Para dimensionarlo: **una máquina de 4 procesadores y 16 GB en Hetzner hoy cues
 | Momento | Qué se hace |
 |---|---|
 | **Piloto (hoy)** | Todo en una máquina de Contabo en EE.UU. Riesgo asumido, y barato |
-| **Primer cliente Institucional / ~10 clientes** | **Sacar la base de datos a un proveedor que la administre**: con los precios de hoy, **Supabase (~$50–60) o DigitalOcean ($60,90)** antes que Neon. Ganás respaldos automáticos y restauración de un clic. Todo lo demás sigue en Contabo. **Costo: +$60–160/mes** |
+| **Primer cliente BUSINESS / ~10 clientes** | **Sacar la base de datos a un proveedor que la administre**: con los precios de hoy, **Supabase (~$50–60) o DigitalOcean ($60,90)** antes que Neon. Ganás respaldos automáticos y restauración de un clic. Todo lo demás sigue en Contabo. **Costo: +$60–160/mes** |
 | **Primer cliente regulado por ASFI / Enterprise** | La aplicación se muda a DigitalOcean o Amazon, con un contrato de servicio que se pueda mostrar (**Hetzner ya no compite en precio**), o se abre la conversación de instalarlo en los servidores del propio cliente |
 
 ---
@@ -449,7 +473,7 @@ Recordá la distinción clave del diccionario: **guardar** cuesta una cosa, y **
 
 ### Por qué Cloudflare R2
 
-1. **Que mirar sea gratis es la variable que decide.** Los supervisores abren fotos todo el día, y una auditoría de un cliente Institucional puede descargarse meses de evidencia de una sentada. Con Amazon eso es una factura sorpresa; con R2 no cuesta nada.
+1. **Que mirar sea gratis es la variable que decide.** Los supervisores abren fotos todo el día, y una auditoría de un cliente BUSINESS puede descargarse meses de evidencia de una sentada. Con Amazon eso es una factura sorpresa; con R2 no cuesta nada.
 2. **El costo es trivial en todas las etapas**: $3 · $8–21 · $45–115 por mes.
 3. **Backblaze B2 para los respaldos**, por dos motivos: es la mitad de precio para guardar, y **tener los respaldos en otra empresa que los datos vivos es higiene básica** — si una falla, la otra sigue de pie.
 
@@ -611,6 +635,33 @@ Separar la base de datos · la modificación para que dos máquinas se coordinen
 | **B**: 150 asientos ≈ $1.900 | $1.900 | $1.540 | $160 | **$1.380 (73%)** | ~2 sueldos bolivianos de soporte, o 1 de la fundadora |
 | **C**: 800 asientos + 2 Enterprise ≈ $10.500 | $10.500 | $8.500 | $560 | **$7.940 (76%)** | Un equipo de 4 a 6 personas en Bolivia |
 
+### 🆕 Lo que agrega el plan FREE *(2026-08-20)*
+
+Las tres etapas de arriba se calcularon sin plan gratuito, porque no existía. **Un FREE es el único cliente que cuesta plata y no la devuelve**, así que la pregunta correcta es cuánto cuesta.
+
+**La respuesta corta: casi nada, y es por sus topes.** Un FREE incluye **100 fotos por mes** — no 0,8 GB como un cobrador de plan pago, sino **80 MB**:
+
+| Cuentas FREE activas | GB nuevos por mes | Costo en R2 al cerrar el 1er año | Al cerrar el 2º |
+|---|---|---|---|
+| 100 | 8 GB | **~$1,50/mes** | ~$3/mes |
+| 500 | 40 GB | **~$7/mes** | ~$14/mes |
+| 2.000 | 160 GB | **~$29/mes** | ~$58/mes |
+
+Para dimensionarlo: **500 cuentas gratuitas cuestan menos que la mitad de un servidor de Contabo.** La base de datos ni se nota — 20 créditos por cuenta es ruido.
+
+**El costo real del FREE no es el almacenamiento: es el soporte.** Una consulta de una cuenta gratuita sale del mismo lugar que el soporte de las que pagan. Por eso el FREE trae **base de conocimientos y chat comunitario, y nada más** — no es tacañería, es lo que lo hace sostenible.
+
+**Y hay dos fugas que tapar antes de abrir el registro al público:**
+
+| Fuga | Qué pasa si no se tapa | Cómo se tapa |
+|---|---|---|
+| **Una empresa abre 12 cuentas FREE** en vez de pagar un plan | El plan pago deja de tener sentido para el cliente chico, que es la mayoría del mercado | Una cuenta por NIT y una por correo *(Pregunta 19, abierta)* |
+| **Cuentas dormidas** que nunca vuelven | Sus fotos se pagan todos los meses, para siempre | A los 6 meses sin entrar, aviso; a los 9, sólo lectura y fotos archivadas. **Nunca borrar sin avisar**: puede haber evidencia adentro *(Pregunta 20, abierta — fase L4)* |
+
+**Lo que el FREE compra a cambio:** es el canal de entrada del cobrador independiente, que después recomienda Kobrax en la agencia donde trabaja. Y con 1 usuario y 20 créditos **se queda corto en una o dos semanas de uso real**, que es exactamente cuando la decisión de pagar $12 se vuelve obvia.
+
+> **Sobre si conviene alojar todo esto en Contabo:** sí, y con margen de sobra. Toda la infraestructura del piloto (§5-A) se cubre con **un solo cliente PROFESSIONAL de 5 cobradores**. Lo que la §6 ya dice y conviene no olvidar es que **la decisión de proveedor no es de plata, es de riesgo**: Contabo no administra la base de datos ni hace respaldos por vos. En un producto cuyo argumento es *evidencia inmutable con valor legal*, **un disco que falla es la evidencia de todos tus clientes** — y por eso los respaldos fuera de Contabo (§9 #6) son el gasto con mejor relación costo-beneficio de toda la lista.
+
 ### Las dos conclusiones honestas
 
 **1. Reverificar todos los precios no movió el caso de negocio.** Contabo salió un poco más caro de lo estimado, Hetzner explotó pero no lo usábamos, Backblaze salió más barato, Neon salió mucho más caro, los mapas dejaron de ser gratis. Neto: **el margen se movió 1 o 2 puntos** y el punto de equilibrio de la etapa B pasó de 13 a 17 cobradores. **La infraestructura sigue sin ser el problema económico de este negocio.**
@@ -630,10 +681,10 @@ Separar la base de datos · la modificación para que dos máquinas se coordinen
 | 1 | 🔴 **¿A qué precio en bolivianos?** *(la pregunta cambió de forma)* El riesgo cambiario se disolvió — el paralelo hoy está **por debajo** del oficial. Pero al pasar de Bs 6,96 a Bs 11,71, **la lista en bolivianos subió 68% sin que nadie la subiera** | Listar **en bolivianos con IVA incluido**, con revisión anual. **La decisión pendiente es tuya: sostener $12 (= Bs 141) o recalibrar a ~Bs 120 (= $10).** El costo no obliga a Bs 141: con la infraestructura en 4–11% del ingreso, Bs 120 sigue dejando más del 70% de margen. **Quién sabe qué tolera una cooperativa de Chuquisaca sos vos, no este documento** |
 | 2 | **¿Quién paga el plan de datos del cobrador?** Las fotos suben por su celular | Dejarlo explícito en el contrato (lo paga el empleador). **Achicar las fotos (§9 #9) reduce este argumento casi a nada** |
 | 3 | **¿De quién son las fotos si el cliente cancela?** | Definirlo ya: exportación completa a pedido + 90 días de gracia + certificado de borrado. **Es pregunta segura de toda cooperativa** |
-| 4 | **¿Prueba gratis o piloto pago?** | **Piloto pago simbólico** (Bs 500/mes por 3 meses, después precio de lista). En este mercado, la prueba gratis se vuelve eterna. El sistema ya sabe manejar el estado "en prueba" **[VERIFICADO-CÓDIGO]** |
+| 4 | ✅ **RESUELTA (20/08) — ¿Prueba gratis o piloto pago?** La pregunta se disolvió sola cuando apareció el FREE | Ni una cosa ni la otra: **el plan se elige al registrarse**. Quien elige FREE lo tiene para siempre; quien elige uno pago entra con **30 días de prueba de ese plan** y al vencer **cae a FREE** en vez de bloquearse. Nadie pierde datos, nadie queda afuera, y el que necesitaba más ya sabe exactamente por qué paga. **Ya está construido** en la web y en el celular |
 | 5 | **¿Qué pasa si se pierde una foto que era prueba judicial?** | Límite de responsabilidad en el contrato, y los respaldos de la §9 como respaldo técnico. Consultar a un abogado una vez y reutilizar el contrato |
 | 6 | **¿Cuándo construir la facturación dentro del producto?** | **No antes de 10 clientes pagando.** Hasta ahí, factura a mano. Los planes ya están programados pero dormidos, y **está bien que sigan así** |
-| 7 | **Aceptar el riesgo de Contabo, por escrito** | Documentarlo internamente: *"el piloto corre sin garantía de servicio; la base de datos se muda al primer cliente Institucional"*. **Que no sea una sorpresa futura sino un plan** |
+| 7 | **Aceptar el riesgo de Contabo, por escrito** | Documentarlo internamente: *"el piloto corre sin garantía de servicio; la base de datos se muda al primer cliente BUSINESS"*. **Que no sea una sorpresa futura sino un plan** |
 | 8 | **¿Y las notificaciones al celular?** | **No existen** (están simuladas) **y no bloquean la venta**: el cobrador vive dentro de la app, y el panel se actualiza solo. **Posponer hasta que un cliente las pida con nombre y apellido** |
 
 ---
