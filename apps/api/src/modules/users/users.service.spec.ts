@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { UsersService } from './users.service';
+import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
 const SELF = '11111111-1111-4111-8111-111111111111';
@@ -41,8 +42,9 @@ interface Opts {
   /** Otros ACCOUNT_ADMIN activos que quedan en el tenant. */
   otherAdmins?: number;
   roles?: { id: string; name: string; level: number }[];
-  /** Miembros activos que ya ocupan asiento (para el techo de `maxUsers`). */
+  /** Miembros activos que ya ocupan asiento (para el techo del plan). */
   seats?: number;
+  /** El tope de miembros de esta cuenta. Ausente = los 25 del PROFESSIONAL del doble. */
   maxUsers?: number;
   /** Simula el choque del @unique de `users.email`. */
   emailTaken?: boolean;
@@ -66,7 +68,9 @@ function makeService(opts: Opts = {}) {
       findFirst: async () => ({
         id: 'acc-A',
         businessName: 'Cobranzas Rosa',
-        maxUsers: opts.maxUsers ?? 5,
+        planCode: 'PROFESSIONAL',
+        // Así se le pisa el número al plan: la excepción negociada de la cuenta (LIMITES §8.2).
+        limitsOverride: opts.maxUsers === undefined ? null : { users: opts.maxUsers },
       }),
     },
     passwordResetToken: {
@@ -135,11 +139,15 @@ function makeService(opts: Opts = {}) {
   const tenant = { accountId: 'acc-A', userId: SELF };
   const audit = { record: async (e: { action: string }) => void calls.audit.push(e.action) };
   const mail = { send: async (to: string, _s: string, text: string) => void calls.mail.push({ to, text }) };
+  // El servicio de topes va DE VERDAD, no como doble: es el que decide si entra uno más, y con un
+  // doble el test diría que sí sin haber contado nada.
+  const plan = new PlanLimitsService(prisma as never, tenant as never);
   const service = new UsersService(
     prisma as never,
     tenant as never,
     audit as never,
     mail as never,
+    plan,
   );
   return { service, calls };
 }
@@ -232,7 +240,7 @@ describe('UsersService.updateMember — guardas', () => {
       seats: 5,
       maxUsers: 5,
     });
-    await rejectsWithCode(service.updateMember(OTHER, { isActive: true }), 'USER_SEAT_LIMIT');
+    await rejectsWithCode(service.updateMember(OTHER, { isActive: true }), 'PLAN_LIMIT_REACHED');
   });
 
   it('deja reactivar si hay asiento libre', async () => {
@@ -293,7 +301,7 @@ describe('UsersService.invite — alta por invitación (S2)', () => {
 
   it('rechaza al llegar al techo del plan, y cuenta DENTRO de la transacción', async () => {
     const { service, calls } = makeService({ seats: 5, maxUsers: 5 });
-    await rejectsWithCode(service.invite(INVITE), 'USER_SEAT_LIMIT');
+    await rejectsWithCode(service.invite(INVITE), 'PLAN_LIMIT_REACHED');
     assert.equal(calls.userCreated, undefined);
     assert.equal(calls.mail.length, 0);
   });

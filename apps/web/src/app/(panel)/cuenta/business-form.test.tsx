@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import type { AccountInfo } from '@kobrax/shared';
+import { PLANS, type AccountInfo } from '@kobrax/shared';
 import { server } from '@/test/msw-server';
 import { PermissionsProvider } from '@/components/permissions';
 import { ToastProvider } from '@/components/toast';
@@ -17,12 +17,12 @@ const ACCOUNT: AccountInfo = {
   taxId: '123456',
   accountType: 'BUSINESS',
   status: 'ACTIVE',
-  planCode: 'PRO',
+  planCode: 'PROFESSIONAL',
   countryCode: 'BO',
   currencyCode: 'BOB',
   timezone: 'America/La_Paz',
-  maxUsers: 5,
-  memberCount: 3,
+  limits: PLANS.PROFESSIONAL.limits,
+  usage: { users: 3 },
 };
 
 function renderForm(permissions = ['account:read', 'account:write']) {
@@ -58,7 +58,7 @@ describe('BusinessForm — sólo se manda lo que cambió', () => {
     await userEvent.type(nombre, 'Cobranzas Sara');
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
-    // Reenviar el objeto del GET (con planCode, maxUsers, memberCount…) sería un 400.
+    // Reenviar el objeto del GET (con planCode, limits, usage…) sería un 400.
     expect(enviado).toEqual({ businessName: 'Cobranzas Sara' });
     // El nombre también vive en el selector de empresa de la topbar, que lo pintó el servidor.
     expect(refresh).toHaveBeenCalled();

@@ -13,17 +13,18 @@ const BAR = { ok: 'bg-k-periwinkle', near: 'bg-k-warning', full: 'bg-k-danger' }
 /**
  * Qué plan tiene la cuenta y qué incluye.
  *
- * Los números salen del catálogo de `shared`, no de la base: hoy la cuenta sólo guarda su
- * `planCode` y un `max_users` suelto. Por eso los asientos se dibujan con `maxUsers` —que es lo
- * que la API frena de verdad— y no con el número del plan; cuando difieren se dice, en vez de
- * mostrar dos cifras que se contradicen.
+ * Los topes se pintan con `account.limits`, que es lo que **rige de verdad** para esta cuenta: el
+ * plan con su excepción negociada ya aplicada. El catálogo sólo aporta el nombre, el precio y —para
+ * la línea de «ajuste a medida»— con qué comparar.
  */
 export async function PlanCard({ account }: { account: AccountInfo }) {
   const t = await getTranslations('plans');
   const plan = planOf(account.planCode);
   const next = nextPlan(account.planCode);
-  const level = usageLevel(account.memberCount, account.maxUsers);
-  const pct = account.maxUsers > 0 ? Math.min(100, (account.memberCount / account.maxUsers) * 100) : 100;
+  const used = account.usage.users;
+  const max = account.limits.users;
+  const level = usageLevel(used, max);
+  const pct = max === null ? 0 : max > 0 ? Math.min(100, (used / max) * 100) : 100;
 
   const limitText = (key: (typeof LIMITS)[number], value: PlanLimit) => {
     if (value === null) return t('unlimited');
@@ -47,19 +48,22 @@ export async function PlanCard({ account }: { account: AccountInfo }) {
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-[13px] font-medium text-k-text">{t('seats')}</span>
           <span className="text-[13px] tabular-nums text-k-text-2">
-            {t('seatsValue', { used: account.memberCount, max: account.maxUsers })}
+            {max === null ? t('count', { n: used }) : t('seatsValue', { used, max })}
           </span>
         </div>
-        {/* Decoración: la cifra de arriba ya dice lo mismo, y un lector de pantalla no gana nada
-            escuchando la barra dos veces. */}
-        <div aria-hidden className="mt-1.5 h-2 overflow-hidden rounded-full bg-k-light-bg">
-          <div className={`h-full rounded-full ${BAR[level]}`} style={{ width: `${pct}%` }} />
-        </div>
-        {plan?.limits.users != null && plan.limits.users !== account.maxUsers && (
-          // El caso negociado (LIMITES §8.2): la cuenta tiene un número propio, distinto al del
-          // plan. Sin esta línea, «Free» arriba y «3 de 5» abajo se leen como un error.
+        {/* Sin tope no hay barra: una barra contra el infinito no dice nada. Y cuando la hay, es
+            decoración —la cifra de arriba ya lo dijo, y un lector de pantalla no gana nada
+            escuchándolo dos veces. */}
+        {max !== null && (
+          <div aria-hidden className="mt-1.5 h-2 overflow-hidden rounded-full bg-k-light-bg">
+            <div className={`h-full rounded-full ${BAR[level]}`} style={{ width: `${pct}%` }} />
+          </div>
+        )}
+        {plan != null && max !== null && plan.limits.users !== max && (
+          // El caso negociado (LIMITES §8.2): esta cuenta tiene un número propio, distinto al de
+          // su plan. Sin esta línea, «Free» arriba y «3 de 5» abajo se leen como un error.
           <p className="mt-2 text-[13px] text-k-text-2">
-            {t('seatsCustom', { max: account.maxUsers, plan: plan.limits.users })}
+            {t('seatsCustom', { max, plan: plan.limits.users ?? 0 })}
           </p>
         )}
       </div>
@@ -74,7 +78,8 @@ export async function PlanCard({ account }: { account: AccountInfo }) {
               <div key={key} className="flex items-baseline justify-between gap-3">
                 <dt className="text-[13px] text-k-text-2">{t(`limits.${key}`)}</dt>
                 <dd className="text-[14px] font-medium tabular-nums text-k-text">
-                  {limitText(key, plan.limits[key])}
+                  {/* De la cuenta y no del catálogo: si negoció otro número, es ése el que rige. */}
+                  {limitText(key, account.limits[key])}
                 </dd>
               </div>
             ))}

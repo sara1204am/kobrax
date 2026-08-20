@@ -1,3 +1,5 @@
+import type { PlanLimits } from '../constants/plans.js';
+
 /**
  * Cuenta y perfil propio: lo que devuelve la API y lo que acepta editar.
  *
@@ -6,7 +8,7 @@
  * se separan en silencio y el desajuste aparece como un 400 en producción.
  */
 
-/** `GET /accounts/me`. Trae más de lo que se puede editar: `memberCount` y `maxUsers` son de lectura. */
+/** `GET /accounts/me`. Trae más de lo que se puede editar: `limits` y `usage` son de lectura. */
 export interface AccountInfo {
   id: string;
   businessName: string;
@@ -17,15 +19,25 @@ export interface AccountInfo {
   countryCode: string;
   currencyCode: string;
   timezone: string | null;
-  maxUsers: number;
-  memberCount: number;
+  /**
+   * Los topes que rigen para esta cuenta: los del plan con su excepción ya aplicada.
+   *
+   * Viene resuelto del servidor y no como `planCode` + excepción a mano, porque si cada pantalla
+   * lo calculara, la web, el móvil y la API tendrían tres oportunidades de calcularlo distinto.
+   */
+  limits: PlanLimits;
+  /**
+   * Cuánto lleva usado de cada tope **que hoy se cuenta**. Hoy sólo los miembros; créditos, fotos
+   * y gestiones se suman cuando su fase los cuente (LIMITES-BUILD-PLAN §L1 y §L2).
+   */
+  usage: { users: number };
 }
 
 /**
  * Los 5 campos que `PATCH /accounts/me` acepta.
  *
  * ⚠️ Se manda **sólo lo que cambió**: la API corre con `forbidNonWhitelisted: true`, así que
- * reenviar el objeto del `GET` (con `planCode`, `maxUsers`, `memberCount`…) es un **400**, no
+ * reenviar el objeto del `GET` (con `planCode`, `limits`, `usage`…) es un **400**, no
  * un no-op. El recorte lo hace `diffAccount`.
  */
 export interface AccountPatch {

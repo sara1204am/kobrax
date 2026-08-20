@@ -75,7 +75,7 @@ export default function DatosCuentaScreen() {
     }
     setSaving(true);
     // El PATCH lleva sólo lo que cambió: la API corre con forbidNonWhitelisted y
-    // reenviar el objeto del GET (planCode, maxUsers, memberCount…) sería un 400.
+    // reenviar el objeto del GET (planCode, limits, usage...) sería un 400.
     const res = await updateAccount(patch);
     setSaving(false);
     if (res.status === 'ok') {

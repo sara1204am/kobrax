@@ -7,6 +7,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { MailService, invitationBody } from '../../common/mail/mail.service';
+import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { formatInvitationCode, newInvitationCode, sha256hex } from '../auth/invitation-code';
 import { emailTaken } from '../accounts/accounts.errors';
 import { serializeMember, serializeProfile, serializeRole } from './users.serializer';
@@ -18,7 +19,6 @@ import {
   notPending,
   profileNotFound,
   roleNotAllowed,
-  seatLimitReached,
 } from './users.errors';
 
 const MEMBER_INCLUDE = { user: { include: { profile: true } }, role: true } as const;
@@ -43,6 +43,7 @@ export class UsersService {
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
     private readonly mail: MailService,
+    private readonly plan: PlanLimitsService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -95,14 +96,11 @@ export class UsersService {
         if (otherAdmins === 0) throw lastAdmin();
       }
 
-      // Reactivar es la otra puerta al techo del plan: `invite()` frena en `maxUsers`, pero
-      // desactivar y volver a activar entraba sin contar asientos. Mismo criterio que allá
-      // —membresías activas— y dentro de la transacción, por la misma carrera (S2-D6).
+      // Reactivar es la otra puerta al techo del plan: `invite()` frena, pero desactivar y volver
+      // a activar entraba sin contar asientos. Mismo criterio que allá y dentro de la transacción,
+      // por la misma carrera (S2-D6).
       if (dto.isActive === true && !before.isActive) {
-        const account = await tx.account.findFirst({ where: { id: this.tenant.accountId } });
-        if (!account) throw memberNotFound();
-        const taken = await tx.userAccount.count({ where: { isActive: true } });
-        if (taken >= account.maxUsers) throw seatLimitReached(account.maxUsers);
+        await this.plan.assertRoom('users', tx);
       }
 
       const updated = await tx.userAccount.update({
@@ -148,12 +146,15 @@ export class UsersService {
     let created;
     try {
       created = await this.tx(async (tx) => {
-        const account = await tx.account.findFirst({ where: { id: accountId } });
+        // Sólo el nombre: es lo que lleva el correo de invitación. El tope lo mira `assertRoom`.
+        const account = await tx.account.findFirst({
+          where: { id: accountId },
+          select: { businessName: true },
+        });
         if (!account) throw memberNotFound();
         // El conteo va DENTRO de la transacción: contar afuera y crear después es una
         // carrera que dos invitaciones simultáneas ganan (S2-D6, README R4).
-        const taken = await tx.userAccount.count({ where: { isActive: true } });
-        if (taken >= account.maxUsers) throw seatLimitReached(account.maxUsers);
+        await this.plan.assertRoom('users', tx);
 
         const user = await tx.user.create({
           data: {

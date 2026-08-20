@@ -81,7 +81,9 @@ export default function CuentaScreen() {
               title="Miembros"
               subtitle={
                 account
-                  ? `${account.memberCount} de ${account.maxUsers}`
+                  ? account.limits.users === null
+                    ? `${account.usage.users} miembros`
+                    : `${account.usage.users} de ${account.limits.users}`
                   : 'Invitar y administrar tu equipo'
               }
               icon="people-outline"

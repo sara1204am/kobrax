@@ -1,8 +1,16 @@
 import type { Account } from '@prisma/client';
+import { effectiveLimits } from '@kobrax/shared';
 
 /**
- * Payload público del tenant. `memberCount` (miembros activos) va acá y no en
- * `/users` porque la pantalla de cuenta muestra "3 de 5 miembros" sin traer la lista.
+ * Payload público del tenant.
+ *
+ * Los topes viajan **ya resueltos** —el plan con su excepción encima— y no como `planCode` +
+ * excepción cruda: si cada pantalla los resolviera, la web, el móvil y la API tendrían tres
+ * oportunidades de resolverlos distinto. `limitsOverride` no sale de la API: es información
+ * interna de lo que se negoció con ese cliente.
+ *
+ * `usage` va acá y no en `/users` porque la pantalla de cuenta muestra «3 de 5 miembros» sin
+ * traer la lista entera.
  */
 export function serializeAccount(a: Account, memberCount: number) {
   return {
@@ -15,7 +23,7 @@ export function serializeAccount(a: Account, memberCount: number) {
     countryCode: a.countryCode,
     currencyCode: a.currencyCode,
     timezone: a.timezone,
-    maxUsers: a.maxUsers,
-    memberCount,
+    limits: effectiveLimits(a.planCode, a.limitsOverride),
+    usage: { users: memberCount },
   };
 }

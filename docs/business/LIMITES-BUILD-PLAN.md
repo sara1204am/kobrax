@@ -13,7 +13,7 @@
 
 | Tope | ¿Se hace cumplir? | Dónde está (o dónde falta) |
 |---|---|---|
-| **Usuarios** | ⚠️ Sí, pero **no según el plan** | `users.service.ts:105` y `:156` leen `accounts.max_users`, columna suelta que **vale 5 en toda cuenta nueva** (`accounts.service.ts:75`), sea FREE o BUSINESS |
+| **Usuarios** | ✅ **Sí, y según el plan** *(desde el 20/08)* | `users.service.ts` llama a `PlanLimitsService.assertRoom('users')` en las dos puertas —invitar y reactivar—, y el tope sale del plan de la cuenta con su excepción encima. Antes leía `accounts.max_users`, columna suelta que valía 5 en toda cuenta, fuera FREE o BUSINESS; ya no existe |
 | **Créditos activos** | ❌ No | `credits.service.ts:123` (alta) · `portfolio-import.service.ts:217` (import masivo) |
 | **Clientes** | ❌ No | `clients.service.ts:108` · `portfolio-import.service.ts:216` · `client-import.service.ts:166` |
 | **Fotos por mes** | ❌ No | `field.service.ts:214` (`fieldEvidence.create`) |
@@ -22,8 +22,9 @@
 | **Sucursales** | ❌ No | la tabla `branches` existe; **cero código de producto** |
 | **Suspender al moroso** | ✅ Sí | `auth.service.ts:238` — pero no hay palanca para activarlo |
 
-`planCode` aparece en toda la API **sólo** en el serializer y en el DTO que lo marca de sólo lectura.
-**Ningún guard lee el plan.** Hoy una cuenta FREE y una BUSINESS tienen los mismos topes reales.
+*(Estado original del 20/08, antes de empezar: `planCode` aparecía en toda la API **sólo** en el
+serializer y en el DTO que lo marca de sólo lectura — ningún guard leía el plan, y una cuenta FREE y
+una BUSINESS tenían exactamente los mismos topes reales.)*
 
 ---
 
@@ -160,7 +161,18 @@ resumen **antes de escribir nada**.
 
 Cada fase deja el sistema entero y verde. Ninguna depende de la siguiente.
 
-### L0 · La fundación — el plan pasa a mandar · **1 día**
+### L0 · La fundación — el plan pasa a mandar · ✅ **CONSTRUIDO (20/08)**
+
+> **Estado:** hecho y verde — shared 78 · API 672 · web 362 · móvil 319, con la migración aplicada
+> y verificada contra la base real: las 20 cuentas conservaron sus asientos y el `DEFAULT` de la
+> columna se renombró solo a `FREE`. Falta la validación visual.
+>
+> **Dos cosas salieron distinto de lo planeado:** el override no se usó sólo para el caso
+> negociado — lo llevan **las 20 cuentas existentes**, porque tenían 5 asientos por cableado y
+> quitárselos habría dejado a media docena por encima de su propio techo. Y las dos cuentas demo
+> pasaron a PROFESSIONAL en el seed: con FREE —1 usuario— la pantalla de equipo se veía llena desde
+> el primer arranque.
+
 
 **Base de datos** — una migración escrita a mano (`prisma migrate dev` no corre en este repo: la
 shadow db no conoce `app_current_account`; se aplican con `migrate deploy`):
@@ -386,7 +398,7 @@ anterior.
 
 | Fase | Qué entrega | Costo | ¿Se puede cortar? |
 |---|---|---|---|
-| **L0** | El plan manda. Sin esto no hay nada | **1 d** | No |
+| **L0** | ✅ El plan manda. Sin esto no hay nada | **hecho** | — |
 | **L0.5** | ✅ Elegir plan al registrarse, con tarjetas | **hecho** | — |
 | **L1** | El freno que sostiene el precio | **1,5 d** | No — es el tope que empuja a pagar |
 | **L2** | Los avisos del 80% | **1 d** | Sí, se puede posponer: no bloquea nada por diseño |

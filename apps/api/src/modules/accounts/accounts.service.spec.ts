@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { TRIAL_DAYS } from '@kobrax/shared';
+import { PLANS, TRIAL_DAYS } from '@kobrax/shared';
 import { AccountsService } from './accounts.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 import { AUTH_ERR } from '../auth/auth.errors';
@@ -12,11 +12,11 @@ function account(over: Record<string, unknown> = {}) {
     taxId: '123456',
     accountType: 'INDEPENDENT',
     status: 'ACTIVE',
-    planCode: 'STARTER',
+    planCode: 'PROFESSIONAL',
     countryCode: 'BO',
     currencyCode: 'BOB',
     timezone: 'America/La_Paz',
-    maxUsers: 5,
+    limitsOverride: null,
     deletedAt: null,
     ...over,
   };
@@ -106,8 +106,9 @@ describe('AccountsService.create (registro público · S4)', () => {
     assert.equal(calls.account!.accountType, 'INDEPENDENT');
     // Sin plan elegido: FREE. Y el FREE **no es una prueba**, es permanente.
     assert.equal(calls.account!.status, 'ACTIVE');
-    assert.equal(calls.account!.planCode, 'STARTER');
-    assert.equal(calls.account!.maxUsers, 1);
+    assert.equal(calls.account!.planCode, 'FREE');
+    // Sin excepción: la cuenta nueva se lleva exactamente los topes de su plan.
+    assert.equal(calls.account!.limitsOverride, undefined);
     assert.deepEqual(calls.account!.settings, {});
     assert.deepEqual((calls.user!.profile as { create: unknown }).create, {
       firstName: 'Sara',
@@ -125,9 +126,10 @@ describe('AccountsService.create (registro público · S4)', () => {
     const { service, calls } = makeSignupService();
     await service.create({ ...SIGNUP, planCode: 'PROFESSIONAL' }, {});
 
-    // Los 25 asientos son de verdad desde el minuto uno: es el único tope que la API frena hoy.
+    // Los 25 asientos son de verdad desde el minuto uno: es el único tope que la API frena hoy,
+    // y ahora sale del plan de la cuenta, no de un número guardado al crearla.
     assert.equal(calls.account!.planCode, 'PROFESSIONAL');
-    assert.equal(calls.account!.maxUsers, 25);
+    assert.equal(PLANS.PROFESSIONAL.limits.users, 25);
     // Pero nace en prueba, que es lo que evita regalar un plan pago sin pasarela de cobro.
     assert.equal(calls.account!.status, 'TRIAL');
     const vence = new Date((calls.account!.settings as { trialEndsAt: string }).trialEndsAt);
@@ -140,7 +142,7 @@ describe('AccountsService.create (registro público · S4)', () => {
     const { service, calls } = makeSignupService();
     await service.create({ ...SIGNUP, planCode: 'BUSINESS' }, {});
     assert.equal((calls.audit!.after as { planCode: string }).planCode, 'BUSINESS');
-    assert.equal(calls.account!.maxUsers, 100);
+    assert.equal(calls.account!.planCode, 'BUSINESS');
   });
 
   it('el email se normaliza a minúsculas', async () => {
@@ -199,8 +201,19 @@ describe('AccountsService.findMine', () => {
     const res = await service.findMine();
     assert.equal(calls.findWhere!.id, 'acc-A');
     assert.equal(calls.findWhere!.deletedAt, null);
-    assert.equal(res.memberCount, 3);
-    assert.equal(res.maxUsers, 5);
+    assert.equal(res.usage.users, 3);
+    // Los topes viajan resueltos: la pantalla no tiene que saber de planes ni de excepciones.
+    assert.equal(res.limits.users, 25);
+  });
+
+  it('🔴 la excepción negociada le gana al plan, y el override no sale de la API', async () => {
+    // Es lo que sostiene la promesa de «nadie pierde asientos» al estrenar los planes: una cuenta
+    // vieja con 5 los conserva aunque su plan incluya otro número.
+    const { service } = makeService({ found: account({ planCode: 'FREE', limitsOverride: { users: 5 } }) });
+    const res = await service.findMine();
+    assert.equal(res.limits.users, 5);
+    assert.equal(res.limits.credits, 20, 'lo que no se negoció sigue saliendo del plan');
+    assert.equal('limitsOverride' in res, false, 'lo negociado con ese cliente es interno');
   });
 
   it('404 si el tenant no existe', async () => {
@@ -224,10 +237,10 @@ describe('AccountsService.update', () => {
     assert.deepEqual(calls.audit, ['UPDATE']);
   });
 
-  it('nunca escribe plan, límite de usuarios, tipo ni estado', async () => {
+  it('nunca escribe plan, topes negociados, tipo ni estado', async () => {
     const { service, calls } = makeService();
     await service.update({ businessName: 'X' });
-    for (const prohibido of ['planCode', 'maxUsers', 'accountType', 'status']) {
+    for (const prohibido of ['planCode', 'limitsOverride', 'accountType', 'status']) {
       assert.equal(prohibido in calls.updated!, false, `${prohibido} no se puede escribir desde el producto`);
     }
   });

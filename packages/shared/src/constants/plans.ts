@@ -166,6 +166,48 @@ export function nextPlan(code: string): Plan | undefined {
   return next ? PLANS[next] : undefined;
 }
 
+/**
+ * La excepción negociada de una cuenta: los topes propios que le pisan a los del plan.
+ *
+ * Existe para el caso de §8.2 —una financiera que pide 40 usuarios pero no quiere el plan de
+ * arriba— y para no quitarle nada a nadie al estrenar los planes: una cuenta que hoy tiene 5
+ * asientos los conserva aunque su plan incluya 1.
+ *
+ * Se guarda como JSON en la cuenta, así que **lo que llega no es de fiar**: `effectiveLimits`
+ * ignora las claves que no conoce y los valores que no son un número o `null`.
+ */
+export type PlanOverride = Partial<PlanLimits>;
+
+const LIMIT_KEYS: (keyof PlanLimits)[] = [
+  'users',
+  'credits',
+  'clients',
+  'photosPerMonth',
+  'photoRetentionMonths',
+  'actionsPerMonth',
+];
+
+/**
+ * Los topes que rigen de verdad para una cuenta: los de su plan, con su excepción encima.
+ *
+ * Un plan desconocido cae al FREE **a propósito**: si el código de plan quedó mal escrito, lo
+ * seguro es el tope más chico, no el más grande. Una cuenta que se quedó corta llama por teléfono;
+ * una sin techo no se entera nadie.
+ */
+export function effectiveLimits(planCode: string, override?: unknown): PlanLimits {
+  const base = planOf(planCode) ?? PLANS.FREE;
+  const limits = { ...base.limits };
+  if (override && typeof override === 'object') {
+    for (const key of LIMIT_KEYS) {
+      const value = (override as Record<string, unknown>)[key];
+      if (value === null || (typeof value === 'number' && Number.isFinite(value) && value >= 0)) {
+        limits[key] = value;
+      }
+    }
+  }
+  return limits;
+}
+
 /** Al 80% se avisa (LIMITES §8.6). */
 export const PLAN_WARN_AT = 0.8;
 

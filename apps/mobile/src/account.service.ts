@@ -3,7 +3,7 @@
  *
  * ⚠️ Los `PATCH` mandan **sólo lo que cambió**. La API corre con
  * `forbidNonWhitelisted: true`: reenviar el objeto que devolvió el `GET`
- * (que trae `planCode`, `maxUsers`, `memberCount`…) es un **400**, no un no-op.
+ * (que trae `planCode`, `limits`, `usage`…) es un **400**, no un no-op.
  * El payload lo arma `account-form.ts`.
  */
 import { publicCall, type PublicResult } from './api';

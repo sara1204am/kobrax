@@ -40,7 +40,7 @@ enum AccountStatus {
 }
 
 enum PlanCode {
-  STARTER
+  FREE
   PROFESSIONAL
   BUSINESS
   ENTERPRISE
@@ -78,8 +78,10 @@ model Account {
   taxId         String?       @map("tax_id")
   accountType   AccountType   @map("account_type")
   status        AccountStatus @default(TRIAL) @map("account_status")
-  planCode      PlanCode      @default(STARTER) @map("plan_code")
-  maxUsers      Int           @default(5) @map("max_users")
+  planCode      PlanCode      @default(FREE) @map("plan_code")
+  /// Topes propios que le pisan a los del plan: el cliente que negoció otro número (LIMITES §8.2).
+  /// `null` = rigen los del plan. La forma la valida `effectiveLimits()` de shared, no la base.
+  limitsOverride Json?        @map("limits_override")
   countryCode   String        @map("country_code")
   currencyCode  String        @map("currency_code")
   timezone      String?

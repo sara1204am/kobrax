@@ -43,9 +43,12 @@ export default function MiembrosScreen() {
     }, [load]),
   );
 
-  const ocupados = account?.memberCount ?? members.filter((m) => m.isActive).length;
-  const tope = account?.maxUsers ?? 5;
-  const lleno = ocupados >= tope;
+  const ocupados = account?.usage.users ?? members.filter((m) => m.isActive).length;
+  // `null` = sin tope (una excepción negociada puede tenerlo). Y sin cuenta cargada tampoco se
+  // afirma que esté lleno: el freno de verdad lo pone el servidor, esto es para no ofrecer lo
+  // imposible.
+  const tope = account?.limits.users ?? null;
+  const lleno = tope !== null && ocupados >= tope;
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
@@ -54,7 +57,9 @@ export default function MiembrosScreen() {
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.md }}>
         <ErrorBanner message={error} />
 
-        <SectionLabel>{`Tu equipo · ${ocupados} de ${tope}`}</SectionLabel>
+        <SectionLabel>
+          {tope === null ? `Tu equipo · ${ocupados}` : `Tu equipo · ${ocupados} de ${tope}`}
+        </SectionLabel>
 
         {members.map((m) => (
           <ListRow

@@ -86,12 +86,9 @@ export class AccountsService {
             // El FREE no es una prueba: es permanente. Sólo el plan pago nace en prueba, y eso
             // es exactamente lo que el job diario busca para hacerlo caer a FREE al vencer.
             status: esPago ? 'TRIAL' : 'ACTIVE',
-            // `FREE` se llama `STARTER` en la base hasta que la migración lo renombre
-            // (LIMITES-BUILD-PLAN §L0). `planOf()` de shared traduce el otro sentido.
-            planCode: plan.code === 'FREE' ? 'STARTER' : plan.code,
-            // Antes eran 5 fijos para todos, sin mirar el plan. Los tres elegibles tienen tope,
-            // así que el `?? 1` no llega a usarse: está por el tipo, no por el caso.
-            maxUsers: plan.limits.users ?? 1,
+            planCode: plan.code,
+            // Sin `limitsOverride`: la cuenta nueva se lleva exactamente los topes de su plan.
+            // La excepción es para el cliente que negoció otra cosa, no para el que se registra.
             settings: trialEndsAt ? { trialEndsAt } : {},
             countryCode: DEFAULT_COUNTRY,
             currencyCode: DEFAULT_CURRENCY,

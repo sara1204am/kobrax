@@ -46,7 +46,10 @@ export default async function EquipoPage({ searchParams }: { searchParams: TeamP
   // Puede faltar: sin `account:read` la API devuelve 403 y la lista tiene que seguir siendo
   // legible. Sin asientos no hay tope que mostrar ni cartel que dar.
   const seats = account.body.data;
-  const level = seats ? usageLevel(seats.memberCount, seats.maxUsers) : 'ok';
+  // `null` = sin tope de miembros. Ningún plan lo tiene hoy, pero una excepción negociada puede:
+  // sin número no hay etiqueta que dibujar ni cartel que dar.
+  const max = seats?.limits.users ?? null;
+  const level = seats ? usageLevel(seats.usage.users, max) : 'ok';
   const plan = seats && planOf(seats.planCode);
   const next = seats && nextPlan(seats.planCode);
 
@@ -59,9 +62,9 @@ export default async function EquipoPage({ searchParams }: { searchParams: TeamP
         // del equipo. Con el botón de invitar —que vive en la barra de la tabla— quedaban a media
         // pantalla del nombre al que califican.
         badge={
-          seats ? (
+          seats && max !== null ? (
             <Badge dot={level !== 'ok'} tone={level === 'ok' ? 'neutral' : 'warning'}>
-              {t('seats', { used: seats.memberCount, max: seats.maxUsers })}
+              {t('seats', { used: seats.usage.users, max })}
             </Badge>
           ) : undefined
         }
@@ -69,12 +72,12 @@ export default async function EquipoPage({ searchParams }: { searchParams: TeamP
 
       {/* El momento en que el tope importa. Un botón apagado que dice «llegaste al tope» deja al
           administrador sin saber qué hacer; acá se nombra el plan, el número y dónde mirarlo. */}
-      {seats && level === 'full' && (
+      {seats && max !== null && level === 'full' && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-2xl bg-k-warning-bg px-4 py-3">
           <p className="text-[13px] leading-relaxed text-k-warning-text">
             {t('atCapacity.text', {
               plan: plan ? tPlans(`names.${plan.code}`) : seats.planCode,
-              max: seats.maxUsers,
+              max,
             })}{' '}
             {next?.limits.users != null &&
               t('atCapacity.next', {

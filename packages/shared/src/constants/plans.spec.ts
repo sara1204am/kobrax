@@ -3,6 +3,7 @@ import {
   PLANS,
   PLAN_ORDER,
   SIGNUP_PLANS,
+  effectiveLimits,
   isSignupPlan,
   nextPlan,
   planOf,
@@ -33,6 +34,44 @@ describe('nextPlan', () => {
   it('el último no tiene siguiente', () => {
     expect(nextPlan('ENTERPRISE')).toBeUndefined();
     expect(nextPlan('PRO')).toBeUndefined();
+  });
+});
+
+describe('effectiveLimits', () => {
+  it('sin excepción rigen los del plan', () => {
+    expect(effectiveLimits('PROFESSIONAL')).toEqual(PLANS.PROFESSIONAL.limits);
+    expect(effectiveLimits('STARTER', null)).toEqual(PLANS.FREE.limits);
+  });
+
+  it('🔴 la excepción pisa sólo lo negociado', () => {
+    // Es lo que sostiene «nadie pierde asientos» al estrenar los planes: una cuenta vieja con 5
+    // los conserva, y todo lo demás lo sigue diciendo su plan.
+    const limits = effectiveLimits('FREE', { users: 5 });
+    expect(limits.users).toBe(5);
+    expect(limits.credits).toBe(PLANS.FREE.limits.credits);
+  });
+
+  it('acepta null como «sin tope» para el caso negociado', () => {
+    expect(effectiveLimits('BUSINESS', { credits: null }).credits).toBeNull();
+  });
+
+  it('🔴 lo que viene de la base es JSON, y no todo JSON es un tope', () => {
+    // `limits_override` es una columna jsonb: adentro puede haber cualquier cosa. Un valor
+    // basura que se colara como tope deja a la cuenta sin freno o la deja sin poder trabajar.
+    const sucio = effectiveLimits('FREE', {
+      users: '99',
+      credits: -1,
+      clients: Number.NaN,
+      photosPerMonth: undefined,
+      loQueSea: 1000,
+    });
+    expect(sucio).toEqual(PLANS.FREE.limits);
+  });
+
+  it('un plan que no existe cae al tope MAS CHICO, no al mayor', () => {
+    // Si el codigo de plan quedo mal escrito, lo seguro es quedarse corto: una cuenta apretada
+    // llama por telefono, una sin techo no la ve nadie.
+    expect(effectiveLimits('LO_QUE_SEA')).toEqual(PLANS.FREE.limits);
   });
 });
 

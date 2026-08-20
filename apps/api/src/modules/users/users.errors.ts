@@ -23,13 +23,10 @@ export const lastAdmin = () =>
     message: 'La cuenta quedaría sin ningún administrador activo',
   });
 
-/** Techo del plan: `Account.maxUsers` es la única guarda de plan del producto (README D3). */
-export const seatLimitReached = (max: number) =>
-  new UnprocessableEntityException({
-    code: 'USER_SEAT_LIMIT',
-    // Sirve para invitar y para reactivar: el texto no nombra ninguna de las dos.
-    message: `Tu plan permite ${max} miembros activos. Desactivá o eliminá a alguien para sumar otro.`,
-  });
+/*
+ * El techo de asientos ya no vive acá: es `planLimitReached` de `common/plan/plan.errors.ts`, uno
+ * solo para todos los topes del plan. `USER_SEAT_LIMIT` se retiró con él.
+ */
 
 /** Reenviar o cancelar una invitación sólo aplica a quien todavía no aceptó (S2-D5). */
 export const notPending = () =>

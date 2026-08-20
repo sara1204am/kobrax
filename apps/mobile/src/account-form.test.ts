@@ -131,7 +131,7 @@ describe('diff — sólo lo que cambió', () => {
     const patch = diffAccount(account(), account({ businessName: 'Nuevo' }));
     expect(patch).toEqual({ businessName: 'Nuevo' });
     expect('planCode' in patch).toBe(false);
-    expect('maxUsers' in patch).toBe(false);
+    expect('limits' in patch).toBe(false);
   });
 
   it('país y moneda viajan juntos cuando se cambia el selector', () => {

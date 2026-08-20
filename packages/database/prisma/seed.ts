@@ -137,11 +137,13 @@ async function main() {
       businessName: 'Kobrax Demo',
       accountType: AccountType.INDEPENDENT,
       status: AccountStatus.ACTIVE,
-      planCode: PlanCode.STARTER,
+      // Las dos cuentas demo tienen equipo (owner, supervisor, cobrador y gerente), asi que el
+      // plan que les toca es el de equipos: con FREE -un solo usuario- la pantalla de equipo
+      // se veria llena desde el primer arranque.
+      planCode: PlanCode.PROFESSIONAL,
       countryCode: 'BO',
       currencyCode: 'BOB',
       timezone: 'America/La_Paz',
-      maxUsers: 5,
     },
   });
 
@@ -201,11 +203,13 @@ async function main() {
       businessName: 'Kobrax Demo Norte',
       accountType: AccountType.INDEPENDENT,
       status: AccountStatus.ACTIVE,
-      planCode: PlanCode.STARTER,
+      // Las dos cuentas demo tienen equipo (owner, supervisor, cobrador y gerente), asi que el
+      // plan que les toca es el de equipos: con FREE -un solo usuario- la pantalla de equipo
+      // se veria llena desde el primer arranque.
+      planCode: PlanCode.PROFESSIONAL,
       countryCode: 'BO',
       currencyCode: 'BOB',
       timezone: 'America/La_Paz',
-      maxUsers: 5,
     },
   });
 

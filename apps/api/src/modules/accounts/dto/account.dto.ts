@@ -6,7 +6,7 @@ const CURRENCIES = Object.keys(SUPPORTED_CURRENCIES);
 const COUNTRIES = Object.values(SUPPORTED_CURRENCIES).map((c) => c.locale.split('-')[1]);
 
 /**
- * Configuración editable del tenant. `planCode`, `maxUsers`, `accountType` y `status`
+ * Configuración editable del tenant. `planCode`, `limitsOverride`, `accountType` y `status`
  * NO están acá a propósito: no son configuración del producto.
  *
  * El `ValidationPipe` global corre con `forbidNonWhitelisted: true` → mandar cualquiera
