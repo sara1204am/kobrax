@@ -332,7 +332,17 @@ Contadores de sólo lectura + el aviso del 80% (Pregunta 36).
 
 ---
 
-### L3 · La palanca — cambiar de plan y suspender · **0,5 día**
+### L3 · La palanca — cambiar de plan y suspender · ✅ **CONSTRUIDO (23/08)**
+
+> **Estado:** hecho y verde — API 711 (+10). Smoke real contra la base de dev: cambio de plan,
+> override puesto y borrado (`--override null` → `Prisma.DbNull`, la cuenta vuelve a los topes
+> puros del plan), suspensión y `--lift`, y las entradas de auditoría con `via` adentro.
+> `account:suspend` ganó `--lift` (el cliente suspendido que paga necesita volver, y eso es la
+> misma operación semanal). La entrada de auditoría va **a nombre del dueño** de la cuenta —
+> `audit_logs.user_id` es NOT NULL y en consola no hay request — con `via: 'plan:set'` diciendo
+> que la mano fue el CLI. Un typo en la clave del override **rebota**, no se ignora: si
+> `effectiveLimits` lo callara, el operador creería que negoció 40 usuarios y la cuenta seguiría
+> con 1.
 
 Hoy se hace a mano por SQL. Lo mínimo que lo saca de ahí:
 
@@ -420,7 +430,7 @@ anterior.
 | **L0.5** | ✅ Elegir plan al registrarse, con tarjetas | **hecho** | — |
 | **L1** | ✅ El freno que sostiene el precio | **hecho** | — |
 | **L2** | ✅ Los avisos del 80% | **hecho** | — |
-| **L3** | La palanca sin SQL a mano | **0,5 d** | Sí, mientras haya pocos clientes |
+| **L3** | ✅ La palanca sin SQL a mano | **hecho** | — |
 | **L4** | Prueba, caída al FREE, dormidas | **1 d** | Parcialmente: la caída al FREE conviene tenerla antes del primer cliente que deje de pagar |
 | | **Subtotal vendible** | **6 días** | |
 | **L5** | Retención de fotos | 1 d | Bloqueada por S3/R2 |
