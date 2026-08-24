@@ -7,6 +7,7 @@ import { diffProfile, hasChanges, type MyProfile, type ProfileForm as Form } fro
 import { Button, ErrorBanner, Field, Input } from '@/components/ui';
 import { useToast } from '@/components/toast';
 import { sendJson } from '@/lib/client';
+import { QrViewer } from './qr-viewer';
 
 const formOf = (p: MyProfile): Form => ({
   firstName: p.firstName ?? '',
@@ -110,6 +111,10 @@ export function ProfileForm({ profile }: { profile: MyProfile }) {
         onChange={(url) => setForm({ ...form, paymentQrUrl: url })}
         onError={setError}
       />
+      {/* Ver en grande sólo lo ya guardado: lo recién subido todavía no es «tu QR». */}
+      {initial.paymentQrUrl && form.paymentQrUrl === initial.paymentQrUrl && (
+        <QrViewer url={initial.paymentQrUrl} />
+      )}
 
       <div className="flex justify-end">
         <span className="w-full sm:w-56">

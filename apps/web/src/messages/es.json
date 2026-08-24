@@ -1670,7 +1670,15 @@
     "save": "Guardar cambios",
     "saved": "Perfil actualizado",
     "saveError": "No se pudo guardar el perfil",
-    "error": "No pudimos cargar tu perfil"
+    "error": "No pudimos cargar tu perfil",
+    "viewQr": "Ver en grande",
+    "qrTitle": "Escanea para pagar",
+    "qrHint": "Cuando el pago entre, regístralo con el método QR. El sistema no lo detecta solo.",
+    "close": "Cerrar",
+    "preferences": "Preferencias",
+    "language": "Idioma del panel",
+    "languageHint": "Solo cambia lo que ves tú. La app del cobrador está en español.",
+    "security": "Seguridad"
   },
   "security": {
     "title": "Seguridad",
@@ -1682,7 +1690,10 @@
       "mfa": "Verificación en dos pasos (MFA)",
       "mfaDesc": "Protege tu cuenta con un segundo factor.",
       "sessions": "Sesiones activas",
-      "sessionsDesc": "Revisa y cierra sesiones en otros dispositivos."
+      "sessionsDesc": "Revisa y cierra sesiones en otros dispositivos.",
+      "mfaOn": "Activa",
+      "mfaOff": "Sin activar",
+      "mfaOffHint": "Actívala: es lo que protege tu cuenta si alguien consigue tu contraseña."
     },
     "changePassword": {
       "title": "Cambiar contraseña",

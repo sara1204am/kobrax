@@ -1670,7 +1670,15 @@
     "save": "Save changes",
     "saved": "Profile updated",
     "saveError": "Could not save your profile",
-    "error": "We could not load your profile"
+    "error": "We could not load your profile",
+    "viewQr": "View full size",
+    "qrTitle": "Scan to pay",
+    "qrHint": "Once the payment arrives, register it with the QR method. The system does not detect it on its own.",
+    "close": "Close",
+    "preferences": "Preferences",
+    "language": "Panel language",
+    "languageHint": "Only changes what you see. The collector app is in Spanish.",
+    "security": "Security"
   },
   "security": {
     "title": "Security",
@@ -1682,7 +1690,10 @@
       "mfa": "Two-step verification (MFA)",
       "mfaDesc": "Protect your account with a second factor.",
       "sessions": "Active sessions",
-      "sessionsDesc": "Review and close sessions on other devices."
+      "sessionsDesc": "Review and close sessions on other devices.",
+      "mfaOn": "On",
+      "mfaOff": "Not enabled",
+      "mfaOffHint": "Turn it on: it is what protects your account if someone gets your password."
     },
     "changePassword": {
       "title": "Change password",
