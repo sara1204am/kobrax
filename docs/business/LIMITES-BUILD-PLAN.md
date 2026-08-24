@@ -16,9 +16,9 @@
 | **Usuarios** | ✅ **Sí, y según el plan** *(desde el 20/08)* | `users.service.ts` llama a `PlanLimitsService.assertRoom('users')` en las dos puertas —invitar y reactivar—, y el tope sale del plan de la cuenta con su excepción encima. Antes leía `accounts.max_users`, columna suelta que valía 5 en toda cuenta, fuera FREE o BUSINESS; ya no existe |
 | **Créditos activos** | ✅ **Sí** *(desde el 20/08)* | `credits.service.ts` en el alta y `portfolio-import.service.ts` por lote — **y en la vista previa**, para avisar antes de confirmar |
 | **Clientes** | ✅ **Sí** *(desde el 20/08)* | `clients.service.ts` y los dos imports |
-| **Fotos por mes** | ❌ No | `field.service.ts:214` (`fieldEvidence.create`) |
-| **Retención de fotos** | ❌ No | no existe nada que archive ni que venza |
-| **Gestiones por mes** | ❌ No | `field.service.ts:170` (`fieldVisit.create`) + `caseActivity` en agenda y casos |
+| **Fotos por mes** | 🔔 **Se cuenta y avisa** *(desde el 23/08 — nunca frena, por diseño R1)* | `plan-limits.service.ts` cuenta · `plan-usage-alerts.service.ts` avisa al 80% (admins) y al 100% (correo interno) · barra en la tarjeta del plan |
+| **Retención de fotos** | ❌ No | no existe nada que archive ni que venza (L5, bloqueada por S3/R2) |
+| **Gestiones por mes** | 🔔 **Se cuenta y avisa** *(desde el 23/08)* | ídem fotos; sólo `field_visits` cuenta (Pregunta 11a: la llamada no) |
 | **Sucursales** | ❌ No | la tabla `branches` existe; **cero código de producto** |
 | **Suspender al moroso** | ✅ Sí | `auth.service.ts:238` — pero no hay palanca para activarlo |
 
@@ -303,7 +303,18 @@ el alta con id propio (de la cola) entra igual y se marca excedente.
 
 ---
 
-### L2 · Fotos y gestiones — avisar, nunca frenar · **1 día**
+### L2 · Fotos y gestiones — avisar, nunca frenar · ✅ **CONSTRUIDO (23/08)**
+
+> **Estado:** hecho y verde — shared 78 · API 701 (+14) · web 365 (+3) · móvil 323, con la
+> migración de índices aplicada. Falta la validación visual.
+>
+> **Cómo quedó, en tres decisiones:** (1) el chequeo lo disparan `createVisit` y `addEvidence`
+> **después de su transacción y sin esperar** — un fallo del aviso se loguea y jamás toca la
+> visita; (2) la marca «ya avisado este mes» vive en `accounts.settings.planAlerts`, y el mes que
+> salta directo al 100% avisa a los dos lados, porque el admin nunca escuchó el 80%; (3) las
+> Preguntas 11a y 12b se resolvieron con la sugerencia: sólo `field_visits` cuenta como gestión, y
+> sólo `field_evidences` (evidencia de campo) cuenta como foto — el avatar y el QR van por
+> `uploads` y no tocan el contador.
 
 Contadores de sólo lectura + el aviso del 80% (Pregunta 36).
 
@@ -408,7 +419,7 @@ anterior.
 | **L0** | ✅ El plan manda. Sin esto no hay nada | **hecho** | — |
 | **L0.5** | ✅ Elegir plan al registrarse, con tarjetas | **hecho** | — |
 | **L1** | ✅ El freno que sostiene el precio | **hecho** | — |
-| **L2** | Los avisos del 80% | **1 d** | Sí, se puede posponer: no bloquea nada por diseño |
+| **L2** | ✅ Los avisos del 80% | **hecho** | — |
 | **L3** | La palanca sin SQL a mano | **0,5 d** | Sí, mientras haya pocos clientes |
 | **L4** | Prueba, caída al FREE, dormidas | **1 d** | Parcialmente: la caída al FREE conviene tenerla antes del primer cliente que deje de pagar |
 | | **Subtotal vendible** | **6 días** | |

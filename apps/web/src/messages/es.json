@@ -1166,6 +1166,7 @@
     "unlimited": "Sin límite",
     "count": "{n, number}",
     "months": "{n, plural, one {# mes} other {# meses}}",
+    "resets": "Fotos y gestiones se reinician el 1 de {month}.",
     "upgrade": "{plan} incluye {users, number} miembros y {credits, number} créditos activos.",
     "upgradeTop": "{plan} se arma a medida.",
     "upgradeHow": "El cambio de plan lo hacemos nosotros: escríbenos y queda activo el mismo día."

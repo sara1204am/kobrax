@@ -1166,6 +1166,7 @@
     "unlimited": "Unlimited",
     "count": "{n, number}",
     "months": "{n, plural, one {# month} other {# months}}",
+    "resets": "Photos and actions reset on {month} 1st.",
     "upgrade": "{plan} includes {users, number} members and {credits, number} active credits.",
     "upgradeTop": "{plan} is tailored to you.",
     "upgradeHow": "We change the plan for you: write to us and it is active the same day."

@@ -57,6 +57,16 @@ export function civilTodayUTC(tz: string, now: Date = new Date()): Date {
 }
 
 /**
+ * El ancla UTC del día 1 del mes civil `tz`. Mismo criterio (y mismos bordes) que `civilTodayUTC`:
+ * a las 22:00 del 31 en La Paz, el mes del tenant todavía es el que termina, aunque UTC ya esté
+ * en el siguiente.
+ */
+export function civilMonthStartUTC(tz: string, now: Date = new Date()): Date {
+  const today = civilTodayUTC(tz, now);
+  return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+}
+
+/**
  * Qué día es **para el tenant**.
  *
  * 🔴 **Existe porque "hoy" en UTC no es hoy para nadie en América.** La agenda anclaba su día a la
@@ -97,5 +107,16 @@ export class TenantClockService {
   /** Medianoche UTC del día civil del tenant — la referencia de "hoy" para vencidos y para el pasado. */
   async today(): Promise<Date> {
     return civilTodayUTC(await this.timezone());
+  }
+
+  /**
+   * Medianoche UTC del día 1 del mes civil del tenant — desde cuándo cuentan los topes mensuales.
+   *
+   * ponytail: es el ancla, no el instante exacto de la medianoche local — los `created_at` reales
+   * de las últimas horas del mes viejo caen en el mes nuevo (4 h en Bolivia). En un contador que
+   * sólo avisa, ese borde no vale la aritmética de offsets; si algún día frena algo, calcularlo.
+   */
+  async monthStart(): Promise<Date> {
+    return civilMonthStartUTC(await this.timezone());
   }
 }

@@ -19,6 +19,7 @@ function makeService(
     evidence: [] as Record<string, unknown>[],
     events: [] as string[],
     audit: [] as { entity: string; action: string }[],
+    alerts: [] as string[],
     listWhere: undefined as Record<string, unknown> | undefined,
     listOrderBy: undefined as Record<string, unknown>[] | undefined,
   };
@@ -56,7 +57,8 @@ function makeService(
     record: async (e: { action: string; entity: string }) => void calls.audit.push({ entity: e.entity, action: e.action }),
   };
   const events = { emit: (name: string) => void calls.events.push(name) };
-  const service = new FieldService(prisma as never, tenant as never, audit as never, events as never);
+  const alerts = { check: async (kind: string) => void calls.alerts.push(kind) };
+  const service = new FieldService(prisma as never, tenant as never, audit as never, events as never, alerts as never);
   return { service, calls };
 }
 
@@ -213,6 +215,12 @@ describe('FieldService.createVisit', () => {
     assert.ok(calls.events.includes('collector.location'));
     assert.ok(r.id);
   });
+
+  it('dispara el chequeo del aviso mensual (L2) — que avisa, nunca frena', async () => {
+    const { service, calls } = makeService();
+    await service.createVisit({ routeStopId: 's1', lat: -16.5, lng: -68.15, outcome: 'PAID' as never });
+    assert.deepEqual(calls.alerts, ['actionsPerMonth']);
+  });
 });
 
 describe('FieldService.addEvidence', () => {
@@ -230,6 +238,7 @@ describe('FieldService.addEvidence', () => {
     assert.equal(calls.evidence[0]!.fileHash, HELLO_SHA);
     assert.deepEqual(calls.audit, [{ entity: 'field_evidence', action: 'CREATE' }]);
     assert.equal(r.fileHash, HELLO_SHA);
+    assert.deepEqual(calls.alerts, ['photosPerMonth'], 'la foto dispara su aviso mensual (L2)');
   });
 });
 

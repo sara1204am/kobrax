@@ -971,6 +971,8 @@ model FieldVisit {
 
   @@index([accountId, caseId])
   @@index([accountId, collectorId])
+  // El contador mensual de gestiones (L2): cuántas van del mes de esta cuenta.
+  @@index([accountId, createdAt])
   @@map("field_visits")
 }
 
@@ -991,6 +993,8 @@ model FieldEvidence {
   visit FieldVisit @relation(fields: [visitId], references: [id])
 
   @@index([accountId, visitId])
+  // El contador mensual de fotos (L2).
+  @@index([accountId, createdAt])
   @@map("field_evidences")
 }
 

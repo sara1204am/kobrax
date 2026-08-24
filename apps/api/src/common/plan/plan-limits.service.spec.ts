@@ -7,7 +7,12 @@ import { rejectsWithCode } from '../../modules/auth/auth-test-utils';
 interface Espia {
   creditWhere?: Record<string, unknown>;
   clientWhere?: Record<string, unknown>;
+  visitWhere?: Record<string, unknown>;
+  evidenceWhere?: Record<string, unknown>;
 }
+
+/** El 1 del mes que el reloj del tenant le va a dar al servicio. */
+const INICIO_DE_MES = new Date('2026-08-01T00:00:00.000Z');
 
 function makeService(
   opts: {
@@ -16,6 +21,8 @@ function makeService(
     credits?: number;
     clients?: number;
     users?: number;
+    photos?: number;
+    visits?: number;
   } = {},
 ) {
   const espia: Espia = {};
@@ -39,9 +46,22 @@ function makeService(
       },
     },
     userAccount: { count: async () => opts.users ?? 0 },
+    fieldVisit: {
+      count: async (args: { where: Record<string, unknown> }) => {
+        espia.visitWhere = args.where;
+        return opts.visits ?? 0;
+      },
+    },
+    fieldEvidence: {
+      count: async (args: { where: Record<string, unknown> }) => {
+        espia.evidenceWhere = args.where;
+        return opts.photos ?? 0;
+      },
+    },
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
-  const service = new PlanLimitsService(prisma as never, { accountId: 'acc-A' } as never);
+  const clock = { monthStart: async () => INICIO_DE_MES };
+  const service = new PlanLimitsService(prisma as never, { accountId: 'acc-A' } as never, clock as never);
   return { service, tx: tx as never, espia };
 }
 
@@ -74,6 +94,31 @@ describe('PlanLimitsService.usage', () => {
     const { service, tx, espia } = makeService();
     await service.usage('clients', tx);
     assert.deepEqual(espia.clientWhere, { deletedAt: null });
+  });
+});
+
+describe('PlanLimitsService.monthlyUsage (L2 — sólo para avisar)', () => {
+  it('cuenta desde el 1 del mes DEL TENANT, no del servidor', async () => {
+    const { service, tx, espia } = makeService({ photos: 42 });
+    assert.equal(await service.monthlyUsage('photosPerMonth', tx), 42);
+    assert.deepEqual(espia.evidenceWhere, { createdAt: { gte: INICIO_DE_MES } });
+  });
+
+  it('las gestiones son las visitas de campo (Pregunta 11a: la llamada no cuenta)', async () => {
+    const { service, tx, espia } = makeService({ visits: 7 });
+    assert.equal(await service.monthlyUsage('actionsPerMonth', tx), 7);
+    assert.deepEqual(espia.visitWhere, { createdAt: { gte: INICIO_DE_MES } });
+  });
+
+  it('usageAll trae los cinco contadores, para que /accounts/me los mande de una', async () => {
+    const { service, tx } = makeService({ users: 1, credits: 2, clients: 3, photos: 4, visits: 5 });
+    assert.deepEqual(await service.usageAll(tx), {
+      users: 1,
+      credits: 2,
+      clients: 3,
+      photosPerMonth: 4,
+      actionsPerMonth: 5,
+    });
   });
 });
 

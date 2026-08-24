@@ -1,10 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { CatalogType, LocationType, RouteStopStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService } from '../../common/events/event-bus.service';
+import { PlanUsageAlertsService } from '../../common/plan/plan-usage-alerts.service';
+import type { MonthlyCounter } from '../../common/plan/plan-limits.service';
 import {
   GPS_FALLBACK_KEY,
   Permission,
@@ -20,15 +22,30 @@ import { evidenceHashInvalid, invalidGps, invalidVisitDetails, resourceNotFound,
 
 @Injectable()
 export class FieldService {
+  private readonly logger = new Logger(FieldService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
     private readonly events: EventBusService,
+    private readonly alerts: PlanUsageAlertsService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
+  }
+
+  /**
+   * El aviso del 80% del plan corre **después y aparte** (L2, R1): una visita jamás espera ni
+   * falla por un cartel. Un fallo acá se loguea y nada más.
+   */
+  private warnPlanUsage(kind: MonthlyCounter): void {
+    void this.alerts
+      .check(kind)
+      .catch((err: unknown) =>
+        this.logger.warn(`Aviso de tope ${kind} falló: ${(err as Error)?.message ?? err}`),
+      );
   }
 
   /**
@@ -201,6 +218,7 @@ export class FieldService {
     });
 
     this.events.emit('collector.location', { collectorId, lat: dto.lat, lng: dto.lng, accountId: this.tenant.accountId });
+    this.warnPlanUsage('actionsPerMonth');
     return { id: visit.id, outcome: visit.outcome, capturedAt: visit.capturedAt };
   }
 
@@ -225,6 +243,7 @@ export class FieldService {
       });
     });
     await this.audit.record({ entity: 'field_evidence', entityId: evidence.id, action: 'CREATE', after: { visitId, type: dto.type, fileHash: evidence.fileHash } });
+    this.warnPlanUsage('photosPerMonth');
     return { id: evidence.id, type: evidence.type, fileHash: evidence.fileHash };
   }
 }

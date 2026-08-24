@@ -10,10 +10,19 @@ import { effectiveLimits } from '@kobrax/shared';
  * interna de lo que se negoció con ese cliente.
  *
  * `usage` va acá y no en `/users` porque la pantalla de cuenta muestra «3 de 5 miembros» sin
- * traer la lista entera. Trae **sólo los topes que se cuentan hoy**: fotos y gestiones se suman
- * cuando su fase las cuente, y mientras tanto la pantalla no dibuja una barra que no sabe llenar.
+ * traer la lista entera. Trae **sólo los topes que se cuentan hoy** — desde L2, los cinco:
+ * fotos y gestiones son lo que va del mes del huso de la cuenta.
  */
-export function serializeAccount(a: Account, usage: { users: number; credits: number; clients: number }) {
+export function serializeAccount(
+  a: Account,
+  usage: {
+    users: number;
+    credits: number;
+    clients: number;
+    photosPerMonth: number;
+    actionsPerMonth: number;
+  },
+) {
   return {
     id: a.id,
     businessName: a.businessName,

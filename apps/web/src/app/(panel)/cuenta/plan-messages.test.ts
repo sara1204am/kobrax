@@ -3,6 +3,7 @@ import { createTranslator } from 'next-intl';
 import { PLANS, PLAN_ORDER } from '@kobrax/shared';
 import es from '@/messages/es.json';
 import en from '@/messages/en.json';
+import { nextMonthName } from './month-name';
 
 /**
  * Los textos del plan **se arman con números** (`${perSeat, number}`, plurales, «sin límite»), y
@@ -27,6 +28,7 @@ const MESSAGES: [string, Record<string, string | number>?][] = [
   ['seatsCustom', { max: 5, plan: 1 }],
   ['count', { n: 25000 }],
   ['months', { n: 24 }],
+  ['resets', { month: 'septiembre' }],
   ['upgrade', { plan: 'Professional', users: 25, credits: 1000 }],
   ['upgradeTop', { plan: 'Enterprise' }],
   ...PLAN_ORDER.flatMap((code): [string, Record<string, string | number>?][] => [
@@ -55,6 +57,25 @@ describe('los textos del plan', () => {
     const t = createTranslator({ locale, messages, namespace: 'plans' });
     expect(t('months', { n: 1 })).toBe(locale === 'es' ? '1 mes' : '1 month');
     expect(t('months', { n: 6 })).toBe(locale === 'es' ? '6 meses' : '6 months');
+  });
+});
+
+describe('el mes del renglón «se reinicia el 1 de …»', () => {
+  it('es el mes que viene, en el idioma del panel', () => {
+    expect(nextMonthName('es', 'America/La_Paz', new Date('2026-08-15T12:00:00.000Z'))).toBe('septiembre');
+    expect(nextMonthName('en', 'America/La_Paz', new Date('2026-08-15T12:00:00.000Z'))).toBe('September');
+  });
+
+  it('en huso de la cuenta: la noche del 31 en La Paz todavía apunta a septiembre, no a octubre', () => {
+    // En UTC ya es 1 de septiembre; para la cuenta sigue siendo 31 de agosto.
+    const noche = new Date('2026-09-01T02:40:00.000Z');
+    expect(nextMonthName('es', 'America/La_Paz', noche)).toBe('septiembre');
+    expect(nextMonthName('es', 'UTC', noche)).toBe('octubre');
+  });
+
+  it('diciembre da vuelta al año, y una zona inventada no rompe la tarjeta', () => {
+    expect(nextMonthName('es', 'UTC', new Date('2026-12-10T12:00:00.000Z'))).toBe('enero');
+    expect(nextMonthName('es', 'Marte/Olympus', new Date('2026-08-15T12:00:00.000Z'))).toBe('septiembre');
   });
 });
 

@@ -1,5 +1,5 @@
 import { PLANS, type PlanLimits } from '@kobrax/shared';
-import type { CountedLimit, PlanLimitsService } from './plan-limits.service';
+import type { CountedLimit, MonthlyCounter, PlanLimitsService } from './plan-limits.service';
 import { planLimitReached } from './plan.errors';
 
 /**
@@ -21,7 +21,8 @@ export function fakePlanLimits(
   const doble = {
     limitsOf: async () => limits,
     usage: async (kind: CountedLimit) => usage[kind],
-    usageAll: async () => usage,
+    monthlyUsage: async (_kind: MonthlyCounter) => 0,
+    usageAll: async () => ({ ...usage, photosPerMonth: 0, actionsPerMonth: 0 }),
     roomLeft: async (kind: CountedLimit) => {
       const max = limits[kind];
       return max === null ? null : Math.max(0, max - usage[kind]);

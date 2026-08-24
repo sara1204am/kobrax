@@ -1,20 +1,22 @@
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import { nextPlan, planOf, usageLevel, type AccountInfo, type PlanLimit } from '@kobrax/shared';
 import { Section } from '@/components/panel-ui';
+import { nextMonthName } from './month-name';
 
 /**
  * Los topes **que se cuentan**, con barra. Cada fase que agrega un contador agrega su clave acá y
- * su número aparece solo: el servidor ya lo manda en `usage`.
+ * su número aparece solo: el servidor ya lo manda en `usage`. Desde L2, fotos y gestiones se
+ * cuentan por mes — su barra lleva debajo el renglón de «se reinicia el 1».
  */
-const CONTADOS = ['users', 'credits', 'clients'] as const;
+const CONTADOS = ['users', 'credits', 'clients', 'photosPerMonth', 'actionsPerMonth'] as const;
 
 /**
  * Los que todavía no se cuentan: se listan como texto, sin barra.
  *
- * 🔴 Dibujarles una barra vacía diría «llevás cero fotos este mes», que es mentira — nadie las
- * está contando. Un tope sin contador se describe, no se mide.
+ * 🔴 Dibujarles una barra vacía diría «llevás cero», que es mentira — nadie los está contando.
+ * Un tope sin contador se describe, no se mide.
  */
-const DESCRITOS = ['photosPerMonth', 'actionsPerMonth', 'photoRetentionMonths'] as const;
+const DESCRITOS = ['photoRetentionMonths'] as const;
 
 const BAR = { ok: 'bg-k-periwinkle', near: 'bg-k-warning', full: 'bg-k-danger' } as const;
 
@@ -27,14 +29,17 @@ const BAR = { ok: 'bg-k-periwinkle', near: 'bg-k-warning', full: 'bg-k-danger' }
  */
 export async function PlanCard({ account }: { account: AccountInfo }) {
   const t = await getTranslations('plans');
+  const locale = await getLocale();
   const plan = planOf(account.planCode);
   const next = nextPlan(account.planCode);
   const asientos = account.limits.users;
+  // Los mensuales se reinician el 1 (Pregunta 13: día 1, no aniversario). Un solo renglón para
+  // los dos: dicen lo mismo y repetirlo es ruido.
+  const hayMensuales =
+    account.limits.photosPerMonth !== null || account.limits.actionsPerMonth !== null;
 
-  const limitText = (key: (typeof DESCRITOS)[number], value: PlanLimit) => {
-    if (value === null) return t('unlimited');
-    return key === 'photoRetentionMonths' ? t('months', { n: value }) : t('count', { n: value });
-  };
+  const limitText = (value: PlanLimit) =>
+    value === null ? t('unlimited') : t('months', { n: value });
 
   return (
     <Section title={t('title')} inner="p-6">
@@ -63,6 +68,11 @@ export async function PlanCard({ account }: { account: AccountInfo }) {
             }
           />
         ))}
+        {hayMensuales && (
+          <p className="text-[13px] text-k-text-2">
+            {t('resets', { month: nextMonthName(locale, account.timezone) })}
+          </p>
+        )}
       </div>
 
       {plan?.limits.users != null && asientos !== null && plan.limits.users !== asientos && (
@@ -84,7 +94,7 @@ export async function PlanCard({ account }: { account: AccountInfo }) {
                 <dt className="text-[13px] text-k-text-2">{t(`limits.${key}`)}</dt>
                 <dd className="text-[14px] font-medium tabular-nums text-k-text">
                   {/* De la cuenta y no del catálogo: si negoció otro número, es ése el que rige. */}
-                  {limitText(key, account.limits[key])}
+                  {limitText(account.limits[key])}
                 </dd>
               </div>
             ))}

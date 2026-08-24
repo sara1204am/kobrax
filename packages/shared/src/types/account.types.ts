@@ -27,11 +27,17 @@ export interface AccountInfo {
    */
   limits: PlanLimits;
   /**
-   * Cuánto lleva usado de cada tope **que hoy se cuenta**. Fotos y gestiones se suman cuando su
-   * fase las cuente (LIMITES-BUILD-PLAN §L2); mientras tanto no están acá, y por eso la pantalla
-   * no les dibuja una barra que no sabría llenar.
+   * Cuánto lleva usado de cada tope **que hoy se cuenta**. Fotos y gestiones son lo que va
+   * **del mes** (se reinician el 1, en el huso de la cuenta); los otros tres son el total vivo.
+   * Un tope que algún día se cuente se suma acá, y recién entonces la pantalla le dibuja barra.
    */
-  usage: { users: number; credits: number; clients: number };
+  usage: {
+    users: number;
+    credits: number;
+    clients: number;
+    photosPerMonth: number;
+    actionsPerMonth: number;
+  };
 }
 
 /**

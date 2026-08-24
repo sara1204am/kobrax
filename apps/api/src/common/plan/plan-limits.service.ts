@@ -3,10 +3,18 @@ import { effectiveLimits, type PlanLimits } from '@kobrax/shared';
 import type { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../context/tenant-context.service';
+import { TenantClockService } from '../context/tenant-clock.service';
 import { planLimitReached } from './plan.errors';
 
 /** Los topes que hoy se cuentan de verdad. Cada fase que agrega un contador agrega su clave acá. */
 export type CountedLimit = 'users' | 'credits' | 'clients';
+
+/**
+ * Los topes mensuales (L2). Tipo aparte a propósito: **nunca frenan** (R1 — la foto y la visita
+ * llegan de la calle, ya ocurridas), y que `assertRoom` no los acepte lo dice el compilador, no
+ * una convención.
+ */
+export type MonthlyCounter = 'photosPerMonth' | 'actionsPerMonth';
 
 /**
  * Qué cuenta como crédito «activo» (LIMITES §5.2, Pregunta 9): con saldo pendiente y sin dar de
@@ -35,6 +43,7 @@ export class PlanLimitsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenant: TenantContextService,
+    private readonly clock: TenantClockService,
   ) {}
 
   /** Los topes que rigen: los del plan de la cuenta, con su excepción encima. */
@@ -73,14 +82,28 @@ export class PlanLimitsService {
     }
   }
 
+  /**
+   * Lo que va del mes de un tope mensual. El mes arranca el 1 **del huso de la cuenta**, no del
+   * servidor (el mismo bug de «hoy» que ya se pagó en la agenda). Cae en los índices
+   * `(account_id, created_at)` de la migración de L2.
+   */
+  async monthlyUsage(kind: MonthlyCounter, tx: PrismaClient): Promise<number> {
+    const since = await this.clock.monthStart();
+    return kind === 'photosPerMonth'
+      ? tx.fieldEvidence.count({ where: { createdAt: { gte: since } } })
+      : tx.fieldVisit.count({ where: { createdAt: { gte: since } } });
+  }
+
   /** Lo usado de cada tope contable, para la pantalla. Una consulta por tope, todas indexadas. */
-  async usageAll(tx: PrismaClient): Promise<Record<CountedLimit, number>> {
-    const [users, credits, clients] = await Promise.all([
+  async usageAll(tx: PrismaClient): Promise<Record<CountedLimit | MonthlyCounter, number>> {
+    const [users, credits, clients, photosPerMonth, actionsPerMonth] = await Promise.all([
       this.usage('users', tx),
       this.usage('credits', tx),
       this.usage('clients', tx),
+      this.monthlyUsage('photosPerMonth', tx),
+      this.monthlyUsage('actionsPerMonth', tx),
     ]);
-    return { users, credits, clients };
+    return { users, credits, clients, photosPerMonth, actionsPerMonth };
   }
 
   /**
