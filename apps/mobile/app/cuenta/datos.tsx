@@ -16,7 +16,7 @@ import {
   type AccountForm,
 } from '@/account-form';
 
-const EMPTY: AccountForm = { businessName: '', taxId: '', countryCode: '', currencyCode: '' };
+const EMPTY: AccountForm = { businessName: '', taxId: '', countryCode: '', currencyCode: '', timezone: '' };
 
 /**
  * Datos del negocio (CUENTA S1). País y moneda son **un solo selector** (S1-D1): están
@@ -28,7 +28,6 @@ const EMPTY: AccountForm = { businessName: '', taxId: '', countryCode: '', curre
 export default function DatosCuentaScreen() {
   const [before, setBefore] = useState<AccountForm>(EMPTY);
   const [form, setForm] = useState<AccountForm>(EMPTY);
-  const [timezone, setTimezone] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,10 +44,11 @@ export default function DatosCuentaScreen() {
         taxId: res.data.taxId ?? '',
         countryCode: res.data.countryCode,
         currencyCode: res.data.currencyCode,
+        // Sólo se muestra: ninguna pantalla del móvil la cambia, así que el diff nunca la manda.
+        timezone: res.data.timezone ?? '',
       };
       setBefore(f);
       setForm(f);
-      setTimezone(res.data.timezone);
       setError(null);
     } else if (res.status === 'offline') setError('Sin conexión. Los datos se leen y se guardan en línea.');
     else if (res.status === 'error') setError(res.message);
@@ -133,8 +133,8 @@ export default function DatosCuentaScreen() {
         />
 
         <SectionLabel>Zona horaria</SectionLabel>
-        <Text style={styles.readonlyValue}>{timezone ?? 'Sin definir'}</Text>
-        <Text style={styles.hint}>Se configura desde la web.</Text>
+        <Text style={styles.readonlyValue}>{form.timezone || 'Según el país'}</Text>
+        <Text style={styles.hint}>Se configura desde la web, en Cuenta.</Text>
       </ScrollView>
 
       {puedeEditar && (

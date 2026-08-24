@@ -20,7 +20,39 @@ const formOf = (a: AccountInfo): AccountForm => ({
   taxId: a.taxId ?? '',
   countryCode: a.countryCode,
   currencyCode: a.currencyCode,
+  timezone: a.timezone ?? '',
 });
+
+/**
+ * Los husos de América que conoce el navegador, con su corrimiento a la vista —
+ * «La Paz (GMT-4)» se elige sin saberse el nombre IANA. Sin librería: `Intl` trae la lista
+ * y el offset. En un navegador viejo sin `supportedValuesOf` la lista queda en el valor
+ * actual + «según el país», que sigue siendo usable.
+ */
+function americanTimezones(pinned: (string | null)[]): { tz: string; label: string }[] {
+  const intl = Intl as { supportedValuesOf?: (key: 'timeZone') => string[] };
+  const all = (intl.supportedValuesOf?.('timeZone') ?? []).filter((tz) => tz.startsWith('America/'));
+  // La guardada y la detectada entran aunque no sean de América (una zona europea guardada a
+  // mano, o el botón de «este equipo» en una laptop de viaje): sin esto el select quedaría mudo.
+  for (const tz of pinned) if (tz && !all.includes(tz)) all.push(tz);
+  const offset = (tz: string) => {
+    try {
+      return (
+        new Intl.DateTimeFormat('en', { timeZone: tz, timeZoneName: 'shortOffset' })
+          .formatToParts(new Date())
+          .find((p) => p.type === 'timeZoneName')?.value ?? ''
+      );
+    } catch {
+      return '';
+    }
+  };
+  return all
+    .map((tz) => ({
+      tz,
+      label: `${tz.replace(/^America\//, '').replaceAll('_', ' ')}${offset(tz) ? ` (${offset(tz)})` : ''}`,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
 
 /**
  * Datos del negocio.
@@ -50,6 +82,11 @@ export function BusinessForm({ account }: { account: AccountInfo }) {
       a.name.localeCompare(b.name, locale),
     );
   }, [locale]);
+
+  const timezones = useMemo(
+    () => americanTimezones([account.timezone, form.timezone]),
+    [account.timezone, form.timezone],
+  );
 
   const patch = diffAccount(initial, form);
   const dirty = hasChanges(patch);
@@ -118,6 +155,44 @@ export function BusinessForm({ account }: { account: AccountInfo }) {
             </option>
           ))}
         </Select>
+      </Field>
+
+      {/*
+        La zona manda en cosas que duelen: cuándo un vencimiento «es hoy», la agenda, y el 1 del
+        mes de los contadores del plan. El móvil la muestra y dice «se configura desde la web»
+        (S1-D2) — este selector es esa promesa. `''` = según el país (el server cae a
+        TZ_BY_COUNTRY), y viaja como `null`.
+      */}
+      <Field label={t('timezone')} hint={t('timezoneHint')}>
+        <span className="flex gap-2">
+          <span className="flex-1">
+            <Select
+              value={form.timezone}
+              onChange={(e) => setForm({ ...form, timezone: e.target.value })}
+              disabled={!editable}
+            >
+              <option value="">{t('timezoneAuto')}</option>
+              {timezones.map(({ tz, label }) => (
+                <option key={tz} value={tz}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </span>
+          {/* La zona del navegador (`resolvedOptions`), sin permisos ni GPS: es la del sistema. */}
+          {editable && (
+            <button
+              type="button"
+              onClick={() => {
+                const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                if (tz) setForm({ ...form, timezone: tz });
+              }}
+              className="shrink-0 rounded-xl border border-k-border bg-white px-3 text-[13px] font-medium text-k-text-2 hover:bg-k-bg"
+            >
+              {t('timezoneDetect')}
+            </button>
+          )}
+        </span>
       </Field>
 
       {editable && (

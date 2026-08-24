@@ -1114,6 +1114,12 @@
     "title": "Cuenta",
     "subtitle": "Tu plan, y los datos del negocio que salen en los comprobantes y en las invitaciones.",
     "businessData": "Datos del negocio",
+    "timezone": "Zona horaria",
+    "timezoneAuto": "Según el país",
+    "timezoneDetect": "Usar la de este equipo",
+    "timezoneHint": "Manda en los vencimientos, la agenda y el 1 del mes de los contadores del plan.",
+    "profileHint": "Tu foto, tu teléfono y tu QR de cobro son tuyos, no del negocio:",
+    "profileLink": "viven en Mi perfil.",
     "status": {
       "ACTIVE": "Activa",
       "TRIAL": "En prueba",

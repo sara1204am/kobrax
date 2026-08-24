@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import type { AccountInfo } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
@@ -51,6 +52,17 @@ export default async function CuentaPage() {
         <PlanCard account={account} />
         <Section title={t('businessData')} inner="p-6">
           <BusinessForm account={account} />
+          {/*
+            Lo personal —foto, teléfono, QR de cobro— vive en Mi perfil, no acá: es de la
+            persona, no del negocio. Sin este puente, quien busca su QR abre Cuenta y no lo
+            encuentra (pasó en la validación del 24/08).
+          */}
+          <p className="mt-5 border-t border-k-border pt-4 text-[13px] text-k-text-2">
+            {t('profileHint')}{' '}
+            <Link href="/settings/perfil" className="font-medium text-k-purple hover:underline">
+              {t('profileLink')}
+            </Link>
+          </p>
         </Section>
       </div>
     </>

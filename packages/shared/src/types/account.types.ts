@@ -83,6 +83,11 @@ export interface AccountForm {
   taxId: string;
   countryCode: string;
   currencyCode: string;
+  /**
+   * `''` = «según el país»: viaja como `null` y el servidor cae al huso del país
+   * (`TZ_BY_COUNTRY`). La edita la web (S1-D2); el móvil la muestra y no la toca.
+   */
+  timezone: string;
 }
 
 export interface ProfileForm {

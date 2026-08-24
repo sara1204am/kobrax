@@ -98,6 +98,48 @@ describe('BusinessForm — sólo se manda lo que cambió', () => {
     expect(enviado).toEqual({ countryCode: 'MX', currencyCode: 'MXN' });
   });
 
+  it('elegir otra zona horaria manda sólo timezone', async () => {
+    let enviado: unknown;
+    server.use(
+      http.patch('*/api/account/me', async ({ request }) => {
+        enviado = await request.json();
+        return HttpResponse.json({ ...ACCOUNT, timezone: 'America/Bogota' });
+      }),
+    );
+
+    renderForm();
+    await userEvent.selectOptions(screen.getByLabelText(/Zona horaria/), 'America/Bogota');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    expect(enviado).toEqual({ timezone: 'America/Bogota' });
+  });
+
+  it('volver a «según el país» la QUITA: manda null y el server cae al huso del país', async () => {
+    let enviado: unknown;
+    server.use(
+      http.patch('*/api/account/me', async ({ request }) => {
+        enviado = await request.json();
+        return HttpResponse.json({ ...ACCOUNT, timezone: null });
+      }),
+    );
+
+    renderForm();
+    await userEvent.selectOptions(screen.getByLabelText(/Zona horaria/), '');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    expect(enviado).toEqual({ timezone: null });
+  });
+
+  it('el botón «usar la de este equipo» pone la zona del navegador, aunque no sea de América', async () => {
+    renderForm();
+    await userEvent.click(screen.getByRole('button', { name: 'Usar la de este equipo' }));
+
+    const select = screen.getByLabelText(/Zona horaria/) as HTMLSelectElement;
+    // La detectada se agrega a las opciones si hace falta: sin eso, un huso fuera de América
+    // (o el UTC de un entorno de CI) dejaría el select mudo.
+    expect(select.value).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  });
+
   it('después de guardar, volver a guardar queda apagado', async () => {
     server.use(http.patch('*/api/account/me', () => HttpResponse.json(ACCOUNT)));
 

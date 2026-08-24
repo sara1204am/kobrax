@@ -80,6 +80,7 @@ export function PanelShell({
       <aside className="sticky top-0 hidden h-screen w-[68px] shrink-0 flex-col bg-k-navy lg:flex xl:w-60">
         <Brand />
         <NavList items={nav} pathname={pathname} collapsible />
+        <SidebarLogout collapsible />
       </aside>
 
       {/*
@@ -100,6 +101,7 @@ export function PanelShell({
         <div className="flex h-full flex-col">
           <Brand expanded />
           <NavList items={nav} pathname={pathname} />
+          <SidebarLogout />
         </div>
       </dialog>
 
@@ -420,6 +422,35 @@ function AccountList({ accounts, activeId }: { accounts: AuthAccountOption[]; ac
         </p>
       )}
     </>
+  );
+}
+
+/**
+ * Cerrar sesión al pie del sidebar, siempre a la vista. Misma salida que el ítem del menú de
+ * usuario; en el sidebar colapsado (1024–1279) queda sólo el ícono, con `title` de respaldo.
+ */
+function SidebarLogout({ collapsible = false }: { collapsible?: boolean }) {
+  const router = useRouter();
+  const t = useTranslations('panel');
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <div className="px-3 py-3">
+      <button
+        type="button"
+        onClick={async () => {
+          setBusy(true);
+          await postJson('/api/auth/logout', {});
+          router.replace('/login');
+        }}
+        disabled={busy}
+        title={t('logout')}
+        className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-k-danger px-3 text-[14px] font-medium text-white hover:bg-k-danger/90 disabled:opacity-60"
+      >
+        <Icon name="logout" className="h-[18px] w-[18px] shrink-0" />
+        <span className={collapsible ? 'hidden xl:inline' : ''}>{t('logout')}</span>
+      </button>
+    </div>
   );
 }
 

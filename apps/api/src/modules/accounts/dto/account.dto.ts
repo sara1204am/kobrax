@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, Length } from 'class-validator';
+import { IsIn, IsOptional, IsString, IsTimeZone, Length } from 'class-validator';
 import { SUPPORTED_CURRENCIES } from '@kobrax/shared';
 
 const CURRENCIES = Object.keys(SUPPORTED_CURRENCIES);
@@ -17,5 +17,7 @@ export class UpdateAccountDto {
   @IsOptional() @IsString() @Length(1, 40) taxId?: string;
   @IsOptional() @IsIn(COUNTRIES) countryCode?: string;
   @IsOptional() @IsIn(CURRENCIES) currencyCode?: string;
-  @IsOptional() @IsString() @Length(1, 64) timezone?: string;
+  // IANA de verdad, no cualquier string: una zona basura guardada a mano hacía caer el reloj
+  // del tenant a UTC en silencio — exactamente el bug que TenantClockService existe para evitar.
+  @IsOptional() @IsTimeZone() timezone?: string;
 }

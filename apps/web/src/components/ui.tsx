@@ -169,11 +169,12 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
 );
 
 /** Campo con su label arriba (14px, sentence case — §3 tipografía del diseño nuevo). */
-export function Field({ label, children }: { label: string; children: ReactNode }) {
+export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <label className="block space-y-2">
       <span className="text-[14px] font-medium text-k-text">{label}</span>
       {children}
+      {hint && <span className="block text-[12px] font-normal text-k-muted">{hint}</span>}
     </label>
   );
 }

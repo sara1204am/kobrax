@@ -1114,6 +1114,12 @@
     "title": "Account",
     "subtitle": "Your plan, and the business details that show up on receipts and invitations.",
     "businessData": "Business details",
+    "timezone": "Timezone",
+    "timezoneAuto": "Based on country",
+    "timezoneDetect": "Use this device's",
+    "timezoneHint": "Drives due dates, the agenda, and the monthly counters' reset on the 1st.",
+    "profileHint": "Your photo, phone and payment QR belong to you, not the business:",
+    "profileLink": "they live in My profile.",
     "status": {
       "ACTIVE": "Active",
       "TRIAL": "Trial",
