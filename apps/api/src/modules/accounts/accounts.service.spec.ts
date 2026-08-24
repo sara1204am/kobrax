@@ -245,4 +245,16 @@ describe('AccountsService.update', () => {
       assert.equal(prohibido in calls.updated!, false, `${prohibido} no se puede escribir desde el producto`);
     }
   });
+
+  it('los decimales van a settings numerizados y SIN pisar lo que ya vivía ahí', async () => {
+    // `settings` también guarda trialEndsAt y planAlerts: pisarlo entero borraría la prueba.
+    const { service, calls } = makeService({ found: account({ settings: { trialEndsAt: '2026-09-01' } }) });
+    await service.update({ currencyDecimals: '0' } as never);
+    assert.deepEqual(calls.updated!.settings, { trialEndsAt: '2026-09-01', currencyDecimals: 0 });
+  });
+
+  it('sin la preferencia guardada, la cuenta dice 2: el default es el comportamiento de siempre', async () => {
+    const { service } = makeService();
+    assert.equal((await service.findMine()).currencyDecimals, 2);
+  });
 });

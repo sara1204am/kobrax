@@ -39,13 +39,26 @@ export function formatLongDate(isoDate: string): string {
 }
 
 /**
+ * Decimales que muestra el teléfono, la preferencia de la cuenta (`currencyDecimals`).
+ *
+ * Variable de módulo y no un parámetro: **todas** las pantallas del móvil formatean plata con
+ * este `money()`, y la app corre con una sola cuenta por sesión — el que la siembra es
+ * `getAccount()` al cargar la cuenta (con o sin señal, porque viene de la copia local).
+ */
+let MONEY_DECIMALS = 2;
+
+export function setMoneyDecimals(n: number): void {
+  MONEY_DECIMALS = Number.isInteger(n) && n >= 0 && n <= 2 ? n : 2;
+}
+
+/**
  * `formatCurrency` explota con una moneda fuera de las 6 soportadas; el saldo no vale una pantalla
  * en blanco. Lo usan el alta (S2) y el detalle (S3).
  */
 export function money(amount: number, currency: string): string {
   return currency in SUPPORTED_CURRENCIES
-    ? formatCurrency(amount, currency as keyof typeof SUPPORTED_CURRENCIES)
-    : `${amount.toFixed(2)} ${currency}`;
+    ? formatCurrency(amount, currency as keyof typeof SUPPORTED_CURRENCIES, MONEY_DECIMALS)
+    : `${amount.toFixed(MONEY_DECIMALS)} ${currency}`;
 }
 
 /** El enum es dominio (shared); la etiqueta en español es UI y vive acá. */

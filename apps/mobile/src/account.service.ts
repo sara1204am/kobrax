@@ -9,6 +9,7 @@
 import { publicCall, type PublicResult } from './api';
 import { apiMutate, apiQuery, type MutateResult, type QueryResult } from './api-client';
 import { cachedOne } from './sync/cached';
+import { setMoneyDecimals } from './agenda-form';
 
 // Las cuatro formas del contrato viven en `@kobrax/shared` (F9 · W2): son las mismas que
 // edita la web. Se re-exportan para no tocar a quien ya las importaba de este archivo.
@@ -46,8 +47,12 @@ export function signup(payload: SignupPayload): Promise<SignupResult> {
  * parado frente al deudor, y ahí casi nunca hay señal. Con la copia local, la pantalla avisa
  * igual; sin ella, el aviso sólo aparecería con internet, que es justo cuando no hace falta.
  */
-export function getAccount(): Promise<QueryResult<AccountInfo>> {
-  return cachedOne('account', 'me', () => apiQuery<AccountInfo>('/accounts/me'));
+export async function getAccount(): Promise<QueryResult<AccountInfo>> {
+  const res = await cachedOne('account', 'me', () => apiQuery<AccountInfo>('/accounts/me'));
+  // La preferencia de decimales se siembra acá, el único lugar por donde la cuenta entra al
+  // teléfono (de la red o de la copia local): todos los `money()` de la app la respetan.
+  if (res.status === 'ok') setMoneyDecimals(res.data.currencyDecimals ?? 2);
+  return res;
 }
 
 /**

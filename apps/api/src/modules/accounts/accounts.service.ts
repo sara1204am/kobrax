@@ -158,6 +158,16 @@ export class AccountsService {
           countryCode: dto.countryCode,
           currencyCode: dto.currencyCode,
           timezone: dto.timezone,
+          // Los decimales viven en `settings` (jsonb, junto a trialEndsAt y planAlerts): son una
+          // preferencia, no una columna. Se mezcla, no se pisa — settings guarda más cosas.
+          ...(dto.currencyDecimals !== undefined
+            ? {
+                settings: {
+                  ...(before.settings as Record<string, unknown>),
+                  currencyDecimals: Number(dto.currencyDecimals),
+                },
+              }
+            : {}),
         },
       });
       return { before, updated };

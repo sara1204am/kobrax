@@ -1,6 +1,12 @@
 import type { Account } from '@prisma/client';
 import { effectiveLimits } from '@kobrax/shared';
 
+/** Lo que llegue de settings es JSON de la base: cualquier cosa fuera de 0–2 cae al default 2. */
+function currencyDecimalsOf(settings: unknown): number {
+  const raw = (settings as { currencyDecimals?: unknown } | null)?.currencyDecimals;
+  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 && raw <= 2 ? raw : 2;
+}
+
 /**
  * Payload público del tenant.
  *
@@ -33,6 +39,7 @@ export function serializeAccount(
     countryCode: a.countryCode,
     currencyCode: a.currencyCode,
     timezone: a.timezone,
+    currencyDecimals: currencyDecimalsOf(a.settings),
     limits: effectiveLimits(a.planCode, a.limitsOverride),
     usage,
   };

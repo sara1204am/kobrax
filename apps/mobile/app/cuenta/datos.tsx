@@ -16,7 +16,7 @@ import {
   type AccountForm,
 } from '@/account-form';
 
-const EMPTY: AccountForm = { businessName: '', taxId: '', countryCode: '', currencyCode: '', timezone: '' };
+const EMPTY: AccountForm = { businessName: '', taxId: '', countryCode: '', currencyCode: '', timezone: '', currencyDecimals: '2' };
 
 /**
  * Datos del negocio (CUENTA S1). País y moneda son **un solo selector** (S1-D1): están
@@ -44,8 +44,9 @@ export default function DatosCuentaScreen() {
         taxId: res.data.taxId ?? '',
         countryCode: res.data.countryCode,
         currencyCode: res.data.currencyCode,
-        // Sólo se muestra: ninguna pantalla del móvil la cambia, así que el diff nunca la manda.
+        // Sólo se muestran: ninguna pantalla del móvil los cambia, así que el diff nunca los manda.
         timezone: res.data.timezone ?? '',
+        currencyDecimals: String(res.data.currencyDecimals ?? 2),
       };
       setBefore(f);
       setForm(f);

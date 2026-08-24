@@ -11,6 +11,7 @@ import { COLORS, RADIUS, SPACING, TYPE } from './theme';
 import { Button, ErrorBanner } from './components';
 import { AGENDA_OUTCOME_META, BottomSheet, SectionLabel } from './ui';
 import { money } from './agenda-form';
+import { getAccount } from './account.service';
 import { completeItem, postponeItem, whatsappLink, type AgendaItemDetail, type AgendaListItem } from './agenda.service';
 import { listCatalogCached, type CatalogOption } from './catalogs.service';
 import { queueForLater } from './sync/sync.service';
@@ -50,10 +51,22 @@ export function RegisterSheet({
     }
   }, [visible]);
 
+  // `{{negocio}}` es el nombre de la cuenta: sale de la copia local, así que anda sin señal.
+  const [negocio, setNegocio] = useState('');
+  useEffect(() => {
+    void getAccount().then((r) => {
+      if (r.status === 'ok') setNegocio(r.data.businessName);
+    });
+  }, []);
+
   // Variables de las plantillas de WhatsApp. `{{saldo}}` sale del crédito que el detalle ya trajo.
   const vars = useMemo(
-    () => ({ cliente: client.displayName, saldo: credit ? money(credit.outstandingBalance, credit.currency) : '' }),
-    [client.displayName, credit],
+    () => ({
+      cliente: client.displayName,
+      saldo: credit ? money(credit.outstandingBalance, credit.currency) : '',
+      negocio,
+    }),
+    [client.displayName, credit, negocio],
   );
 
   /**

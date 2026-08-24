@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import {
@@ -11,6 +12,7 @@ import {
   type AccountInfo,
 } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
+import { Section } from '@/components/panel-ui';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
 import { sendJson } from '@/lib/client';
@@ -21,6 +23,7 @@ const formOf = (a: AccountInfo): AccountForm => ({
   countryCode: a.countryCode,
   currencyCode: a.currencyCode,
   timezone: a.timezone ?? '',
+  currencyDecimals: String(a.currencyDecimals ?? 2),
 });
 
 /**
@@ -108,12 +111,28 @@ export function BusinessForm({ account }: { account: AccountInfo }) {
     router.refresh();
   }
 
+  // El monto de muestra de cada opción de decimales, en la moneda que la cuenta tiene puesta:
+  // «2 decimales · Bs 1.250,50» se elige sin explicación.
+  const ejemplo = (d: number) => {
+    try {
+      return new Intl.NumberFormat('es-BO', {
+        style: 'currency',
+        currency: form.currencyCode || 'BOB',
+        minimumFractionDigits: d,
+        maximumFractionDigits: d,
+      }).format(1250.5);
+    } catch {
+      return '';
+    }
+  };
+
   return (
-    // La caja blanca la pone la `Section` que lo envuelve: dos cajas anidadas se veían como un
-    // recuadro dentro de otro.
-    <form onSubmit={save} className="space-y-5">
+    // Un solo <form> y un solo Guardar para las dos secciones: es el mismo PATCH, y dos botones
+    // serían dos maneras de perder la mitad de los cambios.
+    <form onSubmit={save} className="space-y-6">
       <ErrorBanner message={error} />
 
+      <Section title={t('businessData')} inner="space-y-5 p-6">
       <Field label={t('businessName')}>
         <Input
           value={form.businessName}
@@ -133,28 +152,6 @@ export function BusinessForm({ account }: { account: AccountInfo }) {
           maxLength={40}
           placeholder={t('taxIdPlaceholder')}
         />
-      </Field>
-
-      {/*
-        País y moneda son UN campo: van acoplados (decisión S1-D1 del móvil) y por eso no se
-        pueden combinar mal. `<select>` nativo — no hay dropdown que valga la pena escribir
-        para seis opciones.
-      */}
-      <Field label={t('country')}>
-        <Select
-          value={form.countryCode}
-          onChange={(e) => {
-            const picked = countries.find((c) => c.code === e.target.value);
-            if (picked) setForm({ ...form, countryCode: picked.code, currencyCode: picked.currency });
-          }}
-          disabled={!editable}
-        >
-          {countries.map((c) => (
-            <option key={c.code} value={c.code}>
-              {c.name} · {c.currency} ({c.symbol})
-            </option>
-          ))}
-        </Select>
       </Field>
 
       {/*
@@ -194,6 +191,56 @@ export function BusinessForm({ account }: { account: AccountInfo }) {
           )}
         </span>
       </Field>
+
+      {/*
+        Lo personal —foto, teléfono, QR de cobro— vive en Mi perfil, no acá: es de la persona,
+        no del negocio. Sin este puente, quien busca su QR abre Cuenta y no lo encuentra.
+      */}
+      <p className="border-t border-k-border pt-4 text-[13px] text-k-text-2">
+        {t('profileHint')}{' '}
+        <Link href="/settings/perfil" className="font-medium text-k-purple hover:underline">
+          {t('profileLink')}
+        </Link>
+      </p>
+      </Section>
+
+      <Section title={t('financialData')} inner="space-y-5 p-6">
+      {/*
+        País y moneda son UN campo: van acoplados (decisión S1-D1 del móvil) y por eso no se
+        pueden combinar mal. `<select>` nativo — no hay dropdown que valga la pena escribir
+        para seis opciones.
+      */}
+      <Field label={t('country')}>
+        <Select
+          value={form.countryCode}
+          onChange={(e) => {
+            const picked = countries.find((c) => c.code === e.target.value);
+            if (picked) setForm({ ...form, countryCode: picked.code, currencyCode: picked.currency });
+          }}
+          disabled={!editable}
+        >
+          {countries.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.name} · {c.currency} ({c.symbol})
+            </option>
+          ))}
+        </Select>
+      </Field>
+
+      <Field label={t('decimals')} hint={t('decimalsHint')}>
+        <Select
+          value={form.currencyDecimals}
+          onChange={(e) => setForm({ ...form, currencyDecimals: e.target.value })}
+          disabled={!editable}
+        >
+          {[2, 1, 0].map((d) => (
+            <option key={d} value={String(d)}>
+              {t('decimalsValue', { n: d })} · {ejemplo(d)}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      </Section>
 
       {editable && (
         <div className="flex justify-end">

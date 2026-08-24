@@ -20,4 +20,7 @@ export class UpdateAccountDto {
   // IANA de verdad, no cualquier string: una zona basura guardada a mano hacía caer el reloj
   // del tenant a UTC en silencio — exactamente el bug que TenantClockService existe para evitar.
   @IsOptional() @IsTimeZone() timezone?: string;
+  // String porque sale de un <select> y el diff de shared es de strings; el service lo numeriza
+  // al guardarlo en settings.
+  @IsOptional() @IsIn(['0', '1', '2']) currencyDecimals?: string;
 }

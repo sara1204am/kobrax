@@ -20,6 +20,11 @@ export interface AccountInfo {
   currencyCode: string;
   timezone: string | null;
   /**
+   * Cuántos decimales muestran los montos (0–2, default 2). Preferencia de la cuenta: una
+   * cartera que presta en enteros no quiere leer «,00» en cada renglón. Vive en `settings`.
+   */
+  currencyDecimals: number;
+  /**
    * Los topes que rigen para esta cuenta: los del plan con su excepción ya aplicada.
    *
    * Viene resuelto del servidor y no como `planCode` + excepción a mano, porque si cada pantalla
@@ -54,6 +59,8 @@ export interface AccountPatch {
   countryCode?: string;
   currencyCode?: string;
   timezone?: string | null;
+  /** Viaja como string ('0'|'1'|'2') porque sale de un `<select>` y el diff es de strings. */
+  currencyDecimals?: string;
 }
 
 /** `GET /users/me/profile`. */
@@ -88,6 +95,8 @@ export interface AccountForm {
    * (`TZ_BY_COUNTRY`). La edita la web (S1-D2); el móvil la muestra y no la toca.
    */
   timezone: string;
+  /** '0'|'1'|'2' — string porque es un `<select>`. La edita la web; el móvil sólo la lee. */
+  currencyDecimals: string;
 }
 
 export interface ProfileForm {

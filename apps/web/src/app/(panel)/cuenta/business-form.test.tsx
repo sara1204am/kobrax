@@ -21,6 +21,7 @@ const ACCOUNT: AccountInfo = {
   countryCode: 'BO',
   currencyCode: 'BOB',
   timezone: 'America/La_Paz',
+  currencyDecimals: 2,
   limits: PLANS.PROFESSIONAL.limits,
   usage: { users: 3, credits: 120, clients: 90, photosPerMonth: 40, actionsPerMonth: 12 },
 };
@@ -128,6 +129,22 @@ describe('BusinessForm — sólo se manda lo que cambió', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
     expect(enviado).toEqual({ timezone: null });
+  });
+
+  it('cambiar los decimales manda sólo currencyDecimals, como string del select', async () => {
+    let enviado: unknown;
+    server.use(
+      http.patch('*/api/account/me', async ({ request }) => {
+        enviado = await request.json();
+        return HttpResponse.json({ ...ACCOUNT, currencyDecimals: 0 });
+      }),
+    );
+
+    renderForm();
+    await userEvent.selectOptions(screen.getByLabelText(/Decimales de los montos/), '0');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    expect(enviado).toEqual({ currencyDecimals: '0' });
   });
 
   it('el botón «usar la de este equipo» pone la zona del navegador, aunque no sea de América', async () => {

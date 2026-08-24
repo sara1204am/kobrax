@@ -1,3 +1,4 @@
+import { money, setMoneyDecimals } from './agenda-form';
 import {
   COUNTRY_OPTIONS,
   diffAccount,
@@ -28,6 +29,8 @@ const account = (over: Partial<AccountForm> = {}): AccountForm => ({
   taxId: '123456',
   countryCode: 'BO',
   currencyCode: 'BOB',
+  timezone: '',
+  currencyDecimals: '2',
   ...over,
 });
 
@@ -186,5 +189,24 @@ describe('roleOptions (S2)', () => {
     const [manager] = roleOptions([{ id: 'r3', name: 'MANAGER' }]);
     expect(manager!.label).toBe('Gerente');
     expect(manager!.hint).toBeUndefined();
+  });
+});
+
+describe('money con los decimales de la cuenta (Config. financiera)', () => {
+  afterEach(() => setMoneyDecimals(2));
+
+  it('respeta la preferencia: 0 decimales muestra enteros', () => {
+    setMoneyDecimals(0);
+    expect(money(1250.5, 'BOB')).not.toContain(',');
+    expect(money(1250.5, 'XXX')).toBe('1251 XXX');
+  });
+
+  it('el default es 2, el comportamiento de siempre', () => {
+    expect(money(1250.5, 'XXX')).toBe('1250.50 XXX');
+  });
+
+  it('un valor basura cae al default, no revienta el formateo', () => {
+    setMoneyDecimals(99);
+    expect(money(1250.5, 'XXX')).toBe('1250.50 XXX');
   });
 });
