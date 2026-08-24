@@ -100,34 +100,45 @@ export class PlanToolsService {
     return account;
   }
 
-  /**
-   * `audit_logs.user_id` es NOT NULL y acá no hay request: la entrada va **a nombre del dueño**
-   * de la cuenta, con `via` diciendo que la mano fue el CLI. Sin dueño (no debería pasar) se
-   * loguea y no se audita — la operación vale más que su rastro.
-   */
-  private async auditar(
+  private auditar(
     tx: PrismaClient,
     accountId: string,
     via: string,
     change: { before: unknown; after: unknown },
   ): Promise<void> {
-    const owner = await tx.userAccount.findFirst({ where: { isOwner: true }, select: { userId: true } });
-    if (!owner) {
-      this.logger.warn(`Cuenta ${accountId} sin dueño: el cambio quedó sin entrada de auditoría.`);
-      return;
-    }
-    await tx.auditLog.create({
-      data: {
-        accountId,
-        userId: owner.userId,
-        action: 'UPDATE',
-        entity: 'account',
-        entityId: accountId,
-        before: change.before as never,
-        after: { ...(change.after as Record<string, unknown>), via } as never,
-      },
-    });
+    return auditAsOwner(tx, this.logger, accountId, via, change);
   }
+}
+
+/**
+ * `audit_logs.user_id` es NOT NULL y en una tarea de sistema no hay request: la entrada va
+ * **a nombre del dueño** de la cuenta, con `via` diciendo que la mano fue el CLI o el job. Sin
+ * dueño (no debería pasar) se loguea y no se audita — la operación vale más que su rastro.
+ * La usan la palanca (L3) y el job de vencimientos (L4).
+ */
+export async function auditAsOwner(
+  tx: PrismaClient,
+  logger: Logger,
+  accountId: string,
+  via: string,
+  change: { before: unknown; after: unknown },
+): Promise<void> {
+  const owner = await tx.userAccount.findFirst({ where: { isOwner: true }, select: { userId: true } });
+  if (!owner) {
+    logger.warn(`Cuenta ${accountId} sin dueño: el cambio quedó sin entrada de auditoría.`);
+    return;
+  }
+  await tx.auditLog.create({
+    data: {
+      accountId,
+      userId: owner.userId,
+      action: 'UPDATE',
+      entity: 'account',
+      entityId: accountId,
+      before: change.before as never,
+      after: { ...(change.after as Record<string, unknown>), via } as never,
+    },
+  });
 }
 
 /** El JSON del operador es entrada de teclado: se valida acá, con el error diciendo qué corregir. */

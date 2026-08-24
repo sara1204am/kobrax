@@ -361,9 +361,22 @@ Un script, con el patrón que ya usa `arrears:run` (`modules/arrears/run-once.ts
 
 ---
 
-### L4 · Prueba, caída al FREE y cuentas dormidas · **1 día**
+### L4 · Prueba, caída al FREE y cuentas dormidas · ✅ **CONSTRUIDO (23/08)**
 
-Un job diario, mismo patrón que `arrears:run`:
+> **Estado:** hecho y verde — API 721 (+10). `PlanLifecycleService` corre solo cada 6 h (patrón
+> `arrears:run`, idempotente) y a mano con `pnpm --filter @kobrax/api plan:lifecycle [accountId]`.
+> Smoke real: una prueba fabricada vencida cayó a FREE + ACTIVE, conservó su `limits_override` y
+> su `trialEndsAt` como constancia, y la segunda corrida fue no-op (el guard es `status`, que dejó
+> de ser TRIAL).
+>
+> **Tres cosas quedaron distintas de la tabla de abajo:** (1) la **suspensión por falta de pago
+> no vive en el job** — sin pasarela no hay señal que detectar; es la palanca de L3
+> (`plan:set -- --plan FREE`), a mano. (2) De las dormidas se construyó **el aviso de los 6
+> meses** (correo al dueño, marca `dormantWarnedAt` en settings que se limpia sola cuando alguien
+> vuelve a entrar); el **sólo-lectura de los 9 meses NO existe**: necesita un modo lectura que la
+> API no tiene y el archivado de fotos que bloquea L5 — se retoma con L5. (3) La caída de la
+> prueba avisa a los dos lados: notificación al dueño explicando el congelamiento, y **correo de
+> venta hacia adentro** — una prueba que venció es la llamada comercial más caliente que hay.
 
 | Regla | Qué hace |
 |---|---|
@@ -431,15 +444,15 @@ anterior.
 | **L1** | ✅ El freno que sostiene el precio | **hecho** | — |
 | **L2** | ✅ Los avisos del 80% | **hecho** | — |
 | **L3** | ✅ La palanca sin SQL a mano | **hecho** | — |
-| **L4** | Prueba, caída al FREE, dormidas | **1 d** | Parcialmente: la caída al FREE conviene tenerla antes del primer cliente que deje de pagar |
-| | **Subtotal vendible** | **6 días** | |
+| **L4** | ✅ Prueba, caída al FREE, dormidas (aviso 6 m; sólo-lectura 9 m queda con L5) | **hecho** | — |
+| | **Subtotal vendible** | **✅ completo** | |
 | **L5** | Retención de fotos | 1 d | Bloqueada por S3/R2 |
 | **L6** | Sucursales | 3–5 d | Es otro producto |
 
-✅ **El camino corto para poder cobrar está hecho** (L0.5 + L0 + L1): el cliente elige su plan al
-entrar, FREE y PROFESSIONAL son planes de verdad, y la diferencia entre uno y otro se siente en la
-primera semana — que es exactamente lo que busca la grilla. **Lo que queda de esta serie es
-opcional**: avisos (L2), la palanca sin SQL (L3) y el job de vencimientos (L4).
+✅ **La serie vendible está completa** (L0.5 + L0 + L1 + L2 + L3 + L4): el cliente elige su plan
+al entrar, los topes frenan o avisan según su naturaleza, la prueba vence y cae sola, y la
+operación tiene su palanca sin SQL. Quedan **L5** (retención de fotos + el sólo-lectura de las
+dormidas — bloqueadas por S3/R2) y **L6** (sucursales, que es un módulo, no un límite).
 
 ---
 

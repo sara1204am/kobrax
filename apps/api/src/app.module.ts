@@ -22,6 +22,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { DashboardsModule } from './modules/dashboards/dashboards.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { CryptoModule } from './common/crypto/crypto.module';
+import { PlanLifecycleModule } from './common/plan/plan-lifecycle.module';
 import { TenantContextModule } from './common/context/tenant-context.module';
 import { AuditModule } from './common/audit/audit.module';
 import { EventBusModule } from './common/events/event-bus.module';
@@ -51,6 +52,7 @@ import { RateLimitGuard } from './common/guards/rate-limit.guard';
     FieldModule,
     PaymentsModule,
     NotificationsModule,
+    PlanLifecycleModule,
     AgendaModule,
     CatalogsModule,
     AnalyticsModule,
