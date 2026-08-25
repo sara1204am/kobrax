@@ -53,3 +53,6 @@ apps/api/uploads/
 
 # Evidencia subida en runtime (no versionar)
 apps/api/uploads/
+
+# Dumps de pg_dump (BACKUP_DIR). Son la base entera: nunca al repo.
+apps/api/backups/

@@ -159,6 +159,12 @@ export function ClientCard({
         badge={<Badge tone={STATUS_TONE[shown.status]}>{t(`clientStatus.${shown.status}`)}</Badge>}
         actions={
           <>
+            {/* Navegación llana, no `fetch`: así el navegador maneja la descarga solo, con el
+                `Content-Disposition` que manda el backend. Revela PII (igual que «Mostrar») y
+                la API lo audita como `client/PII_REVEAL`. */}
+            <a href={`/api/clients/${client.id}/pdf`} className="text-[13px] font-medium text-k-purple hover:underline">
+              {t('downloadPdf')}
+            </a>
             {/* La baja no se ofrece si hay plata en la calle: la API la rechaza igual, pero un
                 botón que siempre falla enseña a desconfiar de la pantalla. */}
             {canWrite && !hasActiveCredits && shown.status !== 'INACTIVE' && (

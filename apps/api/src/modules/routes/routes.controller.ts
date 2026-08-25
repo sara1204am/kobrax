@@ -1,10 +1,11 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, StreamableFile, UseGuards } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RoutesService } from './routes.service';
+import { buildRoutePdf } from './route-pdf';
 import { AddStopDto, CreateRouteDto, GenerateRouteDto, ListRoutesQueryDto, UpdateRouteDto, UpdateStopDto } from './dto/route.dto';
 
 @Controller('routes')
@@ -46,6 +47,15 @@ export class RoutesController {
   @Roles(Permission.ROUTE_READ)
   updateStatus(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateRouteDto) {
     return this.routes.updateStatus(id, dto);
+  }
+
+  /** La hoja de ruta impresa: mismas paradas que `findOne` (ya revelado y auditado), en PDF. */
+  @Get(':id/pdf')
+  @Roles(Permission.ROUTE_READ)
+  async pdf(@Param('id', ParseUUIDPipe) id: string): Promise<StreamableFile> {
+    const { route, ...ctx } = await this.routes.pdfBundle(id);
+    const buffer = await buildRoutePdf(route, ctx);
+    return new StreamableFile(buffer, { type: 'application/pdf', disposition: 'attachment; filename="hoja-de-ruta.pdf"' });
   }
 
   /** Vista previa (S3): la polilínea por las calles, distancia, duración y el orden sugerido. */

@@ -17,6 +17,7 @@ export type NavKey =
   | 'payments'
   | 'team'
   | 'account'
+  | 'export'
   | 'profile'
   | 'security';
 
@@ -27,6 +28,13 @@ export interface NavItem {
   permission: Permission | null;
   /** `false` mientras el módulo no exista: se pinta en gris y **no navega**. */
   built: boolean;
+  /**
+   * No se dibuja en el sidebar, pero sigue contando para las migas de pan (`crumbsFor`).
+   * Es el caso de `security`: ahora vive dentro de Mi perfil como su sección de Seguridad,
+   * así que como ítem propio del menú sobra — pero `/settings/security/sessions` sigue
+   * necesitando una miga que lo lleve de vuelta al hub.
+   */
+  hidden?: boolean;
 }
 
 /**
@@ -47,8 +55,9 @@ export const NAV: NavItem[] = [
   { label: 'payments', href: '/pagos', permission: Permission.PAYMENT_READ, built: true },
   { label: 'team', href: '/equipo', permission: Permission.USER_READ, built: true },
   { label: 'account', href: '/cuenta', permission: Permission.ACCOUNT_READ, built: true },
+  { label: 'export', href: '/exportar', permission: Permission.REPORT_EXPORT, built: true },
   { label: 'profile', href: '/settings/perfil', permission: null, built: true },
-  { label: 'security', href: '/settings/security', permission: null, built: true },
+  { label: 'security', href: '/settings/security', permission: null, built: true, hidden: true },
 ];
 
 /**
@@ -62,7 +71,9 @@ export const NAV: NavItem[] = [
  */
 export function visibleNav(permissions: string[]): NavItem[] {
   const granted = new Set(permissions);
-  return NAV.filter((item) => item.permission === null || granted.has(item.permission));
+  return NAV.filter(
+    (item) => !item.hidden && (item.permission === null || granted.has(item.permission)),
+  );
 }
 
 /**

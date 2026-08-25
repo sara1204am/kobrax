@@ -8,6 +8,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { serializeRoute, serializeStop } from './routes.serializer';
+import type { RoutePdfContext } from './route-pdf';
 import { OsrmService, type OsrmRoute, type OsrmTrip } from './osrm.service';
 import { AddStopDto, CreateRouteDto, GenerateRouteDto, ListRoutesQueryDto, UpdateRouteDto, UpdateStopDto } from './dto/route.dto';
 import {
@@ -376,6 +377,26 @@ export class RoutesService {
       await this.audit.record({ entity: 'route', entityId: id, action: 'PII_REVEAL' });
     }
     return serializeRoute(route, this.crypto);
+  }
+
+  /**
+   * La ruta más lo que el PDF necesita alrededor: la empresa que emite y el nombre del cobrador
+   * (el serializer sólo trae su id, porque `collectorId` es ref suave a `users`).
+   */
+  async pdfBundle(id: string): Promise<{ route: ReturnType<typeof serializeRoute> } & RoutePdfContext> {
+    const route = await this.findOne(id);
+    const [account, profile] = await this.tx((tx) =>
+      Promise.all([
+        tx.account.findUnique({ where: { id: this.tenant.accountId }, select: { businessName: true, currencyCode: true } }),
+        tx.profile.findUnique({ where: { userId: route.collectorId }, select: { firstName: true, lastName: true } }),
+      ]),
+    );
+    return {
+      route,
+      accountName: account?.businessName ?? 'Kobrax',
+      currency: account?.currencyCode ?? undefined,
+      collectorName: profile ? `${profile.firstName} ${profile.lastName}`.trim() : undefined,
+    };
   }
 
   /**

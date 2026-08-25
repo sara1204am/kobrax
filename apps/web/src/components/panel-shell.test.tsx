@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -25,6 +25,12 @@ vi.mock('next/link', () => ({
     </a>
   ),
 }));
+
+// La campanita pide `/api/notifications` al montar; sin este handler cualquier test que
+// renderice el shell revienta con «unhandled request» (MSW en modo estricto).
+beforeEach(() => {
+  server.use(http.get('*/api/notifications', () => HttpResponse.json({ data: [] })));
+});
 
 const USER = { name: 'Sandra Supervisor', email: 'sup@kobrax.demo', role: 'SUPERVISOR', accountId: 'a1' };
 const ACCOUNTS = [

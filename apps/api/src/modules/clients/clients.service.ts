@@ -11,6 +11,7 @@ import { BlindIndexService } from '../../common/crypto/blind-index.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { serializeClient, type PortfolioClient, type PortfolioTotals } from './clients.serializer';
+import type { ClientPdfBundle, ClientPdfContext } from './client-pdf';
 import {
   CreateAttachmentDto,
   CreateClientDto,
@@ -408,6 +409,25 @@ export class ClientsService {
       await this.audit.record({ entity: 'client', entityId: id, action: 'PII_REVEAL' });
     }
     return serializeClient(client, { crypto: this.crypto, reveal });
+  }
+
+  /** Lo que pide el PDF del legajo: el cliente completo (ya audita su propio revelado) + créditos y casos. */
+  async pdfBundle(id: string): Promise<ClientPdfBundle & ClientPdfContext> {
+    const client = await this.findOne(id, true);
+    const [credits, cases, account] = await this.tx((tx) =>
+      Promise.all([
+        tx.credit.findMany({ where: { clientId: id, deletedAt: null }, orderBy: { createdAt: 'desc' } }),
+        tx.collectionCase.findMany({ where: { clientId: id, deletedAt: null }, orderBy: { createdAt: 'desc' } }),
+        tx.account.findUnique({ where: { id: this.tenant.accountId }, select: { businessName: true, currencyCode: true } }),
+      ]),
+    );
+    return {
+      client,
+      credits,
+      cases,
+      accountName: account?.businessName ?? 'Kobrax',
+      currency: account?.currencyCode ?? undefined,
+    };
   }
 
   /**

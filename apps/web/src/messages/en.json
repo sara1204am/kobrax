@@ -23,6 +23,7 @@
       "payments": "Payments",
       "team": "Team",
       "account": "Account",
+      "export": "Export",
       "profile": "My profile",
       "security": "Security"
     },
@@ -49,6 +50,13 @@
     "companyUnavailable": "Company unavailable",
     "switchError": "Could not switch company. Please try again.",
     "logout": "Sign out",
+    "notifications": {
+      "label": "Notifications",
+      "title": "Notifications",
+      "empty": "No notifications",
+      "markAllRead": "Mark all as read",
+      "loadError": "Could not load notifications"
+    },
     "home": {
       "title": "Home",
       "subtitle": "Your collections panel.",
@@ -960,6 +968,7 @@
         "error": "The stop could not be changed."
       },
       "detail": {
+        "downloadPdf": "Download PDF",
         "stops": "Stops",
         "stopsEmpty": "This route has no stops.",
         "summary": "The day",
@@ -1164,6 +1173,25 @@
     "saveError": "Could not save the details",
     "noAccess": "You do not have access to the account details"
   },
+  "exports": {
+    "title": "Export",
+    "subtitle": "Download your account's data: the portfolio as CSV, or everything together as a backup.",
+    "dataTitle": "Portfolio",
+    "items": {
+      "clients": "Clients",
+      "clientsDesc": "Name, document, contact and balance for each person.",
+      "locations": "Locations",
+      "locationsDesc": "The registered addresses, with their client.",
+      "cases": "Overdue",
+      "casesDesc": "Open and closed collection cases, with their credit.",
+      "agenda": "Schedule",
+      "agendaDesc": "Scheduled visits, past and upcoming."
+    },
+    "backupTitle": "Backup",
+    "backup": "Full account backup",
+    "backupHint": "Everything operational —clients, credits, cases, payments, schedule— in a single compressed file. Meant to be kept safe, not opened in a spreadsheet.",
+    "backupAction": "Download backup"
+  },
   "plans": {
     "title": "Your plan",
     "unknown": "{code} plan",
@@ -1303,6 +1331,7 @@
       "profit": "Profit",
       "belowCapital": "With these instalments you will collect less than you lend. You can still save it."
     },
+    "downloadPdf": "Download PDF",
     "archive": "Archive",
     "archived": "Client archived",
     "confirmArchive": {

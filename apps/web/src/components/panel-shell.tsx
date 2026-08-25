@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import type { AuthAccountOption } from '@kobrax/shared';
+import type { AuthAccountOption, NotificationPayload } from '@kobrax/shared';
 import { LocaleSwitch } from './locale-switch';
 import { crumbsFor, type NavItem, type NavKey } from '@/lib/nav';
 import { postJson } from '@/lib/client';
@@ -80,6 +80,7 @@ export function PanelShell({
       <aside className="sticky top-0 hidden h-screen w-[68px] shrink-0 flex-col bg-k-navy lg:flex xl:w-60">
         <Brand />
         <NavList items={nav} pathname={pathname} collapsible />
+        <SidebarIdentity user={user} collapsible />
         <SidebarLogout collapsible />
       </aside>
 
@@ -101,6 +102,7 @@ export function PanelShell({
         <div className="flex h-full flex-col">
           <Brand expanded />
           <NavList items={nav} pathname={pathname} />
+          <SidebarIdentity user={user} />
           <SidebarLogout />
         </div>
       </dialog>
@@ -205,6 +207,90 @@ function NavList({
   );
 }
 
+/**
+ * La campanita: reemplaza al avatar en la topbar, que se fue al sidebar. Pide la lista una vez al
+ * montar —no hay señal de «se abrió el desplegable» en `Dropdown`, que es sobre `<details>`— y
+ * son pocas notificaciones propias, así que no vale la pena esperar al primer click para pedirlas.
+ */
+function NotificationBell() {
+  const t = useTranslations('panel.notifications');
+  const [items, setItems] = useState<NotificationPayload[] | null>(null);
+  const [error, setError] = useState(false);
+
+  async function load() {
+    const res = await fetch('/api/notifications');
+    if (!res.ok) {
+      setError(true);
+      return;
+    }
+    const body = (await res.json()) as { data: NotificationPayload[] };
+    setItems(body.data);
+    setError(false);
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  async function markRead(id: string) {
+    setItems((cur) => cur?.map((n) => (n.id === id ? { ...n, readAt: new Date().toISOString() } : n)) ?? cur);
+    await postJson(`/api/notifications/${id}/read`, {});
+  }
+
+  async function markAllRead() {
+    setItems((cur) => cur?.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })) ?? cur);
+    await postJson('/api/notifications/read-all', {});
+  }
+
+  const unread = items?.filter((n) => !n.readAt).length ?? 0;
+
+  return (
+    <Dropdown
+      label={
+        <span className="relative flex h-9 w-9 items-center justify-center" aria-label={t('label')}>
+          <Icon name="bell" className="h-5 w-5 text-k-text-2" />
+          {unread > 0 && (
+            <span className="absolute right-0.5 top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-k-danger px-1 text-[10px] font-semibold leading-none text-white">
+              {unread > 9 ? '9+' : unread}
+            </span>
+          )}
+        </span>
+      }
+      panelClass="absolute right-0 z-20 mt-1 w-[320px] overflow-hidden rounded-xl border border-k-border bg-white shadow-k-card"
+    >
+      <div className="flex items-center justify-between border-b border-k-border px-3 py-2.5">
+        <p className="text-[13px] font-semibold text-k-text">{t('title')}</p>
+        {unread > 0 && (
+          <button type="button" onClick={() => void markAllRead()} className="text-[12px] font-medium text-k-purple hover:underline">
+            {t('markAllRead')}
+          </button>
+        )}
+      </div>
+
+      <div className="max-h-[360px] overflow-y-auto">
+        {error && <p className="px-3 py-4 text-[13px] text-k-danger">{t('loadError')}</p>}
+        {!error && items?.length === 0 && <p className="px-3 py-4 text-[13px] text-k-text-2">{t('empty')}</p>}
+        {(items ?? []).map((n) => (
+          <button
+            key={n.id}
+            type="button"
+            onClick={() => !n.readAt && void markRead(n.id)}
+            className={`flex w-full items-start gap-2 border-b border-k-border px-3 py-2.5 text-left last:border-b-0 hover:bg-k-bg ${
+              n.readAt ? '' : 'bg-k-highlight/40'
+            }`}
+          >
+            {!n.readAt && <span aria-hidden className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-k-purple" />}
+            <span className={`min-w-0 flex-1 ${n.readAt ? 'pl-3.5' : ''}`}>
+              <span className="block truncate text-[13px] font-medium text-k-text">{n.title}</span>
+              {n.body && <span className="block truncate text-[12px] text-k-text-2">{n.body}</span>}
+            </span>
+          </button>
+        ))}
+      </div>
+    </Dropdown>
+  );
+}
+
 function Topbar({
   user,
   accounts,
@@ -281,38 +367,28 @@ function Topbar({
         <LocaleSwitch />
       </div>
 
-      <Dropdown label={<Avatar user={user} />}>
-        <div className="border-b border-k-border px-3 py-2.5">
-          <p className="truncate text-[14px] font-medium text-k-text">{user.name}</p>
-          <p className="truncate text-[12px] text-k-text-2">{user.email}</p>
-          <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-k-muted">
-            {user.role}
-          </p>
-        </div>
-
-        {canSwitch && (
-          <div className="border-b border-k-border py-1.5 md:hidden">
-            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-k-muted">
-              {t('company')}
-            </p>
-            <AccountList accounts={accounts} activeId={user.accountId} />
+      {/*
+       * Celular: empresa e idioma no entran inline en la topbar (por eso el `hidden md:block` de
+       * arriba), así que quedan acá — su propio desplegable, ya sin la identidad ni «Cerrar
+       * sesión», que se mudaron al pie del sidebar para no repetir lo mismo dos veces.
+       */}
+      <div className="md:hidden">
+        <Dropdown label={<Icon name="account" className="h-5 w-5 text-k-text-2" />}>
+          {canSwitch && (
+            <div className="border-b border-k-border py-1.5">
+              <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-k-muted">
+                {t('company')}
+              </p>
+              <AccountList accounts={accounts} activeId={user.accountId} />
+            </div>
+          )}
+          <div className="px-3 py-2">
+            <LocaleSwitch />
           </div>
-        )}
-        <div className="border-b border-k-border px-3 py-2 md:hidden">
-          <LocaleSwitch />
-        </div>
+        </Dropdown>
+      </div>
 
-        <Link href="/settings/perfil" className={MENU_ITEM}>
-          <Icon name="profile" className="h-[18px] w-[18px] text-k-muted" />
-          {t('nav.profile')}
-        </Link>
-        <Link href="/settings/security" className={MENU_ITEM}>
-          <Icon name="security" className="h-[18px] w-[18px] text-k-muted" />
-          {t('nav.security')}
-        </Link>
-
-        <LogoutItem />
-      </Dropdown>
+      <NotificationBell />
     </header>
   );
 }
@@ -426,6 +502,23 @@ function AccountList({ accounts, activeId }: { accounts: AuthAccountOption[]; ac
 }
 
 /**
+ * Nombre, rol y foto — antes vivían en el desplegable de la topbar, junto a «Mi perfil» y
+ * «Seguridad», que YA están en el menú principal. Repetir ahí la identidad (y no sólo los
+ * accesos) era la única duplicación real; se muda acá, justo arriba de cerrar sesión.
+ */
+function SidebarIdentity({ user, collapsible = false }: { user: ShellUser; collapsible?: boolean }) {
+  return (
+    <div className="flex items-center gap-2.5 border-t border-white/10 px-3 pb-1 pt-3">
+      <Avatar user={user} />
+      <span className={`min-w-0 flex-1 ${collapsible ? 'hidden xl:block' : ''}`}>
+        <span className="block truncate text-[13px] font-medium text-white">{user.name}</span>
+        <span className="block truncate text-[11px] uppercase tracking-wide text-white/50">{user.role}</span>
+      </span>
+    </div>
+  );
+}
+
+/**
  * Cerrar sesión al pie del sidebar, siempre a la vista. Misma salida que el ítem del menú de
  * usuario; en el sidebar colapsado (1024–1279) queda sólo el ícono, con `title` de respaldo.
  */
@@ -451,28 +544,6 @@ function SidebarLogout({ collapsible = false }: { collapsible?: boolean }) {
         <span className={collapsible ? 'hidden xl:inline' : ''}>{t('logout')}</span>
       </button>
     </div>
-  );
-}
-
-function LogoutItem() {
-  const router = useRouter();
-  const t = useTranslations('panel');
-  const [busy, setBusy] = useState(false);
-
-  return (
-    <button
-      type="button"
-      onClick={async () => {
-        setBusy(true);
-        await postJson('/api/auth/logout', {});
-        router.replace('/login');
-      }}
-      disabled={busy}
-      className={MENU_ITEM}
-    >
-      <Icon name="logout" className="h-[18px] w-[18px] text-k-muted" />
-      {t('logout')}
-    </button>
   );
 }
 
@@ -528,7 +599,8 @@ const ICONS: Record<
   | 'phone'
   | 'mail'
   | 'file'
-  | 'upload',
+  | 'upload'
+  | 'bell',
   string
 > = {
   home: 'M4 10.5 12 4l8 6.5M6.5 9.5V20h11V9.5',
@@ -540,6 +612,8 @@ const ICONS: Record<
   payments: 'M3 8h18v9H3zM3 11.5h18M6.5 14.5h2.5',
   team: 'M9 11.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4zM2.8 19.5c0-3.4 2.8-5.2 6.2-5.2s6.2 1.8 6.2 5.2M17 8.4a2.8 2.8 0 0 1 0 4.6M18.5 14.6c2 .6 3.2 2 3.2 3.9',
   account: 'M4.5 20V5.5h9V20M13.5 10.5H20V20M7.5 9h3M7.5 12.5h3M7.5 16h3',
+  // Flecha hacia abajo a una bandeja: lo opuesto de `upload`, a propósito.
+  export: 'M12 4v11m0 0-3.5-3.5M12 15l3.5-3.5M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2',
   profile: 'M12 12.2a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2zM4.8 20.5c0-3.7 3.2-5.8 7.2-5.8s7.2 2.1 7.2 5.8',
   security: 'M12 3.5l7 2.8v5.4c0 3.9-2.9 6.8-7 8.6-4.1-1.8-7-4.7-7-8.6V6.3zM9.2 11.8l2 2 3.6-3.6',
   menu: 'M4 7h16M4 12h16M4 17h16',
@@ -557,6 +631,8 @@ const ICONS: Record<
   // Documentos: la hoja con la esquina doblada, y la nube con la flecha para subir.
   file: 'M13.5 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9zM13.5 3.5V9H19',
   upload: 'M7 16.5a3.5 3.5 0 0 1-.4-7A5 5 0 0 1 16.5 9a3.5 3.5 0 0 1 .5 7M12 20v-8m0 0-2.5 2.5M12 12l2.5 2.5',
+  // La campana: cuerpo + badajo, nada más.
+  bell: 'M6 10.5a6 6 0 0 1 12 0c0 3.4 1 5 2 6H4c1-1 2-2.6 2-6zM10 19a2 2 0 0 0 4 0',
 };
 
 export function Icon({

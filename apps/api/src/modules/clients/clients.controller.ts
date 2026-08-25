@@ -9,6 +9,7 @@ import {
   Patch,
   Post,
   Query,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
@@ -17,6 +18,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ClientsService } from './clients.service';
+import { buildClientPdf } from './client-pdf';
 import {
   CreateAttachmentDto,
   CreateClientDto,
@@ -64,6 +66,15 @@ export class ClientsController {
    */
   findOne(@Param('id', ParseUUIDPipe) id: string, @Query('reveal') reveal?: string) {
     return this.clients.findOne(id, reveal === 'true');
+  }
+
+  /** El legajo del cliente en PDF: mismo revelado auditado que `findOne(id, true)`, para imprimir. */
+  @Get(':id/pdf')
+  @Roles(Permission.CLIENT_READ)
+  async pdf(@Param('id', ParseUUIDPipe) id: string): Promise<StreamableFile> {
+    const { accountName, currency, ...bundle } = await this.clients.pdfBundle(id);
+    const buffer = await buildClientPdf(bundle, { accountName, currency });
+    return new StreamableFile(buffer, { type: 'application/pdf', disposition: 'attachment; filename="legajo-cliente.pdf"' });
   }
 
   @Patch(':id')

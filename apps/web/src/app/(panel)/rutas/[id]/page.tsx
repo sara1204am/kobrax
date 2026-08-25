@@ -125,6 +125,13 @@ export default async function RutaPage({
         // El estado va al lado del nombre: dice QUÉ ES esta ruta, no es una acción. A la derecha
         // quedaba a media pantalla de aquello que califica.
         badge={<Badge tone={ROUTE_STATUS_TONE[route.status]} dot>{t(`status.${route.status}`)}</Badge>}
+        actions={
+          // Navegación llana: el navegador maneja la descarga con el `Content-Disposition` del
+          // backend. Mismo revelado auditado que ya paga esta pantalla al pedir el detalle.
+          <a href={`/api/routes/${route.id}/pdf`} className="text-[13px] font-medium text-k-purple hover:underline">
+            {t('detail.downloadPdf')}
+          </a>
+        }
       />
 
       <div className="space-y-6">

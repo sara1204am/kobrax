@@ -15,16 +15,22 @@ describe('visibleNav', () => {
     );
   });
 
-  it('el admin de la cuenta ve el menú completo', () => {
-    expect(labels(ROLE_PERMISSIONS[RoleType.ACCOUNT_ADMIN])).toEqual(NAV.map((i) => i.label));
+  it('el admin de la cuenta ve el menú completo, salvo los ítems ocultos', () => {
+    expect(labels(ROLE_PERMISSIONS[RoleType.ACCOUNT_ADMIN])).toEqual(
+      NAV.filter((i) => !i.hidden).map((i) => i.label),
+    );
   });
 
   it('sin ningún permiso quedan sólo los ítems que no piden ninguno', () => {
-    expect(labels([])).toEqual(['home', 'profile', 'security']);
+    expect(labels([])).toEqual(['home', 'profile']);
   });
 
   it('un permiso de más no cuela un ítem que no existe en el menú', () => {
-    expect(labels([Permission.AUDIT_READ])).toEqual(['home', 'profile', 'security']);
+    expect(labels([Permission.AUDIT_READ])).toEqual(['home', 'profile']);
+  });
+
+  it('security queda oculto del sidebar: vive dentro de Mi perfil', () => {
+    expect(labels(ROLE_PERMISSIONS[RoleType.ACCOUNT_ADMIN])).not.toContain('security');
   });
 });
 

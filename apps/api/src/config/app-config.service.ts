@@ -23,6 +23,10 @@ export class AppConfigService {
   get appDatabaseUrl() {
     return this.get('APP_DATABASE_URL');
   }
+  /** El rol dueño del esquema (bypassa RLS) — sólo para migraciones y el backup completo. */
+  get databaseUrl() {
+    return this.get('DATABASE_URL');
+  }
   get redisUrl() {
     return this.get('REDIS_URL');
   }

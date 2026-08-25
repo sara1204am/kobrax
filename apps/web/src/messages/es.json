@@ -23,6 +23,7 @@
       "payments": "Pagos",
       "team": "Equipo",
       "account": "Cuenta",
+      "export": "Exportar",
       "profile": "Mi perfil",
       "security": "Seguridad"
     },
@@ -49,6 +50,13 @@
     "companyUnavailable": "Empresa no disponible",
     "switchError": "No se pudo cambiar de empresa. Intenta de nuevo.",
     "logout": "Cerrar sesión",
+    "notifications": {
+      "label": "Notificaciones",
+      "title": "Notificaciones",
+      "empty": "No hay notificaciones",
+      "markAllRead": "Marcar todas como leídas",
+      "loadError": "No se pudieron cargar las notificaciones"
+    },
     "home": {
       "title": "Inicio",
       "subtitle": "Tu panel de cobranzas.",
@@ -960,6 +968,7 @@
         "error": "No se pudo cambiar la parada."
       },
       "detail": {
+        "downloadPdf": "Descargar PDF",
         "stops": "Paradas",
         "stopsEmpty": "Esta ruta no tiene paradas.",
         "summary": "La jornada",
@@ -1164,6 +1173,25 @@
     "saveError": "No se pudieron guardar los datos",
     "noAccess": "No tienes acceso a los datos de la cuenta"
   },
+  "exports": {
+    "title": "Exportar",
+    "subtitle": "Bajá los datos de tu cuenta: la cartera en CSV, o todo junto como backup.",
+    "dataTitle": "Cartera",
+    "items": {
+      "clients": "Clientes",
+      "clientsDesc": "Nombre, documento, contacto y saldo de cada persona.",
+      "locations": "Ubicaciones",
+      "locationsDesc": "Las direcciones registradas, con su cliente.",
+      "cases": "Mora",
+      "casesDesc": "Los casos de cobranza abiertos y cerrados, con su crédito.",
+      "agenda": "Agenda",
+      "agendaDesc": "Las gestiones agendadas, pasadas y futuras."
+    },
+    "backupTitle": "Backup",
+    "backup": "Backup completo de la cuenta",
+    "backupHint": "Todo lo operativo —clientes, créditos, casos, pagos, agenda— en un único archivo comprimido. Pensado para guardarlo a salvo, no para abrirlo en una planilla.",
+    "backupAction": "Descargar backup"
+  },
   "plans": {
     "title": "Tu plan",
     "unknown": "Plan {code}",
@@ -1303,6 +1331,7 @@
       "profit": "Ganancia",
       "belowCapital": "Con estas cuotas vas a cobrar menos de lo que prestás. Se puede guardar igual."
     },
+    "downloadPdf": "Descargar PDF",
     "archive": "Dar de baja",
     "archived": "Cliente dado de baja",
     "confirmArchive": {
