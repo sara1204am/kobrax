@@ -53,7 +53,15 @@ export function ColumnsStep({
   const candidate = columns.columnCandidates.find((c) => c.header === days?.from);
 
   const tracked = trackedFields(config, screen.catalog);
-  const essential = tracked.filter((f) => screen.catalog[f]?.starred);
+  /*
+   * La mora queda FUERA de la lista: ya tiene su tarjeta arriba, con las candidatas del cuadro y el
+   * confirmar en dos pasos. Dibujarla también acá daba un segundo control para el mismo campo que
+   * escribe otro parche — limpia el `in` (en `pdf-blocks` manda al motor a buscar la columna en el
+   * encabezado del bloque: entra toda la cartera con cero días de atraso, sin un solo error) y
+   * arrastra el `calibrated` viejo, que el servidor rechaza con `CALIBRATION_STALE`. Sigue contando
+   * en `configProgress`: sale de la lista, no del progreso.
+   */
+  const essential = tracked.filter((f) => screen.catalog[f]?.starred && f !== DAYS_PAST_DUE);
   const extra = tracked.filter((f) => !screen.catalog[f]?.starred);
   // Los bloqueados no se ofrecen para agregar: ya están arriba, con su aviso si les falta columna.
   const addable = Object.keys(screen.catalog).filter((f) => !tracked.includes(f) && !screen.catalog[f]?.locked);

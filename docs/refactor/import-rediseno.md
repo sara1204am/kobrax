@@ -152,7 +152,6 @@ query, y ninguno de los dos en la corrida real.
 
 **Limitaciones reales:**
 
-- Falta `/code-review` y `/ponytail-review`.
 - `lint` es un `echo` en este repo: no hay linter real que correr.
 - La muestra sigue sin sobrevivir a un refresh de la página. Persistirla exigiría subirla al
   servidor, que es un cambio de alcance mayor.
@@ -187,3 +186,30 @@ exacto; ahora dice cuál es la diferencia y por qué.
 
 Tampoco se subió a `shared` el `fieldStatus` / `trackedFields` / `configProgress`: el móvil no los
 pide. Son funciones puras sobre `ImportConfig`, así que suben tal cual el día que los pida.
+
+---
+
+## 10. Revisiones (26/08) — 5 defectos, todos arreglados
+
+`/code-review` sobre el commit entero y `/ponytail-review` sobre el diff. La validación visual no
+los había visto porque **ninguno se nota mirando la pantalla**: cuatro de los cinco se disparan con
+una configuración que la corrida de prueba no tenía.
+
+| # | Defecto | Por qué no se veía | Arreglo |
+|---:|---|---|---|
+| 1 | **La mora se dibujaba dos veces**, y la fila de la lista escribía otro parche que el de la tarjeta: limpiaba el `in` y arrastraba el `calibrated` viejo | `daysPastDue` es `starred`, así que entra en «Datos necesarios» además de su tarjeta. Cambiarla desde la fila daba 400 (`CALIBRATION_STALE`) — o peor, en `pdf-blocks` **guardaba bien y entraba toda la cartera con cero días de atraso** | sale de la lista, sigue contando en el progreso (`columns-step.tsx`) |
+| 2 | Cambiar la forma con un archivo que no sirve para la forma nueva dejaba **las columnas viejas en pantalla** | `assertFileShape` corre antes de parsear: el `PATCH` sale bien y la relectura falla. El paso 3 seguía abierto ofreciendo encabezados que ya no existen | si la relectura falla, se suelta la muestra y el paso 3 vuelve a bloquearse |
+| 3 | **Sin red, la pantalla quedaba gris y muda hasta recargar** | `fetch` **rechaza** cuando no hay red (no devuelve `ok:false`), y el rechazo se llevaba puesto el `setBusy(false)` | el catch va en `sendJson` y en `postImportFile`, no en la pantalla: **son 37 los llamadores con esta misma forma** |
+| 4 | En `pdf-blocks`, elegir dónde arranca cada crédito **borraba todas las etiquetas y ejemplos** | con `fields: {}` —cuenta nueva o reset— el descarte de bloques vacíos se los llevaba todos (`every` de nada es `true`). Justo el paso que habilita el módulo, y sin salida | el descarte sólo aplica cuando había algo que leer |
+| 5 | `detectLabels(block)` se recorría dos veces por bloque | — | una sola vez |
+
+Tests nuevos: 3 en la web (410/410) + 1 en la API (729/729). Los cuatro afirman el **síntoma**, no
+la implementación: que la mora no tenga dos controles, que el paso 3 se bloquee cuando la muestra
+deja de servir, que `sendJson` conteste en vez de rechazar, y que un PDF sin nada emparejado igual
+traiga columnas.
+
+**Del `/ponytail-review`, no aplicado** (−40 líneas, ninguna cambia comportamiento): el anillo de
+progreso es una segunda dona SVG a mano y `components/dashboard/charts.tsx` ya exporta `Donut`
+—**no se tocó porque cambiaría el look que la dueña validó el 25/08**—; `RowWithName` envuelve las
+5 filas esenciales para no hacer nada en 4; y el «ofrecer igual la columna guardada que no vino en
+esta muestra» está duplicado en `field-row.tsx` y `columns-step.tsx`.

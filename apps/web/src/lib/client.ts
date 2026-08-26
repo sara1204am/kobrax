@@ -16,11 +16,23 @@ export async function sendJson<T = unknown>(
   method: 'POST' | 'PATCH' | 'DELETE' = 'POST',
   headers: Record<string, string> = {},
 ): Promise<JsonResult<T>> {
+  /*
+   * 🔴 `fetch` **rechaza** cuando no hay red (no devuelve una respuesta con `ok:false`), y sin este
+   * catch la promesa rechazada sale por arriba de quien llamó. Los 37 llamadores tienen la misma
+   * forma —`setBusy(true)` → `await` → `setBusy(false)`—, así que el rechazo se lleva puesto el
+   * `setBusy(false)`: la pantalla queda con todos los controles grises, sin mensaje, hasta recargar.
+   *
+   * Se contesta como un fallo más y **sin objeto de error**: `errorText(undefined, …)` cae en
+   * `errors.generic`, que todos los módulos ya tienen traducido. `status: 0` distingue "nunca salió"
+   * de un error del servidor, por si algún día alguien lo quiere mirar.
+   */
   const res = await fetch(path, {
     method,
     headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body),
-  });
+  }).catch(() => null);
+  if (!res) return { ok: false, status: 0, data: {} as JsonResult<T>['data'] };
+
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };
 }

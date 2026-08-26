@@ -111,6 +111,17 @@ describe('pdf-blocks.parser — motor genérico sobre un extracto real', () => {
     }
   });
 
+  it('🔴 recién elegido el recordStart y SIN nada emparejado, igual trae etiquetas y ejemplos', async () => {
+    // Es el estado de una cuenta nueva o recién reseteada: `DEFAULT_IMPORT_CONFIG.fields = {}`. El
+    // descarte de bloques vacíos se los llevaba TODOS (`every` de nada es `true`), así que la
+    // pantalla de Ajustes volvía sin una sola columna que emparejar justo después del paso que
+    // habilita el módulo — y sin emparejar nada, no había forma de salir de ahí.
+    const { labels, samples } = await parsePdfBlocks(bytes(), profile, {});
+
+    assert.ok(labels.includes('No.Credito'), `sin fields tiene que listar igual: ${labels.join(' · ')}`);
+    assert.deepEqual(samples['Cliente'], ['RIOS LAVARDEN BARBARA']);
+  });
+
   it('la firma es opcional: sin `signature` lee igual', async () => {
     const { records } = await parsePdfBlocks(bytes(), { ...profile, signature: undefined }, fields);
     assert.equal(records.length, 1);

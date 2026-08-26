@@ -98,10 +98,14 @@ export async function postImportFile<T>(
   form.append('file', withDeducedType(file));
   if (options.dryRun !== undefined) form.append('dryRun', String(options.dryRun));
 
+  // Sin red `fetch` rechaza, y el rechazo se llevaría puesto el `setBusy(false)` de quien llamó:
+  // la pantalla entera queda gris y muda hasta recargar. Sin `error`, el banner dice `errors.generic`.
   const res = await fetch(`/api/imports/run${options.columnsOnly ? '?columnsOnly=true' : ''}`, {
     method: 'POST',
     body: form,
-  });
+  }).catch(() => null);
+  if (!res) return { ok: false };
+
   const body = (await res.json().catch(() => ({}))) as T & { error?: ApiError };
   return res.ok ? { ok: true, data: body } : { ok: false, error: body.error };
 }

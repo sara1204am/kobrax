@@ -210,6 +210,32 @@ describe('ImportSetup — cambiar la forma del archivo es destructivo y se pregu
     await waitFor(() => expect(patched).toBe(true));
   });
 
+  it('🔴 si la muestra ya no sirve para la forma nueva, se suelta en vez de mentir', async () => {
+    const user = userEvent.setup();
+    renderMapper({ code: { from: 'NRO' } });
+    server.use(
+      http.patch('http://localhost/api/imports/config', () =>
+        HttpResponse.json({ config: { ...CONFIG, profile: { kind: 'pdf-rows' }, fields: {} } }),
+      ),
+    );
+    await withSample(user);
+
+    // El CSV que está en la mano no se puede releer como PDF: `assertFileShape` corre ANTES de
+    // parsear. Dejando las columnas viejas en pantalla, el paso 3 seguía ofreciendo los
+    // encabezados del CSV mientras la config ya era `pdf-rows` — cada columna elegida ahí es una
+    // etiqueta que no existe más.
+    server.use(
+      http.post('http://localhost/api/imports/run', () =>
+        HttpResponse.json({ error: { code: 'FILE_SHAPE_MISMATCH', message: 'Ese archivo no tiene la forma que configuraste.' } }, { status: 400 }),
+      ),
+    );
+    await user.click(screen.getByRole('radio', { name: /Una tabla adentro de un PDF/ }));
+    await user.click(screen.getByRole('button', { name: es.panel.import.setup.shapeConfirmCta }));
+
+    expect(await screen.findByText(es.panel.import.setup.step3Blocked)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Sale de — N° de crédito/)).not.toBeInTheDocument();
+  });
+
   it('sin nada emparejado no molesta: no hay qué perder', async () => {
     const user = userEvent.setup();
     let patched = false;
@@ -301,6 +327,21 @@ describe('ImportSetup —la mora se elige y se confirma en dos pasos', () => {
     // significaría nada — el servidor lo rechaza con CALIBRATION_STALE.
     expect(screen.getByRole('button', { name: es.panel.import.columns.calibrateConfirm })).toBeInTheDocument();
     expect(screen.queryByText(es.panel.import.columns.calibrated)).not.toBeInTheDocument();
+  });
+
+  it('🔴 la mora NO se dibuja además como una fila más de la lista', async () => {
+    const user = userEvent.setup();
+    renderMapper({ daysPastDue: { from: 'ATRASO', calibrated: true } });
+    await withSample(user);
+
+    // Dos controles para el mismo campo escribían parches distintos, y los dos rompían: la fila
+    // limpia el `in` (en `pdf-blocks`, el motor busca la columna donde no está y entra toda la
+    // cartera con cero días de atraso, sin un solo error) y arrastra el `calibrated` viejo, que el
+    // servidor rechaza con CALIBRATION_STALE — sin forma de cumplir desde ese control.
+    expect(screen.queryByLabelText(/Sale de — Días de retraso/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(es.panel.import.columns.moraQuestion)).toBeInTheDocument();
+    // Y sigue contando: sale de la lista, no del progreso (4 esenciales, la mora emparejada).
+    expect(screen.getByText('1/4')).toBeInTheDocument();
   });
 
   it('confirmada, deja de pedirlo', async () => {

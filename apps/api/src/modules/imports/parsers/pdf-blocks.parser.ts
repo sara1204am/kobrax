@@ -177,11 +177,20 @@ export function readBlocks(
     for (const [canonical, src] of Object.entries(fields)) {
       record[canonical] = readField(block, profile, src);
     }
-    // Un bloque del que no se pudo sacar NINGÚN valor no es un registro (cabecera, pie, ruido).
-    if (Object.values(record).every((v) => v === null || v === '')) continue;
+    /*
+     * Un bloque del que no se pudo sacar NINGÚN valor no es un registro (cabecera, pie, ruido).
+     *
+     * 🔴 Sólo se puede afirmar **cuando había algo que leer**. Con `fields` vacío —cuenta nueva o
+     * reset— `record` sale `{}` y `every` de nada es `true`, así que este descarte se llevaba TODOS
+     * los bloques: al elegir dónde arranca cada crédito, la respuesta volvía sin una sola etiqueta
+     * ni ejemplo, que es exactamente lo que hace falta para poder emparejar. Sin emparejado no hay
+     * emparejado posible.
+     */
+    if (Object.keys(fields).length > 0 && Object.values(record).every((v) => v === null || v === '')) continue;
     records.push(record);
 
-    for (const l of detectLabels(block)) labels.add(l);
+    const blockLabels = detectLabels(block);
+    for (const l of blockLabels) labels.add(l);
     // Muestras para la calibración manual (§6.5.1): 3 registros alcanzan para que el usuario
     // reconozca sus datos y decida. Más no ayudan y engordan la respuesta.
     if (records.length <= CANDIDATE_SAMPLES) {
@@ -189,7 +198,7 @@ export function readBlocks(
       collectSamples(block, profile, label, samples);
       // El valor de cada etiqueta leído con el MISMO `readField` que usa la corrida: el ejemplo
       // que se muestra al emparejar es exactamente lo que después se va a importar.
-      for (const l of detectLabels(block)) {
+      for (const l of blockLabels) {
         const raw = readField(block, profile, { from: l })?.trim();
         if (raw) (labelSamples[l] ??= []).push(raw);
       }

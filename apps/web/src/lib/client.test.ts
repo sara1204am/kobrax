@@ -18,6 +18,19 @@ describe('sendJson', () => {
     });
     vi.unstubAllGlobals();
   });
+
+  it('🔴 sin red contesta como fallo en vez de rechazar', async () => {
+    // `fetch` rechaza cuando no hay red. El rechazo salía por arriba de los 37 llamadores, que
+    // tienen todos la misma forma (`setBusy(true)` → await → `setBusy(false)`): se llevaba puesto
+    // el `setBusy(false)` y dejaba la pantalla gris y muda hasta recargar.
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+    const result = await sendJson('/api/imports/config', { source: 'file' }, 'PATCH');
+
+    // Sin `error`: `errorText(undefined, …)` cae en `errors.generic`, que todos los módulos tienen.
+    expect(result).toEqual({ ok: false, status: 0, data: {} });
+    vi.unstubAllGlobals();
+  });
 });
 
 describe('routeByStep', () => {

@@ -106,7 +106,15 @@ export function ImportSetup({ screen }: { screen: ConfigScreen }) {
    * indicara que había que volver a subir el archivo — y es el paso que habilita el módulo entero.
    */
   async function saveAndReread(patch: ImportConfigPatch) {
-    if ((await save(patch)) && sample) await readSample(sample);
+    if (!(await save(patch)) || !sample) return;
+    // Si la muestra ya no se puede leer con lo que se acaba de guardar —cambiar de `rows` a
+    // `pdf-rows` con un CSV en la mano da `FILE_SHAPE_MISMATCH` antes de parsear— hay que soltarla.
+    // Dejándola, el paso 3 sigue abierto ofreciendo los encabezados de la forma anterior, y toda
+    // columna elegida ahí es una etiqueta que ya no existe.
+    if (!(await readSample(sample))) {
+      setColumns(null);
+      setSample(null);
+    }
   }
 
   /** Corre el archivo en seco. Es el `dryRun` que ya existía y que el panel nunca ofreció. */
