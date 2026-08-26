@@ -406,6 +406,7 @@ export class PortfolioImportService {
   async readColumns(file: Buffer): Promise<{
     labels: string[];
     columnCandidates: ColumnCandidate[];
+    samples: Record<string, string[]>;
     recordStartCandidates: { text: string; count: number }[];
     headerCandidates: { anchor: string; preview: string }[];
   }> {
@@ -417,23 +418,23 @@ export class PortfolioImportService {
     const empty = { recordStartCandidates: [], headerCandidates: [] };
     try {
       if (config.profile.kind === 'rows') {
-        const { labels, columnCandidates } = await parseRowsFile(file, config.profile, config.fieldMap);
-        return { labels, columnCandidates, ...empty };
+        const { labels, columnCandidates, samples } = await parseRowsFile(file, config.profile, config.fieldMap);
+        return { labels, columnCandidates, samples, ...empty };
       }
       if (config.profile.kind === 'pdf-rows') {
-        const { labels, columnCandidates, headerCandidates } = await parsePdfRows(
+        const { labels, columnCandidates, samples, headerCandidates } = await parsePdfRows(
           new Uint8Array(file),
           config.profile,
           config.fieldMap,
         );
-        return { labels, columnCandidates, recordStartCandidates: [], headerCandidates };
+        return { labels, columnCandidates, samples, recordStartCandidates: [], headerCandidates };
       }
-      const { labels, columnCandidates, recordStartCandidates } = await parsePdfBlocks(
+      const { labels, columnCandidates, samples, recordStartCandidates } = await parsePdfBlocks(
         new Uint8Array(file),
         config.profile,
         config.fieldMap,
       );
-      return { labels, columnCandidates, recordStartCandidates, headerCandidates: [] };
+      return { labels, columnCandidates, samples, recordStartCandidates, headerCandidates: [] };
     } catch (e) {
       throw new BadRequestException({
         code: 'PARSE_FAILED',

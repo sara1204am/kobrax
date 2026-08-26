@@ -59,8 +59,7 @@
     },
     "home": {
       "title": "Home",
-      "subtitle": "Your collections panel.",
-      "building": "Modules show up in the menu as they get built."
+      "subtitle": "Your collections panel."
     },
     "dashboard": {
       "title": "Dashboard",
@@ -212,10 +211,6 @@
       "max": "Max",
       "from": "From",
       "to": "To",
-      "moreFilters": "+ More filters",
-      "lessFilters": "− Fewer filters",
-      "removeFilter": "Remove filter",
-      "clearAll": "Clear all",
       "retry": "Retry",
       "selectAll": "Select all on this page",
       "selectRow": "Select this loan",
@@ -224,7 +219,6 @@
     "import": {
       "title": "Portfolio import",
       "subtitle": "Upload today's file, see what will change, and only then confirm.",
-      "backToRun": "Back to import",
       "run": {
         "dropTitle": "Drop the file here",
         "pick": "Choose a file",
@@ -269,10 +263,44 @@
           "fields": "The file columns are not mapped to your fields yet."
         }
       },
+      "setup": {
+        "title": "Set up your import",
+        "subtitle": "Get your file ready before importing the portfolio. Everything saves on its own.",
+        "backToRun": "Back to import",
+        "steps": {
+          "here": "Current step:",
+          "file": "File",
+          "config": "Setup",
+          "review": "Review",
+          "import": "Import"
+        },
+        "saving": "Saving…",
+        "savedAll": "All changes are saved",
+        "summary": "Summary",
+        "summaryNoFile": "No file uploaded yet",
+        "summaryMoraPending": "Not confirmed yet",
+        "step1": "Your file",
+        "step1Hint": "Upload one of the files your system sends you. Nothing gets imported: we only look at what it carries.",
+        "step2": "Who does this portfolio belong to?",
+        "step2Hint": "It sets how far the import reaches: outside that scope nothing is touched.",
+        "step3": "Match the columns with your fields",
+        "step3Hint": "Pick the column of your file that matches each field, looking at the real values.",
+        "step3Blocked": "Upload a sample file to see which columns it carries.",
+        "step4": "Import rules",
+        "step4Hint": "What to do with what the file does not carry, and who ends up owning each credit.",
+        "shapeQuestion": "How is your file organised?",
+        "shapeHint": "Pick the one that matches the file you just uploaded. If it is wrong, the file reads empty.",
+        "shapeConfirmTitle": "Change how it is organised?",
+        "shapeConfirmText": "You have {n, plural, one {# matched column} other {# matched columns}} and they will be cleared: each file shape carries its own columns. What you already imported is not touched.",
+        "shapeConfirmCta": "Yes, change it",
+        "scopeQuestion": "Who does this portfolio belong to?",
+        "scopePending": "Pick who, to save the scope. Until then the previous one still applies.",
+        "sourceFileHint": "The office uploads a file and the portfolio is updated from it.",
+        "sourceToManual": "Load by hand",
+        "sourceToFile": "Import from a file"
+      },
       "settings": {
         "link": "Settings",
-        "title": "Import settings",
-        "subtitle": "How your system's file gets read. Saved as you go.",
         "source": "Where the portfolio comes from",
         "sourceFile": "From a file the office uploads",
         "sourceManual": "Loaded by hand",
@@ -283,52 +311,82 @@
         "scopeRefGone": "The one you chose is no longer available",
         "scopeSole": "The whole portfolio goes to {name}.",
         "shape": "What the file looks like",
-        "shapeWarning": "Changing the shape clears the column mapping and you have to do it again.",
         "carriesAssignee": "The file says who each credit belongs to",
         "carriesAssigneeHint": "If it does not, you assign collectors from Portfolio.",
         "absent": "Credits the file does not carry",
         "askOnLogin": "Offer to import at sign-in",
         "askOnLoginHint": "Applies to the collector's app, not to this panel.",
         "columns": "Map columns",
-        "columnsHint": "Which column of the file each field comes from.",
-        "columnsCta": "Map",
         "reset": "Reset to factory settings",
         "resetTitle": "Reset to factory settings?",
         "resetText": "The column mapping, the scope and the file shape are cleared. What you already imported is untouched.",
         "resetCta": "Yes, reset",
         "cancel": "Cancel",
-        "saved": "Saved",
         "saveError": "Could not save."
       },
       "columns": {
-        "title": "Map columns",
-        "subtitle": "Upload a sample file and tell us where each field comes from.",
         "sample": "Sample file",
         "pickSample": "Upload a sample file",
-        "changeSample": "Change the sample",
+        "changeSample": "Change file",
         "reading": "Reading the file…",
-        "noSample": "Without a sample file there are no columns to map.",
-        "noSampleText": "Upload one of the files your system sends you. Nothing gets imported: we only look at what it carries.",
-        "field": "Field",
+        "noSampleText": "No file uploaded yet.",
+        "noLabels": "The file was read but carries no recognisable column. Usually it is organised in another shape: try another option above.",
+        "seeDetected": "{n, plural, one {# detected column} other {# detected columns}}",
+        "status": "Setup status",
+        "statusReadyCount": "{n, plural, one {# correct} other {# correct}}",
+        "statusReviewCount": "{n, plural, one {# to review} other {# to review}}",
+        "statusMissingCount": "{n, plural, one {# without a column} other {# without a column}}",
+        "statusBlocking": "{n, plural, one {# required field is} other {# required fields are}} missing: the file cannot be imported without it.",
+        "statusOptional": "Everything required is set. {n, plural, one {# optional field has} other {# optional fields have}} no column.",
+        "statusReview": "Almost there. Confirm the days past due to finish.",
+        "statusDone": "All set. You can import your portfolio.",
+        "required": "Required",
         "from": "Comes from",
         "state": "How it is treated",
         "notMapped": "Not mapped",
+        "takenBy": "{column} — already feeds “{field}”",
+        "examples": "Examples:",
+        "noExamples": "This column has no values in the first rows.",
         "locked": "Always imported",
-        "add": "Add a field",
-        "remove": "Remove",
-        "nameOrder": "How the name comes",
+        "rowStatus": {
+          "ready": "Ready",
+          "review": "Confirm",
+          "missing": "Missing",
+          "off": "Not imported"
+        },
+        "matchCount": "{ready} of {total} ready",
+        "essential": "Required fields",
+        "extra": "Additional fields",
+        "add": "Add more fields",
+        "addHint": "Add the ones your file carries and you want to keep. Once added they show up above, to pick a column for them.",
+        "remove": "Remove from the list",
+        "nameOrder": "How does the name come?",
         "namePreview": "It would be: surnames “{lastName}”, first names “{firstName}”",
-        "namePreviewNone": "Upload a sample to see how a real name would be split.",
+        "namePreviewNone": "Map the client to see how a real name would be split.",
         "recordStart": "Where each credit starts",
         "recordStartHint": "The text repeated at the top of each block. Its count is how many credits there are.",
         "recordStartCount": "{n} credits",
         "headerRow": "Which row holds the headers",
         "headerRowHint": "The report has a title and a date before the table; point at the header row.",
-        "calibrate": "Days past due",
-        "calibrateHint": "Choose the column, look at the values and only then confirm. This is what decides who is in arrears.",
+        "calibrate": "First confirm the days past due",
+        "calibrateHint": "This is the field that decides who is in arrears. Choose the column, look at the values and only then confirm.",
+        "moraQuestion": "Which column holds the days past due?",
+        "moraColClient": "Client",
+        "moraColDays": "Days past due",
+        "moraCheck": "Are these values correct?",
+        "moraCheckHint": "If those are the days past due for those clients, confirm. If not, pick another column.",
         "calibrateConfirm": "Yes, those are the days past due",
-        "calibrated": "Confirmed",
-        "noCandidates": "The sample file has no numeric column that would work."
+        "calibrated": "Days past due confirmed",
+        "calibratedHint": "You can change the column whenever you want: doing so requires confirming again.",
+        "noCandidates": "The sample file has no numeric column that would work.",
+        "testTitle": "Want to check how your data will look?",
+        "testHint": "The whole file is read and we show you what would happen. Nothing is saved.",
+        "testBlocked": "Upload a file and fill in the required fields to be able to test.",
+        "testCta": "Test without importing",
+        "testResult": "{created} new · {updated} updated · {setCurrent} set current",
+        "testOk": "The data looks right",
+        "testWarned": "{n, plural, one {# row would be left out} other {# rows would be left out}}",
+        "continue": "Save and continue"
       },
       "profiles": {
         "rows": {
@@ -379,16 +437,13 @@
       },
       "fieldStates": {
         "required": {
-          "label": "Required",
-          "hint": "If the file does not carry it, that credit is not imported."
+          "label": "Required"
         },
         "optional": {
-          "label": "Optional",
-          "hint": "If it is missing, it is left as it is."
+          "label": "Optional"
         },
         "off": {
-          "label": "Do not import",
-          "hint": "Whatever the file says is ignored."
+          "label": "Do not import"
         }
       },
       "nameOrder": {
@@ -629,7 +684,6 @@
       "unassigned": "No collector",
       "noTime": "No time",
       "overdueBadge": "Overdue",
-      "itemCount": "{n} items",
       "noReasons": "This company has not loaded any reasons yet. They are managed in the catalogs.",
       "actions": {
         "open": "Open the item",
@@ -850,7 +904,6 @@
         "areaRadius": "Radius",
         "areaKm": "{km} km",
         "areaMeters": "{m} m",
-        "inArea": "{n} in the area",
         "mapNoPoints": "The ones picked have no location on file, so they cannot be drawn.",
         "mapBig": "Enlarge the map",
         "mapSmall": "Shrink the map",
@@ -898,16 +951,15 @@
             "createdAt": "Most recent"
           },
           "zone": "Zone",
-          "anyZone": "All",
           "balance": "Balance",
           "min": "From",
           "max": "To",
           "lastVisit": "Last visit",
           "visitAges": {
-            "never": "Never visited",
             "7": "No visit in 7 days",
             "15": "No visit in 15 days",
-            "30": "No visit in 30 days"
+            "30": "No visit in 30 days",
+            "never": "Never visited"
           },
           "promise": "Promise to pay",
           "withPromise": "With promise",
@@ -1275,9 +1327,7 @@
     "edit": "Edit",
     "reveal": "Show full details",
     "revealing": "Opening…",
-    "revealed": "Full details shown",
     "revealError": "Could not show the full details",
-    "maskedHint": "Sensitive data is hidden. Showing it in full is recorded.",
     "clientType": {
       "PERSON": "Person",
       "COMPANY": "Company"
@@ -1291,7 +1341,6 @@
     "newTitle": "New client",
     "newSubtitle": "A first name, a last name and one phone is enough to save.",
     "editTitle": "Edit client",
-    "editSubtitle": "Only what you change is sent.",
     "save": "Save",
     "cancel": "Cancel",
     "saved": "Saved",
@@ -1347,8 +1396,6 @@
     "attachmentRemoved": "Attachment removed",
     "noCredits": "This client has no credits.",
     "creditsDenied": "Your role cannot see credits.",
-    "ofPrincipal": "of {amount}",
-    "installmentOf": "instalment {amount}",
     "dueOn": "due {date}",
     "noCode": "no code",
     "imported": "Imported",
@@ -1445,7 +1492,6 @@
       "risk": "Risk segment",
       "createdAt": "Added",
       "principal": "Principal",
-      "rate": "Rate",
       "installments": "Instalments",
       "currency": "Currency",
       "disbursedAt": "Disbursed",
@@ -1475,7 +1521,6 @@
       "OTHER": "Other"
     },
     "primary": "primary",
-    "noPin": "no map pin",
     "notContactable": "do not contact",
     "noContacts": "No phones on file.",
     "noLocations": "No addresses on file.",

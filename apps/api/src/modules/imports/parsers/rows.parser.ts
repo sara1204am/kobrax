@@ -21,6 +21,8 @@ export interface RowsResult {
   /** Encabezados encontrados — la lista para emparejar (§6.5). */
   labels: string[];
   columnCandidates: ColumnCandidate[];
+  /** Primeros valores de CADA columna, para emparejar sin adivinar cuál «SALDO» es cuál. */
+  samples: Record<string, string[]>;
 }
 
 const CANDIDATE_SAMPLES = 3;
@@ -82,7 +84,7 @@ export async function parseXlsxRows(
 
   const skip = Math.max(0, (profile.headerRow ?? 1) - 1);
   const [header, ...body] = matrix.slice(skip);
-  if (!header) return { records: [], labels: [], columnCandidates: [] };
+  if (!header) return { records: [], labels: [], columnCandidates: [], samples: {} };
 
   // Encabezado repetido (dos columnas "SALDO") pisaría la primera: se desambigua como hace el CSV.
   const labels = header.map((h, i) => (h === '' ? `Columna ${i + 1}` : h));
@@ -150,7 +152,31 @@ export function readRows(
     return record;
   });
 
-  return { records, labels, columnCandidates: buildCandidates(rows, labels, records, opts.labelField) };
+  return {
+    records,
+    labels,
+    columnCandidates: buildCandidates(rows, labels, records, opts.labelField),
+    samples: buildSamples(rows, labels),
+  };
+}
+
+/**
+ * Los primeros valores de cada columna — lo mismo que `readRows` pondría en el registro si esa
+ * columna estuviera emparejada (`row[label]`), así que el ejemplo no puede diferir de lo que
+ * después se importa.
+ *
+ * Las vacías se descartan en vez de mandar `['', '', '']`: una columna sin valores en las primeras
+ * filas no ayuda a decidir, y la pantalla necesita distinguir «no hay ejemplo» de «el ejemplo es
+ * vacío».
+ */
+function buildSamples(rows: Record<string, string>[], labels: string[]): Record<string, string[]> {
+  const head = rows.slice(0, CANDIDATE_SAMPLES);
+  const out: Record<string, string[]> = {};
+  for (const label of labels) {
+    const values = head.map((r) => (r[label] ?? '').trim()).filter(Boolean);
+    if (values.length > 0) out[label] = values;
+  }
+  return out;
 }
 
 /**

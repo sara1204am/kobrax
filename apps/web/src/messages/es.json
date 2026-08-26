@@ -59,8 +59,7 @@
     },
     "home": {
       "title": "Inicio",
-      "subtitle": "Tu panel de cobranzas.",
-      "building": "Los módulos se van sumando al menú a medida que se construyen."
+      "subtitle": "Tu panel de cobranzas."
     },
     "dashboard": {
       "title": "Dashboard",
@@ -212,10 +211,6 @@
       "max": "Máx",
       "from": "Desde",
       "to": "Hasta",
-      "moreFilters": "+ Más filtros",
-      "lessFilters": "− Menos filtros",
-      "removeFilter": "Quitar filtro",
-      "clearAll": "Limpiar todos",
       "retry": "Reintentar",
       "selectAll": "Elegir todos los de esta página",
       "selectRow": "Elegir este préstamo",
@@ -224,7 +219,6 @@
     "import": {
       "title": "Import de cartera",
       "subtitle": "Subí el archivo del día, mirá qué va a cambiar y recién ahí confirmá.",
-      "backToRun": "Volver al import",
       "run": {
         "dropTitle": "Arrastrá el archivo acá",
         "pick": "Elegir archivo",
@@ -269,10 +263,44 @@
           "fields": "Falta emparejar las columnas del archivo con tus datos."
         }
       },
+      "setup": {
+        "title": "Configurá tu importación",
+        "subtitle": "Prepará tu archivo antes de importar la cartera. Todo se guarda solo.",
+        "backToRun": "Volver al import",
+        "steps": {
+          "here": "Paso actual:",
+          "file": "Archivo",
+          "config": "Configuración",
+          "review": "Revisar",
+          "import": "Importar"
+        },
+        "saving": "Guardando…",
+        "savedAll": "Todos los cambios están guardados",
+        "summary": "Resumen",
+        "summaryNoFile": "Todavía no subiste ninguno",
+        "summaryMoraPending": "Falta confirmar",
+        "step1": "Tu archivo",
+        "step1Hint": "Subí uno de los archivos que te manda tu sistema. No se importa nada: sólo se mira qué trae.",
+        "step2": "¿A quién pertenece esta cartera?",
+        "step2Hint": "Marca hasta dónde llega la importación: fuera de ese alcance no se toca nada.",
+        "step3": "Emparejá las columnas con tus datos",
+        "step3Hint": "Elegí la columna de tu archivo que corresponde a cada dato, mirando los valores de verdad.",
+        "step3Blocked": "Subí un archivo de muestra para ver qué columnas trae.",
+        "step4": "Reglas de la importación",
+        "step4Hint": "Qué hacer con lo que el archivo no trae, y quién queda a cargo de cada crédito.",
+        "shapeQuestion": "¿Cómo está organizado tu archivo?",
+        "shapeHint": "Elegí la que se parezca al que acabás de subir. Si no acierta, el archivo se lee vacío.",
+        "shapeConfirmTitle": "¿Cambiar cómo está organizado?",
+        "shapeConfirmText": "Tenés {n, plural, one {# columna emparejada} other {# columnas emparejadas}} y se van a borrar: cada forma de archivo trae sus propias columnas. Lo que ya importaste no se toca.",
+        "shapeConfirmCta": "Sí, cambiar",
+        "scopeQuestion": "¿A quién pertenece esta cartera?",
+        "scopePending": "Elegí a quién para guardar el alcance. Hasta entonces sigue valiendo el anterior.",
+        "sourceFileHint": "La oficina sube un archivo y la cartera se actualiza con él.",
+        "sourceToManual": "Cargar a mano",
+        "sourceToFile": "Importar de un archivo"
+      },
       "settings": {
         "link": "Ajustes",
-        "title": "Ajustes del import",
-        "subtitle": "Cómo se lee el archivo de tu sistema. Se guarda al momento.",
         "source": "De dónde sale la cartera",
         "sourceFile": "De un archivo que sube la oficina",
         "sourceManual": "Se carga a mano",
@@ -283,52 +311,82 @@
         "scopeRefGone": "El elegido ya no está disponible",
         "scopeSole": "Toda la cartera queda a nombre de {name}.",
         "shape": "Cómo se ve el archivo",
-        "shapeWarning": "Cambiar la forma borra el emparejado de columnas y hay que hacerlo de nuevo.",
         "carriesAssignee": "El archivo dice de quién es cada crédito",
         "carriesAssigneeHint": "Si no lo trae, el reparto entre cobradores se hace desde Cartera.",
         "absent": "Los créditos que el archivo no trae",
         "askOnLogin": "Ofrecer importar al iniciar sesión",
         "askOnLoginHint": "Aplica a la app del cobrador, no a este panel.",
         "columns": "Emparejar columnas",
-        "columnsHint": "De qué columna del archivo sale cada dato.",
-        "columnsCta": "Emparejar",
         "reset": "Volver a la configuración de fábrica",
         "resetTitle": "¿Volver a la configuración de fábrica?",
         "resetText": "Se borra el emparejado de columnas, el alcance y la forma del archivo. Lo que ya importaste no se toca.",
         "resetCta": "Sí, reiniciar",
         "cancel": "Cancelar",
-        "saved": "Guardado",
         "saveError": "No se pudo guardar."
       },
       "columns": {
-        "title": "Emparejar columnas",
-        "subtitle": "Subí un archivo de muestra y decile de dónde sale cada dato.",
         "sample": "Archivo de muestra",
         "pickSample": "Subir un archivo de muestra",
-        "changeSample": "Cambiar la muestra",
+        "changeSample": "Cambiar archivo",
         "reading": "Leyendo el archivo…",
-        "noSample": "Sin un archivo de muestra no hay columnas que emparejar.",
-        "noSampleText": "Subí uno de los archivos que te manda tu sistema. No se importa nada: sólo se mira qué trae.",
-        "field": "Dato",
+        "noSampleText": "Todavía no subiste ningún archivo.",
+        "noLabels": "Se leyó el archivo pero no trae ninguna columna reconocible. Suele ser que está organizado de otra forma: probá con otra opción de acá arriba.",
+        "seeDetected": "{n, plural, one {# columna detectada} other {# columnas detectadas}}",
+        "status": "Estado de la configuración",
+        "statusReadyCount": "{n, plural, one {# correcto} other {# correctos}}",
+        "statusReviewCount": "{n, plural, one {# por revisar} other {# por revisar}}",
+        "statusMissingCount": "{n, plural, one {# sin columna} other {# sin columna}}",
+        "statusBlocking": "Falta {n, plural, one {# dato obligatorio} other {# datos obligatorios}}: sin eso el archivo no se puede importar.",
+        "statusOptional": "Lo obligatorio está listo. Quedan {n, plural, one {# dato opcional} other {# datos opcionales}} sin columna.",
+        "statusReview": "Casi listo. Confirmá los días de atraso para terminar.",
+        "statusDone": "Todo listo. Ya podés importar tu cartera.",
+        "required": "Obligatorio",
         "from": "Sale de",
         "state": "Cómo se trata",
         "notMapped": "Sin emparejar",
+        "takenBy": "{column} — ya alimenta «{field}»",
+        "examples": "Ejemplos:",
+        "noExamples": "Esta columna no trae valores en las primeras filas.",
         "locked": "Siempre se importa",
-        "add": "Agregar un dato",
-        "remove": "Quitar",
-        "nameOrder": "Cómo viene el nombre",
+        "rowStatus": {
+          "ready": "Listo",
+          "review": "Confirmar",
+          "missing": "Falta",
+          "off": "No se importa"
+        },
+        "matchCount": "{ready} de {total} listos",
+        "essential": "Datos necesarios",
+        "extra": "Datos adicionales",
+        "add": "Agregar más datos",
+        "addHint": "Sumá los que tu archivo traiga y quieras guardar. Al agregarlos aparecen arriba, para elegirles columna.",
+        "remove": "Quitar de la lista",
+        "nameOrder": "¿Cómo viene el nombre?",
         "namePreview": "Quedaría: apellidos «{lastName}», nombres «{firstName}»",
-        "namePreviewNone": "Subí una muestra para ver cómo quedaría un nombre real.",
+        "namePreviewNone": "Emparejá el cliente para ver cómo quedaría un nombre real.",
         "recordStart": "Dónde arranca cada crédito",
         "recordStartHint": "El texto que se repite al principio de cada bloque. Su cuenta es cuántos créditos hay.",
         "recordStartCount": "{n} créditos",
         "headerRow": "Cuál fila son los encabezados",
         "headerRowHint": "El reporte trae título y fecha antes de la tabla; señalá la fila de encabezados.",
-        "calibrate": "Días de atraso",
-        "calibrateHint": "Elegí la columna, mirá los valores y recién después confirmá. Es lo que decide quién está en mora.",
+        "calibrate": "Primero confirmá los días de atraso",
+        "calibrateHint": "Es el dato que decide quién está en mora. Elegí la columna, mirá los valores y recién después confirmá.",
+        "moraQuestion": "¿De qué columna vienen los días de atraso?",
+        "moraColClient": "Cliente",
+        "moraColDays": "Días de atraso",
+        "moraCheck": "¿Estos valores son correctos?",
+        "moraCheckHint": "Si son los días de atraso de esos clientes, confirmá. Si no, elegí otra columna.",
         "calibrateConfirm": "Sí, esos son los días de atraso",
-        "calibrated": "Confirmada",
-        "noCandidates": "El archivo de muestra no trae ninguna columna numérica que sirva."
+        "calibrated": "Días de atraso confirmados",
+        "calibratedHint": "Podés cambiar la columna cuando quieras: al hacerlo hay que volver a confirmar.",
+        "noCandidates": "El archivo de muestra no trae ninguna columna numérica que sirva.",
+        "testTitle": "¿Querés verificar cómo se van a ver tus datos?",
+        "testHint": "Se lee el archivo entero y se te muestra qué pasaría. No se guarda nada.",
+        "testBlocked": "Subí un archivo y completá los datos obligatorios para poder probar.",
+        "testCta": "Probar sin importar",
+        "testResult": "{created} nuevos · {updated} actualizados · {setCurrent} al día",
+        "testOk": "Los datos se ven bien",
+        "testWarned": "{n, plural, one {# fila quedaría afuera} other {# filas quedarían afuera}}",
+        "continue": "Guardar y continuar"
       },
       "profiles": {
         "rows": {
@@ -379,16 +437,13 @@
       },
       "fieldStates": {
         "required": {
-          "label": "Obligatorio",
-          "hint": "Si el archivo no lo trae, ese crédito no se importa."
+          "label": "Obligatorio"
         },
         "optional": {
-          "label": "Opcional",
-          "hint": "Si no viene, se deja como está."
+          "label": "Opcional"
         },
         "off": {
-          "label": "No importar",
-          "hint": "Se ignora lo que diga el archivo."
+          "label": "No importar"
         }
       },
       "nameOrder": {
@@ -629,7 +684,6 @@
       "unassigned": "Sin cobrador",
       "noTime": "Sin hora",
       "overdueBadge": "Vencida",
-      "itemCount": "{n} gestiones",
       "noReasons": "Esta empresa todavía no cargó motivos. Se administran en los catálogos.",
       "actions": {
         "open": "Ver la gestión",
@@ -850,7 +904,6 @@
         "areaRadius": "Radio",
         "areaKm": "{km} km",
         "areaMeters": "{m} m",
-        "inArea": "{n} en el área",
         "mapNoPoints": "Los elegidos no tienen ubicación cargada, así que no se pueden dibujar.",
         "mapBig": "Agrandar el mapa",
         "mapSmall": "Achicar el mapa",
@@ -898,16 +951,15 @@
             "createdAt": "Más reciente"
           },
           "zone": "Zona",
-          "anyZone": "Todas",
           "balance": "Saldo",
           "min": "Desde",
           "max": "Hasta",
           "lastVisit": "Última visita",
           "visitAges": {
-            "never": "Nunca visitado",
             "7": "Sin visita hace 7 días",
             "15": "Sin visita hace 15 días",
-            "30": "Sin visita hace 30 días"
+            "30": "Sin visita hace 30 días",
+            "never": "Nunca visitado"
           },
           "promise": "Promesa de pago",
           "withPromise": "Con promesa",
@@ -1275,9 +1327,7 @@
     "edit": "Editar",
     "reveal": "Ver datos completos",
     "revealing": "Abriendo…",
-    "revealed": "Datos completos a la vista",
     "revealError": "No se pudieron mostrar los datos completos",
-    "maskedHint": "Los datos sensibles se muestran tapados. Verlos completos queda registrado.",
     "clientType": {
       "PERSON": "Persona",
       "COMPANY": "Empresa"
@@ -1291,7 +1341,6 @@
     "newTitle": "Nuevo cliente",
     "newSubtitle": "Con nombre, apellido y un teléfono alcanza para guardar.",
     "editTitle": "Editar cliente",
-    "editSubtitle": "Se manda sólo lo que cambies.",
     "save": "Guardar",
     "cancel": "Cancelar",
     "saved": "Guardado",
@@ -1347,8 +1396,6 @@
     "attachmentRemoved": "Adjunto eliminado",
     "noCredits": "Este cliente no tiene créditos.",
     "creditsDenied": "Tu rol no puede ver los créditos.",
-    "ofPrincipal": "de {amount}",
-    "installmentOf": "cuota {amount}",
     "dueOn": "vence {date}",
     "noCode": "sin código",
     "imported": "Importado",
@@ -1445,7 +1492,6 @@
       "risk": "Segmento de riesgo",
       "createdAt": "Alta",
       "principal": "Capital",
-      "rate": "Tasa",
       "installments": "Cuotas",
       "currency": "Moneda",
       "disbursedAt": "Desembolso",
@@ -1475,7 +1521,6 @@
       "OTHER": "Otro"
     },
     "primary": "principal",
-    "noPin": "sin punto en el mapa",
     "notContactable": "no contactar",
     "noContacts": "Sin teléfonos cargados.",
     "noLocations": "Sin direcciones cargadas.",

@@ -50,6 +50,8 @@ export interface PdfBlocksResult {
   labels: string[];
   /** Columnas del cuadro que parecen días, con muestras reales para calibrar (§6.5.1). */
   columnCandidates: ColumnCandidate[];
+  /** Primeros valores de CADA etiqueta de cabecera, para emparejar sin adivinar. */
+  samples: Record<string, string[]>;
   /**
    * Textos que se repiten a lo largo del archivo, del más frecuente al menos. El que abre cada
    * registro es siempre uno de ellos, y su cuenta es la cantidad de registros. Es lo que permite
@@ -154,6 +156,9 @@ export function readBlocks(
       records: [],
       labels: [...new Set(detectLabels(ordered))].sort(),
       columnCandidates: [],
+      // Sin bloques no hay de dónde sacar el valor de una etiqueta: `valueRightOf` necesita saber
+      // dónde termina el registro, o traería el valor del crédito de al lado.
+      samples: {},
       recordStartCandidates,
     };
   }
@@ -161,6 +166,7 @@ export function readBlocks(
   const records: Record<string, string | null>[] = [];
   const labels = new Set<string>();
   const samples: RawSample[] = [];
+  const labelSamples: Record<string, string[]> = {};
 
   for (let s = 0; s < starts.length; s++) {
     const from = starts[s]!;
@@ -181,10 +187,22 @@ export function readBlocks(
     if (records.length <= CANDIDATE_SAMPLES) {
       const label = record[opts.labelField ?? 'clientName'] ?? record.code ?? '';
       collectSamples(block, profile, label, samples);
+      // El valor de cada etiqueta leído con el MISMO `readField` que usa la corrida: el ejemplo
+      // que se muestra al emparejar es exactamente lo que después se va a importar.
+      for (const l of detectLabels(block)) {
+        const raw = readField(block, profile, { from: l })?.trim();
+        if (raw) (labelSamples[l] ??= []).push(raw);
+      }
     }
   }
 
-  return { records, labels: [...labels].sort(), columnCandidates: buildCandidates(samples), recordStartCandidates };
+  return {
+    records,
+    labels: [...labels].sort(),
+    columnCandidates: buildCandidates(samples),
+    samples: labelSamples,
+    recordStartCandidates,
+  };
 }
 
 /** Hasta acá llega una etiqueta; más largo es un párrafo o un valor, no el rótulo de un registro. */

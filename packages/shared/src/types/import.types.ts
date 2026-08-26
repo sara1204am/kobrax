@@ -110,6 +110,16 @@ export interface ColumnsPayload {
   labels: string[];
   columnCandidates: ColumnCandidate[];
   /**
+   * Los primeros valores reales de cada etiqueta — **lo que el motor leería si se emparejara ahí**,
+   * leído con el mismo `readField` que usa la corrida, así que el ejemplo no puede diferir de lo
+   * que después se importa.
+   *
+   * Sin esto se empareja a ciegas: el archivo ofrece «SALDO» y «SALDO CAPITAL» y nada dice cuál es
+   * cuál hasta que la cartera entró mal. `columnCandidates` no alcanza — sólo trae las columnas
+   * que parecen días de atraso.
+   */
+  samples?: Record<string, string[]>;
+  /**
    * Sólo en extractos PDF: textos que se repiten, del más frecuente al menos. Uno de ellos es el
    * que abre cada registro, y su cuenta es cuántos registros hay. Sin elegirlo, el archivo no se
    * puede cortar en créditos y no hay columnas que emparejar.

@@ -1,13 +1,28 @@
-import type { FieldRule, ImportConfig, ImportConfigPatch, ScopeBranch, ScopeMember } from '@kobrax/shared';
+import type {
+  FieldDef,
+  FieldRule,
+  ImportConfig,
+  ImportConfigPatch,
+  ScopeBranch,
+  ScopeMember,
+} from '@kobrax/shared';
 import { sendJson } from './client';
 import type { ApiError, Translator } from './api-error';
 
 /**
- * Lo que el panel pone del import y `shared` no: **texto en un idioma**.
+ * Lo que el panel pone del import y `shared` no.
  *
- * Las reglas (estados de campo, el corte del nombre, qué falta para poder importar) viven en
- * `@kobrax/shared` y las comparte con el móvil. Acá está sólo la traducción de los códigos que
- * la API devuelve, que en el panel son dos idiomas y en el teléfono uno.
+ * Dos cosas, y conviene no confundirlas:
+ *
+ * 1. **Texto en un idioma** — la traducción de los códigos que devuelve la API. En el panel son
+ *    dos idiomas y en el teléfono uno, así que nunca sube a `shared`.
+ * 2. **Cómo se lee la config para dibujar ESTA pantalla** (`fieldStatus`, `trackedFields`,
+ *    `configProgress`, `usedColumns`). No está en `shared` porque el móvil no lo pide: su pantalla
+ *    de columnas es una lista corta sin contador ni progreso. El día que lo pida, sube tal cual —
+ *    son funciones puras sobre `ImportConfig` y el catálogo.
+ *
+ * El **contrato** (qué campos hay, qué significa `locked` / `starred` / `calibrated`) sí vive en
+ * `@kobrax/shared`, y es lo único que los tres tienen que compartir.
  */
 
 /**
@@ -154,6 +169,93 @@ export function withDeducedType(file: File): File {
   if (file.type) return file;
   const type = MIME_BY_EXT[file.name.split('.').pop()?.toLowerCase() ?? ''];
   return type ? new File([file], file.name, { type }) : file;
+}
+
+// ── Estado del emparejado ────────────────────────────────────────────────────
+
+/**
+ * En qué anda un campo. Es lo que la pantalla pinta al lado de cada fila y lo que suma el
+ * contador de arriba — no hay dos definiciones de «listo».
+ */
+export type FieldStatus = 'ready' | 'review' | 'missing' | 'off';
+
+export function fieldStatus(field: string, rule: FieldRule | undefined): FieldStatus {
+  if (rule?.enabled === false) return 'off';
+  if (!rule?.from) return 'missing';
+  /*
+   * La mora es el único campo que además de emparejarse se CONFIRMA, y por eso es el único que
+   * puede estar emparejado y no estar listo: elegida y sin confirmar, la corrida importa igual y
+   * sólo avisa (`MORA_SIN_CONFIRMAR`) — pero de que esa columna sea la correcta depende quién
+   * aparece en mora.
+   */
+  if (field === DAYS_PAST_DUE && !rule.calibrated) return 'review';
+  return 'ready';
+}
+
+/**
+ * Los campos que la pantalla lista y cuenta: **los esenciales siempre**, estén configurados o no,
+ * más los que se hayan agregado.
+ *
+ * 🔴 El «siempre» no es cosmético. `DEFAULT_IMPORT_CONFIG.fields` es `{}`, así que en una cuenta
+ * nueva —o después de un reset— listar sólo `config.fields` deja la pantalla vacía y manda la
+ * llave y el cliente al fondo de un desplegable de 19 opciones, sin nada que diga que son los dos
+ * que el import no puede suplir. Así se llega a una cartera entera de «SIN NOMBRE» sin que nada
+ * haya avisado.
+ *
+ * El móvil hace lo mismo con un conjunto más chico: lista siempre los `locked` (la llave y el
+ * cliente) y no los `starred`. No es un descuido — su pantalla no configura, sólo empareja lo que
+ * ya no se puede evitar.
+ */
+export function trackedFields(config: ImportConfig, catalog: Record<string, FieldDef>): string[] {
+  const essential = Object.keys(catalog).filter((field) => catalog[field]?.starred);
+  const added = Object.keys(config.fields).filter((field) => !catalog[field]?.starred);
+  return [...essential, ...added];
+}
+
+export interface ConfigProgress {
+  fields: string[];
+  ready: number;
+  review: number;
+  missing: number;
+  /** Cuántos cuentan para la barra: los apagados son una decisión tomada, no una tarea pendiente. */
+  total: number;
+  /**
+   * Sin columna y sin los cuales la corrida no sirve: los bloqueados (la llave, el cliente) y los
+   * que se marcaron obligatorios. Es lo que decide si se puede probar el archivo.
+   */
+  blocking: string[];
+}
+
+export function configProgress(config: ImportConfig, catalog: Record<string, FieldDef>): ConfigProgress {
+  const fields = trackedFields(config, catalog);
+  const counts = { ready: 0, review: 0, missing: 0 };
+  const blocking: string[] = [];
+
+  for (const field of fields) {
+    const rule = config.fields[field];
+    const status = fieldStatus(field, rule);
+    if (status === 'off') continue;
+    counts[status]++;
+    if (status === 'missing' && (catalog[field]?.locked || rule?.required)) blocking.push(field);
+  }
+
+  return { fields, ...counts, total: counts.ready + counts.review + counts.missing, blocking };
+}
+
+/**
+ * Qué etiqueta del archivo ya alimenta a otro dato, para no ofrecerla dos veces.
+ *
+ * La llave es `dónde:etiqueta`, **igual que el servidor**: la misma etiqueta puede alimentar dos
+ * campos si se lee en dos lugares distintos (el encabezado del bloque y el cuadro de movimientos),
+ * y bloquearla de más sacaría una combinación que el servidor acepta.
+ */
+export function usedColumns(config: ImportConfig, except: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [field, rule] of Object.entries(config.fields)) {
+    if (field === except || !rule.from || rule.enabled === false) continue;
+    out.set(`${rule.in ?? 'header'}:${rule.from}`, field);
+  }
+  return out;
 }
 
 /**

@@ -110,7 +110,7 @@ function readTable(
   // Sin señalar la fila de encabezados no hay tabla que leer, pero sí se puede mostrar el archivo
   // para que el usuario la señale. Devolver "no se pudo leer" sería mentir: se leyó perfecto.
   if (headerIndex === -1) {
-    return { records: [], labels: [], columnCandidates: [], headerCandidates };
+    return { records: [], labels: [], columnCandidates: [], samples: {}, headerCandidates };
   }
 
   const dataRows = rows.slice(headerIndex + 1).filter((r) => r.length >= MIN_CELLS);

@@ -1,14 +1,16 @@
+import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import type { ConfigScreen } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
-import { SettingsForm } from './settings-form';
+import { ImportSetup } from './import-setup';
 
 /**
- * Ajustes del import: cómo se lee el archivo que emite el sistema del cliente.
+ * Configurar la importación: el archivo, cómo está organizado, de quién es, sus columnas y las
+ * reglas — **todo en una pantalla**.
  *
  * Una sola llamada trae la config, el catálogo de campos, la última corrida y los candidatos de
- * alcance — la pantalla no sirve de nada con la config sin lo demás.
+ * alcance: la pantalla no sirve de nada con la config sin lo demás.
  */
 export default async function ImportSettingsPage() {
   const t = await getTranslations('panel.import');
@@ -20,13 +22,16 @@ export default async function ImportSettingsPage() {
   // 403 = el rol no tiene `client:import`. El ítem del menú tampoco se le dibuja, así que llegar
   // acá es haber escrito la URL.
   if (status !== 200 || !body.data) {
-    return <EmptyState title={t('title')} text={body.error?.message} />;
+    return <EmptyState title={t('setup.title')} text={body.error?.message} />;
   }
 
   return (
     <>
-      <PageHeader title={t('settings.title')} subtitle={t('settings.subtitle')} />
-      <SettingsForm screen={body.data} />
+      <Link href="/import" className="mb-3 inline-block text-[13px] font-medium text-k-purple hover:underline">
+        ← {t('setup.backToRun')}
+      </Link>
+      <PageHeader title={t('setup.title')} subtitle={t('setup.subtitle')} />
+      <ImportSetup screen={body.data} />
     </>
   );
 }

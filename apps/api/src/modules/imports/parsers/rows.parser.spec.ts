@@ -69,6 +69,24 @@ describe('rows.parser — un formato cualquiera, sin código propio (C12)', () =
     assert.equal(atraso.samples[0]!.label, 'QUISPE MAMANI ROSA ELENA');
   });
 
+  it('trae valores de muestra de TODAS las columnas, no sólo de las que parecen días', () => {
+    // Es lo que deja emparejar sin adivinar: «SALDO» y «SALDO CAPITAL» sólo se distinguen mirando
+    // lo que traen. `columnCandidates` no alcanza — filtra todo lo que no parece días de atraso.
+    const { samples } = parseCsvRows(CSV_COMA, {}, FIELDS);
+    assert.deepEqual(samples.DEUDOR, [
+      'QUISPE MAMANI ROSA ELENA',
+      'VARGAS LEON JULIO CESAR',
+      'CHOQUE ROJAS ANA',
+    ]);
+    assert.deepEqual(samples.SALDO, ['12500.50', '8300.00', '1500.25']);
+  });
+
+  it('una columna sin valores no aparece: la pantalla distingue "sin ejemplo" de "vacío"', () => {
+    const { samples } = parseCsvRows('NRO,VACIA\n90210,\n90211,', {}, FIELDS);
+    assert.deepEqual(samples.NRO, ['90210', '90211']);
+    assert.ok(!('VACIA' in samples));
+  });
+
   it('una columna que no existe en el archivo → null, no 0 (no pisa la mora en la DB)', () => {
     const { records } = parseCsvRows(CSV_COMA, {}, { ...FIELDS, daysPastDue: { from: 'NO_EXISTE' } });
     assert.equal(normalizeRecord(records[0]!).daysPastDue, null);

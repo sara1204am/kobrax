@@ -1,25 +1,16 @@
-import { getTranslations } from 'next-intl/server';
-import type { ConfigScreen } from '@kobrax/shared';
-import { apiCall } from '@/lib/bff';
-import { EmptyState, PageHeader } from '@/components/panel-ui';
-import { ColumnMapper } from './column-mapper';
+import { redirect } from 'next/navigation';
 
-/** Emparejar las columnas del archivo con los datos de la cartera, contra un archivo de muestra. */
-export default async function ImportColumnsPage() {
-  const t = await getTranslations('panel.import');
-  const { status, body } = await apiCall<ConfigScreen>('/imports/portfolio/config', {
-    method: 'GET',
-    auth: true,
-  });
-
-  if (status !== 200 || !body.data) {
-    return <EmptyState title={t('columns.title')} text={body.error?.message} />;
-  }
-
-  return (
-    <>
-      <PageHeader title={t('columns.title')} subtitle={t('columns.subtitle')} />
-      <ColumnMapper screen={body.data} />
-    </>
-  );
+/**
+ * El emparejado dejó de ser una pantalla aparte: vive dentro de Ajustes, en el paso 3.
+ *
+ * La ruta se conserva —y no se borra— porque estaba enlazada desde la pantalla de correr y desde
+ * los mensajes de error del import (`NO_CODE` manda textualmente a «Ajustes › Emparejar
+ * columnas»). Un 404 ahí sería peor que una redirección.
+ *
+ * Partirlo nunca fue sólo incómodo: **el archivo de muestra vive en el estado de React y no
+ * sobrevive a un `router.push`**, así que llegar acá por navegación significaba llegar sin
+ * archivo, y sin archivo no hay una sola columna que emparejar.
+ */
+export default function ImportColumnsPage(): never {
+  redirect('/import/ajustes');
 }

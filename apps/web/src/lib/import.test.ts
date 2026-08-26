@@ -2,19 +2,45 @@ import { describe, expect, it } from 'vitest';
 import es from '@/messages/es.json';
 import en from '@/messages/en.json';
 import { translator } from '@/test/translator';
+import type { FieldDef, ImportConfig } from '@kobrax/shared';
 import {
   ACCEPTED_FILES,
+  configProgress,
   confirmDaysPastDue,
+  fieldStatus,
   groupWarnings,
   pickDaysPastDue,
+  postImportFile,
   rejectText,
   scopeRefName,
+  trackedFields,
+  usedColumns,
   warningText,
   withDeducedType,
 } from './import';
 
 const ES = translator(es, 'panel.import');
 const EN = translator(en, 'panel.import');
+
+/** Recorte del catálogo real: los dos bloqueados, dos esenciales más y uno adicional. */
+const CATALOG: Record<string, FieldDef> = {
+  code: { label: 'N° de crédito', type: 'text', starred: true, locked: true },
+  clientName: { label: 'Cliente', type: 'text', starred: true, locked: true },
+  daysPastDue: { label: 'Días de retraso', type: 'int', starred: true },
+  outstandingBalance: { label: 'Saldo', type: 'number', starred: true },
+  phone: { label: 'Teléfono', type: 'text' },
+};
+
+const cfg = (fields: ImportConfig['fields'] = {}): ImportConfig => ({
+  source: 'file',
+  profile: { kind: 'rows' },
+  fields,
+  nameOrder: 'full',
+  scope: { kind: 'account', ref: null },
+  absentRule: 'set-current',
+  carriesAssignee: false,
+  askOnLogin: false,
+});
 
 describe('rejectText', () => {
   it('colapsa todos los MISSING_* en un solo texto', () => {
@@ -128,6 +154,131 @@ describe('withDeducedType', () => {
   it('una extensión que no se acepta se deja pasar tal cual: quien rechaza es la API', () => {
     const original = new File(['x'], 'cartera.docx', { type: '' });
     expect(withDeducedType(original)).toBe(original);
+  });
+});
+
+describe('postImportFile — cada bandera por su carril', () => {
+  /** Intercepta el `fetch` para mirar exactamente qué se manda, sin red de por medio. */
+  async function capture(options: Parameters<typeof postImportFile>[1]) {
+    const calls: { url: string; form: FormData }[] = [];
+    const original = globalThis.fetch;
+    globalThis.fetch = ((url: string, init: RequestInit) => {
+      calls.push({ url, form: init.body as FormData });
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    }) as typeof fetch;
+    await postImportFile(new File(['a'], 'cartera.csv', { type: 'text/csv' }), options);
+    globalThis.fetch = original;
+    return calls[0]!;
+  }
+
+  it('🔴 `dryRun` va como campo del multipart, nunca en la query', async () => {
+    // El controller lo lee con `@Body('dryRun')`. Mandarlo por query hace que el POST aplique la
+    // importación de verdad creyendo que previsualiza.
+    const { url, form } = await capture({ dryRun: true });
+    expect(form.get('dryRun')).toBe('true');
+    expect(url).toBe('/api/imports/run');
+  });
+
+  it('🔴 `columnsOnly` va como query, nunca en el multipart', async () => {
+    // Lo lee con `@Query`. Adentro del cuerpo, el servidor correría el reconcile de verdad sobre
+    // el archivo que se subió sólo para mirar qué columnas trae.
+    const { url, form } = await capture({ columnsOnly: true });
+    expect(url).toBe('/api/imports/run?columnsOnly=true');
+    expect(form.get('columnsOnly')).toBeNull();
+    expect(form.get('dryRun')).toBeNull();
+  });
+
+  it('sin opciones no manda ninguna de las dos: es la corrida real', async () => {
+    const { url, form } = await capture({});
+    expect(url).toBe('/api/imports/run');
+    expect(form.get('dryRun')).toBeNull();
+  });
+});
+
+describe('fieldStatus', () => {
+  it('sin columna es un pendiente', () => {
+    expect(fieldStatus('outstandingBalance', undefined)).toBe('missing');
+    expect(fieldStatus('outstandingBalance', { enabled: true })).toBe('missing');
+  });
+
+  it('con columna está listo', () => {
+    expect(fieldStatus('outstandingBalance', { from: 'SALDO' })).toBe('ready');
+  });
+
+  it('la mora emparejada y sin confirmar NO está lista', () => {
+    // Es la única que puede estar emparejada y no lista: de esa columna depende quién está en mora.
+    expect(fieldStatus('daysPastDue', { from: 'ATRASO' })).toBe('review');
+    expect(fieldStatus('daysPastDue', { from: 'ATRASO', calibrated: true })).toBe('ready');
+  });
+
+  it('apagado no es un pendiente: es una decisión tomada', () => {
+    expect(fieldStatus('phone', { enabled: false, from: 'TEL' })).toBe('off');
+    expect(fieldStatus('phone', { enabled: false })).toBe('off');
+  });
+});
+
+describe('trackedFields — los esenciales se listan SIEMPRE', () => {
+  it('con la config vacía igual lista los cinco esenciales', () => {
+    // 🔴 El caso de una cuenta nueva o recién reseteada: `fields` viene `{}`. Si la lista saliera
+    // de la config, la llave y el cliente quedarían escondidos en el desplegable de agregar.
+    expect(trackedFields(cfg(), CATALOG)).toEqual(['code', 'clientName', 'daysPastDue', 'outstandingBalance']);
+  });
+
+  it('los agregados van después de los esenciales, sin repetirlos', () => {
+    const fields = trackedFields(cfg({ phone: { from: 'TEL' }, code: { from: 'OPER' } }), CATALOG);
+    expect(fields).toEqual(['code', 'clientName', 'daysPastDue', 'outstandingBalance', 'phone']);
+  });
+});
+
+describe('configProgress', () => {
+  it('la config vacía son cuatro pendientes, dos de ellos bloqueantes', () => {
+    const p = configProgress(cfg(), CATALOG);
+    expect(p).toMatchObject({ ready: 0, review: 0, missing: 4, total: 4 });
+    // La llave y el cliente están bloqueados en el catálogo: sin ellos no hay import que corra.
+    expect(p.blocking).toEqual(['code', 'clientName']);
+  });
+
+  it('la mora sin confirmar cuenta aparte de lo listo y de lo que falta', () => {
+    const p = configProgress(
+      cfg({ code: { from: 'OPER' }, clientName: { from: 'CLIENTE' }, daysPastDue: { from: 'ATRASO' } }),
+      CATALOG,
+    );
+    expect(p).toMatchObject({ ready: 2, review: 1, missing: 1, blocking: [] });
+  });
+
+  it('un campo apagado sale del total en vez de contar como pendiente', () => {
+    const p = configProgress(cfg({ outstandingBalance: { enabled: false } }), CATALOG);
+    expect(p.total).toBe(3);
+    expect(p.missing).toBe(3);
+  });
+
+  it('un opcional marcado obligatorio y sin columna también bloquea', () => {
+    const p = configProgress(cfg({ phone: { required: true } }), CATALOG);
+    expect(p.blocking).toContain('phone');
+  });
+});
+
+describe('usedColumns', () => {
+  it('marca la columna que ya alimenta a otro dato', () => {
+    const used = usedColumns(cfg({ outstandingBalance: { from: 'SALDO' } }), 'installmentAmount');
+    expect(used.get('header:SALDO')).toBe('outstandingBalance');
+  });
+
+  it('el campo que se está editando no se bloquea a sí mismo', () => {
+    const used = usedColumns(cfg({ outstandingBalance: { from: 'SALDO' } }), 'outstandingBalance');
+    expect(used.size).toBe(0);
+  });
+
+  it('la misma etiqueta en dos LUGARES distintos no choca — igual que en el servidor', () => {
+    // La llave del servidor es `dónde:etiqueta`: bloquear sólo por nombre sacaría una combinación
+    // que el `PATCH` acepta (el encabezado del bloque y el cuadro de movimientos).
+    const used = usedColumns(cfg({ daysPastDue: { from: 'DIAS', in: 'table' } }), 'phone');
+    expect(used.get('table:DIAS')).toBe('daysPastDue');
+    expect(used.has('header:DIAS')).toBe(false);
+  });
+
+  it('un campo apagado libera su columna', () => {
+    expect(usedColumns(cfg({ phone: { from: 'TEL', enabled: false } }), 'address').size).toBe(0);
   });
 });
 
