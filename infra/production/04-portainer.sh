@@ -47,7 +47,6 @@ while iptables -L DOCKER-USER --line-numbers -n | grep -q 'kobrax-portainer'; do
 done
 
 if [ ${#PERMITIDAS[@]} -gt 0 ]; then
-  apt-get install -y -qq iptables-persistent >/dev/null 2>&1 || true
   # Se insertan en orden inverso porque -I mete cada una en la posicion 1:
   # primero el DROP general, y encima los ACCEPT de cada IP permitida.
   iptables -I DOCKER-USER -p tcp --dport 9443 -j DROP -m comment --comment kobrax-portainer
@@ -55,7 +54,38 @@ if [ ${#PERMITIDAS[@]} -gt 0 ]; then
     iptables -I DOCKER-USER -s "$ip" -p tcp --dport 9443 -j ACCEPT -m comment --comment kobrax-portainer
     echo "    permitida: $ip"
   done
-  netfilter-persistent save >/dev/null 2>&1 || echo "    (aviso: las reglas no quedaron persistidas al reinicio)"
+
+  # 🔴 NO usar iptables-persistent para conservarlas al reiniciar.
+  # En Ubuntu 24.04 ese paquete DESPLAZA a ufw: apt lo DESINSTALA para resolver
+  # el conflicto, sin fallar y sin avisar. Las cadenas ufw-* quedan colgando en
+  # iptables, `ufw status` ya no existe, la politica vuelve a ACCEPT y TODOS los
+  # puertos del servidor quedan abiertos a internet. Pasó de verdad acá el
+  # 2026-08-31: dejo expuestos el 3000 y el 4010.
+  # En su lugar, un servicio propio que reaplica las reglas despues de docker.
+  printf '#!/usr/bin/env bash\nset -e\n' > /opt/kobrax/portainer-firewall.sh
+  printf 'iptables -I DOCKER-USER -p tcp --dport 9443 -j DROP -m comment --comment kobrax-portainer\n' >> /opt/kobrax/portainer-firewall.sh
+  for ip in "${PERMITIDAS[@]}"; do
+    printf 'iptables -I DOCKER-USER -s %s -p tcp --dport 9443 -j ACCEPT -m comment --comment kobrax-portainer\n' "$ip" >> /opt/kobrax/portainer-firewall.sh
+  done
+  chmod +x /opt/kobrax/portainer-firewall.sh
+
+  cat > /etc/systemd/system/kobrax-portainer-firewall.service <<'EOF'
+[Unit]
+Description=Reglas de acceso a Portainer (DOCKER-USER)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/kobrax/portainer-firewall.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable kobrax-portainer-firewall >/dev/null
+  echo "    reglas persistidas via systemd (no con iptables-persistent)"
 fi
 
 echo

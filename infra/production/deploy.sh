@@ -16,7 +16,19 @@ RESPALDOS=/opt/kobrax/backups
 RETENER=10
 
 cd "$APP"
-set -a; . /opt/kobrax/.env; set +a
+# Dos archivos, y hacen falta LOS DOS:
+#   /opt/kobrax/.env      secretos crudos (POSTGRES_PASSWORD lo usa el paso RLS)
+#   /opt/kobrax/app/.env  las URL ya armadas (DATABASE_URL la usa Prisma)
+# El segundo lo deriva 05-app.sh del primero. Cargar solo el primero deja a
+# `prisma migrate deploy` sin DATABASE_URL, y el error que tira no menciona
+# ningun archivo: dice "Environment variable not found" y nada mas.
+set -a
+. /opt/kobrax/.env
+. "$APP/.env"
+set +a
+
+: "${DATABASE_URL:?falta DATABASE_URL — corre 05-app.sh para regenerar $APP/.env}"
+: "${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en /opt/kobrax/.env}"
 
 echo "==> 1. Trayendo main"
 git fetch --prune origin
@@ -51,13 +63,20 @@ ls -1t "$RESPALDOS"/kobrax-*.sql.gz 2>/dev/null | tail -n +$((RETENER + 1)) | xa
 # servidor se muere: para eso falta subirlos a Backblaze B2 (§9 #6), que es
 # gasto aparte y va en su propio script.
 
-echo "==> 6. Migraciones"
+echo "==> 6. Funcion base de RLS (las migraciones dependen de ella)"
+# Ver el encabezado de rls-bootstrap.sql: sin esto, migrar sobre una base vacia
+# muere en 20260618160000 con "function app_current_account() does not exist".
+docker run --rm -i --network kobrax_default -e PGPASSWORD="$POSTGRES_PASSWORD" \
+  postgres:15-alpine psql -h postgres -U postgres -d kobrax -v ON_ERROR_STOP=1 -q -f - \
+  < /opt/kobrax/rls-bootstrap.sql
+
+echo "==> 7. Migraciones"
 # Solo `migrate deploy`: aplica lo ya commiteado y nada mas. NUNCA `migrate dev`
 # (necesita una shadow db que este repo no puede levantar) ni `migrate reset`
 # (borra la base entera).
 pnpm db:deploy
 
-echo "==> 7. Politicas RLS"
+echo "==> 8. Politicas RLS"
 # Ningun script del repo las aplicaba: se venian corriendo a mano. Es el
 # bloqueante §9 #5. Son idempotentes por diseno (DROP FUNCTION ... CASCADE y
 # recrean todo), asi que se aplican en cada despliegue.
@@ -68,11 +87,11 @@ for sql in $(ls -1 "$APP"/packages/database/prisma/rls/*.sql | grep -v verify_is
     postgres:15-alpine psql -h postgres -U postgres -d kobrax -v ON_ERROR_STOP=1 -q -f - < "$sql"
 done
 
-echo "==> 8. Reiniciando servicios"
+echo "==> 9. Reiniciando servicios"
 systemctl restart kobrax-api
 systemctl restart kobrax-web
 
-echo "==> 9. Comprobando que arrancaron"
+echo "==> 10. Comprobando que arrancaron"
 sleep 5
 for s in kobrax-api kobrax-web; do
   if ! systemctl is-active --quiet "$s"; then
@@ -81,6 +100,24 @@ for s in kobrax-api kobrax-web; do
     exit 1
   fi
 done
+
+echo "==> 11. El firewall sigue en pie?"
+# Esta guarda existe porque el firewall YA desaparecio una vez sin avisar:
+# instalar iptables-persistent desinstala ufw en Ubuntu 24.04 y deja todos los
+# puertos abiertos. Un despliegue que deja el servidor expuesto no es un
+# despliegue exitoso, aunque la aplicacion levante perfecto.
+if ! command -v ufw >/dev/null 2>&1 || ! ufw status | grep -q '^Status: active'; then
+  echo "FALLO: ufw no esta instalado o no esta activo. El servidor quedo expuesto." >&2
+  echo "Reparar con: bash /opt/kobrax/01-harden.sh" >&2
+  exit 1
+fi
+for puerto in 3000 4010 5434 6379; do
+  if ufw status | grep -qE "^${puerto}(/tcp)?[[:space:]]+ALLOW"; then
+    echo "FALLO: el puerto $puerto quedo permitido en el firewall." >&2
+    exit 1
+  fi
+done
+echo "    activo, y 3000/4010/5434/6379 sin regla de permiso"
 
 echo
 echo "===================== RESULTADO ====================="

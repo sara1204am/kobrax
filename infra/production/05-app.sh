@@ -105,7 +105,12 @@ After=network.target kobrax-api.service
 Type=simple
 WorkingDirectory=$APP/apps/web
 EnvironmentFile=$APP/.env
-ExecStart=$APP/apps/web/node_modules/.bin/next start -p 3000
+# 🪤 next NO esta en apps/web/node_modules/.bin: este repo iza las dependencias
+# a la raiz del workspace, y ahi apps/web/node_modules solo tiene @kobrax.
+# Apuntarle al .bin de la app da 203/EXEC, que systemd reporta sin decir que
+# archivo no encontro. Se invoca con node y la ruta real del paquete, asi no
+# depende de donde pnpm decida dejar el enlace.
+ExecStart=/usr/bin/node $APP/node_modules/next/dist/bin/next start -p 3000
 Restart=always
 RestartSec=5
 StandardOutput=journal
