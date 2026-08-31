@@ -9,6 +9,11 @@ set -euo pipefail
 APP=/opt/kobrax/app
 REPO=https://github.com/sara1204am/kobrax.git
 
+# Dominios publicos. El proxy (06-proxy.sh) los termina con HTTPS y reenvia a
+# los puertos locales de abajo.
+WEB_PUBLICA=https://kobrax.ikigaisystems.lat
+API_PUBLICA=https://api.kobrax.ikigaisystems.lat
+
 # ─── 1. Node 20 y pnpm ──────────────────────────────────────────────────────
 if ! command -v node >/dev/null 2>&1 || [ "$(node -v | cut -c2-3)" -lt 20 ]; then
   echo "==> Instalando Node 20"
@@ -57,9 +62,17 @@ APP_BLIND_INDEX_KEY=${APP_BLIND_INDEX_KEY}
 NODE_ENV=production
 API_PORT=4010
 MOBILE_APP_SCHEME=kobrax
-# TODO(dominio): cuando exista el dominio, estas tres pasan a https://app.<dominio>
-APP_URL=http://${IP}:3000
-SOCKET_CORS_ORIGIN=http://${IP}:3000
+
+# Las URL PUBLICAS, con https y sin puerto: son las que el navegador y el
+# celular ven de verdad. Dejarlas en http://IP:3100 rompe las sesiones apenas el
+# proxy sirve por HTTPS — una cookie marcada Secure no viaja por http, y el
+# origen que declara SOCKET_CORS_ORIGIN tiene que coincidir EXACTO con el que
+# manda el navegador o el websocket del panel se rechaza sin decir por que.
+APP_URL=${WEB_PUBLICA}
+SOCKET_CORS_ORIGIN=${WEB_PUBLICA}
+# Esta NO lleva dominio a proposito: es el salto interno del servidor de Next a
+# la API, dentro de la misma maquina. Mandarlo por el dominio publico haria que
+# cada peticion del panel saliera a internet y volviera a entrar por el proxy.
 KOBRAX_API_URL=http://127.0.0.1:4010
 
 # Storage de evidencia: vacio a proposito. Hoy las fotos van al disco local.
@@ -110,7 +123,13 @@ EnvironmentFile=$APP/.env
 # Apuntarle al .bin de la app da 203/EXEC, que systemd reporta sin decir que
 # archivo no encontro. Se invoca con node y la ruta real del paquete, asi no
 # depende de donde pnpm decida dejar el enlace.
-ExecStart=/usr/bin/node $APP/node_modules/next/dist/bin/next start -p 3000
+# 🪤 3100 y no 3000: Nginx Proxy Manager corre en red de host y su backend
+# interno escucha en el 3000. Con los dos ahi, el que arranca segundo pierde el
+# puerto y la interfaz de NPM (puerto 81) termina pidiendole su API a este
+# Next.js — devuelve el panel de Kobrax donde deberia estar la administracion
+# del proxy, sin ningun error visible. El puerto de la web es interno: solo lo
+# conocen este servicio y el proxy, asi que moverlo no le cambia nada a nadie.
+ExecStart=/usr/bin/node $APP/node_modules/next/dist/bin/next start -p 3100
 Restart=always
 RestartSec=5
 StandardOutput=journal
