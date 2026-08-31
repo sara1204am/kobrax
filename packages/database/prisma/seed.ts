@@ -128,6 +128,23 @@ async function main() {
   }
   console.log(`  ✓ ${Object.keys(ROLES).length} roles`);
 
+  // Corte para PRODUCCIÓN: `pnpm db:seed:catalog` carga sólo permisos y roles y
+  // se detiene acá. Sin el catálogo, el registro público falla con
+  // ROLE_CATALOG_MISSING y no se puede crear la primera cuenta; con el seed
+  // completo entrarían clientes, créditos y rutas de prueba a la base real.
+  //
+  // Es un corte en ESTE archivo y no un seed aparte a propósito: la lista de
+  // permisos vive acá arriba, y copiarla a otro archivo es exactamente el error
+  // que documenta el comentario de ROLES — dos listas que se separan en
+  // silencio y sólo se notan meses después.
+  // Se lee de argv y no de una variable de entorno para no depender de
+  // cross-env: `VAR=1 comando` no existe en PowerShell, y el script tiene que
+  // correr igual en Windows (desarrollo) y en Linux (producción).
+  if (process.argv.includes('--catalog')) {
+    console.log('  ⏹ --catalog → sin datos de demostración');
+    return;
+  }
+
   // 3) Tenant demo + owner
   const account = await prisma.account.upsert({
     where: { code: 'DEMO' },

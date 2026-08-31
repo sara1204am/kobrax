@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "@kobrax/database",
   "version": "0.1.0",
   "private": true,
@@ -20,6 +20,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:catalog": "tsx prisma/seed.ts --catalog",
     "db:seed:day": "tsx prisma/seed-day.ts",
     "db:seed:bulk": "tsx prisma/seed-bulk.ts",
     "db:studio": "prisma studio"
