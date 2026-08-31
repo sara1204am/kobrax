@@ -1,0 +1,8 @@
+# Los scripts que corren en el servidor SIEMPRE se guardan con fin de linea LF.
+# Con CRLF, bash falla con "\r: command not found" — un error que no dice nada
+# sobre su causa y que solo aparece en produccion, nunca en la maquina Windows
+# donde se escribio el archivo.
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.Dockerfile text eol=lf
+Caddyfile text eol=lf
