@@ -47,7 +47,10 @@ DECLARE
     -- Garantias del credito: la personal (credit_guarantors) y la no personal (collaterals).
     -- Las dos tablas puente llevan account_id propio aunque cuelguen de otra fila: sin el, su
     -- aislamiento dependeria del JOIN que escriba cada consulta.
-    'collaterals', 'collateral_credits', 'credit_guarantors'
+    'collaterals', 'collateral_credits', 'credit_guarantors',
+    -- Asignación efectiva (F1 del plan de seguridad). Es la tabla que decide quién ve qué dentro
+    -- de la empresa, así que su propio aislamiento entre empresas no puede faltar.
+    'credit_assignments'
   ];
 BEGIN
   FOREACH t IN ARRAY operational LOOP

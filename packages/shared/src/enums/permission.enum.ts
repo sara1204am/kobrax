@@ -58,4 +58,24 @@ export enum Permission {
   ROLE_WRITE = 'role:write',
 
   AUDIT_READ = 'audit:read',
+
+  /**
+   * Asignar un crédito a alguien: permanente o temporal (cobertura).
+   *
+   * Es lo que impide que un cobrador se otorgue acceso a sí mismo — no lo hace un constraint de la
+   * base, a propósito: un supervisor o admin **sí** puede tomarse un crédito para cubrir a alguien
+   * de baja, y una regla dura de «otorgante ≠ destinatario» bloquearía ese caso legítimo.
+   * Quien no tiene este permiso no puede crear ninguna asignación, ni suya ni de otro.
+   */
+  ASSIGNMENT_WRITE = 'assignment:write',
+
+  /**
+   * Ve los datos de TODA la empresa, no sólo lo que tiene asignado.
+   *
+   * No es un permiso más: es el que decide el `app.current_scope` con el que corre cada
+   * transacción, y por lo tanto qué filas entrega PostgreSQL (ver `prisma/rls/002_scope.sql`).
+   * Quien no lo tiene —hoy sólo el cobrador— recibe únicamente sus filas asignadas, y eso lo
+   * impone la base: no depende de que la consulta se acuerde de filtrar.
+   */
+  DATA_SCOPE_ALL = 'data:scope:all',
 }

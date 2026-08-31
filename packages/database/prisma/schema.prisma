@@ -107,6 +107,7 @@ model Account {
   agendaItems     AgendaItem[]
   catalogItems    CatalogItem[]
   dashboards      Dashboard[]
+  creditAssignments CreditAssignment[]
 
   @@index([status])
   @@index([deletedAt])
@@ -723,6 +724,7 @@ model Credit {
   payments     Payment[]
   guarantors   CreditGuarantor[]
   collaterals  CollateralCredit[]
+  assignments  CreditAssignment[]
 
   @@unique([accountId, code]) // F10 import: `code` (No.Credito) es la llave de match del extracto
   @@index([accountId])
@@ -730,6 +732,62 @@ model Credit {
   @@index([accountId, clientId])
   @@index([deletedAt])
   @@map("credits")
+}
+
+/// Quién puede operar este crédito: la ASIGNACIÓN EFECTIVA.
+///
+/// Es la fuente de verdad del alcance `own` de RLS (`docs/security/PLAN-SEGURIDAD.md §4.bis`).
+/// Antes esto vivía en dos columnas escalares que no alcanzaban:
+///   · `credits.assigned_manager_id` — el responsable, pero **una sola persona**: reasignar borraba
+///     al anterior, así que una cobertura temporal destruía la asignación permanente.
+///   · `collection_cases.assignee_id` — a nivel CASO, y los casos son transitorios (el trabajo de
+///     mora los abre y los cierra): el cobrador perdía de vista al cliente justo cuando se ponía
+///     al día. Esa columna **sigue existiendo** como dato operativo (quién trabaja esta cobranza
+///     hoy: rutas, agenda, balanceo de carga), pero ya no decide quién ve qué.
+///
+/// Las tres formas que toma una fila, sin columna de tipo que pueda contradecirse:
+///   · PERMANENTE → `expires_at IS NULL AND case_id IS NULL`. Una sola vigente por crédito.
+///   · TEMPORAL CON FECHA → `expires_at` puesta. Vence sola.
+///   · TEMPORAL ATADA A UN CASO → `case_id` puesta. Al cerrarse el caso se revoca (decisión de la
+///     dueña: por defecto vence al cerrar el caso, con fecha opcional encima; vence lo que ocurra
+///     primero). Se revoca en el cierre y no se resuelve con un JOIN en la policy: el costo va una
+///     vez donde se cierra, no en cada lectura.
+///
+/// **Una temporal nunca toca a la permanente.** Son filas distintas y las dos quedan vigentes:
+/// el crédito de Juan asignado temporalmente a Sara lo ven los dos, y al expirar Sara lo deja de
+/// ver con la de Juan intacta.
+///
+/// Nada se borra: revocar es `revoked_at`. La tabla ES el historial de asignaciones.
+model CreditAssignment {
+  id        String    @id @default(uuid())
+  accountId String    @map("account_id")
+  creditId  String    @map("credit_id")
+  /// A quién se le asigna (users.id, referencia suave como el resto del dominio).
+  userId    String    @map("user_id")
+  /// Si nació de reasignar un caso, cuál. Al cerrarse ese caso, esta fila se revoca.
+  caseId    String?   @map("case_id")
+  startsAt  DateTime  @default(now()) @map("starts_at")
+  /// NULL = no vence por fecha. En la permanente es siempre NULL.
+  expiresAt DateTime? @map("expires_at")
+  /// Quién la otorgó. NULL = la creó el sistema (importación, backfill).
+  /// Puede ser igual a `user_id`: un supervisor o admin **sí** puede tomarse un crédito para
+  /// cubrir a alguien de baja. Que un cobrador no pueda otorgarse nada lo garantiza el permiso
+  /// `assignment:write`, que no tiene — no un constraint, que bloquearía el caso legítimo.
+  grantedBy String?   @map("granted_by")
+  revokedAt DateTime? @map("revoked_at")
+  revokedBy String?   @map("revoked_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+  credit  Credit  @relation(fields: [creditId], references: [id])
+
+  /// El índice que sostiene el predicado de `own`: «las asignaciones vigentes de esta persona».
+  @@index([accountId, userId, revokedAt])
+  @@index([accountId, creditId, revokedAt])
+  /// Para revocar en bloque al cerrar un caso.
+  @@index([accountId, caseId])
+  @@map("credit_assignments")
 }
 
 /// Cronograma de pagos de un crédito.
