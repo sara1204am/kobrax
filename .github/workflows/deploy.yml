@@ -1,0 +1,32 @@
+name: Desplegar a produccion
+
+# Cada merge a main despliega. `workflow_dispatch` deja repetirlo a mano desde
+# la pestana Actions sin tener que inventar un commit.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Si se mergean dos PR seguidos, el segundo espera al primero en vez de correr
+# encima. Dos deploy.sh a la vez sobre el mismo clon y la misma base es una
+# carrera con la migracion en el medio.
+concurrency:
+  group: produccion
+  cancel-in-progress: false
+
+jobs:
+  desplegar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Preparar la clave de despliegue
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # La huella del servidor se fija como secreto en vez de aceptar
+          # cualquiera: sin esto el runner confia en quien le conteste.
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Desplegar
+        run: ssh -i ~/.ssh/id_ed25519 root@${{ secrets.DEPLOY_HOST }} 'bash /opt/kobrax/deploy.sh'
