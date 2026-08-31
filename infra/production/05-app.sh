@@ -73,7 +73,7 @@ SOCKET_CORS_ORIGIN=${WEB_PUBLICA}
 # Esta NO lleva dominio a proposito: es el salto interno del servidor de Next a
 # la API, dentro de la misma maquina. Mandarlo por el dominio publico haria que
 # cada peticion del panel saliera a internet y volviera a entrar por el proxy.
-KOBRAX_API_URL=http://127.0.0.1:4010
+KOBRAX_API_URL=http://127.0.0.1:4010/api
 
 # Storage de evidencia: vacio a proposito. Hoy las fotos van al disco local.
 # Se llena cuando se conecte Cloudflare R2 (bloqueante §9 #1).
