@@ -297,6 +297,129 @@ describe('CreditsService.update (editar desde la ficha §4)', () => {
     await service.update('cr1', { code: 'ABC' } as never);
     assert.equal(calls.creditUpdate[0]!.code, 'ABC');
   });
+
+  it('crédito con condiciones: la nota y el próximo vencimiento sí se editan', async () => {
+    const credit = { id: 'cr1', metadata: { origin: 'manual', terms: AGREED, termsVersion: 1 } };
+    const { service, calls } = makeService({ credit });
+    await service.update('cr1', { notes: 'otra', nextDueDate: '2026-12-01' } as never);
+    const meta = calls.creditUpdate[0]!.metadata as Record<string, unknown>;
+    assert.equal(meta.notes, 'otra');
+    assert.equal(meta.nextDueDate, '2026-12-01');
+    assert.deepEqual(meta.terms, AGREED);
+  });
+});
+
+/**
+ * 🔴 F4/06 · Fase 3 — redefinir el crédito. Condiciones y estado al registrar (D13) se recalculan con
+ * el motor y `registeredState` (shared, con sus tests); acá se prueba lo que la API guarda y rechaza.
+ */
+describe('CreditsService.update — redefinir condiciones y estado al registrar (D13)', () => {
+  const fresh = (metadata: Record<string, unknown> = { origin: 'manual', terms: AGREED, termsVersion: 1 }, count = { payments: 0, installments: 0 }) => ({
+    id: 'cr1',
+    clientId: 'c1',
+    branchId: null,
+    assignedManagerId: 'u9',
+    metadata,
+    _count: count,
+    client: { riskSegment: null },
+  });
+  const terms12 = () => ({ ...AGREED, installmentAmount: 120 });
+
+  it('condiciones nuevas: recalcula cuota, total, saldo (D15) y las guarda', async () => {
+    const { service, calls } = makeService({ credit: fresh() });
+    await service.update('cr1', { terms: terms12() } as never);
+    const data = calls.creditUpdate[0]!;
+    assert.equal(data.principalAmount, 1000);
+    assert.equal(data.installmentsCount, 10);
+    assert.equal(data.outstandingBalance, 1200);
+    const meta = data.metadata as Record<string, unknown>;
+    assert.equal(meta.installmentAmount, 120);
+    assert.equal(meta.balanceBasis, 'total');
+    assert.equal(meta.nextDueDate, '2026-10-25');
+    assert.deepEqual(meta.terms, terms12());
+    assert.equal(meta.initialState, undefined);
+  });
+
+  it('estado al registrar: descuenta las cuotas pagadas y vence la primera no pagada', async () => {
+    const { service, calls } = makeService({ credit: fresh() });
+    await service.update('cr1', { initialState: { paidInstallments: 2, daysPastDue: 0 } } as never);
+    const data = calls.creditUpdate[0]!;
+    assert.equal(data.outstandingBalance, 920); // 1.150 − 2 × 115
+    const meta = data.metadata as Record<string, unknown>;
+    assert.equal(meta.nextDueDate, '2026-12-25');
+    assert.deepEqual(meta.initialState, { paidInstallments: 2, daysPastDue: 0 });
+  });
+
+  it('mora al registrarlo: marca manual desde esa fecha y abre el caso', async () => {
+    const { service, calls } = makeService({ credit: fresh() });
+    await service.update('cr1', { initialState: { paidInstallments: 0, daysPastDue: 15 } } as never);
+    const data = calls.creditUpdate[0]!;
+    assert.equal(data.daysPastDue, 15);
+    assert.equal(typeof (data.metadata as Record<string, unknown>).moraSince, 'string');
+    assert.equal(calls.caseCreate.length, 1);
+    assert.equal(calls.caseCreate[0]!.assigneeId, 'u9');
+  });
+
+  it('bajar la mora declarada a 0 saca la marca que ella misma puso', async () => {
+    const meta = { origin: 'manual', terms: AGREED, termsVersion: 1, moraSince: '2026-01-01', initialState: { paidInstallments: 0, daysPastDue: 15 } };
+    const { service, calls } = makeService({ credit: fresh(meta) });
+    await service.update('cr1', { initialState: { paidInstallments: 0, daysPastDue: 0 } } as never);
+    assert.equal((calls.creditUpdate[0]!.metadata as Record<string, unknown>).moraSince, undefined);
+  });
+
+  it('una marca de «Marcar en mora» sobrevive a corregir la cuota', async () => {
+    const meta = { origin: 'manual', terms: AGREED, termsVersion: 1, moraSince: '2026-01-01' };
+    const { service, calls } = makeService({ credit: fresh(meta) });
+    await service.update('cr1', { terms: terms12() } as never);
+    assert.equal((calls.creditUpdate[0]!.metadata as Record<string, unknown>).moraSince, '2026-01-01');
+  });
+
+  it('crédito anterior a F4/06: se redefine con condiciones y queda con `terms`', async () => {
+    const { service, calls } = makeService({ credit: fresh({ origin: 'manual', installmentAmount: 115 }) });
+    await service.update('cr1', { terms: AGREED } as never);
+    assert.deepEqual((calls.creditUpdate[0]!.metadata as Record<string, unknown>).terms, AGREED);
+  });
+
+  it('crédito anterior a F4/06: el estado al registrar solo, sin condiciones, se rechaza', async () => {
+    const { service } = makeService({ credit: fresh({ origin: 'manual' }) });
+    await rejectsWithCode(service.update('cr1', { initialState: { paidInstallments: 1, daysPastDue: 0 } } as never), 'CREDIT_TERMS_INVALID');
+  });
+
+  it('con pagos registrados no se redefine (CREDIT_HAS_PAYMENTS)', async () => {
+    const { service } = makeService({ credit: fresh(undefined, { payments: 1, installments: 0 }) });
+    await rejectsWithCode(service.update('cr1', { terms: terms12() } as never), 'CREDIT_HAS_PAYMENTS');
+  });
+
+  it('con cronograma guardado no se redefine (CREDIT_HAS_SCHEDULE)', async () => {
+    const { service } = makeService({ credit: fresh(undefined, { payments: 0, installments: 10 }) });
+    await rejectsWithCode(service.update('cr1', { terms: terms12() } as never), 'CREDIT_HAS_SCHEDULE');
+  });
+
+  it('importado: no se redefine (CREDIT_LOCKED)', async () => {
+    const { service } = makeService({ credit: fresh({ origin: 'import' }) });
+    await rejectsWithCode(service.update('cr1', { terms: AGREED } as never), 'CREDIT_LOCKED');
+  });
+
+  it('condiciones y campos sueltos en el mismo pedido se rechazan (CREDIT_TERMS_CONFLICT)', async () => {
+    const { service } = makeService({ credit: fresh() });
+    await rejectsWithCode(service.update('cr1', { terms: terms12(), installmentAmount: 120 } as never), 'CREDIT_TERMS_CONFLICT');
+    await rejectsWithCode(service.update('cr1', { terms: terms12(), nextDueDate: '2026-12-01' } as never), 'CREDIT_TERMS_CONFLICT');
+  });
+
+  it('un estado que no cierra con las condiciones se rechaza (CREDIT_INITIAL_STATE_INVALID)', async () => {
+    const { service } = makeService({ credit: fresh() });
+    await rejectsWithCode(service.update('cr1', { initialState: { paidInstallments: 10, daysPastDue: 0 } } as never), 'CREDIT_INITIAL_STATE_INVALID');
+    await rejectsWithCode(
+      service.update('cr1', { initialState: { paidInstallments: 0, outstandingBalance: 2000, daysPastDue: 0 } } as never),
+      'CREDIT_INITIAL_STATE_INVALID',
+    );
+  });
+
+  it('audita las condiciones y el estado con los que quedó', async () => {
+    const { service, calls } = makeService({ credit: fresh() });
+    await service.update('cr1', { terms: terms12() } as never);
+    assert.deepEqual(calls.audit.map((a) => `${a.action} ${a.entity}`), ['UPDATE credit']);
+  });
 });
 
 const CLIENT_ID = '11111111-1111-1111-1111-111111111111';

@@ -9,7 +9,11 @@ import {
   CreditOrigin,
   parseCreditTerms,
   resolveCreditTerms,
+  registeredState,
+  hasInitialState,
+  type CreditTerms,
   type TermsResolution,
+  type TermsResolutionError,
   isExternalOrigin,
   manualArrears,
   moraSinceFromDays,
@@ -36,6 +40,9 @@ import { serializeCredit } from './credits.serializer';
 import { ClearArrearsDto, CreateCreditDto, ListCreditsQueryDto, UpdateCreditDto } from './dto/credit.dto';
 import {
   arrearsDateNotFuture,
+  creditHasPayments,
+  creditHasSchedule,
+  creditInitialStateInvalid,
   creditInstallmentMismatch,
   creditLocked,
   creditNotActive,
@@ -298,7 +305,7 @@ export class CreditsService {
     const credit = await this.tx((tx) =>
       tx.credit.findFirst({
         where: { id, deletedAt: null },
-        include: { installments: { orderBy: { number: 'asc' } }, arrears: true },
+        include: { installments: { orderBy: { number: 'asc' } }, arrears: true, _count: { select: { payments: true } } },
       }),
     );
     if (!credit) throw resourceNotFound();
@@ -310,51 +317,136 @@ export class CreditsService {
     return { creditId: credit.id, installments: credit.installments ?? [] };
   }
 
+  /**
+   * Editar el crédito. Tres clases de cambio, con reglas distintas:
+   *
+   *  · **Organización** (estado, código, tipo, responsable, sucursal): siempre, también en el importado.
+   *  · **Operativos** (nota, próximo vencimiento): cualquier crédito propio, tenga o no condiciones.
+   *  · **Financieros**, de dos formas que no se mezclan en un mismo pedido:
+   *      - `terms` / `initialState` (F4/06 · Fase 3): se redefine el crédito con el motor. Cuota,
+   *        total, saldo (D15), próximo vencimiento y mora salen de `resolveCreditTerms` +
+   *        `registeredState` (D13), la misma regla que muestra la ficha. **Sólo sin pagos**: con pagos,
+   *        cambiarlo reescribiría lo cobrado, y eso es una reestructura.
+   *      - los campos sueltos (capital, tasa, cuota, frecuencia): la edición anterior, sólo para
+   *        créditos sin `terms` — tocar uno suelto dejaría dos definiciones del mismo crédito.
+   */
   async update(id: string, dto: UpdateCreditDto): Promise<ReturnType<typeof serializeCredit>> {
     const config = await this.accountConfig();
-    // ¿Toca datos financieros/operativos? (los que el candado del importado protege, §4.3)
-    const financialEdit =
-      dto.principalAmount !== undefined ||
-      dto.interestRate !== undefined ||
-      dto.installmentAmount !== undefined ||
-      dto.frequency !== undefined ||
-      dto.nextDueDate !== undefined ||
-      dto.notes !== undefined;
+    const redefine = dto.terms !== undefined || dto.initialState !== undefined;
+    const looseField = LOOSE_FINANCIAL_FIELDS.find((k) => dto[k] !== undefined);
+    const operational = dto.nextDueDate !== undefined || dto.notes !== undefined;
+    if (redefine && looseField) throw creditTermsConflict(looseField);
+    // Al redefinir, el próximo vencimiento se deriva de las cuotas pagadas: no se manda aparte.
+    if (redefine && dto.nextDueDate !== undefined) throw creditTermsConflict('nextDueDate');
 
-    const { before, after } = await this.tx(async (tx) => {
-      const prev = await tx.credit.findFirst({ where: { id, deletedAt: null } });
+    const asOf = new Date();
+    const { before, after, caseOpened } = await this.tx(async (tx) => {
+      const prev = await tx.credit.findFirst({
+        where: { id, deletedAt: null },
+        include: { _count: { select: { payments: true, installments: true } }, client: { select: { riskSegment: true } } },
+      });
       if (!prev) throw resourceNotFound();
       const meta = readCreditMetadata(prev.metadata);
-      if (financialEdit && isExternalOrigin(meta.origin)) throw creditLocked();
-      // Cambiar la cuota o el capital sin tocar `terms` dejaría dos definiciones del mismo crédito, y el
-      // saldo total (D15) desalineado. Editarlo bien —recalcular condiciones y saldo— es F4/06 · Fase 3.
-      if (financialEdit && meta.terms) throw creditTermsEditUnsupported();
+      if ((redefine || looseField || operational) && isExternalOrigin(meta.origin)) throw creditLocked();
+      if (looseField && meta.terms) throw creditTermsEditUnsupported();
 
       // Cuota/frecuencia/próxima fecha/nota viven en metadata (D1); se hace merge preservando el resto.
-      const nextMeta: CreditMetadata = {
+      let nextMeta: CreditMetadata = {
         ...meta,
         ...(dto.installmentAmount !== undefined ? { installmentAmount: dto.installmentAmount } : {}),
         ...(dto.frequency !== undefined ? { frequency: dto.frequency } : {}),
         ...(dto.nextDueDate !== undefined ? { nextDueDate: dto.nextDueDate.slice(0, 10) } : {}),
         ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
       };
+      const data: Prisma.CreditUncheckedUpdateInput = {
+        status: dto.status,
+        assignedManagerId: dto.assignedManagerId,
+        branchId: dto.branchId,
+        code: dto.code,
+        typeCode: dto.typeCode,
+        principalAmount: dto.principalAmount,
+        interestRate: dto.interestRate,
+      };
 
+      if (redefine) {
+        if (prev._count.payments > 0) throw creditHasPayments();
+        if (prev._count.installments > 0) throw creditHasSchedule();
+        const terms = dto.terms !== undefined ? parseTermsOrThrow(dto.terms) : meta.terms;
+        if (!terms) throw creditTermsInvalid(['TERMS_REQUIRED']); // un crédito viejo se redefine con sus condiciones
+        const r = throwOnTermsError(resolveCreditTerms(terms, { principalAmount: terms.principal }));
+        const initial = dto.initialState ?? meta.initialState;
+        const reg = registeredState(terms, initial);
+        if (!reg.ok) throw creditInitialStateInvalid(reg.code);
+
+        /*
+         * La mora declarada es la marca manual (`moraSince`) que este campo pone. Sólo se toca si el
+         * número cambió: así una marca puesta con «Marcar en mora» sobrevive a corregir la cuota, y
+         * bajar la mora declarada a 0 saca la marca que ella misma había puesto.
+         */
+        const moraSince =
+          reg.daysPastDue !== (meta.initialState?.daysPastDue ?? 0)
+            ? reg.daysPastDue > 0
+              ? moraSinceFromDays(reg.daysPastDue, asOf)
+              : undefined
+            : meta.moraSince;
+        const daysPastDue = moraSince
+          ? manualArrears(moraSince, reg.outstandingBalance, asOf)
+          : arrearsFromDueDate(reg.nextDueDate, reg.outstandingBalance, asOf);
+
+        Object.assign(data, {
+          principalAmount: terms.principal,
+          interestRate: r.interestRatePercent, // D7: sólo informativa
+          installmentsCount: r.installmentsCount,
+          outstandingBalance: reg.outstandingBalance,
+          daysPastDue,
+        });
+        nextMeta = {
+          ...nextMeta,
+          installmentAmount: r.installmentAmount,
+          frequency: r.frequency,
+          nextDueDate: reg.nextDueDate,
+          balanceBasis: reg.balanceBasis,
+          terms: r.terms,
+          termsVersion: CREDIT_TERMS_VERSION,
+          initialState: hasInitialState(initial) ? initial : undefined,
+          moraSince,
+        };
+      }
+
+      const touchesMeta = redefine || looseField !== undefined || operational;
       const next = await tx.credit.update({
         where: { id },
-        data: {
-          status: dto.status,
-          assignedManagerId: dto.assignedManagerId,
-          branchId: dto.branchId,
-          code: dto.code,
-          typeCode: dto.typeCode,
-          principalAmount: dto.principalAmount,
-          interestRate: dto.interestRate,
-          metadata: financialEdit ? (stripUndefined(nextMeta) as Prisma.InputJsonValue) : undefined,
-        },
+        data: { ...data, metadata: touchesMeta ? (stripUndefined(nextMeta) as Prisma.InputJsonValue) : undefined },
       });
-      return { before: prev, after: next };
+
+      // Con mora al registrarlo, el caso se abre ya — igual que «Marcar en mora».
+      let caseOpened = false;
+      if (redefine && next.daysPastDue > 0) {
+        const priority = computePriority(
+          { outstandingBalance: Number(next.outstandingBalance), daysPastDue: next.daysPastDue, riskSegment: prev.client?.riskSegment },
+          DEFAULT_PRIORITY_PARAMS,
+        );
+        caseOpened = await openCaseIfNone(tx, {
+          accountId: this.tenant.accountId,
+          creditId: id,
+          clientId: prev.clientId,
+          branchId: prev.branchId,
+          assigneeId: dto.assignedManagerId ?? prev.assignedManagerId,
+          priority,
+          slaDueAt: slaDueAt(priority, asOf, DEFAULT_PRIORITY_PARAMS),
+        });
+      }
+      return { before: prev, after: next, caseOpened };
     });
-    await this.audit.record({ entity: 'credit', entityId: id, action: 'UPDATE', before: creditSummary(before), after: creditSummary(after) });
+
+    const redefined = redefine ? { terms: readCreditMetadata(after.metadata).terms, initialState: dto.initialState, caseOpened } : {};
+    await this.audit.record({
+      entity: 'credit',
+      entityId: id,
+      action: 'UPDATE',
+      before: creditSummary(before),
+      after: { ...creditSummary(after), ...redefined },
+    });
     return serializeCredit(after, config.labels);
   }
 
@@ -547,18 +639,29 @@ export class CreditsService {
  * (`resolveCreditTerms`). Acá sólo se traduce cada rechazo a su error HTTP.
  */
 function resolveTerms(dto: CreateCreditDto): TermsResolution {
-  const terms = parseCreditTerms(dto.terms);
+  const terms = parseTermsOrThrow(dto.terms);
+  return throwOnTermsError(
+    resolveCreditTerms(terms, {
+      principalAmount: dto.principalAmount,
+      installmentAmount: dto.installmentAmount,
+      installmentsCount: dto.installmentsCount,
+      frequency: dto.frequency,
+      nextDueDate: dto.nextDueDate,
+      firstDueDate: dto.firstDueDate,
+      interestRate: dto.interestRate,
+      amortizationType: dto.amortizationType,
+    }),
+  );
+}
+
+function parseTermsOrThrow(raw: unknown): CreditTerms {
+  const terms = parseCreditTerms(raw);
   if (!terms) throw creditTermsInvalid(['TERMS_SHAPE']);
-  const r = resolveCreditTerms(terms, {
-    principalAmount: dto.principalAmount,
-    installmentAmount: dto.installmentAmount,
-    installmentsCount: dto.installmentsCount,
-    frequency: dto.frequency,
-    nextDueDate: dto.nextDueDate,
-    firstDueDate: dto.firstDueDate,
-    interestRate: dto.interestRate,
-    amortizationType: dto.amortizationType,
-  });
+  return terms;
+}
+
+/** El rechazo de D14 → su error HTTP. */
+function throwOnTermsError(r: TermsResolution | TermsResolutionError): TermsResolution {
   if (r.ok) return r;
   switch (r.code) {
     case 'TERMS_INVALID':
@@ -571,6 +674,9 @@ function resolveTerms(dto: CreateCreditDto): TermsResolution {
       throw creditInstallmentMismatch(r.expected, r.sent);
   }
 }
+
+/** Los campos financieros sueltos de `UpdateCreditDto`: la edición anterior a las condiciones. */
+const LOOSE_FINANCIAL_FIELDS = ['principalAmount', 'interestRate', 'installmentAmount', 'frequency'] as const;
 
 function addMonths(date: Date, months: number): Date {
   const d = new Date(date.getTime());

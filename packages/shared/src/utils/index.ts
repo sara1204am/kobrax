@@ -12,6 +12,7 @@ export * from './client-form.js';
 export * from './client-diff.js';
 export * from './loan-form.js';
 export * from './credit-form.js';
+export * from './credit-edit.js';
 export * from './import.js';
 export * from './agenda.js';
 export * from './route-day.js';

@@ -8,8 +8,7 @@ import { dayDate, money } from '@/lib/format';
  * 🔴 **Las filas no se calculan acá**: vienen de `calculateCredit` (shared), el mismo motor con el
  * que la API guarda el crédito. Esta tabla sólo dibuja.
  *
- * Nace para la vista previa del alta (F4/06 · Fase 2) y es la que el detalle va a usar en la Fase 3,
- * reemplazando al `Schedule` de la ficha.
+ * La usan la vista previa del alta (F4/06 · Fase 2) y la ficha del crédito, en lectura y edición (Fase 3).
  *
  * Las fechas son días civiles (`YYYY-MM-DD`): van con `dayDate`, en UTC. Con `date()` Bolivia las
  * pintaría un día antes.

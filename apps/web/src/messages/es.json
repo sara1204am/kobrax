@@ -1701,6 +1701,80 @@
         "INSTALLMENT_TOO_SMALL": "El total no alcanza para esa cantidad de cuotas.",
         "TOTAL_BELOW_PRINCIPAL": "Vas a cobrar menos de lo que prestás. Se puede guardar igual."
       }
+    },
+    "creditDetail": {
+      "edit": "Editar",
+      "cancelEdit": "Cancelar",
+      "save": "Guardar cambios",
+      "saved": "Cambios guardados",
+      "sections": {
+        "terms": "Condiciones",
+        "current": "Estado actual",
+        "plan": "Plan de pagos",
+        "collection": "Cobranza",
+        "origin": "Origen",
+        "initialState": "Estado al registrar"
+      },
+      "definition": "Definición",
+      "legacyTerms": "Registrado antes de que existieran las condiciones: se muestra la cuota que se cobra. Al editarlo se define como cuota acordada.",
+      "interest": "Interés",
+      "interestPerPeriod": "{rate} % por período",
+      "interestTotal": "{rate} % sobre el total",
+      "installments": "Cuotas",
+      "singlePayment": "Pago único",
+      "firstDueDate": "Primer pago",
+      "paymentDate": "Fecha de pago",
+      "outstanding": "Saldo pendiente",
+      "totalToCollect": "Total a cobrar",
+      "unknown": "No registrado",
+      "nextDue": "Próximo cobro",
+      "noNextDue": "Sin fecha",
+      "arrears": "Mora",
+      "current": "Al día",
+      "status": "Estado",
+      "progress": "Progreso de pago",
+      "registeredInProgress": "Se cargó en curso: {paid} cuotas ya pagadas al registrarlo.",
+      "declaredArrears": "Mora declarada al registrarlo: {days} días.",
+      "planHint": "Calculado con el mismo motor y las mismas condiciones con que se guardó.",
+      "planPaidHint": "Las primeras {count} cuotas ya estaban pagadas al registrarlo.",
+      "storedPlanHint": "Cronograma guardado al darlo de alta.",
+      "openLoanPlan": "Préstamo abierto: sin número de cuotas no hay plan de pagos.",
+      "manager": "Responsable",
+      "notes": "Notas",
+      "origin": "Origen",
+      "origins": {
+        "manual": "Cargado a mano",
+        "quick_batch": "Carga rápida",
+        "import": "Importado de archivo",
+        "api": "Integración"
+      },
+      "createdAt": "Registrado",
+      "externalRef": "Referencia externa",
+      "legacyBalance": "Saldo anterior al cambio de regla: mide el capital pendiente, sin la ganancia.",
+      "blocked": {
+        "payments": "Ya tiene pagos registrados: las condiciones y el estado al registrar no se cambian, porque reescribirían lo cobrado. Eso es una reestructura.",
+        "schedule": "Tiene un cronograma guardado: sus condiciones se podrán redefinir cuando llegue el cronograma real.",
+        "locked": "Este crédito vino de otra fuente: sus condiciones las manda esa fuente y no se editan acá."
+      },
+      "initial": {
+        "hint": "Para un préstamo que ya venía corriendo cuando se lo cargó. Se puede ajustar mientras no haya pagos registrados.",
+        "paidInstallments": "Cuotas ya pagadas",
+        "outstandingBalance": "Saldo pendiente",
+        "outstandingPlaceholder": "vacío = {amount}",
+        "daysPastDue": "Días de mora",
+        "result": "Queda con saldo {balance} y próximo cobro el {date}.",
+        "issues": {
+          "TERMS_INVALID": "Completá las condiciones para ver cómo queda.",
+          "PAID_INSTALLMENTS_INVALID": "Las cuotas pagadas tienen que ser un número entero.",
+          "PAID_INSTALLMENTS_TOO_MANY": "Con todas las cuotas pagadas el crédito está saldado, no en curso.",
+          "BALANCE_INVALID": "El saldo tiene que ser mayor a 0.",
+          "BALANCE_ABOVE_TOTAL": "El saldo no puede superar el total a cobrar.",
+          "DAYS_PAST_DUE_INVALID": "Los días de mora tienen que ser un entero entre 0 y 3650."
+        }
+      }
+    },
+    "creditBadges": {
+      "inProgress": "Cargado en curso"
     }
   },
   "team": {

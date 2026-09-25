@@ -65,11 +65,33 @@ export const creditTermsNotPersistable = () =>
     message: 'Un crédito con cuotas que varían (capital fijo) todavía no se puede registrar',
   });
 
-/** Editar los datos financieros de un crédito con condiciones: llega con la edición de F4/06 · Fase 3. */
+/** Un crédito con condiciones se edita redefiniéndolas (`terms`), no campo por campo. */
 export const creditTermsEditUnsupported = () =>
   new UnprocessableEntityException({
     code: 'CREDIT_TERMS_EDIT_UNSUPPORTED',
-    message: 'Los datos financieros de un crédito con condiciones todavía no se editan desde acá',
+    message: 'Un crédito con condiciones se edita redefiniendo sus condiciones, no campo por campo',
+  });
+
+/** Redefinir un crédito que ya tiene pagos reescribiría lo cobrado: eso es una reestructura (D13). */
+export const creditHasPayments = () =>
+  new UnprocessableEntityException({
+    code: 'CREDIT_HAS_PAYMENTS',
+    message: 'El crédito ya tiene pagos registrados: sus condiciones y su estado al registrar no se cambian',
+  });
+
+/** Crédito con cronograma guardado (anterior a F4/06): se regenera recién con el cronograma real (Fase 6). */
+export const creditHasSchedule = () =>
+  new UnprocessableEntityException({
+    code: 'CREDIT_HAS_SCHEDULE',
+    message: 'Este crédito tiene un cronograma guardado y sus condiciones todavía no se redefinen',
+  });
+
+/** El estado al registrar no cierra con las condiciones (D13). `reason` dice qué. */
+export const creditInitialStateInvalid = (reason: string) =>
+  new BadRequestException({
+    code: 'CREDIT_INITIAL_STATE_INVALID',
+    message: 'El estado al registrar no es válido para estas condiciones',
+    details: { reason },
   });
 
 /**

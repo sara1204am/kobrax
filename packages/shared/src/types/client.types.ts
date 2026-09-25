@@ -7,6 +7,7 @@
  */
 import type { CreditOrigin, EffectiveBalanceBasis, InterestBase, PaymentFrequency } from '../enums/credit.enum.js';
 import type { CreditTerms } from '../utils/credit-engine.js';
+import type { CreditInitialState } from '../utils/credit-edit.js';
 
 // ── Payload de la API ────────────────────────────────────────────────────────
 export interface NewContactInput {
@@ -312,6 +313,15 @@ export interface CreditDetail {
    * un crédito con cronograma sale de cuota × n, que puede diferir en céntimos de la Σ real.
    */
   totalToCollect?: number | null;
+  /** Cómo venía al registrarlo (D13). Ausente = nació en Kobrax. */
+  initialState?: CreditInitialState;
+  /**
+   * ¿Tiene pagos registrados? ⚠️ Sólo en la ficha (`GET /credits/:id`). Con pagos, las condiciones y el
+   * estado al registrar ya no se editan.
+   */
+  hasPayments?: boolean;
+  externalRef?: string;
+  createdAt?: string;
   disbursedAt?: string;
   assignedManagerId?: string;
   installments?: CreditInstallmentDetail[];
@@ -344,6 +354,13 @@ export interface UpdateCreditPatch {
   code?: string | null;
   typeCode?: string | null;
   assignedManagerId?: string;
+  /**
+   * Redefinir el crédito (F4/06 · Fase 3): condiciones nuevas y/o el estado al registrar (D13). La API
+   * recalcula cuota, total, saldo y próximo vencimiento con el motor. Sólo sin pagos registrados, y no
+   * se mezcla con los campos financieros sueltos de arriba.
+   */
+  terms?: CreditTerms;
+  initialState?: CreditInitialState;
 }
 
 // ── Formulario en pantalla ───────────────────────────────────────────────────

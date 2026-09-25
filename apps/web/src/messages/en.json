@@ -1701,6 +1701,80 @@
         "INSTALLMENT_TOO_SMALL": "The total is not enough for that many installments.",
         "TOTAL_BELOW_PRINCIPAL": "You will collect less than you lend. You can still save it."
       }
+    },
+    "creditDetail": {
+      "edit": "Edit",
+      "cancelEdit": "Cancel",
+      "save": "Save changes",
+      "saved": "Changes saved",
+      "sections": {
+        "terms": "Terms",
+        "current": "Current status",
+        "plan": "Payment plan",
+        "collection": "Collection",
+        "origin": "Origin",
+        "initialState": "Status when registered"
+      },
+      "definition": "Definition",
+      "legacyTerms": "Registered before terms existed: the instalment being collected is shown. Editing it defines it as an agreed instalment.",
+      "interest": "Interest",
+      "interestPerPeriod": "{rate} % per period",
+      "interestTotal": "{rate} % of the total",
+      "installments": "Instalments",
+      "singlePayment": "Single payment",
+      "firstDueDate": "First payment",
+      "paymentDate": "Payment date",
+      "outstanding": "Outstanding balance",
+      "totalToCollect": "Total to collect",
+      "unknown": "Not recorded",
+      "nextDue": "Next collection",
+      "noNextDue": "No date",
+      "arrears": "Arrears",
+      "current": "Up to date",
+      "status": "Status",
+      "progress": "Payment progress",
+      "registeredInProgress": "Registered in progress: {paid} instalments already paid when it was entered.",
+      "declaredArrears": "Arrears declared when registered: {days} days.",
+      "planHint": "Calculated with the same engine and the same terms it was saved with.",
+      "planPaidHint": "The first {count} instalments were already paid when it was registered.",
+      "storedPlanHint": "Schedule saved when the credit was created.",
+      "openLoanPlan": "Open loan: without a number of instalments there is no payment plan.",
+      "manager": "Assigned to",
+      "notes": "Notes",
+      "origin": "Origin",
+      "origins": {
+        "manual": "Entered manually",
+        "quick_batch": "Quick batch",
+        "import": "Imported from file",
+        "api": "Integration"
+      },
+      "createdAt": "Registered",
+      "externalRef": "External reference",
+      "legacyBalance": "Balance from before the rule change: it measures the outstanding principal, without the profit.",
+      "blocked": {
+        "payments": "It already has payments: the terms and the status when registered cannot change, because they would rewrite what was collected. That is a restructure.",
+        "schedule": "It has a saved schedule: its terms can be redefined once the real schedule arrives.",
+        "locked": "This credit came from another source: its terms come from there and are not edited here."
+      },
+      "initial": {
+        "hint": "For a loan that was already running when it was entered. It can be adjusted while there are no payments.",
+        "paidInstallments": "Instalments already paid",
+        "outstandingBalance": "Outstanding balance",
+        "outstandingPlaceholder": "empty = {amount}",
+        "daysPastDue": "Days past due",
+        "result": "Balance will be {balance}, next collection on {date}.",
+        "issues": {
+          "TERMS_INVALID": "Complete the terms to see the result.",
+          "PAID_INSTALLMENTS_INVALID": "Paid instalments must be a whole number.",
+          "PAID_INSTALLMENTS_TOO_MANY": "With every instalment paid the credit is settled, not in progress.",
+          "BALANCE_INVALID": "The balance must be greater than 0.",
+          "BALANCE_ABOVE_TOTAL": "The balance cannot exceed the total to collect.",
+          "DAYS_PAST_DUE_INVALID": "Days past due must be a whole number between 0 and 3650."
+        }
+      }
+    },
+    "creditBadges": {
+      "inProgress": "Registered in progress"
     }
   },
   "team": {

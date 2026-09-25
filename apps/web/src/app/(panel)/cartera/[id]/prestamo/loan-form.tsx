@@ -18,15 +18,7 @@ import { CreditQuotePanel, CreditTermsFields } from '@/components/credit-terms-f
 import { PaymentPlanTable } from '@/components/payment-plan-table';
 import { useToast } from '@/components/toast';
 import { postJson } from '@/lib/client';
-
-/**
- * Hoy en la zona de quien carga, no en UTC: con `toISOString()` Bolivia (UTC−4) proponía la fecha de
- * mañana a partir de las 20:00.
- */
-const todayIso = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
+import { todayIso } from '@/lib/format';
 
 /**
  * Nuevo crédito (F4/06 · Fase 2): cómo se define, sus condiciones, la cotización en vivo y el plan de

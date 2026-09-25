@@ -16,6 +16,7 @@ import {
   type ArrearsSource,
 } from '../enums/credit.enum.js';
 import { CREDIT_TERMS_VERSION, parseCreditTerms, type CreditTerms } from './credit-engine.js';
+import { parseInitialState, type CreditInitialState } from './credit-edit.js';
 
 const DAY_MS = 86_400_000;
 /** Trabaja en céntimos para no arrastrar error de coma flotante. */
@@ -133,6 +134,11 @@ export interface CreditMetadata {
   terms?: CreditTerms;
   /** Formato de `terms` (`CREDIT_TERMS_VERSION`). Un `terms` de una versión desconocida no se lee. */
   termsVersion?: number;
+  /**
+   * Cómo venía el préstamo cuando se lo registró (D13): cuotas ya pagadas, saldo y mora. Lo escribe la
+   * edición mientras no haya pagos; ausente = nació en Kobrax.
+   */
+  initialState?: CreditInitialState;
 }
 
 export function readCreditMetadata(raw: unknown): CreditMetadata {
@@ -148,6 +154,7 @@ export function readCreditMetadata(raw: unknown): CreditMetadata {
     notes: typeof m.notes === 'string' ? m.notes : undefined,
     moraSince: typeof m.moraSince === 'string' ? m.moraSince : undefined,
     balanceBasis: (BALANCE_BASES as readonly unknown[]).includes(m.balanceBasis) ? (m.balanceBasis as BalanceBasis) : undefined,
+    initialState: parseInitialState(m.initialState),
     ...readTerms(m),
   };
 }

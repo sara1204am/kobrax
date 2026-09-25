@@ -1,17 +1,9 @@
 import Link from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { paymentProgress, type CreditDetail } from '@kobrax/shared';
+import { hasInitialState, paymentProgress, type CreditDetail } from '@kobrax/shared';
 import { Badge } from '@/components/panel-ui';
+import { CREDIT_STATUS_TONE, CreditProgress } from '@/components/credit-progress';
 import { money, date, relativeDate } from '@/lib/format';
-
-const STATUS_TONE: Record<string, 'neutral' | 'success' | 'warning' | 'danger'> = {
-  ACTIVE: 'neutral',
-  PAID: 'success',
-  DEFAULTED: 'danger',
-  WRITTEN_OFF: 'danger',
-  RESTRUCTURED: 'warning',
-  CANCELLED: 'neutral',
-};
 
 /**
  * Los que ya no se trabajan. Se guardan para el historial, pero no compiten por la atención con los
@@ -123,6 +115,7 @@ function CreditCard({
           <span className="block truncate text-[13px] text-k-text-2">
             {(c.typeCode && types.get(c.typeCode)) || t('creditNoType')}
           </span>
+          <CreditBadges credit={c} t={t} />
         </span>
 
         <span className="text-right">
@@ -134,7 +127,7 @@ function CreditCard({
 
         <span className="flex flex-col items-end gap-1">
           {c.status && (
-            <Badge tone={STATUS_TONE[c.status] ?? 'neutral'} dot>
+            <Badge tone={CREDIT_STATUS_TONE[c.status] ?? 'neutral'} dot>
               {t(`creditStatus.${c.status}`)}
             </Badge>
           )}
@@ -158,7 +151,7 @@ function CreditCard({
           <Figure label={t('credit.outstanding')} value={money(c.outstandingBalance, c.currency)} />
         </dl>
 
-        <Progress
+        <CreditProgress
           pct={paymentProgress({
             basis: c.balanceBasis ?? 'legacy',
             outstandingBalance: c.outstandingBalance,
@@ -185,31 +178,20 @@ function Figure({ label, value, hint }: { label: string; value: string; hint?: s
 }
 
 /**
- * Cuánto se cobró **del total por cobrar** (D15) — la regla vive en `paymentProgress` de shared.
- *
- * 🔴 **No se dibuja si el número no significa nada.** Un importado sin cuota no tiene total conocido:
- * medirlo contra el capital, con un saldo que ya incluye intereses, daba 0 % aunque hubiera pagado.
- * Sin total no hay barra: una barra vacía dice «no pagó nada», que es una acusación, no un dato faltante.
+ * Cómo es este crédito, de un vistazo: cómo se definió, si se cargó en curso, si es abierto o importado.
+ * Sólo lo que el listado trae de verdad — no se dice nada del cronograma (ver arriba).
  */
-function Progress({ pct, label }: { pct: number | null; label: string }) {
-  if (pct === null) return null;
+function CreditBadges({ credit: c, t }: { credit: CreditDetail; t: (k: string, v?: Record<string, string | number | Date>) => string }) {
+  const inProgress = hasInitialState(c.initialState);
+  const open = !c.installmentsCount && !c.locked;
+  if (!c.terms && !inProgress && !open && !c.locked) return null;
 
   return (
-    <div className="mt-4">
-      <div className="mb-1.5 flex items-baseline justify-between">
-        <span className="text-[12px] text-k-text-2">{label}</span>
-        <span className="text-[12px] font-medium tabular-nums text-k-text">{pct}%</span>
-      </div>
-      <div
-        className="h-2 overflow-hidden rounded-full bg-k-light-bg"
-        role="progressbar"
-        aria-label={label}
-        aria-valuenow={pct}
-        aria-valuemin={0}
-        aria-valuemax={100}
-      >
-        <div className="h-full rounded-full bg-k-periwinkle" style={{ width: `${pct}%` }} />
-      </div>
-    </div>
+    <span className="mt-1.5 flex flex-wrap gap-1.5">
+      {c.terms && <Badge>{t(`creditForm.definition.${c.terms.definition}`)}</Badge>}
+      {inProgress && <Badge>{t('creditBadges.inProgress')}</Badge>}
+      {open && <Badge>{t('openLoan')}</Badge>}
+      {c.locked && <Badge tone="warning">{t('imported')}</Badge>}
+    </span>
   );
 }

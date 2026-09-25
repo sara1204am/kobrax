@@ -8,14 +8,12 @@ interface Ctx {
 }
 
 /**
- * Editar un crédito: capital, tasa, cuota, frecuencia, próxima fecha, estado, código, tipo,
- * responsable y notas — todo lo que acepta `UpdateCreditDto`.
+ * Editar un crédito: redefinir sus condiciones y el estado al registrar (F4/06 · Fase 3), el
+ * próximo cobro, estado, código, tipo, responsable y notas — todo lo que acepta `UpdateCreditDto`.
  *
- * Número de cuotas, moneda y fecha de desembolso **no entran acá**: cambiarlos sin regenerar el
- * cronograma deja una tabla de cuotas que no cierra con el préstamo. Eso es una reestructura.
- *
- * Si el crédito vino de un archivo o de otro core, la API rechaza el cambio con `CREDIT_LOCKED`.
- * La pantalla ya lo anticipa deshabilitando los campos, pero el freno de verdad es el del servidor.
+ * Las reglas son de la API: con pagos registrados no se redefine (`CREDIT_HAS_PAYMENTS`), y si el
+ * crédito vino de un archivo o de otro core, lo financiero se rechaza con `CREDIT_LOCKED`. La
+ * pantalla lo anticipa sin ofrecer esos campos, pero el freno de verdad es el del servidor.
  */
 export async function PATCH(req: Request, { params }: Ctx): Promise<NextResponse> {
   if (!sameOrigin(req)) {

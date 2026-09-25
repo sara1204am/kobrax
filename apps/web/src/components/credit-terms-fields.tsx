@@ -25,8 +25,8 @@ import { money } from '@/lib/format';
  * `@kobrax/shared`, con el mismo motor que usa la API para guardar: la cuota que se ve es la que se
  * cobra.
  *
- * Reemplaza a `loan-fields.tsx` en el alta. La ficha del crédito todavía usa aquél; en la Fase 3
- * pasa a éste con modos de lectura y edición, y `loan-fields.tsx` se borra.
+ * Lo usan el alta y la edición de la ficha (Fase 3): editar un crédito es volver a definirlo con
+ * los mismos campos.
  */
 export function CreditTermsFields({ form, onChange }: { form: CreditForm; onChange: (next: CreditForm) => void }) {
   const t = useTranslations('portfolio.creditForm');

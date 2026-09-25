@@ -38,6 +38,8 @@ export function serializeArrear(a: Arrear) {
 type CreditWithRelations = Credit & {
   installments?: CreditInstallment[];
   arrears?: Arrear[];
+  /** Sólo en la ficha: si hay pagos, las condiciones ya no se redefinen (D13). */
+  _count?: { payments?: number };
 };
 
 export function serializeCredit(
@@ -87,6 +89,8 @@ export function serializeCredit(
       installments: credit.installments?.map((i) => ({ amount: num(i.amount) })),
       terms: view.terms,
     }),
+    initialState: view.initialState,
+    hasPayments: credit._count?.payments !== undefined ? credit._count.payments > 0 : undefined,
     installments: credit.installments?.map(serializeInstallment),
     arrears: credit.arrears?.map(serializeArrear),
   };

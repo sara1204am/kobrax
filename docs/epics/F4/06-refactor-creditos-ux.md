@@ -1,6 +1,6 @@
 # F4 · Fase 6 — Refactor UX de Créditos + motor financiero único
 
-**Parent:** [EPIC-F4 Core Financiero](../EPIC-F4-core-financiero.md) · **Estado:** 🚧 En curso (Fases 0, 1 y 2 cerradas; sigue la Fase 3)
+**Parent:** [EPIC-F4 Core Financiero](../EPIC-F4-core-financiero.md) · **Estado:** 🚧 En curso (Fases 0 a 3 cerradas; sigue la Fase 4)
 **Owner:** Shared · API · Web · Mobile · **Depende de:** [F4/03-creditos](./03-creditos.md), [F4/05-importacion-clientes](./05-importacion-clientes.md)
 
 ## Objetivo
@@ -88,6 +88,48 @@ Opciones avanzadas), cuota variable manual y reestructuración.
 
 **Orden de despliegue:** API → web → mobile. Las frecuencias nuevas no se ofrecen en la UI hasta que la versión de
 mobile que las entiende esté publicada, porque las versiones viejas las leen como `MONTHLY`.
+
+## Fase 3 — Web · Detalle y Edición ✅ (2026-09-25)
+
+- **Reglas de edición** (API `credits.service.ts` `update`; la ficha usa el mismo criterio, `termsEditBlock` de shared):
+  - **Organización** (estado, código, tipo, responsable): siempre, también en el importado.
+  - **Operativos** (nota, próximo cobro): cualquier crédito propio, tenga o no `terms`. Antes un crédito con
+    `terms` rechazaba hasta la nota.
+  - **Redefinir** (`terms` y/o `initialState` en el `PATCH`): la API recalcula cuota, total, saldo (D15),
+    próximo vencimiento y mora con `resolveCreditTerms` + `registeredState`. Se rechaza:
+    - con pagos registrados (`CREDIT_HAS_PAYMENTS`): sería una reestructura;
+    - con cronograma guardado (`CREDIT_HAS_SCHEDULE`): hasta la Fase 6;
+    - si es importado (`CREDIT_LOCKED`);
+    - si se mezcla con campos financieros sueltos o con `nextDueDate` (`CREDIT_TERMS_CONFLICT`);
+    - si el estado no cierra con las condiciones (`CREDIT_INITIAL_STATE_INVALID`).
+  - **Campos sueltos** (capital, tasa, cuota, frecuencia): siguen sólo para créditos sin `terms` (mobile hasta la
+    Fase 5). Con `terms` → `CREDIT_TERMS_EDIT_UNSUPPORTED`.
+  - Esto cierra el pendiente de D15: al cambiar la cuota o el capital, el saldo total se recalcula.
+- **D13 · Estado al registrar** (`packages/shared/src/utils/credit-edit.ts`, `registeredState`, con tests):
+  - Cuotas ya pagadas (k), saldo pendiente (opcional) y días de mora. Se guarda en `metadata.initialState`.
+  - Saldo: el tipeado (base `total`, ≤ total) o total − Σ de las k primeras cuotas del plan. En el préstamo abierto,
+    el capital (base `principal`, D16).
+  - Próximo vencimiento: la cuota k+1 del plan (o `firstDueDate` + k períodos si es abierto). k < n.
+  - Mora > 0: marca manual `moraSince` y abre el caso (como «Marcar en mora»). Esa marca sólo se toca si cambió el
+    número: una marca puesta con «Marcar en mora» sobrevive a corregir la cuota, y bajar la mora declarada a 0
+    saca la que ella misma puso. Con 0, la mora la calcula la fecha.
+  - Con esto la web vuelve a poder cargar un préstamo que ya venía corriendo: se crea con Nuevo crédito y se ajusta
+    en Editar.
+- **Ficha** (`apps/web/src/app/(panel)/cartera/[id]/credito/[cid]/`):
+  - `credit-view.tsx`: lectura con Condiciones (con cuota, total y ganancia del motor) · Estado actual (saldo,
+    total, próximo cobro, mora, estado, barra D15) · Plan (`PaymentPlanTable` desde `calculateCredit(terms)`, o
+    el cronograma guardado con `dayDate`) · Cobranza · Origen.
+  - `credit-editor.tsx`: `CreditTermsFields` + cotización + vista previa del plan, «Estado al registrar» con el
+    saldo y la fecha que van a quedar, y Cobranza. Si no se puede redefinir, dice por qué.
+  - `credit-card.tsx` orquesta: botón **Editar**, Cancelar / Guardar cambios.
+  - `lib/credit-patch.ts` compara contra cómo se abrió la ficha, no contra las columnas: un crédito viejo
+    (sin `terms`) se abre como cuota acordada y guardar sólo una nota no lo redefine.
+  - Crédito anterior a F4/06: se muestra lo que se cobra y, al redefinirlo, queda con `terms`.
+- **Lista** (`credits-section.tsx`): badges de definición, «Cargado en curso», «Préstamo abierto» e «Importado».
+- **Serializer:** expone `initialState` y, sólo en la ficha, `hasPayments`.
+- **Borrado:** `components/loan-fields.tsx`. `hydratePrestamo` / `PrestamoForm` siguen vivos para mobile (Fase 5).
+- **Corregido:** el cronograma guardado de la ficha formatea las fechas con `dayDate` (antes `date()`, un día antes
+  en Bolivia).
 
 ## Fase 2 — Web · Nuevo crédito ✅ (2026-09-24)
 
