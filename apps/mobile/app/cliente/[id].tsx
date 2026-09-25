@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { addPeriods, PaymentFrequency, portfolioStatus } from '@kobrax/shared';
+import { addPeriods, calculateCredit, isUnknownField, PaymentFrequency, portfolioStatus } from '@kobrax/shared';
 import { choosePhoto } from '@/photo';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { AmountInput, BottomSheet, Chips, EmptyState, Header, PORTFOLIO_STATUS_META, SectionLabel, StatusBadge } from '@/ui';
@@ -13,12 +13,14 @@ import { clientContext, type AgendaClientContext, type CreditOption } from '@/ag
 import { clientDisplayName, getClient, type ClientDetail } from '@/clients.service';
 import { addActivity, getCase, type CaseDetail, type NewActivity } from '@/cases.service';
 import { createPayment, listPayments, type PaymentItem, type PaymentMethod } from '@/payments.service';
-import { clearArrears, markArrears } from '@/credits.service';
+import { clearArrears, getCredit, markArrears, type CreditDetail } from '@/credits.service';
+import { PlanSheet, prettyDay } from '@/credit-terms-view';
+import { DEFINITION_LABEL, FREQUENCY_LABEL, IMPORT_FIELD_LABEL, ORIGIN_LABEL, UNKNOWN } from '@/credit-labels';
 import type { QueuedAction } from '@/sync/queue';
 import { uploadImage } from '@/uploads.service';
 import { MiQrCobro } from '@/qr-cobro';
 import { queueForLater } from '@/sync/sync.service';
-import { buildTimeline, promiseReady, recovered, type TimelineEntry } from '@/ficha';
+import { buildTimeline, promiseReady, recovery, type TimelineEntry } from '@/ficha';
 
 /** Las dos acciones de mora, ya en la forma en la que viajan por la cola. */
 type QueuedArrears = Extract<QueuedAction, { kind: 'arrears.mark' | 'arrears.clear' }>;
@@ -61,6 +63,9 @@ export default function ClienteFichaScreen() {
   const [basic, setBasic] = useState<ClientDetail | null>(null);
   const [creditId, setCreditId] = useState<string | null>(null);
   const [detail, setDetail] = useState<CaseDetail | null>(null);
+  /** El crédito elegido: condiciones, base del saldo y total por cobrar (F4/06). `null` mientras carga o sin red. */
+  const [credit, setCredit] = useState<CreditDetail | null>(null);
+  const [planSheet, setPlanSheet] = useState(false);
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [showData, setShowData] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -87,10 +92,11 @@ export default function ClienteFichaScreen() {
     return l ? { id: l.id, latitude: Number(l.latitude), longitude: Number(l.longitude), tone: 'primary' } : undefined;
   }, [ctx]);
 
-  const loadCase = useCallback(async (caseId: string) => {
-    const [c, p] = await Promise.all([getCase(caseId), listPayments(caseId)]);
+  const loadCase = useCallback(async (caseId: string, creditId: string) => {
+    const [c, p, k] = await Promise.all([getCase(caseId), listPayments(caseId), getCredit(creditId)]);
     if (c.status === 'ok') setDetail(c.data);
     if (p.status === 'ok') setPayments(p.data);
+    setCredit(k.status === 'ok' ? k.data : null);
   }, []);
 
   const loadAll = useCallback(async () => {
@@ -112,7 +118,7 @@ export default function ClienteFichaScreen() {
     const first = res.data.credits.find((c) => c.creditId === creditId) ?? res.data.credits[0];
     if (first) {
       setCreditId(first.creditId);
-      await loadCase(first.caseId);
+      await loadCase(first.caseId, first.creditId);
     }
   }, [clientId, creditId, loadCase]);
 
@@ -133,8 +139,9 @@ export default function ClienteFichaScreen() {
     async (c: CreditOption) => {
       setCreditId(c.creditId);
       setDetail(null);
+      setCredit(null);
       setPayments([]);
-      await loadCase(c.caseId);
+      await loadCase(c.caseId, c.creditId);
     },
     [loadCase],
   );
@@ -212,7 +219,10 @@ export default function ClienteFichaScreen() {
   const status = portfolioStatus({ outstandingBalance: selected.outstandingBalance, daysPastDue: selected.daysPastDue, nextDueDate: detail?.nextDueDate ?? null });
   const meta = PORTFOLIO_STATUS_META[status];
   const timeline = buildTimeline(detail?.activities ?? [], payments);
-  const rec = recovered(selected.principalAmount, selected.outstandingBalance);
+  // «Recuperado X de Y» contra lo que representa el saldo (D15); con el crédito todavía sin cargar, contra el capital.
+  const rec = recovery(credit ?? { outstandingBalance: selected.outstandingBalance, principalAmount: selected.principalAmount });
+  const planRows = credit?.terms ? calculateCredit(credit.terms).schedule : null;
+  const unknown = (f: Parameters<typeof isUnknownField>[1]) => (credit ? isUnknownField(credit, f) : false);
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
@@ -280,13 +290,15 @@ export default function ClienteFichaScreen() {
           </View>
         </View>
 
-        {/* Progreso */}
-        <View>
-          <Text style={styles.progressLabel}>Recuperado {money(rec, currency)} de {money(selected.principalAmount, currency)}</Text>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${selected.principalAmount > 0 ? Math.round((rec / selected.principalAmount) * 100) : 0}%` }]} />
+        {/* Progreso: sin un total conocido no hay barra — una vacía diría «no pagó nada» (D15). */}
+        {rec && (
+          <View>
+            <Text style={styles.progressLabel}>Recuperado {money(rec.recovered, currency)} de {money(rec.of, currency)}</Text>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${rec.percent}%` }]} />
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Selector de crédito */}
         {ctx.credits.length > 1 && (
@@ -304,12 +316,37 @@ export default function ClienteFichaScreen() {
         <Pressable onPress={() => setShowData((v) => !v)} accessibilityRole="button">
           <Text style={styles.collapse}>{showData ? '▾' : '▸'} Datos del préstamo</Text>
         </Pressable>
+        {/*
+          Estado actual y condiciones (F4/06 · Fase 5). Del importado, lo que el archivo no trajo dice
+          «No registrado» y no el 0 de relleno de la columna (D9).
+        */}
         {showData && detail && (
           <View style={styles.card}>
-            <DataRow label="Capital" value={money(selected.principalAmount, currency)} />
-            <DataRow label="Frecuencia" value={detail.frequency ?? '—'} />
-            <DataRow label="Próxima fecha" value={prettyDate(detail.nextDueDate)} />
-            <DataRow label="Origen" value={detail.origin ?? 'manual'} />
+            <DataRow label="Saldo pendiente" value={unknown('outstandingBalance') ? UNKNOWN : money(selected.outstandingBalance, currency)} />
+            <DataRow
+              label="Total a cobrar"
+              value={credit?.totalToCollect != null ? money(credit.totalToCollect, currency) : UNKNOWN}
+            />
+            <DataRow label="Capital" value={unknown('principalAmount') ? UNKNOWN : money(selected.principalAmount, currency)} />
+            {credit?.terms && <DataRow label="Definición" value={DEFINITION_LABEL[credit.terms.definition]} />}
+            <DataRow
+              label="Cuotas"
+              value={credit?.installmentsCount === undefined ? UNKNOWN : credit.installmentsCount ? String(credit.installmentsCount) : 'Préstamo abierto'}
+            />
+            <DataRow label="Frecuencia" value={credit?.frequency ? FREQUENCY_LABEL[credit.frequency] : UNKNOWN} />
+            <DataRow label="Próxima fecha" value={detail.nextDueDate ? prettyDay(detail.nextDueDate) : unknown('nextDueDate') ? UNKNOWN : 'Sin fecha'} />
+            {!!credit?.initialState?.paidInstallments && (
+              <DataRow label="Cargado en curso" value={`${credit.initialState.paidInstallments} cuotas ya pagadas`} />
+            )}
+            <DataRow label="Origen" value={ORIGIN_LABEL[detail.origin ?? 'manual'] ?? detail.origin ?? 'manual'} />
+            {!!credit?.unknownFields?.length && (
+              <DataRow label="No registrados" value={credit.unknownFields.map((f) => IMPORT_FIELD_LABEL[f]).join(', ')} />
+            )}
+            {planRows && planRows.length > 0 && (
+              <Pressable onPress={() => setPlanSheet(true)} accessibilityRole="button" style={{ paddingTop: SPACING.sm }}>
+                <Text style={styles.planLink}>Ver plan de pagos ({planRows.length} cuotas)</Text>
+              </Pressable>
+            )}
           </View>
         )}
 
@@ -361,6 +398,17 @@ export default function ClienteFichaScreen() {
         </View>
       </ScrollView>
 
+      {planRows && credit && (
+        <PlanSheet
+          visible={planSheet}
+          onClose={() => setPlanSheet(false)}
+          rows={planRows}
+          currency={currency}
+          paidInstallments={credit.initialState?.paidInstallments ?? 0}
+          hint="Calculado con las mismas condiciones con que se guardó el préstamo."
+        />
+      )}
+
       <PaySheet
         visible={paySheet}
         onClose={() => setPaySheet(false)}
@@ -377,7 +425,7 @@ export default function ClienteFichaScreen() {
             receiptHash: receipt?.hash,
           };
           const res = await createPayment(input, idemKey);
-          if (res.status === 'ok') { setPaySheet(false); await loadCase(selected.caseId); return null; }
+          if (res.status === 'ok') { setPaySheet(false); await loadCase(selected.caseId, selected.creditId); return null; }
           if (res.status === 'offline') {
             // El cobro se guarda en el teléfono y sube solo. La clave de idempotencia es la que ya
             // generó el sheet, así que cuando salga no puede cobrarle dos veces al deudor. Si la
@@ -390,7 +438,7 @@ export default function ClienteFichaScreen() {
             });
             if (!guardado) return 'Sin conexión y no se pudo guardar en el teléfono. Reintentá.';
             setPaySheet(false);
-            await loadCase(selected.caseId);
+            await loadCase(selected.caseId, selected.creditId);
             return null;
           }
           if (res.status === 'unauthenticated') return 'Tu sesión venció.';
@@ -404,14 +452,14 @@ export default function ClienteFichaScreen() {
         currency={currency}
         onSubmit={async (payload) => {
           const res = await addActivity(selected.caseId, payload);
-          if (res.status === 'ok') { setGestSheet(false); await loadCase(selected.caseId); return null; }
+          if (res.status === 'ok') { setGestSheet(false); await loadCase(selected.caseId, selected.creditId); return null; }
           if (res.status === 'offline') {
             // La gestión queda guardada y sube sola: `case_activities` es append-only, así que
             // reintentarla no puede pisar nada.
             const guardada = await queueForLater({ kind: 'case.activity', caseId: selected.caseId, input: payload });
             if (!guardada) return 'Sin conexión y no se pudo guardar en el teléfono. Reintentá.';
             setGestSheet(false);
-            await loadCase(selected.caseId);
+            await loadCase(selected.caseId, selected.creditId);
             return null;
           }
           if (res.status === 'unauthenticated') return 'Tu sesión venció.';
@@ -730,6 +778,7 @@ const styles = StyleSheet.create({
   editIcon: { fontSize: 16 },
   sub: { ...TYPE.secondary, color: COLORS.text2, marginTop: 2 },
   debt: { fontSize: 30, fontWeight: '700', color: COLORS.navy, marginTop: SPACING.sm },
+  planLink: { ...TYPE.body, color: COLORS.periwinkle, fontWeight: '600' },
   locked: { ...TYPE.caption, color: COLORS.warningText, backgroundColor: COLORS.warningBg, padding: SPACING.sm, borderRadius: RADIUS.input, marginTop: SPACING.sm },
   // Chip de hora recomendada (RT-5). Highlight y no warning: es una ayuda, no una alerta.
   hint: { backgroundColor: COLORS.highlight, borderRadius: RADIUS.card, padding: SPACING.md, gap: 2 },

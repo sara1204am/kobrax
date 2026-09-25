@@ -1,10 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { PaymentFrequency } from '@kobrax/shared';
+import {
+  creditFormFromCredit,
+  creditFormState,
+  creditRedefinition,
+  initialStateForm,
+  initialStateFromForm,
+  registeredState,
+  termsEditBlock,
+  type CreditForm,
+  type InitialStateForm,
+  type UpdateCreditPatch,
+} from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
-import { AmountInput, Chips, Header, SectionLabel } from '@/ui';
+import { Header, SectionLabel } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
 import { MONTHS } from '@/agenda-form';
 import { ClienteFormView } from '@/cliente-form-view';
@@ -27,13 +38,20 @@ import {
   updateRelation,
 } from '@/clients.service';
 import { getCredit, listClientCredits, updateCredit, type CreditDetail, type CreditOption } from '@/credits.service';
+import { CreditQuotePanel, CreditTermsFormView, InitialStateFields, PlanSheet } from '@/credit-terms-view';
 
-const FREQ: { value: PaymentFrequency; label: string }[] = [
-  { value: PaymentFrequency.DAILY, label: 'Diario' },
-  { value: PaymentFrequency.WEEKLY, label: 'Semanal' },
-  { value: PaymentFrequency.BIWEEKLY, label: 'Quincenal' },
-  { value: PaymentFrequency.MONTHLY, label: 'Mensual' },
-];
+/** Hoy como día civil en la zona del teléfono. */
+function todayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Por qué las condiciones no se pueden cambiar (el mismo criterio que la API y la web). */
+const BLOCK_TEXT = {
+  locked: '🔒 Crédito importado: sus condiciones las manda el archivo y se actualizan con una nueva importación.',
+  payments: 'Ya tiene pagos registrados: las condiciones no se cambian, porque reescribirían lo cobrado. Sí se puede mover la próxima fecha.',
+  schedule: 'Tiene un cronograma guardado: sus condiciones se podrán redefinir más adelante. Sí se puede mover la próxima fecha.',
+} as const;
 
 function prettyDate(iso?: string): string {
   if (!iso) return 'Sin fecha';
@@ -63,10 +81,16 @@ export default function EditarScreen() {
 
   /** Los préstamos del cliente, para vincular garantes y garantías. */
   const [credits, setCredits] = useState<CreditOption[]>([]);
+  /**
+   * El crédito (F4/06 · Fase 5): se edita **redefiniendo sus condiciones**, igual que en la web. Se
+   * compara contra cómo se abrió (`crOpened`), no contra las columnas: guardar sólo una nota no lo
+   * redefine.
+   */
   const [cr, setCr] = useState<CreditDetail | null>(null);
-  const [principal, setPrincipal] = useState('');
-  const [interest, setInterest] = useState('');
-  const [installment, setInstallment] = useState('');
+  const [crOpened, setCrOpened] = useState<{ form: CreditForm; initial: InitialStateForm } | null>(null);
+  const [crDraft, setCrDraft] = useState<{ form: CreditForm; initial: InitialStateForm } | null>(null);
+  const [crNext, setCrNext] = useState<string | undefined>(undefined);
+  const [planOpen, setPlanOpen] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -86,9 +110,10 @@ export default function EditarScreen() {
       if (cs.status === 'ok') setCredits(cs.data);
       if (k?.status === 'ok') {
         setCr(k.data);
-        setPrincipal(String(k.data.principalAmount ?? ''));
-        setInterest(String(k.data.interestRate ?? ''));
-        setInstallment(k.data.installmentAmount != null ? String(k.data.installmentAmount) : '');
+        const opened = { form: creditFormFromCredit(k.data, todayIso()), initial: initialStateForm(k.data.initialState) };
+        setCrOpened(opened);
+        setCrDraft(opened);
+        setCrNext(k.data.nextDueDate?.slice(0, 10));
       }
       setLoad('ok');
     })();
@@ -96,10 +121,30 @@ export default function EditarScreen() {
 
   const onDate = useCallback((e: DateTimePickerEvent, d?: Date) => {
     setShowPicker(false);
-    if (e.type === 'set' && d) {
-      setCr((s) => (s ? { ...s, nextDueDate: new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().slice(0, 10) } : s));
-    }
+    if (e.type === 'set' && d) setCrNext(new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().slice(0, 10));
   }, []);
+
+  const block = cr ? termsEditBlock(cr) : null;
+  const crState = useMemo(() => (crDraft ? creditFormState(crDraft.form) : null), [crDraft]);
+  const crRegistered = useMemo(
+    () =>
+      crDraft && crState && crState.missing.length === 0 && crState.calculation.ok
+        ? registeredState(crState.terms, initialStateFromForm(crDraft.initial))
+        : null,
+    [crDraft, crState],
+  );
+
+  /** Qué mandarle a `PATCH /credits/:id`: sólo lo que cambió. */
+  const crPatch = useMemo((): UpdateCreditPatch => {
+    if (!cr || !crOpened || !crDraft || cr.locked) return {};
+    const patch: UpdateCreditPatch = block === null ? creditRedefinition(crOpened, crDraft) : {};
+    if (crDraft.form.notes !== (cr.notes ?? '')) patch.notes = crDraft.form.notes;
+    // Al redefinir, la próxima fecha la deriva la API (D13): sólo se mueve a mano con pagos.
+    if (block !== null && crNext && crNext !== cr.nextDueDate?.slice(0, 10)) patch.nextDueDate = crNext;
+    return patch;
+  }, [cr, crOpened, crDraft, crNext, block]);
+  const crRedefining = Boolean(crPatch.terms || crPatch.initialState);
+  const crValid = !crRedefining || Boolean(crState?.canSubmit && crRegistered?.ok);
 
   const save = useCallback(async () => {
     if (!form || !original) return;
@@ -115,15 +160,8 @@ export default function EditarScreen() {
       }
     }
 
-    if (cr && creditId && !cr.locked) {
-      const rk = await updateCredit(creditId, {
-        principalAmount: principal.trim() ? Number(principal) : undefined,
-        interestRate: interest.trim() ? Number(interest) : undefined,
-        installmentAmount: installment.trim() ? Number(installment) : undefined,
-        frequency: cr.frequency,
-        nextDueDate: cr.nextDueDate,
-        notes: cr.notes,
-      });
+    if (cr && creditId && Object.keys(crPatch).length > 0) {
+      const rk = await updateCredit(creditId, crPatch);
       if (rk.status !== 'ok') {
         setSaving(false);
         return setError(rk.status === 'offline' ? 'El cliente se guardó, pero el crédito no (sin conexión).' : rk.status === 'unauthenticated' ? 'Tu sesión venció.' : rk.message);
@@ -131,7 +169,7 @@ export default function EditarScreen() {
     }
     setSaving(false);
     router.back();
-  }, [form, original, cr, creditId, clientId, principal, interest, installment]);
+  }, [form, original, cr, creditId, clientId, crPatch]);
 
   if (load !== 'ok' || !form) {
     return (
@@ -158,35 +196,55 @@ export default function EditarScreen() {
         {cr && (
           <View style={styles.creditCard}>
             <Text style={styles.creditTitle}>💳 Datos del crédito</Text>
-            {cr.locked ? (
-              <Text style={styles.locked}>
-                🔒 Crédito importado ({cr.origin}). Los datos financieros no se editan; se actualizan con una nueva importación (§4.3).
-              </Text>
-            ) : (
+            {block !== null && <Text style={styles.locked}>{BLOCK_TEXT[block]}</Text>}
+            {block === null && crDraft && crState && (
               <>
-                <SectionLabel>Capital</SectionLabel>
-                <AmountInput value={principal} onChangeText={setPrincipal} currencySymbol={cr.currency} accessibilityLabel="Capital" />
-                <SectionLabel>Cuota</SectionLabel>
-                <AmountInput value={installment} onChangeText={setInstallment} currencySymbol={cr.currency} accessibilityLabel="Cuota" />
-                <Field label="Interés (%)" value={interest} onChangeText={setInterest} keyboardType="decimal-pad" placeholder="Informativo" />
-                <SectionLabel>Frecuencia</SectionLabel>
-                <Chips options={FREQ} value={cr.frequency ?? PaymentFrequency.MONTHLY} onChange={(v) => setCr((s) => (s ? { ...s, frequency: v } : s))} />
+                <CreditTermsFormView form={crDraft.form} onChange={(f) => setCrDraft((d) => (d ? { ...d, form: f } : d))} currency="Bs" />
+                <CreditQuotePanel state={crState} currency={cr.currency} onShowPlan={() => setPlanOpen(true)} />
+                <SectionLabel>Estado al registrar</SectionLabel>
+                <Text style={styles.locked}>Para un préstamo que ya venía corriendo. Se ajusta mientras no haya pagos registrados.</Text>
+                <InitialStateFields
+                  value={crDraft.initial}
+                  onChange={(i) => setCrDraft((d) => (d ? { ...d, initial: i } : d))}
+                  registered={crRegistered}
+                  currency="Bs"
+                />
+              </>
+            )}
+            {(block === 'payments' || block === 'schedule') && (
+              <>
                 <SectionLabel>Próxima fecha de pago</SectionLabel>
                 <Pressable style={styles.dateBtn} onPress={() => setShowPicker(true)} accessibilityRole="button">
-                  <Text style={styles.dateText}>{prettyDate(cr.nextDueDate)}</Text>
+                  <Text style={styles.dateText}>{prettyDate(crNext)}</Text>
                 </Pressable>
-                <Field label="Nota" value={cr.notes ?? ''} onChangeText={(t) => setCr((s) => (s ? { ...s, notes: t } : s))} placeholder="Opcional" />
               </>
+            )}
+            {!cr.locked && crDraft && (
+              <Field
+                label="Nota"
+                value={crDraft.form.notes}
+                onChangeText={(t) => setCrDraft((d) => (d ? { ...d, form: { ...d.form, notes: t } } : d))}
+                placeholder="Opcional"
+              />
             )}
           </View>
         )}
       </ScrollView>
 
       <View style={styles.footer}>
-        <Button label="Guardar cambios" onPress={() => void save()} loading={saving} disabled={saving} />
+        <Button label="Guardar cambios" onPress={() => void save()} loading={saving} disabled={saving || !crValid} />
       </View>
 
-      {showPicker && cr && <DateTimePicker value={cr.nextDueDate ? new Date(cr.nextDueDate) : new Date()} mode="date" onChange={onDate} />}
+      {showPicker && cr && <DateTimePicker value={crNext ? new Date(`${crNext}T12:00:00Z`) : new Date()} mode="date" onChange={onDate} />}
+      {crState?.missing.length === 0 && crState.calculation.schedule && cr && (
+        <PlanSheet
+          visible={planOpen}
+          onClose={() => setPlanOpen(false)}
+          rows={crState.calculation.schedule}
+          currency={cr.currency}
+          paidInstallments={crRegistered?.ok && crDraft ? initialStateFromForm(crDraft.initial).paidInstallments : 0}
+        />
+      )}
     </View>
   );
 }

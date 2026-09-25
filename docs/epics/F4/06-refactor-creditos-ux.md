@@ -1,6 +1,6 @@
 # F4 · Fase 6 — Refactor UX de Créditos + motor financiero único
 
-**Parent:** [EPIC-F4 Core Financiero](../EPIC-F4-core-financiero.md) · **Estado:** 🚧 En curso (Fases 0 a 4 cerradas; sigue la Fase 5)
+**Parent:** [EPIC-F4 Core Financiero](../EPIC-F4-core-financiero.md) · **Estado:** 🚧 En curso (Fases 0 a 5 cerradas; la 6 es opcional)
 **Owner:** Shared · API · Web · Mobile · **Depende de:** [F4/03-creditos](./03-creditos.md), [F4/05-importacion-clientes](./05-importacion-clientes.md)
 
 ## Objetivo
@@ -88,6 +88,36 @@ Opciones avanzadas), cuota variable manual y reestructuración.
 
 **Orden de despliegue:** API → web → mobile. Las frecuencias nuevas no se ofrecen en la UI hasta que la versión de
 mobile que las entiende esté publicada, porque las versiones viejas las leen como `MONTHLY`.
+
+## Fase 5 — Mobile ✅ (2026-09-25)
+
+- **Decisión (usuaria, 2026-09-25): en el móvil, «Este préstamo ya está en curso» sigue en el alta.** En la calle,
+  sin señal, crear y después ajustar serían dos operaciones offline y el préstamo quedaría un rato con el saldo
+  equivocado. Viaja como `initialState` en el mismo `POST /credits` (con `terms`); la API aplica la misma regla D13
+  (`registeredState`) que en la edición. La web sigue ajustándolo desde Editar.
+  - `CreateCreditDto.initialState`: exige `terms` (`CREDIT_TERMS_INVALID`), no se mezcla con
+    `outstandingBalance`/`daysPastDue` sueltos (`CREDIT_TERMS_CONFLICT`) y valida contra las condiciones
+    (`CREDIT_INITIAL_STATE_INVALID`). `buildNewCreditPayload(form, clientId, initialState?)` lo arma.
+  - ⚠️ `InitialStateDto` tiene que declararse **antes** de `CreateCreditDto`: con `emitDecoratorMetadata` la API no
+    arrancaba (`Cannot access 'InitialStateDto' before initialization`). Los tests con `tsx` no lo detectan.
+- **Alta** (`app/prestamo/nuevo.tsx`): el mismo modelo que la web —tres definiciones, opciones avanzadas,
+  cotización— con `CreditForm` de shared. «Ver plan de pagos» abre una hoja (`PlanSheet`) con las filas del motor.
+  Sin `clientId` explica que el préstamo se carga desde un cliente, en vez de no hacer nada al guardar.
+- **Edición** (`app/cliente/editar.tsx`): redefine condiciones y estado al registrar con `creditRedefinition`
+  (shared, la misma regla que la web). Con pagos o cronograma guardado sólo se mueve la próxima fecha; el importado
+  no se edita. Antes mandaba campos sueltos, que la API rechaza en créditos con `terms`.
+- **Ficha** (`app/cliente/[id].tsx`): carga también `GET /credits/:id`. «Recuperado X de Y» usa `recovery`
+  (`src/ficha.ts`, sobre `paymentProgress`): contra el total si la base es `total`, sin barra si el total no se
+  conoce. «Datos del préstamo» muestra saldo, total, definición, cuotas, frecuencia, «No registrado» del importado
+  (D9), lo cargado en curso y el plan en una hoja.
+- **Componentes:** `src/credit-terms-view.tsx` (`CreditTermsFormView`, `CreditQuotePanel`, `PlanSheet`,
+  `InitialStateFields`) y `src/credit-labels.ts` (los mismos textos que la web, con las 7 frecuencias).
+- **Bug `ajustes/importacion.tsx`:** «Agregar crédito a mano» abría el alta sin cliente. Ahora va al alta de
+  cliente, que ya ofrece «guardar y cargar préstamo».
+- **Frecuencias nuevas:** el móvil ya las lee y las rotula, pero `OFFERED_FREQUENCIES` **no se amplió**: según el
+  orden de despliegue, se ofrecen recién cuando esta versión del móvil esté publicada.
+- **Verificado:** tests (mobile 329) y el alta del móvil con `initialState` por la API real, incluido el reintento
+  idempotente de la cola. La app no se corrió en un dispositivo.
 
 ## Fase 4 — Importados ✅ (2026-09-25)
 

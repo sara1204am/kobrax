@@ -1,8 +1,7 @@
 import {
   creditFormFromCredit,
-  creditFormTerms,
+  creditRedefinition,
   initialStateForm,
-  initialStateFromForm,
   type CreditDetail,
   type CreditForm,
   type InitialStateForm,
@@ -49,8 +48,6 @@ export function creditDraft(credit: CreditDetail, todayIso: string): CreditDraft
   };
 }
 
-const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
-
 /**
  * Qué mandarle a `PATCH /credits/:id`: **sólo lo que cambió**.
  *
@@ -64,12 +61,7 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.str
 export function creditPatch(credit: CreditDetail, opened: CreditDraft, draft: CreditDraft, redefinable: boolean): UpdateCreditPatch {
   const patch: UpdateCreditPatch = {};
 
-  if (redefinable) {
-    const terms = creditFormTerms(draft.form);
-    if (!same(terms, creditFormTerms(opened.form))) patch.terms = terms;
-    const initial = initialStateFromForm(draft.initial);
-    if (!same(initial, initialStateFromForm(opened.initial))) patch.initialState = initial;
-  }
+  if (redefinable) Object.assign(patch, creditRedefinition(opened, draft));
 
   const { extras } = draft;
   if (draft.form.notes !== (credit.notes ?? '')) patch.notes = draft.form.notes;

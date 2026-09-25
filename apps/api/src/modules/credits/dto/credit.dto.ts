@@ -21,6 +21,17 @@ import { CreditStatus } from '@prisma/client';
 import { CreditOrigin, PaymentFrequency } from '@kobrax/shared';
 import type { AmortizationType } from '../credit-math';
 
+/**
+ * «Estado al registrar» (F4/06 · D13): cómo venía un préstamo que ya estaba corriendo cuando se lo
+ * cargó. Los rangos de negocio (menos cuotas pagadas que el total, saldo ≤ total) los decide
+ * `registeredState` de shared, la misma regla que muestra la ficha.
+ */
+export class InitialStateDto {
+  @IsInt() @Min(0) @Max(600) paidInstallments!: number;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() outstandingBalance?: number;
+  @IsInt() @Min(0) @Max(3650) daysPastDue!: number;
+}
+
 export class CreateCreditDto {
   /**
    * Id propuesto por el móvil, para que el alta sea idempotente cuando viaja en la cola offline.
@@ -71,17 +82,12 @@ export class CreateCreditDto {
    * lo que es una condición válida, compartida con web y móvil. Sin `terms`, el alta de siempre.
    */
   @IsOptional() @IsObject() terms?: Record<string, unknown>;
-}
 
-/**
- * «Estado al registrar» (F4/06 · D13): cómo venía un préstamo que ya estaba corriendo cuando se lo
- * cargó. Los rangos de negocio (menos cuotas pagadas que el total, saldo ≤ total) los decide
- * `registeredState` de shared, la misma regla que muestra la ficha.
- */
-export class InitialStateDto {
-  @IsInt() @Min(0) @Max(600) paidInstallments!: number;
-  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() outstandingBalance?: number;
-  @IsInt() @Min(0) @Max(3650) daysPastDue!: number;
+  /**
+   * «Ya está en curso» con condiciones (D13): el móvil lo carga en el mismo alta, que viaja por la
+   * cola offline como una sola operación. Exige `terms`; no se mezcla con `outstandingBalance`/`daysPastDue`.
+   */
+  @IsOptional() @ValidateNested() @Type(() => InitialStateDto) initialState?: InitialStateDto;
 }
 
 /**

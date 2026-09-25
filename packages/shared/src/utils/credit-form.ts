@@ -25,6 +25,7 @@ import {
   type CreditTerms,
   type CreditTermsIssue,
 } from './credit-engine.js';
+import { hasInitialState, registeredState, type CreditInitialState } from './credit-edit.js';
 
 /** Lo que hay en pantalla. Los números son texto, como los da un `<input>`. */
 export interface CreditForm {
@@ -165,11 +166,14 @@ export function creditFormState(f: CreditForm): CreditFormState {
  *
  * `openCase` y `origin` los pone quien llama (el BFF), igual que con `buildPrestamoPayload`.
  */
-export function buildNewCreditPayload(f: CreditForm, clientId: string): NewCreditInput | null {
+export function buildNewCreditPayload(f: CreditForm, clientId: string, initialState?: CreditInitialState): NewCreditInput | null {
   if (!creditFormState(f).canSubmit) return null;
   const terms = creditFormTerms(f);
   const r = resolveCreditTerms(terms, { principalAmount: terms.principal });
   if (!r.ok) return null;
+  // «Ya está en curso» (D13): sólo viaja si dice algo y cierra con las condiciones.
+  const initial = hasInitialState(initialState) ? initialState : undefined;
+  if (initial && !registeredState(terms, initial).ok) return null;
   return {
     clientId,
     principalAmount: terms.principal,
@@ -180,5 +184,6 @@ export function buildNewCreditPayload(f: CreditForm, clientId: string): NewCredi
     interestRate: terms.definition === CreditDefinition.CALCULATED ? terms.ratePercent : undefined,
     notes: f.notes.trim() || undefined,
     terms,
+    ...(initial ? { initialState: initial } : {}),
   };
 }

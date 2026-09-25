@@ -2,6 +2,7 @@
  * Lógica pura de la ficha de cobranza (V4, §5.4): intercala pagos y gestiones en un timeline y calcula
  * el progreso recuperado. Sin red, sin React → testeable sola.
  */
+import { isUnknownField, paymentProgress, type EffectiveBalanceBasis } from '@kobrax/shared';
 import type { CaseActivityItem } from './cases.service';
 import type { PaymentItem } from './payments.service';
 
@@ -30,9 +31,37 @@ export function buildTimeline(activities: CaseActivityItem[], payments: PaymentI
   return [...a, ...p].sort((x, y) => y.at.localeCompare(x.at));
 }
 
-/** Recuperado = capital − saldo, clampado a [0, capital] (§5.4, "Recuperado X de Y"). */
-export function recovered(principal: number, outstanding: number): number {
-  return Math.max(0, Math.min(principal, principal - outstanding));
+/**
+ * «Recuperado X de Y» (§5.4), medido contra lo que representa el saldo (D15, F4/06 · Fase 5).
+ *
+ * 🔴 **Antes medía siempre contra el capital.** Con saldo = total pendiente (capital + ganancia), un
+ * préstamo de 1.000 que debe 1.500 aparecía con «Recuperado 0 de 1.000» después de cobrar 400.
+ *
+ *  · base `total` → contra el total por cobrar; sin total conocido no hay barra (no se inventa);
+ *  · `principal` (préstamo abierto) y `legacy` (sin migrar) → contra el capital, como antes;
+ *  · saldo o capital desconocidos (importado, D9) → no hay barra.
+ *
+ * El porcentaje sale de `paymentProgress` de shared: el mismo número que la barra de la web.
+ */
+export function recovery(credit: {
+  balanceBasis?: EffectiveBalanceBasis;
+  outstandingBalance: number;
+  principalAmount: number;
+  totalToCollect?: number | null;
+  unknownFields?: readonly string[];
+}): { recovered: number; of: number; percent: number } | null {
+  const basis = credit.balanceBasis ?? 'legacy';
+  if (isUnknownField(credit, 'outstandingBalance')) return null;
+  if (basis !== 'total' && isUnknownField(credit, 'principalAmount')) return null;
+  const of = basis === 'total' ? credit.totalToCollect ?? null : credit.principalAmount;
+  const percent = paymentProgress({
+    basis,
+    outstandingBalance: credit.outstandingBalance,
+    principalAmount: credit.principalAmount,
+    totalToCollect: credit.totalToCollect ?? null,
+  });
+  if (of === null || percent === null) return null;
+  return { recovered: Math.max(0, Math.min(of, of - credit.outstandingBalance)), of, percent };
 }
 
 /** La hoja de gestión-promesa está lista solo con monto > 0, fecha y método (§5.4). */

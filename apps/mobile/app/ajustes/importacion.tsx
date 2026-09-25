@@ -225,7 +225,9 @@ export default function ImportacionScreen() {
           // lo ya configurado NO se borra: si vuelve a "Archivo", lo encuentra como lo dejó.
           <>
             <Text style={styles.muted}>Los créditos se cargan uno por uno. No se lee ningún archivo.</Text>
-            <ListRow title="Agregar crédito a mano" onPress={() => router.push('/prestamo/nuevo')} />
+            {/* Un préstamo es de alguien: se da de alta al cliente y, desde ahí, «guardar y cargar préstamo».
+                Antes abría el alta sin cliente, y guardar no hacía nada. */}
+            <ListRow title="Agregar cliente y crédito a mano" onPress={() => router.push('/cliente/nuevo')} />
           </>
         ) : (
           <>

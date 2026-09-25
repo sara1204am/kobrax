@@ -13,7 +13,7 @@ import { CreditDefinition, InterestBase, PaymentFrequency } from '../enums/credi
 import type { BalanceBasis } from '../enums/credit.enum.js';
 import type { CreditDetail } from '../types/client.types.js';
 import { calculateCredit, type CreditTerms } from './credit-engine.js';
-import { initialCreditForm, type CreditForm } from './credit-form.js';
+import { creditFormTerms, initialCreditForm, type CreditForm } from './credit-form.js';
 import { addPeriods } from './periods.js';
 
 /** Cómo venía el préstamo cuando se lo registró (D13). Se guarda en `metadata.initialState`. */
@@ -210,6 +210,24 @@ export function creditFormFromCredit(credit: CreditDetail, todayIso: string): Cr
         firstDueDate: t.firstDueDate,
       };
   }
+}
+
+/**
+ * Qué hay que redefinir del crédito, comparando el borrador con **cómo se abrió** la edición (no con
+ * las columnas): un crédito anterior a F4/06 se abre como cuota acordada, y guardarle sólo una nota
+ * no puede redefinirlo. La usan la ficha web y la del móvil.
+ */
+export function creditRedefinition(
+  opened: { form: CreditForm; initial: InitialStateForm },
+  draft: { form: CreditForm; initial: InitialStateForm },
+): { terms?: CreditTerms; initialState?: CreditInitialState } {
+  const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+  const out: { terms?: CreditTerms; initialState?: CreditInitialState } = {};
+  const terms = creditFormTerms(draft.form);
+  if (!same(terms, creditFormTerms(opened.form))) out.terms = terms;
+  const initial = initialStateFromForm(draft.initial);
+  if (!same(initial, initialStateFromForm(opened.initial))) out.initialState = initial;
+  return out;
 }
 
 /**

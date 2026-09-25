@@ -70,6 +70,22 @@ describe('creditFormState — qué falta, qué avisa y si se guarda', () => {
   });
 });
 
+describe('buildNewCreditPayload — «ya está en curso» en el alta (D13, móvil)', () => {
+  const agreed = form({ definition: CreditDefinition.AGREED_INSTALLMENT, principal: '1000', installmentAmount: '300', installmentsCount: '5' });
+
+  it('un estado que dice algo viaja con las condiciones', () => {
+    expect(buildNewCreditPayload(agreed, 'c1', { paidInstallments: 2, daysPastDue: 0 })?.initialState).toEqual({ paidInstallments: 2, daysPastDue: 0 });
+  });
+
+  it('uno vacío no viaja', () => {
+    expect(buildNewCreditPayload(agreed, 'c1', { paidInstallments: 0, daysPastDue: 0 })).not.toHaveProperty('initialState');
+  });
+
+  it('uno que no cierra con las condiciones no se puede mandar', () => {
+    expect(buildNewCreditPayload(agreed, 'c1', { paidInstallments: 5, daysPastDue: 0 })).toBeNull();
+  });
+});
+
 describe('creditFormTerms — pantalla → condiciones', () => {
   it('la base "% del total" sólo viaja con simple + cuota fija (D8)', () => {
     const simple = creditFormTerms(form({ rateBase: InterestBase.TOTAL }));

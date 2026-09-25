@@ -102,6 +102,17 @@ export class CreditsService {
      * sueltos (que, si vienen, tienen que coincidir). Sin `terms`, el alta de siempre.
      */
     const resolved = dto.terms !== undefined ? resolveTerms(dto) : undefined;
+
+    /*
+     * «Ya está en curso» con condiciones (D13): la misma regla que la edición (`registeredState`),
+     * aplicada en el alta para que el móvil lo cargue en una sola operación offline.
+     */
+    if (dto.initialState && !resolved) throw creditTermsInvalid(['TERMS_REQUIRED']);
+    if (dto.initialState && dto.outstandingBalance !== undefined) throw creditTermsConflict('outstandingBalance');
+    if (dto.initialState && dto.daysPastDue !== undefined) throw creditTermsConflict('daysPastDue');
+    const registered = resolved && dto.initialState ? registeredState(resolved.terms, dto.initialState) : undefined;
+    if (registered && !registered.ok) throw creditInitialStateInvalid(registered.code);
+    const asOf = new Date();
     const installmentAmount = resolved ? resolved.installmentAmount : dto.installmentAmount;
     const installmentsCount = resolved ? resolved.installmentsCount : dto.installmentsCount;
     const interestRate = resolved ? resolved.interestRatePercent : (dto.interestRate ?? 0);
@@ -149,22 +160,38 @@ export class CreditsService {
           installmentsCount,
           installments: schedule,
         });
-    const balanceBasis: BalanceBasis =
-      dto.outstandingBalance !== undefined || totalToCollect !== null ? 'total' : 'principal';
-    const outstandingBalance = dto.outstandingBalance ?? totalToCollect ?? dto.principalAmount;
-    const daysPastDue = dto.daysPastDue ?? 0;
+    const balanceBasis: BalanceBasis = registered?.ok
+      ? registered.balanceBasis
+      : dto.outstandingBalance !== undefined || totalToCollect !== null
+        ? 'total'
+        : 'principal';
+    const outstandingBalance = registered?.ok
+      ? registered.outstandingBalance
+      : (dto.outstandingBalance ?? totalToCollect ?? dto.principalAmount);
+    // Mora declarada al registrarlo → marca manual, como en la edición; si es 0, la calcula la fecha.
+    const moraSince = registered?.ok && registered.daysPastDue > 0 ? moraSinceFromDays(registered.daysPastDue, asOf) : undefined;
+    const daysPastDue = registered?.ok
+      ? moraSince
+        ? registered.daysPastDue
+        : arrearsFromDueDate(registered.nextDueDate, registered.outstandingBalance, asOf)
+      : (dto.daysPastDue ?? 0);
 
     const metadata: CreditMetadata = {
       frequency: resolved?.frequency ?? dto.frequency ?? PaymentFrequency.MONTHLY,
       origin: dto.origin ?? CreditOrigin.MANUAL,
       installmentAmount,
       nextDueDate:
-        resolved?.nextDueDate ?? dto.nextDueDate?.slice(0, 10) ?? (frozenInstallment ? isoDate(firstDueDate) : undefined),
+        (registered?.ok ? registered.nextDueDate : undefined) ??
+        resolved?.nextDueDate ??
+        dto.nextDueDate?.slice(0, 10) ??
+        (frozenInstallment ? isoDate(firstDueDate) : undefined),
       externalRef: dto.externalRef,
       notes: dto.notes,
       balanceBasis,
       // Las condiciones tal como las validó el motor: el detalle regenera el MISMO plan con ellas.
       ...(resolved ? { terms: resolved.terms, termsVersion: CREDIT_TERMS_VERSION } : {}),
+      initialState: hasInitialState(dto.initialState) ? { ...dto.initialState } : undefined,
+      moraSince,
     };
 
     const accountId = this.tenant.accountId;

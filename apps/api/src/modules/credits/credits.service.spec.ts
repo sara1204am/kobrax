@@ -515,6 +515,48 @@ describe('CreditsService.create — con condiciones (F4/06 · D14)', () => {
     );
   });
 
+  // F4/06 · Fase 5: el móvil carga el «ya está en curso» en el mismo alta (una sola operación offline).
+  it('en curso en el alta: descuenta las cuotas pagadas y vence la primera no pagada (D13)', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({
+      clientId: CLIENT_ID,
+      principalAmount: 1000,
+      installmentAmount: 115,
+      terms: AGREED,
+      initialState: { paidInstallments: 3, daysPastDue: 0 },
+    } as never);
+    const data = calls.creditCreate[0]!;
+    assert.equal(data.outstandingBalance, 805); // 1.150 − 3 × 115
+    const meta = data.metadata as Record<string, unknown>;
+    assert.equal(meta.nextDueDate, '2027-01-25');
+    assert.deepEqual(meta.initialState, { paidInstallments: 3, daysPastDue: 0 });
+  });
+
+  it('en curso en el alta con mora: marca manual y la mora declarada', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: AGREED, initialState: { paidInstallments: 0, outstandingBalance: 900, daysPastDue: 20 } } as never);
+    const data = calls.creditCreate[0]!;
+    assert.equal(data.outstandingBalance, 900);
+    assert.equal(data.daysPastDue, 20);
+    assert.equal(typeof (data.metadata as Record<string, unknown>).moraSince, 'string');
+  });
+
+  it('en curso en el alta: sin condiciones, mezclado con el saldo suelto o que no cierra, se rechaza', async () => {
+    const { service } = makeService({ client: { id: 'c1' } });
+    await rejectsWithCode(
+      service.create({ clientId: CLIENT_ID, principalAmount: 1000, installmentAmount: 115, initialState: { paidInstallments: 1, daysPastDue: 0 } } as never),
+      'CREDIT_TERMS_INVALID',
+    );
+    await rejectsWithCode(
+      service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: AGREED, outstandingBalance: 500, initialState: { paidInstallments: 1, daysPastDue: 0 } } as never),
+      'CREDIT_TERMS_CONFLICT',
+    );
+    await rejectsWithCode(
+      service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: AGREED, initialState: { paidInstallments: 10, daysPastDue: 0 } } as never),
+      'CREDIT_INITIAL_STATE_INVALID',
+    );
+  });
+
   it('total acordado en pago único: una cuota por el total, en la fecha acordada', async () => {
     const { service, calls } = makeService({ client: { id: 'c1' } });
     const terms = { definition: 'agreed_total', principal: 1000, agreedTotal: 1500, repayment: 'single', firstDueDate: '2026-11-25' };

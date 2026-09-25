@@ -1,6 +1,6 @@
 import type { CaseActivityItem } from './cases.service';
 import type { PaymentItem } from './payments.service';
-import { buildTimeline, promiseReady, recovered } from './ficha';
+import { buildTimeline, promiseReady, recovery } from './ficha';
 
 const act = (p: Partial<CaseActivityItem>): CaseActivityItem => ({ id: 'a', type: 'CALL', createdAt: '2026-07-01T10:00:00Z', ...p });
 const pay = (p: Partial<PaymentItem>): PaymentItem =>
@@ -17,11 +17,28 @@ describe('buildTimeline', () => {
   });
 });
 
-describe('recovered', () => {
-  it('capital − saldo, clampado a [0, capital]', () => {
-    expect(recovered(1000, 400)).toBe(600);
-    expect(recovered(1000, 0)).toBe(1000);
-    expect(recovered(1000, 1200)).toBe(0); // saldo mayor que el capital (mora capitalizada) → 0, no negativo
+describe('recovery — «Recuperado X de Y» (D15)', () => {
+  it('base total: contra el total por cobrar, no contra el capital', () => {
+    // 1.000 al 10 % en 5 cuotas de 300: debe 1.500 y ya pagó 400.
+    expect(recovery({ balanceBasis: 'total', outstandingBalance: 1100, principalAmount: 1000, totalToCollect: 1500 })).toEqual({
+      recovered: 400,
+      of: 1500,
+      percent: 27,
+    });
+  });
+
+  it('base total sin total conocido: no hay barra', () => {
+    expect(recovery({ balanceBasis: 'total', outstandingBalance: 800, principalAmount: 1000, totalToCollect: null })).toBeNull();
+  });
+
+  it('legacy y principal: contra el capital, clampado a [0, capital]', () => {
+    expect(recovery({ balanceBasis: 'legacy', outstandingBalance: 400, principalAmount: 1000 })).toEqual({ recovered: 600, of: 1000, percent: 60 });
+    expect(recovery({ outstandingBalance: 1200, principalAmount: 1000 })).toEqual({ recovered: 0, of: 1000, percent: 0 });
+  });
+
+  it('importado con saldo o capital desconocidos (D9): no hay barra', () => {
+    expect(recovery({ balanceBasis: 'total', outstandingBalance: 0, principalAmount: 0, totalToCollect: null, unknownFields: ['outstandingBalance'] })).toBeNull();
+    expect(recovery({ balanceBasis: 'principal', outstandingBalance: 500, principalAmount: 0, unknownFields: ['principalAmount'] })).toBeNull();
   });
 });
 

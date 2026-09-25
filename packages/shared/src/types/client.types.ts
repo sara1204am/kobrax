@@ -119,6 +119,12 @@ export interface NewCreditInput {
    * si vienen, tienen que coincidir. Opcional para que la cola offline de apps viejas siga entrando.
    */
   terms?: CreditTerms;
+  /**
+   * «Ya está en curso» con condiciones (D13, F4/06 · Fase 5): cuotas pagadas, saldo y mora en el
+   * mismo alta, para que el móvil lo cargue en una sola operación offline. Exige `terms` y reemplaza
+   * a `outstandingBalance`/`daysPastDue` sueltos.
+   */
+  initialState?: CreditInitialState;
 }
 
 // ── Lo que devuelve la API ───────────────────────────────────────────────────
