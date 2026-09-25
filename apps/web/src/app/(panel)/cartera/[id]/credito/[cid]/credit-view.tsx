@@ -6,18 +6,22 @@ import {
   CreditDefinition,
   InterestBase,
   RepaymentForm,
+  IMPORT_TRACKED_FIELDS,
   calculateCredit,
+  importCompleteness,
+  isUnknownField,
   memberName,
   paymentProgress,
   type CreditDetail,
   type CreditTerms,
+  type ImportTrackedField,
   type Member,
 } from '@kobrax/shared';
 import type { CatalogOption } from '@/components/client-form';
 import { Badge, Section } from '@/components/panel-ui';
 import { CREDIT_STATUS_TONE, CreditProgress } from '@/components/credit-progress';
 import { PaymentPlanTable } from '@/components/payment-plan-table';
-import { date, dayDate, money } from '@/lib/format';
+import { date, dateTime, dayDate, money } from '@/lib/format';
 
 /**
  * La ficha del crédito en modo lectura (F4/06 · Fase 3): Condiciones · Estado actual · Plan · Cobranza
@@ -102,20 +106,30 @@ function TermsSummary({ credit, terms }: { credit: CreditDetail; terms: CreditTe
   );
 }
 
-/** Un crédito anterior a F4/06: no tiene condiciones, sólo lo que se cobra. No se inventa una definición. */
+/**
+ * Un crédito sin condiciones: anterior a F4/06 o importado. Sólo lo que se cobra; no se inventa una
+ * definición. Del importado, lo que el archivo no trajo dice «No registrado» y no un 0 de relleno (D9).
+ */
 function LegacyTerms({ credit }: { credit: CreditDetail }) {
   const t = useTranslations('portfolio.creditDetail');
   const tp = useTranslations('portfolio');
   const cur = credit.currency;
+  const unknown = (f: ImportTrackedField) => isUnknownField(credit, f);
 
   return (
     <>
       <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-3">
-        <Item label={tp('fields.principal')} value={money(credit.principalAmount, cur)} />
+        <Item label={tp('fields.principal')} value={unknown('principalAmount') ? t('unknown') : money(credit.principalAmount, cur)} />
         <Item label={tp('fields.installment')} value={credit.installmentAmount != null ? money(credit.installmentAmount, cur) : t('unknown')} />
-        <Item label={t('installments')} value={credit.installmentsCount ? String(credit.installmentsCount) : tp('openLoan')} />
-        {credit.frequency && <Item label={tp('fields.frequency')} value={tp(`frequency.${credit.frequency}`)} />}
-        {credit.interestRate > 0 && <Item label={t('interest')} value={t('interestPerPeriod', { rate: credit.interestRate })} />}
+        <Item
+          label={t('installments')}
+          // Sin número (importado): no se sabe. Con 0: préstamo abierto de verdad.
+          value={credit.installmentsCount === undefined ? t('unknown') : credit.installmentsCount ? String(credit.installmentsCount) : tp('openLoan')}
+        />
+        <Item label={tp('fields.frequency')} value={credit.frequency ? tp(`frequency.${credit.frequency}`) : t('unknown')} />
+        {(unknown('interestRate') || credit.interestRate > 0) && (
+          <Item label={t('interest')} value={unknown('interestRate') ? t('unknown') : t('interestPerPeriod', { rate: credit.interestRate })} />
+        )}
       </dl>
       {!credit.locked && <p className="mt-4 text-[12px] text-k-muted">{t('legacyTerms')}</p>}
     </>
@@ -130,17 +144,27 @@ function CurrentState({ credit }: { credit: CreditDetail }) {
   const cur = credit.currency;
   const days = credit.daysPastDue ?? 0;
   const initial = credit.initialState;
+  const unknown = (f: ImportTrackedField) => isUnknownField(credit, f);
 
   return (
     <>
       <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-3">
-        <Figure label={t('outstanding')} value={money(credit.outstandingBalance, cur)} big />
+        <Figure label={t('outstanding')} value={unknown('outstandingBalance') ? t('unknown') : money(credit.outstandingBalance, cur)} big />
         <Figure label={t('totalToCollect')} value={credit.totalToCollect != null ? money(credit.totalToCollect, cur) : t('unknown')} />
-        <Figure label={t('nextDue')} value={credit.nextDueDate ? dayDate(credit.nextDueDate, locale) : t('noNextDue')} />
+        <Figure
+          label={t('nextDue')}
+          value={credit.nextDueDate ? dayDate(credit.nextDueDate, locale) : unknown('nextDueDate') ? t('unknown') : t('noNextDue')}
+        />
         <div>
           <dt className="text-[12px] text-k-text-2">{t('arrears')}</dt>
           <dd className="mt-1">
-            {days > 0 ? <Badge tone="danger">{tp('days', { count: days })}</Badge> : <Badge tone="success">{t('current')}</Badge>}
+            {unknown('daysPastDue') ? (
+              <span className="text-[14px] text-k-text">{t('unknown')}</span>
+            ) : days > 0 ? (
+              <Badge tone="danger">{tp('days', { count: days })}</Badge>
+            ) : (
+              <Badge tone="success">{t('current')}</Badge>
+            )}
           </dd>
         </div>
         {credit.status && (
@@ -203,6 +227,9 @@ function StoredPlan({ credit }: { credit: CreditDetail }) {
   const td = useTranslations('portfolio.creditDetail');
   const locale = useLocale();
   const rows = credit.installments ?? [];
+
+  // El importado no tiene cronograma porque lo lleva su fuente, no porque la cuota esté congelada.
+  if (rows.length === 0 && credit.locked) return <p className="text-[14px] text-k-text-2">{td('importedPlan')}</p>;
 
   if (rows.length === 0) {
     return (
@@ -277,15 +304,30 @@ function Origin({ credit }: { credit: CreditDetail }) {
   const t = useTranslations('portfolio.creditDetail');
   const tp = useTranslations('portfolio');
   const locale = useLocale();
+  const missing = IMPORT_TRACKED_FIELDS.filter((f) => isUnknownField(credit, f));
+  const completeness = importCompleteness(credit.unknownFields);
 
   return (
-    <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-3">
-      <Item label={t('origin')} value={credit.origin ? t(`origins.${credit.origin}`) : '—'} />
-      <Item label={tp('fields.currency')} value={credit.currency} />
-      <Item label={tp('fields.disbursedAt')} value={credit.disbursedAt ? date(credit.disbursedAt, locale) : '—'} />
-      {credit.createdAt && <Item label={t('createdAt')} value={date(credit.createdAt, locale)} />}
-      {credit.externalRef && <Item label={t('externalRef')} value={credit.externalRef} />}
-    </dl>
+    <>
+      <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-3">
+        <Item label={t('origin')} value={credit.origin ? t(`origins.${credit.origin}`) : '—'} />
+        <Item label={tp('fields.currency')} value={credit.currency} />
+        <Item
+          label={tp('fields.disbursedAt')}
+          value={credit.disbursedAt ? date(credit.disbursedAt, locale) : isUnknownField(credit, 'disbursedAt') ? t('unknown') : '—'}
+        />
+        {credit.createdAt && <Item label={t('createdAt')} value={date(credit.createdAt, locale)} />}
+        {credit.importedAt && <Item label={t('importedAt')} value={dateTime(credit.importedAt, locale)} />}
+        {credit.externalRef && <Item label={t('externalRef')} value={credit.externalRef} />}
+      </dl>
+      {/* Completitud: sólo se sabe de los importados desde la Fase 4, que guardan qué no trajo el archivo. */}
+      {credit.unknownFields && (
+        <p className="mt-4 text-[13px] text-k-text-2">
+          {t('completeness', completeness)}{' '}
+          {missing.length > 0 && t('completenessMissing', { fields: missing.map((f) => t(`importFields.${f}`)).join(', ') })}
+        </p>
+      )}
+    </>
   );
 }
 

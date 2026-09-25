@@ -8,6 +8,7 @@
 import type { CreditOrigin, EffectiveBalanceBasis, InterestBase, PaymentFrequency } from '../enums/credit.enum.js';
 import type { CreditTerms } from '../utils/credit-engine.js';
 import type { CreditInitialState } from '../utils/credit-edit.js';
+import type { ImportTrackedField } from '../utils/credit-import.js';
 
 // ── Payload de la API ────────────────────────────────────────────────────────
 export interface NewContactInput {
@@ -321,6 +322,13 @@ export interface CreditDetail {
    */
   hasPayments?: boolean;
   externalRef?: string;
+  /**
+   * Importado: los datos financieros que el archivo nunca trajo (D9). Su valor numérico, si viene, es
+   * un 0 de relleno: preguntar con `isUnknownField` antes de dibujarlo.
+   */
+  unknownFields?: ImportTrackedField[];
+  /** Importado: cuándo lo tocó la última importación. */
+  importedAt?: string;
   createdAt?: string;
   disbursedAt?: string;
   assignedManagerId?: string;

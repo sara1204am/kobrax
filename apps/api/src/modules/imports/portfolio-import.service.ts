@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { ClientType, ContactType, CreditStatus, LocationType } from '@prisma/client';
-import { CreditOrigin, readCreditMetadata } from '@kobrax/shared';
+import { readCreditMetadata } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -25,6 +25,7 @@ import {
   type ImportConfigPatch,
 } from './import-config';
 import { planPortfolioImport, type ExistingCredit, type PortfolioRow } from './portfolio-plan';
+import { creditCreateData, creditUpdateData, mapStatus, type ImportStamp } from './portfolio-credit';
 
 /** La config del tenant + lo derivado que necesita una corrida. */
 interface RunConfig extends ImportConfig {
@@ -219,6 +220,8 @@ export class PortfolioImportService {
       // Create batcheado: 2 createMany (clientes + créditos) en vez de 2N inserts en serie —
       // un extracto de banco puede traer miles de créditos. Los ids de cliente se pre-generan
       // en app para enlazar crédito↔cliente sin depender del id devuelto por cada insert.
+      // El id de la corrida se genera antes: cada crédito que toca guarda de qué corrida vino.
+      const stamp: ImportStamp = { runId: randomUUID(), at: new Date().toISOString() };
       const touched: ContactGap[] = [];
       if (plan.toCreate.length > 0) {
         const clientsData: Prisma.ClientCreateManyInput[] = [];
@@ -235,7 +238,7 @@ export class PortfolioImportService {
             lastName: b.clientLastName ?? 'SIN NOMBRE',
             firstName: b.clientFirstName ?? undefined,
           });
-          creditsData.push(creditCreateData(accountId, clientId, b, scope));
+          creditsData.push(creditCreateData(accountId, clientId, b, scope, stamp));
           touched.push({ clientId, b });
         }
         await tx.client.createMany({ data: clientsData });
@@ -243,7 +246,7 @@ export class PortfolioImportService {
       }
       for (const u of plan.toUpdate) {
         const b = u.row.data as unknown as NormalizedRecord;
-        await this.updateCredit(tx, u.id, b, metaById.get(u.id) ?? {});
+        await this.updateCredit(tx, u.id, b, metaById.get(u.id) ?? {}, stamp);
         const clientId = clientIdByCredit.get(u.id);
         if (clientId) touched.push({ clientId, b });
       }
@@ -260,6 +263,7 @@ export class PortfolioImportService {
 
       const run = await tx.clientImportRun.create({
         data: {
+          id: stamp.runId,
           accountId,
           source: 'portfolio',
           fileHash,
@@ -454,26 +458,14 @@ export class PortfolioImportService {
     return { ...cfg, fieldMap: toFieldMap(cfg.fields), required: requiredFields(cfg.fields) };
   }
 
-  private async updateCredit(tx: PrismaClient, id: string, b: NormalizedRecord, prevMeta: Record<string, unknown>): Promise<void> {
-    await tx.credit.update({
-      where: { id },
-      data: {
-        outstandingBalance: b.outstandingBalance ?? undefined,
-        // `null` = el parser no encontró la columna → NO se escribe. Escribirla siempre haría que
-        // un archivo con otro layout ponga la cartera entera en 0 días de mora (§2.1 del plan).
-        daysPastDue: b.daysPastDue ?? undefined,
-        // Estado desconocido (no mapeado) → NO tocar el status: evita degradar silenciosamente
-        // un DEFAULTED/WRITTEN_OFF a ACTIVE en cada import (la tabla de equivalencias completa = web).
-        status: mapStatus(b.status) ?? undefined,
-        interestRate: b.interestRate ?? undefined,
-        metadata: {
-          ...prevMeta,
-          origin: CreditOrigin.IMPORT,
-          coHolder: b.coHolder ?? prevMeta.coHolder,
-          pastDueAmount: b.pastDueAmount ?? prevMeta.pastDueAmount,
-        } as Prisma.InputJsonValue,
-      },
-    });
+  private async updateCredit(
+    tx: PrismaClient,
+    id: string,
+    b: NormalizedRecord,
+    prevMeta: Record<string, unknown>,
+    stamp: ImportStamp,
+  ): Promise<void> {
+    await tx.credit.update({ where: { id }, data: creditUpdateData(b, prevMeta, stamp) });
   }
 }
 
@@ -653,52 +645,6 @@ function moraWarnings(blocks: NormalizedRecord[], config: RunConfig): PortfolioS
   return out;
 }
 
-/** Datos de un crédito nuevo para `createMany` (el archivo no trae carnet → cliente sin nationalId). */
-function creditCreateData(
-  accountId: string,
-  clientId: string,
-  b: NormalizedRecord,
-  scope: ImportConfig['scope'],
-): Prisma.CreditCreateManyInput {
-  return {
-    accountId,
-    clientId,
-    code: b.code ?? undefined,
-    principalAmount: b.principalAmount ?? 0,
-    outstandingBalance: b.outstandingBalance ?? 0,
-    interestRate: b.interestRate ?? 0,
-    currency: mapCurrency(b.currency),
-    status: mapStatus(b.status) ?? CreditStatus.ACTIVE, // crédito nuevo: default razonable si el estado no se mapea
-    daysPastDue: b.daysPastDue ?? 0, // la columna es NOT NULL: el default aplica sólo al CREAR
-    branchId: scope.kind === 'branch' ? scope.ref : undefined,
-    assignedManagerId: scope.kind === 'official' ? scope.ref : undefined,
-    disbursedAt: b.disbursedAt ? new Date(b.disbursedAt) : undefined,
-    metadata: {
-      origin: CreditOrigin.IMPORT,
-      coHolder: b.coHolder ?? undefined,
-      pastDueAmount: b.pastDueAmount ?? undefined,
-    } as Prisma.InputJsonValue,
-  };
-}
-
-// VIGENTE → ACTIVE; el resto, mapeo mínimo (la tabla completa de equivalencias es config → web).
-// Devuelve null ante una etiqueta desconocida → el caller decide (preservar en update, default en create).
-const STATUS_MAP: Record<string, CreditStatus> = {
-  VIGENTE: CreditStatus.ACTIVE,
-  VENCIDO: CreditStatus.DEFAULTED,
-  CASTIGADO: CreditStatus.WRITTEN_OFF,
-  CANCELADO: CreditStatus.CANCELLED,
-};
-function mapStatus(raw: string | null): CreditStatus | null {
-  return STATUS_MAP[(raw ?? '').toUpperCase()] ?? null;
-}
-function mapCurrency(raw: string | null): string {
-  if (!raw) return 'BOB';
-  const u = raw.toUpperCase();
-  if (u.startsWith('BOLIV')) return 'BOB';
-  if (u.startsWith('DOLAR') || u.startsWith('DÓLAR')) return 'USD';
-  return raw;
-}
 function emptyPreview(): PortfolioSummary['preview'] {
   return { toCreate: [], toUpdate: [], toSetCurrent: [], invalid: [], warnings: [] };
 }

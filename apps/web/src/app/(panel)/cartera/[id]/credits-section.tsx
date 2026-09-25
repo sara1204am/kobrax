@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { hasInitialState, paymentProgress, type CreditDetail } from '@kobrax/shared';
+import { hasInitialState, isUnknownField, paymentProgress, type CreditDetail } from '@kobrax/shared';
 import { Badge } from '@/components/panel-ui';
 import { CREDIT_STATUS_TONE, CreditProgress } from '@/components/credit-progress';
 import { money, date, relativeDate } from '@/lib/format';
@@ -121,7 +121,7 @@ function CreditCard({
         <span className="text-right">
           <span className="block text-[11px] uppercase tracking-wide text-k-muted">{t('credit.principal')}</span>
           <span className="block text-[15px] font-semibold tabular-nums text-k-text">
-            {money(c.principalAmount, c.currency)}
+            {amountOf(c, 'principalAmount', t)}
           </span>
         </span>
 
@@ -142,13 +142,13 @@ function CreditCard({
 
       <div className="border-t border-k-border p-4">
         <dl className="grid gap-4 sm:grid-cols-3">
-          <Figure label={t('credit.principal')} value={money(c.principalAmount, c.currency)} />
+          <Figure label={t('credit.principal')} value={amountOf(c, 'principalAmount', t)} />
           <Figure
             label={t('credit.installment')}
             value={c.installmentAmount != null ? money(c.installmentAmount, c.currency) : '—'}
             hint={c.nextDueDate ? t('dueOn', { date: date(c.nextDueDate, locale) }) : undefined}
           />
-          <Figure label={t('credit.outstanding')} value={money(c.outstandingBalance, c.currency)} />
+          <Figure label={t('credit.outstanding')} value={amountOf(c, 'outstandingBalance', t)} />
         </dl>
 
         <CreditProgress
@@ -175,6 +175,15 @@ function Figure({ label, value, hint }: { label: string; value: string; hint?: s
       {hint && <p className="text-[12px] text-k-muted">{hint}</p>}
     </div>
   );
+}
+
+/** Un monto del crédito, o «No registrado» si el archivo del importado no lo trajo (D9): nunca el 0 de relleno. */
+function amountOf(
+  c: CreditDetail,
+  field: 'principalAmount' | 'outstandingBalance',
+  t: (k: string, v?: Record<string, string | number | Date>) => string,
+): string {
+  return isUnknownField(c, field) ? t('creditDetail.unknown') : money(c[field], c.currency);
 }
 
 /**

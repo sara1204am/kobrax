@@ -1,5 +1,5 @@
 import type { Arrear, Credit, CreditInstallment } from '@prisma/client';
-import { balanceBasisOf, creditTotalToCollect, creditView } from '@kobrax/shared';
+import { balanceBasisOf, creditTotalToCollect, creditView, CreditOrigin, type ImportTrackedField } from '@kobrax/shared';
 
 /** Etiquetas de concepto por defecto (las sobreescribe `account.configuration.creditLabels`). */
 export const DEFAULT_CREDIT_LABELS: Record<string, string> = {
@@ -52,6 +52,18 @@ export function serializeCredit(
     metadata: credit.metadata,
     installments: credit.installments?.map((i) => ({ dueDate: i.dueDate, amount: num(i.amount), status: i.status })),
   });
+  // Importado: lo que el archivo nunca trajo (D9). Frecuencia y nº de cuotas no se inventan: la columna
+  // guarda 0 («abierto») y el metadata cae a MONTHLY, y ninguno de los dos es cierto.
+  const unknownFields = view.importMissing?.length ? view.importMissing : undefined;
+  const unknown = (f: ImportTrackedField): boolean => unknownFields?.includes(f) ?? false;
+  // 🔴 El importador nunca escribe el nº de cuotas: la columna queda en su default (1), y con él el
+  // total por cobrar salía = una cuota. Vale también para los importados anteriores a la Fase 4.
+  const imported = view.origin === CreditOrigin.IMPORT;
+  const countUnknown = unknown('installmentsCount') || imported;
+  // La frecuencia tampoco la escribe nunca: `readCreditMetadata` cae a MONTHLY. Y una cuota en 0 no es
+  // una cuota (el alta exige > 0): es el relleno de algún archivo viejo.
+  const frequencyUnknown = unknown('frequency') || imported;
+  const installmentAmount = imported && !(view.installmentAmount && view.installmentAmount > 0) ? undefined : view.installmentAmount;
   return {
     id: credit.id,
     code: credit.code ?? undefined,
@@ -62,7 +74,7 @@ export function serializeCredit(
     outstandingBalance: num(credit.outstandingBalance),
     interestRate: num(credit.interestRate),
     currency: credit.currency,
-    installmentsCount: credit.installmentsCount,
+    installmentsCount: countUnknown ? undefined : credit.installmentsCount,
     status: credit.status,
     daysPastDue: credit.daysPastDue,
     assignedManagerId: credit.assignedManagerId ?? undefined,
@@ -70,9 +82,9 @@ export function serializeCredit(
     createdAt: credit.createdAt,
     updatedAt: credit.updatedAt,
     labels: { ...DEFAULT_CREDIT_LABELS, ...labels },
-    installmentAmount: view.installmentAmount,
+    installmentAmount,
     nextDueDate: view.nextDueDate,
-    frequency: view.frequency,
+    frequency: frequencyUnknown ? undefined : view.frequency,
     origin: view.origin,
     locked: view.locked, // candado de los campos financieros (§4.3)
     externalRef: view.externalRef,
@@ -84,12 +96,14 @@ export function serializeCredit(
     balanceBasis: balanceBasisOf(view),
     totalToCollect: creditTotalToCollect({
       principalAmount: num(credit.principalAmount),
-      installmentAmount: view.installmentAmount,
-      installmentsCount: credit.installmentsCount,
+      installmentAmount,
+      installmentsCount: countUnknown ? undefined : credit.installmentsCount,
       installments: credit.installments?.map((i) => ({ amount: num(i.amount) })),
       terms: view.terms,
     }),
     initialState: view.initialState,
+    unknownFields,
+    importedAt: view.importedAt,
     hasPayments: credit._count?.payments !== undefined ? credit._count.payments > 0 : undefined,
     installments: credit.installments?.map(serializeInstallment),
     arrears: credit.arrears?.map(serializeArrear),

@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import {
   creditFormState,
   initialStateFromForm,
+  isUnknownField,
   registeredState,
   termsEditBlock,
   type CreditDetail,
@@ -107,9 +108,9 @@ export function CreditCard({
   return (
     <form onSubmit={save} className="space-y-4">
       <PageHeader
-        title={money(credit.outstandingBalance, credit.currency)}
+        title={isUnknownField(credit, 'outstandingBalance') ? td('unknown') : money(credit.outstandingBalance, credit.currency)}
         subtitle={t('creditSubtitle', {
-          principal: money(credit.principalAmount, credit.currency),
+          principal: isUnknownField(credit, 'principalAmount') ? td('unknown') : money(credit.principalAmount, credit.currency),
           code: credit.code ?? t('noCode'),
         })}
         /* Las etiquetas van pegadas al saldo que califican, no a media pantalla entre los botones. */

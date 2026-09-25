@@ -1771,6 +1771,21 @@
           "BALANCE_ABOVE_TOTAL": "El saldo no puede superar el total a cobrar.",
           "DAYS_PAST_DUE_INVALID": "Los días de mora tienen que ser un entero entre 0 y 3650."
         }
+      },
+      "importedPlan": "Crédito importado: el plan de pagos lo lleva la fuente. Acá se ve la cuota y la próxima fecha del último archivo.",
+      "importedAt": "Última importación",
+      "completeness": "Datos que trajo el archivo: {known} de {total}",
+      "completenessMissing": "No registrados: {fields}.",
+      "importFields": {
+        "principalAmount": "monto",
+        "outstandingBalance": "saldo",
+        "interestRate": "tasa",
+        "installmentAmount": "cuota",
+        "installmentsCount": "número de cuotas",
+        "frequency": "frecuencia",
+        "nextDueDate": "próximo vencimiento",
+        "disbursedAt": "fecha de desembolso",
+        "daysPastDue": "días de mora"
       }
     },
     "creditBadges": {

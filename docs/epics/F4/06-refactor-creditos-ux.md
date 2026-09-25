@@ -1,6 +1,6 @@
 # F4 · Fase 6 — Refactor UX de Créditos + motor financiero único
 
-**Parent:** [EPIC-F4 Core Financiero](../EPIC-F4-core-financiero.md) · **Estado:** 🚧 En curso (Fases 0 a 3 cerradas; sigue la Fase 4)
+**Parent:** [EPIC-F4 Core Financiero](../EPIC-F4-core-financiero.md) · **Estado:** 🚧 En curso (Fases 0 a 4 cerradas; sigue la Fase 5)
 **Owner:** Shared · API · Web · Mobile · **Depende de:** [F4/03-creditos](./03-creditos.md), [F4/05-importacion-clientes](./05-importacion-clientes.md)
 
 ## Objetivo
@@ -88,6 +88,31 @@ Opciones avanzadas), cuota variable manual y reestructuración.
 
 **Orden de despliegue:** API → web → mobile. Las frecuencias nuevas no se ofrecen en la UI hasta que la versión de
 mobile que las entiende esté publicada, porque las versiones viejas las leen como `MONTHLY`.
+
+## Fase 4 — Importados ✅ (2026-09-25)
+
+- **D9 sin migración:** `principal_amount`, `interest_rate`, `outstanding_balance`, `days_past_due` e
+  `installments_count` son `NOT NULL`. Hacerlas anulables arrastraba API, web y mobile, así que el alta
+  importada sigue escribiendo un 0 de relleno, pero **el campo queda en `metadata.importMissing`**
+  (`packages/shared/src/utils/credit-import.ts`, `nextImportMissing`, con tests). La API lo expone como
+  `unknownFields` y la web dibuja «No registrado» (`isUnknownField`).
+  - Alta: falta lo que el archivo no trajo.
+  - Actualización: lo que llega deja de faltar **y se escribe** (ahora también capital y desembolso). Lo que no
+    llega no se toca y, si ya se conocía, sigue conocido.
+  - Importado antes de la Fase 4 (sin lista): se toma como faltante lo que el archivo actual no trae.
+- **Cuota y próximo vencimiento** se guardan en `metadata` al crear y al actualizar (antes se leían y se descartaban).
+- **`importRunId` / `importedAt`** en `metadata`: el id de la corrida se genera antes de escribir y es el mismo de
+  `client_import_runs`.
+- **Serializer, sólo origen `import`:** nº de cuotas, frecuencia y una cuota en 0 son desconocidos siempre. El
+  importador nunca escribe el nº de cuotas y la columna nace en `@default(1)`: el total por cobrar salía = una cuota
+  y la barra de progreso medía contra eso. Vale también para los importados viejos.
+- **Código:** la lógica de qué escribe una fila salió de `portfolio-import.service.ts` a
+  `apps/api/src/modules/imports/portfolio-credit.ts` (`creditCreateData`, `creditUpdateData`, con spec).
+- **Web · detalle de solo lectura:** Condiciones y Estado actual con «No registrado»; el plan dice que lo lleva la
+  fuente (antes decía «cuota congelada» y «préstamo abierto»); Origen muestra la última importación y la completitud
+  («Datos que trajo el archivo: 5 de 9 · No registrados: …»). En la lista, monto y saldo desconocidos dicen
+  «No registrado».
+- **Verificado:** E2E con dos CSV contra la API local (config temporal, restaurada con `reset`) y la ficha por SSR.
 
 ## Fase 3 — Web · Detalle y Edición ✅ (2026-09-25)
 

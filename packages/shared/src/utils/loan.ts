@@ -17,6 +17,7 @@ import {
 } from '../enums/credit.enum.js';
 import { CREDIT_TERMS_VERSION, parseCreditTerms, type CreditTerms } from './credit-engine.js';
 import { parseInitialState, type CreditInitialState } from './credit-edit.js';
+import { isImportTrackedField, type ImportTrackedField } from './credit-import.js';
 
 const DAY_MS = 86_400_000;
 /** Trabaja en céntimos para no arrastrar error de coma flotante. */
@@ -139,6 +140,15 @@ export interface CreditMetadata {
    * edición mientras no haya pagos; ausente = nació en Kobrax.
    */
   initialState?: CreditInitialState;
+  /**
+   * Importado (F4/06 · Fase 4): los datos financieros que ningún archivo trajo. Su columna puede tener
+   * un 0 que no significa nada (D9). Ausente = no se sabe (importado antes de la Fase 4) o no es importado.
+   */
+  importMissing?: ImportTrackedField[];
+  /** La corrida de importación que lo tocó por última vez (`client_import_runs.id`). */
+  importRunId?: string;
+  /** ISO: cuándo lo tocó esa corrida. */
+  importedAt?: string;
 }
 
 export function readCreditMetadata(raw: unknown): CreditMetadata {
@@ -155,6 +165,9 @@ export function readCreditMetadata(raw: unknown): CreditMetadata {
     moraSince: typeof m.moraSince === 'string' ? m.moraSince : undefined,
     balanceBasis: (BALANCE_BASES as readonly unknown[]).includes(m.balanceBasis) ? (m.balanceBasis as BalanceBasis) : undefined,
     initialState: parseInitialState(m.initialState),
+    importMissing: Array.isArray(m.importMissing) ? m.importMissing.filter(isImportTrackedField) : undefined,
+    importRunId: typeof m.importRunId === 'string' ? m.importRunId : undefined,
+    importedAt: typeof m.importedAt === 'string' ? m.importedAt : undefined,
     ...readTerms(m),
   };
 }

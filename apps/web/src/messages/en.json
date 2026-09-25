@@ -1771,6 +1771,21 @@
           "BALANCE_ABOVE_TOTAL": "The balance cannot exceed the total to collect.",
           "DAYS_PAST_DUE_INVALID": "Days past due must be a whole number between 0 and 3650."
         }
+      },
+      "importedPlan": "Imported credit: the payment plan is kept by the source. The instalment and next date from the last file are shown here.",
+      "importedAt": "Last import",
+      "completeness": "Data the file brought: {known} of {total}",
+      "completenessMissing": "Not recorded: {fields}.",
+      "importFields": {
+        "principalAmount": "amount",
+        "outstandingBalance": "balance",
+        "interestRate": "rate",
+        "installmentAmount": "instalment",
+        "installmentsCount": "number of instalments",
+        "frequency": "frequency",
+        "nextDueDate": "next due date",
+        "disbursedAt": "disbursement date",
+        "daysPastDue": "days past due"
       }
     },
     "creditBadges": {
