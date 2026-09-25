@@ -4,7 +4,12 @@ import { AgendaItemStatus, AgendaItemType, CasePriority, CaseStatus, CreditStatu
 import {
   addPeriods,
   arrearsFromDueDate,
+  CREDIT_TERMS_VERSION,
+  creditTotalToCollect,
   CreditOrigin,
+  parseCreditTerms,
+  resolveCreditTerms,
+  type TermsResolution,
   isExternalOrigin,
   manualArrears,
   moraSinceFromDays,
@@ -12,6 +17,7 @@ import {
   readCreditMetadata,
   resolvePagination,
   type ApiResponse,
+  type BalanceBasis,
   type CreditMetadata,
   ResponseDto,
 } from '@kobrax/shared';
@@ -28,7 +34,19 @@ import {
 } from './credit-math';
 import { serializeCredit } from './credits.serializer';
 import { ClearArrearsDto, CreateCreditDto, ListCreditsQueryDto, UpdateCreditDto } from './dto/credit.dto';
-import { arrearsDateNotFuture, creditLocked, creditNotActive, currencyMismatch, resourceNotFound, scheduleInvalid } from './credits.errors';
+import {
+  arrearsDateNotFuture,
+  creditInstallmentMismatch,
+  creditLocked,
+  creditNotActive,
+  creditTermsConflict,
+  creditTermsEditUnsupported,
+  creditTermsInvalid,
+  creditTermsNotPersistable,
+  currencyMismatch,
+  resourceNotFound,
+  scheduleInvalid,
+} from './credits.errors';
 import { computePriority, slaDueAt, DEFAULT_PRIORITY_PARAMS } from '../cases/case-priority';
 import { closeOpenCases, openCaseIfNone } from '../arrears/case-lifecycle';
 
@@ -71,16 +89,31 @@ export class CreditsService {
     const currency = dto.currency ?? config.currencyCode;
     if (dto.currency && dto.currency !== config.currencyCode) throw currencyMismatch(config.currencyCode);
 
+    /*
+     * F4/06 · D14: con condiciones (`terms`) la API recalcula con el motor único y **manda según el
+     * modo**; cuota, número de cuotas, frecuencia, primera fecha y tasa salen de ahí, no de los campos
+     * sueltos (que, si vienen, tienen que coincidir). Sin `terms`, el alta de siempre.
+     */
+    const resolved = dto.terms !== undefined ? resolveTerms(dto) : undefined;
+    const installmentAmount = resolved ? resolved.installmentAmount : dto.installmentAmount;
+    const installmentsCount = resolved ? resolved.installmentsCount : dto.installmentsCount;
+    const interestRate = resolved ? resolved.interestRatePercent : (dto.interestRate ?? 0);
+
     const disbursedAt = dto.disbursedAt ? new Date(dto.disbursedAt) : new Date();
-    const firstDueDate = dto.firstDueDate ? new Date(dto.firstDueDate) : addMonths(disbursedAt, 1);
+    const firstDueDate = resolved
+      ? new Date(`${resolved.nextDueDate}T00:00:00.000Z`)
+      : dto.firstDueDate
+        ? new Date(dto.firstDueDate)
+        : addMonths(disbursedAt, 1);
 
     /**
      * Dos formas de nacer, y las distingue un solo dato (spec §4, §7, §8):
      *  · con `installmentAmount` → crédito de cobranza: la cuota viene **congelada** del móvil y
      *    NO se genera cronograma. Es el único modo que admite el préstamo abierto (sin `n`).
+     *    Con `terms` siempre es este camino: el cronograma real llega en F4/06 · Fase 6.
      *  · sin él → comportamiento de siempre (web/importador): cronograma amortizado.
      */
-    const frozenInstallment = dto.installmentAmount !== undefined;
+    const frozenInstallment = installmentAmount !== undefined;
     const schedule = frozenInstallment
       ? []
       : buildSchedule({
@@ -92,17 +125,40 @@ export class CreditsService {
         });
     if (!frozenInstallment && !scheduleIsBalanced(dto.principalAmount, schedule)) throw scheduleInvalid();
 
+    /*
+     * 🔴 D15 (F4/06): el saldo es el **total pendiente de cobro**, no el capital. Antes nacía igual al
+     * capital y el pago que lo superaba se rechazaba: en 1.000 al 10 % en 5 cuotas de 300, la 4.ª cuota
+     * rebotaba con «El monto excede el saldo» y la ganancia no se podía cobrar nunca.
+     *
+     *  · "ya está en curso" → el saldo que dijo quien lo carga (es lo que falta cobrar);
+     *  · total conocido (cronograma, o cuota × n) → ese total;
+     *  · préstamo abierto → nadie sabe el total: saldo = capital, marcado `principal` (D16).
+     */
+    const totalToCollect = resolved
+      ? resolved.totalToCollect
+      : creditTotalToCollect({
+          principalAmount: dto.principalAmount,
+          installmentAmount,
+          installmentsCount,
+          installments: schedule,
+        });
+    const balanceBasis: BalanceBasis =
+      dto.outstandingBalance !== undefined || totalToCollect !== null ? 'total' : 'principal';
+    const outstandingBalance = dto.outstandingBalance ?? totalToCollect ?? dto.principalAmount;
+    const daysPastDue = dto.daysPastDue ?? 0;
+
     const metadata: CreditMetadata = {
-      frequency: dto.frequency ?? PaymentFrequency.MONTHLY,
+      frequency: resolved?.frequency ?? dto.frequency ?? PaymentFrequency.MONTHLY,
       origin: dto.origin ?? CreditOrigin.MANUAL,
-      installmentAmount: dto.installmentAmount,
-      nextDueDate: dto.nextDueDate?.slice(0, 10) ?? (frozenInstallment ? isoDate(firstDueDate) : undefined),
+      installmentAmount,
+      nextDueDate:
+        resolved?.nextDueDate ?? dto.nextDueDate?.slice(0, 10) ?? (frozenInstallment ? isoDate(firstDueDate) : undefined),
       externalRef: dto.externalRef,
       notes: dto.notes,
+      balanceBasis,
+      // Las condiciones tal como las validó el motor: el detalle regenera el MISMO plan con ellas.
+      ...(resolved ? { terms: resolved.terms, termsVersion: CREDIT_TERMS_VERSION } : {}),
     };
-    // "Este préstamo ya está en curso" (§4.1): sin el toggle, saldo = capital y mora = 0.
-    const outstandingBalance = dto.outstandingBalance ?? dto.principalAmount;
-    const daysPastDue = dto.daysPastDue ?? 0;
 
     const accountId = this.tenant.accountId;
     const created = await this.tx(async (tx) => {
@@ -143,9 +199,9 @@ export class CreditsService {
           typeCode: dto.typeCode,
           principalAmount: dto.principalAmount,
           outstandingBalance,
-          interestRate: dto.interestRate ?? 0,
+          interestRate, // con `terms`: el % del calculado, 0 si fue acordado (D7: sólo informativa)
           currency,
-          installmentsCount: dto.installmentsCount ?? 0, // 0 = préstamo abierto (§4.1)
+          installmentsCount: installmentsCount ?? 0, // 0 = préstamo abierto (§4.1)
           daysPastDue,
           assignedManagerId: dto.assignedManagerId,
           disbursedAt,
@@ -270,6 +326,9 @@ export class CreditsService {
       if (!prev) throw resourceNotFound();
       const meta = readCreditMetadata(prev.metadata);
       if (financialEdit && isExternalOrigin(meta.origin)) throw creditLocked();
+      // Cambiar la cuota o el capital sin tocar `terms` dejaría dos definiciones del mismo crédito, y el
+      // saldo total (D15) desalineado. Editarlo bien —recalcular condiciones y saldo— es F4/06 · Fase 3.
+      if (financialEdit && meta.terms) throw creditTermsEditUnsupported();
 
       // Cuota/frecuencia/próxima fecha/nota viven en metadata (D1); se hace merge preservando el resto.
       const nextMeta: CreditMetadata = {
@@ -480,6 +539,36 @@ export class CreditsService {
 
     await this.audit.record({ entity: 'credit', entityId: id, action: 'ARREARS_RECALC', after: result });
     return result;
+  }
+}
+
+/**
+ * `terms` del body → lo que se guarda, aplicando D14 con la función pura de shared
+ * (`resolveCreditTerms`). Acá sólo se traduce cada rechazo a su error HTTP.
+ */
+function resolveTerms(dto: CreateCreditDto): TermsResolution {
+  const terms = parseCreditTerms(dto.terms);
+  if (!terms) throw creditTermsInvalid(['TERMS_SHAPE']);
+  const r = resolveCreditTerms(terms, {
+    principalAmount: dto.principalAmount,
+    installmentAmount: dto.installmentAmount,
+    installmentsCount: dto.installmentsCount,
+    frequency: dto.frequency,
+    nextDueDate: dto.nextDueDate,
+    firstDueDate: dto.firstDueDate,
+    interestRate: dto.interestRate,
+    amortizationType: dto.amortizationType,
+  });
+  if (r.ok) return r;
+  switch (r.code) {
+    case 'TERMS_INVALID':
+      throw creditTermsInvalid(r.issues);
+    case 'TERMS_NOT_PERSISTABLE':
+      throw creditTermsNotPersistable();
+    case 'TERMS_CONFLICT':
+      throw creditTermsConflict(r.field);
+    case 'INSTALLMENT_MISMATCH':
+      throw creditInstallmentMismatch(r.expected, r.sent);
   }
 }
 

@@ -98,6 +98,26 @@ describe('PaymentsService.register', () => {
     assert.equal(calls.caseClose.length, 0);
   });
 
+  /**
+   * 🔴 D15: con el saldo = total por cobrar, la cuota que ya pasó el capital se cobra entera. Préstamo
+   * de 1.000 en 5 cuotas de 300 (total 1.500): tras 3 cuotas quedan 600; la 4.ª cuota de 300 entra.
+   * Con el saldo viejo (= capital) quedaban 100 y esta misma cuota se rechazaba.
+   */
+  it('D15: la cuota que cubre ganancia se cobra entera (saldo = total pendiente)', async () => {
+    const credit = {
+      id: 'cr1',
+      status: 'ACTIVE',
+      branchId: null,
+      outstandingBalance: 600,
+      installments: [],
+      metadata: { origin: 'manual', balanceBasis: 'total', installmentAmount: 300, frequency: 'MONTHLY', nextDueDate: '2027-01-25' },
+    };
+    const { service, calls } = makeService({ credit });
+    await service.register({ ...PAY, amount: 300 });
+    assert.equal(calls.creditUpdate[0]!.outstandingBalance, 300);
+    assert.equal(calls.creditUpdate[0]!.status, undefined); // todavía se debe la 5.ª
+  });
+
   it('rechaza monto que excede el saldo (PAYMENT_001)', async () => {
     const { service } = makeService();
     await rejectsWithCode(service.register({ ...PAY, amount: 300 }), 'PAYMENT_001');

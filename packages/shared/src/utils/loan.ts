@@ -2,88 +2,27 @@
  * Matemática del préstamo tal como la define la spec (`Cliente_Prestamo.pdf` §4.2, §5.3).
  * Funciones puras, cero deps: las usan el móvil (panel en vivo, estado de la tarjeta) y la API.
  *
- * OJO — esto NO es un motor financiero. La cuota se calcula una vez, el usuario puede redondearla,
- * y se congela como valor fijo (§8: "la app es de cobranza, no core financiero"). La amortización
- * real (`buildSchedule`, sistema francés) vive en la API y solo sirve a los créditos con cronograma.
+ * La cotización y el plan de pagos NO viven acá: salen del motor único (`credit-engine.ts`), que usan
+ * por igual la vista previa (web/móvil) y la API (F4/06).
  */
 import {
+  BALANCE_BASES,
   CreditOrigin,
   DUE_SOON_DAYS,
-  InterestBase,
   PaymentFrequency,
+  type BalanceBasis,
+  type EffectiveBalanceBasis,
   PortfolioStatus,
   type ArrearsSource,
 } from '../enums/credit.enum.js';
+import { CREDIT_TERMS_VERSION, parseCreditTerms, type CreditTerms } from './credit-engine.js';
 
 const DAY_MS = 86_400_000;
 /** Trabaja en céntimos para no arrastrar error de coma flotante. */
 const round2 = (x: number): number => Math.round(x * 100) / 100;
 
-/**
- * Suma `n` períodos a una fecha según la frecuencia (§4.1). Base de "avanzar la próxima cuota".
- *
- * En UTC a propósito: las fechas de cobro se anclan a medianoche UTC en todo el sistema. Con
- * `setMonth`/`getMonth` (hora local) un `2026-07-01T00:00Z` + 1 mes caía en el **31 de julio** para
- * cualquier huso al oeste de Greenwich, o sea toda LatAm.
- */
-export function addPeriods(date: Date, n: number, frequency: PaymentFrequency): Date {
-  const d = new Date(date.getTime());
-  switch (frequency) {
-    case PaymentFrequency.DAILY:
-      return new Date(d.getTime() + n * DAY_MS);
-    case PaymentFrequency.WEEKLY:
-      return new Date(d.getTime() + n * 7 * DAY_MS);
-    case PaymentFrequency.BIWEEKLY:
-      return new Date(d.getTime() + n * 14 * DAY_MS);
-    case PaymentFrequency.MONTHLY:
-      d.setUTCMonth(d.getUTCMonth() + n);
-      return d;
-  }
-}
-
-export interface LoanQuote {
-  /** Cuota (§4.2). */
-  installment: number;
-  /** Total a cobrar = cuota × n. */
-  total: number;
-  /** Ganancia = total − capital (el "Interés" del panel). */
-  profit: number;
-}
-
-/**
- * Panel en vivo del Modo B — Cuota / Total a cobrar / Ganancia (§4.2).
- *
- *   % por período:  cuota = capital/n + capital × i/100     ·  total = cuota × n
- *   % total:        total = capital × (1 + i/100)           ·  cuota = total / n
- *
- * Ejemplo del PDF: capital 1.000, 10% por período, 5 cuotas → cuota 300, total 1.500, ganancia 500.
- */
-export function quoteLoan(params: {
-  principal: number;
-  interestPercent: number;
-  installments: number;
-  base?: InterestBase;
-}): LoanQuote {
-  const { principal, interestPercent: i, installments: n } = params;
-  const base = params.base ?? InterestBase.PER_PERIOD;
-  if (n < 1) return { installment: 0, total: 0, profit: 0 };
-
-  const installment =
-    base === InterestBase.TOTAL
-      ? round2((principal * (1 + i / 100)) / n)
-      : round2(principal / n + (principal * i) / 100);
-
-  return quoteFromInstallment(principal, installment, n);
-}
-
-/**
- * El mismo panel, pero partiendo de una cuota ya fijada — Modo A, y Modo B después de que el usuario
- * la **redondea a mano** ("la cuota es editable tras el cálculo… al editarla se recalcula el total", §5.2).
- */
-export function quoteFromInstallment(principal: number, installment: number, installments: number): LoanQuote {
-  const total = round2(installment * installments);
-  return { installment: round2(installment), total, profit: round2(total - principal) };
-}
+// Vive en su propio archivo (ver `periods.ts`); se re-exporta acá para no mover a nadie que lo importe.
+export { addPeriods } from './periods.js';
 
 /**
  * Estado de la tarjeta de cartera (§5.3). Derivado, nunca editable.
@@ -181,6 +120,19 @@ export interface CreditMetadata {
    * es borrarlo.
    */
   moraSince?: string;
+  /**
+   * Qué representa el saldo (D15). **Sólo se guarda cuando se sabe** —lo escribe el alta—; si falta,
+   * `balanceBasisOf` lo deriva. Nunca se estampa una base supuesta en un crédito viejo.
+   */
+  balanceBasis?: BalanceBasis;
+  /**
+   * Las condiciones con las que se definió el crédito (F4/06 · Fase 1), tal como las recalculó la API.
+   * Con ellas el detalle rehidrata el formulario y vuelve a generar el MISMO plan con `calculateCredit`.
+   * Ausente en los créditos anteriores a F4/06 y en los importados.
+   */
+  terms?: CreditTerms;
+  /** Formato de `terms` (`CREDIT_TERMS_VERSION`). Un `terms` de una versión desconocida no se lee. */
+  termsVersion?: number;
 }
 
 export function readCreditMetadata(raw: unknown): CreditMetadata {
@@ -195,7 +147,32 @@ export function readCreditMetadata(raw: unknown): CreditMetadata {
     externalRef: typeof m.externalRef === 'string' ? m.externalRef : undefined,
     notes: typeof m.notes === 'string' ? m.notes : undefined,
     moraSince: typeof m.moraSince === 'string' ? m.moraSince : undefined,
+    balanceBasis: (BALANCE_BASES as readonly unknown[]).includes(m.balanceBasis) ? (m.balanceBasis as BalanceBasis) : undefined,
+    ...readTerms(m),
   };
+}
+
+/**
+ * `terms` + `termsVersion` juntos o ninguno. Una versión que este código no conoce se descarta
+ * entera: interpretar mal unas condiciones es peor que no tenerlas.
+ */
+function readTerms(m: Record<string, unknown>): Pick<CreditMetadata, 'terms' | 'termsVersion'> {
+  if (m.termsVersion !== CREDIT_TERMS_VERSION) return {};
+  const terms = parseCreditTerms(m.terms);
+  return terms ? { terms, termsVersion: CREDIT_TERMS_VERSION } : {};
+}
+
+/**
+ * Qué representa el saldo de este crédito (D15), y el único lugar que lo decide.
+ *
+ *  · marca guardada → esa (los créditos nacidos con la regla nueva);
+ *  · importado / API → `total`: el archivo del banco ya trae el saldo total pendiente;
+ *  · manual sin marca → `legacy`: nació con saldo = capital y todavía no se migró.
+ */
+export function balanceBasisOf(meta: CreditMetadata): EffectiveBalanceBasis {
+  if (meta.balanceBasis) return meta.balanceBasis;
+  if (isExternalOrigin(meta.origin)) return 'total';
+  return 'legacy';
 }
 
 /**

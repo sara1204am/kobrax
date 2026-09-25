@@ -37,7 +37,7 @@
       "parada": "Stop",
       "planificar": "Plan",
       "editar": "Edit",
-      "prestamo": "New loan",
+      "prestamo": "New credit",
       "credito": "Credit",
       "solicitudes": "Payment requests",
       "nueva": "New",
@@ -1361,11 +1361,7 @@
       "timeline": "Activity log",
       "cases": "Overdue"
     },
-    "newLoan": "New loan",
-    "loanTitle": "New loan",
-    "loanSubtitle": "For {name}",
-    "loanSave": "Grant the loan",
-    "loanCreated": "Loan registered",
+    "newLoan": "New credit",
     "loanMode": {
       "A": "I know the instalment",
       "B": "Work out the instalment"
@@ -1424,7 +1420,10 @@
       "DAILY": "Daily",
       "WEEKLY": "Weekly",
       "BIWEEKLY": "Fortnightly",
-      "MONTHLY": "Monthly"
+      "MONTHLY": "Monthly",
+      "QUARTERLY": "Quarterly",
+      "SEMIANNUAL": "Semiannual",
+      "ANNUAL": "Annual"
     },
     "schedule": {
       "number": "Instalment",
@@ -1463,10 +1462,6 @@
       "openLoanHint": "empty = open loan",
       "assignedTo": "Collected by",
       "unassigned": "Unassigned",
-      "inProgress": "This loan is already running",
-      "inProgressHint": "For loading older loans: it is saved with the balance and arrears it already has.",
-      "outstanding": "Current balance",
-      "daysPastDue": "Days past due",
       "relationContacts": "Their phones",
       "relationLocations": "Their addresses",
       "remove": "Remove",
@@ -1627,6 +1622,84 @@
         "next_period": "The next collection date moves forward one period, following the loan frequency.",
         "date": "The next collection date becomes the one you pick. It must be in the future.",
         "none": "It becomes an open loan: with no agreed due date there are no overdue days to count."
+      }
+    },
+    "creditForm": {
+      "title": "New credit",
+      "subtitle": "For {name}",
+      "save": "Grant the credit",
+      "created": "Credit registered",
+      "definitionLabel": "How do you want to define the credit?",
+      "definition": {
+        "calculated": "Calculate installments",
+        "agreed_installment": "Agreed installment",
+        "agreed_total": "Agreed total"
+      },
+      "definitionHint": {
+        "calculated": "The installment comes from the interest, the number of installments and the frequency.",
+        "agreed_installment": "You already know how much each installment is. No rate needed.",
+        "agreed_total": "You agreed on the total to pay back. No rate needed."
+      },
+      "principal": "Amount to lend",
+      "ratePercent": "Interest (%)",
+      "installmentsCount": "Number of installments",
+      "term": "Term (in periods)",
+      "openLoanHint": "empty = open loan",
+      "installmentAmount": "Agreed installment",
+      "agreedTotal": "Agreed total",
+      "repayment": "Repayment",
+      "repaymentOptions": {
+        "single": "Single payment",
+        "installments": "In installments"
+      },
+      "frequency": "Frequency",
+      "termFrequency": "Each period is",
+      "firstDueDate": "First payment",
+      "paymentDate": "Payment date",
+      "advanced": "Advanced options",
+      "interestType": "Interest type",
+      "interestTypes": {
+        "simple": "Simple",
+        "compound": "Compound"
+      },
+      "amortization": "Amortization method",
+      "amortizations": {
+        "fixed_installment": "Fixed installment",
+        "fixed_principal": "Fixed principal (decreasing installment)",
+        "single_payment": "Single payment"
+      },
+      "rateBase": "How the interest applies",
+      "quote": {
+        "installment": "Installment",
+        "firstInstallment": "First installment",
+        "total": "Total to collect",
+        "profit": "Profit",
+        "openLoan": "Open loan: without a number of installments there is no total or payment plan."
+      },
+      "incomplete": "Fill in the details to see the installment and the payment plan.",
+      "plan": {
+        "title": "Payment plan",
+        "hint": "Preview with the same terms that are saved with the credit.",
+        "number": "Installment",
+        "dueDate": "Date",
+        "principal": "Principal",
+        "interest": "Interest",
+        "amount": "Total",
+        "balance": "Principal balance"
+      },
+      "issues": {
+        "PRINCIPAL_INVALID": "The amount must be greater than 0.",
+        "RATE_INVALID": "The interest cannot be negative.",
+        "RATE_OUT_OF_RANGE": "The interest is above the maximum: 100% per installment or 500% over the total.",
+        "RATE_BASE_NOT_SUPPORTED": "Interest over the total only applies to simple interest with a fixed installment.",
+        "COMBINATION_NOT_SUPPORTED": "That combination of interest and amortization method is not offered.",
+        "PERIODS_INVALID": "The number of installments must be a whole number between 1 and 600.",
+        "INSTALLMENT_INVALID": "The installment must be greater than 0.",
+        "TOTAL_INVALID": "The total must be greater than 0.",
+        "FREQUENCY_REQUIRED": "Choose a frequency.",
+        "DATE_INVALID": "The date is not valid.",
+        "INSTALLMENT_TOO_SMALL": "The total is not enough for that many installments.",
+        "TOTAL_BELOW_PRINCIPAL": "You will collect less than you lend. You can still save it."
       }
     }
   },

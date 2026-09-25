@@ -209,6 +209,7 @@ El schema Pilar 2 está migrado y conforme al documento `DB_Architecture_COBRA`.
 | 3 | [F4/03-creditos](./F4/03-creditos.md) ✅ | CRUD créditos + cronograma + mora + labels | — |
 | 4 | [F4/04-tests-cierre](./F4/04-tests-cierre.md) | Pirámide de tests + DoD de seguridad (transversal, desde Fase 2) | — |
 | 5 | [F4/05-importacion-clientes](./F4/05-importacion-clientes.md) ✅ (MVP) | Importación masiva (CSV/JSON) + reconciliación diaria (upsert/baja/alta) con permisos | — |
+| 6 | [F4/06-refactor-creditos-ux](./F4/06-refactor-creditos-ux.md) 🚧 | Motor financiero único (preview = persistencia) + UX Nuevo/Detalle/Editar crédito | — |
 
 > **Orden crítico:** las historias de Infra/Seguridad (Fase 0 y 1) deben completarse antes de escribir la primera línea de negocio. Sin `TenantContextInterceptor` activo, cualquier test de integración es inválido.
 

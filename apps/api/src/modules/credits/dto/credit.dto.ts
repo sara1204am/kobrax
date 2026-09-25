@@ -6,6 +6,7 @@ import {
   IsIn,
   IsInt,
   IsNumber,
+  IsObject,
   IsOptional,
   IsPositive,
   IsString,
@@ -61,6 +62,14 @@ export class CreateCreditDto {
 
   /** Abre el caso de cobranza en la misma transacción (§5.2). El alta del móvil siempre lo pide. */
   @IsOptional() @IsBoolean() openCase?: boolean;
+
+  /**
+   * Las condiciones del crédito (F4/06), en la forma `CreditTerms` de `@kobrax/shared`. Con ellas la
+   * API **recalcula** con el motor único y aplica D14 (quién manda según el modo). La forma la valida
+   * `parseCreditTerms` en el servicio —no class-validator—, para que haya una sola definición de
+   * lo que es una condición válida, compartida con web y móvil. Sin `terms`, el alta de siempre.
+   */
+  @IsOptional() @IsObject() terms?: Record<string, unknown>;
 }
 
 /** Solo campos editables tras el desembolso (no monto/tasa/cuotas/moneda → requieren reestructura). */

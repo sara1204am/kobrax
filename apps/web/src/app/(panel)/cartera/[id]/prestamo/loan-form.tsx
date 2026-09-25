@@ -1,35 +1,42 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
-  buildPrestamoPayload,
-  canSubmitPrestamo,
-  initialPrestamo,
+  buildNewCreditPayload,
+  creditFormState,
+  initialCreditForm,
   memberName,
   type CreditDetail,
+  type CreditForm,
   type Member,
-  type PrestamoForm,
 } from '@kobrax/shared';
-import { PageHeader } from '@/components/panel-ui';
+import { PageHeader, Section } from '@/components/panel-ui';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
-import { LoanFields, LoanQuotePanel } from '@/components/loan-fields';
+import { CreditQuotePanel, CreditTermsFields } from '@/components/credit-terms-fields';
+import { PaymentPlanTable } from '@/components/payment-plan-table';
 import { useToast } from '@/components/toast';
 import { postJson } from '@/lib/client';
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
+/**
+ * Hoy en la zona de quien carga, no en UTC: con `toISOString()` Bolivia (UTC−4) proponía la fecha de
+ * mañana a partir de las 20:00.
+ */
+const todayIso = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 /**
- * Alta de préstamo, con el panel Cuota / Total / Ganancia en vivo.
+ * Nuevo crédito (F4/06 · Fase 2): cómo se define, sus condiciones, la cotización en vivo y el plan de
+ * pagos **antes** de darlo.
  *
- * 🔴 **Los campos son los MISMOS que corrigen el préstamo desde su ficha** (`loan-fields.tsx`). Las
- * dos pantallas se habían separado: acá se preguntaba capital, interés y modo, y allá el capital y
- * la tasa se dibujaban de sólo lectura. Dar de alta y corregir tienen que verse igual, porque son
- * lo mismo con el préstamo ya creado.
+ * 🔴 **Sólo crea.** Ya no hay «este préstamo ya está en curso»: un crédito existente es el detalle de
+ * un crédito, no una variante del alta (D13 — el estado al registrar se ajusta desde la ficha).
  *
- * Lo que sí es del alta y no de la ficha vive acá: a quién se asigna, «ya está en curso» (para
- * digitalizar cartera vieja) y la nota inicial.
+ * La vista previa y lo que se guarda salen del mismo motor (`creditFormState` / `buildNewCreditPayload`
+ * de shared, y `resolveCreditTerms` en la API): lo que se ve es lo que se cobra.
  */
 export function LoanForm({
   clientId,
@@ -43,25 +50,28 @@ export function LoanForm({
   currency: string;
 }) {
   const t = useTranslations('portfolio');
+  const tc = useTranslations('portfolio.creditForm');
   const router = useRouter();
   const toast = useToast();
 
-  const [form, setForm] = useState<PrestamoForm>(() => initialPrestamo(todayIso()));
+  const [form, setForm] = useState<CreditForm>(() => initialCreditForm(todayIso()));
   const [manager, setManager] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const set = (patch: Partial<PrestamoForm>) => setForm({ ...form, ...patch });
-  const valid = canSubmitPrestamo(form);
+  const state = useMemo(() => creditFormState(form), [form]);
+  const schedule = state.missing.length === 0 ? state.calculation.schedule : null;
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    const payload = buildNewCreditPayload(form, clientId);
+    if (!payload) return;
     setError(null);
     setSaving(true);
 
     const { ok, data } = await postJson<CreditDetail>('/api/credits', {
-      ...buildPrestamoPayload(form, clientId),
-      // En la oficina, quien carga el préstamo y quien lo cobra no son la misma persona.
+      ...payload,
+      // En la oficina, quien carga el crédito y quien lo cobra no son la misma persona.
       ...(manager ? { assignedManagerId: manager } : {}),
     });
     setSaving(false);
@@ -69,7 +79,7 @@ export function LoanForm({
       setError(data.error?.message ?? t('saveError'));
       return;
     }
-    toast(t('loanCreated'));
+    toast(tc('created'));
     router.push(`/cartera/${clientId}/credito/${data.id}`);
     router.refresh();
   }
@@ -77,8 +87,8 @@ export function LoanForm({
   return (
     <form onSubmit={save} className="space-y-4">
       <PageHeader
-        title={t('loanTitle')}
-        subtitle={t('loanSubtitle', { name: clientName })}
+        title={tc('title')}
+        subtitle={tc('subtitle', { name: clientName })}
         actions={
           <>
             <span className="w-32">
@@ -87,8 +97,8 @@ export function LoanForm({
               </Button>
             </span>
             <span className="w-44">
-              <Button type="submit" loading={saving} disabled={!valid}>
-                {t('loanSave')}
+              <Button type="submit" loading={saving} disabled={!state.canSubmit}>
+                {tc('save')}
               </Button>
             </span>
           </>
@@ -98,10 +108,20 @@ export function LoanForm({
       <ErrorBanner message={error} />
 
       <section className="rounded-2xl border border-k-border bg-white p-5">
-        {/* Los mismos campos que corrigen el préstamo desde su ficha (`components/loan-fields`). */}
-        <LoanFields form={form} onChange={setForm} />
+        <CreditTermsFields form={form} onChange={setForm} />
+      </section>
 
-        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+      <CreditQuotePanel state={state} currency={currency} />
+
+      {schedule && schedule.length > 0 && (
+        <Section title={tc('plan.title')}>
+          <p className="mb-3 text-[12px] text-k-muted">{tc('plan.hint')}</p>
+          <PaymentPlanTable rows={schedule} currency={currency} />
+        </Section>
+      )}
+
+      <section className="rounded-2xl border border-k-border bg-white p-5">
+        <div className="grid gap-5 sm:grid-cols-2">
           {team.length > 0 && (
             <Field label={t('form.assignedTo')}>
               <Select value={manager} onChange={(e) => setManager(e.target.value)}>
@@ -114,45 +134,8 @@ export function LoanForm({
               </Select>
             </Field>
           )}
-        </div>
-      </section>
-
-      <LoanQuotePanel form={form} currency={currency} />
-
-      <section className="rounded-2xl border border-k-border bg-white p-5">
-        <label className="flex items-center gap-2 text-[14px] text-k-text">
-          <input
-            type="checkbox"
-            checked={form.inProgress}
-            onChange={(e) => set({ inProgress: e.target.checked })}
-            className="h-4 w-4 accent-k-purple"
-          />
-          {t('form.inProgress')}
-        </label>
-        <p className="mt-1 text-[12px] text-k-muted">{t('form.inProgressHint')}</p>
-
-        {form.inProgress && (
-          <div className="mt-4 grid gap-5 sm:grid-cols-2">
-            {/* Números de verdad: como texto, `7.000,50` se convertía en NaN y viajaba un cero. */}
-            <Field label={t('form.outstanding')}>
-              <Input
-                value={form.outstandingBalance}
-                onChange={(e) => set({ outstandingBalance: e.target.value })}
-                type="number"
-                min={0}
-                step="0.01"
-                required
-              />
-            </Field>
-            <Field label={t('form.daysPastDue')}>
-              <Input value={form.daysPastDue} onChange={(e) => set({ daysPastDue: e.target.value })} type="number" min={0} step="1" />
-            </Field>
-          </div>
-        )}
-
-        <div className="mt-5">
           <Field label={t('form.notes')}>
-            <Input value={form.notes} onChange={(e) => set({ notes: e.target.value })} maxLength={500} />
+            <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} maxLength={500} />
           </Field>
         </div>
       </section>

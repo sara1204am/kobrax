@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
-import type { CreditDetail } from '@kobrax/shared';
+import { paymentProgress, type CreditDetail } from '@kobrax/shared';
 import { Badge } from '@/components/panel-ui';
 import { money, date, relativeDate } from '@/lib/format';
 
@@ -158,7 +158,15 @@ function CreditCard({
           <Figure label={t('credit.outstanding')} value={money(c.outstandingBalance, c.currency)} />
         </dl>
 
-        <Progress principal={c.principalAmount} outstanding={c.outstandingBalance} label={t('credit.progress')} />
+        <Progress
+          pct={paymentProgress({
+            basis: c.balanceBasis ?? 'legacy',
+            outstandingBalance: c.outstandingBalance,
+            principalAmount: c.principalAmount,
+            totalToCollect: c.totalToCollect ?? null,
+          })}
+          label={t('credit.progress')}
+        />
 
         {c.locked && <p className="mt-3 text-[12px] text-k-muted">{t('importedHint')}</p>}
       </div>
@@ -177,16 +185,14 @@ function Figure({ label, value, hint }: { label: string; value: string; hint?: s
 }
 
 /**
- * Cuánto se pagó del capital.
+ * Cuánto se cobró **del total por cobrar** (D15) — la regla vive en `paymentProgress` de shared.
  *
- * 🔴 **No se dibuja si el número no significa nada.** Sin capital no hay porcentaje que calcular, y
- * un crédito importado puede traer un saldo MAYOR que su capital —intereses y cargos que el archivo
- * ya sumó al saldo—: ahí el «progreso» daría negativo. Se recorta a 0–100 y, sin capital, no hay
- * barra: una barra vacía dice «no pagó nada», que es una acusación, no un dato faltante.
+ * 🔴 **No se dibuja si el número no significa nada.** Un importado sin cuota no tiene total conocido:
+ * medirlo contra el capital, con un saldo que ya incluye intereses, daba 0 % aunque hubiera pagado.
+ * Sin total no hay barra: una barra vacía dice «no pagó nada», que es una acusación, no un dato faltante.
  */
-function Progress({ principal, outstanding, label }: { principal: number; outstanding: number; label: string }) {
-  if (!(principal > 0)) return null;
-  const pct = Math.max(0, Math.min(100, Math.round(((principal - outstanding) / principal) * 100)));
+function Progress({ pct, label }: { pct: number | null; label: string }) {
+  if (pct === null) return null;
 
   return (
     <div className="mt-4">

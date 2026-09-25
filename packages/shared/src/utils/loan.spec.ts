@@ -8,10 +8,9 @@ import {
   manualArrears,
   moraSinceFromDays,
   portfolioStatus,
-  quoteFromInstallment,
-  quoteLoan,
   readCreditMetadata,
 } from './loan.js';
+import { quoteFromInstallment, quoteLoan } from './credit-engine.js';
 import { searchTerms } from './client-form.js';
 
 const d = (iso: string): Date => new Date(`${iso}T00:00:00.000Z`);
@@ -137,8 +136,24 @@ describe('addPeriods', () => {
     expect(addPeriods(d('2026-07-13'), 1, PaymentFrequency.MONTHLY)).toEqual(d('2026-08-13'));
   });
 
-  it('mensual sobre fin de mes no se pasa al mes siguiente', () => {
-    expect(addPeriods(d('2026-01-31'), 1, PaymentFrequency.MONTHLY).getUTCMonth()).toBe(2); // marzo (JS clamp)
+  // D6: antes 31/01 + 1 mes caía en 03/03 (desborde de setUTCMonth) aunque el test se llamara así.
+  it('mensual sobre fin de mes no se pasa al mes siguiente: cae en el último día', () => {
+    expect(addPeriods(d('2026-01-31'), 1, PaymentFrequency.MONTHLY)).toEqual(d('2026-02-28'));
+    expect(addPeriods(d('2028-01-31'), 1, PaymentFrequency.MONTHLY)).toEqual(d('2028-02-29')); // bisiesto
+    expect(addPeriods(d('2026-01-31'), 2, PaymentFrequency.MONTHLY)).toEqual(d('2026-03-31')); // desde la primera, conserva el 31
+    expect(addPeriods(d('2026-08-31'), 1, PaymentFrequency.QUARTERLY)).toEqual(d('2026-11-30'));
+  });
+
+  it('trimestral, semestral y anual', () => {
+    expect(addPeriods(d('2026-10-25'), 1, PaymentFrequency.QUARTERLY)).toEqual(d('2027-01-25'));
+    expect(addPeriods(d('2026-10-25'), 1, PaymentFrequency.SEMIANNUAL)).toEqual(d('2027-04-25'));
+    expect(addPeriods(d('2026-10-25'), 1, PaymentFrequency.ANNUAL)).toEqual(d('2027-10-25'));
+    expect(addPeriods(d('2028-02-29'), 1, PaymentFrequency.ANNUAL)).toEqual(d('2029-02-28'));
+  });
+
+  it('conserva la hora del día', () => {
+    const t = new Date('2026-01-31T15:30:00.000Z');
+    expect(addPeriods(t, 1, PaymentFrequency.MONTHLY)).toEqual(new Date('2026-02-28T15:30:00.000Z'));
   });
 });
 

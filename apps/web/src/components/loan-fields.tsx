@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import {
   InterestBase,
+  OFFERED_FREQUENCIES,
   PaymentFrequency,
   currentInstallment,
   quoteFor,
@@ -130,7 +131,8 @@ export function LoanFields({
 
         <Field label={t('fields.frequency')}>
           <Select value={form.frequency} onChange={(e) => set({ frequency: e.target.value as PaymentFrequency })} disabled={disabled}>
-            {Object.values(PaymentFrequency).map((f) => (
+            {/* Las ofrecidas hoy, más la que ya tenga el crédito para no perderla al editar. */}
+            {(OFFERED_FREQUENCIES.includes(form.frequency) ? OFFERED_FREQUENCIES : [...OFFERED_FREQUENCIES, form.frequency]).map((f) => (
               <option key={f} value={f}>
                 {t(`frequency.${f}`)}
               </option>

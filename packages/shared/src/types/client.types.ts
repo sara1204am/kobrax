@@ -5,7 +5,8 @@
  * los **mismos** clientes contra los **mismos** endpoints. Los valores son los enums de la API
  * (Prisma) escritos como uniones, no como enums propios: son el contrato del DTO.
  */
-import type { CreditOrigin, InterestBase, PaymentFrequency } from '../enums/credit.enum.js';
+import type { CreditOrigin, EffectiveBalanceBasis, InterestBase, PaymentFrequency } from '../enums/credit.enum.js';
+import type { CreditTerms } from '../utils/credit-engine.js';
 
 // ── Payload de la API ────────────────────────────────────────────────────────
 export interface NewContactInput {
@@ -111,6 +112,11 @@ export interface NewCreditInput {
   assignedManagerId?: string;
   /** Qué clase de crédito es → catálogo `CREDIT_TYPE`. Opcional: el móvil no lo pregunta. */
   typeCode?: string;
+  /**
+   * Las condiciones (F4/06). Con ellas la API recalcula y aplica D14; los campos sueltos de arriba,
+   * si vienen, tienen que coincidir. Opcional para que la cola offline de apps viejas siga entrando.
+   */
+  terms?: CreditTerms;
 }
 
 // ── Lo que devuelve la API ───────────────────────────────────────────────────
@@ -297,6 +303,15 @@ export interface CreditDetail {
   status?: string;
   daysPastDue?: number;
   hasSchedule?: boolean;
+  /** Las condiciones con las que se definió (F4/06). Ausente en créditos anteriores y en importados. */
+  terms?: CreditTerms;
+  /** Qué representa `outstandingBalance` (D15): `total` pendiente, `principal` (préstamo abierto) o `legacy`. */
+  balanceBasis?: EffectiveBalanceBasis;
+  /**
+   * Total por cobrar, si se conoce (`creditTotalToCollect`). ⚠️ En el listado no vienen las cuotas: para
+   * un crédito con cronograma sale de cuota × n, que puede diferir en céntimos de la Σ real.
+   */
+  totalToCollect?: number | null;
   disbursedAt?: string;
   assignedManagerId?: string;
   installments?: CreditInstallmentDetail[];

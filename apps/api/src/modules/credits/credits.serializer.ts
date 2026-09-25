@@ -1,5 +1,5 @@
 import type { Arrear, Credit, CreditInstallment } from '@prisma/client';
-import { creditView } from '@kobrax/shared';
+import { balanceBasisOf, creditTotalToCollect, creditView } from '@kobrax/shared';
 
 /** Etiquetas de concepto por defecto (las sobreescribe `account.configuration.creditLabels`). */
 export const DEFAULT_CREDIT_LABELS: Record<string, string> = {
@@ -76,6 +76,17 @@ export function serializeCredit(
     externalRef: view.externalRef,
     notes: view.notes,
     hasSchedule: view.hasSchedule,
+    // Las condiciones con que se definió (F4/06): el detalle regenera el plan con el mismo motor.
+    terms: view.terms,
+    // D15: qué representa `outstandingBalance`, y el total contra el que se mide el progreso.
+    balanceBasis: balanceBasisOf(view),
+    totalToCollect: creditTotalToCollect({
+      principalAmount: num(credit.principalAmount),
+      installmentAmount: view.installmentAmount,
+      installmentsCount: credit.installmentsCount,
+      installments: credit.installments?.map((i) => ({ amount: num(i.amount) })),
+      terms: view.terms,
+    }),
     installments: credit.installments?.map(serializeInstallment),
     arrears: credit.arrears?.map(serializeArrear),
   };

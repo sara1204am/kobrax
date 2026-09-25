@@ -141,11 +141,12 @@ describe('CreditsService.create — el tope del plan', () => {
 });
 
 describe('CreditsService.create', () => {
-  it('genera el cronograma y deja outstandingBalance = principal', async () => {
+  it('genera el cronograma y deja el saldo = total por cobrar (sin interés, igual al capital)', async () => {
     const { service, calls } = makeService({ client: { id: 'c1' } });
     const res = await service.create(BASE);
     const data = calls.creditCreate[0]!;
     assert.equal(data.outstandingBalance, 1200);
+    assert.equal((data.metadata as { balanceBasis?: string }).balanceBasis, 'total');
     assert.equal((data.installments as { create: unknown[] }).create.length, 12);
     assert.equal(res.installmentsCount, 12);
     assert.equal(res.principalAmount, 1200);
@@ -177,7 +178,28 @@ describe('CreditsService.create — crédito sin cronograma', () => {
       origin: 'manual',
       installmentAmount: 300,
       nextDueDate: '2026-07-20',
+      balanceBasis: 'total',
     });
+  });
+
+  /**
+   * 🔴 D15. Antes el saldo nacía = capital (1.200) y, como el pago no puede superar el saldo, a partir
+   * de la 5.ª cuota de 300 el cobro rebotaba: los 2.400 de ganancia no se podían cobrar nunca.
+   */
+  it('D15: el saldo nace = total por cobrar (cuota × n), no el capital', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create(MOVIL); // capital 1.200, 12 cuotas de 300
+    assert.equal(calls.creditCreate[0]!.outstandingBalance, 3600);
+  });
+
+  it('D15: con cronograma e interés, el saldo es Σ de las cuotas', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ ...(BASE as object), interestRate: 0.01, amortizationType: 'FLAT' } as never);
+    const data = calls.creditCreate[0]!;
+    const rows = (data.installments as { create: { amount: number }[] }).create;
+    const total = Math.round(rows.reduce((s, r) => s + r.amount * 100, 0)) / 100;
+    assert.equal(total, 1344); // 1.200 + 12 × 12
+    assert.equal(data.outstandingBalance, total);
   });
 
   it('préstamo abierto: sin número de cuotas se acepta y queda en 0 (§4.1)', async () => {
@@ -186,12 +208,22 @@ describe('CreditsService.create — crédito sin cronograma', () => {
     assert.equal(calls.creditCreate[0]!.installmentsCount, 0);
   });
 
+  // D16: nadie sabe cuánto se va a cobrar en total → el saldo es el capital y queda marcado así.
+  it('préstamo abierto: saldo = capital, marcado `principal` (D16)', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ clientId: BASE.clientId, principalAmount: 1000, installmentAmount: 250 } as never);
+    const data = calls.creditCreate[0]!;
+    assert.equal(data.outstandingBalance, 1000);
+    assert.equal((data.metadata as { balanceBasis?: string }).balanceBasis, 'principal');
+  });
+
   it('"ya está en curso": respeta el saldo y la mora que trae el cobrador (§4.1)', async () => {
     const { service, calls } = makeService({ client: { id: 'c1' } });
     await service.create({ ...(MOVIL as object), outstandingBalance: 800, daysPastDue: 45 } as never);
     const data = calls.creditCreate[0]!;
-    assert.equal(data.outstandingBalance, 800); // no lo pisa con el capital
+    assert.equal(data.outstandingBalance, 800); // no lo pisa con el capital ni con el total
     assert.equal(data.daysPastDue, 45);
+    assert.equal((data.metadata as { balanceBasis?: string }).balanceBasis, 'total');
   });
 
   it('openCase abre el caso y el recordatorio en la agenda, en la misma transacción (§5.2)', async () => {
@@ -250,6 +282,125 @@ describe('CreditsService.update (editar desde la ficha §4)', () => {
     const { service, calls } = makeService({ credit });
     await service.update('cr1', { code: 'ABC' } as never);
     assert.equal(calls.creditUpdate[0]!.metadata, undefined); // no reescribe metadata
+  });
+
+  // Cambiar la cuota sin tocar `terms` dejaría dos definiciones del mismo crédito (F4/06 · Fase 3).
+  it('crédito con condiciones: rechaza editar datos financieros (CREDIT_TERMS_EDIT_UNSUPPORTED)', async () => {
+    const credit = { id: 'cr1', metadata: { origin: 'manual', terms: AGREED, termsVersion: 1, installmentAmount: 115 } };
+    const { service } = makeService({ credit });
+    await rejectsWithCode(service.update('cr1', { installmentAmount: 120 } as never), 'CREDIT_TERMS_EDIT_UNSUPPORTED');
+  });
+
+  it('crédito con condiciones: lo no financiero se edita y `terms` se conserva', async () => {
+    const credit = { id: 'cr1', metadata: { origin: 'manual', terms: AGREED, termsVersion: 1 } };
+    const { service, calls } = makeService({ credit });
+    await service.update('cr1', { code: 'ABC' } as never);
+    assert.equal(calls.creditUpdate[0]!.code, 'ABC');
+  });
+});
+
+const CLIENT_ID = '11111111-1111-1111-1111-111111111111';
+const AGREED = {
+  definition: 'agreed_installment',
+  principal: 1000,
+  installmentAmount: 115,
+  installmentsCount: 10,
+  frequency: 'MONTHLY',
+  firstDueDate: '2026-10-25',
+};
+const CALCULATED = {
+  definition: 'calculated',
+  principal: 1000,
+  ratePercent: 1,
+  interestType: 'simple',
+  amortization: 'fixed_installment',
+  periods: 10,
+  frequency: 'MONTHLY',
+  firstDueDate: '2026-10-25',
+};
+
+/**
+ * 🔴 D14 — quién manda según el modo. La regla vive en shared (`resolveCreditTerms`, con sus tests);
+ * acá se prueba que la API guarda lo que esa regla decide y traduce cada rechazo a su error.
+ */
+describe('CreditsService.create — con condiciones (F4/06 · D14)', () => {
+  it('cuota acordada: guarda la cuota del usuario, el total como saldo y las condiciones', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ clientId: CLIENT_ID, principalAmount: 1000, installmentAmount: 115, terms: AGREED } as never);
+    const data = calls.creditCreate[0]!;
+    assert.equal(data.outstandingBalance, 1150); // D15: total por cobrar
+    assert.equal(data.installmentsCount, 10);
+    assert.equal(data.interestRate, 0); // acordada: no se inventa tasa
+    assert.deepEqual((data.installments as { create: unknown[] }).create, []); // cronograma real: Fase 6
+    assert.deepEqual(data.metadata, {
+      frequency: 'MONTHLY',
+      origin: 'manual',
+      installmentAmount: 115,
+      nextDueDate: '2026-10-25',
+      balanceBasis: 'total',
+      terms: AGREED,
+      termsVersion: 1,
+    });
+  });
+
+  it('calculado: sin cuota del cliente guarda la del motor', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: CALCULATED } as never);
+    const data = calls.creditCreate[0]!;
+    assert.equal((data.metadata as { installmentAmount: number }).installmentAmount, 110);
+    assert.equal(data.outstandingBalance, 1100);
+    assert.equal(data.interestRate, 1); // D7: porcentaje, informativa
+  });
+
+  it('calculado: un céntimo de redondeo se normaliza a la cuota del motor', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ clientId: CLIENT_ID, principalAmount: 1000, installmentAmount: 109.99, terms: CALCULATED } as never);
+    assert.equal((calls.creditCreate[0]!.metadata as { installmentAmount: number }).installmentAmount, 110);
+  });
+
+  it('calculado: otra cuota se rechaza (CREDIT_INSTALLMENT_MISMATCH)', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await rejectsWithCode(
+      service.create({ clientId: CLIENT_ID, principalAmount: 1000, installmentAmount: 115, terms: CALCULATED } as never),
+      'CREDIT_INSTALLMENT_MISMATCH',
+    );
+    assert.equal(calls.creditCreate.length, 0);
+  });
+
+  it('un campo suelto que contradice las condiciones se rechaza (CREDIT_TERMS_CONFLICT)', async () => {
+    const { service } = makeService({ client: { id: 'c1' } });
+    await rejectsWithCode(
+      service.create({ clientId: CLIENT_ID, principalAmount: 1000, installmentsCount: 12, terms: AGREED } as never),
+      'CREDIT_TERMS_CONFLICT',
+    );
+  });
+
+  it('condiciones con forma inválida o incalculables (CREDIT_TERMS_INVALID)', async () => {
+    const { service } = makeService({ client: { id: 'c1' } });
+    await rejectsWithCode(service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: { definition: 'x' } } as never), 'CREDIT_TERMS_INVALID');
+    await rejectsWithCode(
+      service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: { ...CALCULATED, ratePercent: 150 } } as never),
+      'CREDIT_TERMS_INVALID',
+    );
+  });
+
+  it('capital fijo todavía no se registra (CREDIT_TERMS_NOT_PERSISTABLE)', async () => {
+    const { service } = makeService({ client: { id: 'c1' } });
+    await rejectsWithCode(
+      service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: { ...CALCULATED, amortization: 'fixed_principal' } } as never),
+      'CREDIT_TERMS_NOT_PERSISTABLE',
+    );
+  });
+
+  it('total acordado en pago único: una cuota por el total, en la fecha acordada', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    const terms = { definition: 'agreed_total', principal: 1000, agreedTotal: 1500, repayment: 'single', firstDueDate: '2026-11-25' };
+    await service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms } as never);
+    const data = calls.creditCreate[0]!;
+    assert.equal(data.outstandingBalance, 1500);
+    assert.equal(data.installmentsCount, 1);
+    assert.equal((data.metadata as { installmentAmount: number }).installmentAmount, 1500);
+    assert.equal((data.metadata as { nextDueDate: string }).nextDueDate, '2026-11-25');
   });
 });
 

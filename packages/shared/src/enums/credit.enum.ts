@@ -9,6 +9,64 @@ export enum PaymentFrequency {
   WEEKLY = 'WEEKLY',
   BIWEEKLY = 'BIWEEKLY',
   MONTHLY = 'MONTHLY',
+  QUARTERLY = 'QUARTERLY',
+  SEMIANNUAL = 'SEMIANNUAL',
+  ANNUAL = 'ANNUAL',
+}
+
+/**
+ * Las frecuencias que las pantallas ofrecen hoy. Las trimestral/semestral/anual ya las entiende el
+ * motor, pero **no se ofrecen** hasta que salga el móvil que las conoce: una versión vieja lee un
+ * valor desconocido como `MONTHLY` (`readCreditMetadata`) y cobraría en la fecha equivocada.
+ */
+export const OFFERED_FREQUENCIES: readonly PaymentFrequency[] = [
+  PaymentFrequency.DAILY,
+  PaymentFrequency.WEEKLY,
+  PaymentFrequency.BIWEEKLY,
+  PaymentFrequency.MONTHLY,
+];
+
+/**
+ * Cómo se definió el crédito (F4/06 · D1). Decide también **quién manda** en la cuota (D14):
+ * calculado → el motor; cuota acordada → la cuota del usuario; total acordado → el total del usuario.
+ */
+export enum CreditDefinition {
+  CALCULATED = 'calculated',
+  AGREED_INSTALLMENT = 'agreed_installment',
+  AGREED_TOTAL = 'agreed_total',
+}
+
+/** Tipo de interés (D2). Es un eje distinto del método de amortización: francés NO es "compuesto". */
+export enum InterestType {
+  SIMPLE = 'simple',
+  COMPOUND = 'compound',
+}
+
+/** Método de amortización (D3). Pago único es un método, no una frecuencia (D5). */
+export enum AmortizationMethod {
+  FIXED_INSTALLMENT = 'fixed_installment',
+  FIXED_PRINCIPAL = 'fixed_principal',
+  SINGLE_PAYMENT = 'single_payment',
+}
+
+/**
+ * Qué representa `credits.outstanding_balance` (F4/06 · D15). Se guarda en `metadata.balanceBasis`
+ * **sólo cuando se sabe**; nunca se estampa una suposición.
+ *
+ *  · `total`     — saldo TOTAL pendiente de cobro (capital + interés/ganancia). La regla desde D15.
+ *  · `principal` — el saldo es el capital: sólo el préstamo abierto, cuyo total nadie conoce (D16).
+ *
+ * El saldo de CAPITAL es otro concepto y no vive en esa columna: se deriva del plan de pagos.
+ */
+export const BALANCE_BASES = ['total', 'principal'] as const;
+export type BalanceBasis = (typeof BALANCE_BASES)[number];
+/** La base efectiva: `legacy` = crédito manual anterior a D15, sin marca (ver la estrategia de migración). */
+export type EffectiveBalanceBasis = BalanceBasis | 'legacy';
+
+/** Forma de pago de un total acordado: todo junto o repartido en cuotas. */
+export enum RepaymentForm {
+  SINGLE = 'single',
+  INSTALLMENTS = 'installments',
 }
 
 /**

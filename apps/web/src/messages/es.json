@@ -37,7 +37,7 @@
       "parada": "Parada",
       "planificar": "Planificar",
       "editar": "Editar",
-      "prestamo": "Nuevo préstamo",
+      "prestamo": "Nuevo crédito",
       "credito": "Crédito",
       "solicitudes": "Cobros pedidos",
       "nueva": "Nueva",
@@ -1361,11 +1361,7 @@
       "timeline": "Bitácora de actividad",
       "cases": "En mora"
     },
-    "newLoan": "Nuevo préstamo",
-    "loanTitle": "Nuevo préstamo",
-    "loanSubtitle": "Para {name}",
-    "loanSave": "Dar el préstamo",
-    "loanCreated": "Préstamo registrado",
+    "newLoan": "Nuevo crédito",
     "loanMode": {
       "A": "Ya sé la cuota",
       "B": "Calcular la cuota"
@@ -1424,7 +1420,10 @@
       "DAILY": "Diario",
       "WEEKLY": "Semanal",
       "BIWEEKLY": "Quincenal",
-      "MONTHLY": "Mensual"
+      "MONTHLY": "Mensual",
+      "QUARTERLY": "Trimestral",
+      "SEMIANNUAL": "Semestral",
+      "ANNUAL": "Anual"
     },
     "schedule": {
       "number": "Cuota",
@@ -1463,10 +1462,6 @@
       "openLoanHint": "vacío = préstamo abierto",
       "assignedTo": "Lo cobra",
       "unassigned": "Sin asignar",
-      "inProgress": "Este préstamo ya está en curso",
-      "inProgressHint": "Para cargar cartera vieja: se guarda con el saldo y la mora que ya tiene.",
-      "outstanding": "Saldo actual",
-      "daysPastDue": "Días de mora",
       "relationContacts": "Sus teléfonos",
       "relationLocations": "Sus direcciones",
       "remove": "Quitar",
@@ -1627,6 +1622,84 @@
         "next_period": "La próxima fecha de cobro avanza un período según la frecuencia del préstamo.",
         "date": "La próxima fecha de cobro pasa a ser la que elijas. Tiene que ser futura.",
         "none": "Queda como préstamo abierto: sin vencimiento pactado no hay días de mora que contar."
+      }
+    },
+    "creditForm": {
+      "title": "Nuevo crédito",
+      "subtitle": "Para {name}",
+      "save": "Dar el crédito",
+      "created": "Crédito registrado",
+      "definitionLabel": "¿Cómo querés definir el crédito?",
+      "definition": {
+        "calculated": "Calcular cuotas",
+        "agreed_installment": "Cuota acordada",
+        "agreed_total": "Total acordado"
+      },
+      "definitionHint": {
+        "calculated": "La cuota sale del interés, el número de cuotas y la frecuencia.",
+        "agreed_installment": "Ya sabés cuánto va a pagar por cuota. No hace falta una tasa.",
+        "agreed_total": "Acordaron cuánto devuelve en total. No hace falta una tasa."
+      },
+      "principal": "Monto a prestar",
+      "ratePercent": "Interés (%)",
+      "installmentsCount": "Número de cuotas",
+      "term": "Plazo (en períodos)",
+      "openLoanHint": "vacío = préstamo abierto",
+      "installmentAmount": "Cuota acordada",
+      "agreedTotal": "Total acordado",
+      "repayment": "Forma de pago",
+      "repaymentOptions": {
+        "single": "Pago único",
+        "installments": "En cuotas"
+      },
+      "frequency": "Frecuencia",
+      "termFrequency": "Cada período es",
+      "firstDueDate": "Primer pago",
+      "paymentDate": "Fecha de pago",
+      "advanced": "Opciones avanzadas",
+      "interestType": "Tipo de interés",
+      "interestTypes": {
+        "simple": "Simple",
+        "compound": "Compuesto"
+      },
+      "amortization": "Método de amortización",
+      "amortizations": {
+        "fixed_installment": "Cuota fija",
+        "fixed_principal": "Capital fijo (cuota decreciente)",
+        "single_payment": "Pago único"
+      },
+      "rateBase": "Cómo se aplica el interés",
+      "quote": {
+        "installment": "Cuota",
+        "firstInstallment": "Primera cuota",
+        "total": "Total a cobrar",
+        "profit": "Ganancia",
+        "openLoan": "Préstamo abierto: sin número de cuotas no hay total ni plan de pagos."
+      },
+      "incomplete": "Completá los datos para ver la cuota y el plan de pagos.",
+      "plan": {
+        "title": "Plan de pagos",
+        "hint": "Vista previa con las mismas condiciones que se guardan con el crédito.",
+        "number": "Cuota",
+        "dueDate": "Fecha",
+        "principal": "Capital",
+        "interest": "Interés",
+        "amount": "Total",
+        "balance": "Saldo de capital"
+      },
+      "issues": {
+        "PRINCIPAL_INVALID": "El monto tiene que ser mayor a 0.",
+        "RATE_INVALID": "El interés no puede ser negativo.",
+        "RATE_OUT_OF_RANGE": "El interés supera el máximo: 100 % por cuota o 500 % sobre el total.",
+        "RATE_BASE_NOT_SUPPORTED": "El interés sobre el total sólo se aplica a interés simple con cuota fija.",
+        "COMBINATION_NOT_SUPPORTED": "Esa combinación de interés y método de amortización no se ofrece.",
+        "PERIODS_INVALID": "El número de cuotas tiene que ser un entero entre 1 y 600.",
+        "INSTALLMENT_INVALID": "La cuota tiene que ser mayor a 0.",
+        "TOTAL_INVALID": "El total tiene que ser mayor a 0.",
+        "FREQUENCY_REQUIRED": "Elegí una frecuencia.",
+        "DATE_INVALID": "La fecha no es válida.",
+        "INSTALLMENT_TOO_SMALL": "El total no alcanza para esa cantidad de cuotas.",
+        "TOTAL_BELOW_PRINCIPAL": "Vas a cobrar menos de lo que prestás. Se puede guardar igual."
       }
     }
   },
