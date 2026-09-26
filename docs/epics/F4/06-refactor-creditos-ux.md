@@ -47,6 +47,7 @@ CRÉDITOS
 | D13 | Préstamo que ya venía corriendo: se crea con Nuevo crédito y, en Detalle → Editar, "Estado al registrar" ajusta saldo, cuotas pagadas y mora **solo mientras no haya pagos registrados**. |
 | D14 | La fuente de verdad depende del modo (ver abajo). |
 | D17 | **El período de la tasa es independiente de la frecuencia de pago** (2026-09-25). El % se pacta por cuota, mensual, trimestral, semestral o anual, y el motor lo convierte a la tasa de la cuota. Nominal (proporcional) por defecto; efectiva (TEA) como opción. El plazo se puede cargar en cuotas, meses o años. Ver abajo. |
+| D20 | **Cómo se cuenta la mora, por crédito** (2026-09-25). `oldest_unpaid` (desde la cuota impaga más antigua, lo de siempre) o `first_default` (bancario: desde el primer atraso hasta quedar al día). El default lo pone la cuenta; con pagos no se cambia. Ver abajo. |
 | D18 | **Desgravamen y otros cargos** (2026-09-25). Desgravamen = % mensual sobre el saldo de capital, sumado a cada cuota. Cargos: monto por cuota, único en la 1.ª cuota (fijo o % del monto) o descontado del desembolso. Entran en el total y el saldo; la ganancia sigue siendo el interés. Ver abajo. |
 
 ### D4 — Matriz
@@ -90,6 +91,38 @@ cargos, que el plan original dejaba afuera, entraron por pedido de la usuaria (D
 
 **Orden de despliegue:** API → web → mobile. Las frecuencias nuevas no se ofrecen en la UI hasta que la versión de
 mobile que las entiende esté publicada, porque las versiones viejas las leen como `MONTHLY`.
+
+## D13 (ampliada) y D20 — Cuotas ya pagadas en el alta y método de mora ✅ (2026-09-25)
+
+**Cuotas ya pagadas (D13, decisiones de la usuaria):**
+- Las pagadas son **siempre las primeras k, sin huecos** (1..k pagadas, k+1..n pendientes); el modelo de conteo
+  (`initialState.paidInstallments`) ya lo representa. **Máximo n − 1**: no se registra un crédito con todas pagas.
+- **Vuelve al alta web** (en la Fase 3 había quedado sólo en Editar): en *Plan de pagos* del Nuevo crédito, el select
+  «Cuotas ya pagadas antes de registrarlo» (0..n−1) y la columna **Estado** de la tabla. Tocar una cuota **mueve el
+  corte** (desmarcar la 4 deja 1–3; marcar la 7 deja 1–7). Editar usa el mismo control mientras no haya pagos.
+- Sin campos manuales de saldo ni de días de mora cuando hay plan: el saldo sale de las cuotas y la mora de la
+  primera impaga. Siguen a mano sólo en el préstamo abierto (sin plan).
+- Lo pagado antes del registro **no genera `Payment`**; en las cuotas guardadas queda `PAID` **sin `paidAt`** (no se
+  sabe cuándo se pagó). `priorPaidAmountOf` lo calcula y **«Recuperado X de Y» lo descuenta**: mide sólo lo cobrado en
+  Kobrax (web, mobile y `paymentProgress`).
+- La auditoría del alta y de la edición (`creditSummary`) incluye `initialState` y `arrearsMethod`.
+- El panel derecho del alta muestra cuotas pagadas, saldo, próxima cuota y mora (`registrationSituation`, shared).
+
+**D20 — método de mora** (`packages/shared/src/utils/arrears-method.ts`, tests en `arrears-method.spec.ts`):
+- `oldest_unpaid` (default): desde la cuota impaga más antigua; pagar la más atrasada baja la mora.
+- `first_default` (bancario): `metadata.arrearsSince` se fija en el primer atraso y **no se mueve** mientras siga
+  habiendo cuotas vencidas; vuelve a 0 (y se borra) al quedar al día o con «Poner al día».
+- Se guarda en `metadata.arrearsMethod` de **cada** crédito. El default es de la cuenta (`accounts.settings.arrearsMethod`,
+  editable en Cuenta → datos) y viene preseleccionado en «Opciones avanzadas» del alta (web y móvil). Cambiar el
+  default no toca los créditos ya dados.
+- **Con pagos registrados no se cambia** (`CREDIT_HAS_PAYMENTS`); sin pagos se cambia, recalcula la mora y queda en la
+  auditoría (antes y después).
+- Aplicado en: alta (con cuotas pagadas), pago (`creditPatchAfterPayment`), trabajo diario (`arrears-job`),
+  recálculo manual, edición y «Poner al día». Importada y mora marcada a mano no usan el método (su dueño es otro).
+- La ficha (web y móvil) muestra las dos lecturas: «167 días desde 12 abr · Cuota a reclamar: 5 (venció 12 may)»
+  (`CreditDetail.arrearsSince` + `oldestUnpaid`).
+- Verificado por la API real: 10 cuotas de 150, 3 pagadas, hoy sep 2026 → 167 días; paga la 4 → `oldest_unpaid` 137,
+  `first_default` 167 desde el 12 abr; cambiar el método con pagos → `CREDIT_HAS_PAYMENTS`; default de la cuenta aplicado.
 
 ## D18 — Desgravamen y otros cargos ✅ (2026-09-25)
 
@@ -281,7 +314,7 @@ sola cuota que congelar. En vez de rechazarlo (`CREDIT_TERMS_NOT_PERSISTABLE`, e
     pago único) y base de la tasa si aplica.
   - Cotización en vivo y **vista previa del plan de pagos**, con las columnas Cuota · Fecha · Capital · Interés ·
     Total · Saldo de capital.
-  - Textos: «Monto a prestar», «Primer pago» / «Fecha de pago», «Dar el crédito». Título, botón y ruta de
+  - Textos: «Monto a prestar», «Primer pago» / «Fecha de pago», «Crear crédito». Título, botón y ruta de
     navegación dicen «Nuevo crédito».
 - **Componentes nuevos:**
   - `components/credit-terms-fields.tsx` (`CreditTermsFields`, `CreditQuotePanel`).

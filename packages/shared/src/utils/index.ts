@@ -14,6 +14,8 @@ export * from './loan-form.js';
 export * from './credit-form.js';
 export * from './credit-edit.js';
 export * from './credit-import.js';
+export * from './plan-csv.js';
+export * from './arrears-method.js';
 export * from './import.js';
 export * from './agenda.js';
 export * from './route-day.js';

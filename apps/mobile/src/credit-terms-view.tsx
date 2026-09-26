@@ -7,10 +7,11 @@
  * para guardar: la cuota que ve el cobrador es la que se cobra.
  */
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import {
   AmortizationMethod,
+  ArrearsMethod,
   CreditDefinition,
   InterestBase,
   InterestType,
@@ -19,6 +20,7 @@ import {
   RatePeriod,
   RepaymentForm,
   TermUnit,
+  paymentPlanCsv,
   periodicRatePercent,
   rateBaseApplies,
   ratePeriodApplies,
@@ -30,6 +32,7 @@ import {
   type CreditScheduleRow,
   type InitialStateForm,
   type RegisteredStateResult,
+  type RegistrationSituation,
 } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { AmountInput, BottomSheet, Chips, SectionLabel } from '@/ui';
@@ -37,6 +40,8 @@ import { Field } from '@/components';
 import { money, MONTHS } from '@/agenda-form';
 import {
   AMORTIZATION_HINT,
+  ARREARS_METHOD_HINT,
+  ARREARS_METHOD_LABEL,
   AMORTIZATION_LABEL,
   DEFINITION_HINT,
   DEFINITION_LABEL,
@@ -67,6 +72,7 @@ const AMORTIZATIONS = Object.values(AmortizationMethod).map((a) => ({ value: a, 
 const RATE_BASES = Object.values(InterestBase).map((b) => ({ value: b, label: RATE_BASE_LABEL[b] }));
 const RATE_PERIODS = Object.values(RatePeriod).map((p) => ({ value: p, label: RATE_PERIOD_LABEL[p] }));
 const RATE_CONVENTIONS = Object.values(RateConvention).map((c) => ({ value: c, label: RATE_CONVENTION_LABEL[c] }));
+const ARREARS_METHODS = Object.values(ArrearsMethod).map((m) => ({ value: m, label: ARREARS_METHOD_LABEL[m] }));
 const TERM_UNITS = Object.values(TermUnit).map((u) => ({ value: u, label: TERM_UNIT_LABEL[u] }));
 const CHARGE_KIND_OPTIONS = CHARGE_KINDS.map((k) => ({ value: k, label: CHARGE_KIND_LABEL[k] }));
 
@@ -185,14 +191,19 @@ export function CreditTermsFormView({ form, onChange, currency }: { form: Credit
         <Text style={styles.dateText}>{prettyDay(form.firstDueDate)}</Text>
       </Pressable>
 
-      {/* Sólo lo que el dominio soporta hoy (D4, D8). Sin seguro ni cargos: son otra épica. */}
-      {calculated && (
-        <>
+      {/* Siempre: el método de mora (D20) vale para cualquier definición. Lo demás, sólo en «Calcular cuotas». */}
+      <>
           <Pressable onPress={() => setAdvanced((v) => !v)} accessibilityRole="button" style={{ paddingVertical: SPACING.sm }}>
             <Text style={styles.collapse}>{advanced ? '▾' : '▸'} Opciones avanzadas</Text>
           </Pressable>
           {advanced && (
             <View style={{ gap: SPACING.xs }}>
+              <SectionLabel>Cómo se cuenta la mora</SectionLabel>
+              <Chips options={ARREARS_METHODS} value={form.arrearsMethod} onChange={(arrearsMethod) => set({ arrearsMethod })} />
+              <Text style={styles.hint}>{ARREARS_METHOD_HINT[form.arrearsMethod]}</Text>
+
+              {calculated && (
+              <>
               {form.amortization !== AmortizationMethod.FIXED_PRINCIPAL && (
                 <>
                   <SectionLabel>Tipo de interés</SectionLabel>
@@ -242,10 +253,11 @@ export function CreditTermsFormView({ form, onChange, currency }: { form: Credit
               <Pressable onPress={addCharge} accessibilityRole="button" style={{ paddingVertical: SPACING.xs }}>
                 <Text style={styles.link}>+ Agregar cargo</Text>
               </Pressable>
+              </>
+              )}
             </View>
           )}
-        </>
-      )}
+      </>
 
       {picker && <DateTimePicker value={new Date(`${form.firstDueDate}T12:00:00Z`)} mode="date" onChange={onDate} />}
     </View>
@@ -332,26 +344,77 @@ export function PlanSheet({
           </View>
         ))}
       </ScrollView>
+      {/*
+        Compartir el plan en CSV (el mismo de la web, `paymentPlanCsv`). Va como texto por la hoja de
+        compartir del teléfono: guardarlo como archivo pide expo-file-system + expo-sharing (nativos).
+      */}
+      <Pressable
+        onPress={() => void Share.share({ title: 'Plan de pagos', message: paymentPlanCsv(rows).replace(/^﻿/, '') })}
+        accessibilityRole="button"
+        style={{ paddingTop: SPACING.md }}
+      >
+        <Text style={styles.link}>Compartir plan de pagos (CSV)</Text>
+      </Pressable>
     </BottomSheet>
   );
 }
 
 /**
- * «Ya está en curso» (D13): cuotas pagadas, saldo y mora, con el saldo y el próximo cobro que van a
- * quedar. La regla (`registeredState`) es la misma que aplica la API al guardar.
+ * «Ya está en curso» (D13). La regla (`registeredState`) es la misma que aplica la API al guardar.
+ *
+ *  · **Con plan** (`situation`): sólo cuántas de las primeras cuotas ya estaban pagadas (sin huecos, hasta
+ *    n − 1). Saldo, próxima cuota y mora salen de ahí (D20: la mora desde la primera cuota impaga).
+ *  · **Préstamo abierto** (sin plan): no hay cuotas que marcar; saldo y días de mora se cargan a mano.
  */
 export function InitialStateFields({
   value,
   onChange,
   registered,
   currency,
+  situation,
+  total,
 }: {
   value: InitialStateForm;
   onChange: (v: InitialStateForm) => void;
   registered: RegisteredStateResult | null;
   currency: string;
+  /** Cómo queda con esas cuotas pagadas (con plan). */
+  situation?: RegistrationSituation | null;
+  /** Número de cuotas del plan; ausente = préstamo abierto. */
+  total?: number;
 }) {
   const set = (p: Partial<InitialStateForm>) => onChange({ ...value, ...p });
+
+  if (total !== undefined) {
+    const typed = Number(value.paidInstallments) || 0;
+    return (
+      <View style={{ gap: SPACING.xs }}>
+        <Field
+          label={`Cuotas ya pagadas (de ${total}, máximo ${total - 1})`}
+          value={value.paidInstallments}
+          // Sólo el número: el saldo y la mora se derivan (se borran los manuales).
+          onChangeText={(paidInstallments) => onChange({ paidInstallments, outstandingBalance: '', daysPastDue: '' })}
+          keyboardType="number-pad"
+          placeholder="0"
+        />
+        {typed >= total ? (
+          <Text style={styles.error}>{INITIAL_STATE_ISSUE.PAID_INSTALLMENTS_TOO_MANY}</Text>
+        ) : situation ? (
+          <Text style={styles.hint}>
+            {`${situation.paid} de ${situation.total} pagadas · saldo ${money(situation.outstanding, currency)} · próxima cuota N.º ${situation.next.number} (${prettyDay(situation.next.dueDate)})`}
+            {situation.daysPastDue > 0
+              ? ` · ${situation.daysPastDue} días de mora desde ${prettyDay(situation.arrearsSince)}`
+              : ' · al día'}
+          </Text>
+        ) : (
+          <Text style={registered && !registered.ok ? styles.error : styles.hint}>
+            {registered && !registered.ok ? INITIAL_STATE_ISSUE[registered.code] : INITIAL_STATE_ISSUE.TERMS_INVALID}
+          </Text>
+        )}
+      </View>
+    );
+  }
+
   return (
     <View style={{ gap: SPACING.xs }}>
       <Field label="Cuotas ya pagadas" value={value.paidInstallments} onChangeText={(paidInstallments) => set({ paidInstallments })} keyboardType="number-pad" placeholder="0" />

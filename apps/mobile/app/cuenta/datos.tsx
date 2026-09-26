@@ -16,7 +16,7 @@ import {
   type AccountForm,
 } from '@/account-form';
 
-const EMPTY: AccountForm = { businessName: '', taxId: '', countryCode: '', currencyCode: '', timezone: '', currencyDecimals: '2' };
+const EMPTY: AccountForm = { businessName: '', taxId: '', countryCode: '', currencyCode: '', timezone: '', currencyDecimals: '2', arrearsMethod: 'oldest_unpaid' };
 
 /**
  * Datos del negocio (CUENTA S1). País y moneda son **un solo selector** (S1-D1): están
@@ -47,6 +47,8 @@ export default function DatosCuentaScreen() {
         // Sólo se muestran: ninguna pantalla del móvil los cambia, así que el diff nunca los manda.
         timezone: res.data.timezone ?? '',
         currencyDecimals: String(res.data.currencyDecimals ?? 2),
+        // El método de mora por defecto (D20) lo edita la web; acá sólo se conserva para que el diff no lo mande.
+        arrearsMethod: res.data.arrearsMethod ?? 'oldest_unpaid',
       };
       setBefore(f);
       setForm(f);

@@ -9,7 +9,7 @@
  * Las condiciones y el estado al registrar sólo se editan **mientras no haya pagos registrados**:
  * después, cambiarlos reescribiría lo que ya se cobró (es una reestructura, otra operación).
  */
-import { CreditDefinition, InterestBase, PaymentFrequency, RateConvention, RatePeriod, TermUnit } from '../enums/credit.enum.js';
+import { CreditDefinition, DEFAULT_ARREARS_METHOD, InterestBase, PaymentFrequency, RateConvention, RatePeriod, TermUnit } from '../enums/credit.enum.js';
 import type { BalanceBasis } from '../enums/credit.enum.js';
 import type { CreditDetail } from '../types/client.types.js';
 import { calculateCredit, type CreditTerms } from './credit-engine.js';
@@ -105,6 +105,19 @@ function frequencyOf(terms: CreditTerms): PaymentFrequency {
   return ('frequency' in terms ? terms.frequency : undefined) ?? PaymentFrequency.MONTHLY;
 }
 
+/**
+ * Lo que se pagó **antes** de registrar el crédito en Kobrax (D13): total menos el saldo con que nació.
+ * «Recuperado» lo descuenta, así mide sólo lo cobrado en Kobrax. 0 sin estado al registrar, en un préstamo
+ * abierto (sin total) o si las condiciones no cierran.
+ */
+export function priorPaidAmountOf(terms: CreditTerms | undefined, initial: CreditInitialState | undefined): number {
+  if (!terms || !hasInitialState(initial)) return 0;
+  const total = calculateCredit(terms).quote?.total;
+  const reg = registeredState(terms, initial);
+  if (total == null || !reg.ok || reg.balanceBasis !== 'total') return 0;
+  return Math.max(0, Math.round((total - reg.outstandingBalance) * 100) / 100);
+}
+
 /** ¿Este estado dice algo? Uno vacío (0 pagadas, sin saldo, sin mora) no se guarda. */
 export function hasInitialState(s: CreditInitialState | undefined): s is CreditInitialState {
   return Boolean(s && (s.paidInstallments > 0 || s.outstandingBalance !== undefined || s.daysPastDue > 0));
@@ -159,7 +172,12 @@ export function initialStateFromForm(f: InitialStateForm): CreditInitialState {
  */
 export function creditFormFromCredit(credit: CreditDetail, todayIso: string): CreditForm {
   // Lo guardado son cuotas: sólo el calculado se vuelve a mostrar en meses (más abajo).
-  const base = { ...initialCreditForm(todayIso), termUnit: TermUnit.INSTALLMENTS, notes: credit.notes ?? '' };
+  const base = {
+    ...initialCreditForm(todayIso),
+    termUnit: TermUnit.INSTALLMENTS,
+    notes: credit.notes ?? '',
+    arrearsMethod: credit.arrearsMethod ?? DEFAULT_ARREARS_METHOD,
+  };
   const t = credit.terms;
   const str = (n: number | undefined): string => (n !== undefined && Number.isFinite(n) ? String(n) : '');
 

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import {
+  ArrearsMethod,
   COUNTRY_CURRENCIES,
   diffAccount,
   hasChanges,
@@ -24,6 +25,7 @@ const formOf = (a: AccountInfo): AccountForm => ({
   currencyCode: a.currencyCode,
   timezone: a.timezone ?? '',
   currencyDecimals: String(a.currencyDecimals ?? 2),
+  arrearsMethod: a.arrearsMethod ?? ArrearsMethod.OLDEST_UNPAID,
 });
 
 /**
@@ -236,6 +238,21 @@ export function BusinessForm({ account }: { account: AccountInfo }) {
           {[2, 1, 0].map((d) => (
             <option key={d} value={String(d)}>
               {t('decimalsValue', { n: d })} · {ejemplo(d)}
+            </option>
+          ))}
+        </Select>
+      </Field>
+
+      {/* D20: viene preseleccionado en el alta de cada crédito; cada crédito guarda el suyo. */}
+      <Field label={t('arrearsMethod')} hint={t('arrearsMethodHint')}>
+        <Select
+          value={form.arrearsMethod}
+          onChange={(e) => setForm({ ...form, arrearsMethod: e.target.value })}
+          disabled={!editable}
+        >
+          {Object.values(ArrearsMethod).map((m) => (
+            <option key={m} value={m}>
+              {t(`arrearsMethods.${m}`)}
             </option>
           ))}
         </Select>

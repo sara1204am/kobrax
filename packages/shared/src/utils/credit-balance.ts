@@ -45,8 +45,14 @@ export function paymentProgress(credit: {
   outstandingBalance: number;
   principalAmount: number;
   totalToCollect: number | null;
+  /**
+   * Lo pagado antes de registrarlo en Kobrax (D13). Se descuenta de la referencia: «Recuperado» mide
+   * sólo lo cobrado en Kobrax, así un crédito cargado con 3 cuotas pagadas arranca en 0 %.
+   */
+  priorPaidAmount?: number;
 }): number | null {
-  const reference = credit.basis === 'total' ? credit.totalToCollect : credit.principalAmount;
+  const full = credit.basis === 'total' ? credit.totalToCollect : credit.principalAmount;
+  const reference = full === null ? null : full - (credit.basis === 'total' ? (credit.priorPaidAmount ?? 0) : 0);
   if (reference === null || reference <= 0) return null;
   const pct = Math.round(((reference - credit.outstandingBalance) / reference) * 100);
   return Math.max(0, Math.min(100, pct));

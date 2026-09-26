@@ -1223,7 +1223,13 @@
     "save": "Save changes",
     "saved": "Details saved",
     "saveError": "Could not save the details",
-    "noAccess": "You do not have access to the account details"
+    "noAccess": "You do not have access to the account details",
+    "arrearsMethod": "How arrears are counted (new credits)",
+    "arrearsMethodHint": "Preselected on every new credit; can be changed per credit. Existing credits do not change.",
+    "arrearsMethods": {
+      "oldest_unpaid": "From the oldest unpaid instalment",
+      "first_default": "From the first default until caught up (as banks do)"
+    }
   },
   "exports": {
     "title": "Export",
@@ -1627,7 +1633,7 @@
     "creditForm": {
       "title": "New credit",
       "subtitle": "For {name}",
-      "save": "Grant the credit",
+      "save": "Create credit",
       "created": "Credit registered",
       "definitionLabel": "How do you want to define the credit?",
       "definition": {
@@ -1753,7 +1759,41 @@
       },
       "chargeValue": "Value",
       "chargeAdd": "Add charge",
-      "chargeRemove": "Remove"
+      "chargeRemove": "Remove",
+      "exportPlan": "Export payment plan",
+      "arrearsMethod": "How arrears are counted",
+      "arrearsMethods": {
+        "oldest_unpaid": "From the oldest unpaid instalment",
+        "first_default": "From the first default until caught up"
+      },
+      "arrearsMethodHints": {
+        "oldest_unpaid": "Paying the most overdue instalment lowers the arrears.",
+        "first_default": "As banks do: keeps counting from the first unpaid instalment until the client is up to date."
+      },
+      "paid": {
+        "label": "Instalments already paid before registering",
+        "none": "None (new credit)",
+        "option": "{count} of {total} · {date}",
+        "hint": "For a credit that was already running outside Kobrax. The number of instalments does not change: the first ones are marked as paid.",
+        "status": "Status",
+        "paidStatus": "Paid",
+        "pendingStatus": "Pending",
+        "markPaid": "Mark paid (and the previous ones)",
+        "markPending": "Mark pending (and the following ones)",
+        "thisMonth": "this month"
+      },
+      "situation": {
+        "paidCount": "Instalments paid",
+        "paidOf": "{count} of {total}",
+        "outstanding": "Outstanding balance",
+        "next": "Next instalment",
+        "nextValue": "No. {number} · {date}",
+        "arrears": "Arrears",
+        "current": "Up to date",
+        "days": "{count} days",
+        "since": "since {date}",
+        "oldestUnpaid": "Oldest unpaid instalment: {number} (due {date})"
+      }
     },
     "creditDetail": {
       "edit": "Edit",
@@ -1845,7 +1885,11 @@
       "interestImported": "{rate} % (as per the source)",
       "insurance": "Credit life insurance",
       "insuranceValue": "{rate} % monthly on balance",
-      "charges": "Other charges"
+      "charges": "Other charges",
+      "arrearsSince": "since {date}",
+      "oldestUnpaid": "Instalment to collect: {number} (due {date})",
+      "oldestUnpaidNoNumber": "Instalment to collect: due {date}",
+      "arrearsMethod": "How arrears are counted"
     },
     "creditBadges": {
       "inProgress": "Registered in progress"

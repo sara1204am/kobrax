@@ -1,4 +1,5 @@
 import type { PlanLimits } from '../constants/plans.js';
+import type { ArrearsMethod } from '../enums/credit.enum.js';
 
 /**
  * Cuenta y perfil propio: lo que devuelve la API y lo que acepta editar.
@@ -24,6 +25,11 @@ export interface AccountInfo {
    * cartera que presta en enteros no quiere leer «,00» en cada renglón. Vive en `settings`.
    */
   currencyDecimals: number;
+  /**
+   * Cómo se cuentan los días de mora por defecto en los créditos nuevos (D20). Viene preseleccionado en
+   * el alta; cada crédito guarda el suyo. Vive en `settings`. `oldest_unpaid` si la cuenta no lo eligió.
+   */
+  arrearsMethod: ArrearsMethod;
   /**
    * Los topes que rigen para esta cuenta: los del plan con su excepción ya aplicada.
    *
@@ -61,6 +67,8 @@ export interface AccountPatch {
   timezone?: string | null;
   /** Viaja como string ('0'|'1'|'2') porque sale de un `<select>` y el diff es de strings. */
   currencyDecimals?: string;
+  /** Método de mora por defecto de los créditos nuevos (D20). */
+  arrearsMethod?: string;
 }
 
 /** `GET /users/me/profile`. */
@@ -97,6 +105,8 @@ export interface AccountForm {
   timezone: string;
   /** '0'|'1'|'2' — string porque es un `<select>`. La edita la web; el móvil sólo la lee. */
   currencyDecimals: string;
+  /** Método de mora por defecto (D20). La edita la web; el móvil sólo la lee. */
+  arrearsMethod: string;
 }
 
 export interface ProfileForm {

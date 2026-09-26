@@ -1223,7 +1223,13 @@
     "save": "Guardar cambios",
     "saved": "Datos guardados",
     "saveError": "No se pudieron guardar los datos",
-    "noAccess": "No tienes acceso a los datos de la cuenta"
+    "noAccess": "No tienes acceso a los datos de la cuenta",
+    "arrearsMethod": "Cómo se cuenta la mora (créditos nuevos)",
+    "arrearsMethodHint": "Viene elegido en cada crédito nuevo; se puede cambiar crédito por crédito. Los ya dados no cambian.",
+    "arrearsMethods": {
+      "oldest_unpaid": "Desde la cuota impaga más antigua",
+      "first_default": "Desde el primer atraso, hasta quedar al día (como los bancos)"
+    }
   },
   "exports": {
     "title": "Exportar",
@@ -1627,7 +1633,7 @@
     "creditForm": {
       "title": "Nuevo crédito",
       "subtitle": "Para {name}",
-      "save": "Dar el crédito",
+      "save": "Crear crédito",
       "created": "Crédito registrado",
       "definitionLabel": "¿Cómo querés definir el crédito?",
       "definition": {
@@ -1753,7 +1759,41 @@
       },
       "chargeValue": "Valor",
       "chargeAdd": "Agregar cargo",
-      "chargeRemove": "Quitar"
+      "chargeRemove": "Quitar",
+      "exportPlan": "Exportar plan de pagos",
+      "arrearsMethod": "Cómo se cuenta la mora",
+      "arrearsMethods": {
+        "oldest_unpaid": "Desde la cuota impaga más antigua",
+        "first_default": "Desde el primer atraso, hasta quedar al día"
+      },
+      "arrearsMethodHints": {
+        "oldest_unpaid": "Pagar la cuota más atrasada baja la mora.",
+        "first_default": "Como los bancos: sigue contando desde la primera cuota que no se pagó hasta que se pone al día."
+      },
+      "paid": {
+        "label": "Cuotas ya pagadas antes de registrarlo",
+        "none": "Ninguna (crédito nuevo)",
+        "option": "{count} de {total} · {date}",
+        "hint": "Para un crédito que ya venía corriendo fuera de Kobrax. No cambia el número de cuotas: marca las primeras como pagadas.",
+        "status": "Estado",
+        "paidStatus": "Pagada",
+        "pendingStatus": "Pendiente",
+        "markPaid": "Marcar pagada (y las anteriores)",
+        "markPending": "Marcar pendiente (y las siguientes)",
+        "thisMonth": "este mes"
+      },
+      "situation": {
+        "paidCount": "Cuotas pagadas",
+        "paidOf": "{count} de {total}",
+        "outstanding": "Saldo pendiente",
+        "next": "Próxima cuota",
+        "nextValue": "N.º {number} · {date}",
+        "arrears": "Mora",
+        "current": "Al día",
+        "days": "{count} días",
+        "since": "desde {date}",
+        "oldestUnpaid": "Cuota impaga más antigua: {number} (venció {date})"
+      }
     },
     "creditDetail": {
       "edit": "Editar",
@@ -1845,7 +1885,11 @@
       "interestImported": "{rate} % (según la fuente)",
       "insurance": "Desgravamen",
       "insuranceValue": "{rate} % mensual sobre saldo",
-      "charges": "Otros cargos"
+      "charges": "Otros cargos",
+      "arrearsSince": "desde {date}",
+      "oldestUnpaid": "Cuota a reclamar: {number} (venció {date})",
+      "oldestUnpaidNoNumber": "Cuota a reclamar: venció {date}",
+      "arrearsMethod": "Cómo se cuenta la mora"
     },
     "creditBadges": {
       "inProgress": "Cargado en curso"

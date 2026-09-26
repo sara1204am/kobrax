@@ -3,7 +3,13 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 import { AgendaItemStatus, AgendaItemType, CasePriority, CaseStatus, CreditStatus, InstallmentStatus } from '@prisma/client';
 import {
   addPeriods,
+  arrearsByMethod,
   arrearsFromDueDate,
+  arrearsMethodOf,
+  ArrearsMethod,
+  DEFAULT_ARREARS_METHOD,
+  oldestUnpaid,
+  withArrearsMethod,
   CREDIT_TERMS_VERSION,
   creditTotalToCollect,
   CreditOrigin,
@@ -61,6 +67,8 @@ interface AccountConfig {
   currencyCode: string;
   labels: Record<string, string>;
   arrears: ArrearParams;
+  /** Método de mora por defecto de los créditos nuevos (D20), de `accounts.settings`. */
+  arrearsMethod: ArrearsMethod;
 }
 
 @Injectable()
@@ -87,6 +95,7 @@ export class CreditsService {
       currencyCode: account?.currencyCode ?? 'USD',
       labels: cfg.creditLabels ?? {},
       arrears: { ...DEFAULT_ARREAR_PARAMS, ...(cfg.arrears ?? {}) },
+      arrearsMethod: arrearsMethodOf(account?.settings),
     };
   }
 
@@ -139,7 +148,7 @@ export class CreditsService {
      */
     const frozenInstallment = installmentAmount !== undefined;
     const schedule: InstallmentRow[] = variableSchedule
-      ? installmentRows(variableSchedule, dto.initialState?.paidInstallments ?? 0, asOf)
+      ? installmentRows(variableSchedule, dto.initialState?.paidInstallments ?? 0)
       : frozenInstallment
         ? []
         : buildSchedule({
@@ -181,12 +190,20 @@ export class CreditsService {
     const outstandingBalance = registered?.ok
       ? registered.outstandingBalance
       : (dto.outstandingBalance ?? totalToCollect ?? dto.principalAmount);
-    // Mora declarada al registrarlo → marca manual, como en la edición; si es 0, la calcula la fecha.
+    // D20: el método del crédito; si el alta no lo dice, el default de la cuenta. Se guarda siempre, así
+    // cambiar el default de la cuenta después no cambia cómo se cuenta la mora de los créditos ya dados.
+    const arrearsMethod = dto.arrearsMethod ?? config.arrearsMethod;
+    // Mora declarada al registrarlo (apps viejas) → marca manual, como en la edición. Si no se declaró, la
+    // calcula la fecha de la primera cuota impaga (k+1) con el método del crédito.
     const moraSince = registered?.ok && registered.daysPastDue > 0 ? moraSinceFromDays(registered.daysPastDue, asOf) : undefined;
+    const initialArrears =
+      registered?.ok && !moraSince
+        ? arrearsByMethod({ method: arrearsMethod, oldestUnpaidDue: registered.nextDueDate, balance: registered.outstandingBalance, asOf })
+        : undefined;
     const daysPastDue = registered?.ok
       ? moraSince
         ? registered.daysPastDue
-        : arrearsFromDueDate(registered.nextDueDate, registered.outstandingBalance, asOf)
+        : initialArrears!.daysPastDue
       : (dto.daysPastDue ?? 0);
 
     const metadata: CreditMetadata = {
@@ -205,6 +222,8 @@ export class CreditsService {
       ...(resolved ? { terms: resolved.terms, termsVersion: CREDIT_TERMS_VERSION } : {}),
       initialState: hasInitialState(dto.initialState) ? { ...dto.initialState } : undefined,
       moraSince,
+      arrearsMethod,
+      arrearsSince: initialArrears?.arrearsSince,
     };
 
     const accountId = this.tenant.accountId;
@@ -383,6 +402,17 @@ export class CreditsService {
       if ((redefine || looseField || operational) && isExternalOrigin(meta.origin)) throw creditLocked();
       if (looseField && meta.terms) throw creditTermsEditUnsupported();
 
+      /*
+       * D20: cambiar cómo se cuenta la mora a mitad de vida la reescribiría de un clic (8 días pasan a
+       * 38): con pagos registrados se bloquea, igual que las condiciones. El cambio queda en la auditoría
+       * (`arrearsMethod` en el antes y el después).
+       */
+      const currentMethod = meta.arrearsMethod ?? DEFAULT_ARREARS_METHOD;
+      const methodChange = dto.arrearsMethod !== undefined && dto.arrearsMethod !== currentMethod;
+      if (methodChange && isExternalOrigin(meta.origin)) throw creditLocked();
+      if (methodChange && prev._count.payments > 0) throw creditHasPayments();
+      const method = methodChange ? dto.arrearsMethod! : currentMethod;
+
       // Cuota/frecuencia/próxima fecha/nota viven en metadata (D1); se hace merge preservando el resto.
       let nextMeta: CreditMetadata = {
         ...meta,
@@ -424,9 +454,11 @@ export class CreditsService {
               ? moraSinceFromDays(reg.daysPastDue, asOf)
               : undefined
             : meta.moraSince;
-        const daysPastDue = moraSince
-          ? manualArrears(moraSince, reg.outstandingBalance, asOf)
-          : arrearsFromDueDate(reg.nextDueDate, reg.outstandingBalance, asOf);
+        // Sin marca manual, la mora sale de la primera cuota impaga (k+1) con el método del crédito (D20).
+        const byMethod = moraSince
+          ? undefined
+          : arrearsByMethod({ method, oldestUnpaidDue: reg.nextDueDate, balance: reg.outstandingBalance, asOf });
+        const daysPastDue = moraSince ? manualArrears(moraSince, reg.outstandingBalance, asOf) : byMethod!.daysPastDue;
 
         Object.assign(data, {
           principalAmount: terms.principal,
@@ -443,7 +475,7 @@ export class CreditsService {
         if (prev._count.installments > 0) await tx.creditInstallment.deleteMany({ where: { creditId: id } });
         if (r.schedule) {
           await tx.creditInstallment.createMany({
-            data: installmentRows(r.schedule, initial?.paidInstallments ?? 0, asOf).map((row) => ({
+            data: installmentRows(r.schedule, initial?.paidInstallments ?? 0).map((row) => ({
               ...row,
               accountId: this.tenant.accountId,
               creditId: id,
@@ -461,10 +493,28 @@ export class CreditsService {
           termsVersion: CREDIT_TERMS_VERSION,
           initialState: hasInitialState(initial) ? initial : undefined,
           moraSince,
+          arrearsMethod: method,
+          arrearsSince: byMethod?.arrearsSince,
         };
+      } else if (methodChange) {
+        /*
+         * Sólo cambia el método: la mora se recalcula con él. Si la mora la manda una marca a mano, esa
+         * sigue mandando (el método aplica a la calculada). Con cronograma, desde la cuota impaga más antigua.
+         */
+        nextMeta = { ...nextMeta, arrearsMethod: method };
+        if (!meta.moraSince) {
+          const rows =
+            prev._count.installments > 0
+              ? await tx.creditInstallment.findMany({ where: { creditId: id }, select: { number: true, dueDate: true, status: true } })
+              : [];
+          const oldestDue = rows.length > 0 ? oldestUnpaid(rows)?.dueDate : meta.nextDueDate;
+          const reading = arrearsByMethod({ method, oldestUnpaidDue: oldestDue, balance: Number(prev.outstandingBalance), asOf });
+          nextMeta = { ...nextMeta, arrearsSince: reading.arrearsSince };
+          data.daysPastDue = reading.daysPastDue;
+        }
       }
 
-      const touchesMeta = redefine || looseField !== undefined || operational;
+      const touchesMeta = redefine || looseField !== undefined || operational || methodChange;
       const next = await tx.credit.update({
         where: { id },
         data: { ...data, metadata: touchesMeta ? (stripUndefined(nextMeta) as Prisma.InputJsonValue) : undefined },
@@ -591,7 +641,8 @@ export class CreditsService {
         where: { id },
         data: {
           daysPastDue: 0,
-          metadata: stripUndefined({ ...meta, nextDueDate, moraSince: undefined }) as Prisma.InputJsonValue,
+          // Poner al día borra la marca manual y el primer atraso del método bancario (D20).
+          metadata: stripUndefined({ ...meta, nextDueDate, moraSince: undefined, arrearsSince: undefined }) as Prisma.InputJsonValue,
         },
       });
       const closed = await closeOpenCases(tx, id, 'CURRENT', asOf);
@@ -639,8 +690,24 @@ export class CreditsService {
       // Crédito sin cronograma (el del móvil): la mora sale de la próxima fecha, no de las cuotas.
       // `computeArrears` sobre un array vacío devuelve 0 y borraba la mora real.
       if (credit.installments.length === 0) {
-        const daysOverdue = arrearsFromDueDate(meta.nextDueDate, Number(credit.outstandingBalance), asOf);
-        await tx.credit.update({ where: { id }, data: { daysPastDue: daysOverdue } });
+        // D20: con el método del crédito (el bancario guarda y respeta la fecha del primer atraso).
+        const reading = arrearsByMethod({
+          method: meta.arrearsMethod,
+          oldestUnpaidDue: meta.nextDueDate,
+          arrearsSince: meta.arrearsSince,
+          balance: Number(credit.outstandingBalance),
+          asOf,
+        });
+        const daysOverdue = reading.daysPastDue;
+        await tx.credit.update({
+          where: { id },
+          data: {
+            daysPastDue: daysOverdue,
+            ...(reading.arrearsSince !== meta.arrearsSince
+              ? { metadata: stripUndefined({ ...meta, arrearsSince: reading.arrearsSince }) as Prisma.InputJsonValue }
+              : {}),
+          },
+        });
         return { daysOverdue, overdueAmount: daysOverdue > 0 ? Number(credit.outstandingBalance) : 0, interest: 0, penalty: 0, overdueInstallmentIds: [] };
       }
 
@@ -663,7 +730,24 @@ export class CreditsService {
           data: { status: 'OVERDUE' },
         });
       }
-      await tx.credit.update({ where: { id }, data: { daysPastDue: arrear.daysOverdue } });
+      // D20: el método del crédito sobre la mora de siempre (desde la cuota impaga más antigua).
+      const reading = withArrearsMethod({
+        baseDays: arrear.daysOverdue,
+        method: meta.arrearsMethod,
+        oldestUnpaidDue: oldestUnpaid(credit.installments)?.dueDate,
+        arrearsSince: meta.arrearsSince,
+        asOf,
+      });
+      arrear.daysOverdue = reading.daysPastDue;
+      await tx.credit.update({
+        where: { id },
+        data: {
+          daysPastDue: arrear.daysOverdue,
+          ...(reading.arrearsSince !== meta.arrearsSince
+            ? { metadata: stripUndefined({ ...meta, arrearsSince: reading.arrearsSince }) as Prisma.InputJsonValue }
+            : {}),
+        },
+      });
       // Snapshot único por crédito (idempotente): reemplaza el anterior.
       await tx.arrear.deleteMany({ where: { creditId: id } });
       await tx.arrear.create({
@@ -739,15 +823,18 @@ interface InstallmentRow {
 /**
  * El cronograma del motor → las cuotas que se guardan (cuota variable). Las primeras `paid` ya estaban
  * pagadas al registrarlo (D13): nacen `PAID`, así la próxima fecha y la mora arrancan en la primera impaga.
+ *
+ * 🔴 **Sin `paidAt` y sin `Payment`.** No se cobraron en Kobrax ni se sabe cuándo se pagaron: ponerles la
+ * fecha del registro las mostraría como cobradas ese día. Se reconocen por su número (≤ `paidInstallments`).
  */
-function installmentRows(rows: CreditScheduleRow[], paid: number, asOf: Date): InstallmentRow[] {
+function installmentRows(rows: CreditScheduleRow[], paid: number): InstallmentRow[] {
   return rows.map((r) => ({
     number: r.number,
     dueDate: new Date(`${r.dueDate}T00:00:00.000Z`),
     amount: r.amount,
     principal: r.principal,
     interest: r.interest,
-    ...(r.number <= paid ? { paidAmount: r.amount, status: InstallmentStatus.PAID, paidAt: asOf } : {}),
+    ...(r.number <= paid ? { paidAmount: r.amount, status: InstallmentStatus.PAID } : {}),
   }));
 }
 
@@ -787,7 +874,9 @@ function creditSummary(c: {
   status: string;
   daysPastDue: number;
   assignedManagerId: string | null;
+  metadata?: unknown;
 }): Record<string, unknown> {
+  const meta = readCreditMetadata(c.metadata);
   return {
     id: c.id,
     clientId: c.clientId,
@@ -799,5 +888,9 @@ function creditSummary(c: {
     status: c.status,
     daysPastDue: c.daysPastDue,
     assignedManagerId: c.assignedManagerId ?? undefined,
+    // Dato financiero con traza (D13/D20): con cuántas cuotas pagadas se registró y cómo se cuenta la mora.
+    initialState: meta.initialState,
+    arrearsMethod: meta.arrearsMethod ?? DEFAULT_ARREARS_METHOD,
   };
 }
+

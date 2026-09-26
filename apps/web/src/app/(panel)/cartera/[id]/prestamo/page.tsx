@@ -33,6 +33,7 @@ export default async function PrestamoPage({ params }: { params: { id: string } 
       clientName={fullName(client.body.data)}
       team={(team.body.data ?? []).filter((m) => m.isActive)}
       currency={account.body.data?.currencyCode ?? 'BOB'}
+      defaultArrearsMethod={account.body.data?.arrearsMethod}
     />
   );
 }

@@ -18,7 +18,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { CreditStatus } from '@prisma/client';
-import { CreditOrigin, PaymentFrequency } from '@kobrax/shared';
+import { ArrearsMethod, CreditOrigin, PaymentFrequency } from '@kobrax/shared';
 import type { AmortizationType } from '../credit-math';
 
 /**
@@ -88,6 +88,9 @@ export class CreateCreditDto {
    * cola offline como una sola operación. Exige `terms`; no se mezcla con `outstandingBalance`/`daysPastDue`.
    */
   @IsOptional() @ValidateNested() @Type(() => InitialStateDto) initialState?: InitialStateDto;
+
+  /** Cómo se cuentan los días de mora (D20). Ausente = el default de la cuenta. */
+  @IsOptional() @IsEnum(ArrearsMethod) arrearsMethod?: ArrearsMethod;
 }
 
 /**
@@ -113,6 +116,9 @@ export class UpdateCreditDto {
   /** Condiciones nuevas, en la forma `CreditTerms` de shared (la valida `parseCreditTerms`, como en el alta). */
   @IsOptional() @IsObject() terms?: Record<string, unknown>;
   @IsOptional() @ValidateNested() @Type(() => InitialStateDto) initialState?: InitialStateDto;
+
+  /** Cambiar cómo se cuentan los días de mora (D20). Sólo sin pagos registrados: si no, reescribe la mora. */
+  @IsOptional() @IsEnum(ArrearsMethod) arrearsMethod?: ArrearsMethod;
 }
 
 export class ListCreditsQueryDto {

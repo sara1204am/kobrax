@@ -104,6 +104,20 @@ export enum RateConvention {
 }
 
 /**
+ * Cómo se cuentan los días de mora (F4/06 · D20). Se elige por crédito; el default lo pone la cuenta.
+ *  · `oldest_unpaid` — desde la cuota impaga más antigua: pagar la más atrasada baja la mora. Es lo
+ *    que el sistema hacía siempre, y el default si la cuenta no dice otra cosa.
+ *  · `first_default` — como los bancos: desde la primera cuota que no se pagó, y **no baja** hasta que
+ *    el cliente queda al día. La fecha de ese primer atraso se guarda (`metadata.arrearsSince`).
+ */
+export enum ArrearsMethod {
+  OLDEST_UNPAID = 'oldest_unpaid',
+  FIRST_DEFAULT = 'first_default',
+}
+
+export const DEFAULT_ARREARS_METHOD = ArrearsMethod.OLDEST_UNPAID;
+
+/**
  * Cuándo se cobra un cargo (F4/06 · D18):
  *  · `per_installment` — un monto fijo en cada cuota (gastos de cobranza);
  *  · `first_installment` — una vez, en la primera cuota (comisión de apertura, fija o % del monto);

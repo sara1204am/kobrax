@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import {
@@ -8,6 +8,7 @@ import {
   initialStateForm,
   initialStateFromForm,
   registeredState,
+  registrationSituation,
   type CreditForm,
   type InitialStateForm,
 } from '@kobrax/shared';
@@ -17,7 +18,7 @@ import { Button, ErrorBanner, Field } from '@/components';
 import { money } from '@/agenda-form';
 import { CreditQuotePanel, CreditTermsFormView, InitialStateFields, PlanSheet, prettyDay } from '@/credit-terms-view';
 import { createCredit } from '@/credits.service';
-import { hayLugar } from '@/account.service';
+import { getAccount, hayLugar } from '@/account.service';
 import { nuevoId } from '@/ids';
 import { queueForLater } from '@/sync/sync.service';
 
@@ -49,6 +50,13 @@ export default function NuevoPrestamoScreen() {
   const [plan, setPlan] = useState(false);
   const [doneMsg, setDoneMsg] = useState<{ installment: number; nextDueDate: string } | null>(null);
 
+  // D20: el método de mora por defecto de la cuenta (de la caché: funciona sin señal).
+  useEffect(() => {
+    void getAccount().then((r) => {
+      if (r.status === 'ok' && r.data.arrearsMethod) setForm((f) => ({ ...f, arrearsMethod: r.data.arrearsMethod }));
+    });
+  }, []);
+
   const state = useMemo(() => creditFormState(form), [form]);
   const registered = useMemo(
     () => (inProgress && state.missing.length === 0 && state.calculation.ok ? registeredState(state.terms, initialStateFromForm(initial)) : null),
@@ -56,6 +64,14 @@ export default function NuevoPrestamoScreen() {
   );
   const schedule = state.missing.length === 0 ? state.calculation.schedule : null;
   const canSubmit = state.canSubmit && (!inProgress || registered?.ok === true);
+  // Cómo queda con las cuotas ya pagadas: saldo, próxima cuota y mora (D13/D20), la misma regla que la API.
+  const situation = useMemo(
+    () =>
+      inProgress && schedule && registered?.ok
+        ? registrationSituation(state.terms, Number(initial.paidInstallments) || 0, form.arrearsMethod, new Date())
+        : null,
+    [inProgress, schedule, registered, state, initial, form.arrearsMethod],
+  );
 
   const submit = useCallback(async () => {
     if (!clientId) return;
@@ -152,13 +168,13 @@ export default function NuevoPrestamoScreen() {
           <Text style={styles.switchLabel}>Este préstamo ya está en curso</Text>
           <Switch value={inProgress} onValueChange={setInProgress} trackColor={{ true: COLORS.purple, false: COLORS.border }} />
         </View>
-        {inProgress && <InitialStateFields value={initial} onChange={setInitial} registered={registered} currency="Bs" />}
+        {inProgress && <InitialStateFields value={initial} onChange={setInitial} registered={registered} currency="Bs" total={schedule?.length} situation={situation} />}
 
         <Field label="Nota" value={form.notes} onChangeText={(notes) => setForm((f) => ({ ...f, notes }))} placeholder="Opcional" />
       </ScrollView>
 
       <View style={styles.footer}>
-        <Button label="Dar el crédito" onPress={submit} loading={saving} disabled={saving || !canSubmit} />
+        <Button label="Crear crédito" onPress={submit} loading={saving} disabled={saving || !canSubmit} />
       </View>
 
       {schedule && (

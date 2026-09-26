@@ -1,5 +1,16 @@
 import type { Arrear, Credit, CreditInstallment } from '@prisma/client';
-import { balanceBasisOf, creditTotalToCollect, creditView, CreditOrigin, type ImportTrackedField } from '@kobrax/shared';
+import {
+  balanceBasisOf,
+  calculateCredit,
+  creditTotalToCollect,
+  creditView,
+  CreditOrigin,
+  DEFAULT_ARREARS_METHOD,
+  oldestUnpaid,
+  priorPaidAmountOf,
+  type CreditTerms,
+  type ImportTrackedField,
+} from '@kobrax/shared';
 
 /** Etiquetas de concepto por defecto (las sobreescribe `account.configuration.creditLabels`). */
 export const DEFAULT_CREDIT_LABELS: Record<string, string> = {
@@ -104,8 +115,33 @@ export function serializeCredit(
     initialState: view.initialState,
     unknownFields,
     importedAt: view.importedAt,
+    // D13: lo pagado antes de registrarlo; «Recuperado» lo descuenta.
+    priorPaidAmount: priorPaidAmountOf(view.terms, view.initialState),
+    // D20: cómo se cuenta la mora, desde cuándo (bancario) y qué cuota reclamar hoy.
+    arrearsMethod: view.arrearsMethod ?? DEFAULT_ARREARS_METHOD,
+    arrearsSince: view.arrearsSince,
+    oldestUnpaid: oldestUnpaidOf(credit.installments, view.terms, view.nextDueDate),
     hasPayments: credit._count?.payments !== undefined ? credit._count.payments > 0 : undefined,
     installments: credit.installments?.map(serializeInstallment),
     arrears: credit.arrears?.map(serializeArrear),
   };
+}
+
+/**
+ * La cuota impaga más antigua, la que hay que reclamar (D20). Con cronograma guardado, la fila; sin él,
+ * la próxima fecha, y su número sale del plan de las condiciones si coincide una fecha.
+ */
+function oldestUnpaidOf(
+  rows: CreditInstallment[] | undefined,
+  terms: CreditTerms | undefined,
+  nextDueDate: string | undefined,
+): { number?: number; dueDate: string } | undefined {
+  if (rows && rows.length > 0) {
+    const r = oldestUnpaid(rows);
+    return r ? { number: r.number, dueDate: r.dueDate.toISOString().slice(0, 10) } : undefined;
+  }
+  if (!nextDueDate) return undefined;
+  const due = nextDueDate.slice(0, 10);
+  const number = terms ? calculateCredit(terms).schedule?.find((s) => s.dueDate === due)?.number : undefined;
+  return { ...(number ? { number } : {}), dueDate: due };
 }

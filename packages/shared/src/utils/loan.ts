@@ -6,6 +6,7 @@
  * por igual la vista previa (web/móvil) y la API (F4/06).
  */
 import {
+  ArrearsMethod,
   BALANCE_BASES,
   CreditOrigin,
   DUE_SOON_DAYS,
@@ -149,6 +150,10 @@ export interface CreditMetadata {
   importRunId?: string;
   /** ISO: cuándo lo tocó esa corrida. */
   importedAt?: string;
+  /** Cómo se cuentan los días de mora (D20). Ausente = `oldest_unpaid`, lo de siempre. */
+  arrearsMethod?: ArrearsMethod;
+  /** YYYY-MM-DD del primer atraso, sólo con `first_default` y mientras siga en mora (D20). */
+  arrearsSince?: string;
 }
 
 export function readCreditMetadata(raw: unknown): CreditMetadata {
@@ -168,6 +173,8 @@ export function readCreditMetadata(raw: unknown): CreditMetadata {
     importMissing: Array.isArray(m.importMissing) ? m.importMissing.filter(isImportTrackedField) : undefined,
     importRunId: typeof m.importRunId === 'string' ? m.importRunId : undefined,
     importedAt: typeof m.importedAt === 'string' ? m.importedAt : undefined,
+    arrearsMethod: isEnumValue(ArrearsMethod, m.arrearsMethod) ? m.arrearsMethod : undefined,
+    arrearsSince: typeof m.arrearsSince === 'string' ? m.arrearsSince : undefined,
     ...readTerms(m),
   };
 }

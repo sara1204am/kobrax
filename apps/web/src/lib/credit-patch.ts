@@ -62,6 +62,8 @@ export function creditPatch(credit: CreditDetail, opened: CreditDraft, draft: Cr
   const patch: UpdateCreditPatch = {};
 
   if (redefinable) Object.assign(patch, creditRedefinition(opened, draft));
+  // D20: el método de mora se cambia sólo mientras se puede redefinir (sin pagos: la API lo exige igual).
+  if (redefinable && draft.form.arrearsMethod !== opened.form.arrearsMethod) patch.arrearsMethod = draft.form.arrearsMethod;
 
   const { extras } = draft;
   if (draft.form.notes !== (credit.notes ?? '')) patch.notes = draft.form.notes;

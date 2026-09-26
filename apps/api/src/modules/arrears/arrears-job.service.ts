@@ -1,6 +1,13 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
-import { CaseStatus, CreditStatus, type PrismaClient } from '@prisma/client';
-import { arrearsFromDueDate, arrearsSourceOf, manualArrears, readCreditMetadata } from '@kobrax/shared';
+import { CaseStatus, CreditStatus, type Prisma, type PrismaClient } from '@prisma/client';
+import {
+  arrearsByMethod,
+  arrearsSourceOf,
+  manualArrears,
+  oldestUnpaid,
+  readCreditMetadata,
+  withArrearsMethod,
+} from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { computePriority, slaDueAt, DEFAULT_PRIORITY_PARAMS, type PriorityParams } from '../cases/case-priority';
 import { computeArrears, DEFAULT_ARREAR_PARAMS, type ArrearParams } from '../credits/credit-math';
@@ -167,7 +174,7 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
         metadata: true,
         assignedManagerId: true,
         client: { select: { riskSegment: true } },
-        installments: { select: { id: true, dueDate: true, amount: true, paidAmount: true, status: true } },
+        installments: { select: { id: true, number: true, dueDate: true, amount: true, paidAmount: true, status: true } },
       },
       orderBy: { id: 'asc' },
       take: ARREARS_BATCH,
@@ -186,7 +193,8 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
     {
       for (const credit of credits) {
         const balance = Number(credit.outstandingBalance);
-        const days = this.arrearsFor(credit, arrearParams, asOf);
+        const reading = this.arrearsFor(credit, arrearParams, asOf);
+        const days = reading?.days ?? null;
 
         /*
          * 🔴 **Si no se sabe de dónde sale la mora, el job no toca ese crédito. Ni la mora, ni el caso.**
@@ -200,10 +208,19 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
          * En el producto real esto no se da: la web y el móvil siempre guardan la próxima fecha, y lo
          * importado se reconoce por su origen. Es la guarda para el dato que entró por la ventana.
          */
-        if (days === null) continue;
+        if (days === null || !reading) continue;
 
-        if (days !== credit.daysPastDue) {
-          await tx.credit.update({ where: { id: credit.id }, data: { daysPastDue: days } });
+        // D20: con el método bancario la fecha del primer atraso también se guarda (o se borra al quedar al día).
+        const meta = readCreditMetadata(credit.metadata);
+        const sinceChanged = reading.arrearsSince !== meta.arrearsSince;
+        if (days !== credit.daysPastDue || sinceChanged) {
+          await tx.credit.update({
+            where: { id: credit.id },
+            data: {
+              daysPastDue: days,
+              ...(sinceChanged ? { metadata: withArrearsSince(credit.metadata, reading.arrearsSince) } : {}),
+            },
+          });
           out.updated++;
         }
 
@@ -272,24 +289,26 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
       outstandingBalance: unknown;
       daysPastDue: number;
       metadata: unknown;
-      installments: { id: string; dueDate: Date; amount: unknown; paidAmount: unknown; status: string }[];
+      installments: { id: string; number: number; dueDate: Date; amount: unknown; paidAmount: unknown; status: string }[];
     },
     params: ArrearParams,
     asOf: Date,
-  ): number | null {
+  ): { days: number; arrearsSince: string | undefined } | null {
     const meta = readCreditMetadata(credit.metadata);
     const balance = Number(credit.outstandingBalance);
+    // Importada y manual no usan el método: su dueño es otro. La fecha de primer atraso queda como está.
+    const keep = (days: number) => ({ days, arrearsSince: meta.arrearsSince });
 
     switch (arrearsSourceOf(meta)) {
       case 'IMPORTED':
         // Su archivo manda hasta la próxima carga (§6). Se deja tal cual vino — y con ella se le
         // abre el caso, que es lo que hace entrar a Cobranza a una cartera cargada por archivo.
-        return credit.daysPastDue;
+        return keep(credit.daysPastDue);
       case 'MANUAL':
-        return manualArrears(meta.moraSince, balance, asOf);
+        return keep(manualArrears(meta.moraSince, balance, asOf));
       default:
         if (credit.installments.length > 0) {
-          return computeArrears(
+          const baseDays = computeArrears(
             credit.installments.map((i) => ({
               id: i.id,
               dueDate: i.dueDate,
@@ -300,6 +319,15 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
             params,
             asOf,
           ).daysOverdue;
+          // D20: el método del crédito sobre la mora de siempre (desde la cuota impaga más antigua).
+          const r = withArrearsMethod({
+            baseDays,
+            method: meta.arrearsMethod,
+            oldestUnpaidDue: oldestUnpaid(credit.installments)?.dueDate,
+            arrearsSince: meta.arrearsSince,
+            asOf,
+          });
+          return { days: r.daysPastDue, arrearsSince: r.arrearsSince };
         }
         /*
          * Sin cronograma y sin próxima fecha no hay nada de dónde sacarla.
@@ -310,7 +338,16 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
          * quien lo cargó y el job no opina.
          */
         if (!meta.nextDueDate) return null;
-        return arrearsFromDueDate(meta.nextDueDate, balance, asOf);
+        {
+          const r = arrearsByMethod({
+            method: meta.arrearsMethod,
+            oldestUnpaidDue: meta.nextDueDate,
+            arrearsSince: meta.arrearsSince,
+            balance,
+            asOf,
+          });
+          return { days: r.daysPastDue, arrearsSince: r.arrearsSince };
+        }
     }
   }
 
@@ -332,4 +369,12 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
   private msg(err: unknown): string {
     return err instanceof Error ? err.message : String(err);
   }
+}
+
+/** La metadata con la fecha de primer atraso puesta o borrada (D20). Prisma rechaza `undefined` en un JSON. */
+function withArrearsSince(metadata: unknown, arrearsSince: string | undefined): Prisma.InputJsonObject {
+  const m = { ...((metadata ?? {}) as Record<string, unknown>) };
+  if (arrearsSince) m.arrearsSince = arrearsSince;
+  else delete m.arrearsSince;
+  return m as Prisma.InputJsonObject;
 }

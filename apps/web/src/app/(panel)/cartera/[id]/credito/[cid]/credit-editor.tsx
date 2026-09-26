@@ -4,6 +4,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import {
   CREDIT_STATUSES,
   memberName,
+  registrationSituation,
   type CreditDetail,
   type CreditFormState,
   type Member,
@@ -15,6 +16,7 @@ import { Section } from '@/components/panel-ui';
 import { Field, Input, Select } from '@/components/ui';
 import { CreditQuotePanel, CreditTermsFields } from '@/components/credit-terms-fields';
 import { PaymentPlanTable } from '@/components/payment-plan-table';
+import { PaidInstallmentsSelect } from '@/components/paid-installments-select';
 import { dayDate, money } from '@/lib/format';
 import type { CreditDraft } from '@/lib/credit-patch';
 
@@ -62,6 +64,24 @@ export function CreditEditor({
   const schedule = state.missing.length === 0 ? state.calculation.schedule : null;
   const derivedTotal = state.missing.length === 0 ? state.calculation.quote?.total : null;
 
+  // D13: con plan, el estado al registrar es sólo «cuántas de las primeras están pagadas». El saldo y
+  // la mora salen de ahí (se borran los manuales); quedan a mano sólo en el préstamo abierto.
+  const typedPaid = Number(draft.initial.paidInstallments) || 0;
+  const paidCount = schedule ? Math.min(typedPaid, Math.max(0, schedule.length - 1)) : 0;
+  const setPaid = (k: number) =>
+    onChange({
+      ...draft,
+      initial: {
+        paidInstallments: k > 0 ? String(k) : '',
+        outstandingBalance: '',
+        daysPastDue: '',
+      },
+    });
+  const situation =
+    schedule && state.calculation.ok
+      ? registrationSituation(state.terms, paidCount, draft.form.arrearsMethod, new Date())
+      : null;
+
   return (
     <>
       {block === null ? (
@@ -81,79 +101,93 @@ export function CreditEditor({
           </section>
 
           <aside className="lg:sticky lg:top-4 lg:col-start-4 lg:row-span-3 lg:row-start-1">
-            <CreditQuotePanel state={state} currency={cur} />
+            <CreditQuotePanel state={state} currency={cur} situation={situation} />
           </aside>
 
           {schedule && schedule.length > 0 && (
             <div className="lg:col-span-3">
               <Section title={t('sections.plan')}>
-                <PaymentPlanTable rows={schedule} currency={cur} />
+                {/* D13: cuántas de las primeras cuotas ya estaban pagadas al registrarlo (como en el alta). */}
+                {schedule.length > 1 && (
+                  <div className="mb-4 max-w-md">
+                    <PaidInstallmentsSelect schedule={schedule} value={paidCount} onChange={setPaid} />
+                  </div>
+                )}
+                <PaymentPlanTable
+                  rows={schedule}
+                  currency={cur}
+                  paidCount={paidCount}
+                  onPaidChange={schedule.length > 1 ? setPaid : undefined}
+                />
               </Section>
             </div>
           )}
 
-          <div className="lg:col-span-3">
-            <Section title={t('sections.initialState')}>
-              <p className="mb-4 text-[13px] text-k-text-2">{t('initial.hint')}</p>
-              <div className="grid gap-5 sm:grid-cols-3">
-                <Field label={t('initial.paidInstallments')}>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="1"
-                    placeholder="0"
-                    value={draft.initial.paidInstallments}
-                    onChange={(e) => setInitial({ paidInstallments: e.target.value })}
-                  />
-                </Field>
-                <Field label={t('initial.outstandingBalance')}>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    // Vacío = que se derive del plan; el placeholder muestra cuánto daría.
-                    placeholder={
-                      registered?.ok && registered.balanceDerived
-                        ? t('initial.outstandingPlaceholder', {
-                            amount: money(registered.outstandingBalance, cur),
-                          })
-                        : undefined
-                    }
-                    value={draft.initial.outstandingBalance}
-                    onChange={(e) => setInitial({ outstandingBalance: e.target.value })}
-                  />
-                </Field>
-                <Field label={t('initial.daysPastDue')}>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={3650}
-                    step="1"
-                    placeholder="0"
-                    value={draft.initial.daysPastDue}
-                    onChange={(e) => setInitial({ daysPastDue: e.target.value })}
-                  />
-                </Field>
-              </div>
-              <p className="mt-4 text-[13px]" aria-live="polite">
-                {registered === null ? (
-                  <span className="text-k-text-2">{t('initial.issues.TERMS_INVALID')}</span>
-                ) : registered.ok ? (
-                  <span className="text-k-text">
-                    {t('initial.result', {
-                      balance: money(registered.outstandingBalance, cur),
-                      date: dayDate(registered.nextDueDate, locale),
-                    })}
-                  </span>
-                ) : (
-                  <span className="text-k-danger">{t(`initial.issues.${registered.code}`)}</span>
+          {/* Préstamo abierto: sin plan no hay cuotas que marcar; el estado se carga a mano. */}
+          {!schedule && (
+            <div className="lg:col-span-3">
+              <Section title={t('sections.initialState')}>
+                <p className="mb-4 text-[13px] text-k-text-2">{t('initial.hint')}</p>
+                <div className="grid gap-5 sm:grid-cols-3">
+                  <Field label={t('initial.paidInstallments')}>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="1"
+                      placeholder="0"
+                      value={draft.initial.paidInstallments}
+                      onChange={(e) => setInitial({ paidInstallments: e.target.value })}
+                    />
+                  </Field>
+                  <Field label={t('initial.outstandingBalance')}>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      // Vacío = que se derive del plan; el placeholder muestra cuánto daría.
+                      placeholder={
+                        registered?.ok && registered.balanceDerived
+                          ? t('initial.outstandingPlaceholder', {
+                              amount: money(registered.outstandingBalance, cur),
+                            })
+                          : undefined
+                      }
+                      value={draft.initial.outstandingBalance}
+                      onChange={(e) => setInitial({ outstandingBalance: e.target.value })}
+                    />
+                  </Field>
+                  <Field label={t('initial.daysPastDue')}>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={3650}
+                      step="1"
+                      placeholder="0"
+                      value={draft.initial.daysPastDue}
+                      onChange={(e) => setInitial({ daysPastDue: e.target.value })}
+                    />
+                  </Field>
+                </div>
+                <p className="mt-4 text-[13px]" aria-live="polite">
+                  {registered === null ? (
+                    <span className="text-k-text-2">{t('initial.issues.TERMS_INVALID')}</span>
+                  ) : registered.ok ? (
+                    <span className="text-k-text">
+                      {t('initial.result', {
+                        balance: money(registered.outstandingBalance, cur),
+                        date: dayDate(registered.nextDueDate, locale),
+                      })}
+                    </span>
+                  ) : (
+                    <span className="text-k-danger">{t(`initial.issues.${registered.code}`)}</span>
+                  )}
+                </p>
+                {derivedTotal == null && state.missing.length === 0 && (
+                  <p className="mt-2 text-[12px] text-k-muted">{tc('quote.openLoan')}</p>
                 )}
-              </p>
-              {derivedTotal == null && state.missing.length === 0 && (
-                <p className="mt-2 text-[12px] text-k-muted">{tc('quote.openLoan')}</p>
-              )}
-            </Section>
-          </div>
+              </Section>
+            </div>
+          )}
         </div>
       ) : (
         <Section title={t('sections.terms')}>

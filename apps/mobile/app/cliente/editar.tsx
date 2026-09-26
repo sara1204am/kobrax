@@ -6,6 +6,7 @@ import {
   creditFormFromCredit,
   creditFormState,
   creditRedefinition,
+  registrationSituation,
   initialStateForm,
   initialStateFromForm,
   registeredState,
@@ -126,6 +127,14 @@ export default function EditarScreen() {
 
   const block = cr ? termsEditBlock(cr) : null;
   const crState = useMemo(() => (crDraft ? creditFormState(crDraft.form) : null), [crDraft]);
+  const crSchedule = crState && crState.missing.length === 0 ? crState.calculation.schedule : null;
+  const crSituation = useMemo(
+    () =>
+      crDraft && crState && crSchedule && crState.calculation.ok
+        ? registrationSituation(crState.terms, Number(crDraft.initial.paidInstallments) || 0, crDraft.form.arrearsMethod, new Date())
+        : null,
+    [crDraft, crState, crSchedule],
+  );
   const crRegistered = useMemo(
     () =>
       crDraft && crState && crState.missing.length === 0 && crState.calculation.ok
@@ -138,6 +147,8 @@ export default function EditarScreen() {
   const crPatch = useMemo((): UpdateCreditPatch => {
     if (!cr || !crOpened || !crDraft || cr.locked) return {};
     const patch: UpdateCreditPatch = block === null ? creditRedefinition(crOpened, crDraft) : {};
+    // D20: el método de mora sólo se cambia sin pagos (la API lo exige igual).
+    if (block === null && crDraft.form.arrearsMethod !== crOpened.form.arrearsMethod) patch.arrearsMethod = crDraft.form.arrearsMethod;
     if (crDraft.form.notes !== (cr.notes ?? '')) patch.notes = crDraft.form.notes;
     // Al redefinir, la próxima fecha la deriva la API (D13): sólo se mueve a mano con pagos.
     if (block !== null && crNext && crNext !== cr.nextDueDate?.slice(0, 10)) patch.nextDueDate = crNext;
@@ -208,6 +219,8 @@ export default function EditarScreen() {
                   onChange={(i) => setCrDraft((d) => (d ? { ...d, initial: i } : d))}
                   registered={crRegistered}
                   currency="Bs"
+                  total={crSchedule?.length}
+                  situation={crSituation}
                 />
               </>
             )}

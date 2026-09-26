@@ -5,7 +5,7 @@
  * los **mismos** clientes contra los **mismos** endpoints. Los valores son los enums de la API
  * (Prisma) escritos como uniones, no como enums propios: son el contrato del DTO.
  */
-import type { CreditOrigin, EffectiveBalanceBasis, InterestBase, PaymentFrequency } from '../enums/credit.enum.js';
+import type { ArrearsMethod, CreditOrigin, EffectiveBalanceBasis, InterestBase, PaymentFrequency } from '../enums/credit.enum.js';
 import type { CreditTerms } from '../utils/credit-engine.js';
 import type { CreditInitialState } from '../utils/credit-edit.js';
 import type { ImportTrackedField } from '../utils/credit-import.js';
@@ -125,6 +125,8 @@ export interface NewCreditInput {
    * a `outstandingBalance`/`daysPastDue` sueltos.
    */
   initialState?: CreditInitialState;
+  /** Cómo se cuentan los días de mora (D20). Ausente = el default de la cuenta. */
+  arrearsMethod?: ArrearsMethod;
 }
 
 // ── Lo que devuelve la API ───────────────────────────────────────────────────
@@ -322,6 +324,17 @@ export interface CreditDetail {
   totalToCollect?: number | null;
   /** Cómo venía al registrarlo (D13). Ausente = nació en Kobrax. */
   initialState?: CreditInitialState;
+  /** Lo pagado antes de registrarlo en Kobrax (D13): «Recuperado» lo descuenta. 0 si nació en Kobrax. */
+  priorPaidAmount?: number;
+  /** Cómo se cuentan los días de mora (D20). Siempre presente: `oldest_unpaid` si nunca se eligió. */
+  arrearsMethod?: ArrearsMethod;
+  /** YYYY-MM-DD del primer atraso (método bancario, en mora). */
+  arrearsSince?: string;
+  /**
+   * La cuota impaga más antigua: la que hay que reclamar. Con el método bancario la mora puede correr
+   * desde antes (`arrearsSince`); esto dice qué cuota cobrar hoy. `number` si se puede saber.
+   */
+  oldestUnpaid?: { number?: number; dueDate: string };
   /**
    * ¿Tiene pagos registrados? ⚠️ Sólo en la ficha (`GET /credits/:id`). Con pagos, las condiciones y el
    * estado al registrar ya no se editan.
@@ -375,6 +388,8 @@ export interface UpdateCreditPatch {
    */
   terms?: CreditTerms;
   initialState?: CreditInitialState;
+  /** Cambiar cómo se cuenta la mora (D20). Sólo sin pagos registrados. */
+  arrearsMethod?: ArrearsMethod;
 }
 
 // ── Formulario en pantalla ───────────────────────────────────────────────────

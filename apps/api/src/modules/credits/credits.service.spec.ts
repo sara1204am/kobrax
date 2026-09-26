@@ -9,6 +9,8 @@ function makeService(
     client?: unknown;
     credit?: unknown;
     config?: unknown;
+    /** `accounts.settings` (D20: método de mora por defecto). */
+    settings?: unknown;
     openCase?: unknown;
     /** Topes del plan. Por defecto no frenan: sólo los usa el test del tope. */
     plan?: Parameters<typeof fakePlanLimits>[0];
@@ -68,7 +70,7 @@ function makeService(
         return { id: 'ag1', ...args.data };
       },
     },
-    account: { findUnique: async () => ({ currencyCode: 'BOB', configuration: opts.config ?? {} }) },
+    account: { findUnique: async () => ({ currencyCode: 'BOB', configuration: opts.config ?? {}, settings: opts.settings ?? {} }) },
     arrear: {
       deleteMany: async () => {
         calls.arrearDeleteMany += 1;
@@ -191,6 +193,7 @@ describe('CreditsService.create — crédito sin cronograma', () => {
       installmentAmount: 300,
       nextDueDate: '2026-07-20',
       balanceBasis: 'total',
+      arrearsMethod: 'oldest_unpaid', // D20: el default de la cuenta, guardado en el crédito
     });
   });
 
@@ -493,6 +496,7 @@ describe('CreditsService.create — con condiciones (F4/06 · D14)', () => {
       balanceBasis: 'total',
       terms: AGREED,
       termsVersion: 1,
+      arrearsMethod: 'oldest_unpaid',
     });
   });
 
@@ -802,5 +806,72 @@ describe('CreditsService.clearArrears', () => {
     await service.clearArrears('cr1', { mode: 'next_period' });
     const meta = calls.creditUpdate[0]!.metadata as { moraSince?: string };
     assert.equal(meta.moraSince, undefined);
+  });
+});
+
+/**
+ * 🔴 F4/06 · D20 — cómo se cuenta la mora: por crédito, con el default de la cuenta. Cambiarlo con pagos
+ * registrados se bloquea (reescribiría la mora de un clic).
+ */
+describe('CreditsService — método de mora (D20)', () => {
+  // 10 cuotas mensuales desde el 25 oct 2025: con 3 pagadas, la 4.ª venció el 25 ene 2026 → en mora hoy.
+  const OLD = { ...AGREED, firstDueDate: '2025-10-25' };
+
+  it('sin método en el alta: el default de la cuenta, guardado en el crédito', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' }, settings: { arrearsMethod: 'first_default' } });
+    await service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: AGREED } as never);
+    assert.equal((calls.creditCreate[0]!.metadata as Record<string, unknown>).arrearsMethod, 'first_default');
+  });
+
+  it('el método del alta gana al de la cuenta', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' }, settings: { arrearsMethod: 'first_default' } });
+    await service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: AGREED, arrearsMethod: 'oldest_unpaid' } as never);
+    assert.equal((calls.creditCreate[0]!.metadata as Record<string, unknown>).arrearsMethod, 'oldest_unpaid');
+  });
+
+  it('en curso con el método bancario: la mora arranca en la primera impaga y guarda el primer atraso', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({
+      clientId: CLIENT_ID,
+      principalAmount: 1000,
+      terms: OLD,
+      initialState: { paidInstallments: 3, daysPastDue: 0 },
+      arrearsMethod: 'first_default',
+    } as never);
+    const data = calls.creditCreate[0]!;
+    const meta = data.metadata as Record<string, unknown>;
+    assert.equal(meta.arrearsSince, '2026-01-25');
+    assert.equal(meta.moraSince, undefined); // no es una marca manual: la calcula la fecha
+    assert.ok((data.daysPastDue as number) > 0);
+  });
+
+  it('cambiar el método con pagos registrados se bloquea (CREDIT_HAS_PAYMENTS)', async () => {
+    const credit = { id: 'cr1', clientId: 'c1', metadata: { origin: 'manual', terms: AGREED, termsVersion: 1 }, _count: { payments: 1, installments: 0 }, client: {} };
+    const { service } = makeService({ credit });
+    await rejectsWithCode(service.update('cr1', { arrearsMethod: 'first_default' } as never), 'CREDIT_HAS_PAYMENTS');
+  });
+
+  it('sin pagos se cambia, recalcula la mora y queda en la auditoría', async () => {
+    const credit = {
+      id: 'cr1',
+      clientId: 'c1',
+      outstandingBalance: 805,
+      metadata: { origin: 'manual', terms: OLD, termsVersion: 1, nextDueDate: '2026-01-25' },
+      _count: { payments: 0, installments: 0 },
+      client: {},
+    };
+    const { service, calls } = makeService({ credit });
+    await service.update('cr1', { arrearsMethod: 'first_default' } as never);
+    const meta = calls.creditUpdate[0]!.metadata as Record<string, unknown>;
+    assert.equal(meta.arrearsMethod, 'first_default');
+    assert.equal(meta.arrearsSince, '2026-01-25');
+    assert.deepEqual(calls.audit.map((a) => `${a.action} ${a.entity}`), ['UPDATE credit']);
+  });
+
+  it('volver a mandar el mismo método no es un cambio (no choca con los pagos)', async () => {
+    const credit = { id: 'cr1', clientId: 'c1', metadata: { origin: 'manual', arrearsMethod: 'first_default' }, _count: { payments: 3, installments: 0 }, client: {} };
+    const { service, calls } = makeService({ credit });
+    await service.update('cr1', { arrearsMethod: 'first_default', code: 'X' } as never);
+    assert.equal(calls.creditUpdate[0]!.code, 'X');
   });
 });

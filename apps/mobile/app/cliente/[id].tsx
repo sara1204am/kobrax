@@ -269,7 +269,16 @@ export default function ClienteFichaScreen() {
           <Text style={styles.cardSub}>
             {detail?.nextDueDate ? `Vence ${prettyDate(detail.nextDueDate)}` : 'Sin fecha'}
             {selected.daysPastDue > 0 ? ` · ${selected.daysPastDue} días de mora` : ''}
+            {/* D20: desde cuándo corre la mora (con el método bancario puede ser antes de la cuota a cobrar). */}
+            {selected.daysPastDue > 0 && credit?.arrearsSince ? ` desde ${prettyDay(credit.arrearsSince)}` : ''}
           </Text>
+          {selected.daysPastDue > 0 && credit?.oldestUnpaid && (
+            <Text style={styles.cardSub}>
+              {credit.oldestUnpaid.number
+                ? `Cuota a reclamar: N.º ${credit.oldestUnpaid.number} (venció ${prettyDay(credit.oldestUnpaid.dueDate)})`
+                : `Cuota a reclamar: venció ${prettyDay(credit.oldestUnpaid.dueDate)}`}
+            </Text>
+          )}
           <View style={{ gap: SPACING.sm, marginTop: SPACING.sm }}>
             <Button label="Registrar pago" onPress={() => setPaySheet(true)} />
             <Button label="Registrar gestión" variant="ghost" onPress={() => setGestSheet(true)} />

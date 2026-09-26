@@ -11,8 +11,10 @@
  */
 import {
   AmortizationMethod,
+  ArrearsMethod,
   ChargeTiming,
   CreditDefinition,
+  DEFAULT_ARREARS_METHOD,
   InterestBase,
   InterestType,
   PAYMENTS_PER_YEAR,
@@ -48,6 +50,8 @@ export interface CreditForm {
   insuranceMonthlyPercent: string;
   /** Otros cargos (D18). */
   charges: CreditFormCharge[];
+  /** Cómo se cuentan los días de mora (D20). No es una condición del plan: no entra en `terms`. */
+  arrearsMethod: ArrearsMethod;
   interestType: InterestType;
   amortization: AmortizationMethod;
   /** Cuota acordada. */
@@ -133,6 +137,8 @@ export function initialCreditForm(todayIso: string): CreditForm {
     rateBase: InterestBase.PER_PERIOD,
     insuranceMonthlyPercent: '',
     charges: [],
+    // Quien llama pone el default de la cuenta (`AccountInfo.arrearsMethod`).
+    arrearsMethod: DEFAULT_ARREARS_METHOD,
     interestType: InterestType.SIMPLE,
     amortization: AmortizationMethod.FIXED_INSTALLMENT,
     installmentAmount: '',
@@ -298,5 +304,6 @@ export function buildNewCreditPayload(f: CreditForm, clientId: string, initialSt
     notes: f.notes.trim() || undefined,
     terms,
     ...(initial ? { initialState: initial } : {}),
+    arrearsMethod: f.arrearsMethod,
   };
 }

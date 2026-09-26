@@ -111,3 +111,10 @@ describe('creditPatch', () => {
     expect(edit(conDueño, { extras: { assignedManagerId: '' } })).toEqual({});
   });
 });
+
+describe('creditPatch — método de mora (D20)', () => {
+  it('cambiarlo viaja; sin poder redefinir (con pagos), no', () => {
+    expect(edit(CREDIT, { form: { arrearsMethod: 'first_default' as never } })).toEqual({ arrearsMethod: 'first_default' });
+    expect(edit(CREDIT, { form: { arrearsMethod: 'first_default' as never } }, false)).toEqual({});
+  });
+});

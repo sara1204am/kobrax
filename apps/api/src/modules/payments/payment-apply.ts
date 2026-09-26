@@ -1,10 +1,12 @@
 import { InstallmentStatus, type Prisma } from '@prisma/client';
 import {
   addPeriods,
-  arrearsFromDueDate,
+  arrearsByMethod,
   isExternalOrigin,
+  oldestUnpaid,
   readCreditMetadata,
   type CreditMetadata,
+  withArrearsMethod,
 } from '@kobrax/shared';
 
 /** Aplicación pura de un pago al cronograma (cuota más antigua primero). Testeable. */
@@ -101,13 +103,32 @@ export function creditPatchAfterPayment(p: {
 
   // 2) La mora. En cartera de un core ajeno manda la fuente: no se recalcula (spec §6).
   if (isExternalOrigin(meta.origin)) return patch;
-  if (p.creditPaid) {
-    patch.daysPastDue = 0;
-    return patch;
+
+  /*
+   * D20: según el método del crédito. Con el de siempre, pagar la cuota más atrasada baja la mora;
+   * con el bancario sigue contando desde el primer atraso hasta quedar al día. Saldado, todo a 0.
+   */
+  const reading = p.creditPaid
+    ? { daysPastDue: 0, arrearsSince: undefined }
+    : hasSchedule
+      ? withArrearsMethod({
+          baseDays: daysPastDue(p.installments, p.now),
+          method: meta.arrearsMethod,
+          oldestUnpaidDue: oldestUnpaid(p.installments)?.dueDate,
+          arrearsSince: meta.arrearsSince,
+          asOf: p.now,
+        })
+      : arrearsByMethod({
+          method: meta.arrearsMethod,
+          oldestUnpaidDue: nextDueDate,
+          arrearsSince: meta.arrearsSince,
+          balance: p.newBalance,
+          asOf: p.now,
+        });
+  patch.daysPastDue = reading.daysPastDue;
+  if (reading.arrearsSince !== meta.arrearsSince) {
+    patch.metadata = stripUndefined({ ...meta, nextDueDate, arrearsSince: reading.arrearsSince });
   }
-  patch.daysPastDue = hasSchedule
-    ? daysPastDue(p.installments, p.now)
-    : arrearsFromDueDate(nextDueDate, p.newBalance, p.now);
   return patch;
 }
 

@@ -36,6 +36,15 @@ describe('recovery — «Recuperado X de Y» (D15)', () => {
     expect(recovery({ outstandingBalance: 1200, principalAmount: 1000 })).toEqual({ recovered: 0, of: 1000, percent: 0 });
   });
 
+  it('cargado con cuotas ya pagadas (D13): sólo cuenta lo cobrado en Kobrax', () => {
+    // Total 1.500, 3 cuotas de 150 pagadas antes (450): al registrarlo debe 1.050; cobró 150 en Kobrax.
+    expect(recovery({ balanceBasis: 'total', outstandingBalance: 900, principalAmount: 1000, totalToCollect: 1500, priorPaidAmount: 450 })).toEqual({
+      recovered: 150,
+      of: 1050,
+      percent: 14,
+    });
+  });
+
   it('importado con saldo o capital desconocidos (D9): no hay barra', () => {
     expect(recovery({ balanceBasis: 'total', outstandingBalance: 0, principalAmount: 0, totalToCollect: null, unknownFields: ['outstandingBalance'] })).toBeNull();
     expect(recovery({ balanceBasis: 'principal', outstandingBalance: 500, principalAmount: 0, unknownFields: ['principalAmount'] })).toBeNull();

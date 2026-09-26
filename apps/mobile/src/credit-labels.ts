@@ -4,6 +4,7 @@
  */
 import {
   AmortizationMethod,
+  ArrearsMethod,
   CreditDefinition,
   InterestBase,
   InterestType,
@@ -80,6 +81,17 @@ export const RATE_PERIOD_LABEL: Record<RatePeriod, string> = {
 export const RATE_CONVENTION_LABEL: Record<RateConvention, string> = {
   [RateConvention.NOMINAL]: 'Nominal',
   [RateConvention.EFFECTIVE]: 'Efectiva (TEA)',
+};
+
+/** Cómo se cuentan los días de mora (D20). Los mismos textos que la web. */
+export const ARREARS_METHOD_LABEL: Record<ArrearsMethod, string> = {
+  [ArrearsMethod.OLDEST_UNPAID]: 'Desde la cuota impaga más antigua',
+  [ArrearsMethod.FIRST_DEFAULT]: 'Desde el primer atraso (bancario)',
+};
+
+export const ARREARS_METHOD_HINT: Record<ArrearsMethod, string> = {
+  [ArrearsMethod.OLDEST_UNPAID]: 'Pagar la cuota más atrasada baja la mora.',
+  [ArrearsMethod.FIRST_DEFAULT]: 'Como los bancos: sigue contando desde la primera cuota que no se pagó hasta que se pone al día.',
 };
 
 /** Cómo se cobra un cargo (D18). Los mismos textos que la web. */

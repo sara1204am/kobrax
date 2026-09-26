@@ -157,6 +157,7 @@ function CreditCard({
             outstandingBalance: c.outstandingBalance,
             principalAmount: c.principalAmount,
             totalToCollect: c.totalToCollect ?? null,
+            priorPaidAmount: c.priorPaidAmount, // sólo lo cobrado en Kobrax (D13)
           })}
           label={t('credit.progress')}
         />

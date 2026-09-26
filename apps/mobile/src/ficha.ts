@@ -49,16 +49,20 @@ export function recovery(credit: {
   principalAmount: number;
   totalToCollect?: number | null;
   unknownFields?: readonly string[];
+  /** Lo pagado antes de registrarlo en Kobrax (D13): no cuenta como recuperado. */
+  priorPaidAmount?: number;
 }): { recovered: number; of: number; percent: number } | null {
   const basis = credit.balanceBasis ?? 'legacy';
   if (isUnknownField(credit, 'outstandingBalance')) return null;
   if (basis !== 'total' && isUnknownField(credit, 'principalAmount')) return null;
-  const of = basis === 'total' ? credit.totalToCollect ?? null : credit.principalAmount;
+  const prior = basis === 'total' ? (credit.priorPaidAmount ?? 0) : 0;
+  const of = basis === 'total' ? (credit.totalToCollect == null ? null : credit.totalToCollect - prior) : credit.principalAmount;
   const percent = paymentProgress({
     basis,
     outstandingBalance: credit.outstandingBalance,
     principalAmount: credit.principalAmount,
     totalToCollect: credit.totalToCollect ?? null,
+    priorPaidAmount: credit.priorPaidAmount,
   });
   if (of === null || percent === null) return null;
   return { recovered: Math.max(0, Math.min(of, of - credit.outstandingBalance)), of, percent };
