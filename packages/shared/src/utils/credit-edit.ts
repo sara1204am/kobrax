@@ -9,11 +9,11 @@
  * Las condiciones y el estado al registrar sólo se editan **mientras no haya pagos registrados**:
  * después, cambiarlos reescribiría lo que ya se cobró (es una reestructura, otra operación).
  */
-import { CreditDefinition, InterestBase, PaymentFrequency } from '../enums/credit.enum.js';
+import { CreditDefinition, InterestBase, PaymentFrequency, RateConvention, RatePeriod, TermUnit } from '../enums/credit.enum.js';
 import type { BalanceBasis } from '../enums/credit.enum.js';
 import type { CreditDetail } from '../types/client.types.js';
 import { calculateCredit, type CreditTerms } from './credit-engine.js';
-import { creditFormTerms, initialCreditForm, type CreditForm } from './credit-form.js';
+import { chargeToForm, creditFormTerms, initialCreditForm, installmentsToMonths, type CreditForm } from './credit-form.js';
 import { addPeriods } from './periods.js';
 
 /** Cómo venía el préstamo cuando se lo registró (D13). Se guarda en `metadata.initialState`. */
@@ -158,7 +158,8 @@ export function initialStateFromForm(f: InitialStateForm): CreditInitialState {
  *    que se sabe con certeza. Recalcularla desde la tasa mostraría un número que nadie pactó.
  */
 export function creditFormFromCredit(credit: CreditDetail, todayIso: string): CreditForm {
-  const base = { ...initialCreditForm(todayIso), notes: credit.notes ?? '' };
+  // Lo guardado son cuotas: sólo el calculado se vuelve a mostrar en meses (más abajo).
+  const base = { ...initialCreditForm(todayIso), termUnit: TermUnit.INSTALLMENTS, notes: credit.notes ?? '' };
   const t = credit.terms;
   const str = (n: number | undefined): string => (n !== undefined && Number.isFinite(n) ? String(n) : '');
 
@@ -181,10 +182,15 @@ export function creditFormFromCredit(credit: CreditDetail, todayIso: string): Cr
         definition: t.definition,
         principal: str(t.principal),
         ratePercent: str(t.ratePercent),
+        ratePeriod: t.ratePeriod ?? RatePeriod.PER_INSTALLMENT,
+        rateConvention: t.rateConvention ?? RateConvention.NOMINAL,
         rateBase: t.rateBase ?? InterestBase.PER_PERIOD,
+        insuranceMonthlyPercent: t.insuranceMonthlyPercent ? String(t.insuranceMonthlyPercent) : '',
+        charges: (t.charges ?? []).map((c, i) => chargeToForm(c, `c${i}`)),
         interestType: t.interestType,
         amortization: t.amortization,
-        installmentsCount: str(t.periods),
+        // Calcular cuotas muestra el período en años; si no da años enteros, en meses; y si tampoco, en cuotas.
+        ...termFromPeriods(t.periods, t.frequency),
         frequency: t.frequency,
         firstDueDate: t.firstDueDate,
       };
@@ -212,6 +218,14 @@ export function creditFormFromCredit(credit: CreditDetail, todayIso: string): Cr
   }
 }
 
+/** Cuotas guardadas → cómo se muestran en «Período del préstamo»: años, meses o, si no cierra, cuotas. */
+function termFromPeriods(periods: number, frequency: PaymentFrequency): Pick<CreditForm, 'installmentsCount' | 'termUnit'> {
+  const months = installmentsToMonths(periods, frequency);
+  if (months !== null && months % 12 === 0) return { installmentsCount: String(months / 12), termUnit: TermUnit.YEARS };
+  if (months !== null) return { installmentsCount: String(months), termUnit: TermUnit.MONTHS };
+  return { installmentsCount: Number.isFinite(periods) ? String(periods) : '', termUnit: TermUnit.INSTALLMENTS };
+}
+
 /**
  * Qué hay que redefinir del crédito, comparando el borrador con **cómo se abrió** la edición (no con
  * las columnas): un crédito anterior a F4/06 se abre como cuota acordada, y guardarle sólo una nota
@@ -236,10 +250,11 @@ export function creditRedefinition(
  */
 export type TermsEditBlock = 'locked' | 'payments' | 'schedule' | null;
 
-export function termsEditBlock(credit: Pick<CreditDetail, 'locked' | 'hasPayments' | 'hasSchedule'>): TermsEditBlock {
+export function termsEditBlock(credit: Pick<CreditDetail, 'locked' | 'hasPayments' | 'hasSchedule' | 'terms'>): TermsEditBlock {
   if (credit.locked) return 'locked';
   if (credit.hasPayments) return 'payments';
-  // Cronograma real guardado (web anterior a F4/06): se regenera recién con la Fase 6.
-  if (credit.hasSchedule) return 'schedule';
+  // Cronograma guardado por la web anterior a F4/06 (sin condiciones): no hay de qué regenerarlo. El de una
+  // cuota variable sí tiene condiciones, y la API lo rehace entero mientras no haya pagos.
+  if (credit.hasSchedule && !credit.terms) return 'schedule';
   return null;
 }

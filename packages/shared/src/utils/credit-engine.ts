@@ -19,10 +19,14 @@
  */
 import {
   AmortizationMethod,
+  ChargeTiming,
   CreditDefinition,
   InterestBase,
   InterestType,
+  PAYMENTS_PER_YEAR,
   PaymentFrequency,
+  RateConvention,
+  RatePeriod,
   RepaymentForm,
 } from '../enums/credit.enum.js';
 import { addPeriods } from './periods.js';
@@ -33,8 +37,22 @@ import { addPeriods } from './periods.js';
 export interface CalculatedTerms {
   definition: CreditDefinition.CALCULATED;
   principal: number;
-  /** Porcentaje por período (D7). Con `rateBase: TOTAL`, porcentaje sobre todo el préstamo. */
+  /**
+   * Porcentaje (D7), **tal como se pactó**: por cuota, o del período que diga `ratePeriod` (D17).
+   * Con `rateBase: TOTAL`, porcentaje sobre todo el préstamo.
+   */
   ratePercent: number;
+  /** A qué período se refiere `ratePercent` (D17). Ausente = por cuota. */
+  ratePeriod?: RatePeriod;
+  /** Cómo se convierte a la tasa de la cuota cuando `ratePeriod` no es por cuota. Ausente = nominal. */
+  rateConvention?: RateConvention;
+  /**
+   * Seguro de desgravamen (D18): % **mensual** sobre el saldo de capital de cada período, sumado a la
+   * cuota. Con otra frecuencia se prorratea (semanal: × 12/52). Ausente o 0 = sin seguro.
+   */
+  insuranceMonthlyPercent?: number;
+  /** Otros cargos (D18): por cuota, en la primera cuota o descontados del desembolso. */
+  charges?: CreditCharge[];
   rateBase?: InterestBase;
   interestType: InterestType;
   amortization: AmortizationMethod;
@@ -72,16 +90,42 @@ export interface AgreedTotalTerms {
 
 export type CreditTerms = CalculatedTerms | AgreedInstallmentTerms | AgreedTotalTerms;
 
+/** Un cargo del crédito (D18). Exactamente uno de `amount` / `percent`. */
+export interface CreditCharge {
+  /** Descripción libre: «Comisión de apertura», «Gastos de cobranza». */
+  label?: string;
+  timing: ChargeTiming;
+  /** Monto fijo. */
+  amount?: number;
+  /** % del monto prestado. No aplica a `per_installment`. */
+  percent?: number;
+}
+
 export interface CreditScheduleRow {
   number: number;
   /** YYYY-MM-DD */
   dueDate: string;
   principal: number;
   interest: number;
-  /** Cuota de la fila = capital + interés. */
+  /** Desgravamen de la fila (D18). Sólo si el crédito tiene seguro o cargos. */
+  insurance?: number;
+  /** Cargos de la fila (D18). Sólo si el crédito tiene seguro o cargos. */
+  charges?: number;
+  /** Cuota de la fila = capital + interés (+ seguro + cargos). */
   amount: number;
   /** Saldo de capital después de pagar la fila. */
   principalBalance: number;
+}
+
+/** Lo que agregan seguro y cargos (D18), para mostrarlo aparte de la ganancia. */
+export interface CreditQuoteExtras {
+  insuranceTotal: number;
+  /** Cargos cobrados en las cuotas (no incluye los descontados). */
+  chargesTotal: number;
+  /** Descontado del desembolso. */
+  deducted: number;
+  /** Lo que recibe el cliente: capital − descontado. */
+  netDisbursement: number;
 }
 
 export interface CreditQuote {
@@ -93,8 +137,10 @@ export interface CreditQuote {
   installmentsCount: number | null;
   /** Total a cobrar = Σ cuotas. `null` en el préstamo abierto. */
   total: number | null;
-  /** Ganancia = total − capital. `null` en el préstamo abierto. */
+  /** Ganancia = el interés (total − capital sin seguro ni cargos). `null` en el préstamo abierto. */
   profit: number | null;
+  /** Seguro y cargos (D18). Ausente si el crédito no tiene. */
+  extras?: CreditQuoteExtras;
 }
 
 export type CreditTermsIssueCode =
@@ -102,6 +148,16 @@ export type CreditTermsIssueCode =
   | 'RATE_INVALID'
   | 'RATE_OUT_OF_RANGE'
   | 'RATE_BASE_NOT_SUPPORTED'
+  /** El interés sobre el total no tiene período: no se combina con una tasa mensual/anual (D17). */
+  | 'RATE_PERIOD_NOT_SUPPORTED'
+  /** El plazo en meses/años no da un número entero de cuotas con esa frecuencia (D17). */
+  | 'TERM_NOT_WHOLE'
+  /** Desgravamen negativo o por encima del tope (D18). */
+  | 'INSURANCE_INVALID'
+  /** Un cargo sin monto válido, con monto y % a la vez, o % por cuota (D18). */
+  | 'CHARGE_INVALID'
+  /** Lo descontado del desembolso se come todo el monto (D18). */
+  | 'DEDUCTION_TOO_LARGE'
   | 'COMBINATION_NOT_SUPPORTED'
   | 'PERIODS_INVALID'
   | 'INSTALLMENT_INVALID'
@@ -151,6 +207,32 @@ export function calculateCredit(terms: CreditTerms): CreditCalculation {
   }
 }
 
+/** Cuántos períodos de cada tipo entran en un año (D17). */
+const RATE_PERIODS_PER_YEAR: Record<Exclude<RatePeriod, RatePeriod.PER_INSTALLMENT>, number> = {
+  [RatePeriod.MONTHLY]: 12,
+  [RatePeriod.QUARTERLY]: 4,
+  [RatePeriod.SEMIANNUAL]: 2,
+  [RatePeriod.ANNUAL]: 1,
+};
+
+/**
+ * D17 — la tasa **de cada cuota**, en %, a partir de la pactada. Es la única que usa el cálculo.
+ *
+ *  · por cuota → la misma;
+ *  · nominal (default) → proporcional: anual × (1 / cuotas por año). 18 % anual, mensual → 1,5 %;
+ *  · efectiva → (1 + tasa)^(períodos de la tasa por año / cuotas por año) − 1. 18 % TEA, mensual → ≈ 1,389 %.
+ *
+ * Sin frecuencia (no debería pasar en un calculado) no hay a qué convertir: `NaN`, y el motor lo reporta.
+ */
+export function periodicRatePercent(t: Pick<CalculatedTerms, 'ratePercent' | 'ratePeriod' | 'rateConvention' | 'frequency'>): number {
+  const period = t.ratePeriod ?? RatePeriod.PER_INSTALLMENT;
+  if (period === RatePeriod.PER_INSTALLMENT) return t.ratePercent;
+  if (!t.frequency || !isFiniteNumber(t.ratePercent)) return Number.NaN;
+  const ratio = RATE_PERIODS_PER_YEAR[period] / PAYMENTS_PER_YEAR[t.frequency];
+  if (t.rateConvention === RateConvention.EFFECTIVE) return (Math.pow(1 + t.ratePercent / 100, ratio) - 1) * 100;
+  return t.ratePercent * ratio;
+}
+
 /** Filas en céntimos, antes de ponerles fecha. */
 interface RawRow {
   principal: number;
@@ -167,19 +249,24 @@ function calculated(t: CalculatedTerms): CreditCalculation {
   const base = t.rateBase ?? InterestBase.PER_PERIOD;
   const isSimpleLevel = t.interestType === InterestType.SIMPLE && t.amortization === AmortizationMethod.FIXED_INSTALLMENT;
   if (base === InterestBase.TOTAL && !isSimpleLevel) issues.push(err('RATE_BASE_NOT_SUPPORTED'));
+  const perInstallment = (t.ratePeriod ?? RatePeriod.PER_INSTALLMENT) === RatePeriod.PER_INSTALLMENT;
+  if (base === InterestBase.TOTAL && !perInstallment) issues.push(err('RATE_PERIOD_NOT_SUPPORTED'));
   if (t.interestType === InterestType.COMPOUND && t.amortization === AmortizationMethod.FIXED_PRINCIPAL) {
     issues.push(err('COMBINATION_NOT_SUPPORTED'));
   }
-  if (isFiniteNumber(t.ratePercent)) {
+  // D17: el tope es el de la tasa de la cuota, ya convertida: 60 % anual pagando mensual es 5 % por mes.
+  const periodic = t.frequency ? periodicRatePercent(t) : Number.NaN;
+  if (isFiniteNumber(periodic)) {
     const max = base === InterestBase.TOTAL ? MAX_RATE_TOTAL_PERCENT : MAX_RATE_PER_PERIOD_PERCENT;
-    if (t.ratePercent > max) issues.push(err('RATE_OUT_OF_RANGE'));
+    if (periodic > max) issues.push(err('RATE_OUT_OF_RANGE'));
   }
+  const extras = extrasOf(t, P, issues);
   // Tasa fuera de rango sí se calcula (la pantalla muestra el número y avisa); lo demás, no.
   if (P === null || n === null || issues.some((i) => i.code !== 'RATE_OUT_OF_RANGE')) {
     return result(issues, null, null);
   }
 
-  const r = t.ratePercent / 100;
+  const r = periodic / 100;
   let rows: RawRow[];
   let dated: 'series' | 'single' = 'series';
   switch (t.amortization) {
@@ -205,7 +292,7 @@ function calculated(t: CalculatedTerms): CreditCalculation {
       break;
     }
   }
-  return finish(P, rows, t.frequency, t.firstDueDate, dated, t.amortization === AmortizationMethod.FIXED_PRINCIPAL, issues);
+  return finish(P, rows, t.frequency, t.firstDueDate, dated, t.amortization === AmortizationMethod.FIXED_PRINCIPAL, issues, extras);
 }
 
 function agreedInstallment(t: AgreedInstallmentTerms): CreditCalculation {
@@ -305,16 +392,41 @@ function finish(
   dated: 'series' | 'single',
   installmentVaries: boolean,
   issues: CreditTermsIssue[],
+  extras: Extras | null = null,
 ): CreditCalculation {
-  const totalCents = rows.reduce((s, r) => s + r.principal + r.interest, 0);
-  if (totalCents < P) issues.push({ code: 'TOTAL_BELOW_PRINCIPAL', severity: 'warning' });
+  const baseCents = rows.reduce((s, r) => s + r.principal + r.interest, 0);
+  if (baseCents < P) issues.push({ code: 'TOTAL_BELOW_PRINCIPAL', severity: 'warning' });
+
+  // D18: el desgravamen corre sobre el saldo de capital AL INICIO de cada período; los cargos, por cuota
+  // o sólo en la primera. Se suman a la cuota y, con ella, al total que debe el cliente.
+  let open = P;
+  const added = rows.map((row, idx) => {
+    const insurance = extras ? Math.round(open * extras.insuranceRate) : 0;
+    open -= row.principal;
+    const charges = extras ? extras.perInstallment + (idx === 0 ? extras.firstInstallment : 0) : 0;
+    return { insurance, charges };
+  });
+  const amountOf = (idx: number): number => rows[idx]!.principal + rows[idx]!.interest + added[idx]!.insurance + added[idx]!.charges;
+  const totalCents = rows.reduce((s, _r, idx) => s + amountOf(idx), 0);
+  // Un seguro que baja con el saldo o un cargo sólo en la primera hacen que las cuotas no sean iguales.
+  const varies = installmentVaries || added.some((a, idx) => a.insurance > 0 || (idx === 0 && (extras?.firstInstallment ?? 0) > 0));
 
   const quote: CreditQuote = {
-    installment: toUnits(rows[0]!.principal + rows[0]!.interest),
-    installmentVaries,
+    installment: toUnits(amountOf(0)),
+    installmentVaries: varies,
     installmentsCount: rows.length,
     total: toUnits(totalCents),
-    profit: toUnits(totalCents - P),
+    profit: toUnits(baseCents - P),
+    ...(extras
+      ? {
+          extras: {
+            insuranceTotal: toUnits(added.reduce((s, a) => s + a.insurance, 0)),
+            chargesTotal: toUnits(added.reduce((s, a) => s + a.charges, 0)),
+            deducted: toUnits(extras.deducted),
+            netDisbursement: toUnits(P - extras.deducted),
+          },
+        }
+      : {}),
   };
 
   const first = parseIsoDate(firstDueDate);
@@ -332,11 +444,66 @@ function finish(
       dueDate: due.toISOString().slice(0, 10),
       principal: toUnits(row.principal),
       interest: toUnits(row.interest),
-      amount: toUnits(row.principal + row.interest),
+      ...(extras ? { insurance: toUnits(added[idx]!.insurance), charges: toUnits(added[idx]!.charges) } : {}),
+      amount: toUnits(amountOf(idx)),
       principalBalance: toUnits(balance),
     };
   });
   return result(issues, quote, schedule);
+}
+
+/** Seguro y cargos ya en céntimos y por período (D18). */
+interface Extras {
+  /** Fracción por período sobre el saldo de capital. */
+  insuranceRate: number;
+  perInstallment: number;
+  firstInstallment: number;
+  deducted: number;
+}
+
+/** Tope del desgravamen, en % mensual. Un seguro de vida de crédito ronda décimas: 5 % ya es un error de tipeo. */
+export const MAX_INSURANCE_MONTHLY_PERCENT = 5;
+
+/** Valida seguro y cargos y los pasa a céntimos. `null` si el crédito no tiene ninguno. */
+function extrasOf(t: CalculatedTerms, P: number | null, issues: CreditTermsIssue[]): Extras | null {
+  const ins = t.insuranceMonthlyPercent;
+  const charges = t.charges ?? [];
+  if ((ins === undefined || ins === 0) && charges.length === 0) return null;
+
+  let insuranceRate = 0;
+  if (ins !== undefined && ins !== 0) {
+    if (!isFiniteNumber(ins) || ins < 0 || ins > MAX_INSURANCE_MONTHLY_PERCENT) issues.push(err('INSURANCE_INVALID'));
+    else if (t.frequency) insuranceRate = (ins / 100) * (12 / PAYMENTS_PER_YEAR[t.frequency]);
+  }
+
+  const out: Extras = { insuranceRate, perInstallment: 0, firstInstallment: 0, deducted: 0 };
+  for (const c of charges) {
+    const hasAmount = c.amount !== undefined;
+    const hasPercent = c.percent !== undefined;
+    const valid =
+      hasAmount !== hasPercent &&
+      (hasAmount ? isFiniteNumber(c.amount) && toCents(c.amount!) >= 1 : isFiniteNumber(c.percent) && c.percent! > 0 && c.percent! <= 100) &&
+      !(c.timing === ChargeTiming.PER_INSTALLMENT && hasPercent) &&
+      (Object.values(ChargeTiming) as string[]).includes(c.timing);
+    if (!valid) {
+      issues.push(err('CHARGE_INVALID'));
+      continue;
+    }
+    if (P === null) continue;
+    const cents = hasAmount ? toCents(c.amount!) : Math.round((P * c.percent!) / 100);
+    if (c.timing === ChargeTiming.PER_INSTALLMENT) out.perInstallment += cents;
+    else if (c.timing === ChargeTiming.FIRST_INSTALLMENT) out.firstInstallment += cents;
+    else out.deducted += cents;
+  }
+  if (P !== null && out.deducted >= P) issues.push(err('DEDUCTION_TOO_LARGE'));
+  // Un mismo código una sola vez: diez cargos mal tipeados son un solo aviso.
+  const seen = new Set<string>();
+  for (let i = issues.length - 1; i >= 0; i--) {
+    const code = issues[i]!.code;
+    if (code === 'CHARGE_INVALID' && seen.has(code)) issues.splice(i, 1);
+    seen.add(code);
+  }
+  return out;
 }
 
 function result(issues: CreditTermsIssue[], quote: CreditQuote | null, schedule: CreditScheduleRow[] | null): CreditCalculation {
@@ -371,12 +538,26 @@ export function parseCreditTerms(raw: unknown): CreditTerms | null {
       const interestType = enumOf(InterestType, r.interestType);
       const amortization = enumOf(AmortizationMethod, r.amortization);
       const rateBase = r.rateBase === undefined ? undefined : enumOf(InterestBase, r.rateBase);
+      const ratePeriod = r.ratePeriod === undefined ? undefined : enumOf(RatePeriod, r.ratePeriod);
+      const rateConvention = r.rateConvention === undefined ? undefined : enumOf(RateConvention, r.rateConvention);
       if (ratePercent === undefined || periods === undefined || !interestType || !amortization || !frequency) return null;
       if (r.rateBase !== undefined && !rateBase) return null;
+      if (r.ratePeriod !== undefined && !ratePeriod) return null;
+      if (r.rateConvention !== undefined && !rateConvention) return null;
+      const insurance = num('insuranceMonthlyPercent');
+      if (r.insuranceMonthlyPercent !== undefined && insurance === undefined) return null;
+      const charges = parseCharges(r.charges);
+      if (charges === null) return null;
       return {
         definition: CreditDefinition.CALCULATED,
         principal,
         ratePercent,
+        // D18: seguro y cargos sólo si hay; un crédito sin ellos queda igual que antes.
+        ...(insurance ? { insuranceMonthlyPercent: insurance } : {}),
+        ...(charges.length > 0 ? { charges } : {}),
+        // D17: sólo se guarda lo que no es el default, así un crédito de siempre queda igual que antes.
+        ...(ratePeriod && ratePeriod !== RatePeriod.PER_INSTALLMENT ? { ratePeriod } : {}),
+        ...(ratePeriod && ratePeriod !== RatePeriod.PER_INSTALLMENT && rateConvention === RateConvention.EFFECTIVE ? { rateConvention } : {}),
         ...(rateBase ? { rateBase } : {}),
         interestType,
         amortization,
@@ -419,6 +600,32 @@ export function parseCreditTerms(raw: unknown): CreditTerms | null {
     default:
       return null;
   }
+}
+
+/**
+ * Cargos desde un valor no confiable (D18). `[]` si no hay; `null` si la FORMA no es válida. Que el monto
+ * sea positivo o que no se mezcle monto y % lo dice `calculateCredit` (`CHARGE_INVALID`).
+ */
+function parseCharges(raw: unknown): CreditCharge[] | null {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) return null;
+  const out: CreditCharge[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'object' || item === null) return null;
+    const c = item as Record<string, unknown>;
+    const timing = enumOf(ChargeTiming, c.timing);
+    if (!timing) return null;
+    if (c.label !== undefined && typeof c.label !== 'string') return null;
+    if (c.amount !== undefined && typeof c.amount !== 'number') return null;
+    if (c.percent !== undefined && typeof c.percent !== 'number') return null;
+    out.push({
+      ...(typeof c.label === 'string' && c.label.trim() ? { label: c.label.trim().slice(0, 80) } : {}),
+      timing,
+      ...(typeof c.amount === 'number' ? { amount: c.amount } : {}),
+      ...(typeof c.percent === 'number' ? { percent: c.percent } : {}),
+    });
+  }
+  return out;
 }
 
 function enumOf<T extends Record<string, string>>(e: T, v: unknown): T[keyof T] | undefined {
@@ -511,8 +718,6 @@ export interface SentCreditFields {
 export type TermsResolutionError =
   /** El motor no puede calcular o guardar esto (`issues` dice por qué). */
   | { ok: false; code: 'TERMS_INVALID'; issues: CreditTermsIssueCode[] }
-  /** Cuotas que varían (capital fijo): hasta guardar el cronograma real (Fase 6) no se pueden cobrar bien. */
-  | { ok: false; code: 'TERMS_NOT_PERSISTABLE' }
   /** Un campo suelto contradice a las condiciones. */
   | { ok: false; code: 'TERMS_CONFLICT'; field: keyof SentCreditFields }
   /** La cuota enviada no es la del acuerdo / la del motor, ni por redondeo. */
@@ -521,8 +726,13 @@ export type TermsResolutionError =
 export interface TermsResolution {
   ok: true;
   terms: CreditTerms;
-  /** La cuota que se congela en `metadata.installmentAmount`. */
+  /** La cuota que se congela en `metadata.installmentAmount`. Con cuotas que varían, la primera. */
   installmentAmount: number;
+  /**
+   * Cuotas que varían (capital fijo): la API **guarda este cronograma** fila por fila en vez de congelar
+   * una sola cuota, y los pagos, la mora y la próxima fecha salen de las filas. `null` = cuota fija.
+   */
+  schedule: CreditScheduleRow[] | null;
   /** 0 = préstamo abierto (la convención de la columna). */
   installmentsCount: number;
   frequency: PaymentFrequency;
@@ -551,7 +761,6 @@ export function resolveCreditTerms(terms: CreditTerms, sent: SentCreditFields): 
     return { ok: false, code: 'TERMS_INVALID', issues: calc.issues.filter((i) => i.severity === 'error').map((i) => i.code) };
   }
   const q = calc.quote;
-  if (q.installmentVaries) return { ok: false, code: 'TERMS_NOT_PERSISTABLE' };
 
   if (toCents(sent.principalAmount) !== toCents(terms.principal)) return conflict('principalAmount');
 
@@ -598,6 +807,7 @@ export function resolveCreditTerms(terms: CreditTerms, sent: SentCreditFields): 
     interestRatePercent,
     totalToCollect: q.total,
     normalized,
+    schedule: q.installmentVaries ? calc.schedule : null,
   };
 }
 

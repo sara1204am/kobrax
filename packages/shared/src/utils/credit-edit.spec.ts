@@ -152,6 +152,8 @@ describe('termsEditBlock', () => {
     expect(termsEditBlock({ locked: true })).toBe('locked');
     expect(termsEditBlock({ hasPayments: true })).toBe('payments');
     expect(termsEditBlock({ hasSchedule: true })).toBe('schedule');
+    // Cronograma de una cuota variable: tiene condiciones, se rehace mientras no haya pagos.
+    expect(termsEditBlock({ hasSchedule: true, terms: AGREED })).toBeNull();
     expect(termsEditBlock({})).toBeNull();
   });
 });

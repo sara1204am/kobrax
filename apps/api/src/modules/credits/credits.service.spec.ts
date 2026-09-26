@@ -22,6 +22,8 @@ function makeService(
     agendaCreate: [] as Record<string, unknown>[],
     arrearCreate: [] as Record<string, unknown>[],
     arrearDeleteMany: 0,
+    installmentDeleteMany: 0,
+    installmentCreateMany: [] as Record<string, unknown>[][],
     audit: [] as { action: string; entity: string }[],
   };
   const tx = {
@@ -38,7 +40,17 @@ function makeService(
         return { id: 'cr1', ...(opts.credit as object), ...args.data };
       },
     },
-    creditInstallment: { updateMany: async () => ({ count: 1 }) },
+    creditInstallment: {
+      updateMany: async () => ({ count: 1 }),
+      deleteMany: async () => {
+        calls.installmentDeleteMany += 1;
+        return { count: 1 };
+      },
+      createMany: async (args: { data: Record<string, unknown>[] }) => {
+        calls.installmentCreateMany.push(args.data);
+        return { count: args.data.length };
+      },
+    },
     collectionCase: {
       create: async (args: { data: Record<string, unknown> }) => {
         calls.caseCreate.push(args.data);
@@ -390,9 +402,27 @@ describe('CreditsService.update — redefinir condiciones y estado al registrar 
     await rejectsWithCode(service.update('cr1', { terms: terms12() } as never), 'CREDIT_HAS_PAYMENTS');
   });
 
-  it('con cronograma guardado no se redefine (CREDIT_HAS_SCHEDULE)', async () => {
-    const { service } = makeService({ credit: fresh(undefined, { payments: 0, installments: 10 }) });
+  it('con cronograma guardado de antes de F4/06 (sin condiciones) no se redefine (CREDIT_HAS_SCHEDULE)', async () => {
+    const { service } = makeService({ credit: fresh({ origin: 'manual' }, { payments: 0, installments: 10 }) });
     await rejectsWithCode(service.update('cr1', { terms: terms12() } as never), 'CREDIT_HAS_SCHEDULE');
+  });
+
+  it('cuota variable sin pagos: redefinir rehace el cronograma', async () => {
+    const variable = { ...CALCULATED, amortization: 'fixed_principal' };
+    const { service, calls } = makeService({ credit: fresh({ origin: 'manual', terms: variable, termsVersion: 1 }, { payments: 0, installments: 10 }) });
+    await service.update('cr1', { terms: { ...variable, periods: 5 } } as never);
+    assert.equal(calls.installmentDeleteMany, 1);
+    assert.equal(calls.installmentCreateMany[0]!.length, 5);
+    assert.equal(calls.installmentCreateMany[0]![0]!.creditId, 'cr1');
+  });
+
+  it('pasar de cuota variable a fija: borra el cronograma y congela la cuota', async () => {
+    const variable = { ...CALCULATED, amortization: 'fixed_principal' };
+    const { service, calls } = makeService({ credit: fresh({ origin: 'manual', terms: variable, termsVersion: 1 }, { payments: 0, installments: 10 }) });
+    await service.update('cr1', { terms: CALCULATED } as never);
+    assert.equal(calls.installmentDeleteMany, 1);
+    assert.equal(calls.installmentCreateMany.length, 0);
+    assert.equal(typeof (calls.creditUpdate[0]!.metadata as Record<string, unknown>).installmentAmount, 'number');
   });
 
   it('importado: no se redefine (CREDIT_LOCKED)', async () => {
@@ -507,12 +537,53 @@ describe('CreditsService.create — con condiciones (F4/06 · D14)', () => {
     );
   });
 
-  it('capital fijo todavía no se registra (CREDIT_TERMS_NOT_PERSISTABLE)', async () => {
-    const { service } = makeService({ client: { id: 'c1' } });
-    await rejectsWithCode(
-      service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: { ...CALCULATED, amortization: 'fixed_principal' } } as never),
-      'CREDIT_TERMS_NOT_PERSISTABLE',
-    );
+  // Cuota variable (capital fijo): no hay UNA cuota que congelar; se guarda el cronograma del motor.
+  it('cuota variable: guarda el cronograma del motor fila por fila y no congela cuota', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: { ...CALCULATED, amortization: 'fixed_principal' } } as never);
+    const data = calls.creditCreate[0]!;
+    const rows = (data.installments as { create: { amount: number; status?: string }[] }).create;
+    assert.equal(rows.length, 10);
+    assert.equal(rows[0]!.amount, 110); // 100 de capital + 1 % de 1.000
+    assert.equal(rows[9]!.amount, 101); // la última, sobre un saldo de 100
+    assert.equal((data.metadata as Record<string, unknown>).installmentAmount, undefined);
+    assert.equal(data.outstandingBalance, 1055); // Σ de las cuotas
+  });
+
+  // D18: con desgravamen (baja con el saldo) las cuotas varían → se guarda el cronograma con el seguro adentro.
+  it('desgravamen y cargos: las cuotas guardadas los incluyen y el saldo es su suma', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({
+      clientId: CLIENT_ID,
+      principalAmount: 1000,
+      terms: {
+        ...CALCULATED,
+        insuranceMonthlyPercent: 0.1,
+        charges: [{ timing: 'per_installment', amount: 2 }, { timing: 'deducted', amount: 50 }],
+      },
+    } as never);
+    const data = calls.creditCreate[0]!;
+    const rows = (data.installments as { create: { amount: number; principal: number; interest: number }[] }).create;
+    assert.equal(rows.length, 10);
+    // Cuota base 110 (simple, 1 % × 10) + seguro 1 (0,1 % de 1.000) + 2 de gastos.
+    assert.equal(rows[0]!.amount, 113);
+    const sum = rows.reduce((s, r) => s + Math.round(r.amount * 100), 0) / 100;
+    assert.equal(data.outstandingBalance, sum);
+    assert.equal(rows.reduce((s, r) => s + Math.round(r.principal * 100), 0) / 100, 1000); // Σ capital = monto
+  });
+
+  it('cuota variable en curso: las cuotas ya pagadas nacen pagadas', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({
+      clientId: CLIENT_ID,
+      principalAmount: 1000,
+      terms: { ...CALCULATED, amortization: 'fixed_principal' },
+      initialState: { paidInstallments: 2, daysPastDue: 0 },
+    } as never);
+    const data = calls.creditCreate[0]!;
+    const rows = (data.installments as { create: { status?: string }[] }).create;
+    assert.deepEqual(rows.slice(0, 3).map((r) => r.status ?? 'PENDING'), ['PAID', 'PAID', 'PENDING']);
+    assert.equal(data.outstandingBalance, 1055 - 110 - 109);
   });
 
   // F4/06 · Fase 5: el móvil carga el «ya está en curso» en el mismo alta (una sola operación offline).

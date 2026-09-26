@@ -80,6 +80,62 @@ export enum CreditOrigin {
   API = 'api',
 }
 
+/**
+ * **A qué período se refiere el porcentaje de interés** (F4/06 · D17), independiente de la frecuencia
+ * de pago. El banco dice «18 % anual» y se paga mensual; el prestamista, «5 % mensual» y cobra semanal.
+ * El motor lo convierte a la tasa de cada cuota (`periodicRatePercent`). Ausente = por cuota (como antes).
+ */
+export enum RatePeriod {
+  PER_INSTALLMENT = 'per_installment',
+  MONTHLY = 'monthly',
+  QUARTERLY = 'quarterly',
+  SEMIANNUAL = 'semiannual',
+  ANNUAL = 'annual',
+}
+
+/**
+ * Cómo se convierte una tasa de otro período a la de la cuota (D17):
+ *  · `nominal` (default) — proporcional: 18 % anual pagando mensual = 18/12 = 1,5 % por mes;
+ *  · `effective` — la tasa ya capitaliza (TEA): (1 + 18 %)^(1/12) − 1 ≈ 1,389 % por mes.
+ */
+export enum RateConvention {
+  NOMINAL = 'nominal',
+  EFFECTIVE = 'effective',
+}
+
+/**
+ * Cuándo se cobra un cargo (F4/06 · D18):
+ *  · `per_installment` — un monto fijo en cada cuota (gastos de cobranza);
+ *  · `first_installment` — una vez, en la primera cuota (comisión de apertura, fija o % del monto);
+ *  · `deducted` — se descuenta del desembolso: no toca las cuotas, se entrega menos.
+ */
+export enum ChargeTiming {
+  PER_INSTALLMENT = 'per_installment',
+  FIRST_INSTALLMENT = 'first_installment',
+  DEDUCTED = 'deducted',
+}
+
+/** En qué se expresa el plazo en pantalla (D17). Se guarda siempre convertido a número de cuotas. */
+export enum TermUnit {
+  INSTALLMENTS = 'installments',
+  MONTHS = 'months',
+  YEARS = 'years',
+}
+
+/**
+ * Períodos de pago por año, para convertir tasas y plazos (D17). Quincenal = 26 porque el
+ * calendario avanza de a 14 días (`addPeriods`); diario = 360, la convención bancaria.
+ */
+export const PAYMENTS_PER_YEAR: Record<PaymentFrequency, number> = {
+  [PaymentFrequency.DAILY]: 360,
+  [PaymentFrequency.WEEKLY]: 52,
+  [PaymentFrequency.BIWEEKLY]: 26,
+  [PaymentFrequency.MONTHLY]: 12,
+  [PaymentFrequency.QUARTERLY]: 4,
+  [PaymentFrequency.SEMIANNUAL]: 2,
+  [PaymentFrequency.ANNUAL]: 1,
+};
+
 /** Base de cálculo del interés en el Modo B (§4.2). Default: por período, "la convención dominante". */
 export enum InterestBase {
   PER_PERIOD = 'PER_PERIOD',

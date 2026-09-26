@@ -5,9 +5,12 @@ import {
   AmortizationMethod,
   CreditDefinition,
   InterestBase,
+  RateConvention,
   RepaymentForm,
   IMPORT_TRACKED_FIELDS,
   calculateCredit,
+  chargeToForm,
+  periodicRatePercent,
   importCompleteness,
   isUnknownField,
   memberName,
@@ -80,8 +83,20 @@ function TermsSummary({ credit, terms }: { credit: CreditDetail; terms: CreditTe
         {terms.definition === CreditDefinition.CALCULATED && (
           <Item
             label={t('interest')}
-            value={t(terms.rateBase === InterestBase.TOTAL ? 'interestTotal' : 'interestPerPeriod', { rate: terms.ratePercent })}
-            hint={`${tf(`interestTypes.${terms.interestType}`)} · ${tf(`amortizations.${terms.amortization}`)}`}
+            value={
+              terms.ratePeriod
+                ? // D17: la tasa como se pactó («18 % anual»), y abajo la de cada cuota.
+                  t('interestWithPeriod', { rate: terms.ratePercent, period: tf(`ratePeriods.${terms.ratePeriod}`) }) +
+                  (terms.rateConvention === RateConvention.EFFECTIVE ? ` · ${tf('rateConventions.effective')}` : '')
+                : t(terms.rateBase === InterestBase.TOTAL ? 'interestTotal' : 'interestPerPeriod', { rate: terms.ratePercent })
+            }
+            hint={[
+              terms.ratePeriod ? t('interestEquivalent', { rate: periodicRatePercent(terms).toLocaleString(locale, { maximumFractionDigits: 4 }) }) : null,
+              tf(`interestTypes.${terms.interestType}`),
+              tf(`amortizations.${terms.amortization}`),
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           />
         )}
         {terms.definition === CreditDefinition.AGREED_INSTALLMENT && (
@@ -93,6 +108,25 @@ function TermsSummary({ credit, terms }: { credit: CreditDetail; terms: CreditTe
           <Item label={tf('frequency')} value={tp(`frequency.${frequency}`)} />
         )}
         <Item label={single ? t('paymentDate') : t('firstDueDate')} value={dayDate(terms.firstDueDate, locale)} />
+        {/* D18: seguro y cargos, como se pactaron. */}
+        {terms.definition === CreditDefinition.CALCULATED && !!terms.insuranceMonthlyPercent && (
+          <Item label={t('insurance')} value={t('insuranceValue', { rate: terms.insuranceMonthlyPercent.toLocaleString(locale) })} />
+        )}
+        {terms.definition === CreditDefinition.CALCULATED && terms.charges && terms.charges.length > 0 && (
+          <div className="sm:col-span-3">
+            <Item
+              label={t('charges')}
+              value={terms.charges
+                .map(
+                  (c) =>
+                    `${c.label ? `${c.label}: ` : ''}${c.percent !== undefined ? `${c.percent} %` : money(c.amount ?? 0, cur)} · ${tf(
+                      `chargeKinds.${chargeToForm(c, '').kind}`,
+                    ).toLowerCase()}`,
+                )
+                .join(' — ')}
+            />
+          </div>
+        )}
       </dl>
 
       {quote && (
@@ -128,7 +162,17 @@ function LegacyTerms({ credit }: { credit: CreditDetail }) {
         />
         <Item label={tp('fields.frequency')} value={credit.frequency ? tp(`frequency.${credit.frequency}`) : t('unknown')} />
         {(unknown('interestRate') || credit.interestRate > 0) && (
-          <Item label={t('interest')} value={unknown('interestRate') ? t('unknown') : t('interestPerPeriod', { rate: credit.interestRate })} />
+          <Item
+            label={t('interest')}
+            value={
+              unknown('interestRate')
+                ? t('unknown')
+                : // El archivo del banco no dice el período (suele ser anual): no se inventa «por período».
+                  credit.locked
+                  ? t('interestImported', { rate: credit.interestRate })
+                  : t('interestPerPeriod', { rate: credit.interestRate })
+            }
+          />
         )}
       </dl>
       {!credit.locked && <p className="mt-4 text-[12px] text-k-muted">{t('legacyTerms')}</p>}

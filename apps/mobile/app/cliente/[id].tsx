@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { addPeriods, calculateCredit, isUnknownField, PaymentFrequency, portfolioStatus } from '@kobrax/shared';
+import { addPeriods, calculateCredit, isUnknownField, PaymentFrequency, portfolioStatus, RatePeriod } from '@kobrax/shared';
 import { choosePhoto } from '@/photo';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { AmountInput, BottomSheet, Chips, EmptyState, Header, PORTFOLIO_STATUS_META, SectionLabel, StatusBadge } from '@/ui';
@@ -15,7 +15,7 @@ import { addActivity, getCase, type CaseDetail, type NewActivity } from '@/cases
 import { createPayment, listPayments, type PaymentItem, type PaymentMethod } from '@/payments.service';
 import { clearArrears, getCredit, markArrears, type CreditDetail } from '@/credits.service';
 import { PlanSheet, prettyDay } from '@/credit-terms-view';
-import { DEFINITION_LABEL, FREQUENCY_LABEL, IMPORT_FIELD_LABEL, ORIGIN_LABEL, UNKNOWN } from '@/credit-labels';
+import { DEFINITION_LABEL, FREQUENCY_LABEL, IMPORT_FIELD_LABEL, ORIGIN_LABEL, RATE_PERIOD_LABEL, UNKNOWN } from '@/credit-labels';
 import type { QueuedAction } from '@/sync/queue';
 import { uploadImage } from '@/uploads.service';
 import { MiQrCobro } from '@/qr-cobro';
@@ -329,6 +329,10 @@ export default function ClienteFichaScreen() {
             />
             <DataRow label="Capital" value={unknown('principalAmount') ? UNKNOWN : money(selected.principalAmount, currency)} />
             {credit?.terms && <DataRow label="Definición" value={DEFINITION_LABEL[credit.terms.definition]} />}
+            {/* D17: la tasa como se pactó («18 % anual»), no convertida. */}
+            {credit?.terms?.definition === 'calculated' && (
+              <DataRow label="Interés" value={`${credit.terms.ratePercent} % ${RATE_PERIOD_LABEL[credit.terms.ratePeriod ?? RatePeriod.PER_INSTALLMENT]}`} />
+            )}
             <DataRow
               label="Cuotas"
               value={credit?.installmentsCount === undefined ? UNKNOWN : credit.installmentsCount ? String(credit.installmentsCount) : 'Préstamo abierto'}

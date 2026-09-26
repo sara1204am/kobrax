@@ -46,6 +46,8 @@ CRÉDITOS
 | D12 | Préstamo abierto (cuota acordada sin n): se permite y **no tiene plan** ("No disponible"). |
 | D13 | Préstamo que ya venía corriendo: se crea con Nuevo crédito y, en Detalle → Editar, "Estado al registrar" ajusta saldo, cuotas pagadas y mora **solo mientras no haya pagos registrados**. |
 | D14 | La fuente de verdad depende del modo (ver abajo). |
+| D17 | **El período de la tasa es independiente de la frecuencia de pago** (2026-09-25). El % se pacta por cuota, mensual, trimestral, semestral o anual, y el motor lo convierte a la tasa de la cuota. Nominal (proporcional) por defecto; efectiva (TEA) como opción. El plazo se puede cargar en cuotas, meses o años. Ver abajo. |
+| D18 | **Desgravamen y otros cargos** (2026-09-25). Desgravamen = % mensual sobre el saldo de capital, sumado a cada cuota. Cargos: monto por cuota, único en la 1.ª cuota (fijo o % del monto) o descontado del desembolso. Entran en el total y el saldo; la ganancia sigue siendo el interés. Ver abajo. |
 
 ### D4 — Matriz
 
@@ -83,11 +85,88 @@ definitionMode ───┼─ agreed_installment ─ el usuario manda la cuota 
 | 5 | **Mobile:** mismo modelo; hoja con el plan; estado actual en la ficha; bug `clientId` en `ajustes/importacion.tsx`; "Recuperado X de Y" (`src/ficha.ts` `recovered`) con `paymentProgress` (D15), que hoy mide contra el capital. | Media |
 | 6 | **Cronograma real** (`CreditInstallment`) con la misma función. **Solo si hace falta**, porque cambia la mora y la aplicación de pagos. | Alta |
 
-**Fuera de alcance:** seguro de desgravamen, cargos y comisiones (épica financiera aparte; **no** aparecen en
-Opciones avanzadas), cuota variable manual y reestructuración.
+**Fuera de alcance:** cuota variable manual (cuotas tipeadas una por una) y reestructuración. El desgravamen y los
+cargos, que el plan original dejaba afuera, entraron por pedido de la usuaria (D18).
 
 **Orden de despliegue:** API → web → mobile. Las frecuencias nuevas no se ofrecen en la UI hasta que la versión de
 mobile que las entiende esté publicada, porque las versiones viejas las leen como `MONTHLY`.
+
+## D18 — Desgravamen y otros cargos ✅ (2026-09-25)
+
+**Reglas** (respuestas de la usuaria; `packages/shared`, tests en `credit-extras.spec.ts`), sólo en «Calcular cuotas»:
+- `CalculatedTerms.insuranceMonthlyPercent`: desgravamen = saldo de capital **al inicio** de cada período × % mensual
+  (con otra frecuencia, × 12 / cuotas por año). Tope 5 % mensual (`INSURANCE_INVALID`).
+- `CalculatedTerms.charges[]` (`CreditCharge`: `label?`, `timing`, `amount` **o** `percent`):
+  - `per_installment` — monto fijo en cada cuota (no admite %);
+  - `first_installment` — una vez, en la 1.ª cuota: monto fijo o % del monto;
+  - `deducted` — descontado del desembolso: no toca las cuotas; `quote.extras.netDisbursement` = monto − descontado
+    (`DEDUCTION_TOO_LARGE` si se come todo).
+- Cada fila del plan lleva `insurance` y `charges`; su `amount` los incluye. **Total a cobrar y saldo (D15) los
+  incluyen**: el cliente los debe. «Ganancia» sigue siendo sólo el interés; seguro, cargos y monto a entregar se
+  muestran aparte (`quote.extras`).
+- Con desgravamen o cargo en la 1.ª cuota las cuotas varían → la API guarda el cronograma fila por fila (como la
+  cuota variable). La tabla `credit_installments` no separa seguro/cargos (van dentro de `amount`): para estas filas
+  el control del alta es Σ capital = monto, no Σ cuota = capital + interés.
+- Sin seguro ni cargos no se guarda ninguna clave nueva: los créditos de siempre quedan igual.
+- **Pantalla (web y móvil), Opciones avanzadas:** «Desgravamen (% mensual)» y «⚙ Otros cargos» (lista: descripción,
+  cómo se cobra, valor). El panel muestra Desgravamen · Otros cargos · Descontado · Monto a entregar; el plan, las
+  columnas Seguro y Cargos; la ficha, el seguro y los cargos pactados.
+- Verificado por la API real: 10.000 al 18 % anual, 12 meses, francés; desgravamen 0,05 %; 5 por cuota; 1 % de
+  comisión; 100 descontados → 1.ª cuota 1.026,80, 2.ª 926,42, total 11.194,99; un pago de 1.026,80 salda la 1.ª.
+
+**Pantalla de «Calcular cuotas» — valores por defecto (pedido de la usuaria):** el interés arranca en **anual** y
+el «Período del préstamo» en **años** (luego meses). Layout en pantalla ancha: datos en 3/4 y el panel de la cuota
+en 1/4, fijo al bajar (Nuevo crédito y Editar).
+
+## D17 — Tasa con período propio y plazo en meses/años ✅ (2026-09-25)
+
+**El problema:** el banco dice «18 % anual a 3 años» y se paga mensual; el prestamista, «5 % mensual» y cobra
+semanal. La pantalla sólo tenía «Interés (%)», que el motor tomaba siempre **por cuota**: un 18 % anual cargado así
+cobraba 18 % cada mes.
+
+**La regla** (`packages/shared`, con tests en `credit-rate-period.spec.ts`):
+- `CalculatedTerms.ratePeriod` (`per_installment` · `monthly` · `quarterly` · `semiannual` · `annual`) y
+  `rateConvention` (`nominal` · `effective`). Opcionales y sólo se guardan si no son el default: un crédito de
+  siempre queda igual (sigue `termsVersion: 1`).
+- `periodicRatePercent` da la tasa de la cuota, la única que usa el cálculo:
+  - nominal = tasa × (períodos de la tasa por año ÷ cuotas por año). 18 % anual, mensual → 1,5 %;
+  - efectiva = (1 + tasa)^(períodos de la tasa ÷ cuotas por año) − 1. 18 % TEA, mensual → ≈ 1,389 %.
+- Cuotas por año (`PAYMENTS_PER_YEAR`): diario 360 (convención bancaria), semanal 52, quincenal 26 (el calendario
+  avanza de a 14 días), mensual 12, trimestral 4, semestral 2, anual 1.
+- El tope de 100 % se controla sobre la tasa **ya convertida**. «% del total» no admite período
+  (`RATE_PERIOD_NOT_SUPPORTED`).
+- **Plazo:** `CreditForm.termUnit` (cuotas · meses · años) → `termInstallments`: 3 años mensual = 36 cuotas. Si no da
+  cuotas enteras (1 mes semanal) se avisa (`TERM_NOT_WHOLE`), no se redondea. Se guarda en cuotas.
+- La columna `interest_rate` guarda la tasa **como se pactó** (18), sólo para mostrar (D7).
+- Verificado: 10.000 al 18 % nominal anual, francés mensual, 12 meses → cuota 916,80 (la de un simulador bancario),
+  por la API real y en la ficha web.
+
+**Pantallas:** en web y móvil, el interés lleva al lado «El interés es: por cuota / mensual / … / anual» y la
+equivalencia («Equivale a 1,5 % por cuota (mensual)»); el plazo, «cuotas / meses / años» con «= 36 cuotas»; «Tipo de
+tasa» (nominal/efectiva) va en Opciones avanzadas. La ficha muestra «18 % anual» y, debajo, «1,5 % por cuota». De un
+importado se muestra «X % (según la fuente)», porque el archivo del banco no dice el período.
+
+## Cuota variable (capital fijo) se registra ✅ (2026-09-25)
+
+**Adelanta la parte de la Fase 6 que hacía falta.** Con capital fijo la cuota baja en cada pago, así que no hay una
+sola cuota que congelar. En vez de rechazarlo (`CREDIT_TERMS_NOT_PERSISTABLE`, eliminado):
+- `resolveCreditTerms` devuelve `schedule` cuando las cuotas varían, y la API **guarda ese cronograma** en
+  `credit_installments`. Pagos (`applyPayment`, en orden), mora (`computeArrears`), próxima fecha y cuota
+  (`creditView`) ya funcionaban sobre filas: son los de los créditos con cronograma de siempre.
+- «En curso» (D13): las primeras k cuotas nacen `PAID`.
+- Edición sin pagos: se borran las filas y se rehacen con las condiciones nuevas. Pasar a cuota fija las deja vacías
+  y congela la cuota. `termsEditBlock` sólo bloquea el cronograma **sin** `terms` (web anterior a F4/06).
+- Compuesto + capital fijo sigue sin ofrecerse (D4): al elegir cuota variable el interés queda simple.
+- Verificado por la API real: 12.000 al 24 % anual, 6 meses → 2.240, 2.200 … 2.040; tras pagar la primera,
+  saldo 10.600 y próxima cuota 2.200.
+
+**Pantalla de «Calcular cuotas» (pedido de la usuaria, 2026-09-25), web y móvil:**
+- «Tipo de cuota: Cuota fija / Cuota variable», a la vista (antes «Método», escondido en Opciones avanzadas).
+  **Pago único ya no se ofrece**; sólo aparece si el crédito guardado lo tiene.
+- «Período del préstamo» en **meses o años** (sin «cuotas»). Al reabrir un calculado, el período vuelve en meses
+  (`installmentsToMonths`); si no da meses enteros (10 cuotas semanales), en cuotas. En cuota acordada y total
+  acordado sigue la opción «cuotas».
+- Rótulos: «Período del préstamo» y «Frecuencia de pago».
 
 ## Fase 5 — Mobile ✅ (2026-09-25)
 

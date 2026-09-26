@@ -99,38 +99,50 @@ export function LoanForm({
 
       <ErrorBanner message={error} />
 
-      <section className="rounded-2xl border border-k-border bg-white p-5">
-        <CreditTermsFields form={form} onChange={setForm} />
-      </section>
+      {/* En pantalla ancha: los datos en 3/4 y la cuota en 1/4, fija mientras se baja. En angosta se
+          apila, con la cuota justo después de los datos. */}
+      <div className="grid gap-4 lg:grid-cols-4 lg:items-start">
+        <section className="rounded-2xl border border-k-border bg-white p-5 lg:col-span-3">
+          <CreditTermsFields form={form} onChange={setForm} />
+        </section>
 
-      <CreditQuotePanel state={state} currency={currency} />
+        <aside className="lg:sticky lg:top-4 lg:col-start-4 lg:row-span-3 lg:row-start-1">
+          <CreditQuotePanel state={state} currency={currency} />
+        </aside>
 
-      {schedule && schedule.length > 0 && (
-        <Section title={tc('plan.title')}>
-          <p className="mb-3 text-[12px] text-k-muted">{tc('plan.hint')}</p>
-          <PaymentPlanTable rows={schedule} currency={currency} />
-        </Section>
-      )}
+        {schedule && schedule.length > 0 && (
+          <div className="lg:col-span-3">
+            <Section title={tc('plan.title')}>
+              <p className="mb-3 text-[12px] text-k-muted">{tc('plan.hint')}</p>
+              <PaymentPlanTable rows={schedule} currency={currency} />
+            </Section>
+          </div>
+        )}
 
-      <section className="rounded-2xl border border-k-border bg-white p-5">
-        <div className="grid gap-5 sm:grid-cols-2">
-          {team.length > 0 && (
-            <Field label={t('form.assignedTo')}>
-              <Select value={manager} onChange={(e) => setManager(e.target.value)}>
-                <option value="">{t('form.unassigned')}</option>
-                {team.map((m) => (
-                  <option key={m.userId} value={m.userId}>
-                    {memberName(m)}
-                  </option>
-                ))}
-              </Select>
+        <section className="rounded-2xl border border-k-border bg-white p-5 lg:col-span-3">
+          <div className="grid gap-5 sm:grid-cols-2">
+            {team.length > 0 && (
+              <Field label={t('form.assignedTo')}>
+                <Select value={manager} onChange={(e) => setManager(e.target.value)}>
+                  <option value="">{t('form.unassigned')}</option>
+                  {team.map((m) => (
+                    <option key={m.userId} value={m.userId}>
+                      {memberName(m)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+            <Field label={t('form.notes')}>
+              <Input
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                maxLength={500}
+              />
             </Field>
-          )}
-          <Field label={t('form.notes')}>
-            <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} maxLength={500} />
-          </Field>
-        </div>
-      </section>
+          </div>
+        </section>
+      </div>
     </form>
   );
 }

@@ -16,6 +16,8 @@ import { dayDate, money } from '@/lib/format';
 export function PaymentPlanTable({ rows, currency }: { rows: CreditScheduleRow[]; currency: string }) {
   const t = useTranslations('portfolio.creditForm.plan');
   const locale = useLocale();
+  // D18: las columnas de seguro y cargos sólo si el crédito los tiene.
+  const extras = rows.some((r) => r.insurance !== undefined);
 
   return (
     <div className="overflow-x-auto">
@@ -26,6 +28,8 @@ export function PaymentPlanTable({ rows, currency }: { rows: CreditScheduleRow[]
             <th scope="col" className="py-2 pr-4">{t('dueDate')}</th>
             <th scope="col" className="py-2 pr-4 text-right">{t('principal')}</th>
             <th scope="col" className="py-2 pr-4 text-right">{t('interest')}</th>
+            {extras && <th scope="col" className="py-2 pr-4 text-right">{t('insurance')}</th>}
+            {extras && <th scope="col" className="py-2 pr-4 text-right">{t('charges')}</th>}
             <th scope="col" className="py-2 pr-4 text-right">{t('amount')}</th>
             <th scope="col" className="py-2 text-right">{t('balance')}</th>
           </tr>
@@ -37,6 +41,8 @@ export function PaymentPlanTable({ rows, currency }: { rows: CreditScheduleRow[]
               <td className="py-2 pr-4 whitespace-nowrap">{dayDate(r.dueDate, locale)}</td>
               <td className="py-2 pr-4 text-right tabular-nums">{money(r.principal, currency)}</td>
               <td className="py-2 pr-4 text-right tabular-nums">{money(r.interest, currency)}</td>
+              {extras && <td className="py-2 pr-4 text-right tabular-nums">{money(r.insurance ?? 0, currency)}</td>}
+              {extras && <td className="py-2 pr-4 text-right tabular-nums">{money(r.charges ?? 0, currency)}</td>}
               <td className="py-2 pr-4 text-right font-semibold tabular-nums text-k-text">{money(r.amount, currency)}</td>
               <td className="py-2 text-right tabular-nums text-k-text-2">{money(r.principalBalance, currency)}</td>
             </tr>

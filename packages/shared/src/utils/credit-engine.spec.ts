@@ -442,11 +442,18 @@ describe('resolveCreditTerms — D14', () => {
     expect(resolveCreditTerms(calculated, { principalAmount: 1000, installmentsCount: 10, frequency: PaymentFrequency.MONTHLY, nextDueDate: '2026-10-25', interestRate: 1 }).ok).toBe(true);
   });
 
-  it('capital fijo todavía no se guarda: sus cuotas bajan y hoy se congela una sola (Fase 6)', () => {
-    expect(resolveCreditTerms({ ...calculated, amortization: AmortizationMethod.FIXED_PRINCIPAL }, { principalAmount: 1000 })).toEqual({
-      ok: false,
-      code: 'TERMS_NOT_PERSISTABLE',
-    });
+  it('capital fijo (cuota variable): se resuelve con su cronograma, que la API guarda fila por fila', () => {
+    const r = resolveCreditTerms({ ...calculated, amortization: AmortizationMethod.FIXED_PRINCIPAL }, { principalAmount: 1000 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.schedule).toHaveLength(10);
+    expect(r.installmentAmount).toBe(r.schedule![0]!.amount); // la primera, la más alta
+    expect(r.schedule![9]!.amount).toBeLessThan(r.schedule![0]!.amount);
+  });
+
+  it('cuota fija: sin cronograma (se congela la cuota)', () => {
+    const r = resolveCreditTerms(calculated, { principalAmount: 1000 });
+    expect(r.ok && r.schedule).toBeNull();
   });
 
   it('condiciones que el motor no puede calcular', () => {

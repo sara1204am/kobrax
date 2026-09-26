@@ -58,13 +58,6 @@ export const creditInstallmentMismatch = (expected: number, sent: number) =>
     details: { expected, sent },
   });
 
-/** Cuotas que varían (capital fijo): se cobran bien recién cuando se guarde el cronograma real (F4/06 · Fase 6). */
-export const creditTermsNotPersistable = () =>
-  new UnprocessableEntityException({
-    code: 'CREDIT_TERMS_NOT_PERSISTABLE',
-    message: 'Un crédito con cuotas que varían (capital fijo) todavía no se puede registrar',
-  });
-
 /** Un crédito con condiciones se edita redefiniéndolas (`terms`), no campo por campo. */
 export const creditTermsEditUnsupported = () =>
   new UnprocessableEntityException({

@@ -5,12 +5,20 @@ import {
   InterestBase,
   InterestType,
   PaymentFrequency,
+  RatePeriod,
   RepaymentForm,
+  TermUnit,
 } from '../enums/credit.enum.js';
 import { buildNewCreditPayload, creditFormState, creditFormTerms, initialCreditForm, type CreditForm } from './credit-form.js';
 import { resolveCreditTerms } from './credit-engine.js';
 
-const form = (over: Partial<CreditForm>): CreditForm => ({ ...initialCreditForm('2026-10-25'), ...over });
+// Estos tests hablan de tasa por cuota y período en cuotas; la pantalla arranca en anual / años (D17).
+const form = (over: Partial<CreditForm>): CreditForm => ({
+  ...initialCreditForm('2026-10-25'),
+  ratePeriod: RatePeriod.PER_INSTALLMENT,
+  termUnit: TermUnit.INSTALLMENTS,
+  ...over,
+});
 
 describe('creditFormState — qué falta, qué avisa y si se guarda', () => {
   it('vacío: falta lo de la definición y no se grita ningún error del motor', () => {
@@ -53,12 +61,12 @@ describe('creditFormState — qué falta, qué avisa y si se guarda', () => {
     expect(creditFormState(single).canSubmit).toBe(true);
   });
 
-  it('capital fijo: hay vista previa pero todavía no se guarda (Fase 6)', () => {
+  it('capital fijo (cuota variable): vista previa y se puede guardar', () => {
     const s = creditFormState(
       form({ principal: '1200', ratePercent: '1', installmentsCount: '3', amortization: AmortizationMethod.FIXED_PRINCIPAL }),
     );
-    expect(s.calculation.schedule).toHaveLength(3);
-    expect(s.canSubmit).toBe(false);
+    expect(s.calculation.schedule?.map((r) => r.amount)).toEqual([412, 408, 404]);
+    expect(s.canSubmit).toBe(true);
   });
 
   it('cobrar menos de lo prestado avisa pero se guarda', () => {

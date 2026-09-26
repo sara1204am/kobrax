@@ -1642,7 +1642,7 @@
       },
       "principal": "Amount to lend",
       "ratePercent": "Interest (%)",
-      "installmentsCount": "Number of installments",
+      "installmentsCount": "Loan term",
       "term": "Term (in periods)",
       "openLoanHint": "empty = open loan",
       "installmentAmount": "Agreed installment",
@@ -1652,7 +1652,7 @@
         "single": "Single payment",
         "installments": "In installments"
       },
-      "frequency": "Frequency",
+      "frequency": "Payment frequency",
       "termFrequency": "Each period is",
       "firstDueDate": "First payment",
       "paymentDate": "Payment date",
@@ -1662,10 +1662,10 @@
         "simple": "Simple",
         "compound": "Compound"
       },
-      "amortization": "Amortization method",
+      "amortization": "Instalment type",
       "amortizations": {
-        "fixed_installment": "Fixed installment",
-        "fixed_principal": "Fixed principal (decreasing installment)",
+        "fixed_installment": "Fixed instalment",
+        "fixed_principal": "Variable instalment",
         "single_payment": "Single payment"
       },
       "rateBase": "How the interest applies",
@@ -1674,7 +1674,11 @@
         "firstInstallment": "First installment",
         "total": "Total to collect",
         "profit": "Profit",
-        "openLoan": "Open loan: without a number of installments there is no total or payment plan."
+        "openLoan": "Open loan: without a number of installments there is no total or payment plan.",
+        "insurance": "Credit life insurance",
+        "charges": "Other charges",
+        "deducted": "Deducted",
+        "netDisbursement": "Amount to disburse"
       },
       "incomplete": "Fill in the details to see the installment and the payment plan.",
       "plan": {
@@ -1685,7 +1689,9 @@
         "principal": "Principal",
         "interest": "Interest",
         "amount": "Total",
-        "balance": "Principal balance"
+        "balance": "Principal balance",
+        "insurance": "Insurance",
+        "charges": "Charges"
       },
       "issues": {
         "PRINCIPAL_INVALID": "The amount must be greater than 0.",
@@ -1699,8 +1705,55 @@
         "FREQUENCY_REQUIRED": "Choose a frequency.",
         "DATE_INVALID": "The date is not valid.",
         "INSTALLMENT_TOO_SMALL": "The total is not enough for that many installments.",
-        "TOTAL_BELOW_PRINCIPAL": "You will collect less than you lend. You can still save it."
-      }
+        "TOTAL_BELOW_PRINCIPAL": "You will collect less than you lend. You can still save it.",
+        "RATE_PERIOD_NOT_SUPPORTED": "Interest on the total is applied once: it cannot be monthly or annual.",
+        "TERM_NOT_WHOLE": "That term does not give a whole number of instalments with this frequency.",
+        "INSURANCE_INVALID": "Insurance must be between 0 and 5 % monthly.",
+        "CHARGE_INVALID": "A charge has no valid value.",
+        "DEDUCTION_TOO_LARGE": "The deduction cannot be the whole amount."
+      },
+      "ratePeriod": "Interest is",
+      "ratePeriods": {
+        "per_installment": "per instalment",
+        "monthly": "monthly",
+        "quarterly": "quarterly",
+        "semiannual": "semiannual",
+        "annual": "annual"
+      },
+      "rateEquivalent": "Equals {rate} % per instalment ({frequency}).",
+      "rateConvention": "Rate type",
+      "rateConventions": {
+        "nominal": "Nominal (proportional)",
+        "effective": "Effective (APY)"
+      },
+      "termUnit": "Term in",
+      "termUnits": {
+        "installments": "instalments",
+        "months": "months",
+        "years": "years"
+      },
+      "termEquivalent": "= {count} instalments",
+      "amortizationHints": {
+        "fixed_installment": "Every instalment is the same.",
+        "fixed_principal": "Repays the same principal each time plus interest on what is owed: the instalment goes down with each payment.",
+        "single_payment": "Repays everything on a single date."
+      },
+      "insurance": "Credit life insurance (% monthly)",
+      "insuranceHint": "On each period’s principal balance: it goes down with it. Empty = no insurance.",
+      "charges": "Other charges",
+      "chargeLabel": "Description",
+      "chargeLabelPlaceholder": "Fee, expenses…",
+      "chargeKind": "How it is charged",
+      "chargeKinds": {
+        "per_installment": "Amount on every instalment",
+        "first_amount": "One-off amount, on the 1st instalment",
+        "first_percent": "% of the amount, on the 1st instalment",
+        "deducted_amount": "Amount deducted from disbursement",
+        "deducted_percent": "% deducted from disbursement"
+      },
+      "chargeValue": "Value",
+      "chargeAdd": "Add charge",
+      "chargeRemove": "Remove"
     },
     "creditDetail": {
       "edit": "Edit",
@@ -1786,7 +1839,13 @@
         "nextDueDate": "next due date",
         "disbursedAt": "disbursement date",
         "daysPastDue": "days past due"
-      }
+      },
+      "interestWithPeriod": "{rate} % {period}",
+      "interestEquivalent": "{rate} % per instalment",
+      "interestImported": "{rate} % (as per the source)",
+      "insurance": "Credit life insurance",
+      "insuranceValue": "{rate} % monthly on balance",
+      "charges": "Other charges"
     },
     "creditBadges": {
       "inProgress": "Registered in progress"

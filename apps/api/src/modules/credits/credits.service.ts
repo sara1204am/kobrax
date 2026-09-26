@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { AgendaItemStatus, AgendaItemType, CasePriority, CaseStatus, CreditStatus } from '@prisma/client';
+import { AgendaItemStatus, AgendaItemType, CasePriority, CaseStatus, CreditStatus, InstallmentStatus } from '@prisma/client';
 import {
   addPeriods,
   arrearsFromDueDate,
@@ -11,6 +11,7 @@ import {
   resolveCreditTerms,
   registeredState,
   hasInitialState,
+  type CreditScheduleRow,
   type CreditTerms,
   type TermsResolution,
   type TermsResolutionError,
@@ -49,7 +50,6 @@ import {
   creditTermsConflict,
   creditTermsEditUnsupported,
   creditTermsInvalid,
-  creditTermsNotPersistable,
   currencyMismatch,
   resourceNotFound,
   scheduleInvalid,
@@ -113,7 +113,13 @@ export class CreditsService {
     const registered = resolved && dto.initialState ? registeredState(resolved.terms, dto.initialState) : undefined;
     if (registered && !registered.ok) throw creditInitialStateInvalid(registered.code);
     const asOf = new Date();
-    const installmentAmount = resolved ? resolved.installmentAmount : dto.installmentAmount;
+    /*
+     * Cuota variable (capital fijo): no hay UNA cuota que congelar. Se guarda el cronograma del motor
+     * fila por fila y de ahí salen los pagos, la mora y la próxima fecha, como en los créditos con
+     * cronograma de siempre. Las cuotas ya pagadas al registrarlo (D13) nacen pagadas.
+     */
+    const variableSchedule = resolved?.schedule ?? null;
+    const installmentAmount = resolved ? (variableSchedule ? undefined : resolved.installmentAmount) : dto.installmentAmount;
     const installmentsCount = resolved ? resolved.installmentsCount : dto.installmentsCount;
     const interestRate = resolved ? resolved.interestRatePercent : (dto.interestRate ?? 0);
 
@@ -132,16 +138,23 @@ export class CreditsService {
      *  · sin él → comportamiento de siempre (web/importador): cronograma amortizado.
      */
     const frozenInstallment = installmentAmount !== undefined;
-    const schedule = frozenInstallment
-      ? []
-      : buildSchedule({
-          principal: dto.principalAmount,
-          periodicRate: dto.interestRate ?? 0,
-          count: dto.installmentsCount ?? 1,
-          type: dto.amortizationType ?? 'FRENCH',
-          firstDueDate,
-        });
-    if (!frozenInstallment && !scheduleIsBalanced(dto.principalAmount, schedule)) throw scheduleInvalid();
+    const schedule: InstallmentRow[] = variableSchedule
+      ? installmentRows(variableSchedule, dto.initialState?.paidInstallments ?? 0, asOf)
+      : frozenInstallment
+        ? []
+        : buildSchedule({
+            principal: dto.principalAmount,
+            periodicRate: dto.interestRate ?? 0,
+            count: dto.installmentsCount ?? 1,
+            type: dto.amortizationType ?? 'FRENCH',
+            firstDueDate,
+          });
+    // El cronograma del motor puede llevar seguro y cargos dentro de la cuota (D18), que la tabla no
+    // separa: ahí el invariante es Σ capital = monto (cada cuota ya es la suma de sus partes).
+    const balanced = variableSchedule
+      ? Math.round(schedule.reduce((s, r) => s + r.principal * 100, 0)) === Math.round(dto.principalAmount * 100)
+      : scheduleIsBalanced(dto.principalAmount, schedule);
+    if (!frozenInstallment && !balanced) throw scheduleInvalid();
 
     /*
      * 🔴 D15 (F4/06): el saldo es el **total pendiente de cobro**, no el capital. Antes nacía igual al
@@ -241,14 +254,7 @@ export class CreditsService {
           disbursedAt,
           metadata: stripUndefined(metadata),
           installments: {
-            create: schedule.map((s) => ({
-              accountId,
-              number: s.number,
-              dueDate: s.dueDate,
-              amount: s.amount,
-              principal: s.principal,
-              interest: s.interest,
-            })),
+            create: schedule.map((s) => ({ accountId, ...s })),
           },
         },
         include: { installments: { orderBy: { number: 'asc' } } },
@@ -397,7 +403,9 @@ export class CreditsService {
 
       if (redefine) {
         if (prev._count.payments > 0) throw creditHasPayments();
-        if (prev._count.installments > 0) throw creditHasSchedule();
+        // Cronograma de la web anterior a F4/06: no hay condiciones de las que regenerarlo. El de una
+        // cuota variable sí las tiene, y se rehace entero más abajo.
+        if (prev._count.installments > 0 && !meta.terms) throw creditHasSchedule();
         const terms = dto.terms !== undefined ? parseTermsOrThrow(dto.terms) : meta.terms;
         if (!terms) throw creditTermsInvalid(['TERMS_REQUIRED']); // un crédito viejo se redefine con sus condiciones
         const r = throwOnTermsError(resolveCreditTerms(terms, { principalAmount: terms.principal }));
@@ -427,9 +435,25 @@ export class CreditsService {
           outstandingBalance: reg.outstandingBalance,
           daysPastDue,
         });
+        /*
+         * Sin pagos, el cronograma guardado no tiene nada que conservar: se borra y, si las condiciones
+         * nuevas son de cuota variable, se vuelve a crear con el motor. Pasar a cuota fija lo deja vacío
+         * y congela la cuota, como cualquier alta con condiciones.
+         */
+        if (prev._count.installments > 0) await tx.creditInstallment.deleteMany({ where: { creditId: id } });
+        if (r.schedule) {
+          await tx.creditInstallment.createMany({
+            data: installmentRows(r.schedule, initial?.paidInstallments ?? 0, asOf).map((row) => ({
+              ...row,
+              accountId: this.tenant.accountId,
+              creditId: id,
+            })),
+          });
+        }
+
         nextMeta = {
           ...nextMeta,
-          installmentAmount: r.installmentAmount,
+          installmentAmount: r.schedule ? undefined : r.installmentAmount,
           frequency: r.frequency,
           nextDueDate: reg.nextDueDate,
           balanceBasis: reg.balanceBasis,
@@ -693,13 +717,38 @@ function throwOnTermsError(r: TermsResolution | TermsResolutionError): TermsReso
   switch (r.code) {
     case 'TERMS_INVALID':
       throw creditTermsInvalid(r.issues);
-    case 'TERMS_NOT_PERSISTABLE':
-      throw creditTermsNotPersistable();
     case 'TERMS_CONFLICT':
       throw creditTermsConflict(r.field);
     case 'INSTALLMENT_MISMATCH':
       throw creditInstallmentMismatch(r.expected, r.sent);
   }
+}
+
+/** Una cuota a guardar en `credit_installments` (sin `accountId`/`creditId`, que pone quien la crea). */
+interface InstallmentRow {
+  number: number;
+  dueDate: Date;
+  amount: number;
+  principal: number;
+  interest: number;
+  paidAmount?: number;
+  status?: InstallmentStatus;
+  paidAt?: Date;
+}
+
+/**
+ * El cronograma del motor → las cuotas que se guardan (cuota variable). Las primeras `paid` ya estaban
+ * pagadas al registrarlo (D13): nacen `PAID`, así la próxima fecha y la mora arrancan en la primera impaga.
+ */
+function installmentRows(rows: CreditScheduleRow[], paid: number, asOf: Date): InstallmentRow[] {
+  return rows.map((r) => ({
+    number: r.number,
+    dueDate: new Date(`${r.dueDate}T00:00:00.000Z`),
+    amount: r.amount,
+    principal: r.principal,
+    interest: r.interest,
+    ...(r.number <= paid ? { paidAmount: r.amount, status: InstallmentStatus.PAID, paidAt: asOf } : {}),
+  }));
 }
 
 /** Los campos financieros sueltos de `UpdateCreditDto`: la edición anterior a las condiciones. */

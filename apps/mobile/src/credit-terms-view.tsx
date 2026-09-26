@@ -15,9 +15,17 @@ import {
   InterestBase,
   InterestType,
   OFFERED_FREQUENCIES,
+  RateConvention,
+  RatePeriod,
   RepaymentForm,
+  TermUnit,
+  periodicRatePercent,
   rateBaseApplies,
+  ratePeriodApplies,
+  termInstallments,
+  CHARGE_KINDS,
   type CreditForm,
+  type CreditFormCharge,
   type CreditFormState,
   type CreditScheduleRow,
   type InitialStateForm,
@@ -28,6 +36,7 @@ import { AmountInput, BottomSheet, Chips, SectionLabel } from '@/ui';
 import { Field } from '@/components';
 import { money, MONTHS } from '@/agenda-form';
 import {
+  AMORTIZATION_HINT,
   AMORTIZATION_LABEL,
   DEFINITION_HINT,
   DEFINITION_LABEL,
@@ -35,7 +44,11 @@ import {
   INITIAL_STATE_ISSUE,
   INTEREST_TYPE_LABEL,
   RATE_BASE_LABEL,
+  RATE_CONVENTION_LABEL,
+  RATE_PERIOD_LABEL,
   REPAYMENT_LABEL,
+  CHARGE_KIND_LABEL,
+  TERM_UNIT_LABEL,
   TERMS_ISSUE,
 } from '@/credit-labels';
 
@@ -49,9 +62,13 @@ export function prettyDay(iso?: string | null): string {
 const DEFINITIONS = Object.values(CreditDefinition).map((d) => ({ value: d, label: DEFINITION_LABEL[d] }));
 const REPAYMENTS = Object.values(RepaymentForm).map((r) => ({ value: r, label: REPAYMENT_LABEL[r] }));
 const INTEREST_TYPES = Object.values(InterestType).map((i) => ({ value: i, label: INTEREST_TYPE_LABEL[i] }));
-// Capital fijo no se ofrece: se registra recién con el cronograma real (Fase 6).
-const AMORTIZATIONS = [AmortizationMethod.FIXED_INSTALLMENT, AmortizationMethod.SINGLE_PAYMENT].map((a) => ({ value: a, label: AMORTIZATION_LABEL[a] }));
+// Cuota fija · cuota variable (capital fijo: la API guarda su cronograma) · pago único.
+const AMORTIZATIONS = Object.values(AmortizationMethod).map((a) => ({ value: a, label: AMORTIZATION_LABEL[a] }));
 const RATE_BASES = Object.values(InterestBase).map((b) => ({ value: b, label: RATE_BASE_LABEL[b] }));
+const RATE_PERIODS = Object.values(RatePeriod).map((p) => ({ value: p, label: RATE_PERIOD_LABEL[p] }));
+const RATE_CONVENTIONS = Object.values(RateConvention).map((c) => ({ value: c, label: RATE_CONVENTION_LABEL[c] }));
+const TERM_UNITS = Object.values(TermUnit).map((u) => ({ value: u, label: TERM_UNIT_LABEL[u] }));
+const CHARGE_KIND_OPTIONS = CHARGE_KINDS.map((k) => ({ value: k, label: CHARGE_KIND_LABEL[k] }));
 
 /** Cómo se define el crédito y sólo los campos que esa definición necesita. */
 export function CreditTermsFormView({ form, onChange, currency }: { form: CreditForm; onChange: (f: CreditForm) => void; currency: string }) {
@@ -70,6 +87,31 @@ export function CreditTermsFormView({ form, onChange, currency }: { form: Credit
     label: FREQUENCY_LABEL[f],
   }));
 
+  // D17: la tasa de cada cuota cuando el % es de otro período, y las cuotas cuando el plazo es en meses/años.
+  const periodic = periodicRatePercent({ ...form, ratePercent: Number(form.ratePercent) });
+  const rateHint =
+    form.ratePeriod !== RatePeriod.PER_INSTALLMENT && form.ratePercent.trim() !== '' && Number.isFinite(periodic)
+      ? `Equivale a ${periodic.toLocaleString('es', { maximumFractionDigits: 4 })} % por cuota (${FREQUENCY_LABEL[form.frequency].toLowerCase()}).`
+      : null;
+  const installments = termInstallments(form.installmentsCount, form.termUnit, form.frequency);
+  const termHint =
+    form.termUnit !== TermUnit.INSTALLMENTS && form.installmentsCount.trim() !== '' && Number.isFinite(installments) ? `= ${installments} cuotas` : null;
+
+  // Calcular cuotas ofrece cuota fija o variable. Pago único sólo si el crédito ya lo tiene (no se pierde al editar).
+  const amortizations = AMORTIZATIONS.filter((a) => a.value !== AmortizationMethod.SINGLE_PAYMENT || form.amortization === AmortizationMethod.SINGLE_PAYMENT);
+  // En Calcular cuotas el período se dice en meses o años; «cuotas» sólo si uno guardado no da meses enteros.
+  const termUnits = calculated
+    ? [...TERM_UNITS].reverse().filter((u) => u.value !== TermUnit.INSTALLMENTS || form.termUnit === TermUnit.INSTALLMENTS) // años, meses
+    : TERM_UNITS;
+
+  const setCharge = (id: string, p: Partial<CreditFormCharge>) =>
+    set({ charges: form.charges.map((c) => (c.id === id ? { ...c, ...p } : c)) });
+  const addCharge = () => set({ charges: [...form.charges, { id: `n${Date.now()}`, label: '', kind: 'first_amount', value: '' }] });
+
+  // Cuota variable = capital fijo: el interés corre sobre el saldo y es simple (compuesto no se ofrece, D4).
+  const setAmortization = (amortization: AmortizationMethod) =>
+    set({ amortization, ...(amortization === AmortizationMethod.FIXED_PRINCIPAL ? { interestType: InterestType.SIMPLE } : {}) });
+
   const onDate = (e: DateTimePickerEvent, d?: Date) => {
     setPicker(false);
     if (e.type === 'set' && d) set({ firstDueDate: new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().slice(0, 10) });
@@ -85,7 +127,20 @@ export function CreditTermsFormView({ form, onChange, currency }: { form: Credit
       <AmountInput value={form.principal} onChangeText={(principal) => set({ principal })} currencySymbol={currency} accessibilityLabel="Monto a prestar" />
 
       {calculated && (
-        <Field label="Interés (%)" value={form.ratePercent} onChangeText={(ratePercent) => set({ ratePercent })} keyboardType="decimal-pad" placeholder="10" />
+        <>
+          <Field label="Interés (%)" value={form.ratePercent} onChangeText={(ratePercent) => set({ ratePercent })} keyboardType="decimal-pad" placeholder="10" />
+          {/* D17: a qué período se refiere el %, independiente de cada cuánto se paga. */}
+          {ratePeriodApplies(form) && (
+            <>
+              <SectionLabel>El interés es</SectionLabel>
+              <Chips options={RATE_PERIODS} value={form.ratePeriod} onChange={(ratePeriod) => set({ ratePeriod })} />
+              {rateHint && <Text style={styles.hint}>{rateHint}</Text>}
+            </>
+          )}
+          <SectionLabel>Tipo de cuota</SectionLabel>
+          <Chips options={amortizations} value={form.amortization} onChange={setAmortization} />
+          <Text style={styles.hint}>{AMORTIZATION_HINT[form.amortization]}</Text>
+        </>
       )}
       {agreedInstallment && (
         <>
@@ -104,17 +159,23 @@ export function CreditTermsFormView({ form, onChange, currency }: { form: Credit
 
       {(calculated || agreedInstallment || (agreedTotal && form.repayment === RepaymentForm.INSTALLMENTS)) && (
         <Field
-          label={calculated && single ? 'Plazo (en períodos)' : agreedInstallment ? 'Número de cuotas (vacío = préstamo abierto)' : 'Número de cuotas'}
+          label={calculated && single ? 'Plazo (en períodos)' : agreedInstallment ? 'Período del préstamo (vacío = préstamo abierto)' : 'Período del préstamo'}
           value={form.installmentsCount}
           onChangeText={(installmentsCount) => set({ installmentsCount })}
-          keyboardType="number-pad"
+          keyboardType="decimal-pad"
           placeholder={agreedInstallment ? 'Opcional' : '5'}
         />
+      )}
+      {(calculated || agreedInstallment || (agreedTotal && form.repayment === RepaymentForm.INSTALLMENTS)) && (
+        <>
+          <Chips options={termUnits} value={form.termUnit} onChange={(termUnit) => set({ termUnit })} />
+          {termHint && <Text style={styles.hint}>{termHint}</Text>}
+        </>
       )}
 
       {!(agreedTotal && single) && (
         <>
-          <SectionLabel>{calculated && single ? 'Cada período es' : 'Frecuencia'}</SectionLabel>
+          <SectionLabel>{calculated && single ? 'Cada período es' : 'Frecuencia de pago'}</SectionLabel>
           <Chips options={frequencies} value={form.frequency} onChange={(frequency) => set({ frequency })} />
         </>
       )}
@@ -132,16 +193,55 @@ export function CreditTermsFormView({ form, onChange, currency }: { form: Credit
           </Pressable>
           {advanced && (
             <View style={{ gap: SPACING.xs }}>
-              <SectionLabel>Tipo de interés</SectionLabel>
-              <Chips options={INTEREST_TYPES} value={form.interestType} onChange={(interestType) => set({ interestType })} />
-              <SectionLabel>Método</SectionLabel>
-              <Chips options={AMORTIZATIONS} value={form.amortization} onChange={(amortization) => set({ amortization })} />
+              {form.amortization !== AmortizationMethod.FIXED_PRINCIPAL && (
+                <>
+                  <SectionLabel>Tipo de interés</SectionLabel>
+                  <Chips options={INTEREST_TYPES} value={form.interestType} onChange={(interestType) => set({ interestType })} />
+                </>
+              )}
+              {ratePeriodApplies(form) && form.ratePeriod !== RatePeriod.PER_INSTALLMENT && (
+                <>
+                  <SectionLabel>Tipo de tasa</SectionLabel>
+                  <Chips options={RATE_CONVENTIONS} value={form.rateConvention} onChange={(rateConvention) => set({ rateConvention })} />
+                </>
+              )}
               {rateBaseApplies(form) && (
                 <>
                   <SectionLabel>Cómo se aplica el interés</SectionLabel>
                   <Chips options={RATE_BASES} value={form.rateBase} onChange={(rateBase) => set({ rateBase })} />
                 </>
               )}
+
+              {/* D18: desgravamen, % mensual sobre el saldo; baja con él. */}
+              <Field
+                label="Desgravamen (% mensual sobre saldo)"
+                value={form.insuranceMonthlyPercent}
+                onChangeText={(insuranceMonthlyPercent) => set({ insuranceMonthlyPercent })}
+                keyboardType="decimal-pad"
+                placeholder="Vacío = sin seguro"
+              />
+
+              {/* D18: otros cargos — por cuota, en la primera cuota o descontados del desembolso. */}
+              <SectionLabel>⚙ Otros cargos</SectionLabel>
+              {form.charges.map((c) => (
+                <View key={c.id} style={styles.chargeCard}>
+                  <Field label="Descripción" value={c.label} onChangeText={(label) => setCharge(c.id, { label })} placeholder="Comisión, gastos…" />
+                  <Chips options={CHARGE_KIND_OPTIONS} value={c.kind} onChange={(kind) => setCharge(c.id, { kind })} />
+                  <Field
+                    label={c.kind.endsWith('percent') ? 'Valor (%)' : 'Valor (Bs)'}
+                    value={c.value}
+                    onChangeText={(value) => setCharge(c.id, { value })}
+                    keyboardType="decimal-pad"
+                    placeholder="0"
+                  />
+                  <Pressable onPress={() => set({ charges: form.charges.filter((x) => x.id !== c.id) })} accessibilityRole="button">
+                    <Text style={styles.remove}>Quitar cargo</Text>
+                  </Pressable>
+                </View>
+              ))}
+              <Pressable onPress={addCharge} accessibilityRole="button" style={{ paddingVertical: SPACING.xs }}>
+                <Text style={styles.link}>+ Agregar cargo</Text>
+              </Pressable>
             </View>
           )}
         </>
@@ -168,6 +268,15 @@ export function CreditQuotePanel({ state, currency, onShowPlan }: { state: Credi
           <PanelRow label={quote.installmentVaries ? 'Primera cuota' : 'Cuota'} value={money(quote.installment, currency)} strong />
           <PanelRow label="Total a cobrar" value={quote.total != null ? money(quote.total, currency) : '—'} />
           <PanelRow label="Ganancia" value={quote.profit != null ? money(quote.profit, currency) : '—'} />
+          {/* D18: lo que no es ganancia pero sí se cobra, y lo que recibe el cliente si hay descuentos. */}
+          {!!quote.extras?.insuranceTotal && <PanelRow label="Desgravamen" value={money(quote.extras.insuranceTotal, currency)} />}
+          {!!quote.extras?.chargesTotal && <PanelRow label="Otros cargos" value={money(quote.extras.chargesTotal, currency)} />}
+          {!!quote.extras?.deducted && (
+            <>
+              <PanelRow label="Descontado" value={money(quote.extras.deducted, currency)} />
+              <PanelRow label="Monto a entregar" value={money(quote.extras.netDisbursement, currency)} />
+            </>
+          )}
           {quote.total == null && <Text style={styles.hint}>Préstamo abierto: sin número de cuotas no hay total ni plan de pagos.</Text>}
         </>
       )}
@@ -214,7 +323,9 @@ export function PlanSheet({
                 {r.number <= paidInstallments ? ' · pagada' : ''}
               </Text>
               <Text style={styles.planSub}>
-                {`Capital ${money(r.principal, currency)} · Interés ${money(r.interest, currency)} · Saldo ${money(r.principalBalance, currency)}`}
+                {`Capital ${money(r.principal, currency)} · Interés ${money(r.interest, currency)}`}
+                {r.insurance !== undefined ? ` · Seguro ${money(r.insurance, currency)} · Cargos ${money(r.charges ?? 0, currency)}` : ''}
+                {` · Saldo ${money(r.principalBalance, currency)}`}
               </Text>
             </View>
             <Text style={styles.planAmount}>{money(r.amount, currency)}</Text>
@@ -279,6 +390,8 @@ const styles = StyleSheet.create({
   error: { ...TYPE.secondary, color: COLORS.danger },
   warn: { ...TYPE.secondary, color: COLORS.warningText, backgroundColor: COLORS.warningBg, padding: SPACING.sm, borderRadius: RADIUS.input },
   link: { ...TYPE.body, color: COLORS.periwinkle, fontWeight: '600' },
+  chargeCard: { gap: SPACING.xs, padding: SPACING.sm, borderRadius: RADIUS.input, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.white },
+  remove: { ...TYPE.secondary, color: COLORS.danger, fontWeight: '600' },
   collapse: { ...TYPE.body, color: COLORS.navy, fontWeight: '600' },
   dateBtn: { height: 48, borderRadius: RADIUS.input, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.white, justifyContent: 'center', paddingHorizontal: SPACING.md },
   dateText: { ...TYPE.body, color: COLORS.navy },

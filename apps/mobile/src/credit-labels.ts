@@ -8,7 +8,11 @@ import {
   InterestBase,
   InterestType,
   PaymentFrequency,
+  RateConvention,
+  RatePeriod,
   RepaymentForm,
+  TermUnit,
+  type ChargeKind,
   type CreditTermsIssueCode,
   type ImportTrackedField,
   type InitialStateIssueCode,
@@ -49,8 +53,14 @@ export const INTEREST_TYPE_LABEL: Record<InterestType, string> = {
 
 export const AMORTIZATION_LABEL: Record<AmortizationMethod, string> = {
   [AmortizationMethod.FIXED_INSTALLMENT]: 'Cuota fija',
-  [AmortizationMethod.FIXED_PRINCIPAL]: 'Capital fijo',
+  [AmortizationMethod.FIXED_PRINCIPAL]: 'Cuota variable',
   [AmortizationMethod.SINGLE_PAYMENT]: 'Pago único',
+};
+
+export const AMORTIZATION_HINT: Record<AmortizationMethod, string> = {
+  [AmortizationMethod.FIXED_INSTALLMENT]: 'Todas las cuotas son iguales.',
+  [AmortizationMethod.FIXED_PRINCIPAL]: 'Paga la misma parte de capital en cada cuota y el interés sobre lo que debe: la cuota baja en cada pago.',
+  [AmortizationMethod.SINGLE_PAYMENT]: 'Devuelve todo en una sola fecha.',
 };
 
 export const RATE_BASE_LABEL: Record<InterestBase, string> = {
@@ -58,11 +68,45 @@ export const RATE_BASE_LABEL: Record<InterestBase, string> = {
   [InterestBase.TOTAL]: '% total',
 };
 
+/** A qué período se refiere el % (D17): se lee «18 % anual». */
+export const RATE_PERIOD_LABEL: Record<RatePeriod, string> = {
+  [RatePeriod.PER_INSTALLMENT]: 'por cuota',
+  [RatePeriod.MONTHLY]: 'mensual',
+  [RatePeriod.QUARTERLY]: 'trimestral',
+  [RatePeriod.SEMIANNUAL]: 'semestral',
+  [RatePeriod.ANNUAL]: 'anual',
+};
+
+export const RATE_CONVENTION_LABEL: Record<RateConvention, string> = {
+  [RateConvention.NOMINAL]: 'Nominal',
+  [RateConvention.EFFECTIVE]: 'Efectiva (TEA)',
+};
+
+/** Cómo se cobra un cargo (D18). Los mismos textos que la web. */
+export const CHARGE_KIND_LABEL: Record<ChargeKind, string> = {
+  per_installment: 'En cada cuota',
+  first_amount: 'Único, 1.ª cuota',
+  first_percent: '% del monto, 1.ª cuota',
+  deducted_amount: 'Descontado',
+  deducted_percent: '% descontado',
+};
+
+export const TERM_UNIT_LABEL: Record<TermUnit, string> = {
+  [TermUnit.INSTALLMENTS]: 'Cuotas',
+  [TermUnit.MONTHS]: 'Meses',
+  [TermUnit.YEARS]: 'Años',
+};
+
 export const TERMS_ISSUE: Record<CreditTermsIssueCode, string> = {
   PRINCIPAL_INVALID: 'El monto tiene que ser mayor a 0.',
   RATE_INVALID: 'El interés no puede ser negativo.',
   RATE_OUT_OF_RANGE: 'El interés supera el máximo: 100 % por cuota o 500 % sobre el total.',
   RATE_BASE_NOT_SUPPORTED: 'El interés sobre el total sólo se aplica a interés simple con cuota fija.',
+  RATE_PERIOD_NOT_SUPPORTED: 'El interés sobre el total se aplica una sola vez: no puede ser mensual ni anual.',
+  TERM_NOT_WHOLE: 'Ese plazo no da un número entero de cuotas con esta frecuencia.',
+  INSURANCE_INVALID: 'El desgravamen tiene que estar entre 0 y 5 % mensual.',
+  CHARGE_INVALID: 'Hay un cargo sin valor válido.',
+  DEDUCTION_TOO_LARGE: 'Lo descontado no puede ser todo el monto.',
   COMBINATION_NOT_SUPPORTED: 'Esa combinación de interés y método de amortización no se ofrece.',
   PERIODS_INVALID: 'El número de cuotas tiene que ser un entero entre 1 y 600.',
   INSTALLMENT_INVALID: 'La cuota tiene que ser mayor a 0.',

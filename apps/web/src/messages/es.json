@@ -1642,7 +1642,7 @@
       },
       "principal": "Monto a prestar",
       "ratePercent": "Interés (%)",
-      "installmentsCount": "Número de cuotas",
+      "installmentsCount": "Período del préstamo",
       "term": "Plazo (en períodos)",
       "openLoanHint": "vacío = préstamo abierto",
       "installmentAmount": "Cuota acordada",
@@ -1652,7 +1652,7 @@
         "single": "Pago único",
         "installments": "En cuotas"
       },
-      "frequency": "Frecuencia",
+      "frequency": "Frecuencia de pago",
       "termFrequency": "Cada período es",
       "firstDueDate": "Primer pago",
       "paymentDate": "Fecha de pago",
@@ -1662,10 +1662,10 @@
         "simple": "Simple",
         "compound": "Compuesto"
       },
-      "amortization": "Método de amortización",
+      "amortization": "Tipo de cuota",
       "amortizations": {
         "fixed_installment": "Cuota fija",
-        "fixed_principal": "Capital fijo (cuota decreciente)",
+        "fixed_principal": "Cuota variable",
         "single_payment": "Pago único"
       },
       "rateBase": "Cómo se aplica el interés",
@@ -1674,7 +1674,11 @@
         "firstInstallment": "Primera cuota",
         "total": "Total a cobrar",
         "profit": "Ganancia",
-        "openLoan": "Préstamo abierto: sin número de cuotas no hay total ni plan de pagos."
+        "openLoan": "Préstamo abierto: sin número de cuotas no hay total ni plan de pagos.",
+        "insurance": "Desgravamen",
+        "charges": "Otros cargos",
+        "deducted": "Descontado",
+        "netDisbursement": "Monto a entregar"
       },
       "incomplete": "Completá los datos para ver la cuota y el plan de pagos.",
       "plan": {
@@ -1685,7 +1689,9 @@
         "principal": "Capital",
         "interest": "Interés",
         "amount": "Total",
-        "balance": "Saldo de capital"
+        "balance": "Saldo de capital",
+        "insurance": "Seguro",
+        "charges": "Cargos"
       },
       "issues": {
         "PRINCIPAL_INVALID": "El monto tiene que ser mayor a 0.",
@@ -1699,8 +1705,55 @@
         "FREQUENCY_REQUIRED": "Elegí una frecuencia.",
         "DATE_INVALID": "La fecha no es válida.",
         "INSTALLMENT_TOO_SMALL": "El total no alcanza para esa cantidad de cuotas.",
-        "TOTAL_BELOW_PRINCIPAL": "Vas a cobrar menos de lo que prestás. Se puede guardar igual."
-      }
+        "TOTAL_BELOW_PRINCIPAL": "Vas a cobrar menos de lo que prestás. Se puede guardar igual.",
+        "RATE_PERIOD_NOT_SUPPORTED": "El interés sobre el total se aplica una sola vez: no puede ser mensual ni anual.",
+        "TERM_NOT_WHOLE": "Ese plazo no da un número entero de cuotas con esta frecuencia.",
+        "INSURANCE_INVALID": "El desgravamen tiene que estar entre 0 y 5 % mensual.",
+        "CHARGE_INVALID": "Hay un cargo sin valor válido.",
+        "DEDUCTION_TOO_LARGE": "Lo descontado no puede ser todo el monto."
+      },
+      "ratePeriod": "El interés es",
+      "ratePeriods": {
+        "per_installment": "por cuota",
+        "monthly": "mensual",
+        "quarterly": "trimestral",
+        "semiannual": "semestral",
+        "annual": "anual"
+      },
+      "rateEquivalent": "Equivale a {rate} % por cuota ({frequency}).",
+      "rateConvention": "Tipo de tasa",
+      "rateConventions": {
+        "nominal": "Nominal (proporcional)",
+        "effective": "Efectiva (TEA)"
+      },
+      "termUnit": "Plazo en",
+      "termUnits": {
+        "installments": "cuotas",
+        "months": "meses",
+        "years": "años"
+      },
+      "termEquivalent": "= {count} cuotas",
+      "amortizationHints": {
+        "fixed_installment": "Todas las cuotas son iguales.",
+        "fixed_principal": "Paga la misma parte de capital en cada cuota y el interés sobre lo que debe: la cuota baja en cada pago.",
+        "single_payment": "Devuelve todo en una sola fecha."
+      },
+      "insurance": "Desgravamen (% mensual)",
+      "insuranceHint": "Sobre el saldo de capital de cada período: baja con él. Vacío = sin seguro.",
+      "charges": "Otros cargos",
+      "chargeLabel": "Descripción",
+      "chargeLabelPlaceholder": "Comisión, gastos…",
+      "chargeKind": "Cómo se cobra",
+      "chargeKinds": {
+        "per_installment": "Monto en cada cuota",
+        "first_amount": "Monto único, en la 1.ª cuota",
+        "first_percent": "% del monto, en la 1.ª cuota",
+        "deducted_amount": "Monto descontado del desembolso",
+        "deducted_percent": "% descontado del desembolso"
+      },
+      "chargeValue": "Valor",
+      "chargeAdd": "Agregar cargo",
+      "chargeRemove": "Quitar"
     },
     "creditDetail": {
       "edit": "Editar",
@@ -1786,7 +1839,13 @@
         "nextDueDate": "próximo vencimiento",
         "disbursedAt": "fecha de desembolso",
         "daysPastDue": "días de mora"
-      }
+      },
+      "interestWithPeriod": "{rate} % {period}",
+      "interestEquivalent": "{rate} % por cuota",
+      "interestImported": "{rate} % (según la fuente)",
+      "insurance": "Desgravamen",
+      "insuranceValue": "{rate} % mensual sobre saldo",
+      "charges": "Otros cargos"
     },
     "creditBadges": {
       "inProgress": "Cargado en curso"
