@@ -235,7 +235,7 @@
         "updated": "Updated",
         "updatedHint": "You already had them: balance and days past due get updated.",
         "setCurrent": "Set current",
-        "setCurrentHint": "You have them and the file does not. They stay active with no arrears; the balance is untouched.",
+        "setCurrentHint": "You have them and the file does not include them. They are left with no arrears; balance and status are not touched.",
         "invalid": "Not imported",
         "invalidHint": "The file is missing something you marked as required.",
         "colCode": "Credit no.",
@@ -261,7 +261,17 @@
           "scope": "You still have to say whose portfolio the file carries.",
           "profile": "You still have to say what the file looks like.",
           "fields": "The file columns are not mapped to your fields yet."
-        }
+        },
+        "reportDate": "Cut-off {date}",
+        "reportDateUnknown": "The report does not state its cut-off date",
+        "advisor": "Advisor {code}",
+        "absent": "No longer in the report",
+        "absentHint": "They were in the previous report and not in this one. It is not a payment or a closure: balance and status stay as they were, and the day they went missing is recorded.",
+        "reappeared": "Back in the report",
+        "reappearedHint": "They were missing and this report brings them back. The same credit is updated, with its history.",
+        "needsReview": "Review link",
+        "linkReview": "Review link",
+        "existingClient": "existing client"
       },
       "setup": {
         "title": "Set up your import",
@@ -468,12 +478,16 @@
         "PROFILE_CHANGED": "The file shape changed: map the columns again.",
         "CALIBRATION_STALE": "Confirm the days past due column after choosing it.",
         "INVALID_SOURCE": "Invalid source.",
-        "INVALID_PROFILE_KIND": "Invalid file shape."
+        "INVALID_PROFILE_KIND": "Invalid file shape.",
+        "REPORT_OUTDATED": "This report is older than the last one you applied. An older report does not overwrite newer data.",
+        "ADVISOR_NOT_LINKED": "The report belongs to an advisor who is not linked to any user. Link them below, in Report advisors.",
+        "INVALID_REPORT_DATE": "The cut-off date is not valid."
       },
       "warnings": {
         "MORA_SIN_CONFIRMAR": "You have not confirmed which column holds the days past due.",
         "MORA_COLUMNA_SOSPECHOSA": "The days past due column may be the wrong one.",
-        "MORA_INCONSISTENTE": "There are active credits with no charges but with days past due."
+        "MORA_INCONSISTENTE": "There are active credits with no charges but with days past due.",
+        "REPORT_DATE_UNKNOWN": "The report does not include its cut-off date: figures are saved without knowing which day they refer to."
       },
       "rejects": {
         "MISSING": "It is missing a field you marked as required.",
@@ -481,6 +495,21 @@
         "DUP_IN_FILE": "The credit number is repeated in the file.",
         "MATCHES_MANUAL": "That credit number already exists, loaded by hand. The import does not touch it.",
         "MATCHES_OUT_OF_SCOPE": "That credit number exists outside this file's scope."
+      },
+      "advisors": {
+        "title": "Report advisors",
+        "subtitle": "Each arrears report belongs to one advisor. Link their code to the team member who handles that portfolio: new operations are assigned to them, and what is missing from their report is missing only from their portfolio.",
+        "unlinked": "These codes already came in a report and have no one: {codes}",
+        "none": "You have not linked any advisor yet.",
+        "code": "Advisor code",
+        "user": "Who handles that portfolio",
+        "pickUser": "Choose a person",
+        "link": "Link",
+        "remove": "Remove",
+        "saved": "Advisor linked",
+        "errors": {
+          "generic": "Could not save. Try again."
+        }
       }
     },
     "cases": {
@@ -1899,10 +1928,31 @@
       "arrearsSince": "since {date}",
       "oldestUnpaid": "Instalment to collect: {number} (due {date})",
       "oldestUnpaidNoNumber": "Instalment to collect: due {date}",
-      "arrearsMethod": "How arrears are counted"
+      "arrearsMethod": "How arrears are counted",
+      "externalId": "Operation",
+      "reportedAsOf": "Figures as of cut-off",
+      "syncStatus": "In the report",
+      "syncAbsentSince": "Missing since {date}",
+      "sync": {
+        "PRESENT": "In the latest report",
+        "ABSENT": "No longer in the report"
+      }
     },
     "creditBadges": {
       "inProgress": "Registered in progress"
+    },
+    "linkReview": {
+      "title": "Review link",
+      "textSuggestions": "The import created this client because you already had someone with the same name, and it did not merge them on its own. Their credits are already in the portfolio. If it is the same person, link them; if not, confirm it is someone else.",
+      "textSameFile": "The report has several operations with this same name and they were grouped into one client. Confirm it is a single person.",
+      "credits": "{n, plural, one {# credit} other {# credits}}",
+      "isThisOne": "This is the person",
+      "isNew": "It is someone else",
+      "linked": "Credits linked",
+      "confirmed": "Review closed",
+      "errors": {
+        "generic": "Could not save. Try again."
+      }
     }
   },
   "team": {

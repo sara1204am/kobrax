@@ -105,6 +105,16 @@ export function ImportRunner({ config }: { config: ImportConfig }) {
           <p className="mt-3 truncate text-[13px] text-k-text-2">
             {t('run.file')}: <span className="text-k-text">{file.name}</span>
           </p>
+          {/* D8 · D9: de qué día y de qué asesor es el reporte. Sin fecha de corte se dice: los
+              números entran igual, pero sin saber a qué día corresponden. */}
+          {summary.report && (
+            <p className="mt-1 text-[13px] text-k-text-2">
+              {summary.report.reportDate
+                ? t('run.reportDate', { date: summary.report.reportDate.split('-').reverse().join('/') })
+                : t('run.reportDateUnknown')}
+              {summary.report.advisorCode && <> · {t('run.advisor', { code: summary.report.advisorCode })}</>}
+            </p>
+          )}
           <Counts summary={summary} t={t} />
 
           {/*
@@ -217,12 +227,19 @@ function Gate({ title, text, cta }: { title: string; text: string; cta: string }
 
 /** Los tres baldes + los rechazos, en números. **«Eliminados» no existe: el reconcile nunca borra.** */
 function Counts({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
+  // Las de la operación externa (D2, D4) sólo aparecen si pasan: un 0 fijo en cada corrida de un
+  // formato que no los usa sería ruido. Las tres de siempre, siempre.
+  const extra = [
+    ['absent', summary.counts.absent ?? 0],
+    ['reappeared', summary.counts.reappeared ?? 0],
+    ['needsReview', summary.counts.needsReview ?? 0],
+  ] as const;
   const tiles = [
     ['created', summary.counts.created],
     ['updated', summary.counts.updated],
-    ['setCurrent', summary.counts.setCurrent],
+    ...extra.filter(([, n]) => n > 0),
     ['invalid', summary.counts.invalid],
-  ] as const;
+  ];
 
   return (
     <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -245,7 +262,9 @@ function Counts({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
  * techo se sube con `content-visibility: auto` en las filas antes que con una librería.
  */
 function Buckets({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
-  const { toCreate, toUpdate, toSetCurrent, invalid, warnings } = summary.preview;
+  const { toCreate, toUpdate, invalid, warnings } = summary.preview;
+  const toMarkAbsent = summary.preview.toMarkAbsent ?? [];
+  const reappeared = toUpdate.filter((u) => u.reappeared);
 
   return (
     <>
@@ -272,7 +291,19 @@ function Buckets({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
         rows={toCreate}
         columns={[
           { key: 'code', header: t('run.colCode'), sortable: false, render: (row) => row.code },
-          { key: 'name', header: t('run.colClient'), sortable: false, render: (row) => row.clientName },
+          {
+            key: 'name',
+            header: t('run.colClient'),
+            sortable: false,
+            // D2: el cliente que se parece a otro entra igual, marcado para revisar el vínculo.
+            render: (row) => (
+              <>
+                {row.clientName}
+                {row.linkReview && <span className="ml-2 text-[12px] font-semibold text-k-warning-text">{t('run.linkReview')}</span>}
+                {row.existingClient && <span className="ml-2 text-[12px] text-k-text-2">{t('run.existingClient')}</span>}
+              </>
+            ),
+          },
         ]}
         empty={t('run.emptyBucket')}
       />
@@ -285,10 +316,20 @@ function Buckets({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
         empty={t('run.emptyBucket')}
       />
 
+      {reappeared.length > 0 && (
+        <Bucket
+          title={t('run.reappeared')}
+          hint={t('run.reappearedHint')}
+          rows={reappeared}
+          columns={[{ key: 'code', header: t('run.colCode'), sortable: false, render: (row) => row.code }]}
+          empty={t('run.emptyBucket')}
+        />
+      )}
+
       <Bucket
-        title={t('run.setCurrent')}
-        hint={t('run.setCurrentHint')}
-        rows={toSetCurrent}
+        title={t('run.absent')}
+        hint={t('run.absentHint')}
+        rows={toMarkAbsent}
         columns={[{ key: 'code', header: t('run.colCode'), sortable: false, render: (row) => row.code ?? '—' }]}
         empty={t('run.emptyBucket')}
       />

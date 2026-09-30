@@ -320,6 +320,7 @@ export const NAME_ORDER_LABEL: Record<NameOrder, string> = {
  * Resultado; el código crudo (`MORA_SIN_CONFIRMAR`) no se le muestra nunca a nadie.
  */
 const WARNING_TEXT: Record<string, string> = {
+  REPORT_DATE_UNKNOWN: 'El reporte no trae su fecha de corte: los números se guardan sin saber a qué día corresponden.',
   MORA_SIN_CONFIRMAR: '⚠ Todavía no confirmaste cuál columna son los días de atraso.',
   MORA_COLUMNA_SOSPECHOSA: '⚠ Puede que la columna de días de atraso esté mal elegida.',
   MORA_INCONSISTENTE: '⚠ Hay créditos vigentes y sin cargos, pero con días de atraso.',

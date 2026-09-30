@@ -243,6 +243,13 @@ export const ATTACHMENT_TYPES = ['ID_CARD', 'PHOTO', 'CONTRACT', 'OTHER'] as con
 export interface ClientDetail {
   id: string;
   clientType: ClientTypeValue;
+  /**
+   * D2 · opción B: lo creó la importación y puede ser alguien que ya existía. Hay que decidir:
+   * vincular sus créditos a uno de `linkSuggestions`, o confirmar que es una persona nueva.
+   */
+  linkReviewPending?: boolean;
+  /** Los clientes que se llaman igual (sólo con `linkReviewPending`). */
+  linkSuggestions?: { id: string; displayName: string; creditCount: number }[];
   firstName?: string;
   lastName?: string;
   businessName?: string;

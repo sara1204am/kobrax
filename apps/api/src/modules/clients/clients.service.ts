@@ -10,7 +10,7 @@ import { CryptoService } from '../../common/crypto/crypto.service';
 import { BlindIndexService } from '../../common/crypto/blind-index.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
-import { serializeClient, type PortfolioClient, type PortfolioTotals } from './clients.serializer';
+import { clientDisplayName, serializeClient, type PortfolioClient, type PortfolioTotals } from './clients.serializer';
 import type { ClientPdfBundle, ClientPdfContext } from './client-pdf';
 import {
   CreateAttachmentDto,
@@ -387,7 +387,7 @@ export class ClientsService {
     }
   }
 
-  async findOne(id: string, reveal: boolean): Promise<ReturnType<typeof serializeClient>> {
+  async findOne(id: string, reveal: boolean): Promise<ReturnType<typeof serializeClient> & { linkSuggestions?: { id: string; displayName: string; creditCount: number }[] }> {
     const client = await this.tx((tx) =>
       tx.client.findFirst({
         where: { id, deletedAt: null },
@@ -408,7 +408,25 @@ export class ClientsService {
       // Acceso a PII en claro → queda auditado (data_access_log detallado llega en F12).
       await this.audit.record({ entity: 'client', entityId: id, action: 'PII_REVEAL' });
     }
-    return serializeClient(client, { crypto: this.crypto, reveal });
+    const serialized = serializeClient(client, { crypto: this.crypto, reveal });
+    if (!client.linkReviewPending) return serialized;
+
+    // Las sugerencias con su nombre: la pantalla de revisión no puede mostrar uuids.
+    const ids = ((client.metadata as { linkSuggestions?: unknown })?.linkSuggestions ?? []) as unknown[];
+    const suggestionIds = ids.filter((x): x is string => typeof x === 'string');
+    const suggested =
+      suggestionIds.length > 0
+        ? await this.tx((tx) =>
+            tx.client.findMany({
+              where: { id: { in: suggestionIds }, deletedAt: null },
+              select: { id: true, firstName: true, lastName: true, businessName: true, creditCount: true },
+            }),
+          )
+        : [];
+    return {
+      ...serialized,
+      linkSuggestions: suggested.map((c) => ({ id: c.id, displayName: clientDisplayName(c) ?? '—', creditCount: c.creditCount })),
+    };
   }
 
   /** Lo que pide el PDF del legajo: el cliente completo (ya audita su propio revelado) + créditos y casos. */

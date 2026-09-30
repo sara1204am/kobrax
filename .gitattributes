@@ -6,3 +6,7 @@
 Dockerfile text eol=lf
 *.Dockerfile text eol=lf
 Caddyfile text eol=lf
+
+# Los PDF son binarios: con autocrlf, git les cambiaba los saltos de linea al hacer checkout y los
+# rompia (los reportes de docs/flows son fixtures de los tests del importador).
+*.pdf binary

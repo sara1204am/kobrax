@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/panel-ui';
 import { AccountSummary } from './account-summary';
 import { CasesSection } from './cases-section';
 import { ClientCard } from './client-card';
+import { LinkReview } from './link-review';
 import { CreditsSection } from './credits-section';
 import { TimelineSection } from './timeline-section';
 
@@ -67,33 +68,37 @@ export default async function ClientePage({
   const moneda = account.body.data?.currencyCode ?? 'BOB';
 
   return (
-    <ClientCard
-      client={client.body.data}
-      hasActiveCredits={creditos.some((c) => c.status === 'ACTIVE')}
-      credits={
-        // Si `credit:read` no está, la lista viene vacía y la sección lo dice en vez de mentir con
-        // un cero. El catálogo de tipos sí puede faltar sin consecuencia: se muestra «Sin clasificar».
-        <CreditsSection
-          clientId={params.id}
-          credits={creditos}
-          types={new Map((types.body.data ?? []).map((c) => [c.code, c.label]))}
-          showClosed={searchParams.historial === '1'}
-          denied={credits.status === 403}
-        />
-      }
-      creditOptions={creditos}
-      currency={moneda}
-      collateralTypes={collateralTypes.body.data ?? []}
-      summary={<AccountSummary client={client.body.data} credits={creditos} currency={moneda} />}
-      timeline={
-        <TimelineSection
-          entries={timeline.body.data ?? []}
-          members={equipo}
-          denied={timeline.status === 403}
-          seeAllHref={`/cartera/${params.id}/bitacora`}
-        />
-      }
-      cases={<CasesSection cases={cases.body.data ?? []} members={equipo} denied={cases.status === 403} />}
-    />
+    <>
+      {/* D2 · opción B: la duda del vínculo se resuelve acá, sin frenar la cobranza. */}
+      <LinkReview client={client.body.data} creditIds={creditos.map((c) => c.id)} />
+      <ClientCard
+        client={client.body.data}
+        hasActiveCredits={creditos.some((c) => c.status === 'ACTIVE')}
+        credits={
+          // Si `credit:read` no está, la lista viene vacía y la sección lo dice en vez de mentir con
+          // un cero. El catálogo de tipos sí puede faltar sin consecuencia: se muestra «Sin clasificar».
+          <CreditsSection
+            clientId={params.id}
+            credits={creditos}
+            types={new Map((types.body.data ?? []).map((c) => [c.code, c.label]))}
+            showClosed={searchParams.historial === '1'}
+            denied={credits.status === 403}
+          />
+        }
+        creditOptions={creditos}
+        currency={moneda}
+        collateralTypes={collateralTypes.body.data ?? []}
+        summary={<AccountSummary client={client.body.data} credits={creditos} currency={moneda} />}
+        timeline={
+          <TimelineSection
+            entries={timeline.body.data ?? []}
+            members={equipo}
+            denied={timeline.status === 403}
+            seeAllHref={`/cartera/${params.id}/bitacora`}
+          />
+        }
+        cases={<CasesSection cases={cases.body.data ?? []} members={equipo} denied={cases.status === 403} />}
+      />
+    </>
   );
 }

@@ -235,7 +235,7 @@
         "updated": "Se actualizan",
         "updatedHint": "Ya los tenías: se les actualiza el saldo y los días de atraso.",
         "setCurrent": "Quedan al día",
-        "setCurrentHint": "Los tenés y el archivo no los trae. Quedan vigentes y sin atraso; el saldo no se toca.",
+        "setCurrentHint": "Los tenés y el archivo no los trae. Quedan sin atraso; el saldo y el estado no se tocan.",
         "invalid": "No se importan",
         "invalidHint": "Al archivo le falta algo que marcaste obligatorio.",
         "colCode": "N° de crédito",
@@ -261,7 +261,17 @@
           "scope": "Falta decir de quién es la cartera que trae el archivo.",
           "profile": "Falta decir cómo se ve el archivo.",
           "fields": "Falta emparejar las columnas del archivo con tus datos."
-        }
+        },
+        "reportDate": "Corte del {date}",
+        "reportDateUnknown": "El reporte no dice su fecha de corte",
+        "advisor": "Asesor {code}",
+        "absent": "Ya no vienen en el reporte",
+        "absentHint": "Estaban en el reporte anterior y en este no. No es un pago ni un cierre: el saldo y el estado quedan como estaban, y queda registrado desde qué día faltan.",
+        "reappeared": "Volvieron al reporte",
+        "reappearedHint": "Faltaban y este reporte las vuelve a traer. Se actualiza el mismo crédito, con su historia.",
+        "needsReview": "Revisar vínculo",
+        "linkReview": "Revisar vínculo",
+        "existingClient": "cliente que ya tenías"
       },
       "setup": {
         "title": "Configurá tu importación",
@@ -468,12 +478,16 @@
         "PROFILE_CHANGED": "Cambió la forma del archivo: hay que emparejar las columnas de nuevo.",
         "CALIBRATION_STALE": "Confirmá la columna de días de atraso después de elegirla.",
         "INVALID_SOURCE": "Origen inválido.",
-        "INVALID_PROFILE_KIND": "Forma de archivo inválida."
+        "INVALID_PROFILE_KIND": "Forma de archivo inválida.",
+        "REPORT_OUTDATED": "Este reporte es más viejo que el último que aplicaste. Un reporte viejo no pisa datos más nuevos.",
+        "ADVISOR_NOT_LINKED": "El reporte es de un asesor que no está vinculado a ningún usuario. Vinculalo abajo, en Asesores de los reportes.",
+        "INVALID_REPORT_DATE": "La fecha de corte no es válida."
       },
       "warnings": {
         "MORA_SIN_CONFIRMAR": "Todavía no confirmaste cuál columna son los días de atraso.",
         "MORA_COLUMNA_SOSPECHOSA": "Puede que la columna de días de atraso esté mal elegida.",
-        "MORA_INCONSISTENTE": "Hay créditos vigentes y sin cargos, pero con días de atraso."
+        "MORA_INCONSISTENTE": "Hay créditos vigentes y sin cargos, pero con días de atraso.",
+        "REPORT_DATE_UNKNOWN": "El reporte no trae su fecha de corte: los números se guardan sin saber a qué día corresponden."
       },
       "rejects": {
         "MISSING": "Le falta un dato que marcaste obligatorio.",
@@ -481,6 +495,21 @@
         "DUP_IN_FILE": "El N° de crédito viene repetido en el archivo.",
         "MATCHES_MANUAL": "Ese N° de crédito ya existe cargado a mano. El import no lo toca.",
         "MATCHES_OUT_OF_SCOPE": "Ese N° de crédito existe fuera del alcance de este archivo."
+      },
+      "advisors": {
+        "title": "Asesores de los reportes",
+        "subtitle": "Cada reporte de mora es de un asesor. Vinculá su código a la persona de tu equipo que lleva esa cartera: sus operaciones nuevas le quedan asignadas, y lo que falta de su reporte falta sólo de su cartera.",
+        "unlinked": "Estos códigos ya vinieron en un reporte y no tienen a nadie: {codes}",
+        "none": "Todavía no vinculaste ningún asesor.",
+        "code": "Código del asesor",
+        "user": "Quién lleva esa cartera",
+        "pickUser": "Elegí una persona",
+        "link": "Vincular",
+        "remove": "Quitar",
+        "saved": "Asesor vinculado",
+        "errors": {
+          "generic": "No se pudo guardar. Probá de nuevo."
+        }
       }
     },
     "cases": {
@@ -1899,10 +1928,31 @@
       "arrearsSince": "desde {date}",
       "oldestUnpaid": "Cuota a reclamar: {number} (venció {date})",
       "oldestUnpaidNoNumber": "Cuota a reclamar: venció {date}",
-      "arrearsMethod": "Cómo se cuenta la mora"
+      "arrearsMethod": "Cómo se cuenta la mora",
+      "externalId": "Operación",
+      "reportedAsOf": "Números al corte del",
+      "syncStatus": "En el reporte",
+      "syncAbsentSince": "Ya no viene desde el {date}",
+      "sync": {
+        "PRESENT": "Viene en el último reporte",
+        "ABSENT": "Ya no viene"
+      }
     },
     "creditBadges": {
       "inProgress": "Cargado en curso"
+    },
+    "linkReview": {
+      "title": "Revisar vínculo",
+      "textSuggestions": "La importación creó este cliente porque ya tenías a alguien con el mismo nombre, y no los juntó sola. Sus créditos ya están en cartera y en mora. Si es la misma persona, vinculalos; si no, confirmá que es otra.",
+      "textSameFile": "El reporte trae varias operaciones con este mismo nombre y se juntaron en un solo cliente. Confirmá que es una sola persona.",
+      "credits": "{n, plural, one {# crédito} other {# créditos}}",
+      "isThisOne": "Es esta persona",
+      "isNew": "Es otra persona",
+      "linked": "Créditos vinculados",
+      "confirmed": "Revisión cerrada",
+      "errors": {
+        "generic": "No se pudo guardar. Probá de nuevo."
+      }
     }
   },
   "team": {

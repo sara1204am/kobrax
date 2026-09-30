@@ -585,6 +585,15 @@ function Origin({ credit }: { credit: CreditDetail }) {
           <Item label={t('importedAt')} value={dateTime(credit.importedAt, locale)} />
         )}
         {credit.externalRef && <Item label={t('externalRef')} value={credit.externalRef} />}
+        {/* Operación externa (D1, D4, D9): de qué día son los números y si sigue viniendo en el reporte. */}
+        {credit.externalId && <Item label={t('externalId')} value={`${credit.externalSource ?? ''} ${credit.externalId}`.trim()} />}
+        {credit.reportedAsOf && <Item label={t('reportedAsOf')} value={day(credit.reportedAsOf)} />}
+        {credit.syncStatus && (
+          <Item
+            label={t('syncStatus')}
+            value={credit.syncStatus === 'ABSENT' && credit.absentSince ? t('syncAbsentSince', { date: day(credit.absentSince) }) : t(`sync.${credit.syncStatus}`)}
+          />
+        )}
       </dl>
       {/* Completitud: sólo se sabe de los importados desde la Fase 4, que guardan qué no trajo el archivo. */}
       {credit.unknownFields && (
@@ -598,6 +607,11 @@ function Origin({ credit }: { credit: CreditDetail }) {
       )}
     </>
   );
+}
+
+/** `YYYY-MM-DD` → `dd/mm/aaaa`: una fecha de corte, sin hora ni zona que la corran un día. */
+function day(iso: string): string {
+  return iso.slice(0, 10).split('-').reverse().join('/');
 }
 
 function Item({ label, value, hint }: { label: string; value: string; hint?: string }) {

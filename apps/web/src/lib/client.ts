@@ -13,7 +13,7 @@ interface JsonResult<T> {
 export async function sendJson<T = unknown>(
   path: string,
   body: unknown,
-  method: 'POST' | 'PATCH' | 'DELETE' = 'POST',
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE' = 'POST',
   headers: Record<string, string> = {},
 ): Promise<JsonResult<T>> {
   /*

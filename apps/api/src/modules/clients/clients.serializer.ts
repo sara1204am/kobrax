@@ -176,6 +176,8 @@ export function serializeClient(client: ClientWithRelations, opts: SerializeOpts
     nationalId: pii(nationalId, reveal, maskDocument),
     taxId: pii(taxId, reveal, maskDocument),
     status: client.status,
+    // D2 · opción B: cliente creado por la importación que puede ser alguien que ya existía.
+    linkReviewPending: client.linkReviewPending || undefined,
     preferredContactChannel: client.preferredContactChannel ?? undefined,
     riskSegment: client.riskSegment ?? undefined,
     /*

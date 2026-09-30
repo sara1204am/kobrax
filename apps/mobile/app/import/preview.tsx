@@ -105,28 +105,49 @@ export default function PreviewScreen() {
               </View>
             ) : (
               <>
+                {/* D8 · D9: de qué día y de qué asesor es el reporte. */}
+                {preview.report && (
+                  <Text style={styles.hint}>
+                    {preview.report.reportDate
+                      ? `Corte del ${preview.report.reportDate.split('-').reverse().join('/')}`
+                      : 'El reporte no dice su fecha de corte'}
+                    {preview.report.advisorCode ? ` · Asesor ${preview.report.advisorCode}` : ''}
+                  </Text>
+                )}
                 <SectionLabel>QUÉ VA A PASAR</SectionLabel>
                 <View style={styles.tiles}>
                   <StatTile label="Agregados" value={String(preview.counts.created)} />
                   <StatTile label="Actualizados" value={String(preview.counts.updated)} />
-                  <StatTile label="Al día" value={String(preview.counts.setCurrent)} />
+                  <StatTile label="Ya no vienen" value={String(preview.counts.absent ?? preview.counts.setCurrent)} />
                 </View>
 
                 <BucketList
                   title="Se agregan"
-                  items={preview.preview.toCreate.map((r) => ({ key: r.code, title: r.code, sub: r.clientName }))}
+                  items={preview.preview.toCreate.map((r) => ({
+                    key: r.code,
+                    title: r.code,
+                    // D2: el que se parece a un cliente que ya existe entra igual, marcado para revisar.
+                    sub: r.linkReview ? `${r.clientName} · revisar vínculo` : r.clientName,
+                  }))}
                 />
                 <BucketList
                   title="Se actualizan"
                   items={preview.preview.toUpdate.map((r) => ({ key: r.code, title: r.code }))}
                 />
+                {preview.preview.toUpdate.some((r) => r.reappeared) && (
+                  <BucketList
+                    title="Volvieron al reporte"
+                    items={preview.preview.toUpdate.filter((r) => r.reappeared).map((r) => ({ key: r.code, title: r.code }))}
+                    hint="Faltaban y este reporte las vuelve a traer. Se actualiza el mismo crédito."
+                  />
+                )}
                 <BucketList
-                  title="Pasan a al día"
-                  items={preview.preview.toSetCurrent.map((r, i) => ({
+                  title="Ya no vienen en el reporte"
+                  items={(preview.preview.toMarkAbsent ?? preview.preview.toSetCurrent).map((r, i) => ({
                     key: r.code ?? `s${i}`,
                     title: r.code ?? 'Sin número',
                   }))}
-                  hint="No vienen en el archivo. Quedan vigentes y sin atraso; el saldo no se toca."
+                  hint="No es un pago ni un cierre: el saldo y el estado quedan como estaban. Queda registrado desde qué día faltan."
                 />
 
                 {preview.counts.invalid > 0 && (
