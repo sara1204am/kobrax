@@ -2,9 +2,12 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  Param,
   Patch,
   Post,
+  Put,
   Query,
   UploadedFile,
   UseGuards,
@@ -78,11 +81,36 @@ export class PortfolioImportController {
     @UploadedFile() file: UploadedPortfolioFile | undefined,
     @Body('dryRun') dryRun?: string,
     @Query('columnsOnly') columnsOnly?: string,
+    // D9: la fecha de corte, si el reporte no la trae (o para corregirla). YYYY-MM-DD.
+    @Body('reportDate') reportDate?: string,
   ) {
     if (!file?.buffer) {
       throw new BadRequestException({ code: 'FILE_REQUIRED', message: 'Falta el archivo (campo file)' });
     }
     if (columnsOnly === 'true') return this.portfolio.readColumns(file.buffer);
-    return this.portfolio.run(file.buffer, dryRun === 'true');
+    return this.portfolio.run(file.buffer, dryRun === 'true', { reportDate: reportDate || undefined });
+  }
+
+  /**
+   * D8: de qué usuario es cada código de asesor de los reportes. El código no es la identidad del
+   * usuario: sólo dice de quién es un reporte, y con eso qué operaciones pueden quedar ausentes.
+   */
+  @Get('advisors')
+  @Roles(Permission.CLIENT_IMPORT)
+  listAdvisors() {
+    return this.portfolio.listAdvisorLinks();
+  }
+
+  @Put('advisors/:code')
+  @Roles(Permission.CLIENT_IMPORT)
+  linkAdvisor(@Param('code') code: string, @Body('userId') userId?: string) {
+    if (!userId) throw new BadRequestException({ code: 'USER_REQUIRED', message: 'Falta el usuario (userId)' });
+    return this.portfolio.linkAdvisor(code, userId);
+  }
+
+  @Delete('advisors/:code')
+  @Roles(Permission.CLIENT_IMPORT)
+  unlinkAdvisor(@Param('code') code: string) {
+    return this.portfolio.unlinkAdvisor(code);
   }
 }

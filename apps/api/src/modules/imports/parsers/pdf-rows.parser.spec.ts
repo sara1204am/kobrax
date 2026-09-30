@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { parsePdfRows } from './pdf-rows.parser';
-import { normalizeRecord } from '../field-catalog';
+import { looksLikeOperationCode, normalizeRecord } from '../field-catalog';
 
 // Muestra real: "REPORTE DE SEGUIMIENTO DE MORA", 10 registros en una tabla dentro de un PDF.
 // Es el formato que dejaba sin salida a los otros dos motores: no es texto (así que `rows` no
@@ -92,5 +92,53 @@ describe('pdf-rows.parser — una tabla adentro de un PDF', () => {
       headerCandidates.some((c) => c.preview.includes('Cliente') && c.preview.includes('Saldo')),
       'la fila de encabezados tiene que estar entre las que se ofrecen',
     );
+  });
+});
+
+// Cinco cortes diarios del mismo asesor (datos simulados de PSF). El mismo formato, cinco días: las
+// columnas tienen que salir IGUALES todos los días, o un emparejado hecho el lunes deja de leer el
+// saldo el martes. Antes pasaba: los montos van alineados a la derecha y su X de inicio baila con el
+// ancho del número, así que «Saldo» y «Cuota» quedaban en una sola columna según el día.
+const DAILY = ['20260928', '20260929', '20260930', '20261001', '20261002'].map((d) =>
+  resolve(here, `../../../../../../docs/flows/psf-diario/Reporte_Mora_${d}_CQE.pdf`),
+);
+const dailyFields = {
+  code: { from: 'Nº Operación' },
+  clientName: { from: 'Cliente' },
+  outstandingBalance: { from: 'Saldo Capital (Bs)' },
+  installmentAmount: { from: 'Cuota (Bs)' },
+  daysPastDue: { from: 'Días Atraso' },
+  status: { from: 'Estado' },
+  pastDueAmount: { from: 'Total a Cobrar (Bs)' },
+};
+
+describe('pdf-rows.parser — reportes diarios de un asesor', () => {
+  it('las columnas de la tabla son las mismas los cinco días', async () => {
+    const REAL = ['Nº Operación', 'Cliente', 'Monto Crédito (Bs)', 'Saldo Capital (Bs)', 'Cuota (Bs)', 'Plazo (M)', 'Días Atraso', 'Calif.', 'Estado', 'Cuotas Venc.', 'Monto Vencido (Bs)', 'Total a Cobrar (Bs)'];
+    for (const pdf of DAILY) {
+      const { labels } = await parsePdfRows(new Uint8Array(readFileSync(pdf)), { tableAnchor: 'Nº Operación' }, {});
+      for (const l of REAL) assert.ok(labels.includes(l), `${pdf}: falta la columna «${l}»`);
+    }
+  });
+
+  it('lee cada operación con sus números, y el marcador de alta "(N)" no es parte del nº', async () => {
+    const { records } = await parsePdfRows(new Uint8Array(readFileSync(DAILY[1]!)), { tableAnchor: 'Nº Operación' }, dailyFields);
+    const first = normalizeRecord(records[0]!);
+    assert.equal(first.code, '302-222-5381'); // viene "302-222-5381 (N)"
+    assert.equal(first.clientLastName, 'Elizabeth Chambi Ticona');
+    assert.equal(first.outstandingBalance, 13123.1);
+    assert.equal(first.installmentAmount, 505.33);
+    assert.equal(first.daysPastDue, 1);
+    assert.equal(first.status, 'Vigente en mora');
+  });
+
+  it('las filas de operaciones son las del día; el pie (totales, movimientos) no trae nº de operación', async () => {
+    const expected = [10, 13, 16, 15, 19];
+    for (const [i, pdf] of DAILY.entries()) {
+      const { records } = await parsePdfRows(new Uint8Array(readFileSync(pdf)), { tableAnchor: 'Nº Operación' }, dailyFields);
+      const ops = records.map((r) => normalizeRecord(r).code).filter((c) => c && looksLikeOperationCode(c));
+      assert.equal(ops.length, expected[i], pdf);
+      assert.equal(new Set(ops).size, ops.length, `${pdf}: nº repetido`);
+    }
   });
 });

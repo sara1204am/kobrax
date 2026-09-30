@@ -568,6 +568,101 @@ export class CreditsService {
 
   // ── Mora declarada a mano ──────────────────────────────────────────────────
   /**
+   * «Vincular a otro cliente» (D2 · opción B). El crédito —con sus casos, su agenda, sus paradas de
+   * ruta y sus pedidos de cobro— pasa al cliente elegido. **No se crea otro crédito**: es el mismo, con
+   * su historia, sus pagos y sus snapshots, colgado de la persona correcta.
+   *
+   * Si venía de un cliente provisional de la importación, la decisión se guarda como vínculo
+   * (`client_external_keys`): la próxima operación de esa persona entra directo a este cliente, sin
+   * volver a preguntar. Y si el provisional queda sin créditos, lo que tenía (teléfono, dirección) pasa
+   * al elegido donde a éste le falte, y el provisional se da de baja.
+   */
+  async linkClient(id: string, targetClientId: string): Promise<ReturnType<typeof serializeCredit>> {
+    const accountId = this.tenant.accountId;
+    const outcome = await this.tx(async (tx) => {
+      const credit = await tx.credit.findFirst({ where: { id, deletedAt: null } });
+      if (!credit) throw resourceNotFound();
+      const [from, to] = await Promise.all([
+        tx.client.findFirst({ where: { id: credit.clientId } }),
+        tx.client.findFirst({ where: { id: targetClientId, deletedAt: null } }),
+      ]);
+      if (!to || !from) throw resourceNotFound();
+      if (from.id === to.id) return { credit, fromId: from.id, keySaved: false, retired: false };
+
+      await tx.credit.update({ where: { id }, data: { clientId: to.id } });
+      const caseIds = (await tx.collectionCase.findMany({ where: { creditId: id }, select: { id: true } })).map((c) => c.id);
+      await tx.collectionCase.updateMany({ where: { creditId: id }, data: { clientId: to.id } });
+      if (caseIds.length > 0) {
+        await tx.routeStop.updateMany({ where: { caseId: { in: caseIds } }, data: { clientId: to.id } });
+      }
+      await tx.agendaItem.updateMany({ where: { creditId: id }, data: { clientId: to.id } });
+      await tx.paymentRequest.updateMany({ where: { creditId: id }, data: { clientId: to.id } });
+
+      // La decisión queda para las próximas importaciones: esta persona del reporte ES este cliente.
+      const fromMeta = (from.metadata ?? {}) as Record<string, unknown>;
+      const nameKeyOf = typeof fromMeta.externalNameKey === 'string' ? fromMeta.externalNameKey : null;
+      const source = credit.externalSource ?? (typeof fromMeta.externalSource === 'string' ? fromMeta.externalSource : null);
+      if (nameKeyOf && source) {
+        await tx.clientExternalKey.upsert({
+          where: { accountId_externalSource_keyType_key: { accountId, externalSource: source, keyType: 'NAME', key: nameKeyOf } },
+          create: { accountId, externalSource: source, keyType: 'NAME', key: nameKeyOf, clientId: to.id, confirmedBy: this.tenant.userId },
+          update: { clientId: to.id, confirmedBy: this.tenant.userId, deletedAt: null },
+        });
+      }
+
+      // El provisional que quedó vacío se da de baja; lo que el elegido no tenga, lo hereda.
+      let retired = false;
+      const remaining = await tx.credit.count({ where: { clientId: from.id, deletedAt: null } });
+      if (remaining === 0 && from.linkReviewPending) {
+        const [toContacts, toLocations] = await Promise.all([
+          tx.clientContact.count({ where: { clientId: to.id } }),
+          tx.clientLocation.count({ where: { clientId: to.id } }),
+        ]);
+        if (toContacts === 0) await tx.clientContact.updateMany({ where: { clientId: from.id }, data: { clientId: to.id } });
+        if (toLocations === 0) await tx.clientLocation.updateMany({ where: { clientId: from.id }, data: { clientId: to.id } });
+        await tx.client.update({ where: { id: from.id }, data: { deletedAt: new Date(), linkReviewPending: false } });
+        retired = true;
+      }
+      const after = await tx.credit.findFirst({ where: { id } });
+      return { credit: after!, fromId: from.id, keySaved: Boolean(nameKeyOf && source), retired };
+    });
+
+    await this.audit.record({
+      entity: 'credit',
+      entityId: id,
+      action: 'LINK_CLIENT',
+      before: { clientId: outcome.fromId },
+      after: { clientId: targetClientId, linkSaved: outcome.keySaved, provisionalRetired: outcome.retired },
+    });
+    return serializeCredit(outcome.credit, (await this.accountConfig()).labels);
+  }
+
+  /**
+   * «Es una persona nueva»: la revisión del cliente provisional se cierra sin moverlo (D2). También
+   * se guarda el vínculo, para que la próxima operación de esta persona no vuelva a preguntar.
+   */
+  async confirmClientLink(clientId: string): Promise<{ clientId: string; linkReviewPending: false }> {
+    const accountId = this.tenant.accountId;
+    await this.tx(async (tx) => {
+      const client = await tx.client.findFirst({ where: { id: clientId, deletedAt: null } });
+      if (!client) throw resourceNotFound();
+      const meta = (client.metadata ?? {}) as Record<string, unknown>;
+      await tx.client.update({ where: { id: clientId }, data: { linkReviewPending: false } });
+      if (typeof meta.externalNameKey === 'string' && typeof meta.externalSource === 'string') {
+        await tx.clientExternalKey.upsert({
+          where: {
+            accountId_externalSource_keyType_key: { accountId, externalSource: meta.externalSource, keyType: 'NAME', key: meta.externalNameKey },
+          },
+          create: { accountId, externalSource: meta.externalSource, keyType: 'NAME', key: meta.externalNameKey, clientId, confirmedBy: this.tenant.userId },
+          update: { clientId, confirmedBy: this.tenant.userId, deletedAt: null },
+        });
+      }
+    });
+    await this.audit.record({ entity: 'client', entityId: clientId, action: 'LINK_REVIEW_CONFIRMED' });
+    return { clientId, linkReviewPending: false };
+  }
+
+  /**
    * «Este préstamo está en mora», dicho por una persona.
    *
    * Es para quien presta sin cronograma y sabe que le deben sin mirar una fecha. Hace dos cosas y

@@ -151,6 +151,16 @@ export interface CreditMetadata {
    * (`suggestedPaymentAmount`); ausente = el reporte no lo trae.
    */
   pastDueAmount?: number;
+  /** Operación externa: la etiqueta de estado tal como la escribió el reporte ("Vigente en mora"). */
+  reportedStatus?: string;
+  /** Operación externa: el plazo en meses que dice el reporte. */
+  reportedTermMonths?: number;
+  /** Operación externa: fecha del último pago según el reporte (YYYY-MM-DD). */
+  lastPaymentDate?: string;
+  /** Operación externa: garante o referencia personal que trae el reporte. */
+  reportedGuarantor?: { name?: string; phone?: string };
+  /** Operación externa: el asesor del reporte que la trae (D8). Decide de qué cartera es la ausencia. */
+  externalAdvisorCode?: string;
   /** La corrida de importación que lo tocó por última vez (`client_import_runs.id`). */
   importRunId?: string;
   /** ISO: cuándo lo tocó esa corrida. */
@@ -192,6 +202,11 @@ export function readCreditMetadata(raw: unknown, originColumn?: string | null): 
     initialState: parseInitialState(m.initialState),
     importMissing: Array.isArray(m.importMissing) ? m.importMissing.filter(isImportTrackedField) : undefined,
     pastDueAmount: typeof m.pastDueAmount === 'number' ? m.pastDueAmount : undefined,
+    reportedStatus: typeof m.reportedStatus === 'string' ? m.reportedStatus : undefined,
+    reportedTermMonths: typeof m.reportedTermMonths === 'number' ? m.reportedTermMonths : undefined,
+    lastPaymentDate: typeof m.lastPaymentDate === 'string' ? m.lastPaymentDate : undefined,
+    reportedGuarantor: guarantorOf(m.reportedGuarantor),
+    externalAdvisorCode: typeof m.externalAdvisorCode === 'string' ? m.externalAdvisorCode : undefined,
     importRunId: typeof m.importRunId === 'string' ? m.importRunId : undefined,
     importedAt: typeof m.importedAt === 'string' ? m.importedAt : undefined,
     arrearsMethod: isEnumValue(ArrearsMethod, m.arrearsMethod) ? m.arrearsMethod : undefined,
@@ -204,6 +219,14 @@ export function readCreditMetadata(raw: unknown, originColumn?: string | null): 
  * `terms` + `termsVersion` juntos o ninguno. Una versión que este código no conoce se descarta
  * entera: interpretar mal unas condiciones es peor que no tenerlas.
  */
+function guarantorOf(v: unknown): CreditMetadata['reportedGuarantor'] {
+  if (typeof v !== 'object' || v === null) return undefined;
+  const g = v as Record<string, unknown>;
+  const name = typeof g.name === 'string' ? g.name : undefined;
+  const phone = typeof g.phone === 'string' ? g.phone : undefined;
+  return name || phone ? { name, phone } : undefined;
+}
+
 function readTerms(m: Record<string, unknown>): Pick<CreditMetadata, 'terms' | 'termsVersion'> {
   if (m.termsVersion !== CREDIT_TERMS_VERSION) return {};
   const terms = parseCreditTerms(m.terms);

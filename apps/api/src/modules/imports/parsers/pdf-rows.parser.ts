@@ -47,6 +47,12 @@ const ROW_BAND = 8;
 /** Tolerancia horizontal para decidir que dos items de filas distintas son la misma columna. */
 const COLUMN_BAND = 20;
 
+/**
+ * Hasta cuánto pueden diferir en X dos items de la misma fila y seguir siendo la misma celda: los
+ * renglones apilados de una celda partida arrancan en la misma X, con uno o dos píxeles de redondeo.
+ */
+const STACKED_BAND = 4;
+
 /** Cuántas filas se le ofrecen al usuario para que señale la de encabezados. */
 const HEADER_CANDIDATES = 12;
 
@@ -71,7 +77,7 @@ export async function parsePdfRows(
 // ── Parseo puro sobre los items (testeable sin PDF) ──────────────────────────
 
 /** Items agrupados en filas visuales, de arriba hacia abajo. */
-function visualRows(items: TextItem[]): TextItem[][] {
+export function visualRows(items: TextItem[]): TextItem[][] {
   const ordered = [...items].sort((a, b) => a.page - b.page || b.y - a.y || a.x - b.x);
   const rows: TextItem[][] = [];
   let current: TextItem[] = [];
@@ -150,18 +156,33 @@ interface Column {
  * ("No de" + "Oper.") caen en el mismo tramo y se unen solos.
  */
 function columnRanges(dataRows: TextItem[][], headerRow: TextItem[]): Column[] {
-  const xs = dataRows.flatMap((r) => r.map((i) => i.x)).sort((a, b) => a - b);
-  if (xs.length === 0) return [];
+  const points = dataRows
+    .flatMap((r, row) => r.map((i) => ({ x: i.x, row })))
+    .sort((a, b) => a.x - b.x);
+  if (points.length === 0) return [];
 
-  // Agrupa las X en columnas: una X nueva abre columna sólo si se despega de la anterior.
+  /*
+   * Agrupa las X en columnas: una X nueva abre columna si se despega de la anterior, **o si su fila
+   * ya tiene un valor al lado en esta columna**. Lo segundo es lo que la hace estable: los números
+   * van alineados a la derecha, así que su X de inicio baila con el ancho ("1,996.85" y "13,972.33"),
+   * y encadenando por cercanía solamente, un día «Saldo» y «Cuota» quedaban en una sola columna y
+   * otro día no — con el mismo formato de reporte. Dos valores de la misma fila, uno al lado del
+   * otro, nunca son una sola celda. Uno ARRIBA del otro sí (una dirección partida en dos renglones):
+   * esos empiezan en la misma X y no parten la columna.
+   */
   const centers: number[] = [];
-  let group: number[] = [xs[0]!];
-  for (const x of xs.slice(1)) {
-    if (x - group[group.length - 1]! <= COLUMN_BAND) {
-      group.push(x);
+  let group: number[] = [points[0]!.x];
+  let rowsInGroup = new Map<number, number>([[points[0]!.row, points[0]!.x]]);
+  for (const p of points.slice(1)) {
+    const sameRowX = rowsInGroup.get(p.row);
+    const sideBySide = sameRowX !== undefined && p.x - sameRowX > STACKED_BAND;
+    if (p.x - group[group.length - 1]! <= COLUMN_BAND && !sideBySide) {
+      group.push(p.x);
+      if (sameRowX === undefined) rowsInGroup.set(p.row, p.x);
     } else {
       centers.push(median(group));
-      group = [x];
+      group = [p.x];
+      rowsInGroup = new Map([[p.row, p.x]]);
     }
   }
   centers.push(median(group));

@@ -7,6 +7,8 @@ import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
+import { CryptoService } from '../../common/crypto/crypto.service';
+import { BlindIndexService } from '../../common/crypto/blind-index.service';
 import { parsePdfBlocks, type ColumnCandidate, type FieldMap } from './parsers/pdf-blocks.parser';
 import { parsePdfRows } from './parsers/pdf-rows.parser';
 import { parseRowsFile } from './parsers/rows.parser';
@@ -25,7 +27,17 @@ import {
   type ImportConfigPatch,
 } from './import-config';
 import { planPortfolioImport, type ExistingCredit, type PortfolioRow } from './portfolio-plan';
-import { creditCreateData, creditUpdateData, mapStatus, type ImportStamp } from './portfolio-credit';
+import {
+  creditCreateData,
+  creditUpdateData,
+  FILE_SOURCE,
+  mapStatus,
+  snapshotData,
+  type ImportStamp,
+  type RowContext,
+} from './portfolio-credit';
+import { documentLines, readReportMeta, type ReportMeta } from './report-meta';
+import { nameKey, resolveClients, searchWords } from './client-match';
 
 /** La config del tenant + lo derivado que necesita una corrida. */
 interface RunConfig extends ImportConfig {
@@ -41,6 +53,9 @@ interface LastRun {
   updated: number;
   setCurrent: number;
   errors: number;
+  /** Fecha de corte del último reporte aplicado (YYYY-MM-DD), y de qué asesor era. */
+  reportDate?: string | null;
+  advisorCode?: string | null;
 }
 
 /** Candidatos de `scope.ref` para la pantalla de Ajustes (FIELD-RULES §6.4). */
@@ -55,12 +70,29 @@ interface ScopeBranch {
   name: string;
 }
 
+interface Counts {
+  created: number;
+  updated: number;
+  setCurrent: number;
+  invalid: number;
+  /** Operaciones que faltan del reporte por primera vez (D4). */
+  absent: number;
+  /** Operaciones que faltaban y volvieron (D4). */
+  reappeared: number;
+  /** Clientes nuevos que quedan marcados «Revisar vínculo» (D2 · opción B). */
+  needsReview: number;
+  /** Filas que no son registros: totales y notas debajo de la tabla. */
+  ignored: number;
+}
+
 interface PortfolioSummary {
   dryRun: boolean;
   idempotentSkip: boolean;
   runId?: string;
   scope: ImportConfig['scope'];
-  counts: { created: number; updated: number; setCurrent: number; invalid: number };
+  counts: Counts;
+  /** De qué fecha de corte y de qué asesor es el reporte, y a qué alcance se aplica (D8, D9). */
+  report?: { reportDate: string | null; advisorCode: string | null; scope: string };
   /**
    * El tope de créditos contra lo que este archivo quiere crear. Ausente = el plan no tiene tope.
    * Va en la vista previa para poder avisar ANTES de confirmar (LIMITES §5.2, Pregunta 10).
@@ -68,14 +100,30 @@ interface PortfolioSummary {
   plan?: { roomLeft: number; over: number };
   // Baldes para la Vista Previa (obligatoria antes de confirmar). "Eliminados" no existe: nunca borra.
   preview: {
-    toCreate: { code: string; clientName: string }[];
-    toUpdate: { code: string }[];
+    toCreate: { code: string; clientName: string; existingClient?: boolean; linkReview?: boolean }[];
+    toUpdate: { code: string; reappeared?: boolean }[];
     toSetCurrent: { code: string | null }[];
+    toMarkAbsent: { code: string | null }[];
     invalid: { index: number; reason: string }[];
     // Advertencias que NO frenan la fila (§5): la fila se importa igual y se avisa.
     warnings: { index?: number; code: string; detail?: string }[];
   };
 }
+
+/** Una operación que apareció, faltó o volvió: va a la auditoría como evento del crédito (§13). */
+interface TransitionEvent {
+  creditId: string;
+  action: 'EXTERNAL_APPEARED' | 'EXTERNAL_ABSENT' | 'EXTERNAL_REAPPEARED';
+  externalId: string;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+}
+
+/**
+ * Tope de clientes candidatos que se traen para sugerir coincidencias por nombre. Una palabra muy
+ * común ("MAMANI") puede traer miles; más allá de esto la sugerencia deja de servir igual.
+ */
+const MAX_CANDIDATES = 5000;
 
 @Injectable()
 export class PortfolioImportService {
@@ -84,13 +132,15 @@ export class PortfolioImportService {
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
     private readonly plan: PlanLimitsService,
+    private readonly crypto: CryptoService,
+    private readonly blind: BlindIndexService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
   }
 
-  async run(file: Buffer, dryRun: boolean): Promise<PortfolioSummary> {
+  async run(file: Buffer, dryRun: boolean, opts: { reportDate?: string } = {}): Promise<PortfolioSummary> {
     const config = await this.importConfig();
     if (config.source === 'manual') {
       throw new BadRequestException({ code: 'IMPORT_DISABLED', message: 'El tenant carga a mano (source=manual)' });
@@ -98,13 +148,21 @@ export class PortfolioImportService {
     assertRunnable(config);
     assertFileShape(file, config.profile.kind);
 
+    // D9: una fecha que llega a mano tiene que ser una fecha, y no del futuro.
+    const explicitDate = opts.reportDate ? isoDay(opts.reportDate) : null;
+    if (opts.reportDate && (!explicitDate || explicitDate > isoDay(new Date().toISOString())!)) {
+      throw new BadRequestException({ code: 'INVALID_REPORT_DATE', message: 'La fecha de corte no es válida' });
+    }
+
     // Parseo server-side (fuera de la transacción), con el motor que pida el perfil.
     // Errores de lectura (firma, tope anti-DoS, archivo corrupto) → 400, no 500.
     let blocks: NormalizedRecord[];
+    let meta: ReportMeta;
     try {
       const { profile, fieldMap } = config;
       const raw = await readWithProfile(file, profile, fieldMap);
       blocks = raw.map((r) => normalizeRecord(r, config.nameOrder));
+      meta = readReportMeta(await documentLines(file, profile.kind));
     } catch (e) {
       const message = e instanceof Error ? e.message : 'No se pudo leer el archivo';
       const code = message.includes('SIGNATURE_MISMATCH') ? 'SIGNATURE_MISMATCH' : 'PARSE_FAILED';
@@ -119,9 +177,14 @@ export class PortfolioImportService {
       });
     }
 
+    // D9: la fecha de corte. La que se indica a mano manda sobre la del documento; sin ninguna, los
+    // números se guardan igual pero sin fecha, y la vista previa lo dice.
+    const reportDate = explicitDate ?? meta.reportDate ?? null;
+    const reportAsOf = reportDate ? new Date(`${reportDate}T00:00:00.000Z`) : null;
+    const advisorCode = meta.advisorCode;
+
     const fileHash = createHash('sha256').update(file).digest('hex');
     const accountId = this.tenant.accountId;
-    const scope = config.scope;
 
     const result = await this.tx(async (tx) => {
       // Idempotencia: mismo archivo ya aplicado → no-op.
@@ -131,48 +194,88 @@ export class PortfolioImportService {
           return {
             idempotentSkip: true,
             runId: prev.id,
-            counts: { created: prev.creditsCreated, updated: prev.creditsUpdated, setCurrent: prev.creditsSetCurrent, invalid: prev.errors },
+            scope: config.scope,
+            counts: { ...emptyCounts(), created: prev.creditsCreated, updated: prev.creditsUpdated, setCurrent: prev.creditsSetCurrent, invalid: prev.errors },
             preview: emptyPreview(),
+            transitions: [] as TransitionEvent[],
           };
         }
       }
 
-      // Existentes de la CUENTA ENTERA (todo scope, incl. borrados). El `@@unique([accountId,code])`
-      // es account-wide → el matching de colisión DEBE cubrir ese dominio: si filtrara por scope o
-      // por `deletedAt: null`, un code fuera de alcance o soft-deleted caería en toCreate y estallaría
-      // con P2002 abortando la corrida entera. `eligible` = activo (no borrado) y dentro del alcance
-      // → único candidato real a update / set-current (D-SCOPE).
-      // `account` = el archivo cubre TODA la cuenta → no filtra por agencia ni por oficial (§2.4).
+      /*
+       * D8 · El alcance efectivo. Un reporte que dice de qué asesor es cubre SÓLO la cartera de ese
+       * asesor: lo que no trae, falta de su cartera, no de la de todos. Con el asesor vinculado a un
+       * usuario, el alcance es ese usuario. Sin vínculo y con alcance «toda la empresa», importar
+       * pondría ausentes a las operaciones de los demás asesores → se frena y se dice cómo seguir.
+       */
+      let scope: ImportConfig['scope'] = config.scope;
+      let advisorUserId: string | undefined;
+      if (advisorCode) {
+        const link = await tx.externalAdvisorLink.findFirst({
+          where: { accountId, externalSource: FILE_SOURCE, advisorCode, deletedAt: null },
+        });
+        if (link) {
+          advisorUserId = link.userId;
+          scope = { kind: 'official', ref: link.userId };
+        } else if (config.scope.kind === 'account') {
+          throw new BadRequestException({
+            code: 'ADVISOR_NOT_LINKED',
+            message: `El reporte es del asesor ${advisorCode}, que no está vinculado a ningún usuario. Vinculalo en Ajustes › Importación › Asesores para que sus operaciones no se crucen con las de los demás.`,
+            details: { advisorCode },
+          });
+        }
+      }
+      const scopeText = scopeLabel(scope);
+
+      // D9 · Un reporte con fecha de corte anterior al último aplicado en el mismo alcance no pisa nada.
+      if (reportAsOf) {
+        const last = await tx.clientImportRun.findFirst({
+          where: { accountId, externalSource: FILE_SOURCE, scope: scopeText, status: 'DONE', reportAsOf: { not: null } },
+          orderBy: { reportAsOf: 'desc' },
+        });
+        if (last?.reportAsOf && reportAsOf.getTime() < last.reportAsOf.getTime()) {
+          throw new BadRequestException({
+            code: 'REPORT_OUTDATED',
+            message: `Este reporte es del ${fmtDay(reportAsOf)} y ya se aplicó uno del ${fmtDay(last.reportAsOf)}. Un reporte más viejo no pisa datos más nuevos.`,
+            details: { reportDate, lastReportDate: isoDay(last.reportAsOf.toISOString()) },
+          });
+        }
+      }
+
+      // Todas las operaciones externas de la cuenta (incl. borradas y de otros alcances): la identidad
+      // es única en toda la cuenta, así que el match tiene que verlas a todas (ver `portfolio-plan`).
       const inScope = (c: { branchId: string | null; assignedManagerId: string | null }): boolean =>
-        scope.kind === 'account'
-          ? true
-          : scope.kind === 'official'
-            ? c.assignedManagerId === scope.ref
-            : c.branchId === scope.ref;
+        scope.kind === 'account' ? true : scope.kind === 'official' ? c.assignedManagerId === scope.ref : c.branchId === scope.ref;
       const existing = await tx.credit.findMany({
-        where: { accountId },
+        where: { accountId, externalSource: FILE_SOURCE },
         select: {
           id: true,
           code: true,
+          externalId: true,
           clientId: true,
           deletedAt: true,
           branchId: true,
           assignedManagerId: true,
           status: true,
-          origin: true,
+          syncStatus: true,
+          outstandingBalance: true,
+          daysPastDue: true,
           metadata: true,
         },
       });
-      const metaById = new Map(existing.map((c) => [c.id, (c.metadata ?? {}) as Record<string, unknown>]));
-      const codeById = new Map(existing.map((c) => [c.id, c.code]));
-      // Al crédito ya emparejado se llega por el archivo; a SU cliente, sólo por acá.
-      const clientIdByCredit = new Map(existing.map((c) => [c.id, c.clientId]));
+      const byId = new Map(existing.map((c) => [c.id, c]));
+      // Con asesor en el reporte, sus operaciones se reconocen por el asesor que ya tienen guardado;
+      // las importadas antes de guardarlo, por el alcance.
+      const inReportScope = (c: (typeof existing)[number]): boolean => {
+        const saved = readCreditMetadata(c.metadata).externalAdvisorCode;
+        return advisorCode && saved ? saved === advisorCode : inScope(c);
+      };
       const existingCredits: ExistingCredit[] = existing.map((c) => ({
         id: c.id,
-        code: c.code,
-        origin: readCreditMetadata(c.metadata, c.origin).origin,
-        eligible: c.deletedAt === null && inScope(c),
+        externalId: c.externalId,
+        eligible: c.deletedAt === null && inReportScope(c),
         closed: c.status !== CreditStatus.ACTIVE,
+        syncStatus: c.syncStatus,
       }));
 
       const rows: PortfolioRow[] = blocks.map((b, index) => ({
@@ -185,19 +288,79 @@ export class PortfolioImportService {
         required: config.required,
       });
 
+      // D2 · A qué cliente va cada operación nueva.
+      const creates = plan.toCreate.map((r) => ({ row: r, b: r.data as unknown as NormalizedRecord }));
+      const idHashOf = new Map(
+        creates.map((c) => [c.row.index, c.b.clientNationalId ? this.blind.hash(c.b.clientNationalId) : null] as const),
+      );
+      const keys = [...new Set(creates.map((c) => nameKey(clientLabel(c.b))).filter((k): k is string => k !== null))];
+      const words = [...new Set(creates.flatMap((c) => searchWords(clientLabel(c.b))))];
+      const hashes = [...idHashOf.values()].filter((h): h is string => !!h);
+      const [linkedKeys, candidates] = await Promise.all([
+        keys.length > 0
+          ? tx.clientExternalKey.findMany({
+              where: { accountId, externalSource: FILE_SOURCE, keyType: 'NAME', key: { in: keys }, deletedAt: null, client: { deletedAt: null } },
+              select: { key: true, clientId: true },
+            })
+          : [],
+        words.length > 0 || hashes.length > 0
+          ? tx.client.findMany({
+              where: {
+                accountId,
+                deletedAt: null,
+                OR: [
+                  ...words.flatMap((w) => [
+                    { lastName: { contains: w, mode: 'insensitive' as const } },
+                    { firstName: { contains: w, mode: 'insensitive' as const } },
+                  ]),
+                  ...(hashes.length > 0 ? [{ nationalIdHash: { in: hashes } }] : []),
+                ],
+              },
+              select: { id: true, firstName: true, lastName: true, businessName: true, nationalIdHash: true },
+              take: MAX_CANDIDATES,
+            })
+          : [],
+      ]);
+      const resolution = resolveClients(
+        creates.map((c) => ({ index: c.row.index, fullName: clientLabel(c.b), nationalIdHash: idHashOf.get(c.row.index) })),
+        { linkedByName: new Map(linkedKeys.map((k) => [k.key, k.clientId])), candidates },
+      );
+      const needsReview = creates.filter((c) => {
+        const r = resolution.get(c.row.index);
+        return r?.kind === 'new' && r.review;
+      });
+      const newGroups = new Set(
+        creates.flatMap((c) => {
+          const r = resolution.get(c.row.index);
+          return r?.kind === 'new' ? [r.group] : [];
+        }),
+      );
+
+      const codeOf = (id: string): string | null => byId.get(id)?.externalId ?? byId.get(id)?.code ?? null;
       const preview: PortfolioSummary['preview'] = {
-        toCreate: plan.toCreate.map((r) => ({ code: r.code, clientName: clientLabel(r.data as unknown as NormalizedRecord) })),
-        toUpdate: plan.toUpdate.map((u) => ({ code: u.row.code })),
-        toSetCurrent: plan.toSetCurrent.map((id) => ({ code: codeById.get(id) ?? null })),
+        toCreate: creates.map((c) => ({
+          code: c.row.code,
+          clientName: clientLabel(c.b),
+          ...(resolution.get(c.row.index)?.kind === 'existing' ? { existingClient: true } : {}),
+          ...(needsReview.includes(c) ? { linkReview: true } : {}),
+        })),
+        toUpdate: plan.toUpdate.map((u) => ({ code: u.row.code, ...(u.reappeared ? { reappeared: true } : {}) })),
+        toSetCurrent: plan.toSetCurrent.map((id) => ({ code: codeOf(id) })),
+        toMarkAbsent: plan.toMarkAbsent.map((id) => ({ code: codeOf(id) })),
         invalid: plan.invalid,
-        warnings: moraWarnings(blocks, config),
+        warnings: [...moraWarnings(blocks, config), ...(reportDate ? [] : [{ code: 'REPORT_DATE_UNKNOWN' }])],
       };
       const counts = {
         created: plan.toCreate.length,
         updated: plan.toUpdate.length,
         setCurrent: plan.toSetCurrent.length,
         invalid: plan.invalid.length,
+        absent: plan.toMarkAbsent.length,
+        reappeared: plan.toUpdate.filter((u) => u.reappeared).length,
+        needsReview: needsReview.length,
+        ignored: plan.ignored,
       };
+      const report = { reportDate, advisorCode: advisorCode ?? null, scope: scopeText };
 
       /*
        * 🔴 El tope de créditos, ANTES de escribir y también en la vista previa.
@@ -210,68 +373,115 @@ export class PortfolioImportService {
        * puede decir «trae 500 y te quedan 80» antes de que nadie confirme nada.
        */
       const roomLeft = await this.plan.roomLeft('credits', tx);
-      const planInfo =
-        roomLeft === null ? undefined : { roomLeft, over: Math.max(0, counts.created - roomLeft) };
+      const planInfo = roomLeft === null ? undefined : { roomLeft, over: Math.max(0, counts.created - roomLeft) };
 
-      if (dryRun) return { idempotentSkip: false, counts, preview, plan: planInfo };
-      // Los dos topes, aunque hoy los planes les den el mismo número: el archivo crea un cliente
-      // por crédito nuevo, y una excepción negociada puede separarlos.
+      if (dryRun) return { idempotentSkip: false, scope, counts, preview, report, plan: planInfo, transitions: [] as TransitionEvent[] };
       await this.plan.assertRoom('credits', tx, { cuantos: counts.created });
-      await this.plan.assertRoom('clients', tx, { cuantos: counts.created });
+      await this.plan.assertRoom('clients', tx, { cuantos: newGroups.size });
 
       // Aplicar (atómico dentro del tenant). NUNCA borra (§4 del plan).
-      // Create batcheado: 2 createMany (clientes + créditos) en vez de 2N inserts en serie —
-      // un extracto de banco puede traer miles de créditos. Los ids de cliente se pre-generan
-      // en app para enlazar crédito↔cliente sin depender del id devuelto por cada insert.
-      // El id de la corrida se genera antes: cada crédito que toca guarda de qué corrida vino.
+      // Ids pre-generados en app: enlazan crédito↔cliente y crédito↔snapshot sin depender de lo que
+      // devuelva cada insert, y dejan los altas en dos `createMany` en vez de 2N inserts en serie.
       const stamp: ImportStamp = { runId: randomUUID(), at: new Date().toISOString() };
+      const rowCtx: RowContext = {
+        reportAsOf,
+        advisorCode,
+        balanceBasis: config.balanceBasis,
+        statusMap: config.statusMap as Record<string, CreditStatus> | undefined,
+      };
       const touched: ContactGap[] = [];
-      if (plan.toCreate.length > 0) {
+      const snapshots: Prisma.CreditExternalSnapshotCreateManyInput[] = [];
+      const transitions: TransitionEvent[] = [];
+
+      if (creates.length > 0) {
+        const clientByGroup = new Map<string, string>();
         const clientsData: Prisma.ClientCreateManyInput[] = [];
         const creditsData: Prisma.CreditCreateManyInput[] = [];
-        for (const r of plan.toCreate) {
-          const b = r.data as unknown as NormalizedRecord;
-          // El archivo no trae carnet → cliente sin nationalId. El corte apellido/nombre lo decidió
-          // el usuario con `nameOrder` (§2.3): acá ya viene resuelto por `normalizeRecord`.
-          const clientId = randomUUID();
-          clientsData.push({
-            id: clientId,
-            accountId,
-            clientType: ClientType.PERSON,
-            lastName: b.clientLastName ?? 'SIN NOMBRE',
-            firstName: b.clientFirstName ?? undefined,
-          });
-          creditsData.push(creditCreateData(accountId, clientId, b, scope, stamp));
+        for (const { row, b } of creates) {
+          const res = resolution.get(row.index)!;
+          let clientId: string;
+          if (res.kind === 'existing') {
+            clientId = res.clientId;
+          } else if (clientByGroup.has(res.group)) {
+            clientId = clientByGroup.get(res.group)!;
+          } else {
+            clientId = randomUUID();
+            clientByGroup.set(res.group, clientId);
+            const hash = idHashOf.get(row.index);
+            // El corte apellido/nombre lo decidió el usuario con `nameOrder` (§2.3): ya viene resuelto.
+            clientsData.push({
+              id: clientId,
+              accountId,
+              clientType: ClientType.PERSON,
+              lastName: b.clientLastName ?? 'SIN NOMBRE',
+              firstName: b.clientFirstName ?? undefined,
+              ...(hash && b.clientNationalId ? { nationalId: this.crypto.encrypt(b.clientNationalId), nationalIdHash: hash } : {}),
+              // D2 · opción B: la duda no frena la cobranza. Entra marcado y con sus sugerencias.
+              linkReviewPending: res.review,
+              metadata: {
+                ...(res.nameKey ? { externalNameKey: res.nameKey, externalSource: FILE_SOURCE } : {}),
+                ...(res.review ? { linkSuggestions: res.suggestions, linkReason: res.suggestions.length > 0 ? 'NAME_MATCH' : 'SAME_NAME_IN_FILE' } : {}),
+              },
+            });
+          }
+          const creditId = randomUUID();
+          creditsData.push(
+            creditCreateData(accountId, clientId, b, scope, stamp, { ...rowCtx, id: creditId, assignedManagerId: advisorUserId }),
+          );
+          snapshots.push(snapshotData(accountId, creditId, row.code, stamp.runId, reportAsOf, b));
+          transitions.push({ creditId, action: 'EXTERNAL_APPEARED', externalId: row.code, after: reported(b) });
           touched.push({ clientId, b });
         }
-        await tx.client.createMany({ data: clientsData });
+        if (clientsData.length > 0) await tx.client.createMany({ data: clientsData });
         await tx.credit.createMany({ data: creditsData });
       }
+
       for (const u of plan.toUpdate) {
         const b = u.row.data as unknown as NormalizedRecord;
-        await this.updateCredit(tx, u.id, b, metaById.get(u.id) ?? {}, stamp);
-        const clientId = clientIdByCredit.get(u.id);
-        if (clientId) touched.push({ clientId, b });
+        const prev = byId.get(u.id)!;
+        await tx.credit.update({
+          where: { id: u.id },
+          data: creditUpdateData(b, (prev.metadata ?? {}) as Record<string, unknown>, stamp, { ...rowCtx, prevStatus: prev.status }),
+        });
+        snapshots.push(snapshotData(accountId, u.id, u.row.code, stamp.runId, reportAsOf, b));
+        if (u.reappeared) transitions.push({ creditId: u.id, action: 'EXTERNAL_REAPPEARED', externalId: u.row.code, after: reported(b) });
+        touched.push({ clientId: prev.clientId, b });
       }
+
       // Contacto y dirección van al final y por una vía aparte: no son campos del crédito, y su
       // regla es rellenar huecos, no pisar (ver `fillContactGaps`).
       await fillContactGaps(tx, accountId, touched);
+
       if (plan.toSetCurrent.length > 0) {
-        // Ausente del archivo → al día. Saldo y ESTADO intactos: la ausencia no es un pago ni un cierre
-        // (D4). El `status` del where es la segunda llave: el plan ya excluye los cerrados.
+        // Con la regla 'set-current', la mora del ausente activo queda en 0: no está en el reporte de
+        // mora. Saldo y ESTADO intactos: la ausencia no es un pago ni un cierre (D4). El `status`
+        // del where es la segunda llave: el plan ya excluye los cerrados.
         await tx.credit.updateMany({
           where: { id: { in: plan.toSetCurrent }, status: CreditStatus.ACTIVE },
           data: { daysPastDue: 0 },
         });
-        // Y queda registrado que faltó (D4): sólo en la transición, así `absent_since` guarda el primer
-        // día de la ausencia y no el último. La fecha es la de la corrida hasta que el reporte traiga
-        // su fecha de corte (fase 5).
-        await tx.credit.updateMany({
-          // `OR` y no `not: ABSENT`: en SQL `NULL <> 'ABSENT'` no es verdadero y dejaría afuera a los NULL.
-          where: { id: { in: plan.toSetCurrent }, OR: [{ syncStatus: null }, { syncStatus: ExternalSyncStatus.PRESENT }] },
-          data: { syncStatus: ExternalSyncStatus.ABSENT, absentSince: new Date(stamp.at.slice(0, 10)) },
-        });
       }
+      if (plan.toMarkAbsent.length > 0) {
+        // La ausencia se registra en la transición (D4): `absent_since` es la fecha de corte del primer
+        // reporte que no la trajo; sin fecha de corte, el día de la corrida.
+        await tx.credit.updateMany({
+          where: { id: { in: plan.toMarkAbsent } },
+          data: { syncStatus: ExternalSyncStatus.ABSENT, absentSince: reportAsOf ?? new Date(stamp.at.slice(0, 10)) },
+        });
+        for (const id of plan.toMarkAbsent) {
+          const prev = byId.get(id)!;
+          const externalId = prev.externalId ?? prev.code ?? id;
+          snapshots.push(snapshotData(accountId, id, externalId, stamp.runId, reportAsOf, null));
+          transitions.push({
+            creditId: id,
+            action: 'EXTERNAL_ABSENT',
+            externalId,
+            // Lo último que se sabía: con esto se contesta «qué saldo y mora tenía antes de faltar».
+            before: { outstandingBalance: Number(prev.outstandingBalance), daysPastDue: prev.daysPastDue, status: prev.status },
+          });
+        }
+      }
+      if (snapshots.length > 0) await tx.creditExternalSnapshot.createMany({ data: snapshots });
 
       const run = await tx.clientImportRun.create({
         data: {
@@ -282,18 +492,20 @@ export class PortfolioImportService {
           mode: 'RECONCILE',
           status: 'DONE',
           template: config.profile.kind,
-          // Sin `ref` (alcance de empresa) se guarda la clase a secas: `${kind}:${ref}` escribía
-          // literalmente "account:null" en el historial, que además ahora se le muestra al usuario
-          // en la tarjeta de última importación (FIELD-RULES §8 · item 14).
-          scope: scopeLabel(scope),
+          // Sin `ref` (alcance de empresa) se guarda la clase a secas (FIELD-RULES §8 · item 14).
+          scope: scopeText,
+          externalSource: FILE_SOURCE,
+          reportAsOf,
+          advisorCode,
           creditsCreated: counts.created,
           creditsUpdated: counts.updated,
           creditsSetCurrent: counts.setCurrent,
+          needsReview: counts.needsReview,
           errors: counts.invalid,
           createdBy: this.tenant.userId,
         },
       });
-      return { idempotentSkip: false, runId: run.id, counts, preview, plan: planInfo };
+      return { idempotentSkip: false, runId: run.id, scope, counts, preview, report, plan: planInfo, transitions };
     });
 
     if (!dryRun && !result.idempotentSkip) {
@@ -301,10 +513,80 @@ export class PortfolioImportService {
         entity: 'portfolio_import',
         entityId: result.runId ?? fileHash,
         action: 'IMPORT',
-        after: { template: config.profile.kind, scope: scopeLabel(scope), ...result.counts },
+        after: { template: config.profile.kind, scope: scopeLabel(result.scope), reportDate, advisorCode, ...result.counts },
       });
+      // Un evento por operación que apareció, faltó o volvió (§13). Lo que cambió día a día sin
+      // transición está en los snapshots, no en la auditoría: sería una fila por crédito por día.
+      await this.audit.recordMany(
+        result.transitions.map((t) => ({
+          entity: 'credit',
+          entityId: t.creditId,
+          action: t.action,
+          before: t.before,
+          after: { runId: result.runId, reportDate, externalId: t.externalId, ...(t.after ?? {}) },
+        })),
+      );
     }
-    return { dryRun, scope, ...result };
+    const { transitions: _omit, ...summary } = result;
+    void _omit;
+    return { dryRun, ...summary };
+  }
+
+  // ── Asesores del reporte → usuarios (D8) ───────────────────────────────────
+
+  /** Los vínculos vigentes, más los códigos que ya trajeron los reportes y todavía no tienen usuario. */
+  async listAdvisorLinks(): Promise<{ links: { advisorCode: string; userId: string }[]; unlinked: string[] }> {
+    const accountId = this.tenant.accountId;
+    const [links, seen] = await this.tx((tx) =>
+      Promise.all([
+        tx.externalAdvisorLink.findMany({
+          where: { accountId, externalSource: FILE_SOURCE, deletedAt: null },
+          select: { advisorCode: true, userId: true },
+          orderBy: { advisorCode: 'asc' },
+        }),
+        tx.clientImportRun.findMany({
+          where: { accountId, externalSource: FILE_SOURCE, advisorCode: { not: null } },
+          select: { advisorCode: true },
+          distinct: ['advisorCode'],
+        }),
+      ]),
+    );
+    const linked = new Set(links.map((l) => l.advisorCode));
+    const unlinked = seen.map((r) => r.advisorCode!).filter((c) => !linked.has(c)).sort();
+    return { links, unlinked };
+  }
+
+  async linkAdvisor(rawCode: string, userId: string): Promise<{ advisorCode: string; userId: string }> {
+    const advisorCode = rawCode.trim().toUpperCase();
+    if (!/^[A-Z0-9]{2,12}$/.test(advisorCode)) {
+      throw new BadRequestException({ code: 'INVALID_ADVISOR_CODE', message: 'El código de asesor no es válido' });
+    }
+    const accountId = this.tenant.accountId;
+    const saved = await this.tx(async (tx) => {
+      const member = await tx.userAccount.findFirst({ where: { userId, isActive: true } });
+      if (!member) throw new BadRequestException({ code: 'USER_NOT_MEMBER', message: 'Ese usuario no es parte de la empresa' });
+      return tx.externalAdvisorLink.upsert({
+        where: { accountId_externalSource_advisorCode: { accountId, externalSource: FILE_SOURCE, advisorCode } },
+        create: { accountId, externalSource: FILE_SOURCE, advisorCode, userId },
+        update: { userId, deletedAt: null },
+        select: { advisorCode: true, userId: true },
+      });
+    });
+    await this.audit.record({ entity: 'external_advisor_link', entityId: advisorCode, action: 'UPSERT', after: saved });
+    return saved;
+  }
+
+  async unlinkAdvisor(rawCode: string): Promise<{ advisorCode: string }> {
+    const advisorCode = rawCode.trim().toUpperCase();
+    const accountId = this.tenant.accountId;
+    await this.tx((tx) =>
+      tx.externalAdvisorLink.updateMany({
+        where: { accountId, externalSource: FILE_SOURCE, advisorCode, deletedAt: null },
+        data: { deletedAt: new Date() },
+      }),
+    );
+    await this.audit.record({ entity: 'external_advisor_link', entityId: advisorCode, action: 'DELETE' });
+    return { advisorCode };
   }
 
   // ── Configuración (N3) ─────────────────────────────────────────────────────
@@ -352,6 +634,8 @@ export class PortfolioImportService {
             updated: run.creditsUpdated,
             setCurrent: run.creditsSetCurrent,
             errors: run.errors,
+            reportDate: run.reportAsOf ? run.reportAsOf.toISOString().slice(0, 10) : null,
+            advisorCode: run.advisorCode,
           }
         : null,
       // Se devuelven TODOS los miembros activos con su rol, sin filtrar por COLLECTOR: quien lleva
@@ -469,16 +753,6 @@ export class PortfolioImportService {
     // exige config es importar, así que la exigencia vive en `run()` (ver `assertRunnable`).
     return { ...cfg, fieldMap: toFieldMap(cfg.fields), required: requiredFields(cfg.fields) };
   }
-
-  private async updateCredit(
-    tx: PrismaClient,
-    id: string,
-    b: NormalizedRecord,
-    prevMeta: Record<string, unknown>,
-    stamp: ImportStamp,
-  ): Promise<void> {
-    await tx.credit.update({ where: { id }, data: creditUpdateData(b, prevMeta, stamp) });
-  }
 }
 
 /** Cómo se muestra el cliente en la Vista Previa. */
@@ -526,11 +800,13 @@ async function fillContactGaps(tx: PrismaClient, accountId: string, entries: Con
 
   const wantsPhone = unique.filter((e) => e.b.phone);
   const wantsAddress = unique.filter((e) => e.b.address ?? e.b.addressRef);
-  if (wantsPhone.length === 0 && wantsAddress.length === 0) return;
+  // El negocio es otra ubicación (WORK), con su propio hueco: tener la casa no dice dónde está el puesto.
+  const wantsBusiness = unique.filter((e) => e.b.businessAddress);
+  if (wantsPhone.length === 0 && wantsAddress.length === 0 && wantsBusiness.length === 0) return;
 
   // Quién YA tiene. Los recién creados no aparecen (no tienen nada todavía), así que altas y
   // existentes pasan por el mismo camino en vez de por dos ramas que se desincronizan.
-  const [withPhone, withAddress] = await Promise.all([
+  const [withPhone, withAddress, withBusiness] = await Promise.all([
     wantsPhone.length > 0
       ? tx.clientContact.findMany({
           where: { accountId, clientId: { in: wantsPhone.map((e) => e.clientId) } },
@@ -545,9 +821,17 @@ async function fillContactGaps(tx: PrismaClient, accountId: string, entries: Con
           distinct: ['clientId'],
         })
       : [],
+    wantsBusiness.length > 0
+      ? tx.clientLocation.findMany({
+          where: { accountId, clientId: { in: wantsBusiness.map((e) => e.clientId) }, locationType: LocationType.WORK },
+          select: { clientId: true },
+          distinct: ['clientId'],
+        })
+      : [],
   ]);
   const hasPhone = new Set(withPhone.map((c) => c.clientId));
   const hasAddress = new Set(withAddress.map((c) => c.clientId));
+  const hasBusiness = new Set(withBusiness.map((c) => c.clientId));
 
   const contacts = wantsPhone
     .filter((e) => !hasPhone.has(e.clientId))
@@ -560,17 +844,22 @@ async function fillContactGaps(tx: PrismaClient, accountId: string, entries: Con
         isPrimary: i === 0,
       })),
     );
-  const locations = wantsAddress
-    .filter((e) => !hasAddress.has(e.clientId))
-    .map((e) => ({
-      accountId,
-      clientId: e.clientId,
-      locationType: LocationType.HOME,
-      address: e.b.address ?? undefined,
-      // La referencia es cómo se llega ("Frente a la cancha"): para el cobrador vale tanto como
-      // la calle, y va en la misma ubicación, no en otra.
-      referenceNotes: e.b.addressRef ?? undefined,
-    }));
+  const locations: Prisma.ClientLocationCreateManyInput[] = [
+    ...wantsAddress
+      .filter((e) => !hasAddress.has(e.clientId))
+      .map((e) => ({
+        accountId,
+        clientId: e.clientId,
+        locationType: LocationType.HOME,
+        address: e.b.address ?? undefined,
+        // La referencia es cómo se llega ("Frente a la cancha"): para el cobrador vale tanto como
+        // la calle, y va en la misma ubicación, no en otra.
+        referenceNotes: e.b.addressRef ?? undefined,
+      })),
+    ...wantsBusiness
+      .filter((e) => !hasBusiness.has(e.clientId))
+      .map((e) => ({ accountId, clientId: e.clientId, locationType: LocationType.WORK, address: e.b.businessAddress ?? undefined })),
+  ];
 
   if (contacts.length > 0) await tx.clientContact.createMany({ data: contacts });
   if (locations.length > 0) await tx.clientLocation.createMany({ data: locations });
@@ -658,5 +947,28 @@ function moraWarnings(blocks: NormalizedRecord[], config: RunConfig): PortfolioS
 }
 
 function emptyPreview(): PortfolioSummary['preview'] {
-  return { toCreate: [], toUpdate: [], toSetCurrent: [], invalid: [], warnings: [] };
+  return { toCreate: [], toUpdate: [], toSetCurrent: [], toMarkAbsent: [], invalid: [], warnings: [] };
 }
+/** `YYYY-MM-DD` de un ISO (o de algo que empiece como uno); `null` si no es una fecha real. */
+function isoDay(raw: string): string | null {
+  const day = raw.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+  const d = new Date(`${day}T00:00:00.000Z`);
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== day ? null : day;
+}
+
+/** 28/09/2026: como lo escribe el reporte, para que el mensaje se lea igual que el archivo. */
+function fmtDay(d: Date): string {
+  const [y, m, day] = d.toISOString().slice(0, 10).split('-');
+  return `${day}/${m}/${y}`;
+}
+
+/** Lo reportado que vale la pena en el evento de auditoría de una operación. */
+function reported(b: NormalizedRecord): Record<string, unknown> {
+  return { outstandingBalance: b.outstandingBalance, daysPastDue: b.daysPastDue, status: b.status };
+}
+
+function emptyCounts(): Counts {
+  return { created: 0, updated: 0, setCurrent: 0, invalid: 0, absent: 0, reappeared: 0, needsReview: 0, ignored: 0 };
+}
+

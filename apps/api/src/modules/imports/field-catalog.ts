@@ -42,6 +42,13 @@ export const FIELD_CATALOG: Record<string, FieldDef> = {
   pastDueAmount: { label: 'Monto en mora', type: 'number' },
   nextDueDate: { label: 'Próximo vencimiento', type: 'date' },
   branchLabel: { label: 'Agencia', type: 'text' },
+  // Lo que un reporte de mora suele traer y antes se descartaba (PSF · fase 5).
+  termMonths: { label: 'Plazo (meses)', type: 'int' },
+  lastPaymentDate: { label: 'Fecha del último pago', type: 'date' },
+  clientNationalId: { label: 'Carnet / documento del cliente', type: 'text' },
+  businessAddress: { label: 'Negocio / dirección del negocio', type: 'text' },
+  guarantorName: { label: 'Garante / referencia personal', type: 'text' },
+  guarantorPhone: { label: 'Teléfono del garante', type: 'text' },
 };
 
 export type CanonicalField = keyof typeof FIELD_CATALOG;
@@ -69,6 +76,12 @@ export interface NormalizedRecord {
   daysPastDue: number | null;
   disbursedAt: string | null;
   nextDueDate: string | null;
+  termMonths: number | null;
+  lastPaymentDate: string | null;
+  clientNationalId: string | null;
+  businessAddress: string | null;
+  guarantorName: string | null;
+  guarantorPhone: string | null;
 }
 
 /**
@@ -97,7 +110,7 @@ export function normalizeRecord(raw: Record<string, string | null>, nameOrder: N
   });
 
   return {
-    code: text('code'),
+    code: operationCode(text('code')),
     clientLastName: lastName,
     clientFirstName: firstName,
     coHolder: text('coHolder'),
@@ -115,6 +128,13 @@ export function normalizeRecord(raw: Record<string, string | null>, nameOrder: N
     daysPastDue: intOrNull(number('daysPastDue')),
     disbursedAt: toIso(text('disbursedAt')),
     nextDueDate: toIso(text('nextDueDate')),
+    // "48" o "48 M": el plazo es el número; la unidad la dice el encabezado de la columna.
+    termMonths: intOrNull(num(text('termMonths')?.match(/\d+/)?.[0] ?? null)),
+    lastPaymentDate: toIso(text('lastPaymentDate')),
+    clientNationalId: text('clientNationalId'),
+    businessAddress: text('businessAddress'),
+    guarantorName: text('guarantorName'),
+    guarantorPhone: text('guarantorPhone'),
   };
 }
 
@@ -154,6 +174,27 @@ export function splitName(
  *
  * El guion sólo corta con espacios alrededor. Pegado es parte del número ("302-222-2542").
  */
+/**
+ * El nº de operación tal como identifica a la operación (D1). Los reportes marcan las altas del día
+ * pegadas al número —"302-222-5381 (N)"—, y ese marcador no es parte de la identidad: sin quitarlo,
+ * la misma operación sería otra al día siguiente, cuando ya viene sin "(N)".
+ */
+export function operationCode(raw: string | null): string | null {
+  if (raw === null) return null;
+  const code = raw.replace(/\s*\([A-Za-z]{1,3}\)\s*$/, '').trim();
+  return code === '' ? null : code;
+}
+
+/**
+ * ¿Esto es el nº de una operación, o una fila que no es un registro? Un reporte en PDF trae debajo
+ * de la tabla totales y notas ("TOTALES", "Corte anterior: 28/09/2026 con 10 operaciones") que el
+ * lector de tablas no puede distinguir de una fila más. Un nº de operación es **una sola palabra con
+ * al menos un dígito** (letras, dígitos y `- / . _`); lo demás no se importa como crédito.
+ */
+export function looksLikeOperationCode(code: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9\-/._]{0,39}$/.test(code) && /\d/.test(code);
+}
+
 export function splitPhones(raw: string): string[] {
   return raw
     .split(/\s[-/]\s|[,;/]/)

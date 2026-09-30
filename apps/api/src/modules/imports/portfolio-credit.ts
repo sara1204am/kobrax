@@ -5,8 +5,8 @@ import type { NormalizedRecord } from './field-catalog';
 import type { ImportConfig } from './import-config';
 
 /**
- * Qué escribe una importación en cada crédito (F4/06 · Fase 4). Funciones puras: el servicio sólo
- * las aplica dentro de la transacción.
+ * Qué escribe una importación en cada crédito (F4/06 · Fase 4, PSF · fase 5). Funciones puras: el
+ * servicio sólo las aplica dentro de la transacción.
  *
  * 🔴 **Desconocido no es cero (D9).** Si el archivo no trae un dato:
  *  · al crear, las columnas `NOT NULL` reciben un 0 de relleno y el campo queda en
@@ -40,15 +40,48 @@ export function presentFields(b: NormalizedRecord): Partial<Record<ImportTracked
   };
 }
 
-/** Datos de un crédito nuevo para `createMany` (el archivo no trae carnet → cliente sin nationalId). */
+/**
+ * Lo que la corrida sabe además de la fila: el id que va a tener el crédito (los snapshots lo
+ * necesitan antes del insert), la fecha de corte del reporte (D9), el asesor (D8), qué representa
+ * el saldo en este formato (D6) y cómo se leen sus estados.
+ */
+export interface RowContext {
+  id?: string;
+  reportAsOf?: Date | null;
+  advisorCode?: string;
+  balanceBasis?: 'principal' | 'total';
+  statusMap?: Record<string, CreditStatus>;
+  /** Sólo al actualizar: el estado que tiene hoy. */
+  prevStatus?: CreditStatus;
+  /** Sólo al crear: a quién queda asignado (el usuario vinculado al asesor del reporte, D8). */
+  assignedManagerId?: string;
+}
+
+/** Lo reportado que no tiene columna: viaja en `metadata` con el resto de lo que trajo el archivo. */
+function reportedMeta(b: NormalizedRecord, prevMeta: Record<string, unknown>, ctx: RowContext): Record<string, unknown> {
+  const guarantor = b.guarantorName || b.guarantorPhone ? { name: b.guarantorName ?? undefined, phone: b.guarantorPhone ?? undefined } : undefined;
+  return {
+    reportedStatus: b.status ?? prevMeta.reportedStatus,
+    reportedTermMonths: b.termMonths ?? prevMeta.reportedTermMonths,
+    lastPaymentDate: b.lastPaymentDate ?? prevMeta.lastPaymentDate,
+    reportedGuarantor: guarantor ?? prevMeta.reportedGuarantor,
+    externalAdvisorCode: ctx.advisorCode ?? prevMeta.externalAdvisorCode,
+    // D6: sólo si el formato lo declara. Sin declarar, el saldo reportado queda sin base: no se inventa.
+    balanceBasis: ctx.balanceBasis ?? prevMeta.balanceBasis,
+  };
+}
+
+/** Datos de un crédito nuevo para `createMany`. */
 export function creditCreateData(
   accountId: string,
   clientId: string,
   b: NormalizedRecord,
   scope: ImportConfig['scope'],
   stamp: ImportStamp,
+  ctx: RowContext = {},
 ): Prisma.CreditCreateManyInput {
   return {
+    ...(ctx.id ? { id: ctx.id } : {}),
     accountId,
     clientId,
     code: b.code ?? undefined,
@@ -58,15 +91,16 @@ export function creditCreateData(
     externalId: b.code ?? undefined,
     syncStatus: ExternalSyncStatus.PRESENT,
     lastSeenRunId: stamp.runId,
+    reportedAsOf: ctx.reportAsOf ?? undefined,
     // Rellenos de columnas NOT NULL: `importMissing` dice que no significan nada.
     principalAmount: b.principalAmount ?? 0,
     outstandingBalance: b.outstandingBalance ?? 0,
     interestRate: b.interestRate ?? 0,
     currency: mapCurrency(b.currency),
-    status: mapStatus(b.status) ?? CreditStatus.ACTIVE, // crédito nuevo: default razonable si el estado no se mapea
+    status: mapStatus(b.status, ctx.statusMap) ?? CreditStatus.ACTIVE, // crédito nuevo: default razonable si el estado no se mapea
     daysPastDue: b.daysPastDue ?? 0,
     branchId: scope.kind === 'branch' ? scope.ref : undefined,
-    assignedManagerId: scope.kind === 'official' ? scope.ref : undefined,
+    assignedManagerId: ctx.assignedManagerId ?? (scope.kind === 'official' ? (scope.ref ?? undefined) : undefined),
     disbursedAt: b.disbursedAt ? new Date(b.disbursedAt) : undefined,
     metadata: stripUndefined({
       origin: CreditOrigin.IMPORT,
@@ -75,6 +109,7 @@ export function creditCreateData(
       // Antes se leían y se descartaban: la ficha y la agenda del importado quedaban sin cuota ni fecha.
       installmentAmount: b.installmentAmount ?? undefined,
       nextDueDate: b.nextDueDate ?? undefined,
+      ...reportedMeta(b, {}, ctx),
       importMissing: nextImportMissing(undefined, presentFields(b)),
       importRunId: stamp.runId,
       importedAt: stamp.at,
@@ -87,21 +122,25 @@ export function creditCreateData(
  * parser no encontró la columna, y escribirla siempre haría que un archivo con otro layout ponga la
  * cartera entera en cero (§2.1 del plan).
  */
-export function creditUpdateData(b: NormalizedRecord, prevMeta: Record<string, unknown>, stamp: ImportStamp): Prisma.CreditUpdateInput {
+export function creditUpdateData(
+  b: NormalizedRecord,
+  prevMeta: Record<string, unknown>,
+  stamp: ImportStamp,
+  ctx: RowContext = {},
+): Prisma.CreditUpdateInput {
   const prev = readCreditMetadata(prevMeta);
   return {
     principalAmount: b.principalAmount ?? undefined,
     outstandingBalance: b.outstandingBalance ?? undefined,
     daysPastDue: b.daysPastDue ?? undefined,
-    // Estado desconocido (no mapeado) → NO tocar el status: evita degradar silenciosamente
-    // un DEFAULTED/WRITTEN_OFF a ACTIVE en cada import (la tabla de equivalencias completa = web).
-    status: mapStatus(b.status) ?? undefined,
+    status: updatedStatus(b.status, ctx),
     interestRate: b.interestRate ?? undefined,
     disbursedAt: b.disbursedAt ? new Date(b.disbursedAt) : undefined,
     // Vino en este reporte: presente, y si estaba ausente, deja de estarlo (reaparición, D4).
     syncStatus: ExternalSyncStatus.PRESENT,
     absentSince: null,
     lastSeenRunId: stamp.runId,
+    reportedAsOf: ctx.reportAsOf ?? undefined,
     metadata: stripUndefined({
       ...prevMeta,
       origin: CreditOrigin.IMPORT,
@@ -109,6 +148,7 @@ export function creditUpdateData(b: NormalizedRecord, prevMeta: Record<string, u
       pastDueAmount: b.pastDueAmount ?? prevMeta.pastDueAmount,
       installmentAmount: b.installmentAmount ?? prevMeta.installmentAmount,
       nextDueDate: b.nextDueDate ?? prevMeta.nextDueDate,
+      ...reportedMeta(b, prevMeta, ctx),
       importMissing: nextImportMissing(prev.importMissing, presentFields(b)),
       importRunId: stamp.runId,
       importedAt: stamp.at,
@@ -116,17 +156,72 @@ export function creditUpdateData(b: NormalizedRecord, prevMeta: Record<string, u
   };
 }
 
-// VIGENTE → ACTIVE; el resto, mapeo mínimo (la tabla completa de equivalencias es config → web).
-// Devuelve null ante una etiqueta desconocida → el caller decide (preservar en update, default en create).
+/**
+ * El estado al actualizar. Etiqueta que se entiende → ese estado. Etiqueta desconocida → no se toca,
+ * para no degradar en silencio un estado que la fuente sí dijo antes — **salvo que el crédito esté
+ * cerrado**: si la fuente lo vuelve a traer en su reporte de mora, para ella está vivo (B-4 de la
+ * revisión: la ausencia no reabre nada; la presencia sí).
+ */
+function updatedStatus(label: string | null, ctx: RowContext): CreditStatus | undefined {
+  const mapped = mapStatus(label, ctx.statusMap);
+  if (mapped) return mapped;
+  if (ctx.prevStatus && ctx.prevStatus !== CreditStatus.ACTIVE) return CreditStatus.ACTIVE;
+  return undefined;
+}
+
+/**
+ * Lo que la fuente reportó de esta operación en esta corrida (§12). `null` en un dato = el reporte no
+ * lo trajo; la fila `ABSENT` no trae ninguno.
+ */
+export function snapshotData(
+  accountId: string,
+  creditId: string,
+  externalId: string,
+  runId: string,
+  reportAsOf: Date | null,
+  b: NormalizedRecord | null,
+): Prisma.CreditExternalSnapshotCreateManyInput {
+  return {
+    accountId,
+    creditId,
+    runId,
+    externalSource: FILE_SOURCE,
+    externalId,
+    syncStatus: b ? ExternalSyncStatus.PRESENT : ExternalSyncStatus.ABSENT,
+    reportedAsOf: reportAsOf ?? undefined,
+    reportedBalance: b?.outstandingBalance ?? undefined,
+    reportedDaysPastDue: b?.daysPastDue ?? undefined,
+    reportedStatus: b?.status ?? undefined,
+    raw: b ? stripUndefined(b as unknown as Record<string, unknown>) : {},
+  };
+}
+
+// VIGENTE → ACTIVE; el resto, mapeo mínimo. Cada tenant puede sumar o corregir etiquetas en su
+// configuración (`statusMap`), que manda sobre esta tabla. Devuelve null ante una etiqueta
+// desconocida → el caller decide (preservar en update, default en create).
 const STATUS_MAP: Record<string, CreditStatus> = {
   VIGENTE: CreditStatus.ACTIVE,
   VENCIDO: CreditStatus.DEFAULTED,
   CASTIGADO: CreditStatus.WRITTEN_OFF,
   CANCELADO: CreditStatus.CANCELLED,
 };
-export function mapStatus(raw: string | null): CreditStatus | null {
-  return STATUS_MAP[(raw ?? '').toUpperCase()] ?? null;
+
+/** Mayúsculas y sin tildes: "Ejecución" y "EJECUCION" son la misma etiqueta. */
+export function statusKey(raw: string): string {
+  return raw
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, ' ');
 }
+
+export function mapStatus(raw: string | null, overrides?: Record<string, CreditStatus>): CreditStatus | null {
+  if (!raw) return null;
+  const key = statusKey(raw);
+  return overrides?.[key] ?? STATUS_MAP[key] ?? null;
+}
+
 export function mapCurrency(raw: string | null): string {
   if (!raw) return 'BOB';
   const u = raw.toUpperCase();

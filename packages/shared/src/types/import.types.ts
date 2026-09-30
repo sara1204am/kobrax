@@ -48,6 +48,10 @@ export interface ImportConfig {
   absentRule: AbsentRule;
   carriesAssignee: boolean;
   askOnLogin: boolean;
+  /** Qué representa el saldo de este formato (D6). Ausente = no se sabe. */
+  balanceBasis?: 'principal' | 'total';
+  /** Etiqueta de estado del reporte (MAYÚSCULAS, sin tildes) → estado del crédito. */
+  statusMap?: Record<string, string>;
 }
 
 /**
@@ -76,6 +80,9 @@ export interface LastRun {
   updated: number;
   setCurrent: number;
   errors: number;
+  /** Fecha de corte del último reporte aplicado (YYYY-MM-DD) y de qué asesor era (D8, D9). */
+  reportDate?: string | null;
+  advisorCode?: string | null;
 }
 
 /** Candidatos de `scope.ref` — los devuelve el mismo GET de config. */
@@ -142,7 +149,22 @@ export interface ColumnsPayload {
 export interface PortfolioSummary {
   dryRun: boolean;
   idempotentSkip: boolean;
-  counts: { created: number; updated: number; setCurrent: number; invalid: number };
+  counts: {
+    created: number;
+    updated: number;
+    setCurrent: number;
+    invalid: number;
+    /** Operaciones que faltan del reporte por primera vez (D4). Ausentes en respuestas viejas. */
+    absent?: number;
+    /** Operaciones que faltaban y volvieron. */
+    reappeared?: number;
+    /** Clientes nuevos que quedan marcados «Revisar vínculo» (D2). */
+    needsReview?: number;
+    /** Filas que no son registros: totales y notas debajo de la tabla. */
+    ignored?: number;
+  };
+  /** De qué fecha de corte y de qué asesor es el reporte, y a qué alcance se aplica (D8, D9). */
+  report?: { reportDate: string | null; advisorCode: string | null; scope: string };
   /**
    * El tope de créditos del plan, contra lo que este archivo quiere crear.
    *
@@ -157,9 +179,11 @@ export interface PortfolioSummary {
     over: number;
   };
   preview: {
-    toCreate: { code: string; clientName: string }[];
-    toUpdate: { code: string }[];
+    toCreate: { code: string; clientName: string; existingClient?: boolean; linkReview?: boolean }[];
+    toUpdate: { code: string; reappeared?: boolean }[];
     toSetCurrent: { code: string | null }[];
+    /** Operaciones que dejan de venir en el reporte (D4): no es un pago ni un cierre. */
+    toMarkAbsent?: { code: string | null }[];
     invalid: { index: number; reason: string }[];
     /** Advertencias que NO frenan la fila: se importa igual y se avisa. */
     warnings: { index?: number; code: string; detail?: string }[];
