@@ -172,6 +172,7 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
         outstandingBalance: true,
         daysPastDue: true,
         metadata: true,
+        origin: true,
         assignedManagerId: true,
         client: { select: { riskSegment: true } },
         installments: { select: { id: true, number: true, dueDate: true, amount: true, paidAmount: true, status: true } },
@@ -211,7 +212,7 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
         if (days === null || !reading) continue;
 
         // D20: con el método bancario la fecha del primer atraso también se guarda (o se borra al quedar al día).
-        const meta = readCreditMetadata(credit.metadata);
+        const meta = readCreditMetadata(credit.metadata, credit.origin);
         const sinceChanged = reading.arrearsSince !== meta.arrearsSince;
         if (days !== credit.daysPastDue || sinceChanged) {
           await tx.credit.update({
@@ -289,12 +290,13 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
       outstandingBalance: unknown;
       daysPastDue: number;
       metadata: unknown;
+      origin?: string | null;
       installments: { id: string; number: number; dueDate: Date; amount: unknown; paidAmount: unknown; status: string }[];
     },
     params: ArrearParams,
     asOf: Date,
   ): { days: number; arrearsSince: string | undefined } | null {
-    const meta = readCreditMetadata(credit.metadata);
+    const meta = readCreditMetadata(credit.metadata, credit.origin);
     const balance = Number(credit.outstandingBalance);
     // Importada y manual no usan el método: su dueño es otro. La fecha de primer atraso queda como está.
     const keep = (days: number) => ({ days, arrearsSince: meta.arrearsSince });

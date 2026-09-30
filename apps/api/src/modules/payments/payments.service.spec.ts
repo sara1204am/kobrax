@@ -58,6 +58,96 @@ function makeService(opts: { credit?: unknown; idempotentExisting?: unknown; max
 
 const PAY = { creditId: 'cr1', method: 'CASH' as never };
 
+/** Una operación PSF: saldo y mora del reporte, sin cuotas. */
+function psfCredit(over: Record<string, unknown> = {}) {
+  return {
+    id: 'cr1',
+    status: 'ACTIVE',
+    branchId: 'b1',
+    outstandingBalance: 1996.85,
+    daysPastDue: 25,
+    installments: [],
+    metadata: { origin: 'import', importRunId: 'run1' },
+    ...over,
+  };
+}
+
+describe('PaymentsService.register — crédito PSF (D3)', () => {
+  it('registra el Payment y no toca saldo, mora, estado, cuotas ni casos', async () => {
+    const { service, calls } = makeService({ credit: psfCredit() });
+    const r = await service.register({ ...PAY, amount: 500, caseId: 'case1' });
+    assert.equal(calls.create.length, 1);
+    assert.equal(calls.create[0]!.amount, 500);
+    assert.equal(calls.create[0]!.caseId, 'case1');
+    assert.equal(calls.create[0]!.registeredBy, 'u1');
+    assert.equal(calls.create[0]!.branchId, 'b1');
+    assert.equal(calls.creditUpdate.length, 0); // saldo, mora y estado reportados intactos
+    assert.equal(calls.caseClose.length, 0); // el caso lo cierra el próximo reporte, no el pago
+    assert.deepEqual(calls.audit, ['CREATE']);
+    assert.deepEqual(calls.events, ['payment.registered']);
+    assert.equal(r.idempotentReplay, false);
+  });
+
+  it('un monto mayor al saldo reportado se acepta: el reporte puede ir atrasado', async () => {
+    const { service, calls } = makeService({ credit: psfCredit({ outstandingBalance: 100 }) });
+    await service.register({ ...PAY, amount: 500 });
+    assert.equal(calls.create.length, 1);
+    assert.equal(calls.creditUpdate.length, 0);
+  });
+
+  it('se acepta aunque el estado reportado no sea ACTIVE (un pago offline no se pierde)', async () => {
+    const { service, calls } = makeService({ credit: psfCredit({ status: 'DEFAULTED' }) });
+    await service.register({ ...PAY, amount: 50 });
+    assert.equal(calls.create.length, 1);
+  });
+
+  // D1: el origen lo decide la columna, no un JSON que cualquier edición reescribe.
+  it('manda la columna `origin`: IMPORT con metadata manual → rama PSF; MANUAL con metadata import → Kobrax', async () => {
+    const psf = makeService({ credit: psfCredit({ origin: 'IMPORT', metadata: { origin: 'manual' } }) });
+    await psf.service.register({ ...PAY, amount: 50 });
+    assert.equal(psf.calls.creditUpdate.length, 0);
+
+    const own = makeService({ credit: { ...activeCredit(), origin: 'MANUAL', metadata: { origin: 'import' } } });
+    await own.service.register({ ...PAY, amount: 100 });
+    assert.equal(own.calls.creditUpdate[0]!.outstandingBalance, 100);
+  });
+
+  it('guarda canal, nota y la fecha del cobro (pago offline sincronizado después)', async () => {
+    const { service, calls } = makeService({ credit: psfCredit() });
+    const cobrado = new Date(Date.now() - 2 * 86_400_000).toISOString();
+    await service.register({ ...PAY, amount: 500, channel: 'EXTERNAL_CONFIRMED' as never, notes: 'Pagó en ventanilla', paymentDate: cobrado });
+    const data = calls.create[0]!;
+    assert.equal(data.channel, 'EXTERNAL_CONFIRMED');
+    assert.equal(data.notes, 'Pagó en ventanilla');
+    assert.equal((data.paymentDate as Date).toISOString(), cobrado);
+  });
+
+  it('sin fecha no fija `paymentDate`: la pone la base (ahora)', async () => {
+    const { service, calls } = makeService({ credit: psfCredit() });
+    await service.register({ ...PAY, amount: 50 });
+    assert.equal('paymentDate' in calls.create[0]!, false);
+  });
+
+  it('rechaza una fecha futura o de hace más de 30 días', async () => {
+    const futura = new Date(Date.now() + 86_400_000).toISOString();
+    const vieja = new Date(Date.now() - 31 * 86_400_000).toISOString();
+    await rejectsWithCode(makeService({ credit: psfCredit() }).service.register({ ...PAY, amount: 50, paymentDate: futura }), 'PAYMENT_001');
+    await rejectsWithCode(makeService({ credit: psfCredit() }).service.register({ ...PAY, amount: 50, paymentDate: vieja }), 'PAYMENT_001');
+  });
+
+  it('igual rechaza monto ≤ 0 y crédito inexistente', async () => {
+    await rejectsWithCode(makeService({ credit: psfCredit() }).service.register({ ...PAY, amount: 0 }), 'PAYMENT_001');
+    await rejectsWithCode(makeService({ credit: null }).service.register({ ...PAY, amount: 50 }), 'RESOURCE_NOT_FOUND');
+  });
+
+  it('idempotencia: el reintento offline con la misma clave no duplica', async () => {
+    const { service, calls } = makeService({ credit: psfCredit(), idempotentExisting: { id: 'old', creditId: 'cr1', amount: 500, method: 'CASH' } });
+    const r = await service.register({ ...PAY, amount: 500 }, 'key-psf');
+    assert.equal(r.idempotentReplay, true);
+    assert.equal(calls.create.length, 0);
+  });
+});
+
 describe('PaymentsService.register', () => {
   it('aplica el pago, reduce el saldo, registra y emite evento', async () => {
     const { service, calls } = makeService();

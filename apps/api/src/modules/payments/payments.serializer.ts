@@ -15,6 +15,8 @@ export function serializePayment(p: Payment) {
     receiptUrl: p.receiptUrl ?? undefined, // comprobante subido (§5.4); no es PII
     paymentDate: p.paymentDate,
     registeredBy: p.registeredBy ?? undefined,
+    channel: p.channel,
+    notes: p.notes ?? undefined,
     createdAt: p.createdAt,
   };
 }

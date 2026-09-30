@@ -4,14 +4,14 @@
  */
 import { isUnknownField, paymentProgress, type EffectiveBalanceBasis } from '@kobrax/shared';
 import type { CaseActivityItem } from './cases.service';
-import type { PaymentItem } from './payments.service';
+import type { NewPayment, PaymentItem } from './payments.service';
 
 export type TimelineEntry =
-  | { kind: 'payment'; id: string; at: string; amount: number; method: string; receiptUrl?: string }
+  | { kind: 'payment'; id: string; at: string; amount: number; method: string; receiptUrl?: string; pending?: boolean }
   | { kind: 'activity'; id: string; at: string; type: string; result?: string; notes?: string };
 
 /** Pagos ∪ gestiones, orden cronológico descendente (lo más reciente arriba). */
-export function buildTimeline(activities: CaseActivityItem[], payments: PaymentItem[]): TimelineEntry[] {
+export function buildTimeline(activities: CaseActivityItem[], payments: (PaymentItem & { pending?: boolean })[]): TimelineEntry[] {
   const a: TimelineEntry[] = activities.map((x) => ({
     kind: 'activity',
     id: x.id,
@@ -27,8 +27,40 @@ export function buildTimeline(activities: CaseActivityItem[], payments: PaymentI
     amount: x.amount,
     method: x.method,
     receiptUrl: x.receiptUrl,
+    pending: x.pending,
   }));
   return [...a, ...p].sort((x, y) => y.at.localeCompare(x.at));
+}
+
+/**
+ * Los pagos de ESTE caso que todavía están en la cola del teléfono (cobrados sin señal), como filas del
+ * historial marcadas `pending`. Así el cobrador ve su cobro en el acto, en vez de un historial que no
+ * lo muestra hasta que vuelva la red — que es cuando más dudaría de si quedó guardado.
+ *
+ * La fecha es la del cobro (`paymentDate` del pedido), y si no la trae, la de cuando se encoló.
+ */
+export function queuedPayments(
+  caseId: string,
+  queued: readonly { action: { kind: string; input?: unknown; idempotencyKey?: string }; createdAt: number }[],
+): (PaymentItem & { pending: true })[] {
+  return queued.flatMap(({ action, createdAt }) => {
+    if (action.kind !== 'payment' || !action.input) return [];
+    const input = action.input as NewPayment;
+    if (input.caseId !== caseId) return [];
+    const at = input.paymentDate ?? new Date(createdAt).toISOString();
+    return [
+      {
+        id: `pending-${action.idempotencyKey ?? createdAt}`,
+        creditId: input.creditId,
+        caseId: input.caseId,
+        amount: input.amount,
+        method: input.method,
+        paymentDate: at,
+        createdAt: at,
+        pending: true as const,
+      },
+    ];
+  });
 }
 
 /**

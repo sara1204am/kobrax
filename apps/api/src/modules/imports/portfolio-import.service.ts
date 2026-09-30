@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { ClientType, ContactType, CreditStatus, LocationType } from '@prisma/client';
+import { ClientType, ContactType, CreditStatus, ExternalSyncStatus, LocationType } from '@prisma/client';
 import { readCreditMetadata } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
@@ -158,6 +158,8 @@ export class PortfolioImportService {
           deletedAt: true,
           branchId: true,
           assignedManagerId: true,
+          status: true,
+          origin: true,
           metadata: true,
         },
       });
@@ -168,8 +170,9 @@ export class PortfolioImportService {
       const existingCredits: ExistingCredit[] = existing.map((c) => ({
         id: c.id,
         code: c.code,
-        origin: readCreditMetadata(c.metadata).origin,
+        origin: readCreditMetadata(c.metadata, c.origin).origin,
         eligible: c.deletedAt === null && inScope(c),
+        closed: c.status !== CreditStatus.ACTIVE,
       }));
 
       const rows: PortfolioRow[] = blocks.map((b, index) => ({
@@ -254,10 +257,19 @@ export class PortfolioImportService {
       // regla es rellenar huecos, no pisar (ver `fillContactGaps`).
       await fillContactGaps(tx, accountId, touched);
       if (plan.toSetCurrent.length > 0) {
-        // Ausente del archivo → al día. Saldo INTACTO (pagó la cuota, no el crédito).
+        // Ausente del archivo → al día. Saldo y ESTADO intactos: la ausencia no es un pago ni un cierre
+        // (D4). El `status` del where es la segunda llave: el plan ya excluye los cerrados.
         await tx.credit.updateMany({
-          where: { id: { in: plan.toSetCurrent } },
-          data: { daysPastDue: 0, status: CreditStatus.ACTIVE },
+          where: { id: { in: plan.toSetCurrent }, status: CreditStatus.ACTIVE },
+          data: { daysPastDue: 0 },
+        });
+        // Y queda registrado que faltó (D4): sólo en la transición, así `absent_since` guarda el primer
+        // día de la ausencia y no el último. La fecha es la de la corrida hasta que el reporte traiga
+        // su fecha de corte (fase 5).
+        await tx.credit.updateMany({
+          // `OR` y no `not: ABSENT`: en SQL `NULL <> 'ABSENT'` no es verdadero y dejaría afuera a los NULL.
+          where: { id: { in: plan.toSetCurrent }, OR: [{ syncStatus: null }, { syncStatus: ExternalSyncStatus.PRESENT }] },
+          data: { syncStatus: ExternalSyncStatus.ABSENT, absentSince: new Date(stamp.at.slice(0, 10)) },
         });
       }
 

@@ -20,6 +20,7 @@ import { useToast } from '@/components/toast';
 import { sendJson } from '@/lib/client';
 import { money, todayIso } from '@/lib/format';
 import { creditDraft, creditPatch, hasCreditChanges, type CreditDraft } from '@/lib/credit-patch';
+import { PaymentModal } from '../../../../pagos/payment-actions';
 import { ArrearsActions } from './arrears-actions';
 import { CreditEditor } from './credit-editor';
 import { CreditView } from './credit-view';
@@ -51,10 +52,13 @@ export function CreditCard({
 }) {
   const t = useTranslations('portfolio');
   const td = useTranslations('portfolio.creditDetail');
+  const tp = useTranslations('panel.payments');
   const router = useRouter();
   const toast = useToast();
   const { can } = usePermissions();
   const canWrite = can('credit:write');
+  const canPay = can('payment:write');
+  const [paying, setPaying] = useState(false);
   const block = termsEditBlock(credit);
 
   /** Cómo se abrió la edición: contra esto se decide qué cambió. `null` = modo lectura. */
@@ -106,82 +110,99 @@ export function CreditCard({
   const editing = draft !== null && state !== null;
 
   return (
-    <form onSubmit={save} className="space-y-4">
-      <PageHeader
-        title={isUnknownField(credit, 'outstandingBalance') ? td('unknown') : money(credit.outstandingBalance, credit.currency)}
-        subtitle={t('creditSubtitle', {
-          principal: isUnknownField(credit, 'principalAmount') ? td('unknown') : money(credit.principalAmount, credit.currency),
-          code: credit.code ?? t('noCode'),
-        })}
-        /* Las etiquetas van pegadas al saldo que califican, no a media pantalla entre los botones. */
-        badge={
-          <>
-            {credit.locked && <Badge tone="warning">{t('imported')}</Badge>}
-            {(credit.daysPastDue ?? 0) > 0 && <Badge tone="danger">{t('days', { count: credit.daysPastDue! })}</Badge>}
-            {/* Marcar en mora / poner al día: al lado de los días, que es el dato que cambian. */}
-            {canWrite && !editing && (
-              <ArrearsActions creditId={credit.id} daysPastDue={credit.daysPastDue ?? 0} locked={credit.locked} />
-            )}
-          </>
-        }
-        actions={
-          editing ? (
+    <>
+      <form onSubmit={save} className="space-y-4">
+        <PageHeader
+          title={isUnknownField(credit, 'outstandingBalance') ? td('unknown') : money(credit.outstandingBalance, credit.currency)}
+          subtitle={t('creditSubtitle', {
+            principal: isUnknownField(credit, 'principalAmount') ? td('unknown') : money(credit.principalAmount, credit.currency),
+            code: credit.code ?? t('noCode'),
+          })}
+          /* Las etiquetas van pegadas al saldo que califican, no a media pantalla entre los botones. */
+          badge={
             <>
-              <span className="w-36">
-                <Button type="button" variant="ghost" onClick={cancelEdit} disabled={saving}>
-                  {td('cancelEdit')}
-                </Button>
-              </span>
-              <span className="w-44">
-                <Button type="submit" loading={saving} disabled={!hasCreditChanges(patch) || !valid}>
-                  {td('save')}
-                </Button>
-              </span>
-            </>
-          ) : (
-            <>
-              {/* Botones y no links de texto: son las salidas de esta pantalla y hay que verlas.
-                  La de pagos es además la ÚNICA puerta a los de ESTE crédito — registrar y pedir un
-                  cobro los exigen, y el ledger no elige el crédito: se lo tiene que traer quien llega. */}
-              <span className="w-44">
-                <Button type="button" variant="ghost" onClick={() => router.push(`/pagos?creditId=${credit.id}`)}>
-                  {t('creditPayments')}
-                </Button>
-              </span>
-              <span className="w-44">
-                <Button type="button" variant="ghost" onClick={() => router.push(`/cartera/${clientId}`)}>
-                  {t('backToClient')}
-                </Button>
-              </span>
-              {canWrite && (
-                <span className="w-32">
-                  <Button type="button" onClick={startEdit}>
-                    {td('edit')}
-                  </Button>
-                </span>
+              {credit.locked && <Badge tone="warning">{t('imported')}</Badge>}
+              {(credit.daysPastDue ?? 0) > 0 && <Badge tone="danger">{t('days', { count: credit.daysPastDue! })}</Badge>}
+              {/* Marcar en mora / poner al día: al lado de los días, que es el dato que cambian. */}
+              {canWrite && !editing && (
+                <ArrearsActions creditId={credit.id} daysPastDue={credit.daysPastDue ?? 0} locked={credit.locked} />
               )}
             </>
-          )
-        }
-      />
-
-      <ErrorBanner message={error} />
-      {credit.locked && <p className="text-[13px] text-k-warning-text">{t('lockedHint')}</p>}
-
-      {editing ? (
-        <CreditEditor
-          credit={credit}
-          draft={draft}
-          onChange={setDraft}
-          block={block}
-          state={state}
-          registered={registered}
-          team={team}
-          types={types}
+          }
+          actions={
+            editing ? (
+              <>
+                <span className="w-36">
+                  <Button type="button" variant="ghost" onClick={cancelEdit} disabled={saving}>
+                    {td('cancelEdit')}
+                  </Button>
+                </span>
+                <span className="w-44">
+                  <Button type="submit" loading={saving} disabled={!hasCreditChanges(patch) || !valid}>
+                    {td('save')}
+                  </Button>
+                </span>
+              </>
+            ) : (
+              <>
+                {/* Botones y no links de texto: son las salidas de esta pantalla y hay que verlas.
+                    La de pagos es además la ÚNICA puerta a los de ESTE crédito — registrar y pedir un
+                    cobro los exigen, y el ledger no elige el crédito: se lo tiene que traer quien llega. */}
+                {/* Registrar un pago es la acción más frecuente de esta ficha: se hace acá, en un modal,
+                    sin ir al ledger (§5). El ledger sigue siendo la puerta para verlos y pedir un cobro. */}
+                {canPay && (
+                  <span className="w-44">
+                    <Button type="button" onClick={() => setPaying(true)}>
+                      {tp('register.cta')}
+                    </Button>
+                  </span>
+                )}
+                <span className="w-44">
+                  <Button type="button" variant="ghost" onClick={() => router.push(`/pagos?creditId=${credit.id}`)}>
+                    {t('creditPayments')}
+                  </Button>
+                </span>
+                <span className="w-44">
+                  <Button type="button" variant="ghost" onClick={() => router.push(`/cartera/${clientId}`)}>
+                    {t('backToClient')}
+                  </Button>
+                </span>
+                {canWrite && (
+                  <span className="w-32">
+                    <Button type="button" onClick={startEdit}>
+                      {td('edit')}
+                    </Button>
+                  </span>
+                )}
+              </>
+            )
+          }
         />
-      ) : (
-        <CreditView credit={credit} team={team} types={types} />
-      )}
-    </form>
+
+        <ErrorBanner message={error} />
+        {credit.locked && <p className="text-[13px] text-k-warning-text">{t('lockedHint')}</p>}
+
+        {editing ? (
+          <CreditEditor
+            credit={credit}
+            draft={draft}
+            onChange={setDraft}
+            block={block}
+            state={state}
+            registered={registered}
+            team={team}
+            types={types}
+          />
+        ) : (
+          <CreditView credit={credit} team={team} types={types} />
+        )}
+      </form>
+      {/* Fuera del <form> de la ficha: el modal trae su propio form, y un form anidado no es HTML válido. */}
+      <PaymentModal
+        open={paying}
+        onClose={() => setPaying(false)}
+        credit={{ id: credit.id, code: credit.code, suggestedAmount: credit.suggestedPaymentAmount, external: credit.locked }}
+      />
+    </>
   );
 }

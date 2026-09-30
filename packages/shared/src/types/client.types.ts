@@ -5,7 +5,7 @@
  * los **mismos** clientes contra los **mismos** endpoints. Los valores son los enums de la API
  * (Prisma) escritos como uniones, no como enums propios: son el contrato del DTO.
  */
-import type { ArrearsMethod, CreditOrigin, EffectiveBalanceBasis, InterestBase, PaymentFrequency } from '../enums/credit.enum.js';
+import type { ArrearsMethod, CreditOrigin, ExternalSyncStatus, EffectiveBalanceBasis, InterestBase, PaymentFrequency } from '../enums/credit.enum.js';
 import type { CreditTerms } from '../utils/credit-engine.js';
 import type { CreditInitialState } from '../utils/credit-edit.js';
 import type { ImportTrackedField } from '../utils/credit-import.js';
@@ -348,6 +348,16 @@ export interface CreditDetail {
   unknownFields?: ImportTrackedField[];
   /** Importado: cuándo lo tocó la última importación. */
   importedAt?: string;
+  /** Operación de una fuente externa (D1): de qué sistema y con qué nº de operación. */
+  externalSource?: string;
+  externalId?: string;
+  /** Si vino en el último reporte (D4) y, si no, desde qué fecha de corte falta (YYYY-MM-DD). */
+  syncStatus?: ExternalSyncStatus;
+  absentSince?: string;
+  /** Fecha de corte (YYYY-MM-DD) a la que son el saldo y la mora reportados (D9). */
+  reportedAsOf?: string;
+  /** Con qué monto arranca el formulario de pago (`suggestedPaymentAmount`). Ausente = vacío. */
+  suggestedPaymentAmount?: number;
   createdAt?: string;
   disbursedAt?: string;
   assignedManagerId?: string;

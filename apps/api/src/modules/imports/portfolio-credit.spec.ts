@@ -45,6 +45,26 @@ describe('creditCreateData — alta desde el archivo', () => {
   });
 });
 
+// D1: la identidad de la operación es (fuente, nº de operación); `code` queda como rótulo.
+describe('identidad y sincronización de la operación externa', () => {
+  it('el alta guarda origen, fuente, nº de operación y que vino en esta corrida', () => {
+    const data = creditCreateData('acc', 'cli', ROW, SCOPE as never, STAMP);
+    assert.equal(data.origin, 'IMPORT');
+    assert.equal(data.externalSource, 'PSF');
+    assert.equal(data.externalId, 'C-1');
+    assert.equal(data.code, 'C-1');
+    assert.equal(data.syncStatus, 'PRESENT');
+    assert.equal(data.lastSeenRunId, 'run-1');
+  });
+
+  it('volver a venir en el reporte lo deja presente y borra la ausencia (reaparición, D4)', () => {
+    const data = creditUpdateData(ROW, { origin: 'import' }, STAMP);
+    assert.equal(data.syncStatus, 'PRESENT');
+    assert.equal(data.absentSince, null);
+    assert.equal(data.lastSeenRunId, 'run-1');
+  });
+});
+
 describe('creditUpdateData — actualización desde el archivo', () => {
   it('lo que llega deja de faltar y se escribe; lo que no llega no se toca', () => {
     const prev = { origin: 'import', installmentAmount: 140, importMissing: ['principalAmount', 'interestRate', 'installmentsCount', 'frequency'] };

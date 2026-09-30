@@ -1120,7 +1120,13 @@
         "cancel": "Back",
         "done": "Payment recorded",
         "immutable": "A recorded payment cannot be edited or voided. If it is wrong, it is corrected with another entry.",
-        "noCredit": "Pick the credit first, from the debtor's file."
+        "noCredit": "Pick the credit first, from the debtor's file.",
+        "moreOptions": "More options",
+        "lessOptions": "Fewer options",
+        "channel": "Who received the money?",
+        "notes": "Note (optional)",
+        "externalHint": "This credit comes from another source: the payment is recorded as a Kobrax collection and does not change the reported balance or arrears. They update with the next report.",
+        "suggested": "Suggested: what is due today"
       },
       "detail": {
         "title": "The payment",
@@ -1168,6 +1174,10 @@
         "generic": "The action could not be completed.",
         "PAYMENT_001": "The amount cannot be negative.",
         "AUTH_002": "You do not have permission for this action."
+      },
+      "channel": {
+        "KOBRAX_COLLECTED": "Collected by Kobrax",
+        "EXTERNAL_CONFIRMED": "Paid through an entity channel"
       }
     }
   },

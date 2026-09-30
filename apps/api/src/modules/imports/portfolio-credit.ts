@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import { CreditStatus } from '@prisma/client';
+import { CreditDataOrigin, CreditStatus, ExternalSyncStatus } from '@prisma/client';
 import { CreditOrigin, nextImportMissing, readCreditMetadata, type ImportTrackedField } from '@kobrax/shared';
 import type { NormalizedRecord } from './field-catalog';
 import type { ImportConfig } from './import-config';
@@ -20,6 +20,12 @@ export interface ImportStamp {
   /** ISO. */
   at: string;
 }
+
+/**
+ * La única fuente de archivos hoy (D1). Cuando haya otra, sale de la configuración del tenant; mientras
+ * tanto es una constante y no un campo que alguien pueda cambiar a mitad de camino y duplicar la cartera.
+ */
+export const FILE_SOURCE = 'PSF';
 
 /** Qué datos financieros trae esta fila. Nº de cuotas y frecuencia no los trae ningún formato. */
 export function presentFields(b: NormalizedRecord): Partial<Record<ImportTrackedField, boolean>> {
@@ -46,6 +52,12 @@ export function creditCreateData(
     accountId,
     clientId,
     code: b.code ?? undefined,
+    // Identidad de la operación (D1): el nº de operación del reporte. `code` queda como rótulo.
+    origin: CreditDataOrigin.IMPORT,
+    externalSource: FILE_SOURCE,
+    externalId: b.code ?? undefined,
+    syncStatus: ExternalSyncStatus.PRESENT,
+    lastSeenRunId: stamp.runId,
     // Rellenos de columnas NOT NULL: `importMissing` dice que no significan nada.
     principalAmount: b.principalAmount ?? 0,
     outstandingBalance: b.outstandingBalance ?? 0,
@@ -86,6 +98,10 @@ export function creditUpdateData(b: NormalizedRecord, prevMeta: Record<string, u
     status: mapStatus(b.status) ?? undefined,
     interestRate: b.interestRate ?? undefined,
     disbursedAt: b.disbursedAt ? new Date(b.disbursedAt) : undefined,
+    // Vino en este reporte: presente, y si estaba ausente, deja de estarlo (reaparición, D4).
+    syncStatus: ExternalSyncStatus.PRESENT,
+    absentSince: null,
+    lastSeenRunId: stamp.runId,
     metadata: stripUndefined({
       ...prevMeta,
       origin: CreditOrigin.IMPORT,

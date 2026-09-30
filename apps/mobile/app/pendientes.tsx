@@ -8,6 +8,7 @@ import { useNetStore } from '@/store/net';
 import { getUserId } from '@/session';
 import { whenLabel } from '@/notifications.service';
 import { ACTION_LABEL, pendingActions, type QueuedAction } from '@/sync/queue';
+import { REJECTED_ATTEMPTS } from '@/db';
 import { drain } from '@/sync/sync.service';
 
 interface Fila {
@@ -91,6 +92,8 @@ export default function PendientesScreen() {
                 right={
                   f.attempts === 0 ? (
                     <StatusBadge label="En espera" tone="neutral" />
+                  ) : f.attempts >= REJECTED_ATTEMPTS ? (
+                    <StatusBadge label="Rechazado" tone="danger" />
                   ) : (
                     <StatusBadge label={`${f.attempts} ${f.attempts === 1 ? 'intento' : 'intentos'}`} tone="warning" />
                   )

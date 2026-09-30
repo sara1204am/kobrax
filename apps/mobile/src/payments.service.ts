@@ -12,7 +12,7 @@ import { cachedList } from './sync/cached';
  * hasta ahora el de `shared` era minúscula legacy y esta app se había escrito su propia copia al
  * lado. Se arregló allá, así que la copia se va y queda una sola verdad.
  */
-export type { NewPayment, PaymentItem, PaymentMethod } from '@kobrax/shared';
+export type { NewPayment, PaymentChannel, PaymentItem, PaymentMethod } from '@kobrax/shared';
 
 export function listPayments(caseId: string): Promise<QueryResult<PaymentItem[]>> {
   const query = toQuery({ caseId, limit: 100 });

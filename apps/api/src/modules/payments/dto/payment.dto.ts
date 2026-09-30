@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsDateString, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Length, Max, Min } from 'class-validator';
-import { PaymentMethod } from '@prisma/client';
+import { PaymentChannel, PaymentMethod } from '@prisma/client';
 
 /** Las columnas del ledger que se pueden ordenar. Son campos propios de `payments`, no de relaciones. */
 export const PAYMENT_SORTS = ['paymentDate', 'amount', 'method', 'receiptNumber'] as const;
@@ -16,6 +16,14 @@ export class CreatePaymentDto {
   /** Comprobante (spec §5.4). Los devuelve `POST /api/uploads`; el hash es del buffer original. */
   @IsOptional() @IsString() receiptUrl?: string;
   @IsOptional() @IsString() @Length(64, 64) receiptHash?: string;
+  /** Quién recibió la plata (D3). Default `KOBRAX_COLLECTED`. */
+  @IsOptional() @IsEnum(PaymentChannel) channel?: PaymentChannel;
+  @IsOptional() @IsString() @Length(1, 500) notes?: string;
+  /**
+   * Cuándo se cobró, si no es ahora: el pago guardado offline viaja con la hora del cobro. La ventana
+   * (no futuro, no más viejo que `PAYMENT_BACKDATE_DAYS`) la valida el service.
+   */
+  @IsOptional() @IsDateString() paymentDate?: string;
 }
 
 export class ListPaymentsQueryDto {

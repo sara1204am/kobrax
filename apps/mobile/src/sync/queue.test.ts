@@ -198,3 +198,15 @@ describe('send · altas offline', () => {
     expect(mockCalls).toContain('clearArrears:cr1:none:-');
   });
 });
+
+describe('isPermanentRejection', () => {
+  it('un 4xx es definitivo, salvo 408 y 429; un 5xx o sin status no', () => {
+    const { isPermanentRejection } = jest.requireActual('./queue') as typeof import('./queue');
+    expect(isPermanentRejection(400)).toBe(true);
+    expect(isPermanentRejection(422)).toBe(true);
+    expect(isPermanentRejection(408)).toBe(false);
+    expect(isPermanentRejection(429)).toBe(false);
+    expect(isPermanentRejection(500)).toBe(false);
+    expect(isPermanentRejection(undefined)).toBe(false);
+  });
+});

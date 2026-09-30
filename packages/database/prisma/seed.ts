@@ -30,6 +30,8 @@ import {
   AgendaItemStatus,
   ScheduleTimeMode,
   CatalogType,
+  CreditDataOrigin,
+  ExternalSyncStatus,
 } from '@prisma/client';
 import { ROLE_PERMISSIONS, RoleType, validateAgendaDetails } from '@kobrax/shared';
 import bcrypt from 'bcryptjs';
@@ -608,6 +610,15 @@ async function seedAgenda(acc: string, collectorId: string): Promise<void> {
         installmentsCount: opts.installmentsCount ?? 0, // 0 = préstamo abierto (§4.1)
         status: opts.status ?? CreditStatus.ACTIVE,
         daysPastDue: opts.daysPastDue,
+        // El importado lleva su identidad de operación externa en columnas (D1), como lo deja el importador.
+        ...(opts.origin === 'import'
+          ? {
+              origin: CreditDataOrigin.IMPORT,
+              externalSource: 'PSF',
+              externalId: `CRD-${opts.doc}`,
+              syncStatus: ExternalSyncStatus.PRESENT,
+            }
+          : {}),
         metadata: {
           frequency: opts.frequency,
           origin: opts.origin,

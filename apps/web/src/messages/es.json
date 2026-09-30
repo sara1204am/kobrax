@@ -1120,7 +1120,13 @@
         "cancel": "Volver",
         "done": "Pago registrado",
         "immutable": "Un pago registrado no se puede editar ni anular. Si está mal, se corrige con otro asiento.",
-        "noCredit": "Elegí primero el crédito desde la ficha del deudor."
+        "noCredit": "Elegí primero el crédito desde la ficha del deudor.",
+        "moreOptions": "Más opciones",
+        "lessOptions": "Menos opciones",
+        "channel": "¿Quién recibió la plata?",
+        "notes": "Nota (opcional)",
+        "externalHint": "Este crédito viene de otra fuente: el pago queda registrado como cobro de Kobrax y no cambia el saldo ni la mora reportados. Se actualizan con el próximo reporte.",
+        "suggested": "Sugerido: lo que corresponde cobrar hoy"
       },
       "detail": {
         "title": "El pago",
@@ -1168,6 +1174,10 @@
         "generic": "No se pudo completar la acción.",
         "PAYMENT_001": "El monto no puede ser negativo.",
         "AUTH_002": "No tenés permiso para esta acción."
+      },
+      "channel": {
+        "KOBRAX_COLLECTED": "La cobró Kobrax",
+        "EXTERNAL_CONFIRMED": "Pagó por un canal de la entidad"
       }
     }
   },

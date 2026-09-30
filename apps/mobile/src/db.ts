@@ -295,6 +295,17 @@ export async function markFailed(id: number, error: string): Promise<void> {
   await db.runAsync('UPDATE queue SET attempts = attempts + 1, last_error = ? WHERE id = ?', [error, id]);
 }
 
+/**
+ * Rechazado por el server: no se reintenta solo. Se marca con `REJECTED_ATTEMPTS` intentos —supera el
+ * techo de la cola sin agregar una columna a la base del teléfono— y sigue a la vista con su motivo.
+ * «Reintentar ahora» igual lo vuelve a mandar (`force`). **El ítem NO se borra.**
+ */
+export const REJECTED_ATTEMPTS = 99;
+export async function markRejected(id: number, error: string): Promise<void> {
+  const db = await open();
+  await db.runAsync('UPDATE queue SET attempts = ?, last_error = ? WHERE id = ?', [REJECTED_ATTEMPTS, error, id]);
+}
+
 /** Sólo para los tests y el borrado de datos del dispositivo. */
 export async function resetForTests(): Promise<void> {
   const db = await open();

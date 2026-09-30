@@ -58,7 +58,8 @@ export async function drain(userId: string, opts: { force?: boolean } = {}): Pro
         res.stopped = r.status;
         break; // sin red o sin sesión: lo que sigue va a fallar igual
       }
-      await db.markFailed(item.id, r.message);
+      if (r.permanent) await db.markRejected(item.id, r.message);
+      else await db.markFailed(item.id, r.message);
       res.failed += 1;
     }
 

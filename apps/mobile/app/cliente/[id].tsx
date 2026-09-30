@@ -12,15 +12,16 @@ import { MiniMapCard, type MiniMapPoint } from '@/maps/MiniMapCard';
 import { clientContext, type AgendaClientContext, type CreditOption } from '@/agenda.service';
 import { clientDisplayName, getClient, type ClientDetail } from '@/clients.service';
 import { addActivity, getCase, type CaseDetail, type NewActivity } from '@/cases.service';
-import { createPayment, listPayments, type PaymentItem, type PaymentMethod } from '@/payments.service';
+import { createPayment, listPayments, type PaymentChannel, type PaymentItem, type PaymentMethod } from '@/payments.service';
 import { clearArrears, getCredit, markArrears, type CreditDetail } from '@/credits.service';
 import { PlanSheet, prettyDay } from '@/credit-terms-view';
 import { DEFINITION_LABEL, FREQUENCY_LABEL, IMPORT_FIELD_LABEL, ORIGIN_LABEL, RATE_PERIOD_LABEL, UNKNOWN } from '@/credit-labels';
-import type { QueuedAction } from '@/sync/queue';
+import { pendingActions, type QueuedAction } from '@/sync/queue';
+import { getUserId } from '@/session';
 import { uploadImage } from '@/uploads.service';
 import { MiQrCobro } from '@/qr-cobro';
 import { queueForLater } from '@/sync/sync.service';
-import { buildTimeline, promiseReady, recovery, type TimelineEntry } from '@/ficha';
+import { buildTimeline, promiseReady, queuedPayments, recovery, type TimelineEntry } from '@/ficha';
 
 /** Las dos acciones de mora, ya en la forma en la que viajan por la cola. */
 type QueuedArrears = Extract<QueuedAction, { kind: 'arrears.mark' | 'arrears.clear' }>;
@@ -30,6 +31,17 @@ const METHODS: { value: PaymentMethod; label: string }[] = [
   { value: 'TRANSFER', label: 'Transferencia' },
   { value: 'QR', label: 'QR' },
 ];
+/** Quién recibió la plata (D3). El default es el caso de siempre: la cobró el cobrador. */
+const CHANNELS: { value: PaymentChannel; label: string }[] = [
+  { value: 'KOBRAX_COLLECTED', label: 'La cobré yo' },
+  { value: 'EXTERNAL_CONFIRMED', label: 'Pagó en la entidad' },
+];
+
+/** Los pagos de este caso que esperan señal en el teléfono (para mostrarlos en el historial ya). */
+async function queuedFor(caseId: string): Promise<PaymentItem[]> {
+  const userId = await getUserId();
+  return userId ? queuedPayments(caseId, await pendingActions(userId)) : [];
+}
 // Catálogo de resultado de gestión (§5.4). type = CaseActivityType, result = VisitOutcome.
 const OUTCOMES: { key: string; label: string; type: 'CALL' | 'VISIT' | 'NOTE'; result: string; promise?: boolean }[] = [
   { key: 'no_contact', label: 'No contesta', type: 'CALL', result: 'NO_CONTACT' },
@@ -93,9 +105,11 @@ export default function ClienteFichaScreen() {
   }, [ctx]);
 
   const loadCase = useCallback(async (caseId: string, creditId: string) => {
-    const [c, p, k] = await Promise.all([getCase(caseId), listPayments(caseId), getCredit(creditId)]);
+    const [c, p, k, q] = await Promise.all([getCase(caseId), listPayments(caseId), getCredit(creditId), queuedFor(caseId)]);
     if (c.status === 'ok') setDetail(c.data);
-    if (p.status === 'ok') setPayments(p.data);
+    // Lo que espera señal va arriba de lo confirmado: el cobrador ve su cobro aunque no haya red.
+    if (p.status === 'ok') setPayments([...q, ...p.data]);
+    else if (q.length > 0) setPayments(q);
     setCredit(k.status === 'ok' ? k.data : null);
   }, []);
 
@@ -426,9 +440,13 @@ export default function ClienteFichaScreen() {
         visible={paySheet}
         onClose={() => setPaySheet(false)}
         currency={currency}
-        defaultAmount={detail?.installmentAmount ?? selected.outstandingBalance}
-        maxAmount={selected.outstandingBalance}
-        onSubmit={async (amount, method, receipt, idemKey) => {
+        // El monto sugerido (`suggestedPaymentAmount`): en PSF la mora reportada, nunca el saldo entero.
+        defaultAmount={detail?.suggestedPaymentAmount ?? detail?.installmentAmount}
+        external={detail?.locked}
+        // Importado (PSF): el saldo es el del último reporte y el pago no lo toca (D3). Topearlo
+        // rechazaría un cobro real cuando el reporte va atrasado.
+        maxAmount={detail?.locked ? Number.POSITIVE_INFINITY : selected.outstandingBalance}
+        onSubmit={async (amount, method, receipt, idemKey, channel) => {
           const input = {
             creditId: selected.creditId,
             caseId: selected.caseId,
@@ -436,6 +454,9 @@ export default function ClienteFichaScreen() {
             method,
             receiptUrl: receipt?.url,
             receiptHash: receipt?.hash,
+            ...(channel !== 'KOBRAX_COLLECTED' ? { channel } : {}),
+            // La hora del cobro, no la de la sincronización: si queda en la cola, viaja con ella.
+            paymentDate: new Date().toISOString(),
           };
           const res = await createPayment(input, idemKey);
           if (res.status === 'ok') { setPaySheet(false); await loadCase(selected.caseId, selected.creditId); return null; }
@@ -636,6 +657,7 @@ function TimelineRow({ e, currency }: { e: TimelineEntry; currency: string }) {
           {isPay ? `Pago ${money(e.amount, currency)} · ${METHOD_LABEL[e.method] ?? e.method}` : (e.result ?? e.type)}
           {isPay && e.receiptUrl ? '  📎' : ''}
         </Text>
+        {isPay && e.pending ? <Text style={styles.tlSub}>Guardado en el teléfono · se sube con señal</Text> : null}
         {!isPay && e.notes ? <Text style={styles.tlSub}>{e.notes}</Text> : null}
         <Text style={styles.tlDate}>{new Date(e.at).toLocaleDateString('es')}</Text>
       </View>
@@ -645,14 +667,20 @@ function TimelineRow({ e, currency }: { e: TimelineEntry; currency: string }) {
 
 /** Hoja Registrar pago (§5.4). */
 function PaySheet({
-  visible, onClose, currency, defaultAmount, maxAmount, onSubmit,
+  visible, onClose, currency, defaultAmount, maxAmount, external, onSubmit,
 }: {
-  visible: boolean; onClose: () => void; currency: string; defaultAmount: number; maxAmount: number;
+  visible: boolean; onClose: () => void; currency: string;
+  /** Con qué arranca el monto. Ausente = vacío (no hay un monto sensato que proponer). */
+  defaultAmount?: number;
+  maxAmount: number;
+  /** Operación PSF: el pago no cambia el saldo reportado, y se dice (D3). */
+  external?: boolean;
   /** `receipt` viaja entero: con señal trae `url`+`hash`, sin señal la ruta local de la foto. */
-  onSubmit: (amount: number, method: PaymentMethod, receipt: Comprobante | null, idemKey: string) => Promise<string | null>;
+  onSubmit: (amount: number, method: PaymentMethod, receipt: Comprobante | null, idemKey: string, channel: PaymentChannel) => Promise<string | null>;
 }) {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('CASH');
+  const [channel, setChannel] = useState<PaymentChannel>('KOBRAX_COLLECTED');
   const [receipt, setReceipt] = useState<Comprobante | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -661,8 +689,9 @@ function PaySheet({
 
   useEffect(() => {
     if (visible) {
-      setAmount(String(defaultAmount));
+      setAmount(defaultAmount !== undefined ? String(defaultAmount) : '');
       setMethod('CASH');
+      setChannel('KOBRAX_COLLECTED');
       setReceipt(null);
       setError(null);
       idemRef.current = `pay-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
@@ -689,18 +718,23 @@ function PaySheet({
   const submit = useCallback(async () => {
     setSaving(true);
     setError(null);
-    const err = await onSubmit(num, method, receipt, idemRef.current);
+    const err = await onSubmit(num, method, receipt, idemRef.current, channel);
     setSaving(false);
     if (err) setError(err);
-  }, [num, method, receipt, onSubmit]);
+  }, [num, method, receipt, channel, onSubmit]);
 
   return (
     <BottomSheet visible={visible} onClose={onClose} title="Registrar pago">
       <ErrorBanner message={error} />
       <SectionLabel>Monto</SectionLabel>
       <AmountInput value={amount} onChangeText={setAmount} currencySymbol={currency} accessibilityLabel="Monto del pago" />
+      {external && (
+        <Text style={styles.sheetHint}>No cambia el saldo ni la mora del reporte: se actualizan con el próximo.</Text>
+      )}
       <SectionLabel>Método</SectionLabel>
       <Chips options={METHODS} value={method} onChange={setMethod} />
+      <SectionLabel>¿Quién recibió la plata?</SectionLabel>
+      <Chips options={CHANNELS} value={channel} onChange={setChannel} />
       {method === 'QR' && <MiQrCobro />}
       <Pressable style={styles.receiptBtn} onPress={capture} disabled={uploading} accessibilityRole="button">
         <Text style={styles.receiptText}>{uploading ? 'Subiendo…' : receipt ? '📷 Comprobante listo' : '📷 Foto de comprobante'}</Text>
@@ -816,6 +850,7 @@ const styles = StyleSheet.create({
   tlIcon: { fontSize: 18 },
   tlTitle: { ...TYPE.body, color: COLORS.navy, fontWeight: '600' },
   tlSub: { ...TYPE.secondary, color: COLORS.text2 },
+  sheetHint: { ...TYPE.secondary, color: COLORS.text2, marginBottom: SPACING.sm },
   tlDate: { ...TYPE.caption, color: COLORS.muted, marginTop: 2 },
   receiptBtn: { marginTop: SPACING.md, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.input, borderWidth: 1, borderColor: COLORS.periwinkle, backgroundColor: COLORS.highlight },
   receiptText: { ...TYPE.secondary, color: COLORS.navy, fontWeight: '600' },

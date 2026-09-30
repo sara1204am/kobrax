@@ -6,8 +6,8 @@
  *
  *   - en archivo + existe (origin=import) → UPDATE
  *   - en archivo + no existe              → CREATE (cliente + crédito)
- *   - ausente del archivo + elegible (origin=import, en alcance) → AL DÍA
- *       (`daysPastDue=0`, `ACTIVE`, saldo intacto) — regla de ausentes = 'set-current'
+ *   - ausente del archivo + elegible (origin=import, en alcance, no cerrado) → AL DÍA
+ *       (`daysPastDue=0`; estado y saldo intactos) — regla de ausentes = 'set-current'
  *   - crédito cargado a mano (origin≠import) → INTOCABLE
  *
  * El caller pasa TODOS los créditos de la cuenta (no solo los del alcance) porque el
@@ -34,6 +34,11 @@ export interface ExistingCredit {
   // dentro del alcance → único candidato real a update / set-current. Un match no-elegible NO se crea
   // (violaría el unique) ni se toca → cae en `invalid`.
   eligible: boolean;
+  /**
+   * Cerrado (PAID, CANCELLED, WRITTEN_OFF…): la ausencia del reporte no lo toca (D4). Antes la regla de
+   * ausentes le escribía `ACTIVE` y resucitaba un crédito cancelado. Ausente = no cerrado.
+   */
+  closed?: boolean;
 }
 
 export interface PortfolioPlan {
@@ -104,7 +109,7 @@ export function planPortfolioImport(
   // Ausentes del archivo dentro del alcance: solo elegibles origin=import → al día. Nunca borrar.
   if (absentRule === 'set-current') {
     for (const e of existingAccount) {
-      if (!e.eligible || e.origin !== CreditOrigin.IMPORT || matched.has(e.id)) continue;
+      if (!e.eligible || e.closed || e.origin !== CreditOrigin.IMPORT || matched.has(e.id)) continue;
       plan.toSetCurrent.push(e.id);
     }
   }

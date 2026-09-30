@@ -1,5 +1,5 @@
 import type { CaseActivity, CollectionCase } from '@prisma/client';
-import { arrearsSourceOf, creditView, readCreditMetadata } from '@kobrax/shared';
+import { arrearsSourceOf, creditView, readCreditMetadata, suggestedPaymentAmount } from '@kobrax/shared';
 import { clientDisplayName } from '../clients/clients.serializer';
 
 const TERMINAL = ['CLOSED', 'WRITTEN_OFF'];
@@ -16,7 +16,12 @@ type CaseCredit = {
   daysPastDue: number;
   code?: string | null;
   metadata?: unknown;
-  installments?: { dueDate: Date; amount: unknown; status: string }[];
+  /** `credits.origin`: manda sobre `metadata.origin` (D1). */
+  origin?: string | null;
+  /** Operación externa: si vino en el último reporte y a qué fecha de corte son sus números (D4, D9). */
+  syncStatus?: string | null;
+  reportedAsOf?: Date | null;
+  installments?: { number?: number; dueDate: Date; amount: unknown; paidAmount?: unknown; status: string }[];
 };
 
 export function serializeActivity(a: CaseActivity) {
@@ -72,6 +77,7 @@ export function serializeCase(c: CaseWithActivities, now: Date = new Date(), por
   const view = c.credit
     ? creditView({
         metadata: c.credit.metadata,
+        origin: c.credit.origin,
         installments: c.credit.installments?.map((i) => ({ ...i, amount: Number(i.amount) })),
       })
     : undefined;
@@ -105,12 +111,28 @@ export function serializeCase(c: CaseWithActivities, now: Date = new Date(), por
      *
      * Se **deriva** de la metadata (no es columna), así que no puede quedar desincronizado.
      */
-    arrearsSource: c.credit ? arrearsSourceOf(readCreditMetadata(c.credit.metadata)) : undefined,
+    arrearsSource: c.credit ? arrearsSourceOf(readCreditMetadata(c.credit.metadata, c.credit.origin)) : undefined,
     installmentAmount: view?.installmentAmount,
     nextDueDate: view?.nextDueDate,
     frequency: view?.frequency,
     origin: view?.origin, // el móvil pinta el candado con esto (§4.3)
     locked: view?.locked,
+    // Operación externa (D4, D9): viajan en el caso porque el caso es lo que el móvil guarda offline.
+    syncStatus: c.credit?.syncStatus ?? undefined,
+    reportedAsOf: c.credit?.reportedAsOf ? c.credit.reportedAsOf.toISOString().slice(0, 10) : undefined,
+    // Con qué arranca el formulario de pago: viaja en el caso para que el móvil lo tenga offline.
+    suggestedPaymentAmount:
+      c.credit && view
+        ? suggestedPaymentAmount({
+            external: view.locked,
+            outstandingBalance: Number(c.credit.outstandingBalance),
+            installmentAmount: view.installmentAmount,
+            reportedPastDueAmount: view.pastDueAmount,
+            installments: c.credit.installments?.every((i) => i.number !== undefined)
+              ? c.credit.installments.map((i) => ({ number: i.number!, amount: Number(i.amount), paidAmount: Number(i.paidAmount ?? 0), status: i.status }))
+              : undefined,
+          })
+        : undefined,
     // Cartera (§5.3): solo presentes con `view=portfolio`; ausentes en agenda/mutaciones.
     zone: portfolio?.zone,
     locations: portfolio?.locations,

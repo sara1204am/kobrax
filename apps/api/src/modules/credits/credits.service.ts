@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { AgendaItemStatus, AgendaItemType, CasePriority, CaseStatus, CreditStatus, InstallmentStatus } from '@prisma/client';
+import { AgendaItemStatus, AgendaItemType, CasePriority, CaseStatus, CreditDataOrigin, CreditStatus, InstallmentStatus } from '@prisma/client';
 import {
   addPeriods,
   arrearsByMethod,
@@ -53,6 +53,7 @@ import {
   creditInstallmentMismatch,
   creditLocked,
   creditNotActive,
+  creditOriginNotAllowed,
   creditTermsConflict,
   creditTermsEditUnsupported,
   creditTermsInvalid,
@@ -104,6 +105,7 @@ export class CreditsService {
     const config = await this.accountConfig();
     const currency = dto.currency ?? config.currencyCode;
     if (dto.currency && dto.currency !== config.currencyCode) throw currencyMismatch(config.currencyCode);
+    if (dto.origin && isExternalOrigin(dto.origin)) throw creditOriginNotAllowed(dto.origin);
 
     /*
      * F4/06 · D14: con condiciones (`terms`) la API recalcula con el motor único y **manda según el
@@ -263,6 +265,8 @@ export class CreditsService {
           branchId: dto.branchId,
           code: dto.code,
           typeCode: dto.typeCode,
+          // Espejo en columna de `metadata.origin` (D1). El alta sólo admite los de Kobrax.
+          origin: dto.origin === CreditOrigin.QUICK_BATCH ? CreditDataOrigin.QUICK_BATCH : CreditDataOrigin.MANUAL,
           principalAmount: dto.principalAmount,
           outstandingBalance,
           interestRate, // con `terms`: el % del calculado, 0 si fue acordado (D7: sólo informativa)
@@ -372,8 +376,11 @@ export class CreditsService {
   /**
    * Editar el crédito. Tres clases de cambio, con reglas distintas:
    *
-   *  · **Organización** (estado, código, tipo, responsable, sucursal): siempre, también en el importado.
-   *  · **Operativos** (nota, próximo vencimiento): cualquier crédito propio, tenga o no condiciones.
+   *  · **Organización** (tipo, responsable, sucursal): siempre, también en el importado.
+   *  · **Estado y código**: en el importado los manda la fuente (D5) — el código es el nº de operación
+   *    del reporte, y el estado financiero lo informa el archivo. Mandar el mismo valor no es un cambio.
+   *  · **Nota**: siempre; en el importado es enriquecimiento de Kobrax, no un dato de la fuente (D5).
+   *  · **Próximo vencimiento**: cualquier crédito propio, tenga o no condiciones.
    *  · **Financieros**, de dos formas que no se mezclan en un mismo pedido:
    *      - `terms` / `initialState` (F4/06 · Fase 3): se redefine el crédito con el motor. Cuota,
    *        total, saldo (D15), próximo vencimiento y mora salen de `resolveCreditTerms` +
@@ -398,8 +405,14 @@ export class CreditsService {
         include: { _count: { select: { payments: true, installments: true } }, client: { select: { riskSegment: true } } },
       });
       if (!prev) throw resourceNotFound();
-      const meta = readCreditMetadata(prev.metadata);
-      if ((redefine || looseField || operational) && isExternalOrigin(meta.origin)) throw creditLocked();
+      const meta = readCreditMetadata(prev.metadata, prev.origin);
+      if (isExternalOrigin(meta.origin)) {
+        const sourceControlled =
+          dto.nextDueDate !== undefined ||
+          (dto.status !== undefined && dto.status !== prev.status) ||
+          (dto.code !== undefined && (dto.code || null) !== prev.code);
+        if (redefine || looseField || sourceControlled) throw creditLocked();
+      }
       if (looseField && meta.terms) throw creditTermsEditUnsupported();
 
       /*
@@ -414,8 +427,10 @@ export class CreditsService {
       const method = methodChange ? dto.arrearsMethod! : currentMethod;
 
       // Cuota/frecuencia/próxima fecha/nota viven en metadata (D1); se hace merge preservando el resto.
+      // El importado sólo llega acá con la nota (D5): se funde sobre su metadata tal como está, porque
+      // la leída trae defaults (frecuencia MONTHLY) que el archivo nunca dijo (D9).
       let nextMeta: CreditMetadata = {
-        ...meta,
+        ...(isExternalOrigin(meta.origin) ? (prev.metadata as unknown as CreditMetadata) : meta),
         ...(dto.installmentAmount !== undefined ? { installmentAmount: dto.installmentAmount } : {}),
         ...(dto.frequency !== undefined ? { frequency: dto.frequency } : {}),
         ...(dto.nextDueDate !== undefined ? { nextDueDate: dto.nextDueDate.slice(0, 10) } : {}),
@@ -570,7 +585,7 @@ export class CreditsService {
       const found = await tx.credit.findFirst({ where: { id, deletedAt: null }, include: { client: { select: { riskSegment: true } } } });
       if (!found) throw resourceNotFound();
       if (found.status !== CreditStatus.ACTIVE) throw creditNotActive();
-      const meta = readCreditMetadata(found.metadata);
+      const meta = readCreditMetadata(found.metadata, found.origin);
       if (isExternalOrigin(meta.origin)) throw creditLocked();
 
       const moraSince = moraSinceFromDays(days ?? 0, asOf);
@@ -620,7 +635,7 @@ export class CreditsService {
       const found = await tx.credit.findFirst({ where: { id, deletedAt: null } });
       if (!found) throw resourceNotFound();
       if (found.status !== CreditStatus.ACTIVE) throw creditNotActive();
-      const meta = readCreditMetadata(found.metadata);
+      const meta = readCreditMetadata(found.metadata, found.origin);
       if (isExternalOrigin(meta.origin)) throw creditLocked();
 
       let nextDueDate: string | undefined;
@@ -665,7 +680,7 @@ export class CreditsService {
       });
       if (!credit) throw resourceNotFound();
 
-      const meta = readCreditMetadata(credit.metadata);
+      const meta = readCreditMetadata(credit.metadata, credit.origin);
 
       // Cartera de un core ajeno: manda el valor del archivo "hasta la siguiente carga" (spec §6).
       // Sin esta guarda, un recálculo le borraba la mora que trajo la importación.

@@ -32,6 +32,16 @@ export const creditLocked = () =>
     message: 'Los datos financieros de un crédito importado no se editan; actualizá con una nueva importación',
   });
 
+/**
+ * Un crédito «importado» sólo lo crea el importador. Aceptar `origin: import|api` en el alta dejaba
+ * fabricar a mano un crédito bloqueado que el importador después adoptaba como suyo.
+ */
+export const creditOriginNotAllowed = (origin: string) =>
+  new BadRequestException({
+    code: 'CREDIT_ORIGIN_NOT_ALLOWED',
+    message: `Un crédito con origen «${origin}» sólo lo crea la importación`,
+  });
+
 // ── Condiciones del crédito (F4/06 · D14) ─────────────────────────────────────
 
 /** Las condiciones no tienen forma válida, o el motor no puede calcularlas (`issues` dice por qué). */

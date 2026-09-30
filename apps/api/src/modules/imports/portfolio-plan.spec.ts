@@ -93,4 +93,15 @@ describe('planPortfolioImport — unique account-wide (fix P2002)', () => {
     const plan = planPortfolioImport([], [imp('e1', 'C1', false)]);
     assert.deepEqual(plan.toSetCurrent, []);
   });
+
+  // D4: la ausencia no es un pago ni un cierre; un crédito cerrado no se resucita.
+  it('import cerrado (PAID/CANCELLED) ausente del archivo → NO se toca', () => {
+    const plan = planPortfolioImport([], [{ ...imp('e1', 'C1'), closed: true }, imp('e2', 'C2')]);
+    assert.deepEqual(plan.toSetCurrent, ['e2']);
+  });
+
+  it('import cerrado que vuelve a venir en el archivo → se actualiza (la fuente manda)', () => {
+    const plan = planPortfolioImport([row(0, 'C1')], [{ ...imp('e1', 'C1'), closed: true }]);
+    assert.deepEqual(plan.toUpdate.map((u) => u.id), ['e1']);
+  });
 });

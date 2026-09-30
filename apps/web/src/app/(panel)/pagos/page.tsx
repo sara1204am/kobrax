@@ -48,8 +48,9 @@ export default async function PagosPage({ searchParams }: { searchParams: Paymen
    * de por un uuid. Si no se puede leer, la acción sigue funcionando con el id.
    */
   const creditId = searchParams.creditId && isUuid(searchParams.creditId) ? searchParams.creditId : undefined;
+  const detail = creditId ? (await apiCall<CreditDetail>(`/credits/${creditId}`, { method: 'GET', auth: true })).body.data : undefined;
   const credit = creditId
-    ? { id: creditId, code: (await apiCall<CreditDetail>(`/credits/${creditId}`, { method: 'GET', auth: true })).body.data?.code }
+    ? { id: creditId, code: detail?.code, suggestedAmount: detail?.suggestedPaymentAmount, external: detail?.locked }
     : undefined;
 
   return (

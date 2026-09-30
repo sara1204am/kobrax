@@ -197,10 +197,12 @@ export function CreditEditor({
 
       <Section title={t('sections.collection')}>
         <div className="grid gap-5 sm:grid-cols-2">
+          {/* Importado: el estado lo informa la fuente y el código es su nº de operación (D5). */}
           <Field label={tp('form.status')}>
             <Select
               value={draft.extras.status}
               onChange={(e) => setExtra({ status: e.target.value })}
+              disabled={block === 'locked'}
             >
               {CREDIT_STATUSES.map((s) => (
                 <option key={s} value={s}>
@@ -214,6 +216,7 @@ export function CreditEditor({
             <Input
               value={draft.extras.code}
               onChange={(e) => setExtra({ code: e.target.value })}
+              disabled={block === 'locked'}
               maxLength={64}
             />
           </Field>
@@ -262,7 +265,7 @@ export function CreditEditor({
             </Field>
           )}
 
-          {/* La nota del importado también la manda la fuente (la API la rechaza con CREDIT_LOCKED). */}
+          {/* La nota es de Kobrax también en el importado: lo que el cobrador sabe del deudor (D5). */}
           <div className="sm:col-span-2">
             <Field label={t('notes')}>
               <Input
@@ -270,7 +273,6 @@ export function CreditEditor({
                 onChange={(e) =>
                   onChange({ ...draft, form: { ...draft.form, notes: e.target.value } })
                 }
-                disabled={block === 'locked'}
                 maxLength={500}
               />
             </Field>

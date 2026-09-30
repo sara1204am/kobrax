@@ -146,6 +146,11 @@ export interface CreditMetadata {
    * un 0 que no significa nada (D9). Ausente = no se sabe (importado antes de la Fase 4) o no es importado.
    */
   importMissing?: ImportTrackedField[];
+  /**
+   * Importado: el monto en mora que trajo el reporte. Es lo que se le propone cobrar al cobrador
+   * (`suggestedPaymentAmount`); ausente = el reporte no lo trae.
+   */
+  pastDueAmount?: number;
   /** La corrida de importación que lo tocó por última vez (`client_import_runs.id`). */
   importRunId?: string;
   /** ISO: cuándo lo tocó esa corrida. */
@@ -156,13 +161,28 @@ export interface CreditMetadata {
   arrearsSince?: string;
 }
 
-export function readCreditMetadata(raw: unknown): CreditMetadata {
+/** La columna `credits.origin` (enum de la base, en mayúsculas) → el origen del dominio. */
+const ORIGIN_BY_COLUMN: Readonly<Record<string, CreditOrigin>> = {
+  MANUAL: CreditOrigin.MANUAL,
+  QUICK_BATCH: CreditOrigin.QUICK_BATCH,
+  IMPORT: CreditOrigin.IMPORT,
+  API: CreditOrigin.API,
+};
+
+/**
+ * `originColumn` = `credits.origin`. **Cuando llega, manda** (D1): la columna la escriben sólo el alta y
+ * el importador, y decide qué rama del sistema maneja el crédito; `metadata.origin` es un espejo que se
+ * sigue escribiendo para las apps viejas, dentro de un JSON que cualquier edición reescribe. Sin
+ * columna (el móvil, que lee el metadata que le mandan), se lee el espejo como siempre.
+ */
+export function readCreditMetadata(raw: unknown, originColumn?: string | null): CreditMetadata {
   const m = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
   const freq = m.frequency;
   const origin = m.origin;
+  const fromColumn = originColumn ? ORIGIN_BY_COLUMN[originColumn] : undefined;
   return {
     frequency: isEnumValue(PaymentFrequency, freq) ? freq : PaymentFrequency.MONTHLY,
-    origin: isEnumValue(CreditOrigin, origin) ? origin : CreditOrigin.MANUAL,
+    origin: fromColumn ?? (isEnumValue(CreditOrigin, origin) ? origin : CreditOrigin.MANUAL),
     installmentAmount: typeof m.installmentAmount === 'number' ? m.installmentAmount : undefined,
     nextDueDate: typeof m.nextDueDate === 'string' ? m.nextDueDate : undefined,
     externalRef: typeof m.externalRef === 'string' ? m.externalRef : undefined,
@@ -171,6 +191,7 @@ export function readCreditMetadata(raw: unknown): CreditMetadata {
     balanceBasis: (BALANCE_BASES as readonly unknown[]).includes(m.balanceBasis) ? (m.balanceBasis as BalanceBasis) : undefined,
     initialState: parseInitialState(m.initialState),
     importMissing: Array.isArray(m.importMissing) ? m.importMissing.filter(isImportTrackedField) : undefined,
+    pastDueAmount: typeof m.pastDueAmount === 'number' ? m.pastDueAmount : undefined,
     importRunId: typeof m.importRunId === 'string' ? m.importRunId : undefined,
     importedAt: typeof m.importedAt === 'string' ? m.importedAt : undefined,
     arrearsMethod: isEnumValue(ArrearsMethod, m.arrearsMethod) ? m.arrearsMethod : undefined,
@@ -239,9 +260,11 @@ export interface CreditView extends CreditMetadata {
  */
 export function creditView(credit: {
   metadata?: unknown;
+  /** `credits.origin`, si quien llama lo tiene (ver `readCreditMetadata`). */
+  origin?: string | null;
   installments?: { dueDate: Date | string; amount: number; status: string }[] | null;
 }): CreditView {
-  const meta = readCreditMetadata(credit.metadata);
+  const meta = readCreditMetadata(credit.metadata, credit.origin);
   const locked = isExternalOrigin(meta.origin);
   const schedule = credit.installments ?? [];
   if (schedule.length === 0) return { ...meta, hasSchedule: false, locked };

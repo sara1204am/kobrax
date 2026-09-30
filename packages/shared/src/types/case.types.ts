@@ -5,7 +5,7 @@
  * `serializeCase` de la API (las fechas llegan como ISO string vía JSON).
  */
 import type { CasePriority, CaseStatus } from '../enums/index.js';
-import type { ArrearsSource, CreditOrigin, PaymentFrequency } from '../enums/credit.enum.js';
+import type { ArrearsSource, CreditOrigin, ExternalSyncStatus, PaymentFrequency } from '../enums/credit.enum.js';
 
 /**
  * Cómo se puede ordenar `GET /cases`. La primera es el default.
@@ -65,6 +65,11 @@ export interface CaseListItem {
   frequency?: PaymentFrequency;
   origin?: CreditOrigin;
   locked?: boolean;
+  /** Operación externa: si vino en el último reporte y a qué fecha de corte son sus números (D4, D9). */
+  syncStatus?: ExternalSyncStatus;
+  reportedAsOf?: string;
+  /** Con qué monto arranca el formulario de pago (`suggestedPaymentAmount`). Ausente = vacío. */
+  suggestedPaymentAmount?: number;
   /** Sólo con `view=portfolio`. */
   zone?: string;
   /** Todas las ubicaciones dibujables: las del cliente y las de sus garantes/familiares. */

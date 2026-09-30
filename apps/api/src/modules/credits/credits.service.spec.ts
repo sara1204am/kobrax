@@ -217,6 +217,15 @@ describe('CreditsService.create — crédito sin cronograma', () => {
     assert.equal(data.outstandingBalance, total);
   });
 
+  it('el alta rechaza un origen externo: un importado sólo lo crea la importación', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await rejectsWithCode(service.create({ ...(MOVIL as object), origin: 'import' } as never), 'CREDIT_ORIGIN_NOT_ALLOWED');
+    await rejectsWithCode(service.create({ ...(MOVIL as object), origin: 'api' } as never), 'CREDIT_ORIGIN_NOT_ALLOWED');
+    assert.equal(calls.creditCreate.length, 0);
+    await service.create({ ...(MOVIL as object), origin: 'quick_batch' } as never);
+    assert.equal(calls.creditCreate.length, 1);
+  });
+
   it('préstamo abierto: sin número de cuotas se acepta y queda en 0 (§4.1)', async () => {
     const { service, calls } = makeService({ client: { id: 'c1' } });
     await service.create({ clientId: BASE.clientId, principalAmount: 1000, installmentAmount: 250 } as never);
@@ -292,11 +301,38 @@ describe('CreditsService.update (editar desde la ficha §4)', () => {
     await rejectsWithCode(service.update('cr1', { installmentAmount: 600 } as never), 'CREDIT_LOCKED');
   });
 
-  it('editar solo status/código NO dispara el candado ni toca metadata', async () => {
-    const credit = { id: 'cr1', metadata: { origin: 'import' } };
+  it('crédito manual: editar solo status/código NO toca metadata', async () => {
+    const credit = { id: 'cr1', metadata: { origin: 'manual' } };
     const { service, calls } = makeService({ credit });
-    await service.update('cr1', { code: 'ABC' } as never);
+    await service.update('cr1', { code: 'ABC', status: 'DEFAULTED' } as never);
     assert.equal(calls.creditUpdate[0]!.metadata, undefined); // no reescribe metadata
+  });
+
+  // D5: el código es el nº de operación del reporte y el estado lo informa la fuente.
+  it('importado: cambiar código o estado → CREDIT_LOCKED (D5)', async () => {
+    const credit = { id: 'cr1', code: '302-222-2542', status: 'ACTIVE', metadata: { origin: 'import' } };
+    const { service } = makeService({ credit });
+    await rejectsWithCode(service.update('cr1', { code: 'OTRO' } as never), 'CREDIT_LOCKED');
+    await rejectsWithCode(service.update('cr1', { code: null } as never), 'CREDIT_LOCKED');
+    await rejectsWithCode(service.update('cr1', { status: 'PAID' } as never), 'CREDIT_LOCKED');
+    await rejectsWithCode(service.update('cr1', { nextDueDate: '2026-12-01' } as never), 'CREDIT_LOCKED');
+  });
+
+  it('importado: el mismo código y estado que ya tiene no es un cambio', async () => {
+    const credit = { id: 'cr1', code: '302-222-2542', status: 'ACTIVE', metadata: { origin: 'import' } };
+    const { service, calls } = makeService({ credit });
+    await service.update('cr1', { code: '302-222-2542', status: 'ACTIVE', typeCode: 'MICRO' } as never);
+    assert.equal(calls.creditUpdate.length, 1);
+  });
+
+  // D5: la nota es enriquecimiento de Kobrax, no un dato de la fuente.
+  it('importado: la nota, el tipo y el responsable sí se editan (D5)', async () => {
+    const credit = { id: 'cr1', code: '302-222-2542', status: 'ACTIVE', metadata: { origin: 'import', installmentAmount: 500 } };
+    const { service, calls } = makeService({ credit });
+    await service.update('cr1', { notes: 'Paga los viernes en el puesto', typeCode: 'MICRO' } as never);
+    const data = calls.creditUpdate[0]!;
+    assert.equal(data.typeCode, 'MICRO');
+    assert.deepEqual(data.metadata, { origin: 'import', installmentAmount: 500, notes: 'Paga los viernes en el puesto' });
   });
 
   // Cambiar la cuota sin tocar `terms` dejaría dos definiciones del mismo crédito (F4/06 · Fase 3).

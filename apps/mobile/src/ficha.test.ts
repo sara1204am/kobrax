@@ -1,6 +1,6 @@
 import type { CaseActivityItem } from './cases.service';
 import type { PaymentItem } from './payments.service';
-import { buildTimeline, promiseReady, recovery } from './ficha';
+import { buildTimeline, promiseReady, queuedPayments, recovery } from './ficha';
 
 const act = (p: Partial<CaseActivityItem>): CaseActivityItem => ({ id: 'a', type: 'CALL', createdAt: '2026-07-01T10:00:00Z', ...p });
 const pay = (p: Partial<PaymentItem>): PaymentItem =>
@@ -56,5 +56,24 @@ describe('promiseReady', () => {
     expect(promiseReady({ amount: 300, promiseDate: '2026-08-01', paymentMethodCode: 'CASH' })).toBe(true);
     expect(promiseReady({ amount: 0, promiseDate: '2026-08-01', paymentMethodCode: 'CASH' })).toBe(false);
     expect(promiseReady({ amount: 300, promiseDate: '', paymentMethodCode: 'CASH' })).toBe(false);
+  });
+});
+
+describe('queuedPayments — el cobro sin señal se ve en el acto', () => {
+  const queued = [
+    { action: { kind: 'payment', idempotencyKey: 'k1', input: { creditId: 'cr', caseId: 'c1', amount: 500, method: 'CASH', paymentDate: '2026-09-30T15:00:00.000Z' } }, createdAt: 1 },
+    { action: { kind: 'payment', idempotencyKey: 'k2', input: { creditId: 'cr', caseId: 'otro', amount: 80, method: 'CASH' } }, createdAt: 2 },
+    { action: { kind: 'case.activity' }, createdAt: 3 },
+  ];
+
+  it('sólo los pagos de este caso, con la fecha del cobro y marcados pendientes', () => {
+    const p = queuedPayments('c1', queued);
+    expect(p).toHaveLength(1);
+    expect(p[0]).toMatchObject({ id: 'pending-k1', amount: 500, paymentDate: '2026-09-30T15:00:00.000Z', pending: true });
+  });
+
+  it('en el historial el pendiente queda marcado y ordenado por la hora del cobro', () => {
+    const t = buildTimeline([act({ createdAt: '2026-09-30T10:00:00Z' })], [...queuedPayments('c1', queued), pay({})]);
+    expect(t[0]).toMatchObject({ kind: 'payment', id: 'pending-k1', pending: true });
   });
 });

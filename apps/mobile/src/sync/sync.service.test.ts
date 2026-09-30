@@ -18,6 +18,11 @@ jest.mock('../db', () => ({
     const row = mockCola.find((x) => x.id === id);
     if (row) row.attempts += 1;
   }),
+  markRejected: jest.fn(async (id: number, err: string) => {
+    mockOps.push(`markRejected:${id}:${err}`);
+    const row = mockCola.find((x) => x.id === id);
+    if (row) row.attempts = 99;
+  }),
   pendingCount: jest.fn(async () => mockCola.length),
 }));
 
@@ -69,6 +74,19 @@ describe('drain', () => {
     expect(r.failed).toBe(1);
     expect(mockOps.some((o) => o.startsWith('markFailed:1'))).toBe(true);
     expect(mockOps.some((o) => o.startsWith('dequeue'))).toBe(false);
+  });
+
+  // Un 4xx no se arregla reintentando: queda a la vista como rechazado, y tampoco se borra.
+  it('un rechazo definitivo del servidor se marca rechazado, no se borra ni se reintenta solo', async () => {
+    mockCola.push(item(1));
+    mockSend.result = { status: 'error', message: 'La fecha del pago no puede ser futura', permanent: true };
+    const r = await drain('u1');
+    expect(r.failed).toBe(1);
+    expect(mockOps).toContain('markRejected:1:La fecha del pago no puede ser futura');
+    expect(mockOps.some((o) => o.startsWith('markFailed') || o.startsWith('dequeue'))).toBe(false);
+    mockOps.length = 0;
+    await drain('u1');
+    expect(mockOps.some((o) => o.startsWith('send'))).toBe(false); // superó el techo: no sale solo
   });
 
   it('sin red corta en el primero: los que siguen tampoco van a salir', async () => {

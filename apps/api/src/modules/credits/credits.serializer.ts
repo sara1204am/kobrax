@@ -8,6 +8,7 @@ import {
   DEFAULT_ARREARS_METHOD,
   oldestUnpaid,
   priorPaidAmountOf,
+  suggestedPaymentAmount,
   type CreditTerms,
   type ImportTrackedField,
 } from '@kobrax/shared';
@@ -20,6 +21,8 @@ export const DEFAULT_CREDIT_LABELS: Record<string, string> = {
 };
 
 const num = (d: unknown): number => (d == null ? 0 : Number(d));
+/** Una columna `DATE` como `YYYY-MM-DD` (sin hora: es una fecha de corte, no un instante). */
+const isoDay = (d: Date | null | undefined): string | undefined => (d ? d.toISOString().slice(0, 10) : undefined);
 
 export function serializeInstallment(i: CreditInstallment) {
   return {
@@ -61,6 +64,7 @@ export function serializeCredit(
   // Misma función que el listado de casos y que el móvil: una sola regla, tres consumidores.
   const view = creditView({
     metadata: credit.metadata,
+    origin: credit.origin,
     installments: credit.installments?.map((i) => ({ dueDate: i.dueDate, amount: num(i.amount), status: i.status })),
   });
   // Importado: lo que el archivo nunca trajo (D9). Frecuencia y nº de cuotas no se inventan: la columna
@@ -115,6 +119,19 @@ export function serializeCredit(
     initialState: view.initialState,
     unknownFields,
     importedAt: view.importedAt,
+    // Operación de una fuente externa (D1, D4, D9). Ausentes en los créditos de Kobrax.
+    externalSource: credit.externalSource ?? undefined,
+    externalId: credit.externalId ?? undefined,
+    syncStatus: credit.syncStatus ?? undefined,
+    absentSince: isoDay(credit.absentSince),
+    reportedAsOf: isoDay(credit.reportedAsOf),
+    suggestedPaymentAmount: suggestedPaymentAmount({
+      external: view.locked,
+      outstandingBalance: num(credit.outstandingBalance),
+      installmentAmount,
+      reportedPastDueAmount: view.pastDueAmount,
+      installments: credit.installments?.map((i) => ({ number: i.number, amount: num(i.amount), paidAmount: num(i.paidAmount), status: i.status })),
+    }),
     // D13: lo pagado antes de registrarlo; «Recuperado» lo descuenta.
     priorPaidAmount: priorPaidAmountOf(view.terms, view.initialState),
     // D20: cómo se cuenta la mora, desde cuándo (bancario) y qué cuota reclamar hoy.

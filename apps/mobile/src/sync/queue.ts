@@ -139,7 +139,16 @@ export async function enqueue(action: QueuedAction): Promise<boolean> {
 }
 
 /** Lo que puede pasarle a un envío. `auth` corta el drenaje entero: sin sesión no sube nada más. */
-export type SendResult = { status: 'ok' } | { status: 'offline' } | { status: 'auth' } | { status: 'error'; message: string };
+/**
+ * `permanent`: el server **rechazó** la acción (un 4xx: datos inválidos, sin permiso, ya no aplica).
+ * Reintentarla no la arregla —el mismo pedido recibe la misma respuesta—, así que no se reintenta sola:
+ * queda a la vista con su motivo. Un 5xx o un 408/429 son pasajeros y sí se reintentan.
+ */
+export type SendResult =
+  | { status: 'ok' }
+  | { status: 'offline' }
+  | { status: 'auth' }
+  | { status: 'error'; message: string; permanent?: boolean };
 
 /**
  * Sube una acción. Es el único lugar que sabe traducir lo guardado a llamadas del API — y usa
@@ -209,11 +218,16 @@ export async function send(action: QueuedAction): Promise<SendResult> {
   }
 }
 
-function mapMutate(res: { status: string; message?: string }): SendResult {
+function mapMutate(res: { status: string; message?: string; httpStatus?: number }): SendResult {
   if (res.status === 'ok') return { status: 'ok' };
   if (res.status === 'offline') return { status: 'offline' };
   if (res.status === 'unauthenticated') return { status: 'auth' };
-  return { status: 'error', message: res.message ?? 'No se pudo subir' };
+  return { status: 'error', message: res.message ?? 'No se pudo subir', permanent: isPermanentRejection(res.httpStatus) };
+}
+
+/** Un 4xx es definitivo, salvo el timeout (408) y el «más despacio» (429), que son del momento. */
+export function isPermanentRejection(httpStatus: number | undefined): boolean {
+  return httpStatus !== undefined && httpStatus >= 400 && httpStatus < 500 && httpStatus !== 408 && httpStatus !== 429;
 }
 
 /** Lo pendiente, ya deserializado, para pintarlo en la hoja de pendientes. */

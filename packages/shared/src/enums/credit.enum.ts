@@ -198,6 +198,13 @@ export const ARREARS_SOURCES = ['CALCULATED', 'IMPORTED', 'MANUAL'] as const;
 export type ArrearsSource = (typeof ARREARS_SOURCES)[number];
 
 /**
+ * Si una operación externa vino en el último reporte de su alcance (D4). **`ABSENT` ≠ al día ≠ pagado**:
+ * que un reporte de mora deje de traerla no dice si se puso al día o si canceló.
+ */
+export const EXTERNAL_SYNC_STATUSES = ['PRESENT', 'ABSENT'] as const;
+export type ExternalSyncStatus = (typeof EXTERNAL_SYNC_STATUSES)[number];
+
+/**
  * Por qué se cerró un caso. Es texto libre en la base (`closed_reason`); acá viven **los que pone
  * el sistema**, que son los que después hay que poder contar.
  *

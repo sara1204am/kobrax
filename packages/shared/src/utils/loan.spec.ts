@@ -260,3 +260,27 @@ describe('readCreditMetadata', () => {
     expect(m.installmentAmount).toBeUndefined();
   });
 });
+
+// D1: el origen vive en `credits.origin`; `metadata.origin` es un espejo para las apps viejas.
+describe('readCreditMetadata — columna de origen', () => {
+  it('la columna manda sobre el metadata', () => {
+    expect(readCreditMetadata({ origin: 'manual' }, 'IMPORT').origin).toBe(CreditOrigin.IMPORT);
+    expect(readCreditMetadata({ origin: 'import' }, 'MANUAL').origin).toBe(CreditOrigin.MANUAL);
+    expect(readCreditMetadata({}, 'QUICK_BATCH').origin).toBe(CreditOrigin.QUICK_BATCH);
+  });
+
+  it('sin columna (el móvil) se lee el metadata como siempre', () => {
+    expect(readCreditMetadata({ origin: 'import' }).origin).toBe(CreditOrigin.IMPORT);
+    expect(readCreditMetadata({ origin: 'import' }, null).origin).toBe(CreditOrigin.IMPORT);
+    expect(readCreditMetadata({}).origin).toBe(CreditOrigin.MANUAL);
+  });
+
+  it('un valor de columna desconocido cae al metadata', () => {
+    expect(readCreditMetadata({ origin: 'import' }, 'OTRO').origin).toBe(CreditOrigin.IMPORT);
+  });
+
+  it('creditView bloquea según la columna', () => {
+    expect(creditView({ metadata: { origin: 'manual' }, origin: 'IMPORT' }).locked).toBe(true);
+    expect(creditView({ metadata: { origin: 'import' }, origin: 'MANUAL' }).locked).toBe(false);
+  });
+});
