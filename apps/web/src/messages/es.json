@@ -296,7 +296,10 @@
         "existingClient": "cliente que ya tenías",
         "colBalance": "Saldo",
         "colArrears": "Mora",
-        "colStatus": "Estado en el reporte"
+        "colStatus": "Estado en el reporte",
+        "toastOk": "Importación guardada: {created} nuevos y {updated} actualizados.",
+        "toastWarned": "Importación guardada, con {n, plural, one {# registro rechazado} other {# registros rechazados}}.",
+        "toastSkipped": "Este archivo ya se había importado: no se volvió a aplicar."
       },
       "setup": {
         "title": "Configurá tu importación",

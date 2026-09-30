@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/panel-ui';
 import { ACCEPTED_FILES, groupWarnings, postImportFile, rejectText, warningText } from '@/lib/import';
 import { errorText, type Translator } from '@/lib/api-error';
 import { money } from '@/lib/format';
+import { useToast } from '@/components/toast';
 import { ValueChange } from './value-change';
 
 /**
@@ -23,6 +24,7 @@ export function ImportRunner({ config, currency }: { config: ImportConfig; curre
   const t = useTranslations('panel.import');
   const locale = useLocale();
   const router = useRouter();
+  const toast = useToast();
   const filePicker = useRef<HTMLInputElement>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -41,8 +43,18 @@ export function ImportRunner({ config, currency }: { config: ImportConfig; curre
       return;
     }
     setSummary(result.data);
-    // La tarjeta de la última corrida la pintó el servidor: sin esto sigue mostrando la anterior.
-    if (!dryRun) router.refresh();
+    if (dryRun) return;
+    // El historial lo pinta el servidor: sin esto sigue mostrando la corrida anterior.
+    router.refresh();
+    /*
+     * El aviso de que quedó guardado, como en el resto del panel. Con filas rechazadas es un aviso
+     * y no un éxito: se importó, pero no todo. El mismo archivo otra vez no guardó nada.
+     */
+    const { counts, idempotentSkip } = result.data;
+    const kind = resultKind(counts.invalid, idempotentSkip);
+    if (kind === 'skipped') toast(t('run.toastSkipped'), 'warning');
+    else if (kind === 'warned') toast(t('run.toastWarned', { n: counts.invalid }), 'warning');
+    else toast(t('run.toastOk', { created: counts.created, updated: counts.updated }));
   }
 
   function choose(chosen: File) {

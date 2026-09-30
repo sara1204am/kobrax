@@ -296,7 +296,10 @@
         "existingClient": "existing client",
         "colBalance": "Balance",
         "colArrears": "Arrears",
-        "colStatus": "Status in report"
+        "colStatus": "Status in report",
+        "toastOk": "Import saved: {created} new and {updated} updated.",
+        "toastWarned": "Import saved, with {n, plural, one {# rejected record} other {# rejected records}}.",
+        "toastSkipped": "This file was already imported: it was not applied again."
       },
       "setup": {
         "title": "Set up your import",
