@@ -293,7 +293,10 @@
         "reappearedHint": "They were missing and this report brings them back. The same credit is updated, with its history.",
         "needsReview": "Review link",
         "linkReview": "Review link",
-        "existingClient": "existing client"
+        "existingClient": "existing client",
+        "colBalance": "Balance",
+        "colArrears": "Arrears",
+        "colStatus": "Status in report"
       },
       "setup": {
         "title": "Set up your import",

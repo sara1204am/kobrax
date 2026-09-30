@@ -181,12 +181,17 @@ export interface PortfolioSummary {
     over: number;
   };
   preview: {
-    toCreate: { code: string; clientName: string; existingClient?: boolean; linkReview?: boolean }[];
-    toUpdate: { code: string; reappeared?: boolean }[];
-    toSetCurrent: { code: string | null }[];
+    /**
+     * Cada balde dice **quién** es y con qué números, no sólo el nº de operación: «302-222-1515» no le
+     * dice nada a quien confirma. `before` es cómo está hoy en Kobrax; `after`, lo que trae el reporte.
+     * Los campos nuevos son opcionales: una API vieja los omite y la pantalla muestra el código.
+     */
+    toCreate: { code: string; clientName: string; existingClient?: boolean; linkReview?: boolean; after?: ImportItemValues }[];
+    toUpdate: { code: string; reappeared?: boolean; clientName?: string; before?: ImportItemValues; after?: ImportItemValues }[];
+    toSetCurrent: { code: string | null; clientName?: string; before?: ImportItemValues }[];
     /** Operaciones que dejan de venir en el reporte (D4): no es un pago ni un cierre. */
-    toMarkAbsent?: { code: string | null }[];
-    invalid: { index: number; reason: string }[];
+    toMarkAbsent?: { code: string | null; clientName?: string; before?: ImportItemValues }[];
+    invalid: { index: number; reason: string; code?: string; clientName?: string }[];
     /** Advertencias que NO frenan la fila: se importa igual y se avisa. */
     warnings: { index?: number; code: string; detail?: string }[];
   };

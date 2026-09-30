@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
-import type { ConfigScreen, ImportRunSummary, MeInfo } from '@kobrax/shared';
+import type { AccountInfo, ConfigScreen, ImportRunSummary, MeInfo } from '@kobrax/shared';
 import { apiCall, pageMeta } from '@/lib/bff';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { HISTORY_PAGE_SIZE, historyQuery } from '@/lib/import';
@@ -17,10 +17,12 @@ import { ImportHistoryTable } from './history-table';
  */
 export default async function ImportPage({ searchParams }: { searchParams: { page?: string; pageSize?: string } }) {
   const t = await getTranslations('panel.import');
-  const [screen, runs, me] = await Promise.all([
+  const [screen, runs, me, account] = await Promise.all([
     apiCall<ConfigScreen>('/imports/portfolio/config', { method: 'GET', auth: true }),
     apiCall<ImportRunSummary[]>(`/imports/portfolio/runs?${historyQuery(searchParams)}`, { method: 'GET', auth: true }),
     apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
+    // La moneda de la cuenta: la vista previa muestra saldos.
+    apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
   ]);
 
   if (screen.status !== 200 || !screen.body.data) {
@@ -44,7 +46,7 @@ export default async function ImportPage({ searchParams }: { searchParams: { pag
         }
       />
       <div className="space-y-6">
-        <ImportRunner config={config} />
+        <ImportRunner config={config} currency={account.body.data?.currencyCode ?? 'BOB'} />
 
         <section className="space-y-2">
           <h2 className="text-[16px] font-semibold text-k-navy">{t('history.title')}</h2>

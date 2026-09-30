@@ -293,7 +293,10 @@
         "reappearedHint": "Faltaban y este reporte las vuelve a traer. Se actualiza el mismo crédito, con su historia.",
         "needsReview": "Revisar vínculo",
         "linkReview": "Revisar vínculo",
-        "existingClient": "cliente que ya tenías"
+        "existingClient": "cliente que ya tenías",
+        "colBalance": "Saldo",
+        "colArrears": "Mora",
+        "colStatus": "Estado en el reporte"
       },
       "setup": {
         "title": "Configurá tu importación",

@@ -9,6 +9,7 @@ import {
   LIST_LIMIT,
   markImported,
   moreLabel,
+  previewLine,
   rejectText,
   warningText,
   type PortfolioSummary,
@@ -125,19 +126,25 @@ export default function PreviewScreen() {
                   title="Se agregan"
                   items={preview.preview.toCreate.map((r) => ({
                     key: r.code,
-                    title: r.code,
+                    title: r.clientName,
                     // D2: el que se parece a un cliente que ya existe entra igual, marcado para revisar.
-                    sub: r.linkReview ? `${r.clientName} · revisar vínculo` : r.clientName,
+                    sub: r.linkReview ? `${previewLine(r.code, undefined, r.after)} · revisar vínculo` : previewLine(r.code, undefined, r.after),
                   }))}
                 />
                 <BucketList
                   title="Se actualizan"
-                  items={preview.preview.toUpdate.map((r) => ({ key: r.code, title: r.code }))}
+                  items={preview.preview.toUpdate.map((r) => ({
+                    key: r.code,
+                    title: r.clientName ?? r.code,
+                    sub: previewLine(r.code, r.before, r.after),
+                  }))}
                 />
                 {preview.preview.toUpdate.some((r) => r.reappeared) && (
                   <BucketList
                     title="Volvieron al reporte"
-                    items={preview.preview.toUpdate.filter((r) => r.reappeared).map((r) => ({ key: r.code, title: r.code }))}
+                    items={preview.preview.toUpdate
+                      .filter((r) => r.reappeared)
+                      .map((r) => ({ key: r.code, title: r.clientName ?? r.code, sub: previewLine(r.code, r.before, r.after) }))}
                     hint="Faltaban y este reporte las vuelve a traer. Se actualiza el mismo crédito."
                   />
                 )}
@@ -145,7 +152,8 @@ export default function PreviewScreen() {
                   title="Ya no vienen en el reporte"
                   items={(preview.preview.toMarkAbsent ?? preview.preview.toSetCurrent).map((r, i) => ({
                     key: r.code ?? `s${i}`,
-                    title: r.code ?? 'Sin número',
+                    title: r.clientName ?? r.code ?? 'Sin número',
+                    sub: previewLine(r.code, r.before),
                   }))}
                   hint="No es un pago ni un cierre: el saldo y el estado quedan como estaban. Queda registrado desde qué día faltan."
                 />
@@ -156,8 +164,8 @@ export default function PreviewScreen() {
                     danger
                     items={preview.preview.invalid.map((r) => ({
                       key: String(r.index),
-                      title: `Registro ${r.index + 1}`,
-                      sub: rejectText(r.reason),
+                      title: r.clientName ?? `Registro ${r.index + 1}`,
+                      sub: [`Registro ${r.index + 1}`, r.code, rejectText(r.reason)].filter(Boolean).join(' · '),
                     }))}
                   />
                 )}

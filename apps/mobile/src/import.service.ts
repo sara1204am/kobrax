@@ -368,3 +368,29 @@ export function lastRunWhen(iso: string, now = new Date()): string {
   const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   return `${d.getDate()} ${MES[d.getMonth()]} ${hh}:${mm}`;
 }
+
+/** Saldo, mora y estado de una operación en la vista previa (el mismo contrato que la web). */
+interface PreviewValues {
+  outstandingBalance?: number | null;
+  daysPastDue?: number | null;
+  reportedStatus?: string | null;
+}
+
+const amount = (n: number): string => n.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/**
+ * La bajada de una fila de la vista previa: operación, saldo y mora, con «antes → después» si
+ * cambian. Sin símbolo de moneda: la vista previa no la trae, y un «Bs» supuesto podría mentir.
+ *
+ * «302-222-1515 · Saldo 9.752,96 · Mora 69 → 70 d». Sin números (API vieja) queda el código solo.
+ */
+export function previewLine(code: string | null, before?: PreviewValues, after?: PreviewValues): string {
+  const pair = (b: number | null | undefined, a: number | null | undefined, fmt: (n: number) => string): string | null => {
+    if (b == null && a == null) return null;
+    if (b != null && a != null && Math.abs(b - a) > 0.005) return `${fmt(b)} → ${fmt(a)}`;
+    return fmt((a ?? b) as number);
+  };
+  const saldo = pair(before?.outstandingBalance, after?.outstandingBalance, amount);
+  const mora = pair(before?.daysPastDue, after?.daysPastDue, (n) => String(n));
+  return [code ?? 'Sin número', saldo && `Saldo ${saldo}`, mora && `Mora ${mora} d`].filter(Boolean).join(' · ');
+}

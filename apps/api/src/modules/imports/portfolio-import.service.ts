@@ -110,11 +110,11 @@ interface PortfolioSummary {
   plan?: { roomLeft: number; over: number };
   // Baldes para la Vista Previa (obligatoria antes de confirmar). "Eliminados" no existe: nunca borra.
   preview: {
-    toCreate: { code: string; clientName: string; existingClient?: boolean; linkReview?: boolean }[];
-    toUpdate: { code: string; reappeared?: boolean }[];
-    toSetCurrent: { code: string | null }[];
-    toMarkAbsent: { code: string | null }[];
-    invalid: { index: number; reason: string }[];
+    toCreate: { code: string; clientName: string; existingClient?: boolean; linkReview?: boolean; after?: ImportItemValues }[];
+    toUpdate: { code: string; reappeared?: boolean; clientName?: string; before?: ImportItemValues; after?: ImportItemValues }[];
+    toSetCurrent: { code: string | null; clientName?: string; before?: ImportItemValues }[];
+    toMarkAbsent: { code: string | null; clientName?: string; before?: ImportItemValues }[];
+    invalid: { index: number; reason: string; code?: string; clientName?: string }[];
     // Advertencias que NO frenan la fila (§5): la fila se importa igual y se avisa.
     warnings: { index?: number; code: string; detail?: string }[];
   };
@@ -361,17 +361,33 @@ export class PortfolioImportService {
       );
 
       const codeOf = (id: string): string | null => byId.get(id)?.externalId ?? byId.get(id)?.code ?? null;
+      // Las que no vienen en el archivo sólo se conocen por lo que ya hay en Kobrax: nombre, saldo y mora de hoy.
+      const known = (id: string) => {
+        const prev = byId.get(id)!;
+        return { code: codeOf(id), clientName: nameOf(prev.client), before: valuesBefore(prev) };
+      };
+      const statusMapPreview = config.statusMap as Record<string, CreditStatus> | undefined;
       const preview: PortfolioSummary['preview'] = {
         toCreate: creates.map((c) => ({
           code: c.row.code,
           clientName: clientLabel(c.b),
           ...(resolution.get(c.row.index)?.kind === 'existing' ? { existingClient: true } : {}),
           ...(needsReview.includes(c) ? { linkReview: true } : {}),
+          after: valuesOf(c.b, statusMapPreview),
         })),
-        toUpdate: plan.toUpdate.map((u) => ({ code: u.row.code, ...(u.reappeared ? { reappeared: true } : {}) })),
-        toSetCurrent: plan.toSetCurrent.map((id) => ({ code: codeOf(id) })),
-        toMarkAbsent: plan.toMarkAbsent.map((id) => ({ code: codeOf(id) })),
-        invalid: plan.invalid,
+        toUpdate: plan.toUpdate.map((u) => ({
+          code: u.row.code,
+          ...(u.reappeared ? { reappeared: true } : {}),
+          clientName: clientLabel(u.row.data as unknown as NormalizedRecord),
+          before: valuesBefore(byId.get(u.id)!),
+          after: valuesOf(u.row.data as unknown as NormalizedRecord, statusMapPreview),
+        })),
+        toSetCurrent: plan.toSetCurrent.map(known),
+        toMarkAbsent: plan.toMarkAbsent.map(known),
+        invalid: plan.invalid.map((inv) => {
+          const b = blocks[inv.index];
+          return { ...inv, ...(b?.code ? { code: b.code } : {}), ...(b ? { clientName: clientLabel(b) } : {}) };
+        }),
         warnings: [...moraWarnings(blocks, config), ...(reportDate ? [] : [{ code: 'REPORT_DATE_UNKNOWN' }])],
       };
       const counts = {

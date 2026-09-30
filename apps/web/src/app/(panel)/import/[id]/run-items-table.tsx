@@ -1,13 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import type { ImportRunItem, ImportRunItemAction } from '@kobrax/shared';
 import { DataTable, type Column, type PageMeta } from '@/components/data-table';
 import { Badge, EmptyState } from '@/components/panel-ui';
 import { money } from '@/lib/format';
 import { rejectText } from '@/lib/import';
+import { ValueChange } from '../value-change';
 
 const ACTION_TONE: Record<ImportRunItemAction, 'neutral' | 'success' | 'warning' | 'danger'> = {
   CREATED: 'success',
@@ -89,14 +89,14 @@ export function RunItemsTable({
       header: t('detail.columns.balance'),
       numeric: true,
       sortable: false,
-      render: (r) => change(r.before?.outstandingBalance, r.after?.outstandingBalance, (v) => money(v, currency)),
+      render: (r) => <ValueChange before={r.before?.outstandingBalance} after={r.after?.outstandingBalance} format={(v) => money(v, currency)} />,
     },
     {
       key: 'arrears',
       header: t('detail.columns.arrears'),
       numeric: true,
       sortable: false,
-      render: (r) => change(r.before?.daysPastDue, r.after?.daysPastDue, (v) => t('detail.days', { n: v })),
+      render: (r) => <ValueChange before={r.before?.daysPastDue} after={r.after?.daysPastDue} format={(v) => t('detail.days', { n: v })} />,
     },
     {
       key: 'status',
@@ -130,19 +130,4 @@ export function RunItemsTable({
       empty={<EmptyState title={t('detail.empty')} />}
     />
   );
-}
-
-/** «A → B» si cambió; el valor solo si no; «—» si no se sabe. El antes va apagado. */
-function change(before: number | null | undefined, after: number | null | undefined, fmt: (v: number) => string): ReactNode {
-  const hasBefore = before != null;
-  const hasAfter = after != null;
-  if (!hasBefore && !hasAfter) return <span className="text-k-muted">—</span>;
-  if (hasBefore && hasAfter && Math.abs(before - after) > 0.005) {
-    return (
-      <span className="whitespace-nowrap tabular-nums">
-        <span className="text-k-muted">{fmt(before)}</span> → <span className="font-medium text-k-text">{fmt(after)}</span>
-      </span>
-    );
-  }
-  return <span className="whitespace-nowrap tabular-nums text-k-text">{fmt((hasAfter ? after : before) as number)}</span>;
 }

@@ -10,6 +10,8 @@ import { DataTable, type Column } from '@/components/data-table';
 import { EmptyState } from '@/components/panel-ui';
 import { ACCEPTED_FILES, groupWarnings, postImportFile, rejectText, warningText } from '@/lib/import';
 import { errorText, type Translator } from '@/lib/api-error';
+import { money } from '@/lib/format';
+import { ValueChange } from './value-change';
 
 /**
  * El import del día, en tres estados sobre el mismo `File` en memoria.
@@ -17,7 +19,7 @@ import { errorText, type Translator } from '@/lib/api-error';
  * El archivo **se sube dos veces**: una para la vista previa (`dryRun`) y otra al confirmar. Es
  * correcto y no un descuido: la previa no guarda nada, y entre una y otra la cartera pudo cambiar.
  */
-export function ImportRunner({ config }: { config: ImportConfig }) {
+export function ImportRunner({ config, currency }: { config: ImportConfig; currency: string }) {
   const t = useTranslations('panel.import');
   const locale = useLocale();
   const router = useRouter();
@@ -87,7 +89,7 @@ export function ImportRunner({ config }: { config: ImportConfig }) {
           </div>
         </div>
         {/* «Ya se había importado» llega con los conteos de aquella corrida y SIN listas. */}
-        {!summary.idempotentSkip && <Buckets summary={summary} t={t} />}
+        {!summary.idempotentSkip && <Buckets summary={summary} t={t} currency={currency} />}
       </div>
     );
   }
@@ -152,7 +154,7 @@ export function ImportRunner({ config }: { config: ImportConfig }) {
             </span>
           </div>
         </div>
-        <Buckets summary={summary} t={t} />
+        <Buckets summary={summary} t={t} currency={currency} />
       </div>
     );
   }
@@ -261,10 +263,57 @@ function Counts({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
  * `<tr>` y el navegador de escritorio los aguanta. Si aparece un tenant con decenas de miles, el
  * techo se sube con `content-visibility: auto` en las filas antes que con una librería.
  */
-function Buckets({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
+function Buckets({ summary, t, currency }: { summary: PortfolioSummary; t: Translator; currency: string }) {
   const { toCreate, toUpdate, invalid, warnings } = summary.preview;
   const toMarkAbsent = summary.preview.toMarkAbsent ?? [];
   const reappeared = toUpdate.filter((u) => u.reappeared);
+  // Con la regla «al día», la ausente además queda sin atraso: su mora se muestra «antes → 0».
+  const setCurrent = new Set(summary.preview.toSetCurrent.map((r) => r.code));
+
+  /*
+   * Quién es y con qué números, no sólo el nº de operación: «302-222-1515» no le dice nada a quien
+   * tiene que decidir si confirma. `before` es cómo está hoy en Kobrax; `after`, lo que trae el reporte.
+   */
+  type Values = { outstandingBalance?: number | null; daysPastDue?: number | null; status?: string | null; reportedStatus?: string | null };
+  const clientCol = <R extends { clientName?: string }>(): Column<R> => ({
+    key: 'name',
+    header: t('run.colClient'),
+    sortable: false,
+    render: (row) => row.clientName ?? <span className="text-k-muted">—</span>,
+  });
+  const balanceCol = <R,>(get: (row: R) => { before?: Values; after?: Values }): Column<R> => ({
+    key: 'balance',
+    header: t('run.colBalance'),
+    numeric: true,
+    sortable: false,
+    render: (row) => {
+      const v = get(row);
+      return <ValueChange before={v.before?.outstandingBalance} after={v.after?.outstandingBalance} format={(n) => money(n, currency)} />;
+    },
+  });
+  const arrearsCol = <R,>(get: (row: R) => { before?: Values; after?: Values }): Column<R> => ({
+    key: 'arrears',
+    header: t('run.colArrears'),
+    numeric: true,
+    sortable: false,
+    render: (row) => {
+      const v = get(row);
+      return <ValueChange before={v.before?.daysPastDue} after={v.after?.daysPastDue} format={(n) => t('detail.days', { n })} />;
+    },
+  });
+  const statusCol = <R,>(get: (row: R) => Values | undefined): Column<R> => ({
+    key: 'status',
+    header: t('run.colStatus'),
+    sortable: false,
+    // El estado como lo escribe el banco («Vencida», «Ejecución») dice más que el nuestro.
+    render: (row) => <span className="text-[13px] text-k-text-2">{get(row)?.reportedStatus ?? '—'}</span>,
+  });
+  type Preview = PortfolioSummary['preview'];
+  type CreateRow = Preview['toCreate'][number];
+  type UpdateRow = Preview['toUpdate'][number];
+  type AbsentRow = NonNullable<Preview['toMarkAbsent']>[number];
+  type InvalidRow = Preview['invalid'][number];
+  const same = (row: UpdateRow) => row;
 
   return (
     <>
@@ -304,6 +353,9 @@ function Buckets({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
               </>
             ),
           },
+          balanceCol<CreateRow>((row) => ({ after: row.after })),
+          arrearsCol<CreateRow>((row) => ({ after: row.after })),
+          statusCol<CreateRow>((row) => row.after),
         ]}
         empty={t('run.emptyBucket')}
       />
@@ -312,7 +364,13 @@ function Buckets({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
         title={t('run.updated')}
         hint={t('run.updatedHint')}
         rows={toUpdate}
-        columns={[{ key: 'code', header: t('run.colCode'), sortable: false, render: (row) => row.code }]}
+        columns={[
+          { key: 'code', header: t('run.colCode'), sortable: false, render: (row) => row.code },
+          clientCol<UpdateRow>(),
+          balanceCol<UpdateRow>(same),
+          arrearsCol<UpdateRow>(same),
+          statusCol<UpdateRow>((row) => row.after),
+        ]}
         empty={t('run.emptyBucket')}
       />
 
@@ -321,7 +379,13 @@ function Buckets({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
           title={t('run.reappeared')}
           hint={t('run.reappearedHint')}
           rows={reappeared}
-          columns={[{ key: 'code', header: t('run.colCode'), sortable: false, render: (row) => row.code }]}
+          columns={[
+            { key: 'code', header: t('run.colCode'), sortable: false, render: (row) => row.code },
+            clientCol<UpdateRow>(),
+            balanceCol<UpdateRow>(same),
+            arrearsCol<UpdateRow>(same),
+            statusCol<UpdateRow>((row) => row.after),
+          ]}
           empty={t('run.emptyBucket')}
         />
       )}
@@ -330,7 +394,13 @@ function Buckets({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
         title={t('run.absent')}
         hint={t('run.absentHint')}
         rows={toMarkAbsent}
-        columns={[{ key: 'code', header: t('run.colCode'), sortable: false, render: (row) => row.code ?? '—' }]}
+        columns={[
+          { key: 'code', header: t('run.colCode'), sortable: false, render: (row) => row.code ?? '—' },
+          clientCol<AbsentRow>(),
+          // El saldo queda como está (D4); la mora, en 0 si la regla es «al día».
+          balanceCol<AbsentRow>((row) => ({ before: row.before })),
+          arrearsCol<AbsentRow>((row) => ({ before: row.before, after: setCurrent.has(row.code) ? { daysPastDue: 0 } : undefined })),
+        ]}
         empty={t('run.emptyBucket')}
       />
 
@@ -339,7 +409,9 @@ function Buckets({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
         hint={t('run.invalidHint')}
         rows={invalid}
         columns={[
-          { key: 'index', header: t('run.colRow'), sortable: false, numeric: true, render: (row) => row.index },
+          { key: 'index', header: t('run.colRow'), sortable: false, numeric: true, render: (row) => row.index + 1 },
+          { key: 'code', header: t('run.colCode'), sortable: false, render: (row) => row.code ?? '—' },
+          clientCol<InvalidRow>(),
           { key: 'reason', header: t('run.colReason'), sortable: false, render: (row) => rejectText(row.reason, t) },
         ]}
         empty={t('run.emptyBucket')}
