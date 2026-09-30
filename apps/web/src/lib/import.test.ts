@@ -5,6 +5,11 @@ import { translator } from '@/test/translator';
 import type { FieldDef, ImportConfig } from '@kobrax/shared';
 import {
   ACCEPTED_FILES,
+  fileSize,
+  HISTORY_PAGE_SIZE,
+  historyQuery,
+  runItemAction,
+  runItemsQuery,
   configProgress,
   confirmDaysPastDue,
   fieldStatus,
@@ -303,5 +308,24 @@ describe('scopeRefName', () => {
 
   it('sin elegir todavía, no inventa nombre', () => {
     expect(scopeRefName({ kind: 'branch', ref: null }, members, branches, ES)).toBeNull();
+  });
+});
+
+describe('historial de importaciones', () => {
+  it('la página y el tamaño viajan; un tamaño que la tabla no ofrece cae al default', () => {
+    expect(historyQuery({ page: '2', pageSize: '50' }).toString()).toBe('page=2&limit=50');
+    expect(historyQuery({ pageSize: '7' }).get('limit')).toBe(String(HISTORY_PAGE_SIZE));
+  });
+
+  it('🔴 sólo viaja un tipo de movimiento que existe: otro sería un 400', () => {
+    expect(runItemsQuery({ action: 'ABSENT' }).get('action')).toBe('ABSENT');
+    expect(runItemsQuery({ action: 'BORRADOS' }).has('action')).toBe(false);
+    expect(runItemAction(undefined)).toBeUndefined();
+  });
+
+  it('el tamaño del documento se lee como en un explorador', () => {
+    expect(fileSize(9629)).toBe('9 KB');
+    expect(fileSize(2.4 * 1024 * 1024)).toBe('2,4 MB');
+    expect(fileSize(10)).toBe('1 KB');
   });
 });

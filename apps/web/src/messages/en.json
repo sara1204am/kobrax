@@ -273,7 +273,7 @@
         "again": "Import another file",
         "lastRun": "Last import",
         "lastRunNever": "You have not imported any file yet.",
-        "lastRunCounts": "{created} new · {updated} updated · {setCurrent} set current · {errors} left out",
+        "lastRunCounts": "{created} new · {updated} updated · {setCurrent} set current · {errors} rejected",
         "disabledTitle": "The import is off",
         "disabledText": "This company loads its portfolio by hand. You can turn it on in Settings.",
         "setupTitle": "The import is not set up yet",
@@ -531,6 +531,72 @@
         "saved": "Advisor linked",
         "errors": {
           "generic": "Could not save. Try again."
+        }
+      },
+      "history": {
+        "title": "Import history",
+        "hint": "Every file that was imported and what changed. Tap the date for the detail, or a number to jump to those records.",
+        "empty": "You have not imported any file yet.",
+        "entity": "imports",
+        "noFile": "No file",
+        "columns": {
+          "date": "Date",
+          "file": "File",
+          "reportDate": "Cut-off",
+          "advisor": "Advisor",
+          "by": "Imported by",
+          "created": "New",
+          "updated": "Updated",
+          "reappeared": "Back",
+          "setCurrent": "Current",
+          "absent": "Missing",
+          "rejected": "Rejected"
+        }
+      },
+      "detail": {
+        "title": "Import of {date}",
+        "back": "← Import data",
+        "by": "Imported by",
+        "at": "Date",
+        "file": "File",
+        "reportDate": "Cut-off date",
+        "advisor": "Advisor",
+        "scope": "Scope",
+        "view": "View document",
+        "download": "Download",
+        "noFile": "This import predates storing the file.",
+        "partial": "Import from before the history: which ones were set current and which rows were rejected was not recorded.",
+        "all": "All",
+        "movements": "Changes",
+        "empty": "No changes of this type.",
+        "entity": "records",
+        "newClient": "new client",
+        "existingClient": "existing client",
+        "linkReview": "Review link",
+        "days": "{n, plural, one {# day} other {# days}}",
+        "unknownUser": "—",
+        "tabs": {
+          "CREATED": "New",
+          "UPDATED": "Updated",
+          "REAPPEARED": "Back",
+          "SET_CURRENT": "Current",
+          "ABSENT": "Missing",
+          "REJECTED": "Rejected"
+        },
+        "columns": {
+          "row": "Record",
+          "code": "Operation",
+          "client": "Client",
+          "movement": "Change",
+          "balance": "Balance",
+          "arrears": "Arrears",
+          "status": "Status",
+          "note": "Detail"
+        },
+        "scopeKinds": {
+          "account": "Whole company",
+          "official": "{name}'s portfolio",
+          "branch": "Branch {name}"
         }
       }
     },

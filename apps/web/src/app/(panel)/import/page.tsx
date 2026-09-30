@@ -1,28 +1,33 @@
 import Link from 'next/link';
-import { getLocale, getTranslations } from 'next-intl/server';
-import type { ConfigScreen } from '@kobrax/shared';
-import { apiCall } from '@/lib/bff';
-import { Card, EmptyState, PageHeader } from '@/components/panel-ui';
-import { dateTime } from '@/lib/format';
+import { getTranslations } from 'next-intl/server';
+import type { ConfigScreen, ImportRunSummary, MeInfo } from '@kobrax/shared';
+import { apiCall, pageMeta } from '@/lib/bff';
+import { EmptyState, PageHeader } from '@/components/panel-ui';
+import { HISTORY_PAGE_SIZE, historyQuery } from '@/lib/import';
 import { ImportRunner } from './import-runner';
+import { ImportHistoryTable } from './history-table';
 
 /**
  * El import del día. Una sola pantalla con tres estados (elegir · vista previa · resultado) y no
  * cuatro rutas como en el móvil: **un `File` no sobrevive a un `router.push`** — no es
  * serializable y en el navegador no hay `uri` que reabrir. Navegar significaría volver a pedirle
  * el archivo a la persona.
+ *
+ * Debajo, el historial: cada archivo importado con lo que cambió, y su detalle a un clic.
  */
-export default async function ImportPage() {
+export default async function ImportPage({ searchParams }: { searchParams: { page?: string; pageSize?: string } }) {
   const t = await getTranslations('panel.import');
-  const { status, body } = await apiCall<ConfigScreen>('/imports/portfolio/config', {
-    method: 'GET',
-    auth: true,
-  });
+  const [screen, runs, me] = await Promise.all([
+    apiCall<ConfigScreen>('/imports/portfolio/config', { method: 'GET', auth: true }),
+    apiCall<ImportRunSummary[]>(`/imports/portfolio/runs?${historyQuery(searchParams)}`, { method: 'GET', auth: true }),
+    apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
+  ]);
 
-  if (status !== 200 || !body.data) {
-    return <EmptyState title={t('title')} text={body.error?.message} />;
+  if (screen.status !== 200 || !screen.body.data) {
+    return <EmptyState title={t('title')} text={screen.body.error?.message} />;
   }
-  const { config, lastRun } = body.data;
+  const { config } = screen.body.data;
+  const limit = Number(historyQuery(searchParams).get('limit')) || HISTORY_PAGE_SIZE;
 
   return (
     <>
@@ -41,28 +46,19 @@ export default async function ImportPage() {
       <div className="space-y-6">
         <ImportRunner config={config} />
 
-        {/*
-          La última corrida. La API guarda **conteos, no el detalle por fila**, y sólo expone la
-          última: un histórico de verdad es un endpoint nuevo, así que acá no se finge tenerlo.
-        */}
-        <Card>
-          <p className="text-[14px] font-medium text-k-text">{t('run.lastRun')}</p>
-          {lastRun ? (
-            <>
-              <p className="mt-1 text-[13px] text-k-text-2">{dateTime(lastRun.at, await getLocale())}</p>
-              <p className="mt-2 text-[13px] text-k-text-2">
-                {t('run.lastRunCounts', {
-                  created: lastRun.created,
-                  updated: lastRun.updated,
-                  setCurrent: lastRun.setCurrent,
-                  errors: lastRun.errors,
-                })}
-              </p>
-            </>
+        <section className="space-y-2">
+          <h2 className="text-[16px] font-semibold text-k-navy">{t('history.title')}</h2>
+          <p className="text-[13px] text-k-text-2">{t('history.hint')}</p>
+          {runs.status === 200 && runs.body.data ? (
+            <ImportHistoryTable
+              rows={runs.body.data}
+              meta={pageMeta(runs.body, searchParams.page, limit)}
+              userId={me.body.data?.userId}
+            />
           ) : (
-            <p className="mt-1 text-[13px] text-k-text-2">{t('run.lastRunNever')}</p>
+            <EmptyState title={t('history.title')} text={runs.body.error?.message} />
           )}
-        </Card>
+        </section>
       </div>
     </>
   );

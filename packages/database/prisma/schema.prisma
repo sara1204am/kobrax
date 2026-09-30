@@ -429,13 +429,72 @@ model ClientImportRun {
   externalSource    String?   @map("external_source")
   /// Código de asesor leído del encabezado del reporte ("CQE"), si lo trae (D8).
   advisorCode       String?   @map("advisor_code")
+  /// Operaciones que faltaron por primera vez, que volvieron, y filas del archivo que no eran
+  /// registros (totales, notas). Antes vivían sólo en la auditoría de la corrida.
+  creditsAbsent     Int       @default(0) @map("credits_absent")
+  creditsReappeared Int       @default(0) @map("credits_reappeared")
+  rowsIgnored       Int       @default(0) @map("rows_ignored")
+  /// El documento subido, tal cual: se puede volver a ver o descargar desde el historial.
+  /// NULL = corrida anterior a que se guardara el archivo.
+  fileName          String?   @map("file_name")
+  fileSize          Int?      @map("file_size")
+  fileMime          String?   @map("file_mime")
+  /// Nombre en el almacenamiento de la cuenta (`imports/<sha256>.<ext>`), nunca una ruta de afuera.
+  fileKey           String?   @map("file_key")
+  /// `true` = cada movimiento de la corrida quedó en `client_import_run_items`. Las corridas
+  /// anteriores se reconstruyeron a medias (sin «al día» ni rechazadas) y quedan en `false`.
+  itemsComplete     Boolean   @default(false) @map("items_complete")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  items ClientImportRunItem[]
 
   @@index([accountId, status])
   @@index([accountId, fileHash])
   @@index([accountId, externalSource, scope, reportAsOf])
+  @@index([accountId, source, createdAt])
   @@map("client_import_runs")
+}
+
+/// Qué le pasó a un registro en una corrida de importación de cartera.
+enum ImportRunItemAction {
+  CREATED // operación nueva (y su cliente, nuevo o existente)
+  UPDATED // ya existía y vino en el reporte
+  REAPPEARED // faltaba y volvió
+  SET_CURRENT // faltó y, con la regla «al día», su mora quedó en 0
+  ABSENT // faltó del reporte por primera vez (D4)
+  REJECTED // fila del archivo que no se pudo importar
+
+  @@map("import_run_item_action")
+}
+
+/// Un movimiento de una corrida: quién, qué operación, y cómo estaba antes y después. RLS por tenant.
+model ClientImportRunItem {
+  id         String              @id @default(uuid())
+  accountId  String              @map("account_id")
+  runId      String              @map("run_id")
+  action     ImportRunItemAction
+  /// Referencias suaves: el crédito o el cliente pueden borrarse después y el historial queda.
+  creditId   String?             @map("credit_id")
+  clientId   String?             @map("client_id")
+  /// Nº de operación tal como vino en el reporte.
+  externalId String?             @map("external_id")
+  /// Nombre del deudor tal como vino en el archivo (o el del cliente, si faltó del reporte).
+  clientName String?             @map("client_name")
+  /// Fila del archivo (1 = primer registro). Sólo en las que vinieron en el reporte.
+  rowNumber  Int?                @map("row_number")
+  /// Por qué se rechazó la fila (`MISSING_CODE`, `MATCHES_OUT_OF_SCOPE`…).
+  reason     String?
+  /// Saldo, mora y estado antes y después: `{ outstandingBalance, daysPastDue, status }`.
+  before     Json?
+  after      Json?
+  createdAt  DateTime            @default(now()) @map("created_at")
+
+  run ClientImportRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, runId, action])
+  @@index([accountId, creditId])
+  @@map("client_import_run_items")
 }
 
 enum ClientType {
@@ -1040,26 +1099,26 @@ enum VisitOutcome {
 
 /// Proceso activo de cobranza asociado a un crédito en mora.
 model CollectionCase {
-  id           String       @id @default(uuid())
-  accountId    String       @map("account_id")
-  creditId     String       @map("credit_id")
-  clientId     String       @map("client_id")
-  branchId     String?      @map("branch_id")
-  assigneeId   String?      @map("assignee_id") // collector asignado (users.id, ref suave)
-  status       CaseStatus   @default(PENDING)
-  priority     CasePriority @default(MEDIUM)
+  id               String       @id @default(uuid())
+  accountId        String       @map("account_id")
+  creditId         String       @map("credit_id")
+  clientId         String       @map("client_id")
+  branchId         String?      @map("branch_id")
+  assigneeId       String?      @map("assignee_id") // collector asignado (users.id, ref suave)
+  status           CaseStatus   @default(PENDING)
+  priority         CasePriority @default(MEDIUM)
   /// Prioridad fijada a mano: el trabajo diario de mora NO la recalcula mientras esté puesta.
   /// Guarda cuándo, no un sí/no — la fecha contesta «¿esto lo decidió alguien hace un año?».
   /// Volver a la automática es ponerla en NULL.
-  priorityPinnedAt DateTime? @map("priority_pinned_at")
-  slaDueAt     DateTime?    @map("sla_due_at")
-  lastActionAt DateTime?    @map("last_action_at")
-  closedAt     DateTime?    @map("closed_at")
-  closedBy     String?      @map("closed_by")
-  closedReason String?      @map("closed_reason")
-  createdAt    DateTime     @default(now()) @map("created_at")
-  updatedAt    DateTime     @updatedAt @map("updated_at")
-  deletedAt    DateTime?    @map("deleted_at")
+  priorityPinnedAt DateTime?    @map("priority_pinned_at")
+  slaDueAt         DateTime?    @map("sla_due_at")
+  lastActionAt     DateTime?    @map("last_action_at")
+  closedAt         DateTime?    @map("closed_at")
+  closedBy         String?      @map("closed_by")
+  closedReason     String?      @map("closed_reason")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+  deletedAt        DateTime?    @map("deleted_at")
 
   account    Account        @relation(fields: [accountId], references: [id])
   credit     Credit         @relation(fields: [creditId], references: [id])
@@ -1421,7 +1480,6 @@ model CatalogItem {
   @@index([accountId, catalog, isActive])
   @@map("catalog_items")
 }
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // W8 · Dashboards configurables

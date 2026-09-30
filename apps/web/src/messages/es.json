@@ -273,7 +273,7 @@
         "again": "Importar otro archivo",
         "lastRun": "Última importación",
         "lastRunNever": "Todavía no importaste ningún archivo.",
-        "lastRunCounts": "{created} nuevos · {updated} actualizados · {setCurrent} al día · {errors} afuera",
+        "lastRunCounts": "{created} nuevos · {updated} actualizados · {setCurrent} al día · {errors} rechazadas",
         "disabledTitle": "El import está apagado",
         "disabledText": "Esta empresa carga la cartera a mano. Se enciende en Ajustes.",
         "setupTitle": "Falta configurar el import",
@@ -531,6 +531,72 @@
         "saved": "Asesor vinculado",
         "errors": {
           "generic": "No se pudo guardar. Probá de nuevo."
+        }
+      },
+      "history": {
+        "title": "Historial de importaciones",
+        "hint": "Cada archivo que se importó y qué cambió. Tocá la fecha para ver el detalle, o un número para ir directo a esos registros.",
+        "empty": "Todavía no importaste ningún archivo.",
+        "entity": "importaciones",
+        "noFile": "Sin archivo",
+        "columns": {
+          "date": "Fecha",
+          "file": "Archivo",
+          "reportDate": "Corte",
+          "advisor": "Asesor",
+          "by": "Importó",
+          "created": "Nuevos",
+          "updated": "Actualizados",
+          "reappeared": "Volvieron",
+          "setCurrent": "Al día",
+          "absent": "Ausentes",
+          "rejected": "Rechazadas"
+        }
+      },
+      "detail": {
+        "title": "Importación del {date}",
+        "back": "← Importar datos",
+        "by": "Importó",
+        "at": "Fecha",
+        "file": "Archivo",
+        "reportDate": "Fecha de corte",
+        "advisor": "Asesor",
+        "scope": "Alcance",
+        "view": "Ver documento",
+        "download": "Descargar",
+        "noFile": "Esta importación es anterior a que se guardara el archivo.",
+        "partial": "Importación anterior al historial: no quedaron registradas cuáles se pusieron al día ni qué filas se rechazaron.",
+        "all": "Todos",
+        "movements": "Movimientos",
+        "empty": "No hubo movimientos de este tipo.",
+        "entity": "registros",
+        "newClient": "cliente nuevo",
+        "existingClient": "cliente que ya tenías",
+        "linkReview": "Revisar vínculo",
+        "days": "{n, plural, one {# día} other {# días}}",
+        "unknownUser": "—",
+        "tabs": {
+          "CREATED": "Nuevos",
+          "UPDATED": "Actualizados",
+          "REAPPEARED": "Volvieron",
+          "SET_CURRENT": "Al día",
+          "ABSENT": "Ausentes",
+          "REJECTED": "Rechazadas"
+        },
+        "columns": {
+          "row": "Registro",
+          "code": "Operación",
+          "client": "Cliente",
+          "movement": "Movimiento",
+          "balance": "Saldo",
+          "arrears": "Mora",
+          "status": "Estado",
+          "note": "Detalle"
+        },
+        "scopeKinds": {
+          "account": "Toda la empresa",
+          "official": "Cartera de {name}",
+          "branch": "Sucursal {name}"
         }
       }
     },

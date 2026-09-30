@@ -1,8 +1,18 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import type { Readable } from 'node:stream';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { ClientType, ContactType, CreditStatus, ExternalSyncStatus, LocationType } from '@prisma/client';
-import { readCreditMetadata } from '@kobrax/shared';
+import { ClientType, ContactType, CreditStatus, ExternalSyncStatus, ImportRunItemAction, LocationType } from '@prisma/client';
+import {
+  readCreditMetadata,
+  resolvePagination,
+  ResponseDto,
+  type ApiResponse,
+  type ImportItemValues,
+  type ImportRunItem,
+  type ImportRunSummary,
+} from '@kobrax/shared';
+import { UploadsService } from '../uploads/uploads.service';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -134,13 +144,18 @@ export class PortfolioImportService {
     private readonly plan: PlanLimitsService,
     private readonly crypto: CryptoService,
     private readonly blind: BlindIndexService,
+    private readonly uploads: UploadsService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
   }
 
-  async run(file: Buffer, dryRun: boolean, opts: { reportDate?: string } = {}): Promise<PortfolioSummary> {
+  async run(
+    file: Buffer,
+    dryRun: boolean,
+    opts: { reportDate?: string; fileName?: string; mimeType?: string } = {},
+  ): Promise<PortfolioSummary> {
     const config = await this.importConfig();
     if (config.source === 'manual') {
       throw new BadRequestException({ code: 'IMPORT_DISABLED', message: 'El tenant carga a mano (source=manual)' });
@@ -185,6 +200,13 @@ export class PortfolioImportService {
 
     const fileHash = createHash('sha256').update(file).digest('hex');
     const accountId = this.tenant.accountId;
+
+    /*
+     * El documento se guarda tal cual, para verlo o descargarlo desde el historial. Va antes de la
+     * transacción y no adentro: es disco, no base. Si la corrida después falla, queda un archivo sin
+     * corrida —nombrado por su hash, así que subirlo de nuevo reusa el mismo lugar— y nada más.
+     */
+    const stored = !dryRun && opts.mimeType ? await this.uploads.storeDocument(file, opts.mimeType, 'imports') : null;
 
     const result = await this.tx(async (tx) => {
       // Idempotencia: mismo archivo ya aplicado → no-op.
@@ -261,6 +283,8 @@ export class PortfolioImportService {
           outstandingBalance: true,
           daysPastDue: true,
           metadata: true,
+          // El nombre va al historial: una ausente no trae fila, así que su deudor sale de acá.
+          client: { select: { firstName: true, lastName: true, businessName: true } },
         },
       });
       const byId = new Map(existing.map((c) => [c.id, c]));
@@ -392,6 +416,14 @@ export class PortfolioImportService {
       const touched: ContactGap[] = [];
       const snapshots: Prisma.CreditExternalSnapshotCreateManyInput[] = [];
       const transitions: TransitionEvent[] = [];
+      /*
+       * El historial de la corrida: un movimiento por registro, con cómo estaba y cómo quedó. Se
+       * escribe después de la corrida (la FK lo pide), pero se arma acá, donde se sabe qué pasó.
+       */
+      const items: Prisma.ClientImportRunItemCreateManyInput[] = [];
+      const item = (action: ImportRunItemAction, data: Omit<Prisma.ClientImportRunItemCreateManyInput, 'accountId' | 'runId' | 'action'>) =>
+        items.push({ accountId, runId: stamp.runId, action, ...data });
+      const statusMap = config.statusMap as Record<string, CreditStatus> | undefined;
 
       if (creates.length > 0) {
         const clientByGroup = new Map<string, string>();
@@ -430,6 +462,18 @@ export class PortfolioImportService {
           );
           snapshots.push(snapshotData(accountId, creditId, row.code, stamp.runId, reportAsOf, b));
           transitions.push({ creditId, action: 'EXTERNAL_APPEARED', externalId: row.code, after: reported(b) });
+          item(ImportRunItemAction.CREATED, {
+            creditId,
+            clientId,
+            externalId: row.code,
+            clientName: clientLabel(b),
+            rowNumber: row.index + 1,
+            after: json({
+              ...valuesOf(b, statusMap),
+              newClient: res.kind === 'new',
+              ...(res.kind === 'new' && res.review ? { linkReview: true } : {}),
+            }),
+          });
           touched.push({ clientId, b });
         }
         if (clientsData.length > 0) await tx.client.createMany({ data: clientsData });
@@ -445,6 +489,15 @@ export class PortfolioImportService {
         });
         snapshots.push(snapshotData(accountId, u.id, u.row.code, stamp.runId, reportAsOf, b));
         if (u.reappeared) transitions.push({ creditId: u.id, action: 'EXTERNAL_REAPPEARED', externalId: u.row.code, after: reported(b) });
+        item(u.reappeared ? ImportRunItemAction.REAPPEARED : ImportRunItemAction.UPDATED, {
+          creditId: u.id,
+          clientId: prev.clientId,
+          externalId: u.row.code,
+          clientName: clientLabel(b),
+          rowNumber: u.row.index + 1,
+          before: json(valuesBefore(prev)),
+          after: json(valuesOf(b, statusMap)),
+        });
         touched.push({ clientId: prev.clientId, b });
       }
 
@@ -460,6 +513,17 @@ export class PortfolioImportService {
           where: { id: { in: plan.toSetCurrent }, status: CreditStatus.ACTIVE },
           data: { daysPastDue: 0 },
         });
+        for (const id of plan.toSetCurrent) {
+          const prev = byId.get(id)!;
+          item(ImportRunItemAction.SET_CURRENT, {
+            creditId: id,
+            clientId: prev.clientId,
+            externalId: prev.externalId ?? prev.code,
+            clientName: nameOf(prev.client),
+            before: json({ daysPastDue: prev.daysPastDue }),
+            after: json({ daysPastDue: 0 }),
+          });
+        }
       }
       if (plan.toMarkAbsent.length > 0) {
         // La ausencia se registra en la transición (D4): `absent_since` es la fecha de corte del primer
@@ -479,9 +543,26 @@ export class PortfolioImportService {
             // Lo último que se sabía: con esto se contesta «qué saldo y mora tenía antes de faltar».
             before: { outstandingBalance: Number(prev.outstandingBalance), daysPastDue: prev.daysPastDue, status: prev.status },
           });
+          item(ImportRunItemAction.ABSENT, {
+            creditId: id,
+            clientId: prev.clientId,
+            externalId,
+            clientName: nameOf(prev.client),
+            before: json(valuesBefore(prev)),
+          });
         }
       }
       if (snapshots.length > 0) await tx.creditExternalSnapshot.createMany({ data: snapshots });
+      // Las filas que no se pudieron importar también quedan: sin esto sólo se sabía cuántas.
+      for (const inv of plan.invalid) {
+        const b = blocks[inv.index];
+        item(ImportRunItemAction.REJECTED, {
+          externalId: b?.code ?? undefined,
+          clientName: b ? clientLabel(b) : undefined,
+          rowNumber: inv.index + 1,
+          reason: inv.reason,
+        });
+      }
 
       const run = await tx.clientImportRun.create({
         data: {
@@ -500,11 +581,19 @@ export class PortfolioImportService {
           creditsCreated: counts.created,
           creditsUpdated: counts.updated,
           creditsSetCurrent: counts.setCurrent,
+          creditsAbsent: counts.absent,
+          creditsReappeared: counts.reappeared,
+          rowsIgnored: counts.ignored,
           needsReview: counts.needsReview,
           errors: counts.invalid,
           createdBy: this.tenant.userId,
+          ...(stored
+            ? { fileName: opts.fileName ?? null, fileSize: stored.size, fileMime: stored.mimeType, fileKey: stored.key }
+            : {}),
+          itemsComplete: true,
         },
       });
+      if (items.length > 0) await tx.clientImportRunItem.createMany({ data: items });
       return { idempotentSkip: false, runId: run.id, scope, counts, preview, report, plan: planInfo, transitions };
     });
 
@@ -530,6 +619,106 @@ export class PortfolioImportService {
     const { transitions: _omit, ...summary } = result;
     void _omit;
     return { dryRun, ...summary };
+  }
+
+  // ── Historial de importaciones ─────────────────────────────────────────────
+
+  /** Las corridas de cartera, la más reciente primero. */
+  async listRuns(query: { page?: number; limit?: number }): Promise<ApiResponse<ImportRunSummary[]>> {
+    const { page, limit, skip } = resolvePagination(query);
+    const where = { accountId: this.tenant.accountId, source: 'portfolio' };
+    const [rows, total] = await this.tx((tx) =>
+      Promise.all([
+        tx.clientImportRun.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
+        tx.clientImportRun.count({ where }),
+      ]),
+    );
+    const names = await this.userNames(rows.map((r) => r.createdBy));
+    return ResponseDto.paginated(
+      rows.map((r) => runSummary(r, names)),
+      total,
+      page,
+      limit,
+    );
+  }
+
+  async getRun(id: string): Promise<ImportRunSummary> {
+    const run = await this.findRun(id);
+    return runSummary(run, await this.userNames([run.createdBy]));
+  }
+
+  /** Los movimientos de una corrida, filtrables por lo que les pasó. */
+  async listRunItems(
+    id: string,
+    query: { page?: number; limit?: number; action?: ImportRunItemAction },
+  ): Promise<ApiResponse<ImportRunItem[]>> {
+    await this.findRun(id);
+    const { page, limit, skip } = resolvePagination(query);
+    const where: Prisma.ClientImportRunItemWhereInput = {
+      accountId: this.tenant.accountId,
+      runId: id,
+      ...(query.action ? { action: query.action } : {}),
+    };
+    const [rows, total] = await this.tx((tx) =>
+      Promise.all([
+        // En el orden del archivo; las que no vinieron (ausentes, al día) al final, por operación.
+        tx.clientImportRunItem.findMany({
+          where,
+          orderBy: [{ rowNumber: { sort: 'asc', nulls: 'last' } }, { externalId: 'asc' }, { id: 'asc' }],
+          skip,
+          take: limit,
+        }),
+        tx.clientImportRunItem.count({ where }),
+      ]),
+    );
+    return ResponseDto.paginated(
+      rows.map((r) => ({
+        id: r.id,
+        action: r.action,
+        creditId: r.creditId ?? undefined,
+        clientId: r.clientId ?? undefined,
+        externalId: r.externalId ?? undefined,
+        clientName: r.clientName ?? undefined,
+        rowNumber: r.rowNumber ?? undefined,
+        reason: r.reason ?? undefined,
+        before: (r.before as ImportItemValues | null) ?? undefined,
+        after: (r.after as ImportItemValues | null) ?? undefined,
+      })),
+      total,
+      page,
+      limit,
+    );
+  }
+
+  /** El documento de la corrida, para verlo o descargarlo. */
+  async runFile(id: string): Promise<{ stream: Readable; name: string; mimeType: string }> {
+    const run = await this.findRun(id);
+    if (!run.fileKey) throw new NotFoundException({ code: 'IMPORT_FILE_NOT_STORED', message: 'Esta importación es anterior a que se guardara el archivo' });
+    return {
+      stream: this.uploads.documentStream(run.fileKey),
+      name: run.fileName ?? run.fileKey.split('/').pop()!,
+      mimeType: run.fileMime ?? 'application/octet-stream',
+    };
+  }
+
+  private async findRun(id: string) {
+    const run = await this.tx((tx) =>
+      tx.clientImportRun.findFirst({ where: { id, accountId: this.tenant.accountId, source: 'portfolio' } }),
+    );
+    if (!run) throw new NotFoundException({ code: 'IMPORT_RUN_NOT_FOUND', message: 'Importación no encontrada' });
+    return run;
+  }
+
+  /** Nombre de quien importó. `users` es global: se lee por id, sin depender del tenant. */
+  private async userNames(ids: (string | null)[]): Promise<Map<string, string>> {
+    const unique = [...new Set(ids.filter((i): i is string => !!i))];
+    if (unique.length === 0) return new Map();
+    const users = await this.tx((tx) =>
+      tx.user.findMany({ where: { id: { in: unique } }, select: { id: true, email: true, profile: true } }),
+    );
+    return new Map(
+      users.map((u) => [u.id, u.profile ? `${u.profile.firstName} ${u.profile.lastName}`.trim() : u.email]),
+    );
   }
 
   // ── Asesores del reporte → usuarios (D8) ───────────────────────────────────
@@ -964,6 +1153,83 @@ function fmtDay(d: Date): string {
 }
 
 /** Lo reportado que vale la pena en el evento de auditoría de una operación. */
+/** La corrida como la ve el historial. «Actualizadas» no incluye las reaparecidas: van aparte. */
+export function runSummary(
+  r: {
+    id: string;
+    createdAt: Date;
+    createdBy: string | null;
+    template: string | null;
+    scope: string | null;
+    externalSource: string | null;
+    reportAsOf: Date | null;
+    advisorCode: string | null;
+    creditsCreated: number;
+    creditsUpdated: number;
+    creditsReappeared: number;
+    creditsSetCurrent: number;
+    creditsAbsent: number;
+    errors: number;
+    rowsIgnored: number;
+    needsReview: number;
+    fileName: string | null;
+    fileSize: number | null;
+    fileMime: string | null;
+    fileKey: string | null;
+    itemsComplete: boolean;
+  },
+  names: Map<string, string>,
+): ImportRunSummary {
+  const who = r.createdBy ? names.get(r.createdBy) : undefined;
+  return {
+    id: r.id,
+    at: r.createdAt.toISOString(),
+    ...(r.createdBy && who ? { createdBy: { id: r.createdBy, name: who } } : {}),
+    template: r.template,
+    scope: r.scope,
+    externalSource: r.externalSource,
+    reportDate: r.reportAsOf ? r.reportAsOf.toISOString().slice(0, 10) : null,
+    advisorCode: r.advisorCode,
+    counts: {
+      created: r.creditsCreated,
+      updated: Math.max(0, r.creditsUpdated - r.creditsReappeared),
+      reappeared: r.creditsReappeared,
+      setCurrent: r.creditsSetCurrent,
+      absent: r.creditsAbsent,
+      rejected: r.errors,
+      ignored: r.rowsIgnored,
+      needsReview: r.needsReview,
+    },
+    ...(r.fileKey ? { file: { name: r.fileName ?? 'documento', size: r.fileSize ?? 0, mimeType: r.fileMime ?? 'application/octet-stream' } } : {}),
+    itemsComplete: r.itemsComplete,
+  };
+}
+
+/** Lo que el reporte dice de la operación, con el estado ya traducido al del crédito. */
+function valuesOf(b: NormalizedRecord, statusMap?: Record<string, CreditStatus>): ImportItemValues {
+  return {
+    outstandingBalance: b.outstandingBalance ?? null,
+    daysPastDue: b.daysPastDue ?? null,
+    status: mapStatus(b.status ?? null, statusMap) ?? CreditStatus.ACTIVE,
+    reportedStatus: b.status ?? null,
+  };
+}
+
+/** Cómo estaba la operación antes de la corrida. */
+function valuesBefore(c: { outstandingBalance: unknown; daysPastDue: number; status: string }): ImportItemValues {
+  return { outstandingBalance: Number(c.outstandingBalance), daysPastDue: c.daysPastDue, status: c.status };
+}
+
+function nameOf(c: { firstName: string | null; lastName: string | null; businessName: string | null } | null): string | undefined {
+  if (!c) return undefined;
+  return c.businessName ?? ([c.lastName, c.firstName].filter(Boolean).join(' ') || undefined);
+}
+
+/** Prisma rechaza `undefined` dentro de un JSON. */
+function json(o: object): Prisma.InputJsonObject {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Prisma.InputJsonObject;
+}
+
 function reported(b: NormalizedRecord): Record<string, unknown> {
   return { outstandingBalance: b.outstandingBalance, daysPastDue: b.daysPastDue, status: b.status };
 }

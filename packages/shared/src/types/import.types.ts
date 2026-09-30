@@ -191,3 +191,73 @@ export interface PortfolioSummary {
     warnings: { index?: number; code: string; detail?: string }[];
   };
 }
+
+// ── Historial de importaciones de cartera ────────────────────────────────────
+
+/** Qué le pasó a un registro en una corrida. */
+export const IMPORT_RUN_ITEM_ACTIONS = ['CREATED', 'UPDATED', 'REAPPEARED', 'SET_CURRENT', 'ABSENT', 'REJECTED'] as const;
+export type ImportRunItemAction = (typeof IMPORT_RUN_ITEM_ACTIONS)[number];
+
+/** Cuántos registros hubo de cada cosa en una corrida. */
+export interface ImportRunCounts {
+  created: number;
+  /** Ya existían y vinieron en el reporte. **No** incluye las reaparecidas, que van aparte. */
+  updated: number;
+  reappeared: number;
+  /** Faltaron del reporte y, con la regla «al día», su mora quedó en 0. Siempre son ausentes también. */
+  setCurrent: number;
+  /** Faltaron del reporte por primera vez (D4): no es «pagó» ni «al día». */
+  absent: number;
+  /** Filas del archivo que no se pudieron importar. */
+  rejected: number;
+  /** Filas que no eran registros (totales, notas): no se cuentan como error. */
+  ignored: number;
+  /** Clientes nuevos que quedaron para «Revisar vínculo» (D2). */
+  needsReview: number;
+}
+
+/** Una corrida del historial (`GET /imports/portfolio/runs`). */
+export interface ImportRunSummary {
+  id: string;
+  at: string;
+  /** Quién importó: nombre y correo. Ausente si el usuario ya no existe. */
+  createdBy?: { id: string; name: string };
+  template: string | null;
+  scope: string | null;
+  externalSource: string | null;
+  reportDate: string | null;
+  advisorCode: string | null;
+  counts: ImportRunCounts;
+  /** El documento que se subió. Ausente = corrida anterior a que se guardara. */
+  file?: { name: string; size: number; mimeType: string };
+  /** `false` = corrida anterior al historial: sin el detalle de «al día» ni de rechazadas. */
+  itemsComplete: boolean;
+}
+
+/** Saldo, mora y estado de una operación, antes o después de la corrida. */
+export interface ImportItemValues {
+  outstandingBalance?: number | null;
+  daysPastDue?: number | null;
+  status?: string | null;
+  /** Estado tal como lo escribió el reporte («VIGENTE», «Vencida»…). */
+  reportedStatus?: string | null;
+  /** Sólo en las nuevas: si se creó el cliente o se sumó a uno existente, y si quedó a revisar. */
+  newClient?: boolean;
+  linkReview?: boolean;
+}
+
+/** Un movimiento de la corrida (`GET /imports/portfolio/runs/:id/items`). */
+export interface ImportRunItem {
+  id: string;
+  action: ImportRunItemAction;
+  creditId?: string;
+  clientId?: string;
+  externalId?: string;
+  clientName?: string;
+  /** Nº de registro en el archivo (1 = el primero). */
+  rowNumber?: number;
+  /** Por qué se rechazó (`MISSING_CODE`, `MATCHES_OUT_OF_SCOPE`…). */
+  reason?: string;
+  before?: ImportItemValues;
+  after?: ImportItemValues;
+}

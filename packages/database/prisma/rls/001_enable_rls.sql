@@ -53,7 +53,9 @@ DECLARE
     'credit_assignments',
     -- Cartera de una fuente externa (PSF): lo que reportó cada corrida, los vínculos persona →
     -- cliente confirmados y los códigos de asesor. Los tres dicen de quién es qué cartera.
-    'credit_external_snapshots', 'client_external_keys', 'external_advisor_links'
+    'credit_external_snapshots', 'client_external_keys', 'external_advisor_links',
+    -- Historial de importaciones: qué le pasó a cada registro en cada corrida.
+    'client_import_run_items'
   ];
 BEGIN
   FOREACH t IN ARRAY operational LOOP

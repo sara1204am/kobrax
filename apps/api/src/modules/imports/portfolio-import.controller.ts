@@ -5,10 +5,12 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Put,
   Query,
+  StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -21,11 +23,23 @@ import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PortfolioImportService } from './portfolio-import.service';
 import type { ImportConfigPatch } from './import-config';
+import { ListImportRunItemsQueryDto, ListImportRunsQueryDto } from './dto/import-runs.dto';
 
 // Sin @types/multer: solo necesitamos el buffer (FileInterceptor usa memoria por defecto).
 interface UploadedPortfolioFile {
   buffer: Buffer;
   originalname?: string;
+  mimetype?: string;
+}
+
+/**
+ * El nombre original del archivo. Multer lo entrega leído como latin1, así que «Reporte_Mora_Año.pdf»
+ * llegaría como «Reporte_Mora_AÃ±o.pdf»: se relee como UTF-8. Sin carpetas y con tope de largo.
+ */
+function originalName(file: UploadedPortfolioFile): string | undefined {
+  if (!file.originalname) return undefined;
+  const utf8 = Buffer.from(file.originalname, 'latin1').toString('utf8');
+  return (utf8.split(/[\\/]/).pop() ?? utf8).slice(0, 200);
 }
 
 // Formas de archivo soportadas (FIELD-RULES §4.1). El match contra la forma CONFIGURADA lo hace
@@ -88,7 +102,49 @@ export class PortfolioImportController {
       throw new BadRequestException({ code: 'FILE_REQUIRED', message: 'Falta el archivo (campo file)' });
     }
     if (columnsOnly === 'true') return this.portfolio.readColumns(file.buffer);
-    return this.portfolio.run(file.buffer, dryRun === 'true', { reportDate: reportDate || undefined });
+    return this.portfolio.run(file.buffer, dryRun === 'true', {
+      reportDate: reportDate || undefined,
+      fileName: originalName(file),
+      mimeType: file.mimetype,
+    });
+  }
+
+  // ── Historial ───────────────────────────────────────────────────────────────
+
+  /** Las corridas de cartera, la más reciente primero. */
+  @Get('runs')
+  @Roles(Permission.CLIENT_IMPORT)
+  listRuns(@Query() query: ListImportRunsQueryDto) {
+    return this.portfolio.listRuns(query);
+  }
+
+  @Get('runs/:id')
+  @Roles(Permission.CLIENT_IMPORT)
+  getRun(@Param('id', ParseUUIDPipe) id: string) {
+    return this.portfolio.getRun(id);
+  }
+
+  /** Qué le pasó a cada registro: las nuevas, actualizadas, al día, ausentes, rechazadas… */
+  @Get('runs/:id/items')
+  @Roles(Permission.CLIENT_IMPORT)
+  listRunItems(@Param('id', ParseUUIDPipe) id: string, @Query() query: ListImportRunItemsQueryDto) {
+    return this.portfolio.listRunItems(id, query);
+  }
+
+  /**
+   * El documento que se subió. `?download=1` lo baja; sin eso se abre en el navegador (un PDF se ve
+   * ahí mismo). Mismo permiso que importar: el reporte trae la cartera entera de un asesor.
+   */
+  @Get('runs/:id/file')
+  @Roles(Permission.CLIENT_IMPORT)
+  async runFile(@Param('id', ParseUUIDPipe) id: string, @Query('download') download?: string) {
+    const { stream, name, mimeType } = await this.portfolio.runFile(id);
+    const encoded = encodeURIComponent(name);
+    const ascii = name.replace(/[^ -~]/g, '_').replace(/"/g, '');
+    return new StreamableFile(stream, {
+      type: mimeType,
+      disposition: `${download === '1' ? 'attachment' : 'inline'}; filename="${ascii}"; filename*=UTF-8''${encoded}`,
+    });
   }
 
   /**

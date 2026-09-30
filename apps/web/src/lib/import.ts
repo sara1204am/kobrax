@@ -1,12 +1,15 @@
-import type {
-  FieldDef,
-  FieldRule,
-  ImportConfig,
-  ImportConfigPatch,
-  ScopeBranch,
-  ScopeMember,
+import {
+  IMPORT_RUN_ITEM_ACTIONS,
+  type FieldDef,
+  type FieldRule,
+  type ImportConfig,
+  type ImportConfigPatch,
+  type ImportRunItemAction,
+  type ScopeBranch,
+  type ScopeMember,
 } from '@kobrax/shared';
 import { sendJson } from './client';
+import { PAGE_SIZES } from './table-prefs';
 import type { ApiError, Translator } from './api-error';
 
 /**
@@ -280,4 +283,40 @@ export function scopeRefName(
   // Si el ref guardado ya no existe (persona dada de baja, sucursal cerrada) se dice, en vez de
   // dibujar una fila vacía que parece configurada.
   return found ?? t('settings.scopeRefGone');
+}
+
+// ── Historial de importaciones ─────────────────────────────────────────────
+
+/** Cuántas corridas por página si nadie eligió otra cosa. Es uno de los tamaños que ofrece la tabla. */
+export const HISTORY_PAGE_SIZE = 25;
+/** Cuántos movimientos por página en el detalle de una corrida. */
+export const RUN_ITEMS_PAGE_SIZE = 50;
+
+/** El filtro de movimientos que llegó por la URL, si es uno que existe. Otro no viaja: sería un 400. */
+export function runItemAction(value: string | undefined): ImportRunItemAction | undefined {
+  return value && (IMPORT_RUN_ITEM_ACTIONS as readonly string[]).includes(value) ? (value as ImportRunItemAction) : undefined;
+}
+
+/** La query de una página: el tamaño elegido si es uno de los que ofrece la tabla, o el default. */
+function pageQuery(params: { page?: string; pageSize?: string }, fallback: number): URLSearchParams {
+  const page = Math.max(1, Number(params.page) || 1);
+  const limit = PAGE_SIZES.includes(Number(params.pageSize)) ? Number(params.pageSize) : fallback;
+  return new URLSearchParams({ page: String(page), limit: String(limit) });
+}
+
+export function historyQuery(params: { page?: string; pageSize?: string }): URLSearchParams {
+  return pageQuery(params, HISTORY_PAGE_SIZE);
+}
+
+export function runItemsQuery(params: { action?: string; page?: string; pageSize?: string }): URLSearchParams {
+  const query = pageQuery(params, RUN_ITEMS_PAGE_SIZE);
+  const action = runItemAction(params.action);
+  if (action) query.set('action', action);
+  return query;
+}
+
+/** «2,4 MB» / «830 KB»: el tamaño del documento, como se lee en un explorador de archivos. */
+export function fileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
