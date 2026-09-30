@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { RouteStopStatus, type CaseListItem, type RouteStopItem } from '@kobrax/shared';
 import { Badge } from '@/components/panel-ui';
+import { SourceBadge } from '@/components/source-badge';
 import { RouteMap } from '@/components/route-map';
 import { AvailableList } from '@/components/route-planner/available-list';
 import { MapPanel, type PlanArea } from '@/components/route-planner/map-panel';
@@ -341,6 +342,9 @@ export function RouteEditor({
                   <span className="block truncate text-[15px] font-medium text-k-text">{stop.clientName ?? '—'}</span>
                   <span className="block truncate text-[13px] text-k-text-2">{stop.address ?? '—'}</span>
                 </a>
+
+                {/* D7: el cobrador tiene que saber que ese saldo es el reportado por el banco. */}
+                <SourceBadge source={stop.externalSource} syncStatus={stop.syncStatus} reportedAsOf={stop.reportedAsOf} />
 
                 {/* Cómo terminó pesa más que en qué estado quedó la parada: es lo que se vino a mirar. */}
                 {stop.lastOutcome ? (

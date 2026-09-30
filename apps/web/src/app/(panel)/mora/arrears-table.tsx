@@ -1,7 +1,8 @@
 'use client';
 
 import { useLocale, useTranslations } from 'next-intl';
-import { memberName, type CaseListItem, type Member } from '@kobrax/shared';
+import { CREDIT_SOURCES, memberName, type CaseListItem, type Member } from '@kobrax/shared';
+import { SourceBadge } from '@/components/source-badge';
 import { Badge, EmptyState } from '@/components/panel-ui';
 import { DataTable, type Column, type PageMeta } from '@/components/data-table';
 import type { FilterDef } from '@/components/data-table-filters';
@@ -45,6 +46,7 @@ export function ArrearsTable({
   canWrite: boolean;
 }) {
   const t = useTranslations('panel.cases');
+  const tsrc = useTranslations('creditSource');
   const locale = useLocale();
   const byId = new Map(members.map((m) => [m.userId, memberName(m)]));
 
@@ -89,9 +91,18 @@ export function ArrearsTable({
        */
       key: 'arrearsSource',
       header: t('columns.arrearsSource'),
-      render: (c) => (
-        <span className="text-[13px] text-k-text-2">{t(`arrearsSource.${c.arrearsSource ?? 'CALCULATED'}`)}</span>
-      ),
+      render: (c) =>
+        // D7/D9: la del banco se lee con su fuente y su corte — y con el aviso si faltó o está vieja.
+        c.externalSource ? (
+          <SourceBadge
+            source={c.externalSource}
+            syncStatus={c.syncStatus}
+            reportedAsOf={c.reportedAsOf}
+            stale={c.reportedStale}
+          />
+        ) : (
+          <span className="text-[13px] text-k-text-2">{t(`arrearsSource.${c.arrearsSource ?? 'CALCULATED'}`)}</span>
+        ),
     },
     {
       key: 'assignee',
@@ -157,6 +168,14 @@ export function ArrearsTable({
         ]
       : []),
     { keys: ['dpdMin', 'dpdMax'], label: t('filters.arrearsRange'), type: 'numberRange' },
+    {
+      // D7: de qué fuente son los créditos. Kobrax = los que calcula el sistema; PSF = los reportados.
+      keys: ['source'],
+      label: tsrc('filter'),
+      type: 'select' as const,
+      allLabel: tsrc('all'),
+      options: CREDIT_SOURCES.map((s) => ({ value: s, label: tsrc(s) })),
+    },
     {
       keys: ['priority'],
       label: t('filters.priority'),

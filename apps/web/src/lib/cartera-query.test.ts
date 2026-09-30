@@ -60,3 +60,14 @@ describe('carteraQuery', () => {
     expect(hasCarteraFilters({ q: 'perez' })).toBe(true);
   });
 });
+
+describe('carteraQuery — fuente (D7)', () => {
+  it('la fuente conocida viaja y cuenta como filtro', () => {
+    expect(carteraQuery({ source: 'PSF' }).get('source')).toBe('PSF');
+    expect(hasCarteraFilters({ source: 'KOBRAX' })).toBe(true);
+  });
+
+  it('🔴 una fuente inventada no viaja: la API contestaría 400', () => {
+    expect(carteraQuery({ source: 'BANCO' }).has('source')).toBe(false);
+  });
+});

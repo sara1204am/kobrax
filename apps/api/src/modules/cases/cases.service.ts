@@ -443,6 +443,7 @@ export class CasesService {
         ...(query.balanceMax != null ? { lte: query.balanceMax } : {}),
       };
     }
+    if (query.source) credit.externalSource = query.source === 'KOBRAX' ? null : query.source;
     if (Object.keys(credit).length > 0) where.credit = credit;
 
     /*
@@ -562,7 +563,7 @@ export class CasesService {
           take: limit,
           include: {
             client: { select: { firstName: true, lastName: true, businessName: true } },
-            credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true, code: true, metadata: true, origin: true, syncStatus: true, reportedAsOf: true, installments: { select: { number: true, dueDate: true, amount: true, paidAmount: true, status: true } } } },
+            credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true, code: true, metadata: true, origin: true, externalSource: true, syncStatus: true, reportedAsOf: true, installments: { select: { number: true, dueDate: true, amount: true, paidAmount: true, status: true } } } },
           },
         }),
         tx.collectionCase.count({ where }),
@@ -711,7 +712,7 @@ export class CasesService {
         include: {
           activities: { orderBy: { createdAt: 'desc' } },
           client: { select: { firstName: true, lastName: true, businessName: true } },
-          credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true, metadata: true, origin: true, syncStatus: true, reportedAsOf: true, installments: { select: { number: true, dueDate: true, amount: true, paidAmount: true, status: true } } } },
+          credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true, metadata: true, origin: true, externalSource: true, syncStatus: true, reportedAsOf: true, installments: { select: { number: true, dueDate: true, amount: true, paidAmount: true, status: true } } } },
         },
       }),
       this.config(tx),

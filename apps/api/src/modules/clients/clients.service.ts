@@ -66,6 +66,8 @@ interface PortfolioRow {
   total_debt: number;
   max_days_past_due: number;
   credit_count: number;
+  total_debt_external: number;
+  max_days_past_due_external: number;
 }
 
 @Injectable()
@@ -263,7 +265,9 @@ export class ClientsService {
       SELECT c.id,
              c.total_debt::float8  AS total_debt,
              c.max_days_past_due   AS max_days_past_due,
-             c.credit_count        AS credit_count
+             c.credit_count        AS credit_count,
+             c.total_debt_external::float8 AS total_debt_external,
+             c.max_days_past_due_external  AS max_days_past_due_external
       FROM clients c
       WHERE ${where}
       ORDER BY ${this.portfolioOrder(query)}
@@ -287,6 +291,8 @@ export class ClientsService {
           totalDebt: Math.round(r.total_debt * 100) / 100,
           maxDaysPastDue: r.max_days_past_due,
           creditCount: r.credit_count,
+          totalDebtExternal: Math.round(r.total_debt_external * 100) / 100,
+          maxDaysPastDueExternal: r.max_days_past_due_external,
         },
       ];
     });
@@ -326,6 +332,17 @@ export class ClientsService {
       conds.push(Prisma.sql`EXISTS (
         SELECT 1 FROM credits k
         WHERE k.client_id = c.id AND k.deleted_at IS NULL AND k.branch_id = ${query.branchId})`);
+    }
+    /*
+     * D7: la fuente también es del crédito — «tiene algún crédito vivo de esa fuente». Quien tiene
+     * uno de Kobrax y otro PSF aparece en los dos filtros, y su fila dice cuánto es de cada uno.
+     */
+    if (query.source) {
+      const source =
+        query.source === 'KOBRAX' ? Prisma.sql`k.external_source IS NULL` : Prisma.sql`k.external_source = ${query.source}`;
+      conds.push(Prisma.sql`EXISTS (
+        SELECT 1 FROM credits k
+        WHERE k.client_id = c.id AND k.deleted_at IS NULL AND ${source})`);
     }
     /*
      * 🔴 **Los filtros de agregado son un `WHERE` común, no un `HAVING`.**

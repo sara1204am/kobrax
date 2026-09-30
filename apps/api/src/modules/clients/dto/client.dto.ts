@@ -1,4 +1,5 @@
 import { applyDecorators } from '@nestjs/common';
+import { CREDIT_SOURCES, type CreditSource } from '@kobrax/shared';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -221,6 +222,11 @@ export class ListClientsQueryDto {
    * y **la lista se puede ordenar por eso**. Es la cartera del panel web (F9 · W3).
    */
   @IsOptional() @IsIn(['portfolio']) view?: 'portfolio';
+  /**
+   * D7: clientes con algún crédito vivo de esa fuente. **Sólo con `view=portfolio`**, como la
+   * sucursal: la fuente es del crédito, y la lista simple no mira créditos.
+   */
+  @IsOptional() @IsIn(CREDIT_SOURCES as unknown as string[]) source?: CreditSource;
   /**
    * ⚠️ **Sólo con `view=portfolio`.** `debt` y `dpd` se calculan agregando los créditos, así que
    * ordenar por ellos es parte de la misma consulta: sin la vista no hay nada que ordenar. La lista

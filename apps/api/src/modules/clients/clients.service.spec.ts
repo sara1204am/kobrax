@@ -371,6 +371,17 @@ describe('ClientsService.list — cartera (view=portfolio)', () => {
     assert.doesNotMatch(sql, /\bJOIN\b/);
   });
 
+  it('D7 · la fuente filtra con EXISTS sobre créditos, y la fila trae los totales externos', async () => {
+    const { service, calls } = makeService({ rows: [], clients: [] });
+    await service.list({ view: 'portfolio', source: 'PSF' } as never);
+    const { sql } = pageSql(calls);
+    assert.match(sql, /EXISTS \(\s*SELECT 1 FROM credits k\s*WHERE k\.client_id = c\.id AND k\.deleted_at IS NULL AND k\.external_source = \?/);
+    assert.match(sql, /c\.total_debt_external/);
+    const kobrax = makeService({ rows: [], clients: [] });
+    await kobrax.service.list({ view: 'portfolio', source: 'KOBRAX' } as never);
+    assert.match(pageSql(kobrax.calls).sql, /k\.external_source IS NULL/);
+  });
+
   it('ordena por nombre con la misma regla que el nombre visible (empresa antes que persona)', async () => {
     const { service, calls } = makeService({ rows: [], clients: [] });
     await service.list({ view: 'portfolio', sort: 'name', dir: 'asc' } as never);

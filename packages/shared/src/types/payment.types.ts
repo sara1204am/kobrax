@@ -37,6 +37,8 @@ export interface PaymentItem {
   channel?: PaymentChannel;
   notes?: string;
   createdAt: string;
+  /** Fuente externa del crédito al que se imputó (D7). Ausente = crédito de Kobrax. Sólo en el listado. */
+  creditSource?: string;
 }
 
 export interface NewPayment {

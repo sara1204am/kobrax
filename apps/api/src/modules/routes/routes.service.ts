@@ -59,7 +59,20 @@ const STOP_VISIT = {
 
 const STOP_CASE = {
   // `creditId` va también: el registro de resultado (S5) cobra y promete contra ESE crédito.
-  select: { creditId: true, credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true } } },
+  select: {
+    creditId: true,
+    credit: {
+      select: {
+        outstandingBalance: true,
+        currency: true,
+        daysPastDue: true,
+        // D1/D3: el cobro sobre un PSF no se topea con su saldo reportado, y la tarjeta lo dice.
+        externalSource: true,
+        syncStatus: true,
+        reportedAsOf: true,
+      },
+    },
+  },
 } satisfies Prisma.CollectionCaseDefaultArgs;
 
 @Injectable()

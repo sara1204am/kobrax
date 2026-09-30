@@ -26,6 +26,7 @@ type CaseCredit = {
   /** `credits.origin`: manda sobre `metadata.origin` (D1). */
   origin?: string | null;
   /** Operación externa: si vino en el último reporte y a qué fecha de corte son sus números (D4, D9). */
+  externalSource?: string | null;
   syncStatus?: string | null;
   reportedAsOf?: Date | null;
   installments?: { number?: number; dueDate: Date; amount: unknown; paidAmount?: unknown; status: string }[];
@@ -130,6 +131,7 @@ export function serializeCase(
     origin: view?.origin, // el móvil pinta el candado con esto (§4.3)
     locked: view?.locked,
     // Operación externa (D4, D9): viajan en el caso porque el caso es lo que el móvil guarda offline.
+    externalSource: c.credit?.externalSource ?? undefined,
     syncStatus: c.credit?.syncStatus ?? undefined,
     reportedAsOf: c.credit?.reportedAsOf ? c.credit.reportedAsOf.toISOString().slice(0, 10) : undefined,
     reportedStale: c.credit?.syncStatus ? isReportStale(c.credit.reportedAsOf, now, staleAfterDays) : undefined,

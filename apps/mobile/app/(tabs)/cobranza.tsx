@@ -235,7 +235,8 @@ function Others({ hits }: { hits: ClientHit[] }) {
 /** Tarjeta de cliente (§5.3): nombre + zona, deuda agregada (roja si mora), línea secundaria y badge. */
 function Card({ card }: { card: ClientPortfolio }) {
   const meta = PORTFOLIO_STATUS_META[card.status];
-  const caption = [card.zone, card.creditCount > 1 ? `${card.creditCount} préstamos` : undefined]
+  // D7: si parte de la deuda la reporta el banco, la tarjeta lo dice junto a la zona.
+  const caption = [card.zone, card.creditCount > 1 ? `${card.creditCount} préstamos` : undefined, card.sourceLine]
     .filter(Boolean)
     .join(' · ');
   return (

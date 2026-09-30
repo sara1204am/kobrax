@@ -6,6 +6,18 @@
     "backToLogin": "Back to sign in",
     "close": "Close"
   },
+  "creditSource": {
+    "column": "Source",
+    "filter": "Source",
+    "all": "All",
+    "KOBRAX": "Kobrax",
+    "PSF": "PSF",
+    "withAsOf": "{source} · as of {date}",
+    "absent": "Missing from report",
+    "stale": "Out-of-date data",
+    "ofWhich": "of which {amount} reported (PSF)",
+    "allReported": "all reported (PSF)"
+  },
   "locale": {
     "label": "Language",
     "es": "Spanish",

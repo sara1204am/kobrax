@@ -265,6 +265,21 @@ export default function ClienteFichaScreen() {
           {detail?.locked && (
             <Text style={styles.locked}>🔒 Importado · {detail.origin} — actualizá con una nueva importación</Text>
           )}
+          {/*
+           * D4/D9: el saldo y la mora de un PSF son los del reporte. Si la operación ya no viene, no es
+           * «pagó» ni «al día»; si el dato está viejo, no es el de hoy. El cobrador lo tiene que saber
+           * antes de tocar la puerta.
+           */}
+          {credit?.externalSource && credit.syncStatus === 'ABSENT' && (
+            <Text style={styles.locked}>
+              {`⚠️ Ya no viene en el reporte ${credit.externalSource}${credit.absentSince ? ` desde el ${prettyDay(credit.absentSince)}` : ''}: el saldo es el último informado.`}
+            </Text>
+          )}
+          {credit?.externalSource && credit.syncStatus !== 'ABSENT' && credit.reportedStale && (
+            <Text style={styles.locked}>
+              {`⚠️ Dato desactualizado: saldo y mora son del corte del ${credit.reportedAsOf ? prettyDay(credit.reportedAsOf) : '—'}.`}
+            </Text>
+          )}
         </View>
 
         {/* Barra de acciones */}
@@ -366,6 +381,12 @@ export default function ClienteFichaScreen() {
               <DataRow label="Cargado en curso" value={`${credit.initialState.paidInstallments} cuotas ya pagadas`} />
             )}
             <DataRow label="Origen" value={ORIGIN_LABEL[detail.origin ?? 'manual'] ?? detail.origin ?? 'manual'} />
+            {credit?.externalSource && (
+              <DataRow label="Operación" value={`${credit.externalSource} ${credit.externalId ?? ''}`.trim()} />
+            )}
+            {credit?.externalSource && credit.reportedAsOf && (
+              <DataRow label="Números al corte del" value={prettyDay(credit.reportedAsOf)} />
+            )}
             {!!credit?.unknownFields?.length && (
               <DataRow label="No registrados" value={credit.unknownFields.map((f) => IMPORT_FIELD_LABEL[f]).join(', ')} />
             )}

@@ -1,4 +1,4 @@
-import { CASE_SORTS, CASE_TRANSITIONS, CasePriority, CaseStatus } from '@kobrax/shared';
+import { CASE_SORTS, CASE_TRANSITIONS, CasePriority, CaseStatus, isCreditSource } from '@kobrax/shared';
 import { PAGE_SIZES } from './table-prefs';
 
 /**
@@ -76,6 +76,8 @@ export interface MoraParams {
   dpdMax?: string;
   /** `'0'` explícito = «mostrar también los que están al día». */
   todos?: string;
+  /** D7: `KOBRAX` o una fuente externa. */
+  source?: string;
   q?: string;
   sort?: string;
   dir?: string;
@@ -115,6 +117,8 @@ export function moraQuery(params: MoraParams): URLSearchParams {
     if (params[key]) query.set(key, params[key]!);
   }
   if (params.overdue === 'true') query.set('overdue', 'true');
+  // D7: una fuente inventada no viaja — la API la valida y un 400 deja la pantalla sin lista.
+  if (isCreditSource(params.source)) query.set('source', params.source);
 
   if (params.dpdMin) query.set('dpdMin', params.dpdMin);
   else if (params.todos !== '1') query.set('dpdMin', '1'); // el default de la pantalla
@@ -145,7 +149,7 @@ export function moraQuery(params: MoraParams): URLSearchParams {
  */
 export function hasMoraFilters(params: MoraParams): boolean {
   return Boolean(
-    params.status || params.priority || params.assigneeId || params.q || params.dpdMin || params.dpdMax ||
+    params.status || params.priority || params.assigneeId || params.q || params.dpdMin || params.dpdMax || params.source ||
       params.overdue === 'true' || params.todos === '1',
   );
 }

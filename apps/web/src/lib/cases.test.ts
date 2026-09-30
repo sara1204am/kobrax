@@ -143,3 +143,11 @@ describe('hasMoraFilters', () => {
     expect(hasMoraFilters({ todos: '1' })).toBe(true);
   });
 });
+
+describe('moraQuery — fuente (D7)', () => {
+  it('la fuente conocida viaja; una inventada no', () => {
+    expect(moraQuery({ source: 'PSF' }).get('source')).toBe('PSF');
+    expect(moraQuery({ source: 'otra' }).has('source')).toBe(false);
+    expect(hasMoraFilters({ source: 'KOBRAX' })).toBe(true);
+  });
+});

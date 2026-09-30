@@ -119,3 +119,11 @@ describe('isUuid', () => {
     expect(isUuid('')).toBe(false);
   });
 });
+
+describe('paymentQuery — fuente (D7)', () => {
+  it('la fuente conocida viaja; una inventada no', () => {
+    expect(paymentQuery({ source: 'KOBRAX' }).get('source')).toBe('KOBRAX');
+    expect(paymentQuery({ source: 'x' }).has('source')).toBe(false);
+    expect(hasPaymentFilters({ source: 'PSF' })).toBe(true);
+  });
+});

@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import { IsDateString, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Length, Max, Min } from 'class-validator';
 import { PaymentChannel, PaymentMethod } from '@prisma/client';
+import { CREDIT_SOURCES, type CreditSource } from '@kobrax/shared';
 
 /** Las columnas del ledger que se pueden ordenar. Son campos propios de `payments`, no de relaciones. */
 export const PAYMENT_SORTS = ['paymentDate', 'amount', 'method', 'receiptNumber'] as const;
@@ -33,6 +34,8 @@ export class ListPaymentsQueryDto {
   @IsOptional() @IsUUID() caseId?: string;
   /** Todos los pagos de una persona, de todos sus créditos. Es el historial de la ficha. */
   @IsOptional() @IsUUID() clientId?: string;
+  /** D7: sólo los pagos imputados a créditos de esa fuente. `KOBRAX` = sin fuente externa. */
+  @IsOptional() @IsIn(CREDIT_SOURCES as unknown as string[]) source?: CreditSource;
   @IsOptional() @IsDateString() from?: string;
   @IsOptional() @IsDateString() to?: string;
 

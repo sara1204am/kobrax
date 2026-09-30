@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { hasInitialState, isUnknownField, paymentProgress, type CreditDetail } from '@kobrax/shared';
 import { Badge } from '@/components/panel-ui';
+import { SourceBadge } from '@/components/source-badge';
 import { CREDIT_STATUS_TONE, CreditProgress } from '@/components/credit-progress';
 import { money, date, relativeDate } from '@/lib/format';
 
@@ -194,14 +195,19 @@ function amountOf(
 function CreditBadges({ credit: c, t }: { credit: CreditDetail; t: (k: string, v?: Record<string, string | number | Date>) => string }) {
   const inProgress = hasInitialState(c.initialState);
   const open = !c.installmentsCount && !c.locked;
-  if (!c.terms && !inProgress && !open && !c.locked) return null;
+  if (!c.terms && !inProgress && !open && !c.locked && !c.externalSource) return null;
 
   return (
     <span className="mt-1.5 flex flex-wrap gap-1.5">
       {c.terms && <Badge>{t(`creditForm.definition.${c.terms.definition}`)}</Badge>}
       {inProgress && <Badge>{t('creditBadges.inProgress')}</Badge>}
       {open && <Badge>{t('openLoan')}</Badge>}
-      {c.locked && <Badge tone="warning">{t('imported')}</Badge>}
+      {/* D1/D4/D9: el externo dice de dónde, a qué corte, y si faltó en el reporte o está viejo. */}
+      {c.externalSource ? (
+        <SourceBadge source={c.externalSource} syncStatus={c.syncStatus} reportedAsOf={c.reportedAsOf} stale={c.reportedStale} />
+      ) : (
+        c.locked && <Badge tone="warning">{t('imported')}</Badge>
+      )}
     </span>
   );
 }

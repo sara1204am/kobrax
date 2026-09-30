@@ -271,6 +271,12 @@ export interface ClientDetail {
   totalDebt?: number;
   maxDaysPastDue?: number;
   creditCount?: number;
+  /**
+   * D7: la parte de `totalDebt` y la peor mora que son de créditos **reportados** por una fuente
+   * externa (PSF), a su fecha de corte. Los mantiene el mismo trigger. 0 = no tiene externos.
+   */
+  totalDebtExternal?: number;
+  maxDaysPastDueExternal?: number;
   contacts?: ClientContactDetail[];
   locations?: ClientLocationDetail[];
   relations?: ClientRelationDetail[];

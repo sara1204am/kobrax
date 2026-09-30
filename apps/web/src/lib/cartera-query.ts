@@ -12,6 +12,7 @@
  * pantalla entera sin cartera. Se descarta antes de salir.
  */
 
+import { isCreditSource } from '@kobrax/shared';
 import { PAGE_SIZES } from './table-prefs';
 
 /** Los que el servidor sabe ordenar. `status` NO está: ordenaría por `client_status`, que no es la columna Estado. */
@@ -43,7 +44,7 @@ const ESTADO: Record<string, Record<string, string>> = {
 };
 
 /** Todo lo que la Cartera considera «un filtro puesto». De acá sale el vacío-por-filtros. */
-export const CARTERA_FILTER_KEYS = ['q', 'status', 'risk', 'estado', ...NUMERIC_FILTERS, ...ID_FILTERS] as const;
+export const CARTERA_FILTER_KEYS = ['q', 'status', 'risk', 'estado', 'source', ...NUMERIC_FILTERS, ...ID_FILTERS] as const;
 
 export function hasCarteraFilters(params: Record<string, string | undefined>): boolean {
   return CARTERA_FILTER_KEYS.some((k) => params[k]?.trim());
@@ -79,6 +80,9 @@ export function carteraQuery(params: Record<string, string | undefined>): URLSea
     const raw = params[key]?.trim();
     if (raw && IS_UUID.test(raw)) query.set(key, raw);
   }
+
+  // D7: una fuente inventada no viaja — la API la valida con `@IsIn` y contestaría 400.
+  if (isCreditSource(params.source)) query.set('source', params.source);
 
   if (params.sort && (CARTERA_SORTS as readonly string[]).includes(params.sort)) {
     query.set('sort', params.sort);

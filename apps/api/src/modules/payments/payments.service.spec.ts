@@ -233,13 +233,14 @@ describe('PaymentsService.register', () => {
 });
 
 /** Un service que sólo sabe listar: guarda con qué `orderBy` se llamó a Prisma. */
-function makeLister() {
-  const calls: { orderBy?: Record<string, unknown> } = {};
+function makeLister(rows: unknown[] = []) {
+  const calls: { orderBy?: Record<string, unknown>; where?: Record<string, unknown> } = {};
   const tx = {
     payment: {
-      findMany: async (args: { orderBy: Record<string, unknown> }) => {
+      findMany: async (args: { orderBy: Record<string, unknown>; where: Record<string, unknown> }) => {
         calls.orderBy = args.orderBy;
-        return [];
+        calls.where = args.where;
+        return rows;
       },
       count: async () => 0,
     },
@@ -248,6 +249,27 @@ function makeLister() {
   const service = new PaymentsService(prisma as never, { accountId: 'acc-A' } as never, {} as never, {} as never);
   return { service, calls };
 }
+
+describe('PaymentsService.list — fuente del crédito (D7)', () => {
+  it('🔴 cliente y fuente comparten `where.credit`: el segundo no pisa al primero', async () => {
+    const { service, calls } = makeLister();
+    await service.list({ clientId: 'cl1', source: 'PSF' });
+    assert.deepEqual(calls.where!.credit, { clientId: 'cl1', externalSource: 'PSF' });
+    await service.list({ source: 'KOBRAX' });
+    assert.deepEqual(calls.where!.credit, { externalSource: null });
+  });
+
+  it('cada fila dice si el cobro fue sobre un crédito externo', async () => {
+    const base = { id: 'p1', creditId: 'cr1', amount: 10, method: 'CASH', paymentDate: new Date(), channel: 'KOBRAX_COLLECTED', createdAt: new Date() };
+    const { service } = makeLister([
+      { ...base, credit: { externalSource: 'PSF' } },
+      { ...base, id: 'p2', credit: { externalSource: null } },
+    ]);
+    const out = await service.list({});
+    assert.equal(out.data![0]!.creditSource, 'PSF');
+    assert.equal(out.data![1]!.creditSource, undefined);
+  });
+});
 
 describe('PaymentsService.list — el orden', () => {
   it('sin pedir nada: lo último cobrado primero', async () => {

@@ -246,6 +246,14 @@ describe('CasesService.list (scope por capacidad + enriquecimiento)', () => {
     });
   });
 
+  it('D7 · la fuente es del crédito y convive con la mora y el saldo', async () => {
+    const { service, calls } = makeService({ permissions: ['case:assign'] });
+    await service.list({ dpdMin: 30, source: 'PSF' } as never);
+    assert.deepEqual(calls.listWhere!.credit, { daysPastDue: { gte: 30 }, externalSource: 'PSF' });
+    await service.list({ source: 'KOBRAX' } as never);
+    assert.deepEqual(calls.listWhere!.credit, { externalSource: null });
+  });
+
   it('🔴 el buscador encuentra por nombre O por zona', async () => {
     // Al armar una ruta se busca de las dos maneras —«los Mamani» y «los del Centro»—; obligar a
     // elegir el campo antes de escribir hace que la mitad de las búsquedas devuelvan vacío.

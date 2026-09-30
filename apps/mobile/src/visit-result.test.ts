@@ -2,6 +2,7 @@ import { VisitOutcome } from '@kobrax/shared';
 import {
   buildDetails,
   canSubmitResult,
+  paymentCap,
   initialResult,
   paymentOutcome,
   postVisitWarning,
@@ -62,6 +63,21 @@ describe('buildDetails', () => {
   it('las variantes sin campos propios no mandan nada', () => {
     expect(buildDetails('PAID', form({ channel: 'DOOR', categoryCode: 'X' }))).toEqual({});
     expect(buildDetails('WRONG_ADDRESS', form({ categoryCode: 'X' }))).toEqual({});
+  });
+});
+
+describe('paymentCap (D3)', () => {
+  it('Kobrax se topea con el saldo de la parada', () => {
+    expect(paymentCap({ overdueAmount: 500 })).toBe(500);
+  });
+
+  it('🔴 un crédito externo no tiene tope: su saldo es el reportado al corte', () => {
+    expect(paymentCap({ overdueAmount: 500, externalSource: 'PSF' })).toBeUndefined();
+    expect(canSubmitResult('PAID', form({ amount: '800' }), paymentCap({ overdueAmount: 500, externalSource: 'PSF' }))).toBe(true);
+  });
+
+  it('sin parada todavía no hay tope que aplicar', () => {
+    expect(paymentCap(null)).toBeUndefined();
   });
 });
 

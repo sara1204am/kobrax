@@ -149,6 +149,9 @@ export interface PortfolioTotals {
   /** La peor mora entre sus créditos — de acá sale el color de la fila. */
   maxDaysPastDue: number;
   creditCount: number;
+  /** D7: lo de `totalDebt` / `maxDaysPastDue` que es de créditos de fuente externa. */
+  totalDebtExternal: number;
+  maxDaysPastDueExternal: number;
 }
 
 export type PortfolioClient = ReturnType<typeof serializeClient> & PortfolioTotals;
@@ -191,6 +194,9 @@ export function serializeClient(client: ClientWithRelations, opts: SerializeOpts
     totalDebt: Number(client.totalDebt),
     maxDaysPastDue: client.maxDaysPastDue,
     creditCount: client.creditCount,
+    // D7: la parte de fuente externa, del mismo trigger. La ficha y la lista la muestran aparte.
+    totalDebtExternal: Number(client.totalDebtExternal),
+    maxDaysPastDueExternal: client.maxDaysPastDueExternal,
     metadata: client.metadata,
     createdAt: client.createdAt,
     updatedAt: client.updatedAt,

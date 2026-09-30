@@ -208,7 +208,13 @@ export class PaymentsService {
      * cada crédito suyo. La ficha del cliente muestra las últimas cobranzas de TODOS sus créditos
      * juntos, que es como se mira un historial — nadie pregunta «cuánto pagó del crédito 2».
      */
-    if (query.clientId) where.credit = { clientId: query.clientId };
+    // Cliente y fuente son del crédito: comparten `where.credit`, o el segundo pisaría al primero.
+    if (query.clientId || query.source) {
+      where.credit = {
+        ...(query.clientId ? { clientId: query.clientId } : {}),
+        ...(query.source ? { externalSource: query.source === 'KOBRAX' ? null : query.source } : {}),
+      };
+    }
     if (query.from || query.to) where.paymentDate = { ...(query.from ? { gte: new Date(query.from) } : {}), ...(query.to ? { lte: new Date(query.to) } : {}) };
 
     /*
@@ -230,11 +236,17 @@ export class PaymentsService {
 
     const [rows, total] = await this.tx((tx) =>
       Promise.all([
-        tx.payment.findMany({ where, orderBy, skip, take: limit }),
+        // La fuente del crédito viaja con la fila (D7): el ledger dice qué cobro fue sobre un PSF.
+        tx.payment.findMany({ where, orderBy, skip, take: limit, include: { credit: { select: { externalSource: true } } } }),
         tx.payment.count({ where }),
       ]),
     );
-    return ResponseDto.paginated(rows.map(serializePayment), total, page, limit);
+    return ResponseDto.paginated(
+      rows.map((p) => ({ ...serializePayment(p), creditSource: p.credit.externalSource ?? undefined })),
+      total,
+      page,
+      limit,
+    );
   }
 
   async findOne(id: string) {

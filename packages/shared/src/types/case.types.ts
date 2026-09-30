@@ -65,6 +65,8 @@ export interface CaseListItem {
   frequency?: PaymentFrequency;
   origin?: CreditOrigin;
   locked?: boolean;
+  /** De qué fuente externa es el crédito (D1). Ausente = Kobrax. */
+  externalSource?: string;
   /** Operación externa: si vino en el último reporte y a qué fecha de corte son sus números (D4, D9). */
   syncStatus?: ExternalSyncStatus;
   reportedAsOf?: string;

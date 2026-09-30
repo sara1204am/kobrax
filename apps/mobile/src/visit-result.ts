@@ -107,6 +107,19 @@ export function canSubmitResult(key: VariantKey, f: ResultForm, maxAmount?: numb
   return true;
 }
 
+/**
+ * Hasta cuánto se puede cobrar en la parada. `undefined` = sin tope.
+ *
+ * 🔴 **Un crédito de fuente externa (PSF) no tiene tope** (D3). Su saldo es el que reportó el banco a
+ * su fecha de corte, no uno que Kobrax lleve: el deudor puede estar pagando además cargos o cuotas
+ * que el reporte todavía no refleja, y el pago no baja ese saldo. Topearlo con él rechazaba en la
+ * puerta un cobro que la ficha del cliente y la API aceptan.
+ */
+export function paymentCap(stop: { overdueAmount?: number; externalSource?: string } | null | undefined): number | undefined {
+  if (!stop || stop.externalSource) return undefined;
+  return stop.overdueAmount;
+}
+
 /** Si el monto cubre el saldo es PAID; si no, fue un pago parcial. */
 export function paymentOutcome(amount: number, outstanding?: number): VisitOutcome {
   if (outstanding == null) return VisitOutcome.PAID;
