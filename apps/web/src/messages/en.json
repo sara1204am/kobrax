@@ -78,8 +78,17 @@
         "priority": "Priority",
         "all": "All",
         "selected": "{count} selected",
-        "clear": "Clear filters"
+        "clear": "Clear filters",
+        "source": "Source",
+        "allSources": "All"
       },
+      "sources": {
+        "KOBRAX": "Kobrax",
+        "PSF": "PSF"
+      },
+      "mixedSources": "Includes {count, plural, one {# {source} operation} other {# {source} operations}} with balance and arrears reported as of the {to} cut-off.",
+      "mixedSourcesRange": "Includes {count, plural, one {# {source} operation} other {# {source} operations}} with balance and arrears reported at cut-offs from {from} to {to}.",
+      "mixedSourcesHint": "These are not today's figures: pick a source to see them separately.",
       "presets": {
         "today": "Today",
         "yesterday": "Yesterday",
@@ -167,7 +176,8 @@
       "trend": {
         "outstanding": "Portfolio balance",
         "collected": "Collected",
-        "reconstructed": "Each date's balance is reconstructed from what was collected afterwards: it shows what collections brought down, and does not include new disbursements."
+        "reconstructed": "Each date's balance is reconstructed from what was collected afterwards: it shows what collections brought down, and does not include new disbursements.",
+        "external": "Includes the balance reported by external sources at each date (today {amount}): that part is not reconstructed from payments."
       },
       "map": {
         "done": "{n} visited",

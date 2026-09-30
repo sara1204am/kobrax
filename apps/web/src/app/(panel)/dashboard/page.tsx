@@ -32,6 +32,9 @@ import { WidgetRenderer, type DashboardData } from '@/components/dashboard/widge
  * datos una vez, y dejar que el renderer decida qué componente le toca a cada widget guardado. Por
  * eso «Vista general», «Cobranza» y «Campo» son el mismo código.
  */
+/** `YYYY-MM-DD` → `dd/mm`, sin pasar por la zona horaria del servidor. */
+const day = (iso: string): string => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -78,6 +81,10 @@ export default async function DashboardPage({
    */
   const widgets = current ? current.widgets : DEFAULT_WIDGETS;
 
+  const bySource = summary.body.data?.bySource ?? [];
+  const sources = bySource.map((s) => s.source);
+  const external = bySource.filter((s) => s.source !== 'KOBRAX' && s.credits > 0);
+
   const data: DashboardData = {
     summary: summary.body.data ?? undefined,
     aging: aging.body.data ?? undefined,
@@ -106,7 +113,28 @@ export default async function DashboardPage({
       <DashboardToolbar dashboards={dashboards} current={current} widgets={widgets} editable={editable} />
 
       {/* Los filtros van ANTES de los números: primero se elige qué se mira. */}
-      <DashboardFilters collectors={team.body.data ?? []} />
+      <DashboardFilters collectors={team.body.data ?? []} sources={sources} />
+
+      {/*
+       * 🔴 D7: nunca mezclados en silencio. Sin fuente elegida, el saldo y la mora suman lo que
+       * calcula Kobrax con lo que reporta el banco a su fecha de corte: se dice, con el corte, y cada
+       * KPI trae su desglose.
+       */}
+      {!filters.source && external.length > 0 && (
+        <p role="note" className="mb-5 rounded-xl bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text">
+          {external
+            .map((s) =>
+              t(s.reportedAsOf && s.reportedAsOf.from !== s.reportedAsOf.to ? 'mixedSourcesRange' : 'mixedSources', {
+                source: t(`sources.${s.source}`),
+                count: s.credits,
+                from: s.reportedAsOf ? day(s.reportedAsOf.from) : '—',
+                to: s.reportedAsOf ? day(s.reportedAsOf.to) : '—',
+              }),
+            )
+            .join(' ')}{' '}
+          {t('mixedSourcesHint')}
+        </p>
+      )}
 
       <DashboardGrid dashboardId={current?.id} widgets={widgets} editable={editable}>
         {widgets.map((widget) => (

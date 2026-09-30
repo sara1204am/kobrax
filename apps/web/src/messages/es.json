@@ -78,8 +78,17 @@
         "priority": "Prioridad",
         "all": "Todos",
         "selected": "{count} seleccionados",
-        "clear": "Limpiar filtros"
+        "clear": "Limpiar filtros",
+        "source": "Fuente",
+        "allSources": "Todas"
       },
+      "sources": {
+        "KOBRAX": "Kobrax",
+        "PSF": "PSF"
+      },
+      "mixedSources": "Incluye {count, plural, one {# operación} other {# operaciones}} {source} con saldo y mora reportados al corte del {to}.",
+      "mixedSourcesRange": "Incluye {count, plural, one {# operación} other {# operaciones}} {source} con saldo y mora reportados a cortes del {from} al {to}.",
+      "mixedSourcesHint": "No son números de hoy: elegí una fuente para verlas por separado.",
       "presets": {
         "today": "Hoy",
         "yesterday": "Ayer",
@@ -167,7 +176,8 @@
       "trend": {
         "outstanding": "Saldo de cartera",
         "collected": "Recaudado",
-        "reconstructed": "El saldo de cada fecha se reconstruye con lo cobrado después: muestra lo que bajó la cobranza, no incluye desembolsos nuevos."
+        "reconstructed": "El saldo de cada fecha se reconstruye con lo cobrado después: muestra lo que bajó la cobranza, no incluye desembolsos nuevos.",
+        "external": "Incluye el saldo reportado por fuentes externas a cada fecha (hoy {amount}): ese no se reconstruye con pagos."
       },
       "map": {
         "done": "{n} visitadas",
