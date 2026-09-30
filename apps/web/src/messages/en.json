@@ -1931,6 +1931,8 @@
       "arrearsMethod": "How arrears are counted",
       "externalId": "Operation",
       "reportedAsOf": "Figures as of cut-off",
+      "reportedAsOfStale": "{date} (out of date)",
+      "reportStale": "Balance and arrears are from the {date} cut-off, more than {days, plural, one {# day} other {# days}} ago: they may not reflect today's situation. Meanwhile no new cases are opened from this data.",
       "syncStatus": "In the report",
       "syncAbsentSince": "Missing since {date}",
       "sync": {

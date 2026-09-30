@@ -27,6 +27,7 @@ import {
   PaymentFrequency,
   readCreditMetadata,
   resolvePagination,
+  staleAfterDaysOf,
   type ApiResponse,
   type BalanceBasis,
   type CreditMetadata,
@@ -67,10 +68,15 @@ import { closeOpenCases, openCaseIfNone } from '../arrears/case-lifecycle';
 interface AccountConfig {
   currencyCode: string;
   labels: Record<string, string>;
+  /** Días desde el corte tras los que el dato de un externo es viejo (D9), del formato de importación. */
+  staleAfterDays: number;
   arrears: ArrearParams;
   /** Método de mora por defecto de los créditos nuevos (D20), de `accounts.settings`. */
   arrearsMethod: ArrearsMethod;
 }
+
+/** Lo que el serializer toma de la config: etiquetas y umbral del dato viejo. */
+const labelsOf = (c: AccountConfig): [Record<string, string>, number] => [c.labels, c.staleAfterDays];
 
 @Injectable()
 export class CreditsService {
@@ -91,10 +97,12 @@ export class CreditsService {
     const cfg = (account?.configuration ?? {}) as {
       creditLabels?: Record<string, string>;
       arrears?: Partial<ArrearParams>;
+      importConfig?: { staleAfterDays?: unknown };
     };
     return {
       currencyCode: account?.currencyCode ?? 'USD',
       labels: cfg.creditLabels ?? {},
+      staleAfterDays: staleAfterDaysOf(cfg.importConfig?.staleAfterDays),
       arrears: { ...DEFAULT_ARREAR_PARAMS, ...(cfg.arrears ?? {}) },
       arrearsMethod: arrearsMethodOf(account?.settings),
     };
@@ -322,7 +330,7 @@ export class CreditsService {
     });
 
     // El alta ya se auditó cuando entró de verdad: un reintento de la cola no la registra dos veces.
-    if (created.reintento) return serializeCredit(created.credit, config.labels);
+    if (created.reintento) return serializeCredit(created.credit, config.labels, config.staleAfterDays);
 
     await this.audit.record({ entity: 'credit', entityId: created.credit.id, action: 'CREATE', after: creditSummary(created.credit) });
     if (created.caseId) {
@@ -331,7 +339,7 @@ export class CreditsService {
     if (created.agendaId) {
       await this.audit.record({ entity: 'agenda_item', entityId: created.agendaId, action: 'CREATE', after: { creditId: created.credit.id, caseId: created.caseId, source: 'credit_create' } });
     }
-    return serializeCredit(created.credit, config.labels);
+    return serializeCredit(created.credit, config.labels, config.staleAfterDays);
   }
 
   async list(query: ListCreditsQueryDto): Promise<ApiResponse<ReturnType<typeof serializeCredit>[]>> {
@@ -349,7 +357,7 @@ export class CreditsService {
       ]),
     );
     return ResponseDto.paginated(
-      rows.map((c) => serializeCredit(c, config.labels)),
+      rows.map((c) => serializeCredit(c, config.labels, config.staleAfterDays)),
       total,
       page,
       limit,
@@ -365,7 +373,7 @@ export class CreditsService {
       }),
     );
     if (!credit) throw resourceNotFound();
-    return serializeCredit(credit, config.labels);
+    return serializeCredit(credit, config.labels, config.staleAfterDays);
   }
 
   async getSchedule(id: string) {
@@ -563,7 +571,7 @@ export class CreditsService {
       before: creditSummary(before),
       after: { ...creditSummary(after), ...redefined },
     });
-    return serializeCredit(after, config.labels);
+    return serializeCredit(after, config.labels, config.staleAfterDays);
   }
 
   // ── Mora declarada a mano ──────────────────────────────────────────────────
@@ -634,7 +642,7 @@ export class CreditsService {
       before: { clientId: outcome.fromId },
       after: { clientId: targetClientId, linkSaved: outcome.keySaved, provisionalRetired: outcome.retired },
     });
-    return serializeCredit(outcome.credit, (await this.accountConfig()).labels);
+    return serializeCredit(outcome.credit, ...labelsOf(await this.accountConfig()));
   }
 
   /**
@@ -707,7 +715,7 @@ export class CreditsService {
     });
 
     await this.audit.record({ entity: 'credit', entityId: id, action: 'ARREARS_MARK', after: { days: credit.daysPastDue, caseOpened: opened } });
-    return serializeCredit(credit, (await this.accountConfig()).labels);
+    return serializeCredit(credit, ...labelsOf(await this.accountConfig()));
   }
 
   /**
@@ -760,7 +768,7 @@ export class CreditsService {
     });
 
     await this.audit.record({ entity: 'credit', entityId: id, action: 'ARREARS_CLEAR', after: { mode: dto.mode, casesClosed: closed } });
-    return serializeCredit(credit, (await this.accountConfig()).labels);
+    return serializeCredit(credit, ...labelsOf(await this.accountConfig()));
   }
 
   // ── Mora ──────────────────────────────────────────────────────────────────

@@ -1,17 +1,19 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
-import { CaseStatus, CreditStatus, type Prisma, type PrismaClient } from '@prisma/client';
+import { CaseStatus, CreditStatus, ExternalSyncStatus, type Prisma, type PrismaClient } from '@prisma/client';
 import {
   arrearsByMethod,
   arrearsSourceOf,
+  isReportStale,
   manualArrears,
   oldestUnpaid,
   readCreditMetadata,
+  staleAfterDaysOf,
   withArrearsMethod,
 } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { computePriority, slaDueAt, DEFAULT_PRIORITY_PARAMS, type PriorityParams } from '../cases/case-priority';
 import { computeArrears, DEFAULT_ARREAR_PARAMS, type ArrearParams } from '../credits/credit-math';
-import { closeOpenCases, openCaseIfNone } from './case-lifecycle';
+import { closeOpenCases, openCaseIfNone, reopenAbsentCase } from './case-lifecycle';
 
 /** Cada cuánto barre. Diario en la práctica; corre más seguido para que un reinicio no lo saltee. */
 export const ARREARS_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -36,6 +38,8 @@ interface ArrearsConfig {
   priority: PriorityParams;
   arrears: ArrearParams;
   minDaysPastDue: number;
+  /** Días desde el corte tras los que el dato de una operación externa es viejo (D9). */
+  staleAfterDays: number;
 }
 
 export interface ArrearsRunResult {
@@ -45,9 +49,22 @@ export interface ArrearsRunResult {
   closed: number;
   /** Casos abiertos a los que les cambió la prioridad (y con ella su lugar en la ruta). */
   reprioritized: number;
+  /** Casos cerrados por ausencia que se reabrieron porque la operación volvió al reporte. */
+  reopened: number;
+  /** Operaciones externas en mora a las que no se les abrió caso porque su dato está viejo (D9). */
+  stale: number;
 }
 
-const EMPTY: ArrearsRunResult = { updated: 0, opened: 0, closed: 0, reprioritized: 0 };
+const EMPTY: ArrearsRunResult = { updated: 0, opened: 0, closed: 0, reprioritized: 0, reopened: 0, stale: 0 };
+
+function addInto(total: ArrearsRunResult, r: ArrearsRunResult): void {
+  total.updated += r.updated;
+  total.opened += r.opened;
+  total.closed += r.closed;
+  total.reprioritized += r.reprioritized;
+  total.reopened += r.reopened;
+  total.stale += r.stale;
+}
 
 /**
  * El trabajo diario de la mora: **la pieza que hacía falta para que Cobranza se llene y se vacíe sola**.
@@ -66,6 +83,9 @@ const EMPTY: ArrearsRunResult = { updated: 0, opened: 0, closed: 0, reprioritize
  * 4. Recalcula la prioridad de los que siguen abiertos — **es lo que ordena las paradas de la ruta**,
  *    y hasta ahora se fijaba al abrir el caso y no se tocaba nunca más: un caso que abrió con un día
  *    seguía en prioridad baja con doscientos.
+ *
+ * Con las operaciones externas (PSF) suma tres reglas: la que faltó en su reporte cierra su caso con
+ * `SOURCE_ABSENT` (D4); la que vuelve reabre ese mismo caso; y con el dato viejo (D9) no se abre caso.
  *
  * 🔴 **No notifica.** Abrir un caso por la vía normal emite `CASE_UPDATED`, que hace fan-out a todas
  * las supervisoras; la primera pasada sobre cartera histórica sería una avalancha de avisos por algo
@@ -109,17 +129,16 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
     const total = { ...EMPTY };
     for (const accountId of accountIds) {
       try {
-        const r = await this.scanAccount(accountId, asOf);
-        total.updated += r.updated;
-        total.opened += r.opened;
-        total.closed += r.closed;
-        total.reprioritized += r.reprioritized;
+        addInto(total, await this.scanAccount(accountId, asOf));
       } catch (err) {
         this.logger.error(`Mora falló en tenant ${accountId}: ${this.msg(err)}`);
       }
     }
-    if (total.opened || total.closed) {
-      this.logger.log(`Mora: ${total.opened} casos abiertos, ${total.closed} cerrados, ${total.updated} créditos actualizados`);
+    if (total.opened || total.closed || total.reopened || total.stale) {
+      this.logger.log(
+        `Mora: ${total.opened} casos abiertos, ${total.reopened} reabiertos, ${total.closed} cerrados, ` +
+          `${total.updated} créditos actualizados, ${total.stale} sin caso por dato viejo`,
+      );
     }
     return total;
   }
@@ -146,10 +165,7 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
         (tx) => this.scanBatch(tx, accountId, asOf, params, cursor),
         ARREARS_TX_TIMEOUT_MS,
       );
-      out.updated += batch.result.updated;
-      out.opened += batch.result.opened;
-      out.closed += batch.result.closed;
-      out.reprioritized += batch.result.reprioritized;
+      addInto(out, batch.result);
       if (!batch.next) return out;
       cursor = batch.next;
     }
@@ -160,11 +176,20 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
     tx: PrismaClient,
     accountId: string,
     asOf: Date,
-    { priority: priorityParams, arrears: arrearParams, minDaysPastDue }: ArrearsConfig,
+    { priority: priorityParams, arrears: arrearParams, minDaysPastDue, staleAfterDays }: ArrearsConfig,
     cursor?: string,
   ): Promise<{ result: ArrearsRunResult; next?: string }> {
     const credits = await tx.credit.findMany({
-      where: { status: CreditStatus.ACTIVE, deletedAt: null },
+      /*
+       * Los activos, y además los externos que su fuente reporta como vencidos (`DEFAULTED`): para
+       * el banco «Vencido» es un grado de mora, no un cierre, y sin esto su caso nunca se abriría —ni
+       * se cerraría al faltar del reporte—. Los créditos de Kobrax en `DEFAULTED` siguen afuera: ese
+       * estado lo pone una persona y el job no lo reinterpreta.
+       */
+      where: {
+        deletedAt: null,
+        OR: [{ status: CreditStatus.ACTIVE }, { status: CreditStatus.DEFAULTED, externalSource: { not: null } }],
+      },
       select: {
         id: true,
         clientId: true,
@@ -173,6 +198,8 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
         daysPastDue: true,
         metadata: true,
         origin: true,
+        syncStatus: true,
+        reportedAsOf: true,
         assignedManagerId: true,
         client: { select: { riskSegment: true } },
         installments: { select: { id: true, number: true, dueDate: true, amount: true, paidAmount: true, status: true } },
@@ -193,6 +220,21 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
     const out = { ...EMPTY };
     {
       for (const credit of credits) {
+        /*
+         * 🔴 **Operación externa que faltó en su reporte: se cierra su caso con `SOURCE_ABSENT`, y nada más.**
+         *
+         * No es `CURRENT` ni `PAID` (D4): que el reporte de mora deje de traerla no dice si se puso al
+         * día o si canceló. Por eso va antes que todo lo demás — con la regla `set-current` su mora
+         * quedó en cero y, sin esta guarda, el caso se cerraría como «al día», que es afirmar algo que
+         * nadie sabe. Tampoco se le abre caso: sus números son los del último reporte que la trajo.
+         */
+        if (credit.syncStatus === ExternalSyncStatus.ABSENT) {
+          if (openByCredit.has(credit.id)) {
+            out.closed += await closeOpenCases(tx, credit.id, 'SOURCE_ABSENT', asOf);
+          }
+          continue;
+        }
+
         const balance = Number(credit.outstandingBalance);
         const reading = this.arrearsFor(credit, arrearParams, asOf);
         const days = reading?.days ?? null;
@@ -240,6 +282,23 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
 
         if (days >= minDaysPastDue) {
           if (!open) {
+            const external = credit.syncStatus != null;
+            /*
+             * D9: con el dato viejo no se sale a cobrar. La mora de un externo es la de su fecha de
+             * corte; si el reporte dejó de llegar hace más de `staleAfterDays`, abrir (o reabrir) un
+             * caso con ella es mandar al cobrador por un número que ya nadie confirma. El caso que ya
+             * estaba abierto sigue: cerrarlo sería afirmar que se puso al día. La ficha lo avisa.
+             */
+            if (external && isReportStale(credit.reportedAsOf, asOf, staleAfterDays)) {
+              out.stale++;
+              continue;
+            }
+            const sla = slaDueAt(priority, asOf, priorityParams);
+            // Volvió al reporte después de faltar: se reabre su caso de antes, no uno nuevo.
+            if (external && (await reopenAbsentCase(tx, credit.id, priority, sla, asOf))) {
+              out.reopened++;
+              continue;
+            }
             await openCaseIfNone(tx, {
               accountId,
               creditId: credit.id,
@@ -247,7 +306,7 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
               branchId: credit.branchId,
               assigneeId: credit.assignedManagerId,
               priority,
-              slaDueAt: slaDueAt(priority, asOf, priorityParams),
+              slaDueAt: sla,
             });
             out.opened++;
           } else if (open.priority !== priority && !open.priorityPinnedAt) {
@@ -360,11 +419,13 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
       casePriority?: Partial<PriorityParams>;
       caseGeneration?: { minDaysPastDue?: number };
       arrears?: Partial<ArrearParams>;
+      importConfig?: { staleAfterDays?: unknown };
     };
     return {
       priority: { ...DEFAULT_PRIORITY_PARAMS, ...(cfg.casePriority ?? {}) },
       arrears: { ...DEFAULT_ARREAR_PARAMS, ...(cfg.arrears ?? {}) },
       minDaysPastDue: cfg.caseGeneration?.minDaysPastDue ?? 1,
+      staleAfterDays: staleAfterDaysOf(cfg.importConfig?.staleAfterDays),
     };
   }
 

@@ -1931,6 +1931,8 @@
       "arrearsMethod": "Cómo se cuenta la mora",
       "externalId": "Operación",
       "reportedAsOf": "Números al corte del",
+      "reportedAsOfStale": "{date} (desactualizado)",
+      "reportStale": "Saldo y mora son del corte del {date}, hace más de {days, plural, one {# día} other {# días}}: pueden no reflejar la situación de hoy. Mientras tanto no se abren casos nuevos con este dato.",
       "syncStatus": "En el reporte",
       "syncAbsentSince": "Ya no viene desde el {date}",
       "sync": {

@@ -52,6 +52,8 @@ export interface ImportConfig {
   balanceBasis?: 'principal' | 'total';
   /** Etiqueta de estado del reporte (MAYÚSCULAS, sin tildes) → estado del crédito. */
   statusMap?: Record<string, string>;
+  /** Días desde la fecha de corte tras los que el dato se marca desactualizado (D9). Ausente = 2. */
+  staleAfterDays?: number;
 }
 
 /**

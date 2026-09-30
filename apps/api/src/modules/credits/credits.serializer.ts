@@ -11,6 +11,8 @@ import {
   suggestedPaymentAmount,
   type CreditTerms,
   type ImportTrackedField,
+  DEFAULT_REPORT_STALE_AFTER_DAYS,
+  isReportStale,
 } from '@kobrax/shared';
 
 /** Etiquetas de concepto por defecto (las sobreescribe `account.configuration.creditLabels`). */
@@ -59,6 +61,7 @@ type CreditWithRelations = Credit & {
 export function serializeCredit(
   credit: CreditWithRelations,
   labels: Record<string, string> = DEFAULT_CREDIT_LABELS,
+  staleAfterDays: number = DEFAULT_REPORT_STALE_AFTER_DAYS,
 ) {
   // La ficha (§5.4) necesita cuota, frecuencia, próxima fecha y el candado del importado.
   // Misma función que el listado de casos y que el móvil: una sola regla, tres consumidores.
@@ -125,6 +128,9 @@ export function serializeCredit(
     syncStatus: credit.syncStatus ?? undefined,
     absentSince: isoDay(credit.absentSince),
     reportedAsOf: isoDay(credit.reportedAsOf),
+    // D9: pasado el umbral desde el corte, la mora y el saldo reportados ya no se presentan como de hoy.
+    reportedStale: credit.syncStatus ? isReportStale(credit.reportedAsOf, new Date(), staleAfterDays) : undefined,
+    reportStaleAfterDays: credit.syncStatus ? staleAfterDays : undefined,
     suggestedPaymentAmount: suggestedPaymentAmount({
       external: view.locked,
       outstandingBalance: num(credit.outstandingBalance),

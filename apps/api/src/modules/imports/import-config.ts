@@ -7,6 +7,7 @@
  *
  * Función pura, sin Nest ni Prisma → testeable sin levantar nada.
  */
+import { REPORT_STALE_AFTER_DAYS_MAX, REPORT_STALE_AFTER_DAYS_MIN } from '@kobrax/shared';
 import { FIELD_CATALOG, type NameOrder } from './field-catalog';
 import type { FieldMap, PdfBlocksProfile } from './parsers/pdf-blocks.parser';
 import type { PdfRowsProfile } from './parsers/pdf-rows.parser';
@@ -58,6 +59,11 @@ export interface ImportConfig {
    * el estado: "Vencida" o "Ejecución" son grados de mora, y el crédito sigue vivo.
    */
   statusMap?: Record<string, string>;
+  /**
+   * Pasados estos días desde la fecha de corte, la mora y el saldo reportados se marcan como
+   * desactualizados y el trabajo diario deja de abrir casos con ellos (D9). Ausente = 2.
+   */
+  staleAfterDays?: number;
 }
 
 /**
@@ -119,6 +125,17 @@ export function validateImportConfig(next: ImportConfig, prev?: ImportConfig): v
   }
   if (next.balanceBasis !== undefined && !['principal', 'total'].includes(next.balanceBasis)) {
     throw new ImportConfigError('INVALID_BALANCE_BASIS', `Base del saldo inválida: ${String(next.balanceBasis)}`);
+  }
+  if (
+    next.staleAfterDays !== undefined &&
+    (!Number.isInteger(next.staleAfterDays) ||
+      next.staleAfterDays < REPORT_STALE_AFTER_DAYS_MIN ||
+      next.staleAfterDays > REPORT_STALE_AFTER_DAYS_MAX)
+  ) {
+    throw new ImportConfigError(
+      'INVALID_STALE_AFTER_DAYS',
+      `Los días para marcar el dato como viejo van de ${REPORT_STALE_AFTER_DAYS_MIN} a ${REPORT_STALE_AFTER_DAYS_MAX}`,
+    );
   }
   for (const [label, status] of Object.entries(next.statusMap ?? {})) {
     if (!CREDIT_STATUSES.includes(status)) {

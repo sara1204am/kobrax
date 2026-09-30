@@ -1,5 +1,12 @@
 import type { CaseActivity, CollectionCase } from '@prisma/client';
-import { arrearsSourceOf, creditView, readCreditMetadata, suggestedPaymentAmount } from '@kobrax/shared';
+import {
+  arrearsSourceOf,
+  creditView,
+  DEFAULT_REPORT_STALE_AFTER_DAYS,
+  isReportStale,
+  readCreditMetadata,
+  suggestedPaymentAmount,
+} from '@kobrax/shared';
 import { clientDisplayName } from '../clients/clients.serializer';
 
 const TERMINAL = ['CLOSED', 'WRITTEN_OFF'];
@@ -70,7 +77,12 @@ export type PortfolioExtra = {
   hasActivePromise?: boolean;
 };
 
-export function serializeCase(c: CaseWithActivities, now: Date = new Date(), portfolio?: PortfolioExtra) {
+export function serializeCase(
+  c: CaseWithActivities,
+  now: Date = new Date(),
+  portfolio?: PortfolioExtra,
+  staleAfterDays: number = DEFAULT_REPORT_STALE_AFTER_DAYS,
+) {
   const isOverdue = !!c.slaDueAt && !TERMINAL.includes(c.status) && c.slaDueAt.getTime() < now.getTime();
   // Cuota y próxima fecha: derivadas del cronograma si existe, leídas del metadata si no.
   // Misma función que usa el móvil → la tarjeta dice lo mismo en los dos lados.
@@ -120,6 +132,7 @@ export function serializeCase(c: CaseWithActivities, now: Date = new Date(), por
     // Operación externa (D4, D9): viajan en el caso porque el caso es lo que el móvil guarda offline.
     syncStatus: c.credit?.syncStatus ?? undefined,
     reportedAsOf: c.credit?.reportedAsOf ? c.credit.reportedAsOf.toISOString().slice(0, 10) : undefined,
+    reportedStale: c.credit?.syncStatus ? isReportStale(c.credit.reportedAsOf, now, staleAfterDays) : undefined,
     // Con qué arranca el formulario de pago: viaja en el caso para que el móvil lo tenga offline.
     suggestedPaymentAmount:
       c.credit && view

@@ -410,6 +410,12 @@ function CurrentState({ credit }: { credit: CreditDetail }) {
       {credit.balanceBasis === 'legacy' && (
         <p className="mt-3 text-[12px] text-k-muted">{t('legacyBalance')}</p>
       )}
+      {/* D9: saldo y mora son los del corte; pasado el umbral del formato ya no se presentan como de hoy. */}
+      {credit.reportedStale && credit.reportedAsOf && (
+        <p role="status" className="mt-3 rounded-md bg-k-warning-bg px-3 py-2 text-[13px] text-k-warning-text">
+          {t('reportStale', { date: day(credit.reportedAsOf), days: credit.reportStaleAfterDays ?? 2 })}
+        </p>
+      )}
     </>
   );
 }
@@ -587,7 +593,12 @@ function Origin({ credit }: { credit: CreditDetail }) {
         {credit.externalRef && <Item label={t('externalRef')} value={credit.externalRef} />}
         {/* Operación externa (D1, D4, D9): de qué día son los números y si sigue viniendo en el reporte. */}
         {credit.externalId && <Item label={t('externalId')} value={`${credit.externalSource ?? ''} ${credit.externalId}`.trim()} />}
-        {credit.reportedAsOf && <Item label={t('reportedAsOf')} value={day(credit.reportedAsOf)} />}
+        {credit.reportedAsOf && (
+          <Item
+            label={t('reportedAsOf')}
+            value={credit.reportedStale ? t('reportedAsOfStale', { date: day(credit.reportedAsOf) }) : day(credit.reportedAsOf)}
+          />
+        )}
         {credit.syncStatus && (
           <Item
             label={t('syncStatus')}

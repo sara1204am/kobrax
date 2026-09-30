@@ -14,6 +14,7 @@ import {
   maskDocument,
   Permission,
   resolvePagination,
+  staleAfterDaysOf,
   type ApiResponse,
   type CaseSort,
   ResponseDto,
@@ -115,12 +116,18 @@ export class CasesService {
     return this.prisma.withTenant(this.tenant.accountId, fn);
   }
 
-  private async config(tx: PrismaClient): Promise<{ priority: PriorityParams; minDaysPastDue: number }> {
+  private async config(tx: PrismaClient): Promise<{ priority: PriorityParams; minDaysPastDue: number; staleAfterDays: number }> {
     const account = await tx.account.findUnique({ where: { id: this.tenant.accountId } });
-    const cfg = (account?.configuration ?? {}) as { casePriority?: Partial<PriorityParams>; caseGeneration?: { minDaysPastDue?: number } };
+    const cfg = (account?.configuration ?? {}) as {
+      casePriority?: Partial<PriorityParams>;
+      caseGeneration?: { minDaysPastDue?: number };
+      importConfig?: { staleAfterDays?: unknown };
+    };
     return {
       priority: { ...DEFAULT_PRIORITY_PARAMS, ...(cfg.casePriority ?? {}) },
       minDaysPastDue: cfg.caseGeneration?.minDaysPastDue ?? 1,
+      // D9: con cuántos días desde el corte el dato de un externo pasa a desactualizado.
+      staleAfterDays: staleAfterDaysOf(cfg.importConfig?.staleAfterDays),
     };
   }
 
@@ -546,7 +553,7 @@ export class CasesService {
       ];
     }
 
-    const [rows, total] = await this.tx((tx) =>
+    const [rows, total, { staleAfterDays }] = await this.tx((tx) =>
       Promise.all([
         tx.collectionCase.findMany({
           where,
@@ -559,6 +566,7 @@ export class CasesService {
           },
         }),
         tx.collectionCase.count({ where }),
+        this.config(tx),
       ]),
     );
     // Lista de cartera (§5.3): zona + punto en el mapa + documento enmascarado + promesa vigente,
@@ -570,7 +578,7 @@ export class CasesService {
       await this.audit.record({ entity: 'case_portfolio', entityId: this.tenant.userId ?? 'anon', action: 'PII_REVEAL' });
     }
     return ResponseDto.paginated(
-      rows.map((c) => serializeCase(c, new Date(), extra?.get(c.clientId))),
+      rows.map((c) => serializeCase(c, new Date(), extra?.get(c.clientId), staleAfterDays)),
       total,
       page,
       limit,
@@ -697,7 +705,7 @@ export class CasesService {
   }
 
   async findOne(id: string): Promise<ReturnType<typeof serializeCase>> {
-    const found = await this.tx((tx) =>
+    const [found, { staleAfterDays }] = await this.tx((tx) => Promise.all([
       tx.collectionCase.findFirst({
         where: { id, deletedAt: null },
         include: {
@@ -706,12 +714,13 @@ export class CasesService {
           credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true, metadata: true, origin: true, syncStatus: true, reportedAsOf: true, installments: { select: { number: true, dueDate: true, amount: true, paidAmount: true, status: true } } } },
         },
       }),
-    );
+      this.config(tx),
+    ]));
     if (!found) throw resourceNotFound();
     // Mismo scope que el listado: un cobrador no consulta el caso de otro, pero un auditor sí.
     if (this.scopedToOwnCases() && found.assigneeId !== this.tenant.userId) {
       throw resourceNotFound();
     }
-    return serializeCase(found);
+    return serializeCase(found, new Date(), undefined, staleAfterDays);
   }
 }

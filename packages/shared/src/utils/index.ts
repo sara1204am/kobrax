@@ -21,3 +21,4 @@ export * from './agenda.js';
 export * from './route-day.js';
 export * from './aging.js';
 export * from './payment-suggestion.js';
+export * from './external-report.js';

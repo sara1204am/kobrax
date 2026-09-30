@@ -68,6 +68,8 @@ export interface CaseListItem {
   /** Operación externa: si vino en el último reporte y a qué fecha de corte son sus números (D4, D9). */
   syncStatus?: ExternalSyncStatus;
   reportedAsOf?: string;
+  /** El corte tiene más días que el umbral del formato: el dato está desactualizado (D9). */
+  reportedStale?: boolean;
   /** Con qué monto arranca el formulario de pago (`suggestedPaymentAmount`). Ausente = vacío. */
   suggestedPaymentAmount?: number;
   /** Sólo con `view=portfolio`. */

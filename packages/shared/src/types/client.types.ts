@@ -363,6 +363,9 @@ export interface CreditDetail {
   absentSince?: string;
   /** Fecha de corte (YYYY-MM-DD) a la que son el saldo y la mora reportados (D9). */
   reportedAsOf?: string;
+  /** El corte tiene más de `reportStaleAfterDays` días: saldo y mora reportados están desactualizados (D9). */
+  reportedStale?: boolean;
+  reportStaleAfterDays?: number;
   /** Con qué monto arranca el formulario de pago (`suggestedPaymentAmount`). Ausente = vacío. */
   suggestedPaymentAmount?: number;
   createdAt?: string;

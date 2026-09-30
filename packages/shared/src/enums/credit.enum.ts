@@ -209,8 +209,10 @@ export type ExternalSyncStatus = (typeof EXTERNAL_SYNC_STATUSES)[number];
  * el sistema**, que son los que después hay que poder contar.
  *
  * `PAID` y `CURRENT` los escribe el trabajo diario y **no exigen gestión registrada**: si el deudor
- * pagó por transferencia nunca hubo visita, y cobrado es cobrado. `MANUAL` es el cierre de una
+ * pagó por transferencia nunca hubo visita, y cobrado es cobrado. `SOURCE_ABSENT` también lo escribe
+ * el job: la operación externa dejó de venir en su reporte (D4) — **no es «al día» ni «pagado»**, y si
+ * vuelve a aparecer el mismo caso se reabre. `MANUAL` es el cierre de una
  * persona desde la ficha, que sí la exige (`CASE_001`).
  */
-export const CASE_CLOSE_REASONS = ['PAID', 'CURRENT', 'MANUAL'] as const;
+export const CASE_CLOSE_REASONS = ['PAID', 'CURRENT', 'SOURCE_ABSENT', 'MANUAL'] as const;
 export type CaseCloseReason = (typeof CASE_CLOSE_REASONS)[number];
