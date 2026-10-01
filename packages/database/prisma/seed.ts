@@ -80,6 +80,10 @@ const PERMISSIONS = [
   ['role:read', 'roles', 'READ', 'ACCOUNT'],
   ['role:write', 'roles', 'UPDATE', 'ACCOUNT'],
   ['audit:read', 'audit', 'READ', 'ACCOUNT'],
+  // Faltaban: los roles los tenían en `ROLE_PERMISSIONS`, pero el bucle de roles se saltea en
+  // silencio todo código que no esté en esta lista, así que nadie los recibía en el JWT.
+  ['assignment:write', 'assignments', 'UPDATE', 'ACCOUNT'],
+  ['data:scope:all', 'data', 'READ', 'ACCOUNT'],
 ] as const;
 
 /**
@@ -120,6 +124,10 @@ async function main() {
     });
     const codes = ROLE_PERMISSIONS[name as RoleType] as string[];
     const perms = await prisma.permission.findMany({ where: { code: { in: codes as string[] } } });
+    // 🔴 Un permiso del rol que no está en el catálogo se perdía sin aviso (pasó con
+    // `assignment:write` y `data:scope:all`). Ahora frena el seed y dice cuál.
+    const missing = codes.filter((c) => !perms.some((p) => p.code === c));
+    if (missing.length > 0) throw new Error(`Permisos de ${name} sin catálogo en seed.ts: ${missing.join(', ')}`);
     for (const perm of perms) {
       await prisma.rolePermission.upsert({
         where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } },
@@ -244,6 +252,20 @@ async function main() {
   });
 
   console.log('  ✓ tenant DEMO2 + multi@kobrax.demo (2 empresas · pass: Kobrax123!)');
+
+  // multi2@kobrax.demo: MANAGER en DEMO (default) y DEMO2. Como multi@, pero sin rol crítico →
+  // sin MFA obligatorio, para que el QA pruebe el cambio de empresa sin enrolar un authenticator.
+  const multi2 = await ensureUser('multi2@kobrax.demo', 'Marcos', 'Multi', 'MANAGER', {
+    isDefault: true,
+  });
+  const managerRole = await prisma.role.findUniqueOrThrow({ where: { name: 'MANAGER' } });
+  await prisma.userAccount.upsert({
+    where: { userId_accountId: { userId: multi2.id, accountId: account2.id } },
+    update: {},
+    create: { userId: multi2.id, accountId: account2.id, roleId: managerRole.id },
+  });
+
+  console.log('  ✓ multi2@kobrax.demo (2 empresas, MANAGER en ambas, sin MFA · pass: Kobrax123!)');
 
   // 4) Cadena operativa demo (idempotente por el blind index del documento del cliente).
   const acc = account.id;

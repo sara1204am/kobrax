@@ -65,7 +65,11 @@ export enum Permission {
    * Es lo que impide que un cobrador se otorgue acceso a sí mismo — no lo hace un constraint de la
    * base, a propósito: un supervisor o admin **sí** puede tomarse un crédito para cubrir a alguien
    * de baja, y una regla dura de «otorgante ≠ destinatario» bloquearía ese caso legítimo.
-   * Quien no tiene este permiso no puede crear ninguna asignación, ni suya ni de otro.
+   *
+   * Quien no tiene este permiso no ELIGE a nadie: no puede poner ni cambiar el responsable de un
+   * crédito, tampoco el suyo. Lo único que recibe sin elegir es lo que el sistema deriva como suyo
+   * —los nuevos de la cartera que él mismo importa, el préstamo que él mismo da de alta—, nunca un
+   * crédito que ya existe. Se revisa en `AssignmentService`, la única vía que escribe el responsable.
    */
   ASSIGNMENT_WRITE = 'assignment:write',
 

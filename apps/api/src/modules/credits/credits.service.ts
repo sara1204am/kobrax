@@ -37,6 +37,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
+import { AssignmentService } from '../assignments/assignment.service';
 import {
   buildSchedule,
   computeArrears,
@@ -85,6 +86,7 @@ export class CreditsService {
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
     private readonly plan: PlanLimitsService,
+    private readonly assignment: AssignmentService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -236,6 +238,16 @@ export class CreditsService {
       arrearsSince: initialArrears?.arrearsSince,
     };
 
+    /*
+     * El responsable. Elegir a OTRA persona exige `assignment:write`; sin elegir, quien no puede
+     * asignar queda como responsable de lo que da de alta (P4) — el préstamo que el cobrador acuerda
+     * en la calle es suyo. Quien sí puede asignar y no elige lo deja sin responsable, como antes.
+     */
+    const me = this.tenant.userId;
+    if (dto.assignedManagerId && dto.assignedManagerId !== me) this.assignment.authorize();
+    const responsible = dto.assignedManagerId ?? (this.assignment.canAssign() ? undefined : me);
+    const assignReason = dto.assignedManagerId && dto.assignedManagerId !== me ? 'CREATE_MANUAL' : 'CREATE_OWN';
+
     const accountId = this.tenant.accountId;
     const created = await this.tx(async (tx) => {
       // Alta idempotente (igual que en clientes): si el móvil propuso un id y ese préstamo ya
@@ -253,6 +265,7 @@ export class CreditsService {
         select: { id: true },
       });
       if (!client) throw resourceNotFound(); // cliente inexistente o de otro tenant
+      if (dto.assignedManagerId) await this.assignment.assertAssignable(tx, [dto.assignedManagerId]);
 
       // 🔴 El tope de créditos del plan. Va DESPUÉS de la guarda de idempotencia: un reintento de
       // algo que ya entró no vuelve a pedir lugar.
@@ -281,7 +294,9 @@ export class CreditsService {
           currency,
           installmentsCount: installmentsCount ?? 0, // 0 = préstamo abierto (§4.1)
           daysPastDue,
-          assignedManagerId: dto.assignedManagerId,
+          // La columna nace con el mismo valor que `AssignmentService` escribe abajo: así el crédito
+          // que se devuelve ya trae su responsable sin otra lectura.
+          assignedManagerId: responsible,
           disbursedAt,
           metadata: stripUndefined(metadata),
           installments: {
@@ -290,6 +305,7 @@ export class CreditsService {
         },
         include: { installments: { orderBy: { number: 'asc' } } },
       });
+      const assigned = responsible ? await this.assignment.apply(tx, [{ creditId: credit.id, to: responsible }], assignReason) : [];
 
       // Caso de cobranza automático (§5.2): "para el cobrador, cliente y préstamo son una sola acción".
       if (dto.openCase) {
@@ -324,15 +340,16 @@ export class CreditsService {
           });
           agendaId = item.id;
         }
-        return { credit, caseId: kase.id, agendaId, reintento: false };
+        return { credit, caseId: kase.id, agendaId, reintento: false, assigned };
       }
-      return { credit, caseId: undefined, agendaId: undefined, reintento: false };
+      return { credit, caseId: undefined, agendaId: undefined, reintento: false, assigned };
     });
 
     // El alta ya se auditó cuando entró de verdad: un reintento de la cola no la registra dos veces.
     if (created.reintento) return serializeCredit(created.credit, config.labels, config.staleAfterDays);
 
     await this.audit.record({ entity: 'credit', entityId: created.credit.id, action: 'CREATE', after: creditSummary(created.credit) });
+    await this.assignment.auditChanges(created.assigned ?? []);
     if (created.caseId) {
       await this.audit.record({ entity: 'collection_case', entityId: created.caseId, action: 'CREATE', after: { creditId: created.credit.id, clientId: dto.clientId, source: 'credit_create' } });
     }
@@ -407,12 +424,30 @@ export class CreditsService {
     if (redefine && dto.nextDueDate !== undefined) throw creditTermsConflict('nextDueDate');
 
     const asOf = new Date();
-    const { before, after, caseOpened } = await this.tx(async (tx) => {
+    const { before, after, caseOpened, assigned } = await this.tx(async (tx) => {
       const prev = await tx.credit.findFirst({
         where: { id, deletedAt: null },
         include: { _count: { select: { payments: true, installments: true } }, client: { select: { riskSegment: true } } },
       });
       if (!prev) throw resourceNotFound();
+
+      /*
+       * 🔴 Cambiar el responsable exige `assignment:write`, y se revisa ACÁ y no con `@Roles`: este
+       * mismo PATCH lo usa el cobrador para corregir la nota o la próxima fecha, y cerrarle el
+       * endpoint entero le quitaría eso. Mandar el responsable que ya tiene no es un cambio.
+       * No toca los casos abiertos: el cobrador del caso es otra responsabilidad (decisión 7).
+       */
+      const reassigning = dto.assignedManagerId !== undefined && dto.assignedManagerId !== prev.assignedManagerId;
+      let assigned: Awaited<ReturnType<AssignmentService['apply']>> = [];
+      if (reassigning) {
+        this.assignment.authorize();
+        await this.assignment.assertAssignable(tx, [dto.assignedManagerId!]);
+        assigned = await this.assignment.apply(
+          tx,
+          [{ creditId: id, to: dto.assignedManagerId!, expectedFrom: prev.assignedManagerId }],
+          'MANUAL',
+        );
+      }
       const meta = readCreditMetadata(prev.metadata, prev.origin);
       if (isExternalOrigin(meta.origin)) {
         const sourceControlled =
@@ -446,7 +481,7 @@ export class CreditsService {
       };
       const data: Prisma.CreditUncheckedUpdateInput = {
         status: dto.status,
-        assignedManagerId: dto.assignedManagerId,
+        // El responsable NO va acá: lo escribió `AssignmentService` arriba (tabla + columna).
         branchId: dto.branchId,
         code: dto.code,
         typeCode: dto.typeCode,
@@ -560,7 +595,7 @@ export class CreditsService {
           slaDueAt: slaDueAt(priority, asOf, DEFAULT_PRIORITY_PARAMS),
         });
       }
-      return { before: prev, after: next, caseOpened };
+      return { before: prev, after: next, caseOpened, assigned };
     });
 
     const redefined = redefine ? { terms: readCreditMetadata(after.metadata).terms, initialState: dto.initialState, caseOpened } : {};
@@ -571,6 +606,7 @@ export class CreditsService {
       before: creditSummary(before),
       after: { ...creditSummary(after), ...redefined },
     });
+    await this.assignment.auditChanges(assigned);
     return serializeCredit(after, config.labels, config.staleAfterDays);
   }
 

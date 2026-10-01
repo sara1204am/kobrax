@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import type { AccountInfo, ClientDetail, Member } from '@kobrax/shared';
+import type { AccountInfo, Assignee, ClientDetail } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { EmptyState } from '@/components/panel-ui';
 import { fullName } from '@/lib/format';
@@ -16,9 +16,10 @@ import { LoanForm } from './loan-form';
 export default async function PrestamoPage({ params }: { params: { id: string } }) {
   const t = await getTranslations('portfolio');
 
-  const [client, team, account] = await Promise.all([
+  const [client, assignees, account] = await Promise.all([
     apiCall<ClientDetail>(`/clients/${params.id}`, { method: 'GET', auth: true }),
-    apiCall<Member[]>('/users', { method: 'GET', auth: true }),
+    // Sólo con `assignment:write`: sin él, el préstamo queda a cargo de quien lo da de alta (P4).
+    apiCall<Assignee[]>('/assignments/assignees', { method: 'GET', auth: true }),
     apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
   ]);
 
@@ -31,7 +32,7 @@ export default async function PrestamoPage({ params }: { params: { id: string } 
     <LoanForm
       clientId={params.id}
       clientName={fullName(client.body.data)}
-      team={(team.body.data ?? []).filter((m) => m.isActive)}
+      assignees={assignees.body.data ?? []}
       currency={account.body.data?.currencyCode ?? 'BOB'}
       defaultArrearsMethod={account.body.data?.arrearsMethod}
     />

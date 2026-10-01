@@ -53,6 +53,32 @@ export default function PreviewScreen() {
     void dryRun();
   }, [dryRun]);
 
+  /*
+   * Quién queda responsable. El cobrador (SELF) no elige: lo nuevo es suyo. Quien reparte (CHOOSE)
+   * acepta en el teléfono la sugerencia del reporte; repartir entre varias personas se hace en el
+   * panel web, así que si algún nuevo no tiene sugerencia, acá no se confirma.
+   */
+  const mode = preview?.assignment?.mode;
+  const newHint =
+    mode === 'SELF'
+      ? 'Estos créditos se asignarán a ti.'
+      : mode === 'CHOOSE'
+        ? 'Quedan con el responsable que sugiere el reporte.'
+        : undefined;
+  const blocked = !preview
+    ? null
+    : preview.alreadyApplied
+      ? {
+          title: 'Este archivo ya se importó',
+          text: 'Confirmar no cambiaría nada. Para cambiar responsables, usá Cartera en el panel web.',
+        }
+      : mode === 'CHOOSE' && preview.preview.toCreate.some((r) => !r.suggestedAssigneeId)
+        ? {
+            title: 'Hay créditos nuevos sin responsable',
+            text: 'El reporte no dice de quién son. Asigná los responsables desde el panel web para importarlo.',
+          }
+        : null;
+
   async function confirm() {
     setBusy(true);
     setError(null);
@@ -95,6 +121,13 @@ export default function PreviewScreen() {
 
         {preview && (
           <>
+            {/* Lo que impide confirmar desde el teléfono, dicho antes de la lista. */}
+            {blocked && (
+              <View style={styles.note}>
+                <Text style={styles.noteTitle}>{blocked.title}</Text>
+                <Text style={styles.hint}>{blocked.text}</Text>
+              </View>
+            )}
             {preview.idempotentSkip ? (
               // Mismo archivo ya aplicado: no hay nada que previsualizar. Se dice así, en vez de
               // dibujar tres baldes en cero que se leerían como "el archivo no trae nada".
@@ -124,6 +157,7 @@ export default function PreviewScreen() {
 
                 <BucketList
                   title="Se agregan"
+                  hint={newHint}
                   items={preview.preview.toCreate.map((r) => ({
                     key: r.code,
                     title: r.clientName,
@@ -133,6 +167,7 @@ export default function PreviewScreen() {
                 />
                 <BucketList
                   title="Se actualizan"
+                  hint="Mantendrán su responsable actual."
                   items={preview.preview.toUpdate.map((r) => ({
                     key: r.code,
                     title: r.clientName ?? r.code,
@@ -183,7 +218,7 @@ export default function PreviewScreen() {
         )}
 
         {/* Sin preview cargada no existe el confirmar: la Vista Previa no se saltea. */}
-        {preview && !preview.idempotentSkip && !isTest && (
+        {preview && !preview.idempotentSkip && !blocked && !isTest && (
           <Button label="Confirmar importación" onPress={() => void confirm()} loading={busy} />
         )}
         {isTest && preview && (

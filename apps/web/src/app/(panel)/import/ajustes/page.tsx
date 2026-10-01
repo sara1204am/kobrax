@@ -35,13 +35,24 @@ export default async function ImportSettingsPage() {
         ← {t('setup.backToRun')}
       </Link>
       <PageHeader title={t('setup.title')} subtitle={t('setup.subtitle')} />
-      <ImportSetup screen={body.data} />
-      {/* D8: de quién es cada reporte. Aparte del asistente: no es parte de leer el archivo. */}
-      <AdvisorLinks
-        links={advisors.body.data?.links ?? []}
-        unlinked={advisors.body.data?.unlinked ?? []}
-        members={body.data.members}
-      />
+      {/*
+        P1 · Configurar y vincular asesores es de quien reparte la cartera o del dueño de la cuenta:
+        el vínculo asesor → usuario decide de quién es cada cartera. Quien sólo importa ve la
+        configuración pero no la toca. El `fieldset` nativo apaga todos los controles de una vez;
+        el servidor igual rechaza el cambio (IMPORT_CONFIG_FORBIDDEN).
+      */}
+      {!body.data.viewer.canConfigure && (
+        <p className="mb-4 rounded-xl bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text">{t('setup.readOnly')}</p>
+      )}
+      <fieldset disabled={!body.data.viewer.canConfigure} className="m-0 min-w-0 border-0 p-0">
+        <ImportSetup screen={body.data} />
+        {/* D8: de quién es cada reporte. Aparte del asistente: no es parte de leer el archivo. */}
+        <AdvisorLinks
+          links={advisors.body.data?.links ?? []}
+          unlinked={advisors.body.data?.unlinked ?? []}
+          members={body.data.members}
+        />
+      </fieldset>
     </>
   );
 }

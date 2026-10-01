@@ -10,6 +10,7 @@ import {
   registeredState,
   termsEditBlock,
   type CreditDetail,
+  type Assignee,
   type Member,
 } from '@kobrax/shared';
 import type { CatalogOption } from '@/components/client-form';
@@ -41,12 +42,15 @@ export function CreditCard({
   credit,
   clientId,
   team,
+  assignees,
   types,
 }: {
   credit: CreditDetail;
   clientId: string;
   /** El equipo, para reasignar el préstamo. Vacío si el rol no puede leer `/users`. */
   team: Member[];
+  /** A quién se puede asignar (vacío sin `assignment:write`: el responsable no se edita). */
+  assignees: Assignee[];
   /** Catálogo `CREDIT_TYPE` del tenant. Vacío = el tipo no se ofrece. */
   types: CatalogOption[];
 }) {
@@ -191,6 +195,7 @@ export function CreditCard({
             state={state}
             registered={registered}
             team={team}
+            assignees={assignees}
             types={types}
           />
         ) : (

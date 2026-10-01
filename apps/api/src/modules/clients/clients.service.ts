@@ -334,6 +334,16 @@ export class ClientsService {
         WHERE k.client_id = c.id AND k.deleted_at IS NULL AND k.branch_id = ${query.branchId})`);
     }
     /*
+     * P7 · El RESPONSABLE es del crédito, no del caso: «tiene algún crédito vivo a cargo de esta
+     * persona». No es lo mismo que el cobrador (`collectorId`, el del caso): reasignar un crédito
+     * no mueve sus casos abiertos, así que los dos pueden diferir y cada filtro contesta lo suyo.
+     */
+    if (query.managerId) {
+      conds.push(Prisma.sql`EXISTS (
+        SELECT 1 FROM credits k
+        WHERE k.client_id = c.id AND k.deleted_at IS NULL AND k.assigned_manager_id = ${query.managerId})`);
+    }
+    /*
      * D7: la fuente también es del crédito — «tiene algún crédito vivo de esa fuente». Quien tiene
      * uno de Kobrax y otro PSF aparece en los dos filtros, y su fila dice cuánto es de cada uno.
      */

@@ -75,6 +75,9 @@ export default async function ImportRunPage({
   const run = runRes.body.data;
   const currency = account.body.data?.currencyCode ?? 'BOB';
   const fileUrl = `/api/imports/runs/${run.id}/file`;
+  // P10: el documento trae la cartera sin enmascarar. Sin `client:pii:read` (el supervisor) se ve el
+  // detalle de la corrida pero no el archivo crudo; la API además lo rechaza.
+  const canSeeFile = (me.body.data?.permissions ?? []).includes('client:pii:read');
   const total = IMPORT_RUN_ITEM_ACTIONS.reduce((sum, a) => sum + run.counts[COUNT_OF[a]], 0);
   const scopeText = scopeOf(run.scope, screen.body.data, t);
 
@@ -99,7 +102,7 @@ export default async function ImportRunPage({
           </dl>
 
           {/* El documento tal cual se subió: se abre en otra pestaña (un PDF se ve ahí mismo) o se baja. */}
-          {run.file && (
+          {run.file && canSeeFile && (
             <div className="mt-5 flex flex-wrap gap-4">
               <a href={fileUrl} target="_blank" rel="noreferrer" className="text-[14px] font-medium text-k-purple hover:underline">
                 {t('detail.view')}

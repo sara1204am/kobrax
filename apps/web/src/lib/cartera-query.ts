@@ -26,7 +26,8 @@ export const DEFAULT_PAGE_SIZE = 50;
 const NUMERIC_FILTERS = ['debtMin', 'debtMax', 'dpdMin', 'dpdMax', 'creditsMin', 'creditsMax'] as const;
 
 /** Los que identifican a alguien: se validan como uuid o no viajan. */
-const ID_FILTERS = ['collectorId', 'branchId'] as const;
+// `collectorId` = el cobrador de algún CASO; `managerId` = el responsable de algún CRÉDITO (P7).
+const ID_FILTERS = ['collectorId', 'managerId', 'branchId'] as const;
 
 const IS_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

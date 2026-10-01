@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakePlanLimits } from '../../common/plan/plan-test-utils';
 import { CreditsService } from './credits.service';
+import { AssignmentService } from '../assignments/assignment.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
 function makeService(
@@ -14,6 +15,10 @@ function makeService(
     openCase?: unknown;
     /** Topes del plan. Por defecto no frenan: sólo los usa el test del tope. */
     plan?: Parameters<typeof fakePlanLimits>[0];
+    /** Permisos de quien llama. Por defecto ninguno: un cobrador sin `assignment:write`. */
+    permissions?: string[];
+    /** Miembros de la cuenta, para validar a quién se asigna. */
+    members?: { userId: string; isActive: boolean; role: string }[];
   } = {},
 ) {
   const calls = {
@@ -27,6 +32,8 @@ function makeService(
     installmentDeleteMany: 0,
     installmentCreateMany: [] as Record<string, unknown>[][],
     audit: [] as { action: string; entity: string }[],
+    assignmentCreate: [] as Record<string, unknown>[],
+    columnWrites: [] as Record<string, unknown>[],
   };
   const tx = {
     client: { findFirst: async () => opts.client ?? null },
@@ -41,6 +48,31 @@ function makeService(
         calls.creditUpdate.push(args.data);
         return { id: 'cr1', ...(opts.credit as object), ...args.data };
       },
+      // Lo que lee y escribe `AssignmentService`.
+      findMany: async (args: { where: { id: { in: string[] } } }) =>
+        args.where.id.in.map((id) => ({ id, assignedManagerId: (opts.credit as { assignedManagerId?: string } | undefined)?.assignedManagerId ?? null })),
+      updateMany: async (args: { data: Record<string, unknown> }) => {
+        calls.columnWrites.push(args.data);
+        return { count: 1 };
+      },
+    },
+    creditAssignment: {
+      // La permanente vigente es la del crédito de prueba, como la dejó la migración de sincronización.
+      findMany: async () => {
+        const owner = (opts.credit as { assignedManagerId?: string } | undefined)?.assignedManagerId;
+        return owner ? [{ id: 'a0', creditId: 'cr1', userId: owner }] : [];
+      },
+      updateMany: async () => ({ count: 0 }),
+      createMany: async (args: { data: Record<string, unknown>[] }) => {
+        calls.assignmentCreate.push(...args.data);
+        return { count: args.data.length };
+      },
+    },
+    userAccount: {
+      findMany: async (args: { where: { userId: { in: string[] } } }) =>
+        (opts.members ?? [])
+          .filter((m) => args.where.userId.in.includes(m.userId))
+          .map((m) => ({ userId: m.userId, isActive: m.isActive, role: { name: m.role } })),
     },
     creditInstallment: {
       updateMany: async () => ({ count: 1 }),
@@ -85,9 +117,14 @@ function makeService(
   const prisma = {
     withTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
   };
-  const tenant = { accountId: 'acc-A', userId: 'user-1' };
-  const audit = { record: async (e: { action: string; entity: string }) => void calls.audit.push(e) };
-  const service = new CreditsService(prisma as never, tenant as never, audit as never, fakePlanLimits(opts.plan));
+  const permissions = opts.permissions ?? [];
+  const tenant = { accountId: 'acc-A', userId: 'user-1', can: (p: string) => permissions.includes(p) };
+  const audit = {
+    record: async (e: { action: string; entity: string }) => void calls.audit.push(e),
+    recordMany: async (es: { action: string; entity: string }[]) => void calls.audit.push(...es),
+  };
+  const assignment = new AssignmentService({} as never, tenant as never, audit as never);
+  const service = new CreditsService(prisma as never, tenant as never, audit as never, fakePlanLimits(opts.plan), assignment);
   return { service, calls };
 }
 
@@ -164,7 +201,8 @@ describe('CreditsService.create', () => {
     assert.equal((data.installments as { create: unknown[] }).create.length, 12);
     assert.equal(res.installmentsCount, 12);
     assert.equal(res.principalAmount, 1200);
-    assert.deepEqual(calls.audit.map((a) => `${a.action} ${a.entity}`), ['CREATE credit']);
+    // P4: sin `assignment:write`, quien da de alta queda de responsable — y eso también se audita.
+    assert.deepEqual(calls.audit.map((a) => `${a.action} ${a.entity}`), ['CREATE credit', 'ASSIGN credit']);
   });
 
   it('rechaza si el cliente no existe / es de otro tenant (RESOURCE_NOT_FOUND)', async () => {
@@ -265,7 +303,7 @@ describe('CreditsService.create — crédito sin cronograma', () => {
     assert.equal((ag.scheduledDate as Date).toISOString().slice(0, 10), '2026-07-20');
     assert.deepEqual(
       calls.audit.map((a) => `${a.action} ${a.entity}`),
-      ['CREATE credit', 'CREATE collection_case', 'CREATE agenda_item'],
+      ['CREATE credit', 'ASSIGN credit', 'CREATE collection_case', 'CREATE agenda_item'],
     );
   });
 
@@ -909,5 +947,74 @@ describe('CreditsService — método de mora (D20)', () => {
     const { service, calls } = makeService({ credit });
     await service.update('cr1', { arrearsMethod: 'first_default', code: 'X' } as never);
     assert.equal(calls.creditUpdate[0]!.code, 'X');
+  });
+});
+
+/**
+ * El responsable del crédito: elegirlo exige `assignment:write`, y se escribe por `AssignmentService`
+ * (tabla + columna). Se revisa en el servicio y no con `@Roles` porque el mismo PATCH lo usa el
+ * cobrador para la nota: llamar al API directo no saltea la regla.
+ */
+describe('CreditsService — responsable del crédito (assignment:write)', () => {
+  const COBRADOR = { userId: 'u-juan', isActive: true, role: 'COLLECTOR' };
+
+  it('PATCH sin assignment:write que cambia el responsable → ASSIGNMENT_FORBIDDEN', async () => {
+    const { service, calls } = makeService({ credit: { id: 'cr1', metadata: { origin: 'import' }, assignedManagerId: 'u-ana' } });
+    await rejectsWithCode(service.update('cr1', { assignedManagerId: 'u-juan' } as never), 'ASSIGNMENT_FORBIDDEN');
+    assert.equal(calls.creditUpdate.length, 0);
+  });
+
+  it('PATCH con assignment:write reasigna por el servicio: la columna no va en el update directo', async () => {
+    const { service, calls } = makeService({
+      permissions: ['assignment:write'],
+      members: [COBRADOR],
+      credit: { id: 'cr1', metadata: { origin: 'import' }, assignedManagerId: 'u-ana' },
+    });
+    await service.update('cr1', { assignedManagerId: 'u-juan' } as never);
+    assert.equal(calls.creditUpdate[0]!.assignedManagerId, undefined);
+    assert.deepEqual(calls.assignmentCreate.map((a) => a.userId), ['u-juan']);
+    assert.deepEqual(calls.columnWrites, [{ assignedManagerId: 'u-juan' }]);
+    assert.ok(calls.audit.some((a) => a.action === 'REASSIGN' && a.entity === 'credit'));
+  });
+
+  it('el cobrador corrige la nota sin tocar el responsable: pasa sin assignment:write', async () => {
+    const { service, calls } = makeService({ credit: { id: 'cr1', metadata: { origin: 'import' }, assignedManagerId: 'u-ana' } });
+    await service.update('cr1', { notes: 'Llamar después de las 18' } as never);
+    assert.equal(calls.assignmentCreate.length, 0);
+  });
+
+  it('mandar el mismo responsable que ya tiene no es reasignar (no pide permiso)', async () => {
+    const { service, calls } = makeService({ credit: { id: 'cr1', metadata: { origin: 'manual' }, assignedManagerId: 'u-ana' } });
+    await service.update('cr1', { assignedManagerId: 'u-ana', notes: 'x' } as never);
+    assert.equal(calls.assignmentCreate.length, 0);
+  });
+
+  it('a alguien que no es cobrador activo de la cuenta → ASSIGNEE_NOT_ELIGIBLE', async () => {
+    const { service } = makeService({
+      permissions: ['assignment:write'],
+      members: [],
+      credit: { id: 'cr1', metadata: { origin: 'manual' }, assignedManagerId: null },
+    });
+    await rejectsWithCode(service.update('cr1', { assignedManagerId: 'u-fantasma' } as never), 'ASSIGNEE_NOT_ELIGIBLE');
+  });
+
+  it('P4 · alta sin assignment:write y sin elegir: el responsable es quien la da de alta', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create(BASE);
+    assert.equal(calls.creditCreate[0]!.assignedManagerId, 'user-1');
+    assert.deepEqual(calls.assignmentCreate.map((a) => a.userId), ['user-1']);
+  });
+
+  it('alta sin assignment:write eligiendo a OTRA persona → ASSIGNMENT_FORBIDDEN', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await rejectsWithCode(service.create({ ...(BASE as object), assignedManagerId: 'u-juan' } as never), 'ASSIGNMENT_FORBIDDEN');
+    assert.equal(calls.creditCreate.length, 0);
+  });
+
+  it('alta con assignment:write sin elegir: queda sin responsable, como antes', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' }, permissions: ['assignment:write'] });
+    await service.create(BASE);
+    assert.equal(calls.creditCreate[0]!.assignedManagerId, undefined);
+    assert.equal(calls.assignmentCreate.length, 0);
   });
 });

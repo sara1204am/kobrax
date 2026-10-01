@@ -1,20 +1,29 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Readable } from 'node:stream';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { ClientType, ContactType, CreditStatus, ExternalSyncStatus, ImportRunItemAction, LocationType } from '@prisma/client';
 import {
+  Permission,
   readCreditMetadata,
   resolvePagination,
   ResponseDto,
   type ApiResponse,
+  type ImportAssignments,
   type ImportItemValues,
+  type ImportViewer,
   type ImportRunItem,
   type ImportRunSummary,
 } from '@kobrax/shared';
 import { UploadsService } from '../uploads/uploads.service';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
+import { TenantClockService, civilDayStartInstant } from '../../common/context/tenant-clock.service';
+import type { ListImportRunsQueryDto } from './dto/import-runs.dto';
+import { AssignmentService, type AssignmentRequest } from '../assignments/assignment.service';
+import type { AssignmentChange, AssignmentReason } from '../assignments/assignment-rules';
+import { assigneeNotEligible, assignmentForbidden } from '../assignments/assignment.errors';
+import { hasAssignments, ImportAssignmentError, planAssignments, resolveImportOwnership, type Ownership } from './import-assignment';
 import { AuditService } from '../../common/audit/audit.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
@@ -135,6 +144,20 @@ interface TransitionEvent {
  */
 const MAX_CANDIDATES = 5000;
 
+/** Cuántas veces aparece cada id: el reparto final que devuelve la confirmación. */
+function tally(userIds: string[]): { userId: string; count: number }[] {
+  const n = new Map<string, number>();
+  for (const u of userIds) n.set(u, (n.get(u) ?? 0) + 1);
+  return [...n].map(([userId, count]) => ({ userId, count }));
+}
+
+/** `YYYY-MM-DD` del día siguiente. En UTC a propósito: es aritmética de calendario, no de reloj. */
+function nextDay(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 @Injectable()
 export class PortfolioImportService {
   constructor(
@@ -145,6 +168,8 @@ export class PortfolioImportService {
     private readonly crypto: CryptoService,
     private readonly blind: BlindIndexService,
     private readonly uploads: UploadsService,
+    private readonly clock: TenantClockService,
+    private readonly assignment: AssignmentService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -154,7 +179,7 @@ export class PortfolioImportService {
   async run(
     file: Buffer,
     dryRun: boolean,
-    opts: { reportDate?: string; fileName?: string; mimeType?: string } = {},
+    opts: { reportDate?: string; fileName?: string; mimeType?: string; assignments?: ImportAssignments | null } = {},
   ): Promise<PortfolioSummary> {
     const config = await this.importConfig();
     if (config.source === 'manual') {
@@ -208,45 +233,58 @@ export class PortfolioImportService {
      */
     const stored = !dryRun && opts.mimeType ? await this.uploads.storeDocument(file, opts.mimeType, 'imports') : null;
 
-    const result = await this.tx(async (tx) => {
-      // Idempotencia: mismo archivo ya aplicado → no-op.
-      if (!dryRun) {
-        const prev = await tx.clientImportRun.findFirst({ where: { accountId, fileHash, status: 'DONE', template: { not: null } } });
-        if (prev) {
-          return {
-            idempotentSkip: true,
-            runId: prev.id,
-            scope: config.scope,
-            counts: { ...emptyCounts(), created: prev.creditsCreated, updated: prev.creditsUpdated, setCurrent: prev.creditsSetCurrent, invalid: prev.errors },
-            preview: emptyPreview(),
-            transitions: [] as TransitionEvent[],
-          };
-        }
-      }
+    // Quién importa decide cómo se asigna: quien reparte (`assignment:write`) elige; el cobrador no.
+    const canAssign = this.assignment.canAssign();
+    const me = this.tenant.userId ?? '';
+    if (!canAssign && hasAssignments(opts.assignments ?? null)) throw assignmentForbidden();
 
+    const result = await this.tx(async (tx) => {
       /*
-       * D8 · El alcance efectivo. Un reporte que dice de qué asesor es cubre SÓLO la cartera de ese
-       * asesor: lo que no trae, falta de su cartera, no de la de todos. Con el asesor vinculado a un
-       * usuario, el alcance es ese usuario. Sin vínculo y con alcance «toda la empresa», importar
-       * pondría ausentes a las operaciones de los demás asesores → se frena y se dice cómo seguir.
+       * Idempotencia: el mismo archivo ya aplicado no se vuelve a aplicar (P6).
+       *
+       * 🔴 La vista previa también lo mira, para AVISAR: antes calculaba como si fuera nuevo, todo
+       * salía como «se actualizan», y las reasignaciones que alguien marcara ahí se descartaban en
+       * silencio al confirmar. Confirmar con asignaciones un archivo ya aplicado es 409: reasignar
+       * con un reporte viejo no es importar, se hace desde Cartera.
        */
-      let scope: ImportConfig['scope'] = config.scope;
-      let advisorUserId: string | undefined;
-      if (advisorCode) {
-        const link = await tx.externalAdvisorLink.findFirst({
-          where: { accountId, externalSource: FILE_SOURCE, advisorCode, deletedAt: null },
-        });
-        if (link) {
-          advisorUserId = link.userId;
-          scope = { kind: 'official', ref: link.userId };
-        } else if (config.scope.kind === 'account') {
-          throw new BadRequestException({
-            code: 'ADVISOR_NOT_LINKED',
-            message: `El reporte es del asesor ${advisorCode}, que no está vinculado a ningún usuario. Vinculalo en Ajustes › Importación › Asesores para que sus operaciones no se crucen con las de los demás.`,
-            details: { advisorCode },
+      const prev = await tx.clientImportRun.findFirst({ where: { accountId, fileHash, status: 'DONE', template: { not: null } } });
+      if (prev && !dryRun) {
+        if (hasAssignments(opts.assignments ?? null)) {
+          throw new ConflictException({
+            code: 'ALREADY_APPLIED',
+            message: 'Este archivo ya se importó. Para cambiar responsables, reasigná desde Cartera.',
+            details: { runId: prev.id },
           });
         }
+        return {
+          idempotentSkip: true,
+          runId: prev.id,
+          scope: config.scope,
+          counts: { ...emptyCounts(), created: prev.creditsCreated, updated: prev.creditsUpdated, setCurrent: prev.creditsSetCurrent, invalid: prev.errors },
+          preview: emptyPreview(),
+          transitions: [] as TransitionEvent[],
+          assignmentChanges: [] as AssignmentChange[],
+        };
       }
+      const alreadyApplied = prev
+        ? { runId: prev.id, at: prev.createdAt.toISOString(), by: prev.createdBy ? ((await this.namesIn(tx, [prev.createdBy])).get(prev.createdBy) ?? null) : null }
+        : undefined;
+
+      /*
+       * D8 · El alcance efectivo, y de quién es la cartera. Un reporte que dice de qué asesor es
+       * cubre SÓLO la cartera de ese asesor: lo que no trae, falta de su cartera, no de la de todos.
+       * Quien no reparte sólo importa la suya (`resolveImportOwnership`).
+       */
+      const link = advisorCode
+        ? await tx.externalAdvisorLink.findFirst({ where: { accountId, externalSource: FILE_SOURCE, advisorCode, deletedAt: null } })
+        : null;
+      let ownership: Ownership;
+      try {
+        ownership = resolveImportOwnership({ canAssign, me, advisorCode, linkedUserId: link?.userId ?? null, configScope: config.scope });
+      } catch (e) {
+        throw await this.ownershipError(tx, e);
+      }
+      const scope = ownership.scope;
       const scopeText = scopeLabel(scope);
 
       // D9 · Un reporte con fecha de corte anterior al último aplicado en el mismo alcance no pisa nada.
@@ -312,6 +350,23 @@ export class PortfolioImportService {
         required: config.required,
       });
 
+      /*
+       * Quién queda responsable. Los existentes conservan el suyo (la importación nunca lo cambia
+       * sola); los nuevos van a quien importa (SELF) o a lo elegido / sugerido (CHOOSE). En la vista
+       * previa no se mira lo pedido: la pantalla arranca de las sugerencias y reparte en memoria.
+       */
+      const currentOf = new Map(plan.toUpdate.map((u) => [u.row.code, byId.get(u.id)!.assignedManagerId] as const));
+      const assignable = ownership.mode === 'CHOOSE' ? await this.assignment.assignableIds(tx) : new Set([me]);
+      const assignPlan = planAssignments({
+        mode: ownership.mode,
+        me,
+        toCreate: plan.toCreate.map((r) => r.code),
+        toUpdate: currentOf,
+        suggested: ownership.suggested,
+        assignable,
+        requested: dryRun ? null : (opts.assignments ?? null),
+      });
+
       // D2 · A qué cliente va cada operación nueva.
       const creates = plan.toCreate.map((r) => ({ row: r, b: r.data as unknown as NormalizedRecord }));
       const idHashOf = new Map(
@@ -374,6 +429,8 @@ export class PortfolioImportService {
           ...(resolution.get(c.row.index)?.kind === 'existing' ? { existingClient: true } : {}),
           ...(needsReview.includes(c) ? { linkReview: true } : {}),
           after: valuesOf(c.b, statusMapPreview),
+          suggestedAssigneeId: assignPlan.create.get(c.row.code)?.userId ?? null,
+          ...(assignPlan.create.has(c.row.code) && ownership.suggested ? { suggestionSource: ownership.suggested.source } : {}),
         })),
         toUpdate: plan.toUpdate.map((u) => ({
           code: u.row.code,
@@ -381,6 +438,7 @@ export class PortfolioImportService {
           clientName: clientLabel(u.row.data as unknown as NormalizedRecord),
           before: valuesBefore(byId.get(u.id)!),
           after: valuesOf(u.row.data as unknown as NormalizedRecord, statusMapPreview),
+          currentAssigneeId: currentOf.get(u.row.code) ?? null,
         })),
         toSetCurrent: plan.toSetCurrent.map(known),
         toMarkAbsent: plan.toMarkAbsent.map(known),
@@ -415,7 +473,31 @@ export class PortfolioImportService {
       const roomLeft = await this.plan.roomLeft('credits', tx);
       const planInfo = roomLeft === null ? undefined : { roomLeft, over: Math.max(0, counts.created - roomLeft) };
 
-      if (dryRun) return { idempotentSkip: false, scope, counts, preview, report, plan: planInfo, transitions: [] as TransitionEvent[] };
+      const assignment = { mode: ownership.mode, selfUserId: me };
+      if (dryRun) {
+        return {
+          idempotentSkip: false,
+          scope,
+          counts,
+          preview,
+          report,
+          plan: planInfo,
+          assignment,
+          ...(alreadyApplied ? { alreadyApplied } : {}),
+          transitions: [] as TransitionEvent[],
+          assignmentChanges: [] as AssignmentChange[],
+        };
+      }
+
+      // Al confirmar, el reparto se valida con el plan RECALCULADO, no con lo que vio la pantalla.
+      if (assignPlan.notAssignable.length > 0) throw assigneeNotEligible(assignPlan.notAssignable);
+      if (assignPlan.unassigned.length > 0) {
+        throw new BadRequestException({
+          code: 'UNASSIGNED_NEW_CREDITS',
+          message: `Hay ${assignPlan.unassigned.length} créditos nuevos sin responsable. Asignalos antes de confirmar.`,
+          details: { codes: assignPlan.unassigned },
+        });
+      }
       await this.plan.assertRoom('credits', tx, { cuantos: counts.created });
       await this.plan.assertRoom('clients', tx, { cuantos: newGroups.size });
 
@@ -437,6 +519,8 @@ export class PortfolioImportService {
        * escribe después de la corrida (la FK lo pide), pero se arma acá, donde se sabe qué pasó.
        */
       const items: Prisma.ClientImportRunItemCreateManyInput[] = [];
+      const assignmentChanges: AssignmentChange[] = [];
+      const reassignOf = new Map(assignPlan.reassign.map((r) => [r.code, { from: r.from, to: r.to }] as const));
       const item = (action: ImportRunItemAction, data: Omit<Prisma.ClientImportRunItemCreateManyInput, 'accountId' | 'runId' | 'action'>) =>
         items.push({ accountId, runId: stamp.runId, action, ...data });
       const statusMap = config.statusMap as Record<string, CreditStatus> | undefined;
@@ -474,7 +558,7 @@ export class PortfolioImportService {
           }
           const creditId = randomUUID();
           creditsData.push(
-            creditCreateData(accountId, clientId, b, scope, stamp, { ...rowCtx, id: creditId, assignedManagerId: advisorUserId }),
+            creditCreateData(accountId, clientId, b, scope, stamp, { ...rowCtx, id: creditId, assignedManagerId: assignPlan.create.get(row.code)!.userId }),
           );
           snapshots.push(snapshotData(accountId, creditId, row.code, stamp.runId, reportAsOf, b));
           transitions.push({ creditId, action: 'EXTERNAL_APPEARED', externalId: row.code, after: reported(b) });
@@ -486,6 +570,7 @@ export class PortfolioImportService {
             rowNumber: row.index + 1,
             after: json({
               ...valuesOf(b, statusMap),
+              assigneeId: assignPlan.create.get(row.code)!.userId,
               newClient: res.kind === 'new',
               ...(res.kind === 'new' && res.review ? { linkReview: true } : {}),
             }),
@@ -494,6 +579,16 @@ export class PortfolioImportService {
         }
         if (clientsData.length > 0) await tx.client.createMany({ data: clientsData });
         await tx.credit.createMany({ data: creditsData });
+
+        // La permanente de cada nuevo, por el servicio (la columna ya nació con el mismo valor).
+        // Agrupadas por motivo: es lo único que cambia en la auditoría.
+        const idOf = new Map(creditsData.map((c) => [c.externalId as string, c.id as string]));
+        const byReason = new Map<AssignmentReason, AssignmentRequest[]>();
+        for (const [code, a] of assignPlan.create) {
+          const creditId = idOf.get(code);
+          if (creditId) byReason.set(a.reason, [...(byReason.get(a.reason) ?? []), { creditId, to: a.userId }]);
+        }
+        for (const [reason, reqs] of byReason) assignmentChanges.push(...(await this.assignment.apply(tx, reqs, reason)));
       }
 
       for (const u of plan.toUpdate) {
@@ -512,9 +607,26 @@ export class PortfolioImportService {
           clientName: clientLabel(b),
           rowNumber: u.row.index + 1,
           before: json(valuesBefore(prev)),
-          after: json(valuesOf(b, statusMap)),
+          after: json({ ...valuesOf(b, statusMap), ...(reassignOf.has(u.row.code) ? { assignee: reassignOf.get(u.row.code) } : {}) }),
         });
         touched.push({ clientId: prev.clientId, b });
+      }
+
+      /*
+       * Reasignaciones EXPLÍCITAS de existentes (las pidió quien reparte; nunca las decide el
+       * archivo). `expectedFrom` = el responsable que se vio en la vista previa: si alguien lo cambió
+       * mientras tanto, la corrida entera se cae con ASSIGNMENT_CONFLICT y no queda nada a medias.
+       * Los casos abiertos no se tocan: su cobrador es otra responsabilidad (decisión 7).
+       */
+      if (assignPlan.reassign.length > 0) {
+        const updatedId = new Map(plan.toUpdate.map((u) => [u.row.code, u.id] as const));
+        assignmentChanges.push(
+          ...(await this.assignment.apply(
+            tx,
+            assignPlan.reassign.map((r) => ({ creditId: updatedId.get(r.code)!, to: r.to, expectedFrom: r.from })),
+            'IMPORT_REASSIGN',
+          )),
+        );
       }
 
       // Contacto y dirección van al final y por una vía aparte: no son campos del crédito, y su
@@ -610,7 +722,21 @@ export class PortfolioImportService {
         },
       });
       if (items.length > 0) await tx.clientImportRunItem.createMany({ data: items });
-      return { idempotentSkip: false, runId: run.id, scope, counts, preview, report, plan: planInfo, transitions };
+      return {
+        idempotentSkip: false,
+        runId: run.id,
+        scope,
+        counts,
+        preview,
+        report,
+        plan: planInfo,
+        assignment,
+        assigned: tally([...assignPlan.create.values()].map((a) => a.userId)),
+        reassigned: assignPlan.reassign.length,
+        ...(assignPlan.notes.length > 0 ? { assignmentNotes: assignPlan.notes } : {}),
+        transitions,
+        assignmentChanges,
+      };
     });
 
     if (!dryRun && !result.idempotentSkip) {
@@ -631,18 +757,65 @@ export class PortfolioImportService {
           after: { runId: result.runId, reportDate, externalId: t.externalId, ...(t.after ?? {}) },
         })),
       );
+      // Quién quedó responsable de qué: un ASSIGN por nuevo, un REASSIGN por reasignación explícita.
+      await this.assignment.auditChanges(result.assignmentChanges, { runId: result.runId });
     }
-    const { transitions: _omit, ...summary } = result;
+    const { transitions: _omit, assignmentChanges: _changes, ...summary } = result;
     void _omit;
+    void _changes;
     return { dryRun, ...summary };
   }
 
   // ── Historial de importaciones ─────────────────────────────────────────────
 
-  /** Las corridas de cartera, la más reciente primero. */
-  async listRuns(query: { page?: number; limit?: number }): Promise<ApiResponse<ImportRunSummary[]>> {
+  /**
+   * Las corridas de cartera, la más reciente primero, con búsqueda y filtros.
+   *
+   * 🔴 **Quién importó se busca por nombre, pero se guarda por id.** `created_by` es un uuid sin
+   * relación en el schema, así que el texto se resuelve primero a los usuarios que coinciden y
+   * después entra al `OR` como `createdBy in (...)`. Sin esto, buscar «Mónica» no encontraba nada
+   * aunque la columna dijera «Mónica Manager».
+   */
+  async listRuns(query: ListImportRunsQueryDto): Promise<ApiResponse<ImportRunSummary[]>> {
     const { page, limit, skip } = resolvePagination(query);
-    const where = { accountId: this.tenant.accountId, source: 'portfolio' };
+    const where: Prisma.ClientImportRunWhereInput = { accountId: this.tenant.accountId, source: 'portfolio' };
+
+    if (query.createdBy) where.createdBy = query.createdBy;
+    if (query.from || query.to) {
+      const tz = await this.clock.timezone();
+      where.createdAt = {
+        ...(query.from ? { gte: civilDayStartInstant(query.from, tz) } : {}),
+        // Hasta el final del día pedido: el comienzo del siguiente, excluido.
+        ...(query.to ? { lt: civilDayStartInstant(nextDay(query.to), tz) } : {}),
+      };
+    }
+    if (query.reportFrom || query.reportTo) {
+      where.reportAsOf = {
+        ...(query.reportFrom ? { gte: new Date(query.reportFrom) } : {}),
+        ...(query.reportTo ? { lte: new Date(query.reportTo) } : {}),
+      };
+    }
+    if (query.q) {
+      const q = query.q;
+      const importers = await this.tx((tx) =>
+        tx.user.findMany({
+          where: {
+            OR: [
+              { email: { contains: q, mode: 'insensitive' } },
+              { profile: { firstName: { contains: q, mode: 'insensitive' } } },
+              { profile: { lastName: { contains: q, mode: 'insensitive' } } },
+            ],
+          },
+          select: { id: true },
+        }),
+      );
+      where.OR = [
+        { fileName: { contains: q, mode: 'insensitive' } },
+        { advisorCode: { contains: q, mode: 'insensitive' } },
+        ...(importers.length ? [{ createdBy: { in: importers.map((u) => u.id) } }] : []),
+      ];
+    }
+
     const [rows, total] = await this.tx((tx) =>
       Promise.all([
         tx.clientImportRun.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
@@ -726,6 +899,30 @@ export class PortfolioImportService {
   }
 
   /** Nombre de quien importó. `users` es global: se lee por id, sin depender del tenant. */
+  /**
+   * El error de `resolveImportOwnership`, como respuesta HTTP. El de cartera ajena dice DE QUIÉN es:
+   * «es del asesor CQE» no le alcanza a quien la subió para saber a quién pasársela.
+   */
+  private async ownershipError(tx: PrismaClient, e: unknown): Promise<unknown> {
+    if (!(e instanceof ImportAssignmentError)) return e;
+    if (e.code === 'ADVISOR_BELONGS_TO_OTHER') {
+      const owner = String(e.details?.userId ?? '');
+      const name = (await this.namesIn(tx, [owner])).get(owner) ?? 'otra persona';
+      return new ForbiddenException({
+        code: e.code,
+        message: `Este reporte es la cartera de ${name} (asesor ${String(e.details?.advisorCode)}). Sólo podés importar tu propia cartera.`,
+        details: e.details,
+      });
+    }
+    return new BadRequestException({ code: e.code, message: e.message, details: e.details });
+  }
+
+  /** Nombres de usuario dentro de una transacción en curso (`userNames` abre la suya). */
+  private async namesIn(tx: PrismaClient, ids: string[]): Promise<Map<string, string>> {
+    const users = await tx.user.findMany({ where: { id: { in: ids } }, select: { id: true, email: true, profile: true } });
+    return new Map(users.map((u) => [u.id, u.profile ? `${u.profile.firstName} ${u.profile.lastName}`.trim() : u.email]));
+  }
+
   private async userNames(ids: (string | null)[]): Promise<Map<string, string>> {
     const unique = [...new Set(ids.filter((i): i is string => !!i))];
     if (unique.length === 0) return new Map();
@@ -762,6 +959,7 @@ export class PortfolioImportService {
   }
 
   async linkAdvisor(rawCode: string, userId: string): Promise<{ advisorCode: string; userId: string }> {
+    await this.assertCanConfigure();
     const advisorCode = rawCode.trim().toUpperCase();
     if (!/^[A-Z0-9]{2,12}$/.test(advisorCode)) {
       throw new BadRequestException({ code: 'INVALID_ADVISOR_CODE', message: 'El código de asesor no es válido' });
@@ -782,6 +980,7 @@ export class PortfolioImportService {
   }
 
   async unlinkAdvisor(rawCode: string): Promise<{ advisorCode: string }> {
+    await this.assertCanConfigure();
     const advisorCode = rawCode.trim().toUpperCase();
     const accountId = this.tenant.accountId;
     await this.tx((tx) =>
@@ -803,8 +1002,10 @@ export class PortfolioImportService {
     lastRun: LastRun | null;
     members: ScopeMember[];
     branches: ScopeBranch[];
+    viewer: ImportViewer;
   }> {
     const accountId = this.tenant.accountId;
+    const canConfigure = await this.canConfigure();
     // `members` y `branches` son lo que la pantalla ofrece al elegir el alcance (FIELD-RULES §6.4):
     // sin ellos, `scope.kind` official/branch queda sin `ref` y el asistente no puede avanzar.
     // Viajan acá y no en endpoints propios porque no existe módulo `users` ni `branches`, y montar
@@ -854,7 +1055,39 @@ export class PortfolioImportService {
         }))
         .sort((a, b) => a.name.localeCompare(b.name)),
       branches,
+      viewer: { userId: this.tenant.userId ?? '', canAssign: this.tenant.can(Permission.ASSIGNMENT_WRITE), canConfigure },
     };
+  }
+
+  /**
+   * P1 · Quién cambia la configuración y los vínculos de asesor: quien reparte la cartera
+   * (`assignment:write`) o el dueño de la cuenta.
+   *
+   * 🔴 **No alcanza con `client:import`.** El vínculo asesor → usuario decide de quién es cada
+   * cartera: con sólo importar, un cobrador podía vincularse el código de otro asesor y después
+   * importar —y quedarse— esa cartera, salteando la regla de «sólo tu propia cartera». El dueño
+   * entra igual porque el cobrador independiente es COLLECTOR y dueño a la vez, y configura lo suyo.
+   */
+  private async canConfigure(): Promise<boolean> {
+    if (this.tenant.can(Permission.ASSIGNMENT_WRITE)) return true;
+    const userId = this.tenant.userId;
+    if (!userId) return false;
+    const owner = await this.tx((tx) =>
+      tx.userAccount.findFirst({
+        where: { accountId: this.tenant.accountId, userId, isActive: true, isOwner: true },
+        select: { id: true },
+      }),
+    );
+    return owner !== null;
+  }
+
+  private async assertCanConfigure(): Promise<void> {
+    if (!(await this.canConfigure())) {
+      throw new ForbiddenException({
+        code: 'IMPORT_CONFIG_FORBIDDEN',
+        message: 'Sólo quien reparte la cartera o el dueño de la cuenta cambia la configuración de importación',
+      });
+    }
   }
 
   /**
@@ -863,6 +1096,7 @@ export class PortfolioImportService {
    * una cartera mal importada. Merge superficial: la pantalla guarda campo por campo.
    */
   async patchConfig(patch: ImportConfigPatch): Promise<{ config: ImportConfig }> {
+    await this.assertCanConfigure();
     const accountId = this.tenant.accountId;
     const account = await this.tx((tx) => tx.account.findUnique({ where: { id: accountId } }));
     const configuration = (account?.configuration ?? {}) as Record<string, unknown>;

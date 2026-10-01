@@ -1,6 +1,7 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import dynamic from 'next/dynamic';
 import { useFormatter, useTranslations } from 'next-intl';
 import {
   PHONE_PATTERN,
@@ -13,11 +14,18 @@ import {
   type ClienteForm,
   type CollateralRow,
   type ContactRow,
+  type CoordMode,
   type CreditOption,
   type LocationRow,
   type RelationRow,
 } from '@kobrax/shared';
 import { Field, Input, Select } from '@/components/ui';
+
+/**
+ * MapLibre son ~250 kB y el formulario se abre mucho más de lo que se marca un punto: el chunk baja
+ * cuando alguien elige el modo «Mapa». `ssr: false` porque necesita `window`.
+ */
+const MapPicker = dynamic(() => import('@/components/map-picker').then((m) => m.MapPicker), { ssr: false });
 
 const CONTACT_TYPES = ['PHONE', 'EMAIL'] as const;
 // Los tipos de dirección salen de `shared` (`locationTypeChoices`): la regla de cuáles se ofrecen es
@@ -274,31 +282,8 @@ export function LocationRows({
                   <Input value={l.referenceNotes} onChange={(e) => set({ referenceNotes: e.target.value })} disabled={disabled} />
                 </Field>
               </div>
-              {/* Las coordenadas se tipean. Marcarlas en un mapa es de W6, que es donde entra
-                  MapLibre; pintar un mapa acá sería traer la librería por un campo. */}
-              <Field label={t('form.latitude')}>
-                <Input
-                  value={l.latitude}
-                  onChange={(e) => set({ latitude: e.target.value })}
-                  disabled={disabled}
-                  type="number"
-                  step="any"
-                  min={-90}
-                  max={90}
-                />
-              </Field>
-              <Field label={t('form.longitude')}>
-                <Input
-                  value={l.longitude}
-                  onChange={(e) => set({ longitude: e.target.value })}
-                  disabled={disabled}
-                  type="number"
-                  step="any"
-                  min={-180}
-                  max={180}
-                />
-              </Field>
             </div>
+            <CoordFields row={l} onChange={set} disabled={disabled} />
             <div className="mt-3 flex justify-end">
               <RemoveButton onClick={() => onChange(rows.filter((_, j) => j !== i))} disabled={disabled} label={t('form.removeLocation')} />
             </div>
@@ -306,6 +291,154 @@ export function LocationRows({
         );
       })}
     </ul>
+  );
+}
+
+/** Coordenada del formulario (texto) → número para el mapa. `undefined` si está vacía o a medio escribir. */
+function coordNum(v: string): number | undefined {
+  const n = Number(v);
+  return v.trim() === '' || Number.isNaN(n) ? undefined : n;
+}
+
+const COORD_MODES = [
+  { value: 'manual', label: 'coordManual' },
+  { value: 'gps', label: 'coordGps' },
+  { value: 'map', label: 'coordMap' },
+] as const satisfies readonly { value: CoordMode; label: string }[];
+
+/**
+ * El punto de una dirección: **las mismas tres formas que el móvil** —escribirlo, tomar el GPS o
+ * marcarlo en el mapa—, sobre el mismo `coordMode` de `LocationRow`. Sirve igual a las direcciones
+ * del cliente y a las del garante, porque las dos pasan por `LocationRows`.
+ *
+ * 🔴 **Las tres escriben la MISMA coordenada.** Cambiar de modo no borra nada: quien capturó el GPS
+ * y pasa al mapa ve el pin ahí y lo arrastra unos metros. `coordMode` no viaja a la API —el diff lo
+ * ignora—: es sólo qué controles se ven.
+ *
+ * El mapa se pinta sólo en modo «Mapa»: un garante con tres direcciones serían tres MapLibre vivos
+ * en el modal por un modo que casi nadie abre en todas.
+ */
+function CoordFields({
+  row,
+  onChange,
+  disabled,
+}: {
+  row: LocationRow;
+  onChange: (patch: Partial<LocationRow>) => void;
+  disabled?: boolean;
+}) {
+  const t = useTranslations('portfolio');
+  const [ubicando, setUbicando] = useState(false);
+  const [geoError, setGeoError] = useState<string | null>(null);
+  const lat = coordNum(row.latitude);
+  const lng = coordNum(row.longitude);
+  const conPunto = lat != null && lng != null;
+
+  /*
+   * El GPS del navegador. Si lo niegan no se bloquea nada: los otros dos modos siguen ahí y el
+   * punto es opcional. `toFixed(6)` como el móvil: ~10 cm, más que lo que da cualquier GPS.
+   */
+  function capturar() {
+    setGeoError(null);
+    if (!navigator.geolocation) return setGeoError(t('form.noGeo'));
+    setUbicando(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUbicando(false);
+        onChange({ latitude: pos.coords.latitude.toFixed(6), longitude: pos.coords.longitude.toFixed(6) });
+      },
+      () => {
+        setUbicando(false);
+        setGeoError(t('form.geoDenied'));
+      },
+      { enableHighAccuracy: true, timeout: 15_000 },
+    );
+  }
+
+  const punto = conPunto ? t('form.pinAt', { lat: row.latitude, lng: row.longitude }) : null;
+
+  return (
+    <div className="mt-4 space-y-3">
+      <div>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{t('form.coordMode')}</p>
+        <div role="radiogroup" aria-label={t('form.coordMode')} className="inline-flex rounded-xl border border-k-border bg-white p-1">
+          {COORD_MODES.map((m) => (
+            <button
+              key={m.value}
+              type="button"
+              role="radio"
+              aria-checked={row.coordMode === m.value}
+              disabled={disabled}
+              onClick={() => {
+                setGeoError(null);
+                onChange({ coordMode: m.value });
+              }}
+              className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors disabled:opacity-50 ${
+                row.coordMode === m.value ? 'bg-k-highlight text-k-periwinkle' : 'text-k-text-2 hover:text-k-text'
+              }`}
+            >
+              {t(`form.${m.label}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {row.coordMode === 'manual' && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label={t('form.latitude')}>
+            <Input
+              value={row.latitude}
+              onChange={(e) => onChange({ latitude: e.target.value })}
+              disabled={disabled}
+              type="number"
+              step="any"
+              min={-90}
+              max={90}
+            />
+          </Field>
+          <Field label={t('form.longitude')}>
+            <Input
+              value={row.longitude}
+              onChange={(e) => onChange({ longitude: e.target.value })}
+              disabled={disabled}
+              type="number"
+              step="any"
+              min={-180}
+              max={180}
+            />
+          </Field>
+        </div>
+      )}
+
+      {row.coordMode === 'gps' && (
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={capturar}
+            disabled={disabled || ubicando}
+            className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg bg-k-highlight px-3 text-[13px] font-medium text-k-periwinkle hover:bg-k-light-bg disabled:opacity-50"
+          >
+            {ubicando ? t('form.locating') : conPunto ? t('form.recaptureLocation') : t('form.captureLocation')}
+          </button>
+          {punto && <span className="text-[12px] text-k-text-2">{punto}</span>}
+        </div>
+      )}
+
+      {row.coordMode === 'map' && (
+        <>
+          <MapPicker
+            latitude={lat}
+            longitude={lng}
+            onChange={disabled ? undefined : ({ latitude, longitude }) => onChange({ latitude: latitude.toFixed(6), longitude: longitude.toFixed(6) })}
+            height={240}
+            label={t('form.mapPick')}
+          />
+          <p className="text-[12px] text-k-text-2">{punto ?? t('form.pinHint')}</p>
+        </>
+      )}
+
+      {geoError && <p className="text-[12px] text-k-danger">{geoError}</p>}
+    </div>
   );
 }
 

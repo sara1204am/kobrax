@@ -33,6 +33,14 @@ describe('carteraQuery', () => {
     expect(carteraQuery({ collectorId: id }).get('collectorId')).toBe(id);
   });
 
+  it('P7 · el responsable del crédito viaja aparte del cobrador del caso', () => {
+    const id = '3f2b9c10-1a4d-4b7e-9c8f-0a1b2c3d4e5f';
+    const q = carteraQuery({ managerId: id });
+    expect(q.get('managerId')).toBe(id);
+    expect(q.has('collectorId')).toBe(false);
+    expect(carteraQuery({ managerId: 'cualquier-cosa' }).has('managerId')).toBe(false);
+  });
+
   it('🔴 `status` NO es un orden válido', () => {
     // La columna Estado se deriva en el navegador de la deuda y la mora; el servidor sólo sabe
     // ordenar por `client_status`, que es otra cosa. Ordenar por ella devolvería un orden que no

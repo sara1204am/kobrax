@@ -66,6 +66,17 @@ describe('identidad y sincronización de la operación externa', () => {
 });
 
 describe('creditUpdateData — actualización desde el archivo', () => {
+  /*
+   * 🔴 La regla de oro de la importación: el reporte trae saldo y mora, nunca a quién le toca
+   * cobrar. Que aparezca de nuevo en un reporte no le cambia el responsable ni la agencia; eso sólo
+   * se hace con una reasignación explícita por `AssignmentService`.
+   */
+  it('nunca escribe el responsable ni la agencia de un crédito existente', () => {
+    const data = creditUpdateData({ ...ROW, principalAmount: 1000 }, { origin: 'import' }, STAMP, { advisorCode: 'CQE' });
+    assert.equal('assignedManagerId' in data, false);
+    assert.equal('branchId' in data, false);
+  });
+
   it('lo que llega deja de faltar y se escribe; lo que no llega no se toca', () => {
     const prev = { origin: 'import', installmentAmount: 140, importMissing: ['principalAmount', 'interestRate', 'installmentsCount', 'frequency'] };
     const data = creditUpdateData({ ...ROW, principalAmount: 1000, installmentAmount: null, nextDueDate: null }, prev, STAMP);

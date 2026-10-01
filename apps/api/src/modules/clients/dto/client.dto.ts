@@ -217,6 +217,8 @@ export class ListClientsQueryDto {
    * eso filtra con un `EXISTS` sobre casos y no con una columna.
    */
   @IsOptional() @IsUUID() collectorId?: string;
+  /** El responsable de algún crédito del cliente (`credits.assigned_manager_id`). Ver P7 en el servicio. */
+  @IsOptional() @IsUUID() managerId?: string;
   /**
    * `portfolio` → cada cliente viene con su deuda agregada, su peor mora y cuántos créditos tiene,
    * y **la lista se puede ordenar por eso**. Es la cartera del panel web (F9 · W3).

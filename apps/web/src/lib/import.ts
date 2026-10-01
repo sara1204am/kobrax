@@ -1,6 +1,8 @@
 import {
   IMPORT_RUN_ITEM_ACTIONS,
   type FieldDef,
+  type ImportAssignments,
+  type PortfolioSummary,
   type FieldRule,
   type ImportConfig,
   type ImportConfigPatch,
@@ -95,11 +97,13 @@ export async function patchConfig(
  */
 export async function postImportFile<T>(
   file: File,
-  options: { columnsOnly?: boolean; dryRun?: boolean } = {},
+  options: { columnsOnly?: boolean; dryRun?: boolean; assignments?: ImportAssignments } = {},
 ): Promise<{ ok: boolean; data?: T; error?: ApiError }> {
   const form = new FormData();
   form.append('file', withDeducedType(file));
   if (options.dryRun !== undefined) form.append('dryRun', String(options.dryRun));
+  // Campo del multipart, como `dryRun`: el BFF reenvía el FormData tal cual.
+  if (options.assignments) form.append('assignments', JSON.stringify(options.assignments));
 
   // Sin red `fetch` rechaza, y el rechazo se llevaría puesto el `setBusy(false)` de quien llamó:
   // la pantalla entera queda gris y muda hasta recargar. Sin `error`, el banner dice `errors.generic`.
@@ -304,8 +308,23 @@ function pageQuery(params: { page?: string; pageSize?: string }, fallback: numbe
   return new URLSearchParams({ page: String(page), limit: String(limit) });
 }
 
-export function historyQuery(params: { page?: string; pageSize?: string }): URLSearchParams {
-  return pageQuery(params, HISTORY_PAGE_SIZE);
+/**
+ * Lo que el historial deja buscar y filtrar, tal cual lo recibe la API: el texto (`q`, que pone el
+ * `SearchBox`), cuándo se importó, la fecha de corte del reporte y quién importó.
+ */
+export const HISTORY_FILTER_KEYS = ['q', 'from', 'to', 'reportFrom', 'reportTo', 'createdBy'] as const;
+
+export function hasHistoryFilters(params: Record<string, string | undefined>): boolean {
+  return HISTORY_FILTER_KEYS.some((k) => params[k]?.trim());
+}
+
+export function historyQuery(params: Record<string, string | undefined>): URLSearchParams {
+  const query = pageQuery(params, HISTORY_PAGE_SIZE);
+  for (const k of HISTORY_FILTER_KEYS) {
+    const v = params[k]?.trim();
+    if (v) query.set(k, v);
+  }
+  return query;
 }
 
 export function runItemsQuery(params: { action?: string; page?: string; pageSize?: string }): URLSearchParams {
@@ -319,4 +338,79 @@ export function runItemsQuery(params: { action?: string; page?: string; pageSize
 export function fileSize(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} MB`;
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+// ── Responsables al importar ─────────────────────────────────────────────────
+
+/**
+ * Quién queda responsable de cada crédito en la vista previa, por **nº de operación**.
+ *
+ * - `create`: los nuevos. Arranca en la sugerencia del servidor (el asesor del reporte); `null` =
+ *   sin responsable, y con alguno así no se confirma.
+ * - `update`: los existentes. Arranca en su responsable de HOY; distinto de ese = reasignación.
+ *
+ * 🔴 Por nº de operación y no por fila: al confirmar el servidor vuelve a leer el archivo, y la
+ * posición de una fila no es una identidad.
+ */
+export interface AssignState {
+  create: Record<string, string | null>;
+  update: Record<string, string | null>;
+}
+
+export function initialAssignState(summary: PortfolioSummary): AssignState {
+  return {
+    create: Object.fromEntries(summary.preview.toCreate.map((r) => [r.code, r.suggestedAssigneeId ?? null])),
+    update: Object.fromEntries(summary.preview.toUpdate.map((r) => [r.code, r.currentAssigneeId ?? null])),
+  };
+}
+
+/** Pone a `userId` como responsable de `codes` en una de las dos listas. Devuelve un estado nuevo. */
+export function assignCodes(state: AssignState, list: keyof AssignState, codes: string[], userId: string | null): AssignState {
+  const next = { ...state[list] };
+  for (const c of codes) if (c in next) next[c] = userId;
+  return { ...state, [list]: next };
+}
+
+/** Cuántos nuevos tienen responsable, cuántos no, y el reparto por persona (de más a menos). */
+export function assignmentStats(create: AssignState['create']): {
+  assigned: number;
+  unassigned: number;
+  byUser: { userId: string; count: number }[];
+} {
+  const counts = new Map<string, number>();
+  let unassigned = 0;
+  for (const userId of Object.values(create)) {
+    if (userId) counts.set(userId, (counts.get(userId) ?? 0) + 1);
+    else unassigned += 1;
+  }
+  const byUser = [...counts].map(([userId, count]) => ({ userId, count })).sort((a, b) => b.count - a.count);
+  return { assigned: byUser.reduce((n, u) => n + u.count, 0), unassigned, byUser };
+}
+
+/** Los existentes cuyo responsable se cambió en la pantalla: las reasignaciones que se van a pedir. */
+export function pendingReassignments(
+  state: AssignState,
+  summary: PortfolioSummary,
+): { code: string; clientName?: string; from: string | null; to: string }[] {
+  return summary.preview.toUpdate.flatMap((r) => {
+    const to = state.update[r.code];
+    const from = r.currentAssigneeId ?? null;
+    return to && to !== from ? [{ code: r.code, clientName: r.clientName, from, to }] : [];
+  });
+}
+
+/**
+ * Lo que viaja al confirmar. Los nuevos agrupados por responsable (100 créditos entre tres personas
+ * son tres grupos, no cien filas), y sólo las reasignaciones que de verdad cambian algo.
+ */
+export function buildAssignmentsPayload(state: AssignState, summary: PortfolioSummary): ImportAssignments {
+  const groups = new Map<string, string[]>();
+  for (const [code, userId] of Object.entries(state.create)) {
+    if (userId) groups.set(userId, [...(groups.get(userId) ?? []), code]);
+  }
+  return {
+    version: 1,
+    create: [...groups].map(([userId, externalIds]) => ({ userId, externalIds })),
+    reassign: pendingReassignments(state, summary).map(({ code, from, to }) => ({ externalId: code, fromUserId: from, toUserId: to })),
+  };
 }

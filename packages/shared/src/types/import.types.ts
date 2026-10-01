@@ -100,12 +100,25 @@ export interface ScopeBranch {
 }
 
 /** Todo lo que la pantalla de Ajustes necesita para dibujarse, en una sola llamada. */
+/**
+ * Qué puede hacer en la importación quien la está mirando. Lo decide el servidor —las pantallas no
+ * deducen permisos del rol— y viaja con la configuración para no dibujar controles que van a fallar.
+ */
+export interface ImportViewer {
+  userId: string;
+  /** `assignment:write`: elige el responsable de los créditos nuevos y puede reasignar existentes. */
+  canAssign: boolean;
+  /** Cambia la configuración y los vínculos de asesor: `assignment:write` o dueño de la cuenta (P1). */
+  canConfigure: boolean;
+}
+
 export interface ConfigScreen {
   config: ImportConfig;
   catalog: Record<string, FieldDef>;
   lastRun: LastRun | null;
   members: ScopeMember[];
   branches: ScopeBranch[];
+  viewer: ImportViewer;
 }
 
 /** Una columna que podría ser "días de atraso", con valores reales para calibrar. */
@@ -140,6 +153,34 @@ export interface ColumnsPayload {
    * regla general distingue eso de una fila de encabezados.
    */
   headerCandidates?: { anchor: string; preview: string }[];
+}
+
+/**
+ * Quién queda responsable de lo que trae un reporte, como lo manda la pantalla al CONFIRMAR
+ * (campo `assignments` del multipart, en JSON).
+ *
+ * 🔴 **Todo por nº de operación, nunca por posición.** El archivo se vuelve a leer al confirmar y el
+ * servidor recalcula el plan: una fila que en la vista previa era la 7 puede no serlo.
+ */
+export interface ImportAssignments {
+  version: 1;
+  /** Créditos NUEVOS agrupados por responsable elegido. Los que no figuran toman la sugerencia. */
+  create?: { userId: string; externalIds: string[] }[];
+  /**
+   * Reasignaciones EXPLÍCITAS de créditos que ya existían. `fromUserId` es el responsable que se
+   * vio en la vista previa: si cambió mientras tanto, se rechaza (ASSIGNMENT_CONFLICT).
+   */
+  reassign?: { externalId: string; fromUserId: string | null; toUserId: string }[];
+}
+
+/** De dónde sale el responsable sugerido de un crédito nuevo. */
+export type AssigneeSuggestionSource = 'ADVISOR' | 'SCOPE' | 'SELF';
+
+/** Una asignación pedida que no se aplicó, y por qué. No frena la corrida: se informa. */
+export interface ImportAssignmentNote {
+  externalId: string;
+  /** NOW_EXISTING: era nuevo en la vista previa y al confirmar ya existía (otra importación). */
+  reason: 'NOW_EXISTING' | 'UNKNOWN_CODE' | 'NOT_UPDATED';
 }
 
 /**
@@ -180,14 +221,47 @@ export interface PortfolioSummary {
     /** Por cuántos se pasa el archivo. `0` = entra. */
     over: number;
   };
+  /**
+   * Cómo se decide el responsable en ESTA corrida, según quién importa:
+   * - `SELF`: no tiene `assignment:write` (el cobrador). Los nuevos quedan a su nombre; no elige.
+   * - `CHOOSE`: reparte. Los nuevos llegan con una sugerencia y no se confirma si queda alguno sin.
+   */
+  assignment?: { mode: 'SELF' | 'CHOOSE'; selfUserId: string };
+  /**
+   * Este mismo archivo ya se aplicó (P6). La vista previa lo avisa y no deja confirmar ni repartir:
+   * confirmar de nuevo no hace nada, y reasignar con un archivo viejo se hace desde Cartera.
+   */
+  alreadyApplied?: { runId: string; at: string; by: string | null };
+  /** Sólo al confirmar: cuántos nuevos quedaron con cada responsable y cuántos existentes se reasignaron. */
+  assigned?: { userId: string; count: number }[];
+  reassigned?: number;
+  /** Asignaciones pedidas que no se aplicaron (por ejemplo, un nuevo que ya existía al confirmar). */
+  assignmentNotes?: ImportAssignmentNote[];
   preview: {
     /**
      * Cada balde dice **quién** es y con qué números, no sólo el nº de operación: «302-222-1515» no le
      * dice nada a quien confirma. `before` es cómo está hoy en Kobrax; `after`, lo que trae el reporte.
      * Los campos nuevos son opcionales: una API vieja los omite y la pantalla muestra el código.
      */
-    toCreate: { code: string; clientName: string; existingClient?: boolean; linkReview?: boolean; after?: ImportItemValues }[];
-    toUpdate: { code: string; reappeared?: boolean; clientName?: string; before?: ImportItemValues; after?: ImportItemValues }[];
+    toCreate: {
+      code: string;
+      clientName: string;
+      existingClient?: boolean;
+      linkReview?: boolean;
+      after?: ImportItemValues;
+      /** Responsable sugerido (el usuario del asesor del reporte, o el del alcance). `null` = nadie. */
+      suggestedAssigneeId?: string | null;
+      suggestionSource?: AssigneeSuggestionSource;
+    }[];
+    toUpdate: {
+      code: string;
+      reappeared?: boolean;
+      clientName?: string;
+      before?: ImportItemValues;
+      after?: ImportItemValues;
+      /** Responsable de hoy. La importación NO lo cambia; sólo una reasignación explícita. */
+      currentAssigneeId?: string | null;
+    }[];
     toSetCurrent: { code: string | null; clientName?: string; before?: ImportItemValues }[];
     /** Operaciones que dejan de venir en el reporte (D4): no es un pago ni un cierre. */
     toMarkAbsent?: { code: string | null; clientName?: string; before?: ImportItemValues }[];

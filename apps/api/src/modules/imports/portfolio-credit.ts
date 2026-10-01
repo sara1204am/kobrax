@@ -53,7 +53,10 @@ export interface RowContext {
   statusMap?: Record<string, CreditStatus>;
   /** Sólo al actualizar: el estado que tiene hoy. */
   prevStatus?: CreditStatus;
-  /** Sólo al crear: a quién queda asignado (el usuario vinculado al asesor del reporte, D8). */
+  /**
+   * Sólo al crear: a quién queda asignado. Lo decide `planAssignments` (quien importa, lo elegido o la
+   * sugerencia del asesor) y la fila permanente la escribe `AssignmentService`: la columna nace igual.
+   */
   assignedManagerId?: string;
 }
 
@@ -100,7 +103,7 @@ export function creditCreateData(
     status: mapStatus(b.status, ctx.statusMap) ?? CreditStatus.ACTIVE, // crédito nuevo: default razonable si el estado no se mapea
     daysPastDue: b.daysPastDue ?? 0,
     branchId: scope.kind === 'branch' ? scope.ref : undefined,
-    assignedManagerId: ctx.assignedManagerId ?? (scope.kind === 'official' ? (scope.ref ?? undefined) : undefined),
+    assignedManagerId: ctx.assignedManagerId,
     disbursedAt: b.disbursedAt ? new Date(b.disbursedAt) : undefined,
     metadata: stripUndefined({
       origin: CreditOrigin.IMPORT,

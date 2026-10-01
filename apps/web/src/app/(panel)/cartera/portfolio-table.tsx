@@ -146,6 +146,15 @@ export function PortfolioTable({
       options: collectors.map((m) => ({ value: m.userId, label: memberName(m) })),
     },
     {
+      // P7: el responsable del CRÉDITO. Reasignar un crédito no mueve sus casos abiertos, así que
+      // «responsable» y «cobrador del caso» pueden ser personas distintas y cada filtro dice cuál.
+      keys: ['managerId'],
+      label: t('filters.manager'),
+      type: 'select',
+      allLabel: t('filters.allManagers'),
+      options: collectors.map((m) => ({ value: m.userId, label: memberName(m) })),
+    },
+    {
       keys: ['branchId'],
       label: t('filters.branch'),
       type: 'select',

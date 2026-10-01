@@ -16,7 +16,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { Permission } from '@kobrax/shared';
+import { Permission, type ImportAssignments } from '@kobrax/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
@@ -24,6 +24,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { PortfolioImportService } from './portfolio-import.service';
 import type { ImportConfigPatch } from './import-config';
 import { ListImportRunItemsQueryDto, ListImportRunsQueryDto } from './dto/import-runs.dto';
+import { ImportAssignmentError, parseImportAssignments } from './import-assignment';
 
 // Sin @types/multer: solo necesitamos el buffer (FileInterceptor usa memoria por defecto).
 interface UploadedPortfolioFile {
@@ -97,15 +98,26 @@ export class PortfolioImportController {
     @Query('columnsOnly') columnsOnly?: string,
     // D9: la fecha de corte, si el reporte no la trae (o para corregirla). YYYY-MM-DD.
     @Body('reportDate') reportDate?: string,
+    // Al confirmar: quién queda responsable de los nuevos y qué existentes se reasignan (JSON, por
+    // nº de operación). Ver `ImportAssignments` en shared.
+    @Body('assignments') assignments?: string,
   ) {
     if (!file?.buffer) {
       throw new BadRequestException({ code: 'FILE_REQUIRED', message: 'Falta el archivo (campo file)' });
     }
     if (columnsOnly === 'true') return this.portfolio.readColumns(file.buffer);
+    let parsed: ImportAssignments | null;
+    try {
+      parsed = parseImportAssignments(assignments);
+    } catch (e) {
+      if (e instanceof ImportAssignmentError) throw new BadRequestException({ code: e.code, message: e.message });
+      throw e;
+    }
     return this.portfolio.run(file.buffer, dryRun === 'true', {
       reportDate: reportDate || undefined,
       fileName: originalName(file),
       mimeType: file.mimetype,
+      assignments: parsed,
     });
   }
 
@@ -133,10 +145,14 @@ export class PortfolioImportController {
 
   /**
    * El documento que se subió. `?download=1` lo baja; sin eso se abre en el navegador (un PDF se ve
-   * ahí mismo). Mismo permiso que importar: el reporte trae la cartera entera de un asesor.
+   * ahí mismo).
+   *
+   * 🔴 Además de importar, pide `client:pii:read` (P10): el reporte trae la cartera entera de un
+   * asesor con nombres, documentos y teléfonos **sin enmascarar**. El supervisor importa y reparte,
+   * pero no ve PII en ningún otro lado; el documento crudo no puede ser la excepción.
    */
   @Get('runs/:id/file')
-  @Roles(Permission.CLIENT_IMPORT)
+  @Roles(Permission.CLIENT_IMPORT, Permission.CLIENT_PII_READ)
   async runFile(@Param('id', ParseUUIDPipe) id: string, @Query('download') download?: string) {
     const { stream, name, mimeType } = await this.portfolio.runFile(id);
     const encoded = encodeURIComponent(name);

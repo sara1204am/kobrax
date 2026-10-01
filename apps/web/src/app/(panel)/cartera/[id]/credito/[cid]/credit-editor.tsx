@@ -7,6 +7,7 @@ import {
   registrationSituation,
   type CreditDetail,
   type CreditFormState,
+  type Assignee,
   type Member,
   type RegisteredStateResult,
   type TermsEditBlock,
@@ -39,6 +40,7 @@ export function CreditEditor({
   state,
   registered,
   team,
+  assignees,
   types,
 }: {
   credit: CreditDetail;
@@ -49,6 +51,8 @@ export function CreditEditor({
   /** El resultado de condiciones + estado al registrar; `null` mientras falten datos. */
   registered: RegisteredStateResult | null;
   team: Member[];
+  /** A quién se puede asignar. Vacío = quien edita no tiene `assignment:write`: no se dibuja. */
+  assignees: Assignee[];
   types: CatalogOption[];
 }) {
   const t = useTranslations('portfolio.creditDetail');
@@ -237,16 +241,30 @@ export function CreditEditor({
             </Field>
           )}
 
-          {team.length > 0 && (
-            <Field label={tp('form.assignedTo')}>
+          {/*
+            🔴 Sólo con `assignment:write` (la lista viene vacía sin él). Las opciones son las que el
+            servidor acepta —cobradores activos y uno mismo—; el responsable de hoy, si no está entre
+            ellas (un gerente, alguien dado de baja), se muestra igual para no esconder el valor real.
+            Cambiarlo NO mueve los casos abiertos: su cobrador se reasigna aparte.
+          */}
+          {assignees.length > 0 && (
+            <Field label={tp('form.assignedTo')} hint={tp('form.assignedToHint')}>
               <Select
                 value={draft.extras.assignedManagerId}
                 onChange={(e) => setExtra({ assignedManagerId: e.target.value })}
               >
-                <option value="">{tp('form.unassigned')}</option>
-                {team.map((m) => (
-                  <option key={m.userId} value={m.userId}>
-                    {memberName(m)}
+                {!credit.assignedManagerId && <option value="">{tp('form.unassigned')}</option>}
+                {credit.assignedManagerId && !assignees.some((a) => a.userId === credit.assignedManagerId) && (
+                  <option value={credit.assignedManagerId}>
+                    {(() => {
+                      const m = team.find((x) => x.userId === credit.assignedManagerId);
+                      return m ? memberName(m) : tp('form.currentAssignee');
+                    })()}
+                  </option>
+                )}
+                {assignees.map((a) => (
+                  <option key={a.userId} value={a.userId}>
+                    {a.isMe ? tp('form.meNamed', { name: a.name }) : a.name}
                   </option>
                 ))}
               </Select>

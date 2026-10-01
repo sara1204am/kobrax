@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { ROLE_PERMISSIONS, RoleType } from '@kobrax/shared';
+import { Permission, ROLE_PERMISSIONS, RoleType } from '@kobrax/shared';
 import { ROLES_KEY } from './auth/decorators/roles.decorator';
 import { AgendaController } from './agenda/agenda.controller';
 import { CasesController } from './cases/cases.controller';
@@ -13,6 +13,7 @@ import { PaymentsController } from './payments/payments.controller';
 import { PortfolioImportController } from './imports/portfolio-import.controller';
 import { RoutesController } from './routes/routes.controller';
 import { AnalyticsController } from './analytics/analytics.controller';
+import { ClientImportController } from './clients/import/client-import.controller';
 
 /**
  * Las puertas (`@Roles`) del camino del cobrador, contra los permisos que realmente tiene.
@@ -128,4 +129,39 @@ describe('Puerta del dashboard', () => {
       );
     });
   }
+});
+
+/**
+ * Quién asigna y quién importa (decisiones del 2026-09-30).
+ *
+ * `assignment:write` es lo que separa elegir el responsable de un crédito de sólo cobrarlo. El
+ * cobrador importa su cartera sin él; el supervisor importa y reparte. Las dos puertas de abajo son
+ * las que se abrieron al darle `client:import` al supervisor, y no tenían que abrirse.
+ */
+describe('Asignación e importación por rol', () => {
+  const tiene = (rol: RoleType, p: Permission) => (ROLE_PERMISSIONS[rol] as string[]).includes(p);
+  const puerta = (ctrl: new (...args: never[]) => object, metodo: string) =>
+    (Reflect.getMetadata(ROLES_KEY, (ctrl.prototype as Record<string, object>)[metodo]!) as string[] | undefined) ?? [];
+
+  it('el cobrador importa pero NO asigna', () => {
+    assert.ok(tiene(RoleType.COLLECTOR, Permission.CLIENT_IMPORT));
+    assert.ok(!tiene(RoleType.COLLECTOR, Permission.ASSIGNMENT_WRITE));
+  });
+
+  for (const rol of [RoleType.SUPERVISOR, RoleType.MANAGER, RoleType.ACCOUNT_ADMIN]) {
+    it(`${rol} importa y asigna`, () => {
+      assert.ok(tiene(rol, Permission.CLIENT_IMPORT));
+      assert.ok(tiene(rol, Permission.ASSIGNMENT_WRITE));
+    });
+  }
+
+  it('P10 · el documento crudo de una corrida pide además client:pii:read (el supervisor no lo baja)', () => {
+    assert.deepEqual(puerta(PortfolioImportController, 'runFile'), [Permission.CLIENT_IMPORT, Permission.CLIENT_PII_READ]);
+    assert.ok(!tiene(RoleType.SUPERVISOR, Permission.CLIENT_PII_READ));
+  });
+
+  it('P11 · el import de clientes pide además client:write (el supervisor no lo usa)', () => {
+    assert.deepEqual(puerta(ClientImportController, 'run'), [Permission.CLIENT_IMPORT, Permission.CLIENT_WRITE]);
+    assert.ok(!tiene(RoleType.SUPERVISOR, Permission.CLIENT_WRITE));
+  });
 });

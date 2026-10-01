@@ -8,12 +8,11 @@ import {
   creditFormState,
   DEFAULT_ARREARS_METHOD,
   initialCreditForm,
-  memberName,
   registrationSituation,
   type ArrearsMethod,
   type CreditDetail,
   type CreditForm,
-  type Member,
+  type Assignee,
 } from '@kobrax/shared';
 import { PageHeader, Section } from '@/components/panel-ui';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
@@ -39,13 +38,14 @@ import { todayIso } from '@/lib/format';
 export function LoanForm({
   clientId,
   clientName,
-  team,
+  assignees,
   currency,
   defaultArrearsMethod,
 }: {
   clientId: string;
   clientName: string;
-  team: Member[];
+  /** A quién se puede asignar (vacío sin `assignment:write`: queda a cargo de quien lo da de alta). */
+  assignees: Assignee[];
   currency: string;
   /** El método de mora por defecto de la cuenta (D20). */
   defaultArrearsMethod?: ArrearsMethod;
@@ -135,13 +135,13 @@ export function LoanForm({
             form={form}
             onChange={setForm}
             assignee={
-              team.length > 0 ? (
+              assignees.length > 0 ? (
                 <Field label={t('form.assignedTo')}>
                   <Select value={manager} onChange={(e) => setManager(e.target.value)}>
                     <option value="">{t('form.unassigned')}</option>
-                    {team.map((m) => (
-                      <option key={m.userId} value={m.userId}>
-                        {memberName(m)}
+                    {assignees.map((a) => (
+                      <option key={a.userId} value={a.userId}>
+                        {a.isMe ? t('form.meNamed', { name: a.name }) : a.name}
                       </option>
                     ))}
                   </Select>
