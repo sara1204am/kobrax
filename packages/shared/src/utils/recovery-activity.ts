@@ -35,6 +35,8 @@ export const RECOVERY_RESULTS_BY_TYPE: Record<RecoveryActivityType, readonly Rec
 export const RECOVERY_NOTES_MAX_LENGTH = 1000;
 
 export interface RecoveryActivityInput {
+  /** Lo pone el móvil para que reintentar sin red no duplique la gestión. */
+  id?: string;
   type: string;
   result?: string;
   notes?: string;

@@ -1,12 +1,11 @@
-> **ESTADO: EN BORRADOR — ronda 1 (2026-10-02). NO construir hasta PASS de `/f10-validar-plan`.**
+> **ESTADO: PLAN COMPLETO — ronda 2 (2026-10-02), decisiones confirmadas por la usuaria. Pendiente: PASS de `/f10-validar-plan`.**
 
-## ⏸️ Pendiente de confirmar
+## ✅ Decisiones cerradas (ronda 2)
 
-- [ ] **Pantallas:** no hay mockup Figma de Mora (el `ui-screen-map` no la menciona). ¿Se construye con los componentes existentes (`CaseCard`/`ListRow`/`StatusBadge`/`BottomSheet`) o hay diseño que traer?
-- [ ] **Dónde vive la lista:** pestaña nueva, vista dentro de `cobranza.tsx`, o chip «En mora» que pase a leer `GET /mora`.
-- [ ] **Nombre/número de etapa y rama.** Este plan se llama `plans/mora/` (módulo, como Cartera/Agenda/Rutas). Rama propuesta: `f10/mora`, **desde `feat/mora-central-f1`** (la API de `/mora` aún no está en `main`).
-- [ ] **Corrección al plan F4 (T17):** ver «Hallazgo» — no se reusa `groupPortfolio`.
-- [ ] **Deps nuevas:** ninguna prevista.
+1. **Idempotencia:** `POST /mora/:creditId/activities` acepta `id` opcional (hecho en `7e27557`; reintento con el mismo id devuelve lo guardado, 409 `MORA_004` si es de otro crédito).
+2. **Pantallas:** sin Figma; se construye con los componentes del sistema y la usuaria valida a ojo.
+3. **Lista:** dentro de `cobranza.tsx`; el chip «En mora» pasa a leer `GET /mora` (no `groupPortfolio`).
+4. **Rama:** `f10/mora` desde `feat/mora-central-f1`.
 
 # Mora móvil — la central de mora del cobrador
 
@@ -63,7 +62,7 @@ F4 T17 dice «reusar `groupPortfolio`». **No sirve:** `groupPortfolio` agrupa *
 | Tipo de caché `mora` / `mora.detail` | EXTENDER | `CacheKind` en `src/db.ts` |
 | Hidratación en oficina | EXTENDER | `src/sync/hydrate.ts`: un paso «mora» que **copia la llamada de la pantalla** (regla del archivo) + fichas de los créditos hasta `MAX_FICHAS` |
 | Cola de escritura | EXTENDER | `src/sync/queue.ts`: `QueuedAction` + `ACTION_LABEL` + `send()`; `QueueKind` en `db.ts` |
-| Gestión con resultado y promesa | EXTENDER | acción nueva `mora.activity` (id del teléfono) sobre `POST /mora/:creditId/activities`; **idempotencia a confirmar** (ver riesgos) |
+| Gestión con resultado y promesa | EXTENDER | acción nueva `mora.activity` (id del teléfono) sobre `POST /mora/:creditId/activities`; id del teléfono (`nuevoId()`), el endpoint ya es idempotente por id |
 | Nota | NUEVO (acción de cola) | `credit.note`, id vía `nuevoId()` (`src/ids.ts`) |
 | Pago | REUSAR | `createPayment` + acción `payment` de la cola; `AmountInput` de `ui.tsx` |
 | Visita | REUSAR | `app/rutas/resultado.tsx` + acción `visit` |
@@ -120,7 +119,7 @@ F4 T17 dice «reusar `groupPortfolio`». **No sirve:** `groupPortfolio` agrupa *
 
 ## 12. Riesgos / decisiones abiertas
 
-1. **Idempotencia de `POST /mora/:creditId/activities`.** (Verificado 2026-10-02 en `mora.dto.ts`.) Su DTO **no** acepta `id` del teléfono (sí lo acepta la nota). Si se encola sin llave, un reintento duplica la gestión. Opciones: (a) añadir `id` opcional al endpoint (cambio chico de API, como en la nota) o (b) usar `POST /cases/:id/activities` sólo cuando hay caso. **Recomiendo (a).** Hay que verificarlo en el código antes de codear.
+1. ~~Idempotencia de la gestión~~ ✅ resuelta: el endpoint ya acepta `id` (`7e27557`).
 2. **Caché de mora desactualizado:** se muestra «datos de las HH:MM»; sin resolución de conflictos (todo append-only).
 3. `cliente/[id].tsx` (880 líneas): la extracción de hojas es el riesgo de regresión; se hace con tests primero.
 4. El filtro «Sin gestión N días» depende de `noActionSince` del servidor; confirmar que cabe en la clave de caché por query.
