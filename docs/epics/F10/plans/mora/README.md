@@ -1,4 +1,4 @@
-> **ESTADO: PLAN COMPLETO — ronda 2 (2026-10-02), decisiones confirmadas por la usuaria. Pendiente: PASS de `/f10-validar-plan`.**
+> **ESTADO: PLAN COMPLETO — ronda 2 (2026-10-02). Validador: PASS en la 2.ª pasada (ver fin del archivo).**
 
 ## ✅ Decisiones cerradas (ronda 2)
 
@@ -35,16 +35,18 @@ El cobrador ve **sus créditos en mora, uno por crédito**, con y sin señal, ab
 
 ## 5. Contrato (API ya construida y verificada en esta rama)
 
+El prefijo `/api` ya lo pone `API_BASE` (`src/api.ts`): los services pasan `/mora/...` a `apiQuery`/`apiMutate`, y las tablas de abajo lo muestran completo.
+
 | Uso | Endpoint | Notas |
 |---|---|---|
 | Lista | `GET /api/mora` | `case:read`; el cobrador sólo ve lo suyo (el server acota). Orden `priority`/`daysPastDue`/`balance`/`lastAction`; filtros `hasPromise`, `priority`, `noActionSince`, `q`, `limit≤100`. Piso `días ≥ 1` por defecto. |
 | Ficha | `GET /api/mora/:creditId` | `MoraCreditDetail` (lista + gestiones del caso abierto). |
-| Historial/métricas | `GET /mora/:creditId/episodes`, `/metrics` | Móvil: sólo mora actual y última (§5 F4); métricas opcionales. |
-| Promesas / notas | `GET /mora/:creditId/promises`, `/notes` | |
-| Gestión | `POST /mora/:creditId/activities` | Resultado + promesa; abre el caso si no hay. **Reemplaza** al `POST /cases/:id/activities` previsto en F4 §4 para este flujo: sirve también a créditos **sin caso** (21 de 22 en la base de desarrollo). |
-| Nota | `POST /mora/:creditId/notes` | `id` opcional puesto por el teléfono → reintento idempotente (`MORA_003` si el id es de otro crédito). |
-| Pago | `POST /payments` + `Idempotency-Key` | ya existe (`createPayment`). |
-| Visita | `POST /visits` | ya existe (`createVisit`), vía `rutas/resultado`. |
+| Historial/métricas | `GET /api/mora/:creditId/episodes`, `/metrics` | Móvil: sólo mora actual y última (§5 F4); métricas opcionales. |
+| Promesas / notas | `GET /api/mora/:creditId/promises`, `/notes` | |
+| Gestión | `POST /api/mora/:creditId/activities` | Resultado + promesa; abre el caso si no hay. **Reemplaza** al `POST /cases/:id/activities` previsto en F4 §4 para este flujo: sirve también a créditos **sin caso** (21 de 22 en la base de desarrollo). |
+| Nota | `POST /api/mora/:creditId/notes` | `id` opcional puesto por el teléfono → reintento idempotente (`MORA_003` si el id es de otro crédito). |
+| Pago | `POST /api/payments` + `Idempotency-Key` | ya existe (`createPayment`). |
+| Visita | `POST /api/visits` | ya existe (`createVisit`), vía `rutas/resultado`. |
 
 Tipos: **todos en `@kobrax/shared`** (`MoraCreditListItem`, `MoraCreditDetail`, `MoraPromise`, `CreditNote`, `NewCreditNote`, `MORA_SORTS`, `RECOVERY_RESULTS`, `validateRecoveryActivity`, `summarizePromises`, `computeRecoveryMetrics`). El móvil no redefine ninguno.
 
@@ -123,3 +125,8 @@ F4 T17 dice «reusar `groupPortfolio`». **No sirve:** `groupPortfolio` agrupa *
 2. **Caché de mora desactualizado:** se muestra «datos de las HH:MM»; sin resolución de conflictos (todo append-only).
 3. `cliente/[id].tsx` (880 líneas): la extracción de hojas es el riesgo de regresión; se hace con tests primero.
 4. El filtro «Sin gestión N días» depende de `noActionSince` del servidor; confirmar que cabe en la clave de caché por query.
+
+## Validación
+
+- 1.ª pasada: FAIL — pantallas aún «pendientes», prefijo `/api` sin decir, cambio de `cobranza.tsx` sin definir.
+- 2.ª pasada (2026-10-02): PASS — corregidos los tres; ítems 1–16 verificados contra código (`nuevoId` en `src/ids.ts`, `MiniMapCard`, `currentLocation`, `cachedList`, `API_BASE`). Advertencia: sin node-ids por no existir diseño (confirmado por la usuaria).
