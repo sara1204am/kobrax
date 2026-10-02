@@ -7,16 +7,17 @@ const CREDIT = '11111111-1111-4111-8111-111111111111';
 const FUTURE = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
 const PROMISE = { amount: 500, promiseDate: FUTURE, paymentMethodCode: 'CASH' };
 
-function make(opts: { visible?: boolean; previous?: { creditId: string }; openCase?: string | null; raced?: string; createFails?: boolean; permissions?: string[] } = {}) {
+function make(opts: { visible?: boolean; previous?: { creditId: string }; lateWinner?: boolean; openCase?: string | null; raced?: string; createFails?: boolean; permissions?: string[] } = {}) {
   const calls = { created: [] as Record<string, unknown>[], added: [] as { caseId: string; dto: Record<string, unknown> }[], queries: [] as { sql: string; values: unknown[] }[] };
   let caseLookups = 0;
+  let activityLookups = 0;
   const tx = {
     $queryRaw: async (q: { sql: string; values: unknown[] }) => {
       calls.queries.push({ sql: q.sql, values: q.values });
       return opts.visible === false ? [] : [{ id: CREDIT, client_id: 'cl1' }];
     },
     caseActivity: {
-      findFirst: async () => (opts.previous ? { id: 'act-previa', type: 'CALL', createdAt: new Date('2026-10-02T09:00:00Z'), caseId: 'case-1', case: { creditId: opts.previous.creditId } } : null),
+      findFirst: async () => (opts.lateWinner ? (activityLookups++ === 0 ? null : { id: 'act-ganadora', type: 'CALL', createdAt: new Date('2026-10-02T09:00:00Z'), caseId: 'case-1', case: { creditId: CREDIT } }) : opts.previous ? { id: 'act-previa', type: 'CALL', createdAt: new Date('2026-10-02T09:00:00Z'), caseId: 'case-1', case: { creditId: opts.previous.creditId } } : null),
     },
     collectionCase: {
       findFirst: async () => {
@@ -36,6 +37,8 @@ function make(opts: { visible?: boolean; previous?: { creditId: string }; openCa
     },
     addActivity: async (caseId: string, dto: Record<string, unknown>) => {
       calls.added.push({ caseId, dto });
+      // Dos envíos con el mismo id a la vez: el otro ganó y la unicidad de la base rechaza a éste.
+      if (opts.lateWinner) throw Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
       return { id: 'act1', type: dto.type, createdAt: new Date('2026-10-02T10:00:00Z') };
     },
   };
@@ -157,5 +160,12 @@ describe('MoraService.addActivity — id puesto por el teléfono (reintento sin 
   it('sobre un crédito que no puede ver, 404 aunque traiga id', async () => {
     const { service } = make({ visible: false, previous: { creditId: CREDIT } });
     await assert.rejects(() => service.addActivity(CREDIT, { id: ID, type: 'CALL', result: 'NO_ANSWER' }), NotFoundException);
+  });
+
+  it('🔴 dos envíos con el mismo id a la vez: el que pierde recibe la gestión del ganador, no un 500', async () => {
+    const { service } = make({ openCase: 'case-1', lateWinner: true });
+    const res = await service.addActivity(CREDIT, { id: ID, type: 'CALL', result: 'NO_ANSWER' });
+    assert.equal(res.data!.id, 'act-ganadora');
+    assert.equal(res.data!.caseOpened, false);
   });
 });
