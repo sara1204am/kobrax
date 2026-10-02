@@ -20,6 +20,7 @@ Decisiones C1–C4 resueltas el 2026-10-01 (ver §9.C). Sin bloqueantes abiertos
 | T7 export web | ✅ | Botones «Exportar CSV/PDF» en la tabla (con `case:export`) + proxy `app/api/mora/export`. La query sale de `moraExportQuery` (la misma de la lista, sin página). |
 | T9 persona / T14 pagos y promesas / T12 notas | ✅ | Secciones de la ficha: Notas, Promesas de pago, Pagos y La persona. Ver «Secciones de la ficha» abajo. Migración `20261003030000_notas_de_credito` sin aplicar en la base de desarrollo. |
 | T13 formulario de gestión con resultado y promesa | ✅ | `POST /mora/:creditId/activities` + `RegisterActivityButton`. Ver «Formulario de gestión» abajo. |
+| T16 contratos finales | ✅ | Ya estaban en `mora.types.ts`: `MoraCreditDetail`, `MoraEpisode`, `MoraPromise`, `CreditNote`, `NewCreditNote`. La gestión es `MoraActivityItem` (no se creó `RecoveryActivityItem`: la ficha sólo muestra gestiones del caso) y las etiquetas de resultado son `RECOVERY_RESULTS`. Web, api y mobile compilan con el mismo tipo. |
 | T15 métricas de recuperación | ✅ | `GET /mora/:creditId/metrics` + sección «Recuperación». Ver «Métricas de recuperación» abajo. |
 | T16, T17–T19 | ⏳ pendientes | |
 
