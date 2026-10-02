@@ -94,14 +94,14 @@ F4 T17 dice «reusar `groupPortfolio`». **No sirve:** `groupPortfolio` agrupa *
 - [x] `hydrate.ts`: paso «mora» con **los mismos parámetros** que la pantalla + test de que se hidrata.
 
 **M2 — ficha y acciones (T18)**
-- [ ] Extraer `PaySheet`/`GestionSheet` de `cliente/[id].tsx` con tests antes de tocar.
-- [ ] `app/mora/[creditId].tsx`: cabecera (cliente, crédito, saldo, mora, prioridad), acciones llamar / WhatsApp / visita / gestión / pago / nota; secciones contactos+direcciones, últimas gestiones, promesas, notas, pagos.
-- [ ] Llamar/visitar/registrar en ≤ 3 toques.
+- [x] Extraer `PaySheet`/`GestionSheet` de `cliente/[id].tsx` con tests antes de tocar.
+- [x] `app/mora/[creditId].tsx`: cabecera (cliente, crédito, saldo, mora, prioridad), acciones llamar / WhatsApp / visita / gestión / pago / nota; secciones contactos+direcciones, últimas gestiones, promesas, notas, pagos.
+- [x] Llamar/visitar/registrar en ≤ 3 toques (ficha → botón → hoja). **Desviación:** «visita» se registra como gestión `VISIT`; `rutas/resultado` exige una parada de ruta.
 
 **M3 — offline (T19)**
-- [ ] Acciones de cola `credit.note` y `mora.activity`; `ACTION_LABEL`; `send()`; `QueueKind`.
-- [ ] Tests: sin red → encola; reconexión → drena FIFO; 4xx → `REJECTED` en pendientes; nota reintentada no duplica.
-- [ ] Evidencia: flujo actual `choosePhoto`/`uploadImage` **dentro de `visit`**. Firma y hash local quedan fuera (P8-firma diferida a v2 por decisión del 2026-08-06): brecha documentada.
+- [x] Acciones de cola `credit.note` y `mora.activity`; `ACTION_LABEL`; `send()`; `QueueKind`.
+- [x] Tests: sin red → encola; reconexión → drena FIFO; 4xx → `REJECTED` en pendientes; nota reintentada no duplica.
+- [x] Evidencia: flujo actual `choosePhoto`/`uploadImage` **dentro de `visit`**. Firma y hash local quedan fuera (P8-firma diferida a v2 por decisión del 2026-08-06): brecha documentada.
 
 ## 10. Reglas de la fase
 

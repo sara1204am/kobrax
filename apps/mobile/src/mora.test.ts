@@ -1,5 +1,5 @@
-import { CasePriority, CaseStatus, type MoraCreditListItem } from '@kobrax/shared';
-import { daysSinceAction, filterMora, matchesMoraChip, moraCardProps, NO_ACTION_DAYS, sortMora, staleLine, toMoraRows, type MoraRow } from './mora';
+import { CasePriority, CaseStatus, MORA_PROMISE_STATUSES, type MoraCreditListItem } from '@kobrax/shared';
+import { activityLine, daysSinceAction, filterMora, matchesMoraChip, moraCardProps, NO_ACTION_DAYS, PROMISE_STATUS_META, sortMora, staleLine, toMoraRows, type MoraRow } from './mora';
 
 const ASOF = new Date('2026-10-02T12:00:00Z');
 
@@ -132,5 +132,26 @@ describe('staleLine', () => {
 
   it('con marca, dice de qué hora son los datos', () => {
     expect(staleLine(new Date(2026, 9, 2, 8, 5).getTime())).toBe('Sin señal · datos de las 08:05');
+  });
+});
+
+describe('activityLine', () => {
+  it('tipo y resultado en español', () => {
+    expect(activityLine({ type: 'CALL', result: 'NO_ANSWER' })).toBe('Llamada · No contesta');
+    expect(activityLine({ type: 'VISIT', result: 'NOT_FOUND' })).toBe('Visita · No estaba');
+  });
+
+  it('sin resultado, sólo el tipo', () => {
+    expect(activityLine({ type: 'NOTE' })).toBe('Nota');
+  });
+
+  it('lo desconocido se muestra tal cual en vez de esconderse', () => {
+    expect(activityLine({ type: 'ALGO_NUEVO', result: 'RARO' })).toBe('ALGO_NUEVO · RARO');
+  });
+});
+
+describe('PROMISE_STATUS_META', () => {
+  it('cubre todos los estados que manda el servidor', () => {
+    for (const s of MORA_PROMISE_STATUSES) expect(PROMISE_STATUS_META[s].label).toBeTruthy();
   });
 });

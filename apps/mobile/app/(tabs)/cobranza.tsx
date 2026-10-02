@@ -315,8 +315,7 @@ function MoraRowCard({ row, asOf }: { row: MoraRow; asOf: Date }) {
         amount={p.amount}
         amountDanger
         badge={p.badge}
-        // M2 lo lleva a la ficha de mora; mientras, abre la ficha del deudor.
-        onPress={() => router.push(`/cliente/${row.clientId}`)}
+        onPress={() => router.push(`/mora/${row.creditId}`)}
       />
     </View>
   );

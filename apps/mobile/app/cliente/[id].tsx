@@ -3,14 +3,14 @@ import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, Styl
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { addPeriods, calculateCredit, isUnknownField, PaymentFrequency, portfolioStatus, RatePeriod } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
-import { AmountInput, BottomSheet, Chips, EmptyState, Header, PORTFOLIO_STATUS_META, SectionLabel, StatusBadge } from '@/ui';
+import { ActionBtn, AmountInput, BottomSheet, Chips, DataRow, EmptyState, Header, PORTFOLIO_STATUS_META, SectionLabel, StatusBadge } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
 import { money, timeSlotRange } from '@/agenda-form';
 import { MiniMapCard, type MiniMapPoint } from '@/maps/MiniMapCard';
 import { clientContext, type AgendaClientContext, type CreditOption } from '@/agenda.service';
 import { clientDisplayName, getClient, type ClientDetail } from '@/clients.service';
-import { addActivity, getCase, type CaseDetail, type NewActivity } from '@/cases.service';
-import { createPayment, listPayments, type PaymentItem } from '@/payments.service';
+import { addActivity, getCase, type CaseDetail } from '@/cases.service';
+import { listPayments, type PaymentItem } from '@/payments.service';
 import { clearArrears, getCredit, markArrears, type CreditDetail } from '@/credits.service';
 import { PlanSheet, prettyDay } from '@/credit-terms-view';
 import { DEFINITION_LABEL, FREQUENCY_LABEL, IMPORT_FIELD_LABEL, ORIGIN_LABEL, RATE_PERIOD_LABEL, UNKNOWN } from '@/credit-labels';
@@ -19,6 +19,8 @@ import { getUserId } from '@/session';
 import { queueForLater } from '@/sync/sync.service';
 import { buildTimeline, onlyDigits, queuedPayments, recovery, type TimelineEntry } from '@/ficha';
 import { PaySheet } from '@/pay-sheet';
+import { submitPayment } from '@/payment-submit';
+import { registrarRastro } from '@/trace';
 import { GestionSheet, prettyDate } from '@/gestion-sheet';
 
 /** Las dos acciones de mora, ya en la forma en la que viajan por la cola. */
@@ -448,25 +450,11 @@ export default function ClienteFichaScreen() {
             // La hora del cobro, no la de la sincronización: si queda en la cola, viaja con ella.
             paymentDate: new Date().toISOString(),
           };
-          const res = await createPayment(input, idemKey);
-          if (res.status === 'ok') { setPaySheet(false); await loadCase(selected.caseId, selected.creditId); return null; }
-          if (res.status === 'offline') {
-            // El cobro se guarda en el teléfono y sube solo. La clave de idempotencia es la que ya
-            // generó el sheet, así que cuando salga no puede cobrarle dos veces al deudor. Si la
-            // foto quedó sin subir, viaja con él y la sube la cola.
-            const guardado = await queueForLater({
-              kind: 'payment',
-              input,
-              idempotencyKey: idemKey,
-              photo: receipt?.local,
-            });
-            if (!guardado) return 'Sin conexión y no se pudo guardar en el teléfono. Reintentá.';
-            setPaySheet(false);
-            await loadCase(selected.caseId, selected.creditId);
-            return null;
-          }
-          if (res.status === 'unauthenticated') return 'Tu sesión venció.';
-          return res.message;
+          const err = await submitPayment(input, idemKey, receipt);
+          if (err) return err;
+          setPaySheet(false);
+          await loadCase(selected.caseId, selected.creditId);
+          return null;
         }}
       />
 
@@ -602,35 +590,6 @@ function MoraSheet({
   );
 }
 
-/**
- * Deja constancia de que se llamó, se escribió por WhatsApp o se fue a la dirección. Sin señal se
- * encola: son las tres acciones más usadas en la calle, y perderlas dejaba el historial del deudor
- * sin rastro de que el cobrador lo intentó — que es justo lo que después se le reclama.
- *
- * No espera ni avisa: es un rastro, no la acción principal. Lo que el cobrador pidió (llamar, abrir
- * el mapa) ya está pasando.
- */
-async function registrarRastro(caseId: string, input: NewActivity): Promise<void> {
-  const res = await addActivity(caseId, input);
-  if (res.status === 'offline') await queueForLater({ kind: 'case.activity', caseId, input });
-}
-
-function ActionBtn({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) {
-  return (
-    <Pressable style={styles.action} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
-      <Text style={styles.actionIcon}>{icon}</Text>
-      <Text style={styles.actionLabel}>{label}</Text>
-    </Pressable>
-  );
-}
-function DataRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.dataRow}>
-      <Text style={styles.dataLabel}>{label}</Text>
-      <Text style={styles.dataValue}>{value}</Text>
-    </View>
-  );
-}
 function TimelineRow({ e, currency }: { e: TimelineEntry; currency: string }) {
   const isPay = e.kind === 'payment';
   return (
@@ -663,9 +622,6 @@ const styles = StyleSheet.create({
   hint: { backgroundColor: COLORS.highlight, borderRadius: RADIUS.card, padding: SPACING.md, gap: 2 },
   hintTitle: { ...TYPE.body, color: COLORS.navy, fontWeight: '700' },
   actions: { flexDirection: 'row', gap: SPACING.sm },
-  action: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: SPACING.md, backgroundColor: COLORS.white, borderRadius: RADIUS.card, borderWidth: 1, borderColor: COLORS.border },
-  actionIcon: { fontSize: 22 },
-  actionLabel: { ...TYPE.caption, color: COLORS.navy, fontWeight: '600' },
   card: { backgroundColor: COLORS.white, borderRadius: RADIUS.card, borderWidth: 1, borderColor: COLORS.border, padding: SPACING.lg },
   cardTitle: { ...TYPE.caption, color: COLORS.muted, textTransform: 'uppercase', fontWeight: '700' },
   cardBig: { fontSize: 26, fontWeight: '700', color: COLORS.navy, marginTop: 2 },
@@ -674,9 +630,6 @@ const styles = StyleSheet.create({
   progressTrack: { height: 8, borderRadius: 4, backgroundColor: COLORS.lightBg, overflow: 'hidden' },
   progressFill: { height: 8, backgroundColor: COLORS.success },
   collapse: { ...TYPE.body, color: COLORS.navy, fontWeight: '600' },
-  dataRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
-  dataLabel: { ...TYPE.secondary, color: COLORS.text2 },
-  dataValue: { ...TYPE.secondary, color: COLORS.navy, fontWeight: '600', textTransform: 'capitalize' },
   line: { ...TYPE.body, color: COLORS.text, paddingVertical: 4 },
   tlRow: { flexDirection: 'row', gap: SPACING.sm, paddingVertical: SPACING.sm, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   tlIcon: { fontSize: 18 },

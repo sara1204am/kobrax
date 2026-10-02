@@ -8,7 +8,7 @@
  * El teléfono sólo ordena y filtra lo que llegó. Qué es mora, cuánto se debe y qué prioridad tiene lo
  * decide el servidor (`packages/shared` + API).
  */
-import { CasePriority, type MoraCreditListItem } from '@kobrax/shared';
+import { CasePriority, type MoraCreditListItem, type MoraNoteKind, type MoraPromiseStatus } from '@kobrax/shared';
 import { money } from './agenda-form';
 import { CASE_PRIORITY_LABEL } from './ui';
 import type { BadgeTone } from './ui';
@@ -138,4 +138,50 @@ export function staleLine(localAt: number | null | undefined): string | undefine
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
   return `Sin señal · datos de las ${hh}:${mm}`;
+}
+
+/** Cómo se llama y de qué color va cada estado de una promesa. El estado lo calcula el servidor. */
+export const PROMISE_STATUS_META: Record<MoraPromiseStatus, { label: string; tone: BadgeTone }> = {
+  ACTIVE: { label: 'Vigente', tone: 'info' },
+  OVERDUE: { label: 'Vencida', tone: 'danger' },
+  KEPT: { label: 'Cumplida', tone: 'success' },
+  BROKEN: { label: 'Incumplida', tone: 'danger' },
+  EXECUTED: { label: 'Ejecutada', tone: 'success' },
+  CANCELLED: { label: 'Cancelada', tone: 'neutral' },
+  RESCHEDULED: { label: 'Reagendada', tone: 'warning' },
+};
+
+export const NOTE_KIND_LABEL: Record<MoraNoteKind, string> = {
+  INFO: 'Informativa',
+  WARNING: 'Advertencia',
+  IMPORTANT: 'Importante',
+};
+
+const ACTIVITY_TYPE_LABEL: Record<string, string> = {
+  CALL: 'Llamada',
+  VISIT: 'Visita',
+  MESSAGE: 'Mensaje',
+  NOTE: 'Nota',
+  PAYMENT: 'Pago',
+  STATUS_CHANGE: 'Cambio de estado',
+  ASSIGNMENT: 'Asignación',
+};
+
+const RESULT_LABEL: Record<string, string> = {
+  CONTACTED: 'Contactado',
+  NO_ANSWER: 'No contesta',
+  NO_CONTACT: 'No contesta',
+  WRONG_NUMBER: 'Número equivocado',
+  NOT_FOUND: 'No estaba',
+  WRONG_ADDRESS: 'Dirección equivocada',
+  REFUSAL: 'Se negó a pagar',
+  PROMISE_TO_PAY: 'Promesa de pago',
+  PARTIAL_PAYMENT: 'Pago parcial',
+  PAID: 'Pagó',
+};
+
+/** «Llamada · No contesta». Lo que el servidor mande y no se conozca se muestra tal cual, no se esconde. */
+export function activityLine(a: { type: string; result?: string }): string {
+  const type = ACTIVITY_TYPE_LABEL[a.type] ?? a.type;
+  return a.result ? `${type} · ${RESULT_LABEL[a.result] ?? a.result}` : type;
 }

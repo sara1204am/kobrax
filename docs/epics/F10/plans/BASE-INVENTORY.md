@@ -160,3 +160,19 @@
     `cliente/editar` son hasta 16 llamadas —contactos, direcciones, relaciones— y las altas devuelven
     ids que los cambios posteriores usan. Encolar sólo el PATCH suelto perdería el resto del mismo
     guardado. Para hacerlo bien hay que llevar el id propuesto a esas cuatro entidades.
+- ✅ **Mora móvil** (`plans/mora/`, F4/07 T17–T19) sumó:
+  - Lista por crédito en `cobranza.tsx` (chip «En mora» → `GET /mora`, **no** `groupPortfolio`) y la ficha
+    `app/mora/[creditId].tsx`. Lógica pura en `src/mora.ts` (orden, chips, `moraCardProps`, `activityLine`,
+    `staleLine`); lectura en `src/mora.service.ts` (`CacheKind` `mora`, `mora.detail`, `mora.promises`,
+    `mora.notes`); escritura en `src/mora-actions.ts` (`submitMoraActivity`, `submitMoraNote`, `MORA_OUTCOMES`).
+  - Cola: `mora.activity` y `credit.note`, **idempotentes por el `id` que pone el teléfono** (el endpoint
+    `POST /mora/:creditId/activities` lo acepta desde `7e27557`; la nota ya lo aceptaba).
+  - **Extraídos de `cliente/[id].tsx` sin cambiar comportamiento** para reusarlos: `src/pay-sheet.tsx`
+    (`PaySheet`, `METHODS`, `Comprobante`), `src/gestion-sheet.tsx` (`GestionSheet` con prop `outcomes`,
+    `CLIENTE_OUTCOMES`, `prettyDate`, `todayIso`), `src/payment-submit.ts` (`submitPayment`), `src/trace.ts`
+    (`registrarRastro`), `onlyDigits` en `src/ficha.ts`, y `ActionBtn`/`DataRow` en `src/ui.tsx`.
+  - Nuevo: `src/note-sheet.tsx`, `listCreditPayments` en `payments.service.ts`.
+  - ⚠ **`hydrate` baja `GET /mora?limit=100`** con los mismos parámetros que la Cobranza, y las fichas de los
+    deudores en mora aunque no tengan caso.
+  - ⚠ **«Visita» en mora se registra como gestión `VISIT` con resultado**, no por `rutas/resultado` (esa
+    pantalla exige una parada de ruta). Evidencia con foto/GPS sigue siendo la del flujo de rutas.

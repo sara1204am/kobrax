@@ -885,3 +885,32 @@ const styles = StyleSheet.create({
   offlinePending: { backgroundColor: COLORS.lightBg },
   offlineText: { ...TYPE.secondary, color: COLORS.warningText, textAlign: 'center', fontWeight: '600' },
 });
+
+/** Botón de acción de una ficha (Llamar, WhatsApp, Pago…): ícono arriba, etiqueta abajo. Lo usan la ficha del deudor y la de mora. */
+export function ActionBtn({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) {
+  return (
+    <Pressable style={fichaStyles.action} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
+      <Text style={fichaStyles.actionIcon}>{icon}</Text>
+      <Text style={fichaStyles.actionLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/** Una línea «etiqueta · valor» de una ficha. */
+export function DataRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={fichaStyles.dataRow}>
+      <Text style={fichaStyles.dataLabel}>{label}</Text>
+      <Text style={fichaStyles.dataValue}>{value}</Text>
+    </View>
+  );
+}
+
+const fichaStyles = StyleSheet.create({
+  action: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: SPACING.md, backgroundColor: COLORS.white, borderRadius: RADIUS.card, borderWidth: 1, borderColor: COLORS.border },
+  actionIcon: { fontSize: 22 },
+  actionLabel: { ...TYPE.caption, color: COLORS.navy, fontWeight: '600' },
+  dataRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
+  dataLabel: { ...TYPE.secondary, color: COLORS.text2 },
+  dataValue: { ...TYPE.secondary, color: COLORS.navy, fontWeight: '600', textTransform: 'capitalize' },
+});

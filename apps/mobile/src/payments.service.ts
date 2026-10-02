@@ -35,3 +35,9 @@ export function listPaymentsByDay(day: string): Promise<QueryResult<PaymentItem[
 export function createPayment(input: NewPayment, idempotencyKey: string): Promise<MutateResult<PaymentItem>> {
   return apiMutate<PaymentItem>('/payments', 'POST', input, { 'idempotency-key': idempotencyKey });
 }
+
+/** Los pagos de un crédito (la ficha de mora los muestra aunque el crédito no tenga caso). */
+export function listCreditPayments(creditId: string): Promise<QueryResult<PaymentItem[]>> {
+  const query = toQuery({ creditId, limit: 100 });
+  return cachedList<PaymentItem>('payment', query, () => apiQuery<PaymentItem[]>(`/payments${query}`));
+}
