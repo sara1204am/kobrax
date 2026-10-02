@@ -17,6 +17,7 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
   [RoleType.ACCOUNT_ADMIN]: Object.values(Permission).filter((p) => p !== Permission.AUDIT_READ),
   [RoleType.MANAGER]: [
     Permission.CASE_READ,
+    Permission.CASE_EXPORT,
     Permission.CASE_WRITE,
     Permission.CASE_ASSIGN,
     Permission.CASE_CLOSE,
@@ -46,6 +47,7 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
   ],
   [RoleType.SUPERVISOR]: [
     Permission.CASE_READ,
+    Permission.CASE_EXPORT,
     Permission.CASE_WRITE,
     Permission.CASE_ASSIGN,
     Permission.PAYMENT_READ,
@@ -69,6 +71,7 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
   ],
   [RoleType.COLLECTOR]: [
     Permission.CASE_READ,
+    Permission.CASE_EXPORT,
     Permission.CASE_WRITE,
     Permission.PAYMENT_READ,
     Permission.PAYMENT_WRITE,
@@ -93,6 +96,7 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
   ],
   [RoleType.AUDITOR]: [
     Permission.CASE_READ,
+    Permission.CASE_EXPORT,
     Permission.PAYMENT_READ,
     Permission.ROUTE_READ,
     Permission.CLIENT_READ,
@@ -107,6 +111,7 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
   ],
   [RoleType.VIEWER]: [
     Permission.CASE_READ,
+    Permission.CASE_EXPORT,
     Permission.PAYMENT_READ,
     Permission.ROUTE_READ,
     Permission.CLIENT_READ,

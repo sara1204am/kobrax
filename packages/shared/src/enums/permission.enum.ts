@@ -15,6 +15,8 @@ export enum Permission {
   CASE_WRITE = 'case:write',
   CASE_ASSIGN = 'case:assign',
   CASE_CLOSE = 'case:close',
+  /** Descargar la lista de Mora (CSV/PDF) con el filtro y el alcance de quien la baja. No es `report:export`. */
+  CASE_EXPORT = 'case:export',
 
   PAYMENT_READ = 'payment:read',
   PAYMENT_WRITE = 'payment:write',
