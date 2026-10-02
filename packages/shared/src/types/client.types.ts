@@ -63,6 +63,39 @@ export interface NewCollateralInput {
   creditIds?: string[];
 }
 
+/** Lo que se pregunta antes del alta: con qué datos se va a crear la persona. */
+export interface ClientDuplicateCheckInput {
+  clientType: 'PERSON' | 'COMPANY';
+  nationalId?: string;
+  firstName?: string;
+  lastName?: string;
+  businessName?: string;
+}
+
+/** Un cliente que ya existe y podría ser la misma persona. Sin PII en claro: el carnet va enmascarado. */
+export interface ClientDuplicateMatch {
+  id: string;
+  displayName: string;
+  /** Carnet enmascarado (`12345***`), o `null` si no tiene. */
+  maskedDocument: string | null;
+  status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
+  creditCount: number;
+  /** Dado de baja: sigue ocupando su carnet (el índice único no los excluye), pero no tiene ficha. */
+  deleted: boolean;
+  /** Se llama igual pero tiene OTRO carnet cargado: puede ser un homónimo, o el mismo con un error. */
+  otherDocument: boolean;
+}
+
+/**
+ * Posibles duplicados de un alta.
+ *  - `document`: alguien ya tiene ese carnet → **bloquea**, el servidor rechazaría el alta (`CLIENT_DUP`).
+ *  - `names`: se llaman igual (sin tildes, mayúsculas ni orden de palabras) → **avisa**: hay homónimos.
+ */
+export interface ClientDuplicateCheck {
+  document: ClientDuplicateMatch | null;
+  names: ClientDuplicateMatch[];
+}
+
 /** Alta atómica: cliente + contactos + ubicaciones + relaciones en una transacción. */
 export interface NewClientInput {
   /**

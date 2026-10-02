@@ -2131,6 +2131,19 @@
       "errors": {
         "generic": "Could not save. Try again."
       }
+    },
+    "duplicate": {
+      "checking": "Checking whether they already exist…",
+      "documentTaken": "This ID already belongs to {name}.",
+      "documentTakenDeleted": "This ID belongs to {name}, who was removed. It cannot be used for a new client.",
+      "documentHint": "If it is the same person, open their profile instead of creating them again.",
+      "openClient": "View client",
+      "namesTitle": "{n, plural, one {There is already a client with this name} other {There are already # clients with this name}}",
+      "namesText": "It may be the same person. Check them before creating a new one.",
+      "otherDocument": "different ID",
+      "noDocument": "no ID",
+      "credits": "{n, plural, =0 {no credits} one {# credit} other {# credits}}",
+      "acceptNames": "It is a different person, create anyway"
     }
   },
   "team": {

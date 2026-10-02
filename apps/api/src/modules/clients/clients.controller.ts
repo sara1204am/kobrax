@@ -20,6 +20,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { ClientsService } from './clients.service';
 import { buildClientPdf } from './client-pdf';
 import {
+  ClientDuplicateCheckDto,
   CreateAttachmentDto,
   CreateClientDto,
   CreateCollateralDto,
@@ -46,6 +47,18 @@ export class ClientsController {
   @Roles(Permission.CLIENT_WRITE)
   create(@Body() dto: CreateClientDto) {
     return this.clients.create(dto);
+  }
+
+  /**
+   * Posibles duplicados antes del alta: mismo carnet (bloquea) o mismo nombre (avisa).
+   * `POST` y no `GET` para que el carnet no quede en la URL ni en los logs de acceso.
+   * Con `CLIENT_READ`: no revela nada que la búsqueda de la cartera no muestre ya.
+   */
+  @Post('duplicate-check')
+  @HttpCode(200)
+  @Roles(Permission.CLIENT_READ)
+  duplicateCheck(@Body() dto: ClientDuplicateCheckDto) {
+    return this.clients.duplicateCheck(dto);
   }
 
   @Get()

@@ -14,29 +14,10 @@
  * revisar: que dos filas se llamen igual es probable que sea la misma persona, no seguro.
  */
 
-/** "Miriam  CRUZ apaza" y "Apaza Cruz Miriam" → la misma llave: palabras sin tildes, ordenadas. */
-export function nameKey(fullName: string | null | undefined): string | null {
-  if (!fullName) return null;
-  const words = fullName
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toUpperCase()
-    .replace(/[^A-Z\s]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean);
-  return words.length === 0 ? null : [...words].sort().join(' ');
-}
+import { nameKey } from '../../common/name-key';
 
-/** Las palabras por las que conviene buscar candidatos en la base: las más largas, que menos se repiten. */
-export function searchWords(fullName: string | null | undefined): string[] {
-  const key = nameKey(fullName);
-  if (!key) return [];
-  return key
-    .split(' ')
-    .filter((w) => w.length >= 4)
-    .sort((a, b) => b.length - a.length)
-    .slice(0, 1);
-}
+// Viven en `common/name-key.ts`: el alta de cliente las usa para avisar de posibles duplicados.
+export { nameKey, searchWords } from '../../common/name-key';
 
 export interface MatchRow {
   index: number;

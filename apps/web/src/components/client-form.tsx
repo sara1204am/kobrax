@@ -67,10 +67,13 @@ export function IdentityFields({
   form,
   onChange,
   disabled,
+  documentNotice,
 }: {
   form: ClienteForm;
   onChange: (next: ClienteForm) => void;
   disabled?: boolean;
+  /** Aviso bajo el carnet (el alta lo usa para «este carnet ya es de…»). Con aviso, el campo va en rojo. */
+  documentNotice?: ReactNode;
 }) {
   const t = useTranslations('portfolio');
   const set = (patch: Partial<ClienteForm>) => onChange({ ...form, ...patch });
@@ -94,7 +97,9 @@ export function IdentityFields({
           onChange={(e) => set({ nationalId: e.target.value })}
           disabled={disabled}
           placeholder={t('form.documentPlaceholder')}
+          error={Boolean(documentNotice)}
         />
+        {documentNotice}
       </Field>
 
       {/* Una persona necesita nombre y apellido; una empresa, razón social. Lo exige el
@@ -532,6 +537,7 @@ export function ClientFormFields({
   credits = [],
   collateralTypes = [],
   currency,
+  documentNotice,
 }: {
   form: ClienteForm;
   onChange: (next: ClienteForm) => void;
@@ -547,6 +553,8 @@ export function ClientFormFields({
   /** Catálogo `COLLATERAL_TYPE` del tenant. Vacío = el tipo se escribe libre. */
   collateralTypes?: CatalogOption[];
   currency: string;
+  /** Ver `IdentityFields`. */
+  documentNotice?: ReactNode;
 }) {
   const t = useTranslations('portfolio');
   const set = (patch: Partial<ClienteForm>) => onChange({ ...form, ...patch });
@@ -554,7 +562,7 @@ export function ClientFormFields({
   return (
     <div className="space-y-3">
       <Acordeon title={t('sections.identity')} open>
-        <IdentityFields form={form} onChange={onChange} disabled={disabled} />
+        <IdentityFields form={form} onChange={onChange} disabled={disabled} documentNotice={documentNotice} />
       </Acordeon>
 
       <Acordeon

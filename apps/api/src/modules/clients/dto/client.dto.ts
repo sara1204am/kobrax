@@ -161,6 +161,17 @@ export class CreateClientDto {
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => CreateCollateralDto) collaterals?: CreateCollateralDto[];
 }
 
+/** Antes del alta: ¿ya hay alguien con este carnet, o que se llame igual? (`POST /clients/duplicate-check`). */
+export class ClientDuplicateCheckDto {
+  @IsEnum(ClientType)
+  clientType!: ClientType;
+
+  @IsOptional() @IsString() @MaxLength(64) nationalId?: string;
+  @IsOptional() @IsString() @MaxLength(120) firstName?: string;
+  @IsOptional() @IsString() @MaxLength(120) lastName?: string;
+  @IsOptional() @IsString() @MaxLength(200) businessName?: string;
+}
+
 /** Todos los campos opcionales (no extiende PartialType para no depender de mapped-types). */
 export class UpdateClientDto {
   /**

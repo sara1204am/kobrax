@@ -2131,6 +2131,19 @@
       "errors": {
         "generic": "No se pudo guardar. Probá de nuevo."
       }
+    },
+    "duplicate": {
+      "checking": "Buscando si ya existe…",
+      "documentTaken": "Este carnet ya es de {name}.",
+      "documentTakenDeleted": "Este carnet es de {name}, que está dado de baja. No se puede usar para un cliente nuevo.",
+      "documentHint": "Si es la misma persona, abrí su ficha en vez de crearla de nuevo.",
+      "openClient": "Ver cliente",
+      "namesTitle": "{n, plural, one {Ya hay un cliente con este nombre} other {Ya hay # clientes con este nombre}}",
+      "namesText": "Puede ser la misma persona. Revisalos antes de crear uno nuevo.",
+      "otherDocument": "otro carnet",
+      "noDocument": "sin carnet",
+      "credits": "{n, plural, =0 {sin créditos} one {# crédito} other {# créditos}}",
+      "acceptNames": "Es otra persona, crear igual"
     }
   },
   "team": {
