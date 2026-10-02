@@ -108,6 +108,8 @@ model Account {
   catalogItems            CatalogItem[]
   dashboards              Dashboard[]
   creditAssignments       CreditAssignment[]
+  creditArrearEpisodes    CreditArrearEpisode[]
+  creditNotes             CreditNote[]
   creditExternalSnapshots CreditExternalSnapshot[]
   clientExternalKeys      ClientExternalKey[]
   externalAdvisorLinks    ExternalAdvisorLink[]
@@ -621,6 +623,7 @@ model Client {
   attachments  ClientAttachment[]
   credits      Credit[]
   cases        CollectionCase[]
+  creditNotes  CreditNote[]
   routeStops   RouteStop[]
   externalKeys ClientExternalKey[]
 
@@ -840,6 +843,8 @@ model Credit {
   guarantors        CreditGuarantor[]
   collaterals       CollateralCredit[]
   assignments       CreditAssignment[]
+  arrearEpisodes    CreditArrearEpisode[]
+  notes             CreditNote[]
   externalSnapshots CreditExternalSnapshot[]
 
   /// `code` dejó de ser único (D1): es un rótulo. Un nº de operación PSF puede coincidir con el
@@ -988,6 +993,104 @@ model CreditAssignment {
   /// Para revocar en bloque al cerrar un caso.
   @@index([accountId, caseId])
   @@map("credit_assignments")
+}
+
+/// Cómo terminó un episodio de mora. Ninguno es «recuperado» a secas: `SOURCE_ABSENT` no dice si pagó o
+/// se puso al día, sólo que el reporte dejó de traerlo (D4), y por eso no cuenta como recuperación.
+enum ArrearEpisodeEnd {
+  PAID // saldó la deuda
+  CURRENT // la mora volvió a cero con saldo vivo (pagó la cuota, o le movieron la fecha)
+  SOURCE_ABSENT // la fuente externa dejó de reportarlo: se desconoce el desenlace
+  WRITTEN_OFF
+  CANCELLED
+  DELETED
+
+  @@map("arrear_episode_end")
+}
+
+/// De quién era la mora al abrirse el episodio (misma regla que `arrearsSourceOf` de shared).
+enum ArrearEpisodeSource {
+  CALCULATED
+  IMPORTED
+  MANUAL
+
+  @@map("arrear_episode_source")
+}
+
+/// **Un periodo de mora de un crédito.** El historial que no existía: `credits.days_past_due` sólo
+/// dice cuántos días lleva hoy, y `arrears` es una foto que se borra y se vuelve a escribir.
+///
+/// 🔴 **Lo escribe un TRIGGER sobre `credits`, no la aplicación** (`credits_track_arrear_episode`,
+/// migración 20261003020000), como los totales de la cartera: la mora cambia desde el trabajo diario,
+/// las acciones manuales, el importador de PSF, los pagos y hasta un UPDATE a mano, y un historial que
+/// depende de que cada vía se acuerde de anotarlo se llena de agujeros. No lo escribas desde el código.
+///
+/// `started_at` es **estimado** (`started_at_estimated`) salvo que alguien haya declarado cuándo
+/// empezó (`moraSince`/`arrearsSince`): un importado sólo trae días, y empezar = corte − días es una
+/// cuenta, no un dato. Los episodios `reconstructed` salen de los casos cerrados antes de que esta
+/// tabla existiera: no traen días máximos ni saldos, y la pantalla no debe fingir que los tiene.
+///
+/// A lo sumo **uno abierto** por crédito (índice único parcial, sólo en SQL).
+model CreditArrearEpisode {
+  id                 String              @id @default(uuid())
+  accountId          String              @map("account_id")
+  creditId           String              @map("credit_id")
+  startedAt          DateTime            @map("started_at") @db.Date
+  startedAtEstimated Boolean             @default(true) @map("started_at_estimated")
+  /// NULL = sigue en mora.
+  endedAt            DateTime?           @map("ended_at") @db.Date
+  endReason          ArrearEpisodeEnd?   @map("end_reason")
+  startDaysPastDue   Int?                @map("start_days_past_due")
+  maxDaysPastDue     Int?                @map("max_days_past_due")
+  balanceAtStart     Decimal?            @map("balance_at_start") @db.Decimal(14, 2)
+  balanceAtEnd       Decimal?            @map("balance_at_end") @db.Decimal(14, 2)
+  source             ArrearEpisodeSource
+  /// Reconstruido de los casos anteriores a esta tabla (no medido en su momento).
+  reconstructed      Boolean             @default(false)
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+  credit  Credit  @relation(fields: [creditId], references: [id])
+
+  @@index([accountId, creditId, startedAt(sort: Desc)])
+  @@map("credit_arrear_episodes")
+}
+
+/// Qué tan importante es una nota. `IMPORTANT` es la que hay que leer antes de salir a cobrar.
+enum CreditNoteKind {
+  INFO
+  WARNING
+  IMPORTANT
+
+  @@map("credit_note_kind")
+}
+
+/// **Una nota sobre un crédito**, independiente del caso: sobrevive a que el caso se cierre o ni siquiera exista
+/// (un crédito en mora sin caso también tiene cosas que decir). Antes no había dónde dejarlas: la única nota era
+/// `case_activities.notes`, atada a un caso y a un tipo de gestión.
+///
+/// **Append-only**, como `case_activities`: sin `updated_at` ni `deleted_at`. Una nota es lo que alguien dijo en
+/// un momento; corregirla es escribir otra. El `id` lo puede traer quien la crea (el móvil, que escribe sin
+/// red y reintenta): crear dos veces el mismo id no duplica.
+model CreditNote {
+  id        String         @id @default(uuid())
+  accountId String         @map("account_id")
+  creditId  String         @map("credit_id")
+  clientId  String         @map("client_id")
+  /// Quién la escribió (users.id, referencia suave como el resto del dominio).
+  authorId  String?        @map("author_id")
+  kind      CreditNoteKind @default(INFO)
+  body      String
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+  credit  Credit  @relation(fields: [creditId], references: [id])
+  client  Client  @relation(fields: [clientId], references: [id])
+
+  @@index([accountId, creditId, createdAt(sort: Desc)])
+  @@index([accountId, clientId])
+  @@map("credit_notes")
 }
 
 /// Cronograma de pagos de un crédito.

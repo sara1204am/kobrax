@@ -50,6 +50,7 @@ const PERMISSIONS = [
   ['case:write', 'cases', 'UPDATE', 'ACCOUNT'],
   ['case:assign', 'cases', 'UPDATE', 'BRANCH'],
   ['case:close', 'cases', 'UPDATE', 'ACCOUNT'],
+  ['case:export', 'cases', 'EXECUTE', 'ACCOUNT'],
   ['payment:read', 'payments', 'READ', 'ACCOUNT'],
   ['payment:write', 'payments', 'CREATE', 'OWN'],
   ['payment:approve', 'payments', 'APPROVE', 'ACCOUNT'],
