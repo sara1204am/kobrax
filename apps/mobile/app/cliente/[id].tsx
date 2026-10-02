@@ -1,68 +1,37 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { addPeriods, calculateCredit, isUnknownField, PaymentFrequency, portfolioStatus, RatePeriod } from '@kobrax/shared';
-import { choosePhoto } from '@/photo';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { AmountInput, BottomSheet, Chips, EmptyState, Header, PORTFOLIO_STATUS_META, SectionLabel, StatusBadge } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
-import { money, MONTHS, timeSlotRange } from '@/agenda-form';
+import { money, timeSlotRange } from '@/agenda-form';
 import { MiniMapCard, type MiniMapPoint } from '@/maps/MiniMapCard';
 import { clientContext, type AgendaClientContext, type CreditOption } from '@/agenda.service';
 import { clientDisplayName, getClient, type ClientDetail } from '@/clients.service';
 import { addActivity, getCase, type CaseDetail, type NewActivity } from '@/cases.service';
-import { createPayment, listPayments, type PaymentChannel, type PaymentItem, type PaymentMethod } from '@/payments.service';
+import { createPayment, listPayments, type PaymentItem } from '@/payments.service';
 import { clearArrears, getCredit, markArrears, type CreditDetail } from '@/credits.service';
 import { PlanSheet, prettyDay } from '@/credit-terms-view';
 import { DEFINITION_LABEL, FREQUENCY_LABEL, IMPORT_FIELD_LABEL, ORIGIN_LABEL, RATE_PERIOD_LABEL, UNKNOWN } from '@/credit-labels';
 import { pendingActions, type QueuedAction } from '@/sync/queue';
 import { getUserId } from '@/session';
-import { uploadImage } from '@/uploads.service';
-import { MiQrCobro } from '@/qr-cobro';
 import { queueForLater } from '@/sync/sync.service';
-import { buildTimeline, promiseReady, queuedPayments, recovery, type TimelineEntry } from '@/ficha';
+import { buildTimeline, onlyDigits, queuedPayments, recovery, type TimelineEntry } from '@/ficha';
+import { PaySheet } from '@/pay-sheet';
+import { GestionSheet, prettyDate } from '@/gestion-sheet';
 
 /** Las dos acciones de mora, ya en la forma en la que viajan por la cola. */
 type QueuedArrears = Extract<QueuedAction, { kind: 'arrears.mark' | 'arrears.clear' }>;
 
-const METHODS: { value: PaymentMethod; label: string }[] = [
-  { value: 'CASH', label: 'Efectivo' },
-  { value: 'TRANSFER', label: 'Transferencia' },
-  { value: 'QR', label: 'QR' },
-];
-/** Quién recibió la plata (D3). El default es el caso de siempre: la cobró el cobrador. */
-const CHANNELS: { value: PaymentChannel; label: string }[] = [
-  { value: 'KOBRAX_COLLECTED', label: 'La cobré yo' },
-  { value: 'EXTERNAL_CONFIRMED', label: 'Pagó en la entidad' },
-];
 
 /** Los pagos de este caso que esperan señal en el teléfono (para mostrarlos en el historial ya). */
 async function queuedFor(caseId: string): Promise<PaymentItem[]> {
   const userId = await getUserId();
   return userId ? queuedPayments(caseId, await pendingActions(userId)) : [];
 }
-// Catálogo de resultado de gestión (§5.4). type = CaseActivityType, result = VisitOutcome.
-const OUTCOMES: { key: string; label: string; type: 'CALL' | 'VISIT' | 'NOTE'; result: string; promise?: boolean }[] = [
-  { key: 'no_contact', label: 'No contesta', type: 'CALL', result: 'NO_CONTACT' },
-  { key: 'visit', label: 'Visita', type: 'VISIT', result: 'CONTACTED' },
-  { key: 'not_found', label: 'Inubicable', type: 'VISIT', result: 'NOT_FOUND' },
-  { key: 'promise', label: 'Promesa de pago', type: 'NOTE', result: 'PROMISE_TO_PAY', promise: true },
-];
 const METHOD_LABEL: Record<string, string> = { CASH: 'Efectivo', TRANSFER: 'Transferencia', QR: 'QR', CARD: 'Tarjeta', MOBILE_PAYMENT: 'Pago móvil' };
 
-function todayIso(): string {
-  const n = new Date();
-  return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate())).toISOString().slice(0, 10);
-}
-function prettyDate(iso?: string): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
-}
-function onlyDigits(s?: string | null): string {
-  return (s ?? '').replace(/[^0-9]/g, '');
-}
 
 /** V4 — Ficha de cobranza (§5.4): detalle + acciones + pago + gestión + timeline. */
 export default function ClienteFichaScreen() {
@@ -634,12 +603,6 @@ function MoraSheet({
 }
 
 /**
- * El comprobante del pago. Con señal se sube al sacarlo y quedan `url`+`hash`; sin señal queda
- * `local`, la ruta del archivo en el teléfono, y lo sube la cola junto con el cobro.
- */
-type Comprobante = { url?: string; hash?: string; local?: { uri: string; mimeType?: string } };
-
-/**
  * Deja constancia de que se llamó, se escribió por WhatsApp o se fue a la dirección. Sin señal se
  * encola: son las tres acciones más usadas en la calle, y perderlas dejaba el historial del deudor
  * sin rastro de que el cobrador lo intentó — que es justo lo que después se le reclama.
@@ -686,158 +649,6 @@ function TimelineRow({ e, currency }: { e: TimelineEntry; currency: string }) {
   );
 }
 
-/** Hoja Registrar pago (§5.4). */
-function PaySheet({
-  visible, onClose, currency, defaultAmount, maxAmount, external, onSubmit,
-}: {
-  visible: boolean; onClose: () => void; currency: string;
-  /** Con qué arranca el monto. Ausente = vacío (no hay un monto sensato que proponer). */
-  defaultAmount?: number;
-  maxAmount: number;
-  /** Operación PSF: el pago no cambia el saldo reportado, y se dice (D3). */
-  external?: boolean;
-  /** `receipt` viaja entero: con señal trae `url`+`hash`, sin señal la ruta local de la foto. */
-  onSubmit: (amount: number, method: PaymentMethod, receipt: Comprobante | null, idemKey: string, channel: PaymentChannel) => Promise<string | null>;
-}) {
-  const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState<PaymentMethod>('CASH');
-  const [channel, setChannel] = useState<PaymentChannel>('KOBRAX_COLLECTED');
-  const [receipt, setReceipt] = useState<Comprobante | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const idemRef = useRef<string>('');
-
-  useEffect(() => {
-    if (visible) {
-      setAmount(defaultAmount !== undefined ? String(defaultAmount) : '');
-      setMethod('CASH');
-      setChannel('KOBRAX_COLLECTED');
-      setReceipt(null);
-      setError(null);
-      idemRef.current = `pay-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
-    }
-  }, [visible, defaultAmount]);
-
-  const capture = useCallback(async () => {
-    const pick = await choosePhoto();
-    if (!pick) return;
-    setUploading(true);
-    const up = await uploadImage(pick.uri, pick.mimeType);
-    setUploading(false);
-    if (up.status === 'ok') return setReceipt({ url: up.url, hash: up.hash });
-    // Sin señal la foto queda en el teléfono y viaja con el pago cuando haya red — mismo criterio
-    // que el resultado de una parada. Antes, el mismo "comprobante" se perdía o no según por qué
-    // pantalla hubiera entrado el cobrador.
-    if (up.status === 'offline') return setReceipt({ local: { uri: pick.uri, mimeType: pick.mimeType } });
-    setError('No se pudo subir el comprobante.');
-  }, []);
-
-  const num = Number(amount);
-  const valid = num > 0 && num <= maxAmount + 0.005;
-
-  const submit = useCallback(async () => {
-    setSaving(true);
-    setError(null);
-    const err = await onSubmit(num, method, receipt, idemRef.current, channel);
-    setSaving(false);
-    if (err) setError(err);
-  }, [num, method, receipt, channel, onSubmit]);
-
-  return (
-    <BottomSheet visible={visible} onClose={onClose} title="Registrar pago">
-      <ErrorBanner message={error} />
-      <SectionLabel>Monto</SectionLabel>
-      <AmountInput value={amount} onChangeText={setAmount} currencySymbol={currency} accessibilityLabel="Monto del pago" />
-      {external && (
-        <Text style={styles.sheetHint}>No cambia el saldo ni la mora del reporte: se actualizan con el próximo.</Text>
-      )}
-      <SectionLabel>Método</SectionLabel>
-      <Chips options={METHODS} value={method} onChange={setMethod} />
-      <SectionLabel>¿Quién recibió la plata?</SectionLabel>
-      <Chips options={CHANNELS} value={channel} onChange={setChannel} />
-      {method === 'QR' && <MiQrCobro />}
-      <Pressable style={styles.receiptBtn} onPress={capture} disabled={uploading} accessibilityRole="button">
-        <Text style={styles.receiptText}>{uploading ? 'Subiendo…' : receipt ? '📷 Comprobante listo' : '📷 Foto de comprobante'}</Text>
-      </Pressable>
-      <View style={{ marginTop: SPACING.md }}>
-        <Button label="Confirmar pago" onPress={submit} loading={saving} disabled={saving || uploading || !valid} />
-      </View>
-    </BottomSheet>
-  );
-}
-
-/** Hoja Registrar gestión (§5.4). */
-function GestionSheet({
-  visible, onClose, currency, onSubmit,
-}: {
-  visible: boolean; onClose: () => void; currency: string;
-  onSubmit: (payload: { type: 'NOTE' | 'CALL' | 'VISIT' | 'MESSAGE'; result: string; notes?: string; promise?: { amount: number; promiseDate: string; paymentMethodCode: string } }) => Promise<string | null>;
-}) {
-  const [outcome, setOutcome] = useState('no_contact');
-  const [notes, setNotes] = useState('');
-  const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(todayIso());
-  const [method, setMethod] = useState<PaymentMethod>('CASH');
-  const [showPicker, setShowPicker] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (visible) { setOutcome('no_contact'); setNotes(''); setAmount(''); setDate(todayIso()); setMethod('CASH'); setError(null); }
-  }, [visible]);
-
-  const oc = OUTCOMES.find((o) => o.key === outcome)!;
-  const isPromise = !!oc.promise;
-  const promise = { amount: Number(amount), promiseDate: date, paymentMethodCode: method };
-  const valid = !isPromise || promiseReady(promise);
-
-  const onDate = useCallback((e: DateTimePickerEvent, d?: Date) => {
-    setShowPicker(false);
-    if (e.type === 'set' && d) setDate(new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().slice(0, 10));
-  }, []);
-
-  const submit = useCallback(async () => {
-    setSaving(true);
-    setError(null);
-    const err = await onSubmit({
-      type: oc.type,
-      result: oc.result,
-      notes: notes.trim() || undefined,
-      promise: isPromise ? promise : undefined,
-    });
-    setSaving(false);
-    if (err) setError(err);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oc, notes, isPromise, amount, date, method, onSubmit]);
-
-  return (
-    <BottomSheet visible={visible} onClose={onClose} title="Registrar gestión">
-      <ErrorBanner message={error} />
-      <SectionLabel>Resultado</SectionLabel>
-      <Chips options={OUTCOMES.map((o) => ({ value: o.key, label: o.label }))} value={outcome} onChange={setOutcome} />
-      {isPromise && (
-        <>
-          <SectionLabel>Monto prometido</SectionLabel>
-          <AmountInput value={amount} onChangeText={setAmount} currencySymbol={currency} accessibilityLabel="Monto prometido" />
-          <SectionLabel>Pagará el</SectionLabel>
-          <Pressable style={styles.dateBtn} onPress={() => setShowPicker(true)} accessibilityRole="button">
-            <Text style={styles.dateText}>{prettyDate(date)}</Text>
-          </Pressable>
-          <SectionLabel>Medio de pago</SectionLabel>
-          <Chips options={METHODS} value={method} onChange={setMethod} />
-        </>
-      )}
-      <SectionLabel>Nota</SectionLabel>
-      <Field label="" value={notes} onChangeText={setNotes} placeholder="Opcional" />
-      <View style={{ marginTop: SPACING.md }}>
-        <Button label="Guardar gestión" onPress={submit} loading={saving} disabled={saving || !valid} />
-      </View>
-      {showPicker && <DateTimePicker value={new Date(date)} mode="date" onChange={onDate} />}
-    </BottomSheet>
-  );
-}
-
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
@@ -871,10 +682,5 @@ const styles = StyleSheet.create({
   tlIcon: { fontSize: 18 },
   tlTitle: { ...TYPE.body, color: COLORS.navy, fontWeight: '600' },
   tlSub: { ...TYPE.secondary, color: COLORS.text2 },
-  sheetHint: { ...TYPE.secondary, color: COLORS.text2, marginBottom: SPACING.sm },
   tlDate: { ...TYPE.caption, color: COLORS.muted, marginTop: 2 },
-  receiptBtn: { marginTop: SPACING.md, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.input, borderWidth: 1, borderColor: COLORS.periwinkle, backgroundColor: COLORS.highlight },
-  receiptText: { ...TYPE.secondary, color: COLORS.navy, fontWeight: '600' },
-  dateBtn: { height: 48, borderRadius: RADIUS.input, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.white, justifyContent: 'center', paddingHorizontal: SPACING.md },
-  dateText: { ...TYPE.body, color: COLORS.navy, textTransform: 'capitalize' },
 });

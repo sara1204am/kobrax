@@ -104,3 +104,8 @@ export function recovery(credit: {
 export function promiseReady(p: { amount: number; promiseDate: string; paymentMethodCode: string }): boolean {
   return p.amount > 0 && !!p.promiseDate && !!p.paymentMethodCode;
 }
+
+/** Sólo los dígitos de un teléfono: lo que necesitan `tel:` y `wa.me/`. */
+export function onlyDigits(s?: string | null): string {
+  return (s ?? '').replace(/[^0-9]/g, '');
+}
