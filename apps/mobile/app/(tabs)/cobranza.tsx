@@ -9,6 +9,8 @@ import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { BottomSheet, CaseCard, Chips, EmptyState, ListRow, PORTFOLIO_STATUS_META, SectionLabel, SegmentTabs, TONE_SOLID } from '@/ui';
 import { money } from '@/agenda-form';
 import { listCases } from '@/cases.service';
+import { listMora, MORA_LIMIT } from '@/mora.service';
+import { filterMora, MORA_CHIP_LABEL, moraCardProps, staleLine, type MoraChip, type MoraRow } from '@/mora';
 import {
   filterPortfolio,
   groupPortfolio,
@@ -44,6 +46,15 @@ type Load =
   | { status: 'error' }
   | { status: 'ok'; cards: ClientPortfolio[] };
 
+/** La lista de «En mora» viene de `GET /mora` (por crédito), no de la cartera (por cliente). */
+type MoraLoad =
+  | { status: 'loading' }
+  | { status: 'offline' }
+  | { status: 'error' }
+  | { status: 'ok'; rows: MoraRow[]; localAt?: number | null };
+
+const MORA_CHIPS = Object.keys(MORA_CHIP_LABEL) as MoraChip[];
+
 /**
  * Cartera (V3, §5.3): lista centrada en el cliente con la deuda agregada. Buscador (nombre + documento +
  * zona) + chips de filtro + orden elegible. Los datos salen de `GET /cases?view=portfolio` (ya scoped al
@@ -54,6 +65,8 @@ type Load =
  */
 export default function CobranzaScreen() {
   const [load, setLoad] = useState<Load>({ status: 'loading' });
+  const [moraLoad, setMoraLoad] = useState<MoraLoad>({ status: 'loading' });
+  const [moraChip, setMoraChip] = useState<MoraChip>('all');
   const [chip, setChip] = useState<PortfolioChip>('all');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<PortfolioSort>('mora');
@@ -68,8 +81,15 @@ export default function CobranzaScreen() {
     // 🔴 `open: true` no es opcional: sin él entran los casos CERRADOS. Mientras nada los cerraba
     // daba igual; ahora el trabajo diario cierra al que pagó, y esta lista lo seguiría mostrando
     // para cobrar. Lo mismo en `rutas/crear` y en el hidratado offline.
-    const res = await listCases({ view: 'portfolio', open: true, limit: 100 });
+    // La mora se pide a la par pero **por su cuenta**: si una falla, la otra lista igual se muestra.
+    const [res, moraRes] = await Promise.all([
+      listCases({ view: 'portfolio', open: true, limit: 100 }),
+      listMora({ limit: MORA_LIMIT }), // misma llamada que `hydrate`
+    ]);
     if (reqId !== reqRef.current) return;
+    if (moraRes.status === 'ok') setMoraLoad({ status: 'ok', rows: moraRes.data, localAt: moraRes.localAt });
+    else
+      setMoraLoad((prev) => (prev.status === 'ok' ? prev : { status: moraRes.status === 'offline' ? 'offline' : 'error' }));
     // Un bache de red en un refresh no borra lo ya cargado (offline-first).
     if (res.status === 'offline') return setLoad((prev) => (prev.status === 'ok' ? prev : { status: 'offline' }));
     if (res.status !== 'ok') return setLoad((prev) => (prev.status === 'ok' ? prev : { status: 'error' }));
@@ -104,10 +124,14 @@ export default function CobranzaScreen() {
       CHIPS.map((c) => ({
         key: c.key,
         label: c.label,
-        count: filterPortfolio(cards, c.key, query).length,
+        // «En mora» cuenta CRÉDITOS (de `GET /mora`), no clientes: es lo que la lista de ese chip muestra.
+        count:
+          c.key === 'overdue' && moraLoad.status === 'ok'
+            ? filterMora(moraLoad.rows, 'all', query).length
+            : filterPortfolio(cards, c.key, query).length,
         tone: c.danger ? ('danger' as const) : ('neutral' as const),
       })),
-    [cards, query],
+    [cards, query, moraLoad],
   );
   const visible = useMemo(() => sortPortfolio(filterPortfolio(cards, chip, query), sort), [cards, chip, query, sort]);
 
@@ -138,6 +162,8 @@ export default function CobranzaScreen() {
       {load.status === 'ok' && (
         <View style={styles.chips}>
           <SegmentTabs items={chipItems} value={chip} onChange={(k) => setChip(k as PortfolioChip)} />
+          {/* En mora el orden es fijo (prioridad → días) y no hay tarjeta compacta: no hay nada que elegir. */}
+          {chip !== 'overdue' && (
           <View style={styles.tools}>
             <Pressable
               style={styles.sortPill}
@@ -156,10 +182,13 @@ export default function CobranzaScreen() {
               <Text style={styles.sortText}>⇅ {PORTFOLIO_SORT_LABEL[sort]}</Text>
             </Pressable>
           </View>
+          )}
         </View>
       )}
 
-      {load.status === 'loading' ? (
+      {chip === 'overdue' ? (
+        <MoraList load={moraLoad} chip={moraChip} onChip={setMoraChip} query={query} refreshing={refreshing} onRefresh={onRefresh} />
+      ) : load.status === 'loading' ? (
         <View style={styles.center}>
           <ActivityIndicator color={COLORS.navy} />
         </View>
@@ -207,6 +236,88 @@ export default function CobranzaScreen() {
       >
         <Text style={styles.fabPlus}>+</Text>
       </Pressable>
+    </View>
+  );
+}
+
+/**
+ * «En mora»: **un crédito por fila**, con y sin caso (`GET /mora`). Orden fijo prioridad → días → saldo; los
+ * sub-chips y la búsqueda se resuelven acá sobre lo ya bajado, así que funcionan igual sin señal.
+ */
+function MoraList({
+  load,
+  chip,
+  onChip,
+  query,
+  refreshing,
+  onRefresh,
+}: {
+  load: MoraLoad;
+  chip: MoraChip;
+  onChip: (c: MoraChip) => void;
+  query: string;
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
+  const asOf = useMemo(() => new Date(), [load]);
+  const rows = load.status === 'ok' ? load.rows : [];
+  const items = useMemo(
+    () => MORA_CHIPS.map((k) => ({ key: k, label: MORA_CHIP_LABEL[k], count: filterMora(rows, k, query, asOf).length })),
+    [rows, query, asOf],
+  );
+  const visible = useMemo(() => filterMora(rows, chip, query, asOf), [rows, chip, query, asOf]);
+
+  if (load.status === 'loading')
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={COLORS.navy} />
+      </View>
+    );
+  if (load.status === 'offline') return <EmptyState icon="📴" title="Sin conexión" hint="Tu mora aparecerá cuando vuelva la red." />;
+  if (load.status === 'error') return <EmptyState icon="⚠️" title="No se pudo cargar" hint="Reintentá en un momento." />;
+
+  const stale = staleLine(load.localAt);
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={styles.chips}>
+        <SegmentTabs items={items} value={chip} onChange={(k) => onChip(k as MoraChip)} />
+        {stale && <Text style={styles.othersHint}>{stale}</Text>}
+      </View>
+      {visible.length === 0 ? (
+        <EmptyState
+          icon={rows.length === 0 ? '🎉' : '🔍'}
+          title={rows.length === 0 ? 'Nadie en mora' : 'Sin resultados'}
+          hint={rows.length === 0 ? 'No tenés créditos vencidos.' : 'Probá con otro filtro o búsqueda.'}
+        />
+      ) : (
+        <FlashList
+          data={visible}
+          keyExtractor={(r) => r.creditId}
+          estimatedItemSize={92}
+          contentContainerStyle={{ padding: SPACING.lg, paddingBottom: SPACING.xxl * 2 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.navy} />}
+          renderItem={({ item }) => <MoraRowCard row={item} asOf={asOf} />}
+        />
+      )}
+    </View>
+  );
+}
+
+/** La tarjeta del crédito: lo arma `moraCardProps` (probado aparte) y la pinta `CaseCard`. */
+function MoraRowCard({ row, asOf }: { row: MoraRow; asOf: Date }) {
+  const p = moraCardProps(row, asOf);
+  return (
+    <View style={{ marginBottom: SPACING.sm }}>
+      <CaseCard
+        name={p.name}
+        caption={p.caption}
+        subtitle={p.subtitle}
+        amount={p.amount}
+        amountDanger
+        badge={p.badge}
+        // M2 lo lleva a la ficha de mora; mientras, abre la ficha del deudor.
+        onPress={() => router.push(`/cliente/${row.clientId}`)}
+      />
     </View>
   );
 }

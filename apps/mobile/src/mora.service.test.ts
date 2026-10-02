@@ -1,0 +1,67 @@
+/**
+ * `listMora` guarda cada consulta bajo su propia clave y cae al respaldo SÓLO sin red. La clave tiene que
+ * ser la misma que usa `hydrate`, o la pantalla sale vacía sin señal con la base llena.
+ */
+const mockStore: Record<string, unknown[]> = {};
+const mockApi = jest.fn();
+
+jest.mock('./api-client', () => ({
+  apiQuery: (...a: unknown[]) => mockApi(...a),
+  toQuery: (p: Record<string, unknown>) => {
+    const q = Object.entries(p).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${v}`).join('&');
+    return q ? `?${q}` : '';
+  },
+}));
+jest.mock('./db', () => ({
+  replaceAll: jest.fn(async (kind: string, items: unknown[], scope?: string) => {
+    mockStore[`${kind}|${scope ?? ''}`] = items;
+  }),
+  getMany: jest.fn(async (kind: string, scope?: string) => mockStore[`${kind}|${scope ?? ''}`] ?? []),
+  fetchedAt: jest.fn(async () => 1_700_000_000_000),
+}));
+
+import { listMora, MORA_LIMIT } from './mora.service';
+
+const item = { creditId: 'cr1', clientId: 'cl1', currency: 'BOB', daysPastDue: 12, arrearsSource: 'SCHEDULE', hasActivePromise: false };
+
+beforeEach(() => {
+  for (const k of Object.keys(mockStore)) delete mockStore[k];
+  mockApi.mockReset();
+});
+
+describe('listMora', () => {
+  it('pide /mora con el límite y le pone a cada fila el id del crédito', async () => {
+    mockApi.mockResolvedValue({ status: 'ok', data: [item], total: 1 });
+    const r = await listMora({ limit: MORA_LIMIT });
+    expect(mockApi).toHaveBeenCalledWith('/mora?limit=100');
+    expect(r.status === 'ok' && r.data[0].id).toBe('cr1');
+  });
+
+  it('guarda la respuesta bajo la consulta que la pidió', async () => {
+    mockApi.mockResolvedValue({ status: 'ok', data: [item], total: 1 });
+    await listMora({ limit: MORA_LIMIT });
+    expect(mockStore['mora|?limit=100']).toHaveLength(1);
+  });
+
+  it('sin red devuelve lo guardado y avisa de qué hora es', async () => {
+    mockApi.mockResolvedValueOnce({ status: 'ok', data: [item], total: 1 });
+    await listMora({ limit: MORA_LIMIT });
+    mockApi.mockResolvedValueOnce({ status: 'offline' });
+    const r = await listMora({ limit: MORA_LIMIT });
+    expect(r.status).toBe('ok');
+    expect(r.status === 'ok' && r.localAt).toBe(1_700_000_000_000);
+    expect(r.status === 'ok' && r.data[0].creditId).toBe('cr1');
+  });
+
+  it('un error del servidor NO se tapa con datos viejos', async () => {
+    mockApi.mockResolvedValueOnce({ status: 'ok', data: [item], total: 1 });
+    await listMora({ limit: MORA_LIMIT });
+    mockApi.mockResolvedValueOnce({ status: 'error', message: 'boom' });
+    expect((await listMora({ limit: MORA_LIMIT })).status).toBe('error');
+  });
+
+  it('sin red y sin nada guardado sigue siendo offline', async () => {
+    mockApi.mockResolvedValue({ status: 'offline' });
+    expect((await listMora({ limit: MORA_LIMIT })).status).toBe('offline');
+  });
+});

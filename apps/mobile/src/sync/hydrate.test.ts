@@ -18,6 +18,13 @@ jest.mock('../cases.service', () => ({
     return mockRes.cases ?? ok([{ id: 'c1', clientId: 'cl1' }]);
   }),
 }));
+jest.mock('../mora.service', () => ({
+  MORA_LIMIT: 100,
+  listMora: jest.fn(async (p: unknown) => {
+    mockLlamadas.push({ fn: 'listMora', params: p });
+    return mockRes.mora ?? ok([]);
+  }),
+}));
 jest.mock('../routes.service', () => ({
   listRoutes: jest.fn(async (p: unknown) => {
     mockLlamadas.push({ fn: 'listRoutes', params: p });
@@ -57,6 +64,7 @@ const llamada = (fn: string) => mockLlamadas.find((l) => l.fn === fn);
 beforeEach(() => {
   mockLlamadas.length = 0;
   delete mockRes.cases;
+  delete mockRes.mora;
   delete mockRes.routes;
   delete mockRes.agenda;
 });
@@ -69,6 +77,19 @@ describe('hydrate · usa las consultas de las pantallas', () => {
   it('la cartera se baja con los mismos parámetros que la Cobranza', async () => {
     await hydrate('u1');
     expect(llamada('listCases')!.params).toEqual({ view: 'portfolio', open: true, limit: 100 });
+  });
+
+  // La mora de la Cobranza se pide con `limit: 100`; con otro parámetro el respaldo queda en otra casilla.
+  it('la mora se baja con los mismos parámetros que el chip «En mora» de la Cobranza', async () => {
+    await hydrate('u1');
+    expect(llamada('listMora')!.params).toEqual({ limit: 100 });
+  });
+
+  it('una mora que falla no tumba la cartera', async () => {
+    mockRes.mora = { status: 'error', message: 'boom' };
+    const r = await hydrate('u1');
+    expect(r.failed).toContain('mora');
+    expect(r.ok).toContain('cartera');
   });
 
   it('las rutas se bajan SIN filtro de estado, como las pide la pestaña Rutas', async () => {

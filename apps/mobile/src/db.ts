@@ -38,6 +38,10 @@ export type CacheKind =
   | 'client.context'
   | 'case'
   | 'case.detail'
+  /** Los créditos en mora del cobrador (`GET /mora`). Una fila por crédito; el `id` es el crédito. */
+  | 'mora'
+  /** La ficha de recuperación de un crédito (`GET /mora/:creditId`): compuesto, no la fila de la lista. */
+  | 'mora.detail'
   | 'credit'
   | 'route'
   | 'agenda'

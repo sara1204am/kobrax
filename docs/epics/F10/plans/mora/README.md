@@ -80,7 +80,7 @@ F4 T17 dice «reusar `groupPortfolio`». **No sirve:** `groupPortfolio` agrupa *
 
 - `src/mora.service.ts` — lectura/escritura de `/mora` (service, no en el componente).
 - `src/mora.ts` (+test) — orden y chips puros del lado del teléfono.
-- `src/ui.tsx` → `MoraCard`.
+- ~~`MoraCard` en `ui.tsx`~~ → no hace falta: la tarjeta es `CaseCard` (REUSAR) y sus props las arma `moraCardProps` en `src/mora.ts` (probado).
 - `app/mora/[creditId].tsx` — la ficha.
 - Hojas extraídas de `cliente/[id].tsx` → `src/pay-sheet.tsx`, `src/gestion-sheet.tsx`.
 - Acciones de cola `credit.note` y `mora.activity`.
@@ -88,10 +88,10 @@ F4 T17 dice «reusar `groupPortfolio`». **No sirve:** `groupPortfolio` agrupa *
 ## 9. Tareas (lectura antes que escritura)
 
 **M1 — lista (T17)**
-- [ ] `CacheKind` `mora`/`mora.detail`; `src/mora.service.ts` con `listMora` sobre `cachedList`.
-- [ ] `src/mora.ts`: orden prioridad → días; chips «Crítica», «Con promesa», «Sin gestión N días»; test.
-- [ ] En `cobranza.tsx`, **modo de lista por chip**: con «En mora» la fuente pasa a `GET /mora` y se pintan `MoraCard` (una por crédito); los demás chips siguen con `groupPortfolio` y `CaseCard`. `FlashList`, loading/empty/error, `OfflineIndicator`, «datos de las HH:MM» (`localAt`).
-- [ ] `hydrate.ts`: paso «mora» con **los mismos parámetros** que la pantalla + test de que se hidrata.
+- [x] `CacheKind` `mora`/`mora.detail`; `src/mora.service.ts` con `listMora` sobre `cachedList`.
+- [x] `src/mora.ts`: orden prioridad → días; chips «Crítica», «Con promesa», «Sin gestión N días»; test.
+- [x] En `cobranza.tsx`, **modo de lista por chip**: con «En mora» la fuente pasa a `GET /mora` y se pintan `MoraCard` (una por crédito); los demás chips siguen con `groupPortfolio` y `CaseCard`. `FlashList`, loading/empty/error, `OfflineIndicator`, «datos de las HH:MM» (`localAt`).
+- [x] `hydrate.ts`: paso «mora» con **los mismos parámetros** que la pantalla + test de que se hidrata.
 
 **M2 — ficha y acciones (T18)**
 - [ ] Extraer `PaySheet`/`GestionSheet` de `cliente/[id].tsx` con tests antes de tocar.
