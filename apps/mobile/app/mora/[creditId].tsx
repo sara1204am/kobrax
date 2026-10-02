@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import type { CreditNote, MoraCreditDetail, MoraPromise } from '@kobrax/shared';
@@ -17,6 +17,7 @@ import { NoteSheet } from '@/note-sheet';
 import { prettyDay } from '@/credit-terms-view';
 import { onlyDigits } from '@/ficha';
 import { registrarRastro } from '@/trace';
+import { nuevoId } from '@/ids';
 
 type Load = 'loading' | 'ok' | 'offline' | 'error';
 
@@ -40,6 +41,11 @@ export default function MoraFichaScreen() {
   const [paySheet, setPaySheet] = useState(false);
   const [gestSheet, setGestSheet] = useState(false);
   const [noteSheet, setNoteSheet] = useState(false);
+  // 🔴 El id de la gestión y de la nota se fija al ABRIR la hoja, no en cada intento: si el servidor la guardó
+  // pero la respuesta llegó como error, el cobrador toca «Guardar» otra vez y ese segundo intento lleva el MISMO
+  // id, así que el servidor devuelve lo ya guardado en vez de crear una segunda gestión (con su promesa).
+  const activityId = useRef(nuevoId());
+  const noteId = useRef(nuevoId());
 
   const loadAll = useCallback(async () => {
     const main = await getMora(creditId);
@@ -138,9 +144,9 @@ export default function MoraFichaScreen() {
         <View style={styles.actions}>
           <ActionBtn label="Llamar" icon="📞" onPress={() => contact('call')} />
           <ActionBtn label="WhatsApp" icon="💬" onPress={() => contact('whatsapp')} />
-          <ActionBtn label="Gestión" icon="📝" onPress={() => setGestSheet(true)} />
+          <ActionBtn label="Gestión" icon="📝" onPress={() => { activityId.current = nuevoId(); setGestSheet(true); }} />
           <ActionBtn label="Pago" icon="💵" onPress={() => setPaySheet(true)} />
-          <ActionBtn label="Nota" icon="🗒️" onPress={() => setNoteSheet(true)} />
+          <ActionBtn label="Nota" icon="🗒️" onPress={() => { noteId.current = nuevoId(); setNoteSheet(true); }} />
         </View>
         {!phone && <Text style={styles.hint}>Sin teléfono registrado: llamar y WhatsApp no están disponibles.</Text>}
         {!detail.case && <Text style={styles.hint}>Este crédito no tiene caso abierto: al registrar una gestión se abre uno.</Text>}
@@ -283,7 +289,7 @@ export default function MoraFichaScreen() {
         currency={currency}
         outcomes={MORA_OUTCOMES}
         onSubmit={async (payload) => {
-          const err = await submitMoraActivity(detail.creditId, payload);
+          const err = await submitMoraActivity(detail.creditId, { ...payload, id: activityId.current });
           if (err) return err;
           setGestSheet(false);
           await loadAll();
@@ -295,7 +301,7 @@ export default function MoraFichaScreen() {
         visible={noteSheet}
         onClose={() => setNoteSheet(false)}
         onSubmit={async (note) => {
-          const err = await submitMoraNote(detail.creditId, note);
+          const err = await submitMoraNote(detail.creditId, { ...note, id: noteId.current });
           if (err) return err;
           setNoteSheet(false);
           await loadAll();
