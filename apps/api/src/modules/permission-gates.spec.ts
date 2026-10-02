@@ -5,6 +5,8 @@ import { Permission, ROLE_PERMISSIONS, RoleType } from '@kobrax/shared';
 import { ROLES_KEY } from './auth/decorators/roles.decorator';
 import { AgendaController } from './agenda/agenda.controller';
 import { CasesController } from './cases/cases.controller';
+import { MoraController } from './mora/mora.controller';
+import { ExportsController } from './exports/exports.controller';
 import { CatalogsController } from './catalogs/catalogs.controller';
 import { ClientsController } from './clients/clients.controller';
 import { CreditsController } from './credits/credits.controller';
@@ -36,6 +38,8 @@ const CAMINO_DEL_COBRADOR: [string, new (...args: never[]) => object, string[]][
   ['agenda', AgendaController, ['list', 'overdue', 'findOne', 'create', 'update', 'complete', 'postpone', 'cancel', 'reschedule', 'remove']],
   // Los casos que gestiona y la actividad que registra sobre ellos.
   ['cases', CasesController, ['list', 'findOne', 'addActivity']],
+  // La Central de Mora: sus créditos en mora (el service lo acota a sus casos).
+  ['mora', MoraController, ['list', 'findOne', 'byCase', 'episodes', 'metrics', 'promises', 'notes', 'addNote', 'addActivity', 'exportCsv', 'exportPdf']],
   // Su cartera: la ve, la da de alta en campo y le corrige datos.
   ['clients', ClientsController, ['list', 'findOne', 'create', 'update']],
   ['credits', CreditsController, ['list', 'findOne', 'create', 'update']],
@@ -94,6 +98,38 @@ describe('Puertas que el cobrador NO debe pasar', () => {
       );
     });
   }
+});
+
+/**
+ * 🔴 Exportar Mora lo puede todo rol que ve Mora, pero **no** a través de `report:export`: ese permiso abre
+ * los exports de la cuenta (`/exports/cases|clients|locations|backup`), que no filtran por alcance y
+ * entregan datos personales en claro. Si alguien "unifica" los dos permisos, el cobrador baja la cartera
+ * entera — este spec lo frena.
+ */
+describe('Exportar Mora (case:export)', () => {
+  const ROLES_CON_MORA = [RoleType.MANAGER, RoleType.SUPERVISOR, RoleType.COLLECTOR, RoleType.AUDITOR, RoleType.VIEWER];
+
+  for (const role of ROLES_CON_MORA) {
+    it(`${role} ve Mora y puede exportarla`, () => {
+      const perms = ROLE_PERMISSIONS[role] as string[];
+      assert.ok(perms.includes(Permission.CASE_READ) && perms.includes(Permission.CASE_EXPORT));
+    });
+  }
+
+  it('el cobrador y el supervisor siguen SIN report:export (los exports de la cuenta)', () => {
+    assert.ok(!(ROLE_PERMISSIONS[RoleType.COLLECTOR] as string[]).includes(Permission.REPORT_EXPORT));
+    assert.ok(!(ROLE_PERMISSIONS[RoleType.SUPERVISOR] as string[]).includes(Permission.REPORT_EXPORT));
+  });
+
+  it('los exports de Mora exigen case:read Y case:export; los de la cuenta siguen en report:export', () => {
+    for (const metodo of ['exportCsv', 'exportPdf']) {
+      const handler = (MoraController.prototype as unknown as Record<string, unknown>)[metodo];
+      const requeridos = (Reflect.getMetadata(ROLES_KEY, handler as object) as string[]) ?? [];
+      assert.deepEqual([...requeridos].sort(), [Permission.CASE_EXPORT, Permission.CASE_READ].sort());
+    }
+    const cuenta = (Reflect.getMetadata(ROLES_KEY, ExportsController) as string[]) ?? [];
+    assert.deepEqual(cuenta, [Permission.REPORT_EXPORT]);
+  });
 });
 
 /**

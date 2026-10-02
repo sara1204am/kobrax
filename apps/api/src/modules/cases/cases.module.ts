@@ -9,5 +9,7 @@ import { CasesService } from './cases.service';
   imports: [AuthModule, AuditModule],
   controllers: [CasesController],
   providers: [CasesService],
+  // Mora registra gestiones por crédito y reutiliza esta lógica (promesa → agenda_item, `lastActionAt`), no la copia.
+  exports: [CasesService],
 })
 export class CasesModule {}
