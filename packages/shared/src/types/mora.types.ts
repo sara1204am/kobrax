@@ -212,22 +212,54 @@ export const MORA_NOTE_KINDS = ['INFO', 'WARNING', 'IMPORTANT'] as const;
 export type MoraNoteKind = (typeof MORA_NOTE_KINDS)[number];
 export const MORA_NOTE_MAX_LENGTH = 1000;
 
-/** Una nota sobre un crédito, independiente del caso (`GET /mora/:creditId/notes`). */
+/** Los colores del post-it (la paleta de Gallium). Es el color de la nota; el tipo (`MORA_NOTE_KINDS`) es otra cosa. */
+export const MORA_NOTE_COLORS = ['YELLOW', 'PINK', 'BLUE', 'GREEN', 'PURPLE', 'ORANGE'] as const;
+export type MoraNoteColor = (typeof MORA_NOTE_COLORS)[number];
+
+/** Tamaño del post-it en el tablero (px). La base lo vuelve a exigir (`credit_notes_tablero`). */
+export const NOTE_BOARD_LIMITS = { minWidth: 160, maxWidth: 520, minHeight: 120, maxHeight: 440, defaultWidth: 240, defaultHeight: 180 } as const;
+
+/** Una nota sobre un crédito, independiente del caso (`GET /mora/:creditId/notes`). Es un post-it sobre el tablero de la ficha. */
 export interface CreditNote {
   id: string;
   creditId: string;
   kind: MoraNoteKind;
   body: string;
+  color: MoraNoteColor;
+  /** Lugar en el tablero: esquina superior izquierda, tamaño y orden de apilado (más alto = encima). */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  zIndex: number;
   authorId?: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 /**
  * Crear una nota. `id` es opcional y **lo puede traer quien escribe** (el móvil, sin red): reintentar con el
- * mismo id no duplica la nota.
+ * mismo id no duplica la nota. Sin lugar, el servidor la pone en cascada; el orden de apilado lo pone siempre él.
  */
 export interface NewCreditNote {
   id?: string;
   kind?: MoraNoteKind;
   body: string;
+  color?: MoraNoteColor;
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+}
+
+/** Editar una nota: sólo lo que viene cambia. `front` la trae al frente del tablero. */
+export interface UpdateCreditNote {
+  kind?: MoraNoteKind;
+  body?: string;
+  color?: MoraNoteColor;
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+  front?: boolean;
 }

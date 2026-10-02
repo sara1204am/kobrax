@@ -24,4 +24,5 @@ export * from './payment-suggestion.js';
 export * from './external-report.js';
 export * from './promises.js';
 export * from './recovery-activity.js';
+export * from './credit-note-board.js';
 export * from './recovery-metrics.js';
