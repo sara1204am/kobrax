@@ -1,7 +1,10 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import {
   Permission,
+  cascadePosition,
+  clampNoteBox,
+  NOTE_BOARD_LIMITS,
   computeRecoveryMetrics,
   resolvePagination,
   ResponseDto,
@@ -23,7 +26,7 @@ import { TenantContextService } from '../../common/context/tenant-context.servic
 import { serializeActivity } from '../cases/cases.serializer';
 import { CasesService } from '../cases/cases.service';
 import type { CreateActivityDto } from '../cases/dto/case.dto';
-import type { CreateMoraActivityDto, CreateMoraNoteDto, ListMoraQueryDto } from './dto/mora.dto';
+import type { CreateMoraActivityDto, CreateMoraNoteDto, ListMoraQueryDto, UpdateMoraNoteDto } from './dto/mora.dto';
 import { buildMoraOrder, buildMoraWhere, MORA_FROM, moraAccessConditions, TERMINAL_CASE_STATUSES, type MoraScope } from './mora-query';
 import { serializeEpisodes } from './mora-episodes';
 import { serializeNote } from './mora-notes';
@@ -345,7 +348,7 @@ export class MoraService {
   async notes(creditId: string): Promise<ApiResponse<CreditNote[]>> {
     const rows = await this.tx(async (tx) => {
       if (!(await this.visible(tx, creditId))) return null;
-      return tx.creditNote.findMany({ where: { creditId }, orderBy: { createdAt: 'desc' }, take: 200 });
+      return tx.creditNote.findMany({ where: { creditId, deletedAt: null }, orderBy: { createdAt: 'desc' }, take: 200 });
     });
     if (!rows) throw new NotFoundException('Crédito no encontrado');
     return ResponseDto.ok(rows.map(serializeNote));
@@ -370,6 +373,11 @@ export class MoraService {
           return { note: existing, created: false };
         }
       }
+      // Sin lugar, en cascada según cuántas hay; siempre encima de las demás.
+      const live = { creditId, deletedAt: null };
+      const [count, top] = await Promise.all([tx.creditNote.count({ where: live }), tx.creditNote.aggregate({ where: live, _max: { zIndex: true } })]);
+      const spot = cascadePosition(count);
+      const box = clampNoteBox({ x: dto.x ?? spot.x, y: dto.y ?? spot.y, w: dto.w ?? NOTE_BOARD_LIMITS.defaultWidth, h: dto.h ?? NOTE_BOARD_LIMITS.defaultHeight });
       const made = await tx.creditNote.create({
         data: {
           ...(dto.id ? { id: dto.id } : {}),
@@ -379,6 +387,12 @@ export class MoraService {
           authorId: this.tenant.userId,
           kind: dto.kind ?? 'INFO',
           body,
+          color: dto.color ?? 'YELLOW',
+          posX: box.x,
+          posY: box.y,
+          width: box.w,
+          height: box.h,
+          zIndex: (top._max.zIndex ?? 0) + 1,
         },
       });
       return { note: made, created: true };
@@ -392,6 +406,74 @@ export class MoraService {
       await this.audit.record({ entity: 'credit_note', entityId: note.id, action: 'CREATE', after: { creditId, kind: note.kind, length: note.body.length } });
     }
     return ResponseDto.ok(serializeNote(note));
+  }
+
+  /** El texto, el tipo y el borrado son de quien escribió la nota o de quien reparte cartera. Mover y pintar, de cualquiera. */
+  private canEditNote(note: { authorId: string | null }): boolean {
+    return (note.authorId !== null && note.authorId === this.tenant.userId) || this.tenant.can(Permission.CASE_ASSIGN);
+  }
+
+  /**
+   * Edita un post-it. Cambiar el **texto o el tipo** lo hace quien la escribió o quien reparte cartera (403 si no);
+   * mover, redimensionar, pintar y traer al frente, cualquiera con `case:write` que vea el crédito, porque es
+   * ordenar el tablero y no tocar lo que la nota dice. Sólo se audita el cambio de contenido, y sin el texto.
+   */
+  async updateNote(creditId: string, noteId: string, dto: UpdateMoraNoteDto): Promise<ApiResponse<CreditNote>> {
+    const body = dto.body?.trim();
+    if (body !== undefined && body.length === 0) throw new BadRequestException({ code: 'MORA_002', message: 'La nota no puede estar vacía.' });
+    const content = body !== undefined || dto.kind !== undefined;
+
+    const { note, before, changed } = await this.tx(async (tx) => {
+      if (!(await this.visible(tx, creditId))) throw new NotFoundException('Crédito no encontrado');
+      const current = await tx.creditNote.findFirst({ where: { id: noteId, creditId, deletedAt: null } });
+      if (!current) throw new NotFoundException('Nota no encontrada');
+      if (content && !this.canEditNote(current)) {
+        throw new ForbiddenException({ code: 'MORA_005', message: 'Sólo quien escribió la nota o quien reparte cartera puede cambiar su texto.' });
+      }
+
+      const data: Prisma.CreditNoteUncheckedUpdateInput = {};
+      if (body !== undefined) data.body = body;
+      if (dto.kind !== undefined) data.kind = dto.kind;
+      if (dto.color !== undefined) data.color = dto.color;
+      if (dto.x !== undefined || dto.y !== undefined || dto.w !== undefined || dto.h !== undefined) {
+        const box = clampNoteBox({ x: dto.x ?? current.posX, y: dto.y ?? current.posY, w: dto.w ?? current.width, h: dto.h ?? current.height });
+        Object.assign(data, { posX: box.x, posY: box.y, width: box.w, height: box.h });
+      }
+      if (dto.front) {
+        const top = await tx.creditNote.aggregate({ where: { creditId, deletedAt: null }, _max: { zIndex: true } });
+        // Ya está arriba de todo: no se escribe otra vez (arrastrar una nota manda esto en cada gesto).
+        if (current.zIndex < (top._max.zIndex ?? 0) || (top._max.zIndex ?? 0) === 0) data.zIndex = (top._max.zIndex ?? 0) + 1;
+      }
+      if (Object.keys(data).length === 0) return { note: current, before: current, changed: false };
+      return { note: await tx.creditNote.update({ where: { id: noteId }, data }), before: current, changed: true };
+    });
+
+    if (content && changed) {
+      await this.audit.record({
+        entity: 'credit_note',
+        entityId: noteId,
+        action: 'UPDATE',
+        before: { kind: before.kind, length: before.body.length },
+        after: { creditId, kind: note.kind, length: note.body.length },
+      });
+    }
+    return ResponseDto.ok(serializeNote(note));
+  }
+
+  /** Borra un post-it (borrado lógico: queda en la base y en la auditoría). Quien la escribió o quien reparte cartera. */
+  async deleteNote(creditId: string, noteId: string): Promise<ApiResponse<{ id: string }>> {
+    const gone = await this.tx(async (tx) => {
+      if (!(await this.visible(tx, creditId))) throw new NotFoundException('Crédito no encontrado');
+      const current = await tx.creditNote.findFirst({ where: { id: noteId, creditId, deletedAt: null } });
+      if (!current) throw new NotFoundException('Nota no encontrada');
+      if (!this.canEditNote(current)) {
+        throw new ForbiddenException({ code: 'MORA_005', message: 'Sólo quien escribió la nota o quien reparte cartera puede borrarla.' });
+      }
+      await tx.creditNote.update({ where: { id: noteId }, data: { deletedAt: new Date() } });
+      return current;
+    });
+    await this.audit.record({ entity: 'credit_note', entityId: noteId, action: 'DELETE', before: { creditId, kind: gone.kind, length: gone.body.length } });
+    return ResponseDto.ok({ id: noteId });
   }
 
   /** Las oficinas activas de la cuenta, para el filtro de la lista. Sólo id y nombre. */
