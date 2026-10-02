@@ -42,6 +42,10 @@ export type CacheKind =
   | 'mora'
   /** La ficha de recuperación de un crédito (`GET /mora/:creditId`): compuesto, no la fila de la lista. */
   | 'mora.detail'
+  /** Las promesas de un crédito en mora (`scope` = el crédito). */
+  | 'mora.promises'
+  /** Las notas de un crédito en mora (`scope` = el crédito). */
+  | 'mora.notes'
   | 'credit'
   | 'route'
   | 'agenda'
@@ -74,7 +78,11 @@ export type QueueKind =
   | 'arrears.mark'
   | 'arrears.clear'
   | 'agenda.cancel'
-  | 'agenda.reschedule';
+  | 'agenda.reschedule'
+  /** Gestión con resultado y promesa sobre un crédito en mora (`POST /mora/:id/activities`). */
+  | 'mora.activity'
+  /** Nota de un crédito (`POST /mora/:id/notes`). */
+  | 'credit.note';
 
 export interface QueueRow {
   id: number;

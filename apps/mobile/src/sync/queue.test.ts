@@ -9,6 +9,7 @@ const mockState: { visit: Record<string, unknown>; upload: Record<string, unknow
   upload: { status: 'ok', url: 'http://x/f.jpg', hash: 'h1' },
 };
 const mockPayment: { idem?: string; input?: Record<string, unknown> } = {};
+const mockMora: { res: Record<string, unknown> } = { res: { status: 'ok', data: {} } };
 
 jest.mock('../field.service', () => ({
   createVisit: jest.fn(async () => {
@@ -75,7 +76,18 @@ jest.mock('../credits.service', () => ({
   }),
 }));
 
-import { send } from './queue';
+jest.mock('../mora.service', () => ({
+  addMoraActivity: jest.fn(async (creditId: string, input: { id?: string; type: string }) => {
+    mockCalls.push(`addMoraActivity:${creditId}:${input.id}:${input.type}`);
+    return mockMora.res;
+  }),
+  addMoraNote: jest.fn(async (creditId: string, input: { id?: string }) => {
+    mockCalls.push(`addMoraNote:${creditId}:${input.id}`);
+    return mockMora.res;
+  }),
+}));
+
+import { ACTION_LABEL, send } from './queue';
 
 const visitInput = { caseId: 'c1', lat: -17.7, lng: -63.1, outcome: 'PAID' } as never;
 
@@ -84,6 +96,7 @@ beforeEach(() => {
   mockState.visit = { status: 'ok', data: { id: 'v1' } };
   mockState.upload = { status: 'ok', url: 'http://x/f.jpg', hash: 'h1' };
   delete mockPayment.idem;
+  mockMora.res = { status: 'ok', data: {} };
 });
 
 describe('send · visita compuesta', () => {
@@ -196,6 +209,38 @@ describe('send · altas offline', () => {
   it('«sin fecha de vencimiento» también es idempotente', async () => {
     await send({ kind: 'arrears.clear', creditId: 'cr1', input: { mode: 'none' } });
     expect(mockCalls).toContain('clearArrears:cr1:none:-');
+  });
+});
+
+describe('send · mora', () => {
+  const ID = '33333333-3333-4333-8333-333333333333';
+
+  // El id lo puso el teléfono: es lo que hace que reintentar no duplique la gestión ni su promesa.
+  it('la gestión viaja con el mismo id con el que se encoló', async () => {
+    const r = await send({ kind: 'mora.activity', creditId: 'cr1', input: { id: ID, type: 'CALL', result: 'NO_ANSWER' } });
+    expect(r.status).toBe('ok');
+    expect(mockCalls).toEqual([`addMoraActivity:cr1:${ID}:CALL`]);
+  });
+
+  it('la nota viaja con el mismo id con el que se encoló', async () => {
+    await send({ kind: 'credit.note', creditId: 'cr1', input: { id: ID, body: 'Llamar después de las 18' } });
+    expect(mockCalls).toEqual([`addMoraNote:cr1:${ID}`]);
+  });
+
+  it('un 4xx del servidor es definitivo y queda a la vista, no se reintenta', async () => {
+    mockMora.res = { status: 'error', message: 'Ese id de nota ya pertenece a otro crédito.', httpStatus: 409 };
+    const r = await send({ kind: 'credit.note', creditId: 'cr1', input: { id: ID, body: 'x' } });
+    expect(r).toEqual({ status: 'error', message: 'Ese id de nota ya pertenece a otro crédito.', permanent: true });
+  });
+
+  it('sin red no es error: queda en la cola', async () => {
+    mockMora.res = { status: 'offline' };
+    expect((await send({ kind: 'mora.activity', creditId: 'cr1', input: { id: ID, type: 'CALL', result: 'NO_ANSWER' } })).status).toBe('offline');
+  });
+
+  it('las dos acciones se llaman en la hoja de pendientes', () => {
+    expect(ACTION_LABEL['mora.activity']).toBe('Gestión de mora registrada');
+    expect(ACTION_LABEL['credit.note']).toBe('Nota del crédito');
   });
 });
 

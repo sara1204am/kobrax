@@ -4,9 +4,9 @@
  *
  * Los tipos del contrato viven en `@kobrax/shared`; acá no se redefine ninguno.
  */
-import type { MoraCreditListItem } from '@kobrax/shared';
-import { apiQuery, toQuery, type QueryResult } from './api-client';
-import { cachedList } from './sync/cached';
+import type { CreditNote, MoraCreditDetail, MoraCreditListItem, MoraPromise, NewCreditNote, RecoveryActivityInput } from '@kobrax/shared';
+import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
+import { cachedList, cachedOne } from './sync/cached';
 import { toMoraRows, type MoraRow } from './mora';
 
 export interface ListMoraParams {
@@ -30,3 +30,34 @@ export function listMora(params: ListMoraParams = {}): Promise<QueryResult<MoraR
 
 /** Cuántos créditos baja la pantalla (y la hidratación). La cartera de un cobrador cabe en memoria. */
 export const MORA_LIMIT = 100;
+
+/** La ficha de recuperación de un crédito. Con respaldo local: sin señal se abre con lo último que se bajó. */
+export function getMora(creditId: string): Promise<QueryResult<MoraCreditDetail>> {
+  return cachedOne<MoraCreditDetail>('mora.detail', creditId, () => apiQuery<MoraCreditDetail>(`/mora/${creditId}`));
+}
+
+/** Las promesas del crédito (más reciente primero). `scope` = el crédito, para que no se mezclen entre sí. */
+export function listMoraPromises(creditId: string): Promise<QueryResult<MoraPromise[]>> {
+  return cachedList<MoraPromise>('mora.promises', creditId, () => apiQuery<MoraPromise[]>(`/mora/${creditId}/promises`));
+}
+
+/** Las notas del crédito (más reciente primero). */
+export function listMoraNotes(creditId: string): Promise<QueryResult<CreditNote[]>> {
+  return cachedList<CreditNote>('mora.notes', creditId, () => apiQuery<CreditNote[]>(`/mora/${creditId}/notes`));
+}
+
+/**
+ * Gestión con resultado y promesa. **Lleva `id` del teléfono**: el servidor lo guarda con ese id y un
+ * reintento (la cola) devuelve lo ya guardado en vez de crear otra. Abre el caso si el crédito no tiene.
+ */
+export function addMoraActivity(
+  creditId: string,
+  input: RecoveryActivityInput,
+): Promise<MutateResult<{ id: string; type: string; createdAt: string; caseId: string; caseOpened: boolean }>> {
+  return apiMutate(`/mora/${creditId}/activities`, 'POST', input);
+}
+
+/** Nota del crédito. Idempotente por `id` (puesto por el teléfono). */
+export function addMoraNote(creditId: string, input: NewCreditNote): Promise<MutateResult<CreditNote>> {
+  return apiMutate(`/mora/${creditId}/notes`, 'POST', input);
+}
