@@ -72,6 +72,8 @@ export class CreateMoraNoteDto {
  * también el panel.
  */
 export class CreateMoraActivityDto {
+  /** Lo puede poner el móvil (sin red): reintentar con el mismo id no duplica la gestión. */
+  @IsOptional() @IsUUID() id?: string;
   @IsIn(RECOVERY_ACTIVITY_TYPES as unknown as string[]) type!: string;
   @IsOptional() @IsString() @MaxLength(40) result?: string;
   @IsOptional() @IsString() @MaxLength(MORA_NOTE_MAX_LENGTH + 200) notes?: string;

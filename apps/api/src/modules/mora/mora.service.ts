@@ -286,6 +286,18 @@ export class MoraService {
    *    gestión y se avisa al tablero — una sola lógica, no una copia.
    */
   async addActivity(creditId: string, dto: CreateMoraActivityDto): Promise<ApiResponse<{ id: string; type: string; createdAt: Date; caseId: string; caseOpened: boolean }>> {
+    // Reintento del móvil: la gestión ya entró con ese id. Se responde lo guardado y no se escribe nada más.
+    if (dto.id) {
+      const prev = await this.tx(async (tx) => {
+        if (!(await this.visible(tx, creditId))) throw new NotFoundException('Crédito no encontrado');
+        return tx.caseActivity.findFirst({ where: { id: dto.id }, select: { id: true, type: true, createdAt: true, caseId: true, case: { select: { creditId: true } } } });
+      });
+      if (prev) {
+        if (prev.case.creditId !== creditId) throw new ConflictException({ code: 'MORA_004', message: 'Ese id de gestión ya pertenece a otro crédito.' });
+        return ResponseDto.ok({ id: prev.id, type: prev.type, createdAt: prev.createdAt, caseId: prev.caseId, caseOpened: false });
+      }
+    }
+
     // Un día de margen: quien escribe en Bolivia a las 21:00 puede prometer «hoy» aunque en UTC ya sea mañana.
     const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
     const invalid = validateRecoveryActivity(dto, yesterday);
@@ -311,6 +323,7 @@ export class MoraService {
     }
 
     const done = await this.cases.addActivity(caseId, {
+      id: dto.id,
       type: dto.type,
       result: dto.result,
       notes: dto.notes?.trim() || undefined,

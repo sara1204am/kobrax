@@ -171,6 +171,8 @@ export class ActivityPromiseDto {
 }
 
 export class CreateActivityDto {
+  /** Opcional: lo pone quien llama (móvil) para que reintentar no duplique. Hoy sólo lo manda `POST /mora/:creditId/activities`. */
+  @IsOptional() @IsUUID() id?: string;
   @IsEnum(CaseActivityType) type!: CaseActivityType;
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsString() result?: string;

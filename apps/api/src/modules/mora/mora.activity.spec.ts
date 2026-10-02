@@ -1,19 +1,22 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { MoraService } from './mora.service';
 
 const CREDIT = '11111111-1111-4111-8111-111111111111';
 const FUTURE = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
 const PROMISE = { amount: 500, promiseDate: FUTURE, paymentMethodCode: 'CASH' };
 
-function make(opts: { visible?: boolean; openCase?: string | null; raced?: string; createFails?: boolean; permissions?: string[] } = {}) {
+function make(opts: { visible?: boolean; previous?: { creditId: string }; openCase?: string | null; raced?: string; createFails?: boolean; permissions?: string[] } = {}) {
   const calls = { created: [] as Record<string, unknown>[], added: [] as { caseId: string; dto: Record<string, unknown> }[], queries: [] as { sql: string; values: unknown[] }[] };
   let caseLookups = 0;
   const tx = {
     $queryRaw: async (q: { sql: string; values: unknown[] }) => {
       calls.queries.push({ sql: q.sql, values: q.values });
       return opts.visible === false ? [] : [{ id: CREDIT, client_id: 'cl1' }];
+    },
+    caseActivity: {
+      findFirst: async () => (opts.previous ? { id: 'act-previa', type: 'CALL', createdAt: new Date('2026-10-02T09:00:00Z'), caseId: 'case-1', case: { creditId: opts.previous.creditId } } : null),
     },
     collectionCase: {
       findFirst: async () => {
@@ -52,7 +55,7 @@ describe('MoraService.addActivity — gestión con resultado y promesa', () => {
     assert.equal(res.data!.caseId, 'case-1');
     assert.equal(res.data!.caseOpened, false);
     assert.equal(calls.created.length, 0, 'no abre otro caso');
-    assert.deepEqual(calls.added[0], { caseId: 'case-1', dto: { type: 'VISIT', result: 'NOT_FOUND', notes: 'Se dejó aviso con un familiar', promise: undefined } });
+    assert.deepEqual(calls.added[0], { caseId: 'case-1', dto: { id: undefined, type: 'VISIT', result: 'NOT_FOUND', notes: 'Se dejó aviso con un familiar', promise: undefined } });
   });
 
   it('🔴 una promesa viaja entera a CasesService, que la vuelve un agenda_item', async () => {
@@ -126,5 +129,33 @@ describe('MoraService.addActivity — validación (la regla de shared)', () => {
     const hoyMenosUno = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
     await service.addActivity(CREDIT, { type: 'CALL', result: 'PROMISE_TO_PAY', promise: { ...PROMISE, promiseDate: hoyMenosUno } });
     assert.equal(calls.added.length, 1);
+  });
+});
+
+describe('MoraService.addActivity — id puesto por el teléfono (reintento sin red)', () => {
+  const ID = '22222222-2222-4222-8222-222222222222';
+
+  it('el id viaja a CasesService para que la gestión se guarde con él', async () => {
+    const { service, calls } = make({ openCase: 'case-1' });
+    await service.addActivity(CREDIT, { id: ID, type: 'CALL', result: 'NO_ANSWER' });
+    assert.equal(calls.added[0].dto.id, ID);
+  });
+
+  it('🔴 reintentar con un id que ya entró devuelve lo guardado y NO escribe otra gestión', async () => {
+    const { service, calls } = make({ openCase: 'case-1', previous: { creditId: CREDIT } });
+    const res = await service.addActivity(CREDIT, { id: ID, type: 'CALL', result: 'NO_ANSWER' });
+    assert.equal(res.data!.id, 'act-previa');
+    assert.equal(calls.added.length, 0);
+    assert.equal(calls.created.length, 0);
+  });
+
+  it('un id que pertenece a otro crédito rebota con 409', async () => {
+    const { service } = make({ previous: { creditId: '99999999-9999-4999-8999-999999999999' } });
+    await assert.rejects(() => service.addActivity(CREDIT, { id: ID, type: 'CALL', result: 'NO_ANSWER' }), ConflictException);
+  });
+
+  it('sobre un crédito que no puede ver, 404 aunque traiga id', async () => {
+    const { service } = make({ visible: false, previous: { creditId: CREDIT } });
+    await assert.rejects(() => service.addActivity(CREDIT, { id: ID, type: 'CALL', result: 'NO_ANSWER' }), NotFoundException);
   });
 });

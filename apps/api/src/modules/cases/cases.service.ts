@@ -361,7 +361,7 @@ export class CasesService {
       const found = await tx.collectionCase.findFirst({ where: { id, deletedAt: null }, select: { id: true, clientId: true, creditId: true } });
       if (!found) throw resourceNotFound();
       const created = await tx.caseActivity.create({
-        data: { accountId: this.tenant.accountId, caseId: id, userId: this.tenant.userId, type: dto.type, notes: dto.notes, result: dto.result },
+        data: { ...(dto.id ? { id: dto.id } : {}), accountId: this.tenant.accountId, caseId: id, userId: this.tenant.userId, type: dto.type, notes: dto.notes, result: dto.result },
       });
       // Promesa de pago (§5.4): además del historial, vive en agenda_items → enciende PROMESA en la
       // cartera (S1) y aparece en la Agenda. Misma transacción que la gestión.
