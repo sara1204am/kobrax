@@ -322,14 +322,23 @@ export class MoraService {
       }
     }
 
-    const done = await this.cases.addActivity(caseId, {
-      id: dto.id,
-      type: dto.type,
-      result: dto.result,
-      notes: dto.notes?.trim() || undefined,
-      promise: dto.promise,
-    } as CreateActivityDto);
-    return ResponseDto.ok({ id: done.id, type: done.type, createdAt: done.createdAt, caseId, caseOpened });
+    try {
+      const done = await this.cases.addActivity(caseId, {
+        id: dto.id,
+        type: dto.type,
+        result: dto.result,
+        notes: dto.notes?.trim() || undefined,
+        promise: dto.promise,
+      } as CreateActivityDto);
+      return ResponseDto.ok({ id: done.id, type: done.type, createdAt: done.createdAt, caseId, caseOpened });
+    } catch (err) {
+      // Misma carrera que en la nota: el otro envío con este id ya la guardó. Se devuelve esa, no un 500.
+      if (dto.id && isUniqueViolation(err)) {
+        const prev = await this.tx((tx) => tx.caseActivity.findFirst({ where: { id: dto.id }, select: { id: true, type: true, createdAt: true, caseId: true } }));
+        if (prev) return ResponseDto.ok({ id: prev.id, type: prev.type, createdAt: prev.createdAt, caseId: prev.caseId, caseOpened: false });
+      }
+      throw err;
+    }
   }
 
   /** Las notas de un crédito, la más reciente primero. Mismo alcance que la ficha. */
@@ -351,7 +360,7 @@ export class MoraService {
     const body = dto.body.trim();
     if (body.length === 0) throw new BadRequestException({ code: 'MORA_002', message: 'La nota no puede estar vacía.' });
 
-    const { note, created } = await this.tx(async (tx) => {
+    const run = () => this.tx(async (tx) => {
       const credit = await this.visible(tx, creditId);
       if (!credit) throw new NotFoundException('Crédito no encontrado');
       if (dto.id) {
@@ -374,6 +383,9 @@ export class MoraService {
       });
       return { note: made, created: true };
     });
+    // Dos envíos con el mismo id a la vez (el intento en vivo y la cola) pasan los dos el chequeo y uno choca con
+    // la unicidad: se repite UNA vez, y esta vez encuentra la nota que ya guardó el otro.
+    const { note, created } = await run().catch((err: unknown) => (dto.id && isUniqueViolation(err) ? run() : Promise.reject(err)));
 
     // Sólo se audita lo nuevo, y sin el texto: una nota puede traer datos personales.
     if (created) {
@@ -382,10 +394,6 @@ export class MoraService {
     return ResponseDto.ok(serializeNote(note));
   }
 
-  /**
-   * A qué crédito pertenece un caso. Existe para que los enlaces viejos (`/mora/<caseId>`: notificaciones,
-   * la bitácora del cliente) sigan abriendo: la ficha ahora es por crédito.
-   */
   /** Las oficinas activas de la cuenta, para el filtro de la lista. Sólo id y nombre. */
   async branches(): Promise<ApiResponse<{ id: string; name: string }[]>> {
     const rows = await this.tx((tx) =>
@@ -394,6 +402,10 @@ export class MoraService {
     return ResponseDto.ok(rows);
   }
 
+  /**
+   * A qué crédito pertenece un caso. Existe para que los enlaces viejos (`/mora/<caseId>`: notificaciones,
+   * la bitácora del cliente) sigan abriendo: la ficha ahora es por crédito.
+   */
   async byCase(caseId: string): Promise<ApiResponse<MoraCaseLookup>> {
     const scope = this.scope();
     const row = await this.tx((tx) =>
@@ -473,4 +485,9 @@ export class MoraService {
       .filter((r): r is MoraCreditRow => r !== undefined)
       .map((r) => serializeMoraCredit(r, { now, staleAfterDays, hasActivePromise: withPromise.has(r.clientId) }));
   }
+}
+
+/** Violación de unicidad de Prisma (P2002): otro envío escribió esa fila primero. */
+function isUniqueViolation(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError ? err.code === 'P2002' : (err as { code?: string } | null)?.code === 'P2002';
 }

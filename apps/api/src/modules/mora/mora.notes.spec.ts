@@ -7,7 +7,8 @@ const CREDIT = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
 const NOTE_ID = '33333333-3333-4333-8333-333333333333';
 
-function make(opts: { visible?: boolean; permissions?: string[]; existing?: { id: string; creditId: string; kind: string; body: string; authorId: string | null; createdAt: Date } | null } = {}) {
+function make(opts: { raceOnCreate?: boolean; visible?: boolean; permissions?: string[]; existing?: { id: string; creditId: string; kind: string; body: string; authorId: string | null; createdAt: Date } | null } = {}) {
+  let raceCreated = false;
   const calls = { created: [] as Record<string, unknown>[], audit: [] as Record<string, unknown>[], queries: [] as { sql: string; values: unknown[] }[] };
   const tx = {
     $queryRaw: async (q: { sql: string; values: unknown[] }) => {
@@ -15,9 +16,14 @@ function make(opts: { visible?: boolean; permissions?: string[]; existing?: { id
       return opts.visible === false ? [] : [{ id: CREDIT, client_id: 'cl1' }];
     },
     creditNote: {
-      findFirst: async () => opts.existing ?? null,
+      findFirst: async () =>
+        opts.raceOnCreate && raceCreated ? { id: NOTE_ID, creditId: CREDIT, kind: 'INFO', body: 'ganadora', authorId: 'u2', createdAt: new Date('2026-10-01T10:00:00Z') } : (opts.existing ?? null),
       findMany: async () => [{ id: 'n1', creditId: CREDIT, kind: 'WARNING', body: 'Visitar al padre', authorId: 'u1', createdAt: new Date('2026-10-01T10:00:00Z') }],
       create: async (a: { data: Record<string, unknown> }) => {
+        if (opts.raceOnCreate) {
+          raceCreated = true;
+          throw Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
+        }
         calls.created.push(a.data);
         return { id: (a.data.id as string) ?? 'gen', creditId: CREDIT, kind: a.data.kind, body: a.data.body, authorId: a.data.authorId, createdAt: new Date('2026-10-01T10:00:00Z') };
       },
@@ -110,5 +116,14 @@ describe('MoraService.notes / promises — lectura con el mismo alcance', () => 
     const { service } = make({ visible: false });
     await assert.rejects(() => service.notes(CREDIT), NotFoundException);
     await assert.rejects(() => service.promises(CREDIT), NotFoundException);
+  });
+});
+
+describe('MoraService.addNote — carrera por id repetido', () => {
+  it('🔴 dos envíos con el mismo id a la vez: el que pierde devuelve la nota del ganador, no un 500', async () => {
+    const { service, calls } = make({ raceOnCreate: true });
+    const res = await service.addNote(CREDIT, { id: NOTE_ID, body: 'mi nota' });
+    assert.equal(res.data!.body, 'ganadora');
+    assert.equal(calls.audit.length, 0, 'no audita: no creó nada');
   });
 });
