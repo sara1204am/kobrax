@@ -50,6 +50,11 @@ describe('moraListQuery', () => {
     expect(moraListQuery({ assigneeId: '' }).has('assigneeId')).toBe(false);
   });
 
+  it('la oficina viaja a la API y cuenta como filtro activo', () => {
+    expect(moraListQuery({ branchId: 'b1' }).get('branchId')).toBe('b1');
+    expect(hasMoraFilters({ branchId: 'b1' })).toBe(true);
+  });
+
   it('la fuente conocida viaja; una inventada no (D7)', () => {
     expect(moraListQuery({ source: 'PSF' }).get('source')).toBe('PSF');
     expect(moraListQuery({ source: 'otra' }).has('source')).toBe(false);

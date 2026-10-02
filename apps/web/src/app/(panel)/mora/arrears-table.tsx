@@ -34,6 +34,7 @@ export function ArrearsTable({
   rows,
   meta,
   members,
+  branches = [],
   currency,
   filtered,
   userId,
@@ -44,6 +45,7 @@ export function ArrearsTable({
   rows: MoraCreditListItem[];
   meta: PageMeta;
   members: Member[];
+  branches?: { id: string; name: string }[];
   currency: string;
   filtered: boolean;
   userId?: string;
@@ -271,6 +273,17 @@ export function ArrearsTable({
               { value: 'true', label: t('filters.withCase') },
               { value: 'false', label: t('filters.withoutCase') },
             ],
+          },
+        ]
+      : []),
+    ...(showAssignee && branches.length > 1
+      ? [
+          {
+            keys: ['branchId'],
+            label: t('filters.branch'),
+            type: 'select' as const,
+            allLabel: t('filters.allBranches'),
+            options: branches.map((b) => ({ value: b.id, label: b.name })),
           },
         ]
       : []),

@@ -10,6 +10,7 @@ export interface MoraParams {
   status?: string;
   priority?: string;
   assigneeId?: string;
+  branchId?: string;
   /** `'true'` = casos sin cobrador. Sólo lo ofrece quien reparte. */
   unassigned?: string;
   /** `'true'` = con caso abierto · `'false'` = en mora pero sin caso. */
@@ -49,7 +50,7 @@ export function moraLimit(params: MoraParams): number {
 }
 
 /** Filtros de texto libre o de id que viajan tal cual. Un valor vacío **no se manda**. */
-const PASSTHROUGH = ['status', 'priority', 'assigneeId', 'q', 'balanceMin', 'balanceMax', 'dpdMin', 'dpdMax'] as const;
+const PASSTHROUGH = ['status', 'priority', 'assigneeId', 'branchId', 'q', 'balanceMin', 'balanceMax', 'dpdMin', 'dpdMax'] as const;
 /** Banderas que la API valida como `'true'`/`'false'`: cualquier otra cosa no viaja. */
 const FLAGS = ['unassigned', 'hasCase', 'overdue', 'hasPromise'] as const;
 
@@ -93,7 +94,7 @@ export function moraListQuery(params: MoraParams): URLSearchParams {
  */
 export function hasMoraFilters(params: MoraParams): boolean {
   return Boolean(
-    params.status || params.priority || params.assigneeId || params.q || params.dpdMin || params.dpdMax ||
+    params.status || params.priority || params.assigneeId || params.branchId || params.q || params.dpdMin || params.dpdMax ||
       params.balanceMin || params.balanceMax || params.source || params.todos === '1' ||
       FLAGS.some((k) => params[k] === 'true' || params[k] === 'false'),
   );

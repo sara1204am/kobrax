@@ -43,6 +43,13 @@ export class MoraController {
     return new StreamableFile(file.content, { type: 'application/pdf', disposition: `attachment; filename="${file.filename}"` });
   }
 
+  /** Las oficinas para el filtro. Va antes de `:creditId`. */
+  @Get('branches')
+  @Roles(Permission.CASE_READ)
+  branches() {
+    return this.mora.branches();
+  }
+
   /** Va antes de `:creditId`: «by-case» no es un id. */
   @Get('by-case/:caseId')
   @Roles(Permission.CASE_READ)

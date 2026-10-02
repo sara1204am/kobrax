@@ -94,8 +94,9 @@ Clasificación pedida en §2.3, con lo que quedó implementado:
 - **Sin `POST /mora/:id/open-case`:** el botón «Abrir caso» usa el `POST /cases { creditId }` que ya existía (a través del BFF nuevo `app/api/cases/route.ts`).
 - **Orden:** `overdueAmount` no es ordenable (vive en JSON/cuotas). Las claves son `daysPastDue, balance, priority, lastAction, slaDueAt, createdAt`.
 - **Operaciones externas ausentes del último reporte** (`sync_status = ABSENT`) no se listan salvo con «incluir los que están al día» (D4: la ausencia no es mora ni pago).
-- **Filtro por oficina** y exportación: siguen pendientes (requieren la lista de oficinas y T5–T7).
-- **Enlaces viejos:** cuatro pantallas (`agenda/[id]`, `cartera/[id]/cases-section`, `pagos/[id]`, `rutas/[id]/parada/[sid]`) siguen enlazando `/mora/<caseId>`; funcionan por la redirección y se pueden cambiar a crédito después.
+- **Filtro por oficina (hecho):** `GET /mora/branches` (`case:read`, oficinas activas, id y nombre) + filtro «Oficina» en la tabla, sólo para quien reparte (`case:assign`) y si hay más de una oficina. `branchId` ya lo entendía `GET /mora` y viaja también al export.
+- **Enlaces viejos (hecho salvo uno):** agenda, Cartera y Pagos enlazan ya a `/mora/<creditId>`. La parada de ruta sólo conoce `caseId` (`RouteStopItem` no trae `creditId`) y sigue por la redirección `/mora/<caseId>`.
+- **PDF sin ver a ojo:** sigue pendiente, no hay renderizador en la máquina de desarrollo.
 
 **Hallazgo con datos reales (base de desarrollo):** de 22 créditos en mora, **21 no tienen caso abierto**; el listado anterior sólo habría mostrado 1. Es exactamente el hueco que motivó listar por crédito.
 **Alcance:** Web primero (Fases 0–6 y 10), Mobile después (Fases 7–9).

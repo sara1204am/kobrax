@@ -373,6 +373,14 @@ export class MoraService {
    * A qué crédito pertenece un caso. Existe para que los enlaces viejos (`/mora/<caseId>`: notificaciones,
    * la bitácora del cliente) sigan abriendo: la ficha ahora es por crédito.
    */
+  /** Las oficinas activas de la cuenta, para el filtro de la lista. Sólo id y nombre. */
+  async branches(): Promise<ApiResponse<{ id: string; name: string }[]>> {
+    const rows = await this.tx((tx) =>
+      tx.branch.findMany({ where: { deletedAt: null, active: true }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+    );
+    return ResponseDto.ok(rows);
+  }
+
   async byCase(caseId: string): Promise<ApiResponse<MoraCaseLookup>> {
     const scope = this.scope();
     const row = await this.tx((tx) =>

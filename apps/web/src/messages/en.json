@@ -675,6 +675,8 @@
         "status": "Status",
         "priority": "Priority",
         "assignee": "Collector",
+        "branch": "Office",
+        "allBranches": "All offices",
         "all": "All",
         "unassigned": "Unassigned",
         "overdue": "Overdue only",

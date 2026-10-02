@@ -26,11 +26,12 @@ export default async function MoraPage({ searchParams }: { searchParams: MoraPar
   const t = await getTranslations('panel.cases');
   const query = moraListQuery(searchParams);
 
-  const [list, me, team, account] = await Promise.all([
+  const [list, me, team, account, branchList] = await Promise.all([
     apiCall<MoraCreditListItem[]>(`/mora?${query}`, { method: 'GET', auth: true }),
     apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
     apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
+    apiCall<{ id: string; name: string }[]>('/mora/branches', { method: 'GET', auth: true }),
   ]);
 
   if (list.status !== 200 || !list.body.data) {
@@ -64,6 +65,7 @@ export default async function MoraPage({ searchParams }: { searchParams: MoraPar
         rows={list.body.data}
         meta={pageMeta(list.body, searchParams.page, moraLimit(searchParams))}
         members={members}
+        branches={branchList.body.data ?? []}
         currency={account.body.data?.currencyCode ?? 'BOB'}
         filtered={hasMoraFilters(searchParams)}
         userId={me.body.data?.userId}

@@ -675,6 +675,8 @@
         "status": "Estado",
         "priority": "Prioridad",
         "assignee": "Cobrador",
+        "branch": "Oficina",
+        "allBranches": "Todas las oficinas",
         "all": "Todos",
         "unassigned": "Sin asignar",
         "overdue": "Sólo vencidos",
