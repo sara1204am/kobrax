@@ -25,7 +25,7 @@ El cobrador ve **sus créditos en mora, uno por crédito**, con y sin señal, ab
 
 ## 4. Pantallas
 
-**Sin node-id de Figma: no existe diseño de Mora.** Se propone construir con componentes del sistema (navy primario) y que la usuaria valide visualmente. *(Pendiente de confirmar, arriba.)*
+**Sin node-id de Figma: no existe diseño de Mora — confirmado por la usuaria (2026-10-02).** Se construye con los componentes del sistema (CTA navy) y ella valida visualmente. Tampoco hay pulls de Figma en la construcción.
 
 | Pantalla | Qué es | Figma |
 |---|---|---|
@@ -37,8 +37,8 @@ El cobrador ve **sus créditos en mora, uno por crédito**, con y sin señal, ab
 
 | Uso | Endpoint | Notas |
 |---|---|---|
-| Lista | `GET /mora` | `case:read`; el cobrador sólo ve lo suyo (el server acota). Orden `priority`/`daysPastDue`/`balance`/`lastAction`; filtros `hasPromise`, `priority`, `noActionSince`, `q`, `limit≤100`. Piso `días ≥ 1` por defecto. |
-| Ficha | `GET /mora/:creditId` | `MoraCreditDetail` (lista + gestiones del caso abierto). |
+| Lista | `GET /api/mora` | `case:read`; el cobrador sólo ve lo suyo (el server acota). Orden `priority`/`daysPastDue`/`balance`/`lastAction`; filtros `hasPromise`, `priority`, `noActionSince`, `q`, `limit≤100`. Piso `días ≥ 1` por defecto. |
+| Ficha | `GET /api/mora/:creditId` | `MoraCreditDetail` (lista + gestiones del caso abierto). |
 | Historial/métricas | `GET /mora/:creditId/episodes`, `/metrics` | Móvil: sólo mora actual y última (§5 F4); métricas opcionales. |
 | Promesas / notas | `GET /mora/:creditId/promises`, `/notes` | |
 | Gestión | `POST /mora/:creditId/activities` | Resultado + promesa; abre el caso si no hay. **Reemplaza** al `POST /cases/:id/activities` previsto en F4 §4 para este flujo: sirve también a créditos **sin caso** (21 de 22 en la base de desarrollo). |
@@ -88,7 +88,7 @@ F4 T17 dice «reusar `groupPortfolio`». **No sirve:** `groupPortfolio` agrupa *
 **M1 — lista (T17)**
 - [ ] `CacheKind` `mora`/`mora.detail`; `src/mora.service.ts` con `listMora` sobre `cachedList`.
 - [ ] `src/mora.ts`: orden prioridad → días; chips «Crítica», «Con promesa», «Sin gestión N días»; test.
-- [ ] Pantalla (según decisión pendiente) con `FlashList`, loading/empty/error, `OfflineIndicator`, «datos de las HH:MM» (`localAt`).
+- [ ] En `cobranza.tsx`, **modo de lista por chip**: con «En mora» la fuente pasa a `GET /mora` y se pintan `MoraCard` (una por crédito); los demás chips siguen con `groupPortfolio` y `CaseCard`. `FlashList`, loading/empty/error, `OfflineIndicator`, «datos de las HH:MM» (`localAt`).
 - [ ] `hydrate.ts`: paso «mora» con **los mismos parámetros** que la pantalla + test de que se hidrata.
 
 **M2 — ficha y acciones (T18)**
