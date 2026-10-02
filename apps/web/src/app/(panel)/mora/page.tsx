@@ -1,14 +1,14 @@
 import { getTranslations } from 'next-intl/server';
-import { Permission, type AccountInfo, type CaseListItem, type MeInfo, type Member } from '@kobrax/shared';
+import { Permission, type AccountInfo, type MeInfo, type Member, type MoraCreditListItem } from '@kobrax/shared';
 import { apiCall, pageMeta } from '@/lib/bff';
-import { hasMoraFilters, moraLimit, moraQuery, type MoraParams } from '@/lib/cases';
+import { hasMoraFilters, moraLimit, moraListQuery, type MoraParams } from '@/lib/mora';
 import { EmptyState } from '@/components/panel-ui';
 import { ArrearsTable } from './arrears-table';
 
 /**
  * La cartera en mora.
  *
- * 🔴 **Abre con los vencidos, no con todo el trabajo abierto** (`dpdMin=1`, en `moraQuery`). La
+ * 🔴 **Abre con los vencidos, no con todo el trabajo abierto** (el piso `días >= 1` lo pone `GET /mora`). La
  * pantalla se llama Mora: listar también a quien está al día y sólo tiene el expediente sin cerrar
  * la volvía otra cosa. Ver a esos es un filtro que se saca, no el estado inicial.
  *
@@ -18,16 +18,16 @@ import { ArrearsTable } from './arrears-table';
  * mora no existe para nadie.
  *
  * 🔴 **La misma pantalla muestra cosas distintas según quién mire, y la respuesta no lo dice.**
- * `GET /cases` acota por capacidad: con `case:assign` devuelve todo el tenant, y sin él sólo lo
+ * `GET /mora` acota por capacidad: con `case:assign` devuelve todo el tenant, y sin él sólo lo
  * propio. Un cobrador ve una lista corta y correcta sin ninguna señal de que está filtrada, así que
  * la señal la pone la pantalla.
  */
 export default async function MoraPage({ searchParams }: { searchParams: MoraParams }) {
   const t = await getTranslations('panel.cases');
-  const query = moraQuery(searchParams);
+  const query = moraListQuery(searchParams);
 
   const [list, me, team, account] = await Promise.all([
-    apiCall<CaseListItem[]>(`/cases?${query}`, { method: 'GET', auth: true }),
+    apiCall<MoraCreditListItem[]>(`/mora?${query}`, { method: 'GET', auth: true }),
     apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
     apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
@@ -42,6 +42,8 @@ export default async function MoraPage({ searchParams }: { searchParams: MoraPar
   // Cambiar la prioridad es gestionar la cobranza, no repartirla: alcanza con `case:write`, así el
   // cobrador que conoce a su deudor puede subirla sin ser supervisor.
   const canWrite = permissions.includes(Permission.CASE_WRITE);
+  // Exportar es de todo rol que ve Mora: la API lo acota a su alcance (el cobrador baja sólo lo suyo).
+  const canExport = permissions.includes(Permission.CASE_EXPORT);
   // El equipo puede venir vacío si el rol no tiene `user:read`: el filtro por cobrador
   // simplemente no se dibuja, y la lista sigue siendo legible.
   const members = team.body.data ?? [];
@@ -67,6 +69,7 @@ export default async function MoraPage({ searchParams }: { searchParams: MoraPar
         userId={me.body.data?.userId}
         showAssignee={supervises && members.length > 0}
         canWrite={canWrite}
+        canExport={canExport}
       />
     </>
   );
