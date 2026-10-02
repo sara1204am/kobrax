@@ -1,85 +1,105 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocale, useTranslations } from 'next-intl';
-import { memberName, MORA_NOTE_KINDS, MORA_NOTE_MAX_LENGTH, type CreditNote, type Member, type MoraNoteKind } from '@kobrax/shared';
+import { memberName, type CreditNote, type Member, type MoraNoteKind } from '@kobrax/shared';
 import { Section } from '@/components/panel-ui';
-import { Button, ErrorBanner, Field, Select } from '@/components/ui';
+import { Button } from '@/components/ui';
+import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
 import { errorText } from '@/lib/api-error';
-import { postJson } from '@/lib/client';
 import { dateTime } from '@/lib/format';
-import { notePreview, sortNotes } from '@/lib/mora-notes';
+import { canEditNoteText, NOTE_COLORS, sortNotes } from '@/lib/mora-notes';
+import { NoteDialog, type NoteDraft } from './note-dialog';
+import { NotesBoard } from './notes-board';
+import { useNotes } from './use-notes';
 
 /** El color del punto de cada tipo: lo importante se ve antes de leerlo. */
-const DOT: Record<MoraNoteKind, string> = {
-  INFO: 'bg-k-muted',
-  WARNING: 'bg-k-warning',
-  IMPORTANT: 'bg-k-danger',
+const BADGE: Record<MoraNoteKind, string> = {
+  INFO: 'bg-black/5 text-k-text-2',
+  WARNING: 'bg-k-warning-bg text-k-warning-text',
+  IMPORTANT: 'bg-k-danger-bg text-k-danger',
 };
 
 /**
- * Las notas del crédito: **compactas y plegadas**, la importante arriba, y un formulario para dejar otra.
+ * Las notas del crédito, como **post-its** (el estilo de Gallium): tarjetas de colores en la ficha y, si se
+ * quiere, un tablero donde flotan sobre la pantalla, se arrastran y se redimensionan.
  *
- * 🔴 **Son del crédito, no del caso**: sobreviven a que el caso se cierre y existen aunque todavía no haya uno
- * (un crédito en mora sin caso también tiene cosas que decir). Se escriben y no se editan: una nota es lo que
- * alguien dijo en un momento, y corregirla es escribir otra.
+ * 🔴 **Son del crédito, no del caso**: sobreviven a que el caso se cierre y existen aunque todavía no haya uno.
+ * Se pueden corregir y borrar, con una regla: **el texto, el tipo y el borrado son de quien la escribió o de
+ * quien reparte cartera**; mover, pintar y redimensionar, de cualquiera que pueda escribir sobre el crédito
+ * (es ordenar el tablero, no cambiar lo que la nota dice). La API hace cumplir las dos; acá sólo se decide qué
+ * botones se ofrecen.
  *
  * `notes === null` es «no se pudo leer» (la API sin la migración, o sin permiso): la ficha sigue entera.
  */
 export function NotesSection({
   creditId,
-  notes,
+  notes: initial,
   members,
   canWrite,
+  userId,
+  canAssign = false,
 }: {
   creditId: string;
   notes: CreditNote[] | null;
   members: Member[];
   canWrite: boolean;
+  /** Quién mira: decide de qué notas puede corregir el texto. */
+  userId?: string;
+  /** Repartir cartera: puede corregir y borrar notas ajenas. */
+  canAssign?: boolean;
 }) {
   const t = useTranslations('panel.cases.ficha.notes');
   const tErr = useTranslations('panel.cases');
   const locale = useLocale();
-  const router = useRouter();
   const toast = useToast();
-  const [open, setOpen] = useState(false);
-  const [body, setBody] = useState('');
-  const [kind, setKind] = useState<MoraNoteKind>('INFO');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { notes, preview, save, create, remove } = useNotes(creditId, initial);
+  const [board, setBoard] = useState(false);
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<{ note?: CreditNote } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<CreditNote | null>(null);
   const byId = new Map(members.map((m) => [m.userId, memberName(m)]));
-  // Un id por nota que se está escribiendo: si el envío falla y se reintenta (o se hace doble clic), viaja el mismo.
-  const pendingId = useRef<string | null>(null);
+  const nameOf = useCallback(
+    (n: CreditNote) => (n.authorId ? (byId.get(n.authorId) ?? t('unknownAuthor')) : t('unknownAuthor')),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [members, t],
+  );
 
-  async function save() {
-    setBusy(true);
-    setError(null);
-    // El id lo genera quien escribe: si el envío se repite (doble clic, reintento), la API no duplica la nota.
-    pendingId.current ??= crypto.randomUUID();
-    const res = await postJson(`/api/mora/${creditId}/notes`, { id: pendingId.current, kind, body: body.trim() });
-    setBusy(false);
-    if (!res.ok) {
-      setError(errorText(res.data.error, tErr, locale));
-      return;
-    }
-    setBody('');
-    setKind('INFO');
-    setOpen(false);
-    pendingId.current = null;
-    toast(t('saved'));
-    router.refresh();
+  /** «Ubicar en pantalla»: abre el tablero y hace parpadear esa nota un momento. */
+  function locate(id: string) {
+    setBoard(true);
+    setFlashId(id);
+    window.setTimeout(() => setFlashId((cur) => (cur === id ? null : cur)), 1800);
   }
 
-  const sorted = notes ? sortNotes(notes) : [];
+  async function submit(draft: NoteDraft): Promise<string | null> {
+    if (dialog?.note) {
+      const before = dialog.note;
+      preview({ ...before, ...draft });
+      // Una sola escritura: texto, tipo y color juntos. Si la API la rechaza vuelve a como estaba.
+      const ok = await save(before, { body: draft.body, kind: draft.kind, color: draft.color });
+      if (!ok) return errorText(undefined, tErr, locale);
+      toast(t('updated'));
+    } else {
+      const made = await create(draft);
+      if (!made) return errorText(undefined, tErr, locale);
+      locate(made.id);
+    }
+    setDialog(null);
+    return null;
+  }
+
+  const sorted = initial ? sortNotes(notes) : [];
 
   return (
     <Section
       title={t('title')}
+      collapsible={{ count: notes.length }}
       action={
-        canWrite && notes !== null && !open ? (
-          <button type="button" onClick={() => setOpen(true)} className="text-[13px] font-medium text-k-periwinkle hover:underline">
+        canWrite && initial !== null ? (
+          <button type="button" onClick={() => setDialog({})} className="text-[13px] font-medium text-k-periwinkle hover:underline">
             {t('add')}
           </button>
         ) : undefined
@@ -87,79 +107,136 @@ export function NotesSection({
     >
       <p className="mb-3 text-[13px] text-k-text-2">{t('hint')}</p>
 
-      {open && (
-        <div className="mb-4 space-y-3 rounded-xl border border-k-border bg-k-bg p-3">
-          <Field label={t('kind')}>
-            <Select value={kind} onChange={(e) => setKind(e.target.value as MoraNoteKind)} aria-label={t('kind')}>
-              {MORA_NOTE_KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {t(`kinds.${k}`)}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <label className="block">
-            <span className="sr-only">{t('title')}</span>
-            <textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              maxLength={MORA_NOTE_MAX_LENGTH}
-              rows={3}
-              placeholder={t('placeholder')}
-              className="w-full rounded-lg border border-k-border bg-white px-3 py-2 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus"
-            />
-            <span className="mt-1 block text-right text-[12px] text-k-muted">{t('remaining', { n: MORA_NOTE_MAX_LENGTH - body.length })}</span>
-          </label>
-          <ErrorBanner message={error} />
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                setOpen(false);
-                setError(null);
-              }}
-              disabled={busy}
-              className="sm:w-auto sm:px-4"
-            >
-              {t('cancel')}
-            </Button>
-            <Button type="button" onClick={save} loading={busy} disabled={body.trim().length === 0} className="sm:w-auto sm:px-4">
-              {t('save')}
-            </Button>
-          </div>
-        </div>
+      {initial === null ? (
+        <p className="text-[13px] text-k-muted">{t('unavailable')}</p>
+      ) : (
+        <>
+          {notes.length > 0 && (
+            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-k-border bg-k-bg px-3.5 py-3">
+              <span aria-hidden className="text-[20px]">
+                📌
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[14px] font-semibold text-k-text">{board ? t('showing') : t('launcherTitle')}</div>
+                <div className="text-[12px] text-k-text-2">{t('launcherSub')}</div>
+              </div>
+              <Button type="button" variant="ghost" onClick={() => setBoard((b) => !b)} className="h-9 text-[13px] sm:w-auto sm:px-3">
+                {board ? t('hide') : t('show')}
+              </Button>
+            </div>
+          )}
+
+          {sorted.length === 0 ? (
+            <p className="text-[13px] text-k-muted">{t('empty')}</p>
+          ) : (
+            <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {sorted.map((n) => {
+                const C = NOTE_COLORS[n.color];
+                const text = canWrite && canEditNoteText(n, userId, canAssign);
+                return (
+                  <li
+                    key={n.id}
+                    data-note-card={n.id}
+                    className="relative flex min-h-[132px] flex-col gap-2.5 rounded-[10px] border border-black/5 p-3.5 shadow-sm"
+                    style={{ background: C.bg, color: C.ink }}
+                  >
+                    <span className={`absolute right-3 top-3 rounded-full px-2 py-0.5 text-[11px] font-semibold ${BADGE[n.kind]}`}>
+                      {t(`kinds.${n.kind}`)}
+                    </span>
+                    <p className="flex-1 whitespace-pre-wrap break-words pr-20 text-[14px] leading-normal">{n.body}</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate text-[11.5px] opacity-70">
+                        {nameOf(n)} · {dateTime(n.createdAt, locale)}
+                      </span>
+                      <span className="flex shrink-0 gap-1">
+                        <IconButton label={t('locate')} onClick={() => locate(n.id)}>
+                          📍
+                        </IconButton>
+                        {text && (
+                          <IconButton label={t('edit')} onClick={() => setDialog({ note: n })}>
+                            ✏️
+                          </IconButton>
+                        )}
+                        {text && (
+                          <IconButton label={t('delete')} onClick={() => setConfirmDelete(n)}>
+                            🗑
+                          </IconButton>
+                        )}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </>
       )}
 
-      {notes === null ? (
-        <p className="text-[13px] text-k-muted">{t('unavailable')}</p>
-      ) : sorted.length === 0 ? (
-        <p className="text-[13px] text-k-muted">{t('empty')}</p>
-      ) : (
-        <ul className="space-y-1.5">
-          {sorted.map((n) => {
-            const preview = notePreview(n.body);
-            const author = n.authorId ? (byId.get(n.authorId) ?? t('unknownAuthor')) : t('unknownAuthor');
-            return (
-              <li key={n.id}>
-                {/* `details` nativo: plegada por defecto, se abre con el teclado y no necesita estado. */}
-                <details className="group rounded-lg border border-k-border bg-white px-3 py-2">
-                  <summary className="flex cursor-pointer list-none items-center gap-2 text-[13px] text-k-text">
-                    <span aria-hidden className={`h-2.5 w-2.5 shrink-0 rounded-full ${DOT[n.kind]}`} />
-                    <span className="sr-only">{t(`kinds.${n.kind}`)}</span>
-                    <span className="min-w-0 flex-1 truncate">{preview.text}</span>
-                    <span className="shrink-0 text-[12px] text-k-muted">{dateTime(n.createdAt, locale)}</span>
-                  </summary>
-                  <div className="mt-2 border-t border-k-border pt-2">
-                    <p className="whitespace-pre-wrap text-[14px] text-k-text">{n.body}</p>
-                    <p className="mt-1 text-[12px] text-k-muted">{t('by', { name: author })}</p>
-                  </div>
-                </details>
-              </li>
-            );
-          })}
-        </ul>
+      {/* El tablero va en `body`: el acordeón cerrado esconde todo lo que tiene adentro, y los post-its tienen que
+          seguir sobre la pantalla aunque se pliegue la sección. */}
+      {board &&
+        createPortal(
+        <NotesBoard
+          notes={notes}
+          nameOf={nameOf}
+          userId={userId}
+          canMove={canWrite}
+          canAssign={canAssign}
+          flashId={flashId}
+          onPreview={preview}
+          onCommit={(before, patch) => void save(before, patch)}
+          onDelete={setConfirmDelete}
+          onNew={() => setDialog({})}
+          onClose={() => setBoard(false)}
+        />,
+        document.body,
       )}
+
+      <NoteDialog
+        open={dialog !== null}
+        initial={dialog?.note ? { body: dialog.note.body, kind: dialog.note.kind, color: dialog.note.color } : undefined}
+        onClose={() => setDialog(null)}
+        onSubmit={submit}
+      />
+
+      <Modal
+        open={confirmDelete !== null}
+        onClose={() => setConfirmDelete(null)}
+        title={t('deleteTitle')}
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmDelete(null)} className="sm:w-auto sm:px-4">
+              {t('cancel')}
+            </Button>
+            <Button
+              onClick={async () => {
+                const n = confirmDelete;
+                setConfirmDelete(null);
+                if (n) await remove(n.id);
+              }}
+              className="sm:w-auto sm:px-4"
+            >
+              {t('delete')}
+            </Button>
+          </>
+        }
+      >
+        <p>{t('deleteBody')}</p>
+      </Modal>
     </Section>
+  );
+}
+
+function IconButton({ label, onClick, children }: { label: string; onClick: () => void; children: string }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="grid h-7 w-7 place-items-center rounded-md bg-black/5 text-[13px] hover:bg-black/15"
+    >
+      {children}
+    </button>
   );
 }

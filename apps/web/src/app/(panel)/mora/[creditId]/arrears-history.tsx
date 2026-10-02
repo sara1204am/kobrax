@@ -1,6 +1,6 @@
 import { useLocale, useTranslations } from 'next-intl';
 import type { MoraEpisode, MoraEpisodeEndReason } from '@kobrax/shared';
-import { Badge, EmptyState } from '@/components/panel-ui';
+import { Badge, EmptyState, Section } from '@/components/panel-ui';
 import { dayDate, money } from '@/lib/format';
 
 type Tone = 'neutral' | 'success' | 'warning' | 'danger';
@@ -39,9 +39,8 @@ export function ArrearsHistory({ episodes, currency }: { episodes: MoraEpisode[]
   const amount = (n: number | undefined) => (n === undefined ? dash : money(n, currency));
 
   return (
-    <section>
-      <h2 className="text-[18px] font-semibold text-k-navy">{t('title')}</h2>
-      <p className="mb-3 mt-1 text-[13px] text-k-text-2">{t('subtitle')}</p>
+    <Section title={t('title')} collapsible={{ count: episodes?.length }}>
+      <p className="mb-3 text-[13px] text-k-text-2">{t('subtitle')}</p>
 
       {episodes === null ? (
         <EmptyState title={t('unavailable')} />
@@ -92,7 +91,7 @@ export function ArrearsHistory({ episodes, currency }: { episodes: MoraEpisode[]
           ))}
         </ol>
       )}
-    </section>
+    </Section>
   );
 }
 

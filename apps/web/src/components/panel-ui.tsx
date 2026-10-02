@@ -57,12 +57,41 @@ export function Section({
   children,
   /** El padding de la caja. `''` para listas que ya paginan su propio espacio. */
   inner = 'p-4',
+  collapsible,
 }: {
   title: string;
   action?: ReactNode;
   children: ReactNode;
   inner?: string;
+  /**
+   * Una sección plegable (acordeón): `<details>` nativo, sin JavaScript —se abre con el teclado y el navegador
+   * se acuerda de nada, que es lo que se quiere—. `open` la deja abierta de entrada; `count` va en el rótulo
+   * porque plegada no se ve el contenido: «Pagos (3)» dice que hay algo adentro.
+   *
+   * 🔴 La `action` **no va en el encabezado**: tocarlo pliega, y un enlace ahí dentro sería un clic que a veces
+   * abre y a veces pliega. Va adentro, arriba a la derecha.
+   */
+  collapsible?: { open?: boolean; count?: number };
 }) {
+  if (collapsible) {
+    return (
+      <details open={collapsible.open} className="group rounded-2xl border border-k-border bg-white">
+        <summary className="flex cursor-pointer list-none items-center gap-3 p-4 hover:bg-k-bg [&::-webkit-details-marker]:hidden">
+          <span aria-hidden className="text-k-muted transition-transform group-open:rotate-180">
+            ⌄
+          </span>
+          <h2 className="flex-1 text-[14px] font-semibold text-k-navy">
+            {title}
+            {collapsible.count != null && collapsible.count > 0 && <span className="ml-1.5 font-normal text-k-muted">({collapsible.count})</span>}
+          </h2>
+        </summary>
+        <div className={`border-t border-k-border ${inner || 'p-4'}`}>
+          {action && <div className="mb-3 flex justify-end">{action}</div>}
+          {children}
+        </div>
+      </details>
+    );
+  }
   return (
     <section aria-label={title}>
       <div className="mb-2 flex items-center justify-between gap-3">

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { CreditNote } from '@kobrax/shared';
-import { notePreview, sortNotes } from './mora-notes';
+import { MORA_NOTE_COLORS, type CreditNote } from '@kobrax/shared';
+import { canEditNoteText, displayBox, NOTE_COLORS, notePreview, sortNotes } from './mora-notes';
 
-const n = (id: string, kind: CreditNote['kind'], createdAt: string): CreditNote => ({ id, creditId: 'c', kind, body: id, createdAt });
+const n = (id: string, kind: CreditNote['kind'], createdAt: string): CreditNote => ({ id, creditId: 'c', kind, body: id, createdAt, color: 'YELLOW', x: 0, y: 0, w: 240, h: 180, zIndex: 1, updatedAt: createdAt });
 
 describe('sortNotes', () => {
   it('🔴 las importantes primero, aunque sean viejas; dentro de cada tipo, la más reciente arriba', () => {
@@ -41,5 +41,35 @@ describe('notePreview', () => {
 
   it('los espacios de los bordes no cuentan', () => {
     expect(notePreview('   hola   ')).toEqual({ text: 'hola', truncated: false });
+  });
+});
+
+describe('NOTE_COLORS', () => {
+  it('cada color del contrato tiene su paleta', () => {
+    for (const c of MORA_NOTE_COLORS) {
+      expect(NOTE_COLORS[c].bg).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(NOTE_COLORS[c].head).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(NOTE_COLORS[c].ink).toMatch(/^#[0-9a-f]{6}$/i);
+    }
+  });
+});
+
+describe('canEditNoteText', () => {
+  it('quien la escribió, sí; otro cobrador, no; quien reparte cartera, siempre', () => {
+    expect(canEditNoteText({ authorId: 'u1' }, 'u1', false)).toBe(true);
+    expect(canEditNoteText({ authorId: 'u2' }, 'u1', false)).toBe(false);
+    expect(canEditNoteText({ authorId: 'u2' }, 'u1', true)).toBe(true);
+  });
+
+  it('una nota sin autor sólo la corrige quien reparte; sin sesión, nadie', () => {
+    expect(canEditNoteText({ authorId: undefined }, 'u1', false)).toBe(false);
+    expect(canEditNoteText({ authorId: undefined }, 'u1', true)).toBe(true);
+    expect(canEditNoteText({ authorId: 'u1' }, undefined, false)).toBe(false);
+  });
+});
+
+describe('displayBox', () => {
+  it('una nota guardada en una pantalla grande se dibuja dentro de una chica', () => {
+    expect(displayBox({ x: 900, y: 700, w: 240, h: 180 }, { width: 500, height: 400 })).toEqual({ x: 260, y: 220, w: 240, h: 180 });
   });
 });
