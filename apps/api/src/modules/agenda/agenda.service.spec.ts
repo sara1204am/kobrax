@@ -461,7 +461,7 @@ describe('AgendaService.clientContext', () => {
   });
 
   it('el alcance es el de la ficha de mora: un cobrador entra por responsable/asignación, no por caso', async () => {
-    const { service, calls } = makeService({ permissions: ['case:write'], credits: [creditRow()] });
+    const { service, calls } = makeService({ permissions: ['collection:write'], credits: [creditRow()] });
     await service.clientContext('cl1');
     assert.match(calls.visibleSql!.sql, /cr\.assigned_manager_id = ?/);
     assert.match(calls.visibleSql!.sql, /credit_assignments/);
@@ -604,7 +604,7 @@ describe('AgendaService.create', () => {
 
   it('un supervisor agendando sobre un crédito ajeno lo asigna al responsable del crédito, no a sí mismo', async () => {
     const { service, calls } = makeService({
-      permissions: ['agenda:assign', 'case:assign', 'data:scope:all'],
+      permissions: ['agenda:assign', 'assignment:write', 'data:scope:all'],
       credits: [creditRow({ assignedManagerId: 'cobrador-2' })],
       contacts: [{ id: CONTACT }],
     });

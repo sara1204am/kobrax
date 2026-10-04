@@ -69,7 +69,8 @@ export async function buildClientPdf(bundle: ClientPdfBundle, ctx: ClientPdfCont
     currency: ctx.currency,
   });
 
-  const vivos = credits.filter((x) => x.status === 'ACTIVE');
+  // D1-a: el castigo es la condición `written_off_at`; un crédito castigado no es «vigente».
+  const vivos = credits.filter((x) => x.status === 'ACTIVE' && !x.writtenOffAt);
   const abiertos = cases.filter((x) => !['CLOSED', 'WRITTEN_OFF'].includes(x.status));
 
   r.kpis([
@@ -127,7 +128,7 @@ export async function buildClientPdf(bundle: ClientPdfBundle, ctx: ClientPdfCont
   r.table<Credit>(
     [
       { header: 'Código', width: 18, value: (x) => x.code ?? '—', strong: true },
-      { header: 'Estado', width: 16, value: (x) => CREDIT_STATUS[x.status] ?? x.status },
+      { header: 'Estado', width: 16, value: (x) => (x.writtenOffAt || x.status === 'WRITTEN_OFF' ? 'Castigado' : (CREDIT_STATUS[x.status] ?? x.status)) },
       { header: 'Otorgado', width: 15, value: (x) => fecha(x.disbursedAt) },
       { header: 'Capital', width: 17, value: (x) => r.fmtMoney(Number(x.principalAmount)), align: 'right' },
       { header: 'Saldo', width: 17, value: (x) => r.fmtMoney(Number(x.outstandingBalance)), align: 'right', strong: true },

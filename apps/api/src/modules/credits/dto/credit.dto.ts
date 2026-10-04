@@ -161,3 +161,8 @@ export class ClearArrearsDto {
   /** Obligatoria con `mode=date`, y tiene que ser futura: una fecha pasada deja el crédito en mora. */
   @IsOptional() @IsDateString() date?: string;
 }
+
+/** `POST /credits/:id/write-off` — el motivo es opcional. */
+export class WriteOffDto {
+  @IsOptional() @IsString() @MaxLength(500) reason?: string;
+}

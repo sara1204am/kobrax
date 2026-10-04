@@ -70,7 +70,7 @@ function make(opts: Opts = {}) {
     collectionCase: new Proxy({}, { get: () => () => void calls.cases++ }),
     caseActivity: new Proxy({}, { get: () => () => void calls.cases++ }),
   };
-  const permissions = opts.permissions ?? ['case:read', 'case:write', 'case:assign'];
+  const permissions = opts.permissions ?? ['collection:read', 'collection:write', 'assignment:write'];
   const agenda = {
     createPromiseItem: async (_tx: unknown, input: { creditId: string; details: Record<string, unknown> }) => {
       calls.promises.push(input);
@@ -149,7 +149,7 @@ describe('MoraService.addActivity — por crédito, sin caso', () => {
   });
 
   it('el alcance del cobrador entra en la consulta de visibilidad (por responsable, no por caso)', async () => {
-    const { service, calls } = make({ permissions: ['case:read', 'case:write'] });
+    const { service, calls } = make({ permissions: ['collection:read', 'collection:write'] });
     await service.addActivity(CREDIT, { type: 'CALL', result: 'CONTACTED' });
     assert.match(calls.queries[0]!.sql, /cr\.assigned_manager_id = \?/);
     assert.ok(calls.queries[0]!.values.includes('u1'));
@@ -306,7 +306,7 @@ describe('MoraService.addActivity — promesa por la función única de Agenda',
       catalogItem: { findFirst: async () => catalog },
     };
     const prisma = { withTenant: async (_a: string, fn: (t: unknown) => unknown) => fn(tx) };
-    const tenant = { accountId: 'acc', userId: 'u1', can: (p: string) => ['case:write'].includes(p) };
+    const tenant = { accountId: 'acc', userId: 'u1', can: (p: string) => ['collection:write'].includes(p) };
     const audits: string[] = [];
     const audit = { record: async (e: { entity: string; action: string }) => void audits.push(`${e.entity}:${e.action}`) };
     const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`);

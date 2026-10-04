@@ -86,6 +86,7 @@ describe('PlanLimitsService.usage', () => {
     await service.usage('credits', tx);
     assert.deepEqual(espia.creditWhere, {
       deletedAt: null,
+      writtenOffAt: null, // el castigado (D1-a) tampoco ocupa lugar
       status: { in: ['ACTIVE', 'DEFAULTED', 'RESTRUCTURED'] },
     });
   });

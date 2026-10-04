@@ -114,7 +114,7 @@ export class AnalyticsService {
    * sin que nada se vea roto.
    */
   private creditWhere(q: AnalyticsQueryDto): Prisma.Sql {
-    const conds: Prisma.Sql[] = [Prisma.sql`cr.deleted_at IS NULL`, Prisma.sql`cr.status = 'ACTIVE'::"CreditStatus"`];
+    const conds: Prisma.Sql[] = [Prisma.sql`cr.deleted_at IS NULL`, Prisma.sql`cr.status = 'ACTIVE'::"CreditStatus"`, Prisma.sql`cr.written_off_at IS NULL`];
     if (q.branchId) conds.push(Prisma.sql`cr.branch_id = ${q.branchId}`);
     const source = this.sourceSql('cr', q);
     if (source) conds.push(source);
@@ -332,7 +332,7 @@ export class AnalyticsService {
           -- El filtro de ACTIVE es el mismo que usa el KPI de saldo: sin eso, el ranking sumaba
           -- también los créditos pagados y castigados, y en la misma pantalla convivían dos números
           -- rotulados «saldo» que no daban lo mismo, sin forma de saber cuál era el bueno.
-          LEFT JOIN credits cr ON cr.id = k.credit_id AND cr.deleted_at IS NULL AND cr.status = 'ACTIVE'::"CreditStatus"
+          LEFT JOIN credits cr ON cr.id = k.credit_id AND cr.deleted_at IS NULL AND cr.status = 'ACTIVE'::"CreditStatus" AND cr.written_off_at IS NULL
           WHERE ${cases} AND k.assignee_id IS NOT NULL AND k.status::text NOT IN (${Prisma.join(TERMINAL)})
           GROUP BY k.assignee_id`),
         tx.$queryRaw<{ collector: string; collected: number }[]>(Prisma.sql`

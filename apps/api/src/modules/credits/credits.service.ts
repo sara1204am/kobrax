@@ -25,6 +25,7 @@ import {
   manualArrears,
   moraSinceFromDays,
   PaymentFrequency,
+  Permission,
   readCreditMetadata,
   resolvePagination,
   staleAfterDaysOf,
@@ -62,6 +63,8 @@ import {
   currencyMismatch,
   resourceNotFound,
   scheduleInvalid,
+  writeOffForbidden,
+  writeOffUseEndpoint,
 } from './credits.errors';
 import { computePriority, slaDueAt, DEFAULT_PRIORITY_PARAMS } from '../cases/case-priority';
 import { closeOpenCases, openCaseIfNone } from '../arrears/case-lifecycle';
@@ -415,6 +418,8 @@ export class CreditsService {
    *        créditos sin `terms` — tocar uno suelto dejaría dos definiciones del mismo crédito.
    */
   async update(id: string, dto: UpdateCreditDto): Promise<ReturnType<typeof serializeCredit>> {
+    // D1-a: el castigo no es un estado; se pide por su endpoint ().
+    if (dto.status === CreditStatus.WRITTEN_OFF) throw writeOffUseEndpoint();
     const config = await this.accountConfig();
     const redefine = dto.terms !== undefined || dto.initialState !== undefined;
     const looseField = LOOSE_FINANCIAL_FIELDS.find((k) => dto[k] !== undefined);
@@ -441,7 +446,7 @@ export class CreditsService {
       let assigned: Awaited<ReturnType<AssignmentService['apply']>> = [];
       if (reassigning) {
         this.assignment.authorize();
-        await this.assignment.assertAssignable(tx, [dto.assignedManagerId!]);
+        await this.assignment.assertAssignable(tx, [dto.assignedManagerId!], [id]);
         assigned = await this.assignment.apply(
           tx,
           [{ creditId: id, to: dto.assignedManagerId!, expectedFrom: prev.assignedManagerId }],
@@ -608,6 +613,74 @@ export class CreditsService {
     });
     await this.assignment.auditChanges(assigned);
     return serializeCredit(after, config.labels, config.staleAfterDays);
+  }
+
+  // ── Castigo (D1-a) ──────────────────────────────────────────────────────────────────────────
+  /**
+   * Castigar: marca `written_off_at/by/reason` y deja constancia. Es una **condición aparte**: no cambia
+   * `credits.status`, no cierra el episodio de mora abierto y los días de mora siguen corriendo (el trabajo
+   * diario lo procesa como a cualquier crédito activo). Sólo gerente y administrador (alcance total).
+   * Idempotente: castigar al ya castigado no cambia ni audita nada.
+   */
+  async writeOff(id: string, reason?: string) {
+    this.assertCanWriteOff();
+    const actor = this.tenant.userId ?? null;
+    const { before, after, changed } = await this.tx(async (tx) => {
+      const prev = await tx.credit.findFirst({ where: { id, deletedAt: null } });
+      if (!prev) throw resourceNotFound();
+      if (prev.writtenOffAt) return { before: prev, after: prev, changed: false };
+      const next = await tx.credit.update({
+        where: { id },
+        data: { writtenOffAt: new Date(), writtenOffBy: actor, writtenOffReason: reason?.trim() || null },
+      });
+      return { before: prev, after: next, changed: true };
+    });
+    if (changed) {
+      await this.audit.record({
+        entity: 'credit',
+        entityId: id,
+        action: 'WRITE_OFF',
+        before: { writtenOffAt: null },
+        after: { writtenOffAt: after.writtenOffAt?.toISOString(), reason: after.writtenOffReason, daysPastDue: before.daysPastDue },
+      });
+    }
+    return serializeCredit(after, ...labelsOf(await this.accountConfig()));
+  }
+
+  /** Revertir el castigo: limpia `written_off_at/by/reason`. Mismas reglas de permiso. Idempotente. */
+  async unWriteOff(id: string) {
+    this.assertCanWriteOff();
+    const { before, after, changed } = await this.tx(async (tx) => {
+      const prev = await tx.credit.findFirst({ where: { id, deletedAt: null } });
+      if (!prev) throw resourceNotFound();
+      // Un crédito viejo con status WRITTEN_OFF (anterior a D1-a) también se lee como castigado: revertirlo lo vuelve ACTIVE.
+      if (!prev.writtenOffAt && prev.status !== CreditStatus.WRITTEN_OFF) return { before: prev, after: prev, changed: false };
+      const next = await tx.credit.update({
+        where: { id },
+        data: {
+          writtenOffAt: null,
+          writtenOffBy: null,
+          writtenOffReason: null,
+          ...(prev.status === CreditStatus.WRITTEN_OFF ? { status: CreditStatus.ACTIVE } : {}),
+        },
+      });
+      return { before: prev, after: next, changed: true };
+    });
+    if (changed) {
+      await this.audit.record({
+        entity: 'credit',
+        entityId: id,
+        action: 'WRITE_OFF_REVERT',
+        before: { writtenOffAt: before.writtenOffAt?.toISOString() ?? null, reason: before.writtenOffReason },
+        after: { writtenOffAt: null },
+      });
+    }
+    return serializeCredit(after, ...labelsOf(await this.accountConfig()));
+  }
+
+  /** Gerente y administrador: escritura de créditos **y** alcance total. El supervisor (agencia) y el cobrador no. */
+  private assertCanWriteOff(): void {
+    if (!this.tenant.can(Permission.CREDIT_WRITE) || !this.tenant.can(Permission.DATA_SCOPE_ALL)) throw writeOffForbidden();
   }
 
   // ── Mora declarada a mano ──────────────────────────────────────────────────

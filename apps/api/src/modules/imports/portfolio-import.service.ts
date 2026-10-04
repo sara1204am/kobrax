@@ -51,6 +51,7 @@ import {
   creditUpdateData,
   FILE_SOURCE,
   mapStatus,
+  storedStatus,
   snapshotData,
   type ImportStamp,
   type RowContext,
@@ -317,6 +318,7 @@ export class PortfolioImportService {
           branchId: true,
           assignedManagerId: true,
           status: true,
+          writtenOffAt: true,
           syncStatus: true,
           outstandingBalance: true,
           daysPastDue: true,
@@ -596,7 +598,7 @@ export class PortfolioImportService {
         const prev = byId.get(u.id)!;
         await tx.credit.update({
           where: { id: u.id },
-          data: creditUpdateData(b, (prev.metadata ?? {}) as Record<string, unknown>, stamp, { ...rowCtx, prevStatus: prev.status }),
+          data: creditUpdateData(b, (prev.metadata ?? {}) as Record<string, unknown>, stamp, { ...rowCtx, prevStatus: prev.status, prevWrittenOffAt: prev.writtenOffAt }),
         });
         snapshots.push(snapshotData(accountId, u.id, u.row.code, stamp.runId, reportAsOf, b));
         if (u.reappeared) transitions.push({ creditId: u.id, action: 'EXTERNAL_REAPPEARED', externalId: u.row.code, after: reported(b) });
@@ -1460,7 +1462,7 @@ function valuesOf(b: NormalizedRecord, statusMap?: Record<string, CreditStatus>)
   return {
     outstandingBalance: b.outstandingBalance ?? null,
     daysPastDue: b.daysPastDue ?? null,
-    status: mapStatus(b.status ?? null, statusMap) ?? CreditStatus.ACTIVE,
+    status: storedStatus(b.status ?? null, statusMap) ?? CreditStatus.ACTIVE,
     reportedStatus: b.status ?? null,
   };
 }

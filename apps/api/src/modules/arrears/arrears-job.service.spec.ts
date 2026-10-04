@@ -17,6 +17,8 @@ interface CreditRow {
   syncStatus?: 'PRESENT' | 'ABSENT' | null;
   reportedAsOf?: Date | null;
   installments?: { id: string; dueDate: Date; amount: number; paidAmount: number; status: string }[];
+  /** D1-a: el castigo es una condición aparte; el job no la mira. */
+  writtenOffAt?: Date | null;
 }
 
 /**
@@ -34,19 +36,22 @@ function makeJob(
     creditUpdate: [] as { id: string; daysPastDue: number }[],
     caseCreate: [] as Record<string, unknown>[],
     caseUpdate: [] as { id: string; data: Record<string, unknown> }[],
+    creditWhere: undefined as Record<string, unknown> | undefined,
   };
   const tx = {
     account: { findFirst: async () => ({ configuration }) },
     credit: {
-      findMany: async () =>
-        credits.map((c) => ({
+      findMany: async (args: { where: Record<string, unknown> }) => {
+        calls.creditWhere = args.where;
+        return credits.map((c) => ({
           branchId: null,
           clientId: 'cl1',
           assignedManagerId: null,
           client: { riskSegment: null },
           installments: [],
           ...c,
-        })),
+        }));
+      },
       update: async (args: { where: { id: string }; data: { daysPastDue: number } }) => {
         calls.creditUpdate.push({ id: args.where.id, daysPastDue: args.data.daysPastDue });
         return {};
@@ -374,5 +379,44 @@ describe('ArrearsJobService — operaciones externas (PSF)', () => {
     const { job, calls } = makeJob([psf({ reportedAsOf: null })]);
     await job.scanAccount('acc-A', HOY);
     assert.equal(calls.caseCreate.length, 1);
+  });
+});
+
+/**
+ * F4/08 · D1-a — el castigo es la condición `written_off_at`, no un estado: el crédito castigado sigue ACTIVE y el
+ * job lo procesa como a cualquier otro (los días de mora siguen corriendo, y con ellos su categoría).
+ */
+describe('ArrearsJobService — un crédito castigado se procesa como cualquier activo', () => {
+  const castigado = (over: Partial<CreditRow> = {}) =>
+    manual({ metadata: { origin: 'manual', moraSince: '2026-01-01' }, writtenOffAt: d('2026-06-01'), ...over });
+
+  it('🔴 los días de mora siguen corriendo aunque esté castigado', async () => {
+    const { job, calls } = makeJob([castigado()]);
+    await job.scanAccount('acc-A', HOY);
+    assert.equal(calls.creditUpdate[0]!.daysPastDue, 228, 'del 2026-01-01 al 2026-08-17');
+  });
+
+  it('el filtro de créditos no excluye a los castigados (sin writtenOffAt: null)', async () => {
+    const { job, calls } = makeJob([castigado()]);
+    await job.scanAccount('acc-A', HOY);
+    assert.equal('writtenOffAt' in calls.creditWhere!, false);
+    const or = calls.creditWhere!.OR as Record<string, unknown>[];
+    assert.ok(or.some((w) => w.status === 'ACTIVE' && !('writtenOffAt' in w)), 'ACTIVE entra, castigado o no');
+  });
+
+  it('compatibilidad: un viejo con estado WRITTEN_OFF y written_off_at también cuenta sus días', async () => {
+    const { job, calls } = makeJob([castigado()]);
+    await job.scanAccount('acc-A', HOY);
+    const or = calls.creditWhere!.OR as { status?: string; writtenOffAt?: unknown }[];
+    assert.ok(or.some((w) => w.status === 'WRITTEN_OFF' && w.writtenOffAt !== undefined));
+  });
+
+  it('con el crédito castigado y en mora el job hace lo mismo que con uno sin castigar', async () => {
+    const a = makeJob([castigado()]);
+    const b = makeJob([castigado({ writtenOffAt: null })]);
+    await a.job.scanAccount('acc-A', HOY);
+    await b.job.scanAccount('acc-A', HOY);
+    assert.deepEqual(a.calls.creditUpdate, b.calls.creditUpdate);
+    assert.equal(a.calls.caseCreate.length, b.calls.caseCreate.length);
   });
 });

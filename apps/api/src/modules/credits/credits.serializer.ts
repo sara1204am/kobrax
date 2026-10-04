@@ -94,6 +94,10 @@ export function serializeCredit(
     currency: credit.currency,
     installmentsCount: countUnknown ? undefined : credit.installmentsCount,
     status: credit.status,
+    // D1-a: el castigo es una condición aparte (`written_off_at`); un crédito viejo con status WRITTEN_OFF también cuenta.
+    writtenOff: credit.writtenOffAt != null || credit.status === 'WRITTEN_OFF',
+    writtenOffAt: credit.writtenOffAt ?? undefined,
+    writtenOffReason: credit.writtenOffReason ?? undefined,
     daysPastDue: credit.daysPastDue,
     assignedManagerId: credit.assignedManagerId ?? undefined,
     disbursedAt: credit.disbursedAt ?? undefined,

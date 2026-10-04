@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -12,6 +12,7 @@ import {
   MarkArrearsDto,
   RecalcArrearsDto,
   UpdateCreditDto,
+  WriteOffDto,
 } from './dto/credit.dto';
 
 @Controller('credits')
@@ -47,6 +48,23 @@ export class CreditsController {
   @Roles(Permission.CREDIT_WRITE)
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateCreditDto) {
     return this.credits.update(id, dto);
+  }
+
+  /**
+   * Castigar (D1-a): condición aparte, no un estado. `credit:write` + alcance total (gerente, administrador): el
+   * service lo exige. No cierra la mora ni cambia `status`.
+   */
+  @Post(':id/write-off')
+  @Roles(Permission.CREDIT_WRITE)
+  writeOff(@Param('id', ParseUUIDPipe) id: string, @Body() dto: WriteOffDto) {
+    return this.credits.writeOff(id, dto.reason);
+  }
+
+  /** Revierte el castigo. Mismas reglas. */
+  @Delete(':id/write-off')
+  @Roles(Permission.CREDIT_WRITE)
+  unWriteOff(@Param('id', ParseUUIDPipe) id: string) {
+    return this.credits.unWriteOff(id);
   }
 
   @Post(':id/recalculate-arrears')

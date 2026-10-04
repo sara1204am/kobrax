@@ -97,6 +97,9 @@ function makeService(
       },
     },
     agendaItem: {
+      // D10: lo que `AssignmentService.apply` mueve al reasignar (acá no hay agendados pendientes).
+      findMany: async () => [],
+      updateMany: async () => ({ count: 0 }),
       create: async (args: { data: Record<string, unknown> }) => {
         calls.agendaCreate.push(args.data);
         return { id: 'ag1', ...args.data };
@@ -966,7 +969,7 @@ describe('CreditsService — responsable del crédito (assignment:write)', () =>
 
   it('PATCH con assignment:write reasigna por el servicio: la columna no va en el update directo', async () => {
     const { service, calls } = makeService({
-      permissions: ['assignment:write'],
+      permissions: ['assignment:write', 'data:scope:all'],
       members: [COBRADOR],
       credit: { id: 'cr1', metadata: { origin: 'import' }, assignedManagerId: 'u-ana' },
     });
@@ -991,7 +994,7 @@ describe('CreditsService — responsable del crédito (assignment:write)', () =>
 
   it('a alguien que no es cobrador activo de la cuenta → ASSIGNEE_NOT_ELIGIBLE', async () => {
     const { service } = makeService({
-      permissions: ['assignment:write'],
+      permissions: ['assignment:write', 'data:scope:all'],
       members: [],
       credit: { id: 'cr1', metadata: { origin: 'manual' }, assignedManagerId: null },
     });

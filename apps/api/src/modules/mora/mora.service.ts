@@ -463,12 +463,12 @@ export class MoraService {
 
   /** El texto, el tipo y el borrado son de quien escribió la nota o de quien reparte cartera. Mover y pintar, de cualquiera. */
   private canEditNote(note: { authorId: string | null }): boolean {
-    return (note.authorId !== null && note.authorId === this.tenant.userId) || this.tenant.can(Permission.CASE_ASSIGN);
+    return (note.authorId !== null && note.authorId === this.tenant.userId) || this.tenant.can(Permission.ASSIGNMENT_WRITE);
   }
 
   /**
    * Edita un post-it. Cambiar el **texto o el tipo** lo hace quien la escribió o quien reparte cartera (403 si no);
-   * mover, redimensionar, pintar y traer al frente, cualquiera con `case:write` que vea el crédito, porque es
+   * mover, redimensionar, pintar y traer al frente, cualquiera con `collection:write` que vea el crédito, porque es
    * ordenar el tablero y no tocar lo que la nota dice. Sólo se audita el cambio de contenido, y sin el texto.
    */
   async updateNote(creditId: string, noteId: string, dto: UpdateMoraNoteDto): Promise<ApiResponse<CreditNote>> {
@@ -570,12 +570,12 @@ export class MoraService {
     const rows = await tx.creditAssignment.findMany({
       where: { creditId, revokedAt: null, startsAt: { lte: now }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }], kind: { in: ['TEMPORAL', 'APOYO'] } },
       orderBy: { startsAt: 'asc' },
-      select: { kind: true, userId: true, expiresAt: true },
+      select: { id: true, kind: true, userId: true, expiresAt: true },
     });
     const principal: MoraAssignment[] = responsibleId ? [{ kind: 'PRINCIPAL', userId: responsibleId }] : [];
     return [
       ...principal,
-      ...rows.map((r) => ({ kind: r.kind as CreditAssignmentKind, userId: r.userId, expiresAt: r.expiresAt?.toISOString() })),
+      ...rows.map((r) => ({ id: r.id, kind: r.kind as CreditAssignmentKind, userId: r.userId, expiresAt: r.expiresAt?.toISOString() })),
     ];
   }
 

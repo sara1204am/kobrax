@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 
 /** Recurso inexistente o de otro tenant (genérico, anti-enumeración). */
 export const resourceNotFound = () =>
@@ -108,4 +108,18 @@ export const arrearsDateNotFuture = () =>
   new UnprocessableEntityException({
     code: 'ARREARS_DATE_PAST',
     message: 'La nueva fecha de vencimiento tiene que ser futura, o el crédito vuelve a quedar en mora',
+  });
+
+/** Castigar o revertir el castigo: sólo gerente y administrador (alcance total + escritura de créditos). */
+export const writeOffForbidden = () =>
+  new ForbiddenException({
+    code: 'WRITE_OFF_FORBIDDEN',
+    message: 'Sólo un gerente o un administrador puede castigar un crédito o revertir el castigo',
+  });
+
+/** `credits.status = WRITTEN_OFF` ya no se escribe (D1-a): el castigo es una condición aparte. */
+export const writeOffUseEndpoint = () =>
+  new UnprocessableEntityException({
+    code: 'CREDIT_WRITE_OFF_USE_ENDPOINT',
+    message: 'El castigo no es un estado: usá POST /credits/:id/write-off',
   });

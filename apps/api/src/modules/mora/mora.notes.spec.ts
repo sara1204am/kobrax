@@ -37,7 +37,7 @@ function make(opts: { count?: number; topZ?: number; raceOnCreate?: boolean; vis
       },
     },
   };
-  const permissions = opts.permissions ?? ['case:read', 'case:write', 'case:assign', 'data:scope:all'];
+  const permissions = opts.permissions ?? ['collection:read', 'collection:write', 'assignment:write', 'data:scope:all'];
   const service = new MoraService(
     { withTenant: async (_a: string, fn: (t: unknown) => unknown) => fn(tx) } as never,
     { accountId: 'acc', userId: 'u1', can: (p: string) => permissions.includes(p) } as never,
@@ -71,7 +71,7 @@ describe('MoraService.addNote — notas por crédito', () => {
   });
 
   it('el alcance del cobrador entra en la consulta de visibilidad (responsable, temporal o apoyo; sin caso)', async () => {
-    const { service, calls } = make({ permissions: ['case:read', 'case:write'] });
+    const { service, calls } = make({ permissions: ['collection:read', 'collection:write'] });
     await service.addNote(CREDIT, { body: 'x' });
     assert.match(calls.queries[0]!.sql, /cr\.assigned_manager_id = \?/);
     assert.match(calls.queries[0]!.sql, /credit_assignments/);
@@ -166,7 +166,7 @@ describe('MoraService.addNote — post-it en el tablero', () => {
 });
 
 describe('MoraService.updateNote', () => {
-  const asCollector = ['case:read', 'case:write'];
+  const asCollector = ['collection:read', 'collection:write'];
 
   it('quien la escribió puede cambiar el texto, y se audita sin el texto', async () => {
     const { service, calls } = make({ existing: { ...NOTE, authorId: 'u1' }, permissions: asCollector });
@@ -184,7 +184,7 @@ describe('MoraService.updateNote', () => {
   });
 
   it('quien reparte cartera sí puede cambiar el tipo de una ajena', async () => {
-    const { service } = make({ existing: { ...NOTE, authorId: 'otro' }, permissions: [...asCollector, 'case:assign'] });
+    const { service } = make({ existing: { ...NOTE, authorId: 'otro' }, permissions: [...asCollector, 'assignment:write'] });
     const res = await service.updateNote(CREDIT, NOTE_ID, { kind: 'IMPORTANT' });
     assert.equal(res.data!.kind, 'IMPORTANT');
   });
@@ -246,7 +246,7 @@ describe('MoraService.updateNote', () => {
 
 describe('MoraService.deleteNote', () => {
   it('quien la escribió la borra (borrado lógico) y queda auditado', async () => {
-    const { service, calls } = make({ existing: { ...NOTE, authorId: 'u1' }, permissions: ['case:read', 'case:write'] });
+    const { service, calls } = make({ existing: { ...NOTE, authorId: 'u1' }, permissions: ['collection:read', 'collection:write'] });
     const res = await service.deleteNote(CREDIT, NOTE_ID);
     assert.equal(res.data!.id, NOTE_ID);
     assert.ok(calls.updated[0]!.data.deletedAt instanceof Date);
@@ -254,7 +254,7 @@ describe('MoraService.deleteNote', () => {
   });
 
   it('🔴 otro cobrador no puede borrar una nota ajena: 403 y no se escribe nada', async () => {
-    const { service, calls } = make({ existing: { ...NOTE, authorId: 'otro' }, permissions: ['case:read', 'case:write'] });
+    const { service, calls } = make({ existing: { ...NOTE, authorId: 'otro' }, permissions: ['collection:read', 'collection:write'] });
     await assert.rejects(() => service.deleteNote(CREDIT, NOTE_ID), ForbiddenException);
     assert.equal(calls.updated.length, 0);
   });
@@ -265,7 +265,7 @@ describe('MoraService.deleteNote', () => {
   });
 
   it('una nota sin autor sólo la borra quien reparte', async () => {
-    const { service } = make({ existing: { ...NOTE, authorId: null }, permissions: ['case:read', 'case:write'] });
+    const { service } = make({ existing: { ...NOTE, authorId: null }, permissions: ['collection:read', 'collection:write'] });
     await assert.rejects(() => service.deleteNote(CREDIT, NOTE_ID), ForbiddenException);
   });
 });

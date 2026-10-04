@@ -188,7 +188,13 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
        */
       where: {
         deletedAt: null,
-        OR: [{ status: CreditStatus.ACTIVE }, { status: CreditStatus.DEFAULTED, externalSource: { not: null } }],
+        OR: [
+          { status: CreditStatus.ACTIVE },
+          { status: CreditStatus.DEFAULTED, externalSource: { not: null } },
+          // D1-a: el castigo es la condición `written_off_at` y el estado no cambia, así que un castigado nuevo ya entra por
+          // ACTIVE. Los viejos con estado WRITTEN_OFF (anteriores a D1-a) siguen contando días de mora igual.
+          { status: CreditStatus.WRITTEN_OFF, writtenOffAt: { not: null } },
+        ],
       },
       select: {
         id: true,

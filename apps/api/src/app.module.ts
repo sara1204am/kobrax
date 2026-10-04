@@ -12,6 +12,7 @@ import { ImportsModule } from './modules/imports/imports.module';
 import { CreditsModule } from './modules/credits/credits.module';
 import { CasesModule } from './modules/cases/cases.module';
 import { MoraModule } from './modules/mora/mora.module';
+import { ArrearCategoriesModule } from './modules/arrear-categories/arrear-categories.module';
 import { ArrearsModule } from './modules/arrears/arrears.module';
 import { RoutesModule } from './modules/routes/routes.module';
 import { FieldModule } from './modules/field-ops/field.module';
@@ -52,6 +53,7 @@ import { AppVersionGuard } from './common/guards/app-version.guard';
     CreditsModule,
     CasesModule,
     MoraModule,
+    ArrearCategoriesModule,
     ArrearsModule,
     RoutesModule,
     FieldModule,

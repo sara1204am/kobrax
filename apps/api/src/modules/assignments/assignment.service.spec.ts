@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Prisma } from '@prisma/client';
 import { Permission, RoleType } from '@kobrax/shared';
 import { AssignmentService } from './assignment.service';
-import { isAssignable, notAssignable } from './assignment-rules';
+import { agencyViolations, isAssignable, notAssignable } from './assignment-rules';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
 interface Row {
@@ -60,6 +60,8 @@ function makeService(opts: {
         return { count: data.length };
       },
     },
+    // D10: sin agendados pendientes en estos casos (los cubre `assignment.coverage.spec.ts`).
+    agendaItem: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
     userAccount: {
       findMany: async ({ where }: { where: { userId: { in: string[] } } }) =>
         (opts.members ?? [])
@@ -81,10 +83,49 @@ describe('P3 · a quién se le puede asignar', () => {
     assert.equal(isAssignable(juan, 'boss'), true);
     assert.equal(isAssignable({ userId: 'boss', role: RoleType.MANAGER, isActive: true }, 'boss'), true);
   });
+  it('D8 · un supervisor también puede tener créditos a su cargo', () => {
+    assert.equal(isAssignable({ userId: 'sup', role: RoleType.SUPERVISOR, isActive: true }, 'boss'), true);
+    assert.equal(isAssignable({ userId: 'sup', role: RoleType.SUPERVISOR, isActive: false }, 'boss'), false);
+  });
+
   it('no a un gerente que no es uno mismo, ni a un cobrador inactivo, ni a alguien de afuera', () => {
     assert.equal(isAssignable({ userId: 'otro', role: RoleType.MANAGER, isActive: true }, 'boss'), false);
     assert.equal(isAssignable({ ...juan, isActive: false }, 'boss'), false);
     assert.deepEqual(notAssignable(['juan', 'fantasma', 'fantasma'], [juan], 'boss'), ['fantasma']);
+  });
+});
+
+describe('D8 · el supervisor reparte sólo dentro de su agencia', () => {
+  const sup = { kind: 'BRANCH' as const, branchId: 'ag-1' };
+  const credits = [
+    { id: 'c-propio', branchId: 'ag-1' },
+    { id: 'c-ajeno', branchId: 'ag-2' },
+    { id: 'c-sin-agencia', branchId: null },
+  ];
+  const people = [
+    { userId: 'juan', branchId: 'ag-1' },
+    { userId: 'maria', branchId: 'ag-2' },
+    { userId: 'sin', branchId: null },
+  ];
+
+  it('gerente y administrador (ALL) no tienen límite', () => {
+    assert.deepEqual(agencyViolations({ kind: 'ALL', branchId: null }, credits, people), { creditIds: [], userIds: [] });
+  });
+
+  it('el supervisor: créditos de su agencia a gente de su agencia', () => {
+    assert.deepEqual(agencyViolations(sup, [credits[0]!], [people[0]!]), { creditIds: [], userIds: [] });
+  });
+
+  it('un crédito de otra agencia o sin agencia, o un destinatario de otra agencia o sin ella, se señala', () => {
+    assert.deepEqual(agencyViolations(sup, credits, people), {
+      creditIds: ['c-ajeno', 'c-sin-agencia'],
+      userIds: ['maria', 'sin'],
+    });
+  });
+
+  it('un supervisor sin agencia no puede repartir nada (null no es igual a ninguna agencia)', () => {
+    const v = agencyViolations({ kind: 'BRANCH', branchId: null }, [{ id: 'c', branchId: null }], [{ userId: 'u', branchId: null }]);
+    assert.deepEqual(v, { creditIds: ['c'], userIds: ['u'] });
   });
 });
 

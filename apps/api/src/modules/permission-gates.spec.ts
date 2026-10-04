@@ -16,6 +16,8 @@ import { PortfolioImportController } from './imports/portfolio-import.controller
 import { RoutesController } from './routes/routes.controller';
 import { AnalyticsController } from './analytics/analytics.controller';
 import { ClientImportController } from './clients/import/client-import.controller';
+import { AssignmentsController } from './assignments/assignments.controller';
+import { ArrearCategoriesController } from './arrear-categories/arrear-categories.controller';
 
 /**
  * Las puertas (`@Roles`) del camino del cobrador, contra los permisos que realmente tiene.
@@ -83,6 +85,10 @@ describe('Puertas que el cobrador NO debe pasar', () => {
   const VEDADAS: [string, new (...args: never[]) => object, string][] = [
     ['cases', CasesController, 'assign'], // asignar cartera es del supervisor
     ['cases', CasesController, 'close'], // cerrar un caso no lo decide quien cobra
+    ['assignments', AssignmentsController, 'createTemporary'], // repartir y cubrir créditos es de quien supervisa
+    ['assignments', AssignmentsController, 'createSupport'],
+    ['assignments', AssignmentsController, 'revoke'],
+    ['arrear-categories', ArrearCategoriesController, 'replace'], // los rangos de mora son de Administración
     ['payments', PaymentsController, 'confirmRequest'], // confirmar el cobro que uno mismo pidió
     ['catalogs', CatalogsController, 'create'], // el ABM de catálogos es de la cuenta
   ];
@@ -106,13 +112,13 @@ describe('Puertas que el cobrador NO debe pasar', () => {
  * entregan datos personales en claro. Si alguien "unifica" los dos permisos, el cobrador baja la cartera
  * entera — este spec lo frena.
  */
-describe('Exportar Mora (case:export)', () => {
+describe('Exportar Mora (collection:export)', () => {
   const ROLES_CON_MORA = [RoleType.MANAGER, RoleType.SUPERVISOR, RoleType.COLLECTOR, RoleType.AUDITOR, RoleType.VIEWER];
 
   for (const role of ROLES_CON_MORA) {
     it(`${role} ve Mora y puede exportarla`, () => {
       const perms = ROLE_PERMISSIONS[role] as string[];
-      assert.ok(perms.includes(Permission.CASE_READ) && perms.includes(Permission.CASE_EXPORT));
+      assert.ok(perms.includes(Permission.COLLECTION_READ) && perms.includes(Permission.COLLECTION_EXPORT));
     });
   }
 
@@ -121,11 +127,11 @@ describe('Exportar Mora (case:export)', () => {
     assert.ok(!(ROLE_PERMISSIONS[RoleType.SUPERVISOR] as string[]).includes(Permission.REPORT_EXPORT));
   });
 
-  it('los exports de Mora exigen case:read Y case:export; los de la cuenta siguen en report:export', () => {
+  it('los exports de Mora exigen collection:read Y collection:export; los de la cuenta siguen en report:export', () => {
     for (const metodo of ['exportCsv', 'exportPdf']) {
       const handler = (MoraController.prototype as unknown as Record<string, unknown>)[metodo];
       const requeridos = (Reflect.getMetadata(ROLES_KEY, handler as object) as string[]) ?? [];
-      assert.deepEqual([...requeridos].sort(), [Permission.CASE_EXPORT, Permission.CASE_READ].sort());
+      assert.deepEqual([...requeridos].sort(), [Permission.COLLECTION_EXPORT, Permission.COLLECTION_READ].sort());
     }
     const cuenta = (Reflect.getMetadata(ROLES_KEY, ExportsController) as string[]) ?? [];
     assert.deepEqual(cuenta, [Permission.REPORT_EXPORT]);
@@ -199,5 +205,98 @@ describe('Asignación e importación por rol', () => {
   it('P11 · el import de clientes pide además client:write (el supervisor no lo usa)', () => {
     assert.deepEqual(puerta(ClientImportController, 'run'), [Permission.CLIENT_IMPORT, Permission.CLIENT_WRITE]);
     assert.ok(!tiene(RoleType.SUPERVISOR, Permission.CLIENT_WRITE));
+  });
+});
+
+/**
+ * F4/08 · D5 — los permisos `case:*` se renombran a `collection:*` (y `case:assign` se reparte en alcance +
+ * `assignment:write`). Fuera de `cases` ninguna puerta pide ya un `case:*`; los dos juegos conviven en los roles
+ * hasta la fase 6 para que la web (todavía en `case:*`) y las sesiones abiertas sigan andando.
+ */
+describe('D5 · renombre de permisos fuera de cases', () => {
+  const CONTROLADORES: [string, new (...args: never[]) => object][] = [
+    ['agenda', AgendaController],
+    ['mora', MoraController],
+    ['exports', ExportsController],
+    ['catalogs', CatalogsController],
+    ['clients', ClientsController],
+    ['credits', CreditsController],
+    ['field', FieldController],
+    ['payments', PaymentsController],
+    ['imports', PortfolioImportController],
+    ['routes', RoutesController],
+    ['analytics', AnalyticsController],
+    ['assignments', AssignmentsController],
+    ['arrear-categories', ArrearCategoriesController],
+  ];
+  const VIEJOS = [Permission.CASE_READ, Permission.CASE_WRITE, Permission.CASE_EXPORT, Permission.CASE_ASSIGN, Permission.CASE_CLOSE] as string[];
+
+  it('🔴 ningún handler fuera de cases exige un case:*', () => {
+    for (const [modulo, ctrl] of CONTROLADORES) {
+      const clase = (Reflect.getMetadata(ROLES_KEY, ctrl) as string[] | undefined) ?? [];
+      assert.deepEqual(clase.filter((p) => VIEJOS.includes(p)), [], `${modulo} (clase)`);
+      for (const name of Object.getOwnPropertyNames(ctrl.prototype)) {
+        const handler = (ctrl.prototype as Record<string, unknown>)[name];
+        if (typeof handler !== 'function' || name === 'constructor') continue;
+        const req = (Reflect.getMetadata(ROLES_KEY, handler) as string[] | undefined) ?? [];
+        assert.deepEqual(req.filter((p) => VIEJOS.includes(p)), [], `${modulo}.${name} sigue pidiendo ${req.join(', ')}`);
+      }
+    }
+  });
+
+  it('Mora: leer = collection:read; gestiones y notas = collection:write; exportar = collection:read + collection:export', () => {
+    const p = (m: string) => (Reflect.getMetadata(ROLES_KEY, (MoraController.prototype as unknown as Record<string, object>)[m]!) as string[]) ?? [];
+    assert.deepEqual(p('list'), [Permission.COLLECTION_READ]);
+    assert.deepEqual(p('addActivity'), [Permission.COLLECTION_WRITE]);
+    assert.deepEqual(p('addNote'), [Permission.COLLECTION_WRITE]);
+    assert.deepEqual([...p('exportCsv')].sort(), [Permission.COLLECTION_EXPORT, Permission.COLLECTION_READ].sort());
+  });
+
+  it('cada rol que tenía case:read/write/export tiene también su collection:* (coexistencia hasta la fase 6)', () => {
+    const pares: [Permission, Permission][] = [
+      [Permission.CASE_READ, Permission.COLLECTION_READ],
+      [Permission.CASE_WRITE, Permission.COLLECTION_WRITE],
+      [Permission.CASE_EXPORT, Permission.COLLECTION_EXPORT],
+    ];
+    for (const role of Object.values(RoleType)) {
+      const perms = ROLE_PERMISSIONS[role] as string[];
+      for (const [viejo, nuevo] of pares) assert.equal(perms.includes(viejo), perms.includes(nuevo), `${role}: ${viejo} vs ${nuevo}`);
+    }
+  });
+});
+
+/**
+ * F4/08 · D8 / D8-a — quién reparte, cubre y castiga. El alcance fino (la agencia del supervisor) lo decide el
+ * service; acá se fija qué permisos abren cada puerta y que los roles los tengan como se acordó.
+ */
+describe('D8 · repartir, cubrir y castigar', () => {
+  const perms = (rol: RoleType) => ROLE_PERMISSIONS[rol] as string[];
+  const puerta = (ctrl: new (...args: never[]) => object, metodo: string) =>
+    (Reflect.getMetadata(ROLES_KEY, (ctrl.prototype as Record<string, object>)[metodo]!) as string[] | undefined) ?? [];
+
+  it('reemplazo temporal, ayuda y revocar exigen assignment:write (gerente, administrador y supervisor)', () => {
+    for (const m of ['assignees', 'createTemporary', 'createSupport', 'revoke']) {
+      assert.deepEqual(puerta(AssignmentsController, m), [Permission.ASSIGNMENT_WRITE], m);
+    }
+    for (const rol of [RoleType.MANAGER, RoleType.SUPERVISOR, RoleType.ACCOUNT_ADMIN]) assert.ok(perms(rol).includes(Permission.ASSIGNMENT_WRITE), rol);
+    assert.ok(!perms(RoleType.COLLECTOR).includes(Permission.ASSIGNMENT_WRITE));
+  });
+
+  it('alcance: gerente y administrador = todo; supervisor = su agencia (y NO todo); cobrador = lo suyo', () => {
+    for (const rol of [RoleType.MANAGER, RoleType.ACCOUNT_ADMIN]) assert.ok(perms(rol).includes(Permission.DATA_SCOPE_ALL), rol);
+    assert.ok(perms(RoleType.SUPERVISOR).includes(Permission.DATA_SCOPE_BRANCH));
+    assert.ok(!perms(RoleType.SUPERVISOR).includes(Permission.DATA_SCOPE_ALL));
+    assert.ok(!perms(RoleType.COLLECTOR).includes(Permission.DATA_SCOPE_ALL) && !perms(RoleType.COLLECTOR).includes(Permission.DATA_SCOPE_BRANCH));
+  });
+
+  it('castigar: credit:write en la puerta y alcance total en el service → sólo gerente y administrador', () => {
+    assert.deepEqual(puerta(CreditsController, 'writeOff'), [Permission.CREDIT_WRITE]);
+    assert.deepEqual(puerta(CreditsController, 'unWriteOff'), [Permission.CREDIT_WRITE]);
+    const pueden = Object.values(RoleType).filter((r) => perms(r).includes(Permission.CREDIT_WRITE) && perms(r).includes(Permission.DATA_SCOPE_ALL));
+    assert.deepEqual(
+      [...pueden].sort(),
+      [RoleType.ACCOUNT_ADMIN, RoleType.MANAGER, RoleType.SUPER_ADMIN].sort(),
+      'si esto cambia, el castigo se le abrió a otro rol',
+    );
   });
 });

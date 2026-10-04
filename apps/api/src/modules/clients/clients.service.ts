@@ -618,7 +618,7 @@ export class ClientsService {
         FROM agenda_items a
         WHERE a.client_id = ${clientId} AND a.deleted_at IS NULL`);
     }
-    if (this.tenant.can(Permission.CASE_READ)) {
+    if (this.tenant.can(Permission.COLLECTION_READ)) {
       partes.push(Prisma.sql`
         SELECT 'ACTIVITY' AS kind, ac.id, ac.created_at AS at, ac.type::text AS code, ac.result AS status,
                NULL AS amount, NULL AS currency, ac.notes AS notes,

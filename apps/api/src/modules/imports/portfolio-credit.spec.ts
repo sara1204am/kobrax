@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { NormalizedRecord } from './field-catalog';
-import { creditCreateData, creditUpdateData } from './portfolio-credit';
+import { creditCreateData, creditUpdateData, isWrittenOffLabel, mapStatus, storedStatus } from './portfolio-credit';
 import { serializeCredit } from '../credits/credits.serializer';
 
 const ROW: NormalizedRecord = {
@@ -148,5 +148,67 @@ describe('serializeCredit — importado con datos desconocidos', () => {
   it('importado con cuota 0 de relleno: la cuota es desconocida, no Bs 0', () => {
     const s = serializeCredit({ id: 'cr3', principalAmount: 1, outstandingBalance: 1, interestRate: 0, currency: 'BOB', installmentsCount: 1, metadata: { origin: 'import', installmentAmount: 0 } } as never);
     assert.equal(s.installmentAmount, undefined);
+  });
+});
+
+/**
+ * F4/08 · D1-a — el CASTIGADO del reporte marca `written_off_at` y deja el estado en ACTIVE: los días de mora
+ * siguen corriendo y el job lo procesa como a cualquier otro. `WRITTEN_OFF` ya no se escribe como estado.
+ */
+describe('CASTIGADO del reporte PSF (D1-a)', () => {
+  const CASTIGADO: NormalizedRecord = { ...ROW, status: 'CASTIGADO', daysPastDue: 240 };
+
+  it('el mapa sigue reconociendo la etiqueta, pero lo que se guarda es ACTIVE', () => {
+    assert.equal(mapStatus('CASTIGADO'), 'WRITTEN_OFF');
+    assert.equal(isWrittenOffLabel('Castigado'), true);
+    assert.equal(storedStatus('CASTIGADO'), 'ACTIVE');
+    assert.equal(isWrittenOffLabel('VIGENTE'), false);
+    assert.equal(isWrittenOffLabel(null), false);
+    assert.equal(storedStatus('VENCIDO'), 'DEFAULTED', 'el resto del mapa no cambia');
+  });
+
+  it('alta: written_off_at puesto, estado ACTIVE y los días de mora del reporte', () => {
+    const data = creditCreateData('acc', 'cli', CASTIGADO, SCOPE as never, STAMP);
+    assert.equal(data.status, 'ACTIVE');
+    assert.deepEqual(data.writtenOffAt, new Date(STAMP.at));
+    assert.equal(data.writtenOffBy, null, 'lo marca el sistema');
+    assert.ok(data.writtenOffReason);
+    assert.equal(data.daysPastDue, 240);
+  });
+
+  it('alta de uno VIGENTE: sin castigo', () => {
+    const data = creditCreateData('acc', 'cli', ROW, SCOPE as never, STAMP);
+    assert.equal(data.writtenOffAt, undefined);
+  });
+
+  it('actualización: lo marca si todavía no estaba castigado y deja el estado como estaba', () => {
+    const data = creditUpdateData(CASTIGADO, {}, STAMP, { prevStatus: 'ACTIVE' as never, prevWrittenOffAt: null });
+    assert.deepEqual(data.writtenOffAt, new Date(STAMP.at));
+    assert.equal(data.status, 'ACTIVE');
+  });
+
+  it('actualización: el castigo ya marcado no se pisa (conserva su fecha y su motivo)', () => {
+    const data = creditUpdateData(CASTIGADO, {}, STAMP, { prevStatus: 'ACTIVE' as never, prevWrittenOffAt: new Date('2026-01-01') });
+    assert.equal(data.writtenOffAt, undefined);
+    assert.equal(data.writtenOffReason, undefined);
+  });
+
+  it('un viejo con estado WRITTEN_OFF que vuelve CASTIGADO: se marca y el estado pasa a ACTIVE', () => {
+    const data = creditUpdateData(CASTIGADO, {}, STAMP, { prevStatus: 'WRITTEN_OFF' as never, prevWrittenOffAt: null });
+    assert.equal(data.status, 'ACTIVE');
+    assert.ok(data.writtenOffAt);
+  });
+
+  it('si el reporte deja de decir CASTIGADO, el castigo no se revierte solo (lo decide una persona)', () => {
+    const data = creditUpdateData(ROW, {}, STAMP, { prevStatus: 'ACTIVE' as never, prevWrittenOffAt: new Date('2026-01-01') });
+    assert.equal(data.writtenOffAt, undefined, 'no se toca la columna');
+  });
+
+  it('un mapa propio de la cuenta que apunta a WRITTEN_OFF también marca el castigo, sin escribir el estado', () => {
+    const row = { ...ROW, status: 'EN EJECUCION' };
+    const ctx = { statusMap: { 'EN EJECUCION': 'WRITTEN_OFF' as never } };
+    const data = creditCreateData('acc', 'cli', row, SCOPE as never, STAMP, ctx);
+    assert.equal(data.status, 'ACTIVE');
+    assert.ok(data.writtenOffAt);
   });
 });
