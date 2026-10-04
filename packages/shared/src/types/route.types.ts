@@ -10,6 +10,7 @@ import type { ExternalSyncStatus } from '../enums/credit.enum.js';
 export interface RouteStopItem {
   id: string;
   clientId: string;
+  /** @deprecated legado: las paradas nuevas no llevan caso (F4/08). */
   caseId?: string;
   sequenceOrder: number;
   status: RouteStopStatus;
@@ -21,7 +22,7 @@ export interface RouteStopItem {
   /** El punto de esa misma ubicación. Sin él la parada existe pero no se puede dibujar. */
   latitude?: number;
   longitude?: number;
-  /** El crédito del caso de la parada: contra él se cobra y se promete al registrar el resultado. */
+  /** El crédito de la parada (F4/08: la parada es por crédito): contra él se cobra y se promete al registrar el resultado. */
   creditId?: string;
   /**
    * La deuda del crédito **de esta parada**, no la suma del deudor: un cliente puede tener más de
@@ -60,7 +61,7 @@ export interface RouteItem {
   branchId?: string;
   plannedDate: string;
   status: RouteStatus;
-  /** Paradas planificadas. Se escribe al armar la ruta. */
+  /** Paradas planificadas. Se escribe al armar la ruta. Nombre legado (antes «casos»): hoy cuenta paradas. */
   totalCases: number;
   /**
    * Paradas ya visitadas, para poder decir «5 de 8» sin traer las paradas.
@@ -84,6 +85,9 @@ export interface RouteItem {
  */
 export interface VisitItem {
   id: string;
+  /** El crédito visitado (F4/08). */
+  creditId?: string;
+  /** @deprecated legado. */
   caseId?: string;
   routeStopId?: string;
   collectorId: string;

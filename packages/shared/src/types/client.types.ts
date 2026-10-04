@@ -208,7 +208,7 @@ export interface ClientRelationDetail {
  * que se decidió para los estados de la cartera.
  *
  * Las tres fuentes son tres tablas y en la base **ya están atadas al cliente**: `agenda_items` lo
- * lleva propio, el pago llega por su crédito y la gestión por su caso. Por eso esto es una consulta,
+ * lleva propio, el pago llega por su crédito y la gestión por su crédito (`credit_activities`). Por eso esto es una consulta,
  * no un recorrido crédito por crédito.
  */
 export type TimelineKind = 'PAYMENT' | 'AGENDA' | 'ACTIVITY';
@@ -220,7 +220,7 @@ export interface ClientTimelineEntry {
   at: string;
   /**
    * Qué fue: el medio de pago (`CASH`…), el tipo de agendado (`VISIT`, `CALL`, `PROMISE_TO_PAY`…) o
-   * el tipo de gestión (`CaseActivityType`).
+   * el tipo de gestión (`CreditActivityType`).
    */
   code: string;
   /** Sólo agenda: si se ejecutó, se canceló o se reagendó. Sin esto, «llamada» no dice si atendió. */
@@ -230,6 +230,7 @@ export interface ClientTimelineEntry {
   /** Lo que escribió quien la registró. Texto libre, tal cual. */
   notes?: string;
   creditId?: string;
+  /** @deprecated F4/08: ya no se llena (las gestiones cuelgan del crédito). Se quita en la fase 6. */
   caseId?: string;
   /** Quién. `users.id`: el nombre lo resuelve quien dibuja, que ya tiene el equipo cargado. */
   userId?: string;

@@ -83,7 +83,13 @@ export interface AnalyticsSummary {
   overdue: KpiValue;
   /** Porcentaje 0-100, no una fracción: es lo que se muestra y así no se redondea dos veces. */
   overdueRate: KpiValue;
+  /**
+   * @deprecated F4/08: es el mismo número que `creditsInArrears` (ya no hay casos). Se quita cuando la web migre.
+   * 🔴 Cambió de definición: las series anteriores a la fase 3 no son comparables.
+   */
   activeCases: KpiValue;
+  /** Créditos con un episodio de mora abierto (y su valor al cierre del período anterior). */
+  creditsInArrears: KpiValue;
   collected: KpiValue;
   currency: string;
   /** El mismo saldo, mora y recaudo partidos por fuente. Sólo las fuentes con algo que aportar. */
@@ -97,8 +103,12 @@ export interface AgingBucketRow {
 }
 
 export interface CollectorPerformanceRow {
+  /** El responsable de los créditos (F4/08), no el cobrador de un caso. */
   collectorId: string;
+  /** @deprecated F4/08: igual a `creditsInArrears`. */
   cases: number;
+  /** Créditos en mora (episodio abierto) del responsable. */
+  creditsInArrears: number;
   outstanding: number;
   overdue: number;
   /** 0-100. Lo calcula el servidor, que es el que tiene los dos números exactos. */
