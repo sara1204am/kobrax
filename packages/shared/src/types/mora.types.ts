@@ -12,6 +12,8 @@
 import type { CasePriority, CaseStatus } from '../enums/index.js';
 import type { ArrearsSource, ExternalSyncStatus } from '../enums/credit.enum.js';
 import type { CreditAssignmentKind, MoraSituation } from './sin-caso.types.js';
+import type { CreditOrigin, PaymentFrequency } from '../enums/credit.enum.js';
+import type { PortfolioLocation } from './case.types.js';
 
 /**
  * Cómo se puede ordenar `GET /mora`. La primera es el default.
@@ -126,6 +128,30 @@ export interface MoraCreditListItem {
   lastActivityType?: string;
   lastActivityResult?: string;
   hasActivePromise: boolean;
+
+  // ── Cartera / rutas (F4/08 fase 5): lo que antes traía `CaseListItem` con `view=portfolio` ─────────────
+  /**
+   * Mapeo `CaseListItem` → `MoraCreditListItem` (para reconstruir `groupPortfolio` desde `GET /mora?todos=true`):
+   *   id / creditId → creditId            · clientId, branchId, clientName, currency → igual
+   *   assigneeId → responsibleId          · creditCode → code
+   *   amount → balance (ausente = el archivo no lo trajo; groupPortfolio usa `?? 0`)
+   *   daysPastDue, arrearsSource, installmentAmount, nextDueDate, externalSource, syncStatus, reportedAsOf,
+   *   reportedStale, suggestedPaymentAmount, hasActivePromise, lastActionAt, priority, priorityPinned → igual
+   *   status → situation (+ writtenOff) · isOverdue → situation === 'IN_ARREARS' (o daysPastDue > 0)
+   *   zone, locations, documentMasked, frequency, origin, locked → NUEVOS aquí (misma forma y regla que el caso)
+   *   slaDueAt, createdAt, updatedAt → no existen. `portfolioStatus` y `creditCount` los calcula el cliente
+   *   (`portfolioStatus` de shared con balance/daysPastDue/nextDueDate/hasActivePromise; count = filas por clientId).
+   */
+  /** Zona de la ubicación primaria DEL CLIENTE (la primera HOME; si no, la primera cargada). Sólo en la lista. */
+  zone?: string;
+  /** Todas las ubicaciones dibujables (con punto): las del cliente y las de sus garantes/familiares. Sólo en la lista. */
+  locations?: PortfolioLocation[];
+  /** Documento del deudor, siempre enmascarado. Sólo en la lista. */
+  documentMasked?: string;
+  frequency?: PaymentFrequency;
+  origin?: CreditOrigin;
+  /** Candado del dato importado (campos financieros no editables). */
+  locked?: boolean;
 }
 
 /** Una gestión del caso abierto (la misma forma que `CaseActivityItem`). */

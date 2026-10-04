@@ -9,6 +9,8 @@ import type { ArrearsMethod, CreditOrigin, ExternalSyncStatus, EffectiveBalanceB
 import type { CreditTerms } from '../utils/credit-engine.js';
 import type { CreditInitialState } from '../utils/credit-edit.js';
 import type { ImportTrackedField } from '../utils/credit-import.js';
+import type { MoraSituation } from './sin-caso.types.js';
+import type { MoraCategoryTag } from './mora.types.js';
 
 // ── Payload de la API ────────────────────────────────────────────────────────
 export interface NewContactInput {
@@ -359,6 +361,14 @@ export interface CreditDetail {
   notes?: string;
   status?: string;
   daysPastDue?: number;
+  /** F4/08: castigado (`written_off_at`), condición aparte de la mora. Presente en el detalle. */
+  writtenOff?: boolean;
+  writtenOffAt?: string;
+  writtenOffReason?: string;
+  /** F4/08: Al día / En mora, del episodio de mora abierto. Sólo en `GET /credits/:id`. */
+  situation?: MoraSituation;
+  /** F4/08: categoría de mora calculada con los rangos de la cuenta. Ausente = al día (< 1 día) o sin rango que la cubra. Sólo en `GET /credits/:id`. */
+  category?: MoraCategoryTag;
   hasSchedule?: boolean;
   /** Las condiciones con las que se definió (F4/06). Ausente en créditos anteriores y en importados. */
   terms?: CreditTerms;
