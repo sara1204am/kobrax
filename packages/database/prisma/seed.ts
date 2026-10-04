@@ -88,6 +88,8 @@ const PERMISSIONS = [
   // silencio todo código que no esté en esta lista, así que nadie los recibía en el JWT.
   ['assignment:write', 'assignments', 'UPDATE', 'ACCOUNT'],
   ['data:scope:all', 'data', 'READ', 'ACCOUNT'],
+  // F4/08 · D8: el alcance del supervisor (su agencia + lo suyo). Espejo de la migración 20261004010000.
+  ['data:scope:branch', 'data', 'READ', 'BRANCH'],
 ] as const;
 
 /**
@@ -139,6 +141,10 @@ async function main() {
         create: { roleId: role.id, permissionId: perm.id },
       });
     }
+    // F4/08 · D8: el alcance de datos se SINCRONIZA (no sólo se agrega): un rol que ya no lo lleva en
+    // `ROLE_PERMISSIONS` —el supervisor con `data:scope:all`— lo pierde al volver a correr el seed.
+    const staleScopes = ['data:scope:all', 'data:scope:branch'].filter((c) => !codes.includes(c));
+    await prisma.rolePermission.deleteMany({ where: { roleId: role.id, permission: { code: { in: staleScopes } } } });
   }
   console.log(`  ✓ ${Object.keys(ROLES).length} roles`);
 
@@ -456,6 +462,18 @@ async function main() {
 
   // 5) Módulo Agenda (F10): catálogos + deudores ricos + agendados de la semana.
   await seedAgenda(acc, collector.id);
+
+  // 6) Agencia demo (F4/08 · D8): el supervisor ve SU agencia, así que necesita una (`user_accounts.branch_id`) y
+  // los créditos de la demo tienen que pertenecer a ella. Sin esto un supervisor sin agencia sólo vería lo suyo.
+  const branch =
+    (await prisma.branch.findFirst({ where: { accountId: acc, deletedAt: null }, orderBy: { createdAt: 'asc' } })) ??
+    (await prisma.branch.create({ data: { accountId: acc, name: 'Casa Central', code: 'CEN' } }));
+  const supervisorUser = await prisma.user.findUnique({ where: { email: 'supervisor@kobrax.demo' }, select: { id: true } });
+  if (supervisorUser) {
+    await prisma.userAccount.updateMany({ where: { userId: supervisorUser.id, accountId: acc, branchId: null }, data: { branchId: branch.id } });
+  }
+  await prisma.credit.updateMany({ where: { accountId: acc, branchId: null }, data: { branchId: branch.id } });
+  console.log(`  ✓ agencia demo «${branch.name}»: supervisor y créditos`);
 
   console.log('✅ Seed completo.');
 }
