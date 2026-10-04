@@ -12,8 +12,19 @@ import {
   type CreditTerms,
   type ImportTrackedField,
   DEFAULT_REPORT_STALE_AFTER_DAYS,
+  categoryForDays,
   isReportStale,
+  moraSituation,
+  type ArrearRange,
 } from '@kobrax/shared';
+
+/** Lo que sólo la ficha (`GET /credits/:id`) calcula: la situación y la categoría de mora (F4/08 · D1). */
+export interface CreditMoraContext {
+  /** ¿Hay un episodio de mora abierto? Es lo único que decide Al día / En mora. */
+  hasOpenEpisode: boolean;
+  /** Los rangos de la cuenta (una consulta por petición). Sin rangos no hay categoría. */
+  categories: readonly (ArrearRange & { code: string; name: string; color: string | null })[];
+}
 
 /** Etiquetas de concepto por defecto (las sobreescribe `account.configuration.creditLabels`). */
 export const DEFAULT_CREDIT_LABELS: Record<string, string> = {
@@ -62,7 +73,13 @@ export function serializeCredit(
   credit: CreditWithRelations,
   labels: Record<string, string> = DEFAULT_CREDIT_LABELS,
   staleAfterDays: number = DEFAULT_REPORT_STALE_AFTER_DAYS,
+  mora?: CreditMoraContext,
 ) {
+  // Sólo con contexto (la ficha): `situation` del episodio abierto y `category` por días de mora (nunca se guarda;
+  // ninguna si el crédito está al día —< 1 día— o ningún rango lo cubre).
+  const writtenOff = credit.writtenOffAt != null || credit.status === 'WRITTEN_OFF';
+  const situation = mora ? moraSituation({ hasOpenEpisode: mora.hasOpenEpisode, daysPastDue: credit.daysPastDue, writtenOffAt: credit.writtenOffAt }).situation : undefined;
+  const cat = mora ? categoryForDays(credit.daysPastDue, mora.categories) : null;
   // La ficha (§5.4) necesita cuota, frecuencia, próxima fecha y el candado del importado.
   // Misma función que el listado de casos y que el móvil: una sola regla, tres consumidores.
   const view = creditView({
@@ -95,10 +112,12 @@ export function serializeCredit(
     installmentsCount: countUnknown ? undefined : credit.installmentsCount,
     status: credit.status,
     // D1-a: el castigo es una condición aparte (`written_off_at`); un crédito viejo con status WRITTEN_OFF también cuenta.
-    writtenOff: credit.writtenOffAt != null || credit.status === 'WRITTEN_OFF',
+    writtenOff,
     writtenOffAt: credit.writtenOffAt ?? undefined,
     writtenOffReason: credit.writtenOffReason ?? undefined,
     daysPastDue: credit.daysPastDue,
+    situation,
+    category: cat ? { code: cat.code, name: cat.name, color: cat.color ?? undefined } : undefined,
     assignedManagerId: credit.assignedManagerId ?? undefined,
     disbursedAt: credit.disbursedAt ?? undefined,
     createdAt: credit.createdAt,

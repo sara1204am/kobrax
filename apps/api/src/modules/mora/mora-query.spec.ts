@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_ARREAR_CATEGORIES, Permission, categoryForDays } from '@kobrax/shared';
-import { buildMoraOrder, buildMoraWhere, categoryCodes, escapeLike, moraAccessConditions, moraScopeOf, type MoraCategoryRange, type MoraScope } from './mora-query';
+import { buildMoraOrder, buildMoraWhere, categoryCodes, escapeLike, moraAccessConditions, moraScopeOf, routedDay, visitCutoff, type MoraCategoryRange, type MoraScope } from './mora-query';
 
 const NOW = new Date('2026-10-01T12:00:00Z');
 const ADMIN: MoraScope = { accountId: 'acc', userId: 'u-admin', kind: 'ALL', ownOnly: false, canAssign: true };
@@ -319,5 +319,98 @@ describe('buildMoraOrder', () => {
   it('lastAction y slaDueAt ya no ordenan (D2): caen al default', () => {
     assert.equal(order('lastAction'), order());
     assert.equal(order('slaDueAt', 'asc'), order(undefined, 'asc'));
+  });
+});
+
+describe('buildMoraWhere — filtros de planificación de rutas (por crédito)', () => {
+  it('sin filtros de visita ni de ruta no toca field_visits ni route_stops', () => {
+    const w = where({});
+    assert.doesNotMatch(w.sql, /field_visits/);
+    assert.doesNotMatch(w.sql, /route_stops/);
+  });
+
+  it('excludeRouted=true excluye las paradas de rutas NO canceladas de hoy, por credit_id', () => {
+    const w = where({ excludeRouted: 'true' });
+    assert.match(w.sql, /NOT EXISTS \(\s*SELECT 1 FROM route_stops rs JOIN route_plans rp ON rp\.id = rs\.route_id/);
+    assert.match(w.sql, /rs\.credit_id = cr\.id/);
+    assert.match(w.sql, /rp\.status::text <> 'CANCELLED'/);
+    assert.ok(w.values.includes('2026-10-01'), 'hoy en UTC');
+    assert.doesNotMatch(w.sql, /case_id/);
+  });
+
+  it('excludeRouted acepta una fecha (lo que mandaba el filtro viejo) y la pasa como parámetro', () => {
+    const w = where({ excludeRouted: '2026-11-15' });
+    assert.ok(w.values.includes('2026-11-15'));
+    assert.match(w.sql, /rp\.planned_date = \?::date/);
+  });
+
+  it('excludeRouted inválido o vacío se ignora (nunca un 400 ni una consulta rota)', () => {
+    for (const bad of ['false', 'mañana', '2026-02-31', '2026-13-01', '', '   ']) {
+      assert.doesNotMatch(where({ excludeRouted: bad }).sql, /route_stops/, `«${bad}»`);
+    }
+  });
+
+  it('neverVisited=true: NOT EXISTS sobre field_visits.credit_id', () => {
+    const w = where({ neverVisited: 'true' });
+    assert.match(w.sql, /NOT EXISTS \(SELECT 1 FROM field_visits v WHERE v\.credit_id = cr\.id AND v\.account_id = cr\.account_id\)/);
+  });
+
+  it('neverVisited=false no filtra', () => {
+    assert.doesNotMatch(where({ neverVisited: 'false' }).sql, /field_visits/);
+  });
+
+  it('notVisitedSince con fecha: ninguna visita con captured_at >= esa fecha (incluye los nunca visitados)', () => {
+    const w = where({ notVisitedSince: '2026-09-01' });
+    assert.match(w.sql, /NOT EXISTS \(SELECT 1 FROM field_visits v WHERE .* AND v\.captured_at >= \?\)/);
+    assert.ok(w.values.some((v) => v instanceof Date && v.toISOString() === '2026-09-01T00:00:00.000Z'));
+  });
+
+  it('notVisitedSince con días: cuenta hacia atrás desde ahora', () => {
+    const w = where({ notVisitedSince: '30' });
+    assert.ok(w.values.some((v) => v instanceof Date && v.toISOString() === '2026-09-01T12:00:00.000Z'));
+  });
+
+  it('neverVisited=true gana sobre notVisitedSince (es un subconjunto): no se repite el criterio', () => {
+    const w = where({ neverVisited: 'true', notVisitedSince: '30' });
+    assert.doesNotMatch(w.sql, /captured_at/);
+  });
+
+  it('outcome = resultado de la ÚLTIMA visita; sólo valores del enum, lo demás se descarta', () => {
+    const w = where({ outcome: 'NOT_FOUND, REFUSAL,INVENTADO,NOT_FOUND' });
+    assert.match(w.sql, /ORDER BY v\.captured_at DESC, v\.id DESC LIMIT 1\) = ANY\(\?::text\[\]\)/);
+    const list = w.values.find((v) => Array.isArray(v) && v.includes('NOT_FOUND')) as string[];
+    assert.deepEqual(list, ['NOT_FOUND', 'REFUSAL']);
+  });
+
+  it('outcome sin ningún valor válido no filtra', () => {
+    assert.doesNotMatch(where({ outcome: 'XX,YY' }).sql, /field_visits/);
+    assert.doesNotMatch(where({ outcome: '' }).sql, /field_visits/);
+  });
+
+  it('el filtro es del crédito, no del caso: ningún filtro nuevo menciona collection_cases', () => {
+    const w = where({ excludeRouted: 'true', outcome: 'PAID', notVisitedSince: '7', zone: 'Centro' });
+    assert.doesNotMatch(w.sql, /collection_cases|case_id/);
+  });
+});
+
+describe('routedDay / visitCutoff — valores límite', () => {
+  it('routedDay: true = hoy; fecha real = ella; el resto null', () => {
+    assert.equal(routedDay('true', NOW), '2026-10-01');
+    assert.equal(routedDay('2026-02-28', NOW), '2026-02-28');
+    assert.equal(routedDay('2024-02-29', NOW), '2024-02-29', 'bisiesto');
+    assert.equal(routedDay('2026-02-29', NOW), null, 'no bisiesto');
+    assert.equal(routedDay(undefined, NOW), null);
+  });
+
+  it('visitCutoff: 1 y 3650 días son los extremos válidos; 0, 3651 y basura no filtran', () => {
+    assert.equal(visitCutoff('1', NOW)?.toISOString(), '2026-09-30T12:00:00.000Z');
+    assert.ok(visitCutoff('3650', NOW));
+    assert.equal(visitCutoff('0', NOW), null);
+    assert.equal(visitCutoff('3651', NOW), null);
+    assert.equal(visitCutoff('-5', NOW), null);
+    assert.equal(visitCutoff('1.5', NOW), null);
+    assert.equal(visitCutoff('abc', NOW), null);
+    assert.equal(visitCutoff('2026-02-31', NOW), null);
+    assert.equal(visitCutoff('2026-10-01', NOW)?.toISOString(), '2026-10-01T00:00:00.000Z');
   });
 });

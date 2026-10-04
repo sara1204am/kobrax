@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
-import { CollectionPriority } from '@prisma/client';
+import { CollectionPriority, VisitOutcome } from '@prisma/client';
 import { MORA_SORTS, Permission, searchTerms, type ArrearRange, type MoraSort } from '@kobrax/shared';
 import type { ListMoraQueryDto } from './dto/mora.dto';
 
@@ -44,6 +44,37 @@ export function escapeLike(term: string): string {
 /** Fecha `YYYY-MM-DD` de hoy en UTC (la misma regla que `clientsWithPromise`). */
 function todayIso(now: Date): string {
   return now.toISOString().slice(0, 10);
+}
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** ¿Es una fecha de calendario real? (`2026-02-31` no.) */
+function isRealDay(raw: string): boolean {
+  if (!ISO_DAY.test(raw)) return false;
+  const d = new Date(`${raw}T00:00:00.000Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === raw;
+}
+
+/** `excludeRouted`: `'true'` = hoy, `YYYY-MM-DD` = esa fecha; cualquier otra cosa no filtra (`null`). */
+export function routedDay(raw: string | undefined, now: Date): string | null {
+  const v = raw?.trim();
+  if (!v) return null;
+  if (v === 'true') return todayIso(now);
+  return isRealDay(v) ? v : null;
+}
+
+/**
+ * `notVisitedSince`: `YYYY-MM-DD` (inicio de ese día, UTC) o un entero de días hacia atrás desde `now`
+ * (`0` = desde ahora: ninguna visita futura, es decir, no filtra nada útil; `1..3650` válidos). Lo demás: `null`.
+ */
+export function visitCutoff(raw: string | undefined, now: Date): Date | null {
+  const v = raw?.trim();
+  if (!v) return null;
+  if (/^\d{1,4}$/.test(v)) {
+    const days = Number(v);
+    return days >= 1 && days <= 3650 ? new Date(now.getTime() - days * 86_400_000) : null;
+  }
+  return isRealDay(v) ? new Date(`${v}T00:00:00.000Z`) : null;
 }
 
 /** Valores válidos de una lista separada por comas; lo desconocido se descarta (no es un 400). */
@@ -218,6 +249,34 @@ export function buildMoraWhere(
         AND a.type::text = 'PROMISE_TO_PAY' AND a.status::text = 'SCHEDULED'
         AND a.scheduled_date >= ${todayIso(now)}::date)`;
     c.push(query.hasPromise === 'true' ? exists : Prisma.sql`NOT ${exists}`);
+  }
+
+  // ── Planificación de rutas: visitas y paradas POR CRÉDITO ─────────────────
+  const visits = Prisma.sql`SELECT 1 FROM field_visits v WHERE v.credit_id = cr.id AND v.account_id = cr.account_id`;
+  if (query.neverVisited === 'true') {
+    c.push(Prisma.sql`NOT EXISTS (${visits})`);
+  } else {
+    // «Nunca» es un subconjunto de «no desde»: si se pidió el primero, el segundo sobra.
+    const cutoff = visitCutoff(query.notVisitedSince, now);
+    if (cutoff) c.push(Prisma.sql`NOT EXISTS (${visits} AND v.captured_at >= ${cutoff})`);
+  }
+
+  // Resultado de la ÚLTIMA visita (la más reciente; el id desempata dos del mismo instante).
+  const outcomes = enumList(query.outcome, VisitOutcome);
+  if (outcomes.length > 0) {
+    c.push(Prisma.sql`(
+      SELECT v.outcome::text FROM field_visits v
+      WHERE v.credit_id = cr.id AND v.account_id = cr.account_id
+      ORDER BY v.captured_at DESC, v.id DESC LIMIT 1) = ANY(${outcomes as string[]}::text[])`);
+  }
+
+  // «Sólo mora disponible»: fuera los que ya son parada de una ruta viva ese día (una cancelada libera al crédito).
+  const routed = routedDay(query.excludeRouted, now);
+  if (routed) {
+    c.push(Prisma.sql`NOT EXISTS (
+      SELECT 1 FROM route_stops rs JOIN route_plans rp ON rp.id = rs.route_id
+      WHERE rs.credit_id = cr.id AND rs.account_id = cr.account_id
+        AND rp.planned_date = ${routed}::date AND rp.status::text <> 'CANCELLED')`);
   }
 
   // ── Búsqueda: nº de crédito, nombre (palabra por palabra) o zona, en la misma caja ──

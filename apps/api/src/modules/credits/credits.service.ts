@@ -46,7 +46,7 @@ import {
   DEFAULT_ARREAR_PARAMS,
   type ArrearParams,
 } from './credit-math';
-import { serializeCredit } from './credits.serializer';
+import { serializeCredit, type CreditMoraContext } from './credits.serializer';
 import { ClearArrearsDto, CreateCreditDto, ListCreditsQueryDto, UpdateCreditDto } from './dto/credit.dto';
 import {
   arrearsDateNotFuture,
@@ -349,14 +349,25 @@ export class CreditsService {
 
   async findOne(id: string): Promise<ReturnType<typeof serializeCredit>> {
     const config = await this.accountConfig();
-    const credit = await this.tx((tx) =>
-      tx.credit.findFirst({
+    const found = await this.tx(async (tx) => {
+      const credit = await tx.credit.findFirst({
         where: { id, deletedAt: null },
         include: { installments: { orderBy: { number: 'asc' } }, arrears: true, _count: { select: { payments: true } } },
-      }),
-    );
-    if (!credit) throw resourceNotFound();
-    return serializeCredit(credit, config.labels, config.staleAfterDays);
+      });
+      if (!credit) return null;
+      // F4/08: situación (episodio abierto) y categoría (rangos de la cuenta, UNA consulta) sólo para la ficha.
+      const [open, categories] = await Promise.all([
+        tx.creditArrearEpisode.count({ where: { creditId: id, endedAt: null } }),
+        tx.arrearCategory.findMany({ where: { accountId: this.tenant.accountId }, orderBy: [{ sortOrder: 'asc' }, { fromDays: 'asc' }] }),
+      ]);
+      return { credit, open, categories };
+    });
+    if (!found) throw resourceNotFound();
+    const mora: CreditMoraContext = {
+      hasOpenEpisode: found.open > 0,
+      categories: found.categories.map((r) => ({ code: r.code, name: r.name, color: r.color, fromDays: r.fromDays, toDays: r.toDays })),
+    };
+    return serializeCredit(found.credit, config.labels, config.staleAfterDays, mora);
   }
 
   async getSchedule(id: string) {

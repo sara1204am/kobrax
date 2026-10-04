@@ -11,6 +11,7 @@ import {
   type ImportTrackedField,
   type MoraCreditListItem,
   type OverdueSource,
+  type PortfolioLocation,
 } from '@kobrax/shared';
 import { clientDisplayName } from '../clients/clients.serializer';
 
@@ -66,7 +67,14 @@ export function overdueFromSchedule(installments: MoraCreditRow['installments'],
 
 export function serializeMoraCredit(
   c: MoraCreditRow,
-  opts: { now: Date; staleAfterDays?: number; hasActivePromise: boolean; categories?: readonly Pick<ArrearCategory, 'code' | 'name' | 'color' | 'fromDays' | 'toDays'>[] },
+  opts: {
+    now: Date;
+    staleAfterDays?: number;
+    hasActivePromise: boolean;
+    categories?: readonly Pick<ArrearCategory, 'code' | 'name' | 'color' | 'fromDays' | 'toDays'>[];
+    /** Zona, ubicaciones y documento enmascarado del deudor: sólo la lista (ver `loadPortfolio`). */
+    portfolio?: { zone?: string; locations?: PortfolioLocation[]; documentMasked?: string };
+  },
 ): MoraCreditListItem {
   const { now } = opts;
   const meta = readCreditMetadata(c.metadata, c.origin);
@@ -156,5 +164,12 @@ export function serializeMoraCredit(
     lastActivityType: activity?.type,
     lastActivityResult: activity?.result ?? undefined,
     hasActivePromise: opts.hasActivePromise,
+    // Cartera / rutas (mismas reglas que el caso: `creditView`; el candado y el origen los pinta el móvil).
+    frequency: view.frequency,
+    origin: view.origin,
+    locked: view.locked,
+    zone: opts.portfolio?.zone,
+    locations: opts.portfolio?.locations,
+    documentMasked: opts.portfolio?.documentMasked,
   };
 }

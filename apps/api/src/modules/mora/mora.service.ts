@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { AgendaItemStatus, Prisma, type CreditActivityType, type PrismaClient } from '@prisma/client';
 import {
   Permission,
+  maskDocument,
   cascadePosition,
   clampNoteBox,
   NOTE_BOARD_LIMITS,
@@ -19,11 +20,13 @@ import {
   type CreditAssignmentKind,
   type CreditNote,
   type MoraEpisode,
+  type PortfolioLocation,
   type MoraPromise,
   type RecoveryMetrics,
 } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { CryptoService } from '../../common/crypto/crypto.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AgendaService } from '../agenda/agenda.service';
 import { agendaNotSchedulable } from '../agenda/agenda.errors';
@@ -71,6 +74,7 @@ export class MoraService {
     private readonly audit: AuditService,
     private readonly agenda: AgendaService,
     private readonly arrearsPriority: ArrearsPriorityService,
+    private readonly crypto: CryptoService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -90,7 +94,11 @@ export class MoraService {
 
   async list(query: ListMoraQueryDto): Promise<ApiResponse<MoraCreditListItem[]>> {
     const { page, limit, skip } = resolvePagination(query);
-    const { items, total } = await this.page(query, limit, skip, page);
+    const { items, total } = await this.page(query, limit, skip, page, true, true);
+    // El punto del mapa es el domicilio: se audita el revelado, UN registro por consulta (no por crédito).
+    if (items.some((i) => i.locations?.length)) {
+      await this.audit.record({ entity: 'credit_portfolio', entityId: this.tenant.userId ?? 'anon', action: 'PII_REVEAL' });
+    }
     return ResponseDto.paginated(items, total, page, limit);
   }
 
@@ -134,6 +142,7 @@ export class MoraService {
     skip: number,
     page: number,
     withTotal = true,
+    withPortfolio = false,
   ): Promise<{ items: MoraCreditListItem[]; total: number }> {
     const now = new Date();
     const order = buildMoraOrder(query.sort, query.dir);
@@ -155,7 +164,7 @@ export class MoraService {
         const [row] = await tx.$queryRaw<{ total: bigint }[]>(Prisma.sql`SELECT COUNT(*) AS total ${MORA_FROM} WHERE ${where}`);
         count = Number(row?.total ?? 0);
       }
-      return { items: await this.loadItems(tx, found.map((r) => r.id), now, categories), total: count };
+      return { items: await this.loadItems(tx, found.map((r) => r.id), now, categories, withPortfolio), total: count };
     });
   }
 
@@ -583,7 +592,7 @@ export class MoraService {
    * Trae de Prisma lo que la lista y la ficha pintan y lo serializa, **en el orden de `ids`**: el orden lo
    * decidió el SQL y no se reordena por lo que devuelva `findMany`.
    */
-  private async loadItems(tx: PrismaClient, ids: string[], now: Date, knownCategories?: MoraCategoryRange[]): Promise<MoraCreditListItem[]> {
+  private async loadItems(tx: PrismaClient, ids: string[], now: Date, knownCategories?: MoraCategoryRange[], withPortfolio = false): Promise<MoraCreditListItem[]> {
     if (ids.length === 0) return [];
     const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     const [rows, account, categories] = await Promise.all([
@@ -636,11 +645,79 @@ export class MoraService {
       (account?.configuration as { importConfig?: { staleAfterDays?: unknown } } | null)?.importConfig?.staleAfterDays,
     );
 
+    const portfolio = withPortfolio ? await this.loadPortfolio(tx, [...new Set(rows.map((r) => r.clientId))]) : undefined;
+
     const byId = new Map(rows.map((r) => [r.id, r as unknown as MoraCreditRow]));
     return ids
       .map((id) => byId.get(id))
       .filter((r): r is MoraCreditRow => r !== undefined)
-      .map((r) => serializeMoraCredit(r, { now, staleAfterDays, hasActivePromise: withPromise.has(r.clientId), categories }));
+      .map((r) => serializeMoraCredit(r, { now, staleAfterDays, hasActivePromise: withPromise.has(r.clientId), categories, portfolio: portfolio?.get(r.clientId) }));
+  }
+
+  /**
+   * Zona, ubicaciones dibujables y documento enmascarado de los deudores de la página: **UNA consulta** (no N+1).
+   *
+   * Misma regla que tenía la cartera por caso: zona = la de la ubicación primaria DEL CLIENTE (la primera `HOME`;
+   * si no hay, la primera cargada); el mapa recibe TODAS las ubicaciones con punto, también las de garantes y
+   * familiares (`relation_id`): una deuda se cobra donde esté la persona. El documento sale SIEMPRE enmascarado.
+   */
+  private async loadPortfolio(
+    tx: PrismaClient,
+    clientIds: string[],
+  ): Promise<Map<string, { zone?: string; locations: PortfolioLocation[]; documentMasked?: string }>> {
+    const out = new Map<string, { zone?: string; locations: PortfolioLocation[]; documentMasked?: string }>();
+    if (clientIds.length === 0) return out;
+    const clients = await tx.client.findMany({
+      where: { id: { in: clientIds } },
+      select: {
+        id: true,
+        nationalId: true,
+        locations: {
+          select: {
+            id: true,
+            locationType: true,
+            zone: true,
+            address: true,
+            latitude: true,
+            longitude: true,
+            relationId: true,
+            relation: { select: { relatedName: true, relationshipType: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+    for (const c of clients) {
+      const doc = this.safeDecrypt(c.nationalId);
+      const own = c.locations.filter((l) => l.relationId == null);
+      const primary = own.find((l) => l.locationType === 'HOME') ?? own[0];
+      out.set(c.id, {
+        zone: primary?.zone ?? undefined,
+        locations: c.locations
+          .filter((l) => l.latitude != null && l.longitude != null)
+          .map((l) => ({
+            id: l.id,
+            locationType: l.locationType,
+            latitude: Number(l.latitude),
+            longitude: Number(l.longitude),
+            address: this.safeDecrypt(l.address) ?? undefined,
+            ownerName: l.relation?.relatedName,
+            ownerRelation: l.relation?.relationshipType,
+          })),
+        documentMasked: doc ? maskDocument(doc) : undefined,
+      });
+    }
+    return out;
+  }
+
+  /** Descifra tolerando el legado en claro (mismo criterio que `clients.serializer`). */
+  private safeDecrypt(value: string | null): string | null {
+    if (value == null) return null;
+    try {
+      return this.crypto.decrypt(value);
+    } catch {
+      return value;
+    }
   }
 }
 

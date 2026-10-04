@@ -59,6 +59,30 @@ export class ListMoraQueryDto {
   @IsOptional() @IsIn(['true', 'false']) hasPromise?: string;
   @IsOptional() @IsString() @MaxLength(60) zone?: string;
 
+  /*
+   * ── Filtros de planificación de rutas (por crédito: `field_visits.credit_id`, `route_stops.credit_id`) ──
+   * Como todo filtro de esta lista, un valor que no se entiende se IGNORA (no es un 400).
+   */
+
+  /**
+   * Excluye los créditos que ya son parada de una ruta NO cancelada de ese día. `'true'` = hoy (UTC);
+   * `YYYY-MM-DD` = esa fecha (es lo que mandaba el filtro viejo de casos). Sin esto, dos supervisores mandan a
+   * dos cobradores a la misma puerta el mismo día.
+   */
+  @IsOptional() @IsString() @MaxLength(10) excludeRouted?: string;
+  /**
+   * Cómo terminó la **última** visita de campo del crédito (`VisitOutcome`, uno o varios separados por coma).
+   * ⚠️ Cambio respecto de los casos: allá era «alguna visita»; acá es la última (ahora hay SQL para ordenarlas).
+   */
+  @IsOptional() @IsString() @MaxLength(200) outcome?: string;
+  /** `'true'` = nunca tuvo una visita de campo. */
+  @IsOptional() @IsIn(['true', 'false']) neverVisited?: string;
+  /**
+   * Ninguna visita desde ese momento; incluye a los nunca visitados. Acepta `YYYY-MM-DD` (como el filtro viejo)
+   * o un número de **días** hacia atrás (`30` = no visitado en los últimos 30 días).
+   */
+  @IsOptional() @IsString() @MaxLength(10) notVisitedSince?: string;
+
   /**
    * @deprecated F4/08 · D1/D2: ya no existen (sin caso, sin SLA, sin «sin gestión desde»). Se aceptan sólo para que
    * un enlace guardado o la web de antes no reciba un 400; **no filtran nada**. Se borran con la fase 3/6.
