@@ -388,6 +388,7 @@ export class MoraService {
           kind: dto.kind ?? 'INFO',
           body,
           color: dto.color ?? 'YELLOW',
+          anchor: dto.anchor ?? 'PAGE',
           posX: box.x,
           posY: box.y,
           width: box.w,
@@ -435,6 +436,7 @@ export class MoraService {
       if (body !== undefined) data.body = body;
       if (dto.kind !== undefined) data.kind = dto.kind;
       if (dto.color !== undefined) data.color = dto.color;
+      if (dto.anchor !== undefined) data.anchor = dto.anchor;
       if (dto.x !== undefined || dto.y !== undefined || dto.w !== undefined || dto.h !== undefined) {
         const box = clampNoteBox({ x: dto.x ?? current.posX, y: dto.y ?? current.posY, w: dto.w ?? current.width, h: dto.h ?? current.height });
         Object.assign(data, { posX: box.x, posY: box.y, width: box.w, height: box.h });
