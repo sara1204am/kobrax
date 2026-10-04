@@ -160,11 +160,13 @@ export class AccountsService {
           timezone: dto.timezone,
           // Los decimales viven en `settings` (jsonb, junto a trialEndsAt y planAlerts): son una
           // preferencia, no una columna. Se mezcla, no se pisa — settings guarda más cosas.
-          ...(dto.currencyDecimals !== undefined
+          // El método de mora por defecto (D20) también es una preferencia de `settings`.
+          ...(dto.currencyDecimals !== undefined || dto.arrearsMethod !== undefined
             ? {
                 settings: {
                   ...(before.settings as Record<string, unknown>),
-                  currencyDecimals: Number(dto.currencyDecimals),
+                  ...(dto.currencyDecimals !== undefined ? { currencyDecimals: Number(dto.currencyDecimals) } : {}),
+                  ...(dto.arrearsMethod !== undefined ? { arrearsMethod: dto.arrearsMethod } : {}),
                 },
               }
             : {}),

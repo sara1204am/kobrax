@@ -1,4 +1,5 @@
 import {
+  previewLine,
   applyFieldState,
   decideImportGate,
   fieldState,
@@ -229,5 +230,23 @@ describe('lastRunWhen', () => {
     const now = new Date('2026-07-25T20:00:00');
     expect(lastRunWhen('2026-07-25T08:14:00', now)).toBe('Hoy 08:14');
     expect(lastRunWhen('2026-07-24T08:14:00', now)).toBe('24 jul 08:14');
+  });
+});
+
+describe('previewLine — quién es y con qué números, no sólo el código', () => {
+  it('muestra antes → después cuando cambia', () => {
+    expect(previewLine('302-222-1515', { outstandingBalance: 9752.96, daysPastDue: 69 }, { outstandingBalance: 9752.96, daysPastDue: 70 })).toBe(
+      '302-222-1515 · Saldo 9.752,96 · Mora 69 → 70 d',
+    );
+  });
+
+  it('la ausente sólo tiene el antes; la nueva, sólo el después', () => {
+    expect(previewLine('302-222-2542', { outstandingBalance: 1996.85, daysPastDue: 25 })).toBe('302-222-2542 · Saldo 1.996,85 · Mora 25 d');
+    expect(previewLine('302-222-9667', undefined, { outstandingBalance: 100, daysPastDue: 0 })).toBe('302-222-9667 · Saldo 100,00 · Mora 0 d');
+  });
+
+  it('sin números (API vieja) queda el código', () => {
+    expect(previewLine('302-222-1515')).toBe('302-222-1515');
+    expect(previewLine(null)).toBe('Sin número');
   });
 });

@@ -17,6 +17,7 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
   [RoleType.ACCOUNT_ADMIN]: Object.values(Permission).filter((p) => p !== Permission.AUDIT_READ),
   [RoleType.MANAGER]: [
     Permission.CASE_READ,
+    Permission.CASE_EXPORT,
     Permission.CASE_WRITE,
     Permission.CASE_ASSIGN,
     Permission.CASE_CLOSE,
@@ -41,9 +42,12 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     Permission.REPORT_EXPORT,
     Permission.ACCOUNT_READ,
     Permission.USER_READ,
+    Permission.DATA_SCOPE_ALL,
+    Permission.ASSIGNMENT_WRITE,
   ],
   [RoleType.SUPERVISOR]: [
     Permission.CASE_READ,
+    Permission.CASE_EXPORT,
     Permission.CASE_WRITE,
     Permission.CASE_ASSIGN,
     Permission.PAYMENT_READ,
@@ -57,9 +61,17 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     Permission.CLIENT_READ,
     Permission.CREDIT_READ,
     Permission.REPORT_READ,
+    // Importa la cartera y la reparte en el mismo paso (tiene `assignment:write`): decisión de
+    // 2026-09-30. Sin esto podía reasignar desde Cartera pero nunca veía la pantalla de reparto.
+    Permission.CLIENT_IMPORT,
+    // Supervisa a varios cobradores: sin esto sólo vería lo asignado a él mismo, que es nada.
+    Permission.DATA_SCOPE_ALL,
+    // Reparte la cartera y cubre bajas: es quien más usa la asignación temporal.
+    Permission.ASSIGNMENT_WRITE,
   ],
   [RoleType.COLLECTOR]: [
     Permission.CASE_READ,
+    Permission.CASE_EXPORT,
     Permission.CASE_WRITE,
     Permission.PAYMENT_READ,
     Permission.PAYMENT_WRITE,
@@ -84,6 +96,7 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
   ],
   [RoleType.AUDITOR]: [
     Permission.CASE_READ,
+    Permission.CASE_EXPORT,
     Permission.PAYMENT_READ,
     Permission.ROUTE_READ,
     Permission.CLIENT_READ,
@@ -93,12 +106,17 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     Permission.REPORT_READ,
     Permission.REPORT_EXPORT,
     Permission.AUDIT_READ,
+    // Un auditor que sólo ve las filas de un cobrador no audita nada.
+    Permission.DATA_SCOPE_ALL,
   ],
   [RoleType.VIEWER]: [
     Permission.CASE_READ,
+    Permission.CASE_EXPORT,
     Permission.PAYMENT_READ,
     Permission.ROUTE_READ,
     Permission.CLIENT_READ,
     Permission.REPORT_READ,
+    // Rol de consulta gerencial: lee toda la empresa, sin escribir nada.
+    Permission.DATA_SCOPE_ALL,
   ],
 };

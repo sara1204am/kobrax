@@ -258,7 +258,10 @@ export function ClientCard({
             />
           </div>
 
-          <AttachmentsSection clientId={client.id} rows={shown.attachments ?? []} canWrite={canWrite} />
+          {/* 🔴 Con `client`, no con `shown`: los adjuntos no llevan máscara, y `shown` es una copia
+              congelada del primer render — el `router.refresh()` de la subida traía el adjunto
+              nuevo y no se veía hasta recargar la página. */}
+          <AttachmentsSection clientId={client.id} rows={client.attachments ?? []} canWrite={canWrite} />
 
           {/* Los casos cierran la columna: son cómo la empresa organiza el trabajo, no un dato del
               deudor. Bajan del servidor como los créditos. */}

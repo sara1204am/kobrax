@@ -4,6 +4,7 @@ import type { ConfigScreen } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { ImportSetup } from './import-setup';
+import { AdvisorLinks } from './advisor-links';
 
 /**
  * Configurar la importación: el archivo, cómo está organizado, de quién es, sus columnas y las
@@ -14,10 +15,13 @@ import { ImportSetup } from './import-setup';
  */
 export default async function ImportSettingsPage() {
   const t = await getTranslations('panel.import');
-  const { status, body } = await apiCall<ConfigScreen>('/imports/portfolio/config', {
-    method: 'GET',
-    auth: true,
-  });
+  const [{ status, body }, advisors] = await Promise.all([
+    apiCall<ConfigScreen>('/imports/portfolio/config', { method: 'GET', auth: true }),
+    apiCall<{ links: { advisorCode: string; userId: string }[]; unlinked: string[] }>('/imports/portfolio/advisors', {
+      method: 'GET',
+      auth: true,
+    }),
+  ]);
 
   // 403 = el rol no tiene `client:import`. El ítem del menú tampoco se le dibuja, así que llegar
   // acá es haber escrito la URL.
@@ -31,7 +35,24 @@ export default async function ImportSettingsPage() {
         ← {t('setup.backToRun')}
       </Link>
       <PageHeader title={t('setup.title')} subtitle={t('setup.subtitle')} />
-      <ImportSetup screen={body.data} />
+      {/*
+        P1 · Configurar y vincular asesores es de quien reparte la cartera o del dueño de la cuenta:
+        el vínculo asesor → usuario decide de quién es cada cartera. Quien sólo importa ve la
+        configuración pero no la toca. El `fieldset` nativo apaga todos los controles de una vez;
+        el servidor igual rechaza el cambio (IMPORT_CONFIG_FORBIDDEN).
+      */}
+      {!body.data.viewer.canConfigure && (
+        <p className="mb-4 rounded-xl bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text">{t('setup.readOnly')}</p>
+      )}
+      <fieldset disabled={!body.data.viewer.canConfigure} className="m-0 min-w-0 border-0 p-0">
+        <ImportSetup screen={body.data} />
+        {/* D8: de quién es cada reporte. Aparte del asistente: no es parte de leer el archivo. */}
+        <AdvisorLinks
+          links={advisors.body.data?.links ?? []}
+          unlinked={advisors.body.data?.unlinked ?? []}
+          members={body.data.members}
+        />
+      </fieldset>
     </>
   );
 }

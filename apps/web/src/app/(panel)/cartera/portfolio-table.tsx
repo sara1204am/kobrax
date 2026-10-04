@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { memberName, type Member } from '@kobrax/shared';
+import { CREDIT_SOURCES, memberName, type Member } from '@kobrax/shared';
 import { EmptyState, Badge } from '@/components/panel-ui';
 import { DataTable, type Column, type PageMeta } from '@/components/data-table';
 import type { FilterDef } from '@/components/data-table-filters';
@@ -45,6 +45,7 @@ export function PortfolioTable({
   branches: { id: string; name: string }[];
 }) {
   const t = useTranslations('portfolio');
+  const tsrc = useTranslations('creditSource');
 
   const columns: Column<PortfolioRow>[] = [
     {
@@ -68,7 +69,17 @@ export function PortfolioTable({
       // Sin deuda, el número se apaga: la fila que ya pagó no tiene que competir por la atención
       // con las que deben.
       render: (c) => (
-        <span className={c.totalDebt > 0 ? 'font-semibold text-k-text' : 'text-k-muted'}>{money(c.totalDebt, currency)}</span>
+        <>
+          <span className={c.totalDebt > 0 ? 'font-semibold text-k-text' : 'text-k-muted'}>{money(c.totalDebt, currency)}</span>
+          {/* D7: si parte de la deuda la reporta el banco a su corte, se dice cuánto — no se mezcla callado. */}
+          {!!c.totalDebtExternal && c.totalDebtExternal > 0 && (
+            <span className="block text-[12px] text-k-text-2">
+              {c.totalDebtExternal >= c.totalDebt - 0.005
+                ? tsrc('allReported')
+                : tsrc('ofWhich', { amount: money(c.totalDebtExternal, currency) })}
+            </span>
+          )}
+        </>
       ),
     },
     {
@@ -135,6 +146,15 @@ export function PortfolioTable({
       options: collectors.map((m) => ({ value: m.userId, label: memberName(m) })),
     },
     {
+      // P7: el responsable del CRÉDITO. Reasignar un crédito no mueve sus casos abiertos, así que
+      // «responsable» y «cobrador del caso» pueden ser personas distintas y cada filtro dice cuál.
+      keys: ['managerId'],
+      label: t('filters.manager'),
+      type: 'select',
+      allLabel: t('filters.allManagers'),
+      options: collectors.map((m) => ({ value: m.userId, label: memberName(m) })),
+    },
+    {
       keys: ['branchId'],
       label: t('filters.branch'),
       type: 'select',
@@ -154,6 +174,14 @@ export function PortfolioTable({
       ],
     },
     { keys: ['debtMin', 'debtMax'], label: t('filters.debtRange'), type: 'numberRange' },
+    {
+      // D7: de qué fuente son los créditos. Kobrax = los que calcula el sistema; PSF = los reportados.
+      keys: ['source'],
+      label: tsrc('filter'),
+      type: 'select',
+      allLabel: tsrc('all'),
+      options: CREDIT_SOURCES.map((s) => ({ value: s, label: tsrc(s) })),
+    },
   ];
 
   return (

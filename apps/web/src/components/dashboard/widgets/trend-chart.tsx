@@ -36,6 +36,12 @@ export async function TrendChart({ points, currency }: { points: TrendPoint[]; c
         points={points.map((p) => ({ x: short(p.date), y: p.collected, display: money(p.collected, currency) }))}
       />
       <p className="text-[11px] text-k-muted">{t('trend.reconstructed')}</p>
+      {/* D7: la parte externa no se reconstruye con pagos, es el último saldo reportado a cada fecha. */}
+      {points.some((p) => p.outstandingExternal > 0) && (
+        <p className="text-[11px] text-k-muted">
+          {t('trend.external', { amount: money(points[points.length - 1]?.outstandingExternal ?? 0, currency) })}
+        </p>
+      )}
     </div>
   );
 }

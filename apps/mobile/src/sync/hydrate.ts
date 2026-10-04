@@ -11,6 +11,8 @@
  */
 import { CatalogType, RouteStatus } from '@kobrax/shared';
 import { listCases, type CaseListItem } from '../cases.service';
+import { listMora, MORA_LIMIT } from '../mora.service';
+import type { MoraRow } from '../mora';
 import { getRoute, listRoutes } from '../routes.service';
 import { clientContext, listByDay, listOverdue } from '../agenda.service';
 import { listCatalog } from '../catalogs.service';
@@ -83,6 +85,8 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
   //       pantalla cambia sus parámetros, tiene que cambiar acá — y es el precio de que el respaldo
   //       sea la respuesta del server tal cual, sin reimplementar sus filtros en el teléfono.
   await paso('cartera', () => estado(listCases({ view: 'portfolio', open: true, limit: 100 }))); // Cobranza · Crear ruta
+  // «En mora» de la Cobranza: por crédito, con y sin caso (los 21 de 22 que `/cases` no ve).
+  await paso('mora', () => estado(listMora({ limit: MORA_LIMIT }))); // Cobranza · chip En mora
   await paso('casos abiertos', () => estado(listCases({ assigneeId: collectorId, open: true, limit: 1 }))); // Inicio
   await paso('rutas', () => estado(listRoutes({ collectorId }))); // pestaña Rutas
   await paso('agenda', () => estado(listByDay(hoy)));
@@ -123,7 +127,9 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
   //    aparece un tenant que lo supere, el arreglo es un endpoint que devuelva el lote, no subirlo.
   await paso('fichas de la cartera', async () => {
     const casos = await db.getMany<CaseListItem>('case');
-    const clientIds = [...new Set(casos.map((c) => c.clientId).filter(Boolean))].slice(0, MAX_FICHAS);
+    // También los deudores en mora que no tienen caso: la tarjeta de «En mora» los abre.
+    const enMora = await db.getMany<MoraRow>('mora');
+    const clientIds = [...new Set([...casos, ...enMora].map((c) => c.clientId).filter(Boolean))].slice(0, MAX_FICHAS);
     if (clientIds.length === 0) return 'ok';
     for (const id of clientIds) {
       const ficha = await getClient(id);

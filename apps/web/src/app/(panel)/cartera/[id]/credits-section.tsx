@@ -1,17 +1,10 @@
 import Link from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
-import type { CreditDetail } from '@kobrax/shared';
+import { hasInitialState, isUnknownField, paymentProgress, type CreditDetail } from '@kobrax/shared';
 import { Badge } from '@/components/panel-ui';
+import { SourceBadge } from '@/components/source-badge';
+import { CREDIT_STATUS_TONE, CreditProgress } from '@/components/credit-progress';
 import { money, date, relativeDate } from '@/lib/format';
-
-const STATUS_TONE: Record<string, 'neutral' | 'success' | 'warning' | 'danger'> = {
-  ACTIVE: 'neutral',
-  PAID: 'success',
-  DEFAULTED: 'danger',
-  WRITTEN_OFF: 'danger',
-  RESTRUCTURED: 'warning',
-  CANCELLED: 'neutral',
-};
 
 /**
  * Los que ya no se trabajan. Se guardan para el historial, pero no compiten por la atención con los
@@ -123,18 +116,19 @@ function CreditCard({
           <span className="block truncate text-[13px] text-k-text-2">
             {(c.typeCode && types.get(c.typeCode)) || t('creditNoType')}
           </span>
+          <CreditBadges credit={c} t={t} />
         </span>
 
         <span className="text-right">
           <span className="block text-[11px] uppercase tracking-wide text-k-muted">{t('credit.principal')}</span>
           <span className="block text-[15px] font-semibold tabular-nums text-k-text">
-            {money(c.principalAmount, c.currency)}
+            {amountOf(c, 'principalAmount', t)}
           </span>
         </span>
 
         <span className="flex flex-col items-end gap-1">
           {c.status && (
-            <Badge tone={STATUS_TONE[c.status] ?? 'neutral'} dot>
+            <Badge tone={CREDIT_STATUS_TONE[c.status] ?? 'neutral'} dot>
               {t(`creditStatus.${c.status}`)}
             </Badge>
           )}
@@ -149,16 +143,25 @@ function CreditCard({
 
       <div className="border-t border-k-border p-4">
         <dl className="grid gap-4 sm:grid-cols-3">
-          <Figure label={t('credit.principal')} value={money(c.principalAmount, c.currency)} />
+          <Figure label={t('credit.principal')} value={amountOf(c, 'principalAmount', t)} />
           <Figure
             label={t('credit.installment')}
             value={c.installmentAmount != null ? money(c.installmentAmount, c.currency) : '—'}
             hint={c.nextDueDate ? t('dueOn', { date: date(c.nextDueDate, locale) }) : undefined}
           />
-          <Figure label={t('credit.outstanding')} value={money(c.outstandingBalance, c.currency)} />
+          <Figure label={t('credit.outstanding')} value={amountOf(c, 'outstandingBalance', t)} />
         </dl>
 
-        <Progress principal={c.principalAmount} outstanding={c.outstandingBalance} label={t('credit.progress')} />
+        <CreditProgress
+          pct={paymentProgress({
+            basis: c.balanceBasis ?? 'legacy',
+            outstandingBalance: c.outstandingBalance,
+            principalAmount: c.principalAmount,
+            totalToCollect: c.totalToCollect ?? null,
+            priorPaidAmount: c.priorPaidAmount, // sólo lo cobrado en Kobrax (D13)
+          })}
+          label={t('credit.progress')}
+        />
 
         {c.locked && <p className="mt-3 text-[12px] text-k-muted">{t('importedHint')}</p>}
       </div>
@@ -176,34 +179,35 @@ function Figure({ label, value, hint }: { label: string; value: string; hint?: s
   );
 }
 
+/** Un monto del crédito, o «No registrado» si el archivo del importado no lo trajo (D9): nunca el 0 de relleno. */
+function amountOf(
+  c: CreditDetail,
+  field: 'principalAmount' | 'outstandingBalance',
+  t: (k: string, v?: Record<string, string | number | Date>) => string,
+): string {
+  return isUnknownField(c, field) ? t('creditDetail.unknown') : money(c[field], c.currency);
+}
+
 /**
- * Cuánto se pagó del capital.
- *
- * 🔴 **No se dibuja si el número no significa nada.** Sin capital no hay porcentaje que calcular, y
- * un crédito importado puede traer un saldo MAYOR que su capital —intereses y cargos que el archivo
- * ya sumó al saldo—: ahí el «progreso» daría negativo. Se recorta a 0–100 y, sin capital, no hay
- * barra: una barra vacía dice «no pagó nada», que es una acusación, no un dato faltante.
+ * Cómo es este crédito, de un vistazo: cómo se definió, si se cargó en curso, si es abierto o importado.
+ * Sólo lo que el listado trae de verdad — no se dice nada del cronograma (ver arriba).
  */
-function Progress({ principal, outstanding, label }: { principal: number; outstanding: number; label: string }) {
-  if (!(principal > 0)) return null;
-  const pct = Math.max(0, Math.min(100, Math.round(((principal - outstanding) / principal) * 100)));
+function CreditBadges({ credit: c, t }: { credit: CreditDetail; t: (k: string, v?: Record<string, string | number | Date>) => string }) {
+  const inProgress = hasInitialState(c.initialState);
+  const open = !c.installmentsCount && !c.locked;
+  if (!c.terms && !inProgress && !open && !c.locked && !c.externalSource) return null;
 
   return (
-    <div className="mt-4">
-      <div className="mb-1.5 flex items-baseline justify-between">
-        <span className="text-[12px] text-k-text-2">{label}</span>
-        <span className="text-[12px] font-medium tabular-nums text-k-text">{pct}%</span>
-      </div>
-      <div
-        className="h-2 overflow-hidden rounded-full bg-k-light-bg"
-        role="progressbar"
-        aria-label={label}
-        aria-valuenow={pct}
-        aria-valuemin={0}
-        aria-valuemax={100}
-      >
-        <div className="h-full rounded-full bg-k-periwinkle" style={{ width: `${pct}%` }} />
-      </div>
-    </div>
+    <span className="mt-1.5 flex flex-wrap gap-1.5">
+      {c.terms && <Badge>{t(`creditForm.definition.${c.terms.definition}`)}</Badge>}
+      {inProgress && <Badge>{t('creditBadges.inProgress')}</Badge>}
+      {open && <Badge>{t('openLoan')}</Badge>}
+      {/* D1/D4/D9: el externo dice de dónde, a qué corte, y si faltó en el reporte o está viejo. */}
+      {c.externalSource ? (
+        <SourceBadge source={c.externalSource} syncStatus={c.syncStatus} reportedAsOf={c.reportedAsOf} stale={c.reportedStale} />
+      ) : (
+        c.locked && <Badge tone="warning">{t('imported')}</Badge>
+      )}
+    </span>
   );
 }

@@ -1,6 +1,7 @@
 import { Transform } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsEnum, IsIn, IsOptional, IsUUID, Matches } from 'class-validator';
 import { CasePriority, CaseStatus } from '@prisma/client';
+import { CREDIT_SOURCES, type CreditSource } from '@kobrax/shared';
 
 /**
  * 🔴 **Sólo `YYYY-MM-DD`, y no cualquier fecha ISO.**
@@ -37,6 +38,8 @@ export class AnalyticsQueryDto {
   @IsOptional() @Csv() @IsArray() @ArrayMaxSize(50) @IsUUID(undefined, { each: true }) collectorId?: string[];
   @IsOptional() @Csv() @IsArray() @ArrayMaxSize(20) @IsEnum(CaseStatus, { each: true }) caseStatus?: CaseStatus[];
   @IsOptional() @Csv() @IsArray() @ArrayMaxSize(20) @IsEnum(CasePriority, { each: true }) priority?: CasePriority[];
+  /** D7: sólo los créditos de esta fuente. Ausente = todas (el resumen trae el desglose). */
+  @IsOptional() @IsIn(CREDIT_SOURCES as unknown as string[]) source?: CreditSource;
 }
 
 export class TrendQueryDto extends AnalyticsQueryDto {

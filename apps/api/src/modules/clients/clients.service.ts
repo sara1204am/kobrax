@@ -2,17 +2,29 @@ import { Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 // `Prisma` entra como valor y no sólo como tipo: la cartera arma su SQL con `Prisma.sql` (§W3).
 import { ClientType, Prisma } from '@prisma/client';
-import { Permission, resolvePagination, searchTerms, type ApiResponse, type ClientTimelineEntry, ResponseDto } from '@kobrax/shared';
+import {
+  Permission,
+  maskDocument,
+  resolvePagination,
+  searchTerms,
+  type ApiResponse,
+  type ClientDuplicateCheck,
+  type ClientDuplicateMatch,
+  type ClientTimelineEntry,
+  ResponseDto,
+} from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { nameTerms } from '../../common/name-search';
+import { nameKey } from '../../common/name-key';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { BlindIndexService } from '../../common/crypto/blind-index.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
-import { serializeClient, type PortfolioClient, type PortfolioTotals } from './clients.serializer';
+import { clientDisplayName, serializeClient, type PortfolioClient, type PortfolioTotals } from './clients.serializer';
 import type { ClientPdfBundle, ClientPdfContext } from './client-pdf';
 import {
+  ClientDuplicateCheckDto,
   CreateAttachmentDto,
   CreateClientDto,
   CreateCollateralDto,
@@ -37,6 +49,28 @@ import {
 
 /** PII del cliente que se redacta en los snapshots de auditoría. */
 const CLIENT_REDACT = ['nationalId', 'taxId', 'value', 'address', 'phone'];
+
+/** Lo que hace falta de cada posible duplicado para mostrarlo sin revelar PII. */
+const DUP_SELECT = {
+  id: true,
+  firstName: true,
+  lastName: true,
+  businessName: true,
+  nationalId: true,
+  nationalIdHash: true,
+  status: true,
+  creditCount: true,
+  deletedAt: true,
+} satisfies Prisma.ClientSelect;
+type DupRow = Prisma.ClientGetPayload<{ select: typeof DUP_SELECT }>;
+
+/** Candidatos que se traen por la palabra más larga, antes de comparar la llave entera. */
+const DUP_CANDIDATES = 200;
+/** Cuántos homónimos se muestran: más que esto ya no se lee, y el aviso es el mismo. */
+const DUP_MAX_NAMES = 5;
+/** Para `translate`: cada letra con tilde de `ACCENTED` pasa a la de la misma posición en `PLAIN`. */
+const ACCENTED = 'ÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ';
+const PLAIN = 'AAAAAEEEEIIIIOOOOOUUUUNC';
 
 /** Una fila cruda de la bitácora, antes de volverse `ClientTimelineEntry`. */
 interface TimelineRow {
@@ -66,6 +100,8 @@ interface PortfolioRow {
   total_debt: number;
   max_days_past_due: number;
   credit_count: number;
+  total_debt_external: number;
+  max_days_past_due_external: number;
 }
 
 @Injectable()
@@ -196,6 +232,78 @@ export class ClientsService {
     return serializeClient(created, { crypto: this.crypto, reveal: false });
   }
 
+  /**
+   * ¿Quién podría ser esta persona, antes de darla de alta? Lo pregunta el modal «Nuevo cliente»
+   * mientras se escribe, para avisar ANTES de guardar y no con un error al final.
+   *
+   *  - **Mismo carnet** → `document`. Es lo que `create()` rechazaría con `CLIENT_DUP`, buscado
+   *    igual: por blind index y **sin** filtrar a los dados de baja, porque el índice único tampoco
+   *    los excluye. Si la respuesta dijera «libre» y el guardado «duplicado», el aviso mentiría.
+   *  - **Mismo nombre** → `names`, con la llave del import (`nameKey`): sin tildes, sin mayúsculas y
+   *    sin importar el orden. A diferencia del import, **se avisa aunque tengan otro carnet**: quien
+   *    carga a mano puede estar tipeando mal el carnet de alguien que ya existe (`otherDocument`).
+   *
+   * No revela más que la cartera: nombre, carnet enmascarado y cuántos créditos tiene.
+   */
+  async duplicateCheck(dto: ClientDuplicateCheckDto): Promise<ClientDuplicateCheck> {
+    const docHash = this.blind.hash(dto.nationalId);
+    const fullName = dto.clientType === ClientType.COMPANY ? dto.businessName : [dto.firstName, dto.lastName].filter(Boolean).join(' ');
+    const key = nameKey(fullName);
+    // Para el nombre hacen falta las dos partes: «Juan» solo coincide con media cartera.
+    const nameReady = dto.clientType === ClientType.COMPANY ? Boolean(key) : Boolean(nameKey(dto.firstName) && nameKey(dto.lastName));
+    // La palabra más larga es la que menos se repite: con ella se traen candidatos y la llave decide.
+    const word = key?.split(' ').sort((a, b) => b.length - a.length)[0] ?? null;
+
+    return this.tx(async (tx) => {
+      const byDoc = docHash ? await tx.client.findFirst({ where: { nationalIdHash: docHash }, select: DUP_SELECT }) : null;
+
+      let byName: DupRow[] = [];
+      if (nameReady && key && word) {
+        /*
+         * Sin tildes también en la base: `ILIKE` compara bytes y «Perez» no encuentra a «Pérez»
+         * (ver `name-search.ts`). `translate` las dobla sin extensión ni migración; la llave
+         * (`nameKey`) hace el resto en memoria. Parametrizado: el `%…%` lo arma `Prisma.sql`.
+         */
+        const found = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
+          SELECT c.id FROM clients c
+          WHERE c.deleted_at IS NULL
+            AND translate(upper(concat_ws(' ', c.first_name, c.last_name, c.business_name)), ${ACCENTED}, ${PLAIN}) LIKE ${`%${word}%`}
+          LIMIT ${DUP_CANDIDATES}`);
+        const ids = found.map((r) => r.id).filter((id) => id !== byDoc?.id);
+        const candidates = ids.length > 0 ? await tx.client.findMany({ where: { id: { in: ids } }, select: DUP_SELECT }) : [];
+        byName = candidates
+          .filter((c) => nameKey([c.firstName, c.lastName, c.businessName].filter(Boolean).join(' ')) === key)
+          .sort((a, b) => b.creditCount - a.creditCount)
+          .slice(0, DUP_MAX_NAMES);
+      }
+
+      return {
+        document: byDoc ? this.dupMatch(byDoc, docHash) : null,
+        names: byName.map((c) => this.dupMatch(c, docHash)),
+      };
+    });
+  }
+
+  private dupMatch(c: DupRow, docHash: string | null): ClientDuplicateMatch {
+    let masked: string | null = null;
+    if (c.nationalId) {
+      try {
+        masked = maskDocument(this.crypto.decrypt(c.nationalId));
+      } catch {
+        masked = null; // Un carnet que no descifra no tumba el aviso: se muestra sin carnet.
+      }
+    }
+    return {
+      id: c.id,
+      displayName: clientDisplayName(c) ?? '—',
+      maskedDocument: masked || null,
+      status: c.status,
+      creditCount: c.creditCount,
+      deleted: c.deletedAt !== null,
+      otherDocument: Boolean(docHash && c.nationalIdHash && c.nationalIdHash !== docHash),
+    };
+  }
+
   /** Los totales son `Partial` porque sólo vienen con `view=portfolio` (§W3). */
   async list(
     query: ListClientsQueryDto,
@@ -263,7 +371,9 @@ export class ClientsService {
       SELECT c.id,
              c.total_debt::float8  AS total_debt,
              c.max_days_past_due   AS max_days_past_due,
-             c.credit_count        AS credit_count
+             c.credit_count        AS credit_count,
+             c.total_debt_external::float8 AS total_debt_external,
+             c.max_days_past_due_external  AS max_days_past_due_external
       FROM clients c
       WHERE ${where}
       ORDER BY ${this.portfolioOrder(query)}
@@ -287,6 +397,8 @@ export class ClientsService {
           totalDebt: Math.round(r.total_debt * 100) / 100,
           maxDaysPastDue: r.max_days_past_due,
           creditCount: r.credit_count,
+          totalDebtExternal: Math.round(r.total_debt_external * 100) / 100,
+          maxDaysPastDueExternal: r.max_days_past_due_external,
         },
       ];
     });
@@ -326,6 +438,27 @@ export class ClientsService {
       conds.push(Prisma.sql`EXISTS (
         SELECT 1 FROM credits k
         WHERE k.client_id = c.id AND k.deleted_at IS NULL AND k.branch_id = ${query.branchId})`);
+    }
+    /*
+     * P7 · El RESPONSABLE es del crédito, no del caso: «tiene algún crédito vivo a cargo de esta
+     * persona». No es lo mismo que el cobrador (`collectorId`, el del caso): reasignar un crédito
+     * no mueve sus casos abiertos, así que los dos pueden diferir y cada filtro contesta lo suyo.
+     */
+    if (query.managerId) {
+      conds.push(Prisma.sql`EXISTS (
+        SELECT 1 FROM credits k
+        WHERE k.client_id = c.id AND k.deleted_at IS NULL AND k.assigned_manager_id = ${query.managerId})`);
+    }
+    /*
+     * D7: la fuente también es del crédito — «tiene algún crédito vivo de esa fuente». Quien tiene
+     * uno de Kobrax y otro PSF aparece en los dos filtros, y su fila dice cuánto es de cada uno.
+     */
+    if (query.source) {
+      const source =
+        query.source === 'KOBRAX' ? Prisma.sql`k.external_source IS NULL` : Prisma.sql`k.external_source = ${query.source}`;
+      conds.push(Prisma.sql`EXISTS (
+        SELECT 1 FROM credits k
+        WHERE k.client_id = c.id AND k.deleted_at IS NULL AND ${source})`);
     }
     /*
      * 🔴 **Los filtros de agregado son un `WHERE` común, no un `HAVING`.**
@@ -387,7 +520,7 @@ export class ClientsService {
     }
   }
 
-  async findOne(id: string, reveal: boolean): Promise<ReturnType<typeof serializeClient>> {
+  async findOne(id: string, reveal: boolean): Promise<ReturnType<typeof serializeClient> & { linkSuggestions?: { id: string; displayName: string; creditCount: number }[] }> {
     const client = await this.tx((tx) =>
       tx.client.findFirst({
         where: { id, deletedAt: null },
@@ -408,7 +541,25 @@ export class ClientsService {
       // Acceso a PII en claro → queda auditado (data_access_log detallado llega en F12).
       await this.audit.record({ entity: 'client', entityId: id, action: 'PII_REVEAL' });
     }
-    return serializeClient(client, { crypto: this.crypto, reveal });
+    const serialized = serializeClient(client, { crypto: this.crypto, reveal });
+    if (!client.linkReviewPending) return serialized;
+
+    // Las sugerencias con su nombre: la pantalla de revisión no puede mostrar uuids.
+    const ids = ((client.metadata as { linkSuggestions?: unknown })?.linkSuggestions ?? []) as unknown[];
+    const suggestionIds = ids.filter((x): x is string => typeof x === 'string');
+    const suggested =
+      suggestionIds.length > 0
+        ? await this.tx((tx) =>
+            tx.client.findMany({
+              where: { id: { in: suggestionIds }, deletedAt: null },
+              select: { id: true, firstName: true, lastName: true, businessName: true, creditCount: true },
+            }),
+          )
+        : [];
+    return {
+      ...serialized,
+      linkSuggestions: suggested.map((c) => ({ id: c.id, displayName: clientDisplayName(c) ?? '—', creditCount: c.creditCount })),
+    };
   }
 
   /** Lo que pide el PDF del legajo: el cliente completo (ya audita su propio revelado) + créditos y casos. */

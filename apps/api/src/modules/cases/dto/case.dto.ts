@@ -17,6 +17,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { CaseActivityType, CasePriority, CaseStatus } from '@prisma/client';
+import { CREDIT_SOURCES, type CreditSource } from '@kobrax/shared';
 
 export class CreateCaseDto {
   @IsUUID() creditId!: string;
@@ -127,6 +128,8 @@ export class ListCasesQueryDto {
    * cobradores a la misma puerta el mismo día.
    */
   @IsOptional() @IsDateString() excludeRouted?: string;
+  /** D7: sólo los casos de créditos de esa fuente. `KOBRAX` = sin fuente externa. */
+  @IsOptional() @IsIn(CREDIT_SOURCES as unknown as string[]) source?: CreditSource;
 }
 
 export class TransitionCaseDto {
@@ -168,6 +171,8 @@ export class ActivityPromiseDto {
 }
 
 export class CreateActivityDto {
+  /** Opcional: lo pone quien llama (móvil) para que reintentar no duplique. Hoy sólo lo manda `POST /mora/:creditId/activities`. */
+  @IsOptional() @IsUUID() id?: string;
   @IsEnum(CaseActivityType) type!: CaseActivityType;
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsString() result?: string;

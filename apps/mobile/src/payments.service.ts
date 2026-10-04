@@ -12,7 +12,7 @@ import { cachedList } from './sync/cached';
  * hasta ahora el de `shared` era minúscula legacy y esta app se había escrito su propia copia al
  * lado. Se arregló allá, así que la copia se va y queda una sola verdad.
  */
-export type { NewPayment, PaymentItem, PaymentMethod } from '@kobrax/shared';
+export type { NewPayment, PaymentChannel, PaymentItem, PaymentMethod } from '@kobrax/shared';
 
 export function listPayments(caseId: string): Promise<QueryResult<PaymentItem[]>> {
   const query = toQuery({ caseId, limit: 100 });
@@ -34,4 +34,10 @@ export function listPaymentsByDay(day: string): Promise<QueryResult<PaymentItem[
 /** Registra el pago. `idempotencyKey` (generado en el cliente) evita el doble cobro ante reintento. */
 export function createPayment(input: NewPayment, idempotencyKey: string): Promise<MutateResult<PaymentItem>> {
   return apiMutate<PaymentItem>('/payments', 'POST', input, { 'idempotency-key': idempotencyKey });
+}
+
+/** Los pagos de un crédito (la ficha de mora los muestra aunque el crédito no tenga caso). */
+export function listCreditPayments(creditId: string): Promise<QueryResult<PaymentItem[]>> {
+  const query = toQuery({ creditId, limit: 100 });
+  return cachedList<PaymentItem>('payment', query, () => apiQuery<PaymentItem[]>(`/payments${query}`));
 }

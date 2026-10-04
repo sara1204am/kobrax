@@ -14,6 +14,8 @@ interface CreditRow {
   metadata: Record<string, unknown>;
   assignedManagerId?: string | null;
   client?: { riskSegment?: string | null };
+  syncStatus?: 'PRESENT' | 'ABSENT' | null;
+  reportedAsOf?: Date | null;
   installments?: { id: string; dueDate: Date; amount: number; paidAmount: number; status: string }[];
 }
 
@@ -25,6 +27,8 @@ function makeJob(
   credits: CreditRow[],
   openCases: { id: string; creditId: string; priority: string; priorityPinnedAt?: Date | null }[] = [],
   configuration: unknown = {},
+  /** El último caso del crédito, cuando no hay uno abierto (el que `reopenAbsentCase` mira). */
+  lastCases: { id: string; creditId: string; status: string; closedReason: string | null; priorityPinnedAt?: Date | null }[] = [],
 ) {
   const calls = {
     creditUpdate: [] as { id: string; daysPastDue: number }[],
@@ -51,8 +55,11 @@ function makeJob(
     collectionCase: {
       findMany: async () => openCases,
       // La re-verificación de `openCaseIfNone`: idempotente aunque dos pasadas se pisen.
-      findFirst: async (args: { where: { creditId: string } }) =>
-        openCases.find((c) => c.creditId === args.where.creditId) ?? null,
+      // Sin `status` en el where es la búsqueda del último caso (reapertura por reaparición).
+      findFirst: async (args: { where: { creditId: string; status?: unknown } }) =>
+        args.where.status
+          ? (openCases.find((c) => c.creditId === args.where.creditId) ?? null)
+          : (lastCases.find((c) => c.creditId === args.where.creditId) ?? null),
       create: async (args: { data: Record<string, unknown> }) => {
         calls.caseCreate.push(args.data);
         return { id: 'k-new' };
@@ -262,5 +269,110 @@ describe('ArrearsJobService — el umbral es del tenant', () => {
     await job.scanAccount('acc-A', HOY);
     assert.equal(calls.creditUpdate[0]!.daysPastDue, 4);
     assert.equal(calls.caseCreate.length, 0);
+  });
+});
+
+/**
+ * Operaciones externas (PSF): su mora la manda el reporte, y **la ausencia no es un pago ni un
+ * «al día»** (D4). El job cierra, reabre o se abstiene según el estado de sincronización y la edad
+ * del dato (D9) — nunca con la regla de los créditos de Kobrax.
+ */
+describe('ArrearsJobService — operaciones externas (PSF)', () => {
+  const psf = (over: Partial<CreditRow> = {}): CreditRow =>
+    manual({
+      daysPastDue: 40,
+      syncStatus: 'PRESENT',
+      reportedAsOf: d('2026-08-16'),
+      metadata: { origin: 'import' },
+      ...over,
+    });
+
+  it('🔴 la que faltó en su reporte cierra el caso con SOURCE_ABSENT, no con CURRENT', async () => {
+    // Con la regla `set-current` la mora del ausente quedó en 0: sin la guarda cerraría como «al día».
+    const { job, calls } = makeJob(
+      [psf({ syncStatus: 'ABSENT', daysPastDue: 0 })],
+      [{ id: 'k1', creditId: 'cr1', priority: 'HIGH' }],
+    );
+    const r = await job.scanAccount('acc-A', HOY);
+    assert.equal(calls.caseUpdate.length, 1);
+    assert.equal(calls.caseUpdate[0]!.data.status, 'CLOSED');
+    assert.equal(calls.caseUpdate[0]!.data.closedReason, 'SOURCE_ABSENT');
+    assert.equal(r.closed, 1);
+  });
+
+  it('la ausente con mora no abre caso: sus números son del último reporte que la trajo', async () => {
+    const { job, calls } = makeJob([psf({ syncStatus: 'ABSENT', daysPastDue: 40 })]);
+    await job.scanAccount('acc-A', HOY);
+    assert.equal(calls.caseCreate.length, 0);
+    assert.equal(calls.caseUpdate.length, 0);
+    assert.equal(calls.creditUpdate.length, 0, 'ni su mora');
+  });
+
+  it('🔴 la que vuelve al reporte reabre SU caso de antes, no uno nuevo', async () => {
+    const { job, calls } = makeJob([psf()], [], {}, [
+      { id: 'k-viejo', creditId: 'cr1', status: 'CLOSED', closedReason: 'SOURCE_ABSENT' },
+    ]);
+    const r = await job.scanAccount('acc-A', HOY);
+    assert.equal(calls.caseCreate.length, 0, 'no se crea otro caso');
+    assert.equal(calls.caseUpdate[0]!.id, 'k-viejo');
+    assert.equal(calls.caseUpdate[0]!.data.status, 'ACTIVE');
+    assert.equal(calls.caseUpdate[0]!.data.closedReason, null);
+    assert.equal(calls.caseUpdate[0]!.data.closedAt, null);
+    assert.equal(r.reopened, 1);
+    assert.equal(r.opened, 0);
+  });
+
+  it('al reabrir respeta la prioridad fijada a mano', async () => {
+    const { job, calls } = makeJob([psf()], [], {}, [
+      { id: 'k-viejo', creditId: 'cr1', status: 'CLOSED', closedReason: 'SOURCE_ABSENT', priorityPinnedAt: d('2026-08-01') },
+    ]);
+    await job.scanAccount('acc-A', HOY);
+    assert.equal(calls.caseUpdate[0]!.data.priority, undefined);
+  });
+
+  it('un caso cerrado a mano o por pago NO lo resucita la reaparición: se abre uno nuevo', async () => {
+    const { job, calls } = makeJob([psf()], [], {}, [
+      { id: 'k-viejo', creditId: 'cr1', status: 'CLOSED', closedReason: 'MANUAL' },
+    ]);
+    const r = await job.scanAccount('acc-A', HOY);
+    assert.equal(calls.caseCreate.length, 1);
+    assert.equal(r.reopened, 0);
+  });
+
+  it('🔴 con el dato viejo (D9) no abre caso', async () => {
+    // Corte del 13/08 y hoy 17/08: 4 días, más que el default de 2.
+    const { job, calls } = makeJob([psf({ reportedAsOf: d('2026-08-13') })]);
+    const r = await job.scanAccount('acc-A', HOY);
+    assert.equal(calls.caseCreate.length, 0);
+    assert.equal(r.stale, 1);
+  });
+
+  it('con el dato viejo tampoco reabre el caso de la ausencia', async () => {
+    const { job, calls } = makeJob([psf({ reportedAsOf: d('2026-08-10') })], [], {}, [
+      { id: 'k-viejo', creditId: 'cr1', status: 'CLOSED', closedReason: 'SOURCE_ABSENT' },
+    ]);
+    await job.scanAccount('acc-A', HOY);
+    assert.equal(calls.caseUpdate.length, 0);
+  });
+
+  it('con el dato viejo el caso que ya estaba abierto sigue abierto', async () => {
+    const { job, calls } = makeJob(
+      [psf({ reportedAsOf: d('2026-08-01') })],
+      [{ id: 'k1', creditId: 'cr1', priority: 'HIGH' }],
+    );
+    await job.scanAccount('acc-A', HOY);
+    assert.ok(calls.caseUpdate.every((u) => u.data.status !== 'CLOSED'));
+  });
+
+  it('el umbral de «viejo» es del formato (importConfig.staleAfterDays)', async () => {
+    const { job, calls } = makeJob([psf({ reportedAsOf: d('2026-08-13') })], [], { importConfig: { staleAfterDays: 7 } });
+    await job.scanAccount('acc-A', HOY);
+    assert.equal(calls.caseCreate.length, 1, 'con 7 días de margen, 4 días no es viejo');
+  });
+
+  it('sin fecha de corte no es «viejo»: el caso se abre como antes', async () => {
+    const { job, calls } = makeJob([psf({ reportedAsOf: null })]);
+    await job.scanAccount('acc-A', HOY);
+    assert.equal(calls.caseCreate.length, 1);
   });
 });

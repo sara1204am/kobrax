@@ -20,6 +20,7 @@ import {
   buildDetails,
   canSubmitResult,
   initialResult,
+  paymentCap,
   paymentOutcome,
   postVisitWarning,
   VISIT_VARIANTS,
@@ -65,7 +66,10 @@ export default function ResultadoScreen() {
 
   const outstanding = stop?.overdueAmount;
   const currency = stop?.currency ?? 'BOB';
-  const valid = useMemo(() => canSubmitResult(key, form, outstanding), [key, form, outstanding]);
+  // D3: el externo no tiene tope — su saldo es el reportado al corte, y el pago no lo baja.
+  const cap = paymentCap(stop);
+  const external = !!stop?.externalSource;
+  const valid = useMemo(() => canSubmitResult(key, form, cap), [key, form, cap]);
 
   const onDate = useCallback(
     (e: DateTimePickerEvent, d?: Date) => {
@@ -247,6 +251,13 @@ export default function ResultadoScreen() {
               currencySymbol={currency}
               accessibilityLabel={key === 'PAID' ? 'Monto cobrado' : 'Monto prometido'}
             />
+            {key === 'PAID' && external && (
+              <Text style={styles.aviso}>
+                {`Crédito ${stop?.externalSource}: el saldo es el reportado por el banco${
+                  stop?.reportedAsOf ? ` al ${stop.reportedAsOf.slice(8, 10)}/${stop.reportedAsOf.slice(5, 7)}` : ''
+                }. El cobro no se limita a ese saldo.`}
+              </Text>
+            )}
           </>
         )}
 

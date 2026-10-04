@@ -2,7 +2,8 @@
 
 import type { ReactNode } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { memberName, type Member, type PaymentItem } from '@kobrax/shared';
+import { CREDIT_SOURCES, memberName, type Member, type PaymentItem } from '@kobrax/shared';
+import { SourceBadge } from '@/components/source-badge';
 import { EmptyState } from '@/components/panel-ui';
 import { DataTable, type Column, type PageMeta } from '@/components/data-table';
 import type { FilterDef } from '@/components/data-table-filters';
@@ -47,6 +48,7 @@ export function PaymentsTable({
   action?: ReactNode;
 }) {
   const t = useTranslations('panel.payments');
+  const tsrc = useTranslations('creditSource');
   const locale = useLocale();
   const byId = new Map(members.map((m) => [m.userId, memberName(m)]));
 
@@ -74,6 +76,12 @@ export function PaymentsTable({
     },
     { key: 'method', header: t('columns.method'), sortable: true, render: (p) => t(`method.${p.method}`) },
     {
+      // D3/D7: un cobro sobre un PSF es recupero, pero no bajó un saldo de Kobrax: la fila lo dice.
+      key: 'source',
+      header: tsrc('column'),
+      render: (p) => (p.creditSource ? <SourceBadge source={p.creditSource} /> : <span className="text-k-muted">{tsrc('KOBRAX')}</span>),
+    },
+    {
       key: 'registeredBy',
       header: t('columns.registeredBy'),
       // Sin nombre no es «nadie»: `/users` da 403 sin `user:read`, y todo pago tiene quien lo cargó.
@@ -96,6 +104,14 @@ export function PaymentsTable({
    */
   const filters: FilterDef[] = [
     { keys: ['from', 'to'], label: t('filters.period'), type: 'dateRange', defaults: period },
+    {
+      // D7: de qué fuente son los créditos. Kobrax = los que calcula el sistema; PSF = los reportados.
+      keys: ['source'],
+      label: tsrc('filter'),
+      type: 'select',
+      allLabel: tsrc('all'),
+      options: CREDIT_SOURCES.map((s) => ({ value: s, label: tsrc(s) })),
+    },
   ];
 
   return (

@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { CasePriority, CaseStatus, memberName, type Member } from '@kobrax/shared';
+import { CasePriority, CaseStatus, CREDIT_SOURCES, memberName, type CreditSource, type Member } from '@kobrax/shared';
 import { Dropdown } from '@/components/panel-shell';
 import { DATE_PRESETS, presetRange, type DatePreset } from '@/lib/dashboard';
 
@@ -22,7 +22,14 @@ interface Option {
  *
  * Todo viaja en la URL: el tablero se comparte por link y recargar no pierde nada.
  */
-export function DashboardFilters({ collectors }: { collectors: Member[] }) {
+export function DashboardFilters({
+  collectors,
+  sources,
+}: {
+  collectors: Member[];
+  /** Las fuentes que tiene la cartera (D7). Con una sola, el selector no discrimina nada y no se dibuja. */
+  sources: CreditSource[];
+}) {
   const t = useTranslations('panel.dashboard');
   // Los rótulos de estado y prioridad ya están traducidos en casos: repetirlos acá sería mantener
   // once textos en dos idiomas en dos lugares, y el día que cambie uno cambiaría en una sola pantalla.
@@ -51,7 +58,11 @@ export function DashboardFilters({ collectors }: { collectors: Member[] }) {
   });
 
   const filtered =
-    params.get('collectorId') || params.get('caseStatus') || params.get('priority') || params.get('from');
+    params.get('collectorId') ||
+    params.get('caseStatus') ||
+    params.get('priority') ||
+    params.get('from') ||
+    params.get('source');
 
   return (
     <div className="mb-5 flex flex-wrap items-end gap-3 rounded-2xl border border-k-border bg-white px-4 py-3">
@@ -92,6 +103,25 @@ export function DashboardFilters({ collectors }: { collectors: Member[] }) {
           allLabel={t('filters.all')}
           countLabel={(count) => t('filters.selected', { count })}
         />
+      )}
+
+      {/* D7: con la fuente elegida, los seis widgets miran sólo esa. Se sigue mostrando si ya hay una
+          elegida, aunque con el filtro puesto la cartera parezca de una sola fuente. */}
+      {(sources.length > 1 || params.get('source')) && (
+        <Field label={t('filters.source')}>
+          <select
+            value={params.get('source') ?? ''}
+            onChange={(e) => set({ source: e.target.value })}
+            className={SELECT}
+          >
+            <option value="">{t('filters.allSources')}</option>
+            {CREDIT_SOURCES.map((s) => (
+              <option key={s} value={s}>
+                {t(`sources.${s}`)}
+              </option>
+            ))}
+          </select>
+        </Field>
       )}
 
       <Multi

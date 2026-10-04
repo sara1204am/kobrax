@@ -31,6 +31,8 @@ type Sheet = 'profile' | 'preset' | 'absent' | 'scope-ref' | null;
  * en el orden en que dependen entre sí (§6.9): sin formato no se sabe qué columnas hay para
  * emparejar, y cambiarlo después resetea el emparejado.
  */
+const READ_ONLY = 'Sólo quien reparte la cartera o el dueño de la cuenta puede cambiar esta configuración.';
+
 export default function ImportacionScreen() {
   const [screen, setScreen] = useState<ConfigScreen | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +81,12 @@ export default function ImportacionScreen() {
   /** Guarda al toque. Si el backend rechaza por invariante, el control vuelve al valor previo. */
   async function save(patch: ImportConfigPatch) {
     if (!screen) return;
+    // P1: configurar es de quien reparte la cartera o del dueño de la cuenta. Sin eso no se intenta:
+    // el control no se mueve y se dice por qué (la API igual lo rechazaría).
+    if (screen.viewer && !screen.viewer.canConfigure) {
+      setError(READ_ONLY);
+      return;
+    }
     const prev = screen.config;
     // Optimista, salvo al reiniciar: ahí el valor nuevo lo arma el backend, no el patch.
     if (!patch.reset) setScreen({ ...screen, config: { ...prev, ...patch } as ImportConfig });
@@ -210,6 +218,8 @@ export default function ImportacionScreen() {
           <Text style={styles.muted}>Todavía no importaste ningún archivo.</Text>
         )}
 
+        {screen.viewer && !screen.viewer.canConfigure && <Text style={styles.muted}>{READ_ONLY}</Text>}
+
         <SectionLabel>ORIGEN DE DATOS</SectionLabel>
         <Chips
           options={[
@@ -225,7 +235,9 @@ export default function ImportacionScreen() {
           // lo ya configurado NO se borra: si vuelve a "Archivo", lo encuentra como lo dejó.
           <>
             <Text style={styles.muted}>Los créditos se cargan uno por uno. No se lee ningún archivo.</Text>
-            <ListRow title="Agregar crédito a mano" onPress={() => router.push('/prestamo/nuevo')} />
+            {/* Un préstamo es de alguien: se da de alta al cliente y, desde ahí, «guardar y cargar préstamo».
+                Antes abría el alta sin cliente, y guardar no hacía nada. */}
+            <ListRow title="Agregar cliente y crédito a mano" onPress={() => router.push('/cliente/nuevo')} />
           </>
         ) : (
           <>

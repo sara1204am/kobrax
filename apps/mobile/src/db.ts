@@ -38,6 +38,14 @@ export type CacheKind =
   | 'client.context'
   | 'case'
   | 'case.detail'
+  /** Los créditos en mora del cobrador (`GET /mora`). Una fila por crédito; el `id` es el crédito. */
+  | 'mora'
+  /** La ficha de recuperación de un crédito (`GET /mora/:creditId`): compuesto, no la fila de la lista. */
+  | 'mora.detail'
+  /** Las promesas de un crédito en mora (`scope` = el crédito). */
+  | 'mora.promises'
+  /** Las notas de un crédito en mora (`scope` = el crédito). */
+  | 'mora.notes'
   | 'credit'
   | 'route'
   | 'agenda'
@@ -70,7 +78,11 @@ export type QueueKind =
   | 'arrears.mark'
   | 'arrears.clear'
   | 'agenda.cancel'
-  | 'agenda.reschedule';
+  | 'agenda.reschedule'
+  /** Gestión con resultado y promesa sobre un crédito en mora (`POST /mora/:id/activities`). */
+  | 'mora.activity'
+  /** Nota de un crédito (`POST /mora/:id/notes`). */
+  | 'credit.note';
 
 export interface QueueRow {
   id: number;
@@ -293,6 +305,17 @@ export async function dequeue(id: number): Promise<void> {
 export async function markFailed(id: number, error: string): Promise<void> {
   const db = await open();
   await db.runAsync('UPDATE queue SET attempts = attempts + 1, last_error = ? WHERE id = ?', [error, id]);
+}
+
+/**
+ * Rechazado por el server: no se reintenta solo. Se marca con `REJECTED_ATTEMPTS` intentos —supera el
+ * techo de la cola sin agregar una columna a la base del teléfono— y sigue a la vista con su motivo.
+ * «Reintentar ahora» igual lo vuelve a mandar (`force`). **El ítem NO se borra.**
+ */
+export const REJECTED_ATTEMPTS = 99;
+export async function markRejected(id: number, error: string): Promise<void> {
+  const db = await open();
+  await db.runAsync('UPDATE queue SET attempts = ?, last_error = ? WHERE id = ?', [REJECTED_ATTEMPTS, error, id]);
 }
 
 /** Sólo para los tests y el borrado de datos del dispositivo. */

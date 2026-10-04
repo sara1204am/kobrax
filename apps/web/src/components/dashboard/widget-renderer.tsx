@@ -76,9 +76,15 @@ export async function WidgetRenderer({
       const kpi: KpiValue | undefined = data.summary?.[key];
       const format =
         key === 'overdueRate' ? percent : key === 'activeCases' ? (v: number) => v.toLocaleString('es-BO') : (v: number) => money(v, data.currency);
+      // D7: saldo, mora y recaudo llevan su desglose por fuente. La tasa y los casos no: una tasa
+      // partida no suma, y los casos no son plata de nadie.
+      const partKey = key === 'outstanding' || key === 'overdue' || key === 'collected' ? key : null;
+      const parts = partKey
+        ? data.summary?.bySource.map((s) => ({ label: t(`sources.${s.source}`), value: format(s[partKey]) }))
+        : undefined;
       return frame(
         t(`kpi.${key}`),
-        kpi ? <KpiWidget kpi={kpi} format={format} /> : null,
+        kpi ? <KpiWidget kpi={kpi} format={format} parts={parts} /> : null,
         data.errors.summary,
         kpi ? undefined : t('error'),
       );

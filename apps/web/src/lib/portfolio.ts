@@ -14,6 +14,9 @@ export interface PortfolioRow {
   totalDebt: number;
   maxDaysPastDue: number;
   creditCount: number;
+  /** D7: la parte de la deuda que es de créditos reportados por una fuente externa. */
+  totalDebtExternal?: number;
+  maxDaysPastDueExternal?: number;
 }
 
 /**

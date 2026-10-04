@@ -1,0 +1,56 @@
+# Stack de datos de produccion (PRICING-Y-DEPLOY.md §8).
+#
+# NO es un override del docker-compose.yml de desarrollo, y es a proposito:
+# al mezclar dos archivos, compose CONCATENA las listas de `ports` en vez de
+# reemplazarlas. Un override que "corrige" el binding dejaria viva TAMBIEN la
+# publicacion original en 0.0.0.0 — sin ningun sintoma visible. Aca la base de
+# datos de una empresa de cobranzas queda expuesta a internet y nadie se entera.
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: kobrax-postgres
+    restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: kobrax
+    ports:
+      # 🔒 El prefijo 127.0.0.1 NO es decorativo. Docker escribe sus PROPIAS
+      # reglas de iptables y NO pasa por ufw: un '5434:5432' a secas queda
+      # abierto a internet aunque ufw diga "deny incoming" y muestre la regla.
+      # Atado al loopback solo se llega desde el mismo servidor, o por tunel ssh:
+      #   ssh -L 5434:127.0.0.1:5434 root@<IP>
+      - '127.0.0.1:5434:5432'
+    volumes:
+      - kobrax_pgdata:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d kobrax']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: kobrax-redis
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '127.0.0.1:6379:6379'
+    volumes:
+      - kobrax_redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  kobrax_pgdata:
+  kobrax_redisdata:

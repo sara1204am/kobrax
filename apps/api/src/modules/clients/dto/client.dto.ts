@@ -1,4 +1,5 @@
 import { applyDecorators } from '@nestjs/common';
+import { CREDIT_SOURCES, type CreditSource } from '@kobrax/shared';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -160,6 +161,17 @@ export class CreateClientDto {
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => CreateCollateralDto) collaterals?: CreateCollateralDto[];
 }
 
+/** Antes del alta: ¿ya hay alguien con este carnet, o que se llame igual? (`POST /clients/duplicate-check`). */
+export class ClientDuplicateCheckDto {
+  @IsEnum(ClientType)
+  clientType!: ClientType;
+
+  @IsOptional() @IsString() @MaxLength(64) nationalId?: string;
+  @IsOptional() @IsString() @MaxLength(120) firstName?: string;
+  @IsOptional() @IsString() @MaxLength(120) lastName?: string;
+  @IsOptional() @IsString() @MaxLength(200) businessName?: string;
+}
+
 /** Todos los campos opcionales (no extiende PartialType para no depender de mapped-types). */
 export class UpdateClientDto {
   /**
@@ -216,11 +228,18 @@ export class ListClientsQueryDto {
    * eso filtra con un `EXISTS` sobre casos y no con una columna.
    */
   @IsOptional() @IsUUID() collectorId?: string;
+  /** El responsable de algún crédito del cliente (`credits.assigned_manager_id`). Ver P7 en el servicio. */
+  @IsOptional() @IsUUID() managerId?: string;
   /**
    * `portfolio` → cada cliente viene con su deuda agregada, su peor mora y cuántos créditos tiene,
    * y **la lista se puede ordenar por eso**. Es la cartera del panel web (F9 · W3).
    */
   @IsOptional() @IsIn(['portfolio']) view?: 'portfolio';
+  /**
+   * D7: clientes con algún crédito vivo de esa fuente. **Sólo con `view=portfolio`**, como la
+   * sucursal: la fuente es del crédito, y la lista simple no mira créditos.
+   */
+  @IsOptional() @IsIn(CREDIT_SOURCES as unknown as string[]) source?: CreditSource;
   /**
    * ⚠️ **Sólo con `view=portfolio`.** `debt` y `dpd` se calculan agregando los créditos, así que
    * ordenar por ellos es parte de la misma consulta: sin la vista no hay nada que ordenar. La lista

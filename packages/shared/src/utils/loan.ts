@@ -2,88 +2,30 @@
  * Matemática del préstamo tal como la define la spec (`Cliente_Prestamo.pdf` §4.2, §5.3).
  * Funciones puras, cero deps: las usan el móvil (panel en vivo, estado de la tarjeta) y la API.
  *
- * OJO — esto NO es un motor financiero. La cuota se calcula una vez, el usuario puede redondearla,
- * y se congela como valor fijo (§8: "la app es de cobranza, no core financiero"). La amortización
- * real (`buildSchedule`, sistema francés) vive en la API y solo sirve a los créditos con cronograma.
+ * La cotización y el plan de pagos NO viven acá: salen del motor único (`credit-engine.ts`), que usan
+ * por igual la vista previa (web/móvil) y la API (F4/06).
  */
 import {
+  ArrearsMethod,
+  BALANCE_BASES,
   CreditOrigin,
   DUE_SOON_DAYS,
-  InterestBase,
   PaymentFrequency,
+  type BalanceBasis,
+  type EffectiveBalanceBasis,
   PortfolioStatus,
   type ArrearsSource,
 } from '../enums/credit.enum.js';
+import { CREDIT_TERMS_VERSION, parseCreditTerms, type CreditTerms } from './credit-engine.js';
+import { parseInitialState, type CreditInitialState } from './credit-edit.js';
+import { isImportTrackedField, type ImportTrackedField } from './credit-import.js';
 
 const DAY_MS = 86_400_000;
 /** Trabaja en céntimos para no arrastrar error de coma flotante. */
 const round2 = (x: number): number => Math.round(x * 100) / 100;
 
-/**
- * Suma `n` períodos a una fecha según la frecuencia (§4.1). Base de "avanzar la próxima cuota".
- *
- * En UTC a propósito: las fechas de cobro se anclan a medianoche UTC en todo el sistema. Con
- * `setMonth`/`getMonth` (hora local) un `2026-07-01T00:00Z` + 1 mes caía en el **31 de julio** para
- * cualquier huso al oeste de Greenwich, o sea toda LatAm.
- */
-export function addPeriods(date: Date, n: number, frequency: PaymentFrequency): Date {
-  const d = new Date(date.getTime());
-  switch (frequency) {
-    case PaymentFrequency.DAILY:
-      return new Date(d.getTime() + n * DAY_MS);
-    case PaymentFrequency.WEEKLY:
-      return new Date(d.getTime() + n * 7 * DAY_MS);
-    case PaymentFrequency.BIWEEKLY:
-      return new Date(d.getTime() + n * 14 * DAY_MS);
-    case PaymentFrequency.MONTHLY:
-      d.setUTCMonth(d.getUTCMonth() + n);
-      return d;
-  }
-}
-
-export interface LoanQuote {
-  /** Cuota (§4.2). */
-  installment: number;
-  /** Total a cobrar = cuota × n. */
-  total: number;
-  /** Ganancia = total − capital (el "Interés" del panel). */
-  profit: number;
-}
-
-/**
- * Panel en vivo del Modo B — Cuota / Total a cobrar / Ganancia (§4.2).
- *
- *   % por período:  cuota = capital/n + capital × i/100     ·  total = cuota × n
- *   % total:        total = capital × (1 + i/100)           ·  cuota = total / n
- *
- * Ejemplo del PDF: capital 1.000, 10% por período, 5 cuotas → cuota 300, total 1.500, ganancia 500.
- */
-export function quoteLoan(params: {
-  principal: number;
-  interestPercent: number;
-  installments: number;
-  base?: InterestBase;
-}): LoanQuote {
-  const { principal, interestPercent: i, installments: n } = params;
-  const base = params.base ?? InterestBase.PER_PERIOD;
-  if (n < 1) return { installment: 0, total: 0, profit: 0 };
-
-  const installment =
-    base === InterestBase.TOTAL
-      ? round2((principal * (1 + i / 100)) / n)
-      : round2(principal / n + (principal * i) / 100);
-
-  return quoteFromInstallment(principal, installment, n);
-}
-
-/**
- * El mismo panel, pero partiendo de una cuota ya fijada — Modo A, y Modo B después de que el usuario
- * la **redondea a mano** ("la cuota es editable tras el cálculo… al editarla se recalcula el total", §5.2).
- */
-export function quoteFromInstallment(principal: number, installment: number, installments: number): LoanQuote {
-  const total = round2(installment * installments);
-  return { installment: round2(installment), total, profit: round2(total - principal) };
-}
+// Vive en su propio archivo (ver `periods.ts`); se re-exporta acá para no mover a nadie que lo importe.
+export { addPeriods } from './periods.js';
 
 /**
  * Estado de la tarjeta de cartera (§5.3). Derivado, nunca editable.
@@ -181,21 +123,127 @@ export interface CreditMetadata {
    * es borrarlo.
    */
   moraSince?: string;
+  /**
+   * Qué representa el saldo (D15). **Sólo se guarda cuando se sabe** —lo escribe el alta—; si falta,
+   * `balanceBasisOf` lo deriva. Nunca se estampa una base supuesta en un crédito viejo.
+   */
+  balanceBasis?: BalanceBasis;
+  /**
+   * Las condiciones con las que se definió el crédito (F4/06 · Fase 1), tal como las recalculó la API.
+   * Con ellas el detalle rehidrata el formulario y vuelve a generar el MISMO plan con `calculateCredit`.
+   * Ausente en los créditos anteriores a F4/06 y en los importados.
+   */
+  terms?: CreditTerms;
+  /** Formato de `terms` (`CREDIT_TERMS_VERSION`). Un `terms` de una versión desconocida no se lee. */
+  termsVersion?: number;
+  /**
+   * Cómo venía el préstamo cuando se lo registró (D13): cuotas ya pagadas, saldo y mora. Lo escribe la
+   * edición mientras no haya pagos; ausente = nació en Kobrax.
+   */
+  initialState?: CreditInitialState;
+  /**
+   * Importado (F4/06 · Fase 4): los datos financieros que ningún archivo trajo. Su columna puede tener
+   * un 0 que no significa nada (D9). Ausente = no se sabe (importado antes de la Fase 4) o no es importado.
+   */
+  importMissing?: ImportTrackedField[];
+  /**
+   * Importado: el monto en mora que trajo el reporte. Es lo que se le propone cobrar al cobrador
+   * (`suggestedPaymentAmount`); ausente = el reporte no lo trae.
+   */
+  pastDueAmount?: number;
+  /** Operación externa: la etiqueta de estado tal como la escribió el reporte ("Vigente en mora"). */
+  reportedStatus?: string;
+  /** Operación externa: el plazo en meses que dice el reporte. */
+  reportedTermMonths?: number;
+  /** Operación externa: fecha del último pago según el reporte (YYYY-MM-DD). */
+  lastPaymentDate?: string;
+  /** Operación externa: garante o referencia personal que trae el reporte. */
+  reportedGuarantor?: { name?: string; phone?: string };
+  /** Operación externa: el asesor del reporte que la trae (D8). Decide de qué cartera es la ausencia. */
+  externalAdvisorCode?: string;
+  /** La corrida de importación que lo tocó por última vez (`client_import_runs.id`). */
+  importRunId?: string;
+  /** ISO: cuándo lo tocó esa corrida. */
+  importedAt?: string;
+  /** Cómo se cuentan los días de mora (D20). Ausente = `oldest_unpaid`, lo de siempre. */
+  arrearsMethod?: ArrearsMethod;
+  /** YYYY-MM-DD del primer atraso, sólo con `first_default` y mientras siga en mora (D20). */
+  arrearsSince?: string;
 }
 
-export function readCreditMetadata(raw: unknown): CreditMetadata {
+/** La columna `credits.origin` (enum de la base, en mayúsculas) → el origen del dominio. */
+const ORIGIN_BY_COLUMN: Readonly<Record<string, CreditOrigin>> = {
+  MANUAL: CreditOrigin.MANUAL,
+  QUICK_BATCH: CreditOrigin.QUICK_BATCH,
+  IMPORT: CreditOrigin.IMPORT,
+  API: CreditOrigin.API,
+};
+
+/**
+ * `originColumn` = `credits.origin`. **Cuando llega, manda** (D1): la columna la escriben sólo el alta y
+ * el importador, y decide qué rama del sistema maneja el crédito; `metadata.origin` es un espejo que se
+ * sigue escribiendo para las apps viejas, dentro de un JSON que cualquier edición reescribe. Sin
+ * columna (el móvil, que lee el metadata que le mandan), se lee el espejo como siempre.
+ */
+export function readCreditMetadata(raw: unknown, originColumn?: string | null): CreditMetadata {
   const m = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
   const freq = m.frequency;
   const origin = m.origin;
+  const fromColumn = originColumn ? ORIGIN_BY_COLUMN[originColumn] : undefined;
   return {
     frequency: isEnumValue(PaymentFrequency, freq) ? freq : PaymentFrequency.MONTHLY,
-    origin: isEnumValue(CreditOrigin, origin) ? origin : CreditOrigin.MANUAL,
+    origin: fromColumn ?? (isEnumValue(CreditOrigin, origin) ? origin : CreditOrigin.MANUAL),
     installmentAmount: typeof m.installmentAmount === 'number' ? m.installmentAmount : undefined,
     nextDueDate: typeof m.nextDueDate === 'string' ? m.nextDueDate : undefined,
     externalRef: typeof m.externalRef === 'string' ? m.externalRef : undefined,
     notes: typeof m.notes === 'string' ? m.notes : undefined,
     moraSince: typeof m.moraSince === 'string' ? m.moraSince : undefined,
+    balanceBasis: (BALANCE_BASES as readonly unknown[]).includes(m.balanceBasis) ? (m.balanceBasis as BalanceBasis) : undefined,
+    initialState: parseInitialState(m.initialState),
+    importMissing: Array.isArray(m.importMissing) ? m.importMissing.filter(isImportTrackedField) : undefined,
+    pastDueAmount: typeof m.pastDueAmount === 'number' ? m.pastDueAmount : undefined,
+    reportedStatus: typeof m.reportedStatus === 'string' ? m.reportedStatus : undefined,
+    reportedTermMonths: typeof m.reportedTermMonths === 'number' ? m.reportedTermMonths : undefined,
+    lastPaymentDate: typeof m.lastPaymentDate === 'string' ? m.lastPaymentDate : undefined,
+    reportedGuarantor: guarantorOf(m.reportedGuarantor),
+    externalAdvisorCode: typeof m.externalAdvisorCode === 'string' ? m.externalAdvisorCode : undefined,
+    importRunId: typeof m.importRunId === 'string' ? m.importRunId : undefined,
+    importedAt: typeof m.importedAt === 'string' ? m.importedAt : undefined,
+    arrearsMethod: isEnumValue(ArrearsMethod, m.arrearsMethod) ? m.arrearsMethod : undefined,
+    arrearsSince: typeof m.arrearsSince === 'string' ? m.arrearsSince : undefined,
+    ...readTerms(m),
   };
+}
+
+/**
+ * `terms` + `termsVersion` juntos o ninguno. Una versión que este código no conoce se descarta
+ * entera: interpretar mal unas condiciones es peor que no tenerlas.
+ */
+function guarantorOf(v: unknown): CreditMetadata['reportedGuarantor'] {
+  if (typeof v !== 'object' || v === null) return undefined;
+  const g = v as Record<string, unknown>;
+  const name = typeof g.name === 'string' ? g.name : undefined;
+  const phone = typeof g.phone === 'string' ? g.phone : undefined;
+  return name || phone ? { name, phone } : undefined;
+}
+
+function readTerms(m: Record<string, unknown>): Pick<CreditMetadata, 'terms' | 'termsVersion'> {
+  if (m.termsVersion !== CREDIT_TERMS_VERSION) return {};
+  const terms = parseCreditTerms(m.terms);
+  return terms ? { terms, termsVersion: CREDIT_TERMS_VERSION } : {};
+}
+
+/**
+ * Qué representa el saldo de este crédito (D15), y el único lugar que lo decide.
+ *
+ *  · marca guardada → esa (los créditos nacidos con la regla nueva);
+ *  · importado / API → `total`: el archivo del banco ya trae el saldo total pendiente;
+ *  · manual sin marca → `legacy`: nació con saldo = capital y todavía no se migró.
+ */
+export function balanceBasisOf(meta: CreditMetadata): EffectiveBalanceBasis {
+  if (meta.balanceBasis) return meta.balanceBasis;
+  if (isExternalOrigin(meta.origin)) return 'total';
+  return 'legacy';
 }
 
 /**
@@ -235,9 +283,11 @@ export interface CreditView extends CreditMetadata {
  */
 export function creditView(credit: {
   metadata?: unknown;
+  /** `credits.origin`, si quien llama lo tiene (ver `readCreditMetadata`). */
+  origin?: string | null;
   installments?: { dueDate: Date | string; amount: number; status: string }[] | null;
 }): CreditView {
-  const meta = readCreditMetadata(credit.metadata);
+  const meta = readCreditMetadata(credit.metadata, credit.origin);
   const locked = isExternalOrigin(meta.origin);
   const schedule = credit.installments ?? [];
   if (schedule.length === 0) return { ...meta, hasSchedule: false, locked };

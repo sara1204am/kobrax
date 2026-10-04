@@ -371,6 +371,17 @@ describe('ClientsService.list — cartera (view=portfolio)', () => {
     assert.doesNotMatch(sql, /\bJOIN\b/);
   });
 
+  it('D7 · la fuente filtra con EXISTS sobre créditos, y la fila trae los totales externos', async () => {
+    const { service, calls } = makeService({ rows: [], clients: [] });
+    await service.list({ view: 'portfolio', source: 'PSF' } as never);
+    const { sql } = pageSql(calls);
+    assert.match(sql, /EXISTS \(\s*SELECT 1 FROM credits k\s*WHERE k\.client_id = c\.id AND k\.deleted_at IS NULL AND k\.external_source = \?/);
+    assert.match(sql, /c\.total_debt_external/);
+    const kobrax = makeService({ rows: [], clients: [] });
+    await kobrax.service.list({ view: 'portfolio', source: 'KOBRAX' } as never);
+    assert.match(pageSql(kobrax.calls).sql, /k\.external_source IS NULL/);
+  });
+
   it('ordena por nombre con la misma regla que el nombre visible (empresa antes que persona)', async () => {
     const { service, calls } = makeService({ rows: [], clients: [] });
     await service.list({ view: 'portfolio', sort: 'name', dir: 'asc' } as never);
@@ -490,5 +501,92 @@ describe('ClientsService.list — cartera (view=portfolio)', () => {
     const { service, calls } = makeService({ rows: [], clients: [] });
     await service.list({ q: 'ana' } as never);
     assert.deepEqual(calls.sql, [], 'la lista de siempre no toca el SQL crudo');
+  });
+});
+
+describe('ClientsService.duplicateCheck — avisar antes del alta', () => {
+  const row = (over: Record<string, unknown>) => ({
+    id: 'x',
+    firstName: null,
+    lastName: null,
+    businessName: null,
+    nationalId: null,
+    nationalIdHash: null,
+    status: 'ACTIVE',
+    creditCount: 0,
+    deletedAt: null,
+    ...over,
+  });
+
+  it('mismo carnet → document, con el carnet enmascarado y el nombre', async () => {
+    const dup = row({ id: 'c7', firstName: 'Juan', lastName: 'Pérez', nationalId: 'enc(1234567LP)', nationalIdHash: 'h(1234567LP)', creditCount: 2 });
+    const { service } = makeService({ dup });
+    const res = await service.duplicateCheck({ clientType: 'PERSON', nationalId: '1234567LP' } as never);
+    assert.equal(res.document?.id, 'c7');
+    assert.equal(res.document?.displayName, 'Juan Pérez');
+    assert.equal(res.document?.maskedDocument, '12345***');
+    assert.equal(res.document?.deleted, false);
+  });
+
+  // El índice único no excluye a los dados de baja: si el aviso dijera «libre», el guardado fallaría igual.
+  it('el carnet de un cliente dado de baja también cuenta, marcado como baja', async () => {
+    const { service } = makeService({ dup: row({ id: 'c8', firstName: 'Ana', lastName: 'Ríos', deletedAt: new Date() }) });
+    const res = await service.duplicateCheck({ clientType: 'PERSON', nationalId: '999' } as never);
+    assert.equal(res.document?.deleted, true);
+  });
+
+  it('mismo nombre sin tildes ni orden → names; otro nombre no entra', async () => {
+    const { service } = makeService({
+      rows: [{ id: 'a' }, { id: 'b' }, { id: 'c' }] as never,
+      clients: [
+        row({ id: 'a', firstName: 'JUAN', lastName: 'PEREZ', creditCount: 1 }),
+        row({ id: 'b', firstName: 'Pérez', lastName: 'Juan', creditCount: 3 }),
+        row({ id: 'c', firstName: 'Juan Carlos', lastName: 'Pérez' }),
+      ],
+    });
+    const res = await service.duplicateCheck({ clientType: 'PERSON', firstName: 'juan', lastName: 'Pérez' } as never);
+    assert.equal(res.document, null);
+    assert.deepEqual(res.names.map((n) => n.id), ['b', 'a'], 'los dos homónimos, el de más créditos primero');
+  });
+
+  it('busca en la base sin tildes, por la palabra más larga', async () => {
+    const { service, calls } = makeService({ rows: [], clients: [] });
+    await service.duplicateCheck({ clientType: 'PERSON', firstName: 'Ana', lastName: 'Gutiérrez' } as never);
+    assert.match(calls.sql[0]!.sql, /translate\(upper/);
+    assert.ok(calls.sql[0]!.values.includes('%GUTIERREZ%'));
+  });
+
+  it('un homónimo con otro carnet se marca otherDocument', async () => {
+    const { service } = makeService({
+      rows: [{ id: 'a' }] as never,
+      clients: [row({ id: 'a', firstName: 'Juan', lastName: 'Pérez', nationalIdHash: 'h(111)' })],
+    });
+    const res = await service.duplicateCheck({ clientType: 'PERSON', firstName: 'Juan', lastName: 'Pérez', nationalId: '222' } as never);
+    assert.equal(res.names[0]?.otherDocument, true);
+  });
+
+  it('el dueño del carnet no se repite en la lista de nombres', async () => {
+    const same = row({ id: 'a', firstName: 'Juan', lastName: 'Pérez', nationalIdHash: 'h(111)' });
+    const { service } = makeService({ dup: same, rows: [{ id: 'a' }] as never, clients: [same] });
+    const res = await service.duplicateCheck({ clientType: 'PERSON', firstName: 'Juan', lastName: 'Pérez', nationalId: '111' } as never);
+    assert.equal(res.document?.id, 'a');
+    assert.deepEqual(res.names, []);
+  });
+
+  // «Juan» solo coincide con media cartera: hasta tener nombre y apellido no se busca por nombre.
+  it('sin apellido no busca por nombre', async () => {
+    const { service, calls } = makeService();
+    const res = await service.duplicateCheck({ clientType: 'PERSON', firstName: 'Juan' } as never);
+    assert.deepEqual(res, { document: null, names: [] });
+    assert.deepEqual(calls.sql, []);
+  });
+
+  it('empresa: compara la razón social', async () => {
+    const { service } = makeService({
+      rows: [{ id: 'e' }] as never,
+      clients: [row({ id: 'e', businessName: 'Comercial Andina SRL' })],
+    });
+    const res = await service.duplicateCheck({ clientType: 'COMPANY', businessName: 'comercial andina srl' } as never);
+    assert.equal(res.names[0]?.id, 'e');
   });
 });

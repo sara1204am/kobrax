@@ -40,6 +40,29 @@ export interface ClientPortfolio {
   nextDueDate?: string;
   /** "8 días de mora" | "Cuota Bs 300 · vence 15 jul" | "" (§5.3). */
   secondaryLine: string;
+  /**
+   * D7: la fuente externa de sus créditos, cuando la hay — «PSF al 02/10», «PSF · ausente del
+   * reporte». Ausente = todo es de Kobrax. La deuda de la tarjeta suma las dos; esto dice que parte
+   * es un saldo reportado por el banco a su corte, no uno que lleve Kobrax.
+   */
+  sourceLine?: string;
+}
+
+/** `YYYY-MM-DD` → `dd/mm`. */
+const ddmm = (iso: string): string => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+
+/**
+ * La línea de fuente de un cliente (D4, D7, D9): de qué fuente, a qué corte, y si alguna operación
+ * ya no viene en el reporte o tiene el dato viejo — que cambian cómo se lee el monto de la tarjeta.
+ */
+export function sourceLineOf(group: Pick<CaseListItem, 'externalSource' | 'syncStatus' | 'reportedAsOf' | 'reportedStale'>[]): string | undefined {
+  const external = group.filter((c) => c.externalSource);
+  if (external.length === 0) return undefined;
+  const sources = [...new Set(external.map((c) => c.externalSource!))].join(', ');
+  if (external.some((c) => c.syncStatus === 'ABSENT')) return `${sources} · ausente del reporte`;
+  if (external.some((c) => c.reportedStale)) return `${sources} · dato desactualizado`;
+  const asOf = external.map((c) => c.reportedAsOf).filter(Boolean).sort()[0];
+  return asOf ? `${sources} al ${ddmm(asOf)}` : sources;
 }
 
 /** Severidad para elegir el peor estado del cliente: mora primero, pagado al final. */
@@ -134,6 +157,7 @@ export function groupPortfolio(cases: CaseListItem[], asOf: Date = new Date()): 
       maxDaysPastDue,
       nextDueDate: next?.nextDueDate,
       secondaryLine,
+      sourceLine: sourceLineOf(group),
     });
   }
 

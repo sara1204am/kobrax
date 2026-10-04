@@ -2,27 +2,45 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  Param,
+  ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
+  StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { Permission } from '@kobrax/shared';
+import { Permission, type ImportAssignments } from '@kobrax/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PortfolioImportService } from './portfolio-import.service';
 import type { ImportConfigPatch } from './import-config';
+import { ListImportRunItemsQueryDto, ListImportRunsQueryDto } from './dto/import-runs.dto';
+import { ImportAssignmentError, parseImportAssignments } from './import-assignment';
 
 // Sin @types/multer: solo necesitamos el buffer (FileInterceptor usa memoria por defecto).
 interface UploadedPortfolioFile {
   buffer: Buffer;
   originalname?: string;
+  mimetype?: string;
+}
+
+/**
+ * El nombre original del archivo. Multer lo entrega leído como latin1, así que «Reporte_Mora_Año.pdf»
+ * llegaría como «Reporte_Mora_AÃ±o.pdf»: se relee como UTF-8. Sin carpetas y con tope de largo.
+ */
+function originalName(file: UploadedPortfolioFile): string | undefined {
+  if (!file.originalname) return undefined;
+  const utf8 = Buffer.from(file.originalname, 'latin1').toString('utf8');
+  return (utf8.split(/[\\/]/).pop() ?? utf8).slice(0, 200);
 }
 
 // Formas de archivo soportadas (FIELD-RULES §4.1). El match contra la forma CONFIGURADA lo hace
@@ -78,11 +96,93 @@ export class PortfolioImportController {
     @UploadedFile() file: UploadedPortfolioFile | undefined,
     @Body('dryRun') dryRun?: string,
     @Query('columnsOnly') columnsOnly?: string,
+    // D9: la fecha de corte, si el reporte no la trae (o para corregirla). YYYY-MM-DD.
+    @Body('reportDate') reportDate?: string,
+    // Al confirmar: quién queda responsable de los nuevos y qué existentes se reasignan (JSON, por
+    // nº de operación). Ver `ImportAssignments` en shared.
+    @Body('assignments') assignments?: string,
   ) {
     if (!file?.buffer) {
       throw new BadRequestException({ code: 'FILE_REQUIRED', message: 'Falta el archivo (campo file)' });
     }
     if (columnsOnly === 'true') return this.portfolio.readColumns(file.buffer);
-    return this.portfolio.run(file.buffer, dryRun === 'true');
+    let parsed: ImportAssignments | null;
+    try {
+      parsed = parseImportAssignments(assignments);
+    } catch (e) {
+      if (e instanceof ImportAssignmentError) throw new BadRequestException({ code: e.code, message: e.message });
+      throw e;
+    }
+    return this.portfolio.run(file.buffer, dryRun === 'true', {
+      reportDate: reportDate || undefined,
+      fileName: originalName(file),
+      mimeType: file.mimetype,
+      assignments: parsed,
+    });
+  }
+
+  // ── Historial ───────────────────────────────────────────────────────────────
+
+  /** Las corridas de cartera, la más reciente primero. */
+  @Get('runs')
+  @Roles(Permission.CLIENT_IMPORT)
+  listRuns(@Query() query: ListImportRunsQueryDto) {
+    return this.portfolio.listRuns(query);
+  }
+
+  @Get('runs/:id')
+  @Roles(Permission.CLIENT_IMPORT)
+  getRun(@Param('id', ParseUUIDPipe) id: string) {
+    return this.portfolio.getRun(id);
+  }
+
+  /** Qué le pasó a cada registro: las nuevas, actualizadas, al día, ausentes, rechazadas… */
+  @Get('runs/:id/items')
+  @Roles(Permission.CLIENT_IMPORT)
+  listRunItems(@Param('id', ParseUUIDPipe) id: string, @Query() query: ListImportRunItemsQueryDto) {
+    return this.portfolio.listRunItems(id, query);
+  }
+
+  /**
+   * El documento que se subió. `?download=1` lo baja; sin eso se abre en el navegador (un PDF se ve
+   * ahí mismo).
+   *
+   * 🔴 Además de importar, pide `client:pii:read` (P10): el reporte trae la cartera entera de un
+   * asesor con nombres, documentos y teléfonos **sin enmascarar**. El supervisor importa y reparte,
+   * pero no ve PII en ningún otro lado; el documento crudo no puede ser la excepción.
+   */
+  @Get('runs/:id/file')
+  @Roles(Permission.CLIENT_IMPORT, Permission.CLIENT_PII_READ)
+  async runFile(@Param('id', ParseUUIDPipe) id: string, @Query('download') download?: string) {
+    const { stream, name, mimeType } = await this.portfolio.runFile(id);
+    const encoded = encodeURIComponent(name);
+    const ascii = name.replace(/[^ -~]/g, '_').replace(/"/g, '');
+    return new StreamableFile(stream, {
+      type: mimeType,
+      disposition: `${download === '1' ? 'attachment' : 'inline'}; filename="${ascii}"; filename*=UTF-8''${encoded}`,
+    });
+  }
+
+  /**
+   * D8: de qué usuario es cada código de asesor de los reportes. El código no es la identidad del
+   * usuario: sólo dice de quién es un reporte, y con eso qué operaciones pueden quedar ausentes.
+   */
+  @Get('advisors')
+  @Roles(Permission.CLIENT_IMPORT)
+  listAdvisors() {
+    return this.portfolio.listAdvisorLinks();
+  }
+
+  @Put('advisors/:code')
+  @Roles(Permission.CLIENT_IMPORT)
+  linkAdvisor(@Param('code') code: string, @Body('userId') userId?: string) {
+    if (!userId) throw new BadRequestException({ code: 'USER_REQUIRED', message: 'Falta el usuario (userId)' });
+    return this.portfolio.linkAdvisor(code, userId);
+  }
+
+  @Delete('advisors/:code')
+  @Roles(Permission.CLIENT_IMPORT)
+  unlinkAdvisor(@Param('code') code: string) {
+    return this.portfolio.unlinkAdvisor(code);
   }
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { civilMonthStartUTC, civilTodayUTC } from './tenant-clock.service';
+import { civilDayStartInstant, civilMonthStartUTC, civilTodayUTC } from './tenant-clock.service';
 
 /** El caso que motivó todo esto: 22:40 del 17 en La Paz ya es el 18 en UTC. */
 const NOCHE_EN_LA_PAZ = new Date('2026-08-18T02:40:00.000Z');
@@ -39,5 +39,25 @@ describe('civilMonthStartUTC (los contadores mensuales de L2)', () => {
 
   it('a mitad de mes es el 1 de ese mes, medianoche UTC', () => {
     assert.equal(civilMonthStartUTC('America/La_Paz', NOCHE_EN_LA_PAZ).toISOString(), '2026-08-01T00:00:00.000Z');
+  });
+});
+
+describe('civilDayStartInstant', () => {
+  it('el 30 en La Paz (UTC−4) empieza a las 04:00 UTC, no a medianoche UTC', () => {
+    assert.equal(civilDayStartInstant('2026-09-30', 'America/La_Paz').toISOString(), '2026-09-30T04:00:00.000Z');
+  });
+
+  it('del otro lado del mundo empieza el día anterior en UTC', () => {
+    assert.equal(civilDayStartInstant('2026-09-30', 'Asia/Tokyo').toISOString(), '2026-09-29T15:00:00.000Z');
+  });
+
+  it('respeta el horario de verano del día pedido', () => {
+    // Santiago: UTC−3 en enero (verano), UTC−4 en julio.
+    assert.equal(civilDayStartInstant('2026-01-15', 'America/Santiago').toISOString(), '2026-01-15T03:00:00.000Z');
+    assert.equal(civilDayStartInstant('2026-07-15', 'America/Santiago').toISOString(), '2026-07-15T04:00:00.000Z');
+  });
+
+  it('una zona inválida cae a medianoche UTC en vez de explotar', () => {
+    assert.equal(civilDayStartInstant('2026-09-30', 'No/Existe').toISOString(), '2026-09-30T00:00:00.000Z');
   });
 });

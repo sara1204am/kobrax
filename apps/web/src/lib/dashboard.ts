@@ -1,4 +1,4 @@
-import { CasePriority, CaseStatus, type DashboardFilters, type KpiValue } from '@kobrax/shared';
+import { CasePriority, CaseStatus, isCreditSource, type DashboardFilters, type KpiValue } from '@kobrax/shared';
 import { isUuid } from './uuid';
 
 /**
@@ -81,6 +81,8 @@ export function dashboardFilters(
     ...(params.branchId && isUuid(params.branchId) ? { branchId: params.branchId } : {}),
     ...(caseStatus.length ? { caseStatus } : {}),
     ...(priority.length ? { priority } : {}),
+    // D7: una fuente inventada tampoco viaja — la API la valida y un 400 rompe los seis widgets.
+    ...(isCreditSource(params.source) ? { source: params.source } : {}),
   };
 }
 

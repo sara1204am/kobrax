@@ -6,6 +6,18 @@
     "backToLogin": "Volver a iniciar sesión",
     "close": "Cerrar"
   },
+  "creditSource": {
+    "column": "Fuente",
+    "filter": "Fuente",
+    "all": "Todas",
+    "KOBRAX": "Kobrax",
+    "PSF": "PSF",
+    "withAsOf": "{source} · al {date}",
+    "absent": "Ausente del reporte",
+    "stale": "Dato desactualizado",
+    "ofWhich": "de ella {amount} reportada (PSF)",
+    "allReported": "toda reportada (PSF)"
+  },
   "locale": {
     "label": "Idioma",
     "es": "Español",
@@ -37,7 +49,7 @@
       "parada": "Parada",
       "planificar": "Planificar",
       "editar": "Editar",
-      "prestamo": "Nuevo préstamo",
+      "prestamo": "Nuevo crédito",
       "credito": "Crédito",
       "solicitudes": "Cobros pedidos",
       "nueva": "Nueva",
@@ -78,8 +90,17 @@
         "priority": "Prioridad",
         "all": "Todos",
         "selected": "{count} seleccionados",
-        "clear": "Limpiar filtros"
+        "clear": "Limpiar filtros",
+        "source": "Fuente",
+        "allSources": "Todas"
       },
+      "sources": {
+        "KOBRAX": "Kobrax",
+        "PSF": "PSF"
+      },
+      "mixedSources": "Incluye {count, plural, one {# operación} other {# operaciones}} {source} con saldo y mora reportados al corte del {to}.",
+      "mixedSourcesRange": "Incluye {count, plural, one {# operación} other {# operaciones}} {source} con saldo y mora reportados a cortes del {from} al {to}.",
+      "mixedSourcesHint": "No son números de hoy: elegí una fuente para verlas por separado.",
       "presets": {
         "today": "Hoy",
         "yesterday": "Ayer",
@@ -167,7 +188,8 @@
       "trend": {
         "outstanding": "Saldo de cartera",
         "collected": "Recaudado",
-        "reconstructed": "El saldo de cada fecha se reconstruye con lo cobrado después: muestra lo que bajó la cobranza, no incluye desembolsos nuevos."
+        "reconstructed": "El saldo de cada fecha se reconstruye con lo cobrado después: muestra lo que bajó la cobranza, no incluye desembolsos nuevos.",
+        "external": "Incluye el saldo reportado por fuentes externas a cada fecha (hoy {amount}): ese no se reconstruye con pagos."
       },
       "map": {
         "done": "{n} visitadas",
@@ -235,7 +257,7 @@
         "updated": "Se actualizan",
         "updatedHint": "Ya los tenías: se les actualiza el saldo y los días de atraso.",
         "setCurrent": "Quedan al día",
-        "setCurrentHint": "Los tenés y el archivo no los trae. Quedan vigentes y sin atraso; el saldo no se toca.",
+        "setCurrentHint": "Los tenés y el archivo no los trae. Quedan sin atraso; el saldo y el estado no se tocan.",
         "invalid": "No se importan",
         "invalidHint": "Al archivo le falta algo que marcaste obligatorio.",
         "colCode": "N° de crédito",
@@ -251,7 +273,7 @@
         "again": "Importar otro archivo",
         "lastRun": "Última importación",
         "lastRunNever": "Todavía no importaste ningún archivo.",
-        "lastRunCounts": "{created} nuevos · {updated} actualizados · {setCurrent} al día · {errors} afuera",
+        "lastRunCounts": "{created} nuevos · {updated} actualizados · {setCurrent} al día · {errors} rechazadas",
         "disabledTitle": "El import está apagado",
         "disabledText": "Esta empresa carga la cartera a mano. Se enciende en Ajustes.",
         "setupTitle": "Falta configurar el import",
@@ -261,10 +283,27 @@
           "scope": "Falta decir de quién es la cartera que trae el archivo.",
           "profile": "Falta decir cómo se ve el archivo.",
           "fields": "Falta emparejar las columnas del archivo con tus datos."
-        }
+        },
+        "reportDate": "Corte del {date}",
+        "reportDateUnknown": "El reporte no dice su fecha de corte",
+        "advisor": "Asesor {code}",
+        "absent": "Ya no vienen en el reporte",
+        "absentHint": "Estaban en el reporte anterior y en este no. No es un pago ni un cierre: el saldo y el estado quedan como estaban, y queda registrado desde qué día faltan.",
+        "reappeared": "Volvieron al reporte",
+        "reappearedHint": "Faltaban y este reporte las vuelve a traer. Se actualiza el mismo crédito, con su historia.",
+        "needsReview": "Revisar vínculo",
+        "linkReview": "Revisar vínculo",
+        "existingClient": "cliente que ya tenías",
+        "colBalance": "Saldo",
+        "colArrears": "Mora",
+        "colStatus": "Estado en el reporte",
+        "toastOk": "Importación guardada: {created} nuevos y {updated} actualizados.",
+        "toastWarned": "Importación guardada, con {n, plural, one {# registro rechazado} other {# registros rechazados}}.",
+        "toastSkipped": "Este archivo ya se había importado: no se volvió a aplicar."
       },
       "setup": {
         "title": "Configurá tu importación",
+        "readOnly": "Sólo quien reparte la cartera o el dueño de la cuenta puede cambiar esta configuración. Podés verla, pero no editarla.",
         "subtitle": "Prepará tu archivo antes de importar la cartera. Todo se guarda solo.",
         "backToRun": "Volver al import",
         "steps": {
@@ -453,6 +492,14 @@
       },
       "errors": {
         "generic": "No se pudo procesar el archivo.",
+        "ADVISOR_BELONGS_TO_OTHER": "Este reporte es la cartera de otra persona. Sólo podés importar tu propia cartera.",
+        "UNASSIGNED_NEW_CREDITS": "Hay créditos nuevos sin responsable.",
+        "ASSIGNEE_NOT_ELIGIBLE": "El responsable elegido no es un cobrador activo de la empresa.",
+        "ASSIGNMENT_CONFLICT": "El responsable de algún crédito cambió mientras tanto. Volvé a cargar el archivo.",
+        "ASSIGNMENT_FORBIDDEN": "No tenés permiso para elegir responsables.",
+        "ALREADY_APPLIED": "Este archivo ya se importó. Para cambiar responsables, usá Cartera.",
+        "INVALID_ASSIGNMENTS": "Las asignaciones enviadas no son válidas.",
+        "IMPORT_CONFIG_FORBIDDEN": "Sólo quien reparte la cartera o el dueño de la cuenta cambia esta configuración.",
         "IMPORT_DISABLED": "El import está apagado: esta empresa carga la cartera a mano.",
         "IMPORT_NOT_CONFIGURED": "Todavía no configuraste el import.",
         "FILE_SHAPE_MISMATCH": "Ese archivo no tiene la forma que configuraste.",
@@ -468,12 +515,16 @@
         "PROFILE_CHANGED": "Cambió la forma del archivo: hay que emparejar las columnas de nuevo.",
         "CALIBRATION_STALE": "Confirmá la columna de días de atraso después de elegirla.",
         "INVALID_SOURCE": "Origen inválido.",
-        "INVALID_PROFILE_KIND": "Forma de archivo inválida."
+        "INVALID_PROFILE_KIND": "Forma de archivo inválida.",
+        "REPORT_OUTDATED": "Este reporte es más viejo que el último que aplicaste. Un reporte viejo no pisa datos más nuevos.",
+        "ADVISOR_NOT_LINKED": "El reporte es de un asesor que no está vinculado a ningún usuario. Vinculalo abajo, en Asesores de los reportes.",
+        "INVALID_REPORT_DATE": "La fecha de corte no es válida."
       },
       "warnings": {
         "MORA_SIN_CONFIRMAR": "Todavía no confirmaste cuál columna son los días de atraso.",
         "MORA_COLUMNA_SOSPECHOSA": "Puede que la columna de días de atraso esté mal elegida.",
-        "MORA_INCONSISTENTE": "Hay créditos vigentes y sin cargos, pero con días de atraso."
+        "MORA_INCONSISTENTE": "Hay créditos vigentes y sin cargos, pero con días de atraso.",
+        "REPORT_DATE_UNKNOWN": "El reporte no trae su fecha de corte: los números se guardan sin saber a qué día corresponden."
       },
       "rejects": {
         "MISSING": "Le falta un dato que marcaste obligatorio.",
@@ -481,6 +532,135 @@
         "DUP_IN_FILE": "El N° de crédito viene repetido en el archivo.",
         "MATCHES_MANUAL": "Ese N° de crédito ya existe cargado a mano. El import no lo toca.",
         "MATCHES_OUT_OF_SCOPE": "Ese N° de crédito existe fuera del alcance de este archivo."
+      },
+      "advisors": {
+        "title": "Asesores de los reportes",
+        "subtitle": "Cada reporte de mora es de un asesor. Vinculá su código a la persona de tu equipo que lleva esa cartera: sus operaciones nuevas le quedan asignadas, y lo que falta de su reporte falta sólo de su cartera.",
+        "unlinked": "Estos códigos ya vinieron en un reporte y no tienen a nadie: {codes}",
+        "none": "Todavía no vinculaste ningún asesor.",
+        "code": "Código del asesor",
+        "user": "Quién lleva esa cartera",
+        "pickUser": "Elegí una persona",
+        "link": "Vincular",
+        "remove": "Quitar",
+        "saved": "Asesor vinculado",
+        "errors": {
+          "generic": "No se pudo guardar. Probá de nuevo."
+        }
+      },
+      "assign": {
+        "colAssignee": "Responsable",
+        "colCurrent": "Responsable actual",
+        "colNew": "Nuevo responsable",
+        "unassigned": "Sin asignar",
+        "me": "Yo ({name})",
+        "unknownUser": "Otro usuario",
+        "suggested": "del reporte",
+        "selfNew": "Estos créditos se asignarán a ti.",
+        "keepCurrent": "Mantendrán su responsable actual.",
+        "chooseNew": "Elegí quién cobra cada crédito nuevo. Arranca con el responsable que sugiere el reporte.",
+        "chooseUpdate": "Conservan su responsable. Cambialo sólo si querés reasignarlo: es una acción aparte de actualizar.",
+        "stats": "Asignados {assigned} · Sin asignar {unassigned}",
+        "assignAllUnassigned": "Asignar todos los sin asignar a…",
+        "onlyUnassigned": "Mostrar sólo sin asignar",
+        "selected": "{n, plural, one {# seleccionado} other {# seleccionados}}",
+        "assignTo": "Asignar a…",
+        "assignToMe": "Asignar a mí",
+        "reassignTo": "Reasignar a…",
+        "reassignBadge": "Reasignación",
+        "blockUnassigned": "Quedan {n, plural, one {# crédito nuevo} other {# créditos nuevos}} sin responsable: asignalos para poder confirmar.",
+        "alreadyApplied": "Este archivo ya se importó el {date}{by, select, none {} other { ({by})}}. Confirmar no cambia nada; para reasignar responsables, usá Cartera.",
+        "reassignTitle": "Cambiar responsables",
+        "reassignText": "Vas a cambiar el responsable de {n, plural, one {# crédito existente} other {# créditos existentes}}. Sus casos abiertos siguen con el cobrador que tienen.",
+        "reassignOk": "Sí, reasignar e importar",
+        "back": "Volver",
+        "resultAssigned": "Nuevos por responsable",
+        "resultReassigned": "{n, plural, one {# crédito reasignado} other {# créditos reasignados}}",
+        "notesTitle": "Algunas asignaciones no se aplicaron",
+        "note": {
+          "NOW_EXISTING": "{code}: ya existía al confirmar (otra importación lo creó); conserva su responsable.",
+          "UNKNOWN_CODE": "{code}: no está en el archivo.",
+          "NOT_UPDATED": "{code}: no vino en este reporte, no se reasignó."
+        }
+      },
+      "history": {
+        "title": "Historial de importaciones",
+        "hint": "Cada archivo que se importó y qué cambió. Tocá la fecha para ver el detalle, o un número para ir directo a esos registros.",
+        "empty": "Todavía no importaste ningún archivo.",
+        "entity": "importaciones",
+        "noFile": "Sin archivo",
+        "noResults": "Ninguna importación coincide con la búsqueda o los filtros.",
+        "noResultsHint": "Probá con otro texto o quitá algún filtro.",
+        "search": {
+          "label": "Buscar importaciones",
+          "placeholder": "Archivo, asesor o quién importó",
+          "hint": "Busca en el nombre del archivo, el código de asesor y el nombre de quien importó."
+        },
+        "filters": {
+          "importedAt": "Fecha de importación",
+          "reportDate": "Fecha de corte",
+          "by": "Importó",
+          "allImporters": "Todos"
+        },
+        "columns": {
+          "date": "Fecha",
+          "file": "Archivo",
+          "reportDate": "Corte",
+          "advisor": "Asesor",
+          "by": "Importó",
+          "created": "Nuevos",
+          "updated": "Actualizados",
+          "reappeared": "Volvieron",
+          "setCurrent": "Al día",
+          "absent": "Ausentes",
+          "rejected": "Rechazadas"
+        }
+      },
+      "detail": {
+        "title": "Importación del {date}",
+        "back": "← Importar datos",
+        "by": "Importó",
+        "at": "Fecha",
+        "file": "Archivo",
+        "reportDate": "Fecha de corte",
+        "advisor": "Asesor",
+        "scope": "Alcance",
+        "view": "Ver documento",
+        "download": "Descargar",
+        "noFile": "Esta importación es anterior a que se guardara el archivo.",
+        "partial": "Importación anterior al historial: no quedaron registradas cuáles se pusieron al día ni qué filas se rechazaron.",
+        "all": "Todos",
+        "movements": "Movimientos",
+        "empty": "No hubo movimientos de este tipo.",
+        "entity": "registros",
+        "newClient": "cliente nuevo",
+        "existingClient": "cliente que ya tenías",
+        "linkReview": "Revisar vínculo",
+        "days": "{n, plural, one {# día} other {# días}}",
+        "unknownUser": "—",
+        "tabs": {
+          "CREATED": "Nuevos",
+          "UPDATED": "Actualizados",
+          "REAPPEARED": "Volvieron",
+          "SET_CURRENT": "Al día",
+          "ABSENT": "Ausentes",
+          "REJECTED": "Rechazadas"
+        },
+        "columns": {
+          "row": "Registro",
+          "code": "Operación",
+          "client": "Cliente",
+          "movement": "Movimiento",
+          "balance": "Saldo",
+          "arrears": "Mora",
+          "status": "Estado",
+          "note": "Detalle"
+        },
+        "scopeKinds": {
+          "account": "Toda la empresa",
+          "official": "Cartera de {name}",
+          "branch": "Sucursal {name}"
+        }
       }
     },
     "cases": {
@@ -495,6 +675,8 @@
         "status": "Estado",
         "priority": "Prioridad",
         "assignee": "Cobrador",
+        "branch": "Oficina",
+        "allBranches": "Todas las oficinas",
         "all": "Todos",
         "unassigned": "Sin asignar",
         "overdue": "Sólo vencidos",
@@ -503,7 +685,14 @@
         "scope": "Alcance",
         "includeCurrent": "Incluir los que están al día",
         "sla": "Tiempo de gestión",
-        "slaOverdue": "Sólo los que se pasaron del plazo"
+        "slaOverdue": "Sólo los que se pasaron del plazo",
+        "case": "Caso",
+        "withoutCase": "En mora, sin caso abierto",
+        "withCase": "Con caso abierto",
+        "unassignedCase": "Casos sin cobrador",
+        "balanceRange": "Saldo",
+        "promise": "Promesa de pago",
+        "withPromise": "Sólo con promesa vigente"
       },
       "columns": {
         "client": "Deudor",
@@ -514,8 +703,24 @@
         "assignee": "Cobrador",
         "slaDueAt": "Vence",
         "actions": "Acciones",
-        "arrearsSource": "Origen de la mora"
+        "arrearsSource": "Origen de la mora",
+        "code": "Nº de crédito",
+        "overdue": "Vencido",
+        "lastAction": "Última gestión",
+        "branch": "Oficina",
+        "caseStatus": "Estado de gestión",
+        "originStatus": "Estado en origen",
+        "principal": "Monto original",
+        "installment": "Cuota",
+        "nextDueDate": "Próxima fecha",
+        "lastPayment": "Último pago",
+        "moraSince": "Inicio de la mora",
+        "promise": "Promesa"
       },
+      "noCase": "Sin caso",
+      "hasPromise": "Con promesa",
+      "overdueReported": "Lo que reportó el archivo",
+      "overdueSchedule": "Cuotas vencidas del cronograma",
       "days": "{n} d",
       "noAssignee": "—",
       "unknownAssignee": "Asignado",
@@ -575,7 +780,17 @@
         "assignee": "Cobrador",
         "openClient": "Ver la ficha del deudor",
         "timeline": "Gestiones",
-        "timelineEmpty": "Todavía no hay gestiones registradas."
+        "timelineEmpty": "Todavía no hay gestiones registradas.",
+        "creditCode": "Crédito {code}",
+        "overdue": "Monto vencido",
+        "principal": "Monto original",
+        "lastPayment": "Último pago",
+        "moraSince": "Inicio de la mora",
+        "openCredit": "Ver el crédito en Cartera",
+        "openCase": "Abrir caso",
+        "caseOpened": "Caso abierto",
+        "noCaseTitle": "Este crédito está en mora y todavía no tiene un caso",
+        "noCaseText": "Abrí el caso para registrar gestiones y asignarlo a un cobrador."
       },
       "status": {
         "PENDING": "Pendiente",
@@ -609,19 +824,191 @@
         "INVALID_ASSIGNEE": "Esa persona no pertenece a esta empresa.",
         "AUTH_002": "No tenés permiso para esta acción."
       },
-      "entity": "préstamos",
+      "entity": "créditos",
       "noCreditCode": "sin código",
       "search": {
-        "label": "Buscar deudor o zona",
-        "placeholder": "Nombre, apellido o zona",
-        "hint": "Busca por nombre y por zona. El documento se busca desde Cartera."
+        "label": "Buscar crédito, deudor o zona",
+        "placeholder": "Nº de crédito, nombre, apellido o zona",
+        "hint": "Busca por número de crédito, nombre y zona. El documento se busca desde Cartera."
       },
       "arrearsSource": {
         "CALCULATED": "Calculada",
         "IMPORTED": "Del archivo",
         "MANUAL": "A mano"
       },
+      "export": {
+        "csv": "Exportar CSV",
+        "pdf": "Exportar PDF",
+        "working": "Preparando…",
+        "hint": "Descarga exactamente los créditos que estás viendo: con tus filtros, tu orden y tu alcance.",
+        "error": "No se pudo exportar."
+      },
+      "history": {
+        "title": "Historial de mora",
+        "subtitle": "Cada periodo en que este crédito estuvo en mora. Se mide desde que existe el historial; lo anterior se reconstruye de los casos cerrados.",
+        "empty": "Sin historial de mora",
+        "emptyText": "Este crédito no tiene periodos de mora registrados todavía.",
+        "unavailable": "No se pudo cargar el historial de mora.",
+        "number": "Mora #{n}",
+        "current": "Actual",
+        "ongoing": "en curso",
+        "estimated": "(aprox.)",
+        "estimatedHint": "El inicio es una cuenta (fecha de corte menos días de mora), no una fecha declarada.",
+        "reconstructed": "Reconstruido",
+        "reconstructedHint": "Sale de un caso cerrado antes de que existiera el historial: no tiene días máximos ni saldos.",
+        "duration": "Duración",
+        "peak": "Pico de mora",
+        "balanceIn": "Saldo al entrar",
+        "balanceOut": "Saldo al salir",
+        "enteredWith": "Entró con",
+        "source": "Origen de la mora",
+        "days": "{n, plural, one {# día} other {# días}}",
+        "end": {
+          "PAID": "Saldó la deuda",
+          "CURRENT": "Se puso al día",
+          "SOURCE_ABSENT": "Dejó de venir en el reporte",
+          "WRITTEN_OFF": "Castigado",
+          "CANCELLED": "Cancelado",
+          "DELETED": "Eliminado"
+        },
+        "endHint": {
+          "SOURCE_ABSENT": "La fuente dejó de reportarlo: no se sabe si pagó o se puso al día."
+        }
+      },
+      "ficha": {
+        "metrics": {
+          "title": "Recuperación",
+          "unavailable": "No se pudieron cargar las métricas de recuperación.",
+          "sinceEpisode": "Desde que empezó esta mora, el {date}.",
+          "sinceAll": "Histórico del crédito: ahora no está en mora.",
+          "estimated": "(inicio aproximado)",
+          "estimatedHint": "El inicio de la mora es una cuenta (fecha de corte menos días de mora), no una fecha declarada.",
+          "untracked": "Esta mora ya llevaba {n, plural, one {# día} other {# días}} cuando se empezó a registrar en Kobrax: lo que se hizo antes puede no estar cargado, y los días hasta el primer contacto, visita o pago cuentan desde el inicio de la mora.",
+          "recovered": "Recuperado",
+          "payments": "{n, plural, =0 {Sin pagos} one {# pago} other {# pagos}}",
+          "ofBalance": "de {amount} al entrar",
+          "activities": "Gestiones",
+          "breakdown": "{calls, plural, one {# llamada} other {# llamadas}} · {visits, plural, one {# visita} other {# visitas}} · {messages, plural, one {# mensaje} other {# mensajes}}",
+          "contacts": "Llegó a hablar con el deudor",
+          "contactsHint": "{n, plural, one {vez} other {veces}}",
+          "firstContact": "Primer contacto",
+          "firstVisit": "Primera visita",
+          "firstPayment": "Primer pago",
+          "noContact": "Todavía sin contacto",
+          "noVisit": "Todavía sin visita",
+          "noPayment": "Todavía sin pagos",
+          "inKobrax": "Desde que Kobrax lo gestiona: {when}",
+          "sameDay": "El mismo día",
+          "afterDays": "A los {n, plural, one {# día} other {# días}}",
+          "promises": "Promesas cumplidas",
+          "promisesKept": "{kept} de {closed}",
+          "compliance": "Cumplimiento {pct} %",
+          "noCompliance": "Todavía no hay promesas cerradas",
+          "activePromises": "{n, plural, one {# vigente} other {# vigentes}}",
+          "lastRecovered": "Última mora recuperada en",
+          "recoveredAllTime": "Recuperado en toda la vida del crédito"
+        },
+        "activity": {
+          "cta": "Registrar gestión",
+          "title": "Registrar una gestión",
+          "text": "Queda en el historial de la cobranza. Si el crédito todavía no tiene caso, se abre uno.",
+          "type": "Qué se hizo",
+          "result": "Resultado",
+          "resultLabel": "Resultado",
+          "resultPlaceholder": "Elegí cómo terminó",
+          "notes": "Observaciones",
+          "noteText": "Nota",
+          "promise": "Promesa de pago",
+          "amount": "Monto prometido",
+          "date": "Fecha prometida",
+          "method": "Medio de pago",
+          "methodPlaceholder": "Elegí el medio",
+          "bank": "Banco (opcional)",
+          "bankPlaceholder": "Sin banco",
+          "confirm": "Registrar",
+          "cancel": "Cancelar",
+          "done": "Gestión registrada",
+          "doneOpened": "Gestión registrada y caso abierto",
+          "results": {
+            "CONTACTED": "Habló con el deudor",
+            "NO_ANSWER": "No respondió",
+            "WRONG_NUMBER": "Número equivocado",
+            "NOT_FOUND": "No lo encontró",
+            "WRONG_ADDRESS": "Dirección equivocada",
+            "REFUSAL": "Se negó a pagar",
+            "PROMISE_TO_PAY": "Promesa de pago"
+          },
+          "errors": {
+            "TYPE_INVALID": "Ese tipo de gestión no se registra a mano.",
+            "NOTES_REQUIRED": "Escribí la nota.",
+            "NOTES_TOO_LONG": "La observación es demasiado larga.",
+            "RESULT_REQUIRED": "Elegí cómo terminó la gestión.",
+            "RESULT_NOT_ALLOWED": "Ese resultado no corresponde a este tipo de gestión.",
+            "PROMISE_REQUIRED": "Completá el monto, la fecha y el medio de pago de la promesa.",
+            "PROMISE_NOT_ALLOWED": "Sólo una gestión con resultado «promesa de pago» lleva promesa.",
+            "PROMISE_AMOUNT_INVALID": "El monto prometido tiene que ser mayor a cero.",
+            "PROMISE_DATE_INVALID": "Elegí la fecha prometida.",
+            "PROMISE_DATE_PAST": "La fecha prometida no puede ser anterior a hoy.",
+            "PROMISE_METHOD_REQUIRED": "Elegí el medio de pago de la promesa."
+          }
+        },
+        "person": {
+          "title": "La persona",
+          "hint": "Con quién hablar, dónde buscarla y quién responde por este crédito. Se corrige desde Cartera.",
+          "denied": "No tenés acceso a los datos de este cliente."
+        },
+        "notes": {
+          "title": "Notas",
+          "hint": "Lo que el equipo tiene que saber de este crédito. Se quedan aunque el caso se cierre.",
+          "empty": "Todavía no hay notas.",
+          "unavailable": "No se pudieron cargar las notas.",
+          "add": "Agregar nota",
+          "kind": "Tipo",
+          "kinds": { "INFO": "Informativa", "WARNING": "Atención", "IMPORTANT": "Importante" },
+          "placeholder": "Escribí la nota…",
+          "remaining": "{n} caracteres restantes",
+          "save": "Guardar nota",
+          "cancel": "Cancelar",
+          "saved": "Nota guardada",
+          "by": "Escrita por {name}",
+          "unknownAuthor": "alguien del equipo"
+        },
+        "promises": {
+          "title": "Promesas de pago",
+          "empty": "No hay promesas de pago registradas.",
+          "unavailable": "No se pudieron cargar las promesas.",
+          "summary": "{made, plural, =0 {Sin promesas} one {# promesa} other {# promesas}} · {kept} cumplidas · {broken} incumplidas",
+          "compliance": "Cumplimiento {pct} %",
+          "noCompliance": "Cumplimiento: todavía no hay promesas cerradas",
+          "unresolved": "{n, plural, one {# promesa venció sin que nadie registrara qué pasó} other {# promesas vencieron sin que nadie registrara qué pasó}}.",
+          "overdueHint": "La fecha pasó y nadie registró si pagó: no se cuenta como incumplida.",
+          "dueOn": "para el {date}",
+          "unknownAssignee": "Asignado",
+          "status": {
+            "ACTIVE": "Vigente",
+            "OVERDUE": "Vencida sin cerrar",
+            "KEPT": "Cumplida",
+            "BROKEN": "Incumplida",
+            "EXECUTED": "Ejecutada",
+            "CANCELLED": "Cancelada",
+            "RESCHEDULED": "Reagendada"
+          }
+        },
+        "payments": {
+          "title": "Pagos",
+          "empty": "Todavía no hay pagos registrados.",
+          "unavailable": "No tenés permiso para ver los pagos, o no se pudieron cargar.",
+          "count": "{n, plural, one {# pago} other {# pagos}}",
+          "collected": "Cobrado por Kobrax: {amount}",
+          "receipt": "Comprobante Nº {n}",
+          "by": "Registró {name}",
+          "unknownUser": "alguien del equipo",
+          "seeAll": "Ver en Pagos",
+          "externalNote": "Un pago sobre una operación de PSF cuenta como recuperado, pero no cambia el saldo ni la mora que reportó el archivo: esos números se actualizan con el próximo reporte."
+        }
+      },
       "arrearsMode": "¿Cómo quedan?",
+      "bulkWithoutCase": "{n, plural, one {# crédito elegido no tiene caso abierto y se deja afuera} other {# créditos elegidos no tienen caso abierto y se dejan afuera}}.",
       "bulk": {
         "assign": "Asignar a un cobrador",
         "assignTitle": "Asignar {count} préstamos a un cobrador",
@@ -1120,7 +1507,13 @@
         "cancel": "Volver",
         "done": "Pago registrado",
         "immutable": "Un pago registrado no se puede editar ni anular. Si está mal, se corrige con otro asiento.",
-        "noCredit": "Elegí primero el crédito desde la ficha del deudor."
+        "noCredit": "Elegí primero el crédito desde la ficha del deudor.",
+        "moreOptions": "Más opciones",
+        "lessOptions": "Menos opciones",
+        "channel": "¿Quién recibió la plata?",
+        "notes": "Nota (opcional)",
+        "externalHint": "Este crédito viene de otra fuente: el pago queda registrado como cobro de Kobrax y no cambia el saldo ni la mora reportados. Se actualizan con el próximo reporte.",
+        "suggested": "Sugerido: lo que corresponde cobrar hoy"
       },
       "detail": {
         "title": "El pago",
@@ -1168,6 +1561,10 @@
         "generic": "No se pudo completar la acción.",
         "PAYMENT_001": "El monto no puede ser negativo.",
         "AUTH_002": "No tenés permiso para esta acción."
+      },
+      "channel": {
+        "KOBRAX_COLLECTED": "La cobró Kobrax",
+        "EXTERNAL_CONFIRMED": "Pagó por un canal de la entidad"
       }
     }
   },
@@ -1223,7 +1620,13 @@
     "save": "Guardar cambios",
     "saved": "Datos guardados",
     "saveError": "No se pudieron guardar los datos",
-    "noAccess": "No tienes acceso a los datos de la cuenta"
+    "noAccess": "No tienes acceso a los datos de la cuenta",
+    "arrearsMethod": "Cómo se cuenta la mora (créditos nuevos)",
+    "arrearsMethodHint": "Viene elegido en cada crédito nuevo; se puede cambiar crédito por crédito. Los ya dados no cambian.",
+    "arrearsMethods": {
+      "oldest_unpaid": "Desde la cuota impaga más antigua",
+      "first_default": "Desde el primer atraso, hasta quedar al día (como los bancos)"
+    }
   },
   "exports": {
     "title": "Exportar",
@@ -1305,7 +1708,9 @@
     },
     "entity": "clientes",
     "filters": {
-      "collector": "Cobrador",
+      "collector": "Cobrador del caso",
+      "manager": "Responsable del crédito",
+      "allManagers": "Todos los responsables",
       "branch": "Sucursal",
       "allCollectors": "Todos los cobradores",
       "allBranches": "Todas las sucursales",
@@ -1361,11 +1766,7 @@
       "timeline": "Bitácora de actividad",
       "cases": "En mora"
     },
-    "newLoan": "Nuevo préstamo",
-    "loanTitle": "Nuevo préstamo",
-    "loanSubtitle": "Para {name}",
-    "loanSave": "Dar el préstamo",
-    "loanCreated": "Préstamo registrado",
+    "newLoan": "Nuevo crédito",
     "loanMode": {
       "A": "Ya sé la cuota",
       "B": "Calcular la cuota"
@@ -1424,7 +1825,10 @@
       "DAILY": "Diario",
       "WEEKLY": "Semanal",
       "BIWEEKLY": "Quincenal",
-      "MONTHLY": "Mensual"
+      "MONTHLY": "Mensual",
+      "QUARTERLY": "Trimestral",
+      "SEMIANNUAL": "Semestral",
+      "ANNUAL": "Anual"
     },
     "schedule": {
       "number": "Cuota",
@@ -1463,10 +1867,9 @@
       "openLoanHint": "vacío = préstamo abierto",
       "assignedTo": "Lo cobra",
       "unassigned": "Sin asignar",
-      "inProgress": "Este préstamo ya está en curso",
-      "inProgressHint": "Para cargar cartera vieja: se guarda con el saldo y la mora que ya tiene.",
-      "outstanding": "Saldo actual",
-      "daysPastDue": "Días de mora",
+      "assignedToHint": "Cambiarlo no mueve los casos abiertos: el cobrador del caso se reasigna aparte.",
+      "currentAssignee": "Responsable actual",
+      "meNamed": "Yo ({name})",
       "relationContacts": "Sus teléfonos",
       "relationLocations": "Sus direcciones",
       "remove": "Quitar",
@@ -1484,7 +1887,19 @@
       "creditNoCode": "Préstamo sin código",
       "phoneHint": "Al menos 5 dígitos. Puede empezar con + y llevar espacios o guiones.",
       "collateralTypeUnset": "Sin clasificar",
-      "attachmentType": "Tipo de adjunto"
+      "attachmentType": "Tipo de adjunto",
+      "coordMode": "Ubicación en el mapa",
+      "coordManual": "Manual",
+      "coordGps": "Mi ubicación",
+      "coordMap": "Mapa",
+      "captureLocation": "Capturar mi ubicación",
+      "recaptureLocation": "Volver a capturar",
+      "locating": "Buscando tu ubicación…",
+      "noGeo": "Este navegador no puede dar tu ubicación. Podés marcarla en el mapa o escribirla.",
+      "geoDenied": "No se pudo obtener tu ubicación (permiso denegado o sin señal). Podés marcarla en el mapa o escribirla.",
+      "pinHint": "Tocá el mapa para marcar el punto; después podés arrastrar el pin.",
+      "pinAt": "Punto: {lat}, {lng}",
+      "mapPick": "Mapa para marcar la ubicación de la dirección"
     },
     "fields": {
       "document": "Documento",
@@ -1536,6 +1951,14 @@
     "noOpenCredits": "No tiene créditos abiertos.",
     "show": "Mostrar",
     "seeOnMap": "Ver en mapa",
+    "details": "Ver detalle",
+    "mapView": "Mapa con la ubicación",
+    "noPoint": "Sin punto en el mapa",
+    "verified": "Verificado",
+    "yes": "Sí",
+    "no": "No",
+    "coordinates": "Coordenadas",
+    "contactableLabel": "Se le puede llamar",
     "seeAll": "Ver todo",
     "attachmentsEmptyHint": "Subí copias de CI, certificados de trabajo o facturas de servicios para completar el legajo del cliente. También podés arrastrarlos acá.",
     "page": "Página {page} de {pages}",
@@ -1628,6 +2051,306 @@
         "date": "La próxima fecha de cobro pasa a ser la que elijas. Tiene que ser futura.",
         "none": "Queda como préstamo abierto: sin vencimiento pactado no hay días de mora que contar."
       }
+    },
+    "creditForm": {
+      "title": "Nuevo crédito",
+      "subtitle": "Para {name}",
+      "save": "Crear crédito",
+      "created": "Crédito registrado",
+      "definitionLabel": "¿Cómo querés definir el crédito?",
+      "definition": {
+        "calculated": "Calcular cuotas",
+        "agreed_installment": "Cuota acordada",
+        "agreed_total": "Total acordado"
+      },
+      "definitionHint": {
+        "calculated": "La cuota sale del interés, el número de cuotas y la frecuencia.",
+        "agreed_installment": "Ya sabés cuánto va a pagar por cuota. No hace falta una tasa.",
+        "agreed_total": "Acordaron cuánto devuelve en total. No hace falta una tasa."
+      },
+      "principal": "Monto a prestar",
+      "ratePercent": "Interés (%)",
+      "installmentsCount": "Período del préstamo",
+      "term": "Plazo (en períodos)",
+      "openLoanHint": "vacío = préstamo abierto",
+      "installmentAmount": "Cuota acordada",
+      "agreedTotal": "Total acordado",
+      "repayment": "Forma de pago",
+      "repaymentOptions": {
+        "single": "Pago único",
+        "installments": "En cuotas"
+      },
+      "frequency": "Frecuencia de pago",
+      "termFrequency": "Cada período es",
+      "firstDueDate": "Primer pago",
+      "paymentDate": "Fecha de pago",
+      "advanced": "Opciones avanzadas",
+      "interestType": "Tipo de interés",
+      "interestTypes": {
+        "simple": "Simple",
+        "compound": "Compuesto"
+      },
+      "amortization": "Tipo de cuota",
+      "amortizations": {
+        "fixed_installment": "Cuota fija",
+        "fixed_principal": "Cuota variable",
+        "single_payment": "Pago único"
+      },
+      "rateBase": "Cómo se aplica el interés",
+      "quote": {
+        "installment": "Cuota",
+        "firstInstallment": "Primera cuota",
+        "total": "Total a cobrar",
+        "profit": "Ganancia",
+        "openLoan": "Préstamo abierto: sin número de cuotas no hay total ni plan de pagos.",
+        "insurance": "Desgravamen",
+        "charges": "Otros cargos",
+        "deducted": "Descontado",
+        "netDisbursement": "Monto a entregar"
+      },
+      "incomplete": "Completá los datos para ver la cuota y el plan de pagos.",
+      "plan": {
+        "title": "Plan de pagos",
+        "hint": "Vista previa con las mismas condiciones que se guardan con el crédito.",
+        "number": "Cuota",
+        "dueDate": "Fecha",
+        "principal": "Capital",
+        "interest": "Interés",
+        "amount": "Total",
+        "balance": "Saldo de capital",
+        "insurance": "Seguro",
+        "charges": "Cargos"
+      },
+      "issues": {
+        "PRINCIPAL_INVALID": "El monto tiene que ser mayor a 0.",
+        "RATE_INVALID": "El interés no puede ser negativo.",
+        "RATE_OUT_OF_RANGE": "El interés supera el máximo: 100 % por cuota o 500 % sobre el total.",
+        "RATE_BASE_NOT_SUPPORTED": "El interés sobre el total sólo se aplica a interés simple con cuota fija.",
+        "COMBINATION_NOT_SUPPORTED": "Esa combinación de interés y método de amortización no se ofrece.",
+        "PERIODS_INVALID": "El número de cuotas tiene que ser un entero entre 1 y 600.",
+        "INSTALLMENT_INVALID": "La cuota tiene que ser mayor a 0.",
+        "TOTAL_INVALID": "El total tiene que ser mayor a 0.",
+        "FREQUENCY_REQUIRED": "Elegí una frecuencia.",
+        "DATE_INVALID": "La fecha no es válida.",
+        "INSTALLMENT_TOO_SMALL": "El total no alcanza para esa cantidad de cuotas.",
+        "TOTAL_BELOW_PRINCIPAL": "Vas a cobrar menos de lo que prestás. Se puede guardar igual.",
+        "RATE_PERIOD_NOT_SUPPORTED": "El interés sobre el total se aplica una sola vez: no puede ser mensual ni anual.",
+        "TERM_NOT_WHOLE": "Ese plazo no da un número entero de cuotas con esta frecuencia.",
+        "INSURANCE_INVALID": "El desgravamen tiene que estar entre 0 y 5 % mensual.",
+        "CHARGE_INVALID": "Hay un cargo sin valor válido.",
+        "DEDUCTION_TOO_LARGE": "Lo descontado no puede ser todo el monto."
+      },
+      "ratePeriod": "El interés es",
+      "ratePeriods": {
+        "per_installment": "por cuota",
+        "monthly": "mensual",
+        "quarterly": "trimestral",
+        "semiannual": "semestral",
+        "annual": "anual"
+      },
+      "rateEquivalent": "Equivale a {rate} % por cuota ({frequency}).",
+      "rateConvention": "Tipo de tasa",
+      "rateConventions": {
+        "nominal": "Nominal (proporcional)",
+        "effective": "Efectiva (TEA)"
+      },
+      "termUnit": "Plazo en",
+      "termUnits": {
+        "installments": "cuotas",
+        "months": "meses",
+        "years": "años"
+      },
+      "termEquivalent": "= {count} cuotas",
+      "amortizationHints": {
+        "fixed_installment": "Todas las cuotas son iguales.",
+        "fixed_principal": "Paga la misma parte de capital en cada cuota y el interés sobre lo que debe: la cuota baja en cada pago.",
+        "single_payment": "Devuelve todo en una sola fecha."
+      },
+      "insurance": "Desgravamen (% mensual)",
+      "insuranceHint": "Sobre el saldo de capital de cada período: baja con él. Vacío = sin seguro.",
+      "charges": "Otros cargos",
+      "chargeLabel": "Descripción",
+      "chargeLabelPlaceholder": "Comisión, gastos…",
+      "chargeKind": "Cómo se cobra",
+      "chargeKinds": {
+        "per_installment": "Monto en cada cuota",
+        "first_amount": "Monto único, en la 1.ª cuota",
+        "first_percent": "% del monto, en la 1.ª cuota",
+        "deducted_amount": "Monto descontado del desembolso",
+        "deducted_percent": "% descontado del desembolso"
+      },
+      "chargeValue": "Valor",
+      "chargeAdd": "Agregar cargo",
+      "chargeRemove": "Quitar",
+      "exportPlan": "Exportar plan de pagos",
+      "arrearsMethod": "Cómo se cuenta la mora",
+      "arrearsMethods": {
+        "oldest_unpaid": "Desde la cuota impaga más antigua",
+        "first_default": "Desde el primer atraso, hasta quedar al día"
+      },
+      "arrearsMethodHints": {
+        "oldest_unpaid": "Pagar la cuota más atrasada baja la mora.",
+        "first_default": "Como los bancos: sigue contando desde la primera cuota que no se pagó hasta que se pone al día."
+      },
+      "paid": {
+        "label": "Cuotas ya pagadas antes de registrarlo",
+        "none": "Ninguna (crédito nuevo)",
+        "option": "{count} de {total} · {date}",
+        "hint": "Para un crédito que ya venía corriendo fuera de Kobrax. No cambia el número de cuotas: marca las primeras como pagadas.",
+        "status": "Estado",
+        "paidStatus": "Pagada",
+        "pendingStatus": "Pendiente",
+        "markPaid": "Marcar pagada (y las anteriores)",
+        "markPending": "Marcar pendiente (y las siguientes)",
+        "thisMonth": "este mes"
+      },
+      "situation": {
+        "paidCount": "Cuotas pagadas",
+        "paidOf": "{count} de {total}",
+        "outstanding": "Saldo pendiente",
+        "next": "Próxima cuota",
+        "nextValue": "N.º {number} · {date}",
+        "arrears": "Mora",
+        "current": "Al día",
+        "days": "{count} días",
+        "since": "desde {date}",
+        "oldestUnpaid": "Cuota impaga más antigua: {number} (venció {date})"
+      }
+    },
+    "creditDetail": {
+      "edit": "Editar",
+      "cancelEdit": "Cancelar",
+      "save": "Guardar cambios",
+      "saved": "Cambios guardados",
+      "sections": {
+        "terms": "Condiciones",
+        "current": "Estado actual",
+        "plan": "Plan de pagos",
+        "collection": "Cobranza",
+        "origin": "Origen",
+        "initialState": "Estado al registrar"
+      },
+      "definition": "Definición",
+      "legacyTerms": "Registrado antes de que existieran las condiciones: se muestra la cuota que se cobra. Al editarlo se define como cuota acordada.",
+      "interest": "Interés",
+      "interestPerPeriod": "{rate} % por período",
+      "interestTotal": "{rate} % sobre el total",
+      "installments": "Cuotas",
+      "singlePayment": "Pago único",
+      "firstDueDate": "Primer pago",
+      "paymentDate": "Fecha de pago",
+      "outstanding": "Saldo pendiente",
+      "totalToCollect": "Total a cobrar",
+      "unknown": "No registrado",
+      "nextDue": "Próximo cobro",
+      "noNextDue": "Sin fecha",
+      "arrears": "Mora",
+      "current": "Al día",
+      "status": "Estado",
+      "progress": "Progreso de pago",
+      "registeredInProgress": "Se cargó en curso: {paid} cuotas ya pagadas al registrarlo.",
+      "declaredArrears": "Mora declarada al registrarlo: {days} días.",
+      "planHint": "Calculado con el mismo motor y las mismas condiciones con que se guardó.",
+      "planPaidHint": "Las primeras {count} cuotas ya estaban pagadas al registrarlo.",
+      "storedPlanHint": "Cronograma guardado al darlo de alta.",
+      "openLoanPlan": "Préstamo abierto: sin número de cuotas no hay plan de pagos.",
+      "manager": "Responsable",
+      "notes": "Notas",
+      "origin": "Origen",
+      "origins": {
+        "manual": "Cargado a mano",
+        "quick_batch": "Carga rápida",
+        "import": "Importado de archivo",
+        "api": "Integración"
+      },
+      "createdAt": "Registrado",
+      "externalRef": "Referencia externa",
+      "legacyBalance": "Saldo anterior al cambio de regla: mide el capital pendiente, sin la ganancia.",
+      "blocked": {
+        "payments": "Ya tiene pagos registrados: las condiciones y el estado al registrar no se cambian, porque reescribirían lo cobrado. Eso es una reestructura.",
+        "schedule": "Tiene un cronograma guardado: sus condiciones se podrán redefinir cuando llegue el cronograma real.",
+        "locked": "Este crédito vino de otra fuente: sus condiciones las manda esa fuente y no se editan acá."
+      },
+      "initial": {
+        "hint": "Para un préstamo que ya venía corriendo cuando se lo cargó. Se puede ajustar mientras no haya pagos registrados.",
+        "paidInstallments": "Cuotas ya pagadas",
+        "outstandingBalance": "Saldo pendiente",
+        "outstandingPlaceholder": "vacío = {amount}",
+        "daysPastDue": "Días de mora",
+        "result": "Queda con saldo {balance} y próximo cobro el {date}.",
+        "issues": {
+          "TERMS_INVALID": "Completá las condiciones para ver cómo queda.",
+          "PAID_INSTALLMENTS_INVALID": "Las cuotas pagadas tienen que ser un número entero.",
+          "PAID_INSTALLMENTS_TOO_MANY": "Con todas las cuotas pagadas el crédito está saldado, no en curso.",
+          "BALANCE_INVALID": "El saldo tiene que ser mayor a 0.",
+          "BALANCE_ABOVE_TOTAL": "El saldo no puede superar el total a cobrar.",
+          "DAYS_PAST_DUE_INVALID": "Los días de mora tienen que ser un entero entre 0 y 3650."
+        }
+      },
+      "importedPlan": "Crédito importado: el plan de pagos lo lleva la fuente. Acá se ve la cuota y la próxima fecha del último archivo.",
+      "importedAt": "Última importación",
+      "completeness": "Datos que trajo el archivo: {known} de {total}",
+      "completenessMissing": "No registrados: {fields}.",
+      "importFields": {
+        "principalAmount": "monto",
+        "outstandingBalance": "saldo",
+        "interestRate": "tasa",
+        "installmentAmount": "cuota",
+        "installmentsCount": "número de cuotas",
+        "frequency": "frecuencia",
+        "nextDueDate": "próximo vencimiento",
+        "disbursedAt": "fecha de desembolso",
+        "daysPastDue": "días de mora"
+      },
+      "interestWithPeriod": "{rate} % {period}",
+      "interestEquivalent": "{rate} % por cuota",
+      "interestImported": "{rate} % (según la fuente)",
+      "insurance": "Desgravamen",
+      "insuranceValue": "{rate} % mensual sobre saldo",
+      "charges": "Otros cargos",
+      "arrearsSince": "desde {date}",
+      "oldestUnpaid": "Cuota a reclamar: {number} (venció {date})",
+      "oldestUnpaidNoNumber": "Cuota a reclamar: venció {date}",
+      "arrearsMethod": "Cómo se cuenta la mora",
+      "externalId": "Operación",
+      "reportedAsOf": "Números al corte del",
+      "reportedAsOfStale": "{date} (desactualizado)",
+      "reportStale": "Saldo y mora son del corte del {date}, hace más de {days, plural, one {# día} other {# días}}: pueden no reflejar la situación de hoy. Mientras tanto no se abren casos nuevos con este dato.",
+      "syncStatus": "En el reporte",
+      "syncAbsentSince": "Ya no viene desde el {date}",
+      "sync": {
+        "PRESENT": "Viene en el último reporte",
+        "ABSENT": "Ya no viene"
+      }
+    },
+    "creditBadges": {
+      "inProgress": "Cargado en curso"
+    },
+    "linkReview": {
+      "title": "Revisar vínculo",
+      "textSuggestions": "La importación creó este cliente porque ya tenías a alguien con el mismo nombre, y no los juntó sola. Sus créditos ya están en cartera y en mora. Si es la misma persona, vinculalos; si no, confirmá que es otra.",
+      "textSameFile": "El reporte trae varias operaciones con este mismo nombre y se juntaron en un solo cliente. Confirmá que es una sola persona.",
+      "credits": "{n, plural, one {# crédito} other {# créditos}}",
+      "isThisOne": "Es esta persona",
+      "isNew": "Es otra persona",
+      "linked": "Créditos vinculados",
+      "confirmed": "Revisión cerrada",
+      "errors": {
+        "generic": "No se pudo guardar. Probá de nuevo."
+      }
+    },
+    "duplicate": {
+      "checking": "Buscando si ya existe…",
+      "documentTaken": "Este carnet ya es de {name}.",
+      "documentTakenDeleted": "Este carnet es de {name}, que está dado de baja. No se puede usar para un cliente nuevo.",
+      "documentHint": "Si es la misma persona, abrí su ficha en vez de crearla de nuevo.",
+      "openClient": "Ver cliente",
+      "namesTitle": "{n, plural, one {Ya hay un cliente con este nombre} other {Ya hay # clientes con este nombre}}",
+      "namesText": "Puede ser la misma persona. Revisalos antes de crear uno nuevo.",
+      "otherDocument": "otro carnet",
+      "noDocument": "sin carnet",
+      "credits": "{n, plural, =0 {sin créditos} one {# crédito} other {# créditos}}",
+      "acceptNames": "Es otra persona, crear igual"
     }
   },
   "team": {

@@ -30,6 +30,8 @@ import {
   AgendaItemStatus,
   ScheduleTimeMode,
   CatalogType,
+  CreditDataOrigin,
+  ExternalSyncStatus,
 } from '@prisma/client';
 import { ROLE_PERMISSIONS, RoleType, validateAgendaDetails } from '@kobrax/shared';
 import bcrypt from 'bcryptjs';
@@ -48,6 +50,7 @@ const PERMISSIONS = [
   ['case:write', 'cases', 'UPDATE', 'ACCOUNT'],
   ['case:assign', 'cases', 'UPDATE', 'BRANCH'],
   ['case:close', 'cases', 'UPDATE', 'ACCOUNT'],
+  ['case:export', 'cases', 'EXECUTE', 'ACCOUNT'],
   ['payment:read', 'payments', 'READ', 'ACCOUNT'],
   ['payment:write', 'payments', 'CREATE', 'OWN'],
   ['payment:approve', 'payments', 'APPROVE', 'ACCOUNT'],
@@ -78,6 +81,10 @@ const PERMISSIONS = [
   ['role:read', 'roles', 'READ', 'ACCOUNT'],
   ['role:write', 'roles', 'UPDATE', 'ACCOUNT'],
   ['audit:read', 'audit', 'READ', 'ACCOUNT'],
+  // Faltaban: los roles los tenían en `ROLE_PERMISSIONS`, pero el bucle de roles se saltea en
+  // silencio todo código que no esté en esta lista, así que nadie los recibía en el JWT.
+  ['assignment:write', 'assignments', 'UPDATE', 'ACCOUNT'],
+  ['data:scope:all', 'data', 'READ', 'ACCOUNT'],
 ] as const;
 
 /**
@@ -118,6 +125,10 @@ async function main() {
     });
     const codes = ROLE_PERMISSIONS[name as RoleType] as string[];
     const perms = await prisma.permission.findMany({ where: { code: { in: codes as string[] } } });
+    // 🔴 Un permiso del rol que no está en el catálogo se perdía sin aviso (pasó con
+    // `assignment:write` y `data:scope:all`). Ahora frena el seed y dice cuál.
+    const missing = codes.filter((c) => !perms.some((p) => p.code === c));
+    if (missing.length > 0) throw new Error(`Permisos de ${name} sin catálogo en seed.ts: ${missing.join(', ')}`);
     for (const perm of perms) {
       await prisma.rolePermission.upsert({
         where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } },
@@ -127,6 +138,23 @@ async function main() {
     }
   }
   console.log(`  ✓ ${Object.keys(ROLES).length} roles`);
+
+  // Corte para PRODUCCIÓN: `pnpm db:seed:catalog` carga sólo permisos y roles y
+  // se detiene acá. Sin el catálogo, el registro público falla con
+  // ROLE_CATALOG_MISSING y no se puede crear la primera cuenta; con el seed
+  // completo entrarían clientes, créditos y rutas de prueba a la base real.
+  //
+  // Es un corte en ESTE archivo y no un seed aparte a propósito: la lista de
+  // permisos vive acá arriba, y copiarla a otro archivo es exactamente el error
+  // que documenta el comentario de ROLES — dos listas que se separan en
+  // silencio y sólo se notan meses después.
+  // Se lee de argv y no de una variable de entorno para no depender de
+  // cross-env: `VAR=1 comando` no existe en PowerShell, y el script tiene que
+  // correr igual en Windows (desarrollo) y en Linux (producción).
+  if (process.argv.includes('--catalog')) {
+    console.log('  ⏹ --catalog → sin datos de demostración');
+    return;
+  }
 
   // 3) Tenant demo + owner
   const account = await prisma.account.upsert({
@@ -225,6 +253,20 @@ async function main() {
   });
 
   console.log('  ✓ tenant DEMO2 + multi@kobrax.demo (2 empresas · pass: Kobrax123!)');
+
+  // multi2@kobrax.demo: MANAGER en DEMO (default) y DEMO2. Como multi@, pero sin rol crítico →
+  // sin MFA obligatorio, para que el QA pruebe el cambio de empresa sin enrolar un authenticator.
+  const multi2 = await ensureUser('multi2@kobrax.demo', 'Marcos', 'Multi', 'MANAGER', {
+    isDefault: true,
+  });
+  const managerRole = await prisma.role.findUniqueOrThrow({ where: { name: 'MANAGER' } });
+  await prisma.userAccount.upsert({
+    where: { userId_accountId: { userId: multi2.id, accountId: account2.id } },
+    update: {},
+    create: { userId: multi2.id, accountId: account2.id, roleId: managerRole.id },
+  });
+
+  console.log('  ✓ multi2@kobrax.demo (2 empresas, MANAGER en ambas, sin MFA · pass: Kobrax123!)');
 
   // 4) Cadena operativa demo (idempotente por el blind index del documento del cliente).
   const acc = account.id;
@@ -591,6 +633,15 @@ async function seedAgenda(acc: string, collectorId: string): Promise<void> {
         installmentsCount: opts.installmentsCount ?? 0, // 0 = préstamo abierto (§4.1)
         status: opts.status ?? CreditStatus.ACTIVE,
         daysPastDue: opts.daysPastDue,
+        // El importado lleva su identidad de operación externa en columnas (D1), como lo deja el importador.
+        ...(opts.origin === 'import'
+          ? {
+              origin: CreditDataOrigin.IMPORT,
+              externalSource: 'PSF',
+              externalId: `CRD-${opts.doc}`,
+              syncStatus: ExternalSyncStatus.PRESENT,
+            }
+          : {}),
         metadata: {
           frequency: opts.frequency,
           origin: opts.origin,

@@ -9,6 +9,64 @@ export enum PaymentFrequency {
   WEEKLY = 'WEEKLY',
   BIWEEKLY = 'BIWEEKLY',
   MONTHLY = 'MONTHLY',
+  QUARTERLY = 'QUARTERLY',
+  SEMIANNUAL = 'SEMIANNUAL',
+  ANNUAL = 'ANNUAL',
+}
+
+/**
+ * Las frecuencias que las pantallas ofrecen hoy. Las trimestral/semestral/anual ya las entiende el
+ * motor, pero **no se ofrecen** hasta que salga el móvil que las conoce: una versión vieja lee un
+ * valor desconocido como `MONTHLY` (`readCreditMetadata`) y cobraría en la fecha equivocada.
+ */
+export const OFFERED_FREQUENCIES: readonly PaymentFrequency[] = [
+  PaymentFrequency.DAILY,
+  PaymentFrequency.WEEKLY,
+  PaymentFrequency.BIWEEKLY,
+  PaymentFrequency.MONTHLY,
+];
+
+/**
+ * Cómo se definió el crédito (F4/06 · D1). Decide también **quién manda** en la cuota (D14):
+ * calculado → el motor; cuota acordada → la cuota del usuario; total acordado → el total del usuario.
+ */
+export enum CreditDefinition {
+  CALCULATED = 'calculated',
+  AGREED_INSTALLMENT = 'agreed_installment',
+  AGREED_TOTAL = 'agreed_total',
+}
+
+/** Tipo de interés (D2). Es un eje distinto del método de amortización: francés NO es "compuesto". */
+export enum InterestType {
+  SIMPLE = 'simple',
+  COMPOUND = 'compound',
+}
+
+/** Método de amortización (D3). Pago único es un método, no una frecuencia (D5). */
+export enum AmortizationMethod {
+  FIXED_INSTALLMENT = 'fixed_installment',
+  FIXED_PRINCIPAL = 'fixed_principal',
+  SINGLE_PAYMENT = 'single_payment',
+}
+
+/**
+ * Qué representa `credits.outstanding_balance` (F4/06 · D15). Se guarda en `metadata.balanceBasis`
+ * **sólo cuando se sabe**; nunca se estampa una suposición.
+ *
+ *  · `total`     — saldo TOTAL pendiente de cobro (capital + interés/ganancia). La regla desde D15.
+ *  · `principal` — el saldo es el capital: sólo el préstamo abierto, cuyo total nadie conoce (D16).
+ *
+ * El saldo de CAPITAL es otro concepto y no vive en esa columna: se deriva del plan de pagos.
+ */
+export const BALANCE_BASES = ['total', 'principal'] as const;
+export type BalanceBasis = (typeof BALANCE_BASES)[number];
+/** La base efectiva: `legacy` = crédito manual anterior a D15, sin marca (ver la estrategia de migración). */
+export type EffectiveBalanceBasis = BalanceBasis | 'legacy';
+
+/** Forma de pago de un total acordado: todo junto o repartido en cuotas. */
+export enum RepaymentForm {
+  SINGLE = 'single',
+  INSTALLMENTS = 'installments',
 }
 
 /**
@@ -21,6 +79,76 @@ export enum CreditOrigin {
   IMPORT = 'import',
   API = 'api',
 }
+
+/**
+ * **A qué período se refiere el porcentaje de interés** (F4/06 · D17), independiente de la frecuencia
+ * de pago. El banco dice «18 % anual» y se paga mensual; el prestamista, «5 % mensual» y cobra semanal.
+ * El motor lo convierte a la tasa de cada cuota (`periodicRatePercent`). Ausente = por cuota (como antes).
+ */
+export enum RatePeriod {
+  PER_INSTALLMENT = 'per_installment',
+  MONTHLY = 'monthly',
+  QUARTERLY = 'quarterly',
+  SEMIANNUAL = 'semiannual',
+  ANNUAL = 'annual',
+}
+
+/**
+ * Cómo se convierte una tasa de otro período a la de la cuota (D17):
+ *  · `nominal` (default) — proporcional: 18 % anual pagando mensual = 18/12 = 1,5 % por mes;
+ *  · `effective` — la tasa ya capitaliza (TEA): (1 + 18 %)^(1/12) − 1 ≈ 1,389 % por mes.
+ */
+export enum RateConvention {
+  NOMINAL = 'nominal',
+  EFFECTIVE = 'effective',
+}
+
+/**
+ * Cómo se cuentan los días de mora (F4/06 · D20). Se elige por crédito; el default lo pone la cuenta.
+ *  · `oldest_unpaid` — desde la cuota impaga más antigua: pagar la más atrasada baja la mora. Es lo
+ *    que el sistema hacía siempre, y el default si la cuenta no dice otra cosa.
+ *  · `first_default` — como los bancos: desde la primera cuota que no se pagó, y **no baja** hasta que
+ *    el cliente queda al día. La fecha de ese primer atraso se guarda (`metadata.arrearsSince`).
+ */
+export enum ArrearsMethod {
+  OLDEST_UNPAID = 'oldest_unpaid',
+  FIRST_DEFAULT = 'first_default',
+}
+
+export const DEFAULT_ARREARS_METHOD = ArrearsMethod.OLDEST_UNPAID;
+
+/**
+ * Cuándo se cobra un cargo (F4/06 · D18):
+ *  · `per_installment` — un monto fijo en cada cuota (gastos de cobranza);
+ *  · `first_installment` — una vez, en la primera cuota (comisión de apertura, fija o % del monto);
+ *  · `deducted` — se descuenta del desembolso: no toca las cuotas, se entrega menos.
+ */
+export enum ChargeTiming {
+  PER_INSTALLMENT = 'per_installment',
+  FIRST_INSTALLMENT = 'first_installment',
+  DEDUCTED = 'deducted',
+}
+
+/** En qué se expresa el plazo en pantalla (D17). Se guarda siempre convertido a número de cuotas. */
+export enum TermUnit {
+  INSTALLMENTS = 'installments',
+  MONTHS = 'months',
+  YEARS = 'years',
+}
+
+/**
+ * Períodos de pago por año, para convertir tasas y plazos (D17). Quincenal = 26 porque el
+ * calendario avanza de a 14 días (`addPeriods`); diario = 360, la convención bancaria.
+ */
+export const PAYMENTS_PER_YEAR: Record<PaymentFrequency, number> = {
+  [PaymentFrequency.DAILY]: 360,
+  [PaymentFrequency.WEEKLY]: 52,
+  [PaymentFrequency.BIWEEKLY]: 26,
+  [PaymentFrequency.MONTHLY]: 12,
+  [PaymentFrequency.QUARTERLY]: 4,
+  [PaymentFrequency.SEMIANNUAL]: 2,
+  [PaymentFrequency.ANNUAL]: 1,
+};
 
 /** Base de cálculo del interés en el Modo B (§4.2). Default: por período, "la convención dominante". */
 export enum InterestBase {
@@ -70,12 +198,21 @@ export const ARREARS_SOURCES = ['CALCULATED', 'IMPORTED', 'MANUAL'] as const;
 export type ArrearsSource = (typeof ARREARS_SOURCES)[number];
 
 /**
+ * Si una operación externa vino en el último reporte de su alcance (D4). **`ABSENT` ≠ al día ≠ pagado**:
+ * que un reporte de mora deje de traerla no dice si se puso al día o si canceló.
+ */
+export const EXTERNAL_SYNC_STATUSES = ['PRESENT', 'ABSENT'] as const;
+export type ExternalSyncStatus = (typeof EXTERNAL_SYNC_STATUSES)[number];
+
+/**
  * Por qué se cerró un caso. Es texto libre en la base (`closed_reason`); acá viven **los que pone
  * el sistema**, que son los que después hay que poder contar.
  *
  * `PAID` y `CURRENT` los escribe el trabajo diario y **no exigen gestión registrada**: si el deudor
- * pagó por transferencia nunca hubo visita, y cobrado es cobrado. `MANUAL` es el cierre de una
+ * pagó por transferencia nunca hubo visita, y cobrado es cobrado. `SOURCE_ABSENT` también lo escribe
+ * el job: la operación externa dejó de venir en su reporte (D4) — **no es «al día» ni «pagado»**, y si
+ * vuelve a aparecer el mismo caso se reabre. `MANUAL` es el cierre de una
  * persona desde la ficha, que sí la exige (`CASE_001`).
  */
-export const CASE_CLOSE_REASONS = ['PAID', 'CURRENT', 'MANUAL'] as const;
+export const CASE_CLOSE_REASONS = ['PAID', 'CURRENT', 'SOURCE_ABSENT', 'MANUAL'] as const;
 export type CaseCloseReason = (typeof CASE_CLOSE_REASONS)[number];

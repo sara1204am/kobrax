@@ -65,6 +65,20 @@ export class CreditsController {
     return this.credits.markArrears(id, dto.days);
   }
 
+  /** «Vincular a otro cliente» (D2): el mismo crédito pasa al cliente elegido. */
+  @Post(':id/link-client')
+  @Roles(Permission.CREDIT_WRITE)
+  linkClient(@Param('id', ParseUUIDPipe) id: string, @Body('clientId', ParseUUIDPipe) clientId: string) {
+    return this.credits.linkClient(id, clientId);
+  }
+
+  /** «Es una persona nueva»: cierra la revisión del cliente provisional sin moverlo (D2). */
+  @Post('link-review/:clientId/confirm')
+  @Roles(Permission.CREDIT_WRITE)
+  confirmClientLink(@Param('clientId', ParseUUIDPipe) clientId: string) {
+    return this.credits.confirmClientLink(clientId);
+  }
+
   /** Poner al día: mueve la fecha de vencimiento y cierra el caso. No borra el síntoma. */
   @Post(':id/arrears/clear')
   @Roles(Permission.CREDIT_WRITE)

@@ -1,6 +1,6 @@
 import { PortfolioStatus } from '@kobrax/shared';
 import type { CaseListItem } from './cases.service';
-import { filterPortfolio, groupPortfolio, matchesSearch, sortPortfolio } from './portfolio';
+import { filterPortfolio, groupPortfolio, matchesSearch, sortPortfolio, sourceLineOf } from './portfolio';
 
 const ASOF = new Date('2026-07-13T12:00:00Z');
 
@@ -18,6 +18,34 @@ function mk(p: Partial<CaseListItem>): CaseListItem {
     ...p,
   };
 }
+
+describe('sourceLineOf (D7)', () => {
+  it('todo de Kobrax: no hay línea', () => {
+    expect(sourceLineOf([{}, {}])).toBeUndefined();
+  });
+
+  it('externo: la fuente con el corte más viejo', () => {
+    expect(
+      sourceLineOf([
+        { externalSource: 'PSF', syncStatus: 'PRESENT', reportedAsOf: '2026-10-02' },
+        { externalSource: 'PSF', syncStatus: 'PRESENT', reportedAsOf: '2026-09-30' },
+        {},
+      ]),
+    ).toBe('PSF al 30/09');
+  });
+
+  it('🔴 la ausencia del reporte manda sobre el corte: no es «al día» ni «pagó» (D4)', () => {
+    expect(sourceLineOf([{ externalSource: 'PSF', syncStatus: 'ABSENT', reportedAsOf: '2026-09-28' }])).toBe(
+      'PSF · ausente del reporte',
+    );
+  });
+
+  it('el dato viejo se avisa (D9)', () => {
+    expect(sourceLineOf([{ externalSource: 'PSF', syncStatus: 'PRESENT', reportedStale: true }])).toBe(
+      'PSF · dato desactualizado',
+    );
+  });
+});
 
 describe('groupPortfolio', () => {
   it('agrupa por cliente, agrega la deuda y cuenta los préstamos', () => {

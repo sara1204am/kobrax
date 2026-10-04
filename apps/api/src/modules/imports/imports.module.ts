@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { AuditModule } from '../../common/audit/audit.module';
 import { PlanModule } from '../../common/plan/plan.module';
+import { AssignmentsModule } from '../assignments/assignments.module';
+import { UploadsModule } from '../uploads/uploads.module';
 import { PortfolioImportController } from './portfolio-import.controller';
 import { PortfolioImportService } from './portfolio-import.service';
 
@@ -11,7 +13,7 @@ import { PortfolioImportService } from './portfolio-import.service';
  * desde AuditModule; PrismaService/TenantContextService desde sus módulos @Global.
  */
 @Module({
-  imports: [AuthModule, AuditModule, PlanModule],
+  imports: [AuthModule, AuditModule, PlanModule, AssignmentsModule, UploadsModule],
   controllers: [PortfolioImportController],
   providers: [PortfolioImportService],
 })

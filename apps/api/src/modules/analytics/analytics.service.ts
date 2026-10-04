@@ -7,6 +7,7 @@ import {
   type AgingBucketRow,
   type AnalyticsSummary,
   type CollectorPerformanceRow,
+  type SourceBreakdown,
   type TrendPoint,
   type VisitMapPoint,
 } from '@kobrax/shared';
@@ -33,6 +34,12 @@ const STEP_INTERVAL: Record<string, string> = { day: "'1 day'", week: "'1 week'"
 
 /** Un año. Más que eso no entra en una transacción de Prisma con granularidad diaria (ver `window`). */
 const MAX_SPAN = 366 * 86_400_000;
+
+/**
+ * La fuente de un crédito como texto, en SQL: `KOBRAX` si no tiene fuente externa (D7). Es la clave
+ * del desglose; `alias` es siempre un literal de este archivo, nunca algo que llegó de afuera.
+ */
+const sourceOf = (alias: string): Prisma.Sql => Prisma.raw(`COALESCE(${alias}.external_source, 'KOBRAX')`);
 
 /** Una ventana de fechas, con la anterior de igual largo para poder comparar. */
 interface Window {
@@ -109,6 +116,8 @@ export class AnalyticsService {
   private creditWhere(q: AnalyticsQueryDto): Prisma.Sql {
     const conds: Prisma.Sql[] = [Prisma.sql`cr.deleted_at IS NULL`, Prisma.sql`cr.status = 'ACTIVE'::"CreditStatus"`];
     if (q.branchId) conds.push(Prisma.sql`cr.branch_id = ${q.branchId}`);
+    const source = this.sourceSql('cr', q);
+    if (source) conds.push(source);
     if (some(q.collectorId) || some(q.caseStatus) || some(q.priority)) {
       const inner: Prisma.Sql[] = [Prisma.sql`k.credit_id = cr.id`, Prisma.sql`k.deleted_at IS NULL`];
       if (some(q.collectorId)) inner.push(Prisma.sql`k.assignee_id IN (${Prisma.join(q.collectorId)})`);
@@ -126,7 +135,33 @@ export class AnalyticsService {
     if (some(q.collectorId)) conds.push(Prisma.sql`k.assignee_id IN (${Prisma.join(q.collectorId)})`);
     if (some(q.caseStatus)) conds.push(Prisma.sql`k.status::text IN (${Prisma.join(q.caseStatus)})`);
     if (some(q.priority)) conds.push(Prisma.sql`k.priority::text IN (${Prisma.join(q.priority)})`);
+    const source = this.creditOfSource(Prisma.sql`k.credit_id`, q);
+    if (source) conds.push(source);
     return Prisma.join(conds, ' AND ');
+  }
+
+  /**
+   * D7: el crédito es de la fuente pedida. `KOBRAX` = sin fuente externa. `null` = sin filtro.
+   * `alias` es un literal de este archivo (ver `sourceOf`).
+   */
+  private sourceSql(alias: string, q: AnalyticsQueryDto): Prisma.Sql | null {
+    if (!q.source) return null;
+    const column = Prisma.raw(`${alias}.external_source`);
+    return q.source === 'KOBRAX' ? Prisma.sql`${column} IS NULL` : Prisma.sql`${column} = ${q.source}`;
+  }
+
+  /**
+   * El mismo filtro para una tabla que apunta al crédito (casos, pagos, agenda): un `EXISTS`, que
+   * también sirve donde la referencia es suave y Prisma no tiene relación por la que filtrar.
+   */
+  private creditOfSource(creditId: Prisma.Sql, q: AnalyticsQueryDto): Prisma.Sql | null {
+    const source = this.sourceSql('sc', q);
+    return source ? Prisma.sql`EXISTS (SELECT 1 FROM credits sc WHERE sc.id = ${creditId} AND ${source})` : null;
+  }
+
+  /** El filtro de fuente en Prisma, para las consultas que van por el cliente tipado. */
+  private sourceFilter(q: AnalyticsQueryDto): Prisma.CreditWhereInput {
+    return { externalSource: q.source === 'KOBRAX' ? null : q.source };
   }
 
   /**
@@ -140,6 +175,8 @@ export class AnalyticsService {
     const conds: Prisma.Sql[] = [Prisma.sql`TRUE`];
     if (some(q.collectorId)) conds.push(Prisma.sql`p.registered_by IN (${Prisma.join(q.collectorId)})`);
     if (q.branchId) conds.push(Prisma.sql`p.branch_id = ${q.branchId}`);
+    const source = this.creditOfSource(Prisma.sql`p.credit_id`, q);
+    if (source) conds.push(source);
     return Prisma.join(conds, ' AND ');
   }
 
@@ -159,6 +196,7 @@ export class AnalyticsService {
       ...(some(q.collectorId) ? { assigneeId: { in: q.collectorId } } : {}),
       ...(some(q.caseStatus) ? { status: { in: q.caseStatus } } : {}),
       ...(some(q.priority) ? { priority: { in: q.priority } } : {}),
+      ...(q.source ? { credit: this.sourceFilter(q) } : {}),
     };
   }
 
@@ -166,6 +204,7 @@ export class AnalyticsService {
     return {
       ...(some(q.collectorId) ? { registeredBy: { in: q.collectorId } } : {}),
       ...(q.branchId ? { branchId: q.branchId } : {}),
+      ...(q.source ? { credit: this.sourceFilter(q) } : {}),
     };
   }
 
@@ -176,15 +215,29 @@ export class AnalyticsService {
     const cases = this.caseFilter(query);
     const payments = this.paymentFilter(query);
 
-    const [stock, activeNow, activePrev, collectedNow, collectedPrev, account] = await this.tx((tx) =>
+    const [stock, collectedBySource, activeNow, activePrev, collectedNow, collectedPrev, account] = await this.tx((tx) =>
       Promise.all([
         // La única que no puede ser Prisma: el `FILTER` saca el saldo total y el saldo en mora **en
         // una sola pasada** por la tabla. Con Prisma serían dos consultas que recorren lo mismo.
-        tx.$queryRaw<{ outstanding: number; overdue: number }[]>(Prisma.sql`
-          SELECT COALESCE(SUM(cr.outstanding_balance), 0)::float8                                   AS outstanding,
-                 COALESCE(SUM(cr.outstanding_balance) FILTER (WHERE cr.days_past_due > 0), 0)::float8 AS overdue
+        // Agrupada por fuente (D7): el total es la suma de las filas, así el desglose y el KPI salen
+        // de la misma pasada y no pueden dejar de sumar lo mismo.
+        tx.$queryRaw<StockRow[]>(Prisma.sql`
+          SELECT ${sourceOf('cr')}                                                                   AS source,
+                 COUNT(*)::int                                                                        AS credits,
+                 COALESCE(SUM(cr.outstanding_balance), 0)::float8                                   AS outstanding,
+                 COALESCE(SUM(cr.outstanding_balance) FILTER (WHERE cr.days_past_due > 0), 0)::float8 AS overdue,
+                 MIN(cr.reported_as_of)                                                               AS as_of_from,
+                 MAX(cr.reported_as_of)                                                               AS as_of_to
           FROM credits cr
-          WHERE ${credits}`),
+          WHERE ${credits}
+          GROUP BY 1`),
+        // Lo recaudado en la ventana, por la fuente del crédito al que se imputó el pago.
+        tx.$queryRaw<{ source: string; collected: number }[]>(Prisma.sql`
+          SELECT ${sourceOf('pc')} AS source, COALESCE(SUM(p.amount), 0)::float8 AS collected
+          FROM payments p
+          JOIN credits pc ON pc.id = p.credit_id
+          WHERE ${this.paymentWhere(query)} AND p.payment_date BETWEEN ${w.from} AND ${w.to}
+          GROUP BY 1`),
         tx.collectionCase.count({ where: { ...cases, status: { notIn: TERMINAL } } }),
         // Los casos activos **sí** se pueden reconstruir: un caso estaba abierto en una fecha si ya
         // existía y todavía no se había cerrado. Es el único KPI de stock con historia propia.
@@ -202,8 +255,8 @@ export class AnalyticsService {
       ]),
     );
 
-    const outstanding = money(stock[0]?.outstanding);
-    const overdue = money(stock[0]?.overdue);
+    const outstanding = money(stock.reduce((sum, r) => sum + Number(r.outstanding ?? 0), 0));
+    const overdue = money(stock.reduce((sum, r) => sum + Number(r.overdue ?? 0), 0));
 
     return {
       // 🔴 `previous: null` en los tres saldos, y no es pereza: la base no guarda cuánto se debía la
@@ -214,6 +267,7 @@ export class AnalyticsService {
       activeCases: { value: activeNow, previous: activePrev },
       collected: { value: money(collectedNow._sum.amount), previous: money(collectedPrev._sum.amount) },
       currency: account?.currencyCode ?? 'BOB',
+      bySource: breakdown(stock, collectedBySource),
     };
   }
 
@@ -308,48 +362,60 @@ export class AnalyticsService {
 
   // ── 4 · Agenda del período ─────────────────────────────────────────────────
   /**
-   * Toda esta la hace Prisma: son `groupBy` planos sobre una tabla y dos conteos. El SQL crudo acá
-   * no compraría nada y costaría los nombres de columna sin tipar.
+   * Una sola consulta sobre la agenda, con las dos ventanas en `FILTER`: de ahí salen los cortes por
+   * tipo y por estado y los indicadores de hoy y del período anterior.
+   *
+   * Es SQL y no `groupBy` por D7: `agenda_items.credit_id` es una referencia suave —sin relación en
+   * el esquema— y Prisma no puede filtrar por la fuente del crédito. Con un `EXISTS` sí, y sin traer
+   * a memoria la lista de ids de ninguna cartera.
    */
   async agendaSummary(query: AnalyticsQueryDto): Promise<AgendaSummary> {
     const w = this.window(query);
-    const where: Prisma.AgendaItemWhereInput = {
-      deletedAt: null,
-      scheduledDate: { gte: w.from, lte: w.to },
-      ...(some(query.collectorId) ? { assigneeId: { in: query.collectorId } } : {}),
-    };
+    const conds: Prisma.Sql[] = [
+      Prisma.sql`a.deleted_at IS NULL`,
+      // Las dos ventanas juntas: la anterior termina justo donde empieza la actual.
+      Prisma.sql`a.scheduled_date BETWEEN ${w.prevFrom} AND ${w.to}`,
+    ];
+    if (some(query.collectorId)) conds.push(Prisma.sql`a.assignee_id IN (${Prisma.join(query.collectorId)})`);
+    const source = this.creditOfSource(Prisma.sql`a.credit_id`, query);
+    if (source) conds.push(source);
     const payments = this.paymentFilter(query);
 
-    const [byType, byStatus, done, prev, pagosNow, pagosPrev] = await this.tx((tx) =>
+    const [rows, pagosNow, pagosPrev] = await this.tx((tx) =>
       Promise.all([
-        tx.agendaItem.groupBy({ by: ['type'], where, _count: { _all: true } }),
-        tx.agendaItem.groupBy({ by: ['status'], where, _count: { _all: true } }),
-        tx.agendaItem.groupBy({ by: ['type'], where: { ...where, status: 'EXECUTED' }, _count: { _all: true } }),
-        // El mismo corte en la ventana anterior: es de donde salen las flechitas de los indicadores.
-        tx.agendaItem.groupBy({
-          by: ['type'],
-          where: { ...where, status: 'EXECUTED', scheduledDate: { gte: w.prevFrom, lte: w.prevTo } },
-          _count: { _all: true },
-        }),
+        tx.$queryRaw<{ type: string; status: string; now: number; prev: number }[]>(Prisma.sql`
+          SELECT a.type::text   AS type,
+                 a.status::text AS status,
+                 COUNT(*) FILTER (WHERE a.scheduled_date BETWEEN ${w.from} AND ${w.to})::int        AS now,
+                 COUNT(*) FILTER (WHERE a.scheduled_date BETWEEN ${w.prevFrom} AND ${w.prevTo})::int AS prev
+          FROM agenda_items a
+          WHERE ${Prisma.join(conds, ' AND ')}
+          GROUP BY 1, 2`),
         tx.payment.count({ where: { ...payments, paymentDate: { gte: w.from, lte: w.to } } }),
         tx.payment.count({ where: { ...payments, paymentDate: { gte: w.prevFrom, lte: w.prevTo } } }),
       ]),
     );
 
-    const now = (type: string): number => done.find((d) => d.type === type)?._count._all ?? 0;
-    const before = (type: string): number => prev.find((d) => d.type === type)?._count._all ?? 0;
+    const total = (key: 'type' | 'status') => {
+      const out = new Map<string, number>();
+      for (const r of rows) if (r.now > 0) out.set(r[key], (out.get(r[key]) ?? 0) + r.now);
+      return [...out];
+    };
+    const executed = rows.filter((r) => r.status === 'EXECUTED');
+    const now = (type: string): number => executed.filter((r) => r.type === type).reduce((s, r) => s + r.now, 0);
+    const before = (type: string): number => executed.filter((r) => r.type === type).reduce((s, r) => s + r.prev, 0);
 
     return {
-      byType: byType.map((r) => ({ type: r.type, total: r._count._all })),
-      byStatus: byStatus.map((r) => ({ status: r.status, total: r._count._all })),
+      byType: total('type').map(([type, n]) => ({ type, total: n })),
+      byStatus: total('status').map(([status, n]) => ({ status, total: n })),
       // Códigos, no rótulos: el panel es bilingüe y el texto vive en sus diccionarios.
       indicators: [
         { code: 'VISITS_DONE', value: now('VISIT'), previous: before('VISIT') },
         { code: 'CALLS_DONE', value: now('CALL'), previous: before('CALL') },
         {
           code: 'CONTACTS',
-          value: done.reduce((s, d) => s + d._count._all, 0),
-          previous: prev.reduce((s, d) => s + d._count._all, 0),
+          value: executed.reduce((s, r) => s + r.now, 0),
+          previous: executed.reduce((s, r) => s + r.prev, 0),
         },
         { code: 'PROMISES', value: now('PROMISE_TO_PAY'), previous: before('PROMISE_TO_PAY') },
         { code: 'PAYMENTS', value: pagosNow, previous: pagosPrev },
@@ -369,6 +435,13 @@ export class AnalyticsService {
     const conds: Prisma.Sql[] = [Prisma.sql`rp.planned_date = ${day}::date`];
     if (some(query.collectorId)) conds.push(Prisma.sql`rp.collector_id IN (${Prisma.join(query.collectorId)})`);
     if (query.branchId) conds.push(Prisma.sql`rp.branch_id = ${query.branchId}`);
+    // D7: la parada es de la fuente de su caso. Una parada sin caso no es de ninguna y no entra.
+    const source = this.sourceSql('vc', query);
+    if (source) {
+      conds.push(
+        Prisma.sql`EXISTS (SELECT 1 FROM collection_cases vk JOIN credits vc ON vc.id = vk.credit_id WHERE vk.id = rs.case_id AND ${source})`,
+      );
+    }
 
     const rows = await this.tx((tx) =>
       tx.$queryRaw<
@@ -398,10 +471,15 @@ export class AnalyticsService {
 
   // ── 6 · Evolución ──────────────────────────────────────────────────────────
   /**
-   * Lo recaudado por período y el saldo **reconstruido hacia atrás**.
+   * Lo recaudado por período y el saldo de cada punto, **cada fuente con su regla** (D7).
    *
-   * ⚠️ El saldo de cada punto es el de hoy más todo lo que se cobró después: es la curva de lo que
-   * la cobranza bajó, **no la historia del saldo** — ignora desembolsos y castigos posteriores.
+   * - **Kobrax: reconstruido hacia atrás.** El de hoy más todo lo cobrado después sobre créditos de
+   *   Kobrax. ⚠️ Es la curva de lo que la cobranza bajó, **no la historia del saldo** — ignora
+   *   desembolsos y castigos posteriores.
+   * - **Externas: el último saldo reportado a esa fecha**, de los snapshots de cada importación. No se
+   *   reconstruye con pagos: el saldo de un PSF lo manda su reporte y un pago en Kobrax no lo baja
+   *   (D3). Sumarle lo cobrado lo contaba dos veces; y una baja informada por el banco no es cobranza.
+   *
    * `generate_series` es lo que hace que un día sin pagos exista y valga cero; sin él, la línea
    * saltea días y el gráfico miente por omisión.
    */
@@ -416,8 +494,11 @@ export class AnalyticsService {
      */
     const interval = Prisma.raw(STEP_INTERVAL[step] ?? STEP_INTERVAL.day);
     const payments = this.paymentWhere(query);
+    const credits = this.creditWhere(query);
+    const puntos = Prisma.sql`
+      SELECT generate_series(date_trunc(${step}, ${w.from}::timestamptz), ${w.to}::timestamptz, ${interval}::interval) AS d`;
 
-    const [rows, stock] = await this.tx((tx) =>
+    const [rows, stock, external] = await this.tx((tx) =>
       Promise.all([
         // El `LEFT JOIN` no ata el pago a su punto: cada punto ve TODOS los pagos y los reparte con
         // dos `FILTER` —lo cobrado en el punto y lo cobrado desde el punto en adelante, que es lo
@@ -425,31 +506,120 @@ export class AnalyticsService {
         // pagos no se nota. ponytail: si un día el rango es de años, esto va a una CTE que agregue
         // por período antes de cruzar.
         tx.$queryRaw<{ date: Date; collected: number; after: number }[]>(Prisma.sql`
-          WITH puntos AS (
-            SELECT generate_series(date_trunc(${step}, ${w.from}::timestamptz), ${w.to}::timestamptz, ${interval}::interval) AS d
-          )
+          WITH puntos AS (${puntos})
           SELECT s.d AS date,
                  COALESCE(SUM(p.amount) FILTER (WHERE p.payment_date >= s.d AND p.payment_date < s.d + ${interval}::interval), 0)::float8 AS collected,
-                 COALESCE(SUM(p.amount) FILTER (WHERE p.payment_date >= s.d), 0)::float8 AS after
+                 -- Sólo lo cobrado sobre créditos de Kobrax reconstruye saldo (D3, D7).
+                 COALESCE(SUM(p.amount) FILTER (WHERE p.payment_date >= s.d AND pc.external_source IS NULL), 0)::float8 AS after
           FROM puntos s
           -- El tope es HOY y no el fin del rango: el saldo de cada punto se reconstruye con todo lo
           -- cobrado desde esa fecha hasta el saldo actual, que es el único que conocemos. Cortando
           -- en el fin del rango, mirar «mes anterior» dibujaba la curva por debajo de lo real, sin
           -- todo lo cobrado entre esa fecha y hoy.
           LEFT JOIN payments p ON ${payments} AND p.payment_date <= now()
+          LEFT JOIN credits pc ON pc.id = p.credit_id
           GROUP BY s.d
           ORDER BY s.d`),
         tx.$queryRaw<{ outstanding: number }[]>(Prisma.sql`
           SELECT COALESCE(SUM(cr.outstanding_balance), 0)::float8 AS outstanding
-          FROM credits cr WHERE ${this.creditWhere(query)}`),
+          FROM credits cr WHERE ${credits} AND cr.external_source IS NULL`),
+        /*
+         * Cada snapshot vale desde su fecha de corte hasta el corte siguiente de la misma operación
+         * (`LEAD`). El punto toma el vigente a su cierre; el período en curso, el último que haya —
+         * así el punto de hoy coincide con el saldo del encabezado aunque un reporte venga fechado
+         * adelante—. Con dos corridas del mismo corte gana la última: la anterior tiene `next = asof`.
+         *
+         * Los snapshots `ABSENT` no cortan la curva: la ausencia no cambia el saldo (D4), así que
+         * sigue valiendo el último reportado — igual que en el encabezado, que suma el saldo de las
+         * ausentes. Y una operación **sin ningún snapshot** (importada antes de que existieran) suma
+         * su saldo actual en todos los puntos: no hay historia, pero tampoco es cero.
+         */
+        tx.$queryRaw<{ date: Date; external: number }[]>(Prisma.sql`
+          WITH puntos AS (${puntos}),
+          sn AS (
+            SELECT x.reported_balance, x.asof,
+                   LEAD(x.asof) OVER (PARTITION BY x.credit_id ORDER BY x.asof, x.created_at) AS next_asof
+            FROM (
+              SELECT sn.credit_id, sn.reported_balance, sn.created_at,
+                     COALESCE(sn.reported_as_of, sn.created_at::date) AS asof
+              FROM credit_external_snapshots sn
+              JOIN credits cr ON cr.id = sn.credit_id
+              WHERE ${credits} AND sn.sync_status = 'PRESENT'
+            ) x
+          ),
+          sin_historia AS (
+            SELECT COALESCE(SUM(cr.outstanding_balance), 0) AS saldo
+            FROM credits cr
+            WHERE ${credits} AND cr.external_source IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM credit_external_snapshots z WHERE z.credit_id = cr.id)
+          )
+          SELECT s.d AS date,
+                 (COALESCE(SUM(sn.reported_balance), 0) + (SELECT saldo FROM sin_historia))::float8 AS external
+          FROM puntos s
+          LEFT JOIN sn ON (
+              (s.d + ${interval}::interval > now() AND sn.next_asof IS NULL)
+              OR (
+                s.d + ${interval}::interval <= now()
+                AND sn.asof < s.d + ${interval}::interval
+                AND (sn.next_asof IS NULL OR sn.next_asof >= s.d + ${interval}::interval)
+              )
+            )
+          GROUP BY s.d
+          ORDER BY s.d`),
       ]),
     );
 
     const today = money(stock[0]?.outstanding);
-    return rows.map((r) => ({
-      date: r.date.toISOString().slice(0, 10),
-      collected: money(r.collected),
-      outstanding: money(today + Number(r.after ?? 0)),
-    }));
+    const externalAt = new Map(external.map((e) => [e.date.toISOString(), money(e.external)]));
+    return rows.map((r) => {
+      const ext = externalAt.get(r.date.toISOString()) ?? 0;
+      return {
+        date: r.date.toISOString().slice(0, 10),
+        collected: money(r.collected),
+        outstanding: money(today + Number(r.after ?? 0) + ext),
+        outstandingExternal: ext,
+      };
+    });
   }
+}
+
+interface StockRow {
+  source?: string;
+  credits?: number;
+  outstanding: number;
+  overdue: number;
+  as_of_from?: Date | null;
+  as_of_to?: Date | null;
+}
+
+/**
+ * El desglose por fuente del encabezado (D7): saldo y mora de la misma pasada que el total, y lo
+ * recaudado de su propia consulta. Kobrax primero; una fuente sin créditos ni cobros no viaja.
+ */
+function breakdown(stock: StockRow[], collected: { source: string; collected: number }[]): SourceBreakdown[] {
+  const bySource = new Map<string, SourceBreakdown>();
+  const entry = (source: string): SourceBreakdown => {
+    let e = bySource.get(source);
+    if (!e) {
+      e = { source: source as SourceBreakdown['source'], credits: 0, outstanding: 0, overdue: 0, collected: 0 };
+      bySource.set(source, e);
+    }
+    return e;
+  };
+  for (const r of stock) {
+    if (!r.source) continue;
+    const e = entry(r.source);
+    e.credits = r.credits ?? 0;
+    e.outstanding = money(r.outstanding);
+    e.overdue = money(r.overdue);
+    if (r.source !== 'KOBRAX' && r.as_of_from && r.as_of_to) {
+      e.reportedAsOf = { from: r.as_of_from.toISOString().slice(0, 10), to: r.as_of_to.toISOString().slice(0, 10) };
+    }
+  }
+  for (const c of collected) {
+    if (c.source) entry(c.source).collected = money(c.collected);
+  }
+  return [...bySource.values()].sort((a, b) =>
+    a.source === 'KOBRAX' ? -1 : b.source === 'KOBRAX' ? 1 : a.source.localeCompare(b.source),
+  );
 }

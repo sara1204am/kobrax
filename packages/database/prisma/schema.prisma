@@ -72,41 +72,47 @@ enum PermissionScope {
 
 /// Tenant raíz. Toda tabla operativa se filtra por su id (account_id).
 model Account {
-  id            String        @id @default(uuid())
-  code          String?       @unique
-  businessName  String        @map("business_name")
-  taxId         String?       @map("tax_id")
-  accountType   AccountType   @map("account_type")
-  status        AccountStatus @default(TRIAL) @map("account_status")
-  planCode      PlanCode      @default(FREE) @map("plan_code")
+  id             String        @id @default(uuid())
+  code           String?       @unique
+  businessName   String        @map("business_name")
+  taxId          String?       @map("tax_id")
+  accountType    AccountType   @map("account_type")
+  status         AccountStatus @default(TRIAL) @map("account_status")
+  planCode       PlanCode      @default(FREE) @map("plan_code")
   /// Topes propios que le pisan a los del plan: el cliente que negoció otro número (LIMITES §8.2).
   /// `null` = rigen los del plan. La forma la valida `effectiveLimits()` de shared, no la base.
-  limitsOverride Json?        @map("limits_override")
-  countryCode   String        @map("country_code")
-  currencyCode  String        @map("currency_code")
-  timezone      String?
-  settings      Json          @default("{}")
-  configuration Json          @default("{}")
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
-  deletedAt     DateTime?     @map("deleted_at")
+  limitsOverride Json?         @map("limits_override")
+  countryCode    String        @map("country_code")
+  currencyCode   String        @map("currency_code")
+  timezone       String?
+  settings       Json          @default("{}")
+  configuration  Json          @default("{}")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  deletedAt      DateTime?     @map("deleted_at")
 
-  branches        Branch[]
-  userAccounts    UserAccount[]
-  sessions        UserSession[]
-  auditLogs       AuditLog[]
-  overrides       UserPermissionOverride[]
-  clients         Client[]
-  credits         Credit[]
-  collectionCases CollectionCase[]
-  routePlans      RoutePlan[]
-  payments        Payment[]
-  paymentRequests PaymentRequest[]
-  notifications   Notification[]
-  refreshTokens   RefreshToken[]
-  agendaItems     AgendaItem[]
-  catalogItems    CatalogItem[]
-  dashboards      Dashboard[]
+  branches                Branch[]
+  userAccounts            UserAccount[]
+  sessions                UserSession[]
+  auditLogs               AuditLog[]
+  overrides               UserPermissionOverride[]
+  clients                 Client[]
+  credits                 Credit[]
+  collectionCases         CollectionCase[]
+  routePlans              RoutePlan[]
+  payments                Payment[]
+  paymentRequests         PaymentRequest[]
+  notifications           Notification[]
+  refreshTokens           RefreshToken[]
+  agendaItems             AgendaItem[]
+  catalogItems            CatalogItem[]
+  dashboards              Dashboard[]
+  creditAssignments       CreditAssignment[]
+  creditArrearEpisodes    CreditArrearEpisode[]
+  creditNotes             CreditNote[]
+  creditExternalSnapshots CreditExternalSnapshot[]
+  clientExternalKeys      ClientExternalKey[]
+  externalAdvisorLinks    ExternalAdvisorLink[]
 
   @@index([status])
   @@index([deletedAt])
@@ -399,31 +405,98 @@ model AuditLog {
 
 /// Corrida de importación masiva/reconciliación de clientes (F4 Fase 5). RLS por tenant.
 model ClientImportRun {
-  id          String   @id @default(uuid())
-  accountId   String   @map("account_id")
-  source      String // csv | json
-  fileHash    String   @map("file_hash") // SHA-256 del contenido (idempotencia)
-  mode        String // RECONCILE | UPSERT_ONLY | REPLACE
-  mapping     Json     @default("{}")
-  status      String   @default("DONE") // DONE | DRY_RUN | FAILED
-  created     Int      @default(0)
-  updated     Int      @default(0)
-  softDeleted Int      @default(0) @map("soft_deleted")
-  needsReview Int      @default(0) @map("needs_review")
-  errors      Int      @default(0)
-  createdBy   String?  @map("created_by")
+  id                String    @id @default(uuid())
+  accountId         String    @map("account_id")
+  source            String // csv | json
+  fileHash          String    @map("file_hash") // SHA-256 del contenido (idempotencia)
+  mode              String // RECONCILE | UPSERT_ONLY | REPLACE
+  mapping           Json      @default("{}")
+  status            String    @default("DONE") // DONE | DRY_RUN | FAILED
+  created           Int       @default(0)
+  updated           Int       @default(0)
+  softDeleted       Int       @default(0) @map("soft_deleted")
+  needsReview       Int       @default(0) @map("needs_review")
+  errors            Int       @default(0)
+  createdBy         String?   @map("created_by")
   // F10 import de CARTERA (reusa esta tabla; null = import de clientes legacy).
   template          String? // banco-union-pdf | csv | xlsx
   scope             String? // alcance del archivo, ej. "branch:<id>" | "official:<id>"
-  creditsCreated    Int      @default(0) @map("credits_created")
-  creditsUpdated    Int      @default(0) @map("credits_updated")
-  creditsSetCurrent Int      @default(0) @map("credits_set_current")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  creditsCreated    Int       @default(0) @map("credits_created")
+  creditsUpdated    Int       @default(0) @map("credits_updated")
+  creditsSetCurrent Int       @default(0) @map("credits_set_current")
+  /// Cartera externa (PSF): fecha de corte del reporte. Un reporte con fecha anterior a la última
+  /// aplicada en el mismo alcance no pisa nada (§14). NULL = corrida anterior a esta columna.
+  reportAsOf        DateTime? @map("report_as_of") @db.Date
+  /// Qué sistema externo mandó el archivo (hoy siempre "PSF"). NULL = import de clientes legacy.
+  externalSource    String?   @map("external_source")
+  /// Código de asesor leído del encabezado del reporte ("CQE"), si lo trae (D8).
+  advisorCode       String?   @map("advisor_code")
+  /// Operaciones que faltaron por primera vez, que volvieron, y filas del archivo que no eran
+  /// registros (totales, notas). Antes vivían sólo en la auditoría de la corrida.
+  creditsAbsent     Int       @default(0) @map("credits_absent")
+  creditsReappeared Int       @default(0) @map("credits_reappeared")
+  rowsIgnored       Int       @default(0) @map("rows_ignored")
+  /// El documento subido, tal cual: se puede volver a ver o descargar desde el historial.
+  /// NULL = corrida anterior a que se guardara el archivo.
+  fileName          String?   @map("file_name")
+  fileSize          Int?      @map("file_size")
+  fileMime          String?   @map("file_mime")
+  /// Nombre en el almacenamiento de la cuenta (`imports/<sha256>.<ext>`), nunca una ruta de afuera.
+  fileKey           String?   @map("file_key")
+  /// `true` = cada movimiento de la corrida quedó en `client_import_run_items`. Las corridas
+  /// anteriores se reconstruyeron a medias (sin «al día» ni rechazadas) y quedan en `false`.
+  itemsComplete     Boolean   @default(false) @map("items_complete")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  items ClientImportRunItem[]
 
   @@index([accountId, status])
   @@index([accountId, fileHash])
+  @@index([accountId, externalSource, scope, reportAsOf])
+  @@index([accountId, source, createdAt])
   @@map("client_import_runs")
+}
+
+/// Qué le pasó a un registro en una corrida de importación de cartera.
+enum ImportRunItemAction {
+  CREATED // operación nueva (y su cliente, nuevo o existente)
+  UPDATED // ya existía y vino en el reporte
+  REAPPEARED // faltaba y volvió
+  SET_CURRENT // faltó y, con la regla «al día», su mora quedó en 0
+  ABSENT // faltó del reporte por primera vez (D4)
+  REJECTED // fila del archivo que no se pudo importar
+
+  @@map("import_run_item_action")
+}
+
+/// Un movimiento de una corrida: quién, qué operación, y cómo estaba antes y después. RLS por tenant.
+model ClientImportRunItem {
+  id         String              @id @default(uuid())
+  accountId  String              @map("account_id")
+  runId      String              @map("run_id")
+  action     ImportRunItemAction
+  /// Referencias suaves: el crédito o el cliente pueden borrarse después y el historial queda.
+  creditId   String?             @map("credit_id")
+  clientId   String?             @map("client_id")
+  /// Nº de operación tal como vino en el reporte.
+  externalId String?             @map("external_id")
+  /// Nombre del deudor tal como vino en el archivo (o el del cliente, si faltó del reporte).
+  clientName String?             @map("client_name")
+  /// Fila del archivo (1 = primer registro). Sólo en las que vinieron en el reporte.
+  rowNumber  Int?                @map("row_number")
+  /// Por qué se rechazó la fila (`MISSING_CODE`, `MATCHES_OUT_OF_SCOPE`…).
+  reason     String?
+  /// Saldo, mora y estado antes y después: `{ outstandingBalance, daysPastDue, status }`.
+  before     Json?
+  after      Json?
+  createdAt  DateTime            @default(now()) @map("created_at")
+
+  run ClientImportRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, runId, action])
+  @@index([accountId, creditId])
+  @@map("client_import_run_items")
 }
 
 enum ClientType {
@@ -475,6 +548,25 @@ enum CreditStatus {
   CANCELLED
 }
 
+/// De dónde nació el crédito. Columna (antes sólo `metadata.origin`): decide qué rama del sistema lo
+/// maneja y no puede quedar a merced de un JSON que cualquiera reescribe.
+enum CreditDataOrigin {
+  MANUAL
+  QUICK_BATCH
+  IMPORT
+  API
+
+  @@map("credit_data_origin")
+}
+
+/// Si la operación externa vino en el último reporte de su alcance (D4). `ABSENT` ≠ al día ≠ pagado.
+enum ExternalSyncStatus {
+  PRESENT
+  ABSENT
+
+  @@map("external_sync_status")
+}
+
 enum InstallmentStatus {
   PENDING
   PARTIAL
@@ -512,23 +604,33 @@ model Client {
   totalDebt               Decimal      @default(0) @map("total_debt") @db.Decimal(14, 2)
   maxDaysPastDue          Int          @default(0) @map("max_days_past_due")
   creditCount             Int          @default(0) @map("credit_count")
+  /// La parte de `totalDebt` / `maxDaysPastDue` que viene de una fuente externa (PSF): saldo y mora
+  /// **reportados**, no calculados (D7). Los mantiene el mismo trigger. Kobrax = total − externo.
+  totalDebtExternal       Decimal      @default(0) @map("total_debt_external") @db.Decimal(14, 2)
+  maxDaysPastDueExternal  Int          @default(0) @map("max_days_past_due_external")
+  /// Cliente creado por la importación con coincidencias sin confirmar (D2 · opción B): hay que
+  /// revisar si es una persona que ya existía. «Vincular a otro cliente» lo resuelve.
+  linkReviewPending       Boolean      @default(false) @map("link_review_pending")
   createdAt               DateTime     @default(now()) @map("created_at")
   updatedAt               DateTime     @updatedAt @map("updated_at")
   deletedAt               DateTime?    @map("deleted_at")
 
-  account     Account            @relation(fields: [accountId], references: [id])
-  contacts    ClientContact[]
-  locations   ClientLocation[]
-  relations   ClientRelation[]
-  collaterals Collateral[]
-  attachments ClientAttachment[]
-  credits     Credit[]
-  cases       CollectionCase[]
-  routeStops  RouteStop[]
+  account      Account             @relation(fields: [accountId], references: [id])
+  contacts     ClientContact[]
+  locations    ClientLocation[]
+  relations    ClientRelation[]
+  collaterals  Collateral[]
+  attachments  ClientAttachment[]
+  credits      Credit[]
+  cases        CollectionCase[]
+  creditNotes  CreditNote[]
+  routeStops   RouteStop[]
+  externalKeys ClientExternalKey[]
 
   @@unique([accountId, nationalIdHash]) // documento único por tenant (vía blind index)
   @@index([accountId])
   @@index([accountId, status])
+  @@index([accountId, linkReviewPending])
   @@index([deletedAt])
   // Los dos órdenes con los que abre la cartera. El desempate por `id` va en el índice porque va en
   // el `ORDER BY`: sin él, `LIMIT/OFFSET` repite o saltea filas entre página y página.
@@ -689,47 +791,306 @@ model ClientAttachment {
 
 /// Obligación financiera. Nombres de concepto configurables por tenant.
 model Credit {
-  id                 String       @id @default(uuid())
-  accountId          String       @map("account_id")
-  clientId           String       @map("client_id")
-  branchId           String?      @map("branch_id")
+  id                 String              @id @default(uuid())
+  accountId          String              @map("account_id")
+  clientId           String              @map("client_id")
+  branchId           String?             @map("branch_id")
   code               String?
   /// Qué clase de crédito es → `catalog_items.code` del catálogo `CREDIT_TYPE`. Texto suelto y no
   /// enum: cada empresa arma su lista (consumo, microcrédito, vivienda…) sin que eso sea una migración.
-  typeCode           String?      @map("type_code")
-  principalAmount    Decimal      @map("principal_amount") @db.Decimal(14, 2)
-  outstandingBalance Decimal      @map("outstanding_balance") @db.Decimal(14, 2)
-  interestRate       Decimal      @default(0) @map("interest_rate") @db.Decimal(7, 4)
+  typeCode           String?             @map("type_code")
+  principalAmount    Decimal             @map("principal_amount") @db.Decimal(14, 2)
+  outstandingBalance Decimal             @map("outstanding_balance") @db.Decimal(14, 2)
+  interestRate       Decimal             @default(0) @map("interest_rate") @db.Decimal(7, 4)
   currency           String
-  installmentsCount  Int          @default(1) @map("installments_count")
-  status             CreditStatus @default(ACTIVE)
-  daysPastDue        Int          @default(0) @map("days_past_due")
-  assignedManagerId  String?      @map("assigned_manager_id") // referencia suave a users.id
-  disbursedAt        DateTime?    @map("disbursed_at")
+  installmentsCount  Int                 @default(1) @map("installments_count")
+  status             CreditStatus        @default(ACTIVE)
+  daysPastDue        Int                 @default(0) @map("days_past_due")
+  assignedManagerId  String?             @map("assigned_manager_id") // referencia suave a users.id
+  disbursedAt        DateTime?           @map("disbursed_at")
   /// Campos operativos de cobranza sin columna propia: frequency, origin, installmentAmount,
   /// nextDueDate, externalRef, notes. Forma y lectura en `@kobrax/shared` (`CreditMetadata`).
   /// Un crédito nacido en el móvil NO tiene cronograma: su cuota y próxima fecha viven acá.
-  metadata           Json         @default("{}")
-  createdAt          DateTime     @default(now()) @map("created_at")
-  updatedAt          DateTime     @updatedAt @map("updated_at")
-  deletedAt          DateTime?    @map("deleted_at")
+  metadata           Json                @default("{}")
+  /// De dónde nació (D1). Espejo de `metadata.origin`, que se sigue escribiendo para las apps viejas.
+  origin             CreditDataOrigin    @default(MANUAL)
+  /// ─── Operación de una fuente externa (PSF). NULL en los créditos de Kobrax. ───
+  ///
+  /// La identidad es `(account_id, external_source, external_id)` — índice único parcial creado en
+  /// SQL (Prisma no los expresa), ver la migración `20260930000000_creditos_de_fuente_externa`.
+  /// `code` es sólo el rótulo que se muestra (D1). `outstanding_balance` y `days_past_due` son en
+  /// estos créditos los valores **reportados** al `reported_as_of`, y sólo los escribe el importador.
+  externalSource     String?             @map("external_source")
+  externalId         String?             @map("external_id")
+  syncStatus         ExternalSyncStatus? @map("sync_status")
+  /// Desde cuándo falta del reporte (fecha de corte del primer reporte que no lo trajo).
+  absentSince        DateTime?           @map("absent_since") @db.Date
+  /// La última corrida (`client_import_runs.id`) que lo trajo.
+  lastSeenRunId      String?             @map("last_seen_run_id")
+  /// Fecha de corte del último reporte que lo trajo: la mora y el saldo son «al» esta fecha (D9).
+  reportedAsOf       DateTime?           @map("reported_as_of") @db.Date
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  deletedAt          DateTime?           @map("deleted_at")
 
-  account      Account             @relation(fields: [accountId], references: [id])
-  client       Client              @relation(fields: [clientId], references: [id])
-  branch       Branch?             @relation(fields: [branchId], references: [id])
-  installments CreditInstallment[]
-  arrears      Arrear[]
-  cases        CollectionCase[]
-  payments     Payment[]
-  guarantors   CreditGuarantor[]
-  collaterals  CollateralCredit[]
+  account           Account                  @relation(fields: [accountId], references: [id])
+  client            Client                   @relation(fields: [clientId], references: [id])
+  branch            Branch?                  @relation(fields: [branchId], references: [id])
+  installments      CreditInstallment[]
+  arrears           Arrear[]
+  cases             CollectionCase[]
+  payments          Payment[]
+  guarantors        CreditGuarantor[]
+  collaterals       CollateralCredit[]
+  assignments       CreditAssignment[]
+  arrearEpisodes    CreditArrearEpisode[]
+  notes             CreditNote[]
+  externalSnapshots CreditExternalSnapshot[]
 
-  @@unique([accountId, code]) // F10 import: `code` (No.Credito) es la llave de match del extracto
+  /// `code` dejó de ser único (D1): es un rótulo. Un nº de operación PSF puede coincidir con el
+  /// código de un crédito manual sin que sean el mismo crédito.
+  @@index([accountId, code])
+  @@index([accountId, externalSource, syncStatus])
   @@index([accountId])
   @@index([accountId, status])
   @@index([accountId, clientId])
   @@index([deletedAt])
   @@map("credits")
+}
+
+/// Lo que una fuente externa reportó de una operación en una corrida (§12). **Inmutable**: sin
+/// `updated_at` ni `deleted_at`, como `payments` y `audit_logs`.
+///
+/// Una fila por operación presente en cada corrida, y una fila `ABSENT` sólo en la corrida en que
+/// deja de venir (no una por día de ausencia). Con estas filas, los pagos y los eventos de
+/// `audit_logs` se reconstruye la historia completa: qué reportó, cuándo faltó, cuándo volvió.
+model CreditExternalSnapshot {
+  id                  String             @id @default(uuid())
+  accountId           String             @map("account_id")
+  creditId            String             @map("credit_id")
+  runId               String             @map("run_id")
+  externalSource      String             @map("external_source")
+  externalId          String             @map("external_id")
+  syncStatus          ExternalSyncStatus @map("sync_status")
+  /// Fecha de corte del reporte de esta corrida. NULL si el reporte no la trae ni se indicó.
+  reportedAsOf        DateTime?          @map("reported_as_of") @db.Date
+  /// Lo reportado. NULL = el reporte no trajo ese dato (o la fila es `ABSENT`): desconocido ≠ 0.
+  reportedBalance     Decimal?           @map("reported_balance") @db.Decimal(14, 2)
+  reportedDaysPastDue Int?               @map("reported_days_past_due")
+  reportedStatus      String?            @map("reported_status")
+  /// La fila normalizada tal como la leyó el parser (sin campos fuera del catálogo).
+  raw                 Json               @default("{}")
+  createdAt           DateTime           @default(now()) @map("created_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+  credit  Credit  @relation(fields: [creditId], references: [id])
+
+  @@unique([creditId, runId])
+  @@index([accountId, creditId, createdAt])
+  @@index([accountId, runId])
+  @@map("credit_external_snapshots")
+}
+
+/// Vínculo persistido entre una persona de una fuente externa y un cliente de Kobrax (D2).
+///
+/// Lo escribe «Vincular a otro cliente» (o la confirmación en la vista previa), y la importación lo
+/// usa antes de sugerir nada: una vez que alguien decidió, la misma revisión no se vuelve a pedir.
+model ClientExternalKey {
+  id             String    @id @default(uuid())
+  accountId      String    @map("account_id")
+  externalSource String    @map("external_source")
+  /// `NATIONAL_ID_HASH` (blind index del CI, cuando el reporte lo trae) | `NAME` (nombre normalizado).
+  keyType        String    @map("key_type")
+  key            String
+  clientId       String    @map("client_id")
+  /// Quién confirmó el vínculo. NULL = lo resolvió el sistema (match por CI).
+  confirmedBy    String?   @map("confirmed_by")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+  client  Client  @relation(fields: [clientId], references: [id])
+
+  @@unique([accountId, externalSource, keyType, key])
+  @@index([accountId, clientId])
+  @@index([deletedAt])
+  @@map("client_external_keys")
+}
+
+/// Código de asesor de una fuente externa → usuario de Kobrax (D8). El código NO es la identidad del
+/// usuario: sólo dice de quién es el reporte, y con eso qué créditos pueden quedar ausentes.
+model ExternalAdvisorLink {
+  id             String    @id @default(uuid())
+  accountId      String    @map("account_id")
+  externalSource String    @map("external_source")
+  advisorCode    String    @map("advisor_code")
+  /// users.id (referencia suave, como el resto del dominio).
+  userId         String    @map("user_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@unique([accountId, externalSource, advisorCode])
+  @@index([accountId, userId])
+  @@index([deletedAt])
+  @@map("external_advisor_links")
+}
+
+/// Quién puede operar este crédito: la ASIGNACIÓN EFECTIVA.
+///
+/// Es la fuente de verdad del alcance `own` de RLS (`docs/security/PLAN-SEGURIDAD.md §4.bis`).
+/// Antes esto vivía en dos columnas escalares que no alcanzaban:
+///   · `credits.assigned_manager_id` — el responsable, pero **una sola persona**: reasignar borraba
+///     al anterior, así que una cobertura temporal destruía la asignación permanente.
+///   · `collection_cases.assignee_id` — a nivel CASO, y los casos son transitorios (el trabajo de
+///     mora los abre y los cierra): el cobrador perdía de vista al cliente justo cuando se ponía
+///     al día. Esa columna **sigue existiendo** como dato operativo (quién trabaja esta cobranza
+///     hoy: rutas, agenda, balanceo de carga), pero ya no decide quién ve qué.
+///
+/// Las tres formas que toma una fila, sin columna de tipo que pueda contradecirse:
+///   · PERMANENTE → `expires_at IS NULL AND case_id IS NULL`. Una sola vigente por crédito.
+///   · TEMPORAL CON FECHA → `expires_at` puesta. Vence sola.
+///   · TEMPORAL ATADA A UN CASO → `case_id` puesta. Al cerrarse el caso se revoca (decisión de la
+///     dueña: por defecto vence al cerrar el caso, con fecha opcional encima; vence lo que ocurra
+///     primero). Se revoca en el cierre y no se resuelve con un JOIN en la policy: el costo va una
+///     vez donde se cierra, no en cada lectura.
+///
+/// **Una temporal nunca toca a la permanente.** Son filas distintas y las dos quedan vigentes:
+/// el crédito de Juan asignado temporalmente a Sara lo ven los dos, y al expirar Sara lo deja de
+/// ver con la de Juan intacta.
+///
+/// Nada se borra: revocar es `revoked_at`. La tabla ES el historial de asignaciones.
+model CreditAssignment {
+  id        String    @id @default(uuid())
+  accountId String    @map("account_id")
+  creditId  String    @map("credit_id")
+  /// A quién se le asigna (users.id, referencia suave como el resto del dominio).
+  userId    String    @map("user_id")
+  /// Si nació de reasignar un caso, cuál. Al cerrarse ese caso, esta fila se revoca.
+  caseId    String?   @map("case_id")
+  startsAt  DateTime  @default(now()) @map("starts_at")
+  /// NULL = no vence por fecha. En la permanente es siempre NULL.
+  expiresAt DateTime? @map("expires_at")
+  /// Quién la otorgó. NULL = la creó el sistema (importación, backfill).
+  /// Puede ser igual a `user_id`: un supervisor o admin **sí** puede tomarse un crédito para
+  /// cubrir a alguien de baja. Que un cobrador no pueda otorgarse nada lo garantiza el permiso
+  /// `assignment:write`, que no tiene — no un constraint, que bloquearía el caso legítimo.
+  grantedBy String?   @map("granted_by")
+  revokedAt DateTime? @map("revoked_at")
+  revokedBy String?   @map("revoked_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+  credit  Credit  @relation(fields: [creditId], references: [id])
+
+  /// El índice que sostiene el predicado de `own`: «las asignaciones vigentes de esta persona».
+  @@index([accountId, userId, revokedAt])
+  @@index([accountId, creditId, revokedAt])
+  /// Para revocar en bloque al cerrar un caso.
+  @@index([accountId, caseId])
+  @@map("credit_assignments")
+}
+
+/// Cómo terminó un episodio de mora. Ninguno es «recuperado» a secas: `SOURCE_ABSENT` no dice si pagó o
+/// se puso al día, sólo que el reporte dejó de traerlo (D4), y por eso no cuenta como recuperación.
+enum ArrearEpisodeEnd {
+  PAID // saldó la deuda
+  CURRENT // la mora volvió a cero con saldo vivo (pagó la cuota, o le movieron la fecha)
+  SOURCE_ABSENT // la fuente externa dejó de reportarlo: se desconoce el desenlace
+  WRITTEN_OFF
+  CANCELLED
+  DELETED
+
+  @@map("arrear_episode_end")
+}
+
+/// De quién era la mora al abrirse el episodio (misma regla que `arrearsSourceOf` de shared).
+enum ArrearEpisodeSource {
+  CALCULATED
+  IMPORTED
+  MANUAL
+
+  @@map("arrear_episode_source")
+}
+
+/// **Un periodo de mora de un crédito.** El historial que no existía: `credits.days_past_due` sólo
+/// dice cuántos días lleva hoy, y `arrears` es una foto que se borra y se vuelve a escribir.
+///
+/// 🔴 **Lo escribe un TRIGGER sobre `credits`, no la aplicación** (`credits_track_arrear_episode`,
+/// migración 20261003020000), como los totales de la cartera: la mora cambia desde el trabajo diario,
+/// las acciones manuales, el importador de PSF, los pagos y hasta un UPDATE a mano, y un historial que
+/// depende de que cada vía se acuerde de anotarlo se llena de agujeros. No lo escribas desde el código.
+///
+/// `started_at` es **estimado** (`started_at_estimated`) salvo que alguien haya declarado cuándo
+/// empezó (`moraSince`/`arrearsSince`): un importado sólo trae días, y empezar = corte − días es una
+/// cuenta, no un dato. Los episodios `reconstructed` salen de los casos cerrados antes de que esta
+/// tabla existiera: no traen días máximos ni saldos, y la pantalla no debe fingir que los tiene.
+///
+/// A lo sumo **uno abierto** por crédito (índice único parcial, sólo en SQL).
+model CreditArrearEpisode {
+  id                 String              @id @default(uuid())
+  accountId          String              @map("account_id")
+  creditId           String              @map("credit_id")
+  startedAt          DateTime            @map("started_at") @db.Date
+  startedAtEstimated Boolean             @default(true) @map("started_at_estimated")
+  /// NULL = sigue en mora.
+  endedAt            DateTime?           @map("ended_at") @db.Date
+  endReason          ArrearEpisodeEnd?   @map("end_reason")
+  startDaysPastDue   Int?                @map("start_days_past_due")
+  maxDaysPastDue     Int?                @map("max_days_past_due")
+  balanceAtStart     Decimal?            @map("balance_at_start") @db.Decimal(14, 2)
+  balanceAtEnd       Decimal?            @map("balance_at_end") @db.Decimal(14, 2)
+  source             ArrearEpisodeSource
+  /// Reconstruido de los casos anteriores a esta tabla (no medido en su momento).
+  reconstructed      Boolean             @default(false)
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+  credit  Credit  @relation(fields: [creditId], references: [id])
+
+  @@index([accountId, creditId, startedAt(sort: Desc)])
+  @@map("credit_arrear_episodes")
+}
+
+/// Qué tan importante es una nota. `IMPORTANT` es la que hay que leer antes de salir a cobrar.
+enum CreditNoteKind {
+  INFO
+  WARNING
+  IMPORTANT
+
+  @@map("credit_note_kind")
+}
+
+/// **Una nota sobre un crédito**, independiente del caso: sobrevive a que el caso se cierre o ni siquiera exista
+/// (un crédito en mora sin caso también tiene cosas que decir). Antes no había dónde dejarlas: la única nota era
+/// `case_activities.notes`, atada a un caso y a un tipo de gestión.
+///
+/// **Append-only**, como `case_activities`: sin `updated_at` ni `deleted_at`. Una nota es lo que alguien dijo en
+/// un momento; corregirla es escribir otra. El `id` lo puede traer quien la crea (el móvil, que escribe sin
+/// red y reintenta): crear dos veces el mismo id no duplica.
+model CreditNote {
+  id        String         @id @default(uuid())
+  accountId String         @map("account_id")
+  creditId  String         @map("credit_id")
+  clientId  String         @map("client_id")
+  /// Quién la escribió (users.id, referencia suave como el resto del dominio).
+  authorId  String?        @map("author_id")
+  kind      CreditNoteKind @default(INFO)
+  body      String
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+  credit  Credit  @relation(fields: [creditId], references: [id])
+  client  Client  @relation(fields: [clientId], references: [id])
+
+  @@index([accountId, creditId, createdAt(sort: Desc)])
+  @@index([accountId, clientId])
+  @@map("credit_notes")
 }
 
 /// Cronograma de pagos de un crédito.
@@ -841,26 +1202,26 @@ enum VisitOutcome {
 
 /// Proceso activo de cobranza asociado a un crédito en mora.
 model CollectionCase {
-  id           String       @id @default(uuid())
-  accountId    String       @map("account_id")
-  creditId     String       @map("credit_id")
-  clientId     String       @map("client_id")
-  branchId     String?      @map("branch_id")
-  assigneeId   String?      @map("assignee_id") // collector asignado (users.id, ref suave)
-  status       CaseStatus   @default(PENDING)
-  priority     CasePriority @default(MEDIUM)
+  id               String       @id @default(uuid())
+  accountId        String       @map("account_id")
+  creditId         String       @map("credit_id")
+  clientId         String       @map("client_id")
+  branchId         String?      @map("branch_id")
+  assigneeId       String?      @map("assignee_id") // collector asignado (users.id, ref suave)
+  status           CaseStatus   @default(PENDING)
+  priority         CasePriority @default(MEDIUM)
   /// Prioridad fijada a mano: el trabajo diario de mora NO la recalcula mientras esté puesta.
   /// Guarda cuándo, no un sí/no — la fecha contesta «¿esto lo decidió alguien hace un año?».
   /// Volver a la automática es ponerla en NULL.
-  priorityPinnedAt DateTime? @map("priority_pinned_at")
-  slaDueAt     DateTime?    @map("sla_due_at")
-  lastActionAt DateTime?    @map("last_action_at")
-  closedAt     DateTime?    @map("closed_at")
-  closedBy     String?      @map("closed_by")
-  closedReason String?      @map("closed_reason")
-  createdAt    DateTime     @default(now()) @map("created_at")
-  updatedAt    DateTime     @updatedAt @map("updated_at")
-  deletedAt    DateTime?    @map("deleted_at")
+  priorityPinnedAt DateTime?    @map("priority_pinned_at")
+  slaDueAt         DateTime?    @map("sla_due_at")
+  lastActionAt     DateTime?    @map("last_action_at")
+  closedAt         DateTime?    @map("closed_at")
+  closedBy         String?      @map("closed_by")
+  closedReason     String?      @map("closed_reason")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+  deletedAt        DateTime?    @map("deleted_at")
 
   account    Account        @relation(fields: [accountId], references: [id])
   credit     Credit         @relation(fields: [creditId], references: [id])
@@ -1010,6 +1371,16 @@ enum PaymentMethod {
   MOBILE_PAYMENT
 }
 
+/// Quién recibió la plata (D3). `PaymentMethod` es el medio (efectivo, QR…); esto es el canal:
+/// la cobró Kobrax, o el deudor pagó por un canal de la entidad y el cobrador lo confirmó.
+/// Los dos cuentan como recuperado; se distinguen en el desglose.
+enum PaymentChannel {
+  KOBRAX_COLLECTED
+  EXTERNAL_CONFIRMED
+
+  @@map("payment_channel")
+}
+
 enum PaymentRequestStatus {
   PENDING
   PAID
@@ -1019,23 +1390,25 @@ enum PaymentRequestStatus {
 
 /// Pago aplicado a un crédito. Ledger INMUTABLE (sin update/delete).
 model Payment {
-  id                    String        @id @default(uuid())
-  accountId             String        @map("account_id")
-  creditId              String        @map("credit_id")
-  branchId              String?       @map("branch_id")
-  caseId                String?       @map("case_id")
-  installmentId         String?       @map("installment_id") // credit_installments.id (ref suave)
-  amount                Decimal       @db.Decimal(14, 2)
+  id                    String         @id @default(uuid())
+  accountId             String         @map("account_id")
+  creditId              String         @map("credit_id")
+  branchId              String?        @map("branch_id")
+  caseId                String?        @map("case_id")
+  installmentId         String?        @map("installment_id") // credit_installments.id (ref suave)
+  amount                Decimal        @db.Decimal(14, 2)
   method                PaymentMethod
   provider              String?
-  externalTransactionId String?       @map("external_transaction_id")
-  receiptNumber         Int?          @map("receipt_number")
-  idempotencyKey        String?       @map("idempotency_key") // anti doble registro (header Idempotency-Key)
-  receiptUrl            String?       @map("receipt_url") // foto del comprobante (opcional)
-  receiptHash           String?       @map("receipt_hash") // SHA-256 del buffer original
-  paymentDate           DateTime      @default(now()) @map("payment_date")
-  registeredBy          String?       @map("registered_by") // users.id (ref suave)
-  createdAt             DateTime      @default(now()) @map("created_at")
+  externalTransactionId String?        @map("external_transaction_id")
+  receiptNumber         Int?           @map("receipt_number")
+  idempotencyKey        String?        @map("idempotency_key") // anti doble registro (header Idempotency-Key)
+  receiptUrl            String?        @map("receipt_url") // foto del comprobante (opcional)
+  receiptHash           String?        @map("receipt_hash") // SHA-256 del buffer original
+  paymentDate           DateTime       @default(now()) @map("payment_date")
+  registeredBy          String?        @map("registered_by") // users.id (ref suave)
+  channel               PaymentChannel @default(KOBRAX_COLLECTED)
+  notes                 String?
+  createdAt             DateTime       @default(now()) @map("created_at")
   // Sin updated_at ni deleted_at → INMUTABLE por diseño. receipt_* se escriben en el INSERT y no se tocan.
 
   account Account         @relation(fields: [accountId], references: [id])
@@ -1210,7 +1583,6 @@ model CatalogItem {
   @@index([accountId, catalog, isActive])
   @@map("catalog_items")
 }
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // W8 · Dashboards configurables

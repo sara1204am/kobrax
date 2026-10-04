@@ -47,7 +47,19 @@ DECLARE
     -- Garantias del credito: la personal (credit_guarantors) y la no personal (collaterals).
     -- Las dos tablas puente llevan account_id propio aunque cuelguen de otra fila: sin el, su
     -- aislamiento dependeria del JOIN que escriba cada consulta.
-    'collaterals', 'collateral_credits', 'credit_guarantors'
+    'collaterals', 'collateral_credits', 'credit_guarantors',
+    -- Asignación efectiva (F1 del plan de seguridad). Es la tabla que decide quién ve qué dentro
+    -- de la empresa, así que su propio aislamiento entre empresas no puede faltar.
+    'credit_assignments',
+    -- Historial de mora (F4/07 T11a): lo escribe un trigger sobre `credits`, pero se lee por tenant.
+    'credit_arrear_episodes',
+    -- Notas por crédito (F4/07 T12): las escribe el equipo, se leen por tenant.
+    'credit_notes',
+    -- Cartera de una fuente externa (PSF): lo que reportó cada corrida, los vínculos persona →
+    -- cliente confirmados y los códigos de asesor. Los tres dicen de quién es qué cartera.
+    'credit_external_snapshots', 'client_external_keys', 'external_advisor_links',
+    -- Historial de importaciones: qué le pasó a cada registro en cada corrida.
+    'client_import_run_items'
   ];
 BEGIN
   FOREACH t IN ARRAY operational LOOP

@@ -1,0 +1,302 @@
+'use client';
+
+import { useLocale, useTranslations } from 'next-intl';
+import {
+  CREDIT_STATUSES,
+  memberName,
+  registrationSituation,
+  type CreditDetail,
+  type CreditFormState,
+  type Assignee,
+  type Member,
+  type RegisteredStateResult,
+  type TermsEditBlock,
+} from '@kobrax/shared';
+import type { CatalogOption } from '@/components/client-form';
+import { Section } from '@/components/panel-ui';
+import { Field, Input, Select } from '@/components/ui';
+import { CreditQuotePanel, CreditTermsFields } from '@/components/credit-terms-fields';
+import { PaymentPlanTable } from '@/components/payment-plan-table';
+import { PaidInstallmentsSelect } from '@/components/paid-installments-select';
+import { dayDate, money } from '@/lib/format';
+import type { CreditDraft } from '@/lib/credit-patch';
+
+/**
+ * La ficha del crédito en modo edición (F4/06 · Fase 3).
+ *
+ * 🔴 **Las condiciones son las del alta, con los mismos campos** (`CreditTermsFields`): editar un
+ * crédito es volver a definirlo, y la API lo recalcula con el mismo motor. Sólo se ofrecen mientras
+ * se pueden guardar (`block === null`); si no, se dice por qué en vez de dibujar campos que la API
+ * va a rechazar.
+ *
+ * El estado al registrar (D13) muestra antes de guardar el saldo y el próximo cobro que van a quedar:
+ * sale de `registeredState`, la misma regla que aplica la API.
+ */
+export function CreditEditor({
+  credit,
+  draft,
+  onChange,
+  block,
+  state,
+  registered,
+  team,
+  assignees,
+  types,
+}: {
+  credit: CreditDetail;
+  draft: CreditDraft;
+  onChange: (next: CreditDraft) => void;
+  block: TermsEditBlock;
+  state: CreditFormState;
+  /** El resultado de condiciones + estado al registrar; `null` mientras falten datos. */
+  registered: RegisteredStateResult | null;
+  team: Member[];
+  /** A quién se puede asignar. Vacío = quien edita no tiene `assignment:write`: no se dibuja. */
+  assignees: Assignee[];
+  types: CatalogOption[];
+}) {
+  const t = useTranslations('portfolio.creditDetail');
+  const tp = useTranslations('portfolio');
+  const tc = useTranslations('portfolio.creditForm');
+  const locale = useLocale();
+  const cur = credit.currency;
+  const setExtra = (p: Partial<CreditDraft['extras']>) =>
+    onChange({ ...draft, extras: { ...draft.extras, ...p } });
+  const setInitial = (p: Partial<CreditDraft['initial']>) =>
+    onChange({ ...draft, initial: { ...draft.initial, ...p } });
+
+  const schedule = state.missing.length === 0 ? state.calculation.schedule : null;
+  const derivedTotal = state.missing.length === 0 ? state.calculation.quote?.total : null;
+
+  // D13: con plan, el estado al registrar es sólo «cuántas de las primeras están pagadas». El saldo y
+  // la mora salen de ahí (se borran los manuales); quedan a mano sólo en el préstamo abierto.
+  const typedPaid = Number(draft.initial.paidInstallments) || 0;
+  const paidCount = schedule ? Math.min(typedPaid, Math.max(0, schedule.length - 1)) : 0;
+  const setPaid = (k: number) =>
+    onChange({
+      ...draft,
+      initial: {
+        paidInstallments: k > 0 ? String(k) : '',
+        outstandingBalance: '',
+        daysPastDue: '',
+      },
+    });
+  const situation =
+    schedule && state.calculation.ok
+      ? registrationSituation(state.terms, paidCount, draft.form.arrearsMethod, new Date())
+      : null;
+
+  return (
+    <>
+      {block === null ? (
+        // Como en el alta: los datos en 3/4 y la cuota en 1/4, fija mientras se baja.
+        <div className="grid gap-4 lg:grid-cols-4 lg:items-start">
+          <section
+            className="rounded-2xl border border-k-border bg-white p-5 lg:col-span-3"
+            aria-label={t('sections.terms')}
+          >
+            <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
+              {t('sections.terms')}
+            </h2>
+            <CreditTermsFields
+              form={draft.form}
+              onChange={(form) => onChange({ ...draft, form })}
+            />
+          </section>
+
+          <aside className="lg:sticky lg:top-4 lg:col-start-4 lg:row-span-3 lg:row-start-1">
+            <CreditQuotePanel state={state} currency={cur} situation={situation} />
+          </aside>
+
+          {schedule && schedule.length > 0 && (
+            <div className="lg:col-span-3">
+              <Section title={t('sections.plan')}>
+                {/* D13: cuántas de las primeras cuotas ya estaban pagadas al registrarlo (como en el alta). */}
+                {schedule.length > 1 && (
+                  <div className="mb-4 max-w-md">
+                    <PaidInstallmentsSelect schedule={schedule} value={paidCount} onChange={setPaid} />
+                  </div>
+                )}
+                <PaymentPlanTable
+                  rows={schedule}
+                  currency={cur}
+                  paidCount={paidCount}
+                  onPaidChange={schedule.length > 1 ? setPaid : undefined}
+                />
+              </Section>
+            </div>
+          )}
+
+          {/* Préstamo abierto: sin plan no hay cuotas que marcar; el estado se carga a mano. */}
+          {!schedule && (
+            <div className="lg:col-span-3">
+              <Section title={t('sections.initialState')}>
+                <p className="mb-4 text-[13px] text-k-text-2">{t('initial.hint')}</p>
+                <div className="grid gap-5 sm:grid-cols-3">
+                  <Field label={t('initial.paidInstallments')}>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="1"
+                      placeholder="0"
+                      value={draft.initial.paidInstallments}
+                      onChange={(e) => setInitial({ paidInstallments: e.target.value })}
+                    />
+                  </Field>
+                  <Field label={t('initial.outstandingBalance')}>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      // Vacío = que se derive del plan; el placeholder muestra cuánto daría.
+                      placeholder={
+                        registered?.ok && registered.balanceDerived
+                          ? t('initial.outstandingPlaceholder', {
+                              amount: money(registered.outstandingBalance, cur),
+                            })
+                          : undefined
+                      }
+                      value={draft.initial.outstandingBalance}
+                      onChange={(e) => setInitial({ outstandingBalance: e.target.value })}
+                    />
+                  </Field>
+                  <Field label={t('initial.daysPastDue')}>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={3650}
+                      step="1"
+                      placeholder="0"
+                      value={draft.initial.daysPastDue}
+                      onChange={(e) => setInitial({ daysPastDue: e.target.value })}
+                    />
+                  </Field>
+                </div>
+                <p className="mt-4 text-[13px]" aria-live="polite">
+                  {registered === null ? (
+                    <span className="text-k-text-2">{t('initial.issues.TERMS_INVALID')}</span>
+                  ) : registered.ok ? (
+                    <span className="text-k-text">
+                      {t('initial.result', {
+                        balance: money(registered.outstandingBalance, cur),
+                        date: dayDate(registered.nextDueDate, locale),
+                      })}
+                    </span>
+                  ) : (
+                    <span className="text-k-danger">{t(`initial.issues.${registered.code}`)}</span>
+                  )}
+                </p>
+                {derivedTotal == null && state.missing.length === 0 && (
+                  <p className="mt-2 text-[12px] text-k-muted">{tc('quote.openLoan')}</p>
+                )}
+              </Section>
+            </div>
+          )}
+        </div>
+      ) : (
+        <Section title={t('sections.terms')}>
+          <p className="text-[14px] text-k-text-2">{t(`blocked.${block}`)}</p>
+        </Section>
+      )}
+
+      <Section title={t('sections.collection')}>
+        <div className="grid gap-5 sm:grid-cols-2">
+          {/* Importado: el estado lo informa la fuente y el código es su nº de operación (D5). */}
+          <Field label={tp('form.status')}>
+            <Select
+              value={draft.extras.status}
+              onChange={(e) => setExtra({ status: e.target.value })}
+              disabled={block === 'locked'}
+            >
+              {CREDIT_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {tp(`creditStatus.${s}`)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field label={tp('fields.code')}>
+            <Input
+              value={draft.extras.code}
+              onChange={(e) => setExtra({ code: e.target.value })}
+              disabled={block === 'locked'}
+              maxLength={64}
+            />
+          </Field>
+
+          {types.length > 0 && (
+            <Field label={tp('fields.creditType')}>
+              <Select
+                value={draft.extras.typeCode}
+                onChange={(e) => setExtra({ typeCode: e.target.value })}
+              >
+                <option value="">{tp('creditNoType')}</option>
+                {types.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.label || c.code}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+
+          {/*
+            🔴 Sólo con `assignment:write` (la lista viene vacía sin él). Las opciones son las que el
+            servidor acepta —cobradores activos y uno mismo—; el responsable de hoy, si no está entre
+            ellas (un gerente, alguien dado de baja), se muestra igual para no esconder el valor real.
+            Cambiarlo NO mueve los casos abiertos: su cobrador se reasigna aparte.
+          */}
+          {assignees.length > 0 && (
+            <Field label={tp('form.assignedTo')} hint={tp('form.assignedToHint')}>
+              <Select
+                value={draft.extras.assignedManagerId}
+                onChange={(e) => setExtra({ assignedManagerId: e.target.value })}
+              >
+                {!credit.assignedManagerId && <option value="">{tp('form.unassigned')}</option>}
+                {credit.assignedManagerId && !assignees.some((a) => a.userId === credit.assignedManagerId) && (
+                  <option value={credit.assignedManagerId}>
+                    {(() => {
+                      const m = team.find((x) => x.userId === credit.assignedManagerId);
+                      return m ? memberName(m) : tp('form.currentAssignee');
+                    })()}
+                  </option>
+                )}
+                {assignees.map((a) => (
+                  <option key={a.userId} value={a.userId}>
+                    {a.isMe ? tp('form.meNamed', { name: a.name }) : a.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+
+          {/* Con pagos (o cronograma guardado) las condiciones quedan quietas, pero el próximo cobro
+              se puede mover: es la agenda, no el contrato. Sin pagos lo deriva el estado al registrar. */}
+          {(block === 'payments' || block === 'schedule') && (
+            <Field label={t('nextDue')}>
+              <Input
+                type="date"
+                value={draft.extras.nextDueDate}
+                onChange={(e) => setExtra({ nextDueDate: e.target.value })}
+              />
+            </Field>
+          )}
+
+          {/* La nota es de Kobrax también en el importado: lo que el cobrador sabe del deudor (D5). */}
+          <div className="sm:col-span-2">
+            <Field label={t('notes')}>
+              <Input
+                value={draft.form.notes}
+                onChange={(e) =>
+                  onChange({ ...draft, form: { ...draft.form, notes: e.target.value } })
+                }
+                maxLength={500}
+              />
+            </Field>
+          </div>
+        </div>
+      </Section>
+    </>
+  );
+}

@@ -1,17 +1,35 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { AgendaItemStatus, AgendaItemType, CasePriority, CaseStatus, CreditStatus } from '@prisma/client';
+import { AgendaItemStatus, AgendaItemType, CasePriority, CaseStatus, CreditDataOrigin, CreditStatus, InstallmentStatus } from '@prisma/client';
 import {
   addPeriods,
+  arrearsByMethod,
   arrearsFromDueDate,
+  arrearsMethodOf,
+  ArrearsMethod,
+  DEFAULT_ARREARS_METHOD,
+  oldestUnpaid,
+  withArrearsMethod,
+  CREDIT_TERMS_VERSION,
+  creditTotalToCollect,
   CreditOrigin,
+  parseCreditTerms,
+  resolveCreditTerms,
+  registeredState,
+  hasInitialState,
+  type CreditScheduleRow,
+  type CreditTerms,
+  type TermsResolution,
+  type TermsResolutionError,
   isExternalOrigin,
   manualArrears,
   moraSinceFromDays,
   PaymentFrequency,
   readCreditMetadata,
   resolvePagination,
+  staleAfterDaysOf,
   type ApiResponse,
+  type BalanceBasis,
   type CreditMetadata,
   ResponseDto,
 } from '@kobrax/shared';
@@ -19,6 +37,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
+import { AssignmentService } from '../assignments/assignment.service';
 import {
   buildSchedule,
   computeArrears,
@@ -28,15 +47,37 @@ import {
 } from './credit-math';
 import { serializeCredit } from './credits.serializer';
 import { ClearArrearsDto, CreateCreditDto, ListCreditsQueryDto, UpdateCreditDto } from './dto/credit.dto';
-import { arrearsDateNotFuture, creditLocked, creditNotActive, currencyMismatch, resourceNotFound, scheduleInvalid } from './credits.errors';
+import {
+  arrearsDateNotFuture,
+  creditHasPayments,
+  creditHasSchedule,
+  creditInitialStateInvalid,
+  creditInstallmentMismatch,
+  creditLocked,
+  creditNotActive,
+  creditOriginNotAllowed,
+  creditTermsConflict,
+  creditTermsEditUnsupported,
+  creditTermsInvalid,
+  currencyMismatch,
+  resourceNotFound,
+  scheduleInvalid,
+} from './credits.errors';
 import { computePriority, slaDueAt, DEFAULT_PRIORITY_PARAMS } from '../cases/case-priority';
 import { closeOpenCases, openCaseIfNone } from '../arrears/case-lifecycle';
 
 interface AccountConfig {
   currencyCode: string;
   labels: Record<string, string>;
+  /** Días desde el corte tras los que el dato de un externo es viejo (D9), del formato de importación. */
+  staleAfterDays: number;
   arrears: ArrearParams;
+  /** Método de mora por defecto de los créditos nuevos (D20), de `accounts.settings`. */
+  arrearsMethod: ArrearsMethod;
 }
+
+/** Lo que el serializer toma de la config: etiquetas y umbral del dato viejo. */
+const labelsOf = (c: AccountConfig): [Record<string, string>, number] => [c.labels, c.staleAfterDays];
 
 @Injectable()
 export class CreditsService {
@@ -45,6 +86,7 @@ export class CreditsService {
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
     private readonly plan: PlanLimitsService,
+    private readonly assignment: AssignmentService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -57,11 +99,14 @@ export class CreditsService {
     const cfg = (account?.configuration ?? {}) as {
       creditLabels?: Record<string, string>;
       arrears?: Partial<ArrearParams>;
+      importConfig?: { staleAfterDays?: unknown };
     };
     return {
       currencyCode: account?.currencyCode ?? 'USD',
       labels: cfg.creditLabels ?? {},
+      staleAfterDays: staleAfterDaysOf(cfg.importConfig?.staleAfterDays),
       arrears: { ...DEFAULT_ARREAR_PARAMS, ...(cfg.arrears ?? {}) },
+      arrearsMethod: arrearsMethodOf(account?.settings),
     };
   }
 
@@ -70,39 +115,138 @@ export class CreditsService {
     const config = await this.accountConfig();
     const currency = dto.currency ?? config.currencyCode;
     if (dto.currency && dto.currency !== config.currencyCode) throw currencyMismatch(config.currencyCode);
+    if (dto.origin && isExternalOrigin(dto.origin)) throw creditOriginNotAllowed(dto.origin);
+
+    /*
+     * F4/06 · D14: con condiciones (`terms`) la API recalcula con el motor único y **manda según el
+     * modo**; cuota, número de cuotas, frecuencia, primera fecha y tasa salen de ahí, no de los campos
+     * sueltos (que, si vienen, tienen que coincidir). Sin `terms`, el alta de siempre.
+     */
+    const resolved = dto.terms !== undefined ? resolveTerms(dto) : undefined;
+
+    /*
+     * «Ya está en curso» con condiciones (D13): la misma regla que la edición (`registeredState`),
+     * aplicada en el alta para que el móvil lo cargue en una sola operación offline.
+     */
+    if (dto.initialState && !resolved) throw creditTermsInvalid(['TERMS_REQUIRED']);
+    if (dto.initialState && dto.outstandingBalance !== undefined) throw creditTermsConflict('outstandingBalance');
+    if (dto.initialState && dto.daysPastDue !== undefined) throw creditTermsConflict('daysPastDue');
+    const registered = resolved && dto.initialState ? registeredState(resolved.terms, dto.initialState) : undefined;
+    if (registered && !registered.ok) throw creditInitialStateInvalid(registered.code);
+    const asOf = new Date();
+    /*
+     * Cuota variable (capital fijo): no hay UNA cuota que congelar. Se guarda el cronograma del motor
+     * fila por fila y de ahí salen los pagos, la mora y la próxima fecha, como en los créditos con
+     * cronograma de siempre. Las cuotas ya pagadas al registrarlo (D13) nacen pagadas.
+     */
+    const variableSchedule = resolved?.schedule ?? null;
+    const installmentAmount = resolved ? (variableSchedule ? undefined : resolved.installmentAmount) : dto.installmentAmount;
+    const installmentsCount = resolved ? resolved.installmentsCount : dto.installmentsCount;
+    const interestRate = resolved ? resolved.interestRatePercent : (dto.interestRate ?? 0);
 
     const disbursedAt = dto.disbursedAt ? new Date(dto.disbursedAt) : new Date();
-    const firstDueDate = dto.firstDueDate ? new Date(dto.firstDueDate) : addMonths(disbursedAt, 1);
+    const firstDueDate = resolved
+      ? new Date(`${resolved.nextDueDate}T00:00:00.000Z`)
+      : dto.firstDueDate
+        ? new Date(dto.firstDueDate)
+        : addMonths(disbursedAt, 1);
 
     /**
      * Dos formas de nacer, y las distingue un solo dato (spec §4, §7, §8):
      *  · con `installmentAmount` → crédito de cobranza: la cuota viene **congelada** del móvil y
      *    NO se genera cronograma. Es el único modo que admite el préstamo abierto (sin `n`).
+     *    Con `terms` siempre es este camino: el cronograma real llega en F4/06 · Fase 6.
      *  · sin él → comportamiento de siempre (web/importador): cronograma amortizado.
      */
-    const frozenInstallment = dto.installmentAmount !== undefined;
-    const schedule = frozenInstallment
-      ? []
-      : buildSchedule({
-          principal: dto.principalAmount,
-          periodicRate: dto.interestRate ?? 0,
-          count: dto.installmentsCount ?? 1,
-          type: dto.amortizationType ?? 'FRENCH',
-          firstDueDate,
+    const frozenInstallment = installmentAmount !== undefined;
+    const schedule: InstallmentRow[] = variableSchedule
+      ? installmentRows(variableSchedule, dto.initialState?.paidInstallments ?? 0)
+      : frozenInstallment
+        ? []
+        : buildSchedule({
+            principal: dto.principalAmount,
+            periodicRate: dto.interestRate ?? 0,
+            count: dto.installmentsCount ?? 1,
+            type: dto.amortizationType ?? 'FRENCH',
+            firstDueDate,
+          });
+    // El cronograma del motor puede llevar seguro y cargos dentro de la cuota (D18), que la tabla no
+    // separa: ahí el invariante es Σ capital = monto (cada cuota ya es la suma de sus partes).
+    const balanced = variableSchedule
+      ? Math.round(schedule.reduce((s, r) => s + r.principal * 100, 0)) === Math.round(dto.principalAmount * 100)
+      : scheduleIsBalanced(dto.principalAmount, schedule);
+    if (!frozenInstallment && !balanced) throw scheduleInvalid();
+
+    /*
+     * 🔴 D15 (F4/06): el saldo es el **total pendiente de cobro**, no el capital. Antes nacía igual al
+     * capital y el pago que lo superaba se rechazaba: en 1.000 al 10 % en 5 cuotas de 300, la 4.ª cuota
+     * rebotaba con «El monto excede el saldo» y la ganancia no se podía cobrar nunca.
+     *
+     *  · "ya está en curso" → el saldo que dijo quien lo carga (es lo que falta cobrar);
+     *  · total conocido (cronograma, o cuota × n) → ese total;
+     *  · préstamo abierto → nadie sabe el total: saldo = capital, marcado `principal` (D16).
+     */
+    const totalToCollect = resolved
+      ? resolved.totalToCollect
+      : creditTotalToCollect({
+          principalAmount: dto.principalAmount,
+          installmentAmount,
+          installmentsCount,
+          installments: schedule,
         });
-    if (!frozenInstallment && !scheduleIsBalanced(dto.principalAmount, schedule)) throw scheduleInvalid();
+    const balanceBasis: BalanceBasis = registered?.ok
+      ? registered.balanceBasis
+      : dto.outstandingBalance !== undefined || totalToCollect !== null
+        ? 'total'
+        : 'principal';
+    const outstandingBalance = registered?.ok
+      ? registered.outstandingBalance
+      : (dto.outstandingBalance ?? totalToCollect ?? dto.principalAmount);
+    // D20: el método del crédito; si el alta no lo dice, el default de la cuenta. Se guarda siempre, así
+    // cambiar el default de la cuenta después no cambia cómo se cuenta la mora de los créditos ya dados.
+    const arrearsMethod = dto.arrearsMethod ?? config.arrearsMethod;
+    // Mora declarada al registrarlo (apps viejas) → marca manual, como en la edición. Si no se declaró, la
+    // calcula la fecha de la primera cuota impaga (k+1) con el método del crédito.
+    const moraSince = registered?.ok && registered.daysPastDue > 0 ? moraSinceFromDays(registered.daysPastDue, asOf) : undefined;
+    const initialArrears =
+      registered?.ok && !moraSince
+        ? arrearsByMethod({ method: arrearsMethod, oldestUnpaidDue: registered.nextDueDate, balance: registered.outstandingBalance, asOf })
+        : undefined;
+    const daysPastDue = registered?.ok
+      ? moraSince
+        ? registered.daysPastDue
+        : initialArrears!.daysPastDue
+      : (dto.daysPastDue ?? 0);
 
     const metadata: CreditMetadata = {
-      frequency: dto.frequency ?? PaymentFrequency.MONTHLY,
+      frequency: resolved?.frequency ?? dto.frequency ?? PaymentFrequency.MONTHLY,
       origin: dto.origin ?? CreditOrigin.MANUAL,
-      installmentAmount: dto.installmentAmount,
-      nextDueDate: dto.nextDueDate?.slice(0, 10) ?? (frozenInstallment ? isoDate(firstDueDate) : undefined),
+      installmentAmount,
+      nextDueDate:
+        (registered?.ok ? registered.nextDueDate : undefined) ??
+        resolved?.nextDueDate ??
+        dto.nextDueDate?.slice(0, 10) ??
+        (frozenInstallment ? isoDate(firstDueDate) : undefined),
       externalRef: dto.externalRef,
       notes: dto.notes,
+      balanceBasis,
+      // Las condiciones tal como las validó el motor: el detalle regenera el MISMO plan con ellas.
+      ...(resolved ? { terms: resolved.terms, termsVersion: CREDIT_TERMS_VERSION } : {}),
+      initialState: hasInitialState(dto.initialState) ? { ...dto.initialState } : undefined,
+      moraSince,
+      arrearsMethod,
+      arrearsSince: initialArrears?.arrearsSince,
     };
-    // "Este préstamo ya está en curso" (§4.1): sin el toggle, saldo = capital y mora = 0.
-    const outstandingBalance = dto.outstandingBalance ?? dto.principalAmount;
-    const daysPastDue = dto.daysPastDue ?? 0;
+
+    /*
+     * El responsable. Elegir a OTRA persona exige `assignment:write`; sin elegir, quien no puede
+     * asignar queda como responsable de lo que da de alta (P4) — el préstamo que el cobrador acuerda
+     * en la calle es suyo. Quien sí puede asignar y no elige lo deja sin responsable, como antes.
+     */
+    const me = this.tenant.userId;
+    if (dto.assignedManagerId && dto.assignedManagerId !== me) this.assignment.authorize();
+    const responsible = dto.assignedManagerId ?? (this.assignment.canAssign() ? undefined : me);
+    const assignReason = dto.assignedManagerId && dto.assignedManagerId !== me ? 'CREATE_MANUAL' : 'CREATE_OWN';
 
     const accountId = this.tenant.accountId;
     const created = await this.tx(async (tx) => {
@@ -121,6 +265,7 @@ export class CreditsService {
         select: { id: true },
       });
       if (!client) throw resourceNotFound(); // cliente inexistente o de otro tenant
+      if (dto.assignedManagerId) await this.assignment.assertAssignable(tx, [dto.assignedManagerId]);
 
       // 🔴 El tope de créditos del plan. Va DESPUÉS de la guarda de idempotencia: un reintento de
       // algo que ya entró no vuelve a pedir lugar.
@@ -141,28 +286,26 @@ export class CreditsService {
           branchId: dto.branchId,
           code: dto.code,
           typeCode: dto.typeCode,
+          // Espejo en columna de `metadata.origin` (D1). El alta sólo admite los de Kobrax.
+          origin: dto.origin === CreditOrigin.QUICK_BATCH ? CreditDataOrigin.QUICK_BATCH : CreditDataOrigin.MANUAL,
           principalAmount: dto.principalAmount,
           outstandingBalance,
-          interestRate: dto.interestRate ?? 0,
+          interestRate, // con `terms`: el % del calculado, 0 si fue acordado (D7: sólo informativa)
           currency,
-          installmentsCount: dto.installmentsCount ?? 0, // 0 = préstamo abierto (§4.1)
+          installmentsCount: installmentsCount ?? 0, // 0 = préstamo abierto (§4.1)
           daysPastDue,
-          assignedManagerId: dto.assignedManagerId,
+          // La columna nace con el mismo valor que `AssignmentService` escribe abajo: así el crédito
+          // que se devuelve ya trae su responsable sin otra lectura.
+          assignedManagerId: responsible,
           disbursedAt,
           metadata: stripUndefined(metadata),
           installments: {
-            create: schedule.map((s) => ({
-              accountId,
-              number: s.number,
-              dueDate: s.dueDate,
-              amount: s.amount,
-              principal: s.principal,
-              interest: s.interest,
-            })),
+            create: schedule.map((s) => ({ accountId, ...s })),
           },
         },
         include: { installments: { orderBy: { number: 'asc' } } },
       });
+      const assigned = responsible ? await this.assignment.apply(tx, [{ creditId: credit.id, to: responsible }], assignReason) : [];
 
       // Caso de cobranza automático (§5.2): "para el cobrador, cliente y préstamo son una sola acción".
       if (dto.openCase) {
@@ -197,22 +340,23 @@ export class CreditsService {
           });
           agendaId = item.id;
         }
-        return { credit, caseId: kase.id, agendaId, reintento: false };
+        return { credit, caseId: kase.id, agendaId, reintento: false, assigned };
       }
-      return { credit, caseId: undefined, agendaId: undefined, reintento: false };
+      return { credit, caseId: undefined, agendaId: undefined, reintento: false, assigned };
     });
 
     // El alta ya se auditó cuando entró de verdad: un reintento de la cola no la registra dos veces.
-    if (created.reintento) return serializeCredit(created.credit, config.labels);
+    if (created.reintento) return serializeCredit(created.credit, config.labels, config.staleAfterDays);
 
     await this.audit.record({ entity: 'credit', entityId: created.credit.id, action: 'CREATE', after: creditSummary(created.credit) });
+    await this.assignment.auditChanges(created.assigned ?? []);
     if (created.caseId) {
       await this.audit.record({ entity: 'collection_case', entityId: created.caseId, action: 'CREATE', after: { creditId: created.credit.id, clientId: dto.clientId, source: 'credit_create' } });
     }
     if (created.agendaId) {
       await this.audit.record({ entity: 'agenda_item', entityId: created.agendaId, action: 'CREATE', after: { creditId: created.credit.id, caseId: created.caseId, source: 'credit_create' } });
     }
-    return serializeCredit(created.credit, config.labels);
+    return serializeCredit(created.credit, config.labels, config.staleAfterDays);
   }
 
   async list(query: ListCreditsQueryDto): Promise<ApiResponse<ReturnType<typeof serializeCredit>[]>> {
@@ -230,7 +374,7 @@ export class CreditsService {
       ]),
     );
     return ResponseDto.paginated(
-      rows.map((c) => serializeCredit(c, config.labels)),
+      rows.map((c) => serializeCredit(c, config.labels, config.staleAfterDays)),
       total,
       page,
       limit,
@@ -242,11 +386,11 @@ export class CreditsService {
     const credit = await this.tx((tx) =>
       tx.credit.findFirst({
         where: { id, deletedAt: null },
-        include: { installments: { orderBy: { number: 'asc' } }, arrears: true },
+        include: { installments: { orderBy: { number: 'asc' } }, arrears: true, _count: { select: { payments: true } } },
       }),
     );
     if (!credit) throw resourceNotFound();
-    return serializeCredit(credit, config.labels);
+    return serializeCredit(credit, config.labels, config.staleAfterDays);
   }
 
   async getSchedule(id: string) {
@@ -254,52 +398,314 @@ export class CreditsService {
     return { creditId: credit.id, installments: credit.installments ?? [] };
   }
 
+  /**
+   * Editar el crédito. Tres clases de cambio, con reglas distintas:
+   *
+   *  · **Organización** (tipo, responsable, sucursal): siempre, también en el importado.
+   *  · **Estado y código**: en el importado los manda la fuente (D5) — el código es el nº de operación
+   *    del reporte, y el estado financiero lo informa el archivo. Mandar el mismo valor no es un cambio.
+   *  · **Nota**: siempre; en el importado es enriquecimiento de Kobrax, no un dato de la fuente (D5).
+   *  · **Próximo vencimiento**: cualquier crédito propio, tenga o no condiciones.
+   *  · **Financieros**, de dos formas que no se mezclan en un mismo pedido:
+   *      - `terms` / `initialState` (F4/06 · Fase 3): se redefine el crédito con el motor. Cuota,
+   *        total, saldo (D15), próximo vencimiento y mora salen de `resolveCreditTerms` +
+   *        `registeredState` (D13), la misma regla que muestra la ficha. **Sólo sin pagos**: con pagos,
+   *        cambiarlo reescribiría lo cobrado, y eso es una reestructura.
+   *      - los campos sueltos (capital, tasa, cuota, frecuencia): la edición anterior, sólo para
+   *        créditos sin `terms` — tocar uno suelto dejaría dos definiciones del mismo crédito.
+   */
   async update(id: string, dto: UpdateCreditDto): Promise<ReturnType<typeof serializeCredit>> {
     const config = await this.accountConfig();
-    // ¿Toca datos financieros/operativos? (los que el candado del importado protege, §4.3)
-    const financialEdit =
-      dto.principalAmount !== undefined ||
-      dto.interestRate !== undefined ||
-      dto.installmentAmount !== undefined ||
-      dto.frequency !== undefined ||
-      dto.nextDueDate !== undefined ||
-      dto.notes !== undefined;
+    const redefine = dto.terms !== undefined || dto.initialState !== undefined;
+    const looseField = LOOSE_FINANCIAL_FIELDS.find((k) => dto[k] !== undefined);
+    const operational = dto.nextDueDate !== undefined || dto.notes !== undefined;
+    if (redefine && looseField) throw creditTermsConflict(looseField);
+    // Al redefinir, el próximo vencimiento se deriva de las cuotas pagadas: no se manda aparte.
+    if (redefine && dto.nextDueDate !== undefined) throw creditTermsConflict('nextDueDate');
 
-    const { before, after } = await this.tx(async (tx) => {
-      const prev = await tx.credit.findFirst({ where: { id, deletedAt: null } });
+    const asOf = new Date();
+    const { before, after, caseOpened, assigned } = await this.tx(async (tx) => {
+      const prev = await tx.credit.findFirst({
+        where: { id, deletedAt: null },
+        include: { _count: { select: { payments: true, installments: true } }, client: { select: { riskSegment: true } } },
+      });
       if (!prev) throw resourceNotFound();
-      const meta = readCreditMetadata(prev.metadata);
-      if (financialEdit && isExternalOrigin(meta.origin)) throw creditLocked();
+
+      /*
+       * 🔴 Cambiar el responsable exige `assignment:write`, y se revisa ACÁ y no con `@Roles`: este
+       * mismo PATCH lo usa el cobrador para corregir la nota o la próxima fecha, y cerrarle el
+       * endpoint entero le quitaría eso. Mandar el responsable que ya tiene no es un cambio.
+       * No toca los casos abiertos: el cobrador del caso es otra responsabilidad (decisión 7).
+       */
+      const reassigning = dto.assignedManagerId !== undefined && dto.assignedManagerId !== prev.assignedManagerId;
+      let assigned: Awaited<ReturnType<AssignmentService['apply']>> = [];
+      if (reassigning) {
+        this.assignment.authorize();
+        await this.assignment.assertAssignable(tx, [dto.assignedManagerId!]);
+        assigned = await this.assignment.apply(
+          tx,
+          [{ creditId: id, to: dto.assignedManagerId!, expectedFrom: prev.assignedManagerId }],
+          'MANUAL',
+        );
+      }
+      const meta = readCreditMetadata(prev.metadata, prev.origin);
+      if (isExternalOrigin(meta.origin)) {
+        const sourceControlled =
+          dto.nextDueDate !== undefined ||
+          (dto.status !== undefined && dto.status !== prev.status) ||
+          (dto.code !== undefined && (dto.code || null) !== prev.code);
+        if (redefine || looseField || sourceControlled) throw creditLocked();
+      }
+      if (looseField && meta.terms) throw creditTermsEditUnsupported();
+
+      /*
+       * D20: cambiar cómo se cuenta la mora a mitad de vida la reescribiría de un clic (8 días pasan a
+       * 38): con pagos registrados se bloquea, igual que las condiciones. El cambio queda en la auditoría
+       * (`arrearsMethod` en el antes y el después).
+       */
+      const currentMethod = meta.arrearsMethod ?? DEFAULT_ARREARS_METHOD;
+      const methodChange = dto.arrearsMethod !== undefined && dto.arrearsMethod !== currentMethod;
+      if (methodChange && isExternalOrigin(meta.origin)) throw creditLocked();
+      if (methodChange && prev._count.payments > 0) throw creditHasPayments();
+      const method = methodChange ? dto.arrearsMethod! : currentMethod;
 
       // Cuota/frecuencia/próxima fecha/nota viven en metadata (D1); se hace merge preservando el resto.
-      const nextMeta: CreditMetadata = {
-        ...meta,
+      // El importado sólo llega acá con la nota (D5): se funde sobre su metadata tal como está, porque
+      // la leída trae defaults (frecuencia MONTHLY) que el archivo nunca dijo (D9).
+      let nextMeta: CreditMetadata = {
+        ...(isExternalOrigin(meta.origin) ? (prev.metadata as unknown as CreditMetadata) : meta),
         ...(dto.installmentAmount !== undefined ? { installmentAmount: dto.installmentAmount } : {}),
         ...(dto.frequency !== undefined ? { frequency: dto.frequency } : {}),
         ...(dto.nextDueDate !== undefined ? { nextDueDate: dto.nextDueDate.slice(0, 10) } : {}),
         ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
       };
+      const data: Prisma.CreditUncheckedUpdateInput = {
+        status: dto.status,
+        // El responsable NO va acá: lo escribió `AssignmentService` arriba (tabla + columna).
+        branchId: dto.branchId,
+        code: dto.code,
+        typeCode: dto.typeCode,
+        principalAmount: dto.principalAmount,
+        interestRate: dto.interestRate,
+      };
 
+      if (redefine) {
+        if (prev._count.payments > 0) throw creditHasPayments();
+        // Cronograma de la web anterior a F4/06: no hay condiciones de las que regenerarlo. El de una
+        // cuota variable sí las tiene, y se rehace entero más abajo.
+        if (prev._count.installments > 0 && !meta.terms) throw creditHasSchedule();
+        const terms = dto.terms !== undefined ? parseTermsOrThrow(dto.terms) : meta.terms;
+        if (!terms) throw creditTermsInvalid(['TERMS_REQUIRED']); // un crédito viejo se redefine con sus condiciones
+        const r = throwOnTermsError(resolveCreditTerms(terms, { principalAmount: terms.principal }));
+        const initial = dto.initialState ?? meta.initialState;
+        const reg = registeredState(terms, initial);
+        if (!reg.ok) throw creditInitialStateInvalid(reg.code);
+
+        /*
+         * La mora declarada es la marca manual (`moraSince`) que este campo pone. Sólo se toca si el
+         * número cambió: así una marca puesta con «Marcar en mora» sobrevive a corregir la cuota, y
+         * bajar la mora declarada a 0 saca la marca que ella misma había puesto.
+         */
+        const moraSince =
+          reg.daysPastDue !== (meta.initialState?.daysPastDue ?? 0)
+            ? reg.daysPastDue > 0
+              ? moraSinceFromDays(reg.daysPastDue, asOf)
+              : undefined
+            : meta.moraSince;
+        // Sin marca manual, la mora sale de la primera cuota impaga (k+1) con el método del crédito (D20).
+        const byMethod = moraSince
+          ? undefined
+          : arrearsByMethod({ method, oldestUnpaidDue: reg.nextDueDate, balance: reg.outstandingBalance, asOf });
+        const daysPastDue = moraSince ? manualArrears(moraSince, reg.outstandingBalance, asOf) : byMethod!.daysPastDue;
+
+        Object.assign(data, {
+          principalAmount: terms.principal,
+          interestRate: r.interestRatePercent, // D7: sólo informativa
+          installmentsCount: r.installmentsCount,
+          outstandingBalance: reg.outstandingBalance,
+          daysPastDue,
+        });
+        /*
+         * Sin pagos, el cronograma guardado no tiene nada que conservar: se borra y, si las condiciones
+         * nuevas son de cuota variable, se vuelve a crear con el motor. Pasar a cuota fija lo deja vacío
+         * y congela la cuota, como cualquier alta con condiciones.
+         */
+        if (prev._count.installments > 0) await tx.creditInstallment.deleteMany({ where: { creditId: id } });
+        if (r.schedule) {
+          await tx.creditInstallment.createMany({
+            data: installmentRows(r.schedule, initial?.paidInstallments ?? 0).map((row) => ({
+              ...row,
+              accountId: this.tenant.accountId,
+              creditId: id,
+            })),
+          });
+        }
+
+        nextMeta = {
+          ...nextMeta,
+          installmentAmount: r.schedule ? undefined : r.installmentAmount,
+          frequency: r.frequency,
+          nextDueDate: reg.nextDueDate,
+          balanceBasis: reg.balanceBasis,
+          terms: r.terms,
+          termsVersion: CREDIT_TERMS_VERSION,
+          initialState: hasInitialState(initial) ? initial : undefined,
+          moraSince,
+          arrearsMethod: method,
+          arrearsSince: byMethod?.arrearsSince,
+        };
+      } else if (methodChange) {
+        /*
+         * Sólo cambia el método: la mora se recalcula con él. Si la mora la manda una marca a mano, esa
+         * sigue mandando (el método aplica a la calculada). Con cronograma, desde la cuota impaga más antigua.
+         */
+        nextMeta = { ...nextMeta, arrearsMethod: method };
+        if (!meta.moraSince) {
+          const rows =
+            prev._count.installments > 0
+              ? await tx.creditInstallment.findMany({ where: { creditId: id }, select: { number: true, dueDate: true, status: true } })
+              : [];
+          const oldestDue = rows.length > 0 ? oldestUnpaid(rows)?.dueDate : meta.nextDueDate;
+          const reading = arrearsByMethod({ method, oldestUnpaidDue: oldestDue, balance: Number(prev.outstandingBalance), asOf });
+          nextMeta = { ...nextMeta, arrearsSince: reading.arrearsSince };
+          data.daysPastDue = reading.daysPastDue;
+        }
+      }
+
+      const touchesMeta = redefine || looseField !== undefined || operational || methodChange;
       const next = await tx.credit.update({
         where: { id },
-        data: {
-          status: dto.status,
-          assignedManagerId: dto.assignedManagerId,
-          branchId: dto.branchId,
-          code: dto.code,
-          typeCode: dto.typeCode,
-          principalAmount: dto.principalAmount,
-          interestRate: dto.interestRate,
-          metadata: financialEdit ? (stripUndefined(nextMeta) as Prisma.InputJsonValue) : undefined,
-        },
+        data: { ...data, metadata: touchesMeta ? (stripUndefined(nextMeta) as Prisma.InputJsonValue) : undefined },
       });
-      return { before: prev, after: next };
+
+      // Con mora al registrarlo, el caso se abre ya — igual que «Marcar en mora».
+      let caseOpened = false;
+      if (redefine && next.daysPastDue > 0) {
+        const priority = computePriority(
+          { outstandingBalance: Number(next.outstandingBalance), daysPastDue: next.daysPastDue, riskSegment: prev.client?.riskSegment },
+          DEFAULT_PRIORITY_PARAMS,
+        );
+        caseOpened = await openCaseIfNone(tx, {
+          accountId: this.tenant.accountId,
+          creditId: id,
+          clientId: prev.clientId,
+          branchId: prev.branchId,
+          assigneeId: dto.assignedManagerId ?? prev.assignedManagerId,
+          priority,
+          slaDueAt: slaDueAt(priority, asOf, DEFAULT_PRIORITY_PARAMS),
+        });
+      }
+      return { before: prev, after: next, caseOpened, assigned };
     });
-    await this.audit.record({ entity: 'credit', entityId: id, action: 'UPDATE', before: creditSummary(before), after: creditSummary(after) });
-    return serializeCredit(after, config.labels);
+
+    const redefined = redefine ? { terms: readCreditMetadata(after.metadata).terms, initialState: dto.initialState, caseOpened } : {};
+    await this.audit.record({
+      entity: 'credit',
+      entityId: id,
+      action: 'UPDATE',
+      before: creditSummary(before),
+      after: { ...creditSummary(after), ...redefined },
+    });
+    await this.assignment.auditChanges(assigned);
+    return serializeCredit(after, config.labels, config.staleAfterDays);
   }
 
   // ── Mora declarada a mano ──────────────────────────────────────────────────
+  /**
+   * «Vincular a otro cliente» (D2 · opción B). El crédito —con sus casos, su agenda, sus paradas de
+   * ruta y sus pedidos de cobro— pasa al cliente elegido. **No se crea otro crédito**: es el mismo, con
+   * su historia, sus pagos y sus snapshots, colgado de la persona correcta.
+   *
+   * Si venía de un cliente provisional de la importación, la decisión se guarda como vínculo
+   * (`client_external_keys`): la próxima operación de esa persona entra directo a este cliente, sin
+   * volver a preguntar. Y si el provisional queda sin créditos, lo que tenía (teléfono, dirección) pasa
+   * al elegido donde a éste le falte, y el provisional se da de baja.
+   */
+  async linkClient(id: string, targetClientId: string): Promise<ReturnType<typeof serializeCredit>> {
+    const accountId = this.tenant.accountId;
+    const outcome = await this.tx(async (tx) => {
+      const credit = await tx.credit.findFirst({ where: { id, deletedAt: null } });
+      if (!credit) throw resourceNotFound();
+      const [from, to] = await Promise.all([
+        tx.client.findFirst({ where: { id: credit.clientId } }),
+        tx.client.findFirst({ where: { id: targetClientId, deletedAt: null } }),
+      ]);
+      if (!to || !from) throw resourceNotFound();
+      if (from.id === to.id) return { credit, fromId: from.id, keySaved: false, retired: false };
+
+      await tx.credit.update({ where: { id }, data: { clientId: to.id } });
+      const caseIds = (await tx.collectionCase.findMany({ where: { creditId: id }, select: { id: true } })).map((c) => c.id);
+      await tx.collectionCase.updateMany({ where: { creditId: id }, data: { clientId: to.id } });
+      if (caseIds.length > 0) {
+        await tx.routeStop.updateMany({ where: { caseId: { in: caseIds } }, data: { clientId: to.id } });
+      }
+      await tx.agendaItem.updateMany({ where: { creditId: id }, data: { clientId: to.id } });
+      await tx.paymentRequest.updateMany({ where: { creditId: id }, data: { clientId: to.id } });
+
+      // La decisión queda para las próximas importaciones: esta persona del reporte ES este cliente.
+      const fromMeta = (from.metadata ?? {}) as Record<string, unknown>;
+      const nameKeyOf = typeof fromMeta.externalNameKey === 'string' ? fromMeta.externalNameKey : null;
+      const source = credit.externalSource ?? (typeof fromMeta.externalSource === 'string' ? fromMeta.externalSource : null);
+      if (nameKeyOf && source) {
+        await tx.clientExternalKey.upsert({
+          where: { accountId_externalSource_keyType_key: { accountId, externalSource: source, keyType: 'NAME', key: nameKeyOf } },
+          create: { accountId, externalSource: source, keyType: 'NAME', key: nameKeyOf, clientId: to.id, confirmedBy: this.tenant.userId },
+          update: { clientId: to.id, confirmedBy: this.tenant.userId, deletedAt: null },
+        });
+      }
+
+      // El provisional que quedó vacío se da de baja; lo que el elegido no tenga, lo hereda.
+      let retired = false;
+      const remaining = await tx.credit.count({ where: { clientId: from.id, deletedAt: null } });
+      if (remaining === 0 && from.linkReviewPending) {
+        const [toContacts, toLocations] = await Promise.all([
+          tx.clientContact.count({ where: { clientId: to.id } }),
+          tx.clientLocation.count({ where: { clientId: to.id } }),
+        ]);
+        if (toContacts === 0) await tx.clientContact.updateMany({ where: { clientId: from.id }, data: { clientId: to.id } });
+        if (toLocations === 0) await tx.clientLocation.updateMany({ where: { clientId: from.id }, data: { clientId: to.id } });
+        await tx.client.update({ where: { id: from.id }, data: { deletedAt: new Date(), linkReviewPending: false } });
+        retired = true;
+      }
+      const after = await tx.credit.findFirst({ where: { id } });
+      return { credit: after!, fromId: from.id, keySaved: Boolean(nameKeyOf && source), retired };
+    });
+
+    await this.audit.record({
+      entity: 'credit',
+      entityId: id,
+      action: 'LINK_CLIENT',
+      before: { clientId: outcome.fromId },
+      after: { clientId: targetClientId, linkSaved: outcome.keySaved, provisionalRetired: outcome.retired },
+    });
+    return serializeCredit(outcome.credit, ...labelsOf(await this.accountConfig()));
+  }
+
+  /**
+   * «Es una persona nueva»: la revisión del cliente provisional se cierra sin moverlo (D2). También
+   * se guarda el vínculo, para que la próxima operación de esta persona no vuelva a preguntar.
+   */
+  async confirmClientLink(clientId: string): Promise<{ clientId: string; linkReviewPending: false }> {
+    const accountId = this.tenant.accountId;
+    await this.tx(async (tx) => {
+      const client = await tx.client.findFirst({ where: { id: clientId, deletedAt: null } });
+      if (!client) throw resourceNotFound();
+      const meta = (client.metadata ?? {}) as Record<string, unknown>;
+      await tx.client.update({ where: { id: clientId }, data: { linkReviewPending: false } });
+      if (typeof meta.externalNameKey === 'string' && typeof meta.externalSource === 'string') {
+        await tx.clientExternalKey.upsert({
+          where: {
+            accountId_externalSource_keyType_key: { accountId, externalSource: meta.externalSource, keyType: 'NAME', key: meta.externalNameKey },
+          },
+          create: { accountId, externalSource: meta.externalSource, keyType: 'NAME', key: meta.externalNameKey, clientId, confirmedBy: this.tenant.userId },
+          update: { clientId, confirmedBy: this.tenant.userId, deletedAt: null },
+        });
+      }
+    });
+    await this.audit.record({ entity: 'client', entityId: clientId, action: 'LINK_REVIEW_CONFIRMED' });
+    return { clientId, linkReviewPending: false };
+  }
+
   /**
    * «Este préstamo está en mora», dicho por una persona.
    *
@@ -318,7 +724,7 @@ export class CreditsService {
       const found = await tx.credit.findFirst({ where: { id, deletedAt: null }, include: { client: { select: { riskSegment: true } } } });
       if (!found) throw resourceNotFound();
       if (found.status !== CreditStatus.ACTIVE) throw creditNotActive();
-      const meta = readCreditMetadata(found.metadata);
+      const meta = readCreditMetadata(found.metadata, found.origin);
       if (isExternalOrigin(meta.origin)) throw creditLocked();
 
       const moraSince = moraSinceFromDays(days ?? 0, asOf);
@@ -345,7 +751,7 @@ export class CreditsService {
     });
 
     await this.audit.record({ entity: 'credit', entityId: id, action: 'ARREARS_MARK', after: { days: credit.daysPastDue, caseOpened: opened } });
-    return serializeCredit(credit, (await this.accountConfig()).labels);
+    return serializeCredit(credit, ...labelsOf(await this.accountConfig()));
   }
 
   /**
@@ -368,7 +774,7 @@ export class CreditsService {
       const found = await tx.credit.findFirst({ where: { id, deletedAt: null } });
       if (!found) throw resourceNotFound();
       if (found.status !== CreditStatus.ACTIVE) throw creditNotActive();
-      const meta = readCreditMetadata(found.metadata);
+      const meta = readCreditMetadata(found.metadata, found.origin);
       if (isExternalOrigin(meta.origin)) throw creditLocked();
 
       let nextDueDate: string | undefined;
@@ -389,7 +795,8 @@ export class CreditsService {
         where: { id },
         data: {
           daysPastDue: 0,
-          metadata: stripUndefined({ ...meta, nextDueDate, moraSince: undefined }) as Prisma.InputJsonValue,
+          // Poner al día borra la marca manual y el primer atraso del método bancario (D20).
+          metadata: stripUndefined({ ...meta, nextDueDate, moraSince: undefined, arrearsSince: undefined }) as Prisma.InputJsonValue,
         },
       });
       const closed = await closeOpenCases(tx, id, 'CURRENT', asOf);
@@ -397,7 +804,7 @@ export class CreditsService {
     });
 
     await this.audit.record({ entity: 'credit', entityId: id, action: 'ARREARS_CLEAR', after: { mode: dto.mode, casesClosed: closed } });
-    return serializeCredit(credit, (await this.accountConfig()).labels);
+    return serializeCredit(credit, ...labelsOf(await this.accountConfig()));
   }
 
   // ── Mora ──────────────────────────────────────────────────────────────────
@@ -412,7 +819,7 @@ export class CreditsService {
       });
       if (!credit) throw resourceNotFound();
 
-      const meta = readCreditMetadata(credit.metadata);
+      const meta = readCreditMetadata(credit.metadata, credit.origin);
 
       // Cartera de un core ajeno: manda el valor del archivo "hasta la siguiente carga" (spec §6).
       // Sin esta guarda, un recálculo le borraba la mora que trajo la importación.
@@ -437,8 +844,24 @@ export class CreditsService {
       // Crédito sin cronograma (el del móvil): la mora sale de la próxima fecha, no de las cuotas.
       // `computeArrears` sobre un array vacío devuelve 0 y borraba la mora real.
       if (credit.installments.length === 0) {
-        const daysOverdue = arrearsFromDueDate(meta.nextDueDate, Number(credit.outstandingBalance), asOf);
-        await tx.credit.update({ where: { id }, data: { daysPastDue: daysOverdue } });
+        // D20: con el método del crédito (el bancario guarda y respeta la fecha del primer atraso).
+        const reading = arrearsByMethod({
+          method: meta.arrearsMethod,
+          oldestUnpaidDue: meta.nextDueDate,
+          arrearsSince: meta.arrearsSince,
+          balance: Number(credit.outstandingBalance),
+          asOf,
+        });
+        const daysOverdue = reading.daysPastDue;
+        await tx.credit.update({
+          where: { id },
+          data: {
+            daysPastDue: daysOverdue,
+            ...(reading.arrearsSince !== meta.arrearsSince
+              ? { metadata: stripUndefined({ ...meta, arrearsSince: reading.arrearsSince }) as Prisma.InputJsonValue }
+              : {}),
+          },
+        });
         return { daysOverdue, overdueAmount: daysOverdue > 0 ? Number(credit.outstandingBalance) : 0, interest: 0, penalty: 0, overdueInstallmentIds: [] };
       }
 
@@ -461,7 +884,24 @@ export class CreditsService {
           data: { status: 'OVERDUE' },
         });
       }
-      await tx.credit.update({ where: { id }, data: { daysPastDue: arrear.daysOverdue } });
+      // D20: el método del crédito sobre la mora de siempre (desde la cuota impaga más antigua).
+      const reading = withArrearsMethod({
+        baseDays: arrear.daysOverdue,
+        method: meta.arrearsMethod,
+        oldestUnpaidDue: oldestUnpaid(credit.installments)?.dueDate,
+        arrearsSince: meta.arrearsSince,
+        asOf,
+      });
+      arrear.daysOverdue = reading.daysPastDue;
+      await tx.credit.update({
+        where: { id },
+        data: {
+          daysPastDue: arrear.daysOverdue,
+          ...(reading.arrearsSince !== meta.arrearsSince
+            ? { metadata: stripUndefined({ ...meta, arrearsSince: reading.arrearsSince }) as Prisma.InputJsonValue }
+            : {}),
+        },
+      });
       // Snapshot único por crédito (idempotente): reemplaza el anterior.
       await tx.arrear.deleteMany({ where: { creditId: id } });
       await tx.arrear.create({
@@ -482,6 +922,78 @@ export class CreditsService {
     return result;
   }
 }
+
+/**
+ * `terms` del body → lo que se guarda, aplicando D14 con la función pura de shared
+ * (`resolveCreditTerms`). Acá sólo se traduce cada rechazo a su error HTTP.
+ */
+function resolveTerms(dto: CreateCreditDto): TermsResolution {
+  const terms = parseTermsOrThrow(dto.terms);
+  return throwOnTermsError(
+    resolveCreditTerms(terms, {
+      principalAmount: dto.principalAmount,
+      installmentAmount: dto.installmentAmount,
+      installmentsCount: dto.installmentsCount,
+      frequency: dto.frequency,
+      nextDueDate: dto.nextDueDate,
+      firstDueDate: dto.firstDueDate,
+      interestRate: dto.interestRate,
+      amortizationType: dto.amortizationType,
+    }),
+  );
+}
+
+function parseTermsOrThrow(raw: unknown): CreditTerms {
+  const terms = parseCreditTerms(raw);
+  if (!terms) throw creditTermsInvalid(['TERMS_SHAPE']);
+  return terms;
+}
+
+/** El rechazo de D14 → su error HTTP. */
+function throwOnTermsError(r: TermsResolution | TermsResolutionError): TermsResolution {
+  if (r.ok) return r;
+  switch (r.code) {
+    case 'TERMS_INVALID':
+      throw creditTermsInvalid(r.issues);
+    case 'TERMS_CONFLICT':
+      throw creditTermsConflict(r.field);
+    case 'INSTALLMENT_MISMATCH':
+      throw creditInstallmentMismatch(r.expected, r.sent);
+  }
+}
+
+/** Una cuota a guardar en `credit_installments` (sin `accountId`/`creditId`, que pone quien la crea). */
+interface InstallmentRow {
+  number: number;
+  dueDate: Date;
+  amount: number;
+  principal: number;
+  interest: number;
+  paidAmount?: number;
+  status?: InstallmentStatus;
+  paidAt?: Date;
+}
+
+/**
+ * El cronograma del motor → las cuotas que se guardan (cuota variable). Las primeras `paid` ya estaban
+ * pagadas al registrarlo (D13): nacen `PAID`, así la próxima fecha y la mora arrancan en la primera impaga.
+ *
+ * 🔴 **Sin `paidAt` y sin `Payment`.** No se cobraron en Kobrax ni se sabe cuándo se pagaron: ponerles la
+ * fecha del registro las mostraría como cobradas ese día. Se reconocen por su número (≤ `paidInstallments`).
+ */
+function installmentRows(rows: CreditScheduleRow[], paid: number): InstallmentRow[] {
+  return rows.map((r) => ({
+    number: r.number,
+    dueDate: new Date(`${r.dueDate}T00:00:00.000Z`),
+    amount: r.amount,
+    principal: r.principal,
+    interest: r.interest,
+    ...(r.number <= paid ? { paidAmount: r.amount, status: InstallmentStatus.PAID } : {}),
+  }));
+}
+
+/** Los campos financieros sueltos de `UpdateCreditDto`: la edición anterior a las condiciones. */
+const LOOSE_FINANCIAL_FIELDS = ['principalAmount', 'interestRate', 'installmentAmount', 'frequency'] as const;
 
 function addMonths(date: Date, months: number): Date {
   const d = new Date(date.getTime());
@@ -516,7 +1028,9 @@ function creditSummary(c: {
   status: string;
   daysPastDue: number;
   assignedManagerId: string | null;
+  metadata?: unknown;
 }): Record<string, unknown> {
+  const meta = readCreditMetadata(c.metadata);
   return {
     id: c.id,
     clientId: c.clientId,
@@ -528,5 +1042,9 @@ function creditSummary(c: {
     status: c.status,
     daysPastDue: c.daysPastDue,
     assignedManagerId: c.assignedManagerId ?? undefined,
+    // Dato financiero con traza (D13/D20): con cuántas cuotas pagadas se registró y cómo se cuenta la mora.
+    initialState: meta.initialState,
+    arrearsMethod: meta.arrearsMethod ?? DEFAULT_ARREARS_METHOD,
   };
 }
+

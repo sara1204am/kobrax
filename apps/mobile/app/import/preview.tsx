@@ -9,6 +9,7 @@ import {
   LIST_LIMIT,
   markImported,
   moreLabel,
+  previewLine,
   rejectText,
   warningText,
   type PortfolioSummary,
@@ -52,6 +53,32 @@ export default function PreviewScreen() {
     void dryRun();
   }, [dryRun]);
 
+  /*
+   * Quién queda responsable. El cobrador (SELF) no elige: lo nuevo es suyo. Quien reparte (CHOOSE)
+   * acepta en el teléfono la sugerencia del reporte; repartir entre varias personas se hace en el
+   * panel web, así que si algún nuevo no tiene sugerencia, acá no se confirma.
+   */
+  const mode = preview?.assignment?.mode;
+  const newHint =
+    mode === 'SELF'
+      ? 'Estos créditos se asignarán a ti.'
+      : mode === 'CHOOSE'
+        ? 'Quedan con el responsable que sugiere el reporte.'
+        : undefined;
+  const blocked = !preview
+    ? null
+    : preview.alreadyApplied
+      ? {
+          title: 'Este archivo ya se importó',
+          text: 'Confirmar no cambiaría nada. Para cambiar responsables, usá Cartera en el panel web.',
+        }
+      : mode === 'CHOOSE' && preview.preview.toCreate.some((r) => !r.suggestedAssigneeId)
+        ? {
+            title: 'Hay créditos nuevos sin responsable',
+            text: 'El reporte no dice de quién son. Asigná los responsables desde el panel web para importarlo.',
+          }
+        : null;
+
   async function confirm() {
     setBusy(true);
     setError(null);
@@ -94,6 +121,13 @@ export default function PreviewScreen() {
 
         {preview && (
           <>
+            {/* Lo que impide confirmar desde el teléfono, dicho antes de la lista. */}
+            {blocked && (
+              <View style={styles.note}>
+                <Text style={styles.noteTitle}>{blocked.title}</Text>
+                <Text style={styles.hint}>{blocked.text}</Text>
+              </View>
+            )}
             {preview.idempotentSkip ? (
               // Mismo archivo ya aplicado: no hay nada que previsualizar. Se dice así, en vez de
               // dibujar tres baldes en cero que se leerían como "el archivo no trae nada".
@@ -105,28 +139,58 @@ export default function PreviewScreen() {
               </View>
             ) : (
               <>
+                {/* D8 · D9: de qué día y de qué asesor es el reporte. */}
+                {preview.report && (
+                  <Text style={styles.hint}>
+                    {preview.report.reportDate
+                      ? `Corte del ${preview.report.reportDate.split('-').reverse().join('/')}`
+                      : 'El reporte no dice su fecha de corte'}
+                    {preview.report.advisorCode ? ` · Asesor ${preview.report.advisorCode}` : ''}
+                  </Text>
+                )}
                 <SectionLabel>QUÉ VA A PASAR</SectionLabel>
                 <View style={styles.tiles}>
                   <StatTile label="Agregados" value={String(preview.counts.created)} />
                   <StatTile label="Actualizados" value={String(preview.counts.updated)} />
-                  <StatTile label="Al día" value={String(preview.counts.setCurrent)} />
+                  <StatTile label="Ya no vienen" value={String(preview.counts.absent ?? preview.counts.setCurrent)} />
                 </View>
 
                 <BucketList
                   title="Se agregan"
-                  items={preview.preview.toCreate.map((r) => ({ key: r.code, title: r.code, sub: r.clientName }))}
+                  hint={newHint}
+                  items={preview.preview.toCreate.map((r) => ({
+                    key: r.code,
+                    title: r.clientName,
+                    // D2: el que se parece a un cliente que ya existe entra igual, marcado para revisar.
+                    sub: r.linkReview ? `${previewLine(r.code, undefined, r.after)} · revisar vínculo` : previewLine(r.code, undefined, r.after),
+                  }))}
                 />
                 <BucketList
                   title="Se actualizan"
-                  items={preview.preview.toUpdate.map((r) => ({ key: r.code, title: r.code }))}
-                />
-                <BucketList
-                  title="Pasan a al día"
-                  items={preview.preview.toSetCurrent.map((r, i) => ({
-                    key: r.code ?? `s${i}`,
-                    title: r.code ?? 'Sin número',
+                  hint="Mantendrán su responsable actual."
+                  items={preview.preview.toUpdate.map((r) => ({
+                    key: r.code,
+                    title: r.clientName ?? r.code,
+                    sub: previewLine(r.code, r.before, r.after),
                   }))}
-                  hint="No vienen en el archivo. Quedan vigentes y sin atraso; el saldo no se toca."
+                />
+                {preview.preview.toUpdate.some((r) => r.reappeared) && (
+                  <BucketList
+                    title="Volvieron al reporte"
+                    items={preview.preview.toUpdate
+                      .filter((r) => r.reappeared)
+                      .map((r) => ({ key: r.code, title: r.clientName ?? r.code, sub: previewLine(r.code, r.before, r.after) }))}
+                    hint="Faltaban y este reporte las vuelve a traer. Se actualiza el mismo crédito."
+                  />
+                )}
+                <BucketList
+                  title="Ya no vienen en el reporte"
+                  items={(preview.preview.toMarkAbsent ?? preview.preview.toSetCurrent).map((r, i) => ({
+                    key: r.code ?? `s${i}`,
+                    title: r.clientName ?? r.code ?? 'Sin número',
+                    sub: previewLine(r.code, r.before),
+                  }))}
+                  hint="No es un pago ni un cierre: el saldo y el estado quedan como estaban. Queda registrado desde qué día faltan."
                 />
 
                 {preview.counts.invalid > 0 && (
@@ -135,8 +199,8 @@ export default function PreviewScreen() {
                     danger
                     items={preview.preview.invalid.map((r) => ({
                       key: String(r.index),
-                      title: `Registro ${r.index + 1}`,
-                      sub: rejectText(r.reason),
+                      title: r.clientName ?? `Registro ${r.index + 1}`,
+                      sub: [`Registro ${r.index + 1}`, r.code, rejectText(r.reason)].filter(Boolean).join(' · '),
                     }))}
                   />
                 )}
@@ -154,7 +218,7 @@ export default function PreviewScreen() {
         )}
 
         {/* Sin preview cargada no existe el confirmar: la Vista Previa no se saltea. */}
-        {preview && !preview.idempotentSkip && !isTest && (
+        {preview && !preview.idempotentSkip && !blocked && !isTest && (
           <Button label="Confirmar importación" onPress={() => void confirm()} loading={busy} />
         )}
         {isTest && preview && (

@@ -33,7 +33,14 @@ function primaryLocation(client: StopClient) {
  */
 type StopCase = {
   creditId?: string;
-  credit: { outstandingBalance: unknown; currency: string; daysPastDue: number } | null;
+  credit: {
+    outstandingBalance: unknown;
+    currency: string;
+    daysPastDue: number;
+    externalSource?: string | null;
+    syncStatus?: string | null;
+    reportedAsOf?: Date | null;
+  } | null;
 };
 
 /**
@@ -69,6 +76,10 @@ export function serializeStop(
     // Cómo terminó la parada (S6). `status: VISITED` dice que se visitó; esto dice qué pasó.
     // Una parada sin visitar lo deja en `undefined`, y así no entra en ninguna categoría del resumen.
     lastOutcome: s.visits?.[0]?.outcome,
+    // D1/D3: crédito de fuente externa — saldo reportado al corte; el cobro no se topea con él.
+    externalSource: credit?.externalSource ?? undefined,
+    syncStatus: credit?.syncStatus ?? undefined,
+    reportedAsOf: credit?.reportedAsOf ? credit.reportedAsOf.toISOString().slice(0, 10) : undefined,
   };
 }
 

@@ -186,11 +186,98 @@ describe('collectionTrend', () => {
 
   it('el saldo de cada punto es el de hoy más lo cobrado después', async () => {
     const { service } = makeService((sql) =>
-      sql.includes('generate_series')
-        ? [{ date: new Date('2026-08-10T00:00:00.000Z'), collected: 100, after: 300 }]
-        : [{ outstanding: 5000 }],
+      sql.includes('credit_external_snapshots')
+        ? []
+        : sql.includes('generate_series')
+          ? [{ date: new Date('2026-08-10T00:00:00.000Z'), collected: 100, after: 300 }]
+          : [{ outstanding: 5000 }],
     );
     const points = await service.collectionTrend({});
-    assert.deepEqual(points, [{ date: '2026-08-10', collected: 100, outstanding: 5300 }]);
+    assert.deepEqual(points, [{ date: '2026-08-10', collected: 100, outstanding: 5300, outstandingExternal: 0 }]);
+  });
+
+  /**
+   * 🔴 D3 + D7: el saldo de un PSF lo manda su reporte y un pago en Kobrax no lo baja. Reconstruirlo
+   * sumándole lo cobrado lo contaba dos veces; se toma el último saldo reportado a esa fecha.
+   */
+  it('🔴 la parte externa sale de los snapshots, no de sumarle pagos', async () => {
+    const date = new Date('2026-08-10T00:00:00.000Z');
+    const { service, sqls } = makeService((sql) =>
+      sql.includes('credit_external_snapshots')
+        ? [{ date, external: 2000 }]
+        : sql.includes('generate_series')
+          ? [{ date, collected: 100, after: 300 }]
+          : [{ outstanding: 5000 }],
+    );
+    const points = await service.collectionTrend({});
+    assert.deepEqual(points, [{ date: '2026-08-10', collected: 100, outstanding: 7300, outstandingExternal: 2000 }]);
+    // Sólo lo cobrado sobre Kobrax reconstruye; y el saldo de hoy que se reconstruye es sólo el de Kobrax.
+    assert.match(sqls.find((q) => q.includes('AS after'))!, /pc\.external_source IS NULL/);
+    assert.match(sqls.find((q) => q.includes('FROM credits cr WHERE'))!, /cr\.external_source IS NULL/);
+  });
+});
+
+/** D7: por fuente, nunca mezclados en silencio. */
+describe('fuente de los créditos (D7)', () => {
+  it('el encabezado trae el desglose por fuente y el total es su suma', async () => {
+    const { service } = makeService((sql) => {
+      if (sql.includes('FROM payments p')) return [{ source: 'PSF', collected: 50 }, { source: 'KOBRAX', collected: 400 }];
+      if (sql.includes('FROM credits')) {
+        return [
+          { source: 'KOBRAX', credits: 10, outstanding: 1000, overdue: 200, as_of_from: null, as_of_to: null },
+          {
+            source: 'PSF',
+            credits: 3,
+            outstanding: 600,
+            overdue: 600,
+            as_of_from: new Date('2026-09-28T00:00:00Z'),
+            as_of_to: new Date('2026-09-30T00:00:00Z'),
+          },
+        ];
+      }
+      return [];
+    });
+    const out = await service.summary({});
+    assert.equal(out.outstanding.value, 1600);
+    assert.equal(out.overdue.value, 800);
+    assert.deepEqual(out.bySource, [
+      { source: 'KOBRAX', credits: 10, outstanding: 1000, overdue: 200, collected: 400 },
+      {
+        source: 'PSF',
+        credits: 3,
+        outstanding: 600,
+        overdue: 600,
+        collected: 50,
+        reportedAsOf: { from: '2026-09-28', to: '2026-09-30' },
+      },
+    ]);
+  });
+
+  it('filtrar Kobrax es «sin fuente externa», en los seis caminos', async () => {
+    const { service, sqls, wheres } = makeService(() => []);
+    await service.summary({ source: 'KOBRAX' });
+    await service.agendaSummary({ source: 'KOBRAX' });
+    await service.visitMap({ source: 'KOBRAX' });
+    assert.match(sqls.find((q) => q.includes('FROM credits cr'))!, /cr\.external_source IS NULL/);
+    assert.match(sqls.find((q) => q.includes('FROM payments p'))!, /sc\.external_source IS NULL/);
+    assert.match(sqls.find((q) => q.includes('FROM agenda_items a'))!, /sc\.external_source IS NULL/);
+    assert.match(sqls.find((q) => q.includes('FROM route_stops'))!, /vc\.external_source IS NULL/);
+    // Los que van por Prisma: casos y pagos filtran por la relación con el crédito.
+    assert.ok(wheres.every((w) => (w as { credit?: unknown }).credit !== undefined));
+    assert.deepEqual((wheres[0] as { credit: unknown }).credit, { externalSource: null });
+  });
+
+  it('filtrar PSF compara la fuente como parámetro, no pegada en el SQL', async () => {
+    const { service, sqls } = makeService(() => []);
+    await service.collectorPerformance({ source: 'PSF' });
+    const load = sqls.find((q) => q.includes('FROM collection_cases k'))!;
+    assert.match(load, /sc\.external_source = (\?|\$\d+)/);
+    assert.doesNotMatch(load, /'PSF'/);
+  });
+
+  it('sin fuente no filtra nada', async () => {
+    const { service, sqls } = makeService(() => []);
+    await service.portfolioAging({});
+    assert.doesNotMatch(sqls[0]!, /external_source/);
   });
 });

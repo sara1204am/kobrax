@@ -1,5 +1,5 @@
 import { IsIn, IsOptional, IsString, IsTimeZone, Length } from 'class-validator';
-import { SUPPORTED_CURRENCIES } from '@kobrax/shared';
+import { ArrearsMethod, SUPPORTED_CURRENCIES } from '@kobrax/shared';
 
 const CURRENCIES = Object.keys(SUPPORTED_CURRENCIES);
 /** Los países donde el producto opera salen del locale de cada moneda (`es-BO` → `BO`). */
@@ -23,4 +23,6 @@ export class UpdateAccountDto {
   // String porque sale de un <select> y el diff de shared es de strings; el service lo numeriza
   // al guardarlo en settings.
   @IsOptional() @IsIn(['0', '1', '2']) currencyDecimals?: string;
+  // D20: cómo se cuenta la mora por defecto en los créditos nuevos de la cuenta.
+  @IsOptional() @IsIn(Object.values(ArrearsMethod)) arrearsMethod?: string;
 }

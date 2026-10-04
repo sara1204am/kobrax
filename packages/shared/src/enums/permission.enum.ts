@@ -15,6 +15,8 @@ export enum Permission {
   CASE_WRITE = 'case:write',
   CASE_ASSIGN = 'case:assign',
   CASE_CLOSE = 'case:close',
+  /** Descargar la lista de Mora (CSV/PDF) con el filtro y el alcance de quien la baja. No es `report:export`. */
+  CASE_EXPORT = 'case:export',
 
   PAYMENT_READ = 'payment:read',
   PAYMENT_WRITE = 'payment:write',
@@ -58,4 +60,28 @@ export enum Permission {
   ROLE_WRITE = 'role:write',
 
   AUDIT_READ = 'audit:read',
+
+  /**
+   * Asignar un crédito a alguien: permanente o temporal (cobertura).
+   *
+   * Es lo que impide que un cobrador se otorgue acceso a sí mismo — no lo hace un constraint de la
+   * base, a propósito: un supervisor o admin **sí** puede tomarse un crédito para cubrir a alguien
+   * de baja, y una regla dura de «otorgante ≠ destinatario» bloquearía ese caso legítimo.
+   *
+   * Quien no tiene este permiso no ELIGE a nadie: no puede poner ni cambiar el responsable de un
+   * crédito, tampoco el suyo. Lo único que recibe sin elegir es lo que el sistema deriva como suyo
+   * —los nuevos de la cartera que él mismo importa, el préstamo que él mismo da de alta—, nunca un
+   * crédito que ya existe. Se revisa en `AssignmentService`, la única vía que escribe el responsable.
+   */
+  ASSIGNMENT_WRITE = 'assignment:write',
+
+  /**
+   * Ve los datos de TODA la empresa, no sólo lo que tiene asignado.
+   *
+   * No es un permiso más: es el que decide el `app.current_scope` con el que corre cada
+   * transacción, y por lo tanto qué filas entrega PostgreSQL (ver `prisma/rls/002_scope.sql`).
+   * Quien no lo tiene —hoy sólo el cobrador— recibe únicamente sus filas asignadas, y eso lo
+   * impone la base: no depende de que la consulta se acuerde de filtrar.
+   */
+  DATA_SCOPE_ALL = 'data:scope:all',
 }

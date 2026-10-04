@@ -85,3 +85,46 @@ export async function closeOpenCases(
   });
   return count;
 }
+
+/**
+ * Reabre el caso que el sistema cerró porque la operación externa dejó de venir en su reporte
+ * (`SOURCE_ABSENT`). Devuelve `true` si reabrió uno.
+ *
+ * 🔴 **Reabre el mismo caso, no abre otro.** La ausencia no fue un cierre de verdad —nadie cobró ni
+ * se puso al día, el reporte simplemente no la trajo—, así que las gestiones, promesas y el
+ * responsable de antes siguen siendo de esta deuda. Un caso nuevo los dejaría colgados de uno
+ * cerrado y el cobrador empezaría de cero con un deudor que ya conocía.
+ *
+ * Sólo toca el **último** caso del crédito y sólo si su motivo es `SOURCE_ABSENT`: uno cerrado a mano
+ * o por pago no lo resucita la reaparición, igual que la ausencia no resucita créditos cerrados (D4).
+ * Vuelve a `ACTIVE` —el estado anterior no se guardó al cerrar— y con la prioridad del dato nuevo,
+ * salvo que estuviera fijada a mano.
+ */
+export async function reopenAbsentCase(
+  tx: PrismaClient,
+  creditId: string,
+  priority: CasePriority,
+  slaDueAt: Date,
+  asOf: Date,
+): Promise<boolean> {
+  const last = await tx.collectionCase.findFirst({
+    where: { creditId, deletedAt: null },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, status: true, closedReason: true, priorityPinnedAt: true },
+  });
+  if (!last || last.status !== CaseStatus.CLOSED || last.closedReason !== 'SOURCE_ABSENT') return false;
+
+  await tx.collectionCase.update({
+    where: { id: last.id },
+    data: {
+      status: CaseStatus.ACTIVE,
+      closedAt: null,
+      closedReason: null,
+      // La prioridad fijada a mano sobrevive a la ausencia: la decidió una persona, no el dato.
+      ...(last.priorityPinnedAt ? {} : { priority }),
+      slaDueAt,
+      lastActionAt: asOf,
+    },
+  });
+  return true;
+}

@@ -14,6 +14,7 @@ import {
   maskDocument,
   Permission,
   resolvePagination,
+  staleAfterDaysOf,
   type ApiResponse,
   type CaseSort,
   ResponseDto,
@@ -115,12 +116,18 @@ export class CasesService {
     return this.prisma.withTenant(this.tenant.accountId, fn);
   }
 
-  private async config(tx: PrismaClient): Promise<{ priority: PriorityParams; minDaysPastDue: number }> {
+  private async config(tx: PrismaClient): Promise<{ priority: PriorityParams; minDaysPastDue: number; staleAfterDays: number }> {
     const account = await tx.account.findUnique({ where: { id: this.tenant.accountId } });
-    const cfg = (account?.configuration ?? {}) as { casePriority?: Partial<PriorityParams>; caseGeneration?: { minDaysPastDue?: number } };
+    const cfg = (account?.configuration ?? {}) as {
+      casePriority?: Partial<PriorityParams>;
+      caseGeneration?: { minDaysPastDue?: number };
+      importConfig?: { staleAfterDays?: unknown };
+    };
     return {
       priority: { ...DEFAULT_PRIORITY_PARAMS, ...(cfg.casePriority ?? {}) },
       minDaysPastDue: cfg.caseGeneration?.minDaysPastDue ?? 1,
+      // D9: con cuántos días desde el corte el dato de un externo pasa a desactualizado.
+      staleAfterDays: staleAfterDaysOf(cfg.importConfig?.staleAfterDays),
     };
   }
 
@@ -354,7 +361,7 @@ export class CasesService {
       const found = await tx.collectionCase.findFirst({ where: { id, deletedAt: null }, select: { id: true, clientId: true, creditId: true } });
       if (!found) throw resourceNotFound();
       const created = await tx.caseActivity.create({
-        data: { accountId: this.tenant.accountId, caseId: id, userId: this.tenant.userId, type: dto.type, notes: dto.notes, result: dto.result },
+        data: { ...(dto.id ? { id: dto.id } : {}), accountId: this.tenant.accountId, caseId: id, userId: this.tenant.userId, type: dto.type, notes: dto.notes, result: dto.result },
       });
       // Promesa de pago (§5.4): además del historial, vive en agenda_items → enciende PROMESA en la
       // cartera (S1) y aparece en la Agenda. Misma transacción que la gestión.
@@ -436,6 +443,7 @@ export class CasesService {
         ...(query.balanceMax != null ? { lte: query.balanceMax } : {}),
       };
     }
+    if (query.source) credit.externalSource = query.source === 'KOBRAX' ? null : query.source;
     if (Object.keys(credit).length > 0) where.credit = credit;
 
     /*
@@ -546,7 +554,7 @@ export class CasesService {
       ];
     }
 
-    const [rows, total] = await this.tx((tx) =>
+    const [rows, total, { staleAfterDays }] = await this.tx((tx) =>
       Promise.all([
         tx.collectionCase.findMany({
           where,
@@ -555,10 +563,11 @@ export class CasesService {
           take: limit,
           include: {
             client: { select: { firstName: true, lastName: true, businessName: true } },
-            credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true, code: true, metadata: true, installments: { select: { dueDate: true, amount: true, status: true } } } },
+            credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true, code: true, metadata: true, origin: true, externalSource: true, syncStatus: true, reportedAsOf: true, installments: { select: { number: true, dueDate: true, amount: true, paidAmount: true, status: true } } } },
           },
         }),
         tx.collectionCase.count({ where }),
+        this.config(tx),
       ]),
     );
     // Lista de cartera (§5.3): zona + punto en el mapa + documento enmascarado + promesa vigente,
@@ -570,7 +579,7 @@ export class CasesService {
       await this.audit.record({ entity: 'case_portfolio', entityId: this.tenant.userId ?? 'anon', action: 'PII_REVEAL' });
     }
     return ResponseDto.paginated(
-      rows.map((c) => serializeCase(c, new Date(), extra?.get(c.clientId))),
+      rows.map((c) => serializeCase(c, new Date(), extra?.get(c.clientId), staleAfterDays)),
       total,
       page,
       limit,
@@ -697,21 +706,22 @@ export class CasesService {
   }
 
   async findOne(id: string): Promise<ReturnType<typeof serializeCase>> {
-    const found = await this.tx((tx) =>
+    const [found, { staleAfterDays }] = await this.tx((tx) => Promise.all([
       tx.collectionCase.findFirst({
         where: { id, deletedAt: null },
         include: {
           activities: { orderBy: { createdAt: 'desc' } },
           client: { select: { firstName: true, lastName: true, businessName: true } },
-          credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true, metadata: true, installments: { select: { dueDate: true, amount: true, status: true } } } },
+          credit: { select: { outstandingBalance: true, currency: true, daysPastDue: true, metadata: true, origin: true, externalSource: true, syncStatus: true, reportedAsOf: true, installments: { select: { number: true, dueDate: true, amount: true, paidAmount: true, status: true } } } },
         },
       }),
-    );
+      this.config(tx),
+    ]));
     if (!found) throw resourceNotFound();
     // Mismo scope que el listado: un cobrador no consulta el caso de otro, pero un auditor sí.
     if (this.scopedToOwnCases() && found.assigneeId !== this.tenant.userId) {
       throw resourceNotFound();
     }
-    return serializeCase(found);
+    return serializeCase(found, new Date(), undefined, staleAfterDays);
   }
 }

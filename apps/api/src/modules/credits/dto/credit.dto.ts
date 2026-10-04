@@ -6,6 +6,7 @@ import {
   IsIn,
   IsInt,
   IsNumber,
+  IsObject,
   IsOptional,
   IsPositive,
   IsString,
@@ -14,10 +15,22 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { CreditStatus } from '@prisma/client';
-import { CreditOrigin, PaymentFrequency } from '@kobrax/shared';
+import { ArrearsMethod, CreditOrigin, PaymentFrequency } from '@kobrax/shared';
 import type { AmortizationType } from '../credit-math';
+
+/**
+ * «Estado al registrar» (F4/06 · D13): cómo venía un préstamo que ya estaba corriendo cuando se lo
+ * cargó. Los rangos de negocio (menos cuotas pagadas que el total, saldo ≤ total) los decide
+ * `registeredState` de shared, la misma regla que muestra la ficha.
+ */
+export class InitialStateDto {
+  @IsInt() @Min(0) @Max(600) paidInstallments!: number;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() outstandingBalance?: number;
+  @IsInt() @Min(0) @Max(3650) daysPastDue!: number;
+}
 
 export class CreateCreditDto {
   /**
@@ -61,9 +74,31 @@ export class CreateCreditDto {
 
   /** Abre el caso de cobranza en la misma transacción (§5.2). El alta del móvil siempre lo pide. */
   @IsOptional() @IsBoolean() openCase?: boolean;
+
+  /**
+   * Las condiciones del crédito (F4/06), en la forma `CreditTerms` de `@kobrax/shared`. Con ellas la
+   * API **recalcula** con el motor único y aplica D14 (quién manda según el modo). La forma la valida
+   * `parseCreditTerms` en el servicio —no class-validator—, para que haya una sola definición de
+   * lo que es una condición válida, compartida con web y móvil. Sin `terms`, el alta de siempre.
+   */
+  @IsOptional() @IsObject() terms?: Record<string, unknown>;
+
+  /**
+   * «Ya está en curso» con condiciones (D13): el móvil lo carga en el mismo alta, que viaja por la
+   * cola offline como una sola operación. Exige `terms`; no se mezcla con `outstandingBalance`/`daysPastDue`.
+   */
+  @IsOptional() @ValidateNested() @Type(() => InitialStateDto) initialState?: InitialStateDto;
+
+  /** Cómo se cuentan los días de mora (D20). Ausente = el default de la cuenta. */
+  @IsOptional() @IsEnum(ArrearsMethod) arrearsMethod?: ArrearsMethod;
 }
 
-/** Solo campos editables tras el desembolso (no monto/tasa/cuotas/moneda → requieren reestructura). */
+/**
+ * Lo editable del crédito. Dos formas de tocar lo financiero, que no se mezclan:
+ *  · `terms` / `initialState` (F4/06 · Fase 3): redefinirlo con el motor, sólo sin pagos registrados;
+ *  · los campos sueltos (capital, tasa, cuota, frecuencia): la edición de siempre, sólo para créditos sin
+ *    `terms` (la usa el móvil hasta la Fase 5).
+ */
 export class UpdateCreditDto {
   @IsOptional() @IsEnum(CreditStatus) status?: CreditStatus;
   @IsOptional() @IsUUID() assignedManagerId?: string;
@@ -77,6 +112,13 @@ export class UpdateCreditDto {
   @IsOptional() @IsEnum(PaymentFrequency) frequency?: PaymentFrequency;
   @IsOptional() @IsDateString() nextDueDate?: string;
   @IsOptional() @IsString() notes?: string;
+
+  /** Condiciones nuevas, en la forma `CreditTerms` de shared (la valida `parseCreditTerms`, como en el alta). */
+  @IsOptional() @IsObject() terms?: Record<string, unknown>;
+  @IsOptional() @ValidateNested() @Type(() => InitialStateDto) initialState?: InitialStateDto;
+
+  /** Cambiar cómo se cuentan los días de mora (D20). Sólo sin pagos registrados: si no, reescribe la mora. */
+  @IsOptional() @IsEnum(ArrearsMethod) arrearsMethod?: ArrearsMethod;
 }
 
 export class ListCreditsQueryDto {

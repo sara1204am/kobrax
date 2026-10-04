@@ -11,10 +11,7 @@ import { canClose } from '@/lib/cases';
 import { errorText } from '@/lib/api-error';
 import { sendJson } from '@/lib/client';
 
-type Action = 'activity' | 'assign' | 'close' | null;
-
-/** Lo que se puede registrar a mano desde el panel. Los demás tipos los escribe el sistema. */
-const ACTIVITY_TYPES = ['NOTE', 'CALL', 'VISIT', 'MESSAGE'] as const;
+type Action = 'assign' | 'close' | null;
 
 /**
  * Lo que se puede hacer con un caso desde su ficha.
@@ -26,14 +23,12 @@ export function CaseActions({
   caseId,
   status,
   members,
-  canWrite,
   canAssign,
   canClose: mayClose,
 }: {
   caseId: string;
   status: CaseStatus;
   members: Member[];
-  canWrite: boolean;
   canAssign: boolean;
   canClose: boolean;
 }) {
@@ -45,8 +40,6 @@ export function CaseActions({
   const [action, setAction] = useState<Action>(null);
   const [reason, setReason] = useState('');
   const [collectorId, setCollectorId] = useState('');
-  const [activityType, setActivityType] = useState<(typeof ACTIVITY_TYPES)[number]>('NOTE');
-  const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,7 +50,6 @@ export function CaseActions({
     setError(null);
     setReason('');
     setCollectorId('');
-    setNotes('');
   }
 
   async function send(path: string, body: unknown, method: 'POST' | 'PATCH', done: string) {
@@ -76,16 +68,6 @@ export function CaseActions({
 
   return (
     <>
-      {/*
-        Registrar una gestión no es un extra: la API **no cierra un caso sin ninguna** (`CASE_001`),
-        y los cambios de estado y las asignaciones no cuentan como tal. Sin esto, un caso trabajado
-        entero desde el panel quedaba imposible de cerrar desde el panel.
-      */}
-      {canWrite && (
-        <Button variant="ghost" onClick={() => setAction('activity')} className="sm:w-auto sm:px-5">
-          {t('actions.activity')}
-        </Button>
-      )}
       {/* Mover de estado ya no es un botón acá: se toca la etiqueta de estado, que es el dato que
           cambia (`status-control.tsx`). Un botón a media pantalla del dato no decía cuál tocaba. */}
       {canAssign && (
@@ -98,54 +80,6 @@ export function CaseActions({
           {t('actions.close')}
         </Button>
       )}
-
-      <Modal
-        open={action === 'activity'}
-        onClose={close}
-        title={t('activity.title')}
-        actions={
-          <>
-            <Button variant="ghost" onClick={close} disabled={busy} className="sm:w-auto sm:px-5">
-              {t('activity.cancel')}
-            </Button>
-            <Button
-              onClick={() =>
-                send(
-                  `/api/cases/${caseId}/activities`,
-                  { type: activityType, notes: notes.trim() || undefined },
-                  'POST',
-                  t('activity.done'),
-                )
-              }
-              loading={busy}
-              className="sm:w-auto sm:px-5"
-            >
-              {t('activity.confirm')}
-            </Button>
-          </>
-        }
-      >
-        <ErrorBanner message={error} />
-        <p>{t('activity.text')}</p>
-        <div className="mt-4 space-y-4">
-          <Field label={t('activity.type')}>
-            <Select
-              value={activityType}
-              onChange={(e) => setActivityType(e.target.value as (typeof ACTIVITY_TYPES)[number])}
-              disabled={busy}
-            >
-              {ACTIVITY_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {t(`activityType.${type}`)}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={t('activity.notes')}>
-            <Input value={notes} onChange={(e) => setNotes(e.target.value)} disabled={busy} maxLength={1000} />
-          </Field>
-        </div>
-      </Modal>
 
       {/* Asignar. Sin elegir a nadie va `auto`, y el servidor lo manda al que menos casos tiene:
           quién es el menos cargado lo cuenta él, no esta pantalla. */}

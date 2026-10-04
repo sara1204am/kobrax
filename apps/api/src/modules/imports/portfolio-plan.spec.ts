@@ -2,95 +2,119 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { planPortfolioImport, type ExistingCredit, type PortfolioRow } from './portfolio-plan';
 
-const row = (index: number, code: string): PortfolioRow => ({ index, code, data: {} });
-const imp = (id: string, code: string | null, eligible = true): ExistingCredit => ({ id, code, origin: 'import', eligible });
-const man = (id: string, code: string | null, eligible = true): ExistingCredit => ({ id, code, origin: 'manual', eligible });
+const row = (index: number, code: string, data: Record<string, unknown> = { clientLastName: 'PEREZ' }): PortfolioRow => ({ index, code, data });
+/** Una operación externa ya importada. */
+const op = (id: string, externalId: string | null, over: Partial<ExistingCredit> = {}): ExistingCredit => ({
+  id,
+  externalId,
+  eligible: true,
+  syncStatus: 'PRESENT',
+  ...over,
+});
 
-describe('planPortfolioImport — premisa', () => {
-  it('actualiza los del archivo, crea los nuevos, pone al día los ausentes', () => {
-    const plan = planPortfolioImport([row(0, 'C1'), row(1, 'C9')], [imp('e1', 'C1'), imp('e2', 'C2')]);
-    assert.deepEqual(
-      plan.toUpdate.map((u) => u.id),
-      ['e1'],
-    );
-    assert.deepEqual(
-      plan.toCreate.map((r) => r.code),
-      ['C9'],
-    );
-    assert.deepEqual(plan.toSetCurrent, ['e2']); // ausente → al día
+describe('planPortfolioImport — la llave es el nº de operación (D1)', () => {
+  it('actualiza las que vienen, crea las nuevas, marca ausentes las que faltan', () => {
+    const plan = planPortfolioImport([row(0, 'OP-1'), row(1, 'OP-9')], [op('e1', 'OP-1'), op('e2', 'OP-2')]);
+    assert.deepEqual(plan.toUpdate.map((u) => u.id), ['e1']);
+    assert.deepEqual(plan.toCreate.map((r) => r.code), ['OP-9']);
+    assert.deepEqual(plan.toMarkAbsent, ['e2']);
+    assert.deepEqual(plan.toSetCurrent, ['e2']);
+  });
+
+  it('un crédito de Kobrax con el mismo código no bloquea: son dos créditos distintos', () => {
+    // Los de Kobrax no llegan a `existing` (no tienen external_id): el match sólo ve operaciones externas.
+    const plan = planPortfolioImport([row(0, 'CRD-0001')], []);
+    assert.deepEqual(plan.toCreate.map((r) => r.code), ['CRD-0001']);
+    assert.deepEqual(plan.invalid, []);
   });
 
   it('un campo obligatorio vacío frena la fila entera (MISSING_<CAMPO>)', () => {
-    const rows: PortfolioRow[] = [
-      { index: 0, code: 'C1', data: { installmentAmount: 320.5 } },
-      { index: 1, code: 'C2', data: { installmentAmount: null } }, // no vino la cuota
-      { index: 2, code: 'C3', data: {} }, // ni siquiera la columna
-    ];
-    const plan = planPortfolioImport(rows, [], { required: ['installmentAmount'] });
-    assert.deepEqual(
-      plan.toCreate.map((r) => r.code),
-      ['C1'],
-    );
-    assert.deepEqual(plan.invalid, [
-      { index: 1, reason: 'MISSING_INSTALLMENTAMOUNT' },
-      { index: 2, reason: 'MISSING_INSTALLMENTAMOUNT' },
-    ]);
+    const plan = planPortfolioImport([row(0, 'OP-1', { clientLastName: 'X', outstandingBalance: null })], [], { required: ['outstandingBalance'] });
+    assert.deepEqual(plan.invalid, [{ index: 0, reason: 'MISSING_OUTSTANDINGBALANCE' }]);
+    assert.equal(plan.toCreate.length, 0);
+  });
+
+  it('«Cliente» obligatorio se cumple con el nombre partido en apellido/nombre', () => {
+    const plan = planPortfolioImport([row(0, 'OP-1', { clientLastName: 'Miriam Cruz Apaza' }), row(1, 'OP-2', { clientLastName: null })], [], {
+      required: ['clientName'],
+    });
+    assert.deepEqual(plan.toCreate.map((r) => r.code), ['OP-1']);
+    assert.deepEqual(plan.invalid, [{ index: 1, reason: 'MISSING_CLIENTNAME' }]);
   });
 
   it('cero es un valor válido: no confundir "sin mora" con "sin dato"', () => {
-    const rows: PortfolioRow[] = [{ index: 0, code: 'C1', data: { daysPastDue: 0 } }];
-    const plan = planPortfolioImport(rows, [], { required: ['daysPastDue'] });
-    assert.equal(plan.invalid.length, 0);
+    const plan = planPortfolioImport([row(0, 'OP-1', { clientLastName: 'X', daysPastDue: 0 })], [], { required: ['daysPastDue'] });
     assert.equal(plan.toCreate.length, 1);
   });
 
-  it('NUNCA borra: el ausente va a toSetCurrent, no existe toSoftDelete', () => {
-    const plan = planPortfolioImport([], [imp('e1', 'C1')]);
-    assert.deepEqual(plan.toSetCurrent, ['e1']);
-    assert.equal('toSoftDelete' in plan, false);
-  });
-
-  it('crédito manual ausente → intocable (no se pone al día)', () => {
-    const plan = planPortfolioImport([], [man('m1', 'C1'), imp('e1', 'C2')]);
-    assert.deepEqual(plan.toSetCurrent, ['e1']); // solo el de origin=import
-  });
-
-  it('code del archivo que choca con un manual → MATCHES_MANUAL (no dup, no toca manual)', () => {
-    const plan = planPortfolioImport([row(0, 'C1')], [man('m1', 'C1')]);
-    assert.deepEqual(plan.toCreate, []);
-    assert.deepEqual(plan.toUpdate, []);
-    assert.deepEqual(plan.invalid, [{ index: 0, reason: 'MATCHES_MANUAL' }]);
-  });
-
-  it('code repetido en el archivo → la 2ª es DUP_IN_FILE (idempotencia intra-archivo)', () => {
-    const plan = planPortfolioImport([row(0, 'C1'), row(1, 'C1')], []);
-    assert.equal(plan.toCreate.length, 1);
+  it('nº repetido en el archivo → la 2ª es DUP_IN_FILE', () => {
+    const plan = planPortfolioImport([row(0, 'OP-1'), row(1, 'OP-1')], []);
     assert.deepEqual(plan.invalid, [{ index: 1, reason: 'DUP_IN_FILE' }]);
   });
 
-  it('fila sin code → NO_CODE inválida (no se crea a ciegas)', () => {
+  it('fila con nombre y sin nº → NO_CODE (no se crea a ciegas)', () => {
     const plan = planPortfolioImport([row(0, '')], []);
     assert.deepEqual(plan.invalid, [{ index: 0, reason: 'NO_CODE' }]);
-    assert.deepEqual(plan.toCreate, []);
   });
 
-  it("absentRule 'no-touch' → no pone al día a nadie", () => {
-    const plan = planPortfolioImport([], [imp('e1', 'C1')], { absentRule: 'no-touch' });
-    assert.deepEqual(plan.toSetCurrent, []);
+  it('lo que no es un registro se ignora: pie vacío, "TOTALES", notas debajo de la tabla', () => {
+    const plan = planPortfolioImport(
+      [row(0, '', {}), row(1, 'TOTALES', { clientLastName: '13 operaciones' }), row(2, 'Corte anterior: 28/09/2026 con 10 operaciones')],
+      [],
+    );
+    assert.equal(plan.ignored, 3);
+    assert.deepEqual(plan.invalid, []);
+    assert.equal(plan.toCreate.length, 0);
+  });
+
+  it('NUNCA borra: el ausente se marca, no existe toSoftDelete', () => {
+    const plan = planPortfolioImport([], [op('e1', 'OP-1')]);
+    assert.ok(!('toSoftDelete' in plan));
+    assert.deepEqual(plan.toMarkAbsent, ['e1']);
   });
 });
 
-describe('planPortfolioImport — unique account-wide (fix P2002)', () => {
-  it('code de import fuera de alcance o borrado (no elegible) → MATCHES_OUT_OF_SCOPE, NO crea', () => {
-    // Sin este chequeo iría a toCreate y credit.create estallaría con P2002 (el @@unique es account-wide).
-    const plan = planPortfolioImport([row(0, 'C1')], [imp('e1', 'C1', /* eligible */ false)]);
-    assert.deepEqual(plan.toCreate, []);
-    assert.deepEqual(plan.toUpdate, []);
-    assert.deepEqual(plan.invalid, [{ index: 0, reason: 'MATCHES_OUT_OF_SCOPE' }]);
+describe('planPortfolioImport — ausencia y reaparición (D4)', () => {
+  it('la ausencia se marca en la transición: el que ya estaba ausente no se vuelve a marcar', () => {
+    const plan = planPortfolioImport([], [op('e1', 'OP-1', { syncStatus: 'ABSENT' }), op('e2', 'OP-2')]);
+    assert.deepEqual(plan.toMarkAbsent, ['e2']);
   });
 
-  it('import no elegible ausente del archivo → NO se pone al día (fuera de alcance)', () => {
-    const plan = planPortfolioImport([], [imp('e1', 'C1', false)]);
+  it('cerrado (PAID/CANCELLED) ausente: se registra la ausencia pero su mora y estado no se tocan', () => {
+    const plan = planPortfolioImport([], [op('e1', 'OP-1', { closed: true }), op('e2', 'OP-2')]);
+    assert.deepEqual(plan.toMarkAbsent, ['e1', 'e2']);
+    assert.deepEqual(plan.toSetCurrent, ['e2']);
+  });
+
+  it("absentRule 'no-touch': la ausencia igual se registra, la mora no se toca", () => {
+    const plan = planPortfolioImport([], [op('e1', 'OP-1')], { absentRule: 'no-touch' });
+    assert.deepEqual(plan.toMarkAbsent, ['e1']);
+    assert.deepEqual(plan.toSetCurrent, []);
+  });
+
+  it('el que faltaba y vuelve a venir REAPARECE: se actualiza el mismo, no se crea otro', () => {
+    const plan = planPortfolioImport([row(0, 'OP-1')], [op('e1', 'OP-1', { syncStatus: 'ABSENT' })]);
+    assert.deepEqual(plan.toUpdate, [{ id: 'e1', row: row(0, 'OP-1'), reappeared: true }]);
+    assert.equal(plan.toCreate.length, 0);
+    assert.deepEqual(plan.toMarkAbsent, []);
+  });
+
+  it('cerrado que vuelve a venir en el archivo → se actualiza (la fuente manda)', () => {
+    const plan = planPortfolioImport([row(0, 'OP-1')], [op('e1', 'OP-1', { closed: true })]);
+    assert.deepEqual(plan.toUpdate.map((u) => u.id), ['e1']);
+  });
+});
+
+describe('planPortfolioImport — alcance (D8)', () => {
+  it('existe fuera del alcance o borrada (no elegible) → MATCHES_OUT_OF_SCOPE, NO crea', () => {
+    const plan = planPortfolioImport([row(0, 'OP-1')], [op('e1', 'OP-1', { eligible: false })]);
+    assert.deepEqual(plan.invalid, [{ index: 0, reason: 'MATCHES_OUT_OF_SCOPE' }]);
+    assert.equal(plan.toCreate.length, 0);
+  });
+
+  it('las de otro asesor/alcance que faltan NO quedan ausentes', () => {
+    const plan = planPortfolioImport([], [op('e1', 'OP-1', { eligible: false })]);
+    assert.deepEqual(plan.toMarkAbsent, []);
     assert.deepEqual(plan.toSetCurrent, []);
   });
 });

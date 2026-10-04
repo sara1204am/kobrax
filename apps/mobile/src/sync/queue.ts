@@ -9,7 +9,7 @@
  * hubiera salido bien, y una cola con dependencias entre ítems necesita un grafo, reintentos
  * encadenados y un orden que respetar. Acá el que falla se saltea y no arrastra a nadie.
  */
-import type { AgendaOutcome, AgendaPostponeStep, RouteStatus } from '@kobrax/shared';
+import type { AgendaOutcome, AgendaPostponeStep, NewCreditNote, RecoveryActivityInput, RouteStatus } from '@kobrax/shared';
 import * as db from '../db';
 import { uploadImage } from '../uploads.service';
 import { addVisitEvidence, createVisit, type CreateVisitInput } from '../field.service';
@@ -27,6 +27,7 @@ import {
   type CreateAgendaInput,
   type RescheduleAgendaInput,
 } from '../agenda.service';
+import { addMoraActivity, addMoraNote } from '../mora.service';
 import { getUserId } from '../session';
 
 /** Una foto todavía en el teléfono. Se sube al drenar; **se guarda la ruta, no los bytes**. */
@@ -91,7 +92,15 @@ export type QueuedAction =
    * ejecutar" en vez de cancelar de nuevo o crear una segunda gestión reagendada.
    */
   | { kind: 'agenda.cancel'; id: string; reasonCode: string }
-  | { kind: 'agenda.reschedule'; id: string; input: RescheduleAgendaInput };
+  | { kind: 'agenda.reschedule'; id: string; input: RescheduleAgendaInput }
+  /**
+   * Gestión con resultado y promesa sobre un crédito en mora. **Idempotente porque `input.id` lo pone el
+   * teléfono** (`nuevoId()`): el servidor guarda la gestión con ese id y un reintento devuelve la ya
+   * guardada, así que una gestión con promesa no se duplica (ni su agenda_item).
+   */
+  | { kind: 'mora.activity'; creditId: string; input: RecoveryActivityInput & { id: string } }
+  /** Nota del crédito. Idempotente por `input.id` del teléfono; el servidor reconoce el id y no la duplica. */
+  | { kind: 'credit.note'; creditId: string; input: NewCreditNote & { id: string } };
 
 /**
  * `ponytail:` **editar la ficha NO se encola** y la pantalla lo dice sin adornos. Un guardado de
@@ -117,6 +126,8 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'arrears.clear': 'Préstamo puesto al día',
   'agenda.cancel': 'Gestión cancelada',
   'agenda.reschedule': 'Gestión reagendada',
+  'mora.activity': 'Gestión de mora registrada',
+  'credit.note': 'Nota del crédito',
 };
 
 /**
@@ -139,7 +150,16 @@ export async function enqueue(action: QueuedAction): Promise<boolean> {
 }
 
 /** Lo que puede pasarle a un envío. `auth` corta el drenaje entero: sin sesión no sube nada más. */
-export type SendResult = { status: 'ok' } | { status: 'offline' } | { status: 'auth' } | { status: 'error'; message: string };
+/**
+ * `permanent`: el server **rechazó** la acción (un 4xx: datos inválidos, sin permiso, ya no aplica).
+ * Reintentarla no la arregla —el mismo pedido recibe la misma respuesta—, así que no se reintenta sola:
+ * queda a la vista con su motivo. Un 5xx o un 408/429 son pasajeros y sí se reintentan.
+ */
+export type SendResult =
+  | { status: 'ok' }
+  | { status: 'offline' }
+  | { status: 'auth' }
+  | { status: 'error'; message: string; permanent?: boolean };
 
 /**
  * Sube una acción. Es el único lugar que sabe traducir lo guardado a llamadas del API — y usa
@@ -206,14 +226,23 @@ export async function send(action: QueuedAction): Promise<SendResult> {
       return mapMutate(await cancelItem(action.id, action.reasonCode));
     case 'agenda.reschedule':
       return mapMutate(await rescheduleItem(action.id, action.input));
+    case 'mora.activity':
+      return mapMutate(await addMoraActivity(action.creditId, action.input));
+    case 'credit.note':
+      return mapMutate(await addMoraNote(action.creditId, action.input));
   }
 }
 
-function mapMutate(res: { status: string; message?: string }): SendResult {
+function mapMutate(res: { status: string; message?: string; httpStatus?: number }): SendResult {
   if (res.status === 'ok') return { status: 'ok' };
   if (res.status === 'offline') return { status: 'offline' };
   if (res.status === 'unauthenticated') return { status: 'auth' };
-  return { status: 'error', message: res.message ?? 'No se pudo subir' };
+  return { status: 'error', message: res.message ?? 'No se pudo subir', permanent: isPermanentRejection(res.httpStatus) };
+}
+
+/** Un 4xx es definitivo, salvo el timeout (408) y el «más despacio» (429), que son del momento. */
+export function isPermanentRejection(httpStatus: number | undefined): boolean {
+  return httpStatus !== undefined && httpStatus >= 400 && httpStatus < 500 && httpStatus !== 408 && httpStatus !== 429;
 }
 
 /** Lo pendiente, ya deserializado, para pintarlo en la hoja de pendientes. */

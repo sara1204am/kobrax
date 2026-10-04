@@ -5,6 +5,7 @@
  * `routes.serializer.ts` y `field.serializer.ts` de la API — las fechas llegan como ISO string.
  */
 import type { EvidenceType, RouteStatus, RouteStopStatus, VisitOutcome } from '../enums/index.js';
+import type { ExternalSyncStatus } from '../enums/credit.enum.js';
 
 export interface RouteStopItem {
   id: string;
@@ -31,6 +32,13 @@ export interface RouteStopItem {
   daysPastDue?: number;
   /** Cómo terminó la parada. `undefined` = todavía no se visitó. */
   lastOutcome?: VisitOutcome;
+  /**
+   * El crédito de la parada es de una fuente externa (D1): su saldo es el **reportado** al corte y un
+   * pago no lo baja (D3), así que el cobro no se topea con él. Ausente = Kobrax.
+   */
+  externalSource?: string;
+  syncStatus?: ExternalSyncStatus;
+  reportedAsOf?: string;
 }
 
 /**

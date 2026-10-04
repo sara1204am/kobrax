@@ -18,7 +18,7 @@ const STATUS_TONE: Record<string, 'neutral' | 'success' | 'warning' | 'danger'> 
  *
  * Va **al final de la ficha** a propósito: el caso es cómo la empresa organiza el trabajo, no un
  * dato del deudor. Quien abre esta pantalla viene a ver cuánto debe y a quién llamar; el caso es lo
- * que mira después, y desde acá salta a `/mora/[id]`, que es donde se gestiona.
+ * que mira después, y desde acá salta a `/mora/[creditId]`, que es donde se gestiona.
  *
  * Un cliente puede tener varios: uno por crédito en mora.
  */
@@ -46,7 +46,7 @@ export async function CasesSection({
           <ul>
             {cases.map((k) => (
               <li key={k.id} className="border-b border-k-border last:border-0">
-                <Link href={`/mora/${k.id}`} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 hover:bg-k-bg">
+                <Link href={`/mora/${k.creditId}`} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 hover:bg-k-bg">
                   <span className="min-w-0">
                     <span className="block text-[14px] font-medium text-k-text">{tc(`priority.${k.priority}`)}</span>
                     <span className="block text-[12px] text-k-muted">
