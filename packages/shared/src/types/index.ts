@@ -11,3 +11,4 @@ export * from './route.types.js';
 export * from './payment.types.js';
 export * from './analytics.types.js';
 export * from './dashboard.types.js';
+export * from './sin-caso.types.js';

@@ -26,3 +26,5 @@ export * from './promises.js';
 export * from './recovery-activity.js';
 export * from './credit-note-board.js';
 export * from './recovery-metrics.js';
+export * from './arrear-category.js';
+export * from './mora-situation.js';

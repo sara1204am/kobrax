@@ -18,6 +18,16 @@ export enum Permission {
   /** Descargar la lista de Mora (CSV/PDF) con el filtro y el alcance de quien la baja. No es `report:export`. */
   CASE_EXPORT = 'case:export',
 
+  /**
+   * F4/08 · D5: los `case:*` renombrados. Coexisten con `CASE_*` hasta la fase 6 (las sesiones abiertas
+   * llevan los nombres viejos hasta renovar el token); el código nuevo exige estos.
+   */
+  COLLECTION_READ = 'collection:read',
+  /** Gestiones, agenda y notas del crédito. */
+  COLLECTION_WRITE = 'collection:write',
+  /** Descargar la lista de Mora (CSV/PDF). */
+  COLLECTION_EXPORT = 'collection:export',
+
   PAYMENT_READ = 'payment:read',
   PAYMENT_WRITE = 'payment:write',
   PAYMENT_APPROVE = 'payment:approve',
