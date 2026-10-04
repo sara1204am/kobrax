@@ -3,10 +3,10 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { clampNoteBox, MORA_NOTE_COLORS, type CreditNote, type MoraNoteColor, type UpdateCreditNote } from '@kobrax/shared';
-import { displayBox, NOTE_COLORS } from '@/lib/mora-notes';
+import { anchorAtPoint, anchorOrigin, displayBox, NOTE_COLORS } from '@/lib/mora-notes';
 
 /**
- * Un post-it sobre el tablero: se arrastra por el encabezado, se redimensiona por la esquina, se pinta y (si es
+ * Un post-it anclado a una sección de la ficha (se dibuja dentro de ella, `x`/`y` desde su esquina): se arrastra por el encabezado, se redimensiona por la esquina, se pinta y (si es
  * tuyo, o repartís cartera) se corrige el texto y se borra. Es el de Gallium, con los colores de Kobrax.
  *
  * 🔴 **Arrastrar y redimensionar no guardan a cada píxel**: `onPreview` mueve la nota en pantalla y `onCommit`
@@ -22,6 +22,7 @@ export function StickyNote({
   canMove,
   canEditText,
   size,
+  layer,
   onPreview,
   onCommit,
   onFront,
@@ -32,8 +33,10 @@ export function StickyNote({
   flash: boolean;
   canMove: boolean;
   canEditText: boolean;
-  /** Tamaño del tablero ahora mismo (la pantalla). Sin medir todavía, se dibuja lo guardado. */
+  /** Tamaño de la sección a la que está anclada, ahora mismo. Sin medir todavía, se dibuja lo guardado. */
   size: { width: number; height: number } | undefined;
+  /** El orden de apilado que se dibuja (1…9), no el número guardado: ver `drawnLayers`. */
+  layer: number;
   onPreview: (note: CreditNote) => void;
   onCommit: (before: CreditNote, patch: UpdateCreditNote) => void;
   onFront: () => void;
@@ -48,7 +51,8 @@ export function StickyNote({
   const latest = useRef<CreditNote>(note);
 
   // Lo que se dibuja: lo guardado, acotado al tablero de ahora (en una pantalla chica nunca queda fuera).
-  const shown = size ? displayBox(note, size) : { x: note.x, y: note.y, w: note.w, h: note.h };
+  // Mientras se arrastra se dibuja libre (puede cruzar a otra sección); en reposo, acotado a la sección de ahora.
+  const shown = size && !dragging ? displayBox(note, size) : { x: note.x, y: note.y, w: note.w, h: note.h };
 
   function gesture(e: ReactPointerEvent, kind: 'move' | 'resize') {
     if (!canMove) return;
@@ -56,6 +60,7 @@ export function StickyNote({
     e.stopPropagation();
     onFront();
     const before = note;
+    const home = (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-note-anchor]');
     start.current = { mx: e.clientX, my: e.clientY, box: { ...shown } };
     latest.current = before;
     if (kind === 'move') setDragging(true);
@@ -65,22 +70,35 @@ export function StickyNote({
       const dx = ev.clientX - start.current.mx;
       const dy = ev.clientY - start.current.my;
       const b = start.current.box;
-      const box =
-        kind === 'move'
-          ? clampNoteBox({ x: b.x + dx, y: b.y + dy, w: b.w, h: b.h }, size)
-          : clampNoteBox({ x: b.x, y: b.y, w: b.w + dx, h: b.h + dy }, size);
+      // Moverla se ve libre —puede salirse de su sección camino a otra—; el lugar definitivo se acota al soltar.
+      const box = kind === 'move' ? { x: b.x + dx, y: b.y + dy, w: b.w, h: b.h } : clampNoteBox({ x: b.x, y: b.y, w: b.w + dx, h: b.h + dy }, size);
       const next = { ...before, x: box.x, y: box.y, w: box.w, h: box.h };
       latest.current = next;
       onPreview(next);
     };
-    const up = () => {
+    const up = (ev: PointerEvent) => {
       setDragging(false);
       document.removeEventListener('pointermove', move);
       document.removeEventListener('pointerup', up);
-      const n = latest.current;
-      const moved = n.x !== before.x || n.y !== before.y || n.w !== before.w || n.h !== before.h;
+      let n = latest.current;
+      let patch: UpdateCreditNote;
+      if (kind === 'move' && home) {
+        // ¿Sobre qué sección la soltó? Si es otra, se re-ancla: sus coordenadas pasan a medirse desde esa sección.
+        const hit = anchorAtPoint(ev.clientX, ev.clientY);
+        const target = hit && hit.anchor !== before.anchor ? hit : null;
+        const from = anchorOrigin(home);
+        const into = target ? anchorOrigin(target.el) : from;
+        const bounds = target ? target.el.getBoundingClientRect() : home.getBoundingClientRect();
+        const box = clampNoteBox({ x: n.x + from.left - into.left, y: n.y + from.top - into.top, w: n.w, h: n.h }, { width: bounds.width, height: bounds.height });
+        n = { ...n, ...box, anchor: target ? target.anchor : n.anchor };
+        patch = { x: n.x, y: n.y, w: n.w, h: n.h, ...(target ? { anchor: n.anchor } : {}), front: true };
+        onPreview(n);
+      } else {
+        patch = { x: n.x, y: n.y, w: n.w, h: n.h, front: true };
+      }
+      const moved = n.x !== before.x || n.y !== before.y || n.w !== before.w || n.h !== before.h || n.anchor !== before.anchor;
       // Un clic sin movimiento sólo la trae al frente; moverla guarda el lugar (y también la trae al frente).
-      onCommit(before, moved ? { x: n.x, y: n.y, w: n.w, h: n.h, front: true } : { front: true });
+      onCommit(before, moved ? patch : { front: true });
     };
     document.addEventListener('pointermove', move);
     document.addEventListener('pointerup', up);
@@ -101,8 +119,8 @@ export function StickyNote({
   return (
     <div
       data-note-id={note.id}
-      className={`pointer-events-auto absolute flex flex-col rounded-[6px] shadow-[0_6px_18px_rgba(26,58,82,.22)] ${dragging ? 'cursor-grabbing shadow-[0_14px_30px_rgba(26,58,82,.3)]' : ''} ${flash ? 'ring-4 ring-k-purple/60' : ''}`}
-      style={{ left: shown.x, top: shown.y, width: shown.w, height: shown.h, background: C.bg, zIndex: note.zIndex }}
+      className={`absolute flex flex-col rounded-[6px] shadow-[0_6px_18px_rgba(26,58,82,.22)] ${dragging ? 'cursor-grabbing shadow-[0_14px_30px_rgba(26,58,82,.3)]' : ''} ${flash ? 'ring-4 ring-k-purple/60' : ''}`}
+      style={{ left: shown.x, top: shown.y, width: shown.w, height: shown.h, background: C.bg, zIndex: layer }}
       onPointerDown={() => canMove && onFront()}
     >
       <div

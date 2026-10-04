@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import type { CreditNote, MoraNoteColor, MoraNoteKind, UpdateCreditNote } from '@kobrax/shared';
+import type { CreditNote, MoraNoteAnchor, MoraNoteColor, MoraNoteKind, UpdateCreditNote } from '@kobrax/shared';
 import { useToast } from '@/components/toast';
 import { errorText } from '@/lib/api-error';
 import { sendJson } from '@/lib/client';
@@ -55,7 +55,7 @@ export function useNotes(creditId: string, initial: CreditNote[] | null) {
   );
 
   const create = useCallback(
-    async (input: { body: string; kind: MoraNoteKind; color: MoraNoteColor }): Promise<CreditNote | null> => {
+    async (input: { body: string; kind: MoraNoteKind; color: MoraNoteColor; anchor?: MoraNoteAnchor; x?: number; y?: number }): Promise<CreditNote | null> => {
       pendingId.current ??= crypto.randomUUID();
       const res = await sendJson<CreditNote>(`/api/mora/${creditId}/notes`, { id: pendingId.current, ...input }, 'POST');
       if (!res.ok) {

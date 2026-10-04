@@ -58,6 +58,8 @@ export function Section({
   /** El padding de la caja. `''` para listas que ya paginan su propio espacio. */
   inner = 'p-4',
   collapsible,
+  anchor,
+  headerAction,
 }: {
   title: string;
   action?: ReactNode;
@@ -71,21 +73,30 @@ export function Section({
    * 🔴 La `action` **no va en el encabezado**: tocarlo pliega, y un enlace ahí dentro sería un clic que a veces
    * abre y a veces pliega. Va adentro, arriba a la derecha.
    */
-  collapsible?: { open?: boolean; count?: number };
+  collapsible?: { open?: boolean; count?: number; /** `false` = sin alto máximo: se extiende todo. Por defecto tiene alto fijo con scroll. */ scroll?: boolean };
+  /**
+   * Sección de la ficha a la que se pueden anclar post-its (`MoraNoteAnchor`). Es el marco de referencia de las
+   * notas: se dibujan **dentro** de ella (`relative`), así que viajan con el scroll, y al plegarla se van con ella.
+   */
+  anchor?: string;
+  /** Un enlace en el encabezado, a la derecha (visible también plegada). Es un `<a>`: navega, no pliega. */
+  headerAction?: ReactNode;
 }) {
   if (collapsible) {
     return (
-      <details open={collapsible.open} className="group rounded-2xl border border-k-border bg-white">
-        <summary className="flex cursor-pointer list-none items-center gap-3 p-4 hover:bg-k-bg [&::-webkit-details-marker]:hidden">
-          <span aria-hidden className="text-k-muted transition-transform group-open:rotate-180">
+      <details open={collapsible.open} data-note-anchor={anchor} className="group relative rounded-2xl border border-k-border bg-white">
+        <summary className="flex cursor-pointer list-none items-center gap-3 rounded-2xl bg-white p-4 text-k-navy hover:bg-k-bg group-open:rounded-b-none group-open:bg-k-navy group-open:text-white group-open:hover:bg-k-slate [&::-webkit-details-marker]:hidden">
+          <span aria-hidden className="text-k-periwinkle transition-transform group-open:rotate-180 group-open:text-white">
             ⌄
           </span>
-          <h2 className="flex-1 text-[14px] font-semibold text-k-navy">
+          <h2 className="flex-1 text-[14px] font-semibold">
             {title}
-            {collapsible.count != null && collapsible.count > 0 && <span className="ml-1.5 font-normal text-k-muted">({collapsible.count})</span>}
+            {collapsible.count != null && collapsible.count > 0 && <span className="ml-1.5 font-normal text-k-muted group-open:text-white/70">({collapsible.count})</span>}
           </h2>
+          {headerAction && <span className="text-[13px] font-medium text-k-periwinkle group-open:text-white">{headerAction}</span>}
         </summary>
-        <div className={`border-t border-k-border ${inner || 'p-4'}`}>
+        {/* Alto fijo (unas 3 filas) con scroll adentro: con muchos ítems la ficha no se vuelve interminable. */}
+        <div className={`${collapsible.scroll === false ? '' : 'max-h-[21rem] overflow-y-auto overscroll-contain'} border-t border-k-border ${inner || 'p-4'}`}>
           {action && <div className="mb-3 flex justify-end">{action}</div>}
           {children}
         </div>

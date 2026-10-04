@@ -102,6 +102,7 @@ describe('ArrearsHistory — el historial de mora de la ficha', () => {
 
   it('muestra el origen de la mora', () => {
     render(<ArrearsHistory currency="BOB" episodes={[ep({ source: 'IMPORTED' })]} />);
-    expect(screen.getByText('Del archivo')).toBeInTheDocument();
+    // aparece bajo las fechas y en el recuadro «Origen de la mora» de la derecha, como en la tarjeta
+    expect(screen.getAllByText('Del archivo')).toHaveLength(2);
   });
 });

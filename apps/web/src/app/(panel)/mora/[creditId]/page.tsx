@@ -24,6 +24,7 @@ import { date, dateTime, dayDate, money } from '@/lib/format';
 import { assignedTo } from '@/lib/cases';
 import { isKnownRole } from '@/lib/team';
 import { PaymentActions } from '../../pagos/payment-actions';
+import { ActivityCard } from './activity-card';
 import { ActivityResult } from './activity-result';
 import { RegisterActivityButton } from './activity-form';
 import { ArrearsHistory } from './arrears-history';
@@ -130,7 +131,7 @@ export default async function CreditoMoraPage({ params }: { params: { creditId: 
         }
       />
 
-      <div className="space-y-6">
+      <div data-note-anchor="PAGE" className="relative space-y-6">
         {/* El resumen: lo que se debe, en grande, y los datos del crédito. Estado, prioridad y fuente son
             **controles**, no etiquetas: se tocan y se cambian acá mismo. Sin caso abierto no hay nada que cambiar, y se dice. */}
         <FichaSummary
@@ -174,31 +175,32 @@ export default async function CreditoMoraPage({ params }: { params: { creditId: 
 
         {/* El resto, en acordeones: las **gestiones** abiertas de entrada (es lo que se mira todos los días). */}
         <div className="space-y-3">
-          <Section title={t('detail.timeline')} collapsible={{ open: true, count: item.activities.length }}>
+          <Section title={t('detail.timeline')} anchor="TIMELINE" collapsible={{ open: true, count: item.activities.length }}>
             {item.activities.length ? (
-          <ol className="space-y-3">
+          <ol className="space-y-2.5">
             {item.activities.map((activity) => (
-              <li key={activity.id} className="rounded-2xl border border-k-border bg-white px-5 py-4">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="text-[14px] font-medium text-k-text">
-                    {/* Un tipo que el diccionario no conoce se muestra crudo: la API puede sumar
-                        uno nuevo, y esconderlo dejaría un renglón sin decir qué pasó. */}
-                    {t.has(`activityType.${activity.type}`) ? t(`activityType.${activity.type}`) : activity.type}
-                  </span>
-                  <span className="text-[13px] text-k-text-2">{dateTime(activity.createdAt, locale)}</span>
-                </div>
-                {activity.result && <ActivityResult result={activity.result} />}
-                {/*
-                 * 🔴 La nota de una asignación es **un id**, no una frase: mostrarla cruda le
-                 * ponía `bf2e039c-…` en la cara a quien mira la cobranza. Va el nombre, y al lado
-                 * el cargo — que es lo que dice si el trabajo quedó en manos de un cobrador o de
-                 * una supervisora.
-                 */}
-                {activity.type === 'ASSIGNMENT' && assignedTo(activity.notes) ? (
-                  <Assignee id={assignedTo(activity.notes)!} members={members} />
-                ) : (
-                  activity.notes && <p className="mt-1 text-[14px] text-k-text">{activity.notes}</p>
-                )}
+              <li key={activity.id}>
+                <ActivityCard
+                  type={activity.type}
+                  result={activity.result}
+                  /* Un tipo que el diccionario no conoce se muestra crudo: la API puede sumar
+                     uno nuevo, y esconderlo dejaría un renglón sin decir qué pasó. */
+                  title={t.has(`activityType.${activity.type}`) ? t(`activityType.${activity.type}`) : activity.type}
+                  when={dateTime(activity.createdAt, locale)}
+                >
+                  {activity.result && <ActivityResult result={activity.result} />}
+                  {/*
+                   * 🔴 La nota de una asignación es **un id**, no una frase: mostrarla cruda le
+                   * ponía `bf2e039c-…` en la cara a quien mira la cobranza. Va el nombre, y al lado
+                   * el cargo — que es lo que dice si el trabajo quedó en manos de un cobrador de calle o de
+                   * una supervisora.
+                   */}
+                  {activity.type === 'ASSIGNMENT' && assignedTo(activity.notes) ? (
+                    <Assignee id={assignedTo(activity.notes)!} members={members} />
+                  ) : (
+                    activity.notes && <p className="mt-0.5 text-[13px] text-k-text">{activity.notes}</p>
+                  )}
+                </ActivityCard>
               </li>
             ))}
           </ol>
@@ -231,7 +233,7 @@ export default async function CreditoMoraPage({ params }: { params: { creditId: 
           <ArrearsHistory episodes={episodes.status === 200 ? (episodes.body.data ?? []) : null} currency={currency} />
 
           {/* La persona, al servicio de la recuperación: sólo lectura (se corrige desde Cartera). */}
-          <Section title={t('ficha.person.title')} collapsible={{}}>
+          <Section title={t('ficha.person.title')} anchor="PERSON" collapsible={{ scroll: false }}>
             <p className="mb-3 text-[13px] text-k-text-2">{t('ficha.person.hint')}</p>
             {client.status === 200 && client.body.data ? (
               <PersonSections creditId={item.creditId} client={client.body.data} currency={currency} collateralTypes={collateralTypes.body.data ?? []} />
