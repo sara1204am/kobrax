@@ -10,7 +10,8 @@ import type { AgendaDetails } from '../validation/agenda-details.js';
 
 export interface AgendaListItem {
   id: string;
-  caseId: string;
+  /** Ya no hay caso (F4/08): solo los ítems viejos lo traen. Usar `creditId`. */
+  caseId?: string;
   clientId: string;
   creditId: string;
   assigneeId: string;
@@ -76,7 +77,8 @@ export interface AgendaItemDetail {
 export interface CreateAgendaInput {
   /** Lo pone quien escribe (el móvil, sin red): reintentar con el mismo id **no duplica** el agendado ni su recordatorio. */
   id?: string;
-  caseId: string;
+  /** Opcional y ignorado por el servidor (F4/08): el agendado cuelga del crédito. */
+  caseId?: string;
   creditId: string;
   type: AgendaItemType;
   scheduledDate: string;

@@ -164,7 +164,7 @@ export function hydrateAgendaForm(item: AgendaListItem): AgendaFormState {
   return {
     type: item.type,
     clientId: item.clientId,
-    caseId: item.caseId,
+    caseId: item.caseId ?? null,
     creditId: item.creditId,
     details: { ...(item.details as Record<string, unknown>) },
     observations: item.observations ?? '',
