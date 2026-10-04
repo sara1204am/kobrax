@@ -4,6 +4,7 @@ import { AuditModule } from '../../common/audit/audit.module';
 import { ClientsModule } from '../clients/clients.module';
 import { AgendaController } from './agenda.controller';
 import { AgendaService } from './agenda.service';
+import { InstallmentReminderService } from './installment-reminders.service';
 
 /**
  * Módulo Agenda (F10) — gestiones agendadas por fecha. Importa `ClientsModule` para reusar
@@ -12,7 +13,7 @@ import { AgendaService } from './agenda.service';
 @Module({
   imports: [AuthModule, AuditModule, ClientsModule],
   controllers: [AgendaController],
-  providers: [AgendaService],
+  providers: [AgendaService, InstallmentReminderService],
   exports: [AgendaService],
 })
 export class AgendaModule {}

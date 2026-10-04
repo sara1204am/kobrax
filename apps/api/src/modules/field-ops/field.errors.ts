@@ -9,7 +9,7 @@ export const invalidGps = () =>
 
 /** Visita sin referencia a caso ni parada de ruta. */
 export const visitNeedsTarget = () =>
-  new BadRequestException({ code: 'VISIT_TARGET', message: 'La visita requiere caseId o routeStopId' });
+  new BadRequestException({ code: 'VISIT_TARGET', message: 'La visita requiere creditId o routeStopId' });
 
 /** Los campos propios de la variante no cierran con el `outcome` (S5 · RT-6). */
 export const invalidVisitDetails = (errors: string[]) =>
@@ -22,3 +22,7 @@ export const evidenceHashInvalid = () =>
 /** El `id` de la visita que mandó el cliente ya es de otra visita (otro caso, parada o cobrador). */
 export const visitIdTaken = () =>
   new ConflictException({ code: 'VISIT_ID', message: 'Ese id de visita ya pertenece a otra visita' });
+
+/** La parada y el crédito que mandó el cliente no son el mismo. */
+export const visitCreditMismatch = () =>
+  new BadRequestException({ code: 'VISIT_CREDIT', message: 'La parada no corresponde a ese crédito' });

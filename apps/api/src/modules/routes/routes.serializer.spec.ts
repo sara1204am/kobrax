@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { serializeStop } from './routes.serializer';
+import { serializeRoute, serializeStop } from './routes.serializer';
 
 /** Cifrado falso: `enc:X` → `X`; cualquier otra cosa revienta (= legado en claro). */
 const crypto = {
@@ -107,5 +107,25 @@ describe('serializeStop', () => {
     );
     assert.equal(s.overdueAmount, 0);
     assert.equal(s.daysPastDue, 0);
+  });
+});
+
+describe('serializeStop por crédito (F4/08)', () => {
+  it('toma creditId y la mora del crédito de la parada (credit_id), no del caso', () => {
+    const s = serializeStop(
+      {
+        id: 's1', clientId: 'cl1', caseId: null, creditId: 'cr1', sequenceOrder: 1, status: 'PENDING', visitedAt: null,
+        creditInfo: { outstandingBalance: 250, currency: 'BOB', daysPastDue: 12 },
+      } as never,
+      crypto,
+    );
+    assert.equal(s.creditId, 'cr1');
+    assert.equal(s.overdueAmount, 250);
+    assert.equal(s.daysPastDue, 12);
+  });
+
+  it('totalCases (nombre legado) se cuenta desde las paradas cuando vienen', () => {
+    const r = serializeRoute({ id: 'r1', collectorId: 'u', plannedDate: new Date(), status: 'PLANNED', totalCases: 99, createdAt: new Date(), stops: [STOP, STOP] } as never);
+    assert.equal(r.totalCases, 2);
   });
 });

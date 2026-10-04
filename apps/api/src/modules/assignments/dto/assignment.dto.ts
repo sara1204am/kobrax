@@ -1,4 +1,4 @@
-import { IsDateString, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsDateString, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 /** `POST /assignments/temporary` — un reemplazo temporal: vence sí o sí. */
 export class CreateTemporaryAssignmentDto {
@@ -15,4 +15,11 @@ export class CreateSupportAssignmentDto {
   @IsUUID() creditId!: string;
   @IsUUID() userId!: string;
   @IsOptional() @IsDateString() expiresAt?: string;
+}
+
+/** `POST /assignments/bulk` — reasignar el responsable de varios créditos a la vez (tope: 500 por petición). */
+export class BulkReassignDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(500) @ArrayUnique() @IsUUID('all', { each: true }) creditIds!: string[];
+  /** El nuevo responsable. */
+  @IsUUID() userId!: string;
 }

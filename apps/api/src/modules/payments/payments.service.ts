@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import type { Payment, PaymentChannel, PaymentMethod, Prisma, PrismaClient } from '@prisma/client';
-import { CaseStatus, CreditStatus } from '@prisma/client';
+import { CreditStatus } from '@prisma/client';
 import { isExternalOrigin, readCreditMetadata, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
@@ -26,7 +26,6 @@ interface ApplyParams {
   creditId: string;
   amount: number;
   method: PaymentMethod;
-  caseId?: string;
   provider?: string;
   externalTransactionId?: string;
   idempotencyKey?: string;
@@ -103,7 +102,7 @@ export class PaymentsService {
      * saldo (D3).** El saldo, la mora y el estado los informa el reporte; el próximo reporte los
      * actualiza. Por eso esta rama no mira el estado ni el saldo reportado —un pago cobrado offline
      * que sube después de un reporte con saldo menor no se pierde— y no toca cuotas, saldo, mora,
-     * estado ni casos. Lo único que escribe es el `Payment`, que es lo que cuenta como recuperado.
+     * estado. Lo único que escribe es el `Payment`, que es lo que cuenta como recuperado.
      */
     if (isExternalOrigin(readCreditMetadata(credit.metadata, credit.origin).origin)) {
       const payment = await this.insertPayment(tx, credit, p);
@@ -148,25 +147,8 @@ export class PaymentsService {
       },
     });
 
-    /*
-     * 🔴 **Saldada la deuda, el caso se cierra acá mismo.** Antes el pago dejaba el crédito en `PAID`
-     * y **no tocaba el caso**: quedaba abierto, seguía entrando a las rutas y el cobrador volvía a
-     * visitar a quien ya había pagado. Cerrarlo era tres pasos a mano, con permiso `case:close` y
-     * una gestión registrada — que si cobró por transferencia nunca existió.
-     *
-     * Va en la misma transacción que el pago, no en el trabajo diario: entre que se cobra y que
-     * corre el job hay horas, y en esas horas el caso sigue en la ruta de alguien.
-     *
-     * Sin `CASE_TRANSITIONS` y sin exigir gestión, por lo mismo que el cierre automático del job:
-     * la máquina de estados gobierna la negociación, y acá no hay negociación — hay una deuda que
-     * dejó de existir. `closedBy` nulo: no lo cerró una persona.
-     */
-    if (creditPaid) {
-      await tx.collectionCase.updateMany({
-        where: { creditId: credit.id, deletedAt: null, status: { notIn: [CaseStatus.CLOSED, CaseStatus.WRITTEN_OFF] } },
-        data: { status: CaseStatus.CLOSED, closedAt: now, closedReason: 'PAID', lastActionAt: now },
-      });
-    }
+    // Saldada la deuda el crédito queda `PAID` y el trigger de episodios termina la mora (F4/08): el pago
+    // ya no cierra casos ni escribe `case_id`; cuelga solo del crédito.
 
     const payment = await this.insertPayment(tx, credit, p);
     return { payment, creditPaid, external: false };
@@ -182,7 +164,6 @@ export class PaymentsService {
           accountId: this.tenant.accountId,
           creditId: credit.id,
           branchId: credit.branchId,
-          caseId: p.caseId,
           amount: p.amount,
           method: p.method,
           provider: p.provider,
@@ -207,7 +188,7 @@ export class PaymentsService {
     const { page, limit, skip } = resolvePagination(query);
     const where: Prisma.PaymentWhereInput = {};
     if (query.creditId) where.creditId = query.creditId;
-    if (query.caseId) where.caseId = query.caseId;
+    // `caseId` del query se ignora (F4/08): el pago cuelga solo del crédito.
     /*
      * 🔴 **El pago no tiene `client_id`, y no hace falta que lo tenga.** Cuelga del crédito, y el
      * crédito del cliente: preguntar «los pagos de esta persona» es un `JOIN`, no una llamada por
@@ -270,7 +251,6 @@ export class PaymentsService {
           accountId: this.tenant.accountId,
           creditId: dto.creditId,
           clientId: dto.clientId,
-          caseId: dto.caseId,
           amount: dto.amount,
           method: dto.method ?? 'QR',
           reference,
@@ -299,7 +279,7 @@ export class PaymentsService {
       if (req.status !== 'PENDING') throw requestNotPending();
       if (!req.creditId) throw paymentInvalid('La solicitud no tiene crédito asociado');
 
-      const r = await this.applyCore(tx, { creditId: req.creditId, amount: Number(req.amount), method: req.method, caseId: req.caseId ?? undefined, externalTransactionId: dto.externalTransactionId, provider: 'payment_request' });
+      const r = await this.applyCore(tx, { creditId: req.creditId, amount: Number(req.amount), method: req.method, externalTransactionId: dto.externalTransactionId, provider: 'payment_request' });
       await tx.paymentRequest.update({ where: { id }, data: { status: 'PAID', paidPaymentId: r.payment.id } });
       return r;
     });

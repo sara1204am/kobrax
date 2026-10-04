@@ -7,7 +7,8 @@ function makeService(
   opts: {
     visit?: unknown;
     stop?: unknown;
-    case?: unknown;
+    /** `$queryRaw` de alcance: los créditos visibles. `false` = fuera de alcance. */
+    visibleCredit?: false;
     category?: unknown;
     permissions?: string[];
     listRows?: Record<string, unknown>[];
@@ -22,6 +23,9 @@ function makeService(
     visitCreate: [] as Record<string, unknown>[],
     stopUpdate: 0,
     activities: 0,
+    activityData: [] as Record<string, unknown>[],
+    creditUpdates: [] as Record<string, unknown>[],
+    scopeQueries: 0,
     evidence: [] as Record<string, unknown>[],
     events: [] as string[],
     audit: [] as { entity: string; action: string }[],
@@ -30,9 +34,14 @@ function makeService(
     listOrderBy: undefined as Record<string, unknown>[] | undefined,
   };
   const tx = {
-    collectionCase: { findFirst: async () => opts.case ?? { id: 'c1' }, update: async () => ({}) },
+    $queryRaw: async () => {
+      calls.scopeQueries += 1;
+      return opts.visibleCredit === false ? [] : [{ id: 'cr1', client_id: 'cl1' }];
+    },
+    creditArrearEpisode: { findFirst: async () => ({ id: 'ep1' }) },
+    credit: { update: async (a: { data: Record<string, unknown> }) => { calls.creditUpdates.push(a.data); return {}; } },
     routeStop: { findFirst: async () => opts.stop ?? { id: 's1' }, update: async () => { calls.stopUpdate += 1; return {}; } },
-    caseActivity: { create: async () => { calls.activities += 1; return {}; } },
+    creditActivity: { create: async (a: { data: Record<string, unknown> }) => { calls.activities += 1; calls.activityData.push(a.data); return {}; } },
     user: { update: async () => ({}) },
     fieldVisit: {
       findFirst: async (args?: { where?: { id?: string } }) => {
@@ -79,7 +88,7 @@ function makeService(
 
 const ROW = {
   id: 'v1',
-  caseId: 'c1',
+  creditId: 'cr1',
   routeStopId: 's1',
   collectorId: 'collector-1',
   latitude: -16.5,
@@ -211,14 +220,14 @@ describe('FieldService.findOne (la visita con su evidencia)', () => {
 });
 
 describe('FieldService.createVisit', () => {
-  it('exige un objetivo (caso o parada)', async () => {
+  it('exige un objetivo (crédito o parada)', async () => {
     const { service } = makeService();
     await rejectsWithCode(service.createVisit({ lat: -16.5, lng: -68.15, outcome: 'CONTACTED' as never }), 'VISIT_TARGET');
   });
 
   it('valida el GPS', async () => {
     const { service } = makeService();
-    await rejectsWithCode(service.createVisit({ caseId: 'c1', lat: 999, lng: 0, outcome: 'CONTACTED' as never } as never), 'VISIT_GPS');
+    await rejectsWithCode(service.createVisit({ creditId: 'cr1', lat: 999, lng: 0, outcome: 'CONTACTED' as never } as never), 'VISIT_GPS');
   });
 
   it('registra la visita, marca la parada y emite collector.location', async () => {
@@ -323,11 +332,59 @@ describe('FieldService.createVisit · details por variante', () => {
   });
 });
 
-describe('FieldService.createVisit idempotente por id (cola offline)', () => {
-  const BASE = { caseId: 'c1', lat: -16.5, lng: -68.15, outcome: 'CONTACTED' };
-  const prior = { id: 'dup-id', caseId: 'c1', routeStopId: null, collectorId: 'collector-1', outcome: 'CONTACTED', capturedAt: new Date('2026-08-01T10:00:00Z') };
+describe('FieldService.createVisit por crédito (F4/08)', () => {
+  const GPS = { lat: -16.5, lng: -68.15, outcome: 'CONTACTED' as never };
 
-  it('id ya existente (mismo caso y cobrador): misma forma de respuesta, sin visita/actividad/ubicación/plan', async () => {
+  it('escribe credit_id, deja la gestión VISIT con el episodio abierto y actualiza last_action_at', async () => {
+    const { service, calls } = makeService();
+    await service.createVisit({ ...GPS, creditId: 'cr1', caseId: 'ignorado' } as never);
+    assert.equal(calls.visitCreate[0]!.creditId, 'cr1');
+    assert.equal('caseId' in calls.visitCreate[0]!, false);
+    assert.equal(calls.activityData[0]!.type, 'VISIT');
+    assert.equal(calls.activityData[0]!.creditId, 'cr1');
+    assert.equal(calls.activityData[0]!.clientId, 'cl1');
+    assert.equal(calls.activityData[0]!.episodeId, 'ep1');
+    assert.equal(calls.activityData[0]!.userId, 'collector-1');
+    assert.ok(calls.creditUpdates[0]!.lastActionAt instanceof Date);
+  });
+
+  it('crédito fuera del alcance del cobrador: 404 y no se escribe nada', async () => {
+    const { service, calls } = makeService({ visibleCredit: false });
+    await rejectsWithCode(service.createVisit({ ...GPS, creditId: 'cr1' } as never), 'RESOURCE_NOT_FOUND');
+    assert.equal(calls.visitCreate.length, 0);
+    assert.equal(calls.activities, 0);
+  });
+
+  it('una visita por parada resuelve el crédito de la parada', async () => {
+    const { service, calls } = makeService({ stop: { id: 's1', creditId: 'cr1' } });
+    await service.createVisit({ ...GPS, routeStopId: 's1' } as never);
+    assert.equal(calls.visitCreate[0]!.creditId, 'cr1');
+    assert.equal(calls.activities, 1);
+  });
+
+  it('la parada de otro crédito que el mandado: VISIT_CREDIT', async () => {
+    const { service } = makeService({ stop: { id: 's1', creditId: 'crX' } });
+    await rejectsWithCode(service.createVisit({ ...GPS, routeStopId: 's1', creditId: 'cr1' } as never), 'VISIT_CREDIT');
+  });
+
+  it('solo caseId (legado) no alcanza como objetivo', async () => {
+    const { service } = makeService();
+    await rejectsWithCode(service.createVisit({ ...GPS, caseId: 'c1' } as never), 'VISIT_TARGET');
+  });
+
+  it('el listado filtra por creditId e ignora caseId', async () => {
+    const { service, calls } = makeService();
+    await service.list({ creditId: 'cr1', caseId: 'c1' } as never);
+    assert.equal(calls.listWhere!.creditId, 'cr1');
+    assert.equal('caseId' in calls.listWhere!, false);
+  });
+});
+
+describe('FieldService.createVisit idempotente por id (cola offline)', () => {
+  const BASE = { creditId: 'cr1', lat: -16.5, lng: -68.15, outcome: 'CONTACTED' };
+  const prior = { id: 'dup-id', creditId: 'cr1', routeStopId: null, collectorId: 'collector-1', outcome: 'CONTACTED', capturedAt: new Date('2026-08-01T10:00:00Z') };
+
+  it('id ya existente (mismo crédito y cobrador): misma forma de respuesta, sin visita/actividad/ubicación/plan', async () => {
     const { service, calls } = makeService({ priorVisit: prior });
     const r = await service.createVisit({ ...BASE, id: 'dup-id' } as never);
     assert.deepEqual(r, { id: 'dup-id', outcome: 'CONTACTED', capturedAt: prior.capturedAt });
@@ -338,14 +395,14 @@ describe('FieldService.createVisit idempotente por id (cola offline)', () => {
     assert.equal(calls.alerts.length, 0);
   });
 
-  it('id de otro caso: 409 VISIT_ID', async () => {
-    const { service, calls } = makeService({ priorVisit: { ...prior, caseId: 'otro' } });
+  it('id de otro crédito: 409 VISIT_ID', async () => {
+    const { service, calls } = makeService({ priorVisit: { ...prior, creditId: 'otro' } });
     await rejectsWithCode(service.createVisit({ ...BASE, id: 'dup-id' } as never), 'VISIT_ID');
     assert.equal(calls.visitCreate.length, 0);
   });
 
   it('id de otra parada de ruta: 409 VISIT_ID', async () => {
-    const { service } = makeService({ priorVisit: { ...prior, caseId: null, routeStopId: 'sX' } });
+    const { service } = makeService({ priorVisit: { ...prior, creditId: null, routeStopId: 'sX' } });
     await rejectsWithCode(service.createVisit({ lat: -16.5, lng: -68.15, outcome: 'CONTACTED', routeStopId: 's1', id: 'dup-id' } as never), 'VISIT_ID');
   });
 

@@ -27,7 +27,9 @@ export class GenerateRouteDto {
   @IsOptional() @IsUUID() id?: string;
   @IsUUID() collectorId!: string;
   @IsDateString() plannedDate!: string;
-  /** Casos a incluir; si se omite con `auto`, toma los casos abiertos del cobrador. */
+  /** Créditos a incluir, en el orden del recorrido; si se omite, toma los créditos en mora del cobrador por prioridad. */
+  @IsOptional() @IsArray() @IsUUID('all', { each: true }) creditIds?: string[];
+  /** @deprecated legado: se acepta y se ignora (se quita en la fase 6). */
   @IsOptional() @IsArray() @IsUUID('all', { each: true }) caseIds?: string[];
   @IsOptional() @IsBoolean() auto?: boolean;
   @IsOptional() @IsUUID() branchId?: string;
@@ -57,9 +59,11 @@ export class UpdateRouteDto {
   @IsEnum(RouteStatus) status!: RouteStatus;
 }
 
-/** Agregar una parada desde el mapa (S2). El caso es opcional: un cliente sin caso abierto se visita igual. */
+/** Agregar una parada desde el mapa (S2). El crédito es opcional: un cliente sin crédito elegido se visita igual. */
 export class AddStopDto {
   @IsUUID() clientId!: string;
+  @IsOptional() @IsUUID() creditId?: string;
+  /** @deprecated legado: se acepta y se ignora. */
   @IsOptional() @IsUUID() caseId?: string;
 }
 

@@ -100,11 +100,16 @@ export class AgendaService {
   }
 
   /**
-   * Scope por capacidad: sin `AGENDA_ASSIGN` (cobrador) solo ve SUS agendados; quien supervisa
-   * (con AGENDA_ASSIGN) ve los de todo el tenant.
+   * Scope por capacidad: sin `AGENDA_ASSIGN` (cobrador) solo ve SUS agendados. Con `AGENDA_ASSIGN` ve los de
+   * los CRÉDITOS a su alcance (F4/08 · D8): el supervisor, los de su agencia; gerente y administrador (alcance
+   * total), todo el tenant. Es el mismo alcance que la ficha de mora, no uno propio de la agenda.
    */
-  private assigneeScope(): Prisma.AgendaItemWhereInput {
-    return this.tenant.can(Permission.AGENDA_ASSIGN) ? {} : { assigneeId: this.tenant.userId };
+  private async assigneeScope(tx: PrismaClient): Promise<Prisma.AgendaItemWhereInput> {
+    if (!this.tenant.can(Permission.AGENDA_ASSIGN)) return { assigneeId: this.tenant.userId };
+    const scope = this.creditScope();
+    if (scope.kind === 'ALL') return {};
+    const visible = await visibleCredits(tx, scope, {});
+    return { creditId: { in: visible.map((c) => c.id) } };
   }
 
   /** Sobre qué créditos puede agendar este usuario: el MISMO alcance que la ficha de mora (no se inventa otro). */
@@ -147,7 +152,7 @@ export class AgendaService {
 
     const { rows, names } = await this.tx(async (tx) => {
       const rows = await tx.agendaItem.findMany({
-        where: { deletedAt: null, scheduledDate, ...this.assigneeScope() },
+        where: { deletedAt: null, scheduledDate, ...(await this.assigneeScope(tx)) },
         orderBy: [{ scheduledDate: 'asc' }, { scheduledTime: 'asc' }, { createdAt: 'asc' }],
       });
       return { rows, names: await this.clientNames(tx, rows.map((r) => r.clientId)) };
@@ -159,13 +164,13 @@ export class AgendaService {
   async listOverdue(query: ListOverdueQueryDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>[]>> {
     const { page, limit, skip } = resolvePagination(query);
     const today = await this.today();
-    const where: Prisma.AgendaItemWhereInput = {
-      deletedAt: null,
-      status: AgendaItemStatus.SCHEDULED,
-      scheduledDate: { lt: today },
-      ...this.assigneeScope(),
-    };
     const { rows, total, names } = await this.tx(async (tx) => {
+      const where: Prisma.AgendaItemWhereInput = {
+        deletedAt: null,
+        status: AgendaItemStatus.SCHEDULED,
+        scheduledDate: { lt: today },
+        ...(await this.assigneeScope(tx)),
+      };
       const [rows, total] = await Promise.all([
         tx.agendaItem.findMany({ where, orderBy: { scheduledDate: 'desc' }, skip, take: limit }),
         tx.agendaItem.count({ where }),
@@ -185,7 +190,7 @@ export class AgendaService {
   async findOne(id: string) {
     const today = await this.today();
     const { item, credit, history } = await this.tx(async (tx) => {
-      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...this.assigneeScope() } });
+      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...(await this.assigneeScope(tx)) } });
       if (!item) throw agendaItemNotFound();
       const [credit, history] = await Promise.all([
         tx.credit.findFirst({ where: { id: item.creditId, deletedAt: null } }),
@@ -247,7 +252,7 @@ export class AgendaService {
    */
   async complete(id: string, dto: CompleteAgendaItemDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
     const { updated, clientName, replay } = await this.tx(async (tx) => {
-      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...this.assigneeScope() } });
+      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...(await this.assigneeScope(tx)) } });
       if (!item) throw agendaItemNotFound();
       // Reintento de la cola offline: ya se ejecutó con ESE mismo resultado → se responde lo hecho, sin otra
       // actividad. Con otro resultado sigue siendo un conflicto.
@@ -296,7 +301,7 @@ export class AgendaService {
    */
   async postpone(id: string, dto: PostponeAgendaItemDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
     const { updated, clientName } = await this.tx(async (tx) => {
-      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...this.assigneeScope() } });
+      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...(await this.assigneeScope(tx)) } });
       if (!item) throw agendaItemNotFound();
       if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
 
@@ -445,14 +450,14 @@ export class AgendaService {
    * deudor estuviera del otro lado. La regla de conteo es pura y vive en `recommendedSlot`.
    */
   private async contactHint(clientId: string): Promise<ContactHint | undefined> {
-    const executed = await this.tx((tx) =>
+    const executed = await this.tx(async (tx) =>
       tx.agendaItem.findMany({
         where: {
           clientId,
           deletedAt: null,
           status: AgendaItemStatus.EXECUTED,
           resultActivityId: { not: null },
-          ...this.assigneeScope(),
+          ...(await this.assigneeScope(tx)),
         },
         select: { timeSlot: true, scheduledTime: true },
       }),
@@ -684,7 +689,7 @@ export class AgendaService {
    */
   async update(id: string, dto: UpdateAgendaItemDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
     const { before, updated, clientName } = await this.tx(async (tx) => {
-      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...this.assigneeScope() } });
+      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...(await this.assigneeScope(tx)) } });
       if (!item) throw agendaItemNotFound();
       if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
 
@@ -736,7 +741,7 @@ export class AgendaService {
    */
   async cancel(id: string, dto: CancelAgendaItemDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
     const { updated, clientName } = await this.tx(async (tx) => {
-      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...this.assigneeScope() } });
+      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...(await this.assigneeScope(tx)) } });
       if (!item) throw agendaItemNotFound();
       if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
 
@@ -769,7 +774,7 @@ export class AgendaService {
     assertTimeMode(dto);
 
     const { created, previousId, clientName } = await this.tx(async (tx) => {
-      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...this.assigneeScope() } });
+      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...(await this.assigneeScope(tx)) } });
       if (!item) throw agendaItemNotFound();
       if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
 
@@ -817,7 +822,7 @@ export class AgendaService {
    */
   async remove(id: string): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
     const { before, updated, clientName } = await this.tx(async (tx) => {
-      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...this.assigneeScope() } });
+      const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...(await this.assigneeScope(tx)) } });
       if (!item) throw agendaItemNotFound();
       if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
 

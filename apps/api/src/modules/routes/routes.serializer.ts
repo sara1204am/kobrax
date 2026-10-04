@@ -48,17 +48,18 @@ type StopCase = {
  * y quien la pide la audita (`findOne`). Sin eso, la parada devuelve ids como siempre.
  */
 export function serializeStop(
-  s: RouteStop & { client?: StopClient; case?: StopCase | null; visits?: { outcome: VisitOutcome }[] },
+  s: RouteStop & { client?: StopClient; case?: StopCase | null; creditInfo?: StopCase['credit']; visits?: { outcome: VisitOutcome }[] },
   crypto?: CryptoService,
 ) {
   const loc = s.client ? primaryLocation(s.client) : undefined;
-  const credit = s.case?.credit ?? undefined;
+  // El crédito de la parada (`credit_id`); el del caso queda sólo para paradas viejas sin `credit_id` (hasta la fase 6).
+  const credit = s.creditInfo ?? s.case?.credit ?? undefined;
   return {
     id: s.id,
     clientId: s.clientId,
     caseId: s.caseId ?? undefined,
-    // El crédito del caso: contra él se cobra y se promete al registrar el resultado (S5).
-    creditId: s.case?.creditId,
+    // Contra este crédito se cobra y se promete al registrar el resultado (S5).
+    creditId: s.creditId ?? s.case?.creditId,
     sequenceOrder: s.sequenceOrder,
     status: s.status,
     visitedAt: s.visitedAt ?? undefined,
@@ -84,7 +85,7 @@ export function serializeStop(
 }
 
 type RouteWithStops = RoutePlan & {
-  stops?: (RouteStop & { client?: StopClient; case?: StopCase | null; visits?: { outcome: VisitOutcome }[] })[];
+  stops?: (RouteStop & { client?: StopClient; case?: StopCase | null; creditInfo?: StopCase['credit']; visits?: { outcome: VisitOutcome }[] })[];
 };
 
 export function serializeRoute(r: RouteWithStops, crypto?: CryptoService) {
@@ -94,7 +95,8 @@ export function serializeRoute(r: RouteWithStops, crypto?: CryptoService) {
     branchId: r.branchId ?? undefined,
     plannedDate: r.plannedDate,
     status: r.status,
-    totalCases: r.totalCases,
+    // Nombre legado (antes «casos»): son paradas. Con las paradas a la vista se cuentan; si no, la columna.
+    totalCases: r.stops ? r.stops.length : r.totalCases,
     totalDistanceKm: r.totalDistanceKm != null ? Number(r.totalDistanceKm) : undefined,
     estimatedMinutes: r.estimatedMinutes ?? undefined,
     createdAt: r.createdAt,

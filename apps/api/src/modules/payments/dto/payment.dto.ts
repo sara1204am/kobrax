@@ -11,6 +11,7 @@ export class CreatePaymentDto {
   @IsUUID() creditId!: string;
   @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() amount!: number;
   @IsEnum(PaymentMethod) method!: PaymentMethod;
+  /** @deprecated legado: se acepta y se ignora (se quita en la fase 6). */
   @IsOptional() @IsUUID() caseId?: string;
   @IsOptional() @IsString() provider?: string;
   @IsOptional() @IsString() externalTransactionId?: string;

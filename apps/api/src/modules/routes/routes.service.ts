@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { Prisma, PrismaClient } from '@prisma/client';
-import { CaseStatus, RouteStatus, RouteStopStatus } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
+import { RouteStatus, RouteStopStatus } from '@prisma/client';
 import { Permission, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
@@ -8,6 +8,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { isUniqueViolation } from '../../common/unique-violation';
+import { moraAccessConditions, moraScopeOf, visibleCredits } from '../mora/mora-query';
 import { serializeRoute, serializeStop } from './routes.serializer';
 import type { RoutePdfContext } from './route-pdf';
 import { OsrmService, type OsrmRoute, type OsrmTrip } from './osrm.service';
@@ -22,8 +23,6 @@ import {
   stopDuplicate,
   stopNotPending,
 } from './routes.errors';
-
-const OPEN_CASE_STATUSES = { notIn: [CaseStatus.CLOSED, CaseStatus.WRITTEN_OFF] };
 
 /**
  * Lo que la parada necesita del cliente para poder pintarse: nombre, dirección y **el punto en el
@@ -77,6 +76,19 @@ const STOP_CASE = {
   },
 } satisfies Prisma.CollectionCaseDefaultArgs;
 
+/** El crédito de la parada (F4/08: `route_stops.credit_id`, sin relación Prisma: se lee aparte). */
+const STOP_CREDIT = {
+  select: {
+    id: true,
+    outstandingBalance: true,
+    currency: true,
+    daysPastDue: true,
+    externalSource: true,
+    syncStatus: true,
+    reportedAsOf: true,
+  },
+} satisfies Prisma.CreditDefaultArgs;
+
 @Injectable()
 export class RoutesService {
   constructor(
@@ -90,6 +102,14 @@ export class RoutesService {
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
+  }
+
+  /** Adjunta a cada parada los datos de su crédito (`creditInfo`): la parada guarda `credit_id` sin relación. */
+  private async withCredits<S extends { creditId: string | null }>(tx: PrismaClient, stops: S[]) {
+    const ids = [...new Set(stops.map((s) => s.creditId).filter((id): id is string => !!id))];
+    const rows = ids.length ? await tx.credit.findMany({ where: { id: { in: ids } }, ...STOP_CREDIT }) : [];
+    const byId = new Map(rows.map((c) => [c.id, c]));
+    return stops.map((s) => ({ ...s, creditInfo: s.creditId ? (byId.get(s.creditId) ?? null) : null }));
   }
 
   private async assertCollector(tx: PrismaClient, collectorId: string): Promise<void> {
@@ -198,7 +218,7 @@ export class RoutesService {
   }
 
   /**
-   * Genera la ruta desde los casos abiertos. Mismo modelo de capacidades que `list`:
+   * Genera la ruta desde los créditos (elegidos, o los del cobrador en mora). Mismo modelo de capacidades que `list`:
    *  - ROUTE_ASSIGN (supervisor): la genera para el cobrador que pida.
    *  - ejecutor de campo (ROUTE_EXECUTE sin ASSIGN): **sólo la suya** — es el camino de RT-0a,
    *    donde el cobrador arma su propia jornada; el `collectorId` del body se ignora.
@@ -210,7 +230,7 @@ export class RoutesService {
       dto.id && isUniqueViolation(err) ? this.generateOnce(dto, collectorId) : Promise.reject(err),
     );
     // Un reintento no vuelve a auditar ni a crear paradas: devuelve la ruta que ya está.
-    if (!replay) await this.audit.record({ entity: 'route', entityId: route.id, action: 'GENERATE', after: { collectorId: route.collectorId, totalCases: route.totalCases } });
+    if (!replay) await this.audit.record({ entity: 'route', entityId: route.id, action: 'GENERATE', after: { collectorId: route.collectorId, totalStops: route.totalCases } });
     return serializeRoute(route);
   }
 
@@ -223,22 +243,17 @@ export class RoutesService {
       if (already) throw routeAlreadyForDay(already.id);
 
       /*
-       * 🔴 **Con `caseIds`, manda el orden en que vinieron.** Antes se reordenaba por prioridad
-       * también en ese caso, así que el recorrido que alguien armó mirando el mapa —esta cuadra,
-       * después la de al lado— se perdía en el camino y el cobrador recibía las paradas en otro
-       * orden. Sin `caseIds` sigue decidiendo la prioridad, que es lo correcto cuando nadie eligió.
+       * Las paradas son por CRÉDITO (F4/08).
+       *
+       * 🔴 **Con `creditIds`, manda el orden en que vinieron** (el recorrido que alguien armó mirando el mapa),
+       * sin repetidos y sólo con los créditos que quien planifica puede ver (el mismo alcance que la ficha de
+       * mora). Sin `creditIds` (`caseIds` legado se ignora), se toman los créditos EN MORA del cobrador
+       * —responsable, temporal o apoyo vigentes— por la prioridad de su episodio abierto.
        */
-      const elegidos = dto.caseIds?.length
-        ? await tx.collectionCase.findMany({ where: { id: { in: dto.caseIds }, status: OPEN_CASE_STATUSES, deletedAt: null } })
-        : null;
-      const cases = elegidos
-        ? // `findMany` con `in` devuelve en el orden de la base, no en el del pedido: se reordena acá.
-          dto.caseIds!.flatMap((id) => elegidos.find((c) => c.id === id) ?? [])
-        : await tx.collectionCase.findMany({
-            where: { assigneeId: collectorId, status: OPEN_CASE_STATUSES, deletedAt: null },
-            orderBy: { priority: 'desc' },
-          });
-      if (cases.length === 0) throw noStopsToRoute();
+      const credits = dto.creditIds?.length
+        ? await this.chosenCredits(tx, dto.creditIds)
+        : await this.collectorArrearsCredits(tx, collectorId);
+      if (credits.length === 0) throw noStopsToRoute();
 
       const created = await tx.routePlan.create({
         data: {
@@ -248,12 +263,12 @@ export class RoutesService {
           branchId: dto.branchId,
           plannedDate: new Date(dto.plannedDate),
           status: RouteStatus.PLANNED,
-          totalCases: cases.length,
+          totalCases: credits.length, // nombre legado: cuenta paradas
           stops: {
-            create: cases.map((c, i) => ({
+            create: credits.map((c, i) => ({
               accountId: this.tenant.accountId,
               clientId: c.clientId,
-              caseId: c.id,
+              creditId: c.id,
               // El orden que eligió quien planifica; sin elección, el de prioridad (CRITICAL primero).
               sequenceOrder: i + 1,
             })),
@@ -263,6 +278,33 @@ export class RoutesService {
       });
       return { route: created, replay: false };
     });
+  }
+
+  /** Los créditos elegidos, en el orden pedido, sin repetir y sólo los visibles para quien planifica. */
+  private async chosenCredits(tx: PrismaClient, creditIds: string[]): Promise<{ id: string; clientId: string }[]> {
+    const wanted = [...new Set(creditIds)];
+    const access = Prisma.join([...moraAccessConditions(moraScopeOf(this.tenant)), Prisma.sql`cr.id = ANY(${wanted}::uuid[])`], ' AND ');
+    const rows = await tx.$queryRaw<{ id: string; client_id: string }[]>(Prisma.sql`SELECT cr.id, cr.client_id FROM credits cr WHERE ${access}`);
+    const byId = new Map(rows.map((r) => [r.id, { id: r.id, clientId: r.client_id }]));
+    // `ANY` no devuelve en el orden del pedido: se reordena acá.
+    return wanted.flatMap((id) => byId.get(id) ?? []);
+  }
+
+  /**
+   * Los créditos en mora (episodio abierto) a cargo del cobrador —principal, temporal o apoyo vigentes—,
+   * por la prioridad del episodio (CRITICAL primero) y luego por días de mora. Un crédito castigado no se visita.
+   */
+  private async collectorArrearsCredits(tx: PrismaClient, collectorId: string): Promise<{ id: string; clientId: string }[]> {
+    const own = moraAccessConditions({ accountId: this.tenant.accountId, userId: collectorId, kind: 'OWN', ownOnly: true, canAssign: false });
+    const where = Prisma.join([...own, Prisma.sql`cr.written_off_at IS NULL`], ' AND ');
+    const rows = await tx.$queryRaw<{ id: string; client_id: string }[]>(Prisma.sql`
+      SELECT cr.id, cr.client_id
+      FROM credits cr
+      JOIN credit_arrear_episodes ep ON ep.credit_id = cr.id AND ep.account_id = cr.account_id AND ep.ended_at IS NULL
+      WHERE ${where}
+      ORDER BY CASE ep.priority::text WHEN 'CRITICAL' THEN 4 WHEN 'HIGH' THEN 3 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 1 END DESC NULLS LAST,
+               cr.days_past_due DESC, cr.id ASC`);
+    return rows.map((r) => ({ id: r.id, clientId: r.client_id }));
   }
 
   /**
@@ -410,12 +452,13 @@ export class RoutesService {
    * la agenda: es la única puerta por la que el cobrador ve direcciones sin `client:pii:read`.
    */
   async findOne(id: string): Promise<ReturnType<typeof serializeRoute>> {
-    const route = await this.tx((tx) =>
-      tx.routePlan.findFirst({
+    const route = await this.tx(async (tx) => {
+      const r = await tx.routePlan.findFirst({
         where: { id },
         include: { stops: { orderBy: { sequenceOrder: 'asc' }, include: { client: STOP_CLIENT, case: STOP_CASE, visits: STOP_VISIT } } },
-      }),
-    );
+      });
+      return r && { ...r, stops: await this.withCredits(tx, r.stops) };
+    });
     if (!route) throw resourceNotFound();
     // Mismo scope que el listado: un cobrador solo accede a su propia ruta, pero un auditor a cualquiera.
     if (this.scopedToOwnRoutes() && route.collectorId !== this.tenant.userId) {
@@ -477,10 +520,11 @@ export class RoutesService {
       // parada apuntando a la cartera de otro. Mismo criterio que `FieldService.createVisit`.
       const client = await tx.client.findFirst({ where: { id: dto.clientId, deletedAt: null }, select: { id: true } });
       if (!client) throw resourceNotFound();
-      if (dto.caseId) {
-        const found = await tx.collectionCase.findFirst({ where: { id: dto.caseId, deletedAt: null }, select: { id: true } });
+      // `caseId` legado: se ignora. La parada se liga al crédito (que debe ser del cliente y estar a la vista).
+      if (dto.creditId) {
+        const [found] = await visibleCredits(tx, moraScopeOf(this.tenant), { creditId: dto.creditId, clientId: dto.clientId });
         if (!found) throw resourceNotFound();
-        const dup = await tx.routeStop.findFirst({ where: { routeId, caseId: dto.caseId }, select: { id: true } });
+        const dup = await tx.routeStop.findFirst({ where: { routeId, creditId: dto.creditId }, select: { id: true } });
         if (dup) throw stopDuplicate();
       }
       const last = await tx.routeStop.findFirst({
@@ -493,13 +537,15 @@ export class RoutesService {
           accountId: this.tenant.accountId,
           routeId,
           clientId: dto.clientId,
-          caseId: dto.caseId,
+          creditId: dto.creditId,
           sequenceOrder: (last?.sequenceOrder ?? 0) + 1,
         },
         include: { client: STOP_CLIENT, case: STOP_CASE, visits: STOP_VISIT },
       });
-      await tx.routePlan.update({ where: { id: routeId }, data: { totalCases: { increment: 1 } } });
-      return created;
+      // El total sale de las paradas, no de un contador que se desfase.
+      await tx.routePlan.update({ where: { id: routeId }, data: { totalCases: await tx.routeStop.count({ where: { routeId } }) } });
+      const [withCredit] = await this.withCredits(tx, [created]);
+      return withCredit!;
     });
     await this.audit.record({ entity: 'route_stop', entityId: stop.id, action: 'CREATE', after: { routeId, clientId: stop.clientId } });
     return serializeStop(stop, this.crypto);
@@ -575,10 +621,11 @@ export class RoutesService {
   async preview(routeId: string): Promise<RoutePreview> {
     const route = await this.tx(async (tx) => {
       await this.assertOwnRoute(tx, routeId);
-      return tx.routePlan.findFirst({
+      const r = await tx.routePlan.findFirst({
         where: { id: routeId },
         include: { stops: { orderBy: { sequenceOrder: 'asc' }, include: { client: STOP_CLIENT, case: STOP_CASE, visits: STOP_VISIT } } },
       });
+      return r && { ...r, stops: await this.withCredits(tx, r.stops) };
     });
     if (!route) throw resourceNotFound();
     if (route.stops.length > 0) {

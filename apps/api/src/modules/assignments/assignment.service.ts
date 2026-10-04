@@ -43,6 +43,13 @@ export interface CoverageAssignment {
   agendaMoved?: number;
 }
 
+/** Resultado de reasignar varios créditos: cuántos cambiaron y cuáles se saltearon (y por qué). */
+export interface BulkReassignResult {
+  changed: number;
+  skipped: { creditId: string; reason: BulkSkipReason }[];
+}
+export type BulkSkipReason = 'NOT_FOUND' | 'ALREADY_ASSIGNED' | 'OUT_OF_AGENCY' | 'CONFLICT';
+
 export interface ExpireResult {
   /** Coberturas que vencieron y se revocaron. */
   revoked: number;
@@ -189,6 +196,22 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
     }
   }
 
+  /**
+   * El límite de agencia del supervisor sobre los DESTINATARIOS solos: para créditos que todavía no existen (los
+   * nuevos de una importación) y por eso no se pueden pasar a `assertAssignable` por id. Gerente y administrador no
+   * tienen límite; el supervisor sólo reparte a gente de su agencia (él incluido).
+   */
+  async assertAssigneesInAgency(tx: PrismaClient, userIds: string[]): Promise<void> {
+    const ids = [...new Set(userIds)];
+    if (ids.length === 0) return;
+    const scope = await this.assignScope(tx);
+    if (scope.kind === 'ALL') return;
+    const rows = await tx.userAccount.findMany({ where: { accountId: this.tenant.accountId, userId: { in: ids } }, select: { userId: true, branchId: true } });
+    const known = new Map(rows.map((r) => [r.userId, r.branchId ?? null]));
+    const v = agencyViolations(scope, [], ids.map((userId) => ({ userId, branchId: known.get(userId) ?? null })));
+    if (v.userIds.length > 0) throw assignmentOutOfAgency([], v.userIds);
+  }
+
   /** El límite de agencia del supervisor sobre estos créditos y estos destinatarios (ya cargados). */
   private async assertAgency(tx: PrismaClient, creditIds: string[], assignees: { userId: string; branchId: string | null }[]): Promise<void> {
     const scope = await this.assignScope(tx);
@@ -290,6 +313,48 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
       for (const i of items) perCredit.set(i.creditId, (perCredit.get(i.creditId) ?? 0) + 1);
       for (const c of changes) if (c.from === g.from && c.to === g.to) c.agendaMoved = perCredit.get(c.creditId) ?? 0;
     }
+  }
+
+  /**
+   * Reasigna el RESPONSABLE de varios créditos a `userId` (acción masiva de la lista de mora, F4/08).
+   *
+   * 🔴 **Atómico por crédito, no en bloque**: cada crédito va en su propia transacción con `apply()` (traspaso de
+   * agenda D10 incluido). Un crédito que no se puede (borrado, ya es suyo, fuera de la agencia del supervisor,
+   * o cambió mientras tanto) se saltea y se informa; no frena a los demás ni deshace los ya hechos.
+   *
+   * El destinatario se valida UNA vez al principio (cobrador o supervisor activo): si no lo es, es un 422 de toda la
+   * petición y no se toca nada. El límite de agencia del supervisor se aplica por crédito con
+   * `assertAssignable(tx, [userId], [creditId])`. La auditoría va después de cada commit (`auditChanges`).
+   */
+  async bulkReassign(input: { creditIds: string[]; userId: string }): Promise<BulkReassignResult> {
+    this.authorize();
+    const accountId = this.tenant.accountId;
+    const ids = [...new Set(input.creditIds)];
+    await this.prisma.withTenant(accountId, (tx) => this.assertAssignable(tx, [input.userId]));
+
+    const changes: AssignmentChange[] = [];
+    const skipped: BulkReassignResult['skipped'] = [];
+    for (const creditId of ids) {
+      try {
+        const out = await this.prisma.withTenant(accountId, async (tx) => {
+          const credit = await tx.credit.findFirst({ where: { id: creditId, deletedAt: null }, select: { id: true, assignedManagerId: true } });
+          if (!credit) return { skip: 'NOT_FOUND' as const };
+          if (credit.assignedManagerId === input.userId) return { skip: 'ALREADY_ASSIGNED' as const };
+          await this.assertAssignable(tx, [input.userId], [creditId]); // la agencia del supervisor
+          const done = await this.apply(tx, [{ creditId, to: input.userId, expectedFrom: credit.assignedManagerId }], 'BULK_REASSIGN');
+          return { done };
+        });
+        if ('skip' in out && out.skip) skipped.push({ creditId, reason: out.skip });
+        else if ('done' in out && out.done) changes.push(...out.done);
+      } catch (e) {
+        const code = (e as { response?: { code?: string } } | null)?.response?.code;
+        if (code === 'ASSIGNMENT_OUT_OF_AGENCY') skipped.push({ creditId, reason: 'OUT_OF_AGENCY' });
+        else if (code === 'ASSIGNMENT_CONFLICT') skipped.push({ creditId, reason: 'CONFLICT' });
+        else throw e;
+      }
+    }
+    await this.auditChanges(changes, { bulk: true });
+    return { changed: changes.length, skipped };
   }
 
   // ── Reemplazo temporal y ayuda (D8-a) ──────────────────────────────────────────────────────────

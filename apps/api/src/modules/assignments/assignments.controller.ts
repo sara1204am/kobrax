@@ -5,7 +5,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AssignmentService } from './assignment.service';
-import { CreateSupportAssignmentDto, CreateTemporaryAssignmentDto } from './dto/assignment.dto';
+import { BulkReassignDto, CreateSupportAssignmentDto, CreateTemporaryAssignmentDto } from './dto/assignment.dto';
 
 @Controller('assignments')
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
@@ -21,6 +21,16 @@ export class AssignmentsController {
   @Roles(Permission.ASSIGNMENT_WRITE)
   assignees() {
     return this.assignments.listAssignees();
+  }
+
+  /**
+   * Reasigna el responsable de varios créditos (acción masiva de la mora). Cada crédito es atómico y los que no se
+   * pueden (ya es suyo, fuera de la agencia del supervisor, borrado, cambió) vuelven en `skipped`.
+   */
+  @Post('bulk')
+  @Roles(Permission.ASSIGNMENT_WRITE)
+  bulk(@Body() dto: BulkReassignDto) {
+    return this.assignments.bulkReassign({ creditIds: dto.creditIds, userId: dto.userId });
   }
 
   /**

@@ -9,7 +9,7 @@ interface FakeStop {
   id: string;
   routeId: string;
   clientId: string;
-  caseId?: string;
+  creditId?: string;
   sequenceOrder: number;
   status: string;
 }
@@ -17,10 +17,11 @@ interface FakeStop {
 function makeService(
   opts: {
     ua?: unknown;
-    cases?: unknown[];
+    /** Créditos que devuelve el `$queryRaw` de alcance/mora: `{ id, client_id }`. */
+    credits?: { id: string; client_id: string }[];
     /** Cliente que resuelve `addStop` (`null` = id de otro tenant, la RLS no lo devuelve). */
     stopClient?: unknown;
-    /** Caso que resuelve `addStop` (`null` = id de otro tenant). */
+    /** Crédito de `addStop` fuera de alcance (`null`) o visible (default). */
     stopCase?: unknown;
     permissions?: string[];
     routes?: unknown[];
@@ -45,13 +46,14 @@ function makeService(
     audit: [] as string[],
     listWhere: undefined as Record<string, unknown> | undefined,
     listOrderBy: undefined as unknown,
+    rawSql: [] as string[],
   };
   // Store real en memoria: la secuencia de paradas es la lógica que hay que probar de verdad.
   const stops: FakeStop[] = opts.stops ? opts.stops.map((s) => ({ ...s })) : [];
   const hit = (s: FakeStop, w: Record<string, unknown> = {}) =>
     (w.id === undefined || s.id === w.id) &&
     (w.routeId === undefined || s.routeId === w.routeId) &&
-    (w.caseId === undefined || s.caseId === w.caseId);
+    (w.creditId === undefined || s.creditId === w.creditId);
   const sorted = (w: Record<string, unknown>, dir: 'asc' | 'desc' = 'asc') =>
     stops.filter((s) => hit(s, w)).sort((a, b) => (dir === 'asc' ? a.sequenceOrder - b.sequenceOrder : b.sequenceOrder - a.sequenceOrder));
 
@@ -62,10 +64,13 @@ function makeService(
     // `addStop` valida que el cliente y el caso sean del tenant antes de insertar: bajo RLS un
     // `findFirst` que no encuentra es exactamente "no es tuyo". `null` simula el id ajeno.
     client: { findFirst: async () => (opts.stopClient === undefined ? { id: 'c1' } : opts.stopClient) },
-    collectionCase: {
-      findMany: async () => opts.cases ?? [],
-      findFirst: async () => (opts.stopCase === undefined ? { id: 'case1' } : opts.stopCase),
+    // Alcance y selección de créditos (`visibleCredits`, `chosenCredits`, créditos en mora del cobrador).
+    $queryRaw: async (q: { sql: string }) => {
+      calls.rawSql.push(q.sql);
+      if (opts.stopCase === null) return [];
+      return opts.credits ?? [{ id: 'cr9', client_id: 'cl9' }];
     },
+    credit: { findMany: async () => [] },
     routeStop: {
       findFirst: async (args: { where: Record<string, unknown>; orderBy?: { sequenceOrder?: 'asc' | 'desc' } }) =>
         sorted(args.where, args.orderBy?.sequenceOrder ?? 'asc')[0] ?? null,
@@ -75,6 +80,7 @@ function makeService(
         return found;
       },
       findMany: async (args: { where: Record<string, unknown> }) => sorted(args.where),
+      count: async (args: { where: Record<string, unknown> }) => sorted(args.where).length,
       // Cuántas paradas visitadas tiene cada ruta, desde el MISMO store: así el contador del
       // listado se prueba contra paradas de verdad y no contra un número inventado en el mock.
       groupBy: async (args: { where: { routeId: { in: string[] }; status: string } }) => {
@@ -198,54 +204,51 @@ describe('RoutesService.create', () => {
 });
 
 describe('RoutesService.generate', () => {
-  it('crea la ruta con paradas secuenciadas desde los casos (ordenados por prioridad)', async () => {
-    const cases = [
-      { id: 'caseA', clientId: 'clA' },
-      { id: 'caseB', clientId: 'clB' },
-    ];
-    const { service, calls } = makeService({ cases, permissions: ASSIGN });
+  const CR = (...ids: string[]) => ids.map((id) => ({ id, client_id: 'cl-' + id }));
+  type Created = { create: { creditId: string; caseId?: string; clientId: string; sequenceOrder: number }[] };
+
+  it('sin creditIds: paradas por CRÉDITO en mora del cobrador (por prioridad del episodio), sin case_id', async () => {
+    const { service, calls } = makeService({ credits: CR('crA', 'crB'), permissions: ASSIGN });
     const r = await service.generate(GEN);
-    assert.equal(r.totalCases, 2);
-    const stops = (calls.routeCreate[0]!.stops as { create: { caseId: string; sequenceOrder: number }[] }).create;
-    assert.deepEqual(stops.map((s) => [s.caseId, s.sequenceOrder]), [['caseA', 1], ['caseB', 2]]);
+    assert.equal(r.totalCases, 2); // nombre legado: cuenta paradas
+    const stops = (calls.routeCreate[0]!.stops as Created).create;
+    assert.deepEqual(stops.map((s) => [s.creditId, s.sequenceOrder]), [['crA', 1], ['crB', 2]]);
+    assert.equal(stops[0]!.clientId, 'cl-crA');
+    assert.equal('caseId' in stops[0]!, false);
     assert.ok(calls.audit.includes('GENERATE'));
+    // El criterio: episodio abierto, prioridad del episodio, responsable/temporal/apoyo vigentes del cobrador.
+    assert.match(calls.rawSql[0]!, /credit_arrear_episodes/);
+    assert.match(calls.rawSql[0]!, /ep\.priority/);
+    assert.match(calls.rawSql[0]!, /credit_assignments/);
+    assert.match(calls.rawSql[0]!, /written_off_at IS NULL/);
   });
 
-  it('🔴 con casos elegidos, las paradas quedan EN ESE ORDEN', async () => {
-    // El recorrido que alguien armó mirando el mapa —esta cuadra, después la de al lado— se perdía:
-    // se reordenaba por prioridad y el cobrador recibía las paradas en otro orden.
-    const cases = [
-      { id: 'caseA', clientId: 'clA' },
-      { id: 'caseB', clientId: 'clB' },
-      { id: 'caseC', clientId: 'clC' },
-    ];
-    const { service, calls } = makeService({ cases, permissions: ASSIGN });
-    await service.generate({ ...GEN, caseIds: ['caseC', 'caseA', 'caseB'] } as never);
-
-    const stops = (calls.routeCreate[0]!.stops as { create: { caseId: string; sequenceOrder: number }[] }).create;
-    assert.deepEqual(stops.map((s) => [s.caseId, s.sequenceOrder]), [
-      ['caseC', 1],
-      ['caseA', 2],
-      ['caseB', 3],
-    ]);
+  it('🔴 con creditIds elegidos, las paradas quedan EN ESE ORDEN', async () => {
+    // El recorrido que alguien armó mirando el mapa se perdía si se reordenaba por prioridad.
+    const { service, calls } = makeService({ credits: CR('crA', 'crB', 'crC'), permissions: ASSIGN });
+    await service.generate({ ...GEN, creditIds: ['crC', 'crA', 'crB'] } as never);
+    const stops = (calls.routeCreate[0]!.stops as Created).create;
+    assert.deepEqual(stops.map((s) => [s.creditId, s.sequenceOrder]), [['crC', 1], ['crA', 2], ['crB', 3]]);
   });
 
-  it('un caso pedido que ya no está abierto se saltea, y el resto conserva su orden', async () => {
-    // El que se cerró entre que se armó la lista y se confirmó no puede correr a los demás ni
-    // dejar un hueco en la numeración.
-    const cases = [{ id: 'caseA', clientId: 'clA' }, { id: 'caseB', clientId: 'clB' }];
-    const { service, calls } = makeService({ cases, permissions: ASSIGN });
-    await service.generate({ ...GEN, caseIds: ['caseB', 'caseCerrado', 'caseA'] } as never);
-
-    const stops = (calls.routeCreate[0]!.stops as { create: { caseId: string; sequenceOrder: number }[] }).create;
-    assert.deepEqual(stops.map((s) => [s.caseId, s.sequenceOrder]), [
-      ['caseB', 1],
-      ['caseA', 2],
-    ]);
+  it('un crédito pedido que no está a la vista se saltea, repetidos se quitan y el resto conserva su orden', async () => {
+    const { service, calls } = makeService({ credits: CR('crA', 'crB'), permissions: ASSIGN });
+    await service.generate({ ...GEN, creditIds: ['crB', 'crFuera', 'crA', 'crB'] } as never);
+    const stops = (calls.routeCreate[0]!.stops as Created).create;
+    assert.deepEqual(stops.map((s) => [s.creditId, s.sequenceOrder]), [['crB', 1], ['crA', 2]]);
+    assert.match(calls.rawSql[0]!, /cr\.account_id/); // pasa por el alcance de mora
   });
 
-  it('rechaza si no hay casos para la ruta (ROUTE_EMPTY)', async () => {
-    const { service } = makeService({ cases: [], permissions: ASSIGN });
+  it('caseIds (legado) se ignora: sin creditIds toma los créditos en mora del cobrador', async () => {
+    const { service, calls } = makeService({ credits: CR('crA'), permissions: ASSIGN });
+    await service.generate({ ...GEN, caseIds: ['caso-viejo'] } as never);
+    const stops = (calls.routeCreate[0]!.stops as Created).create;
+    assert.deepEqual(stops.map((s) => s.creditId), ['crA']);
+    assert.match(calls.rawSql[0]!, /credit_arrear_episodes/);
+  });
+
+  it('rechaza si no hay créditos para la ruta (ROUTE_EMPTY)', async () => {
+    const { service } = makeService({ credits: [], permissions: ASSIGN });
     await rejectsWithCode(service.generate(GEN), 'ROUTE_EMPTY');
   });
 
@@ -253,7 +256,7 @@ describe('RoutesService.generate', () => {
     // Dos toques en «armar la ruta de hoy» dejaban dos rutas. Y se corta ANTES de leer los casos:
     // la ruta ya existe, no hay nada que decidir.
     const { service, calls } = makeService({
-      cases: [{ id: 'caseA', clientId: 'clA' }],
+      credits: [{ id: 'crA', client_id: 'clA' }],
       permissions: ASSIGN,
       routeOfDay: { id: 'r-de-hoy' },
     });
@@ -262,19 +265,19 @@ describe('RoutesService.generate', () => {
   });
 
   it('el cobrador (ROUTE_EXECUTE) genera SU ruta aunque el body pida otro cobrador', async () => {
-    const { service, calls } = makeService({ cases: [{ id: 'c1', clientId: 'cl1' }], permissions: ['route:read', 'route:execute'] });
+    const { service, calls } = makeService({ credits: [{ id: 'cr1', client_id: 'cl1' }], permissions: ['route:read', 'route:execute'] });
     await service.generate(GEN);
     assert.equal(calls.routeCreate[0]!.collectorId, 'u1');
   });
 
   it('con ROUTE_ASSIGN genera para el cobrador pedido', async () => {
-    const { service, calls } = makeService({ cases: [{ id: 'c1', clientId: 'cl1' }], permissions: ASSIGN });
+    const { service, calls } = makeService({ credits: [{ id: 'cr1', client_id: 'cl1' }], permissions: ASSIGN });
     await service.generate(GEN);
     assert.equal(calls.routeCreate[0]!.collectorId, COLLECTOR_ID);
   });
 
   it('el observador de cuenta (sin execute ni assign) no genera (AUTH_002)', async () => {
-    const { service } = makeService({ cases: [{ id: 'c1', clientId: 'cl1' }], permissions: ['route:read'] });
+    const { service } = makeService({ credits: [{ id: 'cr1', client_id: 'cl1' }], permissions: ['route:read'] });
     await rejectsWithCode(service.generate(GEN), 'AUTH_002');
   });
 });
@@ -301,11 +304,11 @@ describe('RoutesService.updateStatus (scope por capacidad)', () => {
 const OWN_ROUTE = { id: 'r1', collectorId: 'u1' };
 const FIELD = ['route:read', 'route:execute'];
 const threeStops = (): FakeStop[] => [
-  { id: 's1', routeId: 'r1', clientId: 'cl1', caseId: 'ca1', sequenceOrder: 1, status: 'PENDING' },
-  { id: 's2', routeId: 'r1', clientId: 'cl2', caseId: 'ca2', sequenceOrder: 2, status: 'PENDING' },
-  { id: 's3', routeId: 'r1', clientId: 'cl3', caseId: 'ca3', sequenceOrder: 3, status: 'PENDING' },
+  { id: 's1', routeId: 'r1', clientId: 'cl1', creditId: 'cr1', sequenceOrder: 1, status: 'PENDING' },
+  { id: 's2', routeId: 'r1', clientId: 'cl2', creditId: 'cr2', sequenceOrder: 2, status: 'PENDING' },
+  { id: 's3', routeId: 'r1', clientId: 'cl3', creditId: 'cr3', sequenceOrder: 3, status: 'PENDING' },
 ];
-const ADD = { clientId: 'cl9', caseId: 'ca9' } as never;
+const ADD = { clientId: 'cl9', creditId: 'cr9' } as never;
 
 describe('RoutesService.addStop', () => {
   it('la parada nueva va al final del recorrido', async () => {
@@ -315,9 +318,9 @@ describe('RoutesService.addStop', () => {
     assert.deepEqual(order(), ['s1', 's2', 's3', 's4']);
   });
 
-  it('el mismo caso no entra dos veces (dos toques sobre el mismo pin)', async () => {
+  it('el mismo crédito no entra dos veces (dos toques sobre el mismo pin)', async () => {
     const { service } = makeService({ route: OWN_ROUTE, permissions: FIELD, stops: threeStops() });
-    await rejectsWithCode(service.addStop('r1', { clientId: 'cl2', caseId: 'ca2' } as never), 'ROUTE_STOP_DUPLICATE');
+    await rejectsWithCode(service.addStop('r1', { clientId: 'cl2', creditId: 'cr2' } as never), 'ROUTE_STOP_DUPLICATE');
   });
 
   it('no se le agregan paradas a la ruta de otro (404, no filtra que exista)', async () => {
@@ -332,9 +335,33 @@ describe('RoutesService.addStop', () => {
     await rejectsWithCode(service.addStop('r1', ADD), 'RESOURCE_NOT_FOUND');
   });
 
-  it('rechaza un caso que no es del tenant', async () => {
+  it('rechaza un crédito fuera de alcance o de otro cliente', async () => {
     const { service } = makeService({ route: OWN_ROUTE, permissions: FIELD, stops: [], stopCase: null });
-    await rejectsWithCode(service.addStop('r1', { clientId: 'cl9', caseId: 'ajeno' } as never), 'RESOURCE_NOT_FOUND');
+    await rejectsWithCode(service.addStop('r1', { clientId: 'cl9', creditId: 'ajeno' } as never), 'RESOURCE_NOT_FOUND');
+  });
+});
+
+describe('RoutesService.addStop por crédito (F4/08)', () => {
+  it('guarda credit_id y NO case_id (caseId legado se ignora) y recuenta el total desde las paradas', async () => {
+    const { service, stops, calls } = makeService({ route: OWN_ROUTE, permissions: FIELD, stops: threeStops() });
+    await service.addStop('r1', { clientId: 'cl9', creditId: 'cr9', caseId: 'viejo' } as never);
+    const created = stops[stops.length - 1]!;
+    assert.equal(created.creditId, 'cr9');
+    assert.equal('caseId' in created, false);
+    assert.equal(calls.routeUpdate.at(-1)!.totalCases, 4);
+  });
+
+  it('el crédito se valida contra el cliente y el alcance de quien arma la ruta', async () => {
+    const { service, calls } = makeService({ route: OWN_ROUTE, permissions: FIELD, stops: [] });
+    await service.addStop('r1', ADD);
+    assert.match(calls.rawSql[0]!, /cr\.client_id/);
+    assert.match(calls.rawSql[0]!, /cr\.id/);
+  });
+
+  it('sin creditId también se agrega (cliente a visitar sin crédito elegido)', async () => {
+    const { service } = makeService({ route: OWN_ROUTE, permissions: FIELD, stops: [] });
+    const stop = await service.addStop('r1', { clientId: 'cl9' } as never);
+    assert.equal(stop.sequenceOrder, 1);
   });
 });
 
@@ -508,7 +535,7 @@ describe('RoutesService.optimize (S3)', () => {
       permissions: FIELD,
       stops: [
         ...threeStops(),
-        { id: 's4', routeId: 'r1', clientId: 'cl4', caseId: 'ca4', sequenceOrder: 4, status: 'PENDING' },
+        { id: 's4', routeId: 'r1', clientId: 'cl4', creditId: 'cr4', sequenceOrder: 4, status: 'PENDING' },
       ],
       // s2 no tiene punto: no entra al cálculo, pero sigue siendo una parada del recorrido.
       points: { s1: THREE_POINTS.s1, s2: null, s3: THREE_POINTS.s3, s4: { latitude: -17.74, longitude: -63.21 } },
@@ -628,10 +655,10 @@ describe('RoutesService.list (orden)', () => {
 describe('RoutesService.list (paradas visitadas)', () => {
   it('🔴 cuenta las visitadas de cada ruta: sin esto la pantalla sólo puede decir «8», no «2 de 3»', async () => {
     const stops: FakeStop[] = [
-      { id: 's1', routeId: 'r1', caseId: 'c1', sequenceOrder: 1, status: 'VISITED' },
-      { id: 's2', routeId: 'r1', caseId: 'c2', sequenceOrder: 2, status: 'VISITED' },
-      { id: 's3', routeId: 'r1', caseId: 'c3', sequenceOrder: 3, status: 'PENDING' },
-      { id: 's4', routeId: 'r2', caseId: 'c4', sequenceOrder: 1, status: 'PENDING' },
+      { id: 's1', routeId: 'r1', creditId: 'c1', sequenceOrder: 1, status: 'VISITED' },
+      { id: 's2', routeId: 'r1', creditId: 'c2', sequenceOrder: 2, status: 'VISITED' },
+      { id: 's3', routeId: 'r1', creditId: 'c3', sequenceOrder: 3, status: 'PENDING' },
+      { id: 's4', routeId: 'r2', creditId: 'c4', sequenceOrder: 1, status: 'PENDING' },
     ];
     const routes = [
       { id: 'r1', collectorId: 'u1', plannedDate: new Date('2026-08-20'), status: 'COMPLETED', totalCases: 3, createdAt: new Date() },

@@ -21,6 +21,7 @@ import { TenantContextService } from '../../common/context/tenant-context.servic
 import { TenantClockService, civilDayStartInstant } from '../../common/context/tenant-clock.service';
 import type { ListImportRunsQueryDto } from './dto/import-runs.dto';
 import { AssignmentService, type AssignmentRequest } from '../assignments/assignment.service';
+import { assertImportAgency } from './import-agency';
 import type { AssignmentChange, AssignmentReason } from '../assignments/assignment-rules';
 import { assigneeNotEligible, assignmentForbidden } from '../assignments/assignment.errors';
 import { hasAssignments, ImportAssignmentError, planAssignments, resolveImportOwnership, type Ownership } from './import-assignment';
@@ -500,6 +501,18 @@ export class PortfolioImportService {
           details: { codes: assignPlan.unassigned },
         });
       }
+      /*
+       * D8 · El supervisor reparte sólo dentro de su agencia, también al importar: lo mismo que `POST /assignments/bulk`.
+       * Va dentro de la transacción: si algo se sale de su agencia, la corrida entera se cae sin dejar nada a medias.
+       */
+      await assertImportAgency(this.assignment, tx, {
+        canAssign,
+        createAssignees: [...assignPlan.create.values()].map((a) => a.userId),
+        reassign: assignPlan.reassign.flatMap((r) => {
+          const creditId = plan.toUpdate.find((u) => u.row.code === r.code)?.id;
+          return creditId && r.to ? [{ creditId, to: r.to }] : [];
+        }),
+      });
       await this.plan.assertRoom('credits', tx, { cuantos: counts.created });
       await this.plan.assertRoom('clients', tx, { cuantos: newGroups.size });
 

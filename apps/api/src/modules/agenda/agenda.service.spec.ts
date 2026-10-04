@@ -931,3 +931,70 @@ describe('AgendaService idempotente (cola offline)', () => {
     await expectError(() => service.complete('a1', { outcome: 'CONTACTED' } as never), 'AGENDA_008');
   });
 });
+
+// ── Alcance por crédito de quien tiene AGENDA_ASSIGN (F4/08 · D8) ─────────────
+describe('AgendaService · alcance por crédito con AGENDA_ASSIGN', () => {
+  const SUP = ['agenda:assign', 'data:scope:branch'];
+
+  it('supervisor (agencia): lista sólo los agendados de los créditos de su agencia, no todo el tenant', async () => {
+    const { service, calls } = makeService({ permissions: SUP, credits: [{ id: 'cr1', clientId: 'cl1' }, { id: 'cr2', clientId: 'cl2' }], rows: [] });
+    await service.listByDay({ date: '2026-07-08' });
+    assert.equal(calls.listWhere!.assigneeId, undefined);
+    assert.deepEqual(calls.listWhere!.creditId, { in: ['cr1', 'cr2'] });
+    assert.match(calls.visibleSql!.sql, /user_accounts/); // el alcance por sucursal de la ficha de mora
+  });
+
+  it('gerente / administrador (alcance total): sin filtro, y sin consulta de alcance', async () => {
+    const { service, calls } = makeService({ permissions: ['agenda:assign', 'data:scope:all'], rows: [] });
+    await service.listByDay({ date: '2026-07-08' });
+    assert.equal(calls.listWhere!.assigneeId, undefined);
+    assert.equal(calls.listWhere!.creditId, undefined);
+    assert.equal(calls.visibleSql, undefined);
+  });
+
+  it('cobrador sin AGENDA_ASSIGN sigue en «lo propio»: sin consulta de alcance', async () => {
+    const { service, calls } = makeService({ permissions: ['collection:write'], rows: [] });
+    await service.listByDay({ date: '2026-07-08' });
+    assert.equal(calls.listWhere!.assigneeId, 'u1');
+    assert.equal(calls.visibleSql, undefined);
+  });
+
+  it('vencidos: mismo alcance (supervisor = créditos de su agencia)', async () => {
+    const { service, calls } = makeService({ permissions: SUP, credits: [{ id: 'cr1', clientId: 'cl1' }], rows: [] });
+    await service.listOverdue({} as never);
+    assert.deepEqual(calls.listWhere!.creditId, { in: ['cr1'] });
+  });
+
+  it('detalle, ejecutar, posponer, editar, cancelar y reagendar buscan el ítem dentro del alcance por crédito', async () => {
+    const run = async (fn: (s: AgendaService) => Promise<unknown>) => {
+      const { service, calls } = makeService({
+        permissions: SUP,
+        credits: [{ id: 'cr1', clientId: 'cl1' }],
+        item: row({ type: 'CALL', details: { contactId: CONTACT } }),
+        credit: creditRow(),
+        catalog: { code: 'CLIENT_REQUEST' },
+      });
+      await fn(service).catch(() => undefined); // sólo importa la búsqueda del ítem
+      return calls.itemWhere!;
+    };
+    for (const fn of [
+      (s: AgendaService) => s.findOne('a1'),
+      (s: AgendaService) => s.complete('a1', { outcome: 'CONTACTED' } as never),
+      (s: AgendaService) => s.postpone('a1', { scheduledDate: isoUTC(2) } as never),
+      (s: AgendaService) => s.update('a1', { observations: 'x' } as never),
+      (s: AgendaService) => s.cancel('a1', { reasonCode: 'CLIENT_REQUEST' } as never),
+      (s: AgendaService) => s.reschedule('a1', { reasonCode: 'CLIENT_REQUEST', scheduledDate: isoUTC(2) } as never),
+    ]) {
+      const where = await run(fn);
+      assert.deepEqual(where.creditId, { in: ['cr1'] });
+      assert.equal(where.assigneeId, undefined);
+    }
+  });
+
+  it('un ítem de un crédito fuera de la agencia del supervisor: 404 (no se filtra que existe)', async () => {
+    // El alcance no devuelve el crédito del ítem → el `findFirst` con `creditId in []` no lo encuentra.
+    const { service, calls } = makeService({ permissions: SUP, credits: [], item: null });
+    await expectError(() => service.cancel('a1', { reasonCode: 'CLIENT_REQUEST' } as never), 'AGENDA_NOT_FOUND');
+    assert.deepEqual(calls.itemWhere!.creditId, { in: [] });
+  });
+});

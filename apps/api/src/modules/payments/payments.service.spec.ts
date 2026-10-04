@@ -83,11 +83,11 @@ describe('PaymentsService.register — crédito PSF (D3)', () => {
     const r = await service.register({ ...PAY, amount: 500, caseId: 'case1' });
     assert.equal(calls.create.length, 1);
     assert.equal(calls.create[0]!.amount, 500);
-    assert.equal(calls.create[0]!.caseId, 'case1');
+    assert.equal(calls.create[0]!.caseId, undefined); // `caseId` legado: ignorado (F4/08)
     assert.equal(calls.create[0]!.registeredBy, 'u1');
     assert.equal(calls.create[0]!.branchId, 'b1');
     assert.equal(calls.creditUpdate.length, 0); // saldo, mora y estado reportados intactos
-    assert.equal(calls.caseClose.length, 0); // el caso lo cierra el próximo reporte, no el pago
+    assert.equal(calls.caseClose.length, 0);
     assert.deepEqual(calls.audit, ['CREATE']);
     assert.deepEqual(calls.events, ['payment.registered']);
     assert.equal(r.idempotentReplay, false);
@@ -172,25 +172,19 @@ describe('PaymentsService.register', () => {
     assert.equal(calls.creditUpdate[0]!.status, 'PAID');
   });
 
-  /**
-   * 🔴 Antes el pago dejaba el crédito en `PAID` y **no tocaba el caso**: quedaba abierto, seguía
-   * entrando a las rutas, y el cobrador volvía a visitar a quien ya había pagado. Va en la misma
-   * transacción que el pago y no en el trabajo diario: entre cobrar y que corra el job hay horas, y
-   * en esas horas el caso sigue en la ruta de alguien.
-   */
-  it('saldada la deuda, cierra el caso en la misma transacción', async () => {
+  it('saldada la deuda NO toca casos ni escribe case_id (F4/08): el crédito PAID y el trigger de episodios terminan la mora', async () => {
     const { service, calls } = makeService();
-    await service.register({ ...PAY, amount: 200 });
-    assert.equal(calls.caseClose.length, 1);
-    assert.equal(calls.caseClose[0]!.data.status, 'CLOSED');
-    assert.equal(calls.caseClose[0]!.data.closedReason, 'PAID');
-    assert.equal(calls.caseClose[0]!.where.creditId, 'cr1');
+    await service.register({ ...PAY, amount: 200, caseId: 'c9' });
+    assert.equal(calls.caseClose.length, 0);
+    assert.equal(calls.creditUpdate[0]!.status, 'PAID');
+    assert.equal('caseId' in calls.create[0]!, false);
   });
 
-  it('un pago parcial NO cierra el caso: todavía se debe', async () => {
+  it('un pago parcial deja el crédito ACTIVE', async () => {
     const { service, calls } = makeService();
     await service.register({ ...PAY, amount: 100 });
     assert.equal(calls.caseClose.length, 0);
+    assert.equal(calls.creditUpdate[0]!.status, undefined);
   });
 
   /**

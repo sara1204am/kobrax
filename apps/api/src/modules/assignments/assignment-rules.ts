@@ -15,7 +15,8 @@ export type AssignmentReason =
   | 'IMPORT_OWN'
   | 'IMPORT_SUGGESTED'
   | 'IMPORT_CHOSEN'
-  | 'IMPORT_REASSIGN';
+  | 'IMPORT_REASSIGN'
+  | 'BULK_REASSIGN';
 
 /** Un miembro de la cuenta tal como lo necesita la regla: rol, si está activo y su agencia. */
 export interface MemberForAssignment {
