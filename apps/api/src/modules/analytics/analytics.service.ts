@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
-import { CaseStatus, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
   AGING_BUCKETS,
   type AgendaSummary,
   type AgingBucketRow,
   type AnalyticsSummary,
   type CollectorPerformanceRow,
+  type KpiValue,
   type SourceBreakdown,
   type TrendPoint,
   type VisitMapPoint,
@@ -15,8 +16,18 @@ import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AnalyticsQueryDto, TrendQueryDto } from './dto/analytics.dto';
 
-/** Los estados en los que un caso ya no se trabaja. Mismo criterio que `cases`. */
-const TERMINAL = [CaseStatus.PAID, CaseStatus.CLOSED, CaseStatus.WRITTEN_OFF];
+/*
+ * 🔴 F4/08 · fase 3 — CAMBIÓ LA DEFINICIÓN de dos números del tablero. Las series de antes y de después NO son comparables:
+ *
+ * · «Casos activos» (`activeCases`) ahora es **créditos en mora** (`creditsInArrears`): créditos con un episodio de
+ *   mora ABIERTO (`credit_arrear_episodes.ended_at IS NULL`). Antes eran los casos de cobranza no terminales, que
+ *   el job abría con reglas propias (umbral, dato viejo) y que una persona podía cerrar. El período anterior sale de
+ *   las fechas de inicio y fin del episodio.
+ * · El ranking por cobrador agrupa por el **responsable del crédito** (`assigned_manager_id`), no por el cobrador del
+ *   caso, y cuenta créditos en mora. Su cartera es la de todos sus créditos activos, estén o no en mora.
+ *
+ * El filtro `caseStatus` desapareció con el estado del caso: el DTO lo acepta y se ignora.
+ */
 
 const money = (n: unknown): number => Math.round(Number(n ?? 0) * 100) / 100;
 
@@ -109,34 +120,34 @@ export class AnalyticsService {
   /**
    * El `WHERE` del lado de los créditos (el saldo es de ellos).
    *
-   * El filtro por cobrador va con un `EXISTS` sobre casos y no con un `JOIN`: un crédito puede
-   * tener más de un caso, y con el join su saldo se sumaría una vez por caso — el KPI daría de más
-   * sin que nada se vea roto.
+   * El cobrador es el **responsable del crédito** (F4/08). La prioridad vive en el episodio abierto y va con un
+   * `EXISTS` y no con un `JOIN`: así el saldo del crédito nunca se suma dos veces.
    */
   private creditWhere(q: AnalyticsQueryDto): Prisma.Sql {
     const conds: Prisma.Sql[] = [Prisma.sql`cr.deleted_at IS NULL`, Prisma.sql`cr.status = 'ACTIVE'::"CreditStatus"`, Prisma.sql`cr.written_off_at IS NULL`];
     if (q.branchId) conds.push(Prisma.sql`cr.branch_id = ${q.branchId}`);
     const source = this.sourceSql('cr', q);
     if (source) conds.push(source);
-    if (some(q.collectorId) || some(q.caseStatus) || some(q.priority)) {
-      const inner: Prisma.Sql[] = [Prisma.sql`k.credit_id = cr.id`, Prisma.sql`k.deleted_at IS NULL`];
-      if (some(q.collectorId)) inner.push(Prisma.sql`k.assignee_id IN (${Prisma.join(q.collectorId)})`);
-      if (some(q.caseStatus)) inner.push(Prisma.sql`k.status::text IN (${Prisma.join(q.caseStatus)})`);
-      if (some(q.priority)) inner.push(Prisma.sql`k.priority::text IN (${Prisma.join(q.priority)})`);
-      conds.push(Prisma.sql`EXISTS (SELECT 1 FROM collection_cases k WHERE ${Prisma.join(inner, ' AND ')})`);
+    if (some(q.collectorId)) conds.push(Prisma.sql`cr.assigned_manager_id IN (${Prisma.join(q.collectorId)})`);
+    if (some(q.priority)) {
+      conds.push(
+        Prisma.sql`EXISTS (SELECT 1 FROM credit_arrear_episodes pe WHERE pe.credit_id = cr.id AND pe.ended_at IS NULL AND pe.priority::text IN (${Prisma.join(q.priority)}))`,
+      );
     }
     return Prisma.join(conds, ' AND ');
   }
 
-  /** El `WHERE` del lado de los casos. */
-  private caseWhere(q: AnalyticsQueryDto): Prisma.Sql {
-    const conds: Prisma.Sql[] = [Prisma.sql`k.deleted_at IS NULL`];
-    if (q.branchId) conds.push(Prisma.sql`k.branch_id = ${q.branchId}`);
-    if (some(q.collectorId)) conds.push(Prisma.sql`k.assignee_id IN (${Prisma.join(q.collectorId)})`);
-    if (some(q.caseStatus)) conds.push(Prisma.sql`k.status::text IN (${Prisma.join(q.caseStatus)})`);
-    if (some(q.priority)) conds.push(Prisma.sql`k.priority::text IN (${Prisma.join(q.priority)})`);
-    const source = this.creditOfSource(Prisma.sql`k.credit_id`, q);
+  /**
+   * El `WHERE` de los episodios de mora **abiertos o históricos** (alias `e`) con su crédito (`cr`): sucursal, fuente,
+   * responsable y prioridad del episodio. `caseStatus` ya no existe (se ignora).
+   */
+  private episodeWhere(q: AnalyticsQueryDto): Prisma.Sql {
+    const conds: Prisma.Sql[] = [Prisma.sql`cr.deleted_at IS NULL`];
+    if (q.branchId) conds.push(Prisma.sql`cr.branch_id = ${q.branchId}`);
+    const source = this.sourceSql('cr', q);
     if (source) conds.push(source);
+    if (some(q.collectorId)) conds.push(Prisma.sql`cr.assigned_manager_id IN (${Prisma.join(q.collectorId)})`);
+    if (some(q.priority)) conds.push(Prisma.sql`e.priority::text IN (${Prisma.join(q.priority)})`);
     return Prisma.join(conds, ' AND ');
   }
 
@@ -151,7 +162,7 @@ export class AnalyticsService {
   }
 
   /**
-   * El mismo filtro para una tabla que apunta al crédito (casos, pagos, agenda): un `EXISTS`, que
+   * El mismo filtro para una tabla que apunta al crédito (pagos, agenda): un `EXISTS`, que
    * también sirve donde la referencia es suave y Prisma no tiene relación por la que filtrar.
    */
   private creditOfSource(creditId: Prisma.Sql, q: AnalyticsQueryDto): Prisma.Sql | null {
@@ -181,7 +192,7 @@ export class AnalyticsService {
   }
 
   /*
-   * Los mismos dos filtros, en Prisma.
+   * El mismo filtro de pagos, en Prisma.
    *
    * ⚠️ **Sí, están escritos dos veces**, y es a propósito: las cuatro consultas que agregan de
    * verdad —tramos, ranking, evolución, mapa— no se pueden expresar con Prisma (`CASE` como clave
@@ -189,17 +200,6 @@ export class AnalyticsService {
    * tienen por qué pagar el SQL crudo. Es el mismo trato que hizo la cartera de W3 con su `where`
    * espejo. El precio es tenerlos alineados; el spec compara los dos caminos.
    */
-  private caseFilter(q: AnalyticsQueryDto): Prisma.CollectionCaseWhereInput {
-    return {
-      deletedAt: null,
-      ...(q.branchId ? { branchId: q.branchId } : {}),
-      ...(some(q.collectorId) ? { assigneeId: { in: q.collectorId } } : {}),
-      ...(some(q.caseStatus) ? { status: { in: q.caseStatus } } : {}),
-      ...(some(q.priority) ? { priority: { in: q.priority } } : {}),
-      ...(q.source ? { credit: this.sourceFilter(q) } : {}),
-    };
-  }
-
   private paymentFilter(q: AnalyticsQueryDto): Prisma.PaymentWhereInput {
     return {
       ...(some(q.collectorId) ? { registeredBy: { in: q.collectorId } } : {}),
@@ -212,10 +212,10 @@ export class AnalyticsService {
   async summary(query: AnalyticsQueryDto): Promise<AnalyticsSummary> {
     const w = this.window(query);
     const credits = this.creditWhere(query);
-    const cases = this.caseFilter(query);
+    const episodes = this.episodeWhere(query);
     const payments = this.paymentFilter(query);
 
-    const [stock, collectedBySource, activeNow, activePrev, collectedNow, collectedPrev, account] = await this.tx((tx) =>
+    const [stock, collectedBySource, arrearsCount, collectedNow, collectedPrev, account] = await this.tx((tx) =>
       Promise.all([
         // La única que no puede ser Prisma: el `FILTER` saca el saldo total y el saldo en mora **en
         // una sola pasada** por la tabla. Con Prisma serían dos consultas que recorren lo mismo.
@@ -238,12 +238,20 @@ export class AnalyticsService {
           JOIN credits pc ON pc.id = p.credit_id
           WHERE ${this.paymentWhere(query)} AND p.payment_date BETWEEN ${w.from} AND ${w.to}
           GROUP BY 1`),
-        tx.collectionCase.count({ where: { ...cases, status: { notIn: TERMINAL } } }),
-        // Los casos activos **sí** se pueden reconstruir: un caso estaba abierto en una fecha si ya
-        // existía y todavía no se había cerrado. Es el único KPI de stock con historia propia.
-        tx.collectionCase.count({
-          where: { ...cases, createdAt: { lte: w.prevTo }, OR: [{ closedAt: null }, { closedAt: { gt: w.prevTo } }] },
-        }),
+        /*
+         * Créditos en mora: con episodio abierto hoy, y los que lo tenían abierto al cierre del período anterior
+         * (empezó antes o ese día y todavía no había terminado). Es el único KPI de stock con historia propia. Una
+         * sola pasada; `COUNT(DISTINCT)` por crédito, aunque dos episodios se solaparan por un dato sucio.
+         * Con el filtro de prioridad, la del período anterior usa la prioridad ACTUAL del episodio (no se guarda historia).
+         */
+        tx.$queryRaw<{ now: number; prev: number }[]>(Prisma.sql`
+          SELECT COUNT(DISTINCT e.credit_id) FILTER (WHERE e.ended_at IS NULL)::int AS now,
+                 COUNT(DISTINCT e.credit_id) FILTER (
+                   WHERE e.started_at <= ${w.prevTo}::date AND (e.ended_at IS NULL OR e.ended_at > ${w.prevTo}::date)
+                 )::int AS prev
+          FROM credit_arrear_episodes e
+          JOIN credits cr ON cr.id = e.credit_id
+          WHERE ${episodes}`),
         tx.payment.aggregate({ _sum: { amount: true }, where: { ...payments, paymentDate: { gte: w.from, lte: w.to } } }),
         tx.payment.aggregate({
           _sum: { amount: true },
@@ -255,6 +263,7 @@ export class AnalyticsService {
       ]),
     );
 
+    const inArrears: KpiValue = { value: Number(arrearsCount[0]?.now ?? 0), previous: Number(arrearsCount[0]?.prev ?? 0) };
     const outstanding = money(stock.reduce((sum, r) => sum + Number(r.outstanding ?? 0), 0));
     const overdue = money(stock.reduce((sum, r) => sum + Number(r.overdue ?? 0), 0));
 
@@ -264,7 +273,10 @@ export class AnalyticsService {
       outstanding: { value: outstanding, previous: null },
       overdue: { value: overdue, previous: null },
       overdueRate: { value: outstanding > 0 ? Math.round((overdue / outstanding) * 1000) / 10 : 0, previous: null },
-      activeCases: { value: activeNow, previous: activePrev },
+      // Mismo número bajo los dos nombres: `activeCases` lo sigue leyendo la web hasta la fase 4 (DEPRECADO); el
+      // nombre honesto es `creditsInArrears`. La definición cambió (ver arriba): no comparar con series viejas.
+      activeCases: inArrears,
+      creditsInArrears: inArrears,
       collected: { value: money(collectedNow._sum.amount), previous: money(collectedPrev._sum.amount) },
       currency: account?.currencyCode ?? 'BOB',
       bySource: breakdown(stock, collectedBySource),
@@ -306,35 +318,31 @@ export class AnalyticsService {
 
   // ── 3 · Ranking de cobradores ──────────────────────────────────────────────
   /**
-   * Cuánta cartera lleva cada cobrador y cuánto recuperó.
+   * Cuánta cartera lleva cada responsable y cuánto recuperó (F4/08: por **responsable del crédito**, no por cobrador
+   * del caso).
    *
-   * ⚠️ **La suma de esta tabla es un poco menor que el KPI de saldo, y está bien**: acá sólo entra
-   * la cartera que tiene un caso abierto **con cobrador asignado**. Un crédito activo sin caso no es
-   * de nadie todavía. Lo que sí tienen que compartir es el universo de créditos —activos, ni
-   * pagados ni castigados—, o serían dos números rotulados «saldo» que no dan lo mismo.
+   * La cartera de cada uno es la de todos sus créditos activos (no pagados ni castigados), estén o no en mora; la
+   * mora y `creditsInArrears` (créditos con episodio abierto) salen de ahí. Así la suma de esta tabla comparte
+   * universo con el KPI de saldo: sólo falta la cartera sin responsable. Cambió de definición: no comparar con la
+   * tabla de antes (que sólo contaba créditos con un caso abierto y su cobrador).
    */
   async collectorPerformance(query: AnalyticsQueryDto): Promise<CollectorPerformanceRow[]> {
     const w = this.window(query);
-    const cases = this.caseWhere(query);
+    const credits = this.creditWhere(query);
     const payments = this.paymentWhere(query);
 
     const [load, collected] = await this.tx((tx) =>
       Promise.all([
-        // 🔴 El `deleted_at` del crédito va en el ON: en el WHERE, este LEFT JOIN se comporta como
-        // INNER y el cobrador sin créditos vivos desaparece del ranking en vez de aparecer en cero.
-        // Es el mismo defecto que ya se pagó una vez en la cartera de W3, y tiene spec.
-        tx.$queryRaw<{ collector: string; cases: number; outstanding: number; overdue: number }[]>(Prisma.sql`
-          SELECT k.assignee_id                                                                        AS collector,
-                 COUNT(*)::int                                                                        AS cases,
+        tx.$queryRaw<{ collector: string; arrears: number; outstanding: number; overdue: number }[]>(Prisma.sql`
+          SELECT cr.assigned_manager_id                                                                AS collector,
+                 COUNT(*) FILTER (
+                   WHERE EXISTS (SELECT 1 FROM credit_arrear_episodes oe WHERE oe.credit_id = cr.id AND oe.ended_at IS NULL)
+                 )::int                                                                                AS arrears,
                  COALESCE(SUM(cr.outstanding_balance), 0)::float8                                     AS outstanding,
                  COALESCE(SUM(cr.outstanding_balance) FILTER (WHERE cr.days_past_due > 0), 0)::float8 AS overdue
-          FROM collection_cases k
-          -- El filtro de ACTIVE es el mismo que usa el KPI de saldo: sin eso, el ranking sumaba
-          -- también los créditos pagados y castigados, y en la misma pantalla convivían dos números
-          -- rotulados «saldo» que no daban lo mismo, sin forma de saber cuál era el bueno.
-          LEFT JOIN credits cr ON cr.id = k.credit_id AND cr.deleted_at IS NULL AND cr.status = 'ACTIVE'::"CreditStatus" AND cr.written_off_at IS NULL
-          WHERE ${cases} AND k.assignee_id IS NOT NULL AND k.status::text NOT IN (${Prisma.join(TERMINAL)})
-          GROUP BY k.assignee_id`),
+          FROM credits cr
+          WHERE ${credits} AND cr.assigned_manager_id IS NOT NULL
+          GROUP BY cr.assigned_manager_id`),
         tx.$queryRaw<{ collector: string; collected: number }[]>(Prisma.sql`
           SELECT p.registered_by AS collector, COALESCE(SUM(p.amount), 0)::float8 AS collected
           FROM payments p
@@ -350,7 +358,9 @@ export class AnalyticsService {
         const overdue = money(r.overdue);
         return {
           collectorId: r.collector,
-          cases: r.cases,
+          // `cases` queda con el mismo número que `creditsInArrears` mientras la web lo lea (deprecado).
+          cases: r.arrears,
+          creditsInArrears: r.arrears,
           outstanding,
           overdue,
           overdueRate: outstanding > 0 ? Math.round((overdue / outstanding) * 1000) / 10 : 0,
@@ -435,11 +445,11 @@ export class AnalyticsService {
     const conds: Prisma.Sql[] = [Prisma.sql`rp.planned_date = ${day}::date`];
     if (some(query.collectorId)) conds.push(Prisma.sql`rp.collector_id IN (${Prisma.join(query.collectorId)})`);
     if (query.branchId) conds.push(Prisma.sql`rp.branch_id = ${query.branchId}`);
-    // D7: la parada es de la fuente de su caso. Una parada sin caso no es de ninguna y no entra.
+    // D7: la parada es de la fuente de su crédito. Una parada sin crédito no es de ninguna y no entra.
     const source = this.sourceSql('vc', query);
     if (source) {
       conds.push(
-        Prisma.sql`EXISTS (SELECT 1 FROM collection_cases vk JOIN credits vc ON vc.id = vk.credit_id WHERE vk.id = rs.case_id AND ${source})`,
+        Prisma.sql`EXISTS (SELECT 1 FROM credits vc WHERE vc.id = rs.credit_id AND ${source})`,
       );
     }
 

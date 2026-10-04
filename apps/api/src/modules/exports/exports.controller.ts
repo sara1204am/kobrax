@@ -30,9 +30,16 @@ export class ExportsController {
     return toFile(await this.exports.locationsCsv());
   }
 
+  /** Los créditos en mora (F4/08). */
+  @Get('mora')
+  async mora(): Promise<StreamableFile> {
+    return toFile(await this.exports.moraCsv());
+  }
+
+  /** Alias de `mora` para quien todavía pide el tipo `cases` (web y móvil, hasta la fase 6). */
   @Get('cases')
   async cases(): Promise<StreamableFile> {
-    return toFile(await this.exports.casesCsv());
+    return toFile(await this.exports.moraCsv());
   }
 
   @Get('agenda')

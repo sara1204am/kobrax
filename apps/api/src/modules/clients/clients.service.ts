@@ -83,7 +83,6 @@ interface TimelineRow {
   currency: string | null;
   notes: string | null;
   credit_id: string | null;
-  case_id: string | null;
   user_id: string | null;
 }
 
@@ -418,16 +417,14 @@ export class ClientsService {
     if (query.status) conds.push(Prisma.sql`c.client_status = ${query.status}::"ClientStatus"`);
     if (query.risk) conds.push(Prisma.sql`c.risk_segment = ${query.risk}`);
     /*
-     * 🔴 **El cobrador se filtra con `EXISTS`, no con un `JOIN`.**
-     *
-     * Vive en `collection_cases`, y un cliente puede tener varios casos: con un join, su saldo se
-     * sumaría una vez por caso y la deuda de la fila daría de más. Es el mismo defecto que ya se
-     * pagó en analytics. `EXISTS` sólo pregunta «¿alguno?» y no multiplica filas.
+     * 🔴 **El cobrador es el responsable del crédito** (F4/08: ya no existe el «cobrador del caso»), y se filtra con
+     * `EXISTS`, no con un `JOIN`: un cliente puede tener varios créditos del mismo responsable y con un join su
+     * saldo se sumaría una vez por crédito. Es el mismo criterio que `managerId`; `collectorId` queda por la web.
      */
     if (query.collectorId) {
       conds.push(Prisma.sql`EXISTS (
-        SELECT 1 FROM collection_cases k
-        WHERE k.client_id = c.id AND k.deleted_at IS NULL AND k.assignee_id = ${query.collectorId})`);
+        SELECT 1 FROM credits k
+        WHERE k.client_id = c.id AND k.deleted_at IS NULL AND k.assigned_manager_id = ${query.collectorId})`);
     }
     /*
      * La sucursal es del CRÉDITO, así que también va con `EXISTS`: «tiene algún crédito vivo de esta
@@ -440,9 +437,8 @@ export class ClientsService {
         WHERE k.client_id = c.id AND k.deleted_at IS NULL AND k.branch_id = ${query.branchId})`);
     }
     /*
-     * P7 · El RESPONSABLE es del crédito, no del caso: «tiene algún crédito vivo a cargo de esta
-     * persona». No es lo mismo que el cobrador (`collectorId`, el del caso): reasignar un crédito
-     * no mueve sus casos abiertos, así que los dos pueden diferir y cada filtro contesta lo suyo.
+     * P7 · El RESPONSABLE es del crédito: «tiene algún crédito vivo a cargo de esta persona». Desde F4/08
+     * es lo mismo que `collectorId`; se mantienen los dos parámetros hasta que la web migre.
      */
     if (query.managerId) {
       conds.push(Prisma.sql`EXISTS (
@@ -562,20 +558,44 @@ export class ClientsService {
     };
   }
 
-  /** Lo que pide el PDF del legajo: el cliente completo (ya audita su propio revelado) + créditos y casos. */
+  /** Lo que pide el PDF del legajo: el cliente completo (ya audita su propio revelado) + créditos y créditos en mora. */
   async pdfBundle(id: string): Promise<ClientPdfBundle & ClientPdfContext> {
     const client = await this.findOne(id, true);
-    const [credits, cases, account] = await this.tx((tx) =>
+    const [credits, episodes, lastActions, account] = await this.tx((tx) =>
       Promise.all([
         tx.credit.findMany({ where: { clientId: id, deletedAt: null }, orderBy: { createdAt: 'desc' } }),
-        tx.collectionCase.findMany({ where: { clientId: id, deletedAt: null }, orderBy: { createdAt: 'desc' } }),
+        // F4/08: sin casos. «En mora» es tener un episodio abierto; la prioridad vive ahí.
+        tx.creditArrearEpisode.findMany({
+          where: { endedAt: null, credit: { clientId: id, deletedAt: null } },
+          select: { creditId: true, startedAt: true, priority: true },
+          orderBy: { startedAt: 'desc' },
+        }),
+        // «Última gestión» sale de las gestiones del crédito.
+        tx.creditActivity.groupBy({ by: ['creditId'], where: { clientId: id }, _max: { createdAt: true } }),
         tx.account.findUnique({ where: { id: this.tenant.accountId }, select: { businessName: true, currencyCode: true } }),
       ]),
     );
+    const lastBy = new Map(lastActions.map((a) => [a.creditId, a._max.createdAt]));
+    const byId = new Map(credits.map((c) => [c.id, c]));
+    const arrears: ClientPdfBundle['arrears'] = [];
+    for (const e of episodes) {
+      const credit = byId.get(e.creditId);
+      if (!credit || arrears.some((a) => a.creditId === e.creditId)) continue;
+      arrears.push({
+        creditId: e.creditId,
+        code: credit.code,
+        daysPastDue: credit.daysPastDue,
+        outstandingBalance: Number(credit.outstandingBalance),
+        priority: e.priority,
+        startedAt: e.startedAt,
+        lastActionAt: lastBy.get(e.creditId) ?? null,
+        writtenOff: credit.writtenOffAt != null,
+      });
+    }
     return {
       client,
       credits,
-      cases,
+      arrears,
       accountName: account?.businessName ?? 'Kobrax',
       currency: account?.currencyCode ?? undefined,
     };
@@ -595,7 +615,7 @@ export class ClientsService {
    * eso también es información—.
    *
    * Las fechas: el pago vale por `payment_date` (cuándo se cobró, no cuándo se cargó), el agendado
-   * por cuándo se actualizó (es cuando se ejecutó o se canceló) y la gestión por su alta.
+   * por cuándo se actualizó (es cuando se ejecutó o se canceló) y la gestión por su alta. Desde F4/08 la gestión es `credit_activities` (cuelga del crédito, no de un caso).
    */
   async timeline(clientId: string, query: TimelineQueryDto): Promise<ApiResponse<ClientTimelineEntry[]>> {
     const { page, limit, skip } = resolvePagination(query);
@@ -605,7 +625,7 @@ export class ClientsService {
       partes.push(Prisma.sql`
         SELECT 'PAYMENT' AS kind, p.id, p.payment_date AS at, p.method::text AS code, NULL AS status,
                p.amount::float8 AS amount, cr.currency AS currency, NULL AS notes,
-               p.credit_id AS credit_id, p.case_id AS case_id, p.registered_by AS user_id
+               p.credit_id AS credit_id, p.registered_by AS user_id
         FROM payments p
         JOIN credits cr ON cr.id = p.credit_id
         WHERE cr.client_id = ${clientId}`);
@@ -614,7 +634,7 @@ export class ClientsService {
       partes.push(Prisma.sql`
         SELECT 'AGENDA' AS kind, a.id, a.updated_at AS at, a.type::text AS code, a.status::text AS status,
                NULL AS amount, NULL AS currency, a.observations AS notes,
-               a.credit_id AS credit_id, a.case_id AS case_id, a.assignee_id AS user_id
+               a.credit_id AS credit_id, a.assignee_id AS user_id
         FROM agenda_items a
         WHERE a.client_id = ${clientId} AND a.deleted_at IS NULL`);
     }
@@ -622,10 +642,9 @@ export class ClientsService {
       partes.push(Prisma.sql`
         SELECT 'ACTIVITY' AS kind, ac.id, ac.created_at AS at, ac.type::text AS code, ac.result AS status,
                NULL AS amount, NULL AS currency, ac.notes AS notes,
-               NULL AS credit_id, ac.case_id AS case_id, ac.user_id AS user_id
-        FROM case_activities ac
-        JOIN collection_cases k ON k.id = ac.case_id
-        WHERE k.client_id = ${clientId}`);
+               ac.credit_id AS credit_id, ac.user_id AS user_id
+        FROM credit_activities ac
+        WHERE ac.client_id = ${clientId}`);
     }
     // Sin ningún permiso no hay consulta que hacer: `UNION ALL` de cero partes no es SQL válido.
     if (partes.length === 0) return ResponseDto.paginated([], 0, page, limit);
@@ -652,7 +671,6 @@ export class ClientsService {
       currency: r.currency ?? undefined,
       notes: r.notes ?? undefined,
       creditId: r.credit_id ?? undefined,
-      caseId: r.case_id ?? undefined,
       userId: r.user_id ?? undefined,
     }));
     return ResponseDto.paginated(data, totals[0]?.total ?? 0, page, limit);

@@ -224,8 +224,8 @@ export class ListClientsQueryDto {
   /** La sucursal es del CRÉDITO, no del cliente. */
   @IsOptional() @IsUUID() branchId?: string;
   /**
-   * El cobrador **no está en el cliente ni en el crédito**: es `collection_cases.assignee_id`. Por
-   * eso filtra con un `EXISTS` sobre casos y no con una columna.
+   * El cobrador es el **responsable del crédito** (`credits.assigned_manager_id`, F4/08: ya no hay «cobrador del
+   * caso»). Filtra con un `EXISTS` sobre créditos; es lo mismo que `managerId`.
    */
   @IsOptional() @IsUUID() collectorId?: string;
   /** El responsable de algún crédito del cliente (`credits.assigned_manager_id`). Ver P7 en el servicio. */

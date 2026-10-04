@@ -35,7 +35,7 @@ function make(opts: { permissions?: string[]; credit?: Credit | null } = {}) {
   const permissions = opts.permissions ?? [];
   const tenant = { accountId: 'acc-A', userId: 'gerente-1', can: (p: string) => permissions.includes(p) };
   const audit = { record: async (e: (typeof audited)[number]) => void audited.push(e), recordMany: async () => undefined };
-  const service = new CreditsService(prisma as never, tenant as never, audit as never, {} as never, {} as never);
+  const service = new CreditsService(prisma as never, tenant as never, audit as never, {} as never, {} as never, {} as never);
   return { service, credit, updates, audited, touched };
 }
 

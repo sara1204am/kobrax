@@ -10,22 +10,15 @@ import { AnalyticsService } from './analytics.service';
  */
 function makeService(
   rowsFor: (sql: string) => unknown[] = () => [],
-  counts: { cases?: number[]; payments?: number[]; groups?: Record<string, unknown>[] } = {},
+  counts: { payments?: number[]; groups?: Record<string, unknown>[] } = {},
 ) {
   const sqls: string[] = [];
   const wheres: Record<string, unknown>[] = [];
-  let caseCall = 0;
   let payCall = 0;
   const tx = {
     $queryRaw: async (q: { sql: string; values: unknown[] }) => {
       sqls.push(q.sql);
       return rowsFor(q.sql);
-    },
-    collectionCase: {
-      count: async (args: { where: Record<string, unknown> }) => {
-        wheres.push(args.where);
-        return counts.cases?.[caseCall++] ?? 0;
-      },
     },
     payment: {
       aggregate: async (args: { where: Record<string, unknown> }) => {
@@ -55,19 +48,66 @@ describe('summary', () => {
     // La base no guarda cuánto se debía la semana pasada. `previous: null` es «no se puede saber»,
     // que no es lo mismo que cero: con cero, la pantalla dibujaría una flecha inventada sobre plata.
     const { service } = makeService(
-      (sql) => (sql.includes('FROM credits') ? [{ outstanding: 1000, overdue: 250 }] : []),
-      { cases: [12, 9], payments: [400, 200] },
+      (sql) =>
+        sql.includes('credit_arrear_episodes')
+          ? [{ now: 12, prev: 9 }]
+          : sql.includes('FROM credits')
+            ? [{ outstanding: 1000, overdue: 250 }]
+            : [],
+      { payments: [400, 200] },
     );
 
     const out = await service.summary({});
     assert.equal(out.outstanding.previous, null);
     assert.equal(out.overdue.previous, null);
     assert.equal(out.overdueRate.previous, null);
-    // Los dos que SÍ se pueden reconstruir: lo cobrado (es un flujo) y los casos abiertos
-    // (`created_at`/`closed_at` cuentan su propia historia).
+    // Los dos que SÍ se pueden reconstruir: lo cobrado (es un flujo) y los créditos en mora (el episodio
+    // cuenta su propia historia con sus fechas de inicio y fin).
     assert.equal(out.collected.previous, 200);
-    assert.equal(out.activeCases.previous, 9);
+    assert.equal(out.creditsInArrears.previous, 9);
     assert.equal(out.overdueRate.value, 25);
+  });
+
+  /**
+   * F4/08: «casos activos» pasó a «créditos en mora» (episodios abiertos). `activeCases` sigue en la respuesta, con
+   * el mismo número, mientras la web lo lea.
+   */
+  it('🔴 créditos en mora = episodios ABIERTOS; activeCases es el mismo número (deprecado)', async () => {
+    const { service, find } = makeService((sql) => (sql.includes('credit_arrear_episodes') ? [{ now: 12, prev: 9 }] : []));
+    const out = await service.summary({});
+    assert.deepEqual(out.creditsInArrears, { value: 12, previous: 9 });
+    assert.deepEqual(out.activeCases, out.creditsInArrears);
+    const sql = find('credit_arrear_episodes')!;
+    assert.match(sql, /e\.ended_at IS NULL/);
+    assert.doesNotMatch(sql, /collection_cases/);
+  });
+
+  it('el período anterior se reconstruye con inicio y fin del episodio', async () => {
+    const { service, find } = makeService(() => []);
+    await service.summary({ dateFrom: '2026-08-10', dateTo: '2026-08-16' });
+    const sql = find('credit_arrear_episodes')!;
+    assert.match(sql, /e\.started_at <= .*::date AND \(e\.ended_at IS NULL OR e\.ended_at > .*::date\)/);
+  });
+
+  it('sin episodios devuelve cero, no undefined', async () => {
+    const { service } = makeService(() => []);
+    const out = await service.summary({});
+    assert.deepEqual(out.creditsInArrears, { value: 0, previous: 0 });
+  });
+
+  it('el filtro caseStatus heredado se acepta y se ignora', async () => {
+    const { service, sqls } = makeService(() => []);
+    await service.summary({ caseStatus: ['PENDING'] });
+    assert.ok(sqls.every((q) => !q.includes('collection_cases') && !/status::text IN/.test(q)));
+  });
+
+  it('prioridad: la del episodio abierto; cobrador: el responsable del crédito', async () => {
+    const { service, sqls } = makeService(() => []);
+    await service.summary({ priority: ['HIGH'], collectorId: ['u1'] });
+    const stock = sqls.find((q) => q.includes('FROM credits cr'))!;
+    assert.match(stock, /cr\.assigned_manager_id IN/);
+    assert.match(stock, /EXISTS \(SELECT 1 FROM credit_arrear_episodes pe WHERE pe\.credit_id = cr\.id AND pe\.ended_at IS NULL AND pe\.priority::text IN/);
+    assert.ok(sqls.every((q) => !q.includes('collection_cases')));
   });
 
   it('la ventana anterior mide lo mismo y termina justo antes', async () => {
@@ -86,12 +126,12 @@ describe('summary', () => {
   });
 
   it('🔴 filtrar por cobrador no duplica el saldo', async () => {
-    // Un crédito puede tener más de un caso: con un JOIN su saldo se sumaría una vez por caso y el
-    // KPI daría de más sin que nada se vea roto. Por eso va con EXISTS.
+    // El filtro es sobre una columna del propio crédito (el responsable): sin JOIN no hay nada que duplicar.
     const { service, find } = makeService(() => []);
     await service.summary({ collectorId: ['11111111-2222-3333-4444-555555555555'] });
-    const sql = find('FROM credits');
-    assert.match(sql!, /EXISTS \(SELECT 1 FROM collection_cases/);
+    const sql = find('FROM credits')!;
+    assert.match(sql, /cr\.assigned_manager_id IN/);
+    assert.doesNotMatch(sql, /JOIN/);
   });
 
   it('🔴 ningún id se castea a ::uuid', async () => {
@@ -117,7 +157,7 @@ describe('summary', () => {
     const { service, find } = makeService(() => []);
     await service.collectorPerformance({ collectorId: ['u1', 'u2'] });
     // Dos marcadores adentro del `IN`: los valores viajan parametrizados, no escritos en el SQL.
-    assert.match(find('FROM collection_cases')!, /k\.assignee_id IN \([^)]+,[^)]+\)/);
+    assert.match(find('assigned_manager_id')!, /cr\.assigned_manager_id IN \([^)]+,[^)]+\)/);
   });
 
   it('🔴 una lista vacía no filtra (y no escribe `IN ()`)', async () => {
@@ -125,7 +165,7 @@ describe('summary', () => {
     // `Prisma.join` de cero elementos la consulta sale `IN ()`: error de sintaxis, no «sin filtro».
     const { service, find } = makeService(() => []);
     await service.collectorPerformance({ collectorId: [], caseStatus: [] });
-    assert.doesNotMatch(find('FROM collection_cases')!, /IN \(\)/);
+    assert.doesNotMatch(find('assigned_manager_id')!, /IN \(\)/);
   });
 });
 
@@ -150,24 +190,33 @@ describe('portfolioAging', () => {
 });
 
 describe('collectorPerformance', () => {
-  it('🔴 el `deleted_at` del crédito va en el ON', async () => {
-    // En el WHERE, el LEFT JOIN se comporta como INNER y el cobrador sin créditos vivos desaparece
-    // del ranking en vez de aparecer en cero. Es el mismo defecto que ya se pagó en la cartera (W3).
+  /** F4/08: agrupa por el responsable del crédito; ya no existe el cobrador del caso. */
+  it('🔴 agrupa por el responsable del crédito y no toca los casos', async () => {
     const { service, find } = makeService(() => []);
     await service.collectorPerformance({});
-    assert.match(find('LEFT JOIN credits')!, /LEFT JOIN credits cr ON cr\.id = k\.credit_id AND cr\.deleted_at IS NULL/);
+    const sql = find('assigned_manager_id')!;
+    assert.match(sql, /GROUP BY cr\.assigned_manager_id/);
+    assert.match(sql, /cr\.assigned_manager_id IS NOT NULL/);
+    assert.doesNotMatch(sql, /collection_cases/);
   });
 
-  it('junta la carga con lo recaudado por persona', async () => {
+  it('cuenta los créditos en mora con un EXISTS sobre el episodio abierto', async () => {
+    const { service, find } = makeService(() => []);
+    await service.collectorPerformance({});
+    assert.match(find('assigned_manager_id')!, /COUNT\(\*\) FILTER \(\s*WHERE EXISTS \(SELECT 1 FROM credit_arrear_episodes oe WHERE oe\.credit_id = cr\.id AND oe\.ended_at IS NULL\)/);
+  });
+
+  it('junta la carga con lo recaudado por persona (cases = creditsInArrears, deprecado)', async () => {
     const { service } = makeService((sql) =>
-      sql.includes('FROM collection_cases')
-        ? [{ collector: 'u1', cases: 10, outstanding: 1000, overdue: 400 }]
+      sql.includes('assigned_manager_id')
+        ? [{ collector: 'u1', arrears: 10, outstanding: 1000, overdue: 400 }]
         : [{ collector: 'u1', collected: 250 }],
     );
     const rows = await service.collectorPerformance({});
     assert.deepEqual(rows[0], {
       collectorId: 'u1',
       cases: 10,
+      creditsInArrears: 10,
       outstanding: 1000,
       overdue: 400,
       overdueRate: 40,
@@ -261,8 +310,11 @@ describe('fuente de los créditos (D7)', () => {
     assert.match(sqls.find((q) => q.includes('FROM credits cr'))!, /cr\.external_source IS NULL/);
     assert.match(sqls.find((q) => q.includes('FROM payments p'))!, /sc\.external_source IS NULL/);
     assert.match(sqls.find((q) => q.includes('FROM agenda_items a'))!, /sc\.external_source IS NULL/);
-    assert.match(sqls.find((q) => q.includes('FROM route_stops'))!, /vc\.external_source IS NULL/);
-    // Los que van por Prisma: casos y pagos filtran por la relación con el crédito.
+    const stops = sqls.find((q) => q.includes('FROM route_stops'))!;
+    assert.match(stops, /vc\.external_source IS NULL/);
+    assert.match(stops, /FROM credits vc WHERE vc\.id = rs\.credit_id/, 'la parada se une al crédito, no al caso');
+    assert.doesNotMatch(stops, /collection_cases/);
+    // Los que van por Prisma: los pagos filtran por la relación con el crédito.
     assert.ok(wheres.every((w) => (w as { credit?: unknown }).credit !== undefined));
     assert.deepEqual((wheres[0] as { credit: unknown }).credit, { externalSource: null });
   });
@@ -270,8 +322,8 @@ describe('fuente de los créditos (D7)', () => {
   it('filtrar PSF compara la fuente como parámetro, no pegada en el SQL', async () => {
     const { service, sqls } = makeService(() => []);
     await service.collectorPerformance({ source: 'PSF' });
-    const load = sqls.find((q) => q.includes('FROM collection_cases k'))!;
-    assert.match(load, /sc\.external_source = (\?|\$\d+)/);
+    const load = sqls.find((q) => q.includes('assigned_manager_id IS NOT NULL'))!;
+    assert.match(load, /cr.external_source = (\?|\$\d+)/);
     assert.doesNotMatch(load, /'PSF'/);
   });
 

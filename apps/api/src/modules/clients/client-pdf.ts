@@ -1,11 +1,26 @@
-import type { Credit, CollectionCase } from '@prisma/client';
-import { Report, arrearsTone, C, type TableColumn } from '../../common/pdf/report';
+import type { Credit, CollectionPriority } from '@prisma/client';
+import { Report, arrearsTone, type TableColumn } from '../../common/pdf/report';
 import { clientDisplayName, serializeClient } from './clients.serializer';
 
 export interface ClientPdfBundle {
   client: ReturnType<typeof serializeClient>;
   credits: Credit[];
-  cases: CollectionCase[];
+  /** Los créditos del cliente con un episodio de mora abierto (F4/08: reemplaza a los casos). */
+  arrears: ClientPdfArrear[];
+}
+
+export interface ClientPdfArrear {
+  creditId: string;
+  code: string | null;
+  daysPastDue: number;
+  outstandingBalance: number;
+  /** Prioridad del episodio abierto. */
+  priority: CollectionPriority | null;
+  /** Inicio del episodio (fecha). */
+  startedAt: Date;
+  /** Última gestión registrada sobre el crédito (`credit_activities`), o `null` si no hay. */
+  lastActionAt: Date | null;
+  writtenOff: boolean;
 }
 
 export interface ClientPdfContext {
@@ -25,16 +40,6 @@ const CREDIT_STATUS: Record<string, string> = {
   DEFAULTED: 'Incobrable',
   RESTRUCTURED: 'Reprogramado',
   CANCELLED: 'Anulado',
-};
-
-const CASE_STATUS: Record<string, string> = {
-  PENDING: 'Pendiente',
-  ACTIVE: 'Activo',
-  IN_NEGOTIATION: 'En negociación',
-  PROMISE_TO_PAY: 'Promesa de pago',
-  PAID: 'Pagado',
-  CLOSED: 'Cerrado',
-  WRITTEN_OFF: 'Castigado',
 };
 
 const PRIORITY: Record<string, string> = {
@@ -59,7 +64,7 @@ const fecha = (d: Date | string | null | undefined): string =>
  * fotos de carnet pesa diez megas y deja de servir para lo que sirve.
  */
 export async function buildClientPdf(bundle: ClientPdfBundle, ctx: ClientPdfContext): Promise<Buffer> {
-  const { client: c, credits, cases } = bundle;
+  const { client: c, credits, arrears } = bundle;
   const nombre = clientDisplayName(c) ?? 'Cliente';
 
   const r = new Report({
@@ -71,7 +76,6 @@ export async function buildClientPdf(bundle: ClientPdfBundle, ctx: ClientPdfCont
 
   // D1-a: el castigo es la condición `written_off_at`; un crédito castigado no es «vigente».
   const vivos = credits.filter((x) => x.status === 'ACTIVE' && !x.writtenOffAt);
-  const abiertos = cases.filter((x) => !['CLOSED', 'WRITTEN_OFF'].includes(x.status));
 
   r.kpis([
     { label: 'Saldo total', value: r.fmtMoney(c.totalDebt), tone: 'money' },
@@ -81,7 +85,7 @@ export async function buildClientPdf(bundle: ClientPdfBundle, ctx: ClientPdfCont
       value: `${c.maxDaysPastDue} d`,
       tone: c.maxDaysPastDue > 30 ? 'danger' : c.maxDaysPastDue > 0 ? 'warn' : 'neutral',
     },
-    { label: 'Cobranzas abiertas', value: String(abiertos.length), tone: 'accent' },
+    { label: 'Créditos en mora', value: String(arrears.length), tone: 'accent' },
   ]);
 
   r.section('Identificación');
@@ -144,23 +148,19 @@ export async function buildClientPdf(bundle: ClientPdfBundle, ctx: ClientPdfCont
     { empty: 'Este cliente no tiene créditos.' },
   );
 
-  r.section('Cobranzas');
-  r.table<CollectionCase>(
+  r.section('Créditos en mora');
+  r.table<ClientPdfArrear>(
     [
-      {
-        header: 'Estado',
-        width: 25,
-        value: (x) => CASE_STATUS[x.status] ?? x.status,
-        strong: true,
-        tone: (x) => (['CLOSED', 'WRITTEN_OFF'].includes(x.status) ? C.muted : C.text),
-      },
-      { header: 'Prioridad', width: 18, value: (x) => PRIORITY[x.priority] ?? x.priority },
-      { header: 'Abierta', width: 19, value: (x) => fecha(x.createdAt) },
-      { header: 'Última gestión', width: 19, value: (x) => fecha(x.lastActionAt) },
-      { header: 'Cierre', width: 19, value: (x) => fecha(x.closedAt) },
+      { header: 'Crédito', width: 20, value: (x) => x.code ?? '—', strong: true },
+      { header: 'Situación', width: 17, value: (x) => (x.writtenOff ? 'Castigado' : 'En mora') },
+      { header: 'Días', width: 10, value: (x) => String(x.daysPastDue), align: 'right', tone: (x) => arrearsTone(x.daysPastDue) },
+      { header: 'Saldo', width: 17, value: (x) => r.fmtMoney(x.outstandingBalance), align: 'right' },
+      { header: 'Prioridad', width: 12, value: (x) => (x.priority ? (PRIORITY[x.priority] ?? x.priority) : '—') },
+      { header: 'En mora desde', width: 12, value: (x) => fecha(x.startedAt) },
+      { header: 'Última gestión', width: 12, value: (x) => fecha(x.lastActionAt) },
     ],
-    cases,
-    { empty: 'Este cliente no tiene cobranzas registradas.' },
+    arrears,
+    { empty: 'Este cliente no tiene créditos en mora.' },
   );
 
   const relaciones = c.relations ?? [];
