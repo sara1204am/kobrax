@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { CasePriority, CaseStatus, CREDIT_SOURCES, memberName, type CreditSource, type Member } from '@kobrax/shared';
+import { COLLECTION_PRIORITIES, CREDIT_SOURCES, memberName, type CreditSource, type Member } from '@kobrax/shared';
 import { Dropdown } from '@/components/panel-shell';
 import { DATE_PRESETS, presetRange, type DatePreset } from '@/lib/dashboard';
 
@@ -31,9 +31,6 @@ export function DashboardFilters({
   sources: CreditSource[];
 }) {
   const t = useTranslations('panel.dashboard');
-  // Los rótulos de estado y prioridad ya están traducidos en casos: repetirlos acá sería mantener
-  // once textos en dos idiomas en dos lugares, y el día que cambie uno cambiaría en una sola pantalla.
-  const tc = useTranslations('panel.cases');
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -59,7 +56,6 @@ export function DashboardFilters({
 
   const filtered =
     params.get('collectorId') ||
-    params.get('caseStatus') ||
     params.get('priority') ||
     params.get('from') ||
     params.get('source');
@@ -125,18 +121,9 @@ export function DashboardFilters({
       )}
 
       <Multi
-        label={t('filters.status')}
-        value={params.get('caseStatus')}
-        options={Object.values(CaseStatus).map((s) => ({ value: s, label: tc(`status.${s}`) }))}
-        onChange={(v) => set({ caseStatus: v })}
-        allLabel={t('filters.all')}
-        countLabel={(count) => t('filters.selected', { count })}
-      />
-
-      <Multi
         label={t('filters.priority')}
         value={params.get('priority')}
-        options={Object.values(CasePriority).map((p) => ({ value: p, label: tc(`priority.${p}`) }))}
+        options={COLLECTION_PRIORITIES.map((p) => ({ value: p, label: t(`priorities.${p}`) }))}
         onChange={(v) => set({ priority: v })}
         allLabel={t('filters.all')}
         countLabel={(count) => t('filters.selected', { count })}

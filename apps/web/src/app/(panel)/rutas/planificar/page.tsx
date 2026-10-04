@@ -4,14 +4,15 @@ import {
   Permission,
   RoleType,
   todayISO,
-  type CaseListItem,
+  type ArrearCategory,
   type MeInfo,
+  type MoraCreditListItem,
   type Member,
   type RouteItem,
 } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { shiftDay } from '@/lib/agenda';
-import { availableQuery, hasPlanFilters, minStops, type PlanParams } from '@/lib/plan';
+import { availableQuery, hasPlanFilters, minStops, toAvailable, type PlanParams } from '@/lib/plan';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { RetryState } from '@/components/retry-state';
 import { PlanScreen } from './plan-screen';
@@ -19,14 +20,13 @@ import { PlanScreen } from './plan-screen';
 /**
  * Planificar las rutas de un día, **de a un cobrador por vez**.
  *
- * 🔴 **La mora que se ofrece es la que se puede asignar de verdad**: abiertas, y sin las que ya son
- * parada de una ruta de ese día (`excludeRouted`). Una lista que muestre trabajo ya repartido manda
- * a dos cobradores a la misma puerta.
+ * 🔴 **Lo que se ofrece son créditos EN MORA** (`GET /mora`, F4/08: la parada es por crédito) de quien
+ * es su responsable. Un cobrador con ruta ese día ya no se planifica de nuevo (la pantalla lo dice).
  *
  * 🔴 **Por defecto, cada uno lo suyo.** La lista arranca acotada a la cartera del cobrador elegido;
- * tomar la de otro es **ayuda de esa jornada** y hay que pedirlo con el filtro de cartera. El dueño
- * del caso **no cambia** al planificar: la parada guarda el caso, y la cartera sigue diciendo de
- * quién es la deuda.
+ * tomar la de otro es **ayuda de esa jornada** y hay que pedirlo con el filtro de cartera. El
+ * responsable del crédito **no cambia** al planificar: la parada guarda el crédito, y la cartera
+ * sigue diciendo de quién es la deuda.
  *
  * Abre en MAÑANA: planificar es preparar el trabajo que viene, el de hoy ya está en la calle.
  */
@@ -61,10 +61,12 @@ export default async function PlanificarPage({ searchParams }: { searchParams: P
   const collectorId = collectors.find((c) => c.userId === searchParams.collectorId)?.userId ?? collectors[0]!.userId;
   const params: PlanParams = { ...searchParams, collectorId };
 
-  const [available, routes] = await Promise.all([
-    apiCall<CaseListItem[]>(`/cases?${availableQuery(params, day)}`, { method: 'GET', auth: true }),
+  const [available, routes, categories] = await Promise.all([
+    apiCall<MoraCreditListItem[]>(`/mora?${availableQuery(params)}`, { method: 'GET', auth: true }),
     // Las rutas del día: quién ya tiene la suya armada y con cuántas paradas.
     apiCall<RouteItem[]>(`/routes?date=${day}&limit=100`, { method: 'GET', auth: true }),
+    // Para el filtro de categoría; si falla (sin permiso) el filtro simplemente no se dibuja.
+    apiCall<ArrearCategory[]>('/arrear-categories', { method: 'GET', auth: true }),
   ]);
 
   if (available.status !== 200 || !available.body.data) {
@@ -84,11 +86,12 @@ export default async function PlanificarPage({ searchParams }: { searchParams: P
         today={todayISO()}
         collectors={collectors}
         collectorId={collectorId}
-        available={available.body.data}
+        available={available.body.data.map(toAvailable)}
         total={available.body.meta?.total ?? available.body.data.length}
         routes={routes.body.data ?? []}
         minStops={minStops(params)}
         filtered={hasPlanFilters(params)}
+        categories={(categories.body.data ?? []).map((c) => ({ code: c.code, name: c.name }))}
       />
     </>
   );

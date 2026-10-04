@@ -40,7 +40,7 @@ const ACCOUNTS = [
 
 function renderShell(
   accounts = ACCOUNTS,
-  permissions = ['client:read', 'user:read', 'case:read', 'payment:read'],
+  permissions = ['client:read', 'user:read', 'collection:read', 'payment:read'],
   nav = visibleNav(permissions),
 ) {
   return render(

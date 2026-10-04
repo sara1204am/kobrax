@@ -29,7 +29,7 @@
       "home": "Home",
       "portfolio": "Portfolio",
       "import": "Import",
-      "cases": "Overdue",
+      "mora": "Overdue",
       "agenda": "Schedule",
       "routes": "Routes",
       "payments": "Payments",
@@ -86,13 +86,18 @@
         "from": "From",
         "to": "To",
         "collector": "Collector",
-        "status": "Status",
         "priority": "Priority",
         "all": "All",
         "selected": "{count} selected",
         "clear": "Clear filters",
         "source": "Source",
         "allSources": "All"
+      },
+      "priorities": {
+        "LOW": "Low",
+        "MEDIUM": "Medium",
+        "HIGH": "High",
+        "CRITICAL": "Critical"
       },
       "sources": {
         "KOBRAX": "Kobrax",
@@ -114,7 +119,7 @@
         "outstanding": "Total portfolio balance",
         "overdue": "Overdue portfolio",
         "overdueRate": "% portfolio overdue",
-        "activeCases": "Overdue loans",
+        "creditsInArrears": "Credits in arrears",
         "collected": "Collected"
       },
       "widgets": {
@@ -178,7 +183,7 @@
       },
       "table": {
         "collector": "Collector",
-        "cases": "Overdue",
+        "inArrears": "In arrears",
         "balance": "Balance",
         "overdue": "Overdue",
         "overdueRate": "% overdue",
@@ -728,7 +733,14 @@
         "balanceRange": "Balance",
         "promise": "Payment promise",
         "withPromise": "Only with an active promise",
-        "slaOverdue": "Only those past the deadline"
+        "slaOverdue": "Only those past the deadline",
+        "situation": "Situation",
+        "category": "Arrears category",
+        "writtenOff": "Write-off",
+        "onlyWrittenOff": "Written off only",
+        "withoutWrittenOff": "Not written off",
+        "responsible": "Responsible",
+        "unassignedResponsible": "Credits with no responsible"
       },
       "columns": {
         "client": "Debtor",
@@ -751,9 +763,71 @@
         "nextDueDate": "Next due date",
         "lastPayment": "Last payment",
         "moraSince": "Arrears since",
-        "promise": "Promise"
+        "promise": "Promise",
+        "situation": "Situation",
+        "responsible": "Responsible"
       },
       "noCase": "No case",
+      "situation": {
+        "CURRENT": "Current",
+        "IN_ARREARS": "In arrears",
+        "writtenOff": "Written off",
+        "category": "Category {code}",
+        "daysPastDue": "{n, plural, one {# day} other {# days}} past due"
+      },
+      "lastActionLabel": "Last action",
+      "activePromiseLabel": "Active promise",
+      "gestion": {
+        "title": "Credit management",
+        "writeOff": {
+          "cta": "Write off",
+          "revert": "Revert write-off",
+          "title": "Write off the credit",
+          "revertTitle": "Revert the write-off",
+          "text": "A write-off is a separate condition: it does not close the arrears or change the days. It is recorded in the audit log.",
+          "revertText": "The credit stops being shown as written off. It is recorded in the audit log.",
+          "reason": "Reason (optional)",
+          "confirm": "Write off",
+          "revertConfirm": "Revert",
+          "cancel": "Cancel",
+          "done": "Credit written off",
+          "revertDone": "Write-off reverted",
+          "error": "The write-off could not be changed."
+        },
+        "responsibles": {
+          "title": "Responsible people",
+          "hint": "Who handles this credit. A temporary replacement returns the credit to the responsible when it expires.",
+          "PRINCIPAL": "Responsible",
+          "TEMPORAL": "Temporary replacement",
+          "APOYO": "Support",
+          "expires": "until {date}",
+          "none": "No responsible",
+          "unknown": "Assigned",
+          "addSupport": "Add support",
+          "changeTemp": "Change temporarily",
+          "remove": "Remove",
+          "removed": "Done, removed",
+          "collector": "Collector",
+          "collectorPlaceholder": "Choose the collector",
+          "expiresAt": "Expiry date",
+          "expiresOptional": "Expiry date (optional)",
+          "reason": "Reason (optional)",
+          "supportTitle": "Add support",
+          "supportText": "A second collector who sees and works this credit alongside the responsible.",
+          "tempTitle": "Change temporarily",
+          "tempText": "The chosen collector covers the credit until the date; pending scheduled items move with them and return to the responsible on expiry.",
+          "confirm": "Save",
+          "cancel": "Cancel",
+          "supportDone": "Support added",
+          "tempDone": "Temporary replacement created",
+          "error": "The change could not be saved.",
+          "needsData": "Choose the collector and the expiry date."
+        },
+        "psf": {
+          "absent": "It no longer appears in the report of {date}. It may have been brought up to date or cancelled; the report does not say.",
+          "absentNoDate": "It no longer appears in the report. It may have been brought up to date or cancelled; the report does not say."
+        }
+      },
       "hasPromise": "With promise",
       "overdueReported": "As reported by the file",
       "overdueSchedule": "Overdue installments of the schedule",
@@ -950,7 +1024,7 @@
         "activity": {
           "cta": "Log action",
           "title": "Log an action",
-          "text": "It is saved in the collection history. If the credit has no case yet, one is opened.",
+          "text": "It is saved in the credit history, whether or not it is in arrears.",
           "type": "What was done",
           "result": "Result",
           "resultLabel": "Result",
@@ -967,7 +1041,6 @@
           "confirm": "Log",
           "cancel": "Cancel",
           "done": "Action logged",
-          "doneOpened": "Action logged and case opened",
           "results": {
             "CONTACTED": "Spoke with the debtor",
             "NO_ANSWER": "No answer",
@@ -1072,7 +1145,7 @@
         "assignTitle": "Assign {count} loans to a collector",
         "clear": "Bring up to date",
         "clearTitle": "Bring {count} loans up to date",
-        "clearText": "{count} loans will be brought up to date and their collections closed.",
+        "clearText": "{count} loans will be brought up to date: their arrears close.",
         "clearOk": "Bring up to date",
         "warning": "This cannot be undone in bulk. Each one keeps its close reason.",
         "cancel": "Cancel",
@@ -1088,7 +1161,15 @@
         "priority": "Priority",
         "priorityTitle": "Change priority of {count} loans",
         "priorityText": "It stays pinned: the daily calculation stops touching it until you release it.",
-        "priorityOk": "Change priority"
+        "priorityOk": "Change priority",
+        "assignText": "They become the chosen collector's. Pending scheduled items move with them.",
+        "collectorPlaceholder": "Choose the collector",
+        "skip": {
+          "NOT_FOUND": "The credit was not found.",
+          "ALREADY_ASSIGNED": "It was already that collector's.",
+          "OUT_OF_AGENCY": "It is outside your agency.",
+          "CONFLICT": "It changed in the meantime."
+        }
       },
       "priorityChange": "Change priority",
       "prioritySet": "Priority pinned",
@@ -1245,7 +1326,9 @@
         "noClients": "No debtor with that name.",
         "changeClient": "Change",
         "contextError": "Could not read the debtor data.",
-        "noCases": "This debtor has no loan to schedule a task against.",
+        "noCredits": "This debtor has no credit to schedule a task against.",
+        "inArrears": "In arrears · {days} days",
+        "current": "Current",
         "credit": "Loan",
         "noCode": "no code",
         "type": "Task type",
@@ -1399,19 +1482,17 @@
           "balance": "Balance",
           "min": "From",
           "max": "To",
-          "lastVisit": "Last visit",
-          "visitAges": {
-            "7": "No visit in 7 days",
-            "15": "No visit in 15 days",
-            "30": "No visit in 30 days",
-            "never": "Never visited"
-          },
           "promise": "Promise to pay",
           "withPromise": "With promise",
           "withoutPromise": "Without promise",
-          "status": "Status",
+          "category": "Arrears category",
           "priority": "Priority",
-          "outcome": "Result of a previous visit"
+          "priorities": {
+            "LOW": "Low",
+            "MEDIUM": "Medium",
+            "HIGH": "High",
+            "CRITICAL": "Critical"
+          }
         }
       },
       "work": {
@@ -1576,7 +1657,7 @@
       "detail": {
         "title": "The payment",
         "credit": "Credit",
-        "case": "Collection",
+        "case": "Collection management",
         "registeredBy": "Recorded by",
         "receiptNumber": "Receipt no.",
         "openReceipt": "Open the receipt",
@@ -1634,6 +1715,35 @@
     "decimals": "Amount decimals",
     "decimalsValue": "{n, plural, =0 {No decimals} one {# decimal} other {# decimals}}",
     "decimalsHint": "How the team sees amounts in the field app.",
+    "arrearCategories": {
+      "title": "Arrears categories",
+      "intro": "Each credit in arrears falls into the category whose range contains its days past due. Ranges start at day 1, cannot have gaps or overlap, and only the last one may be open-ended. A credit's category is not stored: it is calculated from these ranges.",
+      "columns": {
+        "code": "Code",
+        "name": "Name",
+        "from": "From (days)",
+        "to": "To (days)",
+        "color": "Color"
+      },
+      "unlimited": "No limit",
+      "add": "+ Add category",
+      "remove": "Remove",
+      "save": "Save categories",
+      "saved": "Categories saved",
+      "saveError": "Could not save the categories",
+      "readOnly": "Only an administrator can change these ranges.",
+      "validation": {
+        "EMPTY": "There must be at least one category.",
+        "CODE_EMPTY": "Every category needs a code.",
+        "CODE_DUPLICATE": "Two categories have the same code.",
+        "RANGE_INVALID": "The \"from\" and \"to\" days must be whole numbers, and \"from\" at least 1.",
+        "TO_BEFORE_FROM": "In a category, \"to\" cannot be lower than \"from\".",
+        "NOT_STARTING_AT_1": "The first category must start at day 1.",
+        "GAP": "There are days missing between two categories: each range must start the day after the previous one ends.",
+        "OVERLAP": "Two categories share days: ranges cannot overlap.",
+        "OPEN_ENDED_NOT_LAST": "Only the last category can be left open-ended."
+      }
+    },
     "templates": {
       "title": "WhatsApp templates",
       "intro": "The messages your team can pick when writing to a debtor from a task. These variables are filled in automatically on send:",
@@ -1695,8 +1805,8 @@
       "clientsDesc": "Name, document, contact and balance for each person.",
       "locations": "Locations",
       "locationsDesc": "The registered addresses, with their client.",
-      "cases": "Overdue",
-      "casesDesc": "Open and closed collection cases, with their credit.",
+      "mora": "Overdue",
+      "moraDesc": "Credits in arrears, with their owner, category and overdue balance.",
       "agenda": "Schedule",
       "agendaDesc": "Scheduled visits, past and upcoming."
     },
@@ -1766,11 +1876,9 @@
     },
     "entity": "clients",
     "filters": {
-      "collector": "Case collector",
-      "manager": "Loan owner",
+      "manager": "Owner",
       "allManagers": "All owners",
       "branch": "Branch",
-      "allCollectors": "All collectors",
       "allBranches": "All branches",
       "arrearsRange": "Arrears range",
       "debtRange": "Debt range"
@@ -1819,8 +1927,7 @@
       "collaterals": "Collateral",
       "attachments": "Attachments",
       "summary": "Account summary",
-      "timeline": "Activity log",
-      "cases": "Overdue"
+      "timeline": "Activity log"
     },
     "newLoan": "New credit",
     "loanMode": {
@@ -2029,8 +2136,6 @@
       "progress": "Payment progress"
     },
     "noTimeline": "No activity or payments recorded yet.",
-    "noCases": "No open collections.",
-    "casesDenied": "You do not have permission to view collections.",
     "unassigned": "Unassigned",
     "unknownCollector": "Collector",
     "summary": {
@@ -2272,6 +2377,11 @@
       }
     },
     "creditDetail": {
+      "management": {
+        "title": "Collection management",
+        "hint": "Log actions, promises and notes, and review this credit's history, whether or not it is in arrears.",
+        "open": "Open collection management"
+      },
       "edit": "Edit",
       "cancelEdit": "Cancel",
       "save": "Save changes",

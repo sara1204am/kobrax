@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import {
   AmortizationMethod,
@@ -25,6 +26,8 @@ import {
 } from '@kobrax/shared';
 import type { CatalogOption } from '@/components/client-form';
 import { Badge, Section } from '@/components/panel-ui';
+import { usePermissions } from '@/components/permissions';
+import { SituationBadge } from '@/components/situation-badge';
 import { CREDIT_STATUS_TONE, CreditProgress } from '@/components/credit-progress';
 import { PaymentPlanTable } from '@/components/payment-plan-table';
 import { date, dateTime, dayDate, money } from '@/lib/format';
@@ -51,6 +54,8 @@ export function CreditView({
 
   return (
     <>
+      <CollectionManagement credit={credit} />
+
       <Section title={t('sections.terms')}>
         {credit.terms ? (
           <TermsSummary credit={credit} terms={credit.terms} />
@@ -97,6 +102,40 @@ export function CreditView({
         <Origin credit={credit} />
       </Section>
     </>
+  );
+}
+
+/**
+ * «Gestión de cobranza» (F4/08 · D4): la misma ficha de /mora/{creditId} sirve para CUALQUIER crédito, esté
+ * al día o en mora (acciones preventivas). No se duplican componentes: esto sólo lleva a ella.
+ */
+function CollectionManagement({ credit }: { credit: CreditDetail }) {
+  const t = useTranslations('portfolio.creditDetail.management');
+  const { can } = usePermissions();
+  const days = credit.daysPastDue ?? 0;
+  // La situación se deriva de los días de mora de la ficha; el castigo es una condición aparte. La categoría
+  // no viene en el detalle del crédito (se calcula en la API): se ve en la ficha de mora.
+  const writtenOff = (credit as CreditDetail & { writtenOff?: boolean }).writtenOff === true || credit.status === 'WRITTEN_OFF';
+  if (!can('collection:read')) return null;
+  return (
+    <section
+      aria-label={t('title')}
+      className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-k-periwinkle bg-k-highlight p-5"
+    >
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-[15px] font-semibold text-k-text">{t('title')}</h2>
+          <SituationBadge situation={days > 0 ? 'IN_ARREARS' : 'CURRENT'} daysPastDue={days} writtenOff={writtenOff} inline />
+        </div>
+        <p className="mt-1 text-[13px] text-k-text-2">{t('hint')}</p>
+      </div>
+      <Link
+        href={`/mora/${credit.id}`}
+        className="rounded-xl bg-k-navy px-4 py-2.5 text-[14px] font-medium text-white hover:opacity-90"
+      >
+        {t('open')}
+      </Link>
+    </section>
   );
 }
 

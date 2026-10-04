@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { memberName, type CaseListItem, type Member, type RouteItem } from '@kobrax/shared';
+import { memberName, type Member, type RouteItem } from '@kobrax/shared';
 import { Card, InfoTip } from '@/components/panel-ui';
 import { Button, ErrorBanner } from '@/components/ui';
 import { FilterPanel } from '@/components/data-table-filters';
@@ -12,7 +12,7 @@ import { AvailableList } from '@/components/route-planner/available-list';
 import { MapPanel, type PlanArea } from '@/components/route-planner/map-panel';
 import { postJson } from '@/lib/client';
 import { money } from '@/lib/format';
-import { AVAILABLE_LIMIT, withinRadius } from '@/lib/plan';
+import { AVAILABLE_LIMIT, withinRadius, type AvailableCredit } from '@/lib/plan';
 import type { PlanRow } from '@/app/api/routes/plan/route';
 import { planFilterDefs, PLAN_FILTER_KEYS } from './plan-filters';
 
@@ -41,28 +41,30 @@ export function PlanScreen({
   routes,
   minStops,
   filtered,
+  categories,
 }: {
   day: string;
   today: string;
   collectors: Member[];
   collectorId: string;
-  available: CaseListItem[];
+  /** Créditos en mora que se pueden asignar (`id` = creditId). */
+  available: AvailableCredit[];
   /** Cuántos hay en total con esos filtros; la lista trae hasta `AVAILABLE_LIMIT`. */
   total: number;
   routes: RouteItem[];
   minStops: number;
   filtered: boolean;
+  /** Las categorías de mora de la cuenta, para el filtro. */
+  categories: { code: string; name: string }[];
 }) {
   const t = useTranslations('panel.routes.planning');
   const tFilters = useTranslations('panel.routes.planning.filters');
-  const tCases = useTranslations('panel.cases');
-  const tRoutes = useTranslations('panel.routes');
   const tTable = useTranslations('panel.table');
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
 
-  const filters = planFilterDefs(tFilters, tCases, tRoutes);
+  const filters = planFilterDefs(tFilters, categories);
   // El panel abre solo si ya hay un filtro puesto: si no, uno activo quedaría escondido y la lista
   // saldría corta sin que nada lo explique. Mismo criterio que el `DataTable`.
   const [panelOpen, setPanelOpen] = useState(filtered);
@@ -116,7 +118,7 @@ export function PlanScreen({
     setError(null);
     const { ok, data } = await postJson<{ rows: PlanRow[] }>('/api/routes/plan', {
       plannedDate: day,
-      assignments: [{ collectorId, caseIds: picked }],
+      assignments: [{ collectorId, creditIds: picked }],
     });
     setBusy(false);
     if (!ok) return setError(data.error?.message ?? t('error'));

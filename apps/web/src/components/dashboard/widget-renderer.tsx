@@ -35,7 +35,10 @@ export interface DashboardData {
   errors: Record<string, string | undefined>;
 }
 
-const KPI_KEYS = ['outstanding', 'overdue', 'overdueRate', 'activeCases', 'collected'] as const;
+const KPI_KEYS = ['outstanding', 'overdue', 'overdueRate', 'creditsInArrears', 'collected'] as const;
+
+/** F4/08: `activeCases` (casos activos) es el mismo número que `creditsInArrears`; los tableros ya guardados lo siguen usando. */
+const KPI_ALIASES: Record<string, (typeof KPI_KEYS)[number]> = { activeCases: 'creditsInArrears' };
 
 /**
  * Un widget, pintado.
@@ -72,12 +75,13 @@ export async function WidgetRenderer({
 
   switch (widget.type) {
     case 'kpi': {
-      const key = (KPI_KEYS as readonly string[]).includes(metric) ? (metric as (typeof KPI_KEYS)[number]) : 'outstanding';
+      const wanted = KPI_ALIASES[metric] ?? metric;
+      const key = (KPI_KEYS as readonly string[]).includes(wanted) ? (wanted as (typeof KPI_KEYS)[number]) : 'outstanding';
       const kpi: KpiValue | undefined = data.summary?.[key];
       const format =
-        key === 'overdueRate' ? percent : key === 'activeCases' ? (v: number) => v.toLocaleString('es-BO') : (v: number) => money(v, data.currency);
-      // D7: saldo, mora y recaudo llevan su desglose por fuente. La tasa y los casos no: una tasa
-      // partida no suma, y los casos no son plata de nadie.
+        key === 'overdueRate' ? percent : key === 'creditsInArrears' ? (v: number) => v.toLocaleString('es-BO') : (v: number) => money(v, data.currency);
+      // D7: saldo, mora y recaudo llevan su desglose por fuente. La tasa y los créditos en mora no: una tasa
+      // partida no suma, y los créditos en mora no son plata de nadie.
       const partKey = key === 'outstanding' || key === 'overdue' || key === 'collected' ? key : null;
       const parts = partKey
         ? data.summary?.bySource.map((s) => ({ label: t(`sources.${s.source}`), value: format(s[partKey]) }))

@@ -1,8 +1,8 @@
 'use client';
 
-import { CasePriority, CaseStatus, VisitOutcome } from '@kobrax/shared';
+import { COLLECTION_PRIORITIES } from '@kobrax/shared';
 import type { FilterDef } from '@/components/data-table-filters';
-import { DPD_RANGES, VISIT_AGES } from '@/lib/plan';
+import { DPD_RANGES } from '@/lib/plan';
 
 /**
  * Los filtros de la mora que se puede asignar, **en el mismo panel lateral que el resto del panel**.
@@ -16,10 +16,11 @@ import { DPD_RANGES, VISIT_AGES } from '@/lib/plan';
  */
 export function planFilterDefs(
   t: (key: string) => string,
-  /** Los rótulos de estado y prioridad, de donde vive ese dominio: Mora. */
-  tCases: (key: string) => string,
-  /** Los de resultado de visita, de la ficha de la ruta. Una segunda copia sería otra fuente de verdad. */
-  tRoutes: (key: string) => string,
+  /**
+   * Las categorías de mora que configuró la cuenta (`GET /arrear-categories`). Vacío = el filtro no se
+   * dibuja: no hay nada que elegir.
+   */
+  categories: { code: string; name: string }[] = [],
 ): FilterDef[] {
   return [
     {
@@ -50,13 +51,6 @@ export function planFilterDefs(
     { keys: ['zona'], label: t('zone'), type: 'text' },
     { keys: ['saldoMin', 'saldoMax'], label: t('balance'), type: 'numberRange' },
     {
-      keys: ['visita'],
-      label: t('lastVisit'),
-      type: 'select',
-      allLabel: t('any'),
-      options: VISIT_AGES.map((v) => ({ value: v, label: t(`visitAges.${v}`) })),
-    },
-    {
       keys: ['promesa'],
       label: t('promise'),
       type: 'radio',
@@ -66,32 +60,27 @@ export function planFilterDefs(
         { value: 'false', label: t('withoutPromise') },
       ],
     },
-    {
-      keys: ['estado'],
-      label: t('status'),
-      type: 'multiSelect',
-      // Plegado: siete estados, cuatro prioridades y diez resultados desplegados empujan fuera de
-      // la pantalla a los que se usan todos los días.
-      collapsed: true,
-      options: Object.values(CaseStatus).map((s) => ({ value: s, label: tCases(`status.${s}`) })),
-    },
+    // F4/08: la categoría de mora (A/B/C…, configurable) reemplaza al estado del caso.
+    ...(categories.length > 0
+      ? [
+          {
+            keys: ['categoria'],
+            label: t('category'),
+            type: 'multiSelect' as const,
+            // Plegado: las categorías y las prioridades desplegadas empujan fuera de la pantalla a
+            // los filtros que se usan todos los días.
+            collapsed: true,
+            options: categories.map((c) => ({ value: c.code, label: `${c.code} · ${c.name}` })),
+          },
+        ]
+      : []),
     {
       keys: ['prioridad'],
       label: t('priority'),
       type: 'multiSelect',
-      // Plegado: siete estados, cuatro prioridades y diez resultados desplegados empujan fuera de
-      // la pantalla a los que se usan todos los días.
+      // La prioridad es la del EPISODIO de mora abierto.
       collapsed: true,
-      options: Object.values(CasePriority).map((p) => ({ value: p, label: tCases(`priority.${p}`) })),
-    },
-    {
-      keys: ['resultado'],
-      label: t('outcome'),
-      type: 'multiSelect',
-      // Plegado: siete estados, cuatro prioridades y diez resultados desplegados empujan fuera de
-      // la pantalla a los que se usan todos los días.
-      collapsed: true,
-      options: Object.values(VisitOutcome).map((o) => ({ value: o, label: tRoutes(`outcome.${o}`) })),
+      options: COLLECTION_PRIORITIES.map((p) => ({ value: p, label: t(`priorities.${p}`) })),
     },
   ];
 }
@@ -104,10 +93,8 @@ export const PLAN_FILTER_KEYS = [
   'zona',
   'saldoMin',
   'saldoMax',
-  'visita',
   'promesa',
-  'estado',
+  'categoria',
   'prioridad',
-  'resultado',
   'q',
 ];

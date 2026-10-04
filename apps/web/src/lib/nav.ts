@@ -11,7 +11,7 @@ export type NavKey =
   | 'home'
   | 'portfolio'
   | 'import'
-  | 'cases'
+  | 'mora'
   | 'agenda'
   | 'routes'
   | 'payments'
@@ -49,7 +49,7 @@ export const NAV: NavItem[] = [
   { label: 'home', href: '/dashboard', permission: null, built: true },
   { label: 'portfolio', href: '/cartera', permission: Permission.CLIENT_READ, built: true },
   { label: 'import', href: '/import', permission: Permission.CLIENT_IMPORT, built: true },
-  { label: 'cases', href: '/mora', permission: Permission.CASE_READ, built: true },
+  { label: 'mora', href: '/mora', permission: Permission.COLLECTION_READ, built: true },
   { label: 'agenda', href: '/agenda', permission: Permission.AGENDA_READ, built: true },
   { label: 'routes', href: '/rutas', permission: Permission.ROUTE_READ, built: true },
   { label: 'payments', href: '/pagos', permission: Permission.PAYMENT_READ, built: true },
