@@ -94,4 +94,11 @@ export enum Permission {
    * impone la base: no depende de que la consulta se acuerde de filtrar.
    */
   DATA_SCOPE_ALL = 'data:scope:all',
+
+  /**
+   * F4/08 · D8: ve **todo lo de su agencia** (créditos cuya sucursal es la suya) más lo que tiene a su cargo.
+   * Es el alcance del supervisor. Si además tiene `DATA_SCOPE_ALL`, manda el total.
+   * Hoy ninguna policy de RLS lo lee: lo aplica `moraAccessConditions` (Mora y Agenda).
+   */
+  DATA_SCOPE_BRANCH = 'data:scope:branch',
 }

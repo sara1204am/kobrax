@@ -11,9 +11,13 @@
  */
 import type { CasePriority, CaseStatus } from '../enums/index.js';
 import type { ArrearsSource, ExternalSyncStatus } from '../enums/credit.enum.js';
+import type { CreditAssignmentKind, MoraSituation } from './sin-caso.types.js';
 
 /**
  * Cómo se puede ordenar `GET /mora`. La primera es el default.
+ *
+ * @deprecated `lastAction` y `slaDueAt` ya no ordenan nada (F4/08 · D2): la API las trata como clave
+ * desconocida (cae al default). Siguen en la tupla sólo para que web/móvil compilen hasta la fase 3/4.
  *
  * Sólo claves que Postgres puede ordenar sin calcular nada por fila: el monto vencido, la próxima
  * fecha y el inicio de mora viven en el JSON de `credits.metadata` o salen de las cuotas, así que
@@ -25,7 +29,10 @@ export type MoraSort = (typeof MORA_SORTS)[number];
 /** De dónde sale `overdueAmount`: del cronograma (propios) o de lo que reportó el archivo (importados). */
 export type OverdueSource = 'SCHEDULE' | 'REPORTED';
 
-/** El caso abierto que gestiona el crédito. Ausente = el crédito está en mora pero nadie abrió caso. */
+/**
+ * El caso abierto que gestiona el crédito.
+ * @deprecated F4/08: ya no existe el caso en la lista de mora; la API nunca lo llena. Se borra en la fase 6.
+ */
 export interface MoraCaseSummary {
   id: string;
   status: CaseStatus;
@@ -36,6 +43,21 @@ export interface MoraCaseSummary {
   slaDueAt?: string;
   isOverdue: boolean;
   lastActionAt?: string;
+}
+
+/** La categoría de mora de un crédito, tal como la configuró la cuenta. */
+export interface MoraCategoryTag {
+  code: string;
+  name: string;
+  color?: string;
+}
+
+/** Quién atiende el crédito además del responsable: reemplazo temporal o apoyo vigentes. */
+export interface MoraAssignment {
+  kind: CreditAssignmentKind;
+  userId: string;
+  /** ISO. Ausente = no vence por fecha. */
+  expiresAt?: string;
 }
 
 export interface MoraCreditListItem {
@@ -70,6 +92,8 @@ export interface MoraCreditListItem {
   externalSource?: string;
   syncStatus?: ExternalSyncStatus;
   reportedAsOf?: string;
+  /** `YYYY-MM-DD`: desde cuándo ya no aparece en el reporte (D9). Sólo con `syncStatus = ABSENT`. */
+  absentSince?: string;
   /** El corte tiene más días que el umbral del formato (D9). */
   reportedStale?: boolean;
   /** Etiqueta de estado que trajo el archivo. Opcional: sólo importados que la mapearon. */
@@ -78,8 +102,25 @@ export interface MoraCreditListItem {
   // ── Gestión ─────────────────────────────────────────────────────────────────
   branchId?: string;
   branchName?: string;
+  /** @deprecated F4/08: la API nunca lo llena (no hay caso). Usar `priority`, `responsibleId` y `lastActionAt`. */
   case?: MoraCaseSummary;
-  /** Resultado/tipo de la última gestión del caso abierto. */
+
+  // ── Modelo sin caso (F4/08) ─────────────────────────────────────────────────
+  /** Al día / En mora: se deriva del episodio de mora abierto. Nadie la edita. */
+  situation: MoraSituation;
+  /** Categoría de mora (A/B/C…): se CALCULA con los días y los rangos de la cuenta. Ausente = al día o la cuenta no tiene categorías. */
+  category?: MoraCategoryTag;
+  /** Castigado (`credits.written_off_at`): condición aparte; puede estar en mora y castigado. */
+  writtenOff: boolean;
+  /** Prioridad del episodio de mora ABIERTO. Ausente = al día. */
+  priority?: CasePriority;
+  /** La prioridad la fijó una persona (el recálculo no la pisa). */
+  priorityPinned: boolean;
+  /** El responsable del crédito (`credits.assigned_manager_id`). Ausente = sin responsable. */
+  responsibleId?: string;
+  /** Última gestión (`credits.last_action_at`), ISO. Sólo informativo: no es estado ni filtro. */
+  lastActionAt?: string;
+  /** Resultado/tipo de la última gestión del crédito. */
   lastActivityType?: string;
   lastActivityResult?: string;
   hasActivePromise: boolean;
@@ -101,6 +142,8 @@ export interface MoraActivityItem {
  */
 export interface MoraCreditDetail extends MoraCreditListItem {
   activities: MoraActivityItem[];
+  /** Las asignaciones vigentes del crédito: PRINCIPAL, TEMPORAL (con vencimiento) y APOYO. */
+  assignments: MoraAssignment[];
 }
 
 /** `GET /mora/by-case/:caseId`: a qué crédito pertenece un caso, para que los enlaces viejos sigan abriendo. */
