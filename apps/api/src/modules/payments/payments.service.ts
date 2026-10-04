@@ -54,7 +54,7 @@ export class PaymentsService {
 
   // ── Registro de pago (ledger inmutable) ──────────────────────────────────────
   async register(dto: CreatePaymentDto, idempotencyKey?: string) {
-    const { payment, replay, external } = await this.tx(async (tx) => {
+    const run = () => this.tx(async (tx) => {
       if (idempotencyKey) {
         const existing = await tx.payment.findFirst({ where: { idempotencyKey } });
         if (existing) return { payment: existing, replay: true, external: false }; // reintento → no duplica
@@ -62,6 +62,12 @@ export class PaymentsService {
       const { payment, external } = await this.applyCore(tx, { ...dto, idempotencyKey });
       return { payment, replay: false, external };
     });
+    // Dos envíos con la misma clave a la vez (el intento en vivo y la cola offline) pasan los dos el chequeo y uno
+    // choca con la unicidad (account_id, idempotency_key): su transacción se deshace y se repite UNA vez, y esta vez
+    // el chequeo encuentra el pago que registró el otro y responde igual que un reintento normal, no un 500/409.
+    const { payment, replay, external } = await run().catch((err: unknown) =>
+      idempotencyKey && isPaymentDuplicate(err) ? run() : Promise.reject(err),
+    );
 
     if (!replay) {
       // Qué se cobró, cuándo y por qué canal, y si fue sobre una operación externa: con esto y los
@@ -311,4 +317,9 @@ function assertPaymentDate(d: Date, now: Date = new Date()): void {
   if (now.getTime() - d.getTime() > PAYMENT_BACKDATE_DAYS * 86_400_000) {
     throw paymentInvalid(`La fecha del pago no puede ser de hace más de ${PAYMENT_BACKDATE_DAYS} días`);
   }
+}
+
+/** `insertPayment` traduce la violación de unicidad (P2002) a `PAYMENT_DUP`. */
+function isPaymentDuplicate(err: unknown): boolean {
+  return (err as { response?: { code?: string } } | null)?.response?.code === 'PAYMENT_DUP';
 }

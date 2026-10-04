@@ -50,6 +50,10 @@ interface Opts {
   credit?: Record<string, unknown> | null;
   /** `findOne`: filas de catálogo que resuelven los `code`s de una promesa. */
   catalogRows?: { code: string; label: string }[];
+  /** `complete`: la actividad que dejó la ejecución anterior (reintento). */
+  priorActivity?: { result: string } | null;
+  /** `create`: la 1ª alta choca con la PK (carrera); desde ahí `findFirst` devuelve este ítem. */
+  createRace?: Record<string, unknown>;
 }
 
 function makeService(opts: Opts = {}) {
@@ -69,6 +73,7 @@ function makeService(opts: Opts = {}) {
     updated: undefined as Record<string, unknown> | undefined,
     events: [] as string[],
   };
+  let raced = false;
   const first = <T>(list: T[] | undefined) => (list && list.length > 0 ? list[0] : null);
   const tx = {
     agendaItem: {
@@ -83,10 +88,15 @@ function makeService(opts: Opts = {}) {
       },
       findFirst: async (args: { where?: Record<string, unknown> }) => {
         calls.itemWhere = args.where;
+        if (opts.createRace) return raced ? opts.createRace : null;
         return opts.item ?? null;
       },
       count: async () => (opts.rows ?? []).length,
       create: async (args: { data: Record<string, unknown> }) => {
+        if (opts.createRace && !raced) {
+          raced = true;
+          throw Object.assign(new Error('unique'), { code: 'P2002' });
+        }
         // `created` sigue siendo la PRIMERA alta (lo que esperan los tests de S2); `createdAll`
         // guarda todas, porque la promesa además crea su recordatorio.
         calls.created ??= args.data;
@@ -99,6 +109,7 @@ function makeService(opts: Opts = {}) {
       },
     },
     caseActivity: {
+      findFirst: async () => opts.priorActivity ?? null,
       create: async (args: { data: Record<string, unknown> }) => {
         calls.activity = args.data;
         return { id: 'act-1', ...args.data };
@@ -795,5 +806,81 @@ describe('AgendaService.remove (S6 — eliminar)', () => {
     const { service, calls } = makeService({ item: null });
     await expectError(() => service.remove('a1'), 'AGENDA_NOT_FOUND');
     assert.equal(calls.itemWhere!.assigneeId, 'u1');
+  });
+});
+
+describe('AgendaService idempotente (cola offline)', () => {
+  const ID = '4f2504e0-4f89-41d3-9a0c-0305e82c3302';
+
+  it('create con id que ya existe (mismo crédito): devuelve el ítem, sin alta ni recordatorio ni audit', async () => {
+    const { service, calls } = makeService({ item: row({ id: ID, caseId: UUID, creditId: UUID }), cases: [openCase()] });
+    const r = await service.create(createDto({ id: ID, type: 'PROMISE_TO_PAY', scheduledDate: isoUTC(5), details: { amount: 100, promiseDate: isoUTC(5), paymentMethodCode: 'CASH' } }));
+    assert.equal(r.data!.id, ID);
+    assert.equal(calls.createdAll.length, 0);
+    assert.equal(calls.audits.length, 0);
+  });
+
+  it('el reintento NO falla por fecha pasada aunque el ítem se creó días atrás', async () => {
+    const { service, calls } = makeService({ item: row({ id: ID, caseId: UUID, creditId: UUID }) });
+    const r = await service.create(createDto({ id: ID, scheduledDate: isoUTC(-3) }));
+    assert.equal(r.data!.id, ID);
+    assert.equal(calls.createdAll.length, 0);
+  });
+
+  it('create con id de OTRO crédito: 409 AGENDA_009', async () => {
+    const { service } = makeService({ item: row({ id: ID, caseId: UUID, creditId: 'otro-credito' }) });
+    await expectError(() => service.create(createDto({ id: ID })), 'AGENDA_009');
+  });
+
+  it('create con id de un ítem eliminado: 409 AGENDA_009', async () => {
+    const { service } = makeService({ item: row({ id: ID, caseId: UUID, creditId: UUID, deletedAt: new Date() }) });
+    await expectError(() => service.create(createDto({ id: ID })), 'AGENDA_009');
+  });
+
+  it('create con id nuevo: lo usa como PK', async () => {
+    const { service, calls } = makeService({ cases: [openCase()], contacts: [{ id: CONTACT }] });
+    await service.create(createDto({ id: ID }));
+    assert.equal(calls.created!.id, ID);
+  });
+
+  it('carrera en create: reintenta una vez y devuelve el ganador, sin otra alta', async () => {
+    const { service, calls } = makeService({ cases: [openCase()], contacts: [{ id: CONTACT }], createRace: row({ id: ID, caseId: UUID, creditId: UUID }) });
+    const r = await service.create(createDto({ id: ID }));
+    assert.equal(r.data!.id, ID);
+    assert.equal(calls.createdAll.length, 0);
+  });
+
+  it('postpone con toTime: la hora QUEDA en toTime (idempotente), mismo día', async () => {
+    const a = makeService({ item: row({ status: 'SCHEDULED', scheduledDate: new Date('2026-07-12'), scheduledTime: '09:00' }) });
+    await a.service.postpone('a1', { toTime: '10:30' } as never);
+    assert.equal(a.calls.updated!.scheduledTime, '10:30');
+    assert.equal((a.calls.updated!.scheduledDate as Date).toISOString().slice(0, 10), '2026-07-12');
+    assert.equal(a.calls.updated!.timeMode, 'FIXED');
+    // Reenvío sobre el ítem ya movido: sigue en 10:30.
+    const b = makeService({ item: row({ status: 'SCHEDULED', scheduledDate: new Date('2026-07-12'), scheduledTime: '10:30' }) });
+    await b.service.postpone('a1', { toTime: '10:30' } as never);
+    assert.equal(b.calls.updated!.scheduledTime, '10:30');
+  });
+
+  it('postpone: toTime manda sobre minutes; sin ninguno → AGENDA_004', async () => {
+    const { service, calls } = makeService({ item: row({ status: 'SCHEDULED', scheduledTime: '09:00' }) });
+    await service.postpone('a1', { toTime: '11:00', minutes: 30 } as never);
+    assert.equal(calls.updated!.scheduledTime, '11:00');
+    await expectError(() => service.postpone('a1', {} as never), 'AGENDA_004');
+  });
+
+  it('complete ya EXECUTED con el MISMO resultado: devuelve lo hecho, sin otra actividad ni audit/evento', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'CALL', status: 'EXECUTED', resultActivityId: 'act-0' }), priorActivity: { result: 'CONTACTED' } });
+    const r = await service.complete('a1', { outcome: 'CONTACTED' } as never);
+    assert.equal(r.data!.status, 'EXECUTED');
+    assert.equal(calls.activity, undefined);
+    assert.equal(calls.updated, undefined);
+    assert.equal(calls.audits.length, 0);
+    assert.equal(calls.events.length, 0);
+  });
+
+  it('complete ya EXECUTED con OTRO resultado: sigue siendo 409 AGENDA_008', async () => {
+    const { service } = makeService({ item: row({ type: 'CALL', status: 'EXECUTED', resultActivityId: 'act-0' }), priorActivity: { result: 'NO_CONTACT' } });
+    await expectError(() => service.complete('a1', { outcome: 'CONTACTED' } as never), 'AGENDA_008');
   });
 });

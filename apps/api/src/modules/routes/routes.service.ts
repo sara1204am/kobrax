@@ -7,6 +7,7 @@ import { TenantContextService } from '../../common/context/tenant-context.servic
 import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
+import { isUniqueViolation } from '../../common/unique-violation';
 import { serializeRoute, serializeStop } from './routes.serializer';
 import type { RoutePdfContext } from './route-pdf';
 import { OsrmService, type OsrmRoute, type OsrmTrip } from './osrm.service';
@@ -17,6 +18,7 @@ import {
   resourceNotFound,
   routeAlreadyForDay,
   routeForbidden,
+  routeIdTaken,
   stopDuplicate,
   stopNotPending,
 } from './routes.errors';
@@ -150,15 +152,40 @@ export class RoutesService {
     });
   }
 
+  /**
+   * Reintento de la cola offline: la ruta ya entró con ese `id`. Se devuelve la guardada (antes de la guarda de
+   * «ya hay ruta ese día», que si no tomaría el reintento por un duplicado). Un id que es de otro cobrador es un
+   * conflicto, no una ruta nueva.
+   */
+  private async existingById(tx: PrismaClient, id: string | undefined, collectorId: string) {
+    if (!id) return null;
+    const prev = await tx.routePlan.findFirst({ where: { id }, include: { stops: { orderBy: { sequenceOrder: 'asc' } } } });
+    if (!prev) return null;
+    if (prev.collectorId !== collectorId) throw routeIdTaken();
+    return prev;
+  }
+
   /** Mismo modelo de capacidades que `generate`: el ejecutor de campo sólo crea rutas para sí mismo. */
   async create(dto: CreateRouteDto): Promise<ReturnType<typeof serializeRoute>> {
     const collectorId = this.collectorFor(dto.collectorId, 'crear rutas');
-    const route = await this.tx(async (tx) => {
+    // Dos envíos con el mismo id a la vez pasan los dos el chequeo y uno choca con la PK: se repite UNA vez.
+    const { route, replay } = await this.createOnce(dto, collectorId).catch((err: unknown) =>
+      dto.id && isUniqueViolation(err) ? this.createOnce(dto, collectorId) : Promise.reject(err),
+    );
+    if (!replay) await this.audit.record({ entity: 'route', entityId: route.id, action: 'CREATE', after: { collectorId: route.collectorId } });
+    return serializeRoute(route);
+  }
+
+  private createOnce(dto: CreateRouteDto, collectorId: string) {
+    return this.tx(async (tx) => {
+      const prev = await this.existingById(tx, dto.id, collectorId);
+      if (prev) return { route: prev, replay: true };
       await this.assertCollector(tx, collectorId);
       const already = await this.routeOfDay(tx, collectorId, new Date(dto.plannedDate));
       if (already) throw routeAlreadyForDay(already.id);
-      return tx.routePlan.create({
+      const created = await tx.routePlan.create({
         data: {
+          ...(dto.id ? { id: dto.id } : {}),
           accountId: this.tenant.accountId,
           collectorId,
           branchId: dto.branchId,
@@ -166,9 +193,8 @@ export class RoutesService {
           status: RouteStatus.PLANNED,
         },
       });
+      return { route: created, replay: false };
     });
-    await this.audit.record({ entity: 'route', entityId: route.id, action: 'CREATE', after: { collectorId: route.collectorId } });
-    return serializeRoute(route);
   }
 
   /**
@@ -180,8 +206,18 @@ export class RoutesService {
    */
   async generate(dto: GenerateRouteDto): Promise<ReturnType<typeof serializeRoute>> {
     const collectorId = this.collectorFor(dto.collectorId, 'generar rutas');
+    const { route, replay } = await this.generateOnce(dto, collectorId).catch((err: unknown) =>
+      dto.id && isUniqueViolation(err) ? this.generateOnce(dto, collectorId) : Promise.reject(err),
+    );
+    // Un reintento no vuelve a auditar ni a crear paradas: devuelve la ruta que ya está.
+    if (!replay) await this.audit.record({ entity: 'route', entityId: route.id, action: 'GENERATE', after: { collectorId: route.collectorId, totalCases: route.totalCases } });
+    return serializeRoute(route);
+  }
 
-    const route = await this.tx(async (tx) => {
+  private generateOnce(dto: GenerateRouteDto, collectorId: string) {
+    return this.tx(async (tx) => {
+      const prev = await this.existingById(tx, dto.id, collectorId);
+      if (prev) return { route: prev, replay: true };
       await this.assertCollector(tx, collectorId);
       const already = await this.routeOfDay(tx, collectorId, new Date(dto.plannedDate));
       if (already) throw routeAlreadyForDay(already.id);
@@ -206,6 +242,7 @@ export class RoutesService {
 
       const created = await tx.routePlan.create({
         data: {
+          ...(dto.id ? { id: dto.id } : {}),
           accountId: this.tenant.accountId,
           collectorId,
           branchId: dto.branchId,
@@ -224,10 +261,8 @@ export class RoutesService {
         },
         include: { stops: { orderBy: { sequenceOrder: 'asc' } } },
       });
-      return created;
+      return { route: created, replay: false };
     });
-    await this.audit.record({ entity: 'route', entityId: route.id, action: 'GENERATE', after: { collectorId: route.collectorId, totalCases: route.totalCases } });
-    return serializeRoute(route);
   }
 
   /**

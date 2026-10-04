@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 
 export const resourceNotFound = () =>
   new NotFoundException({ code: 'RESOURCE_NOT_FOUND', message: 'Recurso no encontrado' });
@@ -18,3 +18,7 @@ export const invalidVisitDetails = (errors: string[]) =>
 /** El hash declarado de la evidencia no coincide con el contenido (integridad). */
 export const evidenceHashInvalid = () =>
   new UnprocessableEntityException({ code: 'EVIDENCE_001', message: 'El hash de la evidencia no coincide con el contenido' });
+
+/** El `id` de la visita que mandó el cliente ya es de otra visita (otro caso, parada o cobrador). */
+export const visitIdTaken = () =>
+  new ConflictException({ code: 'VISIT_ID', message: 'Ese id de visita ya pertenece a otra visita' });

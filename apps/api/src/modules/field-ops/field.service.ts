@@ -18,7 +18,8 @@ import {
 import { isValidGps, verifyEvidenceHash } from './field-integrity';
 import { serializeVisit, serializeVisitDetail } from './field.serializer';
 import { AddEvidenceDto, CreateVisitDto, ListVisitsQueryDto } from './dto/field.dto';
-import { evidenceHashInvalid, invalidGps, invalidVisitDetails, resourceNotFound, visitNeedsTarget } from './field.errors';
+import { isUniqueViolation } from '../../common/unique-violation';
+import { evidenceHashInvalid, invalidGps, invalidVisitDetails, resourceNotFound, visitIdTaken, visitNeedsTarget } from './field.errors';
 
 @Injectable()
 export class FieldService {
@@ -142,6 +143,22 @@ export class FieldService {
 
   /** Registra una visita de campo (append-only). GPS obligatorio. */
   async createVisit(dto: CreateVisitDto) {
+    // Idempotente por `id` (cola offline del móvil). Dos envíos a la vez pasan los dos el chequeo y uno choca con la
+    // PK: se repite UNA vez y esta vez el chequeo encuentra la visita que guardó el otro.
+    const { visit, replay } = await this.createVisitOnce(dto).catch((err: unknown) =>
+      dto.id && isUniqueViolation(err) ? this.createVisitOnce(dto) : Promise.reject(err),
+    );
+    const out = { id: visit.id, outcome: visit.outcome, capturedAt: visit.capturedAt };
+    // Reintento: la visita ya estaba. Misma forma de respuesta, sin ubicación nueva, sin conteo de plan.
+    if (replay) return out;
+
+    const collectorId = this.tenant.userId!;
+    this.events.emit('collector.location', { collectorId, lat: dto.lat, lng: dto.lng, accountId: this.tenant.accountId });
+    this.warnPlanUsage('actionsPerMonth');
+    return out;
+  }
+
+  private async createVisitOnce(dto: CreateVisitDto) {
     if (!dto.caseId && !dto.routeStopId) throw visitNeedsTarget();
     if (!isValidGps(dto.lat, dto.lng)) throw invalidGps();
 
@@ -151,7 +168,15 @@ export class FieldService {
     if (!validated.ok) throw invalidVisitDetails(validated.errors);
 
     const collectorId = this.tenant.userId!;
-    const visit = await this.tx(async (tx) => {
+    return this.tx(async (tx) => {
+      if (dto.id) {
+        const prev = await tx.fieldVisit.findFirst({ where: { id: dto.id } });
+        if (prev) {
+          const same = (prev.caseId ?? null) === (dto.caseId ?? null) && (prev.routeStopId ?? null) === (dto.routeStopId ?? null) && prev.collectorId === collectorId;
+          if (!same) throw visitIdTaken();
+          return { visit: prev, replay: true };
+        }
+      }
       if (dto.caseId) {
         const c = await tx.collectionCase.findFirst({ where: { id: dto.caseId, deletedAt: null }, select: { id: true } });
         if (!c) throw resourceNotFound();
@@ -186,6 +211,7 @@ export class FieldService {
 
       const created = await tx.fieldVisit.create({
         data: {
+          ...(dto.id ? { id: dto.id } : {}),
           accountId: this.tenant.accountId,
           caseId: dto.caseId,
           routeStopId: dto.routeStopId,
@@ -214,12 +240,8 @@ export class FieldService {
       }
       // Última ubicación conocida del cobrador (users es global, sin RLS).
       await tx.user.update({ where: { id: collectorId }, data: { lastKnownLat: dto.lat, lastKnownLng: dto.lng, lastLocationAt: new Date() } });
-      return created;
+      return { visit: created, replay: false };
     });
-
-    this.events.emit('collector.location', { collectorId, lat: dto.lat, lng: dto.lng, accountId: this.tenant.accountId });
-    this.warnPlanUsage('actionsPerMonth');
-    return { id: visit.id, outcome: visit.outcome, capturedAt: visit.capturedAt };
   }
 
   /** Añade evidencia sellada a una visita (inmutable). Verifica el hash SHA-256 si llega el contenido. */

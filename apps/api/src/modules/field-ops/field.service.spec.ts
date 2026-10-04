@@ -11,11 +11,17 @@ function makeService(
     category?: unknown;
     permissions?: string[];
     listRows?: Record<string, unknown>[];
+    /** createVisit: visita que ya existe con el id del cliente (reintento). */
+    priorVisit?: Record<string, unknown> | null;
+    /** createVisit: la 1ª creación choca con la PK y la 2ª encuentra al ganador. */
+    visitRace?: boolean;
   } = {},
 ) {
+  let raced = false;
   const calls = {
     visitCreate: [] as Record<string, unknown>[],
     stopUpdate: 0,
+    activities: 0,
     evidence: [] as Record<string, unknown>[],
     events: [] as string[],
     audit: [] as { entity: string; action: string }[],
@@ -26,10 +32,15 @@ function makeService(
   const tx = {
     collectionCase: { findFirst: async () => opts.case ?? { id: 'c1' }, update: async () => ({}) },
     routeStop: { findFirst: async () => opts.stop ?? { id: 's1' }, update: async () => { calls.stopUpdate += 1; return {}; } },
-    caseActivity: { create: async () => ({}) },
+    caseActivity: { create: async () => { calls.activities += 1; return {}; } },
     user: { update: async () => ({}) },
     fieldVisit: {
-      findFirst: async () => opts.visit ?? { id: 'v1', latitude: -16.5, longitude: -68.15 },
+      findFirst: async (args?: { where?: { id?: string } }) => {
+        // `createVisit` con id pregunta por ESE id; el resto de las lecturas piden la visita de siempre.
+        if (opts.visitRace && args?.where?.id === 'dup-id') return raced ? opts.priorVisit : null;
+        if (args?.where?.id === 'dup-id' || args?.where?.id === 'new-id') return opts.priorVisit ?? null;
+        return opts.visit ?? { id: 'v1', latitude: -16.5, longitude: -68.15 };
+      },
       findMany: async (args: { where?: Record<string, unknown>; orderBy?: Record<string, unknown>[] }) => {
         calls.listWhere = args.where;
         calls.listOrderBy = args.orderBy;
@@ -37,6 +48,10 @@ function makeService(
       },
       count: async () => opts.listRows?.length ?? 0,
       create: async (args: { data: Record<string, unknown> }) => {
+        if (opts.visitRace && !raced) {
+          raced = true;
+          throw Object.assign(new Error('unique'), { code: 'P2002' });
+        }
         calls.visitCreate.push(args.data);
         return { id: 'v1', ...args.data };
       },
@@ -305,5 +320,48 @@ describe('FieldService.createVisit · details por variante', () => {
     const { service, calls } = makeService({ stop });
     await service.createVisit({ routeStopId: 's1', lat: -16.500012, lng: -68.150004, outcome: 'PAID' } as never);
     assert.deepEqual(calls.visitCreate[0]!.details, {});
+  });
+});
+
+describe('FieldService.createVisit idempotente por id (cola offline)', () => {
+  const BASE = { caseId: 'c1', lat: -16.5, lng: -68.15, outcome: 'CONTACTED' };
+  const prior = { id: 'dup-id', caseId: 'c1', routeStopId: null, collectorId: 'collector-1', outcome: 'CONTACTED', capturedAt: new Date('2026-08-01T10:00:00Z') };
+
+  it('id ya existente (mismo caso y cobrador): misma forma de respuesta, sin visita/actividad/ubicación/plan', async () => {
+    const { service, calls } = makeService({ priorVisit: prior });
+    const r = await service.createVisit({ ...BASE, id: 'dup-id' } as never);
+    assert.deepEqual(r, { id: 'dup-id', outcome: 'CONTACTED', capturedAt: prior.capturedAt });
+    assert.equal(calls.visitCreate.length, 0);
+    assert.equal(calls.activities, 0);
+    assert.equal(calls.stopUpdate, 0);
+    assert.equal(calls.events.length, 0);
+    assert.equal(calls.alerts.length, 0);
+  });
+
+  it('id de otro caso: 409 VISIT_ID', async () => {
+    const { service, calls } = makeService({ priorVisit: { ...prior, caseId: 'otro' } });
+    await rejectsWithCode(service.createVisit({ ...BASE, id: 'dup-id' } as never), 'VISIT_ID');
+    assert.equal(calls.visitCreate.length, 0);
+  });
+
+  it('id de otra parada de ruta: 409 VISIT_ID', async () => {
+    const { service } = makeService({ priorVisit: { ...prior, caseId: null, routeStopId: 'sX' } });
+    await rejectsWithCode(service.createVisit({ lat: -16.5, lng: -68.15, outcome: 'CONTACTED', routeStopId: 's1', id: 'dup-id' } as never), 'VISIT_ID');
+  });
+
+  it('id nuevo: crea la visita con ESE id', async () => {
+    const { service, calls } = makeService();
+    await service.createVisit({ ...BASE, id: 'new-id' } as never);
+    assert.equal(calls.visitCreate[0]!.id, 'new-id');
+    assert.equal(calls.activities, 1);
+  });
+
+  it('carrera: reintenta una vez y devuelve la ganadora sin duplicar efectos', async () => {
+    const { service, calls } = makeService({ visitRace: true, priorVisit: prior });
+    const r = await service.createVisit({ ...BASE, id: 'dup-id' } as never);
+    assert.equal(r.id, 'dup-id');
+    assert.equal(calls.visitCreate.length, 0);
+    assert.equal(calls.activities, 0);
+    assert.equal(calls.events.length, 0);
   });
 });

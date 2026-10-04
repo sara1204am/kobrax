@@ -32,3 +32,7 @@ export const agendaInvalidOutcome = () =>
 /** La gestión ya fue ejecutada (o cancelada): no se puede volver a registrar ni posponer. */
 export const agendaNotSchedulable = () =>
   new ConflictException({ code: 'AGENDA_008', message: 'La gestión ya no está pendiente' });
+
+/** El `id` que mandó el cliente ya es de otra gestión (otro crédito/caso, o una eliminada). */
+export const agendaIdTaken = () =>
+  new ConflictException({ code: 'AGENDA_009', message: 'Ese id de gestión ya pertenece a otra gestión agendada' });

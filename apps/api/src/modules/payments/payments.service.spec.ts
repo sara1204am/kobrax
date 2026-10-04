@@ -16,7 +16,8 @@ function activeCredit(balance = 200) {
   };
 }
 
-function makeService(opts: { credit?: unknown; idempotentExisting?: unknown; maxReceipt?: number } = {}) {
+function makeService(opts: { credit?: unknown; idempotentExisting?: unknown; maxReceipt?: number; uniqueRace?: boolean } = {}) {
+  let raced = false;
   const calls = {
     create: [] as Record<string, unknown>[],
     creditUpdate: [] as Record<string, unknown>[],
@@ -32,9 +33,13 @@ function makeService(opts: { credit?: unknown; idempotentExisting?: unknown; max
       },
     },
     payment: {
-      findFirst: async () => opts.idempotentExisting ?? null,
+      findFirst: async () => (opts.uniqueRace ? (raced ? opts.idempotentExisting : null) : opts.idempotentExisting ?? null),
       aggregate: async () => ({ _max: { receiptNumber: opts.maxReceipt ?? 0 } }),
       create: async (args: { data: Record<string, unknown> }) => {
+        if (opts.uniqueRace && !raced) {
+          raced = true;
+          throw Object.assign(new Error('unique'), { code: 'P2002' });
+        }
         calls.create.push(args.data);
         return { id: 'pay1', ...args.data };
       },
@@ -299,5 +304,24 @@ describe('PaymentsService.list — el orden', () => {
     const { service, calls } = makeLister();
     await service.list({ sort: 'method' });
     assert.deepEqual(calls.orderBy, { method: 'desc' });
+  });
+});
+
+describe('PaymentsService.register — carrera por idempotency_key', () => {
+  const existing = { id: 'pay-winner', creditId: 'cr1', amount: 100, method: 'CASH', idempotencyKey: 'k1', paymentDate: new Date('2026-08-01') };
+
+  it('la violación de (account_id, idempotency_key) devuelve el pago existente como un reintento normal', async () => {
+    const { service, calls } = makeService({ uniqueRace: true, idempotentExisting: existing });
+    const r = await service.register({ ...PAY, amount: 100 }, 'k1');
+    assert.equal(r.id, 'pay-winner');
+    assert.equal(r.idempotentReplay, true);
+    assert.equal(calls.create.length, 0);
+    assert.deepEqual(calls.audit, []);
+    assert.deepEqual(calls.events, []);
+  });
+
+  it('sin clave, la violación sigue siendo PAYMENT_DUP (no se reintenta)', async () => {
+    const { service } = makeService({ uniqueRace: true });
+    await rejectsWithCode(service.register({ ...PAY, amount: 100 }), 'PAYMENT_DUP');
   });
 });

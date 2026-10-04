@@ -25,6 +25,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { ClientsService } from '../clients/clients.service';
 import { UpdateLocationDto } from '../clients/dto/client.dto';
+import { isUniqueViolation } from '../../common/unique-violation';
 import { serializeAgendaItem } from './agenda.serializer';
 import { recommendedSlot, type ContactHint } from './recommended-slot';
 import {
@@ -42,6 +43,7 @@ import {
   agendaCaseNotFound,
   agendaClientWithoutCases,
   agendaInvalidDetails,
+  agendaIdTaken,
   agendaInvalidOutcome,
   agendaInvalidReference,
   agendaInvalidTimeMode,
@@ -249,9 +251,18 @@ export class AgendaService {
    * del **caso** (eso es de F5): registrar la gestión y cobrar son cosas distintas.
    */
   async complete(id: string, dto: CompleteAgendaItemDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
-    const { updated, clientName } = await this.tx(async (tx) => {
+    const { updated, clientName, replay } = await this.tx(async (tx) => {
       const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...this.assigneeScope() } });
       if (!item) throw agendaItemNotFound();
+      // Reintento de la cola offline: ya se ejecutó con ESE mismo resultado → se responde lo hecho, sin otra
+      // actividad. Con otro resultado sigue siendo un conflicto.
+      if (item.status === AgendaItemStatus.EXECUTED && item.resultActivityId) {
+        const done = await tx.caseActivity.findFirst({ where: { id: item.resultActivityId }, select: { result: true } });
+        if (done?.result === dto.outcome) {
+          const names = await this.clientNames(tx, [item.clientId]);
+          return { updated: item, clientName: names.get(item.clientId), replay: true };
+        }
+      }
       if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
       if (!AGENDA_OUTCOMES_BY_TYPE[item.type].includes(dto.outcome)) throw agendaInvalidOutcome();
 
@@ -271,9 +282,10 @@ export class AgendaService {
         data: { status: AgendaItemStatus.EXECUTED, resultActivityId: activity.id, updatedBy: this.tenant.userId },
       });
       const names = await this.clientNames(tx, [updated.clientId]);
-      return { updated, clientName: names.get(updated.clientId) };
+      return { updated, clientName: names.get(updated.clientId), replay: false };
     });
 
+    if (replay) return ResponseDto.ok(await this.view(updated, clientName));
     await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'EXECUTE', after: updated });
     this.events.emit(DomainEvent.CASE_UPDATED, { caseId: updated.caseId, accountId: this.tenant.accountId, activity: ACTIVITY_TYPE_BY_AGENDA[updated.type] });
     return ResponseDto.ok(await this.view(updated, clientName));
@@ -295,7 +307,17 @@ export class AgendaService {
       if (!item) throw agendaItemNotFound();
       if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
 
-      const { dayShift, time } = shiftWallClock(baseMinutes(item), dto.minutes);
+      // `toTime` es absoluta: la hora QUEDA en ese valor, así que repetir el envío no la corre otra vez. `minutes`
+      // (relativa) se mantiene para los clientes viejos.
+      let dayShift = 0;
+      let time: string;
+      if (dto.toTime) {
+        time = dto.toTime;
+      } else if (dto.minutes !== undefined) {
+        ({ dayShift, time } = shiftWallClock(baseMinutes(item), dto.minutes));
+      } else {
+        throw agendaInvalidTimeMode('Indicá la nueva hora (toTime) o los minutos a posponer');
+      }
       const updated = await tx.agendaItem.update({
         where: { id },
         data: {
@@ -502,6 +524,25 @@ export class AgendaService {
 
   /** Alta de una gestión agendada (S2). Devuelve el ítem serializado → el móvil inserta sin refetch. */
   async create(dto: CreateAgendaItemDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
+    // Idempotente por `id` (cola offline del móvil). Dos envíos a la vez pasan los dos el chequeo y uno choca con la
+    // PK: se repite UNA vez y esta vez el chequeo encuentra el que guardó el otro.
+    return this.createOnce(dto).catch((err: unknown) => (dto.id && isUniqueViolation(err) ? this.createOnce(dto) : Promise.reject(err)));
+  }
+
+  private async createOnce(dto: CreateAgendaItemDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
+    // Reintento: ya entró con ese id. Se responde lo guardado ANTES de validar la fecha (un reintento días después
+    // de haberse creado offline no puede fallar por «fecha pasada») y sin crear otro recordatorio ni otra auditoría.
+    if (dto.id) {
+      const prev = await this.tx(async (tx) => {
+        const item = await tx.agendaItem.findFirst({ where: { id: dto.id } });
+        if (!item) return null;
+        if (item.deletedAt || item.creditId !== dto.creditId || item.caseId !== dto.caseId) throw agendaIdTaken();
+        const names = await this.clientNames(tx, [item.clientId]);
+        return { item, clientName: names.get(item.clientId) };
+      });
+      if (prev) return ResponseDto.ok(await this.view(prev.item, prev.clientName));
+    }
+
     const validated = validateAgendaDetails(dto.type, dto.details);
     if (!validated.ok) throw agendaInvalidDetails(validated.errors);
 
@@ -521,6 +562,7 @@ export class AgendaService {
 
       const created = await tx.agendaItem.create({
         data: {
+          ...(dto.id ? { id: dto.id } : {}),
           accountId: this.tenant.accountId,
           caseId: found.id,
           clientId: found.clientId,

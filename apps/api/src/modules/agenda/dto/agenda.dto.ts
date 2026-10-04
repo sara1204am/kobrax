@@ -58,6 +58,8 @@ export class ListOverdueQueryDto {
  * token) — nunca del body. `details` se valida contra el `type` con `validateAgendaDetails`.
  */
 export class CreateAgendaItemDto {
+  /** Opcional: lo genera el móvil para que reintentar (cola offline) no duplique la gestión ni su recordatorio. */
+  @IsOptional() @IsUUID() id?: string;
   @IsUUID() caseId!: string;
   @IsUUID() creditId!: string;
 
@@ -135,7 +137,12 @@ export class CompleteAgendaItemDto {
 
 /** Posponer una gestión en pasos fijos (Figma: +15 / +30 / +1h). */
 export class PostponeAgendaItemDto {
-  @Type(() => Number) @IsIn(AGENDA_POSTPONE_STEPS as unknown as number[]) minutes!: number;
+  /** Relativa (clientes viejos). No es idempotente: cada envío corre la hora otro tanto. */
+  @IsOptional() @Type(() => Number) @IsIn(AGENDA_POSTPONE_STEPS as unknown as number[]) minutes?: number;
+
+  /** Absoluta `HH:mm` (idempotente: la gestión QUEDA a esa hora). Si vienen las dos, manda esta. */
+  @IsOptional() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'toTime debe tener formato HH:mm' })
+  toTime?: string;
 }
 
 /**

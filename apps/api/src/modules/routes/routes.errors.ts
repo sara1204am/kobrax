@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 
 export const resourceNotFound = () =>
   new NotFoundException({ code: 'RESOURCE_NOT_FOUND', message: 'Recurso no encontrado' });
@@ -37,3 +37,7 @@ export const noStopsToRoute = () =>
     code: 'ROUTE_EMPTY',
     message: 'No tenés casos abiertos para armar la ruta de hoy',
   });
+
+/** El `id` de la ruta que mandó el cliente ya es de la ruta de otro cobrador. */
+export const routeIdTaken = () =>
+  new ConflictException({ code: 'ROUTE_ID', message: 'Ese id de ruta ya pertenece a otra ruta' });

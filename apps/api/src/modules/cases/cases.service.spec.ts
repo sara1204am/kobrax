@@ -14,6 +14,10 @@ function makeService(opts: {
   listRows?: Record<string, unknown>[];
   portfolioClients?: Record<string, unknown>[];
   portfolioPromises?: { clientId: string }[];
+  /** Gestión que ya existe con el id que manda el cliente (reintento). */
+  priorActivity?: Record<string, unknown> | null;
+  /** La 1ª creación de gestión choca con la unicidad (carrera) y la 2ª la encuentra. */
+  activityRace?: boolean;
 } = {}) {
   const calls = {
     create: [] as Record<string, unknown>[],
@@ -25,6 +29,7 @@ function makeService(opts: {
     listWhere: undefined as Record<string, unknown> | undefined,
     listOrderBy: undefined as Record<string, unknown>[] | undefined,
   };
+  let raced = false;
   const tx = {
     account: { findUnique: async () => ({ configuration: {} }) },
     credit: {
@@ -69,7 +74,15 @@ function makeService(opts: {
       count: async () => 0,
     },
     caseActivity: {
+      findFirst: async () => {
+        if (opts.activityRace && raced) return { id: 'act-winner', type: 'CALL', caseId: 'case1', createdAt: new Date() };
+        return opts.priorActivity ?? null;
+      },
       create: async (args: { data: Record<string, unknown> }) => {
+        if (opts.activityRace && !raced) {
+          raced = true;
+          throw Object.assign(new Error('unique'), { code: 'P2002' });
+        }
         calls.activity.push(args.data);
         return { id: 'act1', createdAt: new Date(), ...args.data };
       },
@@ -457,6 +470,49 @@ describe('CasesService.addActivity (gestión + promesa §5.4)', () => {
   it('404 si el caso no existe / es de otro tenant', async () => {
     const { service } = makeService({ caseRow: null });
     await rejectsWithCode(service.addActivity('case1', { type: 'NOTE' } as never), 'RESOURCE_NOT_FOUND');
+  });
+});
+
+describe('CasesService.addActivity idempotente por id (cola offline)', () => {
+  const CASE = { id: 'case1', status: 'ACTIVE', clientId: 'cl1', creditId: 'cr1' };
+  const ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+  const PROMISE = { amount: 300, promiseDate: '2026-08-01', paymentMethodCode: 'CASH' };
+
+  it('el id ya existe en ese caso: devuelve lo guardado SIN otra promesa, otra bump ni evento/audit', async () => {
+    const prior = { id: ID, type: 'NOTE', caseId: 'case1', createdAt: new Date('2026-07-01') };
+    const { service, calls } = makeService({ caseRow: CASE as never, priorActivity: prior });
+    const r = await service.addActivity('case1', { id: ID, type: 'NOTE', result: 'PROMISE_TO_PAY', promise: PROMISE } as never);
+    assert.equal(r.id, ID);
+    assert.equal(calls.activity.length, 0);
+    assert.equal(calls.agenda.length, 0);
+    assert.equal(calls.update.length, 0);
+    assert.equal(calls.audit.length, 0);
+    assert.equal(calls.events.length, 0);
+  });
+
+  it('el id es de OTRO caso: 409 CASE_ACTIVITY_ID, sin escribir', async () => {
+    const { service, calls } = makeService({ caseRow: CASE as never, priorActivity: { id: ID, type: 'NOTE', caseId: 'otro', createdAt: new Date() } });
+    await rejectsWithCode(service.addActivity('case1', { id: ID, type: 'NOTE' } as never), 'CASE_ACTIVITY_ID');
+    assert.equal(calls.activity.length, 0);
+  });
+
+  it('id nuevo: crea la gestión con ESE id', async () => {
+    const { service, calls } = makeService({ caseRow: CASE as never });
+    await service.addActivity('case1', { id: ID, type: 'CALL' } as never);
+    assert.equal(calls.activity[0]!.id, ID);
+  });
+
+  it('carrera (violación de unicidad): reintenta una vez y devuelve la ganadora, sin segunda promesa', async () => {
+    const { service, calls } = makeService({ caseRow: CASE as never, activityRace: true });
+    const r = await service.addActivity('case1', { id: ID, type: 'CALL', promise: PROMISE } as never);
+    assert.equal(r.id, 'act-winner');
+    assert.equal(calls.agenda.length, 0);
+    assert.equal(calls.audit.length, 0);
+  });
+
+  it('sin id, una violación de unicidad NO se reintenta', async () => {
+    const { service } = makeService({ caseRow: CASE as never, activityRace: true });
+    await assert.rejects(service.addActivity('case1', { type: 'CALL' } as never), (e: { code?: string }) => e.code === 'P2002');
   });
 });
 

@@ -30,6 +30,7 @@ import { TenantContextModule } from './common/context/tenant-context.module';
 import { AuditModule } from './common/audit/audit.module';
 import { EventBusModule } from './common/events/event-bus.module';
 import { RateLimitGuard } from './common/guards/rate-limit.guard';
+import { AppVersionGuard } from './common/guards/app-version.guard';
 
 @Module({
   imports: [
@@ -66,6 +67,10 @@ import { RateLimitGuard } from './common/guards/rate-limit.guard';
     BackupModule,
   ],
   // Rate limiting de borde para toda la API (los endpoints sensibles lo endurecen con @RateLimit).
-  providers: [{ provide: APP_GUARD, useClass: RateLimitGuard }],
+  // Corte de versiones de la app móvil (MIN_APP_VERSION): apagado si la variable no está.
+  providers: [
+    { provide: APP_GUARD, useClass: RateLimitGuard },
+    { provide: APP_GUARD, useClass: AppVersionGuard },
+  ],
 })
 export class AppModule {}

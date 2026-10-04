@@ -16,6 +16,8 @@ import {
 import { EvidenceType, VisitOutcome } from '@prisma/client';
 
 export class CreateVisitDto {
+  /** Opcional: lo genera el móvil para que reintentar (cola offline) no duplique la visita ni su gestión. */
+  @IsOptional() @IsUUID() id?: string;
   @IsOptional() @IsUUID() caseId?: string;
   @IsOptional() @IsUUID() routeStopId?: string;
   @Type(() => Number) @IsNumber() lat!: number;

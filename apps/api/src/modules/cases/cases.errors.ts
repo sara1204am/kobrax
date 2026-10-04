@@ -25,3 +25,7 @@ export const caseDuplicate = () =>
 /** El colector indicado no pertenece al tenant / no es válido para asignar. */
 export const invalidAssignee = () =>
   new UnprocessableEntityException({ code: 'CASE_ASSIGNEE', message: 'No hay un colector válido para asignar' });
+
+/** El `id` de la gestión que mandó el cliente ya es de otro caso. */
+export const activityIdTaken = () =>
+  new ConflictException({ code: 'CASE_ACTIVITY_ID', message: 'Ese id de gestión ya pertenece a otro caso.' });

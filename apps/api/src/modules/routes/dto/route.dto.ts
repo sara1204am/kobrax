@@ -15,12 +15,16 @@ import { RouteStatus, RouteStopStatus } from '@prisma/client';
 import { ROUTE_SORTS, type RouteSort } from '@kobrax/shared';
 
 export class CreateRouteDto {
+  /** Opcional: lo genera el móvil para que reintentar (cola offline) no duplique la ruta. */
+  @IsOptional() @IsUUID() id?: string;
   @IsUUID() collectorId!: string;
   @IsDateString() plannedDate!: string;
   @IsOptional() @IsUUID() branchId?: string;
 }
 
 export class GenerateRouteDto {
+  /** Opcional: ídem `CreateRouteDto.id`; un reintento devuelve la ruta ya generada, sin otras paradas. */
+  @IsOptional() @IsUUID() id?: string;
   @IsUUID() collectorId!: string;
   @IsDateString() plannedDate!: string;
   /** Casos a incluir; si se omite con `auto`, toma los casos abiertos del cobrador. */

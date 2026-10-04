@@ -36,7 +36,8 @@ import {
   SetPriorityDto,
   TransitionCaseDto,
 } from './dto/case.dto';
-import { caseDuplicate, caseNoActivity, invalidAssignee, invalidTransition, resourceNotFound } from './cases.errors';
+import { isUniqueViolation } from '../../common/unique-violation';
+import { activityIdTaken, caseDuplicate, caseNoActivity, invalidAssignee, invalidTransition, resourceNotFound } from './cases.errors';
 
 const TERMINAL: CaseStatus[] = [CaseStatus.CLOSED, CaseStatus.WRITTEN_OFF];
 
@@ -357,9 +358,30 @@ export class CasesService {
 
   // ── Bitácora ────────────────────────────────────────────────────────────────
   async addActivity(id: string, dto: CreateActivityDto) {
-    const { activity, agendaId } = await this.tx(async (tx) => {
+    // Idempotente por `id` (cola offline del móvil): dos envíos a la vez pasan los dos el chequeo y uno choca con
+    // la unicidad. Se repite UNA vez y esta vez encuentra la gestión que guardó el otro.
+    const run = () => this.writeActivity(id, dto);
+    const { activity, agendaId, replay } = await run().catch((err: unknown) => (dto.id && isUniqueViolation(err) ? run() : Promise.reject(err)));
+    // Reintento: la gestión ya estaba. Se devuelve tal cual, sin evento, sin audit y sin otra promesa.
+    if (replay) return { id: activity.id, type: activity.type, createdAt: activity.createdAt };
+    this.events.emit(DomainEvent.CASE_UPDATED, { caseId: id, accountId: this.tenant.accountId, activity: dto.type });
+    if (agendaId) {
+      await this.audit.record({ entity: 'agenda_item', entityId: agendaId, action: 'CREATE', after: { caseId: id, source: 'gestion_promise' } });
+    }
+    return { id: activity.id, type: activity.type, createdAt: activity.createdAt };
+  }
+
+  private writeActivity(id: string, dto: CreateActivityDto) {
+    return this.tx(async (tx) => {
       const found = await tx.collectionCase.findFirst({ where: { id, deletedAt: null }, select: { id: true, clientId: true, creditId: true } });
       if (!found) throw resourceNotFound();
+      if (dto.id) {
+        const prev = await tx.caseActivity.findFirst({ where: { id: dto.id } });
+        if (prev) {
+          if (prev.caseId !== id) throw activityIdTaken();
+          return { activity: prev, agendaId: undefined as string | undefined, replay: true };
+        }
+      }
       const created = await tx.caseActivity.create({
         data: { ...(dto.id ? { id: dto.id } : {}), accountId: this.tenant.accountId, caseId: id, userId: this.tenant.userId, type: dto.type, notes: dto.notes, result: dto.result },
       });
@@ -389,13 +411,8 @@ export class CasesService {
         agendaId = item.id;
       }
       await tx.collectionCase.update({ where: { id }, data: { lastActionAt: new Date() } });
-      return { activity: created, agendaId };
+      return { activity: created, agendaId, replay: false };
     });
-    this.events.emit(DomainEvent.CASE_UPDATED, { caseId: id, accountId: this.tenant.accountId, activity: dto.type });
-    if (agendaId) {
-      await this.audit.record({ entity: 'agenda_item', entityId: agendaId, action: 'CREATE', after: { caseId: id, source: 'gestion_promise' } });
-    }
-    return { id: activity.id, type: activity.type, createdAt: activity.createdAt };
   }
 
   /**

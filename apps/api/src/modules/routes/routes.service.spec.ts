@@ -27,6 +27,10 @@ function makeService(
     route?: { id: string; collectorId: string; totalDistanceKm?: number; estimatedMinutes?: number };
     /** La ruta que ese cobrador YA tiene ese día. `undefined` = no tiene, y se puede armar. */
     routeOfDay?: { id: string };
+    /** Ruta que ya existe con el id que manda el cliente (reintento). */
+    priorRoute?: Record<string, unknown>;
+    /** La 1ª creación choca con la PK y la 2ª encuentra la ruta `priorRoute`. */
+    routeRace?: boolean;
     /** Los perfiles del equipo, para el orden por nombre de cobrador. */
     profiles?: { userId: string; firstName: string | null; lastName: string | null }[];
     stops?: FakeStop[];
@@ -51,6 +55,7 @@ function makeService(
   const sorted = (w: Record<string, unknown>, dir: 'asc' | 'desc' = 'asc') =>
     stops.filter((s) => hit(s, w)).sort((a, b) => (dir === 'asc' ? a.sequenceOrder - b.sequenceOrder : b.sequenceOrder - a.sequenceOrder));
 
+  let raced = false;
   const tx = {
     userAccount: { findFirst: async () => (opts.ua === undefined ? { id: 'ua1' } : opts.ua) },
     profile: { findMany: async () => opts.profiles ?? [] },
@@ -97,6 +102,10 @@ function makeService(
     },
     routePlan: {
       create: async (args: { data: Record<string, unknown> }) => {
+        if (opts.routeRace && !raced) {
+          raced = true;
+          throw Object.assign(new Error('unique'), { code: 'P2002' });
+        }
         calls.routeCreate.push(args.data);
         const stops = (args.data.stops as { create: unknown[] })?.create ?? [];
         return { id: 'r1', ...args.data, stops };
@@ -116,6 +125,11 @@ function makeService(
       findFirst: async (args?: { where?: Record<string, unknown> }) => {
         // La pregunta «¿este cobrador ya tiene ruta ese día?» es la única que lleva `plannedDate`.
         // Distinguirla acá es lo que hace que el test falle si la guarda consultara sin el día.
+        // Reintento por id: `where: { id }` sin día.
+        if (opts.priorRoute !== undefined && args?.where?.id !== undefined && args.where.plannedDate === undefined) {
+          if (opts.routeRace && !raced) return null;
+          return opts.priorRoute ?? null;
+        }
         if (args?.where?.plannedDate !== undefined) return opts.routeOfDay ?? null;
         return opts.route ? { ...opts.route, stops: sorted({ routeId: opts.route.id }).map(withClient) } : null;
       },
@@ -629,5 +643,46 @@ describe('RoutesService.list (paradas visitadas)', () => {
     assert.equal(res.data![0]!.visitedCount, 2);
     // Una ruta sin ninguna visitada vale CERO, no `undefined`: «0 de 1» es un dato, y un hueco no.
     assert.equal(res.data![1]!.visitedCount, 0);
+  });
+});
+
+describe('RoutesService idempotente por id (cola offline)', () => {
+  const RID = '5f2504e0-4f89-41d3-9a0c-0305e82c3303';
+  const PRIOR = { id: RID, collectorId: 'u1', plannedDate: new Date('2026-08-12'), status: 'PLANNED', totalCases: 1, createdAt: new Date(), stops: [] };
+
+  it('create con id existente: devuelve la ruta, sin crear otra ni auditar, aunque ya haya ruta ese día', async () => {
+    const { service, calls } = makeService({ permissions: ['route:execute'], priorRoute: PRIOR, routeOfDay: { id: RID } });
+    const r = await service.create({ ...GEN, id: RID } as never);
+    assert.equal(r.id, RID);
+    assert.equal(calls.routeCreate.length, 0);
+    assert.equal(calls.audit.length, 0);
+  });
+
+  it('generate con id existente: devuelve la ruta, sin segunda ruta ni paradas', async () => {
+    const { service, calls } = makeService({ permissions: ['route:execute'], priorRoute: PRIOR, routeOfDay: { id: RID } });
+    const r = await service.generate({ ...GEN, id: RID } as never);
+    assert.equal(r.id, RID);
+    assert.equal(calls.routeCreate.length, 0);
+    assert.equal(calls.audit.length, 0);
+  });
+
+  it('id de la ruta de otro cobrador: 409 ROUTE_ID', async () => {
+    const { service } = makeService({ permissions: ['route:execute'], priorRoute: { ...PRIOR, collectorId: 'otro' } });
+    await rejectsWithCode(service.create({ ...GEN, id: RID } as never), 'ROUTE_ID');
+    await rejectsWithCode(service.generate({ ...GEN, id: RID } as never), 'ROUTE_ID');
+  });
+
+  it('id nuevo: crea la ruta con ESE id', async () => {
+    const { service, calls } = makeService({ permissions: ['route:execute'] });
+    await service.create({ ...GEN, id: RID } as never);
+    assert.equal(calls.routeCreate[0]!.id, RID);
+  });
+
+  it('carrera en create: reintenta una vez y devuelve la ruta ganadora', async () => {
+    const { service, calls } = makeService({ permissions: ['route:execute'], routeRace: true, priorRoute: PRIOR });
+    const r = await service.create({ ...GEN, id: RID } as never);
+    assert.equal(r.id, RID);
+    assert.equal(calls.routeCreate.length, 0);
+    assert.equal(calls.audit.length, 0);
   });
 });
