@@ -85,39 +85,6 @@ export interface MoraCreditListItem {
   hasActivePromise: boolean;
 }
 
-/** Filtros de `GET /mora` (todos opcionales; viajan en la URL de la pantalla). */
-export interface MoraListQuery {
-  page?: number;
-  limit?: number;
-  /** Nº de crédito, nombre/apellido/razón social o zona. */
-  q?: string;
-  dpdMin?: number;
-  dpdMax?: number;
-  /** `true` = incluye también los créditos al día (por defecto sólo `dpd >= 1`). */
-  todos?: boolean;
-  balanceMin?: number;
-  balanceMax?: number;
-  /** Uno o varios separados por coma. Son prioridades del **caso**. */
-  priority?: string;
-  /** Uno o varios separados por coma. Es el estado del **caso**, no del crédito. */
-  status?: string;
-  assigneeId?: string;
-  /** `true` = casos sin cobrador. Sólo lo respeta quien ve toda la cartera. */
-  unassigned?: boolean;
-  hasCase?: boolean;
-  branchId?: string;
-  source?: 'KOBRAX' | 'PSF';
-  arrearsSource?: ArrearsSource;
-  hasPromise?: boolean;
-  /** SLA del caso vencido. No es la mora. */
-  overdue?: boolean;
-  /** Sin gestión desde esa fecha (`YYYY-MM-DD`); incluye a quien nunca tuvo. */
-  noActionSince?: string;
-  zone?: string;
-  sort?: MoraSort;
-  dir?: 'asc' | 'desc';
-}
-
 /** Una gestión del caso abierto (la misma forma que `CaseActivityItem`). */
 export interface MoraActivityItem {
   id: string;
@@ -212,7 +179,7 @@ export const MORA_NOTE_KINDS = ['INFO', 'WARNING', 'IMPORTANT'] as const;
 export type MoraNoteKind = (typeof MORA_NOTE_KINDS)[number];
 export const MORA_NOTE_MAX_LENGTH = 1000;
 
-/** Los colores del post-it (la paleta de Gallium). Es el color de la nota; el tipo (`MORA_NOTE_KINDS`) es otra cosa. */
+/** Los colores del post-it (la paleta de post-its de Kobrax). Es el color de la nota; el tipo (`MORA_NOTE_KINDS`) es otra cosa. */
 export const MORA_NOTE_COLORS = ['YELLOW', 'PINK', 'BLUE', 'GREEN', 'PURPLE', 'ORANGE'] as const;
 export type MoraNoteColor = (typeof MORA_NOTE_COLORS)[number];
 
