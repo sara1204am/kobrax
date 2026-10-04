@@ -54,6 +54,8 @@ export interface MoraCategoryTag {
 
 /** Quién atiende el crédito además del responsable: reemplazo temporal o apoyo vigentes. */
 export interface MoraAssignment {
+  /** Id de la fila de `credit_assignments` (para revocar). Ausente en el responsable principal. */
+  id?: string;
   kind: CreditAssignmentKind;
   userId: string;
   /** ISO. Ausente = no vence por fecha. */
