@@ -101,8 +101,8 @@ export function NoteDialog({
                 aria-label={t(`colors.${c}`)}
                 aria-pressed={color === c}
                 onClick={() => setColor(c)}
-                className="h-[30px] w-[30px] rounded-full border-2 border-white"
-                style={{ background: NOTE_COLORS[c].bg, boxShadow: color === c ? '0 0 0 2px #7B68D6' : '0 0 0 1px rgba(0,0,0,.12)' }}
+                className={`h-[30px] w-[30px] rounded-full border-2 border-white ring-2 ${color === c ? 'ring-k-purple' : 'ring-black/10'}`}
+                style={{ background: NOTE_COLORS[c].bg }}
               />
             ))}
           </div>

@@ -1,5 +1,8 @@
 import {
+  CREDIT_STATUSES,
   IMPORT_RUN_ITEM_ACTIONS,
+  REPORT_STALE_AFTER_DAYS_MAX,
+  REPORT_STALE_AFTER_DAYS_MIN,
   type FieldDef,
   type ImportAssignments,
   type PortfolioSummary,
@@ -413,4 +416,62 @@ export function buildAssignmentsPayload(state: AssignState, summary: PortfolioSu
     create: [...groups].map(([userId, externalIds]) => ({ userId, externalIds })),
     reassign: pendingReassignments(state, summary).map(({ code, from, to }) => ({ externalId: code, fromUserId: from, toUserId: to })),
   };
+}
+
+// ── Los datos del reporte: base del saldo, estados y antigüedad ───────────────
+
+/**
+ * La etiqueta de estado como la guarda y la busca el servidor: mayúsculas, sin tildes y con los espacios
+ * colapsados. «Ejecución  judicial» y «EJECUCION JUDICIAL» son la misma. Es la misma regla que
+ * `statusKey` de la API: si acá se guardara distinto, el mapeo nunca calzaría con el archivo.
+ */
+export function normalizeStatusLabel(raw: string): string {
+  return raw
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, ' ');
+}
+
+export type StatusMapResult =
+  | { ok: true; map: Record<string, string> }
+  | { ok: false; reason: 'EMPTY_LABEL' | 'INVALID_STATUS' | 'DUPLICATE_LABEL' };
+
+/**
+ * Suma (o corrige) una etiqueta del reporte → un estado de crédito. Devuelve el mapa entero porque el `PATCH`
+ * **reemplaza** `statusMap`, no lo mezcla. Valida lo mismo que el servidor: la etiqueta no puede quedar vacía y
+ * el estado tiene que existir (`CREDIT_STATUSES`). `replace` es la etiqueta que se está editando, si la hay.
+ */
+export function setStatusMapEntry(
+  map: Record<string, string> | undefined,
+  label: string,
+  status: string,
+  replace?: string,
+): StatusMapResult {
+  const key = normalizeStatusLabel(label);
+  if (!key) return { ok: false, reason: 'EMPTY_LABEL' };
+  if (!(CREDIT_STATUSES as readonly string[]).includes(status)) return { ok: false, reason: 'INVALID_STATUS' };
+  const next = { ...(map ?? {}) };
+  if (replace !== undefined) delete next[replace];
+  else if (key in next) return { ok: false, reason: 'DUPLICATE_LABEL' };
+  next[key] = status;
+  return { ok: true, map: next };
+}
+
+/** Quita una etiqueta del mapa (devuelve el mapa entero, por lo mismo que `setStatusMapEntry`). */
+export function removeStatusMapEntry(map: Record<string, string> | undefined, label: string): Record<string, string> {
+  const next = { ...(map ?? {}) };
+  delete next[label];
+  return next;
+}
+
+export type StaleDaysResult = { ok: true; value: number } | { ok: false };
+
+/** Los días para marcar el dato como viejo: un entero entre `REPORT_STALE_AFTER_DAYS_MIN` y `_MAX`. */
+export function parseStaleAfterDays(raw: string): StaleDaysResult {
+  const text = raw.trim();
+  if (!/^\d+$/.test(text)) return { ok: false };
+  const value = Number(text);
+  return value >= REPORT_STALE_AFTER_DAYS_MIN && value <= REPORT_STALE_AFTER_DAYS_MAX ? { ok: true, value } : { ok: false };
 }

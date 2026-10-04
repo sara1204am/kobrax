@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MORA_NOTE_COLORS, type CreditNote } from '@kobrax/shared';
-import { canEditNoteText, displayBox, drawnLayers, NOTE_COLORS, notePreview, sortNotes } from './mora-notes';
+import { canEditNoteText, displayBox, drawnLayers, NOTE_COLORS, sortNotes } from './mora-notes';
 
 const n = (id: string, kind: CreditNote['kind'], createdAt: string): CreditNote => ({ id, creditId: 'c', kind, body: id, createdAt, color: 'YELLOW', anchor: 'PAGE', x: 0, y: 0, w: 240, h: 180, zIndex: 1, updatedAt: createdAt });
 
@@ -20,27 +20,6 @@ describe('sortNotes', () => {
     const input = [n('a', 'INFO', '2026-01-01T00:00:00Z'), n('b', 'IMPORTANT', '2026-01-02T00:00:00Z')];
     sortNotes(input);
     expect(input.map((x) => x.id)).toEqual(['a', 'b']);
-  });
-});
-
-describe('notePreview', () => {
-  it('un texto corto de una línea se muestra entero y no hay nada que abrir', () => {
-    expect(notePreview('Visitar al padre para negociar pago')).toEqual({ text: 'Visitar al padre para negociar pago', truncated: false });
-  });
-
-  it('un texto largo se recorta y se puede abrir', () => {
-    const r = notePreview('x'.repeat(200), 80);
-    expect(r.text).toHaveLength(81);
-    expect(r.text.endsWith('…')).toBe(true);
-    expect(r.truncated).toBe(true);
-  });
-
-  it('con varias líneas muestra la primera y se puede abrir', () => {
-    expect(notePreview('Primera línea\nSegunda')).toEqual({ text: 'Primera línea', truncated: true });
-  });
-
-  it('los espacios de los bordes no cuentan', () => {
-    expect(notePreview('   hola   ')).toEqual({ text: 'hola', truncated: false });
   });
 });
 

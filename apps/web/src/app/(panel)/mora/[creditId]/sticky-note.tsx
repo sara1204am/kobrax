@@ -6,8 +6,9 @@ import { clampNoteBox, MORA_NOTE_COLORS, type CreditNote, type MoraNoteColor, ty
 import { anchorAtPoint, anchorOrigin, displayBox, NOTE_COLORS } from '@/lib/mora-notes';
 
 /**
- * Un post-it anclado a una sección de la ficha (se dibuja dentro de ella, `x`/`y` desde su esquina): se arrastra por el encabezado, se redimensiona por la esquina, se pinta y (si es
- * tuyo, o repartís cartera) se corrige el texto y se borra. Es el de Gallium, con los colores de Kobrax.
+ * Un post-it anclado a una sección de la ficha: se dibuja dentro de ella, con `x`/`y` medidos desde su esquina.
+ * Se arrastra por el encabezado, se redimensiona por la esquina, se pinta y, si es tuyo o repartís cartera,
+ * se corrige el texto y se borra. Usa la paleta de post-its de Kobrax.
  *
  * 🔴 **Arrastrar y redimensionar no guardan a cada píxel**: `onPreview` mueve la nota en pantalla y `onCommit`
  * guarda UNA vez, al soltar. Sin eso, un arrastre de dos segundos son cien PATCH.
@@ -161,8 +162,8 @@ export function StickyNote({
                     type="button"
                     aria-label={t(`colors.${c}`)}
                     aria-pressed={note.color === c}
-                    className="h-[22px] w-[22px] rounded-full border-2 border-white"
-                    style={{ background: NOTE_COLORS[c].bg, boxShadow: note.color === c ? '0 0 0 2px #7B68D6' : '0 0 0 1px rgba(0,0,0,.12)' }}
+                    className={`h-[22px] w-[22px] rounded-full border-2 border-white ring-2 ${note.color === c ? 'ring-k-purple' : 'ring-black/10'}`}
+                    style={{ background: NOTE_COLORS[c].bg }}
                     onClick={() => {
                       setPalette(false);
                       if (c === note.color) return;

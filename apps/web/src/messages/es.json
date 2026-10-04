@@ -260,6 +260,7 @@
         "setCurrentHint": "Los tenés y el archivo no los trae. Quedan sin atraso; el saldo y el estado no se tocan.",
         "invalid": "No se importan",
         "invalidHint": "Al archivo le falta algo que marcaste obligatorio.",
+        "ignored": "Ignoradas",
         "colCode": "N° de crédito",
         "colClient": "Cliente",
         "colRow": "Fila",
@@ -271,9 +272,6 @@
         "resultWarned": "Se importó, y {n} registros quedaron afuera.",
         "resultSkipped": "Este archivo ya se había importado. No se volvió a aplicar.",
         "again": "Importar otro archivo",
-        "lastRun": "Última importación",
-        "lastRunNever": "Todavía no importaste ningún archivo.",
-        "lastRunCounts": "{created} nuevos · {updated} actualizados · {setCurrent} al día · {errors} rechazadas",
         "disabledTitle": "El import está apagado",
         "disabledText": "Esta empresa carga la cartera a mano. Se enciende en Ajustes.",
         "setupTitle": "Falta configurar el import",
@@ -327,6 +325,8 @@
         "step3Blocked": "Subí un archivo de muestra para ver qué columnas trae.",
         "step4": "Reglas de la importación",
         "step4Hint": "Qué hacer con lo que el archivo no trae, y quién queda a cargo de cada crédito.",
+        "step5": "Datos del reporte",
+        "step5Hint": "Qué es el saldo del archivo, qué estado es cada etiqueta que trae y cuántos días vale el dato.",
         "shapeQuestion": "¿Cómo está organizado tu archivo?",
         "shapeHint": "Elegí la que se parezca al que acabás de subir. Si no acierta, el archivo se lee vacío.",
         "shapeConfirmTitle": "¿Cambiar cómo está organizado?",
@@ -337,6 +337,33 @@
         "sourceFileHint": "La oficina sube un archivo y la cartera se actualiza con él.",
         "sourceToManual": "Cargar a mano",
         "sourceToFile": "Importar de un archivo"
+      },
+      "report": {
+        "basis": "Qué es el saldo del archivo",
+        "basisHint": "Con «Capital pendiente» el saldo es lo que queda por devolver sin intereses; con «Total adeudado», lo que se debe hoy con todo.",
+        "basisUnset": "Todavía no lo definiste",
+        "basisOptions": {
+          "principal": "Capital pendiente",
+          "total": "Total adeudado"
+        },
+        "stale": "Días hasta marcar el dato como viejo",
+        "staleHint": "Entre {min} y {max}. Pasado ese tiempo desde la fecha de corte, el reporte se avisa como desactualizado. Si no lo cambiás, son {def}.",
+        "staleError": "Escribí un número entero entre {min} y {max}.",
+        "statusMap": "Estados del reporte",
+        "statusMapHint": "Cada etiqueta de estado que trae el archivo, y qué estado de crédito es en Kobrax. Se escribe en mayúsculas y sin tildes.",
+        "statusMapEmpty": "Todavía no agregaste ninguna. Las que Kobrax ya conoce (vigente, vencido, castigado, cancelado) funcionan solas.",
+        "statusOf": "Estado para {label}",
+        "remove": "Quitar {label}",
+        "removeCta": "Quitar",
+        "newLabel": "Etiqueta del archivo",
+        "newLabelPlaceholder": "Ej.: EJECUCION",
+        "newStatus": "Estado en Kobrax",
+        "add": "Agregar",
+        "statusMapErrors": {
+          "EMPTY_LABEL": "Escribí la etiqueta tal como viene en el archivo.",
+          "INVALID_STATUS": "Ese estado no existe.",
+          "DUPLICATE_LABEL": "Esa etiqueta ya está en la lista: cambiale el estado ahí."
+        }
       },
       "settings": {
         "link": "Ajustes",
@@ -423,6 +450,7 @@
         "testBlocked": "Subí un archivo y completá los datos obligatorios para poder probar.",
         "testCta": "Probar sin importar",
         "testResult": "{created} nuevos · {updated} actualizados · {setCurrent} al día",
+        "testIgnored": "{n, plural, one {# fila se ignora} other {# filas se ignoran}}: son totales o notas del archivo, no créditos.",
         "testOk": "Los datos se ven bien",
         "testWarned": "{n, plural, one {# fila quedaría afuera} other {# filas quedarían afuera}}",
         "continue": "Guardar y continuar"
@@ -502,6 +530,11 @@
         "IMPORT_CONFIG_FORBIDDEN": "Sólo quien reparte la cartera o el dueño de la cuenta cambia esta configuración.",
         "IMPORT_DISABLED": "El import está apagado: esta empresa carga la cartera a mano.",
         "IMPORT_NOT_CONFIGURED": "Todavía no configuraste el import.",
+        "IMPORT_FILE_NOT_STORED": "Esta importación es anterior a que se guardara el archivo: no hay nada que descargar.",
+        "IMPORT_RUN_NOT_FOUND": "No encontramos esa importación.",
+        "INVALID_ADVISOR_CODE": "El código de asesor no es válido.",
+        "USER_NOT_MEMBER": "Esa persona no pertenece a esta empresa.",
+        "USER_REQUIRED": "Falta elegir a la persona.",
         "FILE_SHAPE_MISMATCH": "Ese archivo no tiene la forma que configuraste.",
         "XLS_LEGACY_NOT_SUPPORTED": "Los .xls viejos no se pueden leer. Guardalo como .xlsx o CSV.",
         "NO_RECORDS_MAPPED": "No se leyó ningún registro: la configuración no le calza a este archivo.",
@@ -613,7 +646,8 @@
           "reappeared": "Volvieron",
           "setCurrent": "Al día",
           "absent": "Ausentes",
-          "rejected": "Rechazadas"
+          "rejected": "Rechazadas",
+          "ignored": "Ignoradas"
         }
       },
       "detail": {
@@ -625,6 +659,8 @@
         "reportDate": "Fecha de corte",
         "advisor": "Asesor",
         "scope": "Alcance",
+        "ignored": "Filas ignoradas",
+        "ignoredValue": "{n, plural, one {# fila (totales o notas)} other {# filas (totales o notas)}}",
         "view": "Ver documento",
         "download": "Descargar",
         "noFile": "Esta importación es anterior a que se guardara el archivo.",
@@ -817,7 +853,6 @@
         "VISIT": "Visita",
         "MESSAGE": "Mensaje",
         "PAYMENT": "Pago",
-        "PROMISE": "Promesa de pago",
         "STATUS_CHANGE": "Cambio de estado",
         "ASSIGNMENT": "Asignación"
       },
@@ -825,7 +860,6 @@
         "generic": "No se pudo completar la acción.",
         "CASE_001": "No se cierra una cobranza sin ninguna gestión registrada.",
         "CASE_002": "Ese cambio de estado no está permitido desde el estado actual.",
-        "INVALID_ASSIGNEE": "Esa persona no pertenece a esta empresa.",
         "AUTH_002": "No tenés permiso para esta acción."
       },
       "entity": "créditos",
@@ -978,7 +1012,7 @@
           "unknownAuthor": "alguien del equipo",
           "launcherTitle": "Tablero de notas",
           "showing": "Mostrando en pantalla",
-          "launcherSub": "Las notas como post-its sobre la pantalla: se arrastran, se pintan y se agrandan.",
+          "launcherSub": "Las notas como post-its anclados a cada sección de la ficha: se arrastran, se pintan y se agrandan.",
           "show": "Mostrar en pantalla",
           "hide": "Ocultar",
           "boardLabel": "Tablero de notas",
@@ -1778,8 +1812,6 @@
       "identity": "Identificación",
       "data": "Datos",
       "credits": "Créditos",
-      "creditFixed": "El préstamo",
-      "creditEditable": "Datos de cobro",
       "schedule": "Cronograma",
       "contacts": "Contacto",
       "locations": "Direcciones",
@@ -1802,8 +1834,7 @@
     "quote": {
       "installment": "Cuota",
       "total": "Total a cobrar",
-      "profit": "Ganancia",
-      "belowCapital": "Con estas cuotas vas a cobrar menos de lo que prestás. Se puede guardar igual."
+      "profit": "Ganancia"
     },
     "downloadPdf": "Descargar PDF",
     "archive": "Dar de baja",
@@ -2051,7 +2082,6 @@
       "text": "El archivo sale del legajo junto con su huella, que es lo que probaba que ese documento existió. No se puede deshacer.",
       "ok": "Quitar adjunto"
     },
-    "creditFixedHint": "Cambiar el número de cuotas, la moneda o la fecha de desembolso es una reestructura: se hace dando de baja este préstamo y cargando el nuevo.",
     "arrears": {
       "markCta": "Marcar en mora",
       "markTitle": "¿Marcar este préstamo en mora?",

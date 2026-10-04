@@ -104,6 +104,8 @@ export function ImportHistoryTable({
     count('setCurrent'),
     count('absent'),
     count('rejected', true),
+    // Totales y notas del archivo: no son un error ni un movimiento, así que no llevan link (no hay registros que ver).
+    count('ignored'),
   ];
 
   const filters: FilterDef[] = [

@@ -260,6 +260,7 @@
         "setCurrentHint": "You have them and the file does not include them. They are left with no arrears; balance and status are not touched.",
         "invalid": "Not imported",
         "invalidHint": "The file is missing something you marked as required.",
+        "ignored": "Ignored",
         "colCode": "Credit no.",
         "colClient": "Client",
         "colRow": "Row",
@@ -271,9 +272,6 @@
         "resultWarned": "Imported, and {n} records were left out.",
         "resultSkipped": "This file had already been imported. It was not applied again.",
         "again": "Import another file",
-        "lastRun": "Last import",
-        "lastRunNever": "You have not imported any file yet.",
-        "lastRunCounts": "{created} new · {updated} updated · {setCurrent} set current · {errors} rejected",
         "disabledTitle": "The import is off",
         "disabledText": "This company loads its portfolio by hand. You can turn it on in Settings.",
         "setupTitle": "The import is not set up yet",
@@ -327,6 +325,8 @@
         "step3Blocked": "Upload a sample file to see which columns it carries.",
         "step4": "Import rules",
         "step4Hint": "What to do with what the file does not carry, and who ends up owning each credit.",
+        "step5": "Report data",
+        "step5Hint": "What the balance in the file is, which status each label stands for and how many days the data stays fresh.",
         "shapeQuestion": "How is your file organised?",
         "shapeHint": "Pick the one that matches the file you just uploaded. If it is wrong, the file reads empty.",
         "shapeConfirmTitle": "Change how it is organised?",
@@ -337,6 +337,33 @@
         "sourceFileHint": "The office uploads a file and the portfolio is updated from it.",
         "sourceToManual": "Load by hand",
         "sourceToFile": "Import from a file"
+      },
+      "report": {
+        "basis": "What the balance in the file is",
+        "basisHint": "With «Outstanding principal» the balance is what is left to repay without interest; with «Total owed», what is owed today in full.",
+        "basisUnset": "Not defined yet",
+        "basisOptions": {
+          "principal": "Outstanding principal",
+          "total": "Total owed"
+        },
+        "stale": "Days until the data is marked as stale",
+        "staleHint": "Between {min} and {max}. Past that time since the cut-off date the report is flagged as out of date. If you do not change it, it is {def}.",
+        "staleError": "Enter a whole number between {min} and {max}.",
+        "statusMap": "Report statuses",
+        "statusMapHint": "Each status label the file carries, and which credit status it is in Kobrax. Write it in capitals without accents.",
+        "statusMapEmpty": "You have not added any yet. The ones Kobrax already knows (current, overdue, written off, cancelled) work on their own.",
+        "statusOf": "Status for {label}",
+        "remove": "Remove {label}",
+        "removeCta": "Remove",
+        "newLabel": "Label in the file",
+        "newLabelPlaceholder": "E.g. EXECUTION",
+        "newStatus": "Status in Kobrax",
+        "add": "Add",
+        "statusMapErrors": {
+          "EMPTY_LABEL": "Type the label exactly as it appears in the file.",
+          "INVALID_STATUS": "That status does not exist.",
+          "DUPLICATE_LABEL": "That label is already in the list: change its status there."
+        }
       },
       "settings": {
         "link": "Settings",
@@ -423,6 +450,7 @@
         "testBlocked": "Upload a file and fill in the required fields to be able to test.",
         "testCta": "Test without importing",
         "testResult": "{created} new · {updated} updated · {setCurrent} set current",
+        "testIgnored": "{n, plural, one {# row is ignored} other {# rows are ignored}}: they are totals or notes in the file, not credits.",
         "testOk": "The data looks right",
         "testWarned": "{n, plural, one {# row would be left out} other {# rows would be left out}}",
         "continue": "Save and continue"
@@ -502,6 +530,11 @@
         "IMPORT_CONFIG_FORBIDDEN": "Only someone who distributes the portfolio, or the account owner, can change this configuration.",
         "IMPORT_DISABLED": "The import is off: this company loads its portfolio by hand.",
         "IMPORT_NOT_CONFIGURED": "The import is not set up yet.",
+        "IMPORT_FILE_NOT_STORED": "This import predates file storage: there is nothing to download.",
+        "IMPORT_RUN_NOT_FOUND": "We could not find that import.",
+        "INVALID_ADVISOR_CODE": "The advisor code is not valid.",
+        "USER_NOT_MEMBER": "That person does not belong to this company.",
+        "USER_REQUIRED": "Pick a person first.",
         "FILE_SHAPE_MISMATCH": "That file does not match the shape you configured.",
         "XLS_LEGACY_NOT_SUPPORTED": "Old .xls files cannot be read. Save it as .xlsx or CSV.",
         "NO_RECORDS_MAPPED": "No records were read: your settings do not match this file.",
@@ -613,7 +646,8 @@
           "reappeared": "Back",
           "setCurrent": "Current",
           "absent": "Missing",
-          "rejected": "Rejected"
+          "rejected": "Rejected",
+          "ignored": "Ignored"
         }
       },
       "detail": {
@@ -625,6 +659,8 @@
         "reportDate": "Cut-off date",
         "advisor": "Advisor",
         "scope": "Scope",
+        "ignored": "Ignored rows",
+        "ignoredValue": "{n, plural, one {# row (totals or notes)} other {# rows (totals or notes)}}",
         "view": "View document",
         "download": "Download",
         "noFile": "This import predates storing the file.",
@@ -817,7 +853,6 @@
         "VISIT": "Visit",
         "MESSAGE": "Message",
         "PAYMENT": "Payment",
-        "PROMISE": "Promise to pay",
         "STATUS_CHANGE": "Status change",
         "ASSIGNMENT": "Assignment"
       },
@@ -825,7 +860,6 @@
         "generic": "The action could not be completed.",
         "CASE_001": "A collection cannot be closed without any activity recorded.",
         "CASE_002": "That status change is not allowed from the current status.",
-        "INVALID_ASSIGNEE": "That person does not belong to this company.",
         "AUTH_002": "You do not have permission for this action."
       },
       "entity": "credits",
@@ -979,7 +1013,7 @@
           "unknownAuthor": "someone on the team",
           "launcherTitle": "Notes board",
           "showing": "Showing on screen",
-          "launcherSub": "Notes as sticky notes over the page: drag, recolour and resize them.",
+          "launcherSub": "Notes as sticky notes anchored to each section of the file: drag, recolour and resize them.",
           "show": "Show on screen",
           "hide": "Hide",
           "boardLabel": "Notes board",
@@ -1778,8 +1812,6 @@
       "identity": "Identification",
       "data": "Details",
       "credits": "Credits",
-      "creditFixed": "The loan",
-      "creditEditable": "Collection details",
       "schedule": "Schedule",
       "contacts": "Contact",
       "locations": "Addresses",
@@ -1802,8 +1834,7 @@
     "quote": {
       "installment": "Instalment",
       "total": "Total to collect",
-      "profit": "Profit",
-      "belowCapital": "With these instalments you will collect less than you lend. You can still save it."
+      "profit": "Profit"
     },
     "downloadPdf": "Download PDF",
     "archive": "Archive",
@@ -2051,7 +2082,6 @@
       "text": "The file leaves the record along with its hash, which is what proved the document existed. This cannot be undone.",
       "ok": "Remove attachment"
     },
-    "creditFixedHint": "Changing the number of installments, the currency or the disbursement date is a restructure: close this loan and create a new one.",
     "arrears": {
       "markCta": "Mark as overdue",
       "markTitle": "Mark this loan as overdue?",
