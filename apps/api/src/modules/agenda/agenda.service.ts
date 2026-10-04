@@ -4,8 +4,6 @@ import { AgendaItemStatus, AgendaItemType, CatalogType, InstallmentStatus, Sched
 import {
   AGENDA_OUTCOMES_BY_TYPE,
   AgendaTimeSlot,
-  CASE_TRANSITIONS,
-  CaseStatus,
   Permission,
   resolvePagination,
   validateAgendaDetails,
@@ -17,15 +15,17 @@ import {
   type WhatsAppDetails,
   ResponseDto,
 } from '@kobrax/shared';
-import { CaseActivityType } from '@prisma/client';
+import { CreditActivityType } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { TenantClockService } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
-import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
+import { EventBusService } from '../../common/events/event-bus.service';
 import { ClientsService } from '../clients/clients.service';
 import { UpdateLocationDto } from '../clients/dto/client.dto';
 import { isUniqueViolation } from '../../common/unique-violation';
+import { moraScopeOf, visibleCredits } from '../mora/mora-query';
+import { recordCreditActivity } from '../mora/credit-activity';
 import { serializeAgendaItem } from './agenda.serializer';
 import { recommendedSlot, type ContactHint } from './recommended-slot';
 import {
@@ -52,19 +52,14 @@ import {
   agendaPastDate,
 } from './agenda.errors';
 
-/** Al ejecutar un agendado, qué tipo de actividad queda en la bitácora del caso. */
-const ACTIVITY_TYPE_BY_AGENDA: Record<AgendaItemType, CaseActivityType> = {
-  [AgendaItemType.CALL]: CaseActivityType.CALL,
-  [AgendaItemType.VISIT]: CaseActivityType.VISIT,
-  [AgendaItemType.WHATSAPP]: CaseActivityType.MESSAGE,
-  [AgendaItemType.PROMISE_TO_PAY]: CaseActivityType.NOTE,
-  [AgendaItemType.REMINDER]: CaseActivityType.NOTE,
+/** Al ejecutar un agendado, qué tipo de actividad queda en la bitácora del crédito. */
+const ACTIVITY_TYPE_BY_AGENDA: Record<AgendaItemType, CreditActivityType> = {
+  [AgendaItemType.CALL]: CreditActivityType.CALL,
+  [AgendaItemType.VISIT]: CreditActivityType.VISIT,
+  [AgendaItemType.WHATSAPP]: CreditActivityType.MESSAGE,
+  [AgendaItemType.PROMISE_TO_PAY]: CreditActivityType.NOTE,
+  [AgendaItemType.REMINDER]: CreditActivityType.NOTE,
 };
-
-/** Un caso es terminal cuando ya no admite transiciones (CLOSED / WRITTEN_OFF). Fuente: shared. */
-function isTerminal(status: `${CaseStatus}`): boolean {
-  return CASE_TRANSITIONS[status].length === 0;
-}
 
 /** Medianoche UTC de una fecha `YYYY-MM-DD` (así se persiste `scheduledDate`, columna `@db.Date`). */
 function toUTCDate(dateStr: string): Date {
@@ -112,9 +107,9 @@ export class AgendaService {
     return this.tenant.can(Permission.AGENDA_ASSIGN) ? {} : { assigneeId: this.tenant.userId };
   }
 
-  /** Mismo scope, pero sobre el caso: de qué casos puede agendar este usuario. */
-  private caseScope(): Prisma.CollectionCaseWhereInput {
-    return this.tenant.can(Permission.AGENDA_ASSIGN) ? {} : { assigneeId: this.tenant.userId };
+  /** Sobre qué créditos puede agendar este usuario: el MISMO alcance que la ficha de mora (no se inventa otro). */
+  private creditScope() {
+    return moraScopeOf(this.tenant);
   }
 
   /** Resuelve nombre visible del deudor por clientId (ref suave → sin join Prisma). */
@@ -194,9 +189,9 @@ export class AgendaService {
       if (!item) throw agendaItemNotFound();
       const [credit, history] = await Promise.all([
         tx.credit.findFirst({ where: { id: item.creditId, deletedAt: null } }),
-        // Sin `assigneeScope`: son gestiones del mismo caso, y el caso ya se validó como propio arriba.
+        // Sin `assigneeScope`: son gestiones del mismo crédito, y el ítem ya se validó como propio arriba.
         tx.agendaItem.findMany({
-          where: { caseId: item.caseId, deletedAt: null, id: { not: id } },
+          where: { creditId: item.creditId, deletedAt: null, id: { not: id } },
           orderBy: { scheduledDate: 'desc' },
           take: 20,
         }),
@@ -246,9 +241,9 @@ export class AgendaService {
   }
 
   /**
-   * Ejecuta una gestión (S4): deja un `CaseActivity` en la bitácora del caso, apunta el agendado a
-   * esa actividad y lo pasa a EXECUTED. `outcome` debe corresponder al tipo. No transiciona el estado
-   * del **caso** (eso es de F5): registrar la gestión y cobrar son cosas distintas.
+   * Ejecuta una gestión (S4): deja un `CreditActivity` en la bitácora del crédito (con el episodio de mora
+   * abierto, si lo hay), actualiza «última gestión», apunta el agendado a esa actividad y lo pasa a EXECUTED.
+   * `outcome` debe corresponder al tipo. Registrar la gestión no cambia la situación del crédito.
    */
   async complete(id: string, dto: CompleteAgendaItemDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
     const { updated, clientName, replay } = await this.tx(async (tx) => {
@@ -257,7 +252,7 @@ export class AgendaService {
       // Reintento de la cola offline: ya se ejecutó con ESE mismo resultado → se responde lo hecho, sin otra
       // actividad. Con otro resultado sigue siendo un conflicto.
       if (item.status === AgendaItemStatus.EXECUTED && item.resultActivityId) {
-        const done = await tx.caseActivity.findFirst({ where: { id: item.resultActivityId }, select: { result: true } });
+        const done = await tx.creditActivity.findFirst({ where: { id: item.resultActivityId }, select: { result: true } });
         if (done?.result === dto.outcome) {
           const names = await this.clientNames(tx, [item.clientId]);
           return { updated: item, clientName: names.get(item.clientId), replay: true };
@@ -266,17 +261,15 @@ export class AgendaService {
       if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
       if (!AGENDA_OUTCOMES_BY_TYPE[item.type].includes(dto.outcome)) throw agendaInvalidOutcome();
 
-      const activity = await tx.caseActivity.create({
-        data: {
-          accountId: this.tenant.accountId,
-          caseId: item.caseId,
-          userId: this.tenant.userId,
-          type: ACTIVITY_TYPE_BY_AGENDA[item.type],
-          result: dto.outcome,
-          notes: dto.notes,
-        },
+      const activity = await recordCreditActivity(tx, {
+        accountId: this.tenant.accountId,
+        creditId: item.creditId,
+        clientId: item.clientId,
+        userId: this.tenant.userId,
+        type: ACTIVITY_TYPE_BY_AGENDA[item.type],
+        result: dto.outcome,
+        notes: dto.notes,
       });
-      await tx.collectionCase.update({ where: { id: item.caseId }, data: { lastActionAt: new Date() } });
       const updated = await tx.agendaItem.update({
         where: { id },
         data: { status: AgendaItemStatus.EXECUTED, resultActivityId: activity.id, updatedBy: this.tenant.userId },
@@ -287,7 +280,7 @@ export class AgendaService {
 
     if (replay) return ResponseDto.ok(await this.view(updated, clientName));
     await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'EXECUTE', after: updated });
-    this.events.emit(DomainEvent.CASE_UPDATED, { caseId: updated.caseId, accountId: this.tenant.accountId, activity: ACTIVITY_TYPE_BY_AGENDA[updated.type] });
+    // Ya no se emite `case.updated`: no hay caso. El feed en vivo de supervisores era solo eso (sin persistir).
     return ResponseDto.ok(await this.view(updated, clientName));
   }
 
@@ -370,20 +363,18 @@ export class AgendaService {
    * se consultan ANTES: si el cliente no tiene ninguno asignado, corta sin revelar nada.
    */
   /**
-   * Casos abiertos del cliente que este usuario puede agendar. Es la puerta de scope del módulo:
-   * si está vacía, el cliente no es suyo y no se le revela ni se le escribe nada.
+   * TODOS los créditos del cliente que este usuario puede ver (al día o en mora), con el mismo alcance que la
+   * ficha de mora. Es la puerta de scope del módulo: si está vacía, el cliente no es suyo y no se le revela ni
+   * se le escribe nada.
    */
-  private async agendableCases(clientId: string) {
-    const openCases = await this.tx((tx) =>
-      tx.collectionCase.findMany({
-        where: { clientId, deletedAt: null, ...this.caseScope() },
-        include: { credit: true },
-        orderBy: { createdAt: 'desc' },
-      }),
-    );
-    const agendable = openCases.filter((c) => !isTerminal(c.status) && c.credit.deletedAt === null);
-    if (agendable.length === 0) throw agendaClientWithoutCases();
-    return agendable;
+  private async agendableCredits(clientId: string): Promise<Credit[]> {
+    const credits = await this.tx(async (tx) => {
+      const visible = await visibleCredits(tx, this.creditScope(), { clientId });
+      if (visible.length === 0) return [];
+      return tx.credit.findMany({ where: { id: { in: visible.map((v) => v.id) }, deletedAt: null }, orderBy: { createdAt: 'desc' } });
+    });
+    if (credits.length === 0) throw agendaClientWithoutCases();
+    return credits;
   }
 
   /**
@@ -403,8 +394,8 @@ export class AgendaService {
   }
 
   async clientContext(clientId: string) {
-    const agendable = await this.agendableCases(clientId);
-    const overdue = await this.overdueByCredit(agendable.map((c) => c.creditId));
+    const agendable = await this.agendableCredits(clientId);
+    const overdue = await this.overdueByCredit(agendable.map((c) => c.id));
     const contactHint = await this.contactHint(clientId);
 
     const client = await this.clients.findOne(clientId, true); // registra `PII_REVEAL` sobre `client`
@@ -417,15 +408,15 @@ export class AgendaService {
     return ResponseDto.ok({
       client: { id: client.id, displayName: displayName(client), nationalId: client.nationalId },
       credits: agendable.map((c) => ({
-        creditId: c.creditId,
-        caseId: c.id,
-        code: c.credit.code ?? undefined,
-        principalAmount: Number(c.credit.principalAmount),
-        outstandingBalance: Number(c.credit.outstandingBalance),
+        creditId: c.id,
+        code: c.code ?? undefined,
+        principalAmount: Number(c.principalAmount),
+        outstandingBalance: Number(c.outstandingBalance),
         /** Suma de las cuotas vencidas impagas. `0` si el crédito no tiene cronograma cargado. */
-        overdueAmount: overdue.get(c.creditId) ?? 0,
-        currency: c.credit.currency,
-        daysPastDue: c.credit.daysPastDue,
+        overdueAmount: overdue.get(c.id) ?? 0,
+        currency: c.currency,
+        /** `0` = al día (acción preventiva); `> 0` = en mora. */
+        daysPastDue: c.daysPastDue,
       })),
       contacts: (client.contacts ?? []).map((c) => ({
         id: c.id,
@@ -476,7 +467,7 @@ export class AgendaService {
    * contexto. El cifrado y el audit los hace `ClientsService.addContact` — acá no se escribe cripto.
    */
   async addClientContact(clientId: string, dto: AddClientContactDto) {
-    await this.agendableCases(clientId);
+    await this.agendableCredits(clientId);
     const created = await this.clients.addContact(clientId, dto);
     // `created.value` viene cifrado; se devuelve el valor que el cliente ya conoce (el que envió).
     return ResponseDto.ok({
@@ -492,7 +483,7 @@ export class AgendaService {
    * mismo scope que `addClientContact`. `ClientsService.addLocation` cifra la dirección y audita.
    */
   async addClientLocation(clientId: string, dto: AddClientLocationDto) {
-    await this.agendableCases(clientId);
+    await this.agendableCredits(clientId);
     const created = await this.clients.addLocation(clientId, dto);
     return ResponseDto.ok({
       id: created.id,
@@ -510,7 +501,7 @@ export class AgendaService {
    * del cobrador.
    */
   async updateClientLocation(clientId: string, locationId: string, dto: UpdateLocationDto) {
-    await this.agendableCases(clientId);
+    await this.agendableCredits(clientId);
     const updated = await this.clients.updateLocation(clientId, locationId, dto);
     return ResponseDto.ok({
       id: updated.id,
@@ -536,7 +527,7 @@ export class AgendaService {
       const prev = await this.tx(async (tx) => {
         const item = await tx.agendaItem.findFirst({ where: { id: dto.id } });
         if (!item) return null;
-        if (item.deletedAt || item.creditId !== dto.creditId || item.caseId !== dto.caseId) throw agendaIdTaken();
+        if (item.deletedAt || item.creditId !== dto.creditId) throw agendaIdTaken();
         const names = await this.clientNames(tx, [item.clientId]);
         return { item, clientName: names.get(item.clientId) };
       });
@@ -552,45 +543,106 @@ export class AgendaService {
     assertTimeMode(dto);
 
     const { created, reminder, clientName } = await this.tx(async (tx) => {
-      const found = await tx.collectionCase.findFirst({
-        where: { id: dto.caseId, deletedAt: null, ...this.caseScope() },
-        include: { credit: true },
-      });
-      if (!found || isTerminal(found.status) || found.creditId !== dto.creditId) throw agendaCaseNotFound();
+      // Por crédito, esté al día o en mora: sin caso. Mismo alcance que la ficha de mora; fuera de alcance → 404.
+      const [visible] = await visibleCredits(tx, this.creditScope(), { creditId: dto.creditId });
+      const credit = visible ? await tx.credit.findFirst({ where: { id: dto.creditId, deletedAt: null } }) : null;
+      if (!credit) throw agendaCaseNotFound();
 
-      await this.assertReferences(tx, dto.type, validated.value, found.clientId, found.credit, today);
+      await this.assertReferences(tx, dto.type, validated.value, credit.clientId, credit, today);
 
-      const created = await tx.agendaItem.create({
-        data: {
-          ...(dto.id ? { id: dto.id } : {}),
-          accountId: this.tenant.accountId,
-          caseId: found.id,
-          clientId: found.clientId,
-          creditId: found.creditId,
-          // El agendado es del cobrador DEL CASO, no de quien lo crea: un supervisor (AGENDA_ASSIGN)
-          // agenda sobre casos ajenos, y `assigneeScope` los ocultaría del cobrador que debe ejecutarlos.
-          // Sin asignado en el caso, queda para quien agenda. `userId` lo garantiza JwtAuthGuard.
-          assigneeId: found.assigneeId ?? this.tenant.userId!,
-          type: dto.type,
-          scheduledDate,
-          timeMode: dto.timeMode,
-          scheduledTime: dto.timeMode === ScheduleTimeMode.FIXED ? dto.scheduledTime : null,
-          timeSlot: dto.timeMode === ScheduleTimeMode.LAPSE ? dto.timeSlot : null,
-          observations: dto.observations,
-          details: validated.value as unknown as Prisma.InputJsonValue,
-          createdBy: this.tenant.userId,
-        },
+      const { created, reminder } = await this.insertItem(tx, {
+        id: dto.id,
+        credit,
+        type: dto.type,
+        scheduledDate,
+        timeMode: dto.timeMode,
+        scheduledTime: dto.timeMode === ScheduleTimeMode.FIXED ? dto.scheduledTime : null,
+        timeSlot: dto.timeMode === ScheduleTimeMode.LAPSE ? dto.timeSlot : null,
+        observations: dto.observations,
+        details: validated.value,
       });
-      const reminder = await this.promiseReminder(tx, created, scheduledDate);
-      const names = await this.clientNames(tx, [found.clientId]);
-      return { created, reminder, clientName: names.get(found.clientId) };
+      const names = await this.clientNames(tx, [credit.clientId]);
+      return { created, reminder, clientName: names.get(credit.clientId) };
     });
 
-    await this.audit.record({ entity: 'agenda_item', entityId: created.id, action: 'CREATE', after: created });
-    if (reminder) {
-      await this.audit.record({ entity: 'agenda_item', entityId: reminder.id, action: 'CREATE', after: reminder });
-    }
+    await this.recordCreated(created, reminder);
     return ResponseDto.ok(await this.view(created, clientName));
+  }
+
+  /** Auditoría del alta de un agendado y, si lo hubo, de su recordatorio. Fuera de la transacción, como el resto. */
+  async recordCreated(created: AgendaItem, reminder?: AgendaItem | null): Promise<void> {
+    await this.audit.record({ entity: 'agenda_item', entityId: created.id, action: 'CREATE', after: created });
+    if (reminder) await this.audit.record({ entity: 'agenda_item', entityId: reminder.id, action: 'CREATE', after: reminder });
+  }
+
+  /**
+   * **La única forma de crear una promesa de pago** (F4/08): la usan `POST /agenda` y «Registrar acción» (mora).
+   * Valida los datos con la regla de shared, el monto (tope = saldo, **salvo en créditos externos/PSF**, donde el
+   * saldo reportado puede ser solo capital), el medio de pago y el banco contra el catálogo; crea el recordatorio
+   * de 24 h si corresponde; hora fija sin hora exacta; asignada al **responsable del crédito** (o a quien la
+   * registra si no tiene). Corre dentro de la transacción de quien llama, que audita con `recordCreated`.
+   */
+  async createPromiseItem(
+    tx: PrismaClient,
+    input: { creditId: string; details: unknown; id?: string; observations?: string },
+  ): Promise<{ created: AgendaItem; reminder: AgendaItem | null }> {
+    const credit = await tx.credit.findFirst({ where: { id: input.creditId, deletedAt: null } });
+    if (!credit) throw agendaCaseNotFound();
+    const validated = validateAgendaDetails(AgendaItemType.PROMISE_TO_PAY, input.details);
+    if (!validated.ok) throw agendaInvalidDetails(validated.errors);
+
+    const today = await this.today();
+    await this.assertReferences(tx, AgendaItemType.PROMISE_TO_PAY, validated.value, credit.clientId, credit, today);
+    return this.insertItem(tx, {
+      id: input.id,
+      credit,
+      type: AgendaItemType.PROMISE_TO_PAY,
+      scheduledDate: toUTCDate((validated.value as PromiseToPayDetails).promiseDate),
+      timeMode: ScheduleTimeMode.FIXED,
+      scheduledTime: null,
+      timeSlot: null,
+      observations: input.observations,
+      details: validated.value,
+    });
+  }
+
+  /** Inserta el agendado (y el recordatorio de la promesa). Todo agendado nace asignado al responsable del crédito. */
+  private async insertItem(
+    tx: PrismaClient,
+    p: {
+      id?: string;
+      credit: Credit;
+      type: AgendaItemType;
+      scheduledDate: Date;
+      timeMode: ScheduleTimeMode;
+      scheduledTime?: string | null;
+      timeSlot?: string | null;
+      observations?: string;
+      details: AgendaDetails;
+    },
+  ): Promise<{ created: AgendaItem; reminder: AgendaItem | null }> {
+    const created = await tx.agendaItem.create({
+      data: {
+        ...(p.id ? { id: p.id } : {}),
+        accountId: this.tenant.accountId,
+        clientId: p.credit.clientId,
+        creditId: p.credit.id,
+        // El agendado es del RESPONSABLE del crédito, no de quien lo crea: un supervisor agenda sobre créditos
+        // ajenos, y `assigneeScope` los ocultaría del cobrador que debe ejecutarlos. Sin responsable, queda para
+        // quien agenda. `userId` lo garantiza JwtAuthGuard.
+        assigneeId: p.credit.assignedManagerId ?? this.tenant.userId!,
+        type: p.type,
+        scheduledDate: p.scheduledDate,
+        timeMode: p.timeMode,
+        scheduledTime: p.timeMode === ScheduleTimeMode.FIXED ? (p.scheduledTime ?? null) : null,
+        timeSlot: p.timeMode === ScheduleTimeMode.LAPSE ? (p.timeSlot ?? null) : null,
+        observations: p.observations,
+        details: p.details as unknown as Prisma.InputJsonValue,
+        createdBy: this.tenant.userId,
+      },
+    });
+    const reminder = await this.promiseReminder(tx, created, p.scheduledDate);
+    return { created, reminder };
   }
 
   /**
@@ -812,7 +864,9 @@ export class AgendaService {
       }
       case AgendaItemType.PROMISE_TO_PAY: {
         const promise = details as PromiseToPayDetails;
-        if (promise.amount > Number(credit.outstandingBalance)) {
+        // Tope = saldo, SOLO en créditos de Kobrax: en uno externo (PSF) el saldo reportado puede ser solo capital
+        // y lo que realmente se debe es mayor, así que no se puede afirmar que el monto «supera el saldo».
+        if (credit.externalSource === null && promise.amount > Number(credit.outstandingBalance)) {
           throw agendaInvalidReference('El monto prometido supera el saldo del crédito');
         }
         if (toUTCDate(promise.promiseDate) < today) throw agendaPastDate();

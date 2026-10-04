@@ -13,5 +13,6 @@ import { AgendaService } from './agenda.service';
   imports: [AuthModule, AuditModule, ClientsModule],
   controllers: [AgendaController],
   providers: [AgendaService],
+  exports: [AgendaService],
 })
 export class AgendaModule {}

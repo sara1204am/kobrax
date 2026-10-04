@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMoraOrder, buildMoraWhere, escapeLike, moraAccessConditions, type MoraScope } from './mora-query';
+import { buildMoraOrder, buildMoraWhere, escapeLike, moraAccessConditions, moraScopeOf, type MoraScope } from './mora-query';
 
 const NOW = new Date('2026-10-01T12:00:00Z');
 const ADMIN: MoraScope = { accountId: 'acc', userId: 'u-admin', ownOnly: false, canAssign: true };
@@ -42,10 +42,20 @@ describe('buildMoraWhere — qué créditos entran', () => {
 });
 
 describe('buildMoraWhere — alcance (C2/C4)', () => {
-  it('el cobrador ve sólo los casos que tiene asignados: no ve créditos sin caso', () => {
+  it('el cobrador ve lo suyo: crédito a su cargo (responsable o asignación vigente), con o sin caso', () => {
     const w = where({}, COLLECTOR);
+    assert.match(w.sql, /cr\.assigned_manager_id = ?/);
     assert.match(w.sql, /cc\.assignee_id = ?/);
+    assert.match(w.sql, /credit_assignments/);
+    assert.match(w.sql, /ca\.revoked_at IS NULL/);
     assert.ok(w.values.includes('u-col'));
+  });
+
+  it('moraScopeOf: por capacidad, igual que la ficha (case:write sin case:assign = sólo lo suyo)', () => {
+    const t = (perms: string[]) => moraScopeOf({ accountId: 'acc', userId: 'u', can: (p) => perms.includes(p) });
+    assert.deepEqual(t(['case:write']), { accountId: 'acc', userId: 'u', ownOnly: true, canAssign: false });
+    assert.equal(t(['case:write', 'case:assign']).ownOnly, false);
+    assert.equal(t(['case:read']).ownOnly, false);
   });
 
   it('el cobrador no puede ampliar su alcance con assigneeId, unassigned ni hasCase=false', () => {

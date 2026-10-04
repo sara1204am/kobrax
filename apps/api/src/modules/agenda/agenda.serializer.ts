@@ -16,7 +16,7 @@ export function serializeAgendaItem(
 ) {
   return {
     id: a.id,
-    caseId: a.caseId,
+    caseId: a.caseId ?? undefined,
     clientId: a.clientId,
     creditId: a.creditId,
     assigneeId: a.assigneeId,

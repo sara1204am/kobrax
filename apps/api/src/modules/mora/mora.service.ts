@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, type PrismaClient } from '@prisma/client';
+import { AgendaItemStatus, Prisma, type CreditActivityType, type PrismaClient } from '@prisma/client';
 import {
   Permission,
   cascadePosition,
@@ -23,11 +23,12 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
-import { serializeActivity } from '../cases/cases.serializer';
-import { CasesService } from '../cases/cases.service';
-import type { CreateActivityDto } from '../cases/dto/case.dto';
-import type { CreateMoraActivityDto, CreateMoraNoteDto, ListMoraQueryDto, UpdateMoraNoteDto } from './dto/mora.dto';
-import { buildMoraOrder, buildMoraWhere, MORA_FROM, moraAccessConditions, TERMINAL_CASE_STATUSES, type MoraScope } from './mora-query';
+import { AgendaService } from '../agenda/agenda.service';
+import { agendaNotSchedulable } from '../agenda/agenda.errors';
+import { ArrearsPriorityService } from '../arrears/arrears-priority.service';
+import type { CreateMoraActivityDto, CreateMoraNoteDto, ListMoraQueryDto, SetMoraPriorityDto, UpdateMoraNoteDto } from './dto/mora.dto';
+import { recordCreditActivity, serializeCreditActivity } from './credit-activity';
+import { buildMoraOrder, buildMoraWhere, MORA_FROM, moraAccessConditions, moraScopeOf, TERMINAL_CASE_STATUSES, type MoraScope } from './mora-query';
 import { serializeEpisodes } from './mora-episodes';
 import { serializeNote } from './mora-notes';
 import { serializePromises } from './mora-promises';
@@ -48,7 +49,7 @@ const ACTIVITY_ERRORS: Record<RecoveryActivityError, string> = {
   PROMISE_METHOD_REQUIRED: 'Falta el medio de pago de la promesa.',
 };
 
-/** Cuántas gestiones trae la ficha. Es el historial del caso abierto; el completo llega con la sección de gestiones. */
+/** Cuántas gestiones trae la ficha. Es la bitácora del crédito; el completo llega con la sección de gestiones. */
 const DETAIL_ACTIVITIES = 100;
 
 /**
@@ -67,7 +68,8 @@ export class MoraService {
     private readonly prisma: PrismaService,
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
-    private readonly cases: CasesService,
+    private readonly agenda: AgendaService,
+    private readonly arrearsPriority: ArrearsPriorityService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -82,13 +84,7 @@ export class MoraService {
    * Los créditos sin caso y los casos sin cobrador quedan, por construcción, fuera del alcance del cobrador.
    */
   private scope(): MoraScope {
-    const canAssign = this.tenant.can(Permission.CASE_ASSIGN);
-    return {
-      accountId: this.tenant.accountId,
-      userId: this.tenant.userId,
-      ownOnly: this.tenant.can(Permission.CASE_WRITE) && !canAssign,
-      canAssign,
-    };
+    return moraScopeOf(this.tenant);
   }
 
   async list(query: ListMoraQueryDto): Promise<ApiResponse<MoraCreditListItem[]>> {
@@ -174,10 +170,9 @@ export class MoraService {
       if (found.length === 0) return null;
       const [item] = await this.loadItems(tx, [creditId], now);
       if (!item) return null;
-      const activities = item.case
-        ? await tx.caseActivity.findMany({ where: { caseId: item.case.id }, orderBy: { createdAt: 'desc' }, take: DETAIL_ACTIVITIES })
-        : [];
-      return { ...item, activities: activities.map(serializeActivity) } as unknown as MoraCreditDetail;
+      // La bitácora es del crédito (preventiva o en mora), con el episodio indicado cuando lo hay.
+      const activities = await tx.creditActivity.findMany({ where: { creditId }, orderBy: { createdAt: 'desc' }, take: DETAIL_ACTIVITIES });
+      return { ...item, activities: activities.map(serializeCreditActivity) } as unknown as MoraCreditDetail;
     });
 
     if (!detail) throw new NotFoundException('Crédito no encontrado');
@@ -232,7 +227,7 @@ export class MoraService {
     });
     const activityIds = rows.map((r) => r.resultActivityId).filter((id): id is string => !!id);
     const activities = activityIds.length
-      ? await tx.caseActivity.findMany({ where: { id: { in: activityIds } }, select: { id: true, result: true } })
+      ? await tx.creditActivity.findMany({ where: { id: { in: activityIds } }, select: { id: true, result: true } })
       : [];
     const outcomes = new Map(activities.filter((a) => a.result).map((a) => [a.id, a.result as string]));
     return serializePromises(rows, outcomes, now);
@@ -251,8 +246,8 @@ export class MoraService {
       if (!(await this.visible(tx, creditId))) return null;
       const [episodeRows, activities, payments, promises] = await Promise.all([
         tx.creditArrearEpisode.findMany({ where: { creditId }, orderBy: [{ startedAt: 'desc' }, { createdAt: 'desc' }] }),
-        // Las gestiones de TODOS los casos del crédito: un caso cerrado y vuelto a abrir sigue siendo el mismo trabajo.
-        tx.caseActivity.findMany({ where: { case: { creditId } }, select: { type: true, result: true, createdAt: true } }),
+        // Todas las gestiones del crédito (la bitácora ya es por crédito, no por caso).
+        tx.creditActivity.findMany({ where: { creditId }, select: { type: true, result: true, createdAt: true } }),
         tx.payment.findMany({ where: { creditId }, select: { amount: true, paymentDate: true, channel: true } }),
         this.loadPromises(tx, creditId, now),
       ]);
@@ -279,25 +274,29 @@ export class MoraService {
 
   /**
    * Registrar una gestión (llamada, visita, mensaje o nota) con su resultado y, si prometió pagar, su promesa.
+   * **Por crédito, esté al día o en mora: ya no abre ni usa un caso** (F4/08).
    *
    *  · **Valida con la regla de shared** (`validateRecoveryActivity`): el tipo, que el resultado corresponda, y
    *    que «promesa de pago» y los datos de la promesa vayan juntos.
    *  · **Mismo alcance que la ficha**: sobre un crédito que no puede ver, 404 y no se escribe nada.
-   *  · **Si el crédito no tiene caso abierto, lo abre.** Sin caso no hay dónde colgar la gestión, y un crédito en
-   *    mora sin caso (sin cronograma, o importado con el reporte viejo) es justo donde nadie estaba gestionando.
-   *  · **Delega en `CasesService.addActivity`**: la promesa se vuelve un `agenda_item`, se actualiza la última
-   *    gestión y se avisa al tablero — una sola lógica, no una copia.
+   *  · Escribe `credit_activities`, ligada al episodio de mora ABIERTO (o a ninguno si está al día) y actualiza
+   *    `credits.last_action_at` (solo informativo).
+   *  · La promesa se crea con `AgendaService.createPromiseItem`: la misma función que `POST /agenda`.
+   *  · `agendaItemId` opcional: marca ejecutada esa gestión agendada (del mismo crédito) en la misma transacción.
    */
-  async addActivity(creditId: string, dto: CreateMoraActivityDto): Promise<ApiResponse<{ id: string; type: string; createdAt: Date; caseId: string; caseOpened: boolean }>> {
+  async addActivity(creditId: string, dto: CreateMoraActivityDto): Promise<ApiResponse<{ id: string; type: string; createdAt: Date; episodeId: string | null }>> {
+    const replay = (prev: { id: string; type: string; createdAt: Date; episodeId: string | null }) =>
+      ResponseDto.ok({ id: prev.id, type: prev.type, createdAt: prev.createdAt, episodeId: prev.episodeId });
+
     // Reintento del móvil: la gestión ya entró con ese id. Se responde lo guardado y no se escribe nada más.
     if (dto.id) {
       const prev = await this.tx(async (tx) => {
         if (!(await this.visible(tx, creditId))) throw new NotFoundException('Crédito no encontrado');
-        return tx.caseActivity.findFirst({ where: { id: dto.id }, select: { id: true, type: true, createdAt: true, caseId: true, case: { select: { creditId: true } } } });
+        return tx.creditActivity.findFirst({ where: { id: dto.id }, select: { id: true, type: true, createdAt: true, creditId: true, episodeId: true } });
       });
       if (prev) {
-        if (prev.case.creditId !== creditId) throw new ConflictException({ code: 'MORA_004', message: 'Ese id de gestión ya pertenece a otro crédito.' });
-        return ResponseDto.ok({ id: prev.id, type: prev.type, createdAt: prev.createdAt, caseId: prev.caseId, caseOpened: false });
+        if (prev.creditId !== creditId) throw new ConflictException({ code: 'MORA_004', message: 'Ese id de gestión ya pertenece a otro crédito.' });
+        return replay(prev);
       }
     }
 
@@ -306,42 +305,88 @@ export class MoraService {
     const invalid = validateRecoveryActivity(dto, yesterday);
     if (invalid) throw new BadRequestException({ code: `MORA_${invalid}`, message: ACTIVITY_ERRORS[invalid] });
 
-    const existing = await this.tx(async (tx) => {
-      if (!(await this.visible(tx, creditId))) throw new NotFoundException('Crédito no encontrado');
-      return tx.collectionCase.findFirst({ where: { creditId, status: { notIn: TERMINAL_CASE_STATUSES as never }, deletedAt: null }, select: { id: true } });
-    });
-
-    let caseId = existing?.id;
-    let caseOpened = false;
-    if (!caseId) {
-      try {
-        caseId = (await this.cases.create({ creditId })).id;
-        caseOpened = true;
-      } catch (err) {
-        // Dos personas gestionando a la vez: la otra abrió el caso primero. Se usa el suyo.
-        const raced = await this.tx((tx) => tx.collectionCase.findFirst({ where: { creditId, status: { notIn: TERMINAL_CASE_STATUSES as never }, deletedAt: null }, select: { id: true } }));
-        if (!raced) throw err;
-        caseId = raced.id;
-      }
-    }
-
     try {
-      const done = await this.cases.addActivity(caseId, {
-        id: dto.id,
-        type: dto.type,
-        result: dto.result,
-        notes: dto.notes?.trim() || undefined,
-        promise: dto.promise,
-      } as CreateActivityDto);
-      return ResponseDto.ok({ id: done.id, type: done.type, createdAt: done.createdAt, caseId, caseOpened });
+      const done = await this.tx(async (tx) => {
+        const credit = await this.visible(tx, creditId);
+        if (!credit) throw new NotFoundException('Crédito no encontrado');
+
+        // La gestión agendada que esta actividad cumple: del mismo crédito y todavía pendiente.
+        let toExecute: { id: string } | null = null;
+        if (dto.agendaItemId) {
+          const item = await tx.agendaItem.findFirst({ where: { id: dto.agendaItemId, deletedAt: null } });
+          if (!item || item.creditId !== creditId) {
+            throw new BadRequestException({ code: 'MORA_006', message: 'Esa gestión agendada no pertenece a este crédito.' });
+          }
+          // Ya ejecutada con ESTA misma actividad: nada que hacer. Con otra, o cancelada, es un conflicto.
+          const sameActivity = item.status === AgendaItemStatus.EXECUTED && !!dto.id && item.resultActivityId === dto.id;
+          if (!sameActivity) {
+            if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
+            toExecute = item;
+          }
+        }
+
+        const activity = await recordCreditActivity(tx, {
+          id: dto.id,
+          accountId: this.tenant.accountId,
+          creditId,
+          clientId: credit.clientId,
+          userId: this.tenant.userId,
+          type: dto.type as CreditActivityType,
+          result: dto.result,
+          notes: dto.notes?.trim() || undefined,
+        });
+        const promise = dto.promise
+          ? await this.agenda.createPromiseItem(tx, { creditId, details: { amount: dto.promise.amount, promiseDate: dto.promise.promiseDate, paymentMethodCode: dto.promise.paymentMethodCode, bankCode: dto.promise.bankCode } })
+          : null;
+        const executed = toExecute
+          ? await tx.agendaItem.update({ where: { id: toExecute.id }, data: { status: AgendaItemStatus.EXECUTED, resultActivityId: activity.id, updatedBy: this.tenant.userId } })
+          : null;
+        return { activity, promise, executed };
+      });
+
+      if (done.promise) await this.agenda.recordCreated(done.promise.created, done.promise.reminder);
+      if (done.executed) await this.audit.record({ entity: 'agenda_item', entityId: done.executed.id, action: 'EXECUTE', after: done.executed });
+      return replay(done.activity);
     } catch (err) {
       // Misma carrera que en la nota: el otro envío con este id ya la guardó. Se devuelve esa, no un 500.
       if (dto.id && isUniqueViolation(err)) {
-        const prev = await this.tx((tx) => tx.caseActivity.findFirst({ where: { id: dto.id }, select: { id: true, type: true, createdAt: true, caseId: true } }));
-        if (prev) return ResponseDto.ok({ id: prev.id, type: prev.type, createdAt: prev.createdAt, caseId: prev.caseId, caseOpened: false });
+        const prev = await this.tx((tx) => tx.creditActivity.findFirst({ where: { id: dto.id }, select: { id: true, type: true, createdAt: true, episodeId: true } }));
+        if (prev) return replay(prev);
       }
       throw err;
     }
+  }
+
+  /**
+   * Fija la prioridad del **episodio de mora abierto** a mano, o la suelta (`priority: null`). Mientras esté fijada
+   * el recálculo no la pisa; al soltarla se recalcula en el acto. Un crédito al día no tiene prioridad (409).
+   * Mismo alcance que la ficha; se audita antes/después.
+   */
+  async setPriority(creditId: string, dto: SetMoraPriorityDto): Promise<ApiResponse<{ creditId: string; episodeId: string; priority: string | null; pinned: boolean }>> {
+    const { episode, before, after } = await this.tx(async (tx) => {
+      if (!(await this.visible(tx, creditId))) throw new NotFoundException('Crédito no encontrado');
+      const open = await tx.creditArrearEpisode.findFirst({ where: { creditId, endedAt: null }, orderBy: { startedAt: 'desc' } });
+      if (!open) throw new ConflictException({ code: 'MORA_007', message: 'El crédito está al día: no tiene prioridad de mora.' });
+
+      let next = open;
+      if (dto.priority === null) {
+        await tx.creditArrearEpisode.update({ where: { id: open.id }, data: { priorityPinnedAt: null } });
+        await this.arrearsPriority.recomputeForCredit(tx, creditId);
+        next = (await tx.creditArrearEpisode.findFirst({ where: { id: open.id } })) ?? open;
+      } else {
+        next = await tx.creditArrearEpisode.update({ where: { id: open.id }, data: { priority: dto.priority, priorityPinnedAt: new Date() } });
+      }
+      return { episode: open, before: open, after: next };
+    });
+
+    await this.audit.record({
+      entity: 'credit_arrear_episode',
+      entityId: episode.id,
+      action: dto.priority === null ? 'PRIORITY_AUTO' : 'PRIORITY_PIN',
+      before: { creditId, priority: before.priority, pinned: before.priorityPinnedAt !== null },
+      after: { creditId, priority: after.priority, pinned: after.priorityPinnedAt !== null },
+    });
+    return ResponseDto.ok({ creditId, episodeId: episode.id, priority: after.priority, pinned: after.priorityPinnedAt !== null });
   }
 
   /** Las notas de un crédito, la más reciente primero. Mismo alcance que la ficha. */

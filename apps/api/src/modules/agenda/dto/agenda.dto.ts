@@ -60,7 +60,8 @@ export class ListOverdueQueryDto {
 export class CreateAgendaItemDto {
   /** Opcional: lo genera el móvil para que reintentar (cola offline) no duplique la gestión ni su recordatorio. */
   @IsOptional() @IsUUID() id?: string;
-  @IsUUID() caseId!: string;
+  /** Ignorado (F4/08): el agendado cuelga del crédito, no de un caso. Se acepta por compatibilidad con clientes viejos. */
+  @IsOptional() @IsUUID() caseId?: string;
   @IsUUID() creditId!: string;
 
   @IsEnum(AgendaItemType) type!: AgendaItemType;

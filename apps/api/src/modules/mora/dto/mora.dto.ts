@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, ValidateNested } from 'class-validator';
+import { IsBoolean, ValidateIf, ValidateNested } from 'class-validator';
 import { IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { ActivityPromiseDto } from '../../cases/dto/case.dto';
 import {
@@ -119,4 +119,16 @@ export class CreateMoraActivityDto {
   @IsOptional() @IsString() @MaxLength(40) result?: string;
   @IsOptional() @IsString() @MaxLength(MORA_NOTE_MAX_LENGTH + 200) notes?: string;
   @IsOptional() @ValidateNested() @Type(() => ActivityPromiseDto) promise?: ActivityPromiseDto;
+  /** Si viene, esa gestión agendada (SCHEDULED, del mismo crédito) se marca ejecutada con esta actividad, en la misma transacción. */
+  @IsOptional() @IsUUID() agendaItemId?: string;
+}
+
+/**
+ * Fijar la prioridad del episodio de mora abierto, o soltarla. `{ priority: 'HIGH' }` la fija a mano (el recálculo no
+ * la pisa mientras esté fijada); `{ priority: null }` la suelta y vuelve la automática. Sin la clave → 400.
+ */
+export class SetMoraPriorityDto {
+  @ValidateIf((o: SetMoraPriorityDto) => o.priority !== null)
+  @IsIn(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'])
+  priority!: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | null;
 }

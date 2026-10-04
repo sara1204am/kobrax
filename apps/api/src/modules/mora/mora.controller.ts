@@ -4,7 +4,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { CreateMoraActivityDto, CreateMoraNoteDto, ListMoraQueryDto, UpdateMoraNoteDto } from './dto/mora.dto';
+import { CreateMoraActivityDto, CreateMoraNoteDto, ListMoraQueryDto, SetMoraPriorityDto, UpdateMoraNoteDto } from './dto/mora.dto';
 import { MoraExportService } from './mora-export.service';
 import { MoraService } from './mora.service';
 
@@ -85,12 +85,22 @@ export class MoraController {
 
   /**
    * Registrar una gestión con su resultado y su promesa. `case:write`: el cobrador la tiene, y sólo la puede
-   * registrar sobre un crédito que vea. Si el crédito no tiene caso, lo abre.
+   * registrar sobre un crédito que vea (al día o en mora). No abre ningún caso.
    */
   @Post(':creditId/activities')
   @Roles(Permission.CASE_WRITE)
   addActivity(@Param('creditId', ParseUUIDPipe) creditId: string, @Body() dto: CreateMoraActivityDto) {
     return this.mora.addActivity(creditId, dto);
+  }
+
+  /**
+   * Fijar la prioridad del episodio de mora abierto a mano (`{ priority: 'HIGH' }`) o soltarla (`{ priority: null }`).
+   * Mismo permiso que el endpoint de prioridad del caso: `case:write` (decir «a éste hay que ir hoy» no es repartir).
+   */
+  @Patch(':creditId/priority')
+  @Roles(Permission.CASE_WRITE)
+  setPriority(@Param('creditId', ParseUUIDPipe) creditId: string, @Body() dto: SetMoraPriorityDto) {
+    return this.mora.setPriority(creditId, dto);
   }
 
   /** Escribir una nota: `case:write` (el cobrador la tiene), y sólo sobre un crédito que pueda ver. */

@@ -54,3 +54,12 @@ export function slaDueAt(
   const hours = params.slaHours[priority] ?? 72;
   return new Date(asOf.getTime() + hours * 60 * 60 * 1000);
 }
+
+/**
+ * Los parámetros de prioridad de una cuenta: los de fábrica con lo que `configuration.casePriority` pise.
+ * Una sola lectura para el caso (viejo) y para la prioridad del episodio.
+ */
+export function priorityParamsOf(configuration: unknown): PriorityParams {
+  const cfg = (configuration ?? {}) as { casePriority?: Partial<PriorityParams> };
+  return { ...DEFAULT_PRIORITY_PARAMS, ...(cfg.casePriority ?? {}) };
+}

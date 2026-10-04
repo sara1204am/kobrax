@@ -1,6 +1,6 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { CasePriority, CaseStatus } from '@prisma/client';
-import { MORA_SORTS, searchTerms, type MoraSort } from '@kobrax/shared';
+import { MORA_SORTS, Permission, searchTerms, type MoraSort } from '@kobrax/shared';
 import { enumList } from '../cases/cases.service';
 import type { ListMoraQueryDto } from './dto/mora.dto';
 
@@ -43,9 +43,42 @@ function todayIso(now: Date): string {
  */
 export function moraAccessConditions(scope: MoraScope): Prisma.Sql[] {
   const c: Prisma.Sql[] = [Prisma.sql`cr.account_id = ${scope.accountId}`, Prisma.sql`cr.deleted_at IS NULL`];
-  // El cobrador sólo ve sus casos: un crédito sin caso, o con el caso de otro, no es suyo.
-  if (scope.ownOnly) c.push(Prisma.sql`cc.assignee_id = ${scope.userId ?? ''}`);
+  // El cobrador ve lo suyo: el crédito que tiene a su cargo (responsable, temporal o apoyo vigentes) o, mientras
+  // el caso viejo exista, el caso que tiene asignado. Un crédito AL DÍA a su cargo también es suyo (F4/08).
+  if (scope.ownOnly) {
+    const me = scope.userId ?? '';
+    c.push(Prisma.sql`(
+      cr.assigned_manager_id = ${me}
+      OR cc.assignee_id = ${me}
+      OR EXISTS (
+        SELECT 1 FROM credit_assignments ca
+        WHERE ca.credit_id = cr.id AND ca.account_id = cr.account_id AND ca.user_id = ${me}
+          AND ca.revoked_at IS NULL AND ca.starts_at <= now() AND (ca.expires_at IS NULL OR ca.expires_at > now())))`);
+  }
   return c;
+}
+
+/** El alcance de quien consulta, por **capacidad** (no por nombre de rol). Lo comparten Mora y Agenda. */
+export function moraScopeOf(tenant: { accountId: string; userId?: string; can(permission: string): boolean }): MoraScope {
+  const canAssign = tenant.can(Permission.CASE_ASSIGN);
+  return { accountId: tenant.accountId, userId: tenant.userId, ownOnly: tenant.can(Permission.CASE_WRITE) && !canAssign, canAssign };
+}
+
+/**
+ * Los créditos que `scope` puede ver (mismo alcance que la ficha de mora), por id o por cliente. Los que no se
+ * ven no aparecen: quien llama decide el 404.
+ */
+export async function visibleCredits(
+  tx: Pick<PrismaClient, '$queryRaw'>,
+  scope: MoraScope,
+  filter: { creditId?: string; clientId?: string },
+): Promise<{ id: string; clientId: string }[]> {
+  const extra: Prisma.Sql[] = [];
+  if (filter.creditId) extra.push(Prisma.sql`cr.id = ${filter.creditId}`);
+  if (filter.clientId) extra.push(Prisma.sql`cr.client_id = ${filter.clientId}`);
+  const access = Prisma.join([...moraAccessConditions(scope), ...extra], ' AND ');
+  const rows = await tx.$queryRaw<{ id: string; client_id: string }[]>(Prisma.sql`SELECT cr.id, cr.client_id ${MORA_FROM} WHERE ${access}`);
+  return rows.map((r) => ({ id: r.id, clientId: r.client_id }));
 }
 
 /**

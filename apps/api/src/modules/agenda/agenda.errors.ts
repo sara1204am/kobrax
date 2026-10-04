@@ -3,13 +3,13 @@ import { BadRequestException, ConflictException, NotFoundException } from '@nest
 export const agendaItemNotFound = () =>
   new NotFoundException({ code: 'AGENDA_NOT_FOUND', message: 'Gestión agendada no encontrada' });
 
-/** El caso no existe, está cerrado, o no está asignado a quien agenda. Se responde 404 (no 403): no filtra existencia. */
+/** El crédito no existe o quien agenda no lo puede ver. Se responde 404 (no 403): no filtra existencia. */
 export const agendaCaseNotFound = () =>
-  new NotFoundException({ code: 'AGENDA_001', message: 'El caso no existe o no está asignado a vos' });
+  new NotFoundException({ code: 'AGENDA_001', message: 'El crédito no existe o no está a tu cargo' });
 
-/** El cliente existe, pero ninguno de sus casos abiertos es del cobrador → no puede agendarle nada. */
+/** El cliente existe, pero ninguno de sus créditos es visible para quien agenda → no puede agendarle nada. */
 export const agendaClientWithoutCases = () =>
-  new NotFoundException({ code: 'AGENDA_002', message: 'El cliente no tiene casos asignados a vos' });
+  new NotFoundException({ code: 'AGENDA_002', message: 'El cliente no tiene créditos a tu cargo' });
 
 export const agendaPastDate = () =>
   new BadRequestException({ code: 'AGENDA_003', message: 'No se puede agendar en una fecha pasada' });
@@ -33,6 +33,6 @@ export const agendaInvalidOutcome = () =>
 export const agendaNotSchedulable = () =>
   new ConflictException({ code: 'AGENDA_008', message: 'La gestión ya no está pendiente' });
 
-/** El `id` que mandó el cliente ya es de otra gestión (otro crédito/caso, o una eliminada). */
+/** El `id` que mandó el cliente ya es de otra gestión (otro crédito, o una eliminada). */
 export const agendaIdTaken = () =>
   new ConflictException({ code: 'AGENDA_009', message: 'Ese id de gestión ya pertenece a otra gestión agendada' });
