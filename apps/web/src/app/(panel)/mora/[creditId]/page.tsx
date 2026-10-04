@@ -5,6 +5,7 @@ import {
   memberName,
   Permission,
   type AccountInfo,
+  type Assignee,
   type MeInfo,
   type Member,
   type MoraCaseLookup,
@@ -20,6 +21,7 @@ import {
 import { apiCall } from '@/lib/bff';
 import { Badge, EmptyState, PageHeader, Section } from '@/components/panel-ui';
 import { SourceBadge } from '@/components/source-badge';
+import { SituationBadge } from '@/components/situation-badge';
 import { date, dateTime, dayDate, money } from '@/lib/format';
 import { assignedTo } from '@/lib/cases';
 import { isKnownRole } from '@/lib/team';
@@ -28,22 +30,26 @@ import { ActivityCard } from './activity-card';
 import { ActivityResult } from './activity-result';
 import { RegisterActivityButton } from './activity-form';
 import { ArrearsHistory } from './arrears-history';
-import { CaseActions } from './case-actions';
 import { FichaSummary } from './ficha-summary';
 import { NotesSection } from './notes-section';
-import { OpenCaseButton } from './open-case-button';
 import { PaymentsSection } from './payments-section';
 import { PersonSections } from './person-sections';
 import { PromisesSection } from './promises-section';
+import { PsfNotice } from './psf-notice';
 import { RecoveryMetricsSection } from './recovery-metrics';
-import { StatusControl } from './status-control';
+import { ResponsiblesSection } from './responsibles-section';
+import { WriteOffButton } from './write-off-button';
 import { PriorityCell } from '../priority-cell';
 
+
 /**
- * La ficha de recuperación **de un crédito**: de quién es, cuánto debe, quién lo trabaja y qué se hizo.
+ * La ficha de **gestión de un crédito**: de quién es, cuánto debe, quién lo trabaja y qué se hizo.
  *
- * 🔴 **La ruta es el crédito, no el caso.** Antes `/mora/<id>` abría un caso, y un crédito en mora sin caso
- * no tenía ficha. Los enlaces viejos (`/mora/<caseId>`, de notificaciones o de la bitácora del cliente)
+ * 🔴 **Sirve para cualquier crédito visible, esté o no en mora** (F4/08 · D4): registrar acciones, agendar y pagar no
+ * exigen mora. Por eso el título dice «Gestión del crédito» y no «Mora». La situación (al día / en mora), la
+ * categoría y el castigo vienen de la API; gestiones y promesas son información, no estados.
+ *
+ * 🔴 **La ruta es el crédito, no el caso.** Los enlaces viejos (`/mora/<caseId>`, de notificaciones o de la bitácora del cliente)
  * siguen abriendo: si el id no es un crédito, se busca a qué crédito pertenece ese caso y se redirige.
  *
  * El historial viene **en la misma llamada** (`activities`, ya ordenadas desc por la API) y se pinta en el
@@ -74,36 +80,50 @@ export default async function CreditoMoraPage({ params }: { params: { creditId: 
     notFound();
   }
   if (detail.status !== 200 || !detail.body.data) {
-    return <EmptyState title={t('title')} text={detail.body.error?.message} />;
+    return <EmptyState title={t('gestion.title')} text={detail.body.error?.message} />;
   }
 
   const item = detail.body.data;
   // Dependen del `clientId` que trae la ficha, así que van después. Un 403 (sin `client:read`) no tumba la página.
-  const [client, collateralTypes] = await Promise.all([
+  const [client, collateralTypes, assignees] = await Promise.all([
     apiCall<ClientDetail>(`/clients/${item.clientId}`, { method: 'GET', auth: true }),
     apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.COLLATERAL_TYPE}`, { method: 'GET', auth: true }),
+    // A quién se puede asignar: sólo lo pide quien reparte (`assignment:write`); el resto da 403.
+    (me.body.data?.permissions ?? []).includes(Permission.ASSIGNMENT_WRITE)
+      ? apiCall<Assignee[]>('/assignments/assignees', { method: 'GET', auth: true })
+      : Promise.resolve(null),
   ]);
   const members = team.body.data ?? [];
   const permissions = me.body.data?.permissions ?? [];
   const currency = item.currency ?? account.body.data?.currencyCode ?? 'BOB';
-  const canWrite = permissions.includes(Permission.CASE_WRITE);
-  const open = item.case;
-  const assignee = members.find((m) => m.userId === open?.assigneeId);
+  // Registrar una acción es de `collection:write`, sobre cualquier crédito que se vea (al día o en mora).
+  const canWrite = permissions.includes(Permission.COLLECTION_WRITE);
+  const canAssign = permissions.includes(Permission.ASSIGNMENT_WRITE);
+  // Castigar: `credit:write` y alcance total (gerente, administrador). La API lo exige igual.
+  const canWriteOff = permissions.includes(Permission.CREDIT_WRITE) && permissions.includes(Permission.DATA_SCOPE_ALL);
+  const collectors = (assignees?.status === 200 ? (assignees.body.data ?? []) : []).map((a) => ({ userId: a.userId, name: a.name }));
+  const people = [...members.map((m) => ({ userId: m.userId, name: memberName(m) })), ...collectors];
+  const principalId = item.responsibleId ?? item.assignments.find((a) => a.kind === 'PRINCIPAL')?.userId;
+  const responsibleName = principalId ? (people.find((p) => p.userId === principalId)?.name ?? t('unknownAssignee')) : t('noAssignee');
+  // Promesa vigente y última gestión: datos sueltos. La vigente es la primera que vence.
+  const activePromise = (promises.status === 200 ? (promises.body.data ?? []) : [])
+    .filter((p) => p.status === 'ACTIVE')
+    .sort((a, b) => a.promiseDate.localeCompare(b.promiseDate))[0];
   /** Un dato que puede faltar: «—», nunca 0 (un importado puede no traerlo). */
   const amount = (n: number | undefined) => (n === undefined ? '—' : money(n, currency));
   /** Un día civil (`YYYY-MM-DD`: próxima fecha, último pago, inicio de mora): en UTC, o Bolivia lo corre un día. */
   const day = (iso: string | undefined) => (iso ? dayDate(iso, locale) : '—');
-  /** Un instante (el plazo de gestión del caso): sí va en hora local. */
+  /** Un instante (la última gestión): sí va en hora local. */
   const instant = (iso: string | undefined) => (iso ? date(iso, locale) : '—');
 
   return (
     <>
       <PageHeader
-        title={item.clientName ?? t('title')}
-        subtitle={item.code ? t('detail.creditCode', { code: item.code }) : t('subtitle')}
+        title={t('gestion.title')}
+        subtitle={[item.clientName, item.code ? t('detail.creditCode', { code: item.code }) : null].filter(Boolean).join(' · ')}
         actions={
           <>
-            {/* Registrar una gestión sirve con o sin caso: si no hay uno, la API lo abre. */}
+            {/* Registrar una gestión sirve con cualquier crédito que se vea, esté o no en mora. */}
             {canWrite && (
               <RegisterActivityButton
                 creditId={item.creditId}
@@ -116,39 +136,21 @@ export default async function CreditoMoraPage({ params }: { params: { creditId: 
             <PaymentActions
               credit={{ id: item.creditId, code: item.code, suggestedAmount: item.suggestedPaymentAmount, external: !!item.externalSource }}
             />
-          {open ? (
-            <CaseActions
-              caseId={open.id}
-              status={open.status}
-              members={members}
-              canAssign={permissions.includes(Permission.CASE_ASSIGN)}
-              canClose={permissions.includes(Permission.CASE_CLOSE)}
-            />
-          ) : (
-            canWrite && <OpenCaseButton creditId={item.creditId} />
-          )}
+            <WriteOffButton creditId={item.creditId} writtenOff={item.writtenOff} canWriteOff={canWriteOff} />
           </>
         }
       />
 
       <div data-note-anchor="PAGE" className="relative space-y-6">
-        {/* El resumen: lo que se debe, en grande, y los datos del crédito. Estado, prioridad y fuente son
-            **controles**, no etiquetas: se tocan y se cambian acá mismo. Sin caso abierto no hay nada que cambiar, y se dice. */}
+        {/* El resumen: lo que se debe, en grande, y los datos del crédito. La situación (al día / en mora), la categoría
+            y el castigo vienen de la API; la prioridad es un control del episodio de mora abierto (un crédito al día no tiene). */}
         <FichaSummary
           chips={
             <>
-              {item.daysPastDue > 0 && <Badge tone="danger">{t('days', { n: item.daysPastDue })}</Badge>}
+              <SituationBadge inline situation={item.situation} daysPastDue={item.daysPastDue} category={item.category} writtenOff={item.writtenOff} />
+              {item.priority && <PriorityCell creditId={item.creditId} priority={item.priority} pinned={item.priorityPinned} canWrite={canWrite} />}
               {item.externalSource && (
                 <SourceBadge source={item.externalSource} syncStatus={item.syncStatus} reportedAsOf={item.reportedAsOf} stale={item.reportedStale} />
-              )}
-              {open ? (
-                <>
-                  <StatusControl caseId={open.id} status={open.status} canWrite={canWrite} />
-                  <PriorityCell caseId={open.id} priority={open.priority} pinned={open.priorityPinned} canWrite={canWrite} />
-                  {open.isOverdue && <Badge tone="danger">{t('overdueBadge')}</Badge>}
-                </>
-              ) : (
-                <Badge tone="neutral">{t('noCase')}</Badge>
               )}
               {item.reportedStatus && <Badge tone="neutral">{item.reportedStatus}</Badge>}
             </>
@@ -161,14 +163,27 @@ export default async function CreditoMoraPage({ params }: { params: { creditId: 
           nextDueDate={day(item.nextDueDate)}
           lastPayment={day(item.lastPaymentAt)}
           moraSince={day(item.moraSince)}
-          sla={instant(open?.slaDueAt)}
-          // Sin nombre no es sin cobrador: `/users` da 403 sin `user:read`.
-          assignee={assignee ? memberName(assignee) : open?.assigneeId ? t('unknownAssignee') : t('noAssignee')}
+          lastAction={instant(item.lastActionAt)}
+          activePromise={activePromise ? `${amount(activePromise.amount)} · ${day(activePromise.promiseDate)}` : '—'}
+          // Sin nombre no es sin responsable: `/users` da 403 sin `user:read`.
+          assignee={responsibleName}
           branch={item.branchName}
           clientHref={`/cartera/${item.clientId}`}
           creditHref={`/cartera/${item.clientId}/credito/${item.creditId}`}
           amount={amount}
         />
+
+        {/* Aviso del reporte PSF (D9): ausente no es pagado, y un dato viejo se avisa. No bloquea el trabajo de campo. */}
+        <PsfNotice
+          externalSource={item.externalSource}
+          syncStatus={item.syncStatus}
+          absentSince={item.absentSince}
+          reportedAsOf={item.reportedAsOf}
+          reportedStale={item.reportedStale}
+        />
+
+        {/* Quién atiende el crédito: responsable, reemplazo temporal y ayuda. */}
+        <ResponsiblesSection creditId={item.creditId} assignments={item.assignments} people={people} collectors={collectors} canAssign={canAssign} />
 
         {/* Qué se hizo para recuperarlo y qué se logró, sobre la mora actual. */}
         <RecoveryMetricsSection metrics={metrics.status === 200 ? (metrics.body.data ?? null) : null} currency={currency} />
@@ -205,7 +220,7 @@ export default async function CreditoMoraPage({ params }: { params: { creditId: 
             ))}
           </ol>
             ) : (
-              <EmptyState title={open ? t('detail.timelineEmpty') : t('detail.noCaseTitle')} text={open ? undefined : t('detail.noCaseText')} />
+              <EmptyState title={t('detail.timelineEmpty')} />
             )}
           </Section>
 
@@ -218,7 +233,7 @@ export default async function CreditoMoraPage({ params }: { params: { creditId: 
             members={members}
             canWrite={canWrite}
             userId={me.body.data?.userId}
-            canAssign={permissions.includes(Permission.CASE_ASSIGN)}
+            canAssign={canAssign}
           />
 
           <PaymentsSection

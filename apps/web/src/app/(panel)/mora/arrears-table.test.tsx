@@ -14,10 +14,17 @@ const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
 vi.mock('@/components/toast', () => ({ useToast: () => toast }));
 // `PriorityCell` y `BulkActions` hablan con el BFF: acá sólo importa qué reciben, no lo que hacen.
 vi.mock('./priority-cell', () => ({
-  PriorityCell: (p: { caseId: string; priority: string }) => <span data-testid="prio">{`${p.caseId}:${p.priority}`}</span>,
+  PriorityCell: (p: { creditId: string; priority: string; pinned?: boolean }) => (
+    <span data-testid="prio">{`${p.creditId}:${p.priority}${p.pinned ? ':pinned' : ''}`}</span>
+  ),
 }));
 vi.mock('./bulk-actions', () => ({
   BulkActions: (p: { ids: string[] }) => <span data-testid="bulk">{p.ids.join(',')}</span>,
+}));
+vi.mock('@/components/situation-badge', () => ({
+  SituationBadge: (p: { situation: string; category?: { code: string }; writtenOff: boolean }) => (
+    <span data-testid="situation">{[p.situation, p.category?.code, p.writtenOff ? 'WRITTEN_OFF' : ''].filter(Boolean).join('|')}</span>
+  ),
 }));
 
 const META = { total: 3, page: 1, limit: 25, pages: 1 };
@@ -33,6 +40,9 @@ function credit(over: Partial<MoraCreditListItem> = {}): MoraCreditListItem {
     daysPastDue: 45,
     arrearsSource: 'CALCULATED',
     hasActivePromise: false,
+    situation: 'IN_ARREARS',
+    writtenOff: false,
+    priorityPinned: false,
     ...over,
   };
 }
@@ -107,23 +117,40 @@ describe('ArrearsTable — ausente no es cero', () => {
   });
 });
 
-describe('ArrearsTable — el caso es opcional', () => {
-  it('con caso: prioridad editable y cobrador', () => {
-    renderTable([credit({ case: { id: 'case-9', status: 'ACTIVE', priority: 'CRITICAL', priorityPinned: false, assigneeId: 'u1', isOverdue: false } })]);
-    expect(screen.getByTestId('prio')).toHaveTextContent('case-9:CRITICAL');
-    expect(screen.getByText('Carlos Mamani')).toBeInTheDocument();
+describe('ArrearsTable — situación, prioridad y responsable (sin caso)', () => {
+  it('🔴 la situación y la categoría salen de la API, y castigado va aparte', () => {
+    renderTable([credit({ category: { code: 'B', name: 'B' }, writtenOff: true })]);
+    expect(screen.getByTestId('situation')).toHaveTextContent('IN_ARREARS|B|WRITTEN_OFF');
   });
 
-  it('🔴 un crédito en mora sin caso aparece igual, sin prioridad que cambiar', () => {
-    renderTable([credit()]);
-    expect(screen.getByText('302-222-9734')).toBeInTheDocument();
+  it('un crédito al día se ve con «Al día» y sin prioridad que cambiar', () => {
+    renderTable([credit({ situation: 'CURRENT', daysPastDue: 0, priority: undefined })], { filtered: true });
+    expect(screen.getByTestId('situation')).toHaveTextContent('CURRENT');
     expect(screen.queryByTestId('prio')).toBeNull();
-    expect(screen.getByText('Sin caso')).toBeInTheDocument();
+  });
+
+  it('la prioridad es la del episodio, se cambia por crédito y muestra el pin', () => {
+    renderTable([credit({ priority: 'CRITICAL', priorityPinned: true })]);
+    expect(screen.getByTestId('prio')).toHaveTextContent('cr-1:CRITICAL:pinned');
+  });
+
+  it('el responsable sale de responsibleId; sin nombre dice «Asignado», no el id', () => {
+    renderTable([credit({ responsibleId: 'u1' }), credit({ creditId: 'cr-2', code: 'C-2', responsibleId: 'desconocido' })]);
+    expect(screen.getByText('Carlos Mamani')).toBeInTheDocument();
+    expect(screen.getByText('Asignado')).toBeInTheDocument();
+    expect(screen.queryByText('desconocido')).toBeNull();
+  });
+
+  it('la última gestión es la fecha, sin etiquetas de estado; ya no hay columnas de caso ni de SLA', () => {
+    renderTable([credit({ lastActionAt: '2026-10-03T15:00:00.000Z', hasActivePromise: true })]);
+    expect(screen.getByRole('columnheader', { name: /Última gestión/ })).toBeInTheDocument();
+    for (const name of [/Estado de gestión/, /Vence/, /Sin caso/]) expect(screen.queryByRole('columnheader', { name })).toBeNull();
+    expect(screen.queryByText(/En gestión|Promesa incumplida|Sin gestión|Sin caso/)).toBeNull();
   });
 });
 
 describe('ArrearsTable — columnas opcionales apagadas por defecto', () => {
-  it('el estado de gestión y el estado en origen no se ven hasta prenderlos', () => {
+  it('el estado en origen y la oficina no se ven hasta prenderlos', () => {
     renderTable([credit({ reportedStatus: 'Ejecución' })]);
     expect(screen.queryByText('Ejecución')).toBeNull();
     expect(screen.queryByRole('columnheader', { name: /Estado en origen/ })).toBeNull();
@@ -131,31 +158,56 @@ describe('ArrearsTable — columnas opcionales apagadas por defecto', () => {
   });
 });
 
-describe('ArrearsTable — acciones en lote sobre casos', () => {
-  it('traduce los créditos elegidos a sus casos y avisa de los que no tienen', async () => {
-    renderTable([
-      credit({ creditId: 'a', code: 'A', case: { id: 'case-a', status: 'ACTIVE', priority: 'HIGH', priorityPinned: false, isOverdue: false } }),
-      credit({ creditId: 'b', code: 'B' }),
-    ]);
+describe('ArrearsTable — acciones en lote por crédito', () => {
+  it('pasa los ids de crédito elegidos, sin traducir a casos ni dejar a nadie afuera', async () => {
+    renderTable([credit({ creditId: 'a', code: 'A' }), credit({ creditId: 'b', code: 'B', situation: 'CURRENT', daysPastDue: 0 })]);
     await userEvent.click(screen.getByLabelText(/Elegir todos los de esta página/i));
-    expect(screen.getByTestId('bulk')).toHaveTextContent('case-a');
-    expect(screen.getByText(/1 crédito elegido no tiene caso abierto/i)).toBeInTheDocument();
+    expect(screen.getByTestId('bulk')).toHaveTextContent('a,b');
+    expect(screen.queryByText(/sin caso|no tiene caso/i)).toBeNull();
   });
 });
 
-describe('ArrearsTable — filtros según quién mire', () => {
-  it('quien reparte ve los filtros de cobrador, sin asignar y con/sin caso', async () => {
+describe('ArrearsTable — filtros', () => {
+  const CATEGORIES = [
+    { id: '1', code: 'A', name: 'Temprana', fromDays: 1, toDays: 30, color: '#0a0', sortOrder: 1 },
+    { id: '2', code: 'B', name: 'B', fromDays: 31, toDays: null, color: null, sortOrder: 2 },
+  ];
+
+  it('quien reparte ve responsable y sin responsable; ya no hay filtros del caso ni de SLA', async () => {
     renderTable([credit()], { showAssignee: true });
     await userEvent.click(screen.getByRole('button', { name: /Filtros/i }));
-    expect(screen.getByText('Casos sin cobrador')).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Cobrador' })).toBeInTheDocument();
+    expect(screen.getByText('Créditos sin responsable')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Responsable' })).toBeInTheDocument();
+    for (const gone of ['Caso', 'Tiempo de gestión', 'Estado']) expect(screen.queryByText(gone)).toBeNull();
   });
 
-  it('el cobrador no los ve: la API ya lo acota a lo suyo', async () => {
+  it('el cobrador no ve los de reparto: la API ya lo acota a lo suyo', async () => {
     renderTable([credit()], { showAssignee: false });
     await userEvent.click(screen.getByRole('button', { name: /Filtros/i }));
-    expect(screen.queryByText('Casos sin cobrador')).toBeNull();
-    expect(screen.queryByRole('combobox', { name: 'Cobrador' })).toBeNull();
+    expect(screen.queryByText('Créditos sin responsable')).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Responsable' })).toBeNull();
+  });
+
+  it('🔴 la categoría se ofrece con lo que configuró la cuenta, no con una lista fija; sin categorías no hay filtro', async () => {
+    renderTable([credit()], { categories: CATEGORIES });
+    await userEvent.click(screen.getByRole('button', { name: /Filtros/i }));
+    const combo = screen.getByRole('combobox', { name: 'Categoría de mora' });
+    expect(within(combo).getAllByRole('option').map((o) => o.textContent)).toEqual(['Todos', 'A · Temprana', 'B']);
+  });
+
+  it('sin categorías configuradas no se dibuja el filtro de categoría', async () => {
+    renderTable([credit()], { categories: [] });
+    await userEvent.click(screen.getByRole('button', { name: /Filtros/i }));
+    expect(screen.queryByRole('combobox', { name: 'Categoría de mora' })).toBeNull();
+  });
+
+  it('castigo, prioridad, fuente y «incluir los que están al día» siguen', async () => {
+    renderTable([credit()]);
+    await userEvent.click(screen.getByRole('button', { name: /Filtros/i }));
+    const castigo = screen.getByRole('combobox', { name: 'Castigo' });
+    expect(within(castigo).getAllByRole('option').map((o) => o.textContent)).toEqual(['Todos', 'Sólo castigados', 'Sin castigados']);
+    expect(screen.getByRole('combobox', { name: 'Prioridad' })).toBeInTheDocument();
+    expect(screen.getByText('Incluir los que están al día')).toBeInTheDocument();
   });
 });
 
@@ -170,7 +222,7 @@ describe('ArrearsTable — exportar', () => {
     URL.revokeObjectURL = vi.fn();
   });
 
-  it('sin case:export no se dibujan los botones', () => {
+  it('sin collection:export no se dibujan los botones', () => {
     renderTable([credit()], { canExport: false });
     expect(screen.queryByRole('button', { name: /Exportar CSV/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Exportar PDF/ })).toBeNull();

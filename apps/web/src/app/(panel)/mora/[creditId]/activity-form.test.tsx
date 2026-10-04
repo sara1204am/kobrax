@@ -128,7 +128,7 @@ describe('RegisterActivityButton — registrar', () => {
   });
 
   it('registra una visita con resultado y observaciones, sin promesa', async () => {
-    post.mockResolvedValue({ ok: true, status: 201, data: { caseOpened: false } });
+    post.mockResolvedValue({ ok: true, status: 201, data: { id: 'a1', type: 'CALL', createdAt: 'x', episodeId: 'e1' } });
     await open();
     await userEvent.selectOptions(screen.getByLabelText('Qué se hizo'), 'VISIT');
     await userEvent.selectOptions(resultSelect(), 'NOT_FOUND');
@@ -141,7 +141,7 @@ describe('RegisterActivityButton — registrar', () => {
   });
 
   it('🔴 registra una promesa con monto numérico, fecha y medio', async () => {
-    post.mockResolvedValue({ ok: true, status: 201, data: { caseOpened: false } });
+    post.mockResolvedValue({ ok: true, status: 201, data: { id: 'a1', type: 'CALL', createdAt: 'x', episodeId: 'e1' } });
     await open();
     await userEvent.selectOptions(resultSelect(), 'PROMISE_TO_PAY');
     await userEvent.clear(screen.getByLabelText('Monto prometido'));
@@ -156,12 +156,13 @@ describe('RegisterActivityButton — registrar', () => {
     expect(body.promise).toEqual({ amount: 500.5, promiseDate: tomorrow(), paymentMethodCode: 'QR' });
   });
 
-  it('si el crédito no tenía caso, avisa que se abrió uno', async () => {
-    post.mockResolvedValue({ ok: true, status: 201, data: { caseOpened: true } });
+  it('🔴 sobre un crédito al día registra igual y no habla de ningún caso (acción preventiva)', async () => {
+    post.mockResolvedValue({ ok: true, status: 201, data: { id: 'a2', type: 'CALL', createdAt: 'x' } });
     await open();
     await userEvent.selectOptions(resultSelect(), 'NO_ANSWER');
     await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
-    await waitFor(() => expect(toast).toHaveBeenCalledWith('Gestión registrada y caso abierto'));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Gestión registrada'));
+    expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/caso/i));
   });
 
   it('un error de la API se muestra y el formulario sigue abierto con lo escrito', async () => {

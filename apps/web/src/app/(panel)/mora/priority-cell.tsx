@@ -8,7 +8,7 @@ import { Badge } from '@/components/panel-ui';
 import { Button, ErrorBanner } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
-import { postJson } from '@/lib/client';
+import { sendJson } from '@/lib/client';
 import { PRIORITY_TONE } from '@/lib/cases';
 
 /** De mayor a menor: la que más se elige queda primera y no hay que recorrer la lista. */
@@ -33,12 +33,13 @@ export const PRIORITIES: CasePriority[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] 
  * otra aplicación.
  */
 export function PriorityCell({
-  caseId,
+  creditId,
   priority,
   pinned,
   canWrite,
 }: {
-  caseId: string;
+  creditId: string;
+  /** La del episodio de mora abierto. */
   priority: CasePriority;
   pinned?: boolean;
   canWrite: boolean;
@@ -56,9 +57,11 @@ export function PriorityCell({
   async function aplicar(value: string) {
     setError(null);
     setBusy(true);
-    const { ok, data } = await postJson(
-      `/api/cases/${caseId}/priority`,
-      value === 'auto' ? { auto: true } : { priority: value },
+    // F4/08: la prioridad vive en el episodio abierto y se fija sobre el crédito (`null` = soltarla).
+    const { ok, data } = await sendJson(
+      `/api/mora/${creditId}/priority`,
+      { priority: value === 'auto' ? null : value },
+      'PATCH',
     );
     setBusy(false);
     if (!ok) return setError(data.error?.message ?? t('priorityError'));

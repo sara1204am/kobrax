@@ -32,7 +32,8 @@ const props = {
   nextDueDate: '02 nov 2026',
   lastPayment: '—',
   moraSince: '—',
-  sla: '—',
+  lastAction: '03 oct 2026',
+  activePromise: 'Bs 300.00 · 10 oct 2026',
   assignee: 'Sin cobrador',
   branch: 'Sucursal Central',
   clientHref: '/cartera/c1',
@@ -57,6 +58,15 @@ describe('FichaSummary', () => {
     expect(screen.queryByRole('progressbar')).toBeNull();
     expect(screen.queryByText(/Bs 0/)).toBeNull();
     expect(screen.getAllByText('—').length).toBeGreaterThan(4);
+  });
+
+  it('última gestión y promesa vigente son datos sueltos, sin ninguna etiqueta de estado', () => {
+    render(<FichaSummary {...props} />);
+    expect(screen.getByText('Última gestión')).toBeInTheDocument();
+    expect(screen.getByText('03 oct 2026')).toBeInTheDocument();
+    expect(screen.getByText('Promesa vigente')).toBeInTheDocument();
+    expect(screen.getByText('Bs 300.00 · 10 oct 2026')).toBeInTheDocument();
+    expect(screen.queryByText(/En gestión|Con promesa|Promesa incumplida|Sin gestión/)).toBeNull();
   });
 
   it('los enlaces llevan al deudor y al crédito en Cartera', () => {

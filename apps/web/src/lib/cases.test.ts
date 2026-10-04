@@ -1,34 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CaseStatus } from '@kobrax/shared';
-import { assignedTo, canClose, nextStates } from './cases';
-describe('nextStates', () => {
-  it('ofrece sólo lo que la máquina de estados permite', () => {
-    expect(nextStates(CaseStatus.PENDING)).toEqual([CaseStatus.ACTIVE]);
-    expect(nextStates(CaseStatus.PROMISE_TO_PAY)).toEqual([CaseStatus.PAID, CaseStatus.ACTIVE]);
-  });
-
-  it('🔴 CLOSED nunca sale por el control de estados', () => {
-    // Tiene su propio endpoint, exige motivo y pide otro permiso: mezclarlo lo haría parecer un
-    // cambio de estado más, y es el único que no se puede deshacer.
-    for (const from of Object.values(CaseStatus)) {
-      expect(nextStates(from)).not.toContain(CaseStatus.CLOSED);
-    }
-    expect(nextStates(CaseStatus.PAID)).toEqual([]);
-  });
-
-  it('un caso terminal no ofrece nada', () => {
-    expect(nextStates(CaseStatus.CLOSED)).toEqual([]);
-    expect(nextStates(CaseStatus.WRITTEN_OFF)).toEqual([]);
-  });
-});
-
-describe('canClose', () => {
-  it('sólo se cierra lo que ya está pagado', () => {
-    expect(canClose(CaseStatus.PAID)).toBe(true);
-    expect(canClose(CaseStatus.ACTIVE)).toBe(false);
-    expect(canClose(CaseStatus.CLOSED)).toBe(false);
-  });
-});
+import { assignedTo } from './cases';
 
 describe('assignedTo', () => {
   const ID = 'bf2e039c-ea1b-4628-883e-8ed117f47bc6';

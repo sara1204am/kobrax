@@ -30,17 +30,24 @@ describe('moraListQuery', () => {
     expect(q.get('balanceMin')).toBe('100');
   });
 
-  it('el estado y la prioridad son los del caso y viajan tal cual', () => {
-    const q = moraListQuery({ status: 'ACTIVE,PROMISE_TO_PAY', priority: 'CRITICAL' });
-    expect(q.get('status')).toBe('ACTIVE,PROMISE_TO_PAY');
+  it('la prioridad (del episodio) y la categoría viajan tal cual', () => {
+    const q = moraListQuery({ priority: 'CRITICAL', category: 'B,C' });
     expect(q.get('priority')).toBe('CRITICAL');
+    expect(q.get('category')).toBe('B,C');
+    expect(hasMoraFilters({ category: 'A' })).toBe(true);
+  });
+
+  it('🔴 los filtros del caso ya no existen: no viajan aunque estén en la URL', () => {
+    const q = moraListQuery({ status: 'ACTIVE', hasCase: 'true', overdue: 'true', noActionSince: '7' } as never);
+    for (const k of ['status', 'hasCase', 'overdue', 'noActionSince']) expect(q.has(k)).toBe(false);
+    expect(hasMoraFilters({ status: 'ACTIVE', hasCase: 'true' } as never)).toBe(false);
   });
 
   it('las banderas sólo viajan como true/false; lo demás se descarta', () => {
-    expect(moraListQuery({ overdue: 'true' }).get('overdue')).toBe('true');
-    expect(moraListQuery({ hasCase: 'false' }).get('hasCase')).toBe('false');
+    expect(moraListQuery({ writtenOff: 'true' }).get('writtenOff')).toBe('true');
+    expect(moraListQuery({ writtenOff: 'false' }).get('writtenOff')).toBe('false');
     expect(moraListQuery({ unassigned: 'true' }).get('unassigned')).toBe('true');
-    expect(moraListQuery({ overdue: 'quizás' }).has('overdue')).toBe(false);
+    expect(moraListQuery({ writtenOff: 'quizás' }).has('writtenOff')).toBe(false);
     expect(moraListQuery({ hasPromise: '1' }).has('hasPromise')).toBe(false);
   });
 
@@ -65,7 +72,9 @@ describe('moraListQuery', () => {
     // sobre una columna que no ordenó nada.
     expect(moraListQuery({ sort: 'inventado' }).has('sort')).toBe(false);
     expect(moraListQuery({ sort: 'daysPastDue' }).get('sort')).toBe('daysPastDue');
-    expect(moraListQuery({ sort: 'lastAction' }).get('sort')).toBe('lastAction');
+    // La API ya no ordena por estas dos (D2): no se mandan.
+    expect(moraListQuery({ sort: 'lastAction' }).has('sort')).toBe(false);
+    expect(moraListQuery({ sort: 'slaDueAt' }).has('sort')).toBe(false);
   });
 
   it('el orden default de una columna es descendente', () => {
@@ -90,19 +99,19 @@ describe('hasMoraFilters', () => {
    */
   it('distingue «nadie te debe» de «el filtro no encontró nada»', () => {
     expect(hasMoraFilters({})).toBe(false);
-    expect(hasMoraFilters({ overdue: 'quizás' })).toBe(false);
-    expect(hasMoraFilters({ status: 'ACTIVE' })).toBe(true);
+    expect(hasMoraFilters({ writtenOff: 'quizás' })).toBe(false);
+    expect(hasMoraFilters({ category: 'B' })).toBe(true);
     expect(hasMoraFilters({ assigneeId: 'u1' })).toBe(true);
     expect(hasMoraFilters({ q: 'tapia' })).toBe(true);
     expect(hasMoraFilters({ dpdMin: '30' })).toBe(true);
     expect(hasMoraFilters({ todos: '1' })).toBe(true);
-    expect(hasMoraFilters({ hasCase: 'false' })).toBe(true);
+    expect(hasMoraFilters({ writtenOff: 'true' })).toBe(true);
     expect(hasMoraFilters({ source: 'KOBRAX' })).toBe(true);
   });
 });
 
 describe('moraExportQuery — exportar lo que se está viendo', () => {
-  const VISTA = { priority: 'CRITICAL', dpdMin: '90', source: 'PSF', assigneeId: 'u1', q: 'tapia', sort: 'balance', dir: 'asc', todos: '1', hasCase: 'false' } as const;
+  const VISTA = { priority: 'CRITICAL', dpdMin: '90', source: 'PSF', assigneeId: 'u1', q: 'tapia', sort: 'balance', dir: 'asc', todos: '1', writtenOff: 'false', category: 'A' } as const;
 
   it('🔴 es la query de la lista sin página ni tamaño: mismo filtro, mismo orden', () => {
     const lista = moraListQuery({ ...VISTA, page: '4', pageSize: '100' });
