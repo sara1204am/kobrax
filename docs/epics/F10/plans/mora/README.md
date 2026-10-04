@@ -1,4 +1,5 @@
-> **ESTADO: PLAN COMPLETO — ronda 2 (2026-10-02). Validador: PASS en la 2.ª pasada (ver fin del archivo).**
+> **ESTADO: HECHO — el módulo móvil de Mora está construido (F4/07 T17–T19). Este archivo es el plan que lo guió y se conserva como referencia de las decisiones.**
+> _Historial:_ PLAN COMPLETO — ronda 2 (2026-10-02). Validador: PASS en la 2.ª pasada (ver fin del archivo).
 
 ## ✅ Decisiones cerradas (ronda 2)
 

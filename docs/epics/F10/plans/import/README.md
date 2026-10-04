@@ -1,4 +1,5 @@
-> **ESTADO: EN BORRADOR — ronda 1 (2026-07-16). NO construir hasta PASS del validador.**
+> **ESTADO: CONSTRUIDO — el import existe en la API, en el móvil y en el panel web (importador, historial y Ajustes). Este archivo es el plan original y se conserva como referencia de las decisiones; lo que cambió al construir está marcado en cada sección.**
+> _Historial:_ EN BORRADOR — ronda 1 (2026-07-16).
 > Overview del módulo. Cada slice se detalla en su propio archivo just-in-time.
 
 ## ⏸️ Pendiente de confirmar (retomar con `/f10-etapa import`)
@@ -16,7 +17,7 @@
       Ajustes, viendo 3 valores reales de su propio archivo por candidata (`FIELD-RULES.md` §6.5.1),
       con `Dias Mora` sugerida y guarda `MORA_INCONSISTENTE` en la Vista Previa. **FUNDACION ya no
       está bloqueada para `main`.** Ver §5 y §14.
-- [x] **R7 APROBADO (2026-07-22):** `expo-document-picker` (móvil) · `pdfjs-dist` + `xlsx` (API).
+- [x] **R7 APROBADO (2026-07-22):** `expo-document-picker` (móvil) · `pdfjs-dist` + `exceljs` (API; **`exceljs`, no `xlsx`**: SheetJS quedó en npm con CVEs sin arreglar y esto parsea archivos que sube el usuario).
 - [x] **R2 — DECIDIDO (default lazy):** co-titular (2ª línea del bloque `Cliente`) → **`credit.metadata.coHolder`**
       (string, sin tabla nueva, sin migración, reversible). Promover a `client_relations` es refinamiento
       de la web (§12), no de FUNDACION. Se puede revertir si la usuaria pide co-titular relacional.
@@ -262,7 +263,7 @@ Tres baldes, con conteo y lista expandible de *cuáles* (el motor nuevo devuelve
 | Pantalla de reparto | `apps/mobile/app/import/reparto.tsx` | D-REPARTO. Sin mockup. |
 | Picker de archivo | dep `expo-document-picker` | No hay forma de elegir archivo. **Dep nueva a confirmar.** |
 | Extracción de texto PDF | dep `pdfjs-dist` (API) | Da coordenadas por item → necesario para la tabla posicional. **Dep nueva a confirmar.** |
-| Lectura XLSX | dep `xlsx` (API) | Los mockups lo prometen. **Dep nueva a confirmar.** |
+| Lectura XLSX | dep `exceljs` (API) | Los mockups lo prometen. **Construido con `exceljs`**, no con `xlsx` (CVEs sin arreglar en SheetJS). |
 
 ---
 
@@ -393,4 +394,4 @@ hacer queda acotado, porque **el backend ya estaría hecho**:
 | **R4** | `COLLECTOR` **no** tiene `CLIENT_IMPORT` en el mapa estático de shared. Un cobrador de banco que opera solo (alcance = oficial) no podría importar. | Decidir con F3/P10 |
 | **R5** | `REPLACE` es hoy código idéntico a `RECONCILE`. **No exponerlo en móvil** — la etiqueta mentiría. | Cerrado: no se expone |
 | **R6** | `needsReview` del motor viejo descarta los IDs y solo devuelve el conteo → ninguna UI puede mostrar *cuáles*. El motor nuevo **sí** devuelve los IDs. | Cerrado por diseño |
-| **R7** | Deps nuevas: `expo-document-picker` (móvil), `pdfjs-dist` + `xlsx` (API). | **APROBADO 2026-07-22** |
+| **R7** | Deps nuevas: `expo-document-picker` (móvil), `pdfjs-dist` + `exceljs` (API). | **APROBADO 2026-07-22** |

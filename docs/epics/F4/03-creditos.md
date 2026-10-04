@@ -2,6 +2,8 @@
 
 **Parent:** [EPIC-F4 Core Financiero](../EPIC-F4-core-financiero.md) · **Estado:** ✅ Completada (2026-06-18)
 **Owner:** API · Shared · **Depende de:** Fase 2 (clientes existen) + Fases 0/1
+
+> **Ver también:** [06-refactor-creditos-ux.md](./06-refactor-creditos-ux.md). Esta fase describe el módulo como se entregó el 2026-06-18; el refactor posterior cambió cómo se capturan, editan y muestran los créditos (base del saldo, datos de cobro editables, reestructura). Ante una diferencia, manda el 06.
 **Gaps que cierra:** G8 (módulo credits + cronograma) · G9 (servicio de mora) · G12 (labels de concepto por tenant)
 
 ## ✅ Estado de ejecución (2026-06-18)
