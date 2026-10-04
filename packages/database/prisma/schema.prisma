@@ -1084,7 +1084,9 @@ model CreditNote {
   body      String
   /// Post-it: color y lugar en el tablero de la ficha (posición, tamaño y orden de apilado).
   color     CreditNoteColor @default(YELLOW)
-  posX      Int            @default(40) @map("pos_x")
+  /// Sección de la ficha a la que está anclada: `pos_x`/`pos_y` son píxeles dentro de ella, y viaja con ella.
+  anchor    CreditNoteAnchor @default(PAGE)
+  posX     Int            @default(40) @map("pos_x")
   posY      Int            @default(40) @map("pos_y")
   width     Int            @default(240)
   height    Int            @default(180)
@@ -1101,6 +1103,19 @@ model CreditNote {
   @@index([accountId, creditId, createdAt(sort: Desc)])
   @@index([accountId, clientId])
   @@map("credit_notes")
+}
+
+/// A qué sección de la ficha de mora se ancla un post-it. `PAGE` es la ficha entera.
+enum CreditNoteAnchor {
+  PAGE
+  TIMELINE
+  PROMISES
+  NOTES
+  PAYMENTS
+  HISTORY
+  PERSON
+
+  @@map("credit_note_anchor")
 }
 
 /// Colores del post-it de una nota (la paleta de Gallium).
