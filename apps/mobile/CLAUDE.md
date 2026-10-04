@@ -11,7 +11,7 @@ La app DEBE funcionar sin internet. La UX debe ser de máxima simplicidad.
   > Nota (2026-06-18): este doc previó NativeWind, pero el código se estandarizó en **StyleSheet + tokens**
   > (ver `components.tsx`). Esa es la base vigente; **no** se reintroduce NativeWind ni se migra a Tamagui/Paper.
 - **Navegación: expo-router** (file-based, sobre React Navigation) + Reanimated para transiciones
-- WatermelonDB — almacenamiento local offline (F10)
+- **expo-sqlite** — almacenamiento local offline (P6): una tabla `cache` genérica (descartable) y una `queue` (lo que aún no llegó al servidor), todo en `src/db.ts`, que es el único archivo que escribe SQL. **No es WatermelonDB** (ver `docs/epics/F10/plans/P6-offline-sync.md §4 D1`)
 - Expo Location (GPS) · Expo Camera + ImageManipulator (fotos ≤ 800 KB) · Expo FileSystem (firmas base64)
 - NetInfo (conectividad) · Zustand (estado global) · React Query + sync layer propio (F10)
 
@@ -32,8 +32,8 @@ offline-first ni la simplicidad del cobrador. Lo premium viene del **craft**, no
 ## Principio Offline-First (NO NEGOCIABLE)
 ```
 Toda acción del cobrador:
-1. Se guarda PRIMERO en WatermelonDB local
-2. Se marca como pendiente de sync (syncStatus: 'pending')
+1. Se guarda PRIMERO en la base local (expo-sqlite): la acción entra a la cola (`queue`)
+2. Queda marcada como pendiente de subir (la hoja «Pendientes» la lista)
 3. Se muestra en UI inmediatamente (optimistic update)
 4. Cuando hay internet → SyncService sube los cambios
 5. Conflictos: last-write-wins con timestamp del servidor
@@ -58,7 +58,7 @@ apps/mobile/
 │   │   ├── index.tsx             # Inicio (Home/Jornada)
 │   │   ├── agenda.tsx            # Agenda diaria de gestiones
 │   │   ├── rutas.tsx             # Rutas del día (mapas en dev build)
-│   │   ├── cobranza.tsx          # Pagos / cobros en campo
+│   │   ├── cobranza.tsx          # Cartera (clientes y préstamos) + Mora (créditos en mora del cobrador); pagos y gestiones se registran desde sus fichas
 │   │   └── mas.tsx               # Overflow: perfil, config, import (gating por rol en F3)
 │   ├── _layout.tsx  index.tsx    # root + splash
 └── src/                          # lógica y UI (layout PLANO, no por dominio)
@@ -66,7 +66,7 @@ apps/mobile/
     ├── components.tsx            # UI de auth (Button, Field, Hero, Card, ...)
     ├── ui.tsx                    # fundación de campo: Header, StatusBadge, ListRow, EmptyState, BottomSheet
     ├── api.ts  auth-service.ts  session.ts  biometric.ts  post-login.ts
-    └── (por slice) sync.service.ts · evidence.service.ts · location.service.ts · database/ (WatermelonDB) · store/ (Zustand)
+    └── db.ts (expo-sqlite: caché + cola) · *.service.ts (uno por dominio, sobre `api-client.ts`) · queue-photos.ts · evidence/location por slice · store/ (Zustand)
 ```
 
 ## Design System Mobile (Kobrax Tokens)
@@ -165,7 +165,7 @@ Caption: 12px / 400 / k-text-muted  ← mínimo absoluto
    a. Captura imagen
    b. Calcula SHA-256 del buffer original
    c. Comprime a max 800KB (ImageManipulator)
-   d. Guarda en WatermelonDB con syncStatus: 'pending'
+   d. Guarda en la cola local (expo-sqlite), pendiente de subir
 4. Si se requiere firma → SignatureCapture
    a. Canvas de firma
    b. Export PNG base64

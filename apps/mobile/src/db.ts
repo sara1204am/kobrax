@@ -55,6 +55,12 @@ export type CacheKind =
   /** Los pagos del día: sin ellos, el cierre de jornada sin señal informaría cero cobrado. */
   | 'payment'
   /**
+   * El `meta.total` de una lista paginada (`id` = `<kind>|<scope>`). Sin esto, sin señal el total se
+   * degradaba al largo de lo guardado (`limit=1` → «1 vencida» aunque haya 40). Vive en `cache`, así que
+   * se borra junto con el resto en el logout.
+   */
+  | 'list.meta'
+  /**
    * La cuenta con sus topes y su consumo (`GET /accounts/me`).
    *
    * Se guarda **para poder avisar sin señal**: el cobrador que da de alta un préstamo en la puerta
@@ -82,7 +88,15 @@ export type QueueKind =
   /** Gestión con resultado y promesa sobre un crédito en mora (`POST /mora/:id/activities`). */
   | 'mora.activity'
   /** Nota de un crédito (`POST /mora/:id/notes`). */
-  | 'credit.note';
+  | 'credit.note'
+  /** Foto de una visita que ya está en el server pero cuya evidencia no pudo adjuntarse (parte suelta de `visit`). */
+  | 'visit.evidence'
+  /** Aviso persistente: una foto que debía viajar ya no estaba en el teléfono. Sólo se puede descartar. */
+  | 'photo.lost'
+  /** Ediciones de la ficha del cliente: valores fijos (PATCH) o altas con búsqueda previa, repetibles sin duplicar. */
+  | 'client.update'
+  | 'client.contact'
+  | 'client.location';
 
 export interface QueueRow {
   id: number;
@@ -227,6 +241,12 @@ export async function fetchedAt(kind: CacheKind, scope?: string): Promise<number
   return row?.t ?? null;
 }
 
+/** Borra una fila del caché por id (todas sus consultas). Sólo para deshacer una fila provisional. */
+export async function removeOne(kind: CacheKind, id: string): Promise<void> {
+  const db = await open();
+  await db.runAsync('DELETE FROM cache WHERE kind = ? AND id = ?', [kind, id]);
+}
+
 /** Reemplaza por completo un recurso (o un scope): lo que el server ya no manda, se va. */
 export async function replaceAll<T extends { id: string }>(
   kind: CacheKind,
@@ -293,6 +313,26 @@ export async function pendingCount(userId: string): Promise<number> {
   const db = await open();
   const row = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM queue WHERE user_id = ?', [userId]);
   return row?.n ?? 0;
+}
+
+/**
+ * Reescribe el payload de una fila. Lo usa la cola para **persistir los ids** que genera al primer envío de un
+ * ítem viejo (guardado sin id): si el envío se corta, el reintento reusa ESE id y no duplica.
+ */
+export async function updatePayload(id: number, payload: unknown): Promise<void> {
+  const db = await open();
+  await db.runAsync('UPDATE queue SET payload = ? WHERE id = ?', [JSON.stringify(payload), id]);
+}
+
+/** Valores sueltos que NO son caché (sobreviven al logout igual que la cola): mapas de ids locales→server. */
+export async function getMeta(key: string): Promise<string | null> {
+  const db = await open();
+  const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM meta WHERE key = ?', [key]);
+  return row?.value ?? null;
+}
+export async function setMeta(key: string, value: string): Promise<void> {
+  const db = await open();
+  await db.runAsync('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)', [key, value]);
 }
 
 /** Salió bien: recién ahí se borra de la cola. */

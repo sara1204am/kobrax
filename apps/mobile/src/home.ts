@@ -52,6 +52,36 @@ export function dueSoon(items: AgendaListItem[], now: Date, minutes = 30): Agend
     });
 }
 
+/** Lo mínimo de una acción encolada que le interesa al «cobrado hoy». */
+export interface QueuedForTotal {
+  action: { kind: string; input?: unknown; payment?: unknown };
+  createdAt: number;
+}
+
+function sameLocalDay(ms: number, now: Date): boolean {
+  const d = new Date(ms);
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+}
+
+/**
+ * Lo cobrado hoy que **todavía está en la cola del teléfono** (cobrado sin señal): los pagos sueltos
+ * (`payment`) y los que viajan dentro de una visita (`visit.payment`). Sin esto, el Home decía «Bs 0» justo
+ * después de cobrar sin señal — el dato más fresco que tiene el dispositivo es el que se le escondía.
+ * Un cobro es «de hoy» por la hora en que se hizo (`paymentDate`) o, si no la trae, por cuándo se encoló.
+ */
+export function queuedCollectedToday(queued: readonly QueuedForTotal[], now: Date = new Date()): number {
+  let total = 0;
+  for (const { action, createdAt } of queued) {
+    let payment: { amount?: number; paymentDate?: string } | undefined;
+    if (action.kind === 'payment') payment = action.input as typeof payment;
+    else if (action.kind === 'visit') payment = action.payment as typeof payment;
+    if (!payment || typeof payment.amount !== 'number') continue;
+    const at = payment.paymentDate ? Date.parse(payment.paymentDate) : createdAt;
+    if (sameLocalDay(Number.isNaN(at) ? createdAt : at, now)) total += payment.amount;
+  }
+  return total;
+}
+
 /** `HH:mm` de HOY en hora local → epoch ms. `null` si el texto no es una hora. */
 function atTime(now: Date, hhmm: string): number | null {
   const m = /^(\d{1,2}):(\d{2})/.exec(hhmm);

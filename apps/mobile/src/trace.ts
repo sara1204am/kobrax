@@ -1,4 +1,5 @@
 import { addActivity, type NewActivity } from './cases.service';
+import { nuevoId } from './ids';
 import { queueForLater } from './sync/sync.service';
 
 /**
@@ -10,6 +11,9 @@ import { queueForLater } from './sync/sync.service';
  * el mapa) ya está pasando. (Salió de `cliente/[id].tsx`; la ficha de mora lo usa también.)
  */
 export async function registrarRastro(caseId: string, input: NewActivity): Promise<void> {
-  const res = await addActivity(caseId, input);
-  if (res.status === 'offline') await queueForLater({ kind: 'case.activity', caseId, input });
+  // El id se fija ANTES del primer intento y es el mismo en el envío y en la cola: si el server guardó el
+  // rastro pero la respuesta se perdió (timeout), el reintento no lo duplica en el historial del deudor.
+  const withId = { ...input, id: input.id ?? nuevoId() };
+  const res = await addActivity(caseId, withId);
+  if (res.status === 'offline') await queueForLater({ kind: 'case.activity', caseId, input: withId });
 }

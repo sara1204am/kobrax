@@ -7,6 +7,7 @@ import { EmptyState, Header, ListRow, ProgressBar, ROUTE_STATUS_LABEL, SectionLa
 import { Button } from '@/components';
 import { formatLongDate, todayISO } from '@/agenda-form';
 import { authService } from '@/auth-service';
+import { nuevoId } from '@/ids';
 import type { MutateResult } from '@/api-client';
 import { money } from '@/agenda-form';
 import { listPaymentsByDay, type PaymentItem } from '@/payments.service';
@@ -41,6 +42,9 @@ export default function RutasScreen() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const reqRef = useRef(0);
+  // El id de la ruta generada: fijo hasta que salga bien, para que un reintento tras un timeout (o un doble
+  // toque) no genere una segunda ruta del mismo día.
+  const generateId = useRef(nuevoId());
 
   const fetchRoute = useCallback(async () => {
     // Foco de tab + pull-to-refresh + recarga post-acción se pisan: sólo el último pedido escribe
@@ -142,7 +146,13 @@ export default function RutasScreen() {
         {!route ? (
           <SinRuta
             busy={busy}
-            onGenerate={() => run(() => generateRoute({ collectorId, plannedDate: todayISO() }))}
+            onGenerate={() =>
+              run(async () => {
+                const res = await generateRoute({ id: generateId.current, collectorId, plannedDate: todayISO() });
+                if (res.status === 'ok') generateId.current = nuevoId();
+                return res;
+              })
+            }
           />
         ) : finished ? (
           <RutaFinalizada route={route} payments={payments} />

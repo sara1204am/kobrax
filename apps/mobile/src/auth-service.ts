@@ -1,7 +1,7 @@
 import type { AuthAccountOption, AuthTokens, LoginResult } from '@kobrax/shared';
 import { apiFetch, type ApiResult } from './api';
 import { authedFetch } from './api-client';
-import { clearSession, getSession, isSessionValid, saveSession, saveUserId, touchSession } from './session';
+import { clearRouteDrafts, clearSession, getSession, isSessionValid, saveSession, saveUserId, touchSession } from './session';
 import * as db from './db';
 
 export type Step = 'done' | 'mfa' | 'mfa_setup' | 'select_account';
@@ -183,6 +183,7 @@ export const authService = {
       const previo = await db.getOne<Me>('session', 'me');
       if (previo && (previo.userId !== res.data.userId || previo.accountId !== res.data.accountId)) {
         await db.clearCache();
+        await clearRouteDrafts(previo.userId);
       }
       // Quién es, para poder encolar acciones cuando no haya red y no se le pueda preguntar (P6).
       await saveUserId(res.data.userId);

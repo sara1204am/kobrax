@@ -8,6 +8,11 @@ import type { VisitOutcome } from '@kobrax/shared';
 import { currentLocation, type Coords } from './location';
 
 export interface CreateVisitInput {
+  /**
+   * Lo pone el teléfono (`nuevoId()`) al abrir la pantalla: reintentar con el mismo id devuelve la visita ya
+   * guardada en vez de duplicar la parada visitada.
+   */
+  id?: string;
   routeStopId?: string;
   caseId?: string;
   lat: number;

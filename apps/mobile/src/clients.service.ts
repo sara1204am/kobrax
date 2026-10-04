@@ -58,6 +58,15 @@ async function searchLocal(q: string): Promise<QueryResult<ClientHit[]>> {
     // `businessName`, así que se muestra tal cual lo devolvió el server.
     hits.push({ id: c.clientId, businessName: c.clientName, nationalId: null });
   }
+  // Los clientes dados de alta sin señal todavía no tienen caso: la cartera no los ve. Se buscan en sus filas
+  // provisionales (`sync/optimistic`), para que el cobrador encuentre al deudor que acaba de cargar.
+  const nuevos = await db.getMany<ClientHit & { pending?: boolean }>('client');
+  for (const c of nuevos) {
+    if (!c.pending || vistos.has(c.id)) continue;
+    if (!normalizar(clientDisplayName(c)).includes(term)) continue;
+    vistos.add(c.id);
+    hits.push({ id: c.id, firstName: c.firstName, lastName: c.lastName, businessName: c.businessName, nationalId: null });
+  }
   if (hits.length === 0) return { status: 'offline' };
   return { status: 'ok', data: hits.slice(0, 20), total: hits.length, localAt: await db.fetchedAt('case') };
 }
@@ -159,6 +168,8 @@ export function removeCollateral(clientId: string, collateralId: string) {
 }
 
 export interface UpdateClientPatch {
+  clientType?: 'PERSON' | 'COMPANY';
+  nationalId?: string;
   firstName?: string;
   lastName?: string;
   businessName?: string;

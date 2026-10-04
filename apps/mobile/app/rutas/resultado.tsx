@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
@@ -10,6 +10,7 @@ import { choosePhoto } from '@/photo';
 import { uploadImage } from '@/uploads.service';
 import { MiQrCobro } from '@/qr-cobro';
 import { queueForLater } from '@/sync/sync.service';
+import { nuevoId } from '@/ids';
 import { money, todayISO } from '@/agenda-form';
 import { listCatalogCached, type CatalogOption } from '@/catalogs.service';
 import { createItem } from '@/agenda.service';
@@ -51,6 +52,11 @@ export default function ResultadoScreen() {
    * se pueda leer sin que la pantalla se vaya sola.
    */
   const [registered, setRegistered] = useState(false);
+  // 🔴 Los ids se fijan al ABRIR la pantalla, no en cada intento: si el server guardó la visita pero la respuesta
+  // se perdió (timeout), el reintento —o el doble toque— lleva el MISMO id y devuelve la visita ya creada en vez de
+  // duplicar la parada visitada. Igual con la promesa; el cobro ya se protege con `visit-<id de la visita>`.
+  const visitId = useRef(nuevoId());
+  const promiseId = useRef(nuevoId());
 
   const set = useCallback((patch: Partial<ResultForm>) => setForm((f) => ({ ...f, ...patch })), []);
   const meta = variantMeta(key);
@@ -111,6 +117,7 @@ export default function ResultadoScreen() {
 
     // Se arman una sola vez y sirven a los dos caminos: enviarlas ahora, o encolarlas si no hay red.
     const visitInput = {
+      id: visitId.current,
       routeStopId: stop.id,
       caseId: stop.caseId,
       lat: coords.latitude,
@@ -124,6 +131,7 @@ export default function ResultadoScreen() {
     const promesaInput =
       key === 'PROMISE' && stop.caseId && stop.creditId
         ? {
+            id: promiseId.current,
             caseId: stop.caseId,
             creditId: stop.creditId,
             type: AgendaItemType.PROMISE_TO_PAY,
@@ -141,7 +149,9 @@ export default function ResultadoScreen() {
       const guardada = await queueForLater({
         kind: 'visit',
         input: visitInput,
-        photo: form.photo?.local,
+        photo: form.photo?.url ? undefined : form.photo?.local,
+        // Si la foto ya subió antes de cortarse la señal, viaja su URL: sin esto se perdía en silencio.
+        photoUploaded: form.photo?.url ? { url: form.photo.url, hash: form.photo.hash! } : undefined,
         payment:
           key === 'PAID' && stop.creditId
             ? { creditId: stop.creditId, caseId: stop.caseId, amount, method: form.paymentMethodCode as PaymentMethod }
@@ -164,6 +174,10 @@ export default function ResultadoScreen() {
     // `setError` y abajo se llamaba a `router.replace` igual: la pantalla se desmontaba antes de
     // pintar el banner, así que un pago que no se guardó se perdía sin que el cobrador se enterara.
     const pendientes: string[] = [];
+    // Lo que no salió pero se guardó en la cola: se avisa igual, pero no se perdió.
+    const guardadas: string[] = [];
+    /** Encola la parte que falló. `true` = quedó guardada en el teléfono. */
+    const guardar = (a: Parameters<typeof queueForLater>[0]) => queueForLater(a);
 
     // La foto se sella contra la visita ya creada. Si falla, la visita YA quedó: se avisa y no se
     // reintenta sola — repetir el registro duplicaría la parada visitada.
@@ -175,36 +189,52 @@ export default function ResultadoScreen() {
     }
     if (foto) {
       const ev = await addVisitEvidence(visit.data.id, { type: 'PHOTO', fileUrl: foto.url, fileHash: foto.hash });
-      if (ev.status !== 'ok') pendientes.push('la foto no se pudo adjuntar');
+      if (ev.status !== 'ok') {
+        // Ya subió: sólo falta sellarla contra la visita. Se encola con la URL para no volver a subirla.
+        if (await guardar({ kind: 'visit.evidence', visitId: visit.data.id, uploaded: foto })) guardadas.push('la foto');
+        else pendientes.push('la foto no se pudo adjuntar');
+      }
     } else if (form.photo) {
-      pendientes.push('la foto no se pudo adjuntar');
+      // No subió (sin señal / falló): la foto viaja en la cola, que la copia a un lugar que no se borra solo.
+      const local = form.photo.local;
+      if (local && (await guardar({ kind: 'visit.evidence', visitId: visit.data.id, photo: local }))) guardadas.push('la foto');
+      else pendientes.push('la foto no se pudo adjuntar');
     }
 
     if (key === 'PAID' && stop.creditId) {
-      const pay = await createPayment(
-        {
-          creditId: stop.creditId,
-          caseId: stop.caseId,
-          amount,
-          method: form.paymentMethodCode as PaymentMethod,
-          receiptUrl: foto?.url,
-          receiptHash: foto?.hash,
-        },
-        // Anti doble cobro si el cobrador reintenta con señal mala: la llave sale de la visita, que
-        // el server creó una sola vez, así que reintentar no puede cobrarle dos veces al deudor.
-        `visit-${visit.data.id}`,
-      );
-      if (pay.status !== 'ok') pendientes.push(`el pago de ${money(amount, currency)} NO se guardó`);
+      const pagoInput = {
+        creditId: stop.creditId,
+        caseId: stop.caseId,
+        amount,
+        method: form.paymentMethodCode as PaymentMethod,
+        receiptUrl: foto?.url,
+        receiptHash: foto?.hash,
+      };
+      // Anti doble cobro si el cobrador reintenta con señal mala: la llave sale de la visita, que
+      // el server creó una sola vez, así que reintentar no puede cobrarle dos veces al deudor.
+      const llave = `visit-${visit.data.id}`;
+      const pay = await createPayment(pagoInput, llave);
+      if (pay.status !== 'ok') {
+        // Falló (sin señal, timeout o error): NO se descarta. Va a la cola con la MISMA llave, así que subirlo
+        // dos veces —si el primero llegó— no cobra dos veces. Sólo si ni la cola lo guarda se avisa «NO se guardó».
+        const etiqueta = `el pago de ${money(amount, currency)}`;
+        if (await guardar({ kind: 'payment', input: pagoInput, idempotencyKey: llave })) guardadas.push(etiqueta);
+        else pendientes.push(`${etiqueta} NO se guardó`);
+      }
     }
 
     if (promesaInput) {
       // La promesa vive en la agenda (patrón cartera/agenda), y el server le agrega su recordatorio.
       const prom = await createItem(promesaInput);
-      if (prom.status !== 'ok') pendientes.push('la promesa no se pudo agendar');
+      if (prom.status !== 'ok') {
+        // Con su id: si la primera llegó, subirla de nuevo devuelve la misma y no agenda dos veces.
+        if (await guardar({ kind: 'agenda.create', input: promesaInput })) guardadas.push('la promesa');
+        else pendientes.push('la promesa no se pudo agendar');
+      }
     }
 
     setBusy(false);
-    const aviso = postVisitWarning(pendientes);
+    const aviso = postVisitWarning(pendientes, guardadas);
     if (aviso) {
       // Se queda en la pantalla a propósito: es lo único que hace que el cobrador lo lea.
       setError(aviso);

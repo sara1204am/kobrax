@@ -4,22 +4,52 @@
  * promesa, **en ese orden**, y con la clave de idempotencia derivada de la visita ya creada.
  */
 const mockCalls: string[] = [];
+/** Detalles de las llamadas (ids, rutas) que no forman parte del ORDEN que verifican los casos de arriba. */
+const mockDetail: string[] = [];
 const mockState: { visit: Record<string, unknown>; upload: Record<string, unknown> } = {
   visit: { status: 'ok', data: { id: 'v1' } },
   upload: { status: 'ok', url: 'http://x/f.jpg', hash: 'h1' },
 };
 const mockPayment: { idem?: string; input?: Record<string, unknown> } = {};
 const mockMora: { res: Record<string, unknown> } = { res: { status: 'ok', data: {} } };
+/** Lo que la cola escribió en la base (filas nuevas, rechazos, payloads reescritos, mapa de ids) y lo que el server responde. */
+const mockDb = {
+  enqueued: [] as { userId: string; kind: string; payload: Record<string, unknown>; idempotencyKey?: string }[],
+  rejected: [] as { id: number; error: string }[],
+  rewritten: [] as { id: number; payload: Record<string, unknown> }[],
+  dequeued: [] as number[],
+  meta: new Map<string, string>(),
+};
+const mockApi = {
+  payment: { status: 'ok', data: {} } as Record<string, unknown>,
+  item: { status: 'ok', data: {} } as Record<string, unknown>,
+  evidence: { status: 'ok', data: {} } as Record<string, unknown>,
+  context: { status: 'ok', data: { contacts: [], locations: [] } } as Record<string, unknown>,
+  addContact: { status: 'ok', data: { id: 'srv-contact' } } as Record<string, unknown>,
+  addLocation: { status: 'ok', data: { id: 'srv-loc' } } as Record<string, unknown>,
+  removeContact: { status: 'ok', data: null } as Record<string, unknown>,
+  photoExists: true,
+};
 
 jest.mock('../field.service', () => ({
   createVisit: jest.fn(async () => {
     mockCalls.push('createVisit');
     return mockState.visit;
   }),
-  addVisitEvidence: jest.fn(async () => {
+  addVisitEvidence: jest.fn(async (visitId: string) => {
     mockCalls.push('addVisitEvidence');
-    return { status: 'ok', data: {} };
+    mockDetail.push(`evidence:${visitId}`);
+    return mockApi.evidence;
   }),
+}));
+jest.mock('../queue-photos', () => ({
+  persistPhoto: jest.fn(async (p: { uri: string }) => ({ ...p, uri: `durable://${p.uri}` })),
+  photoExists: jest.fn(async () => mockApi.photoExists),
+  deleteQueuePhoto: jest.fn(async (uri?: string) => void mockDetail.push(`deletePhoto:${uri}`)),
+}));
+jest.mock('./optimistic', () => ({
+  confirmProvisionalRow: jest.fn(async (kind: string, id: string) => void mockDetail.push(`confirm:${kind}:${id}`)),
+  dropProvisionalRow: jest.fn(async (kind: string, id: string) => void mockDetail.push(`drop:${kind}:${id}`)),
 }));
 jest.mock('../uploads.service', () => ({
   uploadImage: jest.fn(async () => {
@@ -32,16 +62,29 @@ jest.mock('../payments.service', () => ({
     mockCalls.push('createPayment');
     mockPayment.idem = idem;
     mockPayment.input = input;
-    return { status: 'ok', data: {} };
+    return mockApi.payment;
   }),
 }));
 jest.mock('../agenda.service', () => ({
-  createItem: jest.fn(async () => {
+  createItem: jest.fn(async (input: { id?: string; details?: { contactId?: string } }) => {
     mockCalls.push('createItem');
-    return { status: 'ok', data: {} };
+    mockDetail.push(`createItem:id=${input.id}:contact=${input.details?.contactId}`);
+    return mockApi.item;
   }),
   completeItem: jest.fn(async () => ({ status: 'ok', data: {} })),
-  postponeItem: jest.fn(async () => ({ status: 'ok', data: {} })),
+  postponeItem: jest.fn(async (id: string, minutes: number, toTime?: string) => {
+    mockCalls.push(`postponeItem:${id}:${minutes}:${toTime}`);
+    return { status: 'ok', data: {} };
+  }),
+  clientContextLive: jest.fn(async () => mockApi.context),
+  addClientContact: jest.fn(async () => {
+    mockCalls.push('addClientContact');
+    return mockApi.addContact;
+  }),
+  addClientLocation: jest.fn(async () => {
+    mockCalls.push('addClientLocation');
+    return mockApi.addLocation;
+  }),
   cancelItem: jest.fn(async (id: string, reasonCode: string) => {
     mockCalls.push(`cancelItem:${id}:${reasonCode}`);
     return { status: 'ok', data: {} };
@@ -51,11 +94,33 @@ jest.mock('../agenda.service', () => ({
     return { status: 'ok', data: {} };
   }),
 }));
-jest.mock('../db', () => ({ enqueue: jest.fn(async () => 1), pending: jest.fn(async () => []) }));
+jest.mock('../db', () => ({
+  enqueue: jest.fn(async (row: { userId: string; kind: string; payload: Record<string, unknown>; idempotencyKey?: string }) => {
+    mockDb.enqueued.push(row);
+    return mockDb.enqueued.length;
+  }),
+  pending: jest.fn(async () => []),
+  markRejected: jest.fn(async (id: number, error: string) => void mockDb.rejected.push({ id, error })),
+  updatePayload: jest.fn(async (id: number, payload: Record<string, unknown>) => void mockDb.rewritten.push({ id, payload })),
+  dequeue: jest.fn(async (id: number) => void mockDb.dequeued.push(id)),
+  getMeta: jest.fn(async (k: string) => mockDb.meta.get(k) ?? null),
+  setMeta: jest.fn(async (k: string, v: string) => void mockDb.meta.set(k, v)),
+}));
 jest.mock('../session', () => ({ getUserId: jest.fn(async () => 'u1') }));
 jest.mock('../routes.service', () => ({ updateRouteStatus: jest.fn(async () => ({ status: 'ok', data: {} })) }));
 jest.mock('../cases.service', () => ({ addActivity: jest.fn(async () => ({ status: 'ok', data: {} })) }));
 jest.mock('../clients.service', () => ({
+  updateClient: jest.fn(async (id: string, patch: Record<string, unknown>) => {
+    mockCalls.push(`updateClient:${id}:${JSON.stringify(patch)}`);
+    return { status: 'ok', data: {} };
+  }),
+  updateContact: jest.fn(async (cid: string, id: string) => {
+    mockCalls.push(`updateContact:${cid}:${id}`);
+    return { status: 'ok', data: {} };
+  }),
+  removeContact: jest.fn(async () => mockApi.removeContact),
+  updateLocation: jest.fn(async () => ({ status: 'ok', data: {} })),
+  removeLocation: jest.fn(async () => ({ status: 'ok', data: null })),
   createClient: jest.fn(async (input: { id?: string }) => {
     mockCalls.push(`createClient:${input.id}`);
     return { status: 'ok', data: { id: input.id } };
@@ -87,16 +152,30 @@ jest.mock('../mora.service', () => ({
   }),
 }));
 
-import { ACTION_LABEL, send } from './queue';
+import { ACTION_LABEL, actionLabel, discardPending, enqueue, parseAction, QUEUE_VERSION, send, stabilize, withStableIds } from './queue';
 
 const visitInput = { caseId: 'c1', lat: -17.7, lng: -63.1, outcome: 'PAID' } as never;
 
 beforeEach(() => {
   mockCalls.length = 0;
+  mockDetail.length = 0;
   mockState.visit = { status: 'ok', data: { id: 'v1' } };
   mockState.upload = { status: 'ok', url: 'http://x/f.jpg', hash: 'h1' };
   delete mockPayment.idem;
   mockMora.res = { status: 'ok', data: {} };
+  mockDb.enqueued.length = 0;
+  mockDb.rejected.length = 0;
+  mockDb.rewritten.length = 0;
+  mockDb.dequeued.length = 0;
+  mockDb.meta.clear();
+  mockApi.payment = { status: 'ok', data: {} };
+  mockApi.item = { status: 'ok', data: {} };
+  mockApi.evidence = { status: 'ok', data: {} };
+  mockApi.context = { status: 'ok', data: { contacts: [], locations: [] } };
+  mockApi.addContact = { status: 'ok', data: { id: 'srv-contact' } };
+  mockApi.addLocation = { status: 'ok', data: { id: 'srv-loc' } };
+  mockApi.removeContact = { status: 'ok', data: null };
+  mockApi.photoExists = true;
 });
 
 describe('send · visita compuesta', () => {
@@ -253,5 +332,332 @@ describe('isPermanentRejection', () => {
     expect(isPermanentRejection(429)).toBe(false);
     expect(isPermanentRejection(500)).toBe(false);
     expect(isPermanentRejection(undefined)).toBe(false);
+  });
+});
+
+/**
+ * Lo que falla DESPUÉS de que la visita quedó registrada no se pierde ni arrastra a la visita: cada parte
+ * se re-encola como su propio ítem, con sus mismas llaves/ids, y queda a la vista en pendientes.
+ */
+describe('send · visita compuesta: lo que falla después se re-encola', () => {
+  const pago = { creditId: 'cr1', caseId: 'c1', amount: 100, method: 'CASH' } as const;
+  const promesa = { id: 'prom-1', caseId: 'c1', creditId: 'cr1' } as never;
+
+  it('si el cobro falla, se re-encola con su MISMA clave de idempotencia y la acción termina ok', async () => {
+    mockApi.payment = { status: 'offline' };
+    const r = await send({ kind: 'visit', input: visitInput, payment: pago });
+    expect(r.status).toBe('ok'); // la visita ya salió: repetir toda la acción la duplicaría
+    expect(mockDb.enqueued).toHaveLength(1);
+    expect(mockDb.enqueued[0]).toMatchObject({ kind: 'payment', idempotencyKey: 'visit-v1' });
+    expect(mockDb.enqueued[0]!.payload).toMatchObject({ kind: 'payment', idempotencyKey: 'visit-v1', v: QUEUE_VERSION });
+  });
+
+  it('si la promesa falla, se re-encola como agenda.create con su id', async () => {
+    mockApi.item = { status: 'error', message: 'boom', httpStatus: 500 };
+    const r = await send({ kind: 'visit', input: visitInput, promise: promesa });
+    expect(r.status).toBe('ok');
+    expect(mockDb.enqueued.map((e) => e.kind)).toEqual(['agenda.create']);
+    expect((mockDb.enqueued[0]!.payload.input as { id: string }).id).toBe('prom-1');
+  });
+
+  it('si la promesa no traía id, se le genera uno antes de enviarla y el mismo viaja a la cola', async () => {
+    mockApi.item = { status: 'offline' };
+    await send({ kind: 'visit', input: visitInput, promise: { caseId: 'c1', creditId: 'cr1' } as never });
+    const enviado = mockDetail.find((d) => d.startsWith('createItem:id='))!;
+    const id = enviado.split(':')[1]!.replace('id=', '');
+    expect(id).toMatch(/^[0-9a-f-]{36}$/);
+    expect((mockDb.enqueued[0]!.payload.input as { id: string }).id).toBe(id);
+  });
+
+  it('si la foto no sube, se re-encola como visit.evidence con la foto', async () => {
+    mockState.upload = { status: 'offline' };
+    const r = await send({ kind: 'visit', input: visitInput, photo: { uri: 'file:///f.jpg' } });
+    expect(r.status).toBe('ok');
+    expect(mockDb.enqueued).toHaveLength(1);
+    expect(mockDb.enqueued[0]!.payload).toMatchObject({ kind: 'visit.evidence', visitId: 'v1', photo: { uri: 'durable://file:///f.jpg' } });
+  });
+
+  it('si la foto subió pero el sellado falló, se re-encola con la URL (no se vuelve a subir)', async () => {
+    mockApi.evidence = { status: 'offline' };
+    await send({ kind: 'visit', input: visitInput, photo: { uri: 'file:///f.jpg' } });
+    expect(mockDb.enqueued[0]!.payload).toMatchObject({ kind: 'visit.evidence', visitId: 'v1', uploaded: { url: 'http://x/f.jpg', hash: 'h1' } });
+    expect(mockDb.enqueued[0]!.payload.photo).toBeUndefined();
+  });
+
+  it('una foto que ya no está en el teléfono deja un aviso RECHAZADO a la vista (nunca en silencio)', async () => {
+    mockApi.photoExists = false;
+    const r = await send({ kind: 'visit', input: visitInput, photo: { uri: 'file:///f.jpg' } });
+    expect(r.status).toBe('ok');
+    expect(mockCalls).not.toContain('uploadImage');
+    expect(mockDb.enqueued[0]).toMatchObject({ kind: 'photo.lost' });
+    expect(mockDb.rejected).toHaveLength(1);
+    expect(mockDb.rejected[0]!.error).toContain('ya no está en el teléfono');
+  });
+
+  it('la foto subida con señal antes de cortarse (photoUploaded) se sella sin volver a subirla', async () => {
+    await send({ kind: 'visit', input: visitInput, photoUploaded: { url: 'http://x/u.jpg', hash: 'hu' }, payment: pago });
+    expect(mockCalls).toEqual(['createVisit', 'addVisitEvidence', 'createPayment']);
+    expect(mockPayment.input).toMatchObject({ receiptUrl: 'http://x/u.jpg', receiptHash: 'hu' });
+  });
+
+  it('la copia durable de la foto se borra cuando subió', async () => {
+    await send({ kind: 'visit', input: visitInput, photo: { uri: 'durable://x.jpg' } });
+    expect(mockDetail).toContain('deletePhoto:durable://x.jpg');
+  });
+
+  it('la visita viaja con el id que se fijó al abrir la pantalla', async () => {
+    const { createVisit } = jest.requireMock('../field.service') as { createVisit: jest.Mock };
+    await send({ kind: 'visit', input: { ...visitInput, id: 'visita-1' } });
+    expect(createVisit).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'visita-1' }));
+  });
+
+  it('si ni la cola puede guardar lo que falta (sin sesión), la acción falla pasajera: nada se descarta', async () => {
+    mockApi.payment = { status: 'offline' };
+    const { getUserId } = jest.requireMock('../session') as { getUserId: jest.Mock };
+    getUserId.mockResolvedValueOnce(null);
+    const r = await send({ kind: 'visit', input: visitInput, payment: pago });
+    expect(r).toMatchObject({ status: 'error' });
+    expect((r as { permanent?: boolean }).permanent).toBeUndefined();
+  });
+});
+
+describe('send · pagos y fotos', () => {
+  const input = { creditId: 'cr1', caseId: 'c1', amount: 50, method: 'CASH' } as never;
+
+  it('el cobro con un comprobante que ya no existe sube igual, sin comprobante, y deja un aviso a la vista', async () => {
+    mockApi.photoExists = false;
+    const r = await send({ kind: 'payment', input, idempotencyKey: 'k1', photo: { uri: 'durable://gone.jpg' } });
+    expect(r.status).toBe('ok'); // es plata: no se retiene por una foto
+    expect(mockCalls).toContain('createPayment');
+    expect(mockDb.enqueued[0]).toMatchObject({ kind: 'photo.lost' });
+    expect(mockDb.rejected).toHaveLength(1);
+  });
+
+  it('un cobro con comprobante que no sube por falta de señal se reintenta entero (no sale sin recibo)', async () => {
+    mockState.upload = { status: 'offline' };
+    const r = await send({ kind: 'payment', input, idempotencyKey: 'k1', photo: { uri: 'durable://p.jpg' } });
+    expect(r.status).toBe('offline');
+    expect(mockCalls).not.toContain('createPayment');
+  });
+
+  it('visit.evidence con la foto ausente es un rechazo permanente y explícito', async () => {
+    mockApi.photoExists = false;
+    const r = await send({ kind: 'visit.evidence', visitId: 'v1', photo: { uri: 'durable://gone.jpg' } });
+    expect(r).toMatchObject({ status: 'error', permanent: true });
+    expect((r as { message: string }).message).toContain('ya no está en el teléfono');
+  });
+
+  it('visit.evidence sube la foto, la sella y borra la copia', async () => {
+    const r = await send({ kind: 'visit.evidence', visitId: 'v9', photo: { uri: 'durable://p.jpg' } });
+    expect(r.status).toBe('ok');
+    expect(mockDetail).toEqual(expect.arrayContaining(['evidence:v9', 'deletePhoto:durable://p.jpg']));
+  });
+});
+
+describe('enqueue · versión y foto durable', () => {
+  it('guarda el payload con su versión y copia la foto a la carpeta durable', async () => {
+    const ok = await enqueue({ kind: 'payment', input: { amount: 1 } as never, idempotencyKey: 'k', photo: { uri: 'cache://a.jpg' } });
+    expect(ok).toBe(true);
+    expect(mockDb.enqueued[0]!.payload).toMatchObject({ kind: 'payment', v: QUEUE_VERSION, photo: { uri: 'durable://cache://a.jpg' } });
+    expect(mockDb.enqueued[0]!.idempotencyKey).toBe('k');
+  });
+});
+
+describe('parseAction · cola robusta', () => {
+  it('un JSON roto NO tira: vuelve como no soportada', () => {
+    const a = parseAction({ kind: 'payment', payload: '{no es json' });
+    expect(a).toMatchObject({ kind: 'unsupported', rawKind: 'payment' });
+  });
+
+  it('un tipo desconocido vuelve como no soportado, con el tipo original', () => {
+    const a = parseAction({ kind: 'cosa.nueva', payload: JSON.stringify({ kind: 'cosa.nueva', v: 1 }) });
+    expect(a).toMatchObject({ kind: 'unsupported', rawKind: 'cosa.nueva' });
+  });
+
+  it('un payload de una versión más nueva vuelve como no soportado', () => {
+    const a = parseAction({ kind: 'payment', payload: JSON.stringify({ kind: 'payment', v: QUEUE_VERSION + 1 }) });
+    expect(a).toMatchObject({ kind: 'unsupported' });
+  });
+
+  it('un payload que no es un objeto vuelve como no soportado', () => {
+    expect(parseAction({ kind: 'payment', payload: 'null' }).kind).toBe('unsupported');
+    expect(parseAction({ kind: 'payment', payload: '[1]' }).kind).toBe('unsupported');
+  });
+
+  it('sin v (anterior al versionado) se lee como v0 y SE ACEPTA', () => {
+    const a = parseAction({ kind: 'case.activity', payload: JSON.stringify({ kind: 'case.activity', caseId: 'c', input: { type: 'NOTE' } }) });
+    expect(a.kind).toBe('case.activity');
+  });
+
+  it('usa el kind de la fila si al payload le falta', () => {
+    expect(parseAction({ kind: 'route.status', payload: JSON.stringify({ routeId: 'r', status: 'COMPLETED' }) }).kind).toBe('route.status');
+  });
+
+  it('no deja la v en la acción', () => {
+    const a = parseAction({ kind: 'route.status', payload: JSON.stringify({ kind: 'route.status', v: 1, routeId: 'r' }) });
+    expect(a).not.toHaveProperty('v');
+  });
+
+  it('send de una acción no soportada es un rechazo permanente («no soportado»), no una excepción', async () => {
+    const r = await send({ kind: 'unsupported', rawKind: 'x', reason: 'razón' });
+    expect(r).toEqual({ status: 'error', message: 'No soportado: razón', permanent: true });
+  });
+
+  it('las etiquetas tienen un respaldo para tipos desconocidos', () => {
+    expect(actionLabel('cosa.nueva')).toBe('Acción pendiente (no soportada)');
+    expect(actionLabel('visit')).toBe('Visita registrada');
+    for (const k of ['visit.evidence', 'photo.lost', 'client.update', 'client.contact', 'client.location']) {
+      expect(ACTION_LABEL[k as keyof typeof ACTION_LABEL]).toBeTruthy();
+    }
+  });
+});
+
+describe('discardPending', () => {
+  it('borra la fila y la copia de la foto', async () => {
+    await discardPending(5, { kind: 'visit.evidence', visitId: 'v', photo: { uri: 'durable://p.jpg' } });
+    expect(mockDb.dequeued).toEqual([5]);
+    expect(mockDetail).toContain('deletePhoto:durable://p.jpg');
+  });
+
+  it('descartar un alta de cliente rechazada quita su fila provisional', async () => {
+    await discardPending(6, { kind: 'client.create', input: { id: 'cli-1', clientType: 'PERSON' } });
+    expect(mockDetail).toContain('drop:client:cli-1');
+    expect(mockDb.dequeued).toEqual([6]);
+  });
+});
+
+describe('ítems viejos (v0, sin ids): id estable al primer envío', () => {
+  it('genera el id y lo PERSISTE en la fila antes de enviar', async () => {
+    const vieja = { kind: 'case.activity', caseId: 'c1', input: { type: 'NOTE' } } as const;
+    const nueva = await stabilize(42, vieja);
+    const id = (nueva as { input: { id?: string } }).input.id;
+    expect(id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(mockDb.rewritten).toHaveLength(1);
+    expect(mockDb.rewritten[0]!.id).toBe(42);
+    expect(mockDb.rewritten[0]!.payload).toMatchObject({ kind: 'case.activity', v: QUEUE_VERSION, input: { id } });
+  });
+
+  it('si ya tenía id no toca la base ni cambia el id', async () => {
+    const a = { kind: 'agenda.create', input: { id: 'ya-tenia' } } as never;
+    expect(await stabilize(1, a)).toBe(a);
+    expect(mockDb.rewritten).toHaveLength(0);
+  });
+
+  it('cubre la visita (y su promesa) y el agendado; un reintento reusa el id guardado', () => {
+    const v = withStableIds({ kind: 'visit', input: visitInput, promise: { caseId: 'c', creditId: 'k' } as never });
+    expect(v).toMatchObject({ input: { id: expect.any(String) }, promise: { id: expect.any(String) } });
+    expect(withStableIds(v)).toBe(v); // estable: ya no cambia
+    expect(withStableIds({ kind: 'agenda.create', input: {} as never })).toMatchObject({ input: { id: expect.any(String) } });
+  });
+
+  it('el envío de un ítem viejo funciona (con el id recién generado)', async () => {
+    const estable = await stabilize(3, { kind: 'agenda.create', input: { caseId: 'c1', creditId: 'k1' } as never });
+    expect((await send(estable)).status).toBe('ok');
+    expect(mockDetail.some((d) => /^createItem:id=[0-9a-f-]{36}/.test(d))).toBe(true);
+  });
+});
+
+describe('send · posponer con hora absoluta', () => {
+  it('manda toTime y minutes juntos', async () => {
+    await send({ kind: 'agenda.postpone', id: 'a1', minutes: 30, toTime: '10:30' });
+    expect(mockCalls).toContain('postponeItem:a1:30:10:30');
+  });
+
+  it('un ítem viejo (sin toTime) sigue mandando sólo minutes', async () => {
+    await send({ kind: 'agenda.postpone', id: 'a1', minutes: 15 });
+    expect(mockCalls).toContain('postponeItem:a1:15:undefined');
+  });
+});
+
+describe('send · timeout vs offline', () => {
+  it('un timeout es reintentable y marca que el resultado es desconocido', async () => {
+    mockMora.res = { status: 'offline', reason: 'timeout' };
+    const r = await send({ kind: 'credit.note', creditId: 'c', input: { id: 'n', body: 'x' } });
+    expect(r).toEqual({ status: 'offline', outcomeUnknown: true });
+  });
+
+  it('sin red a secas no lo marca', async () => {
+    mockMora.res = { status: 'offline', reason: 'offline' };
+    const r = await send({ kind: 'credit.note', creditId: 'c', input: { id: 'n', body: 'x' } });
+    expect(r).toEqual({ status: 'offline' });
+  });
+});
+
+describe('send · edición de la ficha del cliente', () => {
+  it('client.update manda el PATCH con los valores fijos', async () => {
+    await send({ kind: 'client.update', clientId: 'cl1', patch: { firstName: 'Ana' } });
+    expect(mockCalls).toContain('updateClient:cl1:{"firstName":"Ana"}');
+  });
+
+  it('borrar un teléfono que ya no existe (404) cuenta como hecho', async () => {
+    mockApi.removeContact = { status: 'error', message: 'no existe', httpStatus: 404 };
+    expect((await send({ kind: 'client.contact', clientId: 'cl1', op: 'remove', contactId: 'x' })).status).toBe('ok');
+  });
+
+  it('otro error al borrar sigue siendo error', async () => {
+    mockApi.removeContact = { status: 'error', message: 'prohibido', httpStatus: 403 };
+    expect(await send({ kind: 'client.contact', clientId: 'cl1', op: 'remove', contactId: 'x' })).toMatchObject({ status: 'error', permanent: true });
+  });
+
+  it('alta de teléfono: si el server ya lo tiene (un intento anterior llegó) NO lo crea de nuevo', async () => {
+    mockApi.context = { status: 'ok', data: { contacts: [{ id: 'ya-estaba', contactType: 'PHONE', value: '+591 700-12345' }], locations: [] } };
+    const r = await send({ kind: 'client.contact', clientId: 'cl1', op: 'add', localId: 'local:1', input: { contactType: 'PHONE', value: '70012345' } });
+    expect(r.status).toBe('ok');
+    expect(mockCalls).not.toContain('addClientContact');
+    expect(mockDb.meta.get('idmap:local:1')).toBe('ya-estaba');
+  });
+
+  it('alta de teléfono nuevo: lo crea y guarda local→real', async () => {
+    const r = await send({ kind: 'client.contact', clientId: 'cl1', op: 'add', localId: 'local:2', input: { contactType: 'PHONE', value: '71111111' } });
+    expect(r.status).toBe('ok');
+    expect(mockCalls).toContain('addClientContact');
+    expect(mockDb.meta.get('idmap:local:2')).toBe('srv-contact');
+  });
+
+  it('repetir un alta ya confirmada no vuelve a llamar al server', async () => {
+    mockDb.meta.set('idmap:local:3', 'real');
+    const r = await send({ kind: 'client.contact', clientId: 'cl1', op: 'add', localId: 'local:3', input: { contactType: 'PHONE', value: '1' } });
+    expect(r.status).toBe('ok');
+    expect(mockCalls).toEqual([]);
+  });
+
+  it('sin señal al mirar al server, el alta espera (no crea a ciegas)', async () => {
+    mockApi.context = { status: 'offline' };
+    const r = await send({ kind: 'client.contact', clientId: 'cl1', op: 'add', localId: 'local:4', input: { contactType: 'PHONE', value: '1' } });
+    expect(r.status).toBe('offline');
+    expect(mockCalls).not.toContain('addClientContact');
+  });
+
+  it('alta de dirección: reutiliza la que ya existe con el mismo tipo y texto', async () => {
+    mockApi.context = { status: 'ok', data: { contacts: [], locations: [{ id: 'loc-ya', locationType: 'HOME', address: '  Av. Siempre   Viva 742 ' }] } };
+    await send({ kind: 'client.location', clientId: 'cl1', op: 'add', localId: 'local:5', input: { locationType: 'HOME', address: 'av. siempre viva 742' } });
+    expect(mockCalls).not.toContain('addClientLocation');
+    expect(mockDb.meta.get('idmap:local:5')).toBe('loc-ya');
+  });
+
+  it('el agendado que cita un teléfono provisional lo traduce al id real', async () => {
+    mockDb.meta.set('idmap:local:9', 'contacto-real');
+    const r = await send({ kind: 'agenda.create', input: { id: 'ag-1', details: { contactId: 'local:9' } } as never });
+    expect(r.status).toBe('ok');
+    expect(mockDetail).toContain('createItem:id=ag-1:contact=contacto-real');
+  });
+
+  it('si ese teléfono todavía no subió, el agendado espera (fallo pasajero) y no se envía', async () => {
+    const r = await send({ kind: 'agenda.create', input: { id: 'ag-1', details: { contactId: 'local:10' } } as never });
+    expect(r).toMatchObject({ status: 'error' });
+    expect((r as { permanent?: boolean }).permanent).toBeUndefined();
+    expect(mockCalls).not.toContain('createItem');
+  });
+});
+
+describe('send · altas offline confirman su fila provisional', () => {
+  it('al subir el cliente, la fila deja de ser provisional', async () => {
+    await send({ kind: 'client.create', input: { id: 'cli-9', clientType: 'PERSON' } });
+    expect(mockDetail).toContain('confirm:client:cli-9');
+  });
+
+  it('al subir el préstamo, también', async () => {
+    await send({ kind: 'credit.create', input: { id: 'cre-9', clientId: 'cli-9' } as never });
+    expect(mockDetail).toContain('confirm:credit:cre-9');
   });
 });

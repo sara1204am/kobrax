@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { COLORS, SPACING, TYPE } from '@/theme';
 import { EmptyState, Header, ListRow, StatusBadge } from '@/ui';
@@ -7,13 +7,13 @@ import { Button } from '@/components';
 import { useNetStore } from '@/store/net';
 import { getUserId } from '@/session';
 import { whenLabel } from '@/notifications.service';
-import { ACTION_LABEL, pendingActions, type QueuedAction } from '@/sync/queue';
+import { actionLabel, discardPending, pendingActions, type PendingAction } from '@/sync/queue';
 import { REJECTED_ATTEMPTS } from '@/db';
-import { drain } from '@/sync/sync.service';
+import { drain, refreshPendingCount } from '@/sync/sync.service';
 
 interface Fila {
   id: number;
-  action: QueuedAction;
+  action: PendingAction;
   attempts: number;
   lastError: string | null;
   createdAt: number;
@@ -58,6 +58,35 @@ export default function PendientesScreen() {
     else if (res.sent > 0) setAviso(`${res.sent} ${res.sent === 1 ? 'acción subió' : 'acciones subieron'}.`);
   }, [cargar]);
 
+  /**
+   * Descartar lo que el servidor rechazó o que esta versión no sabe enviar. **Pide confirmación**: es lo único que
+   * borra trabajo del cobrador sin que haya subido, así que no puede pasar por un toque sin querer.
+   */
+  const descartar = useCallback(
+    (f: Fila) => {
+      Alert.alert(
+        'Descartar este pendiente',
+        `«${actionLabel(f.action.kind)}» no se va a subir y se borra del teléfono. No se puede deshacer.`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Descartar',
+            style: 'destructive',
+            onPress: () => {
+              void (async () => {
+                await discardPending(f.id, f.action);
+                const userId = await getUserId();
+                if (userId) await refreshPendingCount(userId);
+                await cargar();
+              })();
+            },
+          },
+        ],
+      );
+    },
+    [cargar],
+  );
+
   return (
     <View style={styles.screen}>
       <Header title="Sin subir" onBack={() => router.back()} />
@@ -80,26 +109,36 @@ export default function PendientesScreen() {
             </Text>
             {aviso && <Text style={styles.aviso}>{aviso}</Text>}
 
-            {filas.map((f) => (
-              <ListRow
-                key={f.id}
-                title={ACTION_LABEL[f.action.kind]}
-                subtitle={
-                  f.lastError
-                    ? `${whenLabel(new Date(f.createdAt).toISOString())} · ${f.lastError}`
-                    : whenLabel(new Date(f.createdAt).toISOString())
-                }
-                right={
-                  f.attempts === 0 ? (
-                    <StatusBadge label="En espera" tone="neutral" />
-                  ) : f.attempts >= REJECTED_ATTEMPTS ? (
-                    <StatusBadge label="Rechazado" tone="danger" />
-                  ) : (
-                    <StatusBadge label={`${f.attempts} ${f.attempts === 1 ? 'intento' : 'intentos'}`} tone="warning" />
-                  )
-                }
-              />
-            ))}
+            {filas.map((f) => {
+              const noSoportado = f.action.kind === 'unsupported';
+              const rechazado = f.attempts >= REJECTED_ATTEMPTS;
+              // Lo no soportado muestra su motivo aunque todavía no haya intentado enviarse.
+              const detalle = f.lastError ?? (f.action.kind === 'unsupported' ? `No soportado: ${f.action.reason}` : null);
+              return (
+                <View key={f.id} style={{ gap: SPACING.xs }}>
+                  <ListRow
+                    title={actionLabel(f.action.kind === 'unsupported' ? f.action.rawKind : f.action.kind)}
+                    subtitle={
+                      detalle
+                        ? `${whenLabel(new Date(f.createdAt).toISOString())} · ${detalle}`
+                        : whenLabel(new Date(f.createdAt).toISOString())
+                    }
+                    right={
+                      noSoportado ? (
+                        <StatusBadge label="No soportado" tone="danger" />
+                      ) : f.attempts === 0 ? (
+                        <StatusBadge label="En espera" tone="neutral" />
+                      ) : rechazado ? (
+                        <StatusBadge label="Rechazado" tone="danger" />
+                      ) : (
+                        <StatusBadge label={`${f.attempts} ${f.attempts === 1 ? 'intento' : 'intentos'}`} tone="warning" />
+                      )
+                    }
+                  />
+                  {(rechazado || noSoportado) && <Button label="Descartar" variant="ghost" onPress={() => descartar(f)} />}
+                </View>
+              );
+            })}
           </ScrollView>
 
           <View style={styles.footer}>

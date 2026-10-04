@@ -1,4 +1,6 @@
 /** Cliente HTTP a la API Kobrax. El mobile llama directo (no hay BFF). */
+import Constants from 'expo-constants';
+
 export const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://127.0.0.1:4010/api';
 
 /** `meta` de la respuesta estándar `{data,meta,error}`; en listados trae la paginación. */
@@ -9,8 +11,18 @@ export interface ApiMeta {
   pages?: number;
 }
 
+/**
+ * Por qué una llamada devolvió `status: 0`. Los dos casos son reintentables, pero NO son lo mismo:
+ *  · `offline`: el pedido no salió (no hay red) → el server NO lo vio.
+ *  · `timeout`: lo cortamos nosotros a los 15 s → **el resultado es desconocido**, el server puede haber
+ *    procesado el pedido y la respuesta perderse.
+ */
+export type NetworkReason = 'offline' | 'timeout';
+
 export interface ApiResult<T> {
   status: number;
+  /** Sólo con `status: 0`. Ver `NetworkReason`. */
+  reason?: NetworkReason;
   data: T | null;
   error: { code: string; message: string; details?: unknown } | null;
   /** Presente en listados paginados (los KPIs de campo leen `meta.total`). */
@@ -27,6 +39,24 @@ export interface ApiResult<T> {
  * pesado), se le pasa el suyo por `init` — no se sube el global.
  */
 const TIMEOUT_MS = 15_000;
+
+/**
+ * Versión de la app que viaja en `x-app-version` en TODA llamada (JSON y multipart). Le sirve al server para
+ * saber qué contrato habla este cliente (ids opcionales, `toTime`, etc.) sin adivinar por el comportamiento.
+ * Sale de `app.json` vía expo-constants; si no está disponible (tests, web) no se manda el header.
+ */
+export function appVersion(): string | undefined {
+  try {
+    return Constants.expoConfig?.version ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function versionHeader(): Record<string, string> {
+  const v = appVersion();
+  return v ? { 'x-app-version': v } : {};
+}
 
 /**
  * Techo de espera de una subida. Diez veces el de `apiFetch` a propósito: por acá viajan archivos
@@ -48,7 +78,7 @@ export async function postMultipart(path: string, form: FormData, token: string)
   try {
     return await fetch(`${API_BASE}${path}`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'x-client-type': 'mobile' },
+      headers: { authorization: `Bearer ${token}`, 'x-client-type': 'mobile', ...versionHeader() },
       body: form,
       signal: abort.signal,
     });
@@ -101,6 +131,13 @@ export async function publicCall<T>(
   return { status: 'error', message: res.error?.message ?? fallback };
 }
 
+/**
+ * 🔴 Por qué reintentar un POST es seguro (y por eso `status: 0` se puede encolar sin miedo): toda escritura
+ * que la cola puede repetir lleva un **id puesto por el teléfono** (`nuevoId()`) o una `Idempotency-Key`, y el
+ * server devuelve la fila ya guardada en vez de crear otra. Eso vale también para el `timeout`, donde el
+ * pedido pudo haber llegado: repetirlo con el mismo id no duplica. Lo que NO lleva id (ediciones de ficha con
+ * valores fijos, `toTime` absoluto al posponer) es idempotente por ser valor fijo, no incremento.
+ */
 export async function apiFetch<T>(
   path: string,
   init: { method?: string; body?: unknown; token?: string; headers?: Record<string, string> } = {},
@@ -108,6 +145,7 @@ export async function apiFetch<T>(
   const headers: Record<string, string> = {
     'content-type': 'application/json',
     'x-client-type': 'mobile',
+    ...versionHeader(),
     ...init.headers,
   };
   if (init.token) headers.authorization = `Bearer ${init.token}`;
@@ -129,7 +167,9 @@ export async function apiFetch<T>(
     return { status: res.status, data: json.data, error: json.error, meta: json.meta };
   } catch {
     // Sin red, o la API no contestó a tiempo: status 0 para que el caller decida modo offline.
-    return { status: 0, data: null, error: { code: 'NETWORK', message: 'Sin conexión' } };
+    // `reason` distingue «no salió» de «salió y no sabemos qué pasó»: ver `NetworkReason`.
+    const reason: NetworkReason = abort.signal.aborted ? 'timeout' : 'offline';
+    return { status: 0, reason, data: null, error: { code: 'NETWORK', message: 'Sin conexión' } };
   } finally {
     clearTimeout(timer);
   }

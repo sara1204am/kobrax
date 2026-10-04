@@ -4,55 +4,89 @@
  * Todo lo que entra acá es idempotente o append-only (plan §D3): reintentarlo no duplica nada. Esa
  * es la condición para poder encolarlo — si una acción no cumple, no se encola, se pide señal.
  *
- * **Los ítems de la cola son independientes entre sí.** Por eso la foto de una visita viaja DENTRO
- * de la visita y no como un ítem aparte: si fueran dos, el segundo dependería de que el primero
- * hubiera salido bien, y una cola con dependencias entre ítems necesita un grafo, reintentos
- * encadenados y un orden que respetar. Acá el que falla se saltea y no arrastra a nadie.
+ * **Idempotencia = un id puesto por el teléfono.** Cada escritura repetible (gestión, agendado, visita, alta de
+ * cliente/préstamo, nota…) lleva un `id` generado UNA vez al abrir la pantalla (`nuevoId()`), y el server
+ * devuelve la fila ya guardada si lo recibe de nuevo. Los pagos usan su `Idempotency-Key`. Las ediciones de la
+ * ficha viajan con valores fijos (no incrementos). Con eso un reintento —incluido el que sigue a un timeout,
+ * donde no se sabe si el pedido llegó— no puede duplicar nada.
+ *
+ * **Los ítems de la cola son independientes entre sí.** La visita compuesta (visita + foto + cobro + promesa)
+ * viaja como UNA acción porque el pago necesita el id de la visita para su clave (`visit-<id>`); pero **lo que
+ * falla después de que la visita salió NO se pierde ni se reintenta junto con ella**: se re-encola como su
+ * propio ítem (ver `sendVisit`). Así el que falla no arrastra a nadie y nada se descarta en silencio.
  */
 import type { AgendaOutcome, AgendaPostponeStep, NewCreditNote, RecoveryActivityInput, RouteStatus } from '@kobrax/shared';
 import * as db from '../db';
-import { uploadImage } from '../uploads.service';
+import { nuevoId } from '../ids';
+import { deleteQueuePhoto, persistPhoto, photoExists, type PendingPhoto } from '../queue-photos';
+import { uploadImage, type UploadResult } from '../uploads.service';
 import { addVisitEvidence, createVisit, type CreateVisitInput } from '../field.service';
 import { createPayment, type NewPayment } from '../payments.service';
 import { addActivity, type NewActivity } from '../cases.service';
 import { updateRouteStatus } from '../routes.service';
-import { createClient, type NewClientInput } from '../clients.service';
+import {
+  createClient,
+  removeContact,
+  removeLocation,
+  updateClient,
+  updateContact,
+  updateLocation,
+  type NewClientInput,
+  type NewContactInput,
+  type NewLocationInput,
+  type UpdateClientPatch,
+} from '../clients.service';
 import { clearArrears, createCredit, markArrears, type ClearArrearsInput, type NewCreditInput } from '../credits.service';
 import {
+  addClientContact,
+  addClientLocation,
   cancelItem,
+  clientContextLive,
   completeItem,
   createItem,
   postponeItem,
   rescheduleItem,
   type CreateAgendaInput,
+  type NewClientContact,
+  type NewClientLocation,
   type RescheduleAgendaInput,
 } from '../agenda.service';
 import { addMoraActivity, addMoraNote } from '../mora.service';
 import { getUserId } from '../session';
+import { confirmProvisionalRow, dropProvisionalRow } from './optimistic';
 
-/** Una foto todavía en el teléfono. Se sube al drenar; **se guarda la ruta, no los bytes**. */
-export interface PendingPhoto {
-  uri: string;
-  mimeType?: string;
-}
+export type { PendingPhoto } from '../queue-photos';
+
+/**
+ * Versión de la forma del payload guardado. **Falta = 0** (ítems anteriores a esta versión: sin ids ni `v`).
+ * Sube cuando cambia la forma de forma incompatible; una fila con `v` mayor a ésta la escribió una app más
+ * nueva y esta no sabe enviarla → queda como «no soportada» a la vista, no se manda ni se pierde.
+ *  · 0 → 1: ids en todas las escrituras repetibles, `toTime` al posponer, partes sueltas de la visita.
+ */
+export const QUEUE_VERSION = 1;
+
+/** Prefijo de los ids que el teléfono inventa para algo que todavía no existe en el server (teléfono/dirección nuevos). */
+export const LOCAL_ID_PREFIX = 'local:';
 
 export type QueuedAction =
   /**
    * La visita lleva **adentro** lo que cierra la parada: la foto, el cobro y la promesa. Es una
    * sola acción y no tres porque el pago necesita el id de la visita para su clave de idempotencia
-   * (`visit-<id>`), y ese id no existe hasta que la visita sale. Encolándolas juntas, la clave se
-   * arma al enviar y reintentar sigue sin poder cobrarle dos veces al deudor.
+   * (`visit-<id>`), y ese id no existe hasta que la visita sale. Si algo de eso falla DESPUÉS de que la visita
+   * quedó registrada, se re-encola como ítem propio (`payment`, `agenda.create`, `visit.evidence`).
    */
   | {
       kind: 'visit';
       input: CreateVisitInput;
       photo?: PendingPhoto;
+      /** La foto que ya subió con señal antes de cortarse (se sella contra la visita y es el comprobante del cobro). */
+      photoUploaded?: { url: string; hash: string };
       payment?: Omit<NewPayment, 'receiptUrl' | 'receiptHash'>;
       promise?: CreateAgendaInput;
     }
   | { kind: 'payment'; input: NewPayment; idempotencyKey: string; photo?: PendingPhoto }
   | { kind: 'agenda.create'; input: CreateAgendaInput }
-  /** Gestión registrada desde la ficha del deudor. `case_activities` es append-only. */
+  /** Gestión registrada desde la ficha del deudor. `case_activities` es append-only; el `input.id` evita duplicarla. */
   | { kind: 'case.activity'; caseId: string; input: NewActivity }
   /**
    * Iniciar o cerrar la jornada. Idempotente porque lleva el **estado destino**, no un incremento:
@@ -82,10 +116,16 @@ export type QueuedAction =
    */
   | { kind: 'arrears.mark'; creditId: string; days?: number }
   | { kind: 'arrears.clear'; creditId: string; input: ClearArrearsInput }
+  /** Idempotente en el server: completar una gestión ya ejecutada devuelve la misma gestión. */
   | { kind: 'agenda.complete'; id: string; outcome: AgendaOutcome; notes?: string }
-  // `AgendaPostponeStep` y no `number`: posponer es en pasos fijos, y el tipo del dominio ya lo
-  // dice. Guardar un número libre dejaría entrar a la cola algo que el server va a rechazar.
-  | { kind: 'agenda.postpone'; id: string; minutes: AgendaPostponeStep }
+  /**
+   * `AgendaPostponeStep` y no `number`: posponer es en pasos fijos, y el tipo del dominio ya lo dice.
+   *
+   * 🔴 `toTime` es la hora **absoluta** a la que queda (calculada al encolar). Con ella un reintento deja la
+   * gestión en el mismo lugar; `minutes` solo es relativo y cada repetición la correría otro tanto. Los ítems
+   * viejos (sin `toTime`) siguen enviando `minutes`, que es lo único que tienen.
+   */
+  | { kind: 'agenda.postpone'; id: string; minutes: AgendaPostponeStep; toTime?: string }
   /**
    * Cancelar y reagendar. Un reintento no puede duplicar nada porque el server **sólo las acepta
    * sobre una gestión SCHEDULED**: si la primera ya entró, la segunda rebota con "no se puede
@@ -100,15 +140,56 @@ export type QueuedAction =
    */
   | { kind: 'mora.activity'; creditId: string; input: RecoveryActivityInput & { id: string } }
   /** Nota del crédito. Idempotente por `input.id` del teléfono; el servidor reconoce el id y no la duplica. */
-  | { kind: 'credit.note'; creditId: string; input: NewCreditNote & { id: string } };
+  | { kind: 'credit.note'; creditId: string; input: NewCreditNote & { id: string } }
+  /**
+   * La foto de una visita ya registrada cuyo sellado de evidencia falló (parte suelta de `visit`). Si la foto
+   * ya subió, viaja `uploaded` y no se sube de nuevo.
+   */
+  | { kind: 'visit.evidence'; visitId: string; photo?: PendingPhoto; uploaded?: { url: string; hash: string } }
+  /**
+   * Aviso, no trabajo: una foto que debía viajar con un pago o una visita ya no estaba en el teléfono (o no se
+   * pudo subir). Nace rechazado y queda a la vista hasta que el cobrador lo descarta — nunca en silencio.
+   */
+  | { kind: 'photo.lost'; detail: string }
+  /**
+   * Edición de los datos sueltos del cliente: `PATCH` con valores fijos → idempotente por naturaleza.
+   */
+  | { kind: 'client.update'; clientId: string; patch: UpdateClientPatch }
+  /**
+   * Teléfonos del cliente.
+   *  · `add` (desde «agendar», endpoint de agenda): **el endpoint no acepta id**, así que no es repetible a
+   *    ciegas. Se vuelve repetible con búsqueda previa: antes de crear se mira si el server ya tiene ese
+   *    número y, si lo tiene, se reutiliza. `localId` (`local:<uuid>`) es el nombre provisional con el que la
+   *    pantalla lo ofreció; al subir se guarda `localId → id real` y un `agenda.create` que lo cita lo traduce.
+   *  · `update` / `remove`: valores fijos y borrado (un 404 al borrar = ya estaba borrado).
+   */
+  | { kind: 'client.contact'; clientId: string; op: 'add'; localId: string; input: NewClientContact }
+  | { kind: 'client.contact'; clientId: string; op: 'update'; contactId: string; input: Partial<NewContactInput> }
+  | { kind: 'client.contact'; clientId: string; op: 'remove'; contactId: string }
+  /** Ídem para direcciones (búsqueda previa por tipo + dirección). */
+  | { kind: 'client.location'; clientId: string; op: 'add'; localId: string; input: NewClientLocation }
+  | { kind: 'client.location'; clientId: string; op: 'update'; locationId: string; input: NewLocationInput }
+  | { kind: 'client.location'; clientId: string; op: 'remove'; locationId: string };
 
 /**
- * `ponytail:` **editar la ficha NO se encola** y la pantalla lo dice sin adornos. Un guardado de
- * `cliente/editar` no es una llamada: es hasta 16 (contactos, direcciones, relaciones — alta, cambio
- * y baja de cada uno), y las altas devuelven ids que los cambios posteriores usan. Encolar sólo el
- * PATCH de los campos sueltos subiría el nombre y perdería el teléfono nuevo del mismo guardado, que
- * es peor que avisar. Para hacerlo bien hay que llevar el id propuesto por el teléfono a esas cuatro
- * entidades, como se hizo con cliente y préstamo.
+ * Una fila que esta versión de la app no sabe enviar: tipo desconocido, payload dañado o escrito por una app más
+ * nueva. **No tira el drenaje**: se muestra, se rechaza como «no soportada» y se puede descartar.
+ */
+export interface UnsupportedAction {
+  kind: 'unsupported';
+  /** El tipo tal como estaba guardado (para el motivo que ve el cobrador). */
+  rawKind: string;
+  reason: string;
+}
+
+export type PendingAction = QueuedAction | UnsupportedAction;
+
+/**
+ * `ponytail:` **qué de la edición de la ficha se encola y qué no.** Se encolan los datos sueltos del cliente
+ * (`client.update`) y los cambios y bajas de teléfonos/direcciones: son valores fijos, repetibles. NO se
+ * encolan las altas de teléfono/dirección de `cliente/editar` (endpoint de clientes), garantes, garantías ni el
+ * crédito: sus POST no aceptan id y devuelven ids que los cambios posteriores del mismo guardado necesitan, así
+ * que reintentarlos a ciegas duplicaría. Esos guardados siguen pidiendo señal, y la pantalla lo dice.
  */
 
 /** Cómo se llama cada cosa en la lista de pendientes que ve el cobrador. */
@@ -128,7 +209,27 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'agenda.reschedule': 'Gestión reagendada',
   'mora.activity': 'Gestión de mora registrada',
   'credit.note': 'Nota del crédito',
+  'visit.evidence': 'Foto de la visita',
+  'photo.lost': 'Foto que no se pudo adjuntar',
+  'client.update': 'Datos del cliente',
+  'client.contact': 'Teléfono del cliente',
+  'client.location': 'Dirección del cliente',
 };
+
+/** El texto de la lista de pendientes para cualquier tipo, incluidos los que esta versión no conoce. */
+export function actionLabel(kind: string): string {
+  return (ACTION_LABEL as Record<string, string | undefined>)[kind] ?? 'Acción pendiente (no soportada)';
+}
+
+const KNOWN_KINDS = new Set<string>(Object.keys(ACTION_LABEL));
+
+/** Las fotos de la cola que cuelgan de una acción (para borrar sus copias al descartarla). */
+function photosOf(action: PendingAction): PendingPhoto[] {
+  if (action.kind === 'visit' || action.kind === 'payment' || action.kind === 'visit.evidence') {
+    return action.photo ? [action.photo] : [];
+  }
+  return [];
+}
 
 /**
  * Guarda la acción para subirla después. **No recibe el userId**: lo saca de la sesión guardada,
@@ -136,17 +237,87 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
  *
  * Devuelve `false` si no hay sesión: sin dueño no se encola nada, porque después no habría forma
  * de saber de quién es ese pago.
+ *
+ * Si la acción lleva una foto, se copia a un directorio durable de la app (ver `queue-photos.ts`) y se encola
+ * esa ruta: la de la cámara está en caché y el sistema puede borrarla antes de que haya señal.
  */
 export async function enqueue(action: QueuedAction): Promise<boolean> {
   const userId = await getUserId();
   if (!userId) return false;
+  let stored = action;
+  if ((action.kind === 'visit' || action.kind === 'payment' || action.kind === 'visit.evidence') && action.photo) {
+    stored = { ...action, photo: await persistPhoto(action.photo) };
+  }
   await db.enqueue({
     userId,
-    kind: action.kind,
-    payload: action,
-    idempotencyKey: action.kind === 'payment' ? action.idempotencyKey : undefined,
+    kind: stored.kind,
+    payload: { ...stored, v: QUEUE_VERSION },
+    idempotencyKey: stored.kind === 'payment' ? stored.idempotencyKey : undefined,
   });
   return true;
+}
+
+/** Un ítem que nace rechazado (un aviso persistente). Falla en silencio sólo si ni siquiera hay sesión. */
+async function enqueueRejected(action: QueuedAction, message: string): Promise<boolean> {
+  const userId = await getUserId();
+  if (!userId) return false;
+  const id = await db.enqueue({ userId, kind: action.kind, payload: { ...action, v: QUEUE_VERSION } });
+  await db.markRejected(id, message);
+  return true;
+}
+
+/**
+ * Descarta un ítem a pedido del cobrador (sólo para lo rechazado o no soportado, ver `pendientes`): borra la
+ * fila y las copias de fotos que colgaban de ella. Es lo único que borra algo de la cola sin que haya subido.
+ */
+export async function discardPending(rowId: number, action: PendingAction): Promise<void> {
+  for (const p of photosOf(action)) await deleteQueuePhoto(p.uri);
+  try {
+    if (action.kind === 'client.create' && action.input.id) await dropProvisionalRow('client', action.input.id);
+    if (action.kind === 'credit.create' && action.input.id) await dropProvisionalRow('credit', action.input.id, action.input.clientId);
+  } catch {
+    // Quitar la fila provisional es cosmético: la próxima hidratación la limpia.
+  }
+  await db.dequeue(rowId);
+}
+
+/**
+ * Completa los ids que le faltan a una acción guardada **antes** de existir los ids (`v` 0). Si faltaba alguno
+ * se devuelve una acción NUEVA (y quien la llama la persiste, ver `stabilize`); si no, la misma.
+ */
+export function withStableIds(action: PendingAction): PendingAction {
+  switch (action.kind) {
+    case 'case.activity':
+      return action.input.id ? action : { ...action, input: { ...action.input, id: nuevoId() } };
+    case 'agenda.create':
+      return action.input.id ? action : { ...action, input: { ...action.input, id: nuevoId() } };
+    case 'client.create':
+      return action.input.id ? action : { ...action, input: { ...action.input, id: nuevoId() } };
+    case 'credit.create':
+      return action.input.id ? action : { ...action, input: { ...action.input, id: nuevoId() } };
+    case 'visit': {
+      const needsVisit = !action.input.id;
+      const needsPromise = !!action.promise && !action.promise.id;
+      if (!needsVisit && !needsPromise) return action;
+      return {
+        ...action,
+        input: needsVisit ? { ...action.input, id: nuevoId() } : action.input,
+        promise: action.promise && needsPromise ? { ...action.promise, id: nuevoId() } : action.promise,
+      };
+    }
+    default:
+      return action;
+  }
+}
+
+/**
+ * Antes de enviar un ítem viejo (guardado sin ids) se le genera un id estable y **se guarda en la fila ANTES de
+ * mandarlo**: si el envío se corta, el reintento usa ese mismo id y el server no duplica.
+ */
+export async function stabilize(rowId: number, action: PendingAction): Promise<PendingAction> {
+  const next = withStableIds(action);
+  if (next !== action) await db.updatePayload(rowId, { ...next, v: QUEUE_VERSION });
+  return next;
 }
 
 /** Lo que puede pasarle a un envío. `auth` corta el drenaje entero: sin sesión no sube nada más. */
@@ -154,66 +325,85 @@ export async function enqueue(action: QueuedAction): Promise<boolean> {
  * `permanent`: el server **rechazó** la acción (un 4xx: datos inválidos, sin permiso, ya no aplica).
  * Reintentarla no la arregla —el mismo pedido recibe la misma respuesta—, así que no se reintenta sola:
  * queda a la vista con su motivo. Un 5xx o un 408/429 son pasajeros y sí se reintentan.
+ *
+ * `offline` cubre «no hay red» Y «el server no contestó a tiempo»; `outcomeUnknown` marca lo segundo (el pedido
+ * pudo haber llegado). Para la cola son lo mismo —reintentable— y es seguro por los ids (ver el tope del archivo).
  */
 export type SendResult =
   | { status: 'ok' }
-  | { status: 'offline' }
+  | { status: 'offline'; outcomeUnknown?: boolean }
   | { status: 'auth' }
   | { status: 'error'; message: string; permanent?: boolean };
+
+const LOST_PHOTO = 'La foto ya no está en el teléfono (el sistema la borró). Descartá este aviso.';
+
+function unsupported(rawKind: string, reason: string): UnsupportedAction {
+  return { kind: 'unsupported', rawKind, reason };
+}
 
 /**
  * Sube una acción. Es el único lugar que sabe traducir lo guardado a llamadas del API — y usa
  * **los mismos services que las pantallas**, no un cliente HTTP propio.
  */
-export async function send(action: QueuedAction): Promise<SendResult> {
+export async function send(action: PendingAction): Promise<SendResult> {
   switch (action.kind) {
-    case 'visit': {
-      const visita = await createVisit(action.input);
-      if (visita.status !== 'ok') return mapMutate(visita);
-
-      // Desde acá, la visita YA quedó registrada en el server. Nada de lo que siga puede devolver
-      // un fallo que haga reintentar toda la acción: repetirla duplicaría la parada visitada.
-      let foto: { url: string; hash: string } | undefined;
-      if (action.photo) {
-        const subida = await uploadImage(action.photo.uri, action.photo.mimeType);
-        if (subida.status === 'ok') {
-          foto = { url: subida.url, hash: subida.hash };
-          await addVisitEvidence(visita.data.id, { type: 'PHOTO', fileUrl: foto.url, fileHash: foto.hash });
-        }
+    case 'unsupported':
+      return { status: 'error', message: `No soportado: ${action.reason}`, permanent: true };
+    case 'visit':
+      return sendVisit(action);
+    case 'visit.evidence': {
+      let foto = action.uploaded;
+      if (!foto) {
+        if (!action.photo) return { status: 'error', message: 'La foto de la visita no se guardó en el teléfono.', permanent: true };
+        if (!(await photoExists(action.photo.uri))) return { status: 'error', message: LOST_PHOTO, permanent: true };
+        const up = await uploadImage(action.photo.uri, action.photo.mimeType);
+        if (up.status !== 'ok') return mapUpload(up);
+        foto = { url: up.url, hash: up.hash };
       }
-
-      if (action.payment) {
-        // La llave sale de la visita, que el server creó una sola vez: reintentar no cobra dos veces.
-        await createPayment(
-          { ...action.payment, receiptUrl: foto?.url, receiptHash: foto?.hash },
-          `visit-${visita.data.id}`,
-        );
-      }
-
-      if (action.promise) await createItem(action.promise);
-
-      return { status: 'ok' };
+      const ev = await addVisitEvidence(action.visitId, { type: 'PHOTO', fileUrl: foto.url, fileHash: foto.hash });
+      if (ev.status === 'ok') await deleteQueuePhoto(action.photo?.uri);
+      return mapMutate(ev);
     }
+    case 'photo.lost':
+      return { status: 'error', message: action.detail, permanent: true };
     case 'payment': {
       // Si hay comprobante, se sube primero: el pago lo referencia.
       let input = action.input;
       if (action.photo && !input.receiptUrl) {
-        const subida = await uploadImage(action.photo.uri, action.photo.mimeType);
-        if (subida.status === 'ok') input = { ...input, receiptUrl: subida.url, receiptHash: subida.hash };
+        if (!(await photoExists(action.photo.uri))) {
+          // El cobro es plata: sale igual, sin comprobante, y el aviso queda a la vista (nunca en silencio).
+          await enqueueRejected({ kind: 'photo.lost', detail: `Un cobro subió sin su comprobante: ${LOST_PHOTO}` }, LOST_PHOTO);
+        } else {
+          const subida = await uploadImage(action.photo.uri, action.photo.mimeType);
+          if (subida.status === 'ok') input = { ...input, receiptUrl: subida.url, receiptHash: subida.hash };
+          else if (subida.status === 'offline' || subida.status === 'unauthenticated') return mapUpload(subida);
+          else await enqueueRejected({ kind: 'photo.lost', detail: `Un cobro subió sin su comprobante: ${subida.message}` }, subida.message);
+        }
       }
       // La clave de idempotencia es **la de cuando se encoló**: reintentar no vuelve a cobrar.
-      return mapMutate(await createPayment(input, action.idempotencyKey));
+      const res = await createPayment(input, action.idempotencyKey);
+      if (res.status === 'ok') await deleteQueuePhoto(action.photo?.uri);
+      return mapMutate(res);
     }
-    case 'agenda.create':
-      return mapMutate(await createItem(action.input));
+    case 'agenda.create': {
+      const resolved = await resolveLocalIds(action.input);
+      if ('wait' in resolved) return { status: 'error', message: resolved.wait };
+      return mapMutate(await createItem(resolved.input));
+    }
     case 'case.activity':
       return mapMutate(await addActivity(action.caseId, action.input));
     case 'route.status':
       return mapMutate(await updateRouteStatus(action.routeId, action.status));
-    case 'client.create':
-      return mapMutate(await createClient(action.input));
-    case 'credit.create':
-      return mapMutate(await createCredit(action.input));
+    case 'client.create': {
+      const res = await createClient(action.input);
+      if (res.status === 'ok' && action.input.id) await confirmProvisional('client', action.input.id);
+      return mapMutate(res);
+    }
+    case 'credit.create': {
+      const res = await createCredit(action.input);
+      if (res.status === 'ok' && action.input.id) await confirmProvisional('credit', action.input.id, action.input.clientId);
+      return mapMutate(res);
+    }
     case 'arrears.mark':
       return mapMutate(await markArrears(action.creditId, action.days));
     case 'arrears.clear':
@@ -221,7 +411,7 @@ export async function send(action: QueuedAction): Promise<SendResult> {
     case 'agenda.complete':
       return mapMutate(await completeItem(action.id, action.outcome, action.notes));
     case 'agenda.postpone':
-      return mapMutate(await postponeItem(action.id, action.minutes));
+      return mapMutate(await postponeItem(action.id, action.minutes, action.toTime));
     case 'agenda.cancel':
       return mapMutate(await cancelItem(action.id, action.reasonCode));
     case 'agenda.reschedule':
@@ -230,14 +420,187 @@ export async function send(action: QueuedAction): Promise<SendResult> {
       return mapMutate(await addMoraActivity(action.creditId, action.input));
     case 'credit.note':
       return mapMutate(await addMoraNote(action.creditId, action.input));
+    case 'client.update':
+      return mapMutate(await updateClient(action.clientId, action.patch));
+    case 'client.contact':
+      return sendClientContact(action);
+    case 'client.location':
+      return sendClientLocation(action);
   }
 }
 
-function mapMutate(res: { status: string; message?: string; httpStatus?: number }): SendResult {
+// ── Visita compuesta ──────────────────────────────────────────────────────────
+
+/**
+ * Visita + foto + cobro + promesa, en ese orden. La visita es lo que decide el resultado del ítem; **lo demás ya
+ * no puede hacerlo fallar**: repetir toda la acción duplicaría la parada visitada. Lo que no salga se
+ * RE-ENCOLA como ítem propio (el cobro con su misma clave de idempotencia, la promesa con su id, la foto como
+ * `visit.evidence`) y queda a la vista en pendientes — antes se descartaba en silencio.
+ */
+async function sendVisit(action: Extract<QueuedAction, { kind: 'visit' }>): Promise<SendResult> {
+  const visita = await createVisit(action.input);
+  if (visita.status !== 'ok') return mapMutate(visita);
+  const visitId = visita.data.id;
+
+  const resto: QueuedAction[] = [];
+  const avisos: { action: QueuedAction; message: string }[] = [];
+
+  let foto: { url: string; hash: string } | undefined = action.photoUploaded;
+  if (foto) {
+    const ev = await addVisitEvidence(visitId, { type: 'PHOTO', fileUrl: foto.url, fileHash: foto.hash });
+    if (ev.status !== 'ok') resto.push({ kind: 'visit.evidence', visitId, uploaded: foto });
+  } else if (action.photo) {
+    if (!(await photoExists(action.photo.uri))) {
+      avisos.push({ action: { kind: 'photo.lost', detail: `La foto de una visita no se adjuntó: ${LOST_PHOTO}` }, message: LOST_PHOTO });
+    } else {
+      const subida = await uploadImage(action.photo.uri, action.photo.mimeType);
+      if (subida.status === 'ok') {
+        foto = { url: subida.url, hash: subida.hash };
+        const ev = await addVisitEvidence(visitId, { type: 'PHOTO', fileUrl: foto.url, fileHash: foto.hash });
+        // Subió: la copia del teléfono ya no hace falta; si el sellado falló se reintenta con la URL, sin re-subir.
+        await deleteQueuePhoto(action.photo.uri);
+        if (ev.status !== 'ok') resto.push({ kind: 'visit.evidence', visitId, uploaded: foto });
+      } else {
+        resto.push({ kind: 'visit.evidence', visitId, photo: action.photo });
+      }
+    }
+  }
+
+  if (action.payment) {
+    // La llave sale de la visita, que el server creó una sola vez: reintentar no cobra dos veces.
+    const input: NewPayment = { ...action.payment, receiptUrl: foto?.url, receiptHash: foto?.hash };
+    const key = `visit-${visitId}`;
+    const pago = await createPayment(input, key);
+    if (pago.status !== 'ok') resto.push({ kind: 'payment', input, idempotencyKey: key });
+  }
+
+  if (action.promise) {
+    const promise = action.promise.id ? action.promise : { ...action.promise, id: nuevoId() };
+    const prom = await createItem(promise);
+    if (prom.status !== 'ok') resto.push({ kind: 'agenda.create', input: promise });
+  }
+
+  for (const a of avisos) await enqueueRejected(a.action, a.message);
+  for (const a of resto) {
+    if (!(await enqueue(a))) {
+      // Sin sesión no hay dónde guardarlas. Se devuelve un fallo pasajero: la visita se repite con su mismo id
+      // (el server devuelve la ya creada), el cobro con su misma clave y la promesa con su mismo id.
+      return { status: 'error', message: 'No se pudo guardar en el teléfono lo que faltaba de la visita.' };
+    }
+  }
+  return { status: 'ok' };
+}
+
+// ── Teléfonos y direcciones del cliente ───────────────────────────────────────
+
+const idMapKey = (localId: string) => `idmap:${localId}`;
+
+/**
+ * Traduce los ids provisionales (`local:…`) de un agendado a los reales. Si el teléfono/dirección todavía no
+ * subió, devuelve `wait`: es un fallo pasajero, no un rechazo — el ítem espera su turno.
+ */
+async function resolveLocalIds(input: CreateAgendaInput): Promise<{ input: CreateAgendaInput } | { wait: string }> {
+  const details = (input.details ?? {}) as Record<string, unknown>;
+  const patch: Record<string, unknown> = {};
+  for (const field of ['contactId', 'locationId'] as const) {
+    const value = details[field];
+    if (typeof value !== 'string' || !value.startsWith(LOCAL_ID_PREFIX)) continue;
+    const real = await db.getMeta(idMapKey(value));
+    if (!real) {
+      return { wait: field === 'contactId' ? 'Espera a que suba el teléfono nuevo del cliente.' : 'Espera a que suba la dirección nueva del cliente.' };
+    }
+    patch[field] = real;
+  }
+  if (Object.keys(patch).length === 0) return { input };
+  return { input: { ...input, details: { ...input.details, ...patch } } };
+}
+
+const digits = (s: string | null | undefined) => (s ?? '').replace(/\D/g, '');
+/** Mismo número aunque uno traiga el prefijo de país («+591 700-12345» = «70012345»). Con menos de 7 dígitos, sólo igualdad exacta. */
+function samePhone(a: string | null | undefined, b: string | null | undefined): boolean {
+  const x = digits(a);
+  const y = digits(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  return Math.min(x.length, y.length) >= 7 && (x.endsWith(y) || y.endsWith(x));
+}
+const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+async function sendClientContact(action: Extract<QueuedAction, { kind: 'client.contact' }>): Promise<SendResult> {
+  if (action.op === 'update') return mapMutate(await updateContact(action.clientId, action.contactId, action.input));
+  if (action.op === 'remove') return mapGone(await removeContact(action.clientId, action.contactId));
+
+  if (await db.getMeta(idMapKey(action.localId))) return { status: 'ok' }; // ya subió (se perdió el borrado de la fila)
+  // El endpoint no acepta id: antes de crear se mira si el server ya lo tiene (un intento anterior que llegó).
+  const ctx = await clientContextLive(action.clientId);
+  if (ctx.status === 'offline') return { status: 'offline' };
+  if (ctx.status === 'unauthenticated') return { status: 'auth' };
+  if (ctx.status === 'ok') {
+    const igual = ctx.data.contacts.find(
+      (c) => c.contactType === action.input.contactType && samePhone(c.value, action.input.value),
+    );
+    if (igual) {
+      await db.setMeta(idMapKey(action.localId), igual.id);
+      return { status: 'ok' };
+    }
+  }
+  const res = await addClientContact(action.clientId, action.input);
+  if (res.status === 'ok') await db.setMeta(idMapKey(action.localId), res.data.id);
+  return mapMutate(res);
+}
+
+async function sendClientLocation(action: Extract<QueuedAction, { kind: 'client.location' }>): Promise<SendResult> {
+  if (action.op === 'update') return mapMutate(await updateLocation(action.clientId, action.locationId, action.input));
+  if (action.op === 'remove') return mapGone(await removeLocation(action.clientId, action.locationId));
+
+  if (await db.getMeta(idMapKey(action.localId))) return { status: 'ok' };
+  const ctx = await clientContextLive(action.clientId);
+  if (ctx.status === 'offline') return { status: 'offline' };
+  if (ctx.status === 'unauthenticated') return { status: 'auth' };
+  if (ctx.status === 'ok') {
+    const igual = ctx.data.locations.find(
+      (l) => l.locationType === action.input.locationType && norm(l.address) === norm(action.input.address),
+    );
+    if (igual) {
+      await db.setMeta(idMapKey(action.localId), igual.id);
+      return { status: 'ok' };
+    }
+  }
+  const res = await addClientLocation(action.clientId, action.input);
+  if (res.status === 'ok') await db.setMeta(idMapKey(action.localId), res.data.id);
+  return mapMutate(res);
+}
+
+// ── Lo provisional se confirma al subir ───────────────────────────────────────
+
+/** Cuando el alta offline sube, la fila provisional deja de estar marcada como pendiente. No hace fallar el envío. */
+async function confirmProvisional(kind: 'client' | 'credit', id: string, clientId?: string): Promise<void> {
+  try {
+    await confirmProvisionalRow(kind, id, clientId);
+  } catch {
+    // Es cosmética: la próxima hidratación reemplaza la fila igual.
+  }
+}
+
+// ── Mapeo de resultados ───────────────────────────────────────────────────────
+
+function mapMutate(res: { status: string; message?: string; httpStatus?: number; reason?: string }): SendResult {
   if (res.status === 'ok') return { status: 'ok' };
-  if (res.status === 'offline') return { status: 'offline' };
+  if (res.status === 'offline') return res.reason === 'timeout' ? { status: 'offline', outcomeUnknown: true } : { status: 'offline' };
   if (res.status === 'unauthenticated') return { status: 'auth' };
   return { status: 'error', message: res.message ?? 'No se pudo subir', permanent: isPermanentRejection(res.httpStatus) };
+}
+
+/** Un DELETE que devuelve 404 ya está hecho: no es un error. */
+function mapGone(res: { status: string; message?: string; httpStatus?: number; reason?: string }): SendResult {
+  if (res.status === 'error' && res.httpStatus === 404) return { status: 'ok' };
+  return mapMutate(res);
+}
+
+function mapUpload(up: Exclude<UploadResult, { status: 'ok' }>): SendResult {
+  if (up.status === 'offline') return { status: 'offline' };
+  if (up.status === 'unauthenticated') return { status: 'auth' };
+  return { status: 'error', message: up.message };
 }
 
 /** Un 4xx es definitivo, salvo el timeout (408) y el «más despacio» (429), que son del momento. */
@@ -245,16 +608,39 @@ export function isPermanentRejection(httpStatus: number | undefined): boolean {
   return httpStatus !== undefined && httpStatus >= 400 && httpStatus < 500 && httpStatus !== 408 && httpStatus !== 429;
 }
 
-/** Lo pendiente, ya deserializado, para pintarlo en la hoja de pendientes. */
+/**
+ * Lo pendiente, ya deserializado, para pintarlo en la hoja de pendientes. **Nunca tira**: una fila dañada o de un
+ * tipo que esta versión no conoce vuelve como `unsupported` y se muestra igual (con su motivo y «Descartar»).
+ */
 export async function pendingActions(userId: string): Promise<
-  { id: number; action: QueuedAction; attempts: number; lastError: string | null; createdAt: number }[]
+  { id: number; action: PendingAction; attempts: number; lastError: string | null; createdAt: number }[]
 > {
   const rows = await db.pending(userId);
   return rows.map((r) => ({
     id: r.id,
-    action: JSON.parse(r.payload) as QueuedAction,
+    action: parseAction(r),
     attempts: r.attempts,
     lastError: r.lastError,
     createdAt: r.createdAt,
   }));
+}
+
+/** Deserializa una fila. Separado y exportado para probarlo sin base. */
+export function parseAction(r: { kind: string; payload: string }): PendingAction {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(r.payload);
+  } catch {
+    return unsupported(r.kind, 'el dato guardado está dañado y no se puede leer.');
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return unsupported(r.kind, 'el dato guardado está dañado y no se puede leer.');
+  }
+  const obj = raw as Record<string, unknown>;
+  const kind = typeof obj.kind === 'string' ? obj.kind : r.kind;
+  if (!KNOWN_KINDS.has(kind)) return unsupported(kind, 'este tipo de acción no lo conoce esta versión de la app.');
+  const v = typeof obj.v === 'number' ? obj.v : 0; // sin `v` = ítem anterior al versionado
+  if (v > QUEUE_VERSION) return unsupported(kind, 'la guardó una versión más nueva de la app. Actualizá la app para enviarla.');
+  const { v: _v, ...rest } = obj;
+  return { ...rest, kind } as unknown as QueuedAction;
 }

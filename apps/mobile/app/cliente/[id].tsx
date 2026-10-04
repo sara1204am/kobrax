@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { addPeriods, calculateCredit, isUnknownField, PaymentFrequency, portfolioStatus, RatePeriod } from '@kobrax/shared';
@@ -22,6 +22,7 @@ import { PaySheet } from '@/pay-sheet';
 import { submitPayment } from '@/payment-submit';
 import { registrarRastro } from '@/trace';
 import { GestionSheet, prettyDate } from '@/gestion-sheet';
+import { nuevoId } from '@/ids';
 
 /** Las dos acciones de mora, ya en la forma en la que viajan por la cola. */
 type QueuedArrears = Extract<QueuedAction, { kind: 'arrears.mark' | 'arrears.clear' }>;
@@ -55,6 +56,8 @@ export default function ClienteFichaScreen() {
   const [paySheet, setPaySheet] = useState(false);
   const [gestSheet, setGestSheet] = useState(false);
   const [moraSheet, setMoraSheet] = useState<'mark' | 'clear' | null>(null);
+
+  const gestId = useRef(nuevoId());
 
   const selected = useMemo(() => ctx?.credits.find((c) => c.creditId === creditId) ?? ctx?.credits[0], [ctx, creditId]);
 
@@ -281,7 +284,15 @@ export default function ClienteFichaScreen() {
           )}
           <View style={{ gap: SPACING.sm, marginTop: SPACING.sm }}>
             <Button label="Registrar pago" onPress={() => setPaySheet(true)} />
-            <Button label="Registrar gestión" variant="ghost" onPress={() => setGestSheet(true)} />
+            <Button
+              label="Registrar gestión"
+              variant="ghost"
+              onPress={() => {
+                // El id de la gestión se fija al ABRIR la hoja: un reintento o doble toque reusa el mismo.
+                gestId.current = nuevoId();
+                setGestSheet(true);
+              }}
+            />
             {/*
              * 🔴 **Marcar en mora es para el préstamo sin cronograma.** Sin fecha que se venza sola,
              * el trabajo diario del servidor no tiene de dónde sacar la mora y ese préstamo nunca
@@ -463,12 +474,13 @@ export default function ClienteFichaScreen() {
         onClose={() => setGestSheet(false)}
         currency={currency}
         onSubmit={async (payload) => {
-          const res = await addActivity(selected.caseId, payload);
+          const withId = { ...payload, id: gestId.current };
+          const res = await addActivity(selected.caseId, withId);
           if (res.status === 'ok') { setGestSheet(false); await loadCase(selected.caseId, selected.creditId); return null; }
           if (res.status === 'offline') {
             // La gestión queda guardada y sube sola: `case_activities` es append-only, así que
             // reintentarla no puede pisar nada.
-            const guardada = await queueForLater({ kind: 'case.activity', caseId: selected.caseId, input: payload });
+            const guardada = await queueForLater({ kind: 'case.activity', caseId: selected.caseId, input: withId });
             if (!guardada) return 'Sin conexión y no se pudo guardar en el teléfono. Reintentá.';
             setGestSheet(false);
             await loadCase(selected.caseId, selected.creditId);

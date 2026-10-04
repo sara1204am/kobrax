@@ -91,7 +91,7 @@ export default function CrearRutaScreen() {
       if (!online) return setPending(true);
       const me = await authService.me();
       if (me.status !== 'ok') return setPending(true);
-      const res = await flushDraft(next, () => createRoute({ collectorId: me.me.userId, plannedDate: todayISO() }));
+      const res = await flushDraft(next, (id) => createRoute({ id, collectorId: me.me.userId, plannedDate: todayISO() }));
       if (res.status === 'ok') {
         setDraft(res.draft);
         setPending(false);

@@ -6,13 +6,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { AGENDA_OUTCOMES_BY_TYPE, AGENDA_POSTPONE_STEPS, AgendaItemStatus, AgendaItemType, CatalogType, renderTemplate, type AgendaOutcome, type AgendaPostponeStep } from '@kobrax/shared';
+import { AGENDA_OUTCOMES_BY_TYPE, AGENDA_POSTPONE_STEPS, AgendaItemStatus, AgendaItemType, CatalogType, ScheduleTimeMode, renderTemplate, type AgendaOutcome, type AgendaPostponeStep } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from './theme';
 import { Button, ErrorBanner } from './components';
 import { AGENDA_OUTCOME_META, BottomSheet, SectionLabel } from './ui';
 import { money } from './agenda-form';
 import { getAccount } from './account.service';
-import { completeItem, postponeItem, whatsappLink, type AgendaItemDetail, type AgendaListItem } from './agenda.service';
+import { completeItem, postponeItem, postponeTarget, whatsappLink, type AgendaItemDetail, type AgendaListItem } from './agenda.service';
 import { listCatalogCached, type CatalogOption } from './catalogs.service';
 import { queueForLater } from './sync/sync.service';
 import type { QueuedAction } from './sync/queue';
@@ -74,7 +74,12 @@ export function RegisterSheet({
    * red hay que poder guardarla, y una función ya invocada no se puede serializar.
    */
   const submit = useCallback(
-    async (fn: () => ReturnType<typeof completeItem>, accion: QueuedAction) => {
+    async (
+      fn: () => ReturnType<typeof completeItem>,
+      accion: QueuedAction,
+      /** Cómo queda el ítem en pantalla mientras la cola no lo sube (por omisión: ejecutado). */
+      local: Partial<AgendaListItem> = { status: AgendaItemStatus.EXECUTED },
+    ) => {
       setBusy(true);
       setError(null);
       const res = await fn();
@@ -92,7 +97,7 @@ export function RegisterSheet({
           void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           // El ítem local se marca como ejecutado aunque el server todavía no lo sepa: es lo que
           // el cobrador acaba de hacer, y el estado real llega cuando la cola drene.
-          onUpdated({ ...item, status: AgendaItemStatus.EXECUTED });
+          onUpdated({ ...item, ...local });
           return;
         }
         setError('Sin conexión y no se pudo guardar en el teléfono. Reintentá.');
@@ -148,7 +153,17 @@ export function RegisterSheet({
           {AGENDA_POSTPONE_STEPS.map((m) => (
             <Pressable
               key={m}
-              onPress={() => submit(() => postponeItem(item.id, m), { kind: 'agenda.postpone', id: item.id, minutes: m })}
+              onPress={() => {
+                // La hora de destino se calcula ACÁ, al tocar: la misma viaja en el intento y en la cola, así
+                // que repetir el envío deja la gestión en esa hora y no la corre otro tanto.
+                const toTime = postponeTarget(item, m);
+                return submit(
+                  () => postponeItem(item.id, m, toTime),
+                  { kind: 'agenda.postpone', id: item.id, minutes: m, toTime },
+                  // Pospuesta sigue pendiente: sólo cambia la hora (no se marca como ejecutada).
+                  toTime ? { timeMode: ScheduleTimeMode.FIXED, scheduledTime: toTime } : {},
+                );
+              }}
               disabled={busy}
               accessibilityRole="button"
               style={[styles.chip, busy && { opacity: 0.5 }]}

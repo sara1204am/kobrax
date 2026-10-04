@@ -26,10 +26,24 @@ jest.mock('../db', () => ({
   pendingCount: jest.fn(async () => mockCola.length),
 }));
 
+const mockSendBehavior: { throws?: Error } = {};
+
+jest.mock('./optimistic', () => ({
+  writeProvisionalClient: jest.fn(async (input: { id?: string }) => void mockOps.push(`provisionalClient:${input.id}`)),
+  writeProvisionalCredit: jest.fn(async (input: { id?: string }) => void mockOps.push(`provisionalCredit:${input.id}`)),
+}));
+
 jest.mock('./queue', () => ({
+  enqueue: jest.fn(async () => true),
+  // Los ítems viejos reciben un id estable ANTES de enviarse: el mock lo deja visible en el registro.
+  stabilize: jest.fn(async (rowId: number, action: unknown) => {
+    mockOps.push(`stabilize:${rowId}`);
+    return action;
+  }),
   pendingActions: jest.fn(async () => [...mockCola]),
   send: jest.fn(async (action: { kind: string }) => {
     mockOps.push(`send:${action.kind}`);
+    if (mockSendBehavior.throws) throw mockSendBehavior.throws;
     return mockSend.result;
   }),
 }));
@@ -41,7 +55,7 @@ jest.mock('../route-draft', () => ({
   }),
 }));
 
-import { drain } from './sync.service';
+import { drain, queueForLater } from './sync.service';
 
 const item = (id: number, kind = 'payment', attempts = 0) => ({
   id,
@@ -55,6 +69,7 @@ beforeEach(() => {
   mockCola.length = 0;
   mockOps.length = 0;
   mockSend.result = { status: 'ok' };
+  delete mockSendBehavior.throws;
 });
 
 describe('drain', () => {
@@ -134,6 +149,34 @@ describe('drain', () => {
     expect(mockOps).not.toContain('flushDraft');
   });
 
+  // Un ítem que explota (archivo ilegible, bug de una acción) no puede tumbar el drenaje ni dejar sin subir al resto.
+  it('un ítem que lanza una excepción se cuenta como fallo y no corta a los que siguen', async () => {
+    mockCola.push(item(1, 'visit'), item(2, 'payment'));
+    mockSendBehavior.throws = new Error('boom');
+    const r = await drain('u1');
+    expect(r.failed).toBe(2);
+    expect(mockOps).toContain('markFailed:1:boom');
+    expect(mockOps).toContain('send:payment'); // el segundo se intentó igual
+    expect(mockOps.some((o) => o.startsWith('dequeue'))).toBe(false);
+  });
+
+  // Los ítems guardados antes de que existieran los ids reciben uno estable ANTES del primer envío.
+  it('estabiliza (ids) cada ítem antes de enviarlo', async () => {
+    mockCola.push(item(7, 'case.activity'));
+    await drain('u1');
+    expect(mockOps.indexOf('stabilize:7')).toBeGreaterThanOrEqual(0);
+    expect(mockOps.indexOf('stabilize:7')).toBeLessThan(mockOps.indexOf('send:case.activity'));
+  });
+
+  // Una fila que esta versión no entiende se rechaza como «no soportada» y queda a la vista.
+  it('una acción no soportada queda rechazada (a la vista), no borrada', async () => {
+    mockCola.push(item(1, 'unsupported'));
+    mockSend.result = { status: 'error', message: 'No soportado: x', permanent: true };
+    await drain('u1');
+    expect(mockOps).toContain('markRejected:1:No soportado: x');
+    expect(mockOps.some((o) => o.startsWith('dequeue'))).toBe(false);
+  });
+
   // Dos drenajes en paralelo subirían la misma acción dos veces; la idempotencia salva al pago,
   // pero no a una visita o a una gestión.
   it('dos drenajes simultáneos no envían lo mismo dos veces', async () => {
@@ -141,5 +184,14 @@ describe('drain', () => {
     const [a, b] = await Promise.all([drain('u1'), drain('u1')]);
     expect(mockOps.filter((o) => o.startsWith('send')).length).toBe(1);
     expect(a.sent + b.sent).toBe(1);
+  });
+});
+
+describe('queueForLater · altas offline visibles', () => {
+  // Sin esto el cliente dado de alta en la puerta del deudor no aparecía en la búsqueda ni en la ficha hasta subir.
+  it('escribe la fila provisional del cliente y del préstamo al encolarlos', async () => {
+    expect(await queueForLater({ kind: 'client.create', input: { id: 'cli-1', clientType: 'PERSON', firstName: 'Ana' } })).toBe(true);
+    expect(await queueForLater({ kind: 'credit.create', input: { id: 'cre-1', clientId: 'cli-1' } as never })).toBe(true);
+    expect(mockOps).toEqual(['provisionalClient:cli-1', 'provisionalCredit:cre-1']);
   });
 });

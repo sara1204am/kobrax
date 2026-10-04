@@ -34,6 +34,8 @@ export function getRoute(id: string): Promise<QueryResult<RouteItem>> {
 
 /** Genera una ruta desde casos (auto = casos abiertos del cobrador). `POST /routes/generate`. */
 export interface GenerateRouteInput {
+  /** Del teléfono: reintentar con el mismo id devuelve la ruta ya creada (no una segunda ni ROUTE_DUPLICATE_DAY). */
+  id?: string;
   collectorId: string;
   plannedDate: string;
   caseIds?: string[];
@@ -46,6 +48,8 @@ export function generateRoute(input: GenerateRouteInput): Promise<MutateResult<R
 
 /** Crea una ruta vacía (paradas aparte). `POST /routes`. */
 export interface CreateRouteInput {
+  /** Del teléfono: reintentar con el mismo id devuelve la ruta ya creada. */
+  id?: string;
   collectorId: string;
   plannedDate: string;
   branchId?: string;

@@ -21,13 +21,19 @@
  * sería churn sin ganancia. Si una ruta llegara a cientos de paradas, ahí sí va a `db.ts`.
  */
 import * as SecureStore from 'expo-secure-store';
+import { nuevoId } from './ids';
 import { addStop, createRoute, getRoute, removeStop, updateStop, type RouteStopItem } from './routes.service';
-
-const KEY = 'kobrax.route.draft';
+import { getUserId, ROUTE_DRAFT_KEY, routeDraftKey } from './session';
 
 export interface RouteDraft {
   /** Ruta en el server. `null` mientras el recorrido sólo existe en el teléfono. */
   routeId: string | null;
+  /**
+   * El id con el que se pide crear la ruta (`POST /routes`), fijado la primera vez y **guardado antes de
+   * llamar**: si la respuesta se pierde, el reintento manda el mismo id y el server devuelve la ruta ya creada
+   * en vez de crear otra (o chocar con «ya hay una ruta hoy»).
+   */
+  createId?: string;
   /** Fecha de la ruta (`YYYY-MM-DD`): un borrador de ayer no se le aplica a la jornada de hoy. */
   date: string;
   /** Los casos elegidos, **en el orden del recorrido**. */
@@ -42,8 +48,20 @@ export function emptyDraft(date: string): RouteDraft {
 
 // ── Persistencia ──────────────────────────────────────────────────────────────
 
+/**
+ * El borrador es **del usuario**: la clave lleva su id. Sin usuario no hay dónde guardarlo (ni de quién sea).
+ * La clave vieja, sin sufijo, no se migra: se borra al primer acceso, porque no se sabe de quién era.
+ */
+async function draftKey(): Promise<string | null> {
+  const userId = await getUserId();
+  return userId ? routeDraftKey(userId) : null;
+}
+
 export async function loadDraft(date: string): Promise<RouteDraft> {
-  const raw = await SecureStore.getItemAsync(KEY);
+  await SecureStore.deleteItemAsync(ROUTE_DRAFT_KEY); // legado sin dueño: se descarta
+  const key = await draftKey();
+  if (!key) return emptyDraft(date);
+  const raw = await SecureStore.getItemAsync(key);
   if (!raw) return emptyDraft(date);
   try {
     const draft = JSON.parse(raw) as RouteDraft;
@@ -55,11 +73,26 @@ export async function loadDraft(date: string): Promise<RouteDraft> {
 }
 
 export async function saveDraft(draft: RouteDraft): Promise<void> {
-  await SecureStore.setItemAsync(KEY, JSON.stringify(draft));
+  const key = await draftKey();
+  if (!key) return;
+  // La pantalla guarda su copia en memoria, que puede no tener el `createId` que `flushDraft` fijó en un intento
+  // fallido: se conserva el guardado, o el reintento mandaría OTRO id y duplicaría la ruta si el primero llegó.
+  let toSave = draft;
+  if (!draft.createId && !draft.routeId) {
+    try {
+      const prev = JSON.parse((await SecureStore.getItemAsync(key)) ?? 'null') as RouteDraft | null;
+      if (prev?.createId && prev.date === draft.date && !prev.routeId) toSave = { ...draft, createId: prev.createId };
+    } catch {
+      /* un guardado ilegible se pisa */
+    }
+  }
+  await SecureStore.setItemAsync(key, JSON.stringify(toSave));
 }
 
 export async function clearDraft(): Promise<void> {
-  await SecureStore.deleteItemAsync(KEY);
+  await SecureStore.deleteItemAsync(ROUTE_DRAFT_KEY);
+  const key = await draftKey();
+  if (key) await SecureStore.deleteItemAsync(key);
 }
 
 // ── Ediciones (puras: la pantalla guarda el resultado) ────────────────────────
@@ -131,17 +164,22 @@ export type FlushResult = { status: 'ok'; draft: RouteDraft } | { status: 'offli
  * Sin conexión corta y avisa: lo local queda intacto para el próximo intento.
  *
  * `createRoute` lo inyecta el caller —crear la ruta del día necesita el `collectorId` de la sesión—
- * y sólo se llama si todavía no hay ninguna.
+ * y sólo se llama si todavía no hay ninguna. Recibe el **id de la ruta**, que viaja en el pedido: se genera una
+ * vez y se persiste en el borrador ANTES de llamar, así un reintento tras un timeout no crea una segunda ruta.
  */
 export async function flushDraft(
   draft: RouteDraft,
-  createRoute: () => Promise<{ status: string; data?: { id: string }; message?: string }>,
+  createRoute: (id: string) => Promise<{ status: string; data?: { id: string }; message?: string }>,
 ): Promise<FlushResult> {
   if (draft.caseIds.length === 0 && !draft.routeId) return { status: 'ok', draft };
 
   let routeId = draft.routeId;
   if (!routeId) {
-    const created = await createRoute();
+    if (!draft.createId) {
+      draft = { ...draft, createId: nuevoId() };
+      await saveDraft(draft);
+    }
+    const created = await createRoute(draft.createId!);
     if (created.status === 'offline') return { status: 'offline' };
     if (created.status !== 'ok' || !created.data) return { status: 'error', message: created.message ?? 'No se pudo crear la ruta' };
     routeId = created.data.id;
@@ -194,6 +232,6 @@ export async function flushPendingDraft(
   if (draft.caseIds.length === 0) return 'nothing';
   // Con `routeId` ya existe en el server; igual se corre el flush, porque puede haber quedado a
   // medias (paradas agregadas y el orden sin aplicar). El diff resuelve qué falta y no duplica.
-  const res = await flushDraft(draft, () => createRoute({ collectorId, plannedDate: date }));
+  const res = await flushDraft(draft, (id) => createRoute({ id, collectorId, plannedDate: date }));
   return res.status === 'ok' ? 'ok' : res.status === 'offline' ? 'offline' : 'error';
 }
