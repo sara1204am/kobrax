@@ -110,6 +110,8 @@ export interface ActivityPromise {
 }
 
 export interface NewActivity {
+  /** Lo pone quien escribe (el móvil, sin red): reintentar con el mismo id no duplica la gestión ni su promesa. */
+  id?: string;
   type: 'NOTE' | 'CALL' | 'VISIT' | 'MESSAGE';
   result?: string;
   notes?: string;

@@ -74,6 +74,8 @@ export interface AgendaItemDetail {
 }
 
 export interface CreateAgendaInput {
+  /** Lo pone quien escribe (el móvil, sin red): reintentar con el mismo id **no duplica** el agendado ni su recordatorio. */
+  id?: string;
   caseId: string;
   creditId: string;
   type: AgendaItemType;
