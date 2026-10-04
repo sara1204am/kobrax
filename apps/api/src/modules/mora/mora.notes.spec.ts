@@ -37,7 +37,7 @@ function make(opts: { count?: number; topZ?: number; raceOnCreate?: boolean; vis
       },
     },
   };
-  const permissions = opts.permissions ?? ['case:read', 'case:write', 'case:assign'];
+  const permissions = opts.permissions ?? ['case:read', 'case:write', 'case:assign', 'data:scope:all'];
   const service = new MoraService(
     { withTenant: async (_a: string, fn: (t: unknown) => unknown) => fn(tx) } as never,
     { accountId: 'acc', userId: 'u1', can: (p: string) => permissions.includes(p) } as never,
@@ -70,10 +70,12 @@ describe('MoraService.addNote — notas por crédito', () => {
     assert.equal(calls.created.length, 0);
   });
 
-  it('el alcance del cobrador entra en la consulta de visibilidad', async () => {
+  it('el alcance del cobrador entra en la consulta de visibilidad (responsable, temporal o apoyo; sin caso)', async () => {
     const { service, calls } = make({ permissions: ['case:read', 'case:write'] });
     await service.addNote(CREDIT, { body: 'x' });
-    assert.match(calls.queries[0]!.sql, /cc\.assignee_id = \?/);
+    assert.match(calls.queries[0]!.sql, /cr\.assigned_manager_id = \?/);
+    assert.match(calls.queries[0]!.sql, /credit_assignments/);
+    assert.doesNotMatch(calls.queries[0]!.sql, /cc\./);
     assert.ok(calls.queries[0]!.values.includes('u1'));
   });
 

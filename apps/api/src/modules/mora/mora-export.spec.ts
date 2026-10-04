@@ -15,6 +15,9 @@ function credit(over: Partial<MoraCreditListItem> = {}): MoraCreditListItem {
     balance: 7011.42,
     daysPastDue: 393,
     arrearsSource: 'CALCULATED',
+    situation: 'IN_ARREARS',
+    writtenOff: false,
+    priorityPinned: false,
     hasActivePromise: false,
     ...over,
   };
@@ -38,16 +41,33 @@ describe('moraCsvRow — ausente queda en blanco, nunca 0', () => {
     assert.equal(row['Origen del monto vencido'], 'Reportado por el archivo');
   });
 
-  it('el cobrador sale con nombre, no con id; sin caso sale vacío', () => {
+  it('el responsable sale con nombre, no con id; sin responsable ni episodio sale vacío', () => {
     const names = new Map([['u1', 'Carlos Mamani']]);
-    const conCaso = moraCsvRow(credit({ case: { id: 'k', status: 'ACTIVE', priority: 'CRITICAL', priorityPinned: false, assigneeId: 'u1', isOverdue: true } }), names);
-    assert.equal(conCaso['Cobrador'], 'Carlos Mamani');
-    assert.equal(conCaso['Prioridad'], 'Crítica');
-    assert.equal(conCaso['Estado de gestión'], 'En gestión');
-    assert.equal(conCaso['Plazo de gestión vencido'], 'Sí');
-    const sinCaso = moraCsvRow(credit(), names);
-    assert.equal(sinCaso['Cobrador'], '');
-    assert.equal(sinCaso['Prioridad'], '');
+    const completo = moraCsvRow(
+      credit({ responsibleId: 'u1', priority: 'CRITICAL', category: { code: 'C', name: 'Categoría C' }, lastActionAt: '2026-09-30T14:00:00.000Z' }),
+      names,
+    );
+    assert.equal(completo['Responsable'], 'Carlos Mamani');
+    assert.equal(completo['Prioridad'], 'Crítica');
+    assert.equal(completo['Categoría'], 'C');
+    assert.equal(completo['Situación'], 'En mora');
+    assert.equal(completo['Castigado'], 'No');
+    assert.equal(completo['Última gestión'], '2026-09-30');
+    const vacio = moraCsvRow(credit({ situation: 'CURRENT', daysPastDue: 0 }), names);
+    assert.equal(vacio['Responsable'], '');
+    assert.equal(vacio['Prioridad'], '');
+    assert.equal(vacio['Categoría'], '');
+    assert.equal(vacio['Situación'], 'Al día');
+  });
+
+  it('castigado sale como «Sí» aunque siga en mora', () => {
+    assert.equal(moraCsvRow(credit({ writtenOff: true }), new Map())['Castigado'], 'Sí');
+  });
+
+  it('F4/08: sin columnas de caso ni de SLA; «Cobrador» pasó a «Responsable»', () => {
+    const cols = MORA_CSV_COLUMNS.join('|');
+    assert.doesNotMatch(cols, /Plazo|Estado de gestión|Cobrador/);
+    for (const c of ['Responsable', 'Categoría', 'Situación', 'Castigado', 'Prioridad']) assert.ok((MORA_CSV_COLUMNS as readonly string[]).includes(c), c);
   });
 
   it('🔴 no lleva teléfonos, direcciones ni documento', () => {
@@ -89,9 +109,16 @@ describe('CSV por tramos', () => {
 describe('describeFilters — los filtros en palabras', () => {
   it('sin filtros no dice nada', () => assert.deepEqual(describeFilters({}), []));
 
-  it('el ejemplo del pedido: oficina, cobrador, mora y prioridad', () => {
-    const f = describeFilters({ branchId: 'b', assigneeId: 'u', dpdMin: 90, priority: 'CRITICAL' }, { branch: 'Centro', assignee: 'Carlos Mamani' });
-    assert.deepEqual(f, ['Días de mora: 90 o más', 'Prioridad: Crítica', 'Cobrador: Carlos Mamani', 'Oficina: Centro']);
+  it('el ejemplo del pedido: oficina, responsable, mora, prioridad, categoría y castigo', () => {
+    const f = describeFilters(
+      { branchId: 'b', assigneeId: 'u', dpdMin: 90, priority: 'CRITICAL', category: 'B,C', writtenOff: 'false' },
+      { branch: 'Centro', assignee: 'Carlos Mamani' },
+    );
+    assert.deepEqual(f, ['Días de mora: 90 o más', 'Prioridad: Crítica', 'Categoría de mora: B, C', 'Sin los castigados', 'Responsable: Carlos Mamani', 'Oficina: Centro']);
+  });
+
+  it('los filtros del caso (estado, SLA, sin gestión desde) ya no se describen: no filtran nada', () => {
+    assert.deepEqual(describeFilters({ status: 'ACTIVE', hasCase: 'true', overdue: 'true', noActionSince: '2026-09-01' }), []);
   });
 
   it('un valor de enum inventado no aparece', () => {
@@ -102,6 +129,7 @@ describe('describeFilters — los filtros en palabras', () => {
     assert.equal(describeSort(), 'días de mora (mayor a menor)');
     assert.equal(describeSort('balance', 'asc'), 'saldo (menor a mayor)');
     assert.equal(describeSort('hasOwnProperty'), 'días de mora (mayor a menor)');
+    assert.equal(describeSort('slaDueAt'), 'días de mora (mayor a menor)');
   });
 });
 

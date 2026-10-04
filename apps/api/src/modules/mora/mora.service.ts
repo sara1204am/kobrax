@@ -12,9 +12,11 @@ import {
   type RecoveryActivityError,
   staleAfterDaysOf,
   type ApiResponse,
+  type MoraAssignment,
   type MoraCaseLookup,
   type MoraCreditDetail,
   type MoraCreditListItem,
+  type CreditAssignmentKind,
   type CreditNote,
   type MoraEpisode,
   type MoraPromise,
@@ -28,7 +30,7 @@ import { agendaNotSchedulable } from '../agenda/agenda.errors';
 import { ArrearsPriorityService } from '../arrears/arrears-priority.service';
 import type { CreateMoraActivityDto, CreateMoraNoteDto, ListMoraQueryDto, SetMoraPriorityDto, UpdateMoraNoteDto } from './dto/mora.dto';
 import { recordCreditActivity, serializeCreditActivity } from './credit-activity';
-import { buildMoraOrder, buildMoraWhere, MORA_FROM, moraAccessConditions, moraScopeOf, TERMINAL_CASE_STATUSES, type MoraScope } from './mora-query';
+import { buildMoraOrder, buildMoraWhere, MORA_ACCESS_FROM, MORA_FROM, moraAccessConditions, moraScopeOf, type MoraCategoryRange, type MoraScope } from './mora-query';
 import { serializeEpisodes } from './mora-episodes';
 import { serializeNote } from './mora-notes';
 import { serializePromises } from './mora-promises';
@@ -53,14 +55,13 @@ const ACTIVITY_ERRORS: Record<RecoveryActivityError, string> = {
 const DETAIL_ACTIVITIES = 100;
 
 /**
- * Central de Mora: **una fila por crédito**, con su caso abierto si lo tiene.
+ * Central de Mora: **una fila por crédito**, sin caso (F4/08).
  *
- * Lo de antes (`GET /cases`) listaba casos, y un caso sólo existe si el trabajo diario lo abrió: un
- * crédito en mora sin cronograma, o importado con el reporte desactualizado, no aparecía. Acá el
- * crédito es la fila y el caso es un dato más.
+ * La situación (al día / en mora) sale del episodio abierto, la prioridad es la de ese episodio, el responsable
+ * es el del crédito y la categoría de mora se calcula con los rangos de la cuenta.
  *
- * Los números (mora, monto vencido, prioridad) los calcula el backend —`creditView`, `computePriority`—:
- * ningún cliente los recalcula.
+ * Los números (mora, monto vencido, prioridad, categoría) los calcula el backend —`creditView`,
+ * `computePriority`, `categoryForDays`—: ningún cliente los recalcula.
  */
 @Injectable()
 export class MoraService {
@@ -77,11 +78,11 @@ export class MoraService {
   }
 
   /**
-   * El alcance sale de la **capacidad**, no del nombre del rol (igual que `CasesService`):
-   *  - `case:write` sin `case:assign` (cobrador) → sólo sus casos;
-   *  - `case:assign` (manager, supervisor, admins) → todo, y puede filtrar por cobrador;
-   *  - sólo `case:read` (auditor, viewer) → todo, sin filtrar por cobrador.
-   * Los créditos sin caso y los casos sin cobrador quedan, por construcción, fuera del alcance del cobrador.
+   * El alcance sale del **alcance de datos** del rol, no de su nombre (D8):
+   *  - `data:scope:all` (gerente, administradores, auditor, lector) → todo;
+   *  - `data:scope:branch` (supervisor) → los créditos con responsable de su agencia + los suyos;
+   *  - ninguno (cobrador) → lo que tiene a su cargo (responsable, temporal o apoyo).
+   * Un crédito sin responsable sólo lo ve el alcance total.
    */
   private scope(): MoraScope {
     return moraScopeOf(this.tenant);
@@ -104,8 +105,11 @@ export class MoraService {
    * se ve completo.
    */
   async count(query: ListMoraQueryDto): Promise<number> {
-    const where = buildMoraWhere(query, this.scope(), new Date());
-    const [row] = await this.tx((tx) => tx.$queryRaw<{ total: bigint }[]>(Prisma.sql`SELECT COUNT(*) AS total ${MORA_FROM} WHERE ${where}`));
+    const now = new Date();
+    const [row] = await this.tx(async (tx) => {
+      const where = buildMoraWhere(query, this.scope(), now, await this.loadCategories(tx));
+      return tx.$queryRaw<{ total: bigint }[]>(Prisma.sql`SELECT COUNT(*) AS total ${MORA_FROM} WHERE ${where}`);
+    });
     return Number(row?.total ?? 0);
   }
 
@@ -132,10 +136,12 @@ export class MoraService {
     withTotal = true,
   ): Promise<{ items: MoraCreditListItem[]; total: number }> {
     const now = new Date();
-    const where = buildMoraWhere(query, this.scope(), now);
     const order = buildMoraOrder(query.sort, query.dir);
 
     return this.tx(async (tx) => {
+      // Las categorías de la cuenta se leen UNA vez por petición: sirven al filtro y a cada fila.
+      const categories = await this.loadCategories(tx);
+      const where = buildMoraWhere(query, this.scope(), now, categories);
       const found = await tx.$queryRaw<{ id: string; total: bigint }[]>(Prisma.sql`
         SELECT cr.id, COUNT(*) OVER() AS total
         ${MORA_FROM}
@@ -149,7 +155,7 @@ export class MoraService {
         const [row] = await tx.$queryRaw<{ total: bigint }[]>(Prisma.sql`SELECT COUNT(*) AS total ${MORA_FROM} WHERE ${where}`);
         count = Number(row?.total ?? 0);
       }
-      return { items: await this.loadItems(tx, found.map((r) => r.id), now), total: count };
+      return { items: await this.loadItems(tx, found.map((r) => r.id), now, categories), total: count };
     });
   }
 
@@ -166,13 +172,14 @@ export class MoraService {
     const access = Prisma.join([...moraAccessConditions(this.scope()), Prisma.sql`cr.id = ${creditId}`], ' AND ');
 
     const detail = await this.tx(async (tx) => {
-      const found = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT cr.id ${MORA_FROM} WHERE ${access} LIMIT 1`);
+      const found = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT cr.id ${MORA_ACCESS_FROM} WHERE ${access} LIMIT 1`);
       if (found.length === 0) return null;
       const [item] = await this.loadItems(tx, [creditId], now);
       if (!item) return null;
       // La bitácora es del crédito (preventiva o en mora), con el episodio indicado cuando lo hay.
       const activities = await tx.creditActivity.findMany({ where: { creditId }, orderBy: { createdAt: 'desc' }, take: DETAIL_ACTIVITIES });
-      return { ...item, activities: activities.map(serializeCreditActivity) } as unknown as MoraCreditDetail;
+      const assignments = await this.loadAssignments(tx, creditId, item.responsibleId, now);
+      return { ...item, activities: activities.map(serializeCreditActivity), assignments } as unknown as MoraCreditDetail;
     });
 
     if (!detail) throw new NotFoundException('Crédito no encontrado');
@@ -188,7 +195,7 @@ export class MoraService {
   async episodes(creditId: string): Promise<ApiResponse<MoraEpisode[]>> {
     const access = Prisma.join([...moraAccessConditions(this.scope()), Prisma.sql`cr.id = ${creditId}`], ' AND ');
     const rows = await this.tx(async (tx) => {
-      const found = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT cr.id ${MORA_FROM} WHERE ${access} LIMIT 1`);
+      const found = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT cr.id ${MORA_ACCESS_FROM} WHERE ${access} LIMIT 1`);
       if (found.length === 0) return null;
       return tx.creditArrearEpisode.findMany({ where: { creditId }, orderBy: [{ startedAt: 'desc' }, { createdAt: 'desc' }] });
     });
@@ -202,7 +209,7 @@ export class MoraService {
    */
   private async visible(tx: PrismaClient, creditId: string): Promise<{ clientId: string } | null> {
     const access = Prisma.join([...moraAccessConditions(this.scope()), Prisma.sql`cr.id = ${creditId}`], ' AND ');
-    const [row] = await tx.$queryRaw<{ id: string; client_id: string }[]>(Prisma.sql`SELECT cr.id, cr.client_id ${MORA_FROM} WHERE ${access} LIMIT 1`);
+    const [row] = await tx.$queryRaw<{ id: string; client_id: string }[]>(Prisma.sql`SELECT cr.id, cr.client_id ${MORA_ACCESS_FROM} WHERE ${access} LIMIT 1`);
     return row ? { clientId: row.client_id } : null;
   }
 
@@ -546,13 +553,40 @@ export class MoraService {
   }
 
   /**
+   * Las categorías de mora de la cuenta (rangos, color y nombre), ordenadas. Una consulta por petición.
+   * Sin categorías configuradas el resultado es vacío y `category` simplemente no aparece.
+   */
+  private async loadCategories(tx: PrismaClient): Promise<MoraCategoryRange[]> {
+    const rows = await tx.arrearCategory.findMany({ where: { accountId: this.tenant.accountId }, orderBy: [{ sortOrder: 'asc' }, { fromDays: 'asc' }] });
+    return rows.map((r) => ({ code: r.code, name: r.name, color: r.color, fromDays: r.fromDays, toDays: r.toDays }));
+  }
+
+  /**
+   * Quién atiende el crédito: el responsable (PRINCIPAL) y, vigentes, los reemplazos temporales y las ayudas.
+   * El responsable sale de `credits.assigned_manager_id` (la fuente de verdad): la fila PRINCIPAL de
+   * `credit_assignments` no se repite.
+   */
+  private async loadAssignments(tx: PrismaClient, creditId: string, responsibleId: string | undefined, now: Date): Promise<MoraAssignment[]> {
+    const rows = await tx.creditAssignment.findMany({
+      where: { creditId, revokedAt: null, startsAt: { lte: now }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }], kind: { in: ['TEMPORAL', 'APOYO'] } },
+      orderBy: { startsAt: 'asc' },
+      select: { kind: true, userId: true, expiresAt: true },
+    });
+    const principal: MoraAssignment[] = responsibleId ? [{ kind: 'PRINCIPAL', userId: responsibleId }] : [];
+    return [
+      ...principal,
+      ...rows.map((r) => ({ kind: r.kind as CreditAssignmentKind, userId: r.userId, expiresAt: r.expiresAt?.toISOString() })),
+    ];
+  }
+
+  /**
    * Trae de Prisma lo que la lista y la ficha pintan y lo serializa, **en el orden de `ids`**: el orden lo
    * decidió el SQL y no se reordena por lo que devuelva `findMany`.
    */
-  private async loadItems(tx: PrismaClient, ids: string[], now: Date): Promise<MoraCreditListItem[]> {
+  private async loadItems(tx: PrismaClient, ids: string[], now: Date, knownCategories?: MoraCategoryRange[]): Promise<MoraCreditListItem[]> {
     if (ids.length === 0) return [];
     const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const [rows, account] = await Promise.all([
+    const [rows, account, categories] = await Promise.all([
       tx.credit.findMany({
         where: { id: { in: ids } },
         select: {
@@ -568,31 +602,25 @@ export class MoraService {
           externalSource: true,
           syncStatus: true,
           reportedAsOf: true,
+          absentSince: true,
+          writtenOffAt: true,
+          lastActionAt: true,
+          assignedManagerId: true,
           branchId: true,
           branch: { select: { name: true } },
           client: { select: { firstName: true, lastName: true, businessName: true } },
           installments: { select: { number: true, dueDate: true, amount: true, paidAmount: true, status: true } },
-          cases: {
-            where: { deletedAt: null, status: { notIn: TERMINAL_CASE_STATUSES as never } },
-            take: 1,
-            select: {
-              id: true,
-              status: true,
-              priority: true,
-              priorityPinnedAt: true,
-              assigneeId: true,
-              slaDueAt: true,
-              lastActionAt: true,
-              activities: { orderBy: { createdAt: 'desc' }, take: 1, select: { type: true, result: true } },
-            },
-          },
+          // El episodio ABIERTO (único por crédito): de él salen la situación y la prioridad.
+          arrearEpisodes: { where: { endedAt: null }, take: 1, select: { priority: true, priorityPinnedAt: true } },
+          activities: { orderBy: { createdAt: 'desc' }, take: 1, select: { type: true, result: true } },
           payments: { orderBy: { paymentDate: 'desc' }, take: 1, select: { paymentDate: true } },
         },
       }),
       tx.account.findUnique({ where: { id: this.tenant.accountId } }),
+      knownCategories ? Promise.resolve(knownCategories) : this.loadCategories(tx),
     ]);
 
-    // Promesa vigente por cliente (misma definición que la lista de casos): una sola consulta para la página.
+    // Promesa vigente por cliente: una sola consulta para la página.
     const promises = await tx.agendaItem.findMany({
       where: {
         clientId: { in: [...new Set(rows.map((r) => r.clientId))] },
@@ -612,7 +640,7 @@ export class MoraService {
     return ids
       .map((id) => byId.get(id))
       .filter((r): r is MoraCreditRow => r !== undefined)
-      .map((r) => serializeMoraCredit(r, { now, staleAfterDays, hasActivePromise: withPromise.has(r.clientId) }));
+      .map((r) => serializeMoraCredit(r, { now, staleAfterDays, hasActivePromise: withPromise.has(r.clientId), categories }));
   }
 }
 

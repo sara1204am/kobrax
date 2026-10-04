@@ -604,13 +604,13 @@ describe('AgendaService.create', () => {
 
   it('un supervisor agendando sobre un crédito ajeno lo asigna al responsable del crédito, no a sí mismo', async () => {
     const { service, calls } = makeService({
-      permissions: ['agenda:assign', 'case:assign'],
+      permissions: ['agenda:assign', 'case:assign', 'data:scope:all'],
       credits: [creditRow({ assignedManagerId: 'cobrador-2' })],
       contacts: [{ id: CONTACT }],
     });
     await service.create(createDto());
     assert.equal(calls.created!.assigneeId, 'cobrador-2'); // si no, el cobrador nunca lo vería en su agenda
-    assert.doesNotMatch(calls.visibleSql!.sql, /assigned_manager_id = /); // quien reparte ve todo
+    assert.doesNotMatch(calls.visibleSql!.sql, /assigned_manager_id = /); // el alcance total ve todo
   });
 
   it('crédito AL DÍA (sin episodio ni caso): se puede agendar una acción preventiva', async () => {

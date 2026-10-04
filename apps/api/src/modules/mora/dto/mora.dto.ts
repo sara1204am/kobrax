@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsBoolean, ValidateIf, ValidateNested } from 'class-validator';
-import { IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { ActivityPromiseDto } from '../../cases/dto/case.dto';
 import {
   ARREARS_SOURCES,
@@ -22,8 +22,9 @@ import {
  * Filtros de `GET /mora`.
  *
  * Viajan en la URL de una pantalla con panel de filtros, así que **lo desconocido no rebota con 400**:
- * `sort`, `priority` y `status` son `@IsString` suelto y el service los valida contra el enum, igual
- * que `ListCasesQueryDto`. Un link guardado de cuando había otro filtro tiene que abrir la lista.
+ * `sort`, `priority` y `category` son `@IsString` suelto y el service los valida. Un link guardado de cuando
+ * había otro filtro tiene que abrir la lista (el pipe global es `forbidNonWhitelisted`, así que los filtros
+ * que ya no existen se siguen ACEPTANDO y se ignoran).
  */
 export class ListMoraQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
@@ -40,26 +41,35 @@ export class ListMoraQueryDto {
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) balanceMin?: number;
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) balanceMax?: number;
 
-  /** Prioridades del caso, separadas por coma. */
+  /** Prioridades del episodio de mora abierto, separadas por coma. */
   @IsOptional() @IsString() @MaxLength(120) priority?: string;
-  /** Estados del caso, separados por coma. */
-  @IsOptional() @IsString() @MaxLength(200) status?: string;
+  /** Categorías de mora (códigos de la cuenta: `A`, `B,C`…), separadas por coma. Un código desconocido se ignora. */
+  @IsOptional() @IsString() @MaxLength(120) category?: string;
+  /** `'true'` = sólo castigados · `'false'` = sin los castigados. */
+  @IsOptional() @IsIn(['true', 'false']) writtenOff?: string;
+  /** Responsable del crédito: el principal o quien lo cubre (reemplazo temporal / apoyo vigentes). */
   @IsOptional() @IsUUID() assigneeId?: string;
-  /** `'true'` = casos sin cobrador asignado. */
+  /** `'true'` = créditos sin responsable. */
   @IsOptional() @IsIn(['true', 'false']) unassigned?: string;
-  /** `'true'` = sólo con caso abierto · `'false'` = sólo sin caso. */
-  @IsOptional() @IsIn(['true', 'false']) hasCase?: string;
   @IsOptional() @IsUUID() branchId?: string;
   /** `KOBRAX` = sin fuente externa. */
   @IsOptional() @IsIn(CREDIT_SOURCES as unknown as string[]) source?: CreditSource;
   /** De dónde salen los días de mora: calculada, del archivo o marcada a mano. */
   @IsOptional() @IsIn(ARREARS_SOURCES as unknown as string[]) arrearsSource?: ArrearsSource;
   @IsOptional() @IsIn(['true', 'false']) hasPromise?: string;
-  /** `'true'` = SLA del caso vencido. **No es la mora del deudor.** */
-  @IsOptional() @IsIn(['true', 'false']) overdue?: string;
-  /** Sin gestión desde esa fecha; incluye a quien nunca tuvo. */
-  @IsOptional() @IsDateString() noActionSince?: string;
   @IsOptional() @IsString() @MaxLength(60) zone?: string;
+
+  /**
+   * @deprecated F4/08 · D1/D2: ya no existen (sin caso, sin SLA, sin «sin gestión desde»). Se aceptan sólo para que
+   * un enlace guardado o la web de antes no reciba un 400; **no filtran nada**. Se borran con la fase 3/6.
+   */
+  @IsOptional() @IsString() @MaxLength(200) status?: string;
+  /** @deprecated ver `status`. */
+  @IsOptional() @IsString() @MaxLength(10) hasCase?: string;
+  /** @deprecated ver `status`. */
+  @IsOptional() @IsString() @MaxLength(10) overdue?: string;
+  /** @deprecated ver `status`. */
+  @IsOptional() @IsString() @MaxLength(40) noActionSince?: string;
 
   /** Sin `@IsIn` a propósito: una clave desconocida cae al orden por defecto. */
   @IsOptional() @IsString() sort?: string;

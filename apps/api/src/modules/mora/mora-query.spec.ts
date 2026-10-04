@@ -1,13 +1,16 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMoraOrder, buildMoraWhere, escapeLike, moraAccessConditions, moraScopeOf, type MoraScope } from './mora-query';
+import { DEFAULT_ARREAR_CATEGORIES, Permission, categoryForDays } from '@kobrax/shared';
+import { buildMoraOrder, buildMoraWhere, categoryCodes, escapeLike, moraAccessConditions, moraScopeOf, type MoraCategoryRange, type MoraScope } from './mora-query';
 
 const NOW = new Date('2026-10-01T12:00:00Z');
-const ADMIN: MoraScope = { accountId: 'acc', userId: 'u-admin', ownOnly: false, canAssign: true };
-const COLLECTOR: MoraScope = { accountId: 'acc', userId: 'u-col', ownOnly: true, canAssign: false };
-const VIEWER: MoraScope = { accountId: 'acc', userId: 'u-view', ownOnly: false, canAssign: false };
+const ADMIN: MoraScope = { accountId: 'acc', userId: 'u-admin', kind: 'ALL', ownOnly: false, canAssign: true };
+const SUPERVISOR: MoraScope = { accountId: 'acc', userId: 'u-sup', kind: 'BRANCH', ownOnly: false, canAssign: true };
+const COLLECTOR: MoraScope = { accountId: 'acc', userId: 'u-col', kind: 'OWN', ownOnly: true, canAssign: false };
 
-const where = (q: Parameters<typeof buildMoraWhere>[0], s: MoraScope = ADMIN) => buildMoraWhere(q, s, NOW);
+const CATS: MoraCategoryRange[] = DEFAULT_ARREAR_CATEGORIES.map((c) => ({ code: c.code, name: c.name, color: c.color, fromDays: c.fromDays, toDays: c.toDays }));
+
+const where = (q: Parameters<typeof buildMoraWhere>[0], s: MoraScope = ADMIN, cats: MoraCategoryRange[] = CATS) => buildMoraWhere(q, s, NOW, cats);
 
 describe('buildMoraWhere — qué créditos entran', () => {
   it('por defecto: sólo en mora (dpd >= 1), del tenant y sin borrados', () => {
@@ -25,7 +28,7 @@ describe('buildMoraWhere — qué créditos entran', () => {
     assert.doesNotMatch(w.sql, /<> 'ABSENT'/);
   });
 
-  it('una operación externa ausente del reporte no se lista por defecto (D4)', () => {
+  it('una operación externa ausente del reporte no se lista por defecto (D9)', () => {
     assert.match(where({}).sql, /cr\.sync_status::text <> 'ABSENT'/);
   });
 
@@ -39,43 +42,207 @@ describe('buildMoraWhere — qué créditos entran', () => {
   it('solo créditos ACTIVE, o DEFAULTED de fuente externa', () => {
     assert.match(where({}).sql, /cr\.status::text = 'ACTIVE' OR \(cr\.status::text = 'DEFAULTED' AND cr\.external_source IS NOT NULL\)/);
   });
+
+  it('F4/08: ya no hay JOIN ni referencia al caso en ninguna parte', () => {
+    const everything = where({ priority: 'HIGH', assigneeId: 'u-x', unassigned: 'true', category: 'A', writtenOff: 'true', hasPromise: 'true', q: 'x' }, SUPERVISOR);
+    assert.doesNotMatch(everything.sql, /\bcc\./);
+    assert.doesNotMatch(everything.sql, /collection_cases/);
+  });
 });
 
-describe('buildMoraWhere — alcance (C2/C4)', () => {
-  it('el cobrador ve lo suyo: crédito a su cargo (responsable o asignación vigente), con o sin caso', () => {
-    const w = where({}, COLLECTOR);
-    assert.match(w.sql, /cr\.assigned_manager_id = ?/);
-    assert.match(w.sql, /cc\.assignee_id = ?/);
-    assert.match(w.sql, /credit_assignments/);
-    assert.match(w.sql, /ca\.revoked_at IS NULL/);
-    assert.ok(w.values.includes('u-col'));
+describe('buildMoraWhere — filtros que ya no existen no filtran ni rompen', () => {
+  it('estado, hasCase, SLA y «sin gestión desde» se ignoran (D1/D2)', () => {
+    const base = where({});
+    const old = where({ status: 'ACTIVE', hasCase: 'true', overdue: 'true', noActionSince: '2026-09-01' });
+    assert.equal(old.sql, base.sql);
+    assert.deepEqual(old.values, base.values);
+  });
+});
+
+describe('buildMoraWhere — categoría de mora (rangos de la cuenta)', () => {
+  const rangeOf = (code: string) => where({ category: code });
+
+  it('A = 1–30: ambos extremos entran como parámetros', () => {
+    const w = rangeOf('A');
+    assert.match(w.sql, /cr\.days_past_due >= \? AND cr\.days_past_due <= \?/);
+    assert.ok(w.values.includes(1) && w.values.includes(30));
   });
 
-  it('moraScopeOf: por capacidad, igual que la ficha (case:write sin case:assign = sólo lo suyo)', () => {
-    const t = (perms: string[]) => moraScopeOf({ accountId: 'acc', userId: 'u', can: (p) => perms.includes(p) });
-    assert.deepEqual(t(['case:write']), { accountId: 'acc', userId: 'u', ownOnly: true, canAssign: false });
-    assert.equal(t(['case:write', 'case:assign']).ownOnly, false);
-    assert.equal(t(['case:read']).ownOnly, false);
+  it('B = 31–60 y C = 61 en adelante (sin tope)', () => {
+    const b = rangeOf('B');
+    assert.ok(b.values.includes(31) && b.values.includes(60));
+    const c = rangeOf('C');
+    assert.ok(c.values.includes(61));
+    assert.doesNotMatch(c.sql.split('(cr.sync_status')[1] ?? '', /days_past_due <=/);
   });
 
-  it('el cobrador no puede ampliar su alcance con assigneeId, unassigned ni hasCase=false', () => {
+  it('en los límites 1, 30, 31, 60, 61 el filtro coincide con la categoría calculada de la fila', () => {
+    // Evalúa el rango que el filtro pone en el SQL contra `categoryForDays`: una sola definición de los límites.
+    const inRange = (code: string, days: number): boolean => {
+      const cat = CATS.find((c) => c.code === code)!;
+      return days >= cat.fromDays && (cat.toDays === null || days <= cat.toDays);
+    };
+    for (const days of [1, 30, 31, 60, 61]) {
+      const owner = categoryForDays(days, CATS)!.code;
+      for (const code of ['A', 'B', 'C']) assert.equal(inRange(code, days), code === owner, `día ${days} / ${code}`);
+    }
+  });
+
+  it('varias categorías se unen con OR; el orden y los repetidos no importan', () => {
+    const w = where({ category: 'C, A,A' });
+    // Salen en el orden pedido (C primero, sin tope; luego A) y A una sola vez.
+    assert.match(w.sql, /\(cr\.days_past_due >= \? OR \(cr\.days_past_due >= \? AND cr\.days_past_due <= \?\)\)/);
+    assert.deepEqual(categoryCodes('C, A,A,'), ['C', 'A']);
+  });
+
+  it('un código que la cuenta no tiene (enlace viejo) se ignora; sin categorías configuradas tampoco filtra', () => {
+    assert.equal(where({ category: 'Z' }).sql, where({}).sql);
+    assert.equal(where({ category: 'A' }, ADMIN, []).sql, where({}).sql);
+  });
+
+  it('respeta los rangos EDITADOS de la cuenta, no unos escritos en el código', () => {
+    const custom: MoraCategoryRange[] = [
+      { code: 'A', name: 'A', color: null, fromDays: 1, toDays: 15 },
+      { code: 'B', name: 'B', color: null, fromDays: 16, toDays: null },
+    ];
+    const w = where({ category: 'A' }, ADMIN, custom);
+    assert.ok(w.values.includes(15));
+    assert.ok(!w.values.includes(30));
+  });
+});
+
+describe('buildMoraWhere — castigado (condición aparte)', () => {
+  it('writtenOff=true: sólo castigados, aunque el estado del crédito ya no sea ACTIVE, y sin exigir mora', () => {
+    const w = where({ writtenOff: 'true' });
+    assert.match(w.sql, /cr\.written_off_at IS NOT NULL/);
+    assert.match(w.sql, /OR cr\.written_off_at IS NOT NULL\)/);
+    assert.doesNotMatch(w.sql, /cr\.days_past_due >=/);
+  });
+
+  it('writtenOff=false: deja afuera a los castigados y conserva el default de mora', () => {
+    const w = where({ writtenOff: 'false' });
+    assert.match(w.sql, /cr\.written_off_at IS NULL/);
+    assert.match(w.sql, /cr\.days_past_due >=/);
+  });
+
+  it('sin el filtro, el castigo no se mira', () => {
+    assert.doesNotMatch(where({}).sql, /written_off_at/);
+  });
+});
+
+describe('buildMoraWhere — responsable y prioridad del episodio', () => {
+  it('assigneeId = responsable del crédito O temporal/apoyo vigentes del mismo (misma regla que el acceso)', () => {
+    const w = where({ assigneeId: '11111111-1111-1111-1111-111111111111' });
+    assert.match(w.sql, /cr\.assigned_manager_id = \? OR EXISTS/);
+    assert.match(w.sql, /ca\.kind::text = ANY/);
+    assert.match(w.sql, /ca\.revoked_at IS NULL AND ca\.starts_at <= now\(\) AND \(ca\.expires_at IS NULL OR ca\.expires_at > now\(\)\)/);
+    assert.ok(w.values.some((v) => Array.isArray(v) && v.includes('TEMPORAL') && v.includes('APOYO') && !v.includes('PRINCIPAL')));
+  });
+
+  it('unassigned = sin responsable', () => {
+    assert.match(where({ unassigned: 'true' }).sql, /cr\.assigned_manager_id IS NULL/);
+  });
+
+  it('prioridad: filtra la del episodio abierto; sólo valores del enum, lo desconocido se descarta', () => {
+    const w = where({ priority: 'CRITICAL,INVENTADA' });
+    assert.match(w.sql, /ep\.priority::text = ANY/);
+    assert.ok(w.values.some((v) => Array.isArray(v) && v.length === 1 && v[0] === 'CRITICAL'));
+    assert.doesNotMatch(where({ priority: 'INVENTADA' }).sql, /ep\.priority/);
+  });
+});
+
+describe('alcance (D8) — moraScopeOf', () => {
+  const t = (perms: string[]) => moraScopeOf({ accountId: 'acc', userId: 'u', can: (p) => perms.includes(p) });
+
+  it('data:scope:all → todo; data:scope:branch → su agencia; ninguno → lo suyo', () => {
+    assert.equal(t([Permission.DATA_SCOPE_ALL]).kind, 'ALL');
+    assert.equal(t([Permission.DATA_SCOPE_BRANCH]).kind, 'BRANCH');
+    assert.equal(t([Permission.COLLECTION_WRITE]).kind, 'OWN');
+    assert.equal(t([]).kind, 'OWN');
+  });
+
+  it('si tiene los dos, manda el total', () => {
+    assert.equal(t([Permission.DATA_SCOPE_BRANCH, Permission.DATA_SCOPE_ALL]).kind, 'ALL');
+  });
+
+  it('sólo el cobrador está acotado a lo suyo y no filtra por responsable', () => {
+    assert.deepEqual(t([Permission.COLLECTION_WRITE]), { accountId: 'acc', userId: 'u', kind: 'OWN', ownOnly: true, canAssign: false });
+    assert.equal(t([Permission.DATA_SCOPE_BRANCH]).canAssign, true);
+    assert.equal(t([Permission.DATA_SCOPE_ALL]).ownOnly, false);
+  });
+});
+
+describe('alcance (D8) — qué ve cada uno', () => {
+  const access = (s: MoraScope) => {
+    const parts = moraAccessConditions(s);
+    return { sql: parts.map((p) => p.sql).join(' AND '), values: parts.flatMap((p) => p.values) };
+  };
+
+  it('gerente / administrador (ALL): todo el tenant, sin condición de responsable ni de agencia', () => {
+    const a = access(ADMIN);
+    assert.match(a.sql, /cr\.account_id = ?/);
+    assert.match(a.sql, /cr\.deleted_at IS NULL/);
+    assert.doesNotMatch(a.sql, /assigned_manager_id|credit_assignments|user_accounts|branch_id/);
+    assert.doesNotMatch(a.sql, /days_past_due/);
+  });
+
+  it('cobrador (OWN): el crédito a su cargo — responsable, o asignación vigente de cualquier tipo (temporal y apoyo incluidos)', () => {
+    const a = access(COLLECTOR);
+    assert.match(a.sql, /cr\.assigned_manager_id = \? OR EXISTS/);
+    assert.match(a.sql, /FROM credit_assignments ca/);
+    assert.match(a.sql, /ca\.revoked_at IS NULL AND ca\.starts_at <= now\(\) AND \(ca\.expires_at IS NULL OR ca\.expires_at > now\(\)\)/);
+    // No acota por tipo: TEMPORAL y APOYO ven y trabajan el crédito igual que el principal.
+    assert.doesNotMatch(a.sql, /ca\.kind/);
+    assert.ok(a.values.every((v) => v !== 'u-other'));
+    assert.ok(a.values.includes('u-col'));
+  });
+
+  it('cobrador: nada de su agencia ni de créditos sin responsable', () => {
+    const a = access(COLLECTOR);
+    assert.doesNotMatch(a.sql, /user_accounts|branch_id/);
+    assert.doesNotMatch(a.sql, /assigned_manager_id IS NULL/);
+  });
+
+  it('supervisor (BRANCH): lo suyo O los créditos CON responsable de su agencia (user_accounts.branch_id)', () => {
+    const a = access(SUPERVISOR);
+    // lo suyo (mismo predicado que el cobrador)
+    assert.match(a.sql, /cr\.assigned_manager_id = \? OR EXISTS/);
+    // su agencia, y sólo si alguien lo atiende
+    assert.match(a.sql, /cr\.assigned_manager_id IS NOT NULL AND cr\.branch_id IS NOT NULL AND cr\.branch_id = \(\s*SELECT ua\.branch_id FROM user_accounts ua/);
+    assert.match(a.sql, /ua\.user_id = \? AND ua\.account_id = cr\.account_id AND ua\.is_active = true/);
+    assert.ok(a.values.filter((v) => v === 'u-sup').length >= 3);
+  });
+
+  it('un crédito SIN responsable queda fuera del cobrador y del supervisor, y sólo lo ve el alcance total', () => {
+    // El crédito sin responsable no cumple `assigned_manager_id = yo` ni la rama de agencia (exige IS NOT NULL).
+    for (const s of [COLLECTOR, SUPERVISOR]) {
+      const sql = moraAccessConditions(s).map((p) => p.sql).join(' AND ');
+      assert.match(sql, /assigned_manager_id = \?/);
+      assert.doesNotMatch(sql, /assigned_manager_id IS NULL/);
+    }
+    assert.doesNotMatch(moraAccessConditions(SUPERVISOR).map((p) => p.sql).join(' '), /OR cr\.branch_id = /);
+    assert.doesNotMatch(moraAccessConditions(ADMIN).map((p) => p.sql).join(' '), /assigned_manager_id/);
+  });
+
+  it('el cobrador no puede ampliar su alcance con assigneeId ni unassigned', () => {
     const w = where({ assigneeId: '11111111-1111-1111-1111-111111111111', unassigned: 'true' }, COLLECTOR);
     assert.ok(!w.values.includes('11111111-1111-1111-1111-111111111111'));
-    assert.doesNotMatch(w.sql, /cc\.assignee_id IS NULL/);
-    // sigue acotado a lo suyo
+    assert.doesNotMatch(w.sql, /assigned_manager_id IS NULL/);
     assert.ok(w.values.includes('u-col'));
   });
 
-  it('quien reparte ve todo (incluidos créditos sin caso) y puede filtrar por cobrador y por sin asignar', () => {
-    assert.doesNotMatch(where({}).sql, /cc\.assignee_id/);
-    assert.ok(where({ assigneeId: 'u-x' }).values.includes('u-x'));
-    assert.match(where({ unassigned: 'true' }).sql, /cc\.id IS NOT NULL AND cc\.assignee_id IS NULL/);
-    assert.match(where({ hasCase: 'false' }).sql, /cc\.id IS NULL/);
+  it('supervisor y gerente sí filtran por responsable y por sin responsable', () => {
+    for (const s of [SUPERVISOR, ADMIN]) {
+      assert.ok(where({ assigneeId: '11111111-1111-1111-1111-111111111111' }, s).values.includes('11111111-1111-1111-1111-111111111111'));
+      assert.match(where({ unassigned: 'true' }, s).sql, /cr\.assigned_manager_id IS NULL/);
+    }
   });
 
-  it('el rol sólo lector ve todo pero no filtra por cobrador', () => {
-    const w = where({ assigneeId: 'u-x', unassigned: 'true' }, VIEWER);
-    assert.doesNotMatch(w.sql, /cc\.assignee_id/);
+  it('la lista usa las mismas condiciones de acceso que la ficha y la agenda', () => {
+    for (const s of [ADMIN, SUPERVISOR, COLLECTOR]) {
+      const list = where({}, s);
+      for (const p of moraAccessConditions(s)) assert.ok(list.sql.includes(p.sql));
+    }
   });
 });
 
@@ -91,28 +258,16 @@ describe('buildMoraWhere — filtros', () => {
     assert.match(where({ arrearsSource: 'CALCULATED' }).sql, /\(cr\.metadata->>'moraSince'\) IS NULL/);
   });
 
-  it('prioridad y estado: sólo valores del enum; lo desconocido se descarta', () => {
-    const w = where({ priority: 'CRITICAL,INVENTADA', status: 'ACTIVE' });
-    assert.ok(w.values.some((v) => Array.isArray(v) && v.length === 1 && v[0] === 'CRITICAL'));
-    assert.ok(w.values.some((v) => Array.isArray(v) && v[0] === 'ACTIVE'));
-    assert.doesNotMatch(where({ priority: 'INVENTADA' }).sql, /cc\.priority/);
-  });
-
-  it('oficina, saldo y SLA vencido', () => {
-    const w = where({ branchId: 'b1', balanceMin: 100, balanceMax: 900, overdue: 'true' });
+  it('oficina y saldo', () => {
+    const w = where({ branchId: 'b1', balanceMin: 100, balanceMax: 900 });
     assert.match(w.sql, /cr\.branch_id = ?/);
     assert.match(w.sql, /cr\.outstanding_balance >= ?/);
-    assert.match(w.sql, /cc\.sla_due_at < ?/);
     assert.ok(w.values.includes('b1') && w.values.includes(100) && w.values.includes(900));
   });
 
   it('promesa vigente: EXISTS / NOT EXISTS sobre la agenda', () => {
     assert.match(where({ hasPromise: 'true' }).sql, /EXISTS \(\s*SELECT 1 FROM agenda_items a/);
     assert.match(where({ hasPromise: 'false' }).sql, /NOT EXISTS/);
-  });
-
-  it('sin gestión desde una fecha incluye a quien nunca tuvo', () => {
-    assert.match(where({ noActionSince: '2026-09-01' }).sql, /cc\.last_action_at IS NULL OR cc\.last_action_at </);
   });
 });
 
@@ -148,9 +303,9 @@ describe('buildMoraOrder', () => {
     assert.equal(order(), 'cr.days_past_due DESC NULLS LAST, cr.id ASC');
   });
 
-  it('prioridad ordena crítica primero y los créditos sin caso al final', () => {
+  it('prioridad sale del EPISODIO abierto: crítica primero y los créditos al día al final', () => {
     const o = order('priority', 'desc');
-    assert.match(o, /CASE cc\.priority::text WHEN 'CRITICAL' THEN 4/);
+    assert.match(o, /CASE ep\.priority::text WHEN 'CRITICAL' THEN 4/);
     assert.match(o, /DESC NULLS LAST, cr\.days_past_due DESC, cr\.id ASC$/);
   });
 
@@ -160,30 +315,9 @@ describe('buildMoraOrder', () => {
     assert.match(order('balance', 'sideways'), /outstanding_balance DESC/);
     assert.match(order('balance', 'asc'), /outstanding_balance ASC/);
   });
-});
 
-describe('moraAccessConditions — la ficha tiene el mismo alcance que la lista', () => {
-  const access = (s: MoraScope) => {
-    const parts = moraAccessConditions(s);
-    return { sql: parts.map((p) => p.sql).join(' AND '), values: parts.flatMap((p) => p.values) };
-  };
-
-  it('siempre acota por tenant y excluye lo borrado, sin exigir estar en mora', () => {
-    const a = access(ADMIN);
-    assert.match(a.sql, /cr.account_id = ?/);
-    assert.match(a.sql, /cr.deleted_at IS NULL/);
-    assert.doesNotMatch(a.sql, /days_past_due/);
-    assert.doesNotMatch(a.sql, /cc.assignee_id/);
-  });
-
-  it('el cobrador sólo abre el crédito si el caso abierto es suyo', () => {
-    const a = access(COLLECTOR);
-    assert.match(a.sql, /cc.assignee_id = ?/);
-    assert.ok(a.values.includes('u-col'));
-  });
-
-  it('la lista usa las mismas condiciones de acceso', () => {
-    const list = where({}, COLLECTOR);
-    for (const p of moraAccessConditions(COLLECTOR)) assert.ok(list.sql.includes(p.sql));
+  it('lastAction y slaDueAt ya no ordenan (D2): caen al default', () => {
+    assert.equal(order('lastAction'), order());
+    assert.equal(order('slaDueAt', 'asc'), order(undefined, 'asc'));
   });
 });
