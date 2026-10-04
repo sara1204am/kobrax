@@ -32,6 +32,7 @@ const note = (over: Partial<CreditNote> = {}): CreditNote => ({
   kind: 'INFO',
   body: 'Visitar al padre para negociar pago',
   color: 'YELLOW',
+  anchor: 'PAGE',
   x: 40,
   y: 40,
   w: 240,
@@ -184,49 +185,57 @@ describe('NotesSection', () => {
   });
 });
 
+/** Las notas se dibujan dentro de la sección a la que están ancladas: en la ficha real es la ficha entera. */
+const Page = ({ children }: { children: React.ReactNode }) => (
+  <div data-note-anchor="PAGE" className="relative">
+    {children}
+  </div>
+);
+
 describe('NotesSection — tablero de post-its', () => {
   it('«Mostrar en pantalla» abre el tablero con las notas y «Ocultar» lo cierra', async () => {
-    render(<NotesSection creditId="c1" notes={[note({ body: 'en el tablero' })]} members={MEMBERS} canWrite={false} />);
+    render(<Page><NotesSection creditId="c1" notes={[note({ body: 'en el tablero' })]} members={MEMBERS} canWrite={false} /></Page>);
     expect(screen.queryByRole('region', { name: 'Tablero de notas' })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Mostrar en pantalla' }));
     const board = screen.getByRole('region', { name: 'Tablero de notas' });
-    expect(within(board).getByText('en el tablero')).toBeInTheDocument();
+    expect(document.querySelector('[data-note-id="n1"]')).not.toBeNull();
+    expect(screen.queryByRole('region', { name: 'Tablero de notas' })).toBeInTheDocument();
     await userEvent.click(within(board).getByRole('button', { name: 'Ocultar' }));
     expect(screen.queryByRole('region', { name: 'Tablero de notas' })).toBeNull();
   });
 
   it('sin notas no se ofrece el tablero', () => {
-    render(<NotesSection creditId="c1" notes={[]} members={MEMBERS} canWrite />);
+    render(<Page><NotesSection creditId="c1" notes={[]} members={MEMBERS} canWrite /></Page>);
     expect(screen.queryByRole('button', { name: 'Mostrar en pantalla' })).toBeNull();
   });
 
   it('«Ubicar en pantalla» abre el tablero', async () => {
-    render(<NotesSection creditId="c1" notes={[note()]} members={MEMBERS} canWrite={false} />);
+    render(<Page><NotesSection creditId="c1" notes={[note()]} members={MEMBERS} canWrite={false} /></Page>);
     await userEvent.click(screen.getByRole('button', { name: 'Ubicar en pantalla' }));
     expect(screen.getByRole('region', { name: 'Tablero de notas' })).toBeInTheDocument();
   });
 
   it('sólo quien puede escribir ve «Nueva nota» y el cambio de color en el tablero', async () => {
-    const { unmount } = render(<NotesSection creditId="c1" notes={[note()]} members={MEMBERS} canWrite={false} />);
+    const { unmount } = render(<Page><NotesSection creditId="c1" notes={[note()]} members={MEMBERS} canWrite={false} /></Page>);
     await userEvent.click(screen.getByRole('button', { name: 'Mostrar en pantalla' }));
     const board = screen.getByRole('region', { name: 'Tablero de notas' });
-    expect(within(board).queryByRole('button', { name: /Nueva nota/ })).toBeNull();
-    expect(within(board).queryByRole('button', { name: 'Color' })).toBeNull();
+    expect(within(document.body).queryByRole('button', { name: /Nueva nota/ })).toBeNull();
+    expect(within(document.body).queryByRole('button', { name: 'Color' })).toBeNull();
     unmount();
-    render(<NotesSection creditId="c1" notes={[note()]} members={MEMBERS} canWrite userId="u1" />);
+    render(<Page><NotesSection creditId="c1" notes={[note()]} members={MEMBERS} canWrite userId="u1" /></Page>);
     await userEvent.click(screen.getByRole('button', { name: 'Mostrar en pantalla' }));
     const board2 = screen.getByRole('region', { name: 'Tablero de notas' });
-    expect(within(board2).getByRole('button', { name: /Nueva nota/ })).toBeInTheDocument();
-    expect(within(board2).getByRole('button', { name: 'Color' })).toBeInTheDocument();
+    expect(within(document.body).getByRole('button', { name: /Nueva nota/ })).toBeInTheDocument();
+    expect(within(document.body).getByRole('button', { name: 'Color' })).toBeInTheDocument();
   });
 
   it('pintar una nota desde el tablero manda sólo el color', async () => {
     send.mockImplementation(async (_p: string, body: object) => ok(note({ ...body })));
-    render(<NotesSection creditId="c1" notes={[note()]} members={MEMBERS} canWrite userId="u1" />);
+    render(<Page><NotesSection creditId="c1" notes={[note()]} members={MEMBERS} canWrite userId="u1" /></Page>);
     await userEvent.click(screen.getByRole('button', { name: 'Mostrar en pantalla' }));
     const board = screen.getByRole('region', { name: 'Tablero de notas' });
-    await userEvent.click(within(board).getByRole('button', { name: 'Color' }));
-    await userEvent.click(within(board).getByRole('button', { name: 'Rosa' }));
+    await userEvent.click(within(document.body).getByRole('button', { name: 'Color' }));
+    await userEvent.click(within(document.body).getByRole('button', { name: 'Rosa' }));
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
     expect(send.mock.calls[0]![1]).toEqual({ color: 'PINK' });
     expect(send.mock.calls[0]![2]).toBe('PATCH');
@@ -323,7 +332,8 @@ describe('PaymentsSection', () => {
   it('lista los pagos con medio, comprobante y quién los registró', () => {
     render(<PaymentsSection creditId="c1" members={MEMBERS} currency="BOB" external={false} payments={[payment({ receiptNumber: 42, method: 'QR' })]} />);
     const item = screen.getByRole('listitem');
-    expect(within(item).getByText('QR')).toBeInTheDocument();
+    // el medio sale dos veces, como en la tarjeta: en la línea de detalle y en la etiqueta de la derecha
+    expect(within(item).getAllByText('QR')).toHaveLength(2);
     expect(within(item).getByText('Comprobante Nº 42')).toBeInTheDocument();
     expect(within(item).getByText('Registró Carlos Mamani')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Ver en Pagos' })).toHaveAttribute('href', '/pagos?creditId=c1');

@@ -1,4 +1,4 @@
-import type { CreditNote, MoraNoteColor, MoraNoteKind } from '@kobrax/shared';
+import type { CreditNote, MoraNoteAnchor, MoraNoteColor, MoraNoteKind } from '@kobrax/shared';
 
 /** Lo que `MoraService` lee de `credit_notes`. */
 export interface NoteRow {
@@ -7,6 +7,7 @@ export interface NoteRow {
   kind: string;
   body: string;
   color: string;
+  anchor: string;
   posX: number;
   posY: number;
   width: number;
@@ -24,6 +25,7 @@ export function serializeNote(n: NoteRow): CreditNote {
     kind: n.kind as MoraNoteKind,
     body: n.body,
     color: n.color as MoraNoteColor,
+    anchor: n.anchor as MoraNoteAnchor,
     x: n.posX,
     y: n.posY,
     w: n.width,

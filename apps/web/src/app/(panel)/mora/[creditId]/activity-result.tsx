@@ -11,8 +11,8 @@ export function ActivityResult({ result }: { result: string }) {
   const t = useTranslations('panel.cases.ficha.activity');
   const label = t.has(`results.${result}`) ? t(`results.${result}`) : result;
   return (
-    <p className="mt-1 text-[13px] text-k-text-2">
-      {t('resultLabel')}: <span className="font-medium text-k-text">{label}</span>
+    <p className="mt-0.5 text-[12.5px]">
+      <span className="text-k-periwinkle">{t('resultLabel')}:</span> <span className="text-k-text">{label}</span>
     </p>
   );
 }

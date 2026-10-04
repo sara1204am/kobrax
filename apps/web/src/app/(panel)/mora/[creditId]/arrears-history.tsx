@@ -39,7 +39,7 @@ export function ArrearsHistory({ episodes, currency }: { episodes: MoraEpisode[]
   const amount = (n: number | undefined) => (n === undefined ? dash : money(n, currency));
 
   return (
-    <Section title={t('title')} collapsible={{ count: episodes?.length }}>
+    <Section title={t('title')} anchor="HISTORY" collapsible={{ count: episodes?.length }}>
       <p className="mb-3 text-[13px] text-k-text-2">{t('subtitle')}</p>
 
       {episodes === null ? (
@@ -47,46 +47,64 @@ export function ArrearsHistory({ episodes, currency }: { episodes: MoraEpisode[]
       ) : episodes.length === 0 ? (
         <EmptyState title={t('empty')} text={t('emptyText')} />
       ) : (
-        <ol className="space-y-3">
+        <ol className="space-y-2.5">
           {episodes.map((e) => (
             <li
               key={e.id}
-              className={`rounded-2xl border bg-white px-5 py-4 ${e.current ? 'border-k-danger/40' : 'border-k-border'}`}
+              className="flex flex-col gap-4 rounded-xl border border-k-border bg-white px-4 py-3.5 shadow-[0_2px_8px_rgba(26,58,82,.06)] lg:flex-row lg:items-center"
             >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[14px] font-semibold text-k-text">{t('number', { n: e.number })}</span>
-                  {e.current ? (
-                    <Badge tone="danger">{t('current')}</Badge>
-                  ) : (
-                    e.endReason && (
-                      <span title={e.endReason === 'SOURCE_ABSENT' ? t('endHint.SOURCE_ABSENT') : undefined}>
-                        <Badge tone={END_TONE[e.endReason]}>{t(`end.${e.endReason}`)}</Badge>
-                      </span>
-                    )
-                  )}
-                  {e.reconstructed && (
-                    <span title={t('reconstructedHint')}>
-                      <Badge tone="neutral">{t('reconstructed')}</Badge>
-                    </span>
-                  )}
-                </div>
-                <span className="text-[13px] text-k-text-2">
-                  {dayDate(e.startedAt, locale)}
-                  {e.startedAtEstimated && <span title={t('estimatedHint')}> {t('estimated')}</span>}
-                  {' → '}
-                  {e.endedAt ? dayDate(e.endedAt, locale) : t('ongoing')}
+              {/* Número y fechas */}
+              <div className="flex items-center gap-3.5 lg:w-[270px] lg:shrink-0">
+                <span aria-hidden className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#E8F0FB] text-[14px] font-semibold text-k-slate">
+                  #{e.number}
                 </span>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[14px] font-semibold text-k-navy">{t('number', { n: e.number })}</span>
+                    {e.current ? (
+                      <span className="rounded-md bg-[#E8F0FB] px-2 py-0.5 text-[11px] font-medium text-k-slate">{t('current')}</span>
+                    ) : (
+                      e.endReason && (
+                        <span title={e.endReason === 'SOURCE_ABSENT' ? t('endHint.SOURCE_ABSENT') : undefined}>
+                          <Badge tone={END_TONE[e.endReason]}>{t(`end.${e.endReason}`)}</Badge>
+                        </span>
+                      )
+                    )}
+                    {e.reconstructed && (
+                      <span title={t('reconstructedHint')}>
+                        <Badge tone="neutral">{t('reconstructed')}</Badge>
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-[12.5px] text-k-text-2">
+                    {dayDate(e.startedAt, locale)}
+                    {e.startedAtEstimated && <span title={t('estimatedHint')}> {t('estimated')}</span>}
+                    {' → '}
+                    {e.endedAt ? dayDate(e.endedAt, locale) : t('ongoing')}
+                  </p>
+                  <p className="mt-0.5 text-[11.5px] text-k-muted">{tSource(e.source)}</p>
+                </div>
               </div>
 
-              <dl className="mt-3 grid gap-x-6 gap-y-2 text-[13px] sm:grid-cols-2 lg:grid-cols-4">
+              {/* Las cifras, separadas por una raya fina */}
+              <dl className="grid flex-1 grid-cols-2 gap-y-3 sm:grid-cols-5 sm:gap-y-0 lg:divide-x lg:divide-k-border">
                 <Item label={t('duration')} value={t('days', { n: e.durationDays })} />
                 <Item label={t('peak')} value={e.maxDaysPastDue === undefined ? dash : t('days', { n: e.maxDaysPastDue })} />
                 <Item label={t('balanceIn')} value={amount(e.balanceAtStart)} />
                 <Item label={t('balanceOut')} value={e.current ? dash : amount(e.balanceAtEnd)} />
                 <Item label={t('enteredWith')} value={e.startDaysPastDue === undefined ? dash : t('days', { n: e.startDaysPastDue })} />
-                <Item label={t('source')} value={tSource(e.source)} />
               </dl>
+
+              {/* De dónde salen los días de mora */}
+              <div className="flex items-center gap-3 rounded-xl bg-k-bg px-3.5 py-2.5 lg:w-[210px] lg:shrink-0">
+                <svg aria-hidden viewBox="0 0 24 24" className="h-5 w-5 shrink-0 fill-none stroke-k-periwinkle" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 2.5h8l5 5V20a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20V4A1.5 1.5 0 0 1 6 2.5zM14 2.5V8h5M8.5 13h7M8.5 16.5h7" />
+                </svg>
+                <div className="min-w-0">
+                  <div className="text-[11px] text-k-periwinkle">{t('source')}</div>
+                  <div className="text-[12.5px] font-medium text-k-navy">{tSource(e.source)}</div>
+                </div>
+              </div>
             </li>
           ))}
         </ol>
@@ -97,9 +115,9 @@ export function ArrearsHistory({ episodes, currency }: { episodes: MoraEpisode[]
 
 function Item({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <dt className="text-[11px] font-semibold uppercase tracking-wide text-k-muted">{label}</dt>
-      <dd className="mt-0.5 text-k-text">{value}</dd>
+    <div className="px-4 first:pl-0 lg:px-5 lg:first:pl-5">
+      <dt className="text-[11px] text-k-periwinkle">{label}</dt>
+      <dd className="mt-0.5 text-[13px] font-medium text-k-navy">{value}</dd>
     </div>
   );
 }

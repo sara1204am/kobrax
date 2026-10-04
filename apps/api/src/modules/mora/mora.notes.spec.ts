@@ -7,7 +7,7 @@ const CREDIT = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
 const NOTE_ID = '33333333-3333-4333-8333-333333333333';
 
-const NOTE = { id: NOTE_ID, creditId: CREDIT, kind: 'INFO', body: 'texto', color: 'YELLOW', posX: 40, posY: 40, width: 240, height: 180, zIndex: 3, authorId: 'u1', createdAt: new Date('2026-10-01T10:00:00Z'), updatedAt: new Date('2026-10-01T10:00:00Z'), deletedAt: null };
+const NOTE = { id: NOTE_ID, creditId: CREDIT, kind: 'INFO', body: 'texto', color: 'YELLOW', anchor: 'PAGE', posX: 40, posY: 40, width: 240, height: 180, zIndex: 3, authorId: 'u1', createdAt: new Date('2026-10-01T10:00:00Z'), updatedAt: new Date('2026-10-01T10:00:00Z'), deletedAt: null };
 
 function make(opts: { count?: number; topZ?: number; raceOnCreate?: boolean; visible?: boolean; permissions?: string[]; existing?: Partial<typeof NOTE> | null } = {}) {
   let raceCreated = false;
@@ -194,6 +194,24 @@ describe('MoraService.updateNote', () => {
     assert.equal(res.data!.color, 'GREEN');
     assert.equal(res.data!.w, 500);
     assert.equal(calls.audit.length, 0);
+  });
+
+  it('🔴 re-anclarla a otra sección la mueve con sus coordenadas, sin auditar (es ordenar el tablero)', async () => {
+    const { service, calls } = make({ existing: { ...NOTE, authorId: 'otro' }, permissions: asCollector });
+    const res = await service.updateNote(CREDIT, NOTE_ID, { anchor: 'PAYMENTS', x: 30, y: 60 });
+    assert.equal(res.data!.anchor, 'PAYMENTS');
+    assert.equal(res.data!.x, 30);
+    assert.equal(res.data!.y, 60);
+    assert.equal(calls.audit.length, 0);
+  });
+
+  it('una nota nueva sin sección cae en la ficha entera; con sección, en esa', async () => {
+    const a = make({});
+    await a.service.addNote(CREDIT, { body: 'hola' });
+    assert.equal(a.calls.created[0]!.anchor, 'PAGE');
+    const b = make({});
+    await b.service.addNote(CREDIT, { body: 'hola', anchor: 'PROMISES', x: 20, y: 30 });
+    assert.equal(b.calls.created[0]!.anchor, 'PROMISES');
   });
 
   it('traerla al frente la pone encima de todas', async () => {

@@ -21,6 +21,7 @@ const note = (over: Partial<CreditNote> = {}): CreditNote => ({
   kind: 'INFO',
   body: 'Visitar al padre',
   color: 'YELLOW',
+  anchor: 'PAGE',
   x: 100,
   y: 100,
   w: 240,
@@ -35,10 +36,19 @@ const note = (over: Partial<CreditNote> = {}): CreditNote => ({
 const down = (el: Element, x: number, y: number) => fireEvent(el, new MouseEvent('pointerdown', { clientX: x, clientY: y, bubbles: true }));
 const move = (type: 'pointermove' | 'pointerup', x: number, y: number) => fireEvent(document, new MouseEvent(type, { clientX: x, clientY: y, bubbles: true }));
 
+/**
+ * El tablero con las notas ya dibujadas. Devuelve la ficha (`PAGE`), que es donde viven las notas ancladas: la
+ * barra «Nueva nota / Ocultar» es otra cosa, fija en pantalla.
+ */
 async function openBoard(notes: CreditNote[], canWrite = true) {
-  render(<NotesSection creditId="c1" notes={notes} members={MEMBERS} canWrite={canWrite} userId="u1" />);
+  const { container } = render(
+    <div data-note-anchor="PAGE" className="relative">
+      <NotesSection creditId="c1" notes={notes} members={MEMBERS} canWrite={canWrite} userId="u1" />
+      <div data-note-anchor="PAYMENTS" data-testid="payments" />
+    </div>,
+  );
   await userEvent.click(screen.getByRole('button', { name: 'Mostrar en pantalla' }));
-  return screen.getByRole('region', { name: 'Tablero de notas' });
+  return container.querySelector('[data-note-anchor="PAGE"]') as HTMLElement;
 }
 
 const realRect = Element.prototype.getBoundingClientRect;
@@ -48,7 +58,11 @@ beforeEach(() => {
   toast.mockClear();
   send.mockReset();
   // Un tablero de 1000 × 800: en jsdom todo mide 0 y acotaría cualquier movimiento a la esquina.
-  Element.prototype.getBoundingClientRect = function () {
+  Element.prototype.getBoundingClientRect = function (this: Element) {
+    // La sección de Pagos está más abajo en la ficha: empieza 400 px más abajo y mide 1000 × 300.
+    if (this.getAttribute('data-note-anchor') === 'PAYMENTS') {
+      return { x: 0, y: 400, top: 400, left: 0, right: 1000, bottom: 700, width: 1000, height: 300, toJSON: () => ({}) } as DOMRect;
+    }
     return { x: 0, y: 0, top: 0, left: 0, right: 1000, bottom: 800, width: 1000, height: 800, toJSON: () => ({}) } as DOMRect;
   };
 });
@@ -120,6 +134,47 @@ describe('Tablero — arrastrar y redimensionar', () => {
     const board = await openBoard([note()], false);
     expect(within(board).queryByTitle(/Arrastrá el encabezado/)).toBeNull();
     expect(board.querySelector('.cursor-nwse-resize')).toBeNull();
+  });
+});
+
+describe('Tablero — anclado a las secciones', () => {
+  it('🔴 la nota se dibuja DENTRO de su sección (viaja con ella), no sobre la pantalla', async () => {
+    const page = await openBoard([note(), note({ id: 'n2', anchor: 'PAYMENTS', body: 'en pagos' })]);
+    expect(page.querySelector('[data-note-id="n1"]')).not.toBeNull();
+    const payments = screen.getByTestId('payments');
+    expect(payments.querySelector('[data-note-id="n2"]')).not.toBeNull();
+    expect(page.querySelector('[data-note-id="n2"]')?.closest('[data-note-anchor]')).toBe(payments);
+    // no hay una capa fija con las notas: lo único fijo es la barra
+    expect(document.body.querySelector('.fixed [data-note-id]')).toBeNull();
+  });
+
+  it('🔴 soltarla sobre otra sección la re-ancla, con coordenadas medidas desde esa sección', async () => {
+    send.mockImplementation(async (_p: string, body: object) => ({ ok: true, status: 200, data: note({ ...body }) }));
+    const page = await openBoard([note()]);
+    const spy = vi.fn(() => [screen.getByTestId('payments')]);
+    (document as unknown as { elementsFromPoint: unknown }).elementsFromPoint = spy;
+    down(within(page).getByTitle(/Arrastrá el encabezado/), 150, 120);
+    move('pointermove', 150, 520); // 400 px más abajo
+    move('pointerup', 150, 520);
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    // y: 100 + 400 de arrastre, menos los 400 donde empieza Pagos = 100
+    expect(send.mock.calls[0]![1]).toEqual({ x: 100, y: 100, w: 240, h: 180, anchor: 'PAYMENTS', front: true });
+    delete (document as unknown as { elementsFromPoint?: unknown }).elementsFromPoint;
+  });
+
+  it('soltarla sobre la misma sección no manda ancla', async () => {
+    send.mockImplementation(async (_p: string, body: object) => ({ ok: true, status: 200, data: note({ ...body }) }));
+    const page = await openBoard([note()]);
+    down(within(page).getByTitle(/Arrastrá el encabezado/), 150, 120);
+    move('pointermove', 200, 160);
+    move('pointerup', 200, 160);
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    expect(send.mock.calls[0]![1]).not.toHaveProperty('anchor');
+  });
+
+  it('una nota de una sección que no está en la ficha cae en la ficha entera en vez de perderse', async () => {
+    const page = await openBoard([note({ anchor: 'HISTORY' })]);
+    expect(page.querySelector('[data-note-id="n1"]')).not.toBeNull();
   });
 });
 

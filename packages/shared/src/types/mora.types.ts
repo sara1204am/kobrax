@@ -216,6 +216,13 @@ export const MORA_NOTE_MAX_LENGTH = 1000;
 export const MORA_NOTE_COLORS = ['YELLOW', 'PINK', 'BLUE', 'GREEN', 'PURPLE', 'ORANGE'] as const;
 export type MoraNoteColor = (typeof MORA_NOTE_COLORS)[number];
 
+/**
+ * La sección de la ficha a la que se ancla un post-it: `x`/`y` son píxeles **dentro de ella**, así que la nota
+ * viaja con la sección (scroll, plegar, cambiar de ancho). `PAGE` es la ficha entera.
+ */
+export const MORA_NOTE_ANCHORS = ['PAGE', 'TIMELINE', 'PROMISES', 'NOTES', 'PAYMENTS', 'HISTORY', 'PERSON'] as const;
+export type MoraNoteAnchor = (typeof MORA_NOTE_ANCHORS)[number];
+
 /** Tamaño del post-it en el tablero (px). La base lo vuelve a exigir (`credit_notes_tablero`). */
 export const NOTE_BOARD_LIMITS = { minWidth: 160, maxWidth: 520, minHeight: 120, maxHeight: 440, defaultWidth: 240, defaultHeight: 180 } as const;
 
@@ -226,6 +233,8 @@ export interface CreditNote {
   kind: MoraNoteKind;
   body: string;
   color: MoraNoteColor;
+  /** Sección de la ficha a la que está anclada (`x`/`y` se miden desde su esquina). */
+  anchor: MoraNoteAnchor;
   /** Lugar en el tablero: esquina superior izquierda, tamaño y orden de apilado (más alto = encima). */
   x: number;
   y: number;
@@ -246,6 +255,7 @@ export interface NewCreditNote {
   kind?: MoraNoteKind;
   body: string;
   color?: MoraNoteColor;
+  anchor?: MoraNoteAnchor;
   x?: number;
   y?: number;
   w?: number;
@@ -257,6 +267,8 @@ export interface UpdateCreditNote {
   kind?: MoraNoteKind;
   body?: string;
   color?: MoraNoteColor;
+  /** Pasarla a otra sección: va junto con el `x`/`y` nuevos, medidos desde esa sección. */
+  anchor?: MoraNoteAnchor;
   x?: number;
   y?: number;
   w?: number;

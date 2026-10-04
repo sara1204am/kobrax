@@ -9,9 +9,11 @@ import {
   MORA_NOTE_KINDS,
   MORA_NOTE_MAX_LENGTH,
   NOTE_BOARD_LIMITS,
+  MORA_NOTE_ANCHORS,
   RECOVERY_ACTIVITY_TYPES,
   type ArrearsSource,
   type CreditSource,
+  type MoraNoteAnchor,
   type MoraNoteColor,
   type MoraNoteKind,
 } from '@kobrax/shared';
@@ -75,6 +77,8 @@ export class CreateMoraNoteDto {
   @IsOptional() @IsIn(MORA_NOTE_KINDS as unknown as string[]) kind?: MoraNoteKind;
   @IsString() @MinLength(1) @MaxLength(MORA_NOTE_MAX_LENGTH) body!: string;
   @IsOptional() @IsIn(MORA_NOTE_COLORS as unknown as string[]) color?: MoraNoteColor;
+  /** Sección de la ficha en la que cae (`x`/`y` se miden desde ella). Sin ella, la ficha entera. */
+  @IsOptional() @IsIn(MORA_NOTE_ANCHORS as unknown as string[]) anchor?: MoraNoteAnchor;
   /** Dónde cae en el tablero. Sin lugar, el servidor la pone en cascada. Se acota al tamaño permitido. */
   @IsOptional() @IsInt() @Min(0) @Max(100_000) x?: number;
   @IsOptional() @IsInt() @Min(0) @Max(100_000) y?: number;
@@ -92,6 +96,7 @@ export class UpdateMoraNoteDto {
   @IsOptional() @IsIn(MORA_NOTE_KINDS as unknown as string[]) kind?: MoraNoteKind;
   @IsOptional() @IsString() @MinLength(1) @MaxLength(MORA_NOTE_MAX_LENGTH) body?: string;
   @IsOptional() @IsIn(MORA_NOTE_COLORS as unknown as string[]) color?: MoraNoteColor;
+  @IsOptional() @IsIn(MORA_NOTE_ANCHORS as unknown as string[]) anchor?: MoraNoteAnchor;
   @IsOptional() @IsInt() @Min(0) @Max(100_000) x?: number;
   @IsOptional() @IsInt() @Min(0) @Max(100_000) y?: number;
   @IsOptional() @IsInt() @Min(NOTE_BOARD_LIMITS.minWidth) @Max(NOTE_BOARD_LIMITS.maxWidth) w?: number;

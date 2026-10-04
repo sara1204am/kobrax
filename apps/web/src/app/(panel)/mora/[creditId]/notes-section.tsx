@@ -10,7 +10,7 @@ import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
 import { errorText } from '@/lib/api-error';
 import { dateTime } from '@/lib/format';
-import { canEditNoteText, NOTE_COLORS, sortNotes } from '@/lib/mora-notes';
+import { anchorElement, canEditNoteText, newNoteSpot, NOTE_COLORS, sortNotes } from '@/lib/mora-notes';
 import { NoteDialog, type NoteDraft } from './note-dialog';
 import { NotesBoard } from './notes-board';
 import { useNotes } from './use-notes';
@@ -67,10 +67,16 @@ export function NotesSection({
     [members, t],
   );
 
-  /** «Ubicar en pantalla»: abre el tablero y hace parpadear esa nota un momento. */
-  function locate(id: string) {
+  /**
+   * «Ubicar en pantalla»: abre el tablero, **abre la sección** donde está la nota (plegada, la nota no se ve), la
+   * lleva al centro de la pantalla y la hace parpadear un momento.
+   */
+  function locate(id: string, anchor?: CreditNote['anchor']) {
     setBoard(true);
     setFlashId(id);
+    const section = anchor ? anchorElement(anchor) : null;
+    if (section instanceof HTMLDetailsElement) section.open = true;
+    window.setTimeout(() => document.querySelector(`[data-note-id="${id}"]`)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' }), 50);
     window.setTimeout(() => setFlashId((cur) => (cur === id ? null : cur)), 1800);
   }
 
@@ -83,9 +89,10 @@ export function NotesSection({
       if (!ok) return errorText(undefined, tErr, locale);
       toast(t('updated'));
     } else {
-      const made = await create(draft);
+      // Cae sobre la ficha, en lo que se está viendo: no arriba de todo, donde quizá nadie está mirando.
+      const made = await create({ ...draft, ...newNoteSpot(notes.length) });
       if (!made) return errorText(undefined, tErr, locale);
-      locate(made.id);
+      locate(made.id, made.anchor);
     }
     setDialog(null);
     return null;
@@ -96,6 +103,7 @@ export function NotesSection({
   return (
     <Section
       title={t('title')}
+      anchor="NOTES"
       collapsible={{ count: notes.length }}
       action={
         canWrite && initial !== null ? (
@@ -149,7 +157,7 @@ export function NotesSection({
                         {nameOf(n)} · {dateTime(n.createdAt, locale)}
                       </span>
                       <span className="flex shrink-0 gap-1">
-                        <IconButton label={t('locate')} onClick={() => locate(n.id)}>
+                        <IconButton label={t('locate')} onClick={() => locate(n.id, n.anchor)}>
                           📍
                         </IconButton>
                         {text && (

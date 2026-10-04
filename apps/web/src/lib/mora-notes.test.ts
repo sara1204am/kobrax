@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { MORA_NOTE_COLORS, type CreditNote } from '@kobrax/shared';
-import { canEditNoteText, displayBox, NOTE_COLORS, notePreview, sortNotes } from './mora-notes';
+import { canEditNoteText, displayBox, drawnLayers, NOTE_COLORS, notePreview, sortNotes } from './mora-notes';
 
-const n = (id: string, kind: CreditNote['kind'], createdAt: string): CreditNote => ({ id, creditId: 'c', kind, body: id, createdAt, color: 'YELLOW', x: 0, y: 0, w: 240, h: 180, zIndex: 1, updatedAt: createdAt });
+const n = (id: string, kind: CreditNote['kind'], createdAt: string): CreditNote => ({ id, creditId: 'c', kind, body: id, createdAt, color: 'YELLOW', anchor: 'PAGE', x: 0, y: 0, w: 240, h: 180, zIndex: 1, updatedAt: createdAt });
 
 describe('sortNotes', () => {
   it('🔴 las importantes primero, aunque sean viejas; dentro de cada tipo, la más reciente arriba', () => {
@@ -71,5 +71,21 @@ describe('canEditNoteText', () => {
 describe('displayBox', () => {
   it('una nota guardada en una pantalla grande se dibuja dentro de una chica', () => {
     expect(displayBox({ x: 900, y: 700, w: 240, h: 180 }, { width: 500, height: 400 })).toEqual({ x: 260, y: 220, w: 240, h: 180 });
+  });
+});
+
+describe('drawnLayers', () => {
+  it('🔴 dibuja el ORDEN (1…9), no el número guardado: una nota con zIndex 40 no le pasa por encima al encabezado fijo', () => {
+    const layers = drawnLayers([
+      { id: 'a', zIndex: 40 },
+      { id: 'b', zIndex: 3 },
+      { id: 'c', zIndex: 17 },
+    ]);
+    expect([layers.get('b'), layers.get('c'), layers.get('a')]).toEqual([1, 2, 3]);
+  });
+
+  it('con más de nueve notas el tope es 9 (siempre debajo del encabezado)', () => {
+    const many = Array.from({ length: 15 }, (_, i) => ({ id: `n${i}`, zIndex: i + 1 }));
+    expect(Math.max(...drawnLayers(many).values())).toBe(9);
   });
 });
