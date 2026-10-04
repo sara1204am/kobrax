@@ -43,7 +43,7 @@ export function PromisesSection({
   const summary = promises ? summarizePromises(promises) : null;
 
   return (
-    <Section title={t('title')}>
+    <Section title={t('title')} collapsible={{ count: promises?.length }}>
       {promises === null ? (
         <p className="text-[13px] text-k-muted">{t('unavailable')}</p>
       ) : promises.length === 0 ? (

@@ -7,14 +7,14 @@ import { PaymentsSection } from './payments-section';
 import { PersonSections } from './person-sections';
 import { PromisesSection } from './promises-section';
 
-const { refresh, toast, post } = vi.hoisted(() => ({ refresh: vi.fn(), toast: vi.fn(), post: vi.fn() }));
+const { refresh, toast, post, send } = vi.hoisted(() => ({ refresh: vi.fn(), toast: vi.fn(), post: vi.fn(), send: vi.fn() }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh, push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/mora/x',
   useSearchParams: () => new URLSearchParams(''),
 }));
 vi.mock('@/components/toast', () => ({ useToast: () => toast }));
-vi.mock('@/lib/client', async (orig) => ({ ...(await orig<typeof import('@/lib/client')>()), postJson: post }));
+vi.mock('@/lib/client', async (orig) => ({ ...(await orig<typeof import('@/lib/client')>()), postJson: post, sendJson: send }));
 
 const MEMBERS = [{ userId: 'u1', firstName: 'Carlos', lastName: 'Mamani', roleName: 'COLLECTOR' } as unknown as Member];
 
@@ -22,6 +22,7 @@ beforeEach(() => {
   refresh.mockClear();
   toast.mockClear();
   post.mockReset();
+  send.mockReset();
 });
 
 // ── Notas ───────────────────────────────────────────────────────────────────────────────────────
@@ -30,10 +31,19 @@ const note = (over: Partial<CreditNote> = {}): CreditNote => ({
   creditId: 'c1',
   kind: 'INFO',
   body: 'Visitar al padre para negociar pago',
+  color: 'YELLOW',
+  x: 40,
+  y: 40,
+  w: 240,
+  h: 180,
+  zIndex: 1,
   authorId: 'u1',
   createdAt: '2026-10-01T10:00:00Z',
+  updatedAt: '2026-10-01T10:00:00Z',
   ...over,
 });
+
+const ok = (data: unknown, status = 200) => ({ ok: true, status, data });
 
 describe('NotesSection', () => {
   it('sin notas lo dice', () => {
@@ -57,17 +67,17 @@ describe('NotesSection', () => {
       />,
     );
     const items = screen.getAllByRole('listitem');
-    // El texto está dos veces (resumen y cuerpo plegado): el orden se mira en el resumen.
-    expect(items[0]!.querySelector('summary')!.textContent).toContain('importante vieja');
-    expect(items[1]!.querySelector('summary')!.textContent).toContain('info nueva');
+    expect(items[0]).toHaveTextContent('importante vieja');
+    expect(items[1]).toHaveTextContent('info nueva');
   });
 
-  it('plegadas por defecto: muestra la primera línea y al abrir, el texto completo con su autor', () => {
-    render(<NotesSection creditId="c1" members={MEMBERS} canWrite={false} notes={[note({ body: 'Primera línea\nSegunda línea con más detalle' })]} />);
-    const details = screen.getByRole('listitem').querySelector('details')!;
-    expect(details.open).toBe(false);
-    expect(screen.getByText('Primera línea')).toBeInTheDocument();
-    expect(screen.getByText(/Escrita por Carlos Mamani/)).toBeInTheDocument();
+  it('cada nota es un post-it de su color, con el tipo, el texto completo y su autor', () => {
+    render(<NotesSection creditId="c1" members={MEMBERS} canWrite={false} notes={[note({ color: 'PINK', kind: 'WARNING', body: 'Primera línea\nSegunda línea con más detalle' })]} />);
+    const card = screen.getByRole('listitem');
+    expect(card).toHaveStyle({ background: 'rgb(252, 231, 243)' });
+    expect(card).toHaveTextContent('Atención');
+    expect(card).toHaveTextContent('Segunda línea con más detalle');
+    expect(card).toHaveTextContent('Carlos Mamani');
   });
 
   it('un autor que no está en el equipo no muestra su id', () => {
@@ -76,39 +86,150 @@ describe('NotesSection', () => {
     expect(screen.queryByText(/u-desconocido/)).toBeNull();
   });
 
-  it('sin case:write no se ofrece escribir', () => {
-    render(<NotesSection creditId="c1" notes={[]} members={MEMBERS} canWrite={false} />);
+  it('sin case:write no se ofrece escribir, editar ni borrar', () => {
+    render(<NotesSection creditId="c1" notes={[note()]} members={MEMBERS} canWrite={false} userId="u1" />);
     expect(screen.queryByText('Agregar nota')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Editar' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Borrar' })).toBeNull();
   });
 
-  it('escribe una nota: manda tipo, texto recortado y un id, avisa y refresca', async () => {
-    post.mockResolvedValue({ ok: true, status: 201, data: {} });
+  it('🔴 editar y borrar sólo en las notas propias; quien reparte cartera, en todas', () => {
+    const notes = [note({ id: 'mia', authorId: 'u1', body: 'mía' }), note({ id: 'ajena', authorId: 'u2', body: 'ajena' })];
+    const { unmount } = render(<NotesSection creditId="c1" notes={notes} members={MEMBERS} canWrite userId="u1" />);
+    expect(screen.getAllByRole('button', { name: 'Editar' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Borrar' })).toHaveLength(1);
+    unmount();
+    render(<NotesSection creditId="c1" notes={notes} members={MEMBERS} canWrite userId="u1" canAssign />);
+    expect(screen.getAllByRole('button', { name: 'Editar' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Borrar' })).toHaveLength(2);
+  });
+
+  it('escribe una nota: manda tipo, texto recortado, color y un id, avisa y refresca', async () => {
+    send.mockResolvedValue(ok(note({ id: 'nueva' }), 201));
     render(<NotesSection creditId="c1" notes={[]} members={MEMBERS} canWrite />);
     await userEvent.click(screen.getByText('Agregar nota'));
     expect(screen.getByRole('button', { name: 'Guardar nota' })).toBeDisabled();
     await userEvent.type(screen.getByPlaceholderText('Escribí la nota…'), '  Llamar el viernes  ');
     await userEvent.selectOptions(screen.getByLabelText('Tipo'), 'WARNING');
+    await userEvent.click(screen.getByRole('button', { name: 'Verde' }));
     await userEvent.click(screen.getByRole('button', { name: 'Guardar nota' }));
-    await waitFor(() => expect(post).toHaveBeenCalled());
-    const [path, body] = post.mock.calls[0]!;
+    await waitFor(() => expect(send).toHaveBeenCalled());
+    const [path, body, method] = send.mock.calls[0]!;
     expect(path).toBe('/api/mora/c1/notes');
-    expect(body).toMatchObject({ kind: 'WARNING', body: 'Llamar el viernes' });
+    expect(method).toBe('POST');
+    expect(body).toMatchObject({ kind: 'WARNING', body: 'Llamar el viernes', color: 'GREEN' });
     expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Nota guardada'));
     expect(refresh).toHaveBeenCalled();
   });
 
   it('🔴 si el envío falla y se reintenta, viaja el MISMO id (la API no duplica)', async () => {
-    post.mockResolvedValueOnce({ ok: false, status: 500, data: { error: { code: 'X', message: 'Falló' } } });
-    post.mockResolvedValueOnce({ ok: true, status: 201, data: {} });
+    send.mockResolvedValueOnce({ ok: false, status: 500, data: { error: { code: 'X', message: 'Falló' } } });
+    send.mockResolvedValueOnce(ok(note({ id: 'nueva' }), 201));
     render(<NotesSection creditId="c1" notes={[]} members={MEMBERS} canWrite />);
     await userEvent.click(screen.getByText('Agregar nota'));
     await userEvent.type(screen.getByPlaceholderText('Escribí la nota…'), 'hola');
     await userEvent.click(screen.getByRole('button', { name: 'Guardar nota' }));
-    await screen.findByText('Falló');
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(toast).toHaveBeenCalled());
     await userEvent.click(screen.getByRole('button', { name: 'Guardar nota' }));
-    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
-    expect(post.mock.calls[1]![1].id).toBe(post.mock.calls[0]![1].id);
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+    expect(send.mock.calls[1]![1].id).toBe(send.mock.calls[0]![1].id);
+  });
+
+  it('corrige una nota propia: manda texto, tipo y color en un solo PATCH', async () => {
+    send.mockImplementation(async (_p: string, body: object) => ok(note({ ...body })));
+    render(<NotesSection creditId="c1" notes={[note({ body: 'vieja' })]} members={MEMBERS} canWrite userId="u1" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    const box = screen.getByPlaceholderText('Escribí la nota…');
+    expect(box).toHaveValue('vieja');
+    await userEvent.clear(box);
+    await userEvent.type(box, 'nueva');
+    await userEvent.click(screen.getByRole('button', { name: 'Azul' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    const [path, body, method] = send.mock.calls[0]!;
+    expect(path).toBe('/api/mora/c1/notes/n1');
+    expect(method).toBe('PATCH');
+    expect(body).toEqual({ body: 'nueva', kind: 'INFO', color: 'BLUE' });
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Nota actualizada'));
+  });
+
+  it('🔴 si la API rechaza la corrección, la nota vuelve a como estaba y se avisa', async () => {
+    send.mockResolvedValue({ ok: false, status: 403, data: { error: { code: 'MORA_005', message: 'Sólo quien escribió la nota' } } });
+    render(<NotesSection creditId="c1" notes={[note({ body: 'original' })]} members={MEMBERS} canWrite userId="u1" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    const box = screen.getByPlaceholderText('Escribí la nota…');
+    await userEvent.clear(box);
+    await userEvent.type(box, 'cambiada');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.any(String), 'danger'));
+    expect(screen.getByRole('listitem')).toHaveTextContent('original');
+    expect(screen.getByRole('listitem')).not.toHaveTextContent('cambiada');
+  });
+
+  it('borra con confirmación: manda DELETE, la nota desaparece y se avisa', async () => {
+    send.mockResolvedValue(ok({ id: 'n1' }));
+    render(<NotesSection creditId="c1" notes={[note()]} members={MEMBERS} canWrite userId="u1" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Borrar' }));
+    expect(send).not.toHaveBeenCalled();
+    expect(screen.getByText('¿Borrar la nota?')).toBeInTheDocument();
+    const confirm = screen.getAllByRole('button', { name: 'Borrar' }).at(-1)!;
+    await userEvent.click(confirm);
+    await waitFor(() => expect(send).toHaveBeenCalled());
+    expect(send.mock.calls[0]![0]).toBe('/api/mora/c1/notes/n1');
+    expect(send.mock.calls[0]![2]).toBe('DELETE');
+    await waitFor(() => expect(screen.queryByRole('listitem')).toBeNull());
+    expect(toast).toHaveBeenCalledWith('Nota borrada');
+  });
+});
+
+describe('NotesSection — tablero de post-its', () => {
+  it('«Mostrar en pantalla» abre el tablero con las notas y «Ocultar» lo cierra', async () => {
+    render(<NotesSection creditId="c1" notes={[note({ body: 'en el tablero' })]} members={MEMBERS} canWrite={false} />);
+    expect(screen.queryByRole('region', { name: 'Tablero de notas' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Mostrar en pantalla' }));
+    const board = screen.getByRole('region', { name: 'Tablero de notas' });
+    expect(within(board).getByText('en el tablero')).toBeInTheDocument();
+    await userEvent.click(within(board).getByRole('button', { name: 'Ocultar' }));
+    expect(screen.queryByRole('region', { name: 'Tablero de notas' })).toBeNull();
+  });
+
+  it('sin notas no se ofrece el tablero', () => {
+    render(<NotesSection creditId="c1" notes={[]} members={MEMBERS} canWrite />);
+    expect(screen.queryByRole('button', { name: 'Mostrar en pantalla' })).toBeNull();
+  });
+
+  it('«Ubicar en pantalla» abre el tablero', async () => {
+    render(<NotesSection creditId="c1" notes={[note()]} members={MEMBERS} canWrite={false} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Ubicar en pantalla' }));
+    expect(screen.getByRole('region', { name: 'Tablero de notas' })).toBeInTheDocument();
+  });
+
+  it('sólo quien puede escribir ve «Nueva nota» y el cambio de color en el tablero', async () => {
+    const { unmount } = render(<NotesSection creditId="c1" notes={[note()]} members={MEMBERS} canWrite={false} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Mostrar en pantalla' }));
+    const board = screen.getByRole('region', { name: 'Tablero de notas' });
+    expect(within(board).queryByRole('button', { name: /Nueva nota/ })).toBeNull();
+    expect(within(board).queryByRole('button', { name: 'Color' })).toBeNull();
+    unmount();
+    render(<NotesSection creditId="c1" notes={[note()]} members={MEMBERS} canWrite userId="u1" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Mostrar en pantalla' }));
+    const board2 = screen.getByRole('region', { name: 'Tablero de notas' });
+    expect(within(board2).getByRole('button', { name: /Nueva nota/ })).toBeInTheDocument();
+    expect(within(board2).getByRole('button', { name: 'Color' })).toBeInTheDocument();
+  });
+
+  it('pintar una nota desde el tablero manda sólo el color', async () => {
+    send.mockImplementation(async (_p: string, body: object) => ok(note({ ...body })));
+    render(<NotesSection creditId="c1" notes={[note()]} members={MEMBERS} canWrite userId="u1" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Mostrar en pantalla' }));
+    const board = screen.getByRole('region', { name: 'Tablero de notas' });
+    await userEvent.click(within(board).getByRole('button', { name: 'Color' }));
+    await userEvent.click(within(board).getByRole('button', { name: 'Rosa' }));
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    expect(send.mock.calls[0]![1]).toEqual({ color: 'PINK' });
+    expect(send.mock.calls[0]![2]).toBe('PATCH');
   });
 });
 

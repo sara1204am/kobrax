@@ -39,6 +39,7 @@ export function PaymentsSection({
   return (
     <Section
       title={t('title')}
+      collapsible={{ count: payments?.length }}
       action={
         payments && payments.length > 0 ? (
           <Link href={`/pagos?creditId=${creditId}`} className="text-[13px] font-medium text-k-periwinkle hover:underline">

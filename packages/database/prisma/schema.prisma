@@ -1070,9 +1070,9 @@ enum CreditNoteKind {
 /// (un crédito en mora sin caso también tiene cosas que decir). Antes no había dónde dejarlas: la única nota era
 /// `case_activities.notes`, atada a un caso y a un tipo de gestión.
 ///
-/// **Append-only**, como `case_activities`: sin `updated_at` ni `deleted_at`. Una nota es lo que alguien dijo en
-/// un momento; corregirla es escribir otra. El `id` lo puede traer quien la crea (el móvil, que escribe sin
-/// red y reintenta): crear dos veces el mismo id no duplica.
+/// Es un **post-it** sobre el tablero de la ficha: lleva color y lugar, se puede editar y se borra de forma lógica
+/// (`deleted_at`; el rastro queda). El `id` lo puede traer quien la crea (el móvil, que escribe sin red y
+/// reintenta): crear dos veces el mismo id no duplica.
 model CreditNote {
   id        String         @id @default(uuid())
   accountId String         @map("account_id")
@@ -1082,7 +1082,17 @@ model CreditNote {
   authorId  String?        @map("author_id")
   kind      CreditNoteKind @default(INFO)
   body      String
+  /// Post-it: color y lugar en el tablero de la ficha (posición, tamaño y orden de apilado).
+  color     CreditNoteColor @default(YELLOW)
+  posX      Int            @default(40) @map("pos_x")
+  posY      Int            @default(40) @map("pos_y")
+  width     Int            @default(240)
+  height    Int            @default(180)
+  zIndex    Int            @default(1) @map("z_index")
   createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @default(now()) @updatedAt @map("updated_at")
+  /// Borrado lógico: una nota es parte del rastro del crédito.
+  deletedAt DateTime?      @map("deleted_at")
 
   account Account @relation(fields: [accountId], references: [id])
   credit  Credit  @relation(fields: [creditId], references: [id])
@@ -1091,6 +1101,18 @@ model CreditNote {
   @@index([accountId, creditId, createdAt(sort: Desc)])
   @@index([accountId, clientId])
   @@map("credit_notes")
+}
+
+/// Colores del post-it de una nota (la paleta de Gallium).
+enum CreditNoteColor {
+  YELLOW
+  PINK
+  BLUE
+  GREEN
+  PURPLE
+  ORANGE
+
+  @@map("credit_note_color")
 }
 
 /// Cronograma de pagos de un crédito.

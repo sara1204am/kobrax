@@ -1,10 +1,10 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, StreamableFile, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, StreamableFile, UseGuards } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { CreateMoraActivityDto, CreateMoraNoteDto, ListMoraQueryDto } from './dto/mora.dto';
+import { CreateMoraActivityDto, CreateMoraNoteDto, ListMoraQueryDto, UpdateMoraNoteDto } from './dto/mora.dto';
 import { MoraExportService } from './mora-export.service';
 import { MoraService } from './mora.service';
 
@@ -98,6 +98,27 @@ export class MoraController {
   @Roles(Permission.CASE_WRITE)
   addNote(@Param('creditId', ParseUUIDPipe) creditId: string, @Body() dto: CreateMoraNoteDto) {
     return this.mora.addNote(creditId, dto);
+  }
+
+  /**
+   * Editar un post-it. `case:write`, y el service distingue: el texto y el tipo son de quien la escribió o de
+   * quien reparte cartera; mover, redimensionar, pintar o traer al frente, de cualquiera que pueda escribir.
+   */
+  @Patch(':creditId/notes/:noteId')
+  @Roles(Permission.CASE_WRITE)
+  updateNote(
+    @Param('creditId', ParseUUIDPipe) creditId: string,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Body() dto: UpdateMoraNoteDto,
+  ) {
+    return this.mora.updateNote(creditId, noteId, dto);
+  }
+
+  /** Borrar un post-it (borrado lógico). Sólo quien la escribió o quien reparte cartera. */
+  @Delete(':creditId/notes/:noteId')
+  @Roles(Permission.CASE_WRITE)
+  deleteNote(@Param('creditId', ParseUUIDPipe) creditId: string, @Param('noteId', ParseUUIDPipe) noteId: string) {
+    return this.mora.deleteNote(creditId, noteId);
   }
 
   @Get(':creditId')

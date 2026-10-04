@@ -18,7 +18,7 @@ import {
   CatalogType,
 } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
-import { Badge, Card, EmptyState, Fact, PageHeader } from '@/components/panel-ui';
+import { Badge, EmptyState, PageHeader, Section } from '@/components/panel-ui';
 import { SourceBadge } from '@/components/source-badge';
 import { date, dateTime, dayDate, money } from '@/lib/format';
 import { assignedTo } from '@/lib/cases';
@@ -28,6 +28,7 @@ import { ActivityResult } from './activity-result';
 import { RegisterActivityButton } from './activity-form';
 import { ArrearsHistory } from './arrears-history';
 import { CaseActions } from './case-actions';
+import { FichaSummary } from './ficha-summary';
 import { NotesSection } from './notes-section';
 import { OpenCaseButton } from './open-case-button';
 import { PaymentsSection } from './payments-section';
@@ -130,137 +131,115 @@ export default async function CreditoMoraPage({ params }: { params: { creditId: 
       />
 
       <div className="space-y-6">
-        <Card>
-          {/* Estado y prioridad son **controles**, no etiquetas: se tocan y se cambian acá mismo. Sin caso
-              abierto no hay nada que cambiar, y se dice. */}
-          <div className="flex flex-wrap items-center gap-2">
-            {item.daysPastDue > 0 && <Badge tone="danger">{t('days', { n: item.daysPastDue })}</Badge>}
-            {item.externalSource && (
-              <SourceBadge
-                source={item.externalSource}
-                syncStatus={item.syncStatus}
-                reportedAsOf={item.reportedAsOf}
-                stale={item.reportedStale}
-              />
-            )}
-            {open ? (
-              <>
-                <StatusControl caseId={open.id} status={open.status} canWrite={canWrite} />
-                <PriorityCell caseId={open.id} priority={open.priority} pinned={open.priorityPinned} canWrite={canWrite} />
-                {open.isOverdue && <Badge tone="danger">{t('overdueBadge')}</Badge>}
-              </>
-            ) : (
-              <Badge tone="neutral">{t('noCase')}</Badge>
-            )}
-            {item.reportedStatus && <Badge tone="neutral">{item.reportedStatus}</Badge>}
-          </div>
-
-          {/* 🔴 El saldo total y lo realmente vencido son dos números distintos y se muestran por separado. */}
-          <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Fact label={t('detail.balance')} value={amount(item.balance)} />
-            <Fact label={t('detail.overdue')} value={amount(item.overdueAmount)} />
-            <Fact label={t('columns.daysPastDue')} value={item.daysPastDue ? t('days', { n: item.daysPastDue }) : '—'} />
-            <Fact label={t('detail.principal')} value={amount(item.principalAmount)} />
-            <Fact label={t('detail.installment')} value={amount(item.installmentAmount)} />
-            <Fact label={t('detail.nextDueDate')} value={day(item.nextDueDate)} />
-            <Fact label={t('detail.lastPayment')} value={day(item.lastPaymentAt)} />
-            <Fact label={t('detail.moraSince')} value={day(item.moraSince)} />
-            <Fact label={t('detail.sla')} value={instant(open?.slaDueAt)} />
-            {/* Sin nombre no es sin cobrador: `/users` da 403 sin `user:read`. */}
-            <Fact
-              label={t('detail.assignee')}
-              value={assignee ? memberName(assignee) : open?.assigneeId ? t('unknownAssignee') : t('noAssignee')}
-            />
-            {item.branchName && <Fact label={t('columns.branch')} value={item.branchName} />}
-          </dl>
-
-          <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2">
-            <Link href={`/cartera/${item.clientId}`} className="text-[14px] font-medium text-k-purple hover:underline">
-              {t('detail.openClient')}
-            </Link>
-            <Link
-              href={`/cartera/${item.clientId}/credito/${item.creditId}`}
-              className="text-[14px] font-medium text-k-purple hover:underline"
-            >
-              {t('detail.openCredit')}
-            </Link>
-          </div>
-        </Card>
+        {/* El resumen: lo que se debe, en grande, y los datos del crédito. Estado, prioridad y fuente son
+            **controles**, no etiquetas: se tocan y se cambian acá mismo. Sin caso abierto no hay nada que cambiar, y se dice. */}
+        <FichaSummary
+          chips={
+            <>
+              {item.daysPastDue > 0 && <Badge tone="danger">{t('days', { n: item.daysPastDue })}</Badge>}
+              {item.externalSource && (
+                <SourceBadge source={item.externalSource} syncStatus={item.syncStatus} reportedAsOf={item.reportedAsOf} stale={item.reportedStale} />
+              )}
+              {open ? (
+                <>
+                  <StatusControl caseId={open.id} status={open.status} canWrite={canWrite} />
+                  <PriorityCell caseId={open.id} priority={open.priority} pinned={open.priorityPinned} canWrite={canWrite} />
+                  {open.isOverdue && <Badge tone="danger">{t('overdueBadge')}</Badge>}
+                </>
+              ) : (
+                <Badge tone="neutral">{t('noCase')}</Badge>
+              )}
+              {item.reportedStatus && <Badge tone="neutral">{item.reportedStatus}</Badge>}
+            </>
+          }
+          balance={item.balance}
+          principal={item.principalAmount}
+          overdue={item.overdueAmount}
+          daysPastDue={item.daysPastDue}
+          installment={item.installmentAmount}
+          nextDueDate={day(item.nextDueDate)}
+          lastPayment={day(item.lastPaymentAt)}
+          moraSince={day(item.moraSince)}
+          sla={instant(open?.slaDueAt)}
+          // Sin nombre no es sin cobrador: `/users` da 403 sin `user:read`.
+          assignee={assignee ? memberName(assignee) : open?.assigneeId ? t('unknownAssignee') : t('noAssignee')}
+          branch={item.branchName}
+          clientHref={`/cartera/${item.clientId}`}
+          creditHref={`/cartera/${item.clientId}/credito/${item.creditId}`}
+          amount={amount}
+        />
 
         {/* Qué se hizo para recuperarlo y qué se logró, sobre la mora actual. */}
         <RecoveryMetricsSection metrics={metrics.status === 200 ? (metrics.body.data ?? null) : null} currency={currency} />
 
-        {/* Las notas van arriba: lo importante hay que leerlo antes de salir a cobrar. */}
-        <NotesSection creditId={item.creditId} notes={notes.status === 200 ? (notes.body.data ?? []) : null} members={members} canWrite={canWrite} />
+        {/* El resto, en acordeones: las **gestiones** abiertas de entrada (es lo que se mira todos los días). */}
+        <div className="space-y-3">
+          <Section title={t('detail.timeline')} collapsible={{ open: true, count: item.activities.length }}>
+            {item.activities.length ? (
+          <ol className="space-y-3">
+            {item.activities.map((activity) => (
+              <li key={activity.id} className="rounded-2xl border border-k-border bg-white px-5 py-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="text-[14px] font-medium text-k-text">
+                    {/* Un tipo que el diccionario no conoce se muestra crudo: la API puede sumar
+                        uno nuevo, y esconderlo dejaría un renglón sin decir qué pasó. */}
+                    {t.has(`activityType.${activity.type}`) ? t(`activityType.${activity.type}`) : activity.type}
+                  </span>
+                  <span className="text-[13px] text-k-text-2">{dateTime(activity.createdAt, locale)}</span>
+                </div>
+                {activity.result && <ActivityResult result={activity.result} />}
+                {/*
+                 * 🔴 La nota de una asignación es **un id**, no una frase: mostrarla cruda le
+                 * ponía `bf2e039c-…` en la cara a quien mira la cobranza. Va el nombre, y al lado
+                 * el cargo — que es lo que dice si el trabajo quedó en manos de un cobrador o de
+                 * una supervisora.
+                 */}
+                {activity.type === 'ASSIGNMENT' && assignedTo(activity.notes) ? (
+                  <Assignee id={assignedTo(activity.notes)!} members={members} />
+                ) : (
+                  activity.notes && <p className="mt-1 text-[14px] text-k-text">{activity.notes}</p>
+                )}
+              </li>
+            ))}
+          </ol>
+            ) : (
+              <EmptyState title={open ? t('detail.timelineEmpty') : t('detail.noCaseTitle')} text={open ? undefined : t('detail.noCaseText')} />
+            )}
+          </Section>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <div className="space-y-6">
-            {/* Si el historial no se pudo leer (permiso, o la API todavía sin la migración), la ficha sigue entera. */}
-            <ArrearsHistory episodes={episodes.status === 200 ? (episodes.body.data ?? []) : null} currency={currency} />
+          <PromisesSection promises={promises.status === 200 ? (promises.body.data ?? []) : null} members={members} currency={currency} />
 
-            <section>
-          <h2 className="mb-3 text-[18px] font-semibold text-k-navy">{t('detail.timeline')}</h2>
-          {item.activities.length ? (
-            <ol className="space-y-3">
-              {item.activities.map((activity) => (
-                <li key={activity.id} className="rounded-2xl border border-k-border bg-white px-5 py-4">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <span className="text-[14px] font-medium text-k-text">
-                      {/* Un tipo que el diccionario no conoce se muestra crudo: la API puede sumar
-                          uno nuevo, y esconderlo dejaría un renglón sin decir qué pasó. */}
-                      {t.has(`activityType.${activity.type}`) ? t(`activityType.${activity.type}`) : activity.type}
-                    </span>
-                    <span className="text-[13px] text-k-text-2">{dateTime(activity.createdAt, locale)}</span>
-                  </div>
-                  {activity.result && <ActivityResult result={activity.result} />}
-                  {/*
-                   * 🔴 La nota de una asignación es **un id**, no una frase: mostrarla cruda le
-                   * ponía `bf2e039c-…` en la cara a quien mira la cobranza. Va el nombre, y al lado
-                   * el cargo — que es lo que dice si el trabajo quedó en manos de un cobrador o de
-                   * una supervisora.
-                   */}
-                  {activity.type === 'ASSIGNMENT' && assignedTo(activity.notes) ? (
-                    <Assignee id={assignedTo(activity.notes)!} members={members} />
-                  ) : (
-                    activity.notes && <p className="mt-1 text-[14px] text-k-text">{activity.notes}</p>
-                  )}
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <EmptyState title={open ? t('detail.timelineEmpty') : t('detail.noCaseTitle')} text={open ? undefined : t('detail.noCaseText')} />
-          )}
-            </section>
-          </div>
+          {/* Las notas, con su tablero de post-its. */}
+          <NotesSection
+            creditId={item.creditId}
+            notes={notes.status === 200 ? (notes.body.data ?? []) : null}
+            members={members}
+            canWrite={canWrite}
+            userId={me.body.data?.userId}
+            canAssign={permissions.includes(Permission.CASE_ASSIGN)}
+          />
 
-          {/* La columna de consulta: qué prometió y qué pagó. */}
-          <div className="space-y-6">
-            <PromisesSection promises={promises.status === 200 ? (promises.body.data ?? []) : null} members={members} currency={currency} />
-            <PaymentsSection
-              creditId={item.creditId}
-              payments={payments.status === 200 ? (payments.body.data ?? []) : null}
-              members={members}
-              currency={currency}
-              external={!!item.externalSource}
-            />
-          </div>
+          <PaymentsSection
+            creditId={item.creditId}
+            payments={payments.status === 200 ? (payments.body.data ?? []) : null}
+            members={members}
+            currency={currency}
+            external={!!item.externalSource}
+          />
+
+          {/* Si el historial no se pudo leer (permiso, o la API todavía sin la migración), la ficha sigue entera. */}
+          <ArrearsHistory episodes={episodes.status === 200 ? (episodes.body.data ?? []) : null} currency={currency} />
+
+          {/* La persona, al servicio de la recuperación: sólo lectura (se corrige desde Cartera). */}
+          <Section title={t('ficha.person.title')} collapsible={{}}>
+            <p className="mb-3 text-[13px] text-k-text-2">{t('ficha.person.hint')}</p>
+            {client.status === 200 && client.body.data ? (
+              <PersonSections creditId={item.creditId} client={client.body.data} currency={currency} collateralTypes={collateralTypes.body.data ?? []} />
+            ) : (
+              <EmptyState title={t('ficha.person.denied')} />
+            )}
+          </Section>
         </div>
-
-        {/* La persona, al servicio de la recuperación: sólo lectura (se corrige desde Cartera). */}
-        <section>
-          <h2 className="text-[18px] font-semibold text-k-navy">{t('ficha.person.title')}</h2>
-          <p className="mb-3 mt-1 text-[13px] text-k-text-2">{t('ficha.person.hint')}</p>
-          {client.status === 200 && client.body.data ? (
-            <PersonSections
-              creditId={item.creditId}
-              client={client.body.data}
-              currency={currency}
-              collateralTypes={collateralTypes.body.data ?? []}
-            />
-          ) : (
-            <EmptyState title={t('ficha.person.denied')} />
-          )}
-        </section>
       </div>
     </>
   );
