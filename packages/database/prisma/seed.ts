@@ -33,7 +33,7 @@ import {
   CreditDataOrigin,
   ExternalSyncStatus,
 } from '@prisma/client';
-import { ROLE_PERMISSIONS, RoleType, validateAgendaDetails } from '@kobrax/shared';
+import { DEFAULT_ARREAR_CATEGORIES, ROLE_PERMISSIONS, RoleType, validateAgendaDetails } from '@kobrax/shared';
 import bcrypt from 'bcryptjs';
 import { createHash } from 'node:crypto';
 import { blindHash, encryptPII } from './pii';
@@ -51,6 +51,9 @@ const PERMISSIONS = [
   ['case:assign', 'cases', 'UPDATE', 'BRANCH'],
   ['case:close', 'cases', 'UPDATE', 'ACCOUNT'],
   ['case:export', 'cases', 'EXECUTE', 'ACCOUNT'],
+  ['collection:read', 'collection', 'READ', 'ACCOUNT'],
+  ['collection:write', 'collection', 'UPDATE', 'ACCOUNT'],
+  ['collection:export', 'collection', 'EXECUTE', 'ACCOUNT'],
   ['payment:read', 'payments', 'READ', 'ACCOUNT'],
   ['payment:write', 'payments', 'CREATE', 'OWN'],
   ['payment:approve', 'payments', 'APPROVE', 'ACCOUNT'],
@@ -240,6 +243,15 @@ async function main() {
       timezone: 'America/La_Paz',
     },
   });
+
+  // Categorías de mora iniciales (F4/08 · D1-b) para las dos cuentas demo. Idempotente: no pisa lo que
+  // alguien ya editó. Los rangos viven en shared (`DEFAULT_ARREAR_CATEGORIES`), no acá.
+  for (const accountId of [account.id, account2.id]) {
+    await prisma.arrearCategory.createMany({
+      data: DEFAULT_ARREAR_CATEGORIES.map((c) => ({ ...c, accountId })),
+      skipDuplicates: true,
+    });
+  }
 
   // multi@kobrax.demo: miembro de DEMO (SUPERVISOR, default) y DEMO2 (ACCOUNT_ADMIN).
   const multi = await ensureUser('multi@kobrax.demo', 'María', 'Multi', 'SUPERVISOR', {

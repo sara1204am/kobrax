@@ -55,6 +55,8 @@ DECLARE
     'credit_arrear_episodes',
     -- Notas por crédito (F4/07 T12): las escribe el equipo, se leen por tenant.
     'credit_notes',
+    -- Sin caso (F4/08 fase 1): la bitácora del crédito y los rangos de la categoría de mora.
+    'credit_activities', 'arrear_categories',
     -- Cartera de una fuente externa (PSF): lo que reportó cada corrida, los vínculos persona →
     -- cliente confirmados y los códigos de asesor. Los tres dicen de quién es qué cartera.
     'credit_external_snapshots', 'client_external_keys', 'external_advisor_links',

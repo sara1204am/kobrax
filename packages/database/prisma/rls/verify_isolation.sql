@@ -41,3 +41,14 @@ SET ROLE kobrax_app;
 SELECT set_config('app.current_account_id', '', false);
 SELECT 'sin-ctx' AS ctx, count(*) AS clients FROM clients;
 RESET ROLE;
+
+-- Sin caso (F4/08): las tablas nuevas también quedan aisladas por tenant.
+\echo '== kobrax_app · credit_activities / arrear_categories: DEMO ve lo suyo, Tenant B no ve lo de DEMO, sin contexto 0 =='
+SET ROLE kobrax_app;
+SELECT set_config('app.current_account_id', :'demo_id', false);
+SELECT 'DEMO' AS ctx, (SELECT count(*) FROM credit_activities) AS activities, (SELECT count(*) FROM arrear_categories) AS categories;
+SELECT set_config('app.current_account_id', 'acc-tenant-b', false);
+SELECT 'TenantB' AS ctx, (SELECT count(*) FROM credit_activities) AS activities, (SELECT count(*) FROM arrear_categories) AS categories;
+SELECT set_config('app.current_account_id', '', false);
+SELECT 'sin-ctx' AS ctx, (SELECT count(*) FROM credit_activities) AS activities, (SELECT count(*) FROM arrear_categories) AS categories;
+RESET ROLE;
