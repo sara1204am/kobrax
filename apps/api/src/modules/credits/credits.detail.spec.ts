@@ -76,8 +76,4 @@ describe('CreditsService.findOne — situación, categoría y castigo (F4/08)', 
     assert.equal(out.category?.code, 'C');
   });
 
-  it('un crédito viejo con status WRITTEN_OFF y sin fecha también cuenta como castigado', async () => {
-    const { service } = make({ credit: { status: 'WRITTEN_OFF' } });
-    assert.equal((await service.findOne('cr1')).writtenOff, true);
-  });
 });

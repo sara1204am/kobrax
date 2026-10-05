@@ -93,7 +93,7 @@ export class PromiseDueService implements OnApplicationBootstrap, OnModuleDestro
           dueDate: { gte: now, lte: horizon },
           status: { not: InstallmentStatus.PAID },
           // Un crédito saldado, castigado o borrado ya no se cobra. Antes lo filtraba el estado del caso.
-          credit: { deletedAt: null, writtenOffAt: null, status: { notIn: [CreditStatus.PAID, CreditStatus.CANCELLED, CreditStatus.WRITTEN_OFF] } },
+          credit: { deletedAt: null, writtenOffAt: null, status: { notIn: [CreditStatus.PAID, CreditStatus.CANCELLED] } },
         },
         select: { creditId: true, number: true, dueDate: true, credit: { select: { assignedManagerId: true } } },
         orderBy: { dueDate: 'asc' },

@@ -392,7 +392,7 @@ export class CreditsService {
    */
   async update(id: string, dto: UpdateCreditDto): Promise<ReturnType<typeof serializeCredit>> {
     // D1-a: el castigo no es un estado; se pide por su endpoint ().
-    if (dto.status === CreditStatus.WRITTEN_OFF) throw writeOffUseEndpoint();
+    if ((dto.status as string | undefined) === 'WRITTEN_OFF') throw writeOffUseEndpoint();
     const config = await this.accountConfig();
     const redefine = dto.terms !== undefined || dto.initialState !== undefined;
     const looseField = LOOSE_FINANCIAL_FIELDS.find((k) => dto[k] !== undefined);
@@ -611,15 +611,13 @@ export class CreditsService {
     const { before, after, changed } = await this.tx(async (tx) => {
       const prev = await tx.credit.findFirst({ where: { id, deletedAt: null } });
       if (!prev) throw resourceNotFound();
-      // Un crédito viejo con status WRITTEN_OFF (anterior a D1-a) también se lee como castigado: revertirlo lo vuelve ACTIVE.
-      if (!prev.writtenOffAt && prev.status !== CreditStatus.WRITTEN_OFF) return { before: prev, after: prev, changed: false };
+      if (!prev.writtenOffAt) return { before: prev, after: prev, changed: false };
       const next = await tx.credit.update({
         where: { id },
         data: {
           writtenOffAt: null,
           writtenOffBy: null,
           writtenOffReason: null,
-          ...(prev.status === CreditStatus.WRITTEN_OFF ? { status: CreditStatus.ACTIVE } : {}),
         },
       });
       return { before: prev, after: next, changed: true };

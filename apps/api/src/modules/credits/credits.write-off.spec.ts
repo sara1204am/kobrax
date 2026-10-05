@@ -122,15 +122,6 @@ describe('DELETE /credits/:id/write-off', () => {
     assert.equal(audited.length, 0);
   });
 
-  it('compatibilidad: un crédito viejo con estado WRITTEN_OFF se lee como castigado, y al revertir vuelve a ACTIVE', async () => {
-    const { service, credit } = make({
-      permissions: MANAGER,
-      credit: { id: 'cr1', status: 'WRITTEN_OFF', metadata: {}, writtenOffAt: null, writtenOffBy: null, writtenOffReason: null },
-    });
-    await service.unWriteOff('cr1');
-    assert.equal(credit!.status, 'ACTIVE');
-    assert.equal(credit!.writtenOffAt, null);
-  });
 });
 
 describe('credits.status = WRITTEN_OFF ya no se escribe', () => {

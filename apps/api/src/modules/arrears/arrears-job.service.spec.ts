@@ -249,13 +249,6 @@ describe('ArrearsJobService — un crédito castigado se procesa como cualquier 
     assert.ok(or.some((w) => w.status === 'ACTIVE' && !('writtenOffAt' in w)), 'ACTIVE entra, castigado o no');
   });
 
-  it('compatibilidad: un viejo con estado WRITTEN_OFF y written_off_at también cuenta sus días', async () => {
-    const { job, calls } = makeJob([castigado()]);
-    await job.scanAccount('acc-A', HOY);
-    const or = calls.creditWhere!.OR as { status?: string; writtenOffAt?: unknown }[];
-    assert.ok(or.some((w) => w.status === 'WRITTEN_OFF' && w.writtenOffAt !== undefined));
-  });
-
   it('con el crédito castigado y en mora el job hace lo mismo que con uno sin castigar', async () => {
     const a = makeJob([castigado()]);
     const b = makeJob([castigado({ writtenOffAt: null })]);

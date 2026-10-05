@@ -77,7 +77,7 @@ export function serializeCredit(
 ) {
   // Sólo con contexto (la ficha): `situation` del episodio abierto y `category` por días de mora (nunca se guarda;
   // ninguna si el crédito está al día —< 1 día— o ningún rango lo cubre).
-  const writtenOff = credit.writtenOffAt != null || credit.status === 'WRITTEN_OFF';
+  const writtenOff = credit.writtenOffAt != null;
   const situation = mora ? moraSituation({ hasOpenEpisode: mora.hasOpenEpisode, daysPastDue: credit.daysPastDue, writtenOffAt: credit.writtenOffAt }).situation : undefined;
   const cat = mora ? categoryForDays(credit.daysPastDue, mora.categories) : null;
   // La ficha (§5.4) necesita cuota, frecuencia, próxima fecha y el candado del importado.
@@ -111,7 +111,7 @@ export function serializeCredit(
     currency: credit.currency,
     installmentsCount: countUnknown ? undefined : credit.installmentsCount,
     status: credit.status,
-    // D1-a: el castigo es una condición aparte (`written_off_at`); un crédito viejo con status WRITTEN_OFF también cuenta.
+    // D1-a: el castigo es una condición aparte (`written_off_at`).
     writtenOff,
     writtenOffAt: credit.writtenOffAt ?? undefined,
     writtenOffReason: credit.writtenOffReason ?? undefined,

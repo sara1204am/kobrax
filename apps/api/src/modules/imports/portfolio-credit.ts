@@ -208,12 +208,15 @@ export function snapshotData(
 // VIGENTE → ACTIVE; el resto, mapeo mínimo. Cada tenant puede sumar o corregir etiquetas en su
 // configuración (`statusMap`), que manda sobre esta tabla. Devuelve null ante una etiqueta
 // desconocida → el caller decide (preservar en update, default en create).
-const STATUS_MAP: Record<string, CreditStatus> = {
+/** Lo que dice el mapa de estados: un estado real o la marca «castigado» (que NO es un estado de `credits`). */
+export type MappedStatus = CreditStatus | 'WRITTEN_OFF';
+
+const STATUS_MAP: Record<string, MappedStatus> = {
   VIGENTE: CreditStatus.ACTIVE,
   VENCIDO: CreditStatus.DEFAULTED,
   // D1-a: en el mapa, `WRITTEN_OFF` quiere decir «la condición de castigo» (`written_off_at`), no un estado
   // que se guarde: `storedStatus` lo traduce a ACTIVE e `isWrittenOffLabel` marca el castigo.
-  CASTIGADO: CreditStatus.WRITTEN_OFF,
+  CASTIGADO: 'WRITTEN_OFF',
   CANCELADO: CreditStatus.CANCELLED,
 };
 
@@ -227,21 +230,21 @@ export function statusKey(raw: string): string {
     .replace(/\s+/g, ' ');
 }
 
-export function mapStatus(raw: string | null, overrides?: Record<string, CreditStatus>): CreditStatus | null {
+export function mapStatus(raw: string | null, overrides?: Record<string, MappedStatus>): MappedStatus | null {
   if (!raw) return null;
   const key = statusKey(raw);
   return overrides?.[key] ?? STATUS_MAP[key] ?? null;
 }
 
 /** El estado que se guarda: `WRITTEN_OFF` ya no se escribe nunca (D1-a); el castigo va en `written_off_at`. */
-export function storedStatus(raw: string | null, overrides?: Record<string, CreditStatus>): CreditStatus | null {
+export function storedStatus(raw: string | null, overrides?: Record<string, MappedStatus>): CreditStatus | null {
   const mapped = mapStatus(raw, overrides);
-  return mapped === CreditStatus.WRITTEN_OFF ? CreditStatus.ACTIVE : mapped;
+  return mapped === 'WRITTEN_OFF' ? CreditStatus.ACTIVE : mapped;
 }
 
 /** ¿La etiqueta del reporte dice «castigado»? */
-export function isWrittenOffLabel(raw: string | null, overrides?: Record<string, CreditStatus>): boolean {
-  return mapStatus(raw, overrides) === CreditStatus.WRITTEN_OFF;
+export function isWrittenOffLabel(raw: string | null, overrides?: Record<string, MappedStatus>): boolean {
+  return mapStatus(raw, overrides) === 'WRITTEN_OFF';
 }
 
 /** Las columnas del castigo que escribe el importador (lo hace el sistema: sin `written_off_by`). */

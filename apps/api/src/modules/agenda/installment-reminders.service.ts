@@ -96,7 +96,7 @@ export class InstallmentReminderService implements OnApplicationBootstrap, OnMod
       const live = {
         deletedAt: null,
         writtenOffAt: null,
-        status: { notIn: [CreditStatus.PAID, CreditStatus.CANCELLED, CreditStatus.WRITTEN_OFF] },
+        status: { notIn: [CreditStatus.PAID, CreditStatus.CANCELLED] },
       };
 
       const reminders: Reminder[] = [];
