@@ -1,5 +1,6 @@
-import { cookies } from 'next/headers';
+import { cookies, headers as requestHeaders } from 'next/headers';
 import type { NextResponse } from 'next/server';
+import { SESSION_CHANGED_CODE, SESSION_HEADER, sessionIdFromToken } from './session-sync';
 
 /**
  * Capa BFF: el navegador nunca ve los tokens. Estas utilidades viven SOLO en el
@@ -33,6 +34,30 @@ export interface ApiEnvelope<T> {
   meta: { timestamp: string; version: string; total?: number; page?: number; limit?: number; pages?: number };
 }
 
+/** El `x-k-session` del pedido (si lo hay) no coincide con la sesión de la cookie de acceso. */
+export function sessionMismatch(access: string): boolean {
+  let claimed: string | null = null;
+  try {
+    claimed = requestHeaders().get(SESSION_HEADER);
+  } catch {
+    return false; // fuera de un request (tests, build): nada que comparar
+  }
+  if (!claimed) return false;
+  const current = sessionIdFromToken(access);
+  return current !== null && current !== claimed;
+}
+
+function sessionChangedResult(): { status: number; body: ApiEnvelope<never> } {
+  return {
+    status: 409,
+    body: {
+      data: null,
+      error: { code: SESSION_CHANGED_CODE, message: 'Tu sesión cambió en otra pestaña. Recarga la página para continuar.' },
+      meta: { timestamp: new Date().toISOString(), version: '1' },
+    },
+  };
+}
+
 /** Llama a la API. `auth` adjunta el access token (cookie) como Bearer. */
 export async function apiCall<T>(
   path: string,
@@ -43,7 +68,15 @@ export async function apiCall<T>(
   headers.set('x-client-type', 'web');
   if (init.auth) {
     const access = cookies().get(COOKIE.access)?.value;
-    if (access) headers.set('authorization', `Bearer ${access}`);
+    if (access) {
+      /*
+       * Control de sesión (W-LOG-54): la pestaña manda con qué sesión se cargó. Si la cookie ya es de
+       * otra (login/cambio de empresa en otra pestaña), se rechaza **sin llamar a la API**: así una
+       * pestaña dormida no guarda nada en la cuenta equivocada ni a nombre de otra persona.
+       */
+      if (sessionMismatch(access)) return sessionChangedResult();
+      headers.set('authorization', `Bearer ${access}`);
+    }
   }
   let res: Response;
   try {

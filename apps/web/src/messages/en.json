@@ -1681,6 +1681,12 @@
         "KOBRAX_COLLECTED": "Collected by Kobrax",
         "EXTERNAL_CONFIRMED": "Paid through an entity channel"
       }
+    },
+    "session": {
+      "reloaded": "Your session changed in another tab. We reloaded the page.",
+      "stale": "Your session changed in another tab. Reload the page to continue.",
+      "reload": "Reload",
+      "dismiss": "Got it"
     }
   },
   "account": {

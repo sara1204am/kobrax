@@ -1681,6 +1681,12 @@
         "KOBRAX_COLLECTED": "La cobró Kobrax",
         "EXTERNAL_CONFIRMED": "Pagó por un canal de la entidad"
       }
+    },
+    "session": {
+      "reloaded": "Tu sesión cambió en otra pestaña. Recargamos la página.",
+      "stale": "Tu sesión cambió en otra pestaña. Recarga la página para continuar.",
+      "reload": "Recargar",
+      "dismiss": "Entendido"
     }
   },
   "account": {

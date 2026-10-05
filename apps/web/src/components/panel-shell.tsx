@@ -8,12 +8,17 @@ import type { AuthAccountOption, NotificationPayload } from '@kobrax/shared';
 import { LocaleSwitch } from './locale-switch';
 import { crumbsFor, type NavItem, type NavKey } from '@/lib/nav';
 import { postJson } from '@/lib/client';
+import { publishSessionEvent } from '@/lib/session-sync';
+import { SessionWatcher } from './session-watcher';
 
 /** Fila de cualquiera de los dos menús de la topbar: 44 px de toque, ancho completo. */
 const MENU_ITEM =
   'flex min-h-[44px] w-full items-center gap-2 px-3 text-left text-[14px] text-k-text hover:bg-k-bg disabled:opacity-60';
 
 export interface ShellUser {
+  /** Con `sessionId`, identifican la sesión con la que se cargó la pestaña (W-LOG-54). */
+  userId?: string;
+  sessionId?: string;
   name: string;
   email: string;
   role: string;
@@ -118,6 +123,7 @@ export function PanelShell({
           }}
         />
         <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-5 sm:px-5 md:px-6 lg:px-8">
+          <SessionWatcher session={{ userId: user.userId, accountId: user.accountId, sessionId: user.sessionId }} />
           {children}
         </main>
       </div>
@@ -468,6 +474,8 @@ function AccountList({ accounts, activeId }: { accounts: AuthAccountOption[]; ac
      * no hay estado de pantalla que valga la pena preservar, el mismo motivo por el que el
      * selector de idioma recarga.
      */
+    // Las demás pestañas del navegador comparten la cookie: tienen que enterarse del cambio.
+    publishSessionEvent('switch');
     window.location.reload();
   }
 
@@ -534,6 +542,7 @@ function SidebarLogout({ collapsible = false }: { collapsible?: boolean }) {
         onClick={async () => {
           setBusy(true);
           await postJson('/api/auth/logout', {});
+          publishSessionEvent('logout');
           router.replace('/login');
         }}
         disabled={busy}

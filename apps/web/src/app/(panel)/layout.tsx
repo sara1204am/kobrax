@@ -43,12 +43,15 @@ export default async function PanelLayout({ children }: { children: ReactNode })
   // El middleware ya refrescó el token si hacía falta; si aun así no hay identidad, la sesión
   // se terminó de verdad.
   if (me.status !== 200 || !me.body.data) redirect('/login');
-  const user = me.body.data;
+  // `sessionId` lo agrega la API a /auth/me (W-LOG-54); el tipo compartido todavía no lo declara.
+  const user: MeInfo & { sessionId?: string } = me.body.data;
 
   return (
     <PermissionsProvider permissions={user.permissions}>
       <PanelShell
         user={{
+          userId: user.userId,
+          sessionId: user.sessionId,
           name: user.profile ? `${user.profile.firstName} ${user.profile.lastName}` : user.email,
           email: user.email,
           role: user.role,
