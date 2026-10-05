@@ -29,21 +29,19 @@ export { addPeriods } from './periods.js';
 
 /**
  * Estado de la tarjeta de cartera (§5.3). Derivado, nunca editable.
- * Precedencia: PAGADO gana sobre todo (el saldo es 0); una promesa vigente tapa la mora
- * (el cobrador ya negoció, no hay que volver a apretar); después mora, por vencer, al día.
+ * Precedencia: PAGADO gana sobre todo (el saldo es 0); después mora, por vencer, al día.
+ * Una promesa vigente es información, nunca un estado (F4/08 D1): no cambia el resultado.
  */
 export function portfolioStatus(
   credit: {
     outstandingBalance: number;
     daysPastDue: number;
     nextDueDate?: Date | string | null;
-    hasActivePromise?: boolean;
   },
   asOf: Date = new Date(),
   dueSoonDays: number = DUE_SOON_DAYS,
 ): PortfolioStatus {
   if (credit.outstandingBalance <= 0.005) return PortfolioStatus.PAID;
-  if (credit.hasActivePromise) return PortfolioStatus.PROMISE;
   if (credit.daysPastDue > 0) return PortfolioStatus.OVERDUE;
 
   const next = toDate(credit.nextDueDate);

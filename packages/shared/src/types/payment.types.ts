@@ -21,8 +21,6 @@ export type PaymentChannel = (typeof PAYMENT_CHANNELS)[number];
 export interface PaymentItem {
   id: string;
   creditId: string;
-  /** De qué caso es el pago. Lo usa el resumen de la jornada. */
-  caseId?: string;
   /** Quién lo registró: `GET /payments` devuelve los del TENANT, no los de un cobrador. */
   registeredBy?: string;
   amount: number;
@@ -43,7 +41,6 @@ export interface PaymentItem {
 
 export interface NewPayment {
   creditId: string;
-  caseId?: string;
   amount: number;
   method: PaymentMethod;
   receiptUrl?: string;
@@ -66,7 +63,6 @@ export interface PaymentRequestItem {
   id: string;
   creditId?: string;
   clientId?: string;
-  caseId?: string;
   amount: number;
   method: PaymentMethod;
   status: PaymentRequestStatus;

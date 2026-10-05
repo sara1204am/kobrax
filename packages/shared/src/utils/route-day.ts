@@ -55,8 +55,6 @@ export function routeProgress(route: RouteItem): { done: number; total: number }
 export interface DayPayment {
   /** El pago cuelga del crédito (F4/08): es lo que se cruza con las paradas. */
   creditId?: string;
-  /** @deprecated legado (se quita en la fase 6): sólo se usa si el pago no trae `creditId`. */
-  caseId?: string;
   amount: number;
 }
 
@@ -95,10 +93,8 @@ export function summarizeDay(route: RouteItem, payments: DayPayment[] = []): Day
   }
 
   const creditIds = new Set(stops.map((s) => s.creditId).filter((id): id is string => !!id));
-  const caseIds = new Set(stops.map((s) => s.caseId).filter((id): id is string => !!id));
   const collected = payments
-    // Por crédito; el cruce por caso queda sólo para pagos viejos sin `creditId` (hasta la fase 6).
-    .filter((p) => (p.creditId ? creditIds.has(p.creditId) : !!p.caseId && caseIds.has(p.caseId)))
+    .filter((p) => !!p.creditId && creditIds.has(p.creditId))
     .reduce((sum, p) => sum + p.amount, 0);
 
   return {

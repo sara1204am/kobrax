@@ -158,13 +158,12 @@ export enum InterestBase {
 
 /**
  * Estado derivado de la cartera (§5.3). **Se calcula, nunca se edita** — deriva de `daysPastDue`,
- * `nextDueDate`, el saldo y las promesas vigentes.
+ * `nextDueDate` y el saldo (las promesas son información, no un estado).
  */
 export enum PortfolioStatus {
   CURRENT = 'CURRENT', // AL DÍA — sin cuota vencida y próxima fecha > umbral
   DUE_SOON = 'DUE_SOON', // POR VENCER — próxima cuota en ≤ umbral
   OVERDUE = 'OVERDUE', // EN MORA — daysPastDue > 0
-  PROMISE = 'PROMISE', // PROMESA — compromiso de pago vigente
   PAID = 'PAID', // PAGADO — saldo 0
 }
 

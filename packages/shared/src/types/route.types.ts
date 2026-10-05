@@ -10,8 +10,6 @@ import type { ExternalSyncStatus } from '../enums/credit.enum.js';
 export interface RouteStopItem {
   id: string;
   clientId: string;
-  /** @deprecated legado: las paradas nuevas no llevan caso (F4/08). */
-  caseId?: string;
   sequenceOrder: number;
   status: RouteStopStatus;
   visitedAt?: string;
@@ -87,8 +85,6 @@ export interface VisitItem {
   id: string;
   /** El crédito visitado (F4/08). */
   creditId?: string;
-  /** @deprecated legado. */
-  caseId?: string;
   routeStopId?: string;
   collectorId: string;
   latitude: number;

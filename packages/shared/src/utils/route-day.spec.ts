@@ -11,13 +11,8 @@ describe('summarizeDay · cobrado por crédito (F4/08)', () => {
     expect(summarizeDay(r, [{ creditId: 'cr1', amount: 100 }, { creditId: 'cr2', amount: 50.5 }, { creditId: 'otro', amount: 999 }]).collected).toBe(150.5);
   });
 
-  it('un pago con creditId no se cuenta por un caseId coincidente', () => {
-    const r = route([{ creditId: 'cr1', caseId: 'k1' }]);
-    expect(summarizeDay(r, [{ creditId: 'otro', caseId: 'k1', amount: 10 }]).collected).toBe(0);
-  });
-
-  it('un pago viejo sin creditId sigue cruzando por caseId (hasta la fase 6)', () => {
-    const r = route([{ caseId: 'k1' }]);
-    expect(summarizeDay(r, [{ caseId: 'k1', amount: 10 }]).collected).toBe(10);
+  it('un pago sin creditId no se cuenta', () => {
+    const r = route([{ creditId: 'cr1' }]);
+    expect(summarizeDay(r, [{ amount: 10 }]).collected).toBe(0);
   });
 });

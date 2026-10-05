@@ -140,8 +140,6 @@ export interface NewCreditInput {
   daysPastDue?: number;
   notes?: string;
   origin?: CreditOrigin;
-  /** Abre el caso de cobranza en la misma transacción. Sin caso, el crédito no le llega a nadie. */
-  openCase?: boolean;
   /**
    * A quién se le asigna. En el teléfono coinciden con quien lo crea; **en la oficina no**: la
    * supervisora carga el préstamo y se lo reparte a un cobrador (F9 · W3 §5.3).
@@ -232,8 +230,6 @@ export interface ClientTimelineEntry {
   /** Lo que escribió quien la registró. Texto libre, tal cual. */
   notes?: string;
   creditId?: string;
-  /** @deprecated F4/08: ya no se llena (las gestiones cuelgan del crédito). Se quita en la fase 6. */
-  caseId?: string;
   /** Quién. `users.id`: el nombre lo resuelve quien dibuja, que ya tiene el equipo cargado. */
   userId?: string;
 }
