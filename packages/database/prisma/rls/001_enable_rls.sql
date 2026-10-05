@@ -32,7 +32,7 @@ DECLARE
     -- 20260618160000 y quedaron fuera de esta lista hasta 2026-07-29.
     'client_import_runs',
     -- Pilar 3
-    'collection_cases', 'case_activities', 'route_plans', 'route_stops',
+    'route_plans', 'route_stops',
     'field_visits', 'field_evidences',
     -- Pilar 4 + transversal
     'payments', 'payment_requests', 'notifications',

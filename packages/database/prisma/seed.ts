@@ -3,7 +3,7 @@
  *
  * Reemplaza a los tres seeds anteriores (`seed`, `seed-bulk`, `seed-day`) por uno solo y coherente:
  * el crédito es el centro de todo (responsable, mora por episodios, gestiones, promesas, pagos, notas,
- * rutas). No inserta en `collection_cases` / `case_activities` ni escribe ningún `case_id`.
+ * rutas). Ya no existe el caso: no hay tablas ni columnas `case_*`.
  *
  *   pnpm db:seed             permisos, roles, catálogos y el dataset demo (idempotente)
  *   pnpm db:seed:catalog     SÓLO permisos y roles (producción)
@@ -55,7 +55,7 @@ import {
   VisitOutcome,
   CollectionPriority,
 } from '@prisma/client';
-import { DEFAULT_ARREAR_CATEGORIES, Permission, ROLE_PERMISSIONS, RoleType, validateAgendaDetails } from '@kobrax/shared';
+import { DEFAULT_ARREAR_CATEGORIES, ROLE_PERMISSIONS, RoleType, validateAgendaDetails } from '@kobrax/shared';
 import bcrypt from 'bcryptjs';
 import { blindHash, encryptPII } from './pii';
 
@@ -109,20 +109,6 @@ const PERMISSIONS: PermRow[] = [
   // F4/08 · D8: el alcance del supervisor (su agencia + lo suyo). Espejo de la migración 20261004010000.
   ['data:scope:branch', 'data', 'READ', 'BRANCH'],
 ];
-
-/**
- * Los `case:*` sólo existen mientras `@kobrax/shared` los siga repartiendo (coexistencia hasta la fase 6):
- * se agregan SÓLO si el enum `Permission` todavía los trae. Cuando shared los borre, este bloque no hace nada.
- */
-const LEGACY_CASE_PERMISSIONS: PermRow[] = [
-  ['case:read', 'cases', 'READ', 'ACCOUNT'],
-  ['case:write', 'cases', 'UPDATE', 'ACCOUNT'],
-  ['case:assign', 'cases', 'UPDATE', 'BRANCH'],
-  ['case:close', 'cases', 'UPDATE', 'ACCOUNT'],
-  ['case:export', 'cases', 'EXECUTE', 'ACCOUNT'],
-];
-const SHARED_CODES = new Set<string>(Object.values(Permission));
-for (const p of LEGACY_CASE_PERMISSIONS) if (SHARED_CODES.has(p[0])) PERMISSIONS.push(p);
 
 /** Roles del sistema → nivel. Los permisos NO se listan acá: salen de `ROLE_PERMISSIONS`. */
 const ROLES: Record<RoleType, { level: number }> = {
@@ -1645,10 +1631,10 @@ async function seedDemo2(ctx: Ctx): Promise<void> {
 
 async function wipeDataset(accountIds: string[]): Promise<void> {
   const exists = async (t: string): Promise<boolean> => ((await prisma.$queryRawUnsafe<{ r: string | null }[]>(`SELECT to_regclass('public.${t}')::text AS r`))[0]?.r ?? null) !== null;
-  // Hijos primero. Las tablas del caso sólo se tocan si todavía existen (bases anteriores a la fase 6).
+  // Hijos primero.
   const tables = [
     'field_evidences', 'field_visits', 'route_stops', 'route_plans', 'notifications', 'agenda_items', 'credit_activities', 'credit_notes',
-    'payment_requests', 'payments', 'case_activities', 'collection_cases', 'credit_guarantors', 'collateral_credits', 'collaterals',
+    'payment_requests', 'payments', 'credit_guarantors', 'collateral_credits', 'collaterals',
     'credit_installments', 'arrears', 'credit_external_snapshots', 'credit_arrear_episodes', 'credit_assignments',
     'client_import_run_items', 'client_import_runs', 'client_external_keys', 'client_contacts', 'client_locations', 'client_relations',
     'client_attachments', 'credits', 'clients',

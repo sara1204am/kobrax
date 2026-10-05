@@ -22,18 +22,18 @@ SELECT 'superuser' AS ctx, count(*) AS clients FROM clients;
 
 SELECT id AS demo_id FROM accounts WHERE code = 'DEMO' \gset
 
-\echo '== kobrax_app · contexto DEMO (espera clients=1, cases=1) =='
+\echo '== kobrax_app · contexto DEMO (espera clients=1) =='
 SET ROLE kobrax_app;
 SELECT set_config('app.current_account_id', :'demo_id', false);
 SELECT 'DEMO' AS ctx, count(*) AS clients FROM clients;
-SELECT 'DEMO' AS ctx, count(*) AS cases FROM collection_cases;
+SELECT 'DEMO' AS ctx, count(*) AS activities FROM credit_activities;
 RESET ROLE;
 
-\echo '== kobrax_app · contexto Tenant B (espera clients=1, cases=0) =='
+\echo '== kobrax_app · contexto Tenant B (espera clients=1) =='
 SET ROLE kobrax_app;
 SELECT set_config('app.current_account_id', 'acc-tenant-b', false);
 SELECT 'TenantB' AS ctx, count(*) AS clients FROM clients;
-SELECT 'TenantB' AS ctx, count(*) AS cases FROM collection_cases;
+SELECT 'TenantB' AS ctx, count(*) AS activities FROM credit_activities;
 RESET ROLE;
 
 \echo '== kobrax_app · sin contexto (espera clients=0) =='

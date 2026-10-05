@@ -135,7 +135,7 @@ BEGIN
   -- ── Cartera de la app: al día / mora / castigado; origen y sin fuente externa ──
   SELECT count(*) INTO n FROM credits WHERE account_id = acc AND external_source IS NULL AND origin::text = 'MANUAL' AND days_past_due = 0 AND status::text = 'ACTIVE' AND deleted_at IS NULL;
   IF n < 7 THEN RAISE EXCEPTION 'FALLO: faltan créditos de la app al día (hay %, mínimo 7)', n; END IF;
-  SELECT count(*) INTO n FROM credits WHERE account_id = acc AND written_off_at IS NOT NULL AND days_past_due >= 240 AND status::text <> 'WRITTEN_OFF';
+  SELECT count(*) INTO n FROM credits WHERE account_id = acc AND written_off_at IS NOT NULL AND days_past_due >= 240;
   IF n < 1 THEN RAISE EXCEPTION 'FALLO: falta el crédito castigado (written_off_at) que sigue en mora 240+ días'; END IF;
   SELECT count(*) INTO n FROM credits c WHERE c.account_id = acc AND c.external_source IS NULL AND c.status::text <> 'PAID'
     AND NOT EXISTS (SELECT 1 FROM credit_installments i WHERE i.credit_id = c.id);
@@ -246,11 +246,11 @@ BEGIN
 
   -- ── Episodios abiertos coherentes con el estado del crédito (mismas invariantes que arrear-episodes.it) ──
   SELECT count(*) INTO n FROM credits c
-   WHERE c.deleted_at IS NULL AND c.days_past_due > 0 AND c.status::text NOT IN ('PAID', 'CANCELLED', 'WRITTEN_OFF')
+   WHERE c.deleted_at IS NULL AND c.days_past_due > 0 AND c.status::text NOT IN ('PAID', 'CANCELLED')
      AND NOT EXISTS (SELECT 1 FROM credit_arrear_episodes e WHERE e.credit_id = c.id AND e.ended_at IS NULL);
   IF n > 0 THEN RAISE EXCEPTION 'FALLO: % créditos en mora sin episodio abierto', n; END IF;
   SELECT count(*) INTO n FROM credit_arrear_episodes e JOIN credits c ON c.id = e.credit_id
-   WHERE e.ended_at IS NULL AND NOT (c.deleted_at IS NULL AND c.days_past_due > 0 AND c.status::text NOT IN ('PAID', 'CANCELLED', 'WRITTEN_OFF'));
+   WHERE e.ended_at IS NULL AND NOT (c.deleted_at IS NULL AND c.days_past_due > 0 AND c.status::text NOT IN ('PAID', 'CANCELLED'));
   IF n > 0 THEN RAISE EXCEPTION 'FALLO: % episodios abiertos en créditos que no están en mora', n; END IF;
   SELECT count(*) INTO n FROM credits c JOIN credit_arrear_episodes e ON e.credit_id = c.id
    WHERE c.sync_status::text = 'ABSENT' AND e.end_reason::text = 'SOURCE_ABSENT';
@@ -262,18 +262,12 @@ BEGIN
   SELECT count(*) INTO n FROM payments WHERE payment_date > now();
   IF n > 0 THEN RAISE EXCEPTION 'FALLO: % pagos con fecha futura', n; END IF;
 
-  -- ── Sin caso: ninguna fila en las tablas del caso ni `case_id` con valor en ninguna tabla ──
+  -- ── Sin caso: no queda ninguna tabla ni columna del caso ──
   FOREACH t IN ARRAY ARRAY['collection_cases', 'case_activities'] LOOP
-    IF to_regclass('public.' || t) IS NOT NULL THEN
-      EXECUTE format('SELECT count(*) FROM %I', t) INTO n;
-      IF n > 0 THEN RAISE EXCEPTION 'FALLO: la tabla % tiene % filas (el seed no debe escribir casos)', t, n; END IF;
-    END IF;
+    IF to_regclass('public.' || t) IS NOT NULL THEN RAISE EXCEPTION 'FALLO: la tabla % sigue existiendo', t; END IF;
   END LOOP;
-  FOR t IN SELECT c.table_name FROM information_schema.columns c
-            WHERE c.table_schema = 'public' AND c.column_name = 'case_id' AND c.table_name NOT IN ('collection_cases', 'case_activities') LOOP
-    EXECUTE format('SELECT count(*) FROM %I WHERE case_id IS NOT NULL', t) INTO n;
-    IF n > 0 THEN RAISE EXCEPTION 'FALLO: % filas de % con case_id', n, t; END IF;
-  END LOOP;
+  SELECT count(*) INTO n FROM information_schema.columns WHERE table_schema = 'public' AND column_name = 'case_id';
+  IF n > 0 THEN RAISE EXCEPTION 'FALLO: % columnas case_id siguen existiendo', n; END IF;
 
   RAISE NOTICE 'OK · seed-sin-caso verificado (hoy %, semana siguiente % a %)', today, next_mon, next_mon + 4;
 END $$;

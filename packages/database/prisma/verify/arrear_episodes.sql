@@ -135,10 +135,10 @@ BEGIN
   PERFORM pg_temp.expect('10f: lo cerrado como CURRENT en una transacción anterior sigue siendo CURRENT',
     (SELECT end_reason FROM credit_arrear_episodes WHERE credit_id = c) = 'CURRENT');
 
-  -- 11 · Castigado y borrado también cierran, con su motivo.
+  -- 11 · Borrado cierra con su motivo; castigar NO cierra (el castigo es independiente de la mora, D1).
   c := pg_temp.new_credit('t-ep-11', 10);
-  UPDATE credits SET status = 'WRITTEN_OFF' WHERE id = c;
-  PERFORM pg_temp.expect('11a: WRITTEN_OFF', (SELECT end_reason FROM credit_arrear_episodes WHERE credit_id = c) = 'WRITTEN_OFF');
+  UPDATE credits SET written_off_at = CURRENT_TIMESTAMP WHERE id = c;
+  PERFORM pg_temp.expect('11a: castigado sigue en mora, episodio abierto', (SELECT ended_at FROM credit_arrear_episodes WHERE credit_id = c) IS NULL AND pg_temp.eps(c) = 1);
   c := pg_temp.new_credit('t-ep-11b', 10);
   UPDATE credits SET deleted_at = CURRENT_TIMESTAMP WHERE id = c;
   PERFORM pg_temp.expect('11b: DELETED', (SELECT end_reason FROM credit_arrear_episodes WHERE credit_id = c) = 'DELETED');
