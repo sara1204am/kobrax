@@ -19,10 +19,11 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset",
+    "db:rebuild": "tsx prisma/rebuild.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:catalog": "tsx prisma/seed.ts --catalog",
-    "db:seed:day": "tsx prisma/seed-day.ts",
-    "db:seed:bulk": "tsx prisma/seed-bulk.ts",
+    "db:seed:refresh": "tsx prisma/seed.ts --refresh",
+    "db:verify:seed": "prisma db execute --file prisma/verify/seed-sin-caso.sql --schema prisma/schema.prisma",
     "db:audit:psf": "tsx prisma/audit-psf.ts",
     "db:audit:assignments": "tsx prisma/audit-assignments.ts",
     "db:studio": "prisma studio"

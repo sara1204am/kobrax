@@ -2,9 +2,9 @@
  * PII cifrada y con su blind index, **igual que la API**.
  *
  * Sembrar el documento en claro no es un atajo inocuo: al leerlo, `CryptoService` intenta
- * descifrarlo y la ficha del cliente revienta. Por eso todos los seeds pasan por acá.
+ * descifrarlo y la ficha del cliente revienta. Por eso el seed pasa por acá.
  *
- * Vive suelto porque lo usan los tres (`seed`, `seed-day`, `seed-bulk`) y una tercera copia del
+ * Vive suelto porque lo usan el seed y los scripts de auditoría, y una copia más del
  * mismo algoritmo es una copia que se va a desincronizar de la API sin que nadie lo note.
  */
 import { createCipheriv, createHmac, randomBytes } from 'node:crypto';
