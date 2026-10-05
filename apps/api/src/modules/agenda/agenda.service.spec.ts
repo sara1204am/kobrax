@@ -56,6 +56,10 @@ interface Opts {
   priorActivity?: { result: string } | null;
   /** `create`: la 1ª alta choca con la PK (carrera); desde ahí `findFirst` devuelve este ítem. */
   createRace?: Record<string, unknown>;
+  /** Rangos de mora de la cuenta (`arrear_categories`). */
+  categories?: Record<string, unknown>[];
+  /** `userAccount` de la cuenta (nombres de quienes atienden). */
+  userAccounts?: unknown[];
 }
 
 function makeService(opts: Opts = {}) {
@@ -75,6 +79,9 @@ function makeService(opts: Opts = {}) {
     activity: undefined as Record<string, unknown> | undefined,
     updated: undefined as Record<string, unknown> | undefined,
     events: [] as string[],
+    /** Cuántas veces se consultó cada tabla del enriquecimiento: tiene que ser UNA por página (sin N+1). */
+    queries: { credit: 0, category: 0, users: 0 },
+    creditSelect: undefined as Record<string, unknown> | undefined,
   };
   let raced = false;
   const first = <T>(list: T[] | undefined) => (list && list.length > 0 ? list[0] : null);
@@ -126,13 +133,32 @@ function makeService(opts: Opts = {}) {
     creditArrearEpisode: { findFirst: async () => opts.episode ?? null },
     credit: {
       findFirst: async () => opts.credit ?? first(opts.credits as unknown[] | undefined),
-      findMany: async () => opts.credits ?? [],
+      findMany: async (args?: { select?: Record<string, unknown> }) => {
+        // El enriquecimiento de la lista pide `arrearEpisodes`; los demás usos (agendables) no.
+        if (args?.select && 'arrearEpisodes' in args.select) {
+          calls.queries.credit += 1;
+          calls.creditSelect = args.select;
+        }
+        return opts.credits ?? [];
+      },
       update: async (args: { data: Record<string, unknown> }) => {
         calls.creditUpdate = args.data;
         return {};
       },
     },
     client: { findMany: async () => opts.clients ?? [] },
+    arrearCategory: {
+      findMany: async () => {
+        calls.queries.category += 1;
+        return opts.categories ?? [];
+      },
+    },
+    userAccount: {
+      findMany: async () => {
+        calls.queries.users += 1;
+        return opts.userAccounts ?? [];
+      },
+    },
     clientContact: { findFirst: async () => first(opts.contacts as unknown[]) },
     clientLocation: { findFirst: async () => first(opts.locations as unknown[]) },
     catalogItem: {
@@ -228,6 +254,92 @@ describe('AgendaService.listByDay (scope + enriquecimiento)', () => {
     });
     const res = await service.listByDay('2026-07-08');
     assert.equal(res.data![0]!.clientName, 'Ana Ruiz');
+  });
+});
+
+describe('AgendaService · campos del crédito en la lista', () => {
+  const CATS = [
+    { code: 'A', name: 'Categoría A', color: null, fromDays: 1, toDays: 30 },
+    { code: 'B', name: 'Categoría B', color: '#f59e0b', fromDays: 31, toDays: 60 },
+  ];
+  const credit = (over: Record<string, unknown> = {}) => ({
+    id: 'cr1', code: 'C-12345', outstandingBalance: 2450.5, currency: 'BOB', daysPastDue: 45, writtenOffAt: null,
+    arrearEpisodes: [{ id: 'e1' }], ...over,
+  });
+  const user = (userId: string, firstName: string, lastName: string) => ({ userId, user: { profile: { firstName, lastName }, email: `${firstName}@x.com` } });
+
+  it('trae código, situación, días, categoría, saldo, moneda y nombre de quien atiende', async () => {
+    const { service } = makeService({
+      rows: [row({ assigneeId: 'u1' })],
+      credits: [credit()],
+      categories: CATS,
+      userAccounts: [user('u1', 'Carlos', 'Rojas')],
+    });
+    const [it] = (await service.listByDay({ date: '2026-07-08' })).data!;
+    assert.equal(it!.creditCode, 'C-12345');
+    assert.equal(it!.creditSituation, 'IN_ARREARS');
+    assert.equal(it!.daysPastDue, 45);
+    assert.deepEqual(it!.category, { code: 'B', name: 'Categoría B', color: '#f59e0b' });
+    assert.equal(it!.balance, 2450.5);
+    assert.equal(it!.currency, 'BOB');
+    assert.equal(it!.assigneeName, 'Carlos Rojas');
+  });
+
+  it('sin episodio abierto está «al día» y sin categoría, aunque tenga días', async () => {
+    const { service } = makeService({ rows: [row()], credits: [credit({ arrearEpisodes: [], daysPastDue: 0 })], categories: CATS });
+    const [it] = (await service.listByDay({ date: '2026-07-08' })).data!;
+    assert.equal(it!.creditSituation, 'CURRENT');
+    assert.equal(it!.category, undefined);
+  });
+
+  it('la situación sale del episodio, no de los días: con episodio abierto y 0 días sigue en mora', async () => {
+    const { service } = makeService({ rows: [row()], credits: [credit({ daysPastDue: 0 })], categories: CATS });
+    const [it] = (await service.listByDay({ date: '2026-07-08' })).data!;
+    assert.equal(it!.creditSituation, 'IN_ARREARS');
+    assert.equal(it!.category, undefined); // days < 1 → sin categoría
+  });
+
+  it('sin nombre en el perfil no hay assigneeName y el correo nunca sale', async () => {
+    const { service } = makeService({
+      rows: [row({ assigneeId: 'u1' })],
+      credits: [credit()],
+      userAccounts: [{ userId: 'u1', user: { profile: null, email: 'secreto@x.com' } }],
+    });
+    const res = await service.listByDay({ date: '2026-07-08' });
+    assert.equal(res.data![0]!.assigneeName, undefined);
+    assert.ok(!JSON.stringify(res).includes('secreto@x.com'));
+  });
+
+  it('una consulta por tabla para toda la página (sin N+1)', async () => {
+    const { service, calls } = makeService({
+      rows: [row({ id: 'a1' }), row({ id: 'a2', assigneeId: 'u2' }), row({ id: 'a3', creditId: 'cr2' })],
+      credits: [credit(), credit({ id: 'cr2', code: 'C-2' })],
+      categories: CATS,
+      userAccounts: [user('u1', 'Carlos', 'Rojas'), user('u2', 'Ana', 'Martínez')],
+    });
+    const res = await service.listByDay({ date: '2026-07-08' });
+    assert.equal(res.data!.length, 3);
+    assert.deepEqual(calls.queries, { credit: 1, category: 1, users: 1 });
+    assert.equal(res.data![2]!.creditCode, 'C-2');
+  });
+
+  it('no pide el correo ni datos de contacto de las personas', async () => {
+    const { service, calls } = makeService({ rows: [row()], credits: [credit()] });
+    await service.listByDay({ date: '2026-07-08' });
+    assert.ok(calls.creditSelect && !('clientId' in calls.creditSelect));
+  });
+
+  it('sin filas no consulta nada de más', async () => {
+    const { service, calls } = makeService({ rows: [] });
+    await service.listByDay({ date: '2026-07-08' });
+    assert.deepEqual(calls.queries, { credit: 0, category: 0, users: 0 });
+  });
+
+  it('las vencidas traen los mismos campos', async () => {
+    const { service } = makeService({ rows: [row()], credits: [credit()], categories: CATS });
+    const [it] = (await service.listOverdue({ limit: 5 } as never)).data!;
+    assert.equal(it!.creditCode, 'C-12345');
+    assert.equal(it!.category?.code, 'B');
   });
 });
 

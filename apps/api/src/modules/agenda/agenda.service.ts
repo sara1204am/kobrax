@@ -9,6 +9,8 @@ import {
   validateAgendaDetails,
   type AgendaDetails,
   type ApiResponse,
+  categoryForDays,
+  moraSituation,
   type CallDetails,
   type PromiseToPayDetails,
   type VisitDetails,
@@ -26,7 +28,8 @@ import { UpdateLocationDto } from '../clients/dto/client.dto';
 import { isUniqueViolation } from '../../common/unique-violation';
 import { moraScopeOf, visibleCredits } from '../mora/mora-query';
 import { recordCreditActivity } from '../mora/credit-activity';
-import { serializeAgendaItem } from './agenda.serializer';
+import { serializeAgendaItem, type AgendaRowExtra } from './agenda.serializer';
+import { loadNames } from '../mora/mora-names';
 import { recommendedSlot, type ContactHint } from './recommended-slot';
 import {
   AddClientContactDto,
@@ -134,6 +137,45 @@ export class AgendaService {
   }
 
   /**
+   * Lo que la lista pinta del crédito y de quien atiende, para TODAS las filas de la página: tres consultas
+   * en total (créditos con su episodio abierto, categorías de la cuenta, nombres), sin N+1.
+   * Sin categorías configuradas, o con el crédito al día, `category` no aparece.
+   */
+  private async rowExtras(tx: PrismaClient, rows: AgendaItem[]): Promise<Map<string, AgendaRowExtra>> {
+    const out = new Map<string, AgendaRowExtra>();
+    if (rows.length === 0) return out;
+    const creditIds = [...new Set(rows.map((r) => r.creditId))];
+    const [credits, cats, names] = await Promise.all([
+      tx.credit.findMany({
+        where: { id: { in: creditIds } },
+        select: {
+          id: true, code: true, outstandingBalance: true, currency: true, daysPastDue: true, writtenOffAt: true,
+          arrearEpisodes: { where: { endedAt: null }, take: 1, select: { id: true } },
+        },
+      }),
+      tx.arrearCategory.findMany({ where: { accountId: this.tenant.accountId }, orderBy: [{ sortOrder: 'asc' }, { fromDays: 'asc' }] }),
+      loadNames(tx, this.tenant.accountId, rows.map((r) => r.assigneeId)),
+    ]);
+    const ranges = cats.map((c) => ({ code: c.code, name: c.name, color: c.color, fromDays: c.fromDays, toDays: c.toDays }));
+    const byCredit = new Map(credits.map((c) => [c.id, c]));
+    for (const r of rows) {
+      const c = byCredit.get(r.creditId);
+      const extra: AgendaRowExtra = { assigneeName: names.get(r.assigneeId) };
+      if (c) {
+        const cat = categoryForDays(c.daysPastDue, ranges);
+        extra.creditCode = c.code ?? undefined;
+        extra.creditSituation = moraSituation({ hasOpenEpisode: (c.arrearEpisodes?.length ?? 0) > 0, daysPastDue: c.daysPastDue, writtenOffAt: c.writtenOffAt }).situation;
+        extra.daysPastDue = c.daysPastDue;
+        extra.category = cat ? { code: cat.code, name: cat.name, color: cat.color ?? undefined } : undefined;
+        extra.balance = Number(c.outstandingBalance);
+        extra.currency = c.currency;
+      }
+      out.set(r.id, extra);
+    }
+    return out;
+  }
+
+  /**
    * Agendados de un día, o **de un rango**.
    *
    * 🔴 El rango existe por la tira semanal y el calendario del mes: pintar cuántas gestiones tiene
@@ -150,21 +192,21 @@ export class AgendaService {
         ? { gte: new Date(query.from), lte: new Date(query.to) }
         : (query.date ? new Date(query.date) : today);
 
-    const { rows, names } = await this.tx(async (tx) => {
+    const { rows, names, extras } = await this.tx(async (tx) => {
       const rows = await tx.agendaItem.findMany({
         where: { deletedAt: null, scheduledDate, ...(await this.assigneeScope(tx)) },
         orderBy: [{ scheduledDate: 'asc' }, { scheduledTime: 'asc' }, { createdAt: 'asc' }],
       });
-      return { rows, names: await this.clientNames(tx, rows.map((r) => r.clientId)) };
+      return { rows, names: await this.clientNames(tx, rows.map((r) => r.clientId)), extras: await this.rowExtras(tx, rows) };
     });
-    return ResponseDto.ok(rows.map((r) => serializeAgendaItem(r, names.get(r.clientId), today)));
+    return ResponseDto.ok(rows.map((r) => serializeAgendaItem(r, names.get(r.clientId), today, extras.get(r.id))));
   }
 
   /** Vencidos: SCHEDULED con fecha < hoy, desc por fecha, paginado (`meta.total` → "ver más"). */
   async listOverdue(query: ListOverdueQueryDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>[]>> {
     const { page, limit, skip } = resolvePagination(query);
     const today = await this.today();
-    const { rows, total, names } = await this.tx(async (tx) => {
+    const { rows, total, names, extras } = await this.tx(async (tx) => {
       const where: Prisma.AgendaItemWhereInput = {
         deletedAt: null,
         status: AgendaItemStatus.SCHEDULED,
@@ -175,9 +217,9 @@ export class AgendaService {
         tx.agendaItem.findMany({ where, orderBy: { scheduledDate: 'desc' }, skip, take: limit }),
         tx.agendaItem.count({ where }),
       ]);
-      return { rows, total, names: await this.clientNames(tx, rows.map((r) => r.clientId)) };
+      return { rows, total, names: await this.clientNames(tx, rows.map((r) => r.clientId)), extras: await this.rowExtras(tx, rows) };
     });
-    return ResponseDto.paginated(rows.map((r) => serializeAgendaItem(r, names.get(r.clientId), today)), total, page, limit);
+    return ResponseDto.paginated(rows.map((r) => serializeAgendaItem(r, names.get(r.clientId), today, extras.get(r.id))), total, page, limit);
   }
 
   /**
@@ -189,7 +231,7 @@ export class AgendaService {
    */
   async findOne(id: string) {
     const today = await this.today();
-    const { item, credit, history } = await this.tx(async (tx) => {
+    const { item, credit, history, extras } = await this.tx(async (tx) => {
       const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...(await this.assigneeScope(tx)) } });
       if (!item) throw agendaItemNotFound();
       const [credit, history] = await Promise.all([
@@ -201,7 +243,7 @@ export class AgendaService {
           take: 20,
         }),
       ]);
-      return { item, credit, history };
+      return { item, credit, history, extras: await this.rowExtras(tx, [item]) };
     });
 
     const client = await this.clients.findOne(item.clientId, true); // audita `client/PII_REVEAL`
@@ -209,7 +251,7 @@ export class AgendaService {
     await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'PII_REVEAL' });
 
     return ResponseDto.ok({
-      item: serializeAgendaItem(item, displayName(client), today),
+      item: serializeAgendaItem(item, displayName(client), today, extras.get(item.id)),
       client: {
         id: client.id,
         displayName: displayName(client),
