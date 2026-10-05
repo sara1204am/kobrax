@@ -1,6 +1,12 @@
 import { TextInput } from 'react-native';
 import { render, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
+const mockStore = new Map<string, string>();
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn(async (k: string) => mockStore.get(k) ?? null),
+  setItemAsync: jest.fn(async (k: string, v: string) => void mockStore.set(k, v)),
+  deleteItemAsync: jest.fn(async (k: string) => void mockStore.delete(k)),
+}));
 jest.mock('expo-router', () => ({ router: { replace: jest.fn(), push: jest.fn() } }));
 jest.mock('@/route-step', () => ({ goToStep: jest.fn() }));
 jest.mock('@/session', () => ({ getSession: jest.fn(async () => null), isSessionValid: jest.fn(() => false) }));
@@ -9,13 +15,18 @@ jest.mock('@/auth-service', () => ({ authService: { login: jest.fn() } }));
 
 import { authService } from '@/auth-service';
 import { goToStep } from '@/route-step';
+import { router } from 'expo-router';
+import { saveForgotDraft } from '@/auth-draft';
 import LoginScreen from '../app/(auth)/login';
 
 const mockLogin = authService.login as jest.Mock;
 const EMAIL = 'ejemplo@empresa.com';
 const PASS = 'Ingresa tu contraseña';
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockStore.clear();
+});
 
 describe('LoginScreen · validación por campo (M-LOG-18)', () => {
   it('correo sin arroba: mensaje bajo el campo y NO llama a la API', async () => {
@@ -111,5 +122,41 @@ describe('LoginScreen · autofill del gestor de contraseñas (M-LOG-39)', () => 
     expect(pass.props.autoComplete).toBe('current-password');
     expect(pass.props.textContentType).toBe('password');
     expect(pass.props.importantForAutofill).toBe('yes');
+  });
+});
+
+describe('LoginScreen · no pierde lo que había al recrearse la app (M-LOG-12 / M-FOR-29)', () => {
+  it('guarda el correo mientras se escribe y lo restaura al montar de nuevo', async () => {
+    const first = render(<LoginScreen />);
+    fireEvent.changeText(screen.getByPlaceholderText(EMAIL), 'ana@kobrax.demo');
+    await waitFor(() => expect(mockStore.size).toBe(1));
+    first.unmount();
+
+    render(<LoginScreen />);
+    await waitFor(() => expect(screen.getByPlaceholderText(EMAIL).props.value).toBe('ana@kobrax.demo'));
+    expect(screen.getByPlaceholderText(PASS).props.value).toBe(''); // la contraseña nunca se guarda
+  });
+
+  it('si había un "Revisa tu correo" pendiente, vuelve a esa pantalla', async () => {
+    await saveForgotDraft('ana@kobrax.demo', Date.now() - 5000);
+    render(<LoginScreen />);
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith('/(auth)/forgot-password'));
+  });
+
+  it('un borrador de recuperación sin enviar no redirige', async () => {
+    await saveForgotDraft('ana@kobrax.demo', null);
+    render(<LoginScreen />);
+    await waitFor(() => expect(screen.getByPlaceholderText(EMAIL)).toBeTruthy());
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('al iniciar sesión se borra el correo guardado', async () => {
+    mockLogin.mockResolvedValue({ step: 'done' });
+    render(<LoginScreen />);
+    fireEvent.changeText(screen.getByPlaceholderText(EMAIL), 'a@b.co');
+    fireEvent.changeText(screen.getByPlaceholderText(PASS), 'x');
+    await waitFor(() => expect(mockStore.size).toBe(1));
+    fireEvent.press(screen.getByText('Iniciar sesión'));
+    await waitFor(() => expect(mockStore.size).toBe(0));
   });
 });

@@ -8,6 +8,7 @@ import { goToStep } from '@/route-step';
 import { biometricLabel, isBiometricEnabled } from '@/biometric';
 import { getSession, isSessionValid } from '@/session';
 import { API_BASE } from '@/api';
+import { clearLoginEmail, loadForgotDraft, loadLoginEmail, saveLoginEmail } from '@/auth-draft';
 import { validateLogin, type LoginFieldErrors } from '@/auth-validation';
 
 export default function LoginScreen() {
@@ -22,6 +23,22 @@ export default function LoginScreen() {
   // La biometría solo desbloquea el token guardado (biometric.ts), no hace login fresco,
   // así que reutiliza la pantalla /unlock existente en vez de reimplementar el prompt.
   const [bio, setBio] = useState<string | null>(null);
+
+  // Si Android recreó la app estando en "Revisa tu correo" o con el correo a medio escribir
+  // (M-FOR-29 / M-LOG-12), vuelve a donde estaba. `forgot-password` limpia su borrador al salir, así
+  // que esto no re-abre la pantalla después de "Volver a iniciar sesión".
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const [saved, forgot] = await Promise.all([loadLoginEmail(), loadForgotDraft()]);
+      if (!alive) return;
+      if (saved) setEmail((cur) => cur || saved);
+      if (forgot?.sentAt != null) router.push('/(auth)/forgot-password');
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -45,6 +62,7 @@ export default function LoginScreen() {
       else setError(res.error);
       return;
     }
+    void clearLoginEmail(); // ya entró (o avanzó al MFA): el borrador cumplió
     goToStep(res.step);
   }
 
@@ -85,6 +103,7 @@ export default function LoginScreen() {
             value={email}
             onChangeText={(v) => {
               setEmail(v);
+              void saveLoginEmail(v);
               if (fieldErrors.email) setFieldErrors((f) => ({ ...f, email: undefined }));
             }}
             placeholder="ejemplo@empresa.com"

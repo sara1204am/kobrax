@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 import { router } from 'expo-router';
 import { KeyboardAvoidingView, Platform, ScrollView, Text } from 'react-native';
 import { Button, Card, ErrorBanner, Field, Hero, SecurityFooter, TextLink, styles } from '@/components';
 import { authService } from '@/auth-service';
-
-const RESEND_SECONDS = 30;
+import { clearForgotDraft, loadForgotDraft, resendSecondsLeft, saveForgotDraft } from '@/auth-draft';
 
 /** Enmascara el correo para confirmar sin revelarlo: juan@banco.com → j***@banco.com */
 function maskEmail(email: string): string {
@@ -19,14 +19,48 @@ export default function ForgotPasswordScreen() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
+  // El reenvío se cuenta contra el instante ABSOLUTO del envío (no restando 1 por tick): si la app
+  // pasó al fondo, los timers se congelan, y al volver el reloj ya dice cuánto falta de verdad.
+  const [sentAt, setSentAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const cooldown = resendSecondsLeft(sentAt, now);
+
+  // Recupera lo que había si Android recreó la app (M-FOR-29): correo y paso "Revisa tu correo".
+  useEffect(() => {
+    let alive = true;
+    void loadForgotDraft().then((d) => {
+      if (!alive || !d) return;
+      setEmail((cur) => cur || d.email);
+      if (d.sentAt != null) {
+        setSentAt(d.sentAt);
+        setSent(true);
+        setNow(Date.now());
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Countdown de reenvío.
   useEffect(() => {
     if (cooldown <= 0) return;
-    const t = setTimeout(() => setCooldown((s) => s - 1), 1000);
+    const t = setTimeout(() => setNow(Date.now()), 1000);
     return () => clearTimeout(t);
-  }, [cooldown]);
+  }, [cooldown, now]);
+
+  // Al volver del fondo se recalcula ya, sin esperar al próximo tick.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') setNow(Date.now());
+    });
+    return () => sub.remove();
+  }, []);
+
+  function backToLogin() {
+    void clearForgotDraft(); // si no, el login volvería a abrir esta pantalla
+    router.replace('/(auth)/login');
+  }
 
   async function submit() {
     setError(null);
@@ -37,8 +71,11 @@ export default function ForgotPasswordScreen() {
       setError(res.error);
       return;
     }
+    const at = Date.now();
+    setSentAt(at);
+    setNow(at);
     setSent(true);
-    setCooldown(RESEND_SECONDS);
+    void saveForgotDraft(email.trim().toLowerCase(), at);
   }
 
   return (
@@ -56,7 +93,10 @@ export default function ForgotPasswordScreen() {
               <Field
                 label="Correo"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(v) => {
+                  setEmail(v);
+                  void saveForgotDraft(v.trim().toLowerCase(), null);
+                }}
                 placeholder="tu@empresa.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -64,7 +104,7 @@ export default function ForgotPasswordScreen() {
                 error={!!error}
               />
               <Button label="Enviar enlace" onPress={submit} loading={loading} disabled={!email} />
-              <TextLink label="Volver a iniciar sesión" onPress={() => router.replace('/(auth)/login')} />
+              <TextLink label="Volver a iniciar sesión" onPress={backToLogin} />
             </>
           ) : (
             <>
@@ -81,7 +121,7 @@ export default function ForgotPasswordScreen() {
                 loading={loading}
                 disabled={cooldown > 0}
               />
-              <TextLink label="Volver a iniciar sesión" onPress={() => router.replace('/(auth)/login')} />
+              <TextLink label="Volver a iniciar sesión" onPress={backToLogin} />
             </>
           )}
         </Card>
