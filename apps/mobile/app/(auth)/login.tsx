@@ -8,11 +8,14 @@ import { goToStep } from '@/route-step';
 import { biometricLabel, isBiometricEnabled } from '@/biometric';
 import { getSession, isSessionValid } from '@/session';
 import { API_BASE } from '@/api';
+import { validateLogin, type LoginFieldErrors } from '@/auth-validation';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Errores por campo (cliente y, si la API los manda, servidor): se pintan bajo su campo.
+  const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
   const [loading, setLoading] = useState(false);
   // Botón biométrico: solo si hay sesión local vigente + biometría activada.
   // La biometría solo desbloquea el token guardado (biometric.ts), no hace login fresco,
@@ -30,11 +33,15 @@ export default function LoginScreen() {
 
   async function submit() {
     setError(null);
+    const invalid = validateLogin(email, password);
+    setFieldErrors(invalid);
+    if (Object.keys(invalid).length) return; // sin llamar a la API: el mensaje ya dice qué corregir
     setLoading(true);
     const res = await authService.login(email.trim(), password);
     setLoading(false);
     if ('error' in res) {
-      setError(res.error);
+      if (res.fieldErrors) setFieldErrors(res.fieldErrors); // la API marcó el campo: aviso bajo el campo
+      else setError(res.error);
       return;
     }
     goToStep(res.step);
@@ -75,21 +82,29 @@ export default function LoginScreen() {
           <Field
             label="Correo electrónico"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(v) => {
+              setEmail(v);
+              if (fieldErrors.email) setFieldErrors((f) => ({ ...f, email: undefined }));
+            }}
             placeholder="ejemplo@empresa.com"
             keyboardType="email-address"
             autoCapitalize="none"
             autoComplete="email"
             error={!!error}
+            errorMessage={fieldErrors.email}
           />
           <Field
             label="Contraseña"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(v) => {
+              setPassword(v);
+              if (fieldErrors.password) setFieldErrors((f) => ({ ...f, password: undefined }));
+            }}
             placeholder="Ingresa tu contraseña"
             secureTextEntry
             autoCapitalize="none"
             error={!!error}
+            errorMessage={fieldErrors.password}
           />
 
           <TextLink
@@ -97,7 +112,7 @@ export default function LoginScreen() {
             onPress={() => router.push('/(auth)/forgot-password')}
           />
 
-          <Button label="Iniciar sesión" onPress={submit} loading={loading} disabled={!email || !password} />
+          <Button label="Iniciar sesión" onPress={submit} loading={loading} />
 
           <TextLink label="Crear una cuenta" onPress={() => router.push('/(auth)/registro')} />
           <TextLink label="Tengo una invitación" onPress={() => router.push('/(auth)/invitacion')} />
