@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
+import { createValidationPipe } from './common/validation/validation-pipe';
 import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import type { NextFunction, Request, Response } from 'express';
@@ -25,9 +26,7 @@ async function bootstrap(): Promise<void> {
   app.use(helmet());
   app.enableCors({ origin: config.corsOrigins, credentials: true });
   app.setGlobalPrefix('api');
-  app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
-  );
+  app.useGlobalPipes(createValidationPipe());
   app.useGlobalInterceptors(new TransformInterceptor());
   app.useGlobalFilters(new GlobalExceptionFilter());
   // WebSocket (F8): Socket.io con CORS restringido a SOCKET_CORS_ORIGIN/APP_URL.

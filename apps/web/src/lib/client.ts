@@ -1,7 +1,7 @@
 interface JsonResult<T> {
   ok: boolean;
   status: number;
-  data: T & { error?: { code: string; message: string } };
+  data: T & { error?: { code: string; message: string; details?: unknown } };
 }
 
 /**

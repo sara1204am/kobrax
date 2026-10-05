@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { AuthShell } from '@/components/auth-shell';
 import { Button, ErrorBanner, Field, Input } from '@/components/ui';
+import { fieldErrors } from '@/lib/api-error';
+import { validateLogin, type LoginFieldErrors } from '@/lib/login-validation';
 import { postJson, routeByStep, type AccountOption, type Step } from '@/lib/client';
 
 export default function LoginPage() {
@@ -14,18 +16,34 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Errores por campo (validación del navegador o detalle que devuelve el servidor).
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    const invalid: LoginFieldErrors = validateLogin(email, password);
+    const local = {
+      email: invalid.email ? t(`validation.${invalid.email}`) : undefined,
+      password: invalid.password ? t(`validation.${invalid.password}`) : undefined,
+    };
+    setErrors(local);
+    // Sin llamar al servidor mientras haya un campo mal.
+    if (local.email || local.password) return;
     setLoading(true);
     const { ok, data } = await postJson<{ step: Step; accounts?: AccountOption[] }>('/api/auth/login', {
-      email,
+      email: email.trim(),
       password,
     });
     setLoading(false);
     if (!ok) {
+      // Validación del servidor con detalle por campo: bajo el campo, no en el aviso general.
+      const fields = fieldErrors(data.error);
+      if (fields.email || fields.password) {
+        setErrors({ email: fields.email, password: fields.password });
+        return;
+      }
       setError(data.error?.message ?? t('error'));
       return;
     }
@@ -37,31 +55,37 @@ export default function LoginPage() {
       <form onSubmit={onSubmit} className="space-y-5" noValidate>
         <ErrorBanner message={error} />
 
-        <Field label={t('email')}>
+        <Field label={t('email')} error={errors.email}>
           <Input
             type="email"
             autoComplete="email"
             placeholder={t('emailPlaceholder')}
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+            }}
             icon={<IconMail />}
-            error={!!error}
-            required
+            error={!!errors.email}
+            aria-invalid={!!errors.email}
           />
         </Field>
 
         <div className="space-y-2">
-          <Field label={t('password')}>
+          <Field label={t('password')} error={errors.password}>
             <Input
               type="password"
               reveal
               autoComplete="current-password"
               placeholder={t('passwordPlaceholder')}
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+              }}
               icon={<IconLock />}
-              error={!!error}
-              required
+              error={!!errors.password}
+              aria-invalid={!!errors.password}
             />
           </Field>
           <Link href="/forgot-password" className="inline-block text-[13px] font-medium text-k-purple hover:underline">

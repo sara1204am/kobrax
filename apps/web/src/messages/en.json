@@ -1000,7 +1000,11 @@
           "unavailable": "The notes could not be loaded.",
           "add": "Add note",
           "kind": "Type",
-          "kinds": { "INFO": "Informational", "WARNING": "Warning", "IMPORTANT": "Important" },
+          "kinds": {
+            "INFO": "Informational",
+            "WARNING": "Warning",
+            "IMPORTANT": "Important"
+          },
           "placeholder": "Write the note…",
           "remaining": "{n} characters left",
           "save": "Save note",
@@ -1027,7 +1031,14 @@
           "edit": "Edit",
           "locate": "Show on screen",
           "colour": "Colour",
-          "colors": { "YELLOW": "Yellow", "PINK": "Pink", "BLUE": "Blue", "GREEN": "Green", "PURPLE": "Purple", "ORANGE": "Orange" }
+          "colors": {
+            "YELLOW": "Yellow",
+            "PINK": "Pink",
+            "BLUE": "Blue",
+            "GREEN": "Green",
+            "PURPLE": "Purple",
+            "ORANGE": "Orange"
+          }
         },
         "promises": {
           "title": "Payment promises",
@@ -2711,7 +2722,14 @@
     "noAccount": "No account yet?",
     "createAccount": "Create an account",
     "haveInvitation": "Got an invitation?",
-    "joinTeam": "Join your team"
+    "joinTeam": "Join your team",
+    "validation": {
+      "emailRequired": "Enter your email address",
+      "emailInvalid": "The email format is not valid (e.g. name@company.com)",
+      "emailTooLong": "The email cannot be longer than 254 characters",
+      "passwordRequired": "Enter your password",
+      "passwordTooLong": "The password cannot be longer than 128 characters"
+    }
   },
   "registro": {
     "eyebrow": "Start collecting with Kobrax",

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import es from '@/messages/es.json';
 import en from '@/messages/en.json';
 import { translator } from '@/test/translator';
-import { errorText } from './api-error';
+import { errorText, fieldErrors } from './api-error';
 
 const ES = translator(es, 'panel.import');
 const EN = translator(en, 'panel.import');
@@ -38,5 +38,18 @@ describe('errorText', () => {
     // La tabla `errors.*` la pone cada namespace; la regla es una sola.
     const casos = translator(en, 'panel.mora');
     expect(errorText({ code: 'AUTH_002', message: 'no' }, casos, 'en')).toBe(en.panel.mora.errors.AUTH_002);
+  });
+});
+
+describe('fieldErrors', () => {
+  it('toma el primer mensaje de cada campo', () => {
+    expect(fieldErrors({ details: { fields: { email: ['a', 'b'], password: ['c'] }, messages: [] } })).toEqual({
+      email: 'a',
+      password: 'c',
+    });
+  });
+  it('sin detalle por campo devuelve vacío', () => {
+    expect(fieldErrors({ details: ['x'] })).toEqual({});
+    expect(fieldErrors(null)).toEqual({});
   });
 });

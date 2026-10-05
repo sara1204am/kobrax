@@ -15,6 +15,7 @@ export interface Translator {
 export interface ApiError {
   code?: string;
   message?: string;
+  details?: unknown;
 }
 
 /**
@@ -40,4 +41,18 @@ export function errorText(error: ApiError | null | undefined, t: Translator, loc
   const key = error.code ? `errors.${error.code}` : null;
   if (key && t.has(key)) return t(key);
   return error.message ?? error.code ?? t('errors.generic');
+}
+
+/**
+ * Errores por campo que manda la API en una validación fallida
+ * (`error.details.fields = { email: ['…'] }`). Devuelve el primer mensaje de cada campo.
+ */
+export function fieldErrors(error: { details?: unknown } | null | undefined): Record<string, string> {
+  const fields = (error?.details as { fields?: unknown } | undefined)?.fields;
+  const out: Record<string, string> = {};
+  if (!fields || typeof fields !== 'object') return out;
+  for (const [name, msgs] of Object.entries(fields as Record<string, unknown>)) {
+    if (Array.isArray(msgs) && typeof msgs[0] === 'string') out[name] = msgs[0];
+  }
+  return out;
 }

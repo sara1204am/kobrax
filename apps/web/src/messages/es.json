@@ -1000,7 +1000,11 @@
           "unavailable": "No se pudieron cargar las notas.",
           "add": "Agregar nota",
           "kind": "Tipo",
-          "kinds": { "INFO": "Informativa", "WARNING": "Atención", "IMPORTANT": "Importante" },
+          "kinds": {
+            "INFO": "Informativa",
+            "WARNING": "Atención",
+            "IMPORTANT": "Importante"
+          },
           "placeholder": "Escribí la nota…",
           "remaining": "{n} caracteres restantes",
           "save": "Guardar nota",
@@ -1027,7 +1031,14 @@
           "edit": "Editar",
           "locate": "Ubicar en pantalla",
           "colour": "Color",
-          "colors": { "YELLOW": "Amarillo", "PINK": "Rosa", "BLUE": "Azul", "GREEN": "Verde", "PURPLE": "Violeta", "ORANGE": "Naranja" }
+          "colors": {
+            "YELLOW": "Amarillo",
+            "PINK": "Rosa",
+            "BLUE": "Azul",
+            "GREEN": "Verde",
+            "PURPLE": "Violeta",
+            "ORANGE": "Naranja"
+          }
         },
         "promises": {
           "title": "Promesas de pago",
@@ -2711,7 +2722,14 @@
     "noAccount": "¿No tienes cuenta?",
     "createAccount": "Crear una cuenta",
     "haveInvitation": "¿Tienes una invitación?",
-    "joinTeam": "Únete a tu equipo"
+    "joinTeam": "Únete a tu equipo",
+    "validation": {
+      "emailRequired": "Ingresa tu correo electrónico",
+      "emailInvalid": "El formato del correo no es válido (ej. nombre@empresa.com)",
+      "emailTooLong": "El correo no puede superar 254 caracteres",
+      "passwordRequired": "Ingresa tu contraseña",
+      "passwordTooLong": "La contraseña no puede superar 128 caracteres"
+    }
   },
   "registro": {
     "eyebrow": "Empieza a cobrar con Kobrax",
