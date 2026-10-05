@@ -75,6 +75,13 @@ SOCKET_CORS_ORIGIN=${WEB_PUBLICA}
 # cada peticion del panel saliera a internet y volviera a entrar por el proxy.
 KOBRAX_API_URL=http://127.0.0.1:4010/api
 
+# Correo (invitaciones y recuperar contrasena). Vienen de /opt/kobrax/.env; si
+# no estan, la API NO envia: solo loguea "[SIN SMTP]". SMTP_PASS es una
+# contrasena de APLICACION de Google, no la del correo.
+SMTP_USER=${SMTP_USER:-}
+SMTP_PASS=${SMTP_PASS:-}
+MAIL_FROM=${MAIL_FROM:-}
+
 # Storage de evidencia: vacio a proposito. Hoy las fotos van al disco local.
 # Se llena cuando se conecte Cloudflare R2 (bloqueante §9 #1).
 S3_BUCKET=
