@@ -29,6 +29,18 @@ export interface AgendaListItem {
   /** El agendado del que nació al reagendar — con esto se arma la cadena en el historial. */
   rescheduledFromId?: string;
   clientName?: string;
+  /** Código del crédito (el que se muestra como «#C-123»). Sólo en las lecturas de lista y detalle. */
+  creditCode?: string;
+  /** Situación del crédito: sale del episodio de mora abierto (`moraSituation`). */
+  creditSituation?: 'CURRENT' | 'IN_ARREARS';
+  daysPastDue?: number;
+  /** Categoría de mora calculada con los rangos de la cuenta; ausente con el crédito al día. */
+  category?: { code: string; name: string; color?: string };
+  /** Saldo pendiente del crédito, en `currency`. */
+  balance?: number;
+  currency?: string;
+  /** Quién atiende la gestión: sólo nombre y apellido, nunca el correo. */
+  assigneeName?: string;
   isOverdue: boolean;
   createdAt: string;
   updatedAt: string;
