@@ -4,9 +4,11 @@
  */
 const mockStore: Record<string, unknown[]> = {};
 const mockApi = jest.fn();
+const mockMutate = jest.fn();
 
 jest.mock('./api-client', () => ({
   apiQuery: (...a: unknown[]) => mockApi(...a),
+  apiMutate: (...a: unknown[]) => mockMutate(...a),
   toQuery: (p: Record<string, unknown>) => {
     const q = Object.entries(p).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${v}`).join('&');
     return q ? `?${q}` : '';
@@ -18,15 +20,20 @@ jest.mock('./db', () => ({
   }),
   getMany: jest.fn(async (kind: string, scope?: string) => mockStore[`${kind}|${scope ?? ''}`] ?? []),
   fetchedAt: jest.fn(async () => 1_700_000_000_000),
+  putOne: jest.fn(async (kind: string, id: string, v: unknown) => {
+    mockStore[`${kind}|${id}`] = [v];
+  }),
+  getOne: jest.fn(async (kind: string, id: string) => mockStore[`${kind}|${id}`]?.[0] ?? null),
 }));
 
-import { listMora, listPortfolio, MORA_LIMIT, tenantCurrency } from './mora.service';
+import { deleteMoraNote, getMoraMetrics, listArrearCategories, listMoraEpisodes, listTeamNames, MORA_LIMIT, listMora, listPortfolio, tenantCurrency, updateMoraNote } from './mora.service';
 
 const item = { creditId: 'cr1', clientId: 'cl1', currency: 'BOB', daysPastDue: 12, arrearsSource: 'SCHEDULE', hasActivePromise: false };
 
 beforeEach(() => {
   for (const k of Object.keys(mockStore)) delete mockStore[k];
   mockApi.mockReset();
+  mockMutate.mockReset();
 });
 
 describe('listMora', () => {
@@ -101,5 +108,49 @@ describe('tenantCurrency · moneda del Inicio', () => {
   it('sin nada de nada, BOB', async () => {
     mockApi.mockResolvedValue({ status: 'offline' });
     expect(await tenantCurrency()).toBe('BOB');
+  });
+});
+
+describe('paridad de la ficha de mora', () => {
+  it('episodios: GET /mora/:id/episodes y respaldo local sin señal', async () => {
+    const e = { id: 'e1', number: 1, startedAt: '2026-09-01', startedAtEstimated: false, source: 'CALCULATED', reconstructed: false, current: true, durationDays: 3 };
+    mockApi.mockResolvedValueOnce({ status: 'ok', data: [e], total: 1 });
+    await listMoraEpisodes('cr1');
+    expect(mockApi).toHaveBeenCalledWith('/mora/cr1/episodes');
+    mockApi.mockResolvedValueOnce({ status: 'offline' });
+    const r = await listMoraEpisodes('cr1');
+    expect(r.status === 'ok' && r.data[0]!.id).toBe('e1');
+  });
+
+  it('métricas: GET /mora/:id/metrics y respaldo local sin señal', async () => {
+    mockApi.mockResolvedValueOnce({ status: 'ok', data: { window: 'ALL', recoveredAmount: 5 }, total: 1 });
+    await getMoraMetrics('cr1');
+    expect(mockApi).toHaveBeenCalledWith('/mora/cr1/metrics');
+    mockApi.mockResolvedValueOnce({ status: 'offline' });
+    const r = await getMoraMetrics('cr1');
+    expect(r.status === 'ok' && r.data.recoveredAmount).toBe(5);
+  });
+
+  it('categorías: GET /arrear-categories', async () => {
+    mockApi.mockResolvedValueOnce({ status: 'ok', data: [{ id: 'k1', code: 'A', name: 'A', fromDays: 1, toDays: null, color: null, sortOrder: 0 }], total: 1 });
+    const r = await listArrearCategories();
+    expect(mockApi).toHaveBeenCalledWith('/arrear-categories');
+    expect(r.status === 'ok' && r.data[0]!.code).toBe('A');
+  });
+
+  it('equipo: el id de la fila es el usuario; un 403 llega como error (la pantalla dice «alguien del equipo»)', async () => {
+    mockApi.mockResolvedValueOnce({ status: 'ok', data: [{ userId: 'u1', email: 'a@x.com' }], total: 1 });
+    const ok = await listTeamNames();
+    expect(ok.status === 'ok' && ok.data[0]!.id).toBe('u1');
+    mockApi.mockResolvedValueOnce({ status: 'error', message: 'forbidden' });
+    expect((await listTeamNames()).status).toBe('error');
+  });
+
+  it('notas: PATCH y DELETE a /mora/:id/notes/:noteId', async () => {
+    mockMutate.mockResolvedValue({ status: 'ok', data: null });
+    await updateMoraNote('cr1', 'n1', { body: 'x', color: 'PINK' });
+    expect(mockMutate).toHaveBeenCalledWith('/mora/cr1/notes/n1', 'PATCH', { body: 'x', color: 'PINK' });
+    await deleteMoraNote('cr1', 'n1');
+    expect(mockMutate).toHaveBeenCalledWith('/mora/cr1/notes/n1', 'DELETE');
   });
 });

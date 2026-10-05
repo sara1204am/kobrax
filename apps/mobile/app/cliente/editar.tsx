@@ -20,8 +20,8 @@ import { Header, SectionLabel } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
 import { MONTHS } from '@/agenda-form';
 import { ClienteFormView } from '@/cliente-form-view';
-import { collateralPayload, contactPayload, hydrateCliente, locationPayload, relationPayload, type ClienteForm } from '@/cliente-form';
-import { diffCliente, hasChanges, type ClienteOps } from '@/cliente-diff';
+import { collateralPayload, contactPayload, hydrateCliente, locationPayload, relationPayload, type ClienteForm } from '@kobrax/shared';
+import { diffCliente, hasClientChanges as hasChanges, type ClienteOps } from '@kobrax/shared';
 import { opsToActions, queueableOps } from '@/cliente-queue';
 import { queueForLater } from '@/sync/sync.service';
 import {

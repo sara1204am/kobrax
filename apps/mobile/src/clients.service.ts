@@ -27,7 +27,7 @@ export async function searchClients(q: string): Promise<QueryResult<ClientHit[]>
 }
 
 /** Sin acentos y en minúsculas: "MARTINEZ" tiene que encontrar a "Martínez". */
-function normalizar(s: string): string {
+export function normalizar(s: string): string {
   return s
     .toLowerCase()
     .normalize('NFD')
@@ -180,4 +180,13 @@ export interface UpdateClientPatch {
 
 export function updateClient(id: string, patch: UpdateClientPatch): Promise<MutateResult<ClientDetail>> {
   return apiMutate<ClientDetail>(`/clients/${id}`, 'PATCH', patch);
+}
+
+/**
+ * Adjuntos del legajo. El archivo se sube aparte (`uploads.service`, `POST /uploads`) y acá sólo se dice
+ * de quién es —dos pasos porque son dos cosas—; igual que el panel web. **Sin cola**: la subida de la foto
+ * necesita señal, así que registrar el adjunto sin señal no tendría archivo que registrar.
+ */
+export function addAttachment(clientId: string, input: { fileType: string; fileUrl: string; fileHash?: string }) {
+  return apiMutate<{ id: string }>(`/clients/${clientId}/attachments`, 'POST', input);
 }

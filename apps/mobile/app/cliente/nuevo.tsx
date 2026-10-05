@@ -1,12 +1,14 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { COLORS, SPACING } from '@/theme';
 import { Header } from '@/ui';
 import { Button, ErrorBanner } from '@/components';
 import { ClienteFormView } from '@/cliente-form-view';
-import { buildClientePayload, canSubmitCliente, clienteEnPunto, initialCliente, type ClienteForm } from '@/cliente-form';
+import { buildClientePayload, canSubmitCliente, clienteEnPunto, initialCliente, type ClienteForm } from '@kobrax/shared';
 import { createClient } from '@/clients.service';
+import { checkDuplicates, duplicateBlocks, duplicateCheckInput, nameSignature, type DuplicateAnswer } from '@/duplicate-check';
+import { DuplicateNotice } from '@/duplicate-notice';
 import { hayLugar } from '@/account.service';
 import { nuevoId } from '@/ids';
 import { queueForLater } from '@/sync/sync.service';
@@ -24,6 +26,21 @@ export default function NuevoClienteScreen() {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dup, setDup] = useState<DuplicateAnswer | null>(null);
+  /** El nombre para el que se confirmó «es otra persona»; si el nombre cambia, la confirmación ya no vale. */
+  const [accepted, setAccepted] = useState<string | null>(null);
+  const formRef = useRef(form);
+  formRef.current = form;
+
+  /** Pregunta por duplicados (servidor con señal, teléfono sin ella). `null` = nada que preguntar o no se pudo saber. */
+  const runCheck = useCallback(async (f: ClienteForm): Promise<DuplicateAnswer | null> => {
+    const input = duplicateCheckInput(f);
+    const answer = input ? await checkDuplicates(input) : null;
+    setDup(answer);
+    return answer;
+  }, []);
+  const onIdentityBlur = useCallback(() => void runCheck(formRef.current), [runCheck]);
+  const confirmed = accepted === nameSignature(form);
 
   const submit = useCallback(
     async (thenLoan: boolean) => {
@@ -36,6 +53,19 @@ export default function NuevoClienteScreen() {
         setSaving(false);
         return setError(
           'Tu plan llegó al tope de clientes. Avisale a tu administrador antes de cargar este.',
+        );
+      }
+
+      // Duplicados ANTES de encolar: un alta offline que el servidor rechazaría por documento repetido
+      // fallaría después, sin que el cobrador esté mirando. El documento bloquea; el nombre pide confirmar.
+      const answer = await runCheck(form);
+      const blocked = duplicateBlocks(answer?.check ?? null, accepted === nameSignature(form));
+      if (blocked) {
+        setSaving(false);
+        return setError(
+          blocked === 'document'
+            ? 'Ya existe un cliente con ese documento. No se puede crear otro.'
+            : 'Hay alguien con ese nombre. Confirma que es otra persona para continuar.',
         );
       }
 
@@ -61,17 +91,30 @@ export default function NuevoClienteScreen() {
       if (res.status === 'unauthenticated') return setError('Tu sesión venció. Volvé a iniciar sesión.');
       setError(res.message); // "Ya existe un cliente con ese documento" en duplicado (§5.1)
     },
-    [form],
+    [form, accepted, runCheck],
   );
 
-  const disabled = saving || !canSubmitCliente(form);
+  const disabled = saving || !canSubmitCliente(form) || !!dup?.check.document;
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <Header title="Nuevo cliente" onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <ErrorBanner message={error} />
-        <ClienteFormView form={form} setForm={setForm} onError={setError} />
+        <ClienteFormView
+          form={form}
+          setForm={setForm}
+          onError={setError}
+          onIdentityBlur={onIdentityBlur}
+          identityNotice={
+            <DuplicateNotice
+              check={dup?.check ?? null}
+              local={dup?.source === 'local'}
+              accepted={confirmed}
+              onAccept={() => setAccepted(nameSignature(form))}
+            />
+          }
+        />
       </ScrollView>
 
       <View style={styles.footer}>

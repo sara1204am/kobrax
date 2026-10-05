@@ -8,8 +8,8 @@
  * que reintentarlos a ciegas duplicaría. Si el guardado trae algo de eso, no se encola NADA (la pantalla pide
  * señal): subir sólo una parte y perder el resto sin avisar es peor que no guardar.
  */
-import type { ClienteOps } from './cliente-diff';
-import { contactPayload, locationPayload } from './cliente-form';
+import type { ClienteOps } from '@kobrax/shared';
+import { contactPayload, locationPayload } from '@kobrax/shared';
 import type { QueuedAction } from './sync/queue';
 
 /** ¿Todo lo que cambió se puede encolar? */

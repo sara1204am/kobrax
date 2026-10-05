@@ -9,8 +9,9 @@ import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import type { BadgeTone } from '@/ui';
 import { BottomSheet, CreditCard, Chips, EmptyState, ListRow, PORTFOLIO_STATUS_META, SectionLabel, SegmentTabs, TONE_SOLID } from '@/ui';
 import { money } from '@/agenda-form';
-import { listMora, listPortfolio, MORA_LIMIT } from '@/mora.service';
-import { filterMora, MORA_CHIP_LABEL, moraCardProps, staleLine, type MoraChip, type MoraRow } from '@/mora';
+import { listArrearCategories, listMora, listPortfolio, MORA_LIMIT } from '@/mora.service';
+import { activeFilterCount, EMPTY_MORA_FILTERS, filterMora, matchesMoraFilters, MORA_CHIP_LABEL, moraCardProps, staleLine, type MoraChip, type MoraFilters, type MoraRow } from '@/mora';
+import { MoraFilterSheet, type CategoryOption } from '@/mora-filter-sheet';
 import {
   filterPortfolio,
   groupPortfolio,
@@ -46,7 +47,7 @@ type Load =
   | { status: 'loading' }
   | { status: 'offline' }
   | { status: 'error' }
-  | { status: 'ok'; cards: ClientPortfolio[] };
+  | { status: 'ok'; rows: MoraRow[] };
 
 /** La lista de «En mora» viene de `GET /mora` (por crédito, sólo los vencidos), no de la cartera (por cliente). */
 type MoraLoad =
@@ -70,6 +71,10 @@ export default function CobranzaScreen() {
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [moraLoad, setMoraLoad] = useState<MoraLoad>({ status: 'loading' });
   const [moraChip, setMoraChip] = useState<MoraChip>('all');
+  // Los filtros valen para las dos listas (cartera por cliente y mora por crédito): se aplican a los CRÉDITOS antes de agrupar.
+  const [filters, setFilters] = useState<MoraFilters>(EMPTY_MORA_FILTERS);
+  const [filterSheet, setFilterSheet] = useState(false);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [chip, setChip] = useState<PortfolioChip>('all');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<PortfolioSort>('mora');
@@ -95,7 +100,7 @@ export default function CobranzaScreen() {
     // Un bache de red en un refresh no borra lo ya cargado (offline-first).
     if (res.status === 'offline') return setLoad((prev) => (prev.status === 'ok' ? prev : { status: 'offline' }));
     if (res.status !== 'ok') return setLoad((prev) => (prev.status === 'ok' ? prev : { status: 'error' }));
-    setLoad({ status: 'ok', cards: groupPortfolio(res.data) });
+    setLoad({ status: 'ok', rows: res.data });
   }, []);
 
   useFocusEffect(
@@ -120,7 +125,17 @@ export default function CobranzaScreen() {
     setRefreshing(false);
   }, [fetchCartera]);
 
-  const cards = load.status === 'ok' ? load.cards : [];
+  // Las categorías de la cuenta, con respaldo local. Si no se pudieron leer, el filtro de categoría no se ofrece.
+  useEffect(() => {
+    void listArrearCategories().then((r) => {
+      if (r.status === 'ok') setCategories(r.data.map((c) => ({ code: c.code, name: c.name })));
+    });
+  }, []);
+  const activeFilters = activeFilterCount(filters);
+  const cards = useMemo(
+    () => (load.status === 'ok' ? groupPortfolio(load.rows.filter((r) => matchesMoraFilters(r, filters))) : []),
+    [load, filters],
+  );
   const chipItems = useMemo(
     () =>
       CHIPS.map((c) => ({
@@ -129,11 +144,11 @@ export default function CobranzaScreen() {
         // «En mora» cuenta CRÉDITOS (de `GET /mora`), no clientes: es lo que la lista de ese chip muestra.
         count:
           c.key === 'overdue' && moraLoad.status === 'ok'
-            ? filterMora(moraLoad.rows, 'all', query).length
+            ? filterMora(moraLoad.rows, 'all', query, undefined, filters).length
             : filterPortfolio(cards, c.key, query).length,
         tone: c.danger ? ('danger' as const) : ('neutral' as const),
       })),
-    [cards, query, moraLoad],
+    [cards, query, moraLoad, filters],
   );
   const visible = useMemo(() => sortPortfolio(filterPortfolio(cards, chip, query), sort), [cards, chip, query, sort]);
 
@@ -164,6 +179,16 @@ export default function CobranzaScreen() {
       {load.status === 'ok' && (
         <View style={styles.chips}>
           <SegmentTabs items={chipItems} value={chip} onChange={(k) => setChip(k as PortfolioChip)} />
+          <View style={styles.tools}>
+            {activeFilters > 0 && (
+              <Pressable style={styles.sortPill} onPress={() => setFilters(EMPTY_MORA_FILTERS)} accessibilityRole="button" accessibilityLabel="Quitar los filtros">
+                <Text style={styles.sortText}>Quitar filtros</Text>
+              </Pressable>
+            )}
+            <Pressable style={styles.sortPill} onPress={() => setFilterSheet(true)} accessibilityRole="button" accessibilityLabel="Filtros">
+              <Text style={styles.sortText}>{activeFilters > 0 ? `Filtros (${activeFilters})` : 'Filtros'}</Text>
+            </Pressable>
+          </View>
           {/* En mora el orden es fijo (prioridad → días) y no hay tarjeta compacta: no hay nada que elegir. */}
           {chip !== 'overdue' && (
           <View style={styles.tools}>
@@ -189,7 +214,7 @@ export default function CobranzaScreen() {
       )}
 
       {chip === 'overdue' ? (
-        <MoraList load={moraLoad} chip={moraChip} onChip={setMoraChip} query={query} refreshing={refreshing} onRefresh={onRefresh} />
+        <MoraList load={moraLoad} chip={moraChip} onChip={setMoraChip} filters={filters} query={query} refreshing={refreshing} onRefresh={onRefresh} />
       ) : load.status === 'loading' ? (
         <View style={styles.center}>
           <ActivityIndicator color={COLORS.navy} />
@@ -218,6 +243,8 @@ export default function CobranzaScreen() {
           ListFooterComponent={others.length > 0 ? <Others hits={others} /> : null}
         />
       )}
+
+      <MoraFilterSheet visible={filterSheet} onClose={() => setFilterSheet(false)} value={filters} onApply={setFilters} categories={categories} />
 
       <BottomSheet visible={sortSheet} onClose={() => setSortSheet(false)} title="Ordenar por">
         <Chips
@@ -250,6 +277,7 @@ function MoraList({
   load,
   chip,
   onChip,
+  filters,
   query,
   refreshing,
   onRefresh,
@@ -257,17 +285,19 @@ function MoraList({
   load: MoraLoad;
   chip: MoraChip;
   onChip: (c: MoraChip) => void;
+  filters: MoraFilters;
   query: string;
   refreshing: boolean;
   onRefresh: () => void;
 }) {
   const asOf = useMemo(() => new Date(), [load]);
   const rows = load.status === 'ok' ? load.rows : [];
+
   const items = useMemo(
-    () => MORA_CHIPS.map((k) => ({ key: k, label: MORA_CHIP_LABEL[k], count: filterMora(rows, k, query, asOf).length })),
-    [rows, query, asOf],
+    () => MORA_CHIPS.map((k) => ({ key: k, label: MORA_CHIP_LABEL[k], count: filterMora(rows, k, query, asOf, filters).length })),
+    [rows, query, asOf, filters],
   );
-  const visible = useMemo(() => filterMora(rows, chip, query, asOf), [rows, chip, query, asOf]);
+  const visible = useMemo(() => filterMora(rows, chip, query, asOf, filters), [rows, chip, query, asOf, filters]);
 
   if (load.status === 'loading')
     return (

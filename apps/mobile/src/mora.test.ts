@@ -1,5 +1,5 @@
-import { MORA_PROMISE_STATUSES, type CollectionPriority, type MoraCreditListItem } from '@kobrax/shared';
-import { activityLine, daysSinceAction, filterMora, matchesMoraChip, moraCardProps, PROMISE_STATUS_META, sortMora, staleLine, toMoraRows, type MoraRow } from './mora';
+import { MORA_PROMISE_STATUSES, RECOVERY_RESULTS, type CollectionPriority, type MoraCreditListItem, type MoraPromise } from '@kobrax/shared';
+import { activeFilterCount, activityLook, activityLine, daysSinceAction, EMPTY_MORA_FILTERS, filterMora, matchesMoraChip, matchesMoraFilters, moraCardProps, parseBound, promiseSummaryLines, PROMISE_STATUS_META, RESULT_LABEL, resultLabel, sortMora, staleLine, toMoraRows, type MoraFilters, type MoraRow } from './mora';
 
 const ASOF = new Date('2026-10-02T12:00:00Z');
 
@@ -141,8 +141,8 @@ describe('staleLine', () => {
 
 describe('activityLine', () => {
   it('tipo y resultado en español', () => {
-    expect(activityLine({ type: 'CALL', result: 'NO_ANSWER' })).toBe('Llamada · No contesta');
-    expect(activityLine({ type: 'VISIT', result: 'NOT_FOUND' })).toBe('Visita · No estaba');
+    expect(activityLine({ type: 'CALL', result: 'NO_ANSWER' })).toBe('Llamada · No respondió');
+    expect(activityLine({ type: 'VISIT', result: 'NOT_FOUND' })).toBe('Visita · No lo encontró');
   });
 
   it('sin resultado, sólo el tipo', () => {
@@ -157,5 +157,107 @@ describe('activityLine', () => {
 describe('PROMISE_STATUS_META', () => {
   it('cubre todos los estados que manda el servidor', () => {
     for (const s of MORA_PROMISE_STATUSES) expect(PROMISE_STATUS_META[s].label).toBeTruthy();
+  });
+});
+
+describe('PROMISE_STATUS_META · el mismo color que la web', () => {
+  it('vencida sin cerrar NO es roja: ámbar como vigente; sólo incumplida es roja', () => {
+    expect(PROMISE_STATUS_META.ACTIVE.tone).toBe('warning');
+    expect(PROMISE_STATUS_META.OVERDUE.tone).toBe('warning');
+    expect(PROMISE_STATUS_META.BROKEN.tone).toBe('danger');
+    expect(PROMISE_STATUS_META.KEPT.tone).toBe('success');
+    for (const s of ['EXECUTED', 'CANCELLED', 'RESCHEDULED'] as const) expect(PROMISE_STATUS_META[s].tone).toBe('neutral');
+    expect(PROMISE_STATUS_META.OVERDUE.label).toBe('Vencida sin cerrar');
+  });
+});
+
+describe('un solo mapa de resultados', () => {
+  it('todos los RECOVERY_RESULTS tienen etiqueta propia y NO_CONTACT ya no duplica a NO_ANSWER', () => {
+    for (const r of RECOVERY_RESULTS) expect(RESULT_LABEL[r]).toBeTruthy();
+    expect(resultLabel('NO_CONTACT')).not.toBe(resultLabel('NO_ANSWER'));
+    expect(resultLabel('PAID')).toBe('Pagó'); // legacy: se sigue leyendo en el historial
+    expect(resultLabel('RARO')).toBe('RARO');
+  });
+});
+
+describe('activityLook · icono y tono de la tarjeta', () => {
+  it('tono por tipo como el panel', () => {
+    expect(activityLook('CALL', 'CONTACTED').tone).toBe('green');
+    expect(activityLook('PAYMENT').tone).toBe('green');
+    expect(activityLook('VISIT', 'CONTACTED').tone).toBe('purple');
+    expect(activityLook('MESSAGE', 'CONTACTED').tone).toBe('teal');
+    expect(activityLook('ASSIGNMENT').tone).toBe('amber');
+    expect(activityLook('NOTE').tone).toBe('blue');
+  });
+
+  it('rojo cuando no se logró, sea cual sea el tipo', () => {
+    for (const r of ['NO_ANSWER', 'WRONG_NUMBER', 'NOT_FOUND', 'WRONG_ADDRESS', 'REFUSAL', 'PROMISE_BROKEN']) {
+      expect(activityLook('CALL', r).tone).toBe('red');
+      expect(activityLook('VISIT', r).tone).toBe('red');
+    }
+    expect(activityLook('CALL', 'PROMISE_TO_PAY').tone).toBe('green');
+  });
+});
+
+describe('promiseSummaryLines · regla de summarizePromises', () => {
+  const p = (status: MoraPromise['status']): MoraPromise => ({ id: status + Math.random(), promiseDate: '2026-10-10', status, createdAt: '2026-10-01T00:00:00Z' });
+
+  it('hechas, cumplidas, incumplidas, cumplimiento y vencidas sin cerrar', () => {
+    const l = promiseSummaryLines([p('KEPT'), p('KEPT'), p('BROKEN'), p('OVERDUE'), p('RESCHEDULED')]);
+    expect(l.summary).toBe('4 promesas · 2 cumplidas · 1 incumplidas');
+    expect(l.compliance).toBe('Cumplimiento 67 %');
+    expect(l.unresolved).toBe('1 promesa venció sin que nadie registrara qué pasó.');
+  });
+
+  it('sin ninguna cerrada no hay porcentaje (no 0 %)', () => {
+    const l = promiseSummaryLines([p('ACTIVE'), p('OVERDUE')]);
+    expect(l.compliance).toBe('Cumplimiento: todavía no hay promesas cerradas');
+  });
+});
+
+describe('filtros de la lista de mora', () => {
+  const rows = [
+    mk({ creditId: 'a', daysPastDue: 10, balance: 500, category: { code: 'A', name: 'Temprana' }, priority: 'LOW' }),
+    mk({ creditId: 'b', daysPastDue: 45, balance: 5000, externalSource: 'PSF', category: { code: 'B', name: 'Media' }, priority: 'HIGH' }),
+    mk({ creditId: 'c', daysPastDue: 120, writtenOff: true, externalSource: 'PSF', category: { code: 'C', name: 'Tardía' }, priority: 'CRITICAL' }),
+  ];
+  const ids = (f: Partial<MoraFilters>) => filterMora(rows, 'all', '', ASOF, { ...EMPTY_MORA_FILTERS, ...f }).map((r) => r.creditId).sort();
+
+  it('sin filtros pasa todo', () => {
+    expect(ids({})).toEqual(['a', 'b', 'c']);
+    expect(activeFilterCount(EMPTY_MORA_FILTERS)).toBe(0);
+  });
+
+  it('rango de días de mora (incluyente)', () => {
+    expect(ids({ dpdMin: '30', dpdMax: '100' })).toEqual(['b']);
+    expect(ids({ dpdMin: '45' })).toEqual(['b', 'c']);
+  });
+
+  it('rango de saldo; un saldo desconocido no pasa un tope de saldo', () => {
+    expect(ids({ balanceMin: '1000' })).toEqual(['b']);
+    expect(ids({ balanceMax: '600' })).toEqual(['a']);
+  });
+
+  it('fuente, categoría, prioridad y castigado', () => {
+    expect(ids({ source: 'PSF' })).toEqual(['b', 'c']);
+    expect(ids({ source: 'KOBRAX' })).toEqual(['a']);
+    expect(ids({ categories: ['A', 'C'] })).toEqual(['a', 'c']);
+    expect(ids({ priorities: ['HIGH', 'CRITICAL'] })).toEqual(['b', 'c']);
+    expect(ids({ writtenOff: 'ONLY' })).toEqual(['c']);
+    expect(ids({ writtenOff: 'EXCLUDE' })).toEqual(['a', 'b']);
+  });
+
+  it('se combinan y cuentan por criterio, no por valor', () => {
+    const f: MoraFilters = { ...EMPTY_MORA_FILTERS, source: 'PSF', writtenOff: 'EXCLUDE', dpdMin: '1', dpdMax: '', categories: ['B', 'C'] };
+    expect(matchesMoraFilters(rows[1], f)).toBe(true);
+    expect(matchesMoraFilters(rows[2], f)).toBe(false);
+    expect(activeFilterCount(f)).toBe(4);
+  });
+
+  it('parseBound: vacío o basura = sin tope, coma decimal ok', () => {
+    expect(parseBound('')).toBeUndefined();
+    expect(parseBound('abc')).toBeUndefined();
+    expect(parseBound('-3')).toBeUndefined();
+    expect(parseBound('12,5')).toBe(12.5);
   });
 });

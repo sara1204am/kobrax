@@ -1,6 +1,6 @@
 import { RECOVERY_RESULTS_BY_TYPE, type RecoveryActivityType, type RecoveryResult } from '@kobrax/shared';
 
-const mockApi = { activity: { status: 'ok' } as Record<string, unknown>, note: { status: 'ok' } as Record<string, unknown> };
+const mockApi = { activity: { status: 'ok' } as Record<string, unknown>, note: { status: 'ok' } as Record<string, unknown>, edit: { status: 'ok' } as Record<string, unknown> };
 const mockSent: { activity: unknown[]; note: unknown[]; queued: unknown[] } = { activity: [], note: [], queued: [] };
 let mockCanQueue = true;
 
@@ -13,6 +13,8 @@ jest.mock('./mora.service', () => ({
     mockSent.note.push({ creditId, input });
     return mockApi.note;
   }),
+  updateMoraNote: jest.fn(async () => mockApi.edit),
+  deleteMoraNote: jest.fn(async () => mockApi.edit),
 }));
 jest.mock('./sync/sync.service', () => ({
   queueForLater: jest.fn(async (action: unknown) => {
@@ -21,11 +23,12 @@ jest.mock('./sync/sync.service', () => ({
   }),
 }));
 
-import { MORA_OUTCOMES, submitMoraActivity, submitMoraNote } from './mora-actions';
+import { MORA_OUTCOMES, submitMoraActivity, submitMoraNote, submitNoteDelete, submitNoteEdit } from './mora-actions';
 
 beforeEach(() => {
   mockApi.activity = { status: 'ok' };
   mockApi.note = { status: 'ok' };
+  mockApi.edit = { status: 'ok' };
   mockSent.activity = [];
   mockSent.note = [];
   mockSent.queued = [];
@@ -105,5 +108,26 @@ describe('submitMoraNote', () => {
   it('con señal no encola', async () => {
     expect(await submitMoraNote('cr1', { body: 'ok' })).toBeNull();
     expect(mockSent.queued).toHaveLength(0);
+  });
+});
+
+describe('corregir y borrar una nota · sólo en línea', () => {
+  it('con señal: null (listo)', async () => {
+    expect(await submitNoteEdit('cr1', 'n1', { body: 'x' })).toBeNull();
+    expect(await submitNoteDelete('cr1', 'n1')).toBeNull();
+  });
+
+  it('sin señal NO se encola y se dice con claridad', async () => {
+    mockApi.edit = { status: 'offline' };
+    expect(await submitNoteEdit('cr1', 'n1', { body: 'x' })).toContain('necesita conexión');
+    expect(await submitNoteDelete('cr1', 'n1')).toContain('necesita conexión');
+    expect(mockSent.queued).toEqual([]);
+  });
+
+  it('el rechazo del servidor llega al cobrador tal cual (p. ej. nota ajena)', async () => {
+    mockApi.edit = { status: 'error', message: 'Sólo quien la escribió puede editarla', httpStatus: 403 };
+    expect(await submitNoteEdit('cr1', 'n1', { body: 'x' })).toBe('Sólo quien la escribió puede editarla');
+    mockApi.edit = { status: 'unauthenticated' };
+    expect(await submitNoteDelete('cr1', 'n1')).toBe('Tu sesión venció.');
   });
 });

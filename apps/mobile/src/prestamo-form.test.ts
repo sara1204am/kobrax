@@ -6,7 +6,7 @@ import {
   initialPrestamo,
   quoteFor,
   totalBelowCapital,
-} from './prestamo-form';
+} from '@kobrax/shared';
 
 const base = () => initialPrestamo('2026-07-14');
 

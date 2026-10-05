@@ -69,6 +69,8 @@ export type CacheKind =
    * se borra junto con el resto en el logout.
    */
   | 'list.meta'
+  /** Historial de importaciones (`scope`: `list` o `items:<corrida>:<acción>`; el detalle de una corrida, `detail:<id>`). */
+  | 'import.run'
   /**
    * La cuenta con sus topes y su consumo (`GET /accounts/me`).
    *
@@ -76,7 +78,15 @@ export type CacheKind =
    * del deudor tiene que enterarse ahí de que el plan está lleno, no tres horas después cuando la
    * cola falle. Sin caché, el aviso sólo existiría con internet — justo cuando no hace falta.
    */
-  | 'account';
+  | 'account'
+  /** Paridad de la ficha de mora (F4/08 fase 5): historial de episodios (`scope` = crédito). */
+  | 'mora.episodes'
+  /** Métricas de recuperación de un crédito (`id` = crédito). */
+  | 'mora.metrics'
+  /** Rangos de categoría de mora de la cuenta (`GET /arrear-categories`): opciones del filtro. */
+  | 'arrear.categories'
+  /** Miembros del equipo (`GET /users`): nombres de quien registró / asignó, cuando el rol puede leerlos. */
+  | 'members';
 
 /** Qué espera subir la cola. Cada uno mapea a un endpoint idempotente o append-only (plan §D3). */
 export type QueueKind =

@@ -4,7 +4,19 @@
  *
  * Los tipos del contrato viven en `@kobrax/shared`; acá no se redefine ninguno.
  */
-import type { CreditNote, MoraCreditDetail, MoraCreditListItem, MoraPromise, NewCreditNote, RecoveryActivityInput } from '@kobrax/shared';
+import type {
+  ArrearCategory,
+  CreditNote,
+  Member,
+  MoraCreditDetail,
+  MoraCreditListItem,
+  MoraEpisode,
+  MoraPromise,
+  NewCreditNote,
+  RecoveryActivityInput,
+  RecoveryMetrics,
+  UpdateCreditNote,
+} from '@kobrax/shared';
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
 import * as db from './db';
 import { cachedList, cachedOne } from './sync/cached';
@@ -108,4 +120,46 @@ export function addMoraActivity(
 /** Nota del crédito. Idempotente por `id` (puesto por el teléfono). */
 export function addMoraNote(creditId: string, input: NewCreditNote): Promise<MutateResult<CreditNote>> {
   return apiMutate(`/mora/${creditId}/notes`, 'POST', input);
+}
+
+/** El historial de mora del crédito (más reciente primero), con respaldo local. */
+export function listMoraEpisodes(creditId: string): Promise<QueryResult<MoraEpisode[]>> {
+  return cachedList<MoraEpisode>('mora.episodes', creditId, () => apiQuery<MoraEpisode[]>(`/mora/${creditId}/episodes`));
+}
+
+/** Las métricas de recuperación (sobre la mora actual) que calcula el servidor con `computeRecoveryMetrics`. */
+export function getMoraMetrics(creditId: string): Promise<QueryResult<RecoveryMetrics>> {
+  return cachedOne<RecoveryMetrics>('mora.metrics', creditId, () => apiQuery<RecoveryMetrics>(`/mora/${creditId}/metrics`));
+}
+
+/** Los rangos de categoría de mora de la cuenta: sólo para ofrecer el filtro (la categoría de cada crédito la manda la API). */
+export function listArrearCategories(): Promise<QueryResult<ArrearCategory[]>> {
+  return cachedList<ArrearCategory>('arrear.categories', 'all', () => apiQuery<ArrearCategory[]>('/arrear-categories'));
+}
+
+/** `Member` con el `id` que pide el respaldo local (la identidad es el usuario). */
+export type MemberRow = Member & { id: string };
+
+/**
+ * Nombres del equipo para «registró X» y «asignada a X». `GET /users` pide `user:read`: un cobrador puede recibir
+ * 403 y entonces la pantalla dice «alguien del equipo». No se inventa un nombre.
+ */
+export function listTeamNames(): Promise<QueryResult<MemberRow[]>> {
+  return cachedList<MemberRow>('members', 'all', async () => {
+    const res = await apiQuery<Member[]>('/users');
+    return res.status === 'ok' ? { ...res, data: res.data.map((m) => ({ ...m, id: m.userId })) } : res;
+  });
+}
+
+/**
+ * Editar una nota. **Sólo en línea**: el texto y el tipo son de quien la escribió o de quien reparte cartera y el
+ * servidor lo vuelve a exigir; encolar un cambio que luego se rechaza dejaría al cobrador creyendo que quedó.
+ */
+export function updateMoraNote(creditId: string, noteId: string, patch: UpdateCreditNote): Promise<MutateResult<CreditNote>> {
+  return apiMutate(`/mora/${creditId}/notes/${noteId}`, 'PATCH', patch);
+}
+
+/** Borrar una nota (borrado lógico). Sólo en línea: repetirlo tras un borrado ya hecho daría 404, no es seguro de reintentar. */
+export function deleteMoraNote(creditId: string, noteId: string): Promise<MutateResult<null>> {
+  return apiMutate(`/mora/${creditId}/notes/${noteId}`, 'DELETE');
 }

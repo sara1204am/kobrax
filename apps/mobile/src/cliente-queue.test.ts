@@ -2,7 +2,7 @@
  * Qué de «Editar cliente» puede esperar señal. Lo que se encola es lo repetible sin duplicar; si el guardado trae
  * una alta (que el server no puede reconocer) no se encola NADA — subir sólo una parte sería perder el resto.
  */
-import type { ClienteOps } from './cliente-diff';
+import type { ClienteOps } from '@kobrax/shared';
 import { opsToActions, queueableOps } from './cliente-queue';
 
 const vacio = <T>() => ({ add: [] as T[], update: [] as T[], removeIds: [] as string[] });

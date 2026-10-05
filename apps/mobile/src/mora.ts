@@ -7,7 +7,7 @@
  * El teléfono sólo ordena y filtra lo que llegó. Qué es mora, cuánto se debe y qué prioridad tiene lo
  * decide el servidor (`packages/shared` + API).
  */
-import type { CollectionPriority, MoraCreditListItem, MoraNoteKind, MoraPromiseStatus } from '@kobrax/shared';
+import { summarizePromises, type CollectionPriority, type MoraCreditListItem, type MoraNoteKind, type MoraPromise, type MoraPromiseStatus } from '@kobrax/shared';
 import { money } from './agenda-form';
 import { PRIORITY_LABEL, priorityTone } from './ui';
 import type { BadgeTone } from './ui';
@@ -83,9 +83,92 @@ export function sortMora(rows: MoraRow[]): MoraRow[] {
   });
 }
 
-export function filterMora(rows: MoraRow[], chip: MoraChip, query: string, asOf: Date = new Date()): MoraRow[] {
-  return sortMora(rows.filter((r) => matchesMoraChip(r, chip, asOf) && matchesMoraSearch(r, query)));
+export function filterMora(
+  rows: MoraRow[],
+  chip: MoraChip,
+  query: string,
+  asOf: Date = new Date(),
+  filters: MoraFilters = EMPTY_MORA_FILTERS,
+): MoraRow[] {
+  return sortMora(rows.filter((r) => matchesMoraChip(r, chip, asOf) && matchesMoraSearch(r, query) && matchesMoraFilters(r, filters)));
 }
+
+// ── Hoja de filtros (paridad con la web: rango de mora y saldo, fuente, categoría, prioridad, castigado) ──────────
+// Se resuelven en el teléfono sobre lo ya bajado (igual que los chips y la búsqueda): funcionan sin señal y no
+// inventan reglas: la categoría y la prioridad son las que mandó la API.
+
+export type MoraSourceFilter = 'ALL' | 'KOBRAX' | 'PSF';
+export type MoraWrittenOffFilter = 'ALL' | 'ONLY' | 'EXCLUDE';
+
+export interface MoraFilters {
+  /** Texto tal como lo escribió el cobrador; vacío o no numérico = sin tope. */
+  dpdMin: string;
+  dpdMax: string;
+  balanceMin: string;
+  balanceMax: string;
+  source: MoraSourceFilter;
+  /** Códigos de categoría elegidos (`A`, `B`…). Vacío = todas. */
+  categories: string[];
+  /** Prioridades elegidas. Vacío = todas. */
+  priorities: string[];
+  writtenOff: MoraWrittenOffFilter;
+}
+
+export const EMPTY_MORA_FILTERS: MoraFilters = {
+  dpdMin: '',
+  dpdMax: '',
+  balanceMin: '',
+  balanceMax: '',
+  source: 'ALL',
+  categories: [],
+  priorities: [],
+  writtenOff: 'ALL',
+};
+
+/** «12» o «1200,5» → número; vacío o basura → `undefined` (sin tope, no cero). */
+export function parseBound(raw: string): number | undefined {
+  const t = raw.trim();
+  if (!t) return undefined;
+  const n = Number(t.replace(/\s/g, '').replace(',', '.'));
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
+export function matchesMoraFilters(row: MoraRow, f: MoraFilters): boolean {
+  const dpdMin = parseBound(f.dpdMin);
+  const dpdMax = parseBound(f.dpdMax);
+  if (dpdMin !== undefined && row.daysPastDue < dpdMin) return false;
+  if (dpdMax !== undefined && row.daysPastDue > dpdMax) return false;
+
+  const bMin = parseBound(f.balanceMin);
+  const bMax = parseBound(f.balanceMax);
+  // Saldo desconocido (el archivo no lo trajo) no pasa un tope de saldo: no se asume 0 ni infinito.
+  if ((bMin !== undefined || bMax !== undefined) && row.balance === undefined) return false;
+  if (bMin !== undefined && (row.balance ?? 0) < bMin) return false;
+  if (bMax !== undefined && (row.balance ?? 0) > bMax) return false;
+
+  if (f.source === 'KOBRAX' && row.externalSource) return false;
+  if (f.source === 'PSF' && !row.externalSource) return false;
+
+  if (f.categories.length > 0 && !(row.category && f.categories.includes(row.category.code))) return false;
+  if (f.priorities.length > 0 && !(row.priority && f.priorities.includes(row.priority))) return false;
+
+  if (f.writtenOff === 'ONLY' && !row.writtenOff) return false;
+  if (f.writtenOff === 'EXCLUDE' && row.writtenOff) return false;
+  return true;
+}
+
+/** Cuántos criterios hay puestos (para el contador del botón «Filtros»). */
+export function activeFilterCount(f: MoraFilters): number {
+  return (
+    (f.dpdMin.trim() || f.dpdMax.trim() ? 1 : 0) +
+    (f.balanceMin.trim() || f.balanceMax.trim() ? 1 : 0) +
+    (f.source !== 'ALL' ? 1 : 0) +
+    (f.categories.length > 0 ? 1 : 0) +
+    (f.priorities.length > 0 ? 1 : 0) +
+    (f.writtenOff !== 'ALL' ? 1 : 0)
+  );
+}
+
 
 export interface MoraCardProps {
   name: string;
@@ -145,47 +228,142 @@ export function staleLine(localAt: number | null | undefined): string | undefine
   return `Sin señal · datos de las ${hh}:${mm}`;
 }
 
-/** Cómo se llama y de qué color va cada estado de una promesa. El estado lo calcula el servidor. */
-export const PROMISE_STATUS_META: Record<MoraPromiseStatus, { label: string; tone: BadgeTone }> = {
-  ACTIVE: { label: 'Vigente', tone: 'info' },
-  OVERDUE: { label: 'Vencida', tone: 'danger' },
-  KEPT: { label: 'Cumplida', tone: 'success' },
-  BROKEN: { label: 'Incumplida', tone: 'danger' },
-  EXECUTED: { label: 'Ejecutada', tone: 'success' },
-  CANCELLED: { label: 'Cancelada', tone: 'neutral' },
-  RESCHEDULED: { label: 'Reagendada', tone: 'warning' },
-};
 
-export const NOTE_KIND_LABEL: Record<MoraNoteKind, string> = {
-  INFO: 'Informativa',
-  WARNING: 'Advertencia',
-  IMPORTANT: 'Importante',
-};
+// ── Etiquetas: UN solo mapa para el tipo y otro para el resultado de una gestión ────────────────────────────
 
-const ACTIVITY_TYPE_LABEL: Record<string, string> = {
+/** Cómo se llama cada tipo de gestión (las mismas palabras que el panel). */
+export const ACTIVITY_TYPE_LABEL: Record<string, string> = {
   CALL: 'Llamada',
   VISIT: 'Visita',
   MESSAGE: 'Mensaje',
   NOTE: 'Nota',
   PAYMENT: 'Pago',
+  STATUS_CHANGE: 'Cambio de estado',
   ASSIGNMENT: 'Asignación',
 };
 
-const RESULT_LABEL: Record<string, string> = {
-  CONTACTED: 'Contactado',
-  NO_ANSWER: 'No contesta',
-  NO_CONTACT: 'No contesta',
+/**
+ * Cómo se llama cada resultado. Las palabras son las del panel (`panel.mora.ficha.activity.results`).
+ *
+ *  · Los 7 primeros son `RECOVERY_RESULTS` (lo que hoy se puede registrar).
+ *  · `PROMISE_KEPT` / `PROMISE_BROKEN` / `DONE` vienen de los desenlaces de la agenda: se guardan como resultado de
+ *    la gestión y se siguen leyendo en el historial.
+ *  · LEGACY (ya no se escriben, pero hay gestiones viejas con ellos): `NO_CONTACT`, `PARTIAL_PAYMENT` y `PAID` no
+ *    están en `RECOVERY_RESULTS`. Cada uno tiene su propia palabra: `NO_CONTACT` ya no se confunde con `NO_ANSWER`.
+ */
+export const RESULT_LABEL: Record<string, string> = {
+  CONTACTED: 'Habló con el deudor',
+  NO_ANSWER: 'No respondió',
   WRONG_NUMBER: 'Número equivocado',
-  NOT_FOUND: 'No estaba',
+  NOT_FOUND: 'No lo encontró',
   WRONG_ADDRESS: 'Dirección equivocada',
   REFUSAL: 'Se negó a pagar',
   PROMISE_TO_PAY: 'Promesa de pago',
+  PROMISE_KEPT: 'Promesa cumplida',
+  PROMISE_BROKEN: 'Promesa incumplida',
+  DONE: 'Hecho',
+  // legacy
+  NO_CONTACT: 'Sin contacto',
   PARTIAL_PAYMENT: 'Pago parcial',
   PAID: 'Pagó',
 };
 
-/** «Llamada · No contesta». Lo que el servidor mande y no se conozca se muestra tal cual, no se esconde. */
-export function activityLine(a: { type: string; result?: string }): string {
-  const type = ACTIVITY_TYPE_LABEL[a.type] ?? a.type;
-  return a.result ? `${type} · ${RESULT_LABEL[a.result] ?? a.result}` : type;
+/** El tipo en español; lo que no se conoce se muestra tal cual (no se esconde). */
+export function activityTypeLabel(type: string): string {
+  return ACTIVITY_TYPE_LABEL[type] ?? type;
 }
+
+/** El resultado en español; lo que no se conoce se muestra tal cual. */
+export function resultLabel(result: string): string {
+  return RESULT_LABEL[result] ?? result;
+}
+
+/** «Llamada · No respondió». */
+export function activityLine(a: { type: string; result?: string }): string {
+  const type = activityTypeLabel(a.type);
+  return a.result ? `${type} · ${resultLabel(a.result)}` : type;
+}
+
+// ── Tarjeta de gestión: icono y tono por tipo (como `ActivityCard` del panel) ───────────────────────────────
+
+export type LookTone = 'blue' | 'green' | 'red' | 'purple' | 'amber' | 'teal';
+
+/** Fondo y tinta de cada tono (los mismos del panel: `TONES`). */
+export const LOOK_COLORS: Record<LookTone, { bg: string; fg: string }> = {
+  blue: { bg: '#E8F0FB', fg: '#5B7DBE' },
+  green: { bg: '#E8F8F0', fg: '#27AE60' },
+  red: { bg: '#FCE8E8', fg: '#DC3545' },
+  purple: { bg: '#F0ECFF', fg: '#7B68D6' },
+  amber: { bg: '#FFF3CD', fg: '#7A5C00' },
+  teal: { bg: '#E3F6F5', fg: '#1B8A84' },
+};
+
+/**
+ * Resultados que son «no se logró»: la tarjeta va en rojo. `PROMISE_BROKEN` está aunque no sea de llamada o
+ * visita: viene de los desenlaces de la agenda y también es «no se logró».
+ */
+export const FAILED_RESULTS: ReadonlySet<string> = new Set(['NO_ANSWER', 'WRONG_NUMBER', 'NOT_FOUND', 'WRONG_ADDRESS', 'REFUSAL', 'PROMISE_BROKEN']);
+
+const ACTIVITY_ICON: Record<string, string> = { CALL: '📞', VISIT: '📍', MESSAGE: '💬', PAYMENT: '💵', ASSIGNMENT: '👤' };
+
+/** Icono y tono de una gestión: rojo si no se logró; si no, el del tipo (llamada/pago verde, visita violeta, mensaje turquesa, asignación ámbar, el resto azul). */
+export function activityLook(type: string, result?: string | null): { tone: LookTone; icon: string } {
+  const icon = ACTIVITY_ICON[type] ?? '📝';
+  if (result && FAILED_RESULTS.has(result)) return { tone: 'red', icon };
+  switch (type) {
+    case 'CALL':
+    case 'PAYMENT':
+      return { tone: 'green', icon };
+    case 'VISIT':
+      return { tone: 'purple', icon };
+    case 'MESSAGE':
+      return { tone: 'teal', icon };
+    case 'ASSIGNMENT':
+      return { tone: 'amber', icon };
+    default:
+      return { tone: 'blue', icon };
+  }
+}
+
+// ── Promesas ────────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Cómo se llama y de qué color va cada estado de una promesa (el MISMO color que el panel).
+ * 🔴 **Vencida sin cerrar es ámbar, no roja**: nadie registró qué pasó y pintarla de incumplida castigaría al deudor
+ * por una gestión que el equipo no cerró. Sólo `BROKEN` (alguien dijo que no pagó) es roja.
+ */
+export const PROMISE_STATUS_META: Record<MoraPromiseStatus, { label: string; tone: BadgeTone }> = {
+  ACTIVE: { label: 'Vigente', tone: 'warning' },
+  OVERDUE: { label: 'Vencida sin cerrar', tone: 'warning' },
+  KEPT: { label: 'Cumplida', tone: 'success' },
+  BROKEN: { label: 'Incumplida', tone: 'danger' },
+  EXECUTED: { label: 'Ejecutada', tone: 'neutral' },
+  CANCELLED: { label: 'Cancelada', tone: 'neutral' },
+  RESCHEDULED: { label: 'Reagendada', tone: 'neutral' },
+};
+
+/**
+ * El resumen de promesas, con la regla de `summarizePromises` (shared): el cumplimiento sólo cuenta las que tienen
+ * desenlace; sin ninguna no hay porcentaje y se dice, no se muestra 0 %.
+ */
+export function promiseSummaryLines(promises: readonly MoraPromise[]): { summary: string; compliance: string; unresolved?: string } {
+  const s = summarizePromises(promises);
+  const made = s.made === 0 ? 'Sin promesas' : s.made === 1 ? '1 promesa' : `${s.made} promesas`;
+  return {
+    summary: `${made} · ${s.kept} cumplidas · ${s.broken} incumplidas`,
+    compliance: s.complianceRate === undefined ? 'Cumplimiento: todavía no hay promesas cerradas' : `Cumplimiento ${Math.round(s.complianceRate * 100)} %`,
+    unresolved:
+      s.unresolved === 0
+        ? undefined
+        : s.unresolved === 1
+          ? '1 promesa venció sin que nadie registrara qué pasó.'
+          : `${s.unresolved} promesas vencieron sin que nadie registrara qué pasó.`,
+  };
+}
+
+/** Los tipos de nota en español (las palabras del panel). */
+export const NOTE_KIND_LABEL: Record<MoraNoteKind, string> = {
+  INFO: 'Informativa',
+  WARNING: 'Atención',
+  IMPORTANT: 'Importante',
+};

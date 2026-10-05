@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { addPeriods, calculateCredit, isUnknownField, PaymentFrequency, portfolioStatus, RatePeriod, type MoraCreditDetail } from '@kobrax/shared';
+import { addPeriods, calculateCredit, DEFAULT_ARREARS_METHOD, isUnknownField, PaymentFrequency, portfolioStatus, RatePeriod, type MoraCreditDetail } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { ActionBtn, AmountInput, BottomSheet, Chips, DataRow, EmptyState, Header, PORTFOLIO_STATUS_META, SectionLabel, StatusBadge } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
@@ -24,6 +24,9 @@ import { submitPayment } from '@/payment-submit';
 import { registrarRastro } from '@/trace';
 import { GestionSheet, prettyDate } from '@/gestion-sheet';
 import { nuevoId } from '@/ids';
+import { AttachmentsBlock, GarantesBlock, LinkReviewBanner } from '@/cliente-legajo-view';
+import { maskDocument } from '@/duplicate-check';
+import { ARREARS_METHOD_LABEL } from '@/credit-labels';
 
 /** Las dos acciones de mora, ya en la forma en la que viajan por la cola. */
 type QueuedArrears = Extract<QueuedAction, { kind: 'arrears.mark' | 'arrears.clear' }>;
@@ -50,6 +53,8 @@ export default function ClienteFichaScreen() {
   const [load, setLoad] = useState<'loading' | 'ok' | 'offline' | 'error' | 'sin-creditos'>('loading');
   /** Identidad mínima cuando no hay contexto de cobranza que mostrar (ver `loadAll`). */
   const [basic, setBasic] = useState<ClientDetail | null>(null);
+  /** La ficha del cliente (legajo: garantes, garantías, adjuntos, alta). Del caché sin señal. */
+  const [client, setClient] = useState<ClientDetail | null>(null);
   const [creditId, setCreditId] = useState<string | null>(null);
   const [detail, setDetail] = useState<MoraCreditDetail | null>(null);
   /** El crédito elegido: condiciones, base del saldo y total por cobrar (F4/06). `null` mientras carga o sin red. */
@@ -114,6 +119,8 @@ export default function ClienteFichaScreen() {
     }
     setCtx(res.data);
     setLoad('ok');
+    // El legajo es un complemento: si no baja ni está en el caché, la ficha de cobranza sigue igual.
+    void getClient(clientId).then((c) => setClient(c.status === 'ok' ? c.data : null));
     const first = res.data.credits.find((c) => c.creditId === creditId) ?? res.data.credits[0];
     if (first) {
       setCreditId(first.creditId);
@@ -273,6 +280,8 @@ export default function ClienteFichaScreen() {
           )}
         </View>
 
+        <LinkReviewBanner detail={client} />
+
         {/* Barra de acciones */}
         <View style={styles.actions}>
           <ActionBtn label="Llamar" icon="📞" onPress={() => doAction('call')} />
@@ -387,6 +396,9 @@ export default function ClienteFichaScreen() {
             {!!credit?.initialState?.paidInstallments && (
               <DataRow label="Cargado en curso" value={`${credit.initialState.paidInstallments} cuotas ya pagadas`} />
             )}
+            <DataRow label="Documento" value={maskDocument(client?.nationalId ?? ctx.client.nationalId) ?? '—'} />
+            <DataRow label="Cliente desde" value={client?.createdAt ? prettyDay(client.createdAt) : '—'} />
+            <DataRow label="Método de mora" value={ARREARS_METHOD_LABEL[credit?.arrearsMethod ?? DEFAULT_ARREARS_METHOD]} />
             <DataRow label="Origen" value={ORIGIN_LABEL[detail.origin ?? 'manual'] ?? detail.origin ?? 'manual'} />
             {credit?.externalSource && (
               <DataRow label="Operación" value={`${credit.externalSource} ${credit.externalId ?? ''}`.trim()} />
@@ -441,6 +453,9 @@ export default function ClienteFichaScreen() {
             <Text key={l.id} style={styles.line}>📍 {[l.address, l.zone].filter(Boolean).join(' · ') || 'Sin dirección'}</Text>
           ))}
         </View>
+
+        <GarantesBlock detail={client} creditId={selected.creditId} />
+        <AttachmentsBlock clientId={clientId} rows={client?.attachments} onChanged={setClient} />
 
         {/* Timeline */}
         <View>
