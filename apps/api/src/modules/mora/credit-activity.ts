@@ -1,4 +1,5 @@
 import type { CreditActivity, CreditActivityType, PrismaClient } from '@prisma/client';
+import { assignedToId, nameOf, type NameMap } from './mora-names';
 
 /** El episodio de mora abierto del crédito, o `null` si está al día. El cliente nunca lo manda: lo resuelve el servidor. */
 export async function openEpisodeId(tx: Pick<PrismaClient, 'creditArrearEpisode'>, creditId: string): Promise<string | null> {
@@ -34,14 +35,27 @@ export async function recordCreditActivity(
 }
 
 /** Una gestión de la bitácora del crédito, como la ve el panel (mismos campos que la del caso, más el episodio). */
-export function serializeCreditActivity(a: Pick<CreditActivity, 'id' | 'type' | 'result' | 'notes' | 'userId' | 'createdAt' | 'episodeId'>) {
+export function serializeCreditActivity(
+  a: Pick<CreditActivity, 'id' | 'type' | 'result' | 'notes' | 'userId' | 'createdAt' | 'episodeId'>,
+  names?: NameMap,
+) {
+  // Una `ASSIGNMENT` guarda en la nota el id de a quién se asignó: se resuelve acá para que ningún cliente muestre un uuid.
+  const assignedTo = a.type === 'ASSIGNMENT' ? assignedToId(a.notes) : undefined;
   return {
     id: a.id,
     type: a.type,
     result: a.result ?? undefined,
     notes: a.notes ?? undefined,
     userId: a.userId ?? undefined,
+    authorName: nameOf(names, a.userId),
+    assignedToId: assignedTo,
+    assignedToName: nameOf(names, assignedTo),
     episodeId: a.episodeId ?? undefined,
     createdAt: a.createdAt,
   };
+}
+
+/** Los ids de persona que una gestión necesita nombrar: quien la hizo y, si es una asignación, a quién. */
+export function activityPeople(a: Pick<CreditActivity, 'type' | 'notes' | 'userId'>): (string | undefined)[] {
+  return [a.userId ?? undefined, a.type === 'ASSIGNMENT' ? assignedToId(a.notes) : undefined];
 }

@@ -2,7 +2,7 @@ import type { Payment, PaymentRequest } from '@prisma/client';
 
 const num = (d: unknown): number => (d == null ? 0 : Number(d));
 
-export function serializePayment(p: Payment) {
+export function serializePayment(p: Payment, names?: ReadonlyMap<string, string>) {
   return {
     id: p.id,
     creditId: p.creditId,
@@ -15,6 +15,8 @@ export function serializePayment(p: Payment) {
     receiptUrl: p.receiptUrl ?? undefined, // comprobante subido (§5.4); no es PII
     paymentDate: p.paymentDate,
     registeredBy: p.registeredBy ?? undefined,
+    // Sólo el nombre (resuelto por el servidor): el cobrador lo lee sin tener `user:read`.
+    registeredByName: p.registeredBy ? names?.get(p.registeredBy) : undefined,
     channel: p.channel,
     notes: p.notes ?? undefined,
     createdAt: p.createdAt,

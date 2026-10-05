@@ -31,7 +31,8 @@ import { AgendaService } from '../agenda/agenda.service';
 import { agendaNotSchedulable } from '../agenda/agenda.errors';
 import { ArrearsPriorityService } from '../arrears/arrears-priority.service';
 import type { CreateMoraActivityDto, CreateMoraNoteDto, ListMoraQueryDto, SetMoraPriorityDto, UpdateMoraNoteDto } from './dto/mora.dto';
-import { recordCreditActivity, serializeCreditActivity } from './credit-activity';
+import { activityPeople, recordCreditActivity, serializeCreditActivity } from './credit-activity';
+import { loadNames, type NameMap } from './mora-names';
 import { buildMoraOrder, buildMoraWhere, MORA_ACCESS_FROM, MORA_FROM, moraAccessConditions, moraScopeOf, type MoraCategoryRange, type MoraScope } from './mora-query';
 import { serializeEpisodes } from './mora-episodes';
 import { serializeNote } from './mora-notes';
@@ -182,12 +183,19 @@ export class MoraService {
     const detail = await this.tx(async (tx) => {
       const found = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT cr.id ${MORA_ACCESS_FROM} WHERE ${access} LIMIT 1`);
       if (found.length === 0) return null;
-      const [item] = await this.loadItems(tx, [creditId], now);
+      // Los nombres se piden UNA vez para toda la ficha (responsable, autores, asignados): sin N+1.
+      const [item] = await this.loadItems(tx, [creditId], now, undefined, false, false);
       if (!item) return null;
       // La bitácora es del crédito (preventiva o en mora), con el episodio indicado cuando lo hay.
       const activities = await tx.creditActivity.findMany({ where: { creditId }, orderBy: { createdAt: 'desc' }, take: DETAIL_ACTIVITIES });
       const assignments = await this.loadAssignments(tx, creditId, item.responsibleId, now);
-      return { ...item, activities: activities.map(serializeCreditActivity), assignments } as unknown as MoraCreditDetail;
+      const names = await this.names(tx, [item.responsibleId, ...activities.flatMap(activityPeople), ...assignments.map((a) => a.userId)]);
+      return {
+        ...item,
+        responsibleName: names.get(item.responsibleId ?? '') ?? undefined,
+        activities: activities.map((a) => serializeCreditActivity(a, names)),
+        assignments: assignments.map((a) => ({ ...a, userName: names.get(a.userId) })),
+      } as unknown as MoraCreditDetail;
     });
 
     if (!detail) throw new NotFoundException('Crédito no encontrado');
@@ -229,13 +237,13 @@ export class MoraService {
    */
   async promises(creditId: string): Promise<ApiResponse<MoraPromise[]>> {
     const now = new Date();
-    const result = await this.tx(async (tx) => ((await this.visible(tx, creditId)) ? this.loadPromises(tx, creditId, now) : null));
+    const result = await this.tx(async (tx) => ((await this.visible(tx, creditId)) ? this.loadPromises(tx, creditId, now, true) : null));
     if (!result) throw new NotFoundException('Crédito no encontrado');
     return ResponseDto.ok(result);
   }
 
   /** Las promesas de un crédito con su estado. Lo usan `promises` y `metrics`: una sola definición. */
-  private async loadPromises(tx: PrismaClient, creditId: string, now: Date): Promise<MoraPromise[]> {
+  private async loadPromises(tx: PrismaClient, creditId: string, now: Date, withNames = false): Promise<MoraPromise[]> {
     const rows = await tx.agendaItem.findMany({
       where: { creditId, type: 'PROMISE_TO_PAY', deletedAt: null },
       select: { id: true, status: true, scheduledDate: true, details: true, observations: true, assigneeId: true, resultActivityId: true, createdAt: true },
@@ -245,7 +253,8 @@ export class MoraService {
       ? await tx.creditActivity.findMany({ where: { id: { in: activityIds } }, select: { id: true, result: true } })
       : [];
     const outcomes = new Map(activities.filter((a) => a.result).map((a) => [a.id, a.result as string]));
-    return serializePromises(rows, outcomes, now);
+    const names = withNames ? await this.names(tx, rows.map((r) => r.assigneeId)) : undefined;
+    return serializePromises(rows, outcomes, now, names);
   }
 
   /**
@@ -408,10 +417,11 @@ export class MoraService {
   async notes(creditId: string): Promise<ApiResponse<CreditNote[]>> {
     const rows = await this.tx(async (tx) => {
       if (!(await this.visible(tx, creditId))) return null;
-      return tx.creditNote.findMany({ where: { creditId, deletedAt: null }, orderBy: { createdAt: 'desc' }, take: 200 });
+      const found = await tx.creditNote.findMany({ where: { creditId, deletedAt: null }, orderBy: { createdAt: 'desc' }, take: 200 });
+      return { found, names: await this.names(tx, found.map((n) => n.authorId)) };
     });
     if (!rows) throw new NotFoundException('Crédito no encontrado');
-    return ResponseDto.ok(rows.map(serializeNote));
+    return ResponseDto.ok(rows.found.map((n) => serializeNote(n, rows.names)));
   }
 
   /**
@@ -430,7 +440,7 @@ export class MoraService {
         const existing = await tx.creditNote.findFirst({ where: { id: dto.id } });
         if (existing) {
           if (existing.creditId !== creditId) throw new ConflictException({ code: 'MORA_003', message: 'Ese id de nota ya pertenece a otro crédito.' });
-          return { note: existing, created: false };
+          return { note: existing, created: false, names: await this.names(tx, [existing.authorId]) };
         }
       }
       // Sin lugar, en cascada según cuántas hay; siempre encima de las demás.
@@ -456,17 +466,17 @@ export class MoraService {
           zIndex: (top._max.zIndex ?? 0) + 1,
         },
       });
-      return { note: made, created: true };
+      return { note: made, created: true, names: await this.names(tx, [made.authorId]) };
     });
     // Dos envíos con el mismo id a la vez (el intento en vivo y la cola) pasan los dos el chequeo y uno choca con
     // la unicidad: se repite UNA vez, y esta vez encuentra la nota que ya guardó el otro.
-    const { note, created } = await run().catch((err: unknown) => (dto.id && isUniqueViolation(err) ? run() : Promise.reject(err)));
+    const { note, created, names } = await run().catch((err: unknown) => (dto.id && isUniqueViolation(err) ? run() : Promise.reject(err)));
 
     // Sólo se audita lo nuevo, y sin el texto: una nota puede traer datos personales.
     if (created) {
       await this.audit.record({ entity: 'credit_note', entityId: note.id, action: 'CREATE', after: { creditId, kind: note.kind, length: note.body.length } });
     }
-    return ResponseDto.ok(serializeNote(note));
+    return ResponseDto.ok(serializeNote(note, names));
   }
 
   /** El texto, el tipo y el borrado son de quien escribió la nota o de quien reparte cartera. Mover y pintar, de cualquiera. */
@@ -484,7 +494,7 @@ export class MoraService {
     if (body !== undefined && body.length === 0) throw new BadRequestException({ code: 'MORA_002', message: 'La nota no puede estar vacía.' });
     const content = body !== undefined || dto.kind !== undefined;
 
-    const { note, before, changed } = await this.tx(async (tx) => {
+    const { note, before, changed, names } = await this.tx(async (tx) => {
       if (!(await this.visible(tx, creditId))) throw new NotFoundException('Crédito no encontrado');
       const current = await tx.creditNote.findFirst({ where: { id: noteId, creditId, deletedAt: null } });
       if (!current) throw new NotFoundException('Nota no encontrada');
@@ -506,8 +516,9 @@ export class MoraService {
         // Ya está arriba de todo: no se escribe otra vez (arrastrar una nota manda esto en cada gesto).
         if (current.zIndex < (top._max.zIndex ?? 0) || (top._max.zIndex ?? 0) === 0) data.zIndex = (top._max.zIndex ?? 0) + 1;
       }
-      if (Object.keys(data).length === 0) return { note: current, before: current, changed: false };
-      return { note: await tx.creditNote.update({ where: { id: noteId }, data }), before: current, changed: true };
+      const names = await this.names(tx, [current.authorId]);
+      if (Object.keys(data).length === 0) return { note: current, before: current, changed: false, names };
+      return { note: await tx.creditNote.update({ where: { id: noteId }, data }), before: current, changed: true, names };
     });
 
     if (content && changed) {
@@ -519,7 +530,7 @@ export class MoraService {
         after: { creditId, kind: note.kind, length: note.body.length },
       });
     }
-    return ResponseDto.ok(serializeNote(note));
+    return ResponseDto.ok(serializeNote(note, names));
   }
 
   /** Borra un post-it (borrado lógico: queda en la base y en la auditoría). Quien la escribió o quien reparte cartera. */
@@ -536,6 +547,11 @@ export class MoraService {
     });
     await this.audit.record({ entity: 'credit_note', entityId: noteId, action: 'DELETE', before: { creditId, kind: gone.kind, length: gone.body.length } });
     return ResponseDto.ok({ id: noteId });
+  }
+
+  /** Nombres de personas de la cuenta (sin `user:read`): una consulta por petición. Ver `loadNames`. */
+  private names(tx: PrismaClient, ids: Iterable<string | null | undefined>): Promise<NameMap> {
+    return loadNames(tx, this.tenant.accountId, ids);
   }
 
   /** Las oficinas activas de la cuenta, para el filtro de la lista. Sólo id y nombre. */
@@ -577,7 +593,7 @@ export class MoraService {
    * Trae de Prisma lo que la lista y la ficha pintan y lo serializa, **en el orden de `ids`**: el orden lo
    * decidió el SQL y no se reordena por lo que devuelva `findMany`.
    */
-  private async loadItems(tx: PrismaClient, ids: string[], now: Date, knownCategories?: MoraCategoryRange[], withPortfolio = false): Promise<MoraCreditListItem[]> {
+  private async loadItems(tx: PrismaClient, ids: string[], now: Date, knownCategories?: MoraCategoryRange[], withPortfolio = false, withNames = true): Promise<MoraCreditListItem[]> {
     if (ids.length === 0) return [];
     const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     const [rows, account, categories] = await Promise.all([
@@ -630,13 +646,14 @@ export class MoraService {
       (account?.configuration as { importConfig?: { staleAfterDays?: unknown } } | null)?.importConfig?.staleAfterDays,
     );
 
+    const names = withNames ? await this.names(tx, rows.map((r) => r.assignedManagerId)) : undefined;
     const portfolio = withPortfolio ? await this.loadPortfolio(tx, [...new Set(rows.map((r) => r.clientId))]) : undefined;
 
     const byId = new Map(rows.map((r) => [r.id, r as unknown as MoraCreditRow]));
     return ids
       .map((id) => byId.get(id))
       .filter((r): r is MoraCreditRow => r !== undefined)
-      .map((r) => serializeMoraCredit(r, { now, staleAfterDays, hasActivePromise: withPromise.has(r.clientId), categories, portfolio: portfolio?.get(r.clientId) }));
+      .map((r) => serializeMoraCredit(r, { now, staleAfterDays, hasActivePromise: withPromise.has(r.clientId), categories, portfolio: portfolio?.get(r.clientId), names }));
   }
 
   /**

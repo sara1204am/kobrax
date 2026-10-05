@@ -11,8 +11,15 @@ const NOTE = { id: NOTE_ID, creditId: CREDIT, kind: 'INFO', body: 'texto', color
 
 function make(opts: { count?: number; topZ?: number; raceOnCreate?: boolean; visible?: boolean; permissions?: string[]; existing?: Partial<typeof NOTE> | null } = {}) {
   let raceCreated = false;
-  const calls = { updated: [] as { where: { id: string }; data: Record<string, unknown> }[], created: [] as Record<string, unknown>[], audit: [] as Record<string, unknown>[], queries: [] as { sql: string; values: unknown[] }[] };
+  const calls = { updated: [] as { where: { id: string }; data: Record<string, unknown> }[], created: [] as Record<string, unknown>[], audit: [] as Record<string, unknown>[], queries: [] as { sql: string; values: unknown[] }[], nameLookups: [] as unknown[] };
   const tx = {
+    // Nombres del equipo (sin `user:read`): sólo Ana existe en la cuenta.
+    userAccount: {
+      findMany: async (a: { where: { accountId: string; userId: { in: string[] } } }) => {
+        calls.nameLookups.push(a.where);
+        return a.where.userId.in.includes('u1') ? [{ userId: 'u1', user: { profile: { firstName: 'Ana', lastName: 'Pérez' } } }] : [];
+      },
+    },
     $queryRaw: async (q: { sql: string; values: unknown[] }) => {
       calls.queries.push({ sql: q.sql, values: q.values });
       return opts.visible === false ? [] : [{ id: CREDIT, client_id: 'cl1' }];
@@ -56,6 +63,25 @@ describe('MoraService.addNote — notas por crédito', () => {
     assert.equal(calls.created[0]!.clientId, 'cl1');
     assert.equal(calls.created[0]!.accountId, 'acc');
     assert.equal(calls.created[0]!.kind, 'INFO');
+  });
+
+  it('devuelve el nombre del autor (sin correo) y lo resuelve en una sola consulta de la cuenta', async () => {
+    const { service, calls } = make();
+    const res = await service.addNote(CREDIT, { body: 'hola' });
+    assert.equal(res.data!.authorName, 'Ana Pérez');
+    assert.equal(calls.nameLookups.length, 1);
+    assert.deepEqual(calls.nameLookups[0], { accountId: 'acc', userId: { in: ['u1'] } });
+    assert.equal(JSON.stringify(res.data).includes('@'), false);
+  });
+
+  it('GET notes: un autor que no se resuelve queda sin nombre (el cliente dice «alguien del equipo»)', async () => {
+    const { service } = make();
+    const res = await service.notes(CREDIT);
+    assert.equal(res.data![0]!.authorName, 'Ana Pérez');
+    const other = make({ existing: { authorId: 'u9' } });
+    const edit = await other.service.updateNote(CREDIT, NOTE_ID, { color: 'PINK' });
+    assert.equal(edit.data!.authorId, 'u9');
+    assert.equal(edit.data!.authorName, undefined);
   });
 
   it('una nota vacía o de puros espacios se rechaza', async () => {

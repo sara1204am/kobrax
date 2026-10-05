@@ -14,6 +14,7 @@ import {
   type PortfolioLocation,
 } from '@kobrax/shared';
 import { clientDisplayName } from '../clients/clients.serializer';
+import { nameOf, type NameMap } from './mora-names';
 
 /** Lo que `MoraService` trae de Prisma por crédito. */
 export interface MoraCreditRow {
@@ -74,6 +75,8 @@ export function serializeMoraCredit(
     categories?: readonly Pick<ArrearCategory, 'code' | 'name' | 'color' | 'fromDays' | 'toDays'>[];
     /** Zona, ubicaciones y documento enmascarado del deudor: sólo la lista (ver `loadPortfolio`). */
     portfolio?: { zone?: string; locations?: PortfolioLocation[]; documentMasked?: string };
+    /** Nombres del equipo (id → nombre) para `responsibleName`: los resuelve el servicio en UNA consulta por petición. */
+    names?: NameMap;
   },
 ): MoraCreditListItem {
   const { now } = opts;
@@ -160,6 +163,7 @@ export function serializeMoraCredit(
     priority: (episode?.priority ?? undefined) as MoraCreditListItem['priority'],
     priorityPinned: episode ? episode.priorityPinnedAt !== null : false,
     responsibleId: c.assignedManagerId ?? undefined,
+    responsibleName: nameOf(opts.names, c.assignedManagerId),
     lastActionAt: c.lastActionAt?.toISOString(),
     lastActivityType: activity?.type,
     lastActivityResult: activity?.result ?? undefined,

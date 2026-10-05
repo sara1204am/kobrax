@@ -8,6 +8,7 @@ import { TenantContextService } from '../../common/context/tenant-context.servic
 import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { applyPayment, creditPatchAfterPayment } from './payment-apply';
+import { loadNames } from '../mora/mora-names';
 import { serializePayment, serializePaymentRequest } from './payments.serializer';
 import { ConfirmPaymentRequestDto, CreatePaymentDto, CreatePaymentRequestDto, ListPaymentsQueryDto } from './dto/payment.dto';
 import { creditNotActive, paymentDuplicate, paymentInvalid, requestNotPending, resourceNotFound } from './payments.errors';
@@ -221,15 +222,17 @@ export class PaymentsService {
           { receiptNumber: { sort: dir, nulls: 'last' } }
         : { [query.sort]: dir };
 
-    const [rows, total] = await this.tx((tx) =>
-      Promise.all([
+    const [rows, total, names] = await this.tx(async (tx) => {
+      const [found, count] = await Promise.all([
         // La fuente del crédito viaja con la fila (D7): el ledger dice qué cobro fue sobre un PSF.
         tx.payment.findMany({ where, orderBy, skip, take: limit, include: { credit: { select: { externalSource: true } } } }),
         tx.payment.count({ where }),
-      ]),
-    );
+      ]);
+      // Quién registró cada pago: UNA consulta para la página, sin exigir `user:read`.
+      return [found, count, await loadNames(tx, this.tenant.accountId, found.map((p) => p.registeredBy))] as const;
+    });
     return ResponseDto.paginated(
-      rows.map((p) => ({ ...serializePayment(p), creditSource: p.credit.externalSource ?? undefined })),
+      rows.map((p) => ({ ...serializePayment(p, names), creditSource: p.credit.externalSource ?? undefined })),
       total,
       page,
       limit,
@@ -237,9 +240,12 @@ export class PaymentsService {
   }
 
   async findOne(id: string) {
-    const payment = await this.tx((tx) => tx.payment.findFirst({ where: { id } }));
-    if (!payment) throw resourceNotFound();
-    return serializePayment(payment);
+    const found = await this.tx(async (tx) => {
+      const row = await tx.payment.findFirst({ where: { id } });
+      return row ? { row, names: await loadNames(tx, this.tenant.accountId, [row.registeredBy]) } : null;
+    });
+    if (!found) throw resourceNotFound();
+    return serializePayment(found.row, found.names);
   }
 
   // ── Solicitudes de pago digital (QR / link) ──────────────────────────────────

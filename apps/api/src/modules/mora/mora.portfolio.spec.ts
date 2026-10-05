@@ -46,7 +46,7 @@ const LOC = (id: string, over: Record<string, unknown> = {}) => ({
 });
 
 function make() {
-  const calls = { clientFind: [] as { where: { id: { in: string[] } } }[], audit: [] as Record<string, unknown>[] };
+  const calls = { clientFind: [] as { where: { id: { in: string[] } } }[], audit: [] as Record<string, unknown>[], nameFinds: [] as { userId: { in: string[] } }[] };
   const tx = {
     $queryRaw: async () => [
       { id: 'cr1', total: 3n },
@@ -56,6 +56,12 @@ function make() {
     credit: { findMany: async () => [row('cr1', 'cl1'), row('cr2', 'cl1'), row('cr3', 'cl2')] },
     account: { findUnique: async () => ({ configuration: {} }) },
     arrearCategory: { findMany: async () => [] },
+    userAccount: {
+      findMany: async (a: { where: { userId: { in: string[] } } }) => {
+        calls.nameFinds.push(a.where);
+        return [{ userId: 'u1', user: { profile: { firstName: 'Ana', lastName: 'Pérez' } } }];
+      },
+    },
     agendaItem: { findMany: async () => [] },
     client: {
       findMany: async (a: { where: { id: { in: string[] } } }) => {
@@ -95,6 +101,14 @@ function make() {
 }
 
 describe('GET /mora — zona, ubicaciones y documento de la cartera', () => {
+  it('responsibleName: el nombre del responsable en cada fila, con UNA consulta de nombres para toda la página', async () => {
+    const { service, calls } = make();
+    const { data } = await service.list({ todos: 'true' } as never);
+    assert.deepEqual(data!.map((d) => d.responsibleName), ['Ana Pérez', 'Ana Pérez', 'Ana Pérez']);
+    assert.equal(calls.nameFinds.length, 1);
+    assert.deepEqual(calls.nameFinds[0]!.userId.in, ['u1'], 'ids únicos');
+  });
+
   it('carga los clientes de TODA la página en UNA sola consulta (sin N+1) y sin repetir ids', async () => {
     const { service, calls } = make();
     await service.list({ todos: 'true' } as never);

@@ -1,4 +1,5 @@
 import type { MoraPromise, MoraPromiseStatus } from '@kobrax/shared';
+import { nameOf, type NameMap } from './mora-names';
 
 /** Lo que `MoraService` lee de `agenda_items` (sólo `PROMISE_TO_PAY`). */
 export interface PromiseRow {
@@ -39,7 +40,7 @@ export function promiseStatus(row: Pick<PromiseRow, 'status' | 'scheduledDate'>,
 }
 
 /** Las promesas de un crédito, **la más reciente primero**. `outcomes`: id de la actividad → su `result`. */
-export function serializePromises(rows: PromiseRow[], outcomes: Map<string, string>, now: Date = new Date()): MoraPromise[] {
+export function serializePromises(rows: PromiseRow[], outcomes: Map<string, string>, now: Date = new Date(), names?: NameMap): MoraPromise[] {
   return [...rows]
     .sort((a, b) => b.scheduledDate.getTime() - a.scheduledDate.getTime() || b.createdAt.getTime() - a.createdAt.getTime())
     .map((r) => {
@@ -53,6 +54,7 @@ export function serializePromises(rows: PromiseRow[], outcomes: Map<string, stri
         paymentMethodCode: typeof d.paymentMethodCode === 'string' ? d.paymentMethodCode : undefined,
         bankCode: typeof d.bankCode === 'string' ? d.bankCode : undefined,
         assigneeId: r.assigneeId,
+        assigneeName: nameOf(names, r.assigneeId),
         observations: r.observations ?? undefined,
         createdAt: r.createdAt.toISOString(),
       };
