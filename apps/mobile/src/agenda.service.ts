@@ -126,8 +126,6 @@ export function whatsappLink(phone: string, message?: string): string {
 /** Un crédito del cliente dentro de mi alcance (en mora o al día): lo que se puede agendar. */
 export interface CreditOption {
   creditId: string;
-  /** @deprecated F4/08: el server ya no lo manda. Opcional-ignorado hasta que 5A lo saque de la cola. */
-  caseId?: string;
   code?: string;
   /** Capital original del crédito. */
   principalAmount: number;

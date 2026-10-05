@@ -254,13 +254,12 @@ export function CreditCard({
 
 /**
  * Estado de cartera (§5.3) → etiqueta + tono de badge. El enum es dominio (shared); el color es UI.
- * PROMESA usa `info` (púrpura sobre highlight), el color semántico que pide el §5.3. Lo reusa S3 (ficha).
+ * La promesa no es un estado (F4/08 D1): es información y se muestra aparte. Lo reusa S3 (ficha).
  */
 export const PORTFOLIO_STATUS_META: Record<PortfolioStatus, { label: string; tone: BadgeTone }> = {
   [PortfolioStatus.CURRENT]: { label: 'Al día', tone: 'success' },
   [PortfolioStatus.DUE_SOON]: { label: 'Por vencer', tone: 'warning' },
   [PortfolioStatus.OVERDUE]: { label: 'En mora', tone: 'danger' },
-  [PortfolioStatus.PROMISE]: { label: 'Promesa', tone: 'info' },
   [PortfolioStatus.PAID]: { label: 'Pagado', tone: 'neutral' },
 };
 

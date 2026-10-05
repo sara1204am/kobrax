@@ -15,16 +15,12 @@ import type { BadgeTone } from './ui';
 /** `cachedList` pide un `id`; el crédito es la identidad de la fila. */
 export type MoraRow = MoraCreditListItem & { id: string };
 
-export type MoraChip = 'all' | 'critical' | 'promise' | 'noAction';
-
-/** Pasados estos días sin gestionar, el crédito entra al chip «Sin gestión». */
-export const NO_ACTION_DAYS = 7;
+export type MoraChip = 'all' | 'critical' | 'promise';
 
 export const MORA_CHIP_LABEL: Record<MoraChip, string> = {
   all: 'Todos',
   critical: 'Críticos',
   promise: 'Con promesa',
-  noAction: `Sin gestión ${NO_ACTION_DAYS}d`,
 };
 
 const DAY_MS = 86_400_000;
@@ -62,11 +58,6 @@ export function matchesMoraChip(row: MoraRow, chip: MoraChip, asOf: Date = new D
       return row.priority === 'CRITICAL';
     case 'promise':
       return row.hasActivePromise;
-    case 'noAction': {
-      // Nunca gestionado también cuenta: es justo el crédito que nadie está mirando.
-      const d = daysSinceAction(row, asOf);
-      return d === undefined || d >= NO_ACTION_DAYS;
-    }
   }
 }
 

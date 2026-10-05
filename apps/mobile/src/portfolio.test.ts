@@ -10,7 +10,6 @@ function mk(p: Partial<PortfolioCredit>): PortfolioCredit {
     clientId: p.clientId ?? 'cl1',
     currency: 'BOB',
     daysPastDue: 0,
-    hasActivePromise: false,
     ...p,
   };
 }
@@ -82,14 +81,14 @@ describe('groupPortfolio', () => {
     expect(card!.secondaryLine).toContain('Cuota');
   });
 
-  it('saldo 0 → PAGADO; una promesa vigente → PROMESA', () => {
+  it('saldo 0 → PAGADO; una promesa vigente no cambia el estado (D1)', () => {
     const [paid] = groupPortfolio([mk({ clientId: 'cl1', balance: 0 })], ASOF);
     expect(paid!.status).toBe(PortfolioStatus.PAID);
     const [promise] = groupPortfolio(
-      [mk({ clientId: 'cl2', balance: 400, daysPastDue: 5, hasActivePromise: true })],
+      [mk({ clientId: 'cl2', balance: 400, daysPastDue: 5 })],
       ASOF,
     );
-    expect(promise!.status).toBe(PortfolioStatus.PROMISE); // la promesa tapa la mora (§5.3)
+    expect(promise!.status).toBe(PortfolioStatus.OVERDUE); // la promesa es información, no estado
   });
 
   it('ordena por mora desc, luego por próxima fecha asc', () => {

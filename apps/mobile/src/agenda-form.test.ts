@@ -85,7 +85,7 @@ describe('canSubmit', () => {
   });
 
   it('sin crédito elegido no se guarda, aunque el resto esté completo', () => {
-    const s = { ...readyCall(), caseId: null, creditId: null };
+    const s = { ...readyCall(), creditId: null };
     expect(canSubmit(s)).toBe(false);
   });
 

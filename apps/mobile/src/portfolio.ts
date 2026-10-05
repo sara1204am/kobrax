@@ -17,7 +17,7 @@ export type PortfolioChip = 'all' | 'today' | 'overdue' | 'current' | 'paid' | '
  */
 export type PortfolioCredit = Pick<
   MoraCreditListItem,
-  'creditId' | 'clientId' | 'currency' | 'daysPastDue' | 'hasActivePromise'
+  'creditId' | 'clientId' | 'currency' | 'daysPastDue'
 > &
   Partial<
     Pick<
@@ -107,9 +107,8 @@ export function sourceLineOf(group: Pick<PortfolioCredit, 'externalSource' | 'sy
 const SEVERITY: Record<PortfolioStatus, number> = {
   [PortfolioStatus.OVERDUE]: 0,
   [PortfolioStatus.DUE_SOON]: 1,
-  [PortfolioStatus.PROMISE]: 2,
-  [PortfolioStatus.CURRENT]: 3,
-  [PortfolioStatus.PAID]: 4,
+  [PortfolioStatus.CURRENT]: 2,
+  [PortfolioStatus.PAID]: 3,
 };
 
 /** `2026-07-15` → `15 jul` (se lee en UTC, como se guarda). */
@@ -160,7 +159,6 @@ export function groupPortfolio(credits: PortfolioCredit[], asOf: Date = new Date
           outstandingBalance: c.balance ?? 0,
           daysPastDue: c.daysPastDue ?? 0,
           nextDueDate: c.nextDueDate ?? null,
-          hasActivePromise: c.hasActivePromise,
         },
         asOf,
       );

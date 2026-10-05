@@ -1,5 +1,5 @@
 import { MORA_PROMISE_STATUSES, type CollectionPriority, type MoraCreditListItem } from '@kobrax/shared';
-import { activityLine, daysSinceAction, filterMora, matchesMoraChip, moraCardProps, NO_ACTION_DAYS, PROMISE_STATUS_META, sortMora, staleLine, toMoraRows, type MoraRow } from './mora';
+import { activityLine, daysSinceAction, filterMora, matchesMoraChip, moraCardProps, PROMISE_STATUS_META, sortMora, staleLine, toMoraRows, type MoraRow } from './mora';
 
 const ASOF = new Date('2026-10-02T12:00:00Z');
 
@@ -59,12 +59,6 @@ describe('chips', () => {
   it('«Con promesa» sigue la promesa vigente del servidor', () => {
     expect(matchesMoraChip(mk({ creditId: 'a', hasActivePromise: true }), 'promise', ASOF)).toBe(true);
     expect(matchesMoraChip(mk({ creditId: 'b' }), 'promise', ASOF)).toBe(false);
-  });
-
-  it(`«Sin gestión» incluye al que nunca se gestionó y al que lleva ${NO_ACTION_DAYS}+ días`, () => {
-    expect(matchesMoraChip(mk({ creditId: 'nunca' }), 'noAction', ASOF)).toBe(true);
-    expect(matchesMoraChip(mk({ creditId: 'viejo', ...caso('LOW', hace(NO_ACTION_DAYS)) }), 'noAction', ASOF)).toBe(true);
-    expect(matchesMoraChip(mk({ creditId: 'reciente', ...caso('LOW', hace(NO_ACTION_DAYS - 1)) }), 'noAction', ASOF)).toBe(false);
   });
 
   it('daysSinceAction: días enteros y nunca negativos', () => {
