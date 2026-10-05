@@ -1,15 +1,14 @@
 /**
  * Contratos del modelo «sin caso» (F4/08): todo cuelga del crédito.
  *
- * Reemplazan, de a poco, a `case.types.ts` (que vive hasta la fase 6). Fechas como ISO string: son lo que
+ * Fechas como ISO string: son lo que
  * llega por JSON.
  */
 
 // ── Actividad del crédito ───────────────────────────────────────────────────────────────────────
 
 /**
- * Qué clase de gestión es. Espejo del enum `credit_activity_type` de la base. `STATUS_CHANGE` del caso ya
- * no existe: no hay estado que cambiar. Constante + unión (como `MORA_SORTS`) y no `enum` de TS.
+ * Qué clase de gestión es. Espejo del enum `credit_activity_type` de la base. No hay cambio de estado: no hay estado que cambiar. Constante + unión (como `MORA_SORTS`) y no `enum` de TS.
  */
 export const CREDIT_ACTIVITY_TYPES = ['NOTE', 'CALL', 'VISIT', 'PAYMENT', 'MESSAGE', 'ASSIGNMENT'] as const;
 export type CreditActivityType = (typeof CREDIT_ACTIVITY_TYPES)[number];

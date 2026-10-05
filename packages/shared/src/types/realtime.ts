@@ -11,8 +11,6 @@ export const REALTIME_NAMESPACE = '/events';
 
 /** Nombres canónicos de los eventos de realtime (server→client, salvo `COLLECTOR_LOCATION` que es bidireccional). */
 export const RealtimeEvent = {
-  CASE_ASSIGNED: 'case.assigned',
-  CASE_UPDATED: 'case.updated',
   PAYMENT_REGISTERED: 'payment.registered',
   ROUTE_COMPLETED: 'route.completed',
   COLLECTOR_LOCATION: 'collector.location',
@@ -22,19 +20,6 @@ export const RealtimeEvent = {
 export type RealtimeEventName = (typeof RealtimeEvent)[keyof typeof RealtimeEvent];
 
 // ── Payloads server→client ─────────────────────────────────────────────────────
-export interface CaseAssignedPayload {
-  caseId: string;
-  collectorId: string;
-  accountId: string;
-}
-
-export interface CaseUpdatedPayload {
-  caseId: string;
-  accountId: string;
-  status?: string;
-  activity?: string;
-}
-
 export interface PaymentRegisteredPayload {
   paymentId: string;
   creditId: string;
@@ -65,7 +50,6 @@ export interface NotificationPayload {
   body: string | null;
   clientId: string | null;
   creditId: string | null;
-  caseId: string | null;
   readAt: string | null;
   createdAt: string;
 }
@@ -79,8 +63,6 @@ export interface CollectorLocationInput {
 
 /** Mapa de eventos server→client (tipado end-to-end para socket.io). */
 export interface ServerToClientEvents {
-  [RealtimeEvent.CASE_ASSIGNED]: (p: CaseAssignedPayload) => void;
-  [RealtimeEvent.CASE_UPDATED]: (p: CaseUpdatedPayload) => void;
   [RealtimeEvent.PAYMENT_REGISTERED]: (p: PaymentRegisteredPayload) => void;
   [RealtimeEvent.ROUTE_COMPLETED]: (p: RouteCompletedPayload) => void;
   [RealtimeEvent.COLLECTOR_LOCATION]: (p: CollectorLocationPayload) => void;

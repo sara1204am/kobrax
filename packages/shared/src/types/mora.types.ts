@@ -9,42 +9,35 @@
  * tiene monto vencido calculable. Todo lo opcional llega `undefined` y la pantalla muestra «—»; un 0
  * inventado haría pasar un dato desconocido por uno conocido.
  */
-import type { CasePriority, CaseStatus } from '../enums/index.js';
 import type { ArrearsSource, ExternalSyncStatus } from '../enums/credit.enum.js';
-import type { CreditAssignmentKind, MoraSituation } from './sin-caso.types.js';
+import type { CollectionPriority, CreditAssignmentKind, MoraSituation } from './sin-caso.types.js';
 import type { CreditOrigin, PaymentFrequency } from '../enums/credit.enum.js';
-import type { PortfolioLocation } from './case.types.js';
 
 /**
  * Cómo se puede ordenar `GET /mora`. La primera es el default.
- *
- * @deprecated `lastAction` y `slaDueAt` ya no ordenan nada (F4/08 · D2): la API las trata como clave
- * desconocida (cae al default). Siguen en la tupla sólo para que web/móvil compilen hasta la fase 3/4.
  *
  * Sólo claves que Postgres puede ordenar sin calcular nada por fila: el monto vencido, la próxima
  * fecha y el inicio de mora viven en el JSON de `credits.metadata` o salen de las cuotas, así que
  * son columnas para mirar y no para ordenar.
  */
-export const MORA_SORTS = ['daysPastDue', 'balance', 'priority', 'lastAction', 'slaDueAt', 'createdAt'] as const;
+export const MORA_SORTS = ['daysPastDue', 'balance', 'priority', 'createdAt'] as const;
 export type MoraSort = (typeof MORA_SORTS)[number];
 
 /** De dónde sale `overdueAmount`: del cronograma (propios) o de lo que reportó el archivo (importados). */
 export type OverdueSource = 'SCHEDULE' | 'REPORTED';
 
 /**
- * El caso abierto que gestiona el crédito.
- * @deprecated F4/08: ya no existe el caso en la lista de mora; la API nunca lo llena. Se borra en la fase 6.
+ * Un punto del cliente en el mapa. `ownerName` presente ⇒ la ubicación es de un garante o
+ * familiar, no del cliente: una deuda se cobra donde esté la persona.
  */
-export interface MoraCaseSummary {
+export interface PortfolioLocation {
   id: string;
-  status: CaseStatus;
-  priority: CasePriority;
-  /** La prioridad la fijó una persona: el trabajo diario no la recalcula. */
-  priorityPinned: boolean;
-  assigneeId?: string;
-  slaDueAt?: string;
-  isOverdue: boolean;
-  lastActionAt?: string;
+  locationType: string;
+  latitude: number;
+  longitude: number;
+  address?: string;
+  ownerName?: string;
+  ownerRelation?: string;
 }
 
 /** La categoría de mora de un crédito, tal como la configuró la cuenta. */
@@ -108,8 +101,6 @@ export interface MoraCreditListItem {
   // ── Gestión ─────────────────────────────────────────────────────────────────
   branchId?: string;
   branchName?: string;
-  /** @deprecated F4/08: la API nunca lo llena (no hay caso). Usar `priority`, `responsibleId` y `lastActionAt`. */
-  case?: MoraCaseSummary;
 
   // ── Modelo sin caso (F4/08) ─────────────────────────────────────────────────
   /** Al día / En mora: se deriva del episodio de mora abierto. Nadie la edita. */
@@ -119,7 +110,7 @@ export interface MoraCreditListItem {
   /** Castigado (`credits.written_off_at`): condición aparte; puede estar en mora y castigado. */
   writtenOff: boolean;
   /** Prioridad del episodio de mora ABIERTO. Ausente = al día. */
-  priority?: CasePriority;
+  priority?: CollectionPriority;
   /** La prioridad la fijó una persona (el recálculo no la pisa). */
   priorityPinned: boolean;
   /** El responsable del crédito (`credits.assigned_manager_id`). Ausente = sin responsable. */
@@ -133,19 +124,7 @@ export interface MoraCreditListItem {
   lastActivityResult?: string;
   hasActivePromise: boolean;
 
-  // ── Cartera / rutas (F4/08 fase 5): lo que antes traía `CaseListItem` con `view=portfolio` ─────────────
-  /**
-   * Mapeo `CaseListItem` → `MoraCreditListItem` (para reconstruir `groupPortfolio` desde `GET /mora?todos=true`):
-   *   id / creditId → creditId            · clientId, branchId, clientName, currency → igual
-   *   assigneeId → responsibleId          · creditCode → code
-   *   amount → balance (ausente = el archivo no lo trajo; groupPortfolio usa `?? 0`)
-   *   daysPastDue, arrearsSource, installmentAmount, nextDueDate, externalSource, syncStatus, reportedAsOf,
-   *   reportedStale, suggestedPaymentAmount, hasActivePromise, lastActionAt, priority, priorityPinned → igual
-   *   status → situation (+ writtenOff) · isOverdue → situation === 'IN_ARREARS' (o daysPastDue > 0)
-   *   zone, locations, documentMasked, frequency, origin, locked → NUEVOS aquí (misma forma y regla que el caso)
-   *   slaDueAt, createdAt, updatedAt → no existen. `portfolioStatus` y `creditCount` los calcula el cliente
-   *   (`portfolioStatus` de shared con balance/daysPastDue/nextDueDate/hasActivePromise; count = filas por clientId).
-   */
+  // ── Cartera / rutas (F4/08 fase 5): datos de la cartera y de las rutas ─────────────
   /** Zona de la ubicación primaria DEL CLIENTE (la primera HOME; si no, la primera cargada). Sólo en la lista. */
   zone?: string;
   /** Todas las ubicaciones dibujables (con punto): las del cliente y las de sus garantes/familiares. Sólo en la lista. */
@@ -158,7 +137,7 @@ export interface MoraCreditListItem {
   locked?: boolean;
 }
 
-/** Una gestión del caso abierto (la misma forma que `CaseActivityItem`). */
+/** Una gestión del crédito (`credit_activities`). */
 export interface MoraActivityItem {
   id: string;
   type: string;

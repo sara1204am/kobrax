@@ -11,17 +11,7 @@ export enum PermissionScope {
  * Es la fuente de verdad para guards (API) y para el control de UI (web/mobile).
  */
 export enum Permission {
-  CASE_READ = 'case:read',
-  CASE_WRITE = 'case:write',
-  CASE_ASSIGN = 'case:assign',
-  CASE_CLOSE = 'case:close',
-  /** Descargar la lista de Mora (CSV/PDF) con el filtro y el alcance de quien la baja. No es `report:export`. */
-  CASE_EXPORT = 'case:export',
-
-  /**
-   * F4/08 · D5: los `case:*` renombrados. Coexisten con `CASE_*` hasta la fase 6 (las sesiones abiertas
-   * llevan los nombres viejos hasta renovar el token); el código nuevo exige estos.
-   */
+  /** F4/08 · D5: reemplazan a los antiguos permisos del caso. */
   COLLECTION_READ = 'collection:read',
   /** Gestiones, agenda y notas del crédito. */
   COLLECTION_WRITE = 'collection:write',

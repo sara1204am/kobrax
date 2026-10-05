@@ -10,14 +10,13 @@ Si está aquí → es la única fuente de verdad.
 packages/shared/src/
 ├── types/
 │   ├── auth.types.ts          # JwtPayload, AuthUser, Session
-│   ├── case.types.ts          # CollectionCase, CaseActivity
+│   ├── mora.types.ts          # MoraCreditListItem, PortfolioLocation (todo cuelga del crédito)
+│   ├── sin-caso.types.ts      # CreditActivity, CollectionPriority, categorías de mora
 │   ├── payment.types.ts       # Payment, PaymentMethod
 │   ├── route.types.ts         # Route, Visit
 │   ├── evidence.types.ts      # FieldEvidence, EvidenceType
 │   └── analytics.types.ts     # KpiData, MetricCard
 ├── enums/
-│   ├── case-status.enum.ts    # CaseStatus
-│   ├── case-priority.enum.ts  # CasePriority
 │   ├── evidence-type.enum.ts  # EvidenceType
 │   ├── permission.enum.ts     # Permission (todos los permisos)
 │   └── role.enum.ts           # RoleType
@@ -27,7 +26,6 @@ packages/shared/src/
 │   └── error.dto.ts           # ErrorDto, ErrorCode
 ├── constants/
 │   ├── permissions.ts         # PERMISSIONS map
-│   ├── case-transitions.ts    # Estados válidos de transición
 │   └── kobrax.constants.ts    # App-wide constants
 ├── utils/
 │   ├── hash.utils.ts          # SHA-256 (web crypto API, funciona en todos lados)
@@ -38,29 +36,9 @@ packages/shared/src/
 
 ## Enums Core
 
-```typescript
-// case-status.enum.ts
-export enum CaseStatus {
-  PENDING        = 'PENDING',
-  ACTIVE         = 'ACTIVE',
-  IN_NEGOTIATION = 'IN_NEGOTIATION',
-  PROMISE_TO_PAY = 'PROMISE_TO_PAY',
-  PAID           = 'PAID',
-  CLOSED         = 'CLOSED',
-  WRITTEN_OFF    = 'WRITTEN_OFF',
-}
-
-// Transiciones válidas (no se puede saltar estados arbitrariamente)
-export const CASE_TRANSITIONS: Record<CaseStatus, CaseStatus[]> = {
-  [CaseStatus.PENDING]:        [CaseStatus.ACTIVE],
-  [CaseStatus.ACTIVE]:         [CaseStatus.IN_NEGOTIATION, CaseStatus.PROMISE_TO_PAY, CaseStatus.PAID, CaseStatus.WRITTEN_OFF],
-  [CaseStatus.IN_NEGOTIATION]: [CaseStatus.PROMISE_TO_PAY, CaseStatus.ACTIVE, CaseStatus.WRITTEN_OFF],
-  [CaseStatus.PROMISE_TO_PAY]: [CaseStatus.PAID, CaseStatus.ACTIVE],
-  [CaseStatus.PAID]:           [CaseStatus.CLOSED],
-  [CaseStatus.CLOSED]:         [],
-  [CaseStatus.WRITTEN_OFF]:    [],
-};
-```
+No hay enum de estado de cobranza: la situación del crédito (Al día / En mora) se deriva del episodio de mora
+abierto, y la prioridad vive en el episodio (`CollectionPriority`, `COLLECTION_PRIORITIES`). Ver
+`docs/epics/F4/08-eliminar-caso.md`.
 
 ## ResponseDto (estándar de respuesta API)
 

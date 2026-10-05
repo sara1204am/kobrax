@@ -43,7 +43,7 @@ export interface RouteStopItem {
 /**
  * Cómo se puede ordenar `GET /routes`. La primera es el default (fecha, descendente).
  *
- * Mismo contrato que `CASE_SORTS`: la API decide qué sabe ordenar y el panel qué columnas ofrece.
+ * Mismo contrato que `MORA_SORTS`: la API decide qué sabe ordenar y el panel qué columnas ofrece.
  *
  * 🔴 **Paradas y distancia no están, y es a propósito.** «Paradas» muestra `visitadas / planificadas`
  * y las visitadas se cuentan aparte del listado, así que ordenar por esa columna ordenaría por el
