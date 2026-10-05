@@ -1112,7 +1112,7 @@
     },
     "agenda": {
       "title": "Agenda",
-      "subtitle": "Lo que el equipo tiene agendado para el día.",
+      "subtitle": "Lo agendado para vos.",
       "scopedToMine": "Estás viendo sólo tus gestiones.",
       "today": "Hoy",
       "previousDay": "Día anterior",
@@ -1215,17 +1215,19 @@
         "AGENDA_006": "Falta el banco de la promesa.",
         "AGENDA_007": "Ese desenlace no corresponde a este tipo de gestión."
       },
-      "subtitleTeam": "Lo agendado por tu equipo, dia por dia.",
+      "subtitleTeam": "Lo agendado por tu equipo, día por día.",
       "view": "Como se ve la agenda",
       "views": {
         "list": "Lista",
-        "calendar": "Calendario"
+        "calendar": "Calendario",
+        "day": "Día",
+        "month": "Mes"
       },
       "week": "Semana",
       "pickDate": "Elegir fecha",
       "previousMonth": "Mes anterior",
       "nextMonth": "Mes siguiente",
-      "createCta": "+ Nueva gestion",
+      "createCta": "Nueva tarea",
       "addHere": "+ Agendar aqui",
       "addShort": "+ Agendar",
       "more": "+{n} mas",
@@ -1237,11 +1239,42 @@
         "overdue": "Vencidas"
       },
       "filters": {
+        "title": "Filtros",
+        "search": "Buscar cliente, crédito o ID…",
         "assignee": "Cobrador",
         "type": "Tipo",
         "all": "Todos",
-        "clear": "Limpiar filtros"
+        "allAssignees": "Todos los cobradores",
+        "allTypes": "Todos los tipos",
+        "allStatuses": "Todos los estados",
+        "clear": "Limpiar"
       },
+      "summary": {
+        "title": "Resumen del día",
+        "count": "{n, plural, one {# actividad} other {# actividades}}",
+        "pending": "Pendientes",
+        "done": "Completadas",
+        "other": "Reprogramadas o canceladas"
+      },
+      "sort": {
+        "label": "Ordenar",
+        "hour": "Ordenar por hora",
+        "type": "Ordenar por tipo",
+        "assignee": "Ordenar por cobrador"
+      },
+      "team": {
+        "label": "Equipo",
+        "mine": "Mi equipo",
+        "count": "{n, plural, one {# cobrador} other {# cobradores}}",
+        "all": "Todo el equipo",
+        "justMe": "Mis gestiones"
+      },
+      "groupCount": "{n, plural, one {# actividad} other {# actividades}}",
+      "emptyFiltered": "Ninguna gestión coincide con los filtros.",
+      "menu": "Acciones de la gestión",
+      "credit": "Crédito #{code}",
+      "miniCalendar": "Calendario del mes",
+      "withItems": "Con gestiones agendadas",
       "create": {
         "title": "Nueva gestion",
         "searchClient": "Deudor",

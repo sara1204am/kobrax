@@ -14,7 +14,7 @@ import { NewTaskModal } from './new-task-modal';
  * en dos archivos parece de más hasta que la agenda se embebe en otra pantalla —el día de un
  * cobrador dentro de su ficha, por ejemplo— y ahí el contenedor es lo único que cambia.
  *
- * ponytail: hoy las cuatro acciones terminan en el detalle, que es donde ya viven completar,
+ * ponytail: hoy las acciones terminan en el detalle, que es donde ya viven completar,
  * reagendar y cancelar. Ejecutar una gestión desde la lista sin abrirla exige mostrar su resultado y
  * su nota, o sea el mismo formulario del detalle metido en un modal — dos lugares para lo mismo. Se
  * agrega el día que se mida que abrir el detalle es el cuello de botella, no antes.
@@ -23,7 +23,6 @@ export function AgendaConnector(props: {
   day: string;
   today: string;
   items: AgendaListItem[];
-  weekItems: AgendaListItem[];
   monthItems: AgendaListItem[];
   overdue: AgendaListItem[];
   overdueTotal: number;
@@ -47,9 +46,10 @@ export function AgendaConnector(props: {
            */
           onCreateRequest: ({ date, time }) => setCreando({ date, time }),
           onViewRequest: (id) => router.push(`/agenda/${id}`),
-          // Completar y llamar terminan en el detalle: es donde están el resultado y el teléfono.
+          // Completar, reagendar y cancelar terminan en el detalle, que abre directo el diálogo pedido (`?accion=`).
           onCompleteRequest: (id) => router.push(`/agenda/${id}?accion=completar`),
-          onCallRequest: (id) => router.push(`/agenda/${id}?accion=llamar`),
+          onRescheduleRequest: (id) => router.push(`/agenda/${id}?accion=reagendar`),
+          onCancelRequest: (id) => router.push(`/agenda/${id}?accion=cancelar`),
         }}
       />
 

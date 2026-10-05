@@ -24,12 +24,15 @@ type Action = 'complete' | 'cancel' | 'reschedule' | null;
 export function ItemActions({
   itemId,
   type,
+  initialAction,
   today,
   cancelReasons,
   rescheduleReasons,
 }: {
   itemId: string;
   type: AgendaItemType;
+  /** El diálogo que se abre de entrada (`?accion=` del menú de la lista). */
+  initialAction?: 'complete' | 'reschedule' | 'cancel';
   /** Hoy, en `YYYY-MM-DD` UTC. Lo calcula el servidor: el reloj del navegador puede estar corrido. */
   today: string;
   cancelReasons: CatalogOption[];
@@ -40,7 +43,7 @@ export function ItemActions({
   const router = useRouter();
   const toast = useToast();
 
-  const [action, setAction] = useState<Action>(null);
+  const [action, setAction] = useState<Action>(initialAction ?? null);
   const [outcome, setOutcome] = useState('');
   const [notes, setNotes] = useState('');
   const [reasonCode, setReasonCode] = useState('');

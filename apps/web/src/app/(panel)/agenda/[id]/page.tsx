@@ -8,6 +8,12 @@ import { Badge, Card, EmptyState, Fact, PageHeader } from '@/components/panel-ui
 import { dayDate, money } from '@/lib/format';
 import { ItemActions } from './item-actions';
 
+const INITIAL_ACTIONS: Record<string, 'complete' | 'reschedule' | 'cancel'> = {
+  completar: 'complete',
+  reagendar: 'reschedule',
+  cancelar: 'cancel',
+};
+
 /** Un ítem del catálogo del tenant (motivos de cancelación y de reprogramación). */
 export interface CatalogOption {
   code: string;
@@ -21,7 +27,14 @@ export interface CatalogOption {
  * sólo acá, al abrir el detalle, y nunca para pintar una lista: hacerlo en el listado dejaría N
  * revelados auditados por pantalla.
  */
-export default async function GestionPage({ params }: { params: { id: string } }) {
+export default async function GestionPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  /** `?accion=` — desde el menú «⋮» de la lista: abre directo el diálogo pedido. */
+  searchParams: { accion?: string };
+}) {
   const t = await getTranslations('panel.agenda');
   const locale = await getLocale();
 
@@ -62,6 +75,7 @@ export default async function GestionPage({ params }: { params: { id: string } }
             <ItemActions
               itemId={item.id}
               type={item.type}
+              initialAction={INITIAL_ACTIONS[searchParams.accion ?? '']}
               today={todayISO()}
               cancelReasons={cancelReasons?.body.data ?? []}
               rescheduleReasons={rescheduleReasons?.body.data ?? []}

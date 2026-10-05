@@ -1,47 +1,48 @@
 'use client';
 
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { AgendaItemType, memberName, type AgendaListItem, type Member } from '@kobrax/shared';
-import { dayMetrics, loadByDay, type DayLoad } from '@/lib/agenda';
-import { Select } from '@/components/ui';
+import { memberName, type AgendaListItem, type Member } from '@kobrax/shared';
+import { filterItems } from '@/lib/agenda';
 import { Segmented } from '@/components/panel-ui';
-import { DateNav } from './date-nav';
-import { DayList } from './day-list';
+import { DayPanel } from './day-panel';
+import { MiniCalendar } from './mini-calendar';
 import { MonthCalendar } from './month-calendar';
 import { OverduePanel } from './overdue-panel';
+import { FiltersCard, SummaryCard } from './side-cards';
 
 /**
  * Lo que la pantalla **pide** que pase. No lo hace ella.
  *
  * 🔴 Crear, ver y ejecutar una gestión son pantallas y modales que ya existen en otro lado. Si esta
- * pantalla los abriera, cada una de esas tres cosas tendría dos implementaciones que se van
+ * pantalla los abriera, cada una de esas cosas tendría dos implementaciones que se van
  * separando. Acá se emite el pedido y quien la usa decide qué abrir.
  */
 export interface AgendaEvents {
   onCreateRequest: (input: { date: string; time?: string; gestorId?: string }) => void;
   onViewRequest: (id: string) => void;
   onCompleteRequest: (id: string) => void;
-  onCallRequest: (id: string) => void;
+  onRescheduleRequest: (id: string) => void;
+  onCancelRequest: (id: string) => void;
 }
 
 /**
  * La agenda: **el día, y dónde está el trabajo**.
  *
- * 🔴 **El estado vive en la URL** —día, vista y filtros—, no adentro. Así la vista se comparte por
- * link, «atrás» funciona, y cambiar de Lista a Calendario conserva el día y los filtros sin una
- * línea de código para sincronizarlos: son el mismo parámetro leído dos veces.
+ * 🔴 **El estado vive en la URL** —día, vista, cobrador, tipo y estado—, no adentro. Así la vista se comparte
+ * por link, «atrás» funciona, y cambiar de Día a Mes conserva el día y los filtros: son el mismo
+ * parámetro leído dos veces. Sólo el texto de la búsqueda es local: pedirle al servidor el día de nuevo por cada
+ * tecla no tiene sentido.
  *
  * 🔴 **Los filtros se aplican acá y no en la API, y es correcto**: `GET /agenda` devuelve el día
- * entero sin paginar. Filtrar en el navegador sobre algo que ya llegó completo no esconde nada —lo
+ * (o el mes) entero sin paginar. Filtrar en el navegador sobre algo que ya llegó completo no esconde nada —lo
  * que sí escondería es filtrar una página de veinte y llamarla «el día».
  */
 export function AgendaScreen({
   day,
   today,
   items,
-  weekItems,
   monthItems,
   overdue,
   overdueTotal,
@@ -53,14 +54,12 @@ export function AgendaScreen({
   today: string;
   /** Las del día elegido. */
   items: AgendaListItem[];
-  /** Las de la semana visible — sólo para pintar la carga de cada día en la tira. */
-  weekItems: AgendaListItem[];
-  /** Las del mes; vacío cuando se está en Lista y no hace falta pedirlas. */
+  /** Las del mes de `day` (con las semanas que completan la grilla): puntos del mini calendario y vista Mes. */
   monthItems: AgendaListItem[];
   overdue: AgendaListItem[];
   overdueTotal: number;
   members: Member[];
-  /** Con `agenda:assign` se ve el equipo: aparece el filtro por cobrador y la lista se agrupa. */
+  /** Con `agenda:assign` se ve el equipo: aparece el selector de equipo y el filtro por cobrador. */
   supervises: boolean;
   events: AgendaEvents;
 }) {
@@ -68,10 +67,12 @@ export function AgendaScreen({
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+  const [q, setQ] = useState('');
 
-  const view = params.get('view') === 'calendar' ? 'calendar' : 'list';
+  const view = params.get('view') === 'calendar' ? 'month' : 'day';
   const gestor = params.get('gestor') ?? '';
   const tipo = params.get('tipo') ?? '';
+  const estado = params.get('estado') ?? '';
 
   /** Escribe en la URL sin perder lo que ya había: es lo que conserva día y filtros al cambiar de vista. */
   function go(patch: Record<string, string | null>) {
@@ -84,42 +85,45 @@ export function AgendaScreen({
   }
 
   /*
-   * 🔴 **La agenda abre SIEMPRE en Lista.** Antes recordaba la última vista en `localStorage` y la
-   * reponía al entrar, así que quien miraba el calendario una vez lo recibía todos los días: la
-   * pantalla que se abre veinte veces por día es la del trabajo de hoy, y el mes es una consulta
-   * puntual. El calendario sigue a un clic, y con `?view=calendar` en la URL se comparte por link.
+   * 🔴 **La agenda abre SIEMPRE en Día.** El mes es una consulta puntual: la pantalla que se abre veinte
+   * veces por día es la del trabajo de hoy. Con `?view=calendar` en la URL el mes se comparte por link.
    */
 
-  /** El filtrado, una vez, para la lista y para las métricas — o el porcentaje mentiría. */
-  const visibles = useMemo(
-    () => items.filter((i) => (!gestor || i.assigneeId === gestor) && (!tipo || i.type === tipo)),
-    [items, gestor, tipo],
-  );
-  const metrics = dayMetrics(visibles);
-  const carga: Map<string, DayLoad> = useMemo(() => loadByDay(weekItems), [weekItems]);
+  const filters = useMemo(() => ({ gestor, tipo, estado, q }), [gestor, tipo, estado, q]);
+  const visibles = useMemo(() => filterItems(items, filters), [items, filters]);
+  const delMes = useMemo(() => filterItems(monthItems, filters), [monthItems, filters]);
+  const conItems = useMemo(() => new Set(delMes.map((i) => i.scheduledDate.slice(0, 10))), [delMes]);
+  const hayFiltro = !!(gestor || tipo || estado || q.trim());
 
   const crear = () => events.onCreateRequest({ date: day, gestorId: gestor || undefined });
-  /*
-   * Dónde vive «Nueva gestión».
-   *
-   * Con el día cargado la acción va **junto a los filtros**, que es donde está la mano: se filtra por
-   * cobrador y se agenda para ese mismo cobrador sin cruzar la pantalla. En un día vacío sobra —el
-   * estado vacío ya ofrece su propio botón, y dos veces lo mismo es una de más—, y en un día pasado
-   * la acción normal no es agendar hacia atrás. En esos dos casos vuelve al encabezado, donde no
-   * compite con nada.
-   */
-  const ctaEnFiltros = view === 'list' && visibles.length > 0 && day >= today;
 
   return (
     <>
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+      <div className="mb-5 grid items-center gap-3 md:grid-cols-[1fr_auto_1fr]">
         <div className="min-w-0">
           <h1 className="text-[26px] font-semibold tracking-tight text-k-navy">{t('title')}</h1>
           <p className="mt-1 text-[14px] text-k-text-2">{supervises ? t('subtitleTeam') : t('subtitle')}</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <ViewToggle view={view} onChange={(v) => go({ view: v === 'list' ? null : v })} />
-          {!ctaEnFiltros && <CreateButton onClick={crear} />}
+        <div className="md:justify-self-center">
+          <Segmented
+            value={view}
+            onChange={(v) => go({ view: v === 'day' ? null : 'calendar' })}
+            label={t('view')}
+            options={[
+              { value: 'day', label: t('views.day') },
+              { value: 'month', label: t('views.month') },
+            ]}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2 md:justify-self-end">
+          <TeamSelect supervises={supervises} members={members} gestor={gestor} onChange={(v) => go({ gestor: v })} />
+          <button
+            type="button"
+            onClick={crear}
+            className="h-10 shrink-0 rounded-lg bg-k-navy px-4 text-[13px] font-medium text-white hover:bg-k-slate active:scale-[.98]"
+          >
+            {t('createCta')}
+          </button>
         </div>
       </div>
 
@@ -129,166 +133,117 @@ export function AgendaScreen({
         </p>
       )}
 
-      {view === 'list' && <DateNav day={day} today={today} load={carga} onPick={(iso) => go({ date: iso })} />}
+      <div className="grid items-start gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="space-y-4">
+          <MiniCalendar
+            day={day}
+            today={today}
+            withItems={conItems}
+            onPickDay={(iso) => go({ date: iso })}
+            onPickMonth={(iso) => go({ date: iso })}
+          />
+          <FiltersCard
+            values={{ q, gestor, tipo, estado }}
+            supervises={supervises}
+            members={members}
+            onChange={(patch) => {
+              if (patch.q !== undefined) setQ(patch.q);
+              const url: Record<string, string | null> = {};
+              if (patch.gestor !== undefined) url.gestor = patch.gestor || null;
+              if (patch.tipo !== undefined) url.tipo = patch.tipo || null;
+              if (patch.estado !== undefined) url.estado = patch.estado || null;
+              if (Object.keys(url).length > 0) go(url);
+            }}
+            onClear={() => {
+              setQ('');
+              go({ gestor: null, tipo: null, estado: null });
+            }}
+          />
+          <SummaryCard items={visibles} />
+        </div>
 
-      <Filtros
-        supervises={supervises}
-        members={members}
-        gestor={gestor}
-        tipo={tipo}
-        onChange={(patch) => go(patch)}
-        cta={ctaEnFiltros ? <CreateButton onClick={crear} /> : null}
-      />
-
-      <OverduePanel items={overdue} total={overdueTotal} events={events} />
-
-      {view === 'list' ? (
-        <>
-          <Metrics total={metrics.total} done={metrics.done} donePct={metrics.donePct} overdue={metrics.overdue} />
-          <div className="mt-4">
-            <DayList items={visibles} members={members} grouped={supervises} events={events} day={day} />
-          </div>
-        </>
-      ) : (
-        <MonthCalendar
-          month={day}
-          today={today}
-          items={monthItems.filter((i) => (!gestor || i.assigneeId === gestor) && (!tipo || i.type === tipo))}
-          onPickDay={(iso) => go({ date: iso, view: null })}
-          onPickMonth={(iso) => go({ date: iso })}
-          events={events}
-        />
-      )}
+        <div className="min-w-0">
+          <OverduePanel items={overdue} total={overdueTotal} events={events} />
+          {view === 'day' ? (
+            <DayPanel
+              day={day}
+              today={today}
+              items={visibles}
+              members={members}
+              filtered={hayFiltro}
+              events={events}
+              onPickDay={(iso) => go({ date: iso })}
+            />
+          ) : (
+            <div className="rounded-2xl border border-k-border bg-white p-3 shadow-k-card sm:p-4">
+              <MonthCalendar
+                month={day}
+                today={today}
+                items={delMes}
+                onPickDay={(iso) => go({ date: iso, view: null })}
+                onPickMonth={(iso) => go({ date: iso })}
+                events={events}
+              />
+            </div>
+          )}
+        </div>
+      </div>
     </>
   );
 }
 
-/** Lista o calendario. `radiogroup` y no dos botones sueltos: se recorre con flechas. */
-/** El mismo control que usa Rutas para Día/Período; vive en `panel-ui` desde que son dos. */
-function ViewToggle({ view, onChange }: { view: 'list' | 'calendar'; onChange: (v: 'list' | 'calendar') => void }) {
-  const t = useTranslations('panel.agenda');
-  return (
-    <Segmented
-      value={view}
-      onChange={onChange}
-      label={t('view')}
-      options={[
-        { value: 'list', label: t('views.list') },
-        { value: 'calendar', label: t('views.calendar') },
-      ]}
-    />
-  );
-}
-
-function CreateButton({ onClick }: { onClick: () => void }) {
-  const t = useTranslations('panel.agenda');
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="h-9 shrink-0 rounded-lg bg-k-navy px-3 text-[13px] font-medium text-white hover:bg-k-slate active:scale-[.98]"
-    >
-      {t('createCta')}
-    </button>
-  );
-}
-
-function Filtros({
+/**
+ * El selector de equipo de la cabecera. Es **el mismo** `gestor` del filtro de cobrador (misma URL, mismos
+ * permisos): con `agenda:assign` se elige a quién mirar o a todo el equipo; sin él, la API ya devuelve sólo lo
+ * propio y no hay nada que elegir.
+ */
+function TeamSelect({
   supervises,
   members,
   gestor,
-  tipo,
   onChange,
-  cta,
 }: {
   supervises: boolean;
   members: Member[];
   gestor: string;
-  tipo: string;
-  onChange: (patch: Record<string, string | null>) => void;
-  /** La acción principal, cuando le toca vivir en esta línea. */
-  cta?: ReactNode;
+  onChange: (gestorId: string) => void;
 }) {
   const t = useTranslations('panel.agenda');
-  // Sin equipo que mostrar y sin tipo elegido, la barra no tendría nada que ofrecer.
-  const conGestor = supervises && members.length > 0;
+  const box = 'relative flex h-10 min-w-[190px] flex-col justify-center rounded-lg border border-k-border bg-white px-3';
 
-  return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
-      {conGestor && (
-        <label className="flex items-center gap-2 text-[13px] text-k-text-2">
-          {t('filters.assignee')}
-          <Select
-            value={gestor}
-            onChange={(e) => onChange({ gestor: e.target.value || null })}
-            className="h-9 w-auto min-w-[160px] text-[13px]"
-          >
-            <option value="">{t('filters.all')}</option>
-            {members.map((m) => (
-              <option key={m.userId} value={m.userId}>
-                {memberName(m)}
-              </option>
-            ))}
-          </Select>
-        </label>
-      )}
-      <label className="flex items-center gap-2 text-[13px] text-k-text-2">
-        {t('filters.type')}
-        <Select
-          value={tipo}
-          onChange={(e) => onChange({ tipo: e.target.value || null })}
-          className="h-9 w-auto min-w-[150px] text-[13px]"
-        >
-          <option value="">{t('filters.all')}</option>
-          {Object.values(AgendaItemType).map((v) => (
-            <option key={v} value={v}>
-              {t(`type.${v}`)}
-            </option>
-          ))}
-        </Select>
-      </label>
-      {(gestor || tipo) && (
-        <button
-          type="button"
-          onClick={() => onChange({ gestor: null, tipo: null })}
-          className="text-[13px] font-medium text-k-periwinkle hover:underline"
-        >
-          {t('filters.clear')}
-        </button>
-      )}
-      {/* `ml-auto` y no un contenedor aparte: en pantalla angosta la barra envuelve y el botón baja. */}
-      {cta && <span className="ml-auto">{cta}</span>}
-    </div>
-  );
-}
+  if (!supervises) {
+    return (
+      <div className={box}>
+        <span className="text-[13px] font-medium text-k-navy">{t('team.justMe')}</span>
+      </div>
+    );
+  }
 
-/**
- * Las tres cifras del día.
- *
- * ⚠️ **No hay «cartera del día» en plata**, y no es un olvido: `AgendaListItem` no trae monto —la
- * agenda agenda gestiones, no deudas—. Poner una cifra ahí obligaba a pedir cada crédito por
- * separado, y una tarjeta con un número inventado es peor que una tarjeta menos.
- */
-function Metrics({ total, done, donePct, overdue }: { total: number; done: number; donePct: number; overdue: number }) {
-  const t = useTranslations('panel.agenda');
+  const elegido = members.find((m) => m.userId === gestor);
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-      <Card label={t('metrics.total')} value={String(total)} />
-      <Card label={t('metrics.done')} value={`${done}`} hint={total > 0 ? `${donePct}%` : undefined} tone="success" />
-      <Card label={t('metrics.overdue')} value={String(overdue)} tone={overdue > 0 ? 'danger' : undefined} />
-    </div>
-  );
-}
-
-function Card({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: 'success' | 'danger' }) {
-  const color = tone === 'danger' ? 'text-k-danger' : tone === 'success' ? 'text-k-success' : 'text-k-navy';
-  return (
-    <div className="rounded-xl border border-k-border bg-white px-4 py-3">
-      <p className="text-[12px] text-k-text-2">{label}</p>
-      <p className={`mt-0.5 text-[22px] font-semibold tabular-nums ${color}`}>
-        {value}
-        {hint && <span className="ml-1.5 text-[13px] font-normal text-k-text-2">{hint}</span>}
-      </p>
-    </div>
+    <label className={`${box} cursor-pointer hover:bg-k-bg`}>
+      <span className="text-[13px] font-semibold leading-tight text-k-navy">
+        {elegido ? memberName(elegido) : t('team.mine')}
+      </span>
+      <span className="text-[11px] leading-tight text-k-text-2">
+        {elegido ? t('team.label') : t('team.count', { n: members.length })}
+      </span>
+      <select
+        aria-label={t('team.label')}
+        value={gestor}
+        onChange={(e) => onChange(e.target.value)}
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+      >
+        <option value="">{t('team.all')}</option>
+        {members.map((m) => (
+          <option key={m.userId} value={m.userId}>
+            {memberName(m)}
+          </option>
+        ))}
+      </select>
+      <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-k-text-2" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M6 9l6 6 6-6" />
+      </svg>
+    </label>
   );
 }

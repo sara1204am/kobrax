@@ -1112,7 +1112,7 @@
     },
     "agenda": {
       "title": "Schedule",
-      "subtitle": "What the team has scheduled for the day.",
+      "subtitle": "What is scheduled for you.",
       "scopedToMine": "You are seeing only your own items.",
       "today": "Today",
       "previousDay": "Previous day",
@@ -1219,7 +1219,9 @@
       "view": "How the agenda is shown",
       "views": {
         "list": "List",
-        "calendar": "Calendar"
+        "calendar": "Calendar",
+        "day": "Day",
+        "month": "Month"
       },
       "week": "Week",
       "pickDate": "Pick a date",
@@ -1237,11 +1239,42 @@
         "overdue": "Overdue"
       },
       "filters": {
+        "title": "Filters",
+        "search": "Search client, credit or ID…",
         "assignee": "Collector",
         "type": "Type",
         "all": "All",
-        "clear": "Clear filters"
+        "allAssignees": "All collectors",
+        "allTypes": "All types",
+        "allStatuses": "All statuses",
+        "clear": "Clear"
       },
+      "summary": {
+        "title": "Day summary",
+        "count": "{n, plural, one {# activity} other {# activities}}",
+        "pending": "Pending",
+        "done": "Completed",
+        "other": "Rescheduled or cancelled"
+      },
+      "sort": {
+        "label": "Sort",
+        "hour": "Sort by time",
+        "type": "Sort by type",
+        "assignee": "Sort by collector"
+      },
+      "team": {
+        "label": "Team",
+        "mine": "My team",
+        "count": "{n, plural, one {# collector} other {# collectors}}",
+        "all": "Whole team",
+        "justMe": "My items"
+      },
+      "groupCount": "{n, plural, one {# activity} other {# activities}}",
+      "emptyFiltered": "No items match the filters.",
+      "menu": "Item actions",
+      "credit": "Credit #{code}",
+      "miniCalendar": "Month calendar",
+      "withItems": "Has scheduled items",
       "create": {
         "title": "New task",
         "searchClient": "Debtor",
