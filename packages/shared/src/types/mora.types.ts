@@ -60,6 +60,8 @@ export interface MoraAssignment {
   id?: string;
   kind: CreditAssignmentKind;
   userId: string;
+  /** Nombre de la persona (resuelto por el servidor; no exige `user:read`). Ausente = no se pudo resolver. */
+  userName?: string;
   /** ISO. Ausente = no vence por fecha. */
   expiresAt?: string;
 }
@@ -122,6 +124,8 @@ export interface MoraCreditListItem {
   priorityPinned: boolean;
   /** El responsable del crédito (`credits.assigned_manager_id`). Ausente = sin responsable. */
   responsibleId?: string;
+  /** Nombre del responsable, resuelto por el servidor (el cobrador no puede leer `/users`). Ausente = sin responsable o no resuelto. */
+  responsibleName?: string;
   /** Última gestión (`credits.last_action_at`), ISO. Sólo informativo: no es estado ni filtro. */
   lastActionAt?: string;
   /** Resultado/tipo de la última gestión del crédito. */
@@ -161,6 +165,13 @@ export interface MoraActivityItem {
   result?: string;
   notes?: string;
   userId?: string;
+  /** Nombre de quien la registró (resuelto por el servidor). */
+  authorName?: string;
+  /** Sólo `ASSIGNMENT`: id de la persona a quien se asignó (sale de la nota). */
+  assignedToId?: string;
+  /** Sólo `ASSIGNMENT`: nombre de la persona a quien se asignó. */
+  assignedToName?: string;
+  episodeId?: string;
   createdAt: string;
 }
 
@@ -235,6 +246,8 @@ export interface MoraPromise {
   bankCode?: string;
   /** Quién la agendó / a quién le toca darle seguimiento. */
   assigneeId?: string;
+  /** Nombre de quien le da seguimiento (resuelto por el servidor). */
+  assigneeName?: string;
   observations?: string;
   createdAt: string;
 }
@@ -275,6 +288,8 @@ export interface CreditNote {
   h: number;
   zIndex: number;
   authorId?: string;
+  /** Nombre del autor (resuelto por el servidor). */
+  authorName?: string;
   createdAt: string;
   updatedAt: string;
 }
