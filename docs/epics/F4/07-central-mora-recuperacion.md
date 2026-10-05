@@ -6,6 +6,8 @@ fue completando con lo que quedó; las secciones de «Avance» de abajo describe
 es el plan original, que se conserva como referencia de las decisiones. Decisiones C1–C4 resueltas el 2026-10-01
 (ver §9.C). Sin bloqueantes abiertos.
 
+> **F4/08:** el «caso» de cobranza se eliminó (`08-eliminar-caso.md`). Donde este documento habla de abrir, cerrar o asignar un caso, hoy es el crédito (responsable y episodio de mora); nadie abre casos, ni el sistema ni una persona.
+
 **Cambios respecto al plan:** las notas no son «append-only»: son **post-its anclados a cada sección** de la ficha,
 con edición y borrado (ver «Post-its» abajo), y las métricas de recuperación están hechas (T15).
 
@@ -849,7 +851,7 @@ por `visitId` en el timeline). **Criterios:** historial reconstruible sin salir 
 **Objetivo:** detalle por crédito con acciones.
 **Archivos a modificar:** `app/cliente/[id].tsx` (hoy 880 líneas; **extraer** secciones en componentes antes de añadir),
 nueva ruta `app/mora/[creditId].tsx`. **A crear:** `src/mora-detail.tsx`, `src/credit-notes.service.ts`.
-**Reutilizar:** `MoraSheet`, `createPayment`, `case.activity`, `rutas/resultado.tsx` para visita, `Linking` para `tel:`/WhatsApp.
+**Reutilizar:** `MoraSheet`, `createPayment`, `mora.activity`, `rutas/resultado.tsx` para visita, `Linking` para `tel:`/WhatsApp.
 **Tests:** crédito correcto, acciones, nota, pago, gestión con promesa. **Dependencias:** T17.
 **Riesgos:** pantalla ya grande; refactor mínimo y con tests. **Criterios:** llamar/visitar/registrar en ≤3 toques.
 
