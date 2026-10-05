@@ -50,14 +50,7 @@ export class MoraController {
     return this.mora.branches();
   }
 
-  /** Va antes de `:creditId`: «by-case» no es un id. */
-  @Get('by-case/:caseId')
-  @Roles(Permission.COLLECTION_READ)
-  byCase(@Param('caseId', ParseUUIDPipe) caseId: string) {
-    return this.mora.byCase(caseId);
-  }
-
-  /** El historial de mora del crédito. Va antes de `:creditId` por el mismo motivo que `by-case`. */
+  /** El historial de mora del crédito. Va antes de `:creditId`. */
   @Get(':creditId/episodes')
   @Roles(Permission.COLLECTION_READ)
   episodes(@Param('creditId', ParseUUIDPipe) creditId: string) {

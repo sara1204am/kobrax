@@ -41,7 +41,7 @@ const CAMINO_DEL_COBRADOR: [string, new (...args: never[]) => object, string[]][
   // Los casos que gestiona y la actividad que registra sobre ellos.
   ['cases', CasesController, ['list', 'findOne', 'addActivity']],
   // La Central de Mora: sus créditos en mora (el service lo acota a sus casos).
-  ['mora', MoraController, ['list', 'findOne', 'byCase', 'branches', 'episodes', 'metrics', 'promises', 'notes', 'addNote', 'updateNote', 'deleteNote', 'addActivity', 'exportCsv', 'exportPdf']],
+  ['mora', MoraController, ['list', 'findOne', 'branches', 'episodes', 'metrics', 'promises', 'notes', 'addNote', 'updateNote', 'deleteNote', 'addActivity', 'exportCsv', 'exportPdf']],
   // Su cartera: la ve, la da de alta en campo y le corrige datos.
   ['clients', ClientsController, ['list', 'findOne', 'create', 'update']],
   ['credits', CreditsController, ['list', 'findOne', 'create', 'update']],

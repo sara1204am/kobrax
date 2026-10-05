@@ -14,7 +14,6 @@ import {
   staleAfterDaysOf,
   type ApiResponse,
   type MoraAssignment,
-  type MoraCaseLookup,
   type MoraCreditDetail,
   type MoraCreditListItem,
   type CreditAssignmentKind,
@@ -545,20 +544,6 @@ export class MoraService {
       tx.branch.findMany({ where: { deletedAt: null, active: true }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
     );
     return ResponseDto.ok(rows);
-  }
-
-  /**
-   * A qué crédito pertenece un caso. Existe para que los enlaces viejos (`/mora/<caseId>`: notificaciones,
-   * la bitácora del cliente) sigan abriendo: la ficha ahora es por crédito.
-   */
-  async byCase(caseId: string): Promise<ApiResponse<MoraCaseLookup>> {
-    const scope = this.scope();
-    const row = await this.tx((tx) =>
-      tx.collectionCase.findFirst({ where: { id: caseId, deletedAt: null }, select: { creditId: true, assigneeId: true } }),
-    );
-    // Mismo alcance que `GET /cases/:id`: el cobrador sólo abre los casos que tiene asignados.
-    if (!row || (scope.ownOnly && row.assigneeId !== scope.userId)) throw new NotFoundException('Caso no encontrado');
-    return ResponseDto.ok({ creditId: row.creditId });
   }
 
   /**
