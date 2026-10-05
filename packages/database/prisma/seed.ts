@@ -293,6 +293,14 @@ const TEAM: TeamMember[] = [
   { key: 'maria', email: 'multi@kobrax.demo', first: 'María', last: 'Multi', role: RoleType.SUPERVISOR, branch: 'ALT', isDefault: true, alsoDemo2: RoleType.ACCOUNT_ADMIN },
   { key: 'julia', email: 'cobrador3@kobrax.demo', first: 'Julia', last: 'Ticona', role: RoleType.COLLECTOR, branch: 'ALT', supervisor: 'maria' },
   { key: 'freddy', email: 'cobrador4@kobrax.demo', first: 'Freddy', last: 'Condori', role: RoleType.COLLECTOR, branch: 'ALT', supervisor: 'maria' },
+  // Cuentas de prueba del QA manual (cobrador5 a cobrador10): existen, están activas y entran con la contraseña del seed.
+  // Sin créditos propios a propósito: sirven para probar login, bloqueo y desbloqueo sin ensuciar los datos de la demo.
+  { key: 'c5', email: 'cobrador5@kobrax.demo', first: 'Elena', last: 'Quispe', role: RoleType.COLLECTOR, branch: 'CEN', supervisor: 'sandra' },
+  { key: 'c6', email: 'cobrador6@kobrax.demo', first: 'Diego', last: 'Mamani', role: RoleType.COLLECTOR, branch: 'CEN', supervisor: 'sandra' },
+  { key: 'c7', email: 'cobrador7@kobrax.demo', first: 'Lucía', last: 'Choque', role: RoleType.COLLECTOR, branch: 'CEN', supervisor: 'sandra' },
+  { key: 'c8', email: 'cobrador8@kobrax.demo', first: 'Pablo', last: 'Rojas', role: RoleType.COLLECTOR, branch: 'ALT', supervisor: 'maria' },
+  { key: 'c9', email: 'cobrador9@kobrax.demo', first: 'Sofía', last: 'Mendoza', role: RoleType.COLLECTOR, branch: 'ALT', supervisor: 'maria' },
+  { key: 'c10', email: 'cobrador10@kobrax.demo', first: 'Iván', last: 'Cruz', role: RoleType.COLLECTOR, branch: 'ALT', supervisor: 'maria' },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
