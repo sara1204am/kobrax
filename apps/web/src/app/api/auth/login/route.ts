@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { LoginResult } from '@kobrax/shared';
 import { apiCall, sameOrigin } from '@/lib/bff';
-import { apiError, stepResponse } from '@/lib/auth-flow';
+import { apiError, revokePreviousSession, stepResponse } from '@/lib/auth-flow';
 
 export async function POST(req: Request): Promise<NextResponse> {
   if (!sameOrigin(req)) return NextResponse.json({ error: { code: 'CSRF', message: 'Origen no permitido' } }, { status: 403 });
@@ -15,5 +15,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     body: JSON.stringify({ email, password }),
   });
   if (status !== 200 || !body.data) return apiError(status, body);
+  // Las cookies de otra sesión (pestaña que seguía en /login) se pisan: se revoca la anterior.
+  await revokePreviousSession();
   return stepResponse(body.data);
 }
