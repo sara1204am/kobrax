@@ -39,6 +39,11 @@ async function fillForm() {
  * usuaria a reintentar un alta que ya existe y cobrarse un 409.
  */
 describe('RegistroPage', () => {
+  it('el paso 1 (elegir plan) ofrece volver a iniciar sesión', () => {
+    render(<RegistroPage />);
+    expect(screen.getByRole('link', { name: 'Ya tengo cuenta' })).toHaveAttribute('href', '/login');
+  });
+
   it('🔴 no hay formulario hasta elegir plan, y el elegido viaja en el alta', async () => {
     let alta: Record<string, unknown> | undefined;
     server.use(
