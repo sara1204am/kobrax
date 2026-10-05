@@ -42,7 +42,7 @@ async function linkCqe(userId: string): Promise<void> {
 async function owner(code: string): Promise<{ column: string | null; table: string[] }> {
   const credit = await prisma.credit.findFirstOrThrow({ where: { accountId, externalId: code } });
   const rows = await prisma.creditAssignment.findMany({
-    where: { creditId: credit.id, revokedAt: null, expiresAt: null, caseId: null },
+    where: { creditId: credit.id, revokedAt: null, expiresAt: null },
     select: { userId: true },
   });
   return { column: credit.assignedManagerId, table: rows.map((r) => r.userId) };
@@ -55,7 +55,7 @@ async function desync(): Promise<number> {
     WHERE c.deleted_at IS NULL AND c.account_id = ${accountId}
       AND c.assigned_manager_id IS DISTINCT FROM (
         SELECT ca.user_id FROM credit_assignments ca
-        WHERE ca.credit_id = c.id AND ca.revoked_at IS NULL AND ca.expires_at IS NULL AND ca.case_id IS NULL)`;
+        WHERE ca.credit_id = c.id AND ca.revoked_at IS NULL AND ca.expires_at IS NULL)`;
   return Number(n);
 }
 
@@ -170,16 +170,11 @@ describe('Importación de cartera — quién queda responsable', { timeout: 600_
     }
   });
 
-  it('8 + 9 + 10 · reasignar un existente es explícito, queda auditado y NO mueve el caso abierto', async () => {
+  it('8 + 9 + 10 · reasignar un existente es explícito, queda auditado', async () => {
     const preview = await importReport<PortfolioSummary>(token.manager, R01, { dryRun: true });
     const target = preview.data!.preview.toUpdate.find((r) => r.currentAssigneeId === id.juan)!;
-    assert.ok(target, 'hay un existente de Juan para reasignar');
-    // Un caso abierto a cargo de Juan sobre ese crédito.
     const credit = await prisma.credit.findFirstOrThrow({ where: { accountId, externalId: target.code } });
-    await prisma.collectionCase.updateMany({ where: { creditId: credit.id }, data: { deletedAt: new Date() } });
-    const kase = await prisma.collectionCase.create({
-      data: { accountId, creditId: credit.id, clientId: credit.clientId, assigneeId: id.juan, status: 'ACTIVE', priority: 'MEDIUM' },
-    });
+    assert.ok(target, 'hay un existente de Juan para reasignar');
 
     const res = await importReport<PortfolioSummary>(token.manager, R01, {
       assignments: { version: 1, reassign: [{ externalId: target.code, fromUserId: id.juan, toUserId: id.pedro }] },
@@ -195,8 +190,6 @@ describe('Importación de cartera — quién queda responsable', { timeout: 600_
     assert.ok(audit, 'quedó auditado');
     assert.equal((audit!.after as { runId?: string }).runId, res.data!.runId);
 
-    // 10 · el caso sigue con su cobrador.
-    assert.equal((await prisma.collectionCase.findUniqueOrThrow({ where: { id: kase.id } })).assigneeId, id.juan);
   });
 
   it('reasignar con un responsable desactualizado → ASSIGNMENT_CONFLICT y la corrida no se aplica', async () => {

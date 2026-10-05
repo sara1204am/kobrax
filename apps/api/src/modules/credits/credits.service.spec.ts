@@ -12,7 +12,6 @@ function makeService(
     config?: unknown;
     /** `accounts.settings` (D20: método de mora por defecto). */
     settings?: unknown;
-    openCase?: unknown;
     /** Topes del plan. Por defecto no frenan: sólo los usa el test del tope. */
     plan?: Parameters<typeof fakePlanLimits>[0];
     /** Permisos de quien llama. Por defecto ninguno: un cobrador sin `assignment:write`. */
@@ -24,8 +23,6 @@ function makeService(
   const calls = {
     creditCreate: [] as Record<string, unknown>[],
     creditUpdate: [] as Record<string, unknown>[],
-    caseCreate: [] as Record<string, unknown>[],
-    caseClose: [] as Record<string, unknown>[],
     agendaCreate: [] as Record<string, unknown>[],
     arrearCreate: [] as Record<string, unknown>[],
     arrearDeleteMany: 0,
@@ -86,17 +83,6 @@ function makeService(
         return { count: args.data.length };
       },
     },
-    collectionCase: {
-      create: async (args: { data: Record<string, unknown> }) => {
-        calls.caseCreate.push(args.data);
-        return { id: 'case1', ...args.data };
-      },
-      findFirst: async () => opts.openCase ?? null,
-      updateMany: async (args: { data: Record<string, unknown> }) => {
-        calls.caseClose.push(args.data);
-        return { count: opts.openCase ? 1 : 0 };
-      },
-    },
     agendaItem: {
       // D10: lo que `AssignmentService.apply` mueve al reasignar (acá no hay agendados pendientes).
       findMany: async () => [],
@@ -148,10 +134,9 @@ describe('CreditsService.create — idempotencia del alta offline', () => {
     assert.equal(calls.creditCreate.length, 0, 'no debe insertar de nuevo');
   });
 
-  it('el reintento (aun con `openCase`, que se ignora) no crea caso ni recordatorio ni audita', async () => {
+  it('el reintento no crea recordatorio ni audita', async () => {
     const { service, calls } = makeService({ client: { id: 'c1' }, credit: { id: 'ya-existe', currency: 'BOB', metadata: {} } });
-    await service.create({ ...(BASE as object), id: 'ya-existe', openCase: true } as never);
-    assert.equal(calls.caseCreate.length, 0);
+    await service.create({ ...(BASE as object), id: 'ya-existe' } as never);
     assert.equal(calls.agendaCreate.length, 0);
     assert.deepEqual(calls.audit, []);
   });
@@ -294,14 +279,10 @@ describe('CreditsService.create — crédito sin cronograma', () => {
     assert.equal((data.metadata as { balanceBasis?: string }).balanceBasis, 'total');
   });
 
-  /**
-   * F4/08: crear un crédito ya no abre caso ni crea el recordatorio «Cobrar cuota» (lo genera un job aparte, D11).
-   * `openCase` sigue siendo un campo válido del DTO —web y móvil aún lo mandan— pero se ignora.
-   */
-  it('openCase se acepta y se ignora: no abre caso ni crea recordatorio', async () => {
+  /** F4/08: crear un crédito no crea el recordatorio «Cobrar cuota» (lo genera un job aparte, D11). */
+  it('no crea recordatorio de agenda', async () => {
     const { service, calls } = makeService({ client: { id: 'c1' } });
-    await service.create({ ...(MOVIL as object), daysPastDue: 45, openCase: true } as never);
-    assert.equal(calls.caseCreate.length, 0);
+    await service.create({ ...(MOVIL as object), daysPastDue: 45 } as never);
     assert.equal(calls.agendaCreate.length, 0);
     assert.deepEqual(
       calls.audit.map((a) => `${a.action} ${a.entity}`),
@@ -309,12 +290,6 @@ describe('CreditsService.create — crédito sin cronograma', () => {
     );
   });
 
-  it('sin openCase tampoco se crea ni caso ni agenda', async () => {
-    const { service, calls } = makeService({ client: { id: 'c1' } });
-    await service.create(MOVIL);
-    assert.equal(calls.caseCreate.length, 0);
-    assert.equal(calls.agendaCreate.length, 0);
-  });
 });
 
 describe('CreditsService.update (editar desde la ficha §4)', () => {
@@ -440,7 +415,6 @@ describe('CreditsService.update — redefinir condiciones y estado al registrar 
     const data = calls.creditUpdate[0]!;
     assert.equal(data.daysPastDue, 15);
     assert.equal(typeof (data.metadata as Record<string, unknown>).moraSince, 'string');
-    assert.equal(calls.caseCreate.length, 0);
     assert.deepEqual(calls.priorityRecompute, ['cr1']);
   });
 
@@ -810,7 +784,6 @@ describe('CreditsService.markArrears', () => {
   it('no abre caso: recalcula la prioridad del episodio ahí mismo', async () => {
     const { service, calls } = makeService({ credit: activo() });
     await service.markArrears('cr1', 15);
-    assert.equal(calls.caseCreate.length, 0);
     assert.deepEqual(calls.priorityRecompute, ['cr1']);
   });
 
@@ -847,18 +820,17 @@ describe('CreditsService.clearArrears', () => {
     ...over,
   });
 
-  it('«siguiente período» avanza la fecha y NO toca casos (el trigger cierra el episodio)', async () => {
-    const { service, calls } = makeService({ credit: enMora(), openCase: { id: 'k1' } });
+  it('«siguiente período» avanza la fecha y (el trigger cierra el episodio)', async () => {
+    const { service, calls } = makeService({ credit: enMora() });
     await service.clearArrears('cr1', { mode: 'next_period' });
     const meta = calls.creditUpdate[0]!.metadata as { nextDueDate?: string };
     assert.ok(meta.nextDueDate! > new Date().toISOString().slice(0, 10), 'la nueva fecha es futura');
     assert.equal(calls.creditUpdate[0]!.daysPastDue, 0);
-    assert.equal(calls.caseClose.length, 0, 'ya no se cierra ningún caso a mano');
     assert.equal(calls.priorityRecompute.length, 0);
   });
 
   it('«sin fecha» deja el préstamo abierto: sin vencimiento no hay mora que contar', async () => {
-    const { service, calls } = makeService({ credit: enMora(), openCase: { id: 'k1' } });
+    const { service, calls } = makeService({ credit: enMora() });
     await service.clearArrears('cr1', { mode: 'none' });
     const meta = calls.creditUpdate[0]!.metadata as { nextDueDate?: string };
     assert.equal(meta.nextDueDate, undefined);
@@ -872,7 +844,7 @@ describe('CreditsService.clearArrears', () => {
 
   it('poner al día también saca la marca manual: quien la puso es quien la saca', async () => {
     const credit = enMora({ metadata: { origin: 'manual', frequency: 'MONTHLY', moraSince: '2026-01-01' } });
-    const { service, calls } = makeService({ credit, openCase: { id: 'k1' } });
+    const { service, calls } = makeService({ credit });
     await service.clearArrears('cr1', { mode: 'next_period' });
     const meta = calls.creditUpdate[0]!.metadata as { moraSince?: string };
     assert.equal(meta.moraSince, undefined);

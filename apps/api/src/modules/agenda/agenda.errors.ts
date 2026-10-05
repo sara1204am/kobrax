@@ -4,11 +4,11 @@ export const agendaItemNotFound = () =>
   new NotFoundException({ code: 'AGENDA_NOT_FOUND', message: 'Gestión agendada no encontrada' });
 
 /** El crédito no existe o quien agenda no lo puede ver. Se responde 404 (no 403): no filtra existencia. */
-export const agendaCaseNotFound = () =>
+export const agendaCreditNotFound = () =>
   new NotFoundException({ code: 'AGENDA_001', message: 'El crédito no existe o no está a tu cargo' });
 
 /** El cliente existe, pero ninguno de sus créditos es visible para quien agenda → no puede agendarle nada. */
-export const agendaClientWithoutCases = () =>
+export const agendaClientWithoutCredits = () =>
   new NotFoundException({ code: 'AGENDA_002', message: 'El cliente no tiene créditos a tu cargo' });
 
 export const agendaPastDate = () =>

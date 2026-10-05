@@ -19,14 +19,12 @@ import { AnalyticsQueryDto, TrendQueryDto } from './dto/analytics.dto';
 /*
  * 🔴 F4/08 · fase 3 — CAMBIÓ LA DEFINICIÓN de dos números del tablero. Las series de antes y de después NO son comparables:
  *
- * · «Casos activos» (`activeCases`) ahora es **créditos en mora** (`creditsInArrears`): créditos con un episodio de
+ * · «Casos activos» pasó a ser **créditos en mora** (`creditsInArrears`): créditos con un episodio de
  *   mora ABIERTO (`credit_arrear_episodes.ended_at IS NULL`). Antes eran los casos de cobranza no terminales, que
  *   el job abría con reglas propias (umbral, dato viejo) y que una persona podía cerrar. El período anterior sale de
  *   las fechas de inicio y fin del episodio.
  * · El ranking por cobrador agrupa por el **responsable del crédito** (`assigned_manager_id`), no por el cobrador del
  *   caso, y cuenta créditos en mora. Su cartera es la de todos sus créditos activos, estén o no en mora.
- *
- * El filtro `caseStatus` desapareció con el estado del caso: el DTO lo acepta y se ignora.
  */
 
 const money = (n: unknown): number => Math.round(Number(n ?? 0) * 100) / 100;
@@ -139,7 +137,7 @@ export class AnalyticsService {
 
   /**
    * El `WHERE` de los episodios de mora **abiertos o históricos** (alias `e`) con su crédito (`cr`): sucursal, fuente,
-   * responsable y prioridad del episodio. `caseStatus` ya no existe (se ignora).
+   * responsable y prioridad del episodio.
    */
   private episodeWhere(q: AnalyticsQueryDto): Prisma.Sql {
     const conds: Prisma.Sql[] = [Prisma.sql`cr.deleted_at IS NULL`];
@@ -273,9 +271,7 @@ export class AnalyticsService {
       outstanding: { value: outstanding, previous: null },
       overdue: { value: overdue, previous: null },
       overdueRate: { value: outstanding > 0 ? Math.round((overdue / outstanding) * 1000) / 10 : 0, previous: null },
-      // Mismo número bajo los dos nombres: `activeCases` lo sigue leyendo la web hasta la fase 4 (DEPRECADO); el
-      // nombre honesto es `creditsInArrears`. La definición cambió (ver arriba): no comparar con series viejas.
-      activeCases: inArrears,
+      // La definición cambió (ver arriba): no comparar con series viejas.
       creditsInArrears: inArrears,
       collected: { value: money(collectedNow._sum.amount), previous: money(collectedPrev._sum.amount) },
       currency: account?.currencyCode ?? 'BOB',
@@ -358,8 +354,6 @@ export class AnalyticsService {
         const overdue = money(r.overdue);
         return {
           collectorId: r.collector,
-          // `cases` queda con el mismo número que `creditsInArrears` mientras la web lo lea (deprecado).
-          cases: r.arrears,
           creditsInArrears: r.arrears,
           outstanding,
           overdue,

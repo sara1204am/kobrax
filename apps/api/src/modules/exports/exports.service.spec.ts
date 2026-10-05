@@ -5,7 +5,7 @@ import { ExportsService } from './exports.service';
 import { MORA_CSV_COLUMNS } from '../mora/mora-export';
 
 /**
- * F4/08 · fase 3 — la exportación `cases` pasó a exportar créditos en mora (alias de `mora`), con las columnas de la
+ * F4/08 · fase 3 — la exportación de mora exporta créditos en mora, con las columnas de la
  * Central de Mora; el backup lleva las gestiones de `credit_activities`.
  */
 function make() {
@@ -51,7 +51,6 @@ function make() {
       },
     },
     profile: { findMany: async () => [{ userId: 'u1', firstName: 'Luis', lastName: 'Paz' }] },
-    collectionCase: new Proxy({}, { get: () => () => ({ then: undefined }) }),
     client: { findMany: async () => [] },
     creditActivity: { findMany: async () => [{ id: 'a1', creditId: 'cr1', type: 'CALL' }] },
     creditArrearEpisode: { findMany: async () => [{ id: 'e1', creditId: 'cr1' }] },
@@ -97,19 +96,10 @@ describe('ExportsService.moraCsv', () => {
     assert.match(row, /,B,/, 'categoría B por 45 días');
   });
 
-  it('se audita como export:mora, también por el alias cases', async () => {
+  it('se audita como export:mora', async () => {
     const a = make();
     await a.service.moraCsv();
-    const b = make();
-    await b.service.casesCsv();
     assert.deepEqual(a.audited.map((e) => e.entity), ['export:mora']);
-    assert.deepEqual(b.audited.map((e) => e.entity), ['export:mora']);
-  });
-
-  it('el alias `cases` devuelve lo mismo que `mora`', async () => {
-    const a = (await make().service.moraCsv()).content.toString('utf-8');
-    const b = (await make().service.casesCsv()).content.toString('utf-8');
-    assert.equal(a, b);
   });
 });
 
@@ -118,12 +108,10 @@ describe('ExportsService.fullBackup', () => {
     const { service, tx } = make();
     (tx.client as { findMany: () => Promise<unknown[]> }).findMany = async () => [];
     (tx.credit as { findMany: () => Promise<unknown[]> }).findMany = async () => [];
-    // Los casos históricos siguen en el backup hasta la fase 6: el fake los devuelve vacíos.
-    (tx as unknown as { collectionCase: { findMany: () => Promise<unknown[]> } }).collectionCase = { findMany: async () => [] };
     const file = await service.fullBackup();
     const json = JSON.parse(gunzipSync(file.content).toString('utf-8')) as Record<string, unknown[]>;
     assert.deepEqual(json.activities, [{ id: 'a1', creditId: 'cr1', type: 'CALL' }]);
     assert.equal(json.arrearEpisodes!.length, 1);
-    assert.ok('cases' in json, 'los casos históricos no se pierden hasta la fase 6');
+    assert.equal('cases' in json, false, 'el caso ya no existe'); 
   });
 });

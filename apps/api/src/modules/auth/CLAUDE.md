@@ -59,7 +59,7 @@ own     → solo sobre sus propios recursos
 
 ### Permisos Granulares (nomenclatura: {recurso}:{acción})
 ```
-case:read, case:write, case:assign, case:close
+collection:read, collection:write, collection:export, assignment:write
 payment:read, payment:write, payment:approve
 route:read, route:write, route:assign
 client:read, client:write
@@ -90,7 +90,7 @@ export const Roles = (...permissions: string[]) =>
 // Uso en controller
 @Get()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('case:read')
+@Roles('collection:read')
 async findAll() { ... }
 ```
 

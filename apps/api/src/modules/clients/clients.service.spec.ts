@@ -87,7 +87,6 @@ function makeService(
       },
     },
     creditActivity: { groupBy: async () => opts.pdf?.lastActions ?? [] },
-    collectionCase: new Proxy({}, { get: () => () => assert.fail('el legajo ya no lee los casos') }),
     account: { findUnique: async () => ({ businessName: 'Demo', currencyCode: 'BOB' }) },
   };
   const prisma = { withTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
@@ -517,14 +516,13 @@ describe('ClientsService.list — cartera (view=portfolio)', () => {
     assert.equal(res.meta.total, 0);
   });
 
-  it('las filas de la bitácora exponen creditId y ya no traen caseId', async () => {
+  it('las filas de la bitácora exponen creditId', async () => {
     const at = new Date('2026-10-01T10:00:00Z');
     const { service } = makeService({
       rows: [{ kind: 'ACTIVITY', id: 'a1', at, code: 'CALL', status: null, amount: null, currency: null, notes: null, credit_id: 'cr1', user_id: 'u1' }] as never,
     });
     const res = await service.timeline('c1', {});
     assert.equal(res.data![0]!.creditId, 'cr1');
-    assert.equal('caseId' in res.data![0]!, false);
   });
 
   it('sin `view` sigue saliendo la lista de siempre, por Prisma y sin agregados', async () => {

@@ -117,10 +117,6 @@ describe('describeFilters — los filtros en palabras', () => {
     assert.deepEqual(f, ['Días de mora: 90 o más', 'Prioridad: Crítica', 'Categoría de mora: B, C', 'Sin los castigados', 'Responsable: Carlos Mamani', 'Oficina: Centro']);
   });
 
-  it('los filtros del caso (estado, SLA, sin gestión desde) ya no se describen: no filtran nada', () => {
-    assert.deepEqual(describeFilters({ status: 'ACTIVE', hasCase: 'true', overdue: 'true', noActionSince: '2026-09-01' }), []);
-  });
-
   it('un valor de enum inventado no aparece', () => {
     assert.deepEqual(describeFilters({ priority: 'INVENTADA' }), []);
   });
@@ -129,7 +125,7 @@ describe('describeFilters — los filtros en palabras', () => {
     assert.equal(describeSort(), 'días de mora (mayor a menor)');
     assert.equal(describeSort('balance', 'asc'), 'saldo (menor a mayor)');
     assert.equal(describeSort('hasOwnProperty'), 'días de mora (mayor a menor)');
-    assert.equal(describeSort('slaDueAt'), 'días de mora (mayor a menor)');
+    assert.equal(describeSort('slaDueAt'), 'días de mora (mayor a menor)'); // clave que ya no existe
   });
 });
 

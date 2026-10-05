@@ -48,24 +48,24 @@ describe('AppVersionGuard', () => {
 
   it('sin MIN_APP_VERSION deja pasar todo (comportamiento por defecto)', () => {
     delete process.env.MIN_APP_VERSION;
-    assert.equal(guard.canActivate(ctx('/api/cases', '0.0.1')), true);
+    assert.equal(guard.canActivate(ctx('/api/mora', '0.0.1')), true);
   });
 
   it('sin header deja pasar (panel web, clientes que no lo mandan)', () => {
     process.env.MIN_APP_VERSION = '1.2.0';
-    assert.equal(guard.canActivate(ctx('/api/cases')), true);
+    assert.equal(guard.canActivate(ctx('/api/mora')), true);
   });
 
   it('versión igual o mayor pasa', () => {
     process.env.MIN_APP_VERSION = '1.2.0';
-    assert.equal(guard.canActivate(ctx('/api/cases', '1.2.0')), true);
-    assert.equal(guard.canActivate(ctx('/api/cases', '1.10.0')), true);
+    assert.equal(guard.canActivate(ctx('/api/mora', '1.2.0')), true);
+    assert.equal(guard.canActivate(ctx('/api/mora', '1.10.0')), true);
   });
 
   it('versión menor → 426 con code APP_001 y mensaje en español', () => {
     process.env.MIN_APP_VERSION = '1.2.0';
     assert.throws(
-      () => guard.canActivate(ctx('/api/cases', '1.1.9')),
+      () => guard.canActivate(ctx('/api/mora', '1.1.9')),
       (e: HttpException) => {
         const body = e.getResponse() as { code: string; message: string };
         assert.equal(e.getStatus(), 426);

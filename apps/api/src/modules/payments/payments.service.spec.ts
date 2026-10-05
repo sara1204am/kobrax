@@ -21,17 +21,10 @@ function makeService(opts: { credit?: unknown; idempotentExisting?: unknown; max
   const calls = {
     create: [] as Record<string, unknown>[],
     creditUpdate: [] as Record<string, unknown>[],
-    caseClose: [] as { where: Record<string, unknown>; data: Record<string, unknown> }[],
     audit: [] as string[],
     events: [] as string[],
   };
   const tx = {
-    collectionCase: {
-      updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
-        calls.caseClose.push(args);
-        return { count: 1 };
-      },
-    },
     payment: {
       findFirst: async () => (opts.uniqueRace ? (raced ? opts.idempotentExisting : null) : opts.idempotentExisting ?? null),
       aggregate: async () => ({ _max: { receiptNumber: opts.maxReceipt ?? 0 } }),
@@ -78,16 +71,14 @@ function psfCredit(over: Record<string, unknown> = {}) {
 }
 
 describe('PaymentsService.register — crédito PSF (D3)', () => {
-  it('registra el Payment y no toca saldo, mora, estado, cuotas ni casos', async () => {
+  it('registra el Payment y no toca saldo, mora, estado ni cuotas', async () => {
     const { service, calls } = makeService({ credit: psfCredit() });
-    const r = await service.register({ ...PAY, amount: 500, caseId: 'case1' });
+    const r = await service.register({ ...PAY, amount: 500 });
     assert.equal(calls.create.length, 1);
     assert.equal(calls.create[0]!.amount, 500);
-    assert.equal(calls.create[0]!.caseId, undefined); // `caseId` legado: ignorado (F4/08)
     assert.equal(calls.create[0]!.registeredBy, 'u1');
     assert.equal(calls.create[0]!.branchId, 'b1');
     assert.equal(calls.creditUpdate.length, 0); // saldo, mora y estado reportados intactos
-    assert.equal(calls.caseClose.length, 0);
     assert.deepEqual(calls.audit, ['CREATE']);
     assert.deepEqual(calls.events, ['payment.registered']);
     assert.equal(r.idempotentReplay, false);
@@ -172,18 +163,15 @@ describe('PaymentsService.register', () => {
     assert.equal(calls.creditUpdate[0]!.status, 'PAID');
   });
 
-  it('saldada la deuda NO toca casos ni escribe case_id (F4/08): el crédito PAID y el trigger de episodios terminan la mora', async () => {
+  it('saldada la deuda: el crédito PAID y el trigger de episodios terminan la mora', async () => {
     const { service, calls } = makeService();
-    await service.register({ ...PAY, amount: 200, caseId: 'c9' });
-    assert.equal(calls.caseClose.length, 0);
+    await service.register({ ...PAY, amount: 200 });
     assert.equal(calls.creditUpdate[0]!.status, 'PAID');
-    assert.equal('caseId' in calls.create[0]!, false);
   });
 
   it('un pago parcial deja el crédito ACTIVE', async () => {
     const { service, calls } = makeService();
     await service.register({ ...PAY, amount: 100 });
-    assert.equal(calls.caseClose.length, 0);
     assert.equal(calls.creditUpdate[0]!.status, undefined);
   });
 

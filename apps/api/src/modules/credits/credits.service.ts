@@ -311,8 +311,7 @@ export class CreditsService {
 
       /*
        * F4/08: crear un crédito ya no abre un caso ni crea el recordatorio «Cobrar cuota». Si nace con mora, el trigger
-       * abre su episodio; el recordatorio de cuota (D11) lo genera un job aparte. `dto.openCase` se acepta y se ignora
-       * hasta que web y móvil dejen de mandarlo (fase 6).
+       * abre su episodio; el recordatorio de cuota (D11) lo genera un job aparte.
        */
       return { credit, reintento: false, assigned };
     });
@@ -414,7 +413,7 @@ export class CreditsService {
        * 🔴 Cambiar el responsable exige `assignment:write`, y se revisa ACÁ y no con `@Roles`: este
        * mismo PATCH lo usa el cobrador para corregir la nota o la próxima fecha, y cerrarle el
        * endpoint entero le quitaría eso. Mandar el responsable que ya tiene no es un cambio.
-       * No toca los casos abiertos: el cobrador del caso es otra responsabilidad (decisión 7).
+       * No toca la asignación: el responsable del crédito es otra responsabilidad (decisión 7).
        */
       const reassigning = dto.assignedManagerId !== undefined && dto.assignedManagerId !== prev.assignedManagerId;
       let assigned: Awaited<ReturnType<AssignmentService['apply']>> = [];
@@ -671,12 +670,6 @@ export class CreditsService {
       await tx.creditActivity.updateMany({ where: { creditId: id }, data: { clientId: to.id } });
       await tx.agendaItem.updateMany({ where: { creditId: id }, data: { clientId: to.id } });
       await tx.routeStop.updateMany({ where: { creditId: id }, data: { clientId: to.id } });
-      // Hasta la fase 6 siguen existiendo los casos (y las paradas viejas que sólo apuntan al caso).
-      const caseIds = (await tx.collectionCase.findMany({ where: { creditId: id }, select: { id: true } })).map((c) => c.id);
-      await tx.collectionCase.updateMany({ where: { creditId: id }, data: { clientId: to.id } });
-      if (caseIds.length > 0) {
-        await tx.routeStop.updateMany({ where: { caseId: { in: caseIds }, creditId: null }, data: { clientId: to.id } });
-      }
       await tx.paymentRequest.updateMany({ where: { creditId: id }, data: { clientId: to.id } });
 
       // La decisión queda para las próximas importaciones: esta persona del reporte ES este cliente.

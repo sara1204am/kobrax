@@ -59,7 +59,7 @@ function makeService(opts: Opts = {}) {
 }
 
 describe('PromiseDueService.scanAccount', () => {
-  it('avisa al responsable del crédito de la cuota próxima a vencer, con creditId y sin caseId', async () => {
+  it('avisa al responsable del crédito de la cuota próxima a vencer, con creditId', async () => {
     const { service, calls } = makeService({
       installments: [{ creditId: 'cr1', number: 3, dueDate: soon(2) }],
     });
@@ -68,7 +68,6 @@ describe('PromiseDueService.scanAccount', () => {
     assert.equal(calls.notified[0]!.userId, 'col1');
     assert.equal(calls.notified[0]!.data.type, 'PROMISE_DUE');
     assert.equal(calls.notified[0]!.data.creditId, 'cr1');
-    assert.equal('caseId' in calls.notified[0]!.data, false);
   });
 
   it('avisa también al reemplazo TEMPORAL vigente (y al responsable, que conserva el crédito)', async () => {
@@ -113,7 +112,6 @@ describe('PromiseDueService.scanAccount', () => {
     assert.equal(await service.scanAccount('acc-A', NOW), 0);
     assert.equal(calls.notified.length, 0);
     assert.equal(calls.dupWhere[0]!.creditId, 'cr1');
-    assert.equal('caseId' in calls.dupWhere[0]!, false);
   });
 
   it('el dedupe es por usuario: el temporal recibe aunque el responsable ya haya sido avisado', async () => {
@@ -134,11 +132,10 @@ describe('PromiseDueService.scanAccount', () => {
     assert.equal(calls.notified.length, 0);
   });
 
-  it('no filtra por casos: la consulta sólo excluye créditos saldados, castigados o borrados', async () => {
+  it('la consulta sólo excluye créditos saldados, castigados o borrados', async () => {
     const { service, calls } = makeService({ installments: [{ creditId: 'cr1', number: 3, dueDate: soon(2) }] });
     await service.scanAccount('acc-A', NOW);
-    const w = calls.installmentWhere as { credit: Record<string, unknown>; collectionCase?: unknown };
-    assert.equal(w.collectionCase, undefined);
+    const w = calls.installmentWhere as { credit: Record<string, unknown> };
     assert.equal(w.credit.deletedAt, null);
     assert.equal(w.credit.writtenOffAt, null);
   });

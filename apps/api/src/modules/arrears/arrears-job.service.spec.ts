@@ -21,7 +21,7 @@ interface CreditRow {
  * Fake en memoria: un solo tenant, y se registra todo lo que el job escribe. Sin `promise_due_account_ids()`
  * se prueba `scanAccount` directo — enumerar tenants es del `run()` y es una línea de SQL.
  *
- * F4/08: el job ya no toca `collectionCase` (cualquier uso revienta el test). Los episodios los abre el trigger de la
+ * F4/08: el job no maneja casos. Los episodios los abre el trigger de la
  * base; la prioridad la calcula `ArrearsPriorityService`, acá un fake que registra a qué créditos se la pide.
  */
 function makeJob(
@@ -48,7 +48,6 @@ function makeJob(
       },
     },
     creditArrearEpisode: { findMany: async () => openEpisodes },
-    collectionCase: new Proxy({}, { get: () => () => assert.fail('el job ya no toca los casos') }),
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
   const priority = {

@@ -12,7 +12,6 @@ interface Row {
   userId: string;
   revokedAt: Date | null;
   expiresAt: Date | null;
-  caseId: string | null;
 }
 
 /**
@@ -47,7 +46,7 @@ function makeService(opts: {
     },
     creditAssignment: {
       findMany: async ({ where }: { where: { creditId: { in: string[] } } }) =>
-        rows.filter((r) => where.creditId.in.includes(r.creditId) && !r.revokedAt && !r.expiresAt && !r.caseId),
+        rows.filter((r) => where.creditId.in.includes(r.creditId) && !r.revokedAt && !r.expiresAt),
       updateMany: async ({ where, data }: { where: { id: { in: string[] } }; data: { revokedAt: Date } }) => {
         for (const r of rows) if (where.id.in.includes(r.id)) r.revokedAt = data.revokedAt;
         return { count: where.id.in.length };
@@ -56,7 +55,7 @@ function makeService(opts: {
         if (opts.createFails) {
           throw new Prisma.PrismaClientKnownRequestError('unique', { code: 'P2002', clientVersion: 'test' });
         }
-        for (const d of data) rows.push({ id: `new-${++seq}`, creditId: d.creditId, userId: d.userId, revokedAt: null, expiresAt: null, caseId: null });
+        for (const d of data) rows.push({ id: `new-${++seq}`, creditId: d.creditId, userId: d.userId, revokedAt: null, expiresAt: null });
         return { count: data.length };
       },
     },
@@ -141,7 +140,7 @@ describe('AssignmentService.apply — tabla y columna, siempre juntas', () => {
   it('reasigna: revoca la anterior (no la borra) y crea la nueva', async () => {
     const { service, tx, credits, rows, active } = makeService({
       credits: [{ id: 'c1', assignedManagerId: 'juan' }],
-      rows: [{ id: 'a1', creditId: 'c1', userId: 'juan', revokedAt: null, expiresAt: null, caseId: null }],
+      rows: [{ id: 'a1', creditId: 'c1', userId: 'juan', revokedAt: null, expiresAt: null }],
     });
     const changes = await service.apply(tx, [{ creditId: 'c1', to: 'maria', expectedFrom: 'juan' }], 'MANUAL');
     assert.deepEqual(changes, [{ creditId: 'c1', from: 'juan', to: 'maria', reason: 'MANUAL' }]);
@@ -153,7 +152,7 @@ describe('AssignmentService.apply — tabla y columna, siempre juntas', () => {
   it('pedir el que ya está no es un cambio: no escribe ni audita', async () => {
     const { service, tx, rows } = makeService({
       credits: [{ id: 'c1', assignedManagerId: 'juan' }],
-      rows: [{ id: 'a1', creditId: 'c1', userId: 'juan', revokedAt: null, expiresAt: null, caseId: null }],
+      rows: [{ id: 'a1', creditId: 'c1', userId: 'juan', revokedAt: null, expiresAt: null }],
     });
     assert.deepEqual(await service.apply(tx, [{ creditId: 'c1', to: 'juan' }], 'MANUAL'), []);
     assert.equal(rows.length, 1);
@@ -163,8 +162,8 @@ describe('AssignmentService.apply — tabla y columna, siempre juntas', () => {
     const { service, tx, rows } = makeService({
       credits: [{ id: 'c1', assignedManagerId: 'juan' }],
       rows: [
-        { id: 'a1', creditId: 'c1', userId: 'juan', revokedAt: null, expiresAt: null, caseId: null },
-        { id: 't1', creditId: 'c1', userId: 'sara', revokedAt: null, expiresAt: new Date('2099-01-01'), caseId: null },
+        { id: 'a1', creditId: 'c1', userId: 'juan', revokedAt: null, expiresAt: null },
+        { id: 't1', creditId: 'c1', userId: 'sara', revokedAt: null, expiresAt: new Date('2099-01-01') },
       ],
     });
     await service.apply(tx, [{ creditId: 'c1', to: 'maria' }], 'MANUAL');
@@ -185,7 +184,7 @@ describe('AssignmentService.apply — tabla y columna, siempre juntas', () => {
   it('repara la columna si se había separado de la tabla, sin inventar un cambio', async () => {
     const { service, tx, credits } = makeService({
       credits: [{ id: 'c1', assignedManagerId: null }],
-      rows: [{ id: 'a1', creditId: 'c1', userId: 'juan', revokedAt: null, expiresAt: null, caseId: null }],
+      rows: [{ id: 'a1', creditId: 'c1', userId: 'juan', revokedAt: null, expiresAt: null }],
     });
     assert.deepEqual(await service.apply(tx, [{ creditId: 'c1', to: 'juan' }], 'MANUAL'), []);
     assert.equal(credits.get('c1')!.assignedManagerId, 'juan');

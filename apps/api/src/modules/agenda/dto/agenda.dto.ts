@@ -54,14 +54,12 @@ export class ListOverdueQueryDto {
 }
 
 /**
- * Alta de una gestión agendada. `clientId` y `assigneeId` los deriva el server (del caso y del
+ * Alta de una gestión agendada. `clientId` y `assigneeId` los deriva el server (del crédito y del
  * token) — nunca del body. `details` se valida contra el `type` con `validateAgendaDetails`.
  */
 export class CreateAgendaItemDto {
   /** Opcional: lo genera el móvil para que reintentar (cola offline) no duplique la gestión ni su recordatorio. */
   @IsOptional() @IsUUID() id?: string;
-  /** Ignorado (F4/08): el agendado cuelga del crédito, no de un caso. Se acepta por compatibilidad con clientes viejos. */
-  @IsOptional() @IsUUID() caseId?: string;
   @IsUUID() creditId!: string;
 
   @IsEnum(AgendaItemType) type!: AgendaItemType;
@@ -86,7 +84,7 @@ export class CreateAgendaItemDto {
  * Editar una gestión pendiente (S5). Todo opcional: se manda sólo lo que cambia.
  *
  * **No lleva `scheduledDate`** a propósito: mover el día es *reagendar* y deja rastro
- * (`plans/agenda/editar-eliminar.md` D5). Tampoco `caseId`/`creditId`/`clientId`: el deudor es el
+ * (`plans/agenda/editar-eliminar.md` D5). Tampoco `creditId`/`clientId`: el deudor es el
  * ancla del agendado y no se cambia editando (D1).
  */
 export class UpdateAgendaItemDto {

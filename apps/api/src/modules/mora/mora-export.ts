@@ -40,7 +40,6 @@ const ACTIVITY_LABEL: Record<string, string> = {
   VISIT: 'Visita',
   MESSAGE: 'Mensaje',
   PAYMENT: 'Pago',
-  STATUS_CHANGE: 'Cambio de estado',
   ASSIGNMENT: 'Asignación',
 };
 const SORT_LABEL: Record<string, string> = {

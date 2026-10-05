@@ -31,7 +31,7 @@ export class AgendaController {
   }
 
   /**
-   * Contexto para agendarle a un cliente: sus créditos con caso abierto + teléfonos y direcciones
+   * Contexto para agendarle a un cliente: sus créditos agendables + teléfonos y direcciones
    * **en claro**. Revela PII (auditada) → exige `AGENDA_WRITE`, no `AGENDA_READ`.
    */
   @Get('clients/:clientId/context')
@@ -90,7 +90,7 @@ export class AgendaController {
     return this.agenda.findOne(id);
   }
 
-  /** Registrar la ejecución de la gestión (S4): deja un CaseActivity y pasa el agendado a EXECUTED. */
+  /** Registrar la ejecución de la gestión (S4): deja una gestión del crédito y pasa el agendado a EXECUTED. */
   @Post(':id/complete')
   @Roles(Permission.AGENDA_WRITE)
   complete(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CompleteAgendaItemDto) {

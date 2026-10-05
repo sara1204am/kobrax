@@ -17,7 +17,7 @@ export interface SerializeOpts {
 
 /**
  * Nombre visible del cliente: empresa → razón social; persona → nombre + apellido.
- * Vive acá porque la regla es del dominio `clients`; la consumen `cases` y `routes`.
+ * Vive acá porque la regla es del dominio `clients`; la consumen `mora` y `routes`.
  * ponytail: `clientLabel()` del import (portfolio-import.service.ts) y `displayName()` de agenda
  * hacen lo mismo — converger cuando se toque cada módulo, no vale un refactor suelto.
  */

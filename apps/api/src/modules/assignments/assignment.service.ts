@@ -62,7 +62,7 @@ export interface ExpireResult {
  *
  * Escribe las dos mitades juntas: la fila permanente de `credit_assignments` —la fuente de verdad
  * del alcance `own` (PLAN-SEGURIDAD §4.bis), y el historial: nunca se borra, se revoca— y su copia
- * `credits.assigned_manager_id`, que leen el trabajo de mora al abrir un caso, la ficha y el alcance
+ * `credits.assigned_manager_id`, que leen la ficha y el alcance
  * del import. Antes cada camino escribía sólo la columna y la tabla quedó con 0 filas vigentes.
  *
  * F4/08 · D8-a: además del responsable (PRINCIPAL) maneja el reemplazo temporal (TEMPORAL, con vencimiento) y
@@ -241,7 +241,7 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
       tx.credit.findMany({ where: { id: { in: ids }, deletedAt: null }, select: { id: true, assignedManagerId: true } }),
       tx.creditAssignment.findMany({
         // Sólo el responsable: una ayuda (APOYO) también es permanente y no es «el» responsable.
-        where: { creditId: { in: ids }, kind: CreditAssignmentKind.PRINCIPAL, revokedAt: null, expiresAt: null, caseId: null },
+        where: { creditId: { in: ids }, kind: CreditAssignmentKind.PRINCIPAL, revokedAt: null, expiresAt: null },
         select: { id: true, creditId: true, userId: true },
       }),
     ]);

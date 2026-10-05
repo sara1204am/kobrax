@@ -29,8 +29,6 @@ export class GenerateRouteDto {
   @IsDateString() plannedDate!: string;
   /** Créditos a incluir, en el orden del recorrido; si se omite, toma los créditos en mora del cobrador por prioridad. */
   @IsOptional() @IsArray() @IsUUID('all', { each: true }) creditIds?: string[];
-  /** @deprecated legado: se acepta y se ignora (se quita en la fase 6). */
-  @IsOptional() @IsArray() @IsUUID('all', { each: true }) caseIds?: string[];
   @IsOptional() @IsBoolean() auto?: boolean;
   @IsOptional() @IsUUID() branchId?: string;
 }
@@ -63,8 +61,6 @@ export class UpdateRouteDto {
 export class AddStopDto {
   @IsUUID() clientId!: string;
   @IsOptional() @IsUUID() creditId?: string;
-  /** @deprecated legado: se acepta y se ignora. */
-  @IsOptional() @IsUUID() caseId?: string;
 }
 
 export class UpdateStopDto {

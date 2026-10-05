@@ -18,13 +18,10 @@ src/
 │   │   ├── guards/             # JwtAuthGuard, RolesGuard
 │   │   ├── decorators/         # @CurrentUser(), @Roles()
 │   │   └── dto/
-│   ├── cases/
-│   │   ├── cases.module.ts
-│   │   ├── cases.controller.ts
-│   │   ├── cases.service.ts
-│   │   ├── cases.repository.ts
-│   │   ├── handlers/           # CQRS command/query handlers
-│   │   ├── events/             # Domain events
+│   ├── mora/                   # Central de Mora: una fila por crédito, gestiones, promesas, notas
+│   │   ├── mora.module.ts
+│   │   ├── mora.controller.ts
+│   │   ├── mora.service.ts
 │   │   └── dto/
 │   └── ... (un folder por módulo)
 ├── common/
@@ -50,12 +47,12 @@ src/
 ```typescript
 // Patrón estándar de endpoint
 @Get(':id')
-@Roles(Permission.CASE_READ)
+@Roles(Permission.COLLECTION_READ)
 async findOne(
   @Param('id', ParseUUIDPipe) id: string,
   @CurrentUser() user: AuthUser,
-): Promise<ResponseDto<CaseDto>> {
-  const data = await this.casesService.findOne(id, user.accountId);
+): Promise<ResponseDto<MoraCreditDto>> {
+  const data = await this.moraService.findOne(id, user.accountId);
   return ResponseDto.ok(data);
 }
 ```
@@ -68,12 +65,12 @@ async findOne(
 
 ```typescript
 // Patrón de transacción
-async assignCase(dto: AssignCaseDto, accountId: string): Promise<Case> {
+async assignCredit(dto: AssignCreditDto, accountId: string): Promise<Credit> {
   return this.prisma.$transaction(async (tx) => {
-    const case_ = await this.casesRepo.findById(dto.caseId, accountId, tx);
-    if (!case_) throw new NotFoundException('Case not found');
-    const updated = await this.casesRepo.assign(dto, tx);
-    this.eventEmitter.emit('case.assigned', new CaseAssignedEvent(updated));
+    const credit = await this.creditsRepo.findById(dto.creditId, accountId, tx);
+    if (!credit) throw new NotFoundException('Credit not found');
+    const updated = await this.creditsRepo.assign(dto, tx);
+    this.eventEmitter.emit('payment.registered', new PaymentRegisteredEvent(updated));
     return updated;
   });
 }
@@ -104,10 +101,10 @@ export class CreateCaseDto {
 
 ```typescript
 // Nunca esto:
-this.prisma.case.findMany()
+this.prisma.credit.findMany()
 
 // Siempre esto:
-this.prisma.case.findMany({ where: { accountId } })
+this.prisma.credit.findMany({ where: { accountId } })
 ```
 
 ## Formato de Respuesta API (estándar global)
@@ -127,8 +124,6 @@ this.prisma.case.findMany({ where: { accountId } })
 AUTH_001 → Token inválido o expirado
 AUTH_002 → Sin permisos para esta acción
 TENANT_001 → Recurso no pertenece al tenant
-CASE_001 → Caso no puede cerrarse sin gestión
-CASE_002 → Cambio de estado no permitido
 PAYMENT_001 → Monto no puede ser negativo
 EVIDENCE_001 → Hash de evidencia inválido
 ```
@@ -137,7 +132,7 @@ EVIDENCE_001 → Hash de evidencia inválido
 ```typescript
 // Stack de guards obligatorio en endpoints protegidos:
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
-@Roles(Permission.CASE_WRITE)
+@Roles(Permission.COLLECTION_WRITE)
 ```
 
 ## WebSocket Gateway (supervisión en tiempo real)
@@ -145,7 +140,6 @@ EVIDENCE_001 → Hash de evidencia inválido
 // Rooms por tenant: "tenant:{accountId}"
 // Rooms por usuario: "user:{userId}"
 // Eventos emitidos:
-// - case.updated → cuando cambia estado de caso
 // - payment.registered → cuando llega un pago
 // - collector.location → GPS del cobrador en campo
 // - route.completed → ruta finalizada

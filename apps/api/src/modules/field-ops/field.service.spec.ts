@@ -337,9 +337,8 @@ describe('FieldService.createVisit por crédito (F4/08)', () => {
 
   it('escribe credit_id, deja la gestión VISIT con el episodio abierto y actualiza last_action_at', async () => {
     const { service, calls } = makeService();
-    await service.createVisit({ ...GPS, creditId: 'cr1', caseId: 'ignorado' } as never);
+    await service.createVisit({ ...GPS, creditId: 'cr1' } as never);
     assert.equal(calls.visitCreate[0]!.creditId, 'cr1');
-    assert.equal('caseId' in calls.visitCreate[0]!, false);
     assert.equal(calls.activityData[0]!.type, 'VISIT');
     assert.equal(calls.activityData[0]!.creditId, 'cr1');
     assert.equal(calls.activityData[0]!.clientId, 'cl1');
@@ -367,16 +366,10 @@ describe('FieldService.createVisit por crédito (F4/08)', () => {
     await rejectsWithCode(service.createVisit({ ...GPS, routeStopId: 's1', creditId: 'cr1' } as never), 'VISIT_CREDIT');
   });
 
-  it('solo caseId (legado) no alcanza como objetivo', async () => {
-    const { service } = makeService();
-    await rejectsWithCode(service.createVisit({ ...GPS, caseId: 'c1' } as never), 'VISIT_TARGET');
-  });
-
-  it('el listado filtra por creditId e ignora caseId', async () => {
+  it('el listado filtra por creditId', async () => {
     const { service, calls } = makeService();
-    await service.list({ creditId: 'cr1', caseId: 'c1' } as never);
+    await service.list({ creditId: 'cr1' } as never);
     assert.equal(calls.listWhere!.creditId, 'cr1');
-    assert.equal('caseId' in calls.listWhere!, false);
   });
 });
 

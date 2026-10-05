@@ -205,16 +205,15 @@ describe('RoutesService.create', () => {
 
 describe('RoutesService.generate', () => {
   const CR = (...ids: string[]) => ids.map((id) => ({ id, client_id: 'cl-' + id }));
-  type Created = { create: { creditId: string; caseId?: string; clientId: string; sequenceOrder: number }[] };
+  type Created = { create: { creditId: string; clientId: string; sequenceOrder: number }[] };
 
-  it('sin creditIds: paradas por CRÉDITO en mora del cobrador (por prioridad del episodio), sin case_id', async () => {
+  it('sin creditIds: paradas por CRÉDITO en mora del cobrador (por prioridad del episodio)', async () => {
     const { service, calls } = makeService({ credits: CR('crA', 'crB'), permissions: ASSIGN });
     const r = await service.generate(GEN);
     assert.equal(r.totalCases, 2); // nombre legado: cuenta paradas
     const stops = (calls.routeCreate[0]!.stops as Created).create;
     assert.deepEqual(stops.map((s) => [s.creditId, s.sequenceOrder]), [['crA', 1], ['crB', 2]]);
     assert.equal(stops[0]!.clientId, 'cl-crA');
-    assert.equal('caseId' in stops[0]!, false);
     assert.ok(calls.audit.includes('GENERATE'));
     // El criterio: episodio abierto, prioridad del episodio, responsable/temporal/apoyo vigentes del cobrador.
     assert.match(calls.rawSql[0]!, /credit_arrear_episodes/);
@@ -237,14 +236,6 @@ describe('RoutesService.generate', () => {
     const stops = (calls.routeCreate[0]!.stops as Created).create;
     assert.deepEqual(stops.map((s) => [s.creditId, s.sequenceOrder]), [['crB', 1], ['crA', 2]]);
     assert.match(calls.rawSql[0]!, /cr\.account_id/); // pasa por el alcance de mora
-  });
-
-  it('caseIds (legado) se ignora: sin creditIds toma los créditos en mora del cobrador', async () => {
-    const { service, calls } = makeService({ credits: CR('crA'), permissions: ASSIGN });
-    await service.generate({ ...GEN, caseIds: ['caso-viejo'] } as never);
-    const stops = (calls.routeCreate[0]!.stops as Created).create;
-    assert.deepEqual(stops.map((s) => s.creditId), ['crA']);
-    assert.match(calls.rawSql[0]!, /credit_arrear_episodes/);
   });
 
   it('rechaza si no hay créditos para la ruta (ROUTE_EMPTY)', async () => {
@@ -342,12 +333,11 @@ describe('RoutesService.addStop', () => {
 });
 
 describe('RoutesService.addStop por crédito (F4/08)', () => {
-  it('guarda credit_id y NO case_id (caseId legado se ignora) y recuenta el total desde las paradas', async () => {
+  it('guarda credit_id y recuenta el total desde las paradas', async () => {
     const { service, stops, calls } = makeService({ route: OWN_ROUTE, permissions: FIELD, stops: threeStops() });
-    await service.addStop('r1', { clientId: 'cl9', creditId: 'cr9', caseId: 'viejo' } as never);
+    await service.addStop('r1', { clientId: 'cl9', creditId: 'cr9' } as never);
     const created = stops[stops.length - 1]!;
     assert.equal(created.creditId, 'cr9');
-    assert.equal('caseId' in created, false);
     assert.equal(calls.routeUpdate.at(-1)!.totalCases, 4);
   });
 

@@ -10,7 +10,6 @@ import { UsersModule } from './modules/users/users.module';
 import { ClientsModule } from './modules/clients/clients.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { CreditsModule } from './modules/credits/credits.module';
-import { CasesModule } from './modules/cases/cases.module';
 import { MoraModule } from './modules/mora/mora.module';
 import { ArrearCategoriesModule } from './modules/arrear-categories/arrear-categories.module';
 import { ArrearsModule } from './modules/arrears/arrears.module';
@@ -51,7 +50,6 @@ import { AppVersionGuard } from './common/guards/app-version.guard';
     ClientsModule,
     ImportsModule,
     CreditsModule,
-    CasesModule,
     MoraModule,
     ArrearCategoriesModule,
     ArrearsModule,

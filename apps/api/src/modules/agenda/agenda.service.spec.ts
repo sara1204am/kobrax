@@ -16,7 +16,7 @@ function isoUTC(offsetDays = 0): string {
 
 function row(over: Record<string, unknown> = {}) {
   return {
-    id: 'a1', caseId: null, clientId: 'cl1', creditId: 'cr1', assigneeId: 'u1',
+    id: 'a1', clientId: 'cl1', creditId: 'cr1', assigneeId: 'u1',
     type: 'CALL', status: 'SCHEDULED', priorityCode: null, expectedResultCode: null,
     scheduledDate: new Date('2026-07-08'), timeMode: 'FIXED', scheduledTime: '09:00',
     timeSlot: null, observations: null, details: {}, resultActivityId: null,
@@ -355,14 +355,13 @@ describe('AgendaService.complete (ejecutar S4)', () => {
     assert.equal(calls.activity!.result, 'CONTACTED');
     assert.equal(calls.activity!.creditId, 'cr1');
     assert.equal(calls.activity!.clientId, 'cl1');
-    assert.equal('caseId' in calls.activity!, false, 'ya no hay caso');
     assert.equal(calls.activity!.episodeId, null, 'crédito al día: sin episodio');
     assert.ok(calls.creditUpdate!.lastActionAt instanceof Date, 'última gestión (informativa)');
     assert.equal(calls.updated!.status, 'EXECUTED');
     assert.equal(calls.updated!.resultActivityId, 'act-1');
     assert.equal(res.data!.status, 'EXECUTED');
     assert.deepEqual(calls.audits, [{ entity: 'agenda_item', action: 'EXECUTE' }]);
-    assert.equal(calls.events.length, 0); // sin caso no hay `case.updated`
+    assert.equal(calls.events.length, 0);
   });
 
   it('con una mora abierta, la actividad queda ligada a ese episodio', async () => {
@@ -371,8 +370,8 @@ describe('AgendaService.complete (ejecutar S4)', () => {
     assert.equal(calls.activity!.episodeId, 'ep-1');
   });
 
-  it('un agendado preventivo (sin caso) se ejecuta igual', async () => {
-    const { service, calls } = makeService({ item: row({ type: 'REMINDER', status: 'SCHEDULED', caseId: null }) });
+  it('un agendado preventivo (crédito al día) se ejecuta igual', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'REMINDER', status: 'SCHEDULED' }) });
     const res = await service.complete('a1', { outcome: 'DONE' } as never);
     assert.equal(res.data!.status, 'EXECUTED');
     assert.equal(calls.updated!.resultActivityId, 'act-1');
@@ -451,7 +450,6 @@ describe('AgendaService.clientContext', () => {
     const res = await service.clientContext('cl1');
     assert.equal(res.data!.credits.length, 2);
     assert.deepEqual(res.data!.credits.map((c) => c.daysPastDue), [12, 0]); // al día = 0 → acción preventiva
-    assert.equal('caseId' in res.data!.credits[0]!, false);
     assert.equal(res.data!.credits[0]!.outstandingBalance, 1000);
     assert.equal(res.data!.client.displayName, 'Ana Ruiz');
     assert.equal(res.data!.contacts[0]!.value, '78012345'); // en claro
@@ -545,7 +543,6 @@ describe('AgendaService.create', () => {
     assert.equal(calls.created!.assigneeId, 'u1');
     assert.equal(calls.created!.timeSlot, null); // FIXED no persiste franja
     assert.equal(calls.created!.creditId, UUID);
-    assert.equal(calls.created!.caseId, undefined, 'no cuelga de ningún caso');
     assert.ok(calls.visibleSql!.values.includes(UUID), 'el alcance se resuelve sobre el crédito');
     assert.deepEqual(calls.audits, [{ entity: 'agenda_item', action: 'CREATE' }]);
     assert.equal(res.data!.type, 'CALL');
@@ -618,12 +615,6 @@ describe('AgendaService.create', () => {
     const res = await service.create(createDto());
     assert.equal(res.data!.creditId, UUID);
     assert.equal(calls.created!.creditId, UUID);
-  });
-
-  it('un caseId en el body se ignora (clientes viejos): el ítem no lo guarda', async () => {
-    const { service, calls } = makeService({ credits: [creditRow()], contacts: [{ id: CONTACT }] });
-    await service.create(createDto({ caseId: '99999999-9999-4999-8999-999999999999' }));
-    assert.equal(calls.created!.caseId, undefined);
   });
 
   it('crédito sin responsable → el agendado queda para quien lo crea', async () => {

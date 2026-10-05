@@ -67,7 +67,7 @@ export class FieldService {
   async list(query: ListVisitsQueryDto): Promise<ApiResponse<ReturnType<typeof serializeVisit>[]>> {
     const { page, limit, skip } = resolvePagination(query);
     const where: Prisma.FieldVisitWhereInput = {};
-    if (query.creditId) where.creditId = query.creditId; // `caseId` del query: legado, se ignora (F4/08)
+    if (query.creditId) where.creditId = query.creditId;
     if (query.routeStopId) where.routeStopId = query.routeStopId;
     // Las visitas de una ruta no cuelgan de la ruta: cuelgan de sus paradas.
     if (query.routeId) where.routeStop = { routeId: query.routeId };
@@ -161,7 +161,7 @@ export class FieldService {
   }
 
   private async createVisitOnce(dto: CreateVisitDto) {
-    if (!dto.creditId && !dto.routeStopId) throw visitNeedsTarget(); // `caseId` legado: se ignora (F4/08)
+    if (!dto.creditId && !dto.routeStopId) throw visitNeedsTarget();
     if (!isValidGps(dto.lat, dto.lng)) throw invalidGps();
 
     // Los campos propios de la variante (S5) se validan contra el `outcome` con la MISMA función que

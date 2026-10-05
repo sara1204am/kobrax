@@ -106,7 +106,7 @@ export class ExportsService {
   /**
    * Mora (F4/08): **un crédito en mora por fila** —con un episodio de mora abierto—, con las mismas columnas que la
    * exportación de la Central de Mora (Responsable, Categoría, Situación, Castigado, Prioridad, Días de mora,
-   * Monto vencido, Última gestión…). Ya no hay casos que exportar.
+   * Monto vencido, Última gestión…).
    *
    * Es la exportación **de la cuenta entera** (permiso `report:export`), sin el alcance por agencia que sí tiene la
    * de la Central de Mora. Sale sin «Promesa vigente»: calcularla pide otra consulta que este archivo no necesita.
@@ -179,11 +179,6 @@ export class ExportsService {
     return { filename: 'mora.csv', content: Buffer.from(csv, 'utf-8'), contentType: 'text/csv; charset=utf-8' };
   }
 
-  /** Alias de `moraCsv` para el tipo de exportación `cases`, que web y móvil todavía piden (se quita en la fase 6). */
-  casesCsv(): Promise<ExportFile> {
-    return this.moraCsv();
-  }
-
   /** `AgendaItem.clientId` es ref suave (sin relación de Prisma) — se resuelve con una segunda consulta. */
   async agendaCsv(): Promise<ExportFile> {
     const { items, clientById } = await this.tx(async (tx) => {
@@ -216,15 +211,15 @@ export class ExportsService {
    * los IDs y los `metadata` crudos, no sólo las columnas que se leen a simple vista.
    *
    * ponytail: cubre clientes (con sus contactos/ubicaciones/relaciones/garantías/adjuntos),
-   * créditos, sus gestiones (`activities`, de `credit_activities`) y episodios de mora, los casos históricos
-   * (con su bitácora, hasta la fase 6), pagos y agenda — lo que hace a «la cartera» de la cuenta.
+   * créditos, sus gestiones (`activities`, de `credit_activities`) y episodios de mora,
+   * pagos y agenda — lo que hace a «la cartera» de la cuenta.
    * Quedan afuera rutas, catálogos y dashboards (configuración operativa, no datos de negocio);
    * se suman el día que alguien los necesite en el backup.
    */
   async fullBackup(): Promise<ExportFile> {
     const accountId = this.tenant.accountId;
     const data = await this.tx(async (tx) => {
-      const [clients, credits, activities, arrearEpisodes, cases, payments, agendaItems] = await Promise.all([
+      const [clients, credits, activities, arrearEpisodes, payments, agendaItems] = await Promise.all([
         tx.client.findMany({
           where: { accountId, deletedAt: null },
           include: {
@@ -239,12 +234,10 @@ export class ExportsService {
         // F4/08: la bitácora de cobranza es del crédito.
         tx.creditActivity.findMany({ where: { accountId }, orderBy: { createdAt: 'asc' } }),
         tx.creditArrearEpisode.findMany({ where: { accountId }, orderBy: { startedAt: 'asc' } }),
-        // Casos históricos: siguen en la base hasta la fase 6, y un backup no pierde historia.
-        tx.collectionCase.findMany({ where: { accountId, deletedAt: null }, include: { activities: true } }),
         tx.payment.findMany({ where: { accountId } }),
         tx.agendaItem.findMany({ where: { accountId, deletedAt: null } }),
       ]);
-      return { clients, credits, activities, arrearEpisodes, cases, payments, agendaItems };
+      return { clients, credits, activities, arrearEpisodes, payments, agendaItems };
     });
     await this.logExport('backup');
 

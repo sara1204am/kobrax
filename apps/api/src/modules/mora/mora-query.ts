@@ -309,7 +309,7 @@ const PRIORITY_RANK = Prisma.raw(
 );
 
 /**
- * `lastAction` y `slaDueAt` ya no existen (F4/08 · D2): no están acá y caen al default, igual que cualquier
+ * Una clave de orden desconocida (por ejemplo las que ya no existen) cae al default, igual que cualquier
  * clave desconocida, aunque `MORA_SORTS` (shared) las conserve hasta que la web deje de nombrarlas.
  */
 const ORDER_EXPR: Partial<Record<MoraSort, Prisma.Sql>> = {

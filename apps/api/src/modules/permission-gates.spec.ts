@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import { Permission, ROLE_PERMISSIONS, RoleType } from '@kobrax/shared';
 import { ROLES_KEY } from './auth/decorators/roles.decorator';
 import { AgendaController } from './agenda/agenda.controller';
-import { CasesController } from './cases/cases.controller';
 import { MoraController } from './mora/mora.controller';
 import { ExportsController } from './exports/exports.controller';
 import { CatalogsController } from './catalogs/catalogs.controller';
@@ -38,9 +37,7 @@ const CAMINO_DEL_COBRADOR: [string, new (...args: never[]) => object, string[]][
   ['routes', RoutesController, ['create', 'generate', 'list', 'findOne', 'preview', 'optimize', 'addStop', 'removeStop', 'updateStop', 'updateStatus']],
   // Su agenda del día: crear, ver, ejecutar, editar, reagendar, cancelar, eliminar.
   ['agenda', AgendaController, ['list', 'overdue', 'findOne', 'create', 'update', 'complete', 'postpone', 'cancel', 'reschedule', 'remove']],
-  // Los casos que gestiona y la actividad que registra sobre ellos.
-  ['cases', CasesController, ['list', 'findOne', 'addActivity']],
-  // La Central de Mora: sus créditos en mora (el service lo acota a sus casos).
+  // La Central de Mora: sus créditos en mora (el service lo acota a sus créditos).
   ['mora', MoraController, ['list', 'findOne', 'branches', 'episodes', 'metrics', 'promises', 'notes', 'addNote', 'updateNote', 'deleteNote', 'addActivity', 'exportCsv', 'exportPdf']],
   // Su cartera: la ve, la da de alta en campo y le corrige datos.
   ['clients', ClientsController, ['list', 'findOne', 'create', 'update']],
@@ -83,8 +80,6 @@ describe('Puertas que el cobrador NO debe pasar', () => {
   const collector = ROLE_PERMISSIONS[RoleType.COLLECTOR] as string[];
 
   const VEDADAS: [string, new (...args: never[]) => object, string][] = [
-    ['cases', CasesController, 'assign'], // asignar cartera es del supervisor
-    ['cases', CasesController, 'close'], // cerrar un caso no lo decide quien cobra
     ['assignments', AssignmentsController, 'createTemporary'], // repartir y cubrir créditos es de quien supervisa
     ['assignments', AssignmentsController, 'createSupport'],
     ['assignments', AssignmentsController, 'revoke'],
@@ -108,7 +103,7 @@ describe('Puertas que el cobrador NO debe pasar', () => {
 
 /**
  * 🔴 Exportar Mora lo puede todo rol que ve Mora, pero **no** a través de `report:export`: ese permiso abre
- * los exports de la cuenta (`/exports/cases|clients|locations|backup`), que no filtran por alcance y
+ * los exports de la cuenta (`/exports/clients|locations|backup`), que no filtran por alcance y
  * entregan datos personales en claro. Si alguien "unifica" los dos permisos, el cobrador baja la cartera
  * entera — este spec lo frena.
  */
@@ -209,11 +204,10 @@ describe('Asignación e importación por rol', () => {
 });
 
 /**
- * F4/08 · D5 — los permisos `case:*` se renombran a `collection:*` (y `case:assign` se reparte en alcance +
- * `assignment:write`). Fuera de `cases` ninguna puerta pide ya un `case:*`; los dos juegos conviven en los roles
- * hasta la fase 6 para que la web (todavía en `case:*`) y las sesiones abiertas sigan andando.
+ * F4/08 · D5 — los permisos `case:*` se renombraron a `collection:*` (y `case:assign` se repartió en alcance +
+ * `assignment:write`). Ninguna puerta ni rol puede llevar ya un `case:*`.
  */
-describe('D5 · renombre de permisos fuera de cases', () => {
+describe('D5 · renombre de permisos', () => {
   const CONTROLADORES: [string, new (...args: never[]) => object][] = [
     ['agenda', AgendaController],
     ['mora', MoraController],
@@ -229,17 +223,17 @@ describe('D5 · renombre de permisos fuera de cases', () => {
     ['assignments', AssignmentsController],
     ['arrear-categories', ArrearCategoriesController],
   ];
-  const VIEJOS = [Permission.CASE_READ, Permission.CASE_WRITE, Permission.CASE_EXPORT, Permission.CASE_ASSIGN, Permission.CASE_CLOSE] as string[];
+  const esViejo = (p: string) => p.startsWith('case:');
 
-  it('🔴 ningún handler fuera de cases exige un case:*', () => {
+  it('🔴 ningún handler exige un case:*', () => {
     for (const [modulo, ctrl] of CONTROLADORES) {
       const clase = (Reflect.getMetadata(ROLES_KEY, ctrl) as string[] | undefined) ?? [];
-      assert.deepEqual(clase.filter((p) => VIEJOS.includes(p)), [], `${modulo} (clase)`);
+      assert.deepEqual(clase.filter(esViejo), [], `${modulo} (clase)`);
       for (const name of Object.getOwnPropertyNames(ctrl.prototype)) {
         const handler = (ctrl.prototype as Record<string, unknown>)[name];
         if (typeof handler !== 'function' || name === 'constructor') continue;
         const req = (Reflect.getMetadata(ROLES_KEY, handler) as string[] | undefined) ?? [];
-        assert.deepEqual(req.filter((p) => VIEJOS.includes(p)), [], `${modulo}.${name} sigue pidiendo ${req.join(', ')}`);
+        assert.deepEqual(req.filter(esViejo), [], `${modulo}.${name} sigue pidiendo ${req.join(', ')}`);
       }
     }
   });
@@ -252,15 +246,9 @@ describe('D5 · renombre de permisos fuera de cases', () => {
     assert.deepEqual([...p('exportCsv')].sort(), [Permission.COLLECTION_EXPORT, Permission.COLLECTION_READ].sort());
   });
 
-  it('cada rol que tenía case:read/write/export tiene también su collection:* (coexistencia hasta la fase 6)', () => {
-    const pares: [Permission, Permission][] = [
-      [Permission.CASE_READ, Permission.COLLECTION_READ],
-      [Permission.CASE_WRITE, Permission.COLLECTION_WRITE],
-      [Permission.CASE_EXPORT, Permission.COLLECTION_EXPORT],
-    ];
+  it('ningún rol lleva un permiso case:*', () => {
     for (const role of Object.values(RoleType)) {
-      const perms = ROLE_PERMISSIONS[role] as string[];
-      for (const [viejo, nuevo] of pares) assert.equal(perms.includes(viejo), perms.includes(nuevo), `${role}: ${viejo} vs ${nuevo}`);
+      assert.deepEqual((ROLE_PERMISSIONS[role] as string[]).filter(esViejo), [], role);
     }
   });
 });

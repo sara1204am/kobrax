@@ -40,8 +40,8 @@ import {
   UpdateAgendaItemDto,
 } from './dto/agenda.dto';
 import {
-  agendaCaseNotFound,
-  agendaClientWithoutCases,
+  agendaCreditNotFound,
+  agendaClientWithoutCredits,
   agendaInvalidDetails,
   agendaIdTaken,
   agendaInvalidOutcome,
@@ -182,7 +182,7 @@ export class AgendaService {
 
   /**
    * Detalle de una gestión agendada (S3): la gestión, el deudor con su CI en claro, el saldo del
-   * crédito, el dato con el que se ejecuta (teléfono o dirección) y el historial del caso.
+   * crédito, el dato con el que se ejecuta (teléfono o dirección) y el historial del crédito.
    *
    * Fuera de scope o soft-deleted → 404 (no filtra existencia). Revela PII en los 5 tipos y lo
    * audita: quien puede abrir el detalle de un deudor propio no gana superficie viendo su CI.
@@ -285,7 +285,6 @@ export class AgendaService {
 
     if (replay) return ResponseDto.ok(await this.view(updated, clientName));
     await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'EXECUTE', after: updated });
-    // Ya no se emite `case.updated`: no hay caso. El feed en vivo de supervisores era solo eso (sin persistir).
     return ResponseDto.ok(await this.view(updated, clientName));
   }
 
@@ -362,9 +361,9 @@ export class AgendaService {
 
   /**
    * Todo lo que el formulario de alta necesita de un cliente, en un round-trip: sus créditos
-   * agendables (caso abierto y dentro del scope) + teléfonos y direcciones **en claro**.
+   * agendables (dentro del scope) + teléfonos y direcciones **en claro**.
    *
-   * La PII se revela vía `ClientsService.findOne(id, true)`, que ya audita `PII_REVEAL`. Los casos
+   * La PII se revela vía `ClientsService.findOne(id, true)`, que ya audita `PII_REVEAL`. Los créditos
    * se consultan ANTES: si el cliente no tiene ninguno asignado, corta sin revelar nada.
    */
   /**
@@ -378,7 +377,7 @@ export class AgendaService {
       if (visible.length === 0) return [];
       return tx.credit.findMany({ where: { id: { in: visible.map((v) => v.id) }, deletedAt: null }, orderBy: { createdAt: 'desc' } });
     });
-    if (credits.length === 0) throw agendaClientWithoutCases();
+    if (credits.length === 0) throw agendaClientWithoutCredits();
     return credits;
   }
 
@@ -406,7 +405,7 @@ export class AgendaService {
     const client = await this.clients.findOne(clientId, true); // registra `PII_REVEAL` sobre `client`
 
     // Segundo rastro, propio del módulo: el cobrador NO tiene `client:pii:read` — esta es la única
-    // puerta por la que ve teléfonos y direcciones en claro, y sólo para un cliente con caso suyo.
+    // puerta por la que ve teléfonos y direcciones en claro, y sólo para un cliente con crédito suyo.
     // Sin esto, una auditoría no puede distinguir esta revelación de las del módulo de clientes.
     await this.audit.record({ entity: 'agenda_client_context', entityId: clientId, action: 'PII_REVEAL' });
 
@@ -502,8 +501,8 @@ export class AgendaService {
 
   /**
    * Corrige una dirección que el cliente ya tenía — típicamente marcarle el punto en el mapa a una
-   * dirección importada, que llega sin coordenadas. Mismo scope que el alta: sólo clientes con un caso
-   * del cobrador.
+   * dirección importada, que llega sin coordenadas. Mismo scope que el alta: sólo clientes con un crédito
+   * a cargo del cobrador.
    */
   async updateClientLocation(clientId: string, locationId: string, dto: UpdateLocationDto) {
     await this.agendableCredits(clientId);
@@ -548,10 +547,10 @@ export class AgendaService {
     assertTimeMode(dto);
 
     const { created, reminder, clientName } = await this.tx(async (tx) => {
-      // Por crédito, esté al día o en mora: sin caso. Mismo alcance que la ficha de mora; fuera de alcance → 404.
+      // Por crédito, esté al día o en mora: sin exigir mora. Mismo alcance que la ficha de mora; fuera de alcance → 404.
       const [visible] = await visibleCredits(tx, this.creditScope(), { creditId: dto.creditId });
       const credit = visible ? await tx.credit.findFirst({ where: { id: dto.creditId, deletedAt: null } }) : null;
-      if (!credit) throw agendaCaseNotFound();
+      if (!credit) throw agendaCreditNotFound();
 
       await this.assertReferences(tx, dto.type, validated.value, credit.clientId, credit, today);
 
@@ -592,7 +591,7 @@ export class AgendaService {
     input: { creditId: string; details: unknown; id?: string; observations?: string },
   ): Promise<{ created: AgendaItem; reminder: AgendaItem | null }> {
     const credit = await tx.credit.findFirst({ where: { id: input.creditId, deletedAt: null } });
-    if (!credit) throw agendaCaseNotFound();
+    if (!credit) throw agendaCreditNotFound();
     const validated = validateAgendaDetails(AgendaItemType.PROMISE_TO_PAY, input.details);
     if (!validated.ok) throw agendaInvalidDetails(validated.errors);
 
@@ -668,7 +667,6 @@ export class AgendaService {
     return tx.agendaItem.create({
       data: {
         accountId: this.tenant.accountId,
-        caseId: promise.caseId,
         clientId: promise.clientId,
         creditId: promise.creditId,
         // Del MISMO cobrador que la promesa: es él quien tiene que acordarse, no quien la cargó.
@@ -704,7 +702,7 @@ export class AgendaService {
         if (!validated.ok) throw agendaInvalidDetails(validated.errors);
 
         const credit = await tx.credit.findFirst({ where: { id: item.creditId } });
-        if (!credit) throw agendaCaseNotFound();
+        if (!credit) throw agendaCreditNotFound();
         await this.assertReferences(tx, type, validated.value, item.clientId, credit, await this.today());
 
         data.type = type;
@@ -737,7 +735,7 @@ export class AgendaService {
 
   /**
    * Cancela una gestión pendiente (S6): no se hizo y no se va a hacer. Queda visible en el día y en el
-   * historial del caso — para que desaparezca está eliminar. El motivo sale del catálogo del tenant.
+   * historial del crédito — para que desaparezca está eliminar. El motivo sale del catálogo del tenant.
    */
   async cancel(id: string, dto: CancelAgendaItemDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
     const { updated, clientName } = await this.tx(async (tx) => {
@@ -762,7 +760,7 @@ export class AgendaService {
 
   /**
    * Reagenda a otro día (S6): cierra la original como RESCHEDULED con su motivo y crea una nueva con la
-   * fecha pedida, apuntando a la anterior. Así el historial del caso muestra la cadena completa —
+   * fecha pedida, apuntando a la anterior. Así el historial del crédito muestra la cadena completa —
    * posponer (S4) mueve la hora del mismo ítem; reagendar deja rastro.
    *
    * Devuelve **el ítem nuevo**: es el que el cobrador va a ejecutar.
@@ -784,7 +782,6 @@ export class AgendaService {
       const created = await tx.agendaItem.create({
         data: {
           accountId: this.tenant.accountId,
-          caseId: item.caseId,
           clientId: item.clientId,
           creditId: item.creditId,
           // Se copia del original, NO se recalcula: si un supervisor reagenda, la gestión tiene que
@@ -816,7 +813,7 @@ export class AgendaService {
 
   /**
    * Elimina una gestión pendiente (S6): soft-delete, para la que no debió existir (se cargó al cliente
-   * equivocado). Una ya ejecutada no se borra — tiene un `CaseActivity` colgando en la bitácora del caso.
+   * equivocado). Una ya ejecutada no se borra — tiene una gestión colgando en la bitácora del crédito.
    *
    * Responde 200 con el ítem, no 204: `apiMutate` del móvil trata el 204 como error.
    */
@@ -839,7 +836,7 @@ export class AgendaService {
   }
 
   /**
-   * Cruces que el validador puro no puede hacer: que el contacto/dirección sean del cliente del caso,
+   * Cruces que el validador puro no puede hacer: que el contacto/dirección sean del cliente del crédito,
    * que la promesa no exceda el saldo y que el medio de pago (y su banco) existan en el catálogo del tenant.
    */
   private async assertReferences(

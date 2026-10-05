@@ -37,11 +37,6 @@ export class AnalyticsQueryDto {
   /** El responsable del crédito (F4/08). El nombre del parámetro se mantiene por la web. */
   /* El tope no es paranoia: cada valor es un parámetro más en el `IN` de seis consultas. */
   @IsOptional() @Csv() @IsArray() @ArrayMaxSize(50) @IsUUID(undefined, { each: true }) collectorId?: string[];
-  /**
-   * @deprecated F4/08: el caso (y su estado) ya no existe. Se acepta y se IGNORA mientras web y móvil lo mandan; se
-   * quita en la fase 6.
-   */
-  @IsOptional() @Csv() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) caseStatus?: string[];
   /** Prioridad del episodio de mora abierto. */
   @IsOptional() @Csv() @IsArray() @ArrayMaxSize(20) @IsEnum(CollectionPriority, { each: true }) priority?: CollectionPriority[];
   /** D7: sólo los créditos de esta fuente. Ausente = todas (el resumen trae el desglose). */

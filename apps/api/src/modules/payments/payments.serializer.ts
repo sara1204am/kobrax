@@ -6,7 +6,6 @@ export function serializePayment(p: Payment, names?: ReadonlyMap<string, string>
   return {
     id: p.id,
     creditId: p.creditId,
-    caseId: p.caseId ?? undefined,
     amount: num(p.amount),
     method: p.method,
     provider: p.provider ?? undefined,
@@ -28,7 +27,6 @@ export function serializePaymentRequest(r: PaymentRequest) {
     id: r.id,
     creditId: r.creditId ?? undefined,
     clientId: r.clientId ?? undefined,
-    caseId: r.caseId ?? undefined,
     amount: num(r.amount),
     method: r.method,
     status: r.status,

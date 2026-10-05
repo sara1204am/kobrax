@@ -1,7 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsBoolean, ValidateIf, ValidateNested } from 'class-validator';
-import { IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
-import { ActivityPromiseDto } from '../../cases/dto/case.dto';
+import { IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsPositive, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
 import {
   ARREARS_SOURCES,
   CREDIT_SOURCES,
@@ -83,18 +82,6 @@ export class ListMoraQueryDto {
    */
   @IsOptional() @IsString() @MaxLength(10) notVisitedSince?: string;
 
-  /**
-   * @deprecated F4/08 · D1/D2: ya no existen (sin caso, sin SLA, sin «sin gestión desde»). Se aceptan sólo para que
-   * un enlace guardado o la web de antes no reciba un 400; **no filtran nada**. Se borran con la fase 3/6.
-   */
-  @IsOptional() @IsString() @MaxLength(200) status?: string;
-  /** @deprecated ver `status`. */
-  @IsOptional() @IsString() @MaxLength(10) hasCase?: string;
-  /** @deprecated ver `status`. */
-  @IsOptional() @IsString() @MaxLength(10) overdue?: string;
-  /** @deprecated ver `status`. */
-  @IsOptional() @IsString() @MaxLength(40) noActionSince?: string;
-
   /** Sin `@IsIn` a propósito: una clave desconocida cae al orden por defecto. */
   @IsOptional() @IsString() sort?: string;
   @IsOptional() @IsString() dir?: string;
@@ -137,6 +124,15 @@ export class UpdateMoraNoteDto {
   @IsOptional() @IsInt() @Min(NOTE_BOARD_LIMITS.minHeight) @Max(NOTE_BOARD_LIMITS.maxHeight) h?: number;
   /** Traerla al frente del tablero. */
   @IsOptional() @IsBoolean() front?: boolean;
+}
+
+/** Promesa de pago de una gestión. Va ANTES de CreateMoraActivityDto: emitDecoratorMetadata evalúa
+ * `@Type(()=>X)` eager → ReferenceError (TDZ) si se declara después. */
+export class ActivityPromiseDto {
+  @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() amount!: number;
+  @IsDateString() promiseDate!: string; // ISO YYYY-MM-DD
+  @IsString() @IsNotEmpty() paymentMethodCode!: string;
+  @IsOptional() @IsString() bankCode?: string;
 }
 
 /**

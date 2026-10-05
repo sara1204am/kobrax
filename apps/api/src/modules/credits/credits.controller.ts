@@ -74,7 +74,7 @@ export class CreditsController {
   }
 
   /**
-   * «Está en mora», dicho a mano — y el caso se abre en el acto, sin esperar al trabajo diario.
+   * «Está en mora», dicho a mano — y el episodio de mora se abre en el acto.
    * Para quien presta sin cronograma y sabe que le deben sin mirar una fecha.
    */
   @Post(':id/arrears')
@@ -97,7 +97,7 @@ export class CreditsController {
     return this.credits.confirmClientLink(clientId);
   }
 
-  /** Poner al día: mueve la fecha de vencimiento y cierra el caso. No borra el síntoma. */
+  /** Poner al día: mueve la fecha de vencimiento y cierra el episodio de mora. No borra el síntoma. */
   @Post(':id/arrears/clear')
   @Roles(Permission.CREDIT_WRITE)
   clearArrears(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ClearArrearsDto) {

@@ -12,7 +12,6 @@ interface NotifRow {
   body: string | null;
   clientId: string | null;
   creditId: string | null;
-  caseId: string | null;
   readAt: Date | null;
   createdAt: Date;
 }
@@ -42,7 +41,6 @@ function makeService(opts: { supervisors?: string[]; notifications?: NotifRow[];
           body: (args.data.body as string) ?? null,
           clientId: (args.data.clientId as string) ?? null,
           creditId: (args.data.creditId as string) ?? null,
-          caseId: (args.data.caseId as string) ?? null,
           readAt: null,
           createdAt: new Date('2026-06-18T12:00:00Z'),
         };
@@ -96,32 +94,6 @@ function makeService(opts: { supervisors?: string[]; notifications?: NotifRow[];
 }
 
 describe('NotificationsService · traductor de eventos', () => {
-  it('case.assigned → notifica DIRECTO al cobrador + feed en vivo del tenant', async () => {
-    const { service, calls } = makeService();
-    await service.onCaseAssigned({ caseId: 'c1', collectorId: 'col1', accountId: 'acc-A' });
-    assert.equal(calls.created.length, 1);
-    assert.equal(calls.created[0]!.userId, 'col1');
-    assert.equal(calls.created[0]!.type, 'CASE_ASSIGNED');
-    assert.deepEqual(calls.wsToTenant, ['acc-A']);
-    assert.equal(calls.wsToUser[0]!.userId, 'col1');
-    assert.equal(calls.channelDeliveries, 1);
-  });
-
-  it('case.updated con cambio de estado → persiste a TODOS los supervisores', async () => {
-    const { service, calls } = makeService({ supervisors: ['sup1', 'sup2'] });
-    await service.onCaseUpdated({ caseId: 'c1', accountId: 'acc-A', status: 'IN_PROGRESS' });
-    assert.equal(calls.created.length, 2);
-    assert.deepEqual(calls.created.map((n) => n.userId).sort(), ['sup1', 'sup2']);
-    assert.deepEqual(calls.wsToSupervisors, ['acc-A']);
-  });
-
-  it('case.updated de bitácora (sin estado) → solo live, NO persiste', async () => {
-    const { service, calls } = makeService();
-    await service.onCaseUpdated({ caseId: 'c1', accountId: 'acc-A', activity: 'CALL' });
-    assert.equal(calls.created.length, 0);
-    assert.deepEqual(calls.wsToSupervisors, ['acc-A']);
-  });
-
   it('payment.registered → persiste a supervisores con tipo PAYMENT_REGISTERED', async () => {
     const { service, calls } = makeService({ supervisors: ['sup1'] });
     await service.onPaymentRegistered({ paymentId: 'p1', creditId: 'cr1', amount: 250, accountId: 'acc-A' });
@@ -142,7 +114,6 @@ describe('NotificationsService · REST (scope own)', () => {
       body: null,
       clientId: null,
       creditId: null,
-      caseId: null,
       readAt: read ? new Date() : null,
       createdAt: new Date(`2026-06-1${i}T00:00:00Z`),
     }));

@@ -74,12 +74,12 @@ function make(opts: Opts = {}) {
         return r ? { ...r } : null;
       },
       create: async ({ data }: { data: Record<string, unknown> }) => {
-        const row = { id: `as-${++seq}`, revokedAt: null, revokedBy: null, caseId: null, ...data } as Row;
+        const row = { id: `as-${++seq}`, revokedAt: null, revokedBy: null, ...data } as Row;
         assignments.push(row);
         return { ...row };
       },
       createMany: async ({ data }: { data: Record<string, unknown>[] }) => {
-        for (const d of data) assignments.push({ id: `as-${++seq}`, revokedAt: null, revokedBy: null, caseId: null, expiresAt: null, ...d } as Row);
+        for (const d of data) assignments.push({ id: `as-${++seq}`, revokedAt: null, revokedBy: null, expiresAt: null, ...d } as Row);
         return { count: data.length };
       },
       update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
@@ -165,7 +165,7 @@ const base = (over: Opts = {}): Opts => ({
   permissions: MANAGER,
   credits: [{ id: 'c1', assignedManagerId: 'ana', branchId: 'ag-1' }],
   assignments: [
-    { id: 'p1', accountId: 'acc-A', creditId: 'c1', userId: 'ana', kind: 'PRINCIPAL', revokedAt: null, expiresAt: null, caseId: null, startsAt: new Date() },
+    { id: 'p1', accountId: 'acc-A', creditId: 'c1', userId: 'ana', kind: 'PRINCIPAL', revokedAt: null, expiresAt: null, startsAt: new Date() },
   ],
   members,
   ...over,
@@ -360,7 +360,7 @@ describe('TEMPORAL · revocar', () => {
         userId: 'sup1',
         credits: [{ id: 'c1', assignedManagerId: 'pedro', branchId: 'ag-2' }],
         assignments: [
-          { id: 't9', accountId: 'acc-A', creditId: 'c1', userId: 'luis', kind: 'TEMPORAL', revokedAt: null, expiresAt: inOneHour(), caseId: null },
+          { id: 't9', accountId: 'acc-A', creditId: 'c1', userId: 'luis', kind: 'TEMPORAL', revokedAt: null, expiresAt: inOneHour() },
         ],
       }),
     );
@@ -376,8 +376,8 @@ describe('TEMPORAL · vencimiento (expireDue)', () => {
       base({
         agenda: [item('a-pend', { assigneeId: 'luis', details: { handoffFromUserId: 'ana', handoffAssignmentId: 't1', amount: 9 } }), item('a-hecho', { assigneeId: 'luis', status: 'EXECUTED' }), item('a-propio', { assigneeId: 'luis' })],
         assignments: [
-          { id: 'p1', accountId: 'acc-A', creditId: 'c1', userId: 'ana', kind: 'PRINCIPAL', revokedAt: null, expiresAt: null, caseId: null },
-          { id: 't1', accountId: 'acc-A', creditId: 'c1', userId: 'luis', kind: 'TEMPORAL', revokedAt: null, expiresAt: exp, grantedBy: 'boss', caseId: null },
+          { id: 'p1', accountId: 'acc-A', creditId: 'c1', userId: 'ana', kind: 'PRINCIPAL', revokedAt: null, expiresAt: null },
+          { id: 't1', accountId: 'acc-A', creditId: 'c1', userId: 'luis', kind: 'TEMPORAL', revokedAt: null, expiresAt: exp, grantedBy: 'boss' },
         ],
         ...extra,
       }),
@@ -410,7 +410,7 @@ describe('TEMPORAL · vencimiento (expireDue)', () => {
     const { service, assignments, agendaOf } = make(
       base({
         agenda: [item('a1', { assigneeId: 'luis', details: { handoffFromUserId: 'ana', handoffAssignmentId: 't1' } })],
-        assignments: [{ id: 't1', accountId: 'acc-A', creditId: 'c1', userId: 'luis', kind: 'TEMPORAL', revokedAt: null, expiresAt: inOneHour(), caseId: null }],
+        assignments: [{ id: 't1', accountId: 'acc-A', creditId: 'c1', userId: 'luis', kind: 'TEMPORAL', revokedAt: null, expiresAt: inOneHour() }],
       }),
     );
     assert.deepEqual(await service.expireDue(new Date()), { revoked: 0, returned: 0 });
@@ -448,8 +448,8 @@ describe('TEMPORAL · vencimiento (expireDue)', () => {
       base({
         agenda: [item('a1')],
         assignments: [
-          { id: 'p1', accountId: 'acc-A', creditId: 'c1', userId: 'ana', kind: 'PRINCIPAL', revokedAt: null, expiresAt: null, caseId: null },
-          { id: 'ap1', accountId: 'acc-A', creditId: 'c1', userId: 'luis', kind: 'APOYO', revokedAt: null, expiresAt: new Date(Date.now() - 1000), caseId: null },
+          { id: 'p1', accountId: 'acc-A', creditId: 'c1', userId: 'ana', kind: 'PRINCIPAL', revokedAt: null, expiresAt: null },
+          { id: 'ap1', accountId: 'acc-A', creditId: 'c1', userId: 'luis', kind: 'APOYO', revokedAt: null, expiresAt: new Date(Date.now() - 1000) },
         ],
       }),
     );
@@ -461,7 +461,7 @@ describe('TEMPORAL · vencimiento (expireDue)', () => {
 
   it('una ayuda sin vencimiento no vence nunca', async () => {
     const { service, assignments } = make(
-      base({ assignments: [{ id: 'ap1', accountId: 'acc-A', creditId: 'c1', userId: 'luis', kind: 'APOYO', revokedAt: null, expiresAt: null, caseId: null }] }),
+      base({ assignments: [{ id: 'ap1', accountId: 'acc-A', creditId: 'c1', userId: 'luis', kind: 'APOYO', revokedAt: null, expiresAt: null }] }),
     );
     assert.deepEqual(await service.expireDue(new Date(Date.now() + 1000 * HOUR)), { revoked: 0, returned: 0 });
     assert.equal(assignments[0]!.revokedAt, null);
@@ -513,8 +513,8 @@ describe('APOYO · segundo cobrador', () => {
     const { service, tx, assignments } = make(
       base({
         assignments: [
-          { id: 'p1', accountId: 'acc-A', creditId: 'c1', userId: 'ana', kind: 'PRINCIPAL', revokedAt: null, expiresAt: null, caseId: null },
-          { id: 'ap1', accountId: 'acc-A', creditId: 'c1', userId: 'luis', kind: 'APOYO', revokedAt: null, expiresAt: null, caseId: null },
+          { id: 'p1', accountId: 'acc-A', creditId: 'c1', userId: 'ana', kind: 'PRINCIPAL', revokedAt: null, expiresAt: null },
+          { id: 'ap1', accountId: 'acc-A', creditId: 'c1', userId: 'luis', kind: 'APOYO', revokedAt: null, expiresAt: null },
         ],
       }),
     );

@@ -28,7 +28,6 @@ function make() {
     agendaItem: { updateMany: upd('agenda_items') },
     routeStop: { updateMany: upd('route_stops') },
     paymentRequest: { updateMany: upd('payment_requests') },
-    collectionCase: { findMany: async () => [{ id: 'k1' }], updateMany: upd('collection_cases') },
     account: { findUnique: async () => ({ currencyCode: 'BOB', configuration: {}, settings: {} }) },
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
@@ -49,10 +48,9 @@ describe('CreditsService.linkClient — re-apunta lo que lleva al cliente', () =
     }
   });
 
-  it('los casos (que viven hasta la fase 6) y los pedidos de cobro también se mueven', async () => {
+  it('los pedidos de cobro también se mueven', async () => {
     const { service, writes } = make();
     await service.linkClient('cr1', 'to');
-    assert.ok(writes.some((w) => w.table === 'collection_cases' && w.data.clientId === 'to'));
     assert.ok(writes.some((w) => w.table === 'payment_requests' && w.data.clientId === 'to'));
   });
 

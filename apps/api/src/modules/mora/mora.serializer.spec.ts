@@ -138,9 +138,9 @@ describe('serializeMoraCredit — un crédito, un registro', () => {
     assert.equal(r.lastPaymentAt, '2026-09-15');
   });
 
-  it('F4/08: nunca llena el caso (case) aunque el contrato lo conserve como deprecated', () => {
+  it('no expone `case` ni `slaDueAt`', () => {
     const r = serializeMoraCredit(row({ arrearEpisodes: episode() }), opts);
-    assert.equal(r.case, undefined);
+    assert.equal('case' in r, false);
     assert.equal('slaDueAt' in r, false);
   });
 

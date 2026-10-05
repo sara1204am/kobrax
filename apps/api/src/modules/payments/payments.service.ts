@@ -149,7 +149,7 @@ export class PaymentsService {
     });
 
     // Saldada la deuda el crédito queda `PAID` y el trigger de episodios termina la mora (F4/08): el pago
-    // ya no cierra casos ni escribe `case_id`; cuelga solo del crédito.
+    // cuelga solo del crédito.
 
     const payment = await this.insertPayment(tx, credit, p);
     return { payment, creditPaid, external: false };
@@ -189,7 +189,6 @@ export class PaymentsService {
     const { page, limit, skip } = resolvePagination(query);
     const where: Prisma.PaymentWhereInput = {};
     if (query.creditId) where.creditId = query.creditId;
-    // `caseId` del query se ignora (F4/08): el pago cuelga solo del crédito.
     /*
      * 🔴 **El pago no tiene `client_id`, y no hace falta que lo tenga.** Cuelga del crédito, y el
      * crédito del cliente: preguntar «los pagos de esta persona» es un `JOIN`, no una llamada por

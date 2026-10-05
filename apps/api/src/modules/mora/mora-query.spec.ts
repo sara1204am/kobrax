@@ -50,15 +50,6 @@ describe('buildMoraWhere — qué créditos entran', () => {
   });
 });
 
-describe('buildMoraWhere — filtros que ya no existen no filtran ni rompen', () => {
-  it('estado, hasCase, SLA y «sin gestión desde» se ignoran (D1/D2)', () => {
-    const base = where({});
-    const old = where({ status: 'ACTIVE', hasCase: 'true', overdue: 'true', noActionSince: '2026-09-01' });
-    assert.equal(old.sql, base.sql);
-    assert.deepEqual(old.values, base.values);
-  });
-});
-
 describe('buildMoraWhere — categoría de mora (rangos de la cuenta)', () => {
   const rangeOf = (code: string) => where({ category: code });
 
@@ -316,9 +307,9 @@ describe('buildMoraOrder', () => {
     assert.match(order('balance', 'asc'), /outstanding_balance ASC/);
   });
 
-  it('lastAction y slaDueAt ya no ordenan (D2): caen al default', () => {
+  it('una clave de orden desconocida cae al default', () => {
     assert.equal(order('lastAction'), order());
-    assert.equal(order('slaDueAt', 'asc'), order(undefined, 'asc'));
+    assert.equal(order('desconocida', 'asc'), order(undefined, 'asc'));
   });
 });
 

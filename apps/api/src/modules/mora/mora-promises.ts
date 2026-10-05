@@ -18,7 +18,7 @@ const utcDay = (d: Date): number => Date.UTC(d.getUTCFullYear(), d.getUTCMonth()
 
 /**
  * El estado de una promesa. Sale de **tres** cosas que ya existen —el estado del agendado, su fecha y el
- * desenlace de la gestión que la ejecutó (`case_activities.result`)—: no hay una columna que pueda
+ * desenlace de la gestión que la ejecutó (`credit_activities.result`)—: no hay una columna que pueda
  * contradecirlas.
  *
  * 🔴 **Vencida sin cerrar no es incumplida.** Si la fecha pasó y nadie registró qué ocurrió, el sistema no

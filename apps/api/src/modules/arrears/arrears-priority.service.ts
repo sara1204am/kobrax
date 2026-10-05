@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { CollectionPriority, PrismaClient } from '@prisma/client';
-import { computePriority, priorityParamsOf } from '../cases/case-priority';
+import { computePriority, priorityParamsOf } from './arrears-priority-score';
 
 /**
  * La prioridad vive en el **episodio de mora abierto** (F4/08 · D3): un crédito al día no tiene episodio abierto y

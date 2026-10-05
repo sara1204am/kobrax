@@ -32,7 +32,6 @@ function make(opts: Opts = {}) {
     agendaUpdates: [] as { where: { id: string }; data: Record<string, unknown> }[],
     audits: [] as { entity: string; action: string }[],
     queries: [] as { sql: string; values: unknown[] }[],
-    cases: 0,
   };
   let activityLookups = 0;
   const stored = { id: 'act-previa', type: 'CALL', createdAt: new Date('2026-10-02T09:00:00Z'), creditId: CREDIT, episodeId: null };
@@ -66,9 +65,6 @@ function make(opts: Opts = {}) {
         return { id: args.where.id, ...args.data };
       },
     },
-    // La causa de esta fase: ya nada de esto se toca desde «Registrar acción».
-    collectionCase: new Proxy({}, { get: () => () => void calls.cases++ }),
-    caseActivity: new Proxy({}, { get: () => () => void calls.cases++ }),
   };
   const permissions = opts.permissions ?? ['collection:read', 'collection:write', 'assignment:write'];
   const agenda = {
@@ -88,13 +84,11 @@ function make(opts: Opts = {}) {
   return { service, calls };
 }
 
-describe('MoraService.addActivity — por crédito, sin caso', () => {
-  it('registra una visita en credit_activities y NO abre ni toca ningún caso', async () => {
+describe('MoraService.addActivity — por crédito', () => {
+  it('registra una visita en credit_activities ', async () => {
     const { service, calls } = make({ episode: 'ep-1' });
     const res = await service.addActivity(CREDIT, { type: 'VISIT', result: 'NOT_FOUND', notes: '  Se dejó aviso con un familiar  ' });
-    assert.equal(calls.cases, 0, 'ni lee ni escribe collection_cases / case_activities');
     assert.deepEqual(res.data, { id: 'act1', type: 'VISIT', createdAt: new Date('2026-10-02T10:00:00Z'), episodeId: 'ep-1' });
-    assert.equal('caseId' in res.data!, false);
     assert.equal('caseOpened' in res.data!, false);
     const a = calls.activities[0]!;
     assert.equal(a.creditId, CREDIT);
@@ -338,7 +332,6 @@ describe('MoraService.addActivity — promesa por la función única de Agenda',
     assert.equal(promesa!.timeMode, 'FIXED');
     assert.equal(promesa!.assigneeId, 'resp-1');
     assert.equal(promesa!.creditId, CREDIT);
-    assert.equal(promesa!.caseId, undefined);
     assert.equal(recordatorio!.type, 'REMINDER');
     assert.equal(recordatorio!.assigneeId, 'resp-1');
     assert.deepEqual(audits, ['agenda_item:CREATE', 'agenda_item:CREATE']);

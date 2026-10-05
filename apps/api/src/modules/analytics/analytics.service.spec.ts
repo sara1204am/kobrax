@@ -69,14 +69,13 @@ describe('summary', () => {
   });
 
   /**
-   * F4/08: «casos activos» pasó a «créditos en mora» (episodios abiertos). `activeCases` sigue en la respuesta, con
-   * el mismo número, mientras la web lo lea.
+   * F4/08: «casos activos» pasó a «créditos en mora» (episodios abiertos). `activeCases` ya no existe.
    */
-  it('🔴 créditos en mora = episodios ABIERTOS; activeCases es el mismo número (deprecado)', async () => {
+  it('🔴 créditos en mora = episodios ABIERTOS', async () => {
     const { service, find } = makeService((sql) => (sql.includes('credit_arrear_episodes') ? [{ now: 12, prev: 9 }] : []));
     const out = await service.summary({});
     assert.deepEqual(out.creditsInArrears, { value: 12, previous: 9 });
-    assert.deepEqual(out.activeCases, out.creditsInArrears);
+    assert.equal('activeCases' in out, false);
     const sql = find('credit_arrear_episodes')!;
     assert.match(sql, /e\.ended_at IS NULL/);
     assert.doesNotMatch(sql, /collection_cases/);
@@ -93,12 +92,6 @@ describe('summary', () => {
     const { service } = makeService(() => []);
     const out = await service.summary({});
     assert.deepEqual(out.creditsInArrears, { value: 0, previous: 0 });
-  });
-
-  it('el filtro caseStatus heredado se acepta y se ignora', async () => {
-    const { service, sqls } = makeService(() => []);
-    await service.summary({ caseStatus: ['PENDING'] });
-    assert.ok(sqls.every((q) => !q.includes('collection_cases') && !/status::text IN/.test(q)));
   });
 
   it('prioridad: la del episodio abierto; cobrador: el responsable del crédito', async () => {
@@ -164,7 +157,7 @@ describe('summary', () => {
     // `?collectorId=` llega como lista vacía, que es un objeto y pasa cualquier `if`. Con un
     // `Prisma.join` de cero elementos la consulta sale `IN ()`: error de sintaxis, no «sin filtro».
     const { service, find } = makeService(() => []);
-    await service.collectorPerformance({ collectorId: [], caseStatus: [] });
+    await service.collectorPerformance({ collectorId: [] });
     assert.doesNotMatch(find('assigned_manager_id')!, /IN \(\)/);
   });
 });
@@ -206,7 +199,7 @@ describe('collectorPerformance', () => {
     assert.match(find('assigned_manager_id')!, /COUNT\(\*\) FILTER \(\s*WHERE EXISTS \(SELECT 1 FROM credit_arrear_episodes oe WHERE oe\.credit_id = cr\.id AND oe\.ended_at IS NULL\)/);
   });
 
-  it('junta la carga con lo recaudado por persona (cases = creditsInArrears, deprecado)', async () => {
+  it('junta la carga con lo recaudado por persona', async () => {
     const { service } = makeService((sql) =>
       sql.includes('assigned_manager_id')
         ? [{ collector: 'u1', arrears: 10, outstanding: 1000, overdue: 400 }]
@@ -215,7 +208,6 @@ describe('collectorPerformance', () => {
     const rows = await service.collectorPerformance({});
     assert.deepEqual(rows[0], {
       collectorId: 'u1',
-      cases: 10,
       creditsInArrears: 10,
       outstanding: 1000,
       overdue: 400,

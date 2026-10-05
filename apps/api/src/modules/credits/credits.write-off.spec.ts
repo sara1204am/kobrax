@@ -14,7 +14,7 @@ type Credit = Record<string, unknown> & { id: string };
 function make(opts: { permissions?: string[]; credit?: Credit | null } = {}) {
   const credit: Credit | null = opts.credit === undefined ? { id: 'cr1', status: 'ACTIVE', daysPastDue: 240, metadata: {}, writtenOffAt: null, writtenOffBy: null, writtenOffReason: null } : opts.credit;
   const updates: Record<string, unknown>[] = [];
-  const touched = { episodes: 0, cases: 0 };
+  const touched = { episodes: 0 };
   const audited: { action: string; entityId: string; before?: Record<string, unknown>; after?: Record<string, unknown> }[] = [];
 
   const tx = {
@@ -27,8 +27,7 @@ function make(opts: { permissions?: string[]; credit?: Credit | null } = {}) {
       },
     },
     account: { findUnique: async () => ({ currencyCode: 'BOB', configuration: {}, settings: {} }) },
-    // Cualquier toque a estas tablas rompe el spec: castigar no cierra la mora ni abre casos.
-    collectionCase: new Proxy({}, { get: () => () => void touched.cases++ }),
+    // Cualquier toque a estas tablas rompe el spec: castigar no cierra la mora.
     creditArrearEpisode: new Proxy({}, { get: () => () => void touched.episodes++ }),
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
@@ -56,10 +55,10 @@ describe('POST /credits/:id/write-off', () => {
     assert.equal(out.status, 'ACTIVE');
   });
 
-  it('🔴 no cierra el episodio de mora ni toca casos', async () => {
+  it('🔴 no cierra el episodio de mora', async () => {
     const { service, touched } = make({ permissions: MANAGER });
     await service.writeOff('cr1');
-    assert.deepEqual(touched, { episodes: 0, cases: 0 });
+    assert.deepEqual(touched, { episodes: 0 });
   });
 
   it('audita WRITE_OFF con el motivo; sin motivo guarda null', async () => {

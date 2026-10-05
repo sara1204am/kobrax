@@ -7,7 +7,7 @@ export const resourceNotFound = () =>
 export const invalidGps = () =>
   new BadRequestException({ code: 'VISIT_GPS', message: 'Coordenadas GPS inválidas o ausentes' });
 
-/** Visita sin referencia a caso ni parada de ruta. */
+/** Visita sin referencia a crédito ni parada de ruta. */
 export const visitNeedsTarget = () =>
   new BadRequestException({ code: 'VISIT_TARGET', message: 'La visita requiere creditId o routeStopId' });
 

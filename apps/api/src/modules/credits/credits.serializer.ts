@@ -81,7 +81,7 @@ export function serializeCredit(
   const situation = mora ? moraSituation({ hasOpenEpisode: mora.hasOpenEpisode, daysPastDue: credit.daysPastDue, writtenOffAt: credit.writtenOffAt }).situation : undefined;
   const cat = mora ? categoryForDays(credit.daysPastDue, mora.categories) : null;
   // La ficha (§5.4) necesita cuota, frecuencia, próxima fecha y el candado del importado.
-  // Misma función que el listado de casos y que el móvil: una sola regla, tres consumidores.
+  // Misma función que la lista de mora y que el móvil: una sola regla, tres consumidores.
   const view = creditView({
     metadata: credit.metadata,
     origin: credit.origin,

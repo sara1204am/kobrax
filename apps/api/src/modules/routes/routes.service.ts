@@ -43,11 +43,6 @@ const STOP_CLIENT = {
 } satisfies Prisma.ClientDefaultArgs;
 
 /**
- * El crédito del caso de la parada, para la mora que pinta la tarjeta de RT-4 (S4). Va por el mismo
- * camino que `STOP_CLIENT` — ensanchar el `include` que ya existe — y no con un `GET /credits` por
- * parada desde el móvil, que sería una llamada por pin.
- */
-/**
  * La última visita de la parada, para saber **cómo** terminó y no sólo que se visitó (S6: las
  * categorías del resumen). `take: 1` a propósito: una parada puede tener varias visitas y acá
  * interesa la que vale, no el historial entero de cada una de las 16 paradas.
@@ -57,24 +52,6 @@ const STOP_VISIT = {
   orderBy: { capturedAt: 'desc' },
   take: 1,
 } satisfies Prisma.RouteStop$visitsArgs;
-
-const STOP_CASE = {
-  // `creditId` va también: el registro de resultado (S5) cobra y promete contra ESE crédito.
-  select: {
-    creditId: true,
-    credit: {
-      select: {
-        outstandingBalance: true,
-        currency: true,
-        daysPastDue: true,
-        // D1/D3: el cobro sobre un PSF no se topea con su saldo reportado, y la tarjeta lo dice.
-        externalSource: true,
-        syncStatus: true,
-        reportedAsOf: true,
-      },
-    },
-  },
-} satisfies Prisma.CollectionCaseDefaultArgs;
 
 /** El crédito de la parada (F4/08: `route_stops.credit_id`, sin relación Prisma: se lee aparte). */
 const STOP_CREDIT = {
@@ -247,7 +224,7 @@ export class RoutesService {
        *
        * 🔴 **Con `creditIds`, manda el orden en que vinieron** (el recorrido que alguien armó mirando el mapa),
        * sin repetidos y sólo con los créditos que quien planifica puede ver (el mismo alcance que la ficha de
-       * mora). Sin `creditIds` (`caseIds` legado se ignora), se toman los créditos EN MORA del cobrador
+       * mora). Sin `creditIds`, se toman los créditos EN MORA del cobrador
        * —responsable, temporal o apoyo vigentes— por la prioridad de su episodio abierto.
        */
       const credits = dto.creditIds?.length
@@ -263,7 +240,7 @@ export class RoutesService {
           branchId: dto.branchId,
           plannedDate: new Date(dto.plannedDate),
           status: RouteStatus.PLANNED,
-          totalCases: credits.length, // nombre legado: cuenta paradas
+          totalCases: credits.length, // nombre legado de la columna: cuenta paradas
           stops: {
             create: credits.map((c, i) => ({
               accountId: this.tenant.accountId,
@@ -455,7 +432,7 @@ export class RoutesService {
     const route = await this.tx(async (tx) => {
       const r = await tx.routePlan.findFirst({
         where: { id },
-        include: { stops: { orderBy: { sequenceOrder: 'asc' }, include: { client: STOP_CLIENT, case: STOP_CASE, visits: STOP_VISIT } } },
+        include: { stops: { orderBy: { sequenceOrder: 'asc' }, include: { client: STOP_CLIENT, visits: STOP_VISIT } } },
       });
       return r && { ...r, stops: await this.withCredits(tx, r.stops) };
     });
@@ -520,7 +497,7 @@ export class RoutesService {
       // parada apuntando a la cartera de otro. Mismo criterio que `FieldService.createVisit`.
       const client = await tx.client.findFirst({ where: { id: dto.clientId, deletedAt: null }, select: { id: true } });
       if (!client) throw resourceNotFound();
-      // `caseId` legado: se ignora. La parada se liga al crédito (que debe ser del cliente y estar a la vista).
+      // La parada se liga al crédito (que debe ser del cliente y estar a la vista).
       if (dto.creditId) {
         const [found] = await visibleCredits(tx, moraScopeOf(this.tenant), { creditId: dto.creditId, clientId: dto.clientId });
         if (!found) throw resourceNotFound();
@@ -540,7 +517,7 @@ export class RoutesService {
           creditId: dto.creditId,
           sequenceOrder: (last?.sequenceOrder ?? 0) + 1,
         },
-        include: { client: STOP_CLIENT, case: STOP_CASE, visits: STOP_VISIT },
+        include: { client: STOP_CLIENT, visits: STOP_VISIT },
       });
       // El total sale de las paradas, no de un contador que se desfase.
       await tx.routePlan.update({ where: { id: routeId }, data: { totalCases: await tx.routeStop.count({ where: { routeId } }) } });
@@ -623,7 +600,7 @@ export class RoutesService {
       await this.assertOwnRoute(tx, routeId);
       const r = await tx.routePlan.findFirst({
         where: { id: routeId },
-        include: { stops: { orderBy: { sequenceOrder: 'asc' }, include: { client: STOP_CLIENT, case: STOP_CASE, visits: STOP_VISIT } } },
+        include: { stops: { orderBy: { sequenceOrder: 'asc' }, include: { client: STOP_CLIENT, visits: STOP_VISIT } } },
       });
       return r && { ...r, stops: await this.withCredits(tx, r.stops) };
     });
