@@ -90,7 +90,11 @@ export default function LoginScreen() {
             placeholder="ejemplo@empresa.com"
             keyboardType="email-address"
             autoCapitalize="none"
-            autoComplete="email"
+            // Autofill (M-LOG-39): el correo es el "usuario" del par que guarda el gestor de contraseñas
+            // (Google en Android, llavero en iOS); con 'email' solo no lo empareja con la contraseña.
+            autoComplete="username"
+            textContentType="username"
+            importantForAutofill="yes"
             // "Siguiente" pasa a la contraseña sin cerrar el teclado (M-LOG-04).
             returnKeyType="next"
             blurOnSubmit={false}
@@ -109,6 +113,9 @@ export default function LoginScreen() {
             placeholder="Ingresa tu contraseña"
             secureTextEntry
             autoCapitalize="none"
+            autoComplete="current-password"
+            textContentType="password"
+            importantForAutofill="yes"
             // "Ir" en la contraseña = tocar "Iniciar sesión" (si falta algo, avisa bajo el campo).
             returnKeyType="go"
             onSubmitEditing={() => void submit()}

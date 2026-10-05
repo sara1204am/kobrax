@@ -99,3 +99,17 @@ describe('LoginScreen · teclado (M-LOG-04)', () => {
     await waitFor(() => expect(mockLogin).toHaveBeenCalledWith('a@b.co', 'x'));
   });
 });
+
+describe('LoginScreen · autofill del gestor de contraseñas (M-LOG-39)', () => {
+  it('correo = usuario y contraseña = current-password, visibles para el servicio de autofill', () => {
+    render(<LoginScreen />);
+    const email = screen.getByPlaceholderText(EMAIL);
+    const pass = screen.getByPlaceholderText(PASS);
+    expect(email.props.autoComplete).toBe('username');
+    expect(email.props.textContentType).toBe('username');
+    expect(email.props.importantForAutofill).toBe('yes');
+    expect(pass.props.autoComplete).toBe('current-password');
+    expect(pass.props.textContentType).toBe('password');
+    expect(pass.props.importantForAutofill).toBe('yes');
+  });
+});
