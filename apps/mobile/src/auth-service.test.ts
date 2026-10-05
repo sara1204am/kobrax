@@ -146,3 +146,20 @@ describe('authService.login — errores por campo (M-LOG-18)', () => {
     expect(await authService.login('a@b.co', 'b')).toEqual({ error: 'Credenciales inválidas' });
   });
 });
+
+describe('authService.login — cuenta bloqueada (M-LOG-40)', () => {
+  it('muestra tal cual el mensaje de bloqueo de la API (423), no "Credenciales inválidas"', async () => {
+    mockFetch.mockResolvedValue({
+      status: 423,
+      data: null,
+      error: {
+        code: 'ACCOUNT_LOCKED',
+        message: 'Cuenta bloqueada temporalmente por intentos fallidos',
+        details: { lockedUntil: '2026-10-05T12:00:00.000Z' },
+      },
+    });
+    expect(await authService.login('cobrador6@kobrax.demo', 'Kobrax123!')).toEqual({
+      error: 'Cuenta bloqueada temporalmente por intentos fallidos',
+    });
+  });
+});
