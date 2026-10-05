@@ -40,6 +40,16 @@ async function main(): Promise<void> {
   try {
     await prisma.$executeRawUnsafe('DROP SCHEMA IF EXISTS public CASCADE');
     await prisma.$executeRawUnsafe('CREATE SCHEMA public');
+    // 🔴 Al borrar `public` se pierden los permisos que da infra/postgres/init/01-create-app-role.sql (solo corre al
+    // crear el volumen): sin ellos la API (rol kobrax_app, sujeto a RLS) falla con «permission denied for schema public».
+    // Van ANTES de las migraciones para que los privilegios por defecto alcancen a las tablas que se crean después.
+    await prisma.$executeRawUnsafe(`DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kobrax_app') THEN
+        GRANT USAGE ON SCHEMA public TO kobrax_app;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO kobrax_app;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO kobrax_app;
+      END IF;
+    END $$`);
     // El helper que las migraciones viejas necesitan antes de que exista 001 (lo recrea 001 con CASCADE).
     await prisma.$executeRawUnsafe(
       `CREATE FUNCTION app_current_account() RETURNS text AS $$ SELECT NULLIF(current_setting('app.current_account_id', true), ''); $$ LANGUAGE sql STABLE`,
