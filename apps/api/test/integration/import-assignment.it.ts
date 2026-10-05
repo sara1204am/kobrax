@@ -26,7 +26,7 @@ const R02 = 'Reporte_Mora_20261002_CQE.pdf';
 
 let prisma: PrismaClient;
 let accountId: string;
-const id: Record<'juan' | 'pedro' | 'manager' | 'supervisor', string> = { juan: '', pedro: '', manager: '', supervisor: '' };
+const id: Record<'juan' | 'pedro' | 'manager' | 'supervisor' | 'owner', string> = { juan: '', pedro: '', manager: '', supervisor: '', owner: '' };
 const token: Record<'juan' | 'pedro' | 'manager', string> = { juan: '', pedro: '', manager: '' };
 
 /** Vincula el código de asesor CQE a un usuario: de quién es la cartera de esos reportes (D8). */
@@ -42,7 +42,7 @@ async function linkCqe(userId: string): Promise<void> {
 async function owner(code: string): Promise<{ column: string | null; table: string[] }> {
   const credit = await prisma.credit.findFirstOrThrow({ where: { accountId, externalId: code } });
   const rows = await prisma.creditAssignment.findMany({
-    where: { creditId: credit.id, revokedAt: null, expiresAt: null },
+    where: { creditId: credit.id, revokedAt: null, expiresAt: null, kind: 'PRINCIPAL' },
     select: { userId: true },
   });
   return { column: credit.assignedManagerId, table: rows.map((r) => r.userId) };
@@ -55,7 +55,7 @@ async function desync(): Promise<number> {
     WHERE c.deleted_at IS NULL AND c.account_id = ${accountId}
       AND c.assigned_manager_id IS DISTINCT FROM (
         SELECT ca.user_id FROM credit_assignments ca
-        WHERE ca.credit_id = c.id AND ca.revoked_at IS NULL AND ca.expires_at IS NULL)`;
+        WHERE ca.credit_id = c.id AND ca.revoked_at IS NULL AND ca.expires_at IS NULL AND ca.kind = 'PRINCIPAL')`;
   return Number(n);
 }
 
@@ -68,6 +68,7 @@ describe('Importación de cartera — quién queda responsable', { timeout: 600_
     id.juan = collector.id;
     id.manager = (await prisma.user.findUniqueOrThrow({ where: { email: 'manager@kobrax.demo' } })).id;
     id.supervisor = (await prisma.user.findUniqueOrThrow({ where: { email: 'supervisor@kobrax.demo' } })).id;
+    id.owner = (await prisma.user.findUniqueOrThrow({ where: { email: 'owner@kobrax.demo' } })).id;
     id.pedro = await addMember(prisma, accountId, 'pedro@kobrax.demo', 'Pedro', 'COLLECTOR');
     const account = await prisma.account.findUniqueOrThrow({ where: { id: accountId } });
     await prisma.account.update({
@@ -157,8 +158,9 @@ describe('Importación de cartera — quién queda responsable', { timeout: 600_
     );
   });
 
-  it('6 · un nuevo sin responsable no se confirma (la sugerencia no sirve: CQE vinculado a un supervisor)', async () => {
-    await linkCqe(id.supervisor);
+  it('6 · un nuevo sin responsable no se confirma (la sugerencia no sirve: CQE vinculado a alguien que no puede cobrar, como el administrador de la cuenta)', async () => {
+    // Un supervisor SÍ puede ser responsable (D8): la sugerencia sirve. Quien no puede serlo —y no es quien importa— es el administrador.
+    await linkCqe(id.owner);
     try {
       const preview = await importReport<PortfolioSummary>(token.manager, R01, { dryRun: true });
       assert.ok(preview.data!.preview.toCreate.every((r) => r.suggestedAssigneeId === null));
@@ -193,6 +195,8 @@ describe('Importación de cartera — quién queda responsable', { timeout: 600_
   });
 
   it('reasignar con un responsable desactualizado → ASSIGNMENT_CONFLICT y la corrida no se aplica', async () => {
+    // El seed ya trae corridas de importación: se compara contra las que había antes, no contra cero.
+    const antes = await prisma.clientImportRun.count({ where: { accountId, reportAsOf: new Date('2026-10-02') } });
     const preview = await importReport<PortfolioSummary>(token.manager, R02, { dryRun: true });
     const target = preview.data!.preview.toUpdate.find((r) => r.currentAssigneeId === id.pedro)!;
     const res = await importReport(token.manager, R02, {
@@ -201,7 +205,7 @@ describe('Importación de cartera — quién queda responsable', { timeout: 600_
     });
     assert.equal(res.status, 409);
     assert.equal(res.error?.code, 'ASSIGNMENT_CONFLICT');
-    assert.equal(await prisma.clientImportRun.count({ where: { accountId, reportAsOf: new Date('2026-10-02') } }), 0, 'nada a medias');
+    assert.equal(await prisma.clientImportRun.count({ where: { accountId, reportAsOf: new Date('2026-10-02') } }), antes, 'nada a medias');
   });
 
   it('11 · sin assignment:write no se cambia el responsable llamando al API directo', async () => {
