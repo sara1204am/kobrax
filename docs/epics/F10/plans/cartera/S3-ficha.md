@@ -1,5 +1,7 @@
 # Cartera · S3 — Ficha de cobranza (V4)
 
+> **Nota — reemplazado por P6 (cola offline):** el pago, la gestión y la nota de la ficha se escriben hoy a la **cola offline** de P6 (`expo-sqlite`), con ids idempotentes, y no con las llamadas directas a la API que describe este plan. Se conserva como referencia de la pantalla (V4) y sus reglas; para la escritura, manda `plans/P6-offline-sync.md`.
+
 > Índice: [README.md](./README.md) · Spec: [`docs/flows/Cliente_Prestamo.pdf`](../../../../flows/Cliente_Prestamo.pdf) §5.4, §6, §7
 > **Depende de** [00-fundacion.md](./00-fundacion.md) (pago que descuenta + comprobante + `uploads`), S1 (`creditView` en `serializeCase`), S2 (`AmountInput`, `Chips`, `uploads.service`). Todo ya construido.
 > **Sin Figma:** extiende el mockup "Detalle de gestión" calcando Agenda (`app/agenda/ver.tsx`, `registrar-accion.tsx`).

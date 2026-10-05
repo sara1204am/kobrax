@@ -1,8 +1,8 @@
-import type { CaseActivityItem } from './cases.service';
+import type { MoraActivityItem } from '@kobrax/shared';
 import type { PaymentItem } from './payments.service';
-import { buildTimeline, promiseReady, recovered } from './ficha';
+import { buildTimeline, promiseReady, queuedPayments, recovery } from './ficha';
 
-const act = (p: Partial<CaseActivityItem>): CaseActivityItem => ({ id: 'a', type: 'CALL', createdAt: '2026-07-01T10:00:00Z', ...p });
+const act = (p: Partial<MoraActivityItem>): MoraActivityItem => ({ id: 'a', type: 'CALL', createdAt: '2026-07-01T10:00:00Z', ...p });
 const pay = (p: Partial<PaymentItem>): PaymentItem =>
   ({ id: 'p', creditId: 'cr', amount: 100, method: 'CASH' as never, paymentDate: '2026-07-02T10:00:00Z', createdAt: '2026-07-02T10:00:00Z', ...p });
 
@@ -17,11 +17,46 @@ describe('buildTimeline', () => {
   });
 });
 
-describe('recovered', () => {
-  it('capital − saldo, clampado a [0, capital]', () => {
-    expect(recovered(1000, 400)).toBe(600);
-    expect(recovered(1000, 0)).toBe(1000);
-    expect(recovered(1000, 1200)).toBe(0); // saldo mayor que el capital (mora capitalizada) → 0, no negativo
+describe('buildTimeline — asignaciones', () => {
+  it('la nota de una asignación es el id: se muestra el nombre que mandó la API, nunca el id', () => {
+    const id = 'bf2e039c-1111-2222-3333-444455556666';
+    const [a, b] = buildTimeline([act({ id: 'x', type: 'ASSIGNMENT', notes: id, assignedToName: 'Luis Rojas' }), act({ id: 'y', type: 'ASSIGNMENT', notes: id, createdAt: '2026-06-01T10:00:00Z' })], []);
+    expect(a).toMatchObject({ notes: 'Asignada a Luis Rojas' });
+    expect(b).toMatchObject({ notes: 'Asignada a alguien del equipo' });
+  });
+});
+
+describe('recovery — «Recuperado X de Y» (D15)', () => {
+  it('base total: contra el total por cobrar, no contra el capital', () => {
+    // 1.000 al 10 % en 5 cuotas de 300: debe 1.500 y ya pagó 400.
+    expect(recovery({ balanceBasis: 'total', outstandingBalance: 1100, principalAmount: 1000, totalToCollect: 1500 })).toEqual({
+      recovered: 400,
+      of: 1500,
+      percent: 27,
+    });
+  });
+
+  it('base total sin total conocido: no hay barra', () => {
+    expect(recovery({ balanceBasis: 'total', outstandingBalance: 800, principalAmount: 1000, totalToCollect: null })).toBeNull();
+  });
+
+  it('legacy y principal: contra el capital, clampado a [0, capital]', () => {
+    expect(recovery({ balanceBasis: 'legacy', outstandingBalance: 400, principalAmount: 1000 })).toEqual({ recovered: 600, of: 1000, percent: 60 });
+    expect(recovery({ outstandingBalance: 1200, principalAmount: 1000 })).toEqual({ recovered: 0, of: 1000, percent: 0 });
+  });
+
+  it('cargado con cuotas ya pagadas (D13): sólo cuenta lo cobrado en Kobrax', () => {
+    // Total 1.500, 3 cuotas de 150 pagadas antes (450): al registrarlo debe 1.050; cobró 150 en Kobrax.
+    expect(recovery({ balanceBasis: 'total', outstandingBalance: 900, principalAmount: 1000, totalToCollect: 1500, priorPaidAmount: 450 })).toEqual({
+      recovered: 150,
+      of: 1050,
+      percent: 14,
+    });
+  });
+
+  it('importado con saldo o capital desconocidos (D9): no hay barra', () => {
+    expect(recovery({ balanceBasis: 'total', outstandingBalance: 0, principalAmount: 0, totalToCollect: null, unknownFields: ['outstandingBalance'] })).toBeNull();
+    expect(recovery({ balanceBasis: 'principal', outstandingBalance: 500, principalAmount: 0, unknownFields: ['principalAmount'] })).toBeNull();
   });
 });
 
@@ -30,5 +65,24 @@ describe('promiseReady', () => {
     expect(promiseReady({ amount: 300, promiseDate: '2026-08-01', paymentMethodCode: 'CASH' })).toBe(true);
     expect(promiseReady({ amount: 0, promiseDate: '2026-08-01', paymentMethodCode: 'CASH' })).toBe(false);
     expect(promiseReady({ amount: 300, promiseDate: '', paymentMethodCode: 'CASH' })).toBe(false);
+  });
+});
+
+describe('queuedPayments — el cobro sin señal se ve en el acto', () => {
+  const queued = [
+    { action: { kind: 'payment', idempotencyKey: 'k1', input: { creditId: 'cr1', amount: 500, method: 'CASH', paymentDate: '2026-09-30T15:00:00.000Z' } }, createdAt: 1 },
+    { action: { kind: 'payment', idempotencyKey: 'k2', input: { creditId: 'otro', amount: 80, method: 'CASH' } }, createdAt: 2 },
+    { action: { kind: 'mora.activity' }, createdAt: 3 },
+  ];
+
+  it('sólo los pagos de este crédito (por creditId), con la fecha del cobro y marcados pendientes', () => {
+    const p = queuedPayments('cr1', queued);
+    expect(p).toHaveLength(1);
+    expect(p[0]).toMatchObject({ id: 'pending-k1', amount: 500, paymentDate: '2026-09-30T15:00:00.000Z', pending: true });
+  });
+
+  it('en el historial el pendiente queda marcado y ordenado por la hora del cobro', () => {
+    const t = buildTimeline([act({ createdAt: '2026-09-30T10:00:00Z' })], [...queuedPayments('cr1', queued), pay({})]);
+    expect(t[0]).toMatchObject({ kind: 'payment', id: 'pending-k1', pending: true });
   });
 });

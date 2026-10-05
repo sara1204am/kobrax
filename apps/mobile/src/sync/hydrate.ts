@@ -10,12 +10,13 @@
  * mira, que es exactamente el defecto que destapó la prueba de campo.
  */
 import { CatalogType, RouteStatus } from '@kobrax/shared';
-import { listCases, type CaseListItem } from '../cases.service';
+import { getMora, getMoraMetrics, listArrearCategories, listMora, listMoraEpisodes, listMoraNotes, listMoraPromises, listPortfolio, MORA_LIMIT, TENANT_CURRENCY_PROBE_LIMIT } from '../mora.service';
+import type { MoraRow } from '../mora';
 import { getRoute, listRoutes } from '../routes.service';
 import { clientContext, listByDay, listOverdue } from '../agenda.service';
 import { listCatalog } from '../catalogs.service';
 import { listNotifications } from '../notifications.service';
-import { listPaymentsByDay } from '../payments.service';
+import { listCreditPayments, listPaymentsByDay } from '../payments.service';
 import { getClient, type ClientDetail } from '../clients.service';
 import { todayISO } from '../agenda-form';
 import * as db from '../db';
@@ -82,13 +83,15 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
   //       Por eso cada línea de acá abajo **copia exactamente** la llamada de su pantalla. Si una
   //       pantalla cambia sus parámetros, tiene que cambiar acá — y es el precio de que el respaldo
   //       sea la respuesta del server tal cual, sin reimplementar sus filtros en el teléfono.
-  await paso('cartera', () => estado(listCases({ view: 'portfolio', open: true, limit: 100 }))); // Cobranza · Crear ruta
-  await paso('casos abiertos', () => estado(listCases({ assigneeId: collectorId, open: true, limit: 1 }))); // Inicio
+  await paso('cartera', () => estado(listPortfolio())); // Cobranza · Crear ruta: TODOS los créditos, al día o en mora
+  await paso('mora', () => estado(listMora({ limit: MORA_LIMIT }))); // Cobranza · chip En mora
+  await paso('créditos en mora', () => estado(listMora({ limit: TENANT_CURRENCY_PROBE_LIMIT }))); // Inicio (moneda y contador)
   await paso('rutas', () => estado(listRoutes({ collectorId }))); // pestaña Rutas
   await paso('agenda', () => estado(listByDay(hoy)));
   await paso('vencidos', () => estado(listOverdue(100)));
   await paso('notificaciones', () => estado(listNotifications()));
   await paso('cobrado hoy', () => estado(listPaymentsByDay(hoy))); // Inicio · pestaña Rutas · resumen
+  await paso('categorías de mora', () => estado(listArrearCategories())); // Cobranza (filtro) · ficha de mora
 
   // La ruta activa, y **su detalle con las paradas**: el listado no las trae y son el itinerario.
   await paso('ruta del día', async () => {
@@ -122,8 +125,10 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
   //    (§4.1). El tope evita que una cartera enorme convierta la hidratación en algo eterno; si
   //    aparece un tenant que lo supere, el arreglo es un endpoint que devuelva el lote, no subirlo.
   await paso('fichas de la cartera', async () => {
-    const casos = await db.getMany<CaseListItem>('case');
-    const clientIds = [...new Set(casos.map((c) => c.clientId).filter(Boolean))].slice(0, MAX_FICHAS);
+    const cartera = await db.getMany<MoraRow>('portfolio');
+    // La lista de mora es un subconjunto de la cartera, pero si la cartera falló y la mora no, igual se bajan esas.
+    const enMora = await db.getMany<MoraRow>('mora');
+    const clientIds = [...new Set([...cartera, ...enMora].map((c) => c.clientId).filter(Boolean))].slice(0, MAX_FICHAS);
     if (clientIds.length === 0) return 'ok';
     for (const id of clientIds) {
       const ficha = await getClient(id);
@@ -132,6 +137,25 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
       // El contexto es lo que consume el alta de gestión (créditos + contactos + ubicaciones).
       const ctx = await clientContext(id);
       if (ctx.status === 'offline') return 'offline';
+      // Y la ficha de cada crédito (gestiones, asignaciones…): lo que la pantalla de cliente abre por `creditId`,
+      // más lo que pide la ficha de mora (`app/mora/[creditId].tsx`, MISMAS llamadas): promesas, notas, pagos del crédito, historial de episodios y métricas de recuperación. Los nombres
+      // (autores, responsable, asignados) ya vienen dentro de cada respuesta: no hace falta bajar el equipo.
+      if (ctx.status === 'ok') {
+        for (const c of ctx.data.credits) {
+          const det = await getMora(c.creditId);
+          if (det.status === 'offline') return 'offline';
+          const eps = await listMoraEpisodes(c.creditId);
+          if (eps.status === 'offline') return 'offline';
+          const met = await getMoraMetrics(c.creditId);
+          if (met.status === 'offline') return 'offline';
+          const prom = await listMoraPromises(c.creditId);
+          if (prom.status === 'offline') return 'offline';
+          const notas = await listMoraNotes(c.creditId);
+          if (notas.status === 'offline') return 'offline';
+          const pagos = await listCreditPayments(c.creditId); // también la ficha del cliente
+          if (pagos.status === 'offline') return 'offline';
+        }
+      }
     }
     return 'ok';
   });
@@ -141,5 +165,5 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
 
 /** Cuándo se hidrató por última vez (para el "datos de las 08:15" del riesgo R4). */
 export function lastHydratedAt(): Promise<number | null> {
-  return db.fetchedAt('case');
+  return db.fetchedAt('portfolio');
 }

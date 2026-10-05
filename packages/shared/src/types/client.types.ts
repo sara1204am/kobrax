@@ -5,7 +5,12 @@
  * los **mismos** clientes contra los **mismos** endpoints. Los valores son los enums de la API
  * (Prisma) escritos como uniones, no como enums propios: son el contrato del DTO.
  */
-import type { CreditOrigin, InterestBase, PaymentFrequency } from '../enums/credit.enum.js';
+import type { ArrearsMethod, CreditOrigin, ExternalSyncStatus, EffectiveBalanceBasis, InterestBase, PaymentFrequency } from '../enums/credit.enum.js';
+import type { CreditTerms } from '../utils/credit-engine.js';
+import type { CreditInitialState } from '../utils/credit-edit.js';
+import type { ImportTrackedField } from '../utils/credit-import.js';
+import type { MoraSituation } from './sin-caso.types.js';
+import type { MoraCategoryTag } from './mora.types.js';
 
 // ── Payload de la API ────────────────────────────────────────────────────────
 export interface NewContactInput {
@@ -60,6 +65,39 @@ export interface NewCollateralInput {
   creditIds?: string[];
 }
 
+/** Lo que se pregunta antes del alta: con qué datos se va a crear la persona. */
+export interface ClientDuplicateCheckInput {
+  clientType: 'PERSON' | 'COMPANY';
+  nationalId?: string;
+  firstName?: string;
+  lastName?: string;
+  businessName?: string;
+}
+
+/** Un cliente que ya existe y podría ser la misma persona. Sin PII en claro: el carnet va enmascarado. */
+export interface ClientDuplicateMatch {
+  id: string;
+  displayName: string;
+  /** Carnet enmascarado (`12345***`), o `null` si no tiene. */
+  maskedDocument: string | null;
+  status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
+  creditCount: number;
+  /** Dado de baja: sigue ocupando su carnet (el índice único no los excluye), pero no tiene ficha. */
+  deleted: boolean;
+  /** Se llama igual pero tiene OTRO carnet cargado: puede ser un homónimo, o el mismo con un error. */
+  otherDocument: boolean;
+}
+
+/**
+ * Posibles duplicados de un alta.
+ *  - `document`: alguien ya tiene ese carnet → **bloquea**, el servidor rechazaría el alta (`CLIENT_DUP`).
+ *  - `names`: se llaman igual (sin tildes, mayúsculas ni orden de palabras) → **avisa**: hay homónimos.
+ */
+export interface ClientDuplicateCheck {
+  document: ClientDuplicateMatch | null;
+  names: ClientDuplicateMatch[];
+}
+
 /** Alta atómica: cliente + contactos + ubicaciones + relaciones en una transacción. */
 export interface NewClientInput {
   /**
@@ -102,8 +140,6 @@ export interface NewCreditInput {
   daysPastDue?: number;
   notes?: string;
   origin?: CreditOrigin;
-  /** Abre el caso de cobranza en la misma transacción. Sin caso, el crédito no le llega a nadie. */
-  openCase?: boolean;
   /**
    * A quién se le asigna. En el teléfono coinciden con quien lo crea; **en la oficina no**: la
    * supervisora carga el préstamo y se lo reparte a un cobrador (F9 · W3 §5.3).
@@ -111,6 +147,19 @@ export interface NewCreditInput {
   assignedManagerId?: string;
   /** Qué clase de crédito es → catálogo `CREDIT_TYPE`. Opcional: el móvil no lo pregunta. */
   typeCode?: string;
+  /**
+   * Las condiciones (F4/06). Con ellas la API recalcula y aplica D14; los campos sueltos de arriba,
+   * si vienen, tienen que coincidir. Opcional para que la cola offline de apps viejas siga entrando.
+   */
+  terms?: CreditTerms;
+  /**
+   * «Ya está en curso» con condiciones (D13, F4/06 · Fase 5): cuotas pagadas, saldo y mora en el
+   * mismo alta, para que el móvil lo cargue en una sola operación offline. Exige `terms` y reemplaza
+   * a `outstandingBalance`/`daysPastDue` sueltos.
+   */
+  initialState?: CreditInitialState;
+  /** Cómo se cuentan los días de mora (D20). Ausente = el default de la cuenta. */
+  arrearsMethod?: ArrearsMethod;
 }
 
 // ── Lo que devuelve la API ───────────────────────────────────────────────────
@@ -159,7 +208,7 @@ export interface ClientRelationDetail {
  * que se decidió para los estados de la cartera.
  *
  * Las tres fuentes son tres tablas y en la base **ya están atadas al cliente**: `agenda_items` lo
- * lleva propio, el pago llega por su crédito y la gestión por su caso. Por eso esto es una consulta,
+ * lleva propio, el pago llega por su crédito y la gestión por su crédito (`credit_activities`). Por eso esto es una consulta,
  * no un recorrido crédito por crédito.
  */
 export type TimelineKind = 'PAYMENT' | 'AGENDA' | 'ACTIVITY';
@@ -171,7 +220,7 @@ export interface ClientTimelineEntry {
   at: string;
   /**
    * Qué fue: el medio de pago (`CASH`…), el tipo de agendado (`VISIT`, `CALL`, `PROMISE_TO_PAY`…) o
-   * el tipo de gestión (`CaseActivityType`).
+   * el tipo de gestión (`CreditActivityType`).
    */
   code: string;
   /** Sólo agenda: si se ejecutó, se canceló o se reagendó. Sin esto, «llamada» no dice si atendió. */
@@ -181,7 +230,6 @@ export interface ClientTimelineEntry {
   /** Lo que escribió quien la registró. Texto libre, tal cual. */
   notes?: string;
   creditId?: string;
-  caseId?: string;
   /** Quién. `users.id`: el nombre lo resuelve quien dibuja, que ya tiene el equipo cargado. */
   userId?: string;
 }
@@ -227,6 +275,13 @@ export const ATTACHMENT_TYPES = ['ID_CARD', 'PHOTO', 'CONTRACT', 'OTHER'] as con
 export interface ClientDetail {
   id: string;
   clientType: ClientTypeValue;
+  /**
+   * D2 · opción B: lo creó la importación y puede ser alguien que ya existía. Hay que decidir:
+   * vincular sus créditos a uno de `linkSuggestions`, o confirmar que es una persona nueva.
+   */
+  linkReviewPending?: boolean;
+  /** Los clientes que se llaman igual (sólo con `linkReviewPending`). */
+  linkSuggestions?: { id: string; displayName: string; creditCount: number }[];
   firstName?: string;
   lastName?: string;
   businessName?: string;
@@ -248,6 +303,12 @@ export interface ClientDetail {
   totalDebt?: number;
   maxDaysPastDue?: number;
   creditCount?: number;
+  /**
+   * D7: la parte de `totalDebt` y la peor mora que son de créditos **reportados** por una fuente
+   * externa (PSF), a su fecha de corte. Los mantiene el mismo trigger. 0 = no tiene externos.
+   */
+  totalDebtExternal?: number;
+  maxDaysPastDueExternal?: number;
   contacts?: ClientContactDetail[];
   locations?: ClientLocationDetail[];
   relations?: ClientRelationDetail[];
@@ -296,7 +357,64 @@ export interface CreditDetail {
   notes?: string;
   status?: string;
   daysPastDue?: number;
+  /** F4/08: castigado (`written_off_at`), condición aparte de la mora. Presente en el detalle. */
+  writtenOff?: boolean;
+  writtenOffAt?: string;
+  writtenOffReason?: string;
+  /** F4/08: Al día / En mora, del episodio de mora abierto. Sólo en `GET /credits/:id`. */
+  situation?: MoraSituation;
+  /** F4/08: categoría de mora calculada con los rangos de la cuenta. Ausente = al día (< 1 día) o sin rango que la cubra. Sólo en `GET /credits/:id`. */
+  category?: MoraCategoryTag;
   hasSchedule?: boolean;
+  /** Las condiciones con las que se definió (F4/06). Ausente en créditos anteriores y en importados. */
+  terms?: CreditTerms;
+  /** Qué representa `outstandingBalance` (D15): `total` pendiente, `principal` (préstamo abierto) o `legacy`. */
+  balanceBasis?: EffectiveBalanceBasis;
+  /**
+   * Total por cobrar, si se conoce (`creditTotalToCollect`). ⚠️ En el listado no vienen las cuotas: para
+   * un crédito con cronograma sale de cuota × n, que puede diferir en céntimos de la Σ real.
+   */
+  totalToCollect?: number | null;
+  /** Cómo venía al registrarlo (D13). Ausente = nació en Kobrax. */
+  initialState?: CreditInitialState;
+  /** Lo pagado antes de registrarlo en Kobrax (D13): «Recuperado» lo descuenta. 0 si nació en Kobrax. */
+  priorPaidAmount?: number;
+  /** Cómo se cuentan los días de mora (D20). Siempre presente: `oldest_unpaid` si nunca se eligió. */
+  arrearsMethod?: ArrearsMethod;
+  /** YYYY-MM-DD del primer atraso (método bancario, en mora). */
+  arrearsSince?: string;
+  /**
+   * La cuota impaga más antigua: la que hay que reclamar. Con el método bancario la mora puede correr
+   * desde antes (`arrearsSince`); esto dice qué cuota cobrar hoy. `number` si se puede saber.
+   */
+  oldestUnpaid?: { number?: number; dueDate: string };
+  /**
+   * ¿Tiene pagos registrados? ⚠️ Sólo en la ficha (`GET /credits/:id`). Con pagos, las condiciones y el
+   * estado al registrar ya no se editan.
+   */
+  hasPayments?: boolean;
+  externalRef?: string;
+  /**
+   * Importado: los datos financieros que el archivo nunca trajo (D9). Su valor numérico, si viene, es
+   * un 0 de relleno: preguntar con `isUnknownField` antes de dibujarlo.
+   */
+  unknownFields?: ImportTrackedField[];
+  /** Importado: cuándo lo tocó la última importación. */
+  importedAt?: string;
+  /** Operación de una fuente externa (D1): de qué sistema y con qué nº de operación. */
+  externalSource?: string;
+  externalId?: string;
+  /** Si vino en el último reporte (D4) y, si no, desde qué fecha de corte falta (YYYY-MM-DD). */
+  syncStatus?: ExternalSyncStatus;
+  absentSince?: string;
+  /** Fecha de corte (YYYY-MM-DD) a la que son el saldo y la mora reportados (D9). */
+  reportedAsOf?: string;
+  /** El corte tiene más de `reportStaleAfterDays` días: saldo y mora reportados están desactualizados (D9). */
+  reportedStale?: boolean;
+  reportStaleAfterDays?: number;
+  /** Con qué monto arranca el formulario de pago (`suggestedPaymentAmount`). Ausente = vacío. */
+  suggestedPaymentAmount?: number;
+  createdAt?: string;
   disbursedAt?: string;
   assignedManagerId?: string;
   installments?: CreditInstallmentDetail[];
@@ -329,6 +447,15 @@ export interface UpdateCreditPatch {
   code?: string | null;
   typeCode?: string | null;
   assignedManagerId?: string;
+  /**
+   * Redefinir el crédito (F4/06 · Fase 3): condiciones nuevas y/o el estado al registrar (D13). La API
+   * recalcula cuota, total, saldo y próximo vencimiento con el motor. Sólo sin pagos registrados, y no
+   * se mezcla con los campos financieros sueltos de arriba.
+   */
+  terms?: CreditTerms;
+  initialState?: CreditInitialState;
+  /** Cambiar cómo se cuenta la mora (D20). Sólo sin pagos registrados. */
+  arrearsMethod?: ArrearsMethod;
 }
 
 // ── Formulario en pantalla ───────────────────────────────────────────────────

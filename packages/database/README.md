@@ -6,7 +6,7 @@ Schema de Prisma, migraciones, seeds y políticas RLS de PostgreSQL.
 
 - **Pilar 1 — Multi-tenant / Acceso**: `accounts, branches, users, profiles, roles, permissions, role_permissions, user_permission_overrides, user_accounts, user_sessions, audit_logs`
 - **Pilar 2 — Clientes y Créditos**: `clients, client_contacts, client_locations, client_relations, client_attachments, credits, credit_installments, arrears`
-- **Pilar 3 — Casos y Rutas**: `collection_cases, case_activities, route_plans, route_stops, field_visits, field_evidences`
+- **Pilar 3 — Cobranza y Rutas**: `credit_activities, credit_arrear_episodes, credit_assignments, credit_notes, route_plans, route_stops, field_visits, field_evidences` (no existe el «caso» de cobranza: todo cuelga del crédito; la mora es un episodio y el castigo es `credits.written_off_at`)
 - **Pilar 4 — Pagos**: `payments, payment_requests`
 - **Transversal**: `notifications`
 

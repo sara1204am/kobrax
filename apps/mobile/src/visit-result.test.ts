@@ -2,6 +2,7 @@ import { VisitOutcome } from '@kobrax/shared';
 import {
   buildDetails,
   canSubmitResult,
+  paymentCap,
   initialResult,
   paymentOutcome,
   postVisitWarning,
@@ -65,6 +66,21 @@ describe('buildDetails', () => {
   });
 });
 
+describe('paymentCap (D3)', () => {
+  it('Kobrax se topea con el saldo de la parada', () => {
+    expect(paymentCap({ overdueAmount: 500 })).toBe(500);
+  });
+
+  it('🔴 un crédito externo no tiene tope: su saldo es el reportado al corte', () => {
+    expect(paymentCap({ overdueAmount: 500, externalSource: 'PSF' })).toBeUndefined();
+    expect(canSubmitResult('PAID', form({ amount: '800' }), paymentCap({ overdueAmount: 500, externalSource: 'PSF' }))).toBe(true);
+  });
+
+  it('sin parada todavía no hay tope que aplicar', () => {
+    expect(paymentCap(null)).toBeUndefined();
+  });
+});
+
 describe('canSubmitResult', () => {
   it('cobrado exige monto y no deja pasarse del saldo', () => {
     expect(canSubmitResult('PAID', form({ amount: '0' }), 500)).toBe(false);
@@ -105,5 +121,27 @@ describe('paymentOutcome', () => {
 
   it('sin saldo conocido no marca un parcial que no puede probar', () => {
     expect(paymentOutcome(100, undefined)).toBe(VisitOutcome.PAID);
+  });
+});
+
+describe('postVisitWarning · lo que quedó en la cola', () => {
+  it('lo guardado en el teléfono se avisa igual (el banner sigue), pero sin pedir que lo anote', () => {
+    const aviso = postVisitWarning([], ['el pago de Bs 250']);
+    expect(aviso).toBe('La visita quedó registrada; el pago de Bs 250 quedó guardado en el teléfono y se sube solo cuando haya señal.');
+    expect(aviso).not.toContain('Anotalo');
+  });
+
+  it('junta varias partes guardadas', () => {
+    expect(postVisitWarning([], ['la foto', 'la promesa'])).toContain('la foto y la promesa quedó guardado');
+  });
+
+  it('mezcla: lo perdido pide anotarlo y lo guardado se menciona aparte', () => {
+    const aviso = postVisitWarning(['el pago NO se guardó'], ['la foto'])!;
+    expect(aviso).toContain('el pago NO se guardó. Anotalo y avisá a tu supervisor.');
+    expect(aviso).toContain('Además, la foto quedó guardado en el teléfono');
+  });
+
+  it('sin fallas ni cola sigue devolviendo null', () => {
+    expect(postVisitWarning([], [])).toBeNull();
   });
 });

@@ -29,7 +29,7 @@ jest.mock('expo-sqlite', () => ({
   })),
 }));
 
-import { dequeue, enqueue, markFailed, pending, putAll, resetForTests } from './db';
+import { dequeue, enqueue, markFailed, pending, putAll, resetForTests, SCHEMA_VERSION } from './db';
 
 /** Las queries emitidas desde que arrancó el caso, en texto plano. */
 const emitido = () => mockSql.map((s) => s.query.replace(/\s+/g, ' ').trim());
@@ -40,7 +40,7 @@ beforeEach(async () => {
   // primera apertura. Sin este reset, el caso de "versión vieja" nunca lo ejecutaría.
   await resetForTests();
   mockSql.length = 0;
-  mockState.firstRow = { value: '1' }; // versión de esquema al día: no dispara el borrado
+  mockState.firstRow = { value: String(SCHEMA_VERSION) }; // versión de esquema al día: no dispara el borrado
 });
 
 describe('cola de escritura', () => {
@@ -78,12 +78,26 @@ describe('cola de escritura', () => {
 });
 
 describe('esquema', () => {
-  it('una versión vieja tira el caché pero NO la cola', async () => {
-    mockState.firstRow = { value: '999' }; // no coincide con SCHEMA_VERSION
+  // F4/08 (dev-only): sin teléfonos con colas reales, el cambio de esquema borra TAMBIÉN la cola y los mapas de
+  // ids locales (`meta`), y deja escrita la versión nueva.
+  it('una versión vieja tira el caché, la cola y los mapas de ids, y guarda la versión nueva', async () => {
+    mockState.firstRow = { value: '2' }; // la anterior a «sin caso»
     await putAll('client', [{ id: 'c1' }]);
     const borrados = emitido().filter((q) => q.startsWith('DELETE'));
     expect(borrados.some((q) => q.includes('DELETE FROM cache'))).toBe(true);
-    expect(borrados.some((q) => q.includes('DELETE FROM queue'))).toBe(false);
+    expect(borrados.some((q) => q.includes('DELETE FROM queue'))).toBe(true);
+    expect(borrados.some((q) => q.includes('DELETE FROM meta'))).toBe(true);
+    const ver = mockSql.find((s) => s.query.includes('INSERT OR REPLACE INTO meta'))!;
+    expect(ver.args).toEqual(['schema_version', String(SCHEMA_VERSION)]);
+  });
+
+  it('con la versión al día NO borra nada (ni caché ni cola)', async () => {
+    await putAll('client', [{ id: 'c1' }]);
+    expect(emitido().filter((q) => q.startsWith('DELETE'))).toEqual([]);
+  });
+
+  it('la versión de esquema es la 3 (sin caso)', () => {
+    expect(SCHEMA_VERSION).toBe(3);
   });
 
   it('el caché guarda el JSON del server tal cual, para que un campo nuevo no rompa nada', async () => {

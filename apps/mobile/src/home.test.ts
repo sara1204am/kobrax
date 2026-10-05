@@ -1,11 +1,10 @@
 import { AgendaItemStatus, AgendaItemType, ScheduleTimeMode } from '@kobrax/shared';
-import { dayProgress, dueSoon, upNext } from './home';
+import { dayProgress, dueSoon, queuedCollectedToday, upNext } from './home';
 import type { AgendaListItem } from './agenda.service';
 
 function item(over: Partial<AgendaListItem>): AgendaListItem {
   return {
     id: Math.random().toString(36).slice(2),
-    caseId: 'c',
     clientId: 'cl',
     creditId: 'cr',
     assigneeId: 'u',
@@ -88,5 +87,61 @@ describe('upNext', () => {
     const items = [alas('08:00'), alas('09:00'), alas('10:00'), item({ status: AgendaItemStatus.EXECUTED })];
     expect(upNext(items, 2).length).toBe(2);
     expect(upNext(items).every((i) => i.status === AgendaItemStatus.SCHEDULED)).toBe(true);
+  });
+});
+
+/**
+ * «Cobrado hoy» del Home. Lo cobrado SIN SEÑAL todavía está en la cola, no en `GET /payments`: sin sumarlo el
+ * Home decía «Bs 0» justo después de cobrar.
+ */
+describe('queuedCollectedToday', () => {
+  const ahora = new Date(2026, 9, 3, 15, 0, 0); // 3 oct 2026, hora local
+  const hoyAl = (h: number) => new Date(2026, 9, 3, h, 0, 0);
+
+  it('suma los pagos encolados de hoy', () => {
+    const total = queuedCollectedToday(
+      [
+        { action: { kind: 'payment', input: { amount: 100 } }, createdAt: hoyAl(9).getTime() },
+        { action: { kind: 'payment', input: { amount: 50.5 } }, createdAt: hoyAl(11).getTime() },
+      ],
+      ahora,
+    );
+    expect(total).toBe(150.5);
+  });
+
+  it('incluye el cobro que viaja dentro de una visita encolada', () => {
+    expect(
+      queuedCollectedToday([{ action: { kind: 'visit', payment: { amount: 80 } }, createdAt: hoyAl(10).getTime() }], ahora),
+    ).toBe(80);
+  });
+
+  it('un cobro de AYER que sigue en la cola no cuenta como de hoy', () => {
+    const ayer = new Date(2026, 9, 2, 18, 0, 0).getTime();
+    expect(queuedCollectedToday([{ action: { kind: 'payment', input: { amount: 100 } }, createdAt: ayer }], ahora)).toBe(0);
+  });
+
+  it('manda la hora del cobro (paymentDate), no la de cuando se encoló', () => {
+    const cobradoAyer = new Date(2026, 9, 2, 20, 0, 0).toISOString();
+    const encoladoHoy = hoyAl(8).getTime();
+    expect(
+      queuedCollectedToday([{ action: { kind: 'payment', input: { amount: 100, paymentDate: cobradoAyer } }, createdAt: encoladoHoy }], ahora),
+    ).toBe(0);
+  });
+
+  it('ignora lo que no es un cobro y los pagos sin monto', () => {
+    expect(
+      queuedCollectedToday(
+        [
+          { action: { kind: 'agenda.create', input: { amount: 999 } }, createdAt: hoyAl(9).getTime() },
+          { action: { kind: 'visit' }, createdAt: hoyAl(9).getTime() },
+          { action: { kind: 'payment', input: {} }, createdAt: hoyAl(9).getTime() },
+        ],
+        ahora,
+      ),
+    ).toBe(0);
+  });
+
+  it('cola vacía = 0', () => {
+    expect(queuedCollectedToday([], ahora)).toBe(0);
   });
 });

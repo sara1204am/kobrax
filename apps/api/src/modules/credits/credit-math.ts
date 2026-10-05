@@ -1,11 +1,21 @@
 /**
- * Matemática pura de créditos: generación de cronograma (amortización) y cálculo de mora.
- * Sin dependencias de Nest/Prisma → totalmente testeable. Trabaja en céntimos (enteros)
- * para evitar errores de coma flotante; expone montos en unidades con 2 decimales.
+ * Cronograma de la API y cálculo de mora. Sin dependencias de Nest/Prisma → totalmente testeable.
  *
- * Convención: `interestRate` es la tasa **por período (por cuota)**, no anual. La frecuencia
- * de las cuotas es mensual (la `dueDate` de la cuota i = firstDueDate + (i-1) meses).
+ * 🔴 El cronograma ya NO se calcula acá: `buildSchedule` es un adaptador sobre el motor único de
+ * `@kobrax/shared` (`calculateCredit`, F4/06), el mismo que usa la vista previa de web y móvil. Así
+ * no puede volver a haber una cuota en pantalla y otra guardada.
+ *
+ * Convención del contrato viejo: `periodicRate` es una **fracción** por período (0.01 = 1 %) y la
+ * frecuencia es mensual. `FRENCH` = compuesto + cuota fija; `FLAT` = simple + cuota fija.
  */
+import {
+  AmortizationMethod,
+  CreditDefinition,
+  InterestType,
+  PaymentFrequency,
+  calculateCredit,
+} from '@kobrax/shared';
+
 export type AmortizationType = 'FRENCH' | 'FLAT';
 
 export interface ScheduleItem {
@@ -17,17 +27,11 @@ export interface ScheduleItem {
 }
 
 const toCents = (units: number): number => Math.round(units * 100);
-const toUnits = (cents: number): number => cents / 100;
-
-function addMonths(date: Date, months: number): Date {
-  const d = new Date(date.getTime());
-  d.setMonth(d.getMonth() + months);
-  return d;
-}
 
 /**
- * Genera el cronograma. Invariante garantizada por construcción:
+ * Genera el cronograma. Invariante garantizada por el motor:
  * Σ amount = principal + Σ interest, y Σ principal = principal (la última cuota absorbe el redondeo).
+ * Fechas mensuales desde `firstDueDate`, en UTC, conservando el día (fin de mes → último día).
  */
 export function buildSchedule(params: {
   principal: number;
@@ -36,59 +40,25 @@ export function buildSchedule(params: {
   type: AmortizationType;
   firstDueDate: Date;
 }): ScheduleItem[] {
-  const { periodicRate: r, count: n, type, firstDueDate } = params;
-  const P = toCents(params.principal);
-  if (n < 1) return [];
-
-  const items: ScheduleItem[] = [];
-
-  if (type === 'FLAT') {
-    const principalPer = Math.round(P / n);
-    const interestPer = Math.round(P * r);
-    let principalAcc = 0;
-    for (let i = 1; i <= n; i++) {
-      const principalCents = i === n ? P - principalAcc : principalPer;
-      principalAcc += principalCents;
-      items.push(item(i, principalCents, interestPer, firstDueDate));
-    }
-    return items;
-  }
-
-  // FRENCH (cuota constante). Si r=0, cuota = P/n.
-  const paymentCents =
-    r === 0 ? Math.round(P / n) : Math.round((P * r) / (1 - Math.pow(1 + r, -n)));
-  let balance = P;
-  for (let i = 1; i <= n; i++) {
-    const interestCents = Math.round(balance * r);
-    let principalCents: number;
-    let amountCents: number;
-    if (i === n) {
-      principalCents = balance; // absorbe el remanente
-      amountCents = principalCents + interestCents;
-    } else {
-      amountCents = paymentCents;
-      principalCents = amountCents - interestCents;
-    }
-    balance -= principalCents;
-    items.push({
-      number: i,
-      dueDate: addMonths(firstDueDate, i - 1),
-      amount: toUnits(amountCents),
-      principal: toUnits(principalCents),
-      interest: toUnits(interestCents),
-    });
-  }
-  return items;
-}
-
-function item(i: number, principalCents: number, interestCents: number, firstDueDate: Date): ScheduleItem {
-  return {
-    number: i,
-    dueDate: addMonths(firstDueDate, i - 1),
-    amount: toUnits(principalCents + interestCents),
-    principal: toUnits(principalCents),
-    interest: toUnits(interestCents),
-  };
+  if (params.count < 1) return [];
+  const calc = calculateCredit({
+    definition: CreditDefinition.CALCULATED,
+    principal: params.principal,
+    ratePercent: params.periodicRate * 100,
+    interestType: params.type === 'FRENCH' ? InterestType.COMPOUND : InterestType.SIMPLE,
+    amortization: AmortizationMethod.FIXED_INSTALLMENT,
+    periods: params.count,
+    frequency: PaymentFrequency.MONTHLY,
+    firstDueDate: params.firstDueDate.toISOString().slice(0, 10),
+  });
+  // Tasa fuera del rango de la pantalla: este contrato nunca lo validó y el motor igual calcula.
+  return (calc.schedule ?? []).map((row) => ({
+    number: row.number,
+    dueDate: new Date(`${row.dueDate}T00:00:00.000Z`),
+    amount: row.amount,
+    principal: row.principal,
+    interest: row.interest,
+  }));
 }
 
 /** True si Σ cuotas = principal + Σ interés (±1 céntimo). Guarda de seguridad. */

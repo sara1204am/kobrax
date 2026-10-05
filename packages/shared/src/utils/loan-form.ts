@@ -1,7 +1,7 @@
 /**
  * Lógica pura del alta de préstamo: qué cuota se muestra, cuándo el alta es válida, y qué se manda.
  *
- * 🔴 **Es plata.** La matemática de abajo (`quoteLoan`, `quoteFromInstallment`) ya vivía acá; lo que
+ * 🔴 **Es plata.** La matemática (`quoteLoan`, `quoteFromInstallment`) sale del motor único; lo que
  * se promovió del móvil en F9 · W3 es la capa que decide *cuál* se usa y *cuándo*. Si el escritorio
  * cotizara distinto que el teléfono, la diferencia aparece meses después, en la boca de un cliente.
  *
@@ -9,7 +9,7 @@
  */
 import { InterestBase, PaymentFrequency } from '../enums/credit.enum.js';
 import type { NewCreditInput, PrestamoForm } from '../types/client.types.js';
-import { quoteFromInstallment, quoteLoan, type LoanQuote } from './loan.js';
+import { quoteFromInstallment, quoteLoan, type LoanQuote } from './credit-engine.js';
 
 export function initialPrestamo(todayIso: string): PrestamoForm {
   return {
@@ -110,8 +110,7 @@ export function canSubmitPrestamo(s: PrestamoForm): boolean {
 /**
  * Arma el payload; la cuota viaja congelada.
  *
- * `openCase` y `origin` los pone quien llama: el móvil siempre abre el caso, y la web también
- * (sin caso el crédito no le llega a nadie). `assignedManagerId` sólo lo manda la web, donde el
+ * `origin` lo pone quien llama. `assignedManagerId` sólo lo manda la web, donde el
  * cobrador se elige en el formulario en vez de ser quien carga.
  */
 export function buildPrestamoPayload(s: PrestamoForm, clientId: string): NewCreditInput {

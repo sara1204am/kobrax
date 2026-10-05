@@ -18,8 +18,8 @@ type StopClient = {
 
 /**
  * Dónde se cobra: la primera HOME; si no hay ninguna, la primera que exista. Un cliente puede tener
- * domicilio y negocio, y la casa es donde se cobra. **Misma regla que la cartera** (`portfolioExtra`
- * de cases): con dos criterios distintos el pin del mapa y la dirección de la parada podrían apuntar
+ * domicilio y negocio, y la casa es donde se cobra. **Misma regla que la cartera**
+ * (la lista de mora): con dos criterios distintos el pin del mapa y la dirección de la parada podrían apuntar
  * a lugares distintos del mismo cliente.
  */
 function primaryLocation(client: StopClient) {
@@ -27,31 +27,33 @@ function primaryLocation(client: StopClient) {
 }
 
 /**
- * La deuda que el cobrador va a reclamar en esa parada. Sale del crédito **del caso de la parada**,
- * no de la suma del deudor: un cliente puede tener más de un crédito (cartera D1) y la parada apunta
- * a uno solo. Sólo viene cuando el query incluye el caso.
+ * La deuda que el cobrador va a reclamar en esa parada. Sale del crédito **de la parada** (`route_stops.credit_id`),
+ * no de la suma del deudor: un cliente puede tener más de un crédito (cartera D1) y la parada apunta a uno solo.
  */
-type StopCase = {
-  creditId?: string;
-  credit: { outstandingBalance: unknown; currency: string; daysPastDue: number } | null;
-};
+type StopCredit = {
+  outstandingBalance: unknown;
+  currency: string;
+  daysPastDue: number;
+  externalSource?: string | null;
+  syncStatus?: string | null;
+  reportedAsOf?: Date | null;
+} | null;
 
 /**
  * `clientName`/`address` sólo salen con `crypto` y el cliente incluido: la dirección es PII en claro
  * y quien la pide la audita (`findOne`). Sin eso, la parada devuelve ids como siempre.
  */
 export function serializeStop(
-  s: RouteStop & { client?: StopClient; case?: StopCase | null; visits?: { outcome: VisitOutcome }[] },
+  s: RouteStop & { client?: StopClient; creditInfo?: StopCredit; visits?: { outcome: VisitOutcome }[] },
   crypto?: CryptoService,
 ) {
   const loc = s.client ? primaryLocation(s.client) : undefined;
-  const credit = s.case?.credit ?? undefined;
+  const credit = s.creditInfo ?? undefined;
   return {
     id: s.id,
     clientId: s.clientId,
-    caseId: s.caseId ?? undefined,
-    // El crédito del caso: contra él se cobra y se promete al registrar el resultado (S5).
-    creditId: s.case?.creditId,
+    // Contra este crédito se cobra y se promete al registrar el resultado (S5).
+    creditId: s.creditId ?? undefined,
     sequenceOrder: s.sequenceOrder,
     status: s.status,
     visitedAt: s.visitedAt ?? undefined,
@@ -61,7 +63,7 @@ export function serializeStop(
     // parada sigue existiendo y numerada en la lista.
     latitude: loc?.latitude != null ? Number(loc.latitude) : undefined,
     longitude: loc?.longitude != null ? Number(loc.longitude) : undefined,
-    // La mora de la tarjeta de RT-4 (S4). Una parada sin caso o sin crédito los deja en `undefined`
+    // La mora de la tarjeta de RT-4 (S4). Una parada sin crédito los deja en `undefined`
     // y la tarjeta oculta los recuadros — mismo criterio que `address`: la parada existe igual.
     overdueAmount: credit != null ? Number(credit.outstandingBalance) : undefined,
     currency: credit?.currency,
@@ -69,11 +71,15 @@ export function serializeStop(
     // Cómo terminó la parada (S6). `status: VISITED` dice que se visitó; esto dice qué pasó.
     // Una parada sin visitar lo deja en `undefined`, y así no entra en ninguna categoría del resumen.
     lastOutcome: s.visits?.[0]?.outcome,
+    // D1/D3: crédito de fuente externa — saldo reportado al corte; el cobro no se topea con él.
+    externalSource: credit?.externalSource ?? undefined,
+    syncStatus: credit?.syncStatus ?? undefined,
+    reportedAsOf: credit?.reportedAsOf ? credit.reportedAsOf.toISOString().slice(0, 10) : undefined,
   };
 }
 
 type RouteWithStops = RoutePlan & {
-  stops?: (RouteStop & { client?: StopClient; case?: StopCase | null; visits?: { outcome: VisitOutcome }[] })[];
+  stops?: (RouteStop & { client?: StopClient; creditInfo?: StopCredit; visits?: { outcome: VisitOutcome }[] })[];
 };
 
 export function serializeRoute(r: RouteWithStops, crypto?: CryptoService) {
@@ -83,7 +89,8 @@ export function serializeRoute(r: RouteWithStops, crypto?: CryptoService) {
     branchId: r.branchId ?? undefined,
     plannedDate: r.plannedDate,
     status: r.status,
-    totalCases: r.totalCases,
+    // Nombre legado (antes «casos»): son paradas. Con las paradas a la vista se cuentan; si no, la columna.
+    totalCases: r.stops ? r.stops.length : r.totalCases,
     totalDistanceKm: r.totalDistanceKm != null ? Number(r.totalDistanceKm) : undefined,
     estimatedMinutes: r.estimatedMinutes ?? undefined,
     createdAt: r.createdAt,

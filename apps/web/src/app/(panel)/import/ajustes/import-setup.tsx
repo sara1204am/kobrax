@@ -28,6 +28,7 @@ import { errorText } from '@/lib/api-error';
 import { SaveIndicator, StatusCard, Stepper, Summary, type SaveState } from './config-status';
 import { ColumnsStep } from './columns-step';
 import { RulesStep, SampleStep, ScopeStep, SourceCard, Step } from './setup-steps';
+import { ReportStep } from './report-step';
 
 /** Cuántas filas de la vista previa se dibujan. La corrida procesa el archivo entero. */
 const PREVIEW_ROWS = 10;
@@ -225,6 +226,10 @@ export function ImportSetup({ screen }: { screen: ConfigScreen }) {
                 <RulesStep config={config} busy={busy} onSave={save} />
               </Step>
 
+              <Step n={5} title={t('setup.step5')} hint={t('setup.step5Hint')}>
+                <ReportStep config={config} busy={busy} onSave={save} />
+              </Step>
+
               {/*
                 Probar sin importar, con el resultado justo debajo del botón que lo pidió. Es el
                 `dryRun` que ya existía: sin él, la única forma de saber si el emparejado está bien
@@ -337,6 +342,10 @@ export function DryRunPreview({ summary }: { summary: PortfolioSummary }) {
           {kind === 'ok' ? t('columns.testOk') : t('columns.testWarned', { n: counts.invalid })}
         </Badge>
       </div>
+
+      {(counts.ignored ?? 0) > 0 && (
+        <p className="mt-3 text-[12px] text-k-text-2">{t('columns.testIgnored', { n: counts.ignored ?? 0 })}</p>
+      )}
 
       {plan && plan.over > 0 && (
         <p className="mt-3 rounded-lg bg-k-danger-bg px-3 py-2 text-[12px] text-k-danger">

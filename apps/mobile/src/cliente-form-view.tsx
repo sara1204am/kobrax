@@ -16,7 +16,7 @@ import { COLORS, RADIUS, SPACING, TYPE } from './theme';
 import { Chips, SectionLabel } from './ui';
 import { Field } from './components';
 import { MapPicker } from './maps/MapPicker';
-import { emptyCollateral, emptyContact, emptyLocation, emptyRelation, locationTypeChoices, type ClienteForm, type CollateralRow, type ContactRow, type CreditOption, type LocationRow, type RelationRow } from './cliente-form';
+import { emptyCollateral, emptyContact, emptyLocation, emptyRelation, locationTypeChoices, type ClienteForm, type CollateralRow, type ContactRow, type CreditOption, type LocationRow, type RelationRow } from '@kobrax/shared';
 import { choosePhoto } from './photo';
 import { uploadImage } from './uploads.service';
 
@@ -56,6 +56,8 @@ export function ClienteFormView({
   setForm,
   onError,
   credits = [],
+  onIdentityBlur,
+  identityNotice,
 }: {
   form: ClienteForm;
   setForm: (updater: (s: ClienteForm) => ClienteForm) => void;
@@ -67,6 +69,10 @@ export function ClienteFormView({
    * vínculo se arma al editar — pedir el préstamo primero sería no poder dar de alta a nadie.
    */
   credits?: CreditOption[];
+  /** Al salir del nombre, apellido o documento (el alta revisa duplicados). */
+  onIdentityBlur?: () => void;
+  /** Aviso bajo el documento (duplicados). */
+  identityNotice?: ReactNode;
 }) {
   const set = useCallback((patch: Partial<ClienteForm>) => setForm((s) => ({ ...s, ...patch })), [setForm]);
 
@@ -91,9 +97,10 @@ export function ClienteFormView({
       <Accordion icon="👤" title="Identificación" defaultOpen>
         <SectionLabel>Tipo de cliente</SectionLabel>
         <Chips options={CLIENT_TYPE} value={form.clientType} onChange={(v) => set({ clientType: v })} />
-        <Field label={isCompany ? 'Razón social' : 'Nombre'} value={isCompany ? form.businessName : form.firstName} onChangeText={(t) => set(isCompany ? { businessName: t } : { firstName: t })} autoCapitalize="words" placeholder={isCompany ? 'Nombre del negocio' : 'Juan'} />
-        <Field label="Apellido" value={form.lastName} onChangeText={(t) => set({ lastName: t })} autoCapitalize="words" placeholder="Pérez" />
-        <Field label="Documento (CI/RUC)" value={form.nationalId} onChangeText={(t) => set({ nationalId: t })} placeholder="Opcional" />
+        <Field label={isCompany ? 'Razón social' : 'Nombre'} value={isCompany ? form.businessName : form.firstName} onChangeText={(t) => set(isCompany ? { businessName: t } : { firstName: t })} autoCapitalize="words" onBlur={onIdentityBlur} placeholder={isCompany ? 'Nombre del negocio' : 'Juan'} />
+        <Field label="Apellido" value={form.lastName} onChangeText={(t) => set({ lastName: t })} autoCapitalize="words" onBlur={onIdentityBlur} placeholder="Pérez" />
+        <Field label="Documento (CI/RUC)" value={form.nationalId} onChangeText={(t) => set({ nationalId: t })} onBlur={onIdentityBlur} placeholder="Opcional" />
+        {identityNotice}
         <SectionLabel>Género</SectionLabel>
         <Chips options={GENDER} value={form.gender} onChange={(v) => set({ gender: v })} />
         <SectionLabel>Segmento de riesgo</SectionLabel>

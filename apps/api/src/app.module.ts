@@ -10,7 +10,8 @@ import { UsersModule } from './modules/users/users.module';
 import { ClientsModule } from './modules/clients/clients.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { CreditsModule } from './modules/credits/credits.module';
-import { CasesModule } from './modules/cases/cases.module';
+import { MoraModule } from './modules/mora/mora.module';
+import { ArrearCategoriesModule } from './modules/arrear-categories/arrear-categories.module';
 import { ArrearsModule } from './modules/arrears/arrears.module';
 import { RoutesModule } from './modules/routes/routes.module';
 import { FieldModule } from './modules/field-ops/field.module';
@@ -29,6 +30,7 @@ import { TenantContextModule } from './common/context/tenant-context.module';
 import { AuditModule } from './common/audit/audit.module';
 import { EventBusModule } from './common/events/event-bus.module';
 import { RateLimitGuard } from './common/guards/rate-limit.guard';
+import { AppVersionGuard } from './common/guards/app-version.guard';
 
 @Module({
   imports: [
@@ -48,7 +50,8 @@ import { RateLimitGuard } from './common/guards/rate-limit.guard';
     ClientsModule,
     ImportsModule,
     CreditsModule,
-    CasesModule,
+    MoraModule,
+    ArrearCategoriesModule,
     ArrearsModule,
     RoutesModule,
     FieldModule,
@@ -64,6 +67,10 @@ import { RateLimitGuard } from './common/guards/rate-limit.guard';
     BackupModule,
   ],
   // Rate limiting de borde para toda la API (los endpoints sensibles lo endurecen con @RateLimit).
-  providers: [{ provide: APP_GUARD, useClass: RateLimitGuard }],
+  // Corte de versiones de la app móvil (MIN_APP_VERSION): apagado si la variable no está.
+  providers: [
+    { provide: APP_GUARD, useClass: RateLimitGuard },
+    { provide: APP_GUARD, useClass: AppVersionGuard },
+  ],
 })
 export class AppModule {}

@@ -20,13 +20,13 @@ describe('TokenService', () => {
       sub: 'u1',
       accountId: 'a1',
       roleId: 'r1',
-      permissions: ['case:read'],
+      permissions: ['collection:read'],
       sessionId: 's1',
     });
     const claims = token.verifyAccess(jwt);
     assert.equal(claims.sub, 'u1');
     assert.equal(claims.accountId, 'a1');
-    assert.deepEqual(claims.permissions, ['case:read']);
+    assert.deepEqual(claims.permissions, ['collection:read']);
   });
 
   it('un pre-auth token NO se acepta como access (type distinto)', () => {

@@ -6,6 +6,18 @@
     "backToLogin": "Back to sign in",
     "close": "Close"
   },
+  "creditSource": {
+    "column": "Source",
+    "filter": "Source",
+    "all": "All",
+    "KOBRAX": "Kobrax",
+    "PSF": "PSF",
+    "withAsOf": "{source} · as of {date}",
+    "absent": "Missing from report",
+    "stale": "Out-of-date data",
+    "ofWhich": "of which {amount} reported (PSF)",
+    "allReported": "all reported (PSF)"
+  },
   "locale": {
     "label": "Language",
     "es": "Spanish",
@@ -17,7 +29,7 @@
       "home": "Home",
       "portfolio": "Portfolio",
       "import": "Import",
-      "cases": "Overdue",
+      "mora": "Overdue",
       "agenda": "Schedule",
       "routes": "Routes",
       "payments": "Payments",
@@ -37,7 +49,7 @@
       "parada": "Stop",
       "planificar": "Plan",
       "editar": "Edit",
-      "prestamo": "New loan",
+      "prestamo": "New credit",
       "credito": "Credit",
       "solicitudes": "Payment requests",
       "nueva": "New",
@@ -74,12 +86,26 @@
         "from": "From",
         "to": "To",
         "collector": "Collector",
-        "status": "Status",
         "priority": "Priority",
         "all": "All",
         "selected": "{count} selected",
-        "clear": "Clear filters"
+        "clear": "Clear filters",
+        "source": "Source",
+        "allSources": "All"
       },
+      "priorities": {
+        "LOW": "Low",
+        "MEDIUM": "Medium",
+        "HIGH": "High",
+        "CRITICAL": "Critical"
+      },
+      "sources": {
+        "KOBRAX": "Kobrax",
+        "PSF": "PSF"
+      },
+      "mixedSources": "Includes {count, plural, one {# {source} operation} other {# {source} operations}} with balance and arrears reported as of the {to} cut-off.",
+      "mixedSourcesRange": "Includes {count, plural, one {# {source} operation} other {# {source} operations}} with balance and arrears reported at cut-offs from {from} to {to}.",
+      "mixedSourcesHint": "These are not today's figures: pick a source to see them separately.",
       "presets": {
         "today": "Today",
         "yesterday": "Yesterday",
@@ -93,7 +119,7 @@
         "outstanding": "Total portfolio balance",
         "overdue": "Overdue portfolio",
         "overdueRate": "% portfolio overdue",
-        "activeCases": "Overdue loans",
+        "creditsInArrears": "Credits in arrears",
         "collected": "Collected"
       },
       "widgets": {
@@ -157,7 +183,7 @@
       },
       "table": {
         "collector": "Collector",
-        "cases": "Overdue",
+        "inArrears": "In arrears",
         "balance": "Balance",
         "overdue": "Overdue",
         "overdueRate": "% overdue",
@@ -167,7 +193,8 @@
       "trend": {
         "outstanding": "Portfolio balance",
         "collected": "Collected",
-        "reconstructed": "Each date's balance is reconstructed from what was collected afterwards: it shows what collections brought down, and does not include new disbursements."
+        "reconstructed": "Each date's balance is reconstructed from what was collected afterwards: it shows what collections brought down, and does not include new disbursements.",
+        "external": "Includes the balance reported by external sources at each date (today {amount}): that part is not reconstructed from payments."
       },
       "map": {
         "done": "{n} visited",
@@ -235,9 +262,10 @@
         "updated": "Updated",
         "updatedHint": "You already had them: balance and days past due get updated.",
         "setCurrent": "Set current",
-        "setCurrentHint": "You have them and the file does not. They stay active with no arrears; the balance is untouched.",
+        "setCurrentHint": "You have them and the file does not include them. They are left with no arrears; balance and status are not touched.",
         "invalid": "Not imported",
         "invalidHint": "The file is missing something you marked as required.",
+        "ignored": "Ignored",
         "colCode": "Credit no.",
         "colClient": "Client",
         "colRow": "Row",
@@ -249,9 +277,6 @@
         "resultWarned": "Imported, and {n} records were left out.",
         "resultSkipped": "This file had already been imported. It was not applied again.",
         "again": "Import another file",
-        "lastRun": "Last import",
-        "lastRunNever": "You have not imported any file yet.",
-        "lastRunCounts": "{created} new · {updated} updated · {setCurrent} set current · {errors} left out",
         "disabledTitle": "The import is off",
         "disabledText": "This company loads its portfolio by hand. You can turn it on in Settings.",
         "setupTitle": "The import is not set up yet",
@@ -261,10 +286,27 @@
           "scope": "You still have to say whose portfolio the file carries.",
           "profile": "You still have to say what the file looks like.",
           "fields": "The file columns are not mapped to your fields yet."
-        }
+        },
+        "reportDate": "Cut-off {date}",
+        "reportDateUnknown": "The report does not state its cut-off date",
+        "advisor": "Advisor {code}",
+        "absent": "No longer in the report",
+        "absentHint": "They were in the previous report and not in this one. It is not a payment or a closure: balance and status stay as they were, and the day they went missing is recorded.",
+        "reappeared": "Back in the report",
+        "reappearedHint": "They were missing and this report brings them back. The same credit is updated, with its history.",
+        "needsReview": "Review link",
+        "linkReview": "Review link",
+        "existingClient": "existing client",
+        "colBalance": "Balance",
+        "colArrears": "Arrears",
+        "colStatus": "Status in report",
+        "toastOk": "Import saved: {created} new and {updated} updated.",
+        "toastWarned": "Import saved, with {n, plural, one {# rejected record} other {# rejected records}}.",
+        "toastSkipped": "This file was already imported: it was not applied again."
       },
       "setup": {
         "title": "Set up your import",
+        "readOnly": "Only someone who distributes the portfolio, or the account owner, can change this configuration. You can view it but not edit it.",
         "subtitle": "Get your file ready before importing the portfolio. Everything saves on its own.",
         "backToRun": "Back to import",
         "steps": {
@@ -288,6 +330,8 @@
         "step3Blocked": "Upload a sample file to see which columns it carries.",
         "step4": "Import rules",
         "step4Hint": "What to do with what the file does not carry, and who ends up owning each credit.",
+        "step5": "Report data",
+        "step5Hint": "What the balance in the file is, which status each label stands for and how many days the data stays fresh.",
         "shapeQuestion": "How is your file organised?",
         "shapeHint": "Pick the one that matches the file you just uploaded. If it is wrong, the file reads empty.",
         "shapeConfirmTitle": "Change how it is organised?",
@@ -298,6 +342,33 @@
         "sourceFileHint": "The office uploads a file and the portfolio is updated from it.",
         "sourceToManual": "Load by hand",
         "sourceToFile": "Import from a file"
+      },
+      "report": {
+        "basis": "What the balance in the file is",
+        "basisHint": "With «Outstanding principal» the balance is what is left to repay without interest; with «Total owed», what is owed today in full.",
+        "basisUnset": "Not defined yet",
+        "basisOptions": {
+          "principal": "Outstanding principal",
+          "total": "Total owed"
+        },
+        "stale": "Days until the data is marked as stale",
+        "staleHint": "Between {min} and {max}. Past that time since the cut-off date the report is flagged as out of date. If you do not change it, it is {def}.",
+        "staleError": "Enter a whole number between {min} and {max}.",
+        "statusMap": "Report statuses",
+        "statusMapHint": "Each status label the file carries, and which credit status it is in Kobrax. Write it in capitals without accents.",
+        "statusMapEmpty": "You have not added any yet. The ones Kobrax already knows (current, overdue, written off, cancelled) work on their own.",
+        "statusOf": "Status for {label}",
+        "remove": "Remove {label}",
+        "removeCta": "Remove",
+        "newLabel": "Label in the file",
+        "newLabelPlaceholder": "E.g. EXECUTION",
+        "newStatus": "Status in Kobrax",
+        "add": "Add",
+        "statusMapErrors": {
+          "EMPTY_LABEL": "Type the label exactly as it appears in the file.",
+          "INVALID_STATUS": "That status does not exist.",
+          "DUPLICATE_LABEL": "That label is already in the list: change its status there."
+        }
       },
       "settings": {
         "link": "Settings",
@@ -384,6 +455,7 @@
         "testBlocked": "Upload a file and fill in the required fields to be able to test.",
         "testCta": "Test without importing",
         "testResult": "{created} new · {updated} updated · {setCurrent} set current",
+        "testIgnored": "{n, plural, one {# row is ignored} other {# rows are ignored}}: they are totals or notes in the file, not credits.",
         "testOk": "The data looks right",
         "testWarned": "{n, plural, one {# row would be left out} other {# rows would be left out}}",
         "continue": "Save and continue"
@@ -453,8 +525,21 @@
       },
       "errors": {
         "generic": "We could not process the file.",
+        "ADVISOR_BELONGS_TO_OTHER": "This report is someone else’s portfolio. You can only import your own.",
+        "UNASSIGNED_NEW_CREDITS": "Some new loans have no owner.",
+        "ASSIGNEE_NOT_ELIGIBLE": "The chosen owner is not an active collector of the company.",
+        "ASSIGNMENT_CONFLICT": "A loan owner changed in the meantime. Load the file again.",
+        "ASSIGNMENT_FORBIDDEN": "You are not allowed to choose owners.",
+        "ALREADY_APPLIED": "This file was already imported. To change owners, use Portfolio.",
+        "INVALID_ASSIGNMENTS": "The submitted assignments are not valid.",
+        "IMPORT_CONFIG_FORBIDDEN": "Only someone who distributes the portfolio, or the account owner, can change this configuration.",
         "IMPORT_DISABLED": "The import is off: this company loads its portfolio by hand.",
         "IMPORT_NOT_CONFIGURED": "The import is not set up yet.",
+        "IMPORT_FILE_NOT_STORED": "This import predates file storage: there is nothing to download.",
+        "IMPORT_RUN_NOT_FOUND": "We could not find that import.",
+        "INVALID_ADVISOR_CODE": "The advisor code is not valid.",
+        "USER_NOT_MEMBER": "That person does not belong to this company.",
+        "USER_REQUIRED": "Pick a person first.",
         "FILE_SHAPE_MISMATCH": "That file does not match the shape you configured.",
         "XLS_LEGACY_NOT_SUPPORTED": "Old .xls files cannot be read. Save it as .xlsx or CSV.",
         "NO_RECORDS_MAPPED": "No records were read: your settings do not match this file.",
@@ -468,12 +553,16 @@
         "PROFILE_CHANGED": "The file shape changed: map the columns again.",
         "CALIBRATION_STALE": "Confirm the days past due column after choosing it.",
         "INVALID_SOURCE": "Invalid source.",
-        "INVALID_PROFILE_KIND": "Invalid file shape."
+        "INVALID_PROFILE_KIND": "Invalid file shape.",
+        "REPORT_OUTDATED": "This report is older than the last one you applied. An older report does not overwrite newer data.",
+        "ADVISOR_NOT_LINKED": "The report belongs to an advisor who is not linked to any user. Link them below, in Report advisors.",
+        "INVALID_REPORT_DATE": "The cut-off date is not valid."
       },
       "warnings": {
         "MORA_SIN_CONFIRMAR": "You have not confirmed which column holds the days past due.",
         "MORA_COLUMNA_SOSPECHOSA": "The days past due column may be the wrong one.",
-        "MORA_INCONSISTENTE": "There are active credits with no charges but with days past due."
+        "MORA_INCONSISTENTE": "There are active credits with no charges but with days past due.",
+        "REPORT_DATE_UNKNOWN": "The report does not include its cut-off date: figures are saved without knowing which day they refer to."
       },
       "rejects": {
         "MISSING": "It is missing a field you marked as required.",
@@ -481,9 +570,141 @@
         "DUP_IN_FILE": "The credit number is repeated in the file.",
         "MATCHES_MANUAL": "That credit number already exists, loaded by hand. The import does not touch it.",
         "MATCHES_OUT_OF_SCOPE": "That credit number exists outside this file's scope."
+      },
+      "advisors": {
+        "title": "Report advisors",
+        "subtitle": "Each arrears report belongs to one advisor. Link their code to the team member who handles that portfolio: new operations are assigned to them, and what is missing from their report is missing only from their portfolio.",
+        "unlinked": "These codes already came in a report and have no one: {codes}",
+        "none": "You have not linked any advisor yet.",
+        "code": "Advisor code",
+        "user": "Who handles that portfolio",
+        "pickUser": "Choose a person",
+        "link": "Link",
+        "remove": "Remove",
+        "saved": "Advisor linked",
+        "errors": {
+          "generic": "Could not save. Try again."
+        }
+      },
+      "assign": {
+        "colAssignee": "Owner",
+        "colCurrent": "Current owner",
+        "colNew": "New owner",
+        "unassigned": "Unassigned",
+        "me": "Me ({name})",
+        "unknownUser": "Another user",
+        "suggested": "from the report",
+        "selfNew": "These loans will be assigned to you.",
+        "keepCurrent": "They keep their current owner.",
+        "chooseNew": "Choose who collects each new loan. It starts with the owner suggested by the report.",
+        "chooseUpdate": "They keep their owner. Change it only to reassign: it is a separate action from updating.",
+        "stats": "Assigned {assigned} · Unassigned {unassigned}",
+        "assignAllUnassigned": "Assign all unassigned to…",
+        "onlyUnassigned": "Show unassigned only",
+        "selected": "{n, plural, one {# selected} other {# selected}}",
+        "assignTo": "Assign to…",
+        "assignToMe": "Assign to me",
+        "reassignTo": "Reassign to…",
+        "reassignBadge": "Reassignment",
+        "blockUnassigned": "{n, plural, one {# new loan has} other {# new loans have}} no owner: assign them to confirm.",
+        "alreadyApplied": "This file was already imported on {date}{by, select, none {} other { ({by})}}. Confirming changes nothing; to reassign owners, use Portfolio.",
+        "reassignTitle": "Change owners",
+        "reassignText": "You are about to change the owner of {n, plural, one {# existing loan} other {# existing loans}}. Their open cases keep their current collector.",
+        "reassignOk": "Yes, reassign and import",
+        "back": "Back",
+        "resultAssigned": "New loans by owner",
+        "resultReassigned": "{n, plural, one {# loan reassigned} other {# loans reassigned}}",
+        "notesTitle": "Some assignments were not applied",
+        "note": {
+          "NOW_EXISTING": "{code}: already existed at confirmation (another import created it); it keeps its owner.",
+          "UNKNOWN_CODE": "{code}: not in the file.",
+          "NOT_UPDATED": "{code}: not in this report, not reassigned."
+        }
+      },
+      "history": {
+        "title": "Import history",
+        "hint": "Every file that was imported and what changed. Tap the date for the detail, or a number to jump to those records.",
+        "empty": "You have not imported any file yet.",
+        "entity": "imports",
+        "noFile": "No file",
+        "noResults": "No import matches the search or filters.",
+        "noResultsHint": "Try other text or clear a filter.",
+        "search": {
+          "label": "Search imports",
+          "placeholder": "File, advisor or who imported",
+          "hint": "Searches the file name, the advisor code and the name of who imported."
+        },
+        "filters": {
+          "importedAt": "Import date",
+          "reportDate": "Cut-off date",
+          "by": "Imported by",
+          "allImporters": "Everyone"
+        },
+        "columns": {
+          "date": "Date",
+          "file": "File",
+          "reportDate": "Cut-off",
+          "advisor": "Advisor",
+          "by": "Imported by",
+          "created": "New",
+          "updated": "Updated",
+          "reappeared": "Back",
+          "setCurrent": "Current",
+          "absent": "Missing",
+          "rejected": "Rejected",
+          "ignored": "Ignored"
+        }
+      },
+      "detail": {
+        "title": "Import of {date}",
+        "back": "← Import data",
+        "by": "Imported by",
+        "at": "Date",
+        "file": "File",
+        "reportDate": "Cut-off date",
+        "advisor": "Advisor",
+        "scope": "Scope",
+        "ignored": "Ignored rows",
+        "ignoredValue": "{n, plural, one {# row (totals or notes)} other {# rows (totals or notes)}}",
+        "view": "View document",
+        "download": "Download",
+        "noFile": "This import predates storing the file.",
+        "partial": "Import from before the history: which ones were set current and which rows were rejected was not recorded.",
+        "all": "All",
+        "movements": "Changes",
+        "empty": "No changes of this type.",
+        "entity": "records",
+        "newClient": "new client",
+        "existingClient": "existing client",
+        "linkReview": "Review link",
+        "days": "{n, plural, one {# day} other {# days}}",
+        "unknownUser": "—",
+        "tabs": {
+          "CREATED": "New",
+          "UPDATED": "Updated",
+          "REAPPEARED": "Back",
+          "SET_CURRENT": "Current",
+          "ABSENT": "Missing",
+          "REJECTED": "Rejected"
+        },
+        "columns": {
+          "row": "Record",
+          "code": "Operation",
+          "client": "Client",
+          "movement": "Change",
+          "balance": "Balance",
+          "arrears": "Arrears",
+          "status": "Status",
+          "note": "Detail"
+        },
+        "scopeKinds": {
+          "account": "Whole company",
+          "official": "{name}'s portfolio",
+          "branch": "Branch {name}"
+        }
       }
     },
-    "cases": {
+    "mora": {
       "title": "Overdue portfolio",
       "subtitle": "Overdue loans, who works them and how long they have been due. It fills and empties on its own: a loan enters on its first day overdue and leaves when it is paid or brought up to date.",
       "scopedToMine": "You are only seeing what is assigned to you.",
@@ -492,40 +713,110 @@
       "noResults": "No loans match these filters",
       "noResultsText": "Try removing one.",
       "filters": {
-        "status": "Status",
         "priority": "Priority",
-        "assignee": "Collector",
+        "branch": "Office",
+        "allBranches": "All offices",
         "all": "All",
         "unassigned": "Unassigned",
-        "overdue": "Overdue only",
-        "clear": "Clear filters",
         "arrearsRange": "Days overdue",
-        "scope": "Scope",
         "includeCurrent": "Include those up to date",
-        "sla": "Handling time",
-        "slaOverdue": "Only those past the deadline"
+        "balanceRange": "Balance",
+        "promise": "Payment promise",
+        "withPromise": "Only with an active promise",
+        "situation": "Situation",
+        "category": "Arrears category",
+        "writtenOff": "Write-off",
+        "onlyWrittenOff": "Written off only",
+        "withoutWrittenOff": "Not written off",
+        "responsible": "Responsible",
+        "unassignedResponsible": "Credits with no responsible"
       },
       "columns": {
         "client": "Debtor",
         "daysPastDue": "Past due",
         "balance": "Balance",
-        "status": "Status",
         "priority": "Priority",
-        "assignee": "Collector",
-        "slaDueAt": "Due",
-        "actions": "Actions",
-        "arrearsSource": "Arrears source"
+        "arrearsSource": "Arrears source",
+        "code": "Credit no.",
+        "overdue": "Overdue",
+        "lastAction": "Last action",
+        "branch": "Branch",
+        "originStatus": "Status at source",
+        "principal": "Original amount",
+        "installment": "Installment",
+        "nextDueDate": "Next due date",
+        "lastPayment": "Last payment",
+        "moraSince": "Arrears since",
+        "promise": "Promise",
+        "situation": "Situation",
+        "responsible": "Responsible"
       },
+      "situation": {
+        "CURRENT": "Current",
+        "IN_ARREARS": "In arrears",
+        "writtenOff": "Written off",
+        "category": "Category {code}",
+        "daysPastDue": "{n, plural, one {# day} other {# days}} past due"
+      },
+      "lastActionLabel": "Last action",
+      "activePromiseLabel": "Active promise",
+      "gestion": {
+        "title": "Credit management",
+        "writeOff": {
+          "cta": "Write off",
+          "revert": "Revert write-off",
+          "title": "Write off the credit",
+          "revertTitle": "Revert the write-off",
+          "text": "A write-off is a separate condition: it does not close the arrears or change the days. It is recorded in the audit log.",
+          "revertText": "The credit stops being shown as written off. It is recorded in the audit log.",
+          "reason": "Reason (optional)",
+          "confirm": "Write off",
+          "revertConfirm": "Revert",
+          "cancel": "Cancel",
+          "done": "Credit written off",
+          "revertDone": "Write-off reverted",
+          "error": "The write-off could not be changed."
+        },
+        "responsibles": {
+          "title": "Responsible people",
+          "hint": "Who handles this credit. A temporary replacement returns the credit to the responsible when it expires.",
+          "PRINCIPAL": "Responsible",
+          "TEMPORAL": "Temporary replacement",
+          "APOYO": "Support",
+          "expires": "until {date}",
+          "none": "No responsible",
+          "unknown": "Assigned",
+          "addSupport": "Add support",
+          "changeTemp": "Change temporarily",
+          "remove": "Remove",
+          "removed": "Done, removed",
+          "collector": "Collector",
+          "collectorPlaceholder": "Choose the collector",
+          "expiresAt": "Expiry date",
+          "expiresOptional": "Expiry date (optional)",
+          "reason": "Reason (optional)",
+          "supportTitle": "Add support",
+          "supportText": "A second collector who sees and works this credit alongside the responsible.",
+          "tempTitle": "Change temporarily",
+          "tempText": "The chosen collector covers the credit until the date; pending scheduled items move with them and return to the responsible on expiry.",
+          "confirm": "Save",
+          "cancel": "Cancel",
+          "supportDone": "Support added",
+          "tempDone": "Temporary replacement created",
+          "error": "The change could not be saved.",
+          "needsData": "Choose the collector and the expiry date."
+        },
+        "psf": {
+          "absent": "It no longer appears in the report of {date}. It may have been brought up to date or cancelled; the report does not say.",
+          "absentNoDate": "It no longer appears in the report. It may have been brought up to date or cancelled; the report does not say."
+        }
+      },
+      "hasPromise": "With promise",
+      "overdueReported": "As reported by the file",
+      "overdueSchedule": "Overdue installments of the schedule",
       "days": "{n} d",
       "noAssignee": "—",
       "unknownAssignee": "Assigned",
-      "overdueBadge": "Overdue",
-      "actions": {
-        "open": "View in Overdue",
-        "activity": "Record activity",
-        "assign": "Assign",
-        "close": "Close collection"
-      },
       "activity": {
         "title": "Record an activity",
         "text": "It stays in the collection history. It cannot be closed without at least one.",
@@ -535,56 +826,22 @@
         "cancel": "Cancel",
         "done": "Activity recorded"
       },
-      "assign": {
-        "title": "Assign collection",
-        "text": "Pick someone, or let it go to the collector with the lightest load.",
-        "collector": "Collector",
-        "auto": "To the lightest load",
-        "noTeam": "We cannot read the team with your role, so it goes to the collector with the lightest load.",
-        "confirm": "Assign",
-        "cancel": "Cancel",
-        "done": "Collection assigned"
-      },
-      "transition": {
-        "title": "Move collection",
-        "text": "Only the states it can move to are offered.",
-        "reason": "Reason (optional)",
-        "confirm": "Move",
-        "cancel": "Cancel",
-        "done": "Collection updated",
-        "none": "It can no longer be moved: it is closed.",
-        "tooltip": "Change the collection status",
-        "from": "Currently in",
-        "to": "Moves to",
-        "pick": "Pick the new status"
-      },
-      "close": {
-        "title": "Close collection",
-        "text": "Closing is final. It stops counting as open work.",
-        "reason": "Reason for closing",
-        "confirm": "Close collection",
-        "cancel": "Cancel",
-        "done": "Collection closed"
-      },
       "detail": {
-        "credit": "Credit",
-        "balance": "Balance",
         "installment": "Installment",
         "nextDueDate": "Next due date",
-        "sla": "Due on",
-        "assignee": "Collector",
+        "summary": "Credit summary",
+        "balanceOwed": "Outstanding balance",
+        "paidProgress": "Share of the principal already paid",
+        "currentArrears": "Current arrears",
         "openClient": "Open the debtor's file",
         "timeline": "Activity",
+        "creditCode": "Credit {code}",
+        "overdue": "Overdue amount",
+        "principal": "Original amount",
+        "lastPayment": "Last payment",
+        "moraSince": "Arrears since",
+        "openCredit": "View the credit in Portfolio",
         "timelineEmpty": "No activity recorded yet."
-      },
-      "status": {
-        "PENDING": "Pending",
-        "ACTIVE": "In progress",
-        "IN_NEGOTIATION": "In negotiation",
-        "PROMISE_TO_PAY": "Promise to pay",
-        "PAID": "Paid",
-        "CLOSED": "Closed",
-        "WRITTEN_OFF": "Written off"
       },
       "priority": {
         "LOW": "Low",
@@ -598,28 +855,213 @@
         "VISIT": "Visit",
         "MESSAGE": "Message",
         "PAYMENT": "Payment",
-        "PROMISE": "Promise to pay",
-        "STATUS_CHANGE": "Status change",
         "ASSIGNMENT": "Assignment"
       },
       "errors": {
         "generic": "The action could not be completed.",
-        "CASE_001": "A collection cannot be closed without any activity recorded.",
-        "CASE_002": "That status change is not allowed from the current status.",
-        "INVALID_ASSIGNEE": "That person does not belong to this company.",
         "AUTH_002": "You do not have permission for this action."
       },
-      "entity": "loans",
+      "entity": "credits",
       "noCreditCode": "no code",
       "search": {
-        "label": "Search debtor or zone",
-        "placeholder": "Name, last name or zone",
-        "hint": "Searches by name and by zone. Search by ID document from Portfolio."
+        "label": "Search credit, debtor or zone",
+        "placeholder": "Credit no., name, last name or zone",
+        "hint": "Searches by credit number, name and zone. Search by ID document from Portfolio."
       },
       "arrearsSource": {
         "CALCULATED": "Calculated",
         "IMPORTED": "From file",
         "MANUAL": "Manual"
+      },
+      "export": {
+        "csv": "Export CSV",
+        "pdf": "Export PDF",
+        "working": "Preparing…",
+        "hint": "Downloads exactly the credits you are looking at: with your filters, your order and your scope.",
+        "error": "The export failed."
+      },
+      "history": {
+        "title": "Arrears history",
+        "subtitle": "Every period this credit has been in arrears. Measured since the history exists; earlier periods are rebuilt from closed cases.",
+        "empty": "No arrears history",
+        "emptyText": "This credit has no recorded arrears periods yet.",
+        "unavailable": "The arrears history could not be loaded.",
+        "number": "Arrears #{n}",
+        "current": "Current",
+        "ongoing": "ongoing",
+        "estimated": "(approx.)",
+        "estimatedHint": "The start is a calculation (cut-off date minus days past due), not a declared date.",
+        "reconstructed": "Rebuilt",
+        "reconstructedHint": "Rebuilt from a case closed before the history existed: it has no peak days or balances.",
+        "duration": "Duration",
+        "peak": "Peak arrears",
+        "balanceIn": "Balance on entry",
+        "balanceOut": "Balance on exit",
+        "enteredWith": "Entered with",
+        "source": "Arrears source",
+        "days": "{n, plural, one {# day} other {# days}}",
+        "end": {
+          "PAID": "Paid off",
+          "CURRENT": "Brought up to date",
+          "SOURCE_ABSENT": "Stopped appearing in the report",
+          "WRITTEN_OFF": "Written off",
+          "CANCELLED": "Cancelled",
+          "DELETED": "Deleted"
+        },
+        "endHint": {
+          "SOURCE_ABSENT": "The source stopped reporting it: it is not known whether it was paid or brought up to date."
+        }
+      },
+      "ficha": {
+        "metrics": {
+          "title": "Recovery",
+          "unavailable": "The recovery metrics could not be loaded.",
+          "sinceEpisode": "Since this arrears period began, on {date}.",
+          "sinceAll": "Credit history: it is not in arrears now.",
+          "estimated": "(approximate start)",
+          "estimatedHint": "The start of the arrears is a calculation (cut-off date minus days past due), not a declared date.",
+          "untracked": "These arrears were already {n, plural, one {# day} other {# days}} old when Kobrax started recording them: earlier actions may not be loaded, and the days to the first contact, visit or payment count from the start of the arrears.",
+          "recovered": "Recovered",
+          "payments": "{n, plural, =0 {No payments} one {# payment} other {# payments}}",
+          "ofBalance": "of {amount} on entry",
+          "activities": "Actions",
+          "breakdown": "{calls, plural, one {# call} other {# calls}} · {visits, plural, one {# visit} other {# visits}} · {messages, plural, one {# message} other {# messages}}",
+          "contacts": "Reached the debtor",
+          "contactsHint": "{n, plural, one {time} other {times}}",
+          "firstContact": "First contact",
+          "firstVisit": "First visit",
+          "firstPayment": "First payment",
+          "noContact": "No contact yet",
+          "noVisit": "No visit yet",
+          "noPayment": "No payments yet",
+          "inKobrax": "Since Kobrax started working it: {when}",
+          "sameDay": "The same day",
+          "afterDays": "After {n, plural, one {# day} other {# days}}",
+          "promises": "Promises kept",
+          "promisesKept": "{kept} of {closed}",
+          "compliance": "Compliance {pct} %",
+          "noCompliance": "No closed promises yet",
+          "activePromises": "{n, plural, one {# active} other {# active}}",
+          "lastRecovered": "Last arrears recovered in",
+          "recoveredAllTime": "Recovered over the whole life of the credit"
+        },
+        "activity": {
+          "cta": "Log action",
+          "title": "Log an action",
+          "text": "It is saved in the credit history, whether or not it is in arrears.",
+          "type": "What was done",
+          "result": "Result",
+          "resultLabel": "Result",
+          "resultPlaceholder": "Choose how it ended",
+          "notes": "Notes",
+          "noteText": "Note",
+          "promise": "Payment promise",
+          "amount": "Promised amount",
+          "date": "Promised date",
+          "method": "Payment method",
+          "methodPlaceholder": "Choose the method",
+          "bank": "Bank (optional)",
+          "bankPlaceholder": "No bank",
+          "confirm": "Log",
+          "cancel": "Cancel",
+          "done": "Action logged",
+          "results": {
+            "CONTACTED": "Spoke with the debtor",
+            "NO_ANSWER": "No answer",
+            "WRONG_NUMBER": "Wrong number",
+            "NOT_FOUND": "Not found",
+            "WRONG_ADDRESS": "Wrong address",
+            "REFUSAL": "Refused to pay",
+            "PROMISE_TO_PAY": "Promise to pay"
+          },
+          "errors": {
+            "TYPE_INVALID": "That type of action cannot be logged by hand.",
+            "NOTES_REQUIRED": "Write the note.",
+            "NOTES_TOO_LONG": "The notes are too long.",
+            "RESULT_REQUIRED": "Choose how the action ended.",
+            "RESULT_NOT_ALLOWED": "That result does not fit this type of action.",
+            "PROMISE_REQUIRED": "Fill in the amount, date and payment method of the promise.",
+            "PROMISE_NOT_ALLOWED": "Only an action with the result \"promise to pay\" carries a promise.",
+            "PROMISE_AMOUNT_INVALID": "The promised amount must be greater than zero.",
+            "PROMISE_DATE_INVALID": "Choose the promised date.",
+            "PROMISE_DATE_PAST": "The promised date cannot be before today.",
+            "PROMISE_METHOD_REQUIRED": "Choose the payment method of the promise."
+          }
+        },
+        "person": {
+          "title": "The person",
+          "hint": "Who to talk to, where to find them and who answers for this credit. Edited from Portfolio.",
+          "denied": "You do not have access to this client's data."
+        },
+        "notes": {
+          "title": "Notes",
+          "hint": "What the team needs to know about this credit. They stay after the case is closed.",
+          "empty": "No notes yet.",
+          "unavailable": "The notes could not be loaded.",
+          "add": "Add note",
+          "kind": "Type",
+          "kinds": { "INFO": "Informational", "WARNING": "Warning", "IMPORTANT": "Important" },
+          "placeholder": "Write the note…",
+          "remaining": "{n} characters left",
+          "save": "Save note",
+          "cancel": "Cancel",
+          "saved": "Note saved",
+          "by": "Written by {name}",
+          "unknownAuthor": "someone on the team",
+          "launcherTitle": "Notes board",
+          "showing": "Showing on screen",
+          "launcherSub": "Notes as sticky notes anchored to each section of the file: drag, recolour and resize them.",
+          "show": "Show on screen",
+          "hide": "Hide",
+          "boardLabel": "Notes board",
+          "dragHint": "Drag the header to move; the bottom corner to resize.",
+          "newNote": "New note",
+          "addTitle": "New note",
+          "editTitle": "Edit note",
+          "saveChanges": "Save changes",
+          "updated": "Note updated",
+          "deleted": "Note deleted",
+          "deleteTitle": "Delete this note?",
+          "deleteBody": "The note disappears from the file. It stays in the audit log.",
+          "delete": "Delete",
+          "edit": "Edit",
+          "locate": "Show on screen",
+          "colour": "Colour",
+          "colors": { "YELLOW": "Yellow", "PINK": "Pink", "BLUE": "Blue", "GREEN": "Green", "PURPLE": "Purple", "ORANGE": "Orange" }
+        },
+        "promises": {
+          "title": "Payment promises",
+          "empty": "No payment promises recorded.",
+          "unavailable": "The promises could not be loaded.",
+          "summary": "{made, plural, =0 {No promises} one {# promise} other {# promises}} · {kept} kept · {broken} broken",
+          "compliance": "Compliance {pct} %",
+          "noCompliance": "Compliance: no closed promises yet",
+          "unresolved": "{n, plural, one {# promise expired with nobody recording what happened} other {# promises expired with nobody recording what happened}}.",
+          "overdueHint": "The date passed and nobody recorded whether it was paid: it does not count as broken.",
+          "dueOn": "for {date}",
+          "unknownAssignee": "Assigned",
+          "status": {
+            "ACTIVE": "Active",
+            "OVERDUE": "Expired, not closed",
+            "KEPT": "Kept",
+            "BROKEN": "Broken",
+            "EXECUTED": "Executed",
+            "CANCELLED": "Cancelled",
+            "RESCHEDULED": "Rescheduled"
+          }
+        },
+        "payments": {
+          "title": "Payments",
+          "empty": "No payments recorded yet.",
+          "unavailable": "You do not have permission to see payments, or they could not be loaded.",
+          "count": "{n, plural, one {# payment} other {# payments}}",
+          "collected": "Collected by Kobrax: {amount}",
+          "receipt": "Receipt no. {n}",
+          "by": "Recorded by {name}",
+          "unknownUser": "someone on the team",
+          "seeAll": "See in Payments",
+          "externalNote": "A payment on a PSF operation counts as recovered, but it does not change the balance or arrears the file reported: those numbers update with the next report."
+        }
       },
       "arrearsMode": "How do they end up?",
       "bulk": {
@@ -627,7 +1069,7 @@
         "assignTitle": "Assign {count} loans to a collector",
         "clear": "Bring up to date",
         "clearTitle": "Bring {count} loans up to date",
-        "clearText": "{count} loans will be brought up to date and their collections closed.",
+        "clearText": "{count} loans will be brought up to date: their arrears close.",
         "clearOk": "Bring up to date",
         "warning": "This cannot be undone in bulk. Each one keeps its close reason.",
         "cancel": "Cancel",
@@ -643,7 +1085,15 @@
         "priority": "Priority",
         "priorityTitle": "Change priority of {count} loans",
         "priorityText": "It stays pinned: the daily calculation stops touching it until you release it.",
-        "priorityOk": "Change priority"
+        "priorityOk": "Change priority",
+        "assignText": "They become the chosen collector's. Pending scheduled items move with them.",
+        "collectorPlaceholder": "Choose the collector",
+        "skip": {
+          "NOT_FOUND": "The credit was not found.",
+          "ALREADY_ASSIGNED": "It was already that collector's.",
+          "OUT_OF_AGENCY": "It is outside your agency.",
+          "CONFLICT": "It changed in the meantime."
+        }
       },
       "priorityChange": "Change priority",
       "prioritySet": "Priority pinned",
@@ -662,7 +1112,7 @@
     },
     "agenda": {
       "title": "Schedule",
-      "subtitle": "What the team has scheduled for the day.",
+      "subtitle": "What is scheduled for you.",
       "scopedToMine": "You are seeing only your own items.",
       "today": "Today",
       "previousDay": "Previous day",
@@ -730,7 +1180,7 @@
         "history": "Collection history",
         "historyEmpty": "No other activity for this loan.",
         "rescheduledFrom": "Born from rescheduling another item.",
-        "openCase": "View in Overdue"
+        "openMora": "View in Overdue"
       },
       "type": {
         "CALL": "Call",
@@ -769,7 +1219,9 @@
       "view": "How the agenda is shown",
       "views": {
         "list": "List",
-        "calendar": "Calendar"
+        "calendar": "Calendar",
+        "day": "Day",
+        "month": "Month"
       },
       "week": "Week",
       "pickDate": "Pick a date",
@@ -787,11 +1239,42 @@
         "overdue": "Overdue"
       },
       "filters": {
+        "title": "Filters",
+        "search": "Search client, credit or ID…",
         "assignee": "Collector",
         "type": "Type",
         "all": "All",
-        "clear": "Clear filters"
+        "allAssignees": "All collectors",
+        "allTypes": "All types",
+        "allStatuses": "All statuses",
+        "clear": "Clear"
       },
+      "summary": {
+        "title": "Day summary",
+        "count": "{n, plural, one {# activity} other {# activities}}",
+        "pending": "Pending",
+        "done": "Completed",
+        "other": "Rescheduled or cancelled"
+      },
+      "sort": {
+        "label": "Sort",
+        "hour": "Sort by time",
+        "type": "Sort by type",
+        "assignee": "Sort by collector"
+      },
+      "team": {
+        "label": "Team",
+        "mine": "My team",
+        "count": "{n, plural, one {# collector} other {# collectors}}",
+        "all": "Whole team",
+        "justMe": "My items"
+      },
+      "groupCount": "{n, plural, one {# activity} other {# activities}}",
+      "emptyFiltered": "No items match the filters.",
+      "menu": "Item actions",
+      "credit": "Credit #{code}",
+      "miniCalendar": "Month calendar",
+      "withItems": "Has scheduled items",
       "create": {
         "title": "New task",
         "searchClient": "Debtor",
@@ -800,7 +1283,9 @@
         "noClients": "No debtor with that name.",
         "changeClient": "Change",
         "contextError": "Could not read the debtor data.",
-        "noCases": "This debtor has no loan to schedule a task against.",
+        "noCredits": "This debtor has no credit to schedule a task against.",
+        "inArrears": "In arrears · {days} days",
+        "current": "Current",
         "credit": "Loan",
         "noCode": "no code",
         "type": "Task type",
@@ -956,17 +1441,23 @@
           "max": "To",
           "lastVisit": "Last visit",
           "visitAges": {
-            "7": "No visit in 7 days",
-            "15": "No visit in 15 days",
-            "30": "No visit in 30 days",
+            "7": "Not visited in 7 days",
+            "15": "Not visited in 15 days",
+            "30": "Not visited in 30 days",
             "never": "Never visited"
           },
+          "outcome": "Last visit outcome",
           "promise": "Promise to pay",
           "withPromise": "With promise",
           "withoutPromise": "Without promise",
-          "status": "Status",
+          "category": "Arrears category",
           "priority": "Priority",
-          "outcome": "Result of a previous visit"
+          "priorities": {
+            "LOW": "Low",
+            "MEDIUM": "Medium",
+            "HIGH": "High",
+            "CRITICAL": "Critical"
+          }
         }
       },
       "work": {
@@ -1030,7 +1521,7 @@
         "distance": "Estimated distance",
         "noDistance": "Not computed",
         "noPreview": "We could not compute the route line. The stops are still listed.",
-        "openCase": "View in Overdue",
+        "openMora": "View in Overdue",
         "openClient": "Open the debtor's file"
       },
       "stop": {
@@ -1120,12 +1611,18 @@
         "cancel": "Back",
         "done": "Payment recorded",
         "immutable": "A recorded payment cannot be edited or voided. If it is wrong, it is corrected with another entry.",
-        "noCredit": "Pick the credit first, from the debtor's file."
+        "noCredit": "Pick the credit first, from the debtor's file.",
+        "moreOptions": "More options",
+        "lessOptions": "Fewer options",
+        "channel": "Who received the money?",
+        "notes": "Note (optional)",
+        "externalHint": "This credit comes from another source: the payment is recorded as a Kobrax collection and does not change the reported balance or arrears. They update with the next report.",
+        "suggested": "Suggested: what is due today"
       },
       "detail": {
         "title": "The payment",
         "credit": "Credit",
-        "case": "Collection",
+        "openMora": "Collection management",
         "registeredBy": "Recorded by",
         "receiptNumber": "Receipt no.",
         "openReceipt": "Open the receipt",
@@ -1168,6 +1665,10 @@
         "generic": "The action could not be completed.",
         "PAYMENT_001": "The amount cannot be negative.",
         "AUTH_002": "You do not have permission for this action."
+      },
+      "channel": {
+        "KOBRAX_COLLECTED": "Collected by Kobrax",
+        "EXTERNAL_CONFIRMED": "Paid through an entity channel"
       }
     }
   },
@@ -1179,6 +1680,35 @@
     "decimals": "Amount decimals",
     "decimalsValue": "{n, plural, =0 {No decimals} one {# decimal} other {# decimals}}",
     "decimalsHint": "How the team sees amounts in the field app.",
+    "arrearCategories": {
+      "title": "Arrears categories",
+      "intro": "Each credit in arrears falls into the category whose range contains its days past due. Ranges start at day 1, cannot have gaps or overlap, and only the last one may be open-ended. A credit's category is not stored: it is calculated from these ranges.",
+      "columns": {
+        "code": "Code",
+        "name": "Name",
+        "from": "From (days)",
+        "to": "To (days)",
+        "color": "Color"
+      },
+      "unlimited": "No limit",
+      "add": "+ Add category",
+      "remove": "Remove",
+      "save": "Save categories",
+      "saved": "Categories saved",
+      "saveError": "Could not save the categories",
+      "readOnly": "Only an administrator can change these ranges.",
+      "validation": {
+        "EMPTY": "There must be at least one category.",
+        "CODE_EMPTY": "Every category needs a code.",
+        "CODE_DUPLICATE": "Two categories have the same code.",
+        "RANGE_INVALID": "The \"from\" and \"to\" days must be whole numbers, and \"from\" at least 1.",
+        "TO_BEFORE_FROM": "In a category, \"to\" cannot be lower than \"from\".",
+        "NOT_STARTING_AT_1": "The first category must start at day 1.",
+        "GAP": "There are days missing between two categories: each range must start the day after the previous one ends.",
+        "OVERLAP": "Two categories share days: ranges cannot overlap.",
+        "OPEN_ENDED_NOT_LAST": "Only the last category can be left open-ended."
+      }
+    },
     "templates": {
       "title": "WhatsApp templates",
       "intro": "The messages your team can pick when writing to a debtor from a task. These variables are filled in automatically on send:",
@@ -1223,7 +1753,13 @@
     "save": "Save changes",
     "saved": "Details saved",
     "saveError": "Could not save the details",
-    "noAccess": "You do not have access to the account details"
+    "noAccess": "You do not have access to the account details",
+    "arrearsMethod": "How arrears are counted (new credits)",
+    "arrearsMethodHint": "Preselected on every new credit; can be changed per credit. Existing credits do not change.",
+    "arrearsMethods": {
+      "oldest_unpaid": "From the oldest unpaid instalment",
+      "first_default": "From the first default until caught up (as banks do)"
+    }
   },
   "exports": {
     "title": "Export",
@@ -1234,8 +1770,8 @@
       "clientsDesc": "Name, document, contact and balance for each person.",
       "locations": "Locations",
       "locationsDesc": "The registered addresses, with their client.",
-      "cases": "Overdue",
-      "casesDesc": "Open and closed collection cases, with their credit.",
+      "mora": "Overdue",
+      "moraDesc": "Credits in arrears, with their owner, category and overdue balance.",
       "agenda": "Schedule",
       "agendaDesc": "Scheduled visits, past and upcoming."
     },
@@ -1305,9 +1841,9 @@
     },
     "entity": "clients",
     "filters": {
-      "collector": "Collector",
+      "manager": "Owner",
+      "allManagers": "All owners",
       "branch": "Branch",
-      "allCollectors": "All collectors",
       "allBranches": "All branches",
       "arrearsRange": "Arrears range",
       "debtRange": "Debt range"
@@ -1349,8 +1885,6 @@
       "identity": "Identification",
       "data": "Details",
       "credits": "Credits",
-      "creditFixed": "The loan",
-      "creditEditable": "Collection details",
       "schedule": "Schedule",
       "contacts": "Contact",
       "locations": "Addresses",
@@ -1358,14 +1892,9 @@
       "collaterals": "Collateral",
       "attachments": "Attachments",
       "summary": "Account summary",
-      "timeline": "Activity log",
-      "cases": "Overdue"
+      "timeline": "Activity log"
     },
-    "newLoan": "New loan",
-    "loanTitle": "New loan",
-    "loanSubtitle": "For {name}",
-    "loanSave": "Grant the loan",
-    "loanCreated": "Loan registered",
+    "newLoan": "New credit",
     "loanMode": {
       "A": "I know the instalment",
       "B": "Work out the instalment"
@@ -1377,8 +1906,7 @@
     "quote": {
       "installment": "Instalment",
       "total": "Total to collect",
-      "profit": "Profit",
-      "belowCapital": "With these instalments you will collect less than you lend. You can still save it."
+      "profit": "Profit"
     },
     "downloadPdf": "Download PDF",
     "archive": "Archive",
@@ -1424,7 +1952,10 @@
       "DAILY": "Daily",
       "WEEKLY": "Weekly",
       "BIWEEKLY": "Fortnightly",
-      "MONTHLY": "Monthly"
+      "MONTHLY": "Monthly",
+      "QUARTERLY": "Quarterly",
+      "SEMIANNUAL": "Semiannual",
+      "ANNUAL": "Annual"
     },
     "schedule": {
       "number": "Instalment",
@@ -1463,10 +1994,9 @@
       "openLoanHint": "empty = open loan",
       "assignedTo": "Collected by",
       "unassigned": "Unassigned",
-      "inProgress": "This loan is already running",
-      "inProgressHint": "For loading older loans: it is saved with the balance and arrears it already has.",
-      "outstanding": "Current balance",
-      "daysPastDue": "Days past due",
+      "assignedToHint": "Changing it does not move open cases: the case collector is reassigned separately.",
+      "currentAssignee": "Current owner",
+      "meNamed": "Me ({name})",
       "relationContacts": "Their phones",
       "relationLocations": "Their addresses",
       "remove": "Remove",
@@ -1484,7 +2014,19 @@
       "creditNoCode": "Loan without code",
       "phoneHint": "At least 5 digits. May start with + and contain spaces or hyphens.",
       "collateralTypeUnset": "Unclassified",
-      "attachmentType": "Attachment type"
+      "attachmentType": "Attachment type",
+      "coordMode": "Location on the map",
+      "coordManual": "Manual",
+      "coordGps": "My location",
+      "coordMap": "Map",
+      "captureLocation": "Capture my location",
+      "recaptureLocation": "Capture again",
+      "locating": "Finding your location…",
+      "noGeo": "This browser cannot provide your location. You can mark it on the map or type it.",
+      "geoDenied": "Could not get your location (permission denied or no signal). You can mark it on the map or type it.",
+      "pinHint": "Click the map to drop the pin; then you can drag it.",
+      "pinAt": "Point: {lat}, {lng}",
+      "mapPick": "Map to mark the address location"
     },
     "fields": {
       "document": "ID",
@@ -1536,6 +2078,14 @@
     "noOpenCredits": "No open credits.",
     "show": "Show",
     "seeOnMap": "See on map",
+    "details": "View details",
+    "mapView": "Map with the location",
+    "noPoint": "No point on the map",
+    "verified": "Verified",
+    "yes": "Yes",
+    "no": "No",
+    "coordinates": "Coordinates",
+    "contactableLabel": "Can be called",
     "seeAll": "See all",
     "attachmentsEmptyHint": "Upload copies of the ID, employment certificates or utility bills to complete the client file. You can also drag them here.",
     "page": "Page {page} of {pages}",
@@ -1551,8 +2101,6 @@
       "progress": "Payment progress"
     },
     "noTimeline": "No activity or payments recorded yet.",
-    "noCases": "No open collections.",
-    "casesDenied": "You do not have permission to view collections.",
     "unassigned": "Unassigned",
     "unknownCollector": "Collector",
     "summary": {
@@ -1576,7 +2124,6 @@
         "CALL": "Call",
         "VISIT": "Visit",
         "PAYMENT": "Payment",
-        "STATUS_CHANGE": "Status change",
         "ASSIGNMENT": "Reassignment",
         "MESSAGE": "Message"
       },
@@ -1604,7 +2151,6 @@
       "text": "The file leaves the record along with its hash, which is what proved the document existed. This cannot be undone.",
       "ok": "Remove attachment"
     },
-    "creditFixedHint": "Changing the number of installments, the currency or the disbursement date is a restructure: close this loan and create a new one.",
     "arrears": {
       "markCta": "Mark as overdue",
       "markTitle": "Mark this loan as overdue?",
@@ -1628,6 +2174,311 @@
         "date": "The next collection date becomes the one you pick. It must be in the future.",
         "none": "It becomes an open loan: with no agreed due date there are no overdue days to count."
       }
+    },
+    "creditForm": {
+      "title": "New credit",
+      "subtitle": "For {name}",
+      "save": "Create credit",
+      "created": "Credit registered",
+      "definitionLabel": "How do you want to define the credit?",
+      "definition": {
+        "calculated": "Calculate installments",
+        "agreed_installment": "Agreed installment",
+        "agreed_total": "Agreed total"
+      },
+      "definitionHint": {
+        "calculated": "The installment comes from the interest, the number of installments and the frequency.",
+        "agreed_installment": "You already know how much each installment is. No rate needed.",
+        "agreed_total": "You agreed on the total to pay back. No rate needed."
+      },
+      "principal": "Amount to lend",
+      "ratePercent": "Interest (%)",
+      "installmentsCount": "Loan term",
+      "term": "Term (in periods)",
+      "openLoanHint": "empty = open loan",
+      "installmentAmount": "Agreed installment",
+      "agreedTotal": "Agreed total",
+      "repayment": "Repayment",
+      "repaymentOptions": {
+        "single": "Single payment",
+        "installments": "In installments"
+      },
+      "frequency": "Payment frequency",
+      "termFrequency": "Each period is",
+      "firstDueDate": "First payment",
+      "paymentDate": "Payment date",
+      "advanced": "Advanced options",
+      "interestType": "Interest type",
+      "interestTypes": {
+        "simple": "Simple",
+        "compound": "Compound"
+      },
+      "amortization": "Instalment type",
+      "amortizations": {
+        "fixed_installment": "Fixed instalment",
+        "fixed_principal": "Variable instalment",
+        "single_payment": "Single payment"
+      },
+      "rateBase": "How the interest applies",
+      "quote": {
+        "installment": "Installment",
+        "firstInstallment": "First installment",
+        "total": "Total to collect",
+        "profit": "Profit",
+        "openLoan": "Open loan: without a number of installments there is no total or payment plan.",
+        "insurance": "Credit life insurance",
+        "charges": "Other charges",
+        "deducted": "Deducted",
+        "netDisbursement": "Amount to disburse"
+      },
+      "incomplete": "Fill in the details to see the installment and the payment plan.",
+      "plan": {
+        "title": "Payment plan",
+        "hint": "Preview with the same terms that are saved with the credit.",
+        "number": "Installment",
+        "dueDate": "Date",
+        "principal": "Principal",
+        "interest": "Interest",
+        "amount": "Total",
+        "balance": "Principal balance",
+        "insurance": "Insurance",
+        "charges": "Charges"
+      },
+      "issues": {
+        "PRINCIPAL_INVALID": "The amount must be greater than 0.",
+        "RATE_INVALID": "The interest cannot be negative.",
+        "RATE_OUT_OF_RANGE": "The interest is above the maximum: 100% per installment or 500% over the total.",
+        "RATE_BASE_NOT_SUPPORTED": "Interest over the total only applies to simple interest with a fixed installment.",
+        "COMBINATION_NOT_SUPPORTED": "That combination of interest and amortization method is not offered.",
+        "PERIODS_INVALID": "The number of installments must be a whole number between 1 and 600.",
+        "INSTALLMENT_INVALID": "The installment must be greater than 0.",
+        "TOTAL_INVALID": "The total must be greater than 0.",
+        "FREQUENCY_REQUIRED": "Choose a frequency.",
+        "DATE_INVALID": "The date is not valid.",
+        "INSTALLMENT_TOO_SMALL": "The total is not enough for that many installments.",
+        "TOTAL_BELOW_PRINCIPAL": "You will collect less than you lend. You can still save it.",
+        "RATE_PERIOD_NOT_SUPPORTED": "Interest on the total is applied once: it cannot be monthly or annual.",
+        "TERM_NOT_WHOLE": "That term does not give a whole number of instalments with this frequency.",
+        "INSURANCE_INVALID": "Insurance must be between 0 and 5 % monthly.",
+        "CHARGE_INVALID": "A charge has no valid value.",
+        "DEDUCTION_TOO_LARGE": "The deduction cannot be the whole amount."
+      },
+      "ratePeriod": "Interest is",
+      "ratePeriods": {
+        "per_installment": "per instalment",
+        "monthly": "monthly",
+        "quarterly": "quarterly",
+        "semiannual": "semiannual",
+        "annual": "annual"
+      },
+      "rateEquivalent": "Equals {rate} % per instalment ({frequency}).",
+      "rateConvention": "Rate type",
+      "rateConventions": {
+        "nominal": "Nominal (proportional)",
+        "effective": "Effective (APY)"
+      },
+      "termUnit": "Term in",
+      "termUnits": {
+        "installments": "instalments",
+        "months": "months",
+        "years": "years"
+      },
+      "termEquivalent": "= {count} instalments",
+      "amortizationHints": {
+        "fixed_installment": "Every instalment is the same.",
+        "fixed_principal": "Repays the same principal each time plus interest on what is owed: the instalment goes down with each payment.",
+        "single_payment": "Repays everything on a single date."
+      },
+      "insurance": "Credit life insurance (% monthly)",
+      "insuranceHint": "On each period’s principal balance: it goes down with it. Empty = no insurance.",
+      "charges": "Other charges",
+      "chargeLabel": "Description",
+      "chargeLabelPlaceholder": "Fee, expenses…",
+      "chargeKind": "How it is charged",
+      "chargeKinds": {
+        "per_installment": "Amount on every instalment",
+        "first_amount": "One-off amount, on the 1st instalment",
+        "first_percent": "% of the amount, on the 1st instalment",
+        "deducted_amount": "Amount deducted from disbursement",
+        "deducted_percent": "% deducted from disbursement"
+      },
+      "chargeValue": "Value",
+      "chargeAdd": "Add charge",
+      "chargeRemove": "Remove",
+      "exportPlan": "Export payment plan",
+      "arrearsMethod": "How arrears are counted",
+      "arrearsMethods": {
+        "oldest_unpaid": "From the oldest unpaid instalment",
+        "first_default": "From the first default until caught up"
+      },
+      "arrearsMethodHints": {
+        "oldest_unpaid": "Paying the most overdue instalment lowers the arrears.",
+        "first_default": "As banks do: keeps counting from the first unpaid instalment until the client is up to date."
+      },
+      "paid": {
+        "label": "Instalments already paid before registering",
+        "none": "None (new credit)",
+        "option": "{count} of {total} · {date}",
+        "hint": "For a credit that was already running outside Kobrax. The number of instalments does not change: the first ones are marked as paid.",
+        "status": "Status",
+        "paidStatus": "Paid",
+        "pendingStatus": "Pending",
+        "markPaid": "Mark paid (and the previous ones)",
+        "markPending": "Mark pending (and the following ones)",
+        "thisMonth": "this month"
+      },
+      "situation": {
+        "paidCount": "Instalments paid",
+        "paidOf": "{count} of {total}",
+        "outstanding": "Outstanding balance",
+        "next": "Next instalment",
+        "nextValue": "No. {number} · {date}",
+        "arrears": "Arrears",
+        "current": "Up to date",
+        "days": "{count} days",
+        "since": "since {date}",
+        "oldestUnpaid": "Oldest unpaid instalment: {number} (due {date})"
+      }
+    },
+    "creditDetail": {
+      "management": {
+        "title": "Collection management",
+        "hint": "Log actions, promises and notes, and review this credit's history, whether or not it is in arrears.",
+        "open": "Open collection management"
+      },
+      "edit": "Edit",
+      "cancelEdit": "Cancel",
+      "save": "Save changes",
+      "saved": "Changes saved",
+      "sections": {
+        "terms": "Terms",
+        "current": "Current status",
+        "plan": "Payment plan",
+        "collection": "Collection",
+        "origin": "Origin",
+        "initialState": "Status when registered"
+      },
+      "definition": "Definition",
+      "legacyTerms": "Registered before terms existed: the instalment being collected is shown. Editing it defines it as an agreed instalment.",
+      "interest": "Interest",
+      "interestPerPeriod": "{rate} % per period",
+      "interestTotal": "{rate} % of the total",
+      "installments": "Instalments",
+      "singlePayment": "Single payment",
+      "firstDueDate": "First payment",
+      "paymentDate": "Payment date",
+      "outstanding": "Outstanding balance",
+      "totalToCollect": "Total to collect",
+      "unknown": "Not recorded",
+      "nextDue": "Next collection",
+      "noNextDue": "No date",
+      "arrears": "Arrears",
+      "current": "Up to date",
+      "status": "Status",
+      "progress": "Payment progress",
+      "registeredInProgress": "Registered in progress: {paid} instalments already paid when it was entered.",
+      "declaredArrears": "Arrears declared when registered: {days} days.",
+      "planHint": "Calculated with the same engine and the same terms it was saved with.",
+      "planPaidHint": "The first {count} instalments were already paid when it was registered.",
+      "storedPlanHint": "Schedule saved when the credit was created.",
+      "openLoanPlan": "Open loan: without a number of instalments there is no payment plan.",
+      "manager": "Assigned to",
+      "notes": "Notes",
+      "origin": "Origin",
+      "origins": {
+        "manual": "Entered manually",
+        "quick_batch": "Quick batch",
+        "import": "Imported from file",
+        "api": "Integration"
+      },
+      "createdAt": "Registered",
+      "externalRef": "External reference",
+      "legacyBalance": "Balance from before the rule change: it measures the outstanding principal, without the profit.",
+      "blocked": {
+        "payments": "It already has payments: the terms and the status when registered cannot change, because they would rewrite what was collected. That is a restructure.",
+        "schedule": "It has a saved schedule: its terms can be redefined once the real schedule arrives.",
+        "locked": "This credit came from another source: its terms come from there and are not edited here."
+      },
+      "initial": {
+        "hint": "For a loan that was already running when it was entered. It can be adjusted while there are no payments.",
+        "paidInstallments": "Instalments already paid",
+        "outstandingBalance": "Outstanding balance",
+        "outstandingPlaceholder": "empty = {amount}",
+        "daysPastDue": "Days past due",
+        "result": "Balance will be {balance}, next collection on {date}.",
+        "issues": {
+          "TERMS_INVALID": "Complete the terms to see the result.",
+          "PAID_INSTALLMENTS_INVALID": "Paid instalments must be a whole number.",
+          "PAID_INSTALLMENTS_TOO_MANY": "With every instalment paid the credit is settled, not in progress.",
+          "BALANCE_INVALID": "The balance must be greater than 0.",
+          "BALANCE_ABOVE_TOTAL": "The balance cannot exceed the total to collect.",
+          "DAYS_PAST_DUE_INVALID": "Days past due must be a whole number between 0 and 3650."
+        }
+      },
+      "importedPlan": "Imported credit: the payment plan is kept by the source. The instalment and next date from the last file are shown here.",
+      "importedAt": "Last import",
+      "completeness": "Data the file brought: {known} of {total}",
+      "completenessMissing": "Not recorded: {fields}.",
+      "importFields": {
+        "principalAmount": "amount",
+        "outstandingBalance": "balance",
+        "interestRate": "rate",
+        "installmentAmount": "instalment",
+        "installmentsCount": "number of instalments",
+        "frequency": "frequency",
+        "nextDueDate": "next due date",
+        "disbursedAt": "disbursement date",
+        "daysPastDue": "days past due"
+      },
+      "interestWithPeriod": "{rate} % {period}",
+      "interestEquivalent": "{rate} % per instalment",
+      "interestImported": "{rate} % (as per the source)",
+      "insurance": "Credit life insurance",
+      "insuranceValue": "{rate} % monthly on balance",
+      "charges": "Other charges",
+      "arrearsSince": "since {date}",
+      "oldestUnpaid": "Instalment to collect: {number} (due {date})",
+      "oldestUnpaidNoNumber": "Instalment to collect: due {date}",
+      "arrearsMethod": "How arrears are counted",
+      "externalId": "Operation",
+      "reportedAsOf": "Figures as of cut-off",
+      "reportedAsOfStale": "{date} (out of date)",
+      "reportStale": "Balance and arrears are from the {date} cut-off, more than {days, plural, one {# day} other {# days}} ago: they may not reflect today's situation. Meanwhile no new cases are opened from this data.",
+      "syncStatus": "In the report",
+      "syncAbsentSince": "Missing since {date}",
+      "sync": {
+        "PRESENT": "In the latest report",
+        "ABSENT": "No longer in the report"
+      }
+    },
+    "creditBadges": {
+      "inProgress": "Registered in progress"
+    },
+    "linkReview": {
+      "title": "Review link",
+      "textSuggestions": "The import created this client because you already had someone with the same name, and it did not merge them on its own. Their credits are already in the portfolio. If it is the same person, link them; if not, confirm it is someone else.",
+      "textSameFile": "The report has several operations with this same name and they were grouped into one client. Confirm it is a single person.",
+      "credits": "{n, plural, one {# credit} other {# credits}}",
+      "isThisOne": "This is the person",
+      "isNew": "It is someone else",
+      "linked": "Credits linked",
+      "confirmed": "Review closed",
+      "errors": {
+        "generic": "Could not save. Try again."
+      }
+    },
+    "duplicate": {
+      "checking": "Checking whether they already exist…",
+      "documentTaken": "This ID already belongs to {name}.",
+      "documentTakenDeleted": "This ID belongs to {name}, who was removed. It cannot be used for a new client.",
+      "documentHint": "If it is the same person, open their profile instead of creating them again.",
+      "openClient": "View client",
+      "namesTitle": "{n, plural, one {There is already a client with this name} other {There are already # clients with this name}}",
+      "namesText": "It may be the same person. Check them before creating a new one.",
+      "otherDocument": "different ID",
+      "noDocument": "no ID",
+      "credits": "{n, plural, =0 {no credits} one {# credit} other {# credits}}",
+      "acceptNames": "It is a different person, create anyway"
     }
   },
   "team": {

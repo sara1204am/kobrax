@@ -28,9 +28,17 @@ describe('carteraQuery', () => {
   });
 
   it('🔴 un id inventado tampoco viaja', () => {
-    expect(carteraQuery({ collectorId: '../../users' }).has('collectorId')).toBe(false);
+    expect(carteraQuery({ managerId: '../../users' }).has('managerId')).toBe(false);
     const id = '3f2b9c10-1a4d-4b7e-9c8f-0a1b2c3d4e5f';
-    expect(carteraQuery({ collectorId: id }).get('collectorId')).toBe(id);
+    expect(carteraQuery({ managerId: id }).get('managerId')).toBe(id);
+  });
+
+  it('F4/08 · el responsable del crédito viaja; `collectorId` (cobrador del caso) ya no', () => {
+    const id = '3f2b9c10-1a4d-4b7e-9c8f-0a1b2c3d4e5f';
+    const q = carteraQuery({ managerId: id, collectorId: id });
+    expect(q.get('managerId')).toBe(id);
+    expect(q.has('collectorId')).toBe(false);
+    expect(carteraQuery({ managerId: 'cualquier-cosa' }).has('managerId')).toBe(false);
   });
 
   it('🔴 `status` NO es un orden válido', () => {
@@ -58,5 +66,16 @@ describe('carteraQuery', () => {
     expect(hasCarteraFilters({ page: '3', sort: 'debt' })).toBe(false);
     expect(hasCarteraFilters({ dpdMin: '90' })).toBe(true);
     expect(hasCarteraFilters({ q: 'perez' })).toBe(true);
+  });
+});
+
+describe('carteraQuery — fuente (D7)', () => {
+  it('la fuente conocida viaja y cuenta como filtro', () => {
+    expect(carteraQuery({ source: 'PSF' }).get('source')).toBe('PSF');
+    expect(hasCarteraFilters({ source: 'KOBRAX' })).toBe(true);
+  });
+
+  it('🔴 una fuente inventada no viaja: la API contestaría 400', () => {
+    expect(carteraQuery({ source: 'BANCO' }).has('source')).toBe(false);
   });
 });

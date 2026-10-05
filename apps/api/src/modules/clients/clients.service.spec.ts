@@ -17,6 +17,12 @@ function makeService(
     clients?: Record<string, unknown>[];
     /** Los permisos de quien mira. Sin esto, puede todo. */
     permissions?: string[];
+    /** Lo que lee el PDF del legajo (F4/08: créditos en mora en vez de casos). */
+    pdf?: {
+      credits?: Record<string, unknown>[];
+      episodes?: Record<string, unknown>[];
+      lastActions?: { creditId: string; _max: { createdAt: Date | null } }[];
+    };
   } = {},
 ) {
   const calls = {
@@ -27,6 +33,7 @@ function makeService(
     relation: [] as Record<string, unknown>[],
     audit: [] as { entity: string; action: string }[],
     sql: [] as { sql: string; values: unknown[] }[],
+    episodeQuery: [] as Record<string, unknown>[],
   };
   const tx = {
     // La cartera no pasa por Prisma: arma su SQL y lo manda entero (ver `listPortfolio`).
@@ -71,7 +78,16 @@ function makeService(
         return { id: 're1', ...args.data };
       },
     },
-    credit: { count: async () => opts.activeCredits ?? 0 },
+    credit: { count: async () => opts.activeCredits ?? 0, findMany: async () => opts.pdf?.credits ?? [] },
+    // F4/08: el PDF lee los episodios abiertos y las gestiones del crédito; NUNCA los casos.
+    creditArrearEpisode: {
+      findMany: async (args: Record<string, unknown>) => {
+        calls.episodeQuery.push(args);
+        return opts.pdf?.episodes ?? [];
+      },
+    },
+    creditActivity: { groupBy: async () => opts.pdf?.lastActions ?? [] },
+    account: { findUnique: async () => ({ businessName: 'Demo', currencyCode: 'BOB' }) },
   };
   const prisma = { withTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
   // `can` por defecto dice que sí a todo; los tests de la bitácora le pasan la lista que quieren.
@@ -360,15 +376,27 @@ describe('ClientsService.list — cartera (view=portfolio)', () => {
     assert.ok([90, 10000, 2].every((v) => values.includes(v)));
   });
 
-  it('cobrador y sucursal filtran con EXISTS, para no multiplicar la fila', async () => {
-    // Con un JOIN, el cliente con dos casos —o dos créditos de la misma sucursal— saldría dos veces.
+  it('cobrador (= responsable del crédito) y sucursal filtran con EXISTS, para no multiplicar la fila', async () => {
+    // Con un JOIN, el cliente con dos créditos del mismo responsable —o de la misma sucursal— saldría dos veces.
     const { service, calls } = makeService({ rows: [], clients: [] });
     await service.list({ view: 'portfolio', collectorId: 'u1', branchId: 'b1' } as never);
 
     const sql = pageSql(calls).sql;
-    assert.match(sql, /EXISTS \(\s*SELECT 1 FROM collection_cases k/);
-    assert.match(sql, /EXISTS \(\s*SELECT 1 FROM credits k/);
+    assert.doesNotMatch(sql, /collection_cases/, 'F4/08: el cobrador ya no es el del caso');
+    assert.match(sql, /EXISTS \(\s*SELECT 1 FROM credits k\s*WHERE k\.client_id = c\.id AND k\.deleted_at IS NULL AND k\.assigned_manager_id = \?/);
+    assert.match(sql, /k\.branch_id = \?/);
     assert.doesNotMatch(sql, /\bJOIN\b/);
+  });
+
+  it('D7 · la fuente filtra con EXISTS sobre créditos, y la fila trae los totales externos', async () => {
+    const { service, calls } = makeService({ rows: [], clients: [] });
+    await service.list({ view: 'portfolio', source: 'PSF' } as never);
+    const { sql } = pageSql(calls);
+    assert.match(sql, /EXISTS \(\s*SELECT 1 FROM credits k\s*WHERE k\.client_id = c\.id AND k\.deleted_at IS NULL AND k\.external_source = \?/);
+    assert.match(sql, /c\.total_debt_external/);
+    const kobrax = makeService({ rows: [], clients: [] });
+    await kobrax.service.list({ view: 'portfolio', source: 'KOBRAX' } as never);
+    assert.match(pageSql(kobrax.calls).sql, /k\.external_source IS NULL/);
   });
 
   it('ordena por nombre con la misma regla que el nombre visible (empresa antes que persona)', async () => {
@@ -458,7 +486,9 @@ describe('ClientsService.list — cartera (view=portfolio)', () => {
     assert.equal((sql.match(/UNION ALL/g) ?? []).length, 2, 'las tres fuentes en una sola consulta');
     assert.match(sql, /FROM payments p/);
     assert.match(sql, /FROM agenda_items a/);
-    assert.match(sql, /FROM case_activities ac/);
+    assert.match(sql, /FROM credit_activities ac/);
+    assert.doesNotMatch(sql, /case_activities|collection_cases|case_id/, 'F4/08: todo cuelga del crédito');
+    assert.match(sql, /ac\.credit_id AS credit_id/);
     assert.match(sql, /ORDER BY t\.at DESC, t\.id/);
   });
 
@@ -471,7 +501,7 @@ describe('ClientsService.list — cartera (view=portfolio)', () => {
     const sql = calls.sql[0]!.sql;
     assert.match(sql, /FROM agenda_items a/);
     assert.doesNotMatch(sql, /FROM payments p/);
-    assert.doesNotMatch(sql, /FROM case_activities ac/);
+    assert.doesNotMatch(sql, /FROM credit_activities ac/);
     assert.doesNotMatch(sql, /UNION ALL/, 'con una sola fuente no hay nada que unir');
   });
 
@@ -486,9 +516,139 @@ describe('ClientsService.list — cartera (view=portfolio)', () => {
     assert.equal(res.meta.total, 0);
   });
 
+  it('las filas de la bitácora exponen creditId', async () => {
+    const at = new Date('2026-10-01T10:00:00Z');
+    const { service } = makeService({
+      rows: [{ kind: 'ACTIVITY', id: 'a1', at, code: 'CALL', status: null, amount: null, currency: null, notes: null, credit_id: 'cr1', user_id: 'u1' }] as never,
+    });
+    const res = await service.timeline('c1', {});
+    assert.equal(res.data![0]!.creditId, 'cr1');
+  });
+
   it('sin `view` sigue saliendo la lista de siempre, por Prisma y sin agregados', async () => {
     const { service, calls } = makeService({ rows: [], clients: [] });
     await service.list({ q: 'ana' } as never);
     assert.deepEqual(calls.sql, [], 'la lista de siempre no toca el SQL crudo');
+  });
+});
+
+describe('ClientsService.pdfBundle — créditos en mora en vez de casos (F4/08)', () => {
+  const credit = (id: string, over: Record<string, unknown> = {}) => ({
+    id,
+    code: `C-${id}`,
+    daysPastDue: 0,
+    outstandingBalance: 100,
+    writtenOffAt: null,
+    ...over,
+  });
+
+  it('trae sólo los créditos con episodio abierto, con prioridad y última gestión de credit_activities', async () => {
+    const last = new Date('2026-10-02T10:00:00Z');
+    const { service, calls } = makeService({
+      pdf: {
+        credits: [credit('cr1', { daysPastDue: 40, outstandingBalance: 900 }), credit('cr2'), credit('cr3', { daysPastDue: 300, writtenOffAt: new Date() })],
+        episodes: [
+          { creditId: 'cr1', startedAt: new Date('2026-08-24'), priority: 'HIGH' },
+          { creditId: 'cr3', startedAt: new Date('2026-01-01'), priority: 'CRITICAL' },
+        ],
+        lastActions: [{ creditId: 'cr1', _max: { createdAt: last } }],
+      },
+    });
+    (service as unknown as { findOne: () => Promise<unknown> }).findOne = async () => ({ id: 'c1' });
+    const bundle = await service.pdfBundle('c1');
+    assert.deepEqual(bundle.arrears.map((a) => a.creditId), ['cr1', 'cr3']);
+    assert.equal(bundle.arrears[0]!.priority, 'HIGH');
+    assert.equal(bundle.arrears[0]!.lastActionAt, last);
+    assert.equal(bundle.arrears[1]!.lastActionAt, null);
+    assert.equal(bundle.arrears[1]!.writtenOff, true);
+    assert.equal('cases' in bundle, false);
+    assert.deepEqual((calls.episodeQuery[0] as { where: { endedAt: null } }).where.endedAt, null, 'sólo episodios abiertos');
+  });
+});
+
+describe('ClientsService.duplicateCheck — avisar antes del alta', () => {
+  const row = (over: Record<string, unknown>) => ({
+    id: 'x',
+    firstName: null,
+    lastName: null,
+    businessName: null,
+    nationalId: null,
+    nationalIdHash: null,
+    status: 'ACTIVE',
+    creditCount: 0,
+    deletedAt: null,
+    ...over,
+  });
+
+  it('mismo carnet → document, con el carnet enmascarado y el nombre', async () => {
+    const dup = row({ id: 'c7', firstName: 'Juan', lastName: 'Pérez', nationalId: 'enc(1234567LP)', nationalIdHash: 'h(1234567LP)', creditCount: 2 });
+    const { service } = makeService({ dup });
+    const res = await service.duplicateCheck({ clientType: 'PERSON', nationalId: '1234567LP' } as never);
+    assert.equal(res.document?.id, 'c7');
+    assert.equal(res.document?.displayName, 'Juan Pérez');
+    assert.equal(res.document?.maskedDocument, '12345***');
+    assert.equal(res.document?.deleted, false);
+  });
+
+  // El índice único no excluye a los dados de baja: si el aviso dijera «libre», el guardado fallaría igual.
+  it('el carnet de un cliente dado de baja también cuenta, marcado como baja', async () => {
+    const { service } = makeService({ dup: row({ id: 'c8', firstName: 'Ana', lastName: 'Ríos', deletedAt: new Date() }) });
+    const res = await service.duplicateCheck({ clientType: 'PERSON', nationalId: '999' } as never);
+    assert.equal(res.document?.deleted, true);
+  });
+
+  it('mismo nombre sin tildes ni orden → names; otro nombre no entra', async () => {
+    const { service } = makeService({
+      rows: [{ id: 'a' }, { id: 'b' }, { id: 'c' }] as never,
+      clients: [
+        row({ id: 'a', firstName: 'JUAN', lastName: 'PEREZ', creditCount: 1 }),
+        row({ id: 'b', firstName: 'Pérez', lastName: 'Juan', creditCount: 3 }),
+        row({ id: 'c', firstName: 'Juan Carlos', lastName: 'Pérez' }),
+      ],
+    });
+    const res = await service.duplicateCheck({ clientType: 'PERSON', firstName: 'juan', lastName: 'Pérez' } as never);
+    assert.equal(res.document, null);
+    assert.deepEqual(res.names.map((n) => n.id), ['b', 'a'], 'los dos homónimos, el de más créditos primero');
+  });
+
+  it('busca en la base sin tildes, por la palabra más larga', async () => {
+    const { service, calls } = makeService({ rows: [], clients: [] });
+    await service.duplicateCheck({ clientType: 'PERSON', firstName: 'Ana', lastName: 'Gutiérrez' } as never);
+    assert.match(calls.sql[0]!.sql, /translate\(upper/);
+    assert.ok(calls.sql[0]!.values.includes('%GUTIERREZ%'));
+  });
+
+  it('un homónimo con otro carnet se marca otherDocument', async () => {
+    const { service } = makeService({
+      rows: [{ id: 'a' }] as never,
+      clients: [row({ id: 'a', firstName: 'Juan', lastName: 'Pérez', nationalIdHash: 'h(111)' })],
+    });
+    const res = await service.duplicateCheck({ clientType: 'PERSON', firstName: 'Juan', lastName: 'Pérez', nationalId: '222' } as never);
+    assert.equal(res.names[0]?.otherDocument, true);
+  });
+
+  it('el dueño del carnet no se repite en la lista de nombres', async () => {
+    const same = row({ id: 'a', firstName: 'Juan', lastName: 'Pérez', nationalIdHash: 'h(111)' });
+    const { service } = makeService({ dup: same, rows: [{ id: 'a' }] as never, clients: [same] });
+    const res = await service.duplicateCheck({ clientType: 'PERSON', firstName: 'Juan', lastName: 'Pérez', nationalId: '111' } as never);
+    assert.equal(res.document?.id, 'a');
+    assert.deepEqual(res.names, []);
+  });
+
+  // «Juan» solo coincide con media cartera: hasta tener nombre y apellido no se busca por nombre.
+  it('sin apellido no busca por nombre', async () => {
+    const { service, calls } = makeService();
+    const res = await service.duplicateCheck({ clientType: 'PERSON', firstName: 'Juan' } as never);
+    assert.deepEqual(res, { document: null, names: [] });
+    assert.deepEqual(calls.sql, []);
+  });
+
+  it('empresa: compara la razón social', async () => {
+    const { service } = makeService({
+      rows: [{ id: 'e' }] as never,
+      clients: [row({ id: 'e', businessName: 'Comercial Andina SRL' })],
+    });
+    const res = await service.duplicateCheck({ clientType: 'COMPANY', businessName: 'comercial andina srl' } as never);
+    assert.equal(res.names[0]?.id, 'e');
   });
 });

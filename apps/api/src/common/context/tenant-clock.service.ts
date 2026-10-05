@@ -67,6 +67,41 @@ export function civilMonthStartUTC(tz: string, now: Date = new Date()): Date {
 }
 
 /**
+ * El **instante** UTC en que empieza el día civil `day` (`YYYY-MM-DD`) en `tz`.
+ *
+ * No es el ancla de `civilTodayUTC`: aquélla es la medianoche UTC con la que la base guarda las
+ * fechas sin hora. Ésta es para filtrar timestamps reales (`created_at`): «importado el 30» en La Paz
+ * empieza a las 04:00 UTC del 30, y comparar contra la medianoche UTC metería las 20:00 del 29.
+ *
+ * El offset se mide dos veces porque el del primer intento puede caer del otro lado de un cambio de
+ * horario. Una zona inválida cae a UTC, como en `civilTodayUTC`.
+ */
+export function civilDayStartInstant(day: string, tz: string): Date {
+  const [y, m, d] = day.split('-').map(Number);
+  const guess = Date.UTC(y!, m! - 1, d!);
+  try {
+    const fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+    const offset = (at: number) => {
+      const p = Object.fromEntries(fmt.formatToParts(new Date(at)).map((x) => [x.type, x.value]));
+      return Date.UTC(+p.year!, +p.month! - 1, +p.day!, +p.hour!, +p.minute!, +p.second!) - at;
+    };
+    const first = guess - offset(guess);
+    return new Date(guess - offset(first));
+  } catch {
+    return new Date(guess);
+  }
+}
+
+/**
  * Qué día es **para el tenant**.
  *
  * 🔴 **Existe porque "hoy" en UTC no es hoy para nadie en América.** La agenda anclaba su día a la

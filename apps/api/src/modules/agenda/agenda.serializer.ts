@@ -2,6 +2,20 @@ import type { AgendaItem } from '@prisma/client';
 import { AgendaItemStatus } from '@prisma/client';
 
 /**
+ * Lo que la lista del panel pinta además de la gestión: el crédito (código, situación, días, saldo) y quién la
+ * atiende. Todo opcional: las respuestas de una sola gestión (alta, edición…) no lo traen.
+ */
+export interface AgendaRowExtra {
+  creditCode?: string;
+  creditSituation?: 'CURRENT' | 'IN_ARREARS';
+  daysPastDue?: number;
+  category?: { code: string; name: string; color?: string };
+  balance?: number;
+  currency?: string;
+  assigneeName?: string;
+}
+
+/**
  * Payload público de una gestión agendada. `clientName` se pasa aparte (clientId es ref suave,
  * el servicio resuelve el nombre). `isOverdue` = derivado: SCHEDULED && fecha < hoy.
  *
@@ -13,10 +27,11 @@ export function serializeAgendaItem(
   a: AgendaItem,
   clientName: string | undefined,
   today: Date = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())),
+  extra: AgendaRowExtra = {},
 ) {
   return {
+    ...extra,
     id: a.id,
-    caseId: a.caseId,
     clientId: a.clientId,
     creditId: a.creditId,
     assigneeId: a.assigneeId,

@@ -48,23 +48,20 @@ describe('dashboardFilters', () => {
     // Un valor pegado a mano no puede arruinar la elección de los otros tres: quien mira la pantalla
     // vería su filtro vacío sin ninguna forma de saber por qué.
     const id = '3f2b9c10-1a4d-4b7e-9c8f-0a1b2c3d4e5f';
-    const out = dashboardFilters({ collectorId: `${id},../../users`, caseStatus: 'ACTIVE,INVENTADO' }, TODAY);
+    const out = dashboardFilters({ collectorId: `${id},../../users`, priority: 'HIGH,INVENTADA' }, TODAY);
     expect(out.collectorId).toEqual([id]);
-    expect(out.caseStatus).toEqual(['ACTIVE']);
+    expect(out.priority).toEqual(['HIGH']);
   });
 
-  it('🔴 un estado o una prioridad inventados tampoco viajan', () => {
+  it('🔴 una prioridad inventada tampoco viaja', () => {
     // La API los valida con `@IsEnum` y contesta 400 **a los seis endpoints**: el tablero entero se
     // vuelve seis cajas de error por un valor pegado en la URL.
-    const out = dashboardFilters({ caseStatus: 'INVENTADO', priority: 'URGENTISIMA' }, TODAY);
-    expect(out.caseStatus).toBeUndefined();
+    const out = dashboardFilters({ priority: 'URGENTISIMA' }, TODAY);
     expect(out.priority).toBeUndefined();
   });
 
-  it('un estado y una prioridad de verdad sí viajan', () => {
-    const out = dashboardFilters({ caseStatus: 'ACTIVE', priority: 'HIGH' }, TODAY);
-    expect(out.caseStatus).toEqual(['ACTIVE']);
-    expect(out.priority).toEqual(['HIGH']);
+  it('una prioridad de verdad sí viaja', () => {
+    expect(dashboardFilters({ priority: 'HIGH' }, TODAY).priority).toEqual(['HIGH']);
   });
 
   it('una fecha inventada cae al rango por defecto', () => {

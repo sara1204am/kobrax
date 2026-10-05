@@ -41,7 +41,6 @@ export function ClientCard({
   creditOptions,
   summary,
   timeline,
-  cases,
   currency,
   collateralTypes,
   hasActiveCredits,
@@ -54,7 +53,6 @@ export function ClientCard({
   credits?: ReactNode;
   summary?: ReactNode;
   timeline?: ReactNode;
-  cases?: ReactNode;
   /** Los mismos créditos, crudos: el modal necesita ofrecerlos para vincular garantes y garantías. */
   creditOptions: CreditOption[];
   /** La moneda de la cuenta (Configuración), para las garantías que no traen la suya. */
@@ -258,11 +256,10 @@ export function ClientCard({
             />
           </div>
 
-          <AttachmentsSection clientId={client.id} rows={shown.attachments ?? []} canWrite={canWrite} />
-
-          {/* Los casos cierran la columna: son cómo la empresa organiza el trabajo, no un dato del
-              deudor. Bajan del servidor como los créditos. */}
-          {cases}
+          {/* 🔴 Con `client`, no con `shown`: los adjuntos no llevan máscara, y `shown` es una copia
+              congelada del primer render — el `router.refresh()` de la subida traía el adjunto
+              nuevo y no se veía hasta recargar la página. */}
+          <AttachmentsSection clientId={client.id} rows={client.attachments ?? []} canWrite={canWrite} />
         </div>
 
         {/* La columna de consulta: cuánto debe, qué se hizo, y quién responde si no paga. */}

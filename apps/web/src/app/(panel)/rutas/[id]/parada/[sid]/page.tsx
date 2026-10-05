@@ -72,9 +72,9 @@ export default async function ParadaPage({ params }: { params: { id: string; sid
             <Link href={`/cartera/${stop.clientId}`} className="text-[14px] font-medium text-k-purple hover:underline">
               {t('detail.openClient')}
             </Link>
-            {stop.caseId && (
-              <Link href={`/mora/${stop.caseId}`} className="text-[14px] font-medium text-k-purple hover:underline">
-                {t('detail.openCase')}
+            {stop.creditId && (
+              <Link href={`/mora/${stop.creditId}`} className="text-[14px] font-medium text-k-purple hover:underline">
+                {t('detail.openMora')}
               </Link>
             )}
           </div>

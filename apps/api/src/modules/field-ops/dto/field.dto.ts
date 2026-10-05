@@ -16,7 +16,10 @@ import {
 import { EvidenceType, VisitOutcome } from '@prisma/client';
 
 export class CreateVisitDto {
-  @IsOptional() @IsUUID() caseId?: string;
+  /** Opcional: lo genera el móvil para que reintentar (cola offline) no duplique la visita ni su gestión. */
+  @IsOptional() @IsUUID() id?: string;
+  /** El crédito visitado. Obligatorio salvo que se mande `routeStopId` (la parada trae el crédito). */
+  @IsOptional() @IsUUID() creditId?: string;
   @IsOptional() @IsUUID() routeStopId?: string;
   @Type(() => Number) @IsNumber() lat!: number;
   @Type(() => Number) @IsNumber() lng!: number;
@@ -51,7 +54,7 @@ export class ListVisitsQueryDto {
   @IsOptional() @IsUUID() routeId?: string;
   /** Las de UNA parada. Una parada puede tener más de una visita: se fue dos veces. */
   @IsOptional() @IsUUID() routeStopId?: string;
-  @IsOptional() @IsUUID() caseId?: string;
+  @IsOptional() @IsUUID() creditId?: string;
   @IsOptional() @IsUUID() collectorId?: string;
   /** Un día concreto (`YYYY-MM-DD`), por `capturedAt`. */
   @IsOptional() @IsDateString() date?: string;

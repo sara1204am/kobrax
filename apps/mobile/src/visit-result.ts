@@ -72,9 +72,15 @@ export function initialResult(todayIso: string): ResultForm {
  * así que la pantalla se desmontaba antes de mostrarlos. Un pago que no se guardó desaparecía sin
  * que nadie se enterara — el cobrador ya había cobrado el efectivo.
  */
-export function postVisitWarning(failed: string[]): string | null {
-  if (failed.length === 0) return null;
-  return `La visita quedó registrada, pero ${failed.join(' y ')}. Anotalo y avisá a tu supervisor.`;
+export function postVisitWarning(failed: string[], queued: string[] = []): string | null {
+  if (failed.length === 0 && queued.length === 0) return null;
+  // `queued`: lo que no salió pero QUEDÓ guardado en el teléfono y sube solo — se avisa igual (el cobrador
+  // tiene que saber que todavía no llegó), pero sin pedirle que lo anote: no se perdió.
+  const guardado =
+    queued.length > 0 ? `${queued.join(' y ')} quedó guardado en el teléfono y se sube solo cuando haya señal.` : '';
+  if (failed.length === 0) return `La visita quedó registrada; ${guardado}`;
+  const perdido = `La visita quedó registrada, pero ${failed.join(' y ')}. Anotalo y avisá a tu supervisor.`;
+  return guardado ? `${perdido} Además, ${guardado}` : perdido;
 }
 
 /** El `details` que viaja al server, por variante. Lo que no corresponde no se manda. */
@@ -105,6 +111,19 @@ export function canSubmitResult(key: VariantKey, f: ResultForm, maxAmount?: numb
   // La dirección incorrecta pide explicar qué pasó: sin eso nadie sabe qué corregir.
   if (key === 'WRONG_ADDRESS') return f.notes.trim().length > 0;
   return true;
+}
+
+/**
+ * Hasta cuánto se puede cobrar en la parada. `undefined` = sin tope.
+ *
+ * 🔴 **Un crédito de fuente externa (PSF) no tiene tope** (D3). Su saldo es el que reportó el banco a
+ * su fecha de corte, no uno que Kobrax lleve: el deudor puede estar pagando además cargos o cuotas
+ * que el reporte todavía no refleja, y el pago no baja ese saldo. Topearlo con él rechazaba en la
+ * puerta un cobro que la ficha del cliente y la API aceptan.
+ */
+export function paymentCap(stop: { overdueAmount?: number; externalSource?: string } | null | undefined): number | undefined {
+  if (!stop || stop.externalSource) return undefined;
+  return stop.overdueAmount;
 }
 
 /** Si el monto cubre el saldo es PAID; si no, fue un pago parcial. */

@@ -40,7 +40,9 @@ export function listByDay(dateISO: string): Promise<QueryResult<AgendaListItem[]
 
 /** Vencidos (SCHEDULED con fecha < hoy), desc. `total` = `meta.total` (para "ver más"). */
 export function listOverdue(limit = 100): Promise<QueryResult<AgendaListItem[]>> {
-  return cachedList<AgendaListItem>('agenda', 'overdue', () =>
+  // El límite entra en el scope: el Home pide `limit=1` (sólo el total) y la Agenda `limit=100`. Con un scope
+  // único, la consulta de 1 fila reemplazaba las 100 guardadas y sin señal la lista quedaba con un solo vencido.
+  return cachedList<AgendaListItem>('agenda', `overdue:limit=${limit}`, () =>
     apiQuery<AgendaListItem[]>(`/agenda/overdue${toQuery({ limit })}`),
   );
 }
@@ -56,9 +58,34 @@ export function completeItem(id: string, outcome: AgendaOutcome, notes?: string)
   return apiMutate<AgendaListItem>(`/agenda/${id}/complete`, 'POST', { outcome, notes });
 }
 
-/** Posponer en pasos fijos (S4). El ítem sigue pendiente, con la hora corrida. */
-export function postponeItem(id: string, minutes: AgendaPostponeStep): Promise<MutateResult<AgendaListItem>> {
-  return apiMutate<AgendaListItem>(`/agenda/${id}/postpone`, 'POST', { minutes });
+/**
+ * Posponer en pasos fijos (S4). El ítem sigue pendiente, con la hora corrida.
+ *
+ * `toTime` (HH:mm) es la hora **absoluta** de destino: repetir el envío la deja en el mismo valor, mientras que
+ * `minutes` es relativo y cada repetición correría la hora otro tanto. Se manda `minutes` también para que un
+ * server viejo siga funcionando; el nuevo da prioridad a `toTime`.
+ */
+export function postponeItem(id: string, minutes: AgendaPostponeStep, toTime?: string): Promise<MutateResult<AgendaListItem>> {
+  return apiMutate<AgendaListItem>(`/agenda/${id}/postpone`, 'POST', toTime ? { minutes, toTime } : { minutes });
+}
+
+/** Inicio de cada franja, en minutos: el MISMO criterio con el que el server calcula la base de un agendado por franja. */
+const SLOT_START_MINUTES: Record<string, number> = { MORNING: 8 * 60, AFTERNOON: 13 * 60, NIGHT: 18 * 60 };
+
+/**
+ * La hora absoluta (`HH:mm`) a la que queda una gestión al posponerla `minutes`. Espeja la aritmética del server
+ * (base = hora fija, o inicio de la franja, o 09:00). **`undefined` si cruza la medianoche**: `toTime` no lleva
+ * día, así que ahí se manda sólo `minutes` y el server corre el día como siempre.
+ */
+export function postponeTarget(
+  item: { scheduledTime?: string | null; timeSlot?: string | null },
+  minutes: AgendaPostponeStep,
+): string | undefined {
+  const m = item.scheduledTime ? /^(\d{1,2}):(\d{2})/.exec(item.scheduledTime) : null;
+  const base = m ? Number(m[1]) * 60 + Number(m[2]) : (SLOT_START_MINUTES[item.timeSlot ?? ''] ?? 9 * 60);
+  const total = base + minutes;
+  if (total >= 24 * 60) return undefined;
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 }
 
 /**
@@ -96,10 +123,9 @@ export function whatsappLink(phone: string, message?: string): string {
   return `https://wa.me/${digits}${message ? `?text=${encodeURIComponent(message)}` : ''}`;
 }
 
-/** Un crédito del cliente con caso abierto asignado a mí: lo que se puede agendar. */
+/** Un crédito del cliente dentro de mi alcance (en mora o al día): lo que se puede agendar. */
 export interface CreditOption {
   creditId: string;
-  caseId: string;
   code?: string;
   /** Capital original del crédito. */
   principalAmount: number;
@@ -108,6 +134,12 @@ export interface CreditOption {
   overdueAmount: number;
   currency: string;
   daysPastDue: number;
+}
+
+/** "En mora · 12 días" | "Al día" — lo que se muestra al elegir el crédito. */
+export function creditSituationLabel(daysPastDue: number): string {
+  if (daysPastDue <= 0) return 'Al día';
+  return `En mora · ${daysPastDue} ${daysPastDue === 1 ? 'día' : 'días'}`;
 }
 
 export interface ContactOption {
@@ -141,7 +173,7 @@ export interface AgendaClientContext {
 
 /**
  * Todo lo que el alta necesita del cliente elegido, en un round-trip: créditos agendables +
- * teléfonos y direcciones en claro. `error` si el cliente no tiene casos asignados a mí (AGENDA_002).
+ * teléfonos y direcciones en claro. `error` si el cliente no tiene créditos en mi alcance (AGENDA_002).
  */
 export function clientContext(clientId: string): Promise<QueryResult<AgendaClientContext>> {
   // Con respaldo local: sin esto, sin señal se puede BUSCAR al deudor pero no abrirlo, que es
@@ -149,6 +181,15 @@ export function clientContext(clientId: string): Promise<QueryResult<AgendaClien
   return cachedOne<AgendaClientContext>('client.context', clientId, () =>
     apiQuery<AgendaClientContext>(`/agenda/clients/${clientId}/context`),
   );
+}
+
+/**
+ * El contexto del cliente **sin respaldo local**: la cola lo usa para mirar qué tiene el server de verdad antes
+ * de repetir un alta que no lleva id. Con `clientContext` (con caché), sin señal devolvería lo viejo y la
+ * búsqueda previa daría por inexistente algo que sí subió.
+ */
+export function clientContextLive(clientId: string): Promise<QueryResult<AgendaClientContext>> {
+  return apiQuery<AgendaClientContext>(`/agenda/clients/${clientId}/context`);
 }
 
 /** Cuerpo de `POST /agenda`. El server deriva `clientId` y `assigneeId` — no van acá. */

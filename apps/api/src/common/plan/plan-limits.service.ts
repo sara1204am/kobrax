@@ -75,7 +75,8 @@ export class PlanLimitsService {
         return tx.userAccount.count({ where: { isActive: true } });
       case 'credits':
         return tx.credit.count({
-          where: { deletedAt: null, status: { in: [...CREDITOS_ACTIVOS] } },
+          // El castigado (D1-a: `written_off_at`, el estado ya no cambia) tampoco cuenta: es lo que era WRITTEN_OFF.
+          where: { deletedAt: null, writtenOffAt: null, status: { in: [...CREDITOS_ACTIVOS] } },
         });
       case 'clients':
         return tx.client.count({ where: { deletedAt: null } });

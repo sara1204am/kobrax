@@ -2,14 +2,19 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { COLORS, RADIUS, SPACING } from '@/theme';
-import { Header, OfflineIndicator, SectionLabel, StatTile } from '@/ui';
+import { Header, OfflineIndicator, SectionLabel } from '@/ui';
+import { CountTiles } from '@/import-views';
 import { Button, ErrorBanner } from '@/components';
 import {
+  alreadyAppliedText,
   importService,
   LIST_LIMIT,
   markImported,
   moreLabel,
+  previewLine,
   rejectText,
+  selfAssignments,
+  unassignedNewCodes,
   warningText,
   type PortfolioSummary,
 } from '@/import.service';
@@ -36,6 +41,8 @@ export default function PreviewScreen() {
   const [preview, setPreview] = useState<PortfolioSummary | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** «Asignar todo a mí»: los nuevos sin sugerencia del reporte quedan a nombre de quien confirma. */
+  const [selfAll, setSelfAll] = useState(false);
 
   // El archivo se rearma desde los params dentro del callback: así la dependencia es el `uri`
   // (un string estable) y no un objeto nuevo en cada render, que relanzaría la lectura sola.
@@ -52,10 +59,33 @@ export default function PreviewScreen() {
     void dryRun();
   }, [dryRun]);
 
+  /*
+   * Quién queda responsable. El cobrador (SELF) no elige: lo nuevo es suyo. Quien reparte (CHOOSE)
+   * acepta en el teléfono la sugerencia del reporte; si algún nuevo no trae sugerencia puede asignarlos a sí
+   * mismo («Asignar todo a mí»). Repartir entre varias personas se hace en el panel web.
+   */
+  const mode = preview?.assignment?.mode;
+  const newHint =
+    mode === 'SELF'
+      ? 'Estos créditos se asignarán a ti.'
+      : mode === 'CHOOSE'
+        ? 'Quedan con el responsable que sugiere el reporte.'
+        : undefined;
+  const blocked = !preview
+    ? null
+    : preview.alreadyApplied
+      ? {
+          title: 'Este archivo ya se importó',
+          text: `${alreadyAppliedText(preview.alreadyApplied)} Confirmar no cambiaría nada. Para cambiar responsables, usa Cartera en el panel web.`,
+        }
+      : null;
+  const sinResponsable = !preview || preview.alreadyApplied || mode !== 'CHOOSE' ? 0 : unassignedNewCodes(preview).length;
+  const needsSelf = sinResponsable > 0 && !selfAll;
+
   async function confirm() {
     setBusy(true);
     setError(null);
-    const res = await importService.run({ uri, name, mimeType: mimeType || undefined }, false);
+    const res = await importService.run({ uri, name, mimeType: mimeType || undefined }, false, selfAll && preview ? selfAssignments(preview) : undefined);
     setBusy(false);
     if (res.status !== 'ok') return setError(errorText(res));
     // El día queda importado acá, con el POST real ya aplicado — no antes (la Vista Previa no
@@ -68,6 +98,9 @@ export default function PreviewScreen() {
         updated: String(res.counts.updated),
         setCurrent: String(res.counts.setCurrent),
         invalid: String(res.counts.invalid),
+        absent: res.counts.absent === undefined ? '' : String(res.counts.absent),
+        reappeared: String(res.counts.reappeared ?? 0),
+        ignored: String(res.counts.ignored ?? 0),
         skip: res.idempotentSkip ? '1' : '',
         // Sólo los que se dibujan: el resto no viaja por la navegación.
         rejects: JSON.stringify(res.preview.invalid.slice(0, LIST_LIMIT)),
@@ -94,39 +127,84 @@ export default function PreviewScreen() {
 
         {preview && (
           <>
+            {/* Lo que impide confirmar desde el teléfono, dicho antes de la lista. */}
+            {blocked && (
+              <View style={styles.note}>
+                <Text style={styles.noteTitle}>{blocked.title}</Text>
+                <Text style={styles.hint}>{blocked.text}</Text>
+              </View>
+            )}
             {preview.idempotentSkip ? (
               // Mismo archivo ya aplicado: no hay nada que previsualizar. Se dice así, en vez de
               // dibujar tres baldes en cero que se leerían como "el archivo no trae nada".
               <View style={styles.note}>
                 <Text style={styles.noteTitle}>Este archivo ya se importó</Text>
                 <Text style={styles.hint}>
-                  Se aplicó antes y no se vuelve a aplicar. Si tu sistema emitió uno nuevo, elegí ese.
+                  {alreadyAppliedText(preview.alreadyApplied)} No se vuelve a aplicar. Si tu sistema emitió uno nuevo, elige ese.
                 </Text>
               </View>
             ) : (
               <>
+                {/* D8 · D9: de qué día y de qué asesor es el reporte. */}
+                {preview.report && (
+                  <Text style={styles.hint}>
+                    {preview.report.reportDate
+                      ? `Corte del ${preview.report.reportDate.split('-').reverse().join('/')}`
+                      : 'El reporte no dice su fecha de corte'}
+                    {preview.report.advisorCode ? ` · Asesor ${preview.report.advisorCode}` : ''}
+                  </Text>
+                )}
                 <SectionLabel>QUÉ VA A PASAR</SectionLabel>
-                <View style={styles.tiles}>
-                  <StatTile label="Agregados" value={String(preview.counts.created)} />
-                  <StatTile label="Actualizados" value={String(preview.counts.updated)} />
-                  <StatTile label="Al día" value={String(preview.counts.setCurrent)} />
-                </View>
+                <CountTiles counts={preview.counts} />
+                {/* Modo CHOOSE con créditos nuevos sin responsable: el servidor no deja confirmar así. */}
+                {sinResponsable > 0 && (
+                  <View style={styles.note}>
+                    <Text style={styles.noteTitle}>{`${sinResponsable} crédito${sinResponsable === 1 ? '' : 's'} nuevo${sinResponsable === 1 ? '' : 's'} sin responsable`}</Text>
+                    <Text style={styles.hint}>
+                      {selfAll
+                        ? 'Quedarán a tu nombre. El resto sigue con el responsable que sugiere el reporte.'
+                        : 'El reporte no dice de quién son. Puedes asignarlos a ti, o repartirlos desde el panel web.'}
+                    </Text>
+                    {!selfAll && <Button label="Asignar todo a mí" variant="ghost" onPress={() => setSelfAll(true)} />}
+                  </View>
+                )}
 
                 <BucketList
                   title="Se agregan"
-                  items={preview.preview.toCreate.map((r) => ({ key: r.code, title: r.code, sub: r.clientName }))}
+                  hint={newHint}
+                  items={preview.preview.toCreate.map((r) => ({
+                    key: r.code,
+                    title: r.clientName,
+                    // D2: el que se parece a un cliente que ya existe entra igual, marcado para revisar.
+                    sub: r.linkReview ? `${previewLine(r.code, undefined, r.after)} · revisar vínculo` : previewLine(r.code, undefined, r.after),
+                  }))}
                 />
                 <BucketList
                   title="Se actualizan"
-                  items={preview.preview.toUpdate.map((r) => ({ key: r.code, title: r.code }))}
-                />
-                <BucketList
-                  title="Pasan a al día"
-                  items={preview.preview.toSetCurrent.map((r, i) => ({
-                    key: r.code ?? `s${i}`,
-                    title: r.code ?? 'Sin número',
+                  hint="Mantendrán su responsable actual."
+                  items={preview.preview.toUpdate.map((r) => ({
+                    key: r.code,
+                    title: r.clientName ?? r.code,
+                    sub: previewLine(r.code, r.before, r.after),
                   }))}
-                  hint="No vienen en el archivo. Quedan vigentes y sin atraso; el saldo no se toca."
+                />
+                {preview.preview.toUpdate.some((r) => r.reappeared) && (
+                  <BucketList
+                    title="Volvieron al reporte"
+                    items={preview.preview.toUpdate
+                      .filter((r) => r.reappeared)
+                      .map((r) => ({ key: r.code, title: r.clientName ?? r.code, sub: previewLine(r.code, r.before, r.after) }))}
+                    hint="Faltaban y este reporte las vuelve a traer. Se actualiza el mismo crédito."
+                  />
+                )}
+                <BucketList
+                  title="Ya no vienen en el reporte"
+                  items={(preview.preview.toMarkAbsent ?? preview.preview.toSetCurrent).map((r, i) => ({
+                    key: r.code ?? `s${i}`,
+                    title: r.clientName ?? r.code ?? 'Sin número',
+                    sub: previewLine(r.code, r.before),
+                  }))}
+                  hint="No es un pago ni un cierre: el saldo y el estado quedan como estaban. Queda registrado desde qué día faltan."
                 />
 
                 {preview.counts.invalid > 0 && (
@@ -135,8 +213,8 @@ export default function PreviewScreen() {
                     danger
                     items={preview.preview.invalid.map((r) => ({
                       key: String(r.index),
-                      title: `Registro ${r.index + 1}`,
-                      sub: rejectText(r.reason),
+                      title: r.clientName ?? `Registro ${r.index + 1}`,
+                      sub: [`Registro ${r.index + 1}`, r.code, rejectText(r.reason)].filter(Boolean).join(' · '),
                     }))}
                   />
                 )}
@@ -154,7 +232,7 @@ export default function PreviewScreen() {
         )}
 
         {/* Sin preview cargada no existe el confirmar: la Vista Previa no se saltea. */}
-        {preview && !preview.idempotentSkip && !isTest && (
+        {preview && !preview.idempotentSkip && !blocked && !needsSelf && !isTest && (
           <Button label="Confirmar importación" onPress={() => void confirm()} loading={busy} />
         )}
         {isTest && preview && (

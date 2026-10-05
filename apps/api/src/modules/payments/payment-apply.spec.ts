@@ -98,3 +98,60 @@ describe('creditPatchAfterPayment — crédito CON cronograma (no hay regresión
     assert.equal(p.metadata, undefined); // con cronograma, la próxima fecha se deriva; no se persiste
   });
 });
+
+/**
+ * 🔴 F4/06 · D20 — el método de mora después de un pago. Cuotas 1 (1 jun) y 2 (1 jul) vencidas, hoy
+ * 13 jul; paga la 1. El de siempre baja a la 2 (12 días); el bancario sigue desde el 1 jun (42 días).
+ */
+describe('creditPatchAfterPayment — método de mora (D20)', () => {
+  const rows = () => [
+    inst('i1', 1, 300, 300, 'PAID', new Date('2026-06-01T00:00:00Z')),
+    inst('i2', 2, 300, 0, 'OVERDUE', new Date('2026-07-01T00:00:00Z')),
+  ];
+
+  it('de siempre: pagar la cuota más atrasada baja la mora', () => {
+    const p = creditPatchAfterPayment({ metadata: meta(), installments: rows(), amount: 300, newBalance: 300, creditPaid: false, now: NOW });
+    assert.equal(p.daysPastDue, 12);
+  });
+
+  it('bancario: sigue contando desde el primer atraso', () => {
+    const p = creditPatchAfterPayment({
+      metadata: meta({ arrearsMethod: 'first_default', arrearsSince: '2026-06-01' }),
+      installments: rows(),
+      amount: 300,
+      newBalance: 300,
+      creditPaid: false,
+      now: NOW,
+    });
+    assert.equal(p.daysPastDue, 42);
+    assert.equal(p.metadata, undefined); // la fecha de primer atraso no cambia
+  });
+
+  it('bancario: al quedar al día borra el primer atraso', () => {
+    const alDia = [inst('i1', 1, 300, 300, 'PAID', new Date('2026-06-01T00:00:00Z')), inst('i2', 2, 300, 0, 'PENDING', new Date('2026-08-01T00:00:00Z'))];
+    const p = creditPatchAfterPayment({
+      metadata: meta({ arrearsMethod: 'first_default', arrearsSince: '2026-06-01' }),
+      installments: alDia,
+      amount: 300,
+      newBalance: 300,
+      creditPaid: false,
+      now: NOW,
+    });
+    assert.equal(p.daysPastDue, 0);
+    assert.equal((p.metadata as Record<string, unknown>).arrearsSince, undefined);
+  });
+
+  it('bancario sin cronograma: la fecha avanza pero la mora sigue desde el primer atraso', () => {
+    // Cuota congelada: vencía el 1 jun, paga una → la próxima pasa al 1 jul, todavía vencida.
+    const p = creditPatchAfterPayment({
+      metadata: meta({ nextDueDate: '2026-06-01', arrearsMethod: 'first_default', arrearsSince: '2026-06-01' }),
+      installments: [],
+      amount: 300,
+      newBalance: 700,
+      creditPaid: false,
+      now: NOW,
+    });
+    assert.equal(p.metadata?.nextDueDate, '2026-07-01');
+    assert.equal(p.daysPastDue, 42);
+  });
+});

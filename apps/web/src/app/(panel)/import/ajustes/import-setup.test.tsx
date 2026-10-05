@@ -177,6 +177,24 @@ describe('ImportSetup —probar antes de importar', () => {
     expect(screen.getByText(/2 nuevos/)).toBeInTheDocument();
   });
 
+  it('la prueba en seco dice cuántas filas se ignoraron (totales o notas)', async () => {
+    const user = userEvent.setup();
+    renderMapper(COMPLETE);
+    await withSample(user);
+    server.use(
+      http.post('http://localhost/api/imports/run', () =>
+        HttpResponse.json({
+          dryRun: true,
+          idempotentSkip: false,
+          counts: { created: 2, updated: 0, setCurrent: 0, invalid: 0, ignored: 4 },
+          preview: { toCreate: [], toUpdate: [], toSetCurrent: [], invalid: [], warnings: [] },
+        }),
+      ),
+    );
+    await user.click(screen.getByRole('button', { name: es.panel.import.columns.testCta }));
+    expect(await screen.findByText(/4 filas se ignoran/)).toBeInTheDocument();
+  });
+
   it('sin los obligatorios el botón de probar está apagado, y dice por qué', async () => {
     const user = userEvent.setup();
     renderMapper();
@@ -352,5 +370,95 @@ describe('ImportSetup —la mora se elige y se confirma en dos pasos', () => {
 
     await user.click(screen.getByRole('button', { name: es.panel.import.columns.calibrateConfirm }));
     await waitFor(() => expect(screen.getAllByText(es.panel.import.columns.calibrated).length).toBeGreaterThan(0));
+  });
+});
+
+describe('ImportSetup — los datos del reporte (saldo, estados, antigüedad)', () => {
+  /** Captura los parches que salen y responde con la config ya parcheada, como el servidor. */
+  function captureAndEcho() {
+    const sent: Record<string, unknown>[] = [];
+    let current = screenOf().config;
+    server.use(
+      http.patch('http://localhost/api/imports/config', async ({ request }) => {
+        const patch = (await request.json()) as Record<string, unknown>;
+        sent.push(patch);
+        current = { ...current, ...patch } as ImportConfig;
+        return HttpResponse.json({ config: current });
+      }),
+    );
+    return sent;
+  }
+  const R = es.panel.import.report;
+
+  it('elegir qué es el saldo manda sólo balanceBasis', async () => {
+    const user = userEvent.setup();
+    const sent = captureAndEcho();
+    renderMapper();
+    await user.selectOptions(screen.getByLabelText(new RegExp(R.basis)), 'principal');
+    await waitFor(() => expect(sent).toEqual([{ balanceBasis: 'principal' }]));
+  });
+
+  it('🔴 los días fuera de 1–60 no se mandan y se explica el rango', async () => {
+    const user = userEvent.setup();
+    const sent = captureAndEcho();
+    renderMapper();
+    const input = screen.getByLabelText(new RegExp(R.stale));
+    await user.clear(input);
+    await user.type(input, '90');
+    await user.tab();
+    expect(await screen.findByText('Escribí un número entero entre 1 y 60.')).toBeInTheDocument();
+    expect(sent).toEqual([]);
+  });
+
+  it('los días válidos se guardan al salir del campo', async () => {
+    const user = userEvent.setup();
+    const sent = captureAndEcho();
+    renderMapper();
+    const input = screen.getByLabelText(new RegExp(R.stale));
+    await user.clear(input);
+    await user.type(input, '7');
+    await user.tab();
+    await waitFor(() => expect(sent).toEqual([{ staleAfterDays: 7 }]));
+  });
+
+  it('agregar una etiqueta de estado la normaliza y manda el mapa entero', async () => {
+    const user = userEvent.setup();
+    const sent = captureAndEcho();
+    renderMapper();
+    await user.type(screen.getByLabelText(R.newLabel), 'Ejecución');
+    await user.selectOptions(screen.getByLabelText(R.newStatus), 'DEFAULTED');
+    await user.click(screen.getByRole('button', { name: R.add }));
+    await waitFor(() => expect(sent).toEqual([{ statusMap: { EJECUCION: 'DEFAULTED' } }]));
+    // Lo que vuelve es la verdad: la etiqueta queda en la lista, con su estado.
+    expect(await screen.findByLabelText('Estado para EJECUCION')).toHaveValue('DEFAULTED');
+  });
+
+  it('una etiqueta vacía no se manda', async () => {
+    const user = userEvent.setup();
+    const sent = captureAndEcho();
+    renderMapper();
+    await user.click(screen.getByRole('button', { name: R.add }));
+    expect(await screen.findByText(R.statusMapErrors.EMPTY_LABEL)).toBeInTheDocument();
+    expect(sent).toEqual([]);
+  });
+
+  it('quitar una etiqueta manda el mapa sin ella', async () => {
+    const user = userEvent.setup();
+    const sent: Record<string, unknown>[] = [];
+    server.use(
+      http.patch('http://localhost/api/imports/config', async ({ request }) => {
+        const patch = (await request.json()) as Record<string, unknown>;
+        sent.push(patch);
+        return HttpResponse.json({ config: { ...screenOf().config, ...patch } });
+      }),
+    );
+    const base = screenOf();
+    render(
+      <ToastProvider>
+        <ImportSetup screen={{ ...base, config: { ...base.config, statusMap: { EJECUCION: 'DEFAULTED', ANULADO: 'CANCELLED' } } }} />
+      </ToastProvider>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Quitar EJECUCION' }));
+    await waitFor(() => expect(sent).toEqual([{ statusMap: { ANULADO: 'CANCELLED' } }]));
   });
 });

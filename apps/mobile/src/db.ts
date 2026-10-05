@@ -18,8 +18,14 @@
  */
 import * as SQLite from 'expo-sqlite';
 
-/** Sube cuando cambia la forma de `cache`. Al no coincidir se borra el caché — nunca la cola. */
-const SCHEMA_VERSION = 2;
+/**
+ * Sube cuando cambia la forma de `cache` o de la cola. Al no coincidir se borra el caché **y la cola**.
+ *
+ * 3 (F4/08 · sin caso): desaparecen los tipos de caché `case`/`case.detail` y de cola `case.activity`, y las
+ * acciones pierden el `caseId`. **Alcance dev-only: no hay teléfonos con colas reales**, así que no se migra
+ * nada — se descarta (decisión confirmada 2026-10-03). Antes de la versión 3 la cola sobrevivía a todo cambio.
+ */
+export const SCHEMA_VERSION = 3;
 const DB_NAME = 'kobrax.db';
 
 /**
@@ -36,8 +42,19 @@ export type CacheKind =
   | 'client'
   /** Lo que el alta de gestión necesita del cliente: créditos, teléfonos y direcciones. */
   | 'client.context'
-  | 'case'
-  | 'case.detail'
+  /**
+   * La cartera del cobrador: TODOS sus créditos, al día o en mora (`GET /mora?todos=true`, paginado y
+   * guardado junto). Una fila por crédito; el `id` es el crédito. Alimenta Cobranza, Rutas y la búsqueda sin señal.
+   */
+  | 'portfolio'
+  /** Los créditos en mora del cobrador (`GET /mora`). Una fila por crédito; el `id` es el crédito. */
+  | 'mora'
+  /** La ficha de recuperación de un crédito (`GET /mora/:creditId`): compuesto, no la fila de la lista. */
+  | 'mora.detail'
+  /** Las promesas de un crédito en mora (`scope` = el crédito). */
+  | 'mora.promises'
+  /** Las notas de un crédito en mora (`scope` = el crédito). */
+  | 'mora.notes'
   | 'credit'
   | 'route'
   | 'agenda'
@@ -47,13 +64,29 @@ export type CacheKind =
   /** Los pagos del día: sin ellos, el cierre de jornada sin señal informaría cero cobrado. */
   | 'payment'
   /**
+   * El `meta.total` de una lista paginada (`id` = `<kind>|<scope>`). Sin esto, sin señal el total se
+   * degradaba al largo de lo guardado (`limit=1` → «1 vencida» aunque haya 40). Vive en `cache`, así que
+   * se borra junto con el resto en el logout.
+   */
+  | 'list.meta'
+  /** Historial de importaciones (`scope`: `list` o `items:<corrida>:<acción>`; el detalle de una corrida, `detail:<id>`). */
+  | 'import.run'
+  /**
    * La cuenta con sus topes y su consumo (`GET /accounts/me`).
    *
    * Se guarda **para poder avisar sin señal**: el cobrador que da de alta un préstamo en la puerta
    * del deudor tiene que enterarse ahí de que el plan está lleno, no tres horas después cuando la
    * cola falle. Sin caché, el aviso sólo existiría con internet — justo cuando no hace falta.
    */
-  | 'account';
+  | 'account'
+  /** Paridad de la ficha de mora (F4/08 fase 5): historial de episodios (`scope` = crédito). */
+  | 'mora.episodes'
+  /** Métricas de recuperación de un crédito (`id` = crédito). */
+  | 'mora.metrics'
+  /** Rangos de categoría de mora de la cuenta (`GET /arrear-categories`): opciones del filtro. */
+  | 'arrear.categories'
+  /** Miembros del equipo (`GET /users`): nombres de quien registró / asignó, cuando el rol puede leerlos. */
+  | 'members';
 
 /** Qué espera subir la cola. Cada uno mapea a un endpoint idempotente o append-only (plan §D3). */
 export type QueueKind =
@@ -62,7 +95,6 @@ export type QueueKind =
   | 'agenda.create'
   | 'agenda.complete'
   | 'agenda.postpone'
-  | 'case.activity'
   | 'route.status'
   | 'client.create'
   | 'credit.create'
@@ -70,7 +102,19 @@ export type QueueKind =
   | 'arrears.mark'
   | 'arrears.clear'
   | 'agenda.cancel'
-  | 'agenda.reschedule';
+  | 'agenda.reschedule'
+  /** Gestión con resultado y promesa sobre un crédito, esté o no en mora (`POST /mora/:id/activities`). */
+  | 'mora.activity'
+  /** Nota de un crédito (`POST /mora/:id/notes`). */
+  | 'credit.note'
+  /** Foto de una visita que ya está en el server pero cuya evidencia no pudo adjuntarse (parte suelta de `visit`). */
+  | 'visit.evidence'
+  /** Aviso persistente: una foto que debía viajar ya no estaba en el teléfono. Sólo se puede descartar. */
+  | 'photo.lost'
+  /** Ediciones de la ficha del cliente: valores fijos (PATCH) o altas con búsqueda previa, repetibles sin duplicar. */
+  | 'client.update'
+  | 'client.contact'
+  | 'client.location';
 
 export interface QueueRow {
   id: number;
@@ -123,13 +167,19 @@ function open(): Promise<SQLite.SQLiteDatabase> {
 }
 
 /**
- * Si la versión del esquema no coincide, se tira el caché y se re-hidrata. **La cola se conserva
- * intacta**: es trabajo del cobrador sin entregar, no una copia de algo que el server ya tiene.
+ * Si la versión del esquema no coincide, se tira el caché Y LA COLA (y los mapas de ids locales de `meta`, que
+ * sólo tienen sentido con su cola) y se re-hidrata. Es una decisión dev-only (F4/08): no hay teléfonos con trabajo
+ * real sin entregar, y migrar los ítems con `caseId` a su forma por crédito no vale el código. Con teléfonos
+ * reales habría que volver a una migración de la cola ANTES de subir la versión.
+ *
+ * Una base nueva (sin `schema_version`) no tiene nada que borrar, pero el borrado es inocuo.
  */
 async function ensureVersion(db: SQLite.SQLiteDatabase): Promise<void> {
   const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM meta WHERE key = ?', ['schema_version']);
   if (row?.value === String(SCHEMA_VERSION)) return;
   await db.runAsync('DELETE FROM cache');
+  await db.runAsync('DELETE FROM queue');
+  await db.runAsync('DELETE FROM meta');
   await db.runAsync('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)', ['schema_version', String(SCHEMA_VERSION)]);
 }
 
@@ -215,6 +265,12 @@ export async function fetchedAt(kind: CacheKind, scope?: string): Promise<number
   return row?.t ?? null;
 }
 
+/** Borra una fila del caché por id (todas sus consultas). Sólo para deshacer una fila provisional. */
+export async function removeOne(kind: CacheKind, id: string): Promise<void> {
+  const db = await open();
+  await db.runAsync('DELETE FROM cache WHERE kind = ? AND id = ?', [kind, id]);
+}
+
 /** Reemplaza por completo un recurso (o un scope): lo que el server ya no manda, se va. */
 export async function replaceAll<T extends { id: string }>(
   kind: CacheKind,
@@ -228,7 +284,7 @@ export async function replaceAll<T extends { id: string }>(
   await putAll(kind, items, scopeOf ?? (() => scope ?? ''));
 }
 
-/** El logout borra la copia de datos del tenant. **No toca la cola** (plan §Q3). */
+/** El logout borra la copia de datos del tenant. **No toca la cola** (plan §Q3): sólo el cambio de esquema la borra. */
 export async function clearCache(): Promise<void> {
   const db = await open();
   await db.runAsync('DELETE FROM cache');
@@ -283,6 +339,26 @@ export async function pendingCount(userId: string): Promise<number> {
   return row?.n ?? 0;
 }
 
+/**
+ * Reescribe el payload de una fila. Lo usa la cola para **persistir los ids** que genera al primer envío de un
+ * ítem viejo (guardado sin id): si el envío se corta, el reintento reusa ESE id y no duplica.
+ */
+export async function updatePayload(id: number, payload: unknown): Promise<void> {
+  const db = await open();
+  await db.runAsync('UPDATE queue SET payload = ? WHERE id = ?', [JSON.stringify(payload), id]);
+}
+
+/** Valores sueltos que NO son caché (sobreviven al logout igual que la cola): mapas de ids locales→server. */
+export async function getMeta(key: string): Promise<string | null> {
+  const db = await open();
+  const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM meta WHERE key = ?', [key]);
+  return row?.value ?? null;
+}
+export async function setMeta(key: string, value: string): Promise<void> {
+  const db = await open();
+  await db.runAsync('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)', [key, value]);
+}
+
 /** Salió bien: recién ahí se borra de la cola. */
 export async function dequeue(id: number): Promise<void> {
   const db = await open();
@@ -293,6 +369,17 @@ export async function dequeue(id: number): Promise<void> {
 export async function markFailed(id: number, error: string): Promise<void> {
   const db = await open();
   await db.runAsync('UPDATE queue SET attempts = attempts + 1, last_error = ? WHERE id = ?', [error, id]);
+}
+
+/**
+ * Rechazado por el server: no se reintenta solo. Se marca con `REJECTED_ATTEMPTS` intentos —supera el
+ * techo de la cola sin agregar una columna a la base del teléfono— y sigue a la vista con su motivo.
+ * «Reintentar ahora» igual lo vuelve a mandar (`force`). **El ítem NO se borra.**
+ */
+export const REJECTED_ATTEMPTS = 99;
+export async function markRejected(id: number, error: string): Promise<void> {
+  const db = await open();
+  await db.runAsync('UPDATE queue SET attempts = ?, last_error = ? WHERE id = ?', [REJECTED_ATTEMPTS, error, id]);
 }
 
 /** Sólo para los tests y el borrado de datos del dispositivo. */

@@ -2,9 +2,20 @@ import { describe, expect, it } from 'vitest';
 import es from '@/messages/es.json';
 import en from '@/messages/en.json';
 import { translator } from '@/test/translator';
-import type { FieldDef, ImportConfig } from '@kobrax/shared';
+import type { FieldDef, ImportConfig, PortfolioSummary } from '@kobrax/shared';
 import {
   ACCEPTED_FILES,
+  fileSize,
+  HISTORY_PAGE_SIZE,
+  hasHistoryFilters,
+  assignCodes,
+  assignmentStats,
+  buildAssignmentsPayload,
+  initialAssignState,
+  pendingReassignments,
+  historyQuery,
+  runItemAction,
+  runItemsQuery,
   configProgress,
   confirmDaysPastDue,
   fieldStatus,
@@ -12,7 +23,11 @@ import {
   pickDaysPastDue,
   postImportFile,
   rejectText,
+  normalizeStatusLabel,
+  parseStaleAfterDays,
+  removeStatusMapEntry,
   scopeRefName,
+  setStatusMapEntry,
   trackedFields,
   usedColumns,
   warningText,
@@ -303,5 +318,130 @@ describe('scopeRefName', () => {
 
   it('sin elegir todavía, no inventa nombre', () => {
     expect(scopeRefName({ kind: 'branch', ref: null }, members, branches, ES)).toBeNull();
+  });
+});
+
+describe('historial de importaciones', () => {
+  it('la página y el tamaño viajan; un tamaño que la tabla no ofrece cae al default', () => {
+    expect(historyQuery({ page: '2', pageSize: '50' }).toString()).toBe('page=2&limit=50');
+    expect(historyQuery({ pageSize: '7' }).get('limit')).toBe(String(HISTORY_PAGE_SIZE));
+  });
+
+  it('la búsqueda y los filtros viajan a la API; los vacíos no', () => {
+    const q = historyQuery({ q: ' CQE ', from: '2026-09-01', to: '', reportTo: '2026-09-30', createdBy: 'u-1' });
+    expect(q.get('q')).toBe('CQE');
+    expect(q.get('from')).toBe('2026-09-01');
+    expect(q.has('to')).toBe(false);
+    expect(q.get('reportTo')).toBe('2026-09-30');
+    expect(q.get('createdBy')).toBe('u-1');
+    expect(hasHistoryFilters({ page: '2' })).toBe(false);
+    expect(hasHistoryFilters({ createdBy: 'u-1' })).toBe(true);
+  });
+
+  it('🔴 sólo viaja un tipo de movimiento que existe: otro sería un 400', () => {
+    expect(runItemsQuery({ action: 'ABSENT' }).get('action')).toBe('ABSENT');
+    expect(runItemsQuery({ action: 'BORRADOS' }).has('action')).toBe(false);
+    expect(runItemAction(undefined)).toBeUndefined();
+  });
+
+  it('el tamaño del documento se lee como en un explorador', () => {
+    expect(fileSize(9629)).toBe('9 KB');
+    expect(fileSize(2.4 * 1024 * 1024)).toBe('2,4 MB');
+    expect(fileSize(10)).toBe('1 KB');
+  });
+});
+
+describe('responsables al importar', () => {
+  const S = {
+    dryRun: true,
+    idempotentSkip: false,
+    counts: { created: 3, updated: 2, setCurrent: 0, invalid: 0 },
+    assignment: { mode: 'CHOOSE', selfUserId: 'yo' },
+    preview: {
+      toCreate: [
+        { code: 'A', clientName: 'a', suggestedAssigneeId: 'juan' },
+        { code: 'B', clientName: 'b', suggestedAssigneeId: null },
+        { code: 'C', clientName: 'c' },
+      ],
+      toUpdate: [
+        { code: 'X', currentAssigneeId: 'juan' },
+        { code: 'Y', currentAssigneeId: 'maria' },
+      ],
+      toSetCurrent: [],
+      invalid: [],
+      warnings: [],
+    },
+  } as unknown as PortfolioSummary;
+
+  it('arranca en la sugerencia para los nuevos y en el responsable de hoy para los existentes', () => {
+    expect(initialAssignState(S)).toEqual({ create: { A: 'juan', B: null, C: null }, update: { X: 'juan', Y: 'maria' } });
+  });
+
+  it('cuenta asignados, sin asignar y el reparto por persona', () => {
+    const st = assignCodes(initialAssignState(S), 'create', ['B'], 'maria');
+    expect(assignmentStats(st.create)).toEqual({
+      assigned: 2,
+      unassigned: 1,
+      byUser: [
+        { userId: 'juan', count: 1 },
+        { userId: 'maria', count: 1 },
+      ],
+    });
+  });
+
+  it('asignar no inventa créditos que no están en la lista', () => {
+    const st = assignCodes(initialAssignState(S), 'create', ['NO-EXISTE'], 'juan');
+    expect(Object.keys(st.create)).toEqual(['A', 'B', 'C']);
+  });
+
+  it('sólo es reasignación lo que cambia: «Juan → Juan» no viaja', () => {
+    const st = assignCodes(initialAssignState(S), 'update', ['X', 'Y'], 'juan');
+    expect(pendingReassignments(st, S)).toEqual([{ code: 'Y', clientName: undefined, from: 'maria', to: 'juan' }]);
+  });
+
+  it('el envío agrupa los nuevos por persona y lleva el responsable visto en cada reasignación', () => {
+    let st = assignCodes(initialAssignState(S), 'create', ['B', 'C'], 'maria');
+    st = assignCodes(st, 'update', ['X'], 'maria');
+    expect(buildAssignmentsPayload(st, S)).toEqual({
+      version: 1,
+      create: [
+        { userId: 'juan', externalIds: ['A'] },
+        { userId: 'maria', externalIds: ['B', 'C'] },
+      ],
+      reassign: [{ externalId: 'X', fromUserId: 'juan', toUserId: 'maria' }],
+    });
+  });
+});
+
+describe('los datos del reporte (estados y antigüedad)', () => {
+  it('la etiqueta de estado se guarda como la busca el servidor: mayúsculas, sin tildes, espacios colapsados', () => {
+    expect(normalizeStatusLabel('  Ejecución   judicial ')).toBe('EJECUCION JUDICIAL');
+  });
+
+  it('suma una etiqueta y devuelve el mapa entero (el PATCH reemplaza, no mezcla)', () => {
+    const r = setStatusMapEntry({ VIGENTE: 'ACTIVE' }, 'Ejecución', 'DEFAULTED');
+    expect(r).toEqual({ ok: true, map: { VIGENTE: 'ACTIVE', EJECUCION: 'DEFAULTED' } });
+  });
+
+  it('rechaza lo que el servidor rechazaría: etiqueta vacía, estado inexistente, etiqueta repetida', () => {
+    expect(setStatusMapEntry({}, '   ', 'ACTIVE')).toEqual({ ok: false, reason: 'EMPTY_LABEL' });
+    expect(setStatusMapEntry({}, 'X', 'MOROSO')).toEqual({ ok: false, reason: 'INVALID_STATUS' });
+    expect(setStatusMapEntry({ X: 'ACTIVE' }, 'x', 'PAID')).toEqual({ ok: false, reason: 'DUPLICATE_LABEL' });
+  });
+
+  it('cambiar el estado de una etiqueta que ya está no cuenta como repetida', () => {
+    expect(setStatusMapEntry({ X: 'ACTIVE' }, 'X', 'PAID', 'X')).toEqual({ ok: true, map: { X: 'PAID' } });
+  });
+
+  it('quitar una etiqueta deja el resto y no toca el original', () => {
+    const map = { A: 'ACTIVE', B: 'PAID' };
+    expect(removeStatusMapEntry(map, 'A')).toEqual({ B: 'PAID' });
+    expect(map).toEqual({ A: 'ACTIVE', B: 'PAID' });
+  });
+
+  it('los días de antigüedad son un entero entre 1 y 60', () => {
+    expect(parseStaleAfterDays('7')).toEqual({ ok: true, value: 7 });
+    expect(parseStaleAfterDays(' 60 ')).toEqual({ ok: true, value: 60 });
+    for (const bad of ['0', '61', '2.5', '-1', 'abc', '']) expect(parseStaleAfterDays(bad)).toEqual({ ok: false });
   });
 });

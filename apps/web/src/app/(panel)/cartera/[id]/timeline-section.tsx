@@ -3,7 +3,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import type { ClientTimelineEntry, Member } from '@kobrax/shared';
 import { memberName } from '@kobrax/shared';
 import { money, relativeDate } from '@/lib/format';
-import { assignedTo } from '@/lib/cases';
+import { assignedTo } from '@/lib/mora';
 import { isKnownRole } from '@/lib/team';
 
 /** El punto de color por fuente. Es apoyo del texto, nunca su reemplazo. */

@@ -40,3 +40,16 @@ export interface MeInfo {
   mfaEnabled?: boolean;
   requiresPasswordChange?: boolean;
 }
+
+/**
+ * Alguien a quien se le puede asignar un crédito (P3): un cobrador activo, o quien está asignando.
+ * Lo arma el servidor (`GET /assignments/assignees`) con la misma regla que valida al guardar, así
+ * que un selector armado con esto no ofrece a nadie que después rebote.
+ */
+export interface Assignee {
+  userId: string;
+  name: string;
+  roleName: string;
+  /** Quien pidió la lista: la pantalla lo muestra como «Yo» y arriba de todo. */
+  isMe: boolean;
+}

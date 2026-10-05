@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakePlanLimits } from '../../common/plan/plan-test-utils';
 import { CreditsService } from './credits.service';
+import { AssignmentService } from '../assignments/assignment.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
 function makeService(
@@ -9,20 +10,28 @@ function makeService(
     client?: unknown;
     credit?: unknown;
     config?: unknown;
-    openCase?: unknown;
+    /** `accounts.settings` (D20: método de mora por defecto). */
+    settings?: unknown;
     /** Topes del plan. Por defecto no frenan: sólo los usa el test del tope. */
     plan?: Parameters<typeof fakePlanLimits>[0];
+    /** Permisos de quien llama. Por defecto ninguno: un cobrador sin `assignment:write`. */
+    permissions?: string[];
+    /** Miembros de la cuenta, para validar a quién se asigna. */
+    members?: { userId: string; isActive: boolean; role: string }[];
   } = {},
 ) {
   const calls = {
     creditCreate: [] as Record<string, unknown>[],
     creditUpdate: [] as Record<string, unknown>[],
-    caseCreate: [] as Record<string, unknown>[],
-    caseClose: [] as Record<string, unknown>[],
     agendaCreate: [] as Record<string, unknown>[],
     arrearCreate: [] as Record<string, unknown>[],
     arrearDeleteMany: 0,
+    installmentDeleteMany: 0,
+    installmentCreateMany: [] as Record<string, unknown>[][],
     audit: [] as { action: string; entity: string }[],
+    priorityRecompute: [] as string[],
+    assignmentCreate: [] as Record<string, unknown>[],
+    columnWrites: [] as Record<string, unknown>[],
   };
   const tx = {
     client: { findFirst: async () => opts.client ?? null },
@@ -37,26 +46,53 @@ function makeService(
         calls.creditUpdate.push(args.data);
         return { id: 'cr1', ...(opts.credit as object), ...args.data };
       },
-    },
-    creditInstallment: { updateMany: async () => ({ count: 1 }) },
-    collectionCase: {
-      create: async (args: { data: Record<string, unknown> }) => {
-        calls.caseCreate.push(args.data);
-        return { id: 'case1', ...args.data };
-      },
-      findFirst: async () => opts.openCase ?? null,
+      // Lo que lee y escribe `AssignmentService`.
+      findMany: async (args: { where: { id: { in: string[] } } }) =>
+        args.where.id.in.map((id) => ({ id, assignedManagerId: (opts.credit as { assignedManagerId?: string } | undefined)?.assignedManagerId ?? null })),
       updateMany: async (args: { data: Record<string, unknown> }) => {
-        calls.caseClose.push(args.data);
-        return { count: opts.openCase ? 1 : 0 };
+        calls.columnWrites.push(args.data);
+        return { count: 1 };
+      },
+    },
+    creditAssignment: {
+      // La permanente vigente es la del crédito de prueba, como la dejó la migración de sincronización.
+      findMany: async () => {
+        const owner = (opts.credit as { assignedManagerId?: string } | undefined)?.assignedManagerId;
+        return owner ? [{ id: 'a0', creditId: 'cr1', userId: owner }] : [];
+      },
+      updateMany: async () => ({ count: 0 }),
+      createMany: async (args: { data: Record<string, unknown>[] }) => {
+        calls.assignmentCreate.push(...args.data);
+        return { count: args.data.length };
+      },
+    },
+    userAccount: {
+      findMany: async (args: { where: { userId: { in: string[] } } }) =>
+        (opts.members ?? [])
+          .filter((m) => args.where.userId.in.includes(m.userId))
+          .map((m) => ({ userId: m.userId, isActive: m.isActive, role: { name: m.role } })),
+    },
+    creditInstallment: {
+      updateMany: async () => ({ count: 1 }),
+      deleteMany: async () => {
+        calls.installmentDeleteMany += 1;
+        return { count: 1 };
+      },
+      createMany: async (args: { data: Record<string, unknown>[] }) => {
+        calls.installmentCreateMany.push(args.data);
+        return { count: args.data.length };
       },
     },
     agendaItem: {
+      // D10: lo que `AssignmentService.apply` mueve al reasignar (acá no hay agendados pendientes).
+      findMany: async () => [],
+      updateMany: async () => ({ count: 0 }),
       create: async (args: { data: Record<string, unknown> }) => {
         calls.agendaCreate.push(args.data);
         return { id: 'ag1', ...args.data };
       },
     },
-    account: { findUnique: async () => ({ currencyCode: 'BOB', configuration: opts.config ?? {} }) },
+    account: { findUnique: async () => ({ currencyCode: 'BOB', configuration: opts.config ?? {}, settings: opts.settings ?? {} }) },
     arrear: {
       deleteMany: async () => {
         calls.arrearDeleteMany += 1;
@@ -71,9 +107,16 @@ function makeService(
   const prisma = {
     withTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
   };
-  const tenant = { accountId: 'acc-A', userId: 'user-1' };
-  const audit = { record: async (e: { action: string; entity: string }) => void calls.audit.push(e) };
-  const service = new CreditsService(prisma as never, tenant as never, audit as never, fakePlanLimits(opts.plan));
+  const permissions = opts.permissions ?? [];
+  const tenant = { accountId: 'acc-A', userId: 'user-1', can: (p: string) => permissions.includes(p) };
+  const audit = {
+    record: async (e: { action: string; entity: string }) => void calls.audit.push(e),
+    recordMany: async (es: { action: string; entity: string }[]) => void calls.audit.push(...es),
+  };
+  const assignment = new AssignmentService({} as never, tenant as never, audit as never);
+  // F4/08: la prioridad del episodio se recalcula con `ArrearsPriorityService`; acá sólo se registra la llamada.
+  const arrearsPriority = { recomputeForCredit: async (_tx: unknown, creditId: string) => void calls.priorityRecompute.push(creditId) };
+  const service = new CreditsService(prisma as never, tenant as never, audit as never, fakePlanLimits(opts.plan), assignment, arrearsPriority as never);
   return { service, calls };
 }
 
@@ -91,10 +134,9 @@ describe('CreditsService.create — idempotencia del alta offline', () => {
     assert.equal(calls.creditCreate.length, 0, 'no debe insertar de nuevo');
   });
 
-  it('el reintento no crea un segundo caso ni otro recordatorio en la agenda', async () => {
+  it('el reintento no crea recordatorio ni audita', async () => {
     const { service, calls } = makeService({ client: { id: 'c1' }, credit: { id: 'ya-existe', currency: 'BOB', metadata: {} } });
-    await service.create({ ...(BASE as object), id: 'ya-existe', openCase: true } as never);
-    assert.equal(calls.caseCreate.length, 0);
+    await service.create({ ...(BASE as object), id: 'ya-existe' } as never);
     assert.equal(calls.agendaCreate.length, 0);
     assert.deepEqual(calls.audit, []);
   });
@@ -141,15 +183,17 @@ describe('CreditsService.create — el tope del plan', () => {
 });
 
 describe('CreditsService.create', () => {
-  it('genera el cronograma y deja outstandingBalance = principal', async () => {
+  it('genera el cronograma y deja el saldo = total por cobrar (sin interés, igual al capital)', async () => {
     const { service, calls } = makeService({ client: { id: 'c1' } });
     const res = await service.create(BASE);
     const data = calls.creditCreate[0]!;
     assert.equal(data.outstandingBalance, 1200);
+    assert.equal((data.metadata as { balanceBasis?: string }).balanceBasis, 'total');
     assert.equal((data.installments as { create: unknown[] }).create.length, 12);
     assert.equal(res.installmentsCount, 12);
     assert.equal(res.principalAmount, 1200);
-    assert.deepEqual(calls.audit.map((a) => `${a.action} ${a.entity}`), ['CREATE credit']);
+    // P4: sin `assignment:write`, quien da de alta queda de responsable — y eso también se audita.
+    assert.deepEqual(calls.audit.map((a) => `${a.action} ${a.entity}`), ['CREATE credit', 'ASSIGN credit']);
   });
 
   it('rechaza si el cliente no existe / es de otro tenant (RESOURCE_NOT_FOUND)', async () => {
@@ -177,7 +221,38 @@ describe('CreditsService.create — crédito sin cronograma', () => {
       origin: 'manual',
       installmentAmount: 300,
       nextDueDate: '2026-07-20',
+      balanceBasis: 'total',
+      arrearsMethod: 'oldest_unpaid', // D20: el default de la cuenta, guardado en el crédito
     });
+  });
+
+  /**
+   * 🔴 D15. Antes el saldo nacía = capital (1.200) y, como el pago no puede superar el saldo, a partir
+   * de la 5.ª cuota de 300 el cobro rebotaba: los 2.400 de ganancia no se podían cobrar nunca.
+   */
+  it('D15: el saldo nace = total por cobrar (cuota × n), no el capital', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create(MOVIL); // capital 1.200, 12 cuotas de 300
+    assert.equal(calls.creditCreate[0]!.outstandingBalance, 3600);
+  });
+
+  it('D15: con cronograma e interés, el saldo es Σ de las cuotas', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ ...(BASE as object), interestRate: 0.01, amortizationType: 'FLAT' } as never);
+    const data = calls.creditCreate[0]!;
+    const rows = (data.installments as { create: { amount: number }[] }).create;
+    const total = Math.round(rows.reduce((s, r) => s + r.amount * 100, 0)) / 100;
+    assert.equal(total, 1344); // 1.200 + 12 × 12
+    assert.equal(data.outstandingBalance, total);
+  });
+
+  it('el alta rechaza un origen externo: un importado sólo lo crea la importación', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await rejectsWithCode(service.create({ ...(MOVIL as object), origin: 'import' } as never), 'CREDIT_ORIGIN_NOT_ALLOWED');
+    await rejectsWithCode(service.create({ ...(MOVIL as object), origin: 'api' } as never), 'CREDIT_ORIGIN_NOT_ALLOWED');
+    assert.equal(calls.creditCreate.length, 0);
+    await service.create({ ...(MOVIL as object), origin: 'quick_batch' } as never);
+    assert.equal(calls.creditCreate.length, 1);
   });
 
   it('préstamo abierto: sin número de cuotas se acepta y queda en 0 (§4.1)', async () => {
@@ -186,46 +261,35 @@ describe('CreditsService.create — crédito sin cronograma', () => {
     assert.equal(calls.creditCreate[0]!.installmentsCount, 0);
   });
 
+  // D16: nadie sabe cuánto se va a cobrar en total → el saldo es el capital y queda marcado así.
+  it('préstamo abierto: saldo = capital, marcado `principal` (D16)', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ clientId: BASE.clientId, principalAmount: 1000, installmentAmount: 250 } as never);
+    const data = calls.creditCreate[0]!;
+    assert.equal(data.outstandingBalance, 1000);
+    assert.equal((data.metadata as { balanceBasis?: string }).balanceBasis, 'principal');
+  });
+
   it('"ya está en curso": respeta el saldo y la mora que trae el cobrador (§4.1)', async () => {
     const { service, calls } = makeService({ client: { id: 'c1' } });
     await service.create({ ...(MOVIL as object), outstandingBalance: 800, daysPastDue: 45 } as never);
     const data = calls.creditCreate[0]!;
-    assert.equal(data.outstandingBalance, 800); // no lo pisa con el capital
+    assert.equal(data.outstandingBalance, 800); // no lo pisa con el capital ni con el total
     assert.equal(data.daysPastDue, 45);
+    assert.equal((data.metadata as { balanceBasis?: string }).balanceBasis, 'total');
   });
 
-  it('openCase abre el caso y el recordatorio en la agenda, en la misma transacción (§5.2)', async () => {
+  /** F4/08: crear un crédito no crea el recordatorio «Cobrar cuota» (lo genera un job aparte, D11). */
+  it('no crea recordatorio de agenda', async () => {
     const { service, calls } = makeService({ client: { id: 'c1' } });
-    await service.create({ ...(MOVIL as object), daysPastDue: 45, openCase: true } as never);
-    const kase = calls.caseCreate[0]!;
-    assert.equal(kase.creditId, 'cr1');
-    assert.equal(kase.assigneeId, 'user-1'); // el cobrador que lo registró
-    assert.equal(kase.priority, 'HIGH'); // 31–90 días
-    // Próxima fecha de cobro en la agenda (§5.2): un REMINDER con la fecha del metadata, asignado al cobrador.
-    const ag = calls.agendaCreate[0]!;
-    assert.equal(ag.type, 'REMINDER');
-    assert.equal(ag.assigneeId, 'user-1');
-    assert.equal(ag.caseId, 'case1');
-    assert.equal((ag.scheduledDate as Date).toISOString().slice(0, 10), '2026-07-20');
+    await service.create({ ...(MOVIL as object), daysPastDue: 45 } as never);
+    assert.equal(calls.agendaCreate.length, 0);
     assert.deepEqual(
       calls.audit.map((a) => `${a.action} ${a.entity}`),
-      ['CREATE credit', 'CREATE collection_case', 'CREATE agenda_item'],
+      ['CREATE credit', 'ASSIGN credit'],
     );
   });
 
-  it('sin openCase no se crea ni caso ni agenda', async () => {
-    const { service, calls } = makeService({ client: { id: 'c1' } });
-    await service.create(MOVIL);
-    assert.equal(calls.caseCreate.length, 0);
-    assert.equal(calls.agendaCreate.length, 0);
-  });
-
-  it('openCase con cronograma (sin nextDueDate en metadata) crea el caso pero NO el recordatorio', async () => {
-    const { service, calls } = makeService({ client: { id: 'c1' } });
-    await service.create({ ...(BASE as object), openCase: true } as never); // BASE = cuotas, sin cuota congelada
-    assert.equal(calls.caseCreate.length, 1);
-    assert.equal(calls.agendaCreate.length, 0); // sin próxima fecha en metadata → no hay recordatorio
-  });
 });
 
 describe('CreditsService.update (editar desde la ficha §4)', () => {
@@ -245,11 +309,381 @@ describe('CreditsService.update (editar desde la ficha §4)', () => {
     await rejectsWithCode(service.update('cr1', { installmentAmount: 600 } as never), 'CREDIT_LOCKED');
   });
 
-  it('editar solo status/código NO dispara el candado ni toca metadata', async () => {
-    const credit = { id: 'cr1', metadata: { origin: 'import' } };
+  it('crédito manual: editar solo status/código NO toca metadata', async () => {
+    const credit = { id: 'cr1', metadata: { origin: 'manual' } };
+    const { service, calls } = makeService({ credit });
+    await service.update('cr1', { code: 'ABC', status: 'DEFAULTED' } as never);
+    assert.equal(calls.creditUpdate[0]!.metadata, undefined); // no reescribe metadata
+  });
+
+  // D5: el código es el nº de operación del reporte y el estado lo informa la fuente.
+  it('importado: cambiar código o estado → CREDIT_LOCKED (D5)', async () => {
+    const credit = { id: 'cr1', code: '302-222-2542', status: 'ACTIVE', metadata: { origin: 'import' } };
+    const { service } = makeService({ credit });
+    await rejectsWithCode(service.update('cr1', { code: 'OTRO' } as never), 'CREDIT_LOCKED');
+    await rejectsWithCode(service.update('cr1', { code: null } as never), 'CREDIT_LOCKED');
+    await rejectsWithCode(service.update('cr1', { status: 'PAID' } as never), 'CREDIT_LOCKED');
+    await rejectsWithCode(service.update('cr1', { nextDueDate: '2026-12-01' } as never), 'CREDIT_LOCKED');
+  });
+
+  it('importado: el mismo código y estado que ya tiene no es un cambio', async () => {
+    const credit = { id: 'cr1', code: '302-222-2542', status: 'ACTIVE', metadata: { origin: 'import' } };
+    const { service, calls } = makeService({ credit });
+    await service.update('cr1', { code: '302-222-2542', status: 'ACTIVE', typeCode: 'MICRO' } as never);
+    assert.equal(calls.creditUpdate.length, 1);
+  });
+
+  // D5: la nota es enriquecimiento de Kobrax, no un dato de la fuente.
+  it('importado: la nota, el tipo y el responsable sí se editan (D5)', async () => {
+    const credit = { id: 'cr1', code: '302-222-2542', status: 'ACTIVE', metadata: { origin: 'import', installmentAmount: 500 } };
+    const { service, calls } = makeService({ credit });
+    await service.update('cr1', { notes: 'Paga los viernes en el puesto', typeCode: 'MICRO' } as never);
+    const data = calls.creditUpdate[0]!;
+    assert.equal(data.typeCode, 'MICRO');
+    assert.deepEqual(data.metadata, { origin: 'import', installmentAmount: 500, notes: 'Paga los viernes en el puesto' });
+  });
+
+  // Cambiar la cuota sin tocar `terms` dejaría dos definiciones del mismo crédito (F4/06 · Fase 3).
+  it('crédito con condiciones: rechaza editar datos financieros (CREDIT_TERMS_EDIT_UNSUPPORTED)', async () => {
+    const credit = { id: 'cr1', metadata: { origin: 'manual', terms: AGREED, termsVersion: 1, installmentAmount: 115 } };
+    const { service } = makeService({ credit });
+    await rejectsWithCode(service.update('cr1', { installmentAmount: 120 } as never), 'CREDIT_TERMS_EDIT_UNSUPPORTED');
+  });
+
+  it('crédito con condiciones: lo no financiero se edita y `terms` se conserva', async () => {
+    const credit = { id: 'cr1', metadata: { origin: 'manual', terms: AGREED, termsVersion: 1 } };
     const { service, calls } = makeService({ credit });
     await service.update('cr1', { code: 'ABC' } as never);
-    assert.equal(calls.creditUpdate[0]!.metadata, undefined); // no reescribe metadata
+    assert.equal(calls.creditUpdate[0]!.code, 'ABC');
+  });
+
+  it('crédito con condiciones: la nota y el próximo vencimiento sí se editan', async () => {
+    const credit = { id: 'cr1', metadata: { origin: 'manual', terms: AGREED, termsVersion: 1 } };
+    const { service, calls } = makeService({ credit });
+    await service.update('cr1', { notes: 'otra', nextDueDate: '2026-12-01' } as never);
+    const meta = calls.creditUpdate[0]!.metadata as Record<string, unknown>;
+    assert.equal(meta.notes, 'otra');
+    assert.equal(meta.nextDueDate, '2026-12-01');
+    assert.deepEqual(meta.terms, AGREED);
+  });
+});
+
+/**
+ * 🔴 F4/06 · Fase 3 — redefinir el crédito. Condiciones y estado al registrar (D13) se recalculan con
+ * el motor y `registeredState` (shared, con sus tests); acá se prueba lo que la API guarda y rechaza.
+ */
+describe('CreditsService.update — redefinir condiciones y estado al registrar (D13)', () => {
+  const fresh = (metadata: Record<string, unknown> = { origin: 'manual', terms: AGREED, termsVersion: 1 }, count = { payments: 0, installments: 0 }) => ({
+    id: 'cr1',
+    clientId: 'c1',
+    branchId: null,
+    assignedManagerId: 'u9',
+    metadata,
+    _count: count,
+    client: { riskSegment: null },
+  });
+  const terms12 = () => ({ ...AGREED, installmentAmount: 120 });
+
+  it('condiciones nuevas: recalcula cuota, total, saldo (D15) y las guarda', async () => {
+    const { service, calls } = makeService({ credit: fresh() });
+    await service.update('cr1', { terms: terms12() } as never);
+    const data = calls.creditUpdate[0]!;
+    assert.equal(data.principalAmount, 1000);
+    assert.equal(data.installmentsCount, 10);
+    assert.equal(data.outstandingBalance, 1200);
+    const meta = data.metadata as Record<string, unknown>;
+    assert.equal(meta.installmentAmount, 120);
+    assert.equal(meta.balanceBasis, 'total');
+    assert.equal(meta.nextDueDate, '2026-10-25');
+    assert.deepEqual(meta.terms, terms12());
+    assert.equal(meta.initialState, undefined);
+  });
+
+  it('estado al registrar: descuenta las cuotas pagadas y vence la primera no pagada', async () => {
+    const { service, calls } = makeService({ credit: fresh() });
+    await service.update('cr1', { initialState: { paidInstallments: 2, daysPastDue: 0 } } as never);
+    const data = calls.creditUpdate[0]!;
+    assert.equal(data.outstandingBalance, 920); // 1.150 − 2 × 115
+    const meta = data.metadata as Record<string, unknown>;
+    assert.equal(meta.nextDueDate, '2026-12-25');
+    assert.deepEqual(meta.initialState, { paidInstallments: 2, daysPastDue: 0 });
+  });
+
+  it('mora al registrarlo: marca manual desde esa fecha y recalcula la prioridad del episodio (sin caso)', async () => {
+    const { service, calls } = makeService({ credit: fresh() });
+    await service.update('cr1', { initialState: { paidInstallments: 0, daysPastDue: 15 } } as never);
+    const data = calls.creditUpdate[0]!;
+    assert.equal(data.daysPastDue, 15);
+    assert.equal(typeof (data.metadata as Record<string, unknown>).moraSince, 'string');
+    assert.deepEqual(calls.priorityRecompute, ['cr1']);
+  });
+
+  it('bajar la mora declarada a 0 saca la marca que ella misma puso', async () => {
+    const meta = { origin: 'manual', terms: AGREED, termsVersion: 1, moraSince: '2026-01-01', initialState: { paidInstallments: 0, daysPastDue: 15 } };
+    const { service, calls } = makeService({ credit: fresh(meta) });
+    await service.update('cr1', { initialState: { paidInstallments: 0, daysPastDue: 0 } } as never);
+    assert.equal((calls.creditUpdate[0]!.metadata as Record<string, unknown>).moraSince, undefined);
+  });
+
+  it('una marca de «Marcar en mora» sobrevive a corregir la cuota', async () => {
+    const meta = { origin: 'manual', terms: AGREED, termsVersion: 1, moraSince: '2026-01-01' };
+    const { service, calls } = makeService({ credit: fresh(meta) });
+    await service.update('cr1', { terms: terms12() } as never);
+    assert.equal((calls.creditUpdate[0]!.metadata as Record<string, unknown>).moraSince, '2026-01-01');
+  });
+
+  it('crédito anterior a F4/06: se redefine con condiciones y queda con `terms`', async () => {
+    const { service, calls } = makeService({ credit: fresh({ origin: 'manual', installmentAmount: 115 }) });
+    await service.update('cr1', { terms: AGREED } as never);
+    assert.deepEqual((calls.creditUpdate[0]!.metadata as Record<string, unknown>).terms, AGREED);
+  });
+
+  it('crédito anterior a F4/06: el estado al registrar solo, sin condiciones, se rechaza', async () => {
+    const { service } = makeService({ credit: fresh({ origin: 'manual' }) });
+    await rejectsWithCode(service.update('cr1', { initialState: { paidInstallments: 1, daysPastDue: 0 } } as never), 'CREDIT_TERMS_INVALID');
+  });
+
+  it('con pagos registrados no se redefine (CREDIT_HAS_PAYMENTS)', async () => {
+    const { service } = makeService({ credit: fresh(undefined, { payments: 1, installments: 0 }) });
+    await rejectsWithCode(service.update('cr1', { terms: terms12() } as never), 'CREDIT_HAS_PAYMENTS');
+  });
+
+  it('con cronograma guardado de antes de F4/06 (sin condiciones) no se redefine (CREDIT_HAS_SCHEDULE)', async () => {
+    const { service } = makeService({ credit: fresh({ origin: 'manual' }, { payments: 0, installments: 10 }) });
+    await rejectsWithCode(service.update('cr1', { terms: terms12() } as never), 'CREDIT_HAS_SCHEDULE');
+  });
+
+  it('cuota variable sin pagos: redefinir rehace el cronograma', async () => {
+    const variable = { ...CALCULATED, amortization: 'fixed_principal' };
+    const { service, calls } = makeService({ credit: fresh({ origin: 'manual', terms: variable, termsVersion: 1 }, { payments: 0, installments: 10 }) });
+    await service.update('cr1', { terms: { ...variable, periods: 5 } } as never);
+    assert.equal(calls.installmentDeleteMany, 1);
+    assert.equal(calls.installmentCreateMany[0]!.length, 5);
+    assert.equal(calls.installmentCreateMany[0]![0]!.creditId, 'cr1');
+  });
+
+  it('pasar de cuota variable a fija: borra el cronograma y congela la cuota', async () => {
+    const variable = { ...CALCULATED, amortization: 'fixed_principal' };
+    const { service, calls } = makeService({ credit: fresh({ origin: 'manual', terms: variable, termsVersion: 1 }, { payments: 0, installments: 10 }) });
+    await service.update('cr1', { terms: CALCULATED } as never);
+    assert.equal(calls.installmentDeleteMany, 1);
+    assert.equal(calls.installmentCreateMany.length, 0);
+    assert.equal(typeof (calls.creditUpdate[0]!.metadata as Record<string, unknown>).installmentAmount, 'number');
+  });
+
+  it('importado: no se redefine (CREDIT_LOCKED)', async () => {
+    const { service } = makeService({ credit: fresh({ origin: 'import' }) });
+    await rejectsWithCode(service.update('cr1', { terms: AGREED } as never), 'CREDIT_LOCKED');
+  });
+
+  it('condiciones y campos sueltos en el mismo pedido se rechazan (CREDIT_TERMS_CONFLICT)', async () => {
+    const { service } = makeService({ credit: fresh() });
+    await rejectsWithCode(service.update('cr1', { terms: terms12(), installmentAmount: 120 } as never), 'CREDIT_TERMS_CONFLICT');
+    await rejectsWithCode(service.update('cr1', { terms: terms12(), nextDueDate: '2026-12-01' } as never), 'CREDIT_TERMS_CONFLICT');
+  });
+
+  it('un estado que no cierra con las condiciones se rechaza (CREDIT_INITIAL_STATE_INVALID)', async () => {
+    const { service } = makeService({ credit: fresh() });
+    await rejectsWithCode(service.update('cr1', { initialState: { paidInstallments: 10, daysPastDue: 0 } } as never), 'CREDIT_INITIAL_STATE_INVALID');
+    await rejectsWithCode(
+      service.update('cr1', { initialState: { paidInstallments: 0, outstandingBalance: 2000, daysPastDue: 0 } } as never),
+      'CREDIT_INITIAL_STATE_INVALID',
+    );
+  });
+
+  it('audita las condiciones y el estado con los que quedó', async () => {
+    const { service, calls } = makeService({ credit: fresh() });
+    await service.update('cr1', { terms: terms12() } as never);
+    assert.deepEqual(calls.audit.map((a) => `${a.action} ${a.entity}`), ['UPDATE credit']);
+  });
+});
+
+const CLIENT_ID = '11111111-1111-1111-1111-111111111111';
+const AGREED = {
+  definition: 'agreed_installment',
+  principal: 1000,
+  installmentAmount: 115,
+  installmentsCount: 10,
+  frequency: 'MONTHLY',
+  firstDueDate: '2026-10-25',
+};
+const CALCULATED = {
+  definition: 'calculated',
+  principal: 1000,
+  ratePercent: 1,
+  interestType: 'simple',
+  amortization: 'fixed_installment',
+  periods: 10,
+  frequency: 'MONTHLY',
+  firstDueDate: '2026-10-25',
+};
+
+/**
+ * 🔴 D14 — quién manda según el modo. La regla vive en shared (`resolveCreditTerms`, con sus tests);
+ * acá se prueba que la API guarda lo que esa regla decide y traduce cada rechazo a su error.
+ */
+describe('CreditsService.create — con condiciones (F4/06 · D14)', () => {
+  it('cuota acordada: guarda la cuota del usuario, el total como saldo y las condiciones', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ clientId: CLIENT_ID, principalAmount: 1000, installmentAmount: 115, terms: AGREED } as never);
+    const data = calls.creditCreate[0]!;
+    assert.equal(data.outstandingBalance, 1150); // D15: total por cobrar
+    assert.equal(data.installmentsCount, 10);
+    assert.equal(data.interestRate, 0); // acordada: no se inventa tasa
+    assert.deepEqual((data.installments as { create: unknown[] }).create, []); // cronograma real: Fase 6
+    assert.deepEqual(data.metadata, {
+      frequency: 'MONTHLY',
+      origin: 'manual',
+      installmentAmount: 115,
+      nextDueDate: '2026-10-25',
+      balanceBasis: 'total',
+      terms: AGREED,
+      termsVersion: 1,
+      arrearsMethod: 'oldest_unpaid',
+    });
+  });
+
+  it('calculado: sin cuota del cliente guarda la del motor', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: CALCULATED } as never);
+    const data = calls.creditCreate[0]!;
+    assert.equal((data.metadata as { installmentAmount: number }).installmentAmount, 110);
+    assert.equal(data.outstandingBalance, 1100);
+    assert.equal(data.interestRate, 1); // D7: porcentaje, informativa
+  });
+
+  it('calculado: un céntimo de redondeo se normaliza a la cuota del motor', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ clientId: CLIENT_ID, principalAmount: 1000, installmentAmount: 109.99, terms: CALCULATED } as never);
+    assert.equal((calls.creditCreate[0]!.metadata as { installmentAmount: number }).installmentAmount, 110);
+  });
+
+  it('calculado: otra cuota se rechaza (CREDIT_INSTALLMENT_MISMATCH)', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await rejectsWithCode(
+      service.create({ clientId: CLIENT_ID, principalAmount: 1000, installmentAmount: 115, terms: CALCULATED } as never),
+      'CREDIT_INSTALLMENT_MISMATCH',
+    );
+    assert.equal(calls.creditCreate.length, 0);
+  });
+
+  it('un campo suelto que contradice las condiciones se rechaza (CREDIT_TERMS_CONFLICT)', async () => {
+    const { service } = makeService({ client: { id: 'c1' } });
+    await rejectsWithCode(
+      service.create({ clientId: CLIENT_ID, principalAmount: 1000, installmentsCount: 12, terms: AGREED } as never),
+      'CREDIT_TERMS_CONFLICT',
+    );
+  });
+
+  it('condiciones con forma inválida o incalculables (CREDIT_TERMS_INVALID)', async () => {
+    const { service } = makeService({ client: { id: 'c1' } });
+    await rejectsWithCode(service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: { definition: 'x' } } as never), 'CREDIT_TERMS_INVALID');
+    await rejectsWithCode(
+      service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: { ...CALCULATED, ratePercent: 150 } } as never),
+      'CREDIT_TERMS_INVALID',
+    );
+  });
+
+  // Cuota variable (capital fijo): no hay UNA cuota que congelar; se guarda el cronograma del motor.
+  it('cuota variable: guarda el cronograma del motor fila por fila y no congela cuota', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: { ...CALCULATED, amortization: 'fixed_principal' } } as never);
+    const data = calls.creditCreate[0]!;
+    const rows = (data.installments as { create: { amount: number; status?: string }[] }).create;
+    assert.equal(rows.length, 10);
+    assert.equal(rows[0]!.amount, 110); // 100 de capital + 1 % de 1.000
+    assert.equal(rows[9]!.amount, 101); // la última, sobre un saldo de 100
+    assert.equal((data.metadata as Record<string, unknown>).installmentAmount, undefined);
+    assert.equal(data.outstandingBalance, 1055); // Σ de las cuotas
+  });
+
+  // D18: con desgravamen (baja con el saldo) las cuotas varían → se guarda el cronograma con el seguro adentro.
+  it('desgravamen y cargos: las cuotas guardadas los incluyen y el saldo es su suma', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({
+      clientId: CLIENT_ID,
+      principalAmount: 1000,
+      terms: {
+        ...CALCULATED,
+        insuranceMonthlyPercent: 0.1,
+        charges: [{ timing: 'per_installment', amount: 2 }, { timing: 'deducted', amount: 50 }],
+      },
+    } as never);
+    const data = calls.creditCreate[0]!;
+    const rows = (data.installments as { create: { amount: number; principal: number; interest: number }[] }).create;
+    assert.equal(rows.length, 10);
+    // Cuota base 110 (simple, 1 % × 10) + seguro 1 (0,1 % de 1.000) + 2 de gastos.
+    assert.equal(rows[0]!.amount, 113);
+    const sum = rows.reduce((s, r) => s + Math.round(r.amount * 100), 0) / 100;
+    assert.equal(data.outstandingBalance, sum);
+    assert.equal(rows.reduce((s, r) => s + Math.round(r.principal * 100), 0) / 100, 1000); // Σ capital = monto
+  });
+
+  it('cuota variable en curso: las cuotas ya pagadas nacen pagadas', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({
+      clientId: CLIENT_ID,
+      principalAmount: 1000,
+      terms: { ...CALCULATED, amortization: 'fixed_principal' },
+      initialState: { paidInstallments: 2, daysPastDue: 0 },
+    } as never);
+    const data = calls.creditCreate[0]!;
+    const rows = (data.installments as { create: { status?: string }[] }).create;
+    assert.deepEqual(rows.slice(0, 3).map((r) => r.status ?? 'PENDING'), ['PAID', 'PAID', 'PENDING']);
+    assert.equal(data.outstandingBalance, 1055 - 110 - 109);
+  });
+
+  // F4/06 · Fase 5: el móvil carga el «ya está en curso» en el mismo alta (una sola operación offline).
+  it('en curso en el alta: descuenta las cuotas pagadas y vence la primera no pagada (D13)', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({
+      clientId: CLIENT_ID,
+      principalAmount: 1000,
+      installmentAmount: 115,
+      terms: AGREED,
+      initialState: { paidInstallments: 3, daysPastDue: 0 },
+    } as never);
+    const data = calls.creditCreate[0]!;
+    assert.equal(data.outstandingBalance, 805); // 1.150 − 3 × 115
+    const meta = data.metadata as Record<string, unknown>;
+    assert.equal(meta.nextDueDate, '2027-01-25');
+    assert.deepEqual(meta.initialState, { paidInstallments: 3, daysPastDue: 0 });
+  });
+
+  it('en curso en el alta con mora: marca manual y la mora declarada', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: AGREED, initialState: { paidInstallments: 0, outstandingBalance: 900, daysPastDue: 20 } } as never);
+    const data = calls.creditCreate[0]!;
+    assert.equal(data.outstandingBalance, 900);
+    assert.equal(data.daysPastDue, 20);
+    assert.equal(typeof (data.metadata as Record<string, unknown>).moraSince, 'string');
+  });
+
+  it('en curso en el alta: sin condiciones, mezclado con el saldo suelto o que no cierra, se rechaza', async () => {
+    const { service } = makeService({ client: { id: 'c1' } });
+    await rejectsWithCode(
+      service.create({ clientId: CLIENT_ID, principalAmount: 1000, installmentAmount: 115, initialState: { paidInstallments: 1, daysPastDue: 0 } } as never),
+      'CREDIT_TERMS_INVALID',
+    );
+    await rejectsWithCode(
+      service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: AGREED, outstandingBalance: 500, initialState: { paidInstallments: 1, daysPastDue: 0 } } as never),
+      'CREDIT_TERMS_CONFLICT',
+    );
+    await rejectsWithCode(
+      service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: AGREED, initialState: { paidInstallments: 10, daysPastDue: 0 } } as never),
+      'CREDIT_INITIAL_STATE_INVALID',
+    );
+  });
+
+  it('total acordado en pago único: una cuota por el total, en la fecha acordada', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    const terms = { definition: 'agreed_total', principal: 1000, agreedTotal: 1500, repayment: 'single', firstDueDate: '2026-11-25' };
+    await service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms } as never);
+    const data = calls.creditCreate[0]!;
+    assert.equal(data.outstandingBalance, 1500);
+    assert.equal(data.installmentsCount, 1);
+    assert.equal((data.metadata as { installmentAmount: number }).installmentAmount, 1500);
+    assert.equal((data.metadata as { nextDueDate: string }).nextDueDate, '2026-11-25');
   });
 });
 
@@ -344,20 +778,19 @@ describe('CreditsService.markArrears', () => {
   });
 
   /**
-   * 🔴 **Abre el caso en el acto, sin esperar al trabajo diario.** Quien aprieta ese botón quiere ver
-   * el crédito en Mora ahora; esperar al job sería decirle que su decisión vale dentro de seis horas.
+   * F4/08: marcar en mora ya no abre ningún caso. El trigger de la base abre el episodio al cambiar los días, y el
+   * servicio sólo calcula su prioridad en el acto (el crédito aparece en Mora ya, ordenado, sin esperar al job).
    */
-  it('abre el caso ahí mismo, heredando el responsable del préstamo', async () => {
+  it('no abre caso: recalcula la prioridad del episodio ahí mismo', async () => {
     const { service, calls } = makeService({ credit: activo() });
-    await service.markArrears('cr1');
-    assert.equal(calls.caseCreate.length, 1);
-    assert.equal(calls.caseCreate[0]!.assigneeId, 'u-cobrador');
+    await service.markArrears('cr1', 15);
+    assert.deepEqual(calls.priorityRecompute, ['cr1']);
   });
 
-  it('con un caso ya abierto no crea otro', async () => {
-    const { service, calls } = makeService({ credit: activo(), openCase: { id: 'k1' } });
-    await service.markArrears('cr1');
-    assert.equal(calls.caseCreate.length, 0);
+  it('la auditoría ya no habla de casos', async () => {
+    const { service, calls } = makeService({ credit: activo() });
+    await service.markArrears('cr1', 15);
+    assert.ok(calls.audit.some((e) => e.action === 'ARREARS_MARK' && e.entity === 'credit'));
   });
 
   /** Su mora la manda el archivo: la marca se guardaría y no haría nada. Mejor rebotar que mentir. */
@@ -387,17 +820,17 @@ describe('CreditsService.clearArrears', () => {
     ...over,
   });
 
-  it('«siguiente período» avanza la fecha y cierra el caso', async () => {
-    const { service, calls } = makeService({ credit: enMora(), openCase: { id: 'k1' } });
+  it('«siguiente período» avanza la fecha y (el trigger cierra el episodio)', async () => {
+    const { service, calls } = makeService({ credit: enMora() });
     await service.clearArrears('cr1', { mode: 'next_period' });
     const meta = calls.creditUpdate[0]!.metadata as { nextDueDate?: string };
     assert.ok(meta.nextDueDate! > new Date().toISOString().slice(0, 10), 'la nueva fecha es futura');
     assert.equal(calls.creditUpdate[0]!.daysPastDue, 0);
-    assert.equal(calls.caseClose[0]!.closedReason, 'CURRENT');
+    assert.equal(calls.priorityRecompute.length, 0);
   });
 
   it('«sin fecha» deja el préstamo abierto: sin vencimiento no hay mora que contar', async () => {
-    const { service, calls } = makeService({ credit: enMora(), openCase: { id: 'k1' } });
+    const { service, calls } = makeService({ credit: enMora() });
     await service.clearArrears('cr1', { mode: 'none' });
     const meta = calls.creditUpdate[0]!.metadata as { nextDueDate?: string };
     assert.equal(meta.nextDueDate, undefined);
@@ -411,9 +844,145 @@ describe('CreditsService.clearArrears', () => {
 
   it('poner al día también saca la marca manual: quien la puso es quien la saca', async () => {
     const credit = enMora({ metadata: { origin: 'manual', frequency: 'MONTHLY', moraSince: '2026-01-01' } });
-    const { service, calls } = makeService({ credit, openCase: { id: 'k1' } });
+    const { service, calls } = makeService({ credit });
     await service.clearArrears('cr1', { mode: 'next_period' });
     const meta = calls.creditUpdate[0]!.metadata as { moraSince?: string };
     assert.equal(meta.moraSince, undefined);
+  });
+});
+
+/**
+ * 🔴 F4/06 · D20 — cómo se cuenta la mora: por crédito, con el default de la cuenta. Cambiarlo con pagos
+ * registrados se bloquea (reescribiría la mora de un clic).
+ */
+describe('CreditsService — método de mora (D20)', () => {
+  // 10 cuotas mensuales desde el 25 oct 2025: con 3 pagadas, la 4.ª venció el 25 ene 2026 → en mora hoy.
+  const OLD = { ...AGREED, firstDueDate: '2025-10-25' };
+
+  it('sin método en el alta: el default de la cuenta, guardado en el crédito', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' }, settings: { arrearsMethod: 'first_default' } });
+    await service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: AGREED } as never);
+    assert.equal((calls.creditCreate[0]!.metadata as Record<string, unknown>).arrearsMethod, 'first_default');
+  });
+
+  it('el método del alta gana al de la cuenta', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' }, settings: { arrearsMethod: 'first_default' } });
+    await service.create({ clientId: CLIENT_ID, principalAmount: 1000, terms: AGREED, arrearsMethod: 'oldest_unpaid' } as never);
+    assert.equal((calls.creditCreate[0]!.metadata as Record<string, unknown>).arrearsMethod, 'oldest_unpaid');
+  });
+
+  it('en curso con el método bancario: la mora arranca en la primera impaga y guarda el primer atraso', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({
+      clientId: CLIENT_ID,
+      principalAmount: 1000,
+      terms: OLD,
+      initialState: { paidInstallments: 3, daysPastDue: 0 },
+      arrearsMethod: 'first_default',
+    } as never);
+    const data = calls.creditCreate[0]!;
+    const meta = data.metadata as Record<string, unknown>;
+    assert.equal(meta.arrearsSince, '2026-01-25');
+    assert.equal(meta.moraSince, undefined); // no es una marca manual: la calcula la fecha
+    assert.ok((data.daysPastDue as number) > 0);
+  });
+
+  it('cambiar el método con pagos registrados se bloquea (CREDIT_HAS_PAYMENTS)', async () => {
+    const credit = { id: 'cr1', clientId: 'c1', metadata: { origin: 'manual', terms: AGREED, termsVersion: 1 }, _count: { payments: 1, installments: 0 }, client: {} };
+    const { service } = makeService({ credit });
+    await rejectsWithCode(service.update('cr1', { arrearsMethod: 'first_default' } as never), 'CREDIT_HAS_PAYMENTS');
+  });
+
+  it('sin pagos se cambia, recalcula la mora y queda en la auditoría', async () => {
+    const credit = {
+      id: 'cr1',
+      clientId: 'c1',
+      outstandingBalance: 805,
+      metadata: { origin: 'manual', terms: OLD, termsVersion: 1, nextDueDate: '2026-01-25' },
+      _count: { payments: 0, installments: 0 },
+      client: {},
+    };
+    const { service, calls } = makeService({ credit });
+    await service.update('cr1', { arrearsMethod: 'first_default' } as never);
+    const meta = calls.creditUpdate[0]!.metadata as Record<string, unknown>;
+    assert.equal(meta.arrearsMethod, 'first_default');
+    assert.equal(meta.arrearsSince, '2026-01-25');
+    assert.deepEqual(calls.audit.map((a) => `${a.action} ${a.entity}`), ['UPDATE credit']);
+  });
+
+  it('volver a mandar el mismo método no es un cambio (no choca con los pagos)', async () => {
+    const credit = { id: 'cr1', clientId: 'c1', metadata: { origin: 'manual', arrearsMethod: 'first_default' }, _count: { payments: 3, installments: 0 }, client: {} };
+    const { service, calls } = makeService({ credit });
+    await service.update('cr1', { arrearsMethod: 'first_default', code: 'X' } as never);
+    assert.equal(calls.creditUpdate[0]!.code, 'X');
+  });
+});
+
+/**
+ * El responsable del crédito: elegirlo exige `assignment:write`, y se escribe por `AssignmentService`
+ * (tabla + columna). Se revisa en el servicio y no con `@Roles` porque el mismo PATCH lo usa el
+ * cobrador para la nota: llamar al API directo no saltea la regla.
+ */
+describe('CreditsService — responsable del crédito (assignment:write)', () => {
+  const COBRADOR = { userId: 'u-juan', isActive: true, role: 'COLLECTOR' };
+
+  it('PATCH sin assignment:write que cambia el responsable → ASSIGNMENT_FORBIDDEN', async () => {
+    const { service, calls } = makeService({ credit: { id: 'cr1', metadata: { origin: 'import' }, assignedManagerId: 'u-ana' } });
+    await rejectsWithCode(service.update('cr1', { assignedManagerId: 'u-juan' } as never), 'ASSIGNMENT_FORBIDDEN');
+    assert.equal(calls.creditUpdate.length, 0);
+  });
+
+  it('PATCH con assignment:write reasigna por el servicio: la columna no va en el update directo', async () => {
+    const { service, calls } = makeService({
+      permissions: ['assignment:write', 'data:scope:all'],
+      members: [COBRADOR],
+      credit: { id: 'cr1', metadata: { origin: 'import' }, assignedManagerId: 'u-ana' },
+    });
+    await service.update('cr1', { assignedManagerId: 'u-juan' } as never);
+    assert.equal(calls.creditUpdate[0]!.assignedManagerId, undefined);
+    assert.deepEqual(calls.assignmentCreate.map((a) => a.userId), ['u-juan']);
+    assert.deepEqual(calls.columnWrites, [{ assignedManagerId: 'u-juan' }]);
+    assert.ok(calls.audit.some((a) => a.action === 'REASSIGN' && a.entity === 'credit'));
+  });
+
+  it('el cobrador corrige la nota sin tocar el responsable: pasa sin assignment:write', async () => {
+    const { service, calls } = makeService({ credit: { id: 'cr1', metadata: { origin: 'import' }, assignedManagerId: 'u-ana' } });
+    await service.update('cr1', { notes: 'Llamar después de las 18' } as never);
+    assert.equal(calls.assignmentCreate.length, 0);
+  });
+
+  it('mandar el mismo responsable que ya tiene no es reasignar (no pide permiso)', async () => {
+    const { service, calls } = makeService({ credit: { id: 'cr1', metadata: { origin: 'manual' }, assignedManagerId: 'u-ana' } });
+    await service.update('cr1', { assignedManagerId: 'u-ana', notes: 'x' } as never);
+    assert.equal(calls.assignmentCreate.length, 0);
+  });
+
+  it('a alguien que no es cobrador activo de la cuenta → ASSIGNEE_NOT_ELIGIBLE', async () => {
+    const { service } = makeService({
+      permissions: ['assignment:write', 'data:scope:all'],
+      members: [],
+      credit: { id: 'cr1', metadata: { origin: 'manual' }, assignedManagerId: null },
+    });
+    await rejectsWithCode(service.update('cr1', { assignedManagerId: 'u-fantasma' } as never), 'ASSIGNEE_NOT_ELIGIBLE');
+  });
+
+  it('P4 · alta sin assignment:write y sin elegir: el responsable es quien la da de alta', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create(BASE);
+    assert.equal(calls.creditCreate[0]!.assignedManagerId, 'user-1');
+    assert.deepEqual(calls.assignmentCreate.map((a) => a.userId), ['user-1']);
+  });
+
+  it('alta sin assignment:write eligiendo a OTRA persona → ASSIGNMENT_FORBIDDEN', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await rejectsWithCode(service.create({ ...(BASE as object), assignedManagerId: 'u-juan' } as never), 'ASSIGNMENT_FORBIDDEN');
+    assert.equal(calls.creditCreate.length, 0);
+  });
+
+  it('alta con assignment:write sin elegir: queda sin responsable, como antes', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' }, permissions: ['assignment:write'] });
+    await service.create(BASE);
+    assert.equal(calls.creditCreate[0]!.assignedManagerId, undefined);
+    assert.equal(calls.assignmentCreate.length, 0);
   });
 });

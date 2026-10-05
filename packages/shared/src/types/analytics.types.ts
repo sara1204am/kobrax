@@ -21,15 +21,16 @@ export interface DashboardFilters {
   dateTo?: string;
   branchId?: string;
   /**
-   * Los tres de selección múltiple: **una lista, no un valor**.
+   * Los dos de selección múltiple: **una lista, no un valor**.
    *
-   * Mirar la cobranza es comparar —dos cobradores de la misma zona, los casos vencidos *y* los que
+   * Mirar la cobranza es comparar —dos cobradores de la misma zona, las mora vencidas *y* las que
    * prometieron pagar—, y con un solo valor por filtro eso obliga a mirar de a uno y sumar de
    * memoria. Viajan a la API separados por coma, que es lo que `String(lista)` ya escribe.
    */
   collectorId?: string[];
-  caseStatus?: string[];
   priority?: string[];
+  /** De qué fuente son los créditos que se miran (D7). Ausente = todas, con el desglose a la vista. */
+  source?: CreditSource;
 }
 
 /**
@@ -51,14 +52,42 @@ export interface KpiValue {
   previous: number | null;
 }
 
+/**
+ * De dónde salen los números de un crédito (D7). `KOBRAX` = los calcula el sistema (cuotas, pagos,
+ * mora); cualquier otra = los **reporta** una fuente externa a su fecha de corte. Se suman en el
+ * mismo tablero sólo con el desglose a la vista: nunca mezclados en silencio.
+ */
+export const CREDIT_SOURCES = ['KOBRAX', 'PSF'] as const;
+export type CreditSource = (typeof CREDIT_SOURCES)[number];
+
+export function isCreditSource(value: unknown): value is CreditSource {
+  return typeof value === 'string' && (CREDIT_SOURCES as readonly string[]).includes(value);
+}
+
+/** Lo que aporta cada fuente a los KPI de saldo, mora y recaudo del encabezado. */
+export interface SourceBreakdown {
+  source: CreditSource;
+  /** Créditos activos de esa fuente dentro de los filtros. */
+  credits: number;
+  outstanding: number;
+  overdue: number;
+  /** Pagos registrados en Kobrax sobre créditos de esa fuente (D3: sobre un PSF también es recupero). */
+  collected: number;
+  /** Sólo externas: el corte más viejo y el más nuevo de sus números (`YYYY-MM-DD`). */
+  reportedAsOf?: { from: string; to: string };
+}
+
 export interface AnalyticsSummary {
   outstanding: KpiValue;
   overdue: KpiValue;
   /** Porcentaje 0-100, no una fracción: es lo que se muestra y así no se redondea dos veces. */
   overdueRate: KpiValue;
-  activeCases: KpiValue;
+  /** Créditos con un episodio de mora abierto (y su valor al cierre del período anterior). */
+  creditsInArrears: KpiValue;
   collected: KpiValue;
   currency: string;
+  /** El mismo saldo, mora y recaudo partidos por fuente. Sólo las fuentes con algo que aportar. */
+  bySource: SourceBreakdown[];
 }
 
 export interface AgingBucketRow {
@@ -68,8 +97,10 @@ export interface AgingBucketRow {
 }
 
 export interface CollectorPerformanceRow {
+  /** El responsable de los créditos (F4/08). */
   collectorId: string;
-  cases: number;
+  /** Créditos en mora (episodio abierto) del responsable. */
+  creditsInArrears: number;
   outstanding: number;
   overdue: number;
   /** 0-100. Lo calcula el servidor, que es el que tiene los dos números exactos. */
@@ -107,6 +138,12 @@ export interface TrendPoint {
    * deuda que `KpiValue.previous`.
    */
   outstanding: number;
+  /**
+   * La parte de `outstanding` que es de fuentes externas (D7). **No se reconstruye con pagos**: el
+   * saldo de un PSF lo manda su reporte y un pago no lo baja (D3). Es el último saldo reportado a
+   * esa fecha, de los snapshots de cada importación; 0 si ninguna operación externa entra.
+   */
+  outstandingExternal: number;
 }
 
 export type TrendGranularity = 'day' | 'week' | 'month';

@@ -53,7 +53,8 @@ export function routeProgress(route: RouteItem): { done: number; total: number }
 
 /** Lo mínimo que el resumen necesita de un pago. */
 export interface DayPayment {
-  caseId?: string;
+  /** El pago cuelga del crédito (F4/08): es lo que se cruza con las paradas. */
+  creditId?: string;
   amount: number;
 }
 
@@ -91,9 +92,9 @@ export function summarizeDay(route: RouteItem, payments: DayPayment[] = []): Day
     counts.set(c, (counts.get(c) ?? 0) + 1);
   }
 
-  const caseIds = new Set(stops.map((s) => s.caseId).filter((id): id is string => !!id));
+  const creditIds = new Set(stops.map((s) => s.creditId).filter((id): id is string => !!id));
   const collected = payments
-    .filter((p) => p.caseId && caseIds.has(p.caseId))
+    .filter((p) => !!p.creditId && creditIds.has(p.creditId))
     .reduce((sum, p) => sum + p.amount, 0);
 
   return {

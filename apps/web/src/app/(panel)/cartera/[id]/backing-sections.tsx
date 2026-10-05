@@ -1,11 +1,14 @@
 'use client';
 
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import type { ClientDetail } from '@kobrax/shared';
+import type { ClientDetail, ClientRelationDetail } from '@kobrax/shared';
 import type { CatalogOption } from '@/components/client-form';
 import { Icon } from '@/components/panel-shell';
 import { Section } from '@/components/panel-ui';
+import { Modal } from '@/components/modal';
 import { money } from '@/lib/format';
+import { ContactDetail, Dato, EyeButton, LocationDetail } from './client-contacts';
 
 /**
  * Qué respalda esta deuda: **la persona y el bien**.
@@ -83,8 +86,12 @@ export function GuarantorsSection({
 }) {
   const t = useTranslations('portfolio');
   const rows = client.relations ?? [];
+  const [viendo, setViendo] = useState<string | null>(null);
+  // Por id y no la fila guardada: si revelan la ficha, el modal muestra los datos en claro.
+  const actual = rows.find((r) => r.id === viendo) ?? null;
 
   return (
+    <>
     <Section
       title={t('sections.guarantors')}
       inner=""
@@ -100,7 +107,10 @@ export function GuarantorsSection({
         <ul className="divide-y divide-k-border">
           {rows.map((r) => (
             <li key={r.id} className="px-4 py-3">
-              <p className="text-[14px] font-medium text-k-text">{r.relatedName}</p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-[14px] font-medium text-k-text">{r.relatedName}</p>
+                <EyeButton onClick={() => setViendo(r.id)} />
+              </div>
               <p className="text-[12px] text-k-muted">
                 {t(`relationType.${r.relationshipType}`)}
                 {!r.isContactable && ` · ${t('notContactable')}`}
@@ -122,6 +132,62 @@ export function GuarantorsSection({
         </ul>
       )}
     </Section>
+
+    <Modal wide open={actual !== null} onClose={() => setViendo(null)} title={actual?.relatedName ?? t('sections.guarantors')}>
+      {actual && <GuarantorDetail relation={actual} />}
+    </Modal>
+    </>
+  );
+}
+
+/**
+ * Todo lo del garante en un lugar: quién es, sus teléfonos y **dónde encontrarlo**, con cada
+ * dirección en su mapa. En la tarjeta de la ficha viaja todo apretado en una línea con `·`; acá se
+ * lee entero el día que el deudor no aparece y hay que ir a buscar a quien responde por él.
+ */
+function GuarantorDetail({ relation: r }: { relation: ClientRelationDetail }) {
+  const t = useTranslations('portfolio');
+  const contacts = r.contacts ?? [];
+  const locations = r.locations ?? [];
+
+  return (
+    <div className="space-y-5">
+      <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        <Dato label={t('form.relatedName')} value={r.relatedName} />
+        <Dato label={t('form.relationType')} value={t(`relationType.${r.relationshipType}`)} />
+        <Dato label={t('form.gender')} value={r.gender ? t(`gender.${r.gender}`) : t('gender.unset')} />
+        <Dato label={t('contactableLabel')} value={r.isContactable ? t('yes') : t('no')} />
+        {r.creditIds && r.creditIds.length > 0 && (
+          <Dato label={t('form.guarantees')} value={t('guaranteesCount', { count: r.creditIds.length })} />
+        )}
+        {r.notes && <Dato label={t('form.notes')} value={r.notes} wide />}
+      </dl>
+
+      <Bloque title={t('form.relationContacts')} empty={t('noContacts')}>
+        {contacts.map((c) => (
+          <li key={c.id} className="rounded-xl border border-k-border bg-k-bg p-4">
+            <ContactDetail contact={c} />
+          </li>
+        ))}
+      </Bloque>
+
+      <Bloque title={t('form.relationLocations')} empty={t('noLocations')}>
+        {locations.map((l) => (
+          <li key={l.id} className="rounded-xl border border-k-border bg-k-bg p-4">
+            <LocationDetail location={l} />
+          </li>
+        ))}
+      </Bloque>
+    </div>
+  );
+}
+
+function Bloque({ title, empty, children }: { title: string; empty: string; children: React.ReactNode[] }) {
+  return (
+    <section className="border-t border-k-border pt-4">
+      <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{title}</h3>
+      {children.length === 0 ? <p className="text-[13px] text-k-muted">{empty}</p> : <ul className="space-y-3">{children}</ul>}
+    </section>
   );
 }
 

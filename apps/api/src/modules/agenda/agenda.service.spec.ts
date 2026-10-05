@@ -16,7 +16,7 @@ function isoUTC(offsetDays = 0): string {
 
 function row(over: Record<string, unknown> = {}) {
   return {
-    id: 'a1', caseId: 'ca1', clientId: 'cl1', creditId: 'cr1', assigneeId: 'u1',
+    id: 'a1', clientId: 'cl1', creditId: 'cr1', assigneeId: 'u1',
     type: 'CALL', status: 'SCHEDULED', priorityCode: null, expectedResultCode: null,
     scheduledDate: new Date('2026-07-08'), timeMode: 'FIXED', scheduledTime: '09:00',
     timeSlot: null, observations: null, details: {}, resultActivityId: null,
@@ -24,11 +24,11 @@ function row(over: Record<string, unknown> = {}) {
   };
 }
 
-/** Caso abierto de `cl1` con su crédito (saldo 1000, moneda BOB). */
-function openCase(over: Record<string, unknown> = {}) {
+/** Crédito de `cl1` (saldo 1000, moneda BOB), a cargo de `u1`. `daysPastDue: 0` = al día. Sin caso de por medio. */
+function creditRow(over: Record<string, unknown> = {}) {
   return {
-    id: UUID, clientId: 'cl1', creditId: UUID, status: 'ACTIVE', deletedAt: null, assigneeId: 'u1',
-    credit: { id: UUID, code: 'CR-001', principalAmount: 1500, outstandingBalance: 1000, currency: 'BOB', daysPastDue: 12, deletedAt: null },
+    id: UUID, clientId: 'cl1', code: 'CR-001', principalAmount: 1500, outstandingBalance: 1000, currency: 'BOB',
+    daysPastDue: 12, deletedAt: null, assignedManagerId: 'u1', externalSource: null,
     ...over,
   };
 }
@@ -37,7 +37,9 @@ interface Opts {
   permissions?: string[];
   rows?: unknown[];
   clients?: unknown[];
-  cases?: unknown[];
+  credits?: unknown[];
+  /** Episodio de mora abierto del crédito (`null`/ausente = al día). */
+  episode?: { id: string } | null;
   contacts?: unknown[];
   locations?: unknown[];
   catalog?: Record<string, unknown> | null;
@@ -50,6 +52,14 @@ interface Opts {
   credit?: Record<string, unknown> | null;
   /** `findOne`: filas de catálogo que resuelven los `code`s de una promesa. */
   catalogRows?: { code: string; label: string }[];
+  /** `complete`: la actividad que dejó la ejecución anterior (reintento). */
+  priorActivity?: { result: string } | null;
+  /** `create`: la 1ª alta choca con la PK (carrera); desde ahí `findFirst` devuelve este ítem. */
+  createRace?: Record<string, unknown>;
+  /** Rangos de mora de la cuenta (`arrear_categories`). */
+  categories?: Record<string, unknown>[];
+  /** `userAccount` de la cuenta (nombres de quienes atienden). */
+  userAccounts?: unknown[];
 }
 
 function makeService(opts: Opts = {}) {
@@ -57,7 +67,8 @@ function makeService(opts: Opts = {}) {
     listWhere: undefined as Record<string, unknown> | undefined,
     itemWhere: undefined as Record<string, unknown> | undefined,
     historyWhere: undefined as Record<string, unknown> | undefined,
-    caseWhere: undefined as Record<string, unknown> | undefined,
+    visibleSql: undefined as { sql: string; values: unknown[] } | undefined,
+    creditUpdate: undefined as Record<string, unknown> | undefined,
     created: undefined as Record<string, unknown> | undefined,
     /** Todas las altas, en orden: la promesa crea DOS agendados (ella y su recordatorio, S5·D2). */
     createdAll: [] as Record<string, unknown>[],
@@ -68,13 +79,17 @@ function makeService(opts: Opts = {}) {
     activity: undefined as Record<string, unknown> | undefined,
     updated: undefined as Record<string, unknown> | undefined,
     events: [] as string[],
+    /** Cuántas veces se consultó cada tabla del enriquecimiento: tiene que ser UNA por página (sin N+1). */
+    queries: { credit: 0, category: 0, users: 0 },
+    creditSelect: undefined as Record<string, unknown> | undefined,
   };
+  let raced = false;
   const first = <T>(list: T[] | undefined) => (list && list.length > 0 ? list[0] : null);
   const tx = {
     agendaItem: {
       findMany: async (args: { where?: Record<string, unknown> }) => {
-        // `findOne` pide el historial por `caseId`; el resto de las lecturas listan por día/vencidos.
-        if (args.where?.caseId) {
+        // `findOne` pide el historial por `creditId`; el resto de las lecturas listan por día/vencidos.
+        if (args.where?.creditId && args.where?.id) {
           calls.historyWhere = args.where;
           return opts.history ?? [];
         }
@@ -83,10 +98,15 @@ function makeService(opts: Opts = {}) {
       },
       findFirst: async (args: { where?: Record<string, unknown> }) => {
         calls.itemWhere = args.where;
+        if (opts.createRace) return raced ? opts.createRace : null;
         return opts.item ?? null;
       },
       count: async () => (opts.rows ?? []).length,
       create: async (args: { data: Record<string, unknown> }) => {
+        if (opts.createRace && !raced) {
+          raced = true;
+          throw Object.assign(new Error('unique'), { code: 'P2002' });
+        }
         // `created` sigue siendo la PRIMERA alta (lo que esperan los tests de S2); `createdAll`
         // guarda todas, porque la promesa además crea su recordatorio.
         calls.created ??= args.data;
@@ -98,21 +118,46 @@ function makeService(opts: Opts = {}) {
         return row({ ...(opts.item ?? {}), ...args.data, id: args.where.id });
       },
     },
-    caseActivity: {
+    creditActivity: {
+      findFirst: async () => opts.priorActivity ?? null,
       create: async (args: { data: Record<string, unknown> }) => {
         calls.activity = args.data;
         return { id: 'act-1', ...args.data };
       },
     },
-    credit: { findFirst: async () => opts.credit ?? null },
-    client: { findMany: async () => opts.clients ?? [] },
-    collectionCase: {
-      findMany: async () => opts.cases ?? [],
-      findFirst: async (args: { where?: Record<string, unknown> }) => {
-        calls.caseWhere = args.where;
-        return first(opts.cases as Record<string, unknown>[] | undefined);
+    // Visibilidad por crédito (mismo alcance que la ficha de mora): una fila por cada crédito visible.
+    $queryRaw: async (q: { sql: string; values: unknown[] }) => {
+      calls.visibleSql = { sql: q.sql, values: q.values };
+      return ((opts.credits ?? []) as { id: string; clientId: string }[]).map((c) => ({ id: c.id, client_id: c.clientId }));
+    },
+    creditArrearEpisode: { findFirst: async () => opts.episode ?? null },
+    credit: {
+      findFirst: async () => opts.credit ?? first(opts.credits as unknown[] | undefined),
+      findMany: async (args?: { select?: Record<string, unknown> }) => {
+        // El enriquecimiento de la lista pide `arrearEpisodes`; los demás usos (agendables) no.
+        if (args?.select && 'arrearEpisodes' in args.select) {
+          calls.queries.credit += 1;
+          calls.creditSelect = args.select;
+        }
+        return opts.credits ?? [];
       },
-      update: async () => ({}),
+      update: async (args: { data: Record<string, unknown> }) => {
+        calls.creditUpdate = args.data;
+        return {};
+      },
+    },
+    client: { findMany: async () => opts.clients ?? [] },
+    arrearCategory: {
+      findMany: async () => {
+        calls.queries.category += 1;
+        return opts.categories ?? [];
+      },
+    },
+    userAccount: {
+      findMany: async () => {
+        calls.queries.users += 1;
+        return opts.userAccounts ?? [];
+      },
     },
     clientContact: { findFirst: async () => first(opts.contacts as unknown[]) },
     clientLocation: { findFirst: async () => first(opts.locations as unknown[]) },
@@ -176,7 +221,7 @@ function makeService(opts: Opts = {}) {
 /** Body mínimo válido de creación; `over` pisa lo que cada test necesite. */
 function createDto(over: Record<string, unknown> = {}) {
   return {
-    caseId: UUID, creditId: UUID, type: 'CALL', scheduledDate: isoUTC(1),
+    creditId: UUID, type: 'CALL', scheduledDate: isoUTC(1),
     timeMode: 'FIXED', scheduledTime: '15:30', details: { contactId: CONTACT }, ...over,
   } as never;
 }
@@ -209,6 +254,92 @@ describe('AgendaService.listByDay (scope + enriquecimiento)', () => {
     });
     const res = await service.listByDay('2026-07-08');
     assert.equal(res.data![0]!.clientName, 'Ana Ruiz');
+  });
+});
+
+describe('AgendaService · campos del crédito en la lista', () => {
+  const CATS = [
+    { code: 'A', name: 'Categoría A', color: null, fromDays: 1, toDays: 30 },
+    { code: 'B', name: 'Categoría B', color: '#f59e0b', fromDays: 31, toDays: 60 },
+  ];
+  const credit = (over: Record<string, unknown> = {}) => ({
+    id: 'cr1', code: 'C-12345', outstandingBalance: 2450.5, currency: 'BOB', daysPastDue: 45, writtenOffAt: null,
+    arrearEpisodes: [{ id: 'e1' }], ...over,
+  });
+  const user = (userId: string, firstName: string, lastName: string) => ({ userId, user: { profile: { firstName, lastName }, email: `${firstName}@x.com` } });
+
+  it('trae código, situación, días, categoría, saldo, moneda y nombre de quien atiende', async () => {
+    const { service } = makeService({
+      rows: [row({ assigneeId: 'u1' })],
+      credits: [credit()],
+      categories: CATS,
+      userAccounts: [user('u1', 'Carlos', 'Rojas')],
+    });
+    const [it] = (await service.listByDay({ date: '2026-07-08' })).data!;
+    assert.equal(it!.creditCode, 'C-12345');
+    assert.equal(it!.creditSituation, 'IN_ARREARS');
+    assert.equal(it!.daysPastDue, 45);
+    assert.deepEqual(it!.category, { code: 'B', name: 'Categoría B', color: '#f59e0b' });
+    assert.equal(it!.balance, 2450.5);
+    assert.equal(it!.currency, 'BOB');
+    assert.equal(it!.assigneeName, 'Carlos Rojas');
+  });
+
+  it('sin episodio abierto está «al día» y sin categoría, aunque tenga días', async () => {
+    const { service } = makeService({ rows: [row()], credits: [credit({ arrearEpisodes: [], daysPastDue: 0 })], categories: CATS });
+    const [it] = (await service.listByDay({ date: '2026-07-08' })).data!;
+    assert.equal(it!.creditSituation, 'CURRENT');
+    assert.equal(it!.category, undefined);
+  });
+
+  it('la situación sale del episodio, no de los días: con episodio abierto y 0 días sigue en mora', async () => {
+    const { service } = makeService({ rows: [row()], credits: [credit({ daysPastDue: 0 })], categories: CATS });
+    const [it] = (await service.listByDay({ date: '2026-07-08' })).data!;
+    assert.equal(it!.creditSituation, 'IN_ARREARS');
+    assert.equal(it!.category, undefined); // days < 1 → sin categoría
+  });
+
+  it('sin nombre en el perfil no hay assigneeName y el correo nunca sale', async () => {
+    const { service } = makeService({
+      rows: [row({ assigneeId: 'u1' })],
+      credits: [credit()],
+      userAccounts: [{ userId: 'u1', user: { profile: null, email: 'secreto@x.com' } }],
+    });
+    const res = await service.listByDay({ date: '2026-07-08' });
+    assert.equal(res.data![0]!.assigneeName, undefined);
+    assert.ok(!JSON.stringify(res).includes('secreto@x.com'));
+  });
+
+  it('una consulta por tabla para toda la página (sin N+1)', async () => {
+    const { service, calls } = makeService({
+      rows: [row({ id: 'a1' }), row({ id: 'a2', assigneeId: 'u2' }), row({ id: 'a3', creditId: 'cr2' })],
+      credits: [credit(), credit({ id: 'cr2', code: 'C-2' })],
+      categories: CATS,
+      userAccounts: [user('u1', 'Carlos', 'Rojas'), user('u2', 'Ana', 'Martínez')],
+    });
+    const res = await service.listByDay({ date: '2026-07-08' });
+    assert.equal(res.data!.length, 3);
+    assert.deepEqual(calls.queries, { credit: 1, category: 1, users: 1 });
+    assert.equal(res.data![2]!.creditCode, 'C-2');
+  });
+
+  it('no pide el correo ni datos de contacto de las personas', async () => {
+    const { service, calls } = makeService({ rows: [row()], credits: [credit()] });
+    await service.listByDay({ date: '2026-07-08' });
+    assert.ok(calls.creditSelect && !('clientId' in calls.creditSelect));
+  });
+
+  it('sin filas no consulta nada de más', async () => {
+    const { service, calls } = makeService({ rows: [] });
+    await service.listByDay({ date: '2026-07-08' });
+    assert.deepEqual(calls.queries, { credit: 0, category: 0, users: 0 });
+  });
+
+  it('las vencidas traen los mismos campos', async () => {
+    const { service } = makeService({ rows: [row()], credits: [credit()], categories: CATS });
+    const [it] = (await service.listOverdue({ limit: 5 } as never)).data!;
+    assert.equal(it!.creditCode, 'C-12345');
+    assert.equal(it!.category?.code, 'B');
   });
 });
 
@@ -294,17 +425,17 @@ describe('AgendaService.findOne (detalle S3)', () => {
     assert.equal(res.data!.labels, undefined);
   });
 
-  it('el historial es del mismo caso, excluye el ítem abierto y los borrados', async () => {
+  it('el historial es del mismo crédito, excluye el ítem abierto y los borrados', async () => {
     const { service, calls } = makeService({
       item: row(),
       credit: CREDIT,
       history: [row({ id: 'a2', status: 'EXECUTED', scheduledDate: new Date('2026-06-21') })],
     });
     const res = await service.findOne('a1');
-    assert.equal(calls.historyWhere!.caseId, 'ca1');
+    assert.equal(calls.historyWhere!.creditId, 'cr1');
     assert.deepEqual(calls.historyWhere!.id, { not: 'a1' });
     assert.equal(calls.historyWhere!.deletedAt, null);
-    // El historial es del caso, no del cobrador: un supervisor y su cobrador ven lo mismo.
+    // El historial es del crédito, no del cobrador: un supervisor y su cobrador ven lo mismo.
     assert.equal(calls.historyWhere!.assigneeId, undefined);
     assert.equal(res.data!.history[0]!.id, 'a2');
     assert.equal(res.data!.history[0]!.isOverdue, false); // EXECUTED nunca vence
@@ -329,17 +460,33 @@ describe('AgendaService.findOne (detalle S3)', () => {
 });
 
 describe('AgendaService.complete (ejecutar S4)', () => {
-  it('deja un CaseActivity con el outcome, apunta el agendado y lo pasa a EXECUTED', async () => {
+  it('deja un CreditActivity con el outcome, apunta el agendado y lo pasa a EXECUTED', async () => {
     const { service, calls } = makeService({ item: row({ type: 'CALL', status: 'SCHEDULED' }) });
     const res = await service.complete('a1', { outcome: 'CONTACTED' } as never);
     assert.equal(calls.activity!.type, 'CALL'); // mapType CALL -> CALL
     assert.equal(calls.activity!.result, 'CONTACTED');
-    assert.equal(calls.activity!.caseId, 'ca1');
+    assert.equal(calls.activity!.creditId, 'cr1');
+    assert.equal(calls.activity!.clientId, 'cl1');
+    assert.equal(calls.activity!.episodeId, null, 'crédito al día: sin episodio');
+    assert.ok(calls.creditUpdate!.lastActionAt instanceof Date, 'última gestión (informativa)');
     assert.equal(calls.updated!.status, 'EXECUTED');
     assert.equal(calls.updated!.resultActivityId, 'act-1');
     assert.equal(res.data!.status, 'EXECUTED');
     assert.deepEqual(calls.audits, [{ entity: 'agenda_item', action: 'EXECUTE' }]);
-    assert.equal(calls.events.length, 1); // CASE_UPDATED
+    assert.equal(calls.events.length, 0);
+  });
+
+  it('con una mora abierta, la actividad queda ligada a ese episodio', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'VISIT', status: 'SCHEDULED' }), episode: { id: 'ep-1' } });
+    await service.complete('a1', { outcome: 'CONTACTED' } as never);
+    assert.equal(calls.activity!.episodeId, 'ep-1');
+  });
+
+  it('un agendado preventivo (crédito al día) se ejecuta igual', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'REMINDER', status: 'SCHEDULED' }) });
+    const res = await service.complete('a1', { outcome: 'DONE' } as never);
+    assert.equal(res.data!.status, 'EXECUTED');
+    assert.equal(calls.updated!.resultActivityId, 'act-1');
   });
 
   it('mapea el tipo de gestión al tipo de actividad de la bitácora', async () => {
@@ -410,10 +557,11 @@ describe('AgendaService.postpone (S4)', () => {
 });
 
 describe('AgendaService.clientContext', () => {
-  it('devuelve créditos agendables y revela la PII con auditoría', async () => {
-    const { service, calls } = makeService({ cases: [openCase()] });
+  it('lista TODOS los créditos visibles (al día y en mora) y revela la PII con auditoría', async () => {
+    const { service, calls } = makeService({ credits: [creditRow(), creditRow({ id: 'cr-aldia', code: 'CR-002', daysPastDue: 0 })] });
     const res = await service.clientContext('cl1');
-    assert.equal(res.data!.credits.length, 1);
+    assert.equal(res.data!.credits.length, 2);
+    assert.deepEqual(res.data!.credits.map((c) => c.daysPastDue), [12, 0]); // al día = 0 → acción preventiva
     assert.equal(res.data!.credits[0]!.outstandingBalance, 1000);
     assert.equal(res.data!.client.displayName, 'Ana Ruiz');
     assert.equal(res.data!.contacts[0]!.value, '78012345'); // en claro
@@ -422,9 +570,18 @@ describe('AgendaService.clientContext', () => {
     assert.deepEqual(calls.audits, [{ entity: 'agenda_client_context', action: 'PII_REVEAL' }]);
   });
 
+  it('el alcance es el de la ficha de mora: un cobrador entra por responsable/asignación, no por caso', async () => {
+    const { service, calls } = makeService({ permissions: ['collection:write'], credits: [creditRow()] });
+    await service.clientContext('cl1');
+    assert.match(calls.visibleSql!.sql, /cr\.assigned_manager_id = ?/);
+    assert.match(calls.visibleSql!.sql, /credit_assignments/);
+    assert.ok(calls.visibleSql!.values.includes('u1'));
+    assert.ok(calls.visibleSql!.values.includes('cl1'));
+  });
+
   it('trae el capital y el saldo de las cuotas vencidas (impago, no el monto original)', async () => {
     const { service } = makeService({
-      cases: [openCase()],
+      credits: [creditRow()],
       installments: [{ creditId: UUID, _sum: { amount: 400, paidAmount: 150 } }],
     });
     const res = await service.clientContext('cl1');
@@ -433,13 +590,13 @@ describe('AgendaService.clientContext', () => {
   });
 
   it('crédito sin cronograma cargado → mora 0, no undefined', async () => {
-    const { service } = makeService({ cases: [openCase()], installments: [] });
+    const { service } = makeService({ credits: [creditRow()], installments: [] });
     const res = await service.clientContext('cl1');
     assert.equal(res.data!.credits[0]!.overdueAmount, 0);
   });
 
-  it('excluye casos terminales → sin casos abiertos corta con AGENDA_002 y NO revela PII', async () => {
-    const { service, calls } = makeService({ cases: [openCase({ status: 'CLOSED' })] });
+  it('sin créditos visibles corta con AGENDA_002 y NO revela PII', async () => {
+    const { service, calls } = makeService({ credits: [] });
     await expectError(() => service.clientContext('cl1'), 'AGENDA_002');
     assert.deepEqual(calls.reveals, []);
     assert.deepEqual(calls.audits, []);
@@ -450,7 +607,7 @@ describe('AgendaService.addClientContact', () => {
   const phone = { contactType: 'PHONE' as const, value: '78099999', notes: 'Celular nuevo' };
 
   it('delega el cifrado y el audit en ClientsService, y no filtra el ciphertext', async () => {
-    const { service, calls } = makeService({ cases: [openCase()] });
+    const { service, calls } = makeService({ credits: [creditRow()] });
     const res = await service.addClientContact('cl1', phone);
     assert.deepEqual(calls.addedContacts, [{ clientId: 'cl1', ...phone }]);
     assert.equal(res.data!.value, '78099999'); // el valor que mandó el cliente, no `enc(...)`
@@ -458,7 +615,7 @@ describe('AgendaService.addClientContact', () => {
   });
 
   it('respeta el scope: cliente sin casos propios → AGENDA_002 y no escribe nada', async () => {
-    const { service, calls } = makeService({ cases: [] });
+    const { service, calls } = makeService({ credits: [] });
     await expectError(() => service.addClientContact('cl1', phone), 'AGENDA_002');
     assert.deepEqual(calls.addedContacts, []);
   });
@@ -468,7 +625,7 @@ describe('AgendaService.addClientLocation', () => {
   const place = { locationType: 'HOME' as const, address: 'Calle Falsa 123', zone: 'Sur', latitude: -17.78, longitude: -63.18 };
 
   it('guarda la dirección con sus coordenadas y devuelve el texto en claro', async () => {
-    const { service, calls } = makeService({ cases: [openCase()] });
+    const { service, calls } = makeService({ credits: [creditRow()] });
     const res = await service.addClientLocation('cl1', place);
     assert.deepEqual(calls.addedLocations, [{ clientId: 'cl1', ...place }]);
     assert.equal(res.data!.address, 'Calle Falsa 123'); // no `enc(...)`
@@ -477,27 +634,28 @@ describe('AgendaService.addClientLocation', () => {
   });
 
   it('las coordenadas son opcionales: se puede cargar sólo la dirección', async () => {
-    const { service } = makeService({ cases: [openCase()] });
+    const { service } = makeService({ credits: [creditRow()] });
     const res = await service.addClientLocation('cl1', { locationType: 'WORK', address: 'Av. Siempre Viva 742' });
     assert.equal(res.data!.latitude, undefined);
     assert.equal(res.data!.longitude, undefined);
   });
 
   it('respeta el scope: cliente sin casos propios → AGENDA_002 y no escribe nada', async () => {
-    const { service, calls } = makeService({ cases: [] });
+    const { service, calls } = makeService({ credits: [] });
     await expectError(() => service.addClientLocation('cl1', place), 'AGENDA_002');
     assert.deepEqual(calls.addedLocations, []);
   });
 });
 
 describe('AgendaService.create', () => {
-  it('crea y deriva clientId/assigneeId del caso (nunca del body)', async () => {
-    const { service, calls } = makeService({ cases: [openCase()], contacts: [{ id: CONTACT }] });
+  it('crea por crédito, sin caso: deriva clientId/assigneeId del crédito (nunca del body)', async () => {
+    const { service, calls } = makeService({ credits: [creditRow()], contacts: [{ id: CONTACT }] });
     const res = await service.create(createDto());
     assert.equal(calls.created!.clientId, 'cl1');
     assert.equal(calls.created!.assigneeId, 'u1');
     assert.equal(calls.created!.timeSlot, null); // FIXED no persiste franja
-    assert.equal(calls.caseWhere!.assigneeId, 'u1'); // scope del cobrador
+    assert.equal(calls.created!.creditId, UUID);
+    assert.ok(calls.visibleSql!.values.includes(UUID), 'el alcance se resuelve sobre el crédito');
     assert.deepEqual(calls.audits, [{ entity: 'agenda_item', action: 'CREATE' }]);
     assert.equal(res.data!.type, 'CALL');
   });
@@ -515,7 +673,7 @@ describe('AgendaService.create', () => {
 
   it('una promesa crea TAMBIÉN su recordatorio, el día anterior', async () => {
     const { service, calls } = makeService({
-      cases: [openCase()],
+      credits: [creditRow()],
       catalog: { code: 'CASH', label: 'Efectivo' }, // el medio de pago que valida `assertPaymentMethod`
     });
     await service.create(promiseDto(5));
@@ -529,7 +687,7 @@ describe('AgendaService.create', () => {
     assert.equal(dif, -24 * 60 * 60 * 1000);
     // Del mismo cobrador: es él quien tiene que acordarse.
     assert.equal(recordatorio!.assigneeId, promesa!.assigneeId);
-    assert.equal(recordatorio!.caseId, promesa!.caseId);
+    assert.equal(recordatorio!.creditId, promesa!.creditId);
     // Y queda auditado como cualquier alta.
     assert.deepEqual(calls.audits, [
       { entity: 'agenda_item', action: 'CREATE' },
@@ -539,7 +697,7 @@ describe('AgendaService.create', () => {
 
   it('una promesa para MAÑANA no crea recordatorio: caería hoy y no recuerda nada', async () => {
     const { service, calls } = makeService({
-      cases: [openCase()],
+      credits: [creditRow()],
       catalog: { code: 'CASH', label: 'Efectivo' }, // el medio de pago que valida `assertPaymentMethod`
     });
     await service.create(promiseDto(1));
@@ -548,76 +706,73 @@ describe('AgendaService.create', () => {
   });
 
   it('el resto de los tipos no crean recordatorio', async () => {
-    const { service, calls } = makeService({ cases: [openCase()], contacts: [{ id: CONTACT }] });
+    const { service, calls } = makeService({ credits: [creditRow()], contacts: [{ id: CONTACT }] });
     await service.create(createDto());
     assert.equal(calls.createdAll.length, 1);
   });
 
-  it('un supervisor agendando sobre un caso ajeno lo asigna al cobrador del caso, no a sí mismo', async () => {
+  it('un supervisor agendando sobre un crédito ajeno lo asigna al responsable del crédito, no a sí mismo', async () => {
     const { service, calls } = makeService({
-      permissions: ['agenda:assign'],
-      cases: [openCase({ assigneeId: 'cobrador-2' })],
+      permissions: ['agenda:assign', 'assignment:write', 'data:scope:all'],
+      credits: [creditRow({ assignedManagerId: 'cobrador-2' })],
       contacts: [{ id: CONTACT }],
     });
     await service.create(createDto());
     assert.equal(calls.created!.assigneeId, 'cobrador-2'); // si no, el cobrador nunca lo vería en su agenda
-    assert.equal(calls.caseWhere!.assigneeId, undefined); // AGENDA_ASSIGN ve todo el tenant
+    assert.doesNotMatch(calls.visibleSql!.sql, /assigned_manager_id = /); // el alcance total ve todo
   });
 
-  it('caso sin cobrador asignado → el agendado queda para quien lo crea', async () => {
-    const { service, calls } = makeService({ cases: [openCase({ assigneeId: null })], contacts: [{ id: CONTACT }] });
+  it('crédito AL DÍA (sin episodio ni caso): se puede agendar una acción preventiva', async () => {
+    const { service, calls } = makeService({ credits: [creditRow({ daysPastDue: 0 })], contacts: [{ id: CONTACT }] });
+    const res = await service.create(createDto());
+    assert.equal(res.data!.creditId, UUID);
+    assert.equal(calls.created!.creditId, UUID);
+  });
+
+  it('crédito sin responsable → el agendado queda para quien lo crea', async () => {
+    const { service, calls } = makeService({ credits: [creditRow({ assignedManagerId: null })], contacts: [{ id: CONTACT }] });
     await service.create(createDto());
     assert.equal(calls.created!.assigneeId, 'u1');
   });
 
-  it('caso ajeno / inexistente → AGENDA_001', async () => {
-    const { service } = makeService({ cases: [] });
-    await expectError(() => service.create(createDto()), 'AGENDA_001');
-  });
-
-  it('caso terminal → AGENDA_001', async () => {
-    const { service } = makeService({ cases: [openCase({ status: 'WRITTEN_OFF' })] });
-    await expectError(() => service.create(createDto()), 'AGENDA_001');
-  });
-
-  it('creditId que no es el del caso → AGENDA_001', async () => {
-    const { service } = makeService({ cases: [openCase({ creditId: 'otro' })] });
+  it('crédito fuera de alcance / inexistente → AGENDA_001', async () => {
+    const { service } = makeService({ credits: [] });
     await expectError(() => service.create(createDto()), 'AGENDA_001');
   });
 
   it('fecha pasada → AGENDA_003', async () => {
-    const { service } = makeService({ cases: [openCase()] });
+    const { service } = makeService({ credits: [creditRow()] });
     await expectError(() => service.create(createDto({ scheduledDate: isoUTC(-1) })), 'AGENDA_003');
   });
 
   it('hoy sí se puede agendar (el borde no es pasado)', async () => {
-    const { service } = makeService({ cases: [openCase()], contacts: [{ id: CONTACT }] });
+    const { service } = makeService({ credits: [creditRow()], contacts: [{ id: CONTACT }] });
     await service.create(createDto({ scheduledDate: isoUTC(0) }));
   });
 
   it('FIXED sin hora → AGENDA_004; LAPSE sin franja → AGENDA_004', async () => {
-    const { service } = makeService({ cases: [openCase()], contacts: [{ id: CONTACT }] });
+    const { service } = makeService({ credits: [creditRow()], contacts: [{ id: CONTACT }] });
     await expectError(() => service.create(createDto({ scheduledTime: undefined })), 'AGENDA_004');
     await expectError(() => service.create(createDto({ timeMode: 'LAPSE', scheduledTime: undefined })), 'AGENDA_004');
   });
 
   it('details inválido para el tipo → AGENDA_005 con la lista de errores', async () => {
-    const { service } = makeService({ cases: [openCase()] });
+    const { service } = makeService({ credits: [creditRow()] });
     await expectError(() => service.create(createDto({ details: {} })), 'AGENDA_005');
   });
 
   it('contactId de otro cliente → AGENDA_006', async () => {
-    const { service } = makeService({ cases: [openCase()], contacts: [] });
+    const { service } = makeService({ credits: [creditRow()], contacts: [] });
     await expectError(() => service.create(createDto()), 'AGENDA_006');
   });
 
   it('VISIT con dirección libre no cruza contra la DB', async () => {
-    const { service } = makeService({ cases: [openCase()], locations: [] });
+    const { service } = makeService({ credits: [creditRow()], locations: [] });
     await service.create(createDto({ type: 'VISIT', details: { customAddress: { address: 'Calle 1' } } }));
   });
 
   it('VISIT con locationId ajeno → AGENDA_006', async () => {
-    const { service } = makeService({ cases: [openCase()], locations: [] });
+    const { service } = makeService({ credits: [creditRow()], locations: [] });
     await expectError(() => service.create(createDto({ type: 'VISIT', details: { locationId: LOCATION } })), 'AGENDA_006');
   });
 
@@ -628,27 +783,33 @@ describe('AgendaService.create', () => {
     });
 
   it('promesa por encima del saldo → AGENDA_006', async () => {
-    const { service } = makeService({ cases: [openCase()], catalog: { code: 'CASH', metadata: {} } });
+    const { service } = makeService({ credits: [creditRow()], catalog: { code: 'CASH', metadata: {} } });
     await expectError(() => service.create(promise({ amount: 1000.01 })), 'AGENDA_006');
   });
 
+  it('promesa sobre un crédito EXTERNO (PSF): sin tope de saldo (el saldo reportado puede ser solo capital)', async () => {
+    const { service, calls } = makeService({ credits: [creditRow({ externalSource: 'PSF' })], catalog: { code: 'CASH', metadata: {} } });
+    await service.create(promise({ amount: 5000 }));
+    assert.equal((calls.created!.details as { amount: number }).amount, 5000);
+  });
+
   it('medio de pago inexistente o inactivo → AGENDA_006', async () => {
-    const { service } = makeService({ cases: [openCase()], catalog: null });
+    const { service } = makeService({ credits: [creditRow()], catalog: null });
     await expectError(() => service.create(promise()), 'AGENDA_006');
   });
 
   it('medio con requiresBank y sin banco → AGENDA_006', async () => {
-    const { service } = makeService({ cases: [openCase()], catalog: { code: 'TRANSFER', metadata: { requiresBank: true } } });
+    const { service } = makeService({ credits: [creditRow()], catalog: { code: 'TRANSFER', metadata: { requiresBank: true } } });
     await expectError(() => service.create(promise({ paymentMethodCode: 'TRANSFER' })), 'AGENDA_006');
   });
 
   it('promesa con fecha de pago pasada → AGENDA_003', async () => {
-    const { service } = makeService({ cases: [openCase()], catalog: { code: 'CASH', metadata: {} } });
+    const { service } = makeService({ credits: [creditRow()], catalog: { code: 'CASH', metadata: {} } });
     await expectError(() => service.create(promise({ promiseDate: isoUTC(-1) })), 'AGENDA_003');
   });
 
   it('promesa válida persiste los details normalizados', async () => {
-    const { service, calls } = makeService({ cases: [openCase()], catalog: { code: 'CASH', metadata: {} } });
+    const { service, calls } = makeService({ credits: [creditRow()], catalog: { code: 'CASH', metadata: {} } });
     await service.create(promise());
     assert.equal((calls.created!.details as { amount: number }).amount, 500);
   });
@@ -795,5 +956,148 @@ describe('AgendaService.remove (S6 — eliminar)', () => {
     const { service, calls } = makeService({ item: null });
     await expectError(() => service.remove('a1'), 'AGENDA_NOT_FOUND');
     assert.equal(calls.itemWhere!.assigneeId, 'u1');
+  });
+});
+
+describe('AgendaService idempotente (cola offline)', () => {
+  const ID = '4f2504e0-4f89-41d3-9a0c-0305e82c3302';
+
+  it('create con id que ya existe (mismo crédito): devuelve el ítem, sin alta ni recordatorio ni audit', async () => {
+    const { service, calls } = makeService({ item: row({ id: ID, creditId: UUID }), credits: [creditRow()] });
+    const r = await service.create(createDto({ id: ID, type: 'PROMISE_TO_PAY', scheduledDate: isoUTC(5), details: { amount: 100, promiseDate: isoUTC(5), paymentMethodCode: 'CASH' } }));
+    assert.equal(r.data!.id, ID);
+    assert.equal(calls.createdAll.length, 0);
+    assert.equal(calls.audits.length, 0);
+  });
+
+  it('el reintento NO falla por fecha pasada aunque el ítem se creó días atrás', async () => {
+    const { service, calls } = makeService({ item: row({ id: ID, creditId: UUID }) });
+    const r = await service.create(createDto({ id: ID, scheduledDate: isoUTC(-3) }));
+    assert.equal(r.data!.id, ID);
+    assert.equal(calls.createdAll.length, 0);
+  });
+
+  it('create con id de OTRO crédito: 409 AGENDA_009', async () => {
+    const { service } = makeService({ item: row({ id: ID, creditId: 'otro-credito' }) });
+    await expectError(() => service.create(createDto({ id: ID })), 'AGENDA_009');
+  });
+
+  it('create con id de un ítem eliminado: 409 AGENDA_009', async () => {
+    const { service } = makeService({ item: row({ id: ID, creditId: UUID, deletedAt: new Date() }) });
+    await expectError(() => service.create(createDto({ id: ID })), 'AGENDA_009');
+  });
+
+  it('create con id nuevo: lo usa como PK', async () => {
+    const { service, calls } = makeService({ credits: [creditRow()], contacts: [{ id: CONTACT }] });
+    await service.create(createDto({ id: ID }));
+    assert.equal(calls.created!.id, ID);
+  });
+
+  it('carrera en create: reintenta una vez y devuelve el ganador, sin otra alta', async () => {
+    const { service, calls } = makeService({ credits: [creditRow()], contacts: [{ id: CONTACT }], createRace: row({ id: ID, creditId: UUID }) });
+    const r = await service.create(createDto({ id: ID }));
+    assert.equal(r.data!.id, ID);
+    assert.equal(calls.createdAll.length, 0);
+  });
+
+  it('postpone con toTime: la hora QUEDA en toTime (idempotente), mismo día', async () => {
+    const a = makeService({ item: row({ status: 'SCHEDULED', scheduledDate: new Date('2026-07-12'), scheduledTime: '09:00' }) });
+    await a.service.postpone('a1', { toTime: '10:30' } as never);
+    assert.equal(a.calls.updated!.scheduledTime, '10:30');
+    assert.equal((a.calls.updated!.scheduledDate as Date).toISOString().slice(0, 10), '2026-07-12');
+    assert.equal(a.calls.updated!.timeMode, 'FIXED');
+    // Reenvío sobre el ítem ya movido: sigue en 10:30.
+    const b = makeService({ item: row({ status: 'SCHEDULED', scheduledDate: new Date('2026-07-12'), scheduledTime: '10:30' }) });
+    await b.service.postpone('a1', { toTime: '10:30' } as never);
+    assert.equal(b.calls.updated!.scheduledTime, '10:30');
+  });
+
+  it('postpone: toTime manda sobre minutes; sin ninguno → AGENDA_004', async () => {
+    const { service, calls } = makeService({ item: row({ status: 'SCHEDULED', scheduledTime: '09:00' }) });
+    await service.postpone('a1', { toTime: '11:00', minutes: 30 } as never);
+    assert.equal(calls.updated!.scheduledTime, '11:00');
+    await expectError(() => service.postpone('a1', {} as never), 'AGENDA_004');
+  });
+
+  it('complete ya EXECUTED con el MISMO resultado: devuelve lo hecho, sin otra actividad ni audit/evento', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'CALL', status: 'EXECUTED', resultActivityId: 'act-0' }), priorActivity: { result: 'CONTACTED' } });
+    const r = await service.complete('a1', { outcome: 'CONTACTED' } as never);
+    assert.equal(r.data!.status, 'EXECUTED');
+    assert.equal(calls.activity, undefined);
+    assert.equal(calls.updated, undefined);
+    assert.equal(calls.audits.length, 0);
+    assert.equal(calls.events.length, 0);
+  });
+
+  it('complete ya EXECUTED con OTRO resultado: sigue siendo 409 AGENDA_008', async () => {
+    const { service } = makeService({ item: row({ type: 'CALL', status: 'EXECUTED', resultActivityId: 'act-0' }), priorActivity: { result: 'NO_CONTACT' } });
+    await expectError(() => service.complete('a1', { outcome: 'CONTACTED' } as never), 'AGENDA_008');
+  });
+});
+
+// ── Alcance por crédito de quien tiene AGENDA_ASSIGN (F4/08 · D8) ─────────────
+describe('AgendaService · alcance por crédito con AGENDA_ASSIGN', () => {
+  const SUP = ['agenda:assign', 'data:scope:branch'];
+
+  it('supervisor (agencia): lista sólo los agendados de los créditos de su agencia, no todo el tenant', async () => {
+    const { service, calls } = makeService({ permissions: SUP, credits: [{ id: 'cr1', clientId: 'cl1' }, { id: 'cr2', clientId: 'cl2' }], rows: [] });
+    await service.listByDay({ date: '2026-07-08' });
+    assert.equal(calls.listWhere!.assigneeId, undefined);
+    assert.deepEqual(calls.listWhere!.creditId, { in: ['cr1', 'cr2'] });
+    assert.match(calls.visibleSql!.sql, /user_accounts/); // el alcance por sucursal de la ficha de mora
+  });
+
+  it('gerente / administrador (alcance total): sin filtro, y sin consulta de alcance', async () => {
+    const { service, calls } = makeService({ permissions: ['agenda:assign', 'data:scope:all'], rows: [] });
+    await service.listByDay({ date: '2026-07-08' });
+    assert.equal(calls.listWhere!.assigneeId, undefined);
+    assert.equal(calls.listWhere!.creditId, undefined);
+    assert.equal(calls.visibleSql, undefined);
+  });
+
+  it('cobrador sin AGENDA_ASSIGN sigue en «lo propio»: sin consulta de alcance', async () => {
+    const { service, calls } = makeService({ permissions: ['collection:write'], rows: [] });
+    await service.listByDay({ date: '2026-07-08' });
+    assert.equal(calls.listWhere!.assigneeId, 'u1');
+    assert.equal(calls.visibleSql, undefined);
+  });
+
+  it('vencidos: mismo alcance (supervisor = créditos de su agencia)', async () => {
+    const { service, calls } = makeService({ permissions: SUP, credits: [{ id: 'cr1', clientId: 'cl1' }], rows: [] });
+    await service.listOverdue({} as never);
+    assert.deepEqual(calls.listWhere!.creditId, { in: ['cr1'] });
+  });
+
+  it('detalle, ejecutar, posponer, editar, cancelar y reagendar buscan el ítem dentro del alcance por crédito', async () => {
+    const run = async (fn: (s: AgendaService) => Promise<unknown>) => {
+      const { service, calls } = makeService({
+        permissions: SUP,
+        credits: [{ id: 'cr1', clientId: 'cl1' }],
+        item: row({ type: 'CALL', details: { contactId: CONTACT } }),
+        credit: creditRow(),
+        catalog: { code: 'CLIENT_REQUEST' },
+      });
+      await fn(service).catch(() => undefined); // sólo importa la búsqueda del ítem
+      return calls.itemWhere!;
+    };
+    for (const fn of [
+      (s: AgendaService) => s.findOne('a1'),
+      (s: AgendaService) => s.complete('a1', { outcome: 'CONTACTED' } as never),
+      (s: AgendaService) => s.postpone('a1', { scheduledDate: isoUTC(2) } as never),
+      (s: AgendaService) => s.update('a1', { observations: 'x' } as never),
+      (s: AgendaService) => s.cancel('a1', { reasonCode: 'CLIENT_REQUEST' } as never),
+      (s: AgendaService) => s.reschedule('a1', { reasonCode: 'CLIENT_REQUEST', scheduledDate: isoUTC(2) } as never),
+    ]) {
+      const where = await run(fn);
+      assert.deepEqual(where.creditId, { in: ['cr1'] });
+      assert.equal(where.assigneeId, undefined);
+    }
+  });
+
+  it('un ítem de un crédito fuera de la agencia del supervisor: 404 (no se filtra que existe)', async () => {
+    // El alcance no devuelve el crédito del ítem → el `findFirst` con `creditId in []` no lo encuentra.
+    const { service, calls } = makeService({ permissions: SUP, credits: [], item: null });
+    await expectError(() => service.cancel('a1', { reasonCode: 'CLIENT_REQUEST' } as never), 'AGENDA_NOT_FOUND');
+    assert.deepEqual(calls.itemWhere!.creditId, { in: [] });
   });
 });

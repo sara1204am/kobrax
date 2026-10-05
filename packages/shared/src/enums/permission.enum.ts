@@ -11,10 +11,12 @@ export enum PermissionScope {
  * Es la fuente de verdad para guards (API) y para el control de UI (web/mobile).
  */
 export enum Permission {
-  CASE_READ = 'case:read',
-  CASE_WRITE = 'case:write',
-  CASE_ASSIGN = 'case:assign',
-  CASE_CLOSE = 'case:close',
+  /** F4/08 · D5: reemplazan a los antiguos permisos del caso. */
+  COLLECTION_READ = 'collection:read',
+  /** Gestiones, agenda y notas del crédito. */
+  COLLECTION_WRITE = 'collection:write',
+  /** Descargar la lista de Mora (CSV/PDF). */
+  COLLECTION_EXPORT = 'collection:export',
 
   PAYMENT_READ = 'payment:read',
   PAYMENT_WRITE = 'payment:write',
@@ -65,7 +67,11 @@ export enum Permission {
    * Es lo que impide que un cobrador se otorgue acceso a sí mismo — no lo hace un constraint de la
    * base, a propósito: un supervisor o admin **sí** puede tomarse un crédito para cubrir a alguien
    * de baja, y una regla dura de «otorgante ≠ destinatario» bloquearía ese caso legítimo.
-   * Quien no tiene este permiso no puede crear ninguna asignación, ni suya ni de otro.
+   *
+   * Quien no tiene este permiso no ELIGE a nadie: no puede poner ni cambiar el responsable de un
+   * crédito, tampoco el suyo. Lo único que recibe sin elegir es lo que el sistema deriva como suyo
+   * —los nuevos de la cartera que él mismo importa, el préstamo que él mismo da de alta—, nunca un
+   * crédito que ya existe. Se revisa en `AssignmentService`, la única vía que escribe el responsable.
    */
   ASSIGNMENT_WRITE = 'assignment:write',
 
@@ -78,4 +84,11 @@ export enum Permission {
    * impone la base: no depende de que la consulta se acuerde de filtrar.
    */
   DATA_SCOPE_ALL = 'data:scope:all',
+
+  /**
+   * F4/08 · D8: ve **todo lo de su agencia** (créditos cuya sucursal es la suya) más lo que tiene a su cargo.
+   * Es el alcance del supervisor. Si además tiene `DATA_SCOPE_ALL`, manda el total.
+   * Hoy ninguna policy de RLS lo lee: lo aplica `moraAccessConditions` (Mora y Agenda).
+   */
+  DATA_SCOPE_BRANCH = 'data:scope:branch',
 }

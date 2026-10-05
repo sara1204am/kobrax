@@ -4,7 +4,7 @@ import { PageHeader, Section } from '@/components/panel-ui';
 const ITEMS = [
   { href: '/api/exports/clients', key: 'clients' },
   { href: '/api/exports/locations', key: 'locations' },
-  { href: '/api/exports/cases', key: 'cases' },
+  { href: '/api/exports/mora', key: 'mora' },
   { href: '/api/exports/agenda', key: 'agenda' },
 ] as const;
 

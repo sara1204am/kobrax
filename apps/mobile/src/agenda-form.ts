@@ -7,7 +7,15 @@
  *
  * Se re-exportan con los nombres de siempre para que las pantallas sigan importando de un solo lado.
  */
-import { AgendaTimeSlot, ScheduleTimeMode, SUPPORTED_CURRENCIES, TIME_SLOT_HOURS, formatCurrency } from '@kobrax/shared';
+import {
+  AgendaTimeSlot,
+  ScheduleTimeMode,
+  SUPPORTED_CURRENCIES,
+  TIME_SLOT_HOURS,
+  formatCurrency,
+  type AgendaFormAction as FormAction,
+  type AgendaFormState as FormState,
+} from '@kobrax/shared';
 
 export {
   agendaFormReducer as formReducer,
@@ -22,7 +30,7 @@ export {
   toLocalDate,
   todayISO,
 } from '@kobrax/shared';
-export type { AgendaFormAction as FormAction, AgendaFormState as FormState } from '@kobrax/shared';
+export type { FormAction, FormState };
 
 export type TimeSlot = AgendaTimeSlot;
 export type TimeMode = ScheduleTimeMode.FIXED | ScheduleTimeMode.LAPSE;

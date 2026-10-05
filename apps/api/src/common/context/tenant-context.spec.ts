@@ -8,12 +8,12 @@ describe('TenantContextService', () => {
   it('expone el contexto dentro de run() y nada fuera', () => {
     const tc = new TenantContextService();
     assert.equal(tc.get(), undefined);
-    tc.run({ accountId: 'a1', userId: 'u1', permissions: ['case:read'] }, () => {
+    tc.run({ accountId: 'a1', userId: 'u1', permissions: ['collection:read'] }, () => {
       assert.equal(tc.get()?.accountId, 'a1');
       assert.equal(tc.accountId, 'a1');
       assert.equal(tc.userId, 'u1');
-      assert.equal(tc.can('case:read'), true);
-      assert.equal(tc.can('case:assign'), false);
+      assert.equal(tc.can('collection:read'), true);
+      assert.equal(tc.can('assignment:write'), false);
     });
     assert.equal(tc.get(), undefined);
   });

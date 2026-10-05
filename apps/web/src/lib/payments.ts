@@ -1,4 +1,4 @@
-import type { PaymentItem } from '@kobrax/shared';
+import { isCreditSource, type PaymentItem } from '@kobrax/shared';
 import { PAGE_SIZES } from './table-prefs';
 import { isUuid } from './uuid';
 
@@ -17,9 +17,10 @@ const IS_DAY = /^\d{4}-\d{2}-\d{2}$/;
 export interface PaymentParams {
   from?: string;
   to?: string;
-  /** Llegan por link desde la ficha del crédito o del caso; no se escriben a mano. */
+  /** Llega por link desde la ficha del crédito; no se escribe a mano. */
   creditId?: string;
-  caseId?: string;
+  /** D7: `KOBRAX` o una fuente externa. */
+  source?: string;
   page?: string;
   pageSize?: string;
   sort?: string;
@@ -76,7 +77,7 @@ export function paymentQuery(params: PaymentParams, today = new Date()): URLSear
     limit: String(paymentLimit(params)),
   });
   if (params.creditId && isUuid(params.creditId)) query.set('creditId', params.creditId);
-  if (params.caseId && isUuid(params.caseId)) query.set('caseId', params.caseId);
+  if (isCreditSource(params.source)) query.set('source', params.source);
 
   // Sin orden pedido no se manda ninguno: el default —lo último cobrado primero— lo pone la API, y
   // repetirlo acá serían dos lugares donde cambiarlo.
@@ -96,7 +97,7 @@ export function paymentQuery(params: PaymentParams, today = new Date()): URLSear
  * verdad pasó — y es una noticia distinta.
  */
 export function hasPaymentFilters(params: PaymentParams): boolean {
-  return Boolean(params.from || params.to || params.creditId || params.caseId);
+  return Boolean(params.from || params.to || params.creditId || params.source);
 }
 
 /** Lo cobrado en lo que se está mirando. Se suma en cliente: no hay endpoint de agregación. */

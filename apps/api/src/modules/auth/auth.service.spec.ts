@@ -63,7 +63,7 @@ function makeAuth(opts: {
   const permissions = {
     forRole: async (roleId: string) => {
       calls.forRole.push(roleId);
-      return ['case:read'];
+      return ['collection:read'];
     },
   };
   const sessions = {

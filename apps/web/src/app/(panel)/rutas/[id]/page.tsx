@@ -4,15 +4,16 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import {
   memberName,
   summarizeDay,
-  type CaseListItem,
+  type ArrearCategory,
   type DayPayment,
   type Member,
+  type MoraCreditListItem,
   type RouteItem,
   type VisitItem,
 } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { CATEGORY_TONE, ROUTE_STATUS_TONE } from '@/lib/routes';
-import { availableQuery, hasPlanFilters, shiftDays, type PlanParams } from '@/lib/plan';
+import { availableQuery, hasPlanFilters, shiftDays, toAvailable, type PlanParams } from '@/lib/plan';
 import { Badge, Card, EmptyState, PageHeader } from '@/components/panel-ui';
 import { dayDate, money } from '@/lib/format';
 import { RouteEditor } from './route-editor';
@@ -49,42 +50,42 @@ export default async function RutaPage({
   const day = route.plannedDate.slice(0, 10);
 
   /*
-   * Los pagos se piden **por caso**, uno por parada, y no con una ventana del día.
+   * Los pagos se piden **por crédito**, uno por parada, y no con una ventana del día.
    *
    * Dos motivos, los dos aprendidos a los golpes: `from`/`to` con la misma fecha arman una ventana
    * de ancho CERO —`paymentDate` es un timestamp, así que sólo entraría un pago hecho a medianoche
    * exacta— y el «recaudado» daba siempre 0. Y pidiendo el día entero del tenant, una sola página
    * de 100 puede dejar afuera pagos de esta ruta y mostrar MENOS plata de la que entró, sin avisar.
    *
-   * Por caso es exacto y acotado: son tantas llamadas como paradas con caso, y una parada no junta
+   * Por crédito es exacto y acotado: son tantas llamadas como paradas con crédito, y una parada no junta
    * cien pagos en un día. Sin `payment:read` vuelven vacías y se muestra cero cobrado, que es lo
    * que ese rol puede saber.
    *
    * 🔴 **Pero acotado AL DÍA de la ruta.** Sin `from`/`to`, «Recaudado» sumaba todos los pagos que
-   * ese caso tuvo alguna vez: una ruta planificada para mañana, con cero paradas gestionadas, decía
-   * que había recaudado mil cuatrocientos bolivianos. `summarizeDay` filtra por caso, no por fecha —
+   * ese crédito tuvo alguna vez: una ruta planificada para mañana, con cero paradas gestionadas, decía
+   * que había recaudado mil cuatrocientos bolivianos. `summarizeDay` filtra por crédito, no por fecha —
    * da por hecho que los pagos que recibe son los del día.
    *
    * ponytail: la ventana es en UTC y el día del tenant es el de Bolivia (UTC−4). Un pago después de
    * las 20:00 cae en el día siguiente de esta cuenta. Se arregla el día que `TenantClockService`
    * —que ya existe y usa la agenda— llegue a pagos; hasta entonces el error es de horas, no de meses.
    */
-  const caseIds = [...new Set((route.stops ?? []).map((s) => s.caseId).filter((id): id is string => !!id))];
+  const creditIds = [...new Set((route.stops ?? []).map((s) => s.creditId).filter((id): id is string => !!id))];
 
   /*
-   * 🔴 La mora que se puede sumar **sólo se pide al editar**: son cien casos con sus ubicaciones, y
+   * 🔴 Los créditos en mora que se pueden sumar **sólo se piden al editar**: son cien créditos, y
    * quien entra a mirar cómo terminó la jornada no los necesita. Es la misma consulta que arma la
-   * ruta la primera vez —incluido `excludeRouted`, que deja fuera lo que ya es parada de ese día—,
-   * acotada a la cartera del cobrador de ESTA ruta salvo que se pida ayuda de todo el equipo.
+   * ruta la primera vez (`GET /mora`), acotada a la cartera del cobrador de ESTA ruta salvo que se
+   * pida ayuda de todo el equipo; los que ya son parada de esta ruta se descartan abajo.
    */
   const editing = searchParams.editar === '1';
   const planParams: PlanParams = { ...searchParams, collectorId: route.collectorId };
 
-  const [team, paymentsByCase, preview, visits, available] = await Promise.all([
+  const [team, paymentsByCredit, preview, visits, available, categories] = await Promise.all([
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
     Promise.all(
-      caseIds.map((caseId) =>
-        apiCall<DayPayment[]>(`/payments?caseId=${caseId}&from=${day}&to=${shiftDays(day, 1)}&limit=${DAY_LIMIT}`, {
+      creditIds.map((creditId) =>
+        apiCall<DayPayment[]>(`/payments?creditId=${creditId}&from=${day}&to=${shiftDays(day, 1)}&limit=${DAY_LIMIT}`, {
           method: 'GET',
           auth: true,
         }),
@@ -107,14 +108,18 @@ export default async function RutaPage({
     // Las visitas de esta ruta: el punto donde se registró cada una (W6-T0).
     apiCall<VisitItem[]>(`/visits?routeId=${params.id}&limit=${DAY_LIMIT}`, { method: 'GET', auth: true }),
     editing
-      ? apiCall<CaseListItem[]>(`/cases?${availableQuery(planParams, day)}`, { method: 'GET', auth: true })
+      ? apiCall<MoraCreditListItem[]>(`/mora?${availableQuery(planParams, day)}`, { method: 'GET', auth: true })
       : null,
+    editing ? apiCall<ArrearCategory[]>('/arrear-categories', { method: 'GET', auth: true }) : null,
   ]);
 
   const members = team.body.data ?? [];
   const collector = members.find((m) => m.userId === route.collectorId);
-  const summary = summarizeDay(route, paymentsByCase.flatMap((r) => r.body.data ?? []));
+  const summary = summarizeDay(route, paymentsByCredit.flatMap((r) => r.body.data ?? []));
   const stops = route.stops ?? [];
+  // Lo que ya es parada de ESTA ruta no se ofrece de nuevo (además del `excludeRouted` del servidor).
+  const enRuta = new Set(creditIds);
+  const disponibles = (available?.body.data ?? []).filter((c) => !enRuta.has(c.creditId)).map(toAvailable);
 
   return (
     <>
@@ -207,9 +212,10 @@ export default async function RutaPage({
             visits={(visits.body.data ?? []).map((v) => ({ latitude: v.latitude, longitude: v.longitude }))}
             line={preview.body.data?.geometry ?? []}
             editing={editing}
-            available={available?.body.data ?? []}
-            total={available?.body.meta?.total ?? available?.body.data?.length ?? 0}
+            available={disponibles}
+            total={Math.max(0, (available?.body.meta?.total ?? disponibles.length) - (available?.body.data?.length ?? 0) + disponibles.length)}
             filtered={hasPlanFilters(planParams)}
+            categories={(categories?.body.data ?? []).map((c) => ({ code: c.code, name: c.name }))}
           />
         ) : (
           <section>

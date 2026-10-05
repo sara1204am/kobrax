@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { hash } from 'bcryptjs';
 import type { PrismaClient } from '@prisma/client';
-import { KOBRAX, PLANS, TRIAL_DAYS, isPasswordValid } from '@kobrax/shared';
+import { DEFAULT_ARREAR_CATEGORIES, KOBRAX, PLANS, TRIAL_DAYS, isPasswordValid } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -112,6 +112,10 @@ export class AccountsService {
         await tx.userAccount.create({
           data: { userId: user.id, accountId, roleId: role.id, isOwner: true, isDefault: true },
         });
+        // F4/08 · D1-b: la cuenta nace con los rangos de ejemplo (A 1–30, B 31–60, C 61+); se editan en Administración.
+        await tx.arrearCategory.createMany({
+          data: DEFAULT_ARREAR_CATEGORIES.map((c) => ({ accountId, code: c.code, name: c.name, fromDays: c.fromDays, toDays: c.toDays, color: c.color, sortOrder: c.sortOrder })),
+        });
         // Audit a mano, no vía AuditService: sin contexto de request ese servicio
         // no-opea en silencio (audit.service.ts:35). Acá el contexto ya es el correcto (S4-D7).
         await tx.auditLog.create({
@@ -160,11 +164,13 @@ export class AccountsService {
           timezone: dto.timezone,
           // Los decimales viven en `settings` (jsonb, junto a trialEndsAt y planAlerts): son una
           // preferencia, no una columna. Se mezcla, no se pisa — settings guarda más cosas.
-          ...(dto.currencyDecimals !== undefined
+          // El método de mora por defecto (D20) también es una preferencia de `settings`.
+          ...(dto.currencyDecimals !== undefined || dto.arrearsMethod !== undefined
             ? {
                 settings: {
                   ...(before.settings as Record<string, unknown>),
-                  currencyDecimals: Number(dto.currencyDecimals),
+                  ...(dto.currencyDecimals !== undefined ? { currencyDecimals: Number(dto.currencyDecimals) } : {}),
+                  ...(dto.arrearsMethod !== undefined ? { arrearsMethod: dto.arrearsMethod } : {}),
                 },
               }
             : {}),

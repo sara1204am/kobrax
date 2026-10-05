@@ -6,9 +6,12 @@ import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
-import { BottomSheet, CaseCard, Chips, EmptyState, ListRow, PORTFOLIO_STATUS_META, SectionLabel, SegmentTabs, TONE_SOLID } from '@/ui';
+import type { BadgeTone } from '@/ui';
+import { BottomSheet, CreditCard, Chips, EmptyState, ListRow, PORTFOLIO_STATUS_META, SectionLabel, SegmentTabs, TONE_SOLID } from '@/ui';
 import { money } from '@/agenda-form';
-import { listCases } from '@/cases.service';
+import { listArrearCategories, listMora, listPortfolio, MORA_LIMIT } from '@/mora.service';
+import { activeFilterCount, EMPTY_MORA_FILTERS, filterMora, matchesMoraFilters, MORA_CHIP_LABEL, moraCardProps, staleLine, type MoraChip, type MoraFilters, type MoraRow } from '@/mora';
+import { MoraFilterSheet, type CategoryOption } from '@/mora-filter-sheet';
 import {
   filterPortfolio,
   groupPortfolio,
@@ -32,6 +35,8 @@ const CHIPS: { key: PortfolioChip; label: string; danger?: boolean }[] = [
   { key: 'overdue', label: 'En mora', danger: true },
   { key: 'current', label: 'Al día' },
   { key: 'paid', label: 'Pagados' },
+  // Los clientes con créditos importados de una fuente externa (PSF): su saldo es el del último reporte.
+  { key: 'psf', label: 'PSF' },
 ];
 
 // Preferencia de densidad (tarjetas ↔ lista), en SecureStore como los flags de import/biometría:
@@ -42,18 +47,34 @@ type Load =
   | { status: 'loading' }
   | { status: 'offline' }
   | { status: 'error' }
-  | { status: 'ok'; cards: ClientPortfolio[] };
+  | { status: 'ok'; rows: MoraRow[] };
+
+/** La lista de «En mora» viene de `GET /mora` (por crédito, sólo los vencidos), no de la cartera (por cliente). */
+type MoraLoad =
+  | { status: 'loading' }
+  | { status: 'offline' }
+  | { status: 'error' }
+  | { status: 'ok'; rows: MoraRow[]; localAt?: number | null };
+
+const MORA_CHIPS = Object.keys(MORA_CHIP_LABEL) as MoraChip[];
 
 /**
  * Cartera (V3, §5.3): lista centrada en el cliente con la deuda agregada. Buscador (nombre + documento +
- * zona) + chips de filtro + orden elegible. Los datos salen de `GET /cases?view=portfolio` (ya scoped al
- * cobrador); agrupar/estado/orden/buscar es lógica pura de `src/portfolio.ts`.
+ * zona) + chips de filtro + orden elegible. Los datos salen de `GET /mora?todos=true` (todos los créditos del
+ * cobrador, **al día incluidos**, y aquellos donde es reemplazo temporal o apoyo; el servidor ya acota por
+ * alcance); agrupar/estado/orden/buscar es lógica pura de `src/portfolio.ts`.
  *
  * **La búsqueda es global (S4)**: además de filtrar lo cargado, consulta `GET /clients?q=`. Sin eso, un
- * cliente sin préstamo —o más allá de la página de casos— no existe en ninguna pantalla de la app.
+ * cliente sin préstamo —o fuera de la cartera cargada— no existe en ninguna pantalla de la app.
  */
 export default function CobranzaScreen() {
   const [load, setLoad] = useState<Load>({ status: 'loading' });
+  const [moraLoad, setMoraLoad] = useState<MoraLoad>({ status: 'loading' });
+  const [moraChip, setMoraChip] = useState<MoraChip>('all');
+  // Los filtros valen para las dos listas (cartera por cliente y mora por crédito): se aplican a los CRÉDITOS antes de agrupar.
+  const [filters, setFilters] = useState<MoraFilters>(EMPTY_MORA_FILTERS);
+  const [filterSheet, setFilterSheet] = useState(false);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [chip, setChip] = useState<PortfolioChip>('all');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<PortfolioSort>('mora');
@@ -64,16 +85,22 @@ export default function CobranzaScreen() {
 
   const fetchCartera = useCallback(async () => {
     const reqId = ++reqRef.current;
-    // La cartera de un cobrador cabe en memoria (§5.3): una página amplia, sin paginar en el móvil.
-    // 🔴 `open: true` no es opcional: sin él entran los casos CERRADOS. Mientras nada los cerraba
-    // daba igual; ahora el trabajo diario cierra al que pagó, y esta lista lo seguiría mostrando
-    // para cobrar. Lo mismo en `rutas/crear` y en el hidratado offline.
-    const res = await listCases({ view: 'portfolio', open: true, limit: 100 });
+    // La cartera de un cobrador cabe en memoria (§5.3): `listPortfolio` pide las páginas que hagan falta y las
+    // guarda juntas. Incluye los créditos al día: trabajar un crédito no exige mora. Lo mismo en `rutas/crear`
+    // y en el hidratado offline (una sola casilla de caché).
+    // La mora se pide a la par pero **por su cuenta**: si una falla, la otra lista igual se muestra.
+    const [res, moraRes] = await Promise.all([
+      listPortfolio(),
+      listMora({ limit: MORA_LIMIT }), // misma llamada que `hydrate`
+    ]);
     if (reqId !== reqRef.current) return;
+    if (moraRes.status === 'ok') setMoraLoad({ status: 'ok', rows: moraRes.data, localAt: moraRes.localAt });
+    else
+      setMoraLoad((prev) => (prev.status === 'ok' ? prev : { status: moraRes.status === 'offline' ? 'offline' : 'error' }));
     // Un bache de red en un refresh no borra lo ya cargado (offline-first).
     if (res.status === 'offline') return setLoad((prev) => (prev.status === 'ok' ? prev : { status: 'offline' }));
     if (res.status !== 'ok') return setLoad((prev) => (prev.status === 'ok' ? prev : { status: 'error' }));
-    setLoad({ status: 'ok', cards: groupPortfolio(res.data) });
+    setLoad({ status: 'ok', rows: res.data });
   }, []);
 
   useFocusEffect(
@@ -98,16 +125,30 @@ export default function CobranzaScreen() {
     setRefreshing(false);
   }, [fetchCartera]);
 
-  const cards = load.status === 'ok' ? load.cards : [];
+  // Las categorías de la cuenta, con respaldo local. Si no se pudieron leer, el filtro de categoría no se ofrece.
+  useEffect(() => {
+    void listArrearCategories().then((r) => {
+      if (r.status === 'ok') setCategories(r.data.map((c) => ({ code: c.code, name: c.name })));
+    });
+  }, []);
+  const activeFilters = activeFilterCount(filters);
+  const cards = useMemo(
+    () => (load.status === 'ok' ? groupPortfolio(load.rows.filter((r) => matchesMoraFilters(r, filters))) : []),
+    [load, filters],
+  );
   const chipItems = useMemo(
     () =>
       CHIPS.map((c) => ({
         key: c.key,
         label: c.label,
-        count: filterPortfolio(cards, c.key, query).length,
+        // «En mora» cuenta CRÉDITOS (de `GET /mora`), no clientes: es lo que la lista de ese chip muestra.
+        count:
+          c.key === 'overdue' && moraLoad.status === 'ok'
+            ? filterMora(moraLoad.rows, 'all', query, undefined, filters).length
+            : filterPortfolio(cards, c.key, query).length,
         tone: c.danger ? ('danger' as const) : ('neutral' as const),
       })),
-    [cards, query],
+    [cards, query, moraLoad, filters],
   );
   const visible = useMemo(() => sortPortfolio(filterPortfolio(cards, chip, query), sort), [cards, chip, query, sort]);
 
@@ -139,6 +180,18 @@ export default function CobranzaScreen() {
         <View style={styles.chips}>
           <SegmentTabs items={chipItems} value={chip} onChange={(k) => setChip(k as PortfolioChip)} />
           <View style={styles.tools}>
+            {activeFilters > 0 && (
+              <Pressable style={styles.sortPill} onPress={() => setFilters(EMPTY_MORA_FILTERS)} accessibilityRole="button" accessibilityLabel="Quitar los filtros">
+                <Text style={styles.sortText}>Quitar filtros</Text>
+              </Pressable>
+            )}
+            <Pressable style={styles.sortPill} onPress={() => setFilterSheet(true)} accessibilityRole="button" accessibilityLabel="Filtros">
+              <Text style={styles.sortText}>{activeFilters > 0 ? `Filtros (${activeFilters})` : 'Filtros'}</Text>
+            </Pressable>
+          </View>
+          {/* En mora el orden es fijo (prioridad → días) y no hay tarjeta compacta: no hay nada que elegir. */}
+          {chip !== 'overdue' && (
+          <View style={styles.tools}>
             <Pressable
               style={styles.sortPill}
               onPress={toggleView}
@@ -156,10 +209,13 @@ export default function CobranzaScreen() {
               <Text style={styles.sortText}>⇅ {PORTFOLIO_SORT_LABEL[sort]}</Text>
             </Pressable>
           </View>
+          )}
         </View>
       )}
 
-      {load.status === 'loading' ? (
+      {chip === 'overdue' ? (
+        <MoraList load={moraLoad} chip={moraChip} onChip={setMoraChip} filters={filters} query={query} refreshing={refreshing} onRefresh={onRefresh} />
+      ) : load.status === 'loading' ? (
         <View style={styles.center}>
           <ActivityIndicator color={COLORS.navy} />
         </View>
@@ -188,6 +244,8 @@ export default function CobranzaScreen() {
         />
       )}
 
+      <MoraFilterSheet visible={filterSheet} onClose={() => setFilterSheet(false)} value={filters} onApply={setFilters} categories={categories} />
+
       <BottomSheet visible={sortSheet} onClose={() => setSortSheet(false)} title="Ordenar por">
         <Chips
           options={SORTS}
@@ -207,6 +265,91 @@ export default function CobranzaScreen() {
       >
         <Text style={styles.fabPlus}>+</Text>
       </Pressable>
+    </View>
+  );
+}
+
+/**
+ * «En mora»: **un crédito por fila** (`GET /mora`). Orden fijo prioridad → días → saldo; los
+ * sub-chips y la búsqueda se resuelven acá sobre lo ya bajado, así que funcionan igual sin señal.
+ */
+function MoraList({
+  load,
+  chip,
+  onChip,
+  filters,
+  query,
+  refreshing,
+  onRefresh,
+}: {
+  load: MoraLoad;
+  chip: MoraChip;
+  onChip: (c: MoraChip) => void;
+  filters: MoraFilters;
+  query: string;
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
+  const asOf = useMemo(() => new Date(), [load]);
+  const rows = load.status === 'ok' ? load.rows : [];
+
+  const items = useMemo(
+    () => MORA_CHIPS.map((k) => ({ key: k, label: MORA_CHIP_LABEL[k], count: filterMora(rows, k, query, asOf, filters).length })),
+    [rows, query, asOf, filters],
+  );
+  const visible = useMemo(() => filterMora(rows, chip, query, asOf, filters), [rows, chip, query, asOf, filters]);
+
+  if (load.status === 'loading')
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={COLORS.navy} />
+      </View>
+    );
+  if (load.status === 'offline') return <EmptyState icon="📴" title="Sin conexión" hint="Tu mora aparecerá cuando vuelva la red." />;
+  if (load.status === 'error') return <EmptyState icon="⚠️" title="No se pudo cargar" hint="Reintentá en un momento." />;
+
+  const stale = staleLine(load.localAt);
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={styles.chips}>
+        <SegmentTabs items={items} value={chip} onChange={(k) => onChip(k as MoraChip)} />
+        {stale && <Text style={styles.othersHint}>{stale}</Text>}
+      </View>
+      {visible.length === 0 ? (
+        <EmptyState
+          icon={rows.length === 0 ? '🎉' : '🔍'}
+          title={rows.length === 0 ? 'Nadie en mora' : 'Sin resultados'}
+          hint={rows.length === 0 ? 'No tenés créditos vencidos.' : 'Probá con otro filtro o búsqueda.'}
+        />
+      ) : (
+        <FlashList
+          data={visible}
+          keyExtractor={(r) => r.creditId}
+          estimatedItemSize={92}
+          contentContainerStyle={{ padding: SPACING.lg, paddingBottom: SPACING.xxl * 2 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.navy} />}
+          renderItem={({ item }) => <MoraRowCard row={item} asOf={asOf} />}
+        />
+      )}
+    </View>
+  );
+}
+
+/** La tarjeta del crédito: lo arma `moraCardProps` (probado aparte) y la pinta `CreditCard`. */
+function MoraRowCard({ row, asOf }: { row: MoraRow; asOf: Date }) {
+  const p = moraCardProps(row, asOf);
+  return (
+    <View style={{ marginBottom: SPACING.sm }}>
+      <CreditCard
+        name={p.name}
+        caption={p.caption}
+        subtitle={p.subtitle || undefined}
+        amount={p.amount}
+        amountDanger={row.situation === 'IN_ARREARS'}
+        badge={p.badge}
+        tag={p.tag}
+        onPress={() => router.push(`/mora/${row.creditId}`)}
+      />
     </View>
   );
 }
@@ -232,21 +375,36 @@ function Others({ hits }: { hits: ClientHit[] }) {
   );
 }
 
-/** Tarjeta de cliente (§5.3): nombre + zona, deuda agregada (roja si mora), línea secundaria y badge. */
+/**
+ * El badge de la tarjeta de cliente: **Castigado** (condición aparte; sólo si TODOS sus créditos lo están) o el
+ * estado de cartera (Al día / Por vencer / En mora / Pagado). La categoría de mora va como etiqueta aparte.
+ */
+function cardBadge(card: ClientPortfolio): { label: string; tone: BadgeTone } {
+  return card.writtenOff ? { label: 'Castigado', tone: 'neutral' } : PORTFOLIO_STATUS_META[card.status];
+}
+
+/** Tarjeta de cliente (§5.3): nombre + zona, deuda agregada (roja si mora), línea secundaria, categoría y badge. */
 function Card({ card }: { card: ClientPortfolio }) {
-  const meta = PORTFOLIO_STATUS_META[card.status];
-  const caption = [card.zone, card.creditCount > 1 ? `${card.creditCount} préstamos` : undefined]
+  const meta = cardBadge(card);
+  // D7: si parte de la deuda la reporta el banco, la tarjeta lo dice junto a la zona.
+  const caption = [
+    card.zone,
+    card.creditCount > 1 ? `${card.creditCount} préstamos` : undefined,
+    !card.writtenOff && card.writtenOffCount > 0 ? `${card.writtenOffCount} castigado${card.writtenOffCount > 1 ? 's' : ''}` : undefined,
+    card.sourceLine,
+  ]
     .filter(Boolean)
     .join(' · ');
   return (
     <View style={{ marginBottom: SPACING.sm }}>
-      <CaseCard
+      <CreditCard
         name={card.name}
         caption={caption || undefined}
         subtitle={card.secondaryLine || undefined}
         amount={money(card.totalDebt, card.currency)}
         amountDanger={card.maxDaysPastDue > 0}
         badge={meta}
+        tag={card.category ? `Cat. ${card.category}` : undefined}
         onPress={() => router.push(`/cliente/${card.clientId}`)}
       />
     </View>
@@ -264,10 +422,10 @@ function CompactRow({ card }: { card: ClientPortfolio }) {
     <Pressable
       style={({ pressed }) => [styles.compactRow, pressed && { backgroundColor: COLORS.bg }]}
       accessibilityRole="button"
-      accessibilityLabel={`${card.name}, ${PORTFOLIO_STATUS_META[card.status].label}, ${money(card.totalDebt, card.currency)}`}
+      accessibilityLabel={`${card.name}, ${cardBadge(card).label}, ${money(card.totalDebt, card.currency)}`}
       onPress={() => router.push(`/cliente/${card.clientId}`)}
     >
-      <View style={[styles.dot, { backgroundColor: TONE_SOLID[PORTFOLIO_STATUS_META[card.status].tone] }]} />
+      <View style={[styles.dot, { backgroundColor: TONE_SOLID[cardBadge(card).tone] }]} />
       <Text style={styles.compactName} numberOfLines={1}>
         {card.name}
       </Text>

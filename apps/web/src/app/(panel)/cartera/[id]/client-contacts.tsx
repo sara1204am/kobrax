@@ -11,10 +11,12 @@ import { Modal } from '@/components/modal';
 /**
  * El mapa se carga **sólo cuando alguien abre el modal**.
  *
- * 🔴 `maplibre` son ~250 kB. Importándolo arriba, cada ficha de cliente los baja para un link que
+ * 🔴 `maplibre` son ~250 kB. Importándolo arriba, cada ficha de cliente los baja para un ojo que
  * casi nadie toca. Con `dynamic` + `ssr: false` el chunk sale recién al pedirlo.
+ *
+ * Es `MapPicker` sin `onChange` —el visor— y no `RouteMap`: acá hay un punto, no un recorrido.
  */
-const RouteMap = dynamic(() => import('@/components/route-map').then((m) => m.RouteMap), { ssr: false });
+const MapPicker = dynamic(() => import('@/components/map-picker').then((m) => m.MapPicker), { ssr: false });
 
 /** Lo que las dos listas comparten: el revelado de la ficha y si se puede escribir. */
 interface Común {
@@ -46,33 +48,53 @@ export function ContactList({
   onEdit,
 }: Común & { rows: ClientContactDetail[]; onEdit: () => void }) {
   const t = useTranslations('portfolio');
+  const [viendo, setViendo] = useState<ClientContactDetail | null>(null);
 
   return (
-    <Section
-      title={t('sections.contacts')}
-      action={canWrite && <EditarLink onClick={onEdit} busy={busy} />}
-    >
-      {rows.length === 0 ? (
-        <p className="text-[13px] text-k-muted">{t('noContacts')}</p>
-      ) : (
-        <ul className="divide-y divide-k-border">
-          {rows.map((c) => (
-            <Fila
-              key={c.id}
-              icon={c.contactType === 'EMAIL' ? 'mail' : 'phone'}
-              value={c.value ?? '—'}
-              hint={t(`contactType.${c.contactType}`)}
-              badge={c.isPrimary ? t('primary') : undefined}
-              action={!revealed && <RevealButton onClick={onReveal} busy={busy} />}
-            />
-          ))}
-        </ul>
-      )}
-    </Section>
+    <>
+      <Section
+        title={t('sections.contacts')}
+        action={canWrite && <EditarLink onClick={onEdit} busy={busy} />}
+      >
+        {rows.length === 0 ? (
+          <p className="text-[13px] text-k-muted">{t('noContacts')}</p>
+        ) : (
+          <ul className="divide-y divide-k-border">
+            {rows.map((c) => (
+              <Fila
+                key={c.id}
+                icon={c.contactType === 'EMAIL' ? 'mail' : 'phone'}
+                value={c.value ?? '—'}
+                hint={t(`contactType.${c.contactType}`)}
+                badge={c.isPrimary ? t('primary') : undefined}
+                action={
+                  <span className="flex shrink-0 items-center gap-2">
+                    {!revealed && <RevealButton onClick={onReveal} busy={busy} />}
+                    <EyeButton onClick={() => setViendo(c)} />
+                  </span>
+                }
+              />
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <Modal open={viendo !== null} onClose={() => setViendo(null)} title={t('sections.contacts')}>
+        {/* Se pinta el de `rows` y no la copia de `viendo`: si revelan con el modal abierto, el valor
+            se destapa acá también. */}
+        {viendo && <ContactDetail contact={rows.find((c) => c.id === viendo.id) ?? viendo} />}
+      </Modal>
+    </>
   );
 }
 
-/** Direcciones. El «Ver en mapa» sólo aparece si hay punto: sin coordenadas no hay nada que abrir. */
+/**
+ * Direcciones.
+ *
+ * El ojo abre **todo** lo de la dirección —tipo, zona, referencia, coordenadas— y el mapa si hay
+ * punto. Antes había un «Ver en mapa» que sólo aparecía con coordenadas, y la referencia («portón
+ * verde frente a la cancha»), que es lo que de verdad sirve para llegar, no se veía en ningún lado.
+ */
 export function LocationList({
   rows,
   revealed,
@@ -82,7 +104,8 @@ export function LocationList({
   onEdit,
 }: Común & { rows: ClientLocationDetail[]; onEdit: () => void }) {
   const t = useTranslations('portfolio');
-  const [enMapa, setEnMapa] = useState<ClientLocationDetail | null>(null);
+  const [viendo, setViendo] = useState<ClientLocationDetail | null>(null);
+  const actual = viendo && (rows.find((l) => l.id === viendo.id) ?? viendo);
 
   return (
     <>
@@ -100,15 +123,7 @@ export function LocationList({
                 action={
                   <span className="flex shrink-0 items-center gap-2">
                     {!revealed && <RevealButton onClick={onReveal} busy={busy} />}
-                    {l.latitude != null && l.longitude != null && (
-                      <button
-                        type="button"
-                        onClick={() => setEnMapa(l)}
-                        className="text-[12px] font-medium text-k-periwinkle hover:underline"
-                      >
-                        {t('seeOnMap')}
-                      </button>
-                    )}
+                    <EyeButton onClick={() => setViendo(l)} />
                   </span>
                 }
               />
@@ -117,23 +132,84 @@ export function LocationList({
         )}
       </Section>
 
-      <Modal open={enMapa !== null} onClose={() => setEnMapa(null)} title={enMapa?.address ?? t('sections.locations')}>
-        {enMapa && (
-          <RouteMap
-            height={340}
-            stops={[
-              {
-                id: enMapa.id,
-                sequenceOrder: 1,
-                latitude: enMapa.latitude,
-                longitude: enMapa.longitude,
-                label: enMapa.address ?? undefined,
-              },
-            ]}
-          />
-        )}
+      <Modal wide open={actual !== null} onClose={() => setViendo(null)} title={actual?.address ?? t('sections.locations')}>
+        {actual && <LocationDetail location={actual} />}
       </Modal>
     </>
+  );
+}
+
+// ── Detalle (lo usan también los garantes) ──────────────────────────────────
+
+/** Todo lo de un teléfono o correo. Enmascarado o en claro, según cómo esté la ficha. */
+export function ContactDetail({ contact }: { contact: ClientContactDetail }) {
+  const t = useTranslations('portfolio');
+  return (
+    <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+      <Dato label={t('form.contactType')} value={t(`contactType.${contact.contactType}`)} />
+      <Dato label={t('form.contactValue')} value={contact.value ?? '—'} />
+      <Dato label={t('primary')} value={contact.isPrimary ? t('yes') : t('no')} />
+      {contact.isVerified != null && <Dato label={t('verified')} value={contact.isVerified ? t('yes') : t('no')} />}
+      {contact.notes && <Dato label={t('form.notes')} value={contact.notes} wide />}
+    </dl>
+  );
+}
+
+/**
+ * Todo lo de una dirección y, si tiene punto, el mapa.
+ *
+ * Sin coordenadas se dice que no hay punto en vez de esconder el mapa sin explicación: una
+ * dirección importada de un extracto es texto y nada más, y quien mira tiene que saber que el
+ * punto falta —y que se carga desde «Editar»—, no preguntarse si el mapa no cargó.
+ */
+export function LocationDetail({ location }: { location: ClientLocationDetail }) {
+  const t = useTranslations('portfolio');
+  const conPunto = location.latitude != null && location.longitude != null;
+
+  return (
+    <div className="space-y-4">
+      <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        <Dato label={t('form.locationType')} value={t(`locationType.${location.locationType}`)} />
+        <Dato label={t('form.zone')} value={location.zone || '—'} />
+        <Dato label={t('form.address')} value={location.address ?? '—'} wide />
+        <Dato label={t('form.reference')} value={location.referenceNotes || '—'} wide />
+        <Dato label={t('coordinates')} value={conPunto ? `${location.latitude}, ${location.longitude}` : t('noPoint')} wide />
+      </dl>
+      {conPunto && (
+        <MapPicker
+          key={location.id}
+          latitude={location.latitude}
+          longitude={location.longitude}
+          height={300}
+          label={t('mapView')}
+        />
+      )}
+    </div>
+  );
+}
+
+export function Dato({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
+  return (
+    <div className={wide ? 'sm:col-span-2' : undefined}>
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
+      <dd className="mt-0.5 break-words text-[14px] text-k-text">{value}</dd>
+    </div>
+  );
+}
+
+/** El ojo que abre el detalle. Siempre está: el detalle tiene más que el mapa. */
+export function EyeButton({ onClick }: { onClick: () => void }) {
+  const t = useTranslations('portfolio');
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={t('details')}
+      title={t('details')}
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-k-text-2 hover:bg-k-bg hover:text-k-periwinkle"
+    >
+      <Icon name="eye" className="h-4 w-4" />
+    </button>
   );
 }
 

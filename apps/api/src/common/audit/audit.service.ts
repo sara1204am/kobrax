@@ -59,4 +59,32 @@ export class AuditService {
       void err;
     }
   }
+
+  /**
+   * Muchas entradas en una sola escritura. Para lo que genera una importación: un evento por crédito
+   * que apareció, faltó o volvió, que en un reporte de miles de filas serían miles de inserts sueltos.
+   * Mismas reglas que `record`: contexto del tenant, PII redactada, y un fallo no rompe la operación.
+   */
+  async recordMany(entries: AuditEntry[]): Promise<void> {
+    const ctx = this.tenantContext.get();
+    if (!ctx || entries.length === 0) return;
+
+    const data = entries.map((entry) => ({
+      accountId: ctx.accountId,
+      userId: ctx.userId,
+      action: entry.action,
+      entity: entry.entity,
+      entityId: entry.entityId,
+      before: (entry.before === undefined ? undefined : redactPII(entry.before, entry.redactKeys)) as Prisma.InputJsonValue | undefined,
+      after: (entry.after === undefined ? undefined : redactPII(entry.after, entry.redactKeys)) as Prisma.InputJsonValue | undefined,
+      ip: ctx.ip,
+      userAgent: ctx.userAgent,
+    }));
+    try {
+      await this.prisma.withTenant(ctx.accountId, (tx) => tx.auditLog.createMany({ data }));
+    } catch (err) {
+      this.logger.error(`No se pudieron registrar ${entries.length} entradas de audit (${entries[0]!.entity})`);
+      void err;
+    }
+  }
 }

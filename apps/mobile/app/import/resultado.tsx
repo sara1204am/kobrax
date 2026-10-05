@@ -1,7 +1,8 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { COLORS, RADIUS, SPACING } from '@/theme';
-import { Header, SectionLabel, StatTile } from '@/ui';
+import { Header, SectionLabel } from '@/ui';
+import { CountTiles } from '@/import-views';
 import { Button } from '@/components';
 import { rejectText, resultKind } from '@/import.service';
 
@@ -27,6 +28,9 @@ export default function ResultadoScreen() {
     created?: string;
     updated?: string;
     setCurrent?: string;
+    absent?: string;
+    reappeared?: string;
+    ignored?: string;
     invalid?: string;
     skip?: string;
     rejects?: string;
@@ -42,6 +46,13 @@ export default function ResultadoScreen() {
     updated: num(p.updated),
     setCurrent: num(p.setCurrent),
     invalid: num(p.invalid),
+  };
+  // Sin `absent` (modo lectura desde Ajustes, o API vieja) quedan los tres baldes de antes.
+  const tileCounts = {
+    created: counts.created,
+    updated: counts.updated,
+    setCurrent: counts.setCurrent,
+    ...(p.absent ? { absent: num(p.absent), reappeared: num(p.reappeared), ignored: num(p.ignored) } : {}),
   };
   const kind = resultKind(counts.invalid, p.skip === '1');
   const rejects = parseRejects(p.rejects);
@@ -71,11 +82,7 @@ export default function ResultadoScreen() {
           </Text>
         )}
 
-        <View style={styles.tiles}>
-          <StatTile label="Agregados" value={String(counts.created)} tone="success" />
-          <StatTile label="Actualizados" value={String(counts.updated)} />
-          <StatTile label="Al día" value={String(counts.setCurrent)} />
-        </View>
+        <CountTiles counts={tileCounts} />
 
         {counts.invalid > 0 && (
           <>

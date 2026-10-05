@@ -15,16 +15,20 @@ import { RouteStatus, RouteStopStatus } from '@prisma/client';
 import { ROUTE_SORTS, type RouteSort } from '@kobrax/shared';
 
 export class CreateRouteDto {
+  /** Opcional: lo genera el móvil para que reintentar (cola offline) no duplique la ruta. */
+  @IsOptional() @IsUUID() id?: string;
   @IsUUID() collectorId!: string;
   @IsDateString() plannedDate!: string;
   @IsOptional() @IsUUID() branchId?: string;
 }
 
 export class GenerateRouteDto {
+  /** Opcional: ídem `CreateRouteDto.id`; un reintento devuelve la ruta ya generada, sin otras paradas. */
+  @IsOptional() @IsUUID() id?: string;
   @IsUUID() collectorId!: string;
   @IsDateString() plannedDate!: string;
-  /** Casos a incluir; si se omite con `auto`, toma los casos abiertos del cobrador. */
-  @IsOptional() @IsArray() @IsUUID('all', { each: true }) caseIds?: string[];
+  /** Créditos a incluir, en el orden del recorrido; si se omite, toma los créditos en mora del cobrador por prioridad. */
+  @IsOptional() @IsArray() @IsUUID('all', { each: true }) creditIds?: string[];
   @IsOptional() @IsBoolean() auto?: boolean;
   @IsOptional() @IsUUID() branchId?: string;
 }
@@ -53,10 +57,10 @@ export class UpdateRouteDto {
   @IsEnum(RouteStatus) status!: RouteStatus;
 }
 
-/** Agregar una parada desde el mapa (S2). El caso es opcional: un cliente sin caso abierto se visita igual. */
+/** Agregar una parada desde el mapa (S2). El crédito es opcional: un cliente sin crédito elegido se visita igual. */
 export class AddStopDto {
   @IsUUID() clientId!: string;
-  @IsOptional() @IsUUID() caseId?: string;
+  @IsOptional() @IsUUID() creditId?: string;
 }
 
 export class UpdateStopDto {

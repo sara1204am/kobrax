@@ -5,13 +5,19 @@ import { NAV, crumbsFor, visibleNav } from './nav';
 const labels = (permissions: string[]) => visibleNav(permissions).map((i) => i.label);
 
 describe('visibleNav', () => {
+  it('F4/08 · Mora es la clave `mora` y pide collection:read', () => {
+    const mora = NAV.find((i) => i.label === 'mora');
+    expect(mora).toMatchObject({ href: '/mora', permission: Permission.COLLECTION_READ });
+    expect(labels(['collection:read'])).toContain('mora');
+  });
+
   it('un cobrador no ve equipo ni cuenta — ni siquiera apagados', () => {
     const collector = ROLE_PERMISSIONS[RoleType.COLLECTOR];
     expect(labels(collector)).not.toContain('team');
     expect(labels(collector)).not.toContain('account');
     // Lo suyo sí: cartera, casos, agenda, rutas, pagos.
     expect(labels(collector)).toEqual(
-      expect.arrayContaining(['portfolio', 'cases', 'agenda', 'routes', 'payments']),
+      expect.arrayContaining(['portfolio', 'mora', 'agenda', 'routes', 'payments']),
     );
   });
 

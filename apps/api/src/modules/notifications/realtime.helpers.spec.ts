@@ -13,8 +13,8 @@ import {
   LOCATION_THROTTLE_MS,
 } from './realtime.helpers';
 
-const collector = { userId: 'u1', accountId: 'a1', permissions: [Permission.ROUTE_EXECUTE, Permission.CASE_READ] };
-const supervisor = { userId: 'u2', accountId: 'a1', permissions: [Permission.ROUTE_ASSIGN, Permission.CASE_READ] };
+const collector = { userId: 'u1', accountId: 'a1', permissions: [Permission.ROUTE_EXECUTE, Permission.COLLECTION_READ] };
+const supervisor = { userId: 'u2', accountId: 'a1', permissions: [Permission.ROUTE_ASSIGN, Permission.COLLECTION_READ] };
 
 describe('deriveRooms', () => {
   it('un cobrador entra a su tenant y su user, NO a supervisores', () => {

@@ -1,5 +1,7 @@
 # Cartera · S2 — Alta: cliente → préstamo (V1 + V2)
 
+> **Nota — reemplazado por P6 (cola offline):** el alta se escribe hoy a la **cola offline** de P6 (`expo-sqlite`, `cliente-queue.ts`), con los ids generados en el dispositivo, y no con la llamada directa a la API que describe este plan. Se conserva como referencia de las pantallas y reglas (V1/V2); para la escritura, manda `plans/P6-offline-sync.md`.
+
 > Índice: [README.md](./README.md) · Spec: [`docs/flows/Cliente_Prestamo.pdf`](../../../../flows/Cliente_Prestamo.pdf) §5.1, §5.2, §4.1, §4.2
 > **Depende de [00-fundacion.md](./00-fundacion.md)** (`POST /credits` extendido, `POST /uploads`, `client:write`/`credit:write` al COLLECTOR, `quoteLoan` en shared) — ya construido.
 > **Sin Figma:** se calca el lenguaje visual de Agenda (`app/agenda/crear.tsx`) — mismos tokens, chips, selectores, `Field`, footer CTA.

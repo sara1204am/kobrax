@@ -1,12 +1,12 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { CatalogType, type AccountInfo, type CaseListItem, type ClientDetail, type ClientTimelineEntry, type CreditDetail, type Member } from '@kobrax/shared';
+import { CatalogType, type AccountInfo, type ClientDetail, type ClientTimelineEntry, type CreditDetail, type Member } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { isUuid } from '@/lib/uuid';
 import { EmptyState } from '@/components/panel-ui';
 import { AccountSummary } from './account-summary';
-import { CasesSection } from './cases-section';
 import { ClientCard } from './client-card';
+import { LinkReview } from './link-review';
 import { CreditsSection } from './credits-section';
 import { TimelineSection } from './timeline-section';
 
@@ -24,9 +24,9 @@ const TIMELINE_PREVIEW = 8;
  * garantes y garantías los necesita para ofrecerlos, y pedirlos recién al abrirlo haría que el
  * primer clic esperara la red.
  *
- * 🔴 **Ocho llamadas en paralelo, y ninguna puede tumbar la pantalla salvo la del cliente.** Cada
- * bloque cruza un dominio distinto —créditos, casos, bitácora, equipo—, con su propio permiso: un
- * rol sin `case:read` tiene que poder abrir la ficha igual, con la sección de casos diciendo que no
+ * 🔴 **Siete llamadas en paralelo, y ninguna puede tumbar la pantalla salvo la del cliente.** Cada
+ * bloque cruza un dominio distinto —créditos, bitácora, equipo—, con su propio permiso: un
+ * rol sin `credit:read` tiene que poder abrir la ficha igual, con la sección diciendo que no
  * la puede ver. La única que decide si hay pantalla es la del cliente.
  */
 export default async function ClientePage({
@@ -46,12 +46,11 @@ export default async function ClientePage({
    */
   if (!isUuid(params.id)) notFound();
 
-  const [client, credits, account, timeline, cases, team, types, collateralTypes] = await Promise.all([
+  const [client, credits, account, timeline, team, types, collateralTypes] = await Promise.all([
     apiCall<ClientDetail>(`/clients/${params.id}`, { method: 'GET', auth: true }),
     apiCall<CreditDetail[]>(`/credits?clientId=${params.id}&limit=100`, { method: 'GET', auth: true }),
     apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
     apiCall<ClientTimelineEntry[]>(`/clients/${params.id}/timeline?limit=${TIMELINE_PREVIEW}`, { method: 'GET', auth: true }),
-    apiCall<CaseListItem[]>(`/cases?clientId=${params.id}&limit=20`, { method: 'GET', auth: true }),
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
     apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.CREDIT_TYPE}`, { method: 'GET', auth: true }),
     apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.COLLATERAL_TYPE}`, { method: 'GET', auth: true }),
@@ -67,33 +66,36 @@ export default async function ClientePage({
   const moneda = account.body.data?.currencyCode ?? 'BOB';
 
   return (
-    <ClientCard
-      client={client.body.data}
-      hasActiveCredits={creditos.some((c) => c.status === 'ACTIVE')}
-      credits={
-        // Si `credit:read` no está, la lista viene vacía y la sección lo dice en vez de mentir con
-        // un cero. El catálogo de tipos sí puede faltar sin consecuencia: se muestra «Sin clasificar».
-        <CreditsSection
-          clientId={params.id}
-          credits={creditos}
-          types={new Map((types.body.data ?? []).map((c) => [c.code, c.label]))}
-          showClosed={searchParams.historial === '1'}
-          denied={credits.status === 403}
-        />
-      }
-      creditOptions={creditos}
-      currency={moneda}
-      collateralTypes={collateralTypes.body.data ?? []}
-      summary={<AccountSummary client={client.body.data} credits={creditos} currency={moneda} />}
-      timeline={
-        <TimelineSection
-          entries={timeline.body.data ?? []}
-          members={equipo}
-          denied={timeline.status === 403}
-          seeAllHref={`/cartera/${params.id}/bitacora`}
-        />
-      }
-      cases={<CasesSection cases={cases.body.data ?? []} members={equipo} denied={cases.status === 403} />}
-    />
+    <>
+      {/* D2 · opción B: la duda del vínculo se resuelve acá, sin frenar la cobranza. */}
+      <LinkReview client={client.body.data} creditIds={creditos.map((c) => c.id)} />
+      <ClientCard
+        client={client.body.data}
+        hasActiveCredits={creditos.some((c) => c.status === 'ACTIVE')}
+        credits={
+          // Si `credit:read` no está, la lista viene vacía y la sección lo dice en vez de mentir con
+          // un cero. El catálogo de tipos sí puede faltar sin consecuencia: se muestra «Sin clasificar».
+          <CreditsSection
+            clientId={params.id}
+            credits={creditos}
+            types={new Map((types.body.data ?? []).map((c) => [c.code, c.label]))}
+            showClosed={searchParams.historial === '1'}
+            denied={credits.status === 403}
+          />
+        }
+        creditOptions={creditos}
+        currency={moneda}
+        collateralTypes={collateralTypes.body.data ?? []}
+        summary={<AccountSummary client={client.body.data} credits={creditos} currency={moneda} />}
+        timeline={
+          <TimelineSection
+            entries={timeline.body.data ?? []}
+            members={equipo}
+            denied={timeline.status === 403}
+            seeAllHref={`/cartera/${params.id}/bitacora`}
+          />
+        }
+      />
+    </>
   );
 }

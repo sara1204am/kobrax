@@ -5,7 +5,10 @@ import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { staleAfterDaysOf } from '@kobrax/shared';
 import { safeDecrypt, clientDisplayName } from '../clients/clients.serializer';
+import { moraCsvRow, MORA_CSV_COLUMNS } from '../mora/mora-export';
+import { serializeMoraCredit, type MoraCreditRow } from '../mora/mora.serializer';
 import { toCsv } from './csv';
 
 export interface ExportFile {
@@ -101,48 +104,78 @@ export class ExportsService {
   }
 
   /**
-   * Mora: un caso de cobranza por fila, con el cliente y el crédito que lo originan.
+   * Mora (F4/08): **un crédito en mora por fila** —con un episodio de mora abierto—, con las mismas columnas que la
+   * exportación de la Central de Mora (Responsable, Categoría, Situación, Castigado, Prioridad, Días de mora,
+   * Monto vencido, Última gestión…).
    *
-   * ponytail: `asignado` queda como el id crudo del cobrador — resolver el nombre pide unir contra
-   * `users`, que es una tabla global sin relación de Prisma con `collection_cases` (ref suave a
-   * propósito, ver el schema). Se agrega si hace falta leer el nombre desde el CSV.
+   * Es la exportación **de la cuenta entera** (permiso `report:export`), sin el alcance por agencia que sí tiene la
+   * de la Central de Mora. Sale sin «Promesa vigente»: calcularla pide otra consulta que este archivo no necesita.
    */
-  async casesCsv(): Promise<ExportFile> {
-    const cases = await this.tx((tx) =>
-      tx.collectionCase.findMany({
-        where: { accountId: this.tenant.accountId, deletedAt: null },
-        include: { client: true, credit: true },
-        orderBy: { createdAt: 'asc' },
-      }),
-    );
-    await this.logExport('cases');
+  async moraCsv(): Promise<ExportFile> {
+    const accountId = this.tenant.accountId;
+    const { rows, names } = await this.tx(async (tx) => {
+      const [account, categories] = await Promise.all([
+        tx.account.findUnique({ where: { id: accountId }, select: { configuration: true } }),
+        tx.arrearCategory.findMany({ where: { accountId }, orderBy: [{ sortOrder: 'asc' }, { fromDays: 'asc' }] }),
+      ]);
+      const cfg = (account?.configuration ?? {}) as { importConfig?: { staleAfterDays?: unknown } };
+      const staleAfterDays = staleAfterDaysOf(cfg.importConfig?.staleAfterDays);
+      const now = new Date();
 
-    const rows = cases.map((c) => ({
-      id: c.id,
-      cliente: clientDisplayName(c.client) ?? '',
-      credito: c.credit.code ?? c.creditId,
-      estado: c.status,
-      prioridad: c.priority,
-      diasMora: c.credit.daysPastDue,
-      saldo: Number(c.credit.outstandingBalance),
-      moneda: c.credit.currency,
-      asignado: c.assigneeId ?? '',
-      ultimaGestion: c.lastActionAt ?? '',
-      creadoEl: c.createdAt,
-    }));
-    const csv = toCsv(rows, [
-      'id',
-      'cliente',
-      'credito',
-      'estado',
-      'prioridad',
-      'diasMora',
-      'saldo',
-      'moneda',
-      'asignado',
-      'ultimaGestion',
-      'creadoEl',
-    ]);
+      const items: ReturnType<typeof serializeMoraCredit>[] = [];
+      for (let cursor: string | undefined; ; ) {
+        const batch = await tx.credit.findMany({
+          where: { accountId, deletedAt: null, arrearEpisodes: { some: { endedAt: null } } },
+          select: {
+            id: true,
+            code: true,
+            clientId: true,
+            currency: true,
+            outstandingBalance: true,
+            principalAmount: true,
+            daysPastDue: true,
+            metadata: true,
+            origin: true,
+            externalSource: true,
+            syncStatus: true,
+            reportedAsOf: true,
+            absentSince: true,
+            writtenOffAt: true,
+            lastActionAt: true,
+            assignedManagerId: true,
+            branchId: true,
+            branch: { select: { name: true } },
+            client: { select: { firstName: true, lastName: true, businessName: true } },
+            installments: { select: { number: true, dueDate: true, amount: true, paidAmount: true, status: true } },
+            arrearEpisodes: { where: { endedAt: null }, take: 1, select: { priority: true, priorityPinnedAt: true } },
+            activities: { orderBy: { createdAt: 'desc' }, take: 1, select: { type: true, result: true } },
+            payments: { orderBy: { paymentDate: 'desc' }, take: 1, select: { paymentDate: true } },
+          },
+          orderBy: { id: 'asc' },
+          take: 1000,
+          ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        });
+        for (const c of batch) {
+          items.push(serializeMoraCredit(c as unknown as MoraCreditRow, { now, staleAfterDays, hasActivePromise: false, categories }));
+        }
+        if (batch.length < 1000) break;
+        cursor = batch[batch.length - 1]!.id;
+      }
+
+      const responsibleIds = [...new Set(items.map((i) => i.responsibleId).filter((id): id is string => !!id))];
+      const profiles = responsibleIds.length
+        ? await tx.profile.findMany({ where: { userId: { in: responsibleIds } }, select: { userId: true, firstName: true, lastName: true } })
+        : [];
+      const names = new Map(profiles.map((p) => [p.userId, `${p.firstName} ${p.lastName}`.trim()]));
+      return { rows: items, names };
+    });
+    await this.logExport('mora');
+
+    const columns = MORA_CSV_COLUMNS.filter((c) => c !== 'Promesa vigente');
+    const csv = toCsv(
+      rows.map((r) => moraCsvRow(r, names)),
+      [...columns],
+    );
     return { filename: 'mora.csv', content: Buffer.from(csv, 'utf-8'), contentType: 'text/csv; charset=utf-8' };
   }
 
@@ -178,14 +211,15 @@ export class ExportsService {
    * los IDs y los `metadata` crudos, no sólo las columnas que se leen a simple vista.
    *
    * ponytail: cubre clientes (con sus contactos/ubicaciones/relaciones/garantías/adjuntos),
-   * créditos, casos (con su bitácora), pagos y agenda — lo que hace a «la cartera» de la cuenta.
+   * créditos, sus gestiones (`activities`, de `credit_activities`) y episodios de mora,
+   * pagos y agenda — lo que hace a «la cartera» de la cuenta.
    * Quedan afuera rutas, catálogos y dashboards (configuración operativa, no datos de negocio);
    * se suman el día que alguien los necesite en el backup.
    */
   async fullBackup(): Promise<ExportFile> {
     const accountId = this.tenant.accountId;
     const data = await this.tx(async (tx) => {
-      const [clients, credits, cases, payments, agendaItems] = await Promise.all([
+      const [clients, credits, activities, arrearEpisodes, payments, agendaItems] = await Promise.all([
         tx.client.findMany({
           where: { accountId, deletedAt: null },
           include: {
@@ -197,11 +231,13 @@ export class ExportsService {
           },
         }),
         tx.credit.findMany({ where: { accountId, deletedAt: null } }),
-        tx.collectionCase.findMany({ where: { accountId, deletedAt: null }, include: { activities: true } }),
+        // F4/08: la bitácora de cobranza es del crédito.
+        tx.creditActivity.findMany({ where: { accountId }, orderBy: { createdAt: 'asc' } }),
+        tx.creditArrearEpisode.findMany({ where: { accountId }, orderBy: { startedAt: 'asc' } }),
         tx.payment.findMany({ where: { accountId } }),
         tx.agendaItem.findMany({ where: { accountId, deletedAt: null } }),
       ]);
-      return { clients, credits, cases, payments, agendaItems };
+      return { clients, credits, activities, arrearEpisodes, payments, agendaItems };
     });
     await this.logExport('backup');
 

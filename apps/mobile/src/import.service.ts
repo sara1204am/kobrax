@@ -6,7 +6,8 @@
  * Ver `docs/epics/F10/plans/import/FIELD-RULES.md` §6.
  */
 import * as SecureStore from 'expo-secure-store';
-import { apiMutate, apiQuery, refreshSession, type MutateResult, type QueryResult } from '@/api-client';
+import { apiMutate, apiQuery, refreshSession, toQuery, type MutateResult, type QueryResult } from '@/api-client';
+import { cachedList, cachedOne } from '@/sync/cached';
 import { postMultipart, uploadFailure } from '@/api';
 import { getSession } from '@/session';
 import type {
@@ -15,7 +16,11 @@ import type {
   ConfigScreen,
   FieldState,
   ImportConfig,
+  ImportAssignments,
   ImportConfigPatch,
+  ImportRunItem,
+  ImportRunItemAction,
+  ImportRunSummary,
   NameOrder,
   PortfolioSummary,
   ProfileKind,
@@ -79,9 +84,12 @@ export const importService = {
     return postFile<ColumnsPayload>('?columnsOnly=true', file);
   },
 
-  /** Sube el archivo del día. `dryRun` = Vista Previa; sin él, se aplica. */
-  run(file: PickedFile, dryRun: boolean): Promise<FileResult<PortfolioSummary>> {
-    return postFile<PortfolioSummary>('', file, dryRun);
+  /**
+   * Sube el archivo del día. `dryRun` = Vista Previa; sin él, se aplica. `assignments` sólo al confirmar:
+   * a quién quedan los créditos nuevos (ver `selfAssignments`).
+   */
+  run(file: PickedFile, dryRun: boolean, assignments?: ImportAssignments): Promise<FileResult<PortfolioSummary>> {
+    return postFile<PortfolioSummary>('', file, dryRun, assignments);
   },
 };
 
@@ -103,7 +111,7 @@ export type FileResult<T> =
  * POST multipart a `/imports/portfolio`. No pasa por `apiMutate` (que serializa JSON) — mismo
  * patrón que `uploads.service.ts`, incluido el 401 → refresh → retry una vez.
  */
-async function postFile<T>(query: string, file: PickedFile, dryRun?: boolean): Promise<FileResult<T>> {
+async function postFile<T>(query: string, file: PickedFile, dryRun?: boolean, assignments?: ImportAssignments): Promise<FileResult<T>> {
   const session = await getSession();
   if (!session) return { status: 'unauthenticated' };
 
@@ -116,6 +124,7 @@ async function postFile<T>(query: string, file: PickedFile, dryRun?: boolean): P
       type: file.mimeType ?? 'application/octet-stream',
     } as unknown as Blob);
     if (dryRun !== undefined) form.append('dryRun', String(dryRun));
+    if (assignments) form.append('assignments', JSON.stringify(assignments));
     return postMultipart(`/imports/portfolio${query}`, form, token);
   };
 
@@ -144,9 +153,10 @@ async function postFile<T>(query: string, file: PickedFile, dryRun?: boolean): P
 // pero la app sigue sabiendo que el import está pendiente. El logout NO las borra: son estado
 // operativo, no credencial.
 //
-// ponytail: claves globales, no por usuario — igual que los flags biométricos, que son más
-// sensibles que estos. Un teléfono compartido por dos cobradores haría que el segundo no reciba
-// el ofrecimiento ese día; si eso aparece de verdad, se le sufija el userId y listo.
+// Las claves son GLOBALES del teléfono: no llevan el `userId` (igual que los flags biométricos). Un teléfono
+// compartido por dos cobradores hace que el segundo no reciba el ofrecimiento el mismo día. (El README del plan
+// de importación dice que llevan el `userId`: el código no lo hace.) Si eso aparece de verdad, se les sufija el
+// `userId` y listo.
 
 const LAST_DAY = 'k_import_last_day';
 const SKIP_DAY = 'k_import_skip_day';
@@ -320,6 +330,7 @@ export const NAME_ORDER_LABEL: Record<NameOrder, string> = {
  * Resultado; el código crudo (`MORA_SIN_CONFIRMAR`) no se le muestra nunca a nadie.
  */
 const WARNING_TEXT: Record<string, string> = {
+  REPORT_DATE_UNKNOWN: 'El reporte no trae su fecha de corte: los números se guardan sin saber a qué día corresponden.',
   MORA_SIN_CONFIRMAR: '⚠ Todavía no confirmaste cuál columna son los días de atraso.',
   MORA_COLUMNA_SOSPECHOSA: '⚠ Puede que la columna de días de atraso esté mal elegida.',
   MORA_INCONSISTENTE: '⚠ Hay créditos vigentes y sin cargos, pero con días de atraso.',
@@ -366,4 +377,137 @@ export function lastRunWhen(iso: string, now = new Date()): string {
   if (sameDay) return `Hoy ${hh}:${mm}`;
   const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   return `${d.getDate()} ${MES[d.getMonth()]} ${hh}:${mm}`;
+}
+
+/** Saldo, mora y estado de una operación en la vista previa (el mismo contrato que la web). */
+interface PreviewValues {
+  outstandingBalance?: number | null;
+  daysPastDue?: number | null;
+  reportedStatus?: string | null;
+}
+
+const amount = (n: number): string => n.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/**
+ * La bajada de una fila de la vista previa: operación, saldo y mora, con «antes → después» si
+ * cambian. Sin símbolo de moneda: la vista previa no la trae, y un «Bs» supuesto podría mentir.
+ *
+ * «302-222-1515 · Saldo 9.752,96 · Mora 69 → 70 d». Sin números (API vieja) queda el código solo.
+ */
+export function previewLine(code: string | null, before?: PreviewValues, after?: PreviewValues): string {
+  const pair = (b: number | null | undefined, a: number | null | undefined, fmt: (n: number) => string): string | null => {
+    if (b == null && a == null) return null;
+    if (b != null && a != null && Math.abs(b - a) > 0.005) return `${fmt(b)} → ${fmt(a)}`;
+    return fmt((a ?? b) as number);
+  };
+  const saldo = pair(before?.outstandingBalance, after?.outstandingBalance, amount);
+  const mora = pair(before?.daysPastDue, after?.daysPastDue, (n) => String(n));
+  return [code ?? 'Sin número', saldo && `Saldo ${saldo}`, mora && `Mora ${mora} d`].filter(Boolean).join(' · ');
+}
+
+// ── Asignar todo a mí (vista previa en modo CHOOSE) ─────────────────────────
+
+/**
+ * Los créditos nuevos que el reporte no asigna a nadie. Con el modo CHOOSE el servidor no deja confirmar
+ * si queda alguno sin responsable; antes eso era un callejón sin salida («usá el panel web»).
+ */
+export function unassignedNewCodes(preview: Pick<PortfolioSummary, 'preview'>): string[] {
+  return preview.preview.toCreate.filter((r) => !r.suggestedAssigneeId).map((r) => r.code);
+}
+
+/**
+ * «Asignar todo a mí»: sólo los nuevos SIN sugerencia van a quien confirma; los que sí traen sugerencia
+ * siguen con ella (el servidor la aplica cuando no hay un pedido explícito). `undefined` = nada que pedir.
+ */
+export function selfAssignments(preview: Pick<PortfolioSummary, 'preview' | 'assignment'>): ImportAssignments | undefined {
+  const codes = unassignedNewCodes(preview);
+  const me = preview.assignment?.selfUserId;
+  if (!me || codes.length === 0) return undefined;
+  return { version: 1, create: [{ userId: me, externalIds: codes }], reassign: [] };
+}
+
+// ── Contadores (resultado y vista previa) ────────────────────────────────────
+
+export interface CountTile {
+  key: string;
+  label: string;
+  value: number;
+  tone?: 'success';
+}
+
+/**
+ * Los contadores que se dibujan. Con la regla por defecto «al día» da 0, así que ya no es el tercer balde:
+ * cuentan los que **ya no vienen** y los que **volvieron**, más los **ignorados** (totales y notas del
+ * reporte). «Al día» sólo aparece cuando la regla es «ponerlos al día» (`setCurrent > 0`). Una API vieja sin
+ * `absent` conserva los tres baldes de antes.
+ */
+export function countTiles(c: {
+  created: number;
+  updated: number;
+  setCurrent: number;
+  absent?: number;
+  reappeared?: number;
+  ignored?: number;
+}): CountTile[] {
+  const base: CountTile[] = [
+    { key: 'created', label: 'Agregados', value: c.created, tone: 'success' },
+    { key: 'updated', label: 'Actualizados', value: c.updated },
+  ];
+  if (c.absent === undefined) return [...base, { key: 'setCurrent', label: 'Al día', value: c.setCurrent }];
+  const out: CountTile[] = [
+    ...base,
+    { key: 'absent', label: 'Ya no vienen', value: c.absent },
+    { key: 'reappeared', label: 'Volvieron', value: c.reappeared ?? 0 },
+  ];
+  if ((c.ignored ?? 0) > 0) out.push({ key: 'ignored', label: 'Ignorados', value: c.ignored ?? 0 });
+  if (c.setCurrent > 0) out.push({ key: 'setCurrent', label: 'Al día', value: c.setCurrent });
+  return out;
+}
+
+/** «Este archivo ya se importó el 24 jul 08:14 por Ana»: el aviso del archivo repetido, con cuándo y quién. */
+export function alreadyAppliedText(applied: { at: string; by: string | null } | undefined, now = new Date()): string {
+  if (!applied) return 'Este archivo ya se importó.';
+  return `Este archivo ya se importó el ${lastRunWhen(applied.at, now)}${applied.by ? ` por ${applied.by}` : ''}.`;
+}
+
+// ── Historial de importaciones (sólo lectura, con respaldo local) ────────────
+
+/** Las corridas, la más reciente primero. Sin señal, las de la última vez. */
+export function listRuns(): Promise<QueryResult<ImportRunSummary[]>> {
+  return cachedList<ImportRunSummary>('import.run', 'list', () =>
+    apiQuery<ImportRunSummary[]>(`/imports/portfolio/runs${toQuery({ limit: 50 })}`),
+  );
+}
+
+export function getRun(id: string): Promise<QueryResult<ImportRunSummary>> {
+  return cachedOne<ImportRunSummary>('import.run', `detail:${id}`, () => apiQuery<ImportRunSummary>(`/imports/portfolio/runs/${id}`));
+}
+
+/** Qué le pasó a cada registro de la corrida, de un tipo. */
+export function listRunItems(id: string, action: ImportRunItemAction): Promise<QueryResult<ImportRunItem[]>> {
+  return cachedList<ImportRunItem>('import.run', `items:${id}:${action}`, () =>
+    apiQuery<ImportRunItem[]>(`/imports/portfolio/runs/${id}/items${toQuery({ action, limit: 100 })}`),
+  );
+}
+
+export const RUN_ACTION_LABEL: Record<ImportRunItemAction, string> = {
+  CREATED: 'Agregados',
+  UPDATED: 'Actualizados',
+  REAPPEARED: 'Volvieron',
+  SET_CURRENT: 'Al día',
+  ABSENT: 'Ya no vienen',
+  REJECTED: 'No se importaron',
+};
+
+/** Las acciones con registros, en el orden en que se muestran. */
+export function runActions(c: { created: number; updated: number; reappeared: number; setCurrent: number; absent: number; rejected: number }): ImportRunItemAction[] {
+  const rows: [ImportRunItemAction, number][] = [
+    ['CREATED', c.created],
+    ['UPDATED', c.updated],
+    ['REAPPEARED', c.reappeared],
+    ['ABSENT', c.absent],
+    ['SET_CURRENT', c.setCurrent],
+    ['REJECTED', c.rejected],
+  ];
+  return rows.filter(([, n]) => n > 0).map(([a]) => a);
 }

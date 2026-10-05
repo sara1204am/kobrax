@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -12,6 +12,7 @@ import {
   MarkArrearsDto,
   RecalcArrearsDto,
   UpdateCreditDto,
+  WriteOffDto,
 } from './dto/credit.dto';
 
 @Controller('credits')
@@ -49,6 +50,23 @@ export class CreditsController {
     return this.credits.update(id, dto);
   }
 
+  /**
+   * Castigar (D1-a): condición aparte, no un estado. `credit:write` + alcance total (gerente, administrador): el
+   * service lo exige. No cierra la mora ni cambia `status`.
+   */
+  @Post(':id/write-off')
+  @Roles(Permission.CREDIT_WRITE)
+  writeOff(@Param('id', ParseUUIDPipe) id: string, @Body() dto: WriteOffDto) {
+    return this.credits.writeOff(id, dto.reason);
+  }
+
+  /** Revierte el castigo. Mismas reglas. */
+  @Delete(':id/write-off')
+  @Roles(Permission.CREDIT_WRITE)
+  unWriteOff(@Param('id', ParseUUIDPipe) id: string) {
+    return this.credits.unWriteOff(id);
+  }
+
   @Post(':id/recalculate-arrears')
   @Roles(Permission.CREDIT_WRITE)
   recalculateArrears(@Param('id', ParseUUIDPipe) id: string, @Body() dto: RecalcArrearsDto) {
@@ -56,7 +74,7 @@ export class CreditsController {
   }
 
   /**
-   * «Está en mora», dicho a mano — y el caso se abre en el acto, sin esperar al trabajo diario.
+   * «Está en mora», dicho a mano — y el episodio de mora se abre en el acto.
    * Para quien presta sin cronograma y sabe que le deben sin mirar una fecha.
    */
   @Post(':id/arrears')
@@ -65,7 +83,21 @@ export class CreditsController {
     return this.credits.markArrears(id, dto.days);
   }
 
-  /** Poner al día: mueve la fecha de vencimiento y cierra el caso. No borra el síntoma. */
+  /** «Vincular a otro cliente» (D2): el mismo crédito pasa al cliente elegido. */
+  @Post(':id/link-client')
+  @Roles(Permission.CREDIT_WRITE)
+  linkClient(@Param('id', ParseUUIDPipe) id: string, @Body('clientId', ParseUUIDPipe) clientId: string) {
+    return this.credits.linkClient(id, clientId);
+  }
+
+  /** «Es una persona nueva»: cierra la revisión del cliente provisional sin moverlo (D2). */
+  @Post('link-review/:clientId/confirm')
+  @Roles(Permission.CREDIT_WRITE)
+  confirmClientLink(@Param('clientId', ParseUUIDPipe) clientId: string) {
+    return this.credits.confirmClientLink(clientId);
+  }
+
+  /** Poner al día: mueve la fecha de vencimiento y cierra el episodio de mora. No borra el síntoma. */
   @Post(':id/arrears/clear')
   @Roles(Permission.CREDIT_WRITE)
   clearArrears(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ClearArrearsDto) {

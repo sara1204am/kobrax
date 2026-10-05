@@ -7,6 +7,7 @@
  *
  * Función pura, sin Nest ni Prisma → testeable sin levantar nada.
  */
+import { REPORT_STALE_AFTER_DAYS_MAX, REPORT_STALE_AFTER_DAYS_MIN } from '@kobrax/shared';
 import { FIELD_CATALOG, type NameOrder } from './field-catalog';
 import type { FieldMap, PdfBlocksProfile } from './parsers/pdf-blocks.parser';
 import type { PdfRowsProfile } from './parsers/pdf-rows.parser';
@@ -16,6 +17,8 @@ import type { RowsProfile } from './parsers/rows.parser';
 export type ProfileKind = 'pdf-blocks' | 'pdf-rows' | 'rows';
 
 export const PROFILE_KINDS: ProfileKind[] = ['rows', 'pdf-rows', 'pdf-blocks'];
+/** Los estados de `CreditStatus` (sin importar Prisma: este módulo es puro). */
+const CREDIT_STATUSES = ['ACTIVE', 'PAID', 'DEFAULTED', 'RESTRUCTURED', 'WRITTEN_OFF', 'CANCELLED'];
 export type AbsentRule = 'set-current' | 'no-touch' | 'ask';
 export type ScopeKind = 'official' | 'branch' | 'account';
 
@@ -44,6 +47,23 @@ export interface ImportConfig {
   absentRule: AbsentRule;
   carriesAssignee: boolean;
   askOnLogin: boolean;
+  /**
+   * Qué representa el saldo que trae este formato (D6): `principal` = saldo de capital ("Saldo
+   * Capital"), `total` = todo lo pendiente. Ausente = no se sabe, y la ficha no lo presenta como
+   * total por cobrar. Lo declara quien conoce el reporte; no se deduce del rótulo.
+   */
+  balanceBasis?: 'principal' | 'total';
+  /**
+   * Etiqueta de estado del reporte → estado del crédito, en mayúsculas y sin tildes
+   * ("CANCELADO" → CANCELLED). Manda sobre la tabla por defecto. Una etiqueta que no está no cambia
+   * el estado: "Vencida" o "Ejecución" son grados de mora, y el crédito sigue vivo.
+   */
+  statusMap?: Record<string, string>;
+  /**
+   * Pasados estos días desde la fecha de corte, la mora y el saldo reportados se marcan como
+   * desactualizados y el trabajo diario deja de abrir casos con ellos (D9). Ausente = 2.
+   */
+  staleAfterDays?: number;
 }
 
 /**
@@ -102,6 +122,25 @@ export function readImportConfig(raw: unknown): ImportConfig {
 export function validateImportConfig(next: ImportConfig, prev?: ImportConfig): void {
   if (!['manual', 'file'].includes(next.source)) {
     throw new ImportConfigError('INVALID_SOURCE', `source inválido: ${next.source}`);
+  }
+  if (next.balanceBasis !== undefined && !['principal', 'total'].includes(next.balanceBasis)) {
+    throw new ImportConfigError('INVALID_BALANCE_BASIS', `Base del saldo inválida: ${String(next.balanceBasis)}`);
+  }
+  if (
+    next.staleAfterDays !== undefined &&
+    (!Number.isInteger(next.staleAfterDays) ||
+      next.staleAfterDays < REPORT_STALE_AFTER_DAYS_MIN ||
+      next.staleAfterDays > REPORT_STALE_AFTER_DAYS_MAX)
+  ) {
+    throw new ImportConfigError(
+      'INVALID_STALE_AFTER_DAYS',
+      `Los días para marcar el dato como viejo van de ${REPORT_STALE_AFTER_DAYS_MIN} a ${REPORT_STALE_AFTER_DAYS_MAX}`,
+    );
+  }
+  for (const [label, status] of Object.entries(next.statusMap ?? {})) {
+    if (!CREDIT_STATUSES.includes(status)) {
+      throw new ImportConfigError('INVALID_STATUS_MAP', `"${label}" apunta a un estado que no existe: ${status}`);
+    }
   }
   if (!PROFILE_KINDS.includes(next.profile.kind)) {
     throw new ImportConfigError('INVALID_PROFILE_KIND', `Forma de archivo inválida: ${next.profile.kind}`);

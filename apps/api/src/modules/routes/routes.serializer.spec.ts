@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { serializeStop } from './routes.serializer';
+import { serializeRoute, serializeStop } from './routes.serializer';
 
 /** Cifrado falso: `enc:X` → `X`; cualquier otra cosa revienta (= legado en claro). */
 const crypto = {
@@ -10,7 +10,7 @@ const crypto = {
   },
 } as never;
 
-const STOP = { id: 's1', clientId: 'cl1', caseId: 'ca1', sequenceOrder: 1, status: 'PENDING', visitedAt: null } as never;
+const STOP = { id: 's1', clientId: 'cl1', creditId: 'cr1', sequenceOrder: 1, status: 'PENDING', visitedAt: null } as never;
 
 function stop(client?: unknown) {
   return serializeStop({ ...(STOP as object), client } as never, crypto);
@@ -66,24 +66,24 @@ describe('serializeStop', () => {
 
   // ── La mora de la tarjeta de RT-4 (S4) ─────────────────────────────────────
 
-  it('la mora sale del crédito del caso de la parada', () => {
+  it('la mora sale del crédito de la parada', () => {
     const s = serializeStop(
-      { ...(STOP as object), case: { credit: { outstandingBalance: '450.5', currency: 'BOB', daysPastDue: 45 } } } as never,
+      { ...(STOP as object), creditInfo: { outstandingBalance: '450.5', currency: 'BOB', daysPastDue: 45 } } as never,
     );
     assert.equal(s.overdueAmount, 450.5); // Decimal de Prisma → number, como el resto del módulo
     assert.equal(s.currency, 'BOB');
     assert.equal(s.daysPastDue, 45);
   });
 
-  it('una parada sin caso no trae mora, y no rompe', () => {
-    const s = serializeStop({ ...(STOP as object), case: null } as never);
+  it('una parada sin crédito no trae mora, y no rompe', () => {
+    const s = serializeStop({ ...(STOP as object), creditInfo: null } as never);
     assert.equal(s.overdueAmount, undefined);
     assert.equal(s.currency, undefined);
     assert.equal(s.daysPastDue, undefined);
   });
 
-  it('un caso sin crédito tampoco trae mora', () => {
-    const s = serializeStop({ ...(STOP as object), case: { credit: null } } as never);
+  it('un crédito que no se pudo leer tampoco trae mora', () => {
+    const s = serializeStop({ ...(STOP as object), creditId: 'cr-borrado', creditInfo: null } as never);
     assert.equal(s.overdueAmount, undefined);
     assert.equal(s.daysPastDue, undefined);
   });
@@ -103,9 +103,29 @@ describe('serializeStop', () => {
 
   it('mora en cero es un dato, no un hueco: se devuelve 0', () => {
     const s = serializeStop(
-      { ...(STOP as object), case: { credit: { outstandingBalance: '0', currency: 'BOB', daysPastDue: 0 } } } as never,
+      { ...(STOP as object), creditInfo: { outstandingBalance: '0', currency: 'BOB', daysPastDue: 0 } } as never,
     );
     assert.equal(s.overdueAmount, 0);
     assert.equal(s.daysPastDue, 0);
+  });
+});
+
+describe('serializeStop por crédito (F4/08)', () => {
+  it('toma creditId y la mora del crédito de la parada (credit_id)', () => {
+    const s = serializeStop(
+      {
+        id: 's1', clientId: 'cl1', creditId: 'cr1', sequenceOrder: 1, status: 'PENDING', visitedAt: null,
+        creditInfo: { outstandingBalance: 250, currency: 'BOB', daysPastDue: 12 },
+      } as never,
+      crypto,
+    );
+    assert.equal(s.creditId, 'cr1');
+    assert.equal(s.overdueAmount, 250);
+    assert.equal(s.daysPastDue, 12);
+  });
+
+  it('totalCases (nombre legado) se cuenta desde las paradas cuando vienen', () => {
+    const r = serializeRoute({ id: 'r1', collectorId: 'u', plannedDate: new Date(), status: 'PLANNED', totalCases: 99, createdAt: new Date(), stops: [STOP, STOP] } as never);
+    assert.equal(r.totalCases, 2);
   });
 });

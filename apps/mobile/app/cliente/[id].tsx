@@ -1,56 +1,50 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { addPeriods, PaymentFrequency, portfolioStatus } from '@kobrax/shared';
-import { choosePhoto } from '@/photo';
+import { addPeriods, calculateCredit, DEFAULT_ARREARS_METHOD, isUnknownField, PaymentFrequency, portfolioStatus, RatePeriod, type MoraCreditDetail } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
-import { AmountInput, BottomSheet, Chips, EmptyState, Header, PORTFOLIO_STATUS_META, SectionLabel, StatusBadge } from '@/ui';
+import { ActionBtn, AmountInput, BottomSheet, Chips, DataRow, EmptyState, Header, PORTFOLIO_STATUS_META, SectionLabel, StatusBadge } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
-import { money, MONTHS, timeSlotRange } from '@/agenda-form';
+import { money, timeSlotRange } from '@/agenda-form';
 import { MiniMapCard, type MiniMapPoint } from '@/maps/MiniMapCard';
 import { clientContext, type AgendaClientContext, type CreditOption } from '@/agenda.service';
 import { clientDisplayName, getClient, type ClientDetail } from '@/clients.service';
-import { addActivity, getCase, type CaseDetail, type NewActivity } from '@/cases.service';
-import { createPayment, listPayments, type PaymentItem, type PaymentMethod } from '@/payments.service';
-import { clearArrears, markArrears } from '@/credits.service';
-import type { QueuedAction } from '@/sync/queue';
-import { uploadImage } from '@/uploads.service';
-import { MiQrCobro } from '@/qr-cobro';
+import { getMora } from '@/mora.service';
+import { submitMoraActivity } from '@/mora-actions';
+import { listCreditPayments, type PaymentItem } from '@/payments.service';
+import { clearArrears, getCredit, markArrears, type CreditDetail } from '@/credits.service';
+import { PlanSheet, prettyDay } from '@/credit-terms-view';
+import { DEFINITION_LABEL, FREQUENCY_LABEL, IMPORT_FIELD_LABEL, ORIGIN_LABEL, RATE_PERIOD_LABEL, UNKNOWN } from '@/credit-labels';
+import { pendingActions, type QueuedAction } from '@/sync/queue';
+import { getUserId } from '@/session';
 import { queueForLater } from '@/sync/sync.service';
-import { buildTimeline, promiseReady, recovered, type TimelineEntry } from '@/ficha';
+import { buildTimeline, onlyDigits, queuedPayments, recovery, type TimelineEntry } from '@/ficha';
+import { PaySheet } from '@/pay-sheet';
+import { submitPayment } from '@/payment-submit';
+import { registrarRastro } from '@/trace';
+import { GestionSheet, prettyDate } from '@/gestion-sheet';
+import { nuevoId } from '@/ids';
+import { AttachmentsBlock, GarantesBlock, LinkReviewBanner } from '@/cliente-legajo-view';
+import { maskDocument } from '@/duplicate-check';
+import { ARREARS_METHOD_LABEL } from '@/credit-labels';
 
 /** Las dos acciones de mora, ya en la forma en la que viajan por la cola. */
 type QueuedArrears = Extract<QueuedAction, { kind: 'arrears.mark' | 'arrears.clear' }>;
 
-const METHODS: { value: PaymentMethod; label: string }[] = [
-  { value: 'CASH', label: 'Efectivo' },
-  { value: 'TRANSFER', label: 'Transferencia' },
-  { value: 'QR', label: 'QR' },
-];
-// Catálogo de resultado de gestión (§5.4). type = CaseActivityType, result = VisitOutcome.
-const OUTCOMES: { key: string; label: string; type: 'CALL' | 'VISIT' | 'NOTE'; result: string; promise?: boolean }[] = [
-  { key: 'no_contact', label: 'No contesta', type: 'CALL', result: 'NO_CONTACT' },
-  { key: 'visit', label: 'Visita', type: 'VISIT', result: 'CONTACTED' },
-  { key: 'not_found', label: 'Inubicable', type: 'VISIT', result: 'NOT_FOUND' },
-  { key: 'promise', label: 'Promesa de pago', type: 'NOTE', result: 'PROMISE_TO_PAY', promise: true },
-];
+
+/** Los pagos de este crédito que esperan señal en el teléfono (para mostrarlos en el historial ya). */
+async function queuedFor(creditId: string): Promise<PaymentItem[]> {
+  const userId = await getUserId();
+  return userId ? queuedPayments(creditId, await pendingActions(userId)) : [];
+}
 const METHOD_LABEL: Record<string, string> = { CASH: 'Efectivo', TRANSFER: 'Transferencia', QR: 'QR', CARD: 'Tarjeta', MOBILE_PAYMENT: 'Pago móvil' };
 
-function todayIso(): string {
-  const n = new Date();
-  return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate())).toISOString().slice(0, 10);
-}
-function prettyDate(iso?: string): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
-}
-function onlyDigits(s?: string | null): string {
-  return (s ?? '').replace(/[^0-9]/g, '');
-}
 
-/** V4 — Ficha de cobranza (§5.4): detalle + acciones + pago + gestión + timeline. */
+/**
+ * V4 — Ficha de cobranza (§5.4): detalle + acciones + pago + gestión + timeline. **Todo por crédito** (F4/08): la
+ * ficha lee el crédito (`GET /mora/:creditId`), sus pagos (`/payments?creditId=`) y escribe gestiones y pagos con
+ * `creditId`. No hace falta que el crédito esté en mora: una acción preventiva sobre uno al día funciona igual.
+ */
 export default function ClienteFichaScreen() {
   // `routeId` presente = la ficha se abrió desde el mapa de una ruta (RT-5, Rutas S4).
   const { id: clientId, routeId } = useLocalSearchParams<{ id: string; routeId?: string }>();
@@ -59,8 +53,13 @@ export default function ClienteFichaScreen() {
   const [load, setLoad] = useState<'loading' | 'ok' | 'offline' | 'error' | 'sin-creditos'>('loading');
   /** Identidad mínima cuando no hay contexto de cobranza que mostrar (ver `loadAll`). */
   const [basic, setBasic] = useState<ClientDetail | null>(null);
+  /** La ficha del cliente (legajo: garantes, garantías, adjuntos, alta). Del caché sin señal. */
+  const [client, setClient] = useState<ClientDetail | null>(null);
   const [creditId, setCreditId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<CaseDetail | null>(null);
+  const [detail, setDetail] = useState<MoraCreditDetail | null>(null);
+  /** El crédito elegido: condiciones, base del saldo y total por cobrar (F4/06). `null` mientras carga o sin red. */
+  const [credit, setCredit] = useState<CreditDetail | null>(null);
+  const [planSheet, setPlanSheet] = useState(false);
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [showData, setShowData] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -68,7 +67,15 @@ export default function ClienteFichaScreen() {
   const [gestSheet, setGestSheet] = useState(false);
   const [moraSheet, setMoraSheet] = useState<'mark' | 'clear' | null>(null);
 
+  const gestId = useRef(nuevoId());
+
   const selected = useMemo(() => ctx?.credits.find((c) => c.creditId === creditId) ?? ctx?.credits[0], [ctx, creditId]);
+  /**
+   * Un préstamo dado de alta sin señal que todavía no subió (fila provisional de `sync/optimistic`): el server no
+   * lo conoce, así que cobrar o registrar una gestión daría 404 o iría a una cola que no puede entregarse. Se
+   * ofrecen cuando el alta se confirme.
+   */
+  const provisional = !!(selected as { pending?: boolean } | undefined)?.pending;
 
   /**
    * Los garantes con punto en el mapa (RT-5). `GUARANTOR` es un `LocationType`, no una entidad
@@ -87,19 +94,22 @@ export default function ClienteFichaScreen() {
     return l ? { id: l.id, latitude: Number(l.latitude), longitude: Number(l.longitude), tone: 'primary' } : undefined;
   }, [ctx]);
 
-  const loadCase = useCallback(async (caseId: string) => {
-    const [c, p] = await Promise.all([getCase(caseId), listPayments(caseId)]);
+  const loadCredit = useCallback(async (creditId: string) => {
+    const [c, p, k, q] = await Promise.all([getMora(creditId), listCreditPayments(creditId), getCredit(creditId), queuedFor(creditId)]);
     if (c.status === 'ok') setDetail(c.data);
-    if (p.status === 'ok') setPayments(p.data);
+    // Lo que espera señal va arriba de lo confirmado: el cobrador ve su cobro aunque no haya red.
+    if (p.status === 'ok') setPayments([...q, ...p.data]);
+    else if (q.length > 0) setPayments(q);
+    setCredit(k.status === 'ok' ? k.data : null);
   }, []);
 
   const loadAll = useCallback(async () => {
     const res = await clientContext(clientId);
     if (res.status === 'offline') return setLoad('offline');
     if (res.status === 'unauthenticated') return setLoad('error');
-    // Un cliente sin préstamos asignados a mí NO es un error: la búsqueda global (S4) lo encuentra y
-    // `clientContext` responde AGENDA_002. Antes caía en "No se pudo cargar", que era mentira y un
-    // callejón sin salida. Se degrada a la identidad, que `client:read` sí puede leer sin caso.
+    // Un cliente sin créditos a mi cargo (ni como responsable, reemplazo o apoyo) NO es un error: la búsqueda
+    // global (S4) lo encuentra y `clientContext` responde AGENDA_002. Se degrada a la identidad, que
+    // `client:read` sí puede leer. Un crédito AL DÍA ya no cae acá: el contexto lista todos los del alcance.
     if (res.status !== 'ok' || res.data.credits.length === 0) {
       const only = await getClient(clientId);
       if (only.status === 'offline') return setLoad('offline');
@@ -109,12 +119,14 @@ export default function ClienteFichaScreen() {
     }
     setCtx(res.data);
     setLoad('ok');
+    // El legajo es un complemento: si no baja ni está en el caché, la ficha de cobranza sigue igual.
+    void getClient(clientId).then((c) => setClient(c.status === 'ok' ? c.data : null));
     const first = res.data.credits.find((c) => c.creditId === creditId) ?? res.data.credits[0];
     if (first) {
       setCreditId(first.creditId);
-      await loadCase(first.caseId);
+      await loadCredit(first.creditId);
     }
-  }, [clientId, creditId, loadCase]);
+  }, [clientId, creditId, loadCredit]);
 
   // Recarga al entrar y al VOLVER (p. ej. de la edición) → la ficha refleja los cambios.
   useFocusEffect(
@@ -133,10 +145,11 @@ export default function ClienteFichaScreen() {
     async (c: CreditOption) => {
       setCreditId(c.creditId);
       setDetail(null);
+      setCredit(null);
       setPayments([]);
-      await loadCase(c.caseId);
+      await loadCredit(c.creditId);
     },
-    [loadCase],
+    [loadCredit],
   );
 
   // Barra de acciones: deep-link + auto-log (§5.4/§7). El log no bloquea el link.
@@ -146,21 +159,20 @@ export default function ClienteFichaScreen() {
       const phone = onlyDigits(ctx?.contacts.find((c) => c.isPrimary)?.value ?? ctx?.contacts[0]?.value);
       const loc = ctx?.locations.find((l) => l.latitude != null);
       let url: string | null = null;
-      let type: 'CALL' | 'MESSAGE' | 'NOTE' = 'CALL';
       // Navegar NO sale de la app: abre el mapa de Kobrax centrado en la dirección (el mismo mapa de
       // la ruta, que además anda offline con los packs). Google Maps dejaba al cobrador afuera.
       if (kind === 'navigate') {
         router.push(`/cliente/mapa?clientId=${clientId}&locationId=${loc?.id ?? ''}&name=${encodeURIComponent(ctx?.client.displayName ?? '')}`);
-        void registrarRastro(selected.caseId, { type: 'NOTE', notes: 'Navegación' });
+        if (!provisional) void registrarRastro(selected.creditId, 'navigate');
         return;
       }
-      if (kind === 'call' && phone) { url = `tel:${phone}`; type = 'CALL'; }
-      else if (kind === 'whatsapp' && phone) { url = `https://wa.me/${phone}`; type = 'MESSAGE'; }
+      if (kind === 'call' && phone) url = `tel:${phone}`;
+      else if (kind === 'whatsapp' && phone) url = `https://wa.me/${phone}`;
       if (!url) return;
       void Linking.openURL(url);
-      void registrarRastro(selected.caseId, { type, notes: kind === 'call' ? 'Llamada' : 'WhatsApp' });
+      if (!provisional) void registrarRastro(selected.creditId, kind);
     },
-    [selected, ctx, clientId],
+    [selected, ctx, clientId, provisional],
   );
 
   if (load === 'loading') {
@@ -212,7 +224,10 @@ export default function ClienteFichaScreen() {
   const status = portfolioStatus({ outstandingBalance: selected.outstandingBalance, daysPastDue: selected.daysPastDue, nextDueDate: detail?.nextDueDate ?? null });
   const meta = PORTFOLIO_STATUS_META[status];
   const timeline = buildTimeline(detail?.activities ?? [], payments);
-  const rec = recovered(selected.principalAmount, selected.outstandingBalance);
+  // «Recuperado X de Y» contra lo que representa el saldo (D15); con el crédito todavía sin cargar, contra el capital.
+  const rec = recovery(credit ?? { outstandingBalance: selected.outstandingBalance, principalAmount: selected.principalAmount });
+  const planRows = credit?.terms ? calculateCredit(credit.terms).schedule : null;
+  const unknown = (f: Parameters<typeof isUnknownField>[1]) => (credit ? isUnknownField(credit, f) : false);
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
@@ -237,11 +252,35 @@ export default function ClienteFichaScreen() {
             <StatusBadge label={meta.label} tone={meta.tone} />
           </View>
           <Text style={styles.sub}>{[ctx.client.nationalId, zone].filter(Boolean).join(' · ') || '—'}</Text>
+          {/* Situación, categoría y castigo: condiciones separadas del crédito (F4/08 · D1), no un estado único. */}
+          {(detail?.writtenOff || detail?.category) && (
+            <View style={styles.tags}>
+              {detail.writtenOff && <StatusBadge label="Castigado" tone="neutral" />}
+              {detail.category && <StatusBadge label={`Categoría ${detail.category.code}`} tone={selected.daysPastDue > 0 ? 'danger' : 'neutral'} />}
+            </View>
+          )}
           <Text style={[styles.debt, selected.daysPastDue > 0 && { color: COLORS.danger }]}>{money(totalDebt, currency)}</Text>
           {detail?.locked && (
             <Text style={styles.locked}>🔒 Importado · {detail.origin} — actualizá con una nueva importación</Text>
           )}
+          {/*
+           * D4/D9: el saldo y la mora de un PSF son los del reporte. Si la operación ya no viene, no es
+           * «pagó» ni «al día»; si el dato está viejo, no es el de hoy. El cobrador lo tiene que saber
+           * antes de tocar la puerta.
+           */}
+          {credit?.externalSource && credit.syncStatus === 'ABSENT' && (
+            <Text style={styles.locked}>
+              {`⚠️ Ya no viene en el reporte ${credit.externalSource}${credit.absentSince ? ` desde el ${prettyDay(credit.absentSince)}` : ''}: el saldo es el último informado.`}
+            </Text>
+          )}
+          {credit?.externalSource && credit.syncStatus !== 'ABSENT' && credit.reportedStale && (
+            <Text style={styles.locked}>
+              {`⚠️ Dato desactualizado: saldo y mora son del corte del ${credit.reportedAsOf ? prettyDay(credit.reportedAsOf) : '—'}.`}
+            </Text>
+          )}
         </View>
+
+        <LinkReviewBanner detail={client} />
 
         {/* Barra de acciones */}
         <View style={styles.actions}>
@@ -259,10 +298,35 @@ export default function ClienteFichaScreen() {
           <Text style={styles.cardSub}>
             {detail?.nextDueDate ? `Vence ${prettyDate(detail.nextDueDate)}` : 'Sin fecha'}
             {selected.daysPastDue > 0 ? ` · ${selected.daysPastDue} días de mora` : ''}
+            {/* D20: desde cuándo corre la mora (con el método bancario puede ser antes de la cuota a cobrar). */}
+            {selected.daysPastDue > 0 && credit?.arrearsSince ? ` desde ${prettyDay(credit.arrearsSince)}` : ''}
           </Text>
+          {selected.daysPastDue > 0 && credit?.oldestUnpaid && (
+            <Text style={styles.cardSub}>
+              {credit.oldestUnpaid.number
+                ? `Cuota a reclamar: N.º ${credit.oldestUnpaid.number} (venció ${prettyDay(credit.oldestUnpaid.dueDate)})`
+                : `Cuota a reclamar: venció ${prettyDay(credit.oldestUnpaid.dueDate)}`}
+            </Text>
+          )}
           <View style={{ gap: SPACING.sm, marginTop: SPACING.sm }}>
-            <Button label="Registrar pago" onPress={() => setPaySheet(true)} />
-            <Button label="Registrar gestión" variant="ghost" onPress={() => setGestSheet(true)} />
+            {provisional ? (
+              <Text style={styles.locked}>
+                ⏳ Este préstamo todavía no subió al servidor. Podrás cobrar y registrar gestiones cuando se confirme el alta.
+              </Text>
+            ) : (
+              <>
+                <Button label="Registrar pago" onPress={() => setPaySheet(true)} />
+                <Button
+                  label="Registrar gestión"
+                  variant="ghost"
+                  onPress={() => {
+                    // El id de la gestión se fija al ABRIR la hoja: un reintento o doble toque reusa el mismo.
+                    gestId.current = nuevoId();
+                    setGestSheet(true);
+                  }}
+                />
+              </>
+            )}
             {/*
              * 🔴 **Marcar en mora es para el préstamo sin cronograma.** Sin fecha que se venza sola,
              * el trabajo diario del servidor no tiene de dónde sacar la mora y ese préstamo nunca
@@ -271,7 +335,7 @@ export default function ClienteFichaScreen() {
              *
              * No se ofrecen sobre un préstamo importado: su mora la manda el archivo.
              */}
-            {!detail?.locked &&
+            {!provisional && !detail?.locked &&
               (selected.daysPastDue > 0 ? (
                 <Button label="Poner al día" variant="ghost" onPress={() => setMoraSheet('clear')} />
               ) : (
@@ -280,13 +344,15 @@ export default function ClienteFichaScreen() {
           </View>
         </View>
 
-        {/* Progreso */}
-        <View>
-          <Text style={styles.progressLabel}>Recuperado {money(rec, currency)} de {money(selected.principalAmount, currency)}</Text>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${selected.principalAmount > 0 ? Math.round((rec / selected.principalAmount) * 100) : 0}%` }]} />
+        {/* Progreso: sin un total conocido no hay barra — una vacía diría «no pagó nada» (D15). */}
+        {rec && (
+          <View>
+            <Text style={styles.progressLabel}>Recuperado {money(rec.recovered, currency)} de {money(rec.of, currency)}</Text>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${rec.percent}%` }]} />
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Selector de crédito */}
         {ctx.credits.length > 1 && (
@@ -304,12 +370,50 @@ export default function ClienteFichaScreen() {
         <Pressable onPress={() => setShowData((v) => !v)} accessibilityRole="button">
           <Text style={styles.collapse}>{showData ? '▾' : '▸'} Datos del préstamo</Text>
         </Pressable>
+        {/*
+          Estado actual y condiciones (F4/06 · Fase 5). Del importado, lo que el archivo no trajo dice
+          «No registrado» y no el 0 de relleno de la columna (D9).
+        */}
         {showData && detail && (
           <View style={styles.card}>
-            <DataRow label="Capital" value={money(selected.principalAmount, currency)} />
-            <DataRow label="Frecuencia" value={detail.frequency ?? '—'} />
-            <DataRow label="Próxima fecha" value={prettyDate(detail.nextDueDate)} />
-            <DataRow label="Origen" value={detail.origin ?? 'manual'} />
+            <DataRow label="Saldo pendiente" value={unknown('outstandingBalance') ? UNKNOWN : money(selected.outstandingBalance, currency)} />
+            <DataRow
+              label="Total a cobrar"
+              value={credit?.totalToCollect != null ? money(credit.totalToCollect, currency) : UNKNOWN}
+            />
+            <DataRow label="Capital" value={unknown('principalAmount') ? UNKNOWN : money(selected.principalAmount, currency)} />
+            {credit?.terms && <DataRow label="Definición" value={DEFINITION_LABEL[credit.terms.definition]} />}
+            {/* D17: la tasa como se pactó («18 % anual»), no convertida. */}
+            {credit?.terms?.definition === 'calculated' && (
+              <DataRow label="Interés" value={`${credit.terms.ratePercent} % ${RATE_PERIOD_LABEL[credit.terms.ratePeriod ?? RatePeriod.PER_INSTALLMENT]}`} />
+            )}
+            <DataRow
+              label="Cuotas"
+              value={credit?.installmentsCount === undefined ? UNKNOWN : credit.installmentsCount ? String(credit.installmentsCount) : 'Préstamo abierto'}
+            />
+            <DataRow label="Frecuencia" value={credit?.frequency ? FREQUENCY_LABEL[credit.frequency] : UNKNOWN} />
+            <DataRow label="Próxima fecha" value={detail.nextDueDate ? prettyDay(detail.nextDueDate) : unknown('nextDueDate') ? UNKNOWN : 'Sin fecha'} />
+            {!!credit?.initialState?.paidInstallments && (
+              <DataRow label="Cargado en curso" value={`${credit.initialState.paidInstallments} cuotas ya pagadas`} />
+            )}
+            <DataRow label="Documento" value={maskDocument(client?.nationalId ?? ctx.client.nationalId) ?? '—'} />
+            <DataRow label="Cliente desde" value={client?.createdAt ? prettyDay(client.createdAt) : '—'} />
+            <DataRow label="Método de mora" value={ARREARS_METHOD_LABEL[credit?.arrearsMethod ?? DEFAULT_ARREARS_METHOD]} />
+            <DataRow label="Origen" value={ORIGIN_LABEL[detail.origin ?? 'manual'] ?? detail.origin ?? 'manual'} />
+            {credit?.externalSource && (
+              <DataRow label="Operación" value={`${credit.externalSource} ${credit.externalId ?? ''}`.trim()} />
+            )}
+            {credit?.externalSource && credit.reportedAsOf && (
+              <DataRow label="Números al corte del" value={prettyDay(credit.reportedAsOf)} />
+            )}
+            {!!credit?.unknownFields?.length && (
+              <DataRow label="No registrados" value={credit.unknownFields.map((f) => IMPORT_FIELD_LABEL[f]).join(', ')} />
+            )}
+            {planRows && planRows.length > 0 && (
+              <Pressable onPress={() => setPlanSheet(true)} accessibilityRole="button" style={{ paddingTop: SPACING.sm }}>
+                <Text style={styles.planLink}>Ver plan de pagos ({planRows.length} cuotas)</Text>
+              </Pressable>
+            )}
           </View>
         )}
 
@@ -350,6 +454,9 @@ export default function ClienteFichaScreen() {
           ))}
         </View>
 
+        <GarantesBlock detail={client} creditId={selected.creditId} />
+        <AttachmentsBlock clientId={clientId} rows={client?.attachments} onChanged={setClient} />
+
         {/* Timeline */}
         <View>
           <SectionLabel>Historial</SectionLabel>
@@ -361,40 +468,43 @@ export default function ClienteFichaScreen() {
         </View>
       </ScrollView>
 
+      {planRows && credit && (
+        <PlanSheet
+          visible={planSheet}
+          onClose={() => setPlanSheet(false)}
+          rows={planRows}
+          currency={currency}
+          paidInstallments={credit.initialState?.paidInstallments ?? 0}
+          hint="Calculado con las mismas condiciones con que se guardó el préstamo."
+        />
+      )}
+
       <PaySheet
         visible={paySheet}
         onClose={() => setPaySheet(false)}
         currency={currency}
-        defaultAmount={detail?.installmentAmount ?? selected.outstandingBalance}
-        maxAmount={selected.outstandingBalance}
-        onSubmit={async (amount, method, receipt, idemKey) => {
+        // El monto sugerido (`suggestedPaymentAmount`): en PSF la mora reportada, nunca el saldo entero.
+        defaultAmount={detail?.suggestedPaymentAmount ?? detail?.installmentAmount}
+        external={detail?.locked}
+        // Importado (PSF): el saldo es el del último reporte y el pago no lo toca (D3). Topearlo
+        // rechazaría un cobro real cuando el reporte va atrasado.
+        maxAmount={detail?.locked ? Number.POSITIVE_INFINITY : selected.outstandingBalance}
+        onSubmit={async (amount, method, receipt, idemKey, channel) => {
           const input = {
             creditId: selected.creditId,
-            caseId: selected.caseId,
             amount,
             method,
             receiptUrl: receipt?.url,
             receiptHash: receipt?.hash,
+            ...(channel !== 'KOBRAX_COLLECTED' ? { channel } : {}),
+            // La hora del cobro, no la de la sincronización: si queda en la cola, viaja con ella.
+            paymentDate: new Date().toISOString(),
           };
-          const res = await createPayment(input, idemKey);
-          if (res.status === 'ok') { setPaySheet(false); await loadCase(selected.caseId); return null; }
-          if (res.status === 'offline') {
-            // El cobro se guarda en el teléfono y sube solo. La clave de idempotencia es la que ya
-            // generó el sheet, así que cuando salga no puede cobrarle dos veces al deudor. Si la
-            // foto quedó sin subir, viaja con él y la sube la cola.
-            const guardado = await queueForLater({
-              kind: 'payment',
-              input,
-              idempotencyKey: idemKey,
-              photo: receipt?.local,
-            });
-            if (!guardado) return 'Sin conexión y no se pudo guardar en el teléfono. Reintentá.';
-            setPaySheet(false);
-            await loadCase(selected.caseId);
-            return null;
-          }
-          if (res.status === 'unauthenticated') return 'Tu sesión venció.';
-          return res.message;
+          const err = await submitPayment(input, idemKey, receipt);
+          if (err) return err;
+          setPaySheet(false);
+          await loadCredit(selected.creditId);
+          return null;
         }}
       />
 
@@ -403,19 +513,13 @@ export default function ClienteFichaScreen() {
         onClose={() => setGestSheet(false)}
         currency={currency}
         onSubmit={async (payload) => {
-          const res = await addActivity(selected.caseId, payload);
-          if (res.status === 'ok') { setGestSheet(false); await loadCase(selected.caseId); return null; }
-          if (res.status === 'offline') {
-            // La gestión queda guardada y sube sola: `case_activities` es append-only, así que
-            // reintentarla no puede pisar nada.
-            const guardada = await queueForLater({ kind: 'case.activity', caseId: selected.caseId, input: payload });
-            if (!guardada) return 'Sin conexión y no se pudo guardar en el teléfono. Reintentá.';
-            setGestSheet(false);
-            await loadCase(selected.caseId);
-            return null;
-          }
-          if (res.status === 'unauthenticated') return 'Tu sesión venció.';
-          return res.message;
+          // `submitMoraActivity` intenta con señal y, sin ella, encola `mora.activity` con el MISMO id (el de la
+          // hoja, fijado al abrirla): si la respuesta se perdió, el reintento no duplica la gestión ni su promesa.
+          const err = await submitMoraActivity(selected.creditId, { ...payload, id: gestId.current });
+          if (err) return err;
+          setGestSheet(false);
+          await loadCredit(selected.creditId);
+          return null;
         }}
       />
 
@@ -530,41 +634,6 @@ function MoraSheet({
   );
 }
 
-/**
- * El comprobante del pago. Con señal se sube al sacarlo y quedan `url`+`hash`; sin señal queda
- * `local`, la ruta del archivo en el teléfono, y lo sube la cola junto con el cobro.
- */
-type Comprobante = { url?: string; hash?: string; local?: { uri: string; mimeType?: string } };
-
-/**
- * Deja constancia de que se llamó, se escribió por WhatsApp o se fue a la dirección. Sin señal se
- * encola: son las tres acciones más usadas en la calle, y perderlas dejaba el historial del deudor
- * sin rastro de que el cobrador lo intentó — que es justo lo que después se le reclama.
- *
- * No espera ni avisa: es un rastro, no la acción principal. Lo que el cobrador pidió (llamar, abrir
- * el mapa) ya está pasando.
- */
-async function registrarRastro(caseId: string, input: NewActivity): Promise<void> {
-  const res = await addActivity(caseId, input);
-  if (res.status === 'offline') await queueForLater({ kind: 'case.activity', caseId, input });
-}
-
-function ActionBtn({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) {
-  return (
-    <Pressable style={styles.action} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
-      <Text style={styles.actionIcon}>{icon}</Text>
-      <Text style={styles.actionLabel}>{label}</Text>
-    </Pressable>
-  );
-}
-function DataRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.dataRow}>
-      <Text style={styles.dataLabel}>{label}</Text>
-      <Text style={styles.dataValue}>{value}</Text>
-    </View>
-  );
-}
 function TimelineRow({ e, currency }: { e: TimelineEntry; currency: string }) {
   const isPay = e.kind === 'payment';
   return (
@@ -575,150 +644,11 @@ function TimelineRow({ e, currency }: { e: TimelineEntry; currency: string }) {
           {isPay ? `Pago ${money(e.amount, currency)} · ${METHOD_LABEL[e.method] ?? e.method}` : (e.result ?? e.type)}
           {isPay && e.receiptUrl ? '  📎' : ''}
         </Text>
+        {isPay && e.pending ? <Text style={styles.tlSub}>Guardado en el teléfono · se sube con señal</Text> : null}
         {!isPay && e.notes ? <Text style={styles.tlSub}>{e.notes}</Text> : null}
         <Text style={styles.tlDate}>{new Date(e.at).toLocaleDateString('es')}</Text>
       </View>
     </View>
-  );
-}
-
-/** Hoja Registrar pago (§5.4). */
-function PaySheet({
-  visible, onClose, currency, defaultAmount, maxAmount, onSubmit,
-}: {
-  visible: boolean; onClose: () => void; currency: string; defaultAmount: number; maxAmount: number;
-  /** `receipt` viaja entero: con señal trae `url`+`hash`, sin señal la ruta local de la foto. */
-  onSubmit: (amount: number, method: PaymentMethod, receipt: Comprobante | null, idemKey: string) => Promise<string | null>;
-}) {
-  const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState<PaymentMethod>('CASH');
-  const [receipt, setReceipt] = useState<Comprobante | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const idemRef = useRef<string>('');
-
-  useEffect(() => {
-    if (visible) {
-      setAmount(String(defaultAmount));
-      setMethod('CASH');
-      setReceipt(null);
-      setError(null);
-      idemRef.current = `pay-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
-    }
-  }, [visible, defaultAmount]);
-
-  const capture = useCallback(async () => {
-    const pick = await choosePhoto();
-    if (!pick) return;
-    setUploading(true);
-    const up = await uploadImage(pick.uri, pick.mimeType);
-    setUploading(false);
-    if (up.status === 'ok') return setReceipt({ url: up.url, hash: up.hash });
-    // Sin señal la foto queda en el teléfono y viaja con el pago cuando haya red — mismo criterio
-    // que el resultado de una parada. Antes, el mismo "comprobante" se perdía o no según por qué
-    // pantalla hubiera entrado el cobrador.
-    if (up.status === 'offline') return setReceipt({ local: { uri: pick.uri, mimeType: pick.mimeType } });
-    setError('No se pudo subir el comprobante.');
-  }, []);
-
-  const num = Number(amount);
-  const valid = num > 0 && num <= maxAmount + 0.005;
-
-  const submit = useCallback(async () => {
-    setSaving(true);
-    setError(null);
-    const err = await onSubmit(num, method, receipt, idemRef.current);
-    setSaving(false);
-    if (err) setError(err);
-  }, [num, method, receipt, onSubmit]);
-
-  return (
-    <BottomSheet visible={visible} onClose={onClose} title="Registrar pago">
-      <ErrorBanner message={error} />
-      <SectionLabel>Monto</SectionLabel>
-      <AmountInput value={amount} onChangeText={setAmount} currencySymbol={currency} accessibilityLabel="Monto del pago" />
-      <SectionLabel>Método</SectionLabel>
-      <Chips options={METHODS} value={method} onChange={setMethod} />
-      {method === 'QR' && <MiQrCobro />}
-      <Pressable style={styles.receiptBtn} onPress={capture} disabled={uploading} accessibilityRole="button">
-        <Text style={styles.receiptText}>{uploading ? 'Subiendo…' : receipt ? '📷 Comprobante listo' : '📷 Foto de comprobante'}</Text>
-      </Pressable>
-      <View style={{ marginTop: SPACING.md }}>
-        <Button label="Confirmar pago" onPress={submit} loading={saving} disabled={saving || uploading || !valid} />
-      </View>
-    </BottomSheet>
-  );
-}
-
-/** Hoja Registrar gestión (§5.4). */
-function GestionSheet({
-  visible, onClose, currency, onSubmit,
-}: {
-  visible: boolean; onClose: () => void; currency: string;
-  onSubmit: (payload: { type: 'NOTE' | 'CALL' | 'VISIT' | 'MESSAGE'; result: string; notes?: string; promise?: { amount: number; promiseDate: string; paymentMethodCode: string } }) => Promise<string | null>;
-}) {
-  const [outcome, setOutcome] = useState('no_contact');
-  const [notes, setNotes] = useState('');
-  const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(todayIso());
-  const [method, setMethod] = useState<PaymentMethod>('CASH');
-  const [showPicker, setShowPicker] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (visible) { setOutcome('no_contact'); setNotes(''); setAmount(''); setDate(todayIso()); setMethod('CASH'); setError(null); }
-  }, [visible]);
-
-  const oc = OUTCOMES.find((o) => o.key === outcome)!;
-  const isPromise = !!oc.promise;
-  const promise = { amount: Number(amount), promiseDate: date, paymentMethodCode: method };
-  const valid = !isPromise || promiseReady(promise);
-
-  const onDate = useCallback((e: DateTimePickerEvent, d?: Date) => {
-    setShowPicker(false);
-    if (e.type === 'set' && d) setDate(new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().slice(0, 10));
-  }, []);
-
-  const submit = useCallback(async () => {
-    setSaving(true);
-    setError(null);
-    const err = await onSubmit({
-      type: oc.type,
-      result: oc.result,
-      notes: notes.trim() || undefined,
-      promise: isPromise ? promise : undefined,
-    });
-    setSaving(false);
-    if (err) setError(err);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oc, notes, isPromise, amount, date, method, onSubmit]);
-
-  return (
-    <BottomSheet visible={visible} onClose={onClose} title="Registrar gestión">
-      <ErrorBanner message={error} />
-      <SectionLabel>Resultado</SectionLabel>
-      <Chips options={OUTCOMES.map((o) => ({ value: o.key, label: o.label }))} value={outcome} onChange={setOutcome} />
-      {isPromise && (
-        <>
-          <SectionLabel>Monto prometido</SectionLabel>
-          <AmountInput value={amount} onChangeText={setAmount} currencySymbol={currency} accessibilityLabel="Monto prometido" />
-          <SectionLabel>Pagará el</SectionLabel>
-          <Pressable style={styles.dateBtn} onPress={() => setShowPicker(true)} accessibilityRole="button">
-            <Text style={styles.dateText}>{prettyDate(date)}</Text>
-          </Pressable>
-          <SectionLabel>Medio de pago</SectionLabel>
-          <Chips options={METHODS} value={method} onChange={setMethod} />
-        </>
-      )}
-      <SectionLabel>Nota</SectionLabel>
-      <Field label="" value={notes} onChangeText={setNotes} placeholder="Opcional" />
-      <View style={{ marginTop: SPACING.md }}>
-        <Button label="Guardar gestión" onPress={submit} loading={saving} disabled={saving || !valid} />
-      </View>
-      {showPicker && <DateTimePicker value={new Date(date)} mode="date" onChange={onDate} />}
-    </BottomSheet>
   );
 }
 
@@ -730,14 +660,13 @@ const styles = StyleSheet.create({
   editIcon: { fontSize: 16 },
   sub: { ...TYPE.secondary, color: COLORS.text2, marginTop: 2 },
   debt: { fontSize: 30, fontWeight: '700', color: COLORS.navy, marginTop: SPACING.sm },
+  planLink: { ...TYPE.body, color: COLORS.periwinkle, fontWeight: '600' },
   locked: { ...TYPE.caption, color: COLORS.warningText, backgroundColor: COLORS.warningBg, padding: SPACING.sm, borderRadius: RADIUS.input, marginTop: SPACING.sm },
   // Chip de hora recomendada (RT-5). Highlight y no warning: es una ayuda, no una alerta.
+  tags: { flexDirection: 'row', gap: SPACING.xs, marginTop: SPACING.xs },
   hint: { backgroundColor: COLORS.highlight, borderRadius: RADIUS.card, padding: SPACING.md, gap: 2 },
   hintTitle: { ...TYPE.body, color: COLORS.navy, fontWeight: '700' },
   actions: { flexDirection: 'row', gap: SPACING.sm },
-  action: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: SPACING.md, backgroundColor: COLORS.white, borderRadius: RADIUS.card, borderWidth: 1, borderColor: COLORS.border },
-  actionIcon: { fontSize: 22 },
-  actionLabel: { ...TYPE.caption, color: COLORS.navy, fontWeight: '600' },
   card: { backgroundColor: COLORS.white, borderRadius: RADIUS.card, borderWidth: 1, borderColor: COLORS.border, padding: SPACING.lg },
   cardTitle: { ...TYPE.caption, color: COLORS.muted, textTransform: 'uppercase', fontWeight: '700' },
   cardBig: { fontSize: 26, fontWeight: '700', color: COLORS.navy, marginTop: 2 },
@@ -746,17 +675,10 @@ const styles = StyleSheet.create({
   progressTrack: { height: 8, borderRadius: 4, backgroundColor: COLORS.lightBg, overflow: 'hidden' },
   progressFill: { height: 8, backgroundColor: COLORS.success },
   collapse: { ...TYPE.body, color: COLORS.navy, fontWeight: '600' },
-  dataRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
-  dataLabel: { ...TYPE.secondary, color: COLORS.text2 },
-  dataValue: { ...TYPE.secondary, color: COLORS.navy, fontWeight: '600', textTransform: 'capitalize' },
   line: { ...TYPE.body, color: COLORS.text, paddingVertical: 4 },
   tlRow: { flexDirection: 'row', gap: SPACING.sm, paddingVertical: SPACING.sm, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   tlIcon: { fontSize: 18 },
   tlTitle: { ...TYPE.body, color: COLORS.navy, fontWeight: '600' },
   tlSub: { ...TYPE.secondary, color: COLORS.text2 },
   tlDate: { ...TYPE.caption, color: COLORS.muted, marginTop: 2 },
-  receiptBtn: { marginTop: SPACING.md, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.input, borderWidth: 1, borderColor: COLORS.periwinkle, backgroundColor: COLORS.highlight },
-  receiptText: { ...TYPE.secondary, color: COLORS.navy, fontWeight: '600' },
-  dateBtn: { height: 48, borderRadius: RADIUS.input, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.white, justifyContent: 'center', paddingHorizontal: SPACING.md },
-  dateText: { ...TYPE.body, color: COLORS.navy, textTransform: 'capitalize' },
 });

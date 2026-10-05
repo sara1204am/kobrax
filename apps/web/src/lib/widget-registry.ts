@@ -60,7 +60,7 @@ export const DEFAULT_WIDGETS: DashboardWidget[] = [
   kpi('outstanding', 0),
   kpi('overdue', 2),
   kpi('overdueRate', 4),
-  kpi('activeCases', 6),
+  kpi('creditsInArrears', 6),
   kpi('collected', 8),
   { id: 'w-aging', type: 'donut_chart', title: '', layout: { x: 0, y: 2, w: 4, h: 4 }, config: { metric: 'aging' } },
   { id: 'w-bars', type: 'bar_chart', title: '', layout: { x: 4, y: 2, w: 4, h: 4 }, config: { metric: 'agingBars' } },

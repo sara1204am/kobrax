@@ -16,6 +16,8 @@ import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
 import { postJson } from '@/lib/client';
+import { duplicateBlocks, nameSignature, useDuplicateCheck } from '@/lib/duplicate-check';
+import { DocumentTaken, NamesTaken } from './duplicate-notice';
 
 /**
  * Dar de alta un cliente — **en un modal, sin salir de la cartera**.
@@ -91,6 +93,17 @@ function NewClientModal({
   const [form, setForm] = useState<ClienteForm>(initialCliente);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /*
+   * Posibles duplicados, preguntados mientras se escribe: mejor enterarse en el campo que con un
+   * error después de haber cargado teléfonos, direcciones y garantes.
+   *  - Mismo carnet → bloquea (el servidor lo rechazaría igual).
+   *  - Mismo nombre → avisa, y se guarda recién cuando la persona confirma «es otra persona». La
+   *    confirmación es para ESE nombre: si lo cambia, vuelve a hacer falta.
+   */
+  const { result: dup, checking, checkNow } = useDuplicateCheck(form);
+  const [acceptedFor, setAcceptedFor] = useState<string | null>(null);
+  const namesAccepted = acceptedFor === nameSignature(form);
+  const blocked = duplicateBlocks(dup, namesAccepted);
 
   const valid = canSubmitCliente(form);
 
@@ -98,6 +111,12 @@ function NewClientModal({
     e.preventDefault();
     setError(null);
     setSaving(true);
+    // Otra vez y sin freno: la última respuesta puede ser de hace tres teclas.
+    const fresh = await checkNow();
+    if (duplicateBlocks(fresh, namesAccepted)) {
+      setSaving(false);
+      return;
+    }
     const res = await postJson<ClientDetail>('/api/clients', buildClientePayload(form));
     setSaving(false);
 
@@ -105,6 +124,9 @@ function NewClientModal({
       // El servidor sabe por qué: documento duplicado, falta el apellido, no tenés permiso.
       // Re-escribirlo acá sería adivinar.
       setError(res.data.error?.message ?? t('saveError'));
+      // Si el carnet se ocupó entre el chequeo y el guardado (otra persona dando de alta al mismo
+      // deudor), se pregunta de nuevo para mostrar de quién es, no sólo «ya existe».
+      if (res.data.error?.code === 'CLIENT_DUP') void checkNow();
       return;
     }
 
@@ -137,7 +159,7 @@ function NewClientModal({
               </Button>
             </span>
             <span className="sm:w-44">
-              <Button type="submit" loading={saving} disabled={!valid}>
+              <Button type="submit" loading={saving} disabled={!valid || blocked !== null}>
                 {t('save')}
               </Button>
             </span>
@@ -149,6 +171,18 @@ function NewClientModal({
         {/* El mínimo que exige el servidor: quién es (nombre y apellido, o razón social) y un
             teléfono. Se dice, en vez de dejar el botón apagado sin explicar por qué. */}
         {!valid && <p className="mb-3 mt-2 text-[13px] text-k-muted">{t('form.minimum')}</p>}
+        {checking && <p className="mb-3 mt-2 text-[13px] text-k-muted">{t('duplicate.checking')}</p>}
+
+        {/* El carnet tomado no va acá: va bajo su campo. Si además hay homónimos, se ve el carnet
+            primero, que es lo que bloquea. */}
+        {dup && !dup.document && dup.names.length > 0 && (
+          <NamesTaken
+            matches={dup.names}
+            accepted={namesAccepted}
+            onAccept={(v) => setAcceptedFor(v ? nameSignature(form) : null)}
+            disabled={saving}
+          />
+        )}
 
         {/* Sin créditos: el préstamo se carga después, desde la ficha. El garante se guarda igual y
             el vínculo se arma al editar — al revés no se podría dar de alta a nadie. */}
@@ -158,6 +192,7 @@ function NewClientModal({
           disabled={saving}
           collateralTypes={collateralTypes}
           currency={currency}
+          documentNotice={dup?.document ? <DocumentTaken match={dup.document} /> : undefined}
         />
       </Modal>
     </form>

@@ -26,9 +26,9 @@ function pedir(body: unknown): Request {
   });
 }
 
-/** La API de mentira: rutas ya existentes, casos por cobrador, y qué se intentó crear. */
+/** La API de mentira: rutas ya existentes, créditos por cobrador, y qué se intentó crear. */
 function api(opts: { existing?: string[]; cases?: Record<string, number>; fail?: string } = {}) {
-  const created: { collectorId: string; caseIds: string[]; plannedDate: string }[] = [];
+  const created: { collectorId: string; creditIds: string[]; plannedDate: string }[] = [];
 
   server.use(
     http.get(`${API}/routes`, () =>
@@ -38,22 +38,22 @@ function api(opts: { existing?: string[]; cases?: Record<string, number>; fail?:
         meta: {},
       }),
     ),
-    http.get(`${API}/cases`, ({ request }) => {
+    http.get(`${API}/mora`, ({ request }) => {
       const url = new URL(request.url);
       const who = url.searchParams.get('assigneeId') ?? '';
       const limit = Number(url.searchParams.get('limit')) || 0;
       const n = Math.min(opts.cases?.[who] ?? 0, limit);
       return HttpResponse.json({
-        data: Array.from({ length: n }, (_, i) => ({ id: `${who}-caso-${i}` })),
+        data: Array.from({ length: n }, (_, i) => ({ creditId: `${who}-credito-${i}` })),
         error: null,
         meta: {},
       });
     }),
     http.post(`${API}/routes/generate`, async ({ request }) => {
-      const body = (await request.json()) as { collectorId: string; caseIds: string[]; plannedDate: string };
+      const body = (await request.json()) as { collectorId: string; creditIds: string[]; plannedDate: string };
       if (opts.fail === body.collectorId) {
         return HttpResponse.json(
-          { data: null, error: { code: 'ROUTE_EMPTY', message: 'No tenés casos abiertos' }, meta: {} },
+          { data: null, error: { code: 'ROUTE_EMPTY', message: 'No tenés créditos en mora' }, meta: {} },
           { status: 422 },
         );
       }
@@ -66,21 +66,45 @@ function api(opts: { existing?: string[]; cases?: Record<string, number>; fail?:
 }
 
 describe('POST /api/routes/plan', () => {
-  it('arma una ruta por cobrador con sus casos, hasta el tope de paradas', async () => {
+  it('arma una ruta por cobrador con sus créditos en mora, hasta el tope de paradas', async () => {
     const created = api({ cases: { [ANA]: 20, [JUAN]: 3 } });
 
     const res = await POST(pedir({ plannedDate: '2026-08-25', collectorIds: [ANA, JUAN], stopsPerRoute: 8 }));
     const body = (await res.json()) as { rows: { collectorId: string; stops: number; created?: boolean }[] };
 
     expect(res.status).toBe(200);
-    // Ana tiene veinte casos abiertos pero la jornada son ocho: el tope manda.
+    // Ana tiene veinte créditos en mora pero la jornada son ocho: el tope manda.
     expect(body.rows).toEqual([
       { collectorId: ANA, stops: 8, created: true },
       { collectorId: JUAN, stops: 3, created: true },
     ]);
     expect(created).toHaveLength(2);
-    expect(created[0]!.caseIds).toHaveLength(8);
+    expect(created[0]!.creditIds).toHaveLength(8);
     expect(created[0]!.plannedDate).toBe('2026-08-25');
+  });
+
+  it('🔴 los créditos salen de GET /mora filtrado por el responsable, y viajan como creditIds', async () => {
+    let query = '';
+    const created = api();
+    server.use(
+      http.get(`${API}/mora`, ({ request }) => {
+        query = new URL(request.url).search;
+        return HttpResponse.json({ data: [{ creditId: 'cr-1' }, { creditId: 'cr-2' }], error: null, meta: {} });
+      }),
+    );
+
+    await POST(pedir({ plannedDate: '2026-08-25', collectorIds: [ANA] }));
+    expect(query).toContain('excludeRouted=2026-08-25');
+    expect(query).toContain(`assigneeId=${ANA}`);
+    expect(query).not.toContain('open=');
+    expect(query).not.toContain('view=');
+    expect(created[0]!.creditIds).toEqual(['cr-1', 'cr-2']);
+  });
+
+  it('en el modo a mano manda exactamente los creditIds elegidos', async () => {
+    const created = api();
+    await POST(pedir({ plannedDate: '2026-08-25', assignments: [{ collectorId: ANA, creditIds: ['c1', 'c2'] }] }));
+    expect(created[0]).toMatchObject({ collectorId: ANA, creditIds: ['c1', 'c2'] });
   });
 
   it('🔴 con `dryRun` no crea NADA, y devuelve exactamente lo mismo', async () => {
@@ -108,7 +132,7 @@ describe('POST /api/routes/plan', () => {
     expect(created.map((c) => c.collectorId)).toEqual([JUAN]);
   });
 
-  it('sin casos abiertos no se arma una ruta vacía', async () => {
+  it('sin créditos en mora no se arma una ruta vacía', async () => {
     const created = api({ cases: { [ANA]: 0 } });
     const res = await POST(pedir({ plannedDate: '2026-08-25', collectorIds: [ANA] }));
     const body = (await res.json()) as { rows: { stops: number; created?: boolean }[] };
@@ -125,7 +149,7 @@ describe('POST /api/routes/plan', () => {
     const res = await POST(pedir({ plannedDate: '2026-08-25', collectorIds: [ANA, JUAN] }));
     const body = (await res.json()) as { rows: { collectorId: string; error?: string; created?: boolean }[] };
 
-    expect(body.rows[0]!.error).toBe('No tenés casos abiertos');
+    expect(body.rows[0]!.error).toBe('No tenés créditos en mora');
     expect(body.rows[1]!.created).toBe(true);
     expect(created.map((c) => c.collectorId)).toEqual([JUAN]);
   });

@@ -1,10 +1,16 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
-import { CaseStatus, CreditStatus, type PrismaClient } from '@prisma/client';
-import { arrearsFromDueDate, arrearsSourceOf, manualArrears, readCreditMetadata } from '@kobrax/shared';
+import { CreditStatus, ExternalSyncStatus, type Prisma, type PrismaClient } from '@prisma/client';
+import {
+  arrearsByMethod,
+  arrearsSourceOf,
+  manualArrears,
+  oldestUnpaid,
+  readCreditMetadata,
+  withArrearsMethod,
+} from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
-import { computePriority, slaDueAt, DEFAULT_PRIORITY_PARAMS, type PriorityParams } from '../cases/case-priority';
 import { computeArrears, DEFAULT_ARREAR_PARAMS, type ArrearParams } from '../credits/credit-math';
-import { closeOpenCases, openCaseIfNone } from './case-lifecycle';
+import { ArrearsPriorityService } from './arrears-priority.service';
 
 /** Cada cuánto barre. Diario en la práctica; corre más seguido para que un reinicio no lo saltee. */
 export const ARREARS_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -23,56 +29,52 @@ export const ARREARS_BATCH = 200;
  */
 export const ARREARS_TX_TIMEOUT_MS = 60_000;
 
-const TERMINAL: CaseStatus[] = [CaseStatus.CLOSED, CaseStatus.WRITTEN_OFF];
-
 interface ArrearsConfig {
-  priority: PriorityParams;
   arrears: ArrearParams;
-  minDaysPastDue: number;
 }
 
 export interface ArrearsRunResult {
   /** Créditos a los que les cambió el número de días. */
   updated: number;
-  opened: number;
-  closed: number;
-  /** Casos abiertos a los que les cambió la prioridad (y con ella su lugar en la ruta). */
+  /** Episodios abiertos a los que les cambió la prioridad (y con ella su lugar en la ruta). */
   reprioritized: number;
 }
 
-const EMPTY: ArrearsRunResult = { updated: 0, opened: 0, closed: 0, reprioritized: 0 };
+const EMPTY: ArrearsRunResult = { updated: 0, reprioritized: 0 };
+
+function addInto(total: ArrearsRunResult, r: ArrearsRunResult): void {
+  total.updated += r.updated;
+  total.reprioritized += r.reprioritized;
+}
 
 /**
- * El trabajo diario de la mora: **la pieza que hacía falta para que Cobranza se llene y se vacíe sola**.
+ * El trabajo diario de la mora (F4/08 · fase 3): **calcula los días de mora y la prioridad. No abre ni cierra nada.**
  *
- * Hasta ahora `daysPastDue` sólo cambiaba si alguien tipeaba un número, importaba un archivo o
- * llamaba a mano a `recalculate-arrears` — que no llamaba nadie. Un crédito vencido ayer se quedaba
- * en cero para siempre, el caso no se abría, y cuando el deudor pagaba el caso quedaba abierto.
+ * Antes además abría, cerraba y reabría casos de cobranza. Ya no hay caso: el episodio de mora lo abre y lo cierra el
+ * trigger de la base cuando cambian `days_past_due`, el saldo, el estado o la sincronización (D4/D7/D9), así que lo
+ * único que el job hace es dejar los días de mora al día. Por crédito:
  *
- * Hace cuatro cosas por crédito activo, y ninguna es una decisión: las cuatro son consecuencia del dato.
+ * 1. Pone al día los días de mora **según de quién sea** (`arrearsSourceOf`). El importado no se toca: su archivo
+ *    manda hasta la próxima carga. El manual se deriva de `moraSince`. Lo calculado sale del cronograma o de la
+ *    próxima fecha. Si no se sabe de dónde sale, no se toca.
+ * 2. Recalcula la prioridad del episodio abierto (`ArrearsPriorityService`), respetando la fijada a mano.
  *
- * 1. Pone al día los días de mora **según de quién sea** (`arrearsSourceOf`). El importado no se
- *    toca: su archivo manda hasta la próxima carga. El manual se deriva de `moraSince`, así que el
- *    job vuelve a calcular la misma función y nunca puede cambiar la respuesta de quien la marcó.
- * 2. Abre el caso al cruzar `minDaysPastDue` (default 1 = «al primer día de vencido»).
- * 3. Lo cierra cuando el saldo llega a cero (`PAID`) o cuando la mora vuelve a cero (`CURRENT`).
- * 4. Recalcula la prioridad de los que siguen abiertos — **es lo que ordena las paradas de la ruta**,
- *    y hasta ahora se fijaba al abrir el caso y no se tocaba nunca más: un caso que abrió con un día
- *    seguía en prioridad baja con doscientos.
+ * La operación ausente del reporte (PSF) se salta entera: su mora es la del último reporte que la trajo. El dato viejo
+ * (D9) ya no frena nada aquí —el job no decide a quién se sale a cobrar—; la ficha avisa que el dato es viejo.
  *
- * 🔴 **No notifica.** Abrir un caso por la vía normal emite `CASE_UPDATED`, que hace fan-out a todas
- * las supervisoras; la primera pasada sobre cartera histórica sería una avalancha de avisos por algo
- * que nadie hizo hoy. El job escribe y la pantalla lo muestra.
+ * 🔴 **No notifica**: escribe y la pantalla lo muestra. Es idempotente.
  *
- * Como tarea de sistema enumera los tenants vivos y escanea cada uno bajo su RLS, igual que
- * `PromiseDueService`. Es idempotente: correrlo dos veces en el mismo día no cambia nada.
+ * Como tarea de sistema enumera los tenants vivos y escanea cada uno bajo su RLS, igual que `PromiseDueService`.
  */
 @Injectable()
 export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(ArrearsJobService.name);
   private timer?: NodeJS.Timeout;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly priority: ArrearsPriorityService,
+  ) {}
 
   onApplicationBootstrap(): void {
     this.timer = setInterval(() => void this.run(), ARREARS_INTERVAL_MS);
@@ -102,17 +104,13 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
     const total = { ...EMPTY };
     for (const accountId of accountIds) {
       try {
-        const r = await this.scanAccount(accountId, asOf);
-        total.updated += r.updated;
-        total.opened += r.opened;
-        total.closed += r.closed;
-        total.reprioritized += r.reprioritized;
+        addInto(total, await this.scanAccount(accountId, asOf));
       } catch (err) {
         this.logger.error(`Mora falló en tenant ${accountId}: ${this.msg(err)}`);
       }
     }
-    if (total.opened || total.closed) {
-      this.logger.log(`Mora: ${total.opened} casos abiertos, ${total.closed} cerrados, ${total.updated} créditos actualizados`);
+    if (total.updated || total.reprioritized) {
+      this.logger.log(`Mora: ${total.updated} créditos actualizados, ${total.reprioritized} prioridades recalculadas`);
     }
     return total;
   }
@@ -136,13 +134,10 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
     for (;;) {
       const batch = await this.prisma.withTenant(
         accountId,
-        (tx) => this.scanBatch(tx, accountId, asOf, params, cursor),
+        (tx) => this.scanBatch(tx, asOf, params, cursor),
         ARREARS_TX_TIMEOUT_MS,
       );
-      out.updated += batch.result.updated;
-      out.opened += batch.result.opened;
-      out.closed += batch.result.closed;
-      out.reprioritized += batch.result.reprioritized;
+      addInto(out, batch.result);
       if (!batch.next) return out;
       cursor = batch.next;
     }
@@ -151,23 +146,34 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
   /** Un lote de créditos, en su propia transacción. Devuelve el último id visto para seguir. */
   private async scanBatch(
     tx: PrismaClient,
-    accountId: string,
     asOf: Date,
-    { priority: priorityParams, arrears: arrearParams, minDaysPastDue }: ArrearsConfig,
+    { arrears: arrearParams }: ArrearsConfig,
     cursor?: string,
   ): Promise<{ result: ArrearsRunResult; next?: string }> {
     const credits = await tx.credit.findMany({
-      where: { status: CreditStatus.ACTIVE, deletedAt: null },
+      /*
+       * Los activos, y además los externos que su fuente reporta como vencidos (`DEFAULTED`): para
+       * el banco «Vencido» es un grado de mora, no un cierre, y sin esto su episodio nunca se abriría.
+       * Los créditos de Kobrax en `DEFAULTED` siguen afuera: ese
+       * estado lo pone una persona y el job no lo reinterpreta.
+       */
+      where: {
+        deletedAt: null,
+        OR: [
+          { status: CreditStatus.ACTIVE },
+          { status: CreditStatus.DEFAULTED, externalSource: { not: null } },
+          // El castigo es la condición `written_off_at` y el estado no cambia: un castigado entra por ACTIVE y sigue
+          // contando días de mora.
+        ],
+      },
       select: {
         id: true,
-        clientId: true,
-        branchId: true,
         outstandingBalance: true,
         daysPastDue: true,
         metadata: true,
-        assignedManagerId: true,
-        client: { select: { riskSegment: true } },
-        installments: { select: { id: true, dueDate: true, amount: true, paidAmount: true, status: true } },
+        origin: true,
+        syncStatus: true,
+        installments: { select: { id: true, number: true, dueDate: true, amount: true, paidAmount: true, status: true } },
       },
       orderBy: { id: 'asc' },
       take: ARREARS_BATCH,
@@ -175,84 +181,53 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
     });
     if (credits.length === 0) return { result: { ...EMPTY } };
 
-    // Un solo viaje por los casos abiertos DEL LOTE: preguntarlos de a uno sería una query por crédito.
-    const openCases = await tx.collectionCase.findMany({
-      where: { creditId: { in: credits.map((c) => c.id) }, status: { notIn: TERMINAL }, deletedAt: null },
-      select: { id: true, creditId: true, priority: true, priorityPinnedAt: true },
+    // Un solo viaje por las prioridades de los episodios abiertos DEL LOTE: sirve para contar cuáles cambian.
+    const openEpisodes = await tx.creditArrearEpisode.findMany({
+      where: { creditId: { in: credits.map((c) => c.id) }, endedAt: null },
+      select: { creditId: true, priority: true },
     });
-    const openByCredit = new Map(openCases.map((c) => [c.creditId, c]));
+    const before = new Map(openEpisodes.map((e) => [e.creditId, e.priority]));
 
     const out = { ...EMPTY };
-    {
-      for (const credit of credits) {
-        const balance = Number(credit.outstandingBalance);
-        const days = this.arrearsFor(credit, arrearParams, asOf);
+    for (const credit of credits) {
+      /*
+       * 🔴 **Operación externa que faltó en su reporte: no se toca.** Que el reporte deje de traerla no dice si se
+       * puso al día o si canceló (D4): sus números son los del último reporte que la trajo, y con la regla
+       * `set-current` su mora quedó en cero. El episodio lo cierra el trigger con motivo «ausente del reporte».
+       */
+      if (credit.syncStatus === ExternalSyncStatus.ABSENT) continue;
 
-        /*
-         * 🔴 **Si no se sabe de dónde sale la mora, el job no toca ese crédito. Ni la mora, ni el caso.**
-         *
-         * Un crédito sin cronograma, sin próxima fecha, sin marca a mano y sin archivo detrás tiene un
-         * número de días que no se puede explicar. Escribirle cero borra el dato de alguien; abrirle un
-         * caso pone a cobrar algo que nadie puede fechar. En la base de desarrollo son **199.427
-         * créditos** —el lote sintético del benchmark— y sin esta guarda la primera pasada abría
-         * 199.421 casos y dejaba Mora inservible.
-         *
-         * En el producto real esto no se da: la web y el móvil siempre guardan la próxima fecha, y lo
-         * importado se reconoce por su origen. Es la guarda para el dato que entró por la ventana.
-         */
-        if (days === null) continue;
+      const balance = Number(credit.outstandingBalance);
+      const reading = this.arrearsFor(credit, arrearParams, asOf);
+      const days = reading?.days ?? null;
 
-        if (days !== credit.daysPastDue) {
-          await tx.credit.update({ where: { id: credit.id }, data: { daysPastDue: days } });
-          out.updated++;
-        }
+      /*
+       * 🔴 **Si no se sabe de dónde sale la mora, el job no toca ese crédito.** Un crédito sin cronograma, sin
+       * próxima fecha, sin marca a mano y sin archivo detrás tiene un número de días que no se puede explicar;
+       * escribirle cero borra el dato de alguien. En la base de desarrollo son 199.427 créditos sintéticos.
+       */
+      if (days === null || !reading) continue;
 
-        const open = openByCredit.get(credit.id);
-        const priority = computePriority(
-          { outstandingBalance: balance, daysPastDue: days, riskSegment: credit.client.riskSegment },
-          priorityParams,
-        );
-
-        if (balance <= 0.005) {
-          if (open) {
-            out.closed += await closeOpenCases(tx, credit.id, 'PAID', asOf);
-          }
-          continue;
-        }
-
-        if (days >= minDaysPastDue) {
-          if (!open) {
-            await openCaseIfNone(tx, {
-              accountId,
-              creditId: credit.id,
-              clientId: credit.clientId,
-              branchId: credit.branchId,
-              assigneeId: credit.assignedManagerId,
-              priority,
-              slaDueAt: slaDueAt(priority, asOf, priorityParams),
-            });
-            out.opened++;
-          } else if (open.priority !== priority && !open.priorityPinnedAt) {
-            /*
-             * 🔴 **La prioridad fijada a mano no se toca.** El cálculo sale del saldo, la mora y el
-             * riesgo, y eso sirve para el caso general — pero falla justo en el que motivó la marca:
-             * un deudor con dos días de atraso cae en prioridad baja aunque quien lo conoce sepa que
-             * es moroso frecuente y hay que ir hoy. Sin esta guarda, subirla duraba hasta la noche.
-             *
-             * Misma regla que la mora: cada dato tiene un dueño. Soltarla (`priorityPinnedAt` a
-             * NULL) la devuelve a este cálculo en la pasada siguiente.
-             */
-            await tx.collectionCase.update({ where: { id: open.id }, data: { priority } });
-            out.reprioritized++;
-          }
-          continue;
-        }
-
-        // Mora en cero con saldo vivo: se puso al día (pagó la cuota, o le movieron la fecha).
-        if (open) {
-          out.closed += await closeOpenCases(tx, credit.id, 'CURRENT', asOf);
-        }
+      // D20: con el método bancario la fecha del primer atraso también se guarda (o se borra al quedar al día).
+      const meta = readCreditMetadata(credit.metadata, credit.origin);
+      const sinceChanged = reading.arrearsSince !== meta.arrearsSince;
+      if (days !== credit.daysPastDue || sinceChanged) {
+        // Este update dispara el trigger que abre o cierra el episodio de mora.
+        await tx.credit.update({
+          where: { id: credit.id },
+          data: {
+            daysPastDue: days,
+            ...(sinceChanged ? { metadata: withArrearsSince(credit.metadata, reading.arrearsSince) } : {}),
+          },
+        });
+        out.updated++;
       }
+
+      // Sin saldo o sin mora no hay episodio abierto (o el trigger lo acaba de cerrar): nada que priorizar.
+      if (balance <= 0.005 || days < 1) continue;
+      const after = await this.priority.recomputeForCredit(tx, credit.id);
+      const was = before.get(credit.id);
+      if (after && was !== undefined && after !== was) out.reprioritized++;
     }
     // Hay más si el lote vino lleno. El cursor es el último id, que `orderBy: id` deja ordenado.
     const next = credits.length === ARREARS_BATCH ? credits[credits.length - 1]!.id : undefined;
@@ -272,24 +247,26 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
       outstandingBalance: unknown;
       daysPastDue: number;
       metadata: unknown;
-      installments: { id: string; dueDate: Date; amount: unknown; paidAmount: unknown; status: string }[];
+      origin?: string | null;
+      installments: { id: string; number: number; dueDate: Date; amount: unknown; paidAmount: unknown; status: string }[];
     },
     params: ArrearParams,
     asOf: Date,
-  ): number | null {
-    const meta = readCreditMetadata(credit.metadata);
+  ): { days: number; arrearsSince: string | undefined } | null {
+    const meta = readCreditMetadata(credit.metadata, credit.origin);
     const balance = Number(credit.outstandingBalance);
+    // Importada y manual no usan el método: su dueño es otro. La fecha de primer atraso queda como está.
+    const keep = (days: number) => ({ days, arrearsSince: meta.arrearsSince });
 
     switch (arrearsSourceOf(meta)) {
       case 'IMPORTED':
-        // Su archivo manda hasta la próxima carga (§6). Se deja tal cual vino — y con ella se le
-        // abre el caso, que es lo que hace entrar a Cobranza a una cartera cargada por archivo.
-        return credit.daysPastDue;
+        // Su archivo manda hasta la próxima carga (§6). Se deja tal cual vino; el episodio lo abre el trigger.
+        return keep(credit.daysPastDue);
       case 'MANUAL':
-        return manualArrears(meta.moraSince, balance, asOf);
+        return keep(manualArrears(meta.moraSince, balance, asOf));
       default:
         if (credit.installments.length > 0) {
-          return computeArrears(
+          const baseDays = computeArrears(
             credit.installments.map((i) => ({
               id: i.id,
               dueDate: i.dueDate,
@@ -300,6 +277,15 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
             params,
             asOf,
           ).daysOverdue;
+          // D20: el método del crédito sobre la mora de siempre (desde la cuota impaga más antigua).
+          const r = withArrearsMethod({
+            baseDays,
+            method: meta.arrearsMethod,
+            oldestUnpaidDue: oldestUnpaid(credit.installments)?.dueDate,
+            arrearsSince: meta.arrearsSince,
+            asOf,
+          });
+          return { days: r.daysPastDue, arrearsSince: r.arrearsSince };
         }
         /*
          * Sin cronograma y sin próxima fecha no hay nada de dónde sacarla.
@@ -310,26 +296,35 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
          * quien lo cargó y el job no opina.
          */
         if (!meta.nextDueDate) return null;
-        return arrearsFromDueDate(meta.nextDueDate, balance, asOf);
+        {
+          const r = arrearsByMethod({
+            method: meta.arrearsMethod,
+            oldestUnpaidDue: meta.nextDueDate,
+            arrearsSince: meta.arrearsSince,
+            balance,
+            asOf,
+          });
+          return { days: r.daysPastDue, arrearsSince: r.arrearsSince };
+        }
     }
   }
 
-  /** Los parámetros del tenant, con los defaults de siempre. Mismo criterio que `CasesService`. */
+  /** Los parámetros del tenant, con los defaults de siempre. */
   private async config(tx: PrismaClient): Promise<ArrearsConfig> {
     const account = await tx.account.findFirst({ select: { configuration: true } });
-    const cfg = (account?.configuration ?? {}) as {
-      casePriority?: Partial<PriorityParams>;
-      caseGeneration?: { minDaysPastDue?: number };
-      arrears?: Partial<ArrearParams>;
-    };
-    return {
-      priority: { ...DEFAULT_PRIORITY_PARAMS, ...(cfg.casePriority ?? {}) },
-      arrears: { ...DEFAULT_ARREAR_PARAMS, ...(cfg.arrears ?? {}) },
-      minDaysPastDue: cfg.caseGeneration?.minDaysPastDue ?? 1,
-    };
+    const cfg = (account?.configuration ?? {}) as { arrears?: Partial<ArrearParams> };
+    return { arrears: { ...DEFAULT_ARREAR_PARAMS, ...(cfg.arrears ?? {}) } };
   }
 
   private msg(err: unknown): string {
     return err instanceof Error ? err.message : String(err);
   }
+}
+
+/** La metadata con la fecha de primer atraso puesta o borrada (D20). Prisma rechaza `undefined` en un JSON. */
+function withArrearsSince(metadata: unknown, arrearsSince: string | undefined): Prisma.InputJsonObject {
+  const m = { ...((metadata ?? {}) as Record<string, unknown>) };
+  if (arrearsSince) m.arrearsSince = arrearsSince;
+  else delete m.arrearsSince;
+  return m as Prisma.InputJsonObject;
 }

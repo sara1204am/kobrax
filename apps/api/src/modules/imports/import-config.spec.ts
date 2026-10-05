@@ -34,6 +34,13 @@ describe('import-config — invariantes de §3.1', () => {
     validateImportConfig(base());
   });
 
+  it('D9 · los días para marcar el dato como viejo son un entero de 1 a 60', () => {
+    validateImportConfig(base({ staleAfterDays: 2 }));
+    fails(base({ staleAfterDays: 0 }), 'INVALID_STALE_AFTER_DAYS');
+    fails(base({ staleAfterDays: 61 }), 'INVALID_STALE_AFTER_DAYS');
+    fails(base({ staleAfterDays: 1.5 }), 'INVALID_STALE_AFTER_DAYS');
+  });
+
   it('1 · no importar + obligatorio es contradictorio', () => {
     fails(base({ fields: { installmentAmount: { enabled: false, required: true } } }), 'FIELD_RULE_CONFLICT');
   });

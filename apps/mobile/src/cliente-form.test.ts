@@ -1,4 +1,4 @@
-import { buildClientePayload, canSubmitCliente, emptyContact, emptyLocation, emptyRelation, initialCliente } from './cliente-form';
+import { buildClientePayload, canSubmitCliente, emptyContact, emptyLocation, emptyRelation, initialCliente } from '@kobrax/shared';
 
 describe('cliente-form', () => {
   it('habilita guardar solo con nombre + apellido + un teléfono con valor', () => {

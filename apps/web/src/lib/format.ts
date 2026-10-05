@@ -32,6 +32,15 @@ export function date(d?: string | null, locale = 'es'): string {
  * supuesto que ya había mordido a la agenda del lado del servidor, ahora del lado de quien mira.
  * `date()` sigue siendo el correcto para lo que sí tiene hora — un pago, una gestión.
  */
+/**
+ * Hoy como día civil (`YYYY-MM-DD`) **en la zona de quien carga**, no en UTC: con `toISOString()`
+ * Bolivia (UTC−4) proponía la fecha de mañana a partir de las 20:00.
+ */
+export function todayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function dayDate(d?: string | null, locale = 'es'): string {
   if (!d) return '—';
   return new Date(d).toLocaleDateString(locale, {

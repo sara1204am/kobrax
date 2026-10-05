@@ -94,7 +94,7 @@ describe('PrismaService · contexto de seguridad (F1)', () => {
     // atrapa — lo atrapa el hecho de que `DataScope` sólo tiene tres valores.
     const { prisma, tc, calls } = harness();
     await tc.run(
-      { accountId: ACCOUNT, userId: USER, permissions: [Permission.CASE_READ, Permission.CLIENT_READ] },
+      { accountId: ACCOUNT, userId: USER, permissions: [Permission.COLLECTION_READ, Permission.CLIENT_READ] },
       () => prisma.withTenant(ACCOUNT, async () => null),
     );
     assert.deepEqual(contextOf(calls), [ACCOUNT, USER, DataScope.OWN]);

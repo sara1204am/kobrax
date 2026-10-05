@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import type { AgendaListItem } from '@kobrax/shared';
 // El día de un agendado no tiene hora: en la zona local se corría un día para atrás.
 import { dayDate as fmtDate } from '@/lib/format';
+import { AgendaRow } from './agenda-row';
 import type { AgendaEvents } from './agenda-screen';
 
 /** Cuántas se muestran plegado. Dos: las que se pueden mirar sin dejar de ver el día. */
@@ -46,7 +47,7 @@ export function OverduePanel({
   return (
     <section
       aria-label={t('overdue.title')}
-      className="mb-4 overflow-hidden rounded-xl border border-k-danger bg-k-danger-bg"
+      className="mb-4 rounded-xl border border-k-danger bg-k-danger-bg"
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3">
         <span aria-hidden className="text-[15px]">⚠</span>
@@ -67,26 +68,12 @@ export function OverduePanel({
        * día tres pantallas hacia abajo y volver arriba sería un viaje.
        */}
       <ul
-        className={`divide-y divide-k-danger/15 border-t border-k-danger/20 bg-white/60 ${
+        className={`rounded-b-xl border-t border-k-danger/20 bg-white ${
           abierto ? 'max-h-[320px] overflow-y-auto' : ''
         }`}
       >
         {visibles.map((item) => (
-          <li key={item.id}>
-            <button
-              type="button"
-              onClick={() => events.onViewRequest(item.id)}
-              className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white"
-            >
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[14px] font-medium text-k-text">{item.clientName ?? '—'}</span>
-                <span className="block truncate text-[12px] text-k-text-2">{t(`type.${item.type}`)}</span>
-              </span>
-              <span className="shrink-0 text-[12px] tabular-nums text-k-danger">
-                {fmtDate(item.scheduledDate, locale)}
-              </span>
-            </button>
-          </li>
+          <AgendaRow key={item.id} item={item} events={events} timeLabel={fmtDate(item.scheduledDate, locale)} />
         ))}
       </ul>
 

@@ -28,7 +28,7 @@ jest.mock('./api', () => ({ apiFetch: jest.fn(async () => ({ status: 200, data: 
 jest.mock('./api-client', () => ({ authedFetch: jest.fn(async () => mockAuthed.res) }));
 const mockAuthed = { res: {} as Record<string, unknown> };
 
-import { clearSession, saveSession } from './session';
+import { clearSession, saveSession, saveUserId } from './session';
 import { authService } from './auth-service';
 
 const ME = { userId: 'u1', accountId: 'acc1', email: 'a@k.demo', role: 'COLLECTOR', permissions: [] };
@@ -83,5 +83,42 @@ describe('me() · segunda barrera', () => {
     mockAuthed.res = { status: 200, data: ME, error: null };
     await authService.me();
     expect(mockDb.cacheBorrado).toBe(0);
+  });
+});
+
+/**
+ * El borrador de la ruta (recorrido a medio armar) es por usuario y no sobrevive a la sesión: tiene paradas con
+ * clientes del tenant, y en un teléfono compartido no puede quedar para el siguiente.
+ */
+describe('borrador de ruta · sesión', () => {
+  it('clearSession borra el borrador del usuario y el heredado (sin dueño)', async () => {
+    mockStore.set('k_user_id', 'u1');
+    mockStore.set('kobrax.route.draft.u1', '{"caseIds":["c"]}');
+    mockStore.set('kobrax.route.draft', '{"caseIds":["viejo"]}');
+    await clearSession();
+    expect(mockStore.has('kobrax.route.draft.u1')).toBe(false);
+    expect(mockStore.has('kobrax.route.draft')).toBe(false);
+  });
+
+  it('no toca el borrador de OTRO usuario', async () => {
+    mockStore.set('k_user_id', 'u1');
+    mockStore.set('kobrax.route.draft.u2', '{"caseIds":["c"]}');
+    await clearSession();
+    expect(mockStore.has('kobrax.route.draft.u2')).toBe(true);
+  });
+
+  it('si entra OTRA persona, el borrador de la anterior se borra', async () => {
+    mockStore.set('k_user_id', 'u-anterior');
+    mockStore.set('kobrax.route.draft.u-anterior', '{"caseIds":["c"]}');
+    await saveUserId('u-nueva');
+    expect(mockStore.has('kobrax.route.draft.u-anterior')).toBe(false);
+    expect(mockStore.get('k_user_id')).toBe('u-nueva');
+  });
+
+  it('el mismo usuario volviendo a entrar conserva su borrador', async () => {
+    mockStore.set('k_user_id', 'u1');
+    mockStore.set('kobrax.route.draft.u1', '{"caseIds":["c"]}');
+    await saveUserId('u1');
+    expect(mockStore.has('kobrax.route.draft.u1')).toBe(true);
   });
 });

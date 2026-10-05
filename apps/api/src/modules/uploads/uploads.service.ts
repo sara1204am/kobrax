@@ -34,6 +34,30 @@ export function mimeOf(name: string): string {
   return Object.keys(ALLOWED).find((mime) => ALLOWED[mime] === ext) ?? 'application/octet-stream';
 }
 
+/**
+ * Los documentos que se guardan tal cual se subieron: hoy, los reportes de cartera importados.
+ * Van aparte de las imágenes —otra carpeta, otra lista de tipos— porque no son evidencia de campo
+ * sino el respaldo de una importación, y se sirven sólo por el endpoint de esa importación.
+ */
+const DOCUMENTS: Record<string, string> = {
+  'application/pdf': 'pdf',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.ms-excel': 'xls',
+  'text/csv': 'csv',
+  'text/plain': 'txt',
+};
+
+/** `<carpeta>/<sha256>.<ext>`. Validar contra esto es lo que impide pedir una ruta de afuera. */
+const DOCUMENT_KEY = /^imports\/[0-9a-f]{64}\.(pdf|xlsx|xls|csv|txt)$/;
+
+export interface StoredDocument {
+  /** Dónde quedó, relativo a la carpeta de la cuenta: `imports/<sha256>.pdf`. */
+  key: string;
+  hash: string;
+  size: number;
+  mimeType: string;
+}
+
 export interface StoredFile {
   url: string;
   hash: string;
@@ -77,6 +101,29 @@ export class UploadsService {
 
     await this.audit.record({ entity: 'upload', entityId: hash, action: 'CREATE', after: { size: file.size, mimeType: file.mimetype } });
     return { url: `/api/uploads/${name}`, hash, size: file.size, mimeType: file.mimetype };
+  }
+
+  /**
+   * Guarda un documento en una carpeta de la cuenta. Nombrado por su hash, como las imágenes: el
+   * mismo archivo subido dos veces ocupa un solo lugar, y el nombre no se puede adivinar.
+   */
+  async storeDocument(buffer: Buffer, mimeType: string, folder: 'imports'): Promise<StoredDocument> {
+    const ext = DOCUMENTS[mimeType];
+    if (!ext) throw fileRejected(`Tipo de documento no permitido: ${mimeType}`);
+    const hash = sha256OfBuffer(buffer);
+    const dir = join(this.root, this.tenant.accountId, folder);
+    await mkdir(dir, { recursive: true });
+    const key = `${folder}/${hash}.${ext}`;
+    await writeFile(join(this.root, this.tenant.accountId, key), buffer);
+    return { key, hash, size: buffer.length, mimeType };
+  }
+
+  /** Lee un documento de la cuenta en sesión por su `key`. Una key con otra forma no existe. */
+  documentStream(key: string): Readable {
+    if (!DOCUMENT_KEY.test(key)) throw fileNotFound();
+    const path = join(this.root, this.tenant.accountId, key);
+    if (!existsSync(path)) throw fileNotFound();
+    return createReadStream(path);
   }
 
   /** Sirve el archivo del tenant en sesión. El nombre es el hash: no hay forma de adivinar otro. */

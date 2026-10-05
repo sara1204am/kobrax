@@ -7,10 +7,15 @@
 > **(3)** ¿qué archivos lee cada plantilla (PDF / Excel / CSV);
 > **(4)** ¿qué dibuja exactamente la pantalla y en qué orden aparece cada cosa (§6).
 >
-> Estado del código al 2026-07-25 (FUNDACION commiteada en `790de8b`, **sin mergear** — R1):
-> `importConfig` sólo tiene `source · template · scope · absentRule` (`portfolio-import.service.ts:13`),
-> vive en `account.configuration` y **no hay endpoint que lo lea o escriba**. `fields` no existe.
-> Todo lo de §3 y §6 es **a construir en S1** (§8.2); §2.1 es un **fix de FUNDACION** (§8.1).
+> **Estado actual del código (actualizado):** `importConfig` ya tiene mucho más que el trío original:
+> `source · profile · fields · nameOrder · scope · absentRule · carriesAssignee · askOnLogin`, y además
+> `balanceBasis` (qué es el saldo: `principal | total`), `statusMap` (etiqueta del reporte → estado del
+> crédito) y `staleAfterDays` (1–60, por defecto 2). Hay **endpoints** para leerla y escribirla:
+> `GET` y `PATCH /imports/portfolio/config` (el `PATCH` valida los invariantes y devuelve la config
+> resultante; un campo en `null` se quita del emparejado y `{ reset: true }` vuelve a fábrica), y el panel
+> web los usa desde `/import/ajustes`. Lo que sigue describe el diseño original (ronda del 2026-07-25,
+> cuando `importConfig` sólo tenía `source · template · scope · absentRule` y no había endpoint): léase
+> como referencia de las reglas, no como lista de lo pendiente.
 
 ---
 

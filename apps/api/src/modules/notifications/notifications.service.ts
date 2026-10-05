@@ -6,8 +6,6 @@ import {
   ResponseDto,
   resolvePagination,
   type ApiResponse,
-  type CaseAssignedPayload,
-  type CaseUpdatedPayload,
   type NotificationPayload,
   type PaymentRegisteredPayload,
   type RouteCompletedPayload,
@@ -32,7 +30,6 @@ interface NotifyData {
   body?: string;
   clientId?: string;
   creditId?: string;
-  caseId?: string;
 }
 
 /**
@@ -54,8 +51,6 @@ export class NotificationsService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
-    this.events.on(DomainEvent.CASE_ASSIGNED, (p) => this.safe(() => this.onCaseAssigned(p as CaseAssignedPayload)));
-    this.events.on(DomainEvent.CASE_UPDATED, (p) => this.safe(() => this.onCaseUpdated(p as CaseUpdatedPayload)));
     this.events.on(DomainEvent.PAYMENT_REGISTERED, (p) => this.safe(() => this.onPaymentRegistered(p as PaymentRegisteredPayload)));
     this.events.on(DomainEvent.ROUTE_COMPLETED, (p) => this.safe(() => this.onRouteCompleted(p as RouteCompletedPayload)));
   }
@@ -66,32 +61,6 @@ export class NotificationsService implements OnModuleInit {
   }
 
   // ── Traductores por evento ───────────────────────────────────────────────────────
-  /** Caso asignado → aviso DIRECTO al cobrador + feed en vivo del tenant. */
-  async onCaseAssigned(p: CaseAssignedPayload): Promise<void> {
-    this.gateway.emitToTenant(p.accountId, RealtimeEvent.CASE_ASSIGNED, p);
-    await this.notifyUser(p.accountId, p.collectorId, {
-      type: NotificationType.CASE_ASSIGNED,
-      title: 'Nuevo caso asignado',
-      body: `Se te asignó un caso de cobranza.`,
-      caseId: p.caseId,
-    });
-  }
-
-  /**
-   * Caso actualizado → feed en vivo a supervisores. Se **persiste** solo en cambios de
-   * estado (no en cada actividad de bitácora) para no saturar la bandeja del supervisor.
-   */
-  async onCaseUpdated(p: CaseUpdatedPayload): Promise<void> {
-    this.gateway.emitToSupervisors(p.accountId, RealtimeEvent.CASE_UPDATED, p);
-    if (!p.status) return; // actividad de bitácora → solo live, sin persistir
-    await this.fanOutToSupervisors(p.accountId, {
-      type: NotificationType.CASE_UPDATED,
-      title: 'Caso actualizado',
-      body: `Un caso cambió a estado ${p.status}.`,
-      caseId: p.caseId,
-    });
-  }
-
   /** Pago registrado → feed en vivo + aviso persistido a supervisores. */
   async onPaymentRegistered(p: PaymentRegisteredPayload): Promise<void> {
     this.gateway.emitToSupervisors(p.accountId, RealtimeEvent.PAYMENT_REGISTERED, p);
@@ -133,7 +102,6 @@ export class NotificationsService implements OnModuleInit {
           body: data.body ?? null,
           clientId: data.clientId ?? null,
           creditId: data.creditId ?? null,
-          caseId: data.caseId ?? null,
         },
       }),
     );

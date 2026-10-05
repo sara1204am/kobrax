@@ -5,27 +5,29 @@ jest.mock('./store/net', () => ({ useNetStore: (sel: (s: unknown) => unknown) =>
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 
 import { render } from '@testing-library/react-native';
-import { AgendaItemStatus, AgendaItemType, AgendaOutcome, CasePriority, CaseStatus, RouteStatus, RouteStopStatus } from '@kobrax/shared';
-import { AgendaCard, AGENDA_OUTCOME_META, AGENDA_STATUS_LABEL, AGENDA_TYPE_META, CaseCard, CASE_PRIORITY_LABEL, CASE_STATUS_LABEL, caseStatusTone, ROUTE_STATUS_LABEL, StatTile, STOP_STATUS_META } from './ui';
+import { AgendaItemStatus, AgendaItemType, AgendaOutcome, COLLECTION_PRIORITIES, MORA_SITUATIONS, RouteStatus, RouteStopStatus } from '@kobrax/shared';
+import { AgendaCard, AGENDA_OUTCOME_META, AGENDA_STATUS_LABEL, AGENDA_TYPE_META, CreditCard, PRIORITY_LABEL, priorityTone, ROUTE_STATUS_LABEL, SITUATION_META, situationBadge, StatTile, STOP_STATUS_META } from './ui';
 
-describe('caseStatusTone', () => {
-  it('mapea estados a tonos coherentes', () => {
-    expect(caseStatusTone(CaseStatus.PAID)).toBe('success');
-    expect(caseStatusTone(CaseStatus.WRITTEN_OFF)).toBe('danger');
-    expect(caseStatusTone(CaseStatus.IN_NEGOTIATION)).toBe('warning');
-    expect(caseStatusTone(CaseStatus.PENDING)).toBe('neutral');
+describe('situación y prioridad del crédito (F4/08)', () => {
+  it('hay etiqueta y tono para las dos situaciones: Al día / En mora', () => {
+    for (const s of MORA_SITUATIONS) expect(SITUATION_META[s].label).toBeTruthy();
+    expect(SITUATION_META.CURRENT).toEqual({ label: 'Al día', tone: 'success' });
+    expect(SITUATION_META.IN_ARREARS).toEqual({ label: 'En mora', tone: 'danger' });
   });
 
-  it('tiene etiqueta en español para todos los estados', () => {
-    for (const s of Object.values(CaseStatus)) {
-      expect(CASE_STATUS_LABEL[s]).toBeTruthy();
-    }
+  it('castigado es una condición aparte y gana sobre la situación (puede estar en mora y castigado)', () => {
+    expect(situationBadge('IN_ARREARS', true)).toEqual({ label: 'Castigado', tone: 'neutral' });
+    expect(situationBadge('CURRENT', false).label).toBe('Al día');
   });
 
   it('tiene etiqueta en español para todas las prioridades', () => {
-    for (const p of Object.values(CasePriority)) {
-      expect(CASE_PRIORITY_LABEL[p]).toBeTruthy();
-    }
+    for (const p of COLLECTION_PRIORITIES) expect(PRIORITY_LABEL[p]).toBeTruthy();
+  });
+
+  it('el tono de la prioridad: crítica roja, alta ámbar, el resto neutro', () => {
+    expect(priorityTone('CRITICAL')).toBe('danger');
+    expect(priorityTone('HIGH')).toBe('warning');
+    expect(priorityTone('LOW')).toBe('neutral');
   });
 
   it('tiene etiqueta + tono para todos los desenlaces de gestión (S4)', () => {
@@ -54,20 +56,32 @@ describe('StatTile', () => {
   });
 });
 
-describe('CaseCard', () => {
-  it('renderiza nombre, subtítulo, monto y el badge de estado', () => {
+describe('CreditCard', () => {
+  it('renderiza nombre, subtítulo, monto y el badge de situación', () => {
     const { getByText } = render(
-      <CaseCard name="García López, Roberto" subtitle="Alta · 3 días de mora" amount="Bs 5.000" status={CaseStatus.ACTIVE} />,
+      <CreditCard name="García López, Roberto" subtitle="Última gestión: hoy" amount="Bs 5.000" situation="IN_ARREARS" />,
     );
     expect(getByText('García López, Roberto')).toBeTruthy();
-    expect(getByText('Alta · 3 días de mora')).toBeTruthy();
+    expect(getByText('Última gestión: hoy')).toBeTruthy();
     expect(getByText('Bs 5.000')).toBeTruthy();
-    expect(getByText(CASE_STATUS_LABEL[CaseStatus.ACTIVE])).toBeTruthy();
+    expect(getByText('En mora')).toBeTruthy();
   });
 
-  it('un caso vencido muestra la pill "Vencida"', () => {
-    const { getByText } = render(<CaseCard name="Deudor X" status={CaseStatus.ACTIVE} overdue />);
-    expect(getByText('Vencida')).toBeTruthy();
+  it('un crédito sin situación indicada es «Al día»', () => {
+    const { getByText } = render(<CreditCard name="Deudor X" />);
+    expect(getByText('Al día')).toBeTruthy();
+  });
+
+  it('castigado muestra su pill aparte, y la categoría sale como etiqueta junto al badge', () => {
+    const { getByText, queryByText } = render(<CreditCard name="Deudor Y" situation="IN_ARREARS" writtenOff tag="Cat. C" />);
+    expect(getByText('Castigado')).toBeTruthy();
+    expect(getByText('Cat. C')).toBeTruthy();
+    expect(queryByText('En mora')).toBeNull();
+  });
+
+  it('un badge explícito gana sobre la situación', () => {
+    const { getByText } = render(<CreditCard name="Z" situation="CURRENT" badge={{ label: 'Por vencer', tone: 'warning' }} />);
+    expect(getByText('Por vencer')).toBeTruthy();
   });
 });
 

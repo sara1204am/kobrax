@@ -13,6 +13,10 @@ export const KOBRAX_TOKENS = {
   softPeriw: '#8B9FD6',
   veryLightPurp: '#E0D8F2',
   purpleHighlight: '#F0ECFF',
+  // Apoyos informativos (fondo azul claro y verde azulado: iconos y etiquetas, no estados)
+  infoBg: '#E8F0FB',
+  teal: '#1B8A84',
+  tealBg: '#E3F6F5',
   // Estados operativos (NUNCA para decoración)
   success: '#27AE60',
   successBg: '#E8F8F0',

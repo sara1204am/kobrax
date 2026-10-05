@@ -22,7 +22,7 @@ account    Account  @relation(fields: [accountId], references: [id])
 Tablas SIN account_id (solo globales): `Account`, `Plan`, `Country`
 
 ### Convenciones
-- Nombres de modelos: `PascalCase` singular (`CollectionCase`, no `Cases`)
+- Nombres de modelos: `PascalCase` singular (`CreditActivity`, no `CreditActivities`)
 - Nombres de campos DB: `snake_case` via `@map()`
 - Nombres de tablas: `snake_case` plural via `@@map()`
 - Enums: PostgreSQL nativo con `@db.Enum`
@@ -72,40 +72,18 @@ model UserAccount {
   @@map("user_accounts")
 }
 
-// Caso de cobranza
-model CollectionCase {
-  id          String          @id @default(uuid())
-  accountId   String          @map("account_id")
-  creditId    String          @map("credit_id")
-  assigneeId  String?         @map("assignee_id")
-  status      CaseStatus      @default(PENDING)
-  priority    CasePriority    @default(MEDIUM)
-  closedAt    DateTime?       @map("closed_at")
-  closedBy    String?         @map("closed_by")
-  createdAt   DateTime        @default(now()) @map("created_at")
-  updatedAt   DateTime        @updatedAt @map("updated_at")
-  deletedAt   DateTime?       @map("deleted_at")
-  activities  CaseActivity[]
-  @@index([accountId, status])
-  @@index([accountId, assigneeId])
-  @@map("collection_cases")
-}
-
-enum CaseStatus {
-  PENDING
-  ACTIVE
-  IN_NEGOTIATION
-  PROMISE_TO_PAY
-  PAID
-  CLOSED
-  WRITTEN_OFF
-}
-
-enum CasePriority {
-  LOW
-  MEDIUM
-  HIGH
-  CRITICAL
+// Bitácora del crédito (no existe el «caso» de cobranza: se eliminó en F4/08 · fase 6).
+// Todo cuelga del crédito; la mora es un episodio (credit_arrear_episodes, lo mantiene un trigger)
+// y el castigo es credits.written_off_at, una condición independiente de la mora.
+model CreditActivity {
+  id         String   @id @default(uuid())
+  accountId  String   @map("account_id")
+  creditId   String   @map("credit_id")
+  episodeId  String?  @map("episode_id")   // episodio de mora vigente al escribirla, si lo hay
+  userId     String?  @map("user_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  @@index([accountId, creditId, createdAt])
+  @@map("credit_activities")
 }
 
 // Evidencia digital (inmutable)
@@ -152,7 +130,7 @@ model AuditLog {
 ```
 
 ## Reglas de Migraciones
-- Nombre descriptivo: `add_collection_cases_table`, no `migration_001`
+- Nombre descriptivo: `add_credit_notes_table`, no `migration_001`
 - Nunca modificar una migración ya ejecutada en producción
 - Toda migration incluye su política RLS correspondiente (ver abajo)
 - Seeds en `packages/database/seeds/` separados por entorno
@@ -162,14 +140,14 @@ Ejecutar después de cada migration que agrega tabla operativa:
 
 ```sql
 -- Activar RLS
-ALTER TABLE collection_cases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE credit_activities ENABLE ROW LEVEL SECURITY;
 
 -- Policy para acceso del tenant
 CREATE POLICY tenant_isolation ON collection_cases
   USING (account_id = current_setting('app.current_account_id')::uuid);
 
 -- Dar permiso al rol de app (no al superuser)
-GRANT SELECT, INSERT, UPDATE ON collection_cases TO kobrax_app;
+GRANT SELECT, INSERT, UPDATE ON credit_activities TO kobrax_app;
 ```
 
 La API setea el contexto antes de cada query:
@@ -198,7 +176,7 @@ SELECT
   COUNT(*) FILTER (WHERE status = 'PAID') as paid_count,
   SUM(amount) FILTER (WHERE status = 'PAID') as recovered_amount
 FROM collection_cases
-GROUP BY account_id, DATE(created_at);
+GROUP BY account_id, DATE(payment_date);
 
 CREATE UNIQUE INDEX ON mv_daily_recovery(account_id, date);
 ```

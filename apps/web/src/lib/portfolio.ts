@@ -14,6 +14,9 @@ export interface PortfolioRow {
   totalDebt: number;
   maxDaysPastDue: number;
   creditCount: number;
+  /** D7: la parte de la deuda que es de créditos reportados por una fuente externa. */
+  totalDebtExternal?: number;
+  maxDaysPastDueExternal?: number;
 }
 
 /**
@@ -32,7 +35,6 @@ export function rowStatus(row: Pick<PortfolioRow, 'totalDebt' | 'maxDaysPastDue'
 export const STATUS_TONE: Record<PortfolioStatus, 'neutral' | 'success' | 'warning' | 'danger'> = {
   [PortfolioStatus.OVERDUE]: 'danger',
   [PortfolioStatus.DUE_SOON]: 'warning',
-  [PortfolioStatus.PROMISE]: 'warning',
   [PortfolioStatus.CURRENT]: 'neutral',
   [PortfolioStatus.PAID]: 'success',
 };

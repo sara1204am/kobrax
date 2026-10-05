@@ -56,10 +56,9 @@ describe('paymentQuery', () => {
     expect(paymentQuery({}, TODAY).has('creditId')).toBe(false);
   });
 
-  it('🔴 un crédito o un caso que no es uuid NO viaja', () => {
+  it('🔴 un crédito que no es uuid NO viaja', () => {
     // El DTO los valida: un valor de más en la URL sería un 400 que deja el ledger entero vacío.
     expect(paymentQuery({ creditId: 'cr1' }, TODAY).has('creditId')).toBe(false);
-    expect(paymentQuery({ caseId: '../../users' }, TODAY).has('caseId')).toBe(false);
   });
 
   it('el tamaño de página sale de la URL, y uno inventado cae en el default', () => {
@@ -117,5 +116,13 @@ describe('isUuid', () => {
     expect(isUuid('../../users')).toBe(false);
     expect(isUuid('solicitudes')).toBe(false);
     expect(isUuid('')).toBe(false);
+  });
+});
+
+describe('paymentQuery — fuente (D7)', () => {
+  it('la fuente conocida viaja; una inventada no', () => {
+    expect(paymentQuery({ source: 'KOBRAX' }).get('source')).toBe('KOBRAX');
+    expect(paymentQuery({ source: 'x' }).has('source')).toBe(false);
+    expect(hasPaymentFilters({ source: 'PSF' })).toBe(true);
   });
 });

@@ -11,7 +11,19 @@ import { deltaOf } from '@/lib/dashboard';
  *
  * El rótulo lo pone el marco (es el título del widget): acá va sólo el número.
  */
-export async function KpiWidget({ kpi, format }: { kpi: KpiValue; format: (value: number) => string }) {
+export async function KpiWidget({
+  kpi,
+  format,
+  parts,
+}: {
+  kpi: KpiValue;
+  format: (value: number) => string;
+  /**
+   * D7: lo que aporta cada fuente a este número, cuando el tablero mira más de una. Sumarlas sin
+   * decirlo mezcla un saldo calculado con uno reportado al corte de otro día.
+   */
+  parts?: { label: string; value: string }[];
+}) {
   const t = await getTranslations('panel.dashboard');
   const delta = deltaOf(kpi);
 
@@ -24,6 +36,16 @@ export async function KpiWidget({ kpi, format }: { kpi: KpiValue; format: (value
         </p>
       ) : (
         <p className="mt-1 text-[12px] text-k-muted">{t('noHistory')}</p>
+      )}
+      {parts && parts.length > 1 && (
+        <p className="mt-1 text-[12px] text-k-text-2">
+          {parts.map((p, i) => (
+            <span key={p.label}>
+              {i > 0 && ' · '}
+              {p.label} <span className="tabular-nums">{p.value}</span>
+            </span>
+          ))}
+        </p>
       )}
     </div>
   );
