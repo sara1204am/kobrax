@@ -18,7 +18,7 @@ type Action = 'complete' | 'cancel' | 'reschedule' | null;
  * Lo que se puede hacer con una gestión pendiente.
  *
  * Los tres caminos cierran el día de formas distintas y ninguno borra nada: ejecutar deja además
- * un `CaseActivity` en el caso, cancelar la deja visible con su estado, y reagendar cierra ésta
+ * una gestión en el historial del crédito, cancelar la deja visible con su estado, y reagendar cierra ésta
  * como reagendada y **crea otra** — el día viejo conserva el rastro.
  */
 export function ItemActions({

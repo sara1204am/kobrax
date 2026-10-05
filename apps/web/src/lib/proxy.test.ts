@@ -91,7 +91,7 @@ describe('proxyMutation', () => {
     server.use(
       http.post(`${API}/credits/c1/assign`, () =>
         HttpResponse.json(
-          { data: null, error: { code: 'CASE_002', message: 'Cambio de estado no permitido' }, meta: {} },
+          { data: null, error: { code: 'AUTH_002', message: 'Sin permiso' }, meta: {} },
           { status: 400 },
         ),
       ),
@@ -100,7 +100,7 @@ describe('proxyMutation', () => {
     const res = await proxyMutation(post({}), '/credits/c1/assign');
 
     expect(res.status).toBe(400);
-    expect((await res.json()).error.code).toBe('CASE_002');
+    expect((await res.json()).error.code).toBe('AUTH_002');
   });
 
   it('con la API caída responde y no revienta el handler', async () => {

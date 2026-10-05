@@ -70,7 +70,6 @@ export function dashboardFilters(
   const collectorId = many(params.collectorId, isUuid);
   // La prioridad (la del EPISODIO de mora) se valida por el mismo motivo que los ids: la API la valida con
   // `@IsEnum` y un valor inventado en la URL le contesta 400 **a los seis endpoints**, no a uno.
-  // F4/08: ya no hay estado de caso, así que `caseStatus` no se lee ni viaja.
   const priority = many(params.priority, isPriority);
 
   return {

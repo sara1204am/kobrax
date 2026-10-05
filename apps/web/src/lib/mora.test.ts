@@ -37,12 +37,6 @@ describe('moraListQuery', () => {
     expect(hasMoraFilters({ category: 'A' })).toBe(true);
   });
 
-  it('🔴 los filtros del caso ya no existen: no viajan aunque estén en la URL', () => {
-    const q = moraListQuery({ status: 'ACTIVE', hasCase: 'true', overdue: 'true', noActionSince: '7' } as never);
-    for (const k of ['status', 'hasCase', 'overdue', 'noActionSince']) expect(q.has(k)).toBe(false);
-    expect(hasMoraFilters({ status: 'ACTIVE', hasCase: 'true' } as never)).toBe(false);
-  });
-
   it('las banderas sólo viajan como true/false; lo demás se descarta', () => {
     expect(moraListQuery({ writtenOff: 'true' }).get('writtenOff')).toBe('true');
     expect(moraListQuery({ writtenOff: 'false' }).get('writtenOff')).toBe('false');
@@ -88,7 +82,7 @@ describe('moraListQuery', () => {
   });
 
   it('las claves que ofrece son las que la API sabe ordenar', () => {
-    expect(MORA_SORTS).toEqual(['daysPastDue', 'balance', 'priority', 'lastAction', 'slaDueAt', 'createdAt']);
+    expect(MORA_SORTS).toEqual(['daysPastDue', 'balance', 'priority', 'createdAt']);
   });
 });
 

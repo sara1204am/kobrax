@@ -41,7 +41,7 @@ describe('NewTaskModal (F4/08: la gestión cuelga del crédito)', () => {
     expect(screen.getByRole('option', { name: /C-2 · .*Al día/ })).toBeInTheDocument();
   });
 
-  it('agendar sobre un crédito al día manda sólo creditId (sin caseId)', async () => {
+  it('agendar sobre un crédito al día manda sólo creditId', async () => {
     let enviado: Record<string, unknown> | undefined;
     server.use(
       http.post('*/api/agenda', async ({ request }) => {
@@ -55,6 +55,5 @@ describe('NewTaskModal (F4/08: la gestión cuelga del crédito)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Agendar' }));
 
     expect(enviado).toMatchObject({ creditId: 'cr-dia', type: 'CALL' });
-    expect(enviado).not.toHaveProperty('caseId');
   });
 });

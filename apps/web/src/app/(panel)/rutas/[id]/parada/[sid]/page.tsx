@@ -74,7 +74,7 @@ export default async function ParadaPage({ params }: { params: { id: string; sid
             </Link>
             {stop.creditId && (
               <Link href={`/mora/${stop.creditId}`} className="text-[14px] font-medium text-k-purple hover:underline">
-                {t('detail.openCase')}
+                {t('detail.openMora')}
               </Link>
             )}
           </div>

@@ -37,7 +37,7 @@ export interface DashboardData {
 
 const KPI_KEYS = ['outstanding', 'overdue', 'overdueRate', 'creditsInArrears', 'collected'] as const;
 
-/** F4/08: `activeCases` (casos activos) es el mismo número que `creditsInArrears`; los tableros ya guardados lo siguen usando. */
+/** Los tableros ya guardados pueden traer la métrica `activeCases` (la API ya no la entrega): se lee como `creditsInArrears`. */
 const KPI_ALIASES: Record<string, (typeof KPI_KEYS)[number]> = { activeCases: 'creditsInArrears' };
 
 /**

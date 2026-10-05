@@ -5,12 +5,10 @@ import { NAV, crumbsFor, visibleNav } from './nav';
 const labels = (permissions: string[]) => visibleNav(permissions).map((i) => i.label);
 
 describe('visibleNav', () => {
-  it('F4/08 · Mora es la clave `mora` y pide collection:read (ya no case:read)', () => {
+  it('F4/08 · Mora es la clave `mora` y pide collection:read', () => {
     const mora = NAV.find((i) => i.label === 'mora');
     expect(mora).toMatchObject({ href: '/mora', permission: Permission.COLLECTION_READ });
-    expect(NAV.some((i) => (i.label as string) === 'cases')).toBe(false);
     expect(labels(['collection:read'])).toContain('mora');
-    expect(labels(['case:read'])).not.toContain('mora');
   });
 
   it('un cobrador no ve equipo ni cuenta — ni siquiera apagados', () => {

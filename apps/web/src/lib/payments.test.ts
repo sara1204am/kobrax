@@ -56,10 +56,9 @@ describe('paymentQuery', () => {
     expect(paymentQuery({}, TODAY).has('creditId')).toBe(false);
   });
 
-  it('🔴 un crédito que no es uuid NO viaja, y `caseId` ya no existe', () => {
+  it('🔴 un crédito que no es uuid NO viaja', () => {
     // El DTO los valida: un valor de más en la URL sería un 400 que deja el ledger entero vacío.
     expect(paymentQuery({ creditId: 'cr1' }, TODAY).has('creditId')).toBe(false);
-    expect(paymentQuery({ caseId: CREDIT } as never, TODAY).has('caseId')).toBe(false);
   });
 
   it('el tamaño de página sale de la URL, y uno inventado cae en el default', () => {

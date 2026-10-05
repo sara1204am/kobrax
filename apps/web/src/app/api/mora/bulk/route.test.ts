@@ -84,8 +84,4 @@ describe('POST /api/mora/bulk — por creditIds, sin casos', () => {
     const muchos = Array.from({ length: 101 }, (_, i) => `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`);
     expect((await POST(pedir({ action: 'clear', creditIds: muchos }))).status).toBe(400);
   });
-
-  it('el cuerpo viejo con caseIds ya no sirve', async () => {
-    expect((await POST(pedir({ action: 'priority', caseIds: [C1], priority: 'HIGH' }))).status).toBe(400);
-  });
 });

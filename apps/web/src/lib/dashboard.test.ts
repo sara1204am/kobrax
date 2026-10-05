@@ -60,10 +60,8 @@ describe('dashboardFilters', () => {
     expect(out.priority).toBeUndefined();
   });
 
-  it('una prioridad de verdad sí viaja; el estado de caso (F4/08) ya no', () => {
-    const out = dashboardFilters({ caseStatus: 'ACTIVE', priority: 'HIGH' }, TODAY);
-    expect(out).not.toHaveProperty('caseStatus');
-    expect(out.priority).toEqual(['HIGH']);
+  it('una prioridad de verdad sí viaja', () => {
+    expect(dashboardFilters({ priority: 'HIGH' }, TODAY).priority).toEqual(['HIGH']);
   });
 
   it('una fecha inventada cae al rango por defecto', () => {

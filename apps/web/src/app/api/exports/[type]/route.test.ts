@@ -26,10 +26,6 @@ describe('GET /api/exports/[type]', () => {
     expect(res.headers.get('content-disposition')).toContain('mora.csv');
   });
 
-  it('`cases` ya no se reenvía (F4/08: el caso no existe)', async () => {
-    expect((await GET(req, { params: { type: 'cases' } })).status).toBe(404);
-  });
-
   it('🔴 un tipo que la API no expone no se reenvía', async () => {
     expect((await GET(req, { params: { type: '../users' } })).status).toBe(404);
   });

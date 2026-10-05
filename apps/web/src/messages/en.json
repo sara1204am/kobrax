@@ -855,13 +855,10 @@
         "VISIT": "Visit",
         "MESSAGE": "Message",
         "PAYMENT": "Payment",
-        "STATUS_CHANGE": "Status change",
         "ASSIGNMENT": "Assignment"
       },
       "errors": {
         "generic": "The action could not be completed.",
-        "CASE_001": "A collection cannot be closed without any activity recorded.",
-        "CASE_002": "That status change is not allowed from the current status.",
         "AUTH_002": "You do not have permission for this action."
       },
       "entity": "credits",
@@ -1491,7 +1488,7 @@
         "distance": "Estimated distance",
         "noDistance": "Not computed",
         "noPreview": "We could not compute the route line. The stops are still listed.",
-        "openCase": "View in Overdue",
+        "openMora": "View in Overdue",
         "openClient": "Open the debtor's file"
       },
       "stop": {
@@ -1592,7 +1589,7 @@
       "detail": {
         "title": "The payment",
         "credit": "Credit",
-        "case": "Collection management",
+        "openMora": "Collection management",
         "registeredBy": "Recorded by",
         "receiptNumber": "Receipt no.",
         "openReceipt": "Open the receipt",
@@ -2094,7 +2091,6 @@
         "CALL": "Call",
         "VISIT": "Visit",
         "PAYMENT": "Payment",
-        "STATUS_CHANGE": "Status change",
         "ASSIGNMENT": "Reassignment",
         "MESSAGE": "Message"
       },

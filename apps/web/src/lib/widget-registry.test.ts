@@ -3,7 +3,7 @@ import { WIDGET_TYPES } from '@kobrax/shared';
 import { DEFAULT_WIDGETS, WIDGET_DEFINITIONS, widgetDefinition } from './widget-registry';
 
 describe('catálogo de widgets', () => {
-  it('F4/08 · el KPI de «casos activos» pasó a «créditos en mora»', () => {
+  it('el KPI por defecto es «créditos en mora»', () => {
     const metrics = DEFAULT_WIDGETS.filter((w) => w.type === 'kpi').map((w) => w.config?.metric);
     expect(metrics).toContain('creditsInArrears');
     expect(metrics).not.toContain('activeCases');

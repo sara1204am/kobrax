@@ -855,13 +855,10 @@
         "VISIT": "Visita",
         "MESSAGE": "Mensaje",
         "PAYMENT": "Pago",
-        "STATUS_CHANGE": "Cambio de estado",
         "ASSIGNMENT": "Asignación"
       },
       "errors": {
         "generic": "No se pudo completar la acción.",
-        "CASE_001": "No se cierra una cobranza sin ninguna gestión registrada.",
-        "CASE_002": "Ese cambio de estado no está permitido desde el estado actual.",
         "AUTH_002": "No tenés permiso para esta acción."
       },
       "entity": "créditos",
@@ -1491,7 +1488,7 @@
         "distance": "Distancia estimada",
         "noDistance": "Sin calcular",
         "noPreview": "No pudimos calcular el recorrido. Las paradas se ven igual.",
-        "openCase": "Ver en Mora",
+        "openMora": "Ver en Mora",
         "openClient": "Ver la ficha del deudor"
       },
       "stop": {
@@ -1592,7 +1589,7 @@
       "detail": {
         "title": "El pago",
         "credit": "Crédito",
-        "case": "Gestión de cobranza",
+        "openMora": "Gestión de cobranza",
         "registeredBy": "Registró",
         "receiptNumber": "N° de comprobante",
         "openReceipt": "Ver el comprobante",
@@ -2094,7 +2091,6 @@
         "CALL": "Llamada",
         "VISIT": "Visita",
         "PAYMENT": "Pago",
-        "STATUS_CHANGE": "Cambio de estado",
         "ASSIGNMENT": "Reasignación",
         "MESSAGE": "Mensaje"
       },
