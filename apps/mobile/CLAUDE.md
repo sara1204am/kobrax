@@ -21,7 +21,7 @@ offline-first ni la simplicidad del cobrador. Lo premium viene del **craft**, no
 - **Reanimated 3** — microinteracciones en UI thread (press, transiciones, skeletons, slide del banner offline). Da ~80% de la sensación premium sin costar fluidez.
 - **react-native-gifted-charts** (NO Victory XL / Skia) — solo 1–2 visuales que el cobrador valora (anillo de progreso/meta del día). Ligero, sin dependencia Skia.
 - **expo-haptics** — feedback sutil al registrar pago/visita. Se *siente* premium, peso ~0.
-- **FlashList** (no FlatList) para listas de casos.
+- **FlashList** (no FlatList) para listas de créditos (cartera, mora, agenda).
 - ❌ Descartados: **Tamagui / React Native Paper** (reescriben la base de tokens, look genérico no-marca, peso) y **Skia + Victory Native XL como base** (peso de build/bundle, jank en gama baja). Skia queda como opción futura solo si aparece un visual custom que lo justifique.
 
 ### Tres reglas de diseño (las impone "premium bajo el sol en gama baja")
@@ -46,7 +46,7 @@ NUNCA bloquear una acción del cobrador esperando respuesta de red.
 > expo-router (cubre el TabBar del diseño, teñido con tokens); no hay renderer de tab bar propio.
 > Set de tabs = **Figma `42:3069`** (ver [`docs/epics/F10/ui-screen-map.md §6`](../../docs/epics/F10/ui-screen-map.md)):
 > **Inicio · Agenda · Rutas · Cobranza · Más** — *no* `route/cases/payments/profile`.
-> "Casos" no es tab (vive bajo Agenda/Inicio); Pagos → "Cobranza"; Perfil → dentro de "Más".
+> No hay «casos»: todo cuelga del crédito (la ficha de mora vive bajo Cobranza); Pagos → "Cobranza"; Perfil → dentro de "Más".
 
 ```
 apps/mobile/
@@ -115,10 +115,10 @@ Caption: 12px / 400 / k-text-muted  ← mínimo absoluto
 </Button>
 ```
 
-**CaseCard**
+**CreditCard**
 ```tsx
 // Muestra: nombre deudor, monto, días mora, estado, distancia
-// Tap → navega a detalle del caso
+// Tap → navega a la ficha de mora del crédito
 ```
 
 **EvidenceCapture**

@@ -10,13 +10,13 @@
  * mira, que es exactamente el defecto que destapó la prueba de campo.
  */
 import { CatalogType, RouteStatus } from '@kobrax/shared';
-import { getMora, getMoraMetrics, listArrearCategories, listMora, listMoraEpisodes, listPortfolio, MORA_LIMIT, TENANT_CURRENCY_PROBE_LIMIT } from '../mora.service';
+import { getMora, getMoraMetrics, listArrearCategories, listMora, listMoraEpisodes, listMoraNotes, listMoraPromises, listPortfolio, MORA_LIMIT, TENANT_CURRENCY_PROBE_LIMIT } from '../mora.service';
 import type { MoraRow } from '../mora';
 import { getRoute, listRoutes } from '../routes.service';
 import { clientContext, listByDay, listOverdue } from '../agenda.service';
 import { listCatalog } from '../catalogs.service';
 import { listNotifications } from '../notifications.service';
-import { listPaymentsByDay } from '../payments.service';
+import { listCreditPayments, listPaymentsByDay } from '../payments.service';
 import { getClient, type ClientDetail } from '../clients.service';
 import { todayISO } from '../agenda-form';
 import * as db from '../db';
@@ -138,7 +138,7 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
       const ctx = await clientContext(id);
       if (ctx.status === 'offline') return 'offline';
       // Y la ficha de cada crédito (gestiones, asignaciones…): lo que la pantalla de cliente abre por `creditId`,
-      // más lo que pide la ficha de mora: su historial de episodios y las métricas de recuperación. Los nombres
+      // más lo que pide la ficha de mora (`app/mora/[creditId].tsx`, MISMAS llamadas): promesas, notas, pagos del crédito, historial de episodios y métricas de recuperación. Los nombres
       // (autores, responsable, asignados) ya vienen dentro de cada respuesta: no hace falta bajar el equipo.
       if (ctx.status === 'ok') {
         for (const c of ctx.data.credits) {
@@ -148,6 +148,12 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
           if (eps.status === 'offline') return 'offline';
           const met = await getMoraMetrics(c.creditId);
           if (met.status === 'offline') return 'offline';
+          const prom = await listMoraPromises(c.creditId);
+          if (prom.status === 'offline') return 'offline';
+          const notas = await listMoraNotes(c.creditId);
+          if (notas.status === 'offline') return 'offline';
+          const pagos = await listCreditPayments(c.creditId); // también la ficha del cliente
+          if (pagos.status === 'offline') return 'offline';
         }
       }
     }

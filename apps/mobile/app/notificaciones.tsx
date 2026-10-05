@@ -13,8 +13,6 @@ import {
 
 /** Ícono por tipo. Mismo criterio que `AGENDA_TYPE_META`, pero acá no lo usa nadie más. */
 const TYPE_ICON: Record<NotificationType, string> = {
-  [NotificationType.CASE_ASSIGNED]: '📋',
-  [NotificationType.CASE_UPDATED]: '🔄',
   [NotificationType.PAYMENT_REGISTERED]: '💵',
   [NotificationType.ROUTE_ASSIGNED]: '🗺️',
   [NotificationType.PROMISE_DUE]: '🤝',

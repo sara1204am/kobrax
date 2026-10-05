@@ -35,6 +35,14 @@ jest.mock('../mora.service', () => ({
     mockLlamadas.push({ fn: 'getMoraMetrics', params: id });
     return ok([]);
   }),
+  listMoraPromises: jest.fn(async (id: string) => {
+    mockLlamadas.push({ fn: 'listMoraPromises', params: id });
+    return mockRes.promises ?? ok([]);
+  }),
+  listMoraNotes: jest.fn(async (id: string) => {
+    mockLlamadas.push({ fn: 'listMoraNotes', params: id });
+    return ok([]);
+  }),
   listArrearCategories: jest.fn(async () => {
     mockLlamadas.push({ fn: 'listArrearCategories' });
     return ok([]);
@@ -68,6 +76,10 @@ jest.mock('../payments.service', () => ({
     mockLlamadas.push({ fn: 'listPaymentsByDay' });
     return ok([]);
   }),
+  listCreditPayments: jest.fn(async (id: string) => {
+    mockLlamadas.push({ fn: 'listCreditPayments', params: id });
+    return ok([]);
+  }),
 }));
 jest.mock('../clients.service', () => ({ getClient: jest.fn(async () => ({ status: 'ok', data: { id: 'cl1' } })) }));
 jest.mock('../db', () => ({ getMany: jest.fn(async (kind: string) => (kind === 'portfolio' ? [{ clientId: 'cl1' }] : [])), putAll: jest.fn(), fetchedAt: jest.fn(async () => null) }));
@@ -83,6 +95,7 @@ beforeEach(() => {
   delete mockRes.routes;
   delete mockRes.agenda;
   delete mockRes.episodes;
+  delete mockRes.promises;
 });
 
 describe('hydrate · usa las consultas de las pantallas', () => {
@@ -115,6 +128,22 @@ describe('hydrate · usa las consultas de las pantallas', () => {
     await hydrate('u1');
     expect(mockLlamadas.filter((l) => l.fn === 'listMoraEpisodes').map((l) => l.params)).toEqual(['cr1', 'cr2']);
     expect(mockLlamadas.filter((l) => l.fn === 'getMoraMetrics').map((l) => l.params)).toEqual(['cr1', 'cr2']);
+  });
+
+  // La ficha de mora también abre con `listMoraPromises`, `listMoraNotes` y `listCreditPayments` (app/mora/[creditId].tsx):
+  // sin ellas, esas secciones salen vacías sin señal.
+  it('por cada crédito baja también sus promesas, sus notas y sus pagos, como la ficha de mora', async () => {
+    await hydrate('u1');
+    for (const fn of ['listMoraPromises', 'listMoraNotes', 'listCreditPayments']) {
+      expect(mockLlamadas.filter((l) => l.fn === fn).map((l) => l.params)).toEqual(['cr1', 'cr2']);
+    }
+  });
+
+  it('sin señal en las promesas corta las fichas y lo dice', async () => {
+    mockRes.promises = { status: 'offline' };
+    const r = await hydrate('u1');
+    expect(r.offline).toBe(true);
+    expect(r.failed).toContain('fichas de la cartera');
   });
 
   it('baja las categorías de mora de la cuenta con la misma llamada (sin parámetros)', async () => {

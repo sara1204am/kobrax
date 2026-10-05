@@ -11,7 +11,7 @@ export type PortfolioChip = 'all' | 'today' | 'overdue' | 'current' | 'paid' | '
 
 /**
  * Lo que `groupPortfolio` lee de cada crédito. Es un subconjunto de `MoraCreditListItem` (la fila de
- * `GET /mora`): mapeo desde el viejo `CaseListItem` → amount = balance, creditCode = code, assigneeId =
+ * `GET /mora`): amount = balance, creditCode = code, assigneeId =
  * responsibleId, status = situation + writtenOff. `situation`, `writtenOff` y `category` son opcionales para
  * que una fila mínima también agrupe.
  */

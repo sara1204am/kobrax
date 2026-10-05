@@ -238,7 +238,6 @@ export const ACTIVITY_TYPE_LABEL: Record<string, string> = {
   MESSAGE: 'Mensaje',
   NOTE: 'Nota',
   PAYMENT: 'Pago',
-  STATUS_CHANGE: 'Cambio de estado',
   ASSIGNMENT: 'Asignación',
 };
 
