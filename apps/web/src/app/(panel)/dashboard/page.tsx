@@ -15,6 +15,7 @@ import { apiCall } from '@/lib/bff';
 import { analyticsQuery, dashboardFilters } from '@/lib/dashboard';
 import { DEFAULT_WIDGETS } from '@/lib/widget-registry';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
+import { MfaReminder } from '@/components/mfa-reminder';
 import { DashboardFilters } from '@/components/dashboard/dashboard-filters';
 import { DashboardGrid } from '@/components/dashboard/dashboard-grid';
 import { DashboardToolbar } from '@/components/dashboard/dashboard-toolbar';
@@ -108,6 +109,9 @@ export default async function DashboardPage({
 
   return (
     <>
+      {/* Entró con «Lo hago después»: se recuerda hasta que active la verificación en dos pasos. */}
+      {me.body.data?.mfaEnabled === false && <MfaReminder />}
+
       <PageHeader title={current?.name ?? t('title')} subtitle={t('subtitle')} />
 
       <DashboardToolbar dashboards={dashboards} current={current} widgets={widgets} editable={editable} />

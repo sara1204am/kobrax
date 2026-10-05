@@ -207,7 +207,13 @@
       "noTrend": "El período es muy corto para dibujar una tendencia.",
       "noCollectors": "No hay préstamos en mora en este filtro.",
       "unknownCollector": "Sin nombre",
-      "creditsInBucket": "Créditos en cada tramo"
+      "creditsInBucket": "Créditos en cada tramo",
+      "mfaReminder": {
+        "badge": "Pendiente",
+        "title": "Protege tu cuenta",
+        "text": "Activa la verificación en dos pasos.",
+        "cta": "Activar"
+      }
     },
     "error": {
       "title": "Algo salió mal",
@@ -2813,7 +2819,10 @@
     "backupSubtitle": "Úsalos si pierdes acceso a tu authenticator. Cada uno sirve una sola vez.",
     "download": "Descargar códigos",
     "saved": "Ya los guardé, continuar",
-    "fileHeader": "Códigos de respaldo Kobrax"
+    "fileHeader": "Códigos de respaldo Kobrax",
+    "later": "Lo hago después",
+    "back": "Volver",
+    "skipError": "No se pudo continuar sin activar la verificación"
   },
   "selectAccount": {
     "title": "Elige tu empresa",

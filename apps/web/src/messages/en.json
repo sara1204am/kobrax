@@ -207,7 +207,13 @@
       "noTrend": "The period is too short to draw a trend.",
       "noCollectors": "No overdue loans in this filter.",
       "unknownCollector": "No name",
-      "creditsInBucket": "Credits in each range"
+      "creditsInBucket": "Credits in each range",
+      "mfaReminder": {
+        "badge": "Pending",
+        "title": "Protect your account",
+        "text": "Turn on two-step verification.",
+        "cta": "Turn on"
+      }
     },
     "error": {
       "title": "Something went wrong",
@@ -2813,7 +2819,10 @@
     "backupSubtitle": "Use them if you lose access to your authenticator. Each one works only once.",
     "download": "Download codes",
     "saved": "I saved them, continue",
-    "fileHeader": "Kobrax backup codes"
+    "fileHeader": "Kobrax backup codes",
+    "later": "I'll do it later",
+    "back": "Back",
+    "skipError": "Could not continue without turning on verification"
   },
   "selectAccount": {
     "title": "Choose your company",
