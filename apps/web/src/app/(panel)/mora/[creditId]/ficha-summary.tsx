@@ -64,7 +64,7 @@ export function FichaSummary({
   /** Formatea un monto ya con la moneda del crédito; `undefined` → «—». */
   amount: (n: number | undefined) => string;
 }) {
-  const t = useTranslations('panel.cases');
+  const t = useTranslations('panel.mora');
   const pct = paidPercent(principal, balance);
 
   return (

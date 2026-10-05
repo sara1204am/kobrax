@@ -62,7 +62,7 @@ export function ArrearsTable({
   /** `collection:export` — baja la lista con sus filtros, su orden y su alcance. */
   canExport?: boolean;
 }) {
-  const t = useTranslations('panel.cases');
+  const t = useTranslations('panel.mora');
   const tsrc = useTranslations('creditSource');
   const locale = useLocale();
   const byId = new Map<string, string>([

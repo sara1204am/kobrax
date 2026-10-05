@@ -130,7 +130,7 @@ describe('Tablero — arrastrar y redimensionar', () => {
     expect(sticky().style.top).toBe('100px');
   });
 
-  it('sin case:write no se puede arrastrar: ni encabezado ni esquina', async () => {
+  it('sin collection:write no se puede arrastrar: ni encabezado ni esquina', async () => {
     const board = await openBoard([note()], false);
     expect(within(board).queryByTitle(/Arrastrá el encabezado/)).toBeNull();
     expect(board.querySelector('.cursor-nwse-resize')).toBeNull();

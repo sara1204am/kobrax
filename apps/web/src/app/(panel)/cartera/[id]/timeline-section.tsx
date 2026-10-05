@@ -3,12 +3,8 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import type { ClientTimelineEntry, Member } from '@kobrax/shared';
 import { memberName } from '@kobrax/shared';
 import { money, relativeDate } from '@/lib/format';
+import { assignedTo } from '@/lib/mora';
 import { isKnownRole } from '@/lib/team';
-
-/** El uuid de una nota de asignación («Asignado a <id>»), o `null`. */
-function assignedTo(notes?: string | null): string | null {
-  return notes?.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0] ?? null;
-}
 
 /** El punto de color por fuente. Es apoyo del texto, nunca su reemplazo. */
 const DOT: Record<ClientTimelineEntry['kind'], string> = {

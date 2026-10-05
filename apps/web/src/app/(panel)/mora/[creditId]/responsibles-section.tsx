@@ -49,8 +49,8 @@ export function ResponsiblesSection({
   /** `assignment:write`. */
   canAssign: boolean;
 }) {
-  const t = useTranslations('panel.cases');
-  const tr = useTranslations('panel.cases.gestion.responsibles');
+  const t = useTranslations('panel.mora');
+  const tr = useTranslations('panel.mora.gestion.responsibles');
   const locale = useLocale();
   const router = useRouter();
   const toast = useToast();

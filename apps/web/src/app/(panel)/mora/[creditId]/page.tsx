@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import {
   memberName,
@@ -8,7 +8,6 @@ import {
   type Assignee,
   type MeInfo,
   type Member,
-  type MoraCaseLookup,
   type ClientDetail,
   type CreditNote,
   type MoraCreditDetail,
@@ -23,7 +22,7 @@ import { Badge, EmptyState, PageHeader, Section } from '@/components/panel-ui';
 import { SourceBadge } from '@/components/source-badge';
 import { SituationBadge } from '@/components/situation-badge';
 import { date, dateTime, dayDate, money } from '@/lib/format';
-import { assignedTo } from '@/lib/cases';
+import { assignedTo } from '@/lib/mora';
 import { isKnownRole } from '@/lib/team';
 import { PaymentActions } from '../../pagos/payment-actions';
 import { ActivityCard } from './activity-card';
@@ -49,14 +48,13 @@ import { PriorityCell } from '../priority-cell';
  * exigen mora. Por eso el título dice «Gestión del crédito» y no «Mora». La situación (al día / en mora), la
  * categoría y el castigo vienen de la API; gestiones y promesas son información, no estados.
  *
- * 🔴 **La ruta es el crédito, no el caso.** Los enlaces viejos (`/mora/<caseId>`, de notificaciones o de la bitácora del cliente)
- * siguen abriendo: si el id no es un crédito, se busca a qué crédito pertenece ese caso y se redirige.
+ * 🔴 **La ruta es el crédito.** Un id que no es de un crédito visible da 404.
  *
  * El historial viene **en la misma llamada** (`activities`, ya ordenadas desc por la API) y se pinta en el
  * servidor: no tiene ni una interacción, y así no viaja como JavaScript al navegador.
  */
 export default async function CreditoMoraPage({ params }: { params: { creditId: string } }) {
-  const t = await getTranslations('panel.cases');
+  const t = await getTranslations('panel.mora');
   const locale = await getLocale();
 
   const [detail, episodes, metrics, promises, notes, payments, methods, banks, me, team, account] = await Promise.all([
@@ -73,12 +71,7 @@ export default async function CreditoMoraPage({ params }: { params: { creditId: 
     apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
   ]);
 
-  if (detail.status === 404) {
-    // ¿Será el id de un caso de un enlace viejo? Si lo es, se abre su crédito.
-    const legacy = await apiCall<MoraCaseLookup>(`/mora/by-case/${params.creditId}`, { method: 'GET', auth: true });
-    if (legacy.status === 200 && legacy.body.data) redirect(`/mora/${legacy.body.data.creditId}`);
-    notFound();
-  }
+  if (detail.status === 404) notFound();
   if (detail.status !== 200 || !detail.body.data) {
     return <EmptyState title={t('gestion.title')} text={detail.body.error?.message} />;
   }
@@ -272,7 +265,7 @@ export default async function CreditoMoraPage({ params }: { params: { creditId: 
  * supervisora— y también puede faltar quien fue dado de baja. Un uuid no le dice nada a nadie.
  */
 async function Assignee({ id, members }: { id: string; members: Member[] }) {
-  const t = await getTranslations('panel.cases');
+  const t = await getTranslations('panel.mora');
   const tRoles = await getTranslations('team.roles');
   const member = members.find((m) => m.userId === id);
 

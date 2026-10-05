@@ -4,7 +4,7 @@ import { isUuid } from '@/lib/uuid';
 import { proxyMutation } from '@/lib/proxy';
 
 /**
- * Escribir una nota sobre un crédito (`case:write`). El cuerpo es `{ kind?, body }`.
+ * Escribir una nota sobre un crédito (`collection:write`). El cuerpo es `{ kind?, body }`.
  *
  * 🔴 El `creditId` de la ruta se valida como uuid **antes** de armar la URL de la API: viaja dentro del path, y
  * un valor como `../cases` apuntaría el POST a otro endpoint. Lo demás (largo, tipo, alcance) lo valida la API.

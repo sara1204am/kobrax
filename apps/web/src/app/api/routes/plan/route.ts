@@ -119,7 +119,7 @@ async function planOne(
   if (!chosen) {
     // Los suyos, en mora, lo más urgente primero: es el mismo criterio con el que se mira Mora.
     const credits = await apiCall<MoraCreditListItem[]>(
-      `/mora?assigneeId=${collectorId}&sort=priority&dir=desc&limit=${stopsPerRoute}`,
+      `/mora?assigneeId=${collectorId}&excludeRouted=${plannedDate}&sort=priority&dir=desc&limit=${stopsPerRoute}`,
       { method: 'GET', auth: true },
     );
     if (credits.status >= 400) {

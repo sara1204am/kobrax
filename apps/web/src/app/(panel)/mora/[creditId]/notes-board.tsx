@@ -44,7 +44,7 @@ export function NotesBoard({
   onNew: () => void;
   onClose: () => void;
 }) {
-  const t = useTranslations('panel.cases.ficha.notes');
+  const t = useTranslations('panel.mora.ficha.notes');
 
   // Esc cierra el tablero, salvo que el foco esté escribiendo en una nota.
   useEffect(() => {

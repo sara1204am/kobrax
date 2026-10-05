@@ -108,7 +108,7 @@ export default async function RutaPage({
     // Las visitas de esta ruta: el punto donde se registró cada una (W6-T0).
     apiCall<VisitItem[]>(`/visits?routeId=${params.id}&limit=${DAY_LIMIT}`, { method: 'GET', auth: true }),
     editing
-      ? apiCall<MoraCreditListItem[]>(`/mora?${availableQuery(planParams)}`, { method: 'GET', auth: true })
+      ? apiCall<MoraCreditListItem[]>(`/mora?${availableQuery(planParams, day)}`, { method: 'GET', auth: true })
       : null,
     editing ? apiCall<ArrearCategory[]>('/arrear-categories', { method: 'GET', auth: true }) : null,
   ]);
@@ -117,7 +117,7 @@ export default async function RutaPage({
   const collector = members.find((m) => m.userId === route.collectorId);
   const summary = summarizeDay(route, paymentsByCredit.flatMap((r) => r.body.data ?? []));
   const stops = route.stops ?? [];
-  // Lo que ya es parada de ESTA ruta no se ofrece de nuevo (GET /mora no tiene `excludeRouted`).
+  // Lo que ya es parada de ESTA ruta no se ofrece de nuevo (además del `excludeRouted` del servidor).
   const enRuta = new Set(creditIds);
   const disponibles = (available?.body.data ?? []).filter((c) => !enRuta.has(c.creditId)).map(toAvailable);
 

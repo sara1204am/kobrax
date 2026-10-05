@@ -47,7 +47,7 @@ export function BulkActions({
   /** `collection:write` — sin él no se cambia la prioridad. */
   canWrite: boolean;
 }) {
-  const t = useTranslations('panel.cases');
+  const t = useTranslations('panel.mora');
   const router = useRouter();
   const toast = useToast();
   const [abierto, setAbierto] = useState<'assign' | 'clear' | 'priority' | null>(null);

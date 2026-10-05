@@ -6,7 +6,7 @@
  * viaja se valida antes de salir — un filtro inventado en la URL no puede dejar la pantalla entera
  * sin mora.
  */
-import { COLLECTION_PRIORITIES, type MoraCreditListItem } from '@kobrax/shared';
+import { COLLECTION_PRIORITIES, VisitOutcome, type MoraCreditListItem } from '@kobrax/shared';
 
 /** Una ubicación dibujable de un deudor: lo mínimo que usan el mapa y la lista. */
 export interface PlanLocation {
@@ -19,8 +19,8 @@ export interface PlanLocation {
  * Un crédito en mora que se puede sumar a una ruta. `id` es el **creditId**: es lo que viaja a
  * `POST /routes/generate` (`creditIds`) y a `add-stop`.
  *
- * ⚠️ `GET /mora` hoy no trae `zone` ni `locations`: quedan opcionales y la lista dice «sin dirección» /
- * «sin ubicación» hasta que la API las exponga. La búsqueda por área y el mapa dependen de ellas.
+ * `zone` y `locations` salen de `GET /mora` (opcionales: hay deudores sin dirección cargada). La búsqueda
+ * por área, el mapa y la columna de coordenadas dependen de ellas.
  */
 export interface AvailableCredit {
   id: string;
@@ -37,7 +37,7 @@ export interface AvailableCredit {
 }
 
 /** Una fila de `GET /mora` → lo que usa el planificador. */
-export function toAvailable(row: MoraCreditListItem & { zone?: string; locations?: PlanLocation[] }): AvailableCredit {
+export function toAvailable(row: MoraCreditListItem): AvailableCredit {
   return {
     id: row.creditId,
     clientId: row.clientId,
@@ -67,6 +67,9 @@ export const AVAILABLE_LIMIT = 100;
  */
 export const DEFAULT_MIN_STOPS = 8;
 
+/** «No visitado desde»: cuántos días atrás. `never` es el caso estricto, sin ninguna visita. */
+export const VISIT_AGES = ['never', '7', '15', '30'] as const;
+
 /** Rangos de mora que ofrece el panel. El valor es lo que viaja: `min-max`, con `max` opcional. */
 export const DPD_RANGES = ['1-7', '8-15', '16-30', '31-60', '61-90', '90-'] as const;
 
@@ -86,6 +89,10 @@ export interface PlanParams {
   saldoMin?: string;
   saldoMax?: string;
   promesa?: string;
+  /** «Última visita»: `never` o los días sin visita (`VISIT_AGES`). */
+  visita?: string;
+  /** Resultado de la última visita (`VisitOutcome`, separados por coma). */
+  resultado?: string;
   /** `'todos'` = también la mora de otros cobradores, para ayudar. Por defecto, sólo la del suyo. */
   cartera?: string;
   sort?: string;
@@ -125,6 +132,8 @@ export function hasPlanFilters(params: PlanParams): boolean {
       params.saldoMin ||
       params.saldoMax ||
       params.promesa ||
+      params.visita ||
+      params.resultado ||
       helpingOthers(params),
   );
 }
@@ -132,13 +141,14 @@ export function hasPlanFilters(params: PlanParams): boolean {
 /**
  * La query de los créditos en mora que se pueden asignar (`GET /mora`: por defecto sólo los vencidos).
  *
- * ⚠️ `GET /mora` no tiene `excludeRouted` (lo que ya es parada de ese día): el editor de una ruta descarta
- * en el navegador los créditos que ya son parada de ESA ruta; el cruce con las rutas de otros cobradores
- * lo resuelve el servidor al generar. Tampoco filtra por visitas (`neverVisited`, `notVisitedSince`,
- * `outcome`), así que esos filtros ya no se ofrecen: un parámetro de más es un 400 que vaciaría la lista.
+ * 🔴 **`excludeRouted` va siempre**: lo que ya es parada de una ruta de ese día no se ofrece. Sin eso,
+ * dos supervisores mandan a dos cobradores a la misma puerta la misma mañana. `day` es el día que se
+ * planifica (o el de la ruta que se edita).
+ *
+ * `outcome` se compara contra la ÚLTIMA visita del crédito; `notVisitedSince` viaja como `YYYY-MM-DD`.
  */
-export function availableQuery(params: PlanParams): URLSearchParams {
-  const query = new URLSearchParams({ limit: String(AVAILABLE_LIMIT) });
+export function availableQuery(params: PlanParams, day: string): URLSearchParams {
+  const query = new URLSearchParams({ limit: String(AVAILABLE_LIMIT), excludeRouted: day });
 
   // Sólo la suya, salvo que se pida ayudar. Sin cobrador elegido no se acota: no hay a quién.
   if (!helpingOthers(params) && params.collectorId && IS_UUID.test(params.collectorId)) {
@@ -169,6 +179,14 @@ export function availableQuery(params: PlanParams): URLSearchParams {
   }
 
   if (params.promesa === 'true' || params.promesa === 'false') query.set('hasPromise', params.promesa);
+
+  const resultados = list(params.resultado, Object.values(VisitOutcome));
+  if (resultados.length) query.set('outcome', resultados.join(','));
+
+  if (params.visita === 'never') query.set('neverVisited', 'true');
+  else if ((VISIT_AGES as readonly string[]).includes(params.visita ?? '')) {
+    query.set('notVisitedSince', shiftDays(day, -Number(params.visita)));
+  }
 
   if (params.sort && (SORTS as readonly string[]).includes(params.sort)) {
     query.set('sort', params.sort);

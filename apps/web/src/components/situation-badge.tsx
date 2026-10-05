@@ -25,7 +25,7 @@ export function SituationBadge({
   /** Todo en una línea (cabecera de la ficha). Por defecto, el detalle va debajo (celda de tabla). */
   inline?: boolean;
 }) {
-  const t = useTranslations('panel.cases.situation');
+  const t = useTranslations('panel.mora.situation');
   const inArrears = situation === 'IN_ARREARS';
 
   const parts: string[] = [];

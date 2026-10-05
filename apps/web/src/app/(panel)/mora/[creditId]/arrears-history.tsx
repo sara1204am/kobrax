@@ -32,8 +32,8 @@ const END_TONE: Record<MoraEpisodeEndReason, Tone> = {
  * demás secciones con permiso denegado.
  */
 export function ArrearsHistory({ episodes, currency }: { episodes: MoraEpisode[] | null; currency: string }) {
-  const t = useTranslations('panel.cases.history');
-  const tSource = useTranslations('panel.cases.arrearsSource');
+  const t = useTranslations('panel.mora.history');
+  const tSource = useTranslations('panel.mora.arrearsSource');
   const locale = useLocale();
   const dash = '—';
   const amount = (n: number | undefined) => (n === undefined ? dash : money(n, currency));

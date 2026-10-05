@@ -704,7 +704,7 @@
         }
       }
     },
-    "cases": {
+    "mora": {
       "title": "Cartera en mora",
       "subtitle": "Los préstamos vencidos, quién los trabaja y cuánto llevan. Se llena y se vacía solo: entra al primer día de mora y sale cuando se paga o se pone al día.",
       "scopedToMine": "Estás viendo sólo lo que tenés asignado.",
@@ -713,24 +713,13 @@
       "noResults": "No hay préstamos con esos filtros",
       "noResultsText": "Probá quitando alguno.",
       "filters": {
-        "status": "Estado",
         "priority": "Prioridad",
-        "assignee": "Cobrador",
         "branch": "Oficina",
         "allBranches": "Todas las oficinas",
         "all": "Todos",
         "unassigned": "Sin asignar",
-        "overdue": "Sólo vencidos",
-        "clear": "Limpiar filtros",
         "arrearsRange": "Días de mora",
-        "scope": "Alcance",
         "includeCurrent": "Incluir los que están al día",
-        "sla": "Tiempo de gestión",
-        "slaOverdue": "Sólo los que se pasaron del plazo",
-        "case": "Caso",
-        "withoutCase": "En mora, sin caso abierto",
-        "withCase": "Con caso abierto",
-        "unassignedCase": "Casos sin cobrador",
         "balanceRange": "Saldo",
         "promise": "Promesa de pago",
         "withPromise": "Sólo con promesa vigente",
@@ -746,17 +735,12 @@
         "client": "Deudor",
         "daysPastDue": "Mora",
         "balance": "Saldo",
-        "status": "Estado",
         "priority": "Prioridad",
-        "assignee": "Cobrador",
-        "slaDueAt": "Vence",
-        "actions": "Acciones",
         "arrearsSource": "Origen de la mora",
         "code": "Nº de crédito",
         "overdue": "Vencido",
         "lastAction": "Última gestión",
         "branch": "Oficina",
-        "caseStatus": "Estado de gestión",
         "originStatus": "Estado en origen",
         "principal": "Monto original",
         "installment": "Cuota",
@@ -767,7 +751,6 @@
         "situation": "Situación",
         "responsible": "Responsable"
       },
-      "noCase": "Sin caso",
       "situation": {
         "CURRENT": "Al día",
         "IN_ARREARS": "En mora",
@@ -834,13 +817,6 @@
       "days": "{n} d",
       "noAssignee": "—",
       "unknownAssignee": "Asignado",
-      "overdueBadge": "Vencido",
-      "actions": {
-        "open": "Ver en Mora",
-        "activity": "Registrar gestión",
-        "assign": "Asignar",
-        "close": "Cerrar la cobranza"
-      },
       "activity": {
         "title": "Registrar una gestión",
         "text": "Queda en el historial de la cobranza. No se puede cerrar sin al menos una.",
@@ -850,44 +826,9 @@
         "cancel": "Cancelar",
         "done": "Gestión registrada"
       },
-      "assign": {
-        "title": "Asignar la cobranza",
-        "text": "Elegí a quién, o dejá que se asigne al cobrador con menos carga.",
-        "collector": "Cobrador",
-        "auto": "Al que tenga menos carga",
-        "noTeam": "No podemos leer el equipo con tu rol, así que se asigna al cobrador que tenga menos carga.",
-        "confirm": "Asignar",
-        "cancel": "Cancelar",
-        "done": "Cobranza asignada"
-      },
-      "transition": {
-        "title": "Mover la cobranza",
-        "text": "Sólo se ofrecen los estados a los que puede pasar.",
-        "reason": "Motivo (opcional)",
-        "confirm": "Mover",
-        "cancel": "Cancelar",
-        "done": "Cobranza actualizada",
-        "none": "Ya no se puede mover: está cerrada.",
-        "tooltip": "Cambiar el estado de la cobranza",
-        "from": "Hoy está en",
-        "to": "Pasa a",
-        "pick": "Elegí el estado nuevo"
-      },
-      "close": {
-        "title": "Cerrar la cobranza",
-        "text": "Cerrar es definitivo. Deja de contar como trabajo abierto.",
-        "reason": "Motivo del cierre",
-        "confirm": "Cerrar la cobranza",
-        "cancel": "Cancelar",
-        "done": "Cobranza cerrada"
-      },
       "detail": {
-        "credit": "Crédito",
-        "balance": "Saldo",
         "installment": "Cuota",
         "nextDueDate": "Próximo vencimiento",
-        "sla": "Vence el",
-        "assignee": "Cobrador",
         "summary": "Resumen del crédito",
         "balanceOwed": "Saldo pendiente",
         "paidProgress": "Porcentaje del capital ya pagado",
@@ -900,20 +841,7 @@
         "principal": "Monto original",
         "lastPayment": "Último pago",
         "moraSince": "Inicio de la mora",
-        "openCredit": "Ver el crédito en Cartera",
-        "openCase": "Abrir caso",
-        "caseOpened": "Caso abierto",
-        "noCaseTitle": "Este crédito está en mora y todavía no tiene un caso",
-        "noCaseText": "Abrí el caso para registrar gestiones y asignarlo a un cobrador."
-      },
-      "status": {
-        "PENDING": "Pendiente",
-        "ACTIVE": "En gestión",
-        "IN_NEGOTIATION": "En negociación",
-        "PROMISE_TO_PAY": "Promesa de pago",
-        "PAID": "Pagado",
-        "CLOSED": "Cerrado",
-        "WRITTEN_OFF": "Incobrable"
+        "openCredit": "Ver el crédito en Cartera"
       },
       "priority": {
         "LOW": "Baja",
@@ -1139,7 +1067,6 @@
         }
       },
       "arrearsMode": "¿Cómo quedan?",
-      "bulkWithoutCase": "{n, plural, one {# crédito elegido no tiene caso abierto y se deja afuera} other {# créditos elegidos no tienen caso abierto y se dejan afuera}}.",
       "bulk": {
         "assign": "Asignar a un cobrador",
         "assignTitle": "Asignar {count} préstamos a un cobrador",
@@ -1256,7 +1183,7 @@
         "history": "Historial de la cobranza",
         "historyEmpty": "No hay otras gestiones para este préstamo.",
         "rescheduledFrom": "Nació al reagendar otra gestión.",
-        "openCase": "Ver en Mora"
+        "openMora": "Ver en Mora"
       },
       "type": {
         "CALL": "Llamada",
@@ -1482,6 +1409,14 @@
           "balance": "Saldo",
           "min": "Desde",
           "max": "Hasta",
+          "lastVisit": "Última visita",
+          "visitAges": {
+            "7": "Sin visita hace 7 días",
+            "15": "Sin visita hace 15 días",
+            "30": "Sin visita hace 30 días",
+            "never": "Nunca visitado"
+          },
+          "outcome": "Resultado de la última visita",
           "promise": "Promesa de pago",
           "withPromise": "Con promesa",
           "withoutPromise": "Sin promesa",

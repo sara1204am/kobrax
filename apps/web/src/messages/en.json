@@ -704,7 +704,7 @@
         }
       }
     },
-    "cases": {
+    "mora": {
       "title": "Overdue portfolio",
       "subtitle": "Overdue loans, who works them and how long they have been due. It fills and empties on its own: a loan enters on its first day overdue and leaves when it is paid or brought up to date.",
       "scopedToMine": "You are only seeing what is assigned to you.",
@@ -713,27 +713,16 @@
       "noResults": "No loans match these filters",
       "noResultsText": "Try removing one.",
       "filters": {
-        "status": "Status",
         "priority": "Priority",
-        "assignee": "Collector",
         "branch": "Office",
         "allBranches": "All offices",
         "all": "All",
         "unassigned": "Unassigned",
-        "overdue": "Overdue only",
-        "clear": "Clear filters",
         "arrearsRange": "Days overdue",
-        "scope": "Scope",
         "includeCurrent": "Include those up to date",
-        "sla": "Handling time",
-        "case": "Case",
-        "withoutCase": "In arrears, no open case",
-        "withCase": "With an open case",
-        "unassignedCase": "Cases with no collector",
         "balanceRange": "Balance",
         "promise": "Payment promise",
         "withPromise": "Only with an active promise",
-        "slaOverdue": "Only those past the deadline",
         "situation": "Situation",
         "category": "Arrears category",
         "writtenOff": "Write-off",
@@ -746,17 +735,12 @@
         "client": "Debtor",
         "daysPastDue": "Past due",
         "balance": "Balance",
-        "status": "Status",
         "priority": "Priority",
-        "assignee": "Collector",
-        "slaDueAt": "Due",
-        "actions": "Actions",
         "arrearsSource": "Arrears source",
         "code": "Credit no.",
         "overdue": "Overdue",
         "lastAction": "Last action",
         "branch": "Branch",
-        "caseStatus": "Work status",
         "originStatus": "Status at source",
         "principal": "Original amount",
         "installment": "Installment",
@@ -767,7 +751,6 @@
         "situation": "Situation",
         "responsible": "Responsible"
       },
-      "noCase": "No case",
       "situation": {
         "CURRENT": "Current",
         "IN_ARREARS": "In arrears",
@@ -834,13 +817,6 @@
       "days": "{n} d",
       "noAssignee": "—",
       "unknownAssignee": "Assigned",
-      "overdueBadge": "Overdue",
-      "actions": {
-        "open": "View in Overdue",
-        "activity": "Record activity",
-        "assign": "Assign",
-        "close": "Close collection"
-      },
       "activity": {
         "title": "Record an activity",
         "text": "It stays in the collection history. It cannot be closed without at least one.",
@@ -850,44 +826,9 @@
         "cancel": "Cancel",
         "done": "Activity recorded"
       },
-      "assign": {
-        "title": "Assign collection",
-        "text": "Pick someone, or let it go to the collector with the lightest load.",
-        "collector": "Collector",
-        "auto": "To the lightest load",
-        "noTeam": "We cannot read the team with your role, so it goes to the collector with the lightest load.",
-        "confirm": "Assign",
-        "cancel": "Cancel",
-        "done": "Collection assigned"
-      },
-      "transition": {
-        "title": "Move collection",
-        "text": "Only the states it can move to are offered.",
-        "reason": "Reason (optional)",
-        "confirm": "Move",
-        "cancel": "Cancel",
-        "done": "Collection updated",
-        "none": "It can no longer be moved: it is closed.",
-        "tooltip": "Change the collection status",
-        "from": "Currently in",
-        "to": "Moves to",
-        "pick": "Pick the new status"
-      },
-      "close": {
-        "title": "Close collection",
-        "text": "Closing is final. It stops counting as open work.",
-        "reason": "Reason for closing",
-        "confirm": "Close collection",
-        "cancel": "Cancel",
-        "done": "Collection closed"
-      },
       "detail": {
-        "credit": "Credit",
-        "balance": "Balance",
         "installment": "Installment",
         "nextDueDate": "Next due date",
-        "sla": "Due on",
-        "assignee": "Collector",
         "summary": "Credit summary",
         "balanceOwed": "Outstanding balance",
         "paidProgress": "Share of the principal already paid",
@@ -900,20 +841,7 @@
         "lastPayment": "Last payment",
         "moraSince": "Arrears since",
         "openCredit": "View the credit in Portfolio",
-        "openCase": "Open case",
-        "caseOpened": "Case opened",
-        "noCaseTitle": "This credit is in arrears and has no case yet",
-        "noCaseText": "Open the case to log actions and assign it to a collector.",
         "timelineEmpty": "No activity recorded yet."
-      },
-      "status": {
-        "PENDING": "Pending",
-        "ACTIVE": "In progress",
-        "IN_NEGOTIATION": "In negotiation",
-        "PROMISE_TO_PAY": "Promise to pay",
-        "PAID": "Paid",
-        "CLOSED": "Closed",
-        "WRITTEN_OFF": "Written off"
       },
       "priority": {
         "LOW": "Low",
@@ -948,7 +876,6 @@
         "IMPORTED": "From file",
         "MANUAL": "Manual"
       },
-      "bulkWithoutCase": "{n, plural, one {# selected credit has no open case and is left out} other {# selected credits have no open case and are left out}}.",
       "export": {
         "csv": "Export CSV",
         "pdf": "Export PDF",
@@ -1256,7 +1183,7 @@
         "history": "Collection history",
         "historyEmpty": "No other activity for this loan.",
         "rescheduledFrom": "Born from rescheduling another item.",
-        "openCase": "View in Overdue"
+        "openMora": "View in Overdue"
       },
       "type": {
         "CALL": "Call",
@@ -1482,6 +1409,14 @@
           "balance": "Balance",
           "min": "From",
           "max": "To",
+          "lastVisit": "Last visit",
+          "visitAges": {
+            "7": "Not visited in 7 days",
+            "15": "Not visited in 15 days",
+            "30": "Not visited in 30 days",
+            "never": "Never visited"
+          },
+          "outcome": "Last visit outcome",
           "promise": "Promise to pay",
           "withPromise": "With promise",
           "withoutPromise": "Without promise",

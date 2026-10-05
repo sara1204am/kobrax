@@ -62,7 +62,7 @@ export default async function PlanificarPage({ searchParams }: { searchParams: P
   const params: PlanParams = { ...searchParams, collectorId };
 
   const [available, routes, categories] = await Promise.all([
-    apiCall<MoraCreditListItem[]>(`/mora?${availableQuery(params)}`, { method: 'GET', auth: true }),
+    apiCall<MoraCreditListItem[]>(`/mora?${availableQuery(params, day)}`, { method: 'GET', auth: true }),
     // Las rutas del día: quién ya tiene la suya armada y con cuántas paradas.
     apiCall<RouteItem[]>(`/routes?date=${day}&limit=100`, { method: 'GET', auth: true }),
     // Para el filtro de categoría; si falla (sin permiso) el filtro simplemente no se dibuja.

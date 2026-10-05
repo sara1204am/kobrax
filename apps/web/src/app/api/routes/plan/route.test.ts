@@ -94,6 +94,7 @@ describe('POST /api/routes/plan', () => {
     );
 
     await POST(pedir({ plannedDate: '2026-08-25', collectorIds: [ANA] }));
+    expect(query).toContain('excludeRouted=2026-08-25');
     expect(query).toContain(`assigneeId=${ANA}`);
     expect(query).not.toContain('open=');
     expect(query).not.toContain('view=');

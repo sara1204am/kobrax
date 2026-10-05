@@ -43,7 +43,7 @@ export function StickyNote({
   onFront: () => void;
   onDelete: () => void;
 }) {
-  const t = useTranslations('panel.cases.ficha.notes');
+  const t = useTranslations('panel.mora.ficha.notes');
   const C = NOTE_COLORS[note.color];
   const [dragging, setDragging] = useState(false);
   const [palette, setPalette] = useState(false);

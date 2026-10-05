@@ -52,8 +52,8 @@ export function NotesSection({
   /** Repartir cartera: puede corregir y borrar notas ajenas. */
   canAssign?: boolean;
 }) {
-  const t = useTranslations('panel.cases.ficha.notes');
-  const tErr = useTranslations('panel.cases');
+  const t = useTranslations('panel.mora.ficha.notes');
+  const tErr = useTranslations('panel.mora');
   const locale = useLocale();
   const toast = useToast();
   const { notes, preview, save, create, remove } = useNotes(creditId, initial);

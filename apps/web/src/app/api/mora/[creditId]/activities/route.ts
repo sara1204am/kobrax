@@ -3,7 +3,7 @@ import { isUuid } from '@/lib/uuid';
 import { proxyMutation } from '@/lib/proxy';
 
 /**
- * Registrar una gestión sobre un crédito, con su resultado y su promesa (`case:write`).
+ * Registrar una gestión sobre un crédito, con su resultado y su promesa (`collection:write`).
  *
  * El cuerpo es `{ type, result?, notes?, promise? }`. La API aplica la regla (qué resultado corresponde a qué tipo,
  * promesa y resultado juntos) y, si el crédito no tiene caso, lo abre.

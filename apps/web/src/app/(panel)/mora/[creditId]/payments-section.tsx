@@ -29,7 +29,7 @@ export function PaymentsSection({
   /** El crédito es de una fuente externa (PSF). */
   external: boolean;
 }) {
-  const t = useTranslations('panel.cases.ficha.payments');
+  const t = useTranslations('panel.mora.ficha.payments');
   const tMethod = useTranslations('panel.payments.method');
   const tChannel = useTranslations('panel.payments.channel');
   const locale = useLocale();

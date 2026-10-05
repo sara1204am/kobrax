@@ -29,7 +29,7 @@ export function NoteDialog({
   onClose: () => void;
   onSubmit: (draft: NoteDraft) => Promise<string | null>;
 }) {
-  const t = useTranslations('panel.cases.ficha.notes');
+  const t = useTranslations('panel.mora.ficha.notes');
   const [body, setBody] = useState('');
   const [kind, setKind] = useState<MoraNoteKind>('INFO');
   const [color, setColor] = useState<MoraNoteColor>('YELLOW');

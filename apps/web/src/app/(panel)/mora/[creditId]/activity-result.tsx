@@ -8,7 +8,7 @@ import { useTranslations } from 'next-intl';
  * ejecutadas—, y esconderlas dejaría un renglón sin decir cómo terminó.
  */
 export function ActivityResult({ result }: { result: string }) {
-  const t = useTranslations('panel.cases.ficha.activity');
+  const t = useTranslations('panel.mora.ficha.activity');
   const label = t.has(`results.${result}`) ? t(`results.${result}`) : result;
   return (
     <p className="mt-0.5 text-[12.5px]">

@@ -21,7 +21,7 @@ import { ArrearsTable } from './arrears-table';
  * la señal la pone la pantalla.
  */
 export default async function MoraPage({ searchParams }: { searchParams: MoraParams }) {
-  const t = await getTranslations('panel.cases');
+  const t = await getTranslations('panel.mora');
   const query = moraListQuery(searchParams);
 
   const [list, me, team, account, branchList] = await Promise.all([
@@ -39,7 +39,7 @@ export default async function MoraPage({ searchParams }: { searchParams: MoraPar
   const permissions = me.body.data?.permissions ?? [];
   // Repartir (reasignar, ayuda, reemplazo temporal) es `assignment:write`; ver todo o la agencia es alcance de datos.
   const supervises = permissions.includes(Permission.ASSIGNMENT_WRITE);
-  // Cambiar la prioridad es gestionar la cobranza, no repartirla: alcanza con `case:write`, así el
+  // Cambiar la prioridad es gestionar la cobranza, no repartirla: alcanza con `collection:write`, así el
   // cobrador que conoce a su deudor puede subirla sin ser supervisor.
   const canWrite = permissions.includes(Permission.COLLECTION_WRITE);
   // Exportar es de todo rol que ve Mora: la API lo acota a su alcance (el cobrador baja sólo lo suyo).

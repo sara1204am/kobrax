@@ -50,8 +50,8 @@ export function RegisterActivityButton({
   /** Catálogo `BANK` del tenant. Vacío = no se ofrece el campo. */
   banks: CatalogOption[];
 }) {
-  const t = useTranslations('panel.cases');
-  const tf = useTranslations('panel.cases.ficha.activity');
+  const t = useTranslations('panel.mora');
+  const tf = useTranslations('panel.mora.ficha.activity');
   const tMethod = useTranslations('panel.payments.method');
   const locale = useLocale();
   const router = useRouter();

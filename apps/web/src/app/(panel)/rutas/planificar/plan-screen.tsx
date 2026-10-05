@@ -59,12 +59,13 @@ export function PlanScreen({
 }) {
   const t = useTranslations('panel.routes.planning');
   const tFilters = useTranslations('panel.routes.planning.filters');
+  const tOutcome = useTranslations('panel.routes.outcome');
   const tTable = useTranslations('panel.table');
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
 
-  const filters = planFilterDefs(tFilters, categories);
+  const filters = planFilterDefs(tFilters, categories, tOutcome);
   // El panel abre solo si ya hay un filtro puesto: si no, uno activo quedaría escondido y la lista
   // saldría corta sin que nada lo explique. Mismo criterio que el `DataTable`.
   const [panelOpen, setPanelOpen] = useState(filtered);

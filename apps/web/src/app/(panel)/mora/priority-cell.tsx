@@ -3,16 +3,16 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import type { CasePriority } from '@kobrax/shared';
+import type { CollectionPriority } from '@kobrax/shared';
 import { Badge } from '@/components/panel-ui';
 import { Button, ErrorBanner } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
 import { sendJson } from '@/lib/client';
-import { PRIORITY_TONE } from '@/lib/cases';
+import { PRIORITY_TONE } from '@/lib/mora';
 
 /** De mayor a menor: la que más se elige queda primera y no hay que recorrer la lista. */
-export const PRIORITIES: CasePriority[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as CasePriority[];
+export const PRIORITIES: CollectionPriority[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
 
 /**
  * La prioridad, **cambiable desde la propia celda**.
@@ -40,11 +40,11 @@ export function PriorityCell({
 }: {
   creditId: string;
   /** La del episodio de mora abierto. */
-  priority: CasePriority;
+  priority: CollectionPriority;
   pinned?: boolean;
   canWrite: boolean;
 }) {
-  const t = useTranslations('panel.cases');
+  const t = useTranslations('panel.mora');
   const router = useRouter();
   const toast = useToast();
   const [open, setOpen] = useState(false);

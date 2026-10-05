@@ -17,8 +17,8 @@ import { sendJson } from '@/lib/client';
  * aparte: no cierra la mora ni toca los días. Pide un motivo **opcional**.
  */
 export function WriteOffButton({ creditId, writtenOff, canWriteOff }: { creditId: string; writtenOff: boolean; canWriteOff: boolean }) {
-  const t = useTranslations('panel.cases');
-  const tw = useTranslations('panel.cases.gestion.writeOff');
+  const t = useTranslations('panel.mora');
+  const tw = useTranslations('panel.mora.gestion.writeOff');
   const locale = useLocale();
   const router = useRouter();
   const toast = useToast();

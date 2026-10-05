@@ -26,7 +26,7 @@ export function PsfNotice({
   reportedAsOf?: string;
   reportedStale?: boolean;
 }) {
-  const t = useTranslations('panel.cases.gestion.psf');
+  const t = useTranslations('panel.mora.gestion.psf');
   const tSource = useTranslations('creditSource');
   if (!externalSource) return null;
 

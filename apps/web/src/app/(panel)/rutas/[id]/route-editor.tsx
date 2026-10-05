@@ -70,6 +70,7 @@ export function RouteEditor({
   const t = useTranslations('panel.routes');
   const tPlan = useTranslations('panel.routes.planning');
   const tFilters = useTranslations('panel.routes.planning.filters');
+  const tOutcome = useTranslations('panel.routes.outcome');
   const tTable = useTranslations('panel.table');
   const locale = useLocale();
   const router = useRouter();
@@ -233,7 +234,7 @@ export function RouteEditor({
           <div className="flex flex-col gap-5 lg:flex-row">
             {panelOpen && (
               <FilterPanel
-                defs={planFilterDefs(tFilters, categories)}
+                defs={planFilterDefs(tFilters, categories, tOutcome)}
                 params={params}
                 go={go}
                 onClose={() => setPanelOpen(false)}

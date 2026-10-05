@@ -1,8 +1,8 @@
 'use client';
 
-import { COLLECTION_PRIORITIES } from '@kobrax/shared';
+import { COLLECTION_PRIORITIES, VisitOutcome } from '@kobrax/shared';
 import type { FilterDef } from '@/components/data-table-filters';
-import { DPD_RANGES } from '@/lib/plan';
+import { DPD_RANGES, VISIT_AGES } from '@/lib/plan';
 
 /**
  * Los filtros de la mora que se puede asignar, **en el mismo panel lateral que el resto del panel**.
@@ -21,6 +21,8 @@ export function planFilterDefs(
    * dibuja: no hay nada que elegir.
    */
   categories: { code: string; name: string }[] = [],
+  /** Los de resultado de visita, de la ficha de la ruta (`panel.routes.outcome`): una sola fuente de verdad. */
+  tOutcome: (key: string) => string = (k) => k,
 ): FilterDef[] {
   return [
     {
@@ -50,6 +52,13 @@ export function planFilterDefs(
     },
     { keys: ['zona'], label: t('zone'), type: 'text' },
     { keys: ['saldoMin', 'saldoMax'], label: t('balance'), type: 'numberRange' },
+    {
+      keys: ['visita'],
+      label: t('lastVisit'),
+      type: 'select',
+      allLabel: t('any'),
+      options: VISIT_AGES.map((v) => ({ value: v, label: t(`visitAges.${v}`) })),
+    },
     {
       keys: ['promesa'],
       label: t('promise'),
@@ -82,6 +91,14 @@ export function planFilterDefs(
       collapsed: true,
       options: COLLECTION_PRIORITIES.map((p) => ({ value: p, label: t(`priorities.${p}`) })),
     },
+    {
+      keys: ['resultado'],
+      label: t('outcome'),
+      type: 'multiSelect',
+      // Plegado: prioridades y diez resultados desplegados empujan fuera de la pantalla a los de uso diario.
+      collapsed: true,
+      options: Object.values(VisitOutcome).map((o) => ({ value: o, label: tOutcome(o) })),
+    },
   ];
 }
 
@@ -93,8 +110,10 @@ export const PLAN_FILTER_KEYS = [
   'zona',
   'saldoMin',
   'saldoMax',
+  'visita',
   'promesa',
   'categoria',
   'prioridad',
+  'resultado',
   'q',
 ];

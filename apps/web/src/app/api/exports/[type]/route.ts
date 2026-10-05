@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { API_BASE, bearerHeaders } from '@/lib/bff';
 
-/** Los únicos tipos que la API expone bajo `/exports/*` (`cases` sigue como alias de `mora`). Cierra la ruta a que `type` reenvíe cualquier cosa. */
-const ALLOWED = new Set(['clients', 'locations', 'mora', 'cases', 'agenda', 'backup']);
+/** Los únicos tipos que la API expone bajo `/exports/*`. Cierra la ruta a que `type` reenvíe cualquier cosa. */
+const ALLOWED = new Set(['clients', 'locations', 'mora', 'agenda', 'backup']);
 
 /**
  * Proxy del BFF para las descargas de `/exportar`. Igual que `api/uploads/[name]`: el navegador

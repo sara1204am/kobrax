@@ -17,63 +17,80 @@ const DIA = '2026-08-25';
 const JUAN = '11111111-2222-3333-4444-555555555555';
 
 describe('availableQuery', () => {
-  it('🔴 sólo manda lo que GET /mora acepta: ni view, ni open, ni excludeRouted', () => {
-    // El pipe global es `forbidNonWhitelisted`: un parámetro de más es un 400 y la lista queda vacía.
-    const q = availableQuery({ collectorId: JUAN });
-    expect([...q.keys()].sort()).toEqual(['assigneeId', 'limit', 'sort', 'dir'].sort());
+  it('🔴 sólo manda lo que GET /mora acepta, y excludeRouted va SIEMPRE con el día que se planifica', () => {
+    // El pipe global es forbidNonWhitelisted: un parámetro de más es un 400 y la lista queda vacía.
+    const q = availableQuery({ collectorId: JUAN }, DIA);
+    expect([...q.keys()].sort()).toEqual(['assigneeId', 'excludeRouted', 'limit', 'sort', 'dir'].sort());
+    expect(q.get('excludeRouted')).toBe(DIA);
   });
 
   it('por defecto trae SÓLO la cartera del cobrador elegido', () => {
     // «Cada uno lo suyo» es la regla; tomar la de otro es ayuda puntual y tiene que ser explícito.
-    const q = availableQuery({ collectorId: JUAN });
+    const q = availableQuery({ collectorId: JUAN }, DIA);
     expect(q.get('assigneeId')).toBe(JUAN);
     expect(q.get('limit')).toBe(String(AVAILABLE_LIMIT));
   });
 
   it('«ayudar a otro» saca el filtro de cartera, y sólo entonces', () => {
-    const q = availableQuery({ collectorId: JUAN, cartera: 'todos' });
+    const q = availableQuery({ collectorId: JUAN, cartera: 'todos' }, DIA);
     expect(q.has('assigneeId')).toBe(false);
     expect(helpingOthers({ cartera: 'todos' })).toBe(true);
     expect(helpingOthers({})).toBe(false);
   });
 
   it('el rango de mora viaja como mínimo y máximo', () => {
-    const q = availableQuery({ dpd: '31-60' });
+    const q = availableQuery({ dpd: '31-60' }, DIA);
     expect(q.get('dpdMin')).toBe('31');
     expect(q.get('dpdMax')).toBe('60');
   });
 
   it('«+90 días» no manda máximo: es un piso, no un rango', () => {
-    const q = availableQuery({ dpd: '90-' });
+    const q = availableQuery({ dpd: '90-' }, DIA);
     expect(q.get('dpdMin')).toBe('90');
     expect(q.has('dpdMax')).toBe(false);
   });
 
   it('categoría y prioridad (del episodio) aceptan varias, y descartan lo inventado', () => {
-    const q = availableQuery({ categoria: 'A,B,../x', prioridad: 'HIGH,CRITICAL,INVENTADA' });
+    const q = availableQuery({ categoria: 'A,B,../x', prioridad: 'HIGH,CRITICAL,INVENTADA' }, DIA);
     expect(q.get('category')).toBe('A,B');
     expect(q.get('priority')).toBe('HIGH,CRITICAL');
   });
 
-  it('los filtros por estado de caso y por visitas ya no existen: no viajan', () => {
-    const q = availableQuery({ estado: 'ACTIVE', visita: 'never', resultado: 'NOT_FOUND' } as never);
-    for (const k of ['status', 'neverVisited', 'notVisitedSince', 'outcome']) expect(q.has(k)).toBe(false);
+  it('el estado de caso ya no existe: no viaja', () => {
+    expect(availableQuery({ estado: 'ACTIVE' } as never, DIA).has('status')).toBe(false);
+  });
+
+  it('«Última visita»: nunca visitado, o sin visita desde hace N días (fecha YYYY-MM-DD)', () => {
+    const never = availableQuery({ visita: 'never' }, DIA);
+    expect(never.get('neverVisited')).toBe('true');
+    expect(never.has('notVisitedSince')).toBe(false);
+    expect(availableQuery({ visita: '7' }, DIA).get('notVisitedSince')).toBe('2026-08-18');
+    expect(availableQuery({ visita: '30' }, DIA).get('notVisitedSince')).toBe('2026-07-26');
+    const bad = availableQuery({ visita: '999' }, DIA);
+    expect(bad.has('notVisitedSince')).toBe(false);
+    expect(bad.has('neverVisited')).toBe(false);
+  });
+
+  it('«Resultado de visita» acepta varios y descarta lo inventado', () => {
+    const q = availableQuery({ resultado: 'NOT_FOUND,REFUSAL,INVENTADO' }, DIA);
+    expect(q.get('outcome')).toBe('NOT_FOUND,REFUSAL');
+    expect(availableQuery({ resultado: 'INVENTADO' }, DIA).has('outcome')).toBe(false);
   });
 
   it('el saldo viaja sólo si es un número', () => {
-    expect(availableQuery({ saldoMin: '1000' }).get('balanceMin')).toBe('1000');
-    expect(availableQuery({ saldoMin: 'mil' }).has('balanceMin')).toBe(false);
-    expect(availableQuery({ saldoMin: '-5' }).has('balanceMin')).toBe(false);
+    expect(availableQuery({ saldoMin: '1000' }, DIA).get('balanceMin')).toBe('1000');
+    expect(availableQuery({ saldoMin: 'mil' }, DIA).has('balanceMin')).toBe(false);
+    expect(availableQuery({ saldoMin: '-5' }, DIA).has('balanceMin')).toBe(false);
   });
 
   it('sin orden pedido, lo más urgente primero', () => {
-    const q = availableQuery({});
+    const q = availableQuery({}, DIA);
     expect(q.get('sort')).toBe('priority');
     expect(q.get('dir')).toBe('desc');
   });
 
   it('🔴 un orden que la API no conoce NO viaja: caería al default y la flecha mentiría', () => {
-    const q = availableQuery({ sort: 'distance' });
+    const q = availableQuery({ sort: 'distance' }, DIA);
     expect(q.get('sort')).toBe('priority');
   });
 });
@@ -94,6 +111,15 @@ describe('toAvailable', () => {
   });
 });
 
+describe('toAvailable: zona y ubicaciones', () => {
+  it('pasa zone y locations tal cual vienen de GET /mora', () => {
+    const locations = [{ latitude: -19.03, longitude: -65.26, address: 'Calle 1' }];
+    const row = toAvailable({ creditId: 'cr-1', clientId: 'cl-1', zone: 'Centro', locations } as never);
+    expect(row.zone).toBe('Centro');
+    expect(row.locations).toEqual(locations);
+  });
+});
+
 describe('minStops', () => {
   it('🔴 es un MÍNIMO, y su default es el que arma el negocio', () => {
     // No hay capacidad máxima (decisión de la dueña): no se bloquea al noveno, se avisa al que
@@ -106,6 +132,11 @@ describe('minStops', () => {
 });
 
 describe('hasPlanFilters', () => {
+  it('«última visita» y «resultado» cuentan como filtros puestos', () => {
+    expect(hasPlanFilters({ visita: 'never' })).toBe(true);
+    expect(hasPlanFilters({ resultado: 'PAID' })).toBe(true);
+  });
+
   it('el día y el cobrador NO son filtros: son de qué se está planificando', () => {
     expect(hasPlanFilters({ date: DIA, collectorId: JUAN })).toBe(false);
     expect(hasPlanFilters({ zona: 'Centro' })).toBe(true);
