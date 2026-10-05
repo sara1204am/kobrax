@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
-import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button, ErrorBanner, Field, TextLink } from '@/components';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { authService } from '@/auth-service';
@@ -11,6 +11,7 @@ import { API_BASE } from '@/api';
 import { validateLogin, type LoginFieldErrors } from '@/auth-validation';
 
 export default function LoginScreen() {
+  const passwordRef = useRef<TextInput>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -90,10 +91,15 @@ export default function LoginScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
             autoComplete="email"
+            // "Siguiente" pasa a la contraseña sin cerrar el teclado (M-LOG-04).
+            returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => passwordRef.current?.focus()}
             error={!!error}
             errorMessage={fieldErrors.email}
           />
           <Field
+            ref={passwordRef}
             label="Contraseña"
             value={password}
             onChangeText={(v) => {
@@ -103,6 +109,9 @@ export default function LoginScreen() {
             placeholder="Ingresa tu contraseña"
             secureTextEntry
             autoCapitalize="none"
+            // "Ir" en la contraseña = tocar "Iniciar sesión" (si falta algo, avisa bajo el campo).
+            returnKeyType="go"
+            onSubmitEditing={() => void submit()}
             error={!!error}
             errorMessage={fieldErrors.password}
           />

@@ -1,3 +1,4 @@
+import { TextInput } from 'react-native';
 import { render, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 jest.mock('expo-router', () => ({ router: { replace: jest.fn(), push: jest.fn() } }));
@@ -71,5 +72,30 @@ describe('LoginScreen · validación por campo (M-LOG-18)', () => {
     fireEvent.press(screen.getByText('Iniciar sesión'));
     await waitFor(() => expect(goToStep).toHaveBeenCalledWith('done'));
     expect(mockLogin).toHaveBeenCalledWith('a@b.co', 'x');
+  });
+});
+
+describe('LoginScreen · teclado (M-LOG-04)', () => {
+  it('correo: tecla "Siguiente" que no cierra el teclado y enfoca la contraseña', () => {
+    render(<LoginScreen />);
+    const email = screen.getByPlaceholderText(EMAIL);
+    expect(email.props.returnKeyType).toBe('next');
+    expect(email.props.blurOnSubmit).toBe(false);
+    // El mock de TextInput de jest-expo expone `focus` en el prototipo.
+    const focus = jest.spyOn(TextInput.prototype as unknown as { focus: () => void }, 'focus');
+    fireEvent(email, 'submitEditing');
+    expect(focus).toHaveBeenCalledTimes(1);
+    focus.mockRestore();
+  });
+
+  it('contraseña: tecla "Ir" que envía el formulario', async () => {
+    mockLogin.mockResolvedValue({ step: 'done' });
+    render(<LoginScreen />);
+    fireEvent.changeText(screen.getByPlaceholderText(EMAIL), 'a@b.co');
+    const pass = screen.getByPlaceholderText(PASS);
+    fireEvent.changeText(pass, 'x');
+    expect(pass.props.returnKeyType).toBe('go');
+    fireEvent(pass, 'submitEditing');
+    await waitFor(() => expect(mockLogin).toHaveBeenCalledWith('a@b.co', 'x'));
   });
 });
