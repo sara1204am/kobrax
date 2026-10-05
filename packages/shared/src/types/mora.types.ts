@@ -174,11 +174,6 @@ export interface MoraCreditDetail extends MoraCreditListItem {
   assignments: MoraAssignment[];
 }
 
-/** `GET /mora/by-case/:caseId`: a qué crédito pertenece un caso, para que los enlaces viejos sigan abriendo. */
-export interface MoraCaseLookup {
-  creditId: string;
-}
-
 /** Cómo terminó una mora. `SOURCE_ABSENT` NO es una recuperación: sólo dice que la fuente dejó de reportarla. */
 export const MORA_EPISODE_END_REASONS = ['PAID', 'CURRENT', 'SOURCE_ABSENT', 'WRITTEN_OFF', 'CANCELLED', 'DELETED'] as const;
 export type MoraEpisodeEndReason = (typeof MORA_EPISODE_END_REASONS)[number];
