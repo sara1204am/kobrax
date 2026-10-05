@@ -4,10 +4,10 @@
  * El TabBar lo cubre el `Tabs` nativo de expo-router (ver app/(tabs)/_layout.tsx).
  */
 import { type ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AgendaItemStatus, AgendaItemType, AgendaOutcome, CasePriority, CaseStatus, PortfolioStatus, RouteStatus, RouteStopStatus } from '@kobrax/shared';
+import { AgendaItemStatus, AgendaItemType, AgendaOutcome, PortfolioStatus, RouteStatus, RouteStopStatus, type CollectionPriority, type MoraSituation } from '@kobrax/shared';
 import { useNetStore } from './store/net';
 import { COLORS, RADIUS, SPACING, TYPE } from './theme';
 
@@ -50,7 +50,7 @@ const TONES: Record<BadgeTone, { bg: string; fg: string }> = {
   warning: { bg: COLORS.warningBg, fg: COLORS.warningText },
 };
 
-/** Pill de estado (CaseStatus/VisitOutcome/CasePriority → tone al mapear cada pantalla). */
+/** Pill de estado (situación del crédito / VisitOutcome / prioridad → tone al mapear cada pantalla). */
 export function StatusBadge({ label, tone = 'neutral' }: { label: string; tone?: BadgeTone }) {
   const c = TONES[tone];
   return (
@@ -60,7 +60,7 @@ export function StatusBadge({ label, tone = 'neutral' }: { label: string; tone?:
   );
 }
 
-/** Fila de lista pulsable (base de CaseCard/StopRow/ClientRow; se monta en FlashList luego). */
+/** Fila de lista pulsable (base de CreditCard/StopRow/ClientRow; se monta en FlashList luego). */
 export function ListRow({
   title,
   subtitle,
@@ -109,45 +109,32 @@ export function ListRow({
 }
 
 /**
- * Mapeo presentacional `CaseStatus` → tono de badge. El enum es dominio (shared); el color
- * es UI y vive acá. Un caso vencido pinta `danger` sin importar el estado (lo decide la pantalla).
+ * La situación del crédito (F4/08 · D1): **Al día** o **En mora**, derivada del episodio abierto. El
+ * castigo es una condición aparte (puede haber 240 días de mora y estar castigado), así que tiene su
+ * propia etiqueta y no es un valor de la situación.
  */
-export function caseStatusTone(status: CaseStatus): BadgeTone {
-  switch (status) {
-    case CaseStatus.PAID:
-    case CaseStatus.CLOSED:
-      return 'success';
-    case CaseStatus.ACTIVE:
-    case CaseStatus.PROMISE_TO_PAY:
-      return 'info';
-    case CaseStatus.IN_NEGOTIATION:
-      return 'warning';
-    case CaseStatus.WRITTEN_OFF:
-      return 'danger';
-    case CaseStatus.PENDING:
-    default:
-      return 'neutral';
-  }
+export const SITUATION_META: Record<MoraSituation, { label: string; tone: BadgeTone }> = {
+  CURRENT: { label: 'Al día', tone: 'success' },
+  IN_ARREARS: { label: 'En mora', tone: 'danger' },
+};
+
+/** El badge del crédito: Castigado gana (es lo que el cobrador tiene que saber primero); si no, la situación. */
+export function situationBadge(situation: MoraSituation, writtenOff: boolean): { label: string; tone: BadgeTone } {
+  return writtenOff ? { label: 'Castigado', tone: 'neutral' } : SITUATION_META[situation];
 }
 
-/** Etiqueta corta en español para cada estado de caso. */
-export const CASE_STATUS_LABEL: Record<CaseStatus, string> = {
-  [CaseStatus.PENDING]: 'Pendiente',
-  [CaseStatus.ACTIVE]: 'Activo',
-  [CaseStatus.IN_NEGOTIATION]: 'En negociación',
-  [CaseStatus.PROMISE_TO_PAY]: 'Promesa de pago',
-  [CaseStatus.PAID]: 'Pagado',
-  [CaseStatus.CLOSED]: 'Cerrado',
-  [CaseStatus.WRITTEN_OFF]: 'Incobrable',
+/** Etiqueta corta en español para cada prioridad del episodio de mora. */
+export const PRIORITY_LABEL: Record<CollectionPriority, string> = {
+  LOW: 'Baja',
+  MEDIUM: 'Media',
+  HIGH: 'Alta',
+  CRITICAL: 'Crítica',
 };
 
-/** Etiqueta corta en español para cada prioridad de caso. */
-export const CASE_PRIORITY_LABEL: Record<CasePriority, string> = {
-  [CasePriority.LOW]: 'Baja',
-  [CasePriority.MEDIUM]: 'Media',
-  [CasePriority.HIGH]: 'Alta',
-  [CasePriority.CRITICAL]: 'Crítica',
-};
+/** Tono de la prioridad: crítica roja, alta ámbar, el resto neutro. Recibe `string` porque el API la manda como texto. */
+export function priorityTone(priority: string): BadgeTone {
+  return priority === 'CRITICAL' ? 'danger' : priority === 'HIGH' ? 'warning' : 'neutral';
+}
 
 /**
  * Tile de KPI del Home (label + valor grande + tono opcional). Sol→contraste: el valor va en
@@ -179,7 +166,7 @@ export function StatTile({
   );
 }
 
-/** Color sólido por tono (barra de acento de la tarjeta de caso, punto de la lista compacta). */
+/** Color sólido por tono (barra de acento de la tarjeta de crédito, punto de la lista compacta). */
 export const TONE_SOLID: Record<BadgeTone, string> = {
   neutral: COLORS.muted,
   info: COLORS.periwinkle,
@@ -189,20 +176,21 @@ export const TONE_SOLID: Record<BadgeTone, string> = {
 };
 
 /**
- * Tarjeta de caso de la Agenda (diseño Figma `81:4`): barra de acento a la izquierda (roja si
- * vencida, si no por estado), nombre del deudor en navy, línea secundaria, y a la derecha el monto
- * (alto contraste) sobre la pill de estado. `action` = botón redondo opcional (llamar/mensaje → P2).
- * Reusada en Agenda (P1), Gestiones (P2) y Rutas (P3).
+ * Tarjeta de crédito/cliente (diseño Figma `81:4`): barra de acento a la izquierda (por tono del badge),
+ * nombre del deudor en navy, línea secundaria, y a la derecha el monto (alto contraste) sobre la pill de
+ * situación. `tag` = etiqueta pequeña extra (categoría de mora, PSF). `action` = botón redondo opcional.
+ * Reusada en Cobranza (por cliente y por crédito en mora).
  */
-export function CaseCard({
+export function CreditCard({
   name,
   caption,
   subtitle,
   amount,
   amountDanger,
-  status,
-  overdue,
+  situation,
+  writtenOff,
   badge,
+  tag,
   action,
   onPress,
 }: {
@@ -213,19 +201,17 @@ export function CaseCard({
   amount?: string;
   /** Monto en rojo: deuda con mora (§5.3, "cifra dominante en rojo si hay mora"). */
   amountDanger?: boolean;
-  /** Estado de caso (agenda). Opcional si se pasa `badge` (cartera usa PortfolioStatus). */
-  status?: CaseStatus;
-  overdue?: boolean;
-  /** Badge explícito — override del derivado de `status` (cartera §5.3 pasa el de PortfolioStatus). */
+  /** Situación del crédito. Opcional si se pasa `badge` (la cartera por cliente usa PortfolioStatus). */
+  situation?: MoraSituation;
+  writtenOff?: boolean;
+  /** Badge explícito: gana sobre el derivado de `situation`. */
   badge?: { label: string; tone: BadgeTone };
+  /** Etiqueta secundaria junto al badge (categoría de mora «B», fuente «PSF»). */
+  tag?: string;
   action?: ReactNode;
   onPress?: () => void;
 }) {
-  const b: { label: string; tone: BadgeTone } =
-    badge ??
-    (overdue
-      ? { label: 'Vencida', tone: 'danger' }
-      : { label: CASE_STATUS_LABEL[status ?? CaseStatus.PENDING], tone: caseStatusTone(status ?? CaseStatus.PENDING) });
+  const b: { label: string; tone: BadgeTone } = badge ?? situationBadge(situation ?? 'CURRENT', !!writtenOff);
   return (
     <View style={styles.caseCard}>
       <View style={[styles.caseAccent, { backgroundColor: TONE_SOLID[b.tone] }]} />
@@ -255,7 +241,10 @@ export function CaseCard({
               {amount}
             </Text>
           )}
-          <StatusBadge label={b.label} tone={b.tone} />
+          <View style={{ flexDirection: 'row', gap: SPACING.xs }}>
+            {tag ? <StatusBadge label={tag} tone="neutral" /> : null}
+            <StatusBadge label={b.label} tone={b.tone} />
+          </View>
         </View>
       </Pressable>
       {action}
@@ -312,7 +301,7 @@ export function ProgressBar({ percent, tone = 'success' }: { percent: number; to
  * cuánto debe y qué puedo hacer. Vive acá y no dentro de la pantalla porque **S5 la reusa** debajo
  * del sheet de registrar resultado.
  *
- * Los recuadros de mora se ocultan solos cuando la parada no tiene crédito: una parada sin caso
+ * Los recuadros de mora se ocultan solos cuando la parada no tiene crédito: una parada sin crédito
  * sigue siendo una visita válida, y un `Bs 0.00` inventado es peor que no mostrar nada.
  */
 export function StopCard({
@@ -519,8 +508,10 @@ export function SegmentTabs({
   value: string;
   onChange: (key: string) => void;
 }) {
-  return (
-    <View style={styles.segments}>
+  // Con más de 5 pestañas (Cobranza suma «PSF») no caben parejas en el ancho del teléfono: se desplazan.
+  const scroll = items.length > 5;
+  const row = (
+    <View style={[styles.segments, scroll && { minWidth: items.length * 72 }]}>
       {items.map((it) => {
         const active = it.key === value;
         const valueColor = active ? COLORS.white : it.tone === 'danger' ? COLORS.danger : COLORS.navy;
@@ -540,6 +531,13 @@ export function SegmentTabs({
         );
       })}
     </View>
+  );
+  return scroll ? (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1 }}>
+      {row}
+    </ScrollView>
+  ) : (
+    row
   );
 }
 
@@ -777,7 +775,7 @@ const styles = StyleSheet.create({
   // Sobre navy: el recuadro se hunde en vez de resaltar, y la etiqueta sube de contraste.
   tileDark: { backgroundColor: COLORS.slate, borderColor: COLORS.slate },
   tileLabelDark: { color: COLORS.lightBg },
-  // Tarjeta de caso (Figma 81:4): barra de acento + cuerpo pulsable + acción opcional.
+  // Tarjeta de crédito (Figma 81:4): barra de acento + cuerpo pulsable + acción opcional.
   caseCard: {
     flexDirection: 'row',
     alignItems: 'stretch',

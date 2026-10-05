@@ -70,7 +70,7 @@ describe('writeProvisionalClient', () => {
 describe('writeProvisionalCredit', () => {
   const contexto = {
     client: { id: 'cli-1', displayName: 'Ana Rojas', nationalId: null },
-    credits: [{ creditId: 'viejo', caseId: 'c0', principalAmount: 500, outstandingBalance: 300, overdueAmount: 0, currency: 'USD', daysPastDue: 0 }],
+    credits: [{ creditId: 'viejo', principalAmount: 500, outstandingBalance: 300, overdueAmount: 0, currency: 'USD', daysPastDue: 0 }],
     contacts: [],
     locations: [],
   };
@@ -83,6 +83,15 @@ describe('writeProvisionalCredit', () => {
     expect(ctx.credits).toHaveLength(2);
     expect(ctx.credits[1]).toMatchObject({ creditId: 'cre-1', principalAmount: 1000, outstandingBalance: 1000, currency: 'USD', pending: true });
     expect(ctx.credits[0]).toMatchObject({ creditId: 'viejo' }); // lo que ya estaba no se toca
+  });
+
+  // La ficha esconde «Registrar pago/gestión» mientras `pending` esté puesto: sin caso ni id de server que usar.
+  it('el préstamo provisional no inventa un caseId: sólo creditId y la marca pending', async () => {
+    mockRows.set(key('client.context', 'cli-1'), contexto);
+    await writeProvisionalCredit(credito);
+    const ctx = get('client.context', 'cli-1') as { credits: Row[] };
+    expect(ctx.credits[1]).not.toHaveProperty('caseId');
+    expect(ctx.credits[1]).toMatchObject({ creditId: 'cre-1', pending: true });
   });
 
   it('no duplica si el mismo préstamo ya está (se reintentó el encolado)', async () => {
@@ -145,7 +154,7 @@ describe('dropProvisionalRow · el alta se descartó', () => {
   it('saca el préstamo provisional del contexto y deja los reales', async () => {
     await writeProvisionalClient({ id: 'cli-1', clientType: 'PERSON', firstName: 'Ana' });
     const ctx = get('client.context', 'cli-1') as { credits: unknown[] };
-    mockRows.set(key('client.context', 'cli-1'), { ...ctx, credits: [{ creditId: 'real', caseId: 'c' }] });
+    mockRows.set(key('client.context', 'cli-1'), { ...ctx, credits: [{ creditId: 'real' }] });
     await writeProvisionalCredit({ id: 'cre-1', clientId: 'cli-1', principalAmount: 100 } as never);
     await dropProvisionalRow('credit', 'cre-1', 'cli-1');
     expect((get('client.context', 'cli-1') as { credits: Row[] }).credits.map((c) => c.creditId)).toEqual(['real']);

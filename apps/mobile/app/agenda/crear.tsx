@@ -50,6 +50,7 @@ import {
   addClientLocation,
   clientContext,
   createItem,
+  creditSituationLabel,
   getItem,
   updateItem,
   type AgendaClientContext,
@@ -225,7 +226,7 @@ export default function CrearGestionScreen() {
     // Con un solo crédito no hay nada que elegir.
     if (res.data.credits.length === 1) {
       const only = res.data.credits[0]!;
-      dispatch({ t: 'credit', caseId: only.caseId, creditId: only.creditId });
+      dispatch({ t: 'credit', creditId: only.creditId });
     }
   }, []);
 
@@ -501,7 +502,7 @@ export default function CrearGestionScreen() {
             <SectionLabel>Crédito</SectionLabel>
             <SelectRow
               icon="💳"
-              value={credit ? `${credit.code ?? 'Crédito'} · ${money(credit.outstandingBalance, credit.currency)}` : undefined}
+              value={credit ? `${credit.code ?? 'Crédito'} · ${money(credit.outstandingBalance, credit.currency)} · ${creditSituationLabel(credit.daysPastDue)}` : undefined}
               placeholder="Elegí el crédito"
               onPress={() => setSheet('credit')}
             />
@@ -689,11 +690,11 @@ export default function CrearGestionScreen() {
         options={(ctx?.credits ?? []).map((c) => ({
           key: c.creditId,
           label: c.code ?? 'Crédito',
-          hint: `${money(c.outstandingBalance, c.currency)} · ${c.daysPastDue} días de mora`,
+          hint: `${money(c.outstandingBalance, c.currency)} · ${creditSituationLabel(c.daysPastDue)}`,
         }))}
         onPick={(key) => {
           const c = ctx!.credits.find((x) => x.creditId === key)!;
-          dispatch({ t: 'credit', caseId: c.caseId, creditId: c.creditId });
+          dispatch({ t: 'credit', creditId: c.creditId });
         }}
       />
       <PickerSheet

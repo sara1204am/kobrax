@@ -39,7 +39,7 @@ function normalizar(s: string): string {
  * consulta distinta y nunca habría un resultado guardado para lo que el cobrador escribe ahora—
  * sino contra la CARTERA ya bajada, que es la lista completa de su gente.
  *
- * `ponytail:` sale de los casos cacheados y no de un caché de clientes propio, porque la cartera
+ * `ponytail:` sale de los créditos de la cartera cacheada y no de un caché de clientes propio, porque la cartera
  * ya se hidrata entera y trae `clientName`. Bajar además todas las fichas sería pagar dos veces
  * por el mismo dato. El documento no viaja en esa lista, así que sin señal se busca por nombre.
  */
@@ -47,10 +47,10 @@ async function searchLocal(q: string): Promise<QueryResult<ClientHit[]>> {
   const term = normalizar(q.trim());
   if (!term) return { status: 'offline' };
 
-  const casos = await db.getMany<{ clientId?: string; clientName?: string }>('case');
+  const creditos = await db.getMany<{ clientId?: string; clientName?: string }>('portfolio');
   const vistos = new Set<string>();
   const hits: ClientHit[] = [];
-  for (const c of casos) {
+  for (const c of creditos) {
     if (!c.clientId || !c.clientName || vistos.has(c.clientId)) continue;
     if (!normalizar(c.clientName).includes(term)) continue;
     vistos.add(c.clientId);
@@ -58,7 +58,7 @@ async function searchLocal(q: string): Promise<QueryResult<ClientHit[]>> {
     // `businessName`, así que se muestra tal cual lo devolvió el server.
     hits.push({ id: c.clientId, businessName: c.clientName, nationalId: null });
   }
-  // Los clientes dados de alta sin señal todavía no tienen caso: la cartera no los ve. Se buscan en sus filas
+  // Los clientes dados de alta sin señal todavía no tienen créditos en la cartera bajada: la cartera no los ve. Se buscan en sus filas
   // provisionales (`sync/optimistic`), para que el cobrador encuentre al deudor que acaba de cargar.
   const nuevos = await db.getMany<ClientHit & { pending?: boolean }>('client');
   for (const c of nuevos) {
@@ -68,7 +68,7 @@ async function searchLocal(q: string): Promise<QueryResult<ClientHit[]>> {
     hits.push({ id: c.id, firstName: c.firstName, lastName: c.lastName, businessName: c.businessName, nationalId: null });
   }
   if (hits.length === 0) return { status: 'offline' };
-  return { status: 'ok', data: hits.slice(0, 20), total: hits.length, localAt: await db.fetchedAt('case') };
+  return { status: 'ok', data: hits.slice(0, 20), total: hits.length, localAt: await db.fetchedAt('portfolio') };
 }
 
 /**

@@ -1,7 +1,7 @@
 /**
  * La hoja «Registrar gestión» (§5.4). Vivía dentro de `cliente/[id].tsx`; se extrajo para que la
- * ficha del deudor y la ficha de mora usen la misma. Lo único que se agregó es `outcomes`: cada
- * pantalla dice qué resultados ofrece (la mora usa los del contrato compartido).
+ * ficha del deudor y la ficha de mora usen la misma, por crédito y con los resultados del contrato compartido
+ * (`MORA_OUTCOMES`: cada par tipo/resultado lo acepta el validador del servidor).
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -13,9 +13,9 @@ import { MONTHS } from '@/agenda-form';
 import { promiseReady } from '@/ficha';
 import type { PaymentMethod } from '@/payments.service';
 import { METHODS } from '@/pay-sheet';
+import { MORA_OUTCOMES } from '@/mora-actions';
 
-// Catálogo de resultado de gestión (§5.4). type = CaseActivityType, result = VisitOutcome.
-/** Un resultado que ofrece la hoja. `type` es el tipo de gestión; `result`, cómo salió. */
+/** Un resultado que ofrece la hoja. `type` es el tipo de gestión; `result`, cómo salió (contrato de shared). */
 export interface Outcome {
   key: string;
   label: string;
@@ -23,14 +23,6 @@ export interface Outcome {
   result: string;
   promise?: boolean;
 }
-
-/** Los de la ficha del deudor (los de siempre). */
-export const CLIENTE_OUTCOMES: Outcome[] = [
-  { key: 'no_contact', label: 'No contesta', type: 'CALL', result: 'NO_CONTACT' },
-  { key: 'visit', label: 'Visita', type: 'VISIT', result: 'CONTACTED' },
-  { key: 'not_found', label: 'Inubicable', type: 'VISIT', result: 'NOT_FOUND' },
-  { key: 'promise', label: 'Promesa de pago', type: 'NOTE', result: 'PROMISE_TO_PAY', promise: true },
-];
 
 export function todayIso(): string {
   const n = new Date();
@@ -44,10 +36,10 @@ export function prettyDate(iso?: string): string {
 
 /** Hoja Registrar gestión (§5.4). */
 export function GestionSheet({
-  visible, onClose, currency, onSubmit, outcomes = CLIENTE_OUTCOMES,
+  visible, onClose, currency, onSubmit, outcomes = MORA_OUTCOMES,
 }: {
   visible: boolean; onClose: () => void; currency: string;
-  /** Qué resultados se ofrecen; el primero es el que arranca elegido. */
+  /** Qué resultados se ofrecen; el primero es el que arranca elegido. Por defecto los del contrato de gestiones (`MORA_OUTCOMES`). */
   outcomes?: Outcome[];
   onSubmit: (payload: { type: 'NOTE' | 'CALL' | 'VISIT' | 'MESSAGE'; result: string; notes?: string; promise?: { amount: number; promiseDate: string; paymentMethodCode: string } }) => Promise<string | null>;
 }) {

@@ -108,7 +108,6 @@ jest.mock('../db', () => ({
 }));
 jest.mock('../session', () => ({ getUserId: jest.fn(async () => 'u1') }));
 jest.mock('../routes.service', () => ({ updateRouteStatus: jest.fn(async () => ({ status: 'ok', data: {} })) }));
-jest.mock('../cases.service', () => ({ addActivity: jest.fn(async () => ({ status: 'ok', data: {} })) }));
 jest.mock('../clients.service', () => ({
   updateClient: jest.fn(async (id: string, patch: Record<string, unknown>) => {
     mockCalls.push(`updateClient:${id}:${JSON.stringify(patch)}`);
@@ -154,7 +153,7 @@ jest.mock('../mora.service', () => ({
 
 import { ACTION_LABEL, actionLabel, discardPending, enqueue, parseAction, QUEUE_VERSION, send, stabilize, withStableIds } from './queue';
 
-const visitInput = { caseId: 'c1', lat: -17.7, lng: -63.1, outcome: 'PAID' } as never;
+const visitInput = { creditId: 'cr1', lat: -17.7, lng: -63.1, outcome: 'PAID' } as never;
 
 beforeEach(() => {
   mockCalls.length = 0;
@@ -184,8 +183,8 @@ describe('send · visita compuesta', () => {
       kind: 'visit',
       input: visitInput,
       photo: { uri: 'file:///f.jpg' },
-      payment: { creditId: 'cr1', caseId: 'c1', amount: 100, method: 'CASH' },
-      promise: { caseId: 'c1', creditId: 'cr1' } as never,
+      payment: { creditId: 'cr1', amount: 100, method: 'CASH' },
+      promise: { creditId: 'cr1' } as never,
     });
     expect(r.status).toBe('ok');
     expect(mockCalls).toEqual(['createVisit', 'uploadImage', 'addVisitEvidence', 'createPayment', 'createItem']);
@@ -196,7 +195,7 @@ describe('send · visita compuesta', () => {
     await send({
       kind: 'visit',
       input: visitInput,
-      payment: { creditId: 'cr1', caseId: 'c1', amount: 100, method: 'CASH' },
+      payment: { creditId: 'cr1', amount: 100, method: 'CASH' },
     });
     expect(mockPayment.idem).toBe('visit-v1');
   });
@@ -206,7 +205,7 @@ describe('send · visita compuesta', () => {
       kind: 'visit',
       input: visitInput,
       photo: { uri: 'file:///f.jpg' },
-      payment: { creditId: 'cr1', caseId: 'c1', amount: 100, method: 'CASH' },
+      payment: { creditId: 'cr1', amount: 100, method: 'CASH' },
     });
     expect(mockPayment.input).toMatchObject({ receiptUrl: 'http://x/f.jpg', receiptHash: 'h1' });
   });
@@ -217,7 +216,7 @@ describe('send · visita compuesta', () => {
     const r = await send({
       kind: 'visit',
       input: visitInput,
-      payment: { creditId: 'cr1', caseId: 'c1', amount: 100, method: 'CASH' },
+      payment: { creditId: 'cr1', amount: 100, method: 'CASH' },
     });
     expect(r.status).toBe('error');
     expect(mockCalls).toEqual(['createVisit']);
@@ -318,7 +317,7 @@ describe('send · mora', () => {
   });
 
   it('las dos acciones se llaman en la hoja de pendientes', () => {
-    expect(ACTION_LABEL['mora.activity']).toBe('Gestión de mora registrada');
+    expect(ACTION_LABEL['mora.activity']).toBe('Gestión registrada');
     expect(ACTION_LABEL['credit.note']).toBe('Nota del crédito');
   });
 });
@@ -340,8 +339,8 @@ describe('isPermanentRejection', () => {
  * se re-encola como su propio ítem, con sus mismas llaves/ids, y queda a la vista en pendientes.
  */
 describe('send · visita compuesta: lo que falla después se re-encola', () => {
-  const pago = { creditId: 'cr1', caseId: 'c1', amount: 100, method: 'CASH' } as const;
-  const promesa = { id: 'prom-1', caseId: 'c1', creditId: 'cr1' } as never;
+  const pago = { creditId: 'cr1', amount: 100, method: 'CASH' } as const;
+  const promesa = { id: 'prom-1', creditId: 'cr1' } as never;
 
   it('si el cobro falla, se re-encola con su MISMA clave de idempotencia y la acción termina ok', async () => {
     mockApi.payment = { status: 'offline' };
@@ -362,7 +361,7 @@ describe('send · visita compuesta: lo que falla después se re-encola', () => {
 
   it('si la promesa no traía id, se le genera uno antes de enviarla y el mismo viaja a la cola', async () => {
     mockApi.item = { status: 'offline' };
-    await send({ kind: 'visit', input: visitInput, promise: { caseId: 'c1', creditId: 'cr1' } as never });
+    await send({ kind: 'visit', input: visitInput, promise: { creditId: 'cr1' } as never });
     const enviado = mockDetail.find((d) => d.startsWith('createItem:id='))!;
     const id = enviado.split(':')[1]!.replace('id=', '');
     expect(id).toMatch(/^[0-9a-f-]{36}$/);
@@ -422,7 +421,7 @@ describe('send · visita compuesta: lo que falla después se re-encola', () => {
 });
 
 describe('send · pagos y fotos', () => {
-  const input = { creditId: 'cr1', caseId: 'c1', amount: 50, method: 'CASH' } as never;
+  const input = { creditId: 'cr1', amount: 50, method: 'CASH' } as never;
 
   it('el cobro con un comprobante que ya no existe sube igual, sin comprobante, y deja un aviso a la vista', async () => {
     mockApi.photoExists = false;
@@ -485,8 +484,22 @@ describe('parseAction · cola robusta', () => {
   });
 
   it('sin v (anterior al versionado) se lee como v0 y SE ACEPTA', () => {
+    const a = parseAction({ kind: 'mora.activity', payload: JSON.stringify({ kind: 'mora.activity', creditId: 'cr1', input: { type: 'NOTE' } }) });
+    expect(a.kind).toBe('mora.activity');
+  });
+
+  // F4/08: `case.activity` ya no existe (dev-only: el cambio de esquema borra la cola). Si una fila así aparece igual
+  // —una base restaurada a mano— no rompe el drenaje: cae en «no soportado», visible y descartable.
+  it('un case.activity viejo vuelve como no soportado (no tira el drenaje)', async () => {
     const a = parseAction({ kind: 'case.activity', payload: JSON.stringify({ kind: 'case.activity', caseId: 'c', input: { type: 'NOTE' } }) });
-    expect(a.kind).toBe('case.activity');
+    expect(a).toMatchObject({ kind: 'unsupported', rawKind: 'case.activity' });
+    expect((await send(a)).status).toBe('error');
+    expect(actionLabel('case.activity')).toBe('Acción pendiente (no soportada)');
+  });
+
+  it('la gestión es una sola etiqueta: «Gestión registrada»', () => {
+    expect(ACTION_LABEL['mora.activity']).toBe('Gestión registrada');
+    expect(ACTION_LABEL).not.toHaveProperty('case.activity');
   });
 
   it('usa el kind de la fila si al payload le falta', () => {
@@ -528,13 +541,13 @@ describe('discardPending', () => {
 
 describe('ítems viejos (v0, sin ids): id estable al primer envío', () => {
   it('genera el id y lo PERSISTE en la fila antes de enviar', async () => {
-    const vieja = { kind: 'case.activity', caseId: 'c1', input: { type: 'NOTE' } } as const;
+    const vieja = { kind: 'agenda.create', input: { creditId: 'cr1' } } as never;
     const nueva = await stabilize(42, vieja);
     const id = (nueva as { input: { id?: string } }).input.id;
     expect(id).toMatch(/^[0-9a-f-]{36}$/);
     expect(mockDb.rewritten).toHaveLength(1);
     expect(mockDb.rewritten[0]!.id).toBe(42);
-    expect(mockDb.rewritten[0]!.payload).toMatchObject({ kind: 'case.activity', v: QUEUE_VERSION, input: { id } });
+    expect(mockDb.rewritten[0]!.payload).toMatchObject({ kind: 'agenda.create', v: QUEUE_VERSION, input: { id } });
   });
 
   it('si ya tenía id no toca la base ni cambia el id', async () => {
@@ -544,14 +557,14 @@ describe('ítems viejos (v0, sin ids): id estable al primer envío', () => {
   });
 
   it('cubre la visita (y su promesa) y el agendado; un reintento reusa el id guardado', () => {
-    const v = withStableIds({ kind: 'visit', input: visitInput, promise: { caseId: 'c', creditId: 'k' } as never });
+    const v = withStableIds({ kind: 'visit', input: visitInput, promise: { creditId: 'k' } as never });
     expect(v).toMatchObject({ input: { id: expect.any(String) }, promise: { id: expect.any(String) } });
     expect(withStableIds(v)).toBe(v); // estable: ya no cambia
     expect(withStableIds({ kind: 'agenda.create', input: {} as never })).toMatchObject({ input: { id: expect.any(String) } });
   });
 
   it('el envío de un ítem viejo funciona (con el id recién generado)', async () => {
-    const estable = await stabilize(3, { kind: 'agenda.create', input: { caseId: 'c1', creditId: 'k1' } as never });
+    const estable = await stabilize(3, { kind: 'agenda.create', input: { creditId: 'k1' } as never });
     expect((await send(estable)).status).toBe('ok');
     expect(mockDetail.some((d) => /^createItem:id=[0-9a-f-]{36}/.test(d))).toBe(true);
   });

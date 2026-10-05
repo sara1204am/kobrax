@@ -1,20 +1,16 @@
-import { CasePriority, CaseStatus, MORA_PROMISE_STATUSES, type MoraCreditListItem } from '@kobrax/shared';
+import { MORA_PROMISE_STATUSES, type CollectionPriority, type MoraCreditListItem } from '@kobrax/shared';
 import { activityLine, daysSinceAction, filterMora, matchesMoraChip, moraCardProps, NO_ACTION_DAYS, PROMISE_STATUS_META, sortMora, staleLine, toMoraRows, type MoraRow } from './mora';
 
 const ASOF = new Date('2026-10-02T12:00:00Z');
 
 function mk(p: Partial<MoraCreditListItem> & { creditId: string }): MoraRow {
-  return toMoraRows([{ clientId: 'cl', currency: 'BOB', daysPastDue: 10, arrearsSource: 'SCHEDULE', hasActivePromise: false, ...p } as MoraCreditListItem])[0];
+  return toMoraRows([
+    { clientId: 'cl', currency: 'BOB', daysPastDue: 10, arrearsSource: 'SCHEDULE', hasActivePromise: false, situation: 'IN_ARREARS', writtenOff: false, priorityPinned: false, ...p } as MoraCreditListItem,
+  ])[0];
 }
 
-const caso = (priority: CasePriority, lastActionAt?: string) => ({
-  id: 'k',
-  status: CaseStatus.ACTIVE,
-  priority,
-  priorityPinned: false,
-  isOverdue: false,
-  lastActionAt,
-});
+/** Los campos del episodio abierto que la fila trae (prioridad y última gestión). */
+const caso = (priority: CollectionPriority, lastActionAt?: string) => ({ priority, lastActionAt });
 
 describe('toMoraRows', () => {
   it('el crédito es la identidad de la fila', () => {
@@ -25,19 +21,19 @@ describe('toMoraRows', () => {
 describe('sortMora · prioridad → días → saldo', () => {
   it('crítica antes que alta aunque tenga menos días', () => {
     const rows = [
-      mk({ creditId: 'alta', daysPastDue: 90, case: caso(CasePriority.HIGH) }),
-      mk({ creditId: 'critica', daysPastDue: 5, case: caso(CasePriority.CRITICAL) }),
+      mk({ creditId: 'alta', daysPastDue: 90, ...caso('HIGH') }),
+      mk({ creditId: 'critica', daysPastDue: 5, ...caso('CRITICAL') }),
     ];
     expect(sortMora(rows).map((r) => r.creditId)).toEqual(['critica', 'alta']);
   });
 
-  it('sin caso va después de cualquier prioridad, y entre iguales manda la mora', () => {
+  it('sin prioridad va después de cualquier prioridad, y entre iguales manda la mora', () => {
     const rows = [
-      mk({ creditId: 'sinCaso', daysPastDue: 400 }),
-      mk({ creditId: 'baja', daysPastDue: 3, case: caso(CasePriority.LOW) }),
-      mk({ creditId: 'sinCaso2', daysPastDue: 500 }),
+      mk({ creditId: 'sinPrio', daysPastDue: 400 }),
+      mk({ creditId: 'baja', daysPastDue: 3, ...caso('LOW') }),
+      mk({ creditId: 'sinPrio2', daysPastDue: 500 }),
     ];
-    expect(sortMora(rows).map((r) => r.creditId)).toEqual(['baja', 'sinCaso2', 'sinCaso']);
+    expect(sortMora(rows).map((r) => r.creditId)).toEqual(['baja', 'sinPrio2', 'sinPrio']);
   });
 
   it('con todo igual, el de más saldo primero', () => {
@@ -55,8 +51,8 @@ describe('sortMora · prioridad → días → saldo', () => {
 describe('chips', () => {
   const hace = (d: number) => new Date(ASOF.getTime() - d * 86_400_000).toISOString();
 
-  it('«Críticos» es la prioridad del caso; sin caso no lo es', () => {
-    expect(matchesMoraChip(mk({ creditId: 'a', case: caso(CasePriority.CRITICAL) }), 'critical', ASOF)).toBe(true);
+  it('«Críticos» es la prioridad del episodio; sin prioridad no lo es', () => {
+    expect(matchesMoraChip(mk({ creditId: 'a', ...caso('CRITICAL') }), 'critical', ASOF)).toBe(true);
     expect(matchesMoraChip(mk({ creditId: 'b' }), 'critical', ASOF)).toBe(false);
   });
 
@@ -67,13 +63,13 @@ describe('chips', () => {
 
   it(`«Sin gestión» incluye al que nunca se gestionó y al que lleva ${NO_ACTION_DAYS}+ días`, () => {
     expect(matchesMoraChip(mk({ creditId: 'nunca' }), 'noAction', ASOF)).toBe(true);
-    expect(matchesMoraChip(mk({ creditId: 'viejo', case: caso(CasePriority.LOW, hace(NO_ACTION_DAYS)) }), 'noAction', ASOF)).toBe(true);
-    expect(matchesMoraChip(mk({ creditId: 'reciente', case: caso(CasePriority.LOW, hace(NO_ACTION_DAYS - 1)) }), 'noAction', ASOF)).toBe(false);
+    expect(matchesMoraChip(mk({ creditId: 'viejo', ...caso('LOW', hace(NO_ACTION_DAYS)) }), 'noAction', ASOF)).toBe(true);
+    expect(matchesMoraChip(mk({ creditId: 'reciente', ...caso('LOW', hace(NO_ACTION_DAYS - 1)) }), 'noAction', ASOF)).toBe(false);
   });
 
   it('daysSinceAction: días enteros y nunca negativos', () => {
-    expect(daysSinceAction(mk({ creditId: 'a', case: caso(CasePriority.LOW, hace(3)) }), ASOF)).toBe(3);
-    expect(daysSinceAction(mk({ creditId: 'b', case: caso(CasePriority.LOW, '2026-10-05T00:00:00Z') }), ASOF)).toBe(0);
+    expect(daysSinceAction(mk({ creditId: 'a', ...caso('LOW', hace(3)) }), ASOF)).toBe(3);
+    expect(daysSinceAction(mk({ creditId: 'b', ...caso('LOW', '2026-10-05T00:00:00Z') }), ASOF)).toBe(0);
     expect(daysSinceAction(mk({ creditId: 'c' }), ASOF)).toBeUndefined();
   });
 });
@@ -98,12 +94,13 @@ describe('filterMora', () => {
 });
 
 describe('moraCardProps', () => {
-  it('crédito sin caso: lo dice, no inventa prioridad, y muestra lo vencido antes que el saldo', () => {
+  it('crédito sin prioridad: dice «En mora», no inventa una, y muestra lo vencido antes que el saldo', () => {
     const p = moraCardProps(mk({ creditId: 'a', clientName: 'Ana', code: 'CR-9', daysPastDue: 1, balance: 5000, overdueAmount: 300 }), ASOF);
     expect(p.name).toBe('Ana');
     expect(p.caption).toBe('Crédito CR-9 · 1 día de mora');
-    expect(p.badge).toEqual({ label: 'Sin caso', tone: 'neutral' });
-    expect(p.subtitle).toBe('Sin gestión todavía');
+    expect(p.badge).toEqual({ label: 'En mora', tone: 'danger' });
+    expect(p.subtitle).toBe('');
+    expect(p.tag).toBeUndefined();
     expect(p.amount).toContain('300');
   });
 
@@ -112,15 +109,28 @@ describe('moraCardProps', () => {
     expect(moraCardProps(mk({ creditId: 'b' }), ASOF).amount).toBeUndefined();
   });
 
-  it('con promesa vigente la subtítula manda sobre la última gestión', () => {
-    const p = moraCardProps(mk({ creditId: 'a', hasActivePromise: true, case: caso(CasePriority.CRITICAL, '2026-10-01T12:00:00Z') }), ASOF);
-    expect(p.subtitle).toBe('Promesa de pago vigente');
+  it('la última gestión y la promesa vigente son datos sueltos, no estados', () => {
+    const p = moraCardProps(mk({ creditId: 'a', hasActivePromise: true, ...caso('CRITICAL', '2026-10-01T12:00:00Z') }), ASOF);
+    expect(p.subtitle).toBe('Última gestión: hace 1 día · Promesa vigente');
     expect(p.badge).toEqual({ label: 'Crítica', tone: 'danger' });
   });
 
   it('última gestión en días', () => {
-    expect(moraCardProps(mk({ creditId: 'a', case: caso(CasePriority.LOW, '2026-09-29T12:00:00Z') }), ASOF).subtitle).toBe('Última gestión hace 3 días');
-    expect(moraCardProps(mk({ creditId: 'b', case: caso(CasePriority.LOW, '2026-10-02T08:00:00Z') }), ASOF).subtitle).toBe('Gestionado hoy');
+    expect(moraCardProps(mk({ creditId: 'a', ...caso('LOW', '2026-09-29T12:00:00Z') }), ASOF).subtitle).toBe('Última gestión: hace 3 días');
+    expect(moraCardProps(mk({ creditId: 'b', ...caso('LOW', '2026-10-02T08:00:00Z') }), ASOF).subtitle).toBe('Última gestión: hoy');
+  });
+});
+
+describe('moraCardProps · castigo y categoría', () => {
+  it('castigado gana sobre la prioridad y es una condición aparte de la mora', () => {
+    const p = moraCardProps(mk({ creditId: 'a', daysPastDue: 240, writtenOff: true, ...caso('CRITICAL') }), ASOF);
+    expect(p.badge).toEqual({ label: 'Castigado', tone: 'neutral' });
+    expect(p.caption).toContain('240 días de mora');
+  });
+
+  it('la categoría de mora sale como etiqueta aparte', () => {
+    const p = moraCardProps(mk({ creditId: 'a', category: { code: 'B', name: 'Categoría B' } }), ASOF);
+    expect(p.tag).toBe('Cat. B');
   });
 });
 

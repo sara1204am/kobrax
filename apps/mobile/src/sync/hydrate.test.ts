@@ -12,17 +12,20 @@ const mockRes: Record<string, unknown> = {};
 
 const ok = (data: unknown[] = []) => ({ status: 'ok', data, total: data.length });
 
-jest.mock('../cases.service', () => ({
-  listCases: jest.fn(async (p: unknown) => {
-    mockLlamadas.push({ fn: 'listCases', params: p });
-    return mockRes.cases ?? ok([{ id: 'c1', clientId: 'cl1' }]);
-  }),
-}));
 jest.mock('../mora.service', () => ({
   MORA_LIMIT: 100,
+  TENANT_CURRENCY_PROBE_LIMIT: 1,
+  listPortfolio: jest.fn(async () => {
+    mockLlamadas.push({ fn: 'listPortfolio' });
+    return mockRes.portfolio ?? ok([{ id: 'cr1', creditId: 'cr1', clientId: 'cl1' }]);
+  }),
   listMora: jest.fn(async (p: unknown) => {
     mockLlamadas.push({ fn: 'listMora', params: p });
     return mockRes.mora ?? ok([]);
+  }),
+  getMora: jest.fn(async (id: string) => {
+    mockLlamadas.push({ fn: 'getMora', params: id });
+    return ok([]);
   }),
 }));
 jest.mock('../routes.service', () => ({
@@ -44,7 +47,7 @@ jest.mock('../agenda.service', () => ({
     mockLlamadas.push({ fn: 'listOverdue' });
     return ok([]);
   }),
-  clientContext: jest.fn(async () => ok([])),
+  clientContext: jest.fn(async () => ({ status: 'ok', data: { credits: [{ creditId: 'cr1' }, { creditId: 'cr2' }] }, total: 1 })),
 }));
 jest.mock('../catalogs.service', () => ({ listCatalog: jest.fn(async () => ok([{ id: 'k' }])) }));
 jest.mock('../notifications.service', () => ({ listNotifications: jest.fn(async () => ok([])) }));
@@ -55,7 +58,7 @@ jest.mock('../payments.service', () => ({
   }),
 }));
 jest.mock('../clients.service', () => ({ getClient: jest.fn(async () => ({ status: 'ok', data: { id: 'cl1' } })) }));
-jest.mock('../db', () => ({ getMany: jest.fn(async () => [{ clientId: 'cl1' }]), putAll: jest.fn(), fetchedAt: jest.fn(async () => null) }));
+jest.mock('../db', () => ({ getMany: jest.fn(async (kind: string) => (kind === 'portfolio' ? [{ clientId: 'cl1' }] : [])), putAll: jest.fn(), fetchedAt: jest.fn(async () => null) }));
 
 import { hydrate } from './hydrate';
 
@@ -63,7 +66,7 @@ const llamada = (fn: string) => mockLlamadas.find((l) => l.fn === fn);
 
 beforeEach(() => {
   mockLlamadas.length = 0;
-  delete mockRes.cases;
+  delete mockRes.portfolio;
   delete mockRes.mora;
   delete mockRes.routes;
   delete mockRes.agenda;
@@ -72,11 +75,25 @@ beforeEach(() => {
 describe('hydrate · usa las consultas de las pantallas', () => {
   // Si estos parámetros dejan de coincidir con los de la pantalla, el respaldo se guarda en una
   // casilla que nadie lee y la pantalla sale vacía sin señal, aunque la bajada haya salido bien.
-  // 🔴 `open: true` incluido: el trabajo diario de la mora cierra el caso del que pagó, y sin ese
-  // filtro la Cobranza y el armador de rutas lo seguirían mostrando para ir a cobrarle.
-  it('la cartera se baja con los mismos parámetros que la Cobranza', async () => {
+  // La cartera es TODOS los créditos del cobrador (al día incluidos): `listPortfolio` no recibe filtros, así que la
+  // casilla de caché es una sola para Cobranza, Rutas y la hidratación.
+  it('la cartera se baja con listPortfolio, la misma llamada que la Cobranza', async () => {
+    const r = await hydrate('u1');
+    expect(llamada('listPortfolio')).toBeDefined();
+    expect(r.ok).toContain('cartera');
+  });
+
+  // El Inicio lee la moneda con `tenantCurrency` → `listMora({ limit: 1 })`: si el parámetro cambia, la casilla es otra.
+  it('baja «créditos en mora» con la misma consulta que usa el Inicio', async () => {
+    const r = await hydrate('u1');
+    expect(mockLlamadas.filter((l) => l.fn === 'listMora').map((l) => l.params)).toContainEqual({ limit: 1 });
+    expect(r.ok).toContain('créditos en mora');
+    expect(r.ok).not.toContain('casos abiertos');
+  });
+
+  it('baja la ficha de cada crédito del cliente (la que abre la pantalla por creditId)', async () => {
     await hydrate('u1');
-    expect(llamada('listCases')!.params).toEqual({ view: 'portfolio', open: true, limit: 100 });
+    expect(mockLlamadas.filter((l) => l.fn === 'getMora').map((l) => l.params)).toEqual(['cr1', 'cr2']);
   });
 
   // La mora de la Cobranza se pide con `limit: 100`; con otro parámetro el respaldo queda en otra casilla.
@@ -128,7 +145,7 @@ describe('hydrate · tolerancia a fallos', () => {
   });
 
   it('sin red lo dice, para que la pantalla no culpe al servidor', async () => {
-    mockRes.cases = { status: 'offline' };
+    mockRes.portfolio = { status: 'offline' };
     const r = await hydrate('u1');
     expect(r.offline).toBe(true);
   });

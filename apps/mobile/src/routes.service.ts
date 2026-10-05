@@ -2,7 +2,7 @@
  * Rutas de campo (solo lectura en P1). Thin sobre `apiQuery`; base del resumen de jornada
  * del Home (P1) y de la pantalla de Rutas (P3). Tipos según `routes.serializer.ts`.
  */
-import type { RouteItem, RouteStopItem, RouteStatus, RouteStopStatus } from '@kobrax/shared';
+import type { MoraCreditListItem, RouteItem, RouteStopItem, RouteStatus, RouteStopStatus } from '@kobrax/shared';
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
 import { cachedList, cachedOne } from './sync/cached';
 import type { LngLat } from './maps/tiles';
@@ -32,13 +32,13 @@ export function getRoute(id: string): Promise<QueryResult<RouteItem>> {
 
 // ── Lifecycle (P3 Rutas) ──────────────────────────────────────────────────────
 
-/** Genera una ruta desde casos (auto = casos abiertos del cobrador). `POST /routes/generate`. */
+/** Genera una ruta desde créditos (auto = créditos del cobrador). `POST /routes/generate`. */
 export interface GenerateRouteInput {
   /** Del teléfono: reintentar con el mismo id devuelve la ruta ya creada (no una segunda ni ROUTE_DUPLICATE_DAY). */
   id?: string;
   collectorId: string;
   plannedDate: string;
-  caseIds?: string[];
+  creditIds?: string[];
   auto?: boolean;
   branchId?: string;
 }
@@ -64,7 +64,7 @@ export function updateRouteStatus(id: string, status: RouteStatus): Promise<Muta
 }
 
 /** Agrega una parada al final del recorrido (S2). `POST /routes/:id/stops`. */
-export function addStop(routeId: string, input: { clientId: string; caseId?: string }): Promise<MutateResult<RouteStopItem>> {
+export function addStop(routeId: string, input: { clientId: string; creditId: string }): Promise<MutateResult<RouteStopItem>> {
   return apiMutate<RouteStopItem>(`/routes/${routeId}/stops`, 'POST', input);
 }
 
@@ -102,4 +102,18 @@ export function getRoutePreview(routeId: string): Promise<QueryResult<RoutePrevi
 /** Aplica el orden sugerido. Devuelve la ruta ya reordenada. `POST /routes/:id/optimize`. */
 export function optimizeRoute(routeId: string): Promise<MutateResult<RouteItem>> {
   return apiMutate<RouteItem>(`/routes/${routeId}/optimize`, 'POST', {});
+}
+
+// ── Candidatas del planificador (F4/08) ──────────────────────────────────────
+
+/**
+ * Los créditos que se pueden poner en la ruta: `GET /mora` (el servidor acota al cobrador). Una fila por
+ * crédito, con zona y ubicaciones. Respaldo local propio (`scope`) para armar la ruta sin señal.
+ */
+export function listRoutePlanCredits(limit = 100): Promise<QueryResult<(MoraCreditListItem & { id: string })[]>> {
+  const query = toQuery({ limit });
+  return cachedList<MoraCreditListItem & { id: string }>('mora', `route-plan:${query}`, async () => {
+    const res = await apiQuery<MoraCreditListItem[]>(`/mora${query}`);
+    return res.status === 'ok' ? { ...res, data: res.data.map((i) => ({ ...i, id: i.creditId })) } : res;
+  });
 }

@@ -32,14 +32,14 @@ beforeEach(() => {
 
 describe('cachedList', () => {
   it('con red devuelve lo del server y lo deja guardado', async () => {
-    const r = await cachedList('case', 'q1', async () => ok([{ id: 'a' }]));
+    const r = await cachedList('portfolio', 'q1', async () => ok([{ id: 'a' }]));
     expect(r.status).toBe('ok');
-    expect(mockStore.rows['case|q1']).toEqual([{ id: 'a' }]);
+    expect(mockStore.rows['portfolio|q1']).toEqual([{ id: 'a' }]);
   });
 
   it('sin red devuelve lo guardado, y avisa que es local', async () => {
-    mockStore.rows['case|q1'] = [{ id: 'a' }];
-    const r = await cachedList<{ id: string }>('case', 'q1', async () => off());
+    mockStore.rows['portfolio|q1'] = [{ id: 'a' }];
+    const r = await cachedList<{ id: string }>('portfolio', 'q1', async () => off());
     expect(r.status).toBe('ok');
     if (r.status === 'ok') {
       expect(r.data).toEqual([{ id: 'a' }]);
@@ -48,29 +48,29 @@ describe('cachedList', () => {
   });
 
   it('sin red y sin nada guardado sigue siendo offline (no inventa una lista vacía)', async () => {
-    const r = await cachedList('case', 'q1', async () => off());
+    const r = await cachedList('portfolio', 'q1', async () => off());
     expect(r.status).toBe('offline');
   });
 
   // Tapar un 500 con datos viejos hace que el bug del servidor sea invisible durante días.
   it('un error del servidor NO cae al respaldo: llega a la pantalla tal cual', async () => {
-    mockStore.rows['case|q1'] = [{ id: 'a' }];
-    const r = await cachedList('case', 'q1', async () => ({ status: 'error', message: 'boom' }));
+    mockStore.rows['portfolio|q1'] = [{ id: 'a' }];
+    const r = await cachedList('portfolio', 'q1', async () => ({ status: 'error', message: 'boom' }));
     expect(r.status).toBe('error');
   });
 
   it('una sesión vencida tampoco: tiene que mandar al login', async () => {
-    mockStore.rows['case|q1'] = [{ id: 'a' }];
-    const r = await cachedList('case', 'q1', async () => ({ status: 'unauthenticated' }));
+    mockStore.rows['portfolio|q1'] = [{ id: 'a' }];
+    const r = await cachedList('portfolio', 'q1', async () => ({ status: 'unauthenticated' }));
     expect(r.status).toBe('unauthenticated');
   });
 
   // Dos consultas del mismo recurso con filtros distintos son dos respuestas distintas.
   it('cada consulta guarda su propia respuesta', async () => {
-    await cachedList('case', 'abiertos', async () => ok([{ id: 'a' }]));
-    await cachedList('case', 'vencidos', async () => ok([{ id: 'b' }, { id: 'c' }]));
-    expect(mockStore.rows['case|abiertos']).toHaveLength(1);
-    expect(mockStore.rows['case|vencidos']).toHaveLength(2);
+    await cachedList('portfolio', 'abiertos', async () => ok([{ id: 'a' }]));
+    await cachedList('portfolio', 'vencidos', async () => ok([{ id: 'b' }, { id: 'c' }]));
+    expect(mockStore.rows['portfolio|abiertos']).toHaveLength(1);
+    expect(mockStore.rows['portfolio|vencidos']).toHaveLength(2);
   });
 });
 
@@ -103,8 +103,8 @@ describe('cachedList · total del servidor', () => {
   });
 
   it('si nunca se guardó un total, cae al largo de las filas', async () => {
-    mockStore.rows['case|q1'] = [{ id: 'a' }, { id: 'b' }];
-    const r = await cachedList<{ id: string }>('case', 'q1', async () => off());
+    mockStore.rows['portfolio|q1'] = [{ id: 'a' }, { id: 'b' }];
+    const r = await cachedList<{ id: string }>('portfolio', 'q1', async () => off());
     if (r.status === 'ok') expect(r.total).toBe(2);
   });
 

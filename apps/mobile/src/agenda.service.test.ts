@@ -20,7 +20,7 @@ jest.mock('./api-client', () => ({
   toQuery: jest.fn(() => ''),
 }));
 
-import { listOverdue, postponeItem, postponeTarget } from './agenda.service';
+import { createItem, listOverdue, postponeItem, postponeTarget } from './agenda.service';
 
 beforeEach(() => {
   mockScopes.length = 0;
@@ -80,5 +80,22 @@ describe('postponeTarget · hora absoluta de destino', () => {
   it('es determinista: repetir el cálculo da lo mismo (eso es lo que hace idempotente el reintento)', () => {
     const item = { scheduledTime: '10:00' };
     expect(postponeTarget(item, 30)).toBe(postponeTarget(item, 30));
+  });
+});
+
+describe('createItem · por crédito (F4/08)', () => {
+  it('manda el creditId y el id del teléfono; no hay caseId', async () => {
+    await createItem({
+      id: 'ag-1',
+      creditId: 'cr-1',
+      type: 'CALL',
+      scheduledDate: '2026-10-05',
+      timeMode: 'LAPSE',
+      timeSlot: 'MORNING',
+      details: {},
+    } as unknown as Parameters<typeof createItem>[0]);
+    expect(mockBodies[0]!.path).toBe('/agenda');
+    expect(mockBodies[0]!.body).toMatchObject({ id: 'ag-1', creditId: 'cr-1' });
+    expect(mockBodies[0]!.body).not.toHaveProperty('caseId');
   });
 });

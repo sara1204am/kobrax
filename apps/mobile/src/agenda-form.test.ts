@@ -11,17 +11,16 @@ import {
   timeSlotRange,
   type FormState,
 } from './agenda-form';
-import { actionLinks, whatsappLink, type AgendaListItem } from './agenda.service';
+import { actionLinks, creditSituationLabel, whatsappLink, type AgendaListItem } from './agenda.service';
 
 const CONTACT = '11111111-1111-4111-8111-111111111111';
-const CASE = '22222222-2222-4222-8222-222222222222';
 const CREDIT = '33333333-3333-4333-8333-333333333333';
 
 /** Formulario de llamada listo para guardar. */
 function readyCall(): FormState {
   let s = initialForm('2026-07-10');
   s = formReducer(s, { t: 'client', clientId: 'cl1' });
-  s = formReducer(s, { t: 'credit', caseId: CASE, creditId: CREDIT });
+  s = formReducer(s, { t: 'credit', creditId: CREDIT });
   s = formReducer(s, { t: 'details', patch: { contactId: CONTACT } });
   return formReducer(s, { t: 'time', value: '15:30' });
 }
@@ -68,6 +67,14 @@ describe('whatsappLink (S3)', () => {
 
   it('sin mensaje, sólo el número', () => {
     expect(whatsappLink('78012345')).toBe('https://wa.me/78012345');
+  });
+});
+
+describe('creditSituationLabel', () => {
+  it('mora con días, o al día', () => {
+    expect(creditSituationLabel(12)).toBe('En mora · 12 días');
+    expect(creditSituationLabel(1)).toBe('En mora · 1 día');
+    expect(creditSituationLabel(0)).toBe('Al día');
   });
 });
 
@@ -123,7 +130,7 @@ describe('formReducer', () => {
 
   it('cambiar de cliente descarta el crédito y los details (son de otro cliente)', () => {
     const next = formReducer(readyCall(), { t: 'client', clientId: 'cl2' });
-    expect(next).toMatchObject({ clientId: 'cl2', caseId: null, creditId: null, details: {} });
+    expect(next).toMatchObject({ clientId: 'cl2', creditId: null, details: {} });
   });
 });
 
@@ -138,6 +145,22 @@ describe('buildPayload', () => {
     expect(buildPayload(lapse)).toMatchObject({ scheduledTime: undefined, timeSlot: 'AFTERNOON' });
   });
 
+  it('el cuerpo cuelga del crédito: lleva creditId y NUNCA caseId (F4/08)', () => {
+    const payload = buildPayload(readyCall())!;
+    expect(payload.creditId).toBe(CREDIT);
+    expect(payload).not.toHaveProperty('caseId');
+  });
+
+  it('elegir un crédito (sin caso) basta para guardar, también uno al día (tarea preventiva)', () => {
+    let s = initialForm('2026-07-10');
+    s = formReducer(s, { t: 'client', clientId: 'cl1' });
+    s = formReducer(s, { t: 'credit', creditId: CREDIT });
+    s = formReducer(s, { t: 'details', patch: { contactId: CONTACT } });
+    s = formReducer(s, { t: 'time', value: '09:00' });
+    expect(canSubmit(s)).toBe(true);
+    expect(buildPayload(s)).toMatchObject({ creditId: CREDIT, type: AgendaItemType.CALL });
+  });
+
   it('normaliza las observaciones vacías a undefined y devuelve null si falta algo', () => {
     expect(buildPayload(readyCall())?.observations).toBeUndefined();
     expect(buildPayload(formReducer(readyCall(), { t: 'observations', value: '  Insiste  ' }))?.observations).toBe('Insiste');
@@ -148,7 +171,7 @@ describe('buildPayload', () => {
 /** Agendado tal como lo devuelve el API, para hidratar el formulario en modo edición (S5). */
 function savedItem(over: Partial<AgendaListItem> = {}): AgendaListItem {
   return {
-    id: 'a1', caseId: CASE, clientId: 'cl1', creditId: CREDIT, assigneeId: 'u1',
+    id: 'a1', clientId: 'cl1', creditId: CREDIT, assigneeId: 'u1',
     type: AgendaItemType.CALL, status: AgendaItemStatus.SCHEDULED,
     scheduledDate: '2026-07-10T00:00:00.000Z', timeMode: ScheduleTimeMode.FIXED, scheduledTime: '15:30',
     details: { contactId: CONTACT }, isOverdue: false,
@@ -163,7 +186,6 @@ describe('hydrateForm + buildPatch (S5 — editar)', () => {
     expect(state).toMatchObject({
       type: AgendaItemType.CALL,
       clientId: 'cl1',
-      caseId: CASE,
       creditId: CREDIT,
       scheduledDate: '2026-07-10',
       scheduledTime: '15:30',

@@ -6,18 +6,15 @@ import { BottomSheet, EmptyState, Header, ListRow, PORTFOLIO_STATUS_META, Status
 import { Button } from '@/components';
 import { MapCanvas, type MapMarker } from '@/maps/MapCanvas';
 import { money, todayISO } from '@/agenda-form';
-import { listCases } from '@/cases.service';
-import { groupPortfolio, type ClientPortfolio } from '@/portfolio';
-import type { PortfolioLocation } from '@/cases.service';
-import { createRoute } from '@/routes.service';
+import type { PortfolioLocation } from '@kobrax/shared';
+import { toRouteCandidates, type RouteCandidate } from '@/route-candidates';
+import { createRoute, listRoutePlanCredits } from '@/routes.service';
 import { flushDraft, loadDraft, moveStop, saveDraft, withoutStop, withStop, type RouteDraft } from '@/route-draft';
 import { authService } from '@/auth-service';
 import { useNetStore } from '@/store/net';
 
-/** Cliente de la cartera + el caso con el que entra a la ruta (una parada = un caso). */
-interface Cliente extends ClientPortfolio {
-  caseId: string;
-}
+/** Una candidata = un crédito (una parada = un crédito). */
+type Cliente = RouteCandidate;
 
 /**
  * Un pin del mapa = **una ubicación**, no un cliente: la casa, el negocio, y también la del garante o
@@ -43,7 +40,7 @@ type Load =
 export default function CrearRutaScreen() {
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [draft, setDraft] = useState<RouteDraft | null>(null);
-  const [selected, setSelected] = useState<string | null>(null); // clientId
+  const [selected, setSelected] = useState<string | null>(null); // id de la ubicación
   const [sheet, setSheet] = useState<'recorrido' | 'sin-ubicacion' | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,17 +53,14 @@ export default function CrearRutaScreen() {
 
     setDraft(await loadDraft(todayISO()));
 
-    // La cartera del cobrador ya viene acotada a él y con el punto de cada cliente (§5.1).
-    // 🔴 `open: true`: sin él se arma la ruta con casos cerrados y se sale a visitar a quien ya pagó.
-    const res = await listCases({ view: 'portfolio', open: true, limit: 100 });
+    // Los créditos en mora del cobrador (`GET /mora`), ya acotados a él y con el punto de cada cliente.
+    // Un crédito ya pagado no está en la lista: no se sale a visitar a quien ya pagó.
+    const res = await listRoutePlanCredits();
     if (res.status === 'offline') return setLoad((p) => (p.status === 'ok' ? p : { status: 'offline' }));
     if (res.status !== 'ok') return setLoad((p) => (p.status === 'ok' ? p : { status: 'error' }));
 
-    // Un cliente puede tener varios créditos; la parada se arma con el primero (el más urgente,
-    // que es como `groupPortfolio` ya los ordena).
-    const caseByClient = new Map<string, string>();
-    for (const c of res.data) if (!caseByClient.has(c.clientId)) caseByClient.set(c.clientId, c.id);
-    const todos: Cliente[] = groupPortfolio(res.data).map((c) => ({ ...c, caseId: caseByClient.get(c.clientId)! }));
+    // Una candidata por crédito: un cliente con dos créditos en mora puede aportar dos paradas.
+    const todos: Cliente[] = toRouteCandidates(res.data);
 
     setLoad({
       status: 'ok',
@@ -103,7 +97,7 @@ export default function CrearRutaScreen() {
     [online],
   );
 
-  const enRuta = useMemo(() => new Set(draft?.caseIds ?? []), [draft]);
+  const enRuta = useMemo(() => new Set(draft?.creditIds ?? []), [draft]);
   const pins = load.status === 'ok' ? load.pins : [];
   const elegido = pins.find((p) => p.loc.id === selected);
 
@@ -111,8 +105,8 @@ export default function CrearRutaScreen() {
     id: p.loc.id,
     latitude: p.loc.latitude,
     longitude: p.loc.longitude,
-    label: enRuta.has(p.cliente.caseId) ? String(draft!.caseIds.indexOf(p.cliente.caseId) + 1) : undefined,
-    tone: enRuta.has(p.cliente.caseId) ? 'active' : p.cliente.maxDaysPastDue > 0 ? 'done' : 'default',
+    label: enRuta.has(p.cliente.creditId) ? String(draft!.creditIds.indexOf(p.cliente.creditId) + 1) : undefined,
+    tone: enRuta.has(p.cliente.creditId) ? 'active' : p.cliente.daysPastDue > 0 ? 'done' : 'default',
     selected: p.loc.id === selected,
   }));
 
@@ -133,7 +127,7 @@ export default function CrearRutaScreen() {
     );
   }
 
-  const total = draft?.caseIds.length ?? 0;
+  const total = draft?.creditIds.length ?? 0;
 
   return (
     <View style={styles.screen}>
@@ -174,22 +168,22 @@ export default function CrearRutaScreen() {
             <Text style={TYPE.secondary} numberOfLines={1}>
               {elegido.loc.address ?? elegido.cliente.secondaryLine}
             </Text>
-            <Text style={[styles.monto, elegido.cliente.maxDaysPastDue > 0 && { color: COLORS.danger }]}>
-              {money(elegido.cliente.totalDebt, elegido.cliente.currency)}
+            <Text style={[styles.monto, elegido.cliente.daysPastDue > 0 && { color: COLORS.danger }]}>
+              {money(elegido.cliente.balance, elegido.cliente.currency)}
             </Text>
           </View>
           <View style={{ gap: SPACING.sm, alignItems: 'flex-end' }}>
             <StatusBadge {...PORTFOLIO_STATUS_META[elegido.cliente.status]} />
-            {enRuta.has(elegido.cliente.caseId) ? (
-              <Button label="Quitar" variant="ghost" onPress={() => void commit(withoutStop(draft!, elegido.cliente.caseId))} />
+            {enRuta.has(elegido.cliente.creditId) ? (
+              <Button label="Quitar" variant="ghost" onPress={() => void commit(withoutStop(draft!, elegido.cliente.creditId))} />
             ) : (
               <Button
                 label="Agregar al recorrido"
                 onPress={() =>
                   void commit(
                     withStop(
-                      draft ?? { routeId: null, date: todayISO(), caseIds: [], clientByCase: {} },
-                      elegido.cliente.caseId,
+                      draft ?? { routeId: null, date: todayISO(), creditIds: [], clientByCredit: {} },
+                      elegido.cliente.creditId,
                       elegido.cliente.clientId,
                     ),
                   )
@@ -213,18 +207,18 @@ export default function CrearRutaScreen() {
 
       <BottomSheet visible={sheet === 'recorrido'} onClose={() => setSheet(null)} title="El recorrido">
         <ScrollView style={{ maxHeight: 360 }}>
-          {(draft?.caseIds ?? []).map((caseId, i) => {
-            const p = pins.find((x) => x.cliente.caseId === caseId)?.cliente;
+          {(draft?.creditIds ?? []).map((creditId, i) => {
+            const p = pins.find((x) => x.cliente.creditId === creditId)?.cliente ?? load.sinUbicacion.find((x) => x.creditId === creditId);
             return (
               <ListRow
-                key={caseId}
+                key={creditId}
                 title={`${i + 1}. ${p?.name ?? 'Cliente'}`}
                 subtitle={p?.zone}
                 right={
                   <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
-                    <Mover label="↑" onPress={() => void commit(moveStop(draft!, caseId, -1))} disabled={i === 0} />
-                    <Mover label="↓" onPress={() => void commit(moveStop(draft!, caseId, 1))} disabled={i === draft!.caseIds.length - 1} />
-                    <Mover label="✕" onPress={() => void commit(withoutStop(draft!, caseId))} />
+                    <Mover label="↑" onPress={() => void commit(moveStop(draft!, creditId, -1))} disabled={i === 0} />
+                    <Mover label="↓" onPress={() => void commit(moveStop(draft!, creditId, 1))} disabled={i === draft!.creditIds.length - 1} />
+                    <Mover label="✕" onPress={() => void commit(withoutStop(draft!, creditId))} />
                   </View>
                 }
               />

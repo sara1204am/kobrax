@@ -18,8 +18,14 @@
  */
 import * as SQLite from 'expo-sqlite';
 
-/** Sube cuando cambia la forma de `cache`. Al no coincidir se borra el caché — nunca la cola. */
-const SCHEMA_VERSION = 2;
+/**
+ * Sube cuando cambia la forma de `cache` o de la cola. Al no coincidir se borra el caché **y la cola**.
+ *
+ * 3 (F4/08 · sin caso): desaparecen los tipos de caché `case`/`case.detail` y de cola `case.activity`, y las
+ * acciones pierden el `caseId`. **Alcance dev-only: no hay teléfonos con colas reales**, así que no se migra
+ * nada — se descarta (decisión confirmada 2026-10-03). Antes de la versión 3 la cola sobrevivía a todo cambio.
+ */
+export const SCHEMA_VERSION = 3;
 const DB_NAME = 'kobrax.db';
 
 /**
@@ -36,8 +42,11 @@ export type CacheKind =
   | 'client'
   /** Lo que el alta de gestión necesita del cliente: créditos, teléfonos y direcciones. */
   | 'client.context'
-  | 'case'
-  | 'case.detail'
+  /**
+   * La cartera del cobrador: TODOS sus créditos, al día o en mora (`GET /mora?todos=true`, paginado y
+   * guardado junto). Una fila por crédito; el `id` es el crédito. Alimenta Cobranza, Rutas y la búsqueda sin señal.
+   */
+  | 'portfolio'
   /** Los créditos en mora del cobrador (`GET /mora`). Una fila por crédito; el `id` es el crédito. */
   | 'mora'
   /** La ficha de recuperación de un crédito (`GET /mora/:creditId`): compuesto, no la fila de la lista. */
@@ -76,7 +85,6 @@ export type QueueKind =
   | 'agenda.create'
   | 'agenda.complete'
   | 'agenda.postpone'
-  | 'case.activity'
   | 'route.status'
   | 'client.create'
   | 'credit.create'
@@ -85,7 +93,7 @@ export type QueueKind =
   | 'arrears.clear'
   | 'agenda.cancel'
   | 'agenda.reschedule'
-  /** Gestión con resultado y promesa sobre un crédito en mora (`POST /mora/:id/activities`). */
+  /** Gestión con resultado y promesa sobre un crédito, esté o no en mora (`POST /mora/:id/activities`). */
   | 'mora.activity'
   /** Nota de un crédito (`POST /mora/:id/notes`). */
   | 'credit.note'
@@ -149,13 +157,19 @@ function open(): Promise<SQLite.SQLiteDatabase> {
 }
 
 /**
- * Si la versión del esquema no coincide, se tira el caché y se re-hidrata. **La cola se conserva
- * intacta**: es trabajo del cobrador sin entregar, no una copia de algo que el server ya tiene.
+ * Si la versión del esquema no coincide, se tira el caché Y LA COLA (y los mapas de ids locales de `meta`, que
+ * sólo tienen sentido con su cola) y se re-hidrata. Es una decisión dev-only (F4/08): no hay teléfonos con trabajo
+ * real sin entregar, y migrar los ítems con `caseId` a su forma por crédito no vale el código. Con teléfonos
+ * reales habría que volver a una migración de la cola ANTES de subir la versión.
+ *
+ * Una base nueva (sin `schema_version`) no tiene nada que borrar, pero el borrado es inocuo.
  */
 async function ensureVersion(db: SQLite.SQLiteDatabase): Promise<void> {
   const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM meta WHERE key = ?', ['schema_version']);
   if (row?.value === String(SCHEMA_VERSION)) return;
   await db.runAsync('DELETE FROM cache');
+  await db.runAsync('DELETE FROM queue');
+  await db.runAsync('DELETE FROM meta');
   await db.runAsync('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)', ['schema_version', String(SCHEMA_VERSION)]);
 }
 
@@ -260,7 +274,7 @@ export async function replaceAll<T extends { id: string }>(
   await putAll(kind, items, scopeOf ?? (() => scope ?? ''));
 }
 
-/** El logout borra la copia de datos del tenant. **No toca la cola** (plan §Q3). */
+/** El logout borra la copia de datos del tenant. **No toca la cola** (plan §Q3): sólo el cambio de esquema la borra. */
 export async function clearCache(): Promise<void> {
   const db = await open();
   await db.runAsync('DELETE FROM cache');

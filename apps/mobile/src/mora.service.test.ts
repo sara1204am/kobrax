@@ -20,7 +20,7 @@ jest.mock('./db', () => ({
   fetchedAt: jest.fn(async () => 1_700_000_000_000),
 }));
 
-import { listMora, MORA_LIMIT } from './mora.service';
+import { listMora, listPortfolio, MORA_LIMIT, tenantCurrency } from './mora.service';
 
 const item = { creditId: 'cr1', clientId: 'cl1', currency: 'BOB', daysPastDue: 12, arrearsSource: 'SCHEDULE', hasActivePromise: false };
 
@@ -63,5 +63,43 @@ describe('listMora', () => {
   it('sin red y sin nada guardado sigue siendo offline', async () => {
     mockApi.mockResolvedValue({ status: 'offline' });
     expect((await listMora({ limit: MORA_LIMIT })).status).toBe('offline');
+  });
+});
+
+describe('listPortfolio · la cartera entera, al día incluida', () => {
+  it('pide todos=true con la página máxima y la guarda bajo UNA casilla (portfolio)', async () => {
+    mockApi.mockResolvedValue({ status: 'ok', data: [item], total: 1 });
+    const r = await listPortfolio();
+    expect(mockApi).toHaveBeenCalledWith('/mora?todos=true&limit=100&page=1');
+    expect(r.status === 'ok' && r.data[0].id).toBe('cr1');
+    expect(mockStore['portfolio|todos']).toHaveLength(1);
+  });
+
+  it('sin red devuelve la cartera guardada, con su hora', async () => {
+    mockApi.mockResolvedValueOnce({ status: 'ok', data: [item], total: 1 });
+    await listPortfolio();
+    mockApi.mockResolvedValueOnce({ status: 'offline' });
+    const r = await listPortfolio();
+    expect(r.status === 'ok' && r.localAt).toBe(1_700_000_000_000);
+    expect(r.status === 'ok' && r.data).toHaveLength(1);
+  });
+});
+
+describe('tenantCurrency · moneda del Inicio', () => {
+  it('es la del primer crédito en mora', async () => {
+    mockApi.mockResolvedValue({ status: 'ok', data: [{ ...item, currency: 'USD' }], total: 1 });
+    expect(await tenantCurrency()).toBe('USD');
+    expect(mockApi).toHaveBeenCalledWith('/mora?limit=1');
+  });
+
+  it('si nadie está en mora, cae a la cartera guardada', async () => {
+    mockStore['portfolio|'] = [{ ...item, id: 'cr1', currency: 'USD' }]; // el mock indexa «kind|scope»; getMany sin scope = todos
+    mockApi.mockResolvedValue({ status: 'ok', data: [], total: 0 });
+    expect(await tenantCurrency()).toBe('USD');
+  });
+
+  it('sin nada de nada, BOB', async () => {
+    mockApi.mockResolvedValue({ status: 'offline' });
+    expect(await tenantCurrency()).toBe('BOB');
   });
 });

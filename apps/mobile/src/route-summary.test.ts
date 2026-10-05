@@ -9,7 +9,7 @@ function stop(over: Partial<RouteStopItem> = {}): RouteStopItem {
   return {
     id: `s${n}`,
     clientId: `cl${n}`,
-    caseId: `ca${n}`,
+    creditId: `cr${n}`,
     sequenceOrder: n,
     status: RouteStopStatus.PENDING,
     currency: 'BOB',
@@ -20,8 +20,8 @@ function stop(over: Partial<RouteStopItem> = {}): RouteStopItem {
 const route = (stops: RouteStopItem[]): RouteItem =>
   ({ id: 'r1', collectorId: 'u1', status: RouteStatus.IN_PROGRESS, plannedDate: '2026-08-05', totalCases: stops.length, createdAt: '', stops }) as RouteItem;
 
-const pay = (caseId: string | undefined, amount: number): PaymentItem =>
-  ({ id: `p${amount}`, creditId: 'cr1', caseId, amount, method: 'CASH', paymentDate: '', createdAt: '' }) as PaymentItem;
+const pay = (creditId: string | undefined, amount: number): PaymentItem =>
+  ({ id: `p${amount}`, creditId, amount, method: 'CASH', paymentDate: '', createdAt: '' }) as PaymentItem;
 
 describe('categoryOf', () => {
   it('cobrado total y parcial son la misma categoría', () => {
@@ -78,11 +78,11 @@ describe('summarizeDay · recaudado', () => {
     const a = stop({ lastOutcome: VisitOutcome.PAID });
     const b = stop({ lastOutcome: VisitOutcome.PAID });
     // El tercero es de otra ruta: `GET /payments` devuelve los del tenant entero.
-    const s = summarizeDay(route([a, b]), [pay(a.caseId, 100), pay(b.caseId, 50.5), pay('ca-ajeno', 999)]);
+    const s = summarizeDay(route([a, b]), [pay(a.creditId, 100), pay(b.creditId, 50.5), pay('cr-ajeno', 999)]);
     expect(s.collected).toBe(150.5);
   });
 
-  it('un pago sin caso no se suma (no se puede probar que sea de esta ruta)', () => {
+  it('un pago sin crédito no se suma (no se puede probar que sea de esta ruta)', () => {
     const a = stop({ lastOutcome: VisitOutcome.PAID });
     expect(summarizeDay(route([a]), [pay(undefined, 300)]).collected).toBe(0);
   });
@@ -93,7 +93,7 @@ describe('summarizeDay · recaudado', () => {
 
   it('redondea a centavos y no arrastra el error de coma flotante', () => {
     const a = stop({ lastOutcome: VisitOutcome.PAID });
-    const s = summarizeDay(route([a]), [pay(a.caseId, 0.1), pay(a.caseId, 0.2)]);
+    const s = summarizeDay(route([a]), [pay(a.creditId, 0.1), pay(a.creditId, 0.2)]);
     expect(s.collected).toBe(0.3);
   });
 

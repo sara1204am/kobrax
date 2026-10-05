@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { addPeriods, calculateCredit, isUnknownField, PaymentFrequency, portfolioStatus, RatePeriod } from '@kobrax/shared';
+import { addPeriods, calculateCredit, isUnknownField, PaymentFrequency, portfolioStatus, RatePeriod, type MoraCreditDetail } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { ActionBtn, AmountInput, BottomSheet, Chips, DataRow, EmptyState, Header, PORTFOLIO_STATUS_META, SectionLabel, StatusBadge } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
@@ -9,8 +9,9 @@ import { money, timeSlotRange } from '@/agenda-form';
 import { MiniMapCard, type MiniMapPoint } from '@/maps/MiniMapCard';
 import { clientContext, type AgendaClientContext, type CreditOption } from '@/agenda.service';
 import { clientDisplayName, getClient, type ClientDetail } from '@/clients.service';
-import { addActivity, getCase, type CaseDetail } from '@/cases.service';
-import { listPayments, type PaymentItem } from '@/payments.service';
+import { getMora } from '@/mora.service';
+import { submitMoraActivity } from '@/mora-actions';
+import { listCreditPayments, type PaymentItem } from '@/payments.service';
 import { clearArrears, getCredit, markArrears, type CreditDetail } from '@/credits.service';
 import { PlanSheet, prettyDay } from '@/credit-terms-view';
 import { DEFINITION_LABEL, FREQUENCY_LABEL, IMPORT_FIELD_LABEL, ORIGIN_LABEL, RATE_PERIOD_LABEL, UNKNOWN } from '@/credit-labels';
@@ -28,15 +29,19 @@ import { nuevoId } from '@/ids';
 type QueuedArrears = Extract<QueuedAction, { kind: 'arrears.mark' | 'arrears.clear' }>;
 
 
-/** Los pagos de este caso que esperan señal en el teléfono (para mostrarlos en el historial ya). */
-async function queuedFor(caseId: string): Promise<PaymentItem[]> {
+/** Los pagos de este crédito que esperan señal en el teléfono (para mostrarlos en el historial ya). */
+async function queuedFor(creditId: string): Promise<PaymentItem[]> {
   const userId = await getUserId();
-  return userId ? queuedPayments(caseId, await pendingActions(userId)) : [];
+  return userId ? queuedPayments(creditId, await pendingActions(userId)) : [];
 }
 const METHOD_LABEL: Record<string, string> = { CASH: 'Efectivo', TRANSFER: 'Transferencia', QR: 'QR', CARD: 'Tarjeta', MOBILE_PAYMENT: 'Pago móvil' };
 
 
-/** V4 — Ficha de cobranza (§5.4): detalle + acciones + pago + gestión + timeline. */
+/**
+ * V4 — Ficha de cobranza (§5.4): detalle + acciones + pago + gestión + timeline. **Todo por crédito** (F4/08): la
+ * ficha lee el crédito (`GET /mora/:creditId`), sus pagos (`/payments?creditId=`) y escribe gestiones y pagos con
+ * `creditId`. No hace falta que el crédito esté en mora: una acción preventiva sobre uno al día funciona igual.
+ */
 export default function ClienteFichaScreen() {
   // `routeId` presente = la ficha se abrió desde el mapa de una ruta (RT-5, Rutas S4).
   const { id: clientId, routeId } = useLocalSearchParams<{ id: string; routeId?: string }>();
@@ -46,7 +51,7 @@ export default function ClienteFichaScreen() {
   /** Identidad mínima cuando no hay contexto de cobranza que mostrar (ver `loadAll`). */
   const [basic, setBasic] = useState<ClientDetail | null>(null);
   const [creditId, setCreditId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<CaseDetail | null>(null);
+  const [detail, setDetail] = useState<MoraCreditDetail | null>(null);
   /** El crédito elegido: condiciones, base del saldo y total por cobrar (F4/06). `null` mientras carga o sin red. */
   const [credit, setCredit] = useState<CreditDetail | null>(null);
   const [planSheet, setPlanSheet] = useState(false);
@@ -60,6 +65,12 @@ export default function ClienteFichaScreen() {
   const gestId = useRef(nuevoId());
 
   const selected = useMemo(() => ctx?.credits.find((c) => c.creditId === creditId) ?? ctx?.credits[0], [ctx, creditId]);
+  /**
+   * Un préstamo dado de alta sin señal que todavía no subió (fila provisional de `sync/optimistic`): el server no
+   * lo conoce, así que cobrar o registrar una gestión daría 404 o iría a una cola que no puede entregarse. Se
+   * ofrecen cuando el alta se confirme.
+   */
+  const provisional = !!(selected as { pending?: boolean } | undefined)?.pending;
 
   /**
    * Los garantes con punto en el mapa (RT-5). `GUARANTOR` es un `LocationType`, no una entidad
@@ -78,8 +89,8 @@ export default function ClienteFichaScreen() {
     return l ? { id: l.id, latitude: Number(l.latitude), longitude: Number(l.longitude), tone: 'primary' } : undefined;
   }, [ctx]);
 
-  const loadCase = useCallback(async (caseId: string, creditId: string) => {
-    const [c, p, k, q] = await Promise.all([getCase(caseId), listPayments(caseId), getCredit(creditId), queuedFor(caseId)]);
+  const loadCredit = useCallback(async (creditId: string) => {
+    const [c, p, k, q] = await Promise.all([getMora(creditId), listCreditPayments(creditId), getCredit(creditId), queuedFor(creditId)]);
     if (c.status === 'ok') setDetail(c.data);
     // Lo que espera señal va arriba de lo confirmado: el cobrador ve su cobro aunque no haya red.
     if (p.status === 'ok') setPayments([...q, ...p.data]);
@@ -91,9 +102,9 @@ export default function ClienteFichaScreen() {
     const res = await clientContext(clientId);
     if (res.status === 'offline') return setLoad('offline');
     if (res.status === 'unauthenticated') return setLoad('error');
-    // Un cliente sin préstamos asignados a mí NO es un error: la búsqueda global (S4) lo encuentra y
-    // `clientContext` responde AGENDA_002. Antes caía en "No se pudo cargar", que era mentira y un
-    // callejón sin salida. Se degrada a la identidad, que `client:read` sí puede leer sin caso.
+    // Un cliente sin créditos a mi cargo (ni como responsable, reemplazo o apoyo) NO es un error: la búsqueda
+    // global (S4) lo encuentra y `clientContext` responde AGENDA_002. Se degrada a la identidad, que
+    // `client:read` sí puede leer. Un crédito AL DÍA ya no cae acá: el contexto lista todos los del alcance.
     if (res.status !== 'ok' || res.data.credits.length === 0) {
       const only = await getClient(clientId);
       if (only.status === 'offline') return setLoad('offline');
@@ -106,9 +117,9 @@ export default function ClienteFichaScreen() {
     const first = res.data.credits.find((c) => c.creditId === creditId) ?? res.data.credits[0];
     if (first) {
       setCreditId(first.creditId);
-      await loadCase(first.caseId, first.creditId);
+      await loadCredit(first.creditId);
     }
-  }, [clientId, creditId, loadCase]);
+  }, [clientId, creditId, loadCredit]);
 
   // Recarga al entrar y al VOLVER (p. ej. de la edición) → la ficha refleja los cambios.
   useFocusEffect(
@@ -129,9 +140,9 @@ export default function ClienteFichaScreen() {
       setDetail(null);
       setCredit(null);
       setPayments([]);
-      await loadCase(c.caseId, c.creditId);
+      await loadCredit(c.creditId);
     },
-    [loadCase],
+    [loadCredit],
   );
 
   // Barra de acciones: deep-link + auto-log (§5.4/§7). El log no bloquea el link.
@@ -141,21 +152,20 @@ export default function ClienteFichaScreen() {
       const phone = onlyDigits(ctx?.contacts.find((c) => c.isPrimary)?.value ?? ctx?.contacts[0]?.value);
       const loc = ctx?.locations.find((l) => l.latitude != null);
       let url: string | null = null;
-      let type: 'CALL' | 'MESSAGE' | 'NOTE' = 'CALL';
       // Navegar NO sale de la app: abre el mapa de Kobrax centrado en la dirección (el mismo mapa de
       // la ruta, que además anda offline con los packs). Google Maps dejaba al cobrador afuera.
       if (kind === 'navigate') {
         router.push(`/cliente/mapa?clientId=${clientId}&locationId=${loc?.id ?? ''}&name=${encodeURIComponent(ctx?.client.displayName ?? '')}`);
-        void registrarRastro(selected.caseId, { type: 'NOTE', notes: 'Navegación' });
+        if (!provisional) void registrarRastro(selected.creditId, 'navigate');
         return;
       }
-      if (kind === 'call' && phone) { url = `tel:${phone}`; type = 'CALL'; }
-      else if (kind === 'whatsapp' && phone) { url = `https://wa.me/${phone}`; type = 'MESSAGE'; }
+      if (kind === 'call' && phone) url = `tel:${phone}`;
+      else if (kind === 'whatsapp' && phone) url = `https://wa.me/${phone}`;
       if (!url) return;
       void Linking.openURL(url);
-      void registrarRastro(selected.caseId, { type, notes: kind === 'call' ? 'Llamada' : 'WhatsApp' });
+      if (!provisional) void registrarRastro(selected.creditId, kind);
     },
-    [selected, ctx, clientId],
+    [selected, ctx, clientId, provisional],
   );
 
   if (load === 'loading') {
@@ -235,6 +245,13 @@ export default function ClienteFichaScreen() {
             <StatusBadge label={meta.label} tone={meta.tone} />
           </View>
           <Text style={styles.sub}>{[ctx.client.nationalId, zone].filter(Boolean).join(' · ') || '—'}</Text>
+          {/* Situación, categoría y castigo: condiciones separadas del crédito (F4/08 · D1), no un estado único. */}
+          {(detail?.writtenOff || detail?.category) && (
+            <View style={styles.tags}>
+              {detail.writtenOff && <StatusBadge label="Castigado" tone="neutral" />}
+              {detail.category && <StatusBadge label={`Categoría ${detail.category.code}`} tone={selected.daysPastDue > 0 ? 'danger' : 'neutral'} />}
+            </View>
+          )}
           <Text style={[styles.debt, selected.daysPastDue > 0 && { color: COLORS.danger }]}>{money(totalDebt, currency)}</Text>
           {detail?.locked && (
             <Text style={styles.locked}>🔒 Importado · {detail.origin} — actualizá con una nueva importación</Text>
@@ -283,16 +300,24 @@ export default function ClienteFichaScreen() {
             </Text>
           )}
           <View style={{ gap: SPACING.sm, marginTop: SPACING.sm }}>
-            <Button label="Registrar pago" onPress={() => setPaySheet(true)} />
-            <Button
-              label="Registrar gestión"
-              variant="ghost"
-              onPress={() => {
-                // El id de la gestión se fija al ABRIR la hoja: un reintento o doble toque reusa el mismo.
-                gestId.current = nuevoId();
-                setGestSheet(true);
-              }}
-            />
+            {provisional ? (
+              <Text style={styles.locked}>
+                ⏳ Este préstamo todavía no subió al servidor. Podrás cobrar y registrar gestiones cuando se confirme el alta.
+              </Text>
+            ) : (
+              <>
+                <Button label="Registrar pago" onPress={() => setPaySheet(true)} />
+                <Button
+                  label="Registrar gestión"
+                  variant="ghost"
+                  onPress={() => {
+                    // El id de la gestión se fija al ABRIR la hoja: un reintento o doble toque reusa el mismo.
+                    gestId.current = nuevoId();
+                    setGestSheet(true);
+                  }}
+                />
+              </>
+            )}
             {/*
              * 🔴 **Marcar en mora es para el préstamo sin cronograma.** Sin fecha que se venza sola,
              * el trabajo diario del servidor no tiene de dónde sacar la mora y ese préstamo nunca
@@ -301,7 +326,7 @@ export default function ClienteFichaScreen() {
              *
              * No se ofrecen sobre un préstamo importado: su mora la manda el archivo.
              */}
-            {!detail?.locked &&
+            {!provisional && !detail?.locked &&
               (selected.daysPastDue > 0 ? (
                 <Button label="Poner al día" variant="ghost" onPress={() => setMoraSheet('clear')} />
               ) : (
@@ -452,7 +477,6 @@ export default function ClienteFichaScreen() {
         onSubmit={async (amount, method, receipt, idemKey, channel) => {
           const input = {
             creditId: selected.creditId,
-            caseId: selected.caseId,
             amount,
             method,
             receiptUrl: receipt?.url,
@@ -464,7 +488,7 @@ export default function ClienteFichaScreen() {
           const err = await submitPayment(input, idemKey, receipt);
           if (err) return err;
           setPaySheet(false);
-          await loadCase(selected.caseId, selected.creditId);
+          await loadCredit(selected.creditId);
           return null;
         }}
       />
@@ -474,20 +498,13 @@ export default function ClienteFichaScreen() {
         onClose={() => setGestSheet(false)}
         currency={currency}
         onSubmit={async (payload) => {
-          const withId = { ...payload, id: gestId.current };
-          const res = await addActivity(selected.caseId, withId);
-          if (res.status === 'ok') { setGestSheet(false); await loadCase(selected.caseId, selected.creditId); return null; }
-          if (res.status === 'offline') {
-            // La gestión queda guardada y sube sola: `case_activities` es append-only, así que
-            // reintentarla no puede pisar nada.
-            const guardada = await queueForLater({ kind: 'case.activity', caseId: selected.caseId, input: withId });
-            if (!guardada) return 'Sin conexión y no se pudo guardar en el teléfono. Reintentá.';
-            setGestSheet(false);
-            await loadCase(selected.caseId, selected.creditId);
-            return null;
-          }
-          if (res.status === 'unauthenticated') return 'Tu sesión venció.';
-          return res.message;
+          // `submitMoraActivity` intenta con señal y, sin ella, encola `mora.activity` con el MISMO id (el de la
+          // hoja, fijado al abrirla): si la respuesta se perdió, el reintento no duplica la gestión ni su promesa.
+          const err = await submitMoraActivity(selected.creditId, { ...payload, id: gestId.current });
+          if (err) return err;
+          setGestSheet(false);
+          await loadCredit(selected.creditId);
+          return null;
         }}
       />
 
@@ -631,6 +648,7 @@ const styles = StyleSheet.create({
   planLink: { ...TYPE.body, color: COLORS.periwinkle, fontWeight: '600' },
   locked: { ...TYPE.caption, color: COLORS.warningText, backgroundColor: COLORS.warningBg, padding: SPACING.sm, borderRadius: RADIUS.input, marginTop: SPACING.sm },
   // Chip de hora recomendada (RT-5). Highlight y no warning: es una ayuda, no una alerta.
+  tags: { flexDirection: 'row', gap: SPACING.xs, marginTop: SPACING.xs },
   hint: { backgroundColor: COLORS.highlight, borderRadius: RADIUS.card, padding: SPACING.md, gap: 2 },
   hintTitle: { ...TYPE.body, color: COLORS.navy, fontWeight: '700' },
   actions: { flexDirection: 'row', gap: SPACING.sm },

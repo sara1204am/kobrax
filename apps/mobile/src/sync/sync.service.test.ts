@@ -162,10 +162,10 @@ describe('drain', () => {
 
   // Los ítems guardados antes de que existieran los ids reciben uno estable ANTES del primer envío.
   it('estabiliza (ids) cada ítem antes de enviarlo', async () => {
-    mockCola.push(item(7, 'case.activity'));
+    mockCola.push(item(7, 'mora.activity'));
     await drain('u1');
     expect(mockOps.indexOf('stabilize:7')).toBeGreaterThanOrEqual(0);
-    expect(mockOps.indexOf('stabilize:7')).toBeLessThan(mockOps.indexOf('send:case.activity'));
+    expect(mockOps.indexOf('stabilize:7')).toBeLessThan(mockOps.indexOf('send:mora.activity'));
   });
 
   // Una fila que esta versión no entiende se rechaza como «no soportada» y queda a la vista.

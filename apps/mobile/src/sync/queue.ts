@@ -22,7 +22,6 @@ import { deleteQueuePhoto, persistPhoto, photoExists, type PendingPhoto } from '
 import { uploadImage, type UploadResult } from '../uploads.service';
 import { addVisitEvidence, createVisit, type CreateVisitInput } from '../field.service';
 import { createPayment, type NewPayment } from '../payments.service';
-import { addActivity, type NewActivity } from '../cases.service';
 import { updateRouteStatus } from '../routes.service';
 import {
   createClient,
@@ -62,6 +61,10 @@ export type { PendingPhoto } from '../queue-photos';
  * Sube cuando cambia la forma de forma incompatible; una fila con `v` mayor a ésta la escribió una app más
  * nueva y esta no sabe enviarla → queda como «no soportada» a la vista, no se manda ni se pierde.
  *  · 0 → 1: ids en todas las escrituras repetibles, `toTime` al posponer, partes sueltas de la visita.
+ *
+ * F4/08: se quitó `case.activity` y los `caseId` **sin subir la versión del payload** — el cambio de esquema local
+ * (`SCHEMA_VERSION` 3, ver `db.ts`) borra la cola entera, así que ningún ítem viejo llega acá. Un ítem
+ * `case.activity` que aparezca igual (base restaurada a mano) cae en «no soportado», visible y descartable.
  */
 export const QUEUE_VERSION = 1;
 
@@ -86,8 +89,6 @@ export type QueuedAction =
     }
   | { kind: 'payment'; input: NewPayment; idempotencyKey: string; photo?: PendingPhoto }
   | { kind: 'agenda.create'; input: CreateAgendaInput }
-  /** Gestión registrada desde la ficha del deudor. `case_activities` es append-only; el `input.id` evita duplicarla. */
-  | { kind: 'case.activity'; caseId: string; input: NewActivity }
   /**
    * Iniciar o cerrar la jornada. Idempotente porque lleva el **estado destino**, no un incremento:
    * reintentarlo deja la ruta donde ya estaba. Sin esto, una jornada iniciada sin señal quedaba
@@ -134,9 +135,10 @@ export type QueuedAction =
   | { kind: 'agenda.cancel'; id: string; reasonCode: string }
   | { kind: 'agenda.reschedule'; id: string; input: RescheduleAgendaInput }
   /**
-   * Gestión con resultado y promesa sobre un crédito en mora. **Idempotente porque `input.id` lo pone el
-   * teléfono** (`nuevoId()`): el servidor guarda la gestión con ese id y un reintento devuelve la ya
-   * guardada, así que una gestión con promesa no se duplica (ni su agenda_item).
+   * Gestión con resultado y promesa sobre un crédito (al día o en mora; es la única vía de gestiones: ya no hay
+   * caso). **Idempotente porque `input.id` lo pone el teléfono** (`nuevoId()`): el servidor guarda la gestión con
+   * ese id y un reintento devuelve la ya guardada, así que una gestión con promesa no se duplica (ni su
+   * agenda_item). Incluye el rastro de «Llamar/WhatsApp/Navegar» (una nota).
    */
   | { kind: 'mora.activity'; creditId: string; input: RecoveryActivityInput & { id: string } }
   /** Nota del crédito. Idempotente por `input.id` del teléfono; el servidor reconoce el id y no la duplica. */
@@ -199,7 +201,6 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'agenda.create': 'Gestión agendada',
   'agenda.complete': 'Gestión ejecutada',
   'agenda.postpone': 'Gestión pospuesta',
-  'case.activity': 'Gestión registrada',
   'route.status': 'Estado de la jornada',
   'client.create': 'Cliente nuevo',
   'credit.create': 'Préstamo nuevo',
@@ -207,7 +208,7 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'arrears.clear': 'Préstamo puesto al día',
   'agenda.cancel': 'Gestión cancelada',
   'agenda.reschedule': 'Gestión reagendada',
-  'mora.activity': 'Gestión de mora registrada',
+  'mora.activity': 'Gestión registrada',
   'credit.note': 'Nota del crédito',
   'visit.evidence': 'Foto de la visita',
   'photo.lost': 'Foto que no se pudo adjuntar',
@@ -287,8 +288,6 @@ export async function discardPending(rowId: number, action: PendingAction): Prom
  */
 export function withStableIds(action: PendingAction): PendingAction {
   switch (action.kind) {
-    case 'case.activity':
-      return action.input.id ? action : { ...action, input: { ...action.input, id: nuevoId() } };
     case 'agenda.create':
       return action.input.id ? action : { ...action, input: { ...action.input, id: nuevoId() } };
     case 'client.create':
@@ -390,8 +389,6 @@ export async function send(action: PendingAction): Promise<SendResult> {
       if ('wait' in resolved) return { status: 'error', message: resolved.wait };
       return mapMutate(await createItem(resolved.input));
     }
-    case 'case.activity':
-      return mapMutate(await addActivity(action.caseId, action.input));
     case 'route.status':
       return mapMutate(await updateRouteStatus(action.routeId, action.status));
     case 'client.create': {

@@ -1,13 +1,43 @@
 /**
- * Lógica pura de la lista de cartera (V3, §5.3): agrupa los casos del cobrador por cliente, agrega la
- * deuda, deriva el estado peor-caso, ordena (mora desc → próxima fecha), y filtra por chip + búsqueda local.
+ * Lógica pura de la lista de cartera (V3, §5.3): agrupa los créditos del cobrador (al día o en mora; filas de
+ * `GET /mora?todos=true`) por cliente, agrega la deuda, deriva el estado peor-caso, ordena (mora desc → próxima fecha), y filtra por chip + búsqueda local.
  * Sin red y sin React → testeable sola. El estado deriva de `portfolioStatus` de shared (fuente única).
  */
-import { PortfolioStatus, portfolioStatus } from '@kobrax/shared';
-import type { CaseListItem, PortfolioLocation } from './cases.service';
+import { PortfolioStatus, portfolioStatus, type MoraCreditListItem, type PortfolioLocation } from '@kobrax/shared';
 import { money, MONTHS } from './agenda-form';
 
-export type PortfolioChip = 'all' | 'today' | 'overdue' | 'current' | 'paid';
+/** `psf`: sólo los clientes con algún crédito importado de una fuente externa (PSF). */
+export type PortfolioChip = 'all' | 'today' | 'overdue' | 'current' | 'paid' | 'psf';
+
+/**
+ * Lo que `groupPortfolio` lee de cada crédito. Es un subconjunto de `MoraCreditListItem` (la fila de
+ * `GET /mora`): mapeo desde el viejo `CaseListItem` → amount = balance, creditCode = code, assigneeId =
+ * responsibleId, status = situation + writtenOff. `situation`, `writtenOff` y `category` son opcionales para
+ * que una fila mínima también agrupe.
+ */
+export type PortfolioCredit = Pick<
+  MoraCreditListItem,
+  'creditId' | 'clientId' | 'currency' | 'daysPastDue' | 'hasActivePromise'
+> &
+  Partial<
+    Pick<
+      MoraCreditListItem,
+      | 'clientName'
+      | 'balance'
+      | 'nextDueDate'
+      | 'installmentAmount'
+      | 'zone'
+      | 'locations'
+      | 'documentMasked'
+      | 'externalSource'
+      | 'syncStatus'
+      | 'reportedAsOf'
+      | 'reportedStale'
+      | 'writtenOff'
+      | 'category'
+      | 'situation'
+    >
+  >;
 
 /** Criterios de orden de la lista (S4). `mora` es el de siempre y sigue siendo el default. */
 export type PortfolioSort = 'mora' | 'deuda' | 'nombre' | 'vencimiento';
@@ -33,8 +63,16 @@ export interface ClientPortfolio {
   /** Deuda agregada de todos los créditos del cliente (§5.3, "cifra dominante"). */
   totalDebt: number;
   creditCount: number;
-  /** Estado peor-caso entre los créditos (badge de la tarjeta). */
+  /** Estado del peor crédito (badge de la tarjeta). */
   status: PortfolioStatus;
+  /** Todos sus créditos están castigados (condición aparte: el badge de la tarjeta dice «Castigado»). */
+  writtenOff: boolean;
+  /** Cuántos de sus créditos están castigados. */
+  writtenOffCount: number;
+  /** Categoría de mora (A/B/C…) del crédito con más días de mora; ausente = al día o sin categorías configuradas. */
+  category?: string;
+  /** Algún crédito es de una fuente externa (PSF): el chip «PSF». */
+  external: boolean;
   maxDaysPastDue: number;
   /** La próxima fecha de cobro más cercana entre los créditos con saldo. */
   nextDueDate?: string;
@@ -55,7 +93,7 @@ const ddmm = (iso: string): string => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
  * La línea de fuente de un cliente (D4, D7, D9): de qué fuente, a qué corte, y si alguna operación
  * ya no viene en el reporte o tiene el dato viejo — que cambian cómo se lee el monto de la tarjeta.
  */
-export function sourceLineOf(group: Pick<CaseListItem, 'externalSource' | 'syncStatus' | 'reportedAsOf' | 'reportedStale'>[]): string | undefined {
+export function sourceLineOf(group: Pick<PortfolioCredit, 'externalSource' | 'syncStatus' | 'reportedAsOf' | 'reportedStale'>[]): string | undefined {
   const external = group.filter((c) => c.externalSource);
   if (external.length === 0) return undefined;
   const sources = [...new Set(external.map((c) => c.externalSource!))].join(', ');
@@ -99,10 +137,10 @@ function isSameUtcDay(iso: string | undefined, asOf: Date): boolean {
   );
 }
 
-/** Agrupa los casos por cliente en tarjetas de cartera, ordenadas (mora desc → próxima fecha asc). */
-export function groupPortfolio(cases: CaseListItem[], asOf: Date = new Date()): ClientPortfolio[] {
-  const byClient = new Map<string, CaseListItem[]>();
-  for (const c of cases) {
+/** Agrupa los créditos por cliente en tarjetas de cartera, ordenadas (mora desc → próxima fecha asc). */
+export function groupPortfolio(credits: PortfolioCredit[], asOf: Date = new Date()): ClientPortfolio[] {
+  const byClient = new Map<string, PortfolioCredit[]>();
+  for (const c of credits) {
     const arr = byClient.get(c.clientId);
     if (arr) arr.push(c);
     else byClient.set(c.clientId, [c]);
@@ -111,15 +149,15 @@ export function groupPortfolio(cases: CaseListItem[], asOf: Date = new Date()): 
   const out: ClientPortfolio[] = [];
   for (const [clientId, group] of byClient) {
     const currency = group.find((c) => c.currency)?.currency ?? 'BOB';
-    const totalDebt = group.reduce((s, c) => s + (c.amount ?? 0), 0);
+    const totalDebt = group.reduce((s, c) => s + (c.balance ?? 0), 0);
     const maxDaysPastDue = group.reduce((m, c) => Math.max(m, c.daysPastDue ?? 0), 0);
 
-    // Estado peor-caso: cada crédito calcula el suyo con la regla única de shared.
+    // Estado del peor crédito: cada uno calcula el suyo con la regla única de shared.
     let status = PortfolioStatus.PAID;
     for (const c of group) {
       const s = portfolioStatus(
         {
-          outstandingBalance: c.amount ?? 0,
+          outstandingBalance: c.balance ?? 0,
           daysPastDue: c.daysPastDue ?? 0,
           nextDueDate: c.nextDueDate ?? null,
           hasActivePromise: c.hasActivePromise,
@@ -131,8 +169,13 @@ export function groupPortfolio(cases: CaseListItem[], asOf: Date = new Date()): 
 
     // Próximo cobro: el crédito con saldo y fecha más cercana → alimenta la línea "Cuota … · vence …".
     const next = group
-      .filter((c) => (c.amount ?? 0) > 0.005 && c.nextDueDate)
+      .filter((c) => (c.balance ?? 0) > 0.005 && c.nextDueDate)
       .sort((a, b) => a.nextDueDate!.localeCompare(b.nextDueDate!))[0];
+
+    const writtenOffCount = group.filter((c) => c.writtenOff).length;
+    // La categoría que se muestra es la del crédito más atrasado: es la que dice qué tan grave es el cliente.
+    const worst = [...group].sort((a, b) => (b.daysPastDue ?? 0) - (a.daysPastDue ?? 0))[0];
+    const category = (worst?.daysPastDue ?? 0) > 0 ? worst?.category?.code : undefined;
 
     let secondaryLine = '';
     if (maxDaysPastDue > 0) {
@@ -147,13 +190,17 @@ export function groupPortfolio(cases: CaseListItem[], asOf: Date = new Date()): 
       clientId,
       name: first.clientName ?? 'Sin nombre',
       zone: first.zone,
-      // Las ubicaciones vienen iguales en todos los casos del cliente (son del cliente, no del caso).
+      // Las ubicaciones vienen iguales en todos los créditos del cliente (son del cliente, no del crédito).
       locations: first.locations ?? [],
       documentMasked: first.documentMasked,
       currency,
       totalDebt,
       creditCount: new Set(group.map((c) => c.creditId)).size,
       status,
+      writtenOff: writtenOffCount === group.length,
+      writtenOffCount,
+      category,
+      external: group.some((c) => !!c.externalSource),
       maxDaysPastDue,
       nextDueDate: next?.nextDueDate,
       secondaryLine,
@@ -191,7 +238,7 @@ export function sortPortfolio(list: ClientPortfolio[], sort: PortfolioSort = 'mo
 }
 
 /**
- * ¿La tarjeta pasa el chip activo? (§5.3: Todos · Hoy · En mora · Al día · Pagados).
+ * ¿La tarjeta pasa el chip activo? (§5.3: Todos · Hoy · En mora · Al día · Pagados · PSF).
  * Los chips filtran por las reglas CRUDAS del §5.3 (mora, vencimiento, saldo), no por el badge derivado:
  * "En mora" = days_past_due > 0, literal. El badge (color) es una preocupación aparte.
  */
@@ -210,6 +257,8 @@ export function matchesChip(p: ClientPortfolio, chip: PortfolioChip, asOf: Date 
       return hasDebt && p.maxDaysPastDue === 0;
     case 'paid':
       return !hasDebt;
+    case 'psf':
+      return p.external;
   }
 }
 

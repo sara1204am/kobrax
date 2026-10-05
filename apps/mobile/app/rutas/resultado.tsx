@@ -119,7 +119,7 @@ export default function ResultadoScreen() {
     const visitInput = {
       id: visitId.current,
       routeStopId: stop.id,
-      caseId: stop.caseId,
+      creditId: stop.creditId,
       lat: coords.latitude,
       lng: coords.longitude,
       accuracy: coords.accuracy,
@@ -129,10 +129,9 @@ export default function ResultadoScreen() {
       details: buildDetails(key, form),
     };
     const promesaInput =
-      key === 'PROMISE' && stop.caseId && stop.creditId
+      key === 'PROMISE' && stop.creditId
         ? {
             id: promiseId.current,
-            caseId: stop.caseId,
             creditId: stop.creditId,
             type: AgendaItemType.PROMISE_TO_PAY,
             scheduledDate: form.promiseDate,
@@ -154,7 +153,7 @@ export default function ResultadoScreen() {
         photoUploaded: form.photo?.url ? { url: form.photo.url, hash: form.photo.hash! } : undefined,
         payment:
           key === 'PAID' && stop.creditId
-            ? { creditId: stop.creditId, caseId: stop.caseId, amount, method: form.paymentMethodCode as PaymentMethod }
+            ? { creditId: stop.creditId, amount, method: form.paymentMethodCode as PaymentMethod }
             : undefined,
         promise: promesaInput,
       });
@@ -204,7 +203,6 @@ export default function ResultadoScreen() {
     if (key === 'PAID' && stop.creditId) {
       const pagoInput = {
         creditId: stop.creditId,
-        caseId: stop.caseId,
         amount,
         method: form.paymentMethodCode as PaymentMethod,
         receiptUrl: foto?.url,

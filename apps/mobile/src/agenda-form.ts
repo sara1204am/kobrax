@@ -7,22 +7,72 @@
  *
  * Se re-exportan con los nombres de siempre para que las pantallas sigan importando de un solo lado.
  */
-import { AgendaTimeSlot, ScheduleTimeMode, SUPPORTED_CURRENCIES, TIME_SLOT_HOURS, formatCurrency } from '@kobrax/shared';
+import {
+  agendaFormReducer,
+  buildAgendaPatch,
+  buildAgendaPayload,
+  canSubmitAgenda,
+  hydrateAgendaForm,
+  initialAgendaForm,
+  AgendaTimeSlot,
+  ScheduleTimeMode,
+  SUPPORTED_CURRENCIES,
+  TIME_SLOT_HOURS,
+  formatCurrency,
+  type AgendaFormAction as SharedFormAction,
+  type AgendaFormState as FormState,
+  type AgendaListItem,
+  type CreateAgendaInput,
+  type UpdateAgendaInput,
+} from '@kobrax/shared';
 
 export {
-  agendaFormReducer as formReducer,
-  buildAgendaPatch as buildPatch,
-  buildAgendaPayload as buildPayload,
-  canSubmitAgenda as canSubmit,
-  hydrateAgendaForm as hydrateForm,
-  initialAgendaForm as initialForm,
   partitionDay,
   toHHmm,
   toISO,
   toLocalDate,
   todayISO,
 } from '@kobrax/shared';
-export type { AgendaFormAction as FormAction, AgendaFormState as FormState } from '@kobrax/shared';
+export type { FormState };
+
+/**
+ * F4/08: la agenda cuelga del **crédito**; el formulario de shared todavía exige `caseId` (`canSubmitAgenda`,
+ * `buildAgendaPayload`). Hasta que shared lo suelte, el móvil usa el `creditId` como relleno de `caseId` dentro
+ * del estado y lo quita del cuerpo que se envía: el server ni lo mira. Estos envoltorios son el único lugar que lo sabe.
+ */
+export type FormAction = Exclude<SharedFormAction, { t: 'credit' }> | { t: 'credit'; creditId: string };
+
+export function initialForm(today: string): FormState {
+  return initialAgendaForm(today);
+}
+
+export function formReducer(state: FormState, action: FormAction): FormState {
+  if (action.t === 'credit') return { ...state, creditId: action.creditId, caseId: action.creditId };
+  return agendaFormReducer(state, action);
+}
+
+/** El agendado abierto en edición: el crédito es el ancla (el `caseId` es el relleno, ver arriba). */
+export function hydrateForm(item: AgendaListItem): FormState {
+  return { ...hydrateAgendaForm(item), caseId: item.creditId };
+}
+
+const withPlaceholder = (state: FormState): FormState => (state.creditId ? { ...state, caseId: state.creditId } : state);
+
+export function canSubmit(state: FormState, requiresBank = false): boolean {
+  return canSubmitAgenda(withPlaceholder(state), requiresBank);
+}
+
+/** Cuerpo de `POST /agenda`: sin `caseId`, sólo `creditId`. */
+export function buildPayload(state: FormState): CreateAgendaInput | null {
+  const payload = buildAgendaPayload(withPlaceholder(state));
+  if (!payload) return null;
+  const { caseId: _relleno, ...rest } = payload;
+  return rest;
+}
+
+export function buildPatch(state: FormState): UpdateAgendaInput | null {
+  return buildAgendaPatch(withPlaceholder(state));
+}
 
 export type TimeSlot = AgendaTimeSlot;
 export type TimeMode = ScheduleTimeMode.FIXED | ScheduleTimeMode.LAPSE;

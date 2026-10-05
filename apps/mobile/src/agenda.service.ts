@@ -123,10 +123,11 @@ export function whatsappLink(phone: string, message?: string): string {
   return `https://wa.me/${digits}${message ? `?text=${encodeURIComponent(message)}` : ''}`;
 }
 
-/** Un crédito del cliente con caso abierto asignado a mí: lo que se puede agendar. */
+/** Un crédito del cliente dentro de mi alcance (en mora o al día): lo que se puede agendar. */
 export interface CreditOption {
   creditId: string;
-  caseId: string;
+  /** @deprecated F4/08: el server ya no lo manda. Opcional-ignorado hasta que 5A lo saque de la cola. */
+  caseId?: string;
   code?: string;
   /** Capital original del crédito. */
   principalAmount: number;
@@ -135,6 +136,12 @@ export interface CreditOption {
   overdueAmount: number;
   currency: string;
   daysPastDue: number;
+}
+
+/** "En mora · 12 días" | "Al día" — lo que se muestra al elegir el crédito. */
+export function creditSituationLabel(daysPastDue: number): string {
+  if (daysPastDue <= 0) return 'Al día';
+  return `En mora · ${daysPastDue} ${daysPastDue === 1 ? 'día' : 'días'}`;
 }
 
 export interface ContactOption {
@@ -168,7 +175,7 @@ export interface AgendaClientContext {
 
 /**
  * Todo lo que el alta necesita del cliente elegido, en un round-trip: créditos agendables +
- * teléfonos y direcciones en claro. `error` si el cliente no tiene casos asignados a mí (AGENDA_002).
+ * teléfonos y direcciones en claro. `error` si el cliente no tiene créditos en mi alcance (AGENDA_002).
  */
 export function clientContext(clientId: string): Promise<QueryResult<AgendaClientContext>> {
   // Con respaldo local: sin esto, sin señal se puede BUSCAR al deudor pero no abrirlo, que es

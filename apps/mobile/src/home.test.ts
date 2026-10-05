@@ -5,7 +5,6 @@ import type { AgendaListItem } from './agenda.service';
 function item(over: Partial<AgendaListItem>): AgendaListItem {
   return {
     id: Math.random().toString(36).slice(2),
-    caseId: 'c',
     clientId: 'cl',
     creditId: 'cr',
     assigneeId: 'u',

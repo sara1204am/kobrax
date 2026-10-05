@@ -36,14 +36,14 @@ export interface RouteDraft {
   createId?: string;
   /** Fecha de la ruta (`YYYY-MM-DD`): un borrador de ayer no se le aplica a la jornada de hoy. */
   date: string;
-  /** Los casos elegidos, **en el orden del recorrido**. */
-  caseIds: string[];
-  /** Cliente de cada caso — el server necesita ambos para crear la parada. */
-  clientByCase: Record<string, string>;
+  /** Los créditos elegidos, **en el orden del recorrido** (una parada = un crédito). */
+  creditIds: string[];
+  /** Cliente de cada crédito — el server necesita ambos para crear la parada. */
+  clientByCredit: Record<string, string>;
 }
 
 export function emptyDraft(date: string): RouteDraft {
-  return { routeId: null, date, caseIds: [], clientByCase: {} };
+  return { routeId: null, date, creditIds: [], clientByCredit: {} };
 }
 
 // ── Persistencia ──────────────────────────────────────────────────────────────
@@ -65,8 +65,8 @@ export async function loadDraft(date: string): Promise<RouteDraft> {
   if (!raw) return emptyDraft(date);
   try {
     const draft = JSON.parse(raw) as RouteDraft;
-    // Un borrador de otro día no se arrastra: la jornada de hoy arranca limpia.
-    return draft.date === date ? draft : emptyDraft(date);
+    // Un borrador de otro día —o con otra forma— no se arrastra: la jornada de hoy arranca limpia.
+    return draft.date === date && Array.isArray(draft.creditIds) ? draft : emptyDraft(date);
   } catch {
     return emptyDraft(date);
   }
@@ -97,34 +97,34 @@ export async function clearDraft(): Promise<void> {
 
 // ── Ediciones (puras: la pantalla guarda el resultado) ────────────────────────
 
-export function withStop(draft: RouteDraft, caseId: string, clientId: string): RouteDraft {
-  if (draft.caseIds.includes(caseId)) return draft; // dos toques sobre el mismo pin
+export function withStop(draft: RouteDraft, creditId: string, clientId: string): RouteDraft {
+  if (draft.creditIds.includes(creditId)) return draft; // dos toques sobre el mismo pin
   return {
     ...draft,
-    caseIds: [...draft.caseIds, caseId],
-    clientByCase: { ...draft.clientByCase, [caseId]: clientId },
+    creditIds: [...draft.creditIds, creditId],
+    clientByCredit: { ...draft.clientByCredit, [creditId]: clientId },
   };
 }
 
-export function withoutStop(draft: RouteDraft, caseId: string): RouteDraft {
-  const { [caseId]: _out, ...rest } = draft.clientByCase;
-  return { ...draft, caseIds: draft.caseIds.filter((id) => id !== caseId), clientByCase: rest };
+export function withoutStop(draft: RouteDraft, creditId: string): RouteDraft {
+  const { [creditId]: _out, ...rest } = draft.clientByCredit;
+  return { ...draft, creditIds: draft.creditIds.filter((id) => id !== creditId), clientByCredit: rest };
 }
 
 /** Mueve una parada `delta` lugares (−1 sube, +1 baja). Fuera de rango, no hace nada. */
-export function moveStop(draft: RouteDraft, caseId: string, delta: number): RouteDraft {
-  const from = draft.caseIds.indexOf(caseId);
+export function moveStop(draft: RouteDraft, creditId: string, delta: number): RouteDraft {
+  const from = draft.creditIds.indexOf(creditId);
   const to = from + delta;
-  if (from < 0 || to < 0 || to >= draft.caseIds.length) return draft;
-  const caseIds = [...draft.caseIds];
-  caseIds.splice(to, 0, caseIds.splice(from, 1)[0]!);
-  return { ...draft, caseIds };
+  if (from < 0 || to < 0 || to >= draft.creditIds.length) return draft;
+  const creditIds = [...draft.creditIds];
+  creditIds.splice(to, 0, creditIds.splice(from, 1)[0]!);
+  return { ...draft, creditIds };
 }
 
 // ── Sincronización ────────────────────────────────────────────────────────────
 
 export interface StopDiff {
-  /** Casos que hay que crear como parada. */
+  /** Créditos que hay que crear como parada. */
   toAdd: string[];
   /** Paradas del server que ya no están en el borrador (id de parada). */
   toRemove: string[];
@@ -137,19 +137,19 @@ export interface StopDiff {
  * testea sola. Las paradas ya gestionadas (visitadas/omitidas) **no se tocan**: son historia de la
  * jornada, no parte del recorrido que se está armando.
  */
-export function diffStops(caseIds: string[], serverStops: RouteStopItem[]): StopDiff {
+export function diffStops(creditIds: string[], serverStops: RouteStopItem[]): StopDiff {
   const editable = serverStops.filter((s) => s.status === 'PENDING');
-  const byCase = new Map(editable.filter((s) => s.caseId).map((s) => [s.caseId!, s]));
+  const byCredit = new Map(editable.filter((s) => s.creditId).map((s) => [s.creditId!, s]));
 
-  const toAdd = caseIds.filter((id) => !byCase.has(id));
-  const toRemove = editable.filter((s) => !s.caseId || !caseIds.includes(s.caseId)).map((s) => s.id);
+  const toAdd = creditIds.filter((id) => !byCredit.has(id));
+  const toRemove = editable.filter((s) => !s.creditId || !creditIds.includes(s.creditId)).map((s) => s.id);
 
   // La posición final se cuenta sobre el recorrido completo, incluidas las paradas ya gestionadas
   // que quedan adelante: el número que se manda es la posición real en la ruta.
   const fixed = serverStops.length - editable.length;
   const toMove: StopDiff['toMove'] = [];
-  caseIds.forEach((caseId, i) => {
-    const stop = byCase.get(caseId);
+  creditIds.forEach((creditId, i) => {
+    const stop = byCredit.get(creditId);
     const target = fixed + i + 1;
     if (stop && stop.sequenceOrder !== target) toMove.push({ stopId: stop.id, sequenceOrder: target });
   });
@@ -171,7 +171,7 @@ export async function flushDraft(
   draft: RouteDraft,
   createRoute: (id: string) => Promise<{ status: string; data?: { id: string }; message?: string }>,
 ): Promise<FlushResult> {
-  if (draft.caseIds.length === 0 && !draft.routeId) return { status: 'ok', draft };
+  if (draft.creditIds.length === 0 && !draft.routeId) return { status: 'ok', draft };
 
   let routeId = draft.routeId;
   if (!routeId) {
@@ -189,15 +189,15 @@ export async function flushDraft(
   if (current.status === 'offline') return { status: 'offline' };
   if (current.status !== 'ok') return { status: 'error', message: 'No se pudo leer la ruta' };
 
-  const diff = diffStops(draft.caseIds, current.data.stops ?? []);
+  const diff = diffStops(draft.creditIds, current.data.stops ?? []);
 
   for (const stopId of diff.toRemove) {
     const res = await removeStop(routeId, stopId);
     if (res.status === 'offline') return { status: 'offline' };
     if (res.status === 'error') return { status: 'error', message: res.message };
   }
-  for (const caseId of diff.toAdd) {
-    const res = await addStop(routeId, { clientId: draft.clientByCase[caseId]!, caseId });
+  for (const creditId of diff.toAdd) {
+    const res = await addStop(routeId, { clientId: draft.clientByCredit[creditId]!, creditId });
     if (res.status === 'offline') return { status: 'offline' };
     if (res.status === 'error') return { status: 'error', message: res.message };
   }
@@ -205,7 +205,7 @@ export async function flushDraft(
   const after = await getRoute(routeId);
   if (after.status === 'offline') return { status: 'offline' };
   if (after.status === 'ok') {
-    for (const move of diffStops(draft.caseIds, after.data.stops ?? []).toMove) {
+    for (const move of diffStops(draft.creditIds, after.data.stops ?? []).toMove) {
       const res = await updateStop(routeId, move.stopId, { sequenceOrder: move.sequenceOrder });
       if (res.status === 'offline') return { status: 'offline' };
       if (res.status === 'error') return { status: 'error', message: res.message };
@@ -229,7 +229,7 @@ export async function flushPendingDraft(
   date: string,
 ): Promise<'ok' | 'nothing' | 'offline' | 'error'> {
   const draft = await loadDraft(date);
-  if (draft.caseIds.length === 0) return 'nothing';
+  if (draft.creditIds.length === 0) return 'nothing';
   // Con `routeId` ya existe en el server; igual se corre el flush, porque puede haber quedado a
   // medias (paradas agregadas y el orden sin aplicar). El diff resuelve qué falta y no duplica.
   const res = await flushDraft(draft, (id) => createRoute({ id, collectorId, plannedDate: date }));

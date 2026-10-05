@@ -86,9 +86,8 @@ export async function writeProvisionalCredit(input: NewCreditInput): Promise<voi
   if (!ctx || ctx.credits.some((c) => c.creditId === id)) return;
   const credit: Pending<CreditOption> = {
     creditId: id,
-    // El caso lo abre el server al subir: hasta entonces no hay id de caso y las acciones que lo necesitan
-    // (cobrar, registrar gestión) esperan a que el alta se confirme.
-    caseId: '',
+    // Hasta que el alta suba, el server no conoce este crédito: cobrar o registrar una gestión daría 404. La
+    // ficha del cliente lee `pending` y esconde esas acciones hasta que se confirme (`confirmProvisionalRow`).
     principalAmount: input.principalAmount,
     outstandingBalance: input.outstandingBalance ?? input.principalAmount,
     overdueAmount: 0,

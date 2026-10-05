@@ -9,7 +9,7 @@ import { clientContext, type AgendaClientContext } from '@/agenda.service';
 import { listCreditPayments, type PaymentItem } from '@/payments.service';
 import { getMora, listMoraNotes, listMoraPromises } from '@/mora.service';
 import { activityLine, moraCardProps, NOTE_KIND_LABEL, PROMISE_STATUS_META, staleLine, toMoraRows } from '@/mora';
-import { MORA_OUTCOMES, submitMoraActivity, submitMoraNote } from '@/mora-actions';
+import { submitMoraActivity, submitMoraNote } from '@/mora-actions';
 import { PaySheet } from '@/pay-sheet';
 import { submitPayment } from '@/payment-submit';
 import { GestionSheet, prettyDate } from '@/gestion-sheet';
@@ -24,8 +24,7 @@ type Load = 'loading' | 'ok' | 'offline' | 'error';
 /**
  * Ficha de recuperación de un crédito en mora (`GET /mora/:creditId`).
  *
- * Es por **crédito**, con o sin caso abierto: registrar una gestión sobre un crédito sin caso lo abre el
- * servidor. Todo lo que se escribe acá (gestión con promesa, pago, nota) se puede hacer sin señal: queda en el
+ * Es por **crédito**, esté o no en mora (no hay caso que abrir). Todo lo que se escribe acá (gestión con promesa, pago, nota) se puede hacer sin señal: queda en el
  * teléfono con su id y sube solo. Qué es mora, cuánto se debe y el estado de cada promesa lo calcula el servidor.
  */
 export default function MoraFichaScreen() {
@@ -81,14 +80,12 @@ export default function MoraFichaScreen() {
 
   const phone = useMemo(() => onlyDigits(ctx?.contacts.find((c) => c.isPrimary)?.value ?? ctx?.contacts[0]?.value), [ctx]);
 
-  /** Llamar / WhatsApp: abre la app y, si hay caso, deja el rastro (sin señal se encola). No espera ni bloquea. */
+  /** Llamar / WhatsApp: abre la app y deja el rastro en el crédito (sin señal se encola). No espera ni bloquea. */
   const contact = useCallback(
     (kind: 'call' | 'whatsapp') => {
       if (!phone || !detail) return;
       void Linking.openURL(kind === 'call' ? `tel:${phone}` : `https://wa.me/${phone}`);
-      if (detail.case) {
-        void registrarRastro(detail.case.id, { type: kind === 'call' ? 'CALL' : 'MESSAGE', notes: kind === 'call' ? 'Llamada' : 'WhatsApp' });
-      }
+      void registrarRastro(detail.creditId, kind);
     },
     [phone, detail],
   );
@@ -149,7 +146,6 @@ export default function MoraFichaScreen() {
           <ActionBtn label="Nota" icon="🗒️" onPress={() => { noteId.current = nuevoId(); setNoteSheet(true); }} />
         </View>
         {!phone && <Text style={styles.hint}>Sin teléfono registrado: llamar y WhatsApp no están disponibles.</Text>}
-        {!detail.case && <Text style={styles.hint}>Este crédito no tiene caso abierto: al registrar una gestión se abre uno.</Text>}
 
         <View style={styles.card}>
           <SectionLabel>Resumen</SectionLabel>
@@ -264,7 +260,6 @@ export default function MoraFichaScreen() {
           const err = await submitPayment(
             {
               creditId: detail.creditId,
-              ...(detail.case ? { caseId: detail.case.id } : {}),
               amount,
               method,
               receiptUrl: receipt?.url,
@@ -287,7 +282,6 @@ export default function MoraFichaScreen() {
         visible={gestSheet}
         onClose={() => setGestSheet(false)}
         currency={currency}
-        outcomes={MORA_OUTCOMES}
         onSubmit={async (payload) => {
           const err = await submitMoraActivity(detail.creditId, { ...payload, id: activityId.current });
           if (err) return err;

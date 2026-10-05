@@ -6,10 +6,10 @@ import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
-import { BottomSheet, CaseCard, Chips, EmptyState, ListRow, PORTFOLIO_STATUS_META, SectionLabel, SegmentTabs, TONE_SOLID } from '@/ui';
+import type { BadgeTone } from '@/ui';
+import { BottomSheet, CreditCard, Chips, EmptyState, ListRow, PORTFOLIO_STATUS_META, SectionLabel, SegmentTabs, TONE_SOLID } from '@/ui';
 import { money } from '@/agenda-form';
-import { listCases } from '@/cases.service';
-import { listMora, MORA_LIMIT } from '@/mora.service';
+import { listMora, listPortfolio, MORA_LIMIT } from '@/mora.service';
 import { filterMora, MORA_CHIP_LABEL, moraCardProps, staleLine, type MoraChip, type MoraRow } from '@/mora';
 import {
   filterPortfolio,
@@ -34,6 +34,8 @@ const CHIPS: { key: PortfolioChip; label: string; danger?: boolean }[] = [
   { key: 'overdue', label: 'En mora', danger: true },
   { key: 'current', label: 'Al día' },
   { key: 'paid', label: 'Pagados' },
+  // Los clientes con créditos importados de una fuente externa (PSF): su saldo es el del último reporte.
+  { key: 'psf', label: 'PSF' },
 ];
 
 // Preferencia de densidad (tarjetas ↔ lista), en SecureStore como los flags de import/biometría:
@@ -46,7 +48,7 @@ type Load =
   | { status: 'error' }
   | { status: 'ok'; cards: ClientPortfolio[] };
 
-/** La lista de «En mora» viene de `GET /mora` (por crédito), no de la cartera (por cliente). */
+/** La lista de «En mora» viene de `GET /mora` (por crédito, sólo los vencidos), no de la cartera (por cliente). */
 type MoraLoad =
   | { status: 'loading' }
   | { status: 'offline' }
@@ -57,11 +59,12 @@ const MORA_CHIPS = Object.keys(MORA_CHIP_LABEL) as MoraChip[];
 
 /**
  * Cartera (V3, §5.3): lista centrada en el cliente con la deuda agregada. Buscador (nombre + documento +
- * zona) + chips de filtro + orden elegible. Los datos salen de `GET /cases?view=portfolio` (ya scoped al
- * cobrador); agrupar/estado/orden/buscar es lógica pura de `src/portfolio.ts`.
+ * zona) + chips de filtro + orden elegible. Los datos salen de `GET /mora?todos=true` (todos los créditos del
+ * cobrador, **al día incluidos**, y aquellos donde es reemplazo temporal o apoyo; el servidor ya acota por
+ * alcance); agrupar/estado/orden/buscar es lógica pura de `src/portfolio.ts`.
  *
  * **La búsqueda es global (S4)**: además de filtrar lo cargado, consulta `GET /clients?q=`. Sin eso, un
- * cliente sin préstamo —o más allá de la página de casos— no existe en ninguna pantalla de la app.
+ * cliente sin préstamo —o fuera de la cartera cargada— no existe en ninguna pantalla de la app.
  */
 export default function CobranzaScreen() {
   const [load, setLoad] = useState<Load>({ status: 'loading' });
@@ -77,13 +80,12 @@ export default function CobranzaScreen() {
 
   const fetchCartera = useCallback(async () => {
     const reqId = ++reqRef.current;
-    // La cartera de un cobrador cabe en memoria (§5.3): una página amplia, sin paginar en el móvil.
-    // 🔴 `open: true` no es opcional: sin él entran los casos CERRADOS. Mientras nada los cerraba
-    // daba igual; ahora el trabajo diario cierra al que pagó, y esta lista lo seguiría mostrando
-    // para cobrar. Lo mismo en `rutas/crear` y en el hidratado offline.
+    // La cartera de un cobrador cabe en memoria (§5.3): `listPortfolio` pide las páginas que hagan falta y las
+    // guarda juntas. Incluye los créditos al día: trabajar un crédito no exige mora. Lo mismo en `rutas/crear`
+    // y en el hidratado offline (una sola casilla de caché).
     // La mora se pide a la par pero **por su cuenta**: si una falla, la otra lista igual se muestra.
     const [res, moraRes] = await Promise.all([
-      listCases({ view: 'portfolio', open: true, limit: 100 }),
+      listPortfolio(),
       listMora({ limit: MORA_LIMIT }), // misma llamada que `hydrate`
     ]);
     if (reqId !== reqRef.current) return;
@@ -241,7 +243,7 @@ export default function CobranzaScreen() {
 }
 
 /**
- * «En mora»: **un crédito por fila**, con y sin caso (`GET /mora`). Orden fijo prioridad → días → saldo; los
+ * «En mora»: **un crédito por fila** (`GET /mora`). Orden fijo prioridad → días → saldo; los
  * sub-chips y la búsqueda se resuelven acá sobre lo ya bajado, así que funcionan igual sin señal.
  */
 function MoraList({
@@ -303,18 +305,19 @@ function MoraList({
   );
 }
 
-/** La tarjeta del crédito: lo arma `moraCardProps` (probado aparte) y la pinta `CaseCard`. */
+/** La tarjeta del crédito: lo arma `moraCardProps` (probado aparte) y la pinta `CreditCard`. */
 function MoraRowCard({ row, asOf }: { row: MoraRow; asOf: Date }) {
   const p = moraCardProps(row, asOf);
   return (
     <View style={{ marginBottom: SPACING.sm }}>
-      <CaseCard
+      <CreditCard
         name={p.name}
         caption={p.caption}
-        subtitle={p.subtitle}
+        subtitle={p.subtitle || undefined}
         amount={p.amount}
-        amountDanger
+        amountDanger={row.situation === 'IN_ARREARS'}
         badge={p.badge}
+        tag={p.tag}
         onPress={() => router.push(`/mora/${row.creditId}`)}
       />
     </View>
@@ -342,22 +345,36 @@ function Others({ hits }: { hits: ClientHit[] }) {
   );
 }
 
-/** Tarjeta de cliente (§5.3): nombre + zona, deuda agregada (roja si mora), línea secundaria y badge. */
+/**
+ * El badge de la tarjeta de cliente: **Castigado** (condición aparte; sólo si TODOS sus créditos lo están) o el
+ * estado de cartera (Al día / Por vencer / En mora / Pagado). La categoría de mora va como etiqueta aparte.
+ */
+function cardBadge(card: ClientPortfolio): { label: string; tone: BadgeTone } {
+  return card.writtenOff ? { label: 'Castigado', tone: 'neutral' } : PORTFOLIO_STATUS_META[card.status];
+}
+
+/** Tarjeta de cliente (§5.3): nombre + zona, deuda agregada (roja si mora), línea secundaria, categoría y badge. */
 function Card({ card }: { card: ClientPortfolio }) {
-  const meta = PORTFOLIO_STATUS_META[card.status];
+  const meta = cardBadge(card);
   // D7: si parte de la deuda la reporta el banco, la tarjeta lo dice junto a la zona.
-  const caption = [card.zone, card.creditCount > 1 ? `${card.creditCount} préstamos` : undefined, card.sourceLine]
+  const caption = [
+    card.zone,
+    card.creditCount > 1 ? `${card.creditCount} préstamos` : undefined,
+    !card.writtenOff && card.writtenOffCount > 0 ? `${card.writtenOffCount} castigado${card.writtenOffCount > 1 ? 's' : ''}` : undefined,
+    card.sourceLine,
+  ]
     .filter(Boolean)
     .join(' · ');
   return (
     <View style={{ marginBottom: SPACING.sm }}>
-      <CaseCard
+      <CreditCard
         name={card.name}
         caption={caption || undefined}
         subtitle={card.secondaryLine || undefined}
         amount={money(card.totalDebt, card.currency)}
         amountDanger={card.maxDaysPastDue > 0}
         badge={meta}
+        tag={card.category ? `Cat. ${card.category}` : undefined}
         onPress={() => router.push(`/cliente/${card.clientId}`)}
       />
     </View>
@@ -375,10 +392,10 @@ function CompactRow({ card }: { card: ClientPortfolio }) {
     <Pressable
       style={({ pressed }) => [styles.compactRow, pressed && { backgroundColor: COLORS.bg }]}
       accessibilityRole="button"
-      accessibilityLabel={`${card.name}, ${PORTFOLIO_STATUS_META[card.status].label}, ${money(card.totalDebt, card.currency)}`}
+      accessibilityLabel={`${card.name}, ${cardBadge(card).label}, ${money(card.totalDebt, card.currency)}`}
       onPress={() => router.push(`/cliente/${card.clientId}`)}
     >
-      <View style={[styles.dot, { backgroundColor: TONE_SOLID[PORTFOLIO_STATUS_META[card.status].tone] }]} />
+      <View style={[styles.dot, { backgroundColor: TONE_SOLID[cardBadge(card).tone] }]} />
       <Text style={styles.compactName} numberOfLines={1}>
         {card.name}
       </Text>
