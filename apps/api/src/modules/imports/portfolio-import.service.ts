@@ -21,6 +21,7 @@ import { TenantContextService } from '../../common/context/tenant-context.servic
 import { TenantClockService, civilDayStartInstant } from '../../common/context/tenant-clock.service';
 import type { ListImportRunsQueryDto } from './dto/import-runs.dto';
 import { AssignmentService, type AssignmentRequest } from '../assignments/assignment.service';
+import { assertImportAgency } from './import-agency';
 import type { AssignmentChange, AssignmentReason } from '../assignments/assignment-rules';
 import { assigneeNotEligible, assignmentForbidden } from '../assignments/assignment.errors';
 import { hasAssignments, ImportAssignmentError, planAssignments, resolveImportOwnership, type Ownership } from './import-assignment';
@@ -51,6 +52,7 @@ import {
   creditUpdateData,
   FILE_SOURCE,
   mapStatus,
+  storedStatus,
   snapshotData,
   type ImportStamp,
   type RowContext,
@@ -317,6 +319,7 @@ export class PortfolioImportService {
           branchId: true,
           assignedManagerId: true,
           status: true,
+          writtenOffAt: true,
           syncStatus: true,
           outstandingBalance: true,
           daysPastDue: true,
@@ -498,6 +501,18 @@ export class PortfolioImportService {
           details: { codes: assignPlan.unassigned },
         });
       }
+      /*
+       * D8 · El supervisor reparte sólo dentro de su agencia, también al importar: lo mismo que `POST /assignments/bulk`.
+       * Va dentro de la transacción: si algo se sale de su agencia, la corrida entera se cae sin dejar nada a medias.
+       */
+      await assertImportAgency(this.assignment, tx, {
+        canAssign,
+        createAssignees: [...assignPlan.create.values()].map((a) => a.userId),
+        reassign: assignPlan.reassign.flatMap((r) => {
+          const creditId = plan.toUpdate.find((u) => u.row.code === r.code)?.id;
+          return creditId && r.to ? [{ creditId, to: r.to }] : [];
+        }),
+      });
       await this.plan.assertRoom('credits', tx, { cuantos: counts.created });
       await this.plan.assertRoom('clients', tx, { cuantos: newGroups.size });
 
@@ -596,7 +611,7 @@ export class PortfolioImportService {
         const prev = byId.get(u.id)!;
         await tx.credit.update({
           where: { id: u.id },
-          data: creditUpdateData(b, (prev.metadata ?? {}) as Record<string, unknown>, stamp, { ...rowCtx, prevStatus: prev.status }),
+          data: creditUpdateData(b, (prev.metadata ?? {}) as Record<string, unknown>, stamp, { ...rowCtx, prevStatus: prev.status, prevWrittenOffAt: prev.writtenOffAt }),
         });
         snapshots.push(snapshotData(accountId, u.id, u.row.code, stamp.runId, reportAsOf, b));
         if (u.reappeared) transitions.push({ creditId: u.id, action: 'EXTERNAL_REAPPEARED', externalId: u.row.code, after: reported(b) });
@@ -1460,7 +1475,7 @@ function valuesOf(b: NormalizedRecord, statusMap?: Record<string, CreditStatus>)
   return {
     outstandingBalance: b.outstandingBalance ?? null,
     daysPastDue: b.daysPastDue ?? null,
-    status: mapStatus(b.status ?? null, statusMap) ?? CreditStatus.ACTIVE,
+    status: storedStatus(b.status ?? null, statusMap) ?? CreditStatus.ACTIVE,
     reportedStatus: b.status ?? null,
   };
 }

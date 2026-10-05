@@ -56,8 +56,7 @@ export interface AgendaFormState {
   type: AgendaItemType;
   /** Cliente elegido en el buscador. */
   clientId: string | null;
-  /** Crédito/caso elegido (auto si el cliente tiene uno solo). */
-  caseId: string | null;
+  /** Crédito elegido (auto si el cliente tiene uno solo). */
   creditId: string | null;
   /** Campos propios del tipo. Su forma la valida `validateAgendaDetails`. */
   details: Record<string, unknown>;
@@ -75,7 +74,7 @@ export type AgendaFormAction =
   | { t: 'type'; value: AgendaItemType }
   | { t: 'client'; clientId: string }
   | { t: 'clearClient' }
-  | { t: 'credit'; caseId: string; creditId: string }
+  | { t: 'credit'; creditId: string }
   | { t: 'details'; patch: Record<string, unknown> }
   | { t: 'observations'; value: string }
   | { t: 'date'; value: string }
@@ -87,7 +86,6 @@ export function initialAgendaForm(today: string): AgendaFormState {
   return {
     type: AgendaItemType.CALL,
     clientId: null,
-    caseId: null,
     creditId: null,
     details: {},
     observations: '',
@@ -108,14 +106,14 @@ export function agendaFormReducer(state: AgendaFormState, action: AgendaFormActi
     case 'type':
       return { ...state, type: action.value, details: {} };
 
-    // Otro cliente → sus contactos/direcciones dejan de existir, y el caso hay que reelegirlo.
+    // Otro cliente → sus contactos/direcciones dejan de existir, y el crédito hay que reelegirlo.
     case 'client':
-      return { ...state, clientId: action.clientId, caseId: null, creditId: null, details: {} };
+      return { ...state, clientId: action.clientId, creditId: null, details: {} };
     case 'clearClient':
-      return { ...state, clientId: null, caseId: null, creditId: null, details: {} };
+      return { ...state, clientId: null, creditId: null, details: {} };
 
     case 'credit':
-      return { ...state, caseId: action.caseId, creditId: action.creditId };
+      return { ...state, creditId: action.creditId };
     case 'details':
       return { ...state, details: { ...state.details, ...action.patch } };
     case 'observations':
@@ -150,7 +148,7 @@ function validDetails(state: AgendaFormState): AgendaDetails | null {
  * AGENDA_006 después del round-trip.
  */
 export function canSubmitAgenda(state: AgendaFormState, requiresBank = false): boolean {
-  if (!state.clientId || !state.caseId || !state.creditId) return false;
+  if (!state.clientId || !state.creditId) return false;
   if (!scheduleReady(state) || validDetails(state) === null) return false;
   return !requiresBank || Boolean(state.details.bankCode);
 }
@@ -164,7 +162,6 @@ export function hydrateAgendaForm(item: AgendaListItem): AgendaFormState {
   return {
     type: item.type,
     clientId: item.clientId,
-    caseId: item.caseId,
     creditId: item.creditId,
     details: { ...(item.details as Record<string, unknown>) },
     observations: item.observations ?? '',
@@ -178,7 +175,7 @@ export function hydrateAgendaForm(item: AgendaListItem): AgendaFormState {
 /**
  * Cuerpo de `PATCH /agenda/:id`, o `null` si el formulario no está completo.
  *
- * **Nunca emite `scheduledDate`, `caseId` ni `clientId`**: mover el día es reagendar (deja rastro)
+ * **Nunca emite `scheduledDate` ni `clientId`**: mover el día es reagendar (deja rastro)
  * y el deudor es el ancla del agendado. El server ni siquiera los acepta; esto lo hace explícito.
  */
 export function buildAgendaPatch(state: AgendaFormState): UpdateAgendaInput | null {
@@ -198,10 +195,9 @@ export function buildAgendaPatch(state: AgendaFormState): UpdateAgendaInput | nu
 /** Cuerpo de `POST /agenda`, o `null` si el formulario todavía no está completo. */
 export function buildAgendaPayload(state: AgendaFormState): CreateAgendaInput | null {
   const details = validDetails(state);
-  if (!details || !state.caseId || !state.creditId || !scheduleReady(state)) return null;
+  if (!details || !state.creditId || !scheduleReady(state)) return null;
   const fixed = state.timeMode === ScheduleTimeMode.FIXED;
   return {
-    caseId: state.caseId,
     creditId: state.creditId,
     type: state.type,
     scheduledDate: state.scheduledDate,

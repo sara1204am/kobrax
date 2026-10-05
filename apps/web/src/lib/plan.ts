@@ -1,12 +1,56 @@
 /**
- * El **adaptador de datos** de la planificación de rutas: lo que hay en la URL → la query de mora
- * disponible (`GET /cases`).
+ * El **adaptador de datos** de la planificación de rutas: lo que hay en la URL → la query de los créditos
+ * en mora disponibles (`GET /mora`, F4/08: la parada es por CRÉDITO, no por caso).
  *
  * Función pura, como `carteraQuery` y `moraQuery`: quien pide es el server component. Todo lo que
  * viaja se valida antes de salir — un filtro inventado en la URL no puede dejar la pantalla entera
  * sin mora.
  */
-import { CasePriority, CaseStatus, VisitOutcome } from '@kobrax/shared';
+import { COLLECTION_PRIORITIES, VisitOutcome, type MoraCreditListItem } from '@kobrax/shared';
+
+/** Una ubicación dibujable de un deudor: lo mínimo que usan el mapa y la lista. */
+export interface PlanLocation {
+  latitude: number;
+  longitude: number;
+  address?: string;
+}
+
+/**
+ * Un crédito en mora que se puede sumar a una ruta. `id` es el **creditId**: es lo que viaja a
+ * `POST /routes/generate` (`creditIds`) y a `add-stop`.
+ *
+ * `zone` y `locations` salen de `GET /mora` (opcionales: hay deudores sin dirección cargada). La búsqueda
+ * por área, el mapa y la columna de coordenadas dependen de ellas.
+ */
+export interface AvailableCredit {
+  id: string;
+  clientId: string;
+  clientName?: string;
+  creditCode?: string;
+  amount?: number;
+  currency?: string;
+  daysPastDue?: number;
+  /** El responsable del crédito: marca como «ayuda» al que lo toma de otro. */
+  assigneeId?: string;
+  zone?: string;
+  locations?: PlanLocation[];
+}
+
+/** Una fila de `GET /mora` → lo que usa el planificador. */
+export function toAvailable(row: MoraCreditListItem): AvailableCredit {
+  return {
+    id: row.creditId,
+    clientId: row.clientId,
+    clientName: row.clientName,
+    creditCode: row.code,
+    amount: row.balance ?? row.overdueAmount,
+    currency: row.currency,
+    daysPastDue: row.daysPastDue,
+    assigneeId: row.responsibleId,
+    zone: row.zone,
+    locations: row.locations,
+  };
+}
 
 /** Cuánta mora se trae para elegir. Es el techo de la API (`limit ≤ 100`), no una elección. */
 export const AVAILABLE_LIMIT = 100;
@@ -23,11 +67,11 @@ export const AVAILABLE_LIMIT = 100;
  */
 export const DEFAULT_MIN_STOPS = 8;
 
+/** «No visitado desde»: cuántos días atrás. `never` es el caso estricto, sin ninguna visita. */
+export const VISIT_AGES = ['never', '7', '15', '30'] as const;
+
 /** Rangos de mora que ofrece el panel. El valor es lo que viaja: `min-max`, con `max` opcional. */
 export const DPD_RANGES = ['1-7', '8-15', '16-30', '31-60', '61-90', '90-'] as const;
-
-/** «No visitado desde»: cuántos días atrás. El valor `never` es el caso estricto, sin ninguna visita. */
-export const VISIT_AGES = ['never', '7', '15', '30'] as const;
 
 export interface PlanParams {
   date?: string;
@@ -37,13 +81,17 @@ export interface PlanParams {
   minStops?: string;
   q?: string;
   dpd?: string;
-  estado?: string;
+  /** Categorías de mora (códigos de la cuenta, separados por coma). */
+  categoria?: string;
+  /** Prioridad del episodio de mora (códigos separados por coma). */
   prioridad?: string;
   zona?: string;
   saldoMin?: string;
   saldoMax?: string;
   promesa?: string;
+  /** «Última visita»: `never` o los días sin visita (`VISIT_AGES`). */
   visita?: string;
+  /** Resultado de la última visita (`VisitOutcome`, separados por coma). */
   resultado?: string;
   /** `'todos'` = también la mora de otros cobradores, para ayudar. Por defecto, sólo la del suyo. */
   cartera?: string;
@@ -52,6 +100,7 @@ export interface PlanParams {
 }
 
 const IS_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CATEGORY_CODE = /^[A-Za-z0-9_-]{1,16}$/;
 const IS_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Los que la API sabe ordenar. `distance` no está: la cercanía todavía no existe en el servidor. */
@@ -77,7 +126,7 @@ export function hasPlanFilters(params: PlanParams): boolean {
   return Boolean(
     params.q?.trim() ||
       params.dpd ||
-      params.estado ||
+      params.categoria ||
       params.prioridad ||
       params.zona ||
       params.saldoMin ||
@@ -90,19 +139,16 @@ export function hasPlanFilters(params: PlanParams): boolean {
 }
 
 /**
- * La query de la mora que se puede asignar.
+ * La query de los créditos en mora que se pueden asignar (`GET /mora`: por defecto sólo los vencidos).
  *
- * 🔴 **`excludeRouted` va siempre**: lo que ya es parada de una ruta de ese día no se ofrece. Sin
- * eso, dos supervisores mandan a dos cobradores a la misma puerta la misma mañana, y ni siquiera
- * hace falta que sean dos: alcanza con volver a entrar a la pantalla.
+ * 🔴 **`excludeRouted` va siempre**: lo que ya es parada de una ruta de ese día no se ofrece. Sin eso,
+ * dos supervisores mandan a dos cobradores a la misma puerta la misma mañana. `day` es el día que se
+ * planifica (o el de la ruta que se edita).
+ *
+ * `outcome` se compara contra la ÚLTIMA visita del crédito; `notVisitedSince` viaja como `YYYY-MM-DD`.
  */
 export function availableQuery(params: PlanParams, day: string): URLSearchParams {
-  const query = new URLSearchParams({
-    view: 'portfolio',
-    open: 'true',
-    limit: String(AVAILABLE_LIMIT),
-    excludeRouted: day,
-  });
+  const query = new URLSearchParams({ limit: String(AVAILABLE_LIMIT), excludeRouted: day });
 
   // Sólo la suya, salvo que se pida ayudar. Sin cobrador elegido no se acota: no hay a quién.
   if (!helpingOthers(params) && params.collectorId && IS_UUID.test(params.collectorId)) {
@@ -117,12 +163,11 @@ export function availableQuery(params: PlanParams, day: string): URLSearchParams
     if (dpd[1]) query.set('dpdMax', dpd[1]);
   }
 
-  const estados = list(params.estado, CaseStatus);
-  if (estados.length) query.set('status', estados.join(','));
-  const prioridades = list(params.prioridad, CasePriority);
+  // La categoría la configura cada cuenta: se valida la forma del código, y la API ignora el desconocido.
+  const categorias = [...new Set((params.categoria ?? '').split(',').map((c) => c.trim()).filter((c) => CATEGORY_CODE.test(c)))];
+  if (categorias.length) query.set('category', categorias.join(','));
+  const prioridades = list(params.prioridad, COLLECTION_PRIORITIES);
   if (prioridades.length) query.set('priority', prioridades.join(','));
-  const resultados = list(params.resultado, VisitOutcome);
-  if (resultados.length) query.set('outcome', resultados.join(','));
 
   if (params.zona?.trim()) query.set('zone', params.zona.trim());
   for (const [key, param] of [
@@ -134,6 +179,9 @@ export function availableQuery(params: PlanParams, day: string): URLSearchParams
   }
 
   if (params.promesa === 'true' || params.promesa === 'false') query.set('hasPromise', params.promesa);
+
+  const resultados = list(params.resultado, Object.values(VisitOutcome));
+  if (resultados.length) query.set('outcome', resultados.join(','));
 
   if (params.visita === 'never') query.set('neverVisited', 'true');
   else if ((VISIT_AGES as readonly string[]).includes(params.visita ?? '')) {
@@ -228,10 +276,10 @@ export function sortAvailable<
   });
 }
 
-/** Una lista separada por comas → los valores que el enum conoce. Lo inventado se descarta. */
-function list<T extends Record<string, string>>(raw: string | undefined, values: T): string[] {
+/** Una lista separada por comas → los valores que se conocen. Lo inventado se descarta. */
+function list(raw: string | undefined, values: readonly string[]): string[] {
   if (!raw?.trim()) return [];
-  const valid = new Set<string>(Object.values(values));
+  const valid = new Set<string>(values);
   return [...new Set(raw.split(',').map((v) => v.trim()).filter((v) => valid.has(v)))];
 }
 

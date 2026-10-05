@@ -16,11 +16,9 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
   [RoleType.SUPER_ADMIN]: Object.values(Permission),
   [RoleType.ACCOUNT_ADMIN]: Object.values(Permission).filter((p) => p !== Permission.AUDIT_READ),
   [RoleType.MANAGER]: [
-    Permission.CASE_READ,
-    Permission.CASE_EXPORT,
-    Permission.CASE_WRITE,
-    Permission.CASE_ASSIGN,
-    Permission.CASE_CLOSE,
+    Permission.COLLECTION_READ,
+    Permission.COLLECTION_EXPORT,
+    Permission.COLLECTION_WRITE,
     Permission.PAYMENT_READ,
     Permission.PAYMENT_APPROVE,
     Permission.ROUTE_READ,
@@ -46,10 +44,9 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     Permission.ASSIGNMENT_WRITE,
   ],
   [RoleType.SUPERVISOR]: [
-    Permission.CASE_READ,
-    Permission.CASE_EXPORT,
-    Permission.CASE_WRITE,
-    Permission.CASE_ASSIGN,
+    Permission.COLLECTION_READ,
+    Permission.COLLECTION_EXPORT,
+    Permission.COLLECTION_WRITE,
     Permission.PAYMENT_READ,
     Permission.ROUTE_READ,
     Permission.ROUTE_WRITE,
@@ -64,15 +61,16 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     // Importa la cartera y la reparte en el mismo paso (tiene `assignment:write`): decisión de
     // 2026-09-30. Sin esto podía reasignar desde Cartera pero nunca veía la pantalla de reparto.
     Permission.CLIENT_IMPORT,
-    // Supervisa a varios cobradores: sin esto sólo vería lo asignado a él mismo, que es nada.
-    Permission.DATA_SCOPE_ALL,
+    // F4/08 · D8: supervisa a los cobradores de SU AGENCIA (no toda la empresa) y ve además lo que
+    // tiene a su cargo. Antes tenía `data:scope:all`.
+    Permission.DATA_SCOPE_BRANCH,
     // Reparte la cartera y cubre bajas: es quien más usa la asignación temporal.
     Permission.ASSIGNMENT_WRITE,
   ],
   [RoleType.COLLECTOR]: [
-    Permission.CASE_READ,
-    Permission.CASE_EXPORT,
-    Permission.CASE_WRITE,
+    Permission.COLLECTION_READ,
+    Permission.COLLECTION_EXPORT,
+    Permission.COLLECTION_WRITE,
     Permission.PAYMENT_READ,
     Permission.PAYMENT_WRITE,
     Permission.ROUTE_READ,
@@ -95,8 +93,8 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     Permission.CREDIT_WRITE,
   ],
   [RoleType.AUDITOR]: [
-    Permission.CASE_READ,
-    Permission.CASE_EXPORT,
+    Permission.COLLECTION_READ,
+    Permission.COLLECTION_EXPORT,
     Permission.PAYMENT_READ,
     Permission.ROUTE_READ,
     Permission.CLIENT_READ,
@@ -110,8 +108,8 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     Permission.DATA_SCOPE_ALL,
   ],
   [RoleType.VIEWER]: [
-    Permission.CASE_READ,
-    Permission.CASE_EXPORT,
+    Permission.COLLECTION_READ,
+    Permission.COLLECTION_EXPORT,
     Permission.PAYMENT_READ,
     Permission.ROUTE_READ,
     Permission.CLIENT_READ,

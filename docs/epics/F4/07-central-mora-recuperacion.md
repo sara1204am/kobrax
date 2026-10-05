@@ -1,10 +1,17 @@
 # F4 · Fase 7 — Central de Mora y Recuperación por Crédito
 
 **Parent:** F4 (créditos) · continúa `06-refactor-creditos-ux.md`
-**Estado:** BORRADOR de plan (2026-10-01). Solo auditoría y diseño. **No se ha escrito código.**
-Decisiones C1–C4 resueltas el 2026-10-01 (ver §9.C). Sin bloqueantes abiertos.
+**Estado:** **CONSTRUIDA** (web, API y móvil): T1–T19 hechas. Este documento nació como plan (2026-10-01) y se
+fue completando con lo que quedó; las secciones de «Avance» de abajo describen lo construido y el resto (§0–§10)
+es el plan original, que se conserva como referencia de las decisiones. Decisiones C1–C4 resueltas el 2026-10-01
+(ver §9.C). Sin bloqueantes abiertos.
 
-## Avance (rama `feat/mora-central-f1`, sin commits todavía)
+> **F4/08:** el «caso» de cobranza se eliminó (`08-eliminar-caso.md`). Donde este documento habla de abrir, cerrar o asignar un caso, hoy es el crédito (responsable y episodio de mora); nadie abre casos, ni el sistema ni una persona.
+
+**Cambios respecto al plan:** las notas no son «append-only»: son **post-its anclados a cada sección** de la ficha,
+con edición y borrado (ver «Post-its» abajo), y las métricas de recuperación están hechas (T15).
+
+## Avance (T1–T19 hechas)
 
 | Tarea | Estado | Notas |
 |---|---|---|
@@ -22,7 +29,8 @@ Decisiones C1–C4 resueltas el 2026-10-01 (ver §9.C). Sin bloqueantes abiertos
 | T13 formulario de gestión con resultado y promesa | ✅ | `POST /mora/:creditId/activities` + `RegisterActivityButton`. Ver «Formulario de gestión» abajo. |
 | T16 contratos finales | ✅ | Ya estaban en `mora.types.ts`: `MoraCreditDetail`, `MoraEpisode`, `MoraPromise`, `CreditNote`, `NewCreditNote`. La gestión es `MoraActivityItem` (no se creó `RecoveryActivityItem`: la ficha sólo muestra gestiones del caso) y las etiquetas de resultado son `RECOVERY_RESULTS`. Web, api y mobile compilan con el mismo tipo. |
 | T15 métricas de recuperación | ✅ | `GET /mora/:creditId/metrics` + sección «Recuperación». Ver «Métricas de recuperación» abajo. |
-| T16, T17–T19 | ⏳ pendientes | |
+| T12 notas como post-its | ✅ | Reemplaza las «notas append-only» del plan: post-its de colores **anclados a una sección** de la ficha, con editar y borrar. Migraciones de `credit_notes` con color, ancla, posición y tamaño. Ver «Post-its» abajo. |
+| T17–T19 móvil | ✅ | Lista de mora del cobrador, detalle y acciones, y offline/sync/evidencias. |
 
 ### Episodios de mora (T11a) — cómo quedó
 
@@ -49,12 +57,23 @@ Decisiones C1–C4 resueltas el 2026-10-01 (ver §9.C). Sin bloqueantes abiertos
 
 Layout: encabezado → resumen → **Notas** → [Historial de mora + Gestiones | Promesas + Pagos] → **La persona**. Cada sección carga por su cuenta y, si falla (permiso o API sin migrar), dice «no se pudo cargar» sin tumbar la ficha.
 
-- **Notas** (nuevas). Tabla `credit_notes` (migración `20261003030000_notas_de_credito`, RLS en `001_enable_rls.sql`): del crédito, **independientes del caso**, **append-only** (sin editar ni borrar: corregir es escribir otra), tipo `INFO | WARNING | IMPORTANT`, 1–1000 caracteres (también en la base). `GET/POST /mora/:creditId/notes` (lectura `case:read`, escritura `case:write`, mismo alcance que la ficha: **404** si no se puede ver). El `id` puede venir del cliente y es **idempotente** (el móvil escribe sin red y reintenta); un id de otro crédito da 409. Se audita sin el texto. UI: plegadas por defecto (`<details>`), las importantes primero, formulario con el mismo id al reintentar.
+- **Notas** (nuevas). Tabla `credit_notes` (migración `20261003030000_notas_de_credito`, RLS en `001_enable_rls.sql`): del crédito, **independientes del caso**, tipo `INFO | WARNING | IMPORTANT`, 1–1000 caracteres (también en la base). `GET/POST /mora/:creditId/notes` (lectura `case:read`, escritura `case:write`, mismo alcance que la ficha: **404** si no se puede ver). El `id` puede venir del cliente y es **idempotente** (el móvil escribe sin red y reintenta); un id de otro crédito da 409. Se audita sin el texto. UI: la de los post-its (ver «Post-its» abajo; en el primer corte eran plegadas, append-only y sin edición).
 - **Promesas** (sin tabla nueva). `GET /mora/:creditId/promises` lee `agenda_items PROMISE_TO_PAY`; el estado sale del agendado + su fecha + el desenlace de la gestión que la ejecutó: `ACTIVE | OVERDUE | KEPT | BROKEN | EXECUTED | CANCELLED | RESCHEDULED`. **Vencida sin cerrar (`OVERDUE`) NO es incumplida** (no se sabe si pagó) y no entra al cumplimiento. El resumen (`summarizePromises`, shared) cuenta sólo las cerradas; sin ninguna no hay porcentaje, no «0 %».
 - **Pagos** (sin endpoint nuevo). `GET /payments?creditId=` ya existía. «Cobrado por Kobrax» no suma lo confirmado por un canal de la entidad; en un crédito PSF se avisa que el pago no cambia el saldo ni la mora reportados (D3). `PaymentActions` (registrar pago / cobro por QR) en el encabezado, con `suggestedPaymentAmount` ahora en el contrato de la lista y la ficha.
 - **La persona** (sólo lectura). Reutiliza `ContactList`, `LocationList`, `GuarantorsSection`, `CollateralsSection` y `AttachmentsSection` de Cartera con `canWrite=false`. **Garantes y garantías son los de ESTE crédito** (filtrados por `creditIds`). Carga enmascarada; «Mostrar» revela por la ruta auditada (`PII_REVEAL`).
 - **Verificado:** pruebas unitarias (API 1006, web 508, shared 234) y llamadas reales sobre `kobrax_it`: alcance del cobrador (404 en lo ajeno, nada escrito), idempotencia de la nota, 409 por id ajeno, ficha renderizada con notas, promesa creada desde una gestión, pagos y garante filtrado, y la ficha de un crédito sin caso. BFF: origen ajeno → 403, `creditId` no uuid → 404.
-- **Pendiente:** adjuntos por crédito (hoy son del cliente), formulario de gestión con resultado y promesa (T13), métricas (T15), y mostrar el método y el banco de la promesa (hoy no se muestran; hace falta resolver el catálogo).
+- **Pendiente:** adjuntos por crédito (hoy son del cliente) y mostrar el método y el banco de la promesa (hoy no se muestran; hace falta resolver el catálogo). El formulario de gestión (T13) y las métricas (T15) ya están hechos.
+
+### Post-its (notas del crédito, anclados a cada sección)
+
+Las notas del crédito son **post-its**: tarjetas de colores (`MORA_NOTE_COLORS`) que se dibujan **dentro de la sección de la ficha** a la que están ancladas (`MORA_NOTE_ANCHORS`: `PAGE`, `TIMELINE`, `PROMISES`, `NOTES`, `PAYMENTS`, `HISTORY`, `PERSON`). `x`/`y` se miden en píxeles desde la esquina de esa sección, así que la nota viaja con ella al hacer scroll, se esconde si la sección se pliega y la sigue si cambia de lugar. Arrastrar una nota sobre otra sección la re-ancla ahí. Lo único fijo en pantalla es la barra de abajo del tablero (nueva nota / ocultar); las notas **no** flotan sobre la pantalla.
+
+- **Son del crédito, no del caso:** sobreviven a que el caso se cierre y existen aunque todavía no haya uno.
+- **Editar y borrar sí existen** (el plan decía append-only). `PATCH` y `DELETE /mora/:creditId/notes/:noteId`. Regla: **el texto, el tipo y el borrado son de quien escribió la nota o de quien reparte cartera** (`assignment:write`); mover, pintar y redimensionar, de cualquiera que pueda escribir sobre el crédito (es ordenar el tablero, no cambiar lo que la nota dice). La API hace cumplir las dos reglas; la web sólo decide qué botones ofrece.
+- **Arrastrar y redimensionar no guardan a cada píxel:** la web mueve la nota en pantalla y guarda **una vez**, al soltar.
+- **Tamaño:** `NOTE_BOARD_LIMITS` (160–520 de ancho, 120–440 de alto); la base lo vuelve a exigir. Una nota guardada en una pantalla grande se dibuja acotada en una chica, sin salirse: lo que se guarda es lo que se mueve, no lo que se dibuja.
+- **«Ubicar en la ficha»:** desde la lista de notas, abre la sección donde está la nota (plegada no se vería), la lleva al centro con scroll y la hace parpadear.
+- **Paleta:** la de post-its de Kobrax (`NOTE_COLORS` en `apps/web/src/lib/mora-notes.ts`). El color es de la nota; el tipo (`INFO | WARNING | IMPORTANT`) es otra cosa.
 
 ### Formulario de gestión con resultado y promesa (T13)
 
@@ -759,7 +778,7 @@ notificaciones/bitácora, `lib/nav.ts` (`crumbsFor`).
 pequeño: `POST /credits/:id/notes`, `GET /mora/:creditId/notes`), `shared` `CreditNote/NewCreditNote`, web `notes-section.tsx`.
 **Datos (`CreditNote`, tabla `credit_notes`):** `id` (acepta id del cliente para idempotencia móvil), `accountId`,
 `creditId`, `clientId`, `authorId`, `body` (≤1000, igual que gestión), `kind` (`INFO | WARNING | IMPORTANT`),
-`createdAt`; **append-only** (coherente con `CaseActivity`); sin edición/borrado en esta fase.
+`createdAt`; en el plan eran **append-only** (coherente con `CaseActivity`) y sin edición/borrado. **Superado:** quedaron como post-its anclados, con edición y borrado (ver «Post-its» en «Avance»).
 **Reutilizar:** `AuditService`, patrón de módulo, `Badge`/`Card`. **Permisos:** leer `case:read`; escribir `case:write`.
 **UX/UI:** compactas, minimizadas por defecto, expandibles; 🟡 = `WARNING/IMPORTANT`.
 **Tests:** crear/leer; permisos; aislamiento por tenant; idempotencia por `id`; scope COLLECTOR.
@@ -832,7 +851,7 @@ por `visitId` en el timeline). **Criterios:** historial reconstruible sin salir 
 **Objetivo:** detalle por crédito con acciones.
 **Archivos a modificar:** `app/cliente/[id].tsx` (hoy 880 líneas; **extraer** secciones en componentes antes de añadir),
 nueva ruta `app/mora/[creditId].tsx`. **A crear:** `src/mora-detail.tsx`, `src/credit-notes.service.ts`.
-**Reutilizar:** `MoraSheet`, `createPayment`, `case.activity`, `rutas/resultado.tsx` para visita, `Linking` para `tel:`/WhatsApp.
+**Reutilizar:** `MoraSheet`, `createPayment`, `mora.activity`, `rutas/resultado.tsx` para visita, `Linking` para `tel:`/WhatsApp.
 **Tests:** crédito correcto, acciones, nota, pago, gestión con promesa. **Dependencias:** T17.
 **Riesgos:** pantalla ya grande; refactor mínimo y con tests. **Criterios:** llamar/visitar/registrar en ≤3 toques.
 

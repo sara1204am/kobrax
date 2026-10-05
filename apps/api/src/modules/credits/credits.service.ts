@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { AgendaItemStatus, AgendaItemType, CasePriority, CaseStatus, CreditDataOrigin, CreditStatus, InstallmentStatus } from '@prisma/client';
+import { CreditDataOrigin, CreditStatus, InstallmentStatus } from '@prisma/client';
 import {
   addPeriods,
   arrearsByMethod,
@@ -25,6 +25,7 @@ import {
   manualArrears,
   moraSinceFromDays,
   PaymentFrequency,
+  Permission,
   readCreditMetadata,
   resolvePagination,
   staleAfterDaysOf,
@@ -45,7 +46,7 @@ import {
   DEFAULT_ARREAR_PARAMS,
   type ArrearParams,
 } from './credit-math';
-import { serializeCredit } from './credits.serializer';
+import { serializeCredit, type CreditMoraContext } from './credits.serializer';
 import { ClearArrearsDto, CreateCreditDto, ListCreditsQueryDto, UpdateCreditDto } from './dto/credit.dto';
 import {
   arrearsDateNotFuture,
@@ -62,9 +63,10 @@ import {
   currencyMismatch,
   resourceNotFound,
   scheduleInvalid,
+  writeOffForbidden,
+  writeOffUseEndpoint,
 } from './credits.errors';
-import { computePriority, slaDueAt, DEFAULT_PRIORITY_PARAMS } from '../cases/case-priority';
-import { closeOpenCases, openCaseIfNone } from '../arrears/case-lifecycle';
+import { ArrearsPriorityService } from '../arrears/arrears-priority.service';
 
 interface AccountConfig {
   currencyCode: string;
@@ -87,6 +89,7 @@ export class CreditsService {
     private readonly audit: AuditService,
     private readonly plan: PlanLimitsService,
     private readonly assignment: AssignmentService,
+    private readonly arrearsPriority: ArrearsPriorityService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -255,9 +258,8 @@ export class CreditsService {
       // darle dos préstamos al mismo deudor por un problema de cobertura.
       if (dto.id) {
         const previo = await tx.credit.findFirst({ where: { id: dto.id, deletedAt: null } });
-        // Sin `caseId`/`agendaId`: el caso y el recordatorio se crearon en el intento que sí entró,
-        // y lo único que hacen acá abajo es auditarse. Un reintento no vuelve a auditar nada.
-        if (previo) return { credit: previo, caseId: undefined, agendaId: undefined, reintento: true };
+        // Un reintento no vuelve a auditar nada: el alta ya se registró en el intento que sí entró.
+        if (previo) return { credit: previo, reintento: true, assigned: [] };
       }
 
       const client = await tx.client.findFirst({
@@ -307,42 +309,11 @@ export class CreditsService {
       });
       const assigned = responsible ? await this.assignment.apply(tx, [{ creditId: credit.id, to: responsible }], assignReason) : [];
 
-      // Caso de cobranza automático (§5.2): "para el cobrador, cliente y préstamo son una sola acción".
-      if (dto.openCase) {
-        const kase = await tx.collectionCase.create({
-          data: {
-            accountId,
-            creditId: credit.id,
-            clientId: dto.clientId,
-            branchId: dto.branchId,
-            assigneeId: this.tenant.userId,
-            status: CaseStatus.PENDING,
-            priority: priorityFromArrears(daysPastDue),
-          },
-        });
-        // Próxima fecha de cobro en la agenda del cobrador (§5.2). Recordatorio de día (sin hora).
-        // Solo por el alta del móvil (`openCase`); la web/import usa `cases/generate` → no genera agenda.
-        let agendaId: string | undefined;
-        if (metadata.nextDueDate && this.tenant.userId) {
-          const item = await tx.agendaItem.create({
-            data: {
-              accountId,
-              caseId: kase.id,
-              clientId: dto.clientId,
-              creditId: credit.id,
-              assigneeId: this.tenant.userId,
-              type: AgendaItemType.REMINDER,
-              status: AgendaItemStatus.SCHEDULED,
-              scheduledDate: new Date(metadata.nextDueDate),
-              details: { description: 'Cobrar cuota' },
-              createdBy: this.tenant.userId,
-            },
-          });
-          agendaId = item.id;
-        }
-        return { credit, caseId: kase.id, agendaId, reintento: false, assigned };
-      }
-      return { credit, caseId: undefined, agendaId: undefined, reintento: false, assigned };
+      /*
+       * F4/08: crear un crédito ya no abre un caso ni crea el recordatorio «Cobrar cuota». Si nace con mora, el trigger
+       * abre su episodio; el recordatorio de cuota (D11) lo genera un job aparte.
+       */
+      return { credit, reintento: false, assigned };
     });
 
     // El alta ya se auditó cuando entró de verdad: un reintento de la cola no la registra dos veces.
@@ -350,12 +321,6 @@ export class CreditsService {
 
     await this.audit.record({ entity: 'credit', entityId: created.credit.id, action: 'CREATE', after: creditSummary(created.credit) });
     await this.assignment.auditChanges(created.assigned ?? []);
-    if (created.caseId) {
-      await this.audit.record({ entity: 'collection_case', entityId: created.caseId, action: 'CREATE', after: { creditId: created.credit.id, clientId: dto.clientId, source: 'credit_create' } });
-    }
-    if (created.agendaId) {
-      await this.audit.record({ entity: 'agenda_item', entityId: created.agendaId, action: 'CREATE', after: { creditId: created.credit.id, caseId: created.caseId, source: 'credit_create' } });
-    }
     return serializeCredit(created.credit, config.labels, config.staleAfterDays);
   }
 
@@ -383,14 +348,25 @@ export class CreditsService {
 
   async findOne(id: string): Promise<ReturnType<typeof serializeCredit>> {
     const config = await this.accountConfig();
-    const credit = await this.tx((tx) =>
-      tx.credit.findFirst({
+    const found = await this.tx(async (tx) => {
+      const credit = await tx.credit.findFirst({
         where: { id, deletedAt: null },
         include: { installments: { orderBy: { number: 'asc' } }, arrears: true, _count: { select: { payments: true } } },
-      }),
-    );
-    if (!credit) throw resourceNotFound();
-    return serializeCredit(credit, config.labels, config.staleAfterDays);
+      });
+      if (!credit) return null;
+      // F4/08: situación (episodio abierto) y categoría (rangos de la cuenta, UNA consulta) sólo para la ficha.
+      const [open, categories] = await Promise.all([
+        tx.creditArrearEpisode.count({ where: { creditId: id, endedAt: null } }),
+        tx.arrearCategory.findMany({ where: { accountId: this.tenant.accountId }, orderBy: [{ sortOrder: 'asc' }, { fromDays: 'asc' }] }),
+      ]);
+      return { credit, open, categories };
+    });
+    if (!found) throw resourceNotFound();
+    const mora: CreditMoraContext = {
+      hasOpenEpisode: found.open > 0,
+      categories: found.categories.map((r) => ({ code: r.code, name: r.name, color: r.color, fromDays: r.fromDays, toDays: r.toDays })),
+    };
+    return serializeCredit(found.credit, config.labels, config.staleAfterDays, mora);
   }
 
   async getSchedule(id: string) {
@@ -415,6 +391,8 @@ export class CreditsService {
    *        créditos sin `terms` — tocar uno suelto dejaría dos definiciones del mismo crédito.
    */
   async update(id: string, dto: UpdateCreditDto): Promise<ReturnType<typeof serializeCredit>> {
+    // D1-a: el castigo no es un estado; se pide por su endpoint ().
+    if ((dto.status as string | undefined) === 'WRITTEN_OFF') throw writeOffUseEndpoint();
     const config = await this.accountConfig();
     const redefine = dto.terms !== undefined || dto.initialState !== undefined;
     const looseField = LOOSE_FINANCIAL_FIELDS.find((k) => dto[k] !== undefined);
@@ -424,7 +402,7 @@ export class CreditsService {
     if (redefine && dto.nextDueDate !== undefined) throw creditTermsConflict('nextDueDate');
 
     const asOf = new Date();
-    const { before, after, caseOpened, assigned } = await this.tx(async (tx) => {
+    const { before, after, assigned } = await this.tx(async (tx) => {
       const prev = await tx.credit.findFirst({
         where: { id, deletedAt: null },
         include: { _count: { select: { payments: true, installments: true } }, client: { select: { riskSegment: true } } },
@@ -435,13 +413,13 @@ export class CreditsService {
        * 🔴 Cambiar el responsable exige `assignment:write`, y se revisa ACÁ y no con `@Roles`: este
        * mismo PATCH lo usa el cobrador para corregir la nota o la próxima fecha, y cerrarle el
        * endpoint entero le quitaría eso. Mandar el responsable que ya tiene no es un cambio.
-       * No toca los casos abiertos: el cobrador del caso es otra responsabilidad (decisión 7).
+       * No toca la asignación: el responsable del crédito es otra responsabilidad (decisión 7).
        */
       const reassigning = dto.assignedManagerId !== undefined && dto.assignedManagerId !== prev.assignedManagerId;
       let assigned: Awaited<ReturnType<AssignmentService['apply']>> = [];
       if (reassigning) {
         this.assignment.authorize();
-        await this.assignment.assertAssignable(tx, [dto.assignedManagerId!]);
+        await this.assignment.assertAssignable(tx, [dto.assignedManagerId!], [id]);
         assigned = await this.assignment.apply(
           tx,
           [{ creditId: id, to: dto.assignedManagerId!, expectedFrom: prev.assignedManagerId }],
@@ -578,27 +556,12 @@ export class CreditsService {
         data: { ...data, metadata: touchesMeta ? (stripUndefined(nextMeta) as Prisma.InputJsonValue) : undefined },
       });
 
-      // Con mora al registrarlo, el caso se abre ya — igual que «Marcar en mora».
-      let caseOpened = false;
-      if (redefine && next.daysPastDue > 0) {
-        const priority = computePriority(
-          { outstandingBalance: Number(next.outstandingBalance), daysPastDue: next.daysPastDue, riskSegment: prev.client?.riskSegment },
-          DEFAULT_PRIORITY_PARAMS,
-        );
-        caseOpened = await openCaseIfNone(tx, {
-          accountId: this.tenant.accountId,
-          creditId: id,
-          clientId: prev.clientId,
-          branchId: prev.branchId,
-          assigneeId: dto.assignedManagerId ?? prev.assignedManagerId,
-          priority,
-          slaDueAt: slaDueAt(priority, asOf, DEFAULT_PRIORITY_PARAMS),
-        });
-      }
-      return { before: prev, after: next, caseOpened, assigned };
+      // Con mora al registrarlo, el trigger abre el episodio; su prioridad se calcula ya (no espera al job diario).
+      if (redefine && next.daysPastDue > 0) await this.arrearsPriority.recomputeForCredit(tx, id);
+      return { before: prev, after: next, assigned };
     });
 
-    const redefined = redefine ? { terms: readCreditMetadata(after.metadata).terms, initialState: dto.initialState, caseOpened } : {};
+    const redefined = redefine ? { terms: readCreditMetadata(after.metadata).terms, initialState: dto.initialState } : {};
     await this.audit.record({
       entity: 'credit',
       entityId: id,
@@ -610,9 +573,75 @@ export class CreditsService {
     return serializeCredit(after, config.labels, config.staleAfterDays);
   }
 
+  // ── Castigo (D1-a) ──────────────────────────────────────────────────────────────────────────
+  /**
+   * Castigar: marca `written_off_at/by/reason` y deja constancia. Es una **condición aparte**: no cambia
+   * `credits.status`, no cierra el episodio de mora abierto y los días de mora siguen corriendo (el trabajo
+   * diario lo procesa como a cualquier crédito activo). Sólo gerente y administrador (alcance total).
+   * Idempotente: castigar al ya castigado no cambia ni audita nada.
+   */
+  async writeOff(id: string, reason?: string) {
+    this.assertCanWriteOff();
+    const actor = this.tenant.userId ?? null;
+    const { before, after, changed } = await this.tx(async (tx) => {
+      const prev = await tx.credit.findFirst({ where: { id, deletedAt: null } });
+      if (!prev) throw resourceNotFound();
+      if (prev.writtenOffAt) return { before: prev, after: prev, changed: false };
+      const next = await tx.credit.update({
+        where: { id },
+        data: { writtenOffAt: new Date(), writtenOffBy: actor, writtenOffReason: reason?.trim() || null },
+      });
+      return { before: prev, after: next, changed: true };
+    });
+    if (changed) {
+      await this.audit.record({
+        entity: 'credit',
+        entityId: id,
+        action: 'WRITE_OFF',
+        before: { writtenOffAt: null },
+        after: { writtenOffAt: after.writtenOffAt?.toISOString(), reason: after.writtenOffReason, daysPastDue: before.daysPastDue },
+      });
+    }
+    return serializeCredit(after, ...labelsOf(await this.accountConfig()));
+  }
+
+  /** Revertir el castigo: limpia `written_off_at/by/reason`. Mismas reglas de permiso. Idempotente. */
+  async unWriteOff(id: string) {
+    this.assertCanWriteOff();
+    const { before, after, changed } = await this.tx(async (tx) => {
+      const prev = await tx.credit.findFirst({ where: { id, deletedAt: null } });
+      if (!prev) throw resourceNotFound();
+      if (!prev.writtenOffAt) return { before: prev, after: prev, changed: false };
+      const next = await tx.credit.update({
+        where: { id },
+        data: {
+          writtenOffAt: null,
+          writtenOffBy: null,
+          writtenOffReason: null,
+        },
+      });
+      return { before: prev, after: next, changed: true };
+    });
+    if (changed) {
+      await this.audit.record({
+        entity: 'credit',
+        entityId: id,
+        action: 'WRITE_OFF_REVERT',
+        before: { writtenOffAt: before.writtenOffAt?.toISOString() ?? null, reason: before.writtenOffReason },
+        after: { writtenOffAt: null },
+      });
+    }
+    return serializeCredit(after, ...labelsOf(await this.accountConfig()));
+  }
+
+  /** Gerente y administrador: escritura de créditos **y** alcance total. El supervisor (agencia) y el cobrador no. */
+  private assertCanWriteOff(): void {
+    if (!this.tenant.can(Permission.CREDIT_WRITE) || !this.tenant.can(Permission.DATA_SCOPE_ALL)) throw writeOffForbidden();
+  }
+
   // ── Mora declarada a mano ──────────────────────────────────────────────────
   /**
-   * «Vincular a otro cliente» (D2 · opción B). El crédito —con sus casos, su agenda, sus paradas de
+   * «Vincular a otro cliente» (D2 · opción B). El crédito —con sus actividades, su agenda, sus paradas de
    * ruta y sus pedidos de cobro— pasa al cliente elegido. **No se crea otro crédito**: es el mismo, con
    * su historia, sus pagos y sus snapshots, colgado de la persona correcta.
    *
@@ -634,12 +663,11 @@ export class CreditsService {
       if (from.id === to.id) return { credit, fromId: from.id, keySaved: false, retired: false };
 
       await tx.credit.update({ where: { id }, data: { clientId: to.id } });
-      const caseIds = (await tx.collectionCase.findMany({ where: { creditId: id }, select: { id: true } })).map((c) => c.id);
-      await tx.collectionCase.updateMany({ where: { creditId: id }, data: { clientId: to.id } });
-      if (caseIds.length > 0) {
-        await tx.routeStop.updateMany({ where: { caseId: { in: caseIds } }, data: { clientId: to.id } });
-      }
+      // F4/08: todo cuelga del crédito, así que lo que lleva al cliente se re-apunta por `credit_id`.
+      // `field_visits` no guarda cliente (cuelga del crédito y de la parada), no hay nada que mover.
+      await tx.creditActivity.updateMany({ where: { creditId: id }, data: { clientId: to.id } });
       await tx.agendaItem.updateMany({ where: { creditId: id }, data: { clientId: to.id } });
+      await tx.routeStop.updateMany({ where: { creditId: id }, data: { clientId: to.id } });
       await tx.paymentRequest.updateMany({ where: { creditId: id }, data: { clientId: to.id } });
 
       // La decisión queda para las próximas importaciones: esta persona del reporte ES este cliente.
@@ -711,17 +739,16 @@ export class CreditsService {
    *
    * Es para quien presta sin cronograma y sabe que le deben sin mirar una fecha. Hace dos cosas y
    * las dos importan: guarda **desde cuándo** (no cuántos días — `moraSince`, para que el número
-   * envejezca solo) y **abre el caso en el acto**. Lo segundo es lo que hace que el crédito aparezca
-   * en Mora al instante: esperar al trabajo diario sería decirle a esa persona que su decisión vale
-   * dentro de seis horas.
+   * envejezca solo) y **calcula la prioridad del episodio en el acto**: el trigger de la base abre el episodio
+   * al cambiar los días, así que el crédito aparece en Mora al instante sin esperar al trabajo diario.
    *
    * 🔴 El importado no se puede marcar: su mora la manda el archivo (`arrearsSourceOf` le da
    * prioridad), así que la marca se guardaría y no haría nada. Mejor rebotar que mentir.
    */
   async markArrears(id: string, days?: number) {
     const asOf = new Date();
-    const { credit, opened } = await this.tx(async (tx) => {
-      const found = await tx.credit.findFirst({ where: { id, deletedAt: null }, include: { client: { select: { riskSegment: true } } } });
+    const { credit } = await this.tx(async (tx) => {
+      const found = await tx.credit.findFirst({ where: { id, deletedAt: null } });
       if (!found) throw resourceNotFound();
       if (found.status !== CreditStatus.ACTIVE) throw creditNotActive();
       const meta = readCreditMetadata(found.metadata, found.origin);
@@ -734,23 +761,11 @@ export class CreditsService {
         data: { daysPastDue, metadata: stripUndefined({ ...meta, moraSince }) as Prisma.InputJsonValue },
       });
 
-      const priority = computePriority(
-        { outstandingBalance: Number(found.outstandingBalance), daysPastDue, riskSegment: found.client.riskSegment },
-        DEFAULT_PRIORITY_PARAMS,
-      );
-      const opened = await openCaseIfNone(tx, {
-        accountId: this.tenant.accountId,
-        creditId: id,
-        clientId: found.clientId,
-        branchId: found.branchId,
-        assigneeId: found.assignedManagerId,
-        priority,
-        slaDueAt: slaDueAt(priority, asOf, DEFAULT_PRIORITY_PARAMS),
-      });
-      return { credit: updated, opened };
+      if (daysPastDue > 0) await this.arrearsPriority.recomputeForCredit(tx, id);
+      return { credit: updated };
     });
 
-    await this.audit.record({ entity: 'credit', entityId: id, action: 'ARREARS_MARK', after: { days: credit.daysPastDue, caseOpened: opened } });
+    await this.audit.record({ entity: 'credit', entityId: id, action: 'ARREARS_MARK', after: { days: credit.daysPastDue } });
     return serializeCredit(credit, ...labelsOf(await this.accountConfig()));
   }
 
@@ -758,19 +773,19 @@ export class CreditsService {
    * Poner al día. **Es mover la fecha, no borrar el síntoma.**
    *
    * Un botón que sólo pusiera la mora en cero sería mentirle al sistema: la fecha seguiría vencida y
-   * el trabajo diario volvería a abrir el caso esta misma noche. Así que se resuelve en una de tres
+   * el trabajo diario volvería a subirla esta misma noche. Así que se resuelve en una de tres
    * acciones reales, y las tres dejan el crédito con una fecha que **no** está vencida:
    *
    * · `next_period` — avanza un período según su frecuencia. Pagó la cuota, o se acordó la próxima.
    * · `date` — la fecha que se acordó. Tiene que ser futura, o esto no sirvió de nada.
    * · `none` — sin vencimiento: préstamo abierto. Sin fecha no hay mora que contar.
    *
-   * Y borra la marca manual si la había: quien la puso es quien la saca. El caso se cierra con
-   * motivo `CURRENT`, que es lo que después deja contar por qué se vaciaron cuarenta un martes.
+   * Y borra la marca manual si la había: quien la puso es quien la saca. El episodio de mora lo cierra el trigger
+   * de la base (motivo «al día») al quedar los días en cero; acá ya no se cierra nada a mano.
    */
   async clearArrears(id: string, dto: ClearArrearsDto) {
     const asOf = new Date();
-    const { credit, closed } = await this.tx(async (tx) => {
+    const { credit } = await this.tx(async (tx) => {
       const found = await tx.credit.findFirst({ where: { id, deletedAt: null } });
       if (!found) throw resourceNotFound();
       if (found.status !== CreditStatus.ACTIVE) throw creditNotActive();
@@ -799,11 +814,10 @@ export class CreditsService {
           metadata: stripUndefined({ ...meta, nextDueDate, moraSince: undefined, arrearsSince: undefined }) as Prisma.InputJsonValue,
         },
       });
-      const closed = await closeOpenCases(tx, id, 'CURRENT', asOf);
-      return { credit: updated, closed };
+      return { credit: updated };
     });
 
-    await this.audit.record({ entity: 'credit', entityId: id, action: 'ARREARS_CLEAR', after: { mode: dto.mode, casesClosed: closed } });
+    await this.audit.record({ entity: 'credit', entityId: id, action: 'ARREARS_CLEAR', after: { mode: dto.mode } });
     return serializeCredit(credit, ...labelsOf(await this.accountConfig()));
   }
 
@@ -1006,14 +1020,6 @@ const isoDate = (d: Date): string => d.toISOString().slice(0, 10);
 /** Prisma rechaza `undefined` dentro de un JSON. */
 function stripUndefined(meta: CreditMetadata): Prisma.InputJsonObject {
   return Object.fromEntries(Object.entries(meta).filter(([, v]) => v !== undefined)) as Prisma.InputJsonObject;
-}
-
-/** Prioridad del caso derivada de la mora (spec §5.2). */
-export function priorityFromArrears(days: number): CasePriority {
-  if (days <= 0) return CasePriority.LOW;
-  if (days <= 30) return CasePriority.MEDIUM;
-  if (days <= 90) return CasePriority.HIGH;
-  return CasePriority.CRITICAL;
 }
 
 /** Resumen plano (JSON-safe, sin Decimal/Date crudos de Prisma) para los snapshots de auditoría. */

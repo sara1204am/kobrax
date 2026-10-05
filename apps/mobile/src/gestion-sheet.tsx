@@ -1,7 +1,7 @@
 /**
  * La hoja «Registrar gestión» (§5.4). Vivía dentro de `cliente/[id].tsx`; se extrajo para que la
- * ficha del deudor y la ficha de mora usen la misma. Lo único que se agregó es `outcomes`: cada
- * pantalla dice qué resultados ofrece (la mora usa los del contrato compartido).
+ * ficha del deudor y la ficha de mora usen la misma, por crédito y con los resultados del contrato compartido
+ * (`MORA_OUTCOMES`: cada par tipo/resultado lo acepta el validador del servidor).
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -10,12 +10,13 @@ import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { AmountInput, BottomSheet, Chips, SectionLabel } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
 import { MONTHS } from '@/agenda-form';
-import { promiseReady } from '@/ficha';
-import type { PaymentMethod } from '@/payments.service';
+import { CatalogType } from '@kobrax/shared';
+import { listCatalogCached } from '@/catalogs.service';
+import { gestionError, localToday } from '@/mora-ficha';
 import { METHODS } from '@/pay-sheet';
+import { MORA_OUTCOMES } from '@/mora-actions';
 
-// Catálogo de resultado de gestión (§5.4). type = CaseActivityType, result = VisitOutcome.
-/** Un resultado que ofrece la hoja. `type` es el tipo de gestión; `result`, cómo salió. */
+/** Un resultado que ofrece la hoja. `type` es el tipo de gestión; `result`, cómo salió (contrato de shared). */
 export interface Outcome {
   key: string;
   label: string;
@@ -23,14 +24,6 @@ export interface Outcome {
   result: string;
   promise?: boolean;
 }
-
-/** Los de la ficha del deudor (los de siempre). */
-export const CLIENTE_OUTCOMES: Outcome[] = [
-  { key: 'no_contact', label: 'No contesta', type: 'CALL', result: 'NO_CONTACT' },
-  { key: 'visit', label: 'Visita', type: 'VISIT', result: 'CONTACTED' },
-  { key: 'not_found', label: 'Inubicable', type: 'VISIT', result: 'NOT_FOUND' },
-  { key: 'promise', label: 'Promesa de pago', type: 'NOTE', result: 'PROMISE_TO_PAY', promise: true },
-];
 
 export function todayIso(): string {
   const n = new Date();
@@ -42,51 +35,78 @@ export function prettyDate(iso?: string): string {
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 }
 
+/** Un medio de pago que ofrece la hoja: el del catálogo del tenant, o los de siempre si no lo cargó. */
+interface MethodOption {
+  value: string;
+  label: string;
+  requiresBank: boolean;
+}
+const FALLBACK_METHOD_OPTIONS: MethodOption[] = METHODS.map((m) => ({ value: m.value, label: m.label, requiresBank: false }));
+
 /** Hoja Registrar gestión (§5.4). */
 export function GestionSheet({
-  visible, onClose, currency, onSubmit, outcomes = CLIENTE_OUTCOMES,
+  visible, onClose, currency, onSubmit, outcomes = MORA_OUTCOMES,
 }: {
   visible: boolean; onClose: () => void; currency: string;
-  /** Qué resultados se ofrecen; el primero es el que arranca elegido. */
+  /** Qué resultados se ofrecen; el primero es el que arranca elegido. Por defecto los del contrato de gestiones (`MORA_OUTCOMES`). */
   outcomes?: Outcome[];
-  onSubmit: (payload: { type: 'NOTE' | 'CALL' | 'VISIT' | 'MESSAGE'; result: string; notes?: string; promise?: { amount: number; promiseDate: string; paymentMethodCode: string } }) => Promise<string | null>;
+  onSubmit: (payload: {
+    type: 'NOTE' | 'CALL' | 'VISIT' | 'MESSAGE';
+    result: string;
+    notes?: string;
+    promise?: { amount: number; promiseDate: string; paymentMethodCode: string; bankCode?: string };
+  }) => Promise<string | null>;
 }) {
   const [outcome, setOutcome] = useState(outcomes[0].key);
   const [notes, setNotes] = useState('');
   const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(todayIso());
-  const [method, setMethod] = useState<PaymentMethod>('CASH');
+  const [date, setDate] = useState(localToday());
+  const [methods, setMethods] = useState<MethodOption[]>(FALLBACK_METHOD_OPTIONS);
+  const [banks, setBanks] = useState<{ value: string; label: string }[]>([]);
+  const [method, setMethod] = useState<string>(FALLBACK_METHOD_OPTIONS[0]!.value);
+  const [bank, setBank] = useState('');
   const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (visible) { setOutcome(outcomes[0].key); setNotes(''); setAmount(''); setDate(todayIso()); setMethod('CASH'); setError(null); }
+    if (!visible) return;
+    setOutcome(outcomes[0].key); setNotes(''); setAmount(''); setDate(localToday()); setMethod(FALLBACK_METHOD_OPTIONS[0]!.value); setBank(''); setError(null);
+    // Los catálogos del tenant (con respaldo local): sin ellos se ofrecen los medios de siempre y no se pide banco.
+    void Promise.all([listCatalogCached(CatalogType.PAYMENT_METHOD), listCatalogCached(CatalogType.BANK)]).then(([pm, bk]) => {
+      if (pm.status === 'ok' && pm.data.length > 0) {
+        const opts = pm.data.map((o) => ({ value: o.code, label: o.label, requiresBank: !!o.metadata?.requiresBank }));
+        setMethods(opts);
+        setMethod(opts[0]!.value);
+      }
+      if (bk.status === 'ok') setBanks(bk.data.map((o) => ({ value: o.code, label: o.label })));
+    });
   }, [visible]);
 
   const oc = outcomes.find((o) => o.key === outcome) ?? outcomes[0];
   const isPromise = !!oc.promise;
-  const promise = { amount: Number(amount), promiseDate: date, paymentMethodCode: method };
-  const valid = !isPromise || promiseReady(promise);
+  // El banco sólo se pide si el medio lo exige (`requiresBank`) y el tenant tiene bancos cargados.
+  const bankRequired = isPromise && banks.length > 0 && !!methods.find((m) => m.value === method)?.requiresBank;
+  const promise = { amount: Number(amount.replace(',', '.')), promiseDate: date, paymentMethodCode: method, ...(bankRequired && bank ? { bankCode: bank } : {}) };
 
   const onDate = useCallback((e: DateTimePickerEvent, d?: Date) => {
     setShowPicker(false);
-    if (e.type === 'set' && d) setDate(new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().slice(0, 10));
+    if (e.type === 'set' && d) setDate(localToday(d));
   }, []);
 
   const submit = useCallback(async () => {
+    const payload = { type: oc.type, result: oc.result, notes: notes.trim() || undefined, promise: isPromise ? promise : undefined };
+    // La misma regla que la API y el panel, ANTES de encolar: una promesa con fecha pasada no tiene que quedar en la cola
+    // para ser rechazada horas después, cuando el cobrador ya no puede corregirla.
+    const invalid = gestionError(payload, localToday(), { bankRequired });
+    if (invalid) return setError(invalid);
     setSaving(true);
     setError(null);
-    const err = await onSubmit({
-      type: oc.type,
-      result: oc.result,
-      notes: notes.trim() || undefined,
-      promise: isPromise ? promise : undefined,
-    });
+    const err = await onSubmit(payload);
     setSaving(false);
     if (err) setError(err);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oc, notes, isPromise, amount, date, method, onSubmit]);
+  }, [oc, notes, isPromise, amount, date, method, bank, bankRequired, onSubmit]);
 
   return (
     <BottomSheet visible={visible} onClose={onClose} title="Registrar gestión">
@@ -102,15 +122,21 @@ export function GestionSheet({
             <Text style={styles.dateText}>{prettyDate(date)}</Text>
           </Pressable>
           <SectionLabel>Medio de pago</SectionLabel>
-          <Chips options={METHODS} value={method} onChange={setMethod} />
+          <Chips options={methods} value={method} onChange={(v) => { setMethod(v); setBank(''); }} />
+          {bankRequired && (
+            <>
+              <SectionLabel>Banco</SectionLabel>
+              <Chips options={banks} value={bank} onChange={setBank} />
+            </>
+          )}
         </>
       )}
       <SectionLabel>Nota</SectionLabel>
       <Field label="" value={notes} onChangeText={setNotes} placeholder="Opcional" />
       <View style={{ marginTop: SPACING.md }}>
-        <Button label="Guardar gestión" onPress={submit} loading={saving} disabled={saving || !valid} />
+        <Button label="Guardar gestión" onPress={submit} loading={saving} disabled={saving} />
       </View>
-      {showPicker && <DateTimePicker value={new Date(date)} mode="date" onChange={onDate} />}
+      {showPicker && <DateTimePicker value={new Date(`${date}T12:00:00`)} mode="date" minimumDate={new Date()} onChange={onDate} />}
     </BottomSheet>
   );
 }

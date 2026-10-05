@@ -1,8 +1,7 @@
-import { CasePriority, CaseStatus } from '@prisma/client';
+import { CollectionPriority } from '@prisma/client';
 import type { MoraCreditListItem } from '@kobrax/shared';
 import { Report, arrearsTone, type TableColumn } from '../../common/pdf/report';
 import { csvSafeText } from '../exports/csv';
-import { enumList } from '../cases/cases.service';
 import type { ListMoraQueryDto } from './dto/mora.dto';
 
 import { AsyncResource } from 'node:async_hooks';
@@ -33,13 +32,7 @@ export const MORA_CSV_MAX_ROWS = 50_000;
 export const MORA_PDF_MAX_ROWS = 5_000;
 
 const PRIORITY_LABEL: Record<string, string> = { CRITICAL: 'Crítica', HIGH: 'Alta', MEDIUM: 'Media', LOW: 'Baja' };
-const STATUS_LABEL: Record<string, string> = {
-  PENDING: 'Pendiente',
-  ACTIVE: 'En gestión',
-  IN_NEGOTIATION: 'En negociación',
-  PROMISE_TO_PAY: 'Promesa de pago',
-  PAID: 'Pagado',
-};
+const SITUATION_LABEL: Record<string, string> = { CURRENT: 'Al día', IN_ARREARS: 'En mora' };
 const ARREARS_LABEL: Record<string, string> = { CALCULATED: 'Calculada', IMPORTED: 'Del archivo', MANUAL: 'A mano' };
 const ACTIVITY_LABEL: Record<string, string> = {
   NOTE: 'Nota',
@@ -47,22 +40,19 @@ const ACTIVITY_LABEL: Record<string, string> = {
   VISIT: 'Visita',
   MESSAGE: 'Mensaje',
   PAYMENT: 'Pago',
-  STATUS_CHANGE: 'Cambio de estado',
   ASSIGNMENT: 'Asignación',
 };
 const SORT_LABEL: Record<string, string> = {
   daysPastDue: 'días de mora',
   balance: 'saldo',
   priority: 'prioridad',
-  lastAction: 'última gestión',
-  slaDueAt: 'vencimiento del plazo',
   createdAt: 'antigüedad',
 };
 
 const source = (c: MoraCreditListItem): string => c.externalSource ?? 'KOBRAX';
 const day = (iso?: string): string => (iso ? iso.slice(0, 10) : '');
 
-/** Nombres que el servicio resuelve aparte (el crédito sólo trae ids): cobrador por id. */
+/** Nombres que el servicio resuelve aparte (el crédito sólo trae ids): responsable por id. */
 export type MoraNames = Map<string, string>;
 
 /**
@@ -92,15 +82,16 @@ export const MORA_CSV_COLUMNS = [
   'Corte del reporte',
   'Reporte desactualizado',
   'Estado en origen',
+  'Situación',
+  'Categoría',
+  'Castigado',
   'Prioridad',
-  'Estado de gestión',
-  'Cobrador',
+  'Responsable',
   'Oficina',
   'Última gestión',
   'Tipo de última gestión',
   'Resultado de última gestión',
   'Promesa vigente',
-  'Plazo de gestión vencido',
 ] as const;
 
 const yesNo = (v: boolean | undefined): string => (v === undefined ? '' : v ? 'Sí' : 'No');
@@ -124,19 +115,20 @@ export function moraCsvRow(c: MoraCreditListItem, names: MoraNames): Record<stri
     'Corte del reporte': day(c.reportedAsOf),
     'Reporte desactualizado': yesNo(c.reportedStale),
     'Estado en origen': csvSafeText(c.reportedStatus),
-    Prioridad: c.case ? (PRIORITY_LABEL[c.case.priority] ?? c.case.priority) : '',
-    'Estado de gestión': c.case ? (STATUS_LABEL[c.case.status] ?? c.case.status) : '',
-    Cobrador: csvSafeText(c.case?.assigneeId ? names.get(c.case.assigneeId) : undefined),
+    Situación: SITUATION_LABEL[c.situation] ?? '',
+    Categoría: csvSafeText(c.category?.code),
+    Castigado: yesNo(c.writtenOff),
+    Prioridad: c.priority ? (PRIORITY_LABEL[c.priority] ?? c.priority) : '',
+    Responsable: csvSafeText(c.responsibleId ? names.get(c.responsibleId) : undefined),
     Oficina: csvSafeText(c.branchName),
-    'Última gestión': day(c.case?.lastActionAt),
+    'Última gestión': day(c.lastActionAt),
     'Tipo de última gestión': c.lastActivityType ? (ACTIVITY_LABEL[c.lastActivityType] ?? c.lastActivityType) : '',
     'Resultado de última gestión': csvSafeText(c.lastActivityResult),
     'Promesa vigente': yesNo(c.hasActivePromise),
-    'Plazo de gestión vencido': c.case ? yesNo(c.case.isOverdue) : '',
   };
 }
 
-/** Nombres que `describeFilters` necesita y la consulta no trae: cobrador y oficina elegidos. */
+/** Nombres que `describeFilters` necesita y la consulta no trae: responsable y oficina elegidos. */
 export interface FilterNames {
   assignee?: string;
   branch?: string;
@@ -155,21 +147,20 @@ export function describeFilters(q: ListMoraQueryDto, names: FilterNames = {}): s
   else if (q.dpdMax != null) out.push(`Días de mora: hasta ${q.dpdMax}`);
   if (q.balanceMin != null) out.push(`Saldo desde ${q.balanceMin}`);
   if (q.balanceMax != null) out.push(`Saldo hasta ${q.balanceMax}`);
-  const priorities = enumList(q.priority, CasePriority);
+  const valid = new Set<string>(Object.values(CollectionPriority));
+  const priorities = [...new Set((q.priority ?? '').split(',').map((p) => p.trim()).filter((p) => valid.has(p)))];
   if (priorities.length) out.push(`Prioridad: ${priorities.map((p) => PRIORITY_LABEL[p] ?? p).join(', ')}`);
-  const statuses = enumList(q.status, CaseStatus);
-  if (statuses.length) out.push(`Estado de gestión: ${statuses.map((s) => STATUS_LABEL[s] ?? s).join(', ')}`);
-  if (q.assigneeId) out.push(`Cobrador: ${names.assignee ?? 'seleccionado'}`);
-  if (q.unassigned === 'true') out.push('Casos sin cobrador');
-  if (q.hasCase === 'true') out.push('Con caso abierto');
-  if (q.hasCase === 'false') out.push('En mora, sin caso abierto');
+  const categories = [...new Set((q.category ?? '').split(',').map((c) => c.trim()).filter((c) => c.length > 0))];
+  if (categories.length) out.push(`Categoría de mora: ${categories.join(', ')}`);
+  if (q.writtenOff === 'true') out.push('Sólo castigados');
+  if (q.writtenOff === 'false') out.push('Sin los castigados');
+  if (q.assigneeId) out.push(`Responsable: ${names.assignee ?? 'seleccionado'}`);
+  if (q.unassigned === 'true') out.push('Créditos sin responsable');
   if (q.branchId) out.push(`Oficina: ${names.branch ?? 'seleccionada'}`);
   if (q.source) out.push(`Fuente: ${q.source}`);
   if (q.arrearsSource) out.push(`Origen de la mora: ${ARREARS_LABEL[q.arrearsSource] ?? q.arrearsSource}`);
   if (q.hasPromise === 'true') out.push('Con promesa de pago vigente');
   if (q.hasPromise === 'false') out.push('Sin promesa de pago vigente');
-  if (q.overdue === 'true') out.push('Plazo de gestión vencido');
-  if (q.noActionSince) out.push(`Sin gestión desde el ${q.noActionSince}`);
   if (q.zone?.trim()) out.push(`Zona: ${q.zone.trim()}`);
   return out;
 }
@@ -230,6 +221,8 @@ export interface MoraPdfContext {
   generatedBy?: string;
   /** El cobrador sólo descarga lo suyo: el PDF lo dice. */
   ownOnly: boolean;
+  /** El supervisor descarga su agencia (y lo suyo): el PDF lo dice. */
+  branchScope?: boolean;
   filters: string[];
   sort: string;
   names: MoraNames;
@@ -258,7 +251,7 @@ export async function buildMoraPdf(items: MoraCreditListItem[], ctx: MoraPdfCont
     { label: 'Generado el', value: now.toLocaleString('es-BO', { dateStyle: 'medium', timeStyle: 'short' }) },
     { label: 'Generado por', value: ctx.generatedBy ?? '—' },
     { label: 'Fecha de corte', value: cutoff ?? '—' },
-    { label: 'Alcance', value: ctx.ownOnly ? 'Sólo los casos asignados a quien lo generó' : 'Toda la cartera autorizada' },
+    { label: 'Alcance', value: ctx.ownOnly ? 'Sólo los créditos a cargo de quien lo generó' : ctx.branchScope ? 'La agencia de quien lo generó y sus propios créditos' : 'Toda la cartera autorizada' },
     { label: 'Créditos', value: String(items.length) },
     { label: 'Orden', value: ctx.sort },
   ]);
@@ -284,14 +277,16 @@ export async function buildMoraPdf(items: MoraCreditListItem[], ctx: MoraPdfCont
 
   r.section('Detalle');
   const columns: TableColumn<MoraCreditListItem>[] = [
-    { header: 'Crédito', width: 16, value: (c) => c.code ?? '—', strong: true },
-    { header: 'Deudor', width: 22, value: (c) => c.clientName ?? '—' },
+    { header: 'Crédito', width: 14, value: (c) => c.code ?? '—', strong: true },
+    { header: 'Deudor', width: 18, value: (c) => c.clientName ?? '—' },
     { header: 'Saldo', width: 13, value: (c) => (c.balance === undefined ? '—' : moneyIn(c.currency, c.balance)), align: 'right' },
     { header: 'Vencido', width: 13, value: (c) => (c.overdueAmount === undefined ? '—' : moneyIn(c.currency, c.overdueAmount)), align: 'right' },
     { header: 'Días', width: 6, value: (c) => String(c.daysPastDue), align: 'right', tone: (c) => arrearsTone(c.daysPastDue) },
-    { header: 'Prioridad', width: 9, value: (c) => (c.case ? (PRIORITY_LABEL[c.case.priority] ?? c.case.priority) : 'Sin caso') },
-    { header: 'Cobrador', width: 14, value: (c) => (c.case?.assigneeId ? (ctx.names.get(c.case.assigneeId) ?? '—') : '—') },
-    { header: 'Últ. gestión', width: 11, value: (c) => day(c.case?.lastActionAt) || '—' },
+    { header: 'Cat.', width: 5, value: (c) => c.category?.code ?? '—' },
+    { header: 'Situación', width: 10, value: (c) => (c.writtenOff ? 'Castigado' : (SITUATION_LABEL[c.situation] ?? '—')) },
+    { header: 'Prioridad', width: 9, value: (c) => (c.priority ? (PRIORITY_LABEL[c.priority] ?? c.priority) : '—') },
+    { header: 'Responsable', width: 13, value: (c) => (c.responsibleId ? (ctx.names.get(c.responsibleId) ?? '—') : '—') },
+    { header: 'Últ. gestión', width: 11, value: (c) => day(c.lastActionAt) || '—' },
   ];
   r.table(columns, items, { empty: 'No hay créditos con estos filtros.' });
 

@@ -12,7 +12,6 @@ function makeService(
     config?: unknown;
     /** `accounts.settings` (D20: método de mora por defecto). */
     settings?: unknown;
-    openCase?: unknown;
     /** Topes del plan. Por defecto no frenan: sólo los usa el test del tope. */
     plan?: Parameters<typeof fakePlanLimits>[0];
     /** Permisos de quien llama. Por defecto ninguno: un cobrador sin `assignment:write`. */
@@ -24,14 +23,13 @@ function makeService(
   const calls = {
     creditCreate: [] as Record<string, unknown>[],
     creditUpdate: [] as Record<string, unknown>[],
-    caseCreate: [] as Record<string, unknown>[],
-    caseClose: [] as Record<string, unknown>[],
     agendaCreate: [] as Record<string, unknown>[],
     arrearCreate: [] as Record<string, unknown>[],
     arrearDeleteMany: 0,
     installmentDeleteMany: 0,
     installmentCreateMany: [] as Record<string, unknown>[][],
     audit: [] as { action: string; entity: string }[],
+    priorityRecompute: [] as string[],
     assignmentCreate: [] as Record<string, unknown>[],
     columnWrites: [] as Record<string, unknown>[],
   };
@@ -85,18 +83,10 @@ function makeService(
         return { count: args.data.length };
       },
     },
-    collectionCase: {
-      create: async (args: { data: Record<string, unknown> }) => {
-        calls.caseCreate.push(args.data);
-        return { id: 'case1', ...args.data };
-      },
-      findFirst: async () => opts.openCase ?? null,
-      updateMany: async (args: { data: Record<string, unknown> }) => {
-        calls.caseClose.push(args.data);
-        return { count: opts.openCase ? 1 : 0 };
-      },
-    },
     agendaItem: {
+      // D10: lo que `AssignmentService.apply` mueve al reasignar (acá no hay agendados pendientes).
+      findMany: async () => [],
+      updateMany: async () => ({ count: 0 }),
       create: async (args: { data: Record<string, unknown> }) => {
         calls.agendaCreate.push(args.data);
         return { id: 'ag1', ...args.data };
@@ -124,7 +114,9 @@ function makeService(
     recordMany: async (es: { action: string; entity: string }[]) => void calls.audit.push(...es),
   };
   const assignment = new AssignmentService({} as never, tenant as never, audit as never);
-  const service = new CreditsService(prisma as never, tenant as never, audit as never, fakePlanLimits(opts.plan), assignment);
+  // F4/08: la prioridad del episodio se recalcula con `ArrearsPriorityService`; acá sólo se registra la llamada.
+  const arrearsPriority = { recomputeForCredit: async (_tx: unknown, creditId: string) => void calls.priorityRecompute.push(creditId) };
+  const service = new CreditsService(prisma as never, tenant as never, audit as never, fakePlanLimits(opts.plan), assignment, arrearsPriority as never);
   return { service, calls };
 }
 
@@ -142,10 +134,9 @@ describe('CreditsService.create — idempotencia del alta offline', () => {
     assert.equal(calls.creditCreate.length, 0, 'no debe insertar de nuevo');
   });
 
-  it('el reintento no crea un segundo caso ni otro recordatorio en la agenda', async () => {
+  it('el reintento no crea recordatorio ni audita', async () => {
     const { service, calls } = makeService({ client: { id: 'c1' }, credit: { id: 'ya-existe', currency: 'BOB', metadata: {} } });
-    await service.create({ ...(BASE as object), id: 'ya-existe', openCase: true } as never);
-    assert.equal(calls.caseCreate.length, 0);
+    await service.create({ ...(BASE as object), id: 'ya-existe' } as never);
     assert.equal(calls.agendaCreate.length, 0);
     assert.deepEqual(calls.audit, []);
   });
@@ -288,38 +279,17 @@ describe('CreditsService.create — crédito sin cronograma', () => {
     assert.equal((data.metadata as { balanceBasis?: string }).balanceBasis, 'total');
   });
 
-  it('openCase abre el caso y el recordatorio en la agenda, en la misma transacción (§5.2)', async () => {
+  /** F4/08: crear un crédito no crea el recordatorio «Cobrar cuota» (lo genera un job aparte, D11). */
+  it('no crea recordatorio de agenda', async () => {
     const { service, calls } = makeService({ client: { id: 'c1' } });
-    await service.create({ ...(MOVIL as object), daysPastDue: 45, openCase: true } as never);
-    const kase = calls.caseCreate[0]!;
-    assert.equal(kase.creditId, 'cr1');
-    assert.equal(kase.assigneeId, 'user-1'); // el cobrador que lo registró
-    assert.equal(kase.priority, 'HIGH'); // 31–90 días
-    // Próxima fecha de cobro en la agenda (§5.2): un REMINDER con la fecha del metadata, asignado al cobrador.
-    const ag = calls.agendaCreate[0]!;
-    assert.equal(ag.type, 'REMINDER');
-    assert.equal(ag.assigneeId, 'user-1');
-    assert.equal(ag.caseId, 'case1');
-    assert.equal((ag.scheduledDate as Date).toISOString().slice(0, 10), '2026-07-20');
+    await service.create({ ...(MOVIL as object), daysPastDue: 45 } as never);
+    assert.equal(calls.agendaCreate.length, 0);
     assert.deepEqual(
       calls.audit.map((a) => `${a.action} ${a.entity}`),
-      ['CREATE credit', 'ASSIGN credit', 'CREATE collection_case', 'CREATE agenda_item'],
+      ['CREATE credit', 'ASSIGN credit'],
     );
   });
 
-  it('sin openCase no se crea ni caso ni agenda', async () => {
-    const { service, calls } = makeService({ client: { id: 'c1' } });
-    await service.create(MOVIL);
-    assert.equal(calls.caseCreate.length, 0);
-    assert.equal(calls.agendaCreate.length, 0);
-  });
-
-  it('openCase con cronograma (sin nextDueDate en metadata) crea el caso pero NO el recordatorio', async () => {
-    const { service, calls } = makeService({ client: { id: 'c1' } });
-    await service.create({ ...(BASE as object), openCase: true } as never); // BASE = cuotas, sin cuota congelada
-    assert.equal(calls.caseCreate.length, 1);
-    assert.equal(calls.agendaCreate.length, 0); // sin próxima fecha en metadata → no hay recordatorio
-  });
 });
 
 describe('CreditsService.update (editar desde la ficha §4)', () => {
@@ -439,14 +409,13 @@ describe('CreditsService.update — redefinir condiciones y estado al registrar 
     assert.deepEqual(meta.initialState, { paidInstallments: 2, daysPastDue: 0 });
   });
 
-  it('mora al registrarlo: marca manual desde esa fecha y abre el caso', async () => {
+  it('mora al registrarlo: marca manual desde esa fecha y recalcula la prioridad del episodio (sin caso)', async () => {
     const { service, calls } = makeService({ credit: fresh() });
     await service.update('cr1', { initialState: { paidInstallments: 0, daysPastDue: 15 } } as never);
     const data = calls.creditUpdate[0]!;
     assert.equal(data.daysPastDue, 15);
     assert.equal(typeof (data.metadata as Record<string, unknown>).moraSince, 'string');
-    assert.equal(calls.caseCreate.length, 1);
-    assert.equal(calls.caseCreate[0]!.assigneeId, 'u9');
+    assert.deepEqual(calls.priorityRecompute, ['cr1']);
   });
 
   it('bajar la mora declarada a 0 saca la marca que ella misma puso', async () => {
@@ -809,20 +778,19 @@ describe('CreditsService.markArrears', () => {
   });
 
   /**
-   * 🔴 **Abre el caso en el acto, sin esperar al trabajo diario.** Quien aprieta ese botón quiere ver
-   * el crédito en Mora ahora; esperar al job sería decirle que su decisión vale dentro de seis horas.
+   * F4/08: marcar en mora ya no abre ningún caso. El trigger de la base abre el episodio al cambiar los días, y el
+   * servicio sólo calcula su prioridad en el acto (el crédito aparece en Mora ya, ordenado, sin esperar al job).
    */
-  it('abre el caso ahí mismo, heredando el responsable del préstamo', async () => {
+  it('no abre caso: recalcula la prioridad del episodio ahí mismo', async () => {
     const { service, calls } = makeService({ credit: activo() });
-    await service.markArrears('cr1');
-    assert.equal(calls.caseCreate.length, 1);
-    assert.equal(calls.caseCreate[0]!.assigneeId, 'u-cobrador');
+    await service.markArrears('cr1', 15);
+    assert.deepEqual(calls.priorityRecompute, ['cr1']);
   });
 
-  it('con un caso ya abierto no crea otro', async () => {
-    const { service, calls } = makeService({ credit: activo(), openCase: { id: 'k1' } });
-    await service.markArrears('cr1');
-    assert.equal(calls.caseCreate.length, 0);
+  it('la auditoría ya no habla de casos', async () => {
+    const { service, calls } = makeService({ credit: activo() });
+    await service.markArrears('cr1', 15);
+    assert.ok(calls.audit.some((e) => e.action === 'ARREARS_MARK' && e.entity === 'credit'));
   });
 
   /** Su mora la manda el archivo: la marca se guardaría y no haría nada. Mejor rebotar que mentir. */
@@ -852,17 +820,17 @@ describe('CreditsService.clearArrears', () => {
     ...over,
   });
 
-  it('«siguiente período» avanza la fecha y cierra el caso', async () => {
-    const { service, calls } = makeService({ credit: enMora(), openCase: { id: 'k1' } });
+  it('«siguiente período» avanza la fecha y (el trigger cierra el episodio)', async () => {
+    const { service, calls } = makeService({ credit: enMora() });
     await service.clearArrears('cr1', { mode: 'next_period' });
     const meta = calls.creditUpdate[0]!.metadata as { nextDueDate?: string };
     assert.ok(meta.nextDueDate! > new Date().toISOString().slice(0, 10), 'la nueva fecha es futura');
     assert.equal(calls.creditUpdate[0]!.daysPastDue, 0);
-    assert.equal(calls.caseClose[0]!.closedReason, 'CURRENT');
+    assert.equal(calls.priorityRecompute.length, 0);
   });
 
   it('«sin fecha» deja el préstamo abierto: sin vencimiento no hay mora que contar', async () => {
-    const { service, calls } = makeService({ credit: enMora(), openCase: { id: 'k1' } });
+    const { service, calls } = makeService({ credit: enMora() });
     await service.clearArrears('cr1', { mode: 'none' });
     const meta = calls.creditUpdate[0]!.metadata as { nextDueDate?: string };
     assert.equal(meta.nextDueDate, undefined);
@@ -876,7 +844,7 @@ describe('CreditsService.clearArrears', () => {
 
   it('poner al día también saca la marca manual: quien la puso es quien la saca', async () => {
     const credit = enMora({ metadata: { origin: 'manual', frequency: 'MONTHLY', moraSince: '2026-01-01' } });
-    const { service, calls } = makeService({ credit, openCase: { id: 'k1' } });
+    const { service, calls } = makeService({ credit });
     await service.clearArrears('cr1', { mode: 'next_period' });
     const meta = calls.creditUpdate[0]!.metadata as { moraSince?: string };
     assert.equal(meta.moraSince, undefined);
@@ -966,7 +934,7 @@ describe('CreditsService — responsable del crédito (assignment:write)', () =>
 
   it('PATCH con assignment:write reasigna por el servicio: la columna no va en el update directo', async () => {
     const { service, calls } = makeService({
-      permissions: ['assignment:write'],
+      permissions: ['assignment:write', 'data:scope:all'],
       members: [COBRADOR],
       credit: { id: 'cr1', metadata: { origin: 'import' }, assignedManagerId: 'u-ana' },
     });
@@ -991,7 +959,7 @@ describe('CreditsService — responsable del crédito (assignment:write)', () =>
 
   it('a alguien que no es cobrador activo de la cuenta → ASSIGNEE_NOT_ELIGIBLE', async () => {
     const { service } = makeService({
-      permissions: ['assignment:write'],
+      permissions: ['assignment:write', 'data:scope:all'],
       members: [],
       credit: { id: 'cr1', metadata: { origin: 'manual' }, assignedManagerId: null },
     });

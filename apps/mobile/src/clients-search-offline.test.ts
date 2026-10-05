@@ -12,8 +12,12 @@ jest.mock('./api-client', () => ({
   toQuery: jest.fn(() => ''),
 }));
 jest.mock('./sync/cached', () => ({ cachedOne: jest.fn() }));
+const mockKinds: string[] = [];
 jest.mock('./db', () => ({
-  getMany: jest.fn(async () => mockCasos),
+  getMany: jest.fn(async (kind: string) => {
+    mockKinds.push(kind);
+    return mockCasos;
+  }),
   fetchedAt: jest.fn(async () => 1_700_000_000_000),
 }));
 
@@ -25,12 +29,20 @@ beforeEach(() => {
   mockCasos.push(
     { clientId: 'c1', clientName: 'QUISPE MAMANI ROSA ELENA' },
     { clientId: 'c2', clientName: 'Martínez Durán Juan' },
-    { clientId: 'c1', clientName: 'QUISPE MAMANI ROSA ELENA' }, // el mismo cliente en otro caso
-    { clientId: 'c3' }, // caso sin nombre: no debe romper
+    { clientId: 'c1', clientName: 'QUISPE MAMANI ROSA ELENA' }, // el mismo cliente en otro crédito
+    { clientId: 'c3' }, // crédito sin nombre: no debe romper
   );
 });
 
 describe('searchClients sin señal', () => {
+  // La cartera bajada (`GET /mora?todos=true`) es la casilla `portfolio`: ya no hay casilla de casos.
+  it('lee la cartera guardada (kind portfolio), no los casos', async () => {
+    mockKinds.length = 0;
+    await searchClients('rosa');
+    expect(mockKinds).toContain('portfolio');
+    expect(mockKinds).not.toContain('case');
+  });
+
   it('encuentra por parte del nombre', async () => {
     const r = await searchClients('rosa');
     expect(r.status).toBe('ok');
@@ -44,8 +56,8 @@ describe('searchClients sin señal', () => {
     if (r.status === 'ok') expect(r.data[0]!.id).toBe('c2');
   });
 
-  // Un cliente con dos créditos aparece en dos casos; en la búsqueda tiene que salir una vez.
-  it('no repite un cliente que está en varios casos', async () => {
+  // Un cliente con dos créditos aparece en dos filas de la cartera; en la búsqueda tiene que salir una vez.
+  it('no repite un cliente que tiene varios créditos', async () => {
     const r = await searchClients('quispe');
     if (r.status === 'ok') expect(r.data).toHaveLength(1);
   });
@@ -64,5 +76,25 @@ describe('searchClients sin señal', () => {
     mockApi.res = { status: 'ok', data: [{ id: 'server-1' }], total: 1 };
     const r = await searchClients('rosa');
     if (r.status === 'ok') expect(r.data[0]!.id).toBe('server-1');
+  });
+});
+
+describe('searchClients sin señal · clientes dados de alta sin señal', () => {
+  it('encuentra al cliente provisional por nombre aunque todavía no tenga caso', async () => {
+    mockCasos.push({ id: 'cli-nuevo', pending: true, firstName: 'Lucía', lastName: 'Fernández' } as never);
+    const r = await searchClients('lucia');
+    expect(r.status).toBe('ok');
+    if (r.status === 'ok') expect(r.data.map((h) => h.id)).toEqual(['cli-nuevo']);
+  });
+
+  it('una ficha real cacheada (sin marca de pendiente) no se cuela por esta vía', async () => {
+    mockCasos.push({ id: 'cli-real', firstName: 'Lucía', lastName: 'Fernández' } as never);
+    expect((await searchClients('lucia')).status).toBe('offline');
+  });
+
+  it('no duplica a un cliente que ya salió por la cartera', async () => {
+    mockCasos.push({ id: 'c1', pending: true, businessName: 'QUISPE MAMANI ROSA ELENA' } as never);
+    const r = await searchClients('quispe');
+    if (r.status === 'ok') expect(r.data).toHaveLength(1);
   });
 });

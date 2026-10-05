@@ -1,18 +1,20 @@
 import {
   arrearsSourceOf,
+  categoryForDays,
   creditView,
   DEFAULT_REPORT_STALE_AFTER_DAYS,
   isReportStale,
+  moraSituation,
   readCreditMetadata,
   suggestedPaymentAmount,
+  type ArrearCategory,
   type ImportTrackedField,
-  type MoraCaseSummary,
   type MoraCreditListItem,
   type OverdueSource,
+  type PortfolioLocation,
 } from '@kobrax/shared';
 import { clientDisplayName } from '../clients/clients.serializer';
-
-const TERMINAL = ['CLOSED', 'WRITTEN_OFF'];
+import { nameOf, type NameMap } from './mora-names';
 
 /** Lo que `MoraService` trae de Prisma por crédito. */
 export interface MoraCreditRow {
@@ -28,21 +30,21 @@ export interface MoraCreditRow {
   externalSource: string | null;
   syncStatus: string | null;
   reportedAsOf: Date | null;
+  absentSince?: Date | null;
   branchId: string | null;
   branch?: { name: string } | null;
   client: { firstName: string | null; lastName: string | null; businessName: string | null };
   installments: { number: number; dueDate: Date; amount: unknown; paidAmount: unknown; status: string }[];
-  /** A lo sumo uno: el caso abierto. */
-  cases: {
-    id: string;
-    status: string;
-    priority: string;
-    priorityPinnedAt: Date | null;
-    assigneeId: string | null;
-    slaDueAt: Date | null;
-    lastActionAt: Date | null;
-    activities: { type: string; result: string | null }[];
-  }[];
+  /** Castigo (`credits.written_off_at`): condición independiente de la mora. */
+  writtenOffAt: Date | null;
+  /** `credits.last_action_at`: sólo informativo. */
+  lastActionAt: Date | null;
+  /** El responsable (`credits.assigned_manager_id`). */
+  assignedManagerId: string | null;
+  /** El episodio de mora ABIERTO (a lo sumo uno). Ninguno = al día. De él salen la situación y la prioridad. */
+  arrearEpisodes: { priority: string | null; priorityPinnedAt: Date | null }[];
+  /** La última gestión del crédito (a lo sumo una). */
+  activities: { type: string; result: string | null }[];
   /** El último pago registrado en Kobrax (a lo sumo uno). */
   payments: { paymentDate: Date }[];
 }
@@ -66,7 +68,16 @@ export function overdueFromSchedule(installments: MoraCreditRow['installments'],
 
 export function serializeMoraCredit(
   c: MoraCreditRow,
-  opts: { now: Date; staleAfterDays?: number; hasActivePromise: boolean },
+  opts: {
+    now: Date;
+    staleAfterDays?: number;
+    hasActivePromise: boolean;
+    categories?: readonly Pick<ArrearCategory, 'code' | 'name' | 'color' | 'fromDays' | 'toDays'>[];
+    /** Zona, ubicaciones y documento enmascarado del deudor: sólo la lista (ver `loadPortfolio`). */
+    portfolio?: { zone?: string; locations?: PortfolioLocation[]; documentMasked?: string };
+    /** Nombres del equipo (id → nombre) para `responsibleName`: los resuelve el servicio en UNA consulta por petición. */
+    names?: NameMap;
+  },
 ): MoraCreditListItem {
   const { now } = opts;
   const meta = readCreditMetadata(c.metadata, c.origin);
@@ -102,20 +113,11 @@ export function serializeMoraCredit(
   );
   const lastPaymentAt = lastPayments.length > 0 ? lastPayments.sort().at(-1) : undefined;
 
-  const open = c.cases[0];
-  const activity = open?.activities[0];
-  const caseSummary: MoraCaseSummary | undefined = open
-    ? {
-        id: open.id,
-        status: open.status as MoraCaseSummary['status'],
-        priority: open.priority as MoraCaseSummary['priority'],
-        priorityPinned: open.priorityPinnedAt !== null,
-        assigneeId: open.assigneeId ?? undefined,
-        slaDueAt: open.slaDueAt?.toISOString(),
-        isOverdue: !!open.slaDueAt && !TERMINAL.includes(open.status) && open.slaDueAt.getTime() < now.getTime(),
-        lastActionAt: open.lastActionAt?.toISOString(),
-      }
-    : undefined;
+  // F4/08: la situación sale SÓLO del episodio abierto; el castigo es aparte; la categoría se calcula (nunca se guarda).
+  const episode = c.arrearEpisodes[0];
+  const { situation, writtenOff } = moraSituation({ hasOpenEpisode: !!episode, daysPastDue: c.daysPastDue, writtenOffAt: c.writtenOffAt });
+  const cat = categoryForDays(c.daysPastDue, opts.categories ?? []);
+  const activity = c.activities[0];
 
   return {
     creditId: c.id,
@@ -147,15 +149,31 @@ export function serializeMoraCredit(
     externalSource: c.externalSource ?? undefined,
     syncStatus: (c.syncStatus ?? undefined) as MoraCreditListItem['syncStatus'],
     reportedAsOf: c.reportedAsOf ? iso(c.reportedAsOf) : undefined,
+    // D9: desde cuándo ya no aparece en el reporte (sólo con `syncStatus = ABSENT`).
+    absentSince: c.syncStatus === 'ABSENT' && c.absentSince ? iso(c.absentSince) : undefined,
     reportedStale: c.syncStatus
       ? isReportStale(c.reportedAsOf, now, opts.staleAfterDays ?? DEFAULT_REPORT_STALE_AFTER_DAYS)
       : undefined,
     reportedStatus: meta.reportedStatus,
     branchId: c.branchId ?? undefined,
     branchName: c.branch?.name,
-    case: caseSummary,
+    situation,
+    category: cat ? { code: cat.code, name: cat.name, color: cat.color ?? undefined } : undefined,
+    writtenOff,
+    priority: (episode?.priority ?? undefined) as MoraCreditListItem['priority'],
+    priorityPinned: episode ? episode.priorityPinnedAt !== null : false,
+    responsibleId: c.assignedManagerId ?? undefined,
+    responsibleName: nameOf(opts.names, c.assignedManagerId),
+    lastActionAt: c.lastActionAt?.toISOString(),
     lastActivityType: activity?.type,
     lastActivityResult: activity?.result ?? undefined,
     hasActivePromise: opts.hasActivePromise,
+    // Cartera / rutas (mismas reglas que el caso: `creditView`; el candado y el origen los pinta el móvil).
+    frequency: view.frequency,
+    origin: view.origin,
+    locked: view.locked,
+    zone: opts.portfolio?.zone,
+    locations: opts.portfolio?.locations,
+    documentMasked: opts.portfolio?.documentMasked,
   };
 }

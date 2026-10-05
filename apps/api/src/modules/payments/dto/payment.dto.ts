@@ -11,7 +11,6 @@ export class CreatePaymentDto {
   @IsUUID() creditId!: string;
   @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() amount!: number;
   @IsEnum(PaymentMethod) method!: PaymentMethod;
-  @IsOptional() @IsUUID() caseId?: string;
   @IsOptional() @IsString() provider?: string;
   @IsOptional() @IsString() externalTransactionId?: string;
   /** Comprobante (spec §5.4). Los devuelve `POST /api/uploads`; el hash es del buffer original. */
@@ -31,7 +30,6 @@ export class ListPaymentsQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit?: number;
   @IsOptional() @IsUUID() creditId?: string;
-  @IsOptional() @IsUUID() caseId?: string;
   /** Todos los pagos de una persona, de todos sus créditos. Es el historial de la ficha. */
   @IsOptional() @IsUUID() clientId?: string;
   /** D7: sólo los pagos imputados a créditos de esa fuente. `KOBRAX` = sin fuente externa. */
@@ -58,7 +56,6 @@ export class ListPaymentsQueryDto {
 export class CreatePaymentRequestDto {
   @IsOptional() @IsUUID() creditId?: string;
   @IsOptional() @IsUUID() clientId?: string;
-  @IsOptional() @IsUUID() caseId?: string;
   @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() amount!: number;
   @IsOptional() @IsEnum(PaymentMethod) method?: PaymentMethod;
 }

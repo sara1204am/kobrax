@@ -110,8 +110,7 @@ export function canSubmitPrestamo(s: PrestamoForm): boolean {
 /**
  * Arma el payload; la cuota viaja congelada.
  *
- * `openCase` y `origin` los pone quien llama: el móvil siempre abre el caso, y la web también
- * (sin caso el crédito no le llega a nadie). `assignedManagerId` sólo lo manda la web, donde el
+ * `origin` lo pone quien llama. `assignedManagerId` sólo lo manda la web, donde el
  * cobrador se elige en el formulario en vez de ser quien carga.
  */
 export function buildPrestamoPayload(s: PrestamoForm, clientId: string): NewCreditInput {

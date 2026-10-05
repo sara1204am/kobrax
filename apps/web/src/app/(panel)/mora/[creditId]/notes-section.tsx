@@ -23,8 +23,9 @@ const BADGE: Record<MoraNoteKind, string> = {
 };
 
 /**
- * Las notas del crédito, como **post-its** (el estilo de Gallium): tarjetas de colores en la ficha y, si se
- * quiere, un tablero donde flotan sobre la pantalla, se arrastran y se redimensionan.
+ * Las notas del crédito, como **post-its** (la paleta de post-its de Kobrax): tarjetas de colores en la lista de
+ * la ficha y, si se quiere, el tablero: cada nota queda **anclada a una sección** de la ficha y se dibuja dentro de
+ * ella; se arrastra, se pinta y se redimensiona. Lo único fijo en pantalla es la barra de abajo.
  *
  * 🔴 **Son del crédito, no del caso**: sobreviven a que el caso se cierre y existen aunque todavía no haya uno.
  * Se pueden corregir y borrar, con una regla: **el texto, el tipo y el borrado son de quien la escribió o de
@@ -51,8 +52,8 @@ export function NotesSection({
   /** Repartir cartera: puede corregir y borrar notas ajenas. */
   canAssign?: boolean;
 }) {
-  const t = useTranslations('panel.cases.ficha.notes');
-  const tErr = useTranslations('panel.cases');
+  const t = useTranslations('panel.mora.ficha.notes');
+  const tErr = useTranslations('panel.mora');
   const locale = useLocale();
   const toast = useToast();
   const { notes, preview, save, create, remove } = useNotes(creditId, initial);
@@ -68,8 +69,8 @@ export function NotesSection({
   );
 
   /**
-   * «Ubicar en pantalla»: abre el tablero, **abre la sección** donde está la nota (plegada, la nota no se ve), la
-   * lleva al centro de la pantalla y la hace parpadear un momento.
+   * «Ubicar en la ficha»: abre el tablero, **abre la sección** a la que está anclada la nota (plegada, la nota no se
+   * ve), la lleva al centro de la pantalla con scroll y la hace parpadear un momento.
    */
   function locate(id: string, anchor?: CreditNote['anchor']) {
     setBoard(true);
@@ -180,8 +181,8 @@ export function NotesSection({
         </>
       )}
 
-      {/* El tablero va en `body`: el acordeón cerrado esconde todo lo que tiene adentro, y los post-its tienen que
-          seguir sobre la pantalla aunque se pliegue la sección. */}
+      {/* El tablero va en `body` para que su barra fija (nueva nota / ocultar) no dependa del acordeón: plegado, éste
+          esconde todo lo que tiene adentro. Las notas no flotan acá: cada una se dibuja dentro de su sección. */}
       {board &&
         createPortal(
         <NotesBoard

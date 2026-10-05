@@ -2,13 +2,12 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import type { CaseListItem } from '@kobrax/shared';
 import { Badge, EmptyState } from '@/components/panel-ui';
 import { money } from '@/lib/format';
-import { sortAvailable, type LocalSort } from '@/lib/plan';
+import { sortAvailable, type AvailableCredit, type LocalSort } from '@/lib/plan';
 
 /**
- * La mora que se puede sumar a una ruta: **una fila por deudor, con lo que decide si vale ir**.
+ * Los créditos en mora que se pueden sumar a una ruta: **una fila por crédito, con lo que decide si vale ir**.
  *
  * 🔴 Vive en `components/` porque la usan las dos pantallas que arman una ruta —la que la crea y la
  * que la edita—: es la misma lista, la misma decisión y las mismas columnas.
@@ -28,7 +27,8 @@ export function AvailableList({
   remoteDir,
   onSortRemote,
 }: {
-  rows: CaseListItem[];
+  /** Créditos en mora; `id` es el creditId. */
+  rows: AvailableCredit[];
   picked: string[];
   onToggle: (id: string) => void;
   /** Para quién se arma: las filas de otro se marcan como ayuda. Sin esto, no se marca ninguna. */
@@ -121,7 +121,7 @@ export function AvailableList({
                 <span className="min-w-[180px] flex-1">
                   <span className="flex items-center gap-2">
                     <span className="truncate text-[14px] font-medium text-k-text">{c.clientName ?? '—'}</span>
-                    {/* Se dice cuándo la parada es AYUDA a otro: el dueño del caso no cambia, sólo
+                    {/* Se dice cuándo la parada es AYUDA a otro: el responsable del crédito no cambia, sólo
                         esta jornada la cubre otro. */}
                     {ajeno && <Badge tone="warning">{t('help')}</Badge>}
                   </span>

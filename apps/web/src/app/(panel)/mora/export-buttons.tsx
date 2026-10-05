@@ -23,7 +23,7 @@ function filenameOf(disposition: string | null, fallback: string): string {
  * el tope, la API explica qué hacer, y un enlace mostraría un JSON crudo en otra pestaña.
  */
 export function ExportButtons() {
-  const t = useTranslations('panel.cases.export');
+  const t = useTranslations('panel.mora.export');
   const toast = useToast();
   const search = useSearchParams();
   const [busy, setBusy] = useState<MoraExportFormat | null>(null);

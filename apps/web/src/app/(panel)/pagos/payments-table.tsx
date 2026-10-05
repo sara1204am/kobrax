@@ -16,8 +16,8 @@ import { dateTime, money } from '@/lib/format';
  * columnas configurables y tamaño de página. Antes el período tenía su propia fila de campos encima
  * de la tabla, así que las listas del panel se operaban distinto para hacer lo mismo.
  *
- * ⚠️ **No hay columna de deudor**, y no es un olvido: `GET /payments` devuelve `creditId` y
- * `caseId`, no el nombre. Resolverlo por fila serían dos llamadas por pago —crédito y cliente— o
+ * ⚠️ **No hay columna de deudor**, y no es un olvido: `GET /payments` devuelve `creditId`, no
+ * el nombre. Resolverlo por fila serían dos llamadas por pago —crédito y cliente— o
  * cuarenta por página, para una tabla que se lee de un vistazo. El deudor sale en el detalle, que
  * es una fila sola y se lo puede permitir.
  *
@@ -98,8 +98,8 @@ export function PaymentsTable({
   ];
 
   /**
-   * El único filtro que la API ofrece para el ledger. `creditId` y `caseId` también se aceptan, pero
-   * son uuid que llegan por link desde una ficha: un campo para escribirlos a mano no lo usaría
+   * El único filtro que la API ofrece para el ledger. `creditId` también se acepta, pero
+   * es un uuid que llega por link desde una ficha: un campo para escribirlos a mano no lo usaría
    * nadie.
    */
   const filters: FilterDef[] = [

@@ -31,7 +31,7 @@ function Metric({ label, value, hint, soft }: { label: string; value: string; hi
  * `metrics === null` es «no se pudo leer»: la ficha sigue entera.
  */
 export function RecoveryMetricsSection({ metrics, currency }: { metrics: RecoveryMetrics | null; currency: string }) {
-  const t = useTranslations('panel.cases.ficha.metrics');
+  const t = useTranslations('panel.mora.ficha.metrics');
   const locale = useLocale();
   const amount = (n: number) => money(n, currency);
   /** El mismo hito contado desde que Kobrax registra la mora, si la mora ya venía de antes. */

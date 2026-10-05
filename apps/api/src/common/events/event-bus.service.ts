@@ -3,8 +3,6 @@ import { EventEmitter } from 'node:events';
 
 /** Nombres de eventos de dominio (contrato para F8: realtime + notificaciones). */
 export const DomainEvent = {
-  CASE_ASSIGNED: 'case.assigned',
-  CASE_UPDATED: 'case.updated',
   PAYMENT_REGISTERED: 'payment.registered',
   ROUTE_COMPLETED: 'route.completed',
 } as const;

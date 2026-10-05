@@ -158,13 +158,12 @@ export enum InterestBase {
 
 /**
  * Estado derivado de la cartera (§5.3). **Se calcula, nunca se edita** — deriva de `daysPastDue`,
- * `nextDueDate`, el saldo y las promesas vigentes.
+ * `nextDueDate` y el saldo (las promesas son información, no un estado).
  */
 export enum PortfolioStatus {
   CURRENT = 'CURRENT', // AL DÍA — sin cuota vencida y próxima fecha > umbral
   DUE_SOON = 'DUE_SOON', // POR VENCER — próxima cuota en ≤ umbral
   OVERDUE = 'OVERDUE', // EN MORA — daysPastDue > 0
-  PROMISE = 'PROMISE', // PROMESA — compromiso de pago vigente
   PAID = 'PAID', // PAGADO — saldo 0
 }
 
@@ -203,16 +202,3 @@ export type ArrearsSource = (typeof ARREARS_SOURCES)[number];
  */
 export const EXTERNAL_SYNC_STATUSES = ['PRESENT', 'ABSENT'] as const;
 export type ExternalSyncStatus = (typeof EXTERNAL_SYNC_STATUSES)[number];
-
-/**
- * Por qué se cerró un caso. Es texto libre en la base (`closed_reason`); acá viven **los que pone
- * el sistema**, que son los que después hay que poder contar.
- *
- * `PAID` y `CURRENT` los escribe el trabajo diario y **no exigen gestión registrada**: si el deudor
- * pagó por transferencia nunca hubo visita, y cobrado es cobrado. `SOURCE_ABSENT` también lo escribe
- * el job: la operación externa dejó de venir en su reporte (D4) — **no es «al día» ni «pagado»**, y si
- * vuelve a aparecer el mismo caso se reabre. `MANUAL` es el cierre de una
- * persona desde la ficha, que sí la exige (`CASE_001`).
- */
-export const CASE_CLOSE_REASONS = ['PAID', 'CURRENT', 'SOURCE_ABSENT', 'MANUAL'] as const;
-export type CaseCloseReason = (typeof CASE_CLOSE_REASONS)[number];

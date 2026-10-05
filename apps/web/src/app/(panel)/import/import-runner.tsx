@@ -347,6 +347,8 @@ function Counts({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
     ['absent', summary.counts.absent ?? 0],
     ['reappeared', summary.counts.reappeared ?? 0],
     ['needsReview', summary.counts.needsReview ?? 0],
+    // Totales y notas debajo de la tabla: se saltan, no son registros ni errores.
+    ['ignored', summary.counts.ignored ?? 0],
   ] as const;
   const tiles = [
     ['created', summary.counts.created],

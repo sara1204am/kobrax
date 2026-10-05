@@ -32,8 +32,8 @@ const END_TONE: Record<MoraEpisodeEndReason, Tone> = {
  * demás secciones con permiso denegado.
  */
 export function ArrearsHistory({ episodes, currency }: { episodes: MoraEpisode[] | null; currency: string }) {
-  const t = useTranslations('panel.cases.history');
-  const tSource = useTranslations('panel.cases.arrearsSource');
+  const t = useTranslations('panel.mora.history');
+  const tSource = useTranslations('panel.mora.arrearsSource');
   const locale = useLocale();
   const dash = '—';
   const amount = (n: number | undefined) => (n === undefined ? dash : money(n, currency));
@@ -55,14 +55,14 @@ export function ArrearsHistory({ episodes, currency }: { episodes: MoraEpisode[]
             >
               {/* Número y fechas */}
               <div className="flex items-center gap-3.5 lg:w-[270px] lg:shrink-0">
-                <span aria-hidden className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#E8F0FB] text-[14px] font-semibold text-k-slate">
+                <span aria-hidden className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-k-info-bg text-[14px] font-semibold text-k-slate">
                   #{e.number}
                 </span>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-[14px] font-semibold text-k-navy">{t('number', { n: e.number })}</span>
                     {e.current ? (
-                      <span className="rounded-md bg-[#E8F0FB] px-2 py-0.5 text-[11px] font-medium text-k-slate">{t('current')}</span>
+                      <span className="rounded-md bg-k-info-bg px-2 py-0.5 text-[11px] font-medium text-k-slate">{t('current')}</span>
                     ) : (
                       e.endReason && (
                         <span title={e.endReason === 'SOURCE_ABSENT' ? t('endHint.SOURCE_ABSENT') : undefined}>

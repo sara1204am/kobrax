@@ -12,7 +12,7 @@ import type { FieldEvidence, FieldVisit } from '@prisma/client';
 export function serializeVisit(v: FieldVisit) {
   return {
     id: v.id,
-    caseId: v.caseId ?? undefined,
+    creditId: v.creditId ?? undefined,
     routeStopId: v.routeStopId ?? undefined,
     collectorId: v.collectorId,
     latitude: Number(v.latitude),

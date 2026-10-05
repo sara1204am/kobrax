@@ -98,7 +98,6 @@ model Account {
   overrides               UserPermissionOverride[]
   clients                 Client[]
   credits                 Credit[]
-  collectionCases         CollectionCase[]
   routePlans              RoutePlan[]
   payments                Payment[]
   paymentRequests         PaymentRequest[]
@@ -110,6 +109,8 @@ model Account {
   creditAssignments       CreditAssignment[]
   creditArrearEpisodes    CreditArrearEpisode[]
   creditNotes             CreditNote[]
+  creditActivities        CreditActivity[]
+  arrearCategories        ArrearCategory[]
   creditExternalSnapshots CreditExternalSnapshot[]
   clientExternalKeys      ClientExternalKey[]
   externalAdvisorLinks    ExternalAdvisorLink[]
@@ -136,7 +137,6 @@ model Branch {
   account         Account          @relation(fields: [accountId], references: [id])
   userAccounts    UserAccount[]
   credits         Credit[]
-  collectionCases CollectionCase[]
   routePlans      RoutePlan[]
 
   @@index([accountId])
@@ -544,7 +544,6 @@ enum CreditStatus {
   PAID
   DEFAULTED
   RESTRUCTURED
-  WRITTEN_OFF
   CANCELLED
 }
 
@@ -615,17 +614,17 @@ model Client {
   updatedAt               DateTime     @updatedAt @map("updated_at")
   deletedAt               DateTime?    @map("deleted_at")
 
-  account      Account             @relation(fields: [accountId], references: [id])
-  contacts     ClientContact[]
-  locations    ClientLocation[]
-  relations    ClientRelation[]
-  collaterals  Collateral[]
-  attachments  ClientAttachment[]
-  credits      Credit[]
-  cases        CollectionCase[]
-  creditNotes  CreditNote[]
-  routeStops   RouteStop[]
-  externalKeys ClientExternalKey[]
+  account          Account             @relation(fields: [accountId], references: [id])
+  contacts         ClientContact[]
+  locations        ClientLocation[]
+  relations        ClientRelation[]
+  collaterals      Collateral[]
+  attachments      ClientAttachment[]
+  credits          Credit[]
+  creditNotes      CreditNote[]
+  creditActivities CreditActivity[]
+  routeStops       RouteStop[]
+  externalKeys     ClientExternalKey[]
 
   @@unique([accountId, nationalIdHash]) // documento único por tenant (vía blind index)
   @@index([accountId])
@@ -829,6 +828,13 @@ model Credit {
   lastSeenRunId      String?             @map("last_seen_run_id")
   /// Fecha de corte del último reporte que lo trajo: la mora y el saldo son «al» esta fecha (D9).
   reportedAsOf       DateTime?           @map("reported_as_of") @db.Date
+  /// Última gestión registrada sobre el crédito (F4/08). Sólo informativa: no es estado ni filtro de SLA.
+  lastActionAt       DateTime?           @map("last_action_at")
+  /// Castigo: condición independiente de la mora (F4/08 · D1-a). NULL = no castigado. Fuente de verdad;
+  /// Ya no existe un estado `WRITTEN_OFF`: el castigo es sólo esto.
+  writtenOffAt       DateTime?           @map("written_off_at")
+  writtenOffBy       String?             @map("written_off_by")
+  writtenOffReason   String?             @map("written_off_reason")
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @updatedAt @map("updated_at")
   deletedAt          DateTime?           @map("deleted_at")
@@ -838,13 +844,13 @@ model Credit {
   branch            Branch?                  @relation(fields: [branchId], references: [id])
   installments      CreditInstallment[]
   arrears           Arrear[]
-  cases             CollectionCase[]
   payments          Payment[]
   guarantors        CreditGuarantor[]
   collaterals       CollateralCredit[]
   assignments       CreditAssignment[]
   arrearEpisodes    CreditArrearEpisode[]
   notes             CreditNote[]
+  activities        CreditActivity[]
   externalSnapshots CreditExternalSnapshot[]
 
   /// `code` dejó de ser único (D1): es un rótulo. Un nº de operación PSF puede coincidir con el
@@ -939,50 +945,53 @@ model ExternalAdvisorLink {
   @@map("external_advisor_links")
 }
 
+/// Tipo de asignación de un crédito (F4/08 · D8-a). La permanente de siempre es PRINCIPAL; la que vence
+/// (TEMPORAL) y la ayuda de un segundo cobrador (APOYO) son filas aparte y no tocan a la principal.
+enum CreditAssignmentKind {
+  PRINCIPAL
+  TEMPORAL
+  APOYO
+
+  @@map("credit_assignment_kind")
+}
+
 /// Quién puede operar este crédito: la ASIGNACIÓN EFECTIVA.
 ///
 /// Es la fuente de verdad del alcance `own` de RLS (`docs/security/PLAN-SEGURIDAD.md §4.bis`).
-/// Antes esto vivía en dos columnas escalares que no alcanzaban:
-///   · `credits.assigned_manager_id` — el responsable, pero **una sola persona**: reasignar borraba
-///     al anterior, así que una cobertura temporal destruía la asignación permanente.
-///   · `collection_cases.assignee_id` — a nivel CASO, y los casos son transitorios (el trabajo de
-///     mora los abre y los cierra): el cobrador perdía de vista al cliente justo cuando se ponía
-///     al día. Esa columna **sigue existiendo** como dato operativo (quién trabaja esta cobranza
-///     hoy: rutas, agenda, balanceo de carga), pero ya no decide quién ve qué.
+/// `credits.assigned_manager_id` guarda sólo el responsable (una persona); esta tabla guarda además los
+/// reemplazos y las ayudas, sin pisar al responsable.
 ///
-/// Las tres formas que toma una fila, sin columna de tipo que pueda contradecirse:
-///   · PERMANENTE → `expires_at IS NULL AND case_id IS NULL`. Una sola vigente por crédito.
-///   · TEMPORAL CON FECHA → `expires_at` puesta. Vence sola.
-///   · TEMPORAL ATADA A UN CASO → `case_id` puesta. Al cerrarse el caso se revoca (decisión de la
-///     dueña: por defecto vence al cerrar el caso, con fecha opcional encima; vence lo que ocurra
-///     primero). Se revoca en el cierre y no se resuelve con un JOIN en la policy: el costo va una
-///     vez donde se cierra, no en cada lectura.
+/// Tipos de fila (`kind`):
+///   · PRINCIPAL → el responsable. `expires_at IS NULL`. Una sola vigente por crédito (índice parcial).
+///   · TEMPORAL → reemplazo con vencimiento (`expires_at`). Vence sola.
+///   · APOYO → segundo cobrador.
 ///
-/// **Una temporal nunca toca a la permanente.** Son filas distintas y las dos quedan vigentes:
+/// **Una temporal nunca toca a la principal.** Son filas distintas y las dos quedan vigentes:
 /// el crédito de Juan asignado temporalmente a Sara lo ven los dos, y al expirar Sara lo deja de
 /// ver con la de Juan intacta.
 ///
 /// Nada se borra: revocar es `revoked_at`. La tabla ES el historial de asignaciones.
 model CreditAssignment {
-  id        String    @id @default(uuid())
-  accountId String    @map("account_id")
-  creditId  String    @map("credit_id")
+  id        String               @id @default(uuid())
+  accountId String               @map("account_id")
+  creditId  String               @map("credit_id")
   /// A quién se le asigna (users.id, referencia suave como el resto del dominio).
-  userId    String    @map("user_id")
-  /// Si nació de reasignar un caso, cuál. Al cerrarse ese caso, esta fila se revoca.
-  caseId    String?   @map("case_id")
-  startsAt  DateTime  @default(now()) @map("starts_at")
+  userId    String               @map("user_id")
+  /// Tipo (F4/08 · D8-a): PRINCIPAL = el responsable (uno vigente por crédito); TEMPORAL = reemplazo con
+  /// vencimiento; APOYO = segundo cobrador. Los tres ven y trabajan el crédito.
+  kind      CreditAssignmentKind @default(PRINCIPAL)
+  startsAt  DateTime             @default(now()) @map("starts_at")
   /// NULL = no vence por fecha. En la permanente es siempre NULL.
-  expiresAt DateTime? @map("expires_at")
+  expiresAt DateTime?            @map("expires_at")
   /// Quién la otorgó. NULL = la creó el sistema (importación, backfill).
   /// Puede ser igual a `user_id`: un supervisor o admin **sí** puede tomarse un crédito para
   /// cubrir a alguien de baja. Que un cobrador no pueda otorgarse nada lo garantiza el permiso
   /// `assignment:write`, que no tiene — no un constraint, que bloquearía el caso legítimo.
-  grantedBy String?   @map("granted_by")
-  revokedAt DateTime? @map("revoked_at")
-  revokedBy String?   @map("revoked_by")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
+  grantedBy String?              @map("granted_by")
+  revokedAt DateTime?            @map("revoked_at")
+  revokedBy String?              @map("revoked_by")
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @updatedAt @map("updated_at")
 
   account Account @relation(fields: [accountId], references: [id])
   credit  Credit  @relation(fields: [creditId], references: [id])
@@ -990,8 +999,8 @@ model CreditAssignment {
   /// El índice que sostiene el predicado de `own`: «las asignaciones vigentes de esta persona».
   @@index([accountId, userId, revokedAt])
   @@index([accountId, creditId, revokedAt])
-  /// Para revocar en bloque al cerrar un caso.
-  @@index([accountId, caseId])
+  /// Las vigentes TEMPORAL / APOYO de un crédito.
+  @@index([accountId, creditId, kind, revokedAt])
   @@map("credit_assignments")
 }
 
@@ -1047,14 +1056,96 @@ model CreditArrearEpisode {
   source             ArrearEpisodeSource
   /// Reconstruido de los casos anteriores a esta tabla (no medido en su momento).
   reconstructed      Boolean             @default(false)
+  /// Prioridad de atención del episodio (F4/08 · D3). NULL en los cerrados sin prioridad; un crédito al
+  /// día no tiene episodio abierto y por tanto no tiene prioridad.
+  priority           CollectionPriority?
+  /// Prioridad fijada a mano: el recálculo diario NO la pisa mientras esté puesta. Guarda cuándo, no un
+  /// sí/no. Volver a la automática es ponerla en NULL.
+  priorityPinnedAt   DateTime?           @map("priority_pinned_at")
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at")
 
-  account Account @relation(fields: [accountId], references: [id])
-  credit  Credit  @relation(fields: [creditId], references: [id])
+  account    Account          @relation(fields: [accountId], references: [id])
+  credit     Credit           @relation(fields: [creditId], references: [id])
+  activities CreditActivity[]
 
   @@index([accountId, creditId, startedAt(sort: Desc)])
   @@map("credit_arrear_episodes")
+}
+
+/// Prioridad de atención de una mora (F4/08). Vive en el episodio de mora abierto.
+enum CollectionPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+
+  @@map("collection_priority")
+}
+
+/// Qué clase de gestión es una actividad del crédito. `STATUS_CHANGE` del caso desaparece: no hay estado.
+enum CreditActivityType {
+  NOTE
+  CALL
+  VISIT
+  PAYMENT
+  MESSAGE
+  ASSIGNMENT
+
+  @@map("credit_activity_type")
+}
+
+/// **Bitácora del crédito** (F4/08): todo lo que se hace sobre un crédito, esté o no en mora. Reemplaza a
+/// la antigua bitácora del caso (el backfill conservó los ids: `agenda_items.result_activity_id` sigue resolviendo).
+///
+/// `episode_id` es el episodio de mora vigente al escribirla, para métricas y reportes; NULL = acción
+/// preventiva. El cliente no lo manda: lo resuelve el servidor. Append-only: sin `updated_at`/`deleted_at`.
+/// El `id` lo puede traer quien la crea (móvil offline): el mismo id no duplica.
+model CreditActivity {
+  id        String             @id @default(uuid())
+  accountId String             @map("account_id")
+  creditId  String             @map("credit_id")
+  clientId  String             @map("client_id")
+  episodeId String?            @map("episode_id")
+  /// Autor (users.id, ref suave).
+  userId    String?            @map("user_id")
+  type      CreditActivityType
+  result    String?
+  notes     String?
+  createdAt DateTime           @default(now()) @map("created_at")
+
+  account Account              @relation(fields: [accountId], references: [id])
+  credit  Credit               @relation(fields: [creditId], references: [id])
+  client  Client               @relation(fields: [clientId], references: [id])
+  episode CreditArrearEpisode? @relation(fields: [episodeId], references: [id])
+
+  @@index([accountId, creditId, createdAt(sort: Desc)])
+  @@index([accountId, episodeId])
+  @@map("credit_activities")
+}
+
+/// Rango de días de mora de una categoría (A / B / C…), configurable por cuenta (F4/08 · D1-b).
+/// La categoría NO se guarda en el crédito: se calcula con los días de mora y estos rangos
+/// (`categoryForDays`, shared). Validación (`validateArrearCategories`): empieza en 1, sin huecos ni
+/// solapes, sólo la última sin tope. CHECKs en SQL: `from_days >= 1`, `to_days >= from_days`.
+model ArrearCategory {
+  id        String   @id @default(uuid())
+  accountId String   @map("account_id")
+  code      String
+  name      String
+  fromDays  Int      @map("from_days")
+  /// NULL = sin límite (sólo la última).
+  toDays    Int?     @map("to_days")
+  color     String?
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@unique([accountId, code])
+  @@index([accountId, sortOrder])
+  @@map("arrear_categories")
 }
 
 /// Qué tan importante es una nota. `IMPORTANT` es la que hay que leer antes de salir a cobrar.
@@ -1066,35 +1157,33 @@ enum CreditNoteKind {
   @@map("credit_note_kind")
 }
 
-/// **Una nota sobre un crédito**, independiente del caso: sobrevive a que el caso se cierre o ni siquiera exista
-/// (un crédito en mora sin caso también tiene cosas que decir). Antes no había dónde dejarlas: la única nota era
-/// `case_activities.notes`, atada a un caso y a un tipo de gestión.
+/// **Una nota sobre un crédito**, independiente de la mora: sobrevive a que el episodio termine o ni siquiera exista.
 ///
 /// Es un **post-it** sobre el tablero de la ficha: lleva color y lugar, se puede editar y se borra de forma lógica
 /// (`deleted_at`; el rastro queda). El `id` lo puede traer quien la crea (el móvil, que escribe sin red y
 /// reintenta): crear dos veces el mismo id no duplica.
 model CreditNote {
-  id        String         @id @default(uuid())
-  accountId String         @map("account_id")
-  creditId  String         @map("credit_id")
-  clientId  String         @map("client_id")
+  id        String           @id @default(uuid())
+  accountId String           @map("account_id")
+  creditId  String           @map("credit_id")
+  clientId  String           @map("client_id")
   /// Quién la escribió (users.id, referencia suave como el resto del dominio).
-  authorId  String?        @map("author_id")
-  kind      CreditNoteKind @default(INFO)
+  authorId  String?          @map("author_id")
+  kind      CreditNoteKind   @default(INFO)
   body      String
   /// Post-it: color y lugar en el tablero de la ficha (posición, tamaño y orden de apilado).
-  color     CreditNoteColor @default(YELLOW)
+  color     CreditNoteColor  @default(YELLOW)
   /// Sección de la ficha a la que está anclada: `pos_x`/`pos_y` son píxeles dentro de ella, y viaja con ella.
   anchor    CreditNoteAnchor @default(PAGE)
-  posX     Int            @default(40) @map("pos_x")
-  posY      Int            @default(40) @map("pos_y")
-  width     Int            @default(240)
-  height    Int            @default(180)
-  zIndex    Int            @default(1) @map("z_index")
-  createdAt DateTime       @default(now()) @map("created_at")
-  updatedAt DateTime       @default(now()) @updatedAt @map("updated_at")
+  posX      Int              @default(40) @map("pos_x")
+  posY      Int              @default(40) @map("pos_y")
+  width     Int              @default(240)
+  height    Int              @default(180)
+  zIndex    Int              @default(1) @map("z_index")
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @default(now()) @updatedAt @map("updated_at")
   /// Borrado lógico: una nota es parte del rastro del crédito.
-  deletedAt DateTime?      @map("deleted_at")
+  deletedAt DateTime?        @map("deleted_at")
 
   account Account @relation(fields: [accountId], references: [id])
   credit  Credit  @relation(fields: [creditId], references: [id])
@@ -1176,33 +1265,6 @@ model Arrear {
 // PILAR 3 · Casos y Rutas (Logística de Campo)
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum CaseStatus {
-  PENDING
-  ACTIVE
-  IN_NEGOTIATION
-  PROMISE_TO_PAY
-  PAID
-  CLOSED
-  WRITTEN_OFF
-}
-
-enum CasePriority {
-  LOW
-  MEDIUM
-  HIGH
-  CRITICAL
-}
-
-enum CaseActivityType {
-  NOTE
-  CALL
-  VISIT
-  PAYMENT
-  STATUS_CHANGE
-  ASSIGNMENT
-  MESSAGE
-}
-
 enum RouteStatus {
   PLANNED
   IN_PROGRESS
@@ -1237,62 +1299,6 @@ enum VisitOutcome {
   SPECIAL // gestión especial (fallecimiento, enfermedad grave…), con su categoría en `details` — RT-6
 }
 
-/// Proceso activo de cobranza asociado a un crédito en mora.
-model CollectionCase {
-  id               String       @id @default(uuid())
-  accountId        String       @map("account_id")
-  creditId         String       @map("credit_id")
-  clientId         String       @map("client_id")
-  branchId         String?      @map("branch_id")
-  assigneeId       String?      @map("assignee_id") // collector asignado (users.id, ref suave)
-  status           CaseStatus   @default(PENDING)
-  priority         CasePriority @default(MEDIUM)
-  /// Prioridad fijada a mano: el trabajo diario de mora NO la recalcula mientras esté puesta.
-  /// Guarda cuándo, no un sí/no — la fecha contesta «¿esto lo decidió alguien hace un año?».
-  /// Volver a la automática es ponerla en NULL.
-  priorityPinnedAt DateTime?    @map("priority_pinned_at")
-  slaDueAt         DateTime?    @map("sla_due_at")
-  lastActionAt     DateTime?    @map("last_action_at")
-  closedAt         DateTime?    @map("closed_at")
-  closedBy         String?      @map("closed_by")
-  closedReason     String?      @map("closed_reason")
-  createdAt        DateTime     @default(now()) @map("created_at")
-  updatedAt        DateTime     @updatedAt @map("updated_at")
-  deletedAt        DateTime?    @map("deleted_at")
-
-  account    Account        @relation(fields: [accountId], references: [id])
-  credit     Credit         @relation(fields: [creditId], references: [id])
-  client     Client         @relation(fields: [clientId], references: [id])
-  branch     Branch?        @relation(fields: [branchId], references: [id])
-  activities CaseActivity[]
-  visits     FieldVisit[]
-  routeStops RouteStop[]
-  payments   Payment[]
-
-  @@index([accountId, status])
-  @@index([accountId, assigneeId])
-  @@index([accountId, clientId])
-  @@index([deletedAt])
-  @@map("collection_cases")
-}
-
-/// Bitácora del caso (collection_action_log): timeline append-only de acciones.
-model CaseActivity {
-  id        String           @id @default(uuid())
-  accountId String           @map("account_id")
-  caseId    String           @map("case_id")
-  userId    String?          @map("user_id") // autor (users.id, ref suave)
-  type      CaseActivityType
-  result    String?
-  notes     String?
-  createdAt DateTime         @default(now()) @map("created_at")
-
-  case CollectionCase @relation(fields: [caseId], references: [id])
-
-  @@index([accountId, caseId])
-  @@map("case_activities")
-}
-
 /// Plan diario de ruta de cobranza para un collector.
 model RoutePlan {
   id               String      @id @default(uuid())
@@ -1325,7 +1331,8 @@ model RouteStop {
   accountId              String          @map("account_id")
   routeId                String          @map("route_id")
   clientId               String          @map("client_id")
-  caseId                 String?         @map("case_id")
+  /// El crédito de la parada (F4/08).
+  creditId               String?         @map("credit_id")
   sequenceOrder          Int             @map("sequence_order")
   status                 RouteStopStatus @default(PENDING)
   predictedRecoveryScore Decimal?        @map("predicted_recovery_score") @db.Decimal(5, 4) // IA futura, nullable
@@ -1335,11 +1342,11 @@ model RouteStop {
 
   route  RoutePlan       @relation(fields: [routeId], references: [id])
   client Client          @relation(fields: [clientId], references: [id])
-  case   CollectionCase? @relation(fields: [caseId], references: [id])
   visits FieldVisit[]
 
   @@unique([routeId, sequenceOrder])
   @@index([accountId, routeId])
+  @@index([accountId, creditId])
   @@map("route_stops")
 }
 
@@ -1347,7 +1354,8 @@ model RouteStop {
 model FieldVisit {
   id          String       @id @default(uuid())
   accountId   String       @map("account_id")
-  caseId      String?      @map("case_id")
+  /// El crédito visitado (F4/08).
+  creditId    String?      @map("credit_id")
   routeStopId String?      @map("route_stop_id")
   collectorId String       @map("collector_id") // users.id (ref suave)
   latitude    Decimal      @db.Decimal(10, 8)
@@ -1363,11 +1371,10 @@ model FieldVisit {
   createdAt   DateTime     @default(now()) @map("created_at")
   // Sin updated_at ni deleted_at → INMUTABLE por diseño.
 
-  case      CollectionCase? @relation(fields: [caseId], references: [id])
   routeStop RouteStop?      @relation(fields: [routeStopId], references: [id])
   evidences FieldEvidence[]
 
-  @@index([accountId, caseId])
+  @@index([accountId, creditId])
   @@index([accountId, collectorId])
   // El contador mensual de gestiones (L2): cuántas van del mes de esta cuenta.
   @@index([accountId, createdAt])
@@ -1431,7 +1438,6 @@ model Payment {
   accountId             String         @map("account_id")
   creditId              String         @map("credit_id")
   branchId              String?        @map("branch_id")
-  caseId                String?        @map("case_id")
   installmentId         String?        @map("installment_id") // credit_installments.id (ref suave)
   amount                Decimal        @db.Decimal(14, 2)
   method                PaymentMethod
@@ -1450,7 +1456,6 @@ model Payment {
 
   account Account         @relation(fields: [accountId], references: [id])
   credit  Credit          @relation(fields: [creditId], references: [id])
-  case    CollectionCase? @relation(fields: [caseId], references: [id])
 
   @@unique([accountId, receiptNumber])
   @@unique([accountId, externalTransactionId])
@@ -1460,13 +1465,12 @@ model Payment {
   @@map("payments")
 }
 
-/// Solicitud de pago digital (QR / link) generada para un crédito o caso.
+/// Solicitud de pago digital (QR / link) generada para un crédito.
 model PaymentRequest {
   id            String               @id @default(uuid())
   accountId     String               @map("account_id")
   creditId      String?              @map("credit_id")
   clientId      String?              @map("client_id")
-  caseId        String?              @map("case_id")
   amount        Decimal              @db.Decimal(14, 2)
   method        PaymentMethod        @default(QR)
   status        PaymentRequestStatus @default(PENDING)
@@ -1490,8 +1494,6 @@ model PaymentRequest {
 // ─────────────────────────────────────────────────────────────────────────────
 
 enum NotificationType {
-  CASE_ASSIGNED
-  CASE_UPDATED
   PAYMENT_REGISTERED
   ROUTE_ASSIGNED
   PROMISE_DUE
@@ -1508,7 +1510,6 @@ model Notification {
   body      String?
   clientId  String?          @map("client_id")
   creditId  String?          @map("credit_id")
-  caseId    String?          @map("case_id")
   readAt    DateTime?        @map("read_at")
   createdAt DateTime         @default(now()) @map("created_at")
 
@@ -1516,6 +1517,7 @@ model Notification {
 
   @@index([accountId, userId])
   @@index([accountId, userId, readAt])
+  @@index([accountId, creditId])
   @@map("notifications")
 }
 
@@ -1560,12 +1562,11 @@ enum CatalogType {
   CREDIT_TYPE // qué clase de crédito es (consumo, microcrédito, vivienda…)
 }
 
-/// Gestión agendada (llamada/visita/whatsapp/recordatorio/promesa) sobre un caso.
+/// Gestión agendada (llamada/visita/whatsapp/recordatorio/promesa) sobre un crédito.
 /// Núcleo en columnas; lo específico por tipo en `details` (validado en la app).
 model AgendaItem {
   id                 String           @id @default(uuid())
   accountId          String           @map("account_id")
-  caseId             String           @map("case_id") // ref suave a collection_cases
   clientId           String           @map("client_id") // ref suave
   creditId           String           @map("credit_id") // ref suave (cliente puede tener varios)
   assigneeId         String           @map("assignee_id") // cobrador (users.id, ref suave)
@@ -1579,7 +1580,7 @@ model AgendaItem {
   timeSlot           String?          @map("time_slot") // franja (LAPSE) o rango (RANGE)
   observations       String?
   details            Json             @default("{}") // campos específicos por tipo
-  resultActivityId   String?          @map("result_activity_id") // case_activities.id (ref suave) al ejecutar
+  resultActivityId   String?          @map("result_activity_id") // credit_activities.id (ref suave) al ejecutar
   /// Motivo del desenlace no ejecutado → catalog_items.code. CANCEL_REASON si quedó CANCELLED,
   /// RESCHEDULE_REASON si quedó RESCHEDULED: son excluyentes, por eso una sola columna.
   reasonCode         String?          @map("reason_code")
@@ -1594,7 +1595,7 @@ model AgendaItem {
   account Account @relation(fields: [accountId], references: [id])
 
   @@index([accountId, assigneeId, scheduledDate])
-  @@index([accountId, caseId])
+  @@index([accountId, creditId])
   @@index([accountId, status])
   @@index([deletedAt])
   @@map("agenda_items")

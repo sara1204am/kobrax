@@ -1,5 +1,5 @@
-import { diffCliente, hasChanges } from './cliente-diff';
-import { hydrateCliente } from './cliente-form';
+import { diffCliente, hasClientChanges as hasChanges } from '@kobrax/shared';
+import { hydrateCliente } from '@kobrax/shared';
 
 const DETALLE = {
   clientType: 'PERSON' as const,

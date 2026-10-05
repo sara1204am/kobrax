@@ -30,9 +30,10 @@ export class ExportsController {
     return toFile(await this.exports.locationsCsv());
   }
 
-  @Get('cases')
-  async cases(): Promise<StreamableFile> {
-    return toFile(await this.exports.casesCsv());
+  /** Los créditos en mora (F4/08). */
+  @Get('mora')
+  async mora(): Promise<StreamableFile> {
+    return toFile(await this.exports.moraCsv());
   }
 
   @Get('agenda')

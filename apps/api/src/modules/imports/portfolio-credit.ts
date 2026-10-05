@@ -53,6 +53,8 @@ export interface RowContext {
   statusMap?: Record<string, CreditStatus>;
   /** Sólo al actualizar: el estado que tiene hoy. */
   prevStatus?: CreditStatus;
+  /** Sólo al actualizar: desde cuándo está castigado, si lo está (D1-a). El castigo ya marcado no se pisa. */
+  prevWrittenOffAt?: Date | null;
   /**
    * Sólo al crear: a quién queda asignado. Lo decide `planAssignments` (quien importa, lo elegido o la
    * sugerencia del asesor) y la fila permanente la escribe `AssignmentService`: la columna nace igual.
@@ -100,7 +102,9 @@ export function creditCreateData(
     outstandingBalance: b.outstandingBalance ?? 0,
     interestRate: b.interestRate ?? 0,
     currency: mapCurrency(b.currency),
-    status: mapStatus(b.status, ctx.statusMap) ?? CreditStatus.ACTIVE, // crédito nuevo: default razonable si el estado no se mapea
+    status: storedStatus(b.status, ctx.statusMap) ?? CreditStatus.ACTIVE, // crédito nuevo: default razonable si el estado no se mapea
+    // D1-a: «castigado» es una condición aparte; la mora sigue corriendo y el job lo procesa igual.
+    ...(isWrittenOffLabel(b.status, ctx.statusMap) ? writtenOffFields(stamp) : {}),
     daysPastDue: b.daysPastDue ?? 0,
     branchId: scope.kind === 'branch' ? scope.ref : undefined,
     assignedManagerId: ctx.assignedManagerId,
@@ -137,6 +141,8 @@ export function creditUpdateData(
     outstandingBalance: b.outstandingBalance ?? undefined,
     daysPastDue: b.daysPastDue ?? undefined,
     status: updatedStatus(b.status, ctx),
+    // Sólo si todavía no estaba castigado: la fecha y el motivo del primero no se pisan.
+    ...(isWrittenOffLabel(b.status, ctx.statusMap) && !ctx.prevWrittenOffAt ? writtenOffFields(stamp) : {}),
     interestRate: b.interestRate ?? undefined,
     disbursedAt: b.disbursedAt ? new Date(b.disbursedAt) : undefined,
     // Vino en este reporte: presente, y si estaba ausente, deja de estarlo (reaparición, D4).
@@ -166,7 +172,7 @@ export function creditUpdateData(
  * revisión: la ausencia no reabre nada; la presencia sí).
  */
 function updatedStatus(label: string | null, ctx: RowContext): CreditStatus | undefined {
-  const mapped = mapStatus(label, ctx.statusMap);
+  const mapped = storedStatus(label, ctx.statusMap);
   if (mapped) return mapped;
   if (ctx.prevStatus && ctx.prevStatus !== CreditStatus.ACTIVE) return CreditStatus.ACTIVE;
   return undefined;
@@ -202,10 +208,15 @@ export function snapshotData(
 // VIGENTE → ACTIVE; el resto, mapeo mínimo. Cada tenant puede sumar o corregir etiquetas en su
 // configuración (`statusMap`), que manda sobre esta tabla. Devuelve null ante una etiqueta
 // desconocida → el caller decide (preservar en update, default en create).
-const STATUS_MAP: Record<string, CreditStatus> = {
+/** Lo que dice el mapa de estados: un estado real o la marca «castigado» (que NO es un estado de `credits`). */
+export type MappedStatus = CreditStatus | 'WRITTEN_OFF';
+
+const STATUS_MAP: Record<string, MappedStatus> = {
   VIGENTE: CreditStatus.ACTIVE,
   VENCIDO: CreditStatus.DEFAULTED,
-  CASTIGADO: CreditStatus.WRITTEN_OFF,
+  // D1-a: en el mapa, `WRITTEN_OFF` quiere decir «la condición de castigo» (`written_off_at`), no un estado
+  // que se guarde: `storedStatus` lo traduce a ACTIVE e `isWrittenOffLabel` marca el castigo.
+  CASTIGADO: 'WRITTEN_OFF',
   CANCELADO: CreditStatus.CANCELLED,
 };
 
@@ -219,10 +230,26 @@ export function statusKey(raw: string): string {
     .replace(/\s+/g, ' ');
 }
 
-export function mapStatus(raw: string | null, overrides?: Record<string, CreditStatus>): CreditStatus | null {
+export function mapStatus(raw: string | null, overrides?: Record<string, MappedStatus>): MappedStatus | null {
   if (!raw) return null;
   const key = statusKey(raw);
   return overrides?.[key] ?? STATUS_MAP[key] ?? null;
+}
+
+/** El estado que se guarda: `WRITTEN_OFF` ya no se escribe nunca (D1-a); el castigo va en `written_off_at`. */
+export function storedStatus(raw: string | null, overrides?: Record<string, MappedStatus>): CreditStatus | null {
+  const mapped = mapStatus(raw, overrides);
+  return mapped === 'WRITTEN_OFF' ? CreditStatus.ACTIVE : mapped;
+}
+
+/** ¿La etiqueta del reporte dice «castigado»? */
+export function isWrittenOffLabel(raw: string | null, overrides?: Record<string, MappedStatus>): boolean {
+  return mapStatus(raw, overrides) === 'WRITTEN_OFF';
+}
+
+/** Las columnas del castigo que escribe el importador (lo hace el sistema: sin `written_off_by`). */
+function writtenOffFields(stamp: ImportStamp) {
+  return { writtenOffAt: new Date(stamp.at), writtenOffBy: null, writtenOffReason: 'Reportado como castigado en la importación' };
 }
 
 export function mapCurrency(raw: string | null): string {

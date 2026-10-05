@@ -1,6 +1,13 @@
 # F4 / 08 — Eliminar el «caso» de cobranza
 
-Estado: **todas las decisiones y puntos por confirmar están resueltos (2026-10-03)**. Fase 0 abierta; nada más está implementado.
+Estado: **todas las decisiones y puntos por confirmar están resueltos (2026-10-03)**.
+
+### Alcance de entrega ✅ (2026-10-03)
+
+- **Solo desarrollo y pruebas**: no hay teléfonos de personas reales. Por eso **no hay** atajos de compatibilidad `/cases/*`, ni versión mínima de la app, ni migración con pérdida de la cola de los teléfonos. Al cambiar el esquema local del móvil se borra también la cola. Los arreglos de idempotencia de la fase 0 se mantienen igual (duplicaban datos de verdad).
+- Se avanza **hasta la fase 6 incluida**. La **fase 6 borra todo** (tablas y columnas del caso, y la base de dev se recrea) **y crea un seed nuevo** de acuerdo a lo que ya existe (ver «Seed nuevo»).
+- Después: la usuaria valida visualmente (web y emulador) y **hace ella el merge a `dev`**.
+- La **paridad web ↔ móvil** de cartera, importación y mora se hace **dentro de la fase 5**, sobre el modelo ya por crédito, para no construir dos veces.
 Base del trabajo: **`dev`** (`00ce81d`): ya incluye PSF, asignación al importar, la central de mora web/API, los post-its, la ficha rediseñada y la ficha de mora móvil.
 Origen: la conversación sobre «Registrar acción», Agenda y la cartera importada (ver «Por qué»).
 
@@ -101,6 +108,20 @@ Presentación (semántica, el diseño puede adaptarse):
 - ✅ **D8-a · Reemplazo temporal y ayuda.** El plan de asignación original dejó el **apoyo temporal fuera a propósito**; ahora entra. (En `credit_assignments`: tipo `PRINCIPAL` / `TEMPORAL` (con vencimiento) / `APOYO`. Cobrador principal, temporal y de apoyo **ven y trabajan** el crédito. Mientras dura el reemplazo temporal, lo agendado pendiente pasa al reemplazo y **vuelve** al principal al vencer; el principal conserva la visibilidad. Asignan: supervisor de esa agencia, gerente y administrador.)
 - ✅ **D9-a · Texto del aviso.** (La ausencia sigue sin afirmar «pagado»: «Ya no aparece en el reporte del dd/mm. Puede haberse puesto al día o cancelado; el reporte no lo dice».)
 - ✅ **D11-a · Importados.** (La fecha reportada se muestra como «Próximo pago (según el reporte del dd/mm)» y genera el recordatorio solo si el reporte no está viejo.)
+
+## Limpieza previa (cartera, importación y mora)
+
+Antes de la fase 1 se deja limpio lo existente de estos tres módulos (auditoría 2026-10-03). Lo que es **código muerto, claves de texto sin uso, comentarios y docs desactualizados** se arregla ya; lo que es **paridad con el móvil** va a la fase 5.
+- Web/API/shared: borrar `matchesText` (cartera) y el re-export `PAGE_SIZES` sin consumidor; borrar las claves i18n sin uso (`portfolio.sections.creditFixed`, `creditEditable`, `creditFixedHint`, `quote.belowCapital`, `activityType.PROMISE`, `errors.INVALID_ASSIGNEE` si se confirma); borrar `notePreview` y `MoraListQuery` sin uso; arreglar el comentario cortado de `timeline-section.tsx:56`.
+- Importación: **borrar el módulo huérfano `clients/imports`** (controlador, servicio, csv, plan y 4 specs, sin ningún consumidor); borrar las claves `panel.import.run.lastRun*`; agregar las traducciones es/en que faltan (`IMPORT_FILE_NOT_STORED`, `IMPORT_RUN_NOT_FOUND`, `INVALID_ADVISOR_CODE`, `USER_NOT_MEMBER`, `USER_REQUIRED`); mostrar el recuento de **ignorados** en la vista previa y el historial web; pasar a shared las listas de códigos de rechazo y aviso que web y móvil duplican (las etiquetas siguen locales); alinear el comentario `ponytail:` del móvil sobre las claves con el README.
+- Importación, web: controles de Ajustes para **base del saldo, mapa de estados y días de dato viejo** (hoy solo se cambian por API, aunque FIELD-RULES promete el editor de estados).
+- Docs de importación: README del plan (encabezado «borrador» y `pdfjs-dist + xlsx` → `exceljs`), FIELD-RULES (encabezado falso sobre `importConfig`), BUILD-PLAN L86 («IMPORT web NO existe»), S3 D-N7 (obsoleto: los endpoints y la migración ya existen).
+- `docs/flows/psf-diario/` guarda 5 PDFs de reportes **ficticios** (de prueba): se quedan.
+- Textos: «tablero flotando sobre la pantalla» → «notas ancladas a cada sección» (comentarios y `launcherSub` es/en); quitar las referencias a «Gallium».
+- Colores sueltos → tokens (`k-info-bg`, `k-teal`, `k-teal-bg`; `k-purple` en el aro del post-it) y extraer un `ToneTile` que comparten `activity-card` y `payments-section`; quitar el medio de pago duplicado en la tarjeta de pagos.
+- Docs: `docs/epics/F4/07-central-mora-recuperacion.md` (encabezado, avance y post-its), `docs/epics/F10/BUILD-PLAN.md` y `plans/mora/README.md` (estado HECHO), `plans/cartera/S2` y `S3` («reemplazado por P6»), `F4/03-creditos.md` (apuntar a 06), `README.md` (el import móvil existe), `apps/mobile/CLAUDE.md` (dice WatermelonDB, el código usa `expo-sqlite`; y la descripción de `cobranza.tsx`).
+- Móvil: quitar los archivos que solo reexportan de shared (`cliente-form.ts`, `cliente-diff.ts`, `prestamo-form.ts`) y los exports sin uso de `portfolio.ts`; fechas de la ficha con `prettyDate`; mismas etiquetas de resultado y tipo (mapa compartido) y el mismo color por estado de promesa.
+- La parada de ruta enlaza por `caseId` (`rutas/[id]/parada/[sid]/page.tsx:76`): se resuelve en la fase 4 (pasa a `creditId`) y entonces desaparecen `byCase`, `MoraCaseLookup` y el redireccionamiento.
 
 ## Cobertura: lo hecho en cartera/importación y mora frente a este plan
 
@@ -225,16 +246,29 @@ Orden dentro de la fase (cada paso deja la app funcionando y con la cola intacta
 5. `cliente/[id].tsx` (GestionSheet, PaySheet, MoraSheet) por `creditId`; la ficha muestra **Al día / En mora**, categoría y castigo, y los créditos donde el cobrador es **temporal o de apoyo** aparecen en su cobranza.
 6. `agenda/crear`, `rutas/crear`, `rutas/resultado`, `route-draft` por crédito (con migración o descarte del borrador).
 7. `SCHEMA_VERSION` 3 (borra solo la caché, nunca la cola) **después** de que la migración del paso 2 haya corrido.
-8. Tests (~12 archivos, 8 con uso real) y los planes de `docs/epics/F10`.
+8. **Paridad con la web** (auditoría 2026-10-03), sobre el modelo por crédito:
+   - *Cartera*: aviso de **duplicado al crear un cliente** (`/clients/duplicate-check`, en línea y contra la cartera local sin señal); **adjuntos** del cliente (ver y subir foto de carnet/contrato); bloque de solo lectura de **garantes y garantías** en la ficha; aviso «posible duplicado, revisa en el panel» para clientes provisionales (`linkReviewPending`); chip **PSF** en la lista; mostrar documento, fecha de alta y método de mora en la ficha.
+   - *Mora*: **historial de mora** (episodios) en la ficha; **métricas de recuperación** (`computeRecoveryMetrics`); gestiones con el **formato de tarjeta** (icono por tipo, rojo si no se logró); promesas con `summarizePromises` y el **mismo color por estado que la web**; pagos con medio, canal, quién registró y total cobrado; notas con color, tipo y autor (crear sigue siendo lo principal; editar/borrar solo si el rol puede); avisos PSF de **dato viejo y ausente** con el mismo texto; filtros de rango de mora, saldo y fuente; la validación de la gestión con `validateRecoveryActivity` (fecha no pasada) y `bankCode` en la promesa.
+   - *Importación*: la **pantalla de resultado** muestra los ausentes y los que volvieron (hoy muestra «Al día», que da 0 con la regla por defecto); **historial de importaciones** (lista y detalle, ya existen los endpoints; la decisión de diferirlo quedó obsoleta); en la vista previa, «ya aplicado» con fecha y autor y el recuento de **ignorados**; opción «asignar todo a mí» cuando un crédito nuevo no trae sugerencia (hoy es un callejón sin salida que manda al panel web).
+9. Tests (~12 archivos, 8 con uso real) y los planes de `docs/epics/F10`.
 
-### Fase 6 — Contracción (irreversible)
-- Quitar los shims `/cases/*` cuando la versión mínima del móvil ya no los use.
-- Migración que borra `collection_cases`, `case_activities`, `case_id` de todas las tablas, enums `CaseStatus`/`CasePriority`/`CaseActivityType`, el índice único parcial de un caso abierto, `credit_assignments.case_id` y su predicado.
-- Eliminar `modules/cases`, `case-transitions`, `case-lifecycle` y los tipos/enums de shared; actualizar `CLAUDE.md` de api/database/shared y la lista de tablas RLS (`001_enable_rls.sql`, `verify_isolation.sql`).
-- Quitar los nombres viejos de permisos `case:*` y la coexistencia de tokens; quitar el estado `WRITTEN_OFF` del crédito si ya solo vive en `written_off_at` (D1-a).
-- Backup previo y verificación final (`db:audit`).
+### Fase 6 — Contracción y seed nuevo (irreversible, autorizada)
+- Migración que borra `collection_cases`, `case_activities`, `case_id` de todas las tablas, enums `CaseStatus`/`CasePriority`/`CaseActivityType`, el índice único parcial de un caso abierto, `credit_assignments.case_id` y su predicado, y el estado `WRITTEN_OFF` del crédito (ya vive en `written_off_at`).
+- Eliminar `modules/cases`, `case-transitions`, `case-lifecycle`, `byCase`, los tipos y enums de shared; quitar los nombres viejos de permisos `case:*`; actualizar `CLAUDE.md` de api/database/shared/mobile y la lista de tablas RLS (`001_enable_rls.sql`, `verify_isolation.sql`).
+- **Se recrea la base de dev** (`prisma migrate reset`, con backup previo) y se corre el **seed nuevo**.
+- Verificación final (`db:audit`, tests de las tres apps y type-check).
 
+#### Seed nuevo
+Reemplaza los seeds actuales (`seed.ts`, `seed-bulk.ts`, `seed-day.ts`) por uno coherente con el modelo sin caso. Re-ejecutable. Fechas **relativas a la fecha en que se corre** (nunca fijas).
+- **Cuenta demo** con sus usuarios de siempre (administrador, gerentes, supervisores de **dos agencias**, cobradores), permisos nuevos `collection:*` y las **categorías de mora** A/B/C iniciales.
+- **Créditos creados en la app (Kobrax)**: con cronograma y pagos; al día, en mora de distintas categorías (A, B y C) y uno **castigado**; con su recordatorio de cuota.
+- **Créditos importados (PSF)**: operaciones con la forma de los reportes (datos **anonimizados**, nunca nombres reales) de `docs/flows/psf-diario`, asesor CQE vinculado a un cobrador, uno **ausente del reporte**, uno con **dato viejo**, historial de importaciones con detalle por registro, cliente provisional para «Revisar vínculo».
+- **Un crédito en mora «completo»**: al abrir su ficha **todo está lleno**: gestiones variadas (llamada, visita, mensaje, nota; con resultados logrados y fallidos), promesas en todos los estados, **notas post-it** en todas las secciones y colores, pagos con distintos medios y canales (Kobrax y entidad), **historial de 3 episodios**, persona con garante, familia, compañero y vecino, garantías, contactos y direcciones con coordenadas, responsable con **ayuda** y un **reemplazo temporal** vigente.
+- **Agenda**: **un solo ítem vencido** y, para **la semana siguiente**, ítems **de distintos tipos y días** (llamada, visita, WhatsApp, recordatorio y promesa de pago).
+- Cartera suficiente para que las listas, filtros y la analítica se vean con volumen razonable (decenas, no miles).
 ## Offline: detalles y huecos
+
+> **Alcance dev-only (2026-10-03):** no hay teléfonos con colas reales. Del bloque B se **descartan** los atajos del servidor, la versión mínima y la migración con pérdida de `case.activity`; basta subir `SCHEMA_VERSION` y **borrar también la cola** al actualizar. Los huecos del bloque A (idempotencia) se corrigen igual, y la sección «Limpieza» sigue valiendo.
 
 Revisión de la capa offline sobre `f10/mora` (cola, caché, hidratación). Leído en el código, no ejecutado.
 
@@ -321,7 +355,7 @@ Se borra en la fase 6 (y en la 5 para el móvil), **no antes**, y solo cuando na
 
 ## Riesgos
 
-1. **Cola offline del móvil** con `caseId` encolado: ver la sección «Offline». Mitigado con atajos del servidor, migración al arrancar (con pérdida en `case.activity`), `x-app-version` y versión mínima.
+1. **Cola offline del móvil**: al ser solo desarrollo, se borra con el esquema local (ver «Alcance de entrega»). Los reintentos duplicados se evitan con los ids de la fase 0.
 2. **Una sola mora abierta por crédito**: hoy lo impone el índice único del caso; el episodio no tiene esa restricción. Revisar si hace falta un único parcial en `credit_arrear_episodes`.
 3. **Alcance (D8)**: cambia lo que ve el supervisor; probar con datos reales antes de activarlo.
 4. ~~Ramas sin mergear~~ resuelto: ya están en `dev`.

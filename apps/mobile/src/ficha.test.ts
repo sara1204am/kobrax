@@ -1,8 +1,8 @@
-import type { CaseActivityItem } from './cases.service';
+import type { MoraActivityItem } from '@kobrax/shared';
 import type { PaymentItem } from './payments.service';
 import { buildTimeline, promiseReady, queuedPayments, recovery } from './ficha';
 
-const act = (p: Partial<CaseActivityItem>): CaseActivityItem => ({ id: 'a', type: 'CALL', createdAt: '2026-07-01T10:00:00Z', ...p });
+const act = (p: Partial<MoraActivityItem>): MoraActivityItem => ({ id: 'a', type: 'CALL', createdAt: '2026-07-01T10:00:00Z', ...p });
 const pay = (p: Partial<PaymentItem>): PaymentItem =>
   ({ id: 'p', creditId: 'cr', amount: 100, method: 'CASH' as never, paymentDate: '2026-07-02T10:00:00Z', createdAt: '2026-07-02T10:00:00Z', ...p });
 
@@ -14,6 +14,15 @@ describe('buildTimeline', () => {
     );
     expect(t.map((e) => `${e.kind}:${e.id}`)).toEqual(['activity:a2', 'payment:p1', 'activity:a1']);
     expect(t[1]).toMatchObject({ kind: 'payment', amount: 100, method: 'CASH' });
+  });
+});
+
+describe('buildTimeline — asignaciones', () => {
+  it('la nota de una asignación es el id: se muestra el nombre que mandó la API, nunca el id', () => {
+    const id = 'bf2e039c-1111-2222-3333-444455556666';
+    const [a, b] = buildTimeline([act({ id: 'x', type: 'ASSIGNMENT', notes: id, assignedToName: 'Luis Rojas' }), act({ id: 'y', type: 'ASSIGNMENT', notes: id, createdAt: '2026-06-01T10:00:00Z' })], []);
+    expect(a).toMatchObject({ notes: 'Asignada a Luis Rojas' });
+    expect(b).toMatchObject({ notes: 'Asignada a alguien del equipo' });
   });
 });
 
@@ -61,19 +70,19 @@ describe('promiseReady', () => {
 
 describe('queuedPayments — el cobro sin señal se ve en el acto', () => {
   const queued = [
-    { action: { kind: 'payment', idempotencyKey: 'k1', input: { creditId: 'cr', caseId: 'c1', amount: 500, method: 'CASH', paymentDate: '2026-09-30T15:00:00.000Z' } }, createdAt: 1 },
-    { action: { kind: 'payment', idempotencyKey: 'k2', input: { creditId: 'cr', caseId: 'otro', amount: 80, method: 'CASH' } }, createdAt: 2 },
-    { action: { kind: 'case.activity' }, createdAt: 3 },
+    { action: { kind: 'payment', idempotencyKey: 'k1', input: { creditId: 'cr1', amount: 500, method: 'CASH', paymentDate: '2026-09-30T15:00:00.000Z' } }, createdAt: 1 },
+    { action: { kind: 'payment', idempotencyKey: 'k2', input: { creditId: 'otro', amount: 80, method: 'CASH' } }, createdAt: 2 },
+    { action: { kind: 'mora.activity' }, createdAt: 3 },
   ];
 
-  it('sólo los pagos de este caso, con la fecha del cobro y marcados pendientes', () => {
-    const p = queuedPayments('c1', queued);
+  it('sólo los pagos de este crédito (por creditId), con la fecha del cobro y marcados pendientes', () => {
+    const p = queuedPayments('cr1', queued);
     expect(p).toHaveLength(1);
     expect(p[0]).toMatchObject({ id: 'pending-k1', amount: 500, paymentDate: '2026-09-30T15:00:00.000Z', pending: true });
   });
 
   it('en el historial el pendiente queda marcado y ordenado por la hora del cobro', () => {
-    const t = buildTimeline([act({ createdAt: '2026-09-30T10:00:00Z' })], [...queuedPayments('c1', queued), pay({})]);
+    const t = buildTimeline([act({ createdAt: '2026-09-30T10:00:00Z' })], [...queuedPayments('cr1', queued), pay({})]);
     expect(t[0]).toMatchObject({ kind: 'payment', id: 'pending-k1', pending: true });
   });
 });

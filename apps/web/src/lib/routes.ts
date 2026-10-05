@@ -189,6 +189,7 @@ export function summarizeByCollector(routes: RouteItem[]): CollectorWork[] {
       dias: new Set<string>(),
     };
     acc.routes += 1;
+    // F4/08: `totalCases` es el nombre heredado de la API; hoy cuenta PARADAS (una por crédito).
     acc.stops += r.totalCases;
     // `visitedCount` sólo lo trae el listado; sin él no se inventa un cero, se suma lo que hay.
     acc.done += r.visitedCount ?? 0;

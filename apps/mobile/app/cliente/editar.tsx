@@ -20,8 +20,10 @@ import { Header, SectionLabel } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
 import { MONTHS } from '@/agenda-form';
 import { ClienteFormView } from '@/cliente-form-view';
-import { collateralPayload, contactPayload, hydrateCliente, locationPayload, relationPayload, type ClienteForm } from '@/cliente-form';
-import { diffCliente, hasChanges, type ClienteOps } from '@/cliente-diff';
+import { collateralPayload, contactPayload, hydrateCliente, locationPayload, relationPayload, type ClienteForm } from '@kobrax/shared';
+import { diffCliente, hasClientChanges as hasChanges, type ClienteOps } from '@kobrax/shared';
+import { opsToActions, queueableOps } from '@/cliente-queue';
+import { queueForLater } from '@/sync/sync.service';
 import {
   addCollateral,
   addContact,
@@ -163,9 +165,20 @@ export default function EditarScreen() {
     setError(null);
 
     const ops = diffCliente(original, form);
+    let enCola = false;
     if (hasChanges(ops)) {
       const failure = await applyOps(clientId, ops);
-      if (failure) {
+      if (failure === OFFLINE_MSG && queueableOps(ops)) {
+        // Se cortó la señal a mitad del guardado. Todo lo que cambió es repetible (valores fijos y bajas), así que
+        // se encola ENTERO —aunque una parte ya haya llegado, repetirla no cambia nada— y sube solo.
+        for (const action of opsToActions(clientId, ops)) {
+          if (!(await queueForLater(action))) {
+            setSaving(false);
+            return setError('Sin conexión y no se pudo guardar en el teléfono. Reintentá.');
+          }
+        }
+        enCola = true;
+      } else if (failure) {
         setSaving(false);
         return setError(failure);
       }
@@ -175,7 +188,7 @@ export default function EditarScreen() {
       const rk = await updateCredit(creditId, crPatch);
       if (rk.status !== 'ok') {
         setSaving(false);
-        return setError(rk.status === 'offline' ? 'El cliente se guardó, pero el crédito no (sin conexión).' : rk.status === 'unauthenticated' ? 'Tu sesión venció.' : rk.message);
+        return setError(rk.status === 'offline' ? (enCola ? 'Los datos del cliente quedaron guardados para subir, pero el crédito no (sin conexión).' : 'El cliente se guardó, pero el crédito no (sin conexión).') : rk.status === 'unauthenticated' ? 'Tu sesión venció.' : rk.message);
       }
     }
     setSaving(false);
@@ -266,12 +279,14 @@ export default function EditarScreen() {
  * Aplica la diferencia en orden: primero lo que se borra, después lo nuevo y lo cambiado. Devuelve el
  * mensaje de error de la primera llamada que falla, o `null` si salió todo.
  */
+const OFFLINE_MSG = 'Sin conexión: los cambios de la ficha se guardan en línea. Volvé cuando haya señal.';
+
 async function applyOps(clientId: string, ops: ClienteOps): Promise<string | null> {
   const fail = (r: { status: string; message?: string }): string | null =>
     r.status === 'ok'
       ? null
       : r.status === 'offline'
-        ? 'Sin conexión: los cambios de la ficha se guardan en línea. Volvé cuando haya señal.'
+        ? OFFLINE_MSG
         : r.status === 'unauthenticated'
           ? 'Tu sesión venció. Volvé a iniciar sesión.'
           : (r.message ?? 'No se pudo guardar');

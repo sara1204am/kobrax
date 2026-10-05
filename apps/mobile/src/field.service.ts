@@ -1,6 +1,6 @@
 /**
  * Visitas de campo (Rutas S5 · RT-6). Es lo que cierra la parada: `POST /visits` crea el registro
- * **append-only** con GPS, marca la parada como visitada y deja la gestión en la bitácora del caso —
+ * **append-only** con GPS, marca la parada como visitada y deja la gestión en la bitácora del crédito —
  * todo eso lo hace el server en una transacción, acá sólo se le habla.
  */
 import { apiMutate, type MutateResult } from './api-client';
@@ -8,8 +8,13 @@ import type { VisitOutcome } from '@kobrax/shared';
 import { currentLocation, type Coords } from './location';
 
 export interface CreateVisitInput {
+  /**
+   * Lo pone el teléfono (`nuevoId()`) al abrir la pantalla: reintentar con el mismo id devuelve la visita ya
+   * guardada en vez de duplicar la parada visitada.
+   */
+  id?: string;
   routeStopId?: string;
-  caseId?: string;
+  creditId?: string;
   lat: number;
   lng: number;
   accuracy?: number;

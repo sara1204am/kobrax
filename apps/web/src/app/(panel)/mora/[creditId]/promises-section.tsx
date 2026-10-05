@@ -37,7 +37,7 @@ export function PromisesSection({
   members: Member[];
   currency: string;
 }) {
-  const t = useTranslations('panel.cases.ficha.promises');
+  const t = useTranslations('panel.mora.ficha.promises');
   const locale = useLocale();
   const byId = new Map(members.map((m) => [m.userId, memberName(m)]));
   const summary = promises ? summarizePromises(promises) : null;

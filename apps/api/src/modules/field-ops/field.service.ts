@@ -18,7 +18,10 @@ import {
 import { isValidGps, verifyEvidenceHash } from './field-integrity';
 import { serializeVisit, serializeVisitDetail } from './field.serializer';
 import { AddEvidenceDto, CreateVisitDto, ListVisitsQueryDto } from './dto/field.dto';
-import { evidenceHashInvalid, invalidGps, invalidVisitDetails, resourceNotFound, visitNeedsTarget } from './field.errors';
+import { moraScopeOf, visibleCredits } from '../mora/mora-query';
+import { recordCreditActivity } from '../mora/credit-activity';
+import { isUniqueViolation } from '../../common/unique-violation';
+import { evidenceHashInvalid, invalidGps, invalidVisitDetails, resourceNotFound, visitCreditMismatch, visitIdTaken, visitNeedsTarget } from './field.errors';
 
 @Injectable()
 export class FieldService {
@@ -64,7 +67,7 @@ export class FieldService {
   async list(query: ListVisitsQueryDto): Promise<ApiResponse<ReturnType<typeof serializeVisit>[]>> {
     const { page, limit, skip } = resolvePagination(query);
     const where: Prisma.FieldVisitWhereInput = {};
-    if (query.caseId) where.caseId = query.caseId;
+    if (query.creditId) where.creditId = query.creditId;
     if (query.routeStopId) where.routeStopId = query.routeStopId;
     // Las visitas de una ruta no cuelgan de la ruta: cuelgan de sus paradas.
     if (query.routeId) where.routeStop = { routeId: query.routeId };
@@ -142,7 +145,23 @@ export class FieldService {
 
   /** Registra una visita de campo (append-only). GPS obligatorio. */
   async createVisit(dto: CreateVisitDto) {
-    if (!dto.caseId && !dto.routeStopId) throw visitNeedsTarget();
+    // Idempotente por `id` (cola offline del móvil). Dos envíos a la vez pasan los dos el chequeo y uno choca con la
+    // PK: se repite UNA vez y esta vez el chequeo encuentra la visita que guardó el otro.
+    const { visit, replay } = await this.createVisitOnce(dto).catch((err: unknown) =>
+      dto.id && isUniqueViolation(err) ? this.createVisitOnce(dto) : Promise.reject(err),
+    );
+    const out = { id: visit.id, outcome: visit.outcome, capturedAt: visit.capturedAt };
+    // Reintento: la visita ya estaba. Misma forma de respuesta, sin ubicación nueva, sin conteo de plan.
+    if (replay) return out;
+
+    const collectorId = this.tenant.userId!;
+    this.events.emit('collector.location', { collectorId, lat: dto.lat, lng: dto.lng, accountId: this.tenant.accountId });
+    this.warnPlanUsage('actionsPerMonth');
+    return out;
+  }
+
+  private async createVisitOnce(dto: CreateVisitDto) {
+    if (!dto.creditId && !dto.routeStopId) throw visitNeedsTarget();
     if (!isValidGps(dto.lat, dto.lng)) throw invalidGps();
 
     // Los campos propios de la variante (S5) se validan contra el `outcome` con la MISMA función que
@@ -151,25 +170,39 @@ export class FieldService {
     if (!validated.ok) throw invalidVisitDetails(validated.errors);
 
     const collectorId = this.tenant.userId!;
-    const visit = await this.tx(async (tx) => {
-      if (dto.caseId) {
-        const c = await tx.collectionCase.findFirst({ where: { id: dto.caseId, deletedAt: null }, select: { id: true } });
-        if (!c) throw resourceNotFound();
+    return this.tx(async (tx) => {
+      if (dto.id) {
+        const prev = await tx.fieldVisit.findFirst({ where: { id: dto.id } });
+        if (prev) {
+          const same = (!dto.creditId || prev.creditId === dto.creditId) && (prev.routeStopId ?? null) === (dto.routeStopId ?? null) && prev.collectorId === collectorId;
+          if (!same) throw visitIdTaken();
+          return { visit: prev, replay: true };
+        }
       }
       // Además de existir, la parada trae su punto conocido: es lo que deja al server DERIVAR el
-      // flag de GPS estimado en vez de creerle al body (ver `gpsEstimado` más abajo).
+      // flag de GPS estimado en vez de creerle al body (ver `gpsEstimado` más abajo) y su crédito.
       let stopPoint: { latitude: number; longitude: number } | undefined;
+      let creditId: string | undefined = dto.creditId;
       if (dto.routeStopId) {
         const s = await tx.routeStop.findFirst({
           where: { id: dto.routeStopId },
-          select: { id: true, client: { select: { locations: { select: { locationType: true, latitude: true, longitude: true } } } } },
+          select: { id: true, creditId: true, client: { select: { locations: { select: { locationType: true, latitude: true, longitude: true } } } } },
         });
         if (!s) throw resourceNotFound();
+        if (dto.creditId && s.creditId && s.creditId !== dto.creditId) throw visitCreditMismatch();
+        creditId = dto.creditId ?? s.creditId ?? undefined; // una visita por parada resuelve el crédito de la parada
         const loc =
           s.client?.locations.find((l) => l.locationType === LocationType.HOME) ?? s.client?.locations[0];
         if (loc?.latitude != null && loc.longitude != null) {
           stopPoint = { latitude: Number(loc.latitude), longitude: Number(loc.longitude) };
         }
+      }
+      // El crédito debe estar a la vista de quien visita: el mismo alcance que la ficha de mora y la agenda
+      // (responsable, temporal o apoyo; supervisor = su agencia). Fuera de alcance → 404, no se filtra que existe.
+      let credit: { id: string; clientId: string } | undefined;
+      if (creditId) {
+        [credit] = await visibleCredits(tx, moraScopeOf(this.tenant), { creditId });
+        if (!credit) throw resourceNotFound();
       }
       // El cruce que el validador puro no puede hacer: que la categoría exista en el catálogo de
       // ESTE tenant y esté activa. Mismo criterio que los motivos de agenda S6.
@@ -186,8 +219,9 @@ export class FieldService {
 
       const created = await tx.fieldVisit.create({
         data: {
+          ...(dto.id ? { id: dto.id } : {}),
           accountId: this.tenant.accountId,
-          caseId: dto.caseId,
+          creditId: credit?.id,
           routeStopId: dto.routeStopId,
           collectorId,
           latitude: dto.lat,
@@ -204,22 +238,18 @@ export class FieldService {
           capturedAt: dto.capturedAt ? new Date(dto.capturedAt) : new Date(),
         },
       });
-      // La parada visitada se marca; el caso queda con su última gestión.
+      // La parada visitada se marca.
       if (dto.routeStopId) {
         await tx.routeStop.update({ where: { id: dto.routeStopId }, data: { status: RouteStopStatus.VISITED, visitedAt: new Date() } });
       }
-      if (dto.caseId) {
-        await tx.collectionCase.update({ where: { id: dto.caseId }, data: { lastActionAt: new Date() } });
-        await tx.caseActivity.create({ data: { accountId: this.tenant.accountId, caseId: dto.caseId, userId: collectorId, type: 'VISIT', result: dto.outcome, notes: dto.notes } });
+      // La gestión queda en la bitácora del crédito (con el episodio abierto si lo hay) y su «última gestión».
+      if (credit) {
+        await recordCreditActivity(tx, { accountId: this.tenant.accountId, creditId: credit.id, clientId: credit.clientId, userId: collectorId, type: 'VISIT', result: dto.outcome, notes: dto.notes });
       }
       // Última ubicación conocida del cobrador (users es global, sin RLS).
       await tx.user.update({ where: { id: collectorId }, data: { lastKnownLat: dto.lat, lastKnownLng: dto.lng, lastLocationAt: new Date() } });
-      return created;
+      return { visit: created, replay: false };
     });
-
-    this.events.emit('collector.location', { collectorId, lat: dto.lat, lng: dto.lng, accountId: this.tenant.accountId });
-    this.warnPlanUsage('actionsPerMonth');
-    return { id: visit.id, outcome: visit.outcome, capturedAt: visit.capturedAt };
   }
 
   /** Añade evidencia sellada a una visita (inmutable). Verifica el hash SHA-256 si llega el contenido. */

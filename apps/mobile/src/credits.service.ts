@@ -5,7 +5,7 @@
 import { apiMutate, apiQuery, type MutateResult, type QueryResult } from './api-client';
 
 /**
- * Payload del alta de préstamo (§4.1/§4.2). `openCase` siempre true desde el móvil (§5.2).
+ * Payload del alta de préstamo (§4.1/§4.2).
  * **Vive en `@kobrax/shared`** desde F9 · W3: la supervisora da de alta el mismo préstamo desde
  * el panel web. Se re-exporta para no tocar a quien lo importaba de acá.
  */
@@ -18,9 +18,9 @@ export interface CreatedCredit {
   currency: string;
 }
 
-/** Crea el préstamo; con `openCase` el server abre el caso y el recordatorio de agenda (§5.2). */
+/** Crea el préstamo. Ya no hay caso que abrir: la mora la deriva el servidor del episodio. */
 export function createCredit(input: NewCreditInput): Promise<MutateResult<CreatedCredit>> {
-  return apiMutate<CreatedCredit>('/credits', 'POST', { openCase: true, origin: 'manual', ...input });
+  return apiMutate<CreatedCredit>('/credits', 'POST', { origin: 'manual', ...input });
 }
 
 /**

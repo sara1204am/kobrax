@@ -87,7 +87,7 @@ describe('NotesSection', () => {
     expect(screen.queryByText(/u-desconocido/)).toBeNull();
   });
 
-  it('sin case:write no se ofrece escribir, editar ni borrar', () => {
+  it('sin collection:write no se ofrece escribir, editar ni borrar', () => {
     render(<NotesSection creditId="c1" notes={[note()]} members={MEMBERS} canWrite={false} userId="u1" />);
     expect(screen.queryByText('Agregar nota')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Editar' })).toBeNull();

@@ -27,7 +27,7 @@ export async function searchClients(q: string): Promise<QueryResult<ClientHit[]>
 }
 
 /** Sin acentos y en minúsculas: "MARTINEZ" tiene que encontrar a "Martínez". */
-function normalizar(s: string): string {
+export function normalizar(s: string): string {
   return s
     .toLowerCase()
     .normalize('NFD')
@@ -39,7 +39,7 @@ function normalizar(s: string): string {
  * consulta distinta y nunca habría un resultado guardado para lo que el cobrador escribe ahora—
  * sino contra la CARTERA ya bajada, que es la lista completa de su gente.
  *
- * `ponytail:` sale de los casos cacheados y no de un caché de clientes propio, porque la cartera
+ * `ponytail:` sale de los créditos de la cartera cacheada y no de un caché de clientes propio, porque la cartera
  * ya se hidrata entera y trae `clientName`. Bajar además todas las fichas sería pagar dos veces
  * por el mismo dato. El documento no viaja en esa lista, así que sin señal se busca por nombre.
  */
@@ -47,10 +47,10 @@ async function searchLocal(q: string): Promise<QueryResult<ClientHit[]>> {
   const term = normalizar(q.trim());
   if (!term) return { status: 'offline' };
 
-  const casos = await db.getMany<{ clientId?: string; clientName?: string }>('case');
+  const creditos = await db.getMany<{ clientId?: string; clientName?: string }>('portfolio');
   const vistos = new Set<string>();
   const hits: ClientHit[] = [];
-  for (const c of casos) {
+  for (const c of creditos) {
     if (!c.clientId || !c.clientName || vistos.has(c.clientId)) continue;
     if (!normalizar(c.clientName).includes(term)) continue;
     vistos.add(c.clientId);
@@ -58,8 +58,17 @@ async function searchLocal(q: string): Promise<QueryResult<ClientHit[]>> {
     // `businessName`, así que se muestra tal cual lo devolvió el server.
     hits.push({ id: c.clientId, businessName: c.clientName, nationalId: null });
   }
+  // Los clientes dados de alta sin señal todavía no tienen créditos en la cartera bajada: la cartera no los ve. Se buscan en sus filas
+  // provisionales (`sync/optimistic`), para que el cobrador encuentre al deudor que acaba de cargar.
+  const nuevos = await db.getMany<ClientHit & { pending?: boolean }>('client');
+  for (const c of nuevos) {
+    if (!c.pending || vistos.has(c.id)) continue;
+    if (!normalizar(clientDisplayName(c)).includes(term)) continue;
+    vistos.add(c.id);
+    hits.push({ id: c.id, firstName: c.firstName, lastName: c.lastName, businessName: c.businessName, nationalId: null });
+  }
   if (hits.length === 0) return { status: 'offline' };
-  return { status: 'ok', data: hits.slice(0, 20), total: hits.length, localAt: await db.fetchedAt('case') };
+  return { status: 'ok', data: hits.slice(0, 20), total: hits.length, localAt: await db.fetchedAt('portfolio') };
 }
 
 /**
@@ -159,6 +168,8 @@ export function removeCollateral(clientId: string, collateralId: string) {
 }
 
 export interface UpdateClientPatch {
+  clientType?: 'PERSON' | 'COMPANY';
+  nationalId?: string;
   firstName?: string;
   lastName?: string;
   businessName?: string;
@@ -169,4 +180,13 @@ export interface UpdateClientPatch {
 
 export function updateClient(id: string, patch: UpdateClientPatch): Promise<MutateResult<ClientDetail>> {
   return apiMutate<ClientDetail>(`/clients/${id}`, 'PATCH', patch);
+}
+
+/**
+ * Adjuntos del legajo. El archivo se sube aparte (`uploads.service`, `POST /uploads`) y acá sólo se dice
+ * de quién es —dos pasos porque son dos cosas—; igual que el panel web. **Sin cola**: la subida de la foto
+ * necesita señal, así que registrar el adjunto sin señal no tendría archivo que registrar.
+ */
+export function addAttachment(clientId: string, input: { fileType: string; fileUrl: string; fileHash?: string }) {
+  return apiMutate<{ id: string }>(`/clients/${clientId}/attachments`, 'POST', input);
 }

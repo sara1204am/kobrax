@@ -16,25 +16,23 @@ function activeCredit(balance = 200) {
   };
 }
 
-function makeService(opts: { credit?: unknown; idempotentExisting?: unknown; maxReceipt?: number } = {}) {
+function makeService(opts: { credit?: unknown; idempotentExisting?: unknown; maxReceipt?: number; uniqueRace?: boolean } = {}) {
+  let raced = false;
   const calls = {
     create: [] as Record<string, unknown>[],
     creditUpdate: [] as Record<string, unknown>[],
-    caseClose: [] as { where: Record<string, unknown>; data: Record<string, unknown> }[],
     audit: [] as string[],
     events: [] as string[],
   };
   const tx = {
-    collectionCase: {
-      updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
-        calls.caseClose.push(args);
-        return { count: 1 };
-      },
-    },
     payment: {
-      findFirst: async () => opts.idempotentExisting ?? null,
+      findFirst: async () => (opts.uniqueRace ? (raced ? opts.idempotentExisting : null) : opts.idempotentExisting ?? null),
       aggregate: async () => ({ _max: { receiptNumber: opts.maxReceipt ?? 0 } }),
       create: async (args: { data: Record<string, unknown> }) => {
+        if (opts.uniqueRace && !raced) {
+          raced = true;
+          throw Object.assign(new Error('unique'), { code: 'P2002' });
+        }
         calls.create.push(args.data);
         return { id: 'pay1', ...args.data };
       },
@@ -73,16 +71,14 @@ function psfCredit(over: Record<string, unknown> = {}) {
 }
 
 describe('PaymentsService.register — crédito PSF (D3)', () => {
-  it('registra el Payment y no toca saldo, mora, estado, cuotas ni casos', async () => {
+  it('registra el Payment y no toca saldo, mora, estado ni cuotas', async () => {
     const { service, calls } = makeService({ credit: psfCredit() });
-    const r = await service.register({ ...PAY, amount: 500, caseId: 'case1' });
+    const r = await service.register({ ...PAY, amount: 500 });
     assert.equal(calls.create.length, 1);
     assert.equal(calls.create[0]!.amount, 500);
-    assert.equal(calls.create[0]!.caseId, 'case1');
     assert.equal(calls.create[0]!.registeredBy, 'u1');
     assert.equal(calls.create[0]!.branchId, 'b1');
     assert.equal(calls.creditUpdate.length, 0); // saldo, mora y estado reportados intactos
-    assert.equal(calls.caseClose.length, 0); // el caso lo cierra el próximo reporte, no el pago
     assert.deepEqual(calls.audit, ['CREATE']);
     assert.deepEqual(calls.events, ['payment.registered']);
     assert.equal(r.idempotentReplay, false);
@@ -167,25 +163,16 @@ describe('PaymentsService.register', () => {
     assert.equal(calls.creditUpdate[0]!.status, 'PAID');
   });
 
-  /**
-   * 🔴 Antes el pago dejaba el crédito en `PAID` y **no tocaba el caso**: quedaba abierto, seguía
-   * entrando a las rutas, y el cobrador volvía a visitar a quien ya había pagado. Va en la misma
-   * transacción que el pago y no en el trabajo diario: entre cobrar y que corra el job hay horas, y
-   * en esas horas el caso sigue en la ruta de alguien.
-   */
-  it('saldada la deuda, cierra el caso en la misma transacción', async () => {
+  it('saldada la deuda: el crédito PAID y el trigger de episodios terminan la mora', async () => {
     const { service, calls } = makeService();
     await service.register({ ...PAY, amount: 200 });
-    assert.equal(calls.caseClose.length, 1);
-    assert.equal(calls.caseClose[0]!.data.status, 'CLOSED');
-    assert.equal(calls.caseClose[0]!.data.closedReason, 'PAID');
-    assert.equal(calls.caseClose[0]!.where.creditId, 'cr1');
+    assert.equal(calls.creditUpdate[0]!.status, 'PAID');
   });
 
-  it('un pago parcial NO cierra el caso: todavía se debe', async () => {
+  it('un pago parcial deja el crédito ACTIVE', async () => {
     const { service, calls } = makeService();
     await service.register({ ...PAY, amount: 100 });
-    assert.equal(calls.caseClose.length, 0);
+    assert.equal(calls.creditUpdate[0]!.status, undefined);
   });
 
   /**
@@ -299,5 +286,24 @@ describe('PaymentsService.list — el orden', () => {
     const { service, calls } = makeLister();
     await service.list({ sort: 'method' });
     assert.deepEqual(calls.orderBy, { method: 'desc' });
+  });
+});
+
+describe('PaymentsService.register — carrera por idempotency_key', () => {
+  const existing = { id: 'pay-winner', creditId: 'cr1', amount: 100, method: 'CASH', idempotencyKey: 'k1', paymentDate: new Date('2026-08-01') };
+
+  it('la violación de (account_id, idempotency_key) devuelve el pago existente como un reintento normal', async () => {
+    const { service, calls } = makeService({ uniqueRace: true, idempotentExisting: existing });
+    const r = await service.register({ ...PAY, amount: 100 }, 'k1');
+    assert.equal(r.id, 'pay-winner');
+    assert.equal(r.idempotentReplay, true);
+    assert.equal(calls.create.length, 0);
+    assert.deepEqual(calls.audit, []);
+    assert.deepEqual(calls.events, []);
+  });
+
+  it('sin clave, la violación sigue siendo PAYMENT_DUP (no se reintenta)', async () => {
+    const { service } = makeService({ uniqueRace: true });
+    await rejectsWithCode(service.register({ ...PAY, amount: 100 }), 'PAYMENT_DUP');
   });
 });

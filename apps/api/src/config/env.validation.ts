@@ -24,6 +24,8 @@ export const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   MAIL_FROM: z.string().optional(),
+  // Versión mínima de la app móvil (semver). Sin valor = sin corte; ver AppVersionGuard.
+  MIN_APP_VERSION: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

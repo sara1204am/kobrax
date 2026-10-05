@@ -3,6 +3,12 @@ import { WIDGET_TYPES } from '@kobrax/shared';
 import { DEFAULT_WIDGETS, WIDGET_DEFINITIONS, widgetDefinition } from './widget-registry';
 
 describe('catálogo de widgets', () => {
+  it('el KPI por defecto es «créditos en mora»', () => {
+    const metrics = DEFAULT_WIDGETS.filter((w) => w.type === 'kpi').map((w) => w.config?.metric);
+    expect(metrics).toContain('creditsInArrears');
+    expect(metrics).not.toContain('activeCases');
+  });
+
   it('🔴 los doce tipos del contrato están en el catálogo', () => {
     // Un tipo que exista en `shared` y no acá se puede guardar en la base y después **no se puede
     // dibujar**: el tablero abre con un hueco y nadie sabe qué había ahí.

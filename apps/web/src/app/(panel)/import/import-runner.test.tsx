@@ -253,3 +253,29 @@ describe('ImportRunner — quien reparte (CHOOSE)', () => {
     expect(screen.getByRole('button', { name: 'Confirmar e importar' })).toBeDisabled();
   });
 });
+
+describe('ImportRunner — filas ignoradas', () => {
+  async function previewWith(counts: PortfolioSummary['counts']) {
+    // La vista previa es la primera llamada: acá importa SU conteo.
+    server.use(http.post('http://localhost/api/imports/run', () => HttpResponse.json(summary({ dryRun: true, counts }))));
+    const user = userEvent.setup();
+    const { container } = render(
+      <ToastProvider>
+        <ImportRunner config={CONFIG} currency="BOB" assignees={[]} members={[]} />
+      </ToastProvider>,
+    );
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(input, new File(['%PDF'], 'r.pdf', { type: 'application/pdf' }));
+    await screen.findByRole('button', { name: 'Confirmar e importar' });
+  }
+
+  it('la vista previa cuenta las filas que eran totales o notas', async () => {
+    await previewWith({ created: 5, updated: 11, setCurrent: 0, invalid: 0, ignored: 3 });
+    expect(screen.getByText('Ignoradas')).toBeInTheDocument();
+  });
+
+  it('sin filas ignoradas no dibuja un cero fijo', async () => {
+    await previewWith({ created: 5, updated: 11, setCurrent: 0, invalid: 0, ignored: 0 });
+    expect(screen.queryByText('Ignoradas')).not.toBeInTheDocument();
+  });
+});

@@ -9,7 +9,7 @@ import { RouteStopStatus } from '@kobrax/shared';
 import { apiFetch } from './api';
 import { getSession } from './session';
 import { apiQuery, toQuery } from './api-client';
-import { listCases } from './cases.service';
+import { listPortfolio } from './mora.service';
 import { routeProgress, type RouteItem } from './routes.service';
 import { listByDay, listOverdue } from './agenda.service';
 
@@ -50,21 +50,39 @@ describe('apiQuery', () => {
   });
 });
 
-describe('listCases', () => {
-  it('traduce overdue:true → overdue=true en la query (no boolean)', async () => {
-    mockFetch.mockResolvedValue({ status: 200, data: [], error: null, meta: { total: 0 } });
-    await listCases({ assigneeId: 'u1', overdue: true, limit: 1 });
+describe('listPortfolio', () => {
+  const row = (n: number) => ({ creditId: `cr${n}`, clientId: 'cl1', currency: 'BOB', daysPastDue: 0, hasActivePromise: false, situation: 'CURRENT', writtenOff: false });
+
+  it('pide /mora con todos=true y la página máxima de 100', async () => {
+    mockFetch.mockResolvedValue({ status: 200, data: [row(1)], error: null, meta: { total: 1 } });
+    await listPortfolio();
     const [path] = mockFetch.mock.calls[0];
-    expect(path).toContain('assigneeId=u1');
-    expect(path).toContain('overdue=true');
-    expect(path).toContain('limit=1');
+    expect(path).toContain('/mora?');
+    expect(path).toContain('todos=true');
+    expect(path).toContain('limit=100');
+    expect(path).toContain('page=1');
   });
 
-  it('traduce open:true → open=true en la query', async () => {
-    mockFetch.mockResolvedValue({ status: 200, data: [], error: null, meta: { total: 0 } });
-    await listCases({ assigneeId: 'u1', open: true, limit: 1 });
-    const [path] = mockFetch.mock.calls[0];
-    expect(path).toContain('open=true');
+  it('pagina hasta cubrir el total y junta las filas, con el crédito como id', async () => {
+    const page1 = Array.from({ length: 100 }, (_, i) => row(i));
+    const page2 = [row(100), row(101)];
+    mockFetch
+      .mockResolvedValueOnce({ status: 200, data: page1, error: null, meta: { total: 102 } })
+      .mockResolvedValueOnce({ status: 200, data: page2, error: null, meta: { total: 102 } });
+    const res = await listPortfolio();
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch.mock.calls[1][0]).toContain('page=2');
+    expect(res.status === 'ok' && res.data).toHaveLength(102);
+    expect(res.status === 'ok' && res.total).toBe(102);
+    expect(res.status === 'ok' && res.data[101]!.id).toBe('cr101');
+  });
+
+  it('si una página falla no devuelve una cartera a medias', async () => {
+    mockFetch
+      .mockResolvedValueOnce({ status: 200, data: Array.from({ length: 100 }, (_, i) => row(i)), error: null, meta: { total: 150 } })
+      .mockResolvedValueOnce({ status: 500, data: null, error: { code: 'X', message: 'boom' } });
+    const res = await listPortfolio();
+    expect(res).toEqual({ status: 'error', message: 'boom' });
   });
 });
 

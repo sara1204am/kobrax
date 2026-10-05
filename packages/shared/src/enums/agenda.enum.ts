@@ -16,8 +16,8 @@ export enum AgendaItemStatus {
 }
 
 /**
- * Desenlace al ejecutar una gestión (S4). Estructural: el código ramifica el `CaseActivityType` y
- * el efecto sobre el caso según el outcome, por eso es enum en shared y no un catálogo por tenant.
+ * Desenlace al ejecutar una gestión (S4). Estructural: el código ramifica el tipo de gestión y
+ * el efecto sobre el crédito según el outcome, por eso es enum en shared y no un catálogo por tenant.
  */
 export enum AgendaOutcome {
   CONTACTED = 'CONTACTED', // habló con el deudor (llamada/whatsapp/visita)

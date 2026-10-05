@@ -43,10 +43,10 @@ function make(opts: { visible?: boolean; episodes?: EpisodeRow[]; activities?: u
   const tx = {
     $queryRaw: async () => (opts.visible === false ? [] : [{ id: CREDIT, client_id: 'cl1' }]),
     creditArrearEpisode: { findMany: async () => opts.episodes ?? [] },
-    caseActivity: {
+    creditActivity: {
       findMany: async (a: { where: Record<string, unknown> }) => {
-        // Dos consultas distintas: las gestiones del crédito (por `case`) y los desenlaces de promesas (por `id`).
-        if ('case' in a.where) {
+        // Dos consultas distintas: las gestiones del crédito (por `creditId`) y los desenlaces de promesas (por `id`).
+        if ('creditId' in a.where) {
           wheres.activities = a.where;
           return opts.activities ?? [];
         }
@@ -76,10 +76,10 @@ describe('MoraService.metrics — las métricas de recuperación', () => {
     await assert.rejects(() => service.metrics(CREDIT), NotFoundException);
   });
 
-  it('trae las gestiones de TODOS los casos del crédito y sus pagos', async () => {
+  it('trae las gestiones del crédito (bitácora por crédito) y sus pagos', async () => {
     const { service, wheres } = make({ episodes: [episode()] });
     await service.metrics(CREDIT);
-    assert.deepEqual(wheres.activities, { case: { creditId: CREDIT } });
+    assert.deepEqual(wheres.activities, { creditId: CREDIT });
     assert.deepEqual(wheres.payments, { creditId: CREDIT });
   });
 

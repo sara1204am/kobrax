@@ -54,11 +54,12 @@ export class ListOverdueQueryDto {
 }
 
 /**
- * Alta de una gestión agendada. `clientId` y `assigneeId` los deriva el server (del caso y del
+ * Alta de una gestión agendada. `clientId` y `assigneeId` los deriva el server (del crédito y del
  * token) — nunca del body. `details` se valida contra el `type` con `validateAgendaDetails`.
  */
 export class CreateAgendaItemDto {
-  @IsUUID() caseId!: string;
+  /** Opcional: lo genera el móvil para que reintentar (cola offline) no duplique la gestión ni su recordatorio. */
+  @IsOptional() @IsUUID() id?: string;
   @IsUUID() creditId!: string;
 
   @IsEnum(AgendaItemType) type!: AgendaItemType;
@@ -83,7 +84,7 @@ export class CreateAgendaItemDto {
  * Editar una gestión pendiente (S5). Todo opcional: se manda sólo lo que cambia.
  *
  * **No lleva `scheduledDate`** a propósito: mover el día es *reagendar* y deja rastro
- * (`plans/agenda/editar-eliminar.md` D5). Tampoco `caseId`/`creditId`/`clientId`: el deudor es el
+ * (`plans/agenda/editar-eliminar.md` D5). Tampoco `creditId`/`clientId`: el deudor es el
  * ancla del agendado y no se cambia editando (D1).
  */
 export class UpdateAgendaItemDto {
@@ -135,7 +136,12 @@ export class CompleteAgendaItemDto {
 
 /** Posponer una gestión en pasos fijos (Figma: +15 / +30 / +1h). */
 export class PostponeAgendaItemDto {
-  @Type(() => Number) @IsIn(AGENDA_POSTPONE_STEPS as unknown as number[]) minutes!: number;
+  /** Relativa (clientes viejos). No es idempotente: cada envío corre la hora otro tanto. */
+  @IsOptional() @Type(() => Number) @IsIn(AGENDA_POSTPONE_STEPS as unknown as number[]) minutes?: number;
+
+  /** Absoluta `HH:mm` (idempotente: la gestión QUEDA a esa hora). Si vienen las dos, manda esta. */
+  @IsOptional() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'toTime debe tener formato HH:mm' })
+  toTime?: string;
 }
 
 /**

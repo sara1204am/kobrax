@@ -33,7 +33,8 @@ const FALLBACK_METHODS = ['CASH', 'TRANSFER', 'QR', 'CARD', 'MOBILE_PAYMENT'];
  * resultados que corresponden al tipo («no lo encontró» es de una visita), y «promesa de pago» y los datos de la
  * promesa van juntos. El panel no ofrece lo que la API va a rechazar.
  *
- * Sirve **con o sin caso**: si el crédito no tiene uno, la API lo abre al registrar la gestión.
+ * Sirve con **cualquier crédito que se vea, esté o no en mora** (F4/08): no abre ni exige ningún caso. Si la mora está abierta, la
+ * API deja la gestión ligada a ese episodio; si no, es una acción preventiva.
  */
 export function RegisterActivityButton({
   creditId,
@@ -49,8 +50,8 @@ export function RegisterActivityButton({
   /** Catálogo `BANK` del tenant. Vacío = no se ofrece el campo. */
   banks: CatalogOption[];
 }) {
-  const t = useTranslations('panel.cases');
-  const tf = useTranslations('panel.cases.ficha.activity');
+  const t = useTranslations('panel.mora');
+  const tf = useTranslations('panel.mora.ficha.activity');
   const tMethod = useTranslations('panel.payments.method');
   const locale = useLocale();
   const router = useRouter();
@@ -111,7 +112,7 @@ export function RegisterActivityButton({
     if (invalid) return;
     setBusy(true);
     setError(null);
-    const res = await postJson<{ data?: { caseOpened?: boolean } }>(`/api/mora/${creditId}/activities`, {
+    const res = await postJson(`/api/mora/${creditId}/activities`, {
       type,
       result: result || undefined,
       notes: notes.trim() || undefined,
@@ -122,10 +123,9 @@ export function RegisterActivityButton({
       setError(errorText(res.data.error, t, locale));
       return;
     }
-    const opened = (res.data as { caseOpened?: boolean }).caseOpened;
     setOpen(false);
     reset();
-    toast(opened ? tf('doneOpened') : tf('done'));
+    toast(tf('done'));
     router.refresh();
   }
 

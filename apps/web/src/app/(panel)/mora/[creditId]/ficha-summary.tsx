@@ -35,14 +35,15 @@ export function FichaSummary({
   nextDueDate,
   lastPayment,
   moraSince,
-  sla,
+  lastAction,
+  activePromise,
   assignee,
   branch,
   clientHref,
   creditHref,
   amount,
 }: {
-  /** Estado, prioridad y fuente: controles y etiquetas que arman el encabezado de la tarjeta. */
+  /** Situación, prioridad y fuente: etiquetas y controles que arman el encabezado de la tarjeta. */
   chips: ReactNode;
   balance: number | undefined;
   principal: number | undefined;
@@ -52,7 +53,10 @@ export function FichaSummary({
   nextDueDate: string;
   lastPayment: string;
   moraSince: string;
-  sla: string;
+  /** «Última gestión»: un dato suelto, no un estado. */
+  lastAction: string;
+  /** «Promesa vigente»: un dato suelto («Bs 300 · 10/10»), no un estado. */
+  activePromise: string;
   assignee: string;
   branch: string | undefined;
   clientHref: string;
@@ -60,7 +64,7 @@ export function FichaSummary({
   /** Formatea un monto ya con la moneda del crédito; `undefined` → «—». */
   amount: (n: number | undefined) => string;
 }) {
-  const t = useTranslations('panel.cases');
+  const t = useTranslations('panel.mora');
   const pct = paidPercent(principal, balance);
 
   return (
@@ -108,10 +112,12 @@ export function FichaSummary({
             <Cell label={t('detail.nextDueDate')} value={nextDueDate} />
             <Cell label={t('detail.lastPayment')} value={lastPayment} />
             <Cell label={t('detail.moraSince')} value={moraSince} />
-            <Cell label={t('detail.sla')} value={sla} />
-            <Cell label={t('detail.assignee')} value={assignee} />
+            <Cell label={t('lastActionLabel')} value={lastAction} />
+            <Cell label={t('activePromiseLabel')} value={activePromise} />
+            <Cell label={t('columns.responsible')} value={assignee} />
             <Cell label={t('columns.branch')} value={branch ?? '—'} />
-            {/* 8 celdas en 3 columnas dejan un hueco: se pinta blanco para que no asome el fondo del divisor. */}
+            {/* 10 celdas en 3 columnas dejan huecos: se pintan blancos para que no asome el fondo del divisor. */}
+            <div aria-hidden className="hidden bg-white sm:block" />
             <div aria-hidden className="hidden bg-white sm:block" />
           </dl>
         </div>

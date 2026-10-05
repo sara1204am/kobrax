@@ -18,7 +18,8 @@ import { todayISO } from '../agenda-form';
 import { flushPendingDraft } from '../route-draft';
 import { getUserId } from '../session';
 import { useNetStore } from '../store/net';
-import { enqueue, pendingActions, send, type QueuedAction } from './queue';
+import { enqueue, pendingActions, send, stabilize, type QueuedAction, type SendResult } from './queue';
+import { writeProvisionalClient, writeProvisionalCredit } from './optimistic';
 
 /** Después de esto, el ítem queda esperando un reintento manual. */
 const MAX_ATTEMPTS = 3;
@@ -48,7 +49,15 @@ export async function drain(userId: string, opts: { force?: boolean } = {}): Pro
     for (const item of await pendingActions(userId)) {
       if (!opts.force && item.attempts >= MAX_ATTEMPTS) continue;
 
-      const r = await send(item.action);
+      // Un ítem que explota (archivo ilegible, bug de una acción) NO puede tumbar el drenaje ni dejar sin subir a
+      // los que siguen: se cuenta como fallo pasajero y queda a la vista con su motivo.
+      let r: SendResult;
+      try {
+        // Los ítems viejos (sin ids) reciben un id estable ANTES de enviarse, y se guarda en la fila.
+        r = await send(await stabilize(item.id, item.action));
+      } catch (e) {
+        r = { status: 'error', message: e instanceof Error ? e.message : 'Falló el envío' };
+      }
       if (r.status === 'ok') {
         await db.dequeue(item.id);
         res.sent += 1;
@@ -86,6 +95,14 @@ export async function drain(userId: string, opts: { force?: boolean } = {}): Pro
 export async function queueForLater(action: QueuedAction): Promise<boolean> {
   const guardada = await enqueue(action);
   if (guardada) {
+    // Que el alta offline se vea ya (búsqueda, ficha, préstamos del cliente) hasta que la cola la suba.
+    // Es cosmético: si falla, el alta igual está a salvo en la cola.
+    try {
+      if (action.kind === 'client.create') await writeProvisionalClient(action.input);
+      else if (action.kind === 'credit.create') await writeProvisionalCredit(action.input);
+    } catch {
+      /* ver arriba */
+    }
     const userId = await getUserId();
     if (userId) await refreshPendingCount(userId);
   }

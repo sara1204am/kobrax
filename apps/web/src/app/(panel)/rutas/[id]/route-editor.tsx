@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { RouteStopStatus, type CaseListItem, type RouteStopItem } from '@kobrax/shared';
+import { RouteStopStatus, type RouteStopItem } from '@kobrax/shared';
 import { Badge } from '@/components/panel-ui';
 import { SourceBadge } from '@/components/source-badge';
 import { RouteMap } from '@/components/route-map';
@@ -13,7 +13,7 @@ import { FilterPanel } from '@/components/data-table-filters';
 import { SearchBox } from '@/components/search-box';
 import { sendJson, postJson } from '@/lib/client';
 import { money, time } from '@/lib/format';
-import { AVAILABLE_LIMIT, withinRadius } from '@/lib/plan';
+import { AVAILABLE_LIMIT, withinRadius, type AvailableCredit } from '@/lib/plan';
 import { STOP_STATUS_TONE } from '@/lib/routes';
 import { planFilterDefs, PLAN_FILTER_KEYS } from '../planificar/plan-filters';
 
@@ -52,6 +52,7 @@ export function RouteEditor({
   available,
   total,
   filtered,
+  categories,
 }: {
   routeId: string;
   stops: RouteStopItem[];
@@ -59,15 +60,17 @@ export function RouteEditor({
   /** El recorrido por las calles. Vacío si el motor de ruteo no contestó: el mapa se dibuja igual. */
   line: { latitude: number; longitude: number }[];
   editing: boolean;
-  /** La mora que se puede sumar. Sólo se pide cuando se está editando. */
-  available: CaseListItem[];
+  /** Los créditos en mora que se pueden sumar (`id` = creditId). Sólo se piden cuando se está editando. */
+  available: AvailableCredit[];
   total: number;
   filtered: boolean;
+  /** Las categorías de mora de la cuenta, para el filtro. */
+  categories: { code: string; name: string }[];
 }) {
   const t = useTranslations('panel.routes');
   const tPlan = useTranslations('panel.routes.planning');
   const tFilters = useTranslations('panel.routes.planning.filters');
-  const tCases = useTranslations('panel.cases');
+  const tOutcome = useTranslations('panel.routes.outcome');
   const tTable = useTranslations('panel.table');
   const locale = useLocale();
   const router = useRouter();
@@ -116,13 +119,13 @@ export function RouteEditor({
     void run(stopId, () => sendJson(`/api/routes/${routeId}/stops/${stopId}`, null, 'DELETE'));
 
   /**
-   * Sumar un deudor a la ruta. Va con **cliente y caso**: el cliente es lo que la parada necesita
-   * para tener dirección y punto, y el caso es contra qué se cobra cuando el cobrador llegue.
+   * Sumar un crédito a la ruta. Va con **cliente y crédito**: el cliente es lo que la parada necesita
+   * para tener dirección y punto, y el crédito es contra qué se cobra cuando el cobrador llegue.
    */
-  const add = (caseId: string) => {
-    const caso = available.find((c) => c.id === caseId);
-    if (!caso) return;
-    void run(caseId, () => postJson(`/api/routes/${routeId}/stops`, { clientId: caso.clientId, caseId }));
+  const add = (creditId: string) => {
+    const credito = available.find((c) => c.id === creditId);
+    if (!credito) return;
+    void run(creditId, () => postJson(`/api/routes/${routeId}/stops`, { clientId: credito.clientId, creditId }));
   };
 
   /*
@@ -231,7 +234,7 @@ export function RouteEditor({
           <div className="flex flex-col gap-5 lg:flex-row">
             {panelOpen && (
               <FilterPanel
-                defs={planFilterDefs(tFilters, tCases, t)}
+                defs={planFilterDefs(tFilters, categories, tOutcome)}
                 params={params}
                 go={go}
                 onClose={() => setPanelOpen(false)}

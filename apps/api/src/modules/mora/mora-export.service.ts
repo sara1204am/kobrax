@@ -39,7 +39,7 @@ const stamp = (d: Date): string => d.toISOString().slice(0, 10);
 
 /**
  * Exportar la lista de Mora, **exactamente lo que se está viendo**: mismo filtro, mismo orden y mismo alcance
- * que `GET /mora`, porque pasa por la misma consulta (`MoraService.batches`). Un cobrador baja sólo sus casos.
+ * que `GET /mora`, porque pasa por la misma consulta (`MoraService.batches`). El alcance (cobrador: lo suyo; supervisor: su agencia) sale de la misma consulta.
  *
  * 🔴 **El tope se rechaza antes de empezar.** Con la respuesta ya en camino no se puede contestar un error, y
  * un archivo que se corta a mitad se ve completo: es peor que no tener archivo.
@@ -68,9 +68,9 @@ export class MoraExportService {
     return total;
   }
 
-  /** Cobradores por id, para no mostrar uuids. Lo que no se encuentra queda sin nombre, no con el id. */
+  /** Responsables por id, para no mostrar uuids. Lo que no se encuentra queda sin nombre, no con el id. */
   private async resolveNames(items: MoraCreditListItem[], into: MoraNames): Promise<void> {
-    const missing = [...new Set(items.map((i) => i.case?.assigneeId).filter((id): id is string => !!id && !into.has(id)))];
+    const missing = [...new Set(items.map((i) => i.responsibleId).filter((id): id is string => !!id && !into.has(id)))];
     if (missing.length === 0) return;
     const profiles = await this.tx((tx) =>
       tx.profile.findMany({ where: { userId: { in: missing } }, select: { userId: true, firstName: true, lastName: true } }),
@@ -132,6 +132,7 @@ export class MoraExportService {
       currency: account?.currencyCode ?? undefined,
       generatedBy: full(me),
       ownOnly: scope.ownOnly,
+      branchScope: scope.kind === 'BRANCH',
       filters: describeFilters(query, { assignee: full(assignee), branch: branch?.name }),
       sort: describeSort(query.sort, query.dir),
       names,

@@ -72,9 +72,15 @@ export function initialResult(todayIso: string): ResultForm {
  * así que la pantalla se desmontaba antes de mostrarlos. Un pago que no se guardó desaparecía sin
  * que nadie se enterara — el cobrador ya había cobrado el efectivo.
  */
-export function postVisitWarning(failed: string[]): string | null {
-  if (failed.length === 0) return null;
-  return `La visita quedó registrada, pero ${failed.join(' y ')}. Anotalo y avisá a tu supervisor.`;
+export function postVisitWarning(failed: string[], queued: string[] = []): string | null {
+  if (failed.length === 0 && queued.length === 0) return null;
+  // `queued`: lo que no salió pero QUEDÓ guardado en el teléfono y sube solo — se avisa igual (el cobrador
+  // tiene que saber que todavía no llegó), pero sin pedirle que lo anote: no se perdió.
+  const guardado =
+    queued.length > 0 ? `${queued.join(' y ')} quedó guardado en el teléfono y se sube solo cuando haya señal.` : '';
+  if (failed.length === 0) return `La visita quedó registrada; ${guardado}`;
+  const perdido = `La visita quedó registrada, pero ${failed.join(' y ')}. Anotalo y avisá a tu supervisor.`;
+  return guardado ? `${perdido} Además, ${guardado}` : perdido;
 }
 
 /** El `details` que viaja al server, por variante. Lo que no corresponde no se manda. */

@@ -22,7 +22,11 @@ function row(over: Partial<MoraCreditRow> = {}): MoraCreditRow {
     branch: null,
     client: { firstName: 'Fernando', lastName: 'Blanco Choque', businessName: null },
     installments: [],
-    cases: [],
+    writtenOffAt: null,
+    lastActionAt: null,
+    assignedManagerId: null,
+    arrearEpisodes: [],
+    activities: [],
     payments: [],
     ...over,
   };
@@ -35,6 +39,12 @@ const inst = (n: number, due: string, amount: number, paid: number, status: stri
   status,
 });
 const opts = { now: NOW, hasActivePromise: false };
+const CATS = [
+  { code: 'A', name: 'Categoría A', color: '#16a34a', fromDays: 1, toDays: 30 },
+  { code: 'B', name: 'Categoría B', color: null, fromDays: 31, toDays: 60 },
+  { code: 'C', name: 'Categoría C', color: null, fromDays: 61, toDays: null },
+];
+const episode = (priority: string | null = 'HIGH', pinned: Date | null = null) => [{ priority, priorityPinnedAt: pinned }];
 
 describe('overdueFromSchedule', () => {
   it('suma lo que falta de las cuotas ya vencidas y no pagadas', () => {
@@ -128,38 +138,83 @@ describe('serializeMoraCredit — un crédito, un registro', () => {
     assert.equal(r.lastPaymentAt, '2026-09-15');
   });
 
-  it('crédito sin caso: aparece, sin caso ni prioridad', () => {
-    const r = serializeMoraCredit(row(), opts);
-    assert.equal(r.case, undefined);
-    assert.equal(r.creditId, 'cr1');
+  it('no expone `case` ni `slaDueAt`', () => {
+    const r = serializeMoraCredit(row({ arrearEpisodes: episode() }), opts);
+    assert.equal('case' in r, false);
+    assert.equal('slaDueAt' in r, false);
   });
 
-  it('con caso abierto: estado, prioridad fijada, SLA vencido y última gestión', () => {
+  it('situación: sale SÓLO del episodio abierto, no de los días de mora', () => {
+    assert.equal(serializeMoraCredit(row({ daysPastDue: 45, arrearEpisodes: episode() }), opts).situation, 'IN_ARREARS');
+    assert.equal(serializeMoraCredit(row({ daysPastDue: 45, arrearEpisodes: [] }), opts).situation, 'CURRENT');
+    assert.equal(serializeMoraCredit(row({ daysPastDue: 0, arrearEpisodes: episode() }), opts).situation, 'IN_ARREARS');
+    assert.equal(serializeMoraCredit(row({ daysPastDue: 0 }), opts).situation, 'CURRENT');
+  });
+
+  it('prioridad y pin salen del episodio abierto; un crédito al día no tiene prioridad', () => {
+    const fijada = serializeMoraCredit(row({ arrearEpisodes: episode('CRITICAL', new Date('2026-09-01T00:00:00Z')) }), opts);
+    assert.equal(fijada.priority, 'CRITICAL');
+    assert.equal(fijada.priorityPinned, true);
+    const auto = serializeMoraCredit(row({ arrearEpisodes: episode('LOW') }), opts);
+    assert.equal(auto.priority, 'LOW');
+    assert.equal(auto.priorityPinned, false);
+    const alDia = serializeMoraCredit(row({ daysPastDue: 0 }), opts);
+    assert.equal(alDia.priority, undefined);
+    assert.equal(alDia.priorityPinned, false);
+  });
+
+  it('categoría: se calcula con los días y los rangos de la cuenta (límites 1, 30, 31, 60, 61)', () => {
+    const cat = (days: number) => serializeMoraCredit(row({ daysPastDue: days, arrearEpisodes: episode() }), { ...opts, categories: CATS }).category?.code;
+    assert.deepEqual([1, 30, 31, 60, 61, 393].map(cat), ['A', 'A', 'B', 'B', 'C', 'C']);
+  });
+
+  it('categoría: trae nombre y color; sin color queda ausente', () => {
+    const a = serializeMoraCredit(row({ daysPastDue: 10, arrearEpisodes: episode() }), { ...opts, categories: CATS }).category;
+    assert.deepEqual(a, { code: 'A', name: 'Categoría A', color: '#16a34a' });
+    const b = serializeMoraCredit(row({ daysPastDue: 40, arrearEpisodes: episode() }), { ...opts, categories: CATS }).category;
+    assert.deepEqual(b, { code: 'B', name: 'Categoría B', color: undefined });
+  });
+
+  it('categoría: un crédito con 0 días no tiene; y si la cuenta no configuró ninguna, tampoco', () => {
+    assert.equal(serializeMoraCredit(row({ daysPastDue: 0 }), { ...opts, categories: CATS }).category, undefined);
+    assert.equal(serializeMoraCredit(row({ daysPastDue: 45, arrearEpisodes: episode() }), { ...opts, categories: [] }).category, undefined);
+    assert.equal(serializeMoraCredit(row({ daysPastDue: 45, arrearEpisodes: episode() }), opts).category, undefined);
+  });
+
+  it('castigado: condición aparte; 240 días de mora y castigado sigue «En mora»', () => {
+    const r = serializeMoraCredit(row({ daysPastDue: 240, writtenOffAt: new Date('2026-09-01T00:00:00Z'), arrearEpisodes: episode() }), { ...opts, categories: CATS });
+    assert.equal(r.writtenOff, true);
+    assert.equal(r.situation, 'IN_ARREARS');
+    assert.equal(r.category?.code, 'C');
+    assert.equal(serializeMoraCredit(row(), opts).writtenOff, false);
+  });
+
+  it('responsable y última gestión (informativa) salen del crédito', () => {
     const r = serializeMoraCredit(
-      row({
-        cases: [
-          {
-            id: 'case1',
-            status: 'ACTIVE',
-            priority: 'CRITICAL',
-            priorityPinnedAt: new Date('2026-09-01T00:00:00Z'),
-            assigneeId: 'u1',
-            slaDueAt: new Date('2026-09-30T00:00:00Z'),
-            lastActionAt: new Date('2026-09-28T10:00:00Z'),
-            activities: [{ type: 'VISIT', result: 'NOT_FOUND' }],
-          },
-        ],
-      }),
+      row({ assignedManagerId: 'u1', lastActionAt: new Date('2026-09-28T10:00:00Z'), activities: [{ type: 'VISIT', result: 'NOT_FOUND' }] }),
       { ...opts, hasActivePromise: true },
     );
-    assert.equal(r.case?.id, 'case1');
-    assert.equal(r.case?.priority, 'CRITICAL');
-    assert.equal(r.case?.priorityPinned, true);
-    assert.equal(r.case?.isOverdue, true);
-    assert.equal(r.case?.assigneeId, 'u1');
+    assert.equal(r.responsibleId, 'u1');
+    assert.equal(r.lastActionAt, '2026-09-28T10:00:00.000Z');
     assert.equal(r.lastActivityType, 'VISIT');
     assert.equal(r.lastActivityResult, 'NOT_FOUND');
     assert.equal(r.hasActivePromise, true);
+    const sin = serializeMoraCredit(row(), opts);
+    assert.equal(sin.responsibleId, undefined);
+    assert.equal(sin.lastActionAt, undefined);
+  });
+
+  it('avisos PSF: ausente trae desde cuándo; presente no; dato viejo sigue marcado', () => {
+    const ausente = serializeMoraCredit(
+      row({ origin: 'IMPORT', externalSource: 'PSF', syncStatus: 'ABSENT', reportedAsOf: new Date('2026-09-25T00:00:00Z'), absentSince: new Date('2026-09-26T00:00:00Z'), metadata: { origin: 'import' } }),
+      { ...opts, staleAfterDays: 2 },
+    );
+    assert.equal(ausente.syncStatus, 'ABSENT');
+    assert.equal(ausente.absentSince, '2026-09-26');
+    assert.equal(ausente.reportedAsOf, '2026-09-25');
+    assert.equal(ausente.reportedStale, true);
+    const presente = serializeMoraCredit(row({ origin: 'IMPORT', externalSource: 'PSF', syncStatus: 'PRESENT', absentSince: new Date('2026-09-26T00:00:00Z'), metadata: { origin: 'import' } }), opts);
+    assert.equal(presente.absentSince, undefined);
   });
 
   it('oficina: id y nombre', () => {

@@ -72,9 +72,6 @@ export class CreateCreditDto {
   @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) outstandingBalance?: number;
   @IsOptional() @IsInt() @Min(0) daysPastDue?: number;
 
-  /** Abre el caso de cobranza en la misma transacción (§5.2). El alta del móvil siempre lo pide. */
-  @IsOptional() @IsBoolean() openCase?: boolean;
-
   /**
    * Las condiciones del crédito (F4/06), en la forma `CreditTerms` de `@kobrax/shared`. Con ellas la
    * API **recalcula** con el motor único y aplica D14 (quién manda según el modo). La forma la valida
@@ -160,4 +157,9 @@ export class ClearArrearsDto {
   @IsIn(CURRENT_MODES) mode!: (typeof CURRENT_MODES)[number];
   /** Obligatoria con `mode=date`, y tiene que ser futura: una fecha pasada deja el crédito en mora. */
   @IsOptional() @IsDateString() date?: string;
+}
+
+/** `POST /credits/:id/write-off` — el motivo es opcional. */
+export class WriteOffDto {
+  @IsOptional() @IsString() @MaxLength(500) reason?: string;
 }

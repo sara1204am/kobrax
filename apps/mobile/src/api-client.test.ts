@@ -7,7 +7,7 @@ jest.mock('./session', () => ({
 
 import { apiFetch } from './api';
 import { clearSession, getSession, saveSession } from './session';
-import { authedFetch } from './api-client';
+import { apiMutate, authedFetch } from './api-client';
 
 const mockFetch = apiFetch as jest.Mock;
 const mockGetSession = getSession as jest.Mock;
@@ -84,5 +84,15 @@ describe('authedFetch — Bearer + refresh 401→retry', () => {
     expect(r2.status).toBe(200);
     const refreshCalls = mockFetch.mock.calls.filter(([p]: [string]) => p === '/auth/refresh');
     expect(refreshCalls).toHaveLength(1); // sin single-flight serían 2 → el 2º rota el token y provoca logout
+  });
+});
+
+describe('apiMutate — timeout vs offline', () => {
+  it('propaga el motivo: un timeout NO es lo mismo que sin red (el pedido pudo haber llegado)', async () => {
+    mockGetSession.mockResolvedValue(SESSION);
+    mockFetch.mockResolvedValue({ status: 0, reason: 'timeout', data: null, error: null });
+    expect(await apiMutate('/x', 'POST', {})).toEqual({ status: 'offline', reason: 'timeout' });
+    mockFetch.mockResolvedValue({ status: 0, reason: 'offline', data: null, error: null });
+    expect(await apiMutate('/x', 'POST', {})).toEqual({ status: 'offline', reason: 'offline' });
   });
 });

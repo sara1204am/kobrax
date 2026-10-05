@@ -15,6 +15,20 @@ const KEY = {
   userId: 'k_user_id',
 } as const;
 
+/**
+ * El borrador de la ruta (`route-draft.ts`) se guarda **por usuario**: `kobrax.route.draft.<userId>`. La clave
+ * sin sufijo es la de versiones anteriores, que no distinguía de quién era: se descarta, no se migra.
+ */
+export const ROUTE_DRAFT_KEY = 'kobrax.route.draft';
+export const routeDraftKey = (userId: string) => `${ROUTE_DRAFT_KEY}.${userId}`;
+
+/** Borra el borrador legado (sin dueño) y el del usuario indicado (o el de la sesión actual). */
+export async function clearRouteDrafts(userId?: string | null): Promise<void> {
+  const uid = userId ?? (await SecureStore.getItemAsync(KEY.userId));
+  await SecureStore.deleteItemAsync(ROUTE_DRAFT_KEY);
+  if (uid) await SecureStore.deleteItemAsync(routeDraftKey(uid));
+}
+
 const INACTIVITY_MS = 8 * 60 * 60 * 1000; // 8h
 const REFRESH_MS = 7 * 24 * 60 * 60 * 1000; // 7d
 
@@ -63,6 +77,9 @@ export async function touchSession(): Promise<void> {
  * que persistir el dato.
  */
 export async function saveUserId(userId: string): Promise<void> {
+  // Cambió la persona de este teléfono: el recorrido a medio armar del anterior no es de la que entra.
+  const previo = await SecureStore.getItemAsync(KEY.userId);
+  if (previo && previo !== userId) await clearRouteDrafts(previo);
   await SecureStore.setItemAsync(KEY.userId, userId);
 }
 
@@ -84,6 +101,8 @@ export function getUserId(): Promise<string | null> {
  * con su dueño para cuando vuelva a entrar.
  */
 export async function clearSession(): Promise<void> {
+  // Antes de borrar el userId: el borrador es por usuario y hace falta saber de quién era.
+  await clearRouteDrafts();
   await Promise.all([
     SecureStore.deleteItemAsync(KEY.access),
     SecureStore.deleteItemAsync(KEY.refresh),

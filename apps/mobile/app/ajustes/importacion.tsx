@@ -210,6 +210,7 @@ export default function ImportacionScreen() {
                 })
               }
             />
+            <ListRow title="Historial de importaciones" onPress={() => router.push('/ajustes/importacion-historial')} />
             {/* §6.2: el histórico se mantiene aunque el tenant pase a carga manual; se aclara por qué
                 no se va a actualizar más, en vez de dejar un dato viejo sin contexto. */}
             {!isFile && <Text style={styles.muted}>Origen cambiado a manual.</Text>}

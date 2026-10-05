@@ -5,7 +5,7 @@
  * sin ciclo: `authService` importa de acá, no al revés.
  */
 import type { AuthTokens } from '@kobrax/shared';
-import { apiFetch, type ApiResult } from './api';
+import { apiFetch, type ApiResult, type NetworkReason } from './api';
 import { clearSession, getSession, saveSession } from './session';
 
 export type AuthedFetchResult<T> = ApiResult<T> | { status: 'unauthenticated'; data: null; error: null };
@@ -105,7 +105,8 @@ export async function apiQuery<T>(path: string): Promise<QueryResult<T>> {
  */
 export type MutateResult<T> =
   | { status: 'ok'; data: T }
-  | { status: 'offline' }
+  /** `reason: 'timeout'` = el resultado es DESCONOCIDO (el server pudo haberlo procesado). Ver `NetworkReason`. */
+  | { status: 'offline'; reason?: NetworkReason }
   | { status: 'unauthenticated' }
   /** `httpStatus`: lo que contestó el server. La cola lo usa para distinguir «rechazado» de «falló». */
   | { status: 'error'; message: string; httpStatus?: number };
@@ -119,7 +120,7 @@ export async function apiMutate<T>(
 ): Promise<MutateResult<T>> {
   const res = await authedFetch<T>(path, { method, body, headers });
   if (res.status === 'unauthenticated' || res.status === 401) return { status: 'unauthenticated' };
-  if (res.status === 0) return { status: 'offline' };
+  if (res.status === 0) return { status: 'offline', reason: res.reason };
   if ((res.status === 200 || res.status === 201) && res.data !== null) return { status: 'ok', data: res.data };
   // 204 = salió bien y no hay nada que devolver (un DELETE). Sin esto se leería como error.
   if (res.status === 204) return { status: 'ok', data: null as T };

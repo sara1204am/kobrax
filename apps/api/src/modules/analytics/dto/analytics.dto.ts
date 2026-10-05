@@ -1,6 +1,6 @@
 import { Transform } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsEnum, IsIn, IsOptional, IsUUID, Matches } from 'class-validator';
-import { CasePriority, CaseStatus } from '@prisma/client';
+import { ArrayMaxSize, IsArray, IsEnum, IsIn, IsOptional, IsString, IsUUID, Matches } from 'class-validator';
+import { CollectionPriority } from '@prisma/client';
 import { CREDIT_SOURCES, type CreditSource } from '@kobrax/shared';
 
 /**
@@ -34,10 +34,11 @@ export class AnalyticsQueryDto {
   @IsOptional() @Matches(IS_DAY, { message: 'dateFrom debe ser YYYY-MM-DD' }) dateFrom?: string;
   @IsOptional() @Matches(IS_DAY, { message: 'dateTo debe ser YYYY-MM-DD' }) dateTo?: string;
   @IsOptional() @IsUUID() branchId?: string;
+  /** El responsable del crédito (F4/08). El nombre del parámetro se mantiene por la web. */
   /* El tope no es paranoia: cada valor es un parámetro más en el `IN` de seis consultas. */
   @IsOptional() @Csv() @IsArray() @ArrayMaxSize(50) @IsUUID(undefined, { each: true }) collectorId?: string[];
-  @IsOptional() @Csv() @IsArray() @ArrayMaxSize(20) @IsEnum(CaseStatus, { each: true }) caseStatus?: CaseStatus[];
-  @IsOptional() @Csv() @IsArray() @ArrayMaxSize(20) @IsEnum(CasePriority, { each: true }) priority?: CasePriority[];
+  /** Prioridad del episodio de mora abierto. */
+  @IsOptional() @Csv() @IsArray() @ArrayMaxSize(20) @IsEnum(CollectionPriority, { each: true }) priority?: CollectionPriority[];
   /** D7: sólo los créditos de esta fuente. Ausente = todas (el resumen trae el desglose). */
   @IsOptional() @IsIn(CREDIT_SOURCES as unknown as string[]) source?: CreditSource;
 }

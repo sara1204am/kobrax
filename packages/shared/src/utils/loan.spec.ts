@@ -175,7 +175,7 @@ describe('arrearsFromDueDate — mora sin cronograma (§6)', () => {
   });
 });
 
-describe('portfolioStatus — los 5 estados derivados del §5.3', () => {
+describe('portfolioStatus — los 4 estados derivados del §5.3', () => {
   const base = { outstandingBalance: 500, daysPastDue: 0, nextDueDate: '2026-08-01' };
 
   it('PAGADO gana sobre todo: saldo 0', () => {
@@ -184,9 +184,9 @@ describe('portfolioStatus — los 5 estados derivados del §5.3', () => {
     );
   });
 
-  it('PROMESA tapa la mora: hay compromiso vigente', () => {
-    expect(portfolioStatus({ ...base, daysPastDue: 12, hasActivePromise: true }, d('2026-07-13'))).toBe(
-      PortfolioStatus.PROMISE,
+  it('una promesa vigente no cambia el estado (D1: es información, no estado)', () => {
+    expect(portfolioStatus({ ...base, daysPastDue: 12, hasActivePromise: true } as never, d('2026-07-13'))).toBe(
+      PortfolioStatus.OVERDUE,
     );
   });
 

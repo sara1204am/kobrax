@@ -3,16 +3,16 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import type { CasePriority } from '@kobrax/shared';
+import type { CollectionPriority } from '@kobrax/shared';
 import { Badge } from '@/components/panel-ui';
 import { Button, ErrorBanner } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
-import { postJson } from '@/lib/client';
-import { PRIORITY_TONE } from '@/lib/cases';
+import { sendJson } from '@/lib/client';
+import { PRIORITY_TONE } from '@/lib/mora';
 
 /** De mayor a menor: la que más se elige queda primera y no hay que recorrer la lista. */
-export const PRIORITIES: CasePriority[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as CasePriority[];
+export const PRIORITIES: CollectionPriority[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
 
 /**
  * La prioridad, **cambiable desde la propia celda**.
@@ -33,17 +33,18 @@ export const PRIORITIES: CasePriority[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] 
  * otra aplicación.
  */
 export function PriorityCell({
-  caseId,
+  creditId,
   priority,
   pinned,
   canWrite,
 }: {
-  caseId: string;
-  priority: CasePriority;
+  creditId: string;
+  /** La del episodio de mora abierto. */
+  priority: CollectionPriority;
   pinned?: boolean;
   canWrite: boolean;
 }) {
-  const t = useTranslations('panel.cases');
+  const t = useTranslations('panel.mora');
   const router = useRouter();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -56,9 +57,11 @@ export function PriorityCell({
   async function aplicar(value: string) {
     setError(null);
     setBusy(true);
-    const { ok, data } = await postJson(
-      `/api/cases/${caseId}/priority`,
-      value === 'auto' ? { auto: true } : { priority: value },
+    // F4/08: la prioridad vive en el episodio abierto y se fija sobre el crédito (`null` = soltarla).
+    const { ok, data } = await sendJson(
+      `/api/mora/${creditId}/priority`,
+      { priority: value === 'auto' ? null : value },
+      'PATCH',
     );
     setBusy(false);
     if (!ok) return setError(data.error?.message ?? t('priorityError'));

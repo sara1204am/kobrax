@@ -36,7 +36,7 @@ describe('errorText', () => {
 
   it('sirve para cualquier módulo, no sólo para el import', () => {
     // La tabla `errors.*` la pone cada namespace; la regla es una sola.
-    const casos = translator(en, 'panel.cases');
-    expect(errorText({ code: 'CASE_002', message: 'no' }, casos, 'en')).toBe(en.panel.cases.errors.CASE_002);
+    const casos = translator(en, 'panel.mora');
+    expect(errorText({ code: 'AUTH_002', message: 'no' }, casos, 'en')).toBe(en.panel.mora.errors.AUTH_002);
   });
 });

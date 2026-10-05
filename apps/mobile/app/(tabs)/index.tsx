@@ -15,12 +15,13 @@ import {
   StatusBadge,
 } from '@/ui';
 import { authService, type Me } from '@/auth-service';
-import { listCases } from '@/cases.service';
+import { tenantCurrency } from '@/mora.service';
 import { getRoute, listRoutes, routeProgress, type RouteItem } from '@/routes.service';
 import { listByDay, listOverdue, type AgendaListItem } from '@/agenda.service';
 import { listPaymentsByDay } from '@/payments.service';
 import { money, todayISO } from '@/agenda-form';
-import { dayProgress, dueSoon, upNext, type DayProgress } from '@/home';
+import { dayProgress, dueSoon, queuedCollectedToday, upNext, type DayProgress } from '@/home';
+import { pendingActions } from '@/sync/queue';
 import { unreadCount } from '@/notifications.service';
 
 /** KPIs de la jornada (calculados en cliente — decisión cerrada). `—` = dato no disponible aún. */
@@ -64,15 +65,15 @@ export default function InicioScreen() {
     const hoy = todayISO();
 
     // Todo en paralelo; cada dato degrada solo si falla (offline/error no bloquea el Home).
-    const [agendaRes, overdueRes, routesRes, unread, paysRes, casesRes] = await Promise.all([
+    const [agendaRes, overdueRes, routesRes, unread, paysRes, currency] = await Promise.all([
       listByDay(hoy),
       listOverdue(1), // sólo interesa `meta.total`: el contador de vencidas
       listRoutes({ collectorId: me.userId, status: RouteStatus.IN_PROGRESS }),
       unreadCount(),
       listPaymentsByDay(hoy),
-      // Un caso cualquiera, sólo para saber en qué moneda cobra este tenant: `payments` no la trae
-      // y `GET /accounts/me` es 403 para el cobrador.
-      listCases({ assigneeId: me.userId, open: true, limit: 1 }),
+      // La moneda en la que cobra este tenant (de la lista de créditos): `payments` no la trae y
+      // `GET /accounts/me` es 403 para el cobrador.
+      tenantCurrency(),
     ]);
 
     const items = agendaRes.status === 'ok' ? agendaRes.data : [];
@@ -88,11 +89,19 @@ export default function InicioScreen() {
     // — si no, el Home mostraría lo que cobró otro. Cuenta todo lo suyo, con ruta o sin ella.
     // ponytail: el techo de 100 pagos/día de `listPaymentsByDay` alcanza para un cobrador; si un
     // tenant grande lo supera, hace falta paginar o un `registeredBy` en el query.
-    const collected =
+    // Más lo cobrado sin señal que sigue en la cola: es de este cobrador por definición (la cola es suya) y todavía
+    // no está en `GET /payments`. Sin sumarlo, cobrar offline dejaba el Home en «Bs 0».
+    let enCola = 0;
+    try {
+      enCola = queuedCollectedToday(await pendingActions(me.userId));
+    } catch {
+      /* si la cola no se puede leer, se muestra lo del server */
+    }
+    const delServer =
       paysRes.status === 'ok'
         ? paysRes.data.filter((p) => p.registeredBy === me.userId).reduce((sum, p) => sum + p.amount, 0)
         : null;
-    const currency = (casesRes.status === 'ok' ? casesRes.data[0]?.currency : undefined) ?? 'BOB';
+    const collected = delServer === null ? (enCola > 0 ? enCola : null) : delServer + enCola;
 
     setHome({
       me,

@@ -56,7 +56,7 @@ kobrax/
 | `roles` | RBAC: roles, permisos, scopes |
 | `clients` | Deudores, segmentación, historial |
 | `credits` | Obligaciones financieras, cronogramas, mora |
-| `cases` | Casos de cobranza, estados, asignación |
+| `mora` / `agenda` / `field-ops` | Cobranza por crédito: gestiones (`credit_activities`), agenda, visitas y mora (episodios, prioridad, categoría); sin «caso» ni estado manual |
 | `routes` | Rutas de campo, optimización, visitas |
 | `field-ops` | Gestiones en campo, evidencia digital |
 | `payments` | Registro de pagos, conciliación |

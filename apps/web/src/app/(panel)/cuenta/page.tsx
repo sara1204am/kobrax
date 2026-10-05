@@ -1,7 +1,8 @@
 import { getTranslations } from 'next-intl/server';
-import type { AccountInfo } from '@kobrax/shared';
+import type { AccountInfo, ArrearCategory } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { PageHeader, EmptyState, Badge } from '@/components/panel-ui';
+import { ArrearCategories } from './arrear-categories';
 import { BusinessForm } from './business-form';
 import { PlanCard } from './plan-card';
 import { WhatsappTemplates, type TemplateItem } from './whatsapp-templates';
@@ -44,6 +45,9 @@ export default async function CuentaPage() {
     auth: true,
   });
 
+  // Los rangos de la categoría de mora piden `collection:read`; un rol sin él no ve la sección.
+  const arrear = await apiCall<ArrearCategory[]>('/arrear-categories', { method: 'GET', auth: true });
+
   return (
     <>
       <PageHeader
@@ -59,6 +63,7 @@ export default async function CuentaPage() {
         <PlanCard account={account} />
         {/* Dibuja sus dos secciones (Datos del negocio · Configuración financiera) él mismo. */}
         <BusinessForm account={account} />
+        {arrear.status === 200 && arrear.body.data && <ArrearCategories categories={arrear.body.data} />}
         {templates.status === 200 && templates.body.data && (
           <WhatsappTemplates items={templates.body.data} />
         )}

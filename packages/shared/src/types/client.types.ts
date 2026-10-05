@@ -9,6 +9,8 @@ import type { ArrearsMethod, CreditOrigin, ExternalSyncStatus, EffectiveBalanceB
 import type { CreditTerms } from '../utils/credit-engine.js';
 import type { CreditInitialState } from '../utils/credit-edit.js';
 import type { ImportTrackedField } from '../utils/credit-import.js';
+import type { MoraSituation } from './sin-caso.types.js';
+import type { MoraCategoryTag } from './mora.types.js';
 
 // ── Payload de la API ────────────────────────────────────────────────────────
 export interface NewContactInput {
@@ -138,8 +140,6 @@ export interface NewCreditInput {
   daysPastDue?: number;
   notes?: string;
   origin?: CreditOrigin;
-  /** Abre el caso de cobranza en la misma transacción. Sin caso, el crédito no le llega a nadie. */
-  openCase?: boolean;
   /**
    * A quién se le asigna. En el teléfono coinciden con quien lo crea; **en la oficina no**: la
    * supervisora carga el préstamo y se lo reparte a un cobrador (F9 · W3 §5.3).
@@ -208,7 +208,7 @@ export interface ClientRelationDetail {
  * que se decidió para los estados de la cartera.
  *
  * Las tres fuentes son tres tablas y en la base **ya están atadas al cliente**: `agenda_items` lo
- * lleva propio, el pago llega por su crédito y la gestión por su caso. Por eso esto es una consulta,
+ * lleva propio, el pago llega por su crédito y la gestión por su crédito (`credit_activities`). Por eso esto es una consulta,
  * no un recorrido crédito por crédito.
  */
 export type TimelineKind = 'PAYMENT' | 'AGENDA' | 'ACTIVITY';
@@ -220,7 +220,7 @@ export interface ClientTimelineEntry {
   at: string;
   /**
    * Qué fue: el medio de pago (`CASH`…), el tipo de agendado (`VISIT`, `CALL`, `PROMISE_TO_PAY`…) o
-   * el tipo de gestión (`CaseActivityType`).
+   * el tipo de gestión (`CreditActivityType`).
    */
   code: string;
   /** Sólo agenda: si se ejecutó, se canceló o se reagendó. Sin esto, «llamada» no dice si atendió. */
@@ -230,7 +230,6 @@ export interface ClientTimelineEntry {
   /** Lo que escribió quien la registró. Texto libre, tal cual. */
   notes?: string;
   creditId?: string;
-  caseId?: string;
   /** Quién. `users.id`: el nombre lo resuelve quien dibuja, que ya tiene el equipo cargado. */
   userId?: string;
 }
@@ -358,6 +357,14 @@ export interface CreditDetail {
   notes?: string;
   status?: string;
   daysPastDue?: number;
+  /** F4/08: castigado (`written_off_at`), condición aparte de la mora. Presente en el detalle. */
+  writtenOff?: boolean;
+  writtenOffAt?: string;
+  writtenOffReason?: string;
+  /** F4/08: Al día / En mora, del episodio de mora abierto. Sólo en `GET /credits/:id`. */
+  situation?: MoraSituation;
+  /** F4/08: categoría de mora calculada con los rangos de la cuenta. Ausente = al día (< 1 día) o sin rango que la cubra. Sólo en `GET /credits/:id`. */
+  category?: MoraCategoryTag;
   hasSchedule?: boolean;
   /** Las condiciones con las que se definió (F4/06). Ausente en créditos anteriores y en importados. */
   terms?: CreditTerms;

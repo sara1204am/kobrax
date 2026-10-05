@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { memberName, type Member } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
@@ -11,6 +10,12 @@ import { postJson } from '@/lib/client';
 import { PRIORITIES } from './priority-cell';
 
 const MODES = ['next_period', 'date', 'none'] as const;
+
+/** A quién se puede asignar: lo que devuelve `GET /assignments/assignees` (no depende de `user:read`). */
+export interface Collector {
+  userId: string;
+  name: string;
+}
 
 const hoyIso = () => new Date().toISOString().slice(0, 10);
 
@@ -21,25 +26,28 @@ const hoyIso = () => new Date().toISOString().slice(0, 10);
  * vaciara cuarenta filas sin decir qué les hizo es donde se esconde cartera: el motivo es lo que
  * después deja contestar por qué desaparecieron cuarenta un martes.
  *
+ * Las acciones operan por **créditos** (F4/08): reasignar el responsable, fijar la prioridad del episodio y poner al día.
+ *
  * 🔴 **Poner al día en lote muestra el número antes de confirmar y avisa que no se deshace.** Es la
  * única acción del panel que puede cerrar decenas de cobranzas de un clic.
  */
 export function BulkActions({
   ids,
   clear,
-  members,
+  collectors,
   canAssign,
   canWrite,
 }: {
+  /** Ids de **crédito**. */
   ids: string[];
   clear: () => void;
-  members: Member[];
-  /** Sin `case:assign` la API rechaza asignar; el botón no se dibuja. */
+  collectors: Collector[];
+  /** Sin `assignment:write` la API rechaza asignar; el botón no se dibuja. */
   canAssign: boolean;
-  /** `case:write` — sin él no se cambia ni la prioridad ni la mora. */
+  /** `collection:write` — sin él no se cambia la prioridad. */
   canWrite: boolean;
 }) {
-  const t = useTranslations('panel.cases');
+  const t = useTranslations('panel.mora');
   const router = useRouter();
   const toast = useToast();
   const [abierto, setAbierto] = useState<'assign' | 'clear' | 'priority' | null>(null);
@@ -54,7 +62,7 @@ export function BulkActions({
     setError(null);
     setBusy(true);
     const res = await postJson<{ done: number; failed: number; message?: string }>('/api/mora/bulk', {
-      caseIds: ids,
+      creditIds: ids,
       ...payload,
     });
     setBusy(false);
@@ -62,7 +70,9 @@ export function BulkActions({
 
     const { done, failed, message } = res.data;
     // 🔴 Se dice cuántas entraron **y cuántas no**. «Listo» a secas sobre un lote parcial es mentira.
-    if (failed > 0) setError(t('bulk.partial', { done, failed, reason: message ?? '' }));
+    // `message` puede ser el código del motivo (reasignar) o el texto de la API.
+    const reason = message && t.has(`bulk.skip.${message}` as never) ? t(`bulk.skip.${message}` as never) : (message ?? '');
+    if (failed > 0) setError(t('bulk.partial', { done, failed, reason }));
     else {
       setAbierto(null);
       clear();
@@ -147,7 +157,7 @@ export function BulkActions({
               </Button>
             </span>
             <span className="sm:w-48">
-              <Button loading={busy} onClick={() => void aplicar({ action: 'assign', collectorId: collectorId || undefined })}>
+              <Button loading={busy} disabled={!collectorId} onClick={() => void aplicar({ action: 'assign', userId: collectorId })}>
                 {t('bulk.assign')}
               </Button>
             </span>
@@ -155,17 +165,19 @@ export function BulkActions({
         }
       >
         <ErrorBanner message={error} />
-        <Field label={t('filters.assignee')}>
-          <Select value={collectorId} onChange={(e) => setCollectorId(e.target.value)} disabled={busy}>
-            {/* Vacío = al de menor carga. Es lo que ya sabe hacer `POST /cases/:id/assign` con `auto`. */}
-            <option value="">{t('assign.auto')}</option>
-            {members.map((m) => (
-              <option key={m.userId} value={m.userId}>
-                {memberName(m)}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        <p>{t('bulk.assignText')}</p>
+        <div className="mt-4">
+          <Field label={t('filters.responsible')}>
+            <Select value={collectorId} onChange={(e) => setCollectorId(e.target.value)} disabled={busy}>
+              <option value="">{t('bulk.collectorPlaceholder')}</option>
+              {collectors.map((c) => (
+                <option key={c.userId} value={c.userId}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
       </Modal>
 
       <Modal

@@ -1,4 +1,4 @@
-import { CasePriority, CaseStatus, isCreditSource, type DashboardFilters, type KpiValue } from '@kobrax/shared';
+import { COLLECTION_PRIORITIES, isCreditSource, type CollectionPriority, type DashboardFilters, type KpiValue } from '@kobrax/shared';
 import { isUuid } from './uuid';
 
 /**
@@ -68,9 +68,8 @@ export function dashboardFilters(
   const to = params.to && IS_DAY.test(params.to) ? params.to : fallback.to;
 
   const collectorId = many(params.collectorId, isUuid);
-  // Los dos enums se validan por el mismo motivo que los ids: la API los valida con `@IsEnum` y un
-  // valor inventado en la URL le contesta 400 **a los seis endpoints**, no a uno.
-  const caseStatus = many(params.caseStatus, isCaseStatus);
+  // La prioridad (la del EPISODIO de mora) se valida por el mismo motivo que los ids: la API la valida con
+  // `@IsEnum` y un valor inventado en la URL le contesta 400 **a los seis endpoints**, no a uno.
   const priority = many(params.priority, isPriority);
 
   return {
@@ -79,18 +78,14 @@ export function dashboardFilters(
     dateTo: from <= to ? to : from,
     ...(collectorId.length ? { collectorId } : {}),
     ...(params.branchId && isUuid(params.branchId) ? { branchId: params.branchId } : {}),
-    ...(caseStatus.length ? { caseStatus } : {}),
     ...(priority.length ? { priority } : {}),
     // D7: una fuente inventada tampoco viaja — la API la valida y un 400 rompe los seis widgets.
     ...(isCreditSource(params.source) ? { source: params.source } : {}),
   };
 }
 
-const isCaseStatus = (value?: string): value is CaseStatus =>
-  !!value && (Object.values(CaseStatus) as string[]).includes(value);
-
-const isPriority = (value?: string): value is CasePriority =>
-  !!value && (Object.values(CasePriority) as string[]).includes(value);
+const isPriority = (value?: string): value is CollectionPriority =>
+  !!value && (COLLECTION_PRIORITIES as readonly string[]).includes(value);
 
 /**
  * Los mismos filtros, como query para la API. Los seis endpoints reciben exactamente esto.

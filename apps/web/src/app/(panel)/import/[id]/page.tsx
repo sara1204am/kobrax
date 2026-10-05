@@ -95,6 +95,8 @@ export default async function ImportRunPage({
             <Fact label={t('detail.reportDate')} value={run.reportDate ? dayDate(run.reportDate, locale) : '—'} />
             <Fact label={t('detail.advisor')} value={run.advisorCode ?? '—'} />
             <Fact label={t('detail.scope')} value={scopeText} />
+            {/* Totales y notas del archivo: no se importan ni cuentan como error, pero se dice cuántas fueron. */}
+            {(run.counts.ignored ?? 0) > 0 && <Fact label={t('detail.ignored')} value={t('detail.ignoredValue', { n: run.counts.ignored })} />}
             <Fact
               label={t('detail.file')}
               value={run.file ? `${run.file.name} · ${fileSize(run.file.size)}` : t('detail.noFile')}

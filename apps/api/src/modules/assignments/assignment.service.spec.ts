@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Prisma } from '@prisma/client';
 import { Permission, RoleType } from '@kobrax/shared';
 import { AssignmentService } from './assignment.service';
-import { isAssignable, notAssignable } from './assignment-rules';
+import { agencyViolations, isAssignable, notAssignable } from './assignment-rules';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
 interface Row {
@@ -12,7 +12,6 @@ interface Row {
   userId: string;
   revokedAt: Date | null;
   expiresAt: Date | null;
-  caseId: string | null;
 }
 
 /**
@@ -47,7 +46,7 @@ function makeService(opts: {
     },
     creditAssignment: {
       findMany: async ({ where }: { where: { creditId: { in: string[] } } }) =>
-        rows.filter((r) => where.creditId.in.includes(r.creditId) && !r.revokedAt && !r.expiresAt && !r.caseId),
+        rows.filter((r) => where.creditId.in.includes(r.creditId) && !r.revokedAt && !r.expiresAt),
       updateMany: async ({ where, data }: { where: { id: { in: string[] } }; data: { revokedAt: Date } }) => {
         for (const r of rows) if (where.id.in.includes(r.id)) r.revokedAt = data.revokedAt;
         return { count: where.id.in.length };
@@ -56,10 +55,12 @@ function makeService(opts: {
         if (opts.createFails) {
           throw new Prisma.PrismaClientKnownRequestError('unique', { code: 'P2002', clientVersion: 'test' });
         }
-        for (const d of data) rows.push({ id: `new-${++seq}`, creditId: d.creditId, userId: d.userId, revokedAt: null, expiresAt: null, caseId: null });
+        for (const d of data) rows.push({ id: `new-${++seq}`, creditId: d.creditId, userId: d.userId, revokedAt: null, expiresAt: null });
         return { count: data.length };
       },
     },
+    // D10: sin agendados pendientes en estos casos (los cubre `assignment.coverage.spec.ts`).
+    agendaItem: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
     userAccount: {
       findMany: async ({ where }: { where: { userId: { in: string[] } } }) =>
         (opts.members ?? [])
@@ -81,10 +82,49 @@ describe('P3 · a quién se le puede asignar', () => {
     assert.equal(isAssignable(juan, 'boss'), true);
     assert.equal(isAssignable({ userId: 'boss', role: RoleType.MANAGER, isActive: true }, 'boss'), true);
   });
+  it('D8 · un supervisor también puede tener créditos a su cargo', () => {
+    assert.equal(isAssignable({ userId: 'sup', role: RoleType.SUPERVISOR, isActive: true }, 'boss'), true);
+    assert.equal(isAssignable({ userId: 'sup', role: RoleType.SUPERVISOR, isActive: false }, 'boss'), false);
+  });
+
   it('no a un gerente que no es uno mismo, ni a un cobrador inactivo, ni a alguien de afuera', () => {
     assert.equal(isAssignable({ userId: 'otro', role: RoleType.MANAGER, isActive: true }, 'boss'), false);
     assert.equal(isAssignable({ ...juan, isActive: false }, 'boss'), false);
     assert.deepEqual(notAssignable(['juan', 'fantasma', 'fantasma'], [juan], 'boss'), ['fantasma']);
+  });
+});
+
+describe('D8 · el supervisor reparte sólo dentro de su agencia', () => {
+  const sup = { kind: 'BRANCH' as const, branchId: 'ag-1' };
+  const credits = [
+    { id: 'c-propio', branchId: 'ag-1' },
+    { id: 'c-ajeno', branchId: 'ag-2' },
+    { id: 'c-sin-agencia', branchId: null },
+  ];
+  const people = [
+    { userId: 'juan', branchId: 'ag-1' },
+    { userId: 'maria', branchId: 'ag-2' },
+    { userId: 'sin', branchId: null },
+  ];
+
+  it('gerente y administrador (ALL) no tienen límite', () => {
+    assert.deepEqual(agencyViolations({ kind: 'ALL', branchId: null }, credits, people), { creditIds: [], userIds: [] });
+  });
+
+  it('el supervisor: créditos de su agencia a gente de su agencia', () => {
+    assert.deepEqual(agencyViolations(sup, [credits[0]!], [people[0]!]), { creditIds: [], userIds: [] });
+  });
+
+  it('un crédito de otra agencia o sin agencia, o un destinatario de otra agencia o sin ella, se señala', () => {
+    assert.deepEqual(agencyViolations(sup, credits, people), {
+      creditIds: ['c-ajeno', 'c-sin-agencia'],
+      userIds: ['maria', 'sin'],
+    });
+  });
+
+  it('un supervisor sin agencia no puede repartir nada (null no es igual a ninguna agencia)', () => {
+    const v = agencyViolations({ kind: 'BRANCH', branchId: null }, [{ id: 'c', branchId: null }], [{ userId: 'u', branchId: null }]);
+    assert.deepEqual(v, { creditIds: ['c'], userIds: ['u'] });
   });
 });
 
@@ -100,7 +140,7 @@ describe('AssignmentService.apply — tabla y columna, siempre juntas', () => {
   it('reasigna: revoca la anterior (no la borra) y crea la nueva', async () => {
     const { service, tx, credits, rows, active } = makeService({
       credits: [{ id: 'c1', assignedManagerId: 'juan' }],
-      rows: [{ id: 'a1', creditId: 'c1', userId: 'juan', revokedAt: null, expiresAt: null, caseId: null }],
+      rows: [{ id: 'a1', creditId: 'c1', userId: 'juan', revokedAt: null, expiresAt: null }],
     });
     const changes = await service.apply(tx, [{ creditId: 'c1', to: 'maria', expectedFrom: 'juan' }], 'MANUAL');
     assert.deepEqual(changes, [{ creditId: 'c1', from: 'juan', to: 'maria', reason: 'MANUAL' }]);
@@ -112,7 +152,7 @@ describe('AssignmentService.apply — tabla y columna, siempre juntas', () => {
   it('pedir el que ya está no es un cambio: no escribe ni audita', async () => {
     const { service, tx, rows } = makeService({
       credits: [{ id: 'c1', assignedManagerId: 'juan' }],
-      rows: [{ id: 'a1', creditId: 'c1', userId: 'juan', revokedAt: null, expiresAt: null, caseId: null }],
+      rows: [{ id: 'a1', creditId: 'c1', userId: 'juan', revokedAt: null, expiresAt: null }],
     });
     assert.deepEqual(await service.apply(tx, [{ creditId: 'c1', to: 'juan' }], 'MANUAL'), []);
     assert.equal(rows.length, 1);
@@ -122,8 +162,8 @@ describe('AssignmentService.apply — tabla y columna, siempre juntas', () => {
     const { service, tx, rows } = makeService({
       credits: [{ id: 'c1', assignedManagerId: 'juan' }],
       rows: [
-        { id: 'a1', creditId: 'c1', userId: 'juan', revokedAt: null, expiresAt: null, caseId: null },
-        { id: 't1', creditId: 'c1', userId: 'sara', revokedAt: null, expiresAt: new Date('2099-01-01'), caseId: null },
+        { id: 'a1', creditId: 'c1', userId: 'juan', revokedAt: null, expiresAt: null },
+        { id: 't1', creditId: 'c1', userId: 'sara', revokedAt: null, expiresAt: new Date('2099-01-01') },
       ],
     });
     await service.apply(tx, [{ creditId: 'c1', to: 'maria' }], 'MANUAL');
@@ -144,7 +184,7 @@ describe('AssignmentService.apply — tabla y columna, siempre juntas', () => {
   it('repara la columna si se había separado de la tabla, sin inventar un cambio', async () => {
     const { service, tx, credits } = makeService({
       credits: [{ id: 'c1', assignedManagerId: null }],
-      rows: [{ id: 'a1', creditId: 'c1', userId: 'juan', revokedAt: null, expiresAt: null, caseId: null }],
+      rows: [{ id: 'a1', creditId: 'c1', userId: 'juan', revokedAt: null, expiresAt: null }],
     });
     assert.deepEqual(await service.apply(tx, [{ creditId: 'c1', to: 'juan' }], 'MANUAL'), []);
     assert.equal(credits.get('c1')!.assignedManagerId, 'juan');

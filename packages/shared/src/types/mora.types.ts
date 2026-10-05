@@ -9,8 +9,9 @@
  * tiene monto vencido calculable. Todo lo opcional llega `undefined` y la pantalla muestra «—»; un 0
  * inventado haría pasar un dato desconocido por uno conocido.
  */
-import type { CasePriority, CaseStatus } from '../enums/index.js';
 import type { ArrearsSource, ExternalSyncStatus } from '../enums/credit.enum.js';
+import type { CollectionPriority, CreditAssignmentKind, MoraSituation } from './sin-caso.types.js';
+import type { CreditOrigin, PaymentFrequency } from '../enums/credit.enum.js';
 
 /**
  * Cómo se puede ordenar `GET /mora`. La primera es el default.
@@ -19,23 +20,43 @@ import type { ArrearsSource, ExternalSyncStatus } from '../enums/credit.enum.js'
  * fecha y el inicio de mora viven en el JSON de `credits.metadata` o salen de las cuotas, así que
  * son columnas para mirar y no para ordenar.
  */
-export const MORA_SORTS = ['daysPastDue', 'balance', 'priority', 'lastAction', 'slaDueAt', 'createdAt'] as const;
+export const MORA_SORTS = ['daysPastDue', 'balance', 'priority', 'createdAt'] as const;
 export type MoraSort = (typeof MORA_SORTS)[number];
 
 /** De dónde sale `overdueAmount`: del cronograma (propios) o de lo que reportó el archivo (importados). */
 export type OverdueSource = 'SCHEDULE' | 'REPORTED';
 
-/** El caso abierto que gestiona el crédito. Ausente = el crédito está en mora pero nadie abrió caso. */
-export interface MoraCaseSummary {
+/**
+ * Un punto del cliente en el mapa. `ownerName` presente ⇒ la ubicación es de un garante o
+ * familiar, no del cliente: una deuda se cobra donde esté la persona.
+ */
+export interface PortfolioLocation {
   id: string;
-  status: CaseStatus;
-  priority: CasePriority;
-  /** La prioridad la fijó una persona: el trabajo diario no la recalcula. */
-  priorityPinned: boolean;
-  assigneeId?: string;
-  slaDueAt?: string;
-  isOverdue: boolean;
-  lastActionAt?: string;
+  locationType: string;
+  latitude: number;
+  longitude: number;
+  address?: string;
+  ownerName?: string;
+  ownerRelation?: string;
+}
+
+/** La categoría de mora de un crédito, tal como la configuró la cuenta. */
+export interface MoraCategoryTag {
+  code: string;
+  name: string;
+  color?: string;
+}
+
+/** Quién atiende el crédito además del responsable: reemplazo temporal o apoyo vigentes. */
+export interface MoraAssignment {
+  /** Id de la fila de `credit_assignments` (para revocar). Ausente en el responsable principal. */
+  id?: string;
+  kind: CreditAssignmentKind;
+  userId: string;
+  /** Nombre de la persona (resuelto por el servidor; no exige `user:read`). Ausente = no se pudo resolver. */
+  userName?: string;
+  /** ISO. Ausente = no vence por fecha. */
+  expiresAt?: string;
 }
 
 export interface MoraCreditListItem {
@@ -70,6 +91,8 @@ export interface MoraCreditListItem {
   externalSource?: string;
   syncStatus?: ExternalSyncStatus;
   reportedAsOf?: string;
+  /** `YYYY-MM-DD`: desde cuándo ya no aparece en el reporte (D9). Sólo con `syncStatus = ABSENT`. */
+  absentSince?: string;
   /** El corte tiene más días que el umbral del formato (D9). */
   reportedStale?: boolean;
   /** Etiqueta de estado que trajo el archivo. Opcional: sólo importados que la mapearon. */
@@ -78,53 +101,56 @@ export interface MoraCreditListItem {
   // ── Gestión ─────────────────────────────────────────────────────────────────
   branchId?: string;
   branchName?: string;
-  case?: MoraCaseSummary;
-  /** Resultado/tipo de la última gestión del caso abierto. */
+
+  // ── Modelo sin caso (F4/08) ─────────────────────────────────────────────────
+  /** Al día / En mora: se deriva del episodio de mora abierto. Nadie la edita. */
+  situation: MoraSituation;
+  /** Categoría de mora (A/B/C…): se CALCULA con los días y los rangos de la cuenta. Ausente = al día o la cuenta no tiene categorías. */
+  category?: MoraCategoryTag;
+  /** Castigado (`credits.written_off_at`): condición aparte; puede estar en mora y castigado. */
+  writtenOff: boolean;
+  /** Prioridad del episodio de mora ABIERTO. Ausente = al día. */
+  priority?: CollectionPriority;
+  /** La prioridad la fijó una persona (el recálculo no la pisa). */
+  priorityPinned: boolean;
+  /** El responsable del crédito (`credits.assigned_manager_id`). Ausente = sin responsable. */
+  responsibleId?: string;
+  /** Nombre del responsable, resuelto por el servidor (el cobrador no puede leer `/users`). Ausente = sin responsable o no resuelto. */
+  responsibleName?: string;
+  /** Última gestión (`credits.last_action_at`), ISO. Sólo informativo: no es estado ni filtro. */
+  lastActionAt?: string;
+  /** Resultado/tipo de la última gestión del crédito. */
   lastActivityType?: string;
   lastActivityResult?: string;
   hasActivePromise: boolean;
-}
 
-/** Filtros de `GET /mora` (todos opcionales; viajan en la URL de la pantalla). */
-export interface MoraListQuery {
-  page?: number;
-  limit?: number;
-  /** Nº de crédito, nombre/apellido/razón social o zona. */
-  q?: string;
-  dpdMin?: number;
-  dpdMax?: number;
-  /** `true` = incluye también los créditos al día (por defecto sólo `dpd >= 1`). */
-  todos?: boolean;
-  balanceMin?: number;
-  balanceMax?: number;
-  /** Uno o varios separados por coma. Son prioridades del **caso**. */
-  priority?: string;
-  /** Uno o varios separados por coma. Es el estado del **caso**, no del crédito. */
-  status?: string;
-  assigneeId?: string;
-  /** `true` = casos sin cobrador. Sólo lo respeta quien ve toda la cartera. */
-  unassigned?: boolean;
-  hasCase?: boolean;
-  branchId?: string;
-  source?: 'KOBRAX' | 'PSF';
-  arrearsSource?: ArrearsSource;
-  hasPromise?: boolean;
-  /** SLA del caso vencido. No es la mora. */
-  overdue?: boolean;
-  /** Sin gestión desde esa fecha (`YYYY-MM-DD`); incluye a quien nunca tuvo. */
-  noActionSince?: string;
+  // ── Cartera / rutas (F4/08 fase 5): datos de la cartera y de las rutas ─────────────
+  /** Zona de la ubicación primaria DEL CLIENTE (la primera HOME; si no, la primera cargada). Sólo en la lista. */
   zone?: string;
-  sort?: MoraSort;
-  dir?: 'asc' | 'desc';
+  /** Todas las ubicaciones dibujables (con punto): las del cliente y las de sus garantes/familiares. Sólo en la lista. */
+  locations?: PortfolioLocation[];
+  /** Documento del deudor, siempre enmascarado. Sólo en la lista. */
+  documentMasked?: string;
+  frequency?: PaymentFrequency;
+  origin?: CreditOrigin;
+  /** Candado del dato importado (campos financieros no editables). */
+  locked?: boolean;
 }
 
-/** Una gestión del caso abierto (la misma forma que `CaseActivityItem`). */
+/** Una gestión del crédito (`credit_activities`). */
 export interface MoraActivityItem {
   id: string;
   type: string;
   result?: string;
   notes?: string;
   userId?: string;
+  /** Nombre de quien la registró (resuelto por el servidor). */
+  authorName?: string;
+  /** Sólo `ASSIGNMENT`: id de la persona a quien se asignó (sale de la nota). */
+  assignedToId?: string;
+  /** Sólo `ASSIGNMENT`: nombre de la persona a quien se asignó. */
+  assignedToName?: string;
+  episodeId?: string;
   createdAt: string;
 }
 
@@ -134,11 +160,8 @@ export interface MoraActivityItem {
  */
 export interface MoraCreditDetail extends MoraCreditListItem {
   activities: MoraActivityItem[];
-}
-
-/** `GET /mora/by-case/:caseId`: a qué crédito pertenece un caso, para que los enlaces viejos sigan abriendo. */
-export interface MoraCaseLookup {
-  creditId: string;
+  /** Las asignaciones vigentes del crédito: PRINCIPAL, TEMPORAL (con vencimiento) y APOYO. */
+  assignments: MoraAssignment[];
 }
 
 /** Cómo terminó una mora. `SOURCE_ABSENT` NO es una recuperación: sólo dice que la fuente dejó de reportarla. */
@@ -202,6 +225,8 @@ export interface MoraPromise {
   bankCode?: string;
   /** Quién la agendó / a quién le toca darle seguimiento. */
   assigneeId?: string;
+  /** Nombre de quien le da seguimiento (resuelto por el servidor). */
+  assigneeName?: string;
   observations?: string;
   createdAt: string;
 }
@@ -212,7 +237,7 @@ export const MORA_NOTE_KINDS = ['INFO', 'WARNING', 'IMPORTANT'] as const;
 export type MoraNoteKind = (typeof MORA_NOTE_KINDS)[number];
 export const MORA_NOTE_MAX_LENGTH = 1000;
 
-/** Los colores del post-it (la paleta de Gallium). Es el color de la nota; el tipo (`MORA_NOTE_KINDS`) es otra cosa. */
+/** Los colores del post-it (la paleta de post-its de Kobrax). Es el color de la nota; el tipo (`MORA_NOTE_KINDS`) es otra cosa. */
 export const MORA_NOTE_COLORS = ['YELLOW', 'PINK', 'BLUE', 'GREEN', 'PURPLE', 'ORANGE'] as const;
 export type MoraNoteColor = (typeof MORA_NOTE_COLORS)[number];
 
@@ -242,6 +267,8 @@ export interface CreditNote {
   h: number;
   zIndex: number;
   authorId?: string;
+  /** Nombre del autor (resuelto por el servidor). */
+  authorName?: string;
   createdAt: string;
   updatedAt: string;
 }

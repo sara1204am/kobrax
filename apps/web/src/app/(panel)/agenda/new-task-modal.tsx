@@ -29,7 +29,8 @@ const TIPOS = [
 
 interface Ctx {
   client: { id: string; displayName: string; nationalId: string | null };
-  credits: { creditId: string; caseId: string; code?: string; outstandingBalance: number; currency: string; daysPastDue: number }[];
+  /** TODOS los créditos del deudor que ve quien agenda (F4/08): al día o en mora. */
+  credits: { creditId: string; code?: string; outstandingBalance: number; currency: string; daysPastDue: number }[];
   contacts: { id: string; contactType: string; value: string; isPrimary: boolean }[];
   /**
    * Direcciones **en claro**. `latitude`/`longitude` pueden faltar: una dirección importada de un
@@ -74,8 +75,8 @@ export function NewTaskModal({
   const [buscando, setBuscando] = useState(false);
 
   /**
-   * El crédito elegido. Se guarda el `creditId` y no el `caseId` porque el alta pide **los dos**, y
-   * el caso se deriva de él: al revés habría que buscar el crédito de vuelta en la lista.
+   * El crédito elegido. La gestión cuelga del crédito (F4/08): ya no hace falta un caso abierto, así que
+   * también se agendan acciones preventivas sobre un crédito al día.
    */
   const [creditId, setCreditId] = useState('');
   const [tipo, setTipo] = useState<AgendaItemType>(AgendaItemType.CALL);
@@ -160,7 +161,6 @@ export function NewTaskModal({
     setError(null);
     setSaving(true);
     const res = await postJson('/api/agenda', {
-      caseId: credito!.caseId,
       creditId,
       type: tipo,
       details: details(),
@@ -191,7 +191,7 @@ export function NewTaskModal({
     onClose();
   }
 
-  /** El crédito elegido, que es de donde salen los dos ids que pide el alta. */
+  /** El crédito elegido. */
   const credito = ctx?.credits.find((c) => c.creditId === creditId);
   /** Sin crédito no hay gestión: el resto de lo que falte lo dice el servidor con su mensaje. */
   const puede = Boolean(credito);
@@ -222,7 +222,7 @@ export function NewTaskModal({
       {!ctx ? (
         <>
           {/*
-           * Primero el deudor, siempre. Una gestión cuelga de un caso, y el caso de un crédito suyo:
+           * Primero el deudor, siempre. Una gestión cuelga de un crédito suyo:
            * sin cliente no hay nada que agendar, así que preguntar el tipo antes sería pedir un dato
            * que todavía no significa nada.
            */}
@@ -268,15 +268,19 @@ export function NewTaskModal({
             </button>
           </div>
 
-          {/* Sin caso agendable no hay nada que hacer con este deudor, y conviene decirlo entero. */}
+          {/* Sin ningún crédito visible no hay nada que agendar, y conviene decirlo entero. */}
           {ctx.credits.length === 0 ? (
-            <p className="rounded-xl bg-k-warning-bg px-3 py-2.5 text-[13px] text-k-warning-text">{t('create.noCases')}</p>
+            <p className="rounded-xl bg-k-warning-bg px-3 py-2.5 text-[13px] text-k-warning-text">{t('create.noCredits')}</p>
           ) : (
             <Field label={t('create.credit')}>
               <Select value={creditId} onChange={(e) => setCreditId(e.target.value)} disabled={saving}>
                 {ctx.credits.map((c) => (
                   <option key={c.creditId} value={c.creditId}>
-                    {(c.code ?? t('create.noCode')) + ' · ' + money(c.outstandingBalance, c.currency)}
+                    {(c.code ?? t('create.noCode')) +
+                      ' · ' +
+                      money(c.outstandingBalance, c.currency) +
+                      ' · ' +
+                      (c.daysPastDue > 0 ? t('create.inArrears', { days: c.daysPastDue }) : t('create.current'))}
                   </option>
                 ))}
               </Select>

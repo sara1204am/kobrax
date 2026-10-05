@@ -1,18 +1,18 @@
 import { NextResponse } from 'next/server';
-import type { CaseListItem, RouteItem } from '@kobrax/shared';
+import type { MoraCreditListItem, RouteItem } from '@kobrax/shared';
 import { apiCall, sameOrigin } from '@/lib/bff';
 
 /**
- * Planificar el día: una ruta por cobrador, con sus casos más prioritarios.
+ * Planificar el día: una ruta por cobrador, con sus créditos en mora más prioritarios.
  *
  * 🔴 **No hay endpoint de planificación en la API, y no hace falta uno todavía.** `POST
  * /routes/generate` ya crea la ruta de otro cobrador con los casos que se le pasen, y quien tiene
- * `route:assign` puede hacerlo por cualquiera. Lo que faltaba era **quién decide qué casos entran**,
- * y eso se arma acá: los abiertos de cada cobrador, ordenados por prioridad, cortados en el tope de
- * paradas.
+ * `route:assign` puede hacerlo por cualquiera. Lo que faltaba era **quién decide qué créditos entran**,
+ * y eso se arma acá: los créditos en mora de cada cobrador (`GET /mora`, responsable), ordenados por
+ * prioridad, cortados en el tope de paradas.
  *
  * 🔴 **Las N llamadas se hacen en el servidor**, no en el navegador: son dos por cobrador (leer sus
- * casos y crear la ruta) y hacerlas desde acá deja al navegador con una sola. Mismo patrón que el
+ * créditos y crear la ruta) y hacerlas desde acá deja al navegador con una sola. Mismo patrón que el
  * lote de Mora y que el guardado del cliente.
  *
  * ⚠️ **No es atómico** —la API no ofrece nada que lo sea—, así que si una ruta falla se sigue con
@@ -31,23 +31,23 @@ const MAX_COLLECTORS = 50;
 
 interface PlanBody {
   plannedDate?: string;
-  /** Modo automático: a cada uno, sus casos más urgentes hasta el tope. */
+  /** Modo automático: a cada uno, sus créditos en mora más urgentes hasta el tope. */
   collectorIds?: string[];
   stopsPerRoute?: number;
   /**
-   * Modo elegido a mano: exactamente estos casos para este cobrador.
+   * Modo elegido a mano: exactamente estos créditos para este cobrador.
    *
-   * 🔴 Los casos **no tienen por qué ser suyos**: un cobrador puede llevarse paradas de la cartera
-   * de otro como ayuda de esa jornada, y el dueño del caso **no cambia** (decisión de la dueña,
-   * W11). La parada guarda el caso; la cartera sigue diciendo de quién es la deuda.
+   * 🔴 Los créditos **no tienen por qué ser suyos**: un cobrador puede llevarse paradas de la cartera
+   * de otro como ayuda de esa jornada, y el responsable del crédito **no cambia** (decisión de la
+   * dueña, W11). La parada guarda el crédito; la cartera sigue diciendo de quién es la deuda.
    */
-  assignments?: { collectorId: string; caseIds: string[] }[];
+  assignments?: { collectorId: string; creditIds: string[] }[];
   dryRun?: boolean;
 }
 
 export interface PlanRow {
   collectorId: string;
-  /** Casos abiertos que tiene, hasta el tope pedido. */
+  /** Créditos en mora que tiene, hasta el tope pedido. */
   stops: number;
   /** Ya tenía una ruta ese día: no se le crea otra (la base tampoco deja). */
   alreadyHasRoute?: boolean;
@@ -66,9 +66,9 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   const body = (await req.json().catch(() => null)) as PlanBody | null;
   const day = body?.plannedDate ?? '';
-  // Una fila por cobrador. En el modo a mano trae sus casos; en el automático los elige el handler.
-  const asignaciones: { collectorId: string; caseIds?: string[] }[] = body?.assignments?.length
-    ? body.assignments.filter((a) => a.collectorId && a.caseIds?.length)
+  // Una fila por cobrador. En el modo a mano trae sus créditos; en el automático los elige el handler.
+  const asignaciones: { collectorId: string; creditIds?: string[] }[] = body?.assignments?.length
+    ? body.assignments.filter((a) => a.collectorId && a.creditIds?.length)
     : [...new Set(body?.collectorIds ?? [])].map((collectorId) => ({ collectorId }));
   const collectorIds = asignaciones.map((a) => a.collectorId);
 
@@ -98,7 +98,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const rows: PlanRow[] = [];
   for (const a of asignaciones) {
     rows.push(
-      await planOne(a.collectorId, day, stopsPerRoute, conRuta.has(a.collectorId), body?.dryRun === true, a.caseIds),
+      await planOne(a.collectorId, day, stopsPerRoute, conRuta.has(a.collectorId), body?.dryRun === true, a.creditIds),
     );
   }
 
@@ -111,31 +111,31 @@ async function planOne(
   stopsPerRoute: number,
   alreadyHasRoute: boolean,
   dryRun: boolean,
-  /** Los casos elegidos a mano. Sin esto, los elige el handler: los suyos, los más urgentes. */
+  /** Los créditos elegidos a mano. Sin esto, los elige el handler: los suyos, los más urgentes. */
   chosen?: string[],
 ): Promise<PlanRow> {
-  let caseIds = chosen ?? [];
+  let creditIds = chosen ?? [];
 
   if (!chosen) {
-    // Los suyos, abiertos, lo más urgente primero: es el mismo criterio con el que se mira Mora.
-    const cases = await apiCall<CaseListItem[]>(
-      `/cases?assigneeId=${collectorId}&open=true&sort=priority&dir=desc&limit=${stopsPerRoute}`,
+    // Los suyos, en mora, lo más urgente primero: es el mismo criterio con el que se mira Mora.
+    const credits = await apiCall<MoraCreditListItem[]>(
+      `/mora?assigneeId=${collectorId}&excludeRouted=${plannedDate}&sort=priority&dir=desc&limit=${stopsPerRoute}`,
       { method: 'GET', auth: true },
     );
-    if (cases.status >= 400) {
-      return { collectorId, stops: 0, error: cases.body.error?.message };
+    if (credits.status >= 400) {
+      return { collectorId, stops: 0, error: credits.body.error?.message };
     }
-    caseIds = (cases.body.data ?? []).map((c) => c.id);
+    creditIds = (credits.body.data ?? []).map((c) => c.creditId);
   }
-  const row: PlanRow = { collectorId, stops: caseIds.length, ...(alreadyHasRoute ? { alreadyHasRoute: true } : {}) };
+  const row: PlanRow = { collectorId, stops: creditIds.length, ...(alreadyHasRoute ? { alreadyHasRoute: true } : {}) };
 
-  // Sin casos no se arma una ruta vacía, y con ruta ya armada no se pisa la que hay.
-  if (dryRun || alreadyHasRoute || caseIds.length === 0) return row;
+  // Sin créditos no se arma una ruta vacía, y con ruta ya armada no se pisa la que hay.
+  if (dryRun || alreadyHasRoute || creditIds.length === 0) return row;
 
   const created = await apiCall<RouteItem>('/routes/generate', {
     method: 'POST',
     auth: true,
-    body: JSON.stringify({ collectorId, plannedDate, caseIds }),
+    body: JSON.stringify({ collectorId, plannedDate, creditIds }),
   });
   if (created.status >= 400) return { ...row, error: created.body.error?.message };
   return { ...row, created: true };

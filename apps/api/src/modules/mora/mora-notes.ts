@@ -1,4 +1,5 @@
 import type { CreditNote, MoraNoteAnchor, MoraNoteColor, MoraNoteKind } from '@kobrax/shared';
+import { nameOf, type NameMap } from './mora-names';
 
 /** Lo que `MoraService` lee de `credit_notes`. */
 export interface NoteRow {
@@ -18,7 +19,7 @@ export interface NoteRow {
   updatedAt: Date;
 }
 
-export function serializeNote(n: NoteRow): CreditNote {
+export function serializeNote(n: NoteRow, names?: NameMap): CreditNote {
   return {
     id: n.id,
     creditId: n.creditId,
@@ -32,6 +33,7 @@ export function serializeNote(n: NoteRow): CreditNote {
     h: n.height,
     zIndex: n.zIndex,
     authorId: n.authorId ?? undefined,
+    authorName: nameOf(names, n.authorId),
     createdAt: n.createdAt.toISOString(),
     updatedAt: n.updatedAt.toISOString(),
   };

@@ -86,11 +86,10 @@ export default async function PagoPage({ params }: { params: { id: string } }) {
                 {t('detail.credit')}
               </Link>
             )}
-            {payment.caseId && (
-              <Link href={`/mora/${payment.creditId}`} className="text-[14px] font-medium text-k-purple hover:underline">
-                {t('detail.case')}
-              </Link>
-            )}
+            {/* F4/08: la gestión cuelga del crédito, no de un caso: siempre hay a dónde ir. */}
+            <Link href={`/mora/${payment.creditId}`} className="text-[14px] font-medium text-k-purple hover:underline">
+              {t('detail.openMora')}
+            </Link>
           </div>
         </Card>
 

@@ -32,7 +32,7 @@ let accountId: string;
 let token: string;
 
 /** Un crédito está en mora si está vivo, con días y en un estado que no es cerrado. Misma regla que el trigger. */
-const EN_MORA = `c.deleted_at IS NULL AND c.days_past_due > 0 AND c.status::text NOT IN ('PAID', 'CANCELLED', 'WRITTEN_OFF')`;
+const EN_MORA = `c.deleted_at IS NULL AND c.days_past_due > 0 AND c.status::text NOT IN ('PAID', 'CANCELLED')`;
 
 async function count(sql: string): Promise<number> {
   const [row] = await prisma.$queryRawUnsafe<{ n: bigint }[]>(sql);

@@ -24,7 +24,7 @@ interface Check {
   rows: () => Promise<{ account_id: string; detail: string }[]>;
 }
 
-const PERMANENT = `ca.revoked_at IS NULL AND ca.expires_at IS NULL AND ca.case_id IS NULL`;
+const PERMANENT = `ca.revoked_at IS NULL AND ca.expires_at IS NULL AND ca.kind = 'PRINCIPAL'`;
 
 const CHECKS: Check[] = [
   {

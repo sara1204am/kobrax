@@ -198,3 +198,158 @@ export function itemWhen(
   const key = `timeSlot.${item.timeSlot}`;
   return item.timeSlot && t.has(key) ? t(key) : t('noTime');
 }
+
+/** Los estados que se ofrecen en el filtro; «other» agrupa lo que salió distinto (reagendada o cancelada). */
+export type StatusFilter = '' | 'SCHEDULED' | 'EXECUTED' | 'CANCELLED' | 'RESCHEDULED';
+
+export interface AgendaFilters {
+  /** Id del cobrador. */
+  gestor?: string;
+  tipo?: string;
+  estado?: string;
+  /** Texto libre: deudor, código del crédito o id de la gestión. */
+  q?: string;
+}
+
+const norm = (s: string): string =>
+  s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim();
+
+/**
+ * Los filtros de la pantalla, una sola vez, para el día, el mes, las métricas y el calendario.
+ *
+ * `GET /agenda` no filtra por tipo, estado ni texto: el día llega entero y sin paginar, así que
+ * filtrar acá no esconde nada. La búsqueda ignora tildes y mayúsculas.
+ */
+export function filterItems<
+  T extends { id: string; assigneeId?: string; type: string; status: string; clientName?: string; creditCode?: string },
+>(items: T[], f: AgendaFilters): T[] {
+  const q = f.q ? norm(f.q) : '';
+  return items.filter((i) => {
+    if (f.gestor && i.assigneeId !== f.gestor) return false;
+    if (f.tipo && i.type !== f.tipo) return false;
+    if (f.estado && i.status !== f.estado) return false;
+    if (q) {
+      const hay = norm(`${i.clientName ?? ''} ${i.creditCode ?? ''} ${i.id}`);
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Las cifras del «Resumen del día». **No hay «en proceso»**: una gestión está pendiente, ejecutada,
+ * cancelada o reagendada, y se cuentan tal cual.
+ */
+export function daySummary(items: { status: AgendaItemStatus }[]): {
+  total: number;
+  pending: number;
+  done: number;
+  /** Reagendadas + canceladas. */
+  other: number;
+} {
+  let pending = 0;
+  let done = 0;
+  let other = 0;
+  for (const i of items) {
+    if (i.status === AgendaItemStatus.SCHEDULED) pending += 1;
+    else if (i.status === AgendaItemStatus.EXECUTED) done += 1;
+    else other += 1;
+  }
+  return { total: items.length, pending, done, other };
+}
+
+export type DaySort = 'hour' | 'type' | 'assignee';
+
+type Timed = {
+  timeMode: ScheduleTimeMode;
+  scheduledTime?: string;
+  timeSlot?: string;
+};
+
+/** Orden de las franjas dentro del día: la mañana antes que la tarde. */
+const SLOT_ORDER = ['MORNING', 'AFTERNOON', 'NIGHT'];
+
+/**
+ * La clave de orden de una gestión dentro del día: las de hora exacta primero (por hora), después las
+ * de franja (mañana, tarde, noche) y al final las que no tienen hora.
+ */
+export function timeSortKey(item: Timed): string {
+  const hhmm = item.scheduledTime?.match(/^(\d{2}):(\d{2})/);
+  if (item.timeMode !== ScheduleTimeMode.LAPSE && hhmm) return `0-${hhmm[1]}:${hhmm[2]}`;
+  if (item.timeMode === ScheduleTimeMode.LAPSE && item.timeSlot && SLOT_ORDER.includes(item.timeSlot)) {
+    return `1-${SLOT_ORDER.indexOf(item.timeSlot)}`;
+  }
+  return '2-';
+}
+
+/** La clave del grupo horario: la hora en punto, la franja, o «sin hora». */
+export function hourGroupKey(item: Timed): string {
+  const k = timeSortKey(item);
+  if (k.startsWith('0-')) return `h:${k.slice(2, 4)}:00`;
+  if (k.startsWith('1-')) return `s:${item.timeSlot}`;
+  return 'none';
+}
+
+export interface DayGroup<T> {
+  key: string;
+  label: string;
+  items: T[];
+}
+
+/**
+ * El día agrupado según el orden elegido, con las gestiones de cada grupo siempre por hora.
+ *
+ *  · `hour` — una banda por hora en punto («09:00»); las de franja (mañana/tarde/noche) van en su propio
+ *    grupo con el nombre de la franja, y las sin hora al final.
+ *  · `type` — una banda por tipo de gestión.
+ *  · `assignee` — una banda por cobrador (sin cobrador al final).
+ *
+ * Es pura: las etiquetas las resuelve quien llama, que es quien tiene el idioma.
+ */
+export function groupDay<T extends Timed & { type: string; assigneeId?: string }>(
+  items: T[],
+  sort: DaySort,
+  labels: { slot: (slot?: string) => string; noTime: string; type: (type: string) => string; assignee: (item: T) => string },
+): DayGroup<T>[] {
+  const byTime = [...items].sort((a, b) => timeSortKey(a).localeCompare(timeSortKey(b)));
+  const groups = new Map<string, DayGroup<T>>();
+  for (const item of byTime) {
+    let key: string;
+    let label: string;
+    if (sort === 'type') {
+      key = `t:${item.type}`;
+      label = labels.type(item.type);
+    } else if (sort === 'assignee') {
+      key = `a:${item.assigneeId ?? ''}`;
+      label = labels.assignee(item);
+    } else {
+      key = hourGroupKey(item);
+      label = key.startsWith('h:') ? key.slice(2) : key.startsWith('s:') ? labels.slot(item.timeSlot) : labels.noTime;
+    }
+    const g = groups.get(key) ?? { key, label, items: [] };
+    g.items.push(item);
+    groups.set(key, g);
+  }
+  const out = [...groups.values()];
+  // Por hora ya sale ordenado (se insertó en orden); por tipo o cobrador se ordena por nombre, y lo huérfano al final.
+  if (sort !== 'hour') out.sort((a, b) => (a.key.endsWith(':') ? 1 : b.key.endsWith(':') ? -1 : a.label.localeCompare(b.label)));
+  return out;
+}
+
+/** «Miércoles, 4 de octubre» — con la inicial en mayúscula, en el idioma de quien mira. */
+export function longDay(iso: string, locale: string): string {
+  const s = new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(
+    new Date(`${iso}T00:00:00.000Z`),
+  );
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** La hora que se escribe en la fila: la exacta, o nada si la gestión es por franja. */
+export function rowTime(item: Timed): string | undefined {
+  const k = timeSortKey(item);
+  return k.startsWith('0-') ? k.slice(2) : undefined;
+}

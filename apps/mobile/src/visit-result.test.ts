@@ -123,3 +123,25 @@ describe('paymentOutcome', () => {
     expect(paymentOutcome(100, undefined)).toBe(VisitOutcome.PAID);
   });
 });
+
+describe('postVisitWarning · lo que quedó en la cola', () => {
+  it('lo guardado en el teléfono se avisa igual (el banner sigue), pero sin pedir que lo anote', () => {
+    const aviso = postVisitWarning([], ['el pago de Bs 250']);
+    expect(aviso).toBe('La visita quedó registrada; el pago de Bs 250 quedó guardado en el teléfono y se sube solo cuando haya señal.');
+    expect(aviso).not.toContain('Anotalo');
+  });
+
+  it('junta varias partes guardadas', () => {
+    expect(postVisitWarning([], ['la foto', 'la promesa'])).toContain('la foto y la promesa quedó guardado');
+  });
+
+  it('mezcla: lo perdido pide anotarlo y lo guardado se menciona aparte', () => {
+    const aviso = postVisitWarning(['el pago NO se guardó'], ['la foto'])!;
+    expect(aviso).toContain('el pago NO se guardó. Anotalo y avisá a tu supervisor.');
+    expect(aviso).toContain('Además, la foto quedó guardado en el teléfono');
+  });
+
+  it('sin fallas ni cola sigue devolviendo null', () => {
+    expect(postVisitWarning([], [])).toBeNull();
+  });
+});

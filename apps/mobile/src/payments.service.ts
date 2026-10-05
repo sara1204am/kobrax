@@ -14,11 +14,6 @@ import { cachedList } from './sync/cached';
  */
 export type { NewPayment, PaymentChannel, PaymentItem, PaymentMethod } from '@kobrax/shared';
 
-export function listPayments(caseId: string): Promise<QueryResult<PaymentItem[]>> {
-  const query = toQuery({ caseId, limit: 100 });
-  return cachedList<PaymentItem>('payment', query, () => apiQuery<PaymentItem[]>(`/payments${query}`));
-}
-
 /**
  * Los pagos de un día (Rutas S6). Devuelve los de **todo el tenant**: acotarlos a la ruta —y al
  * cobrador— es responsabilidad de quien llama, porque el KPI se calcula en el cliente
@@ -36,7 +31,7 @@ export function createPayment(input: NewPayment, idempotencyKey: string): Promis
   return apiMutate<PaymentItem>('/payments', 'POST', input, { 'idempotency-key': idempotencyKey });
 }
 
-/** Los pagos de un crédito (la ficha de mora los muestra aunque el crédito no tenga caso). */
+/** Los pagos de un crédito: los muestran la ficha del cliente y la de mora. */
 export function listCreditPayments(creditId: string): Promise<QueryResult<PaymentItem[]>> {
   const query = toQuery({ creditId, limit: 100 });
   return cachedList<PaymentItem>('payment', query, () => apiQuery<PaymentItem[]>(`/payments${query}`));

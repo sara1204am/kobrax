@@ -7,7 +7,7 @@
  * reducer desde el agendado, fija el deudor (es el ancla, no se cambia editando) y **bloquea la fecha**:
  * mover el día es *reagendar* y deja rastro (`plans/agenda/editar-eliminar.md` D5).
  */
-import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
@@ -50,12 +50,17 @@ import {
   addClientLocation,
   clientContext,
   createItem,
+  creditSituationLabel,
   getItem,
   updateItem,
   type AgendaClientContext,
   type ClientLocationType,
+  type ContactOption,
+  type LocationOption,
   type PhoneContactType,
 } from '@/agenda.service';
+import { nuevoId } from '@/ids';
+import { LOCAL_ID_PREFIX } from '@/sync/queue';
 import { clientDisplayName, type ClientHit } from '@/clients.service';
 import { useClientSearch } from '@/use-client-search';
 import { queueForLater } from '@/sync/sync.service';
@@ -114,6 +119,9 @@ export default function CrearGestionScreen() {
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [picker, setPicker] = useState<PickerKind | null>(null);
   const [saving, setSaving] = useState(false);
+  // 🔴 El id del agendado se fija al ABRIR la pantalla, no en cada intento: si el server lo guardó pero la
+  // respuesta se perdió (timeout), el reintento —o el doble toque— lleva el MISMO id y no crea otro (ni otro recordatorio).
+  const createId = useRef(nuevoId());
   const [error, setError] = useState<string | null>(null);
   /** Lo que el usuario tipeó en el monto; `details.amount` guarda el número derivado. */
   const [amountText, setAmountText] = useState('');
@@ -218,7 +226,7 @@ export default function CrearGestionScreen() {
     // Con un solo crédito no hay nada que elegir.
     if (res.data.credits.length === 1) {
       const only = res.data.credits[0]!;
-      dispatch({ t: 'credit', caseId: only.caseId, creditId: only.creditId });
+      dispatch({ t: 'credit', creditId: only.creditId });
     }
   }, []);
 
@@ -238,14 +246,27 @@ export default function CrearGestionScreen() {
       value: newPhone.value.trim(),
       notes: newPhone.notes.trim() || undefined,
     });
+    if (res.status === 'offline') {
+      // Sin señal el teléfono se guarda en el teléfono y sube solo. Se ofrece ya, con un id provisional
+      // (`local:…`): el agendado que lo cite lo traduce al id real cuando suba (ver `sync/queue`).
+      const localId = LOCAL_ID_PREFIX + nuevoId();
+      const input = { contactType: newPhone.contactType, value: newPhone.value.trim(), notes: newPhone.notes.trim() || undefined };
+      const guardada = await queueForLater({ kind: 'client.contact', clientId: ctx.client.id, op: 'add', localId, input });
+      setSavingPhone(false);
+      if (!guardada) return setPhoneError('Sin conexión y no se pudo guardar en el teléfono. Reintentá.');
+      const option: ContactOption = { id: localId, contactType: input.contactType, value: input.value, isPrimary: false };
+      setCtx({ ...ctx, contacts: [...ctx.contacts, option] });
+      dispatch({ t: 'details', patch: { contactId: localId } });
+      setNewPhone({ value: '', notes: '', contactType: 'PHONE' });
+      setSheet(null);
+      return;
+    }
     setSavingPhone(false);
     if (res.status !== 'ok') {
       setPhoneError(
-        res.status === 'offline'
-          ? 'Sin conexión — el teléfono no se guardó.'
-          : res.status === 'unauthenticated'
-            ? 'Tu sesión venció — volvé a entrar.'
-            : res.message,
+        res.status === 'unauthenticated'
+          ? 'Tu sesión venció — volvé a entrar.'
+          : res.message,
       );
       return;
     }
@@ -293,14 +314,39 @@ export default function CrearGestionScreen() {
       latitude: newLoc.latitude,
       longitude: newLoc.longitude,
     });
+    if (res.status === 'offline') {
+      const localId = LOCAL_ID_PREFIX + nuevoId();
+      const input = {
+        locationType: newLoc.locationType,
+        address: newLoc.address.trim(),
+        zone: newLoc.zone.trim() || undefined,
+        referenceNotes: newLoc.referenceNotes.trim() || undefined,
+        latitude: newLoc.latitude,
+        longitude: newLoc.longitude,
+      };
+      const guardada = await queueForLater({ kind: 'client.location', clientId: ctx.client.id, op: 'add', localId, input });
+      setSavingLoc(false);
+      if (!guardada) return setLocError('Sin conexión y no se pudo guardar en el teléfono. Reintentá.');
+      const option: LocationOption = {
+        id: localId,
+        locationType: input.locationType,
+        address: input.address,
+        zone: input.zone,
+        latitude: input.latitude,
+        longitude: input.longitude,
+      };
+      setCtx({ ...ctx, locations: [...ctx.locations, option] });
+      dispatch({ t: 'details', patch: { locationId: localId } });
+      setNewLoc({ address: '', zone: '', referenceNotes: '', locationType: 'HOME' });
+      setSheet(null);
+      return;
+    }
     setSavingLoc(false);
     if (res.status !== 'ok') {
       setLocError(
-        res.status === 'offline'
-          ? 'Sin conexión — la dirección no se guardó.'
-          : res.status === 'unauthenticated'
-            ? 'Tu sesión venció — volvé a entrar.'
-            : res.message,
+        res.status === 'unauthenticated'
+          ? 'Tu sesión venció — volvé a entrar.'
+          : res.message,
       );
       return;
     }
@@ -325,11 +371,20 @@ export default function CrearGestionScreen() {
   const save = useCallback(async () => {
     // Editar manda sólo lo editable (sin fecha ni deudor); crear manda el alta completa.
     const patch = editId ? buildPatch(form) : null;
-    const payload = editId ? null : buildPayload(form);
+    const base = editId ? null : buildPayload(form);
+    const payload = base && { ...base, id: createId.current };
     if (!patch && !payload) return;
     setSaving(true);
     setError(null);
-    const res = patch ? await updateItem(editId!, patch) : await createItem(payload!);
+    // Un teléfono o dirección cargados sin señal todavía no existen en el server: el agendado que los cita
+    // no se puede mandar ahora (el server rechazaría el id provisional). Va por la cola, que lo traduce al subir.
+    const details = (payload?.details ?? {}) as Record<string, unknown>;
+    const usaLocal = [details.contactId, details.locationId].some((v) => typeof v === 'string' && v.startsWith(LOCAL_ID_PREFIX));
+    const res: Awaited<ReturnType<typeof createItem>> = patch
+      ? await updateItem(editId!, patch)
+      : usaLocal
+        ? { status: 'offline' }
+        : await createItem(payload!);
     setSaving(false);
     if (res.status === 'ok') {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -447,7 +502,7 @@ export default function CrearGestionScreen() {
             <SectionLabel>Crédito</SectionLabel>
             <SelectRow
               icon="💳"
-              value={credit ? `${credit.code ?? 'Crédito'} · ${money(credit.outstandingBalance, credit.currency)}` : undefined}
+              value={credit ? `${credit.code ?? 'Crédito'} · ${money(credit.outstandingBalance, credit.currency)} · ${creditSituationLabel(credit.daysPastDue)}` : undefined}
               placeholder="Elegí el crédito"
               onPress={() => setSheet('credit')}
             />
@@ -635,11 +690,11 @@ export default function CrearGestionScreen() {
         options={(ctx?.credits ?? []).map((c) => ({
           key: c.creditId,
           label: c.code ?? 'Crédito',
-          hint: `${money(c.outstandingBalance, c.currency)} · ${c.daysPastDue} días de mora`,
+          hint: `${money(c.outstandingBalance, c.currency)} · ${creditSituationLabel(c.daysPastDue)}`,
         }))}
         onPick={(key) => {
           const c = ctx!.credits.find((x) => x.creditId === key)!;
-          dispatch({ t: 'credit', caseId: c.caseId, creditId: c.creditId });
+          dispatch({ t: 'credit', creditId: c.creditId });
         }}
       />
       <PickerSheet

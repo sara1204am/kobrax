@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { AgendaItemStatus, partitionDay } from '@kobrax/shared';
+import { AgendaItemStatus, ScheduleTimeMode, partitionDay } from '@kobrax/shared';
 import {
   dayMetrics,
   dayOr,
+  daySummary,
+  filterItems,
   groupByAssignee,
   groupByHour,
+  groupDay,
   itemActions,
   loadByDay,
+  longDay,
   monthGrid,
+  rowTime,
   shiftDay,
   shiftMonth,
   weekOf,
@@ -199,5 +204,84 @@ describe('loadByDay + dayMetrics', () => {
 
   it('un día vacío da 0 y no NaN', () => {
     expect(dayMetrics([])).toEqual({ total: 0, done: 0, overdue: 0, donePct: 0 });
+  });
+});
+
+describe('filterItems', () => {
+  const rows = [
+    { id: 'a1', assigneeId: 'u1', type: 'CALL', status: 'SCHEDULED', clientName: 'María López', creditCode: 'C-123' },
+    { id: 'b2', assigneeId: 'u2', type: 'VISIT', status: 'EXECUTED', clientName: 'Juan Pérez', creditCode: 'C-999' },
+    { id: 'c3', assigneeId: 'u1', type: 'VISIT', status: 'CANCELLED', clientName: 'Ana Torres', creditCode: undefined },
+  ];
+
+  it('sin filtros devuelve todo', () => {
+    expect(filterItems(rows, {})).toHaveLength(3);
+  });
+
+  it('cobrador, tipo y estado se combinan', () => {
+    expect(filterItems(rows, { gestor: 'u1', tipo: 'VISIT' }).map((r) => r.id)).toEqual(['c3']);
+    expect(filterItems(rows, { estado: 'EXECUTED' }).map((r) => r.id)).toEqual(['b2']);
+  });
+
+  it('el texto busca por deudor, código de crédito o id, sin tildes ni mayúsculas', () => {
+    expect(filterItems(rows, { q: 'perez' }).map((r) => r.id)).toEqual(['b2']);
+    expect(filterItems(rows, { q: 'c-123' }).map((r) => r.id)).toEqual(['a1']);
+    expect(filterItems(rows, { q: 'C3' }).map((r) => r.id)).toEqual(['c3']);
+    expect(filterItems(rows, { q: 'zzz' })).toEqual([]);
+  });
+});
+
+describe('daySummary', () => {
+  it('cuenta pendientes, completadas y las que salieron distinto; no hay «en proceso»', () => {
+    const s = daySummary([
+      { status: AgendaItemStatus.SCHEDULED },
+      { status: AgendaItemStatus.SCHEDULED },
+      { status: AgendaItemStatus.EXECUTED },
+      { status: AgendaItemStatus.CANCELLED },
+      { status: AgendaItemStatus.RESCHEDULED },
+    ]);
+    expect(s).toEqual({ total: 5, pending: 2, done: 1, other: 2 });
+  });
+});
+
+describe('groupDay', () => {
+  const base = { type: 'CALL', assigneeId: 'u1' };
+  const items = [
+    { id: '1', ...base, timeMode: ScheduleTimeMode.FIXED, scheduledTime: '09:30' },
+    { id: '2', ...base, timeMode: ScheduleTimeMode.FIXED, scheduledTime: '09:00' },
+    { id: '3', ...base, type: 'VISIT', assigneeId: 'u2', timeMode: ScheduleTimeMode.FIXED, scheduledTime: '11:15' },
+    { id: '4', ...base, timeMode: ScheduleTimeMode.LAPSE, timeSlot: 'AFTERNOON' },
+    { id: '5', ...base, timeMode: ScheduleTimeMode.LAPSE, timeSlot: 'MORNING' },
+    { id: '6', ...base, timeMode: ScheduleTimeMode.FIXED },
+  ];
+  const labels = {
+    slot: (s?: string) => (s === 'MORNING' ? 'Mañana' : 'Tarde'),
+    noTime: 'Sin hora',
+    type: (t: string) => (t === 'CALL' ? 'Llamada' : 'Visita'),
+    assignee: (i: { assigneeId?: string }) => (i.assigneeId === 'u1' ? 'Ana' : 'Luis'),
+  };
+
+  it('por hora: una banda por hora en punto, luego las franjas y al final las sin hora', () => {
+    const g = groupDay(items, 'hour', labels);
+    expect(g.map((x) => x.label)).toEqual(['09:00', '11:00', 'Mañana', 'Tarde', 'Sin hora']);
+    expect(g[0]!.items.map((i) => i.id)).toEqual(['2', '1']); // 09:00 antes que 09:30
+  });
+
+  it('por tipo y por cobrador agrupa por nombre y deja la hora como orden interno', () => {
+    expect(groupDay(items, 'type', labels).map((x) => x.label)).toEqual(['Llamada', 'Visita']);
+    const byWho = groupDay(items, 'assignee', labels);
+    expect(byWho.map((x) => x.label)).toEqual(['Ana', 'Luis']);
+    expect(byWho[0]!.items[0]!.id).toBe('2');
+  });
+});
+
+describe('longDay / rowTime', () => {
+  it('escribe el día con inicial mayúscula', () => {
+    expect(longDay('2026-10-07', 'es')).toBe('Miércoles, 7 de octubre');
+  });
+
+  it('la hora de la fila sólo existe para las de hora exacta', () => {
+    expect(rowTime({ timeMode: ScheduleTimeMode.FIXED, scheduledTime: '09:30' })).toBe('09:30');
+    expect(rowTime({ timeMode: ScheduleTimeMode.LAPSE, timeSlot: 'MORNING' })).toBeUndefined();
   });
 });

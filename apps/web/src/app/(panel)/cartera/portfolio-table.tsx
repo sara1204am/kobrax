@@ -139,15 +139,7 @@ export function PortfolioTable({
    */
   const filters: FilterDef[] = [
     {
-      keys: ['collectorId'],
-      label: t('filters.collector'),
-      type: 'select',
-      allLabel: t('filters.allCollectors'),
-      options: collectors.map((m) => ({ value: m.userId, label: memberName(m) })),
-    },
-    {
-      // P7: el responsable del CRÉDITO. Reasignar un crédito no mueve sus casos abiertos, así que
-      // «responsable» y «cobrador del caso» pueden ser personas distintas y cada filtro dice cuál.
+      // F4/08: el responsable del CRÉDITO (principal, temporal o apoyo). Ya no hay «cobrador del caso».
       keys: ['managerId'],
       label: t('filters.manager'),
       type: 'select',

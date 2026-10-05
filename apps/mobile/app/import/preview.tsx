@@ -2,15 +2,19 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { COLORS, RADIUS, SPACING } from '@/theme';
-import { Header, OfflineIndicator, SectionLabel, StatTile } from '@/ui';
+import { Header, OfflineIndicator, SectionLabel } from '@/ui';
+import { CountTiles } from '@/import-views';
 import { Button, ErrorBanner } from '@/components';
 import {
+  alreadyAppliedText,
   importService,
   LIST_LIMIT,
   markImported,
   moreLabel,
   previewLine,
   rejectText,
+  selfAssignments,
+  unassignedNewCodes,
   warningText,
   type PortfolioSummary,
 } from '@/import.service';
@@ -37,6 +41,8 @@ export default function PreviewScreen() {
   const [preview, setPreview] = useState<PortfolioSummary | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** «Asignar todo a mí»: los nuevos sin sugerencia del reporte quedan a nombre de quien confirma. */
+  const [selfAll, setSelfAll] = useState(false);
 
   // El archivo se rearma desde los params dentro del callback: así la dependencia es el `uri`
   // (un string estable) y no un objeto nuevo en cada render, que relanzaría la lectura sola.
@@ -55,8 +61,8 @@ export default function PreviewScreen() {
 
   /*
    * Quién queda responsable. El cobrador (SELF) no elige: lo nuevo es suyo. Quien reparte (CHOOSE)
-   * acepta en el teléfono la sugerencia del reporte; repartir entre varias personas se hace en el
-   * panel web, así que si algún nuevo no tiene sugerencia, acá no se confirma.
+   * acepta en el teléfono la sugerencia del reporte; si algún nuevo no trae sugerencia puede asignarlos a sí
+   * mismo («Asignar todo a mí»). Repartir entre varias personas se hace en el panel web.
    */
   const mode = preview?.assignment?.mode;
   const newHint =
@@ -70,19 +76,16 @@ export default function PreviewScreen() {
     : preview.alreadyApplied
       ? {
           title: 'Este archivo ya se importó',
-          text: 'Confirmar no cambiaría nada. Para cambiar responsables, usá Cartera en el panel web.',
+          text: `${alreadyAppliedText(preview.alreadyApplied)} Confirmar no cambiaría nada. Para cambiar responsables, usa Cartera en el panel web.`,
         }
-      : mode === 'CHOOSE' && preview.preview.toCreate.some((r) => !r.suggestedAssigneeId)
-        ? {
-            title: 'Hay créditos nuevos sin responsable',
-            text: 'El reporte no dice de quién son. Asigná los responsables desde el panel web para importarlo.',
-          }
-        : null;
+      : null;
+  const sinResponsable = !preview || preview.alreadyApplied || mode !== 'CHOOSE' ? 0 : unassignedNewCodes(preview).length;
+  const needsSelf = sinResponsable > 0 && !selfAll;
 
   async function confirm() {
     setBusy(true);
     setError(null);
-    const res = await importService.run({ uri, name, mimeType: mimeType || undefined }, false);
+    const res = await importService.run({ uri, name, mimeType: mimeType || undefined }, false, selfAll && preview ? selfAssignments(preview) : undefined);
     setBusy(false);
     if (res.status !== 'ok') return setError(errorText(res));
     // El día queda importado acá, con el POST real ya aplicado — no antes (la Vista Previa no
@@ -95,6 +98,9 @@ export default function PreviewScreen() {
         updated: String(res.counts.updated),
         setCurrent: String(res.counts.setCurrent),
         invalid: String(res.counts.invalid),
+        absent: res.counts.absent === undefined ? '' : String(res.counts.absent),
+        reappeared: String(res.counts.reappeared ?? 0),
+        ignored: String(res.counts.ignored ?? 0),
         skip: res.idempotentSkip ? '1' : '',
         // Sólo los que se dibujan: el resto no viaja por la navegación.
         rejects: JSON.stringify(res.preview.invalid.slice(0, LIST_LIMIT)),
@@ -134,7 +140,7 @@ export default function PreviewScreen() {
               <View style={styles.note}>
                 <Text style={styles.noteTitle}>Este archivo ya se importó</Text>
                 <Text style={styles.hint}>
-                  Se aplicó antes y no se vuelve a aplicar. Si tu sistema emitió uno nuevo, elegí ese.
+                  {alreadyAppliedText(preview.alreadyApplied)} No se vuelve a aplicar. Si tu sistema emitió uno nuevo, elige ese.
                 </Text>
               </View>
             ) : (
@@ -149,11 +155,19 @@ export default function PreviewScreen() {
                   </Text>
                 )}
                 <SectionLabel>QUÉ VA A PASAR</SectionLabel>
-                <View style={styles.tiles}>
-                  <StatTile label="Agregados" value={String(preview.counts.created)} />
-                  <StatTile label="Actualizados" value={String(preview.counts.updated)} />
-                  <StatTile label="Ya no vienen" value={String(preview.counts.absent ?? preview.counts.setCurrent)} />
-                </View>
+                <CountTiles counts={preview.counts} />
+                {/* Modo CHOOSE con créditos nuevos sin responsable: el servidor no deja confirmar así. */}
+                {sinResponsable > 0 && (
+                  <View style={styles.note}>
+                    <Text style={styles.noteTitle}>{`${sinResponsable} crédito${sinResponsable === 1 ? '' : 's'} nuevo${sinResponsable === 1 ? '' : 's'} sin responsable`}</Text>
+                    <Text style={styles.hint}>
+                      {selfAll
+                        ? 'Quedarán a tu nombre. El resto sigue con el responsable que sugiere el reporte.'
+                        : 'El reporte no dice de quién son. Puedes asignarlos a ti, o repartirlos desde el panel web.'}
+                    </Text>
+                    {!selfAll && <Button label="Asignar todo a mí" variant="ghost" onPress={() => setSelfAll(true)} />}
+                  </View>
+                )}
 
                 <BucketList
                   title="Se agregan"
@@ -218,7 +232,7 @@ export default function PreviewScreen() {
         )}
 
         {/* Sin preview cargada no existe el confirmar: la Vista Previa no se saltea. */}
-        {preview && !preview.idempotentSkip && !blocked && !isTest && (
+        {preview && !preview.idempotentSkip && !blocked && !needsSelf && !isTest && (
           <Button label="Confirmar importación" onPress={() => void confirm()} loading={busy} />
         )}
         {isTest && preview && (

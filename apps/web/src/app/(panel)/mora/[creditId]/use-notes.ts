@@ -14,8 +14,8 @@ import { sendJson } from '@/lib/client';
  * vuelve a como estaba y se avisa — nunca queda en pantalla algo que no se guardó.
  */
 export function useNotes(creditId: string, initial: CreditNote[] | null) {
-  const t = useTranslations('panel.cases.ficha.notes');
-  const tErr = useTranslations('panel.cases');
+  const t = useTranslations('panel.mora.ficha.notes');
+  const tErr = useTranslations('panel.mora');
   const locale = useLocale();
   const router = useRouter();
   const toast = useToast();

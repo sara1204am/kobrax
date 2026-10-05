@@ -283,7 +283,7 @@ export function creditFormState(f: CreditForm): CreditFormState {
  * El alta que se manda: las condiciones más los campos sueltos **derivados de ellas** por la misma
  * regla que aplica la API (D14), así nunca pueden contradecirse. `null` si no se puede guardar.
  *
- * `openCase` y `origin` los pone quien llama (el BFF), igual que con `buildPrestamoPayload`.
+ * `origin` lo pone quien llama (el BFF), igual que con `buildPrestamoPayload`.
  */
 export function buildNewCreditPayload(f: CreditForm, clientId: string, initialState?: CreditInitialState): NewCreditInput | null {
   if (!creditFormState(f).canSubmit) return null;

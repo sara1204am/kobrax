@@ -17,9 +17,8 @@ Query, Zustand, next-auth, Recharts, socket.io-client). Nada de eso está en
 agregala de verdad y actualizá esta lista.
 
 En el mismo corte se borró `src/app/panel/**` (CRUD genérico de clientes /
-créditos / casos) junto con `components/panel.tsx` y `components/panel-nav.tsx`.
-Motivo: se escribieron contra los endpoints genéricos `/clients`, `/credits`,
-`/cases`, **antes** de que el móvil definiera cartera, agenda, rutas, import y
+créditos) junto con `components/panel.tsx` y `components/panel-nav.tsx`.
+Motivo: se escribieron contra los endpoints genéricos `/clients` y `/credits`, **antes** de que el móvil definiera cartera, agenda, rutas, import y
 cuenta con sus propios endpoints y decisiones. Si necesitás mirar cómo estaban
 resueltas esas tablas, están en el historial de git.
 

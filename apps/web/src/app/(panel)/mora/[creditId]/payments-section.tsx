@@ -4,6 +4,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { memberName, type Member, type PaymentItem } from '@kobrax/shared';
 import { Badge, Section } from '@/components/panel-ui';
 import { date, money } from '@/lib/format';
+import { ToneTile, TONES, type Tone } from '@/components/tone-tile';
 
 /**
  * Los pagos del crédito, del último al primero.
@@ -28,7 +29,7 @@ export function PaymentsSection({
   /** El crédito es de una fuente externa (PSF). */
   external: boolean;
 }) {
-  const t = useTranslations('panel.cases.ficha.payments');
+  const t = useTranslations('panel.mora.ficha.payments');
   const tMethod = useTranslations('panel.payments.method');
   const tChannel = useTranslations('panel.payments.channel');
   const locale = useLocale();
@@ -66,13 +67,12 @@ export function PaymentsSection({
           <ul className="max-h-[21rem] space-y-2.5 overflow-y-auto overscroll-contain pr-1">
             {payments.map((p) => {
               const look = METHOD_LOOK[p.method] ?? METHOD_LOOK.CASH!;
+              const pill = TONES[look.tone].pill;
               return (
                 <li key={p.id} className="flex gap-3.5 rounded-xl border border-k-border bg-white px-4 py-3 shadow-[0_2px_8px_rgba(26,58,82,.06)]">
-                  <span aria-hidden className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${look.tile}`}>
-                    <svg viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      {look.icon}
-                    </svg>
-                  </span>
+                  <ToneTile tone={look.tone} size="lg" outline>
+                    {look.icon}
+                  </ToneTile>
                   <div className="min-w-0 flex-1">
                     <span className="text-[15px] font-semibold text-k-navy">{money(p.amount, currency)}</span>
                     <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-k-text-2">
@@ -84,7 +84,7 @@ export function PaymentsSection({
                     {p.notes && <p className="mt-0.5 text-[13px] text-k-text">{p.notes}</p>}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1.5">
-                    <span className={`rounded-md px-2.5 py-1 text-[12px] font-medium ${look.pill}`}>{tMethod(p.method)}</span>
+                    <span className={`rounded-md px-2.5 py-1 text-[12px] font-medium ${pill}`}>{tMethod(p.method)}</span>
                     <span className="text-[12.5px] text-k-text-2">{date(p.paymentDate, locale)}</span>
                   </div>
                 </li>
@@ -99,10 +99,9 @@ export function PaymentsSection({
 }
 
 /** El icono y el color de cada medio de pago: se reconoce de un vistazo cómo pagó. */
-const METHOD_LOOK: Record<string, { tile: string; pill: string; icon: ReactNode }> = {
+const METHOD_LOOK: Record<string, { tone: Tone; icon: ReactNode }> = {
   CASH: {
-    tile: 'bg-k-success-bg text-k-success',
-    pill: 'bg-k-success-bg text-k-success',
+    tone: 'green',
     icon: (
       <>
         <rect x="2.5" y="6" width="19" height="12" rx="2.5" />
@@ -112,8 +111,7 @@ const METHOD_LOOK: Record<string, { tile: string; pill: string; icon: ReactNode 
     ),
   },
   MOBILE_PAYMENT: {
-    tile: 'bg-[#E8F0FB] text-k-periwinkle',
-    pill: 'bg-[#E8F0FB] text-k-slate',
+    tone: 'blue',
     icon: (
       <>
         <rect x="7" y="2.5" width="10" height="19" rx="2.5" />
@@ -122,13 +120,11 @@ const METHOD_LOOK: Record<string, { tile: string; pill: string; icon: ReactNode 
     ),
   },
   TRANSFER: {
-    tile: 'bg-k-highlight text-k-purple',
-    pill: 'bg-k-highlight text-k-purple',
+    tone: 'purple',
     icon: <path d="M4 8h15m0 0-3.5-3.5M19 8l-3.5 3.5M20 16H5m0 0 3.5-3.5M5 16l3.5 3.5" />,
   },
   QR: {
-    tile: 'bg-k-warning-bg text-k-warning-text',
-    pill: 'bg-k-warning-bg text-k-warning-text',
+    tone: 'amber',
     icon: (
       <>
         <rect x="3.5" y="3.5" width="7" height="7" rx="1" />
@@ -139,8 +135,7 @@ const METHOD_LOOK: Record<string, { tile: string; pill: string; icon: ReactNode 
     ),
   },
   CARD: {
-    tile: 'bg-[#E3F6F5] text-[#1B8A84]',
-    pill: 'bg-[#E3F6F5] text-[#1B8A84]',
+    tone: 'teal',
     icon: (
       <>
         <rect x="2.5" y="5" width="19" height="14" rx="2.5" />

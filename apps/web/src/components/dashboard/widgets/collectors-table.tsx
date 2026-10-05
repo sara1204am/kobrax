@@ -8,7 +8,7 @@ import { money, percent } from '@/lib/format';
  *
  * Tabla plana y no el `DataTable` del panel: ése ordena y pagina navegando —recarga la pantalla
  * entera—, y acá se muestran ocho filas de un ranking que ya viene ordenado por el servidor. El
- * enlace de abajo lleva al listado de casos, que es donde sí se ordena y se filtra.
+ * enlace de abajo lleva a la lista de mora, que es donde sí se ordena y se filtra.
  *
  * ⚠️ **Sin `user:read` no hay nombres**: `/users` da 403 para SUPERVISOR. Se muestra un rótulo
  * genérico antes que un uuid crudo, y la fila sigue siendo útil porque los números son suyos.
@@ -33,7 +33,7 @@ export async function CollectorsTable({
         <thead>
           <tr className="border-b border-k-border text-left text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
             <th scope="col" className="py-2 pr-3">{t('table.collector')}</th>
-            <th scope="col" className="py-2 pr-3 text-right">{t('table.cases')}</th>
+            <th scope="col" className="py-2 pr-3 text-right">{t('table.inArrears')}</th>
             <th scope="col" className="py-2 pr-3 text-right">{t('table.balance')}</th>
             <th scope="col" className="py-2 pr-3 text-right">{t('table.overdue')}</th>
             <th scope="col" className="py-2 pr-3 text-right">{t('table.overdueRate')}</th>
@@ -43,8 +43,13 @@ export async function CollectorsTable({
         <tbody>
           {rows.slice(0, 8).map((r) => (
             <tr key={r.collectorId} className="border-b border-k-border last:border-0">
-              <td className="py-2 pr-3 text-k-text">{byId.get(r.collectorId) ?? t('unknownCollector')}</td>
-              <td className="py-2 pr-3 text-right tabular-nums text-k-text-2">{r.cases}</td>
+              <td className="py-2 pr-3 text-k-text">
+                {/* Lleva a la lista de mora de ese responsable. */}
+                <Link href={`/mora?assigneeId=${r.collectorId}`} className="hover:text-k-purple hover:underline">
+                  {byId.get(r.collectorId) ?? t('unknownCollector')}
+                </Link>
+              </td>
+              <td className="py-2 pr-3 text-right tabular-nums text-k-text-2">{r.creditsInArrears}</td>
               <td className="py-2 pr-3 text-right tabular-nums">{money(r.outstanding, currency)}</td>
               <td className="py-2 pr-3 text-right tabular-nums">{money(r.overdue, currency)}</td>
               <td className="py-2 pr-3 text-right tabular-nums">

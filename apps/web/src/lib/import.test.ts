@@ -23,7 +23,11 @@ import {
   pickDaysPastDue,
   postImportFile,
   rejectText,
+  normalizeStatusLabel,
+  parseStaleAfterDays,
+  removeStatusMapEntry,
   scopeRefName,
+  setStatusMapEntry,
   trackedFields,
   usedColumns,
   warningText,
@@ -406,5 +410,38 @@ describe('responsables al importar', () => {
       ],
       reassign: [{ externalId: 'X', fromUserId: 'juan', toUserId: 'maria' }],
     });
+  });
+});
+
+describe('los datos del reporte (estados y antigüedad)', () => {
+  it('la etiqueta de estado se guarda como la busca el servidor: mayúsculas, sin tildes, espacios colapsados', () => {
+    expect(normalizeStatusLabel('  Ejecución   judicial ')).toBe('EJECUCION JUDICIAL');
+  });
+
+  it('suma una etiqueta y devuelve el mapa entero (el PATCH reemplaza, no mezcla)', () => {
+    const r = setStatusMapEntry({ VIGENTE: 'ACTIVE' }, 'Ejecución', 'DEFAULTED');
+    expect(r).toEqual({ ok: true, map: { VIGENTE: 'ACTIVE', EJECUCION: 'DEFAULTED' } });
+  });
+
+  it('rechaza lo que el servidor rechazaría: etiqueta vacía, estado inexistente, etiqueta repetida', () => {
+    expect(setStatusMapEntry({}, '   ', 'ACTIVE')).toEqual({ ok: false, reason: 'EMPTY_LABEL' });
+    expect(setStatusMapEntry({}, 'X', 'MOROSO')).toEqual({ ok: false, reason: 'INVALID_STATUS' });
+    expect(setStatusMapEntry({ X: 'ACTIVE' }, 'x', 'PAID')).toEqual({ ok: false, reason: 'DUPLICATE_LABEL' });
+  });
+
+  it('cambiar el estado de una etiqueta que ya está no cuenta como repetida', () => {
+    expect(setStatusMapEntry({ X: 'ACTIVE' }, 'X', 'PAID', 'X')).toEqual({ ok: true, map: { X: 'PAID' } });
+  });
+
+  it('quitar una etiqueta deja el resto y no toca el original', () => {
+    const map = { A: 'ACTIVE', B: 'PAID' };
+    expect(removeStatusMapEntry(map, 'A')).toEqual({ B: 'PAID' });
+    expect(map).toEqual({ A: 'ACTIVE', B: 'PAID' });
+  });
+
+  it('los días de antigüedad son un entero entre 1 y 60', () => {
+    expect(parseStaleAfterDays('7')).toEqual({ ok: true, value: 7 });
+    expect(parseStaleAfterDays(' 60 ')).toEqual({ ok: true, value: 60 });
+    for (const bad of ['0', '61', '2.5', '-1', 'abc', '']) expect(parseStaleAfterDays(bad)).toEqual({ ok: false });
   });
 });

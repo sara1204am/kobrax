@@ -18,16 +18,14 @@ import { PAGE_SIZES } from './table-prefs';
 /** Los que el servidor sabe ordenar. `status` NO está: ordenaría por `client_status`, que no es la columna Estado. */
 export const CARTERA_SORTS = ['dpd', 'debt', 'name', 'createdAt'] as const;
 
-/** Los tamaños que ofrece la tabla — los mismos para todas, definidos en `table-prefs`. */
-export { PAGE_SIZES };
 export const DEFAULT_PAGE_SIZE = 50;
 
 /** Los filtros de rango: clave en la URL → clave en la API (son la misma, y así queda escrito). */
 const NUMERIC_FILTERS = ['debtMin', 'debtMax', 'dpdMin', 'dpdMax', 'creditsMin', 'creditsMax'] as const;
 
 /** Los que identifican a alguien: se validan como uuid o no viajan. */
-// `collectorId` = el cobrador de algún CASO; `managerId` = el responsable de algún CRÉDITO (P7).
-const ID_FILTERS = ['collectorId', 'managerId', 'branchId'] as const;
+// `managerId` = el responsable de algún CRÉDITO (F4/08: reemplaza al viejo `collectorId`, el cobrador del caso).
+const ID_FILTERS = ['managerId', 'branchId'] as const;
 
 const IS_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

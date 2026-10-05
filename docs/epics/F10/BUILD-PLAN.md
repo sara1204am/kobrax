@@ -20,6 +20,7 @@ Racional (confirmado en [ui-screen-map §7](./ui-screen-map.md)): **leer antes d
 | **P3** | `plans/P3-rutas.md` | 🟢 | Rutas sin mapa: lifecycle, lista de paradas, confirmar/iniciar, resumen jornada | P1 |
 | **P5** | `plans/P5-import-movil.md` | 🟢 | Import móvil (perfil independiente): bulk + carga rápida. **Gap web: ver §4** | P1 |
 | — | — | 🔵 | **⟰ Frontera dev build (`expo prebuild`) ⟱** | — |
+| **Mora** | `plans/mora/README.md` | 🟢 | **Central de mora del cobrador** (F4/07 T17–T19): sus créditos en mora, uno por crédito, con y sin señal; ficha de recuperación con gestión (resultado + promesa), pago y nota encolables offline. Se apoya en el offline de P6 y en `GET /mora` | P6 |
 | **P6** | `plans/P6-offline-sync.md` | 🔵 | Caché local + cola de escritura + `SyncService` (FIFO/backoff); **retro-encaje** en los services de P1–P5. ⚠️ **El motor ya NO es WatermelonDB** — ver `plans/P6-offline-sync.md §4 D1` | P0–P5 |
 | **P7** | `plans/P7-mapas.md` | 🔵 | MapLibre online+offline (packs región); vistas de mapa de Rutas | P3, P6 |
 | **P8** | `plans/P8-evidencia.md` | 🔵 | Cámara + GPS + firma + **SHA-256 sobre buffer original**; `evidence.service`. **Reusa el módulo `uploads` que construye Cartera** (subida + hash); le agrega GPS y el vínculo a `field_evidences` | P6, Cartera |
@@ -83,8 +84,7 @@ Notas de sync (relevantes para P6): `case_activities`, `field_visits`, `field_ev
 
 ### Web (`apps/web`) — lo que F10 asume del lado admin
 - ✅ **Panel F9 existe** (base que F10 da por sentada): `/panel/{clients,credits,cases}` (lista + detalle), settings, auth.
-- ❌ **IMPORT web (admin multiusuario) NO existe.** F10 §4.1 define un perfil "empresa mediana/grande" que carga datos desde **web (admin) → baja al móvil**. Ese módulo web (`/panel/import` o similar) **está completamente sin construir**, y su **gating por capacidad `clients.import`** (F3) tampoco.
-  - **Cuándo:** es F9/F3, **fuera del alcance móvil de F10**. Se deja en constancia aquí para que no se pierda. El endpoint backend (`POST /clients/imports`) ya existe → es solo UI web. Sugerencia: engancharlo cuando se retome F9 o junto a **P5** si se quiere paridad import móvil↔web en la misma pasada.
+- ✅ **IMPORT web (admin multiusuario) existe** (corrige la auditoría anterior, que lo daba por no construido): `apps/web/src/app/(panel)/import` con el importador (vista previa, confirmar, reparto de responsables), el historial de importaciones con su detalle y el archivo original, y **Ajustes** (`/import/ajustes`: de dónde sale la cartera, alcance, forma del archivo, emparejado de columnas, reglas, y los datos del reporte: base del saldo, estados y antigüedad). El backend es `/imports/portfolio/*` (config, corrida, historial). Pendiente de esa parte: el **gating por capacidad `clients.import`** (F3, P10).
 
 ---
 
@@ -129,7 +129,7 @@ pasarela. Cuando haya una integración real, `src/qr-cobro.tsx` es la pantalla q
 - **Import S5 (reparto)** y **S6 (carga rápida)** · la tarjeta de KPIs de Import S2.
 - **Cuenta S5** (cartera por lote): falta `POST /cases/assign-bulk` + pantalla; tiene la Q4 abierta.
 - **P10 · gating RBAC** (F3) · extras de Agenda (plantillas WhatsApp, adjuntos, campañas, ABM).
-- **Import web (admin)**: es F9, fuera del alcance móvil (ver §4).
+- **Import web (admin)**: ya está construido (ver §4); lo que queda es su gating por capacidad (P10).
 
 ### Deuda de verificación que arrastra la cola
 La **validación visual por cable** de agenda S5+S6, rutas S3–S6, cuenta S0–S4 e import. La hace la

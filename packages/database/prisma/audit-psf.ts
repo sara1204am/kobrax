@@ -11,10 +11,10 @@
  * 🔴 **Sin `--apply` no escribe nada.** Y con `--apply` sólo toca lo mecánico, donde la respuesta
  * correcta no depende de nadie:
  *
- *   A. Caso de una operación AUSENTE cerrado como «al día» (\`CURRENT\`) → el motivo pasa a
- *      \`SOURCE_ABSENT\`. Antes de la fase 6 el job no distinguía: la ausencia no es ponerse al día (D4).
- *   B. Caso ABIERTO de una operación AUSENTE → se cierra con \`SOURCE_ABSENT\`, lo mismo que haría el
- *      job en su próxima pasada.
+ *   A. Episodio de mora de una operación AUSENTE cerrado como «al día» (\`CURRENT\`) → el motivo pasa a
+ *      \`SOURCE_ABSENT\`. La ausencia no es ponerse al día (D4).
+ *   B. Episodio ABIERTO de una operación AUSENTE → se cierra con \`SOURCE_ABSENT\`, lo mismo que haría el
+ *      trigger de episodios.
  *
  * Lo demás **se informa y no se toca**: fusionar clientes, dar por cerrado un crédito o inventarle
  * una fecha de corte son decisiones de una persona (D2, D4, D9).
@@ -73,30 +73,30 @@ const CHECKS: Check[] = [
     title: 'Externos pagados o cancelados sin que el reporte lo diga',
     action: 'Antes de D3 un pago podía dejar un PSF en PAID. Confirmar con el banco y, si sigue vivo, volver a ACTIVE.',
     rows: () => prisma.$queryRaw`
-      SELECT c.account_id, COALESCE(c.external_id, c.code, c.id) || ' (' || c.status::text || ')' AS detail FROM credits c
+      SELECT c.account_id, COALESCE(c.external_id, c.code, c.id) || ' (' || CASE WHEN c.written_off_at IS NOT NULL THEN 'WRITTEN_OFF' ELSE c.status::text END || ')' AS detail FROM credits c
       WHERE c.external_source IS NOT NULL AND c.deleted_at IS NULL
-        AND c.status IN ('PAID', 'CANCELLED', 'WRITTEN_OFF')
+        AND (c.status IN ('PAID', 'CANCELLED') OR c.written_off_at IS NOT NULL)
         AND NOT EXISTS (
           SELECT 1 FROM credit_external_snapshots s
           WHERE s.credit_id = c.id AND upper(COALESCE(s.reported_status, '')) IN ('CANCELADO', 'CASTIGADO', 'PAGADO'))`,
   },
   {
-    code: 'ABSENT_CASE_CLOSED_AS_CURRENT',
-    title: '[A] Casos de operaciones ausentes cerrados como «al día»',
+    code: 'ABSENT_EPISODE_CLOSED_AS_CURRENT',
+    title: '[A] Episodios de mora de operaciones ausentes cerrados como «al día»',
     action: 'Con --apply: el motivo pasa a SOURCE_ABSENT.',
     rows: () => prisma.$queryRaw`
-      SELECT k.account_id, COALESCE(c.external_id, c.code, c.id) AS detail FROM collection_cases k
-      JOIN credits c ON c.id = k.credit_id
-      WHERE c.sync_status = 'ABSENT' AND k.deleted_at IS NULL AND k.closed_reason = 'CURRENT'`,
+      SELECT e.account_id, COALESCE(c.external_id, c.code, c.id) AS detail FROM credit_arrear_episodes e
+      JOIN credits c ON c.id = e.credit_id
+      WHERE c.sync_status = 'ABSENT' AND e.end_reason = 'CURRENT'`,
   },
   {
-    code: 'ABSENT_CASE_OPEN',
-    title: '[B] Casos abiertos de operaciones ausentes',
-    action: 'Con --apply: se cierran con SOURCE_ABSENT (lo mismo que hará el job).',
+    code: 'ABSENT_EPISODE_OPEN',
+    title: '[B] Episodios de mora abiertos de operaciones ausentes',
+    action: 'Con --apply: se cierran con SOURCE_ABSENT (lo mismo que haría el trigger de episodios).',
     rows: () => prisma.$queryRaw`
-      SELECT k.account_id, COALESCE(c.external_id, c.code, c.id) AS detail FROM collection_cases k
-      JOIN credits c ON c.id = k.credit_id
-      WHERE c.sync_status = 'ABSENT' AND k.deleted_at IS NULL AND k.status NOT IN ('CLOSED', 'WRITTEN_OFF')`,
+      SELECT e.account_id, COALESCE(c.external_id, c.code, c.id) AS detail FROM credit_arrear_episodes e
+      JOIN credits c ON c.id = e.credit_id
+      WHERE c.sync_status = 'ABSENT' AND e.ended_at IS NULL`,
   },
   {
     code: 'DUPLICATE_CLIENT_NAME',
@@ -142,16 +142,17 @@ const CHECKS: Check[] = [
 
 async function applyFixes(): Promise<void> {
   const relabeled = await prisma.$executeRaw`
-    UPDATE collection_cases k SET closed_reason = 'SOURCE_ABSENT'
+    UPDATE credit_arrear_episodes e SET end_reason = 'SOURCE_ABSENT', updated_at = now()
     FROM credits c
-    WHERE c.id = k.credit_id AND c.sync_status = 'ABSENT' AND k.deleted_at IS NULL AND k.closed_reason = 'CURRENT'`;
+    WHERE c.id = e.credit_id AND c.sync_status = 'ABSENT' AND e.end_reason = 'CURRENT'`;
   const closed = await prisma.$executeRaw`
-    UPDATE collection_cases k
-    SET status = 'CLOSED', closed_at = now(), closed_reason = 'SOURCE_ABSENT', last_action_at = now()
+    UPDATE credit_arrear_episodes e
+    SET ended_at = GREATEST(CURRENT_DATE, e.started_at), end_reason = 'SOURCE_ABSENT',
+        balance_at_end = c.outstanding_balance, updated_at = now()
     FROM credits c
-    WHERE c.id = k.credit_id AND c.sync_status = 'ABSENT' AND k.deleted_at IS NULL
-      AND k.status NOT IN ('CLOSED', 'WRITTEN_OFF')`;
-  console.log(`\nAplicado: ${relabeled} casos re-rotulados SOURCE_ABSENT [A], ${closed} casos cerrados SOURCE_ABSENT [B].`);
+    WHERE c.id = e.credit_id AND c.sync_status = 'ABSENT' AND e.ended_at IS NULL`;
+  console.log(`
+Aplicado: ${relabeled} episodios re-rotulados SOURCE_ABSENT [A], ${closed} episodios cerrados SOURCE_ABSENT [B].`);
 }
 
 async function main(): Promise<void> {

@@ -57,8 +57,12 @@ function makeSignupService(opts: { role?: { id: string } | null; failWith?: unkn
     user: undefined as Record<string, unknown> | undefined,
     membership: undefined as Record<string, unknown> | undefined,
     audit: undefined as Record<string, unknown> | undefined,
+    categories: undefined as Record<string, unknown>[] | undefined,
   };
   const tx = {
+    arrearCategory: {
+      createMany: async (a: { data: Record<string, unknown>[] }) => void (calls.categories = a.data),
+    },
     account: {
       create: async (a: { data: Record<string, unknown> }) => {
         if (opts.failWith) throw opts.failWith;
@@ -121,6 +125,19 @@ describe('AccountsService.create (registro público · S4)', () => {
     assert.equal(calls.audit!.userId, 'u-new');
     assert.equal(calls.audit!.ip, '1.2.3.4');
     assert.equal(res.accountId, calls.account!.id);
+  });
+
+  it('F4/08 · D1-b: la cuenta nace con las categorías de mora A 1–30, B 31–60, C 61+, de SU cuenta', async () => {
+    const { service, calls } = makeSignupService();
+    const res = await service.create(SIGNUP, {});
+    assert.deepEqual(
+      calls.categories!.map((c) => [c.accountId, c.code, c.fromDays, c.toDays]),
+      [
+        [res.accountId, 'A', 1, 30],
+        [res.accountId, 'B', 31, 60],
+        [res.accountId, 'C', 61, null],
+      ],
+    );
   });
 
   it('🔴 el plan elegido entrega sus asientos, pero como PRUEBA de 30 días', async () => {

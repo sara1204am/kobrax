@@ -13,18 +13,7 @@ export function sortNotes(notes: readonly CreditNote[]): CreditNote[] {
   );
 }
 
-/**
- * La nota plegada: **la primera línea**, recortada. El resto se ve al abrirla. Si el texto entero cabe en el
- * resumen, no hay nada más que abrir y quien llama lo sabe por `truncated`.
- */
-export function notePreview(body: string, max = 80): { text: string; truncated: boolean } {
-  const first = body.trim().split(/\r?\n/)[0] ?? '';
-  const multiline = body.trim().includes('\n');
-  if (first.length <= max) return { text: first, truncated: multiline };
-  return { text: `${first.slice(0, max).trimEnd()}…`, truncated: true };
-}
-
-/** La paleta del post-it (la de Gallium): fondo, encabezado y tinta. El color del tipo de nota es otra cosa. */
+/** La paleta del post-it (la paleta de post-its de Kobrax): fondo, encabezado y tinta. El color del tipo de nota es otra cosa. */
 export const NOTE_COLORS: Record<MoraNoteColor, { bg: string; head: string; ink: string }> = {
   YELLOW: { bg: '#fef9c3', head: '#fdef8a', ink: '#854d0e' },
   PINK: { bg: '#fce7f3', head: '#fbcfe8', ink: '#9d174d' },
