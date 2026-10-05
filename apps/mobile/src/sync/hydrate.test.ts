@@ -27,6 +27,18 @@ jest.mock('../mora.service', () => ({
     mockLlamadas.push({ fn: 'getMora', params: id });
     return ok([]);
   }),
+  listMoraEpisodes: jest.fn(async (id: string) => {
+    mockLlamadas.push({ fn: 'listMoraEpisodes', params: id });
+    return mockRes.episodes ?? ok([]);
+  }),
+  getMoraMetrics: jest.fn(async (id: string) => {
+    mockLlamadas.push({ fn: 'getMoraMetrics', params: id });
+    return ok([]);
+  }),
+  listArrearCategories: jest.fn(async () => {
+    mockLlamadas.push({ fn: 'listArrearCategories' });
+    return ok([]);
+  }),
 }));
 jest.mock('../routes.service', () => ({
   listRoutes: jest.fn(async (p: unknown) => {
@@ -70,6 +82,7 @@ beforeEach(() => {
   delete mockRes.mora;
   delete mockRes.routes;
   delete mockRes.agenda;
+  delete mockRes.episodes;
 });
 
 describe('hydrate · usa las consultas de las pantallas', () => {
@@ -94,6 +107,32 @@ describe('hydrate · usa las consultas de las pantallas', () => {
   it('baja la ficha de cada crédito del cliente (la que abre la pantalla por creditId)', async () => {
     await hydrate('u1');
     expect(mockLlamadas.filter((l) => l.fn === 'getMora').map((l) => l.params)).toEqual(['cr1', 'cr2']);
+  });
+
+  // La ficha de mora abre con `listMoraEpisodes(creditId)` y `getMoraMetrics(creditId)` y la Cobranza con `listArrearCategories()`:
+  // misma llamada, mismo parámetro, o el respaldo queda en otra casilla.
+  it('por cada crédito baja también sus episodios y sus métricas, como la ficha de mora', async () => {
+    await hydrate('u1');
+    expect(mockLlamadas.filter((l) => l.fn === 'listMoraEpisodes').map((l) => l.params)).toEqual(['cr1', 'cr2']);
+    expect(mockLlamadas.filter((l) => l.fn === 'getMoraMetrics').map((l) => l.params)).toEqual(['cr1', 'cr2']);
+  });
+
+  it('baja las categorías de mora de la cuenta con la misma llamada (sin parámetros)', async () => {
+    const r = await hydrate('u1');
+    expect(llamada('listArrearCategories')).toBeDefined();
+    expect(r.ok).toContain('categorías de mora');
+  });
+
+  it('no baja el equipo: los nombres ya vienen en cada respuesta (un cobrador no puede leer /users)', async () => {
+    await hydrate('u1');
+    expect(mockLlamadas.some((l) => l.fn === 'listTeamNames')).toBe(false);
+  });
+
+  it('sin señal en los episodios corta las fichas y lo dice', async () => {
+    mockRes.episodes = { status: 'offline' };
+    const r = await hydrate('u1');
+    expect(r.offline).toBe(true);
+    expect(r.failed).toContain('fichas de la cartera');
   });
 
   // La mora de la Cobranza se pide con `limit: 100`; con otro parámetro el respaldo queda en otra casilla.

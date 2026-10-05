@@ -7,7 +7,7 @@ import { ActionBtn, DataRow, EmptyState, Header, PRIORITY_LABEL, priorityTone, P
 import { money } from '@/agenda-form';
 import { clientContext, type AgendaClientContext } from '@/agenda.service';
 import { listCreditPayments, type PaymentItem } from '@/payments.service';
-import { getMora, getMoraMetrics, listMoraEpisodes, listMoraNotes, listMoraPromises, listTeamNames } from '@/mora.service';
+import { getMora, getMoraMetrics, listMoraEpisodes, listMoraNotes, listMoraPromises } from '@/mora.service';
 import { authService } from '@/auth-service';
 import { activityLine, moraCardProps, staleLine, toMoraRows } from '@/mora';
 import {
@@ -50,7 +50,6 @@ export default function MoraFichaScreen() {
   const [payments, setPayments] = useState<PaymentItem[] | null>(null);
   const [episodes, setEpisodes] = useState<MoraEpisode[] | null>(null);
   const [metrics, setMetrics] = useState<RecoveryMetrics | null>(null);
-  const [team, setTeam] = useState<Parameters<typeof nameResolver>[0]>([]);
   const [me, setMe] = useState<{ userId?: string; canAssign: boolean }>({ canAssign: false });
   const [editNote, setEditNote] = useState<CreditNote | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -71,14 +70,13 @@ export default function MoraFichaScreen() {
     setLocalAt(main.localAt);
     setLoad('ok');
     // Lo demás es complemento: si una parte falla, la ficha se muestra igual con lo que haya.
-    const [c, pr, nt, pay, ep, mt, tm, who] = await Promise.all([
+    const [c, pr, nt, pay, ep, mt, who] = await Promise.all([
       clientContext(main.data.clientId),
       listMoraPromises(creditId),
       listMoraNotes(creditId),
       listCreditPayments(creditId),
       listMoraEpisodes(creditId),
       getMoraMetrics(creditId),
-      listTeamNames(), // 403 para el cobrador: entonces «alguien del equipo»
       authService.me(),
     ]);
     if (c.status === 'ok') setCtx(c.data);
@@ -87,7 +85,6 @@ export default function MoraFichaScreen() {
     if (pay.status === 'ok') setPayments(pay.data);
     if (ep.status === 'ok') setEpisodes(ep.data);
     if (mt.status === 'ok') setMetrics(mt.data);
-    if (tm.status === 'ok') setTeam(tm.data);
     if (who.status === 'ok') setMe({ userId: who.me.userId, canAssign: who.me.permissions.includes(Permission.ASSIGNMENT_WRITE) });
   }, [creditId]);
 
@@ -103,7 +100,8 @@ export default function MoraFichaScreen() {
     setRefreshing(false);
   }, [loadAll]);
 
-  const nameOf = useMemo(() => nameResolver(team, me.userId), [team, me.userId]);
+  // Los nombres los manda el servidor (`authorName`, `assigneeName`…): el cobrador no puede leer `/users`.
+  const nameOf = useMemo(() => nameResolver([], me.userId), [me.userId]);
 
   const phone = useMemo(() => onlyDigits(ctx?.contacts.find((c) => c.isPrimary)?.value ?? ctx?.contacts[0]?.value), [ctx]);
 
@@ -220,6 +218,13 @@ export default function MoraFichaScreen() {
           <DataRow label="Último pago" value={detail.lastPaymentAt ? prettyDay(detail.lastPaymentAt) : 'Sin pagos'} />
           {detail.reportedAsOf && <DataRow label="Números al corte del" value={prettyDay(detail.reportedAsOf)} />}
           {detail.branchName ? <Fact label="Agencia" value={detail.branchName} /> : null}
+          {/* Quién atiende: los nombres vienen del servidor (el cobrador no lee `/users`). */}
+          {detail.responsibleId ? <Fact label="Responsable" value={nameOf(detail.responsibleId, detail.responsibleName)} /> : null}
+          {(detail.assignments ?? [])
+            .filter((a) => a.kind !== 'PRINCIPAL')
+            .map((a) => (
+              <Fact key={a.id ?? a.userId} label={a.kind === 'TEMPORAL' ? 'Reemplazo temporal' : 'Apoyo'} value={nameOf(a.userId, a.userName)} />
+            ))}
           {/* Datos sueltos, no estados del crédito (F4/08 · D1). */}
           <Fact label="Última gestión" value={lastActionText(detail, activityLine)} />
           <Fact label="Promesa vigente" value={promises === null ? '—' : activePromiseText(promises, currency)} />
@@ -245,7 +250,7 @@ export default function MoraFichaScreen() {
         )}
 
         <MetricsSection metrics={metrics} currency={currency} />
-        <ActivityTimeline activities={detail.activities} />
+        <ActivityTimeline activities={detail.activities} nameOf={nameOf} />
         <PromisesSection promises={promises} currency={currency} nameOf={nameOf} />
         <NotesSection notes={notes} nameOf={nameOf} userId={me.userId} canAssign={me.canAssign} onEdit={setEditNote} onDelete={removeNote} />
         <PaymentsSection payments={payments} currency={currency} external={external} nameOf={nameOf} />

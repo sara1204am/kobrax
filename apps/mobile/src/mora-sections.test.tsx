@@ -4,6 +4,7 @@ jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { CreditNote, MoraEpisode, MoraPromise } from '@kobrax/shared';
+import { nameResolver } from './mora-ficha';
 import { ActivityTimeline, EpisodesSection, NotesSection, PromisesSection, PsfNotice } from './mora-sections';
 
 const names = (id?: string) => (id === 'me' ? 'Yo' : id ? 'Ana' : 'alguien del equipo');
@@ -94,6 +95,23 @@ describe('ActivityTimeline', () => {
     expect(screen.getByText('Sonó apagado')).toBeTruthy();
   });
 
+  it('una asignación muestra a quién se asignó (nombre del servidor), no se oculta ni enseña el id', () => {
+    render(
+      <ActivityTimeline
+        activities={[{ id: 'a3', type: 'ASSIGNMENT', notes: 'bf2e039c-1111-2222-3333-444455556666', assignedToId: 'bf2e039c-1111-2222-3333-444455556666', assignedToName: 'Luis Rojas', userId: 'u2', authorName: 'Ana Paz', createdAt: '2026-10-02T10:00:00Z' }]}
+      />,
+    );
+    expect(screen.getByText(/Luis Rojas/)).toBeTruthy();
+    expect(screen.getByText('Registró Ana Paz')).toBeTruthy();
+    expect(screen.queryByText(/bf2e039c/)).toBeNull();
+  });
+
+  it('una asignación sin nombre dice «alguien del equipo», no el id', () => {
+    render(<ActivityTimeline activities={[{ id: 'a4', type: 'ASSIGNMENT', notes: 'bf2e039c-1111-2222-3333-444455556666', assignedToId: 'bf2e039c-1111-2222-3333-444455556666', createdAt: '2026-10-02T10:00:00Z' }]} />);
+    expect(screen.getByText(/alguien del equipo/)).toBeTruthy();
+    expect(screen.queryByText(/bf2e039c/)).toBeNull();
+  });
+
   it('no muestra el id crudo de una asignación', () => {
     render(<ActivityTimeline activities={[{ id: 'a2', type: 'ASSIGNMENT', notes: 'bf2e039c-1111-2222-3333-444455556666', createdAt: '2026-10-02T10:00:00Z' }]} />);
     expect(screen.queryByText(/bf2e039c/)).toBeNull();
@@ -139,5 +157,20 @@ describe('PsfNotice', () => {
   it('un crédito de Kobrax o al día no muestra aviso', () => {
     render(<PsfNotice syncStatus="ABSENT" />);
     expect(screen.toJSON()).toBeNull();
+  });
+});
+
+describe('nombres del servidor en notas y promesas', () => {
+  const real = nameResolver([], 'me');
+  it('la nota firma con authorName; sin él, el respaldo', () => {
+    render(<NotesSection notes={[note({ id: 'a', authorId: 'u2', authorName: 'Ana Paz' }), note({ id: 'b', authorId: 'u3' })]} nameOf={real} canAssign={false} onEdit={jest.fn()} onDelete={jest.fn()} />);
+    expect(screen.getByText(/Ana Paz ·/)).toBeTruthy();
+    expect(screen.getByText(/alguien del equipo ·/)).toBeTruthy();
+  });
+
+  it('la promesa muestra assigneeName', () => {
+    const p = { id: 'p1', amount: 100, promiseDate: '2026-10-10', status: 'ACTIVE', assigneeId: 'u2', assigneeName: 'Luis Rojas', createdAt: '2026-10-01T00:00:00Z' } as never;
+    render(<PromisesSection promises={[p]} currency="BOB" nameOf={real} />);
+    expect(screen.getByText('Luis Rojas')).toBeTruthy();
   });
 });

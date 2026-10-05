@@ -26,7 +26,7 @@ jest.mock('./db', () => ({
   getOne: jest.fn(async (kind: string, id: string) => mockStore[`${kind}|${id}`]?.[0] ?? null),
 }));
 
-import { deleteMoraNote, getMoraMetrics, listArrearCategories, listMoraEpisodes, listTeamNames, MORA_LIMIT, listMora, listPortfolio, tenantCurrency, updateMoraNote } from './mora.service';
+import { deleteMoraNote, getMoraMetrics, listArrearCategories, listMoraEpisodes, MORA_LIMIT, listMora, listPortfolio, tenantCurrency, updateMoraNote } from './mora.service';
 
 const item = { creditId: 'cr1', clientId: 'cl1', currency: 'BOB', daysPastDue: 12, arrearsSource: 'SCHEDULE', hasActivePromise: false };
 
@@ -136,14 +136,6 @@ describe('paridad de la ficha de mora', () => {
     const r = await listArrearCategories();
     expect(mockApi).toHaveBeenCalledWith('/arrear-categories');
     expect(r.status === 'ok' && r.data[0]!.code).toBe('A');
-  });
-
-  it('equipo: el id de la fila es el usuario; un 403 llega como error (la pantalla dice «alguien del equipo»)', async () => {
-    mockApi.mockResolvedValueOnce({ status: 'ok', data: [{ userId: 'u1', email: 'a@x.com' }], total: 1 });
-    const ok = await listTeamNames();
-    expect(ok.status === 'ok' && ok.data[0]!.id).toBe('u1');
-    mockApi.mockResolvedValueOnce({ status: 'error', message: 'forbidden' });
-    expect((await listTeamNames()).status).toBe('error');
   });
 
   it('notas: PATCH y DELETE a /mora/:id/notes/:noteId', async () => {

@@ -17,6 +17,15 @@ describe('buildTimeline', () => {
   });
 });
 
+describe('buildTimeline — asignaciones', () => {
+  it('la nota de una asignación es el id: se muestra el nombre que mandó la API, nunca el id', () => {
+    const id = 'bf2e039c-1111-2222-3333-444455556666';
+    const [a, b] = buildTimeline([act({ id: 'x', type: 'ASSIGNMENT', notes: id, assignedToName: 'Luis Rojas' }), act({ id: 'y', type: 'ASSIGNMENT', notes: id, createdAt: '2026-06-01T10:00:00Z' })], []);
+    expect(a).toMatchObject({ notes: 'Asignada a Luis Rojas' });
+    expect(b).toMatchObject({ notes: 'Asignada a alguien del equipo' });
+  });
+});
+
 describe('recovery — «Recuperado X de Y» (D15)', () => {
   it('base total: contra el total por cobrar, no contra el capital', () => {
     // 1.000 al 10 % en 5 cuotas de 300: debe 1.500 y ya pagó 400.

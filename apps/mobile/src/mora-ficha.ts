@@ -245,7 +245,7 @@ export interface PaymentView {
   date: string;
 }
 
-export function paymentView(p: PaymentItem, currency: string, nameOf: (id?: string) => string): PaymentView {
+export function paymentView(p: PaymentItem, currency: string, nameOf: NameOf): PaymentView {
   return {
     id: p.id,
     amount: money(p.amount, currency),
@@ -253,7 +253,7 @@ export function paymentView(p: PaymentItem, currency: string, nameOf: (id?: stri
     look: METHOD_LOOK[p.method] ?? METHOD_LOOK.CASH!,
     channel: p.channel === 'EXTERNAL_CONFIRMED' ? 'Canal de la entidad' : undefined,
     receipt: p.receiptNumber !== undefined ? `Comprobante Nº ${p.receiptNumber}` : undefined,
-    by: p.registeredBy ? `Registró ${nameOf(p.registeredBy)}` : undefined,
+    by: p.registeredBy ? `Registró ${nameOf(p.registeredBy, p.registeredByName)}` : undefined,
     notes: p.notes,
     date: dayText((p.paymentDate ?? p.createdAt).slice(0, 10)),
   };
@@ -306,17 +306,22 @@ export function noteBodyValid(body: string): boolean {
 
 // ── Nombres ─────────────────────────────────────────────────────────────────────────────────────────────────
 
+/** «Quién» de una persona: su id y el nombre que mandó el servidor (`authorName`, `registeredByName`…), si lo mandó. */
+export type NameOf = (id?: string, name?: string) => string;
+
 /**
- * «Quién» de un id: «Yo» si es el que mira, el nombre si el rol puede leer el equipo, y si no «alguien del equipo»
- * (no se inventa un nombre).
+ * «Quién» de una persona. 🔴 **El nombre lo manda el servidor** (`authorName`, `assigneeName`, `registeredByName`…): un
+ * cobrador no puede leer `GET /users`, así que el teléfono ya no pide el equipo. Sólo cuando el campo falta (datos
+ * guardados antes de que la API los mandara) se cae al respaldo: «Yo» si es el que mira, el nombre del equipo si se
+ * pasó una lista, y si no «alguien del equipo» (no se inventa un nombre).
  */
 export function nameResolver(
-  members: readonly { userId: string; firstName: string | null; lastName: string | null; email: string }[],
+  members: readonly { userId: string; firstName: string | null; lastName: string | null; email: string }[] = [],
   myId?: string,
   fallback = 'alguien del equipo',
-): (id?: string) => string {
+): NameOf {
   const byId = new Map(members.map((m) => [m.userId, memberName(m)]));
-  return (id) => (!id ? fallback : id === myId ? 'Yo' : (byId.get(id) ?? fallback));
+  return (id, name) => (name ? name : !id ? fallback : id === myId ? 'Yo' : (byId.get(id) ?? fallback));
 }
 
 // ── Aviso de la fuente externa (PSF) ────────────────────────────────────────────────────────────────────────

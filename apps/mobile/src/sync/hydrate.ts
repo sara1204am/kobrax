@@ -10,7 +10,7 @@
  * mira, que es exactamente el defecto que destapó la prueba de campo.
  */
 import { CatalogType, RouteStatus } from '@kobrax/shared';
-import { getMora, listMora, listPortfolio, MORA_LIMIT, TENANT_CURRENCY_PROBE_LIMIT } from '../mora.service';
+import { getMora, getMoraMetrics, listArrearCategories, listMora, listMoraEpisodes, listPortfolio, MORA_LIMIT, TENANT_CURRENCY_PROBE_LIMIT } from '../mora.service';
 import type { MoraRow } from '../mora';
 import { getRoute, listRoutes } from '../routes.service';
 import { clientContext, listByDay, listOverdue } from '../agenda.service';
@@ -91,6 +91,7 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
   await paso('vencidos', () => estado(listOverdue(100)));
   await paso('notificaciones', () => estado(listNotifications()));
   await paso('cobrado hoy', () => estado(listPaymentsByDay(hoy))); // Inicio · pestaña Rutas · resumen
+  await paso('categorías de mora', () => estado(listArrearCategories())); // Cobranza (filtro) · ficha de mora
 
   // La ruta activa, y **su detalle con las paradas**: el listado no las trae y son el itinerario.
   await paso('ruta del día', async () => {
@@ -136,11 +137,17 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
       // El contexto es lo que consume el alta de gestión (créditos + contactos + ubicaciones).
       const ctx = await clientContext(id);
       if (ctx.status === 'offline') return 'offline';
-      // Y la ficha de cada crédito (gestiones, asignaciones…): lo que la pantalla de cliente abre por `creditId`.
+      // Y la ficha de cada crédito (gestiones, asignaciones…): lo que la pantalla de cliente abre por `creditId`,
+      // más lo que pide la ficha de mora: su historial de episodios y las métricas de recuperación. Los nombres
+      // (autores, responsable, asignados) ya vienen dentro de cada respuesta: no hace falta bajar el equipo.
       if (ctx.status === 'ok') {
         for (const c of ctx.data.credits) {
           const det = await getMora(c.creditId);
           if (det.status === 'offline') return 'offline';
+          const eps = await listMoraEpisodes(c.creditId);
+          if (eps.status === 'offline') return 'offline';
+          const met = await getMoraMetrics(c.creditId);
+          if (met.status === 'offline') return 'offline';
         }
       }
     }

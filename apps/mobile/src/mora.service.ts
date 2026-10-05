@@ -7,7 +7,6 @@
 import type {
   ArrearCategory,
   CreditNote,
-  Member,
   MoraCreditDetail,
   MoraCreditListItem,
   MoraEpisode,
@@ -135,20 +134,6 @@ export function getMoraMetrics(creditId: string): Promise<QueryResult<RecoveryMe
 /** Los rangos de categoría de mora de la cuenta: sólo para ofrecer el filtro (la categoría de cada crédito la manda la API). */
 export function listArrearCategories(): Promise<QueryResult<ArrearCategory[]>> {
   return cachedList<ArrearCategory>('arrear.categories', 'all', () => apiQuery<ArrearCategory[]>('/arrear-categories'));
-}
-
-/** `Member` con el `id` que pide el respaldo local (la identidad es el usuario). */
-export type MemberRow = Member & { id: string };
-
-/**
- * Nombres del equipo para «registró X» y «asignada a X». `GET /users` pide `user:read`: un cobrador puede recibir
- * 403 y entonces la pantalla dice «alguien del equipo». No se inventa un nombre.
- */
-export function listTeamNames(): Promise<QueryResult<MemberRow[]>> {
-  return cachedList<MemberRow>('members', 'all', async () => {
-    const res = await apiQuery<Member[]>('/users');
-    return res.status === 'ok' ? { ...res, data: res.data.map((m) => ({ ...m, id: m.userId })) } : res;
-  });
 }
 
 /**

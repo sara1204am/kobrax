@@ -148,6 +148,21 @@ describe('pagos', () => {
   });
 });
 
+describe('nameResolver — el nombre del servidor manda', () => {
+  it('usa el nombre que mandó la API aunque no haya equipo; el respaldo sólo cuando falta', () => {
+    const f = nameResolver([], 'u1');
+    expect(f('u2', 'Ana Paz')).toBe('Ana Paz');
+    expect(f('u1', 'Mi Nombre')).toBe('Mi Nombre');
+    expect(f('u1')).toBe('Yo');
+    expect(f('u9')).toBe('alguien del equipo');
+  });
+
+  it('pago: «Registró» usa registeredByName', () => {
+    const p = { id: 'p', creditId: 'c', amount: 1, method: 'CASH', paymentDate: '2026-10-03T15:00:00.000Z', createdAt: '2026-10-03T15:00:00.000Z', registeredBy: 'u2', registeredByName: 'Ana Paz' } as never;
+    expect(paymentView(p, 'BOB', nameResolver()).by).toBe('Registró Ana Paz');
+  });
+});
+
 describe('nameResolver', () => {
   it('Yo / nombre / alguien del equipo (no se inventa)', () => {
     const f = nameResolver([{ userId: 'u2', firstName: 'Ana', lastName: null, email: 'a@x.com' }], 'u1');

@@ -16,6 +16,8 @@ import {
   dayText,
   episodeView,
   metricsView,
+  nameResolver,
+  type NameOf,
   NOTE_COLORS,
   NOTE_KIND_TONE,
   paymentsSummary,
@@ -142,7 +144,7 @@ export function MetricsSection({ metrics, currency }: { metrics: RecoveryMetrics
 
 // ── Gestiones (tarjeta con icono y tono) ────────────────────────────────────────────────────────────────────
 
-export function ActivityTimeline({ activities }: { activities: MoraActivityItem[] }) {
+export function ActivityTimeline({ activities, nameOf = nameResolver() }: { activities: MoraActivityItem[]; nameOf?: NameOf }) {
   return (
     <Section title="Gestiones">
       {activities.length === 0 ? (
@@ -163,7 +165,15 @@ export function ActivityTimeline({ activities }: { activities: MoraActivityItem[
                     <Text style={styles.resultKey}>Resultado:</Text> {resultLabel(a.result)}
                   </Text>
                 ) : null}
-                {a.notes && a.type !== 'ASSIGNMENT' ? <Text style={styles.noteText}>{a.notes}</Text> : null}
+                {/* La nota de una asignación es el id de la persona: se muestra su nombre, nunca el id. */}
+                {a.type === 'ASSIGNMENT' ? (
+                  <Text style={styles.rowSub}>
+                    <Text style={styles.resultKey}>Asignada a</Text> {nameOf(a.assignedToId, a.assignedToName)}
+                  </Text>
+                ) : a.notes ? (
+                  <Text style={styles.noteText}>{a.notes}</Text>
+                ) : null}
+                {a.userId || a.authorName ? <Text style={styles.rowDate}>Registró {nameOf(a.userId, a.authorName)}</Text> : null}
               </View>
             </View>
           );
@@ -182,7 +192,7 @@ export function PromisesSection({
 }: {
   promises: MoraPromise[] | null;
   currency: string;
-  nameOf: (id?: string) => string;
+  nameOf: NameOf;
 }) {
   const s = promises && promises.length > 0 ? promiseSummaryLines(promises) : undefined;
   return (
@@ -205,9 +215,9 @@ export function PromisesSection({
                   <Text style={styles.rowTitle}>
                     {p.amount !== undefined ? money(p.amount, currency) : '—'} · para el {dayText(p.promiseDate)}
                   </Text>
-                  {p.assigneeId || p.observations ? (
+                  {p.assigneeId || p.assigneeName || p.observations ? (
                     <Text style={styles.rowSub}>
-                      {[p.assigneeId ? nameOf(p.assigneeId) : undefined, p.observations].filter(Boolean).join(' · ')}
+                      {[p.assigneeId || p.assigneeName ? nameOf(p.assigneeId, p.assigneeName) : undefined, p.observations].filter(Boolean).join(' · ')}
                     </Text>
                   ) : null}
                 </View>
@@ -232,7 +242,7 @@ export function PaymentsSection({
   payments: PaymentItem[] | null;
   currency: string;
   external: boolean;
-  nameOf: (id?: string) => string;
+  nameOf: NameOf;
 }) {
   return (
     <Section title="Pagos" count={payments?.length}>
@@ -285,7 +295,7 @@ export function NotesSection({
   onDelete,
 }: {
   notes: CreditNote[] | null;
-  nameOf: (id?: string) => string;
+  nameOf: NameOf;
   userId?: string;
   /** `assignment:write`: puede corregir y borrar notas ajenas. */
   canAssign: boolean;
@@ -319,7 +329,7 @@ export function NotesSection({
               </View>
               <Text style={[styles.postitBody, { color: c.ink }]}>{n.body}</Text>
               <Text style={[styles.rowDate, { color: c.ink, opacity: 0.7 }]}>
-                {nameOf(n.authorId)} · {new Date(n.createdAt).toLocaleDateString('es')}
+                {nameOf(n.authorId, n.authorName)} · {new Date(n.createdAt).toLocaleDateString('es')}
               </Text>
             </View>
           );

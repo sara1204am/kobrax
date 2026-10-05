@@ -17,7 +17,8 @@ export function buildTimeline(activities: MoraActivityItem[], payments: (Payment
     at: x.createdAt,
     type: x.type,
     result: x.result,
-    notes: x.notes,
+    // La nota de una asignación es el id de la persona: se muestra su nombre, nunca el id.
+    notes: x.type === 'ASSIGNMENT' ? `Asignada a ${x.assignedToName ?? 'alguien del equipo'}` : x.notes,
   }));
   const p: TimelineEntry[] = payments.map((x) => ({
     kind: 'payment',
