@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
-import type { AuthAccountOption, MeInfo } from '@kobrax/shared';
+import { Permission, type AuthAccountOption, type MeInfo } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
+import { getAgendaSummary } from '@/lib/agenda-summary';
 import { PanelShell } from '@/components/panel-shell';
 import { PermissionsProvider } from '@/components/permissions';
 import { ToastProvider } from '@/components/toast';
@@ -46,6 +47,15 @@ export default async function PanelLayout({ children }: { children: ReactNode })
   // `sessionId` lo agrega la API a /auth/me (W-LOG-54); el tipo compartido todavía no lo declara.
   const user: MeInfo & { sessionId?: string } = me.body.data;
 
+  /*
+   * El contador de «Agenda» en el menú: vencidas + pendientes de hoy, **las mismas** que cuenta el Inicio y la lista
+   * (el servidor las calcula con el día civil de la empresa, así que no cambia con la zona horaria del navegador).
+   * Si no responde, el menú sale sin número: es un aviso, no una dependencia.
+   */
+  const today = user.permissions.includes(Permission.AGENDA_READ) ? await getAgendaSummary() : null;
+  const agendaCount = today ? today.overdue + today.pending : 0;
+  const badges = agendaCount > 0 ? { agenda: { count: agendaCount, urgent: (today?.overdue ?? 0) > 0 } } : undefined;
+
   return (
     <PermissionsProvider permissions={user.permissions}>
       <PanelShell
@@ -62,6 +72,7 @@ export default async function PanelLayout({ children }: { children: ReactNode })
         // aparece. Es un adorno de la topbar, no la puerta de entrada.
         accounts={accounts.body.data ?? []}
         nav={visibleNav(user.permissions)}
+        badges={badges}
       >
         {/* Los avisos se montan una sola vez acá: un provider por pantalla haría que un toast
             disparado antes de navegar se pierda con el desmontaje. */}

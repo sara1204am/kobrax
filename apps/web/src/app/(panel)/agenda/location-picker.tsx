@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 import { locationTypeChoices } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
 import { Icon } from '@/components/panel-shell';
-import { postJson } from '@/lib/client';
+import { postJson, sendJson } from '@/lib/client';
 
 /**
  * MapLibre son 250 kB y esto vive dentro del alta de una gestión: la mayoría de las gestiones no son
@@ -61,6 +61,7 @@ export function LocationPicker({
   value,
   onChange,
   onAdded,
+  onUpdated,
   clientId,
   disabled,
 }: {
@@ -68,6 +69,8 @@ export function LocationPicker({
   value: string;
   onChange: (id: string) => void;
   onAdded: (l: Loc) => void;
+  /** Se le marcó el punto a una dirección que ya estaba: el padre reemplaza la suya. */
+  onUpdated: (l: Loc) => void;
   clientId: string;
   disabled?: boolean;
 }) {
@@ -80,6 +83,9 @@ export function LocationPicker({
   const [guardando, setGuardando] = useState(false);
   const [ubicando, setUbicando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** El punto que se está marcando sobre una dirección importada que no lo tenía. */
+  const [punto, setPunto] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [guardandoPunto, setGuardandoPunto] = useState(false);
 
   const elegida = locations.find((l) => l.id === value);
   const conPunto = elegida?.latitude != null && elegida.longitude != null;
@@ -103,6 +109,22 @@ export function LocationPicker({
       },
       { enableHighAccuracy: false, timeout: 10_000 },
     );
+  }
+
+  /** Guarda el punto sobre la dirección que ya existe (no crea otra): una visita sin ubicación no se puede navegar ni entrar a una ruta. */
+  async function guardarPunto() {
+    if (!elegida || !punto) return;
+    setError(null);
+    setGuardandoPunto(true);
+    const res = await sendJson(
+      `/api/agenda/context/${clientId}/locations/${elegida.id}`,
+      { ...(elegida.address ? { address: elegida.address } : {}), latitude: punto.latitude, longitude: punto.longitude },
+      'PATCH',
+    );
+    setGuardandoPunto(false);
+    if (!res.ok) return setError(res.data.error?.message ?? t('create.locationError'));
+    onUpdated({ ...elegida, latitude: punto.latitude, longitude: punto.longitude });
+    setPunto(null);
   }
 
   async function guardar() {
@@ -158,6 +180,26 @@ export function LocationPicker({
 
       {conPunto && verMapa && (
         <MapPicker latitude={elegida!.latitude} longitude={elegida!.longitude} height={220} label={t('create.mapView')} />
+      )}
+
+      {/*
+       * Una dirección sin punto no sirve para una visita (no se puede navegar ni entrar a una ruta). Las importadas llegan así:
+       * se marca acá, sobre la misma dirección, sin tener que tipear otra.
+       */}
+      {elegida && !conPunto && !creando && (
+        <div className="space-y-3 rounded-xl border border-k-warning bg-k-warning-bg p-4">
+          <p className="text-[13px] text-k-warning-text">{t('create.noPoint')}</p>
+          <ErrorBanner message={error} />
+          <MapPicker
+            latitude={punto?.latitude}
+            longitude={punto?.longitude}
+            onChange={(p) => setPunto({ latitude: Number(p.latitude.toFixed(5)), longitude: Number(p.longitude.toFixed(5)) })}
+            label={t('create.mapPick')}
+          />
+          <Button type="button" onClick={() => void guardarPunto()} loading={guardandoPunto} disabled={!punto || disabled}>
+            {t('create.savePoint')}
+          </Button>
+        </div>
       )}
 
       {!creando ? (

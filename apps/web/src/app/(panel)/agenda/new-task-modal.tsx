@@ -1,14 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { AgendaItemType, AgendaTimeSlot, ScheduleTimeMode } from '@kobrax/shared';
+import { AgendaItemType, AgendaTimeSlot, renderTemplate, ScheduleTimeMode, type AgendaAssignee, type AgendaListItem } from '@kobrax/shared';
 import type { CatalogOption } from '@/components/client-form';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
 import { Modal } from '@/components/modal';
+import { TONES, type Tone } from '@/components/tone-tile';
 import { useToast } from '@/components/toast';
-import { postJson } from '@/lib/client';
+import { postJson, sendJson } from '@/lib/client';
 import { money } from '@/lib/format';
 import type { PortfolioRow } from '@/lib/portfolio';
 import { LocationPicker, type Loc } from './location-picker';
@@ -27,10 +28,37 @@ const TIPOS = [
   AgendaItemType.PROMISE_TO_PAY,
 ] as const;
 
+/**
+ * El icono y el color de cada tipo: los mismos que pinta el historial de la mora (llamada verde, visita
+ * violeta, mensaje turquesa), para que una gestión se reconozca igual al agendarla que al verla hecha.
+ */
+const TIPO_LOOK: Record<(typeof TIPOS)[number], { tone: Tone; icon: ReactNode }> = {
+  [AgendaItemType.CALL]: {
+    tone: 'green',
+    icon: <path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25c1.1.37 2.3.57 3.6.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z" />,
+  },
+  [AgendaItemType.VISIT]: {
+    tone: 'purple',
+    icon: <path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z" />,
+  },
+  [AgendaItemType.WHATSAPP]: {
+    tone: 'teal',
+    icon: <path d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2z" />,
+  },
+  [AgendaItemType.REMINDER]: {
+    tone: 'amber',
+    icon: <path d="M12 22a2.5 2.5 0 0 0 2.5-2.5h-5A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1l-2-2z" />,
+  },
+  [AgendaItemType.PROMISE_TO_PAY]: {
+    tone: 'blue',
+    icon: <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15.5V19h-2v-1.5a3.5 3.5 0 0 1-2.5-2.2l1.8-.8c.3.8.9 1.2 1.7 1.2.9 0 1.4-.4 1.4-1 0-.6-.4-.9-1.7-1.3-1.6-.5-3-1.1-3-2.9 0-1.3.9-2.3 2.3-2.7V7h2v1.4c1 .2 1.8.9 2.1 1.9l-1.7.7c-.2-.6-.7-1-1.4-1-.8 0-1.2.4-1.2.9 0 .5.4.8 1.6 1.2 1.7.5 3.1 1.1 3.1 3 0 1.4-1 2.4-2.5 2.9z" />,
+  },
+};
+
 interface Ctx {
   client: { id: string; displayName: string; nationalId: string | null };
   /** TODOS los créditos del deudor que ve quien agenda (F4/08): al día o en mora. */
-  credits: { creditId: string; code?: string; outstandingBalance: number; currency: string; daysPastDue: number }[];
+  credits: { creditId: string; code?: string; principalAmount: number; outstandingBalance: number; overdueAmount: number; currency: string; daysPastDue: number }[];
   contacts: { id: string; contactType: string; value: string; isPrimary: boolean }[];
   /**
    * Direcciones **en claro**. `latitude`/`longitude` pueden faltar: una dirección importada de un
@@ -57,6 +85,8 @@ export function NewTaskModal({
   onClose,
   date,
   time,
+  editing,
+  assign,
 }: {
   open: boolean;
   onClose: () => void;
@@ -64,6 +94,13 @@ export function NewTaskModal({
   date: string;
   /** La hora del hueco desde el que se abrió, si vino de uno. */
   time?: string;
+  /**
+   * Modo edición: la gestión que se corrige. El deudor, el crédito y el día quedan fijos (el ancla del agendado y
+   * mover el día es reagendar); el tipo, sus datos, la hora y las observaciones se pueden cambiar.
+   */
+  editing?: AgendaListItem;
+  /** Solo para quien puede asignar (`agenda:assign`): muestra el selector «Asignar a». */
+  assign?: { meId: string };
 }) {
   const t = useTranslations('panel.agenda');
   const router = useRouter();
@@ -88,6 +125,8 @@ export function NewTaskModal({
   const [promiseDate, setPromiseDate] = useState(date);
   const [metodo, setMetodo] = useState('');
   const [metodos, setMetodos] = useState<CatalogOption[]>([]);
+  /** Plantillas de WhatsApp de la cuenta (catálogo `WHATSAPP_TEMPLATE`): las mismas que ofrece el teléfono. */
+  const [plantillas, setPlantillas] = useState<{ code: string; label: string; metadata?: { body?: string } }[]>([]);
 
   const [timeMode, setTimeMode] = useState<ScheduleTimeMode>(time ? ScheduleTimeMode.FIXED : ScheduleTimeMode.LAPSE);
   const [hora, setHora] = useState(/^\d{2}:\d{2}$/.test(time ?? '') ? time! : '09:00');
@@ -95,13 +134,49 @@ export function NewTaskModal({
   const [scheduledDate, setScheduledDate] = useState(date);
   const [observations, setObservations] = useState('');
 
+  /** A quién se asigna. Vacío = el de siempre (el responsable del crédito, o quien agenda). */
+  const [assigneeId, setAssigneeId] = useState('');
+  const [assignees, setAssignees] = useState<AgendaAssignee[]>([]);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // El día propuesto sigue al que se está mirando mientras no se haya elegido cliente.
   useEffect(() => {
-    if (!ctx) { setScheduledDate(date); setPromiseDate(date); }
-  }, [date, ctx]);
+    if (!ctx && !editing) { setScheduledDate(date); setPromiseDate(date); }
+  }, [date, ctx, editing]);
+
+  // Personas a las que se puede asignar: sólo se piden si quien agenda puede asignar, y no al editar.
+  useEffect(() => {
+    if (!assign) return;
+    void fetch('/api/agenda/assignees')
+      .then((r) => r.json())
+      .then((b) => setAssignees(Array.isArray(b?.data) ? b.data : []))
+      .catch(() => setAssignees([]));
+  }, [assign]);
+
+  // Editar: se precarga lo guardado y se trae el contexto del deudor (teléfonos, direcciones) sin elegirlo de nuevo.
+  useEffect(() => {
+    if (!editing) return;
+    const d = editing.details;
+    const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+    setTipo(editing.type);
+    setContactId(str(d.contactId));
+    setLocationId(str(d.locationId));
+    setMensaje(str(d.message));
+    setDescripcion(str(d.description));
+    setMonto(typeof d.amount === 'number' ? String(d.amount) : '');
+    setPromiseDate(str(d.promiseDate) || editing.scheduledDate.slice(0, 10));
+    setMetodo(str(d.paymentMethodCode));
+    setTimeMode(editing.timeMode);
+    setHora(editing.scheduledTime ?? '09:00');
+    setFranja(editing.timeSlot ?? AgendaTimeSlot.MORNING);
+    setScheduledDate(editing.scheduledDate.slice(0, 10));
+    setObservations(editing.observations ?? '');
+    setAssigneeId(editing.assigneeId);
+    void elegirCliente(editing.clientId, editing.creditId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing?.id]);
 
   /*
    * Búsqueda con freno: sin él, cada tecla es una consulta al servidor y las respuestas vuelven
@@ -128,7 +203,16 @@ export function NewTaskModal({
       .catch(() => setMetodos([]));
   }, [tipo, metodos.length]);
 
-  async function elegirCliente(clientId: string) {
+  // Las plantillas sólo hacen falta para un WhatsApp: se piden al elegir ese tipo.
+  useEffect(() => {
+    if (tipo !== AgendaItemType.WHATSAPP || plantillas.length > 0) return;
+    void fetch('/api/catalogs/WHATSAPP_TEMPLATE')
+      .then((r) => r.json())
+      .then((b) => setPlantillas(Array.isArray(b?.data) ? b.data : []))
+      .catch(() => setPlantillas([]));
+  }, [tipo, plantillas.length]);
+
+  async function elegirCliente(clientId: string, keepCreditId?: string) {
     setError(null);
     setBuscando(true);
     const res = await fetch(`/api/agenda/context/${clientId}`);
@@ -137,6 +221,8 @@ export function NewTaskModal({
     if (!res.ok) return setError(body?.error?.message ?? t('create.contextError'));
     const data = body as Ctx;
     setCtx(data);
+    // Editando, el crédito y los datos ya están precargados: no se pisan con los de por omisión.
+    if (keepCreditId) return setCreditId(keepCreditId);
     setCreditId(data.credits[0]?.creditId ?? '');
     setContactId(data.contacts.find((c) => c.isPrimary)?.id ?? data.contacts[0]?.id ?? '');
     setLocationId(data.locations[0]?.id ?? '');
@@ -160,21 +246,38 @@ export function NewTaskModal({
   async function guardar() {
     setError(null);
     setSaving(true);
-    const res = await postJson('/api/agenda', {
-      creditId,
-      type: tipo,
-      details: details(),
-      scheduledDate,
-      timeMode,
-      ...(timeMode === ScheduleTimeMode.FIXED ? { scheduledTime: hora } : { timeSlot: franja }),
-      ...(observations.trim() ? { observations: observations.trim() } : {}),
-    });
+    const horario = timeMode === ScheduleTimeMode.FIXED ? { scheduledTime: hora } : { timeSlot: franja };
+    // Editar manda sólo lo editable (sin día, crédito ni responsable); las observaciones vacías limpian las anteriores.
+    const res = editing
+      ? await sendJson(
+          `/api/agenda/${editing.id}`,
+          {
+            type: tipo,
+            details: details(),
+            timeMode,
+            ...horario,
+            observations: observations.trim(),
+            // Reasignar: solo si cambió (quien reasigna es el creador; la API valida el destinatario).
+            ...(assigneeId && assigneeId !== editing.assigneeId ? { assigneeId } : {}),
+          },
+          'PATCH',
+        )
+      : await postJson('/api/agenda', {
+          creditId,
+          type: tipo,
+          details: details(),
+          scheduledDate,
+          timeMode,
+          ...horario,
+          ...(observations.trim() ? { observations: observations.trim() } : {}),
+          ...(assigneeId ? { assigneeId } : {}),
+        });
     setSaving(false);
     if (!res.ok) {
       // El servidor dice qué falta, campo por campo: repetir la regla acá sería una segunda copia.
-      return setError(res.data.error?.message ?? t('create.error'));
+      return setError(res.data.error?.message ?? t(editing ? 'edit.error' : 'create.error'));
     }
-    toast(t('create.done'));
+    toast(t(editing ? 'edit.done' : 'create.done'));
     cerrar();
     router.refresh();
   }
@@ -194,14 +297,20 @@ export function NewTaskModal({
   /** El crédito elegido. */
   const credito = ctx?.credits.find((c) => c.creditId === creditId);
   /** Sin crédito no hay gestión: el resto de lo que falte lo dice el servidor con su mensaje. */
-  const puede = Boolean(credito);
+  /*
+   * Una visita exige la dirección CON punto en el mapa (la API lo rechaza con AGENDA_013): se avisa y se frena antes de mandarla,
+   * en vez de dejar que choque. El aviso y el mapa para marcarlo están en el selector de dirección.
+   */
+  const lugar = ctx?.locations.find((l) => l.id === locationId);
+  const visitaSinPunto = tipo === AgendaItemType.VISIT && !(lugar?.latitude != null && lugar.longitude != null);
+  const puede = Boolean(credito) && !visitaSinPunto;
 
   return (
     <Modal
       wide
       open={open}
       onClose={cerrar}
-      title={t('create.title')}
+      title={t(editing ? 'edit.title' : 'create.title')}
       actions={
         <>
           <span className="sm:w-40">
@@ -211,7 +320,7 @@ export function NewTaskModal({
           </span>
           <span className="sm:w-48">
             <Button onClick={() => void guardar()} loading={saving} disabled={!puede}>
-              {t('create.confirm')}
+              {t(editing ? 'edit.confirm' : 'create.confirm')}
             </Button>
           </span>
         </>
@@ -219,7 +328,9 @@ export function NewTaskModal({
     >
       <ErrorBanner message={error} />
 
-      {!ctx ? (
+      {!ctx && editing ? (
+        <p className="text-[13px] text-k-text-2">{t('create.searching')}</p>
+      ) : !ctx ? (
         <>
           {/*
            * Primero el deudor, siempre. Una gestión cuelga de un crédito suyo:
@@ -263,9 +374,11 @@ export function NewTaskModal({
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3 rounded-xl border border-k-border bg-k-bg px-3 py-2.5">
             <span className="text-[14px] font-medium text-k-text">{ctx.client.displayName}</span>
-            <button type="button" onClick={() => setCtx(null)} className="text-[13px] font-medium text-k-periwinkle hover:underline">
-              {t('create.changeClient')}
-            </button>
+            {!editing && (
+              <button type="button" onClick={() => setCtx(null)} className="text-[13px] font-medium text-k-periwinkle hover:underline">
+                {t('create.changeClient')}
+              </button>
+            )}
           </div>
 
           {/* Sin ningún crédito visible no hay nada que agendar, y conviene decirlo entero. */}
@@ -273,7 +386,7 @@ export function NewTaskModal({
             <p className="rounded-xl bg-k-warning-bg px-3 py-2.5 text-[13px] text-k-warning-text">{t('create.noCredits')}</p>
           ) : (
             <Field label={t('create.credit')}>
-              <Select value={creditId} onChange={(e) => setCreditId(e.target.value)} disabled={saving}>
+              <Select value={creditId} onChange={(e) => setCreditId(e.target.value)} disabled={saving || !!editing}>
                 {ctx.credits.map((c) => (
                   <option key={c.creditId} value={c.creditId}>
                     {(c.code ?? t('create.noCode')) +
@@ -287,15 +400,58 @@ export function NewTaskModal({
             </Field>
           )}
 
-          <Field label={t('create.type')}>
-            <Select value={tipo} onChange={(e) => setTipo(e.target.value as AgendaItemType)} disabled={saving}>
-              {TIPOS.map((v) => (
-                <option key={v} value={v}>
-                  {t(`type.${v}`)}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          {assign && (
+            <Field label={editing ? t('detail.assignee') : t('create.assignTo')}>
+              <Select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} disabled={saving}>
+                {/* Al crear, sin elegir se asigna al responsable del crédito; al editar siempre hay uno actual. */}
+                {editing ? (
+                  !assignees.some((a) => a.userId === editing.assigneeId) && <option value={editing.assigneeId}>{editing.assigneeName ?? '—'}</option>
+                ) : (
+                  <option value="">{t('create.assignDefault')}</option>
+                )}
+                {assignees.map((a) => (
+                  <option key={a.userId} value={a.userId}>
+                    {[a.firstName, a.lastName].filter(Boolean).join(' ') || '—'}
+                    {a.userId === assign.meId ? ` (${t('create.me')})` : ''}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+
+          <div>
+            <span id="tipo-gestion" className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-k-text-2">
+              {t('create.type')}
+            </span>
+            <div role="radiogroup" aria-labelledby="tipo-gestion" className="flex flex-wrap gap-2">
+              {TIPOS.map((v) => {
+                const on = tipo === v;
+                const look = TIPO_LOOK[v];
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    disabled={saving}
+                    onClick={() => setTipo(v)}
+                    className={`flex items-center gap-2 rounded-full border-[1.5px] py-1 pl-1 pr-3 text-[13px] font-medium transition-colors disabled:opacity-60 ${
+                      on
+                        ? 'border-k-periwinkle bg-k-highlight text-k-navy shadow-k-focus'
+                        : 'border-k-border bg-white text-k-text hover:bg-k-bg'
+                    }`}
+                  >
+                    <span aria-hidden className={`grid h-6 w-6 place-items-center rounded-full ${TONES[look.tone].tile}`}>
+                      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-current">
+                        {look.icon}
+                      </svg>
+                    </span>
+                    {t(`type.${v}`)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           {/* Lo que cada tipo necesita. El servidor exige exactamente esto y nada más. */}
           {(tipo === AgendaItemType.CALL || tipo === AgendaItemType.WHATSAPP) && (
@@ -313,7 +469,39 @@ export function NewTaskModal({
 
           {tipo === AgendaItemType.WHATSAPP && (
             <Field label={t('create.message')}>
-              <Input value={mensaje} onChange={(e) => setMensaje(e.target.value)} disabled={saving} maxLength={1000} />
+              <div className="space-y-2">
+                {plantillas.length > 0 && (
+                  <div className="flex flex-wrap gap-2" aria-label={t('create.templates')}>
+                    {plantillas.map((p) => (
+                      <button
+                        key={p.code}
+                        type="button"
+                        disabled={saving}
+                        onClick={() =>
+                          setMensaje(
+                            renderTemplate(p.metadata?.body ?? '', {
+                              cliente: ctx.client.displayName,
+                              saldo: credito ? money(credito.outstandingBalance, credito.currency) : undefined,
+                            }),
+                          )
+                        }
+                        className="rounded-full border border-k-border bg-white px-3 py-1.5 text-[13px] font-medium text-k-text hover:bg-k-bg disabled:opacity-60"
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <textarea
+                  value={mensaje}
+                  onChange={(e) => setMensaje(e.target.value)}
+                  disabled={saving}
+                  maxLength={1000}
+                  rows={4}
+                  placeholder={t('create.messageHint')}
+                  className="w-full rounded-xl border-[1.5px] border-k-border bg-white px-3 py-2.5 text-[14px] text-k-text outline-none focus:border-k-periwinkle"
+                />
+              </div>
             </Field>
           )}
 
@@ -327,6 +515,7 @@ export function NewTaskModal({
                 setCtx({ ...ctx, locations: [...ctx.locations, l] });
                 setLocationId(l.id);
               }}
+              onUpdated={(l) => setCtx({ ...ctx, locations: ctx.locations.map((x) => (x.id === l.id ? l : x)) })}
               clientId={ctx.client.id}
               disabled={saving}
             />
@@ -334,7 +523,14 @@ export function NewTaskModal({
 
           {tipo === AgendaItemType.REMINDER && (
             <Field label={t('create.description')}>
-              <Input value={descripcion} onChange={(e) => setDescripcion(e.target.value)} disabled={saving} maxLength={500} />
+              <textarea
+                value={descripcion}
+                onChange={(e) => setDescripcion(e.target.value)}
+                disabled={saving}
+                maxLength={500}
+                rows={3}
+                className="w-full rounded-xl border-[1.5px] border-k-border bg-white px-3 py-2.5 text-[14px] text-k-text outline-none focus:border-k-periwinkle disabled:opacity-60"
+              />
             </Field>
           )}
 
@@ -343,8 +539,25 @@ export function NewTaskModal({
               <Field label={t('create.amount')}>
                 <Input value={monto} onChange={(e) => setMonto(e.target.value)} disabled={saving} type="number" min={0} step="0.01" />
               </Field>
+              {/* Referencia de sólo lectura, igual que en el teléfono: se negocia el monto mirando estos números. */}
+              {credito && (
+                <dl className="grid grid-cols-3 gap-3 rounded-xl border border-k-border bg-k-bg px-3 py-2.5 sm:col-span-2">
+                  {(
+                    [
+                      ['principal', credito.principalAmount],
+                      ['overdue', credito.overdueAmount],
+                      ['outstanding', credito.outstandingBalance],
+                    ] as const
+                  ).map(([k, v]) => (
+                    <div key={k}>
+                      <dt className="text-[11px] font-medium uppercase tracking-wide text-k-text-2">{t(`create.ref.${k}`)}</dt>
+                      <dd className="text-[14px] font-medium text-k-text">{money(v, credito.currency)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
               <Field label={t('create.promiseDate')}>
-                <Input type="date" value={promiseDate} onChange={(e) => setPromiseDate(e.target.value)} disabled={saving} />
+                <Input type="date" value={promiseDate} onChange={(e) => setPromiseDate(e.target.value)} disabled={saving || !!editing} />
               </Field>
               <div className="sm:col-span-2">
                 <Field label={t('create.method')}>
@@ -365,9 +578,9 @@ export function NewTaskModal({
            * Cuándo. Son dos formas de programar y no una hora que a veces falta: la franja es lo
            * normal cuando se sale a la calle, y la hora exacta cuando hay una cita.
            */}
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <Field label={t('create.date')}>
-              <Input type="date" value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)} disabled={saving} />
+              <Input type="date" value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)} disabled={saving || !!editing} />
             </Field>
             <Field label={t('create.timeMode')}>
               <Select value={timeMode} onChange={(e) => setTimeMode(e.target.value as ScheduleTimeMode)} disabled={saving}>
@@ -393,7 +606,14 @@ export function NewTaskModal({
           </div>
 
           <Field label={t('create.observations')}>
-            <Input value={observations} onChange={(e) => setObservations(e.target.value)} disabled={saving} maxLength={500} />
+            <textarea
+                value={observations}
+                onChange={(e) => setObservations(e.target.value)}
+                disabled={saving}
+                maxLength={500}
+                rows={3}
+                className="w-full rounded-xl border-[1.5px] border-k-border bg-white px-3 py-2.5 text-[14px] text-k-text outline-none focus:border-k-periwinkle disabled:opacity-60"
+              />
           </Field>
         </div>
       )}

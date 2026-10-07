@@ -37,7 +37,8 @@
       "account": "Account",
       "export": "Export",
       "profile": "My profile",
-      "security": "Security"
+      "security": "Security",
+      "pending": "{n, plural, one {# pending task} other {# pending tasks}}"
     },
     "crumbs": {
       "password": "Password",
@@ -213,6 +214,18 @@
         "title": "Protect your account",
         "text": "Turn on two-step verification.",
         "cta": "Turn on"
+      },
+      "agendaToday": {
+        "title": "Today's agenda",
+        "view": "View agenda",
+        "overdue": "Overdue",
+        "pending": "Pending today",
+        "next": "Next",
+        "nothing": "You have nothing pending today.",
+        "onlyOverdue": "Nothing else today: check the overdue ones.",
+        "team": "Team workload",
+        "loadPending": "{n} today",
+        "loadOverdue": "{n, plural, =0 {None overdue} one {# overdue} other {# overdue}}"
       }
     },
     "error": {
@@ -1146,7 +1159,8 @@
         "empty": "There are no overdue items.",
         "collapse": "Show less",
         "expand": "View all {n}",
-        "more": "and {n} more"
+        "more": "and {n} more",
+        "truncated": "Showing the first {shown} of {total}. Filter by collector to see the rest."
       },
       "unassigned": "No collector",
       "noTime": "No time",
@@ -1158,7 +1172,9 @@
         "cancel": "Cancel",
         "reschedule": "Reschedule",
         "edit": "Edit",
-        "call": "Call"
+        "call": "Call",
+        "delete": "Delete",
+        "openRoute": "Record on the route"
       },
       "complete": {
         "title": "Record what happened",
@@ -1197,7 +1213,35 @@
         "history": "Collection history",
         "historyEmpty": "No other activity for this loan.",
         "rescheduledFrom": "Born from rescheduling another item.",
-        "openMora": "View in Overdue"
+        "openMora": "View in Overdue",
+        "creditInfo": "Credit information",
+        "seeInMora": "View in arrears",
+        "balanceNow": "Current balance",
+        "gestion": "Task details",
+        "type": "Type",
+        "date": "Date",
+        "moment": "Time",
+        "remember": "What to remember",
+        "message": "Message",
+        "amount": "Promised amount",
+        "promiseDate": "Payment date",
+        "method": "Payment method",
+        "assignee": "Assigned to",
+        "assignedBy": "Assigned by",
+        "current": "This task",
+        "promiseSummary": "Payment commitment for {amount}",
+        "result": "Result",
+        "executedBy": "Recorded by {name} · {date}",
+        "executedOn": "Recorded on {date}",
+        "reason": "Reason",
+        "rescheduledTo": "Moved to {date}",
+        "upcoming": "Upcoming",
+        "past": "History",
+        "showMore": "Show {n} more",
+        "copyPhone": "Copy phone",
+        "phoneCopied": "Phone copied",
+        "openWhatsapp": "Open WhatsApp",
+        "viewLocation": "View location"
       },
       "type": {
         "CALL": "Call",
@@ -1238,9 +1282,14 @@
         "list": "List",
         "calendar": "Calendar",
         "day": "Day",
-        "month": "Month"
+        "month": "Month",
+        "week": "Week"
       },
-      "week": "Week",
+      "week": {
+        "previous": "Previous week",
+        "next": "Next week",
+        "count": "{n, plural, =0 {No tasks} one {# task} other {# tasks}}"
+      },
       "pickDate": "Pick a date",
       "previousMonth": "Previous month",
       "nextMonth": "Next month",
@@ -1310,11 +1359,18 @@
         "noContacts": "No phones on file",
         "primary": "primary",
         "message": "Message",
+        "templates": "Message templates",
+        "messageHint": "Write or pick a template…",
         "location": "Which address",
         "noLocations": "No addresses on file",
         "description": "What to remember",
         "amount": "Promised amount",
         "promiseDate": "Promise date",
+        "ref": {
+          "principal": "Principal",
+          "overdue": "Overdue installment",
+          "outstanding": "Outstanding balance"
+        },
         "method": "How they will pay",
         "pickMethod": "Pick the payment method",
         "date": "Day",
@@ -1339,7 +1395,26 @@
         "noGeo": "This browser cannot provide your location. Mark the point on the map.",
         "geoDenied": "Could not get your location — mark the point by tapping the map.",
         "pinAt": "Point marked: {lat}, {lng}",
-        "pinHint": "Tap the map to mark the point (optional)."
+        "pinHint": "Tap the map to mark the point (optional).",
+        "assignTo": "Assign to",
+        "assignDefault": "Credit owner",
+        "me": "me",
+        "noPoint": "This address has no map location. Without it the visit cannot be scheduled or routed: tap the map to mark it.",
+        "savePoint": "Save location"
+      },
+      "edit": {
+        "title": "Edit the task",
+        "confirm": "Save changes",
+        "dateLocked": "To change the day, use Reschedule.",
+        "error": "Could not save the changes",
+        "done": "Task updated"
+      },
+      "deleteItem": {
+        "title": "Delete the task",
+        "text": "It is removed from the agenda. To record that it was not done, cancel it instead.",
+        "confirm": "Delete",
+        "back": "Back",
+        "done": "Task deleted"
       }
     },
     "routes": {
@@ -1376,7 +1451,7 @@
         "subtitle": "Pick the day and the people: each one goes out with their most urgent loans.",
         "intro": "Build the day's routes in two steps: pick the date and the collectors, review how many stops each one gets, and only then publish. Each collector goes out with their own portfolio.",
         "cta": "Plan routes",
-        "scope": "Visits cannot be picked one by one or moved between collectors yet: each route is built from the loans that person already has assigned, most urgent first.",
+        "scope": "Visits cannot be picked one by one or moved between collectors yet: each route is built from the loans that person already has assigned, most urgent first. Visits scheduled for that day join their owner's route automatically.",
         "noPermission": "Your role does not hand out work: you can check the history, but not plan.",
         "noCollectors": "There are no active collectors",
         "noCollectorsText": "Invite your team from Team and try again.",
@@ -1475,7 +1550,8 @@
             "HIGH": "High",
             "CRITICAL": "Critical"
           }
-        }
+        },
+        "scheduledTag": "Scheduled visit"
       },
       "work": {
         "entity": "collectors",
@@ -2597,6 +2673,14 @@
       "COLLECTOR": "Collector",
       "AUDITOR": "Auditor",
       "VIEWER": "Viewer"
+    },
+    "transfer": {
+      "title": "Hand over {name}'s work",
+      "text": "{name} has {agenda} pending tasks, {credits} credits and {routes} routes. They must be handed to someone else before deactivating.",
+      "target": "Hand them to",
+      "pick": "Choose a person",
+      "confirm": "Hand over and deactivate",
+      "nobody": "There is no other active collector or supervisor to hand them to."
     }
   },
   "profile": {

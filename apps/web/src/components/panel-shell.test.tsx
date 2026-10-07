@@ -140,3 +140,43 @@ describe('PanelShell — cambio de empresa', () => {
     expect(screen.getAllByRole('button', { name: 'Kobrax Demo Norte SUPERVISOR' }).length).toBeGreaterThan(0);
   });
 });
+
+describe('PanelShell · campanita y contador de la agenda (F4/11)', () => {
+  const NOTIF = (over: Record<string, unknown>) => ({ id: 'n1', type: 'SYSTEM', title: 'Aviso', body: null, clientId: null, creditId: null, agendaItemId: null, readAt: null, createdAt: '2026-10-07T00:00:00Z', ...over });
+
+  it('un aviso de una gestión es un enlace a esa gestión', async () => {
+    server.use(http.get('*/api/notifications', () => HttpResponse.json({ data: [NOTIF({ type: 'AGENDA_ASSIGNED', title: 'Nueva gestión asignada', agendaItemId: 'g1' })] })));
+    renderShell();
+    await userEvent.click(await screen.findByLabelText('Notificaciones'));
+    expect(await screen.findByRole('link', { name: /Nueva gestión asignada/ })).toHaveAttribute('href', '/agenda/g1');
+  });
+
+  it('un aviso del sistema no es un enlace', async () => {
+    server.use(http.get('*/api/notifications', () => HttpResponse.json({ data: [NOTIF({ title: 'Plan al límite' })] })));
+    renderShell();
+    await userEvent.click(await screen.findByLabelText('Notificaciones'));
+    expect(await screen.findByRole('button', { name: /Plan al límite/ })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Plan al límite/ })).toBeNull();
+  });
+
+  it('el menú muestra cuántas gestiones tiene la agenda, en rojo si hay vencidas', () => {
+    const permissions = ['agenda:read'];
+    render(
+      <PanelShell user={USER} accounts={ACCOUNTS} nav={visibleNav(permissions)} badges={{ agenda: { count: 7, urgent: true } }}>
+        <p>contenido</p>
+      </PanelShell>,
+    );
+    const badge = screen.getAllByLabelText('7 gestiones pendientes')[0]!;
+    expect(badge).toHaveTextContent('7');
+    expect(badge.className).toContain('bg-k-danger');
+  });
+
+  it('sin vencidas el contador no va en rojo', () => {
+    render(
+      <PanelShell user={USER} accounts={ACCOUNTS} nav={visibleNav(['agenda:read'])} badges={{ agenda: { count: 2 } }}>
+        <p>contenido</p>
+      </PanelShell>,
+    );
+    expect(screen.getAllByLabelText('2 gestiones pendientes')[0]!.className).not.toContain('bg-k-danger');
+  });
+});

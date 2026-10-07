@@ -3,16 +3,17 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { AGENDA_OUTCOMES_BY_TYPE, ScheduleTimeMode, type AgendaItemType } from '@kobrax/shared';
+import { AGENDA_OUTCOMES_BY_TYPE, ScheduleTimeMode, type AgendaItemType, type AgendaListItem } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
 import { shiftDay } from '@/lib/agenda';
 import { errorText } from '@/lib/api-error';
 import { sendJson } from '@/lib/client';
+import { NewTaskModal } from '../new-task-modal';
 import type { CatalogOption } from './page';
 
-type Action = 'complete' | 'cancel' | 'reschedule' | null;
+type Action = 'complete' | 'cancel' | 'reschedule' | 'delete' | null;
 
 /**
  * Lo que se puede hacer con una gestión pendiente.
@@ -28,22 +29,41 @@ export function ItemActions({
   today,
   cancelReasons,
   rescheduleReasons,
+  canExecute,
+  routeStopHref,
+  editable,
+  schedule,
+  assign,
 }: {
   itemId: string;
   type: AgendaItemType;
   /** El diálogo que se abre de entrada (`?accion=` del menú de la lista). */
-  initialAction?: 'complete' | 'reschedule' | 'cancel';
+  initialAction?: 'complete' | 'reschedule' | 'cancel' | 'edit' | 'delete';
   /** Hoy, en `YYYY-MM-DD` UTC. Lo calcula el servidor: el reloj del navegador puede estar corrido. */
   today: string;
   cancelReasons: CatalogOption[];
   rescheduleReasons: CatalogOption[];
+  /** Registrar la ejecución, reagendar y cancelar: de quien atiende la gestión (o su supervisor). */
+  canExecute: boolean;
+  /** La parada de ruta que lleva esta visita: «Registrar la ejecución» pasa a ser un enlace a ella. */
+  routeStopHref?: string;
+  /**
+   * Editar y eliminar: SOLO si quien mira es quien creó la gestión (lo decide la página con `createdBy`).
+   * Llega la gestión entera para precargar el formulario.
+   */
+  editable?: AgendaListItem;
+  /** Cuándo está agendada hoy: reagendar arranca con la MISMA hora o franja (cambiar el día no es cambiar la hora). */
+  schedule: { timeMode: ScheduleTimeMode; scheduledTime?: string; timeSlot?: string };
+  /** Quien puede asignar (`agenda:assign`) ve el campo «Responsable» al editar y puede reasignar. */
+  assign?: { meId: string };
 }) {
   const t = useTranslations('panel.agenda');
   const locale = useLocale();
   const router = useRouter();
   const toast = useToast();
 
-  const [action, setAction] = useState<Action>(initialAction ?? null);
+  // `edit` no es un diálogo de acá sino el modal del formulario: arranca abierto si se pidió desde el menú de la lista.
+  const [action, setAction] = useState<Action>(initialAction && initialAction !== 'edit' && (initialAction !== 'delete' || editable) ? initialAction : null);
   const [outcome, setOutcome] = useState('');
   const [notes, setNotes] = useState('');
   const [reasonCode, setReasonCode] = useState('');
@@ -54,8 +74,12 @@ export function ItemActions({
    */
   const tomorrow = shiftDay(today, 1);
   const [newDate, setNewDate] = useState(tomorrow);
+  const [rMode, setRMode] = useState<ScheduleTimeMode>(schedule.timeMode === ScheduleTimeMode.FIXED && schedule.scheduledTime ? ScheduleTimeMode.FIXED : ScheduleTimeMode.LAPSE);
+  const [rTime, setRTime] = useState(schedule.scheduledTime ?? '09:00');
+  const [rSlot, setRSlot] = useState(schedule.timeSlot ?? 'MORNING');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(initialAction === 'edit' && !!editable);
 
   // Los desenlaces válidos dependen del TIPO, y la API rechaza los demás con AGENDA_007: una
   // visita no puede terminar en «el número no es del deudor».
@@ -67,6 +91,22 @@ export function ItemActions({
     setOutcome('');
     setNotes('');
     setReasonCode('');
+  }
+
+  /** Eliminar quita la gestión: el detalle ya no existe, así que se vuelve a la agenda (no se refresca un 404). */
+  async function remove() {
+    setError(null);
+    setBusy(true);
+    const res = await sendJson(`/api/agenda/${itemId}`, undefined, 'DELETE');
+    setBusy(false);
+    if (!res.ok) {
+      setError(errorText(res.data.error, t, locale));
+      return;
+    }
+    close();
+    toast(t('deleteItem.done'));
+    router.push('/agenda');
+    router.refresh();
   }
 
   async function send(path: string, body: unknown, done: string) {
@@ -90,15 +130,61 @@ export function ItemActions({
 
   return (
     <>
-      <Button variant="ghost" onClick={() => setAction('complete')} className="sm:w-auto sm:px-5">
-        {t('actions.complete')}
-      </Button>
-      <Button variant="ghost" onClick={() => setAction('reschedule')} className="sm:w-auto sm:px-5">
-        {t('actions.reschedule')}
-      </Button>
-      <Button variant="ghost" onClick={() => setAction('cancel')} className="sm:w-auto sm:px-5">
-        {t('actions.cancel')}
-      </Button>
+      {canExecute && (
+        <>
+          {routeStopHref ? (
+            <a href={routeStopHref} className="contents">
+              <Button type="button" className="sm:w-auto sm:px-6">
+                {t('actions.openRoute')}
+              </Button>
+            </a>
+          ) : (
+            <Button onClick={() => setAction('complete')} className="sm:w-auto sm:px-6">
+              {t('actions.complete')}
+            </Button>
+          )}
+          <Button variant="ghost" onClick={() => setAction('reschedule')} className="sm:w-auto sm:px-6">
+            {t('actions.reschedule')}
+          </Button>
+          <Button variant="ghost" onClick={() => setAction('cancel')} className="sm:w-auto sm:px-6">
+            {t('actions.cancel')}
+          </Button>
+        </>
+      )}
+      {editable && (
+        <>
+          <Button variant="ghost" onClick={() => setEditing(true)} className="sm:w-auto sm:px-6">
+            {t('actions.edit')}
+          </Button>
+          <Button variant="ghost" onClick={() => setAction('delete')} className="sm:w-auto sm:px-6">
+            {t('actions.delete')}
+          </Button>
+        </>
+      )}
+
+      {/* Se monta al abrir: el borrador arranca limpio cada vez, con lo guardado. */}
+      {editable && editing && (
+        <NewTaskModal open onClose={() => setEditing(false)} date={editable.scheduledDate.slice(0, 10)} editing={editable} assign={assign} />
+      )}
+
+      <Modal
+        open={action === 'delete'}
+        onClose={close}
+        title={t('deleteItem.title')}
+        actions={
+          <>
+            <Button variant="ghost" onClick={close} disabled={busy} className="sm:w-auto sm:px-5">
+              {t('deleteItem.back')}
+            </Button>
+            <Button onClick={() => void remove()} loading={busy} className="sm:w-auto sm:px-5">
+              {t('deleteItem.confirm')}
+            </Button>
+          </>
+        }
+      >
+        <ErrorBanner message={error} />
+        <p>{t('deleteItem.text')}</p>
+      </Modal>
 
       <Modal
         open={action === 'complete'}
@@ -153,9 +239,9 @@ export function ItemActions({
               onClick={() =>
                 send(
                   `/api/agenda/${itemId}/reschedule`,
-                  // La franja se manda porque el DTO exige un `timeMode`; la hora exacta la
-                  // vuelve a poner quien ejecute, que es quien sabe a qué hora puede ir.
-                  { scheduledDate: newDate, timeMode: ScheduleTimeMode.LAPSE, timeSlot: 'MORNING', reasonCode },
+                  // Conserva la hora exacta o la franja que tenía: antes se mandaba siempre «Mañana» y una cita a las
+                  // 15:30 quedaba como «por la mañana» sin avisar.
+                  { scheduledDate: newDate, timeMode: rMode, ...(rMode === ScheduleTimeMode.FIXED ? { scheduledTime: rTime } : { timeSlot: rSlot }), reasonCode },
                   t('reschedule.done'),
                 )
               }
@@ -182,6 +268,29 @@ export function ItemActions({
               disabled={busy}
             />
           </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label={t('create.timeMode')}>
+              <Select value={rMode} onChange={(e) => setRMode(e.target.value as ScheduleTimeMode)} disabled={busy}>
+                <option value={ScheduleTimeMode.LAPSE}>{t('create.modeLapse')}</option>
+                <option value={ScheduleTimeMode.FIXED}>{t('create.modeFixed')}</option>
+              </Select>
+            </Field>
+            {rMode === ScheduleTimeMode.FIXED ? (
+              <Field label={t('create.time')}>
+                <Input type="time" value={rTime} onChange={(e) => setRTime(e.target.value)} disabled={busy} />
+              </Field>
+            ) : (
+              <Field label={t('create.slot')}>
+                <Select value={rSlot} onChange={(e) => setRSlot(e.target.value)} disabled={busy}>
+                  {['MORNING', 'AFTERNOON', 'NIGHT'].map((slot) => (
+                    <option key={slot} value={slot}>
+                      {t(`timeSlot.${slot}`)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+          </div>
           <ReasonField
             label={t('reschedule.reason')}
             options={rescheduleReasons}
