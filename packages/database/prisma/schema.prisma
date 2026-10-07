@@ -1333,6 +1333,9 @@ model RouteStop {
   clientId               String          @map("client_id")
   /// El crédito de la parada (F4/08).
   creditId               String?         @map("credit_id")
+  /// La visita agendada de la que nació (ref suave, F4/11). Al visitar la parada se cierra esa gestión. Índice único
+  /// parcial (solo paradas no salteadas) en la migración: Prisma no expresa los parciales.
+  agendaItemId           String?         @map("agenda_item_id")
   sequenceOrder          Int             @map("sequence_order")
   status                 RouteStopStatus @default(PENDING)
   predictedRecoveryScore Decimal?        @map("predicted_recovery_score") @db.Decimal(5, 4) // IA futura, nullable
@@ -1347,6 +1350,7 @@ model RouteStop {
   @@unique([routeId, sequenceOrder])
   @@index([accountId, routeId])
   @@index([accountId, creditId])
+  @@index([accountId, agendaItemId])
   @@map("route_stops")
 }
 
@@ -1498,6 +1502,12 @@ enum NotificationType {
   ROUTE_ASSIGNED
   PROMISE_DUE
   SYSTEM
+  /// Alguien te asignó una gestión (F4/11).
+  AGENDA_ASSIGNED
+  /// Alguien cambió una gestión tuya: la reagendó, cancelo, eliminó o editó.
+  AGENDA_CHANGED
+  /// Resumen diario de gestiones vencidas.
+  AGENDA_OVERDUE
 }
 
 /// Notificación operativa dirigida a un usuario dentro de un tenant.
@@ -1510,6 +1520,8 @@ model Notification {
   body      String?
   clientId  String?          @map("client_id")
   creditId  String?          @map("credit_id")
+  /// La gestión de agenda de la que habla el aviso (ref suave): la campanita navega a ella.
+  agendaItemId String?       @map("agenda_item_id")
   readAt    DateTime?        @map("read_at")
   createdAt DateTime         @default(now()) @map("created_at")
 
