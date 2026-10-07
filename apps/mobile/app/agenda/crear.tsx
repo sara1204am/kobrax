@@ -42,12 +42,14 @@ import {
   toHHmm,
   toISO,
   toLocalDate,
+  todayISO,
   type TimeMode,
   type TimeSlot,
 } from '@/agenda-form';
 import {
   addClientContact,
   addClientLocation,
+  updateClientLocation,
   clientContext,
   createItem,
   creditSituationLabel,
@@ -78,11 +80,7 @@ const SLOTS: TimeSlot[] = Object.values(AgendaTimeSlot);
 /** `RANGE` queda fuera del núcleo (ver plans/agenda/crear.md §3). */
 const TIME_MODES: TimeMode[] = [ScheduleTimeMode.FIXED, ScheduleTimeMode.LAPSE];
 
-/** Hoy en UTC (`YYYY-MM-DD`) — mismo anclaje que la pantalla principal y que el server. */
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-type Sheet = 'contact' | 'location' | 'credit' | 'method' | 'bank' | 'newPhone' | 'newLocation';
+type Sheet = 'contact' | 'location' | 'credit' | 'method' | 'bank' | 'newPhone' | 'newLocation' | 'pinLocation';
 type PickerKind = 'date' | 'time' | 'promiseDate';
 
 const PHONE_TYPES: { key: PhoneContactType; label: string }[] = [
@@ -301,6 +299,28 @@ export default function CrearGestionScreen() {
     setPin(res.coords.latitude, res.coords.longitude);
   }, [setPin]);
 
+  /**
+   * Le marca el punto a una dirección que ya estaba cargada (las importadas llegan como texto, sin coordenadas). Se corrige LA
+   * dirección, no se crea otra. Necesita señal: el punto tiene que quedar en el servidor para que la ruta lo use.
+   */
+  const savePin = useCallback(async () => {
+    const location = ctx?.locations.find((l) => l.id === details.locationId);
+    if (!ctx || !location || newLoc.latitude == null || newLoc.longitude == null) return;
+    setSavingLoc(true);
+    setLocError(null);
+    const res = await updateClientLocation(ctx.client.id, location.id, {
+      ...(location.address ? { address: location.address } : {}),
+      latitude: newLoc.latitude,
+      longitude: newLoc.longitude,
+    });
+    setSavingLoc(false);
+    if (res.status === 'offline') return setLocError('Necesitas señal para marcar la ubicación: el punto tiene que quedar guardado para la ruta.');
+    if (res.status !== 'ok') return setLocError(res.status === 'unauthenticated' ? 'Tu sesión venció — volvé a entrar.' : res.message);
+    setCtx({ ...ctx, locations: ctx.locations.map((l) => (l.id === location.id ? { ...l, latitude: newLoc.latitude, longitude: newLoc.longitude } : l)) });
+    setNewLoc((p) => ({ ...p, latitude: undefined, longitude: undefined }));
+    setSheet(null);
+  }, [ctx, details.locationId, newLoc.latitude, newLoc.longitude]);
+
   /** Guarda la dirección, la suma al contexto en memoria y la deja elegida. */
   const saveLocation = useCallback(async () => {
     if (!ctx || !newLoc.address.trim()) return;
@@ -418,6 +438,8 @@ export default function CrearGestionScreen() {
   const credit = ctx?.credits.find((c) => c.creditId === form.creditId);
   const contact = ctx?.contacts.find((c) => c.id === details.contactId);
   const location = ctx?.locations.find((l) => l.id === details.locationId);
+  /** Una visita exige la dirección CON punto en el mapa (el servidor la rechaza si no): se frena antes y se ofrece marcarlo. */
+  const visitaSinPunto = form.type === AgendaItemType.VISIT && !!location && (location.latitude == null || location.longitude == null);
   const method = methods.find((m) => m.code === details.paymentMethodCode);
   const bank = banks.find((b) => b.code === details.bankCode);
   const requiresBank = method?.metadata?.requiresBank === true;
@@ -533,6 +555,20 @@ export default function CrearGestionScreen() {
               <>
                 <SectionLabel>Dirección</SectionLabel>
                 <SelectRow icon="📍" value={location?.address ?? undefined} placeholder="Elegí una dirección" onPress={() => setSheet('location')} />
+                {visitaSinPunto && (
+                  <>
+                    <Text style={styles.hint}>Esta dirección no tiene ubicación en el mapa. Sin ella no se puede agendar la visita ni armar la ruta.</Text>
+                    <Button
+                      label="Marcar la ubicación en el mapa"
+                      variant="ghost"
+                      onPress={() => {
+                        setNewLoc((p) => ({ ...p, latitude: undefined, longitude: undefined }));
+                        setLocError(null);
+                        setSheet('pinLocation');
+                      }}
+                    />
+                  </>
+                )}
               </>
             )}
 
@@ -679,7 +715,7 @@ export default function CrearGestionScreen() {
           label={editing ? 'Guardar cambios' : 'Guardar gestión'}
           onPress={() => void save()}
           loading={saving}
-          disabled={loadingItem || !canSubmit(form, requiresBank)}
+          disabled={loadingItem || !canSubmit(form, requiresBank) || visitaSinPunto}
         />
       </SafeAreaView>
 
@@ -828,6 +864,21 @@ export default function CrearGestionScreen() {
             disabled={!newLoc.address.trim()}
           />
         </ScrollView>
+      </BottomSheet>
+      {/* Marcar el punto de una dirección que ya existe: el mismo mapa de «Nueva dirección», sin sus campos. */}
+      <BottomSheet visible={sheet === 'pinLocation'} onClose={() => setSheet(null)} title="Marcar la ubicación">
+        <MapPicker
+          style={styles.mapBox}
+          latitude={newLoc.latitude}
+          longitude={newLoc.longitude}
+          onChange={({ latitude, longitude }) => setPin(latitude, longitude)}
+        />
+        <Text style={styles.hint}>
+          {newLoc.latitude != null ? `Punto marcado: ${newLoc.latitude.toFixed(5)}, ${newLoc.longitude!.toFixed(5)}` : 'Toca el mapa para marcar el punto.'}
+        </Text>
+        <Button label="Usar mi ubicación actual" variant="ghost" onPress={() => void useMyLocation()} loading={locating} />
+        <ErrorBanner message={locError} />
+        <Button label="Guardar ubicación" onPress={() => void savePin()} loading={savingLoc} disabled={newLoc.latitude == null} />
       </BottomSheet>
       <PickerSheet
         visible={sheet === 'bank'}

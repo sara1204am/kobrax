@@ -145,24 +145,38 @@ export function StatTile({
   value,
   tone = 'neutral',
   onDark = false,
+  onPress,
 }: {
   label: string;
   value: string;
   tone?: 'neutral' | 'success' | 'danger';
   /** Sobre el bloque navy del Inicio: el mismo dato, invertido. Sin esto el valor sale navy sobre navy. */
   onDark?: boolean;
+  /** Con esto el número es un acceso: tocar «Vencidos» abre la lista de vencidas, en vez de ser una cifra que no lleva a ningún lado. */
+  onPress?: () => void;
 }) {
   const valueColor =
     tone === 'success' ? COLORS.success : tone === 'danger' ? COLORS.danger : onDark ? COLORS.white : COLORS.navy;
-  return (
-    <View style={[styles.tile, onDark && styles.tileDark]}>
+  const body = (
+    <>
       <Text style={[styles.tileValue, { color: valueColor }]} numberOfLines={1}>
         {value}
       </Text>
       <Text style={[styles.tileLabel, onDark && styles.tileLabelDark]} numberOfLines={2}>
         {label}
       </Text>
-    </View>
+    </>
+  );
+  if (!onPress) return <View style={[styles.tile, onDark && styles.tileDark]}>{body}</View>;
+  return (
+    <Pressable
+      style={[styles.tile, onDark && styles.tileDark]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}: ${value}`}
+    >
+      {body}
+    </Pressable>
   );
 }
 
@@ -460,6 +474,7 @@ export function AgendaCard({
   statusLabel,
   tone,
   overdue,
+  note,
   onPress,
 }: {
   name: string;
@@ -469,6 +484,8 @@ export function AgendaCard({
   statusLabel: string;
   tone: BadgeTone;
   overdue?: boolean;
+  /** Una línea más bajo la hora y el tipo: quién la asignó, o a quién se le asignó cuando se mira la agenda de un equipo. */
+  note?: string;
   onPress?: () => void;
 }) {
   return (
@@ -487,6 +504,11 @@ export function AgendaCard({
           <Text style={styles.rowSubtitle} numberOfLines={1}>
             {[time, typeLabel].filter(Boolean).join(' · ')}
           </Text>
+          {note && (
+            <Text style={styles.rowSubtitle} numberOfLines={1}>
+              {note}
+            </Text>
+          )}
         </View>
         <StatusBadge label={statusLabel} tone={overdue ? 'danger' : tone} />
       </Pressable>

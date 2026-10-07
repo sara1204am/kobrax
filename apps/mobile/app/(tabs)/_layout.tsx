@@ -4,6 +4,7 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { subscribeConnectivity } from '@/store/net';
 import { authService } from '@/auth-service';
+import { refreshTenantToday } from '@/agenda.service';
 import { hydrate } from '@/sync/hydrate';
 import { startSync } from '@/sync/sync.service';
 import { COLORS } from '@/theme';
@@ -21,6 +22,11 @@ function tab(name: IconName) {
 
 export default function TabsLayout() {
   useEffect(subscribeConnectivity, []);
+
+  // Qué día es para la EMPRESA (no el UTC ni solo el reloj del teléfono): las pantallas lo usan para pedir «hoy». Sin red no hace nada.
+  useEffect(() => {
+    void refreshTenantToday();
+  }, []);
 
   // Hidratación de oficina (P6): al entrar al shell se baja la jornada a la base local, para que
   // después opere sin señal. Va acá y no en `routeAfterAuth` a propósito — es un efecto, no una

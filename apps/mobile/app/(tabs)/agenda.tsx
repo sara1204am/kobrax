@@ -7,15 +7,14 @@ import { router, useFocusEffect } from 'expo-router';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { AgendaCard, AGENDA_STATUS_LABEL, AGENDA_TYPE_META, EmptyState, SectionLabel } from '@/ui';
 import { authService } from '@/auth-service';
-import { MONTHS, partitionDay, WEEKDAYS_SHORT } from '@/agenda-form';
+import { MONTHS, partitionDay, todayISO, WEEKDAYS_SHORT } from '@/agenda-form';
 import { listByDay, listOverdue, type AgendaListItem } from '@/agenda.service';
 
 const RANGE = 180; // días a cada lado de hoy (tira "infinita" práctica; onEndReached bidireccional = futuro)
 
-/** Fecha-calendario en UTC (el backend guarda `scheduledDate` a medianoche UTC). */
+/** Hoy para la EMPRESA como fecha-calendario en UTC (el backend guarda `scheduledDate` a medianoche UTC). */
 function utcToday(): Date {
-  const n = new Date();
-  return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()));
+  return new Date(`${todayISO()}T00:00:00.000Z`);
 }
 function addDays(d: Date, n: number): Date {
   return new Date(d.getTime() + n * 86_400_000);
@@ -186,20 +185,7 @@ export default function AgendaScreen() {
           contentContainerStyle={{ padding: SPACING.lg, paddingBottom: SPACING.xxl * 2 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.navy} />}
         >
-          <SectionLabel>Pendientes</SectionLabel>
-          {pending.length === 0 ? (
-            <Text style={styles.emptyLine}>Sin pendientes</Text>
-          ) : (
-            pending.map((it) => <Row key={it.id} item={it} />)
-          )}
-
-          {done.length > 0 && (
-            <>
-              <SectionLabel>Completados</SectionLabel>
-              {done.map((it) => <Row key={it.id} item={it} />)}
-            </>
-          )}
-
+          {/* Lo vencido va ARRIBA: es lo único accionable de un vistazo y, al final de la lista, quedaba detrás de todo el día. */}
           {overdueItems.length > 0 && (
             <>
               <SectionLabel>Vencidos</SectionLabel>
@@ -214,6 +200,21 @@ export default function AgendaScreen() {
               )}
             </>
           )}
+
+          <SectionLabel>Pendientes</SectionLabel>
+          {pending.length === 0 ? (
+            <Text style={styles.emptyLine}>Sin pendientes</Text>
+          ) : (
+            pending.map((it) => <Row key={it.id} item={it} />)
+          )}
+
+          {done.length > 0 && (
+            <>
+              <SectionLabel>Completados</SectionLabel>
+              {done.map((it) => <Row key={it.id} item={it} />)}
+            </>
+          )}
+
         </ScrollView>
       )}
 
@@ -238,6 +239,15 @@ export default function AgendaScreen() {
 }
 
 /** Mapea un agendado a la tarjeta; tocarla abre el detalle (S3). */
+/**
+ * La línea de más de la fila: quién la asignó (una gestión que te pasó un supervisor no se ve igual que una propia) y, cuando
+ * se mira la agenda de un equipo, de quién es.
+ */
+function agendaNote(item: AgendaListItem): string | undefined {
+  if (item.assignedByName) return `Asignada por ${item.assignedByName}`;
+  return undefined;
+}
+
 function Row({ item }: { item: AgendaListItem }) {
   const meta = AGENDA_TYPE_META[item.type];
   return (
@@ -250,6 +260,7 @@ function Row({ item }: { item: AgendaListItem }) {
         statusLabel={AGENDA_STATUS_LABEL[item.status]}
         tone={meta.tone}
         overdue={item.isOverdue}
+        note={agendaNote(item)}
         onPress={() => router.push(`/agenda/${item.id}`)}
       />
     </View>

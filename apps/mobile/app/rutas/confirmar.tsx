@@ -121,7 +121,7 @@ export default function ConfirmarRutaScreen() {
               <ListRow
                 key={s.id}
                 title={`${s.sequenceOrder}. ${s.clientName ?? 'Cliente sin nombre'}`}
-                subtitle={s.address ?? 'Sin dirección cargada'}
+                subtitle={[s.agendaItemId ? 'Visita agendada' : null, s.address ?? 'Sin dirección cargada'].filter(Boolean).join(' · ')}
                 onPress={() => router.push(`/cliente/${s.clientId}`)}
               />
             ))}

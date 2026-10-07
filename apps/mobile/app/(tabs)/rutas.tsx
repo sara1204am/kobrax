@@ -284,7 +284,7 @@ function Paradas({ stops, readOnly }: { stops: RouteStopItem[]; readOnly: boolea
           <ListRow
             key={s.id}
             title={`${s.sequenceOrder}. ${s.clientName ?? 'Cliente sin nombre'}`}
-            subtitle={s.address ?? 'Sin dirección cargada'}
+            subtitle={[s.agendaItemId ? 'Visita agendada' : null, s.address ?? 'Sin dirección cargada'].filter(Boolean).join(' · ')}
             right={<StatusBadge label={meta.label} tone={meta.tone} />}
             onPress={readOnly ? undefined : () => router.push(`/cliente/${s.clientId}`)}
           />

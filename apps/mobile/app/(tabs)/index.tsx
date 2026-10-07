@@ -169,8 +169,15 @@ export default function InicioScreen() {
           </View>
           <ProgressBar percent={progress.percent} />
           <View style={styles.tiles}>
-            <StatTile label="PENDIENTES" value={String(progress.pending)} onDark />
-            <StatTile label="VENCIDOS" value={String(home.overdue)} tone={home.overdue > 0 ? 'danger' : 'neutral'} onDark />
+            <StatTile label="PENDIENTES" value={String(progress.pending)} onDark onPress={() => router.push('/(tabs)/agenda')} />
+            <StatTile
+              label="VENCIDOS"
+              value={String(home.overdue)}
+              tone={home.overdue > 0 ? 'danger' : 'neutral'}
+              onDark
+              // Abre la Agenda, donde las vencidas van arriba de todo: antes era una cifra que no llevaba a ningún lado.
+              onPress={() => router.push('/(tabs)/agenda')}
+            />
             <StatTile label="COBRADO HOY" value={home.collected} tone="success" onDark />
           </View>
         </View>
