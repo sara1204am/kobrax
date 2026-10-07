@@ -33,6 +33,14 @@ const TZ_BY_COUNTRY: Record<string, string> = {
 };
 
 /**
+ * La zona de una cuenta: la que cargó, o la de su país, o UTC. La usan los jobs, que corren sin petición (y por eso
+ * sin `TenantClockService`) y aun así tienen que contar «hoy» como lo cuenta la agenda.
+ */
+export function timezoneOf(account: { timezone?: string | null; countryCode?: string | null } | null | undefined): string {
+  return account?.timezone || TZ_BY_COUNTRY[account?.countryCode ?? ''] || 'UTC';
+}
+
+/**
  * El ancla UTC de medianoche de la fecha civil `tz`. Exportada suelta para poder probarla sin Nest.
  *
  * `en-CA` no es capricho: es el locale que formatea `YYYY-MM-DD`, así que la fecha sale ya partida
@@ -134,7 +142,7 @@ export class TenantClockService {
     const account = await this.prisma.withTenant(accountId, (tx) =>
       tx.account.findFirst({ where: { id: accountId }, select: { timezone: true, countryCode: true } }),
     );
-    const tz = account?.timezone || TZ_BY_COUNTRY[account?.countryCode ?? ''] || 'UTC';
+    const tz = timezoneOf(account);
     this.tzByAccount.set(accountId, tz);
     return tz;
   }

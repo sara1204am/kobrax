@@ -35,6 +35,8 @@ function makeService(
     /** Los perfiles del equipo, para el orden por nombre de cobrador. */
     profiles?: { userId: string; firstName: string | null; lastName: string | null }[];
     stops?: FakeStop[];
+    /** Visitas agendadas pendientes del cobrador para el día (`agenda_items` VISIT). */
+    visits?: { id: string; creditId: string; clientId: string }[];
     /** Punto de cada parada (`null` = cliente sin ubicación cargada). Sólo lo usa el preview. */
     points?: Record<string, { latitude: number; longitude: number } | null>;
     osrm?: Partial<OsrmService>;
@@ -47,6 +49,7 @@ function makeService(
     listWhere: undefined as Record<string, unknown> | undefined,
     listOrderBy: undefined as unknown,
     rawSql: [] as string[],
+    stopUpdateMany: [] as { where: Record<string, unknown>; data: Record<string, unknown> }[],
   };
   // Store real en memoria: la secuencia de paradas es la lógica que hay que probar de verdad.
   const stops: FakeStop[] = opts.stops ? opts.stops.map((s) => ({ ...s })) : [];
@@ -71,7 +74,12 @@ function makeService(
       return opts.credits ?? [{ id: 'cr9', client_id: 'cl9' }];
     },
     credit: { findMany: async () => [] },
+    agendaItem: { findMany: async () => opts.visits ?? [] },
     routeStop: {
+      updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        calls.stopUpdateMany.push(args);
+        return { count: 0 };
+      },
       findFirst: async (args: { where: Record<string, unknown>; orderBy?: { sequenceOrder?: 'asc' | 'desc' } }) =>
         sorted(args.where, args.orderBy?.sequenceOrder ?? 'asc')[0] ?? null,
       findFirstOrThrow: async (args: { where: Record<string, unknown> }) => {
@@ -79,7 +87,8 @@ function makeService(
         if (!found) throw new Error('no encontrado');
         return found;
       },
-      findMany: async (args: { where: Record<string, unknown> }) => sorted(args.where),
+      // Las paradas que ya llevan una visita (`agendaItemId`): en estas pruebas, ninguna.
+      findMany: async (args: { where: Record<string, unknown> }) => (args.where.agendaItemId !== undefined ? [] : sorted(args.where)),
       count: async (args: { where: Record<string, unknown> }) => sorted(args.where).length,
       // Cuántas paradas visitadas tiene cada ruta, desde el MISMO store: así el contador del
       // listado se prueba contra paradas de verdad y no contra un número inventado en el mock.
@@ -236,6 +245,45 @@ describe('RoutesService.generate', () => {
     const stops = (calls.routeCreate[0]!.stops as Created).create;
     assert.deepEqual(stops.map((s) => [s.creditId, s.sequenceOrder]), [['crB', 1], ['crA', 2]]);
     assert.match(calls.rawSql[0]!, /cr\.account_id/); // pasa por el alcance de mora
+  });
+
+  describe('visitas agendadas (F4/11 · E1)', () => {
+    type Stop = { creditId: string; clientId: string; sequenceOrder: number; agendaItemId?: string };
+    const V = (agendaItem: string, credit: string) => ({ id: agendaItem, creditId: credit, clientId: 'cl-' + credit });
+
+    it('sin créditos elegidos las visitas del día entran PRIMERO y luego la mora', async () => {
+      const { service, calls } = makeService({ credits: CR('crA', 'crB'), visits: [V('v1', 'crV')], permissions: ASSIGN });
+      await service.generate(GEN);
+      const stops = (calls.routeCreate[0]!.stops as { create: Stop[] }).create;
+      assert.deepEqual(stops.map((s) => [s.creditId, s.sequenceOrder, s.agendaItemId]), [['crV', 1, 'v1'], ['crA', 2, undefined], ['crB', 3, undefined]]);
+    });
+
+    it('con créditos elegidos manda el orden elegido y las visitas van al final', async () => {
+      const { service, calls } = makeService({ credits: CR('crA', 'crB'), visits: [V('v1', 'crV')], permissions: ASSIGN });
+      await service.generate({ ...GEN, creditIds: ['crB', 'crA'] } as never);
+      const stops = (calls.routeCreate[0]!.stops as { create: Stop[] }).create;
+      assert.deepEqual(stops.map((s) => s.creditId), ['crB', 'crA', 'crV']);
+    });
+
+    it('si el crédito de la visita ya iba por mora, es UNA sola parada y lleva el vínculo', async () => {
+      const { service, calls } = makeService({ credits: CR('crA', 'crB'), visits: [V('v1', 'crB')], permissions: ASSIGN });
+      await service.generate(GEN);
+      const stops = (calls.routeCreate[0]!.stops as { create: Stop[] }).create;
+      assert.deepEqual(stops.map((s) => [s.creditId, s.agendaItemId]), [['crA', undefined], ['crB', 'v1']]);
+    });
+
+    it('una visita sola alcanza para armar la ruta (no hay mora)', async () => {
+      const { service, calls } = makeService({ credits: [], visits: [V('v1', 'crV')], permissions: ASSIGN });
+      const r = await service.generate(GEN);
+      assert.equal(r.totalCases, 1);
+      assert.equal((calls.routeCreate[0]!.stops as { create: Stop[] }).create[0]!.agendaItemId, 'v1');
+    });
+  });
+
+  it('cancelar la ruta suelta las visitas: sus paradas dejan de apuntar a la gestión', async () => {
+    const { service, calls } = makeService({ route: { id: 'r1', collectorId: 'u1' }, permissions: ASSIGN });
+    await service.updateStatus('r1', { status: 'CANCELLED' } as never);
+    assert.deepEqual(calls.stopUpdateMany[0]!.data, { agendaItemId: null });
   });
 
   it('rechaza si no hay créditos para la ruta (ROUTE_EMPTY)', async () => {

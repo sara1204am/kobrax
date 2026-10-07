@@ -40,3 +40,22 @@ export const roleNotAllowed = () =>
     code: 'USER_ROLE_NOT_ALLOWED',
     message: 'Ese rol se administra desde la web',
   });
+
+/**
+ * No se desactiva a quien todavía tiene trabajo a su nombre (F4/11 · D1): gestiones pendientes, créditos a su cargo o
+ * rutas armadas. Quedarían a nombre de alguien que ya no entra, y nadie los vería. El detalle trae cuántos de cada uno
+ * para que la pantalla pueda pedir a quién pasarlos.
+ */
+export const userHasPendingWork = (work: { agenda: number; credits: number; routes: number }) =>
+  new ConflictException({
+    code: 'USER_HAS_PENDING_WORK',
+    message: 'Esta persona tiene gestiones, créditos o rutas a su nombre. Pásalos a otra persona para desactivarla.',
+    details: work,
+  });
+
+/** A quién se le pasa el trabajo tiene que ser un cobrador o supervisor activo, y no la misma persona. */
+export const reassignTargetInvalid = () =>
+  new BadRequestException({
+    code: 'USER_REASSIGN_TARGET_INVALID',
+    message: 'El trabajo solo se puede pasar a un cobrador o supervisor activo, distinto de quien se desactiva',
+  });

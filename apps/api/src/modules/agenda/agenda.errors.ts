@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 
 export const agendaItemNotFound = () =>
   new NotFoundException({ code: 'AGENDA_NOT_FOUND', message: 'Gestión agendada no encontrada' });
@@ -36,3 +36,23 @@ export const agendaNotSchedulable = () =>
 /** El `id` que mandó el cliente ya es de otra gestión (otro crédito, o una eliminada). */
 export const agendaIdTaken = () =>
   new ConflictException({ code: 'AGENDA_009', message: 'Ese id de gestión ya pertenece a otra gestión agendada' });
+
+/** Un cobrador (sin `agenda:assign`) intentó agendarle una gestión a otra persona. */
+export const agendaAssignForbidden = () =>
+  new ForbiddenException({ code: 'AGENDA_010', message: 'No puedes asignar gestiones a otras personas' });
+
+/** El destinatario no existe, está inactivo, no es cobrador/supervisor o es de otra agencia. 400, no 404: quien pide ya tiene permiso de asignar. */
+export const agendaAssigneeNotEligible = () =>
+  new BadRequestException({ code: 'AGENDA_011', message: 'Esa persona no puede recibir gestiones: debe ser un cobrador o supervisor activo de tu alcance' });
+
+/** Editar y eliminar son de quien creó la gestión: ni el responsable ni un administrador la tocan. */
+export const agendaNotOwner = () =>
+  new ForbiddenException({ code: 'AGENDA_012', message: 'Solo quien creó la gestión puede editarla o eliminarla' });
+
+/** Toda visita lleva la ubicación del domicilio: sin dirección con punto en el mapa no se puede ir ni planificar una ruta. */
+export const agendaVisitNeedsLocation = () =>
+  new BadRequestException({ code: 'AGENDA_013', message: 'La visita necesita una dirección del cliente con ubicación en el mapa' });
+
+/** La visita ya está en una ruta: se registra desde la parada (con GPS y evidencia), no desde la agenda. */
+export const agendaVisitInRoute = () =>
+  new ConflictException({ code: 'AGENDA_014', message: 'Esta visita está en una ruta: regístrala desde la parada' });

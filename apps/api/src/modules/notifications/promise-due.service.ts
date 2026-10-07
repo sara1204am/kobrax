@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { CreditAssignmentKind, CreditStatus, InstallmentStatus, NotificationType } from '@prisma/client';
+import { civilTodayUTC, timezoneOf } from '../../common/context/tenant-clock.service';
 import { PrismaService } from '../../database/prisma.service';
 import { NotificationsService } from './notifications.service';
 
@@ -84,13 +85,17 @@ export class PromiseDueService implements OnApplicationBootstrap, OnModuleDestro
 
   /** Fase de lectura (una sola transacción RLS): cuotas próximas → responsable (+ temporal) del crédito → dedupe. */
   private async collectTargets(accountId: string, now: Date): Promise<PromiseDueTarget[]> {
-    const horizon = new Date(now.getTime() + PROMISE_DUE_HORIZON_DAYS * 86_400_000);
     const since = new Date(now.getTime() - PROMISE_DUE_DEDUPE_MS);
 
     return this.prisma.withTenant(accountId, async (tx) => {
+      // «Hoy» es el día civil de la empresa (no el instante UTC): una cuota que vence HOY tiene que entrar al aviso, y con el
+      // instante UTC una cuota de hoy (medianoche) quedaba «en el pasado» desde la madrugada.
+      const account = await tx.account.findFirst({ where: { id: accountId }, select: { timezone: true, countryCode: true } });
+      const today = civilTodayUTC(timezoneOf(account), now);
+      const horizon = new Date(today.getTime() + PROMISE_DUE_HORIZON_DAYS * 86_400_000);
       const installments = await tx.creditInstallment.findMany({
         where: {
-          dueDate: { gte: now, lte: horizon },
+          dueDate: { gte: today, lte: horizon },
           status: { not: InstallmentStatus.PAID },
           // Un crédito saldado, castigado o borrado ya no se cobra. Antes lo filtraba el estado del caso.
           credit: { deletedAt: null, writtenOffAt: null, status: { notIn: [CreditStatus.PAID, CreditStatus.CANCELLED] } },

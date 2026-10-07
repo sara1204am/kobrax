@@ -13,6 +13,13 @@ export interface AgendaRowExtra {
   balance?: number;
   currency?: string;
   assigneeName?: string;
+  /**
+   * Quién la asignó: el nombre de quien la creó, solo cuando no es el responsable (nadie «se asigna» a sí mismo).
+   * Nunca el correo.
+   */
+  assignedByName?: string;
+  /** Quien pide puede editarla y eliminarla: la creó él y sigue pendiente. El cliente solo dibuja el botón; la API lo hace cumplir. */
+  canEdit?: boolean;
 }
 
 /**
@@ -35,6 +42,7 @@ export function serializeAgendaItem(
     clientId: a.clientId,
     creditId: a.creditId,
     assigneeId: a.assigneeId,
+    createdBy: a.createdBy ?? undefined,
     type: a.type,
     status: a.status,
     priorityCode: a.priorityCode ?? undefined,

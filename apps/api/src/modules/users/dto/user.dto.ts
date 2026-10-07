@@ -16,6 +16,11 @@ export class InviteMemberDto {
 export class UpdateMemberDto {
   @IsOptional() @IsUUID() roleId?: string;
   @IsOptional() @IsBoolean() isActive?: boolean;
+  /**
+   * A quién se le pasa lo que esta persona tiene pendiente (gestiones, créditos y rutas) al desactivarla. Sin él, desactivar
+   * a alguien con trabajo se rechaza (`USER_HAS_PENDING_WORK`); con él se pasa todo y se desactiva en un solo paso.
+   */
+  @IsOptional() @IsUUID() reassignToUserId?: string;
 }
 
 /** El propio perfil. `email` no está: cambiarlo es cambiar la identidad de login. */

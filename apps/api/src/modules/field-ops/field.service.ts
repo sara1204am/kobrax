@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { CatalogType, LocationType, RouteStopStatus } from '@prisma/client';
+import { AgendaItemStatus, CatalogType, LocationType, RouteStopStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -182,13 +182,15 @@ export class FieldService {
       // Además de existir, la parada trae su punto conocido: es lo que deja al server DERIVAR el
       // flag de GPS estimado en vez de creerle al body (ver `gpsEstimado` más abajo) y su crédito.
       let stopPoint: { latitude: number; longitude: number } | undefined;
+      let stopAgendaItemId: string | null = null;
       let creditId: string | undefined = dto.creditId;
       if (dto.routeStopId) {
         const s = await tx.routeStop.findFirst({
           where: { id: dto.routeStopId },
-          select: { id: true, creditId: true, client: { select: { locations: { select: { locationType: true, latitude: true, longitude: true } } } } },
+          select: { id: true, creditId: true, agendaItemId: true, client: { select: { locations: { select: { locationType: true, latitude: true, longitude: true } } } } },
         });
         if (!s) throw resourceNotFound();
+        stopAgendaItemId = s.agendaItemId;
         if (dto.creditId && s.creditId && s.creditId !== dto.creditId) throw visitCreditMismatch();
         creditId = dto.creditId ?? s.creditId ?? undefined; // una visita por parada resuelve el crédito de la parada
         const loc =
@@ -244,7 +246,16 @@ export class FieldService {
       }
       // La gestión queda en la bitácora del crédito (con el episodio abierto si lo hay) y su «última gestión».
       if (credit) {
-        await recordCreditActivity(tx, { accountId: this.tenant.accountId, creditId: credit.id, clientId: credit.clientId, userId: collectorId, type: 'VISIT', result: dto.outcome, notes: dto.notes });
+        const activity = await recordCreditActivity(tx, { accountId: this.tenant.accountId, creditId: credit.id, clientId: credit.clientId, userId: collectorId, type: 'VISIT', result: dto.outcome, notes: dto.notes });
+        // 🔴 Si la parada nació de una visita agendada, ESA gestión se cierra con la misma actividad (F4/11 · E1): una
+        // sola ejecución, en la misma transacción. Si la gestión ya no está pendiente (la cancelaron o reagendaron
+        // mientras tanto) no se toca: la visita se registra igual.
+        if (stopAgendaItemId) {
+          await tx.agendaItem.updateMany({
+            where: { id: stopAgendaItemId, status: AgendaItemStatus.SCHEDULED, deletedAt: null },
+            data: { status: AgendaItemStatus.EXECUTED, resultActivityId: activity.id, updatedBy: collectorId },
+          });
+        }
       }
       // Última ubicación conocida del cobrador (users es global, sin RLS).
       await tx.user.update({ where: { id: collectorId }, data: { lastKnownLat: dto.lat, lastKnownLng: dto.lng, lastLocationAt: new Date() } });
