@@ -16,6 +16,7 @@ import { getRoute, listRoutes } from '../routes.service';
 import { clientContext, getItem, listByDay, listOverdue, refreshTenantToday } from '../agenda.service';
 import type { AgendaListItem } from '@kobrax/shared';
 import { addDays, agendaDetailIds, AGENDA_AHEAD_DAYS } from './agenda-offline';
+import { syncAgendaReminders } from '../agenda-notifications';
 import { listCatalog } from '../catalogs.service';
 import { listNotifications } from '../notifications.service';
 import { listCreditPayments, listPaymentsByDay } from '../payments.service';
@@ -114,6 +115,11 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
     const r = await listOverdue(100);
     if (r.status === 'ok') gestiones.push(...r.data);
     return estado(Promise.resolve(r));
+  });
+  // Los avisos locales: con la agenda de la semana ya bajada, el teléfono avisa de cada gestión aunque no haya señal ni la app abierta.
+  await paso('avisos de la agenda', async () => {
+    await syncAgendaReminders(gestiones, { complete: true });
+    return 'ok';
   });
   // El detalle de cada pendiente (teléfono, dirección, mensaje): sin él, una gestión que nunca se abrió con señal no se podía ni
   // ver ni registrar en la calle — el `GET /agenda/:id` es lo único que trae a dónde llamar o ir.

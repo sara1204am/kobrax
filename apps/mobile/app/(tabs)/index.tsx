@@ -20,6 +20,7 @@ import { getRoute, listRoutes, routeProgress, type RouteItem } from '@/routes.se
 import { listByDay, listOverdue, type AgendaListItem } from '@/agenda.service';
 import { listPaymentsByDay } from '@/payments.service';
 import { money, todayISO } from '@/agenda-form';
+import { syncAgendaReminders } from '@/agenda-notifications';
 import { dayProgress, dueSoon, queuedCollectedToday, upNext, type DayProgress } from '@/home';
 import { pendingActions } from '@/sync/queue';
 import { unreadCount } from '@/notifications.service';
@@ -77,6 +78,8 @@ export default function InicioScreen() {
     ]);
 
     const items = agendaRes.status === 'ok' ? agendaRes.data : [];
+    // Los avisos de hoy (parcial: solo las gestiones de esta lista; la semana entera la programa la hidratación).
+    if (agendaRes.status === 'ok') void syncAgendaReminders(agendaRes.data, { complete: false });
 
     // ponytail: filtro por status IN_PROGRESS (no por fecha) — un cobrador tiene a lo sumo una
     // ruta activa; evita el match exacto de datetime del backend en `plannedDate`.

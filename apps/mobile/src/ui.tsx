@@ -475,6 +475,7 @@ export function AgendaCard({
   tone,
   overdue,
   note,
+  actions,
   onPress,
 }: {
   name: string;
@@ -486,6 +487,8 @@ export function AgendaCard({
   overdue?: boolean;
   /** Una línea más bajo la hora y el tipo: quién la asignó, o a quién se le asignó cuando se mira la agenda de un equipo. */
   note?: string;
+  /** Acciones rápidas bajo la fila (llamar, WhatsApp, navegar): se toca sin abrir el detalle. */
+  actions?: { key: string; label: string; icon: string; onPress: () => void }[];
   onPress?: () => void;
 }) {
   return (
@@ -512,6 +515,15 @@ export function AgendaCard({
         </View>
         <StatusBadge label={statusLabel} tone={overdue ? 'danger' : tone} />
       </Pressable>
+      {actions && actions.length > 0 && (
+        <View style={styles.quickRow}>
+          {actions.map((a) => (
+            <Pressable key={a.key} onPress={a.onPress} accessibilityRole="button" accessibilityLabel={a.label} style={styles.quickBtn}>
+              <Text style={styles.quickText}>{a.icon}  {a.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -719,6 +731,9 @@ export function OfflineIndicator({ onPressPending }: { onPressPending?: () => vo
 }
 
 const styles = StyleSheet.create({
+  quickRow: { flexDirection: 'row', gap: SPACING.sm, paddingHorizontal: SPACING.md, paddingBottom: SPACING.md },
+  quickBtn: { paddingVertical: SPACING.xs, paddingHorizontal: SPACING.md, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.white },
+  quickText: { ...TYPE.secondary, color: COLORS.navy, fontWeight: '600' },
   barTrack: { height: 8, borderRadius: RADIUS.pill, backgroundColor: COLORS.lightBg, marginTop: SPACING.sm, overflow: 'hidden' },
   barFill: { height: 8, borderRadius: RADIUS.pill },
 

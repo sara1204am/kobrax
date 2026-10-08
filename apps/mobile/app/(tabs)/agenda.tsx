@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AgendaItemStatus, type AgendaItemDetail } from '@kobrax/shared';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList, type FlashList as FlashListType } from '@shopify/flash-list';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
@@ -9,6 +10,8 @@ import { AgendaCard, AGENDA_STATUS_LABEL, AGENDA_TYPE_META, EmptyState, SectionL
 import { authService } from '@/auth-service';
 import { MONTHS, partitionDay, todayISO, WEEKDAYS_SHORT } from '@/agenda-form';
 import { listByDay, listOverdue, type AgendaListItem } from '@/agenda.service';
+import { quickActions } from '@/agenda-quick';
+import { getOne } from '@/db';
 
 const RANGE = 180; // días a cada lado de hoy (tira "infinita" práctica; onEndReached bidireccional = futuro)
 
@@ -243,6 +246,37 @@ export default function AgendaScreen() {
  * La línea de más de la fila: quién la asignó (una gestión que te pasó un supervisor no se ve igual que una propia) y, cuando
  * se mira la agenda de un equipo, de quién es.
  */
+/**
+ * Las acciones rápidas de la fila, de lo que el teléfono ya descargó del detalle (la lista no trae teléfono ni dirección). Se leen
+ * del caché al mostrar la fila; si la gestión nunca se bajó, la fila no ofrece nada y se abre como siempre.
+ */
+function useQuickActions(item: AgendaListItem) {
+  const [actions, setActions] = useState<{ key: string; label: string; icon: string; onPress: () => void }[]>([]);
+  useEffect(() => {
+    let vivo = true;
+    if (item.status !== AgendaItemStatus.SCHEDULED) return;
+    void getOne<AgendaItemDetail>('agenda.detail', item.id).then((detail) => {
+      if (!vivo) return;
+      setActions(
+        quickActions(item.type, item.status, detail, Platform.OS).map((a) => ({
+          key: a.kind,
+          label: a.label,
+          icon: a.icon,
+          onPress: () =>
+            a.url
+              ? void Linking.openURL(a.url).catch(() => Alert.alert('No se pudo abrir', 'Tu teléfono no tiene una app para esta acción.'))
+              // Navegar abre el mapa de Kobrax, no el del teléfono: el mismo que usa la ficha.
+              : router.push(`/cliente/mapa?clientId=${item.clientId}&name=${encodeURIComponent(item.clientName ?? '')}`),
+        })),
+      );
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [item.id, item.status, item.type, item.clientId, item.clientName]);
+  return actions;
+}
+
 function agendaNote(item: AgendaListItem): string | undefined {
   if (item.assignedByName) return `Asignada por ${item.assignedByName}`;
   return undefined;
@@ -250,6 +284,7 @@ function agendaNote(item: AgendaListItem): string | undefined {
 
 function Row({ item }: { item: AgendaListItem }) {
   const meta = AGENDA_TYPE_META[item.type];
+  const actions = useQuickActions(item);
   return (
     <View style={{ marginBottom: SPACING.sm }}>
       <AgendaCard
@@ -261,6 +296,7 @@ function Row({ item }: { item: AgendaListItem }) {
         tone={meta.tone}
         overdue={item.isOverdue}
         note={agendaNote(item)}
+        actions={actions}
         onPress={() => router.push(`/agenda/${item.id}`)}
       />
     </View>

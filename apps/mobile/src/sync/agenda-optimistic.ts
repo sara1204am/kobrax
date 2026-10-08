@@ -13,6 +13,7 @@
 import { AgendaItemStatus, type AgendaItemDetail, type AgendaListItem } from '@kobrax/shared';
 import * as db from '../db';
 import { todayISO } from '../tenant-day';
+import { cancelAgendaReminder } from '../agenda-notifications';
 
 /** Las consultas de vencidas que guardan las pantallas: el Inicio pide 1 (solo el total) y la Agenda 100. */
 const OVERDUE_SCOPES = ['overdue:limit=1', 'overdue:limit=100'];
@@ -41,6 +42,9 @@ export async function patchAgendaItemLocal(item: AgendaListItem, patch: Partial<
       await db.replaceAll<AgendaListItem>('agenda', rows.map((r) => (r.id === item.id ? { ...r, ...patch } : r)), scope);
     }
   }
+
+  // Ya hecha, cancelada, reagendada o corrida de hora: el aviso programado quedó viejo y no puede sonar a destiempo.
+  if (leavesPending || patch.scheduledTime !== undefined || patch.timeSlot !== undefined) await cancelAgendaReminder(item.id);
 
   const detail = await db.getOne<AgendaItemDetail>('agenda.detail', item.id);
   if (detail) await db.putOne('agenda.detail', item.id, { ...detail, item: { ...detail.item, ...patch } });

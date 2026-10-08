@@ -318,11 +318,13 @@ Las seis etapas están hechas, con sus pruebas. Lo que sigue dice qué se hizo, 
 - Carga por persona en el Inicio (con `agenda:assign`).
 - **Desvío:** `handOffAgenda` **no se tocó**. Una gestión asignada a propósito a otra persona que no es el responsable del crédito debe quedarse con ella al cambiar el responsable; el análisis lo había contado como problema y no lo es.
 
-### E6 · Móvil ✅ (parcial, ver «Queda»)
+### E6 · Móvil ✅
 - «Hoy» = día de la empresa (`GET /agenda/summary`) y, sin red, el reloj del teléfono corrido por esa diferencia; nunca UTC.
 - Hidratación: hoy, los 7 días siguientes y el **detalle** de las pendientes (hoy primero, tope 60).
 - Lo hecho sin señal se refleja ya en listas, contadores y detalle (`agenda-optimistic`).
 - Los rechazos de la cola se explican (409 cambió mientras no había señal, 404 ya no es tuya, 403).
+- **Avisos locales** (`expo-notifications`): un aviso 15 min antes de cada gestión con hora fija y, para las de franja, al empezar la franja (08:00 mañana, 13:00 tarde, 18:00 noche); se programan al hidratar y al abrir el Inicio, se cancelan al ejecutar, cancelar, reagendar o correr la hora, y al cerrar sesión; tocar uno abre la gestión. El permiso se pide una sola vez.
+- **Acciones rápidas en la fila** (Llamar, WhatsApp con el mensaje, Navegar) leídas del detalle ya descargado.
 - Vencidas arriba en la Agenda; tiles del Inicio pulsables; Llamar y WhatsApp juntos; «Asignada por» en la fila; «Registrar en la ruta» para visitas en ruta; detalle con el resultado.
 
 ### Zona horaria
@@ -332,8 +334,8 @@ Corregidos a «día civil de la empresa»: el job de recordatorios de cuotas, av
 API 1375 · web 809 · móvil 726 · shared 306, todas en verde, más `tsc` limpio en los cuatro paquetes y la integración con base real (visita → ruta → ejecución; reagendar; índice único; baja con traspaso).
 
 ### Queda (decidido o fuera de alcance)
-- Notificaciones locales del móvil y push remoto (D4).
-- Acciones rápidas (llamar, WhatsApp, navegar) **en la fila** de la lista móvil: la lista no trae teléfono ni dirección a propósito (datos revelados y auditados solo en el detalle); el detalle descargado sin conexión ya las tiene.
+- Push remoto: los avisos locales no pueden decirle «te asignaron una gestión» a un teléfono con la app cerrada; eso necesita un servicio de push y los canales del servidor son simulados.
+- El módulo `expo-notifications` es nativo: hace falta un build nuevo de la app (no basta recargar) y probarlo en un teléfono.
 - E2E de navegador y de teléfono (no hay herramienta en el repo); lo visual y las acciones externas (`tel:`, WhatsApp, mapa) se confirman a mano.
 - `audit.record` sigue fuera de la transacción en la agenda (diseño del módulo de auditoría); el traspaso de la baja audita después del commit.
 - Clientes importados sin coordenadas: al agendarles una visita el formulario (web y móvil) avisa y deja marcar el punto en el mapa sobre la misma dirección; hasta marcarlo no se puede guardar. (El móvil necesita señal para marcarlo.)
