@@ -16,7 +16,7 @@ function activeCredit(balance = 200) {
   };
 }
 
-function makeService(opts: { credit?: unknown; idempotentExisting?: unknown; maxReceipt?: number; uniqueRace?: boolean } = {}) {
+function makeService(opts: { credit?: unknown; idempotentExisting?: unknown; maxReceipt?: number; uniqueRace?: boolean; visit?: unknown } = {}) {
   let raced = false;
   const calls = {
     create: [] as Record<string, unknown>[],
@@ -45,6 +45,8 @@ function makeService(opts: { credit?: unknown; idempotentExisting?: unknown; max
       },
     },
     creditInstallment: { update: async () => ({}) },
+    // F4/12: el cobro puede decir en qué visita se hizo.
+    fieldVisit: { findFirst: async () => ('visit' in opts ? opts.visit : { creditId: 'cr1' }) },
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
   const tenant = { accountId: 'acc-A', userId: 'u1' };
@@ -305,5 +307,29 @@ describe('PaymentsService.register — carrera por idempotency_key', () => {
   it('sin clave, la violación sigue siendo PAYMENT_DUP (no se reintenta)', async () => {
     const { service } = makeService({ uniqueRace: true });
     await rejectsWithCode(service.register({ ...PAY, amount: 100 }), 'PAYMENT_DUP');
+  });
+});
+
+describe('PaymentsService.register · cobro dentro de una visita (F4/12)', () => {
+  it('guarda la visita en la que se cobró, la audita y la devuelve', async () => {
+    const { service, calls } = makeService();
+    const r = await service.register({ ...PAY, amount: 100, visitId: 'v1' } as never);
+    assert.equal(calls.create[0]!.visitId, 'v1');
+    assert.equal((r as { visitId?: string }).visitId, 'v1');
+    assert.ok(calls.audit.includes('CREATE'));
+  });
+
+  it('no todo cobro sale de una visita: sin visitId, el pago se registra igual', async () => {
+    const { service, calls } = makeService();
+    await service.register({ ...PAY, amount: 100 } as never);
+    assert.equal(calls.create[0]!.visitId, undefined);
+  });
+
+  it('🔴 la visita tiene que existir y ser de ESE crédito (PAYMENT_001)', async () => {
+    const otherCredit = makeService({ visit: { creditId: 'otro-credito' } });
+    await rejectsWithCode(otherCredit.service.register({ ...PAY, amount: 100, visitId: 'v1' } as never), 'PAYMENT_001');
+    const missing = makeService({ visit: null });
+    await rejectsWithCode(missing.service.register({ ...PAY, amount: 100, visitId: 'v-fantasma' } as never), 'PAYMENT_001');
+    assert.equal(otherCredit.calls.create.length, 0);
   });
 });

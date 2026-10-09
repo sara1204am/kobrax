@@ -37,6 +37,8 @@ interface ApplyParams {
   notes?: string;
   /** ISO: cuándo se cobró (el pago offline). Ausente = ahora. */
   paymentDate?: string;
+  /** La visita en la que se cobró (F4/12). */
+  visitId?: string;
 }
 
 @Injectable()
@@ -82,6 +84,7 @@ export class PaymentsService {
           method: payment.method,
           channel: payment.channel,
           paymentDate: payment.paymentDate,
+          visitId: payment.visitId ?? undefined,
           externalCredit: external,
         },
       });
@@ -97,6 +100,11 @@ export class PaymentsService {
 
     const credit = await tx.credit.findFirst({ where: { id: p.creditId, deletedAt: null }, include: { installments: true } });
     if (!credit) throw resourceNotFound();
+    // El cobro dice en qué visita se hizo: esa visita tiene que existir y ser de ESTE crédito.
+    if (p.visitId) {
+      const visit = await tx.fieldVisit.findFirst({ where: { id: p.visitId }, select: { creditId: true } });
+      if (!visit || (visit.creditId && visit.creditId !== credit.id)) throw paymentInvalid('La visita no corresponde a ese crédito');
+    }
 
     /*
      * 🔴 **Cartera de una fuente externa (PSF): el pago es un hecho de cobranza, no un movimiento del
@@ -174,6 +182,7 @@ export class PaymentsService {
           receiptUrl: p.receiptUrl,
           receiptHash: p.receiptHash,
           registeredBy: this.tenant.userId,
+          visitId: p.visitId,
           channel: p.channel,
           notes: p.notes,
           ...(p.paymentDate ? { paymentDate: new Date(p.paymentDate) } : {}),

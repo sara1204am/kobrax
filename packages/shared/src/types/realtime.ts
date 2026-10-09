@@ -52,6 +52,8 @@ export interface NotificationPayload {
   creditId: string | null;
   /** La gestión de agenda de la que habla el aviso: la campanita navega a ella. */
   agendaItemId?: string | null;
+  /** La ruta de la que habla el aviso: la campanita navega a ella. */
+  routeId?: string | null;
   readAt: string | null;
   createdAt: string;
 }

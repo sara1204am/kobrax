@@ -41,3 +41,87 @@ export const noStopsToRoute = () =>
 /** El `id` de la ruta que mandó el cliente ya es de la ruta de otro cobrador. */
 export const routeIdTaken = () =>
   new ConflictException({ code: 'ROUTE_ID', message: 'Ese id de ruta ya pertenece a otra ruta' });
+
+// ── F4/12 · ciclo de vida, autoría y pedidos de cambio ───────────────────────────────────────────────
+
+/** Ese cambio de estado no existe: una ruta cerrada no se reabre y no se completa lo que nunca se inició. */
+export const routeTransition = (from: string, to: string) =>
+  new UnprocessableEntityException({
+    code: 'ROUTE_TRANSITION',
+    message: `La ruta está ${STATE_LABEL[from] ?? from}: no puede pasar a ${STATE_LABEL[to] ?? to}.`,
+    details: { from, to },
+  });
+
+const STATE_LABEL: Record<string, string> = {
+  PLANNED: 'planificada',
+  IN_PROGRESS: 'en curso',
+  COMPLETED: 'completada',
+  CANCELLED: 'cancelada',
+};
+
+/** Alguien cambió la ruta entre que la pantalla la leyó y este cambio: se vuelve a leer, no se pisa. */
+export const routeStateChanged = () =>
+  new ConflictException({ code: 'ROUTE_STATE_CHANGED', message: 'La ruta cambió mientras la mirabas. Actualizá y volvé a intentar.' });
+
+/** La ruta ya se cerró (completada o cancelada): sus paradas son historia. */
+export const routeClosed = () =>
+  new UnprocessableEntityException({ code: 'ROUTE_CLOSED', message: 'La ruta ya está cerrada: no se puede modificar.' });
+
+/** Cerrar con paradas sin gestionar, o cancelar, exige decir por qué. */
+export const reasonRequired = (what: string) =>
+  new UnprocessableEntityException({
+    code: 'ROUTE_REASON_REQUIRED',
+    message: `Escribí el motivo ${what} (al menos unas palabras).`,
+  });
+
+/** Con visitas registradas no se cancela: esa información no se borra, se cierra la ruta. */
+export const routeHasVisits = () =>
+  new UnprocessableEntityException({
+    code: 'ROUTE_HAS_VISITS',
+    message: 'La ruta ya tiene visitas registradas: no se cancela, se completa. Indicá el motivo de las paradas que quedaron.',
+  });
+
+/** Quien no armó la ruta no la modifica directo: la pide. */
+export const changeRequestRequired = (kind: string) =>
+  new ForbiddenException({
+    code: 'ROUTE_REQUEST_REQUIRED',
+    message: 'Esta ruta la armó otra persona: pedí el cambio con su motivo y ella lo aprueba.',
+    details: { kind },
+  });
+
+/** La parada se marca visitada registrando la visita, no a secas. */
+export const stopStatusNotAllowed = (from: string, to: string) =>
+  new UnprocessableEntityException({
+    code: 'ROUTE_STOP_TRANSITION',
+    message:
+      to === 'VISITED'
+        ? 'Para marcar la parada como visitada registrá la visita: eso guarda el resultado y cierra la gestión.'
+        : `La parada está ${from === 'VISITED' ? 'visitada' : from === 'SKIPPED' ? 'saltada' : 'en ese estado'} y no puede pasar a ese estado.`,
+    details: { from, to },
+  });
+
+/** Fechas de ruta: solo el día, `YYYY-MM-DD`. */
+export const routePastDate = () =>
+  new UnprocessableEntityException({ code: 'ROUTE_PAST_DATE', message: 'No se arma una ruta para un día que ya pasó.' });
+
+export const changeRequestNotFound = () =>
+  new NotFoundException({ code: 'ROUTE_REQUEST_NOT_FOUND', message: 'Ese pedido de cambio no existe.' });
+
+export const changeRequestResolved = () =>
+  new ConflictException({ code: 'ROUTE_REQUEST_RESOLVED', message: 'Ese pedido ya fue resuelto.' });
+
+/** Solo quien manda sobre la ruta resuelve los pedidos; quien lo pidió solo puede retirarlo. */
+export const cannotDecide = () =>
+  new ForbiddenException({ code: 'ROUTE_REQUEST_FORBIDDEN', message: 'Solo quien armó la ruta resuelve los pedidos de cambio.' });
+
+/** El pedido aprobado ya no se puede aplicar (la parada se gestionó, la ruta se cerró…). */
+export const changeRequestStale = (why: string) =>
+  new UnprocessableEntityException({ code: 'ROUTE_REQUEST_STALE', message: `No se puede aplicar el cambio: ${why}` });
+
+/** Para publicar, cada parada necesita un punto en el mapa: sin él no hay recorrido ni ETA (decisión 6). */
+export const stopsWithoutPoint = (creditIds: string[]) =>
+  new UnprocessableEntityException({
+    code: 'ROUTE_STOP_NO_POINT',
+    message: 'Falta la ubicación de algunas paradas: marcá el punto en el mapa antes de armar la ruta.',
+    details: { creditIds },
+  });

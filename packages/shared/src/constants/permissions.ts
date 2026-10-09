@@ -20,6 +20,8 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     Permission.COLLECTION_EXPORT,
     Permission.COLLECTION_WRITE,
     Permission.PAYMENT_READ,
+    // F4/12: cobra una visita que carga desde el panel a nombre de un cobrador (antes solo cobrador y administrador).
+    Permission.PAYMENT_WRITE,
     Permission.PAYMENT_APPROVE,
     Permission.ROUTE_READ,
     Permission.ROUTE_WRITE,
@@ -48,6 +50,7 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     Permission.COLLECTION_EXPORT,
     Permission.COLLECTION_WRITE,
     Permission.PAYMENT_READ,
+    Permission.PAYMENT_WRITE,
     Permission.ROUTE_READ,
     Permission.ROUTE_WRITE,
     Permission.ROUTE_ASSIGN,

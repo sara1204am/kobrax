@@ -9,10 +9,14 @@ type StopClient = {
   lastName: string | null;
   businessName: string | null;
   locations: {
+    id?: string;
     locationType: LocationType;
     address: string | null;
     latitude?: Prisma.Decimal | null;
     longitude?: Prisma.Decimal | null;
+    /** Con valor: es de un garante o familiar (no del cliente). */
+    relationId?: string | null;
+    relation?: { relatedName: string | null } | null;
   }[];
 };
 
@@ -23,7 +27,18 @@ type StopClient = {
  * a lugares distintos del mismo cliente.
  */
 function primaryLocation(client: StopClient) {
-  return client.locations.find((l) => l.locationType === LocationType.HOME) ?? client.locations[0];
+  // Las ubicaciones de garantes y familiares vienen en la misma lista: la «principal» es siempre del propio cliente.
+  const own = client.locations.filter((l) => !l.relationId);
+  return own.find((l) => l.locationType === LocationType.HOME) ?? own[0];
+}
+
+/**
+ * La ubicación de la parada: la que se eligió al armar la ruta (`locationId`) y, si no hay —paradas anteriores a
+ * F4/12, o armadas sin elegir—, la principal del cliente. Si la elegida ya no existe se cae a la principal: la parada
+ * sigue existiendo y numerada.
+ */
+function stopLocation(client: StopClient, locationId?: string | null) {
+  return (locationId ? client.locations.find((l) => l.id === locationId) : undefined) ?? primaryLocation(client);
 }
 
 /**
@@ -44,10 +59,16 @@ type StopCredit = {
  * y quien la pide la audita (`findOne`). Sin eso, la parada devuelve ids como siempre.
  */
 export function serializeStop(
-  s: RouteStop & { client?: StopClient; creditInfo?: StopCredit; visits?: { outcome: VisitOutcome }[] },
+  s: RouteStop & {
+    client?: StopClient;
+    creditInfo?: StopCredit;
+    visits?: { outcome: VisitOutcome }[];
+    /** `HH:mm` de la visita agendada de la que nació (solo si tiene hora fija). */
+    scheduledTime?: string | null;
+  },
   crypto?: CryptoService,
 ) {
-  const loc = s.client ? primaryLocation(s.client) : undefined;
+  const loc = s.client ? stopLocation(s.client, s.locationId) : undefined;
   const credit = s.creditInfo ?? undefined;
   return {
     id: s.id,
@@ -56,6 +77,12 @@ export function serializeStop(
     creditId: s.creditId ?? undefined,
     // La visita agendada de la que nació la parada (F4/11): con esto el cliente la marca como «Agendada».
     agendaItemId: s.agendaItemId ?? undefined,
+    // La ubicación concreta (F4/12): qué se visita y de quién es — «Garante · Juan Pérez».
+    locationId: loc?.id ?? undefined,
+    locationType: loc?.locationType ?? undefined,
+    locationOwner: loc?.relation?.relatedName ?? undefined,
+    // Hora fija de la visita agendada: la parada que la lleva no se mueve de su lugar al optimizar.
+    scheduledTime: s.scheduledTime ?? undefined,
     sequenceOrder: s.sequenceOrder,
     status: s.status,
     visitedAt: s.visitedAt ?? undefined,
@@ -81,7 +108,12 @@ export function serializeStop(
 }
 
 type RouteWithStops = RoutePlan & {
-  stops?: (RouteStop & { client?: StopClient; creditInfo?: StopCredit; visits?: { outcome: VisitOutcome }[] })[];
+  stops?: (RouteStop & {
+    client?: StopClient;
+    creditInfo?: StopCredit;
+    visits?: { outcome: VisitOutcome }[];
+    scheduledTime?: string | null;
+  })[];
 };
 
 export function serializeRoute(r: RouteWithStops, crypto?: CryptoService) {
@@ -96,6 +128,11 @@ export function serializeRoute(r: RouteWithStops, crypto?: CryptoService) {
     totalDistanceKm: r.totalDistanceKm != null ? Number(r.totalDistanceKm) : undefined,
     estimatedMinutes: r.estimatedMinutes ?? undefined,
     createdAt: r.createdAt,
+    createdBy: r.createdBy ?? undefined,
+    startedAt: r.startedAt ?? undefined,
+    completedAt: r.completedAt ?? undefined,
+    cancelledAt: r.cancelledAt ?? undefined,
+    statusReason: r.statusReason ?? undefined,
     stops: r.stops?.map((s) => serializeStop(s, crypto)),
   };
 }

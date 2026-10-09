@@ -14,6 +14,8 @@ export function serializePayment(p: Payment, names?: ReadonlyMap<string, string>
     receiptUrl: p.receiptUrl ?? undefined, // comprobante subido (§5.4); no es PII
     paymentDate: p.paymentDate,
     registeredBy: p.registeredBy ?? undefined,
+    // La visita en la que se cobró, si salió de una (F4/12).
+    visitId: p.visitId ?? undefined,
     // Sólo el nombre (resuelto por el servidor): el cobrador lo lee sin tener `user:read`.
     registeredByName: p.registeredBy ? names?.get(p.registeredBy) : undefined,
     channel: p.channel,

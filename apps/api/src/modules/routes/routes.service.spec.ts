@@ -25,7 +25,7 @@ function makeService(
     stopCase?: unknown;
     permissions?: string[];
     routes?: unknown[];
-    route?: { id: string; collectorId: string; totalDistanceKm?: number; estimatedMinutes?: number };
+    route?: { id: string; collectorId: string; createdBy?: string | null; status?: string; plannedDate?: Date; totalDistanceKm?: number; estimatedMinutes?: number };
     /** La ruta que ese cobrador YA tiene ese día. `undefined` = no tiene, y se puede armar. */
     routeOfDay?: { id: string };
     /** Ruta que ya existe con el id que manda el cliente (reintento). */
@@ -40,11 +40,21 @@ function makeService(
     /** Punto de cada parada (`null` = cliente sin ubicación cargada). Sólo lo usa el preview. */
     points?: Record<string, { latitude: number; longitude: number } | null>;
     osrm?: Partial<OsrmService>;
+    /** Ubicaciones de los clientes que consulta `resolveLocations` (F4/12). */
+    locations?: { id: string; clientId: string; locationType: string; relationId: string | null; latitude: number | null; longitude: number | null }[];
+    /** El cambio de estado choca: otra persona lo cambió antes (updateMany devuelve 0). */
+    statusRace?: boolean;
+    /** Visitas ya registradas en la ruta (F4/12: con alguna no se cancela). */
+    visitCount?: number;
+    /** Día «de hoy» de la empresa para validar que no se arme una ruta del pasado. */
+    today?: string;
   } = {},
 ) {
   const calls = {
     routeCreate: [] as Record<string, unknown>[],
     routeUpdate: [] as Record<string, unknown>[],
+    routeUpdateWhere: [] as Record<string, unknown>[],
+    events: [] as string[],
     audit: [] as string[],
     listWhere: undefined as Record<string, unknown> | undefined,
     listOrderBy: undefined as unknown,
@@ -74,6 +84,12 @@ function makeService(
       return opts.credits ?? [{ id: 'cr9', client_id: 'cl9' }];
     },
     credit: { findMany: async () => [] },
+    // F4/12: la ubicación concreta de cada parada. Sin ubicaciones cargadas no hay nada que resolver ni exigir.
+    clientLocation: { findMany: async () => opts.locations ?? [] },
+    // El detalle cuenta visitas y pedidos de cambio pendientes.
+    fieldVisit: { count: async () => opts.visitCount ?? 0 },
+    routeChangeRequest: { count: async () => 0 },
+    payment: { groupBy: async () => [] },
     agendaItem: { findMany: async () => opts.visits ?? [] },
     routeStop: {
       updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
@@ -146,12 +162,20 @@ function makeService(
           return opts.priorRoute ?? null;
         }
         if (args?.where?.plannedDate !== undefined) return opts.routeOfDay ?? null;
-        return opts.route ? { ...opts.route, stops: sorted({ routeId: opts.route.id }).map(withClient) } : null;
+        // Una ruta abierta por defecto (F4/12: una cerrada no se edita); `createdBy` ausente = anterior a F4/12.
+        return opts.route ? { status: 'PLANNED', ...opts.route, stops: sorted({ routeId: opts.route.id }).map(withClient) } : null;
       },
       update: async (args: { data: Record<string, unknown> }) => {
         calls.routeUpdate.push(args.data);
         return { ...opts.route, ...args.data };
       },
+      // F4/12: el cambio de estado es condicional (`WHERE status = <el leído>`) y vuelve a leer la ruta.
+      updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        calls.routeUpdate.push(args.data);
+        calls.routeUpdateWhere.push(args.where);
+        return { count: opts.statusRace ? 0 : 1 };
+      },
+      findFirstOrThrow: async () => ({ plannedDate: new Date('2026-06-20'), ...opts.route, ...(calls.routeUpdate.at(-1) ?? {}) }),
     },
   };
   function withClient(s: FakeStop) {
@@ -171,7 +195,7 @@ function makeService(
   const perms = opts.permissions ?? [];
   const tenant = { accountId: 'acc-A', userId: 'u1', permissions: perms, can: (p: string) => perms.includes(p) };
   const audit = { record: async (e: { action: string }) => void calls.audit.push(e.action) };
-  const events = { emit: () => {} };
+  const events = { emit: (name: string) => void calls.events.push(name) };
   // Sin motor por defecto: el preview se degrada, que es el camino sin OSRM.
   const osrm = { route: async () => null, trip: async () => null, ...opts.osrm };
   const service = new RoutesService(
@@ -181,6 +205,7 @@ function makeService(
     events as never,
     { decrypt: (v: string) => v } as never,
     osrm as never,
+    { today: async () => new Date(`${opts.today ?? '2026-06-01'}T00:00:00.000Z`), timezone: async () => 'UTC' } as never,
   );
   /** El orden real del recorrido, para asertar contra él. */
   const order = () => stops.slice().sort((a, b) => a.sequenceOrder - b.sequenceOrder).map((s) => s.id);
@@ -280,10 +305,15 @@ describe('RoutesService.generate', () => {
     });
   });
 
-  it('cancelar la ruta suelta las visitas: sus paradas dejan de apuntar a la gestión', async () => {
-    const { service, calls } = makeService({ route: { id: 'r1', collectorId: 'u1' }, permissions: ASSIGN });
-    await service.updateStatus('r1', { status: 'CANCELLED' } as never);
-    assert.deepEqual(calls.stopUpdateMany[0]!.data, { agendaItemId: null });
+  it('cancelar la ruta salta sus paradas: la visita agendada queda libre y el vínculo queda como historia', async () => {
+    const { service, calls } = makeService({
+      route: { id: 'r1', collectorId: 'u1' },
+      permissions: ASSIGN,
+      stops: [{ id: 's1', routeId: 'r1', clientId: 'c1', sequenceOrder: 1, status: 'PENDING' }],
+    });
+    await service.updateStatus('r1', { status: 'CANCELLED', reason: 'La cobradora está enferma' } as never);
+    // F4/12: ya no se borra `agendaItemId` (se perdía la historia); SALTADA alcanza para liberar la visita.
+    assert.deepEqual(calls.stopUpdateMany[0]!.data, { status: 'SKIPPED' });
   });
 
   it('rechaza si no hay créditos para la ruta (ROUTE_EMPTY)', async () => {
@@ -433,11 +463,24 @@ describe('RoutesService.updateStop (mover de posición)', () => {
     assert.deepEqual(order(), ['s2', 's3', 's1']);
   });
 
-  it('cambiar el estado sigue funcionando (lo usa S5)', async () => {
-    const { service, stops } = makeService({ route: OWN_ROUTE, permissions: FIELD, stops: threeStops() });
-    const res = await service.updateStop('r1', 's2', { status: 'VISITED' } as never);
-    assert.equal(res.status, 'VISITED');
-    assert.ok(stops.find((s) => s.id === 's2')!.visitedAt);
+  it('saltar una parada sigue funcionando y queda auditado', async () => {
+    const { service, calls } = makeService({ route: OWN_ROUTE, permissions: FIELD, stops: threeStops() });
+    const res = await service.updateStop('r1', 's2', { status: 'SKIPPED' } as never);
+    assert.equal(res.status, 'SKIPPED');
+    assert.ok(calls.audit.includes('UPDATE'));
+  });
+
+  it('🔴 no se marca VISITED a secas: se visita registrando la visita (ROUTE_STOP_TRANSITION)', async () => {
+    // Marcarla a secas dejaba la gestión sin hacer, sin GPS ni resultado, y sin cerrar la agenda.
+    const { service } = makeService({ route: OWN_ROUTE, permissions: FIELD, stops: threeStops() });
+    await rejectsWithCode(service.updateStop('r1', 's2', { status: 'VISITED' } as never), 'ROUTE_STOP_TRANSITION');
+  });
+
+  it('una parada visitada no vuelve a pendiente', async () => {
+    const stops = threeStops();
+    stops[1]!.status = 'VISITED';
+    const { service } = makeService({ route: OWN_ROUTE, permissions: FIELD, stops });
+    await rejectsWithCode(service.updateStop('r1', 's2', { status: 'PENDING' } as never), 'ROUTE_STOP_TRANSITION');
   });
 
   it('no se toca la parada de una ruta ajena', async () => {
@@ -567,7 +610,7 @@ describe('RoutesService.optimize (S3)', () => {
     assert.deepEqual(order(), ['s1', 's2', 's3']);
   });
 
-  it('la parada sin coordenadas no se pierde: queda al final', async () => {
+  it('la parada sin coordenadas no se pierde ni se mueve de su lugar', async () => {
     const { service, order } = makeService({
       route: OWN_ROUTE,
       permissions: FIELD,
@@ -583,7 +626,9 @@ describe('RoutesService.optimize (S3)', () => {
       } as never,
     });
     await service.optimize('r1');
-    assert.deepEqual(order(), ['s1', 's4', 's3', 's2']);
+    // F4/12: las paradas que no se pueden mover (aquí, la que no tiene punto) conservan SU lugar; el orden sugerido
+    // solo reparte los lugares que quedan entre las demás.
+    assert.deepEqual(order(), ['s1', 's2', 's4', 's3']);
   });
 });
 
@@ -749,5 +794,260 @@ describe('RoutesService idempotente por id (cola offline)', () => {
     assert.equal(r.id, RID);
     assert.equal(calls.routeCreate.length, 0);
     assert.equal(calls.audit.length, 0);
+  });
+});
+
+// ── F4/12 · máquina de estados, autoría y motivos ────────────────────────────────────────────────────
+
+describe('RoutesService.updateStatus · máquina de estados (F4/12)', () => {
+  const MINE = { id: 'r1', collectorId: 'u1', createdBy: 'u1' };
+  const FIELD_ONLY = ['route:read', 'route:execute'];
+  const stopsOf = (...st: string[]): FakeStop[] =>
+    st.map((status, i) => ({ id: `s${i + 1}`, routeId: 'r1', clientId: `cl${i + 1}`, sequenceOrder: i + 1, status }));
+
+  it('iniciar: PLANIFICADA → EN CURSO, con la hora de inicio y condicionado al estado leído', async () => {
+    const { service, calls } = makeService({ route: MINE, permissions: FIELD_ONLY, stops: stopsOf('PENDING') });
+    const r = await service.updateStatus('r1', { status: 'IN_PROGRESS' } as never);
+    assert.equal(r.status, 'IN_PROGRESS');
+    assert.ok(calls.routeUpdate[0]!.startedAt instanceof Date);
+    assert.equal(calls.routeUpdateWhere[0]!.status, 'PLANNED', 'WHERE status = el leído: dos personas a la vez no se pisan');
+  });
+
+  it('🔴 pedir el estado en que ya está es un reintento: no cambia nada ni repite el evento', async () => {
+    const { service, calls } = makeService({ route: { ...MINE, status: 'COMPLETED' }, permissions: FIELD_ONLY });
+    const r = await service.updateStatus('r1', { status: 'COMPLETED' } as never);
+    assert.equal(r.status, 'COMPLETED');
+    assert.equal(calls.routeUpdate.length, 0);
+    assert.equal(calls.events.length, 0, 'sin segundo route.completed ni segunda notificación a supervisores');
+    assert.equal(calls.audit.length, 0);
+  });
+
+  it('🔴 una ruta cerrada no se reabre y no se completa lo que nunca se inició (ROUTE_TRANSITION)', async () => {
+    const closed = makeService({ route: { ...MINE, status: 'COMPLETED' }, permissions: FIELD_ONLY });
+    await rejectsWithCode(closed.service.updateStatus('r1', { status: 'PLANNED' } as never), 'ROUTE_TRANSITION');
+    await rejectsWithCode(closed.service.updateStatus('r1', { status: 'IN_PROGRESS' } as never), 'ROUTE_TRANSITION');
+    const planned = makeService({ route: MINE, permissions: FIELD_ONLY });
+    await rejectsWithCode(planned.service.updateStatus('r1', { status: 'COMPLETED' } as never), 'ROUTE_TRANSITION');
+    assert.equal(planned.calls.routeUpdate.length, 0);
+  });
+
+  it('otra persona cambió la ruta mientras tanto: ROUTE_STATE_CHANGED, no se pisa', async () => {
+    const { service } = makeService({ route: MINE, permissions: FIELD_ONLY, statusRace: true });
+    await rejectsWithCode(service.updateStatus('r1', { status: 'IN_PROGRESS' } as never), 'ROUTE_STATE_CHANGED');
+  });
+
+  it('completar con paradas sin gestionar EXIGE el motivo; con motivo, esas paradas quedan SALTADAS', async () => {
+    const mgr = makeService({ route: { ...MINE, status: 'IN_PROGRESS' }, permissions: ['route:read', 'route:write'], stops: stopsOf('VISITED', 'PENDING', 'PENDING') });
+    await rejectsWithCode(mgr.service.updateStatus('r1', { status: 'COMPLETED' } as never), 'ROUTE_REASON_REQUIRED');
+    await rejectsWithCode(mgr.service.updateStatus('r1', { status: 'COMPLETED', reason: '  ' } as never), 'ROUTE_REASON_REQUIRED');
+    assert.equal(mgr.calls.routeUpdate.length, 0);
+
+    const ok = makeService({ route: { ...MINE, status: 'IN_PROGRESS' }, permissions: ['route:read', 'route:assign', 'route:execute'], stops: stopsOf('VISITED', 'PENDING', 'PENDING') });
+    await ok.service.updateStatus('r1', { status: 'COMPLETED', reason: 'Se acabó el tiempo; sigo mañana' } as never);
+    assert.equal(ok.calls.routeUpdate[0]!.statusReason, 'Se acabó el tiempo; sigo mañana');
+    assert.deepEqual(ok.calls.stopUpdateMany[0]!.data, { status: 'SKIPPED' });
+    assert.deepEqual((ok.calls.stopUpdateMany[0]!.where.id as { in: string[] }).in, ['s2', 's3'], 'la visitada no se toca');
+    assert.deepEqual(ok.calls.events, ['route.completed']);
+  });
+
+  it('el cobrador que cierra SU ruta no necesita mandar motivo (compat con el móvil de hoy); sin pendientes tampoco', async () => {
+    const withPending = makeService({ route: { ...MINE, status: 'IN_PROGRESS' }, permissions: FIELD_ONLY, stops: stopsOf('VISITED', 'PENDING') });
+    await withPending.service.updateStatus('r1', { status: 'COMPLETED' } as never);
+    assert.equal(withPending.calls.routeUpdate[0]!.statusReason, 'Cerrada con paradas sin gestionar.');
+    const clean = makeService({ route: { ...MINE, status: 'IN_PROGRESS' }, permissions: ['route:read', 'route:write'], stops: stopsOf('VISITED', 'SKIPPED') });
+    await clean.service.updateStatus('r1', { status: 'COMPLETED' } as never);
+    assert.equal(clean.calls.stopUpdateMany.length, 0);
+  });
+
+  it('cancelar exige el motivo y salta las paradas sin gestionar', async () => {
+    const { service, calls } = makeService({ route: MINE, permissions: FIELD_ONLY, stops: stopsOf('PENDING', 'PENDING') });
+    await rejectsWithCode(service.updateStatus('r1', { status: 'CANCELLED' } as never), 'ROUTE_REASON_REQUIRED');
+    await service.updateStatus('r1', { status: 'CANCELLED', reason: 'Me enfermé' } as never);
+    assert.equal(calls.routeUpdate[0]!.statusReason, 'Me enfermé');
+    assert.ok(calls.routeUpdate[0]!.cancelledAt instanceof Date);
+    assert.equal(calls.events.includes('route.completed'), false);
+  });
+
+  it('🔴 con visitas registradas no se cancela: se completa (ROUTE_HAS_VISITS)', async () => {
+    const { service, calls } = makeService({ route: { ...MINE, status: 'IN_PROGRESS' }, permissions: FIELD_ONLY, visitCount: 2, stops: stopsOf('VISITED', 'PENDING') });
+    await rejectsWithCode(service.updateStatus('r1', { status: 'CANCELLED', reason: 'Quiero cancelar' } as never), 'ROUTE_HAS_VISITS');
+    assert.equal(calls.routeUpdate.length, 0);
+  });
+
+  it('🔴 quien no armó la ruta ni la anda no la cancela directo: la pide (ROUTE_REQUEST_REQUIRED)', async () => {
+    // La armó otro manager y el cobrador es otra persona: este manager solo puede pedirlo.
+    const { service, calls } = makeService({ route: { id: 'r1', collectorId: 'u9', createdBy: 'u8' }, permissions: ['route:read', 'route:assign'], stops: stopsOf('PENDING') });
+    await rejectsWithCode(service.updateStatus('r1', { status: 'CANCELLED', reason: 'Quiero cancelarla ya' } as never), 'ROUTE_REQUEST_REQUIRED');
+    assert.equal(calls.routeUpdate.length, 0);
+  });
+
+  it('un manager ajeno puede iniciar o completar, pero deja el motivo', async () => {
+    const { service } = makeService({ route: { id: 'r1', collectorId: 'u9', createdBy: 'u8' }, permissions: ['route:read', 'route:assign'], stops: stopsOf('PENDING') });
+    await rejectsWithCode(service.updateStatus('r1', { status: 'IN_PROGRESS' } as never), 'ROUTE_REASON_REQUIRED');
+    await service.updateStatus('r1', { status: 'IN_PROGRESS', reason: 'El cobrador no tiene señal; la inicio yo' } as never);
+  });
+
+  it('cancelar avisa al cobrador y a quien armó la ruta (no a quien la cancela)', async () => {
+    const { service, calls } = makeService({ route: { id: 'r1', collectorId: 'u9', createdBy: 'u8', plannedDate: new Date('2026-06-20') }, permissions: ['route:read', 'route:assign', 'route:execute'], stops: stopsOf('PENDING') });
+    await service.updateStatus('r1', { status: 'CANCELLED', reason: 'Cambio de zona' } as never);
+    assert.equal(calls.events.filter((e) => e === 'route.notice').length, 2);
+  });
+});
+
+describe('RoutesService · autoría y ruta cerrada (F4/12)', () => {
+  const stopsOf = (...st: string[]): FakeStop[] =>
+    st.map((status, i) => ({ id: `s${i + 1}`, routeId: 'r1', clientId: `cl${i + 1}`, sequenceOrder: i + 1, status }));
+
+  it('🔴 quien no armó la ruta no agrega, quita ni mueve paradas: las pide (ROUTE_REQUEST_REQUIRED)', async () => {
+    // El cobrador de una ruta que armó el manager tampoco la edita directo.
+    const route = { id: 'r1', collectorId: 'u1', createdBy: 'manager-1' };
+    const { service, stops } = makeService({ route, permissions: ['route:read', 'route:execute'], stops: stopsOf('PENDING', 'PENDING') });
+    await rejectsWithCode(service.addStop('r1', { clientId: 'c1' } as never), 'ROUTE_REQUEST_REQUIRED');
+    await rejectsWithCode(service.removeStop('r1', 's1'), 'ROUTE_REQUEST_REQUIRED');
+    await rejectsWithCode(service.updateStop('r1', 's1', { sequenceOrder: 2 } as never), 'ROUTE_REQUEST_REQUIRED');
+    assert.equal(stops.length, 2, 'no se tocó nada');
+  });
+
+  it('quien armó la ruta sí la edita; el administrador también', async () => {
+    const route = { id: 'r1', collectorId: 'u9', createdBy: 'u1' };
+    const mine = makeService({ route, permissions: ['route:read', 'route:assign'], stops: stopsOf('PENDING') });
+    await mine.service.removeStop('r1', 's1');
+    const admin = makeService({ route: { ...route, createdBy: 'otro' }, permissions: ['route:read', 'route:assign', 'route:execute'], stops: stopsOf('PENDING') });
+    await admin.service.removeStop('r1', 's1');
+  });
+
+  it('una ruta anterior a F4/12 (sin creador) se rige como siempre: quien administra rutas y su cobrador', async () => {
+    const legacy = { id: 'r1', collectorId: 'u1', createdBy: null };
+    const manager = makeService({ route: legacy, permissions: ['route:read', 'route:write'], stops: stopsOf('PENDING') });
+    await manager.service.removeStop('r1', 's1');
+    const collector = makeService({ route: legacy, permissions: ['route:read', 'route:execute'], stops: stopsOf('PENDING') });
+    await collector.service.removeStop('r1', 's1');
+  });
+
+  it('🔴 una ruta cerrada no se modifica (ROUTE_CLOSED)', async () => {
+    for (const status of ['COMPLETED', 'CANCELLED']) {
+      const { service } = makeService({ route: { id: 'r1', collectorId: 'u1', createdBy: 'u1', status }, permissions: ['route:read', 'route:execute'], stops: stopsOf('PENDING', 'PENDING') });
+      await rejectsWithCode(service.addStop('r1', { clientId: 'c1' } as never), 'ROUTE_CLOSED');
+      await rejectsWithCode(service.removeStop('r1', 's1'), 'ROUTE_CLOSED');
+      await rejectsWithCode(service.updateStop('r1', 's1', { sequenceOrder: 2 } as never), 'ROUTE_CLOSED');
+    }
+  });
+
+  it('la ruta nace con su creador, y no se arma para un día que ya pasó (ROUTE_PAST_DATE)', async () => {
+    const ok = makeService({ permissions: ['route:read', 'route:assign'], today: '2026-06-20' });
+    await ok.service.create({ collectorId: COLLECTOR_ID, plannedDate: '2026-06-20' } as never);
+    assert.equal(ok.calls.routeCreate[0]!.createdBy, 'u1');
+    const past = makeService({ permissions: ['route:read', 'route:assign'], today: '2026-06-21' });
+    await rejectsWithCode(past.service.create({ collectorId: COLLECTOR_ID, plannedDate: '2026-06-20' } as never), 'ROUTE_PAST_DATE');
+    assert.equal(past.calls.routeCreate.length, 0);
+  });
+
+  it('un reintento por id de una ruta ya creada no se rechaza por la fecha', async () => {
+    // La cola offline puede reenviar pasada la medianoche: la ruta ya existe, se devuelve.
+    const { service } = makeService({ permissions: ['route:read', 'route:assign'], today: '2026-06-25', priorRoute: { id: 'r1', collectorId: COLLECTOR_ID, stops: [] } });
+    const r = await service.create({ id: 'r1', collectorId: COLLECTOR_ID, plannedDate: '2026-06-20' } as never);
+    assert.equal(r.id, 'r1');
+  });
+
+  it('con ubicación pedida: debe ser del cliente y tener punto; sin ella, se guarda la principal', async () => {
+    const loc = (id: string, clientId: string, point = true) => ({ id, clientId, locationType: 'HOME', relationId: null, latitude: point ? -16.5 : null, longitude: point ? -68.1 : null });
+    const wrong = makeService({ credits: [{ id: 'crA', client_id: 'cl-crA' }], permissions: ASSIGN, locations: [loc('L1', 'otro-cliente')] });
+    await rejectsWithCode(wrong.service.generate({ ...GEN, creditIds: ['crA'], locations: { crA: 'L1' } } as never), 'RESOURCE_NOT_FOUND');
+    const noPoint = makeService({ credits: [{ id: 'crA', client_id: 'cl-crA' }], permissions: ASSIGN, locations: [loc('L1', 'cl-crA', false)] });
+    await rejectsWithCode(noPoint.service.generate({ ...GEN, creditIds: ['crA'], locations: { crA: 'L1' } } as never), 'ROUTE_STOP_NO_POINT');
+    const fine = makeService({ credits: [{ id: 'crA', client_id: 'cl-crA' }], permissions: ASSIGN, locations: [loc('L1', 'cl-crA')] });
+    await fine.service.generate({ ...GEN, creditIds: ['crA'] } as never);
+    const stops = (fine.calls.routeCreate[0]!.stops as { create: { locationId: string | null }[] }).create;
+    assert.equal(stops[0]!.locationId, 'L1', 'sin elegir, la principal del cliente queda guardada en la parada');
+  });
+
+  it('con requirePoints, una parada sin punto frena la publicación y dice cuáles faltan', async () => {
+    const { service } = makeService({
+      credits: [{ id: 'crA', client_id: 'cl-crA' }],
+      permissions: ASSIGN,
+      locations: [{ id: 'L1', clientId: 'cl-crA', locationType: 'HOME', relationId: null, latitude: null, longitude: null }],
+    });
+    await rejectsWithCode(service.generate({ ...GEN, creditIds: ['crA'], requirePoints: true } as never), 'ROUTE_STOP_NO_POINT');
+  });
+
+  it('el detalle dice qué puede hacer quien mira', async () => {
+    const { service } = makeService({ route: { id: 'r1', collectorId: 'u1', createdBy: 'u1', status: 'PLANNED' }, permissions: ['route:read', 'route:execute'], stops: stopsOf('PENDING') });
+    const r = await service.findOne('r1');
+    assert.equal(r.capabilities.edit, true);
+    assert.equal(r.capabilities.start, true);
+    assert.equal(r.capabilities.cancel, true);
+    assert.equal(r.capabilities.complete, false, 'no se completa lo que no se inició');
+    const other = makeService({ route: { id: 'r1', collectorId: 'u9', createdBy: 'u8', status: 'PLANNED' }, permissions: ['route:read', 'route:assign'], stops: stopsOf('PENDING') });
+    const o = await other.service.findOne('r1');
+    assert.equal(o.capabilities.edit, false);
+    assert.equal(o.capabilities.requestChange, true);
+    assert.equal(o.capabilities.cancel, false);
+  });
+});
+
+// ── F4/12 · vista previa de un recorrido que todavía no existe ───────────────────────────────────────
+
+describe('RoutesService.previewPoints · antes de publicar (F4/12)', () => {
+  const P = (id: string, lat: number, extra: Record<string, unknown> = {}) => ({ id, latitude: lat, longitude: -68.1, ...extra });
+  const pts = { points: [P('a', -16.5), P('b', -16.6), P('c', -16.7)] } as never;
+  const MANAGER = ['route:read', 'route:assign'];
+
+  it('devuelve recorrido, distancia, duración y hora de llegada a cada punto, SIN guardar nada', async () => {
+    const { service, calls } = makeService({
+      permissions: MANAGER,
+      osrm: { route: async () => fakePath(12.4, 45), trip: async () => null } as never,
+    });
+    const r = await service.previewPoints(pts);
+    assert.equal(r.distanceKm, 12.4);
+    // 45 min de calle + 10 de permanencia en cada una de las 3 paradas.
+    assert.equal(r.minutes, 75);
+    // Cada tramo son 23 min (la mitad de 45, redondeada) más los 10 de permanencia en la parada anterior.
+    assert.deepEqual(r.stops.map((s) => s.etaMinutes), [0, 33, 66]);
+    assert.equal(calls.routeCreate.length + calls.routeUpdate.length, 0, 'no escribe nada');
+    assert.equal(calls.audit.length, 0, 'ni audita: no revela datos personales');
+  });
+
+  it('sugiere un orden mejor cuando ahorra de verdad, igual que la ruta ya armada', async () => {
+    const { service } = makeService({
+      permissions: MANAGER,
+      osrm: { route: async () => fakePath(12.4, 45), trip: async () => ({ ...fakePath(9.9, 30), order: [0, 2, 1] }) } as never,
+    });
+    const r = await service.previewPoints(pts);
+    assert.deepEqual(r.suggestion!.order, ['a', 'c', 'b']);
+    assert.equal(r.suggestion!.savedKm, 2.5);
+  });
+
+  it('🔴 con una hora fija, la sugerencia no mueve esa parada de su lugar', async () => {
+    const fixed = { points: [P('a', -16.5), P('b', -16.6, { scheduledTime: '10:30' }), P('c', -16.7)] } as never;
+    const { service } = makeService({
+      permissions: MANAGER,
+      osrm: { route: async () => fakePath(12.4, 45), trip: async () => ({ ...fakePath(9.9, 30), order: [0, 2, 1] }) } as never,
+    });
+    const r = await service.previewPoints(fixed);
+    // «b» tiene hora fija (2.ª): sola queda una parada movible, así que no hay nada que reordenar.
+    assert.equal(r.suggestion, undefined);
+    assert.equal(r.stops[1]!.scheduledTime, '10:30', 'y la hora viaja para que la pantalla marque el choque');
+  });
+
+  it('sin motor de ruteo se degrada: sin distancia inventada', async () => {
+    const { service } = makeService({ permissions: MANAGER });
+    const r = await service.previewPoints(pts);
+    assert.deepEqual(r.geometry, []);
+    assert.equal(r.distanceKm, undefined);
+    assert.equal(r.stops.length, 3);
+  });
+
+  it('un solo punto no tiene recorrido que calcular', async () => {
+    const { service } = makeService({ permissions: MANAGER });
+    const r = await service.previewPoints({ points: [P('a', -16.5)] } as never);
+    assert.equal(r.distanceKm, undefined);
+    assert.equal(r.stops.length, 1);
+  });
+
+  it('un auditor no previsualiza rutas (403); el cobrador sí (arma la suya)', async () => {
+    const auditor = makeService({ permissions: ['route:read'] });
+    await rejectsWithCode(auditor.service.previewPoints(pts), 'AUTH_002');
+    const collector = makeService({ permissions: ['route:read', 'route:execute'] });
+    await collector.service.previewPoints(pts);
   });
 });

@@ -41,6 +41,7 @@ function makeService(opts: { supervisors?: string[]; notifications?: NotifRow[];
           body: (args.data.body as string) ?? null,
           clientId: (args.data.clientId as string) ?? null,
           creditId: (args.data.creditId as string) ?? null,
+          routeId: (args.data.routeId as string) ?? null,
           agendaItemId: (args.data.agendaItemId as string) ?? null,
           readAt: null,
           createdAt: new Date('2026-06-18T12:00:00Z'),
@@ -204,5 +205,37 @@ describe('NotificationsService · avisos de agenda (F4/11)', () => {
     const { service, calls } = makeService();
     await service.onAgendaAssigned(payload({ actorName: undefined, clientName: undefined }));
     assert.equal(calls.created[0]!.body, 'Alguien te asignó una visita para el 10/10.');
+  });
+});
+
+describe('NotificationsService.onRouteNotice (F4/12)', () => {
+  const base = { accountId: 'acc-A', routeId: 'r1', recipientId: 'u9', actorId: 'u1', plannedDate: '2026-10-09' };
+
+  it('te asignaron una ruta: aviso persistido al cobrador, con enlace a la ruta', async () => {
+    const { service, calls } = makeService();
+    await service.onRouteNotice({ ...base, kind: 'ASSIGNED', stops: 8 });
+    const n = calls.created[0]! as NotifRow & { routeId?: string };
+    assert.equal(n.userId, 'u9');
+    assert.equal(n.type, 'ROUTE_ASSIGNED');
+    assert.equal(n.routeId, 'r1');
+    assert.match(n.body!, /8 paradas/);
+    assert.match(n.body!, /09\/10\/2026/);
+  });
+
+  it('cancelaron tu ruta: el aviso lleva el motivo', async () => {
+    const { service, calls } = makeService();
+    await service.onRouteNotice({ ...base, kind: 'CANCELLED', reason: 'Cambio de zona' });
+    assert.equal(calls.created[0]!.type, 'ROUTE_CANCELLED');
+    assert.match(calls.created[0]!.body!, /Cambio de zona/);
+  });
+
+  it('piden un cambio / lo aprobaron / lo rechazaron: tres avisos, cada uno con su tipo y lo que se pidió', async () => {
+    const { service, calls } = makeService();
+    await service.onRouteNotice({ ...base, kind: 'CHANGE_REQUESTED', requestKind: 'ADD_STOP', reason: 'Falta un cliente' });
+    await service.onRouteNotice({ ...base, kind: 'CHANGE_APPROVED', requestKind: 'ADD_STOP' });
+    await service.onRouteNotice({ ...base, kind: 'CHANGE_REJECTED', requestKind: 'CANCEL', reason: 'No' });
+    assert.deepEqual(calls.created.map((n) => n.type), ['ROUTE_CHANGE_REQUESTED', 'ROUTE_CHANGE_DECIDED', 'ROUTE_CHANGE_DECIDED']);
+    assert.match(calls.created[0]!.body!, /agregar una parada/);
+    assert.match(calls.created[2]!.body!, /cancelar la ruta/);
   });
 });
