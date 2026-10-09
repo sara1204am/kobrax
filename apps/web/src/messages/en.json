@@ -1424,8 +1424,8 @@
       "entity": "routes",
       "tabs": {
         "label": "What do you want to do",
-        "planning": "Planning",
-        "history": "History"
+        "history": "History",
+        "today": "Today"
       },
       "views": {
         "label": "How to view the history",
@@ -1448,11 +1448,7 @@
       },
       "planning": {
         "title": "Plan routes",
-        "subtitle": "Pick the day and the people: each one goes out with their most urgent loans.",
-        "intro": "Build the day's routes in two steps: pick the date and the collectors, review how many stops each one gets, and only then publish. Each collector goes out with their own portfolio.",
         "cta": "Plan routes",
-        "scope": "Visits cannot be picked one by one or moved between collectors yet: each route is built from the loans that person already has assigned, most urgent first. Visits scheduled for that day join their owner's route automatically.",
-        "noPermission": "Your role does not hand out work: you can check the history, but not plan.",
         "noCollectors": "There are no active collectors",
         "noCollectorsText": "Invite your team from Team and try again.",
         "date": "Day of the routes",
@@ -1464,6 +1460,11 @@
         "foundCapped": "{n} to assign · showing {shown}",
         "picked": "{n} picked · minimum {min}",
         "days": "{n} days",
+        "dayChips": {
+          "label": "Route day",
+          "today": "Today",
+          "tomorrow": "Tomorrow"
+        },
         "cols": {
           "client": "Debtor and address",
           "balance": "Balance",
@@ -1551,7 +1552,72 @@
             "CRITICAL": "Critical"
           }
         },
-        "scheduledTag": "Scheduled visit"
+        "scheduledTag": "Scheduled visit",
+        "subtitle": "Pick the date and who, add the visits, review the route and publish it.",
+        "steps": {
+          "label": "Steps to build the route",
+          "date": "Date and collector",
+          "clients": "Clients and locations",
+          "order": "Map and order",
+          "preview": "Preview"
+        },
+        "visits": {
+          "title": "Visits scheduled for that day ({n})",
+          "none": "This collector has no visits scheduled that day.",
+          "auto": "These visits will be marked on the route automatically.",
+          "cols": {
+            "time": "Time",
+            "client": "Client",
+            "credit": "Credit",
+            "priority": "Priority"
+          }
+        },
+        "chosen": {
+          "title": "Chosen ({n})",
+          "empty": "You have not picked anyone yet.",
+          "noLabel": "Default location",
+          "noPoint": "No location on the map: it is needed for the route.",
+          "change": "Change the location",
+          "add": "Add a location"
+        },
+        "location": {
+          "title": "Location of {name}",
+          "hint": "Choose where the visit will be: home, work, a guarantor… Or add a new one and mark it on the map.",
+          "loading": "Loading locations…",
+          "error": "The locations could not be loaded.",
+          "needsPoint": "This location has no point on the map. Mark it to use it.",
+          "use": "Use this location",
+          "cancel": "Cancel"
+        },
+        "orderHint": "Drag the stops (or use the arrows) to order the route. Stops with a fixed time are flagged in the preview.",
+        "missingPoints": "{n, plural, one {# stop is missing its location} other {# stops are missing their location}}.",
+        "nextStep": "Next",
+        "back": "Back",
+        "backToEdit": "Back to editing",
+        "fixedAt": "Fixed time {time}",
+        "publish": "Confirm and publish ({n})",
+        "preview": {
+          "visits": "Visits",
+          "distance": "Distance",
+          "duration": "Duration",
+          "start": "Estimated start time",
+          "end": "Estimated end time",
+          "loading": "Calculating the route…",
+          "error": "The route could not be calculated.",
+          "noEngine": "We could not calculate distance or times right now. You can publish anyway: the route is calculated when the map service is back.",
+          "suggest": "The route can be optimized: you would save {km} km (≈ {min} min).",
+          "applyOrder": "Optimize order",
+          "conflicts": "{n, plural, one {# stop arrives after its fixed time} other {# stops arrive after their fixed time}}. Change the order or the departure time.",
+          "extraVisits": "{n, plural, one {One more scheduled visit is} other {# more scheduled visits are}} added at the end of the route (its credit is not among the candidates and is not drawn).",
+          "late": "Arrives late",
+          "cols": {
+            "order": "Order",
+            "client": "Client",
+            "place": "Location",
+            "eta": "Estimated time",
+            "fixed": "Fixed time"
+          }
+        }
       },
       "work": {
         "entity": "collectors",
@@ -1579,6 +1645,29 @@
       "previousDay": "Previous day",
       "nextDay": "Next day",
       "today": "Today",
+      "todayBoard": {
+        "start": "Start",
+        "view": "View",
+        "plan": "Plan",
+        "noRoute": "No route",
+        "empty": "There are no collectors or routes for this day.",
+        "allDone": "All handled",
+        "stats": {
+          "collectors": "Collectors",
+          "stops": "Stops",
+          "done": "Handled",
+          "pending": "Pending"
+        },
+        "cols": {
+          "collector": "Collector",
+          "status": "Status",
+          "stops": "Stops",
+          "progress": "Progress",
+          "collected": "Collected",
+          "next": "Next stop",
+          "actions": "Actions"
+        }
+      },
       "date": "Day",
       "filters": {
         "collector": "Collector",
@@ -1601,7 +1690,11 @@
         "hint": "You can reorder or remove the stops that are still pending, and add debtors from the list below. Handled ones stay as they are: they are the day that already happened.",
         "addTitle": "Add stops",
         "mapCount": "{n} stops on the map",
-        "error": "The stop could not be changed."
+        "error": "The stop could not be changed.",
+        "startRequest": "Ask for changes to the stops",
+        "requestHint": "Someone else built this route: every change you make here is a request with its reason, and they approve or reject it. Handled stops are not touched.",
+        "askAddTitle": "Ask for a stop to be added",
+        "askAddText": "Someone else built this route. Tell them why this stop should be included."
       },
       "detail": {
         "downloadPdf": "Download PDF",
@@ -1615,7 +1708,14 @@
         "noDistance": "Not computed",
         "noPreview": "We could not compute the route line. The stops are still listed.",
         "openMora": "View in Overdue",
-        "openClient": "Open the debtor's file"
+        "openClient": "Open the debtor's file",
+        "pending": "Pending",
+        "nextStop": "Next stop",
+        "nextStopDone": "No stops left to handle.",
+        "register": "Record visit",
+        "viewStop": "View details",
+        "reasonOfClose": "Reason for closing",
+        "cancelledReason": "Reason for cancelling"
       },
       "stop": {
         "sequence": "Stop {n}",
@@ -1671,6 +1771,183 @@
       },
       "errors": {
         "generic": "The action could not be completed."
+      },
+      "actions": {
+        "start": "Start route",
+        "complete": "Complete day",
+        "cancel": "Cancel route",
+        "optimize": "Optimize order",
+        "optimizing": "Optimizing…",
+        "optimized": "Order applied.",
+        "back": "Back",
+        "error": "The action could not be completed.",
+        "reasonLabel": "Reason",
+        "pendingReasonLabel": "Why were some stops left unhandled?",
+        "reasonPlaceholder": "Write the reason…",
+        "reasonHint": "A few words are enough: it is recorded.",
+        "startOtherTitle": "Start someone else's route",
+        "startOtherText": "This route is not yours. Leave the reason so it is recorded.",
+        "completeTitle": "Complete the day",
+        "completeClean": "All stops are handled. The day will be closed.",
+        "completePending": "{n, plural, one {# stop is} other {# stops are}} still unhandled. Say why (not enough time, it will be done another day…). They become skipped and their scheduled visits are freed to be planned again.",
+        "cancelTitle": "Cancel the route",
+        "cancelConfirm": "Yes, cancel the route",
+        "cancelText": "Do you really want to cancel the route? {n, plural, one {# unhandled stop becomes} other {# unhandled stops become}} skipped and their scheduled visits are freed. Write the reason.",
+        "cancelTextEmpty": "Do you really want to cancel the route? Write the reason.",
+        "cancelBlocked": "It already has registered visits: it is not cancelled, it is completed. That information is not erased.",
+        "requestCancel": "Ask to cancel the route",
+        "requestCancelTitle": "Ask for the route to be cancelled",
+        "requestCancelText": "Someone else built this route: they decide. Tell them why you want it cancelled.",
+        "requestSend": "Send request",
+        "requestSent": "Request sent. Whoever built the route will see it."
+      },
+      "requests": {
+        "title": "Change requests",
+        "pending": "{n, plural, one {# pending} other {# pending}}",
+        "someone": "someone",
+        "approve": "Approve",
+        "reject": "Reject",
+        "withdraw": "Withdraw",
+        "history": "{n, plural, one {Show the last resolved request} other {Show the last # resolved requests}}",
+        "noteLabel": "Note (optional)",
+        "notePlaceholder": "If you want, explain your decision…",
+        "error": "The request could not be resolved.",
+        "kind": {
+          "ADD_STOP": "Add a stop",
+          "REMOVE_STOP": "Remove a stop",
+          "REORDER": "Move a stop",
+          "CANCEL": "Cancel the route"
+        },
+        "status": {
+          "PENDING": "Pending",
+          "APPROVED": "Approved",
+          "REJECTED": "Rejected",
+          "WITHDRAWN": "Withdrawn"
+        },
+        "dialog": {
+          "APPROVE": "Approve the request",
+          "REJECT": "Reject the request",
+          "WITHDRAW": "Withdraw the request"
+        },
+        "confirm": {
+          "APPROVE": "Approve and apply",
+          "REJECT": "Reject",
+          "WITHDRAW": "Withdraw"
+        }
+      },
+      "record": {
+        "title": "Record visit",
+        "titleFix": "Correct a visit",
+        "fixHint": "A recorded visit is not edited: this saves a new one that corrects it, and both stay visible.",
+        "onBehalf": "It will be recorded in the name of {name}, with your name as the person who entered it.",
+        "result": "Visit result",
+        "variants": {
+          "PAID": "Collected",
+          "PROMISE": "Promise to pay",
+          "NO_ANSWER": "No answer",
+          "NO_CONTACT_VISIT": "Visit without contact",
+          "WRONG_ADDRESS": "Wrong address",
+          "SPECIAL": "Special case"
+        },
+        "noPay": "Recording a payment needs the payments permission (collectors and administrators have it).",
+        "amountPaid": "Amount collected",
+        "amountPromised": "Amount promised",
+        "capHint": "Up to {max}",
+        "method": "Payment method",
+        "promiseDate": "Promise date",
+        "channel": "How was it attempted?",
+        "channels": {
+          "CALL": "By phone",
+          "DOOR": "At the door"
+        },
+        "noticeLeft": "A collection notice was left",
+        "category": "Special case category",
+        "chooseCategory": "Choose a category",
+        "noCategories": "The company has no special case categories set up.",
+        "notes": "Note (optional)",
+        "notesRequired": "What happened with the address (required)",
+        "notesPlaceholder": "Write a note about the visit…",
+        "evidence": "Evidence",
+        "evidenceHint": "Optional. A photo of the door or the receipt; it is sealed with its fingerprint.",
+        "photoAdd": "Add a photo",
+        "photoReplace": "Change the photo",
+        "photoRemove": "Remove",
+        "uploading": "Uploading…",
+        "photoError": "The photo could not be uploaded.",
+        "submit": "Record visit",
+        "submitFix": "Save the correction",
+        "saving": "Saving…",
+        "cancel": "Cancel",
+        "close": "Close",
+        "error": "The visit could not be recorded.",
+        "photoFailed": "the photo could not be attached",
+        "payFailed": "the payment could not be recorded",
+        "promiseFailed": "the promise could not be recorded",
+        "and": "and",
+        "partial": "The visit was recorded, but {what}. Repeat it by hand from the credit's page."
+      },
+      "stopsTable": {
+        "n": "#",
+        "client": "Client",
+        "time": "Time",
+        "debt": "Debt",
+        "dpd": "Overdue",
+        "status": "Status",
+        "result": "Result",
+        "actions": "Actions",
+        "view": "View",
+        "register": "Record",
+        "days": "{n} days",
+        "help": "Help",
+        "withVisit": "Scheduled visit",
+        "requestRemove": "Ask to remove it",
+        "requestMove": "Ask to move it",
+        "askTitleRemove": "Ask for the stop to be removed",
+        "askTitleMove": "Ask for the stop to be moved",
+        "askTextRemove": "Someone else built this route. Tell them why the stop should not be there.",
+        "askTextMove": "Someone else built this route. Tell them why the stop should go somewhere else.",
+        "askSend": "Send request",
+        "askSent": "Request sent. Whoever built the route will see it.",
+        "up": "Move up",
+        "down": "Move down"
+      },
+      "stopPage": {
+        "back": "Back to the route",
+        "tabsLabel": "Stop sections",
+        "tabs": {
+          "info": "Information",
+          "credit": "Credit",
+          "locations": "Location",
+          "visits": "Visit history",
+          "evidence": "Evidence"
+        },
+        "register": "Record visit",
+        "fix": "Correct",
+        "daysLate": "{n} days overdue",
+        "place": "Place of the visit",
+        "hour": "Time",
+        "lastResult": "Last result",
+        "fromAgenda": "This stop came from a scheduled visit: recording the visit completes it.",
+        "source": "Balance source",
+        "externalHint": "The balance is the one reported by the bank at its cutoff date: a payment does not lower it.",
+        "creditFull": "See the full credit in Arrears",
+        "noCredit": "This stop has no associated credit.",
+        "noAddress": "No address on file",
+        "point": "Point on the map",
+        "noPoint": "No location marked",
+        "allLocations": "See all the client's locations",
+        "correction": "Corrects an earlier visit",
+        "loadedBy": "Entered by {name} in the name of {collector}.",
+        "loadedFromPanel": "Entered from the panel.",
+        "someone": "someone",
+        "withEvidence": "{n, plural, one {1 attachment} other {# attachments}} (in the Evidence tab)."
+      },
+      "whatsapp": {
+        "label": "WhatsApp",
+        "opening": "Opening…",
+        "message": "Hi {name}, I'm writing about your pending payment. Can we arrange it?",
+        "noPhone": "This client has no phone number on file.",
+        "error": "WhatsApp could not be opened."
       }
     },
     "payments": {

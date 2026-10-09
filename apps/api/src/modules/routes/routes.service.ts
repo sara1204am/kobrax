@@ -1,33 +1,60 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { AgendaItemStatus, AgendaItemType, RouteStatus, RouteStopStatus } from '@prisma/client';
-import { Permission, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
+import {
+  Permission,
+  ResponseDto,
+  canTransitionRoute,
+  canTransitionStop,
+  isOpenStop,
+  isValidReason,
+  resolvePagination,
+  routeIsOpen,
+  type ApiResponse,
+  type RouteCapabilities,
+  type RouteStatus as SharedRouteStatus,
+  type RouteStopStatus as SharedStopStatus,
+} from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
+import { TenantClockService, civilDayStartInstant } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
-import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
+import { EventBusService, DomainEvent, type RouteNoticePayload } from '../../common/events/event-bus.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { isUniqueViolation } from '../../common/unique-violation';
+import { clientDisplayName } from '../clients/clients.serializer';
 import { moraAccessConditions, moraScopeOf, visibleCredits } from '../mora/mora-query';
 import { serializeRoute, serializeStop } from './routes.serializer';
 import type { RoutePdfContext } from './route-pdf';
 import { OsrmService, type OsrmRoute, type OsrmTrip } from './osrm.service';
-import { AddStopDto, CreateRouteDto, GenerateRouteDto, ListRoutesQueryDto, UpdateRouteDto, UpdateStopDto } from './dto/route.dto';
+import { routeCapabilities, routeRoles, type RouteRoles } from './route-access';
+import { AddStopDto, CreateRouteDto, GenerateRouteDto, ListRoutesQueryDto, PlanPreviewDto, UpdateRouteDto, UpdateStopDto } from './dto/route.dto';
 import {
+  changeRequestRequired,
   invalidCollector,
   noStopsToRoute,
+  reasonRequired,
   resourceNotFound,
   routeAlreadyForDay,
+  routeClosed,
   routeForbidden,
+  routeHasVisits,
   routeIdTaken,
+  routePastDate,
+  routeStateChanged,
+  routeTransition,
   stopDuplicate,
   stopNotPending,
+  stopStatusNotAllowed,
+  stopsWithoutPoint,
 } from './routes.errors';
 
 /**
  * Lo que la parada necesita del cliente para poder pintarse: nombre, dirección y **el punto en el
  * mapa** (S3: la polilínea y el cálculo de OSRM salen de acá, sin queries nuevas).
- * `relationId: null` = ubicaciones del cliente, no las de sus garantes/contactos.
+ *
+ * F4/12: vienen TODAS las ubicaciones (también las de garantes y familiares, con `relationId`), porque la parada
+ * puede apuntar a cualquiera de ellas (`route_stops.location_id`). La «principal» sigue siendo la del propio cliente.
  */
 const STOP_CLIENT = {
   select: {
@@ -35,8 +62,15 @@ const STOP_CLIENT = {
     lastName: true,
     businessName: true,
     locations: {
-      where: { relationId: null },
-      select: { locationType: true, address: true, latitude: true, longitude: true },
+      select: {
+        id: true,
+        locationType: true,
+        address: true,
+        latitude: true,
+        longitude: true,
+        relationId: true,
+        relation: { select: { relatedName: true } },
+      },
       orderBy: { createdAt: 'asc' },
     },
   },
@@ -66,6 +100,12 @@ const STOP_CREDIT = {
   },
 } satisfies Prisma.CreditDefaultArgs;
 
+/** El detalle de una ruta: la ruta, sus paradas, lo que quien mira puede hacer y los pedidos que esperan. */
+export type RouteDetail = ReturnType<typeof serializeRoute> & { capabilities: RouteCapabilities; pendingRequests: number };
+
+/** La fecha de ruta como el ancla UTC con que se guarda la columna `DATE`. */
+const dayAnchor = (day: string): Date => new Date(`${day.slice(0, 10)}T00:00:00.000Z`);
+
 @Injectable()
 export class RoutesService {
   constructor(
@@ -75,10 +115,15 @@ export class RoutesService {
     private readonly events: EventBusService,
     private readonly crypto: CryptoService,
     private readonly osrm: OsrmService,
+    private readonly clock: TenantClockService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
+  }
+
+  private get actor() {
+    return { userId: this.tenant.userId, can: (p: string) => this.tenant.can(p) };
   }
 
   /** Adjunta a cada parada los datos de su crédito (`creditInfo`): la parada guarda `credit_id` sin relación. */
@@ -87,6 +132,19 @@ export class RoutesService {
     const rows = ids.length ? await tx.credit.findMany({ where: { id: { in: ids } }, ...STOP_CREDIT }) : [];
     const byId = new Map(rows.map((c) => [c.id, c]));
     return stops.map((s) => ({ ...s, creditInfo: s.creditId ? (byId.get(s.creditId) ?? null) : null }));
+  }
+
+  /**
+   * La hora fija de la visita agendada de cada parada (`HH:mm`), si la tiene. **Hora fija = posición fija**: la parada
+   * que lleva una visita con hora no se mueve al optimizar (decisión 9). Una visita por franja no tiene hora.
+   */
+  private async withAgendaTimes<S extends { agendaItemId: string | null }>(tx: PrismaClient, stops: S[]) {
+    const ids = [...new Set(stops.map((s) => s.agendaItemId).filter((id): id is string => !!id))];
+    const rows = ids.length
+      ? await tx.agendaItem.findMany({ where: { id: { in: ids } }, select: { id: true, timeMode: true, scheduledTime: true } })
+      : [];
+    const byId = new Map(rows.map((a) => [a.id, a.timeMode === 'FIXED' ? a.scheduledTime : null]));
+    return stops.map((s) => ({ ...s, scheduledTime: s.agendaItemId ? (byId.get(s.agendaItemId) ?? null) : null }));
   }
 
   private async assertCollector(tx: PrismaClient, collectorId: string): Promise<void> {
@@ -106,16 +164,43 @@ export class RoutesService {
   }
 
   /**
-   * La ruta existe y este usuario la puede modificar: quien administra rutas, cualquiera del tenant;
-   * el ejecutor de campo, sólo la suya. Una ruta ajena responde 404 y no 403 — no se filtra que exista.
+   * La ruta existe y este usuario la ve: quien administra rutas, cualquiera del tenant; el ejecutor de campo, sólo la
+   * suya. Una ruta ajena responde 404 y no 403 — no se filtra que exista. Devuelve también **qué es** quien pide
+   * respecto de ella (`roles`): armar y correr la ruta no son lo mismo (ver `route-access.ts`).
    */
-  private async assertOwnRoute(tx: PrismaClient, routeId: string): Promise<{ id: string; collectorId: string }> {
-    const route = await tx.routePlan.findFirst({ where: { id: routeId }, select: { id: true, collectorId: true } });
+  private async access(tx: PrismaClient, routeId: string, action = 'modificar la ruta') {
+    const route = await tx.routePlan.findFirst({ where: { id: routeId } });
     if (!route) throw resourceNotFound();
-    if (this.tenant.can(Permission.ROUTE_WRITE) || this.tenant.can(Permission.ROUTE_ASSIGN)) return route;
-    if (!this.tenant.can(Permission.ROUTE_EXECUTE)) throw routeForbidden('modificar la ruta');
-    if (route.collectorId !== this.tenant.userId) throw resourceNotFound();
-    return route;
+    const roles = routeRoles(this.actor, route);
+    if (!roles.manager) {
+      if (!this.tenant.can(Permission.ROUTE_EXECUTE)) throw routeForbidden(action);
+      if (!roles.isCollector) throw resourceNotFound();
+    }
+    return { route, roles };
+  }
+
+  /**
+   * Quién es quien pide respecto de una ruta (ya con el alcance validado). Lo usan los pedidos de cambio, que viven en
+   * otro servicio pero aplican las mismas reglas.
+   */
+  async contextOf(routeId: string) {
+    const { route, roles } = await this.tx((tx) => this.access(tx, routeId, 'pedir cambios en la ruta'));
+    return { route, roles };
+  }
+
+  /** Armar la ruta (agregar, quitar, mover) es de quien la creó; el resto la pide. */
+  private requireManage(roles: RouteRoles, kind: 'ADD_STOP' | 'REMOVE_STOP' | 'REORDER' | 'CANCEL'): void {
+    if (!roles.canManage) throw changeRequestRequired(kind);
+  }
+
+  /** Una ruta cerrada es historia: sus paradas no se tocan. */
+  private requireOpen(status: RouteStatus): void {
+    if (!routeIsOpen(status as unknown as SharedRouteStatus)) throw routeClosed();
+  }
+
+  /** `YYYY-MM-DD` ya validado por el DTO; acá se cierra la puerta al pasado, con el día **de la empresa**. */
+  private async assertNotPast(day: string): Promise<void> {
+    if (dayAnchor(day) < (await this.clock.today())) throw routePastDate();
   }
 
   /**
@@ -162,14 +247,25 @@ export class RoutesService {
     return prev;
   }
 
+  /** Aviso a la otra persona (la ruta es suya y la tocó alguien más). Un fallo del aviso nunca tumba la operación. */
+  private notice(p: Omit<RouteNoticePayload, 'accountId' | 'actorId'>): void {
+    if (!this.tenant.userId || p.recipientId === this.tenant.userId) return;
+    this.events.emit(DomainEvent.ROUTE_NOTICE, { ...p, accountId: this.tenant.accountId, actorId: this.tenant.userId } satisfies RouteNoticePayload);
+  }
+
   /** Mismo modelo de capacidades que `generate`: el ejecutor de campo sólo crea rutas para sí mismo. */
   async create(dto: CreateRouteDto): Promise<ReturnType<typeof serializeRoute>> {
     const collectorId = this.collectorFor(dto.collectorId, 'crear rutas');
+    const prev = await this.tx((tx) => this.existingById(tx, dto.id, collectorId));
+    if (!prev) await this.assertNotPast(dto.plannedDate);
     // Dos envíos con el mismo id a la vez pasan los dos el chequeo y uno choca con la PK: se repite UNA vez.
     const { route, replay } = await this.createOnce(dto, collectorId).catch((err: unknown) =>
       dto.id && isUniqueViolation(err) ? this.createOnce(dto, collectorId) : Promise.reject(err),
     );
-    if (!replay) await this.audit.record({ entity: 'route', entityId: route.id, action: 'CREATE', after: { collectorId: route.collectorId } });
+    if (!replay) {
+      await this.audit.record({ entity: 'route', entityId: route.id, action: 'CREATE', after: { collectorId: route.collectorId } });
+      this.notice({ kind: 'ASSIGNED', routeId: route.id, recipientId: route.collectorId, plannedDate: dto.plannedDate });
+    }
     return serializeRoute(route);
   }
 
@@ -178,15 +274,16 @@ export class RoutesService {
       const prev = await this.existingById(tx, dto.id, collectorId);
       if (prev) return { route: prev, replay: true };
       await this.assertCollector(tx, collectorId);
-      const already = await this.routeOfDay(tx, collectorId, new Date(dto.plannedDate));
+      const already = await this.routeOfDay(tx, collectorId, dayAnchor(dto.plannedDate));
       if (already) throw routeAlreadyForDay(already.id);
       const created = await tx.routePlan.create({
         data: {
           ...(dto.id ? { id: dto.id } : {}),
           accountId: this.tenant.accountId,
           collectorId,
+          createdBy: this.tenant.userId,
           branchId: dto.branchId,
-          plannedDate: new Date(dto.plannedDate),
+          plannedDate: dayAnchor(dto.plannedDate),
           status: RouteStatus.PLANNED,
         },
       });
@@ -203,11 +300,16 @@ export class RoutesService {
    */
   async generate(dto: GenerateRouteDto): Promise<ReturnType<typeof serializeRoute>> {
     const collectorId = this.collectorFor(dto.collectorId, 'generar rutas');
+    const prev = await this.tx((tx) => this.existingById(tx, dto.id, collectorId));
+    if (!prev) await this.assertNotPast(dto.plannedDate);
     const { route, replay } = await this.generateOnce(dto, collectorId).catch((err: unknown) =>
       dto.id && isUniqueViolation(err) ? this.generateOnce(dto, collectorId) : Promise.reject(err),
     );
     // Un reintento no vuelve a auditar ni a crear paradas: devuelve la ruta que ya está.
-    if (!replay) await this.audit.record({ entity: 'route', entityId: route.id, action: 'GENERATE', after: { collectorId: route.collectorId, totalStops: route.totalCases } });
+    if (!replay) {
+      await this.audit.record({ entity: 'route', entityId: route.id, action: 'GENERATE', after: { collectorId: route.collectorId, totalStops: route.totalCases } });
+      this.notice({ kind: 'ASSIGNED', routeId: route.id, recipientId: route.collectorId, plannedDate: dto.plannedDate, stops: route.totalCases });
+    }
     return serializeRoute(route);
   }
 
@@ -216,7 +318,8 @@ export class RoutesService {
       const prev = await this.existingById(tx, dto.id, collectorId);
       if (prev) return { route: prev, replay: true };
       await this.assertCollector(tx, collectorId);
-      const already = await this.routeOfDay(tx, collectorId, new Date(dto.plannedDate));
+      const plannedDate = dayAnchor(dto.plannedDate);
+      const already = await this.routeOfDay(tx, collectorId, plannedDate);
       if (already) throw routeAlreadyForDay(already.id);
 
       /*
@@ -236,17 +339,21 @@ export class RoutesService {
        * visitas van al final; sin elección, van primero (son compromisos con día) y luego la mora por prioridad. Si el
        * crédito ya iba por mora, es UNA sola parada y lleva el vínculo con la visita.
        */
-      const visits = await this.pendingVisits(tx, collectorId, new Date(dto.plannedDate));
+      const visits = await this.pendingVisits(tx, collectorId, plannedDate);
       const credits = this.mergeVisits(base, visits, dto.creditIds?.length ? 'append' : 'prepend');
       if (credits.length === 0) throw noStopsToRoute();
+
+      // La ubicación concreta de cada parada (F4/12): la elegida, o la principal del cliente.
+      const locationOf = await this.resolveLocations(tx, credits, dto.locations ?? {}, dto.requirePoints === true);
 
       const created = await tx.routePlan.create({
         data: {
           ...(dto.id ? { id: dto.id } : {}),
           accountId: this.tenant.accountId,
           collectorId,
+          createdBy: this.tenant.userId,
           branchId: dto.branchId,
-          plannedDate: new Date(dto.plannedDate),
+          plannedDate,
           status: RouteStatus.PLANNED,
           totalCases: credits.length, // nombre legado de la columna: cuenta paradas
           stops: {
@@ -255,6 +362,7 @@ export class RoutesService {
               clientId: c.clientId,
               creditId: c.id,
               agendaItemId: c.agendaItemId,
+              locationId: locationOf.get(c.id) ?? null,
               // El orden que eligió quien planifica; sin elección, el de prioridad (CRITICAL primero).
               sequenceOrder: i + 1,
             })),
@@ -264,6 +372,50 @@ export class RoutesService {
       });
       return { route: created, replay: false };
     });
+  }
+
+  /**
+   * La ubicación de cada parada: la que se pidió, o la principal del cliente (HOME propia; si no, la primera propia).
+   *
+   * - Una ubicación pedida debe ser **del cliente** (propia, o de un garante/familiar suyo) y tener punto en el mapa.
+   * - Con `requirePoints`, **cada parada** debe terminar con punto (decisión 6): si no, se devuelve la lista de las que
+   *   faltan para que la pantalla las resuelva antes de publicar.
+   */
+  private async resolveLocations(
+    tx: PrismaClient,
+    credits: { id: string; clientId: string }[],
+    asked: Record<string, string>,
+    requirePoints: boolean,
+  ): Promise<Map<string, string>> {
+    const clientIds = [...new Set(credits.map((c) => c.clientId))];
+    const rows = await tx.clientLocation.findMany({
+      where: { clientId: { in: clientIds } },
+      select: { id: true, clientId: true, locationType: true, relationId: true, latitude: true, longitude: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const hasPoint = (l: { latitude: unknown; longitude: unknown }) => l.latitude != null && l.longitude != null;
+    const byId = new Map(rows.map((l) => [l.id, l]));
+    const out = new Map<string, string>();
+    const missing: string[] = [];
+    for (const c of credits) {
+      const wanted = asked[c.id];
+      if (wanted) {
+        const loc = byId.get(wanted);
+        if (!loc || loc.clientId !== c.clientId) throw resourceNotFound();
+        if (!hasPoint(loc)) {
+          missing.push(c.id);
+          continue;
+        }
+        out.set(c.id, loc.id);
+        continue;
+      }
+      const own = rows.filter((l) => l.clientId === c.clientId && !l.relationId);
+      const primary = own.find((l) => l.locationType === 'HOME') ?? own[0];
+      if (primary) out.set(c.id, primary.id);
+      if (requirePoints && !(primary && hasPoint(primary))) missing.push(c.id);
+    }
+    if (missing.length > 0 && (requirePoints || Object.keys(asked).length > 0)) throw stopsWithoutPoint(missing);
+    return out;
   }
 
   /**
@@ -307,7 +459,7 @@ export class RoutesService {
   /** Los créditos elegidos, en el orden pedido, sin repetir y sólo los visibles para quien planifica. */
   private async chosenCredits(tx: PrismaClient, creditIds: string[]): Promise<{ id: string; clientId: string }[]> {
     const wanted = [...new Set(creditIds)];
-    const access = Prisma.join([...moraAccessConditions(moraScopeOf(this.tenant)), Prisma.sql`cr.id = ANY(${wanted}::uuid[])`], ' AND ');
+    const access = Prisma.join([...moraAccessConditions(moraScopeOf(this.tenant)), Prisma.sql`cr.id = ANY(${wanted}::text[])`], ' AND ');
     const rows = await tx.$queryRaw<{ id: string; client_id: string }[]>(Prisma.sql`SELECT cr.id, cr.client_id FROM credits cr WHERE ${access}`);
     const byId = new Map(rows.map((r) => [r.id, { id: r.id, clientId: r.client_id }]));
     // `ANY` no devuelve en el orden del pedido: se reordena acá.
@@ -356,12 +508,13 @@ export class RoutesService {
      * El día exacto gana sobre el rango: el teléfono manda `date` y tiene que recibir ese día. El
      * rango es del historial por período del panel, y los dos extremos son inclusivos —
      * `plannedDate` es un día civil, no un instante, así que `lte` con el mismo día lo incluye.
+     * `dayAnchor` toma solo `YYYY-MM-DD`: con una hora la igualdad contra la columna `DATE` no coincidía.
      */
-    if (query.date) where.plannedDate = new Date(query.date);
+    if (query.date) where.plannedDate = dayAnchor(query.date);
     else if (query.from || query.to) {
       where.plannedDate = {
-        ...(query.from ? { gte: new Date(query.from) } : {}),
-        ...(query.to ? { lte: new Date(query.to) } : {}),
+        ...(query.from ? { gte: dayAnchor(query.from) } : {}),
+        ...(query.to ? { lte: dayAnchor(query.to) } : {}),
       };
     }
 
@@ -390,9 +543,18 @@ export class RoutesService {
      * total planificado: «8» donde debería decir «5 de 8». Es una consulta agregada sobre las rutas
      * de ESTA página, no una por fila.
      */
-    const visited = await this.visitedByRoute(rows.map((r) => r.id));
+    const [visited, next, collected] = await Promise.all([
+      this.visitedByRoute(rows.map((r) => r.id)),
+      this.nextStops(rows.map((r) => r.id)),
+      // Lo cobrado solo tiene sentido para UN día: es la vista «Hoy». En el historial por período no se calcula.
+      query.date ? this.collectedByCollector(rows.map((r) => r.collectorId), query.date) : Promise.resolve(new Map<string, number>()),
+    ]);
     return ResponseDto.paginated(
-      rows.map((r) => ({ ...serializeRoute(r), visitedCount: visited.get(r.id) ?? 0 })),
+      rows.map((r) => ({
+        ...serializeRoute(r),
+        visitedCount: visited.get(r.id) ?? 0,
+        ...(query.date ? { nextStop: next.get(r.id), collected: collected.get(r.collectorId) ?? 0 } : {}),
+      })),
       total,
       page,
       limit,
@@ -471,34 +633,95 @@ export class RoutesService {
   }
 
   /**
+   * La primera parada sin gestionar de cada ruta de la página, con el nombre del cliente (vista «Hoy»).
+   * Una consulta para toda la página; el nombre es el del deudor, no una dirección: no se audita como revelado.
+   */
+  private async nextStops(routeIds: string[]): Promise<Map<string, { id: string; sequenceOrder: number; clientName?: string }>> {
+    if (routeIds.length === 0) return new Map();
+    const stops = await this.tx((tx) =>
+      tx.routeStop.findMany({
+        where: { routeId: { in: routeIds }, status: { in: [RouteStopStatus.PENDING, RouteStopStatus.IN_ROUTE] } },
+        orderBy: [{ routeId: 'asc' }, { sequenceOrder: 'asc' }],
+        select: { id: true, routeId: true, sequenceOrder: true, client: { select: { firstName: true, lastName: true, businessName: true } } },
+      }),
+    );
+    const out = new Map<string, { id: string; sequenceOrder: number; clientName?: string }>();
+    for (const s of stops) {
+      if (!out.has(s.routeId)) out.set(s.routeId, { id: s.id, sequenceOrder: s.sequenceOrder, clientName: clientDisplayName(s.client) });
+    }
+    return out;
+  }
+
+  /**
+   * Lo cobrado por cada cobrador en el día civil **de la empresa** (la misma cuenta que hace el móvil con
+   * `listPaymentsByDay`). Una consulta agrupada para toda la página.
+   */
+  private async collectedByCollector(collectorIds: string[], day: string): Promise<Map<string, number>> {
+    const ids = [...new Set(collectorIds)];
+    if (ids.length === 0) return new Map();
+    const tz = await this.clock.timezone();
+    const from = civilDayStartInstant(day.slice(0, 10), tz);
+    const to = civilDayStartInstant(new Date(dayAnchor(day).getTime() + 86_400_000).toISOString().slice(0, 10), tz);
+    const grouped = await this.tx((tx) =>
+      tx.payment.groupBy({
+        by: ['registeredBy'],
+        where: { registeredBy: { in: ids }, paymentDate: { gte: from, lt: to } },
+        _sum: { amount: true },
+      }),
+    );
+    return new Map(grouped.flatMap((g) => (g.registeredBy ? [[g.registeredBy, Number(g._sum.amount ?? 0)] as const] : [])));
+  }
+
+  /**
    * Detalle con paradas. Cada parada trae el nombre del deudor y su dirección **en claro**: sin eso
    * la lista dice `Cliente a1b2c3…` y el cobrador no sabe adónde ir. Se audita el revelado, igual que
    * la agenda: es la única puerta por la que el cobrador ve direcciones sin `client:pii:read`.
+   *
+   * Trae además **qué puede hacer quien mira** (`capabilities`) y cuántos pedidos de cambio esperan, para que la
+   * pantalla no adivine qué botones mostrar.
    */
-  async findOne(id: string): Promise<ReturnType<typeof serializeRoute>> {
-    const route = await this.tx(async (tx) => {
+  async findOne(id: string, opts: { audit?: boolean } = {}): Promise<RouteDetail> {
+    const loaded = await this.tx(async (tx) => {
       const r = await tx.routePlan.findFirst({
         where: { id },
         include: { stops: { orderBy: { sequenceOrder: 'asc' }, include: { client: STOP_CLIENT, visits: STOP_VISIT } } },
       });
-      return r && { ...r, stops: await this.withCredits(tx, r.stops) };
+      if (!r) return null;
+      const stops = await this.withAgendaTimes(tx, await this.withCredits(tx, r.stops));
+      const [visitCount, pending] = await Promise.all([
+        tx.fieldVisit.count({ where: { routeStop: { routeId: id } } }),
+        tx.routeChangeRequest.count({ where: { routeId: id, status: 'PENDING' } }),
+      ]);
+      return { route: { ...r, stops }, visitCount, pending };
     });
-    if (!route) throw resourceNotFound();
+    if (!loaded) throw resourceNotFound();
+    const { route } = loaded;
     // Mismo scope que el listado: un cobrador solo accede a su propia ruta, pero un auditor a cualquiera.
     if (this.scopedToOwnRoutes() && route.collectorId !== this.tenant.userId) {
       throw resourceNotFound();
     }
-    if (route.stops.length > 0) {
+    if (route.stops.length > 0 && opts.audit !== false) {
       await this.audit.record({ entity: 'route', entityId: id, action: 'PII_REVEAL' });
     }
-    return serializeRoute(route, this.crypto);
+    const capabilities = routeCapabilities(this.actor, {
+      collectorId: route.collectorId,
+      createdBy: route.createdBy,
+      status: route.status,
+      hasVisits: loaded.visitCount > 0,
+    });
+    return {
+      ...serializeRoute(route, this.crypto),
+      capabilities,
+      // Los pedidos los resuelve quien arma la ruta: a los demás no les sirve el número.
+      pendingRequests: capabilities.isOwner ? loaded.pending : 0,
+    };
   }
 
   /**
    * La ruta más lo que el PDF necesita alrededor: la empresa que emite y el nombre del cobrador
    * (el serializer sólo trae su id, porque `collectorId` es ref suave a `users`).
    */
-  async pdfBundle(id: string): Promise<{ route: ReturnType<typeof serializeRoute> } & RoutePdfContext> {
+  async pdfBundle(id: string): Promise<{ route: RouteDetail } & RoutePdfContext> {
     const route = await this.findOne(id);
     const [account, profile] = await this.tx((tx) =>
       Promise.all([
@@ -515,21 +738,81 @@ export class RoutesService {
   }
 
   /**
-   * Cambia el estado de la ruta. Con ROUTE_WRITE (supervisión), sobre cualquiera del tenant; el
-   * ejecutor de campo sólo sobre la suya — es lo que hace "Iniciar ruta" en RT-0b. Una ruta ajena
-   * responde 404 y no 403: no se filtra que exista, igual que en `findOne`.
+   * Cambia el estado de la ruta, **con la máquina de estados** (F4/12): la API es la autoridad.
+   *
+   *  - PLANIFICADA → EN CURSO | CANCELADA; EN CURSO → COMPLETADA | CANCELADA. Completada y cancelada son finales.
+   *  - Pedir el estado en que ya está es un reintento (la cola offline): se devuelve tal cual, sin repetir el evento.
+   *  - **Completar** con paradas sin gestionar exige el motivo; esas paradas pasan a SALTADAS y su visita agendada
+   *    queda libre para volver a planificarse.
+   *  - **Cancelar** exige el motivo y no se puede con visitas registradas (esa información no se borra: se completa).
+   *  - Quien no es el cobrador ni armó la ruta debe dejar el motivo siempre; y cancelar, para él, es un pedido.
+   *  - El cambio es condicional (`WHERE status = <el que se leyó>`): dos personas a la vez no se pisan.
    */
   async updateStatus(id: string, dto: UpdateRouteDto): Promise<ReturnType<typeof serializeRoute>> {
-    const route = await this.tx(async (tx) => {
-      await this.assertOwnRoute(tx, id);
-      const updated = await tx.routePlan.update({ where: { id }, data: { status: dto.status } });
-      // Una ruta cancelada suelta sus visitas: la gestión sigue pendiente en la agenda y puede entrar a otra ruta.
-      if (dto.status === RouteStatus.CANCELLED) await tx.routeStop.updateMany({ where: { routeId: id, agendaItemId: { not: null } }, data: { agendaItemId: null } });
-      return updated;
+    const reason = dto.reason?.trim();
+    const outcome = await this.tx(async (tx) => {
+      const { route, roles } = await this.access(tx, id);
+      if (dto.status === route.status) return { route, changed: false as const };
+
+      const from = route.status as unknown as SharedRouteStatus;
+      const to = dto.status as unknown as SharedRouteStatus;
+      if (!canTransitionRoute(from, to)) throw routeTransition(route.status, dto.status);
+
+      const stops = await tx.routeStop.findMany({ where: { routeId: id }, select: { id: true, status: true } });
+      const open = stops.filter((s) => isOpenStop(s.status as unknown as SharedStopStatus));
+      const hasVisits = (await tx.fieldVisit.count({ where: { routeStop: { routeId: id } } })) > 0;
+      const now = new Date();
+      let data: Prisma.RoutePlanUpdateManyMutationInput = {};
+      let skipOpen = false;
+
+      if (dto.status === RouteStatus.IN_PROGRESS) {
+        if (!roles.canRun && !roles.manager) throw routeForbidden('iniciar la ruta');
+        if (!roles.canRun && !isValidReason(reason)) throw reasonRequired('de iniciar una ruta ajena');
+        data = { startedAt: now, ...(reason && !roles.canRun ? { statusReason: reason } : {}) };
+      } else if (dto.status === RouteStatus.COMPLETED) {
+        if (!roles.canRun && !roles.manager) throw routeForbidden('completar la ruta');
+        // Compat con el móvil de hoy: el cobrador que cierra SU ruta no manda motivo (se pide en F4/12 · móvil).
+        const legacyField = roles.isCollector && !roles.manager;
+        const need = (open.length > 0 && !legacyField) || !roles.canRun;
+        if (need && !isValidReason(reason)) throw reasonRequired(open.length > 0 ? 'por el que quedaron paradas sin gestionar' : 'de completar una ruta ajena');
+        skipOpen = open.length > 0;
+        data = { completedAt: now, statusReason: reason ?? (skipOpen ? 'Cerrada con paradas sin gestionar.' : null) };
+      } else if (dto.status === RouteStatus.CANCELLED) {
+        // Cancelar es de quien anda o arma la ruta; el resto lo pide.
+        if (!roles.canRun) throw changeRequestRequired('CANCEL');
+        if (hasVisits) throw routeHasVisits();
+        if (!isValidReason(reason)) throw reasonRequired('de la cancelación');
+        skipOpen = true;
+        data = { cancelledAt: now, statusReason: reason };
+      }
+
+      const res = await tx.routePlan.updateMany({ where: { id, status: route.status }, data: { status: dto.status, ...data } });
+      if (res.count === 0) throw routeStateChanged();
+      if (skipOpen && open.length > 0) {
+        // SALTADA libera la visita agendada (el único parcial excluye SKIPPED) y deja el vínculo como historia.
+        await tx.routeStop.updateMany({ where: { id: { in: open.map((s) => s.id) } }, data: { status: RouteStopStatus.SKIPPED } });
+      }
+      const updated = await tx.routePlan.findFirstOrThrow({ where: { id } });
+      return { route: updated, previous: route, changed: true as const, skipped: skipOpen ? open.length : 0, reason };
     });
-    await this.audit.record({ entity: 'route', entityId: id, action: 'UPDATE', after: { status: route.status } });
+
+    if (!outcome.changed) return serializeRoute(outcome.route);
+    const { route, skipped } = outcome;
+    await this.audit.record({
+      entity: 'route',
+      entityId: id,
+      action: 'UPDATE',
+      before: { status: outcome.previous.status },
+      after: { status: route.status, ...(skipped ? { skippedStops: skipped } : {}), ...(outcome.reason ? { reason: outcome.reason } : {}) },
+    });
     if (route.status === RouteStatus.COMPLETED) {
       this.events.emit(DomainEvent.ROUTE_COMPLETED, { routeId: id, collectorId: route.collectorId, accountId: this.tenant.accountId });
+    }
+    if (route.status === RouteStatus.CANCELLED) {
+      this.notice({ kind: 'CANCELLED', routeId: id, recipientId: route.collectorId, plannedDate: route.plannedDate.toISOString().slice(0, 10), reason: outcome.reason });
+      if (route.createdBy && route.createdBy !== route.collectorId) {
+        this.notice({ kind: 'CANCELLED', routeId: id, recipientId: route.createdBy, plannedDate: route.plannedDate.toISOString().slice(0, 10), reason: outcome.reason });
+      }
     }
     return serializeRoute(route);
   }
@@ -538,10 +821,15 @@ export class RoutesService {
    * Agrega una parada al final del recorrido (S2: cada toque en el mapa). El `sequenceOrder` se
    * calcula **dentro de la transacción** porque dos toques seguidos chocarían contra
    * `unique(routeId, sequenceOrder)`.
+   *
+   * F4/12: solo en una ruta abierta, y solo quien la armó; la ubicación concreta es opcional y, si se manda, debe ser
+   * del cliente y tener punto. Sin ella se guarda la principal del cliente.
    */
   async addStop(routeId: string, dto: AddStopDto) {
     const stop = await this.tx(async (tx) => {
-      await this.assertOwnRoute(tx, routeId);
+      const { route, roles } = await this.access(tx, routeId);
+      this.requireManage(roles, 'ADD_STOP');
+      this.requireOpen(route.status);
       // Que el cliente y el caso sean de ESTE tenant. La RLS no alcanza sola: el chequeo de la FK
       // lo hace Postgres por dentro, saltándola, así que un id ajeno entraba igual y dejaba una
       // parada apuntando a la cartera de otro. Mismo criterio que `FieldService.createVisit`.
@@ -554,6 +842,12 @@ export class RoutesService {
         const dup = await tx.routeStop.findFirst({ where: { routeId, creditId: dto.creditId }, select: { id: true } });
         if (dup) throw stopDuplicate();
       }
+      const locationOf = await this.resolveLocations(
+        tx,
+        [{ id: dto.creditId ?? dto.clientId, clientId: dto.clientId }],
+        dto.locationId ? { [dto.creditId ?? dto.clientId]: dto.locationId } : {},
+        false,
+      );
       const last = await tx.routeStop.findFirst({
         where: { routeId },
         orderBy: { sequenceOrder: 'desc' },
@@ -565,16 +859,17 @@ export class RoutesService {
           routeId,
           clientId: dto.clientId,
           creditId: dto.creditId,
+          locationId: locationOf.get(dto.creditId ?? dto.clientId) ?? null,
           sequenceOrder: (last?.sequenceOrder ?? 0) + 1,
         },
         include: { client: STOP_CLIENT, visits: STOP_VISIT },
       });
       // El total sale de las paradas, no de un contador que se desfase.
       await tx.routePlan.update({ where: { id: routeId }, data: { totalCases: await tx.routeStop.count({ where: { routeId } }) } });
-      const [withCredit] = await this.withCredits(tx, [created]);
+      const [withCredit] = await this.withAgendaTimes(tx, await this.withCredits(tx, [created]));
       return withCredit!;
     });
-    await this.audit.record({ entity: 'route_stop', entityId: stop.id, action: 'CREATE', after: { routeId, clientId: stop.clientId } });
+    await this.audit.record({ entity: 'route_stop', entityId: stop.id, action: 'CREATE', after: { routeId, clientId: stop.clientId, locationId: stop.locationId } });
     return serializeStop(stop, this.crypto);
   }
 
@@ -585,7 +880,9 @@ export class RoutesService {
    */
   async removeStop(routeId: string, stopId: string): Promise<void> {
     await this.tx(async (tx) => {
-      await this.assertOwnRoute(tx, routeId);
+      const { route, roles } = await this.access(tx, routeId);
+      this.requireManage(roles, 'REMOVE_STOP');
+      this.requireOpen(route.status);
       const stop = await tx.routeStop.findFirst({ where: { id: stopId, routeId } });
       if (!stop) throw resourceNotFound();
       if (stop.status !== RouteStopStatus.PENDING) throw stopNotPending();
@@ -599,36 +896,47 @@ export class RoutesService {
   }
 
   /**
-   * Cambia el estado de una parada (S5) y/o la mueve de posición (S2). Mover **reordena la lista
+   * Cambia el estado de una parada y/o la mueve de posición (S2). Mover **reordena la lista
    * entera**: escribir el número a secas chocaría con `unique(routeId, sequenceOrder)`.
+   *
+   * F4/12: el estado sigue la tabla `STOP_TRANSITIONS` — **no se pasa a VISITADA a secas** (se registra la visita) ni se
+   * vuelve atrás de visitada/saltada — y todo cambio queda auditado.
    */
   async updateStop(routeId: string, stopId: string, dto: UpdateStopDto) {
-    const stop = await this.tx(async (tx) => {
-      await this.assertOwnRoute(tx, routeId);
+    const { stop, before } = await this.tx(async (tx) => {
+      const { route, roles } = await this.access(tx, routeId);
+      this.requireOpen(route.status);
       const found = await tx.routeStop.findFirst({ where: { id: stopId, routeId } });
       if (!found) throw resourceNotFound();
+      const prevStatus = found.status;
 
-      if (dto.sequenceOrder != null && dto.sequenceOrder !== found.sequenceOrder) {
+      const moves = dto.sequenceOrder != null && dto.sequenceOrder !== found.sequenceOrder;
+      const changes = dto.status != null && dto.status !== found.status;
+      if (moves) this.requireManage(roles, 'REORDER');
+      // Saltar o poner «en camino» es operar la jornada, no armarla: lo hace quien la anda.
+      if (changes && !roles.canRun && !roles.canManage) throw routeForbidden('cambiar la parada');
+
+      if (moves) {
         if (found.status !== RouteStopStatus.PENDING) throw stopNotPending();
         const all = await tx.routeStop.findMany({ where: { routeId }, orderBy: { sequenceOrder: 'asc' }, select: { id: true } });
         const ids = all.map((s) => s.id).filter((id) => id !== stopId);
         // La posición pedida se acota al largo real: el móvil no tiene por qué conocerlo.
-        const target = Math.min(Math.max(dto.sequenceOrder, 1), ids.length + 1);
+        const target = Math.min(Math.max(dto.sequenceOrder!, 1), ids.length + 1);
         ids.splice(target - 1, 0, stopId);
         await this.resequence(tx, ids);
       }
 
-      if (dto.status) {
-        await tx.routeStop.update({
-          where: { id: stopId },
-          data: {
-            status: dto.status,
-            ...(dto.status === RouteStopStatus.VISITED ? { visitedAt: new Date() } : {}),
-          },
-        });
+      if (changes) {
+        if (!canTransitionStop(found.status as unknown as SharedStopStatus, dto.status as unknown as SharedStopStatus)) {
+          throw stopStatusNotAllowed(found.status, dto.status!);
+        }
+        await tx.routeStop.update({ where: { id: stopId }, data: { status: dto.status } });
       }
-      return tx.routeStop.findFirstOrThrow({ where: { id: stopId } });
+      return { stop: await tx.routeStop.findFirstOrThrow({ where: { id: stopId } }), before: { status: prevStatus } };
     });
+    if (dto.status && dto.status !== before.status) {
+      await this.audit.record({ entity: 'route_stop', entityId: stopId, action: 'UPDATE', before: { status: before.status }, after: { status: stop.status, routeId } });
+    }
     return { id: stop.id, status: stop.status, sequenceOrder: stop.sequenceOrder };
   }
 
@@ -644,18 +952,19 @@ export class RoutesService {
    * ponytail: un GET que escribe su propio cache (`totalDistanceKm`/`estimatedMinutes`, columnas que
    * ya existían sin llenarse). Es lo que le deja números reales al camino sin señal; la alternativa
    * —que el móvil los mande al confirmar— pone en manos del cliente un dato que calculó el server.
+   * F4/12: ya **no escribe si el valor no cambió** ni en una ruta cerrada.
    */
-  async preview(routeId: string): Promise<RoutePreview> {
+  async preview(routeId: string, opts: { audit?: boolean } = {}): Promise<RoutePreview> {
     const route = await this.tx(async (tx) => {
-      await this.assertOwnRoute(tx, routeId);
+      await this.access(tx, routeId);
       const r = await tx.routePlan.findFirst({
         where: { id: routeId },
         include: { stops: { orderBy: { sequenceOrder: 'asc' }, include: { client: STOP_CLIENT, visits: STOP_VISIT } } },
       });
-      return r && { ...r, stops: await this.withCredits(tx, r.stops) };
+      return r && { ...r, stops: await this.withAgendaTimes(tx, await this.withCredits(tx, r.stops)) };
     });
     if (!route) throw resourceNotFound();
-    if (route.stops.length > 0) {
+    if (route.stops.length > 0 && opts.audit !== false) {
       // Devuelve direcciones y coordenadas en claro, igual que `findOne`: se audita el revelado.
       await this.audit.record({ entity: 'route', entityId: routeId, action: 'PII_REVEAL' });
     }
@@ -676,15 +985,20 @@ export class RoutesService {
         geometry: [],
         distanceKm: route.totalDistanceKm != null ? Number(route.totalDistanceKm) : undefined,
         minutes: route.estimatedMinutes ?? undefined,
-        stops: stops.map((s) => ({ id: s.id, sequenceOrder: s.sequenceOrder, etaMinutes: undefined })),
+        stops: stops.map((s) => ({ id: s.id, sequenceOrder: s.sequenceOrder, etaMinutes: undefined, scheduledTime: s.scheduledTime })),
       };
     }
 
     const distanceKm = round1(path.distanceM / 1000);
-    const minutes = Math.round(path.durationS / 60) + DWELL_MIN * stops.length;
-    await this.tx((tx) =>
-      tx.routePlan.update({ where: { id: routeId }, data: { totalDistanceKm: distanceKm, estimatedMinutes: minutes } }),
-    );
+    // La permanencia cuenta solo las paradas que faltan: las ya gestionadas son pasado.
+    const pendingStops = stops.filter((s) => isOpenStop(s.status as unknown as SharedStopStatus)).length;
+    const minutes = Math.round(path.durationS / 60) + DWELL_MIN * pendingStops;
+    const changed = Number(route.totalDistanceKm ?? NaN) !== distanceKm || route.estimatedMinutes !== minutes;
+    if (changed && routeIsOpen(route.status as unknown as SharedRouteStatus)) {
+      await this.tx((tx) =>
+        tx.routePlan.update({ where: { id: routeId }, data: { totalDistanceKm: distanceKm, estimatedMinutes: minutes } }),
+      );
+    }
 
     return {
       geometry: path.geometry,
@@ -696,6 +1010,39 @@ export class RoutesService {
   }
 
   /**
+   * La vista previa de una ruta **que todavía no existe** (F4/12 · planificador del panel): recibe los puntos en el orden
+   * en que se piensa recorrer y devuelve lo mismo que `preview` — recorrido, distancia, duración, hora de llegada a cada
+   * parada y, si da vueltas de más, el orden sugerido —, **sin guardar nada**. Es lo que deja revisar antes de publicar
+   * sin crear una ruta a medias que el cobrador vería.
+   *
+   * Sin datos personales: llegan puntos y ids que quien pregunta ya conoce, y no sale ninguna dirección ni nombre.
+   */
+  async previewPoints(dto: PlanPreviewDto): Promise<RoutePreview> {
+    if (!this.tenant.can(Permission.ROUTE_ASSIGN) && !this.tenant.can(Permission.ROUTE_WRITE) && !this.tenant.can(Permission.ROUTE_EXECUTE)) {
+      throw routeForbidden('previsualizar rutas');
+    }
+    const points: PlanPoint[] = dto.points.map((p, i) => ({ id: p.id, sequenceOrder: i + 1, latitude: p.latitude, longitude: p.longitude, scheduledTime: p.scheduledTime }));
+    if (points.length < 2) {
+      return { geometry: [], stops: points.map((p) => ({ id: p.id, sequenceOrder: p.sequenceOrder, etaMinutes: 0, scheduledTime: p.scheduledTime ?? undefined })), minutes: points.length * DWELL_MIN };
+    }
+    const [path, best] = await Promise.all([this.osrm.route(points), points.length >= 3 ? this.osrm.trip(points) : Promise.resolve(null)]);
+    if (!path) {
+      // Sin motor de ruteo no hay distancia confiable: se dice sin inventar una.
+      return { geometry: [], stops: points.map((p) => ({ id: p.id, sequenceOrder: p.sequenceOrder, etaMinutes: undefined, scheduledTime: p.scheduledTime ?? undefined })) };
+    }
+    const fixed = new Set(points.filter((p) => p.scheduledTime).map((p) => p.id));
+    const suggestion = this.suggestOrder(points, path, best);
+    return {
+      geometry: path.geometry,
+      distanceKm: round1(path.distanceM / 1000),
+      minutes: Math.round(path.durationS / 60) + DWELL_MIN * points.length,
+      stops: withEta(points, points, path.legs),
+      // Con hora fija, el orden sugerido no la puede mover: se quita de la sugerencia lo que no cabe respetar.
+      suggestion: suggestion && fixed.size === 0 ? suggestion : suggestion ? keepFixed(points, suggestion, fixed) : undefined,
+    };
+  }
+
+  /**
    * ¿Convendría hacerlo en otro orden? Se le pide a OSRM el recorrido óptimo (la primera parada
    * queda fija: el cobrador ya salió para allá) y se compara contra el actual.
    *
@@ -703,7 +1050,7 @@ export class RoutesService {
    * cobrador a ignorarlas todas.
    */
   private suggestOrder(
-    drawable: PointStop[],
+    drawable: PlanPoint[],
     current: OsrmRoute,
     best: OsrmTrip | null,
   ): RouteSuggestion | undefined {
@@ -719,28 +1066,42 @@ export class RoutesService {
 
   /**
    * Aplica el orden sugerido. Reusa el mismo `resequence` de S2 —dos pasadas por la restricción
-   * `unique(routeId, sequenceOrder)`— y las paradas sin coordenadas, que no entran al cálculo,
-   * quedan al final conservando su orden relativo: no se pierde ninguna.
+   * `unique(routeId, sequenceOrder)`.
+   *
+   * 🔴 F4/12: **las paradas con hora fija y las ya gestionadas conservan su lugar** (decisión 9). El orden sugerido
+   * solo reparte los lugares que quedan entre las paradas que sí se pueden mover; las que no tienen punto en el mapa
+   * tampoco se mueven. Antes se reordenaba todo y una visita de las 10:00 podía terminar a las 15:00.
    */
-  async optimize(routeId: string): Promise<ReturnType<typeof serializeRoute>> {
-    const preview = await this.preview(routeId);
+  async optimize(routeId: string): Promise<RouteDetail> {
+    await this.tx(async (tx) => {
+      const { route, roles } = await this.access(tx, routeId);
+      // Optimizar el orden de su propia jornada lo hace quien la anda; armarla la arma su creador.
+      if (!roles.canManage && !roles.canRun) throw changeRequestRequired('REORDER');
+      this.requireOpen(route.status);
+    });
+    const preview = await this.preview(routeId, { audit: false });
     if (!preview.suggestion) return this.findOne(routeId);
 
-    const ordered = preview.suggestion.order;
+    const fixedByTime = new Set(preview.stops.filter((s) => s.scheduledTime).map((s) => s.id));
     await this.tx(async (tx) => {
-      await this.assertOwnRoute(tx, routeId);
-      const all = await tx.routeStop.findMany({ where: { routeId }, orderBy: { sequenceOrder: 'asc' }, select: { id: true } });
-      const rest = all.map((s) => s.id).filter((id) => !ordered.includes(id));
-      await this.resequence(tx, [...ordered, ...rest]);
+      await this.access(tx, routeId);
+      const all = await tx.routeStop.findMany({ where: { routeId }, orderBy: { sequenceOrder: 'asc' }, select: { id: true, status: true } });
+      const movable = new Set(
+        all.filter((s) => isOpenStop(s.status as unknown as SharedStopStatus) && !fixedByTime.has(s.id) && preview.suggestion!.order.includes(s.id)).map((s) => s.id),
+      );
+      const suggested = preview.suggestion!.order.filter((id) => movable.has(id));
+      let k = 0;
+      const next = all.map((s) => (movable.has(s.id) ? suggested[k++]! : s.id));
+      await this.resequence(tx, next);
     });
-    await this.audit.record({ entity: 'route', entityId: routeId, action: 'UPDATE', after: { optimized: ordered.length } });
+    await this.audit.record({ entity: 'route', entityId: routeId, action: 'UPDATE', after: { optimized: preview.suggestion.order.length } });
     return this.findOne(routeId);
   }
 }
 
 /** Para comparar nombres: sin acentos y en minúsculas, o «Édgar» cae después de «Zeballos». */
 function key(name: string): string {
-  return name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return name.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
 // ── Preview: tipos y cálculo puro ────────────────────────────────────────────
@@ -752,6 +1113,14 @@ const MIN_SAVED_KM = 1;
 const MIN_SAVED_MINUTES = 10;
 
 type SerializedStop = ReturnType<typeof serializeStop>;
+/** Lo mínimo que el cálculo del recorrido necesita de una parada: un id, su lugar en el orden y un punto. */
+interface PlanPoint {
+  id: string;
+  sequenceOrder: number;
+  latitude: number;
+  longitude: number;
+  scheduledTime?: string | null;
+}
 type PointStop = SerializedStop & { latitude: number; longitude: number };
 
 export interface RouteSuggestion {
@@ -766,8 +1135,11 @@ export interface RoutePreview {
   geometry: { latitude: number; longitude: number }[];
   distanceKm?: number;
   minutes?: number;
-  /** `etaMinutes` = minutos desde la salida hasta esa parada. Derivado, no guardado. */
-  stops: { id: string; sequenceOrder: number; etaMinutes?: number }[];
+  /**
+   * `etaMinutes` = minutos desde la salida hasta esa parada. Derivado, no guardado. `scheduledTime` = la hora fija de su
+   * visita agendada, si la tiene: con la hora de salida, la pantalla marca el choque.
+   */
+  stops: { id: string; sequenceOrder: number; etaMinutes?: number; scheduledTime?: string }[];
   suggestion?: RouteSuggestion;
 }
 
@@ -781,8 +1153,8 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
  * Una parada sin coordenadas no tiene tramo y queda sin estimación, pero no rompe la cuenta.
  */
 function withEta(
-  stops: SerializedStop[],
-  drawable: PointStop[],
+  stops: { id: string; sequenceOrder: number; scheduledTime?: string | null }[],
+  drawable: { id: string }[],
   legs: { durationS: number }[],
 ): RoutePreview['stops'] {
   const eta = new Map<string, number>();
@@ -791,5 +1163,18 @@ function withEta(
     if (i > 0) acc += Math.round((legs[i - 1]?.durationS ?? 0) / 60) + DWELL_MIN;
     eta.set(s.id, acc);
   });
-  return stops.map((s) => ({ id: s.id, sequenceOrder: s.sequenceOrder, etaMinutes: eta.get(s.id) }));
+  return stops.map((s) => ({ id: s.id, sequenceOrder: s.sequenceOrder, etaMinutes: eta.get(s.id), scheduledTime: s.scheduledTime ?? undefined }));
+}
+
+/**
+ * El orden sugerido respetando las horas fijas: las paradas con hora conservan SU lugar y el resto se reparte entre los
+ * lugares que quedan (el mismo criterio que `optimize`). Si no queda nada que mover, no hay sugerencia.
+ */
+function keepFixed(points: PlanPoint[], suggestion: RouteSuggestion, fixed: Set<string>): RouteSuggestion | undefined {
+  const movable = suggestion.order.filter((id) => !fixed.has(id));
+  if (movable.length < 2) return undefined;
+  let k = 0;
+  const order = points.map((p) => (fixed.has(p.id) ? p.id : movable[k++]!));
+  const changed = order.some((id, i) => id !== points[i]!.id);
+  return changed ? { ...suggestion, order } : undefined;
 }

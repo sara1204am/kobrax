@@ -61,7 +61,9 @@ DECLARE
     -- cliente confirmados y los códigos de asesor. Los tres dicen de quién es qué cartera.
     'credit_external_snapshots', 'client_external_keys', 'external_advisor_links',
     -- Historial de importaciones: qué le pasó a cada registro en cada corrida.
-    'client_import_run_items'
+    'client_import_run_items',
+    -- Pedidos de cambio sobre rutas ajenas (F4/12).
+    'route_change_requests'
   ];
 BEGIN
   FOREACH t IN ARRAY operational LOOP

@@ -41,7 +41,9 @@ interface PlanBody {
    * de otro como ayuda de esa jornada, y el responsable del crédito **no cambia** (decisión de la
    * dueña, W11). La parada guarda el crédito; la cartera sigue diciendo de quién es la deuda.
    */
-  assignments?: { collectorId: string; creditIds: string[] }[];
+  assignments?: { collectorId: string; creditIds: string[]; locations?: Record<string, string> }[];
+  /** Exige punto en el mapa en TODAS las paradas (el planificador por pasos): sin él no hay recorrido ni hora de llegada. */
+  requirePoints?: boolean;
   dryRun?: boolean;
 }
 
@@ -69,7 +71,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const body = (await req.json().catch(() => null)) as PlanBody | null;
   const day = body?.plannedDate ?? '';
   // Una fila por cobrador. En el modo a mano trae sus créditos; en el automático los elige el handler.
-  const asignaciones: { collectorId: string; creditIds?: string[] }[] = body?.assignments?.length
+  const asignaciones: { collectorId: string; creditIds?: string[]; locations?: Record<string, string> }[] = body?.assignments?.length
     ? body.assignments.filter((a) => a.collectorId && a.creditIds?.length)
     : [...new Set(body?.collectorIds ?? [])].map((collectorId) => ({ collectorId }));
   const collectorIds = asignaciones.map((a) => a.collectorId);
@@ -114,7 +116,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const rows: PlanRow[] = [];
   for (const a of asignaciones) {
     rows.push(
-      await planOne(a.collectorId, day, stopsPerRoute, conRuta.has(a.collectorId), body?.dryRun === true, a.creditIds, visitasPorCobrador.get(a.collectorId) ?? []),
+      await planOne(a.collectorId, day, stopsPerRoute, conRuta.has(a.collectorId), body?.dryRun === true, a.creditIds, visitasPorCobrador.get(a.collectorId) ?? [], a.locations, body?.requirePoints === true),
     );
   }
 
@@ -131,6 +133,9 @@ async function planOne(
   chosen?: string[],
   /** Los créditos de las visitas agendadas de ese cobrador ese día: la API las suma a la ruta. */
   visitCredits: string[] = [],
+  /** La ubicación concreta de cada crédito (`creditId` → `client_locations.id`), si se eligió. */
+  locations?: Record<string, string>,
+  requirePoints = false,
 ): Promise<PlanRow> {
   let creditIds = chosen ?? [];
 
@@ -161,7 +166,7 @@ async function planOne(
   const created = await apiCall<RouteItem>('/routes/generate', {
     method: 'POST',
     auth: true,
-    body: JSON.stringify({ collectorId, plannedDate, creditIds }),
+    body: JSON.stringify({ collectorId, plannedDate, creditIds, ...(locations ? { locations } : {}), ...(requirePoints ? { requirePoints } : {}) }),
   });
   if (created.status >= 400) return { ...row, error: created.body.error?.message };
   return { ...row, created: true };

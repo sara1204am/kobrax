@@ -30,14 +30,16 @@ export class FieldController {
     return this.field.findOne(id);
   }
 
+  // Puerta mínima: registra el cobrador (ROUTE_EXECUTE) y, desde el panel, quien administra rutas. Quién puede sobre
+  // CADA parada lo decide el service (cobrador de la ruta, quien la armó o quien asigna).
   @Post()
-  @Roles(Permission.ROUTE_EXECUTE)
+  @Roles(Permission.ROUTE_READ)
   createVisit(@Body() dto: CreateVisitDto) {
     return this.field.createVisit(dto);
   }
 
   @Post(':id/evidence')
-  @Roles(Permission.ROUTE_EXECUTE)
+  @Roles(Permission.ROUTE_READ)
   addEvidence(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AddEvidenceDto) {
     return this.field.addEvidence(id, dto);
   }

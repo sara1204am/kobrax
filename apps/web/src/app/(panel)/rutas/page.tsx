@@ -1,7 +1,9 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { Permission, todayISO, type MeInfo, type Member, type RouteItem } from '@kobrax/shared';
+import { Permission, RoleType, todayISO, type MeInfo, type Member, type RouteItem } from '@kobrax/shared';
 import { apiCall, pageMeta } from '@/lib/bff';
+import { getAgendaSummary } from '@/lib/agenda-summary';
 import { dayOr } from '@/lib/agenda';
 import {
   hasRouteFilters,
@@ -17,7 +19,7 @@ import { DayPicker } from '@/components/day-picker';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { RouteTabs } from './route-tabs';
 import { PeriodPicker } from './period-picker';
-import { PlanningPanel } from './planning-panel';
+import { TodayBoard } from './today-board';
 import { RoutesTable } from './routes-table';
 import { CollectorWorkTable } from './collector-work-table';
 import { WorkSummary } from './work-summary';
@@ -25,7 +27,7 @@ import { WorkSummary } from './work-summary';
 /**
  * Rutas: **planificar el trabajo de la calle y comprobar qué pasó**.
  *
- * Dos modos, en la URL: `historial` (el default, lo que existía) y `planificacion`. El historial se
+ * Dos modos, en la URL: **`hoy`** (el default: ¿qué pasa hoy con las rutas?, F4/12) e `historial`. El historial se
  * mira de dos maneras: un `dia` —la jornada, que es como se usa todos los días— o un `periodo`, para
  * la pregunta que la vista diaria no podía contestar: «¿qué hizo el equipo esta semana?».
  *
@@ -35,9 +37,12 @@ import { WorkSummary } from './work-summary';
  */
 export default async function RutasPage({ searchParams }: { searchParams: RouteParams }) {
   const t = await getTranslations('panel.routes');
+  // «Planificar» dejó de ser una pestaña (es una acción del encabezado): el link viejo sigue funcionando.
+  if (searchParams.modo === 'planificacion') redirect('/rutas/planificar');
   const modo = routeMode(searchParams);
   const vista = routeView(searchParams);
-  const today = todayISO();
+  // «Hoy» es el de la EMPRESA, no el del servidor: en Bolivia, desde las 20:00 el servidor ya está en mañana.
+  const today = (await getAgendaSummary())?.date ?? todayISO();
   const day = dayOr(today, searchParams.date);
   const period = routePeriod(searchParams);
 
@@ -74,11 +79,39 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
     </>
   );
 
-  if (modo === 'planificacion') {
+  if (modo === 'hoy') {
+    const todays = await apiCall<RouteItem[]>(`/routes?${new URLSearchParams({ date: day, limit: '100' })}`, {
+      method: 'GET',
+      auth: true,
+    });
+    if (todays.status !== 200 || !todays.body.data) {
+      return (
+        <>
+          {header}
+          <EmptyState title={t('title')} text={todays.body.error?.message} />
+        </>
+      );
+    }
     return (
       <>
         {header}
-        <PlanningPanel canPlan={supervises} />
+        {!supervises && (
+          <p className="mb-4 rounded-xl border border-k-border bg-k-bg px-4 py-3 text-[13px] text-k-text-2">{t('scopedToMine')}</p>
+        )}
+        <DayPicker
+          day={day}
+          today={today}
+          labels={{ previous: t('previousDay'), next: t('nextDay'), today: t('today'), date: t('date') }}
+        />
+        <TodayBoard
+          day={day}
+          routes={todays.body.data}
+          // Quien administra rutas ve también a los cobradores que todavía no tienen la suya; el cobrador, solo la propia.
+          collectors={supervises ? members.filter((m) => m.isActive && m.roleName === RoleType.COLLECTOR) : []}
+          members={members}
+          userId={me.body.data?.userId}
+          canPlan={supervises}
+        />
       </>
     );
   }

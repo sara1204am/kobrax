@@ -37,6 +37,7 @@ export function MapPanel({
   onArea,
   onPointClick,
   onMove,
+  onReorder,
   onRemove,
   counter,
   actions,
@@ -50,6 +51,8 @@ export function MapPanel({
   onArea: (area: PlanArea | null) => void;
   onPointClick?: (id: string) => void;
   onMove?: (id: string, delta: number) => void;
+  /** Arrastrar una parada a otro lugar del recorrido (F4/12). Sin esto, el orden se cambia solo con las flechas. */
+  onReorder?: (id: string, toIndex: number) => void;
   onRemove?: (id: string) => void;
   /** Qué dice la línea de arriba: cuántos hay en el mapa, o en el área. Lo arma cada pantalla. */
   counter: string;
@@ -158,7 +161,29 @@ export function MapPanel({
             </p>
             <ol className="max-h-64 min-h-0 flex-1 divide-y divide-k-border overflow-y-auto lg:max-h-none">
               {order.map((o, i) => (
-                <li key={o.id} className="flex items-center gap-2 px-3 py-2 text-[13px]">
+                <li
+                  key={o.id}
+                  // Arrastrar y soltar: solo las paradas que se pueden mover (una gestionada es la jornada que ya pasó).
+                  draggable={!!onReorder && !o.locked}
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('text/plain', o.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onDragOver={(e) => {
+                    if (onReorder && !o.locked) e.preventDefault();
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const id = e.dataTransfer.getData('text/plain');
+                    if (id && id !== o.id && !o.locked) onReorder?.(id, i);
+                  }}
+                  className={`flex items-center gap-2 px-3 py-2 text-[13px] ${onReorder && !o.locked ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                >
+                  {onReorder && !o.locked && (
+                    <span aria-hidden className="shrink-0 select-none text-[14px] leading-none text-k-muted">
+                      ⠿
+                    </span>
+                  )}
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-k-navy text-[11px] font-semibold text-white">
                     {i + 1}
                   </span>

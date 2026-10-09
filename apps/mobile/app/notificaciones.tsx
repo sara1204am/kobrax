@@ -20,6 +20,10 @@ const TYPE_ICON: Record<NotificationType, string> = {
   [NotificationType.AGENDA_ASSIGNED]: '📌',
   [NotificationType.AGENDA_CHANGED]: '🔁',
   [NotificationType.AGENDA_OVERDUE]: '⏰',
+  // F4/12: avisos de ruta. El móvil todavía no los emite ni los distingue; el tipo existe en el contrato compartido.
+  [NotificationType.ROUTE_CHANGE_REQUESTED]: '✋',
+  [NotificationType.ROUTE_CHANGE_DECIDED]: '✅',
+  [NotificationType.ROUTE_CANCELLED]: '🚫',
 };
 
 type Load =

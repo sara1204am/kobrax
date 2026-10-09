@@ -3,6 +3,7 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 import { AgendaItemStatus, CatalogType, LocationType, RouteStopStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
+import { TenantClockService, civilDayStartInstant } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { PlanUsageAlertsService } from '../../common/plan/plan-usage-alerts.service';
@@ -20,8 +21,22 @@ import { serializeVisit, serializeVisitDetail } from './field.serializer';
 import { AddEvidenceDto, CreateVisitDto, ListVisitsQueryDto } from './dto/field.dto';
 import { moraScopeOf, visibleCredits } from '../mora/mora-query';
 import { recordCreditActivity } from '../mora/credit-activity';
+import { routeRoles } from '../routes/route-access';
 import { isUniqueViolation } from '../../common/unique-violation';
-import { evidenceHashInvalid, invalidGps, invalidVisitDetails, resourceNotFound, visitCreditMismatch, visitIdTaken, visitNeedsTarget } from './field.errors';
+import {
+  evidenceHashInvalid,
+  invalidGps,
+  invalidVisitDetails,
+  resourceNotFound,
+  visitCorrectionInvalid,
+  visitCreditMismatch,
+  visitForbidden,
+  visitIdTaken,
+  visitNeedsStop,
+  visitNeedsTarget,
+  visitRouteCancelled,
+  visitStopDone,
+} from './field.errors';
 
 @Injectable()
 export class FieldService {
@@ -33,6 +48,7 @@ export class FieldService {
     private readonly audit: AuditService,
     private readonly events: EventBusService,
     private readonly alerts: PlanUsageAlertsService,
+    private readonly clock: TenantClockService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -72,10 +88,11 @@ export class FieldService {
     // Las visitas de una ruta no cuelgan de la ruta: cuelgan de sus paradas.
     if (query.routeId) where.routeStop = { routeId: query.routeId };
     if (query.date) {
-      const from = new Date(`${query.date}T00:00:00.000Z`);
-      const to = new Date(from);
-      to.setUTCDate(to.getUTCDate() + 1);
-      where.capturedAt = { gte: from, lt: to };
+      // El día es el CIVIL de la empresa, no el UTC: una visita de las 21:00 en La Paz es de ese día, no del siguiente.
+      const tz = await this.clock.timezone();
+      const day = query.date.slice(0, 10);
+      const next = new Date(new Date(`${day}T00:00:00.000Z`).getTime() + 86_400_000).toISOString().slice(0, 10);
+      where.capturedAt = { gte: civilDayStartInstant(day, tz), lt: civilDayStartInstant(next, tz) };
     }
 
     /*
@@ -143,7 +160,13 @@ export class FieldService {
     return serializeVisitDetail(visit);
   }
 
-  /** Registra una visita de campo (append-only). GPS obligatorio. */
+  /**
+   * Registra una visita de campo (append-only). GPS obligatorio.
+   *
+   * F4/12 · decisión 2: la registra **el cobrador desde la calle** o, desde el panel, **quien armó la ruta o quien
+   * administra rutas** (se olvidó, no tenía señal, se quedó sin batería). La visita queda a nombre del cobrador de la
+   * ruta y **marcada con quién la cargó** (`registeredBy`) y desde dónde (`source`).
+   */
   async createVisit(dto: CreateVisitDto) {
     // Idempotente por `id` (cola offline del móvil). Dos envíos a la vez pasan los dos el chequeo y uno choca con la
     // PK: se repite UNA vez y esta vez el chequeo encuentra la visita que guardó el otro.
@@ -154,8 +177,24 @@ export class FieldService {
     // Reintento: la visita ya estaba. Misma forma de respuesta, sin ubicación nueva, sin conteo de plan.
     if (replay) return out;
 
-    const collectorId = this.tenant.userId!;
-    this.events.emit('collector.location', { collectorId, lat: dto.lat, lng: dto.lng, accountId: this.tenant.accountId });
+    // La ubicación del cobrador solo se publica si es ÉL quien registra desde la calle: una visita cargada desde el
+    // panel no dice dónde está el cobrador.
+    if (visit.collectorId === this.tenant.userId && visit.source !== 'WEB') {
+      this.events.emit('collector.location', { collectorId: visit.collectorId, lat: dto.lat, lng: dto.lng, accountId: this.tenant.accountId });
+    }
+    await this.audit.record({
+      entity: 'field_visit',
+      entityId: visit.id,
+      action: 'CREATE',
+      after: {
+        outcome: visit.outcome,
+        routeStopId: visit.routeStopId,
+        source: visit.source,
+        registeredBy: visit.registeredBy,
+        onBehalfOf: visit.registeredBy && visit.registeredBy !== visit.collectorId ? visit.collectorId : undefined,
+        correctsVisitId: visit.correctsVisitId,
+      },
+    });
     this.warnPlanUsage('actionsPerMonth');
     return out;
   }
@@ -169,12 +208,23 @@ export class FieldService {
     const validated = validateVisitDetails(dto.outcome, dto.details);
     if (!validated.ok) throw invalidVisitDetails(validated.errors);
 
-    const collectorId = this.tenant.userId!;
+    const actorId = this.tenant.userId!;
+    const canExecute = this.tenant.can(Permission.ROUTE_EXECUTE);
+    const isManager = this.tenant.can(Permission.ROUTE_ASSIGN) || this.tenant.can(Permission.ROUTE_WRITE);
+    // Ni anda rutas ni las administra (auditor, visor): no registra visitas. Antes lo frenaba la puerta del controlador.
+    if (!canExecute && !isManager) throw visitForbidden();
+    // Sin parada no hay ruta de la que decir quién manda: solo el cobrador registra una visita suelta sobre un crédito.
+    if (!dto.routeStopId && !canExecute) throw visitNeedsStop();
+
     return this.tx(async (tx) => {
       if (dto.id) {
         const prev = await tx.fieldVisit.findFirst({ where: { id: dto.id } });
         if (prev) {
-          const same = (!dto.creditId || prev.creditId === dto.creditId) && (prev.routeStopId ?? null) === (dto.routeStopId ?? null) && prev.collectorId === collectorId;
+          // Un reintento es de quien registró (el cobrador, o quien cargó la visita por él).
+          const same =
+            (!dto.creditId || prev.creditId === dto.creditId) &&
+            (prev.routeStopId ?? null) === (dto.routeStopId ?? null) &&
+            (prev.registeredBy ?? prev.collectorId) === actorId;
           if (!same) throw visitIdTaken();
           return { visit: prev, replay: true };
         }
@@ -184,20 +234,65 @@ export class FieldService {
       let stopPoint: { latitude: number; longitude: number } | undefined;
       let stopAgendaItemId: string | null = null;
       let creditId: string | undefined = dto.creditId;
+      // A nombre de quién queda: del cobrador de la ruta si la carga otra persona; de quien la hace, si es él.
+      let collectorId = actorId;
+      let onBehalf = false;
+      let stopRow: { id: string; status: RouteStopStatus; agendaItemId: string | null } | undefined;
+      let releaseAgendaLink = false;
+
       if (dto.routeStopId) {
         const s = await tx.routeStop.findFirst({
           where: { id: dto.routeStopId },
-          select: { id: true, creditId: true, agendaItemId: true, client: { select: { locations: { select: { locationType: true, latitude: true, longitude: true } } } } },
+          select: {
+            id: true,
+            status: true,
+            creditId: true,
+            agendaItemId: true,
+            locationId: true,
+            route: { select: { collectorId: true, createdBy: true, status: true } },
+            client: { select: { locations: { select: { id: true, locationType: true, latitude: true, longitude: true, relationId: true } } } },
+          },
         });
         if (!s) throw resourceNotFound();
-        stopAgendaItemId = s.agendaItemId;
+        // 🔴 Quién puede registrar sobre ESTA parada: su cobrador, o quien administra rutas (y por tanto quien la armó).
+        // Antes cualquier ejecutor registraba sobre la parada de otro cobrador.
+        const roles = routeRoles({ userId: actorId, can: (p) => this.tenant.can(p) }, s.route);
+        if (!roles.manager && !roles.isCollector) throw resourceNotFound();
+        if (s.route.status === 'CANCELLED') throw visitRouteCancelled();
+        onBehalf = actorId !== s.route.collectorId;
+        collectorId = s.route.collectorId;
+        stopRow = { id: s.id, status: s.status, agendaItemId: s.agendaItemId };
+
         if (dto.creditId && s.creditId && s.creditId !== dto.creditId) throw visitCreditMismatch();
         creditId = dto.creditId ?? s.creditId ?? undefined; // una visita por parada resuelve el crédito de la parada
-        const loc =
-          s.client?.locations.find((l) => l.locationType === LocationType.HOME) ?? s.client?.locations[0];
+
+        // Una parada ya visitada no se visita otra vez «a secas»: una visita no se edita, se corrige con una NUEVA que
+        // dice cuál corrige. Sin esto, dos envíos con ids distintos dejaban dos visitas y pisaban la hora.
+        const existing = await tx.fieldVisit.count({ where: { routeStopId: s.id } });
+        if (dto.correctsVisitId) {
+          const target = await tx.fieldVisit.findFirst({ where: { id: dto.correctsVisitId, routeStopId: s.id }, select: { id: true } });
+          if (!target) throw visitCorrectionInvalid();
+        } else if (s.status === RouteStopStatus.VISITED || existing > 0) {
+          throw visitStopDone();
+        }
+
+        // Una parada saltada libera su visita agendada: si otra parada activa ya la lleva, no se la vuelve a pegar.
+        if (s.agendaItemId && s.status === RouteStopStatus.SKIPPED) {
+          const other = await tx.routeStop.count({ where: { agendaItemId: s.agendaItemId, status: { not: RouteStopStatus.SKIPPED }, id: { not: s.id } } });
+          releaseAgendaLink = other > 0;
+        }
+        stopAgendaItemId = releaseAgendaLink ? null : s.agendaItemId;
+
+        // La ubicación elegida para la parada (F4/12) y, si no hay, la principal del propio cliente.
+        const all = s.client?.locations ?? [];
+        const own = all.filter((l) => !l.relationId);
+        const loc = (s.locationId ? all.find((l) => l.id === s.locationId) : undefined) ?? own.find((l) => l.locationType === LocationType.HOME) ?? own[0];
         if (loc?.latitude != null && loc.longitude != null) {
           stopPoint = { latitude: Number(loc.latitude), longitude: Number(loc.longitude) };
         }
+      } else if (dto.correctsVisitId) {
+        // Corregir es sobre una visita de una parada: sin parada no hay a qué apuntar.
+        throw visitCorrectionInvalid();
       }
       // El crédito debe estar a la vista de quien visita: el mismo alcance que la ficha de mora y la agenda
       // (responsable, temporal o apoyo; supervisor = su agencia). Fuera de alcance → 404, no se filtra que existe.
@@ -215,8 +310,12 @@ export class FieldService {
         });
         if (!cat) throw invalidVisitDetails(['categoryCode: la categoría no existe o está inactiva']);
       }
+      const source = dto.source === 'WEB' ? 'WEB' : 'MOBILE';
+      // Desde el panel o a nombre de otro, la coordenada NO es una lectura del GPS del cobrador: se marca estimada.
       const gpsEstimado =
         dto.gpsFallback === true ||
+        onBehalf ||
+        source === 'WEB' ||
         (stopPoint != null && stopPoint.latitude === dto.lat && stopPoint.longitude === dto.lng);
 
       const created = await tx.fieldVisit.create({
@@ -226,6 +325,9 @@ export class FieldService {
           creditId: credit?.id,
           routeStopId: dto.routeStopId,
           collectorId,
+          registeredBy: actorId,
+          source,
+          correctsVisitId: dto.correctsVisitId,
           latitude: dto.lat,
           longitude: dto.lng,
           accuracy: dto.accuracy,
@@ -240,51 +342,82 @@ export class FieldService {
           capturedAt: dto.capturedAt ? new Date(dto.capturedAt) : new Date(),
         },
       });
-      // La parada visitada se marca.
-      if (dto.routeStopId) {
-        await tx.routeStop.update({ where: { id: dto.routeStopId }, data: { status: RouteStopStatus.VISITED, visitedAt: new Date() } });
+      const correcting = !!dto.correctsVisitId;
+      // La parada visitada se marca. Una corrección no la toca: ya estaba visitada.
+      if (stopRow && !correcting) {
+        await tx.routeStop.update({
+          where: { id: stopRow.id },
+          data: { status: RouteStopStatus.VISITED, visitedAt: new Date(), ...(releaseAgendaLink ? { agendaItemId: null } : {}) },
+        });
       }
       // La gestión queda en la bitácora del crédito (con el episodio abierto si lo hay) y su «última gestión».
+      // Una corrección es una NOTA: no cuenta como otra gestión ni cierra otra vez la agenda.
       if (credit) {
-        const activity = await recordCreditActivity(tx, { accountId: this.tenant.accountId, creditId: credit.id, clientId: credit.clientId, userId: collectorId, type: 'VISIT', result: dto.outcome, notes: dto.notes });
+        const activity = await recordCreditActivity(tx, {
+          accountId: this.tenant.accountId,
+          creditId: credit.id,
+          clientId: credit.clientId,
+          userId: collectorId,
+          type: correcting ? 'NOTE' : 'VISIT',
+          result: correcting ? undefined : dto.outcome,
+          notes: dto.notes,
+        });
         // 🔴 Si la parada nació de una visita agendada, ESA gestión se cierra con la misma actividad (F4/11 · E1): una
         // sola ejecución, en la misma transacción. Si la gestión ya no está pendiente (la cancelaron o reagendaron
         // mientras tanto) no se toca: la visita se registra igual.
-        if (stopAgendaItemId) {
+        if (stopAgendaItemId && !correcting) {
           await tx.agendaItem.updateMany({
             where: { id: stopAgendaItemId, status: AgendaItemStatus.SCHEDULED, deletedAt: null },
             data: { status: AgendaItemStatus.EXECUTED, resultActivityId: activity.id, updatedBy: collectorId },
           });
         }
       }
-      // Última ubicación conocida del cobrador (users es global, sin RLS).
-      await tx.user.update({ where: { id: collectorId }, data: { lastKnownLat: dto.lat, lastKnownLng: dto.lng, lastLocationAt: new Date() } });
+      // Última ubicación conocida del cobrador (users es global, sin RLS): solo si es ÉL, desde la calle.
+      if (!onBehalf && source !== 'WEB') {
+        await tx.user.update({ where: { id: collectorId }, data: { lastKnownLat: dto.lat, lastKnownLng: dto.lng, lastLocationAt: new Date() } });
+      }
       return { visit: created, replay: false };
     });
   }
 
-  /** Añade evidencia sellada a una visita (inmutable). Verifica el hash SHA-256 si llega el contenido. */
+  /**
+   * Añade evidencia sellada a una visita (inmutable). Verifica el hash SHA-256 si llega el contenido.
+   *
+   * F4/12: la agrega quien registró la visita, su cobrador o quien administra rutas — no cualquier ejecutor del tenant —,
+   * y adjuntar dos veces la misma foto (el reintento de la cola) devuelve la que ya estaba.
+   */
   async addEvidence(visitId: string, dto: AddEvidenceDto) {
     if (dto.content && !verifyEvidenceHash(dto.content, dto.fileHash)) throw evidenceHashInvalid();
 
-    const evidence = await this.tx(async (tx) => {
-      const visit = await tx.fieldVisit.findFirst({ where: { id: visitId }, select: { id: true, latitude: true, longitude: true } });
+    const actorId = this.tenant.userId!;
+    const isManager = this.tenant.can(Permission.ROUTE_ASSIGN) || this.tenant.can(Permission.ROUTE_WRITE);
+    if (!isManager && !this.tenant.can(Permission.ROUTE_EXECUTE)) throw visitForbidden();
+    const hash = dto.fileHash.trim().toLowerCase();
+
+    const { evidence, replay } = await this.tx(async (tx) => {
+      const visit = await tx.fieldVisit.findFirst({ where: { id: visitId }, select: { id: true, latitude: true, longitude: true, collectorId: true, registeredBy: true } });
       if (!visit) throw resourceNotFound();
-      return tx.fieldEvidence.create({
+      if (!isManager && visit.collectorId !== actorId && visit.registeredBy !== actorId) throw resourceNotFound();
+      const prev = await tx.fieldEvidence.findFirst({ where: { visitId, fileHash: hash } });
+      if (prev) return { evidence: prev, replay: true };
+      const created = await tx.fieldEvidence.create({
         data: {
           accountId: this.tenant.accountId,
           visitId,
           type: dto.type,
           fileUrl: dto.fileUrl,
-          fileHash: dto.fileHash.trim().toLowerCase(),
+          fileHash: hash,
           latitude: visit.latitude,
           longitude: visit.longitude,
           capturedAt: new Date(),
         },
       });
+      return { evidence: created, replay: false };
     });
-    await this.audit.record({ entity: 'field_evidence', entityId: evidence.id, action: 'CREATE', after: { visitId, type: dto.type, fileHash: evidence.fileHash } });
-    this.warnPlanUsage('photosPerMonth');
+    if (!replay) {
+      await this.audit.record({ entity: 'field_evidence', entityId: evidence.id, action: 'CREATE', after: { visitId, type: dto.type, fileHash: evidence.fileHash } });
+      this.warnPlanUsage('photosPerMonth');
+    }
     return { id: evidence.id, type: evidence.type, fileHash: evidence.fileHash };
   }
 }

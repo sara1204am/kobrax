@@ -22,6 +22,10 @@ export function serializeVisit(v: FieldVisit) {
     notes: v.notes ?? undefined,
     details: (v.details ?? {}) as Record<string, unknown>,
     capturedAt: v.capturedAt.toISOString(),
+    // Quién la registró y desde dónde: una visita cargada desde el panel lo dice (F4/12). Null en las anteriores.
+    registeredBy: v.registeredBy ?? undefined,
+    source: (v.source === 'WEB' ? 'WEB' : 'MOBILE') as 'MOBILE' | 'WEB',
+    correctsVisitId: v.correctsVisitId ?? undefined,
   };
 }
 

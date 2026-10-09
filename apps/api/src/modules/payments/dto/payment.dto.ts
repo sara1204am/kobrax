@@ -24,6 +24,8 @@ export class CreatePaymentDto {
    * (no futuro, no más viejo que `PAYMENT_BACKDATE_DAYS`) la valida el service.
    */
   @IsOptional() @IsDateString() paymentDate?: string;
+  /** La visita en la que se cobró (opcional: no todo cobro sale de una visita). Debe ser de ese crédito. */
+  @IsOptional() @IsUUID() visitId?: string;
 }
 
 export class ListPaymentsQueryDto {

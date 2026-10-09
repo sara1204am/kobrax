@@ -3,6 +3,10 @@ import { NotificationType } from '@kobrax/shared';
 import { notificationHref } from './notifications';
 
 describe('notificationHref', () => {
+  it('un aviso de una ruta lleva a esa ruta (F4/12)', () => {
+    expect(notificationHref({ type: NotificationType.ROUTE_ASSIGNED, agendaItemId: null, creditId: null, routeId: 'r1' })).toBe('/rutas/r1');
+    expect(notificationHref({ type: NotificationType.ROUTE_CHANGE_REQUESTED, agendaItemId: null, creditId: null, routeId: 'r9' })).toBe('/rutas/r9');
+  });
   it('un aviso de una gestión lleva a esa gestión, aunque también tenga crédito', () => {
     expect(notificationHref({ type: NotificationType.AGENDA_ASSIGNED, agendaItemId: 'g1', creditId: 'c1' })).toBe('/agenda/g1');
   });

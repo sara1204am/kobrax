@@ -1,28 +1,37 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import {
+  isOpenStop,
   memberName,
+  Permission,
   summarizeDay,
+  todayISO,
   type ArrearCategory,
   type DayPayment,
+  type MeInfo,
   type Member,
   type MoraCreditListItem,
+  type RouteChangeRequestItem,
   type RouteItem,
   type VisitItem,
 } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
+import { getAgendaSummary } from '@/lib/agenda-summary';
 import { CATEGORY_TONE, ROUTE_STATUS_TONE } from '@/lib/routes';
 import { availableQuery, hasPlanFilters, shiftDays, toAvailable, type PlanParams } from '@/lib/plan';
 import { Badge, Card, EmptyState, PageHeader } from '@/components/panel-ui';
 import { dayDate, money } from '@/lib/format';
 import { RouteEditor } from './route-editor';
+import { RouteActions } from './route-actions';
+import { NextStopCard } from './next-stop-card';
+import { ChangeRequestsPanel } from './change-requests-panel';
 
 /** Techo de lo que se trae de un día —pagos y visitas—. Un día de un tenant no llega a tanto. */
 const DAY_LIMIT = 100;
 
 /**
- * El detalle de una ruta: sus paradas en orden y cómo terminó el día.
+ * El detalle de una ruta: **el centro de supervisión de la jornada** (F4/12) — cómo viene, qué sigue, qué se puede
+ * hacer con ella (iniciar, completar, cancelar, optimizar) y cada parada con su acción.
  *
  * ⚠️ Esta llamada **revela las direcciones en claro y la API lo audita**. Es lo que hace útil la
  * pantalla —una lista de paradas sin dirección no dice adónde fue nadie— y por eso se pide acá y
@@ -30,6 +39,9 @@ const DAY_LIMIT = 100;
  *
  * La cuenta la hace `summarizeDay` de `shared`, la MISMA que corre el teléfono: es la única cuenta
  * del día, y existe porque dos pantallas del mismo día decían cosas distintas.
+ *
+ * 🔴 **Qué botones se ven lo dice la API** (`capabilities`), no se deduce acá del rol: quien armó la ruta, su cobrador,
+ * el administrador y el resto tienen cada uno lo suyo, y repetir esa regla en el panel es repartirla en dos lugares.
  */
 export default async function RutaPage({
   params,
@@ -48,6 +60,16 @@ export default async function RutaPage({
   }
   const route = detail.body.data;
   const day = route.plannedDate.slice(0, 10);
+  const caps = route.capabilities ?? {
+    isOwner: false,
+    start: false,
+    complete: false,
+    cancel: false,
+    cancelBlockedByVisits: false,
+    edit: false,
+    requestChange: false,
+    recordVisit: false,
+  };
 
   /*
    * Los pagos se piden **por crédito**, uno por parada, y no con una ventana del día.
@@ -78,10 +100,11 @@ export default async function RutaPage({
    * ruta la primera vez (`GET /mora`), acotada a la cartera del cobrador de ESTA ruta salvo que se
    * pida ayuda de todo el equipo; los que ya son parada de esta ruta se descartan abajo.
    */
-  const editing = searchParams.editar === '1';
+  const editing = searchParams.editar === '1' && (caps.edit || caps.requestChange);
   const planParams: PlanParams = { ...searchParams, collectorId: route.collectorId };
 
-  const [team, paymentsByCredit, preview, visits, available, categories] = await Promise.all([
+  const [me, team, paymentsByCredit, preview, visits, available, categories, requests, agendaToday] = await Promise.all([
+    apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
     Promise.all(
       creditIds.map((creditId) =>
@@ -96,10 +119,9 @@ export default async function RutaPage({
      * que **puede no estar**: si falla, las paradas se siguen listando y el mapa une los puntos con
      * rectas punteadas. El mapa es un extra, no el contenido.
      *
-     * ponytail: se pide en cada visita a la ficha, y del otro lado ese GET **escribe** la distancia
-     * en la ruta y registra un segundo revelado de PII. Se acepta porque el recorrido por calles es
-     * lo que justifica el mapa; el arreglo de fondo es que `preview` no escriba ni audite —es una
-     * lectura— y eso es de la API, no del panel.
+     * ponytail: se pide en cada visita a la ficha. Desde F4/12 ese GET ya no escribe si el valor no cambió ni en una ruta
+     * cerrada, pero sigue registrando el revelado de datos personales: el arreglo de fondo es que `preview` no los
+     * devuelva, y eso es de la API.
      */
     apiCall<{ geometry: { latitude: number; longitude: number }[] }>(`/routes/${params.id}/preview`, {
       method: 'GET',
@@ -111,38 +133,63 @@ export default async function RutaPage({
       ? apiCall<MoraCreditListItem[]>(`/mora?${availableQuery(planParams, day)}`, { method: 'GET', auth: true })
       : null,
     editing ? apiCall<ArrearCategory[]>('/arrear-categories', { method: 'GET', auth: true }) : null,
+    // Los pedidos de cambio: los ve quien manda sobre la ruta y quien pide.
+    caps.isOwner || caps.requestChange
+      ? apiCall<RouteChangeRequestItem[]>(`/routes/${params.id}/change-requests`, { method: 'GET', auth: true })
+      : null,
+    getAgendaSummary(),
   ]);
 
   const members = team.body.data ?? [];
   const collector = members.find((m) => m.userId === route.collectorId);
+  const collectorName = collector ? memberName(collector) : t('unknownCollector');
   const summary = summarizeDay(route, paymentsByCredit.flatMap((r) => r.body.data ?? []));
   const stops = route.stops ?? [];
+  const openStops = stops.filter((s) => isOpenStop(s.status as never));
+  const next = openStops[0];
   // Lo que ya es parada de ESTA ruta no se ofrece de nuevo (además del `excludeRouted` del servidor).
   const enRuta = new Set(creditIds);
   const disponibles = (available?.body.data ?? []).filter((c) => !enRuta.has(c.creditId)).map(toAvailable);
+  const perms = me.body.data?.permissions ?? [];
+  const viewerIsCollector = !!me.body.data && me.body.data.userId === route.collectorId;
+  const today = agendaToday?.date ?? todayISO();
+  const closed = route.status === 'COMPLETED' || route.status === 'CANCELLED';
+  // Un punto en (0, 0) es el «sin ubicación» de una visita cargada desde el panel: no se dibuja en el mapa.
+  const visitPoints = (visits.body.data ?? [])
+    .filter((v) => v.latitude !== 0 || v.longitude !== 0)
+    .map((v) => ({ latitude: v.latitude, longitude: v.longitude }));
 
   return (
     <>
       <PageHeader
-        title={collector ? memberName(collector) : t('unknownCollector')}
+        title={collectorName}
         // El día de la ruta no tiene hora: formateado en la zona local se corría un día para atrás.
         subtitle={dayDate(route.plannedDate, locale)}
         // El estado va al lado del nombre: dice QUÉ ES esta ruta, no es una acción. A la derecha
         // quedaba a media pantalla de aquello que califica.
         badge={<Badge tone={ROUTE_STATUS_TONE[route.status]} dot>{t(`status.${route.status}`)}</Badge>}
         actions={
-          // Navegación llana: el navegador maneja la descarga con el `Content-Disposition` del
-          // backend. Mismo revelado auditado que ya paga esta pantalla al pedir el detalle.
-          <a href={`/api/routes/${route.id}/pdf`} className="text-[13px] font-medium text-k-purple hover:underline">
-            {t('detail.downloadPdf')}
-          </a>
+          <div className="flex flex-col items-end gap-2">
+            <RouteActions
+              routeId={route.id}
+              status={route.status}
+              capabilities={caps}
+              openStops={openStops.length}
+              viewerIsCollector={viewerIsCollector}
+            />
+            {/* Navegación llana: el navegador maneja la descarga con el `Content-Disposition` del
+                backend. Mismo revelado auditado que ya paga esta pantalla al pedir el detalle. */}
+            <a href={`/api/routes/${route.id}/pdf`} className="text-[13px] font-medium text-k-purple hover:underline">
+              {t('detail.downloadPdf')}
+            </a>
+          </div>
         }
       />
 
       <div className="space-y-6">
         <Card>
           {/*
-           * 🔴 **Tres números y una barra, no cuatro rótulos iguales.** Antes el avance era un «0%»
+           * 🔴 **Cuatro números y una barra, no cuatro rótulos iguales.** Antes el avance era un «0%»
            * suelto al lado de «0 de 4», con el mismo peso que el resto: había que leer los cuatro
            * para saber cómo venía el día. Lo que se viene a mirar es cuánto entró y cuánto falta.
            */}
@@ -163,9 +210,10 @@ export default async function RutaPage({
             )}
           </div>
 
-          <dl className="mt-5 grid gap-3 sm:grid-cols-3">
+          <dl className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Stat tone="money" label={t('detail.collected')} value={money(summary.collected, summary.currency)} strong />
             <Stat tone="work" label={t('detail.done')} value={t('progress', { done: summary.done, total: summary.total })} />
+            <Stat tone="pending" label={t('detail.pending')} value={String(openStops.length)} />
             <Stat
               tone="map"
               label={t('detail.distance')}
@@ -198,7 +246,31 @@ export default async function RutaPage({
             </div>
             <span className="shrink-0 text-[13px] font-medium tabular-nums text-k-text-2">{summary.percent}%</span>
           </div>
+
+          {/* El motivo escrito de un cierre con paradas sin gestionar, o de una cancelación: queda a la vista. */}
+          {route.statusReason && closed && (
+            <p className="mt-4 rounded-lg border border-k-border bg-k-bg px-3 py-2 text-[13px] text-k-text-2">
+              <span className="font-medium text-k-text">
+                {route.status === 'CANCELLED' ? t('detail.cancelledReason') : t('detail.reasonOfClose')}:
+              </span>{' '}
+              {route.statusReason}
+            </p>
+          )}
         </Card>
+
+        {!closed && (
+          <NextStopCard
+            routeId={route.id}
+            stop={next}
+            canRecord={caps.recordVisit}
+            collectorName={collectorName}
+            viewerIsCollector={viewerIsCollector}
+            canPay={perms.includes(Permission.PAYMENT_WRITE)}
+            today={today}
+          />
+        )}
+
+        <ChangeRequestsPanel routeId={route.id} requests={requests?.body.data ?? []} isOwner={caps.isOwner} viewerId={me.body.data?.userId} />
 
         {/*
          * El mapa, las paradas y su edición: todo junto en el cliente. El orden, el quitar y el
@@ -209,13 +281,18 @@ export default async function RutaPage({
           <RouteEditor
             routeId={route.id}
             stops={stops}
-            visits={(visits.body.data ?? []).map((v) => ({ latitude: v.latitude, longitude: v.longitude }))}
+            visits={visitPoints}
             line={preview.body.data?.geometry ?? []}
             editing={editing}
             available={disponibles}
             total={Math.max(0, (available?.body.meta?.total ?? disponibles.length) - (available?.body.data?.length ?? 0) + disponibles.length)}
             filtered={hasPlanFilters(planParams)}
             categories={(categories?.body.data ?? []).map((c) => ({ code: c.code, name: c.name }))}
+            capabilities={caps}
+            collectorName={collectorName}
+            viewerIsCollector={viewerIsCollector}
+            canPay={perms.includes(Permission.PAYMENT_WRITE)}
+            today={today}
           />
         ) : (
           <section>
@@ -229,15 +306,16 @@ export default async function RutaPage({
 }
 
 /**
- * Los tres colores del resumen: la plata, el trabajo y el mapa.
+ * Los colores del resumen: la plata, el trabajo, lo que falta y el mapa.
  *
  * 🔴 El color va en el **fondo y en la línea de abajo**, nunca en el número: sobre estos tintes, un
- * verde de 24 px queda por debajo del contraste mínimo. El dato se lee en navy en las tres, y el
+ * verde de 24 px queda por debajo del contraste mínimo. El dato se lee en navy en todas, y el
  * color sirve para encontrar la tarjeta de un vistazo, no para decir qué dice.
  */
 const STAT_TONES = {
   money: 'border-b-k-success bg-k-success-bg',
   work: 'border-b-k-purple bg-k-highlight',
+  pending: 'border-b-k-warning bg-k-warning-bg',
   map: 'border-b-k-periwinkle bg-k-light-bg',
 } as const;
 
@@ -280,9 +358,3 @@ function Stat({
     </div>
   );
 }
-
-/*
- * Acá vivía `Stop`, que pintaba cada parada en el servidor. Se mudó entera a `RouteEditor`: el orden,
- * el quitar y el sumar necesitan estado, y media lista en el servidor y media en el cliente son dos
- * lugares donde arreglar el mismo detalle.
- */

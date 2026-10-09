@@ -12,7 +12,7 @@ import {
 } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
-import { DomainEvent, EventBusService, type AgendaEventPayload } from '../../common/events/event-bus.service';
+import { DomainEvent, EventBusService, type AgendaEventPayload, type RouteNoticePayload } from '../../common/events/event-bus.service';
 import { RealtimeGateway } from './notifications.gateway';
 import { SUPERVISORY_ROLES } from './realtime.helpers';
 import {
@@ -32,6 +32,8 @@ interface NotifyData {
   creditId?: string;
   /** La gestión de agenda de la que habla el aviso. */
   agendaItemId?: string;
+  /** La ruta de la que habla el aviso. */
+  routeId?: string;
 }
 
 /**
@@ -55,6 +57,7 @@ export class NotificationsService implements OnModuleInit {
   onModuleInit(): void {
     this.events.on(DomainEvent.PAYMENT_REGISTERED, (p) => this.safe(() => this.onPaymentRegistered(p as PaymentRegisteredPayload)));
     this.events.on(DomainEvent.ROUTE_COMPLETED, (p) => this.safe(() => this.onRouteCompleted(p as RouteCompletedPayload)));
+    this.events.on(DomainEvent.ROUTE_NOTICE, (p) => this.safe(() => this.onRouteNotice(p as RouteNoticePayload)));
     this.events.on(DomainEvent.AGENDA_ASSIGNED, (p) => this.safe(() => this.onAgendaAssigned(p as AgendaEventPayload)));
     this.events.on(DomainEvent.AGENDA_CHANGED, (p) => this.safe(() => this.onAgendaChanged(p as AgendaEventPayload)));
   }
@@ -84,6 +87,30 @@ export class NotificationsService implements OnModuleInit {
       title: 'Ruta completada',
       body: `Un cobrador completó su ruta.`,
     });
+  }
+
+  /**
+   * Algo de una ruta le toca a otra persona (F4/12): se la asignaron, se la cancelaron, le piden o le resolvieron un cambio.
+   * Con enlace a la ruta, para que la campanita lleve al detalle.
+   */
+  async onRouteNotice(p: RouteNoticePayload): Promise<void> {
+    const day = p.plannedDate ? ' del ' + p.plannedDate.split('-').reverse().join('/') : '';
+    const why = p.reason ? ` Motivo: ${p.reason}` : '';
+    const what: Record<string, string> = { ADD_STOP: 'agregar una parada', REMOVE_STOP: 'quitar una parada', REORDER: 'mover una parada', CANCEL: 'cancelar la ruta' };
+    const ask = (p.requestKind && what[p.requestKind]) || 'un cambio';
+    const m: Record<RouteNoticePayload['kind'], { type: NotificationType; title: string; body: string }> = {
+      ASSIGNED: {
+        type: NotificationType.ROUTE_ASSIGNED,
+        title: 'Nueva ruta asignada',
+        body: `Te armaron la ruta${day}${p.stops ? ` con ${p.stops} parada${p.stops === 1 ? '' : 's'}` : ''}.`,
+      },
+      CANCELLED: { type: NotificationType.ROUTE_CANCELLED, title: 'Ruta cancelada', body: `Se canceló la ruta${day}.${why}` },
+      CHANGE_REQUESTED: { type: NotificationType.ROUTE_CHANGE_REQUESTED, title: 'Piden un cambio en tu ruta', body: `Piden ${ask} en la ruta${day}.${why}` },
+      CHANGE_APPROVED: { type: NotificationType.ROUTE_CHANGE_DECIDED, title: 'Cambio aprobado', body: `Aprobaron tu pedido de ${ask}${day ? ' en la ruta' + day : ''}.` },
+      CHANGE_REJECTED: { type: NotificationType.ROUTE_CHANGE_DECIDED, title: 'Cambio rechazado', body: `Rechazaron tu pedido de ${ask}${day ? ' en la ruta' + day : ''}.${why}` },
+    };
+    const n = m[p.kind];
+    await this.notifyUser(p.accountId, p.recipientId, { type: n.type, title: n.title, body: n.body, routeId: p.routeId });
   }
 
   /** Una gestión de agenda te la asignó otra persona → aviso persistido al responsable, con enlace a la gestión. */
@@ -134,6 +161,7 @@ export class NotificationsService implements OnModuleInit {
           clientId: data.clientId ?? null,
           creditId: data.creditId ?? null,
           agendaItemId: data.agendaItemId ?? null,
+          routeId: data.routeId ?? null,
         },
       }),
     );
