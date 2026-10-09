@@ -1051,3 +1051,30 @@ describe('RoutesService.previewPoints · antes de publicar (F4/12)', () => {
     await collector.service.previewPoints(pts);
   });
 });
+
+// ── Botón «dónde estoy» de los mapas: el camino entre dos puntos ─────────────────────────────────────
+
+describe('RoutesService.leg · de dónde estoy a una parada', () => {
+  const dto = { from: { id: 'yo', latitude: -16.5, longitude: -68.1 }, to: { id: 'p', latitude: -16.6, longitude: -68.1 } } as never;
+
+  it('devuelve el camino, la distancia y los minutos de calle, sin sumar permanencia', async () => {
+    const { service, calls } = makeService({
+      permissions: ['route:read', 'route:execute'],
+      osrm: { route: async () => fakePath(3.24, 12) } as never,
+    });
+    const r = await service.leg(dto);
+    assert.equal(r!.distanceKm, 3.2);
+    assert.equal(r!.minutes, 12);
+    assert.equal(calls.audit.length, 0, 'no audita: no revela datos personales');
+  });
+
+  it('sin motor de ruteo devuelve null, sin inventar un camino', async () => {
+    const { service } = makeService({ permissions: ['route:read', 'route:execute'] });
+    assert.equal(await service.leg(dto), null);
+  });
+
+  it('un auditor no calcula caminos (403)', async () => {
+    const { service } = makeService({ permissions: ['route:read'] });
+    await rejectsWithCode(service.leg(dto), 'AUTH_002');
+  });
+});

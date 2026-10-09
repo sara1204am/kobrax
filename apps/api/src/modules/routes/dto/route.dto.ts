@@ -120,3 +120,9 @@ export class PlanPointDto {
 export class PlanPreviewDto {
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(60) @ValidateNested({ each: true }) @Type(() => PlanPointDto) points!: PlanPointDto[];
 }
+
+/** Un tramo suelto: de dónde está alguien hasta una parada. Para el botón «dónde estoy» de los mapas. */
+export class LegDto {
+  @ValidateNested() @Type(() => PlanPointDto) from!: PlanPointDto;
+  @ValidateNested() @Type(() => PlanPointDto) to!: PlanPointDto;
+}

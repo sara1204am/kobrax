@@ -28,7 +28,7 @@ import { serializeRoute, serializeStop } from './routes.serializer';
 import type { RoutePdfContext } from './route-pdf';
 import { OsrmService, type OsrmRoute, type OsrmTrip } from './osrm.service';
 import { routeCapabilities, routeRoles, type RouteRoles } from './route-access';
-import { AddStopDto, CreateRouteDto, GenerateRouteDto, ListRoutesQueryDto, PlanPreviewDto, UpdateRouteDto, UpdateStopDto } from './dto/route.dto';
+import { AddStopDto, CreateRouteDto, GenerateRouteDto, LegDto, ListRoutesQueryDto, PlanPreviewDto, UpdateRouteDto, UpdateStopDto } from './dto/route.dto';
 import {
   changeRequestRequired,
   invalidCollector,
@@ -1007,6 +1007,21 @@ export class RoutesService {
       stops: withEta(stops, drawable, path.legs),
       suggestion: this.suggestOrder(drawable, path, best),
     };
+  }
+
+  /**
+   * El camino entre dos puntos, por las calles: lo que pide el botón «dónde estoy» de los mapas para decir cuánto falta
+   * hasta una parada. Sin permanencia (no es un recorrido, es un tramo) y sin datos personales.
+   *
+   * Sin motor de ruteo devuelve `null`: el mapa sigue mostrando la ubicación, solo que sin camino.
+   */
+  async leg(dto: LegDto): Promise<{ geometry: { latitude: number; longitude: number }[]; distanceKm: number; minutes: number } | null> {
+    if (!this.tenant.can(Permission.ROUTE_ASSIGN) && !this.tenant.can(Permission.ROUTE_WRITE) && !this.tenant.can(Permission.ROUTE_EXECUTE)) {
+      throw routeForbidden('calcular un camino');
+    }
+    const path = await this.osrm.route([dto.from, dto.to]);
+    if (!path) return null;
+    return { geometry: path.geometry, distanceKm: round1(path.distanceM / 1000), minutes: Math.max(1, Math.round(path.durationS / 60)) };
   }
 
   /**
