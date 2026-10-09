@@ -4,7 +4,8 @@ import { useEffect, useRef } from 'react';
 // Sin `default`: el paquete exporta con nombre y el `esModuleInterop` de este tsconfig no lo inventa.
 import { Map as MapLibreMap, Marker, NavigationControl } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { DEFAULT_ZOOM, FALLBACK_CENTER, MAP_STYLE } from '@/lib/map-style';
+import { DEFAULT_ZOOM, FALLBACK_CENTER, MAP_LOCALE, MAP_STYLE } from '@/lib/map-style';
+import { addLocateControl } from './map-locate';
 
 /** Al que se acerca cuando ya hay un punto: la manzana, no la ciudad. */
 const PIN_ZOOM = 16;
@@ -61,8 +62,10 @@ export function MapPicker({
       pitchWithRotate: false,
       dragRotate: false,
       attributionControl: { compact: true },
+      locale: MAP_LOCALE,
     });
     m.addControl(new NavigationControl({ showCompass: false }), 'top-right');
+    addLocateControl(m);
     m.on('click', (e) => cb.current?.({ latitude: e.lngLat.lat, longitude: e.lngLat.lng }));
     map.current = m;
 

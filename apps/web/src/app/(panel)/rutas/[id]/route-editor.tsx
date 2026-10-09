@@ -565,6 +565,7 @@ export function RouteEditor({
             overdueAmount: recording.overdueAmount,
             currency: recording.currency,
             externalSource: recording.externalSource,
+            locationId: recording.locationId,
           }}
           collectorName={collectorName}
           viewerIsCollector={viewerIsCollector}

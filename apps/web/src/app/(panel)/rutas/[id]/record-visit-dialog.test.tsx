@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/msw-server';
@@ -87,6 +87,34 @@ describe('RecordVisitDialog · registrar una gestión desde el panel (F4/12 · d
     mockApi();
     setup({ viewerIsCollector: true });
     expect(screen.queryByText(/a nombre de/)).toBeNull();
+  });
+
+  it('«No contesta» + «Volver a visitar»: agenda una visita nueva para el día y la franja elegidos', async () => {
+    const calls = mockApi();
+    setup({ stop: { ...STOP, locationId: 'loc1' } });
+    await choose('No contesta');
+    await userEvent.click(screen.getByLabelText('Volver a visitar'));
+    await userEvent.selectOptions(screen.getByLabelText('¿Cuándo?'), 'AFTERNOON');
+    fireEvent.change(screen.getByLabelText('¿Qué día?'), { target: { value: '2026-10-10' } });
+    await submit();
+    await vi.waitFor(() => expect(calls.agenda).toHaveLength(1));
+    expect(calls.agenda[0]).toMatchObject({
+      creditId: 'cr1',
+      type: 'VISIT',
+      scheduledDate: '2026-10-10',
+      timeMode: 'LAPSE',
+      timeSlot: 'AFTERNOON',
+      details: { locationId: 'loc1' },
+    });
+  });
+
+  it('«Volver a visitar» solo se ofrece cuando no se encontró a nadie', async () => {
+    mockApi();
+    setup();
+    await choose('Cobrado');
+    expect(screen.queryByLabelText('Volver a visitar')).toBeNull();
+    await choose('Visita sin contacto');
+    expect(screen.getByLabelText('Volver a visitar')).toBeInTheDocument();
   });
 
   it('«No contesta»: manda la visita con el punto conocido de la parada, marcada como panel y estimada', async () => {

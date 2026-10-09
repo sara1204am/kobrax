@@ -106,6 +106,7 @@ export default async function ParadaPage({
     overdueAmount: stop.overdueAmount,
     currency: stop.currency,
     externalSource: stop.externalSource,
+    locationId: stop.locationId,
   };
   const href = (to: Tab) => `/rutas/${params.id}/parada/${params.sid}?tab=${to}`;
 

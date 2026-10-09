@@ -11,9 +11,16 @@ import {
   type LngLatLike,
 } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { DEFAULT_ZOOM, FALLBACK_CENTER, MAP_STYLE, SATELLITE_ATTRIBUTION, SATELLITE_TILES } from '@/lib/map-style';
+import { DEFAULT_ZOOM, FALLBACK_CENTER, MAP_LOCALE, MAP_STYLE, SATELLITE_ATTRIBUTION, SATELLITE_TILES } from '@/lib/map-style';
+import { postJson } from '@/lib/client';
+import { addLocateControl, type Here } from '../map-locate';
 
 const SAT = 'plan-satellite';
+const TO_NEXT = 'plan-to-next';
+/** A pie, a paso normal: 5 km/h. Es una estimación —el motor de ruteo sólo conoce las calles para vehículo—. */
+const WALK_KMH = 5;
+/** Si se movió menos que esto, el camino ya calculado sirve: el seguimiento avisa cada pocos segundos. */
+const RECALC_M = 60;
 
 /** Cómo se pinta el pin. El color es el estado de la parada; el badge del globo es otra cosa y no lo repite. */
 export type PinTone = 'pending' | 'done' | 'next' | 'skipped' | 'scheduled' | 'suggestion' | 'candidate' | 'visit';
@@ -113,6 +120,10 @@ export function PointsMap({
   baseRef.current = base;
   /** Los ids de las capas del estilo de calles, para apagarlas al ver el satélite. */
   const baseLayers = useRef<string[]>([]);
+  /** Lo que falta desde donde está la persona hasta la próxima parada. */
+  const [trip, setTrip] = useState<{ distanceKm: number; minutes: number } | null>(null);
+  const hereRef = useRef<Here | null>(null);
+  const asked = useRef<{ at: Here; to: string } | null>(null);
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const markers = useRef(new Map<string, Marker>());
@@ -129,6 +140,8 @@ export function PointsMap({
   notify.current = onCircleMove;
   const click = useRef(onPointClick);
   click.current = onPointClick;
+  const tripLine = useRef<GeoJSON.FeatureCollection | null>(null);
+  const nextRef = useRef<MapPoint | undefined>(undefined);
   const hover = useRef(onPointHover);
   hover.current = onPointHover;
   const lineRef = useRef(line);
@@ -146,8 +159,13 @@ export function PointsMap({
       pitchWithRotate: false,
       dragRotate: false,
       attributionControl: { compact: true },
+      locale: MAP_LOCALE,
     });
     m.addControl(new NavigationControl({ showCompass: false }), 'top-right');
+    addLocateControl(m, (h) => {
+      hereRef.current = h;
+      void askTrip(h, nextRef.current);
+    });
     m.on('load', () => {
       /*
        * El satélite es una capa más **debajo de todo**, y al verlo se apagan las del estilo de calles. Así el selector
@@ -196,6 +214,17 @@ export function PointsMap({
         paint: { 'line-color': '#2B5A7D', 'line-width': 4, 'line-opacity': 0.85 },
       });
 
+      // Del punto donde está la persona hasta la próxima parada: otro color que el recorrido, para no confundirlos.
+      m.addSource(TO_NEXT, { type: 'geojson', data: emptyArea() });
+      m.addLayer({
+        id: TO_NEXT,
+        type: 'line',
+        source: TO_NEXT,
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#7B68D6', 'line-width': 4, 'line-opacity': 0.9, 'line-dasharray': [1, 1.5] },
+      });
+      if (tripLine.current) (m.getSource(TO_NEXT) as GeoJSONSource).setData(tripLine.current);
+
       ready.current = true;
       draw(m, circleRef.current, label.current);
       drawRoad(m, lineRef.current);
@@ -230,6 +259,43 @@ export function PointsMap({
     hover.current?.(p.id);
   };
   const nextStop = points.find((p) => p.tone === 'next');
+  nextRef.current = nextStop;
+
+  /**
+   * El camino desde donde está la persona hasta la próxima parada. Pide el trazo por las calles a la API y lo dibuja; si
+   * el motor de ruteo no contesta, el mapa sigue mostrando dónde está y simplemente no dice cuánto falta.
+   */
+  async function askTrip(h: Here, to: MapPoint | undefined): Promise<void> {
+    const m = map.current;
+    if (!to) return;
+    const prev = asked.current;
+    if (prev && prev.to === to.id && metersBetween(prev.at, h) < RECALC_M) return;
+    asked.current = { at: h, to: to.id };
+    const res = await postJson<{ geometry: { latitude: number; longitude: number }[]; distanceKm: number; minutes: number }>('/api/routes/leg', {
+      from: { id: 'here', latitude: h.latitude, longitude: h.longitude },
+      to: { id: to.id, latitude: to.latitude, longitude: to.longitude },
+    });
+    if (!res.ok || !res.data?.geometry) {
+      asked.current = null;
+      tripLine.current = null;
+      setTrip(null);
+      if (m && ready.current) (m.getSource(TO_NEXT) as GeoJSONSource | undefined)?.setData(emptyArea());
+      return;
+    }
+    const line: GeoJSON.FeatureCollection = {
+      type: 'FeatureCollection',
+      features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: res.data.geometry.map((p) => [p.longitude, p.latitude]) } }],
+    };
+    tripLine.current = line;
+    setTrip({ distanceKm: res.data.distanceKm, minutes: res.data.minutes });
+    if (m && ready.current) (m.getSource(TO_NEXT) as GeoJSONSource | undefined)?.setData(line);
+  }
+
+  // Si la próxima parada cambia (se registró una gestión), el camino se rehace hacia la nueva.
+  useEffect(() => {
+    if (hereRef.current) void askTrip(hereRef.current, nextStop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextStop?.id]);
 
   // Lo vigente, para que el `load` de arriba pueda dibujarlo aunque llegue después que los datos.
   const circleRef = useRef(circle);
@@ -446,6 +512,16 @@ export function PointsMap({
           )}
         </div>
 
+        {trip && nextStop && (
+          <div className="rounded-lg border border-k-border bg-white px-3 py-2 text-[12px] text-k-text-2 shadow">
+            <p className="font-medium text-k-text">{t('mapToNext', { km: trip.distanceKm })}</p>
+            <p className="mt-0.5 tabular-nums">
+              {t('mapByVehicle', { min: trip.minutes })} · {t('mapOnFoot', { min: Math.max(1, Math.round((trip.distanceKm / WALK_KMH) * 60)) })}
+            </p>
+            <p className="mt-0.5 text-[11px] text-k-muted">{t('mapFootNote')}</p>
+          </div>
+        )}
+
         {nextStop && (
           <button
             type="button"
@@ -603,6 +679,16 @@ function fillTip(hit: HTMLElement, p: MapPoint, focused: boolean): void {
     }
     tip.appendChild(row);
   }
+}
+
+/** Metros entre dos puntos (haversine): sólo para decidir si vale pedir el camino de nuevo. */
+function metersBetween(a: Here, b: Here): number {
+  const R = 6_371_000;
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLat = rad(b.latitude - a.latitude);
+  const dLng = rad(b.longitude - a.longitude);
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.latitude)) * Math.cos(rad(b.latitude)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
 }
 
 function emptyArea(): GeoJSON.FeatureCollection {

@@ -5,7 +5,8 @@ import { useEffect, useRef } from 'react';
 // inventa.
 import { LngLatBounds, Map as MapLibreMap, Marker, NavigationControl, Popup, type LngLatLike } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { DEFAULT_ZOOM, FALLBACK_CENTER, MAP_STYLE } from '@/lib/map-style';
+import { DEFAULT_ZOOM, FALLBACK_CENTER, MAP_LOCALE, MAP_STYLE } from '@/lib/map-style';
+import { addLocateControl } from './map-locate';
 
 export interface MapStop {
   id: string;
@@ -72,8 +73,10 @@ export function RouteMap({
       pitchWithRotate: false,
       dragRotate: false,
       attributionControl: { compact: true },
+      locale: MAP_LOCALE,
     });
     map.addControl(new NavigationControl({ showCompass: false }), 'top-right');
+    addLocateControl(map);
 
     for (const stop of located) {
       const pin = document.createElement('div');
