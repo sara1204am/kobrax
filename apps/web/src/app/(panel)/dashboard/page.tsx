@@ -19,7 +19,6 @@ import { DEFAULT_WIDGETS } from '@/lib/widget-registry';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { MfaReminder } from '@/components/mfa-reminder';
 import { DashboardFilters } from '@/components/dashboard/dashboard-filters';
-import { AgendaToday } from '@/components/dashboard/agenda-today';
 import { DashboardGrid } from '@/components/dashboard/dashboard-grid';
 import { DashboardToolbar } from '@/components/dashboard/dashboard-toolbar';
 import { WidgetActions } from '@/components/dashboard/widget-actions';
@@ -62,7 +61,7 @@ export default async function DashboardPage({
     apiCall<DashboardDefinition[]>('/dashboards', { method: 'GET', auth: true }),
     apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
-    // «Agenda de hoy»: sin `agenda:read` vuelve null y el bloque simplemente no aparece.
+    // «Agenda de hoy» (widget `calendar`): sin `agenda:read` vuelve null y el widget lo dice.
     getAgendaSummary(),
   ]);
 
@@ -99,6 +98,7 @@ export default async function DashboardPage({
     aging: aging.body.data ?? undefined,
     collectors: collectors.body.data ?? undefined,
     agenda: agenda.body.data ?? undefined,
+    today: today ?? undefined,
     visits: visits.body.data ?? undefined,
     trend: trend.body.data ?? undefined,
     members: team.body.data ?? [],
@@ -121,8 +121,6 @@ export default async function DashboardPage({
       {me.body.data?.mfaEnabled === false && <MfaReminder />}
 
       <PageHeader title={current?.name ?? t('title')} subtitle={t('subtitle')} />
-
-      {today && <AgendaToday summary={today} />}
 
       <DashboardToolbar dashboards={dashboards} current={current} widgets={widgets} editable={editable} />
 

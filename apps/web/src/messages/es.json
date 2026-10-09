@@ -81,6 +81,8 @@
       "error": "No se pudieron traer los indicadores.",
       "soon": "Este widget llega en la próxima tarea.",
       "vsPrevious": "vs período anterior",
+      "ofPortfolio": "{pct} de la cartera",
+      "noCompare": "sin comparar",
       "noHistory": "sin período anterior para comparar",
       "filters": {
         "date": "Período",
@@ -124,6 +126,7 @@
         "collected": "Recaudado"
       },
       "widgets": {
+        "kpiStrip": "Indicadores",
         "aging": "Cartera por días de mora",
         "agingBars": "Mora por rango de días",
         "agenda": "Agenda del período",
@@ -223,6 +226,16 @@
         "next": "Próxima",
         "nothing": "No tienes nada pendiente para hoy.",
         "onlyOverdue": "Nada más para hoy: revisa las vencidas.",
+        "noAccess": "No tienes acceso a la agenda.",
+        "overdueOne": "Vencida",
+        "more": "{n, plural, one {# actividad más} other {# actividades más}}",
+        "types": {
+          "VISIT": "Visitas",
+          "CALL": "Llamadas",
+          "REMINDER": "Recordatorios",
+          "PROMISE_TO_PAY": "Promesas",
+          "WHATSAPP": "WhatsApp"
+        },
         "team": "Carga del equipo",
         "loadPending": "{n} hoy",
         "loadOverdue": "{n, plural, =0 {Sin vencidas} one {# vencida} other {# vencidas}}"

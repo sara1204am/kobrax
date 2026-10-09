@@ -19,14 +19,27 @@ async function draw(summary: Partial<AgendaTodaySummary>) {
 }
 
 describe('AgendaToday (F4/11 · «¿qué tengo que hacer hoy?»)', () => {
-  it('dice cuántas vencidas y cuántas pendientes hay hoy, y la primera es «Próxima»', async () => {
-    await draw({ pending: 5, overdue: 3, items: [item('g1'), item('g2', { type: 'VISIT', scheduledTime: '14:00', clientName: 'Juan Pérez' })] });
+  it('dice cuántas vencidas y cuántas pendientes hay hoy, y cada fila lleva su estado', async () => {
+    await draw({ pending: 5, overdue: 3, items: [item('g1', { isOverdue: true }), item('g2', { type: 'VISIT', scheduledTime: '14:00', clientName: 'Juan Pérez' })] });
     expect(screen.getByText('Vencidas').nextElementSibling).toHaveTextContent('3');
     expect(screen.getByText('Pendientes hoy').nextElementSibling).toHaveTextContent('5');
     const rows = screen.getAllByRole('link', { name: /Pedro Ticona|Juan Pérez/ });
     expect(rows[0]).toHaveAttribute('href', '/agenda/g1');
-    expect(within(rows[0]!).getByText('Próxima')).toBeInTheDocument();
-    expect(within(rows[1]!).queryByText('Próxima')).toBeNull();
+    expect(within(rows[0]!).getByText('Vencida')).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('Pendiente')).toBeInTheDocument();
+  });
+
+  it('resume lo que no cabe en «N actividades más» y lleva a la Agenda', async () => {
+    await draw({ pending: 6, items: [item('g1'), item('g2'), item('g3'), item('g4'), item('g5')] });
+    // Caben 4 filas: de 6 pendientes quedan 2 por ver.
+    expect(screen.getAllByRole('link', { name: /Pedro Ticona/ })).toHaveLength(4);
+    expect(screen.getByRole('link', { name: /2 actividades más/ })).toHaveAttribute('href', '/agenda');
+  });
+
+  it('los atajos por tipo abren la Agenda filtrada', async () => {
+    await draw({ pending: 1, items: [item('g1')] });
+    expect(screen.getByRole('link', { name: 'Visitas' })).toHaveAttribute('href', '/agenda?tipo=VISIT');
+    expect(screen.getByRole('link', { name: 'Promesas' })).toHaveAttribute('href', '/agenda?tipo=PROMISE_TO_PAY');
   });
 
   it('las vencidas van en rojo; sin vencidas, no', async () => {

@@ -81,6 +81,8 @@
       "error": "The indicators could not be loaded.",
       "soon": "This widget arrives in the next task.",
       "vsPrevious": "vs previous period",
+      "ofPortfolio": "{pct} of portfolio",
+      "noCompare": "no comparison",
       "noHistory": "no previous period to compare",
       "filters": {
         "date": "Period",
@@ -124,6 +126,7 @@
         "collected": "Collected"
       },
       "widgets": {
+        "kpiStrip": "Indicators",
         "aging": "Portfolio by days past due",
         "agingBars": "Overdue by day range",
         "agenda": "Agenda for the period",
@@ -223,6 +226,16 @@
         "next": "Next",
         "nothing": "You have nothing pending today.",
         "onlyOverdue": "Nothing else today: check the overdue ones.",
+        "noAccess": "You don't have access to the agenda.",
+        "overdueOne": "Overdue",
+        "more": "{n, plural, one {# more activity} other {# more activities}}",
+        "types": {
+          "VISIT": "Visits",
+          "CALL": "Calls",
+          "REMINDER": "Reminders",
+          "PROMISE_TO_PAY": "Promises",
+          "WHATSAPP": "WhatsApp"
+        },
         "team": "Team workload",
         "loadPending": "{n} today",
         "loadOverdue": "{n, plural, =0 {None overdue} one {# overdue} other {# overdue}}"
