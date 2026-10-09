@@ -19,11 +19,12 @@ import { apiCall } from '@/lib/bff';
 import { getAgendaSummary } from '@/lib/agenda-summary';
 import { STOP_STATUS_TONE } from '@/lib/routes';
 import { Badge, Card, EmptyState, Fact, PageHeader } from '@/components/panel-ui';
-import { dateTime, money, time } from '@/lib/format';
+import { dateTime, time } from '@/lib/format';
+import { FichaGestion } from '../../../../mora/[creditId]/ficha-gestion';
 import { StopRecordButton } from './stop-actions';
 import { WhatsAppButton } from '../../whatsapp-button';
 
-const TABS = ['info', 'credit', 'locations', 'visits', 'evidence'] as const;
+const TABS = ['ficha', 'visits', 'evidence'] as const;
 type Tab = (typeof TABS)[number];
 
 /**
@@ -34,8 +35,11 @@ type Tab = (typeof TABS)[number];
  * `deleted_at`—, así que acá no hay nada que editar ni borrar. Es justo lo que las vuelve prueba, y la pantalla lo dice:
  * lo que se puede hacer es **registrar la gestión** que falta o **corregir** una con una visita nueva que dice cuál corrige.
  *
- * Cinco pestañas, que viven en la URL (`?tab=`): lo que se ve al abrir es el historial si la parada ya se visitó, y la
- * información si todavía no.
+ * 🔴 **El crédito no tiene dos vistas.** La pestaña «Ficha» es la misma ficha de gestión de `/mora/:creditId`
+ * (`FichaGestion`): lo propio de la parada es la visita —lugar, hora, registrar, corregir— y la evidencia.
+ *
+ * Tres pestañas, que viven en la URL (`?tab=`): lo que se ve al abrir es el historial si la parada ya se visitó, y la
+ * ficha si todavía no. Los `?tab=info|credit|locations` de antes caen en la ficha.
  */
 export default async function ParadaPage({
   params,
@@ -91,7 +95,7 @@ export default async function ParadaPage({
   const today = agendaToday?.date ?? todayISO();
   const visited = stop.status === RouteStopStatus.VISITED;
   const canRecord = !!caps?.recordVisit && !!stop.creditId;
-  const tab: Tab = (TABS as readonly string[]).includes(searchParams.tab ?? '') ? (searchParams.tab as Tab) : visited ? 'visits' : 'info';
+  const tab: Tab = (TABS as readonly string[]).includes(searchParams.tab ?? '') ? (searchParams.tab as Tab) : visited ? 'visits' : 'ficha';
   const recordStop = {
     id: stop.id,
     creditId: stop.creditId,
@@ -116,11 +120,6 @@ export default async function ParadaPage({
         badge={<Badge tone={STOP_STATUS_TONE[stop.status]}>{t(`stopStatus.${stop.status}`)}</Badge>}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-3">
-            {stop.creditId && (
-              <Link href={`/mora/${stop.creditId}`} className="text-[13px] font-medium text-k-purple hover:underline">
-                {t('detail.openMora')}
-              </Link>
-            )}
             <Link href={`/cartera/${stop.clientId}`} className="text-[13px] font-medium text-k-purple hover:underline">
               {t('detail.openClient')}
             </Link>
@@ -131,6 +130,19 @@ export default async function ParadaPage({
           </div>
         }
       />
+
+      {/* Lo propio de esta parada: dónde y cuándo era la visita. El crédito y el cliente están en la ficha. */}
+      <div className="mb-5">
+      <Card>
+        <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Fact label={t('stop.address')} value={stop.address ?? ts('noAddress')} />
+          <Fact label={ts('place')} value={placeOf(stop, tl)} />
+          <Fact label={ts('hour')} value={stop.visitedAt ? time(stop.visitedAt, locale) : (stop.scheduledTime ?? '—')} />
+          <Fact label={ts('lastResult')} value={stop.lastOutcome ? t(`outcome.${stop.lastOutcome}`) : t('stop.notVisited')} />
+        </dl>
+        {stop.agendaItemId && <p className="mt-4 text-[13px] text-k-text-2">{ts('fromAgenda')}</p>}
+      </Card>
+      </div>
 
       <nav aria-label={ts('tabsLabel')} className="mb-5 flex flex-wrap gap-1 border-b border-k-border">
         {TABS.map((id) => (
@@ -149,52 +161,15 @@ export default async function ParadaPage({
         ))}
       </nav>
 
-      {tab === 'info' && (
-        <Card>
-          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Fact label={t('stop.address')} value={stop.address ?? '—'} />
-            <Fact label={ts('place')} value={placeOf(stop, tl)} />
-            <Fact label={ts('hour')} value={stop.visitedAt ? time(stop.visitedAt, locale) : (stop.scheduledTime ?? '—')} />
-            <Fact label={t('stop.debt')} value={stop.overdueAmount != null ? money(stop.overdueAmount, stop.currency ?? 'BOB') : '—'} />
-            <Fact label={t('stop.daysPastDue')} value={stop.daysPastDue != null ? String(stop.daysPastDue) : '—'} />
-            <Fact label={ts('lastResult')} value={stop.lastOutcome ? t(`outcome.${stop.lastOutcome}`) : t('stop.notVisited')} />
-          </dl>
-          {stop.agendaItemId && <p className="mt-4 text-[13px] text-k-text-2">{ts('fromAgenda')}</p>}
-        </Card>
-      )}
-
-      {tab === 'credit' && (
-        <Card>
-          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Fact label={t('stop.debt')} value={stop.overdueAmount != null ? money(stop.overdueAmount, stop.currency ?? 'BOB') : '—'} />
-            <Fact label={t('stop.daysPastDue')} value={stop.daysPastDue != null ? String(stop.daysPastDue) : '—'} />
-            <Fact label={ts('source')} value={stop.externalSource ?? 'Kobrax'} />
-          </dl>
-          {stop.externalSource && <p className="mt-3 text-[13px] text-k-warning-text">{ts('externalHint')}</p>}
-          <div className="mt-4">
-            {stop.creditId ? (
-              <Link href={`/mora/${stop.creditId}`} className="text-[14px] font-medium text-k-purple hover:underline">
-                {ts('creditFull')}
-              </Link>
-            ) : (
-              <p className="text-[14px] text-k-text-2">{ts('noCredit')}</p>
-            )}
-          </div>
-        </Card>
-      )}
-
-      {tab === 'locations' && (
-        <Card>
-          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Fact label={ts('place')} value={placeOf(stop, tl)} />
-            <Fact label={t('stop.address')} value={stop.address ?? ts('noAddress')} />
-            <Fact label={ts('point')} value={stop.latitude != null && stop.longitude != null ? `${stop.latitude.toFixed(5)}, ${stop.longitude.toFixed(5)}` : ts('noPoint')} />
-          </dl>
-          <Link href={`/cartera/${stop.clientId}`} className="mt-4 inline-block text-[14px] font-medium text-k-purple hover:underline">
-            {ts('allLocations')}
-          </Link>
-        </Card>
-      )}
+      {tab === 'ficha' &&
+        (stop.creditId ? (
+          <>
+            {stop.externalSource && <p className="mb-3 text-[13px] text-k-warning-text">{ts('externalHint')}</p>}
+            <FichaGestion creditId={stop.creditId} withHeader={false} />
+          </>
+        ) : (
+          <EmptyState title={ts('noCredit')} />
+        ))}
 
       {tab === 'visits' && (
         <div className="space-y-4">

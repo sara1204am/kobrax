@@ -1928,9 +1928,7 @@
         "back": "Volver a la ruta",
         "tabsLabel": "Secciones de la parada",
         "tabs": {
-          "info": "Información",
-          "credit": "Crédito",
-          "locations": "Ubicación",
+          "ficha": "Ficha",
           "visits": "Historial de visitas",
           "evidence": "Evidencias"
         },

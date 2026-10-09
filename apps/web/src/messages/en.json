@@ -1928,9 +1928,7 @@
         "back": "Back to the route",
         "tabsLabel": "Stop sections",
         "tabs": {
-          "info": "Information",
-          "credit": "Credit",
-          "locations": "Location",
+          "ficha": "Record",
           "visits": "Visit history",
           "evidence": "Evidence"
         },
