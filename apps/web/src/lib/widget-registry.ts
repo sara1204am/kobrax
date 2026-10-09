@@ -20,7 +20,7 @@ export interface WidgetDefinition {
    * De qué fuente vive. `null` = **todavía no tiene dato detrás**: entra al catálogo y al registry,
    * pero al soltarlo dice qué le falta en vez de dibujar una caja vacía que parece rota.
    */
-  source: 'summary' | 'aging' | 'agenda' | 'collectors' | 'visits' | 'trend' | null;
+  source: 'summary' | 'aging' | 'agenda' | 'collectors' | 'visits' | 'trend' | 'agendaToday' | null;
 }
 
 export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
@@ -31,12 +31,13 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   { type: 'map', labelKey: 'map', defaultSize: { w: 4, h: 5 }, minSize: { w: 4, h: 4 }, source: 'visits' },
   { type: 'list', labelKey: 'list', defaultSize: { w: 3, h: 5 }, minSize: { w: 3, h: 3 }, source: 'agenda' },
   { type: 'line_chart', labelKey: 'line', defaultSize: { w: 12, h: 5 }, minSize: { w: 4, h: 4 }, source: 'trend' },
-  // Los cinco de abajo existen en el catálogo y **no tienen fuente todavía**. Prometer un embudo sin
+  // «Agenda de hoy»: el tipo `calendar` del contrato. No necesitó tipo nuevo ni cambio en la API.
+  { type: 'calendar', labelKey: 'calendar', defaultSize: { w: 8, h: 6 }, minSize: { w: 5, h: 5 }, source: 'agendaToday' },
+  // Los cuatro de abajo existen en el catálogo y **no tienen fuente todavía**. Prometer un embudo sin
   // definir de qué es el embudo es dibujar un widget vacío; entran igual para que agregar el dato
   // después no obligue a tocar el registry ni la grilla.
   { type: 'funnel', labelKey: 'funnel', defaultSize: { w: 4, h: 4 }, minSize: { w: 3, h: 3 }, source: null },
   { type: 'gauge', labelKey: 'gauge', defaultSize: { w: 3, h: 3 }, minSize: { w: 2, h: 2 }, source: null },
-  { type: 'calendar', labelKey: 'calendar', defaultSize: { w: 4, h: 4 }, minSize: { w: 3, h: 3 }, source: null },
   { type: 'histogram', labelKey: 'histogram', defaultSize: { w: 4, h: 4 }, minSize: { w: 3, h: 3 }, source: null },
   { type: 'text', labelKey: 'text', defaultSize: { w: 3, h: 2 }, minSize: { w: 2, h: 1 }, source: null },
 ];
@@ -57,20 +58,14 @@ export function widgetDefinition(type: string): WidgetDefinition | undefined {
  * Los `config.metric` son los que el renderer usa para elegir qué dato mostrar.
  */
 export const DEFAULT_WIDGETS: DashboardWidget[] = [
-  kpi('outstanding', 0),
-  kpi('overdue', 2),
-  kpi('overdueRate', 4),
-  kpi('creditsInArrears', 6),
-  kpi('collected', 8),
-  { id: 'w-aging', type: 'donut_chart', title: '', layout: { x: 0, y: 2, w: 4, h: 4 }, config: { metric: 'aging' } },
-  { id: 'w-bars', type: 'bar_chart', title: '', layout: { x: 4, y: 2, w: 4, h: 4 }, config: { metric: 'agingBars' } },
-  { id: 'w-agenda', type: 'donut_chart', title: '', layout: { x: 8, y: 2, w: 4, h: 4 }, config: { metric: 'agenda' } },
-  { id: 'w-team', type: 'table', title: '', layout: { x: 0, y: 6, w: 5, h: 5 }, config: { metric: 'collectors' } },
-  { id: 'w-map', type: 'map', title: '', layout: { x: 5, y: 6, w: 4, h: 5 }, config: { metric: 'visits' } },
-  { id: 'w-ind', type: 'list', title: '', layout: { x: 9, y: 6, w: 3, h: 5 }, config: { metric: 'indicators' } },
-  { id: 'w-trend', type: 'line_chart', title: '', layout: { x: 0, y: 11, w: 12, h: 5 }, config: { metric: 'trend' } },
+  // Una sola tira con saldo, cartera en mora (monto y %), créditos en mora y recaudo.
+  { id: 'w-kpis', type: 'kpi', title: '', layout: { x: 0, y: 0, w: 12, h: 2 }, config: { metric: 'strip' } },
+  { id: 'w-today', type: 'calendar', title: '', layout: { x: 0, y: 2, w: 8, h: 6 }, config: { metric: 'agendaToday' } },
+  { id: 'w-aging', type: 'donut_chart', title: '', layout: { x: 8, y: 2, w: 4, h: 6 }, config: { metric: 'aging' } },
+  { id: 'w-bars', type: 'bar_chart', title: '', layout: { x: 0, y: 8, w: 4, h: 4 }, config: { metric: 'agingBars' } },
+  { id: 'w-agenda', type: 'donut_chart', title: '', layout: { x: 4, y: 8, w: 4, h: 4 }, config: { metric: 'agenda' } },
+  { id: 'w-ind', type: 'list', title: '', layout: { x: 8, y: 8, w: 4, h: 4 }, config: { metric: 'indicators' } },
+  { id: 'w-team', type: 'table', title: '', layout: { x: 0, y: 12, w: 5, h: 5 }, config: { metric: 'collectors' } },
+  { id: 'w-map', type: 'map', title: '', layout: { x: 5, y: 12, w: 7, h: 5 }, config: { metric: 'visits' } },
+  { id: 'w-trend', type: 'line_chart', title: '', layout: { x: 0, y: 17, w: 12, h: 5 }, config: { metric: 'trend' } },
 ];
-
-function kpi(metric: string, x: number): DashboardWidget {
-  return { id: `w-${metric}`, type: 'kpi', title: '', layout: { x, y: 0, w: 2, h: 2 }, config: { metric } };
-}

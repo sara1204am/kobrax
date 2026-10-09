@@ -3,10 +3,9 @@ import { WIDGET_TYPES } from '@kobrax/shared';
 import { DEFAULT_WIDGETS, WIDGET_DEFINITIONS, widgetDefinition } from './widget-registry';
 
 describe('catálogo de widgets', () => {
-  it('el KPI por defecto es «créditos en mora»', () => {
+  it('los indicadores por defecto son UNA tira (saldo, mora, créditos en mora, recaudo)', () => {
     const metrics = DEFAULT_WIDGETS.filter((w) => w.type === 'kpi').map((w) => w.config?.metric);
-    expect(metrics).toContain('creditsInArrears');
-    expect(metrics).not.toContain('activeCases');
+    expect(metrics).toEqual(['strip']);
   });
 
   it('🔴 los doce tipos del contrato están en el catálogo', () => {
