@@ -41,6 +41,7 @@ function makeService(opts: { supervisors?: string[]; notifications?: NotifRow[];
           body: (args.data.body as string) ?? null,
           clientId: (args.data.clientId as string) ?? null,
           creditId: (args.data.creditId as string) ?? null,
+          agendaItemId: (args.data.agendaItemId as string) ?? null,
           readAt: null,
           createdAt: new Date('2026-06-18T12:00:00Z'),
         };
@@ -152,5 +153,56 @@ describe('NotificationsService · REST (scope own)', () => {
     const { service } = makeService({ notifications: store, userId: 'me' });
     await service.markAllRead();
     assert.ok(store.every((n) => n.readAt !== null));
+  });
+});
+
+describe('NotificationsService · avisos de agenda (F4/11)', () => {
+  const payload = (over: Record<string, unknown> = {}) =>
+    ({
+      accountId: 'acc-A',
+      itemId: 'item-1',
+      creditId: 'cr1',
+      clientId: 'cl1',
+      recipientId: 'cobrador-1',
+      actorId: 'sup-1',
+      actorName: 'Sandra Soria',
+      clientName: 'Ana Ruiz',
+      itemType: 'VISIT',
+      scheduledDate: '2026-10-10',
+      kind: 'ASSIGNED',
+      ...over,
+    }) as never;
+
+  it('una gestión asignada avisa al responsable, dice quién la asignó, qué y cuándo, y enlaza a la gestión', async () => {
+    const { service, calls } = makeService();
+    await service.onAgendaAssigned(payload());
+    const n = calls.created[0]!;
+    assert.equal(n.userId, 'cobrador-1');
+    assert.equal(n.type, 'AGENDA_ASSIGNED');
+    assert.equal(n.body, 'Sandra Soria te asignó una visita con Ana Ruiz para el 10/10.');
+    assert.equal(n.agendaItemId, 'item-1');
+    assert.equal(n.creditId, 'cr1');
+  });
+
+  it('un cambio avisa con el verbo correcto según lo que se hizo', async () => {
+    const { service, calls } = makeService();
+    for (const kind of ['RESCHEDULED', 'CANCELLED', 'UPDATED']) await service.onAgendaChanged(payload({ kind }));
+    assert.deepEqual(calls.created.map((n) => n.title), ['Gestión reagendada', 'Gestión cancelada', 'Gestión modificada']);
+    assert.match(String(calls.created[0]!.body), /reagendó una visita/);
+    assert.match(String(calls.created[1]!.body), /canceló una visita/);
+    assert.ok(calls.created.every((n) => n.type === 'AGENDA_CHANGED' && n.agendaItemId === 'item-1'));
+  });
+
+  it('una gestión eliminada avisa pero NO enlaza: la gestión ya no existe y el enlace daría 404', async () => {
+    const { service, calls } = makeService();
+    await service.onAgendaChanged(payload({ kind: 'DELETED' }));
+    assert.equal(calls.created[0]!.title, 'Gestión eliminada');
+    assert.equal(calls.created[0]!.agendaItemId, null);
+  });
+
+  it('sin nombre de quien lo hizo no inventa uno', async () => {
+    const { service, calls } = makeService();
+    await service.onAgendaAssigned(payload({ actorName: undefined, clientName: undefined }));
+    assert.equal(calls.created[0]!.body, 'Alguien te asignó una visita para el 10/10.');
   });
 });

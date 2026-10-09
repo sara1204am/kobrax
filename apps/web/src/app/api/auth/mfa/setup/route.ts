@@ -4,12 +4,14 @@ import type { LoginResult } from '@kobrax/shared';
 import { apiCall, COOKIE, sameOrigin } from '@/lib/bff';
 import { apiError, stepResponse } from '@/lib/auth-flow';
 
-type Body = { action?: 'start' | 'verify'; code?: string };
+type Body = { action?: 'start' | 'verify' | 'skip'; code?: string };
 
 /**
  * Setup MFA obligatorio durante el login (gated por el pre-auth token en cookie):
  * - `start`  → devuelve `{ otpauthUrl, secret }` para configurar el authenticator.
  * - `verify` → activa MFA, completa el login (setea cookies) y devuelve los backup codes.
+ * - `skip`   → «Lo hago después»: entra sin activar MFA y sigue al paso que corresponda
+ *             (dashboard o selector de empresa). Sin límite de veces (decisión de producto 2026-07-31).
  */
 export async function POST(req: Request): Promise<NextResponse> {
   if (!sameOrigin(req)) return NextResponse.json({ error: { code: 'CSRF', message: 'Origen no permitido' } }, { status: 403 });
@@ -36,6 +38,15 @@ export async function POST(req: Request): Promise<NextResponse> {
     });
     if (status !== 200 || !body.data) return apiError(status, body);
     return stepResponse(body.data, { backupCodes: body.data.backupCodes });
+  }
+
+  if (action === 'skip') {
+    const { status, body } = await apiCall<LoginResult>('/auth/mfa/setup/skip', {
+      method: 'POST',
+      body: JSON.stringify({ preAuthToken }),
+    });
+    if (status !== 200 || !body.data) return apiError(status, body);
+    return stepResponse(body.data);
   }
 
   return NextResponse.json({ error: { code: 'VALIDATION', message: 'Acción inválida' } }, { status: 400 });

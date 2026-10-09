@@ -294,7 +294,9 @@ export default function RegistroScreen() {
             placeholder="tu@empresa.com"
             keyboardType="email-address"
             autoCapitalize="none"
-            autoComplete="email"
+            autoComplete="username"
+            textContentType="username"
+            importantForAutofill="yes"
           />
           <Field
             label="Contraseña"
@@ -303,6 +305,9 @@ export default function RegistroScreen() {
             placeholder="••••••••"
             secureTextEntry
             autoCapitalize="none"
+            autoComplete="new-password"
+            textContentType="newPassword"
+            importantForAutofill="yes"
           />
           <PasswordChecklist password={form.password} />
 

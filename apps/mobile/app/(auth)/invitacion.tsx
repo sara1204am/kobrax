@@ -107,6 +107,9 @@ export default function InvitacionScreen() {
                 placeholder="••••••••"
                 secureTextEntry
                 autoCapitalize="none"
+                autoComplete="new-password"
+                textContentType="newPassword"
+                importantForAutofill="yes"
               />
               <PasswordChecklist password={password} />
               <Button

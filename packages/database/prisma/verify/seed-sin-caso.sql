@@ -198,13 +198,15 @@ BEGIN
     SELECT ua.branch_id FROM user_accounts ua JOIN roles r ON r.id = ua.role_id
      WHERE ua.account_id = acc AND r.name = 'SUPERVISOR' AND ua.branch_id IS NOT NULL GROUP BY ua.branch_id) x;
   IF n < 2 THEN RAISE EXCEPTION 'FALLO: debe haber un supervisor en cada una de las 2 agencias (agencias con supervisor: %)', n; END IF;
+  -- Cobradores con agencia: los 5 de la demo (3 en Central, 2 en El Alto) más las cuentas del QA (cobrador5 a cobrador10).
+  -- Cada agencia debe tener al menos los de la demo, y NINGÚN cobrador puede quedar sin agencia.
+  SELECT count(*) INTO n FROM user_accounts ua JOIN roles r ON r.id = ua.role_id
+   WHERE ua.account_id = acc AND r.name = 'COLLECTOR' AND ua.branch_id IS NULL;
+  IF n > 0 THEN RAISE EXCEPTION 'FALLO: hay % cobrador(es) sin agencia', n; END IF;
   SELECT min(c) INTO n FROM (
     SELECT count(*) AS c FROM user_accounts ua JOIN roles r ON r.id = ua.role_id
      WHERE ua.account_id = acc AND r.name = 'COLLECTOR' AND ua.branch_id IS NOT NULL GROUP BY ua.branch_id) x;
-  SELECT max(c) INTO m FROM (
-    SELECT count(*) AS c FROM user_accounts ua JOIN roles r ON r.id = ua.role_id
-     WHERE ua.account_id = acc AND r.name = 'COLLECTOR' AND ua.branch_id IS NOT NULL GROUP BY ua.branch_id) x;
-  IF n <> 2 OR m <> 3 THEN RAISE EXCEPTION 'FALLO: los cobradores por agencia deben ser 3 y 2 (mín %, máx %)', n, m; END IF;
+  IF n < 2 THEN RAISE EXCEPTION 'FALLO: cada agencia debe tener al menos 2 cobradores (mínimo %)', n; END IF;
   SELECT count(*) INTO n FROM user_accounts ua JOIN roles r ON r.id = ua.role_id WHERE ua.account_id = acc AND r.name = 'MANAGER';
   SELECT count(*) INTO m FROM user_accounts ua JOIN roles r ON r.id = ua.role_id WHERE ua.account_id = acc AND r.name = 'ACCOUNT_ADMIN';
   IF n < 1 OR m < 1 THEN RAISE EXCEPTION 'FALLO: faltan el gerente (%) o el administrador (%)', n, m; END IF;

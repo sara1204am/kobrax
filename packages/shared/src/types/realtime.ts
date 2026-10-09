@@ -50,6 +50,8 @@ export interface NotificationPayload {
   body: string | null;
   clientId: string | null;
   creditId: string | null;
+  /** La gestión de agenda de la que habla el aviso: la campanita navega a ella. */
+  agendaItemId?: string | null;
   readAt: string | null;
   createdAt: string;
 }

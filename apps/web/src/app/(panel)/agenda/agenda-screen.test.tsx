@@ -41,6 +41,8 @@ const events: AgendaEvents = {
   onCompleteRequest: vi.fn(),
   onRescheduleRequest: vi.fn(),
   onCancelRequest: vi.fn(),
+  onEditRequest: vi.fn(),
+  onDeleteRequest: vi.fn(),
 };
 
 function renderScreen(over: Partial<Parameters<typeof AgendaScreen>[0]> = {}) {
@@ -217,6 +219,22 @@ describe('AgendaScreen (menú de la fila)', () => {
     expect(names).toEqual(['Ver la gestión', 'Registrar la ejecución', 'Reagendar', 'Cancelar']);
   });
 
+  it('editar y eliminar solo aparecen si la creó quien mira (canEdit) y piden lo suyo', async () => {
+    renderScreen({ items: [item({ id: 'i1', canEdit: true }), item({ id: 'i2' })] });
+    const propia = await openMenu(0);
+    expect(within(propia).getAllByRole('menuitem').map((m) => m.textContent)).toEqual([
+      'Ver la gestión', 'Registrar la ejecución', 'Reagendar', 'Cancelar', 'Editar', 'Eliminar',
+    ]);
+    await userEvent.click(within(propia).getByRole('menuitem', { name: 'Editar' }));
+    expect(events.onEditRequest).toHaveBeenCalledWith('i1');
+    await userEvent.click(within(await openMenu(0)).getByRole('menuitem', { name: 'Eliminar' }));
+    expect(events.onDeleteRequest).toHaveBeenCalledWith('i1');
+
+    const ajena = await openMenu(1);
+    expect(within(ajena).queryByRole('menuitem', { name: 'Editar' })).not.toBeInTheDocument();
+    expect(within(ajena).queryByRole('menuitem', { name: 'Eliminar' })).not.toBeInTheDocument();
+  });
+
   it('cada opción pide lo suyo', async () => {
     renderScreen();
     await userEvent.click(within(await openMenu(0)).getByRole('menuitem', { name: 'Reagendar' }));
@@ -267,5 +285,45 @@ describe('AgendaScreen (vencidas y mes)', () => {
     renderScreen();
     expect(screen.getByRole('radio', { name: 'Mes' })).toBeChecked();
     expect(screen.queryByRole('heading', { level: 3 })).toBeNull();
+  });
+});
+
+describe('AgendaScreen · semana y vencidas filtradas (F4/11)', () => {
+  it('Día/Semana/Mes: pasar a Semana escribe view=week', async () => {
+    search = 'date=2026-10-04';
+    renderScreen();
+    await userEvent.click(screen.getByRole('radio', { name: 'Semana' }));
+    expect(push).toHaveBeenCalledWith('/agenda?date=2026-10-04&view=week');
+  });
+
+  it('la semana muestra los siete días con cuántas gestiones tiene cada uno', () => {
+    search = 'view=week';
+    // 2026-10-04 es domingo: su semana va del lunes 28/09 al domingo 04/10.
+    renderScreen({ monthItems: [item({ id: 'a', scheduledDate: '2026-09-30' }), item({ id: 'b', scheduledDate: '2026-09-30', scheduledTime: '10:00' }), item({ id: 'c', scheduledDate: '2026-10-02' })] });
+    expect(screen.getByRole('radio', { name: 'Semana' })).toBeChecked();
+    expect(screen.getByText('2 gestiones')).toBeInTheDocument();
+    expect(screen.getByText('1 gestión')).toBeInTheDocument();
+    expect(screen.getAllByText('Sin gestiones')).toHaveLength(5);
+  });
+
+  it('tocar un día de la semana lo abre en la vista Día', async () => {
+    search = 'view=week';
+    renderScreen({ monthItems: [] });
+    await userEvent.click(screen.getByRole('button', { name: /Miércoles/ }));
+    expect(push).toHaveBeenCalledWith('/agenda?view=week&date=2026-09-30'.replace('view=week&', ''));
+  });
+
+  it('las vencidas respetan el filtro de cobrador', () => {
+    search = 'gestor=u1';
+    renderScreen({
+      overdue: [
+        item({ id: 'o1', scheduledDate: '2026-09-28', clientName: 'Pedro Vargas', assigneeId: 'u1' }),
+        item({ id: 'o2', scheduledDate: '2026-09-29', clientName: 'Laura Ríos', assigneeId: 'u2' }),
+      ],
+      overdueTotal: 2,
+    });
+    const panel = screen.getByRole('region', { name: 'Vencidas' });
+    expect(within(panel).getByText(/Pedro Vargas/)).toBeInTheDocument();
+    expect(within(panel).queryByText(/Laura Ríos/)).toBeNull();
   });
 });

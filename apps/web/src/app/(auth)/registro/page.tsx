@@ -92,6 +92,10 @@ export default function RegistroPage() {
     return (
       <AuthShell wide title={t('plan.title')} subtitle={t('plan.subtitle')}>
         <PlanPicker onPick={setPlan} />
+        {/* Quien entró por error o ya tiene cuenta no depende del botón atrás del navegador. */}
+        <Link href="/login" className="mt-6 block text-center text-[13px] font-medium text-k-purple hover:underline">
+          {t('haveAccount')}
+        </Link>
       </AuthShell>
     );
   }

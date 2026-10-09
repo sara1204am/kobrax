@@ -12,7 +12,7 @@ import {
 } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
-import { DomainEvent, EventBusService } from '../../common/events/event-bus.service';
+import { DomainEvent, EventBusService, type AgendaEventPayload } from '../../common/events/event-bus.service';
 import { RealtimeGateway } from './notifications.gateway';
 import { SUPERVISORY_ROLES } from './realtime.helpers';
 import {
@@ -30,6 +30,8 @@ interface NotifyData {
   body?: string;
   clientId?: string;
   creditId?: string;
+  /** La gestión de agenda de la que habla el aviso. */
+  agendaItemId?: string;
 }
 
 /**
@@ -53,6 +55,8 @@ export class NotificationsService implements OnModuleInit {
   onModuleInit(): void {
     this.events.on(DomainEvent.PAYMENT_REGISTERED, (p) => this.safe(() => this.onPaymentRegistered(p as PaymentRegisteredPayload)));
     this.events.on(DomainEvent.ROUTE_COMPLETED, (p) => this.safe(() => this.onRouteCompleted(p as RouteCompletedPayload)));
+    this.events.on(DomainEvent.AGENDA_ASSIGNED, (p) => this.safe(() => this.onAgendaAssigned(p as AgendaEventPayload)));
+    this.events.on(DomainEvent.AGENDA_CHANGED, (p) => this.safe(() => this.onAgendaChanged(p as AgendaEventPayload)));
   }
 
   /** Aísla un handler de evento: un fallo se loguea pero nunca tumba el emisor. */
@@ -82,6 +86,33 @@ export class NotificationsService implements OnModuleInit {
     });
   }
 
+  /** Una gestión de agenda te la asignó otra persona → aviso persistido al responsable, con enlace a la gestión. */
+  async onAgendaAssigned(p: AgendaEventPayload): Promise<void> {
+    await this.notifyUser(p.accountId, p.recipientId, {
+      type: NotificationType.AGENDA_ASSIGNED,
+      title: 'Nueva gestión asignada',
+      body: `${p.actorName ?? 'Alguien'} te asignó ${agendaPhrase(p)}.`,
+      clientId: p.clientId,
+      creditId: p.creditId,
+      agendaItemId: p.itemId,
+    });
+  }
+
+  /** Otra persona cambió una gestión tuya → aviso persistido al responsable. */
+  async onAgendaChanged(p: AgendaEventPayload): Promise<void> {
+    const verb = { RESCHEDULED: 'reagendó', CANCELLED: 'canceló', DELETED: 'eliminó', UPDATED: 'modificó', ASSIGNED: 'te asignó', REASSIGNED: 'reasignó' }[p.kind];
+    const title = { RESCHEDULED: 'Gestión reagendada', CANCELLED: 'Gestión cancelada', DELETED: 'Gestión eliminada', UPDATED: 'Gestión modificada', ASSIGNED: 'Nueva gestión asignada', REASSIGNED: 'Gestión reasignada' }[p.kind];
+    await this.notifyUser(p.accountId, p.recipientId, {
+      type: NotificationType.AGENDA_CHANGED,
+      title,
+      body: `${p.actorName ?? 'Alguien'} ${verb} ${agendaPhrase(p)}${p.kind === 'REASSIGNED' ? ' a otra persona' : ''}.`,
+      clientId: p.clientId,
+      creditId: p.creditId,
+      // Una eliminada ya no existe, y una reasignada ya no es tuya (no podrías abrirla): el enlace llevaría a un 404.
+      ...(p.kind === 'DELETED' || p.kind === 'REASSIGNED' ? {} : { agendaItemId: p.itemId }),
+    });
+  }
+
   // ── Persistencia + entrega ───────────────────────────────────────────────────────
   /** Crea, persiste y entrega una notificación a un usuario concreto. Reutilizable por jobs. */
   async notifyUser(accountId: string, userId: string, data: NotifyData): Promise<Notification> {
@@ -102,6 +133,7 @@ export class NotificationsService implements OnModuleInit {
           body: data.body ?? null,
           clientId: data.clientId ?? null,
           creditId: data.creditId ?? null,
+          agendaItemId: data.agendaItemId ?? null,
         },
       }),
     );
@@ -175,4 +207,20 @@ export class NotificationsService implements OnModuleInit {
     if (!userId) throw resourceNotFound();
     return userId;
   }
+}
+
+const AGENDA_TYPE_PHRASE: Record<string, string> = {
+  CALL: 'una llamada',
+  VISIT: 'una visita',
+  WHATSAPP: 'un WhatsApp',
+  REMINDER: 'un recordatorio',
+  PROMISE_TO_PAY: 'una promesa de pago',
+};
+
+/** «una visita con Ana Ruiz para el 10/10»: la gestión en una frase, para el cuerpo de un aviso. */
+function agendaPhrase(p: AgendaEventPayload): string {
+  const what = AGENDA_TYPE_PHRASE[p.itemType] ?? 'una gestión';
+  const who = p.clientName ? ` con ${p.clientName}` : '';
+  const day = `${p.scheduledDate.slice(8, 10)}/${p.scheduledDate.slice(5, 7)}`;
+  return `${what}${who} para el ${day}`;
 }

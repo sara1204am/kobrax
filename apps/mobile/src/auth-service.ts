@@ -3,6 +3,7 @@ import { apiFetch, type ApiResult } from './api';
 import { authedFetch } from './api-client';
 import { clearRouteDrafts, clearSession, getSession, isSessionValid, saveSession, saveUserId, touchSession } from './session';
 import * as db from './db';
+import { fieldErrorsFromDetails, type LoginFieldErrors } from './auth-validation';
 
 export type Step = 'done' | 'mfa' | 'mfa_setup' | 'select_account';
 
@@ -80,9 +81,19 @@ async function meLocal(): Promise<MeResult | null> {
 }
 
 export const authService = {
-  async login(email: string, password: string): Promise<{ step: Step } | { error: string }> {
+  /**
+   * `fieldErrors` viene solo si la API marcó campos concretos (400 de validación con
+   * `details.fields`): la pantalla los pinta bajo su campo y no repite el aviso general.
+   */
+  async login(
+    email: string,
+    password: string,
+  ): Promise<{ step: Step } | { error: string; fieldErrors?: LoginFieldErrors }> {
     const res = await apiFetch<LoginResult>('/auth/login', { method: 'POST', body: { email, password } });
-    if (res.status !== 200 || !res.data) return { error: errMessage(res) };
+    if (res.status !== 200 || !res.data) {
+      const fieldErrors = fieldErrorsFromDetails(res.error?.details);
+      return Object.keys(fieldErrors).length ? { error: errMessage(res), fieldErrors } : { error: errMessage(res) };
+    }
     return { step: await handleResult(res.data) };
   },
 

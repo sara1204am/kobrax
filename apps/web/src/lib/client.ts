@@ -1,7 +1,15 @@
+import {
+  getLoadedSessionId,
+  publishSessionEvent,
+  SESSION_CHANGED_CODE,
+  SESSION_HEADER,
+  SESSION_STALE_EVENT,
+} from './session-sync';
+
 interface JsonResult<T> {
   ok: boolean;
   status: number;
-  data: T & { error?: { code: string; message: string } };
+  data: T & { error?: { code: string; message: string; details?: unknown } };
 }
 
 /**
@@ -28,12 +36,21 @@ export async function sendJson<T = unknown>(
    */
   const res = await fetch(path, {
     method,
-    headers: { 'content-type': 'application/json', ...headers },
+    headers: {
+      'content-type': 'application/json',
+      // Con qué sesión se cargó esta pestaña: el BFF rechaza (409) si la cookie ya es de otra.
+      ...(getLoadedSessionId() ? { [SESSION_HEADER]: getLoadedSessionId() as string } : {}),
+      ...headers,
+    },
     body: JSON.stringify(body),
   }).catch(() => null);
   if (!res) return { ok: false, status: 0, data: {} as JsonResult<T>['data'] };
 
   const data = await res.json().catch(() => ({}));
+  if (res.status === 409 && (data as { error?: { code?: string } })?.error?.code === SESSION_CHANGED_CODE) {
+    // El panel muestra «Tu sesión cambió en otra pestaña. Recarga la página para continuar.»
+    window.dispatchEvent(new Event(SESSION_STALE_EVENT));
+  }
   return { ok: res.ok, status: res.status, data };
 }
 
@@ -62,6 +79,8 @@ interface MiniRouter {
 export function routeByStep(router: MiniRouter, step: Step, accounts?: AccountOption[] | null): void {
   switch (step) {
     case 'done':
+      // Sesión nueva en el navegador: las otras pestañas abiertas tienen que enterarse.
+      publishSessionEvent('login');
       router.replace('/dashboard');
       break;
     case 'mfa':

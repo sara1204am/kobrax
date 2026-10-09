@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { apiCall, sameOrigin } from '@/lib/bff';
-import { apiError } from '@/lib/auth-flow';
+import { apiCall, clearAuthCookies, sameOrigin } from '@/lib/bff';
+import { apiError, revokePreviousSession } from '@/lib/auth-flow';
 
 /**
  * Aceptar la invitación → `POST /auth/invitation/accept`. Fija la contraseña y activa al usuario.
@@ -26,5 +26,9 @@ export async function POST(req: Request): Promise<NextResponse> {
     body: JSON.stringify({ code, password }),
   });
   if (status >= 400 || !body.data) return apiError(status, body);
-  return NextResponse.json(body.data);
+  // Si llegó con las cookies de otra sesión, esa sesión se cierra (en el servidor y en el navegador).
+  const hadSession = await revokePreviousSession();
+  const out = NextResponse.json(body.data);
+  if (hadSession) clearAuthCookies(out);
+  return out;
 }

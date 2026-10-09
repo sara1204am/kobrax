@@ -28,8 +28,9 @@ export {
   toHHmm,
   toISO,
   toLocalDate,
-  todayISO,
 } from '@kobrax/shared';
+// «Hoy» es el día de la EMPRESA (no el UTC ni el reloj a secas): ver `tenant-day.ts`.
+export { todayISO } from './tenant-day';
 export type { FormAction, FormState };
 
 export type TimeSlot = AgendaTimeSlot;

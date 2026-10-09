@@ -27,3 +27,19 @@ jest.mock('expo-sqlite', () => ({
     withTransactionAsync: jest.fn(async (fn) => fn()),
   })),
 }));
+
+/**
+ * Igual con `expo-notifications` (avisos locales de la agenda): es un módulo nativo y en jest no existe. Los avisos no hacen
+ * nada acá; las pruebas que quieren mirarlos declaran su propio `jest.mock('expo-notifications')`.
+ */
+jest.mock('expo-notifications', () => ({
+  setNotificationHandler: jest.fn(),
+  setNotificationChannelAsync: jest.fn(async () => null),
+  getPermissionsAsync: jest.fn(async () => ({ granted: false, canAskAgain: false })),
+  requestPermissionsAsync: jest.fn(async () => ({ granted: false })),
+  getAllScheduledNotificationsAsync: jest.fn(async () => []),
+  scheduleNotificationAsync: jest.fn(async () => 'id'),
+  cancelScheduledNotificationAsync: jest.fn(async () => undefined),
+  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  AndroidImportance: { HIGH: 4 },
+}));

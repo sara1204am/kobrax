@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { AssignmentsModule } from '../assignments/assignments.module';
 import { AuditModule } from '../../common/audit/audit.module';
 import { MailModule } from '../../common/mail/mail.module';
 import { PlanModule } from '../../common/plan/plan.module';
@@ -9,7 +10,7 @@ import { UsersService } from './users.service';
 
 /** Miembros del tenant, perfil propio y catálogo de roles (CUENTA · S0). */
 @Module({
-  imports: [AuthModule, AuditModule, MailModule, PlanModule],
+  imports: [AuthModule, AuditModule, MailModule, PlanModule, AssignmentsModule],
   controllers: [UsersController, RolesController],
   providers: [UsersService],
   exports: [UsersService],

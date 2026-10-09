@@ -62,6 +62,13 @@ export class CreateAgendaItemDto {
   @IsOptional() @IsUUID() id?: string;
   @IsUUID() creditId!: string;
 
+  /**
+   * A quién se le asigna. Sin él, la gestión queda para el responsable del crédito (o para quien agenda).
+   * Solo lo acepta quien tiene `agenda:assign` (supervisor, gerente, administrador); un cobrador solo puede
+   * mandar su propio id. El destinatario se valida en el servidor.
+   */
+  @IsOptional() @IsUUID() assigneeId?: string;
+
   @IsEnum(AgendaItemType) type!: AgendaItemType;
 
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'scheduledDate debe tener formato YYYY-MM-DD' })
@@ -100,6 +107,12 @@ export class UpdateAgendaItemDto {
   @IsOptional() @IsString() @MaxLength(1000) observations?: string;
 
   @IsOptional() @IsObject() details?: Record<string, unknown>;
+
+  /**
+   * Reasignar la gestión a otra persona (F4/11 · E5). Solo quien la creó, y la misma regla del alta: con `agenda:assign` a un
+   * cobrador o supervisor activo de su alcance; sin él, solo a uno mismo.
+   */
+  @IsOptional() @IsUUID() assigneeId?: string;
 }
 
 /** Cancelar una gestión (S6). El motivo sale del catálogo `CANCEL_REASON` del tenant. */

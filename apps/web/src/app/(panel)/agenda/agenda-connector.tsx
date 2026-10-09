@@ -28,15 +28,18 @@ export function AgendaConnector(props: {
   overdueTotal: number;
   members: Member[];
   supervises: boolean;
+  /** Quién puede asignar (`agenda:assign`) y quién es: habilita el selector «Asignar a» del alta. */
+  assign?: { meId: string };
 }) {
   const router = useRouter();
   /** Con qué día y hora se abre el alta. `null` = cerrada. */
+  const { assign, ...screenProps } = props;
   const [creando, setCreando] = useState<{ date: string; time?: string } | null>(null);
 
   return (
     <>
       <AgendaScreen
-        {...props}
+        {...screenProps}
         events={{
           /*
            * 🔴 **Se agenda acá, no en otra pantalla.** Antes esto llevaba a la cartera con la idea de
@@ -50,12 +53,14 @@ export function AgendaConnector(props: {
           onCompleteRequest: (id) => router.push(`/agenda/${id}?accion=completar`),
           onRescheduleRequest: (id) => router.push(`/agenda/${id}?accion=reagendar`),
           onCancelRequest: (id) => router.push(`/agenda/${id}?accion=cancelar`),
+          onEditRequest: (id) => router.push(`/agenda/${id}?accion=editar`),
+          onDeleteRequest: (id) => router.push(`/agenda/${id}?accion=eliminar`),
         }}
       />
 
       {/* Se monta al abrir: el borrador arranca limpio cada vez sin un solo efecto de reset. */}
       {creando && (
-        <NewTaskModal open onClose={() => setCreando(null)} date={creando.date} time={creando.time} />
+        <NewTaskModal open onClose={() => setCreando(null)} date={creando.date} time={creando.time} assign={assign} />
       )}
     </>
   );

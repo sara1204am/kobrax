@@ -41,9 +41,45 @@ export interface AgendaListItem {
   currency?: string;
   /** Quién atiende la gestión: sólo nombre y apellido, nunca el correo. */
   assigneeName?: string;
+  /** Quién la creó (`users.id`). Con esto el cliente decide si le muestra editar y eliminar: solo el creador puede. */
+  createdBy?: string;
+  /** Quién la asignó: el nombre de quien la creó, solo cuando no es el responsable. Nunca el correo. */
+  assignedByName?: string;
+  /** Quien mira puede editarla y eliminarla (la creó él y sigue pendiente). La API es la que lo hace cumplir. */
+  canEdit?: boolean;
   isOverdue: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+/** La carga de una persona del equipo: lo que tiene pendiente hoy y lo vencido. */
+export interface AgendaLoadRow {
+  assigneeId: string;
+  name?: string;
+  pending: number;
+  overdue: number;
+}
+
+/**
+ * «¿Qué tengo que hacer hoy?» (`GET /agenda/summary`): pendientes de hoy, vencidas y las próximas del día. Con
+ * `agenda:assign`, además la carga por persona. `date` es el día civil del tenant, el mismo con que se cuenta todo.
+ */
+export interface AgendaTodaySummary {
+  date: string;
+  pending: number;
+  overdue: number;
+  /** Hasta 5 pendientes de hoy: las de hora fija por hora, luego las de franja. */
+  items: AgendaListItem[];
+  load?: AgendaLoadRow[];
+}
+
+/** A quién se le puede asignar una gestión (`GET /agenda/assignees`): nombre y rol, sin correo ni teléfono. */
+export interface AgendaAssignee {
+  userId: string;
+  firstName: string | null;
+  lastName: string | null;
+  roleName: string;
+  branchId: string | null;
 }
 
 /** Con qué se ejecuta la gestión: el teléfono al que llamar o la dirección a la que ir. */
@@ -64,6 +100,14 @@ export interface AgendaHistoryEntry {
   isOverdue: boolean;
   reasonCode?: string;
   rescheduledFromId?: string;
+  /** Cómo terminó, si se ejecutó: el resultado que se registró (`AGENDA_OUTCOMES_BY_TYPE`). */
+  outcome?: string;
+  /** Cuándo (hora exacta o franja) y de qué iba: la línea de tiempo del detalle los muestra. */
+  timeMode?: ScheduleTimeMode;
+  scheduledTime?: string;
+  timeSlot?: string;
+  observations?: string;
+  details?: Record<string, unknown>;
 }
 
 /**
@@ -77,6 +121,12 @@ export interface AgendaItemDetail {
   item: AgendaListItem;
   client: { id: string; displayName: string; nationalId: string | null; zone?: string };
   credit?: { creditId: string; code?: string; outstandingBalance: number; currency: string; daysPastDue: number };
+  /** Qué pasó al ejecutarla: resultado, nota, quién y cuándo. Solo en las ejecutadas. */
+  execution?: { outcome?: string; notes?: string; byName?: string; at: string };
+  /** La ruta y la parada que llevan esta visita: se registra desde la parada (con GPS y evidencia), no desde la agenda. */
+  route?: { routeId: string; stopId: string };
+  /** A qué gestión se movió, si ésta quedó reagendada. */
+  rescheduledTo?: { id: string; scheduledDate: string };
   /** Ausente en recordatorios y promesas: no hay a quién llamar ni a dónde ir. */
   target?: AgendaTarget;
   /** `code` → etiqueta del catálogo (medio de pago, banco). Sólo en promesas de pago. */

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, type PrismaClient } from '@prisma/client';
-import { RouteStatus, RouteStopStatus } from '@prisma/client';
+import { AgendaItemStatus, AgendaItemType, RouteStatus, RouteStopStatus } from '@prisma/client';
 import { Permission, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
@@ -227,9 +227,17 @@ export class RoutesService {
        * mora). Sin `creditIds`, se toman los créditos EN MORA del cobrador
        * —responsable, temporal o apoyo vigentes— por la prioridad de su episodio abierto.
        */
-      const credits = dto.creditIds?.length
+      const base = dto.creditIds?.length
         ? await this.chosenCredits(tx, dto.creditIds)
         : await this.collectorArrearsCredits(tx, collectorId);
+      /*
+       * 🔴 Las visitas agendadas de ese cobrador para ese día ENTRAN SOLAS a la planificación (F4/11 · D3): quien arma la
+       * ruta no tiene que acordarse de elegirlas. Con créditos elegidos manda el orden que armó quien planifica y las
+       * visitas van al final; sin elección, van primero (son compromisos con día) y luego la mora por prioridad. Si el
+       * crédito ya iba por mora, es UNA sola parada y lleva el vínculo con la visita.
+       */
+      const visits = await this.pendingVisits(tx, collectorId, new Date(dto.plannedDate));
+      const credits = this.mergeVisits(base, visits, dto.creditIds?.length ? 'append' : 'prepend');
       if (credits.length === 0) throw noStopsToRoute();
 
       const created = await tx.routePlan.create({
@@ -246,6 +254,7 @@ export class RoutesService {
               accountId: this.tenant.accountId,
               clientId: c.clientId,
               creditId: c.id,
+              agendaItemId: c.agendaItemId,
               // El orden que eligió quien planifica; sin elección, el de prioridad (CRITICAL primero).
               sequenceOrder: i + 1,
             })),
@@ -255,6 +264,44 @@ export class RoutesService {
       });
       return { route: created, replay: false };
     });
+  }
+
+  /**
+   * Las visitas pendientes del cobrador para ese día que ninguna parada activa lleva ya, por hora (las de franja,
+   * después) y luego por orden de carga. Una por crédito: si hay dos del mismo crédito el mismo día, la primera entra y
+   * la otra sigue solo en la agenda.
+   */
+  private async pendingVisits(tx: PrismaClient, collectorId: string, plannedDate: Date): Promise<{ agendaItemId: string; id: string; clientId: string }[]> {
+    const items = await tx.agendaItem.findMany({
+      where: { assigneeId: collectorId, type: AgendaItemType.VISIT, status: AgendaItemStatus.SCHEDULED, deletedAt: null, scheduledDate: plannedDate },
+      orderBy: [{ scheduledTime: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
+      select: { id: true, creditId: true, clientId: true },
+    });
+    if (items.length === 0) return [];
+    const taken = await tx.routeStop.findMany({
+      where: { agendaItemId: { in: items.map((i) => i.id) }, status: { not: RouteStopStatus.SKIPPED } },
+      select: { agendaItemId: true },
+    });
+    const takenIds = new Set(taken.map((t) => t.agendaItemId));
+    const seen = new Set<string>();
+    return items.flatMap((i) => {
+      if (takenIds.has(i.id) || seen.has(i.creditId)) return [];
+      seen.add(i.creditId);
+      return [{ agendaItemId: i.id, id: i.creditId, clientId: i.clientId }];
+    });
+  }
+
+  /** Une los créditos de la ruta con las visitas del día: sin repetir crédito y con el vínculo en la parada que la lleva. */
+  private mergeVisits(
+    base: { id: string; clientId: string }[],
+    visits: { agendaItemId: string; id: string; clientId: string }[],
+    where: 'append' | 'prepend',
+  ): { id: string; clientId: string; agendaItemId?: string }[] {
+    const link = new Map(visits.map((v) => [v.id, v.agendaItemId]));
+    const known = new Set(base.map((b) => b.id));
+    const withLink = base.map((b) => ({ ...b, agendaItemId: link.get(b.id) }));
+    const extra = visits.filter((v) => !known.has(v.id)).map((v) => ({ id: v.id, clientId: v.clientId, agendaItemId: v.agendaItemId }));
+    return where === 'append' ? [...withLink, ...extra] : [...extra, ...withLink];
   }
 
   /** Los créditos elegidos, en el orden pedido, sin repetir y sólo los visibles para quien planifica. */
@@ -475,7 +522,10 @@ export class RoutesService {
   async updateStatus(id: string, dto: UpdateRouteDto): Promise<ReturnType<typeof serializeRoute>> {
     const route = await this.tx(async (tx) => {
       await this.assertOwnRoute(tx, id);
-      return tx.routePlan.update({ where: { id }, data: { status: dto.status } });
+      const updated = await tx.routePlan.update({ where: { id }, data: { status: dto.status } });
+      // Una ruta cancelada suelta sus visitas: la gestión sigue pendiente en la agenda y puede entrar a otra ruta.
+      if (dto.status === RouteStatus.CANCELLED) await tx.routeStop.updateMany({ where: { routeId: id, agendaItemId: { not: null } }, data: { agendaItemId: null } });
+      return updated;
     });
     await this.audit.record({ entity: 'route', entityId: id, action: 'UPDATE', after: { status: route.status } });
     if (route.status === RouteStatus.COMPLETED) {

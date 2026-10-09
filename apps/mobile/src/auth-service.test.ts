@@ -119,3 +119,47 @@ describe('authService.changePassword', () => {
     expect(clearSession).not.toHaveBeenCalled();
   });
 });
+
+describe('authService.login — errores por campo (M-LOG-18)', () => {
+  it('propaga details.fields de la API como fieldErrors', async () => {
+    mockFetch.mockResolvedValue({
+      status: 400,
+      data: null,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Validación fallida',
+        details: { fields: { email: ['El formato del correo no es válido'] }, messages: ['x'] },
+      },
+    });
+    expect(await authService.login('a', 'b')).toEqual({
+      error: 'Validación fallida',
+      fieldErrors: { email: 'El formato del correo no es válido' },
+    });
+  });
+
+  it('un error de servidor sin campos (credenciales) no trae fieldErrors', async () => {
+    mockFetch.mockResolvedValue({
+      status: 401,
+      data: null,
+      error: { code: 'INVALID_CREDENTIALS', message: 'Credenciales inválidas' },
+    });
+    expect(await authService.login('a@b.co', 'b')).toEqual({ error: 'Credenciales inválidas' });
+  });
+});
+
+describe('authService.login — cuenta bloqueada (M-LOG-40)', () => {
+  it('muestra tal cual el mensaje de bloqueo de la API (423), no "Credenciales inválidas"', async () => {
+    mockFetch.mockResolvedValue({
+      status: 423,
+      data: null,
+      error: {
+        code: 'ACCOUNT_LOCKED',
+        message: 'Cuenta bloqueada temporalmente por intentos fallidos',
+        details: { lockedUntil: '2026-10-05T12:00:00.000Z' },
+      },
+    });
+    expect(await authService.login('cobrador6@kobrax.demo', 'Kobrax123!')).toEqual({
+      error: 'Cuenta bloqueada temporalmente por intentos fallidos',
+    });
+  });
+});

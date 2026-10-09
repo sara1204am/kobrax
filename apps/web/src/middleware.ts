@@ -12,7 +12,63 @@ const REFRESH = 'k_refresh';
 const isProd = process.env.NODE_ENV === 'production';
 const cookieBase = { httpOnly: true, sameSite: 'strict' as const, secure: isProd, path: '/' };
 
+/** Pantallas de acceso: con la sesión abierta no se muestran, se va al panel (W-LOG-54). */
+const GUEST_ONLY = new Set(['/login', '/registro', '/forgot-password', '/invitacion']);
+
+/**
+ * /login, /registro, /forgot-password e /invitacion con una sesión **válida** van al dashboard.
+ *
+ * Se comprueba contra la API y no solo con que exista la cookie: una sesión revocada en el servidor
+ * dejaría la cookie puesta, y redirigir igual haría un bucle (el panel la manda de vuelta a /login).
+ * Sesión vencida, rechazada o API caída → se muestra el formulario, como siempre.
+ * `/reset-password` no pasa por acá: el enlace del correo tiene que seguir funcionando.
+ */
+async function guestOnly(req: NextRequest): Promise<NextResponse> {
+  const access = req.cookies.get(ACCESS)?.value;
+  if (access) {
+    try {
+      const me = await fetch(`${API_BASE}/auth/me`, {
+        headers: { authorization: `Bearer ${access}`, 'x-client-type': 'web' },
+        cache: 'no-store',
+      });
+      if (me.ok) return NextResponse.redirect(new URL('/dashboard', req.url));
+    } catch {
+      return NextResponse.next(); // API caída: no se adivina, se muestra el formulario
+    }
+  }
+
+  const refresh = req.cookies.get(REFRESH)?.value;
+  if (!refresh) return NextResponse.next();
+  try {
+    const r = await fetch(`${API_BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-client-type': 'web' },
+      body: JSON.stringify({ refreshToken: refresh }),
+      cache: 'no-store',
+    });
+    if (r.ok) {
+      const json = (await r.json()) as { data?: { accessToken?: string; refreshToken?: string } };
+      if (json.data?.accessToken && json.data.refreshToken) {
+        const res = NextResponse.redirect(new URL('/dashboard', req.url));
+        res.cookies.set(ACCESS, json.data.accessToken, { ...cookieBase, maxAge: 15 * 60 });
+        res.cookies.set(REFRESH, json.data.refreshToken, { ...cookieBase, maxAge: 7 * 24 * 60 * 60 });
+        return res;
+      }
+    }
+    const res = NextResponse.next();
+    if (r.status === 401 || r.status === 403) {
+      // Sesión muerta de verdad: se limpian las cookies para no repetir la pregunta.
+      res.cookies.set(ACCESS, '', { ...cookieBase, maxAge: 0 });
+      res.cookies.set(REFRESH, '', { ...cookieBase, maxAge: 0 });
+    }
+    return res;
+  } catch {
+    return NextResponse.next();
+  }
+}
+
 export async function middleware(req: NextRequest): Promise<NextResponse> {
+  if (GUEST_ONLY.has(req.nextUrl.pathname)) return guestOnly(req);
   if (req.cookies.get(ACCESS)?.value) return NextResponse.next();
 
   const refresh = req.cookies.get(REFRESH)?.value;
@@ -102,6 +158,11 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
  */
 export const config = {
   matcher: [
+    // Pantallas de acceso (solo para quien NO tiene sesión). Exactas: /login/mfa* no entran.
+    '/login',
+    '/registro',
+    '/forgot-password',
+    '/invitacion',
     '/dashboard/:path*',
     '/settings/:path*',
     '/cuenta/:path*',

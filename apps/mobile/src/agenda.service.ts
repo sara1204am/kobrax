@@ -8,6 +8,7 @@ import type {
   AgendaListItem,
   AgendaOutcome,
   AgendaPostponeStep,
+  AgendaTodaySummary,
   AgendaTarget,
   AgendaTimeSlot,
   CreateAgendaInput,
@@ -15,6 +16,7 @@ import type {
   UpdateAgendaInput,
 } from '@kobrax/shared';
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
+import { setTenantToday } from './tenant-day';
 import { cachedList, cachedOne } from './sync/cached';
 
 /**
@@ -29,6 +31,20 @@ export type {
   CreateAgendaInput,
   UpdateAgendaInput,
 } from '@kobrax/shared';
+
+/**
+ * «¿Qué tengo que hacer hoy?»: pendientes de hoy, vencidas y próximas, con el día civil de la empresa (`date`). Es la fuente de
+ * «hoy» del teléfono (`tenant-day.ts`): el servidor y el panel cuentan igual.
+ */
+export function getSummary(): Promise<QueryResult<AgendaTodaySummary>> {
+  return apiQuery<AgendaTodaySummary>('/agenda/summary');
+}
+
+/** Le pregunta al servidor qué día es para la empresa y lo recuerda. Sin red no hace nada: queda el día local del teléfono. */
+export async function refreshTenantToday(): Promise<void> {
+  const res = await getSummary();
+  if (res.status === 'ok') setTenantToday(res.data.date);
+}
 
 /** Agendados de un día (`YYYY-MM-DD`). El móvil separa secciones por `status`. */
 export function listByDay(dateISO: string): Promise<QueryResult<AgendaListItem[]>> {
@@ -115,13 +131,10 @@ export function actionLinks(
 }
 
 /**
- * Un agendado de WhatsApp abre WhatsApp con el mensaje ya escrito — no una llamada de voz.
- * `wa.me` es el enlace universal: si la app no está, cae al navegador.
+ * Un agendado de WhatsApp abre WhatsApp con el mensaje ya escrito — no una llamada de voz. La regla es la misma que en la
+ * web, así que vive en shared; se re-exporta acá para que las pantallas del móvil sigan importándola de este servicio.
  */
-export function whatsappLink(phone: string, message?: string): string {
-  const digits = phone.replace(/[^\d]/g, '');
-  return `https://wa.me/${digits}${message ? `?text=${encodeURIComponent(message)}` : ''}`;
-}
+export { whatsappLink } from '@kobrax/shared';
 
 /** Un crédito del cliente dentro de mi alcance (en mora o al día): lo que se puede agendar. */
 export interface CreditOption {

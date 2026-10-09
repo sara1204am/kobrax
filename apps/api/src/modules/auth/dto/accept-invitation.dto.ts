@@ -1,4 +1,5 @@
 import { IsString, Length, MinLength } from 'class-validator';
+import { MaxBytes, PASSWORD_MAX_BYTES } from '../../../common/validation/max-bytes';
 
 /**
  * Aceptar una invitación (CUENTA · S2). Endpoint **sin sesión**: este DTO es la única
@@ -10,5 +11,5 @@ import { IsString, Length, MinLength } from 'class-validator';
  */
 export class AcceptInvitationDto {
   @IsString() @Length(8, 24) code!: string;
-  @IsString() @MinLength(1) password!: string;
+  @IsString() @MinLength(1) @MaxBytes(PASSWORD_MAX_BYTES) password!: string;
 }

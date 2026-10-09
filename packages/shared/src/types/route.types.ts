@@ -22,6 +22,8 @@ export interface RouteStopItem {
   longitude?: number;
   /** El crédito de la parada (F4/08: la parada es por crédito): contra él se cobra y se promete al registrar el resultado. */
   creditId?: string;
+  /** La visita agendada de la que nació la parada (F4/11). Al visitarla, esa gestión se cierra sola. */
+  agendaItemId?: string;
   /**
    * La deuda del crédito **de esta parada**, no la suma del deudor: un cliente puede tener más de
    * un crédito y la parada apunta a uno. Ausentes si la parada no tiene caso o crédito.

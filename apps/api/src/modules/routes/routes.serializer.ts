@@ -54,6 +54,8 @@ export function serializeStop(
     clientId: s.clientId,
     // Contra este crédito se cobra y se promete al registrar el resultado (S5).
     creditId: s.creditId ?? undefined,
+    // La visita agendada de la que nació la parada (F4/11): con esto el cliente la marca como «Agendada».
+    agendaItemId: s.agendaItemId ?? undefined,
     sequenceOrder: s.sequenceOrder,
     status: s.status,
     visitedAt: s.visitedAt ?? undefined,

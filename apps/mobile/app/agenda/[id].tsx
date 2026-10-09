@@ -13,6 +13,7 @@ import { AgendaItemStatus, AgendaItemType, CatalogType, ScheduleTimeMode } from 
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { Button } from '@/components';
 import {
+  AGENDA_OUTCOME_META,
   AGENDA_STATUS_LABEL,
   AGENDA_TYPE_META,
   BottomSheet,
@@ -38,6 +39,8 @@ import {
 } from '@/agenda.service';
 import { listCatalog, type CatalogOption } from '@/catalogs.service';
 import { RegisterSheet } from '@/agenda-register';
+import { getUserId } from '@/session';
+import { patchAgendaItemLocal } from '@/sync/agenda-optimistic';
 import { queueForLater } from '@/sync/sync.service';
 import type { QueuedAction } from '@/sync/queue';
 
@@ -101,6 +104,11 @@ export default function AgendaDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [menu, setMenu] = useState(false);
+  // Quién soy: editar y eliminar son sólo de quien creó la gestión (la API responde 403 a los demás).
+  const [meId, setMeId] = useState<string | null>(null);
+  useEffect(() => {
+    void getUserId().then(setMeId);
+  }, []);
 
   const reload = useCallback(async () => {
     if (!id) return;
@@ -150,6 +158,7 @@ export default function AgendaDetailScreen() {
       {load.status === 'ok' && (
         <ItemMenu
           item={load.detail.item}
+          canEdit={!!meId && load.detail.item.createdBy === meId}
           visible={menu}
           onClose={() => setMenu(false)}
           onGone={() => router.back()}
@@ -220,6 +229,20 @@ function Detail({
             </Text>
           ))}
 
+          {item.assignedByName && <Text style={styles.assignedBy}>Asignada por {item.assignedByName}</Text>}
+
+          {/* Qué pasó: sin esto una gestión ejecutada solo decía «Ejecutada». */}
+          {detail.execution && (
+            <View style={styles.quote}>
+              <Text style={styles.quoteText}>
+                Resultado: {detail.execution.outcome && detail.execution.outcome in AGENDA_OUTCOME_META ? AGENDA_OUTCOME_META[detail.execution.outcome as keyof typeof AGENDA_OUTCOME_META].label : 'Registrada'}
+                {detail.execution.notes ? `
+${detail.execution.notes}` : ''}
+              </Text>
+              {detail.execution.byName && <Text style={styles.assignedBy}>Registrada por {detail.execution.byName}</Text>}
+            </View>
+          )}
+
           {item.observations && (
             <View style={styles.quote}>
               <Text style={styles.quoteText}>{item.observations}</Text>
@@ -245,11 +268,9 @@ function Detail({
 
           {(wa || tel || geo) && (
             <View style={styles.actions}>
-              {wa ? (
-                <ActionButton label="WhatsApp" icon="💬" onPress={() => onOpen(wa)} />
-              ) : (
-                tel && <ActionButton label="Llamar" icon="📞" onPress={() => onOpen(tel)} />
-              )}
+              {/* Las dos cuando hay teléfono: abrir WhatsApp o marcar no registra nada, y quien agendó un WhatsApp igual puede necesitar llamar. */}
+              {wa && <ActionButton label="WhatsApp" icon="💬" onPress={() => onOpen(wa)} />}
+              {tel && <ActionButton label="Llamar" icon="📞" onPress={() => onOpen(tel)} />}
               {/* Navegar abre el mapa de Kobrax, no el del teléfono: mismo comportamiento que la ficha. */}
               {geo && (
                 <ActionButton
@@ -277,9 +298,23 @@ function Detail({
 
       {pending && (
         <SafeAreaView edges={['bottom']} style={styles.footer}>
-          <Pressable style={styles.registerBtn} accessibilityRole="button" onPress={() => setShowRegister(true)}>
-            <Text style={styles.registerText}>Registrar gestión</Text>
-          </Pressable>
+          {/*
+            Una visita que una ruta lleva se registra desde su parada (con GPS y evidencia): registrarla acá crearía una segunda
+            actividad. El servidor lo rechaza (AGENDA_014); acá se manda a la ruta en vez de dejar que choque.
+          */}
+          {detail.route ? (
+            <Pressable
+              style={styles.registerBtn}
+              accessibilityRole="button"
+              onPress={() => router.push(`/rutas/resultado?routeId=${detail.route!.routeId}&stopId=${detail.route!.stopId}`)}
+            >
+              <Text style={styles.registerText}>Registrar en la ruta</Text>
+            </Pressable>
+          ) : (
+            <Pressable style={styles.registerBtn} accessibilityRole="button" onPress={() => setShowRegister(true)}>
+              <Text style={styles.registerText}>Registrar gestión</Text>
+            </Pressable>
+          )}
         </SafeAreaView>
       )}
 
@@ -307,12 +342,15 @@ function Detail({
  */
 function ItemMenu({
   item,
+  canEdit,
   visible,
   onClose,
   onGone,
   onReplaced,
 }: {
   item: AgendaListItem;
+  /** Quien la creó: es el único que la edita o elimina. El responsable a quien se la asignaron sólo la ejecuta, reagenda o cancela. */
+  canEdit: boolean;
   visible: boolean;
   onClose: () => void;
   /** La gestión dejó de estar acá (cancelada o eliminada) → volver. */
@@ -361,16 +399,18 @@ function ItemMenu({
    * porque esa la crea el servidor y todavía no existe.
    */
   const done = useCallback(
-    async (res: { status: string; message?: string }, accion: QueuedAction, ok: () => void) => {
+    async (res: { status: string; message?: string }, accion: QueuedAction, ok: () => void, local?: Partial<AgendaListItem>) => {
       if (res.status !== 'ok' && res.status !== 'offline') return fail(res);
       if (res.status === 'offline' && !(await queueForLater(accion))) {
         return fail({ status: 'error', message: 'Sin conexión y no se pudo guardar en el teléfono.' });
       }
+      // Sin señal la gestión ya está hecha para el cobrador: se refleja en las listas y contadores del teléfono, no solo en esta pantalla.
+      if (res.status === 'offline' && local) await patchAgendaItemLocal(item, local);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setSheet(null);
       ok();
     },
-    [fail],
+    [fail, item],
   );
 
   const doCancel = useCallback(
@@ -378,7 +418,7 @@ function ItemMenu({
       setBusy(true);
       const res = await cancelItem(item.id, code);
       setBusy(false);
-      await done(res, { kind: 'agenda.cancel', id: item.id, reasonCode: code }, onGone);
+      await done(res, { kind: 'agenda.cancel', id: item.id, reasonCode: code }, onGone, { status: AgendaItemStatus.CANCELLED });
     },
     [done, item.id, onGone],
   );
@@ -395,8 +435,11 @@ function ItemMenu({
     setBusy(true);
     const res = await rescheduleItem(item.id, input);
     setBusy(false);
-    await done(res, { kind: 'agenda.reschedule', id: item.id, input }, () =>
-      res.status === 'ok' ? onReplaced(res.data) : onGone(),
+    await done(
+      res,
+      { kind: 'agenda.reschedule', id: item.id, input },
+      () => (res.status === 'ok' ? onReplaced(res.data) : onGone()),
+      { status: AgendaItemStatus.RESCHEDULED },
     );
   }, [date, done, fixed, item.id, item.timeMode, item.timeSlot, onGone, onReplaced, reason, time]);
 
@@ -434,15 +477,17 @@ function ItemMenu({
   return (
     <>
       <BottomSheet visible={visible} onClose={onClose} title="Opciones">
-        <ListRow
-          title="Editar"
-          subtitle="Cambiar los datos de la gestión"
-          icon="create-outline"
-          onPress={() => {
-            onClose();
-            router.push({ pathname: '/agenda/crear', params: { id: item.id } });
-          }}
-        />
+        {canEdit && (
+          <ListRow
+            title="Editar"
+            subtitle="Cambiar los datos de la gestión"
+            icon="create-outline"
+            onPress={() => {
+              onClose();
+              router.push({ pathname: '/agenda/crear', params: { id: item.id } });
+            }}
+          />
+        )}
         <ListRow
           title="Reagendar"
           subtitle="Moverla a otro día, con motivo"
@@ -455,7 +500,7 @@ function ItemMenu({
           icon="close-circle-outline"
           onPress={() => void openWithReasons('cancel')}
         />
-        <ListRow title="Eliminar" subtitle="Se cargó por error" icon="trash-outline" onPress={confirmDelete} />
+        {canEdit && <ListRow title="Eliminar" subtitle="Se cargó por error" icon="trash-outline" onPress={confirmDelete} />}
       </BottomSheet>
 
       {/* Cancelar: el motivo ES la acción, así que la hoja de motivos alcanza. */}
@@ -587,6 +632,7 @@ const styles = StyleSheet.create({
   gestionTitle: { ...TYPE.h3, fontWeight: '700' },
   when: { ...TYPE.secondary },
   detailLine: { ...TYPE.body },
+  assignedBy: { ...TYPE.secondary },
   quote: { backgroundColor: COLORS.bg, borderRadius: RADIUS.input, padding: SPACING.md },
   quoteText: { ...TYPE.secondary, color: COLORS.text, fontStyle: 'italic' },
   clientHead: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.md },

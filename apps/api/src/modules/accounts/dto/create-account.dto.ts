@@ -1,4 +1,5 @@
-import { IsEmail, IsIn, IsOptional, IsString, Length, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString, Length, MaxLength, MinLength } from 'class-validator';
+import { EMAIL_MAX_LENGTH, MaxBytes, PASSWORD_MAX_BYTES } from '../../../common/validation/max-bytes';
 import { SIGNUP_PLANS, type SignupPlan } from '@kobrax/shared';
 
 /**
@@ -15,8 +16,8 @@ export class CreateAccountDto {
   @IsString() @Length(2, 160) businessName!: string;
   @IsString() @Length(1, 80) firstName!: string;
   @IsString() @Length(1, 80) lastName!: string;
-  @IsEmail() email!: string;
-  @IsString() @MinLength(1) password!: string;
+  @MaxLength(EMAIL_MAX_LENGTH) @IsEmail() email!: string;
+  @IsString() @MinLength(1) @MaxBytes(PASSWORD_MAX_BYTES) password!: string;
 
   /**
    * El plan que eligió en las tarjetas. Ausente = FREE, que es lo que corresponde a quien llega

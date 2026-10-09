@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import type { AuthTokens } from '@kobrax/shared';
 import { clearCache } from './db';
+import { cancelAllAgendaReminders } from './agenda-notifications';
 
 /**
  * Almacenamiento seguro de la sesión (SecureStore, hardware-backed; nunca AsyncStorage).
@@ -101,6 +102,8 @@ export function getUserId(): Promise<string | null> {
  * con su dueño para cuando vuelva a entrar.
  */
 export async function clearSession(): Promise<void> {
+  // Los avisos locales son de quien salió: no pueden sonarle al próximo que use este teléfono.
+  await cancelAllAgendaReminders();
   // Antes de borrar el userId: el borrador es por usuario y hace falta saber de quién era.
   await clearRouteDrafts();
   await Promise.all([

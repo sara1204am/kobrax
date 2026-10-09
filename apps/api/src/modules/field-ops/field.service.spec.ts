@@ -24,6 +24,7 @@ function makeService(
     stopUpdate: 0,
     activities: 0,
     activityData: [] as Record<string, unknown>[],
+    agendaUpdates: [] as { where: Record<string, unknown>; data: Record<string, unknown> }[],
     creditUpdates: [] as Record<string, unknown>[],
     scopeQueries: 0,
     evidence: [] as Record<string, unknown>[],
@@ -41,7 +42,8 @@ function makeService(
     creditArrearEpisode: { findFirst: async () => ({ id: 'ep1' }) },
     credit: { update: async (a: { data: Record<string, unknown> }) => { calls.creditUpdates.push(a.data); return {}; } },
     routeStop: { findFirst: async () => opts.stop ?? { id: 's1' }, update: async () => { calls.stopUpdate += 1; return {}; } },
-    creditActivity: { create: async (a: { data: Record<string, unknown> }) => { calls.activities += 1; calls.activityData.push(a.data); return {}; } },
+    creditActivity: { create: async (a: { data: Record<string, unknown> }) => { calls.activities += 1; calls.activityData.push(a.data); return { id: 'act-1' }; } },
+    agendaItem: { updateMany: async (a: { where: Record<string, unknown>; data: Record<string, unknown> }) => { calls.agendaUpdates.push(a); return { count: 1 }; } },
     user: { update: async () => ({}) },
     fieldVisit: {
       findFirst: async (args?: { where?: { id?: string } }) => {
@@ -413,5 +415,32 @@ describe('FieldService.createVisit idempotente por id (cola offline)', () => {
     assert.equal(calls.visitCreate.length, 0);
     assert.equal(calls.activities, 0);
     assert.equal(calls.events.length, 0);
+  });
+});
+
+describe('FieldService.createVisit · parada que nació de una visita agendada (F4/11)', () => {
+  const GPS = { lat: -16.5, lng: -68.15, outcome: 'CONTACTED' as never, routeStopId: 's1' };
+
+  it('cierra la gestión agendada con LA MISMA actividad: una sola ejecución', async () => {
+    const { service, calls } = makeService({ stop: { id: 's1', creditId: 'cr1', agendaItemId: 'ai1' } });
+    await service.createVisit(GPS as never);
+    assert.equal(calls.activities, 1, 'una sola actividad en la bitácora');
+    assert.equal(calls.agendaUpdates.length, 1);
+    assert.deepEqual(calls.agendaUpdates[0]!.where, { id: 'ai1', status: 'SCHEDULED', deletedAt: null });
+    assert.equal(calls.agendaUpdates[0]!.data.status, 'EXECUTED');
+    assert.equal(calls.agendaUpdates[0]!.data.resultActivityId, 'act-1');
+    assert.equal(calls.agendaUpdates[0]!.data.updatedBy, 'collector-1');
+  });
+
+  it('una parada sin visita agendada no toca la agenda', async () => {
+    const { service, calls } = makeService({ stop: { id: 's1', creditId: 'cr1' } });
+    await service.createVisit(GPS as never);
+    assert.equal(calls.agendaUpdates.length, 0);
+  });
+
+  it('solo cierra una gestión que sigue pendiente: el filtro lo exige (cancelada o reagendada no se pisa)', async () => {
+    const { service, calls } = makeService({ stop: { id: 's1', creditId: 'cr1', agendaItemId: 'ai1' } });
+    await service.createVisit(GPS as never);
+    assert.equal((calls.agendaUpdates[0]!.where as { status: string }).status, 'SCHEDULED');
   });
 });

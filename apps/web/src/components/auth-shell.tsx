@@ -39,7 +39,13 @@ export function AuthShell({
       <div className="flex flex-1 flex-col lg:flex-row">
         <BrandPanel />
 
-        <section className="flex flex-1 flex-col items-center justify-center px-6 py-10 lg:py-14">
+        {/*
+          Centrado vertical solo mientras la pantalla es baja (laptop). En tablet vertical
+          (iPad 1024×1366) el panel izquierdo deja su contenido arriba y el formulario, centrado,
+          quedaba flotando lejos: de 900 px de alto para arriba el formulario arranca arriba,
+          a la altura del titular de la izquierda (W-LOG-04).
+        */}
+        <section className="flex flex-1 flex-col items-center justify-center px-6 py-10 lg:py-14 lg:[@media(min-height:900px)]:justify-start lg:[@media(min-height:900px)]:pt-24">
           <div className={`mb-5 flex w-full ${ancho} justify-end`}>
             <LocaleSwitch />
           </div>

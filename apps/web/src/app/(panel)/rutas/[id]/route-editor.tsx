@@ -183,7 +183,7 @@ export function RouteEditor({
       stops.map((s) => ({
         id: s.id,
         name: s.clientName ?? '—',
-        hint: s.address ?? undefined,
+        hint: s.agendaItemId ? [tPlan('scheduledTag'), s.address].filter(Boolean).join(' · ') : (s.address ?? undefined),
         locked: s.status !== RouteStopStatus.PENDING,
       })),
     [stops],

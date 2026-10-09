@@ -10,6 +10,7 @@ import { DayPanel } from './day-panel';
 import { MiniCalendar } from './mini-calendar';
 import { MonthCalendar } from './month-calendar';
 import { OverduePanel } from './overdue-panel';
+import { WeekPanel } from './week-panel';
 import { FiltersCard, SummaryCard } from './side-cards';
 
 /**
@@ -25,6 +26,9 @@ export interface AgendaEvents {
   onCompleteRequest: (id: string) => void;
   onRescheduleRequest: (id: string) => void;
   onCancelRequest: (id: string) => void;
+  /** Solo se ofrecen cuando `item.canEdit`: editar y eliminar son de quien creó la gestión. */
+  onEditRequest: (id: string) => void;
+  onDeleteRequest: (id: string) => void;
 }
 
 /**
@@ -69,7 +73,7 @@ export function AgendaScreen({
   const params = useSearchParams();
   const [q, setQ] = useState('');
 
-  const view = params.get('view') === 'calendar' ? 'month' : 'day';
+  const view = params.get('view') === 'calendar' ? 'month' : params.get('view') === 'week' ? 'week' : 'day';
   const gestor = params.get('gestor') ?? '';
   const tipo = params.get('tipo') ?? '';
   const estado = params.get('estado') ?? '';
@@ -94,6 +98,13 @@ export function AgendaScreen({
   const delMes = useMemo(() => filterItems(monthItems, filters), [monthItems, filters]);
   const conItems = useMemo(() => new Set(delMes.map((i) => i.scheduledDate.slice(0, 10))), [delMes]);
   const hayFiltro = !!(gestor || tipo || estado || q.trim());
+  /*
+   * 🔴 Las vencidas obedecen a los mismos filtros que el día (cobrador, tipo y búsqueda; el estado no aplica: todas
+   * están pendientes). Antes el panel rojo seguía mostrando las de TODO el equipo aunque se hubiera elegido a una
+   * persona. Con un filtro puesto, el total es lo filtrado de lo traído (el servidor manda las primeras páginas).
+   */
+  const vencidas = useMemo(() => filterItems(overdue, { gestor, tipo, q }), [overdue, gestor, tipo, q]);
+  const vencidasTotal = gestor || tipo || q.trim() ? vencidas.length : overdueTotal;
 
   const crear = () => events.onCreateRequest({ date: day, gestorId: gestor || undefined });
 
@@ -107,10 +118,11 @@ export function AgendaScreen({
         <div className="md:justify-self-center">
           <Segmented
             value={view}
-            onChange={(v) => go({ view: v === 'day' ? null : 'calendar' })}
+            onChange={(v) => go({ view: v === 'day' ? null : v === 'week' ? 'week' : 'calendar' })}
             label={t('view')}
             options={[
               { value: 'day', label: t('views.day') },
+              { value: 'week', label: t('views.week') },
               { value: 'month', label: t('views.month') },
             ]}
           />
@@ -163,8 +175,17 @@ export function AgendaScreen({
         </div>
 
         <div className="min-w-0">
-          <OverduePanel items={overdue} total={overdueTotal} events={events} />
-          {view === 'day' ? (
+          <OverduePanel items={vencidas} total={vencidasTotal} events={events} />
+          {view === 'week' ? (
+            <WeekPanel
+              day={day}
+              today={today}
+              items={delMes}
+              events={events}
+              onPickDay={(iso) => go({ date: iso })}
+              onOpenDay={(iso) => go({ date: iso, view: null })}
+            />
+          ) : view === 'day' ? (
             <DayPanel
               day={day}
               today={today}
