@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   LngLatBounds,
   Map as MapLibreMap,
@@ -10,7 +11,9 @@ import {
   type LngLatLike,
 } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { DEFAULT_ZOOM, FALLBACK_CENTER, MAP_STYLE } from '@/lib/map-style';
+import { DEFAULT_ZOOM, FALLBACK_CENTER, MAP_STYLE, SATELLITE_ATTRIBUTION, SATELLITE_TILES } from '@/lib/map-style';
+
+const SAT = 'plan-satellite';
 
 /** Cómo se pinta el pin. El color es el estado de la parada; el badge del globo es otra cosa y no lo repite. */
 export type PinTone = 'pending' | 'done' | 'next' | 'skipped' | 'scheduled' | 'suggestion' | 'candidate' | 'visit';
@@ -101,8 +104,17 @@ export function PointsMap({
    */
   onPointClick?: (id: string) => void;
 }) {
+  const t = useTranslations('panel.routes.planning');
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
+  /** Mapa de calles o imágenes satelitales. */
+  const [base, setBase] = useState<'map' | 'satellite'>('map');
+  const baseRef = useRef(base);
+  baseRef.current = base;
+  /** Los ids de las capas del estilo de calles, para apagarlas al ver el satélite. */
+  const baseLayers = useRef<string[]>([]);
+  const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const markers = useRef(new Map<string, Marker>());
   const center = useRef<Marker | null>(null);
   /** El rótulo con el radio, pegado al borde norte del círculo. */
@@ -137,6 +149,16 @@ export function PointsMap({
     });
     m.addControl(new NavigationControl({ showCompass: false }), 'top-right');
     m.on('load', () => {
+      /*
+       * El satélite es una capa más **debajo de todo**, y al verlo se apagan las del estilo de calles. Así el selector
+       * no cambia el estilo —`setStyle` borraría el área, el recorrido y todo lo que se dibuja encima— y funciona con
+       * cualquier estilo de base.
+       */
+      baseLayers.current = m.getStyle().layers.map((l) => l.id);
+      m.addSource(SAT, { type: 'raster', tiles: [SATELLITE_TILES], tileSize: 256, maxzoom: 19, attribution: SATELLITE_ATTRIBUTION });
+      m.addLayer({ id: SAT, type: 'raster', source: SAT, layout: { visibility: 'none' } }, baseLayers.current[0]);
+      applyBase(m, baseRef.current, baseLayers.current);
+
       // La fuente del área nace vacía: así el `setData` de cada movimiento no tiene que crearla.
       m.addSource(AREA, { type: 'geojson', data: emptyArea() });
       m.addLayer({ id: `${AREA}-fill`, type: 'fill', source: AREA, paint: { 'fill-color': '#5B7DBE', 'fill-opacity': 0.12 } });
@@ -190,6 +212,24 @@ export function PointsMap({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const m = map.current;
+    if (m && ready.current) applyBase(m, base, baseLayers.current);
+  }, [base]);
+
+  /** Lo que se busca en el mapa son los puntos que hay en él: por nombre o por el detalle (saldo, zona). */
+  const found = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (q.length < 2) return [];
+    return points.filter((p) => `${p.label ?? ''} ${p.detail ?? ''}`.toLowerCase().includes(q)).slice(0, 6);
+  }, [points, query]);
+
+  const goTo = (p: MapPoint) => {
+    map.current?.easeTo({ center: [p.longitude, p.latitude], zoom: Math.max(map.current.getZoom(), 16), duration: 400 });
+    hover.current?.(p.id);
+  };
+  const nextStop = points.find((p) => p.tone === 'next');
 
   // Lo vigente, para que el `load` de arriba pueda dibujarlo aunque llegue después que los datos.
   const circleRef = useRef(circle);
@@ -360,8 +400,85 @@ export function PointsMap({
   }, [height]);
 
   return (
-    <div ref={container} style={{ height }} className="w-full overflow-hidden rounded-2xl border border-k-border" />
+    <div className="relative">
+      <div ref={container} style={{ height }} className="w-full overflow-hidden rounded-2xl border border-k-border" />
+
+      {/* Los controles flotan sobre el mapa, a la izquierda: a la derecha están el zoom y la atribución. */}
+      <div className="absolute left-3 top-3 z-10 flex w-64 max-w-[calc(100%-5rem)] flex-col gap-2">
+        <div className="relative">
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setSearchOpen(true);
+            }}
+            onFocus={() => setSearchOpen(true)}
+            onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+            placeholder={t('mapSearch')}
+            aria-label={t('mapSearch')}
+            className="h-9 w-full rounded-lg border border-k-border bg-white px-3 text-[13px] text-k-text shadow outline-none focus:border-k-periwinkle"
+          />
+          {searchOpen && query.trim().length >= 2 && (
+            <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-lg border border-k-border bg-white py-1 shadow-k-card">
+              {found.length === 0 ? (
+                <li className="px-3 py-2 text-[12px] text-k-text-2">{t('mapSearchNone')}</li>
+              ) : (
+                found.map((p) => (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      // `onMouseDown` y no `onClick`: el `blur` del campo cerraría la lista antes de que llegue el clic.
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        goTo(p);
+                        setSearchOpen(false);
+                      }}
+                      className="block w-full px-3 py-1.5 text-left hover:bg-k-bg"
+                    >
+                      <span className="block truncate text-[13px] font-medium text-k-text">{p.label}</span>
+                      {p.detail && <span className="block truncate text-[11px] text-k-text-2">{p.detail}</span>}
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          )}
+        </div>
+
+        {nextStop && (
+          <button
+            type="button"
+            onClick={() => goTo(nextStop)}
+            className="h-9 rounded-lg border border-k-border bg-white px-3 text-left text-[13px] font-medium text-k-purple shadow hover:bg-k-highlight"
+          >
+            {t('mapNextStop')}
+          </button>
+        )}
+      </div>
+
+      <div role="group" className="absolute bottom-6 left-3 z-10 flex overflow-hidden rounded-lg border border-k-border bg-white text-[12px] font-medium shadow">
+        {(['map', 'satellite'] as const).map((b) => (
+          <button
+            key={b}
+            type="button"
+            aria-pressed={base === b}
+            onClick={() => setBase(b)}
+            className={`h-8 px-3 ${base === b ? 'bg-k-navy text-white' : 'text-k-text-2 hover:bg-k-bg'}`}
+          >
+            {b === 'map' ? t('mapBaseMap') : t('mapBaseSatellite')}
+          </button>
+        ))}
+      </div>
+    </div>
   );
+}
+
+/** Calles o satélite: se alterna la visibilidad de las capas, sin tocar el estilo. */
+function applyBase(m: MapLibreMap, base: 'map' | 'satellite', layers: string[]): void {
+  const sat = base === 'satellite';
+  for (const id of layers) m.setLayoutProperty(id, 'visibility', sat ? 'none' : 'visible');
+  m.setLayoutProperty(SAT, 'visibility', sat ? 'visible' : 'none');
 }
 
 const AREA = 'plan-area';

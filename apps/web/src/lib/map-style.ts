@@ -33,6 +33,16 @@ const OSM_RASTER_STYLE: StyleSpecification = {
 export const MAP_STYLE: string | StyleSpecification =
   process.env.NEXT_PUBLIC_MAP_STYLE_URL ?? OSM_RASTER_STYLE;
 
+/**
+ * Imágenes satelitales para el selector Mapa / Satélite. Se agregan como una capa más sobre el estilo que haya
+ * (OSM raster o el `style.json` propio), así que el selector funciona igual en desarrollo y en producción.
+ *
+ * ⚠️ Es el servicio público de Esri: sirve para ver el producto funcionando, pero antes de producción hay que
+ * contratar un proveedor de imágenes (o servirlas desde R2 como el resto de los tiles).
+ */
+export const SATELLITE_TILES = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+export const SATELLITE_ATTRIBUTION = 'Imágenes © Esri';
+
 /** Encuadre por defecto sin coordenada de referencia (Santa Cruz, tenant demo). */
 export const FALLBACK_CENTER: [number, number] = [-63.1821, -17.7833];
 export const DEFAULT_ZOOM = 13;
