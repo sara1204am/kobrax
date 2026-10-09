@@ -212,6 +212,12 @@ export function availableQuery(params: PlanParams, day: string): URLSearchParams
 /** Las columnas que ordena el navegador, porque la API no las sabe ordenar. */
 export type LocalSort = 'client' | 'zone' | 'coords';
 
+/**
+ * Hasta dónde se sugiere mora sin ruta alrededor de una ruta armada, en kilómetros (en línea recta, desde cada parada).
+ * Es lo que se camina o se maneja de más para una visita preventiva: pasado eso ya es otra ruta.
+ */
+export const SUGGEST_KM = 1;
+
 /** Radios que ofrece la búsqueda por área, en kilómetros. Media cuadra no es un área; 20 km es la ciudad. */
 export const RADIUS_KM = [0.5, 1, 2, 5] as const;
 
@@ -243,15 +249,13 @@ export function haversineKm(a: Point, b: Point): number {
 /**
  * Los que caen **dentro del círculo**.
  *
- * 🔴 Quien no tiene ubicación cargada **queda afuera**, y no es un descuido: el área pregunta «qué
+ * 🔴 Entra si **alguna** de sus ubicaciones cae adentro. Quien no tiene ubicación cargada **queda afuera**, y no es un descuido: el área pregunta «qué
  * hay acá», y de esa persona no se sabe dónde está. Meterla igual haría que una ruta armada por
  * zona termine con una parada en la otra punta.
  */
 export function withinRadius<T extends { locations?: Point[] }>(rows: T[], center: Point, km: number): T[] {
-  return rows.filter((r) => {
-    const loc = r.locations?.[0];
-    return loc ? haversineKm(center, loc) <= km : false;
-  });
+  // 🔴 **Cualquiera de sus ubicaciones**: el cliente puede vivir lejos y trabajar adentro del círculo (o tener un garante ahí).
+  return rows.filter((r) => (r.locations ?? []).some((loc) => haversineKm(center, loc) <= km));
 }
 
 /**

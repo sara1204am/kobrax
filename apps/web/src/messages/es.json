@@ -1629,7 +1629,13 @@
             "place": "Ubicación",
             "eta": "Hora estimada",
             "fixed": "Hora fija"
-          }
+          },
+          "listTitle": "Recorrido y llegada estimada ({n})",
+          "mapCount": "{n, plural, one {1 parada en el recorrido} other {# paradas en el recorrido}}"
+        },
+        "context": {
+          "planningFor": "Planificando para {name} · {date}",
+          "change": "Cambiar fecha o cobrador"
         }
       },
       "work": {
@@ -1728,7 +1734,9 @@
         "register": "Registrar gestión",
         "viewStop": "Ver detalle",
         "reasonOfClose": "Motivo del cierre",
-        "cancelledReason": "Motivo de la cancelación"
+        "cancelledReason": "Motivo de la cancelación",
+        "stopsCount": "Paradas en la ruta ({n})",
+        "visitPoint": "Visita registrada"
       },
       "stop": {
         "sequence": "Parada {n}",
@@ -1959,6 +1967,16 @@
         "message": "Hola {name}, te escribo por tu pago pendiente. ¿Podemos coordinar?",
         "noPhone": "Este cliente no tiene un teléfono cargado.",
         "error": "No se pudo abrir WhatsApp."
+      },
+      "suggest": {
+        "toggle": "Sugerencias cerca ({n})",
+        "title": "Cerca de esta ruta ({n})",
+        "hint": "Mora sin ruta a menos de {km} km de alguna parada: aprovecha para una visita preventiva.",
+        "away": "a {d}",
+        "add": "Agregar a la ruta",
+        "ask": "Pedir agregarla",
+        "badge": "Sugerida",
+        "count": "{n, plural, one {1 sugerencia} other {# sugerencias}}"
       }
     },
     "payments": {

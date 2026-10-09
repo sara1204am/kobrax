@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { memberName, type Member, type RouteItem } from '@kobrax/shared';
 import { Card, InfoTip } from '@/components/panel-ui';
 import { Button, ErrorBanner } from '@/components/ui';
@@ -10,8 +10,10 @@ import { FilterPanel } from '@/components/data-table-filters';
 import { SearchBox } from '@/components/search-box';
 import { AvailableList } from '@/components/route-planner/available-list';
 import { MapPanel, type PlanArea } from '@/components/route-planner/map-panel';
+import { candidatePins, describeLocation, parsePinId } from '@/components/route-planner/candidate-pins';
+import type { MapPoint } from '@/components/route-planner/points-map';
 import { postJson } from '@/lib/client';
-import { money } from '@/lib/format';
+import { dayDate, money } from '@/lib/format';
 import { AVAILABLE_LIMIT, defaultLocation, shiftDays, withinRadius, type AvailableCredit } from '@/lib/plan';
 import type { PlanRow } from '@/app/api/routes/plan/route';
 import { planFilterDefs, PLAN_FILTER_KEYS } from './plan-filters';
@@ -89,12 +91,23 @@ export function PlanScreen({
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+  const locale = useLocale();
+
+  /*
+   * 🔴 **Si ya vienen el día y el cobrador, el paso 1 sobra**: llegaron desde el tablero de Rutas, donde ya se eligieron.
+   * Se decide una sola vez, al abrir —`go()` también los pone en la URL—, y «Cambiar» lo reabre sin que el efecto de abajo
+   * lo devuelva a clientes en cuanto la persona toque otro cobrador.
+   */
+  // Sólo cuenta si el cobrador existe: con un id inventado la página cae en el primer cobrador y el banner mentiría.
+  const withContext = useRef(params.has('date') && collectors.some((c) => c.userId === params.get('collectorId')));
+  const reopened = useRef(false);
+  const firstStep = (): Step => (withContext.current && !reopened.current ? 'clients' : 'date');
 
   const filters = planFilterDefs(tFilters, categories, tOutcome);
   // El panel abre solo si ya hay un filtro puesto: si no, uno activo quedaría escondido y la lista
   // saldría corta sin que nada lo explique. Mismo criterio que el `DataTable`.
   const [panelOpen, setPanelOpen] = useState(filtered);
-  const [step, setStep] = useState<Step>('date');
+  const [step, setStep] = useState<Step>(firstStep);
   const [picked, setPicked] = useState<string[]>([]);
   const [area, setArea] = useState<PlanArea | null>(null);
   /** La ubicación que se eligió para cada crédito, si no es la predeterminada. */
@@ -110,6 +123,7 @@ export function PlanScreen({
   const byCollector = new Map(routes.map((r) => [r.collectorId, r]));
   const actual = collectors.find((c) => c.userId === collectorId);
   const suRuta = byCollector.get(collectorId);
+  const plannedIds = useMemo(() => new Set(visits.map((v) => v.creditId)), [visits]);
   const visitTime = useMemo(() => new Map(visits.filter((v) => v.time).map((v) => [v.creditId, v.time!])), [visits]);
 
   /*
@@ -120,7 +134,7 @@ export function PlanScreen({
   useEffect(() => {
     setPicked(visits.map((v) => v.creditId).filter((id) => byId.has(id)));
     setChosen({});
-    setStep('date');
+    setStep(firstStep());
     setDone(null);
     setError(null);
     // `available` cambia con los filtros y no debe volver a marcar nada: solo cobrador y día reinician.
@@ -138,7 +152,13 @@ export function PlanScreen({
   }
 
   /** Marcar o desmarcar. **Un solo camino**, lo toque la casilla de la lista o su punto en el mapa. */
-  const toggle = (id: string) => setPicked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const toggle = (id: string) => {
+    // Al desmarcar se olvida la ubicación elegida: si vuelve a marcarse, entra con la predeterminada y no con la de antes.
+    if (picked.includes(id)) {
+      setChosen((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => k !== id)));
+    }
+    setPicked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
 
   /**
    * Mover una parada. 🔴 **El orden de `picked` ES el orden de la ruta**: viaja así a la API, que lo respeta en vez de
@@ -173,9 +193,7 @@ export function PlanScreen({
     const c = byId.get(creditId);
     const loc = defaultLocation(c?.locations);
     if (!loc) return { label: '' };
-    const kind = loc.locationType ? tType(loc.locationType as 'HOME') : '';
-    const owner = loc.ownerName ? ` · ${loc.ownerName}` : '';
-    return { id: loc.id, label: [`${kind}${owner}`, loc.address].filter(Boolean).join(' · '), latitude: loc.latitude, longitude: loc.longitude };
+    return { id: loc.id, label: describeLocation(loc, (type) => tType(type as 'HOME')), latitude: loc.latitude, longitude: loc.longitude };
   }
   const hasPoint = (id: string) => {
     const p = placeOf(id);
@@ -204,7 +222,7 @@ export function PlanScreen({
     if (row?.error) return setError(row.error);
     setDone(t('routeDone', { name: actual ? memberName(actual) : '', n: picked.length }));
     setPicked([]);
-    setStep('date');
+    setStep(firstStep());
     // La ruta recién creada tiene que aparecer en el progreso y su mora salir de la lista.
     router.refresh();
   }
@@ -221,50 +239,79 @@ export function PlanScreen({
    * Los pines del mapa. **Con área puesta**, los que se pueden elegir ahí adentro: es lo que se está buscando. **Sin área**,
    * sólo lo marcado — que es la ruta que se arma — con el número de su lugar en el recorrido y en SU ubicación elegida.
    */
-  const puntos = useMemo(() => {
+  const puntos = useMemo<MapPoint[]>(() => {
     const pickedPins = picked.flatMap((id, i) => {
       const c = byId.get(id);
       const p = placeOf(id);
-      return c && p.latitude != null && p.longitude != null
-        ? [{ id, latitude: p.latitude, longitude: p.longitude, label: c.clientName ?? undefined, detail: p.label || undefined, picked: true, order: i + 1 }]
-        : [];
+      if (!c || p.latitude == null || p.longitude == null) return [];
+      const fixed = visitTime.get(id);
+      const planned = plannedIds.has(id);
+      return [{
+        id,
+        latitude: p.latitude,
+        longitude: p.longitude,
+        label: c.clientName ?? undefined,
+        detail: p.label || undefined,
+        picked: true,
+        order: i + 1,
+        tone: planned || fixed ? ('scheduled' as const) : ('pending' as const),
+        badges: [
+          ...(fixed ? [{ label: t('fixedAt', { time: fixed }), tone: 'info' as const }] : []),
+          ...(planned ? [{ label: t('scheduledTag'), tone: 'warning' as const }] : []),
+        ],
+      }];
     });
     if (!area) return pickedPins;
-    const seen = new Set(picked);
-    const around = filas.flatMap((c) => {
-      const loc = defaultLocation(c.locations);
-      return loc && !seen.has(c.id)
-        ? [{
-            id: c.id,
-            latitude: loc.latitude,
-            longitude: loc.longitude,
-            label: c.clientName ?? undefined,
-            detail: [money(c.amount, c.currency ?? 'BOB'), c.daysPastDue ? t('days', { n: c.daysPastDue }) : null, c.zone ?? null].filter(Boolean).join(' · '),
-            picked: false,
-          }]
-        : [];
+    // Con área puesta, **cada ubicación** de lo que se puede elegir ahí adentro: es lo que se está buscando.
+    const around = candidatePins(filas, {
+      skip: new Set(picked),
+      typeLabel: (type) => tType(type as 'HOME'),
+      detail: (c) => [money(c.amount, c.currency ?? 'BOB'), c.daysPastDue ? t('days', { n: c.daysPastDue }) : null, c.zone ?? null].filter(Boolean).join(' · '),
     });
     return [...around, ...pickedPins];
     // `placeOf` lee `chosen` y `byId`: están en las dependencias de abajo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [area, filas, picked, chosen, byId, t]);
+  }, [area, filas, picked, chosen, byId, t, plannedIds, visitTime]);
+
+  /** Un pin de candidato lo elige **con su ubicación**; uno ya elegido lo saca. */
+  function pickPin(pin: string) {
+    const { creditId, locationId } = parsePinId(pin);
+    if (picked.includes(creditId)) return toggle(creditId);
+    toggle(creditId);
+    const loc = locationId ? byId.get(creditId)?.locations?.find((l) => l.id === locationId) : undefined;
+    if (loc?.id) {
+      setChosen((prev) => ({
+        ...prev,
+        [creditId]: { id: loc.id!, label: describeLocation(loc, (type) => tType(type as 'HOME')), latitude: loc.latitude, longitude: loc.longitude },
+      }));
+    }
+  }
 
   const orden = useMemo(
     () =>
       picked.map((id) => {
         const c = byId.get(id);
         const time = visitTime.get(id);
-        return { id, name: c?.clientName ?? '—', hint: [time ? t('fixedAt', { time }) : null, placeOf(id).label || c?.zone].filter(Boolean).join(' · ') || undefined };
+        return {
+          id,
+          name: c?.clientName ?? '—',
+          hint: placeOf(id).label || c?.zone || undefined,
+          tone: plannedIds.has(id) || time ? ('scheduled' as const) : ('pending' as const),
+          badges: [
+            ...(time ? [{ label: t('fixedAt', { time }), tone: 'info' as const }] : []),
+            ...(plannedIds.has(id) ? [{ label: t('scheduledTag'), tone: 'warning' as const }] : []),
+          ],
+        };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [picked, byId, chosen, visitTime, t],
+    [picked, byId, chosen, visitTime, plannedIds, t],
   );
 
   const previewStops: PreviewStop[] = picked.flatMap((id) => {
     const c = byId.get(id);
     const p = placeOf(id);
     return c && p.latitude != null && p.longitude != null
-      ? [{ id, name: c.clientName ?? '—', place: p.label || '—', latitude: p.latitude, longitude: p.longitude, scheduledTime: visitTime.get(id) }]
+      ? [{ id, name: c.clientName ?? '—', place: p.label || '—', latitude: p.latitude, longitude: p.longitude, scheduledTime: visitTime.get(id), planned: plannedIds.has(id) }]
       : [];
   });
 
@@ -279,6 +326,25 @@ export function PlanScreen({
         <p role="status" className="rounded-xl border border-k-success bg-k-success-bg px-4 py-3 text-[14px] text-k-text">
           {done}
         </p>
+      )}
+
+      {/* Llegó con día y cobrador elegidos: se dice para quién es y se ofrece cambiarlo, sin repetir el paso 1. */}
+      {!suRuta && withContext.current && !reopened.current && step !== 'date' && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-k-border bg-white px-4 py-3">
+          <p className="text-[14px] font-medium text-k-navy">
+            {t('context.planningFor', { name: actual ? memberName(actual) : '', date: dayDate(day, locale) })}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              reopened.current = true;
+              setStep('date');
+            }}
+            className="h-9 rounded-lg border border-k-border bg-white px-3 text-[13px] font-medium text-k-text-2 hover:bg-k-bg"
+          >
+            {t('context.change')}
+          </button>
+        </div>
       )}
 
       {/* Los cuatro pasos: dónde está la persona y cuánto falta. El número va igual al lado del nombre. */}
@@ -466,7 +532,7 @@ export function PlanScreen({
                 order={orden}
                 area={area}
                 onArea={setArea}
-                onPointClick={toggle}
+                onPointClick={pickPin}
                 onMove={move}
                 onReorder={reorder}
                 onRemove={toggle}
@@ -489,7 +555,12 @@ export function PlanScreen({
                 {stepIndex > 0 && (
                   <button
                     type="button"
-                    onClick={() => setStep(STEPS[stepIndex - 1]!)}
+                    onClick={() => {
+                      const target = STEPS[stepIndex - 1]!;
+                      // Volver al paso 1 es reabrirlo: sin esto, cambiar de cobrador ahí lo devolvía a clientes al instante.
+                      if (target === 'date') reopened.current = true;
+                      setStep(target);
+                    }}
                     className="h-11 rounded-xl border border-k-border bg-white px-5 text-[14px] font-medium text-k-text-2 hover:bg-k-bg"
                   >
                     {step === 'preview' ? t('backToEdit') : t('back')}

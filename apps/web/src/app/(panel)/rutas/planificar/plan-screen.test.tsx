@@ -9,21 +9,30 @@ import { PlanScreen, type PlannedVisit } from './plan-screen';
 
 const refresh = vi.fn();
 const push = vi.fn();
+// Lo que hay en la URL: cada prueba lo pone antes de dibujar la pantalla.
+let search = '';
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh, push }),
   usePathname: () => '/rutas/planificar',
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(search),
 }));
 
 // Los mapas son MapLibre (no corre en jsdom) y la lista es un DataTable con su propio estado: acá se prueba el FLUJO del
 // planificador, así que se reemplazan por dobles mínimos que exponen lo que el flujo necesita.
 vi.mock('@/components/route-map', () => ({ RouteMap: () => <div data-testid="route-map" /> }));
 vi.mock('@/components/route-planner/map-panel', () => ({
-  MapPanel: ({ order, onReorder }: { order: { id: string; name: string }[]; onReorder?: (id: string, to: number) => void }) => (
+  MapPanel: ({
+    order,
+    onReorder,
+  }: {
+    order: { id: string; name: string; badges?: { label: string }[] }[];
+    onReorder?: (id: string, to: number) => void;
+  }) => (
     <div data-testid="map-panel">
       {order.map((o, i) => (
         <span key={o.id}>
           {i + 1}. {o.name}
+          {o.badges?.map((b) => <em key={b.label}>{b.label}</em>)}
           {i > 0 && <button onClick={() => onReorder?.(o.id, 0)}>subir {o.name}</button>}
         </span>
       ))}
@@ -87,6 +96,7 @@ const next = () => userEvent.click(screen.getByRole('button', { name: 'Siguiente
 beforeEach(() => {
   refresh.mockClear();
   push.mockClear();
+  search = '';
 });
 
 describe('PlanScreen · el planificador en cuatro pasos (F4/12)', () => {
@@ -98,6 +108,62 @@ describe('PlanScreen · el planificador en cuatro pasos (F4/12)', () => {
     expect(screen.getByText('Teresa Aguilar')).toBeInTheDocument();
     expect(screen.getByText('09:00')).toBeInTheDocument();
     expect(screen.getByText('Estas visitas se marcarán automáticamente en la ruta.')).toBeInTheDocument();
+  });
+
+  describe('llegar desde el tablero con el día y el cobrador ya elegidos', () => {
+    const WITH = 'date=2026-10-09&collectorId=ana';
+
+    it('🔴 abre en clientes, con una línea que dice para quién y sin repetir el paso 1', () => {
+      search = WITH;
+      setup();
+      expect(screen.getByText(/Planificando para Ana Demo/)).toBeInTheDocument();
+      expect(screen.getByRole('checkbox', { name: 'Lidia Mamani' })).toBeInTheDocument();
+      expect(screen.queryByText('Visitas agendadas para ese día (1)')).not.toBeInTheDocument();
+    });
+
+    it('sin día y cobrador en la URL, el paso 1 se muestra como siempre', () => {
+      setup();
+      expect(screen.queryByText(/Planificando para/)).not.toBeInTheDocument();
+      expect(screen.getByText('Visitas agendadas para ese día (1)')).toBeInTheDocument();
+    });
+
+    it('🔴 un cobrador inventado en la URL no salta el paso 1: el banner no puede decir un nombre que no se pidió', () => {
+      search = 'date=2026-10-09&collectorId=zzz';
+      setup();
+      expect(screen.queryByText(/Planificando para/)).not.toBeInTheDocument();
+      expect(screen.getByText('Visitas agendadas para ese día (1)')).toBeInTheDocument();
+    });
+
+    it('«Cambiar fecha o cobrador» reabre el paso 1', async () => {
+      search = WITH;
+      setup();
+      await userEvent.click(screen.getByRole('button', { name: 'Cambiar fecha o cobrador' }));
+      expect(screen.getByText('Visitas agendadas para ese día (1)')).toBeInTheDocument();
+    });
+
+    it('🔴 volver con «Atrás» al paso 1 también lo reabre: cambiar de cobrador ahí no lo devuelve a clientes', async () => {
+      search = WITH;
+      const props = {
+        day: '2026-10-09',
+        today: '2026-10-08',
+        collectors: COLLECTORS,
+        available: [credit('c1', 'Teresa Aguilar', [HOME])],
+        total: 1,
+        routes: [],
+        minStops: 2,
+        filtered: false,
+        categories: [],
+        visits: [VISIT],
+      };
+      const { rerender } = render(<PlanScreen {...props} collectorId="ana" />);
+      await userEvent.click(screen.getByRole('button', { name: 'Atrás' }));
+      expect(screen.getByText('Visitas agendadas para ese día (1)')).toBeInTheDocument();
+      // La persona elige a Bea: la URL cambia y la página vuelve a dibujar la pantalla con otro cobrador.
+      rerender(<PlanScreen {...props} collectorId="bea" visits={[]} />);
+      // Sigue en el paso 1 —con las visitas de Bea, que son ninguna— y no saltó a clientes.
+      expect(screen.getByText('Visitas agendadas para ese día (0)')).toBeInTheDocument();
+      expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    });
   });
 
   it('varios días: cambiar de día es un toque y va a la URL', async () => {

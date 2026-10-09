@@ -60,6 +60,7 @@ export default async function RutaPage({
   }
   const route = detail.body.data;
   const day = route.plannedDate.slice(0, 10);
+  const closed = route.status === 'COMPLETED' || route.status === 'CANCELLED';
   const caps = route.capabilities ?? {
     isOwner: false,
     start: false,
@@ -129,8 +130,13 @@ export default async function RutaPage({
     }),
     // Las visitas de esta ruta: el punto donde se registró cada una (W6-T0).
     apiCall<VisitItem[]>(`/visits?routeId=${params.id}&limit=${DAY_LIMIT}`, { method: 'GET', auth: true }),
-    editing
-      ? apiCall<MoraCreditListItem[]>(`/mora?${availableQuery(planParams, day)}`, { method: 'GET', auth: true })
+    /*
+     * La mora que se puede sumar: **siempre que la ruta siga abierta**, porque de ahí salen las sugerencias del mapa
+     * (mora sin ruta cerca de las paradas). Mirando, va sin filtros —sólo la cartera de este cobrador y la que tiene de
+     * ayuda—; al editar, con los que la persona puso.
+     */
+    !closed
+      ? apiCall<MoraCreditListItem[]>(`/mora?${availableQuery(editing ? planParams : { collectorId: route.collectorId }, day)}`, { method: 'GET', auth: true })
       : null,
     editing ? apiCall<ArrearCategory[]>('/arrear-categories', { method: 'GET', auth: true }) : null,
     // Los pedidos de cambio: los ve quien manda sobre la ruta y quien pide.
@@ -153,7 +159,6 @@ export default async function RutaPage({
   const perms = me.body.data?.permissions ?? [];
   const viewerIsCollector = !!me.body.data && me.body.data.userId === route.collectorId;
   const today = agendaToday?.date ?? todayISO();
-  const closed = route.status === 'COMPLETED' || route.status === 'CANCELLED';
   // Un punto en (0, 0) es el «sin ubicación» de una visita cargada desde el panel: no se dibuja en el mapa.
   const visitPoints = (visits.body.data ?? [])
     .filter((v) => v.latitude !== 0 || v.longitude !== 0)
