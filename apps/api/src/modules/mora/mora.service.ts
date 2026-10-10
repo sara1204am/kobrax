@@ -60,6 +60,8 @@ const ACTIVITY_ERRORS: Record<RecoveryActivityError, string> = {
   EXPECTED_INCOME_DATE_NEEDS_REASON: 'La fecha en que espera cobrar necesita un motivo.',
   PAYER_INVALID: 'Quién responde por el crédito no es válido.',
   ORIGIN_INVALID: 'El origen de la gestión no es válido.',
+  TEMPLATE_INVALID: 'La plantilla de mensaje no es válida.',
+  TEMPLATE_NOT_ALLOWED: 'Solo un mensaje lleva plantilla.',
 };
 
 /** Cuántas gestiones trae la ficha. Es la bitácora del crédito; el completo llega con la sección de gestiones. */
@@ -370,6 +372,7 @@ export class MoraService {
           expectedIncomeDate: dto.expectedIncomeDate,
           payerParty: dto.payerParty as PayerParty | undefined,
           origin: dto.origin as DataOrigin | undefined,
+          templateCode: dto.templateCode,
         });
         const promise = dto.promise
           ? await this.agenda.createPromiseItem(tx, { creditId, details: { amount: dto.promise.amount, promiseDate: dto.promise.promiseDate, paymentMethodCode: dto.promise.paymentMethodCode, bankCode: dto.promise.bankCode } })
@@ -381,7 +384,7 @@ export class MoraService {
       });
 
       // F4/13 · E4: solo se audita cuando trae contexto, y **sin el texto libre**: las notas pueden traer datos personales.
-      if (dto.reasonCode || dto.expectedIncomeDate || dto.payerParty || dto.origin) {
+      if (dto.reasonCode || dto.expectedIncomeDate || dto.payerParty || dto.origin || dto.templateCode) {
         await this.audit.record({
           entity: 'credit_activity',
           entityId: done.activity.id,
@@ -395,6 +398,7 @@ export class MoraService {
             expectedIncomeDate: dto.expectedIncomeDate ?? null,
             payerParty: dto.payerParty ?? null,
             origin: dto.origin ?? null,
+            templateCode: dto.templateCode ?? null,
           },
         });
       }

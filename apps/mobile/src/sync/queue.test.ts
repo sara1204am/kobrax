@@ -776,3 +776,11 @@ describe('send · altas offline confirman su fila provisional', () => {
     expect(mockDetail).toContain('confirm:credit:cre-9');
   });
 });
+
+describe('send · plantilla elegida de una gestión agendada (F4/13 · E5)', () => {
+  it('el código de la plantilla viaja con la gestión', async () => {
+    mockCalls.length = 0;
+    await send({ kind: 'agenda.complete', id: 'a9', outcome: 'CONTACTED', templateCode: 'LAST_NOTICE' } as never);
+    expect(mockCalls.some((x) => x.includes('completeItem:a9') && x.includes('LAST_NOTICE'))).toBe(true);
+  });
+});

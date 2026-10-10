@@ -566,7 +566,8 @@ export class AgendaService {
       if (!item) throw agendaItemNotFound();
       // F4/13 · E4: el contexto (motivo, fecha esperada, quién responde) se valida con la regla compartida, igual que en la
       // ficha de mora. Un día de margen: quien escribe en Bolivia a las 21:00 aún puede ver «hoy» cuando en UTC ya es mañana.
-      const hayContexto = dto.reasonCode !== undefined || dto.expectedIncomeDate !== undefined || dto.payerParty !== undefined || dto.origin !== undefined;
+      const hayContexto =
+        dto.reasonCode !== undefined || dto.expectedIncomeDate !== undefined || dto.payerParty !== undefined || dto.origin !== undefined || dto.templateCode !== undefined;
       if (hayContexto) {
         const ayer = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
         const motivo = validateActivityContext(dto, ACTIVITY_TYPE_BY_AGENDA[item.type], ayer);
@@ -601,6 +602,7 @@ export class AgendaService {
         expectedIncomeDate: dto.expectedIncomeDate,
         payerParty: dto.payerParty as PayerParty | undefined,
         origin: dto.origin as DataOrigin | undefined,
+        templateCode: dto.templateCode,
       });
       const updated = await tx.agendaItem.update({
         where: { id },

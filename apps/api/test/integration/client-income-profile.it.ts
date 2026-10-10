@@ -142,3 +142,33 @@ describe('E3 · aislamiento entre cuentas (RLS)', () => {
     assert.equal(sigue.occupationCode, 'PUBLIC_SERVANT');
   });
 });
+
+describe('E3 · la demo trae datos de contexto (seed)', () => {
+  it('perfiles de ingreso: un funcionario con ciclo trimestral y un transportista semanal', async () => {
+    const perfiles = await prisma.clientIncomeProfile.findMany({ where: { account: { code: 'DEMO' } } });
+    assert.ok(perfiles.length >= 4, 'hay perfiles de ejemplo');
+    assert.ok(perfiles.some((p) => p.occupationCode === 'PUBLIC_SERVANT' && p.incomeCycle === 'QUARTERLY' && p.incomeDay === 15));
+    assert.ok(perfiles.some((p) => p.occupationCode === 'TRANSPORT' && p.incomeCycle === 'WEEKLY'));
+  });
+
+  it('perfil de cobro: lugares con modalidad y franja', async () => {
+    // visit_schedule es JSON: se cuenta por SQL para no depender de cómo Prisma filtra nulos de JSON.
+    const filas = await prisma.$queryRaw<{ n: bigint }[]>`SELECT count(*)::bigint AS n FROM client_locations WHERE visit_schedule IS NOT NULL`;
+    assert.ok(Number(filas[0]!.n) > 0, 'hay lugares con perfil de cobro');
+  });
+
+  it('gestiones con motivo, quién responde y plantilla', async () => {
+    const act = await prisma.creditActivity.findMany({ where: { reasonCode: { not: null } } });
+    assert.ok(act.length >= 4);
+    const motivos = new Set(act.map((a) => a.reasonCode));
+    for (const m of ['LATE_INCOME', 'OVER_INDEBTED', 'CREDIT_FOR_OTHER', 'MOVED_OR_PHONE_CHANGED']) assert.ok(motivos.has(m), `falta ${m}`);
+    assert.ok(await prisma.creditActivity.findFirst({ where: { templateCode: { not: null } } }));
+  });
+
+  it('los motivos sembrados existen en el catálogo de la cuenta demo (la demo es coherente consigo misma)', async () => {
+    const usados = await prisma.creditActivity.findMany({ where: { reasonCode: { not: null } }, select: { reasonCode: true }, distinct: ['reasonCode'] });
+    const catalogo = await prisma.catalogItem.findMany({ where: { catalog: 'NO_PAYMENT_REASON', account: { code: 'DEMO' } }, select: { code: true } });
+    const codigos = new Set(catalogo.map((c) => c.code));
+    for (const u of usados) assert.ok(codigos.has(u.reasonCode!), `${u.reasonCode} no está en el catálogo`);
+  });
+});

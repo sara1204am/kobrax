@@ -48,6 +48,8 @@ export function RegisterSheet({
   const [notes, setNotes] = useState('');
   // F4/13 · E4: motivo, cuándo espera cobrar y quién responde. Solo para llamadas, visitas y mensajes.
   const [ctx, setCtx] = useState(emptyReasonContext());
+  // F4/13 · E5: la plantilla que se eligió (no la que se envió: `wa.me` no lo confirma).
+  const [templateCode, setTemplateCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,6 +60,7 @@ export function RegisterSheet({
       setOutcome(null);
       setNotes('');
       setCtx(emptyReasonContext());
+      setTemplateCode('');
       setError(null);
     }
   }, [visible]);
@@ -133,7 +136,7 @@ export function RegisterSheet({
     <BottomSheet visible={visible} onClose={onClose} title="Registrar gestión">
       <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 480 }}>
         {item.type === AgendaItemType.WHATSAPP && (
-          <WhatsAppBlock vars={vars} phone={detail.target?.phone} onSend={onOpenLink} />
+          <WhatsAppBlock vars={vars} phone={detail.target?.phone} onSend={onOpenLink} onPickTemplate={setTemplateCode} />
         )}
 
         <SectionLabel>Resultado</SectionLabel>
@@ -209,12 +212,13 @@ export function RegisterSheet({
             disabled={!outcome}
             onPress={() =>
               outcome &&
-              submit(() => completeItem(item.id, outcome, notes.trim() || undefined, contextPayload(ctx, reasons, withContext)), {
+              submit(() => completeItem(item.id, outcome, notes.trim() || undefined, { ...contextPayload(ctx, reasons, withContext), ...(templateCode ? { templateCode } : {}) }), {
                 kind: 'agenda.complete',
                 id: item.id,
                 outcome,
                 notes: notes.trim() || undefined,
                 ...contextPayload(ctx, reasons, withContext),
+                ...(templateCode ? { templateCode } : {}),
               })
             }
           />
@@ -229,10 +233,13 @@ function WhatsAppBlock({
   vars,
   phone,
   onSend,
+  onPickTemplate,
 }: {
   vars: Record<string, string>;
   phone?: string;
   onSend: (url: string) => void;
+  /** Avisa qué plantilla se eligió (su código), para dejarla en la gestión. */
+  onPickTemplate?: (code: string) => void;
 }) {
   const [templates, setTemplates] = useState<CatalogOption[]>([]);
   const [body, setBody] = useState('');
@@ -244,7 +251,13 @@ function WhatsAppBlock({
     })();
   }, []);
 
-  const pick = useCallback((t: CatalogOption) => setBody(renderTemplate(t.metadata?.body ?? '', vars)), [vars]);
+  const pick = useCallback(
+    (t: CatalogOption) => {
+      setBody(renderTemplate(t.metadata?.body ?? '', vars));
+      onPickTemplate?.(t.code);
+    },
+    [vars, onPickTemplate],
+  );
 
   return (
     <>

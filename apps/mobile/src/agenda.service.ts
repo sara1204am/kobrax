@@ -89,6 +89,8 @@ export interface ActivityContext {
   reasonCode?: string;
   expectedIncomeDate?: string;
   payerParty?: string;
+  /** Plantilla de mensaje **elegida** (F4/13 · E5), no la enviada: `wa.me` no confirma el envío. */
+  templateCode?: string;
 }
 
 /**

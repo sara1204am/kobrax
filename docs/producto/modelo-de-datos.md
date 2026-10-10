@@ -278,3 +278,16 @@ Init pilares 1-4 (2026-06-16) → índices parciales → tablas auth → reset d
 - Algoritmo de hash de contraseña y forma de generar `receipt_number` (secuencia o cálculo en app).
 - Uso real de `payment_requests` y `arrears` por la aplicación.
 - Migraciones `20260820000000_el_plan_manda_los_topes` y `20260823000000_contadores_mensuales_del_plan`: leídas sólo por nombre.
+
+## Actualización F4/13 — contexto del deudor (2026-10-10)
+
+Capa de datos para la IA. Todo es **opcional**; ninguna regla puede asumir que existe. Detalle en
+[`docs/epics/F4/13-capa-datos-ia-plan.md`](../epics/F4/13-capa-datos-ia-plan.md).
+
+| Cambio | Qué es | Notas |
+|---|---|---|
+| `CatalogType` + 4 valores | `INCOME_SOURCE`, `OCCUPATION`, `NO_PAYMENT_REASON`, `COLLECTION_MODALITY` | Se siembran al registrar la cuenta y con `db:backfill:catalogs` |
+| `client_income_profiles` | Fuente de ingreso, rubro, ciclo, día, detalle y origen. Una fila por cliente | RLS forzada; `CHECK` de día y ciclo |
+| `credit_activities` + 5 columnas | `reason_code`, `expected_income_date`, `payer_party`, `origin`, `template_code` | Nulables; la tabla sigue append-only |
+| `client_locations.visit_schedule` | Perfil de cobro: modalidad, frecuencia, franja, días, quién entrega, indicación | Ya existía; ahora se valida y se devuelve |
+| Enums | `income_cycle`, `data_origin`, `payer_party` | |

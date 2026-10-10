@@ -426,6 +426,8 @@ export const ACTIVITY_ERROR_TEXT: Record<RecoveryActivityError, string> = {
   EXPECTED_INCOME_DATE_NEEDS_REASON: 'Elegí el motivo antes de indicar cuándo espera cobrar.',
   PAYER_INVALID: 'Quién responde por el crédito no es válido.',
   ORIGIN_INVALID: 'El origen de la gestión no es válido.',
+  TEMPLATE_INVALID: 'La plantilla de mensaje no es válida.',
+  TEMPLATE_NOT_ALLOWED: 'Solo un mensaje lleva plantilla.',
 };
 
 export const BANK_REQUIRED_TEXT = 'Elegí el banco: este medio de pago lo necesita.';

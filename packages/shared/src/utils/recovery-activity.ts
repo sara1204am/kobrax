@@ -56,6 +56,11 @@ export interface RecoveryActivityInput {
   payerParty?: string;
   /** De dónde salió: a mano o dictada. Ausente = a mano. */
   origin?: string;
+  /**
+   * Plantilla de mensaje **elegida** (F4/13 · E5): código del catálogo `WHATSAPP_TEMPLATE`. Es la plantilla que se eligió,
+   * no la que se envió: `wa.me` no confirma el envío (D-05). Solo en un mensaje.
+   */
+  templateCode?: string;
 }
 
 /** Por qué una gestión no es válida. Es un código, no una frase: cada lado la dice en su idioma. */
@@ -78,7 +83,9 @@ export type RecoveryActivityError =
   | 'EXPECTED_INCOME_DATE_PAST'
   | 'EXPECTED_INCOME_DATE_NEEDS_REASON'
   | 'PAYER_INVALID'
-  | 'ORIGIN_INVALID';
+  | 'ORIGIN_INVALID'
+  | 'TEMPLATE_INVALID'
+  | 'TEMPLATE_NOT_ALLOWED';
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -113,7 +120,7 @@ export function validateRecoveryActivity(input: RecoveryActivityInput, today: st
  * Exportada porque la agenda registra gestiones por otra vía (`completeItem`) y debe aplicar la misma regla.
  */
 export function validateActivityContext(
-  ctx: Pick<RecoveryActivityInput, 'reasonCode' | 'expectedIncomeDate' | 'payerParty' | 'origin'>,
+  ctx: Pick<RecoveryActivityInput, 'reasonCode' | 'expectedIncomeDate' | 'payerParty' | 'origin' | 'templateCode'>,
   type: string,
   today: string,
 ): RecoveryActivityError | null {
@@ -132,6 +139,11 @@ export function validateActivityContext(
 
   if (ctx.payerParty !== undefined && !(['HOLDER', 'GUARANTOR', 'CODEBTOR', 'BENEFICIARY', 'NOT_LOCATED'] as string[]).includes(ctx.payerParty)) return 'PAYER_INVALID';
   if (ctx.origin !== undefined && !(ORIGINS as readonly string[]).includes(ctx.origin)) return 'ORIGIN_INVALID';
+  // La plantilla es de un mensaje: en una llamada o una visita no tiene sentido.
+  if (ctx.templateCode !== undefined) {
+    if (!REASON_CODE.test(ctx.templateCode)) return 'TEMPLATE_INVALID';
+    if (type !== 'MESSAGE') return 'TEMPLATE_NOT_ALLOWED';
+  }
   return null;
 }
 

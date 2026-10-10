@@ -1042,7 +1042,9 @@
             "EXPECTED_INCOME_DATE_PAST": "The date they expect to be paid cannot be before today.",
             "EXPECTED_INCOME_DATE_NEEDS_REASON": "Choose the reason before saying when they expect to be paid.",
             "PAYER_INVALID": "Who answers for the credit is not valid.",
-            "ORIGIN_INVALID": "The origin of the action is not valid."
+            "ORIGIN_INVALID": "The origin of the action is not valid.",
+            "TEMPLATE_INVALID": "The message template is not valid.",
+            "TEMPLATE_NOT_ALLOWED": "Only a message carries a template."
           }
         },
         "person": {

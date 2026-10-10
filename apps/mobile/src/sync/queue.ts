@@ -149,7 +149,7 @@ export type QueuedAction =
   | { kind: 'arrears.mark'; creditId: string; days?: number }
   | { kind: 'arrears.clear'; creditId: string; input: ClearArrearsInput }
   /** Idempotente en el server: completar una gestión ya ejecutada devuelve la misma gestión. */
-  | { kind: 'agenda.complete'; id: string; outcome: AgendaOutcome; notes?: string; reasonCode?: string; expectedIncomeDate?: string; payerParty?: string }
+  | { kind: 'agenda.complete'; id: string; outcome: AgendaOutcome; notes?: string; reasonCode?: string; expectedIncomeDate?: string; payerParty?: string; templateCode?: string }
   /**
    * `AgendaPostponeStep` y no `number`: posponer es en pasos fijos, y el tipo del dominio ya lo dice.
    *
@@ -493,6 +493,7 @@ export async function send(action: PendingAction): Promise<SendResult> {
         reasonCode: action.reasonCode,
         expectedIncomeDate: action.expectedIncomeDate,
         payerParty: action.payerParty,
+        templateCode: action.templateCode,
       });
       return withAgendaExplanation(mapMutate(res), httpStatusOf(res));
     }

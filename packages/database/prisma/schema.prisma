@@ -1125,6 +1125,8 @@ model CreditActivity {
   payerParty         PayerParty? @map("payer_party")
   /// De dónde salió: a mano o dictada. `null` = a mano (lo anterior).
   origin             DataOrigin?
+  /// F4/13 · E5 — plantilla de mensaje ELEGIDA (código de `WHATSAPP_TEMPLATE`). No dice que se envió: `wa.me` no lo confirma.
+  templateCode       String?     @map("template_code")
   createdAt DateTime           @default(now()) @map("created_at")
 
   account Account              @relation(fields: [accountId], references: [id])

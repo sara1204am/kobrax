@@ -1848,3 +1848,27 @@ describe('AgendaService.complete — contexto de la gestión (F4/13 · E4)', () 
     );
   });
 });
+
+describe('AgendaService.complete — plantilla elegida (F4/13 · E5)', () => {
+  it('deja el código de la plantilla en la actividad de un mensaje', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'WHATSAPP', status: 'SCHEDULED' }) });
+    await service.complete('a1', { outcome: 'CONTACTED', templateCode: 'LAST_NOTICE' } as never);
+    assert.equal(calls.activity!.templateCode, 'LAST_NOTICE');
+    assert.equal(calls.activity!.type, 'MESSAGE');
+  });
+
+  it('🔴 sin plantilla queda en NULL', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'WHATSAPP', status: 'SCHEDULED' }) });
+    await service.complete('a1', { outcome: 'CONTACTED' } as never);
+    assert.equal(calls.activity!.templateCode, null);
+  });
+
+  it('una llamada no lleva plantilla → AGENDA_INVALID_CONTEXT y no escribe', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'CALL', status: 'SCHEDULED' }) });
+    await assert.rejects(
+      () => service.complete('a1', { outcome: 'CONTACTED', templateCode: 'INITIAL' } as never),
+      (e: { getResponse: () => { code: string } }) => e.getResponse().code === 'AGENDA_INVALID_CONTEXT',
+    );
+    assert.equal(calls.activity, undefined);
+  });
+});

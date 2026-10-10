@@ -28,6 +28,8 @@ export async function recordCreditActivity(
     expectedIncomeDate?: string | null;
     payerParty?: PayerParty | null;
     origin?: DataOrigin | null;
+    /** F4/13 · E5 — plantilla de mensaje elegida. */
+    templateCode?: string | null;
   },
 ): Promise<CreditActivity> {
   const episodeId = await openEpisodeId(tx, data.creditId);
@@ -47,6 +49,7 @@ export async function recordCreditActivity(
       expectedIncomeDate: data.expectedIncomeDate ? new Date(`${data.expectedIncomeDate}T00:00:00.000Z`) : null,
       payerParty: data.payerParty ?? null,
       origin: data.origin ?? null,
+      templateCode: data.templateCode ?? null,
     },
   });
   await tx.credit.update({ where: { id: data.creditId }, data: { lastActionAt: new Date() } });
@@ -56,7 +59,7 @@ export async function recordCreditActivity(
 /** Una gestión de la bitácora del crédito, como la ve el panel (mismos campos que la del caso, más el episodio). */
 export function serializeCreditActivity(
   a: Pick<CreditActivity, 'id' | 'type' | 'result' | 'notes' | 'userId' | 'createdAt' | 'episodeId'> &
-    Partial<Pick<CreditActivity, 'reasonCode' | 'expectedIncomeDate' | 'payerParty' | 'origin'>>,
+    Partial<Pick<CreditActivity, 'reasonCode' | 'expectedIncomeDate' | 'payerParty' | 'origin' | 'templateCode'>>,
   names?: NameMap,
 ) {
   // Una `ASSIGNMENT` guarda en la nota el id de a quién se asignó: se resuelve acá para que ningún cliente muestre un uuid.
@@ -76,6 +79,7 @@ export function serializeCreditActivity(
     expectedIncomeDate: a.expectedIncomeDate ? a.expectedIncomeDate.toISOString().slice(0, 10) : undefined,
     payerParty: a.payerParty ?? undefined,
     origin: a.origin ?? undefined,
+    templateCode: a.templateCode ?? undefined,
     createdAt: a.createdAt,
   };
 }

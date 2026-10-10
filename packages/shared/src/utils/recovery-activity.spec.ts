@@ -136,3 +136,24 @@ describe('validateRecoveryActivity — contexto de la gestión (F4/13 · E4)', (
     expect(v({ type: 'CALL', result: 'NOT_FOUND', reasonCode: 'mal' })).toBe('RESULT_NOT_ALLOWED');
   });
 });
+
+describe('validateRecoveryActivity — plantilla elegida (F4/13 · E5)', () => {
+  it('un mensaje puede llevar la plantilla que se eligió', () => {
+    expect(v({ type: 'MESSAGE', result: 'CONTACTED', templateCode: 'LAST_NOTICE' })).toBeNull();
+  });
+
+  it('🔴 sin plantilla es lo de siempre', () => {
+    expect(v({ type: 'MESSAGE', result: 'CONTACTED' })).toBeNull();
+  });
+
+  it('una llamada, una visita o una nota no llevan plantilla', () => {
+    expect(v({ type: 'CALL', result: 'CONTACTED', templateCode: 'INITIAL' })).toBe('TEMPLATE_NOT_ALLOWED');
+    expect(v({ type: 'VISIT', result: 'CONTACTED', templateCode: 'INITIAL' })).toBe('TEMPLATE_NOT_ALLOWED');
+    expect(v({ type: 'NOTE', notes: 'x', templateCode: 'INITIAL' })).toBe('TEMPLATE_NOT_ALLOWED');
+  });
+
+  it('el código tiene formato de código', () => {
+    expect(v({ type: 'MESSAGE', result: 'CONTACTED', templateCode: 'cobro inicial' })).toBe('TEMPLATE_INVALID');
+    expect(v({ type: 'MESSAGE', result: 'CONTACTED', templateCode: '' })).toBe('TEMPLATE_INVALID');
+  });
+});

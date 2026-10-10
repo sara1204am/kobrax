@@ -800,3 +800,19 @@ Código: `apps/api/src/common/plan/` y catálogo `packages/shared/src/constants/
 - **Validación de entrada.** Pipe global whitelist+forbidNonWhitelisted; parámetros UUID con `ParseUUIDPipe`; enums con `ParseEnumPipe`; consultas analíticas sin cast `::uuid` ni intervalos construidos desde input.
 - **Subidas.** Lista blanca de MIME, 8 MB, nombre por hash, aislamiento por carpeta de tenant, `X-Content-Type-Options: nosniff` (helmet) con tipo deducido de la extensión.
 - **Secretos/entorno.** `config/env.validation.ts` (zod): `JWT_SECRET` y `JWT_REFRESH_SECRET` ≥ 16 caracteres; claves de cifrado y blind index validadas al primer uso/boot; SMTP/FCM opcionales.
+
+## Actualización F4/13 — contexto del deudor (2026-10-10)
+
+| Método | Ruta | Permiso | Qué hace |
+|---|---|---|---|
+| GET | `/clients/:id/income-profile` | `client:read` | Perfil de ingreso o `null` |
+| PUT | `/clients/:id/income-profile` | `client:write` | Guarda el perfil completo (idempotente); cuerpo vacío lo borra y responde `{}` |
+| PATCH | `/clients/:id/locations/:lid` | `client:write` | Ahora acepta `visitSchedule` y `riskLevel` (`null` borra el perfil de cobro) |
+| POST | `/mora/:id/activities` | `collection:write` | Acepta `reasonCode`, `expectedIncomeDate`, `payerParty`, `origin`, `templateCode` |
+| POST | `/agenda/:id/complete` | agenda | Acepta el mismo contexto (solo llamada, visita y mensaje) |
+| POST | `/clients` | `client:write` | Acepta `incomeProfile`; el alta atómica ya conserva `visitSchedule` y `riskLevel` |
+| PATCH/DELETE | `/catalogs/:tipo/:id` | `catalog:write` | Ahora filtran por tipo además del id; el `metadata` de rubros y motivos se valida |
+
+**Reglas** (en `packages/shared`, únicas para API, web y móvil): `validateActivityContext` (el motivo puede ir con una
+promesa; la fecha esperada necesita motivo y un día real; solo un mensaje lleva plantilla), `validateIncomeProfile` (el día
+solo con ciclo semanal, mensual o trimestral) y `validateCollectionProfile` (franja con `from < to`, días 1–7).

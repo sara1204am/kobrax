@@ -157,6 +157,8 @@ export class CreateMoraActivityDto {
   @IsOptional() @IsString() @MaxLength(10) expectedIncomeDate?: string;
   @IsOptional() @IsString() @MaxLength(20) payerParty?: string;
   @IsOptional() @IsString() @MaxLength(20) origin?: string;
+  /** Plantilla de mensaje elegida (F4/13 · E5). Solo en un mensaje. */
+  @IsOptional() @IsString() @MaxLength(40) templateCode?: string;
   /** Si viene, esa gestión agendada (SCHEDULED, del mismo crédito) se marca ejecutada con esta actividad, en la misma transacción. */
   @IsOptional() @IsUUID() agendaItemId?: string;
 }

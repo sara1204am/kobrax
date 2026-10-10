@@ -149,3 +149,28 @@ describe('E4 · contexto de la gestión', () => {
     assert.ok(!despues.includes('sueldo'));
   });
 });
+
+describe('E5 · plantilla elegida', () => {
+  it('🔴 un mensaje guarda el código de la plantilla y la ficha lo devuelve', async () => {
+    const id = randomUUID();
+    const r = await call(manager, 'POST', `/mora/${creditId}/activities`, { id, type: 'MESSAGE', result: 'CONTACTED', templateCode: 'LAST_NOTICE' });
+    assert.ok(r.status === 200 || r.status === 201, JSON.stringify(r.error));
+    const fila = await prisma.creditActivity.findUniqueOrThrow({ where: { id } });
+    assert.equal(fila.templateCode, 'LAST_NOTICE');
+    const act = (await detail()).activities.find((a) => a.id === id) as (Activity & { templateCode?: string }) | undefined;
+    assert.equal(act?.templateCode, 'LAST_NOTICE');
+  });
+
+  it('una llamada con plantilla se rechaza', async () => {
+    const r = await call(manager, 'POST', `/mora/${creditId}/activities`, { type: 'CALL', result: 'CONTACTED', templateCode: 'LAST_NOTICE' });
+    assert.equal(r.status, 400);
+    assert.equal(r.error?.code, 'MORA_TEMPLATE_NOT_ALLOWED');
+  });
+
+  it('un mensaje sin plantilla queda con NULL', async () => {
+    const id = randomUUID();
+    await call(manager, 'POST', `/mora/${creditId}/activities`, { id, type: 'MESSAGE', result: 'NO_ANSWER' });
+    const fila = await prisma.creditActivity.findUniqueOrThrow({ where: { id } });
+    assert.equal(fila.templateCode, null);
+  });
+});

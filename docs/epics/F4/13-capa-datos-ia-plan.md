@@ -1,6 +1,6 @@
 # F4/13 · Capa de datos para la IA: plan por etapas
 
-Estado: **validado (gate PASS, ver §11)** el 2026-10-10; en implementación por etapas. Parte de
+Estado: **implementado E1–E5; E6 verificada** (2026-10-10). Gate PASS (ver §11). Resultado por etapa en §10. Parte de
 [`docs/producto/ia-plan-maestro.md`](../../producto/ia-plan-maestro.md) §2 (capa A) y de la lectura del código hecha el
 mismo día; los números de línea citados corresponden a la rama `docs/ia-capa-datos` (desde `dev`).
 
@@ -538,6 +538,44 @@ motivo (capa C).
 
 **Por validar en teléfono**: el bloque de motivo en la hoja de gestión y al completar una gestión de la agenda, y que una
 gestión registrada sin señal suba con su motivo.
+
+### E5 · Plantilla usada ✅ (2026-10-10)
+
+**Hecho**: columna nulable `template_code` en `credit_activities`; regla compartida (solo un mensaje, formato de código);
+`POST /mora/:id/activities` y `POST /agenda/:id/complete` la aceptan; la ficha la devuelve; el móvil la registra al elegir una
+plantilla en la hoja de WhatsApp y viaja por la cola (una acción anterior sale igual). El nombre dice **elegida**: `wa.me` no
+confirma el envío (D-05).
+
+**Verificación**: shared 423 pruebas; API integración `activity-context` 15 de 15.
+
+**Queda**: la web no ofrece plantillas al completar una gestión (D-51).
+
+### E6 · Importación (verificación) ✅ (2026-10-10)
+
+**Resultado: no existe.** El catálogo de campos de la importación (`apps/api/src/modules/imports/field-catalog.ts`) no tiene
+rubro, ciclo ni tipo de crédito, y `typeCode` no se mapea. Lo único cercano es «negocio / dirección del negocio»
+(`businessAddress`), una señal indirecta de que el cliente es comerciante. Si se quiere, es un plan aparte (A5): agregar
+`occupation` y `creditType` como campos opcionales, con su regla de columnas en `FIELD-RULES`.
+
+### Seeds ✅ (2026-10-10)
+
+La lista de catálogos del seed ahora sale de `CATALOG_DEFAULTS` (la misma que el registro). Las cuentas DEMO traen
+perfiles de ingreso (funcionario trimestral, transportista semanal, profesional mensual, comerciante diario), el perfil de
+cobro «en el negocio, todos los días» en los lugares con negocio, y seis gestiones con motivo, quién responde y plantilla.
+Validado **en una base nueva** por una prueba de integración. **No se ejecutó `db:seed:refresh` en la base local** (D-54).
+
+### Resumen de la capa A
+
+| Etapa | Estado |
+|---|---|
+| E1 · Catálogos y siembra | ✅ |
+| E2 · Perfil de cobro | ✅ |
+| E3 · Perfil de ingreso | ✅ |
+| E4 · Motivo en la gestión | ✅ |
+| E5 · Plantilla usada | ✅ |
+| E6 · Importación | ✅ verificada (no existe; plan aparte) |
+
+**Verificación final**: shared 423 · API 1.583 unitarias + **99 de integración** (9 archivos, base desde cero) · web 971 · móvil 959 pruebas, todas en verde.
 
 ## 11. Validación del plan (gate `/f10-validar-plan`, adaptado — D-10)
 
