@@ -162,6 +162,27 @@ export const authService = {
     return { backupCodes: res.data.backupCodes };
   },
 
+  /**
+   * Apaga el segundo factor (`POST /auth/mfa/disable`). Reautentica con la **contraseña** (o un código). Un 401 acá es
+   * «contraseña incorrecta», no sesión muerta: `authedFetch` ya no limpia la sesión por eso.
+   */
+  async mfaDisable(password: string): Promise<{ ok: true } | { error: string }> {
+    const res = await authedFetch('/auth/mfa/disable', { method: 'POST', body: { password } });
+    if (res.status === 'unauthenticated') return { error: 'Sesión expirada' };
+    if (res.status === 0) return { error: 'Sin conexión. Revisa tu red e intenta de nuevo.' };
+    if (res.status !== 200 && res.status !== 204) return { error: errMessage(res as ApiResult<unknown>) };
+    return { ok: true };
+  },
+
+  /** Genera códigos de respaldo nuevos (`POST /auth/mfa/backup-codes/regenerate`); los anteriores dejan de servir. */
+  async mfaRegenerate(): Promise<{ backupCodes: string[] } | { error: string }> {
+    const res = await authedFetch<{ backupCodes: string[] }>('/auth/mfa/backup-codes/regenerate', { method: 'POST' });
+    if (res.status === 'unauthenticated') return { error: 'Sesión expirada' };
+    if (res.status === 0) return { error: 'Sin conexión. Revisa tu red e intenta de nuevo.' };
+    if (res.status !== 200 || !res.data) return { error: errMessage(res as ApiResult<unknown>) };
+    return { backupCodes: res.data.backupCodes };
+  },
+
   async selectAccount(accountId: string): Promise<{ step: Step } | { error: string }> {
     if (!flow.preAuthToken) return { error: 'Sesión de login expirada' };
     const res = await apiFetch<AuthTokens>('/auth/select-account', {

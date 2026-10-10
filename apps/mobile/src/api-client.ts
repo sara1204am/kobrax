@@ -44,6 +44,10 @@ async function doRefresh(): Promise<AuthTokens | null> {
   return res.data;
 }
 
+/** Códigos 401 que dicen «la contraseña o el código que mandaste no es correcto», no «tu sesión venció». */
+const CREDENTIAL_REJECTION_CODES = new Set(['AUTH_001', 'AUTH_006']);
+export const isCredentialRejection = (code: string | undefined): boolean => !!code && CREDENTIAL_REJECTION_CODES.has(code);
+
 /**
  * Hace la petición con el access token actual; ante 401 refresca y reintenta una vez.
  * - Sin sesión local → `status: 'unauthenticated'` (el caller manda a login).
@@ -58,6 +62,9 @@ export async function authedFetch<T>(
   if (!session) return { status: 'unauthenticated', data: null, error: null };
 
   let res = await apiFetch<T>(path, { ...init, token: session.accessToken });
+  // Un 401 por credencial equivocada (clave actual mal escrita, código MFA inválido) lo contesta un servidor que SÍ reconoció la
+  // sesión: no es sesión muerta. Refrescar y limpiar acá cerraba la sesión por un tipeo.
+  if (res.status === 401 && isCredentialRejection(res.error?.code)) return res;
   if (res.status === 401) {
     const refreshed = await refreshSession();
     if (!refreshed) return res;
