@@ -9,7 +9,7 @@
  * consulta que después va a consultarse — hidratar con otros parámetros llena casillas que nadie
  * mira, que es exactamente el defecto que destapó la prueba de campo.
  */
-import { CatalogType, RouteStatus } from '@kobrax/shared';
+import { CACHE_MAX_BYTES, CACHE_TTL_DAYS, CatalogType, RouteStatus } from '@kobrax/shared';
 import { getMora, getMoraMetrics, listArrearCategories, listMora, listMoraEpisodes, listMoraNotes, listMoraPromises, listPortfolio, MORA_LIMIT, TENANT_CURRENCY_PROBE_LIMIT } from '../mora.service';
 import type { MoraRow } from '../mora';
 import { getRoute, listRoutes } from '../routes.service';
@@ -203,6 +203,8 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
     return 'ok';
   });
 
+  // Con datos recién bajados se poda lo vencido o lo que pasa del tope; sin señal NO se poda (no hay con qué reemplazarlo).
+  if (ok.length > 0) await db.purgeCache(CACHE_TTL_DAYS * 86_400_000, CACHE_MAX_BYTES);
   return { ok, failed, offline };
 }
 

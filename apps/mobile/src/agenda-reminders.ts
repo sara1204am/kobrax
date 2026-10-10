@@ -91,3 +91,13 @@ export function planReminders(items: AgendaListItem[], now: Date = new Date()): 
 
   return out.sort((a, b) => a.at.getTime() - b.at.getTime() || a.id.localeCompare(b.id)).slice(0, MAX_REMINDERS);
 }
+
+/**
+ * Los avisos que sobran para no pasar del tope (iOS descarta en silencio los que exceden 64): quedan los **más cercanos**.
+ * `at` en ms; sin fecha legible (no debería pasar) se considera lejano y sale primero. Pura.
+ */
+export function overflowIds(scheduled: { id: string; at: number | null }[], max: number = MAX_REMINDERS): string[] {
+  if (scheduled.length <= max) return [];
+  const byProximity = [...scheduled].sort((a, b) => (a.at ?? Infinity) - (b.at ?? Infinity) || a.id.localeCompare(b.id));
+  return byProximity.slice(max).map((s) => s.id);
+}

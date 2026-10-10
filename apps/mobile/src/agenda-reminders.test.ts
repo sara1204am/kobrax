@@ -1,5 +1,5 @@
 import type { AgendaListItem } from '@kobrax/shared';
-import { MAX_REMINDERS, planReminders, reminderId } from './agenda-reminders';
+import { MAX_REMINDERS, overflowIds, planReminders, reminderId } from './agenda-reminders';
 
 const item = (id: string, scheduledDate: string, over: Record<string, unknown> = {}) =>
   ({ id, scheduledDate: `${scheduledDate}T00:00:00.000Z`, status: 'SCHEDULED', type: 'CALL', clientName: 'Pedro Ticona', ...over }) as unknown as AgendaListItem;
@@ -66,5 +66,21 @@ describe('planReminders', () => {
   it('la hora es de pared del teléfono: «las 15:30» de ese día, no un corrimiento de UTC', () => {
     const [r] = planReminders([item('g', '2026-10-07', { scheduledTime: '15:30' })], NOW);
     expect([r!.at.getFullYear(), r!.at.getMonth(), r!.at.getDate(), r!.at.getHours(), r!.at.getMinutes()]).toEqual([2026, 9, 7, 15, 15]);
+  });
+});
+
+describe('overflowIds (tope de avisos)', () => {
+  const at = (id: string, minutes: number | null) => ({ id, at: minutes === null ? null : minutes * 60_000 });
+
+  it('bajo el tope no saca nada', () => {
+    expect(overflowIds([at('a', 1), at('b', 2)], 2)).toEqual([]);
+  });
+
+  it('pasado el tope, quedan los más cercanos y sale lo más lejano', () => {
+    expect(overflowIds([at('lejos', 90), at('cerca', 5), at('medio', 30)], 2)).toEqual(['lejos']);
+  });
+
+  it('sin fecha legible sale primero (se considera lejano)', () => {
+    expect(overflowIds([at('x', null), at('a', 1), at('b', 2)], 2)).toEqual(['x']);
   });
 });

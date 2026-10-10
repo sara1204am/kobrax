@@ -67,6 +67,12 @@ export default function MasScreen() {
               icon="options-outline"
               onPress={() => router.push('/ajustes/importacion')}
             />
+            <ListRow
+              title="Historial de importaciones"
+              subtitle="Las últimas corridas y qué hicieron"
+              icon="time-outline"
+              onPress={() => router.push('/ajustes/importacion-historial')}
+            />
           </View>
         )}
 

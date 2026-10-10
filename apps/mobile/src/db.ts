@@ -195,6 +195,39 @@ async function ensureVersion(db: SQLite.SQLiteDatabase): Promise<void> {
 
 // ── Caché ─────────────────────────────────────────────────────────────────────
 
+/** Lo que la purga NUNCA toca: la sesión (entrar sin señal), los catálogos (chicos y sin PII) y los totales de lista. */
+const PURGE_PROTECTED = ['session', 'catalog', 'arrear.categories', 'list.meta'] as const;
+
+/**
+ * Poda del caché (D-9): lo que no se renovó en `ttlMs` sale, y si aun así pasa de `maxBytes` salen las filas **menos
+ * recientes**. Retener fichas de personas más de una semana es riesgo sin beneficio. **No toca la cola** ni `meta`.
+ * Devuelve cuántas filas sacó; nunca lanza hacia afuera (una poda que falla no debe romper la hidratación).
+ */
+export async function purgeCache(ttlMs: number, maxBytes: number, now: number = Date.now()): Promise<number> {
+  try {
+    const db = await open();
+    const keep = PURGE_PROTECTED.map(() => '?').join(', ');
+    let removed = 0;
+    const expired = await db.runAsync(`DELETE FROM cache WHERE fetched_at < ? AND kind NOT IN (${keep})`, [now - ttlMs, ...PURGE_PROTECTED]);
+    removed += expired.changes;
+
+    // El tamaño se aproxima con el largo del JSON (SQLite no da bytes por fila): alcanza para acotar.
+    for (let pass = 0; pass < 20; pass++) {
+      const row = await db.getFirstAsync<{ bytes: number }>('SELECT COALESCE(SUM(LENGTH(json)), 0) AS bytes FROM cache');
+      if ((row?.bytes ?? 0) <= maxBytes) break;
+      const trimmed = await db.runAsync(
+        `DELETE FROM cache WHERE rowid IN (SELECT rowid FROM cache WHERE kind NOT IN (${keep}) ORDER BY fetched_at ASC LIMIT 100)`,
+        [...PURGE_PROTECTED],
+      );
+      if (trimmed.changes === 0) break;
+      removed += trimmed.changes;
+    }
+    return removed;
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * Guarda un lote de un recurso. `scope` es la clave por la que después se filtra (la fecha de la
  * agenda, el id del cliente de un caso); `null` cuando el recurso se lee entero.

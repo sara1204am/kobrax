@@ -13,7 +13,7 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import type { AgendaListItem } from '@kobrax/shared';
 import * as db from './db';
-import { planReminders, reminderId } from './agenda-reminders';
+import { MAX_REMINDERS, overflowIds, planReminders, reminderId } from './agenda-reminders';
 
 const CHANNEL = 'agenda';
 const ASKED_KEY = 'agenda.notifications.asked';
@@ -80,10 +80,25 @@ export async function syncAgendaReminders(items: AgendaListItem[], opts: { compl
         trigger: { date: p.at, ...(Platform.OS === 'android' ? { channelId: CHANNEL } : {}) },
       });
     }
-    return planned.length;
+    // Con listas parciales los avisos se van sumando: si pasan del tope se quedan los más cercanos.
+    const all = await Notifications.getAllScheduledNotificationsAsync();
+    const mine = all
+      .filter((n) => n.identifier.startsWith(PREFIX))
+      .map((n) => ({ id: n.identifier, at: triggerTime(n.trigger) }));
+    for (const id of overflowIds(mine, MAX_REMINDERS)) await Notifications.cancelScheduledNotificationAsync(id);
+    return Math.min(planned.length, MAX_REMINDERS);
   } catch {
     return 0;
   }
+}
+
+/** Cuándo suena un aviso programado, en ms. El sistema devuelve el disparador con distinta forma según plataforma. */
+function triggerTime(trigger: unknown): number | null {
+  const t = trigger as { value?: unknown; date?: unknown } | null | undefined;
+  const raw = t?.value ?? t?.date;
+  if (typeof raw === 'number') return raw;
+  if (raw instanceof Date) return raw.getTime();
+  return null;
 }
 
 /** Una gestión dejó de estar pendiente (o cambió de hora): su aviso ya no corresponde. */
