@@ -87,6 +87,24 @@ describe('RouteChangesService.create · pedir un cambio (F4/12)', () => {
     assert.ok(calls.audit.includes('route_change_request:CREATE'));
   });
 
+  it('con id del teléfono: reintentar devuelve el mismo pedido, sin duplicar ni avisar de nuevo', async () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    const { service, requests, calls } = makeService({ userId: 'u-pide', stops: { s1: { status: 'PENDING' } } });
+    const first = await service.create('r1', { id, kind: 'REMOVE_STOP', payload: { stopId: 's1' }, reason: 'El cliente se mudó' } as never);
+    const again = await service.create('r1', { id, kind: 'REMOVE_STOP', payload: { stopId: 's1' }, reason: 'El cliente se mudó' } as never);
+    assert.equal(first.id, id);
+    assert.equal(again.id, id);
+    assert.equal(requests.length, 1);
+    assert.equal(calls.events.length, 1);
+    assert.equal(calls.audit.filter((a) => a === 'route_change_request:CREATE').length, 1);
+  });
+
+  it('el id de un pedido ajeno se rechaza (ROUTE_REQUEST_ID) y no revela el contenido', async () => {
+    const id = '22222222-2222-4222-8222-222222222222';
+    const { service } = makeService({ userId: 'u-pide', requests: [{ ...PENDING, id, requestedBy: 'otra-persona' }] });
+    await rejectsWithCode(service.create('r1', { id, kind: 'CANCEL', reason: 'Cambio de zona' } as never), 'ROUTE_REQUEST_ID');
+  });
+
   it('quien manda sobre la ruta no pide permiso: lo hace directo (ROUTE_REQUEST_NOT_NEEDED)', async () => {
     const { service, requests } = makeService({ canManage: true });
     await rejectsWithCode(service.create('r1', { kind: 'CANCEL', reason: 'Cambio de zona' } as never), 'ROUTE_REQUEST_NOT_NEEDED');

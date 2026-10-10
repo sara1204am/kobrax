@@ -9,7 +9,7 @@
  * consulta que después va a consultarse — hidratar con otros parámetros llena casillas que nadie
  * mira, que es exactamente el defecto que destapó la prueba de campo.
  */
-import { CatalogType, RouteStatus } from '@kobrax/shared';
+import { CACHE_MAX_BYTES, CACHE_TTL_DAYS, CatalogType, RouteStatus } from '@kobrax/shared';
 import { getMora, getMoraMetrics, listArrearCategories, listMora, listMoraEpisodes, listMoraNotes, listMoraPromises, listPortfolio, MORA_LIMIT, TENANT_CURRENCY_PROBE_LIMIT } from '../mora.service';
 import type { MoraRow } from '../mora';
 import { getRoute, listRoutes } from '../routes.service';
@@ -23,6 +23,9 @@ import { listCreditPayments, listPaymentsByDay } from '../payments.service';
 import { getClient, type ClientDetail } from '../clients.service';
 import { todayISO } from '../agenda-form';
 import * as db from '../db';
+import { getSession } from '../session';
+import { preloadImages } from '../image-cache';
+import { photoUri } from '../photo-uri';
 
 /**
  * Los catálogos que las pantallas de campo abren, **verificados uno por uno** contra el código que
@@ -142,7 +145,20 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
     if (res.status !== 'ok') return res.status === 'offline' ? 'offline' : 'error';
     const activa = res.data[0];
     if (!activa) return 'ok'; // sin ruta hoy no hay nada que bajar
-    return estado(getRoute(activa.id));
+    const detalle = await getRoute(activa.id);
+    if (detalle.status === 'ok') {
+      // La principal de cada parada pendiente: el itinerario se ve completo sin señal. Nunca tumba la hidratación.
+      try {
+        const session = await getSession();
+        const fotos = (detalle.data.stops ?? [])
+          .filter((p) => p.status === 'PENDING')
+          .map((p) => (p.locationPhotoUrl ? photoUri(p.locationPhotoUrl) ?? undefined : undefined));
+        if (session) await preloadImages(fotos, session.accessToken);
+      } catch {
+        /* una foto que no baja no es motivo de fallar */
+      }
+    }
+    return estado(Promise.resolve(detalle));
   });
 
   // Catálogos: sin ellos, el sheet de registrar un pago se abre vacío en el campo.
@@ -203,6 +219,8 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
     return 'ok';
   });
 
+  // Con datos recién bajados se poda lo vencido o lo que pasa del tope; sin señal NO se poda (no hay con qué reemplazarlo).
+  if (ok.length > 0) await db.purgeCache(CACHE_TTL_DAYS * 86_400_000, CACHE_MAX_BYTES);
   return { ok, failed, offline };
 }
 

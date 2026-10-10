@@ -29,9 +29,18 @@ import { deleteQueuePhoto, persistPhoto, photoExists, type PendingPhoto } from '
 import { uploadImage, type UploadResult } from '../uploads.service';
 import { addVisitEvidence, createVisit, type CreateVisitInput } from '../field.service';
 import { createPayment, type NewPayment } from '../payments.service';
-import { updateRouteStatus } from '../routes.service';
 import {
+  createChangeRequest,
+  decideChangeRequest,
+  updateRouteStatus,
+  updateStop,
+  type ChangeDecision,
+  type NewChangeRequest,
+} from '../routes.service';
+import {
+  addAttachment,
   createClient,
+  getClient,
   removeContact,
   removeLocation,
   updateClient,
@@ -60,6 +69,7 @@ import {
   type RescheduleAgendaInput,
 } from '../agenda.service';
 import { addMoraActivity, addMoraNote, setMoraPriority, type PinnablePriority } from '../mora.service';
+import { markRead } from '../notifications.service';
 import { getUserId } from '../session';
 import { confirmProvisionalRow, dropProvisionalRow } from './optimistic';
 import { withAgendaExplanation } from './agenda-conflicts';
@@ -104,6 +114,15 @@ export type QueuedAction =
    * reintentarlo deja la ruta donde ya estaba. Sin esto, una jornada iniciada sin señal quedaba
    * `PLANNED` en el servidor y la app volvía a ofrecer "Iniciar ruta" al reconectar.
    */
+  | { kind: 'route.stop.location'; routeId: string; stopId: string; locationId: string }
+  | { kind: 'route.change.create'; routeId: string; input: NewChangeRequest }
+  | { kind: 'route.change.decide'; routeId: string; requestId: string; decision: ChangeDecision; note?: string }
+  /**
+   * Adjunto del legajo sacado sin señal. El `POST` no acepta id, así que antes de crearlo se busca por **hash del archivo** en los
+   * adjuntos del cliente: si ya está (el intento anterior llegó y se perdió la respuesta), no se duplica.
+   */
+  | { kind: 'client.attachment'; clientId: string; fileType: string; photo?: PendingPhoto; uploaded?: { url: string; hash: string } }
+  | { kind: 'notification.read'; id: string }
   | { kind: 'route.status'; routeId: string; status: RouteStatus; /** Por qué se cierra con paradas sin gestionar (D-5). */ reason?: string }
   /**
    * Alta de cliente y de préstamo en la calle. Idempotentes porque **el id lo pone el teléfono**
@@ -220,6 +239,11 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'agenda.complete': 'Gestión ejecutada',
   'agenda.postpone': 'Gestión pospuesta',
   'route.status': 'Estado de la jornada',
+  'notification.read': 'Aviso leído',
+  'client.attachment': 'Adjunto del cliente',
+  'route.change.create': 'Pedido de cambio de ruta',
+  'route.change.decide': 'Decisión sobre un pedido de ruta',
+  'route.stop.location': 'Dirección de una parada',
   'client.create': 'Cliente nuevo',
   'credit.create': 'Préstamo nuevo',
   'arrears.mark': 'Préstamo marcado en mora',
@@ -247,7 +271,7 @@ const KNOWN_KINDS = new Set<string>(Object.keys(ACTION_LABEL));
 
 /** Las fotos de la cola que cuelgan de una acción (para borrar sus copias al descartarla). */
 function photosOf(action: PendingAction): PendingPhoto[] {
-  if (action.kind === 'visit' || action.kind === 'payment' || action.kind === 'visit.evidence') {
+  if (action.kind === 'visit' || action.kind === 'payment' || action.kind === 'visit.evidence' || action.kind === 'client.attachment') {
     return action.photo ? [action.photo] : [];
   }
   return [];
@@ -267,7 +291,7 @@ export async function enqueue(action: QueuedAction): Promise<boolean> {
   const userId = await getUserId();
   if (!userId) return false;
   let stored = action;
-  if ((action.kind === 'visit' || action.kind === 'payment' || action.kind === 'visit.evidence') && action.photo) {
+  if ((action.kind === 'visit' || action.kind === 'payment' || action.kind === 'visit.evidence' || action.kind === 'client.attachment') && action.photo) {
     stored = { ...action, photo: await persistPhoto(action.photo) };
   }
   await db.enqueue({
@@ -386,6 +410,25 @@ export async function send(action: PendingAction): Promise<SendResult> {
       if (ev.status === 'ok') await deleteQueuePhoto(action.photo?.uri);
       return mapMutate(ev);
     }
+    case 'client.attachment': {
+      let foto = action.uploaded;
+      if (!foto) {
+        if (!action.photo) return { status: 'error', message: 'La foto del adjunto no se guardó en el teléfono.', permanent: true };
+        if (!(await photoExists(action.photo.uri))) return { status: 'error', message: LOST_PHOTO, permanent: true };
+        const up = await uploadImage(action.photo.uri, action.photo.mimeType);
+        if (up.status !== 'ok') return mapUpload(up);
+        foto = { url: up.url, hash: up.hash };
+      }
+      // Buscar antes de crear: el POST no acepta id y un reintento tras un timeout duplicaría el adjunto.
+      const ficha = await getClient(action.clientId);
+      if (ficha.status === 'ok' && (ficha.data.attachments ?? []).some((a) => a.fileHash === foto!.hash)) {
+        await deleteQueuePhoto(action.photo?.uri);
+        return { status: 'ok' };
+      }
+      const res = await addAttachment(action.clientId, { fileType: action.fileType, fileUrl: foto.url, fileHash: foto.hash });
+      if (res.status === 'ok') await deleteQueuePhoto(action.photo?.uri);
+      return mapMutate(res);
+    }
     case 'photo.lost':
       return { status: 'error', message: action.detail, permanent: true };
     case 'payment': {
@@ -412,6 +455,15 @@ export async function send(action: PendingAction): Promise<SendResult> {
       if ('wait' in resolved) return { status: 'error', message: resolved.wait };
       return mapMutate(await createItem(resolved.input));
     }
+    case 'route.stop.location':
+      return mapMutate(await updateStop(action.routeId, action.stopId, { locationId: action.locationId }));
+    case 'route.change.create':
+      return mapMutate(await createChangeRequest(action.routeId, action.input));
+    case 'route.change.decide':
+      return mapMutate(await decideChangeRequest(action.routeId, action.requestId, action.decision, action.note));
+    case 'notification.read':
+      // Un aviso que ya no existe (404) está «leído» a todos los efectos.
+      return mapGone(await markRead(action.id));
     case 'route.status':
       return mapMutate(await updateRouteStatus(action.routeId, action.status, action.reason));
     case 'client.create': {

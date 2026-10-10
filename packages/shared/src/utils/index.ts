@@ -31,3 +31,4 @@ export * from './mora-situation.js';
 export * from './contact-links.js';
 export * from './route-rules.js';
 export * from './visit-result.js';
+export * from './geo.js';

@@ -21,6 +21,7 @@ const mockDb = {
   meta: new Map<string, string>(),
 };
 const mockApi = {
+  existingAttachments: [] as { fileHash: string }[],
   agendaWrite: { status: 'ok', data: {} } as { status: string; data?: unknown; message?: string; httpStatus?: number },
   payment: { status: 'ok', data: {} } as Record<string, unknown>,
   item: { status: 'ok', data: {} } as Record<string, unknown>,
@@ -118,6 +119,11 @@ jest.mock('../db', () => ({
 jest.mock('../session', () => ({ getUserId: jest.fn(async () => 'u1') }));
 jest.mock('../routes.service', () => ({ updateRouteStatus: jest.fn(async () => ({ status: 'ok', data: {} })) }));
 jest.mock('../clients.service', () => ({
+  addAttachment: jest.fn(async () => {
+    mockCalls.push('addAttachment');
+    return mockApi.agendaWrite;
+  }),
+  getClient: jest.fn(async () => ({ status: 'ok', data: { attachments: mockApi.existingAttachments } })),
   updateClient: jest.fn(async (id: string, patch: Record<string, unknown>) => {
     mockCalls.push(`updateClient:${id}:${JSON.stringify(patch)}`);
     return { status: 'ok', data: {} };
@@ -604,6 +610,31 @@ describe('send · timeout vs offline', () => {
     mockMora.res = { status: 'offline', reason: 'offline' };
     const r = await send({ kind: 'credit.note', creditId: 'c', input: { id: 'n', body: 'x' } });
     expect(r).toEqual({ status: 'offline' });
+  });
+});
+
+describe('send · adjunto del cliente (C4)', () => {
+  beforeEach(() => {
+    mockApi.agendaWrite = { status: 'ok', data: {} };
+    mockApi.existingAttachments = [];
+  });
+
+  it('sube la foto, crea el adjunto y borra la copia', async () => {
+    const r = await send({ kind: 'client.attachment', clientId: 'c1', fileType: 'ID_CARD', photo: { uri: 'durable://a.jpg' } });
+    expect(r.status).toBe('ok');
+    expect(mockCalls).toContain('addAttachment');
+  });
+
+  it('si el adjunto ya está (mismo hash), no lo duplica', async () => {
+    mockApi.existingAttachments = [{ fileHash: 'h-up' }];
+    const r = await send({ kind: 'client.attachment', clientId: 'c1', fileType: 'ID_CARD', uploaded: { url: 'http://x/a.jpg', hash: 'h-up' } });
+    expect(r.status).toBe('ok');
+    expect(mockCalls).not.toContain('addAttachment');
+  });
+
+  it('sin la foto en el teléfono es un rechazo explícito', async () => {
+    const r = await send({ kind: 'client.attachment', clientId: 'c1', fileType: 'ID_CARD' });
+    expect(r).toMatchObject({ status: 'error', permanent: true });
   });
 });
 

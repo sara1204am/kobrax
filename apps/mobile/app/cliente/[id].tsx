@@ -1,3 +1,4 @@
+import { LocationLine } from '@/location-photo';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -450,7 +451,7 @@ export default function ClienteFichaScreen() {
             <Text key={c.id} style={styles.line}>📱 {c.value ?? '—'}{c.isPrimary ? ' · principal' : ''}</Text>
           ))}
           {ctx.locations.map((l) => (
-            <Text key={l.id} style={styles.line}>📍 {[l.address, l.zone].filter(Boolean).join(' · ') || 'Sin dirección'}</Text>
+            <LocationLine key={l.id} loc={l} />
           ))}
         </View>
 

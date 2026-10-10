@@ -1,3 +1,4 @@
+import { clearImageCache } from './image-cache';
 import * as SecureStore from 'expo-secure-store';
 import type { AuthTokens } from '@kobrax/shared';
 import { clearCache } from './db';
@@ -106,6 +107,8 @@ export async function clearSession(): Promise<void> {
   await cancelAllAgendaReminders();
   // Antes de borrar el userId: el borrador es por usuario y hace falta saber de quién era.
   await clearRouteDrafts();
+  // Fotos de viviendas y personas: son de quien salió.
+  await clearImageCache();
   await Promise.all([
     SecureStore.deleteItemAsync(KEY.access),
     SecureStore.deleteItemAsync(KEY.refresh),

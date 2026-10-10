@@ -87,7 +87,7 @@ jest.mock('../payments.service', () => ({
   }),
 }));
 jest.mock('../clients.service', () => ({ getClient: jest.fn(async () => ({ status: 'ok', data: { id: 'cl1' } })) }));
-jest.mock('../db', () => ({ getMany: jest.fn(async (kind: string) => (kind === 'portfolio' ? [{ clientId: 'cl1' }] : [])), putAll: jest.fn(), fetchedAt: jest.fn(async () => null) }));
+jest.mock('../db', () => ({ getMany: jest.fn(async (kind: string) => (kind === 'portfolio' ? [{ clientId: 'cl1' }] : [])), putAll: jest.fn(), fetchedAt: jest.fn(async () => null), purgeCache: jest.fn(async () => 0) }));
 
 import { hydrate } from './hydrate';
 

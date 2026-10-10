@@ -3,6 +3,7 @@
  * aviso de posible duplicado, adjuntos del legajo y garantes/garantías (sólo lectura).
  * Viven acá y no en la pantalla para no engordar `cliente/[id].tsx`. La lógica pura está en `cliente-legajo.ts`.
  */
+import { queueForLater } from './sync/sync.service';
 import { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ATTACHMENT_TYPES, type ClientAttachmentDetail, type ClientDetail } from '@kobrax/shared';
@@ -113,6 +114,7 @@ export function AttachmentsBlock({
   const [type, setType] = useState<(typeof ATTACHMENT_TYPES)[number]>('ID_CARD');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const list = sortAttachments(rows);
 
   async function pick() {
@@ -121,9 +123,22 @@ export function AttachmentsBlock({
     if (!photo) return;
     setBusy(true);
     const up = await uploadImage(photo.uri, photo.mimeType ?? 'image/jpeg');
+    if (up.status === 'offline') {
+      // Sin señal el adjunto no se pierde: la foto queda en el teléfono y sube sola.
+      const saved = await queueForLater({
+        kind: 'client.attachment',
+        clientId,
+        fileType: type,
+        photo: { uri: photo.uri, mimeType: photo.mimeType ?? 'image/jpeg' },
+      });
+      setBusy(false);
+      if (!saved) return setError('Sin conexión y no se pudo guardar en el teléfono.');
+      setNotice('Guardado en el teléfono: sube cuando haya señal.');
+      return setOpen(false);
+    }
     if (up.status !== 'ok') {
       setBusy(false);
-      return setError(up.status === 'offline' ? 'Sin conexión: no se pudo subir.' : up.status === 'unauthenticated' ? 'Tu sesión venció.' : up.message);
+      return setError(up.status === 'unauthenticated' ? 'Tu sesión venció.' : up.message);
     }
     const res = await addAttachment(clientId, { fileType: type, fileUrl: up.url, fileHash: up.hash });
     if (res.status !== 'ok') {
@@ -153,21 +168,21 @@ export function AttachmentsBlock({
         );
       })}
       <Pressable
-        onPress={() => online && setOpen(true)}
-        disabled={!online}
+        onPress={() => setOpen(true)}
         accessibilityRole="button"
-        style={[styles.addBtn, !online && { opacity: 0.5 }]}
+        style={styles.addBtn}
       >
         <Text style={styles.addText}>＋ Agregar adjunto</Text>
       </Pressable>
-      {!online && <Text style={TYPE.caption}>Sin conexión: los adjuntos se ven, pero para subir uno hace falta señal.</Text>}
+      {notice && <Text style={TYPE.caption}>{notice}</Text>}
+      {!online && <Text style={TYPE.caption}>Sin conexión: el adjunto se guarda en el teléfono y sube solo.</Text>}
 
       <BottomSheet visible={open} onClose={() => !busy && setOpen(false)} title="Agregar adjunto">
         <ErrorBanner message={error} />
         <SectionLabel>Qué es</SectionLabel>
         <Chips options={TYPE_OPTIONS} value={type} onChange={setType} />
         <View style={{ marginTop: SPACING.md }}>
-          <Button label="Elegir foto (cámara o galería)" onPress={pick} loading={busy} disabled={busy || !online} />
+          <Button label="Elegir foto (cámara o galería)" onPress={pick} loading={busy} disabled={busy} />
         </View>
       </BottomSheet>
     </View>

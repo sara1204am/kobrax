@@ -267,6 +267,13 @@ function RutaEnCurso({
             inalcanzable — el vacío que lo ofrece ya no se muestra. */}
         <Button label="Agregar paradas en el mapa" variant="ghost" onPress={() => router.push('/rutas/crear')} />
 
+        {(route.capabilities?.requestChange || (route.pendingRequests ?? 0) > 0) && (
+          <Button
+            label={(route.pendingRequests ?? 0) > 0 ? `Pedidos de cambio (${route.pendingRequests})` : 'Pedidos de cambio'}
+            variant="ghost"
+            onPress={() => router.push(`/rutas/pedidos?routeId=${route.id}`)}
+          />
+        )}
         {notice && <Text style={styles.cancelNotice}>{notice}</Text>}
         {blockedByVisits && <Text style={styles.cancelNotice}>Ya tiene visitas: no se cancela, se cierra la jornada.</Text>}
         {canCancel && !asking && <Button label="Cancelar ruta" variant="ghost" onPress={() => setAsking(true)} />}

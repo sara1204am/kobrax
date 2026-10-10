@@ -38,6 +38,10 @@ export const noStopsToRoute = () =>
     message: 'No tenés casos abiertos para armar la ruta de hoy',
   });
 
+/** El `id` del pedido de cambio que mandó el cliente ya es de otro pedido (de otra persona o de otra ruta). */
+export const changeRequestIdTaken = () =>
+  new ConflictException({ code: 'ROUTE_REQUEST_ID', message: 'Ese id de pedido ya pertenece a otro pedido' });
+
 /** El `id` de la ruta que mandó el cliente ya es de la ruta de otro cobrador. */
 export const routeIdTaken = () =>
   new ConflictException({ code: 'ROUTE_ID', message: 'Ese id de ruta ya pertenece a otra ruta' });

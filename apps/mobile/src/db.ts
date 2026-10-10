@@ -16,6 +16,7 @@
  * `groupPortfolio`, `partitionDay`), así que no hacía falta SQL rico. Lo que sí se conserva de
  * SQLite es lo que importa: leer una ficha sin cargar la cartera entera, e índices para filtrar.
  */
+import { getKey, open as openAtRest, seal } from './at-rest';
 import * as SQLite from 'expo-sqlite';
 
 /**
@@ -86,7 +87,9 @@ export type CacheKind =
   /** Rangos de categoría de mora de la cuenta (`GET /arrear-categories`): opciones del filtro. */
   | 'arrear.categories'
   /** Miembros del equipo (`GET /users`): nombres de quien registró / asignó, cuando el rol puede leerlos. */
-  | 'members';
+  | 'members'
+  /** Mi perfil (`GET /users/me/profile`): sin señal se ve mi QR de cobro. `id` = 'me'. */
+  | 'profile';
 
 /** Qué espera subir la cola. Cada uno mapea a un endpoint idempotente o append-only (plan §D3). */
 export type QueueKind =
@@ -96,6 +99,15 @@ export type QueueKind =
   | 'agenda.complete'
   | 'agenda.postpone'
   | 'route.status'
+  /** Marcar una notificación como leída (valor fijo; repetirlo no cambia nada). */
+  | 'notification.read'
+  /** Adjunto del legajo de un cliente (la foto viaja en el teléfono hasta que haya señal). */
+  | 'client.attachment'
+  /** Pedir un cambio sobre una ruta ajena (el id lo pone el teléfono) y decidir un pedido (valor fijo). */
+  | 'route.change.create'
+  | 'route.change.decide'
+  /** Cambiar la dirección de una parada (valor fijo: repetirlo es un no-op en el servidor). */
+  | 'route.stop.location'
   | 'client.create'
   | 'credit.create'
   /** Marcar en mora y poner al día. Ver `queue.ts`: «poner al día» viaja con la fecha ya resuelta. */
@@ -166,6 +178,7 @@ function open(): Promise<SQLite.SQLiteDatabase> {
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     `);
     await ensureVersion(db);
+    await upgradeToSealed(db);
     return db;
   })();
   return dbPromise;
@@ -188,7 +201,68 @@ async function ensureVersion(db: SQLite.SQLiteDatabase): Promise<void> {
   await db.runAsync('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)', ['schema_version', String(SCHEMA_VERSION)]);
 }
 
+// ── Cifrado en reposo (0.7) ───────────────────────────────────────────────────
+
+/** Descifra una fila (o la devuelve tal cual si es anterior al cifrado). `null` = ilegible. */
+const openSealed = openAtRest;
+
+/**
+ * El payload de la cola, cifrado. **La cola nunca deja de guardar**: sin llave se escribe en claro (perder un cobro es peor)
+ * y la próxima apertura con llave lo cifra (`upgradeToSealed`).
+ */
+async function sealQueue(payload: unknown): Promise<string> {
+  const json = JSON.stringify(payload);
+  return (await seal(json)) ?? json;
+}
+
+/**
+ * Migración perezosa: filas guardadas antes del cifrado. La cola se cifra **en su lugar** (sin perder nada y sin subir
+ * `SCHEMA_VERSION`, que la borraría); el caché, que es descartable, se vacía y se vuelve a bajar ya cifrado.
+ */
+async function upgradeToSealed(db: SQLite.SQLiteDatabase): Promise<void> {
+  if (!(await getKey())) return;
+  const rows = await db.getAllAsync<{ id: number; payload: string }>("SELECT id, payload FROM queue WHERE payload NOT LIKE 'enc1:%'");
+  for (const r of rows) {
+    const sealed = await seal(r.payload);
+    if (sealed) await db.runAsync('UPDATE queue SET payload = ? WHERE id = ?', [sealed, r.id]);
+  }
+  await db.runAsync("DELETE FROM cache WHERE json NOT LIKE 'enc1:%'");
+}
+
 // ── Caché ─────────────────────────────────────────────────────────────────────
+
+/** Lo que la purga NUNCA toca: la sesión (entrar sin señal), los catálogos (chicos y sin PII) y los totales de lista. */
+const PURGE_PROTECTED = ['session', 'catalog', 'arrear.categories', 'list.meta'] as const;
+
+/**
+ * Poda del caché (D-9): lo que no se renovó en `ttlMs` sale, y si aun así pasa de `maxBytes` salen las filas **menos
+ * recientes**. Retener fichas de personas más de una semana es riesgo sin beneficio. **No toca la cola** ni `meta`.
+ * Devuelve cuántas filas sacó; nunca lanza hacia afuera (una poda que falla no debe romper la hidratación).
+ */
+export async function purgeCache(ttlMs: number, maxBytes: number, now: number = Date.now()): Promise<number> {
+  try {
+    const db = await open();
+    const keep = PURGE_PROTECTED.map(() => '?').join(', ');
+    let removed = 0;
+    const expired = await db.runAsync(`DELETE FROM cache WHERE fetched_at < ? AND kind NOT IN (${keep})`, [now - ttlMs, ...PURGE_PROTECTED]);
+    removed += expired.changes;
+
+    // El tamaño se aproxima con el largo del JSON (SQLite no da bytes por fila): alcanza para acotar.
+    for (let pass = 0; pass < 20; pass++) {
+      const row = await db.getFirstAsync<{ bytes: number }>('SELECT COALESCE(SUM(LENGTH(json)), 0) AS bytes FROM cache');
+      if ((row?.bytes ?? 0) <= maxBytes) break;
+      const trimmed = await db.runAsync(
+        `DELETE FROM cache WHERE rowid IN (SELECT rowid FROM cache WHERE kind NOT IN (${keep}) ORDER BY fetched_at ASC LIMIT 100)`,
+        [...PURGE_PROTECTED],
+      );
+      if (trimmed.changes === 0) break;
+      removed += trimmed.changes;
+    }
+    return removed;
+  } catch {
+    return 0;
+  }
+}
 
 /**
  * Guarda un lote de un recurso. `scope` es la clave por la que después se filtra (la fecha de la
@@ -212,11 +286,14 @@ export async function putAll<T extends { id: string }>(
   const db = await open();
   const now = Date.now();
   for (const item of items) {
+    // Sin llave no se escribe: el caché es descartable y NO se guarda en claro (0.7).
+    const json = await seal(JSON.stringify(item));
+    if (json === null) return;
     await db.runAsync('INSERT OR REPLACE INTO cache (kind, scope, id, json, fetched_at) VALUES (?, ?, ?, ?, ?)', [
       kind,
       scopeOf?.(item) ?? '',
       item.id,
-      JSON.stringify(item),
+      json,
       now,
     ]);
   }
@@ -225,11 +302,13 @@ export async function putAll<T extends { id: string }>(
 /** Guarda un valor suelto que no tiene forma de entidad (el compuesto de un detalle, por ejemplo). */
 export async function putOne(kind: CacheKind, id: string, value: unknown): Promise<void> {
   const db = await open();
+  const json = await seal(JSON.stringify(value));
+  if (json === null) return;
   await db.runAsync('INSERT OR REPLACE INTO cache (kind, scope, id, json, fetched_at) VALUES (?, ?, ?, ?, ?)', [
     kind,
     '',
     id,
-    JSON.stringify(value),
+    json,
     Date.now(),
   ]);
 }
@@ -244,7 +323,9 @@ export async function getOne<T>(kind: CacheKind, id: string): Promise<T | null> 
     'SELECT json FROM cache WHERE kind = ? AND id = ? ORDER BY fetched_at DESC LIMIT 1',
     [kind, id],
   );
-  return row ? (JSON.parse(row.json) as T) : null;
+  if (!row) return null;
+  const plain = await openSealed(row.json);
+  return plain === null ? null : (JSON.parse(plain) as T);
 }
 
 /** Todo lo de un recurso, o sólo lo de un `scope` (la respuesta guardada de una consulta). */
@@ -254,7 +335,13 @@ export async function getMany<T>(kind: CacheKind, scope?: string): Promise<T[]> 
     scope === undefined
       ? await db.getAllAsync<{ json: string }>('SELECT json FROM cache WHERE kind = ?', [kind])
       : await db.getAllAsync<{ json: string }>('SELECT json FROM cache WHERE kind = ? AND scope = ?', [kind, scope]);
-  return rows.map((r) => JSON.parse(r.json) as T);
+  const out: T[] = [];
+  for (const r of rows) {
+    // Una fila ilegible (llave perdida o dato alterado) se descarta: el caché se vuelve a bajar.
+    const plain = await openSealed(r.json);
+    if (plain !== null) out.push(JSON.parse(plain) as T);
+  }
+  return out;
 }
 
 /**
@@ -307,7 +394,7 @@ export async function enqueue(input: {
   const db = await open();
   const res = await db.runAsync(
     'INSERT INTO queue (user_id, kind, payload, idempotency_key, created_at) VALUES (?, ?, ?, ?, ?)',
-    [input.userId, input.kind, JSON.stringify(input.payload), input.idempotencyKey ?? null, Date.now()],
+    [input.userId, input.kind, await sealQueue(input.payload), input.idempotencyKey ?? null, Date.now()],
   );
   return res.lastInsertRowId;
 }
@@ -325,16 +412,22 @@ export async function pending(userId: string): Promise<QueueRow[]> {
     last_error: string | null;
     created_at: number;
   }>('SELECT * FROM queue WHERE user_id = ? ORDER BY id ASC', [userId]);
-  return rows.map((r) => ({
+  const out: QueueRow[] = [];
+  for (const r of rows) {
+    // Ilegible = se entrega tal cual: `parseAction` la muestra como «no soportada» con su motivo. Nunca se borra.
+    const payload = (await openSealed(r.payload)) ?? r.payload;
+    out.push({
     id: r.id,
     userId: r.user_id,
     kind: r.kind as QueueKind,
-    payload: r.payload,
+    payload,
     idempotencyKey: r.idempotency_key,
     attempts: r.attempts,
     lastError: r.last_error,
     createdAt: r.created_at,
-  }));
+    });
+  }
+  return out;
 }
 
 /** Cuántas acciones esperan (alimenta el contador del `OfflineIndicator`). */
@@ -350,7 +443,7 @@ export async function pendingCount(userId: string): Promise<number> {
  */
 export async function updatePayload(id: number, payload: unknown): Promise<void> {
   const db = await open();
-  await db.runAsync('UPDATE queue SET payload = ? WHERE id = ?', [JSON.stringify(payload), id]);
+  await db.runAsync('UPDATE queue SET payload = ? WHERE id = ?', [await sealQueue(payload), id]);
 }
 
 /** Valores sueltos que NO son caché (sobreviven al logout igual que la cola): mapas de ids locales→server. */

@@ -2,7 +2,15 @@
  * Rutas de campo (solo lectura en P1). Thin sobre `apiQuery`; base del resumen de jornada
  * del Home (P1) y de la pantalla de Rutas (P3). Tipos según `routes.serializer.ts`.
  */
-import type { MoraCreditListItem, RouteItem, RouteStopItem, RouteStatus, RouteStopStatus } from '@kobrax/shared';
+import type {
+  MoraCreditListItem,
+  RouteChangeKind,
+  RouteChangeRequestItem,
+  RouteItem,
+  RouteStopItem,
+  RouteStatus,
+  RouteStopStatus,
+} from '@kobrax/shared';
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
 import { cachedList, cachedOne } from './sync/cached';
 import type { LngLat } from './maps/tiles';
@@ -82,6 +90,8 @@ export function removeStop(routeId: string, stopId: string): Promise<MutateResul
 export interface UpdateStopPatch {
   status?: RouteStopStatus;
   sequenceOrder?: number;
+  /** Cambiar a qué dirección del cliente va la parada (solo quien armó la ruta; la parada debe estar pendiente). */
+  locationId?: string;
 }
 export function updateStop(routeId: string, stopId: string, patch: UpdateStopPatch): Promise<MutateResult<RouteStopItem>> {
   return apiMutate<RouteStopItem>(`/routes/${routeId}/stops/${stopId}`, 'PATCH', patch);
@@ -120,5 +130,40 @@ export function listRoutePlanCredits(limit = 100): Promise<QueryResult<(MoraCred
   return cachedList<MoraCreditListItem & { id: string }>('mora', `route-plan:${query}`, async () => {
     const res = await apiQuery<MoraCreditListItem[]>(`/mora${query}`);
     return res.status === 'ok' ? { ...res, data: res.data.map((i) => ({ ...i, id: i.creditId })) } : res;
+  });
+}
+
+// ── Pedidos de cambio sobre una ruta ajena (R4) ──────────────────────────────
+
+export type ChangeDecision = 'APPROVE' | 'REJECT' | 'WITHDRAW';
+
+export interface NewChangeRequest {
+  /** Lo pone el teléfono: reintentar el mismo pedido devuelve el ya creado. */
+  id: string;
+  kind: RouteChangeKind;
+  payload?: Record<string, unknown>;
+  reason: string;
+}
+
+/** `POST /routes/:id/change-requests`. */
+export function createChangeRequest(routeId: string, input: NewChangeRequest): Promise<MutateResult<RouteChangeRequestItem>> {
+  return apiMutate<RouteChangeRequestItem>(`/routes/${routeId}/change-requests`, 'POST', input);
+}
+
+/** `GET /routes/:id/change-requests`: el dueño ve todos; el resto solo los suyos. Sin caché: es un estado que cambia. */
+export function listChangeRequests(routeId: string): Promise<QueryResult<RouteChangeRequestItem[]>> {
+  return apiQuery<RouteChangeRequestItem[]>(`/routes/${routeId}/change-requests`);
+}
+
+/** `PATCH /routes/:id/change-requests/:rid`. */
+export function decideChangeRequest(
+  routeId: string,
+  requestId: string,
+  decision: ChangeDecision,
+  note?: string,
+): Promise<MutateResult<RouteChangeRequestItem>> {
+  return apiMutate<RouteChangeRequestItem>(`/routes/${routeId}/change-requests/${requestId}`, 'PATCH', {
+    decision,
+    ...(note ? { note } : {}),
   });
 }

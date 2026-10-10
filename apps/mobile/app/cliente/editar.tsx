@@ -163,7 +163,7 @@ export default function EditarScreen() {
     let enCola = false;
     if (hasChanges(ops)) {
       const failure = await applyOps(clientId, ops);
-      if (failure === OFFLINE_MSG && queueableOps(ops)) {
+      if (failure === OFFLINE_MSG && queueableOps(ops, clientId)) {
         // Se cortó la señal a mitad del guardado. Todo lo que cambió es repetible (valores fijos y bajas), así que
         // se encola ENTERO —aunque una parte ya haya llegado, repetirla no cambia nada— y sube solo.
         for (const action of opsToActions(clientId, ops)) {

@@ -12,6 +12,7 @@ import {
   type FormState,
 } from './agenda-form';
 import { actionLinks, creditSituationLabel, whatsappLink, type AgendaListItem } from './agenda.service';
+import { filterByType } from './agenda-form';
 
 const CONTACT = '11111111-1111-4111-8111-111111111111';
 const CREDIT = '33333333-3333-4333-8333-333333333333';
@@ -262,4 +263,11 @@ describe('timeSlotRange (S4 — chip de hora recomendada)', () => {
       expect(slotOfTime(`${String(to! - 1).padStart(2, '0')}:59`)).toBe(slot);
     }
   });
+});
+
+describe('filterByType', () => {
+  const rows = [{ type: 'CALL' }, { type: 'VISIT' }, { type: 'CALL' }];
+  it('null deja todo', () => expect(filterByType(rows, null)).toHaveLength(3));
+  it('filtra por tipo', () => expect(filterByType(rows, 'CALL')).toHaveLength(2));
+  it('un tipo sin gestiones da vacío', () => expect(filterByType(rows, 'REMINDER')).toEqual([]));
 });

@@ -1,15 +1,21 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { RouteStopStatus } from '@kobrax/shared';
+import { RouteStopStatus, formatDistanceKm, haversineKm } from '@kobrax/shared';
+import { currentLocation } from '@/location';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
-import { EmptyState, Header, StopCard } from '@/ui';
+import { EmptyState, Header, PickerSheet, StatusBadge, StopCard } from '@/ui';
+import { LocationPhoto, PhotoViewer } from '@/location-photo';
+import { lugarLabel } from '@/route-labels';
+import { installmentHint } from '@/visit-result';
 import { Button } from '@/components';
 import { MapCanvas, type MapMarker } from '@/maps/MapCanvas';
 import { money } from '@/agenda-form';
-import { actionLinks, clientContext } from '@/agenda.service';
+import { actionLinks, clientContext, whatsappLink } from '@/agenda.service';
 import { straightLine } from '@/route-eta';
 import { getRoute, getRoutePreview, type RouteItem, type RouteStopItem } from '@/routes.service';
+import { changeStopLocation } from '@/route-stop-location';
+import type { LocationOption } from '@/agenda.service';
 
 /**
  * RT-4 · Mapa activo (Rutas S4). La jornada ya arrancó: el cobrador ve su recorrido, toca el pin de
@@ -24,7 +30,13 @@ export default function MapaRutaScreen() {
   const [line, setLine] = useState<{ latitude: number; longitude: number }[]>([]);
   const [zigzag, setZigzag] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [viewer, setViewer] = useState(false);
   const [phone, setPhone] = useState<string | undefined>();
+  const [locations, setLocations] = useState<LocationOption[]>([]);
+  const [locSheet, setLocSheet] = useState(false);
+  /** Dónde está el cobrador ahora (la toma a pedido; no sigue al GPS, para no gastar batería). */
+  const [here, setHere] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [hereMsg, setHereMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -60,17 +72,25 @@ export default function MapaRutaScreen() {
   // El teléfono de la parada elegida, para que "Llamar" no dependa de abrir la ficha.
   const loadPhone = useCallback(async (clientId: string) => {
     setPhone(undefined);
+    setLocations([]);
     const ctx = await clientContext(clientId);
-    if (ctx.status === 'ok') setPhone(ctx.data.contacts.find((c) => c.value)?.value ?? undefined);
+    if (ctx.status === 'ok') {
+      setPhone(ctx.data.contacts.find((c) => c.value)?.value ?? undefined);
+      setLocations(ctx.data.locations);
+    }
   }, []);
+
+  // La parada elegida (la primera pendiente al abrir, o la que se toca) trae su teléfono y sus direcciones.
+  const selectedClientId = selected?.clientId;
+  useEffect(() => {
+    if (selectedClientId) void loadPhone(selectedClientId);
+  }, [selectedClientId, loadPhone]);
 
   const onSelect = useCallback(
     (id: string) => {
       setSelectedId(id);
-      const stop = stops.find((s) => s.id === id);
-      if (stop) void loadPhone(stop.clientId);
     },
-    [stops, loadPhone],
+    [],
   );
 
   if (!route) {
@@ -99,7 +119,26 @@ export default function MapaRutaScreen() {
       tone: s.status === RouteStopStatus.VISITED ? 'done' : s.id === selectedId ? 'active' : 'default',
     }));
 
-  const links = actionLinks({ phone });
+  const locateMe = async () => {
+    setHereMsg(null);
+    const r = await currentLocation();
+    if (r.status === 'ok') return setHere({ latitude: r.coords.latitude, longitude: r.coords.longitude });
+    setHereMsg(r.status === 'denied' ? 'Sin permiso de ubicación: activalo en los ajustes del teléfono.' : 'No se pudo fijar tu ubicación. ¿Tenés el GPS prendido?');
+  };
+  const toSelected =
+    here && selected?.latitude != null && selected.longitude != null
+      ? formatDistanceKm(haversineKm(here, { latitude: selected.latitude, longitude: selected.longitude }))
+      : null;
+
+  if (here) markers.push({ id: '__me', latitude: here.latitude, longitude: here.longitude, label: 'Yo', tone: 'active' });
+
+  const links = actionLinks({
+    phone,
+    latitude: selected?.latitude,
+    longitude: selected?.longitude,
+    address: selected?.address,
+  });
+  const whatsapp = phone ? whatsappLink(phone) : undefined;
   const sinPendientes = stops.length > 0 && !stops.some((s) => s.status === RouteStopStatus.PENDING);
   const center = selected?.latitude != null && selected.longitude != null
     ? { latitude: selected.latitude, longitude: selected.longitude }
@@ -125,6 +164,7 @@ export default function MapaRutaScreen() {
       />
 
       {selected ? (
+        <>
         <StopCard
           title={selected.clientName ?? 'Cliente sin nombre'}
           address={selected.address}
@@ -135,15 +175,74 @@ export default function MapaRutaScreen() {
               : undefined
           }
           daysPastDue={selected.daysPastDue}
+          thumbnail={
+            selected.locationPhotoUrls?.length || selected.locationPhotoUrl ? (
+              <LocationPhoto
+                fileUrl={selected.locationPhotoUrls?.[0] ?? selected.locationPhotoUrl}
+                size={64}
+                onPress={() => setViewer(true)}
+                label="Ver fotos de la casa"
+              />
+            ) : undefined
+          }
+          chips={
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs }}>
+              {selected.locationType && <StatusBadge label={lugarLabel(selected)} tone="neutral" />}
+              {selected.scheduledTime && <StatusBadge label={`Hora fija ${selected.scheduledTime}`} tone="info" />}
+              {installmentHint(selected) && (
+                <StatusBadge
+                  label={`Cuota ${money(installmentHint(selected)!.amount, selected.currency ?? 'BOB')}`}
+                  tone="warning"
+                />
+              )}
+              {(selected.latitude == null || selected.longitude == null) && <StatusBadge label="Sin punto en el mapa" tone="warning" />}
+            </View>
+          }
           onPrimary={() => router.push(`/rutas/resultado?routeId=${routeId}&stopId=${selected.id}`)}
           actions={
             <View style={styles.acciones}>
+              <View style={{ minWidth: '45%', flexGrow: 1 }}>
+                <Button
+                  label="💬 WhatsApp"
+                  variant="ghost"
+                  disabled={!whatsapp}
+                  onPress={() => whatsapp && void Linking.openURL(whatsapp)}
+                />
+              </View>
+              <View style={{ minWidth: '45%', flexGrow: 1 }}>
+                <Button
+                  label="🧭 Ir en mapa"
+                  variant="ghost"
+                  disabled={!links.geo}
+                  onPress={() => links.geo && void Linking.openURL(links.geo)}
+                />
+              </View>
+              <View style={{ minWidth: '45%', flexGrow: 1 }}>
+                <Button
+                  label={toSelected ? `📍 Estoy aquí · a ${toSelected}` : '📍 Estoy aquí'}
+                  variant="ghost"
+                  onPress={() => void locateMe()}
+                />
+                {hereMsg && <Text style={TYPE.caption}>{hereMsg}</Text>}
+              </View>
               <View style={{ flex: 1 }}>
                 <Button
                   label="📞 Llamar"
                   variant="ghost"
                   disabled={!links.tel}
                   onPress={() => links.tel && void Linking.openURL(links.tel)}
+                />
+              </View>
+              {locations.length > 1 && selected.status === RouteStopStatus.PENDING && (
+                <View style={{ flex: 1 }}>
+                  <Button label="📍 Otra dirección" variant="ghost" onPress={() => setLocSheet(true)} />
+                </View>
+              )}
+              <View style={{ minWidth: '45%', flexGrow: 1 }}>
+                <Button
+                  label="🕘 Historial"
+                  variant="ghost"
+                  onPress={() => router.push(`/rutas/historial?stopId=${selected.id}`)}
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -156,6 +255,30 @@ export default function MapaRutaScreen() {
             </View>
           }
         />
+        <PickerSheet
+          visible={locSheet}
+          onClose={() => setLocSheet(false)}
+          title="¿A qué dirección va esta parada?"
+          options={locations.map((l) => ({
+            key: l.id,
+            label: lugarLabel(l),
+            hint: [l.address, l.latitude == null ? 'sin punto en el mapa' : null].filter(Boolean).join(' · ') || undefined,
+          }))}
+          onPick={(locationId) => {
+            setLocSheet(false);
+            void (async () => {
+              const r = await changeStopLocation(routeId, selected.id, locationId);
+              if (r.status === 'error') setError(r.message);
+              else await fetchAll();
+            })();
+          }}
+        />
+        <PhotoViewer
+          photos={selected.locationPhotoUrls?.length ? selected.locationPhotoUrls : selected.locationPhotoUrl ? [selected.locationPhotoUrl] : []}
+          visible={viewer}
+          onClose={() => setViewer(false)}
+        />
+        </>
       ) : sinPendientes ? (
         // No queda nada por hacer: el paso siguiente es cerrar el día (S6), no seguir en el mapa.
         <View style={styles.cierre}>
@@ -182,7 +305,7 @@ const styles = StyleSheet.create({
   cierre: { padding: SPACING.lg, gap: SPACING.md, alignItems: 'center', backgroundColor: COLORS.white },
   zigzag: { backgroundColor: COLORS.navy, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
   zigzagText: { ...TYPE.secondary, color: COLORS.white, fontWeight: '700' },
-  acciones: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm },
+  acciones: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, marginTop: SPACING.sm },
   error: {
     ...TYPE.secondary,
     color: COLORS.danger,

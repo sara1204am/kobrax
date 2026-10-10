@@ -1,4 +1,4 @@
-> **ESTADO: EN EJECUCIÓN — ronda 3 (2026-10-10).** D-1…D-9 decididas y registradas en §13. **Implementado y probado:** D-4 (código), D-5-C, D-6, D-8 y la parte cuantificable de D-9; **pendiente:** 0.2, 0.4, 0.5, 0.7, 0.8 y las fases 1–6. **Bloqueado externamente:** verificación de push (Firebase + teléfono) y pinning en dispositivo, mapas offline (estilo propio). El estado de cada ítem refleja el código.
+> **ESTADO: EN EJECUCIÓN — ronda 3 (2026-10-10).** D-1…D-9 decididas y registradas en §13. **Implementado y probado:** D-4 (código), D-5-C, D-6, D-8 y la parte cuantificable de D-9; **pendiente:** 0.2, 0.4, 0.5, 0.7, 0.8 y las fases 1–6. **Bloqueado externamente:** verificación de push (Firebase + teléfono) y pinning en dispositivo, mapas offline (estilo propio). El estado de cada ítem refleja el código. **Ronda 4 (2026-10-10):** cuenta, agenda, mora, fotos, cifrado y pedidos de cambio construidos — ver §13.8; lo no construido y lo bloqueado está listado ahí.
 > Plan maestro de alineación móvil ↔ web. Cada fase se detalla en su propio archivo just-in-time (`/f10-etapa`).
 
 # F10 · Alineación del móvil con la web — plan maestro
@@ -451,6 +451,76 @@ cuantificó** (constantes y derivación en `packages/shared/src/constants/offlin
 - **Hash de evidencia:** el servidor calcula el SHA-256 del archivo **que recibe** (el comprimido): es el que queda
   almacenado y es el inmutable. El original no se conserva (distinto de lo que decía el CLAUDE.md del móvil).
 
+### 13.8 Ronda 4 — módulos restantes (2026-10-10)
+
+> Estado real, no la intención. ✅ = código + pruebas automáticas · 🟡 = hecho a medias (se dice qué falta) · ⬜ = no construido ·
+> 🔒 = bloqueado por algo externo. **Nada de esto está verificado en un teléfono**: faltan push, pinning, y recorrer cada pantalla.
+> Auditoría de reuso previa (Paso B) hecha por área sobre el código; los hallazgos que cambiaron el plan están en cada fila.
+
+**Fundación (Fase 0)**
+
+| # | Estado | Qué hay / qué falta |
+|---|---|---|
+| 0.1 / 0.6 | ✅ | El código estable del servidor (`ROUTE_*`, `VISIT_*`) viaja en `MutateResult` y `SendResult`; un 426 no descarta la cola; los rechazos quedan visibles en «Sin subir» |
+| 0.2 | 🟡 | Pagos del día por `GET /payments?day=` (API nueva, día civil de la empresa); «hoy» en gestión/promesa/alta usa el día de la empresa. **Falta** `home.ts` (usa el reloj local del teléfono: correcto si el teléfono está en la zona de la empresa) |
+| 0.3 | 🟡 | `haversineKm` y `formatDistanceKm` pasan a `shared` (web y móvil). Quedan 4 copias de `addDays` |
+| 0.4 | 🔒 | Mapas offline: falta estilo propio (`EXPO_PUBLIC_MAP_STYLE_URL`); el raster de OSM prohíbe la descarga masiva |
+| 0.5 | ✅ | Caché de imágenes (`image-cache.ts`: LRU 40 MB, se vacía al cerrar sesión), precarga de la principal de las paradas pendientes, poda del caché SQLite (7 días / 50 MB) |
+| 0.7 | ✅ | Caché y cola cifrados (XChaCha20-Poly1305, llave en SecureStore, migración perezosa sin subir `SCHEMA_VERSION`). **Dependencia nativa nueva (`expo-crypto`): hace falta un nuevo `prebuild`.** Rendimiento en gama baja sin medir |
+| 0.8 | ✅ | `src/permissions.ts` (`can`); reemplaza los literales de cuenta y gatea Importación. Solo UX: la API autoriza |
+
+**Rutas**
+
+| # | Estado | Qué hay / qué falta |
+|---|---|---|
+| R1 | 🟡 | ✅ ubicación elegida por crédito en el borrador y al crear la parada · ✅ tipo/dueño, hora fija, cuota y «sin punto» en la parada del mapa · ✅ «Cuota a pagar · Usar este monto» · ✅ el cobro viaja con `visitId`. ⬜ tipo/dueño en la lista de Rutas y en confirmar/resultado |
+| R2 | 🟡 | ✅ miniatura y visor (paginado) en la parada, la ficha del cliente y «Cómo ubicarlo». ⬜ foto en el pin del mapa · ⬜ zoom por pellizco (no hay gesture-handler) |
+| R3 | ✅ | «Otra dirección» en la parada (PATCH `locationId`) con cola `route.stop.location` |
+| R4 | 🟡 | ✅ API: `id` del teléfono en `POST change-requests` (reintento no duplica; `ROUTE_REQUEST_ID` si es ajeno) · ✅ pantalla de pedidos: aprobar, rechazar, retirar, **pedir cancelar** · ⬜ pedir agregar/quitar/reordenar paradas desde el móvil |
+| R5 | ✅ | Cancelar ruta con motivo (con señal directo, sin señal a la cola); respeta `capabilities.cancel` |
+| R6 | 🟡 | ✅ WhatsApp, «Ir en mapa», «Estoy aquí» (con distancia) · ⬜ `POST /routes/leg`, `plan-preview` y «llega tarde» |
+| R7 | 🟡 | ✅ historial de la parada (solo lectura, en línea) · ⬜ corregir una gestión (`correctsVisitId`) · ⬜ ver la evidencia con su hash |
+
+**Agenda / Inicio**
+
+| # | Estado | Qué hay / qué falta |
+|---|---|---|
+| A1 | ✅ | Editar y eliminar gestiones sin señal (`agenda.update` / `agenda.delete`); lo eliminado sale de listas, contadores y avisos |
+| A2 | 🟡 | ✅ pagos del día en el día de la empresa. ⬜ «contactos efectivos» y «promesas de hoy»: **decisión abierta** (§ preguntas): chocan con «KPIs en el cliente» o piden ampliar `GET /agenda/summary` |
+| A3 | 🟡 | ✅ filtro por tipo. ⬜ vista «Semana» (la tira de días ya navega la semana; no hay resumen) |
+| A4 | ✅ | Contador de no leídas sin señal y marcar un aviso como leído sin señal (cola `notification.read`). ⬜ «marcar todas» sin señal |
+| A5 | ✅ | Tope de recordatorios aplicado también a los acumulados (quedan los más cercanos). ⬜ horizonte de 48 h |
+
+**Cuenta / seguridad**
+
+| # | Estado | Qué hay / qué falta |
+|---|---|---|
+| U1 | ✅ | Cambiar contraseña desde Seguridad. **Corregido**: un 401 por credencial equivocada (contraseña actual mal escrita) cerraba la sesión y borraba el caché; ya no |
+| U2 | 🟡 | ✅ activar, desactivar (con contraseña) y regenerar códigos. ⬜ política para roles críticos (hoy la API permite desactivar): decisión abierta |
+| U3 | ✅ | Sesiones activas: listar, cerrar una, cerrar las demás |
+| U4 | ✅ | = 0.8 |
+| U5 | ✅ | Perfil/QR de cobro con respaldo local (la imagen del QR depende de la caché de fotos) |
+
+**Cartera / Mora / Importación**
+
+| # | Estado | Qué hay / qué falta |
+|---|---|---|
+| C1 | 🟡 | ✅ miniatura y visor en la ficha. ⬜ editar fotos de una dirección, «hacer principal», agregar desde el formulario |
+| C2 / M2 | ✅ | Tipo y dueño de cada dirección en la ficha y en «Cómo ubicarlo» (el contexto ya traía los datos; el móvil los tiraba) |
+| C3 | ✅ | Alta de teléfono (celular/WhatsApp) y de dirección (sin fotos) sin señal desde «Editar cliente»; la cola busca antes de crear |
+| C4 | ✅ | Adjuntos del legajo sin señal (cola `client.attachment`, dedupe por hash) |
+| M1 | ✅ | Fijar y soltar la prioridad (solo con `collection:write`), con cola |
+| M3 | ⬜ | Notas: editar/borrar siguen **solo en línea** (decisión vigente del código; encolarlas exige una decisión de producto: el cobrador podría creer que quedó y luego recibir un 403 de autoría) |
+| I1 / I2 | ✅ | Importación gateada por `client:import`; «Historial de importaciones» accesible desde Más |
+
+**Pruebas de esta ronda:** API 1522 + 51 de integración · shared 345 · web 938 · móvil 908 · `tsc` limpio en las 4 · `expo export` Android OK.
+**Ramas** (acumulativas, sin PR): `f10/alineacion-rutas` → `-cuenta` → `-agenda` → `-mora` → `-fotos` (la última contiene todo).
+
+**Decisiones abiertas para la usuaria** (no se avanzó sin ellas): (1) A2: ¿los contadores «contactos efectivos / promesas» se calculan en el
+cliente (aproximado: solo ve agenda) o se amplía `GET /agenda/summary`? (2) U2: ¿se bloquea desactivar MFA a los roles críticos?
+(3) M3: ¿notas editables sin señal? **Riesgo nuevo a vigilar:** `GET /payments` ahora acepta `day`; una app 1.1.0 contra una API vieja
+recibiría 400 por parámetro desconocido, así que API y app se despliegan juntas.
+
 ## 14. Orden y dependencias
 
 ```
@@ -479,3 +549,4 @@ i18n del móvil (hoy español fijo; la web es es/en) · rediseño visual del mó
 | 1 | 2026-10-10 | — (sin correr) | Plan maestro en borrador. |
 | 2 | 2026-10-10 | — (sin correr) | Cerradas D-2, D-3, D-7 con la usuaria; D-4, D-5, D-8 en explicación. |
 | 3 | 2026-10-10 | — (sin correr) | D-1, D-4, D-5, D-6, D-8 y D-9 cerradas e implementadas (§13); el gate sigue sin correr: debe pasar antes de construir las fases 1–6. |
+| 4 | 2026-10-10 | — (sin correr formalmente) | Se hizo la auditoría de reuso por área (Paso B) sobre el código real y se construyó; el gate formal `/f10-validar-plan` por etapa sigue pendiente para lo no construido (§13.8). |

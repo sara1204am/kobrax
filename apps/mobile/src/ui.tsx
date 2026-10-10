@@ -325,6 +325,8 @@ export function StopCard({
   onPrimary,
   primaryLabel = 'Registrar resultado  →',
   actions,
+  thumbnail,
+  chips,
 }: {
   title: string;
   address?: string;
@@ -334,15 +336,25 @@ export function StopCard({
   onPrimary?: () => void;
   primaryLabel?: string;
   actions?: ReactNode;
+  /** Miniatura de la foto de la casa (la pantalla la monta: `ui.tsx` no conoce la caché de imágenes). */
+  thumbnail?: ReactNode;
+  /** Fila de datos cortos: tipo y dueño de la dirección, hora fija, cuota, «sin punto en el mapa». */
+  chips?: ReactNode;
 }) {
   return (
     <View style={styles.stopCard}>
-      <Text style={styles.stopTitle} numberOfLines={1}>
-        {title}
-      </Text>
-      <Text style={styles.stopAddress} numberOfLines={2}>
-        {address ?? 'Sin dirección cargada'}
-      </Text>
+      <View style={{ flexDirection: 'row', gap: SPACING.md, alignItems: 'center' }}>
+        {thumbnail}
+        <View style={{ flex: 1 }}>
+          <Text style={styles.stopTitle} numberOfLines={1}>
+            {title}
+          </Text>
+          <Text style={styles.stopAddress} numberOfLines={2}>
+            {address ?? 'Sin dirección cargada'}
+          </Text>
+        </View>
+      </View>
+      {chips}
 
       {(overdue != null || daysPastDue != null) && (
         <View style={styles.stopStats}>
