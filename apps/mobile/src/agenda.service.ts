@@ -40,6 +40,15 @@ export function getSummary(): Promise<QueryResult<AgendaTodaySummary>> {
   return apiQuery<AgendaTodaySummary>('/agenda/summary');
 }
 
+/**
+ * El resumen de hoy **con respaldo local** (contadores del Inicio). Sin señal devuelve el último guardado con `localAt`;
+ * quien lo muestre decide si todavía vale (`summaryView`). `getSummary` queda sin caché a propósito: de él sale «hoy» y un
+ * resumen viejo fijaría un día equivocado.
+ */
+export function getSummaryCached(): Promise<QueryResult<AgendaTodaySummary>> {
+  return cachedOne<AgendaTodaySummary>('agenda.summary', 'today', () => apiQuery<AgendaTodaySummary>('/agenda/summary'));
+}
+
 /** Le pregunta al servidor qué día es para la empresa y lo recuerda. Sin red no hace nada: queda el día local del teléfono. */
 export async function refreshTenantToday(): Promise<void> {
   const res = await getSummary();

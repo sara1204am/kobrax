@@ -59,6 +59,7 @@ jest.mock('../routes.service', () => ({
   }),
 }));
 jest.mock('../agenda.service', () => ({
+  getSummaryCached: jest.fn(async () => ({ status: 'ok', data: { date: '2026-10-10' }, total: 1 })),
   listByDay: jest.fn(async () => {
     mockLlamadas.push({ fn: 'listByDay' });
     return mockRes.agenda ?? ok([]);

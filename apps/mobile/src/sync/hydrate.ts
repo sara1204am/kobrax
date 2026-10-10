@@ -13,7 +13,7 @@ import { CACHE_MAX_BYTES, CACHE_TTL_DAYS, CatalogType, RouteStatus } from '@kobr
 import { getMora, getMoraMetrics, listArrearCategories, listMora, listMoraEpisodes, listMoraNotes, listMoraPromises, listPortfolio, MORA_LIMIT, TENANT_CURRENCY_PROBE_LIMIT } from '../mora.service';
 import type { MoraRow } from '../mora';
 import { getRoute, listRoutes } from '../routes.service';
-import { clientContext, getItem, listByDay, listOverdue, refreshTenantToday } from '../agenda.service';
+import { clientContext, getItem, getSummaryCached, listByDay, listOverdue, refreshTenantToday } from '../agenda.service';
 import type { AgendaListItem } from '@kobrax/shared';
 import { addDays, agendaDetailIds, AGENDA_AHEAD_DAYS } from './agenda-offline';
 import { syncAgendaReminders } from '../agenda-notifications';
@@ -136,6 +136,7 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
     return hubo || gestiones.length === 0 ? 'ok' : 'error';
   });
   await paso('notificaciones', () => estado(listNotifications()));
+  await paso('resumen de hoy', () => estado(getSummaryCached())); // contadores del Inicio, con respaldo
   await paso('cobrado hoy', () => estado(listPaymentsByDay(hoy))); // Inicio · pestaña Rutas · resumen
   await paso('categorías de mora', () => estado(listArrearCategories())); // Cobranza (filtro) · ficha de mora
 

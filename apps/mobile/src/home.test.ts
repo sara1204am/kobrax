@@ -1,5 +1,5 @@
 import { AgendaItemStatus, AgendaItemType, ScheduleTimeMode } from '@kobrax/shared';
-import { dayProgress, dueSoon, queuedCollectedToday, upNext } from './home';
+import { dayProgress, dueSoon, queuedCollectedToday, upNext, summaryView } from './home';
 import type { AgendaListItem } from './agenda.service';
 
 function item(over: Partial<AgendaListItem>): AgendaListItem {
@@ -143,5 +143,34 @@ describe('queuedCollectedToday', () => {
 
   it('cola vacía = 0', () => {
     expect(queuedCollectedToday([], ahora)).toBe(0);
+  });
+});
+
+describe('summaryView (contadores del servidor, con su frescura)', () => {
+  const data = { date: '2026-10-10', generatedAt: '2026-10-10T12:15:00.000Z', effectiveContacts: 4, promisesDue: 2, promisesTaken: 3 };
+
+  it('recién bajado: cifras y «fresh»', () => {
+    const v = summaryView({ status: 'ok', data }, '2026-10-10');
+    expect(v).toMatchObject({ effectiveContacts: 4, promisesDue: 2, promisesTaken: 3, freshness: 'fresh' });
+  });
+
+  it('de la copia guardada pero de hoy: cifras marcadas «cached»', () => {
+    const v = summaryView({ status: 'ok', data, localAt: 1 }, '2026-10-10');
+    expect(v.freshness).toBe('cached');
+    expect(v.effectiveContacts).toBe(4);
+  });
+
+  it('🔴 de otro día: NO se muestran cifras (no pasa por actual)', () => {
+    const v = summaryView({ status: 'ok', data: { ...data, date: '2026-10-09' }, localAt: 1 }, '2026-10-10');
+    expect(v).toMatchObject({ effectiveContacts: null, promisesDue: null, promisesTaken: null, freshness: 'outdated' });
+  });
+
+  it('un servidor viejo sin contadores: no inventa números', () => {
+    const v = summaryView({ status: 'ok', data: { date: '2026-10-10' } }, '2026-10-10');
+    expect(v).toMatchObject({ effectiveContacts: null, promisesDue: null, promisesTaken: null });
+  });
+
+  it('sin datos: «none»', () => {
+    expect(summaryView({ status: 'offline' }, '2026-10-10').freshness).toBe('none');
   });
 });

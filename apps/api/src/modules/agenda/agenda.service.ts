@@ -20,7 +20,7 @@ import {
 import { CreditActivityType } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
-import { TenantClockService } from '../../common/context/tenant-clock.service';
+import { TenantClockService, civilDayStartInstant } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { DomainEvent, EventBusService, type AgendaEventPayload } from '../../common/events/event-bus.service';
 import { ClientsService } from '../clients/clients.service';
@@ -353,10 +353,44 @@ export class AgendaService {
    * 🔴 «Pendiente» y «vencida» son derivadas (`SCHEDULED` en/antes de hoy), nunca un estado guardado. Una gestión de
    * hoy a las 08:00 no es vencida a las 20:00: vence al cambiar el día, igual que en la lista.
    */
-  async summary(): Promise<ApiResponse<{ date: string; pending: number; overdue: number; items: ReturnType<typeof serializeAgendaItem>[]; load?: { assigneeId: string; name?: string; pending: number; overdue: number }[] }>> {
+  async summary(): Promise<
+    ApiResponse<{
+      date: string;
+      pending: number;
+      overdue: number;
+      items: ReturnType<typeof serializeAgendaItem>[];
+      load?: { assigneeId: string; name?: string; pending: number; overdue: number }[];
+      effectiveContacts: number;
+      promisesDue: number;
+      promisesTaken: number;
+      generatedAt: string;
+    }>
+  > {
     const today = await this.today();
-    const { pending, overdue, rows, names, extras, load } = await this.tx(async (tx) => {
-      const where: Prisma.AgendaItemWhereInput = { deletedAt: null, status: AgendaItemStatus.SCHEDULED, ...(await this.assigneeScope(tx)) };
+    // El día civil de la EMPRESA como intervalo de instantes: «hoy» para los conteos por hora de creación o ejecución.
+    const dayISO = today.toISOString().slice(0, 10);
+    const nextISO = new Date(today.getTime() + 86_400_000).toISOString().slice(0, 10);
+    const tz = await this.clock.timezone();
+    const dayStart = civilDayStartInstant(dayISO, tz);
+    const dayEnd = civilDayStartInstant(nextISO, tz);
+    const { pending, overdue, rows, names, extras, load, effectiveContacts, promisesDue, promisesTaken } = await this.tx(async (tx) => {
+      const scope = await this.assigneeScope(tx);
+      const where: Prisma.AgendaItemWhereInput = { deletedAt: null, status: AgendaItemStatus.SCHEDULED, ...scope };
+
+      // Contactos efectivos de hoy: ejecutadas hoy CON gestión real, y esa gestión es de hoy (no de otro día).
+      const executed = await tx.agendaItem.findMany({
+        where: { deletedAt: null, status: AgendaItemStatus.EXECUTED, resultActivityId: { not: null }, updatedAt: { gte: dayStart }, ...scope },
+        select: { resultActivityId: true },
+      });
+      const activityIds = executed.map((e) => e.resultActivityId).filter((id): id is string => !!id);
+      const effectiveContacts = activityIds.length
+        ? await tx.creditActivity.count({ where: { id: { in: activityIds }, createdAt: { gte: dayStart, lt: dayEnd } } })
+        : 0;
+      const [promisesDue, promisesTaken] = await Promise.all([
+        tx.agendaItem.count({ where: { ...where, type: AgendaItemType.PROMISE_TO_PAY, scheduledDate: today } }),
+        tx.agendaItem.count({ where: { deletedAt: null, type: AgendaItemType.PROMISE_TO_PAY, createdAt: { gte: dayStart, lt: dayEnd }, ...scope } }),
+      ]);
+
       const [pending, overdue, rows] = await Promise.all([
         tx.agendaItem.count({ where: { ...where, scheduledDate: today } }),
         tx.agendaItem.count({ where: { ...where, scheduledDate: { lt: today } } }),
@@ -377,12 +411,26 @@ export class AgendaService {
           .map((r) => ({ ...r, name: who.get(r.assigneeId) }))
           .sort((a, b) => b.overdue - a.overdue || b.pending - a.pending || a.assigneeId.localeCompare(b.assigneeId));
       }
-      return { pending, overdue, rows, names: await this.clientNames(tx, rows.map((r) => r.clientId)), extras: await this.rowExtras(tx, rows), load };
+      return {
+        pending,
+        overdue,
+        rows,
+        names: await this.clientNames(tx, rows.map((r) => r.clientId)),
+        extras: await this.rowExtras(tx, rows),
+        load,
+        effectiveContacts,
+        promisesDue,
+        promisesTaken,
+      };
     });
     return ResponseDto.ok({
       date: today.toISOString().slice(0, 10),
       pending,
       overdue,
+      effectiveContacts,
+      promisesDue,
+      promisesTaken,
+      generatedAt: new Date().toISOString(),
       items: rows.map((r) => serializeAgendaItem(r, names.get(r.clientId), today, extras.get(r.id))),
       ...(load ? { load } : {}),
     });
