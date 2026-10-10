@@ -22,7 +22,7 @@ jest.mock('expo-file-system', () => ({
   }),
 }));
 
-import { cacheNameOf, cachedImagePath, clearImageCache, ensureImage, planEviction } from './image-cache';
+import { cacheNameOf, cachedImagePath, clearImageCache, ensureImage, planEviction, preloadImages } from './image-cache';
 
 const HASH = 'a'.repeat(64);
 const URL = `https://api.example/uploads/${HASH}.jpg`;
@@ -86,14 +86,12 @@ describe('preloadImages', () => {
   const u = (c: string) => `https://api.example/uploads/${c.repeat(64)}.jpg`;
 
   it('baja una vez cada foto distinta y se salta lo ya guardado y lo repetido', async () => {
-    const { preloadImages } = await import('./image-cache');
     await ensureImage(u('b'), 'tok'); // ya está
     const got = await preloadImages([u('b'), u('c'), u('c'), undefined, u('d')], 'tok');
     expect(got).toBe(2);
   });
 
   it('respeta el tope de fotos', async () => {
-    const { preloadImages } = await import('./image-cache');
     const got = await preloadImages([u('1'), u('2'), u('3')], 'tok', 2);
     expect(got).toBe(2);
   });
