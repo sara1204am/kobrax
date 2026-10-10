@@ -79,6 +79,11 @@ interface Opts {
   activeStop?: { id: string; routeId?: string; status?: string } | null;
   /** La ruta del cobrador ese día (planificada o en curso). */
   route?: { id: string; status: string } | null;
+  /** `summary`: ejecutadas con gestión real (sus `resultActivityId`) y cuántas de esas gestiones son de hoy. */
+  executedActivityIds?: string[];
+  activitiesToday?: number;
+  promisesDueCount?: number;
+  promisesTakenCount?: number;
 }
 
 function makeService(opts: Opts = {}) {
@@ -101,6 +106,9 @@ function makeService(opts: Opts = {}) {
     eventPayloads: [] as { event: string; payload: Record<string, unknown> }[],
     stopOps: [] as Record<string, unknown>[],
     counts: [] as unknown[],
+    executedWhere: undefined as Record<string, unknown> | undefined,
+    promiseWheres: [] as Record<string, unknown>[],
+    activityWhere: undefined as Record<string, unknown> | undefined,
     reminderCancels: [] as { where: Record<string, unknown>; data: Record<string, unknown> }[],
     /** Cuántas veces se consultó cada tabla del enriquecimiento: tiene que ser UNA por página (sin N+1). */
     queries: { credit: 0, category: 0, users: 0 },
@@ -110,7 +118,12 @@ function makeService(opts: Opts = {}) {
   const first = <T>(list: T[] | undefined) => (list && list.length > 0 ? list[0] : null);
   const tx = {
     agendaItem: {
-      findMany: async (args: { where?: Record<string, unknown> }) => {
+      findMany: async (args: { where?: Record<string, unknown>; select?: Record<string, unknown> }) => {
+        // `summary`: las ejecutadas con gestión real (solo pide `resultActivityId`).
+        if (args.select && 'resultActivityId' in args.select) {
+          calls.executedWhere = args.where;
+          return (opts.executedActivityIds ?? []).map((id) => ({ resultActivityId: id }));
+        }
         // `findOne` pide el historial por `creditId`; el resto de las lecturas listan por día/vencidos.
         if (args.where?.creditId && args.where?.id) {
           calls.historyWhere = args.where;
@@ -126,7 +139,12 @@ function makeService(opts: Opts = {}) {
         if (opts.createRace) return raced ? opts.createRace : null;
         return opts.item ?? null;
       },
-      count: async (args?: { where?: { scheduledDate?: unknown } }) => {
+      count: async (args?: { where?: { scheduledDate?: unknown; type?: string; status?: string } }) => {
+        // `summary`: promesas que vencen hoy (SCHEDULED) y promesas tomadas hoy (por fecha de creación).
+        if (args?.where?.type === 'PROMISE_TO_PAY') {
+          calls.promiseWheres.push(args.where as Record<string, unknown>);
+          return args.where.status ? (opts.promisesDueCount ?? 0) : (opts.promisesTakenCount ?? 0);
+        }
         // `summary` cuenta dos veces: hoy (fecha exacta) y vencidas (`lt`).
         calls.counts.push(args?.where?.scheduledDate);
         return args?.where?.scheduledDate instanceof Date ? (opts.todayCount ?? 0) : (opts.overdueCount ?? 0);
@@ -156,6 +174,10 @@ function makeService(opts: Opts = {}) {
     creditActivity: {
       // El detalle y su historial piden el resultado de las ejecutadas.
       findMany: async () => opts.activities ?? [],
+      count: async (args: { where: Record<string, unknown> }) => {
+        calls.activityWhere = args.where;
+        return opts.activitiesToday ?? 0;
+      },
       findFirst: async () => opts.priorActivity ?? null,
       create: async (args: { data: Record<string, unknown> }) => {
         calls.activity = args.data;
@@ -276,6 +298,8 @@ function makeService(opts: Opts = {}) {
     today: async () => new Date(`${isoUTC(0)}T00:00:00.000Z`),
     // Minutos desde la medianoche de la empresa «ahora»; 0 = recién empezó el día (no estorba a los tests de hora).
     nowWallMinutes: async () => opts.nowMinutes ?? 0,
+    // La Paz (UTC−4): el día civil empieza a las 04:00 UTC.
+    timezone: async () => 'America/La_Paz',
   };
   const service = new AgendaService(
     prisma as never,
@@ -1568,6 +1592,51 @@ describe('AgendaService.summary (F4/11)', () => {
     assert.equal(res.data!.overdue, 2);
     assert.equal(res.data!.items.length, 1);
     assert.match(res.data!.date, /^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('contactos efectivos de hoy: ejecutadas CON gestión real, y la gestión es del día de la empresa', async () => {
+    const { service, calls } = makeService({ executedActivityIds: ['a1', 'a2', 'a3'], activitiesToday: 2 });
+    const res = await service.summary();
+    assert.equal(res.data!.effectiveContacts, 2);
+    // Solo ejecutadas con resultado real, no borradas, y del alcance de quien pregunta.
+    assert.equal(calls.executedWhere!.status, 'EXECUTED');
+    assert.deepEqual(calls.executedWhere!.resultActivityId, { not: null });
+    assert.equal(calls.executedWhere!.assigneeId, 'u1');
+    // La gestión real tiene que ser de HOY en La Paz: [04:00Z, 04:00Z del día siguiente).
+    const range = (calls.activityWhere!.createdAt as { gte: Date; lt: Date });
+    assert.equal(range.lt.getTime() - range.gte.getTime(), 86_400_000);
+    assert.equal(range.gte.getUTCHours(), 4);
+    assert.deepEqual((calls.activityWhere!.id as { in: string[] }).in, ['a1', 'a2', 'a3']);
+  });
+
+  it('sin ejecutadas con gestión real no consulta la bitácora y da 0', async () => {
+    const { service, calls } = makeService({ executedActivityIds: [], activitiesToday: 99 });
+    const res = await service.summary();
+    assert.equal(res.data!.effectiveContacts, 0);
+    assert.equal(calls.activityWhere, undefined);
+  });
+
+  it('promesas: las que vencen hoy son SCHEDULED con fecha de hoy; las tomadas hoy, por fecha de creación', async () => {
+    const { service, calls } = makeService({ promisesDueCount: 3, promisesTakenCount: 5 });
+    const res = await service.summary();
+    assert.equal(res.data!.promisesDue, 3);
+    assert.equal(res.data!.promisesTaken, 5);
+    const due = calls.promiseWheres.find((w) => w.status)!;
+    assert.equal(due.status, 'SCHEDULED');
+    assert.ok(due.scheduledDate instanceof Date);
+    const taken = calls.promiseWheres.find((w) => !w.status)!;
+    assert.equal(taken.deletedAt, null);
+    assert.ok((taken.createdAt as { gte: Date }).gte instanceof Date);
+    // Mismo alcance que el resto del resumen: el cobrador cuenta solo lo suyo.
+    assert.equal(taken.assigneeId, 'u1');
+  });
+
+  it('trae cuándo se calculó, para que quien lo guarde sepa de cuándo es', async () => {
+    const { service } = makeService({});
+    const before = Date.now();
+    const res = await service.summary();
+    const at = Date.parse(res.data!.generatedAt);
+    assert.ok(at >= before - 1000 && at <= Date.now() + 1000);
   });
 
   it('el cobrador cuenta solo lo suyo', async () => {

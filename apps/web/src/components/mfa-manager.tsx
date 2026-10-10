@@ -26,6 +26,8 @@ export function MfaManager() {
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   // disable
   const [password, setPassword] = useState('');
+  /** El rol exige MFA (D2): no se ofrece desactivarlo. El servidor lo impone igual (AUTH_011). */
+  const [required, setRequired] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -34,7 +36,8 @@ export function MfaManager() {
         window.location.href = '/login';
         return;
       }
-      const me = (await res.json()) as { mfaEnabled?: boolean };
+      const me = (await res.json()) as { mfaEnabled?: boolean; mfaRequired?: boolean };
+      setRequired(me.mfaRequired === true);
       setView(me.mfaEnabled ? 'enabled' : 'disabled');
     })();
   }, []);
@@ -174,6 +177,11 @@ export function MfaManager() {
           <Button variant="ghost" onClick={regenerate} loading={busy}>
             {t('regenerate')}
           </Button>
+          {required ? (
+            <p className="border-t border-k-border pt-4 text-[12px] text-k-text-2">
+              Tu rol exige verificación en dos pasos: no se puede desactivar.
+            </p>
+          ) : (
           <div className="border-t border-k-border pt-4">
             <p className="text-[13px] font-medium text-k-text">{t('disableTitle')}</p>
             <p className="mt-1 text-[12px] text-k-text-2">{t('disableHint')}</p>
@@ -186,6 +194,7 @@ export function MfaManager() {
               </Button>
             </div>
           </div>
+          )}
         </>
       )}
     </div>

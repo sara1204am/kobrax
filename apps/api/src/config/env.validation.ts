@@ -29,6 +29,8 @@ export const envSchema = z.object({
   // del repo. Nunca se registran en logs.
   FCM_SERVICE_ACCOUNT_JSON_B64: z.string().optional(),
   FCM_SERVICE_ACCOUNT_FILE: z.string().optional(),
+  // Hasta cuándo un rol crítico sin MFA puede postergar el enrolamiento (fecha ISO). Sin valor = obligatorio ya.
+  MFA_CRITICAL_GRACE_UNTIL: z.string().optional(),
   // Versión mínima de la app móvil (semver). Sin valor = sin corte; ver AppVersionGuard.
   MIN_APP_VERSION: z.string().optional(),
 });
