@@ -82,6 +82,8 @@ export function removeStop(routeId: string, stopId: string): Promise<MutateResul
 export interface UpdateStopPatch {
   status?: RouteStopStatus;
   sequenceOrder?: number;
+  /** Cambiar a qué dirección del cliente va la parada (solo quien armó la ruta; la parada debe estar pendiente). */
+  locationId?: string;
 }
 export function updateStop(routeId: string, stopId: string, patch: UpdateStopPatch): Promise<MutateResult<RouteStopItem>> {
   return apiMutate<RouteStopItem>(`/routes/${routeId}/stops/${stopId}`, 'PATCH', patch);

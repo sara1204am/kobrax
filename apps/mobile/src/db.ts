@@ -96,6 +96,8 @@ export type QueueKind =
   | 'agenda.complete'
   | 'agenda.postpone'
   | 'route.status'
+  /** Cambiar la dirección de una parada (valor fijo: repetirlo es un no-op en el servidor). */
+  | 'route.stop.location'
   | 'client.create'
   | 'credit.create'
   /** Marcar en mora y poner al día. Ver `queue.ts`: «poner al día» viaja con la fecha ya resuelta. */

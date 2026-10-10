@@ -1,9 +1,9 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { RouteStopStatus } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
-import { EmptyState, Header, StatusBadge, StopCard } from '@/ui';
+import { EmptyState, Header, PickerSheet, StatusBadge, StopCard } from '@/ui';
 import { LocationPhoto, PhotoViewer } from '@/location-photo';
 import { lugarLabel } from '@/route-labels';
 import { installmentHint } from '@/visit-result';
@@ -13,6 +13,8 @@ import { money } from '@/agenda-form';
 import { actionLinks, clientContext } from '@/agenda.service';
 import { straightLine } from '@/route-eta';
 import { getRoute, getRoutePreview, type RouteItem, type RouteStopItem } from '@/routes.service';
+import { changeStopLocation } from '@/route-stop-location';
+import type { LocationOption } from '@/agenda.service';
 
 /**
  * RT-4 · Mapa activo (Rutas S4). La jornada ya arrancó: el cobrador ve su recorrido, toca el pin de
@@ -29,6 +31,8 @@ export default function MapaRutaScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewer, setViewer] = useState(false);
   const [phone, setPhone] = useState<string | undefined>();
+  const [locations, setLocations] = useState<LocationOption[]>([]);
+  const [locSheet, setLocSheet] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -64,17 +68,25 @@ export default function MapaRutaScreen() {
   // El teléfono de la parada elegida, para que "Llamar" no dependa de abrir la ficha.
   const loadPhone = useCallback(async (clientId: string) => {
     setPhone(undefined);
+    setLocations([]);
     const ctx = await clientContext(clientId);
-    if (ctx.status === 'ok') setPhone(ctx.data.contacts.find((c) => c.value)?.value ?? undefined);
+    if (ctx.status === 'ok') {
+      setPhone(ctx.data.contacts.find((c) => c.value)?.value ?? undefined);
+      setLocations(ctx.data.locations);
+    }
   }, []);
+
+  // La parada elegida (la primera pendiente al abrir, o la que se toca) trae su teléfono y sus direcciones.
+  const selectedClientId = selected?.clientId;
+  useEffect(() => {
+    if (selectedClientId) void loadPhone(selectedClientId);
+  }, [selectedClientId, loadPhone]);
 
   const onSelect = useCallback(
     (id: string) => {
       setSelectedId(id);
-      const stop = stops.find((s) => s.id === id);
-      if (stop) void loadPhone(stop.clientId);
     },
-    [stops, loadPhone],
+    [],
   );
 
   if (!route) {
@@ -174,6 +186,11 @@ export default function MapaRutaScreen() {
                   onPress={() => links.tel && void Linking.openURL(links.tel)}
                 />
               </View>
+              {locations.length > 1 && selected.status === RouteStopStatus.PENDING && (
+                <View style={{ flex: 1 }}>
+                  <Button label="📍 Otra dirección" variant="ghost" onPress={() => setLocSheet(true)} />
+                </View>
+              )}
               <View style={{ flex: 1 }}>
                 <Button
                   label="Ver detalle"
@@ -183,6 +200,24 @@ export default function MapaRutaScreen() {
               </View>
             </View>
           }
+        />
+        <PickerSheet
+          visible={locSheet}
+          onClose={() => setLocSheet(false)}
+          title="¿A qué dirección va esta parada?"
+          options={locations.map((l) => ({
+            key: l.id,
+            label: lugarLabel(l),
+            hint: [l.address, l.latitude == null ? 'sin punto en el mapa' : null].filter(Boolean).join(' · ') || undefined,
+          }))}
+          onPick={(locationId) => {
+            setLocSheet(false);
+            void (async () => {
+              const r = await changeStopLocation(routeId, selected.id, locationId);
+              if (r.status === 'error') setError(r.message);
+              else await fetchAll();
+            })();
+          }}
         />
         <PhotoViewer
           photos={selected.locationPhotoUrls?.length ? selected.locationPhotoUrls : selected.locationPhotoUrl ? [selected.locationPhotoUrl] : []}

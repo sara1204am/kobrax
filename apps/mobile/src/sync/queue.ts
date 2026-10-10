@@ -29,7 +29,7 @@ import { deleteQueuePhoto, persistPhoto, photoExists, type PendingPhoto } from '
 import { uploadImage, type UploadResult } from '../uploads.service';
 import { addVisitEvidence, createVisit, type CreateVisitInput } from '../field.service';
 import { createPayment, type NewPayment } from '../payments.service';
-import { updateRouteStatus } from '../routes.service';
+import { updateRouteStatus, updateStop } from '../routes.service';
 import {
   createClient,
   removeContact,
@@ -104,6 +104,7 @@ export type QueuedAction =
    * reintentarlo deja la ruta donde ya estaba. Sin esto, una jornada iniciada sin señal quedaba
    * `PLANNED` en el servidor y la app volvía a ofrecer "Iniciar ruta" al reconectar.
    */
+  | { kind: 'route.stop.location'; routeId: string; stopId: string; locationId: string }
   | { kind: 'route.status'; routeId: string; status: RouteStatus; /** Por qué se cierra con paradas sin gestionar (D-5). */ reason?: string }
   /**
    * Alta de cliente y de préstamo en la calle. Idempotentes porque **el id lo pone el teléfono**
@@ -220,6 +221,7 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'agenda.complete': 'Gestión ejecutada',
   'agenda.postpone': 'Gestión pospuesta',
   'route.status': 'Estado de la jornada',
+  'route.stop.location': 'Dirección de una parada',
   'client.create': 'Cliente nuevo',
   'credit.create': 'Préstamo nuevo',
   'arrears.mark': 'Préstamo marcado en mora',
@@ -412,6 +414,8 @@ export async function send(action: PendingAction): Promise<SendResult> {
       if ('wait' in resolved) return { status: 'error', message: resolved.wait };
       return mapMutate(await createItem(resolved.input));
     }
+    case 'route.stop.location':
+      return mapMutate(await updateStop(action.routeId, action.stopId, { locationId: action.locationId }));
     case 'route.status':
       return mapMutate(await updateRouteStatus(action.routeId, action.status, action.reason));
     case 'client.create': {
