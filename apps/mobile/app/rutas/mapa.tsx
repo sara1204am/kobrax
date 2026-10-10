@@ -3,7 +3,10 @@ import { ActivityIndicator, Linking, StyleSheet, Text, View } from 'react-native
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { RouteStopStatus } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
-import { EmptyState, Header, StopCard } from '@/ui';
+import { EmptyState, Header, StatusBadge, StopCard } from '@/ui';
+import { LocationPhoto, PhotoViewer } from '@/location-photo';
+import { lugarLabel } from '@/route-labels';
+import { installmentHint } from '@/visit-result';
 import { Button } from '@/components';
 import { MapCanvas, type MapMarker } from '@/maps/MapCanvas';
 import { money } from '@/agenda-form';
@@ -24,6 +27,7 @@ export default function MapaRutaScreen() {
   const [line, setLine] = useState<{ latitude: number; longitude: number }[]>([]);
   const [zigzag, setZigzag] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [viewer, setViewer] = useState(false);
   const [phone, setPhone] = useState<string | undefined>();
   const [error, setError] = useState<string | null>(null);
 
@@ -125,6 +129,7 @@ export default function MapaRutaScreen() {
       />
 
       {selected ? (
+        <>
         <StopCard
           title={selected.clientName ?? 'Cliente sin nombre'}
           address={selected.address}
@@ -135,6 +140,29 @@ export default function MapaRutaScreen() {
               : undefined
           }
           daysPastDue={selected.daysPastDue}
+          thumbnail={
+            selected.locationPhotoUrls?.length || selected.locationPhotoUrl ? (
+              <LocationPhoto
+                fileUrl={selected.locationPhotoUrls?.[0] ?? selected.locationPhotoUrl}
+                size={64}
+                onPress={() => setViewer(true)}
+                label="Ver fotos de la casa"
+              />
+            ) : undefined
+          }
+          chips={
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs }}>
+              {selected.locationType && <StatusBadge label={lugarLabel(selected)} tone="neutral" />}
+              {selected.scheduledTime && <StatusBadge label={`Hora fija ${selected.scheduledTime}`} tone="info" />}
+              {installmentHint(selected) && (
+                <StatusBadge
+                  label={`Cuota ${money(installmentHint(selected)!.amount, selected.currency ?? 'BOB')}`}
+                  tone="warning"
+                />
+              )}
+              {(selected.latitude == null || selected.longitude == null) && <StatusBadge label="Sin punto en el mapa" tone="warning" />}
+            </View>
+          }
           onPrimary={() => router.push(`/rutas/resultado?routeId=${routeId}&stopId=${selected.id}`)}
           actions={
             <View style={styles.acciones}>
@@ -156,6 +184,12 @@ export default function MapaRutaScreen() {
             </View>
           }
         />
+        <PhotoViewer
+          photos={selected.locationPhotoUrls?.length ? selected.locationPhotoUrls : selected.locationPhotoUrl ? [selected.locationPhotoUrl] : []}
+          visible={viewer}
+          onClose={() => setViewer(false)}
+        />
+        </>
       ) : sinPendientes ? (
         // No queda nada por hacer: el paso siguiente es cerrar el día (S6), no seguir en el mapa.
         <View style={styles.cierre}>

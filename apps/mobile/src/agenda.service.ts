@@ -177,6 +177,11 @@ export interface LocationOption {
   zone?: string;
   latitude?: number;
   longitude?: number;
+  /** Rutas `/api/uploads/…`; la primera es la principal. */
+  photoUrls?: string[];
+  /** Solo en las de garantes y familiares: de quién es la dirección y qué relación tiene con el deudor. */
+  ownerName?: string;
+  ownerRelation?: string;
 }
 
 export interface AgendaClientContext {

@@ -1,3 +1,4 @@
+import { LocationLine } from '@/location-photo';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -262,10 +263,7 @@ export default function MoraFichaScreen() {
               </Text>
             ))}
             {ctx?.locations.map((l) => (
-              <Text key={l.id} style={styles.line}>
-                {l.address ?? 'Sin dirección'}
-                {l.zone ? ` · ${l.zone}` : ''}
-              </Text>
+              <LocationLine key={l.id} loc={l} />
             ))}
           </View>
         )}
