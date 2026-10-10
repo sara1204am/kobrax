@@ -376,12 +376,12 @@ memoria del cobrador. Se propone un perfil corto por cliente (o por ubicación):
 
 | Campo existente | Dónde | Estado |
 |---|---|---|
-| `visitSchedule` (JSON, por ubicación) | `client_locations`; la API lo acepta (`client.dto.ts`) | Sin UI en web ni móvil |
+| `visitSchedule` (JSON, por ubicación) | `client_locations`; solo se escribe al agregar una ubicación: el alta atómica lo descarta, no se puede editar y ningún endpoint lo devuelve | Sin UI; **requiere cambios de API primero** (ver F4/13 E2) |
 | `preferredContactChannel` | `clients`; en API, tipos y seeds | Sin UI en web ni móvil |
 | `referenceNotes` (indicaciones del lugar) | `client_locations` | Existe |
 
-Por eso el perfil de cobro es mayormente **exponer lo que el modelo ya soporta**,
-con una pantalla corta, y no construir un modelo nuevo.
+El campo existe en la base, pero la API solo lo escribe al agregar una ubicación;
+exponerlo exige primero cambios de API (ver `docs/epics/F4/13-capa-datos-ia-plan.md`, E2).
 
 ### 12.6 Qué desbloquea el perfil de cobro
 

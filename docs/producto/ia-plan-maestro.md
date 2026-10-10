@@ -47,7 +47,7 @@ usan el mismo producto, con distinto nivel de asistencia.
 | Fecha esperada de ingreso | ❌ | Gestión |
 | Plantilla de mensaje usada | ❌ | Gestión |
 | Quién responde realmente (titular, garante…) | ❌ | Gestión |
-| Modalidad y horario de cobro | 🟡 `visitSchedule` y `preferredContactChannel` existen en la API y **sin pantalla** | Perfil de cobro |
+| Modalidad y horario de cobro | 🟡 `visit_schedule` solo se **escribe** al agregar una ubicación (el alta atómica lo descarta, no se edita, ningún endpoint lo devuelve); `preferredContactChannel` existe sin pantalla. Verificado en F4/13 | Perfil de cobro |
 | Zona normalizada | 🟡 `client_locations.zone` es texto libre | Catálogo de zonas |
 | Origen del dato (manual / dictado / importado) | ❌ | Perfil y gestión |
 
@@ -123,7 +123,7 @@ aparece nulo en pruebas); se revisa con `FIELD-RULES`.
 | Motivo y fecha esperada | Hoja de gestión (opciones filtradas por fuente de ingreso) | 1 toque |
 | Quién responde | Se sugiere al nombrar garante o codeudor | 0–1 toque |
 | Perfil de cobro | Ficha del cliente y parada | Una vez |
-| Plantilla usada | Automático al enviar por `wa.me` | 0 |
+| Plantilla usada | Al **elegir** la plantilla (`wa.me` no confirma el envío; hoy el código de plantilla se descarta) | 0 |
 
 ### 2.4 Offline, permisos y cambios en lo existente
 

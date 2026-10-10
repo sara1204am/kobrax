@@ -1,0 +1,358 @@
+# F4/13 · Capa de datos para la IA: plan por etapas
+
+Estado: **plan en borrador** (2026-10-10), sin código. Pendiente de pasar el gate de validación del repo antes de
+implementar. Parte de [`docs/producto/ia-plan-maestro.md`](../../producto/ia-plan-maestro.md) §2 (capa A) y de la lectura
+del código hecha el mismo día; los números de línea citados corresponden a la rama `docs/ia-capa-datos` (desde `dev`).
+
+**Objetivo.** Guardar de forma estructurada lo que hoy se pierde en la memoria del cobrador o en notas de texto libre:
+de qué vive el deudor, cuándo le llega el dinero, por qué no pagó, cómo conviene cobrarle y qué plantilla se usó. Que
+esos datos **mejoren la aplicación sin IA** (reglas de la capa B) y queden listos para alimentar la IA después.
+
+## 0. Decisiones
+
+### 0.1 Tomadas por la fundadora
+
+| # | Decisión | Efecto |
+|---|---|---|
+| K1 | El aprendizaje es memoria y contexto, **sin modelo propio de ML** | Esta capa solo guarda datos; no entrena nada |
+| K5 | **Sin aprendizaje entre cuentas** por ahora | Todo dato queda por `account_id`; sin anonimización entre cuentas |
+| — | Se trabaja **por capas**, empezando por los datos; rama propia sobre `dev` | Este plan |
+
+### 0.2 Supuestos de este plan (confirmar antes de empezar cada etapa)
+
+| # | Supuesto | Por qué | Se confirma en |
+|---|---|---|---|
+| S1 | Los catálogos por defecto **se siembran al registrar una cuenta** y se hace un **backfill** para las existentes | Hoy el registro no siembra catálogos (verificado): una cuenta nueva nace vacía | E1 |
+| S2 | El perfil de ingreso es **del cliente**; un crédito puede sobrescribirlo más adelante | Recomendación M2 del plan maestro; un cliente puede tener un crédito productivo y uno de consumo | E3 |
+| S3 | El motivo de no pago es **opcional**, no obligatorio | La cola offline puede traer gestiones antiguas sin él; hacerlo obligatorio las rechazaría con 400 | E4 |
+| S4 | El catálogo `ZONE` **queda fuera** de este plan | `zone` es texto libre hoy; normalizarlo es otro trabajo (§8) | — |
+| S5 | `template_code` significa **plantilla elegida**, no «enviada» | `wa.me` no confirma el envío (verificado) | E5 |
+| S6 | No se sube `QUEUE_VERSION` | Los campos nuevos son opcionales; subirla marca ítems antiguos como no soportados | E4 |
+| S7 | Se reutilizan permisos existentes (`catalog:write`, `client:write`, `collection:write`) | No hay permisos nuevos que gestionar | Todas |
+
+## 1. Principios (no se tocan)
+
+- **Todo dato nuevo es opcional.** Ninguna regla puede asumir que existe; las cuentas y gestiones antiguas siguen válidas.
+- **Origen registrado.** Cada dato guarda si vino de forma manual, dictada o importada (para la IA después).
+- **`credit_activities` es append-only:** solo se agregan columnas nulables, no se reescribe nada.
+- **Una sola fuente de verdad de las reglas:** el validador compartido (`validateRecoveryActivity`) para API, web y móvil.
+- **Despliegue en orden: API → shared → web y móvil.** El validador global rechaza con 400 los campos que no conoce
+  (`whitelist` + `forbidNonWhitelisted`, verificado en `validation-pipe.ts:30-31`).
+- **Offline primero:** lo que el cobrador captura en campo debe poder encolarse.
+- **Todas las tablas nuevas con `account_id` y RLS** (principio no negociable #1).
+
+## 2. Orden de las etapas
+
+```
+E1 Catálogos ──► E2 Perfil de cobro ──► E3 Perfil de ingreso ──► E4 Motivo en la gestión ──► E5 Plantilla
+   (base)          (usa visitSchedule)     (tabla nueva)            (columnas nuevas)         usada
+                                                                          │
+                                                                          └──► E6 Importación (verificación)
+```
+
+| Etapa | Entrega visible | Depende de | Esfuerzo |
+|---|---|---|---|
+| **E1** | Catálogos sembrados y editables; el móvil los baja | — | M |
+| **E2** | Perfil de cobro editable en web y móvil | E1 | M |
+| **E3** | Fuente de ingreso, rubro y ciclo en la ficha del cliente | E1 | M-L |
+| **E4** | Motivo de no pago y fecha esperada al registrar una gestión | E1 | M-L |
+| **E5** | Código de plantilla guardado en la gestión | E4 | S-M |
+| **E6** | Verificar si la importación puede traer rubro, ciclo o tipo | E3 | S |
+
+Cada etapa se puede entregar sola y deja la aplicación funcionando. E2, E3 y E4 son independientes entre sí tras E1.
+
+---
+
+## Etapa 1 · Catálogos base y siembra
+
+**Qué cambia.** Cuatro catálogos nuevos y su siembra por defecto.
+
+| Catálogo | Contenido inicial | `metadata` |
+|---|---|---|
+| `INCOME_SOURCE` | Asalariado/profesional · Comerciante/productivo · Otro | — |
+| `OCCUPATION` | Transportista, funcionario público, comerciante, productor, construcción, servicios, docente, otro | `incomeSource`, `defaultCycle`, `synonyms[]` |
+| `NO_PAYMENT_REASON` | Los motivos de [`ia-aprendizaje-efectividad.md`](../../producto/ia-aprendizaje-efectividad.md) §12.4 | `appliesTo[]`, `suggestion`, `asksExpectedIncomeDate`, `triggersContactUpdate`, `sensitive` |
+| `COLLECTION_MODALITY` | Visita en negocio · en domicilio · recoger la cuota · paga en oficina · transferencia o QR | — |
+
+> Las listas son **borrador**: se validan con cobradores reales (plan maestro M5) y cada cuenta las puede editar. Se
+> siembran con la lista inicial; el valor está en que existan y se puedan ajustar.
+
+### Trabajo
+
+**Base de datos**
+- Una migración **por valor** del enum, con solo `ALTER TYPE "CatalogType" ADD VALUE IF NOT EXISTS '<X>';`
+  (patrón de `20260814230000_add_credit_type_catalog`; `ADD VALUE` no puede convivir con su uso en la misma
+  transacción de Prisma). Orden posterior a `20261010000000`.
+- Valores nuevos en `schema.prisma:1659-1675`.
+
+**Shared**
+- Espejo del enum en `packages/shared/src/enums/agenda.enum.ts:86-102` (hoy duplicado a mano).
+- Mover la lista de catálogos por defecto desde `seed.ts` (arreglo `CATALOGS`, línea 167) a `packages/shared` para
+  que la usen **el seed y el registro**.
+- Esquema validado de `metadata` por catálogo (nuevo util con su spec).
+
+**API**
+- `accounts.service.ts` (~95-110): sembrar catálogos junto a `arrearCategory.createMany`, dentro del mismo `withTenant`.
+- Script de backfill idempotente (`createMany` + `skipDuplicates`) para cuentas existentes.
+- `CreateCatalogItemDto.metadata` es `@IsObject` sin esquema: validar el contenido para los tipos nuevos.
+- `catalogs.service.ts`: `update` y `remove` usan solo el `id`, sin filtrar por catálogo (verificado); corregirlo.
+
+**Móvil**
+- Agregar los 4 tipos a `CATALOGOS` en `sync/hydrate.ts:39-46`; sin eso no bajan al teléfono.
+- Ampliar `CatalogOption.metadata` (`catalogs.service.ts:13`).
+
+**Web**
+- Ampliar `CatalogOption` con `metadata?` (`components/client-form.tsx:41`).
+- Pantalla para editar estos catálogos en `/cuenta` (junto a las plantillas de WhatsApp). *No verificado* si ya hay
+  un patrón reutilizable.
+
+### Pruebas
+- `catalogs.service.spec.ts`: validación de metadata y no cruzar tipos en `update`/`remove`.
+- `accounts.service.spec.ts`: el registro siembra los catálogos.
+- shared: códigos únicos y metadata válida en las listas por defecto.
+- Integración: cuenta nueva con catálogos; backfill idempotente.
+
+### Criterio de aceptación
+Una cuenta recién registrada, y una existente tras el backfill, muestran los 4 catálogos con su lista; el móvil
+los tiene sin red tras una hidratación; editar un ítem no afecta a otro tipo.
+
+---
+
+## Etapa 2 · Perfil de cobro (A3)
+
+**Qué cambia.** El horario y la modalidad de cobro del cliente dejan de ser un campo sin salida.
+
+**Hallazgo que cambia el plan original:** `visit_schedule` **no es solo «sin pantalla»**. Hoy solo se escribe en
+`POST /clients/:id/locations`; el **alta atómica lo descarta** (`mkLocation`, `clients.service.ts:197-202`),
+**no se puede editar** (`UpdateLocationDto` no lo tiene, `client.dto.ts:59-72`) y **ningún endpoint lo devuelve**
+(`serializeLocation`, `clients.serializer.ts:66-79`). Lo mismo ocurre con `riskLevel`.
+
+### Trabajo
+
+**Shared**
+- Esquema validado del perfil de cobro: `{ modality, frequency, window:{from,to}, days[], handoverBy, note }`,
+  con su spec. `modality` referencia el catálogo `COLLECTION_MODALITY`.
+- `NewLocationInput` (`client.types.ts:22`), `ClientLocationDetail` (:176) y `LocationRow` (:487): agregar `visitSchedule`.
+- `preferredContactChannel` → `ClienteForm` (:531), `initialCliente`, `hydrateCliente`, `buildClientePayload`
+  (`client-form.ts:378`) y `diffCliente` (`client-diff.ts:150`, `ClienteOps.client` es un `Pick` cerrado).
+
+**API**
+- `UpdateLocationDto` acepta `visitSchedule` (y `riskLevel`).
+- `mkLocation` del alta atómica copia `visitSchedule` y `riskLevel`.
+- `updateLocation` (`clients.service.ts:838-859`) lo persiste.
+- `serializeLocation` lo devuelve.
+- Validación del contenido contra el esquema compartido.
+- `preferredContactChannel`: acotar a valores conocidos (hoy `@IsString()` libre).
+
+**Web**
+- `client-form.tsx`: bloque «Cómo cobrarle» en `LocationRows` (:247), con select de modalidad, horario y quién entrega.
+- `client-card.tsx`: mostrarlo en la ficha; `section-editor.tsx`: nueva sección `'collection'` (`SectionKey` es una
+  unión cerrada).
+- `lib/client-ops.ts` (`opsRequests`, :35): rama para actualizar la ubicación.
+- i18n es/en (`portfolio.sections`, `portfolio.form`); `messages.test.ts` exige paridad.
+
+**Móvil**
+- `cliente-form-view.tsx`: bloque en `LocationsSection` (:187).
+- `UpdateClientPatch` (`clients.service.ts:170`) es un tipo **cerrado y local**: agregar `preferredContactChannel`.
+- `app/cliente/[id].tsx` (:380-412): mostrar en `DataRow`.
+- Offline: las ubicaciones ya viajan por la cola `client.location`; verificar que acepte el campo nuevo.
+
+### Pruebas
+- shared: esquema válido/ inválido; `client-diff.test`, `client-form.test`.
+- API: alta con `visitSchedule` lo conserva (hoy se pierde); update y serializer.
+- Web: `client-form` y ficha; móvil: `cliente-diff.test.ts`, `cliente-queue.test.ts`.
+
+### Criterio de aceptación
+Un cliente creado con horario de cobro lo conserva, se ve en la ficha y se edita; un cliente antiguo sin él sigue
+funcionando; ítems antiguos de la cola se envían igual.
+
+---
+
+## Etapa 3 · Perfil de ingreso (A2)
+
+**Qué cambia.** Fuente de ingreso, rubro y ciclo de ingreso por cliente.
+
+**Hallazgo:** no entra en `PATCH /clients/:id` ni en `ClienteOps.client`; necesita endpoint propio, un campo nuevo en
+`ClienteOps` y un `kind` nuevo en la cola del móvil. `clients.metadata` queda descartado: ya guarda `linkSuggestions`
+y `update` lo reemplaza entero sin mezclar (`clients.service.ts:705-706`).
+
+### Trabajo
+
+**Base de datos**
+- Tabla `client_income_profiles` (`client_id` único, `income_source_code`, `occupation_code`, `income_cycle` enum
+  `DAILY|WEEKLY|BIWEEKLY|MONTHLY|QUARTERLY|SEASONAL|IRREGULAR`, `income_day`, `origin` enum
+  `MANUAL|DICTATION|IMPORT|SUGGESTION_ACCEPTED`, `declared_by`, `declared_at`, `notes`).
+- RLS: agregar al arreglo `operational` de `rls/001_enable_rls.sql` **y** dejarlo inline en la migración (patrón de
+  `20261010000000_device_push_tokens`). Recordar que el script se aplica a mano.
+
+**API**
+- `GET` y `PUT /clients/:id/income-profile`, con `client:read` / `client:write`.
+- `audit.record({ entity: 'client_income_profile', … })` en alta y edición.
+- Incluirlo en el detalle del cliente.
+
+**Shared**
+- Tipos, validación y `ClienteOps` ampliado.
+
+**Web**
+- Tarjeta «Perfil de ingreso» en la ficha; sección nueva `'income'` en `section-editor.tsx`; rama en `client-ops.ts`.
+- Select de rubro con **fallback a texto libre si el catálogo viene vacío** y que conserve un código ya guardado que
+  salió del catálogo (patrón de `CollateralFields`, :667).
+
+**Móvil**
+- Campos en alta y edición del cliente; `queueableOps` / `opsToActions` (`cliente-queue.ts:62,76`): el perfil es
+  un **valor fijo** (idempotente), así que puede encolarse; kind nuevo `client.income` en `queue.ts` con su entrada en
+  `ACTION_LABEL` y su `case` en `send`.
+
+### Pruebas
+API (spec con `tx` simulado, patrón de `mora.activity.spec.ts`) más una prueba de integración que verifique **RLS
+forzada** de la tabla nueva (patrón de `push-devices.it.ts`); web y móvil como en E2.
+
+### Criterio de aceptación
+Se registra el rubro y ciclo de un cliente en web y móvil, también sin red; se ve en la ficha; otra cuenta no puede
+leerlo; un cliente sin perfil no rompe ninguna pantalla.
+
+---
+
+## Etapa 4 · Motivo de no pago en la gestión (A4)
+
+**Qué cambia.** Al registrar una gestión sin pago, se puede indicar el motivo, la fecha esperada de ingreso y quién
+responde realmente.
+
+### Trabajo
+
+**Base de datos**
+- Columnas **nulables** en `credit_activities`: `reason_code`, `expected_income_date`, `payer_party` (enum
+  `HOLDER|GUARANTOR|CODEBTOR|BENEFICIARY|NOT_LOCATED`), `payer_relation_id`, `origin` (`MANUAL|DICTATION`).
+  Los enums nuevos se crean en la misma migración.
+
+**Shared** (único punto de la regla)
+- `RecoveryActivityInput` (`recovery-activity.ts:37`) y `validateRecoveryActivity` (:73): campos nuevos y reglas.
+- **Reglas, todas permisivas con lo antiguo:** el motivo solo se admite en gestiones **sin** promesa de pago;
+  `expectedIncomeDate` solo con un motivo que lo pida; el campo **no es obligatorio** (S3).
+- Cada código de error nuevo rompe la compilación en dos mapas exhaustivos: `ACTIVITY_ERROR_TEXT`
+  (`mora-ficha.ts:409`) y `panel.mora.ficha.activity.errors` (es/en), además de `ACTIVITY_ERRORS` de la API.
+
+**API**
+- `ActivityPromiseDto` y `CreateMoraActivityDto` (`mora.dto.ts:131-154`): declarar los campos nuevos.
+- `addActivity` (`mora.service.ts:311-385`) y `recordCreditActivity` (`credit-activity.ts:15-37`, lista cerrada de
+  campos) y `serializeCreditActivity` (:42-60, lista cerrada).
+- **Auditar** la actividad (hoy `addActivity` no lo hace): `audit.record` con motivo y origen, sin texto libre.
+- Decidir los otros dos escritores: `agenda.service.ts:582` (completar una gestión agendada) y `field.service.ts:356`
+  (visita de ruta). **Propuesta:** E4 cubre mora y agenda; la visita de ruta queda para una etapa posterior.
+
+**Web**
+- `activity-form.tsx` (`RegisterActivityButton`, :39): estado (:60-70), `input` de validación (:76-83) y payload
+  (:115-120). El motivo aparece **solo cuando el resultado no es pago** (condición sobre `result`, :73).
+- `ficha-gestion.tsx`: leer `NO_PAYMENT_REASON` en el `Promise.all` (:75) y pasarlo por prop; filtrar los motivos por
+  la fuente de ingreso del cliente.
+
+**Móvil**
+- `gestion-sheet.tsx`: ampliar el tipo de `onSubmit` (:53-58) y el payload (:98); cargar el catálogo (:76).
+- Los dos llamadores deben cambiar a la vez: `app/cliente/[id].tsx:519` y `app/mora/[creditId].tsx:327`.
+- Cola: `mora.activity` pasa el `input` entero, así que los campos fluyen; **no se sube `QUEUE_VERSION`** (S6).
+
+### Riesgos de compatibilidad
+- **App nueva contra API vieja:** un campo desconocido da 400 permanente y la gestión queda rechazada. Mitigación:
+  desplegar la API primero y forzar actualización con el 426 que ya existe.
+- **Ítems antiguos de la cola:** no traen el campo; como es opcional, se envían igual.
+- `payer_relation_id` podría referirse a una relación local (`local:`) aún no sincronizada. *No verificado* cómo se
+  resolvería (`resolveLocalIds`, `queue.ts:596`, hoy solo traduce `contactId` y `locationId` de la agenda).
+
+### Pruebas
+`recovery-activity.spec.ts` ampliado; `mora.activity.spec.ts`; web `activity-form.test.tsx`; móvil
+`mora-actions.test.ts` (vigila cada par tipo/resultado), `sync/queue.test.ts`; `i18n/messages.test.ts`.
+
+### Criterio de aceptación
+Se registra una gestión con motivo en web y móvil (con y sin red); el historial lo muestra; una gestión sin motivo
+sigue siendo válida; la fecha esperada solo aparece con el motivo que la pide.
+
+---
+
+## Etapa 5 · Plantilla usada (A4, parte final)
+
+**Hallazgo:** hoy el código de la plantilla **no se guarda en ningún lado**. `pick` en `agenda-register.tsx` descarta
+`t.code`; `new-task-modal.tsx:474-488` en la web hace lo mismo. Y la gestión de mensajes de agenda se completa con
+`completeItem` (agenda), no como `mora.activity`.
+
+### Trabajo
+- Guardar `templateCode` en `details` del ítem de agenda al elegir la plantilla (web `new-task-modal`, móvil
+  `agenda/crear.tsx` y `agenda-register.tsx`).
+- Propagarlo al completar la gestión hacia `credit_activities.template_code` (columna nueva, nulable).
+- `trace.ts` (`registrarRastro`) no lleva plantilla; queda fuera.
+
+### Decisión pendiente
+¿Cuál es la fuente de verdad del mensaje: el ítem de agenda o la actividad `MESSAGE`? Se propone la **actividad**
+(es lo que se analiza), con el código copiado desde el ítem.
+
+### Criterio de aceptación
+Una gestión de WhatsApp completada desde una plantilla queda con su código; las anteriores quedan en blanco.
+
+---
+
+## Etapa 6 · Importación (verificación)
+
+No se construye: se **verifica** si el archivo de cartera puede traer rubro, ciclo o tipo de crédito y si
+`typeCode` se mapea (solo aparece nulo en `portfolio-credit.spec.ts:102`). Si se puede, se abre un plan aparte (A5).
+
+---
+
+## 3. Transversales
+
+| Tema | Regla |
+|---|---|
+| **Migraciones** | Nombre descriptivo, orden posterior a `20261010000000`; un `ADD VALUE` por migración; no modificar las ya ejecutadas |
+| **RLS** | Tabla nueva en `001_enable_rls.sql` **y** inline en su migración; aplicar a mano en cada entorno |
+| **Pruebas de la API** | El script `test` de `apps/api/package.json` **enumera los specs a mano**: agregar los nuevos o no corren. Ya hay uno omitido (`agenda-overdue.spec.ts`) |
+| **Auditoría** | `audit.record` en las mutaciones nuevas, sin texto libre |
+| **i18n** | es y en en paralelo (`messages.test.ts`) |
+| **Despliegue** | API → shared (reconstruir `dist`) → web y móvil; en web reiniciar `dev` tras cambiar shared |
+| **Documentación viva** | Actualizar `modelo-de-datos.md`, `backend-modulos-y-reglas.md` (lista de tipos de catálogo, :143) y las pantallas tocadas |
+| **Zona horaria** | `expected_income_date` es un día civil; se interpreta con el reloj del tenant |
+
+## 4. Pruebas y verificación
+
+Por etapa: pruebas unitarias del validador y servicios, más **una prueba de integración por tabla nueva** que
+compruebe RLS. Antes de cerrar cada etapa: `type-check` y `test` de los paquetes tocados, y recorrido manual del flujo en
+web y móvil. La validación visual en teléfono la hace la fundadora (la app Expo no corre sin cabeza).
+
+## 5. Datos de prueba
+
+Ampliar `seed.ts` para las cuentas DEMO con: catálogos nuevos, perfiles de ingreso variados (asalariado, comerciante,
+ciclo trimestral), perfiles de cobro (cobro diario en negocio) y gestiones con motivo. Es lo que permitirá demostrar la
+capa B después.
+
+## 6. Criterios de aceptación globales
+
+- Ninguna pantalla ni flujo existente cambia de comportamiento si los datos nuevos están vacíos.
+- Los datos nuevos se capturan también **sin red** y se sincronizan.
+- Cada dato nuevo queda con su origen y su autor.
+- Ningún dato nuevo cruza entre cuentas (RLS verificada por prueba).
+- Web y móvil muestran los mismos campos con los mismos textos.
+
+## 7. Qué NO cambia de la gestión actual
+
+Los resultados válidos por tipo, la regla «promesa de pago ↔ datos de promesa», el id idempotente de la cola y la
+inmutabilidad de `credit_activities`.
+
+## 8. Fuera de este plan
+
+| Tema | Dónde sigue |
+|---|---|
+| **Reglas de la capa B** (fecha de promesa por ciclo, rutas por zona, prioridad v2) | Plan siguiente, sobre estos datos |
+| **Agenda recurrente** | [`agenda-recurrencia.md`](../../producto/agenda-recurrencia.md) |
+| **Catálogo `ZONE` y normalización de zonas** | Pendiente; requiere decidir geocodificación |
+| **`ai-gateway`, dictado, memoria** | Capa C |
+| **Motivo en la visita de ruta** (`field.service.ts:356`) | Etapa posterior a E4 |
+| **Perfil de ingreso por crédito** | Cuando se valide S2 con un caso real |
+
+## 9. Por verificar antes de empezar
+
+1. ¿Hay un patrón reutilizable en `/cuenta` para editar catálogos distintos de las plantillas de WhatsApp?
+2. ¿Cómo despacha la cola de agenda los campos nuevos (`onOpenLink` y `agenda/crear.tsx` del móvil)?
+3. ¿Qué valor de `preferredContactChannel` se usa hoy en los datos existentes, antes de acotarlo?
+4. ¿La visita de ruta (`field.service.ts`) debe aceptar motivo desde ya?
+5. Resolución de `payer_relation_id` cuando la relación es local y aún no sincronizada.
+
+## 10. Resultado de la implementación
+
+_(se completa al cerrar cada etapa)_
