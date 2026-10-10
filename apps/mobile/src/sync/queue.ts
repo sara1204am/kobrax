@@ -59,7 +59,7 @@ import {
   type NewClientLocation,
   type RescheduleAgendaInput,
 } from '../agenda.service';
-import { addMoraActivity, addMoraNote } from '../mora.service';
+import { addMoraActivity, addMoraNote, setMoraPriority, type PinnablePriority } from '../mora.service';
 import { getUserId } from '../session';
 import { confirmProvisionalRow, dropProvisionalRow } from './optimistic';
 import { withAgendaExplanation } from './agenda-conflicts';
@@ -159,6 +159,8 @@ export type QueuedAction =
   | { kind: 'mora.activity'; creditId: string; input: RecoveryActivityInput & { id: string } }
   /** Nota del crédito. Idempotente por `input.id` del teléfono; el servidor reconoce el id y no la duplica. */
   | { kind: 'credit.note'; creditId: string; input: NewCreditNote & { id: string } }
+  /** Fijar (o soltar con `null`) la prioridad de un crédito. Valor fijo: reintentar deja lo mismo. */
+  | { kind: 'mora.priority'; creditId: string; priority: PinnablePriority | null }
   /**
    * La foto de una visita ya registrada cuyo sellado de evidencia falló (parte suelta de `visit`). Si la foto
    * ya subió, viaja `uploaded` y no se sube de nuevo.
@@ -228,6 +230,7 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'agenda.reschedule': 'Gestión reagendada',
   'mora.activity': 'Gestión registrada',
   'credit.note': 'Nota del crédito',
+  'mora.priority': 'Prioridad del crédito',
   'visit.evidence': 'Foto de la visita',
   'photo.lost': 'Foto que no se pudo adjuntar',
   'client.update': 'Datos del cliente',
@@ -455,6 +458,8 @@ export async function send(action: PendingAction): Promise<SendResult> {
     }
     case 'mora.activity':
       return mapMutate(await addMoraActivity(action.creditId, action.input));
+    case 'mora.priority':
+      return mapMutate(await setMoraPriority(action.creditId, action.priority));
     case 'credit.note':
       return mapMutate(await addMoraNote(action.creditId, action.input));
     case 'client.update':

@@ -110,6 +110,8 @@ export type QueueKind =
   | 'mora.activity'
   /** Nota de un crédito (`POST /mora/:id/notes`). */
   | 'credit.note'
+  /** Fijar o soltar la prioridad de un crédito en mora (valor fijo). */
+  | 'mora.priority'
   /** Foto de una visita que ya está en el server pero cuya evidencia no pudo adjuntarse (parte suelta de `visit`). */
   | 'visit.evidence'
   /** Aviso persistente: una foto que debía viajar ya no estaba en el teléfono. Sólo se puede descartar. */

@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Linking, RefreshControl, ScrollView, StyleShe
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Permission, type CreditNote, type MoraCreditDetail, type MoraEpisode, type MoraPromise, type RecoveryMetrics } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
-import { ActionBtn, DataRow, EmptyState, Header, PRIORITY_LABEL, priorityTone, ProgressBar, SectionLabel, situationBadge, StatusBadge } from '@/ui';
+import { ActionBtn, BottomSheet, DataRow, EmptyState, Header, ListRow, PRIORITY_LABEL, priorityTone, ProgressBar, SectionLabel, situationBadge, StatusBadge } from '@/ui';
 import { money } from '@/agenda-form';
 import { clientContext, type AgendaClientContext } from '@/agenda.service';
 import { listCreditPayments, type PaymentItem } from '@/payments.service';
@@ -20,7 +20,8 @@ import {
   sourceBadge,
 } from '@/mora-ficha';
 import { ActivityTimeline, EpisodesSection, Fact, MetricsSection, NotesSection, PaymentsSection, PromisesSection, PsfNotice } from '@/mora-sections';
-import { submitMoraActivity, submitMoraNote, submitNoteDelete, submitNoteEdit } from '@/mora-actions';
+import { submitMoraActivity, submitMoraNote, submitMoraPriority, submitNoteDelete, submitNoteEdit } from '@/mora-actions';
+import type { PinnablePriority } from '@/mora.service';
 import { PaySheet } from '@/pay-sheet';
 import { submitPayment } from '@/payment-submit';
 import { GestionSheet, prettyDate } from '@/gestion-sheet';
@@ -50,7 +51,9 @@ export default function MoraFichaScreen() {
   const [payments, setPayments] = useState<PaymentItem[] | null>(null);
   const [episodes, setEpisodes] = useState<MoraEpisode[] | null>(null);
   const [metrics, setMetrics] = useState<RecoveryMetrics | null>(null);
-  const [me, setMe] = useState<{ userId?: string; canAssign: boolean }>({ canAssign: false });
+  const [me, setMe] = useState<{ userId?: string; canAssign: boolean; canWrite: boolean }>({ canAssign: false, canWrite: false });
+  const [prioritySheet, setPrioritySheet] = useState(false);
+  const [priorityError, setPriorityError] = useState<string | null>(null);
   const [editNote, setEditNote] = useState<CreditNote | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [paySheet, setPaySheet] = useState(false);
@@ -85,7 +88,11 @@ export default function MoraFichaScreen() {
     if (pay.status === 'ok') setPayments(pay.data);
     if (ep.status === 'ok') setEpisodes(ep.data);
     if (mt.status === 'ok') setMetrics(mt.data);
-    if (who.status === 'ok') setMe({ userId: who.me.userId, canAssign: who.me.permissions.includes(Permission.ASSIGNMENT_WRITE) });
+    if (who.status === 'ok') setMe({
+      userId: who.me.userId,
+      canAssign: who.me.permissions.includes(Permission.ASSIGNMENT_WRITE),
+      canWrite: who.me.permissions.includes(Permission.COLLECTION_WRITE),
+    });
   }, [creditId]);
 
   useFocusEffect(
@@ -113,6 +120,19 @@ export default function MoraFichaScreen() {
       void registrarRastro(detail.creditId, kind);
     },
     [phone, detail],
+  );
+
+  /** Fija (o suelta con `null`) la prioridad. Sin señal queda guardada y sube sola; la pantalla ya la muestra. */
+  const choosePriority = useCallback(
+    async (priority: PinnablePriority | null) => {
+      setPriorityError(null);
+      const err = await submitMoraPriority(creditId, priority);
+      if (err) return setPriorityError(err);
+      setDetail((d) => (d ? { ...d, ...(priority ? { priority, priorityPinned: true } : { priorityPinned: false }) } : d));
+      setPrioritySheet(false);
+      await loadAll();
+    },
+    [creditId, loadAll],
   );
 
   const removeNote = useCallback(
@@ -197,6 +217,7 @@ export default function MoraFichaScreen() {
           <ActionBtn label="Gestión" icon="📝" onPress={() => { activityId.current = nuevoId(); setGestSheet(true); }} />
           <ActionBtn label="Pago" icon="💵" onPress={() => setPaySheet(true)} />
           <ActionBtn label="Nota" icon="🗒️" onPress={() => { noteId.current = nuevoId(); setNoteSheet(true); }} />
+          {me.canWrite && <ActionBtn label="Prioridad" icon="📌" onPress={() => { setPriorityError(null); setPrioritySheet(true); }} />}
         </View>
         {!phone && <Text style={styles.hint}>Sin teléfono registrado: llamar y WhatsApp no están disponibles.</Text>}
 
@@ -256,6 +277,19 @@ export default function MoraFichaScreen() {
         <PaymentsSection payments={payments} currency={currency} external={external} nameOf={nameOf} />
         <EpisodesSection episodes={episodes} currency={currency} />
       </ScrollView>
+
+      <BottomSheet visible={prioritySheet} onClose={() => setPrioritySheet(false)} title="Prioridad del crédito">
+        {(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as PinnablePriority[]).map((p) => (
+          <ListRow
+            key={p}
+            title={PRIORITY_LABEL[p]}
+            subtitle={detail.priority === p && detail.priorityPinned ? 'Fijada' : undefined}
+            onPress={() => void choosePriority(p)}
+          />
+        ))}
+        {detail.priorityPinned && <ListRow title="Soltar (que se calcule sola)" onPress={() => void choosePriority(null)} />}
+        {priorityError && <Text style={styles.hint}>{priorityError}</Text>}
+      </BottomSheet>
 
       <PaySheet
         visible={paySheet}
