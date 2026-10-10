@@ -30,6 +30,10 @@ export interface RouteStopItem {
   /** De qué es la ubicación (`LocationType`) y de quién, para decir «Garante · Juan Pérez». Solo en `GET /routes/:id`. */
   locationType?: string;
   locationOwner?: string;
+  /** La foto principal de la ubicación (la primera de sus fotos), para reconocer la casa en el mapa. */
+  locationPhotoUrl?: string;
+  /** Todas las fotos de esa ubicación (la principal primero). Ausente si no tiene. */
+  locationPhotoUrls?: string[];
   /** La hora de la visita agendada de la que nació (`HH:mm`): hora fija = posición fija. Ausente si no tiene hora fija. */
   scheduledTime?: string;
   /** El crédito es de otra persona del equipo: la parada va como «Ayuda». */
@@ -39,6 +43,12 @@ export interface RouteStopItem {
    * un crédito y la parada apunta a uno. Ausentes si la parada no tiene caso o crédito.
    */
   overdueAmount?: number;
+  /** La cuota que correspondía pagar (lo pendiente del cronograma, o lo congelado/reportado). Ausente si no hay dato. */
+  installmentAmount?: number;
+  /** Cuándo vence esa cuota (`YYYY-MM-DD`). Solo con cronograma. */
+  nextDueDate?: string;
+  /** Con qué monto arranca un cobro: la cuota acotada al saldo, o lo reportado en mora. Misma regla que el móvil. */
+  suggestedPaymentAmount?: number;
   currency?: string;
   daysPastDue?: number;
   /** Cómo terminó la parada. `undefined` = todavía no se visitó. */

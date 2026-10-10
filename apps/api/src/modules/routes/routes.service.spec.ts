@@ -449,6 +449,49 @@ describe('RoutesService.removeStop', () => {
   });
 });
 
+describe('RoutesService.updateStop · cambiar la dirección de una parada', () => {
+  const LOCS = [
+    { id: 'loc-casa', clientId: 'cl1', locationType: 'HOME', relationId: null, latitude: -19.03, longitude: -65.26 },
+    { id: 'loc-garante', clientId: 'cl1', locationType: 'GUARANTOR', relationId: 'rel1', latitude: -19.04, longitude: -65.25 },
+    { id: 'loc-sin-punto', clientId: 'cl1', locationType: 'WORK', relationId: null, latitude: null, longitude: null },
+    { id: 'loc-ajena', clientId: 'cl2', locationType: 'HOME', relationId: null, latitude: -19.1, longitude: -65.3 },
+  ];
+  const paradas = () => threeStops().map((st, i) => ({ ...st, clientId: `cl${i + 1}` }));
+
+  it('una parada pendiente pasa a la otra dirección del MISMO cliente y queda auditado', async () => {
+    const { service, stops, calls } = makeService({ route: OWN_ROUTE, permissions: FIELD, stops: paradas(), locations: LOCS });
+    const res = await service.updateStop('r1', 's1', { locationId: 'loc-garante' } as never);
+    assert.equal(res.locationId, 'loc-garante');
+    assert.equal(stops.find((x) => x.id === 's1')!.locationId, 'loc-garante');
+    assert.ok(calls.audit.includes('UPDATE'));
+  });
+
+  it('🔴 una dirección de OTRO cliente no sirve (404, no filtra que exista)', async () => {
+    const { service } = makeService({ route: OWN_ROUTE, permissions: FIELD, stops: paradas(), locations: LOCS });
+    await rejectsWithCode(service.updateStop('r1', 's1', { locationId: 'loc-ajena' } as never), 'RESOURCE_NOT_FOUND');
+  });
+
+  it('una dirección sin punto en el mapa se rechaza: no hay recorrido que dibujar', async () => {
+    const { service, stops } = makeService({ route: OWN_ROUTE, permissions: FIELD, stops: paradas(), locations: LOCS });
+    await rejectsWithCode(service.updateStop('r1', 's1', { locationId: 'loc-sin-punto' } as never), 'ROUTE_STOP_NO_POINT');
+    assert.notEqual(stops.find((x) => x.id === 's1')!.locationId, 'loc-sin-punto');
+  });
+
+  it('una parada ya gestionada conserva su dirección: la visita quedó registrada ahí', async () => {
+    const visitadas = paradas();
+    visitadas[0]!.status = 'VISITED';
+    const { service } = makeService({ route: OWN_ROUTE, permissions: FIELD, stops: visitadas, locations: LOCS });
+    await rejectsWithCode(service.updateStop('r1', 's1', { locationId: 'loc-garante' } as never), 'ROUTE_STOP_DONE');
+  });
+
+  it('quien no armó la ruta no cambia la dirección: lo pide (ROUTE_REQUEST_REQUIRED o prohibido)', async () => {
+    const route = { id: 'r1', collectorId: 'u1', createdBy: 'manager-1' };
+    const { service, stops } = makeService({ route, permissions: ['route:read', 'route:execute'], stops: paradas(), locations: LOCS });
+    await assert.rejects(service.updateStop('r1', 's1', { locationId: 'loc-garante' } as never));
+    assert.notEqual(stops.find((x) => x.id === 's1')!.locationId, 'loc-garante');
+  });
+});
+
 describe('RoutesService.updateStop (mover de posición)', () => {
   it('mover la última al principio reordena todo sin chocar la restricción', async () => {
     const { service, stops, order } = makeService({ route: OWN_ROUTE, permissions: FIELD, stops: threeStops() });

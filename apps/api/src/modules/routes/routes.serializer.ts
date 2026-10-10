@@ -1,6 +1,7 @@
 import type { Prisma, RoutePlan, RouteStop, VisitOutcome } from '@prisma/client';
 import { LocationType } from '@prisma/client';
 import type { CryptoService } from '../../common/crypto/crypto.service';
+import { creditView, suggestedPaymentAmount } from '@kobrax/shared';
 import { clientDisplayName, safeDecrypt } from '../clients/clients.serializer';
 
 /** Datos del deudor para pintar la parada. Sólo vienen cuando el query los incluye (`findOne`). */
@@ -17,8 +18,20 @@ type StopClient = {
     /** Con valor: es de un garante o familiar (no del cliente). */
     relationId?: string | null;
     relation?: { relatedName: string | null } | null;
+    /** `client_locations.photo_urls` (JSON): la primera es la foto principal. */
+    photoUrls?: unknown;
   }[];
 };
+
+/** Todas las fotos de una ubicación, la principal primera. Una lista rara (no es un arreglo de textos) no es una lista. */
+export function allPhotos(photoUrls: unknown): string[] {
+  return Array.isArray(photoUrls) ? photoUrls.filter((u): u is string => typeof u === 'string') : [];
+}
+
+/** La foto principal de una ubicación: la primera de la lista. */
+export function mainPhoto(photoUrls: unknown): string | undefined {
+  return Array.isArray(photoUrls) && typeof photoUrls[0] === 'string' ? photoUrls[0] : undefined;
+}
 
 /**
  * Dónde se cobra: la primera HOME; si no hay ninguna, la primera que exista. Un cliente puede tener
@@ -52,7 +65,41 @@ type StopCredit = {
   externalSource?: string | null;
   syncStatus?: string | null;
   reportedAsOf?: Date | null;
+  /** Para la cuota: el origen y los datos congelados/reportados del crédito, y lo que falta del cronograma. */
+  origin?: string | null;
+  metadata?: unknown;
+  installments?: { number: number; dueDate: Date | string; amount: unknown; paidAmount?: unknown; status: string }[];
 } | null;
+
+/**
+ * La cuota que correspondía pagar, con la misma regla que la ficha de mora y el móvil (`creditView` +
+ * `suggestedPaymentAmount` de shared): dos pantallas que muestran «la cuota» no pueden decir números distintos.
+ * Sin dato, ausente: nunca un 0 que diría «no hay cuota».
+ */
+function installmentOf(credit: NonNullable<StopCredit>) {
+  const schedule = (credit.installments ?? []).map((i) => ({
+    number: i.number,
+    dueDate: i.dueDate,
+    amount: Number(i.amount),
+    paidAmount: Number(i.paidAmount ?? 0),
+    status: i.status,
+  }));
+  const view = creditView({ metadata: credit.metadata, origin: credit.origin, installments: schedule });
+  const balance = Number(credit.outstandingBalance);
+  return {
+    installmentAmount: view.installmentAmount,
+    nextDueDate: view.nextDueDate,
+    suggestedPaymentAmount: Number.isFinite(balance)
+      ? suggestedPaymentAmount({
+          external: view.locked,
+          outstandingBalance: balance,
+          installmentAmount: view.installmentAmount,
+          reportedPastDueAmount: view.pastDueAmount,
+          installments: schedule,
+        })
+      : undefined,
+  };
+}
 
 /**
  * `clientName`/`address` sólo salen con `crypto` y el cliente incluido: la dirección es PII en claro
@@ -81,6 +128,10 @@ export function serializeStop(
     locationId: loc?.id ?? undefined,
     locationType: loc?.locationType ?? undefined,
     locationOwner: loc?.relation?.relatedName ?? undefined,
+    // La foto principal de esa ubicación: en los mapas se ve chica para reconocer la casa.
+    locationPhotoUrl: mainPhoto(loc?.photoUrls),
+    // Todas, para abrirlas en el detalle de la ruta («reconocer la casa»). Ausente si no tiene.
+    locationPhotoUrls: allPhotos(loc?.photoUrls).length > 0 ? allPhotos(loc?.photoUrls) : undefined,
     // Hora fija de la visita agendada: la parada que la lleva no se mueve de su lugar al optimizar.
     scheduledTime: s.scheduledTime ?? undefined,
     sequenceOrder: s.sequenceOrder,
@@ -97,6 +148,8 @@ export function serializeStop(
     overdueAmount: credit != null ? Number(credit.outstandingBalance) : undefined,
     currency: credit?.currency,
     daysPastDue: credit?.daysPastDue,
+    // La cuota que correspondía pagar (si hay dato): la muestra «Registrar gestión» junto al monto cobrado.
+    ...(credit ? installmentOf(credit) : {}),
     // Cómo terminó la parada (S6). `status: VISITED` dice que se visitó; esto dice qué pasó.
     // Una parada sin visitar lo deja en `undefined`, y así no entra en ninguna categoría del resumen.
     lastOutcome: s.visits?.[0]?.outcome,

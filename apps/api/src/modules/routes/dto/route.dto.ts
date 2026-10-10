@@ -92,6 +92,8 @@ export class AddStopDto {
 export class UpdateStopDto {
   @IsOptional() @IsEnum(RouteStopStatus) status?: RouteStopStatus;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) sequenceOrder?: number;
+  /** A cuál de las ubicaciones del cliente va la parada (propia o de un garante/familiar). Solo quien armó la ruta. */
+  @IsOptional() @IsUUID() locationId?: string;
 }
 
 /** Pedir un cambio sobre una ruta que armó otra persona. */

@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsEnum,
   IsIn,
   IsInt,
@@ -187,4 +189,7 @@ export class AddClientLocationDto {
 
   /** Referencia para encontrarla ("portón verde, frente a la cancha"). */
   @IsOptional() @IsString() @MaxLength(200) referenceNotes?: string;
+
+  /** Fotos de la vivienda para reconocerla; **la primera es la principal** (la que se ve chica en los mapas). */
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) photoUrls?: string[];
 }
