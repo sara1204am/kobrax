@@ -148,3 +148,17 @@ export function updateMoraNote(creditId: string, noteId: string, patch: UpdateCr
 export function deleteMoraNote(creditId: string, noteId: string): Promise<MutateResult<null>> {
   return apiMutate(`/mora/${creditId}/notes/${noteId}`, 'DELETE');
 }
+
+/** Prioridad que se puede fijar a mano; `null` la suelta y vuelve a calcularse sola. */
+export type PinnablePriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+/**
+ * Fijar o soltar la prioridad de un crédito en mora (`PATCH /mora/:id/priority`). De **valor fijo**, así que repetirla deja
+ * lo mismo y se puede encolar. Un crédito al día lo rechaza (409), y fuera de alcance es 404: rechazos definitivos.
+ */
+export function setMoraPriority(
+  creditId: string,
+  priority: PinnablePriority | null,
+): Promise<MutateResult<{ creditId: string; priority: string | null; pinned: boolean }>> {
+  return apiMutate(`/mora/${creditId}/priority`, 'PATCH', { priority });
+}

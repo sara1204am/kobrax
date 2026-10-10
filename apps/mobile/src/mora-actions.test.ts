@@ -15,6 +15,7 @@ jest.mock('./mora.service', () => ({
   }),
   updateMoraNote: jest.fn(async () => mockApi.edit),
   deleteMoraNote: jest.fn(async () => mockApi.edit),
+  setMoraPriority: jest.fn(async () => mockApi.edit),
 }));
 jest.mock('./sync/sync.service', () => ({
   queueForLater: jest.fn(async (action: unknown) => {
@@ -23,7 +24,7 @@ jest.mock('./sync/sync.service', () => ({
   }),
 }));
 
-import { MORA_OUTCOMES, submitMoraActivity, submitMoraNote, submitNoteDelete, submitNoteEdit } from './mora-actions';
+import { MORA_OUTCOMES, submitMoraActivity, submitMoraNote, submitMoraPriority, submitNoteDelete, submitNoteEdit } from './mora-actions';
 
 beforeEach(() => {
   mockApi.activity = { status: 'ok' };
@@ -129,5 +130,33 @@ describe('corregir y borrar una nota · sólo en línea', () => {
     expect(await submitNoteEdit('cr1', 'n1', { body: 'x' })).toBe('Sólo quien la escribió puede editarla');
     mockApi.edit = { status: 'unauthenticated' };
     expect(await submitNoteDelete('cr1', 'n1')).toBe('Tu sesión venció.');
+  });
+});
+
+describe('submitMoraPriority (M1)', () => {
+  it('con señal: listo, sin cola', async () => {
+    expect(await submitMoraPriority('cr1', 'HIGH')).toBeNull();
+    expect(mockSent.queued).toEqual([]);
+  });
+
+  it('sin señal queda en la cola con el valor fijo (soltar es null)', async () => {
+    mockApi.edit = { status: 'offline' };
+    expect(await submitMoraPriority('cr1', 'CRITICAL')).toBeNull();
+    expect(await submitMoraPriority('cr1', null)).toBeNull();
+    expect(mockSent.queued).toEqual([
+      { kind: 'mora.priority', creditId: 'cr1', priority: 'CRITICAL' },
+      { kind: 'mora.priority', creditId: 'cr1', priority: null },
+    ]);
+  });
+
+  it('sin señal y sin dónde guardar: lo dice', async () => {
+    mockApi.edit = { status: 'offline' };
+    mockCanQueue = false;
+    expect(await submitMoraPriority('cr1', 'LOW')).toMatch(/no se pudo guardar/i);
+  });
+
+  it('rechazo del servidor (crédito al día): devuelve su mensaje', async () => {
+    mockApi.edit = { status: 'error', message: 'El crédito no está en mora', httpStatus: 409 };
+    expect(await submitMoraPriority('cr1', 'LOW')).toBe('El crédito no está en mora');
   });
 });
