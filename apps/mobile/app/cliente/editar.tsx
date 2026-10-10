@@ -34,6 +34,7 @@ import {
   removeContact,
   removeLocation,
   removeRelation,
+  saveIncomeProfile,
   updateClient,
   updateCollateral,
   updateContact,
@@ -296,6 +297,7 @@ async function applyOps(clientId: string, ops: ClienteOps): Promise<string | nul
 
   return (
     (ops.client ? fail(await updateClient(clientId, ops.client)) : null) ??
+    (ops.income !== undefined ? fail(await saveIncomeProfile(clientId, ops.income)) : null) ??
     (await run(ops.contacts.removeIds.map((id) => removeContact(clientId, id)))) ??
     (await run(ops.locations.removeIds.map((id) => removeLocation(clientId, id)))) ??
     (await run(ops.relations.removeIds.map((id) => removeRelation(clientId, id)))) ??

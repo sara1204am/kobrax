@@ -84,6 +84,7 @@ export type {
   NewRelationInput,
 } from '@kobrax/shared';
 import type {
+  IncomeProfile,
   NewClientInput,
   NewCollateralInput,
   NewContactInput,
@@ -182,6 +183,14 @@ export interface UpdateClientPatch {
 
 export function updateClient(id: string, patch: UpdateClientPatch): Promise<MutateResult<ClientDetail>> {
   return apiMutate<ClientDetail>(`/clients/${id}`, 'PATCH', patch);
+}
+
+/**
+ * Perfil de ingreso del cliente (F4/13 · E3). **PUT idempotente**: es un valor fijo, repetirlo no cambia nada, por eso se
+ * puede encolar sin señal. `null` lo borra (la API recibe un cuerpo vacío y responde `{}`).
+ */
+export function saveIncomeProfile(clientId: string, profile: IncomeProfile | null): Promise<MutateResult<IncomeProfile>> {
+  return apiMutate<IncomeProfile>(`/clients/${clientId}/income-profile`, 'PUT', profile ?? {});
 }
 
 /**

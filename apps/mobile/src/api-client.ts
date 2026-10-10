@@ -121,7 +121,7 @@ export type MutateResult<T> =
 /** Escritura autenticada + mapeo a `MutateResult`. El `message` del server (AGENDA_00x) se propaga tal cual. */
 export async function apiMutate<T>(
   path: string,
-  method: 'POST' | 'PATCH' | 'DELETE',
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   body?: unknown,
   headers?: Record<string, string>,
 ): Promise<MutateResult<T>> {

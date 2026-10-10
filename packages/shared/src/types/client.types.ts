@@ -46,6 +46,29 @@ export interface CollectionProfileForm {
   note: string;
 }
 
+/**
+ * Perfil de ingreso del cliente (F4/13 · E3): de qué vive y cuándo le llega el dinero. Todo opcional.
+ * Se valida con `validateIncomeProfile` (utils). Los códigos son de los catálogos `INCOME_SOURCE` y `OCCUPATION`.
+ */
+export interface IncomeProfile {
+  incomeSourceCode?: 'EMPLOYEE' | 'BUSINESS' | 'OTHER';
+  occupationCode?: string;
+  incomeCycle?: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'SEASONAL' | 'IRREGULAR';
+  /** Día de la semana (1–7, ISO) o del mes (1–31), según el ciclo. */
+  incomeDay?: number;
+  notes?: string;
+  origin?: 'MANUAL' | 'DICTATION' | 'IMPORT' | 'SUGGESTION_ACCEPTED';
+}
+
+/** El perfil de ingreso como lo edita el formulario: todo texto. */
+export interface IncomeProfileForm {
+  incomeSourceCode: string;
+  occupationCode: string;
+  incomeCycle: string;
+  incomeDay: string;
+  notes: string;
+}
+
 export interface NewLocationInput {
   locationType?: 'HOME' | 'WORK' | 'GUARANTOR' | 'FAMILY' | 'OTHER';
   address?: string;
@@ -144,6 +167,8 @@ export interface NewClientInput {
   riskSegment?: string;
   status?: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
   preferredContactChannel?: string;
+  /** Perfil de ingreso (F4/13 · E3). Opcional: el alta atómica lo guarda junto al cliente. */
+  incomeProfile?: IncomeProfile;
   contacts?: NewContactInput[];
   locations?: NewLocationInput[];
   relations?: NewRelationInput[];
@@ -322,6 +347,8 @@ export interface ClientDetail {
   status: StatusValue;
   riskSegment?: string;
   preferredContactChannel?: string;
+  /** Perfil de ingreso (F4/13 · E3). `null`/ausente = sin perfil. */
+  incomeProfile?: IncomeProfile | null;
   createdAt?: string;
   updatedAt?: string;
   /**
@@ -571,6 +598,8 @@ export interface ClienteForm {
   riskSegment: string;
   /** Canal de contacto preferido (`PHONE`, `WHATSAPP`…). Texto libre en la base; se conserva lo que haya. */
   preferredContactChannel: string;
+  /** Perfil de ingreso (F4/13 · E3). Vacío = sin perfil. */
+  income: IncomeProfileForm;
   status: StatusValue;
   contacts: ContactRow[];
   locations: LocationRow[];

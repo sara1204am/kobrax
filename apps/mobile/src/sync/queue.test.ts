@@ -128,6 +128,10 @@ jest.mock('../clients.service', () => ({
     mockCalls.push(`updateClient:${id}:${JSON.stringify(patch)}`);
     return { status: 'ok', data: {} };
   }),
+  saveIncomeProfile: jest.fn(async (id: string, profile: Record<string, unknown> | null) => {
+    mockCalls.push(`saveIncomeProfile:${id}:${JSON.stringify(profile)}`);
+    return { status: 'ok', data: {} };
+  }),
   updateContact: jest.fn(async (cid: string, id: string) => {
     mockCalls.push(`updateContact:${cid}:${id}`);
     return { status: 'ok', data: {} };
@@ -536,7 +540,7 @@ describe('parseAction · cola robusta', () => {
   it('las etiquetas tienen un respaldo para tipos desconocidos', () => {
     expect(actionLabel('cosa.nueva')).toBe('Acción pendiente (no soportada)');
     expect(actionLabel('visit')).toBe('Visita registrada');
-    for (const k of ['visit.evidence', 'photo.lost', 'client.update', 'client.contact', 'client.location']) {
+    for (const k of ['visit.evidence', 'photo.lost', 'client.update', 'client.income', 'client.contact', 'client.location']) {
       expect(ACTION_LABEL[k as keyof typeof ACTION_LABEL]).toBeTruthy();
     }
   });
@@ -670,6 +674,16 @@ describe('send · edición de la ficha del cliente', () => {
   it('client.update manda el PATCH con los valores fijos', async () => {
     await send({ kind: 'client.update', clientId: 'cl1', patch: { firstName: 'Ana' } });
     expect(mockCalls).toContain('updateClient:cl1:{"firstName":"Ana"}');
+  });
+
+  it('client.income manda el PUT del perfil (valor fijo, repetible)', async () => {
+    await send({ kind: 'client.income', clientId: 'cl1', profile: { occupationCode: 'TRANSPORT', incomeCycle: 'WEEKLY', incomeDay: 5 } });
+    expect(mockCalls).toContain('saveIncomeProfile:cl1:{"occupationCode":"TRANSPORT","incomeCycle":"WEEKLY","incomeDay":5}');
+  });
+
+  it('client.income con null borra el perfil', async () => {
+    await send({ kind: 'client.income', clientId: 'cl1', profile: null });
+    expect(mockCalls).toContain('saveIncomeProfile:cl1:null');
   });
 
   it('borrar un teléfono que ya no existe (404) cuenta como hecho', async () => {

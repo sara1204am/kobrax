@@ -65,7 +65,7 @@ DECLARE
     -- Pedidos de cambio sobre rutas ajenas (F4/12).
     'route_change_requests',
     -- Tokens de push remoto (F10): a qué teléfonos avisarle a cada usuario.
-    'device_push_tokens'
+    'device_push_tokens', 'client_income_profiles'
   ];
 BEGIN
   FOREACH t IN ARRAY operational LOOP

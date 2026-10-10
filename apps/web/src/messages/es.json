@@ -2264,6 +2264,22 @@
     "upgradeHow": "El cambio de plan lo hacemos nosotros: escríbenos y queda activo el mismo día."
   },
   "portfolio": {
+    "income": {
+      "empty": "Sin cargar. Es opcional.",
+      "hint": "Opcional. De qué vive y cuándo le llega el dinero: con eso no se le insiste antes de que cobre.",
+      "unset": "Sin definir",
+      "source": "Fuente de ingreso",
+      "sourceDefault": { "EMPLOYEE": "Asalariado o profesional", "BUSINESS": "Comerciante o productivo", "OTHER": "Otro" },
+      "occupation": "Rubro",
+      "cycle": "Cada cuánto le llega el dinero",
+      "cycleOptions": { "DAILY": "Todos los días", "WEEKLY": "Cada semana", "BIWEEKLY": "Cada quincena", "MONTHLY": "Cada mes", "QUARTERLY": "Cada tres meses", "SEASONAL": "Por temporada", "IRREGULAR": "Sin ritmo fijo" },
+      "dayOfWeek": "Día de la semana",
+      "dayOfMonth": "Día del mes",
+      "weekdays": { "1": "Lunes", "2": "Martes", "3": "Miércoles", "4": "Jueves", "5": "Viernes", "6": "Sábado", "7": "Domingo" },
+      "notes": "Detalle",
+      "notesPlaceholder": "Ej.: cobra en la alcaldía, le atrasan el flete",
+      "errors": { "day": "El día no corresponde al ciclo elegido." }
+    },
     "collection": {
       "title": "Cómo cobrarle",
       "hint": "Opcional. Lo que el cobrador necesita saber antes de llegar.",
@@ -2348,6 +2364,7 @@
     "saved": "Guardado",
     "saveError": "No se pudo guardar",
     "sections": {
+      "income": "Perfil de ingreso",
       "identity": "Identificación",
       "data": "Datos",
       "credits": "Créditos",

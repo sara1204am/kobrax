@@ -30,7 +30,7 @@ export default async function CarteraPage({
    * **ninguno puede tumbar la pantalla**: un rol sin `user:read` recibe 403 en `/users` y la cartera
    * tiene que seguir abriendo igual, con el selector de cobrador vacío.
    */
-  const [list, account, me, team, collateralTypes, collectionModalities] = await Promise.all([
+  const [list, account, me, team, collateralTypes, collectionModalities, incomeSources, occupations] = await Promise.all([
     apiCall<PortfolioRow[]>(`/clients?${query}`, { method: 'GET', auth: true }),
     apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
     apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
@@ -39,6 +39,9 @@ export default async function CarteraPage({
     apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.COLLATERAL_TYPE}`, { method: 'GET', auth: true }),
     // F4/13 · E2: «cómo cobrarle» en cada ubicación del alta. Sin catálogo no se dibuja el selector y nada se rompe.
     apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.COLLECTION_MODALITY}`, { method: 'GET', auth: true }),
+    // F4/13 · E3: de qué vive y cuándo le llega el dinero. Sin catálogo se ofrecen las tres fuentes fijas.
+    apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.INCOME_SOURCE}`, { method: 'GET', auth: true }),
+    apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.OCCUPATION}`, { method: 'GET', auth: true }),
   ]);
 
   if (list.status !== 200 || !list.body.data) {
@@ -70,6 +73,8 @@ export default async function CarteraPage({
             currency={account.body.data?.currencyCode ?? 'BOB'}
             collateralTypes={collateralTypes.body.data ?? []}
             collectionModalities={collectionModalities.body.data ?? []}
+            incomeSources={incomeSources.body.data ?? []}
+            occupations={occupations.body.data ?? []}
           />
         }
         // Las sucursales todavía no existen como endpoint: cuando exista, entra acá y el filtro ya

@@ -19,13 +19,14 @@ import {
   nuevaFila,
   type CatalogOption,
 } from '@/components/client-form';
+import { IncomeFields } from '@/components/income-fields';
 import { Button, ErrorBanner } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
 import { sendJson } from '@/lib/client';
 
 /** Las secciones de la ficha que se pueden corregir. Cada una edita **sólo lo suyo**. */
-export type SectionKey = 'identity' | 'contacts' | 'locations' | 'guarantors' | 'collaterals';
+export type SectionKey = 'identity' | 'income' | 'contacts' | 'locations' | 'guarantors' | 'collaterals';
 
 /** Lo que toda sección necesita para dibujarse y para guardar. */
 export interface SectionContext {
@@ -35,6 +36,9 @@ export interface SectionContext {
   collateralTypes: CatalogOption[];
   /** Catálogo `COLLECTION_MODALITY` (F4/13 · E2). */
   collectionModalities?: CatalogOption[];
+  /** Catálogos `INCOME_SOURCE` y `OCCUPATION` (F4/13 · E3). */
+  incomeSources?: CatalogOption[];
+  occupations?: CatalogOption[];
   /** La moneda de la cuenta (Configuración), con la que arranca el valor de una garantía. */
   currency: string;
   /** Releer el cliente revelado y refrescar el server component. Lo provee la ficha. */
@@ -143,6 +147,8 @@ function Fields({
   switch (section) {
     case 'identity':
       return <IdentityFields form={form} onChange={onChange} disabled={disabled} />;
+    case 'income':
+      return <IncomeFields value={form.income} onChange={(income) => set({ income })} sources={ctx.incomeSources ?? []} occupations={ctx.occupations ?? []} disabled={disabled} />;
     case 'contacts':
       return (
         <Agregar label={t('form.addContact')} onAdd={() => set({ contacts: [...form.contacts, nuevaFila.contact()] })} disabled={disabled}>

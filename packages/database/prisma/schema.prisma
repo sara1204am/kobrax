@@ -103,6 +103,7 @@ model Account {
   paymentRequests         PaymentRequest[]
   notifications           Notification[]
   devicePushTokens        DevicePushToken[]
+  clientIncomeProfiles    ClientIncomeProfile[]
   refreshTokens           RefreshToken[]
   agendaItems             AgendaItem[]
   catalogItems            CatalogItem[]
@@ -624,6 +625,8 @@ model Client {
   credits          Credit[]
   creditNotes      CreditNote[]
   creditActivities CreditActivity[]
+  /// F4/13 · E3: de qué vive y cuándo le llega el dinero (opcional; una fila por cliente).
+  incomeProfile    ClientIncomeProfile?
   routeStops       RouteStop[]
   externalKeys     ClientExternalKey[]
 
@@ -1631,6 +1634,59 @@ model DevicePushToken {
   @@index([accountId, userId, isActive])
   @@index([token])
   @@map("device_push_tokens")
+}
+
+// ── F4/13 · Contexto del deudor (capa de datos para la IA) ─────────────────────
+
+/// Cada cuánto le llega el dinero a un deudor. `SEASONAL` = por temporada (cosecha); `IRREGULAR` = sin ritmo fijo.
+enum IncomeCycle {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  QUARTERLY
+  SEASONAL
+  IRREGULAR
+
+  @@map("income_cycle")
+}
+
+/// De dónde salió un dato de contexto: para saber cuánto fiarse de él y, más adelante, aprender de las correcciones.
+enum DataOrigin {
+  MANUAL
+  DICTATION
+  IMPORT
+  SUGGESTION_ACCEPTED
+
+  @@map("data_origin")
+}
+
+/// **Perfil de ingreso** del cliente: fuente, rubro y ciclo. Todo opcional (ninguna regla puede asumir que existe).
+/// Una fila por cliente; vaciarlo borra la fila (la auditoría guarda el antes). `income_source_code` y
+/// `occupation_code` son códigos de los catálogos `INCOME_SOURCE` y `OCCUPATION` (ref suave: la cuenta puede editarlos).
+model ClientIncomeProfile {
+  id               String       @id @default(uuid())
+  accountId        String       @map("account_id")
+  clientId         String       @unique @map("client_id")
+  incomeSourceCode String?      @map("income_source_code")
+  occupationCode   String?      @map("occupation_code")
+  incomeCycle      IncomeCycle? @map("income_cycle")
+  /// Día de la semana (1–7, ISO) o del mes (1–31), según el ciclo. Nulo si el ciclo no tiene día.
+  incomeDay        Int?         @map("income_day")
+  notes            String?
+  origin           DataOrigin   @default(MANUAL)
+  /// Quién lo declaró (users.id, ref suave) y cuándo.
+  declaredBy       String?      @map("declared_by")
+  declaredAt       DateTime     @default(now()) @map("declared_at")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+  client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([accountId, occupationCode])
+  @@map("client_income_profiles")
 }
 
 // ── Agenda (F10) — gestiones agendadas por fecha ────────────────────────────

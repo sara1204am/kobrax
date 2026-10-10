@@ -2,7 +2,7 @@ import { collateralPayload, contactPayload, locationPayload, relationPayload, ty
 
 export interface ApiRequest {
   path: string;
-  method: 'POST' | 'PATCH' | 'DELETE';
+  method: 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body?: unknown;
 }
 
@@ -37,6 +37,8 @@ export function opsRequests(id: string, ops: ClienteOps): ApiRequest[] {
   const sub = (kind: string, rest = '') => `/clients/${id}/${kind}${rest}`;
 
   if (ops.client) out.push({ path: `/clients/${id}`, method: 'PATCH', body: ops.client });
+  // F4/13 · E3: el perfil de ingreso es un valor fijo (PUT idempotente). `null` = quedó vacío: el cuerpo vacío lo borra.
+  if (ops.income !== undefined) out.push({ path: sub('income-profile'), method: 'PUT', body: ops.income ?? {} });
 
   for (const rid of ops.contacts.removeIds) out.push({ path: sub('contacts', `/${rid}`), method: 'DELETE' });
   for (const rid of ops.locations.removeIds) out.push({ path: sub('locations', `/${rid}`), method: 'DELETE' });

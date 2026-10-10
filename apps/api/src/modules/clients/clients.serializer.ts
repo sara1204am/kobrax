@@ -1,6 +1,7 @@
 import type {
   Client,
   ClientAttachment,
+  ClientIncomeProfile,
   ClientContact,
   ClientLocation,
   ClientRelation,
@@ -77,6 +78,19 @@ export function serializeLocation(l: ClientLocation, { crypto, reveal }: Seriali
     riskLevel: l.riskLevel ?? undefined,
     // F4/13 · E2: perfil de cobro. Antes se escribía y ningún endpoint lo devolvía.
     visitSchedule: l.visitSchedule ?? undefined,
+  };
+}
+
+/** Perfil de ingreso (F4/13 · E3). Sin `accountId` ni ids internos: es lo que la pantalla edita. */
+export function serializeIncomeProfile(p: ClientIncomeProfile) {
+  return {
+    incomeSourceCode: p.incomeSourceCode ?? undefined,
+    occupationCode: p.occupationCode ?? undefined,
+    incomeCycle: p.incomeCycle ?? undefined,
+    incomeDay: p.incomeDay ?? undefined,
+    notes: p.notes ?? undefined,
+    origin: p.origin,
+    declaredAt: p.declaredAt,
   };
 }
 
@@ -164,6 +178,7 @@ type ClientWithRelations = Client & {
   relations?: (ClientRelation & { contacts?: ClientContact[]; locations?: ClientLocation[]; credits?: { creditId: string }[] })[];
   collaterals?: (Collateral & { credits?: { creditId: string }[] })[];
   attachments?: ClientAttachment[];
+  incomeProfile?: ClientIncomeProfile | null;
 };
 
 /** Serializa un cliente (con o sin sub-recursos), tokenizando la PII salvo `reveal`. */
@@ -207,5 +222,7 @@ export function serializeClient(client: ClientWithRelations, opts: SerializeOpts
     relations: client.relations?.map((r) => serializeRelation(r, opts)),
     collaterals: client.collaterals?.map((g) => serializeCollateral(g)),
     attachments: client.attachments?.map((a) => serializeAttachment(a)),
+    // F4/13 · E3. `null` si el cliente no tiene perfil; ausente si la consulta no lo trajo.
+    incomeProfile: client.incomeProfile === undefined ? undefined : client.incomeProfile ? serializeIncomeProfile(client.incomeProfile) : null,
   };
 }

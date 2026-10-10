@@ -46,7 +46,7 @@ export default async function ClientePage({
    */
   if (!isUuid(params.id)) notFound();
 
-  const [client, credits, account, timeline, team, types, collateralTypes, collectionModalities] = await Promise.all([
+  const [client, credits, account, timeline, team, types, collateralTypes, collectionModalities, incomeSources, occupations] = await Promise.all([
     apiCall<ClientDetail>(`/clients/${params.id}`, { method: 'GET', auth: true }),
     apiCall<CreditDetail[]>(`/credits?clientId=${params.id}&limit=100`, { method: 'GET', auth: true }),
     apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
@@ -55,6 +55,8 @@ export default async function ClientePage({
     apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.CREDIT_TYPE}`, { method: 'GET', auth: true }),
     apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.COLLATERAL_TYPE}`, { method: 'GET', auth: true }),
     apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.COLLECTION_MODALITY}`, { method: 'GET', auth: true }),
+    apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.INCOME_SOURCE}`, { method: 'GET', auth: true }),
+    apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.OCCUPATION}`, { method: 'GET', auth: true }),
   ]);
 
   if (client.status === 404) notFound();
@@ -88,6 +90,8 @@ export default async function ClientePage({
         currency={moneda}
         collateralTypes={collateralTypes.body.data ?? []}
         collectionModalities={collectionModalities.body.data ?? []}
+        incomeSources={incomeSources.body.data ?? []}
+        occupations={occupations.body.data ?? []}
         summary={<AccountSummary client={client.body.data} credits={creditos} currency={moneda} />}
         timeline={
           <TimelineSection

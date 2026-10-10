@@ -114,3 +114,24 @@ describe('opsToActions', () => {
     expect(opsToActions('cl1', ops())).toEqual([]);
   });
 });
+
+describe('perfil de ingreso (F4/13 · E3)', () => {
+  it('es un valor fijo: no frena el guardado sin señal', () => {
+    expect(queueableOps(ops({ income: { occupationCode: 'TRANSPORT', incomeCycle: 'WEEKLY' } }))).toBe(true);
+    expect(queueableOps(ops({ income: null }))).toBe(true);
+  });
+
+  it('se traduce a una sola acción client.income, justo después de los datos del cliente', () => {
+    const actions = opsToActions('cl1', ops({ client: { firstName: 'Ana' }, income: { occupationCode: 'MERCHANT' } }));
+    expect(actions.map((a) => a.kind)).toEqual(['client.update', 'client.income']);
+    expect(actions[1]).toEqual({ kind: 'client.income', clientId: 'cl1', profile: { occupationCode: 'MERCHANT' } });
+  });
+
+  it('🔴 vaciar el perfil encola null: es la forma de borrarlo', () => {
+    expect(opsToActions('cl1', ops({ income: null }))).toEqual([{ kind: 'client.income', clientId: 'cl1', profile: null }]);
+  });
+
+  it('sin cambios en el perfil no genera nada', () => {
+    expect(opsToActions('cl1', ops())).toEqual([]);
+  });
+});

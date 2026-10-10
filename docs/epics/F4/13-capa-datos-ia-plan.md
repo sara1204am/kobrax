@@ -485,6 +485,32 @@ inmutabilidad de `credit_activities`.
 
 **Por validar en teléfono**: el bloque «Cómo cobrarle» en el alta y la edición, y que la línea aparezca en la ficha del cliente.
 
+### E3 · Perfil de ingreso ✅ (2026-10-10)
+
+**Hecho**
+- **Base**: tabla `client_income_profiles` (una fila por cliente), enums `income_cycle` y `data_origin`, `CHECK` de día y ciclo,
+  RLS forzada (inline en la migración y en `001_enable_rls.sql`).
+- **Shared**: `income-profile.ts` (validación estricta; formulario ↔ perfil tolerante), `ClienteForm.income`,
+  `NewClientInput.incomeProfile`, `ClientDetail.incomeProfile` y `ClienteOps.income` (valor fijo en el diff).
+- **API**: `GET`/`PUT /clients/:id/income-profile` (idempotente; cuerpo vacío borra), perfil incluido en el detalle y en el
+  alta atómica, auditoría de crear/editar/borrar sin repetir en reintentos.
+- **Web**: acordeón en el alta, sección editable en la ficha, resumen, rubro filtrado por fuente y propuestas del rubro.
+- **Móvil**: bloque en el formulario, `client.income` en la cola offline, resumen en la ficha.
+
+**Verificación**
+| Comando | Resultado |
+|---|---|
+| `@kobrax/shared` build, type-check, test | 411 pruebas, verde |
+| `@kobrax/api` type-check, test | 1.567 pruebas, verde |
+| `@kobrax/api` integración `client-income-profile.it.ts` (base desde cero, RLS, CHECK) | 11 de 11 |
+| `@kobrax/web` type-check, test | 962 pruebas, verde |
+| `@kobrax/mobile` type-check, test | 944 pruebas, verde |
+
+**Queda**: la capa B todavía no usa el ciclo (fecha de promesa sugerida); el perfil por **crédito** (S2) se difiere.
+
+**Por validar en teléfono**: el bloque «Perfil de ingreso» en alta y edición, que el cambio sin señal se sincronice, y que la
+ficha muestre «Ingreso».
+
 ## 11. Validación del plan (gate `/f10-validar-plan`, adaptado — D-10)
 
 El gate está escrito para etapas móviles F10. Se aplicó con sus ítems de calidad y con los de completitud que

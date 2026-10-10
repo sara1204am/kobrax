@@ -43,6 +43,7 @@ import {
   getClient,
   removeContact,
   removeLocation,
+  saveIncomeProfile,
   updateClient,
   updateContact,
   updateLocation,
@@ -51,6 +52,7 @@ import {
   type NewLocationInput,
   type UpdateClientPatch,
 } from '../clients.service';
+import type { IncomeProfile } from '@kobrax/shared';
 import { clearArrears, createCredit, markArrears, type ClearArrearsInput, type NewCreditInput } from '../credits.service';
 import {
   addClientContact,
@@ -194,6 +196,8 @@ export type QueuedAction =
    * Edición de los datos sueltos del cliente: `PATCH` con valores fijos → idempotente por naturaleza.
    */
   | { kind: 'client.update'; clientId: string; patch: UpdateClientPatch }
+  /** F4/13 · E3. Valor fijo (PUT idempotente): `null` = borrar el perfil. */
+  | { kind: 'client.income'; clientId: string; profile: IncomeProfile | null }
   /**
    * Teléfonos del cliente.
    *  · `add` (desde «agendar», endpoint de agenda): **el endpoint no acepta id**, así que no es repetible a
@@ -258,6 +262,7 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'visit.evidence': 'Foto de la visita',
   'photo.lost': 'Foto que no se pudo adjuntar',
   'client.update': 'Datos del cliente',
+  'client.income': 'Perfil de ingreso del cliente',
   'client.contact': 'Teléfono del cliente',
   'client.location': 'Dirección del cliente',
 };
@@ -516,6 +521,8 @@ export async function send(action: PendingAction): Promise<SendResult> {
       return mapMutate(await addMoraNote(action.creditId, action.input));
     case 'client.update':
       return mapMutate(await updateClient(action.clientId, action.patch));
+    case 'client.income':
+      return mapMutate(await saveIncomeProfile(action.clientId, action.profile));
     case 'client.contact':
       return sendClientContact(action);
     case 'client.location':

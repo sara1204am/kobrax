@@ -7,6 +7,7 @@
  * aparte** (en pantalla es un switch), **las filas vacías se descartan**, y **`serverId` es lo que
  * hace que editar sepa qué actualizar y qué crear**.
  */
+import { emptyIncomeForm, incomeFormFromProfile, incomeProfileFromForm } from './income-profile.js';
 import { collectionFormFromProfile, collectionProfileFromForm, emptyCollectionForm } from './collection-profile.js';
 import type {
   ClienteForm,
@@ -85,6 +86,7 @@ export function initialCliente(): ClienteForm {
     businessName: '',
     riskSegment: '',
     preferredContactChannel: '',
+    income: emptyIncomeForm(),
     status: 'ACTIVE',
     contacts: [emptyContact('c0', true)], // un teléfono principal por defecto, WhatsApp marcado
     locations: [],
@@ -179,6 +181,7 @@ export function hydrateCliente(d: {
   gender?: string;
   riskSegment?: string;
   preferredContactChannel?: string;
+  incomeProfile?: unknown;
   status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
   contacts?: ServerContact[];
   locations?: ServerLocation[];
@@ -212,6 +215,7 @@ export function hydrateCliente(d: {
     businessName: d.businessName ?? '',
     riskSegment: d.riskSegment ?? '',
     preferredContactChannel: d.preferredContactChannel ?? '',
+    income: incomeFormFromProfile(d.incomeProfile),
     status: d.status,
     contacts: hydrateContacts(d.contacts ?? []),
     locations: hydrateLocations(d.locations ?? []),
@@ -395,6 +399,7 @@ export function buildClientePayload(s: ClienteForm): NewClientInput {
     gender: s.gender || undefined,
     riskSegment: s.riskSegment || undefined,
     preferredContactChannel: s.preferredContactChannel.trim() || undefined,
+    incomeProfile: incomeProfileFromForm(s.income),
     status: s.status,
     contacts: mapContacts(s.contacts),
     locations: mapLocations(s.locations),

@@ -1,8 +1,9 @@
 import { LocationLine } from '@/location-photo';
+import { describeIncome, useCatalogLabels } from '@/income-block';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { addPeriods, calculateCredit, DEFAULT_ARREARS_METHOD, isUnknownField, PaymentFrequency, portfolioStatus, RatePeriod, type MoraCreditDetail } from '@kobrax/shared';
+import { addPeriods, calculateCredit, CatalogType, DEFAULT_ARREARS_METHOD, isUnknownField, PaymentFrequency, portfolioStatus, RatePeriod, type MoraCreditDetail } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { ActionBtn, AmountInput, BottomSheet, Chips, DataRow, EmptyState, Header, PORTFOLIO_STATUS_META, SectionLabel, StatusBadge } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
@@ -56,6 +57,9 @@ export default function ClienteFichaScreen() {
   const [basic, setBasic] = useState<ClientDetail | null>(null);
   /** La ficha del cliente (legajo: garantes, garantías, adjuntos, alta). Del caché sin señal. */
   const [client, setClient] = useState<ClientDetail | null>(null);
+  // F4/13 · E3: rótulos de la cuenta para el perfil de ingreso (sin señal salen del respaldo local).
+  const sourceLabels = useCatalogLabels(CatalogType.INCOME_SOURCE);
+  const occupationLabels = useCatalogLabels(CatalogType.OCCUPATION);
   const [creditId, setCreditId] = useState<string | null>(null);
   const [detail, setDetail] = useState<MoraCreditDetail | null>(null);
   /** El crédito elegido: condiciones, base del saldo y total por cobrar (F4/06). `null` mientras carga o sin red. */
@@ -222,6 +226,7 @@ export default function ClienteFichaScreen() {
   const totalDebt = ctx.credits.reduce((s, c) => s + c.outstandingBalance, 0);
   const currency = selected.currency;
   const zone = ctx.locations.find((l) => l.zone)?.zone;
+  const ingreso = describeIncome(client?.incomeProfile, { sources: sourceLabels, occupations: occupationLabels });
   const status = portfolioStatus({ outstandingBalance: selected.outstandingBalance, daysPastDue: selected.daysPastDue, nextDueDate: detail?.nextDueDate ?? null });
   const meta = PORTFOLIO_STATUS_META[status];
   const timeline = buildTimeline(detail?.activities ?? [], payments);
@@ -441,6 +446,14 @@ export default function ClienteFichaScreen() {
                 <MiniMapCard center={deudorPoint ?? garantes[0]!} points={[...(deudorPoint ? [deudorPoint] : []), ...garantes]} />
               </View>
             )}
+          </View>
+        )}
+
+        {/* F4/13 · E3: de qué vive y cuándo le llega el dinero. Solo si está cargado: es opcional. */}
+        {ingreso !== '' && (
+          <View>
+            <SectionLabel>Ingreso</SectionLabel>
+            <Text style={styles.line}>💼 {ingreso}</Text>
           </View>
         )}
 

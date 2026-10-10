@@ -16,8 +16,9 @@ import { COLORS, RADIUS, SPACING, TYPE } from './theme';
 import { Chips, SectionLabel } from './ui';
 import { Field } from './components';
 import { MapPicker } from './maps/MapPicker';
-import { emptyCollateral, emptyCollectionForm, emptyContact, emptyLocation, emptyRelation, locationTypeChoices, type ClienteForm, type CollateralRow, type ContactRow, type CreditOption, type LocationRow, type RelationRow } from '@kobrax/shared';
+import { emptyCollateral, emptyCollectionForm, emptyContact, emptyIncomeForm, emptyLocation, emptyRelation, locationTypeChoices, type ClienteForm, type CollateralRow, type ContactRow, type CreditOption, type LocationRow, type RelationRow } from '@kobrax/shared';
 import { CollectionBlock } from './collection-block';
+import { IncomeBlock } from './income-block';
 import { choosePhoto } from './photo';
 import { uploadImage } from './uploads.service';
 
@@ -113,6 +114,10 @@ export function ClienteFormView({
         <Chips options={channelOptions(form.preferredContactChannel)} value={form.preferredContactChannel} onChange={(v) => set({ preferredContactChannel: v })} />
         <SectionLabel>Estado</SectionLabel>
         <Chips options={STATUS} value={form.status} onChange={(v) => set({ status: v })} />
+      </Accordion>
+
+      <Accordion icon="💼" title="Perfil de ingreso">
+        <IncomeBlock value={form.income ?? emptyIncomeForm()} onChange={(income) => set({ income })} />
       </Accordion>
 
       <Accordion icon="📞" title="Teléfonos del cliente" badge={form.contacts.length} defaultOpen>

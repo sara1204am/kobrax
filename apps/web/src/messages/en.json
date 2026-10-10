@@ -2264,6 +2264,22 @@
     "upgradeHow": "We change the plan for you: write to us and it is active the same day."
   },
   "portfolio": {
+    "income": {
+      "empty": "Not set. Optional.",
+      "hint": "Optional. What the client lives on and when the money arrives, so we do not push before they get paid.",
+      "unset": "Not set",
+      "source": "Source of income",
+      "sourceDefault": { "EMPLOYEE": "Employee or professional", "BUSINESS": "Merchant or producer", "OTHER": "Other" },
+      "occupation": "Occupation",
+      "cycle": "How often the money arrives",
+      "cycleOptions": { "DAILY": "Every day", "WEEKLY": "Every week", "BIWEEKLY": "Every two weeks", "MONTHLY": "Every month", "QUARTERLY": "Every three months", "SEASONAL": "Seasonal", "IRREGULAR": "No fixed rhythm" },
+      "dayOfWeek": "Day of the week",
+      "dayOfMonth": "Day of the month",
+      "weekdays": { "1": "Monday", "2": "Tuesday", "3": "Wednesday", "4": "Thursday", "5": "Friday", "6": "Saturday", "7": "Sunday" },
+      "notes": "Detail",
+      "notesPlaceholder": "E.g.: paid at city hall, freight payments are delayed",
+      "errors": { "day": "The day does not match the chosen cycle." }
+    },
     "collection": {
       "title": "How to collect",
       "hint": "Optional. What the collector needs to know before arriving.",
@@ -2348,6 +2364,7 @@
     "saved": "Saved",
     "saveError": "Could not save",
     "sections": {
+      "income": "Income profile",
       "identity": "Identification",
       "data": "Details",
       "credits": "Credits",

@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { useFormatter, useTranslations } from 'next-intl';
 import { CollectionFields } from '@/components/collection-fields';
+import { IncomeFields } from '@/components/income-fields';
 import { LocationPhotos } from '@/components/location-photos';
 import {
   PHONE_PATTERN,
@@ -572,6 +573,8 @@ export function ClientFormFields({
   credits = [],
   collateralTypes = [],
   collectionModalities = [],
+  incomeSources = [],
+  occupations = [],
   currency,
   documentNotice,
 }: {
@@ -590,6 +593,9 @@ export function ClientFormFields({
   collateralTypes?: CatalogOption[];
   /** Catálogo `COLLECTION_MODALITY` (F4/13 · E2): «cómo cobrarle» en cada ubicación del cliente. */
   collectionModalities?: CatalogOption[];
+  /** Catálogos `INCOME_SOURCE` y `OCCUPATION` (F4/13 · E3): de qué vive y cuándo le llega el dinero. */
+  incomeSources?: CatalogOption[];
+  occupations?: CatalogOption[];
   currency: string;
   /** Ver `IdentityFields`. */
   documentNotice?: ReactNode;
@@ -601,6 +607,10 @@ export function ClientFormFields({
     <div className="space-y-3">
       <Acordeon title={t('sections.identity')} open>
         <IdentityFields form={form} onChange={onChange} disabled={disabled} documentNotice={documentNotice} />
+      </Acordeon>
+
+      <Acordeon title={t('sections.income')}>
+        <IncomeFields value={form.income} onChange={(income) => set({ income })} sources={incomeSources} occupations={occupations} disabled={disabled} />
       </Acordeon>
 
       <Acordeon

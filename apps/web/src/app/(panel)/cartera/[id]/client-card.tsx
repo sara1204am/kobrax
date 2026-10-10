@@ -44,6 +44,8 @@ export function ClientCard({
   currency,
   collateralTypes,
   collectionModalities = [],
+  incomeSources = [],
+  occupations = [],
   hasActiveCredits,
 }: {
   client: ClientDetail;
@@ -62,6 +64,9 @@ export function ClientCard({
   collateralTypes: CatalogOption[];
   /** Catálogo `COLLECTION_MODALITY` (F4/13 · E2): para rotular «cómo cobrarle» y para editarlo. */
   collectionModalities?: CatalogOption[];
+  /** Catálogos `INCOME_SOURCE` y `OCCUPATION` (F4/13 · E3): para rotular el perfil de ingreso y para editarlo. */
+  incomeSources?: CatalogOption[];
+  occupations?: CatalogOption[];
   /** Con plata en la calle no se archiva a nadie: la API lo frena y la pantalla no lo ofrece. */
   hasActiveCredits?: boolean;
 }) {
@@ -136,6 +141,8 @@ export function ClientCard({
     credits: creditOptions,
     collateralTypes,
     collectionModalities,
+    incomeSources,
+    occupations,
     currency,
     onSaved: recargar,
   };
@@ -211,6 +218,11 @@ export function ClientCard({
               )}
               {shown.createdAt && <Dato label={t('fields.createdAt')} value={date(shown.createdAt, locale)} />}
             </dl>
+          </Section>
+
+          {/* F4/13 · E3: de qué vive y cuándo le llega el dinero. Opcional: sin perfil dice que no está cargado. */}
+          <Section title={t('sections.income')} action={editarAction('income')}>
+            <IncomeSummary profile={shown.incomeProfile} sources={incomeSources} occupations={occupations} />
           </Section>
 
           {/*
@@ -336,3 +348,39 @@ function Dato({ label, value }: { label: string; value: string }) {
  * íconos y botón de revelar, otra con vacío ilustrado, otra con zona de arrastre— y una lista
  * genérica que ya no usa nadie es una invitación a volver a hacerlos todos iguales.
  */
+
+/** El perfil de ingreso en la ficha. Sin perfil, lo dice: es opcional y nadie tiene que preguntarse si falló. */
+function IncomeSummary({
+  profile,
+  sources,
+  occupations,
+}: {
+  profile: ClientDetail['incomeProfile'];
+  sources: CatalogOption[];
+  occupations: CatalogOption[];
+}) {
+  const t = useTranslations('portfolio');
+  if (!profile) return <p className="text-[13px] text-k-muted">{t('income.empty')}</p>;
+
+  const fuente = profile.incomeSourceCode
+    ? sources.find((s) => s.code === profile.incomeSourceCode)?.label ?? t(`income.sourceDefault.${profile.incomeSourceCode}`)
+    : undefined;
+  const rubro = profile.occupationCode ? occupations.find((o) => o.code === profile.occupationCode)?.label ?? profile.occupationCode : undefined;
+  const ciclo = profile.incomeCycle ? t(`income.cycleOptions.${profile.incomeCycle}`) : undefined;
+  const dia =
+    profile.incomeDay != null
+      ? profile.incomeCycle === 'WEEKLY'
+        ? t(`income.weekdays.${profile.incomeDay}`)
+        : String(profile.incomeDay)
+      : undefined;
+
+  return (
+    <dl className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-[13px]">
+      {fuente && <Dato label={t('income.source')} value={fuente} />}
+      {rubro && <Dato label={t('income.occupation')} value={rubro} />}
+      {ciclo && <Dato label={t('income.cycle')} value={ciclo} />}
+      {dia && <Dato label={profile.incomeCycle === 'WEEKLY' ? t('income.dayOfWeek') : t('income.dayOfMonth')} value={dia} />}
+      {profile.notes && <Dato label={t('income.notes')} value={profile.notes} />}
+    </dl>
+  );
+}
