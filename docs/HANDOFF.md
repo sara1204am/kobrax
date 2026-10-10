@@ -1,6 +1,19 @@
 # HANDOFF — dónde retomar
 
-> ## 🔵 RETOMAR ACÁ (sesión 2026-07-03): F10 App Mobile — planificación cerrada, listo para código
+> ## 🟢 ESTADO ACTUAL (2026-10-09) — leer esto primero
+> Lo de abajo es historial de julio y **está desactualizado**: el móvil ya no es «solo auth», F4–F10 están construidos y «caso» fue eliminado (F4/08).
+>
+> - **Estado verificado contra el código:** `docs/postulacion-india-bolivia/02-dossier-tecnico.md` (implementado / parcial / planeado por componente).
+> - **Móvil:** offline-first con SQLite (no WatermelonDB), 61 suites / 750 pruebas pasan. Plan de alineación con la web en borrador: `docs/epics/F10/plans/alineacion-web/` (no construir hasta PASS del gate).
+> - **Web:** panel operativo completo; faltan cambio de plan autoservicio y widgets funnel/gauge/histogram/text.
+> - **Rutas F4/12:** base y rediseño web en `main` (PR #4/#5); falta el móvil.
+> - **Despliegue:** corriendo en https://kobrax.ikigaisystems.lat con datos de prueba (`docs/producto/demo-datos-y-despliegue.md`). `docs/business/PRICING-Y-DEPLOY.md` §1 y §9 aún dice «no desplegado»: desactualizado.
+> - **Documentación funcional completa (pantallas web y móvil, roles, backend, datos):** `docs/producto/`.
+> - **Documentos que aún necesitan revisión:** lista en `docs/postulacion-india-bolivia/05-pendientes-y-riesgos.md` §D.
+
+---
+
+> ## 🔵 (HISTÓRICO, sesión 2026-07-03): F10 App Mobile — planificación cerrada, listo para código
 > **Las 5 decisiones de plan quedaron TODAS resueltas.** Docs vivos: `docs/epics/EPIC-F10-app-mobile.md` + `docs/epics/F10/ui-screen-map.md`. Figma "Kobrax movil" fileKey `daLWsKQGC4Sd1NacU9fmrP`.
 >
 > | # | Decisión | Resuelto |
