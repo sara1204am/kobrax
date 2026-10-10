@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Length, Max, Min } from 'class-validator';
+import { IsDateString, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Length, Matches, Max, Min } from 'class-validator';
 import { PaymentChannel, PaymentMethod } from '@prisma/client';
 import { CREDIT_SOURCES, type CreditSource } from '@kobrax/shared';
 
@@ -38,6 +38,11 @@ export class ListPaymentsQueryDto {
   @IsOptional() @IsIn(CREDIT_SOURCES as unknown as string[]) source?: CreditSource;
   @IsOptional() @IsDateString() from?: string;
   @IsOptional() @IsDateString() to?: string;
+  /**
+   * Un día civil de la **empresa** (`YYYY-MM-DD`). Lo resuelve el servidor con su zona horaria: el teléfono no la conoce, y
+   * armar `from/to` en UTC dejaba fuera lo cobrado después de las 20:00 en La Paz. Si viene, manda sobre `from`/`to`.
+   */
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) day?: string;
 
   /**
    * Por qué columna se ordena el ledger.
