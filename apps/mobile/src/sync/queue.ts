@@ -29,7 +29,14 @@ import { deleteQueuePhoto, persistPhoto, photoExists, type PendingPhoto } from '
 import { uploadImage, type UploadResult } from '../uploads.service';
 import { addVisitEvidence, createVisit, type CreateVisitInput } from '../field.service';
 import { createPayment, type NewPayment } from '../payments.service';
-import { updateRouteStatus, updateStop } from '../routes.service';
+import {
+  createChangeRequest,
+  decideChangeRequest,
+  updateRouteStatus,
+  updateStop,
+  type ChangeDecision,
+  type NewChangeRequest,
+} from '../routes.service';
 import {
   createClient,
   removeContact,
@@ -105,6 +112,8 @@ export type QueuedAction =
    * `PLANNED` en el servidor y la app volvía a ofrecer "Iniciar ruta" al reconectar.
    */
   | { kind: 'route.stop.location'; routeId: string; stopId: string; locationId: string }
+  | { kind: 'route.change.create'; routeId: string; input: NewChangeRequest }
+  | { kind: 'route.change.decide'; routeId: string; requestId: string; decision: ChangeDecision; note?: string }
   | { kind: 'route.status'; routeId: string; status: RouteStatus; /** Por qué se cierra con paradas sin gestionar (D-5). */ reason?: string }
   /**
    * Alta de cliente y de préstamo en la calle. Idempotentes porque **el id lo pone el teléfono**
@@ -221,6 +230,8 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'agenda.complete': 'Gestión ejecutada',
   'agenda.postpone': 'Gestión pospuesta',
   'route.status': 'Estado de la jornada',
+  'route.change.create': 'Pedido de cambio de ruta',
+  'route.change.decide': 'Decisión sobre un pedido de ruta',
   'route.stop.location': 'Dirección de una parada',
   'client.create': 'Cliente nuevo',
   'credit.create': 'Préstamo nuevo',
@@ -416,6 +427,10 @@ export async function send(action: PendingAction): Promise<SendResult> {
     }
     case 'route.stop.location':
       return mapMutate(await updateStop(action.routeId, action.stopId, { locationId: action.locationId }));
+    case 'route.change.create':
+      return mapMutate(await createChangeRequest(action.routeId, action.input));
+    case 'route.change.decide':
+      return mapMutate(await decideChangeRequest(action.routeId, action.requestId, action.decision, action.note));
     case 'route.status':
       return mapMutate(await updateRouteStatus(action.routeId, action.status, action.reason));
     case 'client.create': {

@@ -96,6 +96,9 @@ export type QueueKind =
   | 'agenda.complete'
   | 'agenda.postpone'
   | 'route.status'
+  /** Pedir un cambio sobre una ruta ajena (el id lo pone el teléfono) y decidir un pedido (valor fijo). */
+  | 'route.change.create'
+  | 'route.change.decide'
   /** Cambiar la dirección de una parada (valor fijo: repetirlo es un no-op en el servidor). */
   | 'route.stop.location'
   | 'client.create'
