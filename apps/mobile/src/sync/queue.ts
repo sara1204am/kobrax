@@ -335,7 +335,7 @@ export type SendResult =
   | { status: 'auth' }
   /** 426: esta versión de la app ya no es compatible. No es un rechazo: lo pendiente espera a que se actualice. */
   | { status: 'upgrade' }
-  | { status: 'error'; message: string; permanent?: boolean };
+  | { status: 'error'; message: string; permanent?: boolean; code?: string };
 
 const LOST_PHOTO = 'La foto ya no está en el teléfono (el sistema la borró). Descartá este aviso.';
 
@@ -478,7 +478,7 @@ async function sendVisit(action: Extract<QueuedAction, { kind: 'visit' }>): Prom
 
   if (action.payment) {
     // La llave sale de la visita, que el server creó una sola vez: reintentar no cobra dos veces.
-    const input: NewPayment = { ...action.payment, receiptUrl: foto?.url, receiptHash: foto?.hash };
+    const input: NewPayment = { ...action.payment, receiptUrl: foto?.url, receiptHash: foto?.hash, visitId };
     const key = `visit-${visitId}`;
     const pago = await createPayment(input, key);
     if (pago.status !== 'ok') resto.push({ kind: 'payment', input, idempotencyKey: key });
@@ -599,13 +599,13 @@ function httpStatusOf(res: { status: string; httpStatus?: number }): number | un
   return res.status === 'error' ? res.httpStatus : undefined;
 }
 
-function mapMutate(res: { status: string; message?: string; httpStatus?: number; reason?: string }): SendResult {
+function mapMutate(res: { status: string; message?: string; httpStatus?: number; reason?: string; code?: string }): SendResult {
   if (res.status === 'ok') return { status: 'ok' };
   if (res.status === 'offline') return res.reason === 'timeout' ? { status: 'offline', outcomeUnknown: true } : { status: 'offline' };
   if (res.status === 'unauthenticated') return { status: 'auth' };
   // El corte de versión no descarta nada: el drenaje se detiene y la cola espera a la actualización.
   if (res.status === 'error' && res.httpStatus === 426) return { status: 'upgrade' };
-  return { status: 'error', message: res.message ?? 'No se pudo subir', permanent: isPermanentRejection(res.httpStatus) };
+  return { status: 'error', message: res.message ?? 'No se pudo subir', permanent: isPermanentRejection(res.httpStatus), ...(res.code ? { code: res.code } : {}) };
 }
 
 /** Un DELETE que devuelve 404 ya está hecho: no es un error. */

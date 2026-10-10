@@ -69,7 +69,7 @@ export function updateRouteStatus(id: string, status: RouteStatus, reason?: stri
 }
 
 /** Agrega una parada al final del recorrido (S2). `POST /routes/:id/stops`. */
-export function addStop(routeId: string, input: { clientId: string; creditId: string }): Promise<MutateResult<RouteStopItem>> {
+export function addStop(routeId: string, input: { clientId: string; creditId: string; locationId?: string }): Promise<MutateResult<RouteStopItem>> {
   return apiMutate<RouteStopItem>(`/routes/${routeId}/stops`, 'POST', input);
 }
 

@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { RouteStatus, RouteStopStatus } from '@kobrax/shared';
+import { ROUTE_REASON_MAX, RouteStatus, RouteStopStatus, isValidReason } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { EmptyState, Header, ListRow, ProgressBar, ROUTE_STATUS_LABEL, SectionLabel, StatTile, StatusBadge, STOP_STATUS_META } from '@/ui';
 import { Button } from '@/components';
@@ -12,6 +12,7 @@ import type { MutateResult } from '@/api-client';
 import { money } from '@/agenda-form';
 import { listPaymentsByDay, type PaymentItem } from '@/payments.service';
 import { summarizeDay } from '@/route-summary';
+import { cancelRouteWithReason } from '@/route-cancel';
 import {
   generateRoute,
   getRoute,
@@ -158,7 +159,12 @@ export default function RutasScreen() {
           <RutaFinalizada route={route} payments={payments} />
         ) : (
           // Iniciar pasa por la vista previa (S3): ahí se ve el recorrido, se mide y se confirma.
-          <RutaEnCurso route={route} payments={payments} onStart={() => router.push(`/rutas/preview?routeId=${route.id}`)} />
+          <RutaEnCurso
+            route={route}
+            payments={payments}
+            onStart={() => router.push(`/rutas/preview?routeId=${route.id}`)}
+            onCancelled={() => void fetchRoute()}
+          />
         )}
 
         {actionError && <Text style={styles.error}>{actionError}</Text>}
@@ -187,7 +193,39 @@ function SinRuta({ busy, onGenerate }: { busy: boolean; onGenerate: () => void }
 }
 
 /** RT-0b: ruta planificada o en curso — progreso, métricas y la acción del día. */
-function RutaEnCurso({ route, payments, onStart }: { route: RouteItem; payments: PaymentItem[]; onStart: () => void }) {
+function RutaEnCurso({
+  route,
+  payments,
+  onStart,
+  onCancelled,
+}: {
+  route: RouteItem;
+  payments: PaymentItem[];
+  onStart: () => void;
+  onCancelled: () => void;
+}) {
+  const [asking, setAsking] = useState(false);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  // La API ya resolvió si se puede cancelar (sin visitas, y por quién). Sin ese dato (caché viejo): solo si está planificada.
+  const canCancel = route.capabilities ? route.capabilities.cancel : route.status === RouteStatus.PLANNED;
+  const blockedByVisits = route.capabilities?.cancelBlockedByVisits === true;
+
+  const cancel = async () => {
+    setBusy(true);
+    setNotice(null);
+    const res = await cancelRouteWithReason(route.id, reason);
+    setBusy(false);
+    if (res.status === 'cancelled' || res.status === 'queued') {
+      setAsking(false);
+      setReason('');
+      if (res.status === 'queued') setNotice('Sin señal: la cancelación se guardó y sube sola.');
+      return onCancelled();
+    }
+    setNotice(res.message);
+  };
+
   const { done, total } = routeProgress(route);
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   // Lo cobrado sale de la MISMA cuenta que usa la jornada cerrada y el Home: dos pantallas del
@@ -228,6 +266,27 @@ function RutaEnCurso({ route, payments, onStart }: { route: RouteItem; payments:
         {/* La ruta a medio armar es la ruta del día (D-S2-VIDA): sin esta puerta, el mapa quedaría
             inalcanzable — el vacío que lo ofrece ya no se muestra. */}
         <Button label="Agregar paradas en el mapa" variant="ghost" onPress={() => router.push('/rutas/crear')} />
+
+        {notice && <Text style={styles.cancelNotice}>{notice}</Text>}
+        {blockedByVisits && <Text style={styles.cancelNotice}>Ya tiene visitas: no se cancela, se cierra la jornada.</Text>}
+        {canCancel && !asking && <Button label="Cancelar ruta" variant="ghost" onPress={() => setAsking(true)} />}
+        {canCancel && asking && (
+          <View style={{ gap: SPACING.sm }}>
+            <Text style={styles.cancelTitle}>¿Por qué se cancela la ruta?</Text>
+            <TextInput
+              value={reason}
+              onChangeText={setReason}
+              placeholder="Ej.: el cliente pidió otro día"
+              placeholderTextColor={COLORS.muted}
+              multiline
+              maxLength={ROUTE_REASON_MAX}
+              style={styles.cancelReason}
+              accessibilityLabel="Motivo de la cancelación"
+            />
+            <Button label="Cancelar ruta" onPress={() => void cancel()} loading={busy} disabled={busy || !isValidReason(reason)} />
+            <Button label="Volver" variant="ghost" onPress={() => setAsking(false)} disabled={busy} />
+          </View>
+        )}
       </View>
 
       {next && (
@@ -296,6 +355,17 @@ function Paradas({ stops, readOnly }: { stops: RouteStopItem[]; readOnly: boolea
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  cancelTitle: { ...TYPE.body, fontWeight: '700', color: COLORS.navy },
+  cancelNotice: { ...TYPE.caption, color: COLORS.text2 },
+  cancelReason: {
+    minHeight: 84,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.input,
+    padding: SPACING.md,
+    color: COLORS.text,
+    textAlignVertical: 'top',
+  },
   card: { backgroundColor: COLORS.white, borderRadius: RADIUS.card, padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.border },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   bigIcon: { fontSize: 40 },

@@ -40,6 +40,11 @@ export interface RouteDraft {
   creditIds: string[];
   /** Cliente de cada crédito — el server necesita ambos para crear la parada. */
   clientByCredit: Record<string, string>;
+  /**
+   * La ubicación elegida de cada crédito (si el cliente tiene varias). Ausente = que el servidor use la principal. Opcional:
+   * un borrador viejo, sin este campo, sigue siendo válido.
+   */
+  locationByCredit?: Record<string, string>;
 }
 
 export function emptyDraft(date: string): RouteDraft {
@@ -139,18 +144,25 @@ export async function clearDraft(): Promise<void> {
 
 // ── Ediciones (puras: la pantalla guarda el resultado) ────────────────────────
 
-export function withStop(draft: RouteDraft, creditId: string, clientId: string): RouteDraft {
+export function withStop(draft: RouteDraft, creditId: string, clientId: string, locationId?: string): RouteDraft {
   if (draft.creditIds.includes(creditId)) return draft; // dos toques sobre el mismo pin
   return {
     ...draft,
     creditIds: [...draft.creditIds, creditId],
     clientByCredit: { ...draft.clientByCredit, [creditId]: clientId },
+    ...(locationId ? { locationByCredit: { ...draft.locationByCredit, [creditId]: locationId } } : {}),
   };
 }
 
 export function withoutStop(draft: RouteDraft, creditId: string): RouteDraft {
   const { [creditId]: _out, ...rest } = draft.clientByCredit;
-  return { ...draft, creditIds: draft.creditIds.filter((id) => id !== creditId), clientByCredit: rest };
+  const { [creditId]: _loc, ...locs } = draft.locationByCredit ?? {};
+  return {
+    ...draft,
+    creditIds: draft.creditIds.filter((id) => id !== creditId),
+    clientByCredit: rest,
+    ...(draft.locationByCredit ? { locationByCredit: locs } : {}),
+  };
 }
 
 /** Mueve una parada `delta` lugares (−1 sube, +1 baja). Fuera de rango, no hace nada. */
@@ -239,7 +251,11 @@ export async function flushDraft(
     if (res.status === 'error') return { status: 'error', message: res.message };
   }
   for (const creditId of diff.toAdd) {
-    const res = await addStop(routeId, { clientId: draft.clientByCredit[creditId]!, creditId });
+    const res = await addStop(routeId, {
+      clientId: draft.clientByCredit[creditId]!,
+      creditId,
+      ...(draft.locationByCredit?.[creditId] ? { locationId: draft.locationByCredit[creditId] } : {}),
+    });
     if (res.status === 'offline') return { status: 'offline' };
     if (res.status === 'error') return { status: 'error', message: res.message };
   }

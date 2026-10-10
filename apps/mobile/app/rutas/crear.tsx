@@ -9,6 +9,7 @@ import { money, todayISO } from '@/agenda-form';
 import type { PortfolioLocation } from '@kobrax/shared';
 import { toRouteCandidates, type RouteCandidate } from '@/route-candidates';
 import { createRoute, listRoutePlanCredits, listRoutes } from '@/routes.service';
+import { lugarLabel } from '@/route-labels';
 import { isPlannableDay, planningDays } from '@/route-days';
 import { flushDraft, loadDraft, moveStop, saveDraft, withoutStop, withStop, type RouteDraft } from '@/route-draft';
 import { authService } from '@/auth-service';
@@ -235,6 +236,7 @@ export default function CrearRutaScreen() {
                       draft ?? { routeId: null, date: day, creditIds: [], clientByCredit: {} },
                       elegido.cliente.creditId,
                       elegido.cliente.clientId,
+                      elegido.loc.id,
                     ),
                   )
                 }
@@ -307,22 +309,6 @@ export default function CrearRutaScreen() {
       </BottomSheet>
     </View>
   );
-}
-
-const TIPO_LUGAR: Record<string, string> = {
-  HOME: 'Casa',
-  WORK: 'Trabajo',
-  GUARANTOR: 'Garante',
-  FAMILY: 'Familia',
-  OTHER: 'Otra ubicación',
-};
-
-/** "Casa" · "Casa de Luis Vargas (garante)" — de quién es el punto que tocaste. */
-function lugarLabel(loc: { locationType: string; ownerName?: string; ownerRelation?: string }): string {
-  const tipo = TIPO_LUGAR[loc.locationType] ?? 'Ubicación';
-  if (!loc.ownerName) return tipo;
-  const rel = loc.ownerRelation ? TIPO_LUGAR[loc.ownerRelation]?.toLowerCase() : undefined;
-  return `${tipo} de ${loc.ownerName}${rel ? ` (${rel})` : ''}`;
 }
 
 /** Botoncito cuadrado de la fila del recorrido (subir/bajar/quitar). */

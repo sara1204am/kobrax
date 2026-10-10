@@ -24,6 +24,7 @@ import {
   paymentCap,
   paymentOutcome,
   postVisitWarning,
+  installmentHint,
   VISIT_VARIANTS,
   variantMeta,
   type ResultForm,
@@ -75,6 +76,7 @@ export default function ResultadoScreen() {
   // D3: el externo no tiene tope — su saldo es el reportado al corte, y el pago no lo baja.
   const cap = paymentCap(stop);
   const external = !!stop?.externalSource;
+  const cuota = installmentHint(stop);
   const valid = useMemo(() => canSubmitResult(key, form, cap), [key, form, cap]);
 
   const onDate = useCallback(
@@ -207,6 +209,7 @@ export default function ResultadoScreen() {
         method: form.paymentMethodCode as PaymentMethod,
         receiptUrl: foto?.url,
         receiptHash: foto?.hash,
+        visitId: visit.data.id,
       };
       // Anti doble cobro si el cobrador reintenta con señal mala: la llave sale de la visita, que
       // el server creó una sola vez, así que reintentar no puede cobrarle dos veces al deudor.
@@ -279,6 +282,19 @@ export default function ResultadoScreen() {
               currencySymbol={currency}
               accessibilityLabel={key === 'PAID' ? 'Monto cobrado' : 'Monto prometido'}
             />
+            {key === 'PAID' && cuota && !external && (
+              <Pressable
+                onPress={() => set({ amount: String(cuota.amount) })}
+                accessibilityRole="button"
+                accessibilityLabel={`Usar la cuota de ${money(cuota.amount, currency)}`}
+                style={styles.cuota}
+              >
+                <Text style={styles.cuotaTxt}>
+                  {`Cuota a pagar ${money(cuota.amount, currency)}${cuota.dueLabel ? ` · vence ${cuota.dueLabel}` : ''}`}
+                </Text>
+                <Text style={styles.cuotaUsar}>Usar este monto</Text>
+              </Pressable>
+            )}
             {key === 'PAID' && external && (
               <Text style={styles.aviso}>
                 {`Crédito ${stop?.externalSource}: el saldo es el reportado por el banco${
@@ -426,6 +442,18 @@ const styles = StyleSheet.create({
   },
   textarea: { minHeight: 90, textAlignVertical: 'top' },
   aviso: { ...TYPE.caption, color: COLORS.text2 },
+  cuota: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.input,
+    backgroundColor: COLORS.highlight,
+  },
+  cuotaTxt: { ...TYPE.body, color: COLORS.navy, flex: 1 },
+  cuotaUsar: { ...TYPE.secondary, color: COLORS.periwinkle, fontWeight: '600' },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingVertical: SPACING.sm },
   photoBtn: {
     borderWidth: 1,
