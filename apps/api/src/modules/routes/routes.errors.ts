@@ -104,6 +104,14 @@ export const stopStatusNotAllowed = (from: string, to: string) =>
 export const routePastDate = () =>
   new UnprocessableEntityException({ code: 'ROUTE_PAST_DATE', message: 'No se arma una ruta para un día que ya pasó.' });
 
+/** Planificar sin límite hacia adelante convierte la ruta en una lista de deseos: se acota (D-6). */
+export const routeTooFar = (maxDays: number) =>
+  new UnprocessableEntityException({
+    code: 'ROUTE_TOO_FAR',
+    message: `Solo se arma una ruta hasta ${maxDays} días hacia adelante.`,
+    details: { maxDays },
+  });
+
 export const changeRequestNotFound = () =>
   new NotFoundException({ code: 'ROUTE_REQUEST_NOT_FOUND', message: 'Ese pedido de cambio no existe.' });
 

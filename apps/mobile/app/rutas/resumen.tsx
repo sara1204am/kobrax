@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { RouteStatus } from '@kobrax/shared';
+import { ROUTE_REASON_MAX, RouteStatus, isValidReason } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { EmptyState, Header, ListRow, ProgressBar, SectionLabel } from '@/ui';
 import { Button } from '@/components';
@@ -24,6 +24,9 @@ export default function ResumenJornadaScreen() {
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Cerrar con paradas sin registrar pide un motivo (D-5): se escribe acá antes de cerrar. */
+  const [asking, setAsking] = useState(false);
+  const [reason, setReason] = useState('');
 
   const fetchAll = useCallback(async () => {
     const res = await getRoute(routeId);
@@ -44,34 +47,41 @@ export default function ResumenJornadaScreen() {
     }, [fetchAll]),
   );
 
-  const close = useCallback(async () => {
-    setBusy(true);
-    const res = await updateRouteStatus(routeId, RouteStatus.COMPLETED);
-    // Sin red la jornada se cierra igual **y el cierre sube solo** (mismo criterio que al iniciar):
-    // antes se perdía y la jornada reaparecía abierta al reconectar.
-    if (res.status === 'offline') {
-      await queueForLater({ kind: 'route.status', routeId, status: RouteStatus.COMPLETED });
-    }
-    setBusy(false);
-    if (res.status === 'error') return setError(res.message);
-    router.replace('/(tabs)/rutas');
-  }, [routeId]);
+  const close = useCallback(
+    async (why?: string) => {
+      setBusy(true);
+      setError(null);
+      const motivo = why?.trim();
+      const res = await updateRouteStatus(routeId, RouteStatus.COMPLETED, motivo);
+      // Sin red —o con la sesión vencida— la jornada se cierra igual **y el cierre sube solo, con su motivo**.
+      // Antes, con sesión vencida, caía derecho al `replace` y el cierre se perdía en silencio.
+      if (res.status === 'offline' || res.status === 'unauthenticated') {
+        const guardado = await queueForLater({
+          kind: 'route.status',
+          routeId,
+          status: RouteStatus.COMPLETED,
+          ...(motivo ? { reason: motivo } : {}),
+        });
+        if (!guardado) {
+          setBusy(false);
+          return setError('No se pudo guardar el cierre en el teléfono. Reintentá cuando tengas señal.');
+        }
+      }
+      setBusy(false);
+      if (res.status === 'error') return setError(res.message);
+      router.replace('/(tabs)/rutas');
+    },
+    [routeId],
+  );
 
   const onClose = useCallback(() => {
     if (!route) return;
     const { done, total } = summarizeDay(route, payments);
     const pendientes = total - done;
     if (pendientes === 0) return void close();
-    // D2: se permite cerrar con paradas sin hacer — bloquearlo empujaría a marcar visitas falsas —
-    // pero se dice cuántas quedan, para que no sea un accidente.
-    Alert.alert(
-      'Cerrar la jornada',
-      `Quedan ${pendientes} ${pendientes === 1 ? 'parada sin registrar' : 'paradas sin registrar'}. Se van a cerrar así.`,
-      [
-        { text: 'Volver', style: 'cancel' },
-        { text: 'Cerrar igual', style: 'destructive', onPress: () => void close() },
-      ],
-    );
+    // D2: se permite cerrar con paradas sin hacer — bloquearlo empujaría a marcar visitas falsas — pero se pide el motivo
+    // (D-5): queda en la bitácora de la ruta y esas paradas pasan a «saltadas».
+    setAsking(true);
   }, [route, payments, close]);
 
   if (!route) {
@@ -148,6 +158,25 @@ export default function ResumenJornadaScreen() {
       <View style={styles.footer}>
         {cerrada ? (
           <Text style={[TYPE.secondary, { textAlign: 'center' }]}>Esta jornada ya está cerrada.</Text>
+        ) : asking ? (
+          <View style={{ gap: SPACING.sm }}>
+            <Text style={styles.askTitle}>
+              {`Quedan ${s.total - s.done} ${s.total - s.done === 1 ? 'parada sin registrar' : 'paradas sin registrar'}`}
+            </Text>
+            <Text style={TYPE.secondary}>Contá por qué se cierran así. Esas paradas quedan como saltadas.</Text>
+            <TextInput
+              value={reason}
+              onChangeText={setReason}
+              placeholder="Ej.: lluvia fuerte, no llegué a la zona"
+              placeholderTextColor={COLORS.muted}
+              multiline
+              maxLength={ROUTE_REASON_MAX}
+              style={styles.reason}
+              accessibilityLabel="Motivo del cierre"
+            />
+            <Button label="Cerrar jornada" onPress={() => void close(reason)} loading={busy} disabled={busy || !isValidReason(reason)} />
+            <Button label="Volver" variant="ghost" onPress={() => setAsking(false)} disabled={busy} />
+          </View>
         ) : (
           <Button label="Finalizar y Cerrar Jornada  →" onPress={onClose} loading={busy} disabled={busy} />
         )}
@@ -194,4 +223,15 @@ const styles = StyleSheet.create({
   catCount: { fontSize: 22, fontWeight: '700', color: COLORS.navy },
   error: { ...TYPE.secondary, color: COLORS.danger, textAlign: 'center' },
   footer: { padding: SPACING.lg, borderTopWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.white },
+  askTitle: { ...TYPE.body, fontWeight: '700', color: COLORS.navy },
+  reason: {
+    minHeight: 76,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.input,
+    padding: SPACING.md,
+    textAlignVertical: 'top',
+    color: COLORS.text,
+    fontSize: 15,
+  },
 });

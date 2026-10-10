@@ -1,7 +1,7 @@
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { HttpException } from '@nestjs/common';
-import { compareAppVersions, isBelowMinVersion, parseAppVersion } from './app-version';
+import { compareAppVersions, isBelowMinVersion, legacyClientReason, parseAppVersion } from './app-version';
 import { AppVersionGuard } from './guards/app-version.guard';
 
 describe('parseAppVersion / compareAppVersions', () => {
@@ -79,5 +79,24 @@ describe('AppVersionGuard', () => {
   it('auth y health quedan fuera del corte', () => {
     process.env.MIN_APP_VERSION = '1.2.0';
     for (const p of ['/api/auth/login', '/api/auth/refresh', '/api/health']) assert.equal(guard.canActivate(ctx(p, '1.0.0')), true, p);
+  });
+});
+
+describe('legacyClientReason (D-5 · compatibilidad por versión)', () => {
+  it('al día: devuelve null y se le exige la regla completa', () => {
+    assert.equal(legacyClientReason('1.1.0', '1.1.0'), null);
+    assert.equal(legacyClientReason('1.2.0', '1.1.0'), null);
+    assert.equal(legacyClientReason('v2', '1.1.0'), null);
+    assert.equal(legacyClientReason('1.1.0-beta.2', '1.1.0'), null);
+  });
+
+  it('versión menor: legado', () => {
+    assert.equal(legacyClientReason('1.0.9', '1.1.0'), 'version_below');
+    assert.equal(legacyClientReason('0.1.0', '1.1.0'), 'version_below');
+  });
+
+  it('ausente o vacía: legado «missing»; ilegible o con basura: legado «invalid» (nunca una excepción)', () => {
+    for (const v of [undefined, null, '', '   ']) assert.equal(legacyClientReason(v, '1.1.0'), 'version_missing');
+    for (const v of ['abc', '1.1.0; rm -rf', '99999999.0.0', '1..0']) assert.equal(legacyClientReason(v, '1.1.0'), 'version_invalid');
   });
 });

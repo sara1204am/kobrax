@@ -34,6 +34,8 @@ function creditRow(over: Record<string, unknown> = {}) {
 }
 
 interface Opts {
+  /** Hora de pared de la empresa «ahora», en minutos desde su medianoche (por defecto 00:00). */
+  nowMinutes?: number;
   permissions?: string[];
   rows?: unknown[];
   clients?: unknown[];
@@ -270,7 +272,11 @@ function makeService(opts: Opts = {}) {
     },
   };
   // El reloj del tenant, fijado en UTC: los tests arman sus fechas con `isoUTC`, que es la misma vara.
-  const clock = { today: async () => new Date(`${isoUTC(0)}T00:00:00.000Z`) };
+  const clock = {
+    today: async () => new Date(`${isoUTC(0)}T00:00:00.000Z`),
+    // Minutos desde la medianoche de la empresa «ahora»; 0 = recién empezó el día (no estorba a los tests de hora).
+    nowWallMinutes: async () => opts.nowMinutes ?? 0,
+  };
   const service = new AgendaService(
     prisma as never,
     tenant as never,
@@ -590,33 +596,108 @@ describe('AgendaService.complete (ejecutar S4)', () => {
   });
 });
 
-describe('AgendaService.postpone (S4)', () => {
+describe('AgendaService.postpone (S4 · D-8: solo hacia adelante y el mismo día)', () => {
+  const hoy = () => new Date(isoUTC(0));
+  const SCHEDULED = (over: Record<string, unknown> = {}) => row({ status: 'SCHEDULED', scheduledDate: hoy(), scheduledTime: '09:00', timeMode: 'FIXED', ...over });
+
   it('corre la hora AGENDADA (naive) +30, sigue SCHEDULED y fija a hora exacta', async () => {
-    const { service, calls } = makeService({ item: row({ status: 'SCHEDULED', scheduledDate: new Date('2026-07-12'), scheduledTime: '09:00' }) });
+    const { service, calls } = makeService({ item: SCHEDULED() });
     const res = await service.postpone('a1', { minutes: 30 } as never);
-    assert.equal(calls.updated!.scheduledTime, '09:30'); // +30 sobre la hora agendada, no sobre el reloj del server
+    assert.equal(calls.updated!.scheduledTime, '09:30'); // +30 sobre la hora agendada
     assert.equal(calls.updated!.timeMode, 'FIXED');
     assert.equal(calls.updated!.timeSlot, null);
     assert.notEqual(res.data!.status, 'EXECUTED');
     assert.deepEqual(calls.audits, [{ entity: 'agenda_item', action: 'POSTPONE' }]);
   });
 
-  it('cruza la medianoche: +60 sobre 23:50 → 00:50 del día siguiente', async () => {
-    const { service, calls } = makeService({ item: row({ status: 'SCHEDULED', scheduledDate: new Date('2026-07-12'), scheduledTime: '23:50' }) });
-    await service.postpone('a1', { minutes: 60 } as never);
-    assert.equal(calls.updated!.scheduledTime, '00:50');
-    assert.equal((calls.updated!.scheduledDate as Date).toISOString().slice(0, 10), '2026-07-13');
+  it('suma 15, 30 y 60 minutos exactos', async () => {
+    for (const [min, hora] of [[15, '09:15'], [30, '09:30'], [60, '10:00']] as const) {
+      const { service, calls } = makeService({ item: SCHEDULED() });
+      await service.postpone('a1', { minutes: min } as never);
+      assert.equal(calls.updated!.scheduledTime, hora, `+${min}`);
+    }
+  });
+
+  it('🔴 nunca cambia el día: cruzar la medianoche se rechaza y no escribe nada (AGENDA_POSTPONE_RULE)', async () => {
+    const { service, calls } = makeService({ item: SCHEDULED({ scheduledTime: '23:50' }) });
+    await expectError(() => service.postpone('a1', { minutes: 60 } as never), 'AGENDA_POSTPONE_RULE');
+    assert.equal(calls.updated, undefined);
+  });
+
+  it('el límite del día: 23:30 + 15 sí (23:45), 23:50 + 15 no', async () => {
+    const ok = makeService({ item: SCHEDULED({ scheduledTime: '23:30' }) });
+    await ok.service.postpone('a1', { minutes: 15 } as never);
+    assert.equal(ok.calls.updated!.scheduledTime, '23:45');
+    const no = makeService({ item: SCHEDULED({ scheduledTime: '23:50' }) });
+    await expectError(() => no.service.postpone('a1', { minutes: 15 } as never), 'AGENDA_POSTPONE_RULE');
   });
 
   it('un agendado por franja parte del inicio de la franja (MORNING = 08:00)', async () => {
-    const { service, calls } = makeService({ item: row({ status: 'SCHEDULED', scheduledTime: null, timeSlot: 'MORNING', timeMode: 'LAPSE' }) });
+    const { service, calls } = makeService({ item: row({ status: 'SCHEDULED', scheduledDate: hoy(), scheduledTime: null, timeSlot: 'MORNING', timeMode: 'LAPSE' }) });
     await service.postpone('a1', { minutes: 15 } as never);
     assert.equal(calls.updated!.scheduledTime, '08:15'); // no 00:15
+    assert.equal(calls.updated!.timeMode, 'FIXED');
+    assert.equal(calls.updated!.timeSlot, null);
+  });
+
+  it('🔴 un vencido de HOY se pospone desde AHORA, no sobre su hora vieja (que seguiría en el pasado)', async () => {
+    // Estaba a las 09:00, son las 14:10: +30 → 14:40, no 09:30.
+    const { service, calls } = makeService({ item: SCHEDULED(), nowMinutes: 14 * 60 + 10 });
+    await service.postpone('a1', { minutes: 30 } as never);
+    assert.equal(calls.updated!.scheduledTime, '14:40');
+  });
+
+  it('una gestión de un día que ya pasó no se pospone: se reagenda (AGENDA_POSTPONE_RULE)', async () => {
+    const { service, calls } = makeService({ item: SCHEDULED({ scheduledDate: new Date(isoUTC(-1)) }) });
+    await expectError(() => service.postpone('a1', { minutes: 15 } as never), 'AGENDA_POSTPONE_RULE');
+    assert.equal(calls.updated, undefined);
+  });
+
+  it('una gestión de un día futuro se pospone sobre su propia hora (ahora no estorba)', async () => {
+    const { service, calls } = makeService({ item: SCHEDULED({ scheduledDate: new Date(isoUTC(2)) }), nowMinutes: 20 * 60 });
+    await service.postpone('a1', { minutes: 30 } as never);
+    assert.equal(calls.updated!.scheduledTime, '09:30');
+    assert.equal((calls.updated!.scheduledDate as Date | undefined), undefined, 'el día no se toca');
+  });
+
+  it('toTime: hora exacta posterior del mismo día; la hora QUEDA ahí y el día no cambia', async () => {
+    const { service, calls } = makeService({ item: SCHEDULED() });
+    await service.postpone('a1', { toTime: '10:30' } as never);
+    assert.equal(calls.updated!.scheduledTime, '10:30');
+    assert.equal(calls.updated!.scheduledDate, undefined);
+    assert.equal(calls.updated!.timeMode, 'FIXED');
+  });
+
+  it('🔴 toTime igual o anterior a la actual, o a «ahora», no es posponer (AGENDA_POSTPONE_RULE)', async () => {
+    const a = makeService({ item: SCHEDULED() });
+    await expectError(() => a.service.postpone('a1', { toTime: '08:00' } as never), 'AGENDA_POSTPONE_RULE');
+    const b = makeService({ item: SCHEDULED(), nowMinutes: 11 * 60 });
+    await expectError(() => b.service.postpone('a1', { toTime: '10:30' } as never), 'AGENDA_POSTPONE_RULE');
+  });
+
+  it('🔴 idempotente: reenviar el mismo toTime sobre una gestión que ya quedó a esa hora es éxito y no vuelve a auditar', async () => {
+    const { service, calls } = makeService({ item: SCHEDULED({ scheduledTime: '10:30' }) });
+    const res = await service.postpone('a1', { toTime: '10:30' } as never);
+    assert.equal(res.data!.scheduledTime, '10:30');
+    assert.equal(calls.updated, undefined, 'no escribe');
+    assert.deepEqual(calls.audits, []);
+  });
+
+  it('toTime manda sobre minutes; sin ninguno → AGENDA_004', async () => {
+    const { service, calls } = makeService({ item: SCHEDULED() });
+    await service.postpone('a1', { toTime: '11:00', minutes: 30 } as never);
+    assert.equal(calls.updated!.scheduledTime, '11:00');
+    await expectError(() => service.postpone('a1', {} as never), 'AGENDA_004');
   });
 
   it('posponer una gestión ya ejecutada → AGENDA_008', async () => {
     const { service } = makeService({ item: row({ status: 'EXECUTED' }) });
     await expectError(() => service.postpone('a1', { minutes: 15 } as never), 'AGENDA_008');
+  });
+
+  it('no se pospone la de otra persona: 404 (alcance de asignado)', async () => {
+    const { service } = makeService({ item: null as never });
+    await expectError(() => service.postpone('a1', { minutes: 15 } as never), 'AGENDA_NOT_FOUND');
   });
 });
 
@@ -1073,25 +1154,6 @@ describe('AgendaService idempotente (cola offline)', () => {
     const r = await service.create(createDto({ id: ID }));
     assert.equal(r.data!.id, ID);
     assert.equal(calls.createdAll.length, 0);
-  });
-
-  it('postpone con toTime: la hora QUEDA en toTime (idempotente), mismo día', async () => {
-    const a = makeService({ item: row({ status: 'SCHEDULED', scheduledDate: new Date('2026-07-12'), scheduledTime: '09:00' }) });
-    await a.service.postpone('a1', { toTime: '10:30' } as never);
-    assert.equal(a.calls.updated!.scheduledTime, '10:30');
-    assert.equal((a.calls.updated!.scheduledDate as Date).toISOString().slice(0, 10), '2026-07-12');
-    assert.equal(a.calls.updated!.timeMode, 'FIXED');
-    // Reenvío sobre el ítem ya movido: sigue en 10:30.
-    const b = makeService({ item: row({ status: 'SCHEDULED', scheduledDate: new Date('2026-07-12'), scheduledTime: '10:30' }) });
-    await b.service.postpone('a1', { toTime: '10:30' } as never);
-    assert.equal(b.calls.updated!.scheduledTime, '10:30');
-  });
-
-  it('postpone: toTime manda sobre minutes; sin ninguno → AGENDA_004', async () => {
-    const { service, calls } = makeService({ item: row({ status: 'SCHEDULED', scheduledTime: '09:00' }) });
-    await service.postpone('a1', { toTime: '11:00', minutes: 30 } as never);
-    assert.equal(calls.updated!.scheduledTime, '11:00');
-    await expectError(() => service.postpone('a1', {} as never), 'AGENDA_004');
   });
 
   it('complete ya EXECUTED con el MISMO resultado: devuelve lo hecho, sin otra actividad ni audit/evento', async () => {

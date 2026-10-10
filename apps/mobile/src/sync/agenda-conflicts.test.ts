@@ -37,3 +37,11 @@ describe('withAgendaExplanation', () => {
     expect(withAgendaExplanation(r, undefined)).toBe(r);
   });
 });
+
+describe('explainAgendaRejection · reglas de «posponer» (422)', () => {
+  it('conserva el motivo del servidor y aclara que no se aplicó', () => {
+    const txt = explainAgendaRejection(422, 'Posponer no cambia de día: la hora llegaría pasada la medianoche. Usá Reagendar.');
+    expect(txt).toContain('Posponer no cambia de día');
+    expect(txt).toMatch(/no se aplicó/);
+  });
+});

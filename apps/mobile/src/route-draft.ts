@@ -57,36 +57,78 @@ async function draftKey(): Promise<string | null> {
   return userId ? routeDraftKey(userId) : null;
 }
 
+/**
+ * Los borradores del usuario, **uno por día** (D-6: se puede armar la ruta de mañana sin pisar la de hoy). Se guardan juntos
+ * bajo la misma clave —`SecureStore` no permite listar claves, y así «borrar los del usuario» sigue siendo una sola
+ * operación—. El formato viejo (un único borrador) se lee como un mapa de un solo día: no hace falta migrar nada.
+ */
+export type DraftMap = Record<string, RouteDraft>;
+
+const isDraft = (d: unknown): d is RouteDraft =>
+  !!d && typeof d === 'object' && Array.isArray((d as RouteDraft).creditIds) && typeof (d as RouteDraft).date === 'string';
+
+/** Lo guardado, normalizado. Un valor ilegible o de otra forma es un mapa vacío (nunca tira). */
+export function parseDrafts(raw: string | null): DraftMap {
+  if (!raw) return {};
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (isDraft(value)) return { [value.date]: value }; // formato viejo: un solo borrador
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value as Record<string, unknown>).filter(([k, v]) => isDraft(v) && v.date === k)) as DraftMap;
+    }
+  } catch {
+    /* ilegible: se pisa */
+  }
+  return {};
+}
+
+async function readDrafts(key: string): Promise<DraftMap> {
+  return parseDrafts(await SecureStore.getItemAsync(key));
+}
+
+/** Lo que vale la pena seguir guardando: nada de días pasados, ni borradores vacíos sin ruta. */
+export function pruneDrafts(drafts: DraftMap, today: string): DraftMap {
+  return Object.fromEntries(
+    Object.entries(drafts).filter(([date, d]) => date >= today && (d.creditIds.length > 0 || d.routeId)),
+  );
+}
+
 export async function loadDraft(date: string): Promise<RouteDraft> {
   await SecureStore.deleteItemAsync(ROUTE_DRAFT_KEY); // legado sin dueño: se descarta
   const key = await draftKey();
   if (!key) return emptyDraft(date);
-  const raw = await SecureStore.getItemAsync(key);
-  if (!raw) return emptyDraft(date);
-  try {
-    const draft = JSON.parse(raw) as RouteDraft;
-    // Un borrador de otro día —o con otra forma— no se arrastra: la jornada de hoy arranca limpia.
-    return draft.date === date && Array.isArray(draft.creditIds) ? draft : emptyDraft(date);
-  } catch {
-    return emptyDraft(date);
-  }
+  // El de otro día no se arrastra: cada jornada arranca con SU borrador, o limpia.
+  return (await readDrafts(key))[date] ?? emptyDraft(date);
+}
+
+/** Todos los borradores pendientes del usuario (para sincronizar los de varios días). */
+export async function loadAllDrafts(): Promise<DraftMap> {
+  const key = await draftKey();
+  return key ? readDrafts(key) : {};
 }
 
 export async function saveDraft(draft: RouteDraft): Promise<void> {
   const key = await draftKey();
   if (!key) return;
+  const all = await readDrafts(key);
   // La pantalla guarda su copia en memoria, que puede no tener el `createId` que `flushDraft` fijó en un intento
   // fallido: se conserva el guardado, o el reintento mandaría OTRO id y duplicaría la ruta si el primero llegó.
   let toSave = draft;
-  if (!draft.createId && !draft.routeId) {
-    try {
-      const prev = JSON.parse((await SecureStore.getItemAsync(key)) ?? 'null') as RouteDraft | null;
-      if (prev?.createId && prev.date === draft.date && !prev.routeId) toSave = { ...draft, createId: prev.createId };
-    } catch {
-      /* un guardado ilegible se pisa */
-    }
-  }
-  await SecureStore.setItemAsync(key, JSON.stringify(toSave));
+  const prev = all[draft.date];
+  if (!draft.createId && !draft.routeId && prev?.createId && !prev.routeId) toSave = { ...draft, createId: prev.createId };
+  // Los días que ya pasaron y los borradores vacíos sin ruta no se siguen guardando.
+  const next = { ...all, [toSave.date]: toSave };
+  await SecureStore.setItemAsync(key, JSON.stringify(next));
+}
+
+/** Quita el borrador de UN día (la ruta de ese día ya quedó armada) y poda los días que ya pasaron. */
+export async function dropDraft(date: string, today: string): Promise<void> {
+  const key = await draftKey();
+  if (!key) return;
+  const { [date]: _gone, ...rest } = await readDrafts(key);
+  const kept = pruneDrafts(rest, today);
+  if (Object.keys(kept).length === 0) await SecureStore.deleteItemAsync(key);
+  else await SecureStore.setItemAsync(key, JSON.stringify(kept));
 }
 
 export async function clearDraft(): Promise<void> {
@@ -218,11 +260,37 @@ export async function flushDraft(
 }
 
 /**
- * Sincroniza el borrador de hoy sin que haya una pantalla abierta. Lo llama el motor de sync en
- * cada drenaje: antes, un recorrido armado sin señal se quedaba en el teléfono hasta que el
- * cobrador volviera a Crear ruta y tocara un pin.
+ * Sincroniza los borradores de **todos los días** (hoy y los próximos) sin que haya una pantalla abierta. Lo llama el motor
+ * de sync en cada drenaje. Un día que ya pasó sin haberse creado la ruta se descarta: el servidor no arma rutas del pasado.
  *
- * Devuelve `'nothing'` cuando no hay nada que hacer — que es el caso normal y no cuesta red.
+ * Devuelve el peor resultado: `'offline'` si alguno no salió por falta de señal, `'error'` si alguno falló, `'ok'` si se
+ * sincronizó algo y `'nothing'` cuando no había nada — que es el caso normal y no cuesta red.
+ */
+export async function flushPendingDrafts(
+  collectorId: string,
+  today: string,
+): Promise<'ok' | 'nothing' | 'offline' | 'error'> {
+  const all = await loadAllDrafts();
+  let outcome: 'ok' | 'nothing' | 'offline' | 'error' = 'nothing';
+  for (const date of Object.keys(all).sort()) {
+    const draft = all[date]!;
+    if (date < today) {
+      // Ya pasó: si nunca llegó a crearse, no hay nada que rescatar (y la API la rechazaría con ROUTE_PAST_DATE).
+      if (!draft.routeId) await dropDraft(date, today);
+      continue;
+    }
+    if (draft.creditIds.length === 0) continue;
+    const res = await flushDraft(draft, (id) => createRoute({ id, collectorId, plannedDate: date }));
+    if (res.status === 'offline') return 'offline';
+    if (res.status === 'error') outcome = 'error';
+    else if (outcome === 'nothing') outcome = 'ok';
+  }
+  return outcome;
+}
+
+/**
+ * Sincroniza el borrador de UN día. Se conserva por las pantallas que ya lo usan; el motor de sync usa
+ * `flushPendingDrafts`.
  */
 export async function flushPendingDraft(
   collectorId: string,

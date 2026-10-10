@@ -15,7 +15,7 @@ jest.mock('./routes.service', () => ({
 }));
 
 import { RouteStopStatus } from '@kobrax/shared';
-import { clearDraft, diffStops, emptyDraft, flushDraft, loadDraft, moveStop, saveDraft, withoutStop, withStop } from './route-draft';
+import { clearDraft, diffStops, dropDraft, emptyDraft, flushDraft, flushPendingDrafts, loadAllDrafts, loadDraft, moveStop, parseDrafts, pruneDrafts, saveDraft, withoutStop, withStop } from './route-draft';
 import type { RouteStopItem } from './routes.service';
 
 const HOY = '2026-10-03';
@@ -165,7 +165,7 @@ describe('flushDraft · id de la ruta', () => {
     comoUsuario('u1');
     let guardadoAntes: { createId?: string } | null = null;
     const create = jest.fn(async (id: string) => {
-      guardadoAntes = JSON.parse(mockStore.get('kobrax.route.draft.u1')!);
+      guardadoAntes = parseDrafts(mockStore.get('kobrax.route.draft.u1')!)[HOY]!;
       return { status: 'ok', data: { id: 'ruta-1' } };
     });
     const r = await flushDraft(borrador(), create);
@@ -234,5 +234,102 @@ describe('por crédito (F4/08)', () => {
     comoUsuario('u1');
     mockStore.set('kobrax.route.draft.u1', JSON.stringify({ routeId: null, date: HOY, caseIds: ['x'], clientByCase: { x: 'c' } }));
     expect((await loadDraft(HOY)).creditIds).toEqual([]);
+  });
+});
+
+/**
+ * D-6 · planificar varios días: un borrador por día, en la misma clave, sin pisarse entre sí.
+ */
+describe('borradores de varios días (D-6)', () => {
+  const MANANA = '2026-10-04';
+  const para = (date: string, ...creditIds: string[]) => creditIds.reduce((d, c) => withStop(d, c, `cl-${c}`), emptyDraft(date));
+
+  it('cada día conserva SU borrador: armar el de mañana no toca el de hoy', async () => {
+    comoUsuario('u1');
+    await saveDraft(para(HOY, 'cr1'));
+    await saveDraft(para(MANANA, 'cr2', 'cr3'));
+    expect((await loadDraft(HOY)).creditIds).toEqual(['cr1']);
+    expect((await loadDraft(MANANA)).creditIds).toEqual(['cr2', 'cr3']);
+  });
+
+  it('un día sin borrador arranca limpio', async () => {
+    comoUsuario('u1');
+    await saveDraft(para(HOY, 'cr1'));
+    expect((await loadDraft('2026-10-09')).creditIds).toEqual([]);
+  });
+
+  it('lee el formato viejo (un solo borrador) como un mapa de un día, sin migrar', () => {
+    const viejo = JSON.stringify(para(HOY, 'cr1'));
+    expect(Object.keys(parseDrafts(viejo))).toEqual([HOY]);
+  });
+
+  it('un valor ilegible o de otra forma es un mapa vacío: nunca tira', () => {
+    expect(parseDrafts(null)).toEqual({});
+    expect(parseDrafts('no es json')).toEqual({});
+    expect(parseDrafts('{"x": 1}')).toEqual({});
+    expect(parseDrafts('{"2026-10-03": {"caseIds": ["a"]}}')).toEqual({});
+  });
+
+  it('un guardado con la clave de otro día no se acepta (clave y fecha del borrador deben coincidir)', () => {
+    const raw = JSON.stringify({ [MANANA]: para(HOY, 'cr1') });
+    expect(parseDrafts(raw)).toEqual({});
+  });
+
+  it('guardar un día conserva el createId ya fijado de ESE día aunque la pantalla guarde su copia sin él', async () => {
+    comoUsuario('u1');
+    await saveDraft({ ...para(MANANA, 'cr1'), createId: 'id-fijo' });
+    await saveDraft(para(MANANA, 'cr1', 'cr2')); // copia en memoria sin createId
+    expect((await loadDraft(MANANA)).createId).toBe('id-fijo');
+  });
+
+  it('el borrador es del usuario: otro usuario en el mismo teléfono no ve ninguno de los días', async () => {
+    comoUsuario('u1');
+    await saveDraft(para(HOY, 'cr1'));
+    await saveDraft(para(MANANA, 'cr2'));
+    comoUsuario('u2');
+    expect(await loadAllDrafts()).toEqual({});
+  });
+
+  it('poda: los días que ya pasaron y los borradores vacíos sin ruta no se guardan', () => {
+    const conRuta = { ...emptyDraft('2026-10-05'), routeId: 'r1' };
+    const kept = pruneDrafts(
+      { '2026-10-02': para('2026-10-02', 'cr1'), '2026-10-04': emptyDraft('2026-10-04'), '2026-10-05': conRuta, '2026-10-06': para('2026-10-06', 'cr9') },
+      '2026-10-03',
+    );
+    expect(Object.keys(kept).sort()).toEqual(['2026-10-05', '2026-10-06']);
+  });
+
+  it('dropDraft quita solo un día y deja los demás', async () => {
+    comoUsuario('u1');
+    await saveDraft(para(HOY, 'cr1'));
+    await saveDraft(para(MANANA, 'cr2'));
+    await dropDraft(HOY, HOY);
+    expect(Object.keys(await loadAllDrafts())).toEqual([MANANA]);
+  });
+
+  it('el motor de sync sincroniza TODOS los días pendientes y descarta los pasados que nunca se crearon', async () => {
+    comoUsuario('u1');
+    await saveDraft(para('2026-10-02', 'cr0')); // ayer: nunca llegó a crearse
+    await saveDraft(para(HOY, 'cr1'));
+    await saveDraft(para(MANANA, 'cr2'));
+    const { createRoute } = jest.requireMock('./routes.service');
+    createRoute.mockReset();
+    createRoute.mockImplementation(async (input: { plannedDate: string }) => ({ status: 'ok', data: { id: `ruta-${input.plannedDate}` } }));
+    const out = await flushPendingDrafts('u1', HOY);
+    expect(out).toBe('ok');
+    const fechas = createRoute.mock.calls.map((c: [{ plannedDate: string }]) => c[0].plannedDate).sort();
+    expect(fechas).toEqual([HOY, MANANA]); // el de ayer no se intenta
+    expect(Object.keys(await loadAllDrafts())).not.toContain('2026-10-02');
+  });
+
+  it('si un día no sale por falta de señal, corta y lo deja todo para el próximo drenaje', async () => {
+    comoUsuario('u1');
+    await saveDraft(para(HOY, 'cr1'));
+    await saveDraft(para(MANANA, 'cr2'));
+    const { createRoute } = jest.requireMock('./routes.service');
+    createRoute.mockReset();
+    createRoute.mockResolvedValue({ status: 'offline' });
+    expect(await flushPendingDrafts('u1', HOY)).toBe('offline');
+    expect(Object.keys(await loadAllDrafts()).sort()).toEqual([HOY, MANANA]);
   });
 });

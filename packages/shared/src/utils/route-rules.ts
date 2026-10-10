@@ -50,6 +50,13 @@ export function isOpenStop(status: RouteStopStatus): boolean {
   return status === RouteStopStatus.PENDING || status === RouteStopStatus.IN_ROUTE;
 }
 
+/**
+ * Hasta cuántos días hacia adelante se arma una ruta (D-6): hoy + 14. Dos semanas cubren «planifico la próxima semana» con
+ * holgura; más lejos la cartera, las visitas agendadas y las direcciones ya cambiaron, y una ruta armada con tanta
+ * anticipación se vuelve ruido. El tope es de la API (la autoridad); la pantalla lo usa para no ofrecer días que rebota.
+ */
+export const ROUTE_MAX_DAYS_AHEAD = 14;
+
 /** Cuánto puede medir el motivo escrito de un cierre, una cancelación o un pedido. */
 export const ROUTE_REASON_MIN = 5;
 export const ROUTE_REASON_MAX = 500;

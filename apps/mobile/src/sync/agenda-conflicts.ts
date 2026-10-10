@@ -15,6 +15,9 @@
 /** Lo que dice la hoja de pendientes. */
 export function explainAgendaRejection(httpStatus: number | undefined, serverMessage: string): string {
   switch (httpStatus) {
+    case 422:
+      // Posponer es «un rato más tarde, hoy»: el servidor ya dice cuál regla (otra hora, otro día, un día que pasó).
+      return `${serverMessage} Lo que hiciste acá no se aplicó: revisa la gestión en la Agenda.`;
     case 409:
       return 'Esta gestión cambió mientras no tenías señal: otra persona la registró, la canceló o la reagendó. Lo que hiciste acá no se aplicó. Revisa cómo quedó en la Agenda.';
     case 404:

@@ -72,9 +72,9 @@ function make() {
             nationalId: 'enc:1234567',
             locations: [
               // La primera cargada es del trabajo: la zona sale de la primera HOME propia.
-              LOC('l0', { locationType: 'WORK', zone: 'Mercado', latitude: '-17.1', longitude: '-66.1' }),
+              LOC('l0', { locationType: 'WORK', zone: 'Mercado', photoUrls: { raro: true }, latitude: '-17.1', longitude: '-66.1' }),
               LOC('l1', { zone: 'Centro', address: 'enc:Calle 1', latitude: '-17.39', longitude: '-66.15' }),
-              LOC('l2', { zone: 'Norte', relationId: 'rel1', relation: { relatedName: 'Luis', relationshipType: 'GUARANTOR' }, latitude: '-17.4', longitude: '-66.2' }),
+              LOC('l2', { zone: 'Norte', photoUrls: ['/api/uploads/principal.jpg', '/api/uploads/otra.jpg'], relationId: 'rel1', relation: { relatedName: 'Luis', relationshipType: 'GUARANTOR' }, latitude: '-17.4', longitude: '-66.2' }),
               LOC('l3', { zone: 'Sur' }), // sin punto: no se dibuja
             ],
           },
@@ -128,9 +128,13 @@ describe('GET /mora — zona, ubicaciones y documento de la cartera', () => {
     const { data } = await service.list({ todos: 'true' } as never);
     const locs = data![0]!.locations!;
     assert.deepEqual(locs.map((l) => l.id), ['l0', 'l1', 'l2'], 'l3 no tiene punto');
-    assert.deepEqual(locs[1], { id: 'l1', locationType: 'HOME', latitude: -17.39, longitude: -66.15, address: 'Calle 1', ownerName: undefined, ownerRelation: undefined });
+    assert.deepEqual(locs[1], { id: 'l1', locationType: 'HOME', latitude: -17.39, longitude: -66.15, address: 'Calle 1', ownerName: undefined, ownerRelation: undefined, photoUrl: undefined });
     assert.equal(locs[2]!.ownerName, 'Luis');
     assert.equal(locs[2]!.ownerRelation, 'GUARANTOR');
+    // La foto principal es la PRIMERA de la lista; una lista que no es lista no inventa foto.
+    assert.equal(locs[2]!.photoUrl, '/api/uploads/principal.jpg');
+    assert.equal(locs[0]!.photoUrl, undefined);
+    assert.equal(locs[1]!.photoUrl, undefined);
     assert.deepEqual(data![1]!.locations, locs, 'dos créditos del mismo cliente comparten las ubicaciones');
   });
 

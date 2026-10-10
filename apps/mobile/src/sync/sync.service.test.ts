@@ -49,7 +49,7 @@ jest.mock('./queue', () => ({
 }));
 
 jest.mock('../route-draft', () => ({
-  flushPendingDraft: jest.fn(async () => {
+  flushPendingDrafts: jest.fn(async () => {
     mockOps.push('flushDraft');
     return 'nothing';
   }),
@@ -110,6 +110,27 @@ describe('drain', () => {
     const r = await drain('u1');
     expect(r.stopped).toBe('offline');
     expect(mockOps.filter((o) => o.startsWith('send')).length).toBe(1);
+  });
+
+  // D-5/0.1: con la app vieja (426) NADA se pierde ni se rechaza; el drenaje espera a que se actualice.
+  it('🔴 un 426 corta el drenaje sin contar intento, sin rechazar y sin borrar', async () => {
+    mockCola.push(item(1), item(2));
+    mockSend.result = { status: 'upgrade' };
+    const r = await drain('u1');
+    expect(r.stopped).toBe('upgrade');
+    expect(mockOps.filter((o) => o.startsWith('send')).length).toBe(1); // lo que sigue tampoco saldría
+    expect(mockOps.some((o) => o.startsWith('markFailed') || o.startsWith('markRejected') || o.startsWith('dequeue'))).toBe(false);
+    expect(mockCola.map((c) => c.attempts)).toEqual([0, 0]);
+  });
+
+  it('actualizada la app, lo que esperaba sube normalmente', async () => {
+    mockCola.push(item(1));
+    mockSend.result = { status: 'upgrade' };
+    await drain('u1');
+    mockSend.result = { status: 'ok' };
+    const r = await drain('u1');
+    expect(r.sent).toBe(1);
+    expect(mockOps).toContain('dequeue:1');
   });
 
   it('una sesión vencida también corta, sin marcar el ítem como fallado', async () => {

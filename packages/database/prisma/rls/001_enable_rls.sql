@@ -63,7 +63,9 @@ DECLARE
     -- Historial de importaciones: qué le pasó a cada registro en cada corrida.
     'client_import_run_items',
     -- Pedidos de cambio sobre rutas ajenas (F4/12).
-    'route_change_requests'
+    'route_change_requests',
+    -- Tokens de push remoto (F10): a qué teléfonos avisarle a cada usuario.
+    'device_push_tokens'
   ];
 BEGIN
   FOREACH t IN ARRAY operational LOOP

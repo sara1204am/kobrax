@@ -57,6 +57,7 @@ import {
   agendaItemNotFound,
   agendaNotOwner,
   agendaNotSchedulable,
+  agendaPostponeSameDayOnly,
   agendaPastDate,
   agendaVisitInRoute,
   agendaVisitNeedsLocation,
@@ -564,26 +565,57 @@ export class AgendaService {
    * (Posponer "desde ahora" un vencido llegaría con el refinamiento tenant-tz, pendiente en todo el módulo.)
    */
   async postpone(id: string, dto: PostponeAgendaItemDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
-    const { updated, clientName } = await this.tx(async (tx) => {
+    const today = await this.today();
+    const nowMinutes = await this.clock.nowWallMinutes();
+    const { updated, clientName, before, replay } = await this.tx(async (tx) => {
       const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...(await this.assigneeScope(tx)) } });
       if (!item) throw agendaItemNotFound();
       if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
 
+      const before = {
+        scheduledDate: item.scheduledDate.toISOString().slice(0, 10),
+        scheduledTime: item.scheduledTime,
+        timeMode: item.timeMode,
+        timeSlot: item.timeSlot,
+      };
+
+      /*
+       * 🔴 **Reintento idempotente primero.** La cola offline reenvía `toTime` absoluto: si la gestión ya quedó a esa hora
+       * fija, el reenvío es un éxito, no un «no es posterior». Sin esto el segundo envío salía rechazado aunque el primero
+       * había funcionado.
+       */
+      if (dto.toTime && item.timeMode === ScheduleTimeMode.FIXED && item.scheduledTime === dto.toTime) {
+        const names = await this.clientNames(tx, [item.clientId]);
+        return { updated: item, clientName: names.get(item.clientId), before, replay: true };
+      }
+
+      // Posponer no rescata un día que ya pasó: eso es Reagendar (con motivo y cadena).
+      if (item.scheduledDate < today) throw agendaPostponeSameDayOnly('past-day');
+      const isToday = item.scheduledDate.getTime() === today.getTime();
+      const current = baseMinutes(item);
+      // Desde ahora si ya venció hoy: sumar sobre una hora vieja daba otra hora vieja.
+      const from = isToday ? Math.max(current, nowMinutes) : current;
+
       // `toTime` es absoluta: la hora QUEDA en ese valor, así que repetir el envío no la corre otra vez. `minutes`
       // (relativa) se mantiene para los clientes viejos.
-      let dayShift = 0;
       let time: string;
       if (dto.toTime) {
+        const [h, m] = dto.toTime.split(':').map(Number);
+        const target = (h ?? 0) * 60 + (m ?? 0);
+        // «Posponer» es hacia adelante: una hora igual o anterior a la actual (o a «ahora», si es de hoy) no lo es.
+        if (target <= from) throw agendaPostponeSameDayOnly('not-later');
         time = dto.toTime;
       } else if (dto.minutes !== undefined) {
-        ({ dayShift, time } = shiftWallClock(baseMinutes(item), dto.minutes));
+        const shifted = shiftWallClock(from, dto.minutes);
+        if (shifted.dayShift !== 0) throw agendaPostponeSameDayOnly('crosses-day');
+        time = shifted.time;
       } else {
         throw agendaInvalidTimeMode('Indicá la nueva hora (toTime) o los minutos a posponer');
       }
       const updated = await tx.agendaItem.update({
         where: { id },
         data: {
-          scheduledDate: addUTCDays(item.scheduledDate, dayShift),
+          // Nunca cambia el día (ver reglas arriba): solo la hora.
           scheduledTime: time,
           timeMode: ScheduleTimeMode.FIXED,
           timeSlot: null,
@@ -591,10 +623,25 @@ export class AgendaService {
         },
       });
       const names = await this.clientNames(tx, [updated.clientId]);
-      return { updated, clientName: names.get(updated.clientId) };
+      return { updated, clientName: names.get(updated.clientId), before, replay: false };
     });
 
-    await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'POSTPONE', after: updated });
+    // Un reintento que ya había funcionado no vuelve a auditar: el rastro es de la acción, no de cada envío.
+    if (!replay) {
+      await this.audit.record({
+        entity: 'agenda_item',
+        entityId: id,
+        action: 'POSTPONE',
+        before,
+        after: {
+          scheduledDate: updated.scheduledDate.toISOString().slice(0, 10),
+          scheduledTime: updated.scheduledTime,
+          timeMode: updated.timeMode,
+          timeSlot: updated.timeSlot,
+          via: dto.toTime ? 'toTime' : 'minutes',
+        },
+      });
+    }
     return ResponseDto.ok(await this.view(updated, clientName));
   }
 
