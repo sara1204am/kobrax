@@ -11,6 +11,7 @@ import type {
   AgendaTodaySummary,
   AgendaTarget,
   AgendaTimeSlot,
+  CollectionProfile,
   CreateAgendaInput,
   ScheduleTimeMode,
   UpdateAgendaInput,
@@ -188,6 +189,8 @@ export interface LocationOption {
   longitude?: number;
   /** Rutas `/api/uploads/…`; la primera es la principal. */
   photoUrls?: string[];
+  /** Cómo conviene cobrarle en este lugar (F4/13 · E2). Ausente si nunca se cargó. */
+  visitSchedule?: CollectionProfile | null;
   /** Solo en las de garantes y familiares: de quién es la dirección y qué relación tiene con el deudor. */
   ownerName?: string;
   ownerRelation?: string;

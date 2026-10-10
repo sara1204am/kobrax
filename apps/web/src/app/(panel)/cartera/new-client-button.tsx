@@ -33,10 +33,13 @@ import { DocumentTaken, NamesTaken } from './duplicate-notice';
 export function NewClientButton({
   currency,
   collateralTypes,
+  collectionModalities = [],
 }: {
   /** La moneda de la cuenta (Configuración): con la que arranca el valor de una garantía. */
   currency: string;
   collateralTypes: CatalogOption[];
+  /** Catálogo `COLLECTION_MODALITY` (F4/13 · E2). */
+  collectionModalities?: CatalogOption[];
 }) {
   const t = useTranslations('portfolio');
   const { can } = usePermissions();
@@ -59,6 +62,7 @@ export function NewClientButton({
         <NewClientModal
           currency={currency}
           collateralTypes={collateralTypes}
+          collectionModalities={collectionModalities}
           onClose={() => setAbierto(false)}
         />
       )}
@@ -81,10 +85,12 @@ export function NewClientButton({
 function NewClientModal({
   currency,
   collateralTypes,
+  collectionModalities,
   onClose,
 }: {
   currency: string;
   collateralTypes: CatalogOption[];
+  collectionModalities: CatalogOption[];
   onClose: () => void;
 }) {
   const t = useTranslations('portfolio');
@@ -191,6 +197,7 @@ function NewClientModal({
           onChange={setForm}
           disabled={saving}
           collateralTypes={collateralTypes}
+          collectionModalities={collectionModalities}
           currency={currency}
           documentNotice={dup?.document ? <DocumentTaken match={dup.document} /> : undefined}
         />

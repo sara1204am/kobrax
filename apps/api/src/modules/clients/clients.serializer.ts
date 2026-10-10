@@ -75,6 +75,8 @@ export function serializeLocation(l: ClientLocation, { crypto, reveal }: Seriali
     referenceNotes: l.referenceNotes ?? undefined,
     photoUrls: l.photoUrls,
     riskLevel: l.riskLevel ?? undefined,
+    // F4/13 · E2: perfil de cobro. Antes se escribía y ningún endpoint lo devolvía.
+    visitSchedule: l.visitSchedule ?? undefined,
   };
 }
 

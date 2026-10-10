@@ -2264,6 +2264,30 @@
     "upgradeHow": "We change the plan for you: write to us and it is active the same day."
   },
   "portfolio": {
+    "collection": {
+      "title": "How to collect",
+      "hint": "Optional. What the collector needs to know before arriving.",
+      "unset": "Not set",
+      "modality": "Modality",
+      "frequency": "Frequency",
+      "frequencyOptions": { "DAILY": "Every day", "WEEKLY": "Once a week", "PER_INSTALLMENT": "Following the installment calendar" },
+      "windowFrom": "From (time)",
+      "windowTo": "To (time)",
+      "handoverBy": "Who hands over",
+      "handoverOptions": { "HOLDER": "The account holder", "FAMILY": "A family member", "EMPLOYEE": "An employee" },
+      "days": "Days",
+      "dayShort": { "1": "M", "2": "T", "3": "W", "4": "T", "5": "F", "6": "S", "7": "S" },
+      "note": "Instruction",
+      "notePlaceholder": "E.g.: knock at the green gate, before the shop opens",
+      "summary": "How to collect",
+      "errors": { "window": "The time window needs both times, and \"to\" must be after \"from\"." }
+    },
+    "channel": {
+      "unset": "Not set",
+      "PHONE": "Phone call",
+      "WHATSAPP": "WhatsApp",
+      "VISIT": "Visit"
+    },
     "title": "Portfolio",
     "subtitle": "Who owes you, how much, and for how long.",
     "noAccess": "You do not have access to the portfolio",
@@ -2406,6 +2430,7 @@
       "paid": "Paid"
     },
     "form": {
+      "preferredChannel": "Preferred contact channel",
       "clientType": "Type",
       "documentPlaceholder": "ID or tax number",
       "firstName": "First name",

@@ -49,7 +49,8 @@ export class CreateLocationDto {
   @IsOptional() @Type(() => Number) longitude?: number;
   @IsOptional() @IsString() referenceNotes?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) photoUrls?: string[];
-  @IsOptional() @IsObject() visitSchedule?: Record<string, unknown>;
+  /** Perfil de cobro (F4/13 · E2): se valida en el servicio con `validateCollectionProfile`. */
+  @IsOptional() @IsObject() visitSchedule?: Record<string, unknown> | null;
   @IsOptional() @IsString() riskLevel?: string;
   /** Ídem `CreateContactDto`: la ubicación es del garante, no del cliente. */
   @IsOptional() @IsUUID() relationId?: string;
@@ -69,6 +70,12 @@ export class UpdateLocationDto {
    * el estado final, no un agregado—, igual que en las garantías.
    */
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) photoUrls?: string[];
+  /**
+   * Perfil de cobro (F4/13 · E2). **Faltaba acá** —el alta lo aceptaba y la edición no—, así que no había forma de
+   * corregirlo. `null` lo borra; ausente lo deja como está.
+   */
+  @IsOptional() @IsObject() visitSchedule?: Record<string, unknown> | null;
+  @IsOptional() @IsString() riskLevel?: string;
 }
 
 /**
@@ -151,7 +158,7 @@ export class CreateClientDto {
   @IsOptional() @IsString() nationalId?: string;
   @IsOptional() @IsString() taxId?: string;
   @IsOptional() @IsEnum(ClientStatus) status?: ClientStatus;
-  @IsOptional() @IsString() preferredContactChannel?: string;
+  @IsOptional() @IsString() @MaxLength(40) preferredContactChannel?: string;
   @IsOptional() @IsString() riskSegment?: string;
   @IsOptional() @IsObject() metadata?: Record<string, unknown>;
   /** Alta atómica (§5.1): contactos, ubicaciones y relaciones creados en la misma transacción. */
@@ -189,7 +196,7 @@ export class UpdateClientDto {
   @IsOptional() @IsString() nationalId?: string;
   @IsOptional() @IsString() taxId?: string;
   @IsOptional() @IsEnum(ClientStatus) status?: ClientStatus;
-  @IsOptional() @IsString() preferredContactChannel?: string;
+  @IsOptional() @IsString() @MaxLength(40) preferredContactChannel?: string;
   @IsOptional() @IsString() riskSegment?: string;
   @IsOptional() @IsObject() metadata?: Record<string, unknown>;
 }

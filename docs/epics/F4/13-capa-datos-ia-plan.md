@@ -460,6 +460,31 @@ inmutabilidad de `credit_activities`.
 
 **Por validar en teléfono**: que los catálogos nuevos aparezcan sin red tras una hidratación.
 
+### E2 · Perfil de cobro ✅ (2026-10-10)
+
+**Hecho**
+- `collection-profile.ts` en `shared`: esquema (`modality`, `frequency`, `window`, `days`, `handoverBy`, `note`), `validateCollectionProfile`
+  estricto y conversión formulario ↔ perfil tolerante.
+- `LocationRow.collection`, `ClienteForm.preferredContactChannel`, payload, hidratación y diff.
+- **API**: `UpdateLocationDto` acepta `visitSchedule` y `riskLevel`; el alta atómica **ya no los descarta**; `updateLocation` los
+  persiste (`null` borra); `serializeLocation` los devuelve; validación antes de abrir la transacción;
+  `preferredContactChannel` con tope de largo.
+- **Web**: bloque «Cómo cobrarle» por ubicación y canal preferido en identificación; resumen en la lista de direcciones.
+- **Móvil**: `CollectionBlock` en el formulario de cliente, canal preferido, y el resumen en la ficha vía `/agenda/client-context`.
+
+**Verificación**
+| Comando | Resultado |
+|---|---|
+| `@kobrax/shared` build, type-check, test | 386 pruebas, verde |
+| `@kobrax/api` type-check, test | 1.556 pruebas, verde |
+| `@kobrax/api` integración `client-collection-profile.it.ts` (base desde cero) | 8 de 8 |
+| `@kobrax/web` type-check, test | 947 pruebas, verde |
+| `@kobrax/mobile` type-check, test | 926 pruebas, verde |
+
+**Queda**: la agenda no usa todavía la franja ni los días (es la capa B); el perfil de garantes no se edita (D-28).
+
+**Por validar en teléfono**: el bloque «Cómo cobrarle» en el alta y la edición, y que la línea aparezca en la ficha del cliente.
+
 ## 11. Validación del plan (gate `/f10-validar-plan`, adaptado — D-10)
 
 El gate está escrito para etapas móviles F10. Se aplicó con sus ítems de calidad y con los de completitud que

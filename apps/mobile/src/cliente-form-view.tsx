@@ -16,7 +16,8 @@ import { COLORS, RADIUS, SPACING, TYPE } from './theme';
 import { Chips, SectionLabel } from './ui';
 import { Field } from './components';
 import { MapPicker } from './maps/MapPicker';
-import { emptyCollateral, emptyContact, emptyLocation, emptyRelation, locationTypeChoices, type ClienteForm, type CollateralRow, type ContactRow, type CreditOption, type LocationRow, type RelationRow } from '@kobrax/shared';
+import { emptyCollateral, emptyCollectionForm, emptyContact, emptyLocation, emptyRelation, locationTypeChoices, type ClienteForm, type CollateralRow, type ContactRow, type CreditOption, type LocationRow, type RelationRow } from '@kobrax/shared';
+import { CollectionBlock } from './collection-block';
 import { choosePhoto } from './photo';
 import { uploadImage } from './uploads.service';
 
@@ -35,6 +36,9 @@ const coordNum = (s: string): number | undefined => {
 
 const GENDER = [{ value: '', label: 'Sin especificar' }, { value: 'M', label: 'Masculino' }, { value: 'F', label: 'Femenino' }, { value: 'O', label: 'Otro' }];
 const CLIENT_TYPE = [{ value: 'PERSON', label: 'Persona' }, { value: 'COMPANY', label: 'Empresa' }] as const;
+/** Canal preferido (F4/13 · E2). Se conserva cualquier otro valor ya guardado: los datos existentes usan `PHONE`. */
+const CHANNEL = [{ value: '', label: 'Sin definir' }, { value: 'PHONE', label: 'Llamada' }, { value: 'WHATSAPP', label: 'WhatsApp' }, { value: 'VISIT', label: 'Visita' }];
+const channelOptions = (current: string) => (current && !CHANNEL.some((c) => c.value === current) ? [...CHANNEL, { value: current, label: current }] : CHANNEL);
 const RISK = [{ value: '', label: '—' }, { value: 'LOW', label: 'Bajo' }, { value: 'MEDIUM', label: 'Medio' }, { value: 'HIGH', label: 'Alto' }];
 const STATUS = [{ value: 'ACTIVE', label: 'Activo' }, { value: 'INACTIVE', label: 'Inactivo' }, { value: 'BLOCKED', label: 'Bloqueado' }] as const;
 const CONTACT_TYPE = [{ value: 'PHONE', label: 'Teléfono' }, { value: 'EMAIL', label: 'Email' }] as const;
@@ -105,6 +109,8 @@ export function ClienteFormView({
         <Chips options={GENDER} value={form.gender} onChange={(v) => set({ gender: v })} />
         <SectionLabel>Segmento de riesgo</SectionLabel>
         <Chips options={RISK} value={form.riskSegment} onChange={(v) => set({ riskSegment: v })} />
+        <SectionLabel>Canal de contacto preferido</SectionLabel>
+        <Chips options={channelOptions(form.preferredContactChannel)} value={form.preferredContactChannel} onChange={(v) => set({ preferredContactChannel: v })} />
         <SectionLabel>Estado</SectionLabel>
         <Chips options={STATUS} value={form.status} onChange={(v) => set({ status: v })} />
       </Accordion>
@@ -114,7 +120,7 @@ export function ClienteFormView({
       </Accordion>
 
       <Accordion icon="📍" title="Ubicaciones del cliente" badge={form.locations.length} defaultOpen>
-        <LocationsSection locations={form.locations} setLocations={setClientLocations} onError={onError} />
+        <LocationsSection locations={form.locations} setLocations={setClientLocations} onError={onError} withCollection />
       </Accordion>
 
       <Accordion icon="👥" title="Garantes y contactos" badge={form.relations.length} defaultOpen>
@@ -184,7 +190,18 @@ function ContactsSection({ contacts, setContacts }: { contacts: ContactRow[]; se
 }
 
 /** Lista de ubicaciones (del cliente o de un garante): dirección, zona, punto y fotos. */
-function LocationsSection({ locations, setLocations, onError }: { locations: LocationRow[]; setLocations: Updater<LocationRow>; onError: (m: string) => void }) {
+function LocationsSection({
+  locations,
+  setLocations,
+  onError,
+  withCollection,
+}: {
+  locations: LocationRow[];
+  setLocations: Updater<LocationRow>;
+  onError: (m: string) => void;
+  /** «Cómo cobrarle» (F4/13 · E2): solo en las ubicaciones del cliente; las de un garante no llevan perfil de cobro. */
+  withCollection?: boolean;
+}) {
   const add = () => setLocations((rows) => [...rows, emptyLocation(nextId())]);
   const remove = (id: string) => setLocations((rows) => rows.filter((l) => l.id !== id));
   const upd = (id: string, patch: Partial<LocationRow>) => setLocations((rows) => rows.map((l) => (l.id === id ? { ...l, ...patch } : l)));
@@ -248,6 +265,7 @@ function LocationsSection({ locations, setLocations, onError }: { locations: Loc
           )}
 
           <Field label="Referencia / Notas" value={l.referenceNotes} onChangeText={(t) => upd(l.id, { referenceNotes: t })} placeholder="Portón verde frente a la cancha" />
+          {withCollection && <CollectionBlock value={l.collection ?? emptyCollectionForm()} onChange={(collection) => upd(l.id, { collection })} />}
           <SectionLabel>Fotos de la ubicación</SectionLabel>
           {l.photoUrls.length > 0 && (
             <View style={styles.photoRow}>

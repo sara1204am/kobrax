@@ -19,6 +19,33 @@ export interface NewContactInput {
   isPrimary?: boolean;
 }
 
+/**
+ * Perfil de cobro de un lugar: **cómo conviene cobrarle** (F4/13 · E2). Vive en `client_locations.visit_schedule`.
+ * Se valida con `validateCollectionProfile` (utils). Todo opcional.
+ */
+export interface CollectionProfile {
+  /** Código del catálogo `COLLECTION_MODALITY` (`AT_BUSINESS`, `PICK_UP`…). */
+  modality?: string;
+  frequency?: 'DAILY' | 'WEEKLY' | 'PER_INSTALLMENT';
+  /** Franja del día, «HH:mm». */
+  window?: { from: string; to: string };
+  /** Días de la semana, ISO: 1 = lunes … 7 = domingo. */
+  days?: number[];
+  handoverBy?: 'HOLDER' | 'FAMILY' | 'EMPLOYEE';
+  note?: string;
+}
+
+/** El perfil de cobro como lo edita el formulario: todo texto, igual que las coordenadas. */
+export interface CollectionProfileForm {
+  modality: string;
+  frequency: string;
+  windowFrom: string;
+  windowTo: string;
+  days: number[];
+  handoverBy: string;
+  note: string;
+}
+
 export interface NewLocationInput {
   locationType?: 'HOME' | 'WORK' | 'GUARANTOR' | 'FAMILY' | 'OTHER';
   address?: string;
@@ -27,6 +54,8 @@ export interface NewLocationInput {
   longitude?: number;
   referenceNotes?: string;
   photoUrls?: string[];
+  /** Perfil de cobro del lugar. En una edición, `null` lo borra y ausente lo deja como está. */
+  visitSchedule?: CollectionProfile | null;
 }
 
 export interface NewRelationInput {
@@ -184,6 +213,8 @@ export interface ClientLocationDetail {
   referenceNotes?: string;
   photoUrls?: string[];
   riskLevel?: string;
+  /** Perfil de cobro del lugar (F4/13 · E2). Ausente si nunca se cargó. */
+  visitSchedule?: CollectionProfile | null;
 }
 
 export interface ClientRelationDetail {
@@ -495,6 +526,8 @@ export interface LocationRow extends RowFromServer {
   coordMode: CoordMode;
   referenceNotes: string;
   photoUrls: string[];
+  /** Cómo conviene cobrarle en este lugar (F4/13 · E2). Vacío = sin perfil. */
+  collection: CollectionProfileForm;
 }
 
 export interface RelationRow extends RowFromServer {
@@ -536,6 +569,8 @@ export interface ClienteForm {
   gender: string;
   businessName: string;
   riskSegment: string;
+  /** Canal de contacto preferido (`PHONE`, `WHATSAPP`…). Texto libre en la base; se conserva lo que haya. */
+  preferredContactChannel: string;
   status: StatusValue;
   contacts: ContactRow[];
   locations: LocationRow[];

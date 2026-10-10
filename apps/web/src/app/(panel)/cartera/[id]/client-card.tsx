@@ -43,6 +43,7 @@ export function ClientCard({
   timeline,
   currency,
   collateralTypes,
+  collectionModalities = [],
   hasActiveCredits,
 }: {
   client: ClientDetail;
@@ -59,6 +60,8 @@ export function ClientCard({
   currency: string;
   /** Catálogo `COLLATERAL_TYPE` del tenant: código → rótulo. */
   collateralTypes: CatalogOption[];
+  /** Catálogo `COLLECTION_MODALITY` (F4/13 · E2): para rotular «cómo cobrarle» y para editarlo. */
+  collectionModalities?: CatalogOption[];
   /** Con plata en la calle no se archiva a nadie: la API lo frena y la pantalla no lo ofrece. */
   hasActiveCredits?: boolean;
 }) {
@@ -132,6 +135,7 @@ export function ClientCard({
     client: shown,
     credits: creditOptions,
     collateralTypes,
+    collectionModalities,
     currency,
     onSaved: recargar,
   };
@@ -199,6 +203,12 @@ export function ClientCard({
               <Dato label={t('fields.document')} value={shown.nationalId || '—'} />
               {shown.taxId && <Dato label={t('fields.taxId')} value={shown.taxId} />}
               {shown.riskSegment && <Dato label={t('fields.risk')} value={shown.riskSegment} />}
+              {shown.preferredContactChannel && (
+                <Dato
+                  label={t('form.preferredChannel')}
+                  value={['PHONE', 'WHATSAPP', 'VISIT'].includes(shown.preferredContactChannel) ? t(`channel.${shown.preferredContactChannel}`) : shown.preferredContactChannel}
+                />
+              )}
               {shown.createdAt && <Dato label={t('fields.createdAt')} value={date(shown.createdAt, locale)} />}
             </dl>
           </Section>
@@ -253,6 +263,7 @@ export function ClientCard({
               busy={busy}
               onEdit={() => void editar('locations')}
               canWrite={canWrite}
+              modalities={collectionModalities}
             />
           </div>
 

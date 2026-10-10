@@ -3,11 +3,13 @@
 import { useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { useFormatter, useTranslations } from 'next-intl';
+import { CollectionFields } from '@/components/collection-fields';
 import { LocationPhotos } from '@/components/location-photos';
 import {
   PHONE_PATTERN,
   SUPPORTED_CURRENCIES,
   emptyCollateral,
+  emptyCollectionForm,
   emptyContact,
   emptyLocation,
   emptyRelation,
@@ -34,6 +36,12 @@ const CONTACT_TYPES = ['PHONE', 'EMAIL'] as const;
 const RELATION_TYPES = ['GUARANTOR', 'FAMILY', 'COWORKER', 'NEIGHBOR', 'OTHER'] as const;
 /** El género es una columna suelta de texto en la base; el móvil usa estas mismas tres letras. */
 const GENDERS = [{ value: '' }, { value: 'M' }, { value: 'F' }, { value: 'O' }] as const;
+/**
+ * Canal preferido (F4/13 · E2). En la base es texto libre y los datos existentes usan `PHONE`: se ofrecen los conocidos
+ * y se **conserva** cualquier otro valor ya guardado, para que abrir y guardar no lo borre (decisión D-14).
+ */
+const KNOWN_CHANNELS = ['PHONE', 'WHATSAPP', 'VISIT'] as const;
+const channelChoices = (current: string): string[] => (current && !KNOWN_CHANNELS.includes(current as (typeof KNOWN_CHANNELS)[number]) ? [...KNOWN_CHANNELS, current] : [...KNOWN_CHANNELS]);
 const STATUSES = ['ACTIVE', 'INACTIVE', 'BLOCKED'] as const;
 const CURRENCIES = Object.keys(SUPPORTED_CURRENCIES);
 
@@ -145,6 +153,18 @@ export function IdentityFields({
         <Input value={form.riskSegment} onChange={(e) => set({ riskSegment: e.target.value })} disabled={disabled} />
       </Field>
 
+      {/* F4/13 · E2: el campo existía en la base y en la API, pero ninguna pantalla lo mostraba. */}
+      <Field label={t('form.preferredChannel')}>
+        <Select value={form.preferredContactChannel} onChange={(e) => set({ preferredContactChannel: e.target.value })} disabled={disabled}>
+          <option value="">{t('channel.unset')}</option>
+          {channelChoices(form.preferredContactChannel).map((c) => (
+            <option key={c} value={c}>
+              {KNOWN_CHANNELS.includes(c as (typeof KNOWN_CHANNELS)[number]) ? t(`channel.${c}`) : c}
+            </option>
+          ))}
+        </Select>
+      </Field>
+
       <Field label={t('form.status')}>
         <Select
           value={form.status}
@@ -250,10 +270,16 @@ export function LocationRows({
   rows,
   onChange,
   disabled,
+  modalities,
 }: {
   rows: LocationRow[];
   onChange: (rows: LocationRow[]) => void;
   disabled?: boolean;
+  /**
+   * Catálogo `COLLECTION_MODALITY` (F4/13 · E2). **Ausente = no se dibuja «Cómo cobrarle»**: las ubicaciones de un
+   * garante usan estas mismas filas y no llevan perfil de cobro. Un arreglo vacío sí lo dibuja (sin selector).
+   */
+  modalities?: CatalogOption[];
 }) {
   const t = useTranslations('portfolio');
   if (rows.length === 0) return <p className="text-[14px] text-k-muted">{t('noLocations')}</p>;
@@ -292,6 +318,9 @@ export function LocationRows({
               </div>
             </div>
             <CoordFields row={l} onChange={set} disabled={disabled} />
+            {modalities && (
+              <CollectionFields value={l.collection ?? emptyCollectionForm()} onChange={(collection) => set({ collection })} modalities={modalities} disabled={disabled} />
+            )}
             <div className="mt-4">
               <LocationPhotos value={l.photoUrls} onChange={(photoUrls) => set({ photoUrls })} disabled={disabled} />
             </div>
@@ -542,6 +571,7 @@ export function ClientFormFields({
   disabled,
   credits = [],
   collateralTypes = [],
+  collectionModalities = [],
   currency,
   documentNotice,
 }: {
@@ -558,6 +588,8 @@ export function ClientFormFields({
   credits?: CreditOption[];
   /** Catálogo `COLLATERAL_TYPE` del tenant. Vacío = el tipo se escribe libre. */
   collateralTypes?: CatalogOption[];
+  /** Catálogo `COLLECTION_MODALITY` (F4/13 · E2): «cómo cobrarle» en cada ubicación del cliente. */
+  collectionModalities?: CatalogOption[];
   currency: string;
   /** Ver `IdentityFields`. */
   documentNotice?: ReactNode;
@@ -586,7 +618,7 @@ export function ClientFormFields({
         onAdd={disabled ? undefined : () => set({ locations: [...form.locations, nuevaFila.location()] })}
         addLabel={t('form.addLocation')}
       >
-        <LocationRows rows={form.locations} onChange={(locations) => set({ locations })} disabled={disabled} />
+        <LocationRows rows={form.locations} onChange={(locations) => set({ locations })} disabled={disabled} modalities={collectionModalities} />
       </Acordeon>
 
       <Acordeon

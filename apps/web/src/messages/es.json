@@ -2264,6 +2264,30 @@
     "upgradeHow": "El cambio de plan lo hacemos nosotros: escríbenos y queda activo el mismo día."
   },
   "portfolio": {
+    "collection": {
+      "title": "Cómo cobrarle",
+      "hint": "Opcional. Lo que el cobrador necesita saber antes de llegar.",
+      "unset": "Sin definir",
+      "modality": "Modalidad",
+      "frequency": "Frecuencia",
+      "frequencyOptions": { "DAILY": "Todos los días", "WEEKLY": "Una vez por semana", "PER_INSTALLMENT": "Según el calendario de cuotas" },
+      "windowFrom": "Desde (hora)",
+      "windowTo": "Hasta (hora)",
+      "handoverBy": "Quién entrega",
+      "handoverOptions": { "HOLDER": "El titular", "FAMILY": "Un familiar", "EMPLOYEE": "Un empleado" },
+      "days": "Días",
+      "dayShort": { "1": "L", "2": "M", "3": "X", "4": "J", "5": "V", "6": "S", "7": "D" },
+      "note": "Indicación",
+      "notePlaceholder": "Ej.: tocar el portón verde, antes de abrir el local",
+      "summary": "Cómo cobrarle",
+      "errors": { "window": "La franja necesita las dos horas, y «hasta» tiene que ser después de «desde»." }
+    },
+    "channel": {
+      "unset": "Sin definir",
+      "PHONE": "Llamada",
+      "WHATSAPP": "WhatsApp",
+      "VISIT": "Visita"
+    },
     "title": "Cartera",
     "subtitle": "Quién te debe, cuánto y hace cuántos días.",
     "noAccess": "No tienes acceso a la cartera",
@@ -2406,6 +2430,7 @@
       "paid": "Pagado"
     },
     "form": {
+      "preferredChannel": "Canal de contacto preferido",
       "clientType": "Tipo",
       "documentPlaceholder": "CI o NIT",
       "firstName": "Nombre",

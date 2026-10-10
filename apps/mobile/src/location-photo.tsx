@@ -8,6 +8,8 @@ import { Dimensions, FlatList, Image, Modal, Pressable, StyleSheet, Text, View }
 import { ensureImage, cachedImagePath } from './image-cache';
 import { getSession } from './session';
 import { COLORS, RADIUS, SPACING, TYPE } from './theme';
+import type { CollectionProfile } from '@kobrax/shared';
+import { describeCollection, useModalityLabels } from './collection-block';
 import { lugarLabel } from './route-labels';
 
 import { photoUri } from './photo-uri';
@@ -148,16 +150,20 @@ const styles = StyleSheet.create({
 export function LocationLine({
   loc,
 }: {
-  loc: { locationType: string; address: string | null; zone?: string; photoUrls?: string[]; ownerName?: string; ownerRelation?: string };
+  loc: { locationType: string; address: string | null; zone?: string; photoUrls?: string[]; ownerName?: string; ownerRelation?: string; visitSchedule?: CollectionProfile | null };
 }) {
   const [open, setOpen] = useState(false);
   const photos = loc.photoUrls ?? [];
+  const modalidades = useModalityLabels();
+  // F4/13 · E2: cómo conviene cobrarle en este lugar. Vacío si nunca se cargó.
+  const cobro = describeCollection(loc.visitSchedule, modalidades);
   return (
     <View style={styles.line}>
       {photos.length > 0 && <LocationPhoto fileUrl={photos[0]} size={48} onPress={() => setOpen(true)} label="Ver fotos de la ubicación" />}
       <View style={{ flex: 1 }}>
         <Text style={TYPE.secondary}>{lugarLabel(loc)}</Text>
         <Text style={TYPE.body}>{[loc.address, loc.zone].filter(Boolean).join(' · ') || 'Sin dirección'}</Text>
+        {cobro !== '' && <Text style={TYPE.caption}>{`💵 ${cobro}`}</Text>}
         {photos.length > 1 && <Text style={TYPE.caption}>{`${photos.length} fotos`}</Text>}
       </View>
       <PhotoViewer photos={photos} visible={open} onClose={() => setOpen(false)} />

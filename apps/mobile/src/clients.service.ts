@@ -175,6 +175,8 @@ export interface UpdateClientPatch {
   businessName?: string;
   gender?: string;
   riskSegment?: string;
+  /** Canal de contacto preferido (F4/13 · E2). */
+  preferredContactChannel?: string;
   status?: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
 }
 

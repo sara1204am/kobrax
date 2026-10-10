@@ -33,6 +33,8 @@ export interface SectionContext {
   client: ClientDetail;
   credits: CreditOption[];
   collateralTypes: CatalogOption[];
+  /** Catálogo `COLLECTION_MODALITY` (F4/13 · E2). */
+  collectionModalities?: CatalogOption[];
   /** La moneda de la cuenta (Configuración), con la que arranca el valor de una garantía. */
   currency: string;
   /** Releer el cliente revelado y refrescar el server component. Lo provee la ficha. */
@@ -150,7 +152,7 @@ function Fields({
     case 'locations':
       return (
         <Agregar label={t('form.addLocation')} onAdd={() => set({ locations: [...form.locations, nuevaFila.location()] })} disabled={disabled}>
-          <LocationRows rows={form.locations} onChange={(locations) => set({ locations })} disabled={disabled} />
+          <LocationRows rows={form.locations} onChange={(locations) => set({ locations })} disabled={disabled} modalities={ctx.collectionModalities ?? []} />
         </Agregar>
       );
     case 'guarantors':

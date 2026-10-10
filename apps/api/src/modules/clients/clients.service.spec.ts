@@ -30,6 +30,7 @@ function makeService(
     update: [] as { where: { id: string }; data: Record<string, unknown> }[],
     contact: [] as Record<string, unknown>[],
     location: [] as Record<string, unknown>[],
+    locationUpdate: [] as { where: { id: string }; data: Record<string, unknown> }[],
     relation: [] as Record<string, unknown>[],
     audit: [] as { entity: string; action: string }[],
     sql: [] as { sql: string; values: unknown[] }[],
@@ -70,6 +71,11 @@ function makeService(
       create: async (args: { data: Record<string, unknown> }) => {
         calls.location.push(args.data);
         return { id: 'lo1', ...args.data };
+      },
+      findFirst: async () => ({ id: 'lo1' }),
+      update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+        calls.locationUpdate.push(args);
+        return { id: args.where.id, ...args.data };
       },
     },
     clientRelation: {
@@ -650,5 +656,65 @@ describe('ClientsService.duplicateCheck — avisar antes del alta', () => {
     });
     const res = await service.duplicateCheck({ clientType: 'COMPANY', businessName: 'comercial andina srl' } as never);
     assert.equal(res.names[0]?.id, 'e');
+  });
+});
+
+describe('ClientsService · perfil de cobro de la ubicación (F4/13 · E2)', () => {
+  const PERFIL = { modality: 'AT_BUSINESS', frequency: 'DAILY', window: { from: '08:00', to: '10:00' } };
+
+  it('🔴 el alta atómica conserva el perfil de cobro y el nivel de riesgo (antes los descartaba)', async () => {
+    const { service, calls } = makeService();
+    await service.create({ ...(PERSON as object), locations: [{ address: 'Mercado 12', visitSchedule: PERFIL, riskLevel: 'HIGH' }] } as never);
+    assert.deepEqual(calls.location[0]!.visitSchedule, PERFIL);
+    assert.equal(calls.location[0]!.riskLevel, 'HIGH');
+  });
+
+  it('una ubicación sin perfil no escribe nada en la columna', async () => {
+    const { service, calls } = makeService();
+    await service.create({ ...(PERSON as object), locations: [{ address: 'Calle 1' }] } as never);
+    assert.equal(calls.location[0]!.visitSchedule, undefined);
+  });
+
+  it('🔴 un perfil con una franja al revés se rechaza antes de tocar la base', async () => {
+    const { service, calls } = makeService();
+    await rejectsWithCode(
+      service.create({ ...(PERSON as object), locations: [{ visitSchedule: { window: { from: '18:00', to: '08:00' } } }] } as never),
+      'CLIENT_COLLECTION_PROFILE_INVALID',
+    );
+    assert.equal(calls.create.length, 0);
+  });
+
+  it('un campo inventado en el perfil se rechaza', async () => {
+    const { service } = makeService();
+    await rejectsWithCode(
+      service.addLocation('c1', { address: 'x', visitSchedule: { color: 'rojo' } } as never),
+      'CLIENT_COLLECTION_PROFILE_INVALID',
+    );
+  });
+
+  it('agregar una ubicación suelta guarda el perfil', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.addLocation('c1', { address: 'Calle 2', visitSchedule: PERFIL } as never);
+    assert.deepEqual(calls.location.at(-1)!.visitSchedule, PERFIL);
+  });
+
+  it('🔴 editar una ubicación puede corregir el perfil (antes la edición no lo aceptaba)', async () => {
+    const { service, calls } = makeService();
+    await service.updateLocation('c1', 'lo1', { visitSchedule: { modality: 'PICK_UP' } } as never);
+    assert.deepEqual(calls.locationUpdate[0]!.data.visitSchedule, { modality: 'PICK_UP' });
+  });
+
+  it('null borra el perfil (DbNull en la columna JSON) y ausente no lo toca', async () => {
+    const { service, calls } = makeService();
+    await service.updateLocation('c1', 'lo1', { visitSchedule: null } as never);
+    assert.notEqual(calls.locationUpdate[0]!.data.visitSchedule, undefined);
+    assert.notEqual(calls.locationUpdate[0]!.data.visitSchedule, null); // no es el null de JS: es Prisma.DbNull
+    await service.updateLocation('c1', 'lo1', { zone: 'Sur' } as never);
+    assert.equal('visitSchedule' in calls.locationUpdate[1]!.data, false);
+  });
+
+  it('editar una ubicación valida el perfil igual que el alta', async () => {
+    const { service } = makeService();
+    await rejectsWithCode(service.updateLocation('c1', 'lo1', { visitSchedule: { days: [9] } } as never), 'CLIENT_COLLECTION_PROFILE_INVALID');
   });
 });

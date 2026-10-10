@@ -802,6 +802,8 @@ export class AgendaService {
           latitude: l.latitude,
           longitude: l.longitude,
           photoUrls: l.photoUrls ?? [],
+          // F4/13 · E2: cómo conviene cobrarle en este lugar. Solo las del cliente: las de un garante no llevan perfil.
+          visitSchedule: l.visitSchedule ?? undefined,
         })),
         ...(client.relations ?? []).flatMap((r) =>
           (r.locations ?? []).map((l) => ({

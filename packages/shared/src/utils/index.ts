@@ -33,3 +33,4 @@ export * from './route-rules.js';
 export * from './visit-result.js';
 export * from './geo.js';
 export * from './catalog-metadata.js';
+export * from './collection-profile.js';

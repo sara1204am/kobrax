@@ -12,6 +12,7 @@ import {
   type ClientDuplicateMatch,
   type ClientTimelineEntry,
   ResponseDto,
+  validateCollectionProfile,
 } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { nameTerms } from '../../common/name-search';
@@ -44,6 +45,7 @@ import {
   clientDuplicate,
   clientHasActiveCredits,
   invalidClientIdentity,
+  invalidCollectionProfile,
   resourceNotFound,
 } from './clients.errors';
 
@@ -126,6 +128,9 @@ export class ClientsService {
   // ── Clientes ────────────────────────────────────────────────────────────────
   async create(dto: CreateClientDto): Promise<ReturnType<typeof serializeClient>> {
     this.assertIdentity(dto.clientType, dto.firstName, dto.lastName, dto.businessName);
+    // F4/13 · E2: los perfiles de cobro se validan ANTES de abrir la transacción (los del cliente y los de sus garantes).
+    for (const l of dto.locations ?? []) this.assertCollectionProfile(l.visitSchedule);
+    for (const r of dto.relations ?? []) for (const l of r.locations ?? []) this.assertCollectionProfile(l.visitSchedule);
     const nationalIdHash = this.blind.hash(dto.nationalId);
 
     const { created, subs, yaExistia } = await this.tx(async (tx) => {
@@ -187,8 +192,14 @@ export class ClientsService {
         audits.push({ kind: 'contact', id: row.id, after: row });
       };
       const mkLocation = async (l: CreateLocationDto, relationId: string | null) => {
+        this.assertCollectionProfile(l.visitSchedule);
         const row = await tx.clientLocation.create({
-          data: { accountId: acc, clientId: client.id, relationId, locationType: l.locationType, address: this.enc(l.address), zone: l.zone, latitude: l.latitude, longitude: l.longitude, referenceNotes: l.referenceNotes, photoUrls: (l.photoUrls ?? []) as Prisma.InputJsonValue },
+          data: {
+            accountId: acc, clientId: client.id, relationId, locationType: l.locationType, address: this.enc(l.address), zone: l.zone, latitude: l.latitude, longitude: l.longitude, referenceNotes: l.referenceNotes, photoUrls: (l.photoUrls ?? []) as Prisma.InputJsonValue,
+            // F4/13 · E2: el alta atómica descartaba estos dos aunque el DTO los aceptaba; solo `addLocation` los escribía.
+            visitSchedule: l.visitSchedule ? (l.visitSchedule as Prisma.InputJsonValue) : undefined,
+            riskLevel: l.riskLevel,
+          },
         });
         audits.push({ kind: 'location', id: row.id, after: row });
       };
@@ -807,8 +818,16 @@ export class ClientsService {
     return updated;
   }
 
+  /** El perfil de cobro decide comportamiento (rutas, agenda): se valida el contenido; `null`/ausente no se valida. */
+  private assertCollectionProfile(value: unknown): void {
+    if (value === undefined || value === null) return;
+    const reason = validateCollectionProfile(value);
+    if (reason) throw invalidCollectionProfile(reason);
+  }
+
   /** `relationId`: la ubicación es del garante, no del cliente (ídem `addContact`). */
   async addLocation(clientId: string, dto: CreateLocationDto) {
+    this.assertCollectionProfile(dto.visitSchedule);
     return this.subCreate(clientId, 'location', async (tx) => {
       await this.assertRelationOf(tx, clientId, dto.relationId);
       return tx.clientLocation.create({
@@ -823,7 +842,7 @@ export class ClientsService {
           longitude: dto.longitude,
           referenceNotes: dto.referenceNotes,
           photoUrls: (dto.photoUrls ?? []) as Prisma.InputJsonValue,
-          visitSchedule: dto.visitSchedule as Prisma.InputJsonValue | undefined,
+          visitSchedule: dto.visitSchedule ? (dto.visitSchedule as Prisma.InputJsonValue) : undefined,
           riskLevel: dto.riskLevel,
         },
       });
@@ -836,6 +855,7 @@ export class ClientsService {
    * campos que vienen — `address` se cifra como en el alta.
    */
   async updateLocation(clientId: string, locationId: string, dto: UpdateLocationDto) {
+    this.assertCollectionProfile(dto.visitSchedule);
     const updated = await this.tx(async (tx) => {
       const found = await tx.clientLocation.findFirst({ where: { id: locationId, clientId }, select: { id: true } });
       if (!found) throw resourceNotFound();
@@ -849,6 +869,9 @@ export class ClientsService {
           ...(dto.longitude !== undefined && { longitude: dto.longitude }),
           ...(dto.referenceNotes !== undefined && { referenceNotes: dto.referenceNotes }),
           ...(dto.photoUrls !== undefined && { photoUrls: dto.photoUrls as Prisma.InputJsonValue }),
+          // `null` borra el perfil de cobro (en una columna JSON hay que decirlo con `DbNull`); ausente no la toca.
+          ...(dto.visitSchedule !== undefined && { visitSchedule: dto.visitSchedule === null ? Prisma.DbNull : (dto.visitSchedule as Prisma.InputJsonValue) }),
+          ...(dto.riskLevel !== undefined && { riskLevel: dto.riskLevel }),
         },
       });
     });
