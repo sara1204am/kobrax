@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { AgendaItem, CatalogItem, Credit, Prisma, PrismaClient } from '@prisma/client';
-import { AgendaItemStatus, AgendaItemType, CatalogType, InstallmentStatus, ScheduleTimeMode } from '@prisma/client';
+import { AgendaItemStatus, AgendaItemType, CatalogType, InstallmentStatus, RouteStopStatus, ScheduleTimeMode } from '@prisma/client';
 import {
   AGENDA_OUTCOMES_BY_TYPE,
   AgendaTimeSlot,
@@ -22,14 +22,16 @@ import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { TenantClockService } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
-import { EventBusService } from '../../common/events/event-bus.service';
+import { DomainEvent, EventBusService, type AgendaEventPayload } from '../../common/events/event-bus.service';
 import { ClientsService } from '../clients/clients.service';
 import { UpdateLocationDto } from '../clients/dto/client.dto';
 import { isUniqueViolation } from '../../common/unique-violation';
 import { moraScopeOf, visibleCredits } from '../mora/mora-query';
 import { recordCreditActivity } from '../mora/credit-activity';
 import { serializeAgendaItem, type AgendaRowExtra } from './agenda.serializer';
+import { attachVisitToPlannedRoute, detachVisitFromRoute } from './agenda-route-link';
 import { loadNames } from '../mora/mora-names';
+import { agencyViolations, ASSIGNABLE_ROLES, isAssignable } from '../assignments/assignment-rules';
 import { recommendedSlot, type ContactHint } from './recommended-slot';
 import {
   AddClientContactDto,
@@ -43,6 +45,8 @@ import {
   UpdateAgendaItemDto,
 } from './dto/agenda.dto';
 import {
+  agendaAssignForbidden,
+  agendaAssigneeNotEligible,
   agendaCreditNotFound,
   agendaClientWithoutCredits,
   agendaInvalidDetails,
@@ -51,8 +55,11 @@ import {
   agendaInvalidReference,
   agendaInvalidTimeMode,
   agendaItemNotFound,
+  agendaNotOwner,
   agendaNotSchedulable,
   agendaPastDate,
+  agendaVisitInRoute,
+  agendaVisitNeedsLocation,
 } from './agenda.errors';
 
 /** Al ejecutar un agendado, qué tipo de actividad queda en la bitácora del crédito. */
@@ -99,7 +106,138 @@ export class AgendaService {
 
   /** Serializar una gestión suelta con el reloj del tenant puesto. Ahorra repetir el `await` siete veces. */
   private async view(a: AgendaItem, clientName?: string): Promise<ReturnType<typeof serializeAgendaItem>> {
-    return serializeAgendaItem(a, clientName, await this.today());
+    const extra: AgendaRowExtra = { canEdit: this.canEdit(a) };
+    if (a.createdBy && a.createdBy !== a.assigneeId) {
+      const names = await this.tx((tx) => loadNames(tx, this.tenant.accountId, [a.createdBy]));
+      extra.assignedByName = names.get(a.createdBy);
+    }
+    return serializeAgendaItem(a, clientName, await this.today(), extra);
+  }
+
+  /**
+   * Avisa al responsable de que OTRA persona le asignó o le cambió una gestión (F4/11 · E4). Nunca avisa a quien hizo el
+   * cambio sobre lo suyo, y nunca rompe la operación: el aviso es un efecto, no parte de lo que se guardó.
+   */
+  private async notifyAgenda(
+    event: 'ASSIGNED' | 'CHANGED',
+    item: AgendaItem,
+    kind: AgendaEventPayload['kind'],
+    recipientId: string = item.assigneeId,
+  ): Promise<void> {
+    const actorId = this.tenant.userId;
+    if (!actorId || !recipientId || recipientId === actorId) return;
+    try {
+      const { who, clients } = await this.tx(async (tx) => ({
+        who: await loadNames(tx, this.tenant.accountId, [actorId]),
+        clients: await this.clientNames(tx, [item.clientId]),
+      }));
+      const payload: AgendaEventPayload = {
+        accountId: this.tenant.accountId,
+        itemId: item.id,
+        creditId: item.creditId,
+        clientId: item.clientId,
+        recipientId,
+        actorId,
+        actorName: who.get(actorId),
+        clientName: clients.get(item.clientId),
+        itemType: item.type,
+        scheduledDate: item.scheduledDate.toISOString().slice(0, 10),
+        kind,
+      };
+      this.events.emit(event === 'ASSIGNED' ? DomainEvent.AGENDA_ASSIGNED : DomainEvent.AGENDA_CHANGED, payload);
+    } catch {
+      /* un aviso que no sale no puede deshacer una gestión ya guardada */
+    }
+  }
+
+  /**
+   * ¿De quién es la gestión? De quien la creó. Las que nacieron solas (los recordatorios automáticos de cuotas y promesas, sin
+   * creador) son de su responsable: si no, nadie podría quitar un recordatorio que ya no corresponde.
+   */
+  private isOwner(a: AgendaItem): boolean {
+    return a.createdBy ? a.createdBy === this.tenant.userId : a.assigneeId === this.tenant.userId;
+  }
+
+  /** ¿Puede quien pide editarla, reasignarla o eliminarla? Es suya y sigue pendiente. */
+  private canEdit(a: AgendaItem): boolean {
+    return a.status === AgendaItemStatus.SCHEDULED && this.isOwner(a);
+  }
+
+  /** Editar y eliminar son solo de quien creó la gestión (sin excepción para el administrador). Sin creador, de nadie. */
+  private assertCreator(item: AgendaItem): void {
+    if (!this.isOwner(item)) throw agendaNotOwner();
+  }
+
+  /** Hasta dónde puede asignar quien pide: todo (gerente, administrador) o su agencia (supervisor). */
+  private async assignBranch(tx: PrismaClient): Promise<{ kind: 'ALL' | 'BRANCH'; branchId: string | null }> {
+    if (this.tenant.can(Permission.DATA_SCOPE_ALL)) return { kind: 'ALL', branchId: null };
+    const me = await tx.userAccount.findFirst({
+      where: { accountId: this.tenant.accountId, userId: this.tenant.userId, isActive: true },
+      select: { branchId: true },
+    });
+    return { kind: 'BRANCH', branchId: me?.branchId ?? null };
+  }
+
+  /**
+   * A quién queda asignada la gestión que se está creando. `undefined` = el de siempre (el responsable del crédito, o
+   * quien agenda). Un id explícito gana sobre el responsable, pero solo lo acepta quien tiene `agenda:assign` — salvo
+   * el propio —, y tiene que ser un cobrador o supervisor activo de su alcance: la misma regla que reparte la cartera.
+   */
+  private async resolveAssignee(tx: PrismaClient, requested?: string): Promise<string | undefined> {
+    if (!requested) return undefined;
+    if (requested === this.tenant.userId) return requested;
+    if (!this.tenant.can(Permission.AGENDA_ASSIGN)) throw agendaAssignForbidden();
+
+    const member = await tx.userAccount.findFirst({
+      where: { accountId: this.tenant.accountId, userId: requested },
+      select: { userId: true, isActive: true, branchId: true, role: { select: { name: true } } },
+    });
+    if (!member || !isAssignable({ userId: member.userId, isActive: member.isActive, role: member.role.name }, this.tenant.userId)) {
+      throw agendaAssigneeNotEligible();
+    }
+    const scope = await this.assignBranch(tx);
+    const out = agencyViolations(scope, [], [{ userId: member.userId, branchId: member.branchId ?? null }]);
+    if (out.userIds.length > 0) throw agendaAssigneeNotEligible();
+    return requested;
+  }
+
+  /**
+   * Las personas a las que quien pide puede asignarle una gestión (y, con `agenda:assign`, las que supervisa):
+   * cobradores y supervisores activos de su alcance, más él mismo. Sin correo ni teléfono — por eso no es `/users`,
+   * que pide `user:read` y el supervisor no lo tiene.
+   */
+  async listAssignees(): Promise<ApiResponse<{ userId: string; firstName: string | null; lastName: string | null; roleName: string; branchId: string | null }[]>> {
+    const rows = await this.tx(async (tx) => {
+      const scope = await this.assignBranch(tx);
+      const members = await tx.userAccount.findMany({
+        where: {
+          accountId: this.tenant.accountId,
+          isActive: true,
+          OR: [
+            { userId: this.tenant.userId },
+            { role: { name: { in: [...ASSIGNABLE_ROLES] } }, ...(scope.kind === 'ALL' ? {} : { branchId: scope.branchId ?? '__sin_agencia__' }) },
+          ],
+        },
+        select: {
+          userId: true,
+          branchId: true,
+          role: { select: { name: true } },
+          user: { select: { profile: { select: { firstName: true, lastName: true } } } },
+        },
+      });
+      return members;
+    });
+    return ResponseDto.ok(
+      rows
+        .map((m) => ({
+          userId: m.userId,
+          firstName: m.user.profile?.firstName ?? null,
+          lastName: m.user.profile?.lastName ?? null,
+          roleName: m.role.name,
+          branchId: m.branchId ?? null,
+        }))
+        .sort((a, b) => `${a.firstName ?? ''} ${a.lastName ?? ''}`.localeCompare(`${b.firstName ?? ''} ${b.lastName ?? ''}`, 'es')),
+    );
   }
 
   /**
@@ -154,13 +292,17 @@ export class AgendaService {
         },
       }),
       tx.arrearCategory.findMany({ where: { accountId: this.tenant.accountId }, orderBy: [{ sortOrder: 'asc' }, { fromDays: 'asc' }] }),
-      loadNames(tx, this.tenant.accountId, rows.map((r) => r.assigneeId)),
+      loadNames(tx, this.tenant.accountId, rows.flatMap((r) => [r.assigneeId, r.createdBy])),
     ]);
     const ranges = cats.map((c) => ({ code: c.code, name: c.name, color: c.color, fromDays: c.fromDays, toDays: c.toDays }));
     const byCredit = new Map(credits.map((c) => [c.id, c]));
     for (const r of rows) {
       const c = byCredit.get(r.creditId);
-      const extra: AgendaRowExtra = { assigneeName: names.get(r.assigneeId) };
+      const extra: AgendaRowExtra = {
+        assigneeName: names.get(r.assigneeId),
+        canEdit: this.canEdit(r),
+        assignedByName: r.createdBy && r.createdBy !== r.assigneeId ? names.get(r.createdBy) : undefined,
+      };
       if (c) {
         const cat = categoryForDays(c.daysPastDue, ranges);
         extra.creditCode = c.code ?? undefined;
@@ -202,6 +344,49 @@ export class AgendaService {
     return ResponseDto.ok(rows.map((r) => serializeAgendaItem(r, names.get(r.clientId), today, extras.get(r.id))));
   }
 
+  /**
+   * «¿Qué tengo que hacer hoy?» en una sola llamada (F4/11 · E3): cuántas pendientes de hoy y cuántas vencidas, y las
+   * próximas del día. Con `agenda:assign`, además la carga por persona del alcance. Lo usan el Inicio, el contador del
+   * menú y el móvil, y todos cuentan LO MISMO: el día civil del tenant y el mismo alcance que la lista.
+   *
+   * 🔴 «Pendiente» y «vencida» son derivadas (`SCHEDULED` en/antes de hoy), nunca un estado guardado. Una gestión de
+   * hoy a las 08:00 no es vencida a las 20:00: vence al cambiar el día, igual que en la lista.
+   */
+  async summary(): Promise<ApiResponse<{ date: string; pending: number; overdue: number; items: ReturnType<typeof serializeAgendaItem>[]; load?: { assigneeId: string; name?: string; pending: number; overdue: number }[] }>> {
+    const today = await this.today();
+    const { pending, overdue, rows, names, extras, load } = await this.tx(async (tx) => {
+      const where: Prisma.AgendaItemWhereInput = { deletedAt: null, status: AgendaItemStatus.SCHEDULED, ...(await this.assigneeScope(tx)) };
+      const [pending, overdue, rows] = await Promise.all([
+        tx.agendaItem.count({ where: { ...where, scheduledDate: today } }),
+        tx.agendaItem.count({ where: { ...where, scheduledDate: { lt: today } } }),
+        // Las de hora fija primero, por hora; las de franja después, por orden de carga.
+        tx.agendaItem.findMany({ where: { ...where, scheduledDate: today }, orderBy: [{ scheduledTime: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }], take: 5 }),
+      ]);
+      let load: { assigneeId: string; name?: string; pending: number; overdue: number }[] | undefined;
+      if (this.tenant.can(Permission.AGENDA_ASSIGN)) {
+        const [todayBy, overdueBy] = await Promise.all([
+          tx.agendaItem.groupBy({ by: ['assigneeId'], where: { ...where, scheduledDate: today }, _count: { _all: true } }),
+          tx.agendaItem.groupBy({ by: ['assigneeId'], where: { ...where, scheduledDate: { lt: today } }, _count: { _all: true } }),
+        ]);
+        const per = new Map<string, { assigneeId: string; pending: number; overdue: number }>();
+        for (const g of todayBy) per.set(g.assigneeId, { assigneeId: g.assigneeId, pending: g._count._all, overdue: 0 });
+        for (const g of overdueBy) per.set(g.assigneeId, { ...(per.get(g.assigneeId) ?? { assigneeId: g.assigneeId, pending: 0 }), overdue: g._count._all });
+        const who = await loadNames(tx, this.tenant.accountId, [...per.keys()]);
+        load = [...per.values()]
+          .map((r) => ({ ...r, name: who.get(r.assigneeId) }))
+          .sort((a, b) => b.overdue - a.overdue || b.pending - a.pending || a.assigneeId.localeCompare(b.assigneeId));
+      }
+      return { pending, overdue, rows, names: await this.clientNames(tx, rows.map((r) => r.clientId)), extras: await this.rowExtras(tx, rows), load };
+    });
+    return ResponseDto.ok({
+      date: today.toISOString().slice(0, 10),
+      pending,
+      overdue,
+      items: rows.map((r) => serializeAgendaItem(r, names.get(r.clientId), today, extras.get(r.id))),
+      ...(load ? { load } : {}),
+    });
+  }
+
   /** Vencidos: SCHEDULED con fecha < hoy, desc por fecha, paginado (`meta.total` → "ver más"). */
   async listOverdue(query: ListOverdueQueryDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>[]>> {
     const { page, limit, skip } = resolvePagination(query);
@@ -231,7 +416,7 @@ export class AgendaService {
    */
   async findOne(id: string) {
     const today = await this.today();
-    const { item, credit, history, extras } = await this.tx(async (tx) => {
+    const { item, credit, history, extras, activities, successor, names, stop } = await this.tx(async (tx) => {
       const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...(await this.assigneeScope(tx)) } });
       if (!item) throw agendaItemNotFound();
       const [credit, history] = await Promise.all([
@@ -243,8 +428,27 @@ export class AgendaService {
           take: 20,
         }),
       ]);
-      return { item, credit, history, extras: await this.rowExtras(tx, [item]) };
+      // Qué pasó: el resultado y la nota de cada gestión ejecutada (la de este detalle y las del historial), y la
+      // gestión a la que se movió si ésta se reagendó. Dos consultas para todas las filas, sin N+1.
+      const activityIds = [item.resultActivityId, ...history.map((h) => h.resultActivityId)].filter((a): a is string => !!a);
+      const [activities, successor] = await Promise.all([
+        activityIds.length > 0
+          ? tx.creditActivity.findMany({ where: { id: { in: activityIds } }, select: { id: true, result: true, notes: true, userId: true, createdAt: true } })
+          : Promise.resolve([] as { id: string; result: string | null; notes: string | null; userId: string | null; createdAt: Date }[]),
+        item.status === AgendaItemStatus.RESCHEDULED
+          ? tx.agendaItem.findFirst({ where: { rescheduledFromId: item.id, deletedAt: null }, select: { id: true, scheduledDate: true } })
+          : Promise.resolve(null),
+      ]);
+      const names = await loadNames(tx, this.tenant.accountId, activities.map((a) => a.userId));
+      // Una visita pendiente que una ruta lleva se registra desde su parada: el cliente lo sabe por acá y manda a la ruta.
+      const stop =
+        item.type === AgendaItemType.VISIT && item.status === AgendaItemStatus.SCHEDULED
+          ? await tx.routeStop.findFirst({ where: { agendaItemId: item.id, status: { not: RouteStopStatus.SKIPPED } }, select: { id: true, routeId: true } })
+          : null;
+      return { item, credit, history, extras: await this.rowExtras(tx, [item]), activities, successor, names, stop };
     });
+    const activityById = new Map(activities.map((a) => [a.id, a]));
+    const done = item.resultActivityId ? activityById.get(item.resultActivityId) : undefined;
 
     const client = await this.clients.findOne(item.clientId, true); // audita `client/PII_REVEAL`
     // Segundo rastro, propio del módulo: distingue esta puerta de las del módulo de clientes.
@@ -265,6 +469,12 @@ export class AgendaService {
         currency: credit.currency,
         daysPastDue: credit.daysPastDue,
       },
+      // El resultado de la ejecución: sin esto un agendado ejecutado solo decía «Ejecutada».
+      execution: done
+        ? { outcome: done.result ?? undefined, notes: done.notes ?? undefined, byName: done.userId ? names.get(done.userId) : undefined, at: done.createdAt }
+        : undefined,
+      rescheduledTo: successor ? { id: successor.id, scheduledDate: successor.scheduledDate } : undefined,
+      route: stop ? { routeId: stop.routeId, stopId: stop.id } : undefined,
       target: resolveTarget(item.type, item.details as unknown as AgendaDetails, client),
       labels: await this.detailLabels(
         item.type,
@@ -282,6 +492,13 @@ export class AgendaService {
           // Con esto el móvil arma la cadena de reprogramaciones sin otra query (S6).
           reasonCode: s.reasonCode,
           rescheduledFromId: s.rescheduledFromId,
+          outcome: (h.resultActivityId ? activityById.get(h.resultActivityId)?.result : undefined) ?? undefined,
+          // Cuándo y de qué iba: la línea de tiempo del detalle muestra hora y una frase por gestión.
+          timeMode: s.timeMode,
+          scheduledTime: s.scheduledTime,
+          timeSlot: s.timeSlot,
+          observations: s.observations,
+          details: s.details,
         };
       }),
     });
@@ -307,6 +524,11 @@ export class AgendaService {
       }
       if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
       if (!AGENDA_OUTCOMES_BY_TYPE[item.type].includes(dto.outcome)) throw agendaInvalidOutcome();
+      // Una visita que una ruta lleva se registra desde su parada: acá se crearía una SEGUNDA actividad y no quedaría GPS ni evidencia.
+      if (item.type === AgendaItemType.VISIT) {
+        const stop = await tx.routeStop.findFirst({ where: { agendaItemId: id, status: { not: RouteStopStatus.SKIPPED } }, select: { id: true } });
+        if (stop) throw agendaVisitInRoute();
+      }
 
       const activity = await recordCreditActivity(tx, {
         accountId: this.tenant.accountId,
@@ -321,6 +543,7 @@ export class AgendaService {
         where: { id },
         data: { status: AgendaItemStatus.EXECUTED, resultActivityId: activity.id, updatedBy: this.tenant.userId },
       });
+      if (item.type === AgendaItemType.PROMISE_TO_PAY) await this.cancelPromiseReminder(tx, id);
       const names = await this.clientNames(tx, [updated.clientId]);
       return { updated, clientName: names.get(updated.clientId), replay: false };
     });
@@ -470,14 +693,35 @@ export class AgendaService {
         value: c.value,
         isPrimary: c.isPrimary,
       })),
-      locations: (client.locations ?? []).map((l) => ({
-        id: l.id,
-        locationType: l.locationType,
-        address: l.address,
-        zone: l.zone,
-        latitude: l.latitude,
-        longitude: l.longitude,
-      })),
+      /*
+       * Las del cliente primero (el default de quien agenda es la primera), y después las de sus garantes, familiares y
+       * contactos con `ownerName`/`ownerRelation`: una deuda se cobra donde esté la persona, y quien elige tiene que
+       * poder ver de QUIÉN es cada dirección. Sin dueño = del cliente.
+       */
+      locations: [
+        ...(client.locations ?? []).map((l) => ({
+          id: l.id,
+          locationType: l.locationType,
+          address: l.address,
+          zone: l.zone,
+          latitude: l.latitude,
+          longitude: l.longitude,
+          photoUrls: l.photoUrls ?? [],
+        })),
+        ...(client.relations ?? []).flatMap((r) =>
+          (r.locations ?? []).map((l) => ({
+            id: l.id,
+            locationType: l.locationType,
+            address: l.address,
+            zone: l.zone,
+            latitude: l.latitude,
+            longitude: l.longitude,
+            photoUrls: l.photoUrls ?? [],
+            ownerName: r.relatedName,
+            ownerRelation: r.relationshipType,
+          })),
+        ),
+      ],
       /** En qué franja conviene buscarlo (Rutas S4). Ausente si el historial no alcanza. */
       contactHint,
     });
@@ -535,6 +779,7 @@ export class AgendaService {
       id: created.id,
       locationType: created.locationType,
       address: dto.address, // `created.address` viene cifrado
+      photoUrls: Array.isArray(created.photoUrls) ? created.photoUrls : [],
       zone: created.zone ?? undefined,
       latitude: created.latitude != null ? Number(created.latitude) : undefined,
       longitude: created.longitude != null ? Number(created.longitude) : undefined,
@@ -553,6 +798,7 @@ export class AgendaService {
       id: updated.id,
       locationType: updated.locationType,
       address: dto.address, // `updated.address` viene cifrado
+      photoUrls: Array.isArray(updated.photoUrls) ? updated.photoUrls : [],
       zone: updated.zone ?? undefined,
       latitude: updated.latitude != null ? Number(updated.latitude) : undefined,
       longitude: updated.longitude != null ? Number(updated.longitude) : undefined,
@@ -595,10 +841,12 @@ export class AgendaService {
       if (!credit) throw agendaCreditNotFound();
 
       await this.assertReferences(tx, dto.type, validated.value, credit.clientId, credit, today);
+      const assigneeId = await this.resolveAssignee(tx, dto.assigneeId);
 
       const { created, reminder } = await this.insertItem(tx, {
         id: dto.id,
         credit,
+        assigneeId,
         type: dto.type,
         scheduledDate,
         timeMode: dto.timeMode,
@@ -607,11 +855,13 @@ export class AgendaService {
         observations: dto.observations,
         details: validated.value,
       });
+      await attachVisitToPlannedRoute(tx, created);
       const names = await this.clientNames(tx, [credit.clientId]);
       return { created, reminder, clientName: names.get(credit.clientId) };
     });
 
     await this.recordCreated(created, reminder);
+    await this.notifyAgenda('ASSIGNED', created, 'ASSIGNED');
     return ResponseDto.ok(await this.view(created, clientName));
   }
 
@@ -658,6 +908,8 @@ export class AgendaService {
     p: {
       id?: string;
       credit: Credit;
+      /** Quién la atiende. Sin él: el responsable del crédito. */
+      assigneeId?: string;
       type: AgendaItemType;
       scheduledDate: Date;
       timeMode: ScheduleTimeMode;
@@ -676,7 +928,7 @@ export class AgendaService {
         // El agendado es del RESPONSABLE del crédito, no de quien lo crea: un supervisor agenda sobre créditos
         // ajenos, y `assigneeScope` los ocultaría del cobrador que debe ejecutarlos. Sin responsable, queda para
         // quien agenda. `userId` lo garantiza JwtAuthGuard.
-        assigneeId: p.credit.assignedManagerId ?? this.tenant.userId!,
+        assigneeId: p.assigneeId ?? p.credit.assignedManagerId ?? this.tenant.userId!,
         type: p.type,
         scheduledDate: p.scheduledDate,
         timeMode: p.timeMode,
@@ -699,6 +951,14 @@ export class AgendaService {
    * Devuelve `null` cuando no corresponde: si la promesa es para mañana o antes, el recordatorio
    * caería hoy o en el pasado — y un recordatorio en el pasado no le recuerda nada a nadie.
    */
+  /** Cancela el recordatorio automático de una promesa (si sigue pendiente). */
+  private async cancelPromiseReminder(tx: PrismaClient, promiseId: string): Promise<void> {
+    await tx.agendaItem.updateMany({
+      where: { type: AgendaItemType.REMINDER, status: AgendaItemStatus.SCHEDULED, deletedAt: null, details: { path: ['promiseItemId'], equals: promiseId } },
+      data: { status: AgendaItemStatus.CANCELLED, updatedBy: this.tenant.userId },
+    });
+  }
+
   private async promiseReminder(tx: PrismaClient, promise: AgendaItem, scheduledDate: Date) {
     if (promise.type !== AgendaItemType.PROMISE_TO_PAY) return null;
 
@@ -717,7 +977,9 @@ export class AgendaService {
         scheduledDate: dayBefore,
         timeMode: ScheduleTimeMode.LAPSE,
         timeSlot: AgendaTimeSlot.MORNING,
-        details: { description: 'Recordar la promesa de pago de mañana' },
+        // `promiseItemId` es el vínculo: al reagendar, cancelar, eliminar o ejecutar la promesa se cancela ESTE recordatorio
+        // (antes quedaba huérfano, avisando de una promesa que ya no es de ese día).
+        details: { description: 'Recordar la promesa de pago de mañana', promiseItemId: promise.id },
         createdBy: this.tenant.userId,
       },
     });
@@ -731,6 +993,7 @@ export class AgendaService {
     const { before, updated, clientName } = await this.tx(async (tx) => {
       const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...(await this.assigneeScope(tx)) } });
       if (!item) throw agendaItemNotFound();
+      this.assertCreator(item);
       if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
 
       const data: Prisma.AgendaItemUpdateInput = { updatedBy: this.tenant.userId };
@@ -746,6 +1009,10 @@ export class AgendaService {
         const credit = await tx.credit.findFirst({ where: { id: item.creditId } });
         if (!credit) throw agendaCreditNotFound();
         await this.assertReferences(tx, type, validated.value, item.clientId, credit, await this.today());
+        // La fecha de la promesa es el día de la gestión: cambiarla desde acá la dejaría en un día y la agenda en otro.
+        if (type === AgendaItemType.PROMISE_TO_PAY && (validated.value as PromiseToPayDetails).promiseDate !== item.scheduledDate.toISOString().slice(0, 10)) {
+          throw agendaInvalidReference('Para cambiar la fecha de la promesa usa Reagendar');
+        }
 
         data.type = type;
         data.details = validated.value as unknown as Prisma.InputJsonValue;
@@ -766,12 +1033,33 @@ export class AgendaService {
 
       if (dto.observations !== undefined) data.observations = dto.observations;
 
+      // Reasignar (F4/11 · E5): solo su dueño —ya lo exige `assertCreator`— y con la misma regla del alta sobre el destinatario.
+      const reassigned = dto.assigneeId !== undefined && dto.assigneeId !== item.assigneeId;
+      if (reassigned) {
+        await this.resolveAssignee(tx, dto.assigneeId);
+        data.assigneeId = dto.assigneeId;
+      }
+
       const updated = await tx.agendaItem.update({ where: { id }, data });
+      // Una visita va en la ruta de quien la atiende: al cambiar de responsable sale de la anterior y entra a la del día del nuevo.
+      if (reassigned) {
+        await detachVisitFromRoute(tx, id);
+        await attachVisitToPlannedRoute(tx, updated);
+      }
+      if (item.type === AgendaItemType.VISIT && updated.type !== AgendaItemType.VISIT) await detachVisitFromRoute(tx, id);
+      if (item.type !== AgendaItemType.VISIT && updated.type === AgendaItemType.VISIT) await attachVisitToPlannedRoute(tx, updated);
       const names = await this.clientNames(tx, [updated.clientId]);
       return { before: item, updated, clientName: names.get(updated.clientId) };
     });
 
     await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'UPDATE', before, after: updated });
+    if (updated.assigneeId !== before.assigneeId) {
+      // El nuevo responsable recibe una gestión; el anterior se entera de que ya no es suya. Dos avisos, no el genérico de «modificada».
+      await this.notifyAgenda('ASSIGNED', updated, 'ASSIGNED');
+      await this.notifyAgenda('CHANGED', updated, 'REASSIGNED', before.assigneeId);
+    } else {
+      await this.notifyAgenda('CHANGED', updated, 'UPDATED');
+    }
     return ResponseDto.ok(await this.view(updated, clientName));
   }
 
@@ -792,11 +1080,14 @@ export class AgendaService {
         where: { id },
         data: { status: AgendaItemStatus.CANCELLED, reasonCode: reason.code, updatedBy: this.tenant.userId },
       });
+      await detachVisitFromRoute(tx, id);
+      if (item.type === AgendaItemType.PROMISE_TO_PAY) await this.cancelPromiseReminder(tx, id);
       const names = await this.clientNames(tx, [updated.clientId]);
       return { updated, clientName: names.get(updated.clientId) };
     });
 
     await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'CANCEL', after: updated });
+    await this.notifyAgenda('CHANGED', updated, 'CANCELLED');
     return ResponseDto.ok(await this.view(updated, clientName));
   }
 
@@ -835,21 +1126,34 @@ export class AgendaService {
           scheduledTime: dto.timeMode === ScheduleTimeMode.FIXED ? dto.scheduledTime : null,
           timeSlot: dto.timeMode === ScheduleTimeMode.LAPSE ? dto.timeSlot : null,
           observations: item.observations,
-          details: item.details as Prisma.InputJsonValue,
+          // La fecha de una promesa ES su día: al moverla, `promiseDate` se mueve con ella (si no, el detalle decía una
+          // fecha y la agenda otra).
+          details: (item.type === AgendaItemType.PROMISE_TO_PAY
+            ? { ...(item.details as Record<string, unknown>), promiseDate: dto.scheduledDate }
+            : item.details) as Prisma.InputJsonValue,
           rescheduledFromId: item.id,
-          createdBy: this.tenant.userId,
+          // Se copia, NO se pisa: quien reagenda no pasa a ser el creador (perdería el «asignada por» y podría
+          // editar o eliminar lo que otro le asignó).
+          createdBy: item.createdBy,
         },
       });
       await tx.agendaItem.update({
         where: { id },
         data: { status: AgendaItemStatus.RESCHEDULED, reasonCode: reason.code, updatedBy: this.tenant.userId },
       });
+      await detachVisitFromRoute(tx, id);
+      await attachVisitToPlannedRoute(tx, created);
+      if (item.type === AgendaItemType.PROMISE_TO_PAY) {
+        await this.cancelPromiseReminder(tx, id);
+        await this.promiseReminder(tx, created, scheduledDate);
+      }
       const names = await this.clientNames(tx, [created.clientId]);
       return { created, previousId: item.id, clientName: names.get(created.clientId) };
     });
 
     await this.audit.record({ entity: 'agenda_item', entityId: previousId, action: 'RESCHEDULE', after: created });
     await this.audit.record({ entity: 'agenda_item', entityId: created.id, action: 'CREATE', after: created });
+    await this.notifyAgenda('CHANGED', created, 'RESCHEDULED');
     return ResponseDto.ok(await this.view(created, clientName));
   }
 
@@ -863,17 +1167,21 @@ export class AgendaService {
     const { before, updated, clientName } = await this.tx(async (tx) => {
       const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...(await this.assigneeScope(tx)) } });
       if (!item) throw agendaItemNotFound();
+      this.assertCreator(item);
       if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
 
       const updated = await tx.agendaItem.update({
         where: { id },
         data: { deletedAt: new Date(), updatedBy: this.tenant.userId },
       });
+      await detachVisitFromRoute(tx, id);
+      if (item.type === AgendaItemType.PROMISE_TO_PAY) await this.cancelPromiseReminder(tx, id);
       const names = await this.clientNames(tx, [updated.clientId]);
       return { before: item, updated, clientName: names.get(updated.clientId) };
     });
 
     await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'DELETE', before });
+    await this.notifyAgenda('CHANGED', updated, 'DELETED');
     return ResponseDto.ok(await this.view(updated, clientName));
   }
 
@@ -898,12 +1206,15 @@ export class AgendaService {
         return;
       }
       case AgendaItemType.VISIT: {
-        if (!('locationId' in details)) return; // dirección libre: no hay nada que cruzar
+        // Toda visita lleva la dirección del cliente CON su punto en el mapa (F4/11 · D3): una dirección libre,
+        // o una sin coordenadas, no se puede navegar ni entrar a una ruta.
+        if (!('locationId' in details)) throw agendaVisitNeedsLocation();
         const location = await tx.clientLocation.findFirst({
           where: { id: details.locationId, clientId },
-          select: { id: true },
+          select: { id: true, address: true, latitude: true, longitude: true },
         });
         if (!location) throw agendaInvalidReference('La dirección no pertenece al cliente');
+        if (!location.address || location.latitude == null || location.longitude == null) throw agendaVisitNeedsLocation();
         return;
       }
       case AgendaItemType.PROMISE_TO_PAY: {

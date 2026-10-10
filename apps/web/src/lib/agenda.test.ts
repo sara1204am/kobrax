@@ -4,6 +4,7 @@ import {
   dayMetrics,
   dayOr,
   daySummary,
+  entrySummary,
   filterItems,
   groupByAssignee,
   groupByHour,
@@ -283,5 +284,22 @@ describe('longDay / rowTime', () => {
   it('la hora de la fila sólo existe para las de hora exacta', () => {
     expect(rowTime({ timeMode: ScheduleTimeMode.FIXED, scheduledTime: '09:30' })).toBe('09:30');
     expect(rowTime({ timeMode: ScheduleTimeMode.LAPSE, timeSlot: 'MORNING' })).toBeUndefined();
+  });
+});
+
+describe('entrySummary', () => {
+  const promise = (a: string) => `Compromiso por ${a}`;
+  const fmt = (n: number, c?: string) => `${c} ${n}`;
+
+  it('cada tipo dice lo suyo', () => {
+    expect(entrySummary({ type: 'REMINDER', details: { description: 'Llevar el recibo' } }, 'BOB', promise, fmt)).toBe('Llevar el recibo');
+    expect(entrySummary({ type: 'WHATSAPP', details: { message: 'Hola' } }, 'BOB', promise, fmt)).toBe('Hola');
+    expect(entrySummary({ type: 'PROMISE_TO_PAY', details: { amount: 300 } }, 'BOB', promise, fmt)).toBe('Compromiso por BOB 300');
+  });
+
+  it('llamada y visita usan las observaciones; sin nada no inventa una frase', () => {
+    expect(entrySummary({ type: 'VISIT', observations: 'Verificar domicilio' }, 'BOB', promise, fmt)).toBe('Verificar domicilio');
+    expect(entrySummary({ type: 'CALL' }, 'BOB', promise, fmt)).toBeUndefined();
+    expect(entrySummary({ type: 'REMINDER', details: { description: '  ' } }, 'BOB', promise, fmt)).toBeUndefined();
   });
 });

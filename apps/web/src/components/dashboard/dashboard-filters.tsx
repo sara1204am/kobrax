@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { COLLECTION_PRIORITIES, CREDIT_SOURCES, memberName, type CreditSource, type Member } from '@kobrax/shared';
@@ -25,7 +26,16 @@ interface Option {
 export function DashboardFilters({
   collectors,
   sources,
+  actions,
+  today,
 }: {
+  /** El día de la empresa (`YYYY-MM-DD`): los atajos («hoy», «7 días»…) cuentan desde ahí, no desde el reloj del navegador. */
+  today?: string;
+  /**
+   * Lo que va a la **derecha de la misma tarjeta**: la vista, Editar y, editando, las acciones del tablero. Antes eran una
+   * fila aparte encima, y con un solo tablero quedaba un renglón vacío con un único botón al borde.
+   */
+  actions?: ReactNode;
   collectors: Member[];
   /** Las fuentes que tiene la cartera (D7). Con una sola, el selector no discrimina nada y no se dibuja. */
   sources: CreditSource[];
@@ -35,7 +45,9 @@ export function DashboardFilters({
   const pathname = usePathname();
   const params = useSearchParams();
 
-  const range = presetRange('d7');
+  // Mediodía UTC: `presetRange` lee el día en UTC y así no depende de la zona de quien mira.
+  const base = today ? new Date(`${today}T12:00:00Z`) : undefined;
+  const range = presetRange('d7', base);
   const from = params.get('from') ?? range.from;
   const to = params.get('to') ?? range.to;
 
@@ -50,7 +62,7 @@ export function DashboardFilters({
 
   /** El preset que coincide con lo que hay en la URL, para que el desplegable no mienta. */
   const current = DATE_PRESETS.find((p) => {
-    const r = presetRange(p);
+    const r = presetRange(p, base);
     return r.from === from && r.to === to;
   });
 
@@ -67,7 +79,7 @@ export function DashboardFilters({
           value={current ?? 'custom'}
           onChange={(e) => {
             if (e.target.value === 'custom') return;
-            const r = presetRange(e.target.value as DatePreset);
+            const r = presetRange(e.target.value as DatePreset, base);
             set({ from: r.from, to: r.to });
           }}
           className={SELECT}
@@ -138,6 +150,9 @@ export function DashboardFilters({
           {t('filters.clear')}
         </button>
       )}
+
+      {/* `ml-auto`: pegado al borde derecho de la tarjeta; si no entra, baja y sigue a la derecha. */}
+      {actions && <div className="ml-auto flex flex-wrap items-center justify-end gap-2">{actions}</div>}
     </div>
   );
 }

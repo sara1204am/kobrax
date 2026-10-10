@@ -321,10 +321,13 @@ export default function MfaSetupScreen() {
         <OtpInput value={code} onChange={setCode} error={!!error} />
         <Button label="Activar y continuar" onPress={verify} loading={loading} disabled={code.length !== 6 || !secret} />
 
+        {/* "Lo hago después" es un botón y no un link de texto: es la única salida del login para
+            quien no puede configurar el MFA ahora, y como link perdido al final de una pantalla
+            larga (QR + clave + código) el QA no lo encontraba (M-LOG-53). */}
         {conSesion ? (
           <TextLink label="Volver" onPress={() => router.back()} />
         ) : (
-          <TextLink label="Lo hago después" onPress={despues} />
+          <Button label="Lo hago después" variant="ghost" onPress={despues} disabled={loading} />
         )}
       </Card>
       <SecurityFooter />

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
-import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button, ErrorBanner, Field, TextLink } from '@/components';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { authService } from '@/auth-service';
@@ -8,16 +8,37 @@ import { goToStep } from '@/route-step';
 import { biometricLabel, isBiometricEnabled } from '@/biometric';
 import { getSession, isSessionValid } from '@/session';
 import { API_BASE } from '@/api';
+import { clearLoginEmail, loadForgotDraft, loadLoginEmail, saveLoginEmail } from '@/auth-draft';
+import { validateLogin, type LoginFieldErrors } from '@/auth-validation';
 
 export default function LoginScreen() {
+  const passwordRef = useRef<TextInput>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Errores por campo (cliente y, si la API los manda, servidor): se pintan bajo su campo.
+  const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
   const [loading, setLoading] = useState(false);
   // Botón biométrico: solo si hay sesión local vigente + biometría activada.
   // La biometría solo desbloquea el token guardado (biometric.ts), no hace login fresco,
   // así que reutiliza la pantalla /unlock existente en vez de reimplementar el prompt.
   const [bio, setBio] = useState<string | null>(null);
+
+  // Si Android recreó la app estando en "Revisa tu correo" o con el correo a medio escribir
+  // (M-FOR-29 / M-LOG-12), vuelve a donde estaba. `forgot-password` limpia su borrador al salir, así
+  // que esto no re-abre la pantalla después de "Volver a iniciar sesión".
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const [saved, forgot] = await Promise.all([loadLoginEmail(), loadForgotDraft()]);
+      if (!alive) return;
+      if (saved) setEmail((cur) => cur || saved);
+      if (forgot?.sentAt != null) router.push('/(auth)/forgot-password');
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -30,13 +51,18 @@ export default function LoginScreen() {
 
   async function submit() {
     setError(null);
+    const invalid = validateLogin(email, password);
+    setFieldErrors(invalid);
+    if (Object.keys(invalid).length) return; // sin llamar a la API: el mensaje ya dice qué corregir
     setLoading(true);
     const res = await authService.login(email.trim(), password);
     setLoading(false);
     if ('error' in res) {
-      setError(res.error);
+      if (res.fieldErrors) setFieldErrors(res.fieldErrors); // la API marcó el campo: aviso bajo el campo
+      else setError(res.error);
       return;
     }
+    void clearLoginEmail(); // ya entró (o avanzó al MFA): el borrador cumplió
     goToStep(res.step);
   }
 
@@ -75,21 +101,45 @@ export default function LoginScreen() {
           <Field
             label="Correo electrónico"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(v) => {
+              setEmail(v);
+              void saveLoginEmail(v);
+              if (fieldErrors.email) setFieldErrors((f) => ({ ...f, email: undefined }));
+            }}
             placeholder="ejemplo@empresa.com"
             keyboardType="email-address"
             autoCapitalize="none"
-            autoComplete="email"
+            // Autofill (M-LOG-39): el correo es el "usuario" del par que guarda el gestor de contraseñas
+            // (Google en Android, llavero en iOS); con 'email' solo no lo empareja con la contraseña.
+            autoComplete="username"
+            textContentType="username"
+            importantForAutofill="yes"
+            // "Siguiente" pasa a la contraseña sin cerrar el teclado (M-LOG-04).
+            returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => passwordRef.current?.focus()}
             error={!!error}
+            errorMessage={fieldErrors.email}
           />
           <Field
+            ref={passwordRef}
             label="Contraseña"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(v) => {
+              setPassword(v);
+              if (fieldErrors.password) setFieldErrors((f) => ({ ...f, password: undefined }));
+            }}
             placeholder="Ingresa tu contraseña"
             secureTextEntry
             autoCapitalize="none"
+            autoComplete="current-password"
+            textContentType="password"
+            importantForAutofill="yes"
+            // "Ir" en la contraseña = tocar "Iniciar sesión" (si falta algo, avisa bajo el campo).
+            returnKeyType="go"
+            onSubmitEditing={() => void submit()}
             error={!!error}
+            errorMessage={fieldErrors.password}
           />
 
           <TextLink
@@ -97,7 +147,7 @@ export default function LoginScreen() {
             onPress={() => router.push('/(auth)/forgot-password')}
           />
 
-          <Button label="Iniciar sesión" onPress={submit} loading={loading} disabled={!email || !password} />
+          <Button label="Iniciar sesión" onPress={submit} loading={loading} />
 
           <TextLink label="Crear una cuenta" onPress={() => router.push('/(auth)/registro')} />
           <TextLink label="Tengo una invitación" onPress={() => router.push('/(auth)/invitacion')} />

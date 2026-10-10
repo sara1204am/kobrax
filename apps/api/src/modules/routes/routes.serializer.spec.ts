@@ -17,6 +17,63 @@ function stop(client?: unknown) {
 }
 
 describe('serializeStop', () => {
+  it('la parada trae la cuota que correspondía pagar: la primera pendiente del cronograma', () => {
+    const s = serializeStop({
+      ...(STOP as object),
+      creditInfo: {
+        outstandingBalance: 2000,
+        currency: 'BOB',
+        daysPastDue: 10,
+        origin: 'KOBRAX',
+        metadata: {},
+        installments: [
+          { number: 3, dueDate: '2026-11-07', amount: 450, paidAmount: 0, status: 'PENDING' },
+          { number: 2, dueDate: '2026-10-07', amount: 450, paidAmount: 100, status: 'OVERDUE' },
+        ],
+      },
+    } as never);
+    assert.equal(s.installmentAmount, 450);
+    assert.equal(s.nextDueDate, '2026-10-07');
+    // Lo que falta de esa cuota (450 − 100), que es con lo que arranca un cobro.
+    assert.equal(s.suggestedPaymentAmount, 350);
+  });
+
+  it('sin cronograma ni cuota congelada, no hay cuota: ausente, no 0', () => {
+    const s = serializeStop({
+      ...(STOP as object),
+      creditInfo: { outstandingBalance: 2000, currency: 'BOB', daysPastDue: 10, origin: 'KOBRAX', metadata: {}, installments: [] },
+    } as never);
+    assert.equal(s.installmentAmount, undefined);
+    assert.equal(s.nextDueDate, undefined);
+  });
+
+  it('la foto principal de la ubicación de la parada es la primera de sus fotos', () => {
+    const s = serializeStop(
+      {
+        ...(STOP as object),
+        locationId: 'l2',
+        client: {
+          firstName: 'Ana',
+          lastName: 'Ruiz',
+          businessName: null,
+          locations: [
+            { id: 'l1', locationType: 'HOME', address: 'enc:Casa', photoUrls: ['/api/uploads/casa.jpg'] },
+            { id: 'l2', locationType: 'GUARANTOR', address: 'enc:Garante', photoUrls: ['/api/uploads/g1.jpg', '/api/uploads/g2.jpg'] },
+          ],
+        },
+      } as never,
+      crypto,
+    );
+    assert.equal(s.locationPhotoUrl, '/api/uploads/g1.jpg');
+  });
+
+  it('sin fotos (o con un JSON raro) no hay foto principal y la parada sigue igual', () => {
+    const sinFotos = stop({ firstName: 'Ana', lastName: 'Ruiz', businessName: null, locations: [{ locationType: 'HOME', address: 'enc:Casa', photoUrls: [] }] });
+    assert.equal(sinFotos.locationPhotoUrl, undefined);
+    const raro = stop({ firstName: 'Ana', lastName: 'Ruiz', businessName: null, locations: [{ locationType: 'HOME', address: 'enc:Casa', photoUrls: { x: 1 } }] });
+    assert.equal(raro.locationPhotoUrl, undefined);
+  });
+
   it('persona: nombre + apellido y la dirección de su casa, descifrada', () => {
     const s = stop({
       firstName: 'Ana',

@@ -8,12 +8,18 @@ import type { AuthAccountOption, NotificationPayload } from '@kobrax/shared';
 import { LocaleSwitch } from './locale-switch';
 import { crumbsFor, type NavItem, type NavKey } from '@/lib/nav';
 import { postJson } from '@/lib/client';
+import { notificationHref } from '@/lib/notifications';
+import { publishSessionEvent } from '@/lib/session-sync';
+import { SessionWatcher } from './session-watcher';
 
 /** Fila de cualquiera de los dos menús de la topbar: 44 px de toque, ancho completo. */
 const MENU_ITEM =
   'flex min-h-[44px] w-full items-center gap-2 px-3 text-left text-[14px] text-k-text hover:bg-k-bg disabled:opacity-60';
 
 export interface ShellUser {
+  /** Con `sessionId`, identifican la sesión con la que se cargó la pestaña (W-LOG-54). */
+  userId?: string;
+  sessionId?: string;
   name: string;
   email: string;
   role: string;
@@ -36,11 +42,14 @@ export function PanelShell({
   user,
   accounts,
   nav,
+  badges,
   children,
 }: {
   user: ShellUser;
   accounts: AuthAccountOption[];
   nav: NavItem[];
+  /** Contadores del menú por rótulo (hoy sólo `agenda`). `urgent` = hay algo vencido: el contador va en rojo. */
+  badges?: Record<string, { count: number; urgent?: boolean }>;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -79,7 +88,7 @@ export function PanelShell({
       */}
       <aside className="sticky top-0 hidden h-screen w-[68px] shrink-0 flex-col bg-k-navy lg:flex xl:w-60">
         <Brand />
-        <NavList items={nav} pathname={pathname} collapsible />
+        <NavList items={nav} pathname={pathname} badges={badges} collapsible />
         <SidebarIdentity user={user} collapsible />
         <SidebarLogout collapsible />
       </aside>
@@ -101,7 +110,7 @@ export function PanelShell({
       >
         <div className="flex h-full flex-col">
           <Brand expanded />
-          <NavList items={nav} pathname={pathname} />
+          <NavList items={nav} pathname={pathname} badges={badges} />
           <SidebarIdentity user={user} />
           <SidebarLogout />
         </div>
@@ -118,6 +127,7 @@ export function PanelShell({
           }}
         />
         <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-5 sm:px-5 md:px-6 lg:px-8">
+          <SessionWatcher session={{ userId: user.userId, accountId: user.accountId, sessionId: user.sessionId }} />
           {children}
         </main>
       </div>
@@ -148,10 +158,12 @@ function Brand({ expanded = false }: { expanded?: boolean }) {
 function NavList({
   items,
   pathname,
+  badges,
   collapsible = false,
 }: {
   items: NavItem[];
   pathname: string;
+  badges?: Record<string, { count: number; urgent?: boolean }>;
   collapsible?: boolean;
 }) {
   const t = useTranslations('panel');
@@ -182,7 +194,17 @@ function NavList({
                   }`}
                 >
                   <Icon name={item.label} />
-                  <span className={labelClass}>{t(`nav.${item.label}`)}</span>
+                  <span className={`flex-1 ${labelClass}`}>{t(`nav.${item.label}`)}</span>
+                  {badges?.[item.label] && (
+                    <span
+                      aria-label={t('nav.pending', { n: badges[item.label]!.count })}
+                      className={`ml-auto rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white ${
+                        badges[item.label]!.urgent ? 'bg-k-danger' : 'bg-white/25'
+                      }`}
+                    >
+                      {badges[item.label]!.count > 99 ? '99+' : badges[item.label]!.count}
+                    </span>
+                  )}
                 </Link>
               ) : (
                 <span
@@ -230,6 +252,19 @@ function NotificationBell() {
 
   useEffect(() => {
     void load();
+    /*
+     * Se actualiza sola: antes la lista se pedía una vez al montar y un aviso nuevo no aparecía hasta recargar la
+     * página. Cada minuto, y al volver a la pestaña, SOLO si está a la vista (una pestaña escondida no gasta pedidos).
+     */
+    const tick = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+    const id = setInterval(tick, 60_000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', tick);
+    };
   }, []);
 
   async function markRead(id: string) {
@@ -270,22 +305,31 @@ function NotificationBell() {
       <div className="max-h-[360px] overflow-y-auto">
         {error && <p className="px-3 py-4 text-[13px] text-k-danger">{t('loadError')}</p>}
         {!error && items?.length === 0 && <p className="px-3 py-4 text-[13px] text-k-text-2">{t('empty')}</p>}
-        {(items ?? []).map((n) => (
-          <button
-            key={n.id}
-            type="button"
-            onClick={() => !n.readAt && void markRead(n.id)}
-            className={`flex w-full items-start gap-2 border-b border-k-border px-3 py-2.5 text-left last:border-b-0 hover:bg-k-bg ${
-              n.readAt ? '' : 'bg-k-highlight/40'
-            }`}
-          >
-            {!n.readAt && <span aria-hidden className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-k-purple" />}
-            <span className={`min-w-0 flex-1 ${n.readAt ? 'pl-3.5' : ''}`}>
-              <span className="block truncate text-[13px] font-medium text-k-text">{n.title}</span>
-              {n.body && <span className="block truncate text-[12px] text-k-text-2">{n.body}</span>}
-            </span>
-          </button>
-        ))}
+        {(items ?? []).map((n) => {
+          const href = notificationHref(n);
+          const cls = `flex w-full items-start gap-2 border-b border-k-border px-3 py-2.5 text-left last:border-b-0 hover:bg-k-bg ${
+            n.readAt ? '' : 'bg-k-highlight/40'
+          }`;
+          const body = (
+            <>
+              {!n.readAt && <span aria-hidden className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-k-purple" />}
+              <span className={`min-w-0 flex-1 ${n.readAt ? 'pl-3.5' : ''}`}>
+                <span className="block truncate text-[13px] font-medium text-k-text">{n.title}</span>
+                {n.body && <span className="block truncate text-[12px] text-k-text-2">{n.body}</span>}
+              </span>
+            </>
+          );
+          // Con destino, el aviso es un enlace (y se marca leído al tocarlo); sin destino, solo se marca leído.
+          return href ? (
+            <Link key={n.id} href={href} onClick={() => !n.readAt && void markRead(n.id)} className={cls}>
+              {body}
+            </Link>
+          ) : (
+            <button key={n.id} type="button" onClick={() => !n.readAt && void markRead(n.id)} className={cls}>
+              {body}
+            </button>
+          );
+        })}
       </div>
     </Dropdown>
   );
@@ -414,6 +458,13 @@ export function Dropdown({
   panelClass?: string;
 }) {
   const ref = useRef<HTMLDetailsElement>(null);
+  const pathname = usePathname();
+
+  // Al llegar a otra pantalla el desplegable se cierra: tocar un aviso de la campanita navega, y el panel no puede
+  // quedar abierto tapando la pantalla a la que se fue.
+  useEffect(() => {
+    if (ref.current) ref.current.open = false;
+  }, [pathname]);
 
   useEffect(() => {
     function close(e: Event) {
@@ -468,6 +519,8 @@ function AccountList({ accounts, activeId }: { accounts: AuthAccountOption[]; ac
      * no hay estado de pantalla que valga la pena preservar, el mismo motivo por el que el
      * selector de idioma recarga.
      */
+    // Las demás pestañas del navegador comparten la cookie: tienen que enterarse del cambio.
+    publishSessionEvent('switch');
     window.location.reload();
   }
 
@@ -534,6 +587,7 @@ function SidebarLogout({ collapsible = false }: { collapsible?: boolean }) {
         onClick={async () => {
           setBusy(true);
           await postJson('/api/auth/logout', {});
+          publishSessionEvent('logout');
           router.replace('/login');
         }}
         disabled={busy}

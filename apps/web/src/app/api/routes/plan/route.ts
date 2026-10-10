@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import type { MoraCreditListItem, RouteItem } from '@kobrax/shared';
+import type { AgendaListItem, MoraCreditListItem, RouteItem } from '@kobrax/shared';
 import { apiCall, sameOrigin } from '@/lib/bff';
 
 /**
@@ -41,14 +41,18 @@ interface PlanBody {
    * de otro como ayuda de esa jornada, y el responsable del crédito **no cambia** (decisión de la
    * dueña, W11). La parada guarda el crédito; la cartera sigue diciendo de quién es la deuda.
    */
-  assignments?: { collectorId: string; creditIds: string[] }[];
+  assignments?: { collectorId: string; creditIds: string[]; locations?: Record<string, string> }[];
+  /** Exige punto en el mapa en TODAS las paradas (el planificador por pasos): sin él no hay recorrido ni hora de llegada. */
+  requirePoints?: boolean;
   dryRun?: boolean;
 }
 
 export interface PlanRow {
   collectorId: string;
-  /** Créditos en mora que tiene, hasta el tope pedido. */
+  /** Paradas que tendrá la ruta: los créditos en mora (hasta el tope pedido) más las visitas agendadas de ese día. */
   stops: number;
+  /** Cuántas de esas paradas son visitas agendadas para ese día: entran solas a la ruta (F4/11). */
+  visits?: number;
   /** Ya tenía una ruta ese día: no se le crea otra (la base tampoco deja). */
   alreadyHasRoute?: boolean;
   /** Se creó de verdad (sólo fuera de `dryRun`). */
@@ -67,7 +71,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const body = (await req.json().catch(() => null)) as PlanBody | null;
   const day = body?.plannedDate ?? '';
   // Una fila por cobrador. En el modo a mano trae sus créditos; en el automático los elige el handler.
-  const asignaciones: { collectorId: string; creditIds?: string[] }[] = body?.assignments?.length
+  const asignaciones: { collectorId: string; creditIds?: string[]; locations?: Record<string, string> }[] = body?.assignments?.length
     ? body.assignments.filter((a) => a.collectorId && a.creditIds?.length)
     : [...new Set(body?.collectorIds ?? [])].map((collectorId) => ({ collectorId }));
   const collectorIds = asignaciones.map((a) => a.collectorId);
@@ -95,10 +99,24 @@ export async function POST(req: Request): Promise<NextResponse> {
   const existing = await apiCall<RouteItem[]>(`/routes?date=${day}&limit=100`, { method: 'GET', auth: true });
   const conRuta = new Set((existing.body.data ?? []).map((r) => r.collectorId));
 
+  /*
+   * Las visitas agendadas de ese día, por cobrador. La API las suma sola al generar la ruta; se leen acá para que la
+   * revisión previa cuente las mismas paradas que se van a crear y para no descartar a un cobrador que solo tiene visitas.
+   * Si la agenda no responde, se sigue sin ellas: la planificación por mora no depende de la agenda.
+   */
+  const visitasPorCobrador = new Map<string, string[]>();
+  const agenda = await apiCall<AgendaListItem[]>(`/agenda?date=${day}`, { method: 'GET', auth: true }).catch(() => null);
+  for (const item of agenda?.body.data ?? []) {
+    if (item.type !== 'VISIT' || item.status !== 'SCHEDULED') continue;
+    const list = visitasPorCobrador.get(item.assigneeId) ?? [];
+    if (!list.includes(item.creditId)) list.push(item.creditId);
+    visitasPorCobrador.set(item.assigneeId, list);
+  }
+
   const rows: PlanRow[] = [];
   for (const a of asignaciones) {
     rows.push(
-      await planOne(a.collectorId, day, stopsPerRoute, conRuta.has(a.collectorId), body?.dryRun === true, a.creditIds),
+      await planOne(a.collectorId, day, stopsPerRoute, conRuta.has(a.collectorId), body?.dryRun === true, a.creditIds, visitasPorCobrador.get(a.collectorId) ?? [], a.locations, body?.requirePoints === true),
     );
   }
 
@@ -113,6 +131,11 @@ async function planOne(
   dryRun: boolean,
   /** Los créditos elegidos a mano. Sin esto, los elige el handler: los suyos, los más urgentes. */
   chosen?: string[],
+  /** Los créditos de las visitas agendadas de ese cobrador ese día: la API las suma a la ruta. */
+  visitCredits: string[] = [],
+  /** La ubicación concreta de cada crédito (`creditId` → `client_locations.id`), si se eligió. */
+  locations?: Record<string, string>,
+  requirePoints = false,
 ): Promise<PlanRow> {
   let creditIds = chosen ?? [];
 
@@ -127,15 +150,23 @@ async function planOne(
     }
     creditIds = (credits.body.data ?? []).map((c) => c.creditId);
   }
-  const row: PlanRow = { collectorId, stops: creditIds.length, ...(alreadyHasRoute ? { alreadyHasRoute: true } : {}) };
+  // Una visita sobre un crédito que ya va por mora es la misma parada: se cuenta una sola vez.
+  const soloVisita = visitCredits.filter((id) => !creditIds.includes(id));
+  const total = creditIds.length + soloVisita.length;
+  const row: PlanRow = {
+    collectorId,
+    stops: total,
+    ...(visitCredits.length > 0 ? { visits: visitCredits.length } : {}),
+    ...(alreadyHasRoute ? { alreadyHasRoute: true } : {}),
+  };
 
-  // Sin créditos no se arma una ruta vacía, y con ruta ya armada no se pisa la que hay.
-  if (dryRun || alreadyHasRoute || creditIds.length === 0) return row;
+  // Sin paradas no se arma una ruta vacía, y con ruta ya armada no se pisa la que hay.
+  if (dryRun || alreadyHasRoute || total === 0) return row;
 
   const created = await apiCall<RouteItem>('/routes/generate', {
     method: 'POST',
     auth: true,
-    body: JSON.stringify({ collectorId, plannedDate, creditIds }),
+    body: JSON.stringify({ collectorId, plannedDate, creditIds, ...(locations ? { locations } : {}), ...(requirePoints ? { requirePoints } : {}) }),
   });
   if (created.status >= 400) return { ...row, error: created.body.error?.message };
   return { ...row, created: true };

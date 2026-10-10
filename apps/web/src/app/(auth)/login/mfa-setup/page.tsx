@@ -19,6 +19,15 @@ export default function MfaSetupPage() {
   const [loading, setLoading] = useState(false);
   const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
   const [pending, setPending] = useState<{ step: Step; accounts?: AccountOption[] } | null>(null);
+  const [skipping, setSkipping] = useState(false);
+  /** Ya hay una sesión abierta (llegó desde adentro del panel): no hay login que postergar, solo volver. */
+  const [hasSession, setHasSession] = useState(false);
+
+  useEffect(() => {
+    void fetch('/api/auth/me')
+      .then((res) => setHasSession(res.ok))
+      .catch(() => undefined);
+  }, []);
 
   // Arranca el enroll (genera el secreto) al entrar. Deps vacías a propósito: correrlo de nuevo
   // generaría un secreto nuevo y dejaría inservible el QR que la usuaria ya escaneó.
@@ -55,6 +64,22 @@ export default function MfaSetupPage() {
     }
     setBackupCodes(data.backupCodes);
     setPending({ step: data.step, accounts: data.accounts });
+  }
+
+  /** «Lo hago después»: entra sin activar MFA; el panel lo recuerda hasta que lo active. */
+  async function later() {
+    if (skipping || loading) return;
+    setError(null);
+    setSkipping(true);
+    const { ok, data } = await postJson<{ step: Step; accounts?: AccountOption[] }>('/api/auth/mfa/setup', {
+      action: 'skip',
+    });
+    setSkipping(false);
+    if (!ok) {
+      setError(data.error?.message ?? t('skipError'));
+      return;
+    }
+    routeByStep(router, data.step, data.accounts);
   }
 
   function downloadCodes() {
@@ -119,6 +144,15 @@ export default function MfaSetupPage() {
         <Button onClick={verify} loading={loading} disabled={code.length !== 6 || !secret}>
           {t('activate')}
         </Button>
+        {hasSession ? (
+          <Button variant="ghost" onClick={() => router.push('/settings/security')}>
+            {t('back')}
+          </Button>
+        ) : (
+          <Button variant="ghost" onClick={later} loading={skipping} disabled={loading}>
+            {t('later')}
+          </Button>
+        )}
       </div>
     </AuthShell>
   );

@@ -20,6 +20,7 @@ import { getRoute, listRoutes, routeProgress, type RouteItem } from '@/routes.se
 import { listByDay, listOverdue, type AgendaListItem } from '@/agenda.service';
 import { listPaymentsByDay } from '@/payments.service';
 import { money, todayISO } from '@/agenda-form';
+import { syncAgendaReminders } from '@/agenda-notifications';
 import { dayProgress, dueSoon, queuedCollectedToday, upNext, type DayProgress } from '@/home';
 import { pendingActions } from '@/sync/queue';
 import { unreadCount } from '@/notifications.service';
@@ -77,6 +78,8 @@ export default function InicioScreen() {
     ]);
 
     const items = agendaRes.status === 'ok' ? agendaRes.data : [];
+    // Los avisos de hoy (parcial: solo las gestiones de esta lista; la semana entera la programa la hidratación).
+    if (agendaRes.status === 'ok') void syncAgendaReminders(agendaRes.data, { complete: false });
 
     // ponytail: filtro por status IN_PROGRESS (no por fecha) — un cobrador tiene a lo sumo una
     // ruta activa; evita el match exacto de datetime del backend en `plannedDate`.
@@ -169,8 +172,15 @@ export default function InicioScreen() {
           </View>
           <ProgressBar percent={progress.percent} />
           <View style={styles.tiles}>
-            <StatTile label="PENDIENTES" value={String(progress.pending)} onDark />
-            <StatTile label="VENCIDOS" value={String(home.overdue)} tone={home.overdue > 0 ? 'danger' : 'neutral'} onDark />
+            <StatTile label="PENDIENTES" value={String(progress.pending)} onDark onPress={() => router.push('/(tabs)/agenda')} />
+            <StatTile
+              label="VENCIDOS"
+              value={String(home.overdue)}
+              tone={home.overdue > 0 ? 'danger' : 'neutral'}
+              onDark
+              // Abre la Agenda, donde las vencidas van arriba de todo: antes era una cifra que no llevaba a ningún lado.
+              onPress={() => router.push('/(tabs)/agenda')}
+            />
             <StatTile label="COBRADO HOY" value={home.collected} tone="success" onDark />
           </View>
         </View>

@@ -34,7 +34,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           // Errores de class-validator
           code = 'VALIDATION_ERROR';
           message = 'Validación fallida';
-          details = b.message;
+          // `fields` (lo pone el pipe global) trae los mensajes agrupados por campo.
+          details =
+            b.fields && typeof b.fields === 'object' ? { fields: b.fields, messages: b.message } : b.message;
         } else {
           message = (b.message as string) ?? exception.message;
         }

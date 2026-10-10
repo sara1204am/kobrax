@@ -2,10 +2,12 @@ import { useEffect, useRef } from 'react';
 import { AppState, View, type AppStateStatus } from 'react-native';
 import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as Notifications from 'expo-notifications';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getSession, shouldRelock } from '@/session';
 import { isBiometricEnabled } from '@/biometric';
 import { OfflineIndicator } from '@/ui';
+import { configureAgendaNotifications, itemIdOfNotification } from '@/agenda-notifications';
 import { COLORS } from '@/theme';
 
 const AWAY = /inactive|background/;
@@ -13,6 +15,17 @@ const AWAY = /inactive|background/;
 export default function RootLayout() {
   const appState = useRef(AppState.currentState);
   const leftAt = useRef<number | null>(null);
+
+  // Avisos locales de la agenda: cómo se muestran y, al tocar uno, abrir la gestión de la que habla. Si la sesión está bloqueada, el
+  // desbloqueo va primero (el aviso solo trae el id: el detalle pide sus datos con la sesión ya abierta).
+  useEffect(() => {
+    void configureAgendaNotifications();
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const id = itemIdOfNotification(response.notification.request.content.data);
+      if (id) router.push(`/agenda/${id}`);
+    });
+    return () => sub.remove();
+  }, []);
 
   // Endurecimiento (historia 15): al volver a primer plano, re-evaluar la sesión.
   // Se mide CUÁNTO estuvo afuera, no sólo que volvió: un permiso de GPS, la cámara o un salto a

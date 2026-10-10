@@ -15,8 +15,11 @@ export async function KpiWidget({
   kpi,
   format,
   parts,
+  label,
 }: {
   kpi: KpiValue;
+  /** El rótulo va DEBAJO del número, como en las tarjetas de la agenda. */
+  label: string;
   format: (value: number) => string;
   /**
    * D7: lo que aporta cada fuente a este número, cuando el tablero mira más de una. Sumarlas sin
@@ -28,8 +31,9 @@ export async function KpiWidget({
   const delta = deltaOf(kpi);
 
   return (
-    <div>
-      <p className="text-[22px] font-semibold leading-tight text-k-navy">{format(kpi.value)}</p>
+    <div className="text-center">
+      <p className="text-[24px] font-semibold leading-tight text-k-navy">{format(kpi.value)}</p>
+      <p className="mt-0.5 text-[12px] font-medium text-k-text-2">{label}</p>
       {delta ? (
         <p className={`mt-1 text-[12px] ${delta.up ? 'text-k-success' : 'text-k-danger'}`}>
           {delta.up ? '↑' : '↓'} {Math.abs(delta.pct)}% <span className="text-k-muted">{t('vsPrevious')}</span>

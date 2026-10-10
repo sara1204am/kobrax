@@ -16,7 +16,7 @@ function isoUTC(offsetDays = 0): string {
 
 function row(over: Record<string, unknown> = {}) {
   return {
-    id: 'a1', clientId: 'cl1', creditId: 'cr1', assigneeId: 'u1',
+    id: 'a1', clientId: 'cl1', creditId: 'cr1', assigneeId: 'u1', createdBy: 'u1',
     type: 'CALL', status: 'SCHEDULED', priorityCode: null, expectedResultCode: null,
     scheduledDate: new Date('2026-07-08'), timeMode: 'FIXED', scheduledTime: '09:00',
     timeSlot: null, observations: null, details: {}, resultActivityId: null,
@@ -60,6 +60,23 @@ interface Opts {
   categories?: Record<string, unknown>[];
   /** `userAccount` de la cuenta (nombres de quienes atienden). */
   userAccounts?: unknown[];
+  /** Miembros que `resolveAssignee` busca por id (destinatarios de una asignación). */
+  members?: { userId: string; isActive: boolean; branchId: string | null; role: { name: string } }[];
+  /** La membresía de quien opera (u1): su agencia. */
+  me?: { branchId: string | null };
+  /** `summary`: cuántas pendientes de hoy / vencidas, y su reparto por persona. */
+  todayCount?: number;
+  overdueCount?: number;
+  todayBy?: { assigneeId: string; _count: { _all: number } }[];
+  overdueBy?: { assigneeId: string; _count: { _all: number } }[];
+  /** `findOne`: las actividades de bitácora que cerraron gestiones (resultado y nota). */
+  activities?: { id: string; result: string | null; notes: string | null; userId: string | null; createdAt: Date }[];
+  /** `findOne`: la gestión a la que se movió una reagendada. */
+  successor?: { id: string; scheduledDate: Date } | null;
+  /** La parada activa que lleva la gestión (visita en ruta). */
+  activeStop?: { id: string; routeId?: string; status?: string } | null;
+  /** La ruta del cobrador ese día (planificada o en curso). */
+  route?: { id: string; status: string } | null;
 }
 
 function makeService(opts: Opts = {}) {
@@ -79,6 +96,10 @@ function makeService(opts: Opts = {}) {
     activity: undefined as Record<string, unknown> | undefined,
     updated: undefined as Record<string, unknown> | undefined,
     events: [] as string[],
+    eventPayloads: [] as { event: string; payload: Record<string, unknown> }[],
+    stopOps: [] as Record<string, unknown>[],
+    counts: [] as unknown[],
+    reminderCancels: [] as { where: Record<string, unknown>; data: Record<string, unknown> }[],
     /** Cuántas veces se consultó cada tabla del enriquecimiento: tiene que ser UNA por página (sin N+1). */
     queries: { credit: 0, category: 0, users: 0 },
     creditSelect: undefined as Record<string, unknown> | undefined,
@@ -97,11 +118,18 @@ function makeService(opts: Opts = {}) {
         return opts.rows ?? [];
       },
       findFirst: async (args: { where?: Record<string, unknown> }) => {
+        // La gestión a la que se movió una reagendada (`rescheduledFromId`), no la del scope.
+        if (args.where?.rescheduledFromId !== undefined) return opts.successor ?? null;
         calls.itemWhere = args.where;
         if (opts.createRace) return raced ? opts.createRace : null;
         return opts.item ?? null;
       },
-      count: async () => (opts.rows ?? []).length,
+      count: async (args?: { where?: { scheduledDate?: unknown } }) => {
+        // `summary` cuenta dos veces: hoy (fecha exacta) y vencidas (`lt`).
+        calls.counts.push(args?.where?.scheduledDate);
+        return args?.where?.scheduledDate instanceof Date ? (opts.todayCount ?? 0) : (opts.overdueCount ?? 0);
+      },
+      groupBy: async (args: { where: { scheduledDate: unknown } }) => (args.where.scheduledDate instanceof Date ? (opts.todayBy ?? []) : (opts.overdueBy ?? [])),
       create: async (args: { data: Record<string, unknown> }) => {
         if (opts.createRace && !raced) {
           raced = true;
@@ -117,8 +145,15 @@ function makeService(opts: Opts = {}) {
         calls.updated = args.data;
         return row({ ...(opts.item ?? {}), ...args.data, id: args.where.id });
       },
+      // El recordatorio de la promesa se cancela con `updateMany` sobre `details.promiseItemId`.
+      updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        calls.reminderCancels.push(args);
+        return { count: 1 };
+      },
     },
     creditActivity: {
+      // El detalle y su historial piden el resultado de las ejecutadas.
+      findMany: async () => opts.activities ?? [],
       findFirst: async () => opts.priorActivity ?? null,
       create: async (args: { data: Record<string, unknown> }) => {
         calls.activity = args.data;
@@ -158,6 +193,8 @@ function makeService(opts: Opts = {}) {
         calls.queries.users += 1;
         return opts.userAccounts ?? [];
       },
+      findFirst: async (args: { where?: { userId?: string } }) =>
+        args.where?.userId === 'u1' ? (opts.me ?? { branchId: null }) : ((opts.members ?? []).find((m) => m.userId === args.where?.userId) ?? null),
     },
     clientContact: { findFirst: async () => first(opts.contacts as unknown[]) },
     clientLocation: { findFirst: async () => first(opts.locations as unknown[]) },
@@ -166,6 +203,28 @@ function makeService(opts: Opts = {}) {
       findMany: async () => opts.catalogRows ?? [],
     },
     creditInstallment: { groupBy: async () => opts.installments ?? [] },
+    // Paradas y rutas: el vínculo visita ↔ parada (F4/11). Cada escritura queda anotada en `calls.stopOps`.
+    routeStop: {
+      findFirst: async () => opts.activeStop ?? null,
+      findMany: async () => (opts.activeStop ? [{ id: opts.activeStop.id, routeId: opts.activeStop.routeId ?? 'r1' }] : []),
+      count: async () => 0,
+      create: async (args: { data: Record<string, unknown> }) => {
+        calls.stopOps.push({ op: 'create', ...args.data });
+        return {};
+      },
+      update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+        calls.stopOps.push({ op: 'update', id: args.where.id, ...args.data });
+        return {};
+      },
+      delete: async (args: { where: { id: string } }) => {
+        calls.stopOps.push({ op: 'delete', id: args.where.id });
+        return {};
+      },
+    },
+    routePlan: {
+      findFirst: async () => opts.route ?? null,
+      update: async () => ({}),
+    },
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
   const perms = opts.permissions ?? [];
@@ -204,7 +263,12 @@ function makeService(opts: Opts = {}) {
       };
     },
   };
-  const events = { emit: (e: string) => void calls.events.push(e) };
+  const events = {
+    emit: (e: string, payload?: unknown) => {
+      calls.events.push(e);
+      calls.eventPayloads.push({ event: e, payload: payload as Record<string, unknown> });
+    },
+  };
   // El reloj del tenant, fijado en UTC: los tests arman sus fechas con `isoUTC`, que es la misma vara.
   const clock = { today: async () => new Date(`${isoUTC(0)}T00:00:00.000Z`) };
   const service = new AgendaService(
@@ -766,9 +830,20 @@ describe('AgendaService.create', () => {
     await expectError(() => service.create(createDto()), 'AGENDA_006');
   });
 
-  it('VISIT con dirección libre no cruza contra la DB', async () => {
+  it('VISIT con dirección libre → AGENDA_013: toda visita lleva la ubicación del domicilio (F4/11)', async () => {
     const { service } = makeService({ credits: [creditRow()], locations: [] });
-    await service.create(createDto({ type: 'VISIT', details: { customAddress: { address: 'Calle 1' } } }));
+    await expectError(() => service.create(createDto({ type: 'VISIT', details: { customAddress: { address: 'Calle 1' } } })), 'AGENDA_013');
+  });
+
+  it('VISIT con una dirección sin coordenadas → AGENDA_013', async () => {
+    const { service } = makeService({ credits: [creditRow()], locations: [{ id: LOCATION, address: 'Av. 1', latitude: null, longitude: null }] });
+    await expectError(() => service.create(createDto({ type: 'VISIT', details: { locationId: LOCATION } })), 'AGENDA_013');
+  });
+
+  it('VISIT con dirección y coordenadas se agenda', async () => {
+    const { service, calls } = makeService({ credits: [creditRow()], locations: [{ id: LOCATION, address: 'Av. 1', latitude: -16.5, longitude: -68.1 }] });
+    await service.create(createDto({ type: 'VISIT', details: { locationId: LOCATION } }));
+    assert.equal(calls.created!.type, 'VISIT');
   });
 
   it('VISIT con locationId ajeno → AGENDA_006', async () => {
@@ -1099,5 +1174,510 @@ describe('AgendaService · alcance por crédito con AGENDA_ASSIGN', () => {
     const { service, calls } = makeService({ permissions: SUP, credits: [], item: null });
     await expectError(() => service.cancel('a1', { reasonCode: 'CLIENT_REQUEST' } as never), 'AGENDA_NOT_FOUND');
     assert.deepEqual(calls.itemWhere!.creditId, { in: [] });
+  });
+});
+
+// ── Asignar a otra persona, «asignada por» y autoría (F4/09) ───────────────────────────────────
+
+const COLLECTOR_OK = { userId: 'u7', isActive: true, branchId: 'b1', role: { name: 'COLLECTOR' } };
+
+describe('AgendaService.create · a quién se asigna (F4/09)', () => {
+  const create = (opts: Opts, dto: Record<string, unknown> = {}) => {
+    const { service, calls } = makeService({ credits: [creditRow()], contacts: [{ id: CONTACT }], ...opts });
+    return { run: () => service.create(createDto(dto)), calls };
+  };
+
+  it('un cobrador no puede asignarle a otro: AGENDA_010', async () => {
+    const { run } = create({ permissions: ['agenda:write'], members: [COLLECTOR_OK] }, { assigneeId: 'u7' });
+    await expectError(run, 'AGENDA_010');
+  });
+
+  it('un cobrador sí puede mandar su propio id', async () => {
+    const { run, calls } = create({ permissions: ['agenda:write'] }, { assigneeId: 'u1' });
+    await run();
+    assert.equal(calls.created!.assigneeId, 'u1');
+    assert.equal(calls.created!.createdBy, 'u1');
+  });
+
+  it('sin assigneeId queda para el responsable del crédito, como siempre', async () => {
+    const { run, calls } = create({ permissions: ['agenda:write'], credits: [creditRow({ assignedManagerId: 'u5' })] });
+    await run();
+    assert.equal(calls.created!.assigneeId, 'u5');
+  });
+
+  it('el supervisor asigna a un cobrador de su agencia; el id explícito gana sobre el responsable del crédito', async () => {
+    const { run, calls } = create({ permissions: ['agenda:write', 'agenda:assign', 'data:scope:branch'], me: { branchId: 'b1' }, members: [COLLECTOR_OK] }, { assigneeId: 'u7' });
+    await run();
+    assert.equal(calls.created!.assigneeId, 'u7');
+    assert.equal(calls.created!.createdBy, 'u1');
+  });
+
+  it('el supervisor no asigna a alguien de otra agencia: AGENDA_011', async () => {
+    const { run } = create(
+      { permissions: ['agenda:write', 'agenda:assign', 'data:scope:branch'], me: { branchId: 'b1' }, members: [{ ...COLLECTOR_OK, branchId: 'b2' }] },
+      { assigneeId: 'u7' },
+    );
+    await expectError(run, 'AGENDA_011');
+  });
+
+  it('un supervisor sin agencia no asigna a nadie más (falla cerrado)', async () => {
+    const { run } = create(
+      { permissions: ['agenda:write', 'agenda:assign', 'data:scope:branch'], me: { branchId: null }, members: [{ ...COLLECTOR_OK, branchId: null }] },
+      { assigneeId: 'u7' },
+    );
+    await expectError(run, 'AGENDA_011');
+  });
+
+  it('el gerente (alcance total) asigna a un cobrador de cualquier agencia', async () => {
+    const { run, calls } = create(
+      { permissions: ['agenda:write', 'agenda:assign', 'data:scope:all'], me: { branchId: 'b1' }, members: [{ ...COLLECTOR_OK, branchId: 'b2' }] },
+      { assigneeId: 'u7' },
+    );
+    await run();
+    assert.equal(calls.created!.assigneeId, 'u7');
+  });
+
+  it('no se asigna a un gerente, a un inactivo ni a quien no existe: AGENDA_011', async () => {
+    const perms = ['agenda:write', 'agenda:assign', 'data:scope:all'];
+    for (const members of [
+      [{ ...COLLECTOR_OK, role: { name: 'MANAGER' } }],
+      [{ ...COLLECTOR_OK, isActive: false }],
+      [],
+    ]) {
+      const { run } = create({ permissions: perms, members }, { assigneeId: 'u7' });
+      await expectError(run, 'AGENDA_011');
+    }
+  });
+});
+
+describe('AgendaService · solo el creador edita y elimina (F4/09)', () => {
+  const ADMIN = ['agenda:write', 'agenda:assign', 'data:scope:all'];
+
+  it('quien no la creó no la edita, ni siquiera el administrador: AGENDA_012', async () => {
+    const { service } = makeService({ permissions: ADMIN, item: row({ assigneeId: 'u9', createdBy: 'u2' }) });
+    await expectError(() => service.update('a1', { observations: 'x' } as never), 'AGENDA_012');
+  });
+
+  it('el responsable a quien se la asignaron tampoco la edita', async () => {
+    const { service } = makeService({ permissions: ['agenda:write'], item: row({ assigneeId: 'u1', createdBy: 'u2' }) });
+    await expectError(() => service.update('a1', { observations: 'x' } as never), 'AGENDA_012');
+  });
+
+  it('quien no la creó no la elimina, ni siquiera el administrador: AGENDA_012', async () => {
+    const { service, calls } = makeService({ permissions: ADMIN, item: row({ assigneeId: 'u9', createdBy: 'u2' }) });
+    await expectError(() => service.remove('a1'), 'AGENDA_012');
+    assert.equal(calls.updated, undefined);
+  });
+
+  it('una sin creador (recordatorio automático) es de su responsable, no de un tercero ni de un administrador', async () => {
+    const ajena = makeService({ permissions: ADMIN, item: row({ createdBy: null, assigneeId: 'u9' }) });
+    await expectError(() => ajena.service.update('a1', { observations: 'x' } as never), 'AGENDA_012');
+    await expectError(() => ajena.service.remove('a1'), 'AGENDA_012');
+
+    const propia = makeService({ item: row({ createdBy: null, assigneeId: 'u1', type: 'REMINDER', details: { description: 'Cobrar cuota' } }) });
+    await propia.service.remove('a1');
+    assert.ok(propia.calls.updated!.deletedAt instanceof Date, 'el responsable puede quitar su recordatorio automático');
+  });
+
+  it('el creador sí edita y elimina aunque se la haya asignado a otro', async () => {
+    const { service, calls } = makeService({ permissions: ADMIN, item: row({ assigneeId: 'u9', createdBy: 'u1' }) });
+    await service.update('a1', { observations: 'nota' } as never);
+    assert.equal(calls.updated!.observations, 'nota');
+    await service.remove('a1');
+    assert.ok(calls.updated!.deletedAt instanceof Date);
+  });
+
+  it('reagendar conserva al creador: quien reagenda no pasa a ser el dueño', async () => {
+    const { service, calls } = makeService({ item: row({ assigneeId: 'u1', createdBy: 'u2' }), catalog: { code: 'CLIENT_REQUEST' } });
+    await service.reschedule('a1', { scheduledDate: isoUTC(2), timeMode: 'FIXED', scheduledTime: '10:00', reasonCode: 'CLIENT_REQUEST' } as never);
+    assert.equal(calls.created!.createdBy, 'u2');
+  });
+});
+
+describe('AgendaService · «asignada por» (F4/09)', () => {
+  const NAMES = [
+    { userId: 'u1', user: { profile: { firstName: 'Carlos', lastName: 'Collector' }, email: 'carlos@x.com' } },
+    { userId: 'u2', user: { profile: { firstName: 'Sandra', lastName: 'Soria' }, email: 'sandra@x.com' } },
+  ];
+
+  it('en la lista aparece el nombre de quien la creó solo si no es el responsable', async () => {
+    const { service } = makeService({
+      permissions: ['agenda:assign'],
+      rows: [row({ id: 'a1', assigneeId: 'u1', createdBy: 'u2' }), row({ id: 'a2', assigneeId: 'u1', createdBy: 'u1' })],
+      userAccounts: NAMES,
+    });
+    const res = await service.listByDay({ date: '2026-07-08' });
+    assert.equal(res.data![0]!.assignedByName, 'Sandra Soria');
+    assert.equal(res.data![0]!.createdBy, 'u2');
+    assert.equal(res.data![0]!.canEdit, false, 'la creó u2, no quien mira (u1)');
+    assert.equal(res.data![1]!.canEdit, true, 'la creó quien mira y está pendiente');
+    assert.equal(res.data![1]!.assignedByName, undefined);
+    assert.ok(!JSON.stringify(res.data).includes('@x.com'), 'nunca el correo');
+  });
+
+  it('una gestión suelta (alta, edición…) también la trae', async () => {
+    const { service } = makeService({
+      permissions: ['agenda:write', 'agenda:assign', 'data:scope:all'],
+      credits: [creditRow()],
+      contacts: [{ id: CONTACT }],
+      members: [COLLECTOR_OK],
+      userAccounts: NAMES,
+    });
+    const res = await service.create(createDto({ assigneeId: 'u7' }));
+    assert.equal(res.data!.assigneeId, 'u7');
+    assert.equal(res.data!.assignedByName, 'Carlos Collector');
+  });
+});
+
+describe('AgendaService.listAssignees (F4/09)', () => {
+  it('devuelve nombre y rol, ordenados, sin correo ni teléfono', async () => {
+    const { service } = makeService({
+      permissions: ['agenda:assign'],
+      userAccounts: [
+        { userId: 'u7', branchId: 'b1', role: { name: 'COLLECTOR' }, user: { profile: { firstName: 'Rosa', lastName: 'Aliaga' }, email: 'r@x.com' } },
+        { userId: 'u1', branchId: 'b1', role: { name: 'SUPERVISOR' }, user: { profile: { firstName: 'Ana', lastName: 'Zeta' }, email: 'a@x.com' } },
+      ],
+    });
+    const res = await service.listAssignees();
+    assert.deepEqual(res.data!.map((m) => m.userId), ['u1', 'u7']);
+    assert.deepEqual(Object.keys(res.data![0]!).sort(), ['branchId', 'firstName', 'lastName', 'roleName', 'userId']);
+    assert.ok(!JSON.stringify(res.data).includes('@x.com'));
+  });
+});
+
+// ── Visita ↔ ruta (F4/11 · E1) ─────────────────────────────────────────────────────────────────
+
+describe('AgendaService · la visita y su ruta (F4/11)', () => {
+  const VISIT = (over: Record<string, unknown> = {}) => row({ type: 'VISIT', details: { locationId: LOCATION }, ...over });
+
+  it('una visita que una ruta lleva se registra desde la parada: AGENDA_014', async () => {
+    const { service } = makeService({ item: VISIT(), activeStop: { id: 's1' } });
+    await expectError(() => service.complete('a1', { outcome: 'CONTACTED' } as never), 'AGENDA_014');
+  });
+
+  it('una visita sin parada se ejecuta como siempre', async () => {
+    const { service, calls } = makeService({ item: VISIT(), activeStop: null });
+    await service.complete('a1', { outcome: 'CONTACTED' } as never);
+    assert.equal(calls.updated!.status, 'EXECUTED');
+  });
+
+  it('reagendar la visita saca la parada de la ruta planificada (se borra)', async () => {
+    const { service, calls } = makeService({
+      item: VISIT(),
+      catalog: { code: 'CLIENT_REQUEST' },
+      activeStop: { id: 's1', routeId: 'r1' },
+      route: { id: 'r1', status: 'PLANNED' },
+    });
+    await service.reschedule('a1', { scheduledDate: isoUTC(2), timeMode: 'FIXED', scheduledTime: '10:00', reasonCode: 'CLIENT_REQUEST' } as never);
+    assert.ok(calls.stopOps.some((o) => o.op === 'delete' && o.id === 's1'));
+  });
+
+  it('cancelar la visita con la ruta en curso deja la parada SALTEADA, no la borra', async () => {
+    const { service, calls } = makeService({
+      item: VISIT(),
+      catalog: { code: 'CLIENT_UNAVAILABLE' },
+      activeStop: { id: 's1', routeId: 'r1' },
+      route: { id: 'r1', status: 'IN_PROGRESS' },
+    });
+    await service.cancel('a1', { reasonCode: 'CLIENT_UNAVAILABLE' } as never);
+    assert.ok(calls.stopOps.some((o) => o.op === 'update' && o.id === 's1' && o.status === 'SKIPPED'));
+    assert.ok(!calls.stopOps.some((o) => o.op === 'delete'));
+  });
+
+  it('eliminar la visita también la saca de la ruta planificada', async () => {
+    const { service, calls } = makeService({ item: VISIT(), activeStop: { id: 's1', routeId: 'r1' }, route: { id: 'r1', status: 'PLANNED' } });
+    await service.remove('a1');
+    assert.ok(calls.stopOps.some((o) => o.op === 'delete' && o.id === 's1'));
+  });
+
+  it('agendar una visita para un día en que ya hay ruta planificada la agrega como última parada', async () => {
+    const { service, calls } = makeService({
+      credits: [creditRow()],
+      contacts: [{ id: CONTACT }],
+      locations: [{ id: LOCATION, address: 'Av. 1', latitude: -16.5, longitude: -68.1 }],
+      route: { id: 'r1', status: 'PLANNED' },
+    });
+    await service.create(createDto({ type: 'VISIT', details: { locationId: LOCATION } }));
+    const added = calls.stopOps.find((o) => o.op === 'create');
+    assert.ok(added, 'la visita entró a la ruta del día');
+    assert.equal(added!.sequenceOrder, 1);
+    assert.ok(added!.agendaItemId);
+  });
+});
+
+// ── Promesas, recordatorios y resultado visible (F4/11 · E2) ───────────────────────────────────
+
+describe('AgendaService · promesas y recordatorios (F4/11)', () => {
+  const PROMISE = (over: Record<string, unknown> = {}) =>
+    row({ type: 'PROMISE_TO_PAY', scheduledDate: new Date(isoUTC(10) + 'T00:00:00.000Z'), details: { amount: 300, promiseDate: isoUTC(10), paymentMethodCode: 'CASH' }, ...over });
+  const dto = (date = isoUTC(20)) => ({ scheduledDate: date, timeMode: 'FIXED', scheduledTime: '10:00', reasonCode: 'CLIENT_REQUEST' }) as never;
+
+  it('reagendar una promesa mueve su promiseDate al día nuevo (si no, el detalle y la agenda dicen cosas distintas)', async () => {
+    const { service, calls } = makeService({ item: PROMISE(), catalog: { code: 'CLIENT_REQUEST' } });
+    await service.reschedule('a1', dto(isoUTC(20)));
+    assert.equal((calls.created!.details as { promiseDate: string }).promiseDate, isoUTC(20));
+    assert.equal((calls.created!.details as { amount: number }).amount, 300, 'el resto de la promesa se copia tal cual');
+  });
+
+  it('reagendar cancela el recordatorio de la fecha vieja y crea el de la nueva, enlazado a la promesa nueva', async () => {
+    const { service, calls } = makeService({ item: PROMISE(), catalog: { code: 'CLIENT_REQUEST' } });
+    await service.reschedule('a1', dto(isoUTC(20)));
+    const cancel = calls.reminderCancels[0]!;
+    assert.deepEqual(cancel.where.details, { path: ['promiseItemId'], equals: 'a1' });
+    assert.equal(cancel.data.status, 'CANCELLED');
+    const reminder = calls.createdAll.find((c) => c.type === 'REMINDER')!;
+    assert.ok(reminder, 'se recreó el recordatorio');
+    assert.equal(reminder.scheduledDate instanceof Date && reminder.scheduledDate.toISOString().slice(0, 10), isoUTC(19));
+    assert.ok((reminder.details as { promiseItemId?: string }).promiseItemId, 'el recordatorio nuevo lleva el vínculo con su promesa');
+  });
+
+  it('cancelar, eliminar y ejecutar una promesa cancelan su recordatorio', async () => {
+    const a = makeService({ item: PROMISE(), catalog: { code: 'CLIENT_UNAVAILABLE' } });
+    await a.service.cancel('a1', { reasonCode: 'CLIENT_UNAVAILABLE' } as never);
+    const b = makeService({ item: PROMISE() });
+    await b.service.remove('a1');
+    const c = makeService({ item: PROMISE() });
+    await c.service.complete('a1', { outcome: 'PROMISE_KEPT' } as never);
+    for (const { calls } of [a, b, c]) assert.deepEqual(calls.reminderCancels[0]!.where.details, { path: ['promiseItemId'], equals: 'a1' });
+  });
+
+  it('otros tipos no tocan recordatorios al cancelarse', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'CALL' }), catalog: { code: 'CLIENT_UNAVAILABLE' } });
+    await service.cancel('a1', { reasonCode: 'CLIENT_UNAVAILABLE' } as never);
+    assert.equal(calls.reminderCancels.length, 0);
+  });
+
+  it('editar una promesa no puede mover su día: AGENDA_006 (para eso está Reagendar)', async () => {
+    const { service } = makeService({ item: PROMISE(), credits: [creditRow()], credit: creditRow(), catalog: { code: 'CASH' } });
+    await expectError(
+      () => service.update('a1', { details: { amount: 300, promiseDate: isoUTC(15), paymentMethodCode: 'CASH' } } as never),
+      'AGENDA_006',
+    );
+  });
+});
+
+describe('AgendaService.findOne · qué pasó (F4/11)', () => {
+  const CREDIT = { id: UUID, code: 'CR-001', outstandingBalance: 1000, currency: 'BOB', daysPastDue: 3, deletedAt: null };
+  const DONE = { id: 'act-9', result: 'CONTACTED', notes: 'Pagará el viernes', userId: 'u1', createdAt: new Date('2026-10-05T14:00:00Z') };
+  const NAMES = [{ userId: 'u1', user: { profile: { firstName: 'Carlos', lastName: 'Collector' }, email: 'c@x.com' } }];
+
+  it('una ejecutada trae resultado, nota, quién y cuándo', async () => {
+    const { service } = makeService({ item: row({ status: 'EXECUTED', resultActivityId: 'act-9' }), credit: CREDIT, activities: [DONE], userAccounts: NAMES });
+    const res = await service.findOne('a1');
+    assert.deepEqual(res.data!.execution, { outcome: 'CONTACTED', notes: 'Pagará el viernes', byName: 'Carlos Collector', at: DONE.createdAt });
+    assert.ok(!JSON.stringify(res.data).includes('c@x.com'), 'nunca el correo');
+  });
+
+  it('una pendiente no trae ejecución', async () => {
+    const { service } = makeService({ item: row(), credit: CREDIT });
+    const res = await service.findOne('a1');
+    assert.equal(res.data!.execution, undefined);
+    assert.equal(res.data!.rescheduledTo, undefined);
+  });
+
+  it('una reagendada dice a qué gestión se movió', async () => {
+    const next = { id: 'a2', scheduledDate: new Date('2026-10-20T00:00:00Z') };
+    const { service } = makeService({ item: row({ status: 'RESCHEDULED' }), credit: CREDIT, successor: next });
+    const res = await service.findOne('a1');
+    assert.deepEqual(res.data!.rescheduledTo, { id: 'a2', scheduledDate: next.scheduledDate });
+  });
+
+  it('el historial trae el resultado de las filas ejecutadas', async () => {
+    const { service } = makeService({
+      item: row(),
+      credit: CREDIT,
+      history: [row({ id: 'h1', status: 'EXECUTED', resultActivityId: 'act-9' }), row({ id: 'h2' })],
+      activities: [DONE],
+    });
+    const res = await service.findOne('a1');
+    const byId = new Map(res.data!.history.map((h) => [h.id, h]));
+    assert.equal(byId.get('h1')!.outcome, 'CONTACTED');
+    assert.equal(byId.get('h2')!.outcome, undefined);
+  });
+});
+
+// ── Resumen de hoy (F4/11 · E3) ────────────────────────────────────────────────────────────────
+
+describe('AgendaService.summary (F4/11)', () => {
+  it('cuenta pendientes de hoy y vencidas, y trae las próximas del día', async () => {
+    const { service } = makeService({ todayCount: 3, overdueCount: 2, rows: [row({ id: 'p1', scheduledTime: '09:00' })] });
+    const res = await service.summary();
+    assert.equal(res.data!.pending, 3);
+    assert.equal(res.data!.overdue, 2);
+    assert.equal(res.data!.items.length, 1);
+    assert.match(res.data!.date, /^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('el cobrador cuenta solo lo suyo', async () => {
+    const { service, calls } = makeService({ rows: [] });
+    await service.summary();
+    assert.equal(calls.listWhere!.assigneeId, 'u1');
+  });
+
+  it('sin agenda:assign no hay carga por persona', async () => {
+    const { service } = makeService({ todayCount: 1 });
+    const res = await service.summary();
+    assert.equal(res.data!.load, undefined);
+  });
+
+  it('con agenda:assign trae la carga por persona, la más vencida primero', async () => {
+    const { service } = makeService({
+      permissions: ['agenda:assign'],
+      todayBy: [{ assigneeId: 'u2', _count: { _all: 4 } }, { assigneeId: 'u3', _count: { _all: 1 } }],
+      overdueBy: [{ assigneeId: 'u3', _count: { _all: 5 } }],
+      userAccounts: [{ userId: 'u3', user: { profile: { firstName: 'Rosa', lastName: 'Aliaga' }, email: 'r@x.com' } }],
+    });
+    const res = await service.summary();
+    assert.deepEqual(
+      res.data!.load!.map((l) => [l.assigneeId, l.pending, l.overdue]),
+      [['u3', 1, 5], ['u2', 4, 0]],
+    );
+    assert.equal(res.data!.load![0]!.name, 'Rosa Aliaga');
+    assert.ok(!JSON.stringify(res.data).includes('@x.com'));
+  });
+
+  it('vencida es «antes de hoy»: lo de hoy a cualquier hora no cuenta como vencido', async () => {
+    const { service, calls } = makeService({});
+    await service.summary();
+    const [hoy, vencidas] = calls.counts as [Date, { lt: Date }];
+    assert.ok(hoy instanceof Date);
+    assert.ok(vencidas.lt instanceof Date);
+    assert.equal(hoy.getTime(), vencidas.lt.getTime(), 'las dos comparten el mismo «hoy» del tenant');
+  });
+});
+
+// ── Avisos de agenda (F4/11 · E4) ──────────────────────────────────────────────────────────────
+
+describe('AgendaService · avisos al responsable (F4/11)', () => {
+  const NAMES = [
+    { userId: 'u1', user: { profile: { firstName: 'Sandra', lastName: 'Soria' }, email: 's@x.com' } },
+  ];
+  const OTHER = (over: Record<string, unknown> = {}) => row({ assigneeId: 'u9', createdBy: 'u1', ...over });
+
+  it('asignarle una gestión a otra persona le avisa (AGENDA_ASSIGNED), con quién, qué y cuándo', async () => {
+    const { service, calls } = makeService({
+      permissions: ['agenda:write', 'agenda:assign', 'data:scope:all'],
+      credits: [creditRow()],
+      contacts: [{ id: CONTACT }],
+      members: [{ userId: 'u9', isActive: true, branchId: 'b1', role: { name: 'COLLECTOR' } }],
+      userAccounts: NAMES,
+    });
+    await service.create(createDto({ assigneeId: 'u9' }));
+    const sent = calls.eventPayloads.find((e) => e.event === 'agenda.assigned');
+    assert.ok(sent, 'salió el evento');
+    assert.equal(sent!.payload.recipientId, 'u9');
+    assert.equal(sent!.payload.actorId, 'u1');
+    assert.equal(sent!.payload.actorName, 'Sandra Soria');
+    assert.equal(sent!.payload.itemType, 'CALL');
+  });
+
+  it('agendarse una gestión a uno mismo no avisa a nadie', async () => {
+    const { service, calls } = makeService({ credits: [creditRow()], contacts: [{ id: CONTACT }], permissions: ['agenda:write'] });
+    await service.create(createDto());
+    assert.equal(calls.eventPayloads.length, 0);
+  });
+
+  it('cancelar, eliminar, reagendar o editar lo de otro le avisa (AGENDA_CHANGED) con el tipo de cambio', async () => {
+    const kinds: Record<string, string> = {};
+    const a = makeService({ item: OTHER(), catalog: { code: 'CLIENT_UNAVAILABLE' }, userAccounts: NAMES, permissions: ['agenda:assign'] });
+    await a.service.cancel('a1', { reasonCode: 'CLIENT_UNAVAILABLE' } as never);
+    kinds.cancel = String(a.calls.eventPayloads[0]?.payload.kind);
+    const b = makeService({ item: OTHER(), userAccounts: NAMES, permissions: ['agenda:assign'] });
+    await b.service.remove('a1');
+    kinds.remove = String(b.calls.eventPayloads[0]?.payload.kind);
+    const c = makeService({ item: OTHER(), catalog: { code: 'CLIENT_REQUEST' }, userAccounts: NAMES, permissions: ['agenda:assign'] });
+    await c.service.reschedule('a1', { scheduledDate: isoUTC(3), timeMode: 'FIXED', scheduledTime: '10:00', reasonCode: 'CLIENT_REQUEST' } as never);
+    kinds.reschedule = String(c.calls.eventPayloads[0]?.payload.kind);
+    const d = makeService({ item: OTHER(), userAccounts: NAMES, permissions: ['agenda:assign'] });
+    await d.service.update('a1', { observations: 'x' } as never);
+    kinds.update = String(d.calls.eventPayloads[0]?.payload.kind);
+    assert.deepEqual(kinds, { cancel: 'CANCELLED', remove: 'DELETED', reschedule: 'RESCHEDULED', update: 'UPDATED' });
+    for (const x of [a, b, c, d]) {
+      assert.equal(x.calls.eventPayloads[0]!.event, 'agenda.changed');
+      assert.equal(x.calls.eventPayloads[0]!.payload.recipientId, 'u9');
+    }
+  });
+
+  it('cambiar una gestión propia no avisa a nadie', async () => {
+    const { service, calls } = makeService({ item: row(), catalog: { code: 'CLIENT_UNAVAILABLE' } });
+    await service.cancel('a1', { reasonCode: 'CLIENT_UNAVAILABLE' } as never);
+    assert.equal(calls.eventPayloads.length, 0);
+  });
+});
+
+// ── Reasignar una gestión (F4/11 · E5) ─────────────────────────────────────────────────────────
+
+describe('AgendaService.update · reasignar (F4/11)', () => {
+  const ASSIGN = ['agenda:write', 'agenda:assign', 'data:scope:all'];
+  const COLLECTOR = { userId: 'u7', isActive: true, branchId: 'b1', role: { name: 'COLLECTOR' } };
+  const NAMES = [{ userId: 'u1', user: { profile: { firstName: 'Sandra', lastName: 'Soria' }, email: 's@x.com' } }];
+
+  it('quien la creó la reasigna a un cobrador de su alcance', async () => {
+    const { service, calls } = makeService({ permissions: ASSIGN, item: row({ assigneeId: 'u9', createdBy: 'u1' }), members: [COLLECTOR], userAccounts: NAMES });
+    await service.update('a1', { assigneeId: 'u7' } as never);
+    assert.equal(calls.updated!.assigneeId, 'u7');
+  });
+
+  it('el nuevo responsable recibe la gestión y el anterior se entera de que ya no es suya (dos avisos distintos)', async () => {
+    const { service, calls } = makeService({ permissions: ASSIGN, item: row({ assigneeId: 'u9', createdBy: 'u1' }), members: [COLLECTOR], userAccounts: NAMES });
+    await service.update('a1', { assigneeId: 'u7' } as never);
+    const sent = calls.eventPayloads.map((e) => [e.event, e.payload.recipientId, e.payload.kind]);
+    assert.deepEqual(sent, [['agenda.assigned', 'u7', 'ASSIGNED'], ['agenda.changed', 'u9', 'REASSIGNED']]);
+  });
+
+  it('no es la creadora: no reasigna, ni siquiera siendo administradora (AGENDA_012)', async () => {
+    const { service } = makeService({ permissions: ASSIGN, item: row({ assigneeId: 'u9', createdBy: 'u2' }), members: [COLLECTOR] });
+    await expectError(() => service.update('a1', { assigneeId: 'u7' } as never), 'AGENDA_012');
+  });
+
+  it('un cobrador no puede pasarle una gestión a otro (AGENDA_010)', async () => {
+    const { service } = makeService({ permissions: ['agenda:write'], item: row({ assigneeId: 'u1', createdBy: 'u1' }), members: [COLLECTOR] });
+    await expectError(() => service.update('a1', { assigneeId: 'u7' } as never), 'AGENDA_010');
+  });
+
+  it('el destinatario debe ser un cobrador o supervisor activo: un gerente no (AGENDA_011)', async () => {
+    const { service } = makeService({ permissions: ASSIGN, item: row({ assigneeId: 'u9', createdBy: 'u1' }), members: [{ ...COLLECTOR, role: { name: 'MANAGER' } }] });
+    await expectError(() => service.update('a1', { assigneeId: 'u7' } as never), 'AGENDA_011');
+  });
+
+  it('pedir el mismo responsable no cambia nada ni avisa', async () => {
+    const { service, calls } = makeService({ permissions: ASSIGN, item: row({ assigneeId: 'u9', createdBy: 'u1' }), members: [COLLECTOR] });
+    await service.update('a1', { assigneeId: 'u9', observations: 'x' } as never);
+    assert.equal(calls.updated!.assigneeId, undefined);
+    assert.deepEqual(calls.eventPayloads.map((e) => e.payload.kind), ['UPDATED']);
+  });
+
+  it('una visita que cambia de responsable sale de la ruta del anterior', async () => {
+    const { service, calls } = makeService({
+      permissions: ASSIGN,
+      item: row({ type: 'VISIT', details: { locationId: LOCATION }, assigneeId: 'u9', createdBy: 'u1' }),
+      members: [COLLECTOR],
+      activeStop: { id: 's1', routeId: 'r1' },
+      route: { id: 'r1', status: 'PLANNED' },
+    });
+    await service.update('a1', { assigneeId: 'u7' } as never);
+    assert.ok(calls.stopOps.some((o) => o.op === 'delete' && o.id === 's1'));
+  });
+});
+
+describe('AgendaService.findOne · visita en ruta (F4/11)', () => {
+  const CREDIT = { id: UUID, code: 'CR-001', outstandingBalance: 1000, currency: 'BOB', daysPastDue: 3, deletedAt: null };
+
+  it('una visita pendiente que una ruta lleva dice en qué ruta y parada, para registrarla desde ahí', async () => {
+    const { service } = makeService({ item: row({ type: 'VISIT', details: { locationId: LOCATION } }), credit: CREDIT, activeStop: { id: 's1', routeId: 'r1' } });
+    const res = await service.findOne('a1');
+    assert.deepEqual(res.data!.route, { routeId: 'r1', stopId: 's1' });
+  });
+
+  it('una visita sin parada, o cualquier otro tipo, no trae ruta', async () => {
+    const sin = makeService({ item: row({ type: 'VISIT', details: { locationId: LOCATION } }), credit: CREDIT, activeStop: null });
+    assert.equal((await sin.service.findOne('a1')).data!.route, undefined);
+    const llamada = makeService({ item: row({ type: 'CALL' }), credit: CREDIT, activeStop: { id: 's1', routeId: 'r1' } });
+    assert.equal((await llamada.service.findOne('a1')).data!.route, undefined);
+  });
+
+  it('una visita ya ejecutada no trae ruta aunque tuvo parada', async () => {
+    const { service } = makeService({ item: row({ type: 'VISIT', status: 'EXECUTED', details: { locationId: LOCATION } }), credit: CREDIT, activeStop: { id: 's1', routeId: 'r1' } });
+    assert.equal((await service.findOne('a1')).data!.route, undefined);
   });
 });

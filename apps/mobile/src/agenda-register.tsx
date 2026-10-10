@@ -15,6 +15,7 @@ import { getAccount } from './account.service';
 import { completeItem, postponeItem, postponeTarget, whatsappLink, type AgendaItemDetail, type AgendaListItem } from './agenda.service';
 import { listCatalogCached, type CatalogOption } from './catalogs.service';
 import { queueForLater } from './sync/sync.service';
+import { patchAgendaItemLocal } from './sync/agenda-optimistic';
 import type { QueuedAction } from './sync/queue';
 
 const POSTPONE_LABEL: Record<AgendaPostponeStep, string> = { 15: '+15 min', 30: '+30 min', 60: '+1 h' };
@@ -97,6 +98,8 @@ export function RegisterSheet({
           void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           // El ítem local se marca como ejecutado aunque el server todavía no lo sepa: es lo que
           // el cobrador acaba de hacer, y el estado real llega cuando la cola drene.
+          // Y en las listas y contadores del teléfono: sin esto, al volver a la Agenda seguía pendiente y se podía registrar otra vez.
+          await patchAgendaItemLocal(item, local);
           onUpdated({ ...item, ...local });
           return;
         }

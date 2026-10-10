@@ -5,13 +5,28 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RoutesService } from './routes.service';
+import { RouteChangesService } from './route-changes.service';
 import { buildRoutePdf } from './route-pdf';
-import { AddStopDto, CreateRouteDto, GenerateRouteDto, ListRoutesQueryDto, UpdateRouteDto, UpdateStopDto } from './dto/route.dto';
+import {
+  AddStopDto,
+  CreateChangeRequestDto,
+  CreateRouteDto,
+  DecideChangeRequestDto,
+  GenerateRouteDto,
+  LegDto,
+  ListRoutesQueryDto,
+  PlanPreviewDto,
+  UpdateRouteDto,
+  UpdateStopDto,
+} from './dto/route.dto';
 
 @Controller('routes')
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class RoutesController {
-  constructor(private readonly routes: RoutesService) {}
+  constructor(
+    private readonly routes: RoutesService,
+    private readonly changes: RouteChangesService,
+  ) {}
 
   // Puerta mínima, igual que `generate`: el cobrador arma SU ruta desde el mapa (RT-1) y no tiene
   // ROUTE_WRITE — con esa puerta el flujo entero moría en 403. Para quién es la ruta lo decide
@@ -28,6 +43,20 @@ export class RoutesController {
   @Roles(Permission.ROUTE_READ)
   generate(@Body() dto: GenerateRouteDto) {
     return this.routes.generate(dto);
+  }
+
+  /** La vista previa de un recorrido que todavía no se publicó (F4/12): no guarda nada. */
+  @Post('plan-preview')
+  @Roles(Permission.ROUTE_READ)
+  planPreview(@Body() dto: PlanPreviewDto) {
+    return this.routes.previewPoints(dto);
+  }
+
+  /** El camino por las calles entre dos puntos (de «dónde estoy» a una parada): no guarda nada. */
+  @Post('leg')
+  @Roles(Permission.ROUTE_READ)
+  leg(@Body() dto: LegDto) {
+    return this.routes.leg(dto);
   }
 
   @Get()
@@ -89,5 +118,26 @@ export class RoutesController {
   @Roles(Permission.ROUTE_READ)
   updateStop(@Param('id', ParseUUIDPipe) id: string, @Param('sid', ParseUUIDPipe) sid: string, @Body() dto: UpdateStopDto) {
     return this.routes.updateStop(id, sid, dto);
+  }
+
+  // ── Pedidos de cambio (F4/12): quien no armó la ruta la pide, quien la armó aprueba o rechaza ──────────────────
+  // Puerta mínima + alcance y autoría en el service, como el resto de las rutas.
+
+  @Post(':id/change-requests')
+  @Roles(Permission.ROUTE_READ)
+  requestChange(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateChangeRequestDto) {
+    return this.changes.create(id, dto);
+  }
+
+  @Get(':id/change-requests')
+  @Roles(Permission.ROUTE_READ)
+  listChanges(@Param('id', ParseUUIDPipe) id: string) {
+    return this.changes.list(id);
+  }
+
+  @Patch(':id/change-requests/:rid')
+  @Roles(Permission.ROUTE_READ)
+  decideChange(@Param('id', ParseUUIDPipe) id: string, @Param('rid', ParseUUIDPipe) rid: string, @Body() dto: DecideChangeRequestDto) {
+    return this.changes.decide(id, rid, dto);
   }
 }

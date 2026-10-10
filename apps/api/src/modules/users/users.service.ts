@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { hash } from 'bcryptjs';
 import type { PrismaClient } from '@prisma/client';
+import { AgendaItemStatus, CreditAssignmentKind, CreditStatus, RouteStatus } from '@prisma/client';
 import { KOBRAX, MOBILE_ROLES, RoleType, isMobileRole } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
@@ -10,6 +11,8 @@ import { MailService, invitationBody } from '../../common/mail/mail.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { formatInvitationCode, newInvitationCode, sha256hex } from '../auth/invitation-code';
 import { emailTaken } from '../accounts/accounts.errors';
+import { AssignmentService } from '../assignments/assignment.service';
+import { isAssignable, type AssignmentChange } from '../assignments/assignment-rules';
 import { serializeMember, serializeProfile, serializeRole } from './users.serializer';
 import { InviteMemberDto, UpdateMemberDto, UpdateProfileDto } from './dto/user.dto';
 import {
@@ -18,7 +21,9 @@ import {
   memberNotFound,
   notPending,
   profileNotFound,
+  reassignTargetInvalid,
   roleNotAllowed,
+  userHasPendingWork,
 } from './users.errors';
 
 const MEMBER_INCLUDE = { user: { include: { profile: true } }, role: true } as const;
@@ -44,6 +49,7 @@ export class UsersService {
     private readonly audit: AuditService,
     private readonly mail: MailService,
     private readonly plan: PlanLimitsService,
+    private readonly assignments: AssignmentService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -65,9 +71,70 @@ export class UsersService {
     return rows.map(serializeMember);
   }
 
+  /**
+   * Lo que una persona tiene a su nombre y que no puede quedar huérfano si se la desactiva (F4/11 · D1): gestiones
+   * pendientes, créditos a su cargo (responsable vigente, sin pagar ni castigar) y rutas armadas o en curso.
+   */
+  private async pendingWork(tx: PrismaClient, userId: string): Promise<{ agenda: number; credits: number; routes: number }> {
+    const [agenda, credits, routes] = await Promise.all([
+      tx.agendaItem.count({ where: { assigneeId: userId, status: AgendaItemStatus.SCHEDULED, deletedAt: null } }),
+      tx.credit.count({ where: { assignedManagerId: userId, deletedAt: null, writtenOffAt: null, status: { notIn: [CreditStatus.PAID, CreditStatus.CANCELLED] } } }),
+      tx.routePlan.count({ where: { collectorId: userId, status: { in: [RouteStatus.PLANNED, RouteStatus.IN_PROGRESS] } } }),
+    ]);
+    return { agenda, credits, routes };
+  }
+
+  /**
+   * Pasa todo lo pendiente de `from` a `to`, en la transacción de quien llama:
+   *  1. los créditos, por el servicio de asignaciones (que además mueve la agenda de cada crédito);
+   *  2. el resto de sus gestiones pendientes;
+   *  3. sus rutas: pasan al destinatario si ese día no tiene una; si ya tiene, se cancelan (la base solo admite una ruta por
+   *     cobrador y día) y sus visitas quedan libres para entrar a la del destinatario;
+   *  4. sus coberturas temporales y de apoyo, que se revocan.
+   */
+  private async handOver(tx: PrismaClient, from: string, to: string): Promise<{ changes: AssignmentChange[]; routesMoved: number; routesCancelled: number }> {
+    const target = await tx.userAccount.findFirst({ where: { userId: to }, select: { userId: true, isActive: true, role: { select: { name: true } } } });
+    if (to === from || !isAssignable(target ? { userId: target.userId, isActive: target.isActive, role: target.role.name } : undefined, this.selfId)) {
+      throw reassignTargetInvalid();
+    }
+    const actor = this.selfId;
+    const now = new Date();
+
+    const credits = await tx.credit.findMany({
+      where: { assignedManagerId: from, deletedAt: null, writtenOffAt: null, status: { notIn: [CreditStatus.PAID, CreditStatus.CANCELLED] } },
+      select: { id: true },
+    });
+    const changes = await this.assignments.apply(tx, credits.map((c) => ({ creditId: c.id, to })), 'BULK_REASSIGN');
+
+    await tx.agendaItem.updateMany({ where: { assigneeId: from, status: AgendaItemStatus.SCHEDULED, deletedAt: null }, data: { assigneeId: to, updatedBy: actor } });
+
+    let routesMoved = 0;
+    let routesCancelled = 0;
+    const routes = await tx.routePlan.findMany({ where: { collectorId: from, status: { in: [RouteStatus.PLANNED, RouteStatus.IN_PROGRESS] } }, select: { id: true, plannedDate: true } });
+    for (const route of routes) {
+      const clash = await tx.routePlan.findFirst({ where: { collectorId: to, plannedDate: route.plannedDate }, select: { id: true } });
+      if (clash) {
+        await tx.routePlan.update({ where: { id: route.id }, data: { status: RouteStatus.CANCELLED } });
+        // La ruta cancelada suelta sus visitas: siguen pendientes en la agenda (ya del destinatario) y entran a su ruta.
+        await tx.routeStop.updateMany({ where: { routeId: route.id, agendaItemId: { not: null } }, data: { agendaItemId: null } });
+        routesCancelled += 1;
+      } else {
+        await tx.routePlan.update({ where: { id: route.id }, data: { collectorId: to } });
+        routesMoved += 1;
+      }
+    }
+
+    await tx.creditAssignment.updateMany({
+      where: { userId: from, revokedAt: null, kind: { in: [CreditAssignmentKind.TEMPORAL, CreditAssignmentKind.APOYO] } },
+      data: { revokedAt: now, revokedBy: actor },
+    });
+    return { changes, routesMoved, routesCancelled };
+  }
+
   async updateMember(userId: string, dto: UpdateMemberDto) {
     if (userId === this.selfId) throw cannotEditSelf();
 
+    let handover: { changes: AssignmentChange[]; routesMoved: number; routesCancelled: number; work: { agenda: number; credits: number; routes: number } } | undefined;
     const { before, updated } = await this.tx(async (tx) => {
       const before = await tx.userAccount.findFirst({ where: { userId }, include: MEMBER_INCLUDE });
       if (!before) throw memberNotFound();
@@ -103,6 +170,18 @@ export class UsersService {
         await this.plan.assertRoom('users', tx);
       }
 
+      /*
+       * 🔴 No se desactiva a quien tiene trabajo a su nombre (F4/11 · D1). Sin destinatario, se rechaza con el conteo; con él, todo
+       * pasa en ESTA transacción y recién entonces se desactiva: nunca queda una persona inactiva con gestiones, créditos o rutas.
+       */
+      if (dto.isActive === false && before.isActive) {
+        const work = await this.pendingWork(tx, userId);
+        if (work.agenda + work.credits + work.routes > 0) {
+          if (!dto.reassignToUserId) throw userHasPendingWork(work);
+          handover = { ...(await this.handOver(tx, userId, dto.reassignToUserId)), work };
+        }
+      }
+
       const updated = await tx.userAccount.update({
         where: { id: before.id },
         data: { roleId: dto.roleId, isActive: dto.isActive },
@@ -110,6 +189,16 @@ export class UsersService {
       });
       return { before, updated };
     });
+
+    if (handover) {
+      await this.assignments.auditChanges(handover.changes, { reason: 'DEACTIVATED_MEMBER', from: userId });
+      await this.audit.record({
+        entity: 'user_account',
+        entityId: updated.id,
+        action: 'REASSIGN_ON_DEACTIVATE',
+        after: { to: dto.reassignToUserId, ...handover.work, routesMoved: handover.routesMoved, routesCancelled: handover.routesCancelled },
+      });
+    }
 
     await this.audit.record({
       entity: 'user_account',

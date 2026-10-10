@@ -27,13 +27,23 @@ function pedir(body: unknown): Request {
 }
 
 /** La API de mentira: rutas ya existentes, créditos por cobrador, y qué se intentó crear. */
-function api(opts: { existing?: string[]; cases?: Record<string, number>; fail?: string } = {}) {
+function api(opts: { existing?: string[]; cases?: Record<string, number>; fail?: string; visits?: Record<string, string[]> } = {}) {
   const created: { collectorId: string; creditIds: string[]; plannedDate: string }[] = [];
 
   server.use(
     http.get(`${API}/routes`, () =>
       HttpResponse.json({
         data: (opts.existing ?? []).map((collectorId) => ({ id: `r-${collectorId}`, collectorId })),
+        error: null,
+        meta: {},
+      }),
+    ),
+    // Las visitas agendadas de ese día: gestiones `VISIT` pendientes por cobrador.
+    http.get(`${API}/agenda`, () =>
+      HttpResponse.json({
+        data: Object.entries(opts.visits ?? {}).flatMap(([assigneeId, credits]) =>
+          credits.map((creditId) => ({ id: `v-${creditId}`, type: 'VISIT', status: 'SCHEDULED', assigneeId, creditId })),
+        ),
         error: null,
         meta: {},
       }),
@@ -159,5 +169,37 @@ describe('POST /api/routes/plan', () => {
     expect((await POST(pedir({ plannedDate: 'mañana', collectorIds: [ANA] }))).status).toBe(400);
     expect((await POST(pedir({ plannedDate: '2026-08-25', collectorIds: [] }))).status).toBe(400);
     expect(created).toHaveLength(0);
+  });
+});
+
+describe('POST /api/routes/plan · visitas agendadas (F4/11)', () => {
+  it('la revisión previa cuenta las visitas del día además de la mora', async () => {
+    api({ cases: { [ANA]: 2 }, visits: { [ANA]: ['credito-visita'] } });
+    const res = await POST(pedir({ plannedDate: '2026-10-08', collectorIds: [ANA], dryRun: true }));
+    const { rows } = await res.json();
+    expect(rows[0]).toMatchObject({ collectorId: ANA, stops: 3, visits: 1 });
+  });
+
+  it('una visita sobre un crédito que ya va por mora es UNA sola parada', async () => {
+    api({ cases: { [ANA]: 2 }, visits: { [ANA]: [`${ANA}-credito-0`] } });
+    const res = await POST(pedir({ plannedDate: '2026-10-08', collectorIds: [ANA], dryRun: true }));
+    const { rows } = await res.json();
+    expect(rows[0]).toMatchObject({ stops: 2, visits: 1 });
+  });
+
+  it('un cobrador que solo tiene visitas igual recibe su ruta', async () => {
+    const created = api({ cases: {}, visits: { [JUAN]: ['solo-visita'] } });
+    const res = await POST(pedir({ plannedDate: '2026-10-08', collectorIds: [JUAN] }));
+    const { rows } = await res.json();
+    expect(rows[0]).toMatchObject({ collectorId: JUAN, stops: 1, created: true });
+    expect(created).toHaveLength(1);
+  });
+
+  it('las visitas de otro cobrador no se le cuentan', async () => {
+    api({ cases: { [ANA]: 1 }, visits: { [JUAN]: ['ajena'] } });
+    const res = await POST(pedir({ plannedDate: '2026-10-08', collectorIds: [ANA], dryRun: true }));
+    const { rows } = await res.json();
+    expect(rows[0]!.stops).toBe(1);
+    expect(rows[0]!.visits).toBeUndefined();
   });
 });

@@ -83,6 +83,9 @@ export default function ForcePasswordChangeScreen() {
             placeholder="••••••••"
             secureTextEntry
             autoCapitalize="none"
+            autoComplete="current-password"
+            textContentType="password"
+            importantForAutofill="yes"
             error={!!error}
           />
           <Field
@@ -92,6 +95,9 @@ export default function ForcePasswordChangeScreen() {
             placeholder="••••••••"
             secureTextEntry
             autoCapitalize="none"
+            autoComplete="new-password"
+            textContentType="newPassword"
+            importantForAutofill="yes"
           />
           <PasswordChecklist password={next} />
           <Field
@@ -101,6 +107,9 @@ export default function ForcePasswordChangeScreen() {
             placeholder="••••••••"
             secureTextEntry
             autoCapitalize="none"
+            autoComplete="new-password"
+            textContentType="newPassword"
+            importantForAutofill="yes"
             error={mismatch}
           />
           {mismatch && (

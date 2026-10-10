@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { forwardRef, type ReactNode, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -51,38 +51,46 @@ export function Button({
   );
 }
 
-/** Input con label (alto 52, borde 1.5px). Los campos `secureTextEntry` traen toggle ver/ocultar. */
-export function Field({
-  label,
-  error,
-  secureTextEntry,
-  ...props
-}: TextInputProps & { label: string; error?: boolean }) {
-  const [reveal, setReveal] = useState(false);
-  return (
-    <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
-      <View style={[styles.input, styles.inputRow, error && styles.inputError]}>
-        <TextInput
-          placeholderTextColor={COLORS.muted}
-          style={styles.inputControl}
-          secureTextEntry={secureTextEntry && !reveal}
-          {...props}
-        />
-        {secureTextEntry && (
-          <Pressable
-            onPress={() => setReveal((r) => !r)}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={reveal ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-          >
-            <Text style={styles.reveal}>{reveal ? '🙈' : '👁️'}</Text>
-          </Pressable>
-        )}
+/**
+ * Input con label (alto 52, borde 1.5px). Los campos `secureTextEntry` traen toggle ver/ocultar.
+ * `errorMessage` pinta el motivo **debajo del campo** (y lo marca en rojo); `error` solo lo marca.
+ * Reenvía el `ref` al `TextInput` para poder pasar el foco de un campo al siguiente.
+ */
+export const Field = forwardRef<TextInput, TextInputProps & { label: string; error?: boolean; errorMessage?: string | null }>(
+  function Field({ label, error, errorMessage, secureTextEntry, ...props }, ref) {
+    const [reveal, setReveal] = useState(false);
+    const invalid = error || !!errorMessage;
+    return (
+      <View style={styles.field}>
+        <Text style={styles.label}>{label}</Text>
+        <View style={[styles.input, styles.inputRow, invalid && styles.inputError]}>
+          <TextInput
+            ref={ref}
+            placeholderTextColor={COLORS.muted}
+            style={styles.inputControl}
+            secureTextEntry={secureTextEntry && !reveal}
+            {...props}
+          />
+          {secureTextEntry && (
+            <Pressable
+              onPress={() => setReveal((r) => !r)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={reveal ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            >
+              <Text style={styles.reveal}>{reveal ? '🙈' : '👁️'}</Text>
+            </Pressable>
+          )}
+        </View>
+        {errorMessage ? (
+          <Text accessibilityRole="alert" style={styles.errorText}>
+            {errorMessage}
+          </Text>
+        ) : null}
       </View>
-    </View>
-  );
-}
+    );
+  },
+);
 
 /** Banner de error accesible. */
 export function ErrorBanner({ message }: { message?: string | null }) {

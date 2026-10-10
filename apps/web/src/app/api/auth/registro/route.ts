@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { apiCall, sameOrigin } from '@/lib/bff';
-import { apiError } from '@/lib/auth-flow';
+import { apiCall, clearAuthCookies, sameOrigin } from '@/lib/bff';
+import { apiError, revokePreviousSession } from '@/lib/auth-flow';
 
 /**
  * Registro público → `POST /accounts`.
@@ -32,5 +32,9 @@ export async function POST(req: Request): Promise<NextResponse> {
     body: JSON.stringify({ businessName, firstName, lastName, email, password, planCode }),
   });
   if (status >= 400 || !res.data) return apiError(status, res);
-  return NextResponse.json(res.data);
+  // Si llegó con las cookies de otra sesión, esa sesión se cierra (en el servidor y en el navegador).
+  const hadSession = await revokePreviousSession();
+  const out = NextResponse.json(res.data);
+  if (hadSession) clearAuthCookies(out);
+  return out;
 }

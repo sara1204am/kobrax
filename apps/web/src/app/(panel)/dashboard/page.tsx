@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import {
   Permission,
@@ -12,9 +13,11 @@ import {
   type VisitMapPoint,
 } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
+import { getAgendaSummary } from '@/lib/agenda-summary';
 import { analyticsQuery, dashboardFilters } from '@/lib/dashboard';
 import { DEFAULT_WIDGETS } from '@/lib/widget-registry';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
+import { MfaReminder } from '@/components/mfa-reminder';
 import { DashboardFilters } from '@/components/dashboard/dashboard-filters';
 import { DashboardGrid } from '@/components/dashboard/dashboard-grid';
 import { DashboardToolbar } from '@/components/dashboard/dashboard-toolbar';
@@ -41,14 +44,19 @@ export default async function DashboardPage({
   searchParams: Record<string, string | undefined>;
 }) {
   const t = await getTranslations('panel.dashboard');
-  const filters = dashboardFilters(searchParams);
+  /*
+   * 🔴 «Hoy» es el de la EMPRESA, no el del servidor: en Bolivia, desde las 20:00 el servidor (UTC) ya está en mañana, y el
+   * período por defecto terminaba en un día sin rutas. Es el mismo día que usa la agenda y «Rutas».
+   */
+  const companyDay = (await getAgendaSummary())?.date;
+  const filters = dashboardFilters(searchParams, companyDay ? new Date(`${companyDay}T12:00:00Z`) : undefined);
   const query = analyticsQuery(filters);
   const editable = searchParams.edit === '1';
 
   /*
    * Todo en paralelo, no encadenado: la pantalla tarda lo que el más lento y no la suma de los ocho.
    */
-  const [summary, aging, collectors, agenda, visits, trend, boards, me, team] = await Promise.all([
+  const [summary, aging, collectors, agenda, visits, trend, boards, me, team, today] = await Promise.all([
     apiCall<AnalyticsSummary>(`/analytics/summary?${query}`, { method: 'GET', auth: true }),
     apiCall<AgingBucketRow[]>(`/analytics/portfolio-aging?${query}`, { method: 'GET', auth: true }),
     apiCall<CollectorPerformanceRow[]>(`/analytics/collector-performance?${query}`, { method: 'GET', auth: true }),
@@ -58,10 +66,15 @@ export default async function DashboardPage({
     apiCall<DashboardDefinition[]>('/dashboards', { method: 'GET', auth: true }),
     apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
+    // «Agenda de hoy» (widget `calendar`): sin `agenda:read` vuelve null y el widget lo dice.
+    getAgendaSummary(),
   ]);
 
   // Sin `report:read` no hay tablero, y decirlo es mejor que dibujar doce cajas vacías.
-  if (!(me.body.data?.permissions ?? []).includes(Permission.REPORT_READ)) {
+  const permissions = me.body.data?.permissions ?? [];
+  if (!permissions.includes(Permission.REPORT_READ)) {
+    // El cobrador no tiene tablero de gestión: su Inicio ES su agenda. Antes caía acá en una pantalla sin salida.
+    if (permissions.includes(Permission.AGENDA_READ)) redirect('/agenda');
     return <EmptyState title={t('title')} text={t('noAccess')} />;
   }
 
@@ -90,12 +103,13 @@ export default async function DashboardPage({
     aging: aging.body.data ?? undefined,
     collectors: collectors.body.data ?? undefined,
     agenda: agenda.body.data ?? undefined,
+    today: today ?? undefined,
     visits: visits.body.data ?? undefined,
     trend: trend.body.data ?? undefined,
     members: team.body.data ?? [],
     currency: summary.body.data?.currency ?? 'BOB',
-    // El mapa mira el último día del período, no el período: hay que decir cuál.
-    day: filters.dateTo ?? '',
+    // El mapa mira UN día —el último del período con paradas—, no el período: hay que decir cuál.
+    day: visits.body.data?.[0]?.plannedDate ?? filters.dateTo ?? '',
     errors: {
       summary: summary.body.error?.message,
       aging: aging.body.error?.message,
@@ -108,12 +122,19 @@ export default async function DashboardPage({
 
   return (
     <>
+      {/* Entró con «Lo hago después»: se recuerda hasta que active la verificación en dos pasos. */}
+      {me.body.data?.mfaEnabled === false && <MfaReminder />}
+
       <PageHeader title={current?.name ?? t('title')} subtitle={t('subtitle')} />
 
-      <DashboardToolbar dashboards={dashboards} current={current} widgets={widgets} editable={editable} />
-
-      {/* Los filtros van ANTES de los números: primero se elige qué se mira. */}
-      <DashboardFilters collectors={team.body.data ?? []} sources={sources} />
+      {/* Los filtros van ANTES de los números: primero se elige qué se mira. «Editar» y las acciones del tablero van adentro
+          de la misma tarjeta, a la derecha: una fila aparte dejaba un hueco con un solo botón. */}
+      <DashboardFilters
+        collectors={team.body.data ?? []}
+        sources={sources}
+        today={companyDay}
+        actions={<DashboardToolbar dashboards={dashboards} current={current} widgets={widgets} editable={editable} />}
+      />
 
       {/*
        * 🔴 D7: nunca mezclados en silencio. Sin fuente elegida, el saldo y la mora suman lo que

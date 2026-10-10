@@ -30,6 +30,20 @@ export class AgendaController {
     return this.agenda.listOverdue(query);
   }
 
+  /** El resumen de hoy: pendientes, vencidas, próximas y, con `agenda:assign`, la carga por persona. Va antes de `:id`. */
+  @Get('summary')
+  @Roles(Permission.AGENDA_READ)
+  summary() {
+    return this.agenda.summary();
+  }
+
+  /** A quién se le puede asignar una gestión (y a quién supervisa). Va antes de `:id`. */
+  @Get('assignees')
+  @Roles(Permission.AGENDA_ASSIGN)
+  assignees() {
+    return this.agenda.listAssignees();
+  }
+
   /**
    * Contexto para agendarle a un cliente: sus créditos agendables + teléfonos y direcciones
    * **en claro**. Revela PII (auditada) → exige `AGENDA_WRITE`, no `AGENDA_READ`.

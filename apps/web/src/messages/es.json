@@ -37,7 +37,8 @@
       "account": "Cuenta",
       "export": "Exportar",
       "profile": "Mi perfil",
-      "security": "Seguridad"
+      "security": "Seguridad",
+      "pending": "{n, plural, one {# gestión pendiente} other {# gestiones pendientes}}"
     },
     "crumbs": {
       "password": "Contraseña",
@@ -80,6 +81,8 @@
       "error": "No se pudieron traer los indicadores.",
       "soon": "Este widget llega en la próxima tarea.",
       "vsPrevious": "vs período anterior",
+      "ofPortfolio": "{pct} de la cartera",
+      "noCompare": "sin comparar",
       "noHistory": "sin período anterior para comparar",
       "filters": {
         "date": "Período",
@@ -123,6 +126,7 @@
         "collected": "Recaudado"
       },
       "widgets": {
+        "kpiStrip": "Indicadores",
         "aging": "Cartera por días de mora",
         "agingBars": "Mora por rango de días",
         "agenda": "Agenda del período",
@@ -199,7 +203,11 @@
       "map": {
         "done": "{n} visitadas",
         "pending": "{n} pendientes",
-        "day": "paradas del {day}"
+        "day": "paradas del {day}",
+        "amount": "Monto",
+        "collector": "Cobrador",
+        "statusDone": "Visitada",
+        "statusPending": "Pendiente"
       },
       "noOverdue": "No hay cartera en mora en este filtro.",
       "noAgenda": "No hay agendados en este período.",
@@ -207,7 +215,35 @@
       "noTrend": "El período es muy corto para dibujar una tendencia.",
       "noCollectors": "No hay préstamos en mora en este filtro.",
       "unknownCollector": "Sin nombre",
-      "creditsInBucket": "Créditos en cada tramo"
+      "creditsInBucket": "Créditos en cada tramo",
+      "mfaReminder": {
+        "badge": "Pendiente",
+        "title": "Protege tu cuenta",
+        "text": "Activa la verificación en dos pasos.",
+        "cta": "Activar"
+      },
+      "agendaToday": {
+        "title": "Agenda de hoy",
+        "view": "Ver agenda",
+        "overdue": "Vencidas",
+        "pending": "Pendientes hoy",
+        "next": "Próxima",
+        "nothing": "No tienes nada pendiente para hoy.",
+        "onlyOverdue": "Nada más para hoy: revisa las vencidas.",
+        "noAccess": "No tienes acceso a la agenda.",
+        "overdueOne": "Vencida",
+        "more": "{n, plural, one {# actividad más} other {# actividades más}}",
+        "types": {
+          "VISIT": "Visitas",
+          "CALL": "Llamadas",
+          "REMINDER": "Recordatorios",
+          "PROMISE_TO_PAY": "Promesas",
+          "WHATSAPP": "WhatsApp"
+        },
+        "team": "Carga del equipo",
+        "loadPending": "{n} hoy",
+        "loadOverdue": "{n, plural, =0 {Sin vencidas} one {# vencida} other {# vencidas}}"
+      }
     },
     "error": {
       "title": "Algo salió mal",
@@ -1000,7 +1036,11 @@
           "unavailable": "No se pudieron cargar las notas.",
           "add": "Agregar nota",
           "kind": "Tipo",
-          "kinds": { "INFO": "Informativa", "WARNING": "Atención", "IMPORTANT": "Importante" },
+          "kinds": {
+            "INFO": "Informativa",
+            "WARNING": "Atención",
+            "IMPORTANT": "Importante"
+          },
           "placeholder": "Escribí la nota…",
           "remaining": "{n} caracteres restantes",
           "save": "Guardar nota",
@@ -1027,7 +1067,14 @@
           "edit": "Editar",
           "locate": "Ubicar en pantalla",
           "colour": "Color",
-          "colors": { "YELLOW": "Amarillo", "PINK": "Rosa", "BLUE": "Azul", "GREEN": "Verde", "PURPLE": "Violeta", "ORANGE": "Naranja" }
+          "colors": {
+            "YELLOW": "Amarillo",
+            "PINK": "Rosa",
+            "BLUE": "Azul",
+            "GREEN": "Verde",
+            "PURPLE": "Violeta",
+            "ORANGE": "Naranja"
+          }
         },
         "promises": {
           "title": "Promesas de pago",
@@ -1129,7 +1176,8 @@
         "empty": "No hay gestiones vencidas.",
         "collapse": "Ver menos",
         "expand": "Ver las {n}",
-        "more": "y {n} mas"
+        "more": "y {n} mas",
+        "truncated": "Se muestran las primeras {shown} de {total}. Filtra por cobrador para ver el resto."
       },
       "unassigned": "Sin cobrador",
       "noTime": "Sin hora",
@@ -1141,7 +1189,9 @@
         "cancel": "Cancelar",
         "reschedule": "Reagendar",
         "edit": "Editar",
-        "call": "Llamar"
+        "call": "Llamar",
+        "delete": "Eliminar",
+        "openRoute": "Registrar en la ruta"
       },
       "complete": {
         "title": "Registrar la ejecución",
@@ -1180,7 +1230,35 @@
         "history": "Historial de la cobranza",
         "historyEmpty": "No hay otras gestiones para este préstamo.",
         "rescheduledFrom": "Nació al reagendar otra gestión.",
-        "openMora": "Ver en Mora"
+        "openMora": "Ver en Mora",
+        "creditInfo": "Información del crédito",
+        "seeInMora": "Ver en mora",
+        "balanceNow": "Saldo actual",
+        "gestion": "Detalle de la gestión",
+        "type": "Tipo",
+        "date": "Fecha",
+        "moment": "Momento",
+        "remember": "Qué hay que recordar",
+        "message": "Mensaje",
+        "amount": "Monto prometido",
+        "promiseDate": "Fecha de pago",
+        "method": "Medio de pago",
+        "assignee": "Responsable",
+        "assignedBy": "Asignada por",
+        "current": "Esta gestión",
+        "promiseSummary": "Compromiso de pago por {amount}",
+        "result": "Resultado",
+        "executedBy": "Registrada por {name} · {date}",
+        "executedOn": "Registrada el {date}",
+        "reason": "Motivo",
+        "rescheduledTo": "Se movió al {date}",
+        "upcoming": "Próximas",
+        "past": "Historial",
+        "showMore": "Ver {n} más",
+        "copyPhone": "Copiar teléfono",
+        "phoneCopied": "Teléfono copiado",
+        "openWhatsapp": "Abrir WhatsApp",
+        "viewLocation": "Ver ubicación"
       },
       "type": {
         "CALL": "Llamada",
@@ -1221,9 +1299,14 @@
         "list": "Lista",
         "calendar": "Calendario",
         "day": "Día",
-        "month": "Mes"
+        "month": "Mes",
+        "week": "Semana"
       },
-      "week": "Semana",
+      "week": {
+        "previous": "Semana anterior",
+        "next": "Semana siguiente",
+        "count": "{n, plural, =0 {Sin gestiones} one {# gestión} other {# gestiones}}"
+      },
       "pickDate": "Elegir fecha",
       "previousMonth": "Mes anterior",
       "nextMonth": "Mes siguiente",
@@ -1293,11 +1376,22 @@
         "noContacts": "Sin telefonos cargados",
         "primary": "principal",
         "message": "Mensaje",
+        "templates": "Plantillas de mensaje",
+        "messageHint": "Escribe o elige una plantilla…",
         "location": "A que direccion",
         "noLocations": "Sin direcciones cargadas",
+        "mapPickHint": "Toca el mapa para marcar el punto",
+        "ownerClient": "Del cliente",
+        "ownerOf": "De {name} ({relation})",
+        "locationDetail": "{type} · {owner}",
         "description": "Que hay que recordar",
         "amount": "Monto prometido",
         "promiseDate": "Fecha de la promesa",
+        "ref": {
+          "principal": "Capital",
+          "overdue": "Cuota en mora",
+          "outstanding": "Saldo pendiente"
+        },
         "method": "Como va a pagar",
         "pickMethod": "Elegi el medio de pago",
         "date": "Dia",
@@ -1322,7 +1416,26 @@
         "noGeo": "Este navegador no puede dar tu ubicación. Marcá el punto en el mapa.",
         "geoDenied": "No se pudo obtener tu ubicación — marcá el punto tocando el mapa.",
         "pinAt": "Punto marcado: {lat}, {lng}",
-        "pinHint": "Tocá el mapa para marcar el punto (opcional)."
+        "pinHint": "Tocá el mapa para marcar el punto (opcional).",
+        "assignTo": "Asignar a",
+        "assignDefault": "Responsable del crédito",
+        "me": "yo",
+        "noPoint": "Esta dirección no tiene ubicación en el mapa. Sin ella no se puede agendar la visita ni armar la ruta: toca el mapa para marcarla.",
+        "savePoint": "Guardar ubicación"
+      },
+      "edit": {
+        "title": "Editar la gestión",
+        "confirm": "Guardar cambios",
+        "dateLocked": "Para cambiar el día, usa Reagendar.",
+        "error": "No se pudo guardar los cambios",
+        "done": "Gestión actualizada"
+      },
+      "deleteItem": {
+        "title": "Eliminar la gestión",
+        "text": "Se quita de la agenda. Para dejar constancia de que no se hizo, cancélala.",
+        "confirm": "Eliminar",
+        "back": "Volver",
+        "done": "Gestión eliminada"
       }
     },
     "routes": {
@@ -1332,8 +1445,8 @@
       "entity": "rutas",
       "tabs": {
         "label": "Qué querés hacer",
-        "planning": "Planificación",
-        "history": "Historial"
+        "history": "Historial",
+        "today": "Hoy"
       },
       "views": {
         "label": "Cómo mirar el historial",
@@ -1356,11 +1469,7 @@
       },
       "planning": {
         "title": "Planificar rutas",
-        "subtitle": "Elegí el día y a quiénes: cada uno sale con sus préstamos más urgentes.",
-        "intro": "Armá las rutas del día en dos pasos: elegís la fecha y a quiénes, revisás cuántas paradas le toca a cada uno, y recién ahí se publican. Cada cobrador sale con su propia cartera.",
         "cta": "Planificar rutas",
-        "scope": "Todavía no se eligen visitas de a una ni se mueven entre cobradores: cada ruta se arma con los préstamos que esa persona ya tiene asignados, del más urgente al menos.",
-        "noPermission": "Tu rol no reparte trabajo: podés consultar el historial, pero no planificar.",
         "noCollectors": "No hay cobradores activos",
         "noCollectorsText": "Invitá a tu equipo desde Equipo y volvé a intentarlo.",
         "date": "Día de las rutas",
@@ -1372,6 +1481,11 @@
         "foundCapped": "{n} para asignar · se muestran {shown}",
         "picked": "{n} elegidas · mínimo {min}",
         "days": "{n} días",
+        "dayChips": {
+          "label": "Día de las rutas",
+          "today": "Hoy",
+          "tomorrow": "Mañana"
+        },
         "cols": {
           "client": "Deudor y dirección",
           "balance": "Saldo",
@@ -1390,7 +1504,16 @@
         "areaKm": "{km} km",
         "areaMeters": "{m} m",
         "mapNoPoints": "Los elegidos no tienen ubicación cargada, así que no se pueden dibujar.",
-        "mapBig": "Agrandar el mapa",
+        "mapToNext": "A la próxima parada: {km} km",
+        "mapByVehicle": "🚗 {min} min en vehículo",
+        "mapOnFoot": "🚶 {min} min a pie",
+        "mapFootNote": "A pie es una estimación a 5 km/h.",
+        "mapSearch": "Buscar en el mapa…",
+        "mapSearchNone": "Sin resultados en el mapa",
+        "mapNextStop": "Ver próxima parada",
+        "mapBaseMap": "Mapa",
+        "mapBaseSatellite": "Satélite",
+        "mapBig":"Agrandar el mapa",
         "mapSmall": "Achicar el mapa",
         "help": "Ayuda",
         "routeOrder": "El recorrido · {n} paradas, en este orden",
@@ -1399,6 +1522,9 @@
         "moveUp": "Subir una parada",
         "moveDown": "Bajar una parada",
         "removeStop": "Sacar de la ruta",
+        "goToMap": "Ir en mapa",
+        "moreActions": "Más acciones",
+        "changeAddress": "Cambiar la dirección de esta visita",
         "lockedStop": "Ya gestionada",
         "confirmRoute": "Armar la ruta con {n}",
         "belowMin": "Queda por debajo del mínimo de {min}.",
@@ -1458,6 +1584,78 @@
             "HIGH": "Alta",
             "CRITICAL": "Crítica"
           }
+        },
+        "scheduledTag": "Visita agendada",
+        "subtitle": "Elegí la fecha y a quién, sumá las visitas, revisá el recorrido y publicalo.",
+        "steps": {
+          "label": "Pasos para armar la ruta",
+          "date": "Fecha y cobrador",
+          "clients": "Clientes y ubicaciones",
+          "order": "Mapa y orden",
+          "preview": "Vista previa"
+        },
+        "visits": {
+          "title": "Visitas agendadas para ese día ({n})",
+          "none": "Este cobrador no tiene visitas agendadas ese día.",
+          "auto": "Estas visitas se marcarán automáticamente en la ruta.",
+          "cols": {
+            "time": "Hora",
+            "client": "Cliente",
+            "credit": "Crédito",
+            "priority": "Prioridad"
+          }
+        },
+        "chosen": {
+          "title": "Elegidos ({n})",
+          "empty": "Todavía no marcaste a nadie.",
+          "noLabel": "Ubicación predeterminada",
+          "noPoint": "Sin ubicación en el mapa: hace falta para la ruta.",
+          "change": "Cambiar la ubicación",
+          "add": "Agregar ubicación"
+        },
+        "location": {
+          "title": "Ubicación de {name}",
+          "hint": "Elegí a dónde se va a visitar: el domicilio, el trabajo, un garante… O cargá una nueva y marcala en el mapa.",
+          "loading": "Cargando las ubicaciones…",
+          "error": "No se pudieron cargar las ubicaciones.",
+          "needsPoint": "Esta ubicación no tiene punto en el mapa. Marcalo para poder usarla.",
+          "use": "Usar esta ubicación",
+          "cancel": "Cancelar"
+        },
+        "orderHint": "Arrastrá las paradas (o usá las flechas) para ordenar el recorrido. Las que tienen hora fija se avisan en la vista previa.",
+        "missingPoints": "{n, plural, one {Falta la ubicación de # parada} other {Falta la ubicación de # paradas}}.",
+        "nextStep": "Siguiente",
+        "back": "Atrás",
+        "backToEdit": "Volver a editar",
+        "fixedAt": "Hora fija {time}",
+        "publish": "Confirmar y publicar ({n})",
+        "preview": {
+          "visits": "Visitas",
+          "distance": "Distancia",
+          "duration": "Duración",
+          "start": "Hora estimada de inicio",
+          "end": "Hora estimada de fin",
+          "loading": "Calculando el recorrido…",
+          "error": "No se pudo calcular el recorrido.",
+          "noEngine": "No pudimos calcular la distancia ni los horarios ahora. Podés publicar igual: el recorrido se calcula cuando el servicio de mapas vuelva.",
+          "suggest": "El recorrido puede optimizarse: ahorrarías {km} km (≈ {min} min).",
+          "applyOrder": "Optimizar orden",
+          "conflicts": "{n, plural, one {# parada llega después de su hora fija} other {# paradas llegan después de su hora fija}}. Cambiá el orden o la hora de salida.",
+          "extraVisits": "{n, plural, one {Una visita agendada más se suma} other {# visitas agendadas más se suman}} al final de la ruta (su crédito no está entre los candidatos y no se dibuja).",
+          "late": "Llega tarde",
+          "cols": {
+            "order": "Orden",
+            "client": "Cliente",
+            "place": "Ubicación",
+            "eta": "Hora estimada",
+            "fixed": "Hora fija"
+          },
+          "listTitle": "Recorrido y llegada estimada ({n})",
+          "mapCount": "{n, plural, one {1 parada en el recorrido} other {# paradas en el recorrido}}"
+        },
+        "context": {
+          "planningFor": "Planificando para {name} · {date}",
+          "change": "Cambiar fecha o cobrador"
         }
       },
       "work": {
@@ -1486,6 +1684,30 @@
       "previousDay": "Día anterior",
       "nextDay": "Día siguiente",
       "today": "Hoy",
+      "todayBoard": {
+        "entity": "cobradores",
+        "start": "Iniciar",
+        "view": "Ver",
+        "plan": "Planificar",
+        "noRoute": "Sin ruta",
+        "empty": "No hay cobradores ni rutas para este día.",
+        "allDone": "Todas gestionadas",
+        "stats": {
+          "collectors": "Cobradores",
+          "stops": "Paradas",
+          "done": "Gestionadas",
+          "pending": "Pendientes"
+        },
+        "cols": {
+          "collector": "Cobrador",
+          "status": "Estado",
+          "stops": "Paradas",
+          "progress": "Progreso",
+          "collected": "Recaudado",
+          "next": "Siguiente parada",
+          "actions": "Acciones"
+        }
+      },
       "date": "Día",
       "filters": {
         "collector": "Cobrador",
@@ -1508,7 +1730,11 @@
         "hint": "Podés reordenar o sacar las paradas que todavía están pendientes, y sumar deudores de la lista de abajo. Las gestionadas quedan como están: son la jornada que ya pasó.",
         "addTitle": "Sumar paradas",
         "mapCount": "{n} paradas en el mapa",
-        "error": "No se pudo cambiar la parada."
+        "error": "No se pudo cambiar la parada.",
+        "startRequest": "Pedir cambios en las paradas",
+        "requestHint": "Esta ruta la armó otra persona: cada cambio que hagas acá es un pedido con su motivo, y ella lo aprueba o lo rechaza. Las paradas gestionadas no se tocan.",
+        "askAddTitle": "Pedir que se sume una parada",
+        "askAddText": "Esta ruta la armó otra persona. Contale por qué esta parada tiene que entrar."
       },
       "detail": {
         "downloadPdf": "Descargar PDF",
@@ -1522,7 +1748,16 @@
         "noDistance": "Sin calcular",
         "noPreview": "No pudimos calcular el recorrido. Las paradas se ven igual.",
         "openMora": "Ver en Mora",
-        "openClient": "Ver la ficha del deudor"
+        "openClient": "Ver la ficha del deudor",
+        "pending": "Pendientes",
+        "nextStop": "Siguiente parada",
+        "nextStopDone": "No quedan paradas por gestionar.",
+        "register": "Registrar gestión",
+        "viewStop": "Ver detalle",
+        "reasonOfClose": "Motivo del cierre",
+        "cancelledReason": "Motivo de la cancelación",
+        "stopsCount": "Paradas en la ruta ({n})",
+        "visitPoint": "Visita registrada"
       },
       "stop": {
         "sequence": "Parada {n}",
@@ -1578,6 +1813,207 @@
       },
       "errors": {
         "generic": "No se pudo completar la acción."
+      },
+      "actions": {
+        "start": "Iniciar ruta",
+        "complete": "Completar jornada",
+        "cancel": "Cancelar ruta",
+        "optimize": "Optimizar orden",
+        "optimizing": "Optimizando…",
+        "optimized": "Orden aplicado.",
+        "back": "Volver",
+        "error": "No se pudo completar la acción.",
+        "reasonLabel": "Motivo",
+        "pendingReasonLabel": "¿Por qué quedaron paradas sin gestionar?",
+        "reasonPlaceholder": "Escribí el motivo…",
+        "reasonHint": "Contalo en unas palabras: queda registrado.",
+        "startOtherTitle": "Iniciar la ruta de otra persona",
+        "startOtherText": "Esta ruta no es tuya. Dejá el motivo para que quede registrado.",
+        "completeTitle": "Completar la jornada",
+        "completeClean": "Todas las paradas están gestionadas. Se cierra la jornada.",
+        "completePending": "Quedan {n, plural, one {# parada} other {# paradas}} sin gestionar. Contá por qué (falta de tiempo, se hace otro día…). Pasan a saltadas y sus visitas agendadas quedan libres para volver a planificarse.",
+        "cancelTitle": "Cancelar la ruta",
+        "cancelConfirm": "Sí, cancelar la ruta",
+        "cancelText": "¿Seguro que querés cancelar la ruta? Las {n, plural, one {# parada sin gestionar pasa} other {# paradas sin gestionar pasan}} a saltadas y sus visitas agendadas quedan libres. Escribí el motivo.",
+        "cancelTextEmpty": "¿Seguro que querés cancelar la ruta? Escribí el motivo.",
+        "cancelBlocked": "Ya tiene visitas registradas: no se cancela, se completa. Esa información no se borra.",
+        "requestCancel": "Pedir cancelar la ruta",
+        "requestCancelTitle": "Pedir que se cancele la ruta",
+        "requestCancelText": "Esta ruta la armó otra persona: ella decide. Contale por qué la querés cancelar.",
+        "requestSend": "Enviar pedido",
+        "requestSent": "Pedido enviado. Quien armó la ruta lo va a ver."
+      },
+      "requests": {
+        "title": "Pedidos de cambio",
+        "pending": "{n, plural, one {# pendiente} other {# pendientes}}",
+        "someone": "alguien",
+        "approve": "Aprobar",
+        "reject": "Rechazar",
+        "withdraw": "Retirar",
+        "history": "{n, plural, one {Ver el último pedido resuelto} other {Ver los últimos # pedidos resueltos}}",
+        "noteLabel": "Nota (opcional)",
+        "notePlaceholder": "Si querés, explicá tu decisión…",
+        "error": "No se pudo resolver el pedido.",
+        "kind": {
+          "ADD_STOP": "Agregar una parada",
+          "REMOVE_STOP": "Quitar una parada",
+          "REORDER": "Mover una parada",
+          "CANCEL": "Cancelar la ruta"
+        },
+        "status": {
+          "PENDING": "Pendiente",
+          "APPROVED": "Aprobado",
+          "REJECTED": "Rechazado",
+          "WITHDRAWN": "Retirado"
+        },
+        "dialog": {
+          "APPROVE": "Aprobar el pedido",
+          "REJECT": "Rechazar el pedido",
+          "WITHDRAW": "Retirar el pedido"
+        },
+        "confirm": {
+          "APPROVE": "Aprobar y aplicar",
+          "REJECT": "Rechazar",
+          "WITHDRAW": "Retirar"
+        }
+      },
+      "record": {
+        "title": "Registrar gestión",
+        "titleFix": "Corregir una gestión",
+        "fixHint": "Una gestión registrada no se edita: esto guarda una nueva que la corrige, y las dos quedan a la vista.",
+        "onBehalf": "Va a quedar registrada a nombre de {name}, con tu nombre como quien la cargó.",
+        "result": "Resultado de la visita",
+        "variants": {
+          "PAID": "Cobrado",
+          "PROMISE": "Promesa de pago",
+          "NO_ANSWER": "No contesta",
+          "NO_CONTACT_VISIT": "Visita sin contacto",
+          "WRONG_ADDRESS": "Dirección incorrecta",
+          "SPECIAL": "Gestión especial"
+        },
+        "noPay": "Para registrar un cobro hace falta el permiso de pagos (lo tienen el cobrador y el administrador).",
+        "amountPaid": "Monto cobrado",
+        "amountPromised": "Monto prometido",
+        "installmentHint": "Cuota a pagar: {amount}",
+        "installmentDue": "vence {date}",
+        "useInstallment": "Usar este monto",
+        "capHint": "Hasta {max}",
+        "method": "Método de pago",
+        "promiseDate": "Fecha de la promesa",
+        "channel": "¿Cómo se intentó?",
+        "channels": {
+          "CALL": "Por llamada",
+          "DOOR": "En la puerta"
+        },
+        "noticeLeft": "Se dejó el aviso de cobro",
+        "category": "Categoría de la gestión especial",
+        "chooseCategory": "Elegí una categoría",
+        "noCategories": "La empresa no tiene categorías de gestión especial cargadas.",
+        "notes": "Nota (opcional)",
+        "notesRequired": "Qué pasó con la dirección (obligatorio)",
+        "notesPlaceholder": "Escribí una nota de la gestión…",
+        "revisit": "Volver a visitar",
+        "revisitDate": "¿Qué día?",
+        "revisitSlot": "¿Cuándo?",
+        "revisitHint": "Queda agendada para ese día, a cargo del responsable del crédito. Aparece al planificar la ruta de esa fecha.",
+        "revisitFailed": "no se pudo agendar la nueva visita",
+        "slots": {
+          "MORNING": "Mañana",
+          "AFTERNOON": "Tarde",
+          "NIGHT": "Noche"
+        },
+        "evidence": "Evidencia",
+        "evidenceHint": "Opcional. Una foto de la puerta o del comprobante; queda sellada con su huella.",
+        "photoAdd": "Agregar una foto",
+        "photoReplace": "Cambiar la foto",
+        "photoRemove": "Quitar",
+        "uploading": "Subiendo…",
+        "photoError": "No se pudo subir la foto.",
+        "submit": "Registrar gestión",
+        "submitFix": "Guardar la corrección",
+        "saving": "Guardando…",
+        "cancel": "Cancelar",
+        "close": "Cerrar",
+        "error": "No se pudo registrar la gestión.",
+        "photoFailed": "no se pudo adjuntar la foto",
+        "payFailed": "no se pudo registrar el cobro",
+        "promiseFailed": "no se pudo registrar la promesa",
+        "and": "y",
+        "partial": "La gestión quedó registrada, pero {what}. Repetilo a mano desde la ficha del crédito."
+      },
+      "stopsTable": {
+        "n": "#",
+        "client": "Cliente",
+        "time": "Hora",
+        "debt": "Deuda",
+        "dpd": "Mora",
+        "status": "Estado",
+        "result": "Resultado",
+        "actions": "Acciones",
+        "view": "Ver",
+        "viewDetail": "Ver detalle",
+        "clientFile": "Ver ficha del cliente",
+        "copyAddress": "Copiar dirección",
+        "register": "Registrar",
+        "days": "{n} días",
+        "help": "Ayuda",
+        "withVisit": "Visita agendada",
+        "requestRemove": "Pedir quitarla",
+        "requestMove": "Pedir moverla",
+        "askTitleRemove": "Pedir que se quite la parada",
+        "askTitleMove": "Pedir que se mueva la parada",
+        "askTextRemove": "Esta ruta la armó otra persona. Contale por qué la parada no va.",
+        "askTextMove": "Esta ruta la armó otra persona. Contale por qué la parada tiene que ir en otro lugar.",
+        "askSend": "Enviar pedido",
+        "askSent": "Pedido enviado. Quien armó la ruta lo va a ver.",
+        "up": "Subir",
+        "down": "Bajar"
+      },
+      "stopPage": {
+        "back": "Volver a la ruta",
+        "tabsLabel": "Secciones de la parada",
+        "tabs": {
+          "ficha": "Ficha",
+          "visits": "Historial de visitas",
+          "evidence": "Evidencias"
+        },
+        "register": "Registrar gestión",
+        "fix": "Corregir",
+        "daysLate": "{n} días de mora",
+        "place": "Lugar de la visita",
+        "hour": "Hora",
+        "lastResult": "Último resultado",
+        "fromAgenda": "Esta parada nació de una visita agendada: al registrar la gestión, esa visita queda cumplida.",
+        "source": "Fuente del saldo",
+        "externalHint": "El saldo es el reportado por el banco a su fecha de corte: un cobro no lo baja.",
+        "creditFull": "Ver el crédito completo en Mora",
+        "noCredit": "Esta parada no tiene un crédito asociado.",
+        "noAddress": "Sin dirección cargada",
+        "point": "Punto en el mapa",
+        "noPoint": "Sin ubicación marcada",
+        "allLocations": "Ver todas las ubicaciones del cliente",
+        "correction": "Corrige una gestión anterior",
+        "loadedBy": "Cargada por {name} a nombre de {collector}.",
+        "loadedFromPanel": "Cargada desde el panel.",
+        "someone": "alguien",
+        "withEvidence": "{n, plural, one {1 evidencia adjunta} other {# evidencias adjuntas}} (en la pestaña Evidencias)."
+      },
+      "whatsapp": {
+        "label": "WhatsApp",
+        "opening": "Abriendo…",
+        "message": "Hola {name}, te escribo por tu pago pendiente. ¿Podemos coordinar?",
+        "noPhone": "Este cliente no tiene un teléfono cargado.",
+        "error": "No se pudo abrir WhatsApp."
+      },
+      "suggest": {
+        "toggle": "Sugerencias cerca ({n})",
+        "title": "Cerca de esta ruta ({n})",
+        "hint": "Mora sin ruta a menos de {km} km de alguna parada: aprovecha para una visita preventiva.",
+        "away": "a {d}",
+        "add": "Agregar a la ruta",
+        "ask": "Pedir agregarla",
+        "badge": "Sugerida",
+        "count": "{n, plural, one {1 sugerencia} other {# sugerencias}}"
       }
     },
     "payments": {
@@ -1670,6 +2106,12 @@
         "KOBRAX_COLLECTED": "La cobró Kobrax",
         "EXTERNAL_CONFIRMED": "Pagó por un canal de la entidad"
       }
+    },
+    "session": {
+      "reloaded": "Tu sesión cambió en otra pestaña. Recargamos la página.",
+      "stale": "Tu sesión cambió en otra pestaña. Recarga la página para continuar.",
+      "reload": "Recargar",
+      "dismiss": "Entendido"
     }
   },
   "account": {
@@ -2066,6 +2508,33 @@
     "notContactable": "no contactar",
     "noContacts": "Sin teléfonos cargados.",
     "noLocations": "Sin direcciones cargadas.",
+    "photos": {
+      "title": "Fotos de la vivienda",
+      "hint": "Ayudan a reconocer la casa al llegar. La principal es la que se ve chica en los mapas de rutas.",
+      "add": "Agregar fotos",
+      "addMore": "Agregar más fotos",
+      "uploading": "Subiendo…",
+      "main": "Principal",
+      "makeMain": "Hacer principal",
+      "removeShort": "Quitar",
+      "remove": "Quitar la foto {n}",
+      "alt": "Foto {n} de la ubicación",
+      "open": "Ver las fotos de la casa de {name}",
+      "viewer": {
+        "prev": "Foto anterior",
+        "next": "Foto siguiente",
+        "zoomIn": "Acercar",
+        "zoomOut": "Alejar",
+        "fit": "Ajustar a la ventana",
+        "newTab": "Abrir en otra pestaña",
+        "counter": "{n} de {total}",
+        "mainPhoto": "Fotografía principal",
+        "photoN": "Fotografía {n}",
+        "evidenceClient": "Evidencia del cliente",
+        "evidenceOf": "Evidencia de {name}"
+      },
+      "error": "No se pudo subir la foto."
+    },
     "noGuarantors": "Sin garantes cargados.",
     "noCollaterals": "Sin garantías cargadas.",
     "gender": {
@@ -2574,6 +3043,14 @@
       "COLLECTOR": "Cobrador",
       "AUDITOR": "Auditor",
       "VIEWER": "Consulta"
+    },
+    "transfer": {
+      "title": "Pasar el trabajo de {name}",
+      "text": "{name} tiene {agenda} gestiones pendientes, {credits} créditos a su cargo y {routes} rutas. Antes de desactivarla hay que pasarlos a otra persona.",
+      "target": "Pasárselos a",
+      "pick": "Elige a una persona",
+      "confirm": "Pasar y desactivar",
+      "nobody": "No hay otro cobrador o supervisor activo a quien pasárselos."
     }
   },
   "profile": {
@@ -2711,7 +3188,14 @@
     "noAccount": "¿No tienes cuenta?",
     "createAccount": "Crear una cuenta",
     "haveInvitation": "¿Tienes una invitación?",
-    "joinTeam": "Únete a tu equipo"
+    "joinTeam": "Únete a tu equipo",
+    "validation": {
+      "emailRequired": "Ingresa tu correo electrónico",
+      "emailInvalid": "El formato del correo no es válido (ej. nombre@empresa.com)",
+      "emailTooLong": "El correo no puede superar 254 caracteres",
+      "passwordRequired": "Ingresa tu contraseña",
+      "passwordTooLong": "La contraseña no puede superar 128 caracteres"
+    }
   },
   "registro": {
     "eyebrow": "Empieza a cobrar con Kobrax",
@@ -2789,7 +3273,10 @@
     "backupSubtitle": "Úsalos si pierdes acceso a tu authenticator. Cada uno sirve una sola vez.",
     "download": "Descargar códigos",
     "saved": "Ya los guardé, continuar",
-    "fileHeader": "Códigos de respaldo Kobrax"
+    "fileHeader": "Códigos de respaldo Kobrax",
+    "later": "Lo hago después",
+    "back": "Volver",
+    "skipError": "No se pudo continuar sin activar la verificación"
   },
   "selectAccount": {
     "title": "Elige tu empresa",

@@ -12,6 +12,9 @@ import type { RouteMode, RouteView } from '@/lib/routes';
  * botón «atrás» funciona y el server component lee lo mismo para pedir un día o un rango. Un estado
  * local acá obligaría a mover la pantalla entera al navegador para nada.
  *
+ * **«Hoy» es el primero y el default** (F4/12): la pantalla responde a «¿qué pasa hoy con mis rutas?» antes que a
+ * «¿qué pasó?». Planificar no es una pestaña: es una acción del encabezado, porque arma las rutas de OTRO día.
+ *
  * Cambiar de modo o de vista **limpia la página**: la 3 de un día no es la 3 de una semana, y
  * quedarse ahí muestra el medio de una lista que la persona no vio empezar.
  */
@@ -28,7 +31,8 @@ export function RouteTabs({ modo, vista }: { modo: RouteMode; vista: RouteView }
       else next.set(k, v);
     }
     next.delete('page');
-    router.push(`${pathname}?${next}`);
+    const qs = next.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
   }
 
   return (
@@ -36,14 +40,15 @@ export function RouteTabs({ modo, vista }: { modo: RouteMode; vista: RouteView }
       <Segmented
         value={modo}
         label={t('tabs.label')}
-        onChange={(v) => go({ modo: v === 'historial' ? null : v })}
+        // Al pasar de uno al otro el día de la URL no tiene el mismo sentido: «Hoy» mira UN día y el historial, otro.
+        onChange={(v) => go({ modo: v === 'hoy' ? null : v, date: null, vista: null, from: null, to: null, collectorId: null, status: null, sort: null, dir: null })}
         options={[
-          { value: 'planificacion', label: t('tabs.planning') },
+          { value: 'hoy', label: t('tabs.today') },
           { value: 'historial', label: t('tabs.history') },
         ]}
       />
 
-      {/* La vista es del historial: en planificación no hay día ni período que elegir. */}
+      {/* La vista es del historial: en «Hoy» no hay período que elegir. */}
       {modo === 'historial' && (
         <Segmented
           value={vista}

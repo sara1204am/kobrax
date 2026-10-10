@@ -23,6 +23,8 @@ function makeService(opts: Opts = {}) {
     dupWhere: [] as Record<string, unknown>[],
   };
   const tx = {
+    // La zona de la empresa: de ella sale el «hoy» con que se arma la ventana de cuotas.
+    account: { findFirst: async () => ({ timezone: 'America/La_Paz', countryCode: 'BO' }) },
     creditInstallment: {
       findMany: async (a: { where: Record<string, unknown> }) => {
         calls.installmentWhere = a.where;

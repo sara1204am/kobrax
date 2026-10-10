@@ -293,6 +293,14 @@ const TEAM: TeamMember[] = [
   { key: 'maria', email: 'multi@kobrax.demo', first: 'María', last: 'Multi', role: RoleType.SUPERVISOR, branch: 'ALT', isDefault: true, alsoDemo2: RoleType.ACCOUNT_ADMIN },
   { key: 'julia', email: 'cobrador3@kobrax.demo', first: 'Julia', last: 'Ticona', role: RoleType.COLLECTOR, branch: 'ALT', supervisor: 'maria' },
   { key: 'freddy', email: 'cobrador4@kobrax.demo', first: 'Freddy', last: 'Condori', role: RoleType.COLLECTOR, branch: 'ALT', supervisor: 'maria' },
+  // Cuentas de prueba del QA manual (cobrador5 a cobrador10): existen, están activas y entran con la contraseña del seed.
+  // Sin créditos propios a propósito: sirven para probar login, bloqueo y desbloqueo sin ensuciar los datos de la demo.
+  { key: 'c5', email: 'cobrador5@kobrax.demo', first: 'Elena', last: 'Quispe', role: RoleType.COLLECTOR, branch: 'CEN', supervisor: 'sandra' },
+  { key: 'c6', email: 'cobrador6@kobrax.demo', first: 'Diego', last: 'Mamani', role: RoleType.COLLECTOR, branch: 'CEN', supervisor: 'sandra' },
+  { key: 'c7', email: 'cobrador7@kobrax.demo', first: 'Lucía', last: 'Choque', role: RoleType.COLLECTOR, branch: 'CEN', supervisor: 'sandra' },
+  { key: 'c8', email: 'cobrador8@kobrax.demo', first: 'Pablo', last: 'Rojas', role: RoleType.COLLECTOR, branch: 'ALT', supervisor: 'maria' },
+  { key: 'c9', email: 'cobrador9@kobrax.demo', first: 'Sofía', last: 'Mendoza', role: RoleType.COLLECTOR, branch: 'ALT', supervisor: 'maria' },
+  { key: 'c10', email: 'cobrador10@kobrax.demo', first: 'Iván', last: 'Cruz', role: RoleType.COLLECTOR, branch: 'ALT', supervisor: 'maria' },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -818,6 +826,8 @@ interface ItemOpts {
   time?: string;
   slot?: 'MORNING' | 'AFTERNOON' | 'NIGHT';
   assignee?: string;
+  /** Quién la creó (clave de usuario). Sin él, el responsable: nadie asignó nada. */
+  createdBy?: string;
   details?: Record<string, unknown>;
   obs?: string;
   priority?: string;
@@ -896,7 +906,7 @@ function addItem(ctx: Ctx, ds: DataSets, o: ItemOpts): string {
     resultActivityId,
     reasonCode: o.reason,
     rescheduledFromId: o.fromId,
-    createdBy: assigneeId,
+    createdBy: o.createdBy ? ctx.users[o.createdBy]! : assigneeId,
     createdAt: at(o.createdDay ?? Math.min(o.day, 0) - 1, 9, 0),
   });
   return id;
@@ -985,6 +995,7 @@ async function seedDemo(ctx: Ctx, branchIds: Record<'CEN' | 'ALT', string>): Pro
 
   // 7 · Ruta de hoy del cobrador principal, visitas y sus gestiones.
   await seedRoute(ctx, ds, branchIds);
+  await seedMoreRoutes(ctx, ds, branchIds);
 
   // 8 · Notas post-it (la estrella: las 7 secciones) y otras.
   await seedNotes(ctx);
@@ -1230,8 +1241,8 @@ function seedAgenda(ctx: Ctx, ds: DataSets): void {
   // ── Hoy ──
   item({ key: 'c01b', type: T.WHATSAPP, day: 0, time: '08:15', status: S.EXECUTED, result: 'CONTACTED', resultNotes: 'Recordatorio de cuota enviado.', expected: 'REMIND' });
   item({ key: 'c03', type: T.CALL, day: 0, time: '09:30', priority: 'HIGH', expected: 'COLLECT', obs: 'Recordar la cuota semanal' });
-  item({ key: 'c09', type: T.CALL, day: 0, time: '10:00', assignee: 'rosa', priority: 'HIGH', expected: 'COLLECT' });
-  item({ key: 'c06', type: T.VISIT, day: 0, time: '09:00', assignee: 'julia', priority: 'MEDIUM', expected: 'CONFIRM_VISIT' });
+  item({ key: 'c09', type: T.CALL, day: 0, time: '10:00', assignee: 'rosa', createdBy: 'sandra', priority: 'HIGH', expected: 'COLLECT' });
+  item({ key: 'c06', type: T.VISIT, day: 0, time: '09:00', assignee: 'julia', createdBy: 'maria', priority: 'MEDIUM', expected: 'CONFIRM_VISIT' });
   item({ key: 'c07', type: T.REMINDER, day: 0, time: '12:00', assignee: 'sandra', details: { description: 'Revisar la garantía del crédito de vivienda' } });
   // Las visitas de la ruta de hoy las agrega `seedRoute` (con su parada y su gestión).
 
@@ -1249,9 +1260,9 @@ function seedAgenda(ctx: Ctx, ds: DataSets): void {
   item({ key: 'c08', type: T.CALL, day: nm, time: '09:00', priority: 'HIGH', expected: 'COLLECT', obs: 'Confirmar el saldo de la cuota' });
   item({ key: 'c09', type: T.REMINDER, day: nm, slot: 'MORNING', assignee: 'rosa', details: { description: 'Llevar el recibo de la última cuota' } });
   item({ key: 'c13', type: T.VISIT, day: nm + 1, time: '10:30', priority: 'VERY_HIGH', expected: 'NEGOTIATE', obs: 'Hablar de reestructurar la deuda' });
-  item({ key: 'c11', type: T.WHATSAPP, day: nm + 1, time: '15:00', assignee: 'marco', priority: 'MEDIUM', expected: 'REMIND' });
+  item({ key: 'c11', type: T.WHATSAPP, day: nm + 1, time: '15:00', assignee: 'marco', createdBy: 'sandra', priority: 'MEDIUM', expected: 'REMIND' });
   item({ key: 'c09', type: T.PROMISE_TO_PAY, day: nm + 2, details: { amount: 300, promiseDate: isoOf(nm + 2), paymentMethodCode: 'CASH' }, assignee: 'rosa', expected: 'CONFIRM_PAYMENT' });
-  item({ key: 'c12', type: T.CALL, day: nm + 3, time: '11:00', assignee: 'julia', priority: 'HIGH', expected: 'COLLECT' });
+  item({ key: 'c12', type: T.CALL, day: nm + 3, time: '11:00', assignee: 'julia', createdBy: 'manager', priority: 'HIGH', expected: 'COLLECT' });
   item({ key: 'c03', type: T.REMINDER, day: nm + 4, details: { description: 'Cobrar cuota' }, slot: 'AFTERNOON' });
   item({ key: 'p2', type: T.WHATSAPP, day: nm + 4, time: '09:30', priority: 'MEDIUM', expected: 'REMIND' });
 
@@ -1339,9 +1350,12 @@ async function seedRoute(ctx: Ctx, ds: DataSets, branchIds: Record<'CEN' | 'ALT'
       });
       ds.activities.push({ id: activityId, accountId: ctx.acc, creditId: credit.id, clientId: credit.clientId, episodeId: episodeAt(ctx, credit.id, 0), userId: carlos, type: CreditActivityType.VISIT, result: s.outcome === VisitOutcome.PAID ? 'CONTACTED' : 'NOT_FOUND', notes: s.notes, createdAt: when });
       touch(ctx, credit.id, when);
-      addItem(ctx, ds, { key: s.key, type: AgendaItemType.VISIT, day: 0, time, status: AgendaItemStatus.EXECUTED, resultId: activityId, result: s.outcome === VisitOutcome.PAID ? 'CONTACTED' : 'NOT_FOUND', resultNotes: s.notes, priority: 'HIGH' });
+      const itemId = addItem(ctx, ds, { key: s.key, type: AgendaItemType.VISIT, day: 0, time, status: AgendaItemStatus.EXECUTED, resultId: activityId, result: s.outcome === VisitOutcome.PAID ? 'CONTACTED' : 'NOT_FOUND', resultNotes: s.notes, priority: 'HIGH' });
+      // La parada nació de esa visita agendada (F4/11): con el vínculo, ejecutarla en la ruta cierra la gestión.
+      await prisma.routeStop.update({ where: { id: stop.id }, data: { agendaItemId: itemId } });
     } else {
-      addItem(ctx, ds, { key: s.key, type: AgendaItemType.VISIT, day: 0, time: i === 2 ? '14:00' : '15:30', priority: i === 2 ? 'HIGH' : 'LOW', expected: i === 2 ? 'COLLECT' : 'CONFIRM_VISIT', obs: i === 3 ? 'Visita preventiva: sigue al día' : undefined });
+      const itemId = addItem(ctx, ds, { key: s.key, type: AgendaItemType.VISIT, day: 0, time: i === 2 ? '14:00' : '15:30', priority: i === 2 ? 'HIGH' : 'LOW', expected: i === 2 ? 'COLLECT' : 'CONFIRM_VISIT', obs: i === 3 ? 'Visita preventiva: sigue al día' : undefined });
+      await prisma.routeStop.update({ where: { id: stop.id }, data: { agendaItemId: itemId } });
     }
   }
 
@@ -1375,6 +1389,144 @@ async function seedRoute(ctx: Ctx, ds: DataSets, branchIds: Record<'CEN' | 'ALT'
 
   // El pago cobrado en la ruta de hoy ya está en `partials` de c08 (CRD-DEMO-0009); acá sólo el aviso.
   void route;
+}
+
+// ── Más rutas: otros cobradores, días pasados y futuros, todos los estados y resultados ──────
+
+type StopSpec = {
+  key: string;
+  /** V = visitada · P = pendiente · R = en camino · S = salteada */
+  st: 'V' | 'P' | 'R' | 'S';
+  outcome?: VisitOutcome;
+  notes?: string;
+  details?: Record<string, unknown>;
+  evidence?: 'PHOTO' | 'SIGNATURE' | 'BOTH';
+  paid?: number;
+};
+type RouteSpec = { by: string; day: number; status: RouteStatus; stops: StopSpec[] };
+
+const MORE_ROUTES: RouteSpec[] = [
+  // Hoy: dos cobradores más en jornada (con una parada «en camino»).
+  { by: 'rosa', day: 0, status: RouteStatus.IN_PROGRESS, stops: [
+    { key: 'c09', st: 'V', outcome: VisitOutcome.NO_CONTACT, notes: 'Toqué el timbre dos veces; dejé el aviso de cobro en la puerta.', details: { channel: 'DOOR', noticeLeft: true } },
+    { key: 'c04', st: 'V', outcome: VisitOutcome.CONTACTED, notes: 'Atendió; confirma que paga la cuota esta semana.' },
+    { key: 'p4', st: 'R' },
+    { key: 'c01b', st: 'P' },
+  ] },
+  { by: 'julia', day: 0, status: RouteStatus.IN_PROGRESS, stops: [
+    { key: 'c12', st: 'V', outcome: VisitOutcome.PROMISE_TO_PAY, notes: 'Promete Bs 500 el viernes; muestra el taller cerrado por mantenimiento.', evidence: 'PHOTO' },
+    { key: 'c06', st: 'R' },
+    { key: 'c10', st: 'P' },
+  ] },
+  // Ayer y antes: rutas cerradas con todos los resultados posibles de una visita.
+  { by: 'carlos', day: -1, status: RouteStatus.COMPLETED, stops: [
+    { key: 'c02', st: 'V', outcome: VisitOutcome.CONTACTED, notes: 'Visita preventiva: sigue al día.' },
+    { key: 'c03', st: 'V', outcome: VisitOutcome.RESCHEDULED, notes: 'Pidió que volvamos el jueves por la tarde.' },
+    { key: 'c13', st: 'V', outcome: VisitOutcome.REFUSAL, notes: 'Se negó a hablar del tema en la puerta.' },
+    { key: 'p1', st: 'V', outcome: VisitOutcome.PAID, notes: 'Pagó la cuota completa en efectivo.', evidence: 'BOTH', paid: 627.73 },
+  ] },
+  { by: 'marco', day: -1, status: RouteStatus.COMPLETED, stops: [
+    { key: 'c11', st: 'V', outcome: VisitOutcome.PARTIAL_PAYMENT, notes: 'Abonó Bs 250; el resto cuando cobre.', evidence: 'PHOTO', paid: 250 },
+    { key: 'c05', st: 'V', outcome: VisitOutcome.WRONG_ADDRESS, notes: 'En esa dirección vive otra familia; no conocen a la clienta.' },
+    { key: 'c15', st: 'S' },
+  ] },
+  { by: 'julia', day: -1, status: RouteStatus.COMPLETED, stops: [
+    { key: 'c07', st: 'V', outcome: VisitOutcome.CONTACTED, notes: 'Entregó el comprobante de la última cuota.' },
+    { key: 'c12', st: 'V', outcome: VisitOutcome.SPECIAL, notes: 'La familia informa una situación especial en casa.', details: { categoryCode: 'DECEASED' } },
+  ] },
+  { by: 'carlos', day: -2, status: RouteStatus.COMPLETED, stops: [
+    { key: 'c08', st: 'V', outcome: VisitOutcome.NOT_FOUND, notes: 'No estaba; la vecina dijo que trabaja hasta tarde.' },
+    { key: 'p2', st: 'V', outcome: VisitOutcome.NO_CONTACT, notes: 'Nadie contesta el celular.', details: { channel: 'CALL' } },
+    { key: 'c13', st: 'S' },
+  ] },
+  { by: 'freddy', day: -2, status: RouteStatus.COMPLETED, stops: [
+    { key: 'c10', st: 'V', outcome: VisitOutcome.PROMISE_TO_PAY, notes: 'Promete Bs 300 para el lunes.', evidence: 'SIGNATURE' },
+    { key: 'c16', st: 'V', outcome: VisitOutcome.CONTACTED, notes: 'Visita de cortesía por crédito cancelado.' },
+  ] },
+  { by: 'carlos', day: -3, status: RouteStatus.COMPLETED, stops: [
+    { key: 'c03', st: 'V', outcome: VisitOutcome.CONTACTED, notes: 'Cobro de cuota semanal confirmado.' },
+    { key: 'c02', st: 'V', outcome: VisitOutcome.CONTACTED },
+    { key: 'p1', st: 'V', outcome: VisitOutcome.NOT_FOUND, notes: 'No estaba en la parada habitual.' },
+  ] },
+  // Una ruta cancelada y planes por venir.
+  { by: 'rosa', day: -4, status: RouteStatus.CANCELLED, stops: [{ key: 'c09', st: 'P' }, { key: 'c04', st: 'P' }] },
+  { by: 'carlos', day: 1, status: RouteStatus.PLANNED, stops: [{ key: 'c13', st: 'P' }, { key: 'star', st: 'P' }, { key: 'p2', st: 'P' }, { key: 'c03', st: 'P' }] },
+  { by: 'rosa', day: 1, status: RouteStatus.PLANNED, stops: [{ key: 'c09', st: 'P' }, { key: 'p4', st: 'P' }, { key: 'c04', st: 'P' }] },
+  { by: 'marco', day: 1, status: RouteStatus.PLANNED, stops: [{ key: 'c11', st: 'P' }, { key: 'c05', st: 'P' }] },
+  { by: 'julia', day: 1, status: RouteStatus.PLANNED, stops: [{ key: 'c12', st: 'P' }, { key: 'c06', st: 'P' }] },
+  { by: 'freddy', day: 2, status: RouteStatus.PLANNED, stops: [{ key: 'c10', st: 'P' }] },
+  { by: 'carlos', day: 2, status: RouteStatus.PLANNED, stops: [{ key: 'c08', st: 'P' }, { key: 'p1', st: 'P' }] },
+];
+
+async function seedMoreRoutes(ctx: Ctx, ds: DataSets, branchIds: Record<'CEN' | 'ALT', string>): Promise<void> {
+  // La misma foto que escribe `seedRoute` (ya está en disco, servida por `uploads`).
+  const hash = createHash('sha256').update(TINY_JPEG).digest('hex');
+  const evidenceOf = (kind: 'PHOTO' | 'SIGNATURE', lat: number, lng: number, when: Date): Prisma.FieldEvidenceCreateWithoutVisitInput => ({
+    accountId: ctx.acc,
+    type: kind === 'PHOTO' ? EvidenceType.PHOTO : EvidenceType.SIGNATURE,
+    fileUrl: `/api/uploads/${hash}.jpg`,
+    fileHash: hash,
+    latitude: lat,
+    longitude: lng,
+    capturedAt: when,
+  });
+
+  for (const r of MORE_ROUTES) {
+    const collector = ctx.users[r.by]!;
+    const branchId = branchIds[(ctx.userBranch[r.by] as 'CEN' | 'ALT' | undefined) ?? 'CEN'];
+    const route = await prisma.routePlan.create({
+      data: {
+        accountId: ctx.acc,
+        branchId,
+        collectorId: collector,
+        plannedDate: D(r.day),
+        status: r.status,
+        totalCases: r.stops.length,
+        totalDistanceKm: Math.round((3.2 * r.stops.length + 1.4) * 10) / 10,
+        estimatedMinutes: 45 * r.stops.length,
+        stops: {
+          create: r.stops.map((s, i) => ({
+            accountId: ctx.acc,
+            clientId: ctx.credits[s.key]!.clientId,
+            creditId: ctx.credits[s.key]!.id,
+            sequenceOrder: i + 1,
+            status: s.st === 'V' ? RouteStopStatus.VISITED : s.st === 'R' ? RouteStopStatus.IN_ROUTE : s.st === 'S' ? RouteStopStatus.SKIPPED : RouteStopStatus.PENDING,
+            visitedAt: s.st === 'V' ? at(r.day, 9 + i, 15) : null,
+          })),
+        },
+      },
+      include: { stops: { orderBy: { sequenceOrder: 'asc' } } },
+    });
+
+    for (const [i, s] of r.stops.entries()) {
+      if (s.st !== 'V') continue;
+      const credit = ctx.credits[s.key]!;
+      const person = ctx.people[credit.clientKey]!;
+      const when = at(r.day, 9 + i, 15);
+      const lat = person.lat + 0.0002;
+      const lng = person.lng - 0.0002;
+      const evidence = s.evidence === 'BOTH' ? (['PHOTO', 'SIGNATURE'] as const) : s.evidence ? [s.evidence] : [];
+      await prisma.fieldVisit.create({
+        data: {
+          accountId: ctx.acc,
+          creditId: credit.id,
+          routeStopId: route.stops[i]!.id,
+          collectorId: collector,
+          latitude: lat,
+          longitude: lng,
+          accuracy: 8 + ((i * 5) % 12),
+          outcome: s.outcome!,
+          notes: s.notes,
+          details: json(s.details ?? {}),
+          capturedAt: when,
+          ...(evidence.length > 0 ? { evidences: { create: evidence.map((k) => evidenceOf(k, lat, lng, when)) } } : {}),
+        },
+      });
+      addActivity(ctx, ds, { key: s.key, day: r.day, hh: 9 + i, mm: 15, type: CreditActivityType.VISIT, result: s.outcome, notes: s.notes, by: r.by });
+      if (s.paid) queuePayment(ctx, { creditId: credit.id, amount: s.paid, method: PaymentMethod.CASH, day: r.day, hh: 9 + i, by: collector, notes: 'Cobrado en la ruta' });
+    }
+  }
+  console.log(`  ✓ RUTAS: ${MORE_ROUTES.length} rutas adicionales (hoy, pasadas, canceladas y planificadas)`);
 }
 
 /** Un JPEG mínimo válido: alcanza para comprobar que la foto se sirve y se autentica. */

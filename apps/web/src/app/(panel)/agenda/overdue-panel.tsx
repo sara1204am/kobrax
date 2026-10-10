@@ -81,6 +81,10 @@ export function OverduePanel({
       {!abierto && total > visibles.length && (
         <p className="px-4 py-2 text-[12px] text-k-danger">{t('overdue.more', { n: total - visibles.length })}</p>
       )}
+      {/* Abierta tampoco son todas si el servidor mandó solo la primera página: se dice, no se deja creer que ya se vio todo. */}
+      {abierto && total > items.length && (
+        <p className="px-4 py-2 text-[12px] text-k-danger">{t('overdue.truncated', { shown: items.length, total })}</p>
+      )}
     </section>
   );
 }

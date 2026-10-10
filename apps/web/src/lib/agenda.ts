@@ -353,3 +353,30 @@ export function rowTime(item: Timed): string | undefined {
   const k = timeSortKey(item);
   return k.startsWith('0-') ? k.slice(2) : undefined;
 }
+
+/**
+ * La frase de una gestión en la línea de tiempo del detalle: de qué iba, en una línea.
+ *
+ * Cada tipo guarda lo suyo en `details` (el recordatorio su texto, la promesa su monto, el WhatsApp su
+ * mensaje); llamada y visita no tienen texto propio y dicen lo que dejó escrito quien las agendó.
+ * Sin nada que decir devuelve `undefined`: la fila muestra sólo el tipo, no una frase inventada.
+ */
+export function entrySummary(
+  e: { type: string; details?: Record<string, unknown>; observations?: string },
+  currency: string | undefined,
+  promiseText: (amount: string) => string,
+  fmtMoney: (amount: number, currency?: string) => string,
+): string | undefined {
+  const d = e.details ?? {};
+  const text = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+  switch (e.type) {
+    case 'REMINDER':
+      return text(d.description) ?? text(e.observations);
+    case 'WHATSAPP':
+      return text(d.message) ?? text(e.observations);
+    case 'PROMISE_TO_PAY':
+      return typeof d.amount === 'number' ? promiseText(fmtMoney(d.amount, currency)) : text(e.observations);
+    default:
+      return text(e.observations);
+  }
+}

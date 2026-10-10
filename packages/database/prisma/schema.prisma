@@ -1310,12 +1310,21 @@ model RoutePlan {
   totalCases       Int         @default(0) @map("total_cases")
   totalDistanceKm  Decimal?    @map("total_distance_km") @db.Decimal(8, 2)
   estimatedMinutes Int?        @map("estimated_minutes")
+  /// Quién armó la ruta (users.id, ref suave). Manda sobre ella: la modifica directo; cualquier otra persona
+  /// pide el cambio (`route_change_requests`). Las rutas anteriores a F4/12 quedan en null.
+  createdBy        String?     @map("created_by")
+  startedAt        DateTime?   @map("started_at")
+  completedAt      DateTime?   @map("completed_at")
+  cancelledAt      DateTime?   @map("cancelled_at")
+  /// El motivo escrito de cerrar con paradas sin gestionar, o de cancelar.
+  statusReason     String?     @map("status_reason")
   createdAt        DateTime    @default(now()) @map("created_at")
   updatedAt        DateTime    @updatedAt @map("updated_at")
 
-  account Account     @relation(fields: [accountId], references: [id])
-  branch  Branch?     @relation(fields: [branchId], references: [id])
-  stops   RouteStop[]
+  account        Account              @relation(fields: [accountId], references: [id])
+  branch         Branch?              @relation(fields: [branchId], references: [id])
+  stops          RouteStop[]
+  changeRequests RouteChangeRequest[]
 
   // Una ruta por cobrador y por día: la jornada de una persona es una sola. Dos rutas el mismo día
   // son un doble toque en el teléfono o un borrador que se sincronizó dos veces, y dejan la
@@ -1333,6 +1342,12 @@ model RouteStop {
   clientId               String          @map("client_id")
   /// El crédito de la parada (F4/08).
   creditId               String?         @map("credit_id")
+  /// La visita agendada de la que nació (ref suave, F4/11). Al visitar la parada se cierra esa gestión. Índice único
+  /// parcial (solo paradas no salteadas) en la migración: Prisma no expresa los parciales.
+  agendaItemId           String?         @map("agenda_item_id")
+  /// La ubicación CONCRETA que se va a visitar (`client_locations.id`, ref suave): casa, trabajo, la de un garante…
+  /// Null en las paradas anteriores a F4/12: se resuelve como siempre (la primera HOME del cliente).
+  locationId             String?         @map("location_id")
   sequenceOrder          Int             @map("sequence_order")
   status                 RouteStopStatus @default(PENDING)
   predictedRecoveryScore Decimal?        @map("predicted_recovery_score") @db.Decimal(5, 4) // IA futura, nullable
@@ -1347,7 +1362,48 @@ model RouteStop {
   @@unique([routeId, sequenceOrder])
   @@index([accountId, routeId])
   @@index([accountId, creditId])
+  @@index([accountId, agendaItemId])
   @@map("route_stops")
+}
+
+enum RouteChangeKind {
+  ADD_STOP
+  REMOVE_STOP
+  REORDER
+  CANCEL
+}
+
+enum RouteChangeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  /// Quien lo pidió lo retiró antes de que lo resolvieran.
+  WITHDRAWN
+}
+
+/// Pedido de cambio sobre una ruta ajena (F4/12 · decisión 1): quien no armó la ruta no la modifica directo, la pide,
+/// con motivo; quien la armó aprueba (y la API aplica el cambio) o rechaza.
+model RouteChangeRequest {
+  id           String            @id @default(uuid())
+  accountId    String            @map("account_id")
+  routeId      String            @map("route_id")
+  requestedBy  String            @map("requested_by") // users.id (ref suave)
+  kind         RouteChangeKind
+  /// Lo que se pide, según el tipo: `{clientId, creditId?, locationId?}`, `{stopId}`, `{stopId, sequenceOrder}`, `{}`.
+  payload      Json              @default("{}")
+  reason       String
+  status       RouteChangeStatus @default(PENDING)
+  decidedBy    String?           @map("decided_by")
+  decidedAt    DateTime?         @map("decided_at")
+  decisionNote String?           @map("decision_note")
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+
+  route RoutePlan @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, routeId, status])
+  @@index([accountId, requestedBy])
+  @@map("route_change_requests")
 }
 
 /// Registro de una visita en campo (CU-04): GPS + resultado. Append-only.
@@ -1368,6 +1424,13 @@ model FieldVisit {
   /// Se escribe SOLO en el INSERT — la visita sigue siendo inmutable.
   details     Json?
   capturedAt  DateTime     @map("captured_at")
+  /// Quién la registró (users.id): el propio cobrador o, desde el panel, quien armó la ruta o un administrador.
+  /// Null en las anteriores a F4/12.
+  registeredBy String?     @map("registered_by")
+  /// Desde dónde se registró: `MOBILE` o `WEB`.
+  source      String       @default("MOBILE")
+  /// Una visita no se edita: la corrección es una visita NUEVA que apunta a la que corrige.
+  correctsVisitId String?  @map("corrects_visit_id")
   createdAt   DateTime     @default(now()) @map("created_at")
   // Sin updated_at ni deleted_at → INMUTABLE por diseño.
 
@@ -1449,6 +1512,8 @@ model Payment {
   receiptHash           String?        @map("receipt_hash") // SHA-256 del buffer original
   paymentDate           DateTime       @default(now()) @map("payment_date")
   registeredBy          String?        @map("registered_by") // users.id (ref suave)
+  /// La visita en la que se cobró (`field_visits.id`, ref suave). No todo cobro sale de una visita.
+  visitId               String?        @map("visit_id")
   channel               PaymentChannel @default(KOBRAX_COLLECTED)
   notes                 String?
   createdAt             DateTime       @default(now()) @map("created_at")
@@ -1462,6 +1527,7 @@ model Payment {
   @@unique([accountId, idempotencyKey])
   @@index([accountId, creditId])
   @@index([accountId, paymentDate])
+  @@index([accountId, visitId])
   @@map("payments")
 }
 
@@ -1498,6 +1564,18 @@ enum NotificationType {
   ROUTE_ASSIGNED
   PROMISE_DUE
   SYSTEM
+  /// Alguien te asignó una gestión (F4/11).
+  AGENDA_ASSIGNED
+  /// Alguien cambió una gestión tuya: la reagendó, cancelo, eliminó o editó.
+  AGENDA_CHANGED
+  /// Resumen diario de gestiones vencidas.
+  AGENDA_OVERDUE
+  /// Alguien pidió un cambio en una ruta que armaste (F4/12).
+  ROUTE_CHANGE_REQUESTED
+  /// Quien armó la ruta aprobó o rechazó tu pedido de cambio.
+  ROUTE_CHANGE_DECIDED
+  /// Una ruta tuya se canceló.
+  ROUTE_CANCELLED
 }
 
 /// Notificación operativa dirigida a un usuario dentro de un tenant.
@@ -1510,6 +1588,10 @@ model Notification {
   body      String?
   clientId  String?          @map("client_id")
   creditId  String?          @map("credit_id")
+  /// La gestión de agenda de la que habla el aviso (ref suave): la campanita navega a ella.
+  agendaItemId String?       @map("agenda_item_id")
+  /// La ruta de la que habla el aviso (ref suave, F4/12).
+  routeId   String?          @map("route_id")
   readAt    DateTime?        @map("read_at")
   createdAt DateTime         @default(now()) @map("created_at")
 

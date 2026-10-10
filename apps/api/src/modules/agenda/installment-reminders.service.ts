@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { AgendaItemStatus, AgendaItemType, CreditStatus, InstallmentStatus } from '@prisma/client';
 import { isExternalOrigin, isReportStale, readCreditMetadata, staleAfterDaysOf } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
+import { civilTodayUTC, timezoneOf } from '../../common/context/tenant-clock.service';
 
 /** Ventana hacia adelante: las cuotas que vencen dentro de N días generan su recordatorio (F4/08 · D11). */
 export const INSTALLMENT_REMINDER_HORIZON_DAYS = 3;
@@ -86,11 +87,12 @@ export class InstallmentReminderService implements OnApplicationBootstrap, OnMod
 
   /** Un tenant. Devuelve cuántos recordatorios NUEVOS se crearon (los ya existentes no cuentan). */
   async scanAccount(accountId: string, now: Date = new Date()): Promise<number> {
-    const today = new Date(`${now.toISOString().slice(0, 10)}T00:00:00.000Z`);
-    const horizon = new Date(today.getTime() + INSTALLMENT_REMINDER_HORIZON_DAYS * DAY_MS);
-
     return this.prisma.withTenant(accountId, async (tx) => {
       const account = await tx.account.findUnique({ where: { id: accountId } });
+      // «Hoy» es el día civil de la EMPRESA, no el UTC del servidor: en Bolivia, desde las 20:00 el UTC ya es mañana y el
+      // recordatorio de una cuota saltaba un día.
+      const today = civilTodayUTC(timezoneOf(account), now);
+      const horizon = new Date(today.getTime() + INSTALLMENT_REMINDER_HORIZON_DAYS * DAY_MS);
       const cfg = (account?.configuration ?? {}) as { importConfig?: { staleAfterDays?: unknown } };
       const staleAfterDays = staleAfterDaysOf(cfg.importConfig?.staleAfterDays);
       const live = {

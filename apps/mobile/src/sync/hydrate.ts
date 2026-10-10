@@ -13,7 +13,10 @@ import { CatalogType, RouteStatus } from '@kobrax/shared';
 import { getMora, getMoraMetrics, listArrearCategories, listMora, listMoraEpisodes, listMoraNotes, listMoraPromises, listPortfolio, MORA_LIMIT, TENANT_CURRENCY_PROBE_LIMIT } from '../mora.service';
 import type { MoraRow } from '../mora';
 import { getRoute, listRoutes } from '../routes.service';
-import { clientContext, listByDay, listOverdue } from '../agenda.service';
+import { clientContext, getItem, listByDay, listOverdue, refreshTenantToday } from '../agenda.service';
+import type { AgendaListItem } from '@kobrax/shared';
+import { addDays, agendaDetailIds, AGENDA_AHEAD_DAYS } from './agenda-offline';
+import { syncAgendaReminders } from '../agenda-notifications';
 import { listCatalog } from '../catalogs.service';
 import { listNotifications } from '../notifications.service';
 import { listCreditPayments, listPaymentsByDay } from '../payments.service';
@@ -56,7 +59,11 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
   const ok: string[] = [];
   const failed: string[] = [];
   let offline = false;
+  // Primero qué día es para la empresa: todo lo que sigue se pide con ESE «hoy» (a las 20:00 en Bolivia el UTC ya es mañana).
+  await refreshTenantToday();
   const hoy = todayISO();
+  /** Las gestiones que bajan las listas: de ahí sale cuáles se bajan completas. */
+  const gestiones: AgendaListItem[] = [];
 
   /** De `QueryResult` al resultado del paso: sólo interesa si se pudo bajar o no. */
   const estado = async (p: Promise<{ status: string }>): Promise<'ok' | 'offline' | 'error'> => {
@@ -87,8 +94,44 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
   await paso('mora', () => estado(listMora({ limit: MORA_LIMIT }))); // Cobranza · chip En mora
   await paso('créditos en mora', () => estado(listMora({ limit: TENANT_CURRENCY_PROBE_LIMIT }))); // Inicio (moneda y contador)
   await paso('rutas', () => estado(listRoutes({ collectorId }))); // pestaña Rutas
-  await paso('agenda', () => estado(listByDay(hoy)));
-  await paso('vencidos', () => estado(listOverdue(100)));
+  await paso('agenda', async () => {
+    const r = await listByDay(hoy);
+    if (r.status === 'ok') gestiones.push(...r.data);
+    return estado(Promise.resolve(r));
+  });
+  // La semana que viene también se prepara en la oficina: sin esto, cualquier día que no fuera hoy daba «Sin conexión».
+  await paso('agenda de la semana', async () => {
+    let hubo = false;
+    for (let i = 1; i <= AGENDA_AHEAD_DAYS; i++) {
+      const r = await listByDay(addDays(hoy, i));
+      if (r.status === 'offline') return 'offline';
+      if (r.status !== 'ok') continue; // un día que falla no tumba a los otros
+      hubo = true;
+      gestiones.push(...r.data);
+    }
+    return hubo ? 'ok' : 'error';
+  });
+  await paso('vencidos', async () => {
+    const r = await listOverdue(100);
+    if (r.status === 'ok') gestiones.push(...r.data);
+    return estado(Promise.resolve(r));
+  });
+  // Los avisos locales: con la agenda de la semana ya bajada, el teléfono avisa de cada gestión aunque no haya señal ni la app abierta.
+  await paso('avisos de la agenda', async () => {
+    await syncAgendaReminders(gestiones, { complete: true });
+    return 'ok';
+  });
+  // El detalle de cada pendiente (teléfono, dirección, mensaje): sin él, una gestión que nunca se abrió con señal no se podía ni
+  // ver ni registrar en la calle — el `GET /agenda/:id` es lo único que trae a dónde llamar o ir.
+  await paso('detalle de las gestiones', async () => {
+    let hubo = false;
+    for (const id of agendaDetailIds(gestiones, hoy)) {
+      const r = await getItem(id);
+      if (r.status === 'offline') return 'offline';
+      if (r.status === 'ok') hubo = true;
+    }
+    return hubo || gestiones.length === 0 ? 'ok' : 'error';
+  });
   await paso('notificaciones', () => estado(listNotifications()));
   await paso('cobrado hoy', () => estado(listPaymentsByDay(hoy))); // Inicio · pestaña Rutas · resumen
   await paso('categorías de mora', () => estado(listArrearCategories())); // Cobranza (filtro) · ficha de mora

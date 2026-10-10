@@ -83,6 +83,8 @@ export function AgendaRow({
 function RowMenu({ item, events }: { item: AgendaListItem; events: AgendaEvents }) {
   const t = useTranslations('panel.agenda');
   const [open, setOpen] = useState(false);
+  /** Abre hacia arriba cuando abajo no cabe: en la última fila del día el menú se salía de la pantalla y creaba scroll. */
+  const [up, setUp] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const allowed = itemActions(item.status);
 
@@ -112,6 +114,13 @@ function RowMenu({ item, events }: { item: AgendaListItem; events: AgendaEvents 
     ...(allowed.includes('cancel')
       ? [{ key: 'cancel', label: t('actions.cancel'), run: () => events.onCancelRequest(item.id) }]
       : []),
+    // Editar y eliminar: solo quien la creó (la API manda `canEdit`; la misma API las rechaza con 403 a los demás).
+    ...(item.canEdit
+      ? [
+          { key: 'edit', label: t('actions.edit'), run: () => events.onEditRequest(item.id) },
+          { key: 'delete', label: t('actions.delete'), run: () => events.onDeleteRequest(item.id) },
+        ]
+      : []),
   ];
 
   return (
@@ -121,7 +130,15 @@ function RowMenu({ item, events }: { item: AgendaListItem; events: AgendaEvents 
         aria-label={t('menu')}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          if (!open) {
+            const r = box.current?.getBoundingClientRect();
+            // Alto del menú: ~36 px por opción + el relleno. Si abajo no entra y arriba sí, se voltea.
+            const need = entries.length * 36 + 16;
+            setUp(!!r && window.innerHeight - r.bottom < need && r.top > need);
+          }
+          setOpen((v) => !v);
+        }}
         className="flex h-8 w-8 items-center justify-center rounded-lg text-k-text-2 hover:bg-k-light-bg"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -133,7 +150,7 @@ function RowMenu({ item, events }: { item: AgendaListItem; events: AgendaEvents 
       {open && (
         <div
           role="menu"
-          className="absolute right-2 top-10 z-20 w-52 rounded-xl border border-k-border bg-white py-1 shadow-k-card"
+          className={`absolute right-2 z-20 w-52 rounded-xl border border-k-border bg-white py-1 shadow-k-card ${up ? 'bottom-10' : 'top-10'}`}
         >
           {entries.map((e) => (
             <button
@@ -144,7 +161,7 @@ function RowMenu({ item, events }: { item: AgendaListItem; events: AgendaEvents 
                 setOpen(false);
                 e.run();
               }}
-              className={`block w-full px-3 py-2 text-left text-[13px] hover:bg-k-bg ${e.key === 'cancel' ? 'text-k-danger' : 'text-k-text'}`}
+              className={`block w-full px-3 py-2 text-left text-[13px] hover:bg-k-bg ${e.key === 'cancel' || e.key === 'delete' ? 'text-k-danger' : 'text-k-text'}`}
             >
               {e.label}
             </button>

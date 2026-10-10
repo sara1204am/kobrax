@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   AVAILABLE_LIMIT,
   DEFAULT_MIN_STOPS,
+  addMinutes,
   availableQuery,
+  clockConflicts,
+  defaultLocation,
   hasPlanFilters,
   helpingOthers,
   minStops,
@@ -220,5 +223,60 @@ describe('shiftDays', () => {
   it('cuenta días civiles en UTC, sin correrse por la zona horaria', () => {
     expect(shiftDays('2026-08-25', -15)).toBe('2026-08-10');
     expect(shiftDays('2026-03-01', -1)).toBe('2026-02-28');
+  });
+});
+
+describe('defaultLocation · el domicilio del cliente antes que cualquier otro (F4/12)', () => {
+  const loc = (over: Record<string, unknown>) => ({ latitude: -16.5, longitude: -68.1, ...over });
+
+  it('prefiere el domicilio del propio cliente', () => {
+    const l = defaultLocation([loc({ id: 'w', locationType: 'WORK' }), loc({ id: 'h', locationType: 'HOME' })]);
+    expect(l?.id).toBe('h');
+  });
+
+  it('sin domicilio, otra ubicación del cliente antes que la de un garante', () => {
+    const l = defaultLocation([loc({ id: 'g', locationType: 'GUARANTOR', ownerName: 'Juan Pérez' }), loc({ id: 'w', locationType: 'WORK' })]);
+    expect(l?.id).toBe('w');
+  });
+
+  it('solo hay de un garante: se usa esa, para no dejar a la persona sin parada', () => {
+    expect(defaultLocation([loc({ id: 'g', locationType: 'GUARANTOR', ownerName: 'Juan' })])?.id).toBe('g');
+  });
+
+  it('un domicilio de un garante no gana por llamarse HOME', () => {
+    const l = defaultLocation([loc({ id: 'g', locationType: 'HOME', ownerName: 'Juan' }), loc({ id: 'w', locationType: 'WORK' })]);
+    expect(l?.id).toBe('w');
+  });
+
+  it('sin ubicaciones no hay predeterminada', () => {
+    expect(defaultLocation([])).toBeUndefined();
+    expect(defaultLocation(undefined)).toBeUndefined();
+  });
+});
+
+describe('addMinutes y clockConflicts · la hora fija es una restricción dura', () => {
+  it('suma minutos a una hora, dando la vuelta a medianoche', () => {
+    expect(addMinutes('08:30', 125)).toBe('10:35');
+    expect(addMinutes('23:30', 60)).toBe('00:30');
+    expect(addMinutes('08:30', 0)).toBe('08:30');
+  });
+
+  it('una hora inválida no inventa un resultado', () => {
+    expect(addMinutes('25:00', 5)).toBe('—');
+    expect(addMinutes('', 5)).toBe('—');
+  });
+
+  it('marca las paradas que llegan después de la hora fija de su visita', () => {
+    const stops = [
+      { id: 'a', etaMinutes: 0 },
+      { id: 'b', etaMinutes: 95, scheduledTime: '10:00' }, // sale 08:30 + 95 = 10:05 → tarde
+      { id: 'c', etaMinutes: 40, scheduledTime: '10:00' }, // 09:10 → a tiempo
+      { id: 'd', scheduledTime: '11:00' }, // sin estimación: no se puede afirmar nada
+    ];
+    expect(clockConflicts(stops, '08:30')).toEqual(['b']);
+  });
+
+  it('llegar justo a la hora no es un choque', () => {
+    expect(clockConflicts([{ id: 'a', etaMinutes: 90, scheduledTime: '10:00' }], '08:30')).toEqual([]);
   });
 });

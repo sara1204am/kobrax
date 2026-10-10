@@ -348,6 +348,7 @@ export class AuthService implements OnModuleInit {
     accountId: string;
     roleId: string;
     permissions: string[];
+    sessionId?: string;
   }): Promise<{
     userId: string;
     email: string;
@@ -357,6 +358,8 @@ export class AuthService implements OnModuleInit {
     permissions: string[];
     mfaEnabled: boolean;
     requiresPasswordChange: boolean;
+    /** Sesión del token: el panel la compara entre pestañas (W-LOG-54). */
+    sessionId?: string;
   }> {
     // users/profiles/roles son tablas globales (sin RLS) → acceso directo.
     const [dbUser, role] = await Promise.all([
@@ -380,6 +383,7 @@ export class AuthService implements OnModuleInit {
       permissions: user.permissions,
       mfaEnabled: dbUser.mfaEnabled,
       requiresPasswordChange: dbUser.requiresPasswordChange,
+      sessionId: user.sessionId,
     };
   }
 

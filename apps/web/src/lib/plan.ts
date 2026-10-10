@@ -8,11 +8,22 @@
  */
 import { COLLECTION_PRIORITIES, VisitOutcome, type MoraCreditListItem } from '@kobrax/shared';
 
-/** Una ubicación dibujable de un deudor: lo mínimo que usan el mapa y la lista. */
+/**
+ * Una ubicación dibujable de un deudor: lo mínimo que usan el mapa y la lista.
+ *
+ * F4/12: puede ser **la de un garante o un familiar**, no solo la del propio cliente. `id` es el de `client_locations`
+ * (lo que la parada guarda como su ubicación concreta); `ownerName` dice de quién es cuando no es del cliente.
+ */
 export interface PlanLocation {
+  id?: string;
+  locationType?: string;
   latitude: number;
   longitude: number;
   address?: string;
+  ownerName?: string;
+  ownerRelation?: string;
+  /** La foto principal de la ubicación (la primera): se ve chica en el mapa para reconocer la casa. */
+  photoUrl?: string;
 }
 
 /**
@@ -203,6 +214,12 @@ export function availableQuery(params: PlanParams, day: string): URLSearchParams
 /** Las columnas que ordena el navegador, porque la API no las sabe ordenar. */
 export type LocalSort = 'client' | 'zone' | 'coords';
 
+/**
+ * Hasta dónde se sugiere mora sin ruta alrededor de una ruta armada, en kilómetros (en línea recta, desde cada parada).
+ * Es lo que se camina o se maneja de más para una visita preventiva: pasado eso ya es otra ruta.
+ */
+export const SUGGEST_KM = 1;
+
 /** Radios que ofrece la búsqueda por área, en kilómetros. Media cuadra no es un área; 20 km es la ciudad. */
 export const RADIUS_KM = [0.5, 1, 2, 5] as const;
 
@@ -234,15 +251,13 @@ export function haversineKm(a: Point, b: Point): number {
 /**
  * Los que caen **dentro del círculo**.
  *
- * 🔴 Quien no tiene ubicación cargada **queda afuera**, y no es un descuido: el área pregunta «qué
+ * 🔴 Entra si **alguna** de sus ubicaciones cae adentro. Quien no tiene ubicación cargada **queda afuera**, y no es un descuido: el área pregunta «qué
  * hay acá», y de esa persona no se sabe dónde está. Meterla igual haría que una ruta armada por
  * zona termine con una parada en la otra punta.
  */
 export function withinRadius<T extends { locations?: Point[] }>(rows: T[], center: Point, km: number): T[] {
-  return rows.filter((r) => {
-    const loc = r.locations?.[0];
-    return loc ? haversineKm(center, loc) <= km : false;
-  });
+  // 🔴 **Cualquiera de sus ubicaciones**: el cliente puede vivir lejos y trabajar adentro del círculo (o tener un garante ahí).
+  return rows.filter((r) => (r.locations ?? []).some((loc) => haversineKm(center, loc) <= km));
 }
 
 /**
@@ -289,4 +304,38 @@ export function shiftDays(day: string, delta: number): string {
   const d = new Date(`${base}T00:00:00.000Z`);
   d.setUTCDate(d.getUTCDate() + delta);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * La ubicación que se usa si nadie eligió otra: **el domicilio del propio cliente**; si no tiene, otra suya; si no, la
+ * primera que haya (una de un garante). Es la misma regla con la que la API resuelve «la principal» de un cliente:
+ * con dos criterios, el pin del mapa y la dirección de la parada podrían apuntar a lugares distintos.
+ */
+export function defaultLocation(locations?: PlanLocation[]): PlanLocation | undefined {
+  if (!locations || locations.length === 0) return undefined;
+  const own = locations.filter((l) => !l.ownerName);
+  return own.find((l) => l.locationType === 'HOME') ?? own[0] ?? locations[0];
+}
+
+/** Suma minutos a una hora `HH:mm` (da la vuelta a las 24 h). Con una hora inválida devuelve `—`. */
+export function addMinutes(hhmm: string, minutes: number): string {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(hhmm);
+  if (!m) return '—';
+  const total = (((Number(m[1]) * 60 + Number(m[2]) + Math.round(minutes)) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/**
+ * Las paradas que llegan DESPUÉS de la hora fija de su visita agendada (decisión 9: la hora fija es restricción dura y el
+ * choque se muestra siempre). `start` es la hora de salida (`HH:mm`); `etaMinutes`, los minutos desde la salida.
+ */
+export function clockConflicts(stops: { id: string; etaMinutes?: number; scheduledTime?: string }[], start: string): string[] {
+  return stops
+    .filter((s) => s.scheduledTime && s.etaMinutes != null)
+    .filter((s) => {
+      const arrives = addMinutes(start, s.etaMinutes!);
+      // Se compara como texto `HH:mm`: es lo que se muestra, y el orden lexicográfico de la hora es el cronológico.
+      return arrives !== '—' && arrives > s.scheduledTime!;
+    })
+    .map((s) => s.id);
 }

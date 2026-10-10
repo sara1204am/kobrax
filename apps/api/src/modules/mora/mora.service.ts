@@ -683,6 +683,7 @@ export class MoraService {
             latitude: true,
             longitude: true,
             relationId: true,
+            photoUrls: true,
             relation: { select: { relatedName: true, relationshipType: true } },
           },
           orderBy: { createdAt: 'asc' },
@@ -705,6 +706,8 @@ export class MoraService {
             address: this.safeDecrypt(l.address) ?? undefined,
             ownerName: l.relation?.relatedName,
             ownerRelation: l.relation?.relationshipType,
+            // La primera foto es la principal: se ve chica en el mapa para reconocer la casa.
+            photoUrl: Array.isArray(l.photoUrls) && typeof l.photoUrls[0] === 'string' ? l.photoUrls[0] : undefined,
           })),
         documentMasked: doc ? maskDocument(doc) : undefined,
       });

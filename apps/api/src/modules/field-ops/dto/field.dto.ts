@@ -4,6 +4,7 @@ import {
   IsBoolean,
   IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsNumber,
   IsObject,
@@ -40,6 +41,15 @@ export class CreateVisitDto {
    * como GPS real. Es un flag aparte y no parte de `details` porque aplica a todas las variantes.
    */
   @IsOptional() @IsBoolean() gpsFallback?: boolean;
+
+  /** Desde dónde se registra: el móvil no manda nada (`MOBILE`); el panel manda `WEB`. Es informativo: la autoría la pone la API. */
+  @IsOptional() @IsIn(['MOBILE', 'WEB']) source?: 'MOBILE' | 'WEB';
+
+  /**
+   * Una visita no se edita. Para corregir una ya registrada se manda una NUEVA con el id de la que corrige: queda como
+   * nota sobre la original (no cuenta como otra gestión) y las dos se ven juntas.
+   */
+  @IsOptional() @IsUUID() correctsVisitId?: string;
 }
 
 /**

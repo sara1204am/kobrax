@@ -17,6 +17,13 @@ const TYPE_ICON: Record<NotificationType, string> = {
   [NotificationType.ROUTE_ASSIGNED]: '🗺️',
   [NotificationType.PROMISE_DUE]: '🤝',
   [NotificationType.SYSTEM]: '🔔',
+  [NotificationType.AGENDA_ASSIGNED]: '📌',
+  [NotificationType.AGENDA_CHANGED]: '🔁',
+  [NotificationType.AGENDA_OVERDUE]: '⏰',
+  // F4/12: avisos de ruta. El móvil todavía no los emite ni los distingue; el tipo existe en el contrato compartido.
+  [NotificationType.ROUTE_CHANGE_REQUESTED]: '✋',
+  [NotificationType.ROUTE_CHANGE_DECIDED]: '✅',
+  [NotificationType.ROUTE_CANCELLED]: '🚫',
 };
 
 type Load =
@@ -65,8 +72,11 @@ export default function NotificacionesScreen() {
         );
         void markRead(n.id);
       }
-      // El destino útil es el deudor: no hay pantalla de caso suelto.
-      if (n.clientId) router.push(`/cliente/${n.clientId}`);
+      // Un aviso de agenda lleva a la gestión (con el aviso de «asignada por» y sus acciones); el resumen de vencidas, a la
+      // pestaña Agenda. El resto, al deudor: no hay pantalla de caso suelto.
+      if (n.agendaItemId) router.push(`/agenda/${n.agendaItemId}`);
+      else if (n.type === 'AGENDA_OVERDUE') router.push('/(tabs)/agenda');
+      else if (n.clientId) router.push(`/cliente/${n.clientId}`);
     },
     [],
   );

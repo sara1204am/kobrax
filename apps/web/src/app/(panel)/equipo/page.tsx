@@ -98,6 +98,8 @@ export default async function EquipoPage({ searchParams }: { searchParams: TeamP
           caso el selector no se dibuja y la lista sigue siendo legible. */}
       <MembersTable
         members={rows}
+        // Todo el equipo, no solo la página visible: de acá sale a quién se le puede pasar el trabajo de quien se desactiva.
+        team={list.body.data}
         meta={meta}
         // Los roles del filtro salen de QUIÉN HAY, no de `/roles`: ése devuelve sólo los tres
         // asignables, y filtrar por «Gerente» tiene que ser posible aunque no se pueda asignar.

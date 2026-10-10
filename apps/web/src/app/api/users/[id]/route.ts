@@ -13,7 +13,7 @@ export async function PATCH(req: Request, { params }: Ctx): Promise<NextResponse
     return NextResponse.json({ error: { code: 'CSRF', message: 'Origen no permitido' } }, { status: 403 });
   }
 
-  const patch = (await req.json().catch(() => ({}))) as { roleId?: string; isActive?: boolean };
+  const patch = (await req.json().catch(() => ({}))) as { roleId?: string; isActive?: boolean; reassignToUserId?: string };
   const { status, body } = await apiCall<Member>(`/users/${params.id}`, {
     method: 'PATCH',
     auth: true,

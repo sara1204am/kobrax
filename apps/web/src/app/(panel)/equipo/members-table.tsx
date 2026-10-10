@@ -29,8 +29,16 @@ type Pending =
   | { kind: 'deactivate' | 'reactivate' | 'remove'; member: Member }
   | null;
 
+/** Lo que una persona tiene a su nombre y hay que pasar antes de desactivarla (lo informa la API). */
+interface PendingWork {
+  agenda: number;
+  credits: number;
+  routes: number;
+}
+
 export function MembersTable({
   members,
+  team,
   meta,
   roles,
   roleNames,
@@ -40,6 +48,8 @@ export function MembersTable({
   action,
 }: {
   members: Member[];
+  /** El equipo completo (sin paginar ni filtrar): de acá se elige a quién pasarle el trabajo. */
+  team: Member[];
   meta: PageMeta;
   /** Los asignables (`GET /roles`), que son los que ofrece el selector de la fila. */
   roles: AssignableRole[];
@@ -62,6 +72,9 @@ export function MembersTable({
   const [pending, setPending] = useState<Pending>(null);
   const [resent, setResent] = useState<InvitedMember | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Quien se quiere desactivar tiene trabajo a su nombre: se pide a quién pasarlo. */
+  const [transfer, setTransfer] = useState<{ member: Member; work: PendingWork } | null>(null);
+  const [target, setTarget] = useState('');
 
   async function resend(member: Member) {
     setBusy(true);
@@ -88,6 +101,38 @@ export function MembersTable({
     toast(okMessage);
     router.refresh();
   }
+
+  /**
+   * Desactivar. 🔴 La API no desactiva a quien tiene gestiones, créditos o rutas a su nombre (quedarían a nombre de alguien
+   * que ya no entra): contesta `USER_HAS_PENDING_WORK` con cuántos de cada uno, y acá se pide a quién pasarlos. Con
+   * `reassignToUserId` la API pasa todo y desactiva en un solo paso.
+   */
+  async function deactivate(member: Member, reassignToUserId?: string) {
+    setBusy(true);
+    const { ok, data } = await sendJson(
+      `/api/users/${member.userId}`,
+      { isActive: false, ...(reassignToUserId ? { reassignToUserId } : {}) },
+      'PATCH',
+    );
+    setBusy(false);
+    setPending(null);
+    if (!ok && data.error?.code === 'USER_HAS_PENDING_WORK') {
+      setTarget('');
+      setTransfer({ member, work: data.error.details as PendingWork });
+      return;
+    }
+    setTransfer(null);
+    if (!ok) {
+      toast(data.error?.message ?? t('actionError'), 'danger');
+      return;
+    }
+    toast(t('deactivated'));
+    router.refresh();
+  }
+
+  /** A quién se le puede pasar el trabajo: cobradores y supervisores activos, no la misma persona. */
+  const candidates = (member: Member): Member[] =>
+    team.filter((m) => m.userId !== member.userId && m.isActive && ['COLLECTOR', 'SUPERVISOR'].includes(m.roleName));
 
   const columns: Column<Member>[] = [
     {
@@ -214,6 +259,8 @@ export function MembersTable({
                   const { kind, member } = pending;
                   if (kind === 'remove') {
                     void run(`/api/users/${member.userId}`, null, 'DELETE', t('removed'));
+                  } else if (kind === 'deactivate') {
+                    void deactivate(member);
                   } else {
                     void run(
                       `/api/users/${member.userId}`,
@@ -231,6 +278,51 @@ export function MembersTable({
         }
       >
         {pending ? t(`confirm.${pending.kind}.text`, { name: memberName(pending.member) }) : ''}
+      </Modal>
+
+      <Modal
+        open={transfer !== null}
+        onClose={() => setTransfer(null)}
+        title={transfer ? t('transfer.title', { name: memberName(transfer.member) }) : ''}
+        actions={
+          <>
+            <span className="sm:w-40">
+              <Button variant="ghost" onClick={() => setTransfer(null)} disabled={busy}>
+                {t('cancel')}
+              </Button>
+            </span>
+            <span className="sm:w-56">
+              <Button loading={busy} disabled={!target} onClick={() => transfer && void deactivate(transfer.member, target)}>
+                {t('transfer.confirm')}
+              </Button>
+            </span>
+          </>
+        }
+      >
+        {transfer && (
+          <div className="space-y-4">
+            <p className="text-[14px] text-k-text">
+              {t('transfer.text', { name: memberName(transfer.member), agenda: transfer.work.agenda, credits: transfer.work.credits, routes: transfer.work.routes })}
+            </p>
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-k-text-2">{t('transfer.target')}</span>
+              <select
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+                disabled={busy}
+                className="w-full rounded-xl border-[1.5px] border-k-border bg-white px-3 py-3 text-[14px] text-k-text outline-none focus:border-k-periwinkle"
+              >
+                <option value="">{t('transfer.pick')}</option>
+                {candidates(transfer.member).map((m) => (
+                  <option key={m.userId} value={m.userId}>
+                    {memberName(m)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {candidates(transfer.member).length === 0 && <p className="text-[13px] text-k-danger">{t('transfer.nobody')}</p>}
+          </div>
+        )}
       </Modal>
 
       {/* El reenvío devuelve un código NUEVO y mata el anterior: hay que decirlo, o se

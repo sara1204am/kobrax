@@ -38,6 +38,8 @@ export interface PortfolioLocation {
   address?: string;
   ownerName?: string;
   ownerRelation?: string;
+  /** La foto principal de la ubicación (la primera), para reconocer la casa en el mapa. */
+  photoUrl?: string;
 }
 
 /** La categoría de mora de un crédito, tal como la configuró la cuenta. */

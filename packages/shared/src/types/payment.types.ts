@@ -23,6 +23,8 @@ export interface PaymentItem {
   creditId: string;
   /** Quién lo registró: `GET /payments` devuelve los del TENANT, no los de un cobrador. */
   registeredBy?: string;
+  /** La visita en la que se cobró (F4/12). Ausente si el cobro no salió de una visita. */
+  visitId?: string;
   /** Nombre de quien lo registró (resuelto por el servidor; no exige `user:read`). */
   registeredByName?: string;
   amount: number;

@@ -9,6 +9,7 @@ const OTHER = '22222222-2222-4222-8222-222222222222';
 const ROLE_ADMIN = 'role-admin';
 const ROLE_COLLECTOR = 'role-collector';
 const ROLE_MANAGER = 'role-manager';
+const TARGET = '33333333-3333-4333-8333-333333333333';
 
 const ROLES: Record<string, { id: string; name: string; level: number }> = {
   [ROLE_ADMIN]: { id: ROLE_ADMIN, name: 'ACCOUNT_ADMIN', level: 90 },
@@ -48,6 +49,13 @@ interface Opts {
   maxUsers?: number;
   /** Simula el choque del @unique de `users.email`. */
   emailTaken?: boolean;
+  /** Lo que la persona tiene a su nombre al desactivarla (F4/11 · D1). */
+  work?: { agenda?: number; credits?: number; routes?: number };
+  /** Quien recibe el trabajo: lo que devuelve la búsqueda del destinatario (`null` = no existe). */
+  target?: Record<string, unknown> | null;
+  /** Rutas de la persona, y en cuáles de esas fechas el destinatario ya tiene la suya. */
+  routes?: { id: string; plannedDate: Date }[];
+  targetBusyDates?: string[];
 }
 
 function makeService(opts: Opts = {}) {
@@ -62,6 +70,9 @@ function makeService(opts: Opts = {}) {
     tokenInvalidated: 0,
     deleted: [] as string[],
     mail: [] as { to: string; text: string }[],
+    handover: [] as string[],
+    applied: [] as { creditId: string; to: string | null }[],
+    reason: undefined as string | undefined,
   };
   const tx = {
     account: {
@@ -84,7 +95,9 @@ function makeService(opts: Opts = {}) {
         calls.listArgs = args;
         return [member()];
       },
-      findFirst: async () => (opts.found === undefined ? member() : opts.found),
+      findFirst: async (args: { where?: { userId?: string } }) =>
+        // La búsqueda del DESTINATARIO del traspaso (por su id) responde con `target`; la del miembro editado, con `found`.
+        args.where?.userId === TARGET ? (opts.target === undefined ? member({ userId: TARGET, user: { ...member().user, id: TARGET } }) : opts.target) : opts.found === undefined ? member() : opts.found,
       count: async (args: { where?: Record<string, unknown> }) => {
         calls.countWhere = args.where;
         // `invite` cuenta asientos ocupados; `updateMember` cuenta otros admins.
@@ -100,6 +113,24 @@ function makeService(opts: Opts = {}) {
       },
       delete: async () => void calls.deleted.push('userAccount'),
     },
+    // El trabajo pendiente y su traspaso.
+    agendaItem: {
+      count: async () => opts.work?.agenda ?? 0,
+      updateMany: async () => void calls.handover.push('agenda'),
+    },
+    credit: {
+      count: async () => opts.work?.credits ?? 0,
+      findMany: async () => Array.from({ length: opts.work?.credits ?? 0 }, (_, i) => ({ id: `cr${i}` })),
+    },
+    routePlan: {
+      count: async () => opts.work?.routes ?? 0,
+      findMany: async () => opts.routes ?? [],
+      findFirst: async (args: { where: { plannedDate: Date } }) =>
+        opts.targetBusyDates?.includes(args.where.plannedDate.toISOString().slice(0, 10)) ? { id: 'ruta-del-destinatario' } : null,
+      update: async (args: { data: Record<string, unknown> }) => void calls.handover.push(args.data.status === 'CANCELLED' ? 'route-cancelled' : 'route-moved'),
+    },
+    routeStop: { updateMany: async () => void calls.handover.push('stops-released') },
+    creditAssignment: { updateMany: async () => void calls.handover.push('coverage-revoked') },
     role: {
       findUnique: async (args: { where: { id: string } }) => ROLES[args.where.id] ?? null,
       findMany: async (args: { where?: Record<string, unknown> }) => {
@@ -142,12 +173,22 @@ function makeService(opts: Opts = {}) {
   // El servicio de topes va DE VERDAD, no como doble: es el que decide si entra uno más, y con un
   // doble el test diría que sí sin haber contado nada.
   const plan = new PlanLimitsService(prisma as never, tenant as never);
+  // El servicio de asignaciones se dobla: acá solo importa QUÉ se le pide (a quién y por qué), no cómo escribe.
+  const assignments = {
+    apply: async (_tx: unknown, requests: { creditId: string; to: string | null }[], reason: string) => {
+      calls.applied.push(...requests);
+      calls.reason = reason;
+      return requests.map((r) => ({ creditId: r.creditId, from: OTHER, to: r.to, reason }));
+    },
+    auditChanges: async () => void calls.audit.push('assignments.audit'),
+  };
   const service = new UsersService(
     prisma as never,
     tenant as never,
     audit as never,
     mail as never,
     plan,
+    assignments as never,
   );
   return { service, calls };
 }
@@ -363,5 +404,73 @@ describe('UsersService.listRoles', () => {
       in: ['ACCOUNT_ADMIN', 'SUPERVISOR', 'COLLECTOR'],
     });
     assert.equal(roles[0]!.name, 'ACCOUNT_ADMIN');
+  });
+});
+
+describe('UsersService.updateMember · desactivar con trabajo a su nombre (F4/11 · D1)', () => {
+  const off = (over: Record<string, unknown> = {}) => ({ isActive: false, ...over }) as never;
+
+  it('sin trabajo se desactiva directo y no toca asignaciones', async () => {
+    const { service, calls } = makeService({ work: {} });
+    await service.updateMember(OTHER, off());
+    assert.equal(calls.updated!.isActive, false);
+    assert.equal(calls.applied.length, 0);
+  });
+
+  it('con trabajo y sin destinatario se rechaza, y dice cuántos de cada cosa', async () => {
+    const { service, calls } = makeService({ work: { agenda: 4, credits: 2, routes: 1 } });
+    await assert.rejects(service.updateMember(OTHER, off()), (err: { response?: { code?: string; details?: unknown } }) => {
+      assert.equal(err.response?.code, 'USER_HAS_PENDING_WORK');
+      assert.deepEqual(err.response?.details, { agenda: 4, credits: 2, routes: 1 });
+      return true;
+    });
+    assert.equal(calls.updated, undefined, 'no se desactivó');
+  });
+
+  it('con destinatario pasa créditos, gestiones y coberturas, y recién entonces desactiva', async () => {
+    const { service, calls } = makeService({ work: { agenda: 3, credits: 2, routes: 0 } });
+    await service.updateMember(OTHER, off({ reassignToUserId: TARGET }));
+    assert.deepEqual(calls.applied, [{ creditId: 'cr0', to: TARGET }, { creditId: 'cr1', to: TARGET }]);
+    assert.equal(calls.reason, 'BULK_REASSIGN');
+    assert.ok(calls.handover.includes('agenda'));
+    assert.ok(calls.handover.includes('coverage-revoked'));
+    assert.equal(calls.updated!.isActive, false);
+    assert.ok(calls.audit.includes('REASSIGN_ON_DEACTIVATE'));
+  });
+
+  it('un destinatario que no puede recibir (gerente, inactivo, inexistente) se rechaza y no se desactiva', async () => {
+    for (const target of [
+      member({ userId: TARGET, role: ROLES[ROLE_MANAGER] }),
+      member({ userId: TARGET, isActive: false }),
+      null,
+    ]) {
+      const { service, calls } = makeService({ work: { agenda: 1 }, target });
+      await rejectsWithCode(service.updateMember(OTHER, off({ reassignToUserId: TARGET })), 'USER_REASSIGN_TARGET_INVALID');
+      assert.equal(calls.updated, undefined);
+    }
+  });
+
+  it('no se pasa el trabajo a la misma persona que se desactiva', async () => {
+    const { service } = makeService({ work: { agenda: 1 } });
+    await rejectsWithCode(service.updateMember(OTHER, off({ reassignToUserId: OTHER })), 'USER_REASSIGN_TARGET_INVALID');
+  });
+
+  it('sus rutas pasan al destinatario si ese día no tiene una; si ya tiene, se cancelan y sueltan sus visitas', async () => {
+    const { service, calls } = makeService({
+      work: { routes: 2 },
+      routes: [{ id: 'r1', plannedDate: new Date('2026-10-08T00:00:00Z') }, { id: 'r2', plannedDate: new Date('2026-10-09T00:00:00Z') }],
+      targetBusyDates: ['2026-10-09'],
+    });
+    await service.updateMember(OTHER, off({ reassignToUserId: TARGET }));
+    assert.ok(calls.handover.includes('route-moved'));
+    assert.ok(calls.handover.includes('route-cancelled'));
+    assert.ok(calls.handover.includes('stops-released'));
+  });
+
+  it('reactivar no mira el trabajo ni pide destinatario', async () => {
+    const { service, calls } = makeService({ found: member({ isActive: false }), work: { agenda: 9 } });
+    await service.updateMember(OTHER, { isActive: true } as never);
+    assert.equal(calls.updated!.isActive, true);
+    assert.equal(calls.applied.length, 0);
   });
 });

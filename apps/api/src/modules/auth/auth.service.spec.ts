@@ -52,6 +52,7 @@ function makeAuth(opts: {
         return {};
       },
     },
+    role: { findUnique: async () => ({ name: 'MANAGER' }) },
     $queryRaw: async () => opts.memberships ?? [],
     // `issueTokens` escribe la sesión y el refresh dentro del tenant destino.
     withTenant: async <T>(_accountId: string, fn: (tx: unknown) => Promise<T>): Promise<T> =>
@@ -310,5 +311,16 @@ describe('AuthService.login — credenciales y lockout', () => {
     });
     await rejectsWithCode(service.login('locked@kobrax.demo', 'loQueSea', META), AUTH_ERR.ACCOUNT_LOCKED);
     assert.equal(calls.userUpdate.length, 0); // no resetea ni registra nada
+  });
+});
+
+describe('AuthService.me — sesión del token (W-LOG-54)', () => {
+  it('devuelve el sessionId para que las pestañas comparen con qué sesión cargaron', async () => {
+    const { service } = makeAuth({
+      user: { id: 'u1', email: 'm@kobrax.demo', profile: null, mfaEnabled: false, requiresPasswordChange: false },
+    });
+    const me = await service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [], sessionId: 'sess-1' });
+    assert.equal(me.sessionId, 'sess-1');
+    assert.equal(me.accountId, 'a1');
   });
 });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AgendaItemStatus, type AgendaItemDetail } from '@kobrax/shared';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList, type FlashList as FlashListType } from '@shopify/flash-list';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
@@ -7,15 +8,16 @@ import { router, useFocusEffect } from 'expo-router';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { AgendaCard, AGENDA_STATUS_LABEL, AGENDA_TYPE_META, EmptyState, SectionLabel } from '@/ui';
 import { authService } from '@/auth-service';
-import { MONTHS, partitionDay, WEEKDAYS_SHORT } from '@/agenda-form';
+import { MONTHS, partitionDay, todayISO, WEEKDAYS_SHORT } from '@/agenda-form';
 import { listByDay, listOverdue, type AgendaListItem } from '@/agenda.service';
+import { quickActions } from '@/agenda-quick';
+import { getOne } from '@/db';
 
 const RANGE = 180; // días a cada lado de hoy (tira "infinita" práctica; onEndReached bidireccional = futuro)
 
-/** Fecha-calendario en UTC (el backend guarda `scheduledDate` a medianoche UTC). */
+/** Hoy para la EMPRESA como fecha-calendario en UTC (el backend guarda `scheduledDate` a medianoche UTC). */
 function utcToday(): Date {
-  const n = new Date();
-  return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()));
+  return new Date(`${todayISO()}T00:00:00.000Z`);
 }
 function addDays(d: Date, n: number): Date {
   return new Date(d.getTime() + n * 86_400_000);
@@ -186,20 +188,7 @@ export default function AgendaScreen() {
           contentContainerStyle={{ padding: SPACING.lg, paddingBottom: SPACING.xxl * 2 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.navy} />}
         >
-          <SectionLabel>Pendientes</SectionLabel>
-          {pending.length === 0 ? (
-            <Text style={styles.emptyLine}>Sin pendientes</Text>
-          ) : (
-            pending.map((it) => <Row key={it.id} item={it} />)
-          )}
-
-          {done.length > 0 && (
-            <>
-              <SectionLabel>Completados</SectionLabel>
-              {done.map((it) => <Row key={it.id} item={it} />)}
-            </>
-          )}
-
+          {/* Lo vencido va ARRIBA: es lo único accionable de un vistazo y, al final de la lista, quedaba detrás de todo el día. */}
           {overdueItems.length > 0 && (
             <>
               <SectionLabel>Vencidos</SectionLabel>
@@ -214,6 +203,21 @@ export default function AgendaScreen() {
               )}
             </>
           )}
+
+          <SectionLabel>Pendientes</SectionLabel>
+          {pending.length === 0 ? (
+            <Text style={styles.emptyLine}>Sin pendientes</Text>
+          ) : (
+            pending.map((it) => <Row key={it.id} item={it} />)
+          )}
+
+          {done.length > 0 && (
+            <>
+              <SectionLabel>Completados</SectionLabel>
+              {done.map((it) => <Row key={it.id} item={it} />)}
+            </>
+          )}
+
         </ScrollView>
       )}
 
@@ -238,8 +242,49 @@ export default function AgendaScreen() {
 }
 
 /** Mapea un agendado a la tarjeta; tocarla abre el detalle (S3). */
+/**
+ * La línea de más de la fila: quién la asignó (una gestión que te pasó un supervisor no se ve igual que una propia) y, cuando
+ * se mira la agenda de un equipo, de quién es.
+ */
+/**
+ * Las acciones rápidas de la fila, de lo que el teléfono ya descargó del detalle (la lista no trae teléfono ni dirección). Se leen
+ * del caché al mostrar la fila; si la gestión nunca se bajó, la fila no ofrece nada y se abre como siempre.
+ */
+function useQuickActions(item: AgendaListItem) {
+  const [actions, setActions] = useState<{ key: string; label: string; icon: string; onPress: () => void }[]>([]);
+  useEffect(() => {
+    let vivo = true;
+    if (item.status !== AgendaItemStatus.SCHEDULED) return;
+    void getOne<AgendaItemDetail>('agenda.detail', item.id).then((detail) => {
+      if (!vivo) return;
+      setActions(
+        quickActions(item.type, item.status, detail, Platform.OS).map((a) => ({
+          key: a.kind,
+          label: a.label,
+          icon: a.icon,
+          onPress: () =>
+            a.url
+              ? void Linking.openURL(a.url).catch(() => Alert.alert('No se pudo abrir', 'Tu teléfono no tiene una app para esta acción.'))
+              // Navegar abre el mapa de Kobrax, no el del teléfono: el mismo que usa la ficha.
+              : router.push(`/cliente/mapa?clientId=${item.clientId}&name=${encodeURIComponent(item.clientName ?? '')}`),
+        })),
+      );
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [item.id, item.status, item.type, item.clientId, item.clientName]);
+  return actions;
+}
+
+function agendaNote(item: AgendaListItem): string | undefined {
+  if (item.assignedByName) return `Asignada por ${item.assignedByName}`;
+  return undefined;
+}
+
 function Row({ item }: { item: AgendaListItem }) {
   const meta = AGENDA_TYPE_META[item.type];
+  const actions = useQuickActions(item);
   return (
     <View style={{ marginBottom: SPACING.sm }}>
       <AgendaCard
@@ -250,6 +295,8 @@ function Row({ item }: { item: AgendaListItem }) {
         statusLabel={AGENDA_STATUS_LABEL[item.status]}
         tone={meta.tone}
         overdue={item.isOverdue}
+        note={agendaNote(item)}
+        actions={actions}
         onPress={() => router.push(`/agenda/${item.id}`)}
       />
     </View>

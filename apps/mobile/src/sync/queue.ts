@@ -53,6 +53,7 @@ import {
 import { addMoraActivity, addMoraNote } from '../mora.service';
 import { getUserId } from '../session';
 import { confirmProvisionalRow, dropProvisionalRow } from './optimistic';
+import { withAgendaExplanation } from './agenda-conflicts';
 
 export type { PendingPhoto } from '../queue-photos';
 
@@ -405,14 +406,24 @@ export async function send(action: PendingAction): Promise<SendResult> {
       return mapMutate(await markArrears(action.creditId, action.days));
     case 'arrears.clear':
       return mapMutate(await clearArrears(action.creditId, action.input));
-    case 'agenda.complete':
-      return mapMutate(await completeItem(action.id, action.outcome, action.notes));
-    case 'agenda.postpone':
-      return mapMutate(await postponeItem(action.id, action.minutes, action.toTime));
-    case 'agenda.cancel':
-      return mapMutate(await cancelItem(action.id, action.reasonCode));
-    case 'agenda.reschedule':
-      return mapMutate(await rescheduleItem(action.id, action.input));
+    // Las cuatro acciones sobre una gestión existente pueden chocar con lo que otra persona hizo mientras no había señal: si el
+    // servidor las rechaza, la hoja de pendientes explica QUÉ pasó (`agenda-conflicts.ts`) en vez de repetir el mensaje crudo.
+    case 'agenda.complete': {
+      const res = await completeItem(action.id, action.outcome, action.notes);
+      return withAgendaExplanation(mapMutate(res), httpStatusOf(res));
+    }
+    case 'agenda.postpone': {
+      const res = await postponeItem(action.id, action.minutes, action.toTime);
+      return withAgendaExplanation(mapMutate(res), httpStatusOf(res));
+    }
+    case 'agenda.cancel': {
+      const res = await cancelItem(action.id, action.reasonCode);
+      return withAgendaExplanation(mapMutate(res), httpStatusOf(res));
+    }
+    case 'agenda.reschedule': {
+      const res = await rescheduleItem(action.id, action.input);
+      return withAgendaExplanation(mapMutate(res), httpStatusOf(res));
+    }
     case 'mora.activity':
       return mapMutate(await addMoraActivity(action.creditId, action.input));
     case 'credit.note':
@@ -580,6 +591,11 @@ async function confirmProvisional(kind: 'client' | 'credit', id: string, clientI
 }
 
 // ── Mapeo de resultados ───────────────────────────────────────────────────────
+
+/** El código HTTP de un rechazo, si lo hubo. */
+function httpStatusOf(res: { status: string; httpStatus?: number }): number | undefined {
+  return res.status === 'error' ? res.httpStatus : undefined;
+}
 
 function mapMutate(res: { status: string; message?: string; httpStatus?: number; reason?: string }): SendResult {
   if (res.status === 'ok') return { status: 'ok' };

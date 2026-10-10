@@ -10,6 +10,8 @@ export function serializeNotification(n: Notification): NotificationPayload {
     body: n.body,
     clientId: n.clientId,
     creditId: n.creditId,
+    agendaItemId: n.agendaItemId,
+    routeId: n.routeId,
     readAt: n.readAt ? n.readAt.toISOString() : null,
     createdAt: n.createdAt.toISOString(),
   };

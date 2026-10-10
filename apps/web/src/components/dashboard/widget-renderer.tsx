@@ -1,6 +1,8 @@
+import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import type {
   AgendaSummary,
+  AgendaTodaySummary,
   AgingBucketRow,
   AnalyticsSummary,
   CollectorPerformanceRow,
@@ -14,7 +16,9 @@ import { widgetDefinition } from '@/lib/widget-registry';
 import { money, percent } from '@/lib/format';
 import { WidgetFrame } from './widget-frame';
 import { KpiWidget } from './widgets/kpi-widget';
+import { KpiStrip } from './widgets/kpi-strip';
 import { AgingBars, AgingDonut } from './widgets/aging-widgets';
+import { AgendaToday } from './agenda-today';
 import { AgendaDonut, IndicatorsList } from './widgets/agenda-widgets';
 import { CollectorsTable } from './widgets/collectors-table';
 import { TrendChart } from './widgets/trend-chart';
@@ -26,6 +30,8 @@ export interface DashboardData {
   aging?: AgingBucketRow[];
   collectors?: CollectorPerformanceRow[];
   agenda?: AgendaSummary;
+  /** `GET /agenda/summary`: lo de hoy. `undefined` sin `agenda:read`. */
+  today?: AgendaTodaySummary;
   visits?: VisitMapPoint[];
   trend?: TrendPoint[];
   members: Member[];
@@ -36,6 +42,15 @@ export interface DashboardData {
 }
 
 const KPI_KEYS = ['outstanding', 'overdue', 'overdueRate', 'creditsInArrears', 'collected'] as const;
+
+/** El tinte de cada tarjeta: rojo para lo que es mora, verde para lo cobrado, neutro para el saldo. */
+const KPI_TONE: Record<(typeof KPI_KEYS)[number], 'neutral' | 'danger' | 'success'> = {
+  outstanding: 'neutral',
+  overdue: 'danger',
+  overdueRate: 'danger',
+  creditsInArrears: 'danger',
+  collected: 'success',
+};
 
 /** Los tableros ya guardados pueden traer la métrica `activeCases` (la API ya no la entrega): se lee como `creditsInArrears`. */
 const KPI_ALIASES: Record<string, (typeof KPI_KEYS)[number]> = { activeCases: 'creditsInArrears' };
@@ -75,6 +90,21 @@ export async function WidgetRenderer({
 
   switch (widget.type) {
     case 'kpi': {
+      // La tira: cuatro indicadores en un solo widget (el tablero por defecto).
+      if (metric === 'strip') {
+        return (
+          <WidgetFrame
+            title={widget.title || t('widgets.kpiStrip')}
+            actions={actions}
+            editable={editable}
+            tile="none"
+            error={data.errors.summary}
+            empty={data.summary ? undefined : t('error')}
+          >
+            {data.summary ? <KpiStrip summary={data.summary} trend={data.trend} currency={data.currency} /> : null}
+          </WidgetFrame>
+        );
+      }
       const wanted = KPI_ALIASES[metric] ?? metric;
       const key = (KPI_KEYS as readonly string[]).includes(wanted) ? (wanted as (typeof KPI_KEYS)[number]) : 'outstanding';
       const kpi: KpiValue | undefined = data.summary?.[key];
@@ -86,11 +116,18 @@ export async function WidgetRenderer({
       const parts = partKey
         ? data.summary?.bySource.map((s) => ({ label: t(`sources.${s.source}`), value: format(s[partKey]) }))
         : undefined;
-      return frame(
-        t(`kpi.${key}`),
-        kpi ? <KpiWidget kpi={kpi} format={format} parts={parts} /> : null,
-        data.errors.summary,
-        kpi ? undefined : t('error'),
+      const label = widget.title || t(`kpi.${key}`);
+      return (
+        <WidgetFrame
+          title={label}
+          actions={actions}
+          editable={editable}
+          tile={KPI_TONE[key]}
+          error={data.errors.summary}
+          empty={kpi ? undefined : t('error')}
+        >
+          {kpi ? <KpiWidget kpi={kpi} format={format} parts={parts} label={label} /> : null}
+        </WidgetFrame>
       );
     }
 
@@ -132,6 +169,24 @@ export async function WidgetRenderer({
         t('widgets.indicators'),
         data.agenda ? <IndicatorsList summary={data.agenda} /> : null,
         data.errors.agenda,
+      );
+
+    case 'calendar':
+      // «Agenda de hoy»: sin `agenda:read` no hay resumen y el widget lo dice en vez de dibujarse vacío.
+      return (
+        <WidgetFrame
+          title={widget.title || t('agendaToday.title')}
+          actions={actions}
+          editable={editable}
+          aside={
+            <Link href="/agenda" className="text-[13px] font-medium text-k-periwinkle hover:underline">
+              {t('agendaToday.view')} →
+            </Link>
+          }
+          empty={data.today ? undefined : t('agendaToday.noAccess')}
+        >
+          {data.today ? <AgendaToday summary={data.today} /> : null}
+        </WidgetFrame>
       );
 
     case 'line_chart':

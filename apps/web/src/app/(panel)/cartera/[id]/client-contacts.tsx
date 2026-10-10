@@ -7,6 +7,7 @@ import type { ClientContactDetail, ClientLocationDetail } from '@kobrax/shared';
 import { Icon } from '@/components/panel-shell';
 import { Section } from '@/components/panel-ui';
 import { Modal } from '@/components/modal';
+import { PhotoViewer } from '@/components/photo-viewer';
 
 /**
  * El mapa se carga **sólo cuando alguien abre el modal**.
@@ -122,6 +123,13 @@ export function LocationList({
                 hint={[t(`locationType.${l.locationType}`), l.zone].filter(Boolean).join(' · ')}
                 action={
                   <span className="flex shrink-0 items-center gap-2">
+                    {/* La foto principal, chica: es lo que permite reconocer la casa sin abrir el detalle. */}
+                    {l.photoUrls?.[0] && (
+                      <button type="button" onClick={() => setViendo(l)} aria-label={t('photos.title')} className="shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element -- la sirve el BFF con la sesión */}
+                        <img src={l.photoUrls[0]} alt="" loading="lazy" className="h-9 w-9 rounded-md border border-k-border object-cover" />
+                      </button>
+                    )}
                     {!revealed && <RevealButton onClick={onReveal} busy={busy} />}
                     <EyeButton onClick={() => setViendo(l)} />
                   </span>
@@ -165,9 +173,44 @@ export function ContactDetail({ contact }: { contact: ClientContactDetail }) {
 export function LocationDetail({ location }: { location: ClientLocationDetail }) {
   const t = useTranslations('portfolio');
   const conPunto = location.latitude != null && location.longitude != null;
+  const fotos = location.photoUrls ?? [];
+  /** Cuál foto se está mirando en grande (`null` = ninguna). */
+  const [foto, setFoto] = useState<number | null>(null);
 
   return (
     <div className="space-y-4">
+      {/* Las fotos primero: reconocer la casa es lo que se mira antes que el texto. La primera es la principal. */}
+      {fotos.length > 0 && (
+        <section>
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{t('photos.title')}</h3>
+          <ul className="flex flex-wrap gap-3">
+            {fotos.map((url, i) => (
+              <li key={url} className="relative">
+                <button type="button" onClick={() => setFoto(i)} aria-label={t('photos.alt', { n: i + 1 })}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- la sirve el BFF con la sesión */}
+                  <img
+                    src={url}
+                    alt=""
+                    loading="lazy"
+                    className={`h-24 w-32 rounded-lg border-2 object-cover ${i === 0 ? 'border-k-purple' : 'border-k-border'}`}
+                  />
+                </button>
+                {i === 0 && (
+                  <span className="absolute left-1 top-1 rounded bg-k-purple px-1.5 py-0.5 text-[10px] font-semibold text-white">{t('photos.main')}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      <PhotoViewer
+        open={foto !== null}
+        onClose={() => setFoto(null)}
+        title={t(`locationType.${location.locationType}`)}
+        address={location.address ?? undefined}
+        photos={fotos}
+        initialIndex={foto ?? 0}
+      />
       <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
         <Dato label={t('form.locationType')} value={t(`locationType.${location.locationType}`)} />
         <Dato label={t('form.zone')} value={location.zone || '—'} />

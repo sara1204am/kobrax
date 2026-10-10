@@ -38,7 +38,7 @@ export const STOP_STATUS_TONE: Record<RouteStopStatus, Tone> = {
 
 /** Lo que la pantalla de Rutas sabe leer de la URL. Las claves son las que escribe el `DataTable`. */
 export interface RouteParams {
-  /** `planificacion` prepara el trabajo; `historial` (el default) consulta el que ya pasó. */
+  /** `hoy` (el default) mira la jornada; `historial` consulta lo que ya pasó. `planificacion` es el nombre viejo de «Planificar». */
   modo?: string;
   /** Dentro del historial: `dia` (el default) o `periodo`. */
   vista?: string;
@@ -55,18 +55,18 @@ export interface RouteParams {
   pageSize?: string;
 }
 
-export type RouteMode = 'historial' | 'planificacion';
+export type RouteMode = 'hoy' | 'historial';
 export type RouteView = 'dia' | 'periodo';
 
 /**
  * Qué se está mirando, leído de la URL.
  *
- * 🔴 **El historial y el día son los defaults, y no es un detalle**: la pantalla se abre veinte
- * veces al día para ver el trabajo de hoy. Cualquier valor que no reconozca cae ahí en vez de dejar
- * la pantalla en blanco.
+ * 🔴 **«Hoy» es el default (F4/12), y no es un detalle**: la pantalla se abre veinte veces al día para ver qué pasa con
+ * las rutas de la jornada, no para revisar el pasado. El historial es una pestaña aparte. Cualquier valor que no
+ * reconozca cae en «Hoy» en vez de dejar la pantalla en blanco.
  */
 export function routeMode(params: RouteParams): RouteMode {
-  return params.modo === 'planificacion' ? 'planificacion' : 'historial';
+  return params.modo === 'historial' ? 'historial' : 'hoy';
 }
 
 export function routeView(params: RouteParams): RouteView {
@@ -220,4 +220,88 @@ export function totalWork(rows: CollectorWork[]): { collectors: number; stops: n
  */
 export function hasRouteFilters(params: RouteParams): boolean {
   return Boolean(params.collectorId || params.status);
+}
+
+/** Una fila de la vista «Hoy»: un cobrador y su ruta del día, si ya la tiene. */
+export interface TodayRow {
+  collectorId: string;
+  route?: RouteItem;
+}
+
+/** Primero lo que está pasando: en curso, después lo planificado, lo cerrado, y al final quien no tiene ruta. */
+const STATUS_ORDER: Record<RouteStatus, number> = {
+  [RouteStatus.IN_PROGRESS]: 0,
+  [RouteStatus.PLANNED]: 1,
+  [RouteStatus.COMPLETED]: 2,
+  [RouteStatus.CANCELLED]: 3,
+};
+
+/**
+ * Las filas de «Hoy»: **una por cobrador** — con su ruta del día o, si no la tiene, sin ella, para poder planificarla de
+ * ahí mismo (decisión de la vista: la pregunta del día es «¿quién no tiene ruta?» tanto como «¿cómo va cada una?»).
+ *
+ * `collectors` son los que se muestran aunque no tengan ruta (quien administra rutas); un cobrador ve solo la suya, y
+ * una ruta de alguien que ya no está en la lista **igual aparece**: el trabajo del día no desaparece porque la persona
+ * se dio de baja.
+ */
+export function todayRows(routes: RouteItem[], collectors: { userId: string }[], nameOf: (id: string) => string = (id) => id): TodayRow[] {
+  const byCollector = new Map(routes.map((r) => [r.collectorId, r]));
+  const ids = new Set([...routes.map((r) => r.collectorId), ...collectors.map((c) => c.userId)]);
+  return [...ids]
+    .map((collectorId) => ({ collectorId, route: byCollector.get(collectorId) }))
+    .sort((a, b) => {
+      const ra = a.route ? STATUS_ORDER[a.route.status] : 9;
+      const rb = b.route ? STATUS_ORDER[b.route.status] : 9;
+      return ra - rb || nameOf(a.collectorId).localeCompare(nameOf(b.collectorId), 'es');
+    });
+}
+
+/** Avance de una ruta del listado, 0-100. Sin paradas no hay avance que medir: 0, no «100%». */
+export function routePercent(route: Pick<RouteItem, 'totalCases' | 'visitedCount'>): number {
+  if (!route.totalCases) return 0;
+  return Math.min(100, Math.round(((route.visitedCount ?? 0) / route.totalCases) * 100));
+}
+
+/** Las columnas de «Hoy» que ordenan. Se resuelve acá, en memoria: llega el día completo, no una página. */
+export const TODAY_SORTS = ['collector', 'status', 'stops', 'progress', 'collected'] as const;
+
+/** Valor del filtro de estado para «el cobrador todavía no tiene ruta»: no es un `RouteStatus`. */
+export const NO_ROUTE = 'NONE';
+
+/**
+ * Filtra y ordena las filas de «Hoy» según la URL (`collectorId`, `status`, `sort`, `dir`).
+ *
+ * 🔴 **Es exacto porque el día entero está en memoria**, a diferencia del historial, donde lo resuelve la API. Una clave
+ * de orden o un estado que no se conozca **no hace nada**: se queda el orden por defecto de `todayRows`.
+ * Quien no tiene ruta va siempre al final al ordenar por un dato de la ruta, en cualquier sentido: no tiene «cero
+ * paradas», no tiene paradas.
+ */
+export function filterTodayRows(
+  rows: TodayRow[],
+  params: Pick<RouteParams, 'collectorId' | 'status' | 'sort' | 'dir'>,
+  nameOf: (id: string) => string = (id) => id,
+): TodayRow[] {
+  let out = rows;
+  if (params.collectorId) out = out.filter((r) => r.collectorId === params.collectorId);
+  if (params.status === NO_ROUTE) out = out.filter((r) => !r.route);
+  else if (params.status && params.status in STATUS_ORDER) out = out.filter((r) => r.route?.status === params.status);
+
+  const key = (TODAY_SORTS as readonly string[]).includes(params.sort ?? '') ? params.sort : undefined;
+  if (!key) return out;
+  const sign = params.dir === 'desc' ? -1 : 1;
+  const value = (r: TodayRow): number | string | null => {
+    if (key === 'collector') return nameOf(r.collectorId);
+    if (!r.route) return null;
+    if (key === 'status') return STATUS_ORDER[r.route.status];
+    if (key === 'stops') return r.route.totalCases;
+    if (key === 'progress') return routePercent(r.route);
+    return r.route.collected ?? 0;
+  };
+  return [...out].sort((a, b) => {
+    const va = value(a);
+    const vb = value(b);
+    if (va === null || vb === null) return va === vb ? 0 : va === null ? 1 : -1;
+    const c = typeof va === 'string' ? va.localeCompare(vb as string, 'es') : va - (vb as number);
+    return sign * c || nameOf(a.collectorId).localeCompare(nameOf(b.collectorId), 'es');
+  });
 }

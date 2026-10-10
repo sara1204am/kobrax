@@ -68,6 +68,11 @@ jest.mock('../agenda.service', () => ({
     return ok([]);
   }),
   clientContext: jest.fn(async () => ({ status: 'ok', data: { credits: [{ creditId: 'cr1' }, { creditId: 'cr2' }] }, total: 1 })),
+  getItem: jest.fn(async (id: string) => {
+    mockLlamadas.push({ fn: 'getItem', params: id });
+    return { status: 'ok', data: { item: { id } }, total: 1 };
+  }),
+  refreshTenantToday: jest.fn(async () => {}),
 }));
 jest.mock('../catalogs.service', () => ({ listCatalog: jest.fn(async () => ok([{ id: 'k' }])) }));
 jest.mock('../notifications.service', () => ({ listNotifications: jest.fn(async () => ok([])) }));
@@ -193,6 +198,36 @@ describe('hydrate · usa las consultas de las pantallas', () => {
     await hydrate('u1');
     const conEstado = mockLlamadas.filter((l) => l.fn === 'listRoutes').map((l) => JSON.stringify(l.params));
     expect(conEstado.some((p) => p.includes('status'))).toBe(true);
+  });
+});
+
+describe('hydrate · agenda: la semana y el detalle de cada gestión (F4/11)', () => {
+  const pendiente = (id: string) => ({ id, status: 'SCHEDULED', scheduledDate: '2026-10-07T00:00:00.000Z', scheduledTime: '09:00' });
+
+  it('pide primero qué día es para la empresa y recién después la agenda', async () => {
+    const { refreshTenantToday } = jest.requireMock('../agenda.service') as { refreshTenantToday: jest.Mock };
+    refreshTenantToday.mockClear();
+    await hydrate('u1');
+    expect(refreshTenantToday).toHaveBeenCalledTimes(1);
+  });
+
+  it('baja hoy y los siete días que siguen, cada uno con su propia consulta', async () => {
+    const r = await hydrate('u1');
+    expect(mockLlamadas.filter((l) => l.fn === 'listByDay')).toHaveLength(1 + 7);
+    expect(r.ok).toContain('agenda de la semana');
+  });
+
+  it('baja el detalle de las pendientes (sin repetir las ejecutadas ni las que aparecen en dos listas)', async () => {
+    mockRes.agenda = ok([pendiente('g1'), pendiente('g2'), { ...pendiente('g3'), status: 'EXECUTED' }]);
+    const r = await hydrate('u1');
+    expect(mockLlamadas.filter((l) => l.fn === 'getItem').map((l) => l.params).sort()).toEqual(['g1', 'g2']);
+    expect(r.ok).toContain('detalle de las gestiones');
+  });
+
+  it('sin gestiones no hay detalle que bajar y no cuenta como falla', async () => {
+    const r = await hydrate('u1');
+    expect(mockLlamadas.filter((l) => l.fn === 'getItem')).toHaveLength(0);
+    expect(r.failed).not.toContain('detalle de las gestiones');
   });
 });
 

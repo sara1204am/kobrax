@@ -3,15 +3,19 @@ import { RouteStatus, RouteStopStatus, summarizeDay, type RouteItem } from '@kob
 import {
   CATEGORY_TONE,
   DEFAULT_PAGE_SIZE,
+  NO_ROUTE,
   ROUTE_STATUS_TONE,
   STOP_STATUS_TONE,
+  filterTodayRows,
   hasRouteFilters,
   routeLimit,
   routeMode,
+  routePercent,
   routePeriod,
   routeQuery,
   routeView,
   summarizeByCollector,
+  todayRows,
   totalWork,
 } from './routes';
 
@@ -69,17 +73,18 @@ describe('routeQuery', () => {
 });
 
 describe('modo y vista', () => {
-  it('sin nada en la URL: historial, por día', () => {
-    // Es la pantalla que se abre veinte veces al día. Cualquier otra cosa por default sería
-    // hacerle pagar a todo el mundo el camino que se recorre una vez por semana.
-    expect(routeMode({})).toBe('historial');
+  it('sin nada en la URL: «Hoy», y el historial por día', () => {
+    // Es la pantalla que se abre veinte veces al día, y se abre a mirar la jornada, no el pasado (F4/12).
+    expect(routeMode({})).toBe('hoy');
     expect(routeView({})).toBe('dia');
   });
 
   it('un valor inventado cae al default en vez de dejar la pantalla en blanco', () => {
-    expect(routeMode({ modo: 'cualquiera' })).toBe('historial');
+    expect(routeMode({ modo: 'cualquiera' })).toBe('hoy');
     expect(routeView({ vista: 'cualquiera' })).toBe('dia');
-    expect(routeMode({ modo: 'planificacion' })).toBe('planificacion');
+    expect(routeMode({ modo: 'historial' })).toBe('historial');
+    // `planificacion` ya no es un modo: la página redirige a /rutas/planificar y acá cae en «Hoy».
+    expect(routeMode({ modo: 'planificacion' })).toBe('hoy');
     expect(routeView({ vista: 'periodo' })).toBe('periodo');
   });
 });
@@ -190,6 +195,45 @@ describe('hasRouteFilters', () => {
   });
 });
 
+describe('filterTodayRows — filtros y orden de «Hoy»', () => {
+  const r = (collectorId: string, status: RouteStatus, over: Partial<RouteItem> = {}) =>
+    ({ collectorId, route: { id: `r-${collectorId}`, collectorId, status, totalCases: 10, visitedCount: 0, ...over } as RouteItem });
+  const rows = [
+    r('ana', RouteStatus.IN_PROGRESS, { totalCases: 8, visitedCount: 4, collected: 100 }),
+    r('bea', RouteStatus.PLANNED, { totalCases: 12, collected: 0 }),
+    { collectorId: 'carla' },
+    r('dora', RouteStatus.COMPLETED, { totalCases: 5, visitedCount: 5, collected: 900 }),
+  ];
+  const names: Record<string, string> = { ana: 'Ana', bea: 'Bea', carla: 'Carla', dora: 'Dora' };
+  const nameOf = (id: string) => names[id] ?? id;
+  const ids = (list: ReturnType<typeof filterTodayRows>) => list.map((x) => x.collectorId);
+
+  it('sin parámetros no toca ni el orden ni las filas', () => {
+    expect(ids(filterTodayRows(rows, {}, nameOf))).toEqual(['ana', 'bea', 'carla', 'dora']);
+  });
+
+  it('filtra por cobrador y por estado, y «sin ruta» es un estado más', () => {
+    expect(ids(filterTodayRows(rows, { collectorId: 'bea' }, nameOf))).toEqual(['bea']);
+    expect(ids(filterTodayRows(rows, { status: RouteStatus.COMPLETED }, nameOf))).toEqual(['dora']);
+    expect(ids(filterTodayRows(rows, { status: NO_ROUTE }, nameOf))).toEqual(['carla']);
+  });
+
+  it('ordena por paradas, avance y recaudado en los dos sentidos', () => {
+    expect(ids(filterTodayRows(rows, { sort: 'stops', dir: 'desc' }, nameOf))).toEqual(['bea', 'ana', 'dora', 'carla']);
+    expect(ids(filterTodayRows(rows, { sort: 'progress', dir: 'desc' }, nameOf))).toEqual(['dora', 'ana', 'bea', 'carla']);
+    expect(ids(filterTodayRows(rows, { sort: 'collected', dir: 'asc' }, nameOf))).toEqual(['bea', 'ana', 'dora', 'carla']);
+  });
+
+  it('🔴 quien no tiene ruta queda al final al ordenar por un dato de la ruta, suba o baje', () => {
+    expect(ids(filterTodayRows(rows, { sort: 'stops', dir: 'asc' }, nameOf)).at(-1)).toBe('carla');
+    expect(ids(filterTodayRows(rows, { sort: 'stops', dir: 'desc' }, nameOf)).at(-1)).toBe('carla');
+  });
+
+  it('una clave de orden o un estado desconocidos no hacen nada', () => {
+    expect(ids(filterTodayRows(rows, { sort: 'nada', status: 'NOPE' }, nameOf))).toEqual(['ana', 'bea', 'carla', 'dora']);
+  });
+});
+
 describe('los tonos cubren todos los estados', () => {
   it('ninguno queda sin color', () => {
     for (const status of Object.values(RouteStatus)) expect(ROUTE_STATUS_TONE[status]).toBeTruthy();
@@ -222,5 +266,56 @@ describe('summarizeDay sobre una ruta del listado', () => {
     expect(summary.total).toBe(0);
     expect(summary.percent).toBe(0);
     expect(route.totalCases).toBe(8); // lo que la tabla SÍ puede mostrar
+  });
+});
+
+const route = (collectorId: string, status: RouteStatus, over: Partial<RouteItem> = {}): RouteItem =>
+  ({ id: 'r-' + collectorId, collectorId, plannedDate: '2026-10-08', status, totalCases: 4, createdAt: '2026-10-07T00:00:00Z', ...over }) as RouteItem;
+
+describe('todayRows · una fila por cobrador (F4/12)', () => {
+  const names: Record<string, string> = { ana: 'Ana', bea: 'Bea', carla: 'Carla', dora: 'Dora' };
+  const nameOf = (id: string) => names[id] ?? id;
+
+  it('primero lo que está pasando: en curso, planificada, cerrada; y al final quien no tiene ruta', () => {
+    const rows = todayRows(
+      [route('ana', RouteStatus.COMPLETED), route('bea', RouteStatus.IN_PROGRESS), route('carla', RouteStatus.PLANNED)],
+      [{ userId: 'dora' }, { userId: 'ana' }],
+      nameOf,
+    );
+    expect(rows.map((r) => r.collectorId)).toEqual(['bea', 'carla', 'ana', 'dora']);
+    expect(rows[3]!.route).toBeUndefined();
+  });
+
+  it('quien no tiene ruta aparece igual: la pregunta del día es también «¿a quién le falta?»', () => {
+    const rows = todayRows([], [{ userId: 'ana' }, { userId: 'bea' }], nameOf);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => !r.route)).toBe(true);
+  });
+
+  it('una ruta de alguien que ya no está en la lista igual aparece: el trabajo del día no desaparece', () => {
+    const rows = todayRows([route('baja', RouteStatus.PLANNED)], [{ userId: 'ana' }], nameOf);
+    expect(rows.map((r) => r.collectorId).sort()).toEqual(['ana', 'baja']);
+  });
+
+  it('dentro del mismo estado, por nombre y sin tildes que rompan el orden', () => {
+    const rows = todayRows([route('carla', RouteStatus.PLANNED), route('ana', RouteStatus.PLANNED), route('bea', RouteStatus.PLANNED)], [], nameOf);
+    expect(rows.map((r) => r.collectorId)).toEqual(['ana', 'bea', 'carla']);
+  });
+});
+
+describe('routePercent', () => {
+  it('visitadas sobre planificadas, redondeado', () => {
+    expect(routePercent({ totalCases: 8, visitedCount: 4 })).toBe(50);
+    expect(routePercent({ totalCases: 3, visitedCount: 1 })).toBe(33);
+    expect(routePercent({ totalCases: 4, visitedCount: 4 })).toBe(100);
+  });
+
+  it('sin paradas no hay avance que medir: 0, no «100%»', () => {
+    expect(routePercent({ totalCases: 0, visitedCount: 0 })).toBe(0);
+    expect(routePercent({ totalCases: 0 })).toBe(0);
+  });
+
+  it('sin el contador del listado no inventa avance', () => {
+    expect(routePercent({ totalCases: 5 })).toBe(0);
   });
 });
