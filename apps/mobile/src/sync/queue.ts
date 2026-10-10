@@ -15,7 +15,14 @@
  * falla después de que la visita salió NO se pierde ni se reintenta junto con ella**: se re-encola como su
  * propio ítem (ver `sendVisit`). Así el que falla no arrastra a nadie y nada se descarta en silencio.
  */
-import type { AgendaOutcome, AgendaPostponeStep, NewCreditNote, RecoveryActivityInput, RouteStatus } from '@kobrax/shared';
+import type {
+  AgendaOutcome,
+  AgendaPostponeStep,
+  NewCreditNote,
+  RecoveryActivityInput,
+  RouteStatus,
+  UpdateAgendaInput,
+} from '@kobrax/shared';
 import * as db from '../db';
 import { nuevoId } from '../ids';
 import { deleteQueuePhoto, persistPhoto, photoExists, type PendingPhoto } from '../queue-photos';
@@ -43,8 +50,10 @@ import {
   clientContextLive,
   completeItem,
   createItem,
+  deleteItem,
   postponeItem,
   rescheduleItem,
+  updateItem,
   type CreateAgendaInput,
   type NewClientContact,
   type NewClientLocation,
@@ -134,6 +143,12 @@ export type QueuedAction =
    * ejecutar" en vez de cancelar de nuevo o crear una segunda gestión reagendada.
    */
   | { kind: 'agenda.cancel'; id: string; reasonCode: string }
+  /**
+   * Editar y eliminar una gestión sin señal. El `patch` lleva todos los campos del formulario (valores, no incrementos), así que
+   * repetirlo deja lo mismo. Solo quien la creó puede hacerlo: si no, el servidor rechaza (403) y la hoja de pendientes lo explica.
+   */
+  | { kind: 'agenda.update'; id: string; patch: UpdateAgendaInput }
+  | { kind: 'agenda.delete'; id: string }
   | { kind: 'agenda.reschedule'; id: string; input: RescheduleAgendaInput }
   /**
    * Gestión con resultado y promesa sobre un crédito (al día o en mora; es la única vía de gestiones: ya no hay
@@ -208,6 +223,8 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'arrears.mark': 'Préstamo marcado en mora',
   'arrears.clear': 'Préstamo puesto al día',
   'agenda.cancel': 'Gestión cancelada',
+  'agenda.update': 'Gestión editada',
+  'agenda.delete': 'Gestión eliminada',
   'agenda.reschedule': 'Gestión reagendada',
   'mora.activity': 'Gestión registrada',
   'credit.note': 'Nota del crédito',
@@ -420,6 +437,16 @@ export async function send(action: PendingAction): Promise<SendResult> {
     }
     case 'agenda.cancel': {
       const res = await cancelItem(action.id, action.reasonCode);
+      return withAgendaExplanation(mapMutate(res), httpStatusOf(res));
+    }
+    case 'agenda.update': {
+      const res = await updateItem(action.id, action.patch);
+      return withAgendaExplanation(mapMutate(res), httpStatusOf(res));
+    }
+    case 'agenda.delete': {
+      // Un 404 es «ya no existe»: eliminada (por este mismo pedido que se repitió) o por otra persona. Es el resultado buscado.
+      const res = await deleteItem(action.id);
+      if (res.status === 'error' && res.httpStatus === 404) return { status: 'ok' };
       return withAgendaExplanation(mapMutate(res), httpStatusOf(res));
     }
     case 'agenda.reschedule': {

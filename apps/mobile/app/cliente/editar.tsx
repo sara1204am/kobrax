@@ -18,7 +18,7 @@ import {
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { Header, SectionLabel } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
-import { MONTHS } from '@/agenda-form';
+import { MONTHS, todayISO } from '@/agenda-form';
 import { ClienteFormView } from '@/cliente-form-view';
 import { collateralPayload, contactPayload, hydrateCliente, locationPayload, relationPayload, type ClienteForm } from '@kobrax/shared';
 import { diffCliente, hasClientChanges as hasChanges, type ClienteOps } from '@kobrax/shared';
@@ -43,11 +43,6 @@ import {
 import { getCredit, listClientCredits, updateCredit, type CreditDetail, type CreditOption } from '@/credits.service';
 import { CreditQuotePanel, CreditTermsFormView, InitialStateFields, PlanSheet } from '@/credit-terms-view';
 
-/** Hoy como día civil en la zona del teléfono. */
-function todayIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 /** Por qué las condiciones no se pueden cambiar (el mismo criterio que la API y la web). */
 const BLOCK_TEXT = {
@@ -113,7 +108,7 @@ export default function EditarScreen() {
       if (cs.status === 'ok') setCredits(cs.data);
       if (k?.status === 'ok') {
         setCr(k.data);
-        const opened = { form: creditFormFromCredit(k.data, todayIso()), initial: initialStateForm(k.data.initialState) };
+        const opened = { form: creditFormFromCredit(k.data, todayISO()), initial: initialStateForm(k.data.initialState) };
         setCrOpened(opened);
         setCrDraft(opened);
         setCrNext(k.data.nextDueDate?.slice(0, 10));

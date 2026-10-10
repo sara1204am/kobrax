@@ -15,18 +15,12 @@ import {
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { Header } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
-import { money } from '@/agenda-form';
+import { money, todayISO } from '@/agenda-form';
 import { CreditQuotePanel, CreditTermsFormView, InitialStateFields, PlanSheet, prettyDay } from '@/credit-terms-view';
 import { createCredit } from '@/credits.service';
 import { getAccount, hayLugar } from '@/account.service';
 import { nuevoId } from '@/ids';
 import { queueForLater } from '@/sync/sync.service';
-
-/** Hoy como día civil en la zona del teléfono: con UTC, Bolivia proponía mañana a partir de las 20:00. */
-function todayIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 const CURRENCY = 'BOB';
 
@@ -42,7 +36,7 @@ const CURRENCY = 'BOB';
  */
 export default function NuevoPrestamoScreen() {
   const { clientId, name } = useLocalSearchParams<{ clientId?: string; name?: string }>();
-  const [form, setForm] = useState<CreditForm>(() => initialCreditForm(todayIso()));
+  const [form, setForm] = useState<CreditForm>(() => initialCreditForm(todayISO()));
   const [inProgress, setInProgress] = useState(false);
   const [initial, setInitial] = useState<InitialStateForm>(() => initialStateForm());
   const [saving, setSaving] = useState(false);
@@ -137,7 +131,7 @@ export default function NuevoPrestamoScreen() {
               label="Registrar otro"
               variant="ghost"
               onPress={() => {
-                setForm(initialCreditForm(todayIso()));
+                setForm(initialCreditForm(todayISO()));
                 setInProgress(false);
                 setInitial(initialStateForm());
                 setDoneMsg(null);

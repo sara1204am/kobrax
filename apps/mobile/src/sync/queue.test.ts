@@ -21,6 +21,7 @@ const mockDb = {
   meta: new Map<string, string>(),
 };
 const mockApi = {
+  agendaWrite: { status: 'ok', data: {} } as { status: string; data?: unknown; message?: string; httpStatus?: number },
   payment: { status: 'ok', data: {} } as Record<string, unknown>,
   item: { status: 'ok', data: {} } as Record<string, unknown>,
   evidence: { status: 'ok', data: {} } as Record<string, unknown>,
@@ -92,6 +93,14 @@ jest.mock('../agenda.service', () => ({
   rescheduleItem: jest.fn(async (id: string, input: { scheduledDate: string }) => {
     mockCalls.push(`rescheduleItem:${id}:${input.scheduledDate}`);
     return { status: 'ok', data: {} };
+  }),
+  updateItem: jest.fn(async (id: string, patch: { observations?: string }) => {
+    mockCalls.push(`updateItem:${id}:${patch.observations}`);
+    return mockApi.agendaWrite;
+  }),
+  deleteItem: jest.fn(async (id: string) => {
+    mockCalls.push(`deleteItem:${id}`);
+    return mockApi.agendaWrite;
   }),
 }));
 jest.mock('../db', () => ({
@@ -595,6 +604,34 @@ describe('send · timeout vs offline', () => {
     mockMora.res = { status: 'offline', reason: 'offline' };
     const r = await send({ kind: 'credit.note', creditId: 'c', input: { id: 'n', body: 'x' } });
     expect(r).toEqual({ status: 'offline' });
+  });
+});
+
+describe('send · editar y eliminar una gestión (A1)', () => {
+  beforeEach(() => {
+    mockApi.agendaWrite = { status: 'ok', data: {} };
+  });
+
+  it('editar manda el parche completo', async () => {
+    expect((await send({ kind: 'agenda.update', id: 'a1', patch: { observations: 'llamar antes' } })).status).toBe('ok');
+    expect(mockCalls).toContain('updateItem:a1:llamar antes');
+  });
+
+  it('eliminar una que ya no existe (404) es el resultado buscado', async () => {
+    mockApi.agendaWrite = { status: 'error', message: 'no existe', httpStatus: 404 };
+    expect((await send({ kind: 'agenda.delete', id: 'a1' })).status).toBe('ok');
+  });
+
+  it('editar una que cambió (409) o ajena (403) es rechazo definitivo y explicado', async () => {
+    for (const httpStatus of [409, 403]) {
+      mockApi.agendaWrite = { status: 'error', message: 'x', httpStatus };
+      expect(await send({ kind: 'agenda.update', id: 'a1', patch: {} })).toMatchObject({ status: 'error', permanent: true });
+    }
+  });
+
+  it('sin señal sigue pendiente', async () => {
+    mockApi.agendaWrite = { status: 'offline' };
+    expect((await send({ kind: 'agenda.delete', id: 'a1' })).status).toBe('offline');
   });
 });
 

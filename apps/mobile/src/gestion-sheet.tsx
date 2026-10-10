@@ -9,7 +9,7 @@ import DateTimePicker, { type DateTimePickerEvent } from '@react-native-communit
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { AmountInput, BottomSheet, Chips, SectionLabel } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
-import { MONTHS } from '@/agenda-form';
+import { MONTHS, todayISO } from '@/agenda-form';
 import { CatalogType } from '@kobrax/shared';
 import { listCatalogCached } from '@/catalogs.service';
 import { gestionError, localToday } from '@/mora-ficha';
@@ -25,9 +25,9 @@ export interface Outcome {
   promise?: boolean;
 }
 
+/** Hoy, día de la empresa (antes era el día UTC del teléfono: a las 20:00 en Bolivia ya era «mañana»). */
 export function todayIso(): string {
-  const n = new Date();
-  return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate())).toISOString().slice(0, 10);
+  return todayISO();
 }
 export function prettyDate(iso?: string): string {
   if (!iso) return '—';

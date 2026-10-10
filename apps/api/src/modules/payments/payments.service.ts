@@ -5,6 +5,7 @@ import { CreditStatus } from '@prisma/client';
 import { isExternalOrigin, readCreditMetadata, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
+import { TenantClockService, civilDayStartInstant } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { applyPayment, creditPatchAfterPayment } from './payment-apply';
@@ -48,6 +49,7 @@ export class PaymentsService {
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
     private readonly events: EventBusService,
+    private readonly clock: TenantClockService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -211,7 +213,14 @@ export class PaymentsService {
         ...(query.source ? { externalSource: query.source === 'KOBRAX' ? null : query.source } : {}),
       };
     }
-    if (query.from || query.to) where.paymentDate = { ...(query.from ? { gte: new Date(query.from) } : {}), ...(query.to ? { lte: new Date(query.to) } : {}) };
+    if (query.day) {
+      // El día es el CIVIL de la empresa (mismo criterio que las visitas): [00:00 del día, 00:00 del siguiente).
+      const tz = await this.clock.timezone();
+      const next = new Date(new Date(`${query.day}T00:00:00.000Z`).getTime() + 86_400_000).toISOString().slice(0, 10);
+      where.paymentDate = { gte: civilDayStartInstant(query.day, tz), lt: civilDayStartInstant(next, tz) };
+    } else if (query.from || query.to) {
+      where.paymentDate = { ...(query.from ? { gte: new Date(query.from) } : {}), ...(query.to ? { lte: new Date(query.to) } : {}) };
+    }
 
     /*
      * El orden. Por defecto, lo último cobrado primero: un ledger se abre para ver qué entró recién.
