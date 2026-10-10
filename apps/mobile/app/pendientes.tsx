@@ -10,6 +10,8 @@ import { whenLabel } from '@/notifications.service';
 import { actionLabel, discardPending, pendingActions, type PendingAction } from '@/sync/queue';
 import { REJECTED_ATTEMPTS } from '@/db';
 import { drain, refreshPendingCount } from '@/sync/sync.service';
+import { queuePhotosUsage } from '@/queue-photos';
+import { PENDING_PHOTOS_MAX_BYTES } from '@kobrax/shared';
 
 interface Fila {
   id: number;
@@ -31,10 +33,13 @@ export default function PendientesScreen() {
   const [subiendo, setSubiendo] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const online = useNetStore((s) => s.isConnected);
+  /** Lo que ocupan las fotos que esperan señal (D-9): para que el cobrador sepa cuánto lugar queda. */
+  const [fotos, setFotos] = useState<{ count: number; bytes: number } | null>(null);
 
   const cargar = useCallback(async () => {
     const userId = await getUserId();
     setFilas(userId ? await pendingActions(userId) : []);
+    setFotos(await queuePhotosUsage());
   }, []);
 
   useFocusEffect(
@@ -54,6 +59,7 @@ export default function PendientesScreen() {
     await cargar();
     if (res.stopped === 'offline') setAviso('Sigue sin haber señal. Lo pendiente no se pierde.');
     else if (res.stopped === 'auth') setAviso('Tu sesión venció. Volvé a entrar y se sube solo.');
+    else if (res.stopped === 'upgrade') setAviso('Hay que actualizar la app. Lo pendiente está a salvo y sale solo al actualizar.');
     else if (res.failed > 0) setAviso(`${res.sent} subieron; ${res.failed} siguen sin poder subir.`);
     else if (res.sent > 0) setAviso(`${res.sent} ${res.sent === 1 ? 'acción subió' : 'acciones subieron'}.`);
   }, [cargar]);
@@ -108,6 +114,11 @@ export default function PendientesScreen() {
               que lo vuelvas a cargar.
             </Text>
             {aviso && <Text style={styles.aviso}>{aviso}</Text>}
+            {fotos && fotos.count > 0 && (
+              <Text style={TYPE.secondary}>
+                {`${fotos.count} ${fotos.count === 1 ? 'foto espera' : 'fotos esperan'} señal · ${(fotos.bytes / 1048576).toFixed(1)} MB de ${Math.round(PENDING_PHOTOS_MAX_BYTES / 1048576)} MB`}
+              </Text>
+            )}
 
             {filas.map((f) => {
               const noSoportado = f.action.kind === 'unsupported';

@@ -13,6 +13,8 @@ import { AGENDA_OUTCOME_META, BottomSheet, SectionLabel } from './ui';
 import { money } from './agenda-form';
 import { getAccount } from './account.service';
 import { completeItem, postponeItem, postponeTarget, whatsappLink, type AgendaItemDetail, type AgendaListItem } from './agenda.service';
+import { syncAgendaReminders } from './agenda-notifications';
+import { todayISO } from './agenda-form';
 import { listCatalogCached, type CatalogOption } from './catalogs.service';
 import { queueForLater } from './sync/sync.service';
 import { patchAgendaItemLocal } from './sync/agenda-optimistic';
@@ -87,6 +89,8 @@ export function RegisterSheet({
       setBusy(false);
       if (res.status === 'ok') {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // Pospuesta: el aviso programado quedó a la hora vieja. Programar el mismo id lo reemplaza.
+        if (local.scheduledTime) void syncAgendaReminders([res.data], { complete: false }).catch(() => undefined);
         onUpdated(res.data);
         return;
       }
@@ -100,6 +104,8 @@ export function RegisterSheet({
           // el cobrador acaba de hacer, y el estado real llega cuando la cola drene.
           // Y en las listas y contadores del teléfono: sin esto, al volver a la Agenda seguía pendiente y se podía registrar otra vez.
           await patchAgendaItemLocal(item, local);
+          // El parche cancela el aviso viejo; el de la hora nueva se programa ya (sin esperar a la próxima hidratación).
+          if (local.scheduledTime) void syncAgendaReminders([{ ...item, ...local }], { complete: false }).catch(() => undefined);
           onUpdated({ ...item, ...local });
           return;
         }
@@ -159,12 +165,21 @@ export function RegisterSheet({
               onPress={() => {
                 // La hora de destino se calcula ACÁ, al tocar: la misma viaja en el intento y en la cola, así
                 // que repetir el envío deja la gestión en esa hora y no la corre otro tanto.
-                const toTime = postponeTarget(item, m);
+                // D-8: una de HOY que ya venció se pospone desde AHORA (sumar sobre su hora vieja la dejaba en el pasado).
+                const now = new Date();
+                const isToday = String(item.scheduledDate).slice(0, 10) === todayISO(now);
+                const toTime = postponeTarget(item, m, isToday ? { nowMinutes: now.getHours() * 60 + now.getMinutes() } : {});
+                if (!toTime) {
+                  // Posponer no cambia de día: no hay hora válida. Se dice, en vez de mandar un pedido que se rechaza
+                  // (o, sin señal, de «posponer» sin efecto).
+                  setError('No se puede posponer más allá de las 23:59. Usa «Reagendar» para elegir otro día.');
+                  return;
+                }
                 return submit(
                   () => postponeItem(item.id, m, toTime),
                   { kind: 'agenda.postpone', id: item.id, minutes: m, toTime },
-                  // Pospuesta sigue pendiente: sólo cambia la hora (no se marca como ejecutada).
-                  toTime ? { timeMode: ScheduleTimeMode.FIXED, scheduledTime: toTime } : {},
+                  // Pospuesta sigue pendiente: sólo cambia la hora, y deja de ser «por franja» (no se marca como ejecutada).
+                  { timeMode: ScheduleTimeMode.FIXED, scheduledTime: toTime, timeSlot: undefined },
                 );
               }}
               disabled={busy}

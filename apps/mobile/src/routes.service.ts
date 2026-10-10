@@ -58,9 +58,14 @@ export function createRoute(input: CreateRouteInput): Promise<MutateResult<Route
   return apiMutate<RouteItem>('/routes', 'POST', input);
 }
 
-/** Cambia el estado de la ruta (PLANNED→IN_PROGRESS→COMPLETED). `PATCH /routes/:id`. */
-export function updateRouteStatus(id: string, status: RouteStatus): Promise<MutateResult<RouteItem>> {
-  return apiMutate<RouteItem>(`/routes/${id}`, 'PATCH', { status });
+/**
+ * Cambia el estado de la ruta (PLANNED→IN_PROGRESS→COMPLETED). `PATCH /routes/:id`.
+ *
+ * `reason` es el motivo de cerrar con paradas sin gestionar (D-5): la API lo exige desde la versión 1.1.0 de la app. Es un
+ * valor fijo, así que reenviar el cierre con el mismo motivo es idempotente.
+ */
+export function updateRouteStatus(id: string, status: RouteStatus, reason?: string): Promise<MutateResult<RouteItem>> {
+  return apiMutate<RouteItem>(`/routes/${id}`, 'PATCH', reason ? { status, reason } : { status });
 }
 
 /** Agrega una parada al final del recorrido (S2). `POST /routes/:id/stops`. */

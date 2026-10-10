@@ -99,3 +99,26 @@ describe('createItem · por crédito (F4/08)', () => {
     expect(mockBodies[0]!.body).not.toHaveProperty('caseId');
   });
 });
+
+describe('postponeTarget · D-8: desde ahora y sin cruzar el día', () => {
+  it('🔴 una de hoy que ya venció se pospone desde AHORA, no sobre su hora vieja', () => {
+    // Era a las 09:00 y son las 14:10: +30 → 14:40.
+    expect(postponeTarget({ scheduledTime: '09:00' }, 30, { nowMinutes: 14 * 60 + 10 })).toBe('14:40');
+  });
+
+  it('si la hora agendada todavía no llegó, manda ella (ahora no la adelanta)', () => {
+    expect(postponeTarget({ scheduledTime: '16:00' }, 30, { nowMinutes: 14 * 60 })).toBe('16:30');
+  });
+
+  it('una por franja de hoy también parte de ahora si ya pasó el inicio de la franja', () => {
+    expect(postponeTarget({ timeSlot: 'MORNING' }, 15, { nowMinutes: 10 * 60 })).toBe('10:15');
+  });
+
+  it('desde ahora puede cruzar la medianoche: ahí no hay destino y el llamador lo dice (Reagendar)', () => {
+    expect(postponeTarget({ scheduledTime: '09:00' }, 60, { nowMinutes: 23 * 60 + 30 })).toBeUndefined();
+  });
+
+  it('sin `nowMinutes` conserva el comportamiento de siempre (gestiones de otros días)', () => {
+    expect(postponeTarget({ scheduledTime: '09:00' }, 30)).toBe('09:30');
+  });
+});

@@ -90,15 +90,22 @@ const SLOT_START_MINUTES: Record<string, number> = { MORNING: 8 * 60, AFTERNOON:
 
 /**
  * La hora absoluta (`HH:mm`) a la que queda una gestión al posponerla `minutes`. Espeja la aritmética del server
- * (base = hora fija, o inicio de la franja, o 09:00). **`undefined` si cruza la medianoche**: `toTime` no lleva
- * día, así que ahí se manda sólo `minutes` y el server corre el día como siempre.
+ * (base = hora fija, o inicio de la franja, o 09:00).
+ *
+ * D-8 — **Posponer no cambia de día.** Devuelve `undefined` si la hora llegaría a la medianoche o pasada: no hay un destino
+ * válido y la pantalla debe decirlo (la salida es «Reagendar»), no mandar el pedido y que el servidor lo rechace.
+ *
+ * Una gestión de HOY que ya venció se pospone **desde ahora**, no sobre su hora vieja (que seguiría en el pasado): quien
+ * llama pasa `nowMinutes` (minutos desde la medianoche, en el reloj del teléfono, que es el que muestra los avisos).
  */
 export function postponeTarget(
   item: { scheduledTime?: string | null; timeSlot?: string | null },
   minutes: AgendaPostponeStep,
+  opts: { nowMinutes?: number } = {},
 ): string | undefined {
   const m = item.scheduledTime ? /^(\d{1,2}):(\d{2})/.exec(item.scheduledTime) : null;
-  const base = m ? Number(m[1]) * 60 + Number(m[2]) : (SLOT_START_MINUTES[item.timeSlot ?? ''] ?? 9 * 60);
+  const scheduled = m ? Number(m[1]) * 60 + Number(m[2]) : (SLOT_START_MINUTES[item.timeSlot ?? ''] ?? 9 * 60);
+  const base = opts.nowMinutes === undefined ? scheduled : Math.max(scheduled, opts.nowMinutes);
   const total = base + minutes;
   if (total >= 24 * 60) return undefined;
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;

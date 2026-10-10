@@ -8,6 +8,9 @@ import { getSession, shouldRelock } from '@/session';
 import { isBiometricEnabled } from '@/biometric';
 import { OfflineIndicator } from '@/ui';
 import { configureAgendaNotifications, itemIdOfNotification } from '@/agenda-notifications';
+import { configurePushChannel, listenPushTokenRefresh, pushNotificationHandler, targetOfResponse } from '@/push.service';
+import { setPendingTarget } from '@/push-pending';
+import { UpgradeGate } from '@/upgrade-gate';
 import { COLORS } from '@/theme';
 
 const AWAY = /inactive|background/;
@@ -19,12 +22,31 @@ export default function RootLayout() {
   // Avisos locales de la agenda: cómo se muestran y, al tocar uno, abrir la gestión de la que habla. Si la sesión está bloqueada, el
   // desbloqueo va primero (el aviso solo trae el id: el detalle pide sus datos con la sesión ya abierta).
   useEffect(() => {
-    void configureAgendaNotifications();
+    void configureAgendaNotifications().then(() => {
+      // Después de configurar los avisos locales: este handler los respeta y además descarta el push de OTRA persona.
+      Notifications.setNotificationHandler(pushNotificationHandler());
+      return configurePushChannel();
+    });
+    const stopRefresh = listenPushTokenRefresh();
+
+    // App abierta o en segundo plano: tocar un aviso lleva a su pantalla. Los avisos locales de agenda traen `itemId`;
+    // los push remotos, `type` + ids opacos (el detalle lo pide la pantalla con la sesión ya abierta).
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const id = itemIdOfNotification(response.notification.request.content.data);
-      if (id) router.push(`/agenda/${id}`);
+      if (id) return void router.push(`/agenda/${id}`);
+      void targetOfResponse(response).then((target) => target && router.push(target as never));
     });
-    return () => sub.remove();
+
+    // App cerrada: el aviso que la abrió. El splash decide el destino (sesión, bloqueo…): se guarda y `routeAfterAuth` lo usa.
+    void Notifications.getLastNotificationResponseAsync()
+      .then((last) => (last ? targetOfResponse(last) : null))
+      .then((target) => target && setPendingTarget(target))
+      .catch(() => undefined);
+
+    return () => {
+      sub.remove();
+      stopRefresh();
+    };
   }, []);
 
   // Endurecimiento (historia 15): al volver a primer plano, re-evaluar la sesión.
@@ -63,6 +85,8 @@ export default function RootLayout() {
       <View style={{ flex: 1 }}>
         <OfflineIndicator onPressPending={() => router.push('/pendientes')} />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: COLORS.bg } }} />
+        {/* Encima de todo: con la versión vencida (426) la app no sigue como si nada. Lo pendiente queda a salvo. */}
+        <UpgradeGate />
       </View>
     </SafeAreaProvider>
   );

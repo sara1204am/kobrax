@@ -95,7 +95,7 @@ export type QueuedAction =
    * reintentarlo deja la ruta donde ya estaba. Sin esto, una jornada iniciada sin señal quedaba
    * `PLANNED` en el servidor y la app volvía a ofrecer "Iniciar ruta" al reconectar.
    */
-  | { kind: 'route.status'; routeId: string; status: RouteStatus }
+  | { kind: 'route.status'; routeId: string; status: RouteStatus; /** Por qué se cierra con paradas sin gestionar (D-5). */ reason?: string }
   /**
    * Alta de cliente y de préstamo en la calle. Idempotentes porque **el id lo pone el teléfono**
    * (`nuevoId()`): si la cola reintenta, el server reconoce esa alta en vez de crear otra.
@@ -333,6 +333,8 @@ export type SendResult =
   | { status: 'ok' }
   | { status: 'offline'; outcomeUnknown?: boolean }
   | { status: 'auth' }
+  /** 426: esta versión de la app ya no es compatible. No es un rechazo: lo pendiente espera a que se actualice. */
+  | { status: 'upgrade' }
   | { status: 'error'; message: string; permanent?: boolean };
 
 const LOST_PHOTO = 'La foto ya no está en el teléfono (el sistema la borró). Descartá este aviso.';
@@ -391,7 +393,7 @@ export async function send(action: PendingAction): Promise<SendResult> {
       return mapMutate(await createItem(resolved.input));
     }
     case 'route.status':
-      return mapMutate(await updateRouteStatus(action.routeId, action.status));
+      return mapMutate(await updateRouteStatus(action.routeId, action.status, action.reason));
     case 'client.create': {
       const res = await createClient(action.input);
       if (res.status === 'ok' && action.input.id) await confirmProvisional('client', action.input.id);
@@ -601,6 +603,8 @@ function mapMutate(res: { status: string; message?: string; httpStatus?: number;
   if (res.status === 'ok') return { status: 'ok' };
   if (res.status === 'offline') return res.reason === 'timeout' ? { status: 'offline', outcomeUnknown: true } : { status: 'offline' };
   if (res.status === 'unauthenticated') return { status: 'auth' };
+  // El corte de versión no descarta nada: el drenaje se detiene y la cola espera a la actualización.
+  if (res.status === 'error' && res.httpStatus === 426) return { status: 'upgrade' };
   return { status: 'error', message: res.message ?? 'No se pudo subir', permanent: isPermanentRejection(res.httpStatus) };
 }
 
@@ -616,9 +620,12 @@ function mapUpload(up: Exclude<UploadResult, { status: 'ok' }>): SendResult {
   return { status: 'error', message: up.message };
 }
 
-/** Un 4xx es definitivo, salvo el timeout (408) y el «más despacio» (429), que son del momento. */
+/**
+ * Un 4xx es definitivo, salvo el timeout (408), el «más despacio» (429) y el **corte de versión (426)**, que son del momento
+ * y no dicen nada sobre la acción: descartar una cobranza porque la app quedó vieja sería perderla.
+ */
 export function isPermanentRejection(httpStatus: number | undefined): boolean {
-  return httpStatus !== undefined && httpStatus >= 400 && httpStatus < 500 && httpStatus !== 408 && httpStatus !== 429;
+  return httpStatus !== undefined && httpStatus >= 400 && httpStatus < 500 && httpStatus !== 408 && httpStatus !== 429 && httpStatus !== 426;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { BottomSheet, EmptyState, Header, ListRow, PORTFOLIO_STATUS_META, StatusBadge } from '@/ui';
 import { Button } from '@/components';
@@ -8,7 +8,8 @@ import { MapCanvas, type MapMarker } from '@/maps/MapCanvas';
 import { money, todayISO } from '@/agenda-form';
 import type { PortfolioLocation } from '@kobrax/shared';
 import { toRouteCandidates, type RouteCandidate } from '@/route-candidates';
-import { createRoute, listRoutePlanCredits } from '@/routes.service';
+import { createRoute, listRoutePlanCredits, listRoutes } from '@/routes.service';
+import { isPlannableDay, planningDays } from '@/route-days';
 import { flushDraft, loadDraft, moveStop, saveDraft, withoutStop, withStop, type RouteDraft } from '@/route-draft';
 import { authService } from '@/auth-service';
 import { useNetStore } from '@/store/net';
@@ -38,6 +39,12 @@ type Load =
  * la pantalla funciona igual en modo avión.
  */
 export default function CrearRutaScreen() {
+  const params = useLocalSearchParams<{ date?: string }>();
+  const today = todayISO();
+  /** El día que se arma (D-6): hoy por defecto, hasta 14 días hacia adelante. */
+  const [day, setDay] = useState(isPlannableDay(params.date, today) ? params.date : today);
+  /** Días que ya tienen una ruta (una por cobrador y día): esos no se vuelven a armar desde acá. */
+  const [taken, setTaken] = useState<Set<string>>(new Set());
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [draft, setDraft] = useState<RouteDraft | null>(null);
   const [selected, setSelected] = useState<string | null>(null); // id de la ubicación
@@ -51,7 +58,11 @@ export default function CrearRutaScreen() {
     if (me.status === 'offline') return setLoad((p) => (p.status === 'ok' ? p : { status: 'offline' }));
     if (me.status !== 'ok') return router.replace('/(auth)/login');
 
-    setDraft(await loadDraft(todayISO()));
+    setDraft(await loadDraft(day));
+
+    // Qué días ya tienen ruta: la API permite una por cobrador y día, y armarla de nuevo chocaría.
+    const mine = await listRoutes({ collectorId: me.me.userId });
+    if (mine.status === 'ok') setTaken(new Set(mine.data.map((r) => String(r.plannedDate).slice(0, 10))));
 
     // Los créditos en mora del cobrador (`GET /mora`), ya acotados a él y con el punto de cada cliente.
     // Un crédito ya pagado no está en la lista: no se sale a visitar a quien ya pagó.
@@ -68,7 +79,7 @@ export default function CrearRutaScreen() {
       pins: todos.flatMap((cliente) => cliente.locations.map((loc) => ({ loc, cliente }))),
       sinUbicacion: todos.filter((c) => c.locations.length === 0),
     });
-  }, []);
+  }, [day]);
 
   useFocusEffect(
     useCallback(() => {
@@ -85,7 +96,7 @@ export default function CrearRutaScreen() {
       if (!online) return setPending(true);
       const me = await authService.me();
       if (me.status !== 'ok') return setPending(true);
-      const res = await flushDraft(next, (id) => createRoute({ id, collectorId: me.me.userId, plannedDate: todayISO() }));
+      const res = await flushDraft(next, (id) => createRoute({ id, collectorId: me.me.userId, plannedDate: day }));
       if (res.status === 'ok') {
         setDraft(res.draft);
         setPending(false);
@@ -94,7 +105,7 @@ export default function CrearRutaScreen() {
         if (res.status === 'error') setError(res.message);
       }
     },
-    [online],
+    [online, day],
   );
 
   const enRuta = useMemo(() => new Set(draft?.creditIds ?? []), [draft]);
@@ -136,6 +147,44 @@ export default function CrearRutaScreen() {
         onBack={() => router.back()}
         right={pending ? <StatusBadge label="Sin sincronizar" tone="warning" /> : undefined}
       />
+
+      {/* El día que se arma (D-6): hoy y hasta 14 días hacia adelante. Un día que ya tiene ruta se marca y no se vuelve a armar. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.days}
+        contentContainerStyle={styles.daysContent}
+        accessibilityLabel="Día de la ruta"
+      >
+        {planningDays(today).map((d) => {
+          const active = d.date === day;
+          const hasRoute = taken.has(d.date);
+          return (
+            <Pressable
+              key={d.date}
+              onPress={() => {
+                if (active) return;
+                setSelected(null);
+                setSheet(null);
+                setError(null);
+                setLoad({ status: 'loading' });
+                setDay(d.date);
+              }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={`${d.label} ${d.dayOfMonth}${hasRoute ? ', ya tiene ruta' : ''}`}
+              style={[styles.dayChip, active && styles.dayChipActive]}
+            >
+              <Text style={[styles.dayLabel, active && styles.dayLabelActive]}>{d.label}</Text>
+              <Text style={[styles.dayNumber, active && styles.dayLabelActive]}>{d.dayOfMonth}</Text>
+              {hasRoute && <View style={[styles.dayDot, active && { backgroundColor: COLORS.white }]} />}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+      {taken.has(day) && !draft?.routeId && (
+        <Text style={styles.aviso2}>Ya tenés una ruta armada para este día: la ves en la pestaña Rutas.</Text>
+      )}
 
       <MapCanvas
         markers={markers}
@@ -179,10 +228,11 @@ export default function CrearRutaScreen() {
             ) : (
               <Button
                 label="Agregar al recorrido"
+                disabled={taken.has(day) && !draft?.routeId}
                 onPress={() =>
                   void commit(
                     withStop(
-                      draft ?? { routeId: null, date: todayISO(), creditIds: [], clientByCredit: {} },
+                      draft ?? { routeId: null, date: day, creditIds: [], clientByCredit: {} },
                       elegido.cliente.creditId,
                       elegido.cliente.clientId,
                     ),
@@ -291,6 +341,24 @@ function Mover({ label, onPress, disabled }: { label: string; onPress: () => voi
 }
 
 const styles = StyleSheet.create({
+  days: { flexGrow: 0, backgroundColor: COLORS.white, borderBottomWidth: 1, borderColor: COLORS.border },
+  daysContent: { gap: SPACING.sm, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
+  dayChip: {
+    minWidth: 64,
+    height: 56,
+    borderRadius: RADIUS.card,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayChipActive: { backgroundColor: COLORS.navy, borderColor: COLORS.navy },
+  dayLabel: { fontSize: 12, color: COLORS.text2, fontWeight: '600' },
+  dayNumber: { fontSize: 17, color: COLORS.navy, fontWeight: '700' },
+  dayLabelActive: { color: COLORS.white },
+  dayDot: { position: 'absolute', top: 6, right: 8, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.periwinkle },
+  aviso2: { ...TYPE.secondary, backgroundColor: COLORS.highlight, color: COLORS.navy, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
   screen: { flex: 1, backgroundColor: COLORS.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   aviso: { backgroundColor: COLORS.warningBg, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.lg },

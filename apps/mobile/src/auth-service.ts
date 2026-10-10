@@ -4,6 +4,7 @@ import { authedFetch } from './api-client';
 import { clearRouteDrafts, clearSession, getSession, isSessionValid, saveSession, saveUserId, touchSession } from './session';
 import * as db from './db';
 import { fieldErrorsFromDetails, type LoginFieldErrors } from './auth-validation';
+import { revokePushDevice } from './push.service';
 
 export type Step = 'done' | 'mfa' | 'mfa_setup' | 'select_account';
 
@@ -240,6 +241,8 @@ export const authService = {
 
   async logout(): Promise<void> {
     const session = await getSession();
+    // Antes de perder el token de acceso: este teléfono deja de recibir los avisos de quien salió (mejor esfuerzo).
+    await Promise.race([revokePushDevice(), new Promise<void>((r) => setTimeout(r, 3000))]).catch(() => undefined);
     if (session) {
       await apiFetch('/auth/logout', { method: 'POST', body: { refreshToken: session.refreshToken } });
     }

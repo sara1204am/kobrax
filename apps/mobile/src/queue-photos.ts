@@ -53,6 +53,26 @@ export async function persistPhoto(photo: PendingPhoto): Promise<PendingPhoto> {
   }
 }
 
+/**
+ * Cuánto ocupan las fotos pendientes de subir (D-9). Mide la carpeta de la cola: no hay otro lugar donde lo pendiente
+ * guarde fotos. Nunca lanza: si el sistema de archivos falla devuelve 0 (y no se bloquea al cobrador por un diagnóstico).
+ */
+export async function queuePhotosUsage(): Promise<{ count: number; bytes: number }> {
+  const dir = queueDir();
+  if (!dir) return { count: 0, bytes: 0 };
+  try {
+    const names = await FileSystem.readDirectoryAsync(dir);
+    let bytes = 0;
+    for (const name of names) {
+      const info = await FileSystem.getInfoAsync(`${dir}${name}`, { size: true });
+      if (info.exists && 'size' in info && typeof info.size === 'number') bytes += info.size;
+    }
+    return { count: names.length, bytes };
+  } catch {
+    return { count: 0, bytes: 0 };
+  }
+}
+
 /** ¿El archivo sigue en el teléfono? Una excepción del sistema de archivos cuenta como «no está». */
 export async function photoExists(uri: string): Promise<boolean> {
   try {

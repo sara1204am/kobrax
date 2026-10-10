@@ -329,6 +329,8 @@ describe('isPermanentRejection', () => {
     expect(isPermanentRejection(422)).toBe(true);
     expect(isPermanentRejection(408)).toBe(false);
     expect(isPermanentRejection(429)).toBe(false);
+    // 🔴 El corte de versión no dice nada de la acción: descartarla sería perder una cobranza por tener la app vieja.
+    expect(isPermanentRejection(426)).toBe(false);
     expect(isPermanentRejection(500)).toBe(false);
     expect(isPermanentRejection(undefined)).toBe(false);
   });

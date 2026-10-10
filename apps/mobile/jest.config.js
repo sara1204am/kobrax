@@ -10,7 +10,7 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   // Specs co-localizados (mismo patrón que el backend).
-  testMatch: ['**/*.test.ts', '**/*.test.tsx'],
+  testMatch: ['**/*.test.ts', '**/*.test.tsx', '<rootDir>/plugins/**/*.test.js'],
   // Mock del módulo nativo de SQLite: desde P6 los services lo arrastran por importar el caché.
   setupFiles: ['<rootDir>/jest.setup.js'],
   // Los tests de pantalla con RNTL montan el árbol completo y, con muchas suites corriendo en
