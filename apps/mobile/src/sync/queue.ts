@@ -69,6 +69,7 @@ import {
   type RescheduleAgendaInput,
 } from '../agenda.service';
 import { addMoraActivity, addMoraNote, setMoraPriority, type PinnablePriority } from '../mora.service';
+import { markRead } from '../notifications.service';
 import { getUserId } from '../session';
 import { confirmProvisionalRow, dropProvisionalRow } from './optimistic';
 import { withAgendaExplanation } from './agenda-conflicts';
@@ -121,6 +122,7 @@ export type QueuedAction =
    * adjuntos del cliente: si ya está (el intento anterior llegó y se perdió la respuesta), no se duplica.
    */
   | { kind: 'client.attachment'; clientId: string; fileType: string; photo?: PendingPhoto; uploaded?: { url: string; hash: string } }
+  | { kind: 'notification.read'; id: string }
   | { kind: 'route.status'; routeId: string; status: RouteStatus; /** Por qué se cierra con paradas sin gestionar (D-5). */ reason?: string }
   /**
    * Alta de cliente y de préstamo en la calle. Idempotentes porque **el id lo pone el teléfono**
@@ -237,6 +239,7 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'agenda.complete': 'Gestión ejecutada',
   'agenda.postpone': 'Gestión pospuesta',
   'route.status': 'Estado de la jornada',
+  'notification.read': 'Aviso leído',
   'client.attachment': 'Adjunto del cliente',
   'route.change.create': 'Pedido de cambio de ruta',
   'route.change.decide': 'Decisión sobre un pedido de ruta',
@@ -458,6 +461,9 @@ export async function send(action: PendingAction): Promise<SendResult> {
       return mapMutate(await createChangeRequest(action.routeId, action.input));
     case 'route.change.decide':
       return mapMutate(await decideChangeRequest(action.routeId, action.requestId, action.decision, action.note));
+    case 'notification.read':
+      // Un aviso que ya no existe (404) está «leído» a todos los efectos.
+      return mapGone(await markRead(action.id));
     case 'route.status':
       return mapMutate(await updateRouteStatus(action.routeId, action.status, action.reason));
     case 'client.create': {

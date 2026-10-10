@@ -1,3 +1,4 @@
+import { markReadOrQueue } from '@/notifications-read';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
@@ -7,7 +8,6 @@ import { EmptyState, Header, ListRow, OfflineIndicator, SegmentTabs } from '@/ui
 import {
   listNotifications,
   markAllRead,
-  markRead,
   whenLabel,
 } from '@/notifications.service';
 
@@ -70,7 +70,7 @@ export default function NotificacionesScreen() {
             ? { ...p, items: p.items.map((x) => (x.id === n.id ? { ...x, readAt: new Date().toISOString() } : x)) }
             : p,
         );
-        void markRead(n.id);
+        void markReadOrQueue(n.id);
       }
       // Un aviso de agenda lleva a la gestión (con el aviso de «asignada por» y sus acciones); el resumen de vencidas, a la
       // pestaña Agenda. El resto, al deudor: no hay pantalla de caso suelto.

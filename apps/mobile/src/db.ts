@@ -99,6 +99,8 @@ export type QueueKind =
   | 'agenda.complete'
   | 'agenda.postpone'
   | 'route.status'
+  /** Marcar una notificación como leída (valor fijo; repetirlo no cambia nada). */
+  | 'notification.read'
   /** Adjunto del legajo de un cliente (la foto viaja en el teléfono hasta que haya señal). */
   | 'client.attachment'
   /** Pedir un cambio sobre una ruta ajena (el id lo pone el teléfono) y decidir un pedido (valor fijo). */

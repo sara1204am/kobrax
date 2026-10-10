@@ -56,3 +56,4 @@ export function whenLabel(iso: string, today: string = toISO(new Date())): strin
   if (Number.isNaN(d.getTime())) return '';
   return toISO(d) === today ? toHHmm(d) : formatLongDate(toISO(d));
 }
+
