@@ -9,6 +9,7 @@
 > - **Rutas F4/12:** base y rediseño web en `main` (PR #4/#5); falta el móvil.
 > - **Despliegue:** corriendo en https://kobrax.ikigaisystems.lat con datos de prueba (`docs/producto/demo-datos-y-despliegue.md`). `docs/business/PRICING-Y-DEPLOY.md` §1 y §9 aún dice «no desplegado»: desactualizado.
 > - **Documentación funcional completa (pantallas web y móvil, roles, backend, datos):** `docs/producto/`.
+> - **F4/13 · capa de datos para la IA (E1–E5 hechas, E6 verificada):** rama `docs/ia-capa-datos`, sin PR. Plan y resultado en `docs/epics/F4/13-capa-datos-ia-plan.md`; **cada decisión y su motivo** en `docs/epics/F4/13-capa-datos-ia-decisiones.md`. Falta validar en teléfono y la lista de motivos con un cobrador.
 > - **Documentos que aún necesitan revisión:** lista en `docs/postulacion-india-bolivia/05-pendientes-y-riesgos.md` §D.
 
 ---
