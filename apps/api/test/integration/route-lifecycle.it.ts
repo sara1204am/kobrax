@@ -20,6 +20,8 @@ let collectorId: string;
 let credit1: string;
 let credit2: string;
 
+// Días relativos a hoy y DENTRO de la ventana de planificación (ROUTE_MAX_DAYS_AHEAD = 14, D-6). La semilla ocupa hoy y mañana
+// de los cobradores demo: las pruebas usan del 2 al 14 para no chocar con ella ni entre sí.
 const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
 
 interface Stop { id: string; creditId?: string; status: string; sequenceOrder: number; locationId?: string }
@@ -54,7 +56,7 @@ describe('F4/12 · la ruta de la manager para Carlos', () => {
   it('la manager arma la ruta con la ubicación de cada crédito: queda a su nombre y el cobrador recibe el aviso', async () => {
     const r = await call<Route>(manager, 'POST', '/routes/generate', {
       collectorId,
-      plannedDate: day(61),
+      plannedDate: day(5),
       creditIds: [credit1, credit2],
       requirePoints: true,
     });
@@ -224,12 +226,12 @@ describe('F4/12 · cancelar, fechas y autoría', () => {
     const past = await call(manager, 'POST', '/routes/generate', { collectorId, plannedDate: day(-2), creditIds: [credit1] });
     assert.equal(past.status, 422);
     assert.equal(past.error?.code, 'ROUTE_PAST_DATE');
-    const withTime = await call(manager, 'POST', '/routes/generate', { collectorId, plannedDate: `${day(70)}T00:00:00.000Z`, creditIds: [credit1] });
+    const withTime = await call(manager, 'POST', '/routes/generate', { collectorId, plannedDate: `${day(6)}T00:00:00.000Z`, creditIds: [credit1] });
     assert.equal(withTime.status, 400);
   });
 
   it('cancelar exige el motivo, deja las paradas SALTADAS (la visita agendada queda libre) y avisa al cobrador', async () => {
-    const r = await call<Route>(manager, 'POST', '/routes/generate', { collectorId, plannedDate: day(71), creditIds: [credit1] });
+    const r = await call<Route>(manager, 'POST', '/routes/generate', { collectorId, plannedDate: day(7), creditIds: [credit1] });
     assert.equal(r.status, 201, JSON.stringify(r.error));
     const id = r.data!.id;
 
@@ -252,7 +254,7 @@ describe('F4/12 · cancelar, fechas y autoría', () => {
   });
 
   it('el cobrador que arma SU propia ruta la edita directo (él es quien la armó)', async () => {
-    const r = await call<Route>(collector, 'POST', '/routes/generate', { collectorId, plannedDate: day(72), creditIds: [credit1] });
+    const r = await call<Route>(collector, 'POST', '/routes/generate', { collectorId, plannedDate: day(8), creditIds: [credit1] });
     assert.equal(r.status, 201, JSON.stringify(r.error));
     assert.equal(r.data!.createdBy, collectorId);
     const detail = await call<Route>(collector, 'GET', `/routes/${r.data!.id}`);
@@ -262,7 +264,7 @@ describe('F4/12 · cancelar, fechas y autoría', () => {
   });
 
   it('el listado trae lo de la vista «Hoy»: siguiente parada y cobrado del día', async () => {
-    const list = await call<{ id: string; nextStop?: { sequenceOrder: number }; collected?: number }[]>(manager, 'GET', `/routes?date=${day(61)}&collectorId=${collectorId}`);
+    const list = await call<{ id: string; nextStop?: { sequenceOrder: number }; collected?: number }[]>(manager, 'GET', `/routes?date=${day(5)}&collectorId=${collectorId}`);
     assert.equal(list.status, 200);
     const row = list.data![0]!;
     assert.equal(typeof row.collected, 'number');
