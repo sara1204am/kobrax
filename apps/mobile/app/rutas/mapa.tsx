@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { RouteStopStatus } from '@kobrax/shared';
+import { RouteStopStatus, formatDistanceKm, haversineKm } from '@kobrax/shared';
+import { currentLocation } from '@/location';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { EmptyState, Header, PickerSheet, StatusBadge, StopCard } from '@/ui';
 import { LocationPhoto, PhotoViewer } from '@/location-photo';
@@ -33,6 +34,9 @@ export default function MapaRutaScreen() {
   const [phone, setPhone] = useState<string | undefined>();
   const [locations, setLocations] = useState<LocationOption[]>([]);
   const [locSheet, setLocSheet] = useState(false);
+  /** Dónde está el cobrador ahora (la toma a pedido; no sigue al GPS, para no gastar batería). */
+  const [here, setHere] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [hereMsg, setHereMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -114,6 +118,19 @@ export default function MapaRutaScreen() {
       selected: s.id === selectedId,
       tone: s.status === RouteStopStatus.VISITED ? 'done' : s.id === selectedId ? 'active' : 'default',
     }));
+
+  const locateMe = async () => {
+    setHereMsg(null);
+    const r = await currentLocation();
+    if (r.status === 'ok') return setHere({ latitude: r.coords.latitude, longitude: r.coords.longitude });
+    setHereMsg(r.status === 'denied' ? 'Sin permiso de ubicación: activalo en los ajustes del teléfono.' : 'No se pudo fijar tu ubicación. ¿Tenés el GPS prendido?');
+  };
+  const toSelected =
+    here && selected?.latitude != null && selected.longitude != null
+      ? formatDistanceKm(haversineKm(here, { latitude: selected.latitude, longitude: selected.longitude }))
+      : null;
+
+  if (here) markers.push({ id: '__me', latitude: here.latitude, longitude: here.longitude, label: 'Yo', tone: 'active' });
 
   const links = actionLinks({
     phone,
@@ -199,6 +216,14 @@ export default function MapaRutaScreen() {
                   disabled={!links.geo}
                   onPress={() => links.geo && void Linking.openURL(links.geo)}
                 />
+              </View>
+              <View style={{ minWidth: '45%', flexGrow: 1 }}>
+                <Button
+                  label={toSelected ? `📍 Estoy aquí · a ${toSelected}` : '📍 Estoy aquí'}
+                  variant="ghost"
+                  onPress={() => void locateMe()}
+                />
+                {hereMsg && <Text style={TYPE.caption}>{hereMsg}</Text>}
               </View>
               <View style={{ flex: 1 }}>
                 <Button

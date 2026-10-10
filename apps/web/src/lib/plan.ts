@@ -6,6 +6,7 @@
  * viaja se valida antes de salir — un filtro inventado en la URL no puede dejar la pantalla entera
  * sin mora.
  */
+import { haversineKm } from '@kobrax/shared';
 import { COLLECTION_PRIORITIES, VisitOutcome, type MoraCreditListItem } from '@kobrax/shared';
 
 /**
@@ -238,15 +239,7 @@ export interface Point {
  * ponytail: fórmula esférica, sin corrección por el achatamiento de la Tierra. El error es de metros
  * en distancias urbanas — irrelevante para decidir si una casa entra en un radio de dos kilómetros.
  */
-export function haversineKm(a: Point, b: Point): number {
-  const R = 6371; // radio medio de la Tierra
-  const rad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = rad(b.latitude - a.latitude);
-  const dLng = rad(b.longitude - a.longitude);
-  const h =
-    Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.latitude)) * Math.cos(rad(b.latitude)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
+export { haversineKm } from '@kobrax/shared';
 
 /**
  * Los que caen **dentro del círculo**.
