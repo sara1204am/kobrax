@@ -488,7 +488,7 @@ cuantificó** (constantes y derivación en `packages/shared/src/constants/offlin
 | A1 | ✅ | Editar y eliminar gestiones sin señal (`agenda.update` / `agenda.delete`); lo eliminado sale de listas, contadores y avisos |
 | A2 | 🟡 | ✅ pagos del día en el día de la empresa. ⬜ «contactos efectivos» y «promesas de hoy»: **decisión abierta** (§ preguntas): chocan con «KPIs en el cliente» o piden ampliar `GET /agenda/summary` |
 | A3 | 🟡 | ✅ filtro por tipo. ⬜ vista «Semana» (la tira de días ya navega la semana; no hay resumen) |
-| A4 | 🟡 | ✅ contador de no leídas sin señal. ⬜ marcar leída sin señal |
+| A4 | ✅ | Contador de no leídas sin señal y marcar un aviso como leído sin señal (cola `notification.read`). ⬜ «marcar todas» sin señal |
 | A5 | ✅ | Tope de recordatorios aplicado también a los acumulados (quedan los más cercanos). ⬜ horizonte de 48 h |
 
 **Cuenta / seguridad**
