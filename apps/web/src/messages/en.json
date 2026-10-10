@@ -203,7 +203,11 @@
       "map": {
         "done": "{n} visited",
         "pending": "{n} pending",
-        "day": "stops for {day}"
+        "day": "stops of {day}",
+        "amount": "Amount",
+        "collector": "Collector",
+        "statusDone": "Visited",
+        "statusPending": "Pending"
       },
       "noOverdue": "No overdue portfolio under this filter.",
       "noAgenda": "No scheduled work in this period.",
@@ -1376,6 +1380,10 @@
         "messageHint": "Write or pick a template…",
         "location": "Which address",
         "noLocations": "No addresses on file",
+        "mapPickHint": "Tap the map to set the point",
+        "ownerClient": "The client's",
+        "ownerOf": "{name}'s ({relation})",
+        "locationDetail": "{type} · {owner}",
         "description": "What to remember",
         "amount": "Promised amount",
         "promiseDate": "Promise date",
@@ -1496,7 +1504,16 @@
         "areaKm": "{km} km",
         "areaMeters": "{m} m",
         "mapNoPoints": "The ones picked have no location on file, so they cannot be drawn.",
-        "mapBig": "Enlarge the map",
+        "mapToNext": "To the next stop: {km} km",
+        "mapByVehicle": "🚗 {min} min by vehicle",
+        "mapOnFoot": "🚶 {min} min on foot",
+        "mapFootNote": "On foot is an estimate at 5 km/h.",
+        "mapSearch": "Search the map…",
+        "mapSearchNone": "No results on the map",
+        "mapNextStop": "Show next stop",
+        "mapBaseMap": "Map",
+        "mapBaseSatellite": "Satellite",
+        "mapBig":"Enlarge the map",
         "mapSmall": "Shrink the map",
         "help": "Helping out",
         "routeOrder": "The run · {n} stops, in this order",
@@ -1505,6 +1522,9 @@
         "moveUp": "Move one stop up",
         "moveDown": "Move one stop down",
         "removeStop": "Remove from the route",
+        "goToMap": "Show on map",
+        "moreActions": "More actions",
+        "changeAddress": "Change this visit's address",
         "lockedStop": "Already handled",
         "confirmRoute": "Build the route with {n}",
         "belowMin": "That is below the minimum of {min}.",
@@ -1629,7 +1649,13 @@
             "place": "Location",
             "eta": "Estimated time",
             "fixed": "Fixed time"
-          }
+          },
+          "listTitle": "Route and estimated arrival ({n})",
+          "mapCount": "{n, plural, one {1 stop on the route} other {# stops on the route}}"
+        },
+        "context": {
+          "planningFor": "Planning for {name} · {date}",
+          "change": "Change date or collector"
         }
       },
       "work": {
@@ -1659,6 +1685,7 @@
       "nextDay": "Next day",
       "today": "Today",
       "todayBoard": {
+        "entity": "collectors",
         "start": "Start",
         "view": "View",
         "plan": "Plan",
@@ -1728,7 +1755,9 @@
         "register": "Record visit",
         "viewStop": "View details",
         "reasonOfClose": "Reason for closing",
-        "cancelledReason": "Reason for cancelling"
+        "cancelledReason": "Reason for cancelling",
+        "stopsCount": "Stops on the route ({n})",
+        "visitPoint": "Recorded visit"
       },
       "stop": {
         "sequence": "Stop {n}",
@@ -1865,6 +1894,9 @@
         "noPay": "Recording a payment needs the payments permission (collectors and administrators have it).",
         "amountPaid": "Amount collected",
         "amountPromised": "Amount promised",
+        "installmentHint": "Installment due: {amount}",
+        "installmentDue": "due {date}",
+        "useInstallment": "Use this amount",
         "capHint": "Up to {max}",
         "method": "Payment method",
         "promiseDate": "Promise date",
@@ -1880,6 +1912,16 @@
         "notes": "Note (optional)",
         "notesRequired": "What happened with the address (required)",
         "notesPlaceholder": "Write a note about the visit…",
+        "revisit": "Visit again",
+        "revisitDate": "Which day?",
+        "revisitSlot": "When?",
+        "revisitHint": "It is scheduled for that day, assigned to whoever is responsible for the credit. It shows up when planning that date’s route.",
+        "revisitFailed": "the new visit could not be scheduled",
+        "slots": {
+          "MORNING": "Morning",
+          "AFTERNOON": "Afternoon",
+          "NIGHT": "Night"
+        },
         "evidence": "Evidence",
         "evidenceHint": "Optional. A photo of the door or the receipt; it is sealed with its fingerprint.",
         "photoAdd": "Add a photo",
@@ -1909,6 +1951,9 @@
         "result": "Result",
         "actions": "Actions",
         "view": "View",
+        "viewDetail": "View details",
+        "clientFile": "Open client file",
+        "copyAddress": "Copy address",
         "register": "Record",
         "days": "{n} days",
         "help": "Help",
@@ -1928,9 +1973,7 @@
         "back": "Back to the route",
         "tabsLabel": "Stop sections",
         "tabs": {
-          "info": "Information",
-          "credit": "Credit",
-          "locations": "Location",
+          "ficha": "Record",
           "visits": "Visit history",
           "evidence": "Evidence"
         },
@@ -1961,6 +2004,16 @@
         "message": "Hi {name}, I'm writing about your pending payment. Can we arrange it?",
         "noPhone": "This client has no phone number on file.",
         "error": "WhatsApp could not be opened."
+      },
+      "suggest": {
+        "toggle": "Nearby suggestions ({n})",
+        "title": "Near this route ({n})",
+        "hint": "Overdue loans with no route within {km} km of a stop: a chance for a preventive visit.",
+        "away": "{d} away",
+        "add": "Add to route",
+        "ask": "Request to add",
+        "badge": "Suggested",
+        "count": "{n, plural, one {1 suggestion} other {# suggestions}}"
       }
     },
     "payments": {
@@ -2455,6 +2508,33 @@
     "notContactable": "do not contact",
     "noContacts": "No phones on file.",
     "noLocations": "No addresses on file.",
+    "photos": {
+      "title": "Photos of the home",
+      "hint": "They help recognise the house on arrival. The main one is shown small on the route maps.",
+      "add": "Add photos",
+      "addMore": "Add more photos",
+      "uploading": "Uploading…",
+      "main": "Main",
+      "makeMain": "Make main",
+      "removeShort": "Remove",
+      "remove": "Remove photo {n}",
+      "alt": "Photo {n} of the location",
+      "open": "See the photos of {name}'s home",
+      "viewer": {
+        "prev": "Previous photo",
+        "next": "Next photo",
+        "zoomIn": "Zoom in",
+        "zoomOut": "Zoom out",
+        "fit": "Fit to window",
+        "newTab": "Open in a new tab",
+        "counter": "{n} of {total}",
+        "mainPhoto": "Main photo",
+        "photoN": "Photo {n}",
+        "evidenceClient": "Client's evidence",
+        "evidenceOf": "{name}'s evidence"
+      },
+      "error": "The photo could not be uploaded."
+    },
     "noGuarantors": "No guarantors on file.",
     "noCollaterals": "No collateral on file.",
     "gender": {

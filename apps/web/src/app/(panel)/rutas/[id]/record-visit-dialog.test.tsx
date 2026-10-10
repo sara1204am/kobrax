@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/msw-server';
@@ -87,6 +87,34 @@ describe('RecordVisitDialog · registrar una gestión desde el panel (F4/12 · d
     mockApi();
     setup({ viewerIsCollector: true });
     expect(screen.queryByText(/a nombre de/)).toBeNull();
+  });
+
+  it('«No contesta» + «Volver a visitar»: agenda una visita nueva para el día y la franja elegidos', async () => {
+    const calls = mockApi();
+    setup({ stop: { ...STOP, locationId: 'loc1' } });
+    await choose('No contesta');
+    await userEvent.click(screen.getByLabelText('Volver a visitar'));
+    await userEvent.selectOptions(screen.getByLabelText('¿Cuándo?'), 'AFTERNOON');
+    fireEvent.change(screen.getByLabelText('¿Qué día?'), { target: { value: '2026-10-10' } });
+    await submit();
+    await vi.waitFor(() => expect(calls.agenda).toHaveLength(1));
+    expect(calls.agenda[0]).toMatchObject({
+      creditId: 'cr1',
+      type: 'VISIT',
+      scheduledDate: '2026-10-10',
+      timeMode: 'LAPSE',
+      timeSlot: 'AFTERNOON',
+      details: { locationId: 'loc1' },
+    });
+  });
+
+  it('«Volver a visitar» solo se ofrece cuando no se encontró a nadie', async () => {
+    mockApi();
+    setup();
+    await choose('Cobrado');
+    expect(screen.queryByLabelText('Volver a visitar')).toBeNull();
+    await choose('Visita sin contacto');
+    expect(screen.getByLabelText('Volver a visitar')).toBeInTheDocument();
   });
 
   it('«No contesta»: manda la visita con el punto conocido de la parada, marcada como panel y estimada', async () => {
@@ -238,5 +266,40 @@ describe('RecordVisitDialog · parada sin ubicación', () => {
     await submit();
     await vi.waitFor(() => expect(calls.visit).toHaveLength(1));
     expect(calls.visit[0]).toMatchObject({ lat: 0, lng: 0, gpsFallback: true });
+  });
+});
+
+
+describe('RecordVisitDialog · la cuota que correspondía pagar', () => {
+  const CON_CUOTA: RecordStop = { ...STOP, installmentAmount: 450, nextDueDate: '2026-10-07' };
+
+  it('con dato de la cuota, la muestra bajo el monto cobrado —con su vencimiento— y antes del tope', async () => {
+    mockApi();
+    setup({ stop: CON_CUOTA });
+    await choose('Cobrado');
+    expect(screen.getByText(/Cuota a pagar: .*450/)).toBeInTheDocument();
+    expect(screen.getByText(/vence/)).toBeInTheDocument();
+    const cuota = screen.getByText(/Cuota a pagar/);
+    const tope = screen.getByText(/Hasta/);
+    // La cuota va antes que «Hasta el total».
+    expect(cuota.compareDocumentPosition(tope) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('«Usar este monto» llena el campo con la cuota', async () => {
+    mockApi();
+    setup({ stop: CON_CUOTA });
+    await choose('Cobrado');
+    await userEvent.click(screen.getByRole('button', { name: 'Usar este monto' }));
+    expect(screen.getByLabelText('Monto cobrado')).toHaveValue('450');
+    // Ya está puesto: el botón sobra.
+    expect(screen.queryByRole('button', { name: 'Usar este monto' })).toBeNull();
+  });
+
+  it('🔴 sin dato de la cuota no se muestra nada: nunca «Cuota a pagar: Bs 0»', async () => {
+    mockApi();
+    setup({ stop: STOP });
+    await choose('Cobrado');
+    expect(screen.queryByText(/Cuota a pagar/)).toBeNull();
+    expect(screen.getByText(/Hasta/)).toBeInTheDocument();
   });
 });

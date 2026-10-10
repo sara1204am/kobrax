@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   LngLatBounds,
   Map as MapLibreMap,
@@ -10,7 +11,33 @@ import {
   type LngLatLike,
 } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { DEFAULT_ZOOM, FALLBACK_CENTER, MAP_STYLE } from '@/lib/map-style';
+import { DEFAULT_ZOOM, FALLBACK_CENTER, MAP_LOCALE, MAP_STYLE, SATELLITE_ATTRIBUTION, SATELLITE_TILES } from '@/lib/map-style';
+import { postJson } from '@/lib/client';
+import { addLocateControl, type Here } from '../map-locate';
+
+const SAT = 'plan-satellite';
+const TO_NEXT = 'plan-to-next';
+/** A pie, a paso normal: 5 km/h. Es una estimación —el motor de ruteo sólo conoce las calles para vehículo—. */
+const WALK_KMH = 5;
+/** Si se movió menos que esto, el camino ya calculado sirve: el seguimiento avisa cada pocos segundos. */
+const RECALC_M = 60;
+
+/** Cómo se pinta el pin. El color es el estado de la parada; el badge del globo es otra cosa y no lo repite. */
+export type PinTone = 'pending' | 'done' | 'next' | 'skipped' | 'scheduled' | 'suggestion' | 'candidate' | 'visit';
+
+/** Una etiqueta del globo y de la lista: tinte claro, para que no se confunda con el pin (que es de color pleno). */
+export interface PointBadge {
+  label: string;
+  tone: 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+}
+
+export const BADGE_CLASS: Record<PointBadge['tone'], string> = {
+  success: 'bg-k-success-bg text-k-text',
+  warning: 'bg-k-warning-bg text-k-warning-text',
+  danger: 'bg-k-danger-bg text-k-danger',
+  info: 'bg-k-light-bg text-k-slate',
+  neutral: 'bg-k-bg text-k-text-2',
+};
 
 export interface MapPoint {
   id: string;
@@ -28,6 +55,15 @@ export interface MapPoint {
    * hora cae cada puerta— y sin el número el mapa muestra dónde ir pero no en qué orden.
    */
   order?: number;
+  /** El estado de la parada: define el color del pin. Sin él, el pin sale como siempre (numerado, elegido o disponible). */
+  tone?: PinTone;
+  /** Etiquetas del globo: «Visitada», «Hora fija 10:00», «Visita agendada». */
+  badges?: PointBadge[];
+  /**
+   * La foto principal de esa dirección: se dibuja **chica sobre el pin** para reconocer la casa al llegar. Sin ella, el pin
+   * queda como siempre.
+   */
+  photoUrl?: string;
 }
 
 export interface MapCircle {
@@ -57,9 +93,25 @@ export function PointsMap({
   circle,
   onCircleMove,
   onPointClick,
+  line,
+  focusId,
+  centerRequest,
+  onPointHover,
 }: {
   points: MapPoint[];
   height: number;
+  /** El recorrido por las calles (motor de ruteo). Si viene, reemplaza al trazo recto punteado. */
+  line?: { latitude: number; longitude: number }[];
+  /** El punto resaltado desde afuera (la fila de la lista bajo el cursor). */
+  focusId?: string | null;
+  /**
+   * Pedir que el mapa vaya a un punto y lo deje al centro («Ir en mapa»). **Es un objeto nuevo en cada pedido** — así
+   * pedir lo mismo dos veces vuelve a centrar aunque el mapa ya se haya movido —, y reemplaza al viejo «ir al punto al pasar
+   * el cursor por la fila», que movía el mapa sin que nadie lo pidiera.
+   */
+  centerRequest?: { id: string } | null;
+  /** Avisa qué punto tiene el cursor encima, para resaltar su fila. */
+  onPointHover?: (id: string | null) => void;
   circle?: MapCircle;
   /** Dónde quedó el centro al soltarlo. Sin esto, el círculo se dibuja pero no filtra nada. */
   onCircleMove?: (center: { latitude: number; longitude: number }) => void;
@@ -71,8 +123,21 @@ export function PointsMap({
    */
   onPointClick?: (id: string) => void;
 }) {
+  const t = useTranslations('panel.routes.planning');
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
+  /** Mapa de calles o imágenes satelitales. */
+  const [base, setBase] = useState<'map' | 'satellite'>('map');
+  const baseRef = useRef(base);
+  baseRef.current = base;
+  /** Los ids de las capas del estilo de calles, para apagarlas al ver el satélite. */
+  const baseLayers = useRef<string[]>([]);
+  /** Lo que falta desde donde está la persona hasta la próxima parada. */
+  const [trip, setTrip] = useState<{ distanceKm: number; minutes: number } | null>(null);
+  const hereRef = useRef<Here | null>(null);
+  const asked = useRef<{ at: Here; to: string } | null>(null);
+  const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const markers = useRef(new Map<string, Marker>());
   const center = useRef<Marker | null>(null);
   /** El rótulo con el radio, pegado al borde norte del círculo. */
@@ -87,6 +152,12 @@ export function PointsMap({
   notify.current = onCircleMove;
   const click = useRef(onPointClick);
   click.current = onPointClick;
+  const tripLine = useRef<GeoJSON.FeatureCollection | null>(null);
+  const nextRef = useRef<MapPoint | undefined>(undefined);
+  const hover = useRef(onPointHover);
+  hover.current = onPointHover;
+  const lineRef = useRef(line);
+  lineRef.current = line;
 
   // El mapa, una sola vez. Se destruye al salir de la pantalla, no al cambiar la selección.
   useEffect(() => {
@@ -100,9 +171,24 @@ export function PointsMap({
       pitchWithRotate: false,
       dragRotate: false,
       attributionControl: { compact: true },
+      locale: MAP_LOCALE,
     });
     m.addControl(new NavigationControl({ showCompass: false }), 'top-right');
+    addLocateControl(m, (h) => {
+      hereRef.current = h;
+      void askTrip(h, nextRef.current);
+    });
     m.on('load', () => {
+      /*
+       * El satélite es una capa más **debajo de todo**, y al verlo se apagan las del estilo de calles. Así el selector
+       * no cambia el estilo —`setStyle` borraría el área, el recorrido y todo lo que se dibuja encima— y funciona con
+       * cualquier estilo de base.
+       */
+      baseLayers.current = m.getStyle().layers.map((l) => l.id);
+      m.addSource(SAT, { type: 'raster', tiles: [SATELLITE_TILES], tileSize: 256, maxzoom: 19, attribution: SATELLITE_ATTRIBUTION });
+      m.addLayer({ id: SAT, type: 'raster', source: SAT, layout: { visibility: 'none' } }, baseLayers.current[0]);
+      applyBase(m, baseRef.current, baseLayers.current);
+
       // La fuente del área nace vacía: así el `setData` de cada movimiento no tiene que crearla.
       m.addSource(AREA, { type: 'geojson', data: emptyArea() });
       m.addLayer({ id: `${AREA}-fill`, type: 'fill', source: AREA, paint: { 'fill-color': '#5B7DBE', 'fill-opacity': 0.12 } });
@@ -130,9 +216,31 @@ export function PointsMap({
         paint: { 'line-color': '#1A3A52', 'line-width': 2, 'line-dasharray': [1.5, 1.5], 'line-opacity': 0.7 },
       });
 
+      // El camino real por las calles: continuo, porque ése sí es por donde se va.
+      m.addSource(ROAD, { type: 'geojson', data: emptyArea() });
+      m.addLayer({
+        id: ROAD,
+        type: 'line',
+        source: ROAD,
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#2B5A7D', 'line-width': 4, 'line-opacity': 0.85 },
+      });
+
+      // Del punto donde está la persona hasta la próxima parada: otro color que el recorrido, para no confundirlos.
+      m.addSource(TO_NEXT, { type: 'geojson', data: emptyArea() });
+      m.addLayer({
+        id: TO_NEXT,
+        type: 'line',
+        source: TO_NEXT,
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#7B68D6', 'line-width': 4, 'line-opacity': 0.9, 'line-dasharray': [1, 1.5] },
+      });
+      if (tripLine.current) (m.getSource(TO_NEXT) as GeoJSONSource).setData(tripLine.current);
+
       ready.current = true;
       draw(m, circleRef.current, label.current);
-      drawPath(m, pointsRef.current);
+      drawRoad(m, lineRef.current);
+      drawPath(m, pointsRef.current, !!lineRef.current?.length);
     });
     map.current = m;
 
@@ -145,6 +253,61 @@ export function PointsMap({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const m = map.current;
+    if (m && ready.current) applyBase(m, base, baseLayers.current);
+  }, [base]);
+
+  /** Lo que se busca en el mapa son los puntos que hay en él: por nombre o por el detalle (saldo, zona). */
+  const found = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (q.length < 2) return [];
+    return points.filter((p) => `${p.label ?? ''} ${p.detail ?? ''}`.toLowerCase().includes(q)).slice(0, 6);
+  }, [points, query]);
+
+  const goTo = (p: MapPoint) => {
+    map.current?.easeTo({ center: [p.longitude, p.latitude], zoom: Math.max(map.current.getZoom(), 16), duration: 400 });
+    hover.current?.(p.id);
+  };
+  const nextStop = points.find((p) => p.tone === 'next');
+  nextRef.current = nextStop;
+
+  /**
+   * El camino desde donde está la persona hasta la próxima parada. Pide el trazo por las calles a la API y lo dibuja; si
+   * el motor de ruteo no contesta, el mapa sigue mostrando dónde está y simplemente no dice cuánto falta.
+   */
+  async function askTrip(h: Here, to: MapPoint | undefined): Promise<void> {
+    const m = map.current;
+    if (!to) return;
+    const prev = asked.current;
+    if (prev && prev.to === to.id && metersBetween(prev.at, h) < RECALC_M) return;
+    asked.current = { at: h, to: to.id };
+    const res = await postJson<{ geometry: { latitude: number; longitude: number }[]; distanceKm: number; minutes: number }>('/api/routes/leg', {
+      from: { id: 'here', latitude: h.latitude, longitude: h.longitude },
+      to: { id: to.id, latitude: to.latitude, longitude: to.longitude },
+    });
+    if (!res.ok || !res.data?.geometry) {
+      asked.current = null;
+      tripLine.current = null;
+      setTrip(null);
+      if (m && ready.current) (m.getSource(TO_NEXT) as GeoJSONSource | undefined)?.setData(emptyArea());
+      return;
+    }
+    const line: GeoJSON.FeatureCollection = {
+      type: 'FeatureCollection',
+      features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: res.data.geometry.map((p) => [p.longitude, p.latitude]) } }],
+    };
+    tripLine.current = line;
+    setTrip({ distanceKm: res.data.distanceKm, minutes: res.data.minutes });
+    if (m && ready.current) (m.getSource(TO_NEXT) as GeoJSONSource | undefined)?.setData(line);
+  }
+
+  // Si la próxima parada cambia (se registró una gestión), el camino se rehace hacia la nueva.
+  useEffect(() => {
+    if (hereRef.current) void askTrip(hereRef.current, nextStop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextStop?.id]);
 
   // Lo vigente, para que el `load` de arriba pueda dibujarlo aunque llegue después que los datos.
   const circleRef = useRef(circle);
@@ -169,15 +332,21 @@ export function PointsMap({
     }
 
     for (const p of points) {
+      const focused = p.id === focusId;
       const existente = markers.current.get(p.id);
       if (existente) {
-        // Sólo el punto, no el marcador entero: recrearlo lo haría parpadear sin haberse movido.
-        // El punto es el hijo; el padre es el área que se puede tocar.
-        const dot = existente.getElement().firstElementChild as HTMLElement | null;
+        // Sólo el punto y el globo, no el marcador entero: recrearlo lo haría parpadear sin haberse movido.
+        // El punto es el primer hijo; el padre es el área que se puede tocar.
+        const hit = existente.getElement();
+        const dot = hit.firstElementChild as HTMLElement | null;
         if (dot) {
-          dot.className = pinClass(p.picked, p.order);
-          dot.textContent = p.order ? String(p.order) : '';
+          dot.className = pinClass(p, focused);
+          dot.textContent = pinText(p);
         }
+        hit.classList.toggle('z-40', focused);
+        fillPhoto(hit, p);
+        fillTip(hit, p, focused);
+        existente.setLngLat([p.longitude, p.latitude]);
         continue;
       }
 
@@ -200,47 +369,41 @@ export function PointsMap({
       const hit = document.createElement('div');
       hit.className = 'group relative flex h-6 w-6 cursor-pointer items-center justify-center hover:z-50';
       const dot = document.createElement('span');
-      dot.className = pinClass(p.picked, p.order);
-      if (p.order) dot.textContent = String(p.order);
+      dot.className = pinClass(p, focused);
+      dot.textContent = pinText(p);
       hit.appendChild(dot);
+      fillPhoto(hit, p);
+      fillTip(hit, p, focused);
+      hit.classList.toggle('z-40', focused);
 
-      /*
-       * 🔴 **El globo es de la casa, no el `title` del navegador.** Ése tarda un segundo largo en
-       * aparecer, se dibuja con la tipografía del sistema y no puede mostrar dos líneas: justo
-       * cuando alguien barre el mapa comparando diez deudores, llega tarde y dice poco.
-       *
-       * Aparece con CSS puro (`group-hover`) y **no recibe eventos**: si los recibiera, taparía al
-       * punto de al lado y el clic caería en el globo en vez de en el vecino.
-       */
-      if (p.label) {
-        const tip = document.createElement('span');
-        tip.className =
-          'pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded-lg border border-k-border bg-white px-2.5 py-1.5 text-left shadow-k-card group-hover:block';
-        const name = document.createElement('span');
-        name.className = 'block text-[12px] font-semibold text-k-text';
-        name.textContent = p.label;
-        tip.appendChild(name);
-        if (p.detail) {
-          const sub = document.createElement('span');
-          sub.className = 'block text-[11px] text-k-text-2';
-          sub.textContent = p.detail;
-          tip.appendChild(sub);
-        }
-        hit.appendChild(tip);
-      }
       hit.addEventListener('click', (e) => {
         // Sin esto, el clic también llega al mapa y arrastra el encuadre bajo el dedo.
         e.stopPropagation();
         click.current?.(p.id);
       });
+      // El cursor sobre el pin resalta su fila en la lista: es el mismo punto visto desde dos lados.
+      hit.addEventListener('mouseenter', () => hover.current?.(p.id));
+      hit.addEventListener('mouseleave', () => hover.current?.(null));
 
       const marker = new Marker({ element: hit }).setLngLat([p.longitude, p.latitude]);
       marker.addTo(m);
       markers.current.set(p.id, marker);
     }
 
-    if (ready.current) drawPath(m, points);
-  }, [points]);
+    if (ready.current) {
+      drawRoad(m, line);
+      drawPath(m, points, !!line?.length);
+    }
+  }, [points, focusId, line]);
+
+  // «Ir en mapa»: el punto pedido queda al centro y lo bastante cerca como para reconocer la calle.
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !centerRequest) return;
+    const p = pointsRef.current.find((x) => x.id === centerRequest.id);
+    if (!p) return;
+    m.easeTo({ center: [p.longitude, p.latitude] as LngLatLike, zoom: Math.max(m.getZoom(), 16), duration: 450 });
+  }, [centerRequest]);
 
   // Encuadre: sólo cuando cambia CUÁNTOS hay. Reencuadrar en cada tilde movería el mapa bajo el dedo.
   useEffect(() => {
@@ -316,19 +479,120 @@ export function PointsMap({
   }, [height]);
 
   return (
-    <div ref={container} style={{ height }} className="w-full overflow-hidden rounded-2xl border border-k-border" />
+    <div className="relative">
+      <div ref={container} style={{ height }} className="w-full overflow-hidden rounded-2xl border border-k-border" />
+
+      {/* Los controles flotan sobre el mapa, a la izquierda: a la derecha están el zoom y la atribución. */}
+      <div className="absolute left-3 top-3 z-10 flex w-64 max-w-[calc(100%-5rem)] flex-col gap-2">
+        <div className="relative">
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setSearchOpen(true);
+            }}
+            onFocus={() => setSearchOpen(true)}
+            onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+            placeholder={t('mapSearch')}
+            aria-label={t('mapSearch')}
+            className="h-9 w-full rounded-lg border border-k-border bg-white px-3 text-[13px] text-k-text shadow outline-none focus:border-k-periwinkle"
+          />
+          {searchOpen && query.trim().length >= 2 && (
+            <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-lg border border-k-border bg-white py-1 shadow-k-card">
+              {found.length === 0 ? (
+                <li className="px-3 py-2 text-[12px] text-k-text-2">{t('mapSearchNone')}</li>
+              ) : (
+                found.map((p) => (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      // `onMouseDown` y no `onClick`: el `blur` del campo cerraría la lista antes de que llegue el clic.
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        goTo(p);
+                        setSearchOpen(false);
+                      }}
+                      className="block w-full px-3 py-1.5 text-left hover:bg-k-bg"
+                    >
+                      <span className="block truncate text-[13px] font-medium text-k-text">{p.label}</span>
+                      {p.detail && <span className="block truncate text-[11px] text-k-text-2">{p.detail}</span>}
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          )}
+        </div>
+
+        {trip && nextStop && (
+          <div className="rounded-lg border border-k-border bg-white px-3 py-2 text-[12px] text-k-text-2 shadow">
+            <p className="font-medium text-k-text">{t('mapToNext', { km: trip.distanceKm })}</p>
+            <p className="mt-0.5 tabular-nums">
+              {t('mapByVehicle', { min: trip.minutes })} · {t('mapOnFoot', { min: Math.max(1, Math.round((trip.distanceKm / WALK_KMH) * 60)) })}
+            </p>
+            <p className="mt-0.5 text-[11px] text-k-muted">{t('mapFootNote')}</p>
+          </div>
+        )}
+
+        {nextStop && (
+          <button
+            type="button"
+            onClick={() => goTo(nextStop)}
+            className="h-9 rounded-lg border border-k-border bg-white px-3 text-left text-[13px] font-medium text-k-purple shadow hover:bg-k-highlight"
+          >
+            {t('mapNextStop')}
+          </button>
+        )}
+      </div>
+
+      <div role="group" className="absolute bottom-6 left-3 z-10 flex overflow-hidden rounded-lg border border-k-border bg-white text-[12px] font-medium shadow">
+        {(['map', 'satellite'] as const).map((b) => (
+          <button
+            key={b}
+            type="button"
+            aria-pressed={base === b}
+            onClick={() => setBase(b)}
+            className={`h-8 px-3 ${base === b ? 'bg-k-navy text-white' : 'text-k-text-2 hover:bg-k-bg'}`}
+          >
+            {b === 'map' ? t('mapBaseMap') : t('mapBaseSatellite')}
+          </button>
+        ))}
+      </div>
+    </div>
   );
+}
+
+/** Calles o satélite: se alterna la visibilidad de las capas, sin tocar el estilo. */
+function applyBase(m: MapLibreMap, base: 'map' | 'satellite', layers: string[]): void {
+  const sat = base === 'satellite';
+  for (const id of layers) m.setLayoutProperty(id, 'visibility', sat ? 'none' : 'visible');
+  m.setLayoutProperty(SAT, 'visibility', sat ? 'visible' : 'none');
 }
 
 const AREA = 'plan-area';
 const PATH = 'plan-path';
+const ROAD = 'plan-road';
+
+/** El camino real por las calles, si el motor de ruteo lo dio. */
+function drawRoad(m: MapLibreMap, line?: { latitude: number; longitude: number }[]): void {
+  const source = m.getSource(ROAD) as GeoJSONSource | undefined;
+  if (!source) return;
+  const coords = (line ?? []).map((p) => [p.longitude, p.latitude] as [number, number]);
+  source.setData(
+    coords.length < 2
+      ? emptyArea()
+      : { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } }] },
+  );
+}
 
 /**
  * El recorrido posible: une las paradas **elegidas**, en su orden.
  *
- * Con menos de dos no hay recorrido que dibujar — una línea de un punto a sí mismo no dice nada.
+ * Con menos de dos no hay recorrido que dibujar — una línea de un punto a sí mismo no dice nada. Si ya hay camino real
+ * por las calles (`hasRoad`), el trazo recto sobra: se limpia para no dibujar dos recorridos encima.
  */
-function drawPath(m: MapLibreMap, points: MapPoint[]): void {
+function drawPath(m: MapLibreMap, points: MapPoint[], hasRoad = false): void {
   const source = m.getSource(PATH) as GeoJSONSource | undefined;
   if (!source) return;
 
@@ -338,7 +602,7 @@ function drawPath(m: MapLibreMap, points: MapPoint[]): void {
     .map((p) => [p.longitude, p.latitude] as [number, number]);
 
   source.setData(
-    orden.length < 2
+    hasRoad || orden.length < 2
       ? emptyArea()
       : {
           type: 'FeatureCollection',
@@ -347,22 +611,123 @@ function drawPath(m: MapLibreMap, points: MapPoint[]): void {
   );
 }
 
-function pinClass(picked?: boolean, order?: number): string {
+/** El texto del pin: su número en el recorrido, o «+» si es una sugerencia. */
+function pinText(p: MapPoint): string {
+  if (p.tone === 'suggestion') return '+';
+  return p.order ? String(p.order) : '';
+}
+
+function pinClass(p: MapPoint, focused: boolean): string {
   /*
-   * El elegido lleva su número y es del color de la marca; el disponible, un punto gris que no
-   * compite. El numerado es más grande porque tiene que caber una cifra adentro.
+   * El color del pin es **el estado de la parada** (visitada, pendiente, la que sigue, saltada, con visita agendada) y
+   * su número, el lugar en el recorrido. Lo demás —«Hora fija», «Ayuda», la fuente— va en el globo, en etiquetas de tinte
+   * claro: así lo que se lee en el pin y lo que se lee en la etiqueta no se confunden.
    *
-   * Los tres **crecen y se tiñen al acercarse** (`group-hover`, que dispara el área de toque de
-   * alrededor y no el punto en sí): es la confirmación de que el clic va a caer ahí y no en el
-   * vecino, que con puntos de diez píxeles es la duda real.
+   * Los tres tamaños **crecen y se tiñen al acercarse** (`group-hover`, que dispara el área de toque de alrededor y no el
+   * punto en sí): es la confirmación de que el clic va a caer ahí y no en el vecino.
    */
   const base = 'flex items-center justify-center rounded-full border-white shadow transition-all group-hover:scale-125';
-  if (order) {
-    return `${base} h-6 w-6 border-2 bg-k-navy text-[11px] font-semibold text-white group-hover:bg-k-slate`;
+  const ring = focused ? ' scale-125 ring-4 ring-k-periwinkle/40' : '';
+
+  // Dónde se registró una visita: más chico y de otro color, no compite con la parada — la distancia entre los dos es lo que se mira.
+  if (p.tone === 'visit') return `${base} h-3 w-3 border-2 bg-k-purple${ring}`;
+  if (p.tone === 'suggestion') {
+    return `${base} h-5 w-5 border-2 border-k-warning bg-white text-[13px] font-bold leading-none text-k-warning-text group-hover:bg-k-warning-bg${ring}`;
   }
-  return picked
-    ? `${base} h-4 w-4 border-2 bg-k-navy group-hover:bg-k-slate`
-    : `${base} h-2.5 w-2.5 border bg-k-muted group-hover:bg-k-periwinkle group-hover:scale-150`;
+  if (p.order) {
+    const fill =
+      p.tone === 'done'
+        ? 'bg-k-success group-hover:bg-k-success'
+        : p.tone === 'next'
+          ? 'bg-k-purple group-hover:bg-k-purple'
+          : p.tone === 'skipped'
+            ? 'bg-k-muted group-hover:bg-k-muted'
+            : 'bg-k-navy group-hover:bg-k-slate';
+    // La que tiene una visita agendada lleva un aro: es un compromiso, no sólo una parada.
+    const agenda = p.tone === 'scheduled' ? ' ring-2 ring-k-warning' : '';
+    return `${base} h-6 w-6 border-2 text-[11px] font-semibold text-white ${fill}${agenda}${ring}`;
+  }
+  return p.picked
+    ? `${base} h-4 w-4 border-2 bg-k-navy group-hover:bg-k-slate${ring}`
+    : `${base} h-2.5 w-2.5 border bg-k-muted group-hover:bg-k-periwinkle group-hover:scale-150${ring}`;
+}
+
+/**
+ * El globo de un pin: nombre, detalle y etiquetas. Se rehace al repintar —cambia el estado de la parada, llega su hora—
+ * y **no recibe eventos**: si los recibiera, taparía al punto de al lado y el clic caería en el globo y no en el vecino.
+ */
+/**
+ * La foto de la casa, chica y **encima del pin**: es lo que permite reconocer la puerta al llegar sin abrir la ficha.
+ *
+ * No toma el clic (`pointer-events-none`): el área que responde sigue siendo la del pin, así que una foto no le roba el toque
+ * al vecino. Se agrega sólo si la parada tiene foto y se saca si deja de tenerla.
+ */
+function fillPhoto(hit: HTMLElement, p: MapPoint): void {
+  let img = hit.querySelector<HTMLImageElement>('img[data-photo]');
+  if (!p.photoUrl) {
+    img?.remove();
+    return;
+  }
+  if (!img) {
+    img = document.createElement('img');
+    img.setAttribute('data-photo', '');
+    img.alt = '';
+    img.loading = 'lazy';
+    img.className =
+      'pointer-events-none absolute bottom-full left-1/2 mb-0.5 h-9 w-9 -translate-x-1/2 rounded-md border-2 border-white bg-white object-cover shadow-md';
+    // Una foto que no carga (borrada, sin sesión) no deja un ícono roto sobre el mapa.
+    img.addEventListener('error', () => img?.remove());
+    hit.appendChild(img);
+  }
+  if (img.getAttribute('src') !== p.photoUrl) img.src = p.photoUrl;
+}
+
+function fillTip(hit: HTMLElement, p: MapPoint, focused: boolean): void {
+  let tip = hit.querySelector<HTMLElement>('[data-tip]');
+  if (!p.label) {
+    tip?.remove();
+    return;
+  }
+  if (!tip) {
+    tip = document.createElement('span');
+    tip.setAttribute('data-tip', '');
+    hit.appendChild(tip);
+  }
+  tip.className = `pointer-events-none absolute bottom-full left-1/2 z-50 ${p.photoUrl ? 'mb-11' : 'mb-1'} -translate-x-1/2 whitespace-nowrap rounded-lg border border-k-border bg-white px-2.5 py-1.5 text-left shadow-k-card group-hover:block ${focused ? 'block' : 'hidden'}`;
+  tip.replaceChildren();
+
+  const name = document.createElement('span');
+  name.className = 'block text-[12px] font-semibold text-k-text';
+  name.textContent = p.label;
+  tip.appendChild(name);
+
+  if (p.detail) {
+    const sub = document.createElement('span');
+    sub.className = 'block text-[11px] text-k-text-2';
+    sub.textContent = p.detail;
+    tip.appendChild(sub);
+  }
+  if (p.badges?.length) {
+    const row = document.createElement('span');
+    row.className = 'mt-1 flex flex-wrap gap-1';
+    for (const b of p.badges) {
+      const chip = document.createElement('span');
+      chip.className = `rounded-full px-2 py-0.5 text-[10px] font-medium ${BADGE_CLASS[b.tone]}`;
+      chip.textContent = b.label;
+      row.appendChild(chip);
+    }
+    tip.appendChild(row);
+  }
+}
+
+/** Metros entre dos puntos (haversine): sólo para decidir si vale pedir el camino de nuevo. */
+function metersBetween(a: Here, b: Here): number {
+  const R = 6_371_000;
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLat = rad(b.latitude - a.latitude);
+  const dLng = rad(b.longitude - a.longitude);
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.latitude)) * Math.cos(rad(b.latitude)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
 }
 
 function emptyArea(): GeoJSON.FeatureCollection {

@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { useFormatter, useTranslations } from 'next-intl';
+import { LocationPhotos } from '@/components/location-photos';
 import {
   PHONE_PATTERN,
   SUPPORTED_CURRENCIES,
@@ -289,6 +290,9 @@ export function LocationRows({
               </div>
             </div>
             <CoordFields row={l} onChange={set} disabled={disabled} />
+            <div className="mt-4">
+              <LocationPhotos value={l.photoUrls} onChange={(photoUrls) => set({ photoUrls })} disabled={disabled} />
+            </div>
             <div className="mt-3 flex justify-end">
               <RemoveButton onClick={() => onChange(rows.filter((_, j) => j !== i))} disabled={disabled} label={t('form.removeLocation')} />
             </div>

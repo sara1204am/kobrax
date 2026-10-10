@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import {
   AgendaItemType,
   AgendaTimeSlot,
@@ -18,7 +18,7 @@ import {
   type VisitResultForm,
 } from '@kobrax/shared';
 import { Modal } from '@/components/modal';
-import { money } from '@/lib/format';
+import { dayDate, money } from '@/lib/format';
 import { postJson } from '@/lib/client';
 
 /** La parada sobre la que se registra: lo que el formulario necesita saber de ella. */
@@ -31,8 +31,13 @@ export interface RecordStop {
   latitude?: number;
   longitude?: number;
   overdueAmount?: number;
+  /** La cuota que correspondía pagar y cuándo vencía: se muestra bajo el monto, si hay dato. */
+  installmentAmount?: number;
+  nextDueDate?: string;
   currency?: string;
   externalSource?: string;
+  /** La ubicación que se visita: sin ella, «volver a visitar» agenda con la dirección escrita. */
+  locationId?: string;
 }
 
 /** Cada variante, con el color de su tarjeta y el trazo de su ícono. Colores del sistema, sin tonos nuevos. */
@@ -44,6 +49,10 @@ const VARIANT_UI: Record<VariantKey, { tile: string; ring: string; path: string 
   WRONG_ADDRESS: { tile: 'bg-k-danger-bg text-k-danger', ring: 'border-k-danger', path: 'M12 21s-7-5.6-7-11a7 7 0 1 1 14 0c0 5.4-7 11-7 11ZM9.5 8.5l5 5M14.5 8.5l-5 5' },
   SPECIAL: { tile: 'bg-k-highlight text-k-purple', ring: 'border-k-purple', path: 'M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4' },
 };
+
+/** Las gestiones en las que no se encontró a nadie: ahí tiene sentido «volver otro día». */
+const REVISIT_VARIANTS: readonly VariantKey[] = ['NO_ANSWER', 'NO_CONTACT_VISIT'];
+const REVISIT_SLOTS = [AgendaTimeSlot.MORNING, AgendaTimeSlot.AFTERNOON, AgendaTimeSlot.NIGHT] as const;
 
 const METHODS = ['CASH', 'QR', 'TRANSFER'] as const;
 
@@ -94,6 +103,10 @@ export function RecordVisitDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  /** «Volver a visitar»: agenda una nueva visita a este crédito, para otro día o más tarde hoy. */
+  const [revisit, setRevisit] = useState(false);
+  const [revisitDate, setRevisitDate] = useState(today);
+  const [revisitSlot, setRevisitSlot] = useState<AgendaTimeSlot>(AgendaTimeSlot.AFTERNOON);
   const [categories, setCategories] = useState<{ code: string; label: string }[]>([]);
   const [promiseMethods, setPromiseMethods] = useState<{ code: string; label: string }[]>([]);
   // El mismo id en un reintento: la API responde con la visita que ya guardó, sin duplicarla.
@@ -108,6 +121,9 @@ export function RecordVisitDialog({
     setPhoto(null);
     setError(null);
     setWarnings([]);
+    setRevisit(false);
+    setRevisitDate(today);
+    setRevisitSlot(AgendaTimeSlot.AFTERNOON);
   }, [open, today]);
 
   // Los catálogos solo hacen falta para dos variantes: se piden al elegirlas.
@@ -132,8 +148,12 @@ export function RecordVisitDialog({
 
   const cap = paymentCap(stop);
   const currency = stop.currency ?? 'BOB';
+  const locale = useLocale();
   const set = <K extends keyof VisitResultForm>(k: K, v: VisitResultForm[K]) => setForm((f) => ({ ...f, [k]: v }));
-  const ready = variant !== null && canSubmitVisitResult(variant, form, cap) && !uploading;
+  // Agendar la visita pide saber a dónde: la ubicación de la parada, o al menos su dirección.
+  const canRevisit = variant !== null && REVISIT_VARIANTS.includes(variant) && !!(stop.locationId || stop.address?.trim());
+  const revisitOn = canRevisit && revisit;
+  const ready = variant !== null && canSubmitVisitResult(variant, form, cap) && !uploading && (!revisitOn || /^\d{4}-\d{2}-\d{2}$/.test(revisitDate));
 
   const ui = useMemo(() => (variant ? VARIANT_UI[variant] : null), [variant]);
 
@@ -201,6 +221,19 @@ export function RecordVisitDialog({
         details: { amount, promiseDate: form.promiseDate, paymentMethodCode: form.paymentMethodCode },
       });
       if (!r.ok) failed.push(t('promiseFailed'));
+    }
+
+    if (revisitOn) {
+      // A nombre del responsable del crédito (lo decide la API): la visita nueva la hace quien lleva la cartera.
+      const r = await postJson('/api/agenda', {
+        creditId: stop.creditId,
+        type: AgendaItemType.VISIT,
+        scheduledDate: revisitDate,
+        timeMode: ScheduleTimeMode.LAPSE,
+        timeSlot: revisitSlot,
+        details: stop.locationId ? { locationId: stop.locationId } : { customAddress: { address: stop.address!.trim() } },
+      });
+      if (!r.ok) failed.push(t('revisitFailed'));
     }
 
     setBusy(false);
@@ -307,6 +340,27 @@ export function RecordVisitDialog({
                       className={input}
                       placeholder="0.00"
                     />
+                    {/*
+                      * La cuota que correspondía pagar, **antes** del tope: es lo que el cobrador le pide a la persona; el
+                      * total es solo hasta dónde se puede llegar. Sin dato de la cuota, no se muestra nada (nunca un 0).
+                      */}
+                    {stop.installmentAmount != null && (
+                      <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[12px] text-k-text-2">
+                        <span>
+                          {t('installmentHint', { amount: money(stop.installmentAmount, currency) })}
+                          {stop.nextDueDate ? ` · ${t('installmentDue', { date: dayDate(stop.nextDueDate, locale) })}` : ''}
+                        </span>
+                        {form.amount !== String(stop.installmentAmount) && (
+                          <button
+                            type="button"
+                            onClick={() => set('amount', String(stop.installmentAmount))}
+                            className="font-medium text-k-periwinkle hover:underline"
+                          >
+                            {t('useInstallment')}
+                          </button>
+                        )}
+                      </p>
+                    )}
                     {cap != null && variant === 'PAID' && <p className="mt-1 text-[12px] text-k-muted">{t('capHint', { max: money(cap, currency) })}</p>}
                   </div>
                   {variant === 'PAID' ? (
@@ -389,6 +443,38 @@ export function RecordVisitDialog({
                         </option>
                       ))}
                     </select>
+                  )}
+                </div>
+              )}
+
+              {canRevisit && (
+                <div className="rounded-xl border border-k-border bg-k-bg px-4 py-3">
+                  <label className="flex items-center gap-2 text-[14px] font-medium text-k-text">
+                    <input type="checkbox" checked={revisit} onChange={(e) => setRevisit(e.target.checked)} className="h-4 w-4 rounded border-k-border" />
+                    {t('revisit')}
+                  </label>
+                  {revisit && (
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="rv-rdate" className={label}>
+                          {t('revisitDate')}
+                        </label>
+                        <input id="rv-rdate" type="date" min={today} value={revisitDate} onChange={(e) => setRevisitDate(e.target.value)} className={input} />
+                      </div>
+                      <div>
+                        <label htmlFor="rv-rslot" className={label}>
+                          {t('revisitSlot')}
+                        </label>
+                        <select id="rv-rslot" value={revisitSlot} onChange={(e) => setRevisitSlot(e.target.value as AgendaTimeSlot)} className={input}>
+                          {REVISIT_SLOTS.map((sl) => (
+                            <option key={sl} value={sl}>
+                              {t(`slots.${sl}`)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <p className="text-[12px] text-k-muted sm:col-span-2">{t('revisitHint')}</p>
+                    </div>
                   )}
                 </div>
               )}

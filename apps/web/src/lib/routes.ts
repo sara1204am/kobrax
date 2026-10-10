@@ -261,3 +261,47 @@ export function routePercent(route: Pick<RouteItem, 'totalCases' | 'visitedCount
   if (!route.totalCases) return 0;
   return Math.min(100, Math.round(((route.visitedCount ?? 0) / route.totalCases) * 100));
 }
+
+/** Las columnas de «Hoy» que ordenan. Se resuelve acá, en memoria: llega el día completo, no una página. */
+export const TODAY_SORTS = ['collector', 'status', 'stops', 'progress', 'collected'] as const;
+
+/** Valor del filtro de estado para «el cobrador todavía no tiene ruta»: no es un `RouteStatus`. */
+export const NO_ROUTE = 'NONE';
+
+/**
+ * Filtra y ordena las filas de «Hoy» según la URL (`collectorId`, `status`, `sort`, `dir`).
+ *
+ * 🔴 **Es exacto porque el día entero está en memoria**, a diferencia del historial, donde lo resuelve la API. Una clave
+ * de orden o un estado que no se conozca **no hace nada**: se queda el orden por defecto de `todayRows`.
+ * Quien no tiene ruta va siempre al final al ordenar por un dato de la ruta, en cualquier sentido: no tiene «cero
+ * paradas», no tiene paradas.
+ */
+export function filterTodayRows(
+  rows: TodayRow[],
+  params: Pick<RouteParams, 'collectorId' | 'status' | 'sort' | 'dir'>,
+  nameOf: (id: string) => string = (id) => id,
+): TodayRow[] {
+  let out = rows;
+  if (params.collectorId) out = out.filter((r) => r.collectorId === params.collectorId);
+  if (params.status === NO_ROUTE) out = out.filter((r) => !r.route);
+  else if (params.status && params.status in STATUS_ORDER) out = out.filter((r) => r.route?.status === params.status);
+
+  const key = (TODAY_SORTS as readonly string[]).includes(params.sort ?? '') ? params.sort : undefined;
+  if (!key) return out;
+  const sign = params.dir === 'desc' ? -1 : 1;
+  const value = (r: TodayRow): number | string | null => {
+    if (key === 'collector') return nameOf(r.collectorId);
+    if (!r.route) return null;
+    if (key === 'status') return STATUS_ORDER[r.route.status];
+    if (key === 'stops') return r.route.totalCases;
+    if (key === 'progress') return routePercent(r.route);
+    return r.route.collected ?? 0;
+  };
+  return [...out].sort((a, b) => {
+    const va = value(a);
+    const vb = value(b);
+    if (va === null || vb === null) return va === vb ? 0 : va === null ? 1 : -1;
+    const c = typeof va === 'string' ? va.localeCompare(vb as string, 'es') : va - (vb as number);
+    return sign * c || nameOf(a.collectorId).localeCompare(nameOf(b.collectorId), 'es');
+  });
+}

@@ -693,14 +693,35 @@ export class AgendaService {
         value: c.value,
         isPrimary: c.isPrimary,
       })),
-      locations: (client.locations ?? []).map((l) => ({
-        id: l.id,
-        locationType: l.locationType,
-        address: l.address,
-        zone: l.zone,
-        latitude: l.latitude,
-        longitude: l.longitude,
-      })),
+      /*
+       * Las del cliente primero (el default de quien agenda es la primera), y después las de sus garantes, familiares y
+       * contactos con `ownerName`/`ownerRelation`: una deuda se cobra donde esté la persona, y quien elige tiene que
+       * poder ver de QUIÉN es cada dirección. Sin dueño = del cliente.
+       */
+      locations: [
+        ...(client.locations ?? []).map((l) => ({
+          id: l.id,
+          locationType: l.locationType,
+          address: l.address,
+          zone: l.zone,
+          latitude: l.latitude,
+          longitude: l.longitude,
+          photoUrls: l.photoUrls ?? [],
+        })),
+        ...(client.relations ?? []).flatMap((r) =>
+          (r.locations ?? []).map((l) => ({
+            id: l.id,
+            locationType: l.locationType,
+            address: l.address,
+            zone: l.zone,
+            latitude: l.latitude,
+            longitude: l.longitude,
+            photoUrls: l.photoUrls ?? [],
+            ownerName: r.relatedName,
+            ownerRelation: r.relationshipType,
+          })),
+        ),
+      ],
       /** En qué franja conviene buscarlo (Rutas S4). Ausente si el historial no alcanza. */
       contactHint,
     });
@@ -758,6 +779,7 @@ export class AgendaService {
       id: created.id,
       locationType: created.locationType,
       address: dto.address, // `created.address` viene cifrado
+      photoUrls: Array.isArray(created.photoUrls) ? created.photoUrls : [],
       zone: created.zone ?? undefined,
       latitude: created.latitude != null ? Number(created.latitude) : undefined,
       longitude: created.longitude != null ? Number(created.longitude) : undefined,
@@ -776,6 +798,7 @@ export class AgendaService {
       id: updated.id,
       locationType: updated.locationType,
       address: dto.address, // `updated.address` viene cifrado
+      photoUrls: Array.isArray(updated.photoUrls) ? updated.photoUrls : [],
       zone: updated.zone ?? undefined,
       latitude: updated.latitude != null ? Number(updated.latitude) : undefined,
       longitude: updated.longitude != null ? Number(updated.longitude) : undefined,

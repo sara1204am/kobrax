@@ -12,7 +12,11 @@ vi.mock('next-intl/server', async () => {
     getLocale: async () => 'es',
   };
 });
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => '/rutas',
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 const member = (userId: string, firstName: string): Member =>
   ({ userId, email: `${userId}@x.com`, firstName, lastName: 'Demo', phone: null, photoUrl: null, roleId: 'r', roleName: 'COLLECTOR', isOwner: false, isActive: true, userStatus: 'ACTIVE' }) as Member;
@@ -94,6 +98,18 @@ describe('TodayBoard · ¿qué pasa hoy con las rutas? (F4/12)', () => {
     const rows = screen.getAllByRole('row');
     expect(rows).toHaveLength(2);
     expect(rows[1]).toHaveTextContent('Cobrador');
+  });
+
+  it('la URL filtra y ordena las filas, pero los totales siguen siendo los del día', async () => {
+    const { container } = await draw({
+      routes: [route('ana', RouteStatus.IN_PROGRESS, { visitedCount: 4 }), route('bea', RouteStatus.PLANNED, { totalCases: 5 })],
+      collectors: TEAM,
+      params: { status: 'NONE' },
+    });
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent('Carla Demo');
+    expect(within(container.querySelector('dl') as HTMLElement).getByText('Paradas').previousElementSibling).toHaveTextContent('13');
   });
 
   it('un día sin cobradores ni rutas lo dice', async () => {

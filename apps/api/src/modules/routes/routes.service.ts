@@ -28,7 +28,7 @@ import { serializeRoute, serializeStop } from './routes.serializer';
 import type { RoutePdfContext } from './route-pdf';
 import { OsrmService, type OsrmRoute, type OsrmTrip } from './osrm.service';
 import { routeCapabilities, routeRoles, type RouteRoles } from './route-access';
-import { AddStopDto, CreateRouteDto, GenerateRouteDto, ListRoutesQueryDto, PlanPreviewDto, UpdateRouteDto, UpdateStopDto } from './dto/route.dto';
+import { AddStopDto, CreateRouteDto, GenerateRouteDto, LegDto, ListRoutesQueryDto, PlanPreviewDto, UpdateRouteDto, UpdateStopDto } from './dto/route.dto';
 import {
   changeRequestRequired,
   invalidCollector,
@@ -69,6 +69,8 @@ const STOP_CLIENT = {
         latitude: true,
         longitude: true,
         relationId: true,
+        // La primera es la principal: es la que se ve chica en los mapas para reconocer la casa.
+        photoUrls: true,
         relation: { select: { relatedName: true } },
       },
       orderBy: { createdAt: 'asc' },
@@ -97,6 +99,15 @@ const STOP_CREDIT = {
     externalSource: true,
     syncStatus: true,
     reportedAsOf: true,
+    // La cuota que correspondía pagar: sale de lo pendiente del cronograma o, sin cronograma, de lo congelado/reportado.
+    origin: true,
+    metadata: true,
+    installments: {
+      where: { status: { not: 'PAID' } },
+      orderBy: { number: 'asc' },
+      take: 12,
+      select: { number: true, dueDate: true, amount: true, paidAmount: true, status: true },
+    },
   },
 } satisfies Prisma.CreditDefaultArgs;
 
@@ -909,10 +920,21 @@ export class RoutesService {
       const found = await tx.routeStop.findFirst({ where: { id: stopId, routeId } });
       if (!found) throw resourceNotFound();
       const prevStatus = found.status;
+      // Antes de escribir: lo que se audita es de dónde venía, no a dónde llegó.
+      const prevLocationId = found.locationId;
 
       const moves = dto.sequenceOrder != null && dto.sequenceOrder !== found.sequenceOrder;
       const changes = dto.status != null && dto.status !== found.status;
+      const relocates = dto.locationId != null && dto.locationId !== found.locationId;
       if (moves) this.requireManage(roles, 'REORDER');
+      /*
+       * Cambiar a qué puerta se va es **armar** la ruta, no operarla: lo hace quien la armó. Solo una parada pendiente — la
+       * gestionada es la jornada que ya pasó, y su visita quedó registrada en ese lugar.
+       */
+      if (relocates) {
+        if (!roles.canManage) throw routeForbidden('cambiar la dirección de la parada');
+        if (found.status !== RouteStopStatus.PENDING) throw stopNotPending();
+      }
       // Saltar o poner «en camino» es operar la jornada, no armarla: lo hace quien la anda.
       if (changes && !roles.canRun && !roles.canManage) throw routeForbidden('cambiar la parada');
 
@@ -926,18 +948,41 @@ export class RoutesService {
         await this.resequence(tx, ids);
       }
 
+      if (relocates) {
+        // Debe ser del cliente de la parada y tener punto en el mapa: sin él no hay recorrido que dibujar.
+        const locationOf = await this.resolveLocations(
+          tx,
+          [{ id: found.creditId ?? found.clientId, clientId: found.clientId }],
+          { [found.creditId ?? found.clientId]: dto.locationId! },
+          false,
+        );
+        await tx.routeStop.update({ where: { id: stopId }, data: { locationId: locationOf.get(found.creditId ?? found.clientId) ?? null } });
+      }
+
       if (changes) {
         if (!canTransitionStop(found.status as unknown as SharedStopStatus, dto.status as unknown as SharedStopStatus)) {
           throw stopStatusNotAllowed(found.status, dto.status!);
         }
         await tx.routeStop.update({ where: { id: stopId }, data: { status: dto.status } });
       }
-      return { stop: await tx.routeStop.findFirstOrThrow({ where: { id: stopId } }), before: { status: prevStatus } };
+      return {
+        stop: await tx.routeStop.findFirstOrThrow({ where: { id: stopId } }),
+        before: { status: prevStatus, locationId: prevLocationId },
+      };
     });
     if (dto.status && dto.status !== before.status) {
       await this.audit.record({ entity: 'route_stop', entityId: stopId, action: 'UPDATE', before: { status: before.status }, after: { status: stop.status, routeId } });
     }
-    return { id: stop.id, status: stop.status, sequenceOrder: stop.sequenceOrder };
+    if (dto.locationId && dto.locationId !== before.locationId) {
+      await this.audit.record({
+        entity: 'route_stop',
+        entityId: stopId,
+        action: 'UPDATE',
+        before: { locationId: before.locationId },
+        after: { locationId: stop.locationId, routeId },
+      });
+    }
+    return { id: stop.id, status: stop.status, sequenceOrder: stop.sequenceOrder, locationId: stop.locationId ?? undefined };
   }
 
   // ── Vista previa y optimización (S3) ─────────────────────────────────────
@@ -1007,6 +1052,21 @@ export class RoutesService {
       stops: withEta(stops, drawable, path.legs),
       suggestion: this.suggestOrder(drawable, path, best),
     };
+  }
+
+  /**
+   * El camino entre dos puntos, por las calles: lo que pide el botón «dónde estoy» de los mapas para decir cuánto falta
+   * hasta una parada. Sin permanencia (no es un recorrido, es un tramo) y sin datos personales.
+   *
+   * Sin motor de ruteo devuelve `null`: el mapa sigue mostrando la ubicación, solo que sin camino.
+   */
+  async leg(dto: LegDto): Promise<{ geometry: { latitude: number; longitude: number }[]; distanceKm: number; minutes: number } | null> {
+    if (!this.tenant.can(Permission.ROUTE_ASSIGN) && !this.tenant.can(Permission.ROUTE_WRITE) && !this.tenant.can(Permission.ROUTE_EXECUTE)) {
+      throw routeForbidden('calcular un camino');
+    }
+    const path = await this.osrm.route([dto.from, dto.to]);
+    if (!path) return null;
+    return { geometry: path.geometry, distanceKm: round1(path.distanceM / 1000), minutes: Math.max(1, Math.round(path.durationS / 60)) };
   }
 
   /**

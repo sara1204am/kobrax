@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import type { VisitMapPoint } from '@kobrax/shared';
+import { money } from '@/lib/format';
 
 /**
  * Las paradas del día en el mapa.
@@ -37,6 +38,13 @@ export function VisitMapWidget({ points, day }: { points: VisitMapPoint[]; day: 
           latitude: p.latitude,
           longitude: p.longitude,
           tone: p.status === 'VISITED' ? 'done' : 'pending',
+          // El globo: a quién se visita, cuánto debe y a quién está asignada la ruta. Sin dato, la línea no se escribe.
+          title: p.clientName,
+          lines: [
+            p.amount != null ? `${t('map.amount')}: ${money(p.amount, p.currency ?? 'BOB')}` : null,
+            p.collectorName ? `${t('map.collector')}: ${p.collectorName}` : null,
+            p.status === 'VISITED' ? t('map.statusDone') : t('map.statusPending'),
+          ].filter((l): l is string => !!l),
         }))}
       />
       <div className="mt-3 flex flex-wrap items-center gap-4 text-[12px] text-k-text-2">

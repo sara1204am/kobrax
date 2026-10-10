@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { locationTypeChoices } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
 import { Icon } from '@/components/panel-shell';
+import { LocationPhotos } from '@/components/location-photos';
 import { postJson, sendJson } from '@/lib/client';
 
 /**
@@ -22,6 +23,12 @@ export interface Loc {
   zone?: string;
   latitude?: number;
   longitude?: number;
+  /** Presente ⇒ la dirección es de un garante, familiar o contacto, no del cliente. */
+  ownerName?: string;
+  /** `RelationshipType` del dueño: GUARANTOR, FAMILY, COWORKER, NEIGHBOR, OTHER. */
+  ownerRelation?: string;
+  /** Fotos de la vivienda; **la primera es la principal** (la que se ve chica en los mapas). */
+  photoUrls?: string[];
 }
 
 /** Lo que se está tipeando en el alta. Las coordenadas van como texto: un campo a medio escribir no es un número. */
@@ -32,9 +39,10 @@ interface Borrador {
   referenceNotes: string;
   latitude: string;
   longitude: string;
+  photoUrls: string[];
 }
 
-const VACIO: Borrador = { locationType: 'HOME', address: '', zone: '', referenceNotes: '', latitude: '', longitude: '' };
+const VACIO: Borrador = { locationType: 'HOME', address: '', zone: '', referenceNotes: '', latitude: '', longitude: '', photoUrls: [] };
 
 /** `''` → `undefined`, y un número mal tipeado tampoco viaja: la API lo rechazaría con un 400 críptico. */
 function coord(v: string): number | undefined {
@@ -64,7 +72,13 @@ export function LocationPicker({
   onUpdated,
   clientId,
   disabled,
+  near,
 }: {
+  /**
+   * Un lugar cercano para abrir el mapa cuando la dirección no tiene punto: las paradas de la ruta, por ejemplo. Si no
+   * viene, se usa otra dirección del mismo cliente que sí lo tenga.
+   */
+  near?: { latitude: number; longitude: number };
   locations: Loc[];
   value: string;
   onChange: (id: string) => void;
@@ -88,8 +102,30 @@ export function LocationPicker({
   const [guardandoPunto, setGuardandoPunto] = useState(false);
 
   const elegida = locations.find((l) => l.id === value);
+  /** Dónde abrir el mapa sin punto: lo que mandó la pantalla o, si no, otra dirección del cliente que sí esté marcada. */
+  const cerca =
+    near ??
+    (() => {
+      const otra = locations.find((l) => l.id !== value && l.latitude != null && l.longitude != null);
+      return otra ? { latitude: otra.latitude!, longitude: otra.longitude! } : undefined;
+    })();
   const conPunto = elegida?.latitude != null && elegida.longitude != null;
   const set = (patch: Partial<Borrador>) => setForm((f) => ({ ...f, ...patch }));
+
+  // El punto a medio marcar es de la dirección que se estaba mirando: al pasar a otra no se lleva su pin.
+  useEffect(() => {
+    setPunto(null);
+  }, [value]);
+
+  /** «Domicilio» y «Del cliente», o «Trabajo» y «De Juan Pérez (Garante)»: de quién es y qué clase de lugar es. */
+  const quien = (l: Loc) =>
+    l.ownerName
+      ? t('create.ownerOf', {
+          name: l.ownerName,
+          relation: l.ownerRelation ? tp(`relationType.${l.ownerRelation}` as 'relationType.GUARANTOR') : '',
+        }).replace(' ()', '')
+      : t('create.ownerClient');
+  const tipo = (l: Loc) => tp(`locationType.${l.locationType}` as 'locationType.HOME');
 
   /*
    * El GPS del navegador, que es el mismo permiso que pide el teléfono. Si lo niegan no se bloquea
@@ -127,6 +163,18 @@ export function LocationPicker({
     setPunto(null);
   }
 
+  /**
+   * Las fotos de una dirección que ya existe se guardan **al cambiarlas**: subir una foto y tener que acordarse de otro botón
+   * es la manera de perderla. Va por el mismo PATCH que el punto del mapa.
+   */
+  async function guardarFotos(photoUrls: string[]) {
+    if (!elegida) return;
+    setError(null);
+    const res = await sendJson(`/api/agenda/context/${clientId}/locations/${elegida.id}`, { photoUrls }, 'PATCH');
+    if (!res.ok) return setError(res.data.error?.message ?? t('create.locationError'));
+    onUpdated({ ...elegida, photoUrls });
+  }
+
   async function guardar() {
     setError(null);
     setGuardando(true);
@@ -137,6 +185,7 @@ export function LocationPicker({
       ...(form.referenceNotes.trim() ? { referenceNotes: form.referenceNotes.trim() } : {}),
       ...(coord(form.latitude) != null ? { latitude: coord(form.latitude) } : {}),
       ...(coord(form.longitude) != null ? { longitude: coord(form.longitude) } : {}),
+      ...(form.photoUrls.length > 0 ? { photoUrls: form.photoUrls } : {}),
     });
     setGuardando(false);
     if (!res.ok) return setError(res.data.error?.message ?? t('create.locationError'));
@@ -155,7 +204,7 @@ export function LocationPicker({
             {locations.length === 0 && <option value="">{t('create.noLocations')}</option>}
             {locations.map((l) => (
               <option key={l.id} value={l.id}>
-                {l.address ?? '—'} {l.zone ? `· ${l.zone}` : ''}
+                {tipo(l)} · {quien(l)} · {l.address ?? '—'} {l.zone ? `· ${l.zone}` : ''}
               </option>
             ))}
           </Select>
@@ -178,6 +227,21 @@ export function LocationPicker({
         </div>
       </Field>
 
+      {/* Qué es y de quién: una opción larga se corta en el desplegable, y esto es lo que decide a dónde se va. */}
+      {elegida && (
+        <p className="text-[13px] text-k-text-2">
+          <span className="font-medium text-k-text">{t('create.locationDetail', { type: tipo(elegida), owner: quien(elegida) })}</span>
+          {elegida.address ? ` — ${elegida.address}` : ''}
+        </p>
+      )}
+
+      {elegida && !creando && (
+        <>
+          {conPunto && <ErrorBanner message={error} />}
+          <LocationPhotos value={elegida.photoUrls ?? []} onChange={(urls) => void guardarFotos(urls)} disabled={disabled} />
+        </>
+      )}
+
       {conPunto && verMapa && (
         <MapPicker latitude={elegida!.latitude} longitude={elegida!.longitude} height={220} label={t('create.mapView')} />
       )}
@@ -195,6 +259,8 @@ export function LocationPicker({
             longitude={punto?.longitude}
             onChange={(p) => setPunto({ latitude: Number(p.latitude.toFixed(5)), longitude: Number(p.longitude.toFixed(5)) })}
             label={t('create.mapPick')}
+            center={cerca}
+            hint={t('create.mapPickHint')}
           />
           <Button type="button" onClick={() => void guardarPunto()} loading={guardandoPunto} disabled={!punto || disabled}>
             {t('create.savePoint')}
@@ -244,6 +310,8 @@ export function LocationPicker({
             </div>
           </div>
 
+          <LocationPhotos value={form.photoUrls} onChange={(photoUrls) => set({ photoUrls })} disabled={guardando} />
+
           {/*
            * El mapa y los dos campos son la MISMA coordenada, no dos formas de cargar cosas
            * distintas: tocar el mapa escribe los números y escribirlos mueve el pin. Quien tiene el
@@ -256,6 +324,8 @@ export function LocationPicker({
               set({ latitude: latitude.toFixed(5), longitude: longitude.toFixed(5) })
             }
             label={t('create.mapPick')}
+            center={cerca}
+            hint={t('create.mapPickHint')}
           />
           <p className="text-[12px] text-k-text-2">
             {coord(form.latitude) != null && coord(form.longitude) != null

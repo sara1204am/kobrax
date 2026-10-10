@@ -19,7 +19,7 @@ import { apiCall } from '@/lib/bff';
 import { getAgendaSummary } from '@/lib/agenda-summary';
 import { CATEGORY_TONE, ROUTE_STATUS_TONE } from '@/lib/routes';
 import { availableQuery, hasPlanFilters, shiftDays, toAvailable, type PlanParams } from '@/lib/plan';
-import { Badge, Card, EmptyState, PageHeader } from '@/components/panel-ui';
+import { Badge, EmptyState, PageHeader } from '@/components/panel-ui';
 import { dayDate, money } from '@/lib/format';
 import { RouteEditor } from './route-editor';
 import { RouteActions } from './route-actions';
@@ -60,6 +60,7 @@ export default async function RutaPage({
   }
   const route = detail.body.data;
   const day = route.plannedDate.slice(0, 10);
+  const closed = route.status === 'COMPLETED' || route.status === 'CANCELLED';
   const caps = route.capabilities ?? {
     isOwner: false,
     start: false,
@@ -129,8 +130,13 @@ export default async function RutaPage({
     }),
     // Las visitas de esta ruta: el punto donde se registró cada una (W6-T0).
     apiCall<VisitItem[]>(`/visits?routeId=${params.id}&limit=${DAY_LIMIT}`, { method: 'GET', auth: true }),
-    editing
-      ? apiCall<MoraCreditListItem[]>(`/mora?${availableQuery(planParams, day)}`, { method: 'GET', auth: true })
+    /*
+     * La mora que se puede sumar: **siempre que la ruta siga abierta**, porque de ahí salen las sugerencias del mapa
+     * (mora sin ruta cerca de las paradas). Mirando, va sin filtros —sólo la cartera de este cobrador y la que tiene de
+     * ayuda—; al editar, con los que la persona puso.
+     */
+    !closed
+      ? apiCall<MoraCreditListItem[]>(`/mora?${availableQuery(editing ? planParams : { collectorId: route.collectorId }, day)}`, { method: 'GET', auth: true })
       : null,
     editing ? apiCall<ArrearCategory[]>('/arrear-categories', { method: 'GET', auth: true }) : null,
     // Los pedidos de cambio: los ve quien manda sobre la ruta y quien pide.
@@ -153,7 +159,6 @@ export default async function RutaPage({
   const perms = me.body.data?.permissions ?? [];
   const viewerIsCollector = !!me.body.data && me.body.data.userId === route.collectorId;
   const today = agendaToday?.date ?? todayISO();
-  const closed = route.status === 'COMPLETED' || route.status === 'CANCELLED';
   // Un punto en (0, 0) es el «sin ubicación» de una visita cargada desde el panel: no se dibuja en el mapa.
   const visitPoints = (visits.body.data ?? [])
     .filter((v) => v.latitude !== 0 || v.longitude !== 0)
@@ -187,65 +192,55 @@ export default async function RutaPage({
       />
 
       <div className="space-y-6">
-        <Card>
+        <section aria-label={t('detail.summary')} className="rounded-2xl border border-k-border bg-white px-6 py-5 shadow-k-card">
           {/*
-           * 🔴 **Cuatro números y una barra, no cuatro rótulos iguales.** Antes el avance era un «0%»
-           * suelto al lado de «0 de 4», con el mismo peso que el resto: había que leer los cuatro
-           * para saber cómo venía el día. Lo que se viene a mirar es cuánto entró y cuánto falta.
+           * 🔴 **Cuatro números y una barra, no cuatro rótulos iguales.** Lo que se viene a mirar es cuánto
+           * entró y cuánto falta: los números van en fila, separados por una línea fina, y la barra dice de un
+           * vistazo lo que el «2 de 6» dice leyendo. El número va igual al lado de la barra: el color no es el
+           * dato —hay quien no lo distingue—.
            */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-[15px] font-semibold text-k-navy">{t('detail.summary')}</p>
-
-            {/* Sólo las categorías con al menos una parada: un cero no cuenta nada y ocupa lugar. */}
-            {summary.categories.length > 0 && (
-              <ul className="flex flex-wrap gap-2">
-                {summary.categories.map((c) => (
-                  <li key={c.key}>
-                    <Badge tone={CATEGORY_TONE[c.key]}>
-                      {t(`category.${c.key}`)} · {c.count}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <dl className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat tone="money" label={t('detail.collected')} value={money(summary.collected, summary.currency)} strong />
-            <Stat tone="work" label={t('detail.done')} value={t('progress', { done: summary.done, total: summary.total })} />
-            <Stat tone="pending" label={t('detail.pending')} value={String(openStops.length)} />
+          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-0">
+            <Stat label={t('detail.collected')} value={money(summary.collected, summary.currency)} strong />
+            <Stat label={t('detail.done')} value={t('progress', { done: summary.done, total: summary.total })} divided />
+            <Stat label={t('detail.pending')} value={String(openStops.length)} divided />
             <Stat
-              tone="map"
               label={t('detail.distance')}
               value={route.totalDistanceKm != null ? t('km', { n: route.totalDistanceKm.toFixed(1) }) : null}
               // Sin distancia se dice por qué no la hay: un «—» parece un cero o un dato perdido.
               empty={t('detail.noDistance')}
+              divided
             />
           </dl>
 
-          {/*
-           * La barra dice de un vistazo lo que el «0 de 4» dice leyendo. 🔴 El número va igual al
-           * lado: el color no es el dato —hay quien no lo distingue—, y una barra sin cifra obliga a
-           * calcular a ojo cuántas paradas faltan.
-           */}
-          <div className="mt-5 flex items-center gap-3">
+          <div className="mt-4 flex items-center gap-3">
             <div
               role="progressbar"
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={summary.percent}
               aria-label={t('detail.percent')}
-              className="h-2.5 flex-1 overflow-hidden rounded-full bg-k-light-bg"
+              className="h-2 flex-1 overflow-hidden rounded-full bg-k-light-bg"
             >
               <div
-                className={`h-full rounded-full ${
-                  summary.percent === 100 ? 'bg-k-success' : 'bg-gradient-to-r from-k-periwinkle to-k-purple'
-                }`}
+                className={`h-full rounded-full ${summary.percent === 100 ? 'bg-k-success' : 'bg-k-periwinkle'}`}
                 style={{ width: `${summary.percent}%` }}
               />
             </div>
-            <span className="shrink-0 text-[13px] font-medium tabular-nums text-k-text-2">{summary.percent}%</span>
+            <span className="shrink-0 text-[12px] font-medium tabular-nums text-k-text-2">{summary.percent}%</span>
           </div>
+
+          {/* Sólo las categorías con al menos una parada: un cero no cuenta nada y ocupa lugar. */}
+          {summary.categories.length > 0 && (
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {summary.categories.map((c) => (
+                <li key={c.key}>
+                  <Badge tone={CATEGORY_TONE[c.key]}>
+                    {t(`category.${c.key}`)} · {c.count}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          )}
 
           {/* El motivo escrito de un cierre con paradas sin gestionar, o de una cancelación: queda a la vista. */}
           {route.statusReason && closed && (
@@ -256,7 +251,7 @@ export default async function RutaPage({
               {route.statusReason}
             </p>
           )}
-        </Card>
+        </section>
 
         {!closed && (
           <NextStopCard
@@ -306,51 +301,34 @@ export default async function RutaPage({
 }
 
 /**
- * Los colores del resumen: la plata, el trabajo, lo que falta y el mapa.
- *
- * 🔴 El color va en el **fondo y en la línea de abajo**, nunca en el número: sobre estos tintes, un
- * verde de 24 px queda por debajo del contraste mínimo. El dato se lee en navy en todas, y el
- * color sirve para encontrar la tarjeta de un vistazo, no para decir qué dice.
- */
-const STAT_TONES = {
-  money: 'border-b-k-success bg-k-success-bg',
-  work: 'border-b-k-purple bg-k-highlight',
-  pending: 'border-b-k-warning bg-k-warning-bg',
-  map: 'border-b-k-periwinkle bg-k-light-bg',
-} as const;
-
-/**
- * Un número del resumen del día. Distinto de `Fact`: acá el valor **es** lo que se viene a mirar, así
- * que se lee de lejos, y el que falta se explica en vez de mostrar un guión.
+ * Un número del resumen del día. El valor **es** lo que se viene a mirar, así que se lee de lejos, y el que falta se
+ * explica en vez de mostrar un guión. Las columnas se separan con una línea fina, no con tarjetas de colores.
  */
 function Stat({
   label,
   value,
   empty,
   strong,
-  tone,
+  divided,
 }: {
   label: string;
   value: string | null;
   empty?: string;
-  /** El número principal de la tarjeta. Uno solo: si todos gritan, ninguno destaca. */
+  /** El número principal. Uno solo: si todos gritan, ninguno destaca. */
   strong?: boolean;
-  tone: keyof typeof STAT_TONES;
+  /** Lleva la línea separadora a la izquierda (en pantalla ancha). */
+  divided?: boolean;
 }) {
-  // Los bordes se declaran por lado: `border-k-border` pinta los cuatro, y que el color de abajo lo
-  // pise dependería del orden en el que Tailwind emita las reglas.
   return (
-    <div
-      className={`rounded-xl border-x border-t border-b-4 border-x-k-border border-t-k-border px-4 py-3.5 ${STAT_TONES[tone]}`}
-    >
-      <dt className="text-[11px] font-semibold uppercase tracking-wide text-k-slate">{label}</dt>
+    <div className={`min-w-0 ${divided ? 'lg:border-l lg:border-k-border lg:pl-6' : 'lg:pr-6'}`}>
+      <dt className="text-[13px] text-k-slate">{label}</dt>
       <dd
-        className={`mt-1.5 tabular-nums ${
+        className={`mt-1 tabular-nums ${
           value === null
             ? 'text-[15px] text-k-text-2'
             : strong
-              ? 'text-[24px] font-semibold leading-tight text-k-navy'
-              : 'text-[20px] font-medium leading-tight text-k-navy'
+              ? 'text-[26px] font-semibold leading-tight text-k-navy'
+              : 'text-[22px] font-medium leading-tight text-k-navy'
         }`}
       >
         {value ?? empty}

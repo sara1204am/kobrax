@@ -96,7 +96,8 @@ export function DashboardToolbar({
   );
 
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    // Sin margen ni `justify-between`: ya no es una fila propia, va dentro de la tarjeta de filtros (ver `DashboardFilters`).
+    <div className="flex flex-wrap items-center justify-end gap-2">
       <div className="flex flex-wrap items-center gap-2">
         {dashboards.length > 1 && (
           <select

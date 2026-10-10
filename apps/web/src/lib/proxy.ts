@@ -44,7 +44,9 @@ export async function proxyMutation<T>(
     if (value) headers[name] = value;
   }
 
-  const body = await req.text();
+  // `null` es lo que queda de un borrado sin cuerpo que viajó como JSON: reenviarlo haría fallar al parser de la API.
+  const raw = await req.text();
+  const body = raw.trim() === 'null' ? '' : raw;
   const { status, body: res } = await apiCall<T>(path, {
     method,
     auth: true,

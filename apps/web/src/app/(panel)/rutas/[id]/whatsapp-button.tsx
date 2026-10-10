@@ -42,7 +42,7 @@ export function WhatsAppButton({
 }: {
   clientId: string;
   clientName?: string;
-  variant?: 'ghost' | 'compact';
+  variant?: 'ghost' | 'compact' | 'icon';
 }) {
   const t = useTranslations('panel.routes.whatsapp');
   const [busy, setBusy] = useState(false);
@@ -51,7 +51,13 @@ export function WhatsAppButton({
   async function open() {
     setBusy(true);
     setError(null);
-    const tab = window.open('', '_blank', 'noopener');
+    /*
+     * 🔴 **Sin `'noopener'` en el tercer argumento**: con ese feature `window.open` devuelve siempre `null`, y entonces
+     * no hay pestaña a la que redirigir y el código caía al plan B — navegar ESTA ventana, que es justo lo que se quería
+     * evitar. La pestaña se aísla igual cortando `opener` a mano.
+     */
+    const tab = window.open('', '_blank');
+    if (tab) tab.opener = null;
     const res = await fetch(`/api/agenda/context/${clientId}`).catch(() => null);
     const body = res ? await res.json().catch(() => null) : null;
     setBusy(false);
@@ -68,14 +74,33 @@ export function WhatsAppButton({
   }
 
   const cls =
-    variant === 'compact'
+    variant === 'icon'
+      ? 'flex h-8 w-9 items-center justify-center rounded-lg border border-k-border bg-white text-k-success hover:bg-k-success-bg'
+      : variant === 'compact'
       ? 'h-8 rounded-lg border border-k-border bg-white px-3 text-[13px] font-medium text-k-success hover:bg-k-success-bg'
       : 'h-10 rounded-xl border border-k-border bg-white px-4 text-[14px] font-medium text-k-success hover:bg-k-success-bg';
 
   return (
     <span className="inline-flex flex-col items-end gap-1">
-      <button type="button" onClick={() => void open()} disabled={busy} className={`${cls} disabled:opacity-60`}>
-        {busy ? t('opening') : t('label')}
+      <button
+        type="button"
+        onClick={() => void open()}
+        disabled={busy}
+        aria-label={variant === 'icon' ? t('label') : undefined}
+        title={variant === 'icon' ? t('label') : undefined}
+        className={`${cls} disabled:opacity-60`}
+      >
+        {variant === 'icon' ? (
+          // Solo el ícono: el nombre va en `aria-label` y en el tooltip, que es lo que lee un lector de pantalla.
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M20 11.5a8 8 0 0 1-11.9 7L4 20l1.5-4A8 8 0 1 1 20 11.5z" />
+            <path d="M9.5 8.8c.2 2.6 2.7 5 5.3 5.2l1-1.3-1.8-.9-.7.7a4 4 0 0 1-1.9-1.9l.7-.7-.9-1.8-1.7 1.1z" fill="currentColor" stroke="none" />
+          </svg>
+        ) : busy ? (
+          t('opening')
+        ) : (
+          t('label')
+        )}
       </button>
       {error && (
         <span role="alert" className="max-w-[220px] text-right text-[12px] text-k-danger">

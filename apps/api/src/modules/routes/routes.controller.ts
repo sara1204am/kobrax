@@ -13,6 +13,7 @@ import {
   CreateRouteDto,
   DecideChangeRequestDto,
   GenerateRouteDto,
+  LegDto,
   ListRoutesQueryDto,
   PlanPreviewDto,
   UpdateRouteDto,
@@ -49,6 +50,13 @@ export class RoutesController {
   @Roles(Permission.ROUTE_READ)
   planPreview(@Body() dto: PlanPreviewDto) {
     return this.routes.previewPoints(dto);
+  }
+
+  /** El camino por las calles entre dos puntos (de «dónde estoy» a una parada): no guarda nada. */
+  @Post('leg')
+  @Roles(Permission.ROUTE_READ)
+  leg(@Body() dto: LegDto) {
+    return this.routes.leg(dto);
   }
 
   @Get()

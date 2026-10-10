@@ -203,7 +203,11 @@
       "map": {
         "done": "{n} visitadas",
         "pending": "{n} pendientes",
-        "day": "paradas del {day}"
+        "day": "paradas del {day}",
+        "amount": "Monto",
+        "collector": "Cobrador",
+        "statusDone": "Visitada",
+        "statusPending": "Pendiente"
       },
       "noOverdue": "No hay cartera en mora en este filtro.",
       "noAgenda": "No hay agendados en este período.",
@@ -1376,6 +1380,10 @@
         "messageHint": "Escribe o elige una plantilla…",
         "location": "A que direccion",
         "noLocations": "Sin direcciones cargadas",
+        "mapPickHint": "Toca el mapa para marcar el punto",
+        "ownerClient": "Del cliente",
+        "ownerOf": "De {name} ({relation})",
+        "locationDetail": "{type} · {owner}",
         "description": "Que hay que recordar",
         "amount": "Monto prometido",
         "promiseDate": "Fecha de la promesa",
@@ -1496,7 +1504,16 @@
         "areaKm": "{km} km",
         "areaMeters": "{m} m",
         "mapNoPoints": "Los elegidos no tienen ubicación cargada, así que no se pueden dibujar.",
-        "mapBig": "Agrandar el mapa",
+        "mapToNext": "A la próxima parada: {km} km",
+        "mapByVehicle": "🚗 {min} min en vehículo",
+        "mapOnFoot": "🚶 {min} min a pie",
+        "mapFootNote": "A pie es una estimación a 5 km/h.",
+        "mapSearch": "Buscar en el mapa…",
+        "mapSearchNone": "Sin resultados en el mapa",
+        "mapNextStop": "Ver próxima parada",
+        "mapBaseMap": "Mapa",
+        "mapBaseSatellite": "Satélite",
+        "mapBig":"Agrandar el mapa",
         "mapSmall": "Achicar el mapa",
         "help": "Ayuda",
         "routeOrder": "El recorrido · {n} paradas, en este orden",
@@ -1505,6 +1522,9 @@
         "moveUp": "Subir una parada",
         "moveDown": "Bajar una parada",
         "removeStop": "Sacar de la ruta",
+        "goToMap": "Ir en mapa",
+        "moreActions": "Más acciones",
+        "changeAddress": "Cambiar la dirección de esta visita",
         "lockedStop": "Ya gestionada",
         "confirmRoute": "Armar la ruta con {n}",
         "belowMin": "Queda por debajo del mínimo de {min}.",
@@ -1629,7 +1649,13 @@
             "place": "Ubicación",
             "eta": "Hora estimada",
             "fixed": "Hora fija"
-          }
+          },
+          "listTitle": "Recorrido y llegada estimada ({n})",
+          "mapCount": "{n, plural, one {1 parada en el recorrido} other {# paradas en el recorrido}}"
+        },
+        "context": {
+          "planningFor": "Planificando para {name} · {date}",
+          "change": "Cambiar fecha o cobrador"
         }
       },
       "work": {
@@ -1659,6 +1685,7 @@
       "nextDay": "Día siguiente",
       "today": "Hoy",
       "todayBoard": {
+        "entity": "cobradores",
         "start": "Iniciar",
         "view": "Ver",
         "plan": "Planificar",
@@ -1728,7 +1755,9 @@
         "register": "Registrar gestión",
         "viewStop": "Ver detalle",
         "reasonOfClose": "Motivo del cierre",
-        "cancelledReason": "Motivo de la cancelación"
+        "cancelledReason": "Motivo de la cancelación",
+        "stopsCount": "Paradas en la ruta ({n})",
+        "visitPoint": "Visita registrada"
       },
       "stop": {
         "sequence": "Parada {n}",
@@ -1865,6 +1894,9 @@
         "noPay": "Para registrar un cobro hace falta el permiso de pagos (lo tienen el cobrador y el administrador).",
         "amountPaid": "Monto cobrado",
         "amountPromised": "Monto prometido",
+        "installmentHint": "Cuota a pagar: {amount}",
+        "installmentDue": "vence {date}",
+        "useInstallment": "Usar este monto",
         "capHint": "Hasta {max}",
         "method": "Método de pago",
         "promiseDate": "Fecha de la promesa",
@@ -1880,6 +1912,16 @@
         "notes": "Nota (opcional)",
         "notesRequired": "Qué pasó con la dirección (obligatorio)",
         "notesPlaceholder": "Escribí una nota de la gestión…",
+        "revisit": "Volver a visitar",
+        "revisitDate": "¿Qué día?",
+        "revisitSlot": "¿Cuándo?",
+        "revisitHint": "Queda agendada para ese día, a cargo del responsable del crédito. Aparece al planificar la ruta de esa fecha.",
+        "revisitFailed": "no se pudo agendar la nueva visita",
+        "slots": {
+          "MORNING": "Mañana",
+          "AFTERNOON": "Tarde",
+          "NIGHT": "Noche"
+        },
         "evidence": "Evidencia",
         "evidenceHint": "Opcional. Una foto de la puerta o del comprobante; queda sellada con su huella.",
         "photoAdd": "Agregar una foto",
@@ -1909,6 +1951,9 @@
         "result": "Resultado",
         "actions": "Acciones",
         "view": "Ver",
+        "viewDetail": "Ver detalle",
+        "clientFile": "Ver ficha del cliente",
+        "copyAddress": "Copiar dirección",
         "register": "Registrar",
         "days": "{n} días",
         "help": "Ayuda",
@@ -1928,9 +1973,7 @@
         "back": "Volver a la ruta",
         "tabsLabel": "Secciones de la parada",
         "tabs": {
-          "info": "Información",
-          "credit": "Crédito",
-          "locations": "Ubicación",
+          "ficha": "Ficha",
           "visits": "Historial de visitas",
           "evidence": "Evidencias"
         },
@@ -1961,6 +2004,16 @@
         "message": "Hola {name}, te escribo por tu pago pendiente. ¿Podemos coordinar?",
         "noPhone": "Este cliente no tiene un teléfono cargado.",
         "error": "No se pudo abrir WhatsApp."
+      },
+      "suggest": {
+        "toggle": "Sugerencias cerca ({n})",
+        "title": "Cerca de esta ruta ({n})",
+        "hint": "Mora sin ruta a menos de {km} km de alguna parada: aprovecha para una visita preventiva.",
+        "away": "a {d}",
+        "add": "Agregar a la ruta",
+        "ask": "Pedir agregarla",
+        "badge": "Sugerida",
+        "count": "{n, plural, one {1 sugerencia} other {# sugerencias}}"
       }
     },
     "payments": {
@@ -2455,6 +2508,33 @@
     "notContactable": "no contactar",
     "noContacts": "Sin teléfonos cargados.",
     "noLocations": "Sin direcciones cargadas.",
+    "photos": {
+      "title": "Fotos de la vivienda",
+      "hint": "Ayudan a reconocer la casa al llegar. La principal es la que se ve chica en los mapas de rutas.",
+      "add": "Agregar fotos",
+      "addMore": "Agregar más fotos",
+      "uploading": "Subiendo…",
+      "main": "Principal",
+      "makeMain": "Hacer principal",
+      "removeShort": "Quitar",
+      "remove": "Quitar la foto {n}",
+      "alt": "Foto {n} de la ubicación",
+      "open": "Ver las fotos de la casa de {name}",
+      "viewer": {
+        "prev": "Foto anterior",
+        "next": "Foto siguiente",
+        "zoomIn": "Acercar",
+        "zoomOut": "Alejar",
+        "fit": "Ajustar a la ventana",
+        "newTab": "Abrir en otra pestaña",
+        "counter": "{n} de {total}",
+        "mainPhoto": "Fotografía principal",
+        "photoN": "Fotografía {n}",
+        "evidenceClient": "Evidencia del cliente",
+        "evidenceOf": "Evidencia de {name}"
+      },
+      "error": "No se pudo subir la foto."
+    },
     "noGuarantors": "Sin garantes cargados.",
     "noCollaterals": "Sin garantías cargadas.",
     "gender": {

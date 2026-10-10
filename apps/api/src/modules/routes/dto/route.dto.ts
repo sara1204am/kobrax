@@ -92,6 +92,8 @@ export class AddStopDto {
 export class UpdateStopDto {
   @IsOptional() @IsEnum(RouteStopStatus) status?: RouteStopStatus;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) sequenceOrder?: number;
+  /** A cuál de las ubicaciones del cliente va la parada (propia o de un garante/familiar). Solo quien armó la ruta. */
+  @IsOptional() @IsUUID() locationId?: string;
 }
 
 /** Pedir un cambio sobre una ruta que armó otra persona. */
@@ -119,4 +121,10 @@ export class PlanPointDto {
 /** La vista previa de un recorrido que todavía no se publicó: los puntos, en el orden en que se piensa recorrerlos. */
 export class PlanPreviewDto {
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(60) @ValidateNested({ each: true }) @Type(() => PlanPointDto) points!: PlanPointDto[];
+}
+
+/** Un tramo suelto: de dónde está alguien hasta una parada. Para el botón «dónde estoy» de los mapas. */
+export class LegDto {
+  @ValidateNested() @Type(() => PlanPointDto) from!: PlanPointDto;
+  @ValidateNested() @Type(() => PlanPointDto) to!: PlanPointDto;
 }

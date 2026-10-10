@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { postJson } from '@/lib/client';
 import { addMinutes, clockConflicts } from '@/lib/plan';
-import { RouteMap } from '@/components/route-map';
+import { MapPanel, type OrderItem } from '@/components/route-planner/map-panel';
+import type { MapPoint } from '@/components/route-planner/points-map';
 
 /** Una parada del recorrido que se va a publicar, con lo que la vista previa necesita de ella. */
 export interface PreviewStop {
@@ -17,6 +18,10 @@ export interface PreviewStop {
   longitude: number;
   /** La hora fija de su visita agendada, si la tiene. */
   scheduledTime?: string;
+  /** Tiene una visita agendada ese día (con o sin hora): es un compromiso, no sólo una parada. */
+  planned?: boolean;
+  /** La foto principal de la dirección, chica sobre el pin. */
+  photoUrl?: string;
 }
 
 interface PreviewData {
@@ -57,6 +62,7 @@ export function PlanPreview({
   extraVisits: number;
 }) {
   const t = useTranslations('panel.routes.planning.preview');
+  const tPlan = useTranslations('panel.routes.planning');
   const [data, setData] = useState<PreviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +94,36 @@ export function PlanPreview({
   const last = data?.minutes != null ? addMinutes(start, data.minutes) : undefined;
 
   const stat = 'rounded-xl border border-k-border bg-white px-4 py-3';
+
+  const points: MapPoint[] = stops.map((s, i) => ({
+    id: s.id,
+    latitude: s.latitude,
+    longitude: s.longitude,
+    label: s.name,
+    detail: s.place,
+    picked: true,
+    order: i + 1,
+    photoUrl: s.photoUrl,
+    tone: s.planned || s.scheduledTime ? 'scheduled' : 'pending',
+    badges: [
+      ...(s.scheduledTime ? [{ label: tPlan('fixedAt', { time: s.scheduledTime }), tone: 'info' as const }] : []),
+      ...(s.planned ? [{ label: tPlan('scheduledTag'), tone: 'warning' as const }] : []),
+      ...(conflicts.has(s.id) ? [{ label: t('late'), tone: 'danger' as const }] : []),
+    ],
+  }));
+
+  const items: OrderItem[] = stops.map((s, i) => {
+    const eta = etaOf(s.id);
+    return {
+      id: s.id,
+      name: s.name,
+      hint: s.place,
+      photos: s.photoUrl ? [s.photoUrl] : undefined,
+      meta: eta != null ? addMinutes(start, eta) : undefined,
+      tone: s.planned || s.scheduledTime ? 'scheduled' : 'pending',
+      badges: points[i]!.badges,
+    };
+  });
 
   return (
     <div className="space-y-4">
@@ -153,46 +189,25 @@ export function PlanPreview({
 
       {extraVisits > 0 && <p className="text-[13px] text-k-text-2">{t('extraVisits', { n: extraVisits })}</p>}
 
+      {/*
+        🔴 **El mismo mapa y la misma lista que la ficha y la edición** (F4/12): el recorrido a la izquierda sobre las
+        calles, y a la derecha cada parada con su llegada estimada. El pin dice el estado (con aro, si tiene visita
+        agendada); lo que se lee en las etiquetas —hora fija, visita agendada, llega tarde— es otra cosa y va aparte.
+      */}
       {stops.length > 0 && (
-        <RouteMap
-          stops={stops.map((s, i) => ({ id: s.id, sequenceOrder: i + 1, latitude: s.latitude, longitude: s.longitude, label: s.name }))}
-          visits={[]}
-          line={data?.geometry ?? []}
-          height={300}
+        <MapPanel
+          points={points}
+          order={items}
+          area={null}
+          onArea={() => undefined}
+          noArea
+          alwaysShowList
+          listTitle={t('listTitle', { n: stops.length })}
+          line={data?.geometry}
+          height={380}
+          counter={t('mapCount', { n: stops.length })}
         />
       )}
-
-      <div className="overflow-x-auto rounded-2xl border border-k-border bg-white">
-        <table className="w-full min-w-[640px] text-left text-[14px]">
-          <thead>
-            <tr className="border-b border-k-border text-[12px] font-medium text-k-text-2">
-              {(['order', 'client', 'place', 'eta', 'fixed'] as const).map((c) => (
-                <th key={c} scope="col" className="px-4 py-3 font-medium">
-                  {t(`cols.${c}`)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-k-border">
-            {stops.map((s, i) => {
-              const eta = etaOf(s.id);
-              const late = conflicts.has(s.id);
-              return (
-                <tr key={s.id} className={late ? 'bg-k-danger-bg/40' : ''}>
-                  <td className="px-4 py-2.5 font-semibold tabular-nums text-k-navy">{i + 1}</td>
-                  <td className="px-4 py-2.5 text-k-text">{s.name}</td>
-                  <td className="px-4 py-2.5 text-k-text-2">{s.place}</td>
-                  <td className="px-4 py-2.5 tabular-nums text-k-text">{eta != null ? addMinutes(start, eta) : '—'}</td>
-                  <td className="px-4 py-2.5 tabular-nums text-k-text-2">
-                    {s.scheduledTime ?? '—'}
-                    {late && <span className="ml-2 text-[12px] font-medium text-k-danger">{t('late')}</span>}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }
