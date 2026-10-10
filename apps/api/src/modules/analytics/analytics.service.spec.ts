@@ -43,6 +43,35 @@ function makeService(
   return { service, sqls, wheres, find: (needle: string) => sqls.find((s) => s.includes(needle)) };
 }
 
+describe('visitMap · el mapa de visitas', () => {
+  const FILA = { id: 's1', client_id: 'cl1', lat: -19.03, lng: -65.26, status: 'PENDING', seq: 1, collector: 'u1' };
+
+  it('🔴 mira el último día DEL PERÍODO con paradas, no el último día del filtro a secas', async () => {
+    // El período por defecto termina «hoy» y hoy puede no tener rutas: el mapa salía vacío con rutas del día anterior.
+    const { service, sqls } = makeService((sql) => (sql.includes('MAX(rp.planned_date)') ? [{ day: '2026-10-09' }] : [FILA]));
+    const out = await service.visitMap({ dateFrom: '2026-10-04', dateTo: '2026-10-10' });
+    assert.equal(sqls.length, 2);
+    assert.match(sqls[0]!, /BETWEEN/);
+    assert.equal(out.length, 1);
+    assert.equal(out[0]!.plannedDate, '2026-10-09');
+  });
+
+  it('sin ninguna jornada con paradas en el período devuelve vacío y no pide los puntos', async () => {
+    const { service, sqls } = makeService(() => [{ day: null }]);
+    assert.deepEqual(await service.visitMap({ dateFrom: '2026-10-04', dateTo: '2026-10-10' }), []);
+    assert.equal(sqls.length, 1);
+  });
+
+  it('🔴 el punto es el de la ubicación de la parada (location_id), con el domicilio como respaldo', async () => {
+    const { service, sqls } = makeService((sql) => (sql.includes('MAX(rp.planned_date)') ? [{ day: '2026-10-09' }] : []));
+    await service.visitMap({});
+    const puntos = sqls.find((q) => q.includes('JOIN LATERAL'))!;
+    assert.match(puntos, /cl\.id = rs\.location_id/);
+    // Y una sola fila por parada, sin el DISTINCT ON que elegía por orden alfabético del tipo.
+    assert.doesNotMatch(puntos, /DISTINCT ON/);
+  });
+});
+
 describe('summary', () => {
   it('🔴 los saldos NO inventan su período anterior', async () => {
     // La base no guarda cuánto se debía la semana pasada. `previous: null` es «no se puede saber»,

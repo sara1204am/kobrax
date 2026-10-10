@@ -124,6 +124,13 @@ export interface VisitMapPoint {
   status: string;
   sequenceOrder: number;
   collectorId: string;
+  /** El día (`YYYY-MM-DD`) de la jornada que dibuja el mapa: el último del período con paradas. */
+  plannedDate?: string;
+  /** Para el globo del pin: a quién se visita, cuánto debe (saldo, `undefined` si no se sabe) y quién tiene la ruta. */
+  clientName?: string;
+  amount?: number;
+  currency?: string;
+  collectorName?: string;
 }
 
 export interface TrendPoint {

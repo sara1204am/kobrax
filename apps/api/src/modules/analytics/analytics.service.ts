@@ -429,14 +429,24 @@ export class AnalyticsService {
 
   // ── 5 · Mapa de visitas ────────────────────────────────────────────────────
   /**
-   * Las paradas de un día con su punto.
+   * Las paradas de **un día** con su punto: el último día del período que tenga paradas.
    *
-   * `DISTINCT ON (rs.id)`: un deudor puede tener varias ubicaciones —casa y trabajo— y sin esto la
-   * misma parada aparecería dos veces en el mapa, en dos lugares distintos.
+   * 🔴 **No el último día del filtro a secas.** El filtro por defecto termina «hoy» y hoy puede no tener rutas todavía (o ser
+   * ya mañana para el servidor, que corre en UTC): el mapa salía vacío con rutas de varios cobradores un día antes. Mirar
+   * hacia atrás dentro del período encuentra la jornada más reciente que sí existe, y cada punto dice `plannedDate` para
+   * que la pantalla diga de cuál es.
+   *
+   * 🔴 **El punto es el de la ubicación de la parada** (`route_stops.location_id`: la casa, el trabajo o un garante), y si no
+   * lo tiene o no tiene coordenada, el de su domicilio. Antes se tomaba cualquiera de las ubicaciones del cliente por orden
+   * alfabético de tipo, y la parada de un garante caía en otro lado.
    */
   async visitMap(query: AnalyticsQueryDto): Promise<VisitMapPoint[]> {
-    const day = query.dateTo ?? query.dateFrom ?? new Date().toISOString().slice(0, 10);
-    const conds: Prisma.Sql[] = [Prisma.sql`rp.planned_date = ${day}::date`];
+    const upper = query.dateTo ?? query.dateFrom ?? new Date().toISOString().slice(0, 10);
+    const lower = query.dateFrom && query.dateFrom <= upper ? query.dateFrom : upper;
+    const conds: Prisma.Sql[] = [
+      // Sin punto no hay qué dibujar: una jornada con paradas pero sin coordenadas no cuenta como «el día del mapa».
+      Prisma.sql`EXISTS (SELECT 1 FROM client_locations pl WHERE pl.client_id = rs.client_id AND pl.latitude IS NOT NULL AND pl.longitude IS NOT NULL)`,
+    ];
     if (some(query.collectorId)) conds.push(Prisma.sql`rp.collector_id IN (${Prisma.join(query.collectorId)})`);
     if (query.branchId) conds.push(Prisma.sql`rp.branch_id = ${query.branchId}`);
     // D7: la parada es de la fuente de su crédito. Una parada sin crédito no es de ninguna y no entra.
@@ -447,19 +457,56 @@ export class AnalyticsService {
       );
     }
 
-    const rows = await this.tx((tx) =>
-      tx.$queryRaw<
-        { id: string; client_id: string; lat: number; lng: number; status: string; seq: number; collector: string }[]
-      >(Prisma.sql`
-        SELECT DISTINCT ON (rs.id)
-               rs.id AS id, rs.client_id, rs.status::text AS status, rs.sequence_order AS seq,
-               rp.collector_id AS collector,
-               cl.latitude::float8 AS lat, cl.longitude::float8 AS lng
+    const latest = await this.tx((tx) =>
+      tx.$queryRaw<{ day: string | null }[]>(Prisma.sql`
+        SELECT to_char(MAX(rp.planned_date), 'YYYY-MM-DD') AS day
         FROM route_stops rs
         JOIN route_plans rp ON rp.id = rs.route_id
-        JOIN client_locations cl ON cl.client_id = rs.client_id
-        WHERE ${Prisma.join(conds, ' AND ')} AND cl.latitude IS NOT NULL AND cl.longitude IS NOT NULL
-        ORDER BY rs.id, cl.location_type`),
+        WHERE rp.planned_date BETWEEN ${lower}::date AND ${upper}::date AND ${Prisma.join(conds, ' AND ')}`),
+    );
+    const day = latest[0]?.day;
+    if (!day) return [];
+
+    const rows = await this.tx((tx) =>
+      tx.$queryRaw<
+        {
+          id: string;
+          client_id: string;
+          lat: number;
+          lng: number;
+          status: string;
+          seq: number;
+          collector: string;
+          collector_name: string | null;
+          client_name: string | null;
+          amount: number | null;
+          currency: string | null;
+        }[]
+      >(Prisma.sql`
+        SELECT rs.id AS id, rs.client_id, rs.status::text AS status, rs.sequence_order AS seq,
+               rp.collector_id AS collector,
+               NULLIF(TRIM(CONCAT_WS(' ', pr.first_name, pr.last_name)), '') AS collector_name,
+               COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), c.business_name) AS client_name,
+               -- Un saldo que el archivo importado no trajo no es 0: sin dato, el globo no afirma un monto.
+               CASE WHEN cr.metadata->'importMissing' @> '"outstandingBalance"'::jsonb THEN NULL
+                    ELSE cr.outstanding_balance::float8 END AS amount,
+               cr.currency AS currency,
+               loc.latitude::float8 AS lat, loc.longitude::float8 AS lng
+        FROM route_stops rs
+        JOIN route_plans rp ON rp.id = rs.route_id
+        JOIN clients c ON c.id = rs.client_id
+        LEFT JOIN credits cr ON cr.id = rs.credit_id
+        LEFT JOIN profiles pr ON pr.user_id = rp.collector_id
+        -- Un punto por parada: el de su ubicación; si no, el domicilio propio; si no, el primero que tenga coordenada.
+        JOIN LATERAL (
+          SELECT cl.latitude, cl.longitude
+          FROM client_locations cl
+          WHERE cl.client_id = rs.client_id AND cl.latitude IS NOT NULL AND cl.longitude IS NOT NULL
+          ORDER BY (cl.id = rs.location_id) DESC, (cl.relation_id IS NULL) DESC, (cl.location_type::text = 'HOME') DESC, cl.created_at
+          LIMIT 1
+        ) loc ON TRUE
+        WHERE rp.planned_date = ${day}::date AND ${Prisma.join(conds, ' AND ')}
+        ORDER BY rp.collector_id, rs.sequence_order`),
     );
 
     return rows.map((r) => ({
@@ -470,6 +517,11 @@ export class AnalyticsService {
       status: r.status,
       sequenceOrder: r.seq,
       collectorId: r.collector,
+      plannedDate: day,
+      clientName: r.client_name ?? undefined,
+      amount: r.amount ?? undefined,
+      currency: r.currency ?? undefined,
+      collectorName: r.collector_name ?? undefined,
     }));
   }
 
