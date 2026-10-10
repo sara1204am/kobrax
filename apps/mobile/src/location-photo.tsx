@@ -5,15 +5,12 @@
  */
 import { useEffect, useState } from 'react';
 import { Dimensions, FlatList, Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { API_BASE } from './api';
-import { attachmentUri } from './cliente-legajo';
 import { ensureImage, cachedImagePath } from './image-cache';
 import { getSession } from './session';
 import { COLORS, RADIUS, SPACING, TYPE } from './theme';
 import { lugarLabel } from './route-labels';
 
-/** La URL absoluta de una foto guardada como ruta `/api/uploads/…` (o ya absoluta). */
-export const photoUri = (fileUrl: string | undefined): string | null => attachmentUri(fileUrl, API_BASE);
+import { photoUri } from './photo-uri';
 
 /** Resuelve una foto remota a un archivo local. `null` mientras carga o si no se pudo (sin red y sin caché). */
 export function useLocalPhoto(fileUrl: string | undefined): string | null {

@@ -135,3 +135,20 @@ export async function clearImageCache(): Promise<void> {
     /* no hay nada que hacer: la carpeta se recrea sola */
   }
 }
+
+/**
+ * Baja de antemano la foto principal de cada parada pendiente (una por ubicación), para
+ * que el itinerario se vea completo sin señal. Una a una (no satura una conexión débil) y sin repetir. Devuelve cuántas bajó.
+ */
+export async function preloadImages(urls: (string | undefined)[], token: string, limit = 40): Promise<number> {
+  const seen = new Set<string>();
+  let got = 0;
+  for (const url of urls) {
+    if (!url || seen.has(url) || seen.size >= limit) continue;
+    seen.add(url);
+    const had = await cachedImagePath(url);
+    if (had) continue;
+    if (await ensureImage(url, token)) got += 1;
+  }
+  return got;
+}
