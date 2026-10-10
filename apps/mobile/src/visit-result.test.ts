@@ -4,6 +4,7 @@ import {
   canSubmitResult,
   paymentCap,
   initialResult,
+  installmentHint,
   paymentOutcome,
   postVisitWarning,
   VISIT_VARIANTS,
@@ -63,6 +64,21 @@ describe('buildDetails', () => {
   it('las variantes sin campos propios no mandan nada', () => {
     expect(buildDetails('PAID', form({ channel: 'DOOR', categoryCode: 'X' }))).toEqual({});
     expect(buildDetails('WRONG_ADDRESS', form({ categoryCode: 'X' }))).toEqual({});
+  });
+});
+
+describe('installmentHint', () => {
+  it('ofrece la cuota con su vencimiento dd/mm', () => {
+    expect(installmentHint({ suggestedPaymentAmount: 450, nextDueDate: '2026-10-07' })).toEqual({ amount: 450, dueLabel: '07/10' });
+  });
+  it('sin vencimiento legible, solo el monto', () => {
+    expect(installmentHint({ suggestedPaymentAmount: 450, nextDueDate: 'mañana' })).toEqual({ amount: 450 });
+  });
+  it('nunca inventa: ausente, cero o inválida es null', () => {
+    expect(installmentHint(null)).toBeNull();
+    expect(installmentHint({})).toBeNull();
+    expect(installmentHint({ suggestedPaymentAmount: 0 })).toBeNull();
+    expect(installmentHint({ suggestedPaymentAmount: Number.NaN })).toBeNull();
   });
 });
 

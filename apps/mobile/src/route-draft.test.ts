@@ -333,3 +333,29 @@ describe('borradores de varios días (D-6)', () => {
     expect(Object.keys(await loadAllDrafts()).sort()).toEqual([HOY, MANANA]);
   });
 });
+
+describe('ubicación elegida por crédito (R1)', () => {
+  it('withStop la guarda y withoutStop la quita', () => {
+    let d = withStop(emptyDraft(HOY), 'cr1', 'cl1', 'loc-a');
+    d = withStop(d, 'cr2', 'cl2'); // sin elegir: que el servidor use la principal
+    expect(d.locationByCredit).toEqual({ cr1: 'loc-a' });
+    expect(withoutStop(d, 'cr1').locationByCredit).toEqual({});
+  });
+
+  it('un borrador viejo, sin el campo, sigue siendo válido', () => {
+    const viejo = JSON.stringify({ routeId: null, date: HOY, creditIds: ['cr1'], clientByCredit: { cr1: 'cl1' } });
+    expect(parseDrafts(viejo)[HOY]!.creditIds).toEqual(['cr1']);
+  });
+
+  it('al sincronizar manda la ubicación elegida y no la inventa cuando no hay', async () => {
+    const { addStop } = jest.requireMock('./routes.service') as { addStop: jest.Mock };
+    addStop.mockClear();
+    comoUsuario('u1');
+    let d = withStop(emptyDraft(HOY), 'cr1', 'cl1', 'loc-a');
+    d = withStop(d, 'cr2', 'cl2');
+    const r = await flushDraft({ ...d, routeId: 'ruta-1' }, jest.fn());
+    expect(r.status).toBe('ok');
+    expect(addStop).toHaveBeenCalledWith('ruta-1', { clientId: 'cl1', creditId: 'cr1', locationId: 'loc-a' });
+    expect(addStop).toHaveBeenCalledWith('ruta-1', { clientId: 'cl2', creditId: 'cr2' });
+  });
+});
