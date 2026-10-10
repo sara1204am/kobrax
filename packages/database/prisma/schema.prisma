@@ -102,6 +102,7 @@ model Account {
   payments                Payment[]
   paymentRequests         PaymentRequest[]
   notifications           Notification[]
+  devicePushTokens        DevicePushToken[]
   refreshTokens           RefreshToken[]
   agendaItems             AgendaItem[]
   catalogItems            CatalogItem[]
@@ -134,10 +135,10 @@ model Branch {
   updatedAt     DateTime  @updatedAt @map("updated_at")
   deletedAt     DateTime? @map("deleted_at")
 
-  account         Account          @relation(fields: [accountId], references: [id])
-  userAccounts    UserAccount[]
-  credits         Credit[]
-  routePlans      RoutePlan[]
+  account      Account       @relation(fields: [accountId], references: [id])
+  userAccounts UserAccount[]
+  credits      Credit[]
+  routePlans   RoutePlan[]
 
   @@index([accountId])
   @@index([accountId, active])
@@ -1355,8 +1356,8 @@ model RouteStop {
   createdAt              DateTime        @default(now()) @map("created_at")
   updatedAt              DateTime        @updatedAt @map("updated_at")
 
-  route  RoutePlan       @relation(fields: [routeId], references: [id])
-  client Client          @relation(fields: [clientId], references: [id])
+  route  RoutePlan    @relation(fields: [routeId], references: [id])
+  client Client       @relation(fields: [clientId], references: [id])
   visits FieldVisit[]
 
   @@unique([routeId, sequenceOrder])
@@ -1408,30 +1409,30 @@ model RouteChangeRequest {
 
 /// Registro de una visita en campo (CU-04): GPS + resultado. Append-only.
 model FieldVisit {
-  id          String       @id @default(uuid())
-  accountId   String       @map("account_id")
+  id              String       @id @default(uuid())
+  accountId       String       @map("account_id")
   /// El crédito visitado (F4/08).
-  creditId    String?      @map("credit_id")
-  routeStopId String?      @map("route_stop_id")
-  collectorId String       @map("collector_id") // users.id (ref suave)
-  latitude    Decimal      @db.Decimal(10, 8)
-  longitude   Decimal      @db.Decimal(11, 8)
-  accuracy    Decimal?     @db.Decimal(7, 2)
-  outcome     VisitOutcome
-  notes       String?
+  creditId        String?      @map("credit_id")
+  routeStopId     String?      @map("route_stop_id")
+  collectorId     String       @map("collector_id") // users.id (ref suave)
+  latitude        Decimal      @db.Decimal(10, 8)
+  longitude       Decimal      @db.Decimal(11, 8)
+  accuracy        Decimal?     @db.Decimal(7, 2)
+  outcome         VisitOutcome
+  notes           String?
   /// Campos propios de cada variante de RT-6 (canal intentado, aviso dejado, categoría especial…).
   /// Mismo patrón que `agenda_items.details`: JSONB validado en shared, no una columna por qualifier.
   /// Se escribe SOLO en el INSERT — la visita sigue siendo inmutable.
-  details     Json?
-  capturedAt  DateTime     @map("captured_at")
+  details         Json?
+  capturedAt      DateTime     @map("captured_at")
   /// Quién la registró (users.id): el propio cobrador o, desde el panel, quien armó la ruta o un administrador.
   /// Null en las anteriores a F4/12.
-  registeredBy String?     @map("registered_by")
+  registeredBy    String?      @map("registered_by")
   /// Desde dónde se registró: `MOBILE` o `WEB`.
-  source      String       @default("MOBILE")
+  source          String       @default("MOBILE")
   /// Una visita no se edita: la corrección es una visita NUEVA que apunta a la que corrige.
-  correctsVisitId String?  @map("corrects_visit_id")
-  createdAt   DateTime     @default(now()) @map("created_at")
+  correctsVisitId String?      @map("corrects_visit_id")
+  createdAt       DateTime     @default(now()) @map("created_at")
   // Sin updated_at ni deleted_at → INMUTABLE por diseño.
 
   routeStop RouteStop?      @relation(fields: [routeStopId], references: [id])
@@ -1519,8 +1520,8 @@ model Payment {
   createdAt             DateTime       @default(now()) @map("created_at")
   // Sin updated_at ni deleted_at → INMUTABLE por diseño. receipt_* se escriben en el INSERT y no se tocan.
 
-  account Account         @relation(fields: [accountId], references: [id])
-  credit  Credit          @relation(fields: [creditId], references: [id])
+  account Account @relation(fields: [accountId], references: [id])
+  credit  Credit  @relation(fields: [creditId], references: [id])
 
   @@unique([accountId, receiptNumber])
   @@unique([accountId, externalTransactionId])
@@ -1580,20 +1581,20 @@ enum NotificationType {
 
 /// Notificación operativa dirigida a un usuario dentro de un tenant.
 model Notification {
-  id        String           @id @default(uuid())
-  accountId String           @map("account_id")
-  userId    String           @map("user_id") // destinatario (users.id, ref suave)
-  type      NotificationType @default(SYSTEM)
-  title     String
-  body      String?
-  clientId  String?          @map("client_id")
-  creditId  String?          @map("credit_id")
+  id           String           @id @default(uuid())
+  accountId    String           @map("account_id")
+  userId       String           @map("user_id") // destinatario (users.id, ref suave)
+  type         NotificationType @default(SYSTEM)
+  title        String
+  body         String?
+  clientId     String?          @map("client_id")
+  creditId     String?          @map("credit_id")
   /// La gestión de agenda de la que habla el aviso (ref suave): la campanita navega a ella.
-  agendaItemId String?       @map("agenda_item_id")
+  agendaItemId String?          @map("agenda_item_id")
   /// La ruta de la que habla el aviso (ref suave, F4/12).
-  routeId   String?          @map("route_id")
-  readAt    DateTime?        @map("read_at")
-  createdAt DateTime         @default(now()) @map("created_at")
+  routeId      String?          @map("route_id")
+  readAt       DateTime?        @map("read_at")
+  createdAt    DateTime         @default(now()) @map("created_at")
 
   account Account @relation(fields: [accountId], references: [id])
 
@@ -1601,6 +1602,35 @@ model Notification {
   @@index([accountId, userId, readAt])
   @@index([accountId, creditId])
   @@map("notifications")
+}
+
+/// Dispositivo móvil que puede recibir push remoto (FCM, Android). Una fila por instalación de la app y usuario.
+/// El contenido del push es genérico y la app trae el detalle de la API: el token no autoriza nada por sí mismo.
+model DevicePushToken {
+  id             String    @id @default(uuid())
+  accountId      String    @map("account_id")
+  userId         String    @map("user_id") // users.id (ref suave)
+  /// Identidad estable de la instalación (la genera la app): renovar el token no duplica la fila.
+  installationId String    @map("installation_id")
+  token          String
+  platform       String    @default("android")
+  appVersion     String?   @map("app_version")
+  deviceName     String?   @map("device_name")
+  isActive       Boolean   @default(true) @map("is_active")
+  /// Fallos de envío consecutivos y el último motivo: diagnóstico y limpieza de tokens muertos.
+  failureCount   Int       @default(0) @map("failure_count")
+  lastError      String?   @map("last_error")
+  lastSeenAt     DateTime  @default(now()) @map("last_seen_at")
+  lastPushedAt   DateTime? @map("last_pushed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@unique([accountId, userId, installationId])
+  @@index([accountId, userId, isActive])
+  @@index([token])
+  @@map("device_push_tokens")
 }
 
 // ── Agenda (F10) — gestiones agendadas por fecha ────────────────────────────
