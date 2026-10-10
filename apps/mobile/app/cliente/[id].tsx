@@ -523,6 +523,7 @@ export default function ClienteFichaScreen() {
       />
 
       <GestionSheet
+        incomeSource={client?.incomeProfile?.incomeSourceCode}
         visible={gestSheet}
         onClose={() => setGestSheet(false)}
         currency={currency}

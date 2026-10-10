@@ -511,6 +511,34 @@ inmutabilidad de `credit_activities`.
 **Por validar en teléfono**: el bloque «Perfil de ingreso» en alta y edición, que el cambio sin señal se sincronice, y que la
 ficha muestre «Ingreso».
 
+### E4 · Motivo de no pago en la gestión ✅ (2026-10-10)
+
+**Hecho**
+- **Base**: columnas **nulables** `reason_code`, `expected_income_date`, `payer_party` y `origin` en `credit_activities`, el tipo
+  `payer_party` y un índice por motivo y fecha. La tabla es append-only: no se reescribió ninguna fila.
+- **Shared**: `validateActivityContext` (regla única, opcional, con su `isRealDay`), `PayerParty`, nuevos códigos de error.
+- **API**: `POST /mora/:id/activities` y `POST /agenda/:id/complete` aceptan el contexto; la ficha lo devuelve; se
+  audita sin el texto libre.
+- **Web**: bloque «Motivo y quién responde» en el formulario de gestión, filtrado por la fuente de ingreso del cliente,
+  con la fecha solo cuando el motivo la pide.
+- **Móvil**: `ReasonBlock` compartido por la hoja de gestión y el registro de la agenda; `agenda.complete` en la cola
+  lleva los campos nuevos y una acción antigua sale igual.
+
+**Verificación**
+| Comando | Resultado |
+|---|---|
+| `@kobrax/shared` build, type-check, test | 419 pruebas, verde |
+| `@kobrax/api` type-check, test | 1.580 pruebas, verde |
+| `@kobrax/api` integración **completa** (9 archivos, base desde cero) | **92 de 92**, incluidas las anteriores a esta capa |
+| `@kobrax/web` type-check, test | 971 pruebas, verde |
+| `@kobrax/mobile` type-check, test | 958 pruebas, verde |
+
+**Queda**: la web de completar una gestión **agendada** y el registro de la **visita de ruta** (D-48); el dictado que llene el
+motivo (capa C).
+
+**Por validar en teléfono**: el bloque de motivo en la hoja de gestión y al completar una gestión de la agenda, y que una
+gestión registrada sin señal suba con su motivo.
+
 ## 11. Validación del plan (gate `/f10-validar-plan`, adaptado — D-10)
 
 El gate está escrito para etapas móviles F10. Se aplicó con sus ítems de calidad y con los de completitud que

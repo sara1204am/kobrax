@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { AgendaItemStatus, Prisma, type CreditActivityType, type PrismaClient } from '@prisma/client';
+import { AgendaItemStatus, Prisma, type CreditActivityType, type DataOrigin, type PayerParty, type PrismaClient } from '@prisma/client';
 import {
   Permission,
   maskDocument,
@@ -52,6 +52,14 @@ const ACTIVITY_ERRORS: Record<RecoveryActivityError, string> = {
   PROMISE_DATE_INVALID: 'La fecha prometida no es válida.',
   PROMISE_DATE_PAST: 'La fecha prometida no puede ser anterior a hoy.',
   PROMISE_METHOD_REQUIRED: 'Falta el medio de pago de la promesa.',
+  // F4/13 · E4 — contexto de la gestión
+  REASON_INVALID: 'El motivo de no pago no es válido.',
+  CONTEXT_NOT_ALLOWED: 'Una nota no lleva motivo ni datos de quién responde.',
+  EXPECTED_INCOME_DATE_INVALID: 'La fecha en que espera cobrar no es válida.',
+  EXPECTED_INCOME_DATE_PAST: 'La fecha en que espera cobrar no puede ser anterior a hoy.',
+  EXPECTED_INCOME_DATE_NEEDS_REASON: 'La fecha en que espera cobrar necesita un motivo.',
+  PAYER_INVALID: 'Quién responde por el crédito no es válido.',
+  ORIGIN_INVALID: 'El origen de la gestión no es válido.',
 };
 
 /** Cuántas gestiones trae la ficha. Es la bitácora del crédito; el completo llega con la sección de gestiones. */
@@ -358,6 +366,10 @@ export class MoraService {
           type: dto.type as CreditActivityType,
           result: dto.result,
           notes: dto.notes?.trim() || undefined,
+          reasonCode: dto.reasonCode,
+          expectedIncomeDate: dto.expectedIncomeDate,
+          payerParty: dto.payerParty as PayerParty | undefined,
+          origin: dto.origin as DataOrigin | undefined,
         });
         const promise = dto.promise
           ? await this.agenda.createPromiseItem(tx, { creditId, details: { amount: dto.promise.amount, promiseDate: dto.promise.promiseDate, paymentMethodCode: dto.promise.paymentMethodCode, bankCode: dto.promise.bankCode } })
@@ -368,6 +380,24 @@ export class MoraService {
         return { activity, promise, executed };
       });
 
+      // F4/13 · E4: solo se audita cuando trae contexto, y **sin el texto libre**: las notas pueden traer datos personales.
+      if (dto.reasonCode || dto.expectedIncomeDate || dto.payerParty || dto.origin) {
+        await this.audit.record({
+          entity: 'credit_activity',
+          entityId: done.activity.id,
+          action: 'CREATE',
+          after: {
+            id: done.activity.id,
+            creditId,
+            type: dto.type,
+            result: dto.result ?? null,
+            reasonCode: dto.reasonCode ?? null,
+            expectedIncomeDate: dto.expectedIncomeDate ?? null,
+            payerParty: dto.payerParty ?? null,
+            origin: dto.origin ?? null,
+          },
+        });
+      }
       if (done.promise) await this.agenda.recordCreated(done.promise.created, done.promise.reminder);
       if (done.executed) await this.audit.record({ entity: 'agenda_item', entityId: done.executed.id, action: 'EXECUTE', after: done.executed });
       return replay(done.activity);

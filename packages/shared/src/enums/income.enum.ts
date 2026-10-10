@@ -32,3 +32,17 @@ export enum DataOrigin {
   IMPORT = 'IMPORT',
   SUGGESTION_ACCEPTED = 'SUGGESTION_ACCEPTED',
 }
+
+/**
+ * Quién responde realmente por el crédito, según lo que se averiguó en esta gestión (F4/13 · E4).
+ * `BENEFICIARY` = la persona para quien se sacó el crédito (cuando el titular declara que fue para otra).
+ */
+export enum PayerParty {
+  HOLDER = 'HOLDER',
+  GUARANTOR = 'GUARANTOR',
+  CODEBTOR = 'CODEBTOR',
+  BENEFICIARY = 'BENEFICIARY',
+  NOT_LOCATED = 'NOT_LOCATED',
+}
+
+export const PAYER_PARTIES: readonly PayerParty[] = Object.values(PayerParty);

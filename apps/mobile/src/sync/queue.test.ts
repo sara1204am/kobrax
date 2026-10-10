@@ -73,7 +73,10 @@ jest.mock('../agenda.service', () => ({
     mockDetail.push(`createItem:id=${input.id}:contact=${input.details?.contactId}`);
     return mockApi.item;
   }),
-  completeItem: jest.fn(async () => ({ status: 'ok', data: {} })),
+  completeItem: jest.fn(async (id: string, outcome: string, _notes?: string, ctx?: Record<string, unknown>) => {
+    mockCalls.push(`completeItem:${id}:${outcome}:${JSON.stringify(ctx ?? {})}`);
+    return { status: 'ok', data: {} };
+  }),
   postponeItem: jest.fn(async (id: string, minutes: number, toTime?: string) => {
     mockCalls.push(`postponeItem:${id}:${minutes}:${toTime}`);
     return { status: 'ok', data: {} };
@@ -667,6 +670,21 @@ describe('send · editar y eliminar una gestión (A1)', () => {
   it('sin señal sigue pendiente', async () => {
     mockApi.agendaWrite = { status: 'offline' };
     expect((await send({ kind: 'agenda.delete', id: 'a1' })).status).toBe('offline');
+  });
+});
+
+describe('send · contexto de la gestión agendada (F4/13 · E4)', () => {
+  it('🔴 una acción encolada ANTES de estos campos sale igual, sin contexto', async () => {
+    mockCalls.length = 0;
+    const r = await send({ kind: 'agenda.complete', id: 'a1', outcome: 'CONTACTED', notes: 'ok' } as never);
+    expect(r.status).toBe('ok');
+    expect(mockCalls.some((x) => x.startsWith('completeItem:a1'))).toBe(true);
+  });
+
+  it('el motivo, la fecha y quién responde viajan con la gestión', async () => {
+    mockCalls.length = 0;
+    await send({ kind: 'agenda.complete', id: 'a2', outcome: 'CONTACTED', reasonCode: 'LATE_INCOME', expectedIncomeDate: '2026-10-20', payerParty: 'HOLDER' } as never);
+    expect(mockCalls.some((x) => x.includes('completeItem:a2') && x.includes('LATE_INCOME') && x.includes('2026-10-20') && x.includes('HOLDER'))).toBe(true);
   });
 });
 

@@ -149,6 +149,14 @@ export class CreateMoraActivityDto {
   @IsOptional() @IsString() @MaxLength(40) result?: string;
   @IsOptional() @IsString() @MaxLength(MORA_NOTE_MAX_LENGTH + 200) notes?: string;
   @IsOptional() @ValidateNested() @Type(() => ActivityPromiseDto) promise?: ActivityPromiseDto;
+  /**
+   * Contexto de la gestión (F4/13 · E4). **Todo opcional**: una gestión anterior o encolada sin señal no lo trae. La regla
+   * de fondo es `validateActivityContext` de shared (misma para el panel y el móvil).
+   */
+  @IsOptional() @IsString() @MaxLength(40) reasonCode?: string;
+  @IsOptional() @IsString() @MaxLength(10) expectedIncomeDate?: string;
+  @IsOptional() @IsString() @MaxLength(20) payerParty?: string;
+  @IsOptional() @IsString() @MaxLength(20) origin?: string;
   /** Si viene, esa gestión agendada (SCHEDULED, del mismo crédito) se marca ejecutada con esta actividad, en la misma transacción. */
   @IsOptional() @IsUUID() agendaItemId?: string;
 }

@@ -80,8 +80,15 @@ export function getItem(id: string): Promise<QueryResult<AgendaItemDetail>> {
 }
 
 /** Registrar la ejecución (S4): outcome + nota → el ítem pasa a EXECUTED. Devuelve el ítem actualizado. */
-export function completeItem(id: string, outcome: AgendaOutcome, notes?: string): Promise<MutateResult<AgendaListItem>> {
-  return apiMutate<AgendaListItem>(`/agenda/${id}/complete`, 'POST', { outcome, notes });
+export function completeItem(id: string, outcome: AgendaOutcome, notes?: string, context?: ActivityContext): Promise<MutateResult<AgendaListItem>> {
+  return apiMutate<AgendaListItem>(`/agenda/${id}/complete`, 'POST', { outcome, notes, ...context });
+}
+
+/** Contexto opcional de una gestión (F4/13 · E4). Solo viaja lo que se eligió. */
+export interface ActivityContext {
+  reasonCode?: string;
+  expectedIncomeDate?: string;
+  payerParty?: string;
 }
 
 /**

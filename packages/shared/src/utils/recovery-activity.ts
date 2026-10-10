@@ -34,6 +34,10 @@ export const RECOVERY_RESULTS_BY_TYPE: Record<RecoveryActivityType, readonly Rec
 
 export const RECOVERY_NOTES_MAX_LENGTH = 1000;
 
+/** Códigos del catálogo `NO_PAYMENT_REASON`: mayúsculas, dígitos y guion bajo. Se valida el formato, no la existencia (D-34). */
+const REASON_CODE = /^[A-Z0-9_]{1,40}$/;
+const ORIGINS = ['MANUAL', 'DICTATION', 'IMPORT', 'SUGGESTION_ACCEPTED'] as const;
+
 export interface RecoveryActivityInput {
   /** Lo pone el móvil para que reintentar sin red no duplique la gestión. */
   id?: string;
@@ -41,6 +45,17 @@ export interface RecoveryActivityInput {
   result?: string;
   notes?: string;
   promise?: { amount: number; promiseDate: string; paymentMethodCode: string; bankCode?: string };
+  /**
+   * Por qué no pagó (F4/13 · E4): código del catálogo `NO_PAYMENT_REASON`. **Opcional siempre**: una gestión antigua o
+   * encolada sin señal no lo trae y sigue siendo válida (D-03).
+   */
+  reasonCode?: string;
+  /** Cuándo espera cobrar (`YYYY-MM-DD`). Solo con un motivo. */
+  expectedIncomeDate?: string;
+  /** Quién responde realmente por el crédito, según esta gestión. */
+  payerParty?: string;
+  /** De dónde salió: a mano o dictada. Ausente = a mano. */
+  origin?: string;
 }
 
 /** Por qué una gestión no es válida. Es un código, no una frase: cada lado la dice en su idioma. */
@@ -55,7 +70,15 @@ export type RecoveryActivityError =
   | 'PROMISE_AMOUNT_INVALID'
   | 'PROMISE_DATE_INVALID'
   | 'PROMISE_DATE_PAST'
-  | 'PROMISE_METHOD_REQUIRED';
+  | 'PROMISE_METHOD_REQUIRED'
+  // F4/13 · E4 — contexto de la gestión (todo opcional)
+  | 'REASON_INVALID'
+  | 'CONTEXT_NOT_ALLOWED'
+  | 'EXPECTED_INCOME_DATE_INVALID'
+  | 'EXPECTED_INCOME_DATE_PAST'
+  | 'EXPECTED_INCOME_DATE_NEEDS_REASON'
+  | 'PAYER_INVALID'
+  | 'ORIGIN_INVALID';
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -71,6 +94,54 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
  *    que nadie va a poder seguir, y los datos de una promesa con otro resultado se contradicen.
  */
 export function validateRecoveryActivity(input: RecoveryActivityInput, today: string): RecoveryActivityError | null {
+  return validateCore(input, today) ?? validateActivityContext(input, input.type, today);
+}
+
+/**
+ * El contexto de una gestión (F4/13 · E4): por qué no pagó, cuándo espera cobrar y quién responde.
+ *
+ * **Todo es opcional** y ninguna regla lo exige: la cola offline puede traer gestiones anteriores a estos campos y
+ * rechazarlas perdería trabajo de campo (D-03).
+ *
+ * Reglas:
+ *  · una **nota** no lleva contexto: es lo que alguien quiso dejar dicho, sin resultado;
+ *  · el motivo es un código con formato válido (no se verifica contra el catálogo: la cuenta puede haberlo editado);
+ *  · el motivo **puede ir junto a una promesa**: «le pagan tarde» y «prometió el viernes» son la misma historia (D-40);
+ *  · la fecha esperada necesita un motivo y no puede ser anterior a hoy;
+ *  · quién responde y el origen son de un conjunto conocido.
+ *
+ * Exportada porque la agenda registra gestiones por otra vía (`completeItem`) y debe aplicar la misma regla.
+ */
+export function validateActivityContext(
+  ctx: Pick<RecoveryActivityInput, 'reasonCode' | 'expectedIncomeDate' | 'payerParty' | 'origin'>,
+  type: string,
+  today: string,
+): RecoveryActivityError | null {
+  const has = ctx.reasonCode !== undefined || ctx.expectedIncomeDate !== undefined || ctx.payerParty !== undefined;
+  if (has && type === 'NOTE') return 'CONTEXT_NOT_ALLOWED';
+
+  if (ctx.reasonCode !== undefined && !REASON_CODE.test(ctx.reasonCode)) return 'REASON_INVALID';
+
+  if (ctx.expectedIncomeDate !== undefined) {
+    if (ctx.reasonCode === undefined) return 'EXPECTED_INCOME_DATE_NEEDS_REASON';
+    // Ida y vuelta: `Date.parse` es permisivo (acepta «2026-02-31» y lo corre al 3 de marzo), y un día inexistente no
+    // es una fecha en la que alguien espera cobrar.
+    if (!DAY.test(ctx.expectedIncomeDate) || !isRealDay(ctx.expectedIncomeDate)) return 'EXPECTED_INCOME_DATE_INVALID';
+    if (ctx.expectedIncomeDate < today) return 'EXPECTED_INCOME_DATE_PAST';
+  }
+
+  if (ctx.payerParty !== undefined && !(['HOLDER', 'GUARANTOR', 'CODEBTOR', 'BENEFICIARY', 'NOT_LOCATED'] as string[]).includes(ctx.payerParty)) return 'PAYER_INVALID';
+  if (ctx.origin !== undefined && !(ORIGINS as readonly string[]).includes(ctx.origin)) return 'ORIGIN_INVALID';
+  return null;
+}
+
+/** ¿`YYYY-MM-DD` es un día que existe? */
+function isRealDay(day: string): boolean {
+  const d = new Date(`${day}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === day;
+}
+
+function validateCore(input: RecoveryActivityInput, today: string): RecoveryActivityError | null {
   if (!(RECOVERY_ACTIVITY_TYPES as readonly string[]).includes(input.type)) return 'TYPE_INVALID';
   const type = input.type as RecoveryActivityType;
   const notes = input.notes?.trim() ?? '';

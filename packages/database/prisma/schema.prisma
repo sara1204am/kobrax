@@ -1116,6 +1116,15 @@ model CreditActivity {
   type      CreditActivityType
   result    String?
   notes     String?
+  /// F4/13 · E4 — contexto de la gestión (todo opcional; `null` en lo anterior). Por qué no pagó: código del catálogo
+  /// `NO_PAYMENT_REASON` (ref suave: la cuenta puede editarlo).
+  reasonCode         String?     @map("reason_code")
+  /// Cuándo espera cobrar, si el motivo lo dijo.
+  expectedIncomeDate DateTime?   @map("expected_income_date") @db.Date
+  /// Quién responde realmente por el crédito según esta gestión.
+  payerParty         PayerParty? @map("payer_party")
+  /// De dónde salió: a mano o dictada. `null` = a mano (lo anterior).
+  origin             DataOrigin?
   createdAt DateTime           @default(now()) @map("created_at")
 
   account Account              @relation(fields: [accountId], references: [id])
@@ -1125,6 +1134,8 @@ model CreditActivity {
 
   @@index([accountId, creditId, createdAt(sort: Desc)])
   @@index([accountId, episodeId])
+  /// «Qué motivos hay y cuándo»: alerta de evento externo y tablas de qué funcionó (capa B).
+  @@index([accountId, reasonCode, createdAt])
   @@map("credit_activities")
 }
 
@@ -1659,6 +1670,17 @@ enum DataOrigin {
   SUGGESTION_ACCEPTED
 
   @@map("data_origin")
+}
+
+/// Quién responde realmente por el crédito, según lo averiguado en una gestión (F4/13 · E4).
+enum PayerParty {
+  HOLDER
+  GUARANTOR
+  CODEBTOR
+  BENEFICIARY
+  NOT_LOCATED
+
+  @@map("payer_party")
 }
 
 /// **Perfil de ingreso** del cliente: fuente, rubro y ciclo. Todo opcional (ninguna regla puede asumir que existe).

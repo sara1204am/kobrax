@@ -4,10 +4,12 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import {
+  PAYER_PARTIES,
   PROMISE_RESULT,
   RECOVERY_ACTIVITY_TYPES,
   RECOVERY_NOTES_MAX_LENGTH,
   RECOVERY_RESULTS_BY_TYPE,
+  reasonsFor,
   validateRecoveryActivity,
   type RecoveryActivityType,
 } from '@kobrax/shared';
@@ -41,6 +43,8 @@ export function RegisterActivityButton({
   suggestedAmount,
   methods,
   banks,
+  reasons = [],
+  incomeSource,
 }: {
   creditId: string;
   /** Con qué monto arranca la promesa. Ausente = vacío. */
@@ -49,6 +53,10 @@ export function RegisterActivityButton({
   methods: CatalogOption[];
   /** Catálogo `BANK` del tenant. Vacío = no se ofrece el campo. */
   banks: CatalogOption[];
+  /** Catálogo `NO_PAYMENT_REASON` (F4/13 · E4). Vacío = no se ofrece el bloque de motivo. */
+  reasons?: CatalogOption[];
+  /** Fuente de ingreso del cliente: filtra qué motivos se ofrecen. Desconocida = se ofrecen todos. */
+  incomeSource?: string;
 }) {
   const t = useTranslations('panel.mora');
   const tf = useTranslations('panel.mora.ficha.activity');
@@ -65,6 +73,9 @@ export function RegisterActivityButton({
   const [promiseDate, setPromiseDate] = useState('');
   const [method, setMethod] = useState('');
   const [bank, setBank] = useState('');
+  const [reasonCode, setReasonCode] = useState('');
+  const [expectedIncomeDate, setExpectedIncomeDate] = useState('');
+  const [payerParty, setPayerParty] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
@@ -72,6 +83,11 @@ export function RegisterActivityButton({
   const results = RECOVERY_RESULTS_BY_TYPE[type];
   const promises = result === PROMISE_RESULT;
   const methodOptions = methods.length > 0 ? methods : FALLBACK_METHODS.map((code) => ({ code, label: tMethod(code as never) }));
+  // F4/13 · E4: el motivo no aplica a una nota (no tiene resultado). Lo que se ofrece depende de la fuente de ingreso.
+  const reasonOptions = reasonsFor(reasons, incomeSource);
+  const selectedReason = reasons.find((r) => r.code === reasonCode);
+  const asksIncomeDate = selectedReason?.metadata?.asksExpectedIncomeDate === true;
+  const withContext = type !== 'NOTE' && reasons.length > 0;
 
   const input = {
     type,
@@ -80,6 +96,10 @@ export function RegisterActivityButton({
     promise: promises
       ? { amount: Number(amount.replace(',', '.')), promiseDate, paymentMethodCode: method, ...(bank ? { bankCode: bank } : {}) }
       : undefined,
+    // Solo viaja lo que se eligió; una nota nunca lleva contexto.
+    ...(withContext && reasonCode ? { reasonCode } : {}),
+    ...(withContext && reasonCode && asksIncomeDate && expectedIncomeDate ? { expectedIncomeDate } : {}),
+    ...(withContext && payerParty ? { payerParty } : {}),
   };
   const invalid = validateRecoveryActivity(input, todayIso());
 
@@ -91,6 +111,9 @@ export function RegisterActivityButton({
     setPromiseDate('');
     setMethod('');
     setBank('');
+    setReasonCode('');
+    setExpectedIncomeDate('');
+    setPayerParty('');
     setError(null);
     setTouched(false);
   }
@@ -117,6 +140,9 @@ export function RegisterActivityButton({
       result: result || undefined,
       notes: notes.trim() || undefined,
       promise: input.promise,
+      ...(input.reasonCode ? { reasonCode: input.reasonCode } : {}),
+      ...(input.expectedIncomeDate ? { expectedIncomeDate: input.expectedIncomeDate } : {}),
+      ...(input.payerParty ? { payerParty: input.payerParty } : {}),
     });
     setBusy(false);
     if (!res.ok) {
@@ -217,6 +243,42 @@ export function RegisterActivityButton({
                   </Select>
                 </Field>
               )}
+            </fieldset>
+          )}
+
+          {/* F4/13 · E4. Opcional: dejarlo en blanco no es un error, y una nota no lo lleva. */}
+          {withContext && (
+            <fieldset className="space-y-4 rounded-xl border border-k-border bg-k-bg p-3">
+              <legend className="px-1 text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{tf('context')}</legend>
+              <p className="text-[12px] text-k-muted">{tf('contextHint')}</p>
+              <Field label={tf('reason')}>
+                <Select value={reasonCode} onChange={(e) => setReasonCode(e.target.value)} disabled={busy}>
+                  <option value="">{tf('reasonPlaceholder')}</option>
+                  {reasonOptions.map((r) => (
+                    <option key={r.code} value={r.code}>
+                      {r.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              {typeof selectedReason?.metadata?.suggestion === 'string' && (
+                <p className="text-[12px] text-k-text-2">{selectedReason.metadata.suggestion}</p>
+              )}
+              {asksIncomeDate && (
+                <Field label={tf('expectedIncome')}>
+                  <Input type="date" min={todayIso()} value={expectedIncomeDate} onChange={(e) => setExpectedIncomeDate(e.target.value)} disabled={busy} />
+                </Field>
+              )}
+              <Field label={tf('payer')}>
+                <Select value={payerParty} onChange={(e) => setPayerParty(e.target.value)} disabled={busy}>
+                  <option value="">{tf('payerPlaceholder')}</option>
+                  {PAYER_PARTIES.map((p) => (
+                    <option key={p} value={p}>
+                      {tf(`payers.${p}`)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
             </fieldset>
           )}
 

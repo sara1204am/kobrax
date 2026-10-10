@@ -418,6 +418,14 @@ export const ACTIVITY_ERROR_TEXT: Record<RecoveryActivityError, string> = {
   PROMISE_DATE_INVALID: 'Elegí la fecha prometida.',
   PROMISE_DATE_PAST: 'La fecha prometida no puede ser anterior a hoy.',
   PROMISE_METHOD_REQUIRED: 'Elegí el medio de pago de la promesa.',
+  // F4/13 · E4 — contexto de la gestión
+  REASON_INVALID: 'El motivo de no pago no es válido.',
+  CONTEXT_NOT_ALLOWED: 'Una nota no lleva motivo ni datos de quién responde.',
+  EXPECTED_INCOME_DATE_INVALID: 'La fecha en que espera cobrar no es válida.',
+  EXPECTED_INCOME_DATE_PAST: 'La fecha en que espera cobrar no puede ser anterior a hoy.',
+  EXPECTED_INCOME_DATE_NEEDS_REASON: 'Elegí el motivo antes de indicar cuándo espera cobrar.',
+  PAYER_INVALID: 'Quién responde por el crédito no es válido.',
+  ORIGIN_INVALID: 'El origen de la gestión no es válido.',
 };
 
 export const BANK_REQUIRED_TEXT = 'Elegí el banco: este medio de pago lo necesita.';

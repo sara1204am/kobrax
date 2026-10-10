@@ -1001,6 +1001,20 @@
           "confirm": "Registrar",
           "cancel": "Cancelar",
           "done": "Gestión registrada",
+          "context": "Motivo y quién responde (opcional)",
+          "contextHint": "Por qué no pagó y a quién hay que cobrarle. Ayuda a no insistir en vano.",
+          "reason": "Motivo de no pago",
+          "reasonPlaceholder": "Sin motivo",
+          "expectedIncome": "Cuándo espera cobrar",
+          "payer": "Quién responde por el crédito",
+          "payerPlaceholder": "Sin definir",
+          "payers": {
+            "HOLDER": "El titular",
+            "GUARANTOR": "El garante",
+            "CODEBTOR": "El codeudor",
+            "BENEFICIARY": "La persona para quien se sacó",
+            "NOT_LOCATED": "No se lo ubica"
+          },
           "results": {
             "CONTACTED": "Habló con el deudor",
             "NO_ANSWER": "No respondió",
@@ -1021,7 +1035,14 @@
             "PROMISE_AMOUNT_INVALID": "El monto prometido tiene que ser mayor a cero.",
             "PROMISE_DATE_INVALID": "Elegí la fecha prometida.",
             "PROMISE_DATE_PAST": "La fecha prometida no puede ser anterior a hoy.",
-            "PROMISE_METHOD_REQUIRED": "Elegí el medio de pago de la promesa."
+            "PROMISE_METHOD_REQUIRED": "Elegí el medio de pago de la promesa.",
+            "REASON_INVALID": "El motivo de no pago no es válido.",
+            "CONTEXT_NOT_ALLOWED": "Una nota no lleva motivo ni datos de quién responde.",
+            "EXPECTED_INCOME_DATE_INVALID": "La fecha en que espera cobrar no es válida.",
+            "EXPECTED_INCOME_DATE_PAST": "La fecha en que espera cobrar no puede ser anterior a hoy.",
+            "EXPECTED_INCOME_DATE_NEEDS_REASON": "Elegí el motivo antes de indicar cuándo espera cobrar.",
+            "PAYER_INVALID": "Quién responde por el crédito no es válido.",
+            "ORIGIN_INVALID": "El origen de la gestión no es válido."
           }
         },
         "person": {

@@ -12,6 +12,7 @@ import { Button, ErrorBanner, Field } from '@/components';
 import { MONTHS, todayISO } from '@/agenda-form';
 import { CatalogType } from '@kobrax/shared';
 import { listCatalogCached } from '@/catalogs.service';
+import { ReasonBlock, contextPayload, emptyReasonContext, useReasons } from '@/reason-block';
 import { gestionError, localToday } from '@/mora-ficha';
 import { METHODS } from '@/pay-sheet';
 import { MORA_OUTCOMES } from '@/mora-actions';
@@ -45,9 +46,11 @@ const FALLBACK_METHOD_OPTIONS: MethodOption[] = METHODS.map((m) => ({ value: m.v
 
 /** Hoja Registrar gestión (§5.4). */
 export function GestionSheet({
-  visible, onClose, currency, onSubmit, outcomes = MORA_OUTCOMES,
+  visible, onClose, currency, onSubmit, outcomes = MORA_OUTCOMES, incomeSource,
 }: {
   visible: boolean; onClose: () => void; currency: string;
+  /** Fuente de ingreso del cliente (F4/13 · E3): filtra qué motivos se ofrecen. Desconocida = se ofrecen todos. */
+  incomeSource?: string;
   /** Qué resultados se ofrecen; el primero es el que arranca elegido. Por defecto los del contrato de gestiones (`MORA_OUTCOMES`). */
   outcomes?: Outcome[];
   onSubmit: (payload: {
@@ -55,6 +58,10 @@ export function GestionSheet({
     result: string;
     notes?: string;
     promise?: { amount: number; promiseDate: string; paymentMethodCode: string; bankCode?: string };
+    /** F4/13 · E4 — contexto de la gestión (todo opcional). */
+    reasonCode?: string;
+    expectedIncomeDate?: string;
+    payerParty?: string;
   }) => Promise<string | null>;
 }) {
   const [outcome, setOutcome] = useState(outcomes[0].key);
@@ -66,12 +73,16 @@ export function GestionSheet({
   const [method, setMethod] = useState<string>(FALLBACK_METHOD_OPTIONS[0]!.value);
   const [bank, setBank] = useState('');
   const [showPicker, setShowPicker] = useState(false);
+  // F4/13 · E4: motivo, cuándo espera cobrar y quién responde (opcional; el bloque es compartido con la agenda).
+  const reasons = useReasons(visible);
+  const [ctx, setCtx] = useState(emptyReasonContext());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible) return;
     setOutcome(outcomes[0].key); setNotes(''); setAmount(''); setDate(localToday()); setMethod(FALLBACK_METHOD_OPTIONS[0]!.value); setBank(''); setError(null);
+    setCtx(emptyReasonContext());
     // Los catálogos del tenant (con respaldo local): sin ellos se ofrecen los medios de siempre y no se pide banco.
     void Promise.all([listCatalogCached(CatalogType.PAYMENT_METHOD), listCatalogCached(CatalogType.BANK)]).then(([pm, bk]) => {
       if (pm.status === 'ok' && pm.data.length > 0) {
@@ -94,8 +105,18 @@ export function GestionSheet({
     if (e.type === 'set' && d) setDate(localToday(d));
   }, []);
 
+  // Una nota no lleva motivo (no tiene resultado).
+  const withContext = oc.type !== 'NOTE' && reasons.length > 0;
+
   const submit = useCallback(async () => {
-    const payload = { type: oc.type, result: oc.result, notes: notes.trim() || undefined, promise: isPromise ? promise : undefined };
+    const payload = {
+      type: oc.type,
+      result: oc.result,
+      notes: notes.trim() || undefined,
+      promise: isPromise ? promise : undefined,
+      // Solo viaja lo que se eligió: sin tocar el bloque, la gestión es la de siempre.
+      ...contextPayload(ctx, reasons, withContext),
+    };
     // La misma regla que la API y el panel, ANTES de encolar: una promesa con fecha pasada no tiene que quedar en la cola
     // para ser rechazada horas después, cuando el cobrador ya no puede corregirla.
     const invalid = gestionError(payload, localToday(), { bankRequired });
@@ -106,7 +127,7 @@ export function GestionSheet({
     setSaving(false);
     if (err) setError(err);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oc, notes, isPromise, amount, date, method, bank, bankRequired, onSubmit]);
+  }, [oc, notes, isPromise, amount, date, method, bank, bankRequired, onSubmit, withContext, ctx, reasons]);
 
   return (
     <BottomSheet visible={visible} onClose={onClose} title="Registrar gestión">
@@ -131,6 +152,8 @@ export function GestionSheet({
           )}
         </>
       )}
+      {/* F4/13 · E4. Opcional: dejarlo en blanco no es un error, y una nota no lo lleva. */}
+      {withContext && <ReasonBlock reasons={reasons} incomeSource={incomeSource} value={ctx} onChange={setCtx} prettyDate={prettyDate} />}
       <SectionLabel>Nota</SectionLabel>
       <Field label="" value={notes} onChangeText={setNotes} placeholder="Opcional" />
       <View style={{ marginTop: SPACING.md }}>

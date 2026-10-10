@@ -85,3 +85,54 @@ describe('validateRecoveryActivity — la promesa de pago', () => {
     expect(v({ type: 'CALL', result: 'PROMISE_TO_PAY', promise: { ...promise, bankCode: 'BNB' } })).toBeNull();
   });
 });
+
+describe('validateRecoveryActivity — contexto de la gestión (F4/13 · E4)', () => {
+  const visita = { type: 'VISIT', result: 'NOT_FOUND' } as const;
+
+  it('🔴 todo es opcional: una gestión sin contexto sigue siendo válida (la cola puede traer gestiones anteriores)', () => {
+    expect(v({ ...visita })).toBeNull();
+    expect(v({ type: 'CALL', result: 'NO_ANSWER' })).toBeNull();
+  });
+
+  it('un motivo con formato de código es válido', () => {
+    expect(v({ ...visita, reasonCode: 'LATE_INCOME' })).toBeNull();
+    expect(v({ ...visita, reasonCode: 'RUBRO_2' })).toBeNull();
+  });
+
+  it('un motivo con formato inválido se rechaza (no se verifica contra el catálogo: la cuenta pudo editarlo)', () => {
+    for (const reasonCode of ['', 'perdio el empleo', 'A'.repeat(41), 'con-guion']) {
+      expect(v({ ...visita, reasonCode })).toBe('REASON_INVALID');
+    }
+    expect(v({ ...visita, reasonCode: 'CODIGO_QUE_YA_NO_EXISTE' })).toBeNull();
+  });
+
+  it('🔴 el motivo puede ir junto a una promesa: «le pagan tarde» y «prometió el viernes» son la misma historia', () => {
+    expect(v({ type: 'CALL', result: 'PROMISE_TO_PAY', promise, reasonCode: 'LATE_INCOME', expectedIncomeDate: '2026-10-08' })).toBeNull();
+  });
+
+  it('una nota no lleva contexto', () => {
+    expect(v({ type: 'NOTE', notes: 'x', reasonCode: 'FORGOT' })).toBe('CONTEXT_NOT_ALLOWED');
+    expect(v({ type: 'NOTE', notes: 'x', payerParty: 'HOLDER' })).toBe('CONTEXT_NOT_ALLOWED');
+    expect(v({ type: 'NOTE', notes: 'x', expectedIncomeDate: '2026-10-08' })).toBe('CONTEXT_NOT_ALLOWED');
+  });
+
+  it('la fecha en que espera cobrar necesita un motivo, ser una fecha real y no ser anterior a hoy', () => {
+    expect(v({ ...visita, expectedIncomeDate: '2026-10-08' })).toBe('EXPECTED_INCOME_DATE_NEEDS_REASON');
+    expect(v({ ...visita, reasonCode: 'LATE_INCOME', expectedIncomeDate: 'pronto' })).toBe('EXPECTED_INCOME_DATE_INVALID');
+    expect(v({ ...visita, reasonCode: 'LATE_INCOME', expectedIncomeDate: '2026-02-31' })).toBe('EXPECTED_INCOME_DATE_INVALID');
+    expect(v({ ...visita, reasonCode: 'LATE_INCOME', expectedIncomeDate: '2026-10-01' })).toBe('EXPECTED_INCOME_DATE_PAST');
+    expect(v({ ...visita, reasonCode: 'LATE_INCOME', expectedIncomeDate: TODAY })).toBeNull();
+    expect(v({ ...visita, reasonCode: 'LATE_INCOME', expectedIncomeDate: '2026-11-15' })).toBeNull();
+  });
+
+  it('quién responde y el origen son de un conjunto conocido', () => {
+    for (const payerParty of ['HOLDER', 'GUARANTOR', 'CODEBTOR', 'BENEFICIARY', 'NOT_LOCATED']) expect(v({ ...visita, payerParty })).toBeNull();
+    expect(v({ ...visita, payerParty: 'VECINO' })).toBe('PAYER_INVALID');
+    for (const origin of ['MANUAL', 'DICTATION', 'IMPORT', 'SUGGESTION_ACCEPTED']) expect(v({ ...visita, origin })).toBeNull();
+    expect(v({ ...visita, origin: 'ROBOT' })).toBe('ORIGIN_INVALID');
+  });
+
+  it('lo de siempre se valida primero: un resultado inválido gana sobre un contexto inválido', () => {
+    expect(v({ type: 'CALL', result: 'NOT_FOUND', reasonCode: 'mal' })).toBe('RESULT_NOT_ALLOWED');
+  });
+});

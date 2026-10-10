@@ -60,10 +60,11 @@ export function validateCatalogMetadata(catalog: string, metadata: unknown): Cat
  * Los motivos que se ofrecen para una fuente de ingreso. Un motivo sin `appliesTo` es para todos; si no se conoce
  * la fuente (`undefined`), se ofrecen todos: no se esconde una opción por falta de un dato.
  */
-export function reasonsFor<T extends { metadata?: Record<string, unknown> | null }>(reasons: readonly T[], incomeSource?: string | null): T[] {
+export function reasonsFor<T extends { metadata?: object | null }>(reasons: readonly T[], incomeSource?: string | null): T[] {
   if (!incomeSource) return [...reasons];
   return reasons.filter((r) => {
-    const applies = r.metadata?.appliesTo;
+    // `object` y no `Record<string, unknown>`: el móvil tipa su metadata como una interfaz cerrada (sin firma de índice).
+    const applies = (r.metadata as Record<string, unknown> | null | undefined)?.appliesTo;
     return !Array.isArray(applies) || applies.length === 0 || applies.includes(incomeSource);
   });
 }

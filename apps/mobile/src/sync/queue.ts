@@ -149,7 +149,7 @@ export type QueuedAction =
   | { kind: 'arrears.mark'; creditId: string; days?: number }
   | { kind: 'arrears.clear'; creditId: string; input: ClearArrearsInput }
   /** Idempotente en el server: completar una gestión ya ejecutada devuelve la misma gestión. */
-  | { kind: 'agenda.complete'; id: string; outcome: AgendaOutcome; notes?: string }
+  | { kind: 'agenda.complete'; id: string; outcome: AgendaOutcome; notes?: string; reasonCode?: string; expectedIncomeDate?: string; payerParty?: string }
   /**
    * `AgendaPostponeStep` y no `number`: posponer es en pasos fijos, y el tipo del dominio ya lo dice.
    *
@@ -488,7 +488,12 @@ export async function send(action: PendingAction): Promise<SendResult> {
     // Las cuatro acciones sobre una gestión existente pueden chocar con lo que otra persona hizo mientras no había señal: si el
     // servidor las rechaza, la hoja de pendientes explica QUÉ pasó (`agenda-conflicts.ts`) en vez de repetir el mensaje crudo.
     case 'agenda.complete': {
-      const res = await completeItem(action.id, action.outcome, action.notes);
+      // F4/13 · E4: los campos de contexto son opcionales: una acción encolada antes de ellos no los trae y sale igual.
+      const res = await completeItem(action.id, action.outcome, action.notes, {
+        reasonCode: action.reasonCode,
+        expectedIncomeDate: action.expectedIncomeDate,
+        payerParty: action.payerParty,
+      });
       return withAgendaExplanation(mapMutate(res), httpStatusOf(res));
     }
     case 'agenda.postpone': {

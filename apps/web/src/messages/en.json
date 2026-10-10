@@ -1001,6 +1001,20 @@
           "confirm": "Log",
           "cancel": "Cancel",
           "done": "Action logged",
+          "context": "Reason and who answers (optional)",
+          "contextHint": "Why they did not pay and who to collect from. It helps avoid pushing in vain.",
+          "reason": "Reason for non-payment",
+          "reasonPlaceholder": "No reason",
+          "expectedIncome": "When they expect to be paid",
+          "payer": "Who answers for the credit",
+          "payerPlaceholder": "Not set",
+          "payers": {
+            "HOLDER": "The account holder",
+            "GUARANTOR": "The guarantor",
+            "CODEBTOR": "The co-debtor",
+            "BENEFICIARY": "The person it was taken for",
+            "NOT_LOCATED": "Cannot be located"
+          },
           "results": {
             "CONTACTED": "Spoke with the debtor",
             "NO_ANSWER": "No answer",
@@ -1021,7 +1035,14 @@
             "PROMISE_AMOUNT_INVALID": "The promised amount must be greater than zero.",
             "PROMISE_DATE_INVALID": "Choose the promised date.",
             "PROMISE_DATE_PAST": "The promised date cannot be before today.",
-            "PROMISE_METHOD_REQUIRED": "Choose the payment method of the promise."
+            "PROMISE_METHOD_REQUIRED": "Choose the payment method of the promise.",
+            "REASON_INVALID": "The reason for non-payment is not valid.",
+            "CONTEXT_NOT_ALLOWED": "A note does not carry a reason or who answers.",
+            "EXPECTED_INCOME_DATE_INVALID": "The date they expect to be paid is not valid.",
+            "EXPECTED_INCOME_DATE_PAST": "The date they expect to be paid cannot be before today.",
+            "EXPECTED_INCOME_DATE_NEEDS_REASON": "Choose the reason before saying when they expect to be paid.",
+            "PAYER_INVALID": "Who answers for the credit is not valid.",
+            "ORIGIN_INVALID": "The origin of the action is not valid."
           }
         },
         "person": {
