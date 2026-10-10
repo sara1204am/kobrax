@@ -1,5 +1,7 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Permission } from '@kobrax/shared';
+import { can } from '@/permissions';
 import { ScrollView, View } from 'react-native';
 import { COLORS, SPACING } from '@/theme';
 import { Header, ListRow, SectionLabel } from '@/ui';
@@ -15,6 +17,14 @@ import { clearBiometric } from '@/biometric';
  */
 export default function MasScreen() {
   const [importOpen, setImportOpen] = useState(false);
+  // Hasta saber qué puede hacer la persona se ofrece todo (lo de siempre): ocultar es UX, la API autoriza igual (403).
+  const [permissions, setPermissions] = useState<string[] | null>(null);
+  useEffect(() => {
+    void authService.me().then((r) => {
+      if (r.status === 'ok') setPermissions(r.me.permissions);
+    });
+  }, []);
+  const canImport = permissions === null || can(permissions, Permission.CLIENT_IMPORT);
 
   async function logout() {
     await authService.logout();
@@ -33,6 +43,7 @@ export default function MasScreen() {
           icon="people-outline"
           onPress={() => router.push('/(tabs)/cobranza')}
         />
+        {canImport && (
         <ListRow
           title="Importación"
           subtitle="Subir archivo y reglas de lectura"
@@ -40,7 +51,8 @@ export default function MasScreen() {
           expanded={importOpen}
           onPress={() => setImportOpen((v) => !v)}
         />
-        {importOpen && (
+        )}
+        {canImport && importOpen && (
           <View style={{ gap: SPACING.md, paddingLeft: SPACING.lg }}>
             <ListRow
               title="Importar datos"

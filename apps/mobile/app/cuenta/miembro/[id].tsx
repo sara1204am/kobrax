@@ -1,3 +1,5 @@
+import { can } from '@/permissions';
+import { Permission } from '@kobrax/shared';
 import { useCallback, useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -50,7 +52,7 @@ export default function MiembroScreen() {
     if (cat.status === 'ok') setRoles(cat.data);
     if (me.status === 'ok') {
       setYo(me.me.userId);
-      setPuedeEditar(me.me.permissions.includes('user:write'));
+      setPuedeEditar(can(me.me.permissions, Permission.USER_WRITE));
     }
   }, [id]);
 

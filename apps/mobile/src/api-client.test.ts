@@ -96,3 +96,24 @@ describe('apiMutate — timeout vs offline', () => {
     expect(await apiMutate('/x', 'POST', {})).toEqual({ status: 'offline', reason: 'offline' });
   });
 });
+
+describe('authedFetch — 401 por credencial equivocada no es sesión muerta', () => {
+  it.each(['AUTH_001', 'AUTH_006'])('%s: devuelve el 401 sin refrescar ni limpiar la sesión', async (code) => {
+    mockGetSession.mockResolvedValue(SESSION);
+    mockFetch.mockResolvedValue({ status: 401, data: null, error: { code, message: 'Credenciales inválidas' } });
+    const res = await authedFetch('/auth/change-password', { method: 'POST', body: {} });
+    expect(res.status).toBe(401);
+    expect(mockFetch).toHaveBeenCalledTimes(1); // no pidió refresh
+    expect(clearSession).not.toHaveBeenCalled();
+  });
+
+  it('un 401 de token (AUTH_003) sí sigue el camino de refresh', async () => {
+    mockGetSession.mockResolvedValue(SESSION);
+    mockFetch
+      .mockResolvedValueOnce({ status: 401, data: null, error: { code: 'AUTH_003', message: 'x' } })
+      .mockResolvedValueOnce({ status: 200, data: { accessToken: 'a2', refreshToken: 'r2' }, error: null })
+      .mockResolvedValueOnce({ status: 200, data: { ok: 1 }, error: null });
+    expect((await authedFetch('/x')).status).toBe(200);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+});
