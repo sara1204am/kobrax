@@ -41,6 +41,8 @@ const CURRENCIES = Object.keys(SUPPORTED_CURRENCIES);
 export interface CatalogOption {
   code: string;
   label: string;
+  /** Lo que la API manda en `catalog_items.metadata` (rubros: `incomeSource`, `defaultCycle`; motivos: `appliesTo`…). */
+  metadata?: Record<string, unknown> | null;
 }
 
 /** Id de una fila nueva. Sólo vive en el navegador: la fila sin `serverId` es la que se crea. */

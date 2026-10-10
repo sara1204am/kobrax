@@ -43,6 +43,12 @@ const CATALOGOS: CatalogType[] = [
   CatalogType.CANCEL_REASON,
   CatalogType.RESCHEDULE_REASON,
   CatalogType.WHATSAPP_TEMPLATE,
+  // F4/13 · contexto del deudor: rubro, motivo de no pago y modalidad de cobro. Sin esto, sin señal la hoja de
+  // gestión y el alta de cliente no tendrían opciones hasta que hubiera red una vez.
+  CatalogType.INCOME_SOURCE,
+  CatalogType.OCCUPATION,
+  CatalogType.NO_PAYMENT_REASON,
+  CatalogType.COLLECTION_MODALITY,
 ];
 
 export interface HydrateResult {

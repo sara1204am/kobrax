@@ -1,8 +1,14 @@
 # F4/13 · Capa de datos para la IA: plan por etapas
 
-Estado: **plan en borrador** (2026-10-10), sin código. Pendiente de pasar el gate de validación del repo antes de
-implementar. Parte de [`docs/producto/ia-plan-maestro.md`](../../producto/ia-plan-maestro.md) §2 (capa A) y de la lectura
-del código hecha el mismo día; los números de línea citados corresponden a la rama `docs/ia-capa-datos` (desde `dev`).
+Estado: **validado (gate PASS, ver §11)** el 2026-10-10; en implementación por etapas. Parte de
+[`docs/producto/ia-plan-maestro.md`](../../producto/ia-plan-maestro.md) §2 (capa A) y de la lectura del código hecha el
+mismo día; los números de línea citados corresponden a la rama `docs/ia-capa-datos` (desde `dev`).
+
+**Registro de decisiones:** [`13-capa-datos-ia-decisiones.md`](./13-capa-datos-ia-decisiones.md) (cada decisión, su motivo
+y quién la tomó).
+
+**Rama:** `docs/ia-capa-datos` (desde `origin/dev`), un commit por etapa. No hay PR ni merge: ambos requieren la
+autorización escrita de la fundadora.
 
 **Objetivo.** Guardar de forma estructurada lo que hoy se pierde en la memoria del cobrador o en notas de texto libre:
 de qué vive el deudor, cuándo le llega el dinero, por qué no pagó, cómo conviene cobrarle y qué plantilla se usó. Que
@@ -18,17 +24,20 @@ esos datos **mejoren la aplicación sin IA** (reglas de la capa B) y queden list
 | K5 | **Sin aprendizaje entre cuentas** por ahora | Todo dato queda por `account_id`; sin anonimización entre cuentas |
 | — | Se trabaja **por capas**, empezando por los datos; rama propia sobre `dev` | Este plan |
 
-### 0.2 Supuestos de este plan (confirmar antes de empezar cada etapa)
+### 0.2 Supuestos (S1–S4 confirmados por la fundadora el 2026-10-10; S5–S7 decididos por delegación)
 
-| # | Supuesto | Por qué | Se confirma en |
+| # | Supuesto | Por qué | Estado |
 |---|---|---|---|
-| S1 | Los catálogos por defecto **se siembran al registrar una cuenta** y se hace un **backfill** para las existentes | Hoy el registro no siembra catálogos (verificado): una cuenta nueva nace vacía | E1 |
-| S2 | El perfil de ingreso es **del cliente**; un crédito puede sobrescribirlo más adelante | Recomendación M2 del plan maestro; un cliente puede tener un crédito productivo y uno de consumo | E3 |
-| S3 | El motivo de no pago es **opcional**, no obligatorio | La cola offline puede traer gestiones antiguas sin él; hacerlo obligatorio las rechazaría con 400 | E4 |
-| S4 | El catálogo `ZONE` **queda fuera** de este plan | `zone` es texto libre hoy; normalizarlo es otro trabajo (§8) | — |
-| S5 | `template_code` significa **plantilla elegida**, no «enviada» | `wa.me` no confirma el envío (verificado) | E5 |
-| S6 | No se sube `QUEUE_VERSION` | Los campos nuevos son opcionales; subirla marca ítems antiguos como no soportados | E4 |
-| S7 | Se reutilizan permisos existentes (`catalog:write`, `client:write`, `collection:write`) | No hay permisos nuevos que gestionar | Todas |
+| S1 | Los catálogos por defecto **se siembran al registrar una cuenta** y se hace un **backfill** para las existentes | Hoy el registro no siembra catálogos (verificado): una cuenta nueva nace vacía | **Confirmado** (D-01) |
+| S2 | El perfil de ingreso es **del cliente**; un crédito puede sobrescribirlo más adelante | Un cliente puede tener un crédito productivo y uno de consumo | **Confirmado** (D-02) |
+| S3 | El motivo de no pago es **opcional**, no obligatorio | La cola offline puede traer gestiones antiguas sin él; hacerlo obligatorio las rechazaría con 400 | **Confirmado** (D-03) |
+| S4 | El catálogo `ZONE` **queda fuera** de este plan | `zone` es texto libre hoy; normalizarlo es otro trabajo (§8) | **Confirmado** (D-04) |
+| S5 | `template_code` significa **plantilla elegida**, no «enviada» | `wa.me` no confirma el envío (verificado) | Delegado (D-05) |
+| S6 | No se sube `QUEUE_VERSION` | Los campos nuevos son opcionales; subirla marca ítems antiguos como no soportados | Delegado (D-06) |
+| S7 | Se reutilizan permisos existentes (`catalog:write`, `client:write`, `collection:write`) | No hay permisos nuevos que gestionar | Delegado (D-07) |
+
+Las decisiones D-11 a D-17 (motivo en visita de ruta, quién responde, auditoría, canal preferido, tabla propia, perfil de
+cobro y migraciones) están en el registro de decisiones.
 
 ## 1. Principios (no se tocan)
 
@@ -40,6 +49,65 @@ esos datos **mejoren la aplicación sin IA** (reglas de la capa B) y queden list
   (`whitelist` + `forbidNonWhitelisted`, verificado en `validation-pipe.ts:30-31`).
 - **Offline primero:** lo que el cobrador captura en campo debe poder encolarse.
 - **Todas las tablas nuevas con `account_id` y RLS** (principio no negociable #1).
+
+### 1.1 Auditoría de reuso
+
+Qué existe y qué se hace con ello. Nada de lo NUEVO reimplementa algo que ya esté.
+
+| Capacidad | Existe | Decisión | Dónde |
+|---|---|---|---|
+| Catálogos por cuenta (CRUD, auditoría, `metadata`) | `catalogs` module, `catalog_items` | **REUSAR** | `apps/api/src/modules/catalogs` |
+| Tipos de catálogo | Enum duplicado en Prisma y `shared` | **EXTENDER** los dos | `schema.prisma:1659`, `agenda.enum.ts:86` |
+| Catálogos por defecto | Arreglo `CATALOGS` solo en `seed.ts` | **EXTENDER** y **MOVER** a `shared` | `seed.ts:167` → `packages/shared` |
+| Siembra al registrar | Solo `arrearCategory` | **EXTENDER** | `accounts.service.ts:116` |
+| Hidratación de catálogos al móvil | Lista fija de 6 tipos | **EXTENDER** | `sync/hydrate.ts:39-46` |
+| Select con catálogo y fallback a texto libre | `CollateralFields` | **REUSAR** el patrón | `client-form.tsx:667` |
+| Edición de cliente por sección y diff | `section-editor.tsx`, `diffCliente` | **EXTENDER** | `client-diff.ts:150` |
+| Cola offline de cliente | `client.update`, `client.location` | **REUSAR**; kind nuevo solo para el perfil de ingreso | `queue.ts`, `cliente-queue.ts` |
+| Validador de gestión | `validateRecoveryActivity` | **EXTENDER** (única fuente) | `recovery-activity.ts:73` |
+| Registro de gestión | `addActivity`, `recordCreditActivity` | **EXTENDER** | `mora.service.ts:311`, `credit-activity.ts:15` |
+| Auditoría | `AuditService.record` | **REUSAR** | `common/audit/audit.service.ts` |
+| RLS por tabla | Arreglo `operational` + patrón inline | **REUSAR** | `rls/001_enable_rls.sql`, `device_push_tokens` |
+| Esquema de perfil de cobro | No existe | **NUEVO** | `packages/shared/src/utils/collection-profile.ts` |
+| Perfil de ingreso (tabla, endpoints, tipos) | No existe | **NUEVO** | ver E3 |
+| Ciclos de ingreso | No existe | **NUEVO** (enum y etiquetas) | `packages/shared/src/enums` |
+
+### 1.2 Artefactos NUEVOS y su justificación
+
+| Artefacto | Por qué es nuevo | Ubicación (se usa en ≥ 2 apps, por eso va en `shared`) |
+|---|---|---|
+| `CATALOG_DEFAULTS` | Seed y registro deben compartir una fuente | `packages/shared/src/constants` |
+| `collection-profile.ts` (esquema y validación de `visit_schedule`) | Hoy es un JSON sin contenido definido | `packages/shared/src/utils` |
+| `IncomeCycle`, `PayerParty`, `ActivityOrigin` | Enums de dominio usados por API, web y móvil | `packages/shared/src/enums` |
+| `client_income_profiles` | No cabe en `clients` ni en `metadata` (D-15) | `packages/database` |
+| Endpoint del perfil de ingreso | Recurso nuevo con idempotencia propia | `apps/api/src/modules/clients` |
+
+### 1.3 Contrato de los endpoints nuevos
+
+Respuesta estándar `{ data, meta, error }`. Prefijo `/api`. Guards: JWT, tenant y roles, como el resto de `clients`.
+
+| Método | Ruta | Permiso | Cuerpo | Respuesta (`data`) | Errores |
+|---|---|---|---|---|---|
+| GET | `/clients/:id/income-profile` | `client:read` | — | Perfil o `null` si no existe | 404 si el cliente no existe o no es de la cuenta |
+| PUT | `/clients/:id/income-profile` | `client:write` | `{ incomeSourceCode?, occupationCode?, incomeCycle?, incomeDay?, notes?, origin? }` | Perfil guardado | 400 validación; 404 cliente |
+| PATCH | `/clients/:id/locations/:locationId` (existente) | `client:write` | Se agrega `visitSchedule?`, `riskLevel?` | Ubicación con `visitSchedule` | 400 si el contenido no cumple el esquema |
+| POST | `/mora/:creditId/activities` (existente) | `collection:write` | Se agregan `reasonCode?`, `expectedIncomeDate?`, `payerParty?`, `origin?` | Actividad con los campos nuevos | `MORA_*` existentes; 400 para campo desconocido |
+| GET/POST/PATCH/DELETE | `/catalogs/:catalog` (existente) | `catalog:read` / `catalog:write` | Para los tipos nuevos, `metadata` validado contra su esquema | Ítem | 400 si `metadata` no cumple |
+
+`PUT` es idempotente: repetirlo con el mismo cuerpo no cambia el resultado.
+
+### 1.4 Reglas de la fase
+
+1. **Todo dato nuevo es opcional**; ninguna regla asume que existe.
+2. **API → shared → web y móvil**, en ese orden de despliegue.
+3. **Sin `any`**; `strict` en todos los `tsconfig`.
+4. **Offline primero:** lo que se captura en campo debe poder encolarse; nunca se bloquea una acción por falta de red.
+5. **Multi-tenant por `account_id` y RLS**; ningún comportamiento depende de `tenantType`.
+6. **La API valida igual aunque la interfaz oculte**: los permisos no se delegan a la pantalla.
+7. **Auditar** cada mutación nueva, sin texto libre ni datos personales.
+8. **Un spec nuevo de la API se agrega al script `test`** o no corre.
+9. **i18n es/en en paralelo**.
+10. **No se modifican migraciones ya ejecutadas.**
 
 ## 2. Orden de las etapas
 
@@ -309,11 +377,24 @@ No se construye: se **verifica** si el archivo de cartera puede traer rubro, cic
 | **Documentación viva** | Actualizar `modelo-de-datos.md`, `backend-modulos-y-reglas.md` (lista de tipos de catálogo, :143) y las pantallas tocadas |
 | **Zona horaria** | `expected_income_date` es un día civil; se interpreta con el reloj del tenant |
 
-## 4. Pruebas y verificación
+## 4. Pruebas y definición de terminado (DoD)
 
 Por etapa: pruebas unitarias del validador y servicios, más **una prueba de integración por tabla nueva** que
-compruebe RLS. Antes de cerrar cada etapa: `type-check` y `test` de los paquetes tocados, y recorrido manual del flujo en
-web y móvil. La validación visual en teléfono la hace la fundadora (la app Expo no corre sin cabeza).
+compruebe RLS.
+
+**Comandos de verificación** (todos deben pasar antes de cerrar una etapa):
+
+| Paquete | Comando | Cuándo |
+|---|---|---|
+| `packages/database` | `pnpm --filter @kobrax/database db:generate` y `type-check` | Si cambia `schema.prisma` |
+| `packages/shared` | `pnpm --filter @kobrax/shared build`, `type-check`, `test` | Siempre que se toque |
+| `apps/api` | `pnpm --filter @kobrax/api type-check` y `test` | Siempre que se toque |
+| `apps/api` | `pnpm --filter @kobrax/api test:integration` | Etapas con tabla o migración nueva |
+| `apps/web` | `pnpm --filter @kobrax/web type-check` y `test` | Siempre que se toque |
+| `apps/mobile` | `pnpm --filter @kobrax/mobile type-check` y `test` | Siempre que se toque |
+
+La app Expo no corre sin cabeza: la **validación visual en teléfono la hace la fundadora**; el resultado de cada etapa
+dice qué quedó por validar. Una etapa no se da por cerrada si falla alguno de los comandos aplicables.
 
 ## 5. Datos de prueba
 
@@ -355,4 +436,48 @@ inmutabilidad de `credit_activities`.
 
 ## 10. Resultado de la implementación
 
-_(se completa al cerrar cada etapa)_
+### E1 · Catálogos base y siembra ✅ (2026-10-10)
+
+**Hecho**
+- 4 migraciones (una por `ADD VALUE`): `INCOME_SOURCE`, `OCCUPATION`, `NO_PAYMENT_REASON`, `COLLECTION_MODALITY`.
+- `CATALOG_DEFAULTS` en `packages/shared` (la lista completa, movida desde `seed.ts`) y `catalogDefaultRows()`; el seed la importa.
+- El registro de cuentas siembra los catálogos (`accounts.service.ts`); backfill `db:backfill:catalogs` (con `--dry`).
+- Validación del `metadata` de rubros y motivos (`validateCatalogMetadata`, `reasonsFor`) en `shared` y en la API.
+- `update`/`remove` filtran por tipo (corrección de un defecto, D-21).
+- Móvil hidrata los 4 tipos; `CatalogOption.metadata` ampliado en móvil y web.
+
+**Verificación**
+| Comando | Resultado |
+|---|---|
+| `@kobrax/shared` build, type-check, test | 364 pruebas, verde |
+| `@kobrax/api` type-check, test | 1.548 pruebas, verde |
+| `@kobrax/api` integración `catalogs-signup.it.ts` (base desde cero) | 10 de 10 |
+| `@kobrax/web` type-check, test | 938 pruebas, verde |
+| `@kobrax/mobile` type-check, test | 916 pruebas, verde |
+| Migraciones en la base local | Aplicadas; backfill: 30 por cuenta, 0 en la segunda corrida |
+
+**Queda**: editor de estos catálogos en `/cuenta` (hoy se editan por API); no bloquea E2–E4.
+
+**Por validar en teléfono**: que los catálogos nuevos aparezcan sin red tras una hidratación.
+
+## 11. Validación del plan (gate `/f10-validar-plan`, adaptado — D-10)
+
+El gate está escrito para etapas móviles F10. Se aplicó con sus ítems de calidad y con los de completitud que
+corresponden; los específicos de F10 (Figma, rama `f10/PN`, build 🟢/🔵, economía de tokens de Figma) no aplican.
+
+**Primera pasada (2026-10-10): FAIL.** Bloqueantes encontrados y su corrección:
+
+| Ítem | Hallazgo | Corrección |
+|---|---|---|
+| 5 Contrato | No definía cuerpo ni respuesta de los endpoints nuevos | Agregado §1.3 |
+| 6 Auditoría de reuso | No existía la tabla REUSAR / EXTENDER / NUEVO | Agregado §1.1 |
+| 7 Artefactos nuevos | Sin justificación ni ubicación | Agregado §1.2 |
+| 9 Reglas de la fase | No estaban escritas | Agregado §1.4 |
+| 10 DoD verificable | Sin comandos | Reescrito §4 |
+| 16 Preguntas pendientes | S1–S4 sin respuesta registrada | Confirmadas; ver §0.2 y registro de decisiones |
+| 14 No negociables | Offline y `{data,meta,error}` no se declaraban | Explícitos en §1.3 y §1.4 |
+
+**Segunda pasada: PASS.** Ítems aplicables 1, 5–16 cumplidos. Advertencias (no bloquean):
+
+- E4 deja fuera la visita de ruta (D-11); debe retomarse en un plan posterior o los historiales quedarán con campos vacíos según el origen.
+- La lista de motivos y rubros es un borrador pendiente de validar con cobradores; cada cuenta puede ajustarla.

@@ -55,7 +55,7 @@ import {
   VisitOutcome,
   CollectionPriority,
 } from '@prisma/client';
-import { DEFAULT_ARREAR_CATEGORIES, ROLE_PERMISSIONS, RoleType, validateAgendaDetails } from '@kobrax/shared';
+import { CATALOG_DEFAULTS, DEFAULT_ARREAR_CATEGORIES, ROLE_PERMISSIONS, RoleType, validateAgendaDetails } from '@kobrax/shared';
 import bcrypt from 'bcryptjs';
 import { blindHash, encryptPII } from './pii';
 
@@ -163,70 +163,8 @@ const json = (v: unknown): Prisma.InputJsonValue => v as Prisma.InputJsonValue;
 // Catálogos de la cuenta (idempotente por el unique (account, catalog, code))
 // ═══════════════════════════════════════════════════════════════════════════════
 
-type CatalogSeed = { catalog: CatalogType; code: string; label: string; sortOrder: number; metadata?: object };
-const CATALOGS: CatalogSeed[] = [
-  { catalog: CatalogType.PAYMENT_METHOD, code: 'CASH', label: 'Efectivo', sortOrder: 1 },
-  { catalog: CatalogType.PAYMENT_METHOD, code: 'DEPOSIT', label: 'Depósito', sortOrder: 2, metadata: { requiresBank: true } },
-  { catalog: CatalogType.PAYMENT_METHOD, code: 'TRANSFER', label: 'Transferencia', sortOrder: 3, metadata: { requiresBank: true } },
-  { catalog: CatalogType.PAYMENT_METHOD, code: 'QR', label: 'QR', sortOrder: 4 },
-  { catalog: CatalogType.PAYMENT_METHOD, code: 'CHECK', label: 'Cheque', sortOrder: 5, metadata: { requiresBank: true } },
-  { catalog: CatalogType.PAYMENT_METHOD, code: 'MOBILE', label: 'Pago móvil', sortOrder: 6 },
-  { catalog: CatalogType.PAYMENT_METHOD, code: 'AGENCY', label: 'Agencia', sortOrder: 7 },
-  { catalog: CatalogType.PAYMENT_METHOD, code: 'COLLECTOR', label: 'Cobrador', sortOrder: 8 },
-  { catalog: CatalogType.BANK, code: 'BNB', label: 'Banco Nacional de Bolivia', sortOrder: 1 },
-  { catalog: CatalogType.BANK, code: 'BCP', label: 'BCP', sortOrder: 2 },
-  { catalog: CatalogType.BANK, code: 'BMSC', label: 'Banco Mercantil Santa Cruz', sortOrder: 3 },
-  { catalog: CatalogType.BANK, code: 'BISA', label: 'Banco BISA', sortOrder: 4 },
-  { catalog: CatalogType.BANK, code: 'UNION', label: 'Banco Unión', sortOrder: 5 },
-  { catalog: CatalogType.BANK, code: 'FIE', label: 'Banco FIE', sortOrder: 6 },
-  { catalog: CatalogType.BANK, code: 'SOL', label: 'Banco Sol', sortOrder: 7 },
-  { catalog: CatalogType.BANK, code: 'ECOFUTURO', label: 'EcoFuturo', sortOrder: 8 },
-  { catalog: CatalogType.PRIORITY, code: 'VERY_HIGH', label: 'Muy alta', sortOrder: 1 },
-  { catalog: CatalogType.PRIORITY, code: 'HIGH', label: 'Alta', sortOrder: 2 },
-  { catalog: CatalogType.PRIORITY, code: 'MEDIUM', label: 'Media', sortOrder: 3 },
-  { catalog: CatalogType.PRIORITY, code: 'LOW', label: 'Baja', sortOrder: 4 },
-  { catalog: CatalogType.EXPECTED_RESULT, code: 'COLLECT', label: 'Cobrar', sortOrder: 1 },
-  { catalog: CatalogType.EXPECTED_RESULT, code: 'REMIND', label: 'Recordar', sortOrder: 2 },
-  { catalog: CatalogType.EXPECTED_RESULT, code: 'CONFIRM_VISIT', label: 'Confirmar visita', sortOrder: 3 },
-  { catalog: CatalogType.EXPECTED_RESULT, code: 'CONFIRM_PAYMENT', label: 'Confirmar pago', sortOrder: 4 },
-  { catalog: CatalogType.EXPECTED_RESULT, code: 'NEGOTIATE', label: 'Negociar', sortOrder: 5 },
-  { catalog: CatalogType.PHONE_TYPE, code: 'MOBILE', label: 'Celular', sortOrder: 1 },
-  { catalog: CatalogType.PHONE_TYPE, code: 'OFFICE', label: 'Oficina', sortOrder: 2 },
-  { catalog: CatalogType.PHONE_TYPE, code: 'HOME', label: 'Casa', sortOrder: 3 },
-  { catalog: CatalogType.PHONE_TYPE, code: 'REFERENCE', label: 'Referencia', sortOrder: 4 },
-  { catalog: CatalogType.ADDRESS_TYPE, code: 'HOME', label: 'Casa', sortOrder: 1 },
-  { catalog: CatalogType.ADDRESS_TYPE, code: 'WORK', label: 'Trabajo', sortOrder: 2 },
-  { catalog: CatalogType.ADDRESS_TYPE, code: 'BUSINESS', label: 'Negocio', sortOrder: 3 },
-  { catalog: CatalogType.REMINDER_CATEGORY, code: 'PAYMENT', label: 'Pago', sortOrder: 1 },
-  { catalog: CatalogType.REMINDER_CATEGORY, code: 'DOCUMENT', label: 'Documento', sortOrder: 2 },
-  { catalog: CatalogType.REMINDER_CATEGORY, code: 'FOLLOWUP', label: 'Seguimiento', sortOrder: 3 },
-  { catalog: CatalogType.CANCEL_REASON, code: 'CLIENT_UNAVAILABLE', label: 'Cliente no disponible', sortOrder: 1 },
-  { catalog: CatalogType.CANCEL_REASON, code: 'WRONG_DATA', label: 'Datos incorrectos', sortOrder: 2 },
-  { catalog: CatalogType.RESCHEDULE_REASON, code: 'CLIENT_REQUEST', label: 'A pedido del cliente', sortOrder: 1 },
-  { catalog: CatalogType.RESCHEDULE_REASON, code: 'NO_ANSWER', label: 'Sin respuesta', sortOrder: 2 },
-  { catalog: CatalogType.CURRENCY, code: 'BOB', label: 'Boliviano', sortOrder: 1 },
-  { catalog: CatalogType.CURRENCY, code: 'USD', label: 'Dólar', sortOrder: 2 },
-  // Clases de crédito y de garantía: cada empresa las edita, pero el catálogo no arranca vacío.
-  { catalog: CatalogType.CREDIT_TYPE, code: 'CONSUMER', label: 'Crédito de consumo', sortOrder: 1 },
-  { catalog: CatalogType.CREDIT_TYPE, code: 'PERSONAL', label: 'Préstamo personal', sortOrder: 2 },
-  { catalog: CatalogType.CREDIT_TYPE, code: 'MICRO', label: 'Microcrédito', sortOrder: 3 },
-  { catalog: CatalogType.CREDIT_TYPE, code: 'HOUSING', label: 'Vivienda', sortOrder: 4 },
-  { catalog: CatalogType.COLLATERAL_TYPE, code: 'VEHICLE', label: 'Vehículo', sortOrder: 1 },
-  { catalog: CatalogType.COLLATERAL_TYPE, code: 'PROPERTY', label: 'Inmueble', sortOrder: 2 },
-  { catalog: CatalogType.COLLATERAL_TYPE, code: 'MACHINERY', label: 'Maquinaria', sortOrder: 3 },
-  { catalog: CatalogType.COLLATERAL_TYPE, code: 'APPLIANCE', label: 'Electrodoméstico', sortOrder: 4 },
-  { catalog: CatalogType.COLLATERAL_TYPE, code: 'OTHER', label: 'Otro', sortOrder: 5 },
-  // Plantillas de WhatsApp (S4): el cuerpo va en `metadata.body` con variables {{cliente}}/{{saldo}}.
-  { catalog: CatalogType.WHATSAPP_TEMPLATE, code: 'INITIAL', label: 'Cobro inicial', sortOrder: 1, metadata: { body: 'Hola {{cliente}}, le escribimos de Kobrax para recordarle su saldo pendiente de {{saldo}}. Puede coordinar su pago con nosotros.' } },
-  { catalog: CatalogType.WHATSAPP_TEMPLATE, code: 'REMINDER', label: 'Recordatorio', sortOrder: 2, metadata: { body: 'Hola {{cliente}}, le recordamos que su pago de {{saldo}} vence pronto. Quedamos atentos.' } },
-  { catalog: CatalogType.WHATSAPP_TEMPLATE, code: 'LAST_NOTICE', label: 'Último aviso', sortOrder: 3, metadata: { body: 'Hola {{cliente}}, su deuda de {{saldo}} se encuentra vencida. Le pedimos regularizar su pago a la brevedad para evitar cargos adicionales.' } },
-  // Gestión especial en campo (S5 · RT-6).
-  { catalog: CatalogType.SPECIAL_CATEGORY, code: 'DECEASED', label: 'Fallecimiento', sortOrder: 1 },
-  { catalog: CatalogType.SPECIAL_CATEGORY, code: 'SERIOUS_ILLNESS', label: 'Enfermedad grave', sortOrder: 2 },
-  { catalog: CatalogType.SPECIAL_CATEGORY, code: 'LONG_TRIP', label: 'Viaje prolongado', sortOrder: 3 },
-  { catalog: CatalogType.SPECIAL_CATEGORY, code: 'LEGAL_DISPUTE', label: 'Conflicto legal', sortOrder: 4 },
-  { catalog: CatalogType.SPECIAL_CATEGORY, code: 'OTHER', label: 'Otro', sortOrder: 5 },
-];
+/** Los catálogos por defecto viven en `@kobrax/shared` (los usa también el registro de cuentas). */
+const CATALOGS = CATALOG_DEFAULTS;
 
 /**
  * Configuración de importación de PSF de la cuenta demo (la forma de los reportes de `docs/flows/psf-diario`).

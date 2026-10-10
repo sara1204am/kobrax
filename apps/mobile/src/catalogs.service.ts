@@ -9,8 +9,26 @@ export interface CatalogOption {
   code: string;
   label: string;
   sortOrder: number;
-  /** `requiresBank` (PAYMENT_METHOD) · `body` (WHATSAPP_TEMPLATE, con {{cliente}}/{{saldo}}). */
-  metadata: { requiresBank?: boolean; body?: string } | null;
+  /**
+   * `requiresBank` (PAYMENT_METHOD) · `body` (WHATSAPP_TEMPLATE, con {{cliente}}/{{saldo}}) · F4/13: rubros
+   * (`incomeSource`, `defaultCycle`, `synonyms`) y motivos de no pago (`appliesTo`, `suggestion`, banderas).
+   */
+  metadata: CatalogMetadata | null;
+}
+
+export interface CatalogMetadata {
+  requiresBank?: boolean;
+  body?: string;
+  incomeSource?: string;
+  defaultCycle?: string;
+  synonyms?: string[];
+  group?: string;
+  appliesTo?: string[];
+  suggestion?: string;
+  asksExpectedIncomeDate?: boolean;
+  triggersContactUpdate?: boolean;
+  sensitive?: boolean;
+  declaredOnly?: boolean;
 }
 
 /** Ítems activos del catálogo, ya ordenados por el server. Con respaldo local: sin medios de pago

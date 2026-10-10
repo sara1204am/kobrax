@@ -1672,6 +1672,10 @@ enum CatalogType {
   SPECIAL_CATEGORY // categorías de "gestión especial" en campo (fallecimiento, enfermedad…) — RT-6
   COLLATERAL_TYPE // qué clase de bien es la garantía (vehículo, inmueble, maquinaria…)
   CREDIT_TYPE // qué clase de crédito es (consumo, microcrédito, vivienda…)
+  INCOME_SOURCE // de qué vive el deudor: asalariado/profesional, comerciante/productivo, otro (F4/13)
+  OCCUPATION // rubro: transportista, funcionario público, comerciante… (F4/13)
+  NO_PAYMENT_REASON // por qué no pagó (F4/13)
+  COLLECTION_MODALITY // cómo conviene cobrarle: en el negocio, recoger la cuota… (F4/13)
 }
 
 /// Gestión agendada (llamada/visita/whatsapp/recordatorio/promesa) sobre un crédito.

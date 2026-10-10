@@ -58,8 +58,12 @@ function makeSignupService(opts: { role?: { id: string } | null; failWith?: unkn
     membership: undefined as Record<string, unknown> | undefined,
     audit: undefined as Record<string, unknown> | undefined,
     categories: undefined as Record<string, unknown>[] | undefined,
+    catalogs: undefined as Record<string, unknown>[] | undefined,
   };
   const tx = {
+    catalogItem: {
+      createMany: async (a: { data: Record<string, unknown>[] }) => void (calls.catalogs = a.data),
+    },
     arrearCategory: {
       createMany: async (a: { data: Record<string, unknown>[] }) => void (calls.categories = a.data),
     },
@@ -138,6 +142,18 @@ describe('AccountsService.create (registro público · S4)', () => {
         [res.accountId, 'C', 61, null],
       ],
     );
+  });
+
+  it('F4/13 · D-01: la cuenta nace con los catálogos por defecto, todos de SU cuenta (antes nacía sin métodos de pago ni bancos)', async () => {
+    const { service, calls } = makeSignupService();
+    const res = await service.create(SIGNUP, {});
+    const rows = calls.catalogs!;
+    assert.ok(rows.length > 0);
+    assert.ok(rows.every((r) => r.accountId === res.accountId));
+    const tipos = new Set(rows.map((r) => r.catalog));
+    for (const t of ['PAYMENT_METHOD', 'BANK', 'INCOME_SOURCE', 'OCCUPATION', 'NO_PAYMENT_REASON', 'COLLECTION_MODALITY']) {
+      assert.ok(tipos.has(t), `falta ${t}`);
+    }
   });
 
   it('🔴 el plan elegido entrega sus asientos, pero como PRUEBA de 30 días', async () => {

@@ -27,7 +27,8 @@
     "db:verify:contraccion": "prisma db execute --file prisma/verify/sin-caso-contraccion.sql --schema prisma/schema.prisma",
     "db:audit:psf": "tsx prisma/audit-psf.ts",
     "db:audit:assignments": "tsx prisma/audit-assignments.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:backfill:catalogs": "tsx prisma/backfill-catalogs.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
