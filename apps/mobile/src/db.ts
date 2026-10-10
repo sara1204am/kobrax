@@ -16,6 +16,7 @@
  * `groupPortfolio`, `partitionDay`), así que no hacía falta SQL rico. Lo que sí se conserva de
  * SQLite es lo que importa: leer una ficha sin cargar la cartera entera, e índices para filtrar.
  */
+import { getKey, open as openAtRest, seal } from './at-rest';
 import * as SQLite from 'expo-sqlite';
 
 /**
@@ -173,6 +174,7 @@ function open(): Promise<SQLite.SQLiteDatabase> {
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     `);
     await ensureVersion(db);
+    await upgradeToSealed(db);
     return db;
   })();
   return dbPromise;
@@ -193,6 +195,34 @@ async function ensureVersion(db: SQLite.SQLiteDatabase): Promise<void> {
   await db.runAsync('DELETE FROM queue');
   await db.runAsync('DELETE FROM meta');
   await db.runAsync('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)', ['schema_version', String(SCHEMA_VERSION)]);
+}
+
+// ── Cifrado en reposo (0.7) ───────────────────────────────────────────────────
+
+/** Descifra una fila (o la devuelve tal cual si es anterior al cifrado). `null` = ilegible. */
+const openSealed = openAtRest;
+
+/**
+ * El payload de la cola, cifrado. **La cola nunca deja de guardar**: sin llave se escribe en claro (perder un cobro es peor)
+ * y la próxima apertura con llave lo cifra (`upgradeToSealed`).
+ */
+async function sealQueue(payload: unknown): Promise<string> {
+  const json = JSON.stringify(payload);
+  return (await seal(json)) ?? json;
+}
+
+/**
+ * Migración perezosa: filas guardadas antes del cifrado. La cola se cifra **en su lugar** (sin perder nada y sin subir
+ * `SCHEMA_VERSION`, que la borraría); el caché, que es descartable, se vacía y se vuelve a bajar ya cifrado.
+ */
+async function upgradeToSealed(db: SQLite.SQLiteDatabase): Promise<void> {
+  if (!(await getKey())) return;
+  const rows = await db.getAllAsync<{ id: number; payload: string }>("SELECT id, payload FROM queue WHERE payload NOT LIKE 'enc1:%'");
+  for (const r of rows) {
+    const sealed = await seal(r.payload);
+    if (sealed) await db.runAsync('UPDATE queue SET payload = ? WHERE id = ?', [sealed, r.id]);
+  }
+  await db.runAsync("DELETE FROM cache WHERE json NOT LIKE 'enc1:%'");
 }
 
 // ── Caché ─────────────────────────────────────────────────────────────────────
@@ -252,11 +282,14 @@ export async function putAll<T extends { id: string }>(
   const db = await open();
   const now = Date.now();
   for (const item of items) {
+    // Sin llave no se escribe: el caché es descartable y NO se guarda en claro (0.7).
+    const json = await seal(JSON.stringify(item));
+    if (json === null) return;
     await db.runAsync('INSERT OR REPLACE INTO cache (kind, scope, id, json, fetched_at) VALUES (?, ?, ?, ?, ?)', [
       kind,
       scopeOf?.(item) ?? '',
       item.id,
-      JSON.stringify(item),
+      json,
       now,
     ]);
   }
@@ -265,11 +298,13 @@ export async function putAll<T extends { id: string }>(
 /** Guarda un valor suelto que no tiene forma de entidad (el compuesto de un detalle, por ejemplo). */
 export async function putOne(kind: CacheKind, id: string, value: unknown): Promise<void> {
   const db = await open();
+  const json = await seal(JSON.stringify(value));
+  if (json === null) return;
   await db.runAsync('INSERT OR REPLACE INTO cache (kind, scope, id, json, fetched_at) VALUES (?, ?, ?, ?, ?)', [
     kind,
     '',
     id,
-    JSON.stringify(value),
+    json,
     Date.now(),
   ]);
 }
@@ -284,7 +319,9 @@ export async function getOne<T>(kind: CacheKind, id: string): Promise<T | null> 
     'SELECT json FROM cache WHERE kind = ? AND id = ? ORDER BY fetched_at DESC LIMIT 1',
     [kind, id],
   );
-  return row ? (JSON.parse(row.json) as T) : null;
+  if (!row) return null;
+  const plain = await openSealed(row.json);
+  return plain === null ? null : (JSON.parse(plain) as T);
 }
 
 /** Todo lo de un recurso, o sólo lo de un `scope` (la respuesta guardada de una consulta). */
@@ -294,7 +331,13 @@ export async function getMany<T>(kind: CacheKind, scope?: string): Promise<T[]> 
     scope === undefined
       ? await db.getAllAsync<{ json: string }>('SELECT json FROM cache WHERE kind = ?', [kind])
       : await db.getAllAsync<{ json: string }>('SELECT json FROM cache WHERE kind = ? AND scope = ?', [kind, scope]);
-  return rows.map((r) => JSON.parse(r.json) as T);
+  const out: T[] = [];
+  for (const r of rows) {
+    // Una fila ilegible (llave perdida o dato alterado) se descarta: el caché se vuelve a bajar.
+    const plain = await openSealed(r.json);
+    if (plain !== null) out.push(JSON.parse(plain) as T);
+  }
+  return out;
 }
 
 /**
@@ -347,7 +390,7 @@ export async function enqueue(input: {
   const db = await open();
   const res = await db.runAsync(
     'INSERT INTO queue (user_id, kind, payload, idempotency_key, created_at) VALUES (?, ?, ?, ?, ?)',
-    [input.userId, input.kind, JSON.stringify(input.payload), input.idempotencyKey ?? null, Date.now()],
+    [input.userId, input.kind, await sealQueue(input.payload), input.idempotencyKey ?? null, Date.now()],
   );
   return res.lastInsertRowId;
 }
@@ -365,16 +408,22 @@ export async function pending(userId: string): Promise<QueueRow[]> {
     last_error: string | null;
     created_at: number;
   }>('SELECT * FROM queue WHERE user_id = ? ORDER BY id ASC', [userId]);
-  return rows.map((r) => ({
+  const out: QueueRow[] = [];
+  for (const r of rows) {
+    // Ilegible = se entrega tal cual: `parseAction` la muestra como «no soportada» con su motivo. Nunca se borra.
+    const payload = (await openSealed(r.payload)) ?? r.payload;
+    out.push({
     id: r.id,
     userId: r.user_id,
     kind: r.kind as QueueKind,
-    payload: r.payload,
+    payload,
     idempotencyKey: r.idempotency_key,
     attempts: r.attempts,
     lastError: r.last_error,
     createdAt: r.created_at,
-  }));
+    });
+  }
+  return out;
 }
 
 /** Cuántas acciones esperan (alimenta el contador del `OfflineIndicator`). */
@@ -390,7 +439,7 @@ export async function pendingCount(userId: string): Promise<number> {
  */
 export async function updatePayload(id: number, payload: unknown): Promise<void> {
   const db = await open();
-  await db.runAsync('UPDATE queue SET payload = ? WHERE id = ?', [JSON.stringify(payload), id]);
+  await db.runAsync('UPDATE queue SET payload = ? WHERE id = ?', [await sealQueue(payload), id]);
 }
 
 /** Valores sueltos que NO son caché (sobreviven al logout igual que la cola): mapas de ids locales→server. */

@@ -29,6 +29,13 @@ jest.mock('expo-sqlite', () => ({
   })),
 }));
 
+// El cifrado en reposo se prueba aparte (at-rest.test.ts / db-sealed.test.ts); acá la base ve el texto tal cual.
+jest.mock('./at-rest', () => ({
+  getKey: jest.fn(async () => null),
+  seal: jest.fn(async (s: string) => s),
+  open: jest.fn(async (s: string) => s),
+}));
+
 import { dequeue, enqueue, markFailed, pending, purgeCache, putAll, resetForTests, SCHEMA_VERSION } from './db';
 
 /** Las queries emitidas desde que arrancó el caso, en texto plano. */
