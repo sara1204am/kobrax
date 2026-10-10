@@ -10,7 +10,7 @@ import { installmentHint } from '@/visit-result';
 import { Button } from '@/components';
 import { MapCanvas, type MapMarker } from '@/maps/MapCanvas';
 import { money } from '@/agenda-form';
-import { actionLinks, clientContext } from '@/agenda.service';
+import { actionLinks, clientContext, whatsappLink } from '@/agenda.service';
 import { straightLine } from '@/route-eta';
 import { getRoute, getRoutePreview, type RouteItem, type RouteStopItem } from '@/routes.service';
 import { changeStopLocation } from '@/route-stop-location';
@@ -115,7 +115,13 @@ export default function MapaRutaScreen() {
       tone: s.status === RouteStopStatus.VISITED ? 'done' : s.id === selectedId ? 'active' : 'default',
     }));
 
-  const links = actionLinks({ phone });
+  const links = actionLinks({
+    phone,
+    latitude: selected?.latitude,
+    longitude: selected?.longitude,
+    address: selected?.address,
+  });
+  const whatsapp = phone ? whatsappLink(phone) : undefined;
   const sinPendientes = stops.length > 0 && !stops.some((s) => s.status === RouteStopStatus.PENDING);
   const center = selected?.latitude != null && selected.longitude != null
     ? { latitude: selected.latitude, longitude: selected.longitude }
@@ -178,6 +184,22 @@ export default function MapaRutaScreen() {
           onPrimary={() => router.push(`/rutas/resultado?routeId=${routeId}&stopId=${selected.id}`)}
           actions={
             <View style={styles.acciones}>
+              <View style={{ minWidth: '45%', flexGrow: 1 }}>
+                <Button
+                  label="💬 WhatsApp"
+                  variant="ghost"
+                  disabled={!whatsapp}
+                  onPress={() => whatsapp && void Linking.openURL(whatsapp)}
+                />
+              </View>
+              <View style={{ minWidth: '45%', flexGrow: 1 }}>
+                <Button
+                  label="🧭 Ir en mapa"
+                  variant="ghost"
+                  disabled={!links.geo}
+                  onPress={() => links.geo && void Linking.openURL(links.geo)}
+                />
+              </View>
               <View style={{ flex: 1 }}>
                 <Button
                   label="📞 Llamar"
@@ -191,6 +213,13 @@ export default function MapaRutaScreen() {
                   <Button label="📍 Otra dirección" variant="ghost" onPress={() => setLocSheet(true)} />
                 </View>
               )}
+              <View style={{ minWidth: '45%', flexGrow: 1 }}>
+                <Button
+                  label="🕘 Historial"
+                  variant="ghost"
+                  onPress={() => router.push(`/rutas/historial?stopId=${selected.id}`)}
+                />
+              </View>
               <View style={{ flex: 1 }}>
                 <Button
                   label="Ver detalle"
@@ -251,7 +280,7 @@ const styles = StyleSheet.create({
   cierre: { padding: SPACING.lg, gap: SPACING.md, alignItems: 'center', backgroundColor: COLORS.white },
   zigzag: { backgroundColor: COLORS.navy, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
   zigzagText: { ...TYPE.secondary, color: COLORS.white, fontWeight: '700' },
-  acciones: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm },
+  acciones: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, marginTop: SPACING.sm },
   error: {
     ...TYPE.secondary,
     color: COLORS.danger,
