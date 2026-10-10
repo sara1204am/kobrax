@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { Permission, RoleType, todayISO, type MeInfo, type Member, type RouteItem } from '@kobrax/shared';
@@ -58,22 +57,7 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
       <PageHeader
         title={t('title')}
         subtitle={t('subtitle')}
-        /*
-         * La acción primaria de la pantalla, a la vista desde el historial: quien mira lo que pasó
-         * suele venir justo a preparar lo que viene. Va en el encabezado y no en la barra de la
-         * tabla —al revés que «Nuevo cliente»— porque no actúa sobre la lista que se está mirando:
-         * arma las rutas de otro día.
-         */
-        actions={
-          supervises ? (
-            <Link
-              href="/rutas/planificar"
-              className="inline-flex h-9 shrink-0 items-center rounded-lg bg-k-navy px-3 text-[13px] font-medium text-white hover:bg-k-slate"
-            >
-              {t('planning.cta')}
-            </Link>
-          ) : undefined
-        }
+        // Sin «Planificar rutas» aquí: cada cobrador se planifica desde su fila en «Hoy» (y por «Planificar» en la lista).
       />
       <RouteTabs modo={modo} vista={vista} />
     </>
@@ -111,6 +95,7 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
           members={members}
           userId={me.body.data?.userId}
           canPlan={supervises}
+          params={searchParams}
         />
       </>
     );

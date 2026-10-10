@@ -268,3 +268,38 @@ describe('RecordVisitDialog · parada sin ubicación', () => {
     expect(calls.visit[0]).toMatchObject({ lat: 0, lng: 0, gpsFallback: true });
   });
 });
+
+
+describe('RecordVisitDialog · la cuota que correspondía pagar', () => {
+  const CON_CUOTA: RecordStop = { ...STOP, installmentAmount: 450, nextDueDate: '2026-10-07' };
+
+  it('con dato de la cuota, la muestra bajo el monto cobrado —con su vencimiento— y antes del tope', async () => {
+    mockApi();
+    setup({ stop: CON_CUOTA });
+    await choose('Cobrado');
+    expect(screen.getByText(/Cuota a pagar: .*450/)).toBeInTheDocument();
+    expect(screen.getByText(/vence/)).toBeInTheDocument();
+    const cuota = screen.getByText(/Cuota a pagar/);
+    const tope = screen.getByText(/Hasta/);
+    // La cuota va antes que «Hasta el total».
+    expect(cuota.compareDocumentPosition(tope) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('«Usar este monto» llena el campo con la cuota', async () => {
+    mockApi();
+    setup({ stop: CON_CUOTA });
+    await choose('Cobrado');
+    await userEvent.click(screen.getByRole('button', { name: 'Usar este monto' }));
+    expect(screen.getByLabelText('Monto cobrado')).toHaveValue('450');
+    // Ya está puesto: el botón sobra.
+    expect(screen.queryByRole('button', { name: 'Usar este monto' })).toBeNull();
+  });
+
+  it('🔴 sin dato de la cuota no se muestra nada: nunca «Cuota a pagar: Bs 0»', async () => {
+    mockApi();
+    setup({ stop: STOP });
+    await choose('Cobrado');
+    expect(screen.queryByText(/Cuota a pagar/)).toBeNull();
+    expect(screen.getByText(/Hasta/)).toBeInTheDocument();
+  });
+});

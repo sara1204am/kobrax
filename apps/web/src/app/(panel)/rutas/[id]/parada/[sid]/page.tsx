@@ -104,6 +104,8 @@ export default async function ParadaPage({
     latitude: stop.latitude,
     longitude: stop.longitude,
     overdueAmount: stop.overdueAmount,
+    installmentAmount: stop.installmentAmount,
+    nextDueDate: stop.nextDueDate,
     currency: stop.currency,
     externalSource: stop.externalSource,
     locationId: stop.locationId,
@@ -166,7 +168,8 @@ export default async function ParadaPage({
         (stop.creditId ? (
           <>
             {stop.externalSource && <p className="mb-3 text-[13px] text-k-warning-text">{ts('externalHint')}</p>}
-            <FichaGestion creditId={stop.creditId} withHeader={false} />
+            {/* Sin «La persona»: teléfonos, direcciones y garantes están en «Ver ficha del cliente». */}
+            <FichaGestion creditId={stop.creditId} withHeader={false} withPerson={false} />
           </>
         ) : (
           <EmptyState title={ts('noCredit')} />

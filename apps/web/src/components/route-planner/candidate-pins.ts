@@ -47,6 +47,7 @@ export function candidatePins(
           label: c.clientName ?? undefined,
           detail: [opts.detail(c), describeLocation(loc, opts.typeLabel)].filter(Boolean).join(' · '),
           picked: false,
+          photoUrl: loc.photoUrl,
         })),
   );
 }

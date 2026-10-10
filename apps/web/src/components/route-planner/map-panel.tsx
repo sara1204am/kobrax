@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { PhotoViewer } from '@/components/photo-viewer';
 import { RADIUS_KM } from '@/lib/plan';
 import { BADGE_CLASS, PointsMap, type MapPoint, type PinTone, type PointBadge } from './points-map';
 
@@ -27,8 +28,21 @@ export interface OrderItem {
   tone?: PinTone;
   /** Si hay, el nombre es un enlace (a la parada). */
   href?: string;
-  /** Acciones propias de la pantalla: «Ver», «Registrar», WhatsApp. */
+  /** Acciones propias de la pantalla que van **antes** de «Ir en mapa»: WhatsApp, «Ver detalle». */
   trailing?: ReactNode;
+  /** La acción principal, **después** de «Ir en mapa»: «Registrar». */
+  primary?: ReactNode;
+  /** Más etiquetas junto a las de estado: la fuente del saldo («PSF · al 07/10»). */
+  chips?: ReactNode;
+  /** Acciones menos frecuentes, detrás de los tres puntos. Sin ninguna no hay botón. */
+  menu?: { label: string; href?: string; onClick?: () => void }[];
+  /**
+   * Las fotos de la casa de esa parada, **la principal primero**. Con ellas la fila muestra una miniatura y tocarla abre
+   * todas: es para reconocer la puerta al llegar.
+   */
+  photos?: string[];
+  /** De quién es la casa si no es del cliente (un garante, un familiar): el visor dice «Evidencia de …». */
+  photosOwner?: string;
 }
 
 /** El número de la fila, del mismo color que su pin: la lista y el mapa tienen que decir lo mismo. */
@@ -58,6 +72,7 @@ export function MapPanel({
   onMove,
   onReorder,
   onRemove,
+  onChangeAddress,
   counter,
   actions,
   initialOrderOpen = false,
@@ -79,6 +94,8 @@ export function MapPanel({
   /** Arrastrar una parada a otro lugar del recorrido (F4/12). Sin esto, el orden se cambia solo con las flechas. */
   onReorder?: (id: string, toIndex: number) => void;
   onRemove?: (id: string) => void;
+  /** Cambiar a qué dirección del cliente va una parada (la misma pregunta del modal de ubicación). Sin esto no hay botón. */
+  onChangeAddress?: (id: string) => void;
   /** Qué dice la línea de arriba: cuántos hay en el mapa, o en el área. Lo arma cada pantalla. */
   counter: string;
   /** Botones propios de la pantalla —«Editar», «Listo»—, a la derecha de los del mapa. */
@@ -109,6 +126,12 @@ export function MapPanel({
   const [showOrder, setShowOrder] = useState(initialOrderOpen);
   /** La parada bajo el cursor, venga de la fila o del pin. */
   const [hover, setHover] = useState<string | null>(null);
+  /** «Ir en mapa»: a qué punto llevar el centro del mapa. Un objeto nuevo en cada clic. */
+  const [center, setCenter] = useState<{ id: string } | null>(null);
+  const mapBox = useRef<HTMLDivElement>(null);
+  const tPhotos = useTranslations('portfolio.photos');
+  /** La parada cuyas fotos se están mirando. */
+  const [gallery, setGallery] = useState<{ name: string; hint?: string; photos: string[]; owner?: string } | null>(null);
 
   // Si lo resaltado desaparece con el cursor encima (se quitó la parada), `mouseleave` nunca llega: se suelta acá.
   useEffect(() => {
@@ -229,63 +252,116 @@ export function MapPanel({
                       }}
                       onMouseEnter={() => setHover(o.id)}
                       onMouseLeave={() => setHover(null)}
-                      className={`flex items-start gap-2 px-3 py-2.5 text-[13px] ${hover === o.id ? 'bg-k-highlight' : ''} ${
+                      className={`px-3 py-3 text-[13px] ${hover === o.id ? 'bg-k-highlight' : ''} ${
                         onReorder && !o.locked ? 'cursor-grab active:cursor-grabbing' : ''
                       }`}
                     >
-                      {onReorder && !o.locked && (
-                        <span aria-hidden className="mt-1 shrink-0 select-none text-[14px] leading-none text-k-muted">
-                          ⠿
-                        </span>
-                      )}
-                      <span
-                        className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white ${
-                          (o.tone && NUMBER_CLASS[o.tone]) ?? 'bg-k-navy'
-                        }`}
-                      >
-                        {i + 1}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        {o.href ? (
-                          <Link href={o.href} className="block truncate font-medium text-k-text hover:underline">
-                            {o.name}
-                          </Link>
-                        ) : (
-                          <span className="block truncate text-k-text">{o.name}</span>
+                      <div className="flex items-start gap-2">
+                        {onReorder && !o.locked && (
+                          <span aria-hidden className="mt-1 shrink-0 select-none text-[14px] leading-none text-k-muted">
+                            ⠿
+                          </span>
                         )}
-                        {o.hint && <span className="block truncate text-[12px] text-k-text-2">{o.hint}</span>}
-                        {o.badges && o.badges.length > 0 && (
-                          <span className="mt-1 flex flex-wrap gap-1">
-                            {o.badges.map((b, bi) => (
-                              <span key={`${bi}-${b.label}`} className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${BADGE_CLASS[b.tone]}`}>
-                                {b.label}
+                        <span
+                          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold text-white ${
+                            (o.tone && NUMBER_CLASS[o.tone]) ?? 'bg-k-navy'
+                          }`}
+                        >
+                          {i + 1}
+                        </span>
+                        {/* La casa, chica: reconocerla es lo que se mira antes de tocar la puerta. Tocarla abre todas. */}
+                        {o.photos && o.photos.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setGallery({ name: o.name, hint: o.hint, photos: o.photos!, owner: o.photosOwner })}
+                            aria-label={tPhotos('open', { name: o.name })}
+                            title={tPhotos('open', { name: o.name })}
+                            className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-k-border bg-white"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element -- la sirve el BFF con la sesión */}
+                            <img src={o.photos[0]} alt="" loading="lazy" className="h-full w-full object-cover" />
+                            {o.photos.length > 1 && (
+                              <span className="absolute bottom-0 right-0 rounded-tl bg-k-navy/80 px-1 text-[10px] font-semibold leading-4 text-white">
+                                {o.photos.length}
+                              </span>
+                            )}
+                          </button>
+                        )}
+                        <span className="min-w-0 flex-1">
+                          {o.href ? (
+                            <Link href={o.href} className="block truncate text-[14px] font-semibold text-k-text hover:underline">
+                              {o.name}
+                            </Link>
+                          ) : (
+                            <span className="block truncate text-[14px] font-semibold text-k-text">{o.name}</span>
+                          )}
+                          {o.hint && <span className="block truncate text-[12px] text-k-text-2">{o.hint}</span>}
+                          {((o.badges && o.badges.length > 0) || o.chips) && (
+                            <span className="mt-1.5 flex flex-wrap items-center gap-1">
+                              {o.chips}
+                              {o.badges?.map((b, bi) => (
+                                <span key={`${bi}-${b.label}`} className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${BADGE_CLASS[b.tone]}`}>
+                                  {b.label}
+                                </span>
+                              ))}
+                            </span>
+                          )}
+                        </span>
+                        {/* La cabecera de la fila: la hora y, editando, mover y quitar. Siguen donde estaban. */}
+                        <span className="flex shrink-0 flex-col items-end gap-1.5">
+                          {o.meta && <span className="pt-0.5 text-[12px] tabular-nums text-k-text-2">{o.meta}</span>}
+                          {/* La parada gestionada no ofrece botones: es una explicación, no un control
+                              apagado — un ✕ en gris invita a insistir. */}
+                          {onMove &&
+                            (o.locked ? (
+                              <span className="text-[11px] text-k-muted">{t('lockedStop')}</span>
+                            ) : (
+                              <span className="flex items-center gap-1">
+                                {onChangeAddress && (
+                                  <OrderButton onClick={() => onChangeAddress(o.id)} label={t('changeAddress')}>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                                      <path d="M12 20.5s5.5-4.8 5.5-9.5a5.5 5.5 0 1 0-11 0c0 4.7 5.5 9.5 5.5 9.5z" />
+                                      <circle cx="12" cy="11" r="1.8" />
+                                    </svg>
+                                  </OrderButton>
+                                )}
+                                <OrderButton onClick={() => onMove(o.id, -1)} disabled={i === 0} label={t('moveUp')}>
+                                  ↑
+                                </OrderButton>
+                                <OrderButton onClick={() => onMove(o.id, 1)} disabled={i === order.length - 1} label={t('moveDown')}>
+                                  ↓
+                                </OrderButton>
+                                {onRemove && (
+                                  <OrderButton onClick={() => onRemove(o.id)} label={t('removeStop')}>
+                                    ✕
+                                  </OrderButton>
+                                )}
                               </span>
                             ))}
-                          </span>
-                        )}
-                        {o.trailing && <span className="mt-1.5 flex flex-wrap items-center gap-1.5">{o.trailing}</span>}
-                      </span>
-                      {o.meta && <span className="shrink-0 pt-0.5 text-[12px] tabular-nums text-k-text-2">{o.meta}</span>}
-                      {/* La parada gestionada no ofrece botones: es una explicación, no un control
-                          apagado — un ✕ en gris invita a insistir. */}
-                      {onMove &&
-                        (o.locked ? (
-                          <span className="shrink-0 pt-0.5 text-[11px] text-k-muted">{t('lockedStop')}</span>
-                        ) : (
-                          <span className="flex shrink-0 items-center gap-1">
-                            <OrderButton onClick={() => onMove(o.id, -1)} disabled={i === 0} label={t('moveUp')}>
-                              ↑
-                            </OrderButton>
-                            <OrderButton onClick={() => onMove(o.id, 1)} disabled={i === order.length - 1} label={t('moveDown')}>
-                              ↓
-                            </OrderButton>
-                            {onRemove && (
-                              <OrderButton onClick={() => onRemove(o.id)} label={t('removeStop')}>
-                                ✕
-                              </OrderButton>
-                            )}
-                          </span>
-                        ))}
+                        </span>
+                      </div>
+
+                      {/* Las acciones, en su propia fila: WhatsApp (solo ícono), ver el detalle, ir al punto en el mapa y registrar. */}
+                      {(o.trailing || o.primary || points.some((p) => p.id === o.id) || (o.menu && o.menu.length > 0)) && (
+                        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-k-border pt-2.5">
+                          {o.trailing}
+                          {points.some((p) => p.id === o.id) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCenter({ id: o.id });
+                                // En pantallas angostas el mapa queda fuera de la vista: se lo trae.
+                                mapBox.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+                              }}
+                              className="h-8 rounded-lg border border-k-border bg-white px-3 text-[13px] font-medium text-k-slate hover:bg-k-bg"
+                            >
+                              {t('goToMap')}
+                            </button>
+                          )}
+                          {o.primary}
+                          {o.menu && o.menu.length > 0 && <RowMenu items={o.menu} label={t('moreActions')} />}
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ol>
@@ -295,7 +371,7 @@ export function MapPanel({
           </div>
         )}
 
-        <div className="min-w-0 flex-1">
+        <div ref={mapBox} className="min-w-0 flex-1">
           {points.length > 0 || area ? (
             <PointsMap
               points={points}
@@ -303,6 +379,7 @@ export function MapPanel({
               height={mapHeight}
               line={line}
               focusId={hover}
+              centerRequest={center}
               onPointHover={setHover}
               // El radio escrito viaja al mapa: la etiqueta del borde y el select dicen lo mismo.
               circle={area ? { ...area, label: radioLabel(area.radiusKm) } : undefined}
@@ -318,6 +395,83 @@ export function MapPanel({
           )}
         </div>
       </div>
+
+      {/* Las fotos de la casa de esa parada: una grande a la vez, con la principal marcada. */}
+      <PhotoViewer
+        open={gallery !== null}
+        onClose={() => setGallery(null)}
+        title={gallery?.name ?? ''}
+        address={gallery?.hint}
+        photos={gallery?.photos ?? []}
+        evidence={gallery?.owner ? tPhotos('viewer.evidenceOf', { name: gallery.owner }) : undefined}
+      />
+    </div>
+  );
+}
+
+/**
+ * Los tres puntos de una fila: las acciones menos frecuentes. Se cierra al tocar afuera o con Esc.
+ * No es un `<select>`: cada entrada es un enlace o una acción, y el menú nativo no las distingue.
+ */
+function RowMenu({ items, label }: { items: { label: string; href?: string; onClick?: () => void }[]; label: string }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => {
+      if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+
+  const item = 'block w-full px-3 py-2 text-left text-[13px] text-k-text hover:bg-k-bg';
+  return (
+    <div ref={box} className="relative ml-auto">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label={label}
+        title={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex h-8 w-9 items-center justify-center rounded-lg border border-k-border bg-white text-k-text-2 hover:bg-k-bg"
+      >
+        <span aria-hidden className="text-[16px] leading-none">
+          ⋯
+        </span>
+      </button>
+      {open && (
+        <ul role="menu" className="absolute bottom-full right-0 z-30 mb-1 min-w-[190px] overflow-hidden rounded-xl border border-k-border bg-white py-1 shadow-k-card">
+          {items.map((m) => (
+            <li key={m.label} role="none">
+              {m.href ? (
+                <Link role="menuitem" href={m.href} className={item} onClick={() => setOpen(false)}>
+                  {m.label}
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={item}
+                  onClick={() => {
+                    m.onClick?.();
+                    setOpen(false);
+                  }}
+                >
+                  {m.label}
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

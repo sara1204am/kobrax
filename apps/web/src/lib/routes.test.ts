@@ -3,8 +3,10 @@ import { RouteStatus, RouteStopStatus, summarizeDay, type RouteItem } from '@kob
 import {
   CATEGORY_TONE,
   DEFAULT_PAGE_SIZE,
+  NO_ROUTE,
   ROUTE_STATUS_TONE,
   STOP_STATUS_TONE,
+  filterTodayRows,
   hasRouteFilters,
   routeLimit,
   routeMode,
@@ -190,6 +192,45 @@ describe('hasRouteFilters', () => {
     expect(hasRouteFilters({})).toBe(false);
     expect(hasRouteFilters({ collectorId: 'u1' })).toBe(true);
     expect(hasRouteFilters({ status: 'PLANNED' })).toBe(true);
+  });
+});
+
+describe('filterTodayRows — filtros y orden de «Hoy»', () => {
+  const r = (collectorId: string, status: RouteStatus, over: Partial<RouteItem> = {}) =>
+    ({ collectorId, route: { id: `r-${collectorId}`, collectorId, status, totalCases: 10, visitedCount: 0, ...over } as RouteItem });
+  const rows = [
+    r('ana', RouteStatus.IN_PROGRESS, { totalCases: 8, visitedCount: 4, collected: 100 }),
+    r('bea', RouteStatus.PLANNED, { totalCases: 12, collected: 0 }),
+    { collectorId: 'carla' },
+    r('dora', RouteStatus.COMPLETED, { totalCases: 5, visitedCount: 5, collected: 900 }),
+  ];
+  const names: Record<string, string> = { ana: 'Ana', bea: 'Bea', carla: 'Carla', dora: 'Dora' };
+  const nameOf = (id: string) => names[id] ?? id;
+  const ids = (list: ReturnType<typeof filterTodayRows>) => list.map((x) => x.collectorId);
+
+  it('sin parámetros no toca ni el orden ni las filas', () => {
+    expect(ids(filterTodayRows(rows, {}, nameOf))).toEqual(['ana', 'bea', 'carla', 'dora']);
+  });
+
+  it('filtra por cobrador y por estado, y «sin ruta» es un estado más', () => {
+    expect(ids(filterTodayRows(rows, { collectorId: 'bea' }, nameOf))).toEqual(['bea']);
+    expect(ids(filterTodayRows(rows, { status: RouteStatus.COMPLETED }, nameOf))).toEqual(['dora']);
+    expect(ids(filterTodayRows(rows, { status: NO_ROUTE }, nameOf))).toEqual(['carla']);
+  });
+
+  it('ordena por paradas, avance y recaudado en los dos sentidos', () => {
+    expect(ids(filterTodayRows(rows, { sort: 'stops', dir: 'desc' }, nameOf))).toEqual(['bea', 'ana', 'dora', 'carla']);
+    expect(ids(filterTodayRows(rows, { sort: 'progress', dir: 'desc' }, nameOf))).toEqual(['dora', 'ana', 'bea', 'carla']);
+    expect(ids(filterTodayRows(rows, { sort: 'collected', dir: 'asc' }, nameOf))).toEqual(['bea', 'ana', 'dora', 'carla']);
+  });
+
+  it('🔴 quien no tiene ruta queda al final al ordenar por un dato de la ruta, suba o baje', () => {
+    expect(ids(filterTodayRows(rows, { sort: 'stops', dir: 'asc' }, nameOf)).at(-1)).toBe('carla');
+    expect(ids(filterTodayRows(rows, { sort: 'stops', dir: 'desc' }, nameOf)).at(-1)).toBe('carla');
+  });
+
+  it('una clave de orden o un estado desconocidos no hacen nada', () => {
+    expect(ids(filterTodayRows(rows, { sort: 'nada', status: 'NOPE' }, nameOf))).toEqual(['ana', 'bea', 'carla', 'dora']);
   });
 });
 

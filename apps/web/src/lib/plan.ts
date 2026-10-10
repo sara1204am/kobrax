@@ -22,6 +22,8 @@ export interface PlanLocation {
   address?: string;
   ownerName?: string;
   ownerRelation?: string;
+  /** La foto principal de la ubicación (la primera): se ve chica en el mapa para reconocer la casa. */
+  photoUrl?: string;
 }
 
 /**

@@ -59,6 +59,11 @@ export interface MapPoint {
   tone?: PinTone;
   /** Etiquetas del globo: «Visitada», «Hora fija 10:00», «Visita agendada». */
   badges?: PointBadge[];
+  /**
+   * La foto principal de esa dirección: se dibuja **chica sobre el pin** para reconocer la casa al llegar. Sin ella, el pin
+   * queda como siempre.
+   */
+  photoUrl?: string;
 }
 
 export interface MapCircle {
@@ -90,6 +95,7 @@ export function PointsMap({
   onPointClick,
   line,
   focusId,
+  centerRequest,
   onPointHover,
 }: {
   points: MapPoint[];
@@ -98,6 +104,12 @@ export function PointsMap({
   line?: { latitude: number; longitude: number }[];
   /** El punto resaltado desde afuera (la fila de la lista bajo el cursor). */
   focusId?: string | null;
+  /**
+   * Pedir que el mapa vaya a un punto y lo deje al centro («Ir en mapa»). **Es un objeto nuevo en cada pedido** — así
+   * pedir lo mismo dos veces vuelve a centrar aunque el mapa ya se haya movido —, y reemplaza al viejo «ir al punto al pasar
+   * el cursor por la fila», que movía el mapa sin que nadie lo pidiera.
+   */
+  centerRequest?: { id: string } | null;
   /** Avisa qué punto tiene el cursor encima, para resaltar su fila. */
   onPointHover?: (id: string | null) => void;
   circle?: MapCircle;
@@ -332,6 +344,7 @@ export function PointsMap({
           dot.textContent = pinText(p);
         }
         hit.classList.toggle('z-40', focused);
+        fillPhoto(hit, p);
         fillTip(hit, p, focused);
         existente.setLngLat([p.longitude, p.latitude]);
         continue;
@@ -359,6 +372,7 @@ export function PointsMap({
       dot.className = pinClass(p, focused);
       dot.textContent = pinText(p);
       hit.appendChild(dot);
+      fillPhoto(hit, p);
       fillTip(hit, p, focused);
       hit.classList.toggle('z-40', focused);
 
@@ -382,15 +396,14 @@ export function PointsMap({
     }
   }, [points, focusId, line]);
 
-  // Si el punto resaltado desde la lista queda fuera de la vista, el mapa va hacia él.
+  // «Ir en mapa»: el punto pedido queda al centro y lo bastante cerca como para reconocer la calle.
   useEffect(() => {
     const m = map.current;
-    if (!m || !focusId) return;
-    const p = pointsRef.current.find((x) => x.id === focusId);
+    if (!m || !centerRequest) return;
+    const p = pointsRef.current.find((x) => x.id === centerRequest.id);
     if (!p) return;
-    const at: LngLatLike = [p.longitude, p.latitude];
-    if (!m.getBounds().contains(at)) m.easeTo({ center: at, duration: 250 });
-  }, [focusId]);
+    m.easeTo({ center: [p.longitude, p.latitude] as LngLatLike, zoom: Math.max(m.getZoom(), 16), duration: 450 });
+  }, [centerRequest]);
 
   // Encuadre: sólo cuando cambia CUÁNTOS hay. Reencuadrar en cada tilde movería el mapa bajo el dedo.
   useEffect(() => {
@@ -643,6 +656,32 @@ function pinClass(p: MapPoint, focused: boolean): string {
  * El globo de un pin: nombre, detalle y etiquetas. Se rehace al repintar —cambia el estado de la parada, llega su hora—
  * y **no recibe eventos**: si los recibiera, taparía al punto de al lado y el clic caería en el globo y no en el vecino.
  */
+/**
+ * La foto de la casa, chica y **encima del pin**: es lo que permite reconocer la puerta al llegar sin abrir la ficha.
+ *
+ * No toma el clic (`pointer-events-none`): el área que responde sigue siendo la del pin, así que una foto no le roba el toque
+ * al vecino. Se agrega sólo si la parada tiene foto y se saca si deja de tenerla.
+ */
+function fillPhoto(hit: HTMLElement, p: MapPoint): void {
+  let img = hit.querySelector<HTMLImageElement>('img[data-photo]');
+  if (!p.photoUrl) {
+    img?.remove();
+    return;
+  }
+  if (!img) {
+    img = document.createElement('img');
+    img.setAttribute('data-photo', '');
+    img.alt = '';
+    img.loading = 'lazy';
+    img.className =
+      'pointer-events-none absolute bottom-full left-1/2 mb-0.5 h-9 w-9 -translate-x-1/2 rounded-md border-2 border-white bg-white object-cover shadow-md';
+    // Una foto que no carga (borrada, sin sesión) no deja un ícono roto sobre el mapa.
+    img.addEventListener('error', () => img?.remove());
+    hit.appendChild(img);
+  }
+  if (img.getAttribute('src') !== p.photoUrl) img.src = p.photoUrl;
+}
+
 function fillTip(hit: HTMLElement, p: MapPoint, focused: boolean): void {
   let tip = hit.querySelector<HTMLElement>('[data-tip]');
   if (!p.label) {
@@ -654,7 +693,7 @@ function fillTip(hit: HTMLElement, p: MapPoint, focused: boolean): void {
     tip.setAttribute('data-tip', '');
     hit.appendChild(tip);
   }
-  tip.className = `pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 -translate-x-1/2 whitespace-nowrap rounded-lg border border-k-border bg-white px-2.5 py-1.5 text-left shadow-k-card group-hover:block ${focused ? 'block' : 'hidden'}`;
+  tip.className = `pointer-events-none absolute bottom-full left-1/2 z-50 ${p.photoUrl ? 'mb-11' : 'mb-1'} -translate-x-1/2 whitespace-nowrap rounded-lg border border-k-border bg-white px-2.5 py-1.5 text-left shadow-k-card group-hover:block ${focused ? 'block' : 'hidden'}`;
   tip.replaceChildren();
 
   const name = document.createElement('span');

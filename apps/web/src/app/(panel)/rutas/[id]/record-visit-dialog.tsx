@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import {
   AgendaItemType,
   AgendaTimeSlot,
@@ -18,7 +18,7 @@ import {
   type VisitResultForm,
 } from '@kobrax/shared';
 import { Modal } from '@/components/modal';
-import { money } from '@/lib/format';
+import { dayDate, money } from '@/lib/format';
 import { postJson } from '@/lib/client';
 
 /** La parada sobre la que se registra: lo que el formulario necesita saber de ella. */
@@ -31,6 +31,9 @@ export interface RecordStop {
   latitude?: number;
   longitude?: number;
   overdueAmount?: number;
+  /** La cuota que correspondía pagar y cuándo vencía: se muestra bajo el monto, si hay dato. */
+  installmentAmount?: number;
+  nextDueDate?: string;
   currency?: string;
   externalSource?: string;
   /** La ubicación que se visita: sin ella, «volver a visitar» agenda con la dirección escrita. */
@@ -145,6 +148,7 @@ export function RecordVisitDialog({
 
   const cap = paymentCap(stop);
   const currency = stop.currency ?? 'BOB';
+  const locale = useLocale();
   const set = <K extends keyof VisitResultForm>(k: K, v: VisitResultForm[K]) => setForm((f) => ({ ...f, [k]: v }));
   // Agendar la visita pide saber a dónde: la ubicación de la parada, o al menos su dirección.
   const canRevisit = variant !== null && REVISIT_VARIANTS.includes(variant) && !!(stop.locationId || stop.address?.trim());
@@ -336,6 +340,27 @@ export function RecordVisitDialog({
                       className={input}
                       placeholder="0.00"
                     />
+                    {/*
+                      * La cuota que correspondía pagar, **antes** del tope: es lo que el cobrador le pide a la persona; el
+                      * total es solo hasta dónde se puede llegar. Sin dato de la cuota, no se muestra nada (nunca un 0).
+                      */}
+                    {stop.installmentAmount != null && (
+                      <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[12px] text-k-text-2">
+                        <span>
+                          {t('installmentHint', { amount: money(stop.installmentAmount, currency) })}
+                          {stop.nextDueDate ? ` · ${t('installmentDue', { date: dayDate(stop.nextDueDate, locale) })}` : ''}
+                        </span>
+                        {form.amount !== String(stop.installmentAmount) && (
+                          <button
+                            type="button"
+                            onClick={() => set('amount', String(stop.installmentAmount))}
+                            className="font-medium text-k-periwinkle hover:underline"
+                          >
+                            {t('useInstallment')}
+                          </button>
+                        )}
+                      </p>
+                    )}
                     {cap != null && variant === 'PAID' && <p className="mt-1 text-[12px] text-k-muted">{t('capHint', { max: money(cap, currency) })}</p>}
                   </div>
                   {variant === 'PAID' ? (

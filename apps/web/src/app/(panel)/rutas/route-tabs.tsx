@@ -41,7 +41,7 @@ export function RouteTabs({ modo, vista }: { modo: RouteMode; vista: RouteView }
         value={modo}
         label={t('tabs.label')}
         // Al pasar de uno al otro el día de la URL no tiene el mismo sentido: «Hoy» mira UN día y el historial, otro.
-        onChange={(v) => go({ modo: v === 'hoy' ? null : v, date: null, vista: null, from: null, to: null })}
+        onChange={(v) => go({ modo: v === 'hoy' ? null : v, date: null, vista: null, from: null, to: null, collectorId: null, status: null, sort: null, dir: null })}
         options={[
           { value: 'hoy', label: t('tabs.today') },
           { value: 'historial', label: t('tabs.history') },

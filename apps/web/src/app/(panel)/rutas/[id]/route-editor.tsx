@@ -126,6 +126,8 @@ export function RouteEditor({
   const [asking, setAsking] = useState<{ kind: RouteChangeKind; payload: Record<string, unknown> } | null>(null);
   // El crédito al que hay que elegirle la ubicación antes de sumarlo (más de una, o ninguna con punto).
   const [locFor, setLocFor] = useState<AvailableCredit | null>(null);
+  /** La parada a la que se le está cambiando la dirección (la misma pregunta de a qué puerta se va). */
+  const [relocate, setRelocate] = useState<RouteStopItem | null>(null);
 
   // Quien armó la ruta (o su administrador) cambia directo; el resto PIDE el cambio y quien la armó lo aprueba.
   const direct = caps.edit;
@@ -195,6 +197,15 @@ export function RouteEditor({
     setLocFor(c);
   };
 
+  /**
+   * Cambiar a qué dirección del cliente va una parada que ya está en la ruta: abre el mismo modal que al sumar un cliente.
+   * Solo quien armó la ruta y solo una parada pendiente; la API vuelve a validarlo.
+   */
+  const askRelocate = (stopId: string) => {
+    const stop = stops.find((s) => s.id === stopId);
+    if (stop && stop.status === RouteStopStatus.PENDING) setRelocate(stop);
+  };
+
   /** Arrastrar una parada a otro lugar: una sola llamada, la API reordena la lista entera. */
   const reorder = (stopId: string, toIndex: number) => {
     const sequenceOrder = toIndex + 1;
@@ -233,6 +244,8 @@ export function RouteEditor({
   const filas = useMemo(() => (area ? withinRadius(available, area, area.radiusKm) : available), [available, area]);
 
   const withPoint = stops.filter((s) => s.latitude != null && s.longitude != null);
+  /** Dónde está la ruta: la primera parada con punto. El mapa de marcar una dirección sin punto abre por ahí, no en otra ciudad. */
+  const routeCenter = withPoint[0] ? { latitude: withPoint[0].latitude!, longitude: withPoint[0].longitude! } : undefined;
   const nextId = stops
     .filter((s) => isOpenStop(s.status as never))
     .sort((a, b) => a.sequenceOrder - b.sequenceOrder)[0]?.id;
@@ -284,6 +297,7 @@ export function RouteEditor({
       detail: [s.locationOwner, s.address].filter(Boolean).join(' · ') || undefined,
       picked: true,
       order: s.sequenceOrder,
+      photoUrl: s.locationPhotoUrl,
       tone: toneOf(s),
       badges: badgesOf(s),
     }));
@@ -307,6 +321,7 @@ export function RouteEditor({
           label: s.credit.clientName ?? undefined,
           detail: [detailOf(s.credit), distanceLabel(s.km, locale)].filter(Boolean).join(' · '),
           tone: 'suggestion' as const,
+          photoUrl: s.location.photoUrl,
           badges: [{ label: tSuggest('badge'), tone: 'warning' as const }],
         }))
       : [];
@@ -324,6 +339,9 @@ export function RouteEditor({
       id: s.id,
       name: s.clientName ?? '—',
       hint: [s.locationOwner, s.address].filter(Boolean).join(' · ') || '—',
+      // Las fotos de la casa: miniatura en la fila y, al tocarla, todas.
+      photos: s.locationPhotoUrls ?? (s.locationPhotoUrl ? [s.locationPhotoUrl] : undefined),
+      photosOwner: s.locationOwner,
       // La hora real si ya se visitó; la hora fija de la visita agendada si la tiene; si no, nada.
       meta: s.visitedAt ? time(s.visitedAt, locale) : s.scheduledTime,
       tone: toneOf(s),
@@ -333,28 +351,33 @@ export function RouteEditor({
         ? {}
         : {
             href: `/rutas/${routeId}/parada/${s.id}`,
+            // WhatsApp (solo ícono) y «Ver detalle» van antes de «Ir en mapa»; «Registrar» después.
             trailing: (
               <>
-                {/* D7: el cobrador tiene que saber que ese saldo es el reportado por el banco. */}
-                <SourceBadge source={s.externalSource} syncStatus={s.syncStatus} reportedAsOf={s.reportedAsOf} />
-                <WhatsAppButton clientId={s.clientId} clientName={s.clientName} variant="compact" />
+                <WhatsAppButton clientId={s.clientId} clientName={s.clientName} variant="icon" />
                 <Link
                   href={`/rutas/${routeId}/parada/${s.id}`}
                   className="inline-flex h-8 items-center rounded-lg border border-k-border bg-white px-3 text-[13px] font-medium text-k-slate hover:bg-k-bg"
                 >
-                  {tStops('view')}
+                  {tStops('viewDetail')}
                 </Link>
-                {canRecord && (
-                  <button
-                    type="button"
-                    onClick={() => setRecording(s)}
-                    className="h-8 rounded-lg border border-k-periwinkle bg-k-highlight px-3 text-[13px] font-medium text-k-periwinkle hover:bg-k-light-bg"
-                  >
-                    {tStops('register')}
-                  </button>
-                )}
               </>
             ),
+            primary: canRecord ? (
+              <button
+                type="button"
+                onClick={() => setRecording(s)}
+                className="h-8 rounded-lg bg-k-navy px-3 text-[13px] font-semibold text-white hover:bg-k-slate"
+              >
+                {tStops('register')}
+              </button>
+            ) : undefined,
+            // D7: el cobrador tiene que saber que ese saldo es el reportado por el banco.
+            chips: <SourceBadge source={s.externalSource} syncStatus={s.syncStatus} reportedAsOf={s.reportedAsOf} />,
+            menu: [
+              { label: tStops('clientFile'), href: `/cartera/${s.clientId}` },
+              ...(s.address ? [{ label: tStops('copyAddress'), onClick: () => void navigator.clipboard?.writeText(s.address!) }] : []),
+            ],
           }),
     };
   });
@@ -434,6 +457,7 @@ export function RouteEditor({
         onMove={editing && canEditMode ? move : undefined}
         onReorder={editing && canEditMode ? reorder : undefined}
         onRemove={editing && canEditMode ? remove : undefined}
+        onChangeAddress={editing && canEditMode && direct ? askRelocate : undefined}
         alwaysShowList
         listWide
         listTitle={t('detail.stopsCount', { n: stops.length })}
@@ -563,6 +587,8 @@ export function RouteEditor({
             latitude: recording.latitude,
             longitude: recording.longitude,
             overdueAmount: recording.overdueAmount,
+            installmentAmount: recording.installmentAmount,
+            nextDueDate: recording.nextDueDate,
             currency: recording.currency,
             externalSource: recording.externalSource,
             locationId: recording.locationId,
@@ -574,6 +600,22 @@ export function RouteEditor({
         />
       )}
 
+      {relocate && (
+        <PlanLocationDialog
+          open
+          onClose={() => setRelocate(null)}
+          clientId={relocate.clientId}
+          clientName={relocate.clientName}
+          near={routeCenter}
+          chosenId={relocate.locationId}
+          onChoose={(loc) => {
+            const stopId = relocate.id;
+            setRelocate(null);
+            void run(stopId, () => sendJson(`/api/routes/${routeId}/stops/${stopId}`, { locationId: loc.id }, 'PATCH'));
+          }}
+        />
+      )}
+
       {/* A cuál de las ubicaciones del cliente se va: la misma pregunta, el mismo diálogo que al armar la ruta. */}
       {locFor && (
         <PlanLocationDialog
@@ -581,6 +623,7 @@ export function RouteEditor({
           onClose={() => setLocFor(null)}
           clientId={locFor.clientId}
           clientName={locFor.clientName}
+          near={routeCenter}
           onChoose={(loc) => add(locFor.id, loc.id)}
         />
       )}

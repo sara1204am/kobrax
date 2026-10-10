@@ -12,6 +12,8 @@ export interface ChosenLocation {
   label: string;
   latitude?: number;
   longitude?: number;
+  /** Su foto principal: la que se ve chica en el mapa. */
+  photoUrl?: string;
 }
 
 /**
@@ -32,7 +34,10 @@ export function PlanLocationDialog({
   clientName,
   chosenId,
   onChoose,
+  near,
 }: {
+  /** Un punto cercano (las paradas de la ruta) para abrir el mapa cerca cuando la dirección no tiene punto. */
+  near?: { latitude: number; longitude: number };
   open: boolean;
   onClose: () => void;
   clientId: string;
@@ -42,6 +47,7 @@ export function PlanLocationDialog({
 }) {
   const t = useTranslations('panel.routes.planning.location');
   const tType = useTranslations('portfolio.locationType');
+  const tRel = useTranslations('portfolio.relationType');
   const [locs, setLocs] = useState<Loc[]>([]);
   const [value, setValue] = useState('');
   const [loading, setLoading] = useState(false);
@@ -89,9 +95,21 @@ export function PlanLocationDialog({
               if (!chosen) return;
               onChoose({
                 id: chosen.id,
-                label: [tType(chosen.locationType as 'HOME'), chosen.address].filter(Boolean).join(' · '),
+                // «Garante · Juan Pérez (Garante) · Calle 5»: el tipo de lugar, de quién es y dónde.
+                label: [
+                  tType(chosen.locationType as 'HOME'),
+                  chosen.ownerName
+                    ? chosen.ownerRelation
+                      ? `${chosen.ownerName} (${tRel(chosen.ownerRelation as 'GUARANTOR')})`
+                      : chosen.ownerName
+                    : null,
+                  chosen.address,
+                ]
+                  .filter(Boolean)
+                  .join(' · '),
                 latitude: chosen.latitude,
                 longitude: chosen.longitude,
+                photoUrl: chosen.photoUrls?.[0],
               });
               onClose();
             }}
@@ -114,6 +132,7 @@ export function PlanLocationDialog({
           <LocationPicker
             clientId={clientId}
             locations={locs}
+            near={near}
             value={value}
             onChange={setValue}
             onAdded={(l) => {

@@ -21,6 +21,8 @@ export interface MapStop {
   label?: string;
   /** Visitada o pendiente. El dashboard pinta 90 paradas de 11 rutas: sin esto son 90 pines iguales. */
   tone?: 'done' | 'pending';
+  /** La foto principal de la dirección, chica sobre el pin, para reconocer la casa. */
+  photoUrl?: string;
 }
 
 /** Dónde se registró una visita: lo que deja ver si el cobrador estuvo donde dijo. */
@@ -85,6 +87,17 @@ export function RouteMap({
       const size = stop.sequenceOrder ? 'h-7 w-7 text-[12px]' : 'h-4 w-4';
       pin.className = `flex ${size} items-center justify-center rounded-full border-2 border-white ${bg} font-semibold text-white shadow`;
       if (stop.sequenceOrder) pin.textContent = String(stop.sequenceOrder);
+      if (stop.photoUrl) {
+        // El pin es el elemento del marcador: la foto va adentro, sobre él, sin tomar el clic.
+        pin.style.position = 'relative';
+        const img = document.createElement('img');
+        img.src = stop.photoUrl;
+        img.alt = '';
+        img.className =
+          'pointer-events-none absolute bottom-full left-1/2 mb-0.5 h-9 w-9 -translate-x-1/2 rounded-md border-2 border-white bg-white object-cover shadow-md';
+        img.addEventListener('error', () => img.remove());
+        pin.appendChild(img);
+      }
       const marker = new Marker({ element: pin }).setLngLat([stop.longitude, stop.latitude]);
       if (stop.label) marker.setPopup(new Popup({ offset: 16 }).setText(stop.label));
       marker.addTo(map);

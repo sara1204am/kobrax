@@ -187,13 +187,13 @@ export function PlanScreen({
   }
 
   /** La ubicación con la que va cada parada: la que se eligió, o la predeterminada del cliente (su domicilio). */
-  function placeOf(creditId: string): { id?: string; label: string; latitude?: number; longitude?: number } {
+  function placeOf(creditId: string): { id?: string; label: string; latitude?: number; longitude?: number; photoUrl?: string } {
     const picked = chosen[creditId];
     if (picked) return picked;
     const c = byId.get(creditId);
     const loc = defaultLocation(c?.locations);
     if (!loc) return { label: '' };
-    return { id: loc.id, label: describeLocation(loc, (type) => tType(type as 'HOME')), latitude: loc.latitude, longitude: loc.longitude };
+    return { id: loc.id, label: describeLocation(loc, (type) => tType(type as 'HOME')), latitude: loc.latitude, longitude: loc.longitude, photoUrl: loc.photoUrl };
   }
   const hasPoint = (id: string) => {
     const p = placeOf(id);
@@ -201,6 +201,14 @@ export function PlanScreen({
   };
   /** Las elegidas a las que todavía les falta un punto en el mapa: sin él no hay recorrido ni hora de llegada. */
   const missing = picked.filter((id) => !hasPoint(id));
+  /** Dónde está lo que se arma: la primera elegida con punto. El mapa de marcar una dirección sin punto abre por ahí. */
+  const planCenter = (() => {
+    for (const id of picked) {
+      const p = placeOf(id);
+      if (p.latitude != null && p.longitude != null) return { latitude: p.latitude, longitude: p.longitude };
+    }
+    return undefined;
+  })();
 
   async function confirmar() {
     setBusy(true);
@@ -254,6 +262,7 @@ export function PlanScreen({
         detail: p.label || undefined,
         picked: true,
         order: i + 1,
+        photoUrl: p.photoUrl,
         tone: planned || fixed ? ('scheduled' as const) : ('pending' as const),
         badges: [
           ...(fixed ? [{ label: t('fixedAt', { time: fixed }), tone: 'info' as const }] : []),
@@ -282,7 +291,7 @@ export function PlanScreen({
     if (loc?.id) {
       setChosen((prev) => ({
         ...prev,
-        [creditId]: { id: loc.id!, label: describeLocation(loc, (type) => tType(type as 'HOME')), latitude: loc.latitude, longitude: loc.longitude },
+        [creditId]: { id: loc.id!, label: describeLocation(loc, (type) => tType(type as 'HOME')), latitude: loc.latitude, longitude: loc.longitude, photoUrl: loc.photoUrl },
       }));
     }
   }
@@ -296,6 +305,7 @@ export function PlanScreen({
           id,
           name: c?.clientName ?? '—',
           hint: placeOf(id).label || c?.zone || undefined,
+          photos: placeOf(id).photoUrl ? [placeOf(id).photoUrl!] : undefined,
           tone: plannedIds.has(id) || time ? ('scheduled' as const) : ('pending' as const),
           badges: [
             ...(time ? [{ label: t('fixedAt', { time }), tone: 'info' as const }] : []),
@@ -311,7 +321,7 @@ export function PlanScreen({
     const c = byId.get(id);
     const p = placeOf(id);
     return c && p.latitude != null && p.longitude != null
-      ? [{ id, name: c.clientName ?? '—', place: p.label || '—', latitude: p.latitude, longitude: p.longitude, scheduledTime: visitTime.get(id), planned: plannedIds.has(id) }]
+      ? [{ id, name: c.clientName ?? '—', place: p.label || '—', latitude: p.latitude, longitude: p.longitude, scheduledTime: visitTime.get(id), planned: plannedIds.has(id), photoUrl: p.photoUrl }]
       : [];
   });
 
@@ -603,6 +613,7 @@ export function PlanScreen({
           onClose={() => setDialogFor(null)}
           clientId={dialogCredit.clientId}
           clientName={dialogCredit.clientName}
+          near={planCenter}
           chosenId={chosen[dialogCredit.id]?.id ?? placeOf(dialogCredit.id).id}
           onChoose={(loc) => setChosen((prev) => ({ ...prev, [dialogCredit.id]: loc }))}
         />

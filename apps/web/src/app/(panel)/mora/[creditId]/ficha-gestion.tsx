@@ -53,7 +53,19 @@ import { PriorityCell } from '../priority-cell';
  * El historial viene **en la misma llamada** (`activities`, ya ordenadas desc por la API) y se pinta en el
  * servidor: no tiene ni una interacción, y así no viaja como JavaScript al navegador.
  */
-export async function FichaGestion({ creditId, withHeader = true }: { creditId: string; withHeader?: boolean }) {
+export async function FichaGestion({
+  creditId,
+  withHeader = true,
+  withPerson = true,
+}: {
+  creditId: string;
+  withHeader?: boolean;
+  /**
+   * Mostrar «La persona» (teléfonos, direcciones, garantes, garantías). Dentro de la parada de una ruta va **apagado**: ese
+   * detalle ya vive en la ficha del cliente, y repetirlo acá alargaba la página y pedía datos que nadie miraba.
+   */
+  withPerson?: boolean;
+}) {
   const t = await getTranslations('panel.mora');
   const locale = await getLocale();
 
@@ -79,8 +91,11 @@ export async function FichaGestion({ creditId, withHeader = true }: { creditId: 
   const item = detail.body.data;
   // Dependen del `clientId` que trae la ficha, así que van después. Un 403 (sin `client:read`) no tumba la página.
   const [client, collateralTypes, assignees] = await Promise.all([
-    apiCall<ClientDetail>(`/clients/${item.clientId}`, { method: 'GET', auth: true }),
-    apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.COLLATERAL_TYPE}`, { method: 'GET', auth: true }),
+    // Sin la sección de la persona no se piden ni el cliente ni el catálogo de garantías.
+    withPerson ? apiCall<ClientDetail>(`/clients/${item.clientId}`, { method: 'GET', auth: true }) : Promise.resolve(null),
+    withPerson
+      ? apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.COLLATERAL_TYPE}`, { method: 'GET', auth: true })
+      : Promise.resolve(null),
     // A quién se puede asignar: sólo lo pide quien reparte (`assignment:write`); el resto da 403.
     (me.body.data?.permissions ?? []).includes(Permission.ASSIGNMENT_WRITE)
       ? apiCall<Assignee[]>('/assignments/assignees', { method: 'GET', auth: true })
@@ -248,14 +263,16 @@ export async function FichaGestion({ creditId, withHeader = true }: { creditId: 
           <ArrearsHistory episodes={episodes.status === 200 ? (episodes.body.data ?? []) : null} currency={currency} />
 
           {/* La persona, al servicio de la recuperación: sólo lectura (se corrige desde Cartera). */}
-          <Section title={t('ficha.person.title')} anchor="PERSON" collapsible={{ scroll: false }}>
-            <p className="mb-3 text-[13px] text-k-text-2">{t('ficha.person.hint')}</p>
-            {client.status === 200 && client.body.data ? (
-              <PersonSections creditId={item.creditId} client={client.body.data} currency={currency} collateralTypes={collateralTypes.body.data ?? []} />
-            ) : (
-              <EmptyState title={t('ficha.person.denied')} />
-            )}
-          </Section>
+          {withPerson && (
+            <Section title={t('ficha.person.title')} anchor="PERSON" collapsible={{ scroll: false }}>
+              <p className="mb-3 text-[13px] text-k-text-2">{t('ficha.person.hint')}</p>
+              {client?.status === 200 && client.body.data ? (
+                <PersonSections creditId={item.creditId} client={client.body.data} currency={currency} collateralTypes={collateralTypes?.body.data ?? []} />
+              ) : (
+                <EmptyState title={t('ficha.person.denied')} />
+              )}
+            </Section>
+          )}
         </div>
       </div>
     </>

@@ -42,7 +42,12 @@ export async function sendJson<T = unknown>(
       ...(getLoadedSessionId() ? { [SESSION_HEADER]: getLoadedSessionId() as string } : {}),
       ...headers,
     },
-    body: JSON.stringify(body),
+    /*
+     * 🔴 **Sin cuerpo, no se manda `"null"`.** Los borrados pasan `null`/`undefined` porque no tienen nada que enviar, y
+     * `JSON.stringify(null)` es el texto `null`: el servidor lo rechaza como JSON inválido («Unexpected token 'n'») y la
+     * parada no se podía quitar de una ruta.
+     */
+    ...(body === undefined || body === null ? {} : { body: JSON.stringify(body) }),
   }).catch(() => null);
   if (!res) return { ok: false, status: 0, data: {} as JsonResult<T>['data'] };
 

@@ -20,6 +20,8 @@ export interface PreviewStop {
   scheduledTime?: string;
   /** Tiene una visita agendada ese día (con o sin hora): es un compromiso, no sólo una parada. */
   planned?: boolean;
+  /** La foto principal de la dirección, chica sobre el pin. */
+  photoUrl?: string;
 }
 
 interface PreviewData {
@@ -101,6 +103,7 @@ export function PlanPreview({
     detail: s.place,
     picked: true,
     order: i + 1,
+    photoUrl: s.photoUrl,
     tone: s.planned || s.scheduledTime ? 'scheduled' : 'pending',
     badges: [
       ...(s.scheduledTime ? [{ label: tPlan('fixedAt', { time: s.scheduledTime }), tone: 'info' as const }] : []),
@@ -115,6 +118,7 @@ export function PlanPreview({
       id: s.id,
       name: s.name,
       hint: s.place,
+      photos: s.photoUrl ? [s.photoUrl] : undefined,
       meta: eta != null ? addMinutes(start, eta) : undefined,
       tone: s.planned || s.scheduledTime ? 'scheduled' : 'pending',
       badges: points[i]!.badges,
