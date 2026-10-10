@@ -40,7 +40,7 @@ import {
 import { listCatalog, type CatalogOption } from '@/catalogs.service';
 import { RegisterSheet } from '@/agenda-register';
 import { getUserId } from '@/session';
-import { patchAgendaItemLocal } from '@/sync/agenda-optimistic';
+import { patchAgendaItemLocal, removeAgendaItemLocal } from '@/sync/agenda-optimistic';
 import { queueForLater } from '@/sync/sync.service';
 import type { QueuedAction } from '@/sync/queue';
 
@@ -53,7 +53,7 @@ type Load =
 /** `2026-07-10T00:00:00.000Z` → `Hoy` o `Viernes, 10 de julio`. */
 function dayLabel(isoDate: string): string {
   const date = isoDate.slice(0, 10);
-  return date === new Date().toISOString().slice(0, 10) ? 'Hoy' : formatLongDate(date);
+  return date === todayISO() ? 'Hoy' : formatLongDate(date);
 }
 
 /** `2026-06-21T…` → `21 jun` (el historial es una columna angosta). */
@@ -454,14 +454,20 @@ function ItemMenu({
         onPress: () => {
           void (async () => {
             const res = await deleteItem(item.id);
-            if (res.status !== 'ok') return fail(res);
+            if (res.status === 'offline') {
+              // Sin señal se elimina igual: se guarda y sube sola, y ya no se ve ni cuenta en el teléfono.
+              if (!(await queueForLater({ kind: 'agenda.delete', id: item.id }))) {
+                return fail({ status: 'error', message: 'Sin conexión y no se pudo guardar en el teléfono.' });
+              }
+              await removeAgendaItemLocal(item);
+            } else if (res.status !== 'ok') return fail(res);
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             onGone();
           })();
         },
       },
     ]);
-  }, [fail, item.id, onClose, onGone]);
+  }, [fail, item, onClose, onGone]);
 
   const onPicked = useCallback(
     (event: DateTimePickerEvent, picked?: Date) => {

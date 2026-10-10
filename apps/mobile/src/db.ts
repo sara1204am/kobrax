@@ -102,6 +102,9 @@ export type QueueKind =
   | 'arrears.mark'
   | 'arrears.clear'
   | 'agenda.cancel'
+  /** Editar y eliminar una gestión (`PATCH` / `DELETE /agenda/:id`): de valores fijos, reintentables. */
+  | 'agenda.update'
+  | 'agenda.delete'
   | 'agenda.reschedule'
   /** Gestión con resultado y promesa sobre un crédito, esté o no en mora (`POST /mora/:id/activities`). */
   | 'mora.activity'

@@ -15,12 +15,15 @@ import { cachedList } from './sync/cached';
 export type { NewPayment, PaymentChannel, PaymentItem, PaymentMethod } from '@kobrax/shared';
 
 /**
+ * Los pagos de un día (Rutas S6). `day` es el día de la EMPRESA y lo resuelve el servidor con su zona horaria: armar
+ * `from/to` en UTC dejaba fuera lo cobrado después de las 20:00 (UTC−4).
+ *
  * Los pagos de un día (Rutas S6). Devuelve los de **todo el tenant**: acotarlos a la ruta —y al
  * cobrador— es responsabilidad de quien llama, porque el KPI se calcula en el cliente
  * (`ui-screen-map §8.1`). `summarizeDay` es quien lo hace.
  */
 export function listPaymentsByDay(day: string): Promise<QueryResult<PaymentItem[]>> {
-  const query = toQuery({ from: day, to: `${day}T23:59:59.999Z`, limit: 100 });
+  const query = toQuery({ day, limit: 100 });
   // Con respaldo local: sin esto, el cierre de jornada sin señal anunciaba "TOTAL RECAUDADO HOY
   // Bs 0,00" — que es mentira, el cobrador sí cobró — en vez de admitir que no pudo leerlo.
   return cachedList<PaymentItem>('payment', query, () => apiQuery<PaymentItem[]>(`/payments${query}`));
