@@ -23,6 +23,9 @@ export interface MapStop {
   tone?: 'done' | 'pending';
   /** La foto principal de la dirección, chica sobre el pin, para reconocer la casa. */
   photoUrl?: string;
+  /** El globo al tocar el pin: un título (a quién se visita) y líneas de detalle (monto, cobrador…). Sólo texto. */
+  title?: string;
+  lines?: string[];
 }
 
 /** Dónde se registró una visita: lo que deja ver si el cobrador estuvo donde dijo. */
@@ -99,7 +102,26 @@ export function RouteMap({
         pin.appendChild(img);
       }
       const marker = new Marker({ element: pin }).setLngLat([stop.longitude, stop.latitude]);
-      if (stop.label) marker.setPopup(new Popup({ offset: 16 }).setText(stop.label));
+      if (stop.title || (stop.lines && stop.lines.length > 0)) {
+        // Se arma con nodos de texto y no con HTML: el nombre de un cliente nunca se interpreta como marcado.
+        const box = document.createElement('div');
+        box.className = 'min-w-[160px] text-[12px] leading-5 text-k-text';
+        if (stop.title) {
+          const title = document.createElement('div');
+          title.className = 'text-[13px] font-semibold text-k-navy';
+          title.textContent = stop.title;
+          box.appendChild(title);
+        }
+        for (const line of stop.lines ?? []) {
+          const row = document.createElement('div');
+          row.className = 'text-k-text-2';
+          row.textContent = line;
+          box.appendChild(row);
+        }
+        marker.setPopup(new Popup({ offset: 16, closeButton: false }).setDOMContent(box));
+      } else if (stop.label) {
+        marker.setPopup(new Popup({ offset: 16 }).setText(stop.label));
+      }
       marker.addTo(map);
     }
 

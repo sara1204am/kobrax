@@ -203,7 +203,11 @@
       "map": {
         "done": "{n} visited",
         "pending": "{n} pending",
-        "day": "stops for {day}"
+        "day": "stops of {day}",
+        "amount": "Amount",
+        "collector": "Collector",
+        "statusDone": "Visited",
+        "statusPending": "Pending"
       },
       "noOverdue": "No overdue portfolio under this filter.",
       "noAgenda": "No scheduled work in this period.",

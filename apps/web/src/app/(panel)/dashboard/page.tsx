@@ -44,7 +44,12 @@ export default async function DashboardPage({
   searchParams: Record<string, string | undefined>;
 }) {
   const t = await getTranslations('panel.dashboard');
-  const filters = dashboardFilters(searchParams);
+  /*
+   * 🔴 «Hoy» es el de la EMPRESA, no el del servidor: en Bolivia, desde las 20:00 el servidor (UTC) ya está en mañana, y el
+   * período por defecto terminaba en un día sin rutas. Es el mismo día que usa la agenda y «Rutas».
+   */
+  const companyDay = (await getAgendaSummary())?.date;
+  const filters = dashboardFilters(searchParams, companyDay ? new Date(`${companyDay}T12:00:00Z`) : undefined);
   const query = analyticsQuery(filters);
   const editable = searchParams.edit === '1';
 
@@ -103,8 +108,8 @@ export default async function DashboardPage({
     trend: trend.body.data ?? undefined,
     members: team.body.data ?? [],
     currency: summary.body.data?.currency ?? 'BOB',
-    // El mapa mira el último día del período, no el período: hay que decir cuál.
-    day: filters.dateTo ?? '',
+    // El mapa mira UN día —el último del período con paradas—, no el período: hay que decir cuál.
+    day: visits.body.data?.[0]?.plannedDate ?? filters.dateTo ?? '',
     errors: {
       summary: summary.body.error?.message,
       aging: aging.body.error?.message,
@@ -122,10 +127,14 @@ export default async function DashboardPage({
 
       <PageHeader title={current?.name ?? t('title')} subtitle={t('subtitle')} />
 
-      <DashboardToolbar dashboards={dashboards} current={current} widgets={widgets} editable={editable} />
-
-      {/* Los filtros van ANTES de los números: primero se elige qué se mira. */}
-      <DashboardFilters collectors={team.body.data ?? []} sources={sources} />
+      {/* Los filtros van ANTES de los números: primero se elige qué se mira. «Editar» y las acciones del tablero van adentro
+          de la misma tarjeta, a la derecha: una fila aparte dejaba un hueco con un solo botón. */}
+      <DashboardFilters
+        collectors={team.body.data ?? []}
+        sources={sources}
+        today={companyDay}
+        actions={<DashboardToolbar dashboards={dashboards} current={current} widgets={widgets} editable={editable} />}
+      />
 
       {/*
        * 🔴 D7: nunca mezclados en silencio. Sin fuente elegida, el saldo y la mora suman lo que

@@ -203,7 +203,11 @@
       "map": {
         "done": "{n} visitadas",
         "pending": "{n} pendientes",
-        "day": "paradas del {day}"
+        "day": "paradas del {day}",
+        "amount": "Monto",
+        "collector": "Cobrador",
+        "statusDone": "Visitada",
+        "statusPending": "Pendiente"
       },
       "noOverdue": "No hay cartera en mora en este filtro.",
       "noAgenda": "No hay agendados en este período.",
