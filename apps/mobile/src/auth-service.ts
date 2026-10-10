@@ -17,6 +17,8 @@ export interface Me {
   permissions: string[];
   /** El usuario ya tiene MFA enrolado (lo necesita la UI de seguridad). */
   mfaEnabled: boolean;
+  /** El rol exige MFA (D2): no se ofrece desactivarlo ni postergarlo. El servidor lo impone igual. */
+  mfaRequired?: boolean;
   /** El backend exige cambiar la contraseña antes de operar (cambio forzado). */
   requiresPasswordChange: boolean;
 }

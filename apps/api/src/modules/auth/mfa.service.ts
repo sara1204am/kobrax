@@ -4,7 +4,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { generateSecret, otpauthUrl, verifyTotp } from './totp';
-import { mfaInvalid, mfaNotEnrolled } from './auth.errors';
+import { mfaAlreadyEnabled, mfaInvalid, mfaNotEnrolled, mfaRequiredByPolicy } from './auth.errors';
+import { isCriticalRole } from './mfa-policy';
 
 /** Cantidad de códigos de respaldo emitidos al activar MFA. */
 const BACKUP_CODES = 8;
@@ -48,12 +49,23 @@ export class MfaService {
   }
 
   /**
+   * ¿La persona tiene algún rol crítico en alguna empresa activa? Mismo origen que el login (`auth_memberships`): el segundo
+   * factor es de la persona, así que basta una membresía crítica.
+   */
+  async isCritical(userId: string): Promise<boolean> {
+    const rows = await this.prisma.$queryRaw<{ role_name: string }[]>`SELECT * FROM auth_memberships(${userId})`;
+    return rows.some((m) => isCriticalRole(m.role_name));
+  }
+
+  /**
    * Inicia el enroll: genera y guarda el secreto cifrado, pero **no activa** MFA
    * (eso ocurre en `verify`, tras confirmar un código válido).
    */
   async enroll(userId: string): Promise<EnrollResult> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw mfaNotEnrolled();
+    // Reenrolar con el MFA activo pisaba el secreto sin confirmarlo y dejaba a la persona afuera: primero se desactiva.
+    if (user.mfaEnabled) throw mfaAlreadyEnabled();
     const secret = generateSecret();
     await this.prisma.user.update({
       where: { id: userId },
@@ -101,6 +113,8 @@ export class MfaService {
   async disable(userId: string, opts: { password?: string; code?: string }): Promise<void> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user?.mfaEnabled) return; // ya estaba deshabilitado
+    // 🔴 Política (D2): un rol crítico no apaga el segundo factor, ni con la contraseña ni con un código. Va ANTES de reautenticar.
+    if (await this.isCritical(userId)) throw mfaRequiredByPolicy();
 
     const reauthed = opts.password
       ? await compare(opts.password, user.passwordHash)

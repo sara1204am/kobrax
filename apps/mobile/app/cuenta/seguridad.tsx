@@ -82,10 +82,11 @@ export default function SeguridadScreen() {
         {me && !me.mfaEnabled && (
           <Button label="Activar verificación en dos pasos" onPress={() => router.push('/(auth)/mfa-setup?authed=1')} />
         )}
+        {me?.mfaEnabled && me.mfaRequired && <Text style={TYPE.secondary}>Tu rol exige verificación en dos pasos: no se puede desactivar.</Text>}
         {me?.mfaEnabled && !disabling && !codes && (
           <View style={{ gap: SPACING.sm }}>
             <Button label="Generar códigos de respaldo nuevos" variant="ghost" onPress={regenerate} loading={busy} />
-            <Button label="Desactivar" variant="ghost" onPress={() => setDisabling(true)} />
+            {!me.mfaRequired && <Button label="Desactivar" variant="ghost" onPress={() => setDisabling(true)} />}
           </View>
         )}
         {me?.mfaEnabled && disabling && (

@@ -38,6 +38,8 @@ function makeAuth(opts: {
   memberships?: ReturnType<typeof memb>[];
   /** Simula Redis caído en la revocación de la sesión anterior. */
   revokeFails?: boolean;
+  /** La persona tiene un rol crítico (lo que dice `MfaService.isCritical`). */
+  critical?: boolean;
 }) {
   const calls = {
     userUpdate: [] as { where: { id: string }; data: Record<string, unknown> }[],
@@ -75,7 +77,7 @@ function makeAuth(opts: {
       calls.revokedSessions.push(sessionId);
     },
   };
-  const mfa = {};
+  const mfa = { isCritical: async () => opts.critical ?? false };
   const audited: Record<string, unknown>[] = [];
   const audit = {
     record: async (entry: Record<string, unknown>) => {
@@ -131,8 +133,59 @@ describe('AuthService.login — MFA obligatorio (enforcement F2b)', () => {
 });
 
 describe('AuthService.mfaSetupSkip — postergar el MFA obligatorio', () => {
-  // Decisión de producto (31/07): se puede postergar indefinidamente. El recordatorio es
-  // blando (`me.mfaEnabled === false` → aviso en el Home), no hay segundo muro.
+  // D2 (2026-10-10) reemplaza la decisión del 31/07 («se puede postergar indefinidamente»): para un rol crítico el MFA es
+  // obligatorio. La postergación solo existe dentro de una gracia explícita (`MFA_CRITICAL_GRACE_UNTIL`).
+  const savedGrace = process.env.MFA_CRITICAL_GRACE_UNTIL;
+  const setGrace = (v: string | undefined) => {
+    if (v === undefined) delete process.env.MFA_CRITICAL_GRACE_UNTIL;
+    else process.env.MFA_CRITICAL_GRACE_UNTIL = v;
+  };
+  const restore = () => setGrace(savedGrace);
+
+  it('🔴 rol crítico sin gracia configurada: no se puede postergar (AUTH_011)', async () => {
+    setGrace(undefined);
+    try {
+      const { service } = makeAuth({ user: { id: 'u1', status: 'ACTIVE', mfaEnabled: false }, critical: true, memberships: [memb('ACCOUNT_ADMIN', 'a1')] });
+      const pre = token.signPreAuth({ sub: 'u1', purpose: 'mfa_enroll' });
+      await rejectsWithCode(service.mfaSetupSkip(pre, META), AUTH_ERR.MFA_REQUIRED_BY_POLICY);
+    } finally {
+      restore();
+    }
+  });
+
+  it('🔴 con la gracia vencida tampoco', async () => {
+    setGrace('2020-01-01T00:00:00Z');
+    try {
+      const { service } = makeAuth({ user: { id: 'u1', status: 'ACTIVE', mfaEnabled: false }, critical: true, memberships: [memb('ACCOUNT_ADMIN', 'a1')] });
+      const pre = token.signPreAuth({ sub: 'u1', purpose: 'mfa_enroll' });
+      await rejectsWithCode(service.mfaSetupSkip(pre, META), AUTH_ERR.MFA_REQUIRED_BY_POLICY);
+    } finally {
+      restore();
+    }
+  });
+
+  it('dentro de la gracia explícita el crítico todavía puede postergar (transición)', async () => {
+    setGrace(new Date(Date.now() + 7 * 86_400_000).toISOString());
+    try {
+      const { service } = makeAuth({ user: { id: 'u1', status: 'ACTIVE', mfaEnabled: false }, critical: true, memberships: [memb('ACCOUNT_ADMIN', 'a1'), memb('ACCOUNT_ADMIN', 'a2')] });
+      const pre = token.signPreAuth({ sub: 'u1', purpose: 'mfa_enroll' });
+      assert.equal((await service.mfaSetupSkip(pre, META)).step, 'select_account');
+    } finally {
+      restore();
+    }
+  });
+
+  it('quien no es crítico no se ve afectado', async () => {
+    setGrace(undefined);
+    try {
+      const { service } = makeAuth({ user: { id: 'u1', status: 'ACTIVE', mfaEnabled: false }, critical: false, memberships: [memb('MANAGER', 'a1'), memb('MANAGER', 'a2')] });
+      const pre = token.signPreAuth({ sub: 'u1', purpose: 'mfa_enroll' });
+      assert.equal((await service.mfaSetupSkip(pre, META)).step, 'select_account');
+    } finally {
+      restore();
+    }
+  });
+
   it('completa el login sin activar MFA', async () => {
     const { service } = makeAuth({
       user: { id: 'u1', status: 'ACTIVE', mfaEnabled: false },
