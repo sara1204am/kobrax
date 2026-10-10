@@ -86,7 +86,9 @@ export type CacheKind =
   /** Rangos de categoría de mora de la cuenta (`GET /arrear-categories`): opciones del filtro. */
   | 'arrear.categories'
   /** Miembros del equipo (`GET /users`): nombres de quien registró / asignó, cuando el rol puede leerlos. */
-  | 'members';
+  | 'members'
+  /** Mi perfil (`GET /users/me/profile`): sin señal se ve mi QR de cobro. `id` = 'me'. */
+  | 'profile';
 
 /** Qué espera subir la cola. Cada uno mapea a un endpoint idempotente o append-only (plan §D3). */
 export type QueueKind =
