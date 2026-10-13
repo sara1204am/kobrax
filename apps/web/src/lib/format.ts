@@ -1,5 +1,17 @@
 /** Formateo para el panel (server-safe). */
 
+/**
+ * La zona en que se muestran las **fechas con hora**.
+ *
+ * 🔴 **Sin esto, el servidor y el navegador dibujan horas distintas.** `toLocaleString` sin `timeZone` usa la
+ * zona de donde corre el código: el servidor de producción está en Europa (+2) y quien mira, en Bolivia (−4).
+ * El HTML inicial decía «13/10/26, 15:30», el navegador lo rehidrataba como «13/10/26, 9:30», React avisaba con
+ * los errores #425 y #422 y, hasta que terminaba, la pantalla mostraba la hora seis horas corrida.
+ *
+ * Es la zona por defecto de las cuentas (`accounts.timezone`). Una cuenta con otra zona la pasa por parámetro.
+ */
+export const DISPLAY_TIME_ZONE = 'America/La_Paz';
+
 export function money(amount: number | null | undefined, currency = 'BOB'): string {
   if (amount == null) return '—';
   try {
@@ -17,9 +29,9 @@ export function money(amount: number | null | undefined, currency = 'BOB'): stri
  * El default sigue siendo `'es'` porque es el idioma por defecto del panel; quien tiene el locale
  * a mano (`useLocale()` en cliente, `getLocale()` en servidor) lo pasa.
  */
-export function date(d?: string | null, locale = 'es'): string {
+export function date(d?: string | null, locale = 'es', timeZone = DISPLAY_TIME_ZONE): string {
   if (!d) return '—';
-  return new Date(d).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: '2-digit' });
+  return new Date(d).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: '2-digit', timeZone });
 }
 
 /**
@@ -58,14 +70,14 @@ export function dayDate(d?: string | null, locale = 'es'): string {
  * A diferencia de `dayDate`, esto **sí va en hora local**: es un instante, no un día civil. Un
  * timestamp de visita marca el momento en que alguien tocó un timbre.
  */
-export function time(d?: string | null, locale = 'es'): string {
+export function time(d?: string | null, locale = 'es', timeZone = DISPLAY_TIME_ZONE): string {
   if (!d) return '—';
-  return new Date(d).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+  return new Date(d).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', timeZone });
 }
 
-export function dateTime(d?: string | null, locale = 'es'): string {
+export function dateTime(d?: string | null, locale = 'es', timeZone = DISPLAY_TIME_ZONE): string {
   if (!d) return '—';
-  return new Date(d).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
+  return new Date(d).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short', timeZone });
 }
 
 /**
@@ -88,19 +100,20 @@ export function percent(value: number, digits = 1): string {
  * La hora va junto a la fecha porque en una bitácora de cobranza importa: «visita, ayer 8:00» y
  * «visita, ayer 20:00» son dos historias distintas.
  */
-export function relativeDate(d?: string | null, locale = 'es'): string {
+export function relativeDate(d?: string | null, locale = 'es', timeZone = DISPLAY_TIME_ZONE): string {
   if (!d) return '—';
   const when = new Date(d);
   if (Number.isNaN(when.getTime())) return '—';
 
   // Diferencia en días de CALENDARIO, no en horas: a las 23:00, algo de las 01:00 del mismo día es
   // «hoy», y con horas daría «hace 22 horas», que obliga a hacer la cuenta mentalmente.
-  const dia = (x: Date) => Date.UTC(x.getFullYear(), x.getMonth(), x.getDate());
+  // El día se toma en la zona de la cuenta (no en la del servidor): `en-CA` da «YYYY-MM-DD».
+  const dia = (x: Date) => Date.parse(`${new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(x)}T00:00:00Z`);
   const dias = Math.round((dia(when) - dia(new Date())) / 86_400_000);
-  const hora = when.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+  const hora = when.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', timeZone });
 
   // Más de un mes atrás, la fecha exacta dice más que «hace 6 semanas».
-  if (Math.abs(dias) > 30) return `${date(d, locale)}, ${hora}`;
+  if (Math.abs(dias) > 30) return `${date(d, locale, timeZone)}, ${hora}`;
   const rel = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(dias, 'day');
   return `${rel}, ${hora}`;
 }
