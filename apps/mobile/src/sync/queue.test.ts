@@ -233,6 +233,26 @@ describe('send · visita compuesta', () => {
   });
 
   // Si la visita no salió, NADA de lo que cuelga de ella puede salir: sin id no hay a qué colgarlo.
+  // F4/13 · alineación: el motivo es parte de la visita y viaja igual por la cola; una acción vieja no lo trae y sale igual.
+  it('el motivo de no pago viaja con la visita encolada', async () => {
+    const { createVisit } = jest.requireMock('../field.service') as { createVisit: jest.Mock };
+    const input = { ...(visitInput as object), outcome: 'NO_CONTACT', reasonCode: 'LATE_INCOME', expectedIncomeDate: '2026-10-20', payerParty: 'HOLDER' };
+    const r = await send({ kind: 'visit', input: input as never });
+    expect(r.status).toBe('ok');
+    expect(createVisit).toHaveBeenLastCalledWith(
+      expect.objectContaining({ reasonCode: 'LATE_INCOME', expectedIncomeDate: '2026-10-20', payerParty: 'HOLDER' }),
+    );
+  });
+
+  it('🔴 una visita encolada antes de este cambio (sin motivo) sale igual y sin esos campos', async () => {
+    const { createVisit } = jest.requireMock('../field.service') as { createVisit: jest.Mock };
+    const r = await send({ kind: 'visit', input: visitInput });
+    expect(r.status).toBe('ok');
+    const sent = createVisit.mock.calls[createVisit.mock.calls.length - 1]![0] as Record<string, unknown>;
+    expect(sent).not.toHaveProperty('reasonCode');
+    expect(sent).not.toHaveProperty('payerParty');
+  });
+
   it('si la visita falla, no intenta el resto', async () => {
     mockState.visit = { status: 'error', message: 'boom' };
     const r = await send({

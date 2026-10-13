@@ -1222,7 +1222,9 @@
         "notes": "Note (optional)",
         "confirm": "Record",
         "cancel": "Cancel",
-        "done": "Item recorded"
+        "done": "Item recorded",
+        "template": "Template used (optional)",
+        "templatePlaceholder": "No template"
       },
       "cancelItem": {
         "title": "Cancel the item",
@@ -1314,7 +1316,8 @@
       "errors": {
         "generic": "The action could not be completed.",
         "AGENDA_006": "The promise is missing its bank.",
-        "AGENDA_007": "That outcome does not match this kind of item."
+        "AGENDA_007": "That outcome does not match this kind of item.",
+        "AGENDA_INVALID_CONTEXT": "The reason or the respondent details are not valid."
       },
       "subtitleTeam": "What your team has scheduled, day by day.",
       "view": "How the agenda is shown",

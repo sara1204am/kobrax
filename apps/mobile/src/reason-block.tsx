@@ -1,8 +1,8 @@
 /**
  * Motivo de no pago, cuándo espera cobrar y quién responde (F4/13 · E4): el contexto opcional de una gestión.
  *
- * Lo usan la hoja «Registrar gestión» de la ficha (`gestion-sheet`) y el registro de la agenda (`agenda-register`): los
- * dos terminan en la misma bitácora y aplican la misma regla (`validateActivityContext`, en `shared`).
+ * Lo usan la hoja «Registrar gestión» de la ficha (`gestion-sheet`), el registro de la agenda (`agenda-register`) y el
+ * resultado de la parada de una ruta (`rutas/resultado`): los tres terminan en la misma bitácora y aplican la misma regla (`validateActivityContext`, en `shared`).
  *
  * Todo es opcional y **sin tocarlo la gestión es la de siempre**: lo que no se elige no viaja. Los motivos salen del
  * catálogo de la cuenta (con respaldo local sin señal); sin catálogo el bloque no se dibuja.
@@ -10,7 +10,7 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { CatalogType, reasonsFor } from '@kobrax/shared';
+import { CatalogType, VisitOutcome, reasonsFor } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from './theme';
 import { Chips, SectionLabel } from './ui';
 import { listCatalogCached, type CatalogOption } from './catalogs.service';
@@ -67,6 +67,14 @@ export function contextPayload(
     ...(ctx.reasonCode && asks && ctx.incomeDate ? { expectedIncomeDate: ctx.incomeDate } : {}),
     ...(ctx.payerParty ? { payerParty: ctx.payerParty } : {}),
   };
+}
+
+/**
+ * ¿Una visita ofrece el contexto? Sí, salvo que haya cobrado todo (`PAID`): no hay nada que explicar. Un cobro parcial
+ * sí lo ofrece — «pagó una parte» es justo cuando importa saber por qué no pagó el resto.
+ */
+export function visitAcceptsContext(outcome: string): boolean {
+  return outcome !== VisitOutcome.PAID;
 }
 
 export function ReasonBlock({

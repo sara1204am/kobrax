@@ -24,6 +24,13 @@ export interface CreateVisitInput {
   details?: Record<string, unknown>;
   /** La coordenada es la de la parada, no una lectura real del GPS (§5.4). */
   gpsFallback?: boolean;
+  /**
+   * Contexto de la gestión (F4/13 · E4): el mismo de `/mora/:id/activities` y `/agenda/:id/complete`. Todo opcional: una
+   * visita encolada antes de este cambio no lo trae y sale igual. Una visita no lleva plantilla.
+   */
+  reasonCode?: string;
+  expectedIncomeDate?: string;
+  payerParty?: string;
 }
 
 export interface VisitCreated {

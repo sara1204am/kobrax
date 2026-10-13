@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { Prisma, PrismaClient } from '@prisma/client';
+import type { DataOrigin, PayerParty, Prisma, PrismaClient } from '@prisma/client';
 import { AgendaItemStatus, CatalogType, LocationType, RouteStopStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
@@ -12,6 +12,7 @@ import {
   GPS_FALLBACK_KEY,
   Permission,
   resolvePagination,
+  validateActivityContext,
   validateVisitDetails,
   type ApiResponse,
   ResponseDto,
@@ -28,6 +29,7 @@ import {
   invalidGps,
   invalidVisitDetails,
   resourceNotFound,
+  visitInvalidContext,
   visitCorrectionInvalid,
   visitCreditMismatch,
   visitForbidden,
@@ -208,6 +210,16 @@ export class FieldService {
     const validated = validateVisitDetails(dto.outcome, dto.details);
     if (!validated.ok) throw invalidVisitDetails(validated.errors);
 
+    // F4/13 · E4: el motivo de no pago, la fecha esperada y quién responde — la misma regla compartida que la ficha de
+    // mora y la agenda. Una corrección es una NOTA y no lleva contexto. Un día de margen: a las 21:00 en Bolivia, en
+    // UTC ya es mañana.
+    const hayContexto = dto.reasonCode !== undefined || dto.expectedIncomeDate !== undefined || dto.payerParty !== undefined || dto.origin !== undefined;
+    if (hayContexto) {
+      const ayer = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+      const motivo = validateActivityContext(dto, dto.correctsVisitId ? 'NOTE' : 'VISIT', ayer);
+      if (motivo) throw visitInvalidContext(motivo);
+    }
+
     const actorId = this.tenant.userId!;
     const canExecute = this.tenant.can(Permission.ROUTE_EXECUTE);
     const isManager = this.tenant.can(Permission.ROUTE_ASSIGN) || this.tenant.can(Permission.ROUTE_WRITE);
@@ -361,6 +373,10 @@ export class FieldService {
           type: correcting ? 'NOTE' : 'VISIT',
           result: correcting ? undefined : dto.outcome,
           notes: dto.notes,
+          reasonCode: dto.reasonCode,
+          expectedIncomeDate: dto.expectedIncomeDate,
+          payerParty: dto.payerParty as PayerParty | undefined,
+          origin: dto.origin as DataOrigin | undefined,
         });
         // 🔴 Si la parada nació de una visita agendada, ESA gestión se cierra con la misma actividad (F4/11 · E1): una
         // sola ejecución, en la misma transacción. Si la gestión ya no está pendiente (la cancelaron o reagendaron

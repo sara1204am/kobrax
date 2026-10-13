@@ -15,6 +15,10 @@ export const visitNeedsTarget = () =>
 export const invalidVisitDetails = (errors: string[]) =>
   new BadRequestException({ code: 'VISIT_DETAILS', message: 'Faltan datos de la gestión', details: errors });
 
+/** El contexto de la visita (motivo, fecha esperada, quién responde) no es válido. `reason` es el código de `validateActivityContext`. */
+export const visitInvalidContext = (reason: string) =>
+  new BadRequestException({ code: 'VISIT_INVALID_CONTEXT', message: 'El motivo o los datos de quién responde no son válidos.', details: { reason } });
+
 /** El hash declarado de la evidencia no coincide con el contenido (integridad). */
 export const evidenceHashInvalid = () =>
   new UnprocessableEntityException({ code: 'EVIDENCE_001', message: 'El hash de la evidencia no coincide con el contenido' });

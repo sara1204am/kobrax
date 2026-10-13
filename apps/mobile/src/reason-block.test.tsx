@@ -6,7 +6,7 @@ jest.mock('./catalogs.service', () => ({ listCatalogCached: async () => ({ statu
 
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { CatalogOption } from './catalogs.service';
-import { ReasonBlock, contextPayload, emptyReasonContext, type ReasonContext } from './reason-block';
+import { ReasonBlock, contextPayload, emptyReasonContext, visitAcceptsContext, type ReasonContext } from './reason-block';
 
 const reason = (code: string, label: string, metadata: CatalogOption['metadata'] = null): CatalogOption => ({
   id: code,
@@ -50,6 +50,25 @@ describe('contextPayload', () => {
 
   it('quién responde puede ir sin motivo', () => {
     expect(contextPayload(ctx({ payerParty: 'NOT_LOCATED' }), REASONS, true)).toEqual({ payerParty: 'NOT_LOCATED' });
+  });
+});
+
+describe('visita de ruta (F4/13 · alineación)', () => {
+  const ctx: ReasonContext = { reasonCode: 'LATE_INCOME', incomeDate: '2026-10-20', payerParty: 'HOLDER' };
+
+  it('🔴 un cobro total no ofrece el motivo; todo lo demás sí', () => {
+    expect(visitAcceptsContext('PAID')).toBe(false);
+    for (const o of ['PARTIAL_PAYMENT', 'PROMISE', 'NO_CONTACT', 'WRONG_ADDRESS', 'SPECIAL']) expect(visitAcceptsContext(o)).toBe(true);
+  });
+
+  it('el contexto elegido viaja con la visita', () => {
+    const payload = contextPayload(ctx, REASONS, visitAcceptsContext('NO_CONTACT'));
+    expect(payload).toEqual({ reasonCode: 'LATE_INCOME', expectedIncomeDate: '2026-10-20', payerParty: 'HOLDER' });
+  });
+
+  it('🔴 un cobro total no manda contexto aunque quedara elegido, y sin tocar nada no manda nada', () => {
+    expect(contextPayload(ctx, REASONS, visitAcceptsContext('PAID'))).toEqual({});
+    expect(contextPayload(emptyReasonContext(), REASONS, visitAcceptsContext('NO_CONTACT'))).toEqual({});
   });
 });
 

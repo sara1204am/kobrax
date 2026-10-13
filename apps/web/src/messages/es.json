@@ -1222,7 +1222,9 @@
         "notes": "Nota (opcional)",
         "confirm": "Registrar",
         "cancel": "Cancelar",
-        "done": "Gestión registrada"
+        "done": "Gestión registrada",
+        "template": "Plantilla usada (opcional)",
+        "templatePlaceholder": "Sin plantilla"
       },
       "cancelItem": {
         "title": "Cancelar la gestión",
@@ -1314,7 +1316,8 @@
       "errors": {
         "generic": "No se pudo completar la acción.",
         "AGENDA_006": "Falta el banco de la promesa.",
-        "AGENDA_007": "Ese desenlace no corresponde a este tipo de gestión."
+        "AGENDA_007": "Ese desenlace no corresponde a este tipo de gestión.",
+        "AGENDA_INVALID_CONTEXT": "El motivo o los datos de quién responde no son válidos."
       },
       "subtitleTeam": "Lo agendado por tu equipo, día por día.",
       "view": "Como se ve la agenda",

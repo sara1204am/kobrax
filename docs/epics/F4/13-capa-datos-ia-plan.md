@@ -533,11 +533,20 @@ ficha muestre «Ingreso».
 | `@kobrax/web` type-check, test | 971 pruebas, verde |
 | `@kobrax/mobile` type-check, test | 958 pruebas, verde |
 
-**Queda**: la web de completar una gestión **agendada** y el registro de la **visita de ruta** (D-48); el dictado que llene el
-motivo (capa C).
+**Alineación web ↔ móvil (2026-10-12, D-55 a D-58)**: la web de completar una gestión **agendada** y la **visita de ruta**
+(web y móvil) ya capturan el motivo.
+- **API**: `POST /visits` acepta `reasonCode`, `expectedIncomeDate`, `payerParty` y `origin` con la misma regla compartida
+  (`validateActivityContext`); una corrección de visita es una nota y no lleva contexto (`VISIT_INVALID_CONTEXT`).
+- **Web**: bloque «Motivo y quién responde» reutilizable (`activity-context-fields.tsx`) en el modal de completar la gestión
+  agendada y en el diálogo de registrar visita.
+- **Móvil**: `ReasonBlock` en la pantalla de resultado de la visita (`rutas/resultado.tsx`); viaja por la cola offline y una
+  acción anterior sale igual.
 
-**Por validar en teléfono**: el bloque de motivo en la hoja de gestión y al completar una gestión de la agenda, y que una
-gestión registrada sin señal suba con su motivo.
+**Queda**: el dictado que llene el motivo (capa C). En la visita de ruta **no se filtra el motivo por la fuente de ingreso**
+(web y móvil): la parada no trae esa fuente; filtrar exige exponerla en la API (D-57).
+
+**Por validar en teléfono**: el bloque de motivo en la hoja de gestión, al completar una gestión de la agenda y en el
+resultado de una visita de ruta, y que una gestión registrada sin señal suba con su motivo.
 
 ### E5 · Plantilla usada ✅ (2026-10-10)
 
@@ -548,7 +557,10 @@ confirma el envío (D-05).
 
 **Verificación**: shared 423 pruebas; API integración `activity-context` 15 de 15.
 
-**Queda**: la web no ofrece plantillas al completar una gestión (D-51).
+**Alineación (2026-10-12, D-56)**: la web ofrece «Plantilla usada» al completar una gestión agendada de WhatsApp (catálogo
+`WHATSAPP_TEMPLATE`, mismo `code` que el móvil). En una visita no aplica (la regla compartida la rechaza).
+
+**Queda**: nada de esta etapa.
 
 ### E6 · Importación (verificación) ✅ (2026-10-10)
 
@@ -596,5 +608,5 @@ corresponden; los específicos de F10 (Figma, rama `f10/PN`, build 🟢/🔵, ec
 
 **Segunda pasada: PASS.** Ítems aplicables 1, 5–16 cumplidos. Advertencias (no bloquean):
 
-- E4 deja fuera la visita de ruta (D-11); debe retomarse en un plan posterior o los historiales quedarán con campos vacíos según el origen.
+- ~~E4 deja fuera la visita de ruta (D-11)~~ — resuelto el 2026-10-12 (D-55): la visita de ruta ya captura el motivo en web y móvil.
 - La lista de motivos y rubros es un borrador pendiente de validar con cobradores; cada cuenta puede ajustarla.
