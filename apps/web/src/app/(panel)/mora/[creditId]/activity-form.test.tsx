@@ -189,3 +189,92 @@ describe('ActivityResult — el resultado en el historial', () => {
     expect(screen.getByText('llamó_y_colgó')).toBeInTheDocument();
   });
 });
+
+describe('RegisterActivityButton — motivo y quién responde (F4/13 · E4)', () => {
+  const REASONS = [
+    { code: 'JOB_LOSS', label: 'Perdió el empleo', metadata: { appliesTo: ['EMPLOYEE', 'OTHER'], suggestion: 'Suele tardar más en recuperarse.' } },
+    { code: 'NO_SALES', label: 'Sin ventas o negocio caído', metadata: { appliesTo: ['BUSINESS'] } },
+    { code: 'LATE_INCOME', label: 'Ingreso atrasado', metadata: { asksExpectedIncomeDate: true, suggestion: 'Pagará al cobrar.' } },
+    { code: 'FORGOT', label: 'Olvido o descuido', metadata: {} },
+  ];
+  const reasonSelect = () => screen.getByLabelText('Motivo de no pago') as HTMLSelectElement;
+
+  it('🔴 sin catálogo de motivos el formulario es el de siempre: no aparece el bloque', async () => {
+    await open();
+    expect(screen.queryByLabelText('Motivo de no pago')).toBeNull();
+  });
+
+  it('con catálogo ofrece los motivos y quién responde', async () => {
+    await open({ reasons: REASONS });
+    expect(optionsOf(reasonSelect())).toEqual(['JOB_LOSS', 'NO_SALES', 'LATE_INCOME', 'FORGOT']);
+    expect(screen.getByLabelText('Quién responde por el crédito')).toBeInTheDocument();
+  });
+
+  it('el motivo se filtra por la fuente de ingreso del cliente', async () => {
+    await open({ reasons: REASONS, incomeSource: 'BUSINESS' });
+    expect(optionsOf(reasonSelect())).toEqual(['NO_SALES', 'LATE_INCOME', 'FORGOT']);
+  });
+
+  it('🔴 una nota no lleva motivo', async () => {
+    await open({ reasons: REASONS });
+    await userEvent.selectOptions(screen.getByLabelText('Qué se hizo'), 'NOTE');
+    expect(screen.queryByLabelText('Motivo de no pago')).toBeNull();
+  });
+
+  it('la fecha en que espera cobrar solo aparece con el motivo que la pide', async () => {
+    await open({ reasons: REASONS });
+    expect(screen.queryByLabelText('Cuándo espera cobrar')).toBeNull();
+    await userEvent.selectOptions(reasonSelect(), 'FORGOT');
+    expect(screen.queryByLabelText('Cuándo espera cobrar')).toBeNull();
+    await userEvent.selectOptions(reasonSelect(), 'LATE_INCOME');
+    expect(screen.getByLabelText('Cuándo espera cobrar')).toBeInTheDocument();
+  });
+
+  it('muestra la sugerencia del motivo elegido', async () => {
+    await open({ reasons: REASONS });
+    await userEvent.selectOptions(reasonSelect(), 'LATE_INCOME');
+    expect(screen.getByText('Pagará al cobrar.')).toBeInTheDocument();
+  });
+
+  it('🔴 el motivo, la fecha y quién responde viajan con la gestión', async () => {
+    post.mockResolvedValue({ ok: true, data: {} });
+    await open({ reasons: REASONS });
+    await userEvent.selectOptions(resultSelect(), 'NO_ANSWER');
+    await userEvent.selectOptions(reasonSelect(), 'LATE_INCOME');
+    await userEvent.type(screen.getByLabelText('Cuándo espera cobrar'), tomorrow());
+    await userEvent.selectOptions(screen.getByLabelText('Quién responde por el crédito'), 'GUARANTOR');
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    expect(post.mock.calls[0]![1]).toMatchObject({
+      type: 'CALL',
+      result: 'NO_ANSWER',
+      reasonCode: 'LATE_INCOME',
+      expectedIncomeDate: tomorrow(),
+      payerParty: 'GUARANTOR',
+    });
+  });
+
+  it('🔴 sin tocar el bloque no manda nada nuevo: la gestión es la de siempre', async () => {
+    post.mockResolvedValue({ ok: true, data: {} });
+    await open({ reasons: REASONS });
+    await userEvent.selectOptions(resultSelect(), 'NO_ANSWER');
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    const body = post.mock.calls[0]![1] as Record<string, unknown>;
+    expect('reasonCode' in body).toBe(false);
+    expect('expectedIncomeDate' in body).toBe(false);
+    expect('payerParty' in body).toBe(false);
+  });
+
+  it('una fecha sin pedirla el motivo no viaja', async () => {
+    post.mockResolvedValue({ ok: true, data: {} });
+    await open({ reasons: REASONS });
+    await userEvent.selectOptions(resultSelect(), 'NO_ANSWER');
+    await userEvent.selectOptions(reasonSelect(), 'LATE_INCOME');
+    await userEvent.type(screen.getByLabelText('Cuándo espera cobrar'), tomorrow());
+    await userEvent.selectOptions(reasonSelect(), 'FORGOT'); // cambia a uno que no la pide
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    expect('expectedIncomeDate' in (post.mock.calls[0]![1] as Record<string, unknown>)).toBe(false);
+  });
+});

@@ -3,8 +3,8 @@
  * **append-only** con GPS, marca la parada como visitada y deja la gestión en la bitácora del crédito —
  * todo eso lo hace el server en una transacción, acá sólo se le habla.
  */
-import { apiMutate, type MutateResult } from './api-client';
-import type { VisitOutcome } from '@kobrax/shared';
+import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
+import type { VisitDetail, VisitItem, VisitOutcome } from '@kobrax/shared';
 import { currentLocation, type Coords } from './location';
 
 export interface CreateVisitInput {
@@ -24,6 +24,13 @@ export interface CreateVisitInput {
   details?: Record<string, unknown>;
   /** La coordenada es la de la parada, no una lectura real del GPS (§5.4). */
   gpsFallback?: boolean;
+  /**
+   * Contexto de la gestión (F4/13 · E4): el mismo de `/mora/:id/activities` y `/agenda/:id/complete`. Todo opcional: una
+   * visita encolada antes de este cambio no lo trae y sale igual. Una visita no lleva plantilla.
+   */
+  reasonCode?: string;
+  expectedIncomeDate?: string;
+  payerParty?: string;
 }
 
 export interface VisitCreated {
@@ -69,4 +76,17 @@ export async function resolveVisitCoords(
     return { latitude: fallback.latitude, longitude: fallback.longitude, gpsFallback: true };
   }
   return null;
+}
+
+/**
+ * Las visitas de una parada, la más reciente primero (R7). **Solo en línea y sin caché a propósito**: es historial de
+ * personas (notas, coordenadas) y no se hidrata en masa; se ve lo que se abre con señal. El cobrador solo ve las suyas.
+ */
+export function listStopVisits(routeStopId: string): Promise<QueryResult<VisitItem[]>> {
+  return apiQuery<VisitItem[]>(`/visits${toQuery({ routeStopId, limit: 50 })}`);
+}
+
+/** Una visita con sus evidencias (foto/firma y su hash). */
+export function getVisit(id: string): Promise<QueryResult<VisitDetail>> {
+  return apiQuery<VisitDetail>(`/visits/${id}`);
 }

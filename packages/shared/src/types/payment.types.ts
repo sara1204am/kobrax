@@ -49,6 +49,8 @@ export interface NewPayment {
   method: PaymentMethod;
   receiptUrl?: string;
   receiptHash?: string;
+  /** La visita en la que se cobró (vincula el pago con la gestión de la parada). Debe ser del mismo crédito. */
+  visitId?: string;
   /** Default `KOBRAX_COLLECTED`. */
   channel?: PaymentChannel;
   notes?: string;

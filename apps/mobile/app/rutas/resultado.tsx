@@ -13,6 +13,8 @@ import { queueForLater } from '@/sync/sync.service';
 import { nuevoId } from '@/ids';
 import { money, todayISO } from '@/agenda-form';
 import { listCatalogCached, type CatalogOption } from '@/catalogs.service';
+import { ReasonBlock, contextPayload, emptyReasonContext, useReasons, visitAcceptsContext } from '@/reason-block';
+import { prettyDate } from '@/gestion-sheet';
 import { createItem } from '@/agenda.service';
 import { createPayment, type PaymentMethod } from '@/payments.service';
 import { getRoute, type RouteStopItem } from '@/routes.service';
@@ -24,6 +26,7 @@ import {
   paymentCap,
   paymentOutcome,
   postVisitWarning,
+  installmentHint,
   VISIT_VARIANTS,
   variantMeta,
   type ResultForm,
@@ -44,6 +47,9 @@ export default function ResultadoScreen() {
   const [form, setForm] = useState<ResultForm>(() => initialResult(todayISO()));
   const [categories, setCategories] = useState<CatalogOption[]>([]);
   const [showDate, setShowDate] = useState(false);
+  // F4/13 · E4: motivo de no pago, opcional. Sin catálogo de motivos el bloque no se dibuja.
+  const reasons = useReasons(true);
+  const [reasonCtx, setReasonCtx] = useState(emptyReasonContext());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /**
@@ -75,7 +81,11 @@ export default function ResultadoScreen() {
   // D3: el externo no tiene tope — su saldo es el reportado al corte, y el pago no lo baja.
   const cap = paymentCap(stop);
   const external = !!stop?.externalSource;
+  const cuota = installmentHint(stop);
   const valid = useMemo(() => canSubmitResult(key, form, cap), [key, form, cap]);
+  // El resultado que se va a registrar: con «Cobrado» depende del monto (total o parcial) y de él depende si se ofrece el motivo.
+  const outcomeNow = key === 'PAID' ? paymentOutcome(Number(form.amount), outstanding) : meta.outcome;
+  const withContext = visitAcceptsContext(outcomeNow) && reasons.length > 0;
 
   const onDate = useCallback(
     (e: DateTimePickerEvent, d?: Date) => {
@@ -127,6 +137,8 @@ export default function ResultadoScreen() {
       outcome,
       notes: form.notes.trim() || undefined,
       details: buildDetails(key, form),
+      // Solo lo que se eligió; un cobro total no lleva contexto. Es parte de la visita: viaja igual por la cola offline.
+      ...contextPayload(reasonCtx, reasons, visitAcceptsContext(outcome) && reasons.length > 0),
     };
     const promesaInput =
       key === 'PROMISE' && stop.creditId
@@ -207,6 +219,7 @@ export default function ResultadoScreen() {
         method: form.paymentMethodCode as PaymentMethod,
         receiptUrl: foto?.url,
         receiptHash: foto?.hash,
+        visitId: visit.data.id,
       };
       // Anti doble cobro si el cobrador reintenta con señal mala: la llave sale de la visita, que
       // el server creó una sola vez, así que reintentar no puede cobrarle dos veces al deudor.
@@ -239,7 +252,7 @@ export default function ResultadoScreen() {
       return;
     }
     router.replace(`/rutas/mapa?routeId=${routeId}`);
-  }, [stop, key, form, outstanding, meta, routeId, currency]);
+  }, [stop, key, form, outstanding, meta, routeId, currency, reasonCtx, reasons]);
 
   return (
     <View style={styles.screen}>
@@ -279,6 +292,19 @@ export default function ResultadoScreen() {
               currencySymbol={currency}
               accessibilityLabel={key === 'PAID' ? 'Monto cobrado' : 'Monto prometido'}
             />
+            {key === 'PAID' && cuota && !external && (
+              <Pressable
+                onPress={() => set({ amount: String(cuota.amount) })}
+                accessibilityRole="button"
+                accessibilityLabel={`Usar la cuota de ${money(cuota.amount, currency)}`}
+                style={styles.cuota}
+              >
+                <Text style={styles.cuotaTxt}>
+                  {`Cuota a pagar ${money(cuota.amount, currency)}${cuota.dueLabel ? ` · vence ${cuota.dueLabel}` : ''}`}
+                </Text>
+                <Text style={styles.cuotaUsar}>Usar este monto</Text>
+              </Pressable>
+            )}
             {key === 'PAID' && external && (
               <Text style={styles.aviso}>
                 {`Crédito ${stop?.externalSource}: el saldo es el reportado por el banco${
@@ -357,6 +383,8 @@ export default function ResultadoScreen() {
           </>
         )}
 
+        {withContext && <ReasonBlock reasons={reasons} value={reasonCtx} onChange={setReasonCtx} prettyDate={prettyDate} />}
+
         <SectionLabel>{key === 'WRONG_ADDRESS' ? 'Observación (obligatoria)' : 'Observación'}</SectionLabel>
         <TextInput
           style={[styles.input, styles.textarea]}
@@ -426,6 +454,18 @@ const styles = StyleSheet.create({
   },
   textarea: { minHeight: 90, textAlignVertical: 'top' },
   aviso: { ...TYPE.caption, color: COLORS.text2 },
+  cuota: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.input,
+    backgroundColor: COLORS.highlight,
+  },
+  cuotaTxt: { ...TYPE.body, color: COLORS.navy, flex: 1 },
+  cuotaUsar: { ...TYPE.secondary, color: COLORS.periwinkle, fontWeight: '600' },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingVertical: SPACING.sm },
   photoBtn: {
     borderWidth: 1,

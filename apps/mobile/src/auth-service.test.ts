@@ -163,3 +163,28 @@ describe('authService.login — cuenta bloqueada (M-LOG-40)', () => {
     });
   });
 });
+
+describe('authService — seguridad (U1/U2)', () => {
+  it('contraseña actual incorrecta (401 AUTH_001) devuelve error y NO cierra la sesión', async () => {
+    mockGetSession.mockResolvedValue(SESSION);
+    mockFetch.mockResolvedValue({ status: 401, data: null, error: { code: 'AUTH_001', message: 'Credenciales inválidas' } });
+    expect(await authService.changePassword('mal', 'Kobrax123!')).toEqual({ error: 'Credenciales inválidas' });
+    expect(clearSession).not.toHaveBeenCalled();
+  });
+
+  it('mfaDisable: éxito y contraseña incorrecta', async () => {
+    mockGetSession.mockResolvedValue(SESSION);
+    mockFetch.mockResolvedValueOnce({ status: 204, data: null, error: null });
+    expect(await authService.mfaDisable('Clave1!')).toEqual({ ok: true });
+    expect(mockFetch).toHaveBeenLastCalledWith('/auth/mfa/disable', expect.objectContaining({ method: 'POST', body: { password: 'Clave1!' } }));
+    mockFetch.mockResolvedValueOnce({ status: 401, data: null, error: { code: 'AUTH_001', message: 'Credenciales inválidas' } });
+    expect(await authService.mfaDisable('mal')).toHaveProperty('error');
+    expect(clearSession).not.toHaveBeenCalled();
+  });
+
+  it('mfaRegenerate devuelve los códigos nuevos', async () => {
+    mockGetSession.mockResolvedValue(SESSION);
+    mockFetch.mockResolvedValue({ status: 200, data: { backupCodes: ['a', 'b'] }, error: null });
+    expect(await authService.mfaRegenerate()).toEqual({ backupCodes: ['a', 'b'] });
+  });
+});

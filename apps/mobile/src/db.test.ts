@@ -29,7 +29,14 @@ jest.mock('expo-sqlite', () => ({
   })),
 }));
 
-import { dequeue, enqueue, markFailed, pending, putAll, resetForTests, SCHEMA_VERSION } from './db';
+// El cifrado en reposo se prueba aparte (at-rest.test.ts / db-sealed.test.ts); acá la base ve el texto tal cual.
+jest.mock('./at-rest', () => ({
+  getKey: jest.fn(async () => null),
+  seal: jest.fn(async (s: string) => s),
+  open: jest.fn(async (s: string) => s),
+}));
+
+import { dequeue, enqueue, markFailed, pending, purgeCache, putAll, resetForTests, SCHEMA_VERSION } from './db';
 
 /** Las queries emitidas desde que arrancó el caso, en texto plano. */
 const emitido = () => mockSql.map((s) => s.query.replace(/\s+/g, ' ').trim());
@@ -104,5 +111,23 @@ describe('esquema', () => {
     await putAll('client', [{ id: 'c1', nombre: 'Ana', campoQueElServerAgregoAyer: 42 } as never]);
     const ins = mockSql.find((s) => s.query.includes('INSERT OR REPLACE INTO cache'))!;
     expect(String(ins.args[3])).toContain('campoQueElServerAgregoAyer');
+  });
+});
+
+describe('purgeCache (D-9)', () => {
+  it('saca lo vencido sin tocar sesión, catálogos ni totales, y nunca la cola', async () => {
+    mockState.firstRow = { value: String(SCHEMA_VERSION), bytes: 0 };
+    await purgeCache(7 * 86_400_000, 50_000_000, 1_000_000_000_000);
+    const del = emitido().find((q) => /^DELETE FROM cache WHERE fetched_at < \? AND kind NOT IN/.test(q))!;
+    expect(del).toBeDefined();
+    const call = mockSql.find((q) => q.query.replace(/\s+/g, ' ').trim() === del)!;
+    expect(call.args).toEqual([1_000_000_000_000 - 7 * 86_400_000, 'session', 'catalog', 'arrear.categories', 'list.meta']);
+    expect(emitido().some((q) => /DELETE FROM queue/.test(q))).toBe(false);
+  });
+
+  it('pasado el tope de tamaño borra las menos recientes, por lotes', async () => {
+    mockState.firstRow = { value: String(SCHEMA_VERSION), bytes: 99_000_000 };
+    await purgeCache(7 * 86_400_000, 50_000_000);
+    expect(emitido().some((q) => /ORDER BY fetched_at ASC LIMIT 100/.test(q))).toBe(true);
   });
 });

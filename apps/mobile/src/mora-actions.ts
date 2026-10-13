@@ -9,7 +9,7 @@
 import type { NewCreditNote, RecoveryActivityInput, UpdateCreditNote } from '@kobrax/shared';
 import type { Outcome } from './gestion-sheet';
 import { nuevoId } from './ids';
-import { addMoraActivity, addMoraNote, deleteMoraNote, updateMoraNote } from './mora.service';
+import { addMoraActivity, addMoraNote, deleteMoraNote, setMoraPriority, updateMoraNote, type PinnablePriority } from './mora.service';
 import { queueForLater } from './sync/sync.service';
 
 /**
@@ -68,6 +68,18 @@ export async function submitNoteDelete(creditId: string, noteId: string): Promis
   const res = await deleteMoraNote(creditId, noteId);
   if (res.status === 'ok') return null;
   if (res.status === 'offline') return SIN_SENAL_NOTA;
+  if (res.status === 'unauthenticated') return 'Tu sesión venció.';
+  return res.message;
+}
+
+/**
+ * Fijar la prioridad del crédito (o soltarla con `null`). Es de valor fijo, así que **sin señal se guarda y sube sola**.
+ * `null` = listo; un texto = lo que hay que decirle al cobrador (p. ej. «el crédito ya está al día»).
+ */
+export async function submitMoraPriority(creditId: string, priority: PinnablePriority | null): Promise<string | null> {
+  const res = await setMoraPriority(creditId, priority);
+  if (res.status === 'ok') return null;
+  if (res.status === 'offline') return (await queueForLater({ kind: 'mora.priority', creditId, priority })) ? null : NO_GUARDADO;
   if (res.status === 'unauthenticated') return 'Tu sesión venció.';
   return res.message;
 }

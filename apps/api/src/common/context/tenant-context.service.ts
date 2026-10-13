@@ -11,6 +11,11 @@ export interface RequestContext {
   requestId?: string;
   ip?: string;
   userAgent?: string;
+  /**
+   * `x-app-version` tal como la mandó el cliente (recortada). **No es identidad ni autorización**: solo decide qué regla
+   * funcional de compatibilidad aplica a un cliente móvil viejo (ver `legacyClientReason`).
+   */
+  appVersion?: string;
 }
 
 /**

@@ -10,11 +10,13 @@ jest.mock('../db', () => ({
   replaceAll: jest.fn(async (kind: string, rows: unknown[], scope: string) => void mockLists.set(listKey(kind, scope), rows)),
   getOne: jest.fn(async (kind: string, id: string) => mockOnes.get(listKey(kind, id)) ?? null),
   putOne: jest.fn(async (kind: string, id: string, value: unknown) => void mockOnes.set(listKey(kind, id), value)),
+  removeOne: jest.fn(async (kind: string, id: string) => void mockOnes.delete(listKey(kind, id))),
 }));
+jest.mock('../agenda-notifications', () => ({ cancelAgendaReminder: jest.fn(async () => undefined) }));
 jest.mock('../tenant-day', () => ({ todayISO: () => '2026-10-07' }));
 
 import type { AgendaListItem } from '@kobrax/shared';
-import { agendaScopesFor, patchAgendaItemLocal } from './agenda-optimistic';
+import { agendaScopesFor, patchAgendaItemLocal, removeAgendaItemLocal } from './agenda-optimistic';
 
 const item = (id: string, scheduledDate: string, over: Record<string, unknown> = {}) =>
   ({ id, scheduledDate: `${scheduledDate}T00:00:00.000Z`, status: 'SCHEDULED', ...over }) as unknown as AgendaListItem;
@@ -84,5 +86,22 @@ describe('agendaScopesFor', () => {
   it('su día, hoy y las dos consultas de vencidas, sin repetir', () => {
     expect(agendaScopesFor(item('x', '2026-10-09'))).toEqual(['2026-10-09', '2026-10-07', 'overdue:limit=1', 'overdue:limit=100']);
     expect(agendaScopesFor(item('x', '2026-10-07'))).toEqual(['2026-10-07', 'overdue:limit=1', 'overdue:limit=100']);
+  });
+});
+
+describe('removeAgendaItemLocal (eliminar sin señal)', () => {
+  it('sale de su día y de las vencidas, baja el total y borra el detalle', async () => {
+    const g = item('g1', '2026-10-01');
+    mockLists.set(listKey('agenda', '2026-10-01'), [g, item('g2', '2026-10-01')]);
+    mockLists.set(listKey('agenda', 'overdue:limit=100'), [g]);
+    mockOnes.set(listKey('list.meta', 'agenda|overdue:limit=100'), { total: 3 });
+    mockOnes.set(listKey('agenda.detail', 'g1'), { item: g });
+
+    await removeAgendaItemLocal(g);
+
+    expect(rows('agenda', '2026-10-01').map((r) => r.id)).toEqual(['g2']);
+    expect(rows('agenda', 'overdue:limit=100')).toEqual([]);
+    expect(mockOnes.get(listKey('list.meta', 'agenda|overdue:limit=100'))).toEqual({ total: 2 });
+    expect(mockOnes.has(listKey('agenda.detail', 'g1'))).toBe(false);
   });
 });

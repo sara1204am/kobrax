@@ -1,3 +1,5 @@
+import { can } from '@/permissions';
+import { Permission } from '@kobrax/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
@@ -55,7 +57,7 @@ export default function DatosCuentaScreen() {
       setError(null);
     } else if (res.status === 'offline') setError('Sin conexión. Los datos se leen y se guardan en línea.');
     else if (res.status === 'error') setError(res.message);
-    if (meRes.status === 'ok') setPuedeEditar(meRes.me.permissions.includes('account:write'));
+    if (meRes.status === 'ok') setPuedeEditar(can(meRes.me.permissions, Permission.ACCOUNT_WRITE));
     setLoading(false);
   }, []);
 

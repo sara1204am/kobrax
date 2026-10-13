@@ -15,7 +15,7 @@
  */
 import * as db from '../db';
 import { todayISO } from '../agenda-form';
-import { flushPendingDraft } from '../route-draft';
+import { flushPendingDrafts } from '../route-draft';
 import { getUserId } from '../session';
 import { useNetStore } from '../store/net';
 import { enqueue, pendingActions, send, stabilize, type QueuedAction, type SendResult } from './queue';
@@ -30,7 +30,7 @@ export interface DrainResult {
   sent: number;
   failed: number;
   /** Quedó algo sin intentar porque se cortó (sin red o sesión vencida). */
-  stopped: 'offline' | 'auth' | null;
+  stopped: 'offline' | 'auth' | 'upgrade' | null;
 }
 
 let corriendo = false;
@@ -63,9 +63,9 @@ export async function drain(userId: string, opts: { force?: boolean } = {}): Pro
         res.sent += 1;
         continue;
       }
-      if (r.status === 'offline' || r.status === 'auth') {
+      if (r.status === 'offline' || r.status === 'auth' || r.status === 'upgrade') {
         res.stopped = r.status;
-        break; // sin red o sin sesión: lo que sigue va a fallar igual
+        break; // sin red, sin sesión o app vieja: lo que sigue va a fallar igual (y nada se descarta ni cuenta intento)
       }
       if (r.permanent) await db.markRejected(item.id, r.message);
       else await db.markFailed(item.id, r.message);
@@ -76,7 +76,7 @@ export async function drain(userId: string, opts: { force?: boolean } = {}): Pro
     // diferencia, no una acción—, pero sí tiene que reintentarse solo. Antes se quedaba en el
     // teléfono hasta que el cobrador volviera a la pantalla y tocara un pin.
     if (!res.stopped) {
-      const draft = await flushPendingDraft(userId, todayISO());
+      const draft = await flushPendingDrafts(userId, todayISO());
       if (draft === 'offline') res.stopped = 'offline';
     }
   } finally {

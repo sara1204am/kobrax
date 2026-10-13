@@ -44,6 +44,10 @@ async function doRefresh(): Promise<AuthTokens | null> {
   return res.data;
 }
 
+/** Códigos 401 que dicen «la contraseña o el código que mandaste no es correcto», no «tu sesión venció». */
+const CREDENTIAL_REJECTION_CODES = new Set(['AUTH_001', 'AUTH_006']);
+export const isCredentialRejection = (code: string | undefined): boolean => !!code && CREDENTIAL_REJECTION_CODES.has(code);
+
 /**
  * Hace la petición con el access token actual; ante 401 refresca y reintenta una vez.
  * - Sin sesión local → `status: 'unauthenticated'` (el caller manda a login).
@@ -58,6 +62,9 @@ export async function authedFetch<T>(
   if (!session) return { status: 'unauthenticated', data: null, error: null };
 
   let res = await apiFetch<T>(path, { ...init, token: session.accessToken });
+  // Un 401 por credencial equivocada (clave actual mal escrita, código MFA inválido) lo contesta un servidor que SÍ reconoció la
+  // sesión: no es sesión muerta. Refrescar y limpiar acá cerraba la sesión por un tipeo.
+  if (res.status === 401 && isCredentialRejection(res.error?.code)) return res;
   if (res.status === 401) {
     const refreshed = await refreshSession();
     if (!refreshed) return res;
@@ -109,12 +116,12 @@ export type MutateResult<T> =
   | { status: 'offline'; reason?: NetworkReason }
   | { status: 'unauthenticated' }
   /** `httpStatus`: lo que contestó el server. La cola lo usa para distinguir «rechazado» de «falló». */
-  | { status: 'error'; message: string; httpStatus?: number };
+  | { status: 'error'; message: string; httpStatus?: number; /** Código estable del servidor (ROUTE_*, VISIT_*…): decide qué hacer sin leer el texto. */ code?: string };
 
 /** Escritura autenticada + mapeo a `MutateResult`. El `message` del server (AGENDA_00x) se propaga tal cual. */
 export async function apiMutate<T>(
   path: string,
-  method: 'POST' | 'PATCH' | 'DELETE',
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   body?: unknown,
   headers?: Record<string, string>,
 ): Promise<MutateResult<T>> {
@@ -124,7 +131,7 @@ export async function apiMutate<T>(
   if ((res.status === 200 || res.status === 201) && res.data !== null) return { status: 'ok', data: res.data };
   // 204 = salió bien y no hay nada que devolver (un DELETE). Sin esto se leería como error.
   if (res.status === 204) return { status: 'ok', data: null as T };
-  return { status: 'error', message: res.error?.message ?? 'No se pudo guardar', httpStatus: res.status };
+  return { status: 'error', message: res.error?.message ?? 'No se pudo guardar', httpStatus: res.status, code: res.error?.code };
 }
 
 /** Serializa params a query string, saltando `undefined`/`null`/`''`. */

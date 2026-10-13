@@ -131,3 +131,17 @@ export function paymentOutcome(amount: number, outstanding?: number): VisitOutco
   if (outstanding == null) return VisitOutcome.PAID;
   return amount + 0.005 >= outstanding ? VisitOutcome.PAID : VisitOutcome.PARTIAL_PAYMENT;
 }
+
+/**
+ * La cuota que el cliente debe pagar, para ofrecerla («Usar este monto»). Solo si la API la calculó y es positiva:
+ * nunca se inventa. No se precarga el campo a ciegas: el cobrador decide.
+ */
+export function installmentHint(
+  stop: { suggestedPaymentAmount?: number; nextDueDate?: string } | null | undefined,
+): { amount: number; dueLabel?: string } | null {
+  const amount = stop?.suggestedPaymentAmount;
+  if (amount == null || !Number.isFinite(amount) || amount <= 0) return null;
+  const due = stop?.nextDueDate;
+  const dueLabel = due && /^\d{4}-\d{2}-\d{2}/.test(due) ? `${due.slice(8, 10)}/${due.slice(5, 7)}` : undefined;
+  return { amount, ...(dueLabel ? { dueLabel } : {}) };
+}

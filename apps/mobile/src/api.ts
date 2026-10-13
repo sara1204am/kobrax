@@ -1,5 +1,6 @@
 /** Cliente HTTP a la API Kobrax. El mobile llama directo (no hay BFF). */
 import Constants from 'expo-constants';
+import { isUpgradeRequired, useUpgradeStore } from './store/upgrade';
 
 export const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://127.0.0.1:4010/api';
 
@@ -60,7 +61,8 @@ function versionHeader(): Record<string, string> {
 
 /**
  * Techo de espera de una subida. Diez veces el de `apiFetch` a propósito: por acá viajan archivos
- * de hasta 15 MB por una conexión de campo, y cortar a los 15 s abortaría subidas que iban bien.
+ * de hasta 8 MB (el tope del servidor; el cliente comprime a ~800 KB, ver `photo-compress.ts`) por una conexión de campo,
+ * y cortar a los 15 s abortaría subidas que iban bien.
  */
 const UPLOAD_TIMEOUT_MS = 60_000;
 
@@ -76,12 +78,14 @@ export async function postMultipart(path: string, form: FormData, token: string)
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), UPLOAD_TIMEOUT_MS);
   try {
-    return await fetch(`${API_BASE}${path}`, {
+    const res = await fetch(`${API_BASE}${path}`, {
       method: 'POST',
       headers: { authorization: `Bearer ${token}`, 'x-client-type': 'mobile', ...versionHeader() },
       body: form,
       signal: abort.signal,
     });
+    if (isUpgradeRequired(res.status)) useUpgradeStore.getState().mark();
+    return res;
   } catch (e) {
     throw abort.signal.aborted ? new UploadTimeout() : e;
   } finally {
@@ -164,6 +168,8 @@ export async function apiFetch<T>(
       error: ApiResult<T>['error'];
       meta?: ApiMeta;
     };
+    // 426 = esta versión ya no es compatible: se marca UNA vez, para toda la app (ver `UpgradeGate`).
+    if (isUpgradeRequired(res.status)) useUpgradeStore.getState().mark(json.error?.message);
     return { status: res.status, data: json.data, error: json.error, meta: json.meta };
   } catch {
     // Sin red, o la API no contestó a tiempo: status 0 para que el caller decida modo offline.

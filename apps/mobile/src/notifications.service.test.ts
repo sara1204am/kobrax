@@ -1,4 +1,32 @@
-import { whenLabel } from './notifications.service';
+const mockQuery = jest.fn();
+const mockRows: { readAt: string | null }[] = [];
+jest.mock('./api-client', () => ({
+  apiQuery: (...a: unknown[]) => mockQuery(...a),
+  apiMutate: jest.fn(),
+  toQuery: (p: Record<string, unknown>) => '?' + Object.entries(p).map(([k, v]) => `${k}=${v}`).join('&'),
+}));
+jest.mock('./db', () => ({ getMany: jest.fn(async () => mockRows) }));
+jest.mock('./sync/cached', () => ({ cachedList: jest.fn() }));
+
+import { unreadCount, whenLabel } from './notifications.service';
+
+describe('unreadCount', () => {
+  it('con señal usa el total del servidor', async () => {
+    mockQuery.mockResolvedValue({ status: 'ok', data: [], total: 7 });
+    expect(await unreadCount()).toBe(7);
+  });
+
+  it('sin señal cuenta las no leídas del buzón guardado', async () => {
+    mockQuery.mockResolvedValue({ status: 'offline' });
+    mockRows.splice(0, mockRows.length, { readAt: null }, { readAt: '2026-10-09T10:00:00Z' }, { readAt: null });
+    expect(await unreadCount()).toBe(2);
+  });
+
+  it('un error del servidor no inventa un número', async () => {
+    mockQuery.mockResolvedValue({ status: 'error', message: 'x' });
+    expect(await unreadCount()).toBe(0);
+  });
+});
 
 describe('whenLabel', () => {
   it('de hoy muestra la hora, no la fecha', () => {

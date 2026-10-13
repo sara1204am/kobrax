@@ -12,6 +12,8 @@ import {
   type ClientDuplicateMatch,
   type ClientTimelineEntry,
   ResponseDto,
+  validateCollectionProfile,
+  validateIncomeProfile,
 } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { nameTerms } from '../../common/name-search';
@@ -21,7 +23,7 @@ import { CryptoService } from '../../common/crypto/crypto.service';
 import { BlindIndexService } from '../../common/crypto/blind-index.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
-import { clientDisplayName, serializeClient, type PortfolioClient, type PortfolioTotals } from './clients.serializer';
+import { clientDisplayName, serializeClient, serializeIncomeProfile, type PortfolioClient, type PortfolioTotals } from './clients.serializer';
 import type { ClientPdfBundle, ClientPdfContext } from './client-pdf';
 import {
   ClientDuplicateCheckDto,
@@ -35,6 +37,7 @@ import {
   UpdateLocationDto,
   UpdateRelationDto,
   CreateRelationDto,
+  IncomeProfileDto,
   ListClientsQueryDto,
   TimelineQueryDto,
   UpdateClientDto,
@@ -44,6 +47,8 @@ import {
   clientDuplicate,
   clientHasActiveCredits,
   invalidClientIdentity,
+  invalidCollectionProfile,
+  invalidIncomeProfile,
   resourceNotFound,
 } from './clients.errors';
 
@@ -103,6 +108,12 @@ interface PortfolioRow {
   max_days_past_due_external: number;
 }
 
+/** Los campos de un perfil de ingreso ya validados (F4/13 · E3). */
+type IncomeData = Pick<
+  Prisma.ClientIncomeProfileUncheckedCreateInput,
+  'incomeSourceCode' | 'occupationCode' | 'incomeCycle' | 'incomeDay' | 'notes' | 'origin'
+>;
+
 @Injectable()
 export class ClientsService {
   constructor(
@@ -126,6 +137,10 @@ export class ClientsService {
   // ── Clientes ────────────────────────────────────────────────────────────────
   async create(dto: CreateClientDto): Promise<ReturnType<typeof serializeClient>> {
     this.assertIdentity(dto.clientType, dto.firstName, dto.lastName, dto.businessName);
+    // F4/13 · E2: los perfiles de cobro se validan ANTES de abrir la transacción (los del cliente y los de sus garantes).
+    for (const l of dto.locations ?? []) this.assertCollectionProfile(l.visitSchedule);
+    for (const r of dto.relations ?? []) for (const l of r.locations ?? []) this.assertCollectionProfile(l.visitSchedule);
+    const incomeProfile = this.incomeData(dto.incomeProfile);
     const nationalIdHash = this.blind.hash(dto.nationalId);
 
     const { created, subs, yaExistia } = await this.tx(async (tx) => {
@@ -187,8 +202,14 @@ export class ClientsService {
         audits.push({ kind: 'contact', id: row.id, after: row });
       };
       const mkLocation = async (l: CreateLocationDto, relationId: string | null) => {
+        this.assertCollectionProfile(l.visitSchedule);
         const row = await tx.clientLocation.create({
-          data: { accountId: acc, clientId: client.id, relationId, locationType: l.locationType, address: this.enc(l.address), zone: l.zone, latitude: l.latitude, longitude: l.longitude, referenceNotes: l.referenceNotes, photoUrls: (l.photoUrls ?? []) as Prisma.InputJsonValue },
+          data: {
+            accountId: acc, clientId: client.id, relationId, locationType: l.locationType, address: this.enc(l.address), zone: l.zone, latitude: l.latitude, longitude: l.longitude, referenceNotes: l.referenceNotes, photoUrls: (l.photoUrls ?? []) as Prisma.InputJsonValue,
+            // F4/13 · E2: el alta atómica descartaba estos dos aunque el DTO los aceptaba; solo `addLocation` los escribía.
+            visitSchedule: l.visitSchedule ? (l.visitSchedule as Prisma.InputJsonValue) : undefined,
+            riskLevel: l.riskLevel,
+          },
         });
         audits.push({ kind: 'location', id: row.id, after: row });
       };
@@ -216,6 +237,11 @@ export class ClientsService {
         });
         audits.push({ kind: 'collateral', id: row.id, after: row });
         await this.linkCollateral(tx, client.id, row.id, g.creditIds);
+      }
+      // F4/13 · E3: el perfil de ingreso viaja con el alta (atómico: sin cliente a medias si algo falla).
+      if (incomeProfile) {
+        const row = await tx.clientIncomeProfile.create({ data: { accountId: acc, clientId: client.id, ...incomeProfile, declaredBy: this.tenant.userId } });
+        audits.push({ kind: 'income_profile', id: row.id, after: row });
       }
       return { created: client, subs: audits, yaExistia: false };
     });
@@ -528,6 +554,7 @@ export class ClientsService {
           relations: { include: { contacts: true, locations: true, credits: { select: { creditId: true } } } },
           collaterals: { include: { credits: { select: { creditId: true } } } },
           attachments: true,
+          incomeProfile: true,
         },
       }),
     );
@@ -807,8 +834,92 @@ export class ClientsService {
     return updated;
   }
 
+  // ── Perfil de ingreso (F4/13 · E3) ───────────────────────────────────────────────────────────
+
+  /**
+   * Los campos con valor del DTO, validados con la regla compartida. `undefined` si no trae nada (vaciar el perfil).
+   *
+   * Se arma un objeto plano sin claves `undefined`: la instancia de la clase puede traerlas y el validador es
+   * estricto con las claves.
+   */
+  private incomeData(dto: IncomeProfileDto | undefined | null): IncomeData | undefined {
+    if (!dto) return undefined;
+    const plain: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(dto)) if (v !== undefined && v !== null && v !== '') plain[k] = v;
+    if (Object.keys(plain).length === 0) return undefined;
+    const reason = validateIncomeProfile(plain);
+    if (reason) throw invalidIncomeProfile(reason);
+    return plain as IncomeData;
+  }
+
+  async getIncomeProfile(clientId: string) {
+    return this.tx(async (tx) => {
+      const client = await tx.client.findFirst({ where: { id: clientId, deletedAt: null }, select: { id: true } });
+      if (!client) throw resourceNotFound();
+      const row = await tx.clientIncomeProfile.findFirst({ where: { clientId } });
+      return row ? serializeIncomeProfile(row) : null;
+    });
+  }
+
+  /**
+   * Guarda el perfil de ingreso del cliente. **Idempotente**: repetir el mismo cuerpo no cambia el resultado, que es
+   * lo que permite encolarlo sin señal. Un cuerpo vacío **borra** el perfil (la auditoría guarda el antes) y responde `{}`.
+   */
+  async putIncomeProfile(clientId: string, dto: IncomeProfileDto) {
+    const data = this.incomeData(dto);
+    const { before, after } = await this.tx(async (tx) => {
+      const client = await tx.client.findFirst({ where: { id: clientId, deletedAt: null }, select: { id: true } });
+      if (!client) throw resourceNotFound();
+      const existing = await tx.clientIncomeProfile.findFirst({ where: { clientId } });
+
+      if (!data) {
+        if (existing) await tx.clientIncomeProfile.delete({ where: { id: existing.id } });
+        return { before: existing, after: null };
+      }
+      // Los campos que no vienen se limpian: es el estado final, no un parche (igual que las fotos de una ubicación).
+      const values = {
+        incomeSourceCode: data.incomeSourceCode ?? null,
+        occupationCode: data.occupationCode ?? null,
+        incomeCycle: data.incomeCycle ?? null,
+        incomeDay: data.incomeDay ?? null,
+        notes: data.notes ?? null,
+        origin: data.origin ?? 'MANUAL',
+        declaredBy: this.tenant.userId ?? null,
+        declaredAt: new Date(),
+      };
+      const saved = existing
+        ? await tx.clientIncomeProfile.update({ where: { id: existing.id }, data: values })
+        : await tx.clientIncomeProfile.create({ data: { accountId: this.tenant.accountId, clientId, ...values } });
+      return { before: existing, after: saved };
+    });
+
+    // Sin cambio real no se audita: un PUT repetido (reintento de la cola) no debe llenar la bitácora.
+    const same = before && after && before.incomeSourceCode === after.incomeSourceCode && before.occupationCode === after.occupationCode &&
+      before.incomeCycle === after.incomeCycle && before.incomeDay === after.incomeDay && before.notes === after.notes && before.origin === after.origin;
+    if (!same && (before || after)) {
+      await this.audit.record({
+        entity: 'client_income_profile',
+        entityId: (after ?? before)!.id,
+        action: !before ? 'CREATE' : !after ? 'DELETE' : 'UPDATE',
+        before: before ?? undefined,
+        after: after ?? undefined,
+        redactKeys: ['notes'],
+      });
+    }
+    // `{}` y no `null` cuando quedó vacío: un 200 sin cuerpo se lee como error en los clientes (el móvil lo trata así).
+    return after ? serializeIncomeProfile(after) : {};
+  }
+
+  /** El perfil de cobro decide comportamiento (rutas, agenda): se valida el contenido; `null`/ausente no se valida. */
+  private assertCollectionProfile(value: unknown): void {
+    if (value === undefined || value === null) return;
+    const reason = validateCollectionProfile(value);
+    if (reason) throw invalidCollectionProfile(reason);
+  }
+
   /** `relationId`: la ubicación es del garante, no del cliente (ídem `addContact`). */
   async addLocation(clientId: string, dto: CreateLocationDto) {
+    this.assertCollectionProfile(dto.visitSchedule);
     return this.subCreate(clientId, 'location', async (tx) => {
       await this.assertRelationOf(tx, clientId, dto.relationId);
       return tx.clientLocation.create({
@@ -823,7 +934,7 @@ export class ClientsService {
           longitude: dto.longitude,
           referenceNotes: dto.referenceNotes,
           photoUrls: (dto.photoUrls ?? []) as Prisma.InputJsonValue,
-          visitSchedule: dto.visitSchedule as Prisma.InputJsonValue | undefined,
+          visitSchedule: dto.visitSchedule ? (dto.visitSchedule as Prisma.InputJsonValue) : undefined,
           riskLevel: dto.riskLevel,
         },
       });
@@ -836,6 +947,7 @@ export class ClientsService {
    * campos que vienen — `address` se cifra como en el alta.
    */
   async updateLocation(clientId: string, locationId: string, dto: UpdateLocationDto) {
+    this.assertCollectionProfile(dto.visitSchedule);
     const updated = await this.tx(async (tx) => {
       const found = await tx.clientLocation.findFirst({ where: { id: locationId, clientId }, select: { id: true } });
       if (!found) throw resourceNotFound();
@@ -849,6 +961,9 @@ export class ClientsService {
           ...(dto.longitude !== undefined && { longitude: dto.longitude }),
           ...(dto.referenceNotes !== undefined && { referenceNotes: dto.referenceNotes }),
           ...(dto.photoUrls !== undefined && { photoUrls: dto.photoUrls as Prisma.InputJsonValue }),
+          // `null` borra el perfil de cobro (en una columna JSON hay que decirlo con `DbNull`); ausente no la toca.
+          ...(dto.visitSchedule !== undefined && { visitSchedule: dto.visitSchedule === null ? Prisma.DbNull : (dto.visitSchedule as Prisma.InputJsonValue) }),
+          ...(dto.riskLevel !== undefined && { riskLevel: dto.riskLevel }),
         },
       });
     });

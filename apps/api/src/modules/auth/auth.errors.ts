@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  ConflictException,
+  ForbiddenException,
   HttpException,
   HttpStatus,
   UnauthorizedException,
@@ -21,6 +23,10 @@ export const AUTH_ERR = {
   WEAK_PASSWORD: 'AUTH_008',
   MFA_REQUIRED: 'AUTH_009',
   INVITATION_INVALID: 'AUTH_010',
+  /** Tu rol exige verificación en dos pasos: no se puede desactivar ni postergar. */
+  MFA_REQUIRED_BY_POLICY: 'AUTH_011',
+  /** Ya hay un segundo factor activo: reenrolar pisaría el secreto y dejaría a la persona afuera. */
+  MFA_ALREADY_ENABLED: 'AUTH_012',
 } as const;
 
 export const invalidCredentials = () =>
@@ -116,3 +122,17 @@ export const mfaRequired = () =>
     { code: AUTH_ERR.MFA_REQUIRED, message: 'MFA obligatorio: completa el enroll para continuar' },
     HttpStatus.FORBIDDEN,
   );
+
+/** El rol de la persona exige MFA: ni se desactiva ni se posterga (D2). */
+export const mfaRequiredByPolicy = () =>
+  new ForbiddenException({
+    code: AUTH_ERR.MFA_REQUIRED_BY_POLICY,
+    message: 'Tu rol exige verificación en dos pasos: no se puede desactivar ni postergar.',
+  });
+
+/** Enrolar de nuevo con el MFA activo pisaría el secreto sin confirmarlo: primero hay que desactivarlo (si el rol lo permite). */
+export const mfaAlreadyEnabled = () =>
+  new ConflictException({
+    code: AUTH_ERR.MFA_ALREADY_ENABLED,
+    message: 'La verificación en dos pasos ya está activa.',
+  });

@@ -8,7 +8,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { AgendaCard, AGENDA_STATUS_LABEL, AGENDA_TYPE_META, EmptyState, SectionLabel } from '@/ui';
 import { authService } from '@/auth-service';
-import { MONTHS, partitionDay, todayISO, WEEKDAYS_SHORT } from '@/agenda-form';
+import { filterByType, MONTHS, partitionDay, todayISO, WEEKDAYS_SHORT } from '@/agenda-form';
 import { listByDay, listOverdue, type AgendaListItem } from '@/agenda.service';
 import { quickActions } from '@/agenda-quick';
 import { getOne } from '@/db';
@@ -41,6 +41,8 @@ export default function AgendaScreen() {
   const [day, setDay] = useState<DayLoad>({ status: 'loading' });
   const [overdue, setOverdue] = useState<Overdue | null>(null);
   const [showAllOverdue, setShowAllOverdue] = useState(false);
+  /** Filtro por tipo de gestión (solo sobre lo ya cargado). `null` = todas. */
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const reqRef = useRef(0);
@@ -125,11 +127,11 @@ export default function AgendaScreen() {
 
   // El reparto vive en `agenda-form.ts` (puro, con test): "Completadas" incluye canceladas y
   // reagendadas, y la tarjeta las distingue por su etiqueta.
-  const { pending, done } = partitionDay(day.status === 'ok' ? day.items : []);
+  const { pending, done } = partitionDay(filterByType(day.status === 'ok' ? day.items : [], typeFilter));
   // "Vencidos" es el backlog global, y no depende del día elegido. Al pararse en una fecha pasada, sus
   // pendientes YA aparecen arriba: sin este filtro la misma tarjeta se pinta dos veces.
   const dayIds = new Set(pending.map((i) => i.id));
-  const overdueItems = overdue ? overdue.items.filter((i) => !dayIds.has(i.id)) : [];
+  const overdueItems = overdue ? filterByType(overdue.items, typeFilter).filter((i) => !dayIds.has(i.id)) : [];
   const overdueShown = showAllOverdue ? overdueItems : overdueItems.slice(0, 2);
 
   return (
@@ -173,6 +175,22 @@ export default function AgendaScreen() {
             }}
           />
         </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+          {[{ key: null as string | null, label: 'Todas' }, ...Object.entries(AGENDA_TYPE_META).map(([key, m]) => ({ key, label: `${m.icon} ${m.label}` }))].map((f) => {
+            const active = typeFilter === f.key;
+            return (
+              <Pressable
+                key={f.key ?? 'todas'}
+                onPress={() => setTypeFilter(f.key)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                style={[styles.filter, active && styles.filterActive]}
+              >
+                <Text style={[styles.filterText, active && styles.filterTextActive]}>{f.label}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       </SafeAreaView>
 
       {day.status === 'loading' ? (
@@ -304,6 +322,19 @@ function Row({ item }: { item: AgendaListItem }) {
 }
 
 const styles = StyleSheet.create({
+  filters: { gap: SPACING.xs, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
+  filter: {
+    minHeight: 36,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.pill,
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  filterActive: { backgroundColor: COLORS.navy, borderColor: COLORS.navy },
+  filterText: { ...TYPE.secondary, color: COLORS.navy },
+  filterTextActive: { color: COLORS.white },
   header: { backgroundColor: COLORS.navy },
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingTop: SPACING.md },
   headerTitle: { color: COLORS.white, fontSize: 20, fontWeight: '700' },

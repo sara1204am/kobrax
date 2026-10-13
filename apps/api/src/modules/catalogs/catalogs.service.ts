@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import type { CatalogType, Prisma, PrismaClient } from '@prisma/client';
-import { type ApiResponse, ResponseDto } from '@kobrax/shared';
+import { type ApiResponse, ResponseDto, validateCatalogMetadata } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { serializeCatalogItem } from './catalogs.serializer';
 import { CreateCatalogItemDto, UpdateCatalogItemDto } from './dto/catalog.dto';
-import { catalogItemNotFound } from './catalogs.errors';
+import { catalogItemNotFound, catalogMetadataInvalid } from './catalogs.errors';
 
-/** Catálogos configurables por tenant (una tabla genérica para los 11 tipos). */
+/** Catálogos configurables por tenant (una tabla genérica para todos los tipos). */
 @Injectable()
 export class CatalogsService {
   constructor(
@@ -32,7 +32,17 @@ export class CatalogsService {
     return ResponseDto.ok(rows.map(serializeCatalogItem));
   }
 
+  /**
+   * El `metadata` de los tipos de F4/13 decide comportamiento (qué motivos se ofrecen, qué ciclo se propone): se valida.
+   * Los demás tipos siguen aceptando cualquier objeto.
+   */
+  private assertMetadata(catalog: CatalogType, metadata: unknown): void {
+    const reason = validateCatalogMetadata(catalog, metadata);
+    if (reason) throw catalogMetadataInvalid(reason);
+  }
+
   async create(catalog: CatalogType, dto: CreateCatalogItemDto): Promise<ReturnType<typeof serializeCatalogItem>> {
+    this.assertMetadata(catalog, dto.metadata ?? {});
     const created = await this.tx((tx) =>
       tx.catalogItem.create({
         data: {
@@ -49,10 +59,12 @@ export class CatalogsService {
     return serializeCatalogItem(created);
   }
 
-  async update(id: string, dto: UpdateCatalogItemDto): Promise<ReturnType<typeof serializeCatalogItem>> {
+  /** `catalog` viene de la ruta: un ítem de otro tipo no se toca desde la ruta equivocada. */
+  async update(catalog: CatalogType, id: string, dto: UpdateCatalogItemDto): Promise<ReturnType<typeof serializeCatalogItem>> {
     const updated = await this.tx(async (tx) => {
-      const found = await tx.catalogItem.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+      const found = await tx.catalogItem.findFirst({ where: { id, catalog, deletedAt: null }, select: { id: true } });
       if (!found) throw catalogItemNotFound();
+      if (dto.metadata !== undefined) this.assertMetadata(catalog, dto.metadata);
       return tx.catalogItem.update({
         where: { id },
         data: {
@@ -68,9 +80,9 @@ export class CatalogsService {
   }
 
   /** Soft-delete. */
-  async remove(id: string): Promise<void> {
+  async remove(catalog: CatalogType, id: string): Promise<void> {
     await this.tx(async (tx) => {
-      const found = await tx.catalogItem.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+      const found = await tx.catalogItem.findFirst({ where: { id, catalog, deletedAt: null }, select: { id: true } });
       if (!found) throw catalogItemNotFound();
       await tx.catalogItem.update({ where: { id }, data: { deletedAt: new Date(), isActive: false } });
     });

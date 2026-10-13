@@ -17,11 +17,11 @@ import {
 import { authService, type Me } from '@/auth-service';
 import { tenantCurrency } from '@/mora.service';
 import { getRoute, listRoutes, routeProgress, type RouteItem } from '@/routes.service';
-import { listByDay, listOverdue, type AgendaListItem } from '@/agenda.service';
+import { getSummaryCached, listByDay, listOverdue, type AgendaListItem } from '@/agenda.service';
 import { listPaymentsByDay } from '@/payments.service';
 import { money, todayISO } from '@/agenda-form';
 import { syncAgendaReminders } from '@/agenda-notifications';
-import { dayProgress, dueSoon, queuedCollectedToday, upNext, type DayProgress } from '@/home';
+import { dayProgress, dueSoon, queuedCollectedToday, summaryView, upNext, type DayProgress, type SummaryView } from '@/home';
 import { pendingActions } from '@/sync/queue';
 import { unreadCount } from '@/notifications.service';
 
@@ -36,6 +36,8 @@ interface Home {
   route: RouteItem | null;
   routeProgress: { done: number; total: number } | null;
   unread: number;
+  /** Contactos efectivos y promesas de hoy: los calcula el servidor (una sola definición para web y móvil). */
+  summary: SummaryView;
 }
 
 /**
@@ -66,7 +68,7 @@ export default function InicioScreen() {
     const hoy = todayISO();
 
     // Todo en paralelo; cada dato degrada solo si falla (offline/error no bloquea el Home).
-    const [agendaRes, overdueRes, routesRes, unread, paysRes, currency] = await Promise.all([
+    const [agendaRes, overdueRes, routesRes, unread, paysRes, currency, summaryRes] = await Promise.all([
       listByDay(hoy),
       listOverdue(1), // sólo interesa `meta.total`: el contador de vencidas
       listRoutes({ collectorId: me.userId, status: RouteStatus.IN_PROGRESS }),
@@ -75,6 +77,7 @@ export default function InicioScreen() {
       // La moneda en la que cobra este tenant (de la lista de créditos): `payments` no la trae y
       // `GET /accounts/me` es 403 para el cobrador.
       tenantCurrency(),
+      getSummaryCached(),
     ]);
 
     const items = agendaRes.status === 'ok' ? agendaRes.data : [];
@@ -116,6 +119,7 @@ export default function InicioScreen() {
       route,
       routeProgress: route ? routeProgress(route) : null,
       unread,
+      summary: summaryView(summaryRes, hoy),
     });
   }, []);
 
@@ -184,6 +188,19 @@ export default function InicioScreen() {
             <StatTile label="COBRADO HOY" value={home.collected} tone="success" onDark />
           </View>
         </View>
+
+        {/* Lo que el servidor cuenta hoy. Un resumen guardado dice de qué hora es; uno de ayer no muestra cifras. */}
+        {home.summary.freshness !== 'none' && (
+          <View style={{ gap: SPACING.xs }}>
+            <View style={styles.tiles}>
+              <StatTile label="CONTACTOS EFECTIVOS" value={home.summary.effectiveContacts == null ? '—' : String(home.summary.effectiveContacts)} />
+              <StatTile label="PROMESAS TOMADAS" value={home.summary.promisesTaken == null ? '—' : String(home.summary.promisesTaken)} />
+              <StatTile label="PROMESAS DE HOY" value={home.summary.promisesDue == null ? '—' : String(home.summary.promisesDue)} />
+            </View>
+            {home.summary.freshness === 'cached' && <Text style={TYPE.caption}>{`Sin señal: datos de las ${home.summary.asOf ?? 'última vez'}.`}</Text>}
+            {home.summary.freshness === 'outdated' && <Text style={TYPE.caption}>Sin datos de hoy todavía: se actualizan con señal.</Text>}
+          </View>
+        )}
 
         {/* Lo urgente. Sólo aparece si de verdad hay algo por empezar: una banda naranja permanente
             deja de significar urgencia a los dos días. */}

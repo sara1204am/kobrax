@@ -49,3 +49,21 @@ export async function patchAgendaItemLocal(item: AgendaListItem, patch: Partial<
   const detail = await db.getOne<AgendaItemDetail>('agenda.detail', item.id);
   if (detail) await db.putOne('agenda.detail', item.id, { ...detail, item: { ...detail.item, ...patch } });
 }
+
+/**
+ * Quita la gestión de todas las copias locales: la eliminó el cobrador sin señal y no debe seguir viéndose ni contando.
+ * Distinta de `patchAgendaItemLocal`: eliminar no es un estado, es que la fila ya no existe.
+ */
+export async function removeAgendaItemLocal(item: Pick<AgendaListItem, 'id' | 'scheduledDate' | 'status'>): Promise<void> {
+  for (const scope of agendaScopesFor(item)) {
+    const rows = await db.getMany<AgendaListItem>('agenda', scope);
+    if (!rows.some((r) => r.id === item.id)) continue;
+    await db.replaceAll<AgendaListItem>('agenda', rows.filter((r) => r.id !== item.id), scope);
+    if (OVERDUE_SCOPES.includes(scope)) {
+      const meta = await db.getOne<{ total?: number }>('list.meta', `agenda|${scope}`);
+      if (typeof meta?.total === 'number') await db.putOne('list.meta', `agenda|${scope}`, { total: Math.max(0, meta.total - 1) });
+    }
+  }
+  await db.removeOne('agenda.detail', item.id);
+  await cancelAgendaReminder(item.id);
+}

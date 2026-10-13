@@ -6,6 +6,7 @@ import {
   AgendaTimeSlot,
   Permission,
   resolvePagination,
+  validateActivityContext,
   validateAgendaDetails,
   type AgendaDetails,
   type ApiResponse,
@@ -17,10 +18,10 @@ import {
   type WhatsAppDetails,
   ResponseDto,
 } from '@kobrax/shared';
-import { CreditActivityType } from '@prisma/client';
+import { CreditActivityType, type DataOrigin, type PayerParty } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
-import { TenantClockService } from '../../common/context/tenant-clock.service';
+import { TenantClockService, civilDayStartInstant } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { DomainEvent, EventBusService, type AgendaEventPayload } from '../../common/events/event-bus.service';
 import { ClientsService } from '../clients/clients.service';
@@ -57,9 +58,11 @@ import {
   agendaItemNotFound,
   agendaNotOwner,
   agendaNotSchedulable,
+  agendaPostponeSameDayOnly,
   agendaPastDate,
   agendaVisitInRoute,
   agendaVisitNeedsLocation,
+  agendaInvalidContext,
 } from './agenda.errors';
 
 /** Al ejecutar un agendado, qué tipo de actividad queda en la bitácora del crédito. */
@@ -352,10 +355,44 @@ export class AgendaService {
    * 🔴 «Pendiente» y «vencida» son derivadas (`SCHEDULED` en/antes de hoy), nunca un estado guardado. Una gestión de
    * hoy a las 08:00 no es vencida a las 20:00: vence al cambiar el día, igual que en la lista.
    */
-  async summary(): Promise<ApiResponse<{ date: string; pending: number; overdue: number; items: ReturnType<typeof serializeAgendaItem>[]; load?: { assigneeId: string; name?: string; pending: number; overdue: number }[] }>> {
+  async summary(): Promise<
+    ApiResponse<{
+      date: string;
+      pending: number;
+      overdue: number;
+      items: ReturnType<typeof serializeAgendaItem>[];
+      load?: { assigneeId: string; name?: string; pending: number; overdue: number }[];
+      effectiveContacts: number;
+      promisesDue: number;
+      promisesTaken: number;
+      generatedAt: string;
+    }>
+  > {
     const today = await this.today();
-    const { pending, overdue, rows, names, extras, load } = await this.tx(async (tx) => {
-      const where: Prisma.AgendaItemWhereInput = { deletedAt: null, status: AgendaItemStatus.SCHEDULED, ...(await this.assigneeScope(tx)) };
+    // El día civil de la EMPRESA como intervalo de instantes: «hoy» para los conteos por hora de creación o ejecución.
+    const dayISO = today.toISOString().slice(0, 10);
+    const nextISO = new Date(today.getTime() + 86_400_000).toISOString().slice(0, 10);
+    const tz = await this.clock.timezone();
+    const dayStart = civilDayStartInstant(dayISO, tz);
+    const dayEnd = civilDayStartInstant(nextISO, tz);
+    const { pending, overdue, rows, names, extras, load, effectiveContacts, promisesDue, promisesTaken } = await this.tx(async (tx) => {
+      const scope = await this.assigneeScope(tx);
+      const where: Prisma.AgendaItemWhereInput = { deletedAt: null, status: AgendaItemStatus.SCHEDULED, ...scope };
+
+      // Contactos efectivos de hoy: ejecutadas hoy CON gestión real, y esa gestión es de hoy (no de otro día).
+      const executed = await tx.agendaItem.findMany({
+        where: { deletedAt: null, status: AgendaItemStatus.EXECUTED, resultActivityId: { not: null }, updatedAt: { gte: dayStart }, ...scope },
+        select: { resultActivityId: true },
+      });
+      const activityIds = executed.map((e) => e.resultActivityId).filter((id): id is string => !!id);
+      const effectiveContacts = activityIds.length
+        ? await tx.creditActivity.count({ where: { id: { in: activityIds }, createdAt: { gte: dayStart, lt: dayEnd } } })
+        : 0;
+      const [promisesDue, promisesTaken] = await Promise.all([
+        tx.agendaItem.count({ where: { ...where, type: AgendaItemType.PROMISE_TO_PAY, scheduledDate: today } }),
+        tx.agendaItem.count({ where: { deletedAt: null, type: AgendaItemType.PROMISE_TO_PAY, createdAt: { gte: dayStart, lt: dayEnd }, ...scope } }),
+      ]);
+
       const [pending, overdue, rows] = await Promise.all([
         tx.agendaItem.count({ where: { ...where, scheduledDate: today } }),
         tx.agendaItem.count({ where: { ...where, scheduledDate: { lt: today } } }),
@@ -376,12 +413,26 @@ export class AgendaService {
           .map((r) => ({ ...r, name: who.get(r.assigneeId) }))
           .sort((a, b) => b.overdue - a.overdue || b.pending - a.pending || a.assigneeId.localeCompare(b.assigneeId));
       }
-      return { pending, overdue, rows, names: await this.clientNames(tx, rows.map((r) => r.clientId)), extras: await this.rowExtras(tx, rows), load };
+      return {
+        pending,
+        overdue,
+        rows,
+        names: await this.clientNames(tx, rows.map((r) => r.clientId)),
+        extras: await this.rowExtras(tx, rows),
+        load,
+        effectiveContacts,
+        promisesDue,
+        promisesTaken,
+      };
     });
     return ResponseDto.ok({
       date: today.toISOString().slice(0, 10),
       pending,
       overdue,
+      effectiveContacts,
+      promisesDue,
+      promisesTaken,
+      generatedAt: new Date().toISOString(),
       items: rows.map((r) => serializeAgendaItem(r, names.get(r.clientId), today, extras.get(r.id))),
       ...(load ? { load } : {}),
     });
@@ -513,6 +564,15 @@ export class AgendaService {
     const { updated, clientName, replay } = await this.tx(async (tx) => {
       const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...(await this.assigneeScope(tx)) } });
       if (!item) throw agendaItemNotFound();
+      // F4/13 · E4: el contexto (motivo, fecha esperada, quién responde) se valida con la regla compartida, igual que en la
+      // ficha de mora. Un día de margen: quien escribe en Bolivia a las 21:00 aún puede ver «hoy» cuando en UTC ya es mañana.
+      const hayContexto =
+        dto.reasonCode !== undefined || dto.expectedIncomeDate !== undefined || dto.payerParty !== undefined || dto.origin !== undefined || dto.templateCode !== undefined;
+      if (hayContexto) {
+        const ayer = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+        const motivo = validateActivityContext(dto, ACTIVITY_TYPE_BY_AGENDA[item.type], ayer);
+        if (motivo) throw agendaInvalidContext(motivo);
+      }
       // Reintento de la cola offline: ya se ejecutó con ESE mismo resultado → se responde lo hecho, sin otra
       // actividad. Con otro resultado sigue siendo un conflicto.
       if (item.status === AgendaItemStatus.EXECUTED && item.resultActivityId) {
@@ -538,6 +598,11 @@ export class AgendaService {
         type: ACTIVITY_TYPE_BY_AGENDA[item.type],
         result: dto.outcome,
         notes: dto.notes,
+        reasonCode: dto.reasonCode,
+        expectedIncomeDate: dto.expectedIncomeDate,
+        payerParty: dto.payerParty as PayerParty | undefined,
+        origin: dto.origin as DataOrigin | undefined,
+        templateCode: dto.templateCode,
       });
       const updated = await tx.agendaItem.update({
         where: { id },
@@ -564,26 +629,57 @@ export class AgendaService {
    * (Posponer "desde ahora" un vencido llegaría con el refinamiento tenant-tz, pendiente en todo el módulo.)
    */
   async postpone(id: string, dto: PostponeAgendaItemDto): Promise<ApiResponse<ReturnType<typeof serializeAgendaItem>>> {
-    const { updated, clientName } = await this.tx(async (tx) => {
+    const today = await this.today();
+    const nowMinutes = await this.clock.nowWallMinutes();
+    const { updated, clientName, before, replay } = await this.tx(async (tx) => {
       const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...(await this.assigneeScope(tx)) } });
       if (!item) throw agendaItemNotFound();
       if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
 
+      const before = {
+        scheduledDate: item.scheduledDate.toISOString().slice(0, 10),
+        scheduledTime: item.scheduledTime,
+        timeMode: item.timeMode,
+        timeSlot: item.timeSlot,
+      };
+
+      /*
+       * 🔴 **Reintento idempotente primero.** La cola offline reenvía `toTime` absoluto: si la gestión ya quedó a esa hora
+       * fija, el reenvío es un éxito, no un «no es posterior». Sin esto el segundo envío salía rechazado aunque el primero
+       * había funcionado.
+       */
+      if (dto.toTime && item.timeMode === ScheduleTimeMode.FIXED && item.scheduledTime === dto.toTime) {
+        const names = await this.clientNames(tx, [item.clientId]);
+        return { updated: item, clientName: names.get(item.clientId), before, replay: true };
+      }
+
+      // Posponer no rescata un día que ya pasó: eso es Reagendar (con motivo y cadena).
+      if (item.scheduledDate < today) throw agendaPostponeSameDayOnly('past-day');
+      const isToday = item.scheduledDate.getTime() === today.getTime();
+      const current = baseMinutes(item);
+      // Desde ahora si ya venció hoy: sumar sobre una hora vieja daba otra hora vieja.
+      const from = isToday ? Math.max(current, nowMinutes) : current;
+
       // `toTime` es absoluta: la hora QUEDA en ese valor, así que repetir el envío no la corre otra vez. `minutes`
       // (relativa) se mantiene para los clientes viejos.
-      let dayShift = 0;
       let time: string;
       if (dto.toTime) {
+        const [h, m] = dto.toTime.split(':').map(Number);
+        const target = (h ?? 0) * 60 + (m ?? 0);
+        // «Posponer» es hacia adelante: una hora igual o anterior a la actual (o a «ahora», si es de hoy) no lo es.
+        if (target <= from) throw agendaPostponeSameDayOnly('not-later');
         time = dto.toTime;
       } else if (dto.minutes !== undefined) {
-        ({ dayShift, time } = shiftWallClock(baseMinutes(item), dto.minutes));
+        const shifted = shiftWallClock(from, dto.minutes);
+        if (shifted.dayShift !== 0) throw agendaPostponeSameDayOnly('crosses-day');
+        time = shifted.time;
       } else {
         throw agendaInvalidTimeMode('Indicá la nueva hora (toTime) o los minutos a posponer');
       }
       const updated = await tx.agendaItem.update({
         where: { id },
         data: {
-          scheduledDate: addUTCDays(item.scheduledDate, dayShift),
+          // Nunca cambia el día (ver reglas arriba): solo la hora.
           scheduledTime: time,
           timeMode: ScheduleTimeMode.FIXED,
           timeSlot: null,
@@ -591,10 +687,25 @@ export class AgendaService {
         },
       });
       const names = await this.clientNames(tx, [updated.clientId]);
-      return { updated, clientName: names.get(updated.clientId) };
+      return { updated, clientName: names.get(updated.clientId), before, replay: false };
     });
 
-    await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'POSTPONE', after: updated });
+    // Un reintento que ya había funcionado no vuelve a auditar: el rastro es de la acción, no de cada envío.
+    if (!replay) {
+      await this.audit.record({
+        entity: 'agenda_item',
+        entityId: id,
+        action: 'POSTPONE',
+        before,
+        after: {
+          scheduledDate: updated.scheduledDate.toISOString().slice(0, 10),
+          scheduledTime: updated.scheduledTime,
+          timeMode: updated.timeMode,
+          timeSlot: updated.timeSlot,
+          via: dto.toTime ? 'toTime' : 'minutes',
+        },
+      });
+    }
     return ResponseDto.ok(await this.view(updated, clientName));
   }
 
@@ -707,6 +818,8 @@ export class AgendaService {
           latitude: l.latitude,
           longitude: l.longitude,
           photoUrls: l.photoUrls ?? [],
+          // F4/13 · E2: cómo conviene cobrarle en este lugar. Solo las del cliente: las de un garante no llevan perfil.
+          visitSchedule: l.visitSchedule ?? undefined,
         })),
         ...(client.relations ?? []).flatMap((r) =>
           (r.locations ?? []).map((l) => ({

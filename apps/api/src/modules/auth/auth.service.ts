@@ -8,6 +8,7 @@ import { TokenService } from './token.service';
 import { PermissionsService } from './permissions.service';
 import { SessionService } from './session.service';
 import { MfaService } from './mfa.service';
+import { CRITICAL_ROLES, canPostponeEnrollment } from './mfa-policy';
 import {
   accountLocked,
   accountNotAllowed,
@@ -15,6 +16,7 @@ import {
   invalidPreAuth,
   invalidToken,
   mfaInvalid,
+  mfaRequiredByPolicy,
   noActiveTenant,
   refreshRetry,
   reuseDetected,
@@ -43,8 +45,6 @@ interface MembershipRow {
 const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const GRACE_MS = 10_000;
 
-/** Roles que exigen MFA obligatorio (F2b enforcement). */
-const CRITICAL_ROLES = ['SUPER_ADMIN', 'ACCOUNT_ADMIN'];
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -322,6 +322,8 @@ export class AuthService implements OnModuleInit {
    */
   async mfaSetupSkip(preAuthToken: string, meta: SessionMeta): Promise<LoginResult> {
     const pre = this.verifyEnrollToken(preAuthToken);
+    // 🔴 D2: para un rol crítico el MFA es obligatorio. Solo se puede postergar dentro de la gracia explícita (`MFA_CRITICAL_GRACE_UNTIL`).
+    if ((await this.mfa.isCritical(pre.sub)) && !canPostponeEnrollment()) throw mfaRequiredByPolicy();
     return this.proceedToAccountStep(pre.sub, meta, false);
   }
 
@@ -357,6 +359,7 @@ export class AuthService implements OnModuleInit {
     role: string;
     permissions: string[];
     mfaEnabled: boolean;
+    mfaRequired: boolean;
     requiresPasswordChange: boolean;
     /** Sesión del token: el panel la compara entre pestañas (W-LOG-54). */
     sessionId?: string;
@@ -382,6 +385,8 @@ export class AuthService implements OnModuleInit {
       role: role?.name ?? 'UNKNOWN',
       permissions: user.permissions,
       mfaEnabled: dbUser.mfaEnabled,
+      /** El rol exige MFA (D2): el cliente no ofrece desactivarlo ni postergarlo. El servidor lo impone igual. */
+      mfaRequired: await this.mfa.isCritical(dbUser.id),
       requiresPasswordChange: dbUser.requiresPasswordChange,
       sessionId: user.sessionId,
     };

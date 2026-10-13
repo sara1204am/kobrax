@@ -52,7 +52,8 @@ function makeService(opts: { credit?: unknown; idempotentExisting?: unknown; max
   const tenant = { accountId: 'acc-A', userId: 'u1' };
   const audit = { record: async (e: { action: string }) => void calls.audit.push(e.action) };
   const events = { emit: (name: string) => void calls.events.push(name) };
-  const service = new PaymentsService(prisma as never, tenant as never, audit as never, events as never);
+  const clock = { timezone: async () => 'America/La_Paz' };
+  const service = new PaymentsService(prisma as never, tenant as never, audit as never, events as never, clock as never);
   return { service, calls };
 }
 
@@ -235,7 +236,8 @@ function makeLister(rows: unknown[] = []) {
     },
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
-  const service = new PaymentsService(prisma as never, { accountId: 'acc-A' } as never, {} as never, {} as never);
+  const clock = { timezone: async () => 'America/La_Paz' };
+  const service = new PaymentsService(prisma as never, { accountId: 'acc-A' } as never, {} as never, {} as never, clock as never);
   return { service, calls };
 }
 
@@ -246,6 +248,15 @@ describe('PaymentsService.list — fuente del crédito (D7)', () => {
     assert.deepEqual(calls.where!.credit, { clientId: 'cl1', externalSource: 'PSF' });
     await service.list({ source: 'KOBRAX' });
     assert.deepEqual(calls.where!.credit, { externalSource: null });
+  });
+
+  it('day: el día civil de la empresa (La Paz = UTC−4), no el día UTC', async () => {
+    const { service, calls } = makeLister();
+    await service.list({ day: '2026-10-07' });
+    const range = calls.where!.paymentDate as { gte: Date; lt: Date };
+    // 00:00 del 7 en La Paz = 04:00 UTC; lo cobrado a las 21:00 locales (01:00 UTC del 8) sigue siendo del 7.
+    assert.equal(range.gte.toISOString(), '2026-10-07T04:00:00.000Z');
+    assert.equal(range.lt.toISOString(), '2026-10-08T04:00:00.000Z');
   });
 
   it('cada fila dice si el cobro fue sobre un crédito externo', async () => {

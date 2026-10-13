@@ -11,6 +11,7 @@ import type {
   AgendaTodaySummary,
   AgendaTarget,
   AgendaTimeSlot,
+  CollectionProfile,
   CreateAgendaInput,
   ScheduleTimeMode,
   UpdateAgendaInput,
@@ -38,6 +39,15 @@ export type {
  */
 export function getSummary(): Promise<QueryResult<AgendaTodaySummary>> {
   return apiQuery<AgendaTodaySummary>('/agenda/summary');
+}
+
+/**
+ * El resumen de hoy **con respaldo local** (contadores del Inicio). Sin señal devuelve el último guardado con `localAt`;
+ * quien lo muestre decide si todavía vale (`summaryView`). `getSummary` queda sin caché a propósito: de él sale «hoy» y un
+ * resumen viejo fijaría un día equivocado.
+ */
+export function getSummaryCached(): Promise<QueryResult<AgendaTodaySummary>> {
+  return cachedOne<AgendaTodaySummary>('agenda.summary', 'today', () => apiQuery<AgendaTodaySummary>('/agenda/summary'));
 }
 
 /** Le pregunta al servidor qué día es para la empresa y lo recuerda. Sin red no hace nada: queda el día local del teléfono. */
@@ -70,8 +80,17 @@ export function getItem(id: string): Promise<QueryResult<AgendaItemDetail>> {
 }
 
 /** Registrar la ejecución (S4): outcome + nota → el ítem pasa a EXECUTED. Devuelve el ítem actualizado. */
-export function completeItem(id: string, outcome: AgendaOutcome, notes?: string): Promise<MutateResult<AgendaListItem>> {
-  return apiMutate<AgendaListItem>(`/agenda/${id}/complete`, 'POST', { outcome, notes });
+export function completeItem(id: string, outcome: AgendaOutcome, notes?: string, context?: ActivityContext): Promise<MutateResult<AgendaListItem>> {
+  return apiMutate<AgendaListItem>(`/agenda/${id}/complete`, 'POST', { outcome, notes, ...context });
+}
+
+/** Contexto opcional de una gestión (F4/13 · E4). Solo viaja lo que se eligió. */
+export interface ActivityContext {
+  reasonCode?: string;
+  expectedIncomeDate?: string;
+  payerParty?: string;
+  /** Plantilla de mensaje **elegida** (F4/13 · E5), no la enviada: `wa.me` no confirma el envío. */
+  templateCode?: string;
 }
 
 /**
@@ -90,15 +109,22 @@ const SLOT_START_MINUTES: Record<string, number> = { MORNING: 8 * 60, AFTERNOON:
 
 /**
  * La hora absoluta (`HH:mm`) a la que queda una gestión al posponerla `minutes`. Espeja la aritmética del server
- * (base = hora fija, o inicio de la franja, o 09:00). **`undefined` si cruza la medianoche**: `toTime` no lleva
- * día, así que ahí se manda sólo `minutes` y el server corre el día como siempre.
+ * (base = hora fija, o inicio de la franja, o 09:00).
+ *
+ * D-8 — **Posponer no cambia de día.** Devuelve `undefined` si la hora llegaría a la medianoche o pasada: no hay un destino
+ * válido y la pantalla debe decirlo (la salida es «Reagendar»), no mandar el pedido y que el servidor lo rechace.
+ *
+ * Una gestión de HOY que ya venció se pospone **desde ahora**, no sobre su hora vieja (que seguiría en el pasado): quien
+ * llama pasa `nowMinutes` (minutos desde la medianoche, en el reloj del teléfono, que es el que muestra los avisos).
  */
 export function postponeTarget(
   item: { scheduledTime?: string | null; timeSlot?: string | null },
   minutes: AgendaPostponeStep,
+  opts: { nowMinutes?: number } = {},
 ): string | undefined {
   const m = item.scheduledTime ? /^(\d{1,2}):(\d{2})/.exec(item.scheduledTime) : null;
-  const base = m ? Number(m[1]) * 60 + Number(m[2]) : (SLOT_START_MINUTES[item.timeSlot ?? ''] ?? 9 * 60);
+  const scheduled = m ? Number(m[1]) * 60 + Number(m[2]) : (SLOT_START_MINUTES[item.timeSlot ?? ''] ?? 9 * 60);
+  const base = opts.nowMinutes === undefined ? scheduled : Math.max(scheduled, opts.nowMinutes);
   const total = base + minutes;
   if (total >= 24 * 60) return undefined;
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
@@ -170,6 +196,13 @@ export interface LocationOption {
   zone?: string;
   latitude?: number;
   longitude?: number;
+  /** Rutas `/api/uploads/…`; la primera es la principal. */
+  photoUrls?: string[];
+  /** Cómo conviene cobrarle en este lugar (F4/13 · E2). Ausente si nunca se cargó. */
+  visitSchedule?: CollectionProfile | null;
+  /** Solo en las de garantes y familiares: de quién es la dirección y qué relación tiene con el deudor. */
+  ownerName?: string;
+  ownerRelation?: string;
 }
 
 export interface AgendaClientContext {

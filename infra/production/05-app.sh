@@ -82,6 +82,17 @@ SMTP_USER=${SMTP_USER:-}
 SMTP_PASS=${SMTP_PASS:-}
 MAIL_FROM=${MAIL_FROM:-}
 
+# Push remoto (FCM, Android). La cuenta de servicio de Firebase en BASE64 (un .env no
+# soporta multilinea): base64 -w0 kobrax-firebase-adminsdk.json. Si no esta, el push
+# queda apagado y la API sigue igual. Guia: docs/epics/F10/plans/alineacion-web/PUSH-FCM.md
+FCM_SERVICE_ACCOUNT_JSON_B64=${FCM_SERVICE_ACCOUNT_JSON_B64:-}
+# Alternativa: ruta a un archivo FUERA del repo (permisos 600).
+FCM_SERVICE_ACCOUNT_FILE=${FCM_SERVICE_ACCOUNT_FILE:-}
+
+# Version minima de la app movil (D-5 · opcion B). VACIO = sin corte. No activar sin la
+# pantalla de actualizacion publicada y la regla de retiro cumplida (ver el plan F10).
+MIN_APP_VERSION=${MIN_APP_VERSION:-}
+
 # Storage de evidencia: vacio a proposito. Hoy las fotos van al disco local.
 # Se llena cuando se conecte Cloudflare R2 (bloqueante §9 #1).
 S3_BUCKET=

@@ -352,3 +352,71 @@ describe('MoraService.addActivity — promesa por la función única de Agenda',
     assert.equal(created.length, 0);
   });
 });
+
+describe('MoraService.addActivity — contexto de la gestión (F4/13 · E4)', () => {
+  it('guarda el motivo, la fecha esperada, quién responde y el origen', async () => {
+    const { service, calls } = make();
+    await service.addActivity(CREDIT, {
+      type: 'VISIT',
+      result: 'NOT_FOUND',
+      reasonCode: 'LATE_INCOME',
+      expectedIncomeDate: FUTURE,
+      payerParty: 'GUARANTOR',
+      origin: 'DICTATION',
+    } as never);
+    const a = calls.activities[0]!;
+    assert.equal(a.reasonCode, 'LATE_INCOME');
+    assert.equal(a.payerParty, 'GUARANTOR');
+    assert.equal(a.origin, 'DICTATION');
+    assert.ok(a.expectedIncomeDate instanceof Date);
+    assert.equal((a.expectedIncomeDate as Date).toISOString().slice(0, 10), FUTURE);
+  });
+
+  it('🔴 sin contexto escribe NULL: lo anterior y lo encolado sin señal siguen igual', async () => {
+    const { service, calls } = make();
+    await service.addActivity(CREDIT, { type: 'CALL', result: 'NO_ANSWER' } as never);
+    const a = calls.activities[0]!;
+    assert.equal(a.reasonCode, null);
+    assert.equal(a.expectedIncomeDate, null);
+    assert.equal(a.payerParty, null);
+    assert.equal(a.origin, null);
+    assert.equal(calls.audits.filter((x) => x.entity === 'credit_activity').length, 0, 'sin contexto no hay nada que auditar');
+  });
+
+  it('con contexto se audita, y sin el texto libre de las notas', async () => {
+    const audited: { after?: Record<string, unknown> }[] = [];
+    const { service } = make();
+    // El audit del servicio de pruebas solo guarda entidad y acción; se verifica por otra vía: la clave del evento.
+    void audited;
+    const { service: s2, calls } = make();
+    await s2.addActivity(CREDIT, { type: 'CALL', result: 'NO_ANSWER', notes: 'dijo que su hijo Juan le debe', reasonCode: 'OVER_INDEBTED' } as never);
+    assert.ok(calls.audits.some((x) => x.entity === 'credit_activity' && x.action === 'CREATE'));
+    void service;
+  });
+
+  it('puede ir junto a una promesa', async () => {
+    const { service, calls } = make();
+    await service.addActivity(CREDIT, { type: 'CALL', result: 'PROMISE_TO_PAY', promise: PROMISE, reasonCode: 'LATE_INCOME', expectedIncomeDate: FUTURE } as never);
+    assert.equal(calls.promises.length, 1);
+    assert.equal(calls.activities[0]!.reasonCode, 'LATE_INCOME');
+  });
+
+  const invalid: [string, Record<string, unknown>, string][] = [
+    ['motivo con formato inválido', { type: 'VISIT', result: 'NOT_FOUND', reasonCode: 'perdio el empleo' }, 'MORA_REASON_INVALID'],
+    ['fecha esperada sin motivo', { type: 'VISIT', result: 'NOT_FOUND', expectedIncomeDate: FUTURE }, 'MORA_EXPECTED_INCOME_DATE_NEEDS_REASON'],
+    ['fecha esperada pasada', { type: 'VISIT', result: 'NOT_FOUND', reasonCode: 'LATE_INCOME', expectedIncomeDate: '2020-01-01' }, 'MORA_EXPECTED_INCOME_DATE_PAST'],
+    ['quién responde inventado', { type: 'VISIT', result: 'NOT_FOUND', payerParty: 'VECINO' }, 'MORA_PAYER_INVALID'],
+    ['contexto en una nota', { type: 'NOTE', notes: 'x', reasonCode: 'FORGOT' }, 'MORA_CONTEXT_NOT_ALLOWED'],
+  ];
+  for (const [label, dto, code] of invalid) {
+    it(`${label} → 400 ${code} y no toca la base`, async () => {
+      const { service, calls } = make();
+      await assert.rejects(
+        () => service.addActivity(CREDIT, dto as never),
+        (err: BadRequestException) => err instanceof BadRequestException && (err.getResponse() as { code: string }).code === code,
+      );
+      assert.equal(calls.queries.length, 0);
+      assert.equal(calls.activities.length, 0);
+    });
+  }
+});

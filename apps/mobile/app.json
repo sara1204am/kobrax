@@ -3,7 +3,7 @@
     "name": "Kobrax",
     "slug": "kobrax-mobile",
     "scheme": "kobrax",
-    "version": "0.1.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
@@ -23,7 +23,8 @@
     },
     "android": {
       "package": "demo.kobrax.mobile",
-      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
+      "versionCode": 10100,
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "POST_NOTIFICATIONS"]
     },
     "plugins": [
       "expo-router",
@@ -50,7 +51,15 @@
       "./plugins/with-gradle-plugin-dedupe",
       [
         "./plugins/with-ssl-pinning",
-        { "domain": "api.kobrax.com", "pins": [] }
+        {
+          "domain": "api.kobrax.ikigaisystems.lat",
+          "pins": [
+            "s/tdAOmUzd8syaTuqfgGvFcn6DzA5Cmb+Vby1ST+U3Y=",
+            "sCkq5UWXjg+7mKu9lMhhYF5bGLsy7VI/UNW3tccdR7w=",
+            "diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI="
+          ],
+          "expiration": "2027-09-30"
+        }
       ]
     ],
     "experiments": {

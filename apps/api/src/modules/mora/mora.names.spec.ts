@@ -192,7 +192,7 @@ describe('PaymentsService — registeredByName', () => {
       payment: { findMany: async () => [pay('p1', ANA), pay('p2', LUIS), pay('p3', null), pay('p4', ANA)], count: async () => 4 },
       userAccount,
     };
-    const service = new PaymentsService({ withTenant: async (_a: string, fn: (t: unknown) => unknown) => fn(tx) } as never, { accountId: 'acc' } as never, {} as never, {} as never);
+    const service = new PaymentsService({ withTenant: async (_a: string, fn: (t: unknown) => unknown) => fn(tx) } as never, { accountId: 'acc' } as never, {} as never, {} as never, {} as never);
     const { data } = await service.list({ creditId: CREDIT });
     assert.deepEqual(data!.map((p) => p.registeredByName), ['Ana Pérez', 'Luis Rojas', undefined, 'Ana Pérez']);
     assert.equal(lookups.length, 1);

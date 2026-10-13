@@ -1,5 +1,5 @@
 import { applyDecorators } from '@nestjs/common';
-import { CREDIT_SOURCES, type CreditSource } from '@kobrax/shared';
+import { CREDIT_SOURCES, INCOME_CYCLES, INCOME_SOURCE_CODES, type CreditSource } from '@kobrax/shared';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -41,6 +41,19 @@ export class CreateContactDto {
   @IsOptional() @IsUUID() relationId?: string;
 }
 
+/**
+ * Perfil de ingreso del cliente (F4/13 · E3). El contenido se valida otra vez en el servicio con
+ * `validateIncomeProfile` (regla del día según el ciclo), que es la única fuente de verdad compartida con web y móvil.
+ */
+export class IncomeProfileDto {
+  @IsOptional() @IsIn(INCOME_SOURCE_CODES as unknown as string[]) incomeSourceCode?: string;
+  @IsOptional() @IsString() @Length(1, 40) occupationCode?: string;
+  @IsOptional() @IsIn(INCOME_CYCLES as unknown as string[]) incomeCycle?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(31) incomeDay?: number;
+  @IsOptional() @IsString() @MaxLength(280) notes?: string;
+  @IsOptional() @IsIn(['MANUAL', 'DICTATION', 'IMPORT', 'SUGGESTION_ACCEPTED']) origin?: string;
+}
+
 export class CreateLocationDto {
   @IsOptional() @IsEnum(LocationType) locationType?: LocationType;
   @IsOptional() @IsString() address?: string; // se cifra en reposo
@@ -49,7 +62,8 @@ export class CreateLocationDto {
   @IsOptional() @Type(() => Number) longitude?: number;
   @IsOptional() @IsString() referenceNotes?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) photoUrls?: string[];
-  @IsOptional() @IsObject() visitSchedule?: Record<string, unknown>;
+  /** Perfil de cobro (F4/13 · E2): se valida en el servicio con `validateCollectionProfile`. */
+  @IsOptional() @IsObject() visitSchedule?: Record<string, unknown> | null;
   @IsOptional() @IsString() riskLevel?: string;
   /** Ídem `CreateContactDto`: la ubicación es del garante, no del cliente. */
   @IsOptional() @IsUUID() relationId?: string;
@@ -69,6 +83,12 @@ export class UpdateLocationDto {
    * el estado final, no un agregado—, igual que en las garantías.
    */
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) photoUrls?: string[];
+  /**
+   * Perfil de cobro (F4/13 · E2). **Faltaba acá** —el alta lo aceptaba y la edición no—, así que no había forma de
+   * corregirlo. `null` lo borra; ausente lo deja como está.
+   */
+  @IsOptional() @IsObject() visitSchedule?: Record<string, unknown> | null;
+  @IsOptional() @IsString() riskLevel?: string;
 }
 
 /**
@@ -151,9 +171,11 @@ export class CreateClientDto {
   @IsOptional() @IsString() nationalId?: string;
   @IsOptional() @IsString() taxId?: string;
   @IsOptional() @IsEnum(ClientStatus) status?: ClientStatus;
-  @IsOptional() @IsString() preferredContactChannel?: string;
+  @IsOptional() @IsString() @MaxLength(40) preferredContactChannel?: string;
   @IsOptional() @IsString() riskSegment?: string;
   @IsOptional() @IsObject() metadata?: Record<string, unknown>;
+  /** Perfil de ingreso (F4/13 · E3): se guarda en la misma transacción que el cliente. */
+  @IsOptional() @ValidateNested() @Type(() => IncomeProfileDto) incomeProfile?: IncomeProfileDto;
   /** Alta atómica (§5.1): contactos, ubicaciones y relaciones creados en la misma transacción. */
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => CreateContactDto) contacts?: CreateContactDto[];
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => CreateLocationDto) locations?: CreateLocationDto[];
@@ -189,7 +211,7 @@ export class UpdateClientDto {
   @IsOptional() @IsString() nationalId?: string;
   @IsOptional() @IsString() taxId?: string;
   @IsOptional() @IsEnum(ClientStatus) status?: ClientStatus;
-  @IsOptional() @IsString() preferredContactChannel?: string;
+  @IsOptional() @IsString() @MaxLength(40) preferredContactChannel?: string;
   @IsOptional() @IsString() riskSegment?: string;
   @IsOptional() @IsObject() metadata?: Record<string, unknown>;
 }

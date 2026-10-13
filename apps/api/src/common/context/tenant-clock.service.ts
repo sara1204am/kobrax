@@ -109,6 +109,18 @@ export function civilDayStartInstant(day: string, tz: string): Date {
   }
 }
 
+/** Minutos transcurridos desde la medianoche civil de `tz` (0–1439). Con una zona inválida cae a UTC. */
+export function wallMinutesNow(tz: string, now: Date = new Date()): number {
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now);
+    const h = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
+    const m = Number(parts.find((p) => p.type === 'minute')?.value ?? 0);
+    return (h % 24) * 60 + m;
+  } catch {
+    return now.getUTCHours() * 60 + now.getUTCMinutes();
+  }
+}
+
 /**
  * Qué día es **para el tenant**.
  *
@@ -150,6 +162,11 @@ export class TenantClockService {
   /** Medianoche UTC del día civil del tenant — la referencia de "hoy" para vencidos y para el pasado. */
   async today(): Promise<Date> {
     return civilTodayUTC(await this.timezone());
+  }
+
+  /** La hora de pared de la empresa ahora, en minutos desde su medianoche: la base de «posponer desde ahora». */
+  async nowWallMinutes(): Promise<number> {
+    return wallMinutesNow(await this.timezone());
   }
 
   /**

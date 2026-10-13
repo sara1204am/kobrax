@@ -104,3 +104,41 @@ export function upNext(items: AgendaListItem[], limit = 3): AgendaListItem[] {
   const sinHora = pendientes.filter((i) => !(i.timeMode === ScheduleTimeMode.FIXED && i.scheduledTime));
   return [...conHora, ...sinHora].slice(0, limit);
 }
+
+/** Los tres contadores del resumen de hoy, listos para pintar y con su frescura. */
+export interface SummaryView {
+  effectiveContacts: number | null;
+  promisesDue: number | null;
+  promisesTaken: number | null;
+  /** `fresh` = recién bajado; `cached` = de la copia guardada, del día de hoy; `outdated` = de otro día (no se muestran cifras). */
+  freshness: 'fresh' | 'cached' | 'outdated' | 'none';
+  /** `HH:mm` de cuándo se calculó, para decir «datos de las 08:15». */
+  asOf?: string;
+}
+
+/**
+ * Qué decirle al cobrador del resumen del servidor. 🔴 Un resumen guardado de **ayer** no se pasa por el de hoy: sus cifras se
+ * ocultan (`outdated`) en vez de mostrarse como actuales. Uno guardado de hoy se muestra, pero marcado con su hora.
+ */
+export function summaryView(
+  res: { status: string; data?: { date: string; generatedAt?: string; effectiveContacts?: number; promisesDue?: number; promisesTaken?: number }; localAt?: number | null },
+  today: string,
+): SummaryView {
+  if (res.status !== 'ok' || !res.data) return { effectiveContacts: null, promisesDue: null, promisesTaken: null, freshness: 'none' };
+  const d = res.data;
+  const asOf = d.generatedAt && !Number.isNaN(Date.parse(d.generatedAt)) ? hhmm(new Date(d.generatedAt)) : undefined;
+  if (d.date !== today) return { effectiveContacts: null, promisesDue: null, promisesTaken: null, freshness: 'outdated', ...(asOf ? { asOf } : {}) };
+  // Un servidor viejo no manda los contadores: no se inventan.
+  const n = (v: number | undefined) => (typeof v === 'number' ? v : null);
+  return {
+    effectiveContacts: n(d.effectiveContacts),
+    promisesDue: n(d.promisesDue),
+    promisesTaken: n(d.promisesTaken),
+    freshness: res.localAt != null ? 'cached' : 'fresh',
+    ...(asOf ? { asOf } : {}),
+  };
+}
+
+function hhmm(d: Date): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}

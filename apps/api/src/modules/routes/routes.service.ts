@@ -3,6 +3,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { AgendaItemStatus, AgendaItemType, RouteStatus, RouteStopStatus } from '@prisma/client';
 import {
   Permission,
+  ROUTE_MAX_DAYS_AHEAD,
   ResponseDto,
   canTransitionRoute,
   canTransitionStop,
@@ -19,6 +20,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { TenantClockService, civilDayStartInstant } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { ROUTE_CLOSE_REASON_MIN_APP_VERSION, legacyClientReason, type LegacyClientReason } from '../../common/app-version';
 import { EventBusService, DomainEvent, type RouteNoticePayload } from '../../common/events/event-bus.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { isUniqueViolation } from '../../common/unique-violation';
@@ -41,6 +43,7 @@ import {
   routeHasVisits,
   routeIdTaken,
   routePastDate,
+  routeTooFar,
   routeStateChanged,
   routeTransition,
   stopDuplicate,
@@ -209,9 +212,16 @@ export class RoutesService {
     if (!routeIsOpen(status as unknown as SharedRouteStatus)) throw routeClosed();
   }
 
-  /** `YYYY-MM-DD` ya validado por el DTO; acá se cierra la puerta al pasado, con el día **de la empresa**. */
-  private async assertNotPast(day: string): Promise<void> {
-    if (dayAnchor(day) < (await this.clock.today())) throw routePastDate();
+  /**
+   * `YYYY-MM-DD` ya validado por el DTO. Se cierra la puerta al pasado **y** a lo muy lejano, con el día **de la empresa**:
+   * hoy ≤ día ≤ hoy + ROUTE_MAX_DAYS_AHEAD (D-6). Planificar una ruta futura no es lo mismo que operar la jornada: esta es
+   * la única regla de fecha, y modificar una ruta ya armada no pasa por acá.
+   */
+  private async assertPlannable(day: string): Promise<void> {
+    const today = await this.clock.today();
+    if (dayAnchor(day) < today) throw routePastDate();
+    const last = new Date(today.getTime() + ROUTE_MAX_DAYS_AHEAD * 86_400_000);
+    if (dayAnchor(day) > last) throw routeTooFar(ROUTE_MAX_DAYS_AHEAD);
   }
 
   /**
@@ -268,7 +278,7 @@ export class RoutesService {
   async create(dto: CreateRouteDto): Promise<ReturnType<typeof serializeRoute>> {
     const collectorId = this.collectorFor(dto.collectorId, 'crear rutas');
     const prev = await this.tx((tx) => this.existingById(tx, dto.id, collectorId));
-    if (!prev) await this.assertNotPast(dto.plannedDate);
+    if (!prev) await this.assertPlannable(dto.plannedDate);
     // Dos envíos con el mismo id a la vez pasan los dos el chequeo y uno choca con la PK: se repite UNA vez.
     const { route, replay } = await this.createOnce(dto, collectorId).catch((err: unknown) =>
       dto.id && isUniqueViolation(err) ? this.createOnce(dto, collectorId) : Promise.reject(err),
@@ -312,7 +322,7 @@ export class RoutesService {
   async generate(dto: GenerateRouteDto): Promise<ReturnType<typeof serializeRoute>> {
     const collectorId = this.collectorFor(dto.collectorId, 'generar rutas');
     const prev = await this.tx((tx) => this.existingById(tx, dto.id, collectorId));
-    if (!prev) await this.assertNotPast(dto.plannedDate);
+    if (!prev) await this.assertPlannable(dto.plannedDate);
     const { route, replay } = await this.generateOnce(dto, collectorId).catch((err: unknown) =>
       dto.id && isUniqueViolation(err) ? this.generateOnce(dto, collectorId) : Promise.reject(err),
     );
@@ -761,6 +771,8 @@ export class RoutesService {
    */
   async updateStatus(id: string, dto: UpdateRouteDto): Promise<ReturnType<typeof serializeRoute>> {
     const reason = dto.reason?.trim();
+    // Lo que dijo el cliente de su versión: solo decide la compatibilidad de la regla de abajo, no un permiso.
+    const appVersion = this.tenant.get()?.appVersion;
     const outcome = await this.tx(async (tx) => {
       const { route, roles } = await this.access(tx, id);
       if (dto.status === route.status) return { route, changed: false as const };
@@ -775,6 +787,7 @@ export class RoutesService {
       const now = new Date();
       let data: Prisma.RoutePlanUpdateManyMutationInput = {};
       let skipOpen = false;
+      let legacyCompat: LegacyClientReason | undefined;
 
       if (dto.status === RouteStatus.IN_PROGRESS) {
         if (!roles.canRun && !roles.manager) throw routeForbidden('iniciar la ruta');
@@ -782,10 +795,15 @@ export class RoutesService {
         data = { startedAt: now, ...(reason && !roles.canRun ? { statusReason: reason } : {}) };
       } else if (dto.status === RouteStatus.COMPLETED) {
         if (!roles.canRun && !roles.manager) throw routeForbidden('completar la ruta');
-        // Compat con el móvil de hoy: el cobrador que cierra SU ruta no manda motivo (se pide en F4/12 · móvil).
-        const legacyField = roles.isCollector && !roles.manager;
-        const need = (open.length > 0 && !legacyField) || !roles.canRun;
+        /*
+         * D-5 · opción C: la tolerancia a «el cobrador cierra SU ruta sin motivo» es **solo para versiones viejas de la app**
+         * (< ROUTE_CLOSE_REASON_MIN_APP_VERSION, o sin versión legible). La app nueva manda el motivo y aquí se le exige.
+         * Un manager o una ruta ajena nunca tuvo tolerancia.
+         */
+        const compat = roles.isCollector && !roles.manager ? legacyClientReason(appVersion, ROUTE_CLOSE_REASON_MIN_APP_VERSION) : null;
+        const need = (open.length > 0 && compat === null) || !roles.canRun;
         if (need && !isValidReason(reason)) throw reasonRequired(open.length > 0 ? 'por el que quedaron paradas sin gestionar' : 'de completar una ruta ajena');
+        if (compat && open.length > 0 && !isValidReason(reason)) legacyCompat = compat;
         skipOpen = open.length > 0;
         data = { completedAt: now, statusReason: reason ?? (skipOpen ? 'Cerrada con paradas sin gestionar.' : null) };
       } else if (dto.status === RouteStatus.CANCELLED) {
@@ -804,7 +822,7 @@ export class RoutesService {
         await tx.routeStop.updateMany({ where: { id: { in: open.map((s) => s.id) } }, data: { status: RouteStopStatus.SKIPPED } });
       }
       const updated = await tx.routePlan.findFirstOrThrow({ where: { id } });
-      return { route: updated, previous: route, changed: true as const, skipped: skipOpen ? open.length : 0, reason };
+      return { route: updated, previous: route, changed: true as const, skipped: skipOpen ? open.length : 0, reason, legacyCompat };
     });
 
     if (!outcome.changed) return serializeRoute(outcome.route);
@@ -814,7 +832,13 @@ export class RoutesService {
       entityId: id,
       action: 'UPDATE',
       before: { status: outcome.previous.status },
-      after: { status: route.status, ...(skipped ? { skippedStops: skipped } : {}), ...(outcome.reason ? { reason: outcome.reason } : {}) },
+      after: {
+        status: route.status,
+        ...(skipped ? { skippedStops: skipped } : {}),
+        ...(outcome.reason ? { reason: outcome.reason } : {}),
+        // Se cerró sin motivo por tolerancia a un cliente viejo: con esto se mide cuándo se puede retirar (D-5 · B).
+        ...(outcome.legacyCompat ? { legacyCompat: outcome.legacyCompat, appVersion: appVersion ?? null } : {}),
+      },
     });
     if (route.status === RouteStatus.COMPLETED) {
       this.events.emit(DomainEvent.ROUTE_COMPLETED, { routeId: id, collectorId: route.collectorId, accountId: this.tenant.accountId });

@@ -98,6 +98,11 @@ export class UpdateStopDto {
 
 /** Pedir un cambio sobre una ruta que armó otra persona. */
 export class CreateChangeRequestDto {
+  /**
+   * Lo pone el teléfono (`nuevoId()`): reintentar el mismo pedido —típico tras un timeout— devuelve el ya creado en vez de
+   * duplicarlo y volver a avisarle a quien armó la ruta. Opcional: la web no lo manda.
+   */
+  @IsOptional() @IsUUID() id?: string;
   @IsIn(ROUTE_CHANGE_KINDS as unknown as string[]) kind!: RouteChangeKind;
   /** Lo que se pide: `{clientId, creditId?, locationId?}` · `{stopId}` · `{stopId, sequenceOrder}` · `{}`. */
   @IsOptional() @IsObject() payload?: Record<string, unknown>;

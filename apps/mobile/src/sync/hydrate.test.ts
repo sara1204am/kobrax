@@ -59,6 +59,7 @@ jest.mock('../routes.service', () => ({
   }),
 }));
 jest.mock('../agenda.service', () => ({
+  getSummaryCached: jest.fn(async () => ({ status: 'ok', data: { date: '2026-10-10' }, total: 1 })),
   listByDay: jest.fn(async () => {
     mockLlamadas.push({ fn: 'listByDay' });
     return mockRes.agenda ?? ok([]);
@@ -87,7 +88,7 @@ jest.mock('../payments.service', () => ({
   }),
 }));
 jest.mock('../clients.service', () => ({ getClient: jest.fn(async () => ({ status: 'ok', data: { id: 'cl1' } })) }));
-jest.mock('../db', () => ({ getMany: jest.fn(async (kind: string) => (kind === 'portfolio' ? [{ clientId: 'cl1' }] : [])), putAll: jest.fn(), fetchedAt: jest.fn(async () => null) }));
+jest.mock('../db', () => ({ getMany: jest.fn(async (kind: string) => (kind === 'portfolio' ? [{ clientId: 'cl1' }] : [])), putAll: jest.fn(), fetchedAt: jest.fn(async () => null), purgeCache: jest.fn(async () => 0) }));
 
 import { hydrate } from './hydrate';
 

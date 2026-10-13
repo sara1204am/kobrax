@@ -181,7 +181,17 @@ export class NotificationsService implements OnModuleInit {
     this.gateway.emitToUser(notif.userId, RealtimeEvent.NOTIFICATION, serializeNotification(notif));
     for (const ch of this.channels) {
       void ch
-        .deliver({ userId: notif.userId, accountId: notif.accountId, type: notif.type, title: notif.title, body: notif.body })
+        .deliver({
+          id: notif.id,
+          userId: notif.userId,
+          accountId: notif.accountId,
+          type: notif.type,
+          title: notif.title,
+          body: notif.body,
+          routeId: notif.routeId,
+          agendaItemId: notif.agendaItemId,
+          creditId: notif.creditId,
+        })
         .catch((err) => this.logger.warn(`Canal ${ch.name} falló: ${err?.message ?? err}`));
     }
   }

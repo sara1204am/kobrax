@@ -10,7 +10,8 @@ import { rejectsWithCode } from './auth-test-utils';
 /** crypto identidad: el secreto se guarda/lee sin cifrar (no testeamos AES aquí). */
 const crypto = { encrypt: (s: string) => s, decrypt: (s: string) => s };
 
-function makeMfa(user: Record<string, unknown> | null) {
+/** `roles` = los roles de sus membresías activas (lo que devuelve `auth_memberships`). */
+function makeMfa(user: Record<string, unknown> | null, roles: string[] = ['COLLECTOR']) {
   const calls = { transaction: 0 };
   let backupConsumed = false;
   const prisma = {
@@ -28,6 +29,7 @@ function makeMfa(user: Record<string, unknown> | null) {
         return { count: 1 };
       },
     },
+    $queryRaw: async () => roles.map((role_name) => ({ role_name })),
     $transaction: async (ops: Promise<unknown>[]) => {
       calls.transaction += 1;
       return Promise.all(ops);
@@ -55,6 +57,65 @@ describe('MfaService.disable (re-autenticación obligatoria)', () => {
     const { service, calls } = makeMfa({ id: 'u1', mfaEnabled: true, passwordHash });
     await service.disable('u1', { password: 'Right1!' });
     assert.equal(calls.transaction, 1); // borra secreto + backup codes
+  });
+});
+
+describe('MfaService.disable — roles críticos (D2)', () => {
+  // La política no depende del botón: el servidor lo impone aun con la contraseña correcta.
+  for (const role of ['ACCOUNT_ADMIN', 'SUPER_ADMIN']) {
+    it(`🔴 ${role}: no puede desactivar el MFA ni con la contraseña correcta`, async () => {
+      const passwordHash = await hash('Right1!', KOBRAX.BCRYPT_WORK_FACTOR);
+      const { service, calls } = makeMfa({ id: 'u1', mfaEnabled: true, passwordHash }, [role]);
+      await rejectsWithCode(service.disable('u1', { password: 'Right1!' }), AUTH_ERR.MFA_REQUIRED_BY_POLICY);
+      assert.equal(calls.transaction, 0);
+    });
+  }
+
+  it('🔴 tampoco con un código MFA vigente (no hay vía alternativa)', async () => {
+    const { service, calls } = makeMfa({ id: 'u1', mfaEnabled: true, mfaSecret: generateSecret() }, ['ACCOUNT_ADMIN']);
+    await rejectsWithCode(service.disable('u1', { code: 'aaaaa-bbbbb' }), AUTH_ERR.MFA_REQUIRED_BY_POLICY);
+    assert.equal(calls.transaction, 0);
+  });
+
+  it('basta UNA membresía crítica en cualquier empresa: el segundo factor es de la persona', async () => {
+    const passwordHash = await hash('Right1!', KOBRAX.BCRYPT_WORK_FACTOR);
+    const { service } = makeMfa({ id: 'u1', mfaEnabled: true, passwordHash }, ['COLLECTOR', 'ACCOUNT_ADMIN']);
+    await rejectsWithCode(service.disable('u1', { password: 'Right1!' }), AUTH_ERR.MFA_REQUIRED_BY_POLICY);
+  });
+
+  for (const role of ['MANAGER', 'SUPERVISOR', 'COLLECTOR', 'AUDITOR']) {
+    it(`${role}: sigue pudiendo desactivarlo, con reautenticación`, async () => {
+      const passwordHash = await hash('Right1!', KOBRAX.BCRYPT_WORK_FACTOR);
+      const { service, calls } = makeMfa({ id: 'u1', mfaEnabled: true, passwordHash }, [role]);
+      await service.disable('u1', { password: 'Right1!' });
+      assert.equal(calls.transaction, 1);
+    });
+  }
+
+  it('un crítico SIN MFA activo no es bloqueado: no hay nada que apagar (idempotente)', async () => {
+    const { service, calls } = makeMfa({ id: 'u1', mfaEnabled: false }, ['ACCOUNT_ADMIN']);
+    await service.disable('u1', { password: 'x' });
+    assert.equal(calls.transaction, 0);
+  });
+
+  it('isCritical: solo ACCOUNT_ADMIN y SUPER_ADMIN', async () => {
+    assert.equal(await makeMfa(null, ['ACCOUNT_ADMIN']).service.isCritical('u'), true);
+    assert.equal(await makeMfa(null, ['SUPER_ADMIN']).service.isCritical('u'), true);
+    assert.equal(await makeMfa(null, ['MANAGER']).service.isCritical('u'), false);
+    assert.equal(await makeMfa(null, []).service.isCritical('u'), false);
+  });
+});
+
+describe('MfaService.enroll — no pisa un segundo factor activo (D2)', () => {
+  it('con el MFA activo rechaza (AUTH_012): reenrolar dejaría a la persona afuera', async () => {
+    const { service } = makeMfa({ id: 'u1', email: 'a@b.c', mfaEnabled: true, mfaSecret: 'S' });
+    await rejectsWithCode(service.enroll('u1'), AUTH_ERR.MFA_ALREADY_ENABLED);
+  });
+
+  it('sin MFA activo enrola normalmente', async () => {
+    const { service } = makeMfa({ id: 'u1', email: 'a@b.c', mfaEnabled: false });
+    const r = await service.enroll('u1');
+    assert.match(r.otpauthUrl, /^otpauth:\/\//);
   });
 });
 

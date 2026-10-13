@@ -30,13 +30,17 @@ export class CatalogsController {
 
   @Patch(':catalog/:id')
   @Roles(Permission.CATALOG_WRITE)
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateCatalogItemDto) {
-    return this.catalogs.update(id, dto);
+  update(
+    @Param('catalog', new ParseEnumPipe(CatalogType)) catalog: CatalogType,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCatalogItemDto,
+  ) {
+    return this.catalogs.update(catalog, id, dto);
   }
 
   @Delete(':catalog/:id')
   @Roles(Permission.CATALOG_WRITE)
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.catalogs.remove(id);
+  remove(@Param('catalog', new ParseEnumPipe(CatalogType)) catalog: CatalogType, @Param('id', ParseUUIDPipe) id: string) {
+    return this.catalogs.remove(catalog, id);
   }
 }

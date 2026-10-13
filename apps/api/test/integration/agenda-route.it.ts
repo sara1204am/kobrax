@@ -72,7 +72,7 @@ describe('visita agendada → ruta → ejecución (F4/11 · E1)', () => {
   });
 
   it('ejecutar la parada cierra la gestión con UNA sola actividad', async () => {
-    const date = day(41);
+    const date = day(9);
     const item = await call<Item>(token, 'POST', '/agenda', visitBody(creditId, locationId, date));
     assert.equal(item.status, 201, JSON.stringify(item.error));
 
@@ -108,7 +108,7 @@ describe('visita agendada → ruta → ejecución (F4/11 · E1)', () => {
   });
 
   it('reagendar la visita la saca de la ruta planificada y renumera las demás', async () => {
-    const date = day(42);
+    const date = day(10);
     const a = await call<Item>(token, 'POST', '/agenda', visitBody(creditId, locationId, date));
     const b = await call<Item>(token, 'POST', '/agenda', { ...visitBody(creditId2, locationId2, date), scheduledTime: '11:00' });
     assert.equal(a.status, 201);
@@ -121,7 +121,7 @@ describe('visita agendada → ruta → ejecución (F4/11 · E1)', () => {
 
     const reasons = await call<{ code: string }[]>(token, 'GET', '/catalogs/RESCHEDULE_REASON');
     const moved = await call<Item>(token, 'POST', `/agenda/${a.data!.id}/reschedule`, {
-      scheduledDate: day(43),
+      scheduledDate: day(11),
       timeMode: 'FIXED',
       scheduledTime: '10:00',
       reasonCode: reasons.data![0]!.code,
@@ -136,11 +136,11 @@ describe('visita agendada → ruta → ejecución (F4/11 · E1)', () => {
   });
 
   it('una visita no entra a dos paradas activas: el índice único parcial lo impide', async () => {
-    const date = day(44);
+    const date = day(12);
     const item = await call<Item>(token, 'POST', '/agenda', visitBody(creditId, locationId, date));
     const route = await call<Route>(token, 'POST', '/routes/generate', { collectorId, plannedDate: date });
     assert.equal(route.status, 201, JSON.stringify(route.error));
-    const route2 = await prisma.routePlan.create({ data: { accountId: (await prisma.credit.findUniqueOrThrow({ where: { id: creditId } })).accountId, collectorId, plannedDate: new Date(day(45)) } });
+    const route2 = await prisma.routePlan.create({ data: { accountId: (await prisma.credit.findUniqueOrThrow({ where: { id: creditId } })).accountId, collectorId, plannedDate: new Date(day(13)) } });
     const clientId = (await prisma.credit.findUniqueOrThrow({ where: { id: creditId } })).clientId;
     await assert.rejects(
       prisma.routeStop.create({ data: { accountId: route2.accountId, routeId: route2.id, clientId, creditId, agendaItemId: item.data!.id, sequenceOrder: 1 } }),

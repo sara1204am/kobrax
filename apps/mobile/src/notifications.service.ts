@@ -4,13 +4,27 @@
  */
 import type { NotificationPayload } from '@kobrax/shared';
 import { apiMutate, apiQuery, toQuery, type MutateResult, type QueryResult } from './api-client';
+import * as db from './db';
 import { cachedList } from './sync/cached';
 import { formatLongDate, toHHmm, toISO } from './agenda-form';
 
-/** Nº de notificaciones no leídas (usa `meta.total`; pide 1 fila, solo importa el conteo). */
+/** El buzón guardado (`?limit=50`): lo último que se vio con señal. */
+const INBOX_SCOPE = toQuery({ limit: 50 });
+
+/**
+ * Nº de notificaciones no leídas (usa `meta.total`; pide 1 fila, solo importa el conteo). **Sin señal** cuenta las no leídas
+ * del buzón guardado: antes decía 0 y la campanita parecía vacía justo cuando el cobrador no podía mirar.
+ */
 export async function unreadCount(): Promise<number> {
   const res: QueryResult<NotificationPayload[]> = await apiQuery('/notifications?unread=true&limit=1');
-  return res.status === 'ok' ? res.total : 0;
+  if (res.status === 'ok') return res.total;
+  if (res.status !== 'offline') return 0;
+  try {
+    const rows = await db.getMany<NotificationPayload>('notification', INBOX_SCOPE);
+    return rows.filter((n) => !n.readAt).length;
+  } catch {
+    return 0;
+  }
 }
 
 /** El buzón. `unread` filtra a las pendientes; sin él vienen todas, leídas incluidas. */
@@ -42,3 +56,4 @@ export function whenLabel(iso: string, today: string = toISO(new Date())): strin
   if (Number.isNaN(d.getTime())) return '';
   return toISO(d) === today ? toHHmm(d) : formatLongDate(toISO(d));
 }
+

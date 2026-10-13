@@ -34,6 +34,8 @@ function creditRow(over: Record<string, unknown> = {}) {
 }
 
 interface Opts {
+  /** Hora de pared de la empresa «ahora», en minutos desde su medianoche (por defecto 00:00). */
+  nowMinutes?: number;
   permissions?: string[];
   rows?: unknown[];
   clients?: unknown[];
@@ -77,6 +79,11 @@ interface Opts {
   activeStop?: { id: string; routeId?: string; status?: string } | null;
   /** La ruta del cobrador ese día (planificada o en curso). */
   route?: { id: string; status: string } | null;
+  /** `summary`: ejecutadas con gestión real (sus `resultActivityId`) y cuántas de esas gestiones son de hoy. */
+  executedActivityIds?: string[];
+  activitiesToday?: number;
+  promisesDueCount?: number;
+  promisesTakenCount?: number;
 }
 
 function makeService(opts: Opts = {}) {
@@ -99,6 +106,9 @@ function makeService(opts: Opts = {}) {
     eventPayloads: [] as { event: string; payload: Record<string, unknown> }[],
     stopOps: [] as Record<string, unknown>[],
     counts: [] as unknown[],
+    executedWhere: undefined as Record<string, unknown> | undefined,
+    promiseWheres: [] as Record<string, unknown>[],
+    activityWhere: undefined as Record<string, unknown> | undefined,
     reminderCancels: [] as { where: Record<string, unknown>; data: Record<string, unknown> }[],
     /** Cuántas veces se consultó cada tabla del enriquecimiento: tiene que ser UNA por página (sin N+1). */
     queries: { credit: 0, category: 0, users: 0 },
@@ -108,7 +118,12 @@ function makeService(opts: Opts = {}) {
   const first = <T>(list: T[] | undefined) => (list && list.length > 0 ? list[0] : null);
   const tx = {
     agendaItem: {
-      findMany: async (args: { where?: Record<string, unknown> }) => {
+      findMany: async (args: { where?: Record<string, unknown>; select?: Record<string, unknown> }) => {
+        // `summary`: las ejecutadas con gestión real (solo pide `resultActivityId`).
+        if (args.select && 'resultActivityId' in args.select) {
+          calls.executedWhere = args.where;
+          return (opts.executedActivityIds ?? []).map((id) => ({ resultActivityId: id }));
+        }
         // `findOne` pide el historial por `creditId`; el resto de las lecturas listan por día/vencidos.
         if (args.where?.creditId && args.where?.id) {
           calls.historyWhere = args.where;
@@ -124,7 +139,12 @@ function makeService(opts: Opts = {}) {
         if (opts.createRace) return raced ? opts.createRace : null;
         return opts.item ?? null;
       },
-      count: async (args?: { where?: { scheduledDate?: unknown } }) => {
+      count: async (args?: { where?: { scheduledDate?: unknown; type?: string; status?: string } }) => {
+        // `summary`: promesas que vencen hoy (SCHEDULED) y promesas tomadas hoy (por fecha de creación).
+        if (args?.where?.type === 'PROMISE_TO_PAY') {
+          calls.promiseWheres.push(args.where as Record<string, unknown>);
+          return args.where.status ? (opts.promisesDueCount ?? 0) : (opts.promisesTakenCount ?? 0);
+        }
         // `summary` cuenta dos veces: hoy (fecha exacta) y vencidas (`lt`).
         calls.counts.push(args?.where?.scheduledDate);
         return args?.where?.scheduledDate instanceof Date ? (opts.todayCount ?? 0) : (opts.overdueCount ?? 0);
@@ -154,6 +174,10 @@ function makeService(opts: Opts = {}) {
     creditActivity: {
       // El detalle y su historial piden el resultado de las ejecutadas.
       findMany: async () => opts.activities ?? [],
+      count: async (args: { where: Record<string, unknown> }) => {
+        calls.activityWhere = args.where;
+        return opts.activitiesToday ?? 0;
+      },
       findFirst: async () => opts.priorActivity ?? null,
       create: async (args: { data: Record<string, unknown> }) => {
         calls.activity = args.data;
@@ -270,7 +294,13 @@ function makeService(opts: Opts = {}) {
     },
   };
   // El reloj del tenant, fijado en UTC: los tests arman sus fechas con `isoUTC`, que es la misma vara.
-  const clock = { today: async () => new Date(`${isoUTC(0)}T00:00:00.000Z`) };
+  const clock = {
+    today: async () => new Date(`${isoUTC(0)}T00:00:00.000Z`),
+    // Minutos desde la medianoche de la empresa «ahora»; 0 = recién empezó el día (no estorba a los tests de hora).
+    nowWallMinutes: async () => opts.nowMinutes ?? 0,
+    // La Paz (UTC−4): el día civil empieza a las 04:00 UTC.
+    timezone: async () => 'America/La_Paz',
+  };
   const service = new AgendaService(
     prisma as never,
     tenant as never,
@@ -590,33 +620,108 @@ describe('AgendaService.complete (ejecutar S4)', () => {
   });
 });
 
-describe('AgendaService.postpone (S4)', () => {
+describe('AgendaService.postpone (S4 · D-8: solo hacia adelante y el mismo día)', () => {
+  const hoy = () => new Date(isoUTC(0));
+  const SCHEDULED = (over: Record<string, unknown> = {}) => row({ status: 'SCHEDULED', scheduledDate: hoy(), scheduledTime: '09:00', timeMode: 'FIXED', ...over });
+
   it('corre la hora AGENDADA (naive) +30, sigue SCHEDULED y fija a hora exacta', async () => {
-    const { service, calls } = makeService({ item: row({ status: 'SCHEDULED', scheduledDate: new Date('2026-07-12'), scheduledTime: '09:00' }) });
+    const { service, calls } = makeService({ item: SCHEDULED() });
     const res = await service.postpone('a1', { minutes: 30 } as never);
-    assert.equal(calls.updated!.scheduledTime, '09:30'); // +30 sobre la hora agendada, no sobre el reloj del server
+    assert.equal(calls.updated!.scheduledTime, '09:30'); // +30 sobre la hora agendada
     assert.equal(calls.updated!.timeMode, 'FIXED');
     assert.equal(calls.updated!.timeSlot, null);
     assert.notEqual(res.data!.status, 'EXECUTED');
     assert.deepEqual(calls.audits, [{ entity: 'agenda_item', action: 'POSTPONE' }]);
   });
 
-  it('cruza la medianoche: +60 sobre 23:50 → 00:50 del día siguiente', async () => {
-    const { service, calls } = makeService({ item: row({ status: 'SCHEDULED', scheduledDate: new Date('2026-07-12'), scheduledTime: '23:50' }) });
-    await service.postpone('a1', { minutes: 60 } as never);
-    assert.equal(calls.updated!.scheduledTime, '00:50');
-    assert.equal((calls.updated!.scheduledDate as Date).toISOString().slice(0, 10), '2026-07-13');
+  it('suma 15, 30 y 60 minutos exactos', async () => {
+    for (const [min, hora] of [[15, '09:15'], [30, '09:30'], [60, '10:00']] as const) {
+      const { service, calls } = makeService({ item: SCHEDULED() });
+      await service.postpone('a1', { minutes: min } as never);
+      assert.equal(calls.updated!.scheduledTime, hora, `+${min}`);
+    }
+  });
+
+  it('🔴 nunca cambia el día: cruzar la medianoche se rechaza y no escribe nada (AGENDA_POSTPONE_RULE)', async () => {
+    const { service, calls } = makeService({ item: SCHEDULED({ scheduledTime: '23:50' }) });
+    await expectError(() => service.postpone('a1', { minutes: 60 } as never), 'AGENDA_POSTPONE_RULE');
+    assert.equal(calls.updated, undefined);
+  });
+
+  it('el límite del día: 23:30 + 15 sí (23:45), 23:50 + 15 no', async () => {
+    const ok = makeService({ item: SCHEDULED({ scheduledTime: '23:30' }) });
+    await ok.service.postpone('a1', { minutes: 15 } as never);
+    assert.equal(ok.calls.updated!.scheduledTime, '23:45');
+    const no = makeService({ item: SCHEDULED({ scheduledTime: '23:50' }) });
+    await expectError(() => no.service.postpone('a1', { minutes: 15 } as never), 'AGENDA_POSTPONE_RULE');
   });
 
   it('un agendado por franja parte del inicio de la franja (MORNING = 08:00)', async () => {
-    const { service, calls } = makeService({ item: row({ status: 'SCHEDULED', scheduledTime: null, timeSlot: 'MORNING', timeMode: 'LAPSE' }) });
+    const { service, calls } = makeService({ item: row({ status: 'SCHEDULED', scheduledDate: hoy(), scheduledTime: null, timeSlot: 'MORNING', timeMode: 'LAPSE' }) });
     await service.postpone('a1', { minutes: 15 } as never);
     assert.equal(calls.updated!.scheduledTime, '08:15'); // no 00:15
+    assert.equal(calls.updated!.timeMode, 'FIXED');
+    assert.equal(calls.updated!.timeSlot, null);
+  });
+
+  it('🔴 un vencido de HOY se pospone desde AHORA, no sobre su hora vieja (que seguiría en el pasado)', async () => {
+    // Estaba a las 09:00, son las 14:10: +30 → 14:40, no 09:30.
+    const { service, calls } = makeService({ item: SCHEDULED(), nowMinutes: 14 * 60 + 10 });
+    await service.postpone('a1', { minutes: 30 } as never);
+    assert.equal(calls.updated!.scheduledTime, '14:40');
+  });
+
+  it('una gestión de un día que ya pasó no se pospone: se reagenda (AGENDA_POSTPONE_RULE)', async () => {
+    const { service, calls } = makeService({ item: SCHEDULED({ scheduledDate: new Date(isoUTC(-1)) }) });
+    await expectError(() => service.postpone('a1', { minutes: 15 } as never), 'AGENDA_POSTPONE_RULE');
+    assert.equal(calls.updated, undefined);
+  });
+
+  it('una gestión de un día futuro se pospone sobre su propia hora (ahora no estorba)', async () => {
+    const { service, calls } = makeService({ item: SCHEDULED({ scheduledDate: new Date(isoUTC(2)) }), nowMinutes: 20 * 60 });
+    await service.postpone('a1', { minutes: 30 } as never);
+    assert.equal(calls.updated!.scheduledTime, '09:30');
+    assert.equal((calls.updated!.scheduledDate as Date | undefined), undefined, 'el día no se toca');
+  });
+
+  it('toTime: hora exacta posterior del mismo día; la hora QUEDA ahí y el día no cambia', async () => {
+    const { service, calls } = makeService({ item: SCHEDULED() });
+    await service.postpone('a1', { toTime: '10:30' } as never);
+    assert.equal(calls.updated!.scheduledTime, '10:30');
+    assert.equal(calls.updated!.scheduledDate, undefined);
+    assert.equal(calls.updated!.timeMode, 'FIXED');
+  });
+
+  it('🔴 toTime igual o anterior a la actual, o a «ahora», no es posponer (AGENDA_POSTPONE_RULE)', async () => {
+    const a = makeService({ item: SCHEDULED() });
+    await expectError(() => a.service.postpone('a1', { toTime: '08:00' } as never), 'AGENDA_POSTPONE_RULE');
+    const b = makeService({ item: SCHEDULED(), nowMinutes: 11 * 60 });
+    await expectError(() => b.service.postpone('a1', { toTime: '10:30' } as never), 'AGENDA_POSTPONE_RULE');
+  });
+
+  it('🔴 idempotente: reenviar el mismo toTime sobre una gestión que ya quedó a esa hora es éxito y no vuelve a auditar', async () => {
+    const { service, calls } = makeService({ item: SCHEDULED({ scheduledTime: '10:30' }) });
+    const res = await service.postpone('a1', { toTime: '10:30' } as never);
+    assert.equal(res.data!.scheduledTime, '10:30');
+    assert.equal(calls.updated, undefined, 'no escribe');
+    assert.deepEqual(calls.audits, []);
+  });
+
+  it('toTime manda sobre minutes; sin ninguno → AGENDA_004', async () => {
+    const { service, calls } = makeService({ item: SCHEDULED() });
+    await service.postpone('a1', { toTime: '11:00', minutes: 30 } as never);
+    assert.equal(calls.updated!.scheduledTime, '11:00');
+    await expectError(() => service.postpone('a1', {} as never), 'AGENDA_004');
   });
 
   it('posponer una gestión ya ejecutada → AGENDA_008', async () => {
     const { service } = makeService({ item: row({ status: 'EXECUTED' }) });
     await expectError(() => service.postpone('a1', { minutes: 15 } as never), 'AGENDA_008');
+  });
+
+  it('no se pospone la de otra persona: 404 (alcance de asignado)', async () => {
+    const { service } = makeService({ item: null as never });
+    await expectError(() => service.postpone('a1', { minutes: 15 } as never), 'AGENDA_NOT_FOUND');
   });
 });
 
@@ -1075,25 +1180,6 @@ describe('AgendaService idempotente (cola offline)', () => {
     assert.equal(calls.createdAll.length, 0);
   });
 
-  it('postpone con toTime: la hora QUEDA en toTime (idempotente), mismo día', async () => {
-    const a = makeService({ item: row({ status: 'SCHEDULED', scheduledDate: new Date('2026-07-12'), scheduledTime: '09:00' }) });
-    await a.service.postpone('a1', { toTime: '10:30' } as never);
-    assert.equal(a.calls.updated!.scheduledTime, '10:30');
-    assert.equal((a.calls.updated!.scheduledDate as Date).toISOString().slice(0, 10), '2026-07-12');
-    assert.equal(a.calls.updated!.timeMode, 'FIXED');
-    // Reenvío sobre el ítem ya movido: sigue en 10:30.
-    const b = makeService({ item: row({ status: 'SCHEDULED', scheduledDate: new Date('2026-07-12'), scheduledTime: '10:30' }) });
-    await b.service.postpone('a1', { toTime: '10:30' } as never);
-    assert.equal(b.calls.updated!.scheduledTime, '10:30');
-  });
-
-  it('postpone: toTime manda sobre minutes; sin ninguno → AGENDA_004', async () => {
-    const { service, calls } = makeService({ item: row({ status: 'SCHEDULED', scheduledTime: '09:00' }) });
-    await service.postpone('a1', { toTime: '11:00', minutes: 30 } as never);
-    assert.equal(calls.updated!.scheduledTime, '11:00');
-    await expectError(() => service.postpone('a1', {} as never), 'AGENDA_004');
-  });
-
   it('complete ya EXECUTED con el MISMO resultado: devuelve lo hecho, sin otra actividad ni audit/evento', async () => {
     const { service, calls } = makeService({ item: row({ type: 'CALL', status: 'EXECUTED', resultActivityId: 'act-0' }), priorActivity: { result: 'CONTACTED' } });
     const r = await service.complete('a1', { outcome: 'CONTACTED' } as never);
@@ -1508,6 +1594,51 @@ describe('AgendaService.summary (F4/11)', () => {
     assert.match(res.data!.date, /^\d{4}-\d{2}-\d{2}$/);
   });
 
+  it('contactos efectivos de hoy: ejecutadas CON gestión real, y la gestión es del día de la empresa', async () => {
+    const { service, calls } = makeService({ executedActivityIds: ['a1', 'a2', 'a3'], activitiesToday: 2 });
+    const res = await service.summary();
+    assert.equal(res.data!.effectiveContacts, 2);
+    // Solo ejecutadas con resultado real, no borradas, y del alcance de quien pregunta.
+    assert.equal(calls.executedWhere!.status, 'EXECUTED');
+    assert.deepEqual(calls.executedWhere!.resultActivityId, { not: null });
+    assert.equal(calls.executedWhere!.assigneeId, 'u1');
+    // La gestión real tiene que ser de HOY en La Paz: [04:00Z, 04:00Z del día siguiente).
+    const range = (calls.activityWhere!.createdAt as { gte: Date; lt: Date });
+    assert.equal(range.lt.getTime() - range.gte.getTime(), 86_400_000);
+    assert.equal(range.gte.getUTCHours(), 4);
+    assert.deepEqual((calls.activityWhere!.id as { in: string[] }).in, ['a1', 'a2', 'a3']);
+  });
+
+  it('sin ejecutadas con gestión real no consulta la bitácora y da 0', async () => {
+    const { service, calls } = makeService({ executedActivityIds: [], activitiesToday: 99 });
+    const res = await service.summary();
+    assert.equal(res.data!.effectiveContacts, 0);
+    assert.equal(calls.activityWhere, undefined);
+  });
+
+  it('promesas: las que vencen hoy son SCHEDULED con fecha de hoy; las tomadas hoy, por fecha de creación', async () => {
+    const { service, calls } = makeService({ promisesDueCount: 3, promisesTakenCount: 5 });
+    const res = await service.summary();
+    assert.equal(res.data!.promisesDue, 3);
+    assert.equal(res.data!.promisesTaken, 5);
+    const due = calls.promiseWheres.find((w) => w.status)!;
+    assert.equal(due.status, 'SCHEDULED');
+    assert.ok(due.scheduledDate instanceof Date);
+    const taken = calls.promiseWheres.find((w) => !w.status)!;
+    assert.equal(taken.deletedAt, null);
+    assert.ok((taken.createdAt as { gte: Date }).gte instanceof Date);
+    // Mismo alcance que el resto del resumen: el cobrador cuenta solo lo suyo.
+    assert.equal(taken.assigneeId, 'u1');
+  });
+
+  it('trae cuándo se calculó, para que quien lo guarde sepa de cuándo es', async () => {
+    const { service } = makeService({});
+    const before = Date.now();
+    const res = await service.summary();
+    const at = Date.parse(res.data!.generatedAt);
+    assert.ok(at >= before - 1000 && at <= Date.now() + 1000);
+  });
+
   it('el cobrador cuenta solo lo suyo', async () => {
     const { service, calls } = makeService({ rows: [] });
     await service.summary();
@@ -1679,5 +1810,65 @@ describe('AgendaService.findOne · visita en ruta (F4/11)', () => {
   it('una visita ya ejecutada no trae ruta aunque tuvo parada', async () => {
     const { service } = makeService({ item: row({ type: 'VISIT', status: 'EXECUTED', details: { locationId: LOCATION } }), credit: CREDIT, activeStop: { id: 's1', routeId: 'r1' } });
     assert.equal((await service.findOne('a1')).data!.route, undefined);
+  });
+});
+
+describe('AgendaService.complete — contexto de la gestión (F4/13 · E4)', () => {
+  const hoy = new Date().toISOString().slice(0, 10);
+
+  it('deja el motivo, quién responde y el origen en la actividad', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'CALL', status: 'SCHEDULED' }) });
+    await service.complete('a1', { outcome: 'CONTACTED', reasonCode: 'LATE_INCOME', expectedIncomeDate: hoy, payerParty: 'HOLDER', origin: 'DICTATION' } as never);
+    assert.equal(calls.activity!.reasonCode, 'LATE_INCOME');
+    assert.equal(calls.activity!.payerParty, 'HOLDER');
+    assert.equal(calls.activity!.origin, 'DICTATION');
+  });
+
+  it('🔴 sin contexto no cambia nada de lo de siempre', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'CALL', status: 'SCHEDULED' }) });
+    await service.complete('a1', { outcome: 'CONTACTED' } as never);
+    assert.equal(calls.activity!.reasonCode, null);
+    assert.equal(calls.activity!.payerParty, null);
+  });
+
+  it('un motivo inválido → AGENDA_INVALID_CONTEXT y no escribe nada', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'CALL', status: 'SCHEDULED' }) });
+    await assert.rejects(
+      () => service.complete('a1', { outcome: 'CONTACTED', reasonCode: 'perdio el empleo' } as never),
+      (e: { getResponse: () => { code: string } }) => e.getResponse().code === 'AGENDA_INVALID_CONTEXT',
+    );
+    assert.equal(calls.activity, undefined);
+  });
+
+  it('un recordatorio (que deja una nota) no lleva contexto', async () => {
+    const { service } = makeService({ item: row({ type: 'REMINDER', status: 'SCHEDULED' }) });
+    await assert.rejects(
+      () => service.complete('a1', { outcome: 'DONE', reasonCode: 'FORGOT' } as never),
+      (e: { getResponse: () => { code: string } }) => e.getResponse().code === 'AGENDA_INVALID_CONTEXT',
+    );
+  });
+});
+
+describe('AgendaService.complete — plantilla elegida (F4/13 · E5)', () => {
+  it('deja el código de la plantilla en la actividad de un mensaje', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'WHATSAPP', status: 'SCHEDULED' }) });
+    await service.complete('a1', { outcome: 'CONTACTED', templateCode: 'LAST_NOTICE' } as never);
+    assert.equal(calls.activity!.templateCode, 'LAST_NOTICE');
+    assert.equal(calls.activity!.type, 'MESSAGE');
+  });
+
+  it('🔴 sin plantilla queda en NULL', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'WHATSAPP', status: 'SCHEDULED' }) });
+    await service.complete('a1', { outcome: 'CONTACTED' } as never);
+    assert.equal(calls.activity!.templateCode, null);
+  });
+
+  it('una llamada no lleva plantilla → AGENDA_INVALID_CONTEXT y no escribe', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'CALL', status: 'SCHEDULED' }) });
+    await assert.rejects(
+      () => service.complete('a1', { outcome: 'CONTACTED', templateCode: 'INITIAL' } as never),
+      (e: { getResponse: () => { code: string } }) => e.getResponse().code === 'AGENDA_INVALID_CONTEXT',
+    );
+    assert.equal(calls.activity, undefined);
   });
 });

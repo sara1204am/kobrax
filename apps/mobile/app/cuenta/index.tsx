@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { ROLE_LABEL, type RoleType } from '@kobrax/shared';
+import { Permission, ROLE_LABEL, type RoleType } from '@kobrax/shared';
+import { can } from '@/permissions';
 import { COLORS, SPACING } from '@/theme';
 import { Header, ListRow, OfflineIndicator, SectionLabel } from '@/ui';
 import { ErrorBanner } from '@/components';
@@ -27,7 +28,7 @@ export default function CuentaScreen() {
     // Sin `account:read` no se pide: el cobrador no administra la cuenta y `GET /accounts/me` le
     // contesta 403. Pedirlo igual le pintaba un banner de error en su propio perfil (S1-D4: el
     // gating es por capacidad, y vale para leer, no sólo para escribir).
-    if (!meRes.me.permissions.includes('account:read')) return;
+    if (!can(meRes.me.permissions, Permission.ACCOUNT_READ)) return;
     const acc = await getAccount();
     if (acc.status === 'ok') {
       setAccount(acc.data);
@@ -47,11 +48,11 @@ export default function CuentaScreen() {
   const rol = me ? (ROLE_LABEL[me.role as RoleType] ?? me.role) : undefined;
   // Sin `account:write` la cuenta se ve pero no se toca (S1-D4). El gating es por
   // capacidad, nunca por tipo de cuenta ni por plan.
-  const puedeEditar = !!me?.permissions.includes('account:write');
+  const puedeEditar = can(me?.permissions, Permission.ACCOUNT_WRITE);
   // Y sin `account:read` directamente no hay sección "Mi negocio": las dos filas llevaban a
   // pantallas que le contestan 403 (`/accounts/me` y `/users`). Al cobrador le queda su perfil,
   // que es lo único de acá que le pertenece.
-  const puedeVerNegocio = !!me?.permissions.includes('account:read');
+  const puedeVerNegocio = can(me?.permissions, Permission.ACCOUNT_READ);
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
@@ -66,6 +67,12 @@ export default function CuentaScreen() {
           subtitle={[nombre, rol].filter(Boolean).join(' · ') || 'Nombre, teléfono y foto'}
           icon="person-circle-outline"
           onPress={() => router.push('/cuenta/perfil')}
+        />
+        <ListRow
+          title="Seguridad"
+          subtitle="Contraseña, verificación en dos pasos y sesiones"
+          icon="lock-closed-outline"
+          onPress={() => router.push('/cuenta/seguridad')}
         />
 
         {puedeVerNegocio && (

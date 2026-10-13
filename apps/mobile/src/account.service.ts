@@ -70,8 +70,9 @@ export function updateAccount(patch: AccountPatch): Promise<MutateResult<Account
   return apiMutate<AccountInfo>('/accounts/me', 'PATCH', patch);
 }
 
+/** Mi perfil, con respaldo local: el QR de cobro tiene que mostrarse en la calle, sin señal. */
 export function getMyProfile(): Promise<QueryResult<MyProfile>> {
-  return apiQuery<MyProfile>('/users/me/profile');
+  return cachedOne<MyProfile>('profile', 'me', () => apiQuery<MyProfile>('/users/me/profile'));
 }
 
 export function updateMyProfile(patch: ProfilePatch): Promise<MutateResult<MyProfile>> {

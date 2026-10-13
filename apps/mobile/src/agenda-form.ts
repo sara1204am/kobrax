@@ -86,3 +86,11 @@ export function timeSlotRange(slot: AgendaTimeSlot): string {
   const { from, to } = TIME_SLOT_HOURS[slot];
   return `${String(from).padStart(2, '0')}:00 - ${String(to).padStart(2, '0')}:00`;
 }
+
+/**
+ * Deja solo las gestiones de un tipo (`null` = todas). Pura: el filtro es del teléfono sobre lo que ya bajó; no cambia lo que
+ * se descarga ni lo que se sincroniza.
+ */
+export function filterByType<T extends { type: string }>(items: T[], type: string | null): T[] {
+  return type ? items.filter((i) => i.type === type) : items;
+}

@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { ROUTE_MAX_DAYS_AHEAD } from '@kobrax/shared';
 import { RoutesService } from './routes.service';
 import type { OsrmService } from './osrm.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
@@ -41,6 +42,8 @@ function makeService(
     points?: Record<string, { latitude: number; longitude: number } | null>;
     osrm?: Partial<OsrmService>;
     /** Ubicaciones de los clientes que consulta `resolveLocations` (F4/12). */
+    /** `x-app-version` que dijo el cliente (`undefined` = no mandó el header). */
+    appVersion?: string;
     locations?: { id: string; clientId: string; locationType: string; relationId: string | null; latitude: number | null; longitude: number | null }[];
     /** El cambio de estado choca: otra persona lo cambió antes (updateMany devuelve 0). */
     statusRace?: boolean;
@@ -56,6 +59,7 @@ function makeService(
     routeUpdateWhere: [] as Record<string, unknown>[],
     events: [] as string[],
     audit: [] as string[],
+    auditPayloads: [] as { action: string; after: Record<string, unknown> }[],
     listWhere: undefined as Record<string, unknown> | undefined,
     listOrderBy: undefined as unknown,
     rawSql: [] as string[],
@@ -193,8 +197,19 @@ function makeService(
   }
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
   const perms = opts.permissions ?? [];
-  const tenant = { accountId: 'acc-A', userId: 'u1', permissions: perms, can: (p: string) => perms.includes(p) };
-  const audit = { record: async (e: { action: string }) => void calls.audit.push(e.action) };
+  const tenant = {
+    accountId: 'acc-A',
+    userId: 'u1',
+    permissions: perms,
+    can: (p: string) => perms.includes(p),
+    get: () => ({ appVersion: opts.appVersion }),
+  };
+  const audit = {
+    record: async (e: { action: string; after?: Record<string, unknown> }) => {
+      calls.audit.push(e.action);
+      calls.auditPayloads.push({ action: e.action, after: e.after ?? {} });
+    },
+  };
   const events = { emit: (name: string) => void calls.events.push(name) };
   // Sin motor por defecto: el preview se degrada, que es el camino sin OSRM.
   const osrm = { route: async () => null, trip: async () => null, ...opts.osrm };
@@ -205,7 +220,7 @@ function makeService(
     events as never,
     { decrypt: (v: string) => v } as never,
     osrm as never,
-    { today: async () => new Date(`${opts.today ?? '2026-06-01'}T00:00:00.000Z`), timezone: async () => 'UTC' } as never,
+    { today: async () => new Date(`${opts.today ?? '2026-06-20'}T00:00:00.000Z`), timezone: async () => 'UTC' } as never,
   );
   /** El orden real del recorrido, para asertar contra él. */
   const order = () => stops.slice().sort((a, b) => a.sequenceOrder - b.sequenceOrder).map((s) => s.id);
@@ -902,6 +917,76 @@ describe('RoutesService.updateStatus · máquina de estados (F4/12)', () => {
     assert.equal(clean.calls.stopUpdateMany.length, 0);
   });
 
+  describe('D-5 · tolerancia por versión (opción C)', () => {
+    const open = () => stopsOf('VISITED', 'PENDING');
+    const mine = { ...MINE, status: 'IN_PROGRESS' };
+
+    it('APK viejo (< 1.1.0) cierra su ruta sin motivo: se tolera y queda marcado en la auditoría', async () => {
+      const { service, calls } = makeService({ route: mine, permissions: FIELD_ONLY, stops: open(), appVersion: '1.0.3' });
+      await service.updateStatus('r1', { status: 'COMPLETED' } as never);
+      assert.equal(calls.routeUpdate[0]!.statusReason, 'Cerrada con paradas sin gestionar.');
+      assert.equal(calls.auditPayloads.at(-1)!.after.legacyCompat, 'version_below');
+      assert.equal(calls.auditPayloads.at(-1)!.after.appVersion, '1.0.3');
+    });
+
+    it('🔴 app nueva (>= 1.1.0) sin motivo: se rechaza con ROUTE_REASON_REQUIRED y no cambia nada', async () => {
+      const { service, calls } = makeService({ route: mine, permissions: FIELD_ONLY, stops: open(), appVersion: '1.1.0' });
+      await rejectsWithCode(service.updateStatus('r1', { status: 'COMPLETED' } as never), 'ROUTE_REASON_REQUIRED');
+      assert.equal(calls.routeUpdate.length, 0);
+    });
+
+    it('app nueva con motivo válido cierra, guarda el motivo y no queda marcada como legado', async () => {
+      const { service, calls } = makeService({ route: mine, permissions: FIELD_ONLY, stops: open(), appVersion: '1.2.0' });
+      await service.updateStatus('r1', { status: 'COMPLETED', reason: 'Lluvia fuerte en la zona' } as never);
+      assert.equal(calls.routeUpdate[0]!.statusReason, 'Lluvia fuerte en la zona');
+      assert.equal(calls.auditPayloads.at(-1)!.after.legacyCompat, undefined);
+    });
+
+    it('un motivo demasiado corto no vale como motivo ni siquiera en la app nueva', async () => {
+      const { service } = makeService({ route: mine, permissions: FIELD_ONLY, stops: open(), appVersion: '1.1.0' });
+      await rejectsWithCode(service.updateStatus('r1', { status: 'COMPLETED', reason: '.' } as never), 'ROUTE_REASON_REQUIRED');
+    });
+
+    it('sin header, o con un header ilegible o manipulado, rige la tolerancia de hoy y queda marcado', async () => {
+      for (const [appVersion, tag] of [
+        [undefined, 'version_missing'],
+        ['', 'version_missing'],
+        ['abc', 'version_invalid'],
+        ['1.1.0; DROP TABLE', 'version_invalid'],
+      ] as const) {
+        const { service, calls } = makeService({ route: mine, permissions: FIELD_ONLY, stops: open(), appVersion });
+        await service.updateStatus('r1', { status: 'COMPLETED' } as never);
+        assert.equal(calls.auditPayloads.at(-1)!.after.legacyCompat, tag, String(appVersion));
+      }
+    });
+
+    it('🔴 la versión NO afloja nada más: ni permisos ni rutas ajenas ni cancelar', async () => {
+      // Un manager ajeno siempre deja motivo, diga la versión que diga.
+      const ajeno = { id: 'r1', collectorId: 'u9', createdBy: 'u8' };
+      const a = makeService({ route: ajeno, permissions: ['route:read', 'route:assign'], stops: stopsOf('PENDING'), appVersion: '0.0.1' });
+      await rejectsWithCode(a.service.updateStatus('r1', { status: 'IN_PROGRESS' } as never), 'ROUTE_REASON_REQUIRED');
+      // Cancelar exige motivo también con una app vieja.
+      const b = makeService({ route: MINE, permissions: FIELD_ONLY, stops: stopsOf('PENDING'), appVersion: '0.0.1' });
+      await rejectsWithCode(b.service.updateStatus('r1', { status: 'CANCELLED' } as never), 'ROUTE_REASON_REQUIRED');
+      // Una ruta de otro cobrador sigue siendo 404 con cualquier versión.
+      const c = makeService({ route: { id: 'r1', collectorId: 'otro' }, permissions: FIELD_ONLY, stops: open(), appVersion: '0.0.1' });
+      await rejectsWithCode(c.service.updateStatus('r1', { status: 'COMPLETED' } as never), 'RESOURCE_NOT_FOUND');
+    });
+
+    it('sin paradas pendientes no hace falta motivo y no se marca como legado', async () => {
+      const { service, calls } = makeService({ route: mine, permissions: FIELD_ONLY, stops: stopsOf('VISITED', 'SKIPPED'), appVersion: '1.0.0' });
+      await service.updateStatus('r1', { status: 'COMPLETED' } as never);
+      assert.equal(calls.auditPayloads.at(-1)!.after.legacyCompat, undefined);
+    });
+
+    it('reintento idempotente (cola offline): cerrar una ruta ya cerrada devuelve lo mismo sin pedir motivo', async () => {
+      const { service, calls } = makeService({ route: { ...mine, status: 'COMPLETED' }, permissions: FIELD_ONLY, stops: stopsOf('VISITED', 'SKIPPED'), appVersion: '1.1.0' });
+      const out = await service.updateStatus('r1', { status: 'COMPLETED' } as never);
+      assert.equal(out.status, 'COMPLETED');
+      assert.equal(calls.routeUpdate.length, 0);
+    });
+  });
+
   it('cancelar exige el motivo y salta las paradas sin gestionar', async () => {
     const { service, calls } = makeService({ route: MINE, permissions: FIELD_ONLY, stops: stopsOf('PENDING', 'PENDING') });
     await rejectsWithCode(service.updateStatus('r1', { status: 'CANCELLED' } as never), 'ROUTE_REASON_REQUIRED');
@@ -974,6 +1059,54 @@ describe('RoutesService · autoría y ruta cerrada (F4/12)', () => {
       await rejectsWithCode(service.removeStop('r1', 's1'), 'ROUTE_CLOSED');
       await rejectsWithCode(service.updateStop('r1', 's1', { sequenceOrder: 2 } as never), 'ROUTE_CLOSED');
     }
+  });
+
+  describe('D-6 · planificar varios días', () => {
+    const PERM = ['route:read', 'route:assign'];
+    const day = (base: string, n: number) => new Date(new Date(`${base}T00:00:00Z`).getTime() + n * 86_400_000).toISOString().slice(0, 10);
+
+    it('se arma para hoy, mañana y hasta hoy + 14; un día después se rechaza (ROUTE_TOO_FAR)', async () => {
+      for (const n of [0, 1, 7, 14]) {
+        const ok = makeService({ permissions: PERM, today: '2026-06-20' });
+        await ok.service.create({ collectorId: COLLECTOR_ID, plannedDate: day('2026-06-20', n) } as never);
+        assert.equal(ok.calls.routeCreate.length, 1, `+${n}`);
+      }
+      const far = makeService({ permissions: PERM, today: '2026-06-20' });
+      await rejectsWithCode(far.service.create({ collectorId: COLLECTOR_ID, plannedDate: day('2026-06-20', 15) } as never), 'ROUTE_TOO_FAR');
+      assert.equal(far.calls.routeCreate.length, 0);
+    });
+
+    it('el límite también rige en `generate` (lo que usa el planificador)', async () => {
+      const far = makeService({ permissions: PERM, today: '2026-06-20' });
+      await rejectsWithCode(
+        far.service.generate({ collectorId: COLLECTOR_ID, plannedDate: day('2026-06-20', 30), creditIds: ['c1'] } as never),
+        'ROUTE_TOO_FAR',
+      );
+    });
+
+    it('cada día es su propia ruta: dos días distintos del mismo cobrador conviven, el mismo día no (ROUTE_DUPLICATE_DAY)', async () => {
+      const a = makeService({ permissions: PERM, today: '2026-06-20' });
+      await a.service.create({ collectorId: COLLECTOR_ID, plannedDate: '2026-06-21' } as never);
+      const b = makeService({ permissions: PERM, today: '2026-06-20' });
+      await b.service.create({ collectorId: COLLECTOR_ID, plannedDate: '2026-06-22' } as never);
+      const dup = makeService({ permissions: PERM, today: '2026-06-20', routeOfDay: { id: 'rx' } });
+      await rejectsWithCode(dup.service.create({ collectorId: COLLECTOR_ID, plannedDate: '2026-06-21' } as never), 'ROUTE_DUPLICATE_DAY');
+    });
+
+    it('un reintento de la cola con el mismo id devuelve la ruta ya creada sin volver a validar la fecha', async () => {
+      // Se creó hoy con +10 y el teléfono reintenta cuando ya corrieron los días: la fecha no se vuelve a juzgar.
+      const { service, calls } = makeService({
+        permissions: PERM,
+        today: '2026-07-30',
+        priorRoute: { id: 'r1', collectorId: COLLECTOR_ID, stops: [] },
+      });
+      await service.create({ id: 'r1', collectorId: COLLECTOR_ID, plannedDate: '2026-06-30' } as never);
+      assert.equal(calls.routeCreate.length, 0);
+    });
+
+    it('el límite compartido con las pantallas es 14', () => {
+      assert.equal(ROUTE_MAX_DAYS_AHEAD, 14);
+    });
   });
 
   it('la ruta nace con su creador, y no se arma para un día que ya pasó (ROUTE_PAST_DATE)', async () => {

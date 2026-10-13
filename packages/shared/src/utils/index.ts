@@ -31,3 +31,7 @@ export * from './mora-situation.js';
 export * from './contact-links.js';
 export * from './route-rules.js';
 export * from './visit-result.js';
+export * from './geo.js';
+export * from './catalog-metadata.js';
+export * from './collection-profile.js';
+export * from './income-profile.js';

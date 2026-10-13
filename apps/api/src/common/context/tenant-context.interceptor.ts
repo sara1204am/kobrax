@@ -15,6 +15,13 @@ import { TenantContextService } from './tenant-context.service';
  * de modo que el handler y sus awaits heredan el contexto (si solo se llamara
  * `als.run(() => next.handle())` el scope se cerraría antes de que Nest se suscriba).
  */
+/** El header como texto corto o `undefined`: nunca se propaga basura larga ni arreglos al contexto. */
+function clientVersionOf(header: string | string[] | undefined): string | undefined {
+  const raw = Array.isArray(header) ? header[0] : header;
+  const text = typeof raw === 'string' ? raw.trim().slice(0, 32) : '';
+  return text || undefined;
+}
+
 @Injectable()
 export class TenantContextInterceptor implements NestInterceptor {
   constructor(private readonly tenantContext: TenantContextService) {}
@@ -34,6 +41,7 @@ export class TenantContextInterceptor implements NestInterceptor {
           requestId: req.headers['x-request-id'] as string | undefined,
           ip: req.ip,
           userAgent: req.headers['user-agent'],
+          appVersion: clientVersionOf(req.headers['x-app-version']),
         },
         () => {
           next.handle().subscribe(subscriber);

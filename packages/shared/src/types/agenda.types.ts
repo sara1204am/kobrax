@@ -71,6 +71,18 @@ export interface AgendaTodaySummary {
   /** Hasta 5 pendientes de hoy: las de hora fija por hora, luego las de franja. */
   items: AgendaListItem[];
   load?: AgendaLoadRow[];
+  /**
+   * Contactos efectivos de HOY: gestiones agendadas que se **ejecutaron hoy y dejaron una gestión real en la bitácora**
+   * (`resultActivityId`). Es la misma regla de «contacto efectivo» de la hora recomendada. **No** cuenta lo registrado fuera
+   * de la agenda (una gestión suelta desde la ficha de mora no pasa por una gestión agendada).
+   */
+  effectiveContacts: number;
+  /** Promesas de pago agendadas que **vencen hoy** (siguen sin ejecutarse). */
+  promisesDue: number;
+  /** Promesas de pago **tomadas hoy** (creadas hoy, de cualquier fecha de pago, sin contar las eliminadas). */
+  promisesTaken: number;
+  /** Cuándo se calculó (ISO). El móvil lo usa para decir de cuándo es un resumen guardado y no pasarlo por actual. */
+  generatedAt: string;
 }
 
 /** A quién se le puede asignar una gestión (`GET /agenda/assignees`): nombre y rol, sin correo ni teléfono. */

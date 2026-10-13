@@ -21,6 +21,30 @@ export function compareAppVersions(a: string, b: string): number | null {
   return 0;
 }
 
+/**
+ * D-5 · R5: primera versión de la app móvil que pide y manda el motivo al cerrar una ruta con paradas sin gestionar.
+ * Hasta que se apruebe retirar la tolerancia (opción B, ver plan F10 «alineacion-web»), una app más vieja sigue pudiendo
+ * cerrar sin motivo.
+ */
+export const ROUTE_CLOSE_REASON_MIN_APP_VERSION = '1.1.0';
+
+export type LegacyClientReason = 'version_missing' | 'version_invalid' | 'version_below';
+
+/**
+ * ¿Es este un cliente al que todavía se le tolera la regla vieja? `null` = cliente al día: se le exige la regla completa.
+ *
+ * 🔴 **No es una puerta de seguridad.** El header lo manda el cliente y se puede omitir o mentir. Por eso solo decide una
+ * regla *funcional y de auditoría* (un cobrador que cierra SU PROPIA ruta con paradas sin gestionar, sin motivo): autenticación,
+ * permisos y alcance se resuelven antes y por otros medios, y nada de esto los afloja. Ausente, ilegible o menor a `since` →
+ * se tolera (es lo que hoy ya pasa) y queda marcado en la auditoría para medir cuánta flota sigue viéndose así.
+ */
+export function legacyClientReason(raw: string | undefined | null, since: string): LegacyClientReason | null {
+  if (raw === undefined || raw === null || raw.trim() === '') return 'version_missing';
+  const cmp = compareAppVersions(raw, since);
+  if (cmp === null) return 'version_invalid';
+  return cmp < 0 ? 'version_below' : null;
+}
+
 /** `true` sólo si la versión del cliente se leyó, la mínima también, y la del cliente es menor. */
 export function isBelowMinVersion(clientVersion: string | undefined | null, minVersion: string | undefined | null): boolean {
   if (!clientVersion || !minVersion) return false;

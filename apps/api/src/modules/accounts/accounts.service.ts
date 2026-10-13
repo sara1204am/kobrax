@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { hash } from 'bcryptjs';
-import type { PrismaClient } from '@prisma/client';
-import { DEFAULT_ARREAR_CATEGORIES, KOBRAX, PLANS, TRIAL_DAYS, isPasswordValid } from '@kobrax/shared';
+import type { Prisma, PrismaClient } from '@prisma/client';
+import { DEFAULT_ARREAR_CATEGORIES, KOBRAX, PLANS, TRIAL_DAYS, catalogDefaultRows, isPasswordValid } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -115,6 +115,12 @@ export class AccountsService {
         // F4/08 · D1-b: la cuenta nace con los rangos de ejemplo (A 1–30, B 31–60, C 61+); se editan en Administración.
         await tx.arrearCategory.createMany({
           data: DEFAULT_ARREAR_CATEGORIES.map((c) => ({ accountId, code: c.code, name: c.name, fromDays: c.fromDays, toDays: c.toDays, color: c.color, sortOrder: c.sortOrder })),
+        });
+        // F4/13 · D-01: los catálogos por defecto (métodos de pago, bancos, motivos de no pago, rubros…). Antes solo
+        // las cuentas DEMO los tenían y una cuenta registrada nacía vacía. `skipDuplicates`: idempotente.
+        await tx.catalogItem.createMany({
+          data: catalogDefaultRows(accountId).map((r) => ({ ...r, metadata: r.metadata as Prisma.InputJsonValue })),
+          skipDuplicates: true,
         });
         // Audit a mano, no vía AuditService: sin contexto de request ese servicio
         // no-opea en silencio (audit.service.ts:35). Acá el contexto ya es el correcto (S4-D7).

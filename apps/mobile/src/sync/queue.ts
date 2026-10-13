@@ -15,18 +15,35 @@
  * falla después de que la visita salió NO se pierde ni se reintenta junto con ella**: se re-encola como su
  * propio ítem (ver `sendVisit`). Así el que falla no arrastra a nadie y nada se descarta en silencio.
  */
-import type { AgendaOutcome, AgendaPostponeStep, NewCreditNote, RecoveryActivityInput, RouteStatus } from '@kobrax/shared';
+import type {
+  AgendaOutcome,
+  AgendaPostponeStep,
+  NewCreditNote,
+  RecoveryActivityInput,
+  RouteStatus,
+  UpdateAgendaInput,
+} from '@kobrax/shared';
 import * as db from '../db';
 import { nuevoId } from '../ids';
 import { deleteQueuePhoto, persistPhoto, photoExists, type PendingPhoto } from '../queue-photos';
 import { uploadImage, type UploadResult } from '../uploads.service';
 import { addVisitEvidence, createVisit, type CreateVisitInput } from '../field.service';
 import { createPayment, type NewPayment } from '../payments.service';
-import { updateRouteStatus } from '../routes.service';
 import {
+  createChangeRequest,
+  decideChangeRequest,
+  updateRouteStatus,
+  updateStop,
+  type ChangeDecision,
+  type NewChangeRequest,
+} from '../routes.service';
+import {
+  addAttachment,
   createClient,
+  getClient,
   removeContact,
   removeLocation,
+  saveIncomeProfile,
   updateClient,
   updateContact,
   updateLocation,
@@ -35,6 +52,7 @@ import {
   type NewLocationInput,
   type UpdateClientPatch,
 } from '../clients.service';
+import type { IncomeProfile } from '@kobrax/shared';
 import { clearArrears, createCredit, markArrears, type ClearArrearsInput, type NewCreditInput } from '../credits.service';
 import {
   addClientContact,
@@ -43,14 +61,17 @@ import {
   clientContextLive,
   completeItem,
   createItem,
+  deleteItem,
   postponeItem,
   rescheduleItem,
+  updateItem,
   type CreateAgendaInput,
   type NewClientContact,
   type NewClientLocation,
   type RescheduleAgendaInput,
 } from '../agenda.service';
-import { addMoraActivity, addMoraNote } from '../mora.service';
+import { addMoraActivity, addMoraNote, setMoraPriority, type PinnablePriority } from '../mora.service';
+import { markRead } from '../notifications.service';
 import { getUserId } from '../session';
 import { confirmProvisionalRow, dropProvisionalRow } from './optimistic';
 import { withAgendaExplanation } from './agenda-conflicts';
@@ -95,7 +116,16 @@ export type QueuedAction =
    * reintentarlo deja la ruta donde ya estaba. Sin esto, una jornada iniciada sin señal quedaba
    * `PLANNED` en el servidor y la app volvía a ofrecer "Iniciar ruta" al reconectar.
    */
-  | { kind: 'route.status'; routeId: string; status: RouteStatus }
+  | { kind: 'route.stop.location'; routeId: string; stopId: string; locationId: string }
+  | { kind: 'route.change.create'; routeId: string; input: NewChangeRequest }
+  | { kind: 'route.change.decide'; routeId: string; requestId: string; decision: ChangeDecision; note?: string }
+  /**
+   * Adjunto del legajo sacado sin señal. El `POST` no acepta id, así que antes de crearlo se busca por **hash del archivo** en los
+   * adjuntos del cliente: si ya está (el intento anterior llegó y se perdió la respuesta), no se duplica.
+   */
+  | { kind: 'client.attachment'; clientId: string; fileType: string; photo?: PendingPhoto; uploaded?: { url: string; hash: string } }
+  | { kind: 'notification.read'; id: string }
+  | { kind: 'route.status'; routeId: string; status: RouteStatus; /** Por qué se cierra con paradas sin gestionar (D-5). */ reason?: string }
   /**
    * Alta de cliente y de préstamo en la calle. Idempotentes porque **el id lo pone el teléfono**
    * (`nuevoId()`): si la cola reintenta, el server reconoce esa alta en vez de crear otra.
@@ -119,7 +149,7 @@ export type QueuedAction =
   | { kind: 'arrears.mark'; creditId: string; days?: number }
   | { kind: 'arrears.clear'; creditId: string; input: ClearArrearsInput }
   /** Idempotente en el server: completar una gestión ya ejecutada devuelve la misma gestión. */
-  | { kind: 'agenda.complete'; id: string; outcome: AgendaOutcome; notes?: string }
+  | { kind: 'agenda.complete'; id: string; outcome: AgendaOutcome; notes?: string; reasonCode?: string; expectedIncomeDate?: string; payerParty?: string; templateCode?: string }
   /**
    * `AgendaPostponeStep` y no `number`: posponer es en pasos fijos, y el tipo del dominio ya lo dice.
    *
@@ -134,6 +164,12 @@ export type QueuedAction =
    * ejecutar" en vez de cancelar de nuevo o crear una segunda gestión reagendada.
    */
   | { kind: 'agenda.cancel'; id: string; reasonCode: string }
+  /**
+   * Editar y eliminar una gestión sin señal. El `patch` lleva todos los campos del formulario (valores, no incrementos), así que
+   * repetirlo deja lo mismo. Solo quien la creó puede hacerlo: si no, el servidor rechaza (403) y la hoja de pendientes lo explica.
+   */
+  | { kind: 'agenda.update'; id: string; patch: UpdateAgendaInput }
+  | { kind: 'agenda.delete'; id: string }
   | { kind: 'agenda.reschedule'; id: string; input: RescheduleAgendaInput }
   /**
    * Gestión con resultado y promesa sobre un crédito (al día o en mora; es la única vía de gestiones: ya no hay
@@ -144,6 +180,8 @@ export type QueuedAction =
   | { kind: 'mora.activity'; creditId: string; input: RecoveryActivityInput & { id: string } }
   /** Nota del crédito. Idempotente por `input.id` del teléfono; el servidor reconoce el id y no la duplica. */
   | { kind: 'credit.note'; creditId: string; input: NewCreditNote & { id: string } }
+  /** Fijar (o soltar con `null`) la prioridad de un crédito. Valor fijo: reintentar deja lo mismo. */
+  | { kind: 'mora.priority'; creditId: string; priority: PinnablePriority | null }
   /**
    * La foto de una visita ya registrada cuyo sellado de evidencia falló (parte suelta de `visit`). Si la foto
    * ya subió, viaja `uploaded` y no se sube de nuevo.
@@ -158,6 +196,8 @@ export type QueuedAction =
    * Edición de los datos sueltos del cliente: `PATCH` con valores fijos → idempotente por naturaleza.
    */
   | { kind: 'client.update'; clientId: string; patch: UpdateClientPatch }
+  /** F4/13 · E3. Valor fijo (PUT idempotente): `null` = borrar el perfil. */
+  | { kind: 'client.income'; clientId: string; profile: IncomeProfile | null }
   /**
    * Teléfonos del cliente.
    *  · `add` (desde «agendar», endpoint de agenda): **el endpoint no acepta id**, así que no es repetible a
@@ -203,17 +243,26 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'agenda.complete': 'Gestión ejecutada',
   'agenda.postpone': 'Gestión pospuesta',
   'route.status': 'Estado de la jornada',
+  'notification.read': 'Aviso leído',
+  'client.attachment': 'Adjunto del cliente',
+  'route.change.create': 'Pedido de cambio de ruta',
+  'route.change.decide': 'Decisión sobre un pedido de ruta',
+  'route.stop.location': 'Dirección de una parada',
   'client.create': 'Cliente nuevo',
   'credit.create': 'Préstamo nuevo',
   'arrears.mark': 'Préstamo marcado en mora',
   'arrears.clear': 'Préstamo puesto al día',
   'agenda.cancel': 'Gestión cancelada',
+  'agenda.update': 'Gestión editada',
+  'agenda.delete': 'Gestión eliminada',
   'agenda.reschedule': 'Gestión reagendada',
   'mora.activity': 'Gestión registrada',
   'credit.note': 'Nota del crédito',
+  'mora.priority': 'Prioridad del crédito',
   'visit.evidence': 'Foto de la visita',
   'photo.lost': 'Foto que no se pudo adjuntar',
   'client.update': 'Datos del cliente',
+  'client.income': 'Perfil de ingreso del cliente',
   'client.contact': 'Teléfono del cliente',
   'client.location': 'Dirección del cliente',
 };
@@ -227,7 +276,7 @@ const KNOWN_KINDS = new Set<string>(Object.keys(ACTION_LABEL));
 
 /** Las fotos de la cola que cuelgan de una acción (para borrar sus copias al descartarla). */
 function photosOf(action: PendingAction): PendingPhoto[] {
-  if (action.kind === 'visit' || action.kind === 'payment' || action.kind === 'visit.evidence') {
+  if (action.kind === 'visit' || action.kind === 'payment' || action.kind === 'visit.evidence' || action.kind === 'client.attachment') {
     return action.photo ? [action.photo] : [];
   }
   return [];
@@ -247,7 +296,7 @@ export async function enqueue(action: QueuedAction): Promise<boolean> {
   const userId = await getUserId();
   if (!userId) return false;
   let stored = action;
-  if ((action.kind === 'visit' || action.kind === 'payment' || action.kind === 'visit.evidence') && action.photo) {
+  if ((action.kind === 'visit' || action.kind === 'payment' || action.kind === 'visit.evidence' || action.kind === 'client.attachment') && action.photo) {
     stored = { ...action, photo: await persistPhoto(action.photo) };
   }
   await db.enqueue({
@@ -333,7 +382,9 @@ export type SendResult =
   | { status: 'ok' }
   | { status: 'offline'; outcomeUnknown?: boolean }
   | { status: 'auth' }
-  | { status: 'error'; message: string; permanent?: boolean };
+  /** 426: esta versión de la app ya no es compatible. No es un rechazo: lo pendiente espera a que se actualice. */
+  | { status: 'upgrade' }
+  | { status: 'error'; message: string; permanent?: boolean; code?: string };
 
 const LOST_PHOTO = 'La foto ya no está en el teléfono (el sistema la borró). Descartá este aviso.';
 
@@ -364,6 +415,25 @@ export async function send(action: PendingAction): Promise<SendResult> {
       if (ev.status === 'ok') await deleteQueuePhoto(action.photo?.uri);
       return mapMutate(ev);
     }
+    case 'client.attachment': {
+      let foto = action.uploaded;
+      if (!foto) {
+        if (!action.photo) return { status: 'error', message: 'La foto del adjunto no se guardó en el teléfono.', permanent: true };
+        if (!(await photoExists(action.photo.uri))) return { status: 'error', message: LOST_PHOTO, permanent: true };
+        const up = await uploadImage(action.photo.uri, action.photo.mimeType);
+        if (up.status !== 'ok') return mapUpload(up);
+        foto = { url: up.url, hash: up.hash };
+      }
+      // Buscar antes de crear: el POST no acepta id y un reintento tras un timeout duplicaría el adjunto.
+      const ficha = await getClient(action.clientId);
+      if (ficha.status === 'ok' && (ficha.data.attachments ?? []).some((a) => a.fileHash === foto!.hash)) {
+        await deleteQueuePhoto(action.photo?.uri);
+        return { status: 'ok' };
+      }
+      const res = await addAttachment(action.clientId, { fileType: action.fileType, fileUrl: foto.url, fileHash: foto.hash });
+      if (res.status === 'ok') await deleteQueuePhoto(action.photo?.uri);
+      return mapMutate(res);
+    }
     case 'photo.lost':
       return { status: 'error', message: action.detail, permanent: true };
     case 'payment': {
@@ -390,8 +460,17 @@ export async function send(action: PendingAction): Promise<SendResult> {
       if ('wait' in resolved) return { status: 'error', message: resolved.wait };
       return mapMutate(await createItem(resolved.input));
     }
+    case 'route.stop.location':
+      return mapMutate(await updateStop(action.routeId, action.stopId, { locationId: action.locationId }));
+    case 'route.change.create':
+      return mapMutate(await createChangeRequest(action.routeId, action.input));
+    case 'route.change.decide':
+      return mapMutate(await decideChangeRequest(action.routeId, action.requestId, action.decision, action.note));
+    case 'notification.read':
+      // Un aviso que ya no existe (404) está «leído» a todos los efectos.
+      return mapGone(await markRead(action.id));
     case 'route.status':
-      return mapMutate(await updateRouteStatus(action.routeId, action.status));
+      return mapMutate(await updateRouteStatus(action.routeId, action.status, action.reason));
     case 'client.create': {
       const res = await createClient(action.input);
       if (res.status === 'ok' && action.input.id) await confirmProvisional('client', action.input.id);
@@ -409,7 +488,13 @@ export async function send(action: PendingAction): Promise<SendResult> {
     // Las cuatro acciones sobre una gestión existente pueden chocar con lo que otra persona hizo mientras no había señal: si el
     // servidor las rechaza, la hoja de pendientes explica QUÉ pasó (`agenda-conflicts.ts`) en vez de repetir el mensaje crudo.
     case 'agenda.complete': {
-      const res = await completeItem(action.id, action.outcome, action.notes);
+      // F4/13 · E4: los campos de contexto son opcionales: una acción encolada antes de ellos no los trae y sale igual.
+      const res = await completeItem(action.id, action.outcome, action.notes, {
+        reasonCode: action.reasonCode,
+        expectedIncomeDate: action.expectedIncomeDate,
+        payerParty: action.payerParty,
+        templateCode: action.templateCode,
+      });
       return withAgendaExplanation(mapMutate(res), httpStatusOf(res));
     }
     case 'agenda.postpone': {
@@ -420,16 +505,30 @@ export async function send(action: PendingAction): Promise<SendResult> {
       const res = await cancelItem(action.id, action.reasonCode);
       return withAgendaExplanation(mapMutate(res), httpStatusOf(res));
     }
+    case 'agenda.update': {
+      const res = await updateItem(action.id, action.patch);
+      return withAgendaExplanation(mapMutate(res), httpStatusOf(res));
+    }
+    case 'agenda.delete': {
+      // Un 404 es «ya no existe»: eliminada (por este mismo pedido que se repitió) o por otra persona. Es el resultado buscado.
+      const res = await deleteItem(action.id);
+      if (res.status === 'error' && res.httpStatus === 404) return { status: 'ok' };
+      return withAgendaExplanation(mapMutate(res), httpStatusOf(res));
+    }
     case 'agenda.reschedule': {
       const res = await rescheduleItem(action.id, action.input);
       return withAgendaExplanation(mapMutate(res), httpStatusOf(res));
     }
     case 'mora.activity':
       return mapMutate(await addMoraActivity(action.creditId, action.input));
+    case 'mora.priority':
+      return mapMutate(await setMoraPriority(action.creditId, action.priority));
     case 'credit.note':
       return mapMutate(await addMoraNote(action.creditId, action.input));
     case 'client.update':
       return mapMutate(await updateClient(action.clientId, action.patch));
+    case 'client.income':
+      return mapMutate(await saveIncomeProfile(action.clientId, action.profile));
     case 'client.contact':
       return sendClientContact(action);
     case 'client.location':
@@ -476,7 +575,7 @@ async function sendVisit(action: Extract<QueuedAction, { kind: 'visit' }>): Prom
 
   if (action.payment) {
     // La llave sale de la visita, que el server creó una sola vez: reintentar no cobra dos veces.
-    const input: NewPayment = { ...action.payment, receiptUrl: foto?.url, receiptHash: foto?.hash };
+    const input: NewPayment = { ...action.payment, receiptUrl: foto?.url, receiptHash: foto?.hash, visitId };
     const key = `visit-${visitId}`;
     const pago = await createPayment(input, key);
     if (pago.status !== 'ok') resto.push({ kind: 'payment', input, idempotencyKey: key });
@@ -597,11 +696,13 @@ function httpStatusOf(res: { status: string; httpStatus?: number }): number | un
   return res.status === 'error' ? res.httpStatus : undefined;
 }
 
-function mapMutate(res: { status: string; message?: string; httpStatus?: number; reason?: string }): SendResult {
+function mapMutate(res: { status: string; message?: string; httpStatus?: number; reason?: string; code?: string }): SendResult {
   if (res.status === 'ok') return { status: 'ok' };
   if (res.status === 'offline') return res.reason === 'timeout' ? { status: 'offline', outcomeUnknown: true } : { status: 'offline' };
   if (res.status === 'unauthenticated') return { status: 'auth' };
-  return { status: 'error', message: res.message ?? 'No se pudo subir', permanent: isPermanentRejection(res.httpStatus) };
+  // El corte de versión no descarta nada: el drenaje se detiene y la cola espera a la actualización.
+  if (res.status === 'error' && res.httpStatus === 426) return { status: 'upgrade' };
+  return { status: 'error', message: res.message ?? 'No se pudo subir', permanent: isPermanentRejection(res.httpStatus), ...(res.code ? { code: res.code } : {}) };
 }
 
 /** Un DELETE que devuelve 404 ya está hecho: no es un error. */
@@ -616,9 +717,12 @@ function mapUpload(up: Exclude<UploadResult, { status: 'ok' }>): SendResult {
   return { status: 'error', message: up.message };
 }
 
-/** Un 4xx es definitivo, salvo el timeout (408) y el «más despacio» (429), que son del momento. */
+/**
+ * Un 4xx es definitivo, salvo el timeout (408), el «más despacio» (429) y el **corte de versión (426)**, que son del momento
+ * y no dicen nada sobre la acción: descartar una cobranza porque la app quedó vieja sería perderla.
+ */
 export function isPermanentRejection(httpStatus: number | undefined): boolean {
-  return httpStatus !== undefined && httpStatus >= 400 && httpStatus < 500 && httpStatus !== 408 && httpStatus !== 429;
+  return httpStatus !== undefined && httpStatus >= 400 && httpStatus < 500 && httpStatus !== 408 && httpStatus !== 429 && httpStatus !== 426;
 }
 
 /**

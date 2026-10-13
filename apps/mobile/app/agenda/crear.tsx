@@ -24,7 +24,14 @@ import * as Haptics from 'expo-haptics';
 import { currentLocation } from '@/location';
 import { MapPicker } from '@/maps/MapPicker';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { AgendaItemType, AgendaTimeSlot, CatalogType, ScheduleTimeMode, locationTypeChoices } from '@kobrax/shared';
+import {
+  AgendaItemType,
+  AgendaTimeSlot,
+  CatalogType,
+  ScheduleTimeMode,
+  locationTypeChoices,
+  type AgendaListItem,
+} from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { Button, ErrorBanner } from '@/components';
 // `SelectRow` y `PickerSheet` nacieron en esta pantalla y subieron a `ui.tsx` con su 2º consumidor (S6).
@@ -66,6 +73,7 @@ import { LOCAL_ID_PREFIX } from '@/sync/queue';
 import { clientDisplayName, type ClientHit } from '@/clients.service';
 import { useClientSearch } from '@/use-client-search';
 import { queueForLater } from '@/sync/sync.service';
+import { patchAgendaItemLocal } from '@/sync/agenda-optimistic';
 import { listCatalog, type CatalogOption } from '@/catalogs.service';
 
 const TYPES: AgendaItemType[] = [
@@ -120,6 +128,8 @@ export default function CrearGestionScreen() {
   // 🔴 El id del agendado se fija al ABRIR la pantalla, no en cada intento: si el server lo guardó pero la
   // respuesta se perdió (timeout), el reintento —o el doble toque— lleva el MISMO id y no crea otro (ni otro recordatorio).
   const createId = useRef(nuevoId());
+  /** La gestión que se está editando, tal como llegó: el parche local sobre las listas necesita su día y su id. */
+  const editedItem = useRef<AgendaListItem | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** Lo que el usuario tipeó en el monto; `details.amount` guarda el número derivado. */
   const [amountText, setAmountText] = useState('');
@@ -178,6 +188,7 @@ export default function CrearGestionScreen() {
         return;
       }
       const { item } = res.data;
+      editedItem.current = item;
       dispatch({ t: 'hydrate', state: hydrateForm(item) });
       // El monto se pinta desde su texto (el número es el derivado, no al revés — lección de S2).
       const amount = (item.details as { amount?: number }).amount;
@@ -415,8 +426,27 @@ export default function CrearGestionScreen() {
       // Sin señal, el ALTA se guarda y sube sola: agendar una visita o una promesa parado frente al
       // deudor es el caso más común del módulo, y frenarlo por cobertura es lo que P6 vino a evitar.
       //
-      // La EDICIÓN no se encola: es un PATCH sobre algo que vive en el servidor, y encolar cambios
-      // parciales de un ítem que pudo cambiar de otro lado es pedir un conflicto. Se reintenta.
+      // La EDICIÓN también se guarda: el `patch` lleva todos los campos del formulario (valores, no incrementos), así que
+      // repetirlo deja lo mismo. Si la gestión cambió mientras tanto, el servidor lo rechaza y la hoja de pendientes lo explica.
+      if (patch && editId) {
+        const guardada = await queueForLater({ kind: 'agenda.update', id: editId, patch });
+        if (guardada) {
+          const item = editedItem.current;
+          if (item) {
+            await patchAgendaItemLocal(item, {
+              type: patch.type,
+              timeMode: patch.timeMode,
+              scheduledTime: patch.scheduledTime,
+              timeSlot: patch.timeSlot,
+              observations: patch.observations,
+              ...(patch.details ? { details: patch.details as Record<string, unknown> } : {}),
+            } as Partial<AgendaListItem>);
+          }
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          router.back();
+          return;
+        }
+      }
       if (payload) {
         const guardada = await queueForLater({ kind: 'agenda.create', input: payload });
         if (guardada) {
@@ -425,11 +455,7 @@ export default function CrearGestionScreen() {
           return;
         }
       }
-      setError(
-        payload
-          ? 'Sin conexión y no se pudo guardar en el teléfono. Reintentá.'
-          : 'Sin conexión — los cambios se guardan cuando vuelva la señal. Reintentá.',
-      );
+      setError('Sin conexión y no se pudo guardar en el teléfono. Reintentá.');
       return;
     }
     setError(res.status === 'error' ? res.message : 'Sesión vencida.');

@@ -2,6 +2,8 @@ import { router } from 'expo-router';
 import { authService } from './auth-service';
 import { shouldOfferBiometricSetup } from './biometric';
 import { shouldOfferImport } from './import.service';
+import { registerForPush } from './push.service';
+import { consumePendingTarget } from './push-pending';
 
 /**
  * Único punto de decisión tras autenticarse (lo usan `goToStep('done')` y el splash).
@@ -28,6 +30,8 @@ export async function routeAfterAuth(): Promise<void> {
     router.replace('/(app)/force-password-change');
     return;
   }
+  // Push remoto: con sesión válida se registra este teléfono. No bloquea el arranque ni puede romperlo.
+  void registerForPush().catch(() => undefined);
   if (await shouldOfferBiometricSetup()) {
     router.replace('/(auth)/biometric-setup');
     return;
@@ -40,4 +44,7 @@ export async function routeAfterAuth(): Promise<void> {
     return;
   }
   router.replace('/(tabs)');
+  // Si la app se abrió tocando un aviso, ahora que hay sesión se va a su pantalla.
+  const pending = consumePendingTarget();
+  if (pending) router.push(pending as never);
 }

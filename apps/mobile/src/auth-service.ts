@@ -4,6 +4,7 @@ import { authedFetch } from './api-client';
 import { clearRouteDrafts, clearSession, getSession, isSessionValid, saveSession, saveUserId, touchSession } from './session';
 import * as db from './db';
 import { fieldErrorsFromDetails, type LoginFieldErrors } from './auth-validation';
+import { revokePushDevice } from './push.service';
 
 export type Step = 'done' | 'mfa' | 'mfa_setup' | 'select_account';
 
@@ -16,6 +17,8 @@ export interface Me {
   permissions: string[];
   /** El usuario ya tiene MFA enrolado (lo necesita la UI de seguridad). */
   mfaEnabled: boolean;
+  /** El rol exige MFA (D2): no se ofrece desactivarlo ni postergarlo. El servidor lo impone igual. */
+  mfaRequired?: boolean;
   /** El backend exige cambiar la contraseña antes de operar (cambio forzado). */
   requiresPasswordChange: boolean;
 }
@@ -161,6 +164,27 @@ export const authService = {
     return { backupCodes: res.data.backupCodes };
   },
 
+  /**
+   * Apaga el segundo factor (`POST /auth/mfa/disable`). Reautentica con la **contraseña** (o un código). Un 401 acá es
+   * «contraseña incorrecta», no sesión muerta: `authedFetch` ya no limpia la sesión por eso.
+   */
+  async mfaDisable(password: string): Promise<{ ok: true } | { error: string }> {
+    const res = await authedFetch('/auth/mfa/disable', { method: 'POST', body: { password } });
+    if (res.status === 'unauthenticated') return { error: 'Sesión expirada' };
+    if (res.status === 0) return { error: 'Sin conexión. Revisa tu red e intenta de nuevo.' };
+    if (res.status !== 200 && res.status !== 204) return { error: errMessage(res as ApiResult<unknown>) };
+    return { ok: true };
+  },
+
+  /** Genera códigos de respaldo nuevos (`POST /auth/mfa/backup-codes/regenerate`); los anteriores dejan de servir. */
+  async mfaRegenerate(): Promise<{ backupCodes: string[] } | { error: string }> {
+    const res = await authedFetch<{ backupCodes: string[] }>('/auth/mfa/backup-codes/regenerate', { method: 'POST' });
+    if (res.status === 'unauthenticated') return { error: 'Sesión expirada' };
+    if (res.status === 0) return { error: 'Sin conexión. Revisa tu red e intenta de nuevo.' };
+    if (res.status !== 200 || !res.data) return { error: errMessage(res as ApiResult<unknown>) };
+    return { backupCodes: res.data.backupCodes };
+  },
+
   async selectAccount(accountId: string): Promise<{ step: Step } | { error: string }> {
     if (!flow.preAuthToken) return { error: 'Sesión de login expirada' };
     const res = await apiFetch<AuthTokens>('/auth/select-account', {
@@ -240,6 +264,8 @@ export const authService = {
 
   async logout(): Promise<void> {
     const session = await getSession();
+    // Antes de perder el token de acceso: este teléfono deja de recibir los avisos de quien salió (mejor esfuerzo).
+    await Promise.race([revokePushDevice(), new Promise<void>((r) => setTimeout(r, 3000))]).catch(() => undefined);
     if (session) {
       await apiFetch('/auth/logout', { method: 'POST', body: { refreshToken: session.refreshToken } });
     }

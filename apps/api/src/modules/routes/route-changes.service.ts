@@ -5,10 +5,12 @@ import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { DomainEvent, EventBusService, type RouteNoticePayload } from '../../common/events/event-bus.service';
+import { isUniqueViolation } from '../../common/unique-violation';
 import { RoutesService } from './routes.service';
 import { CreateChangeRequestDto, DecideChangeRequestDto } from './dto/route.dto';
 import {
   cannotDecide,
+  changeRequestIdTaken,
   changeRequestNotFound,
   changeRequestResolved,
   changeRequestStale,
@@ -61,10 +63,23 @@ export class RouteChangesService {
     if (!isValidReason(reason)) throw reasonRequired('del cambio que pedís');
     const payload = dto.payload ?? {};
 
-    const created = await this.tx(async (tx) => {
+    // Reintento de un pedido ya creado (mismo id, misma persona, misma ruta): se devuelve el existente, sin duplicar,
+    // sin volver a auditar y sin volver a avisar.
+    if (dto.id) {
+      const prev = await this.tx((tx) => tx.routeChangeRequest.findFirst({ where: { id: dto.id } }));
+      if (prev) {
+        if (prev.routeId !== routeId || prev.requestedBy !== this.tenant.userId) throw changeRequestIdTaken();
+        return (await this.serialize([prev]))[0]!;
+      }
+    }
+
+    let created: RouteChangeRequest;
+    try {
+      created = await this.tx(async (tx) => {
       await this.checkPayload(tx, routeId, dto.kind, payload);
       return tx.routeChangeRequest.create({
         data: {
+          ...(dto.id ? { id: dto.id } : {}),
           accountId: this.tenant.accountId,
           routeId,
           requestedBy: this.tenant.userId!,
@@ -73,7 +88,16 @@ export class RouteChangesService {
           reason,
         },
       });
-    });
+      });
+    } catch (err) {
+      // Dos intentos del mismo pedido a la vez: gana uno y el otro lee el ya creado.
+      if (dto.id && isUniqueViolation(err)) {
+        const dup = await this.tx((tx) => tx.routeChangeRequest.findFirst({ where: { id: dto.id } }));
+        if (dup && dup.routeId === routeId && dup.requestedBy === this.tenant.userId) return (await this.serialize([dup]))[0]!;
+        throw changeRequestIdTaken();
+      }
+      throw err;
+    }
     await this.audit.record({ entity: 'route_change_request', entityId: created.id, action: 'CREATE', after: { routeId, kind: dto.kind, reason } });
     // Lo aprueba quien armó la ruta; si no hay creador (ruta anterior a F4/12) no hace falta pedir nada.
     if (route.createdBy) {

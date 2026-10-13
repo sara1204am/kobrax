@@ -1,3 +1,5 @@
+import { can } from '@/permissions';
+import { Permission } from '@kobrax/shared';
 import { useCallback, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
@@ -32,7 +34,7 @@ export default function MiembrosScreen() {
       setError('Sin conexión. El equipo se administra en línea.');
     } else if (res.status === 'error') setError(res.message);
     if (acc.status === 'ok') setAccount(acc.data);
-    if (me.status === 'ok') setPuedeInvitar(me.me.permissions.includes('user:invite'));
+    if (me.status === 'ok') setPuedeInvitar(can(me.me.permissions, Permission.USER_INVITE));
     setLoading(false);
   }, []);
 

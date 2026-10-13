@@ -38,6 +38,10 @@ export const noStopsToRoute = () =>
     message: 'No tenés casos abiertos para armar la ruta de hoy',
   });
 
+/** El `id` del pedido de cambio que mandó el cliente ya es de otro pedido (de otra persona o de otra ruta). */
+export const changeRequestIdTaken = () =>
+  new ConflictException({ code: 'ROUTE_REQUEST_ID', message: 'Ese id de pedido ya pertenece a otro pedido' });
+
 /** El `id` de la ruta que mandó el cliente ya es de la ruta de otro cobrador. */
 export const routeIdTaken = () =>
   new ConflictException({ code: 'ROUTE_ID', message: 'Ese id de ruta ya pertenece a otra ruta' });
@@ -103,6 +107,14 @@ export const stopStatusNotAllowed = (from: string, to: string) =>
 /** Fechas de ruta: solo el día, `YYYY-MM-DD`. */
 export const routePastDate = () =>
   new UnprocessableEntityException({ code: 'ROUTE_PAST_DATE', message: 'No se arma una ruta para un día que ya pasó.' });
+
+/** Planificar sin límite hacia adelante convierte la ruta en una lista de deseos: se acota (D-6). */
+export const routeTooFar = (maxDays: number) =>
+  new UnprocessableEntityException({
+    code: 'ROUTE_TOO_FAR',
+    message: `Solo se arma una ruta hasta ${maxDays} días hacia adelante.`,
+    details: { maxDays },
+  });
 
 export const changeRequestNotFound = () =>
   new NotFoundException({ code: 'ROUTE_REQUEST_NOT_FOUND', message: 'Ese pedido de cambio no existe.' });

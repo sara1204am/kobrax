@@ -7,3 +7,4 @@ export * from './agenda.enum.js';
 export * from './credit.enum.js';
 export * from './role.enum.js';
 export * from './permission.enum.js';
+export * from './income.enum.js';

@@ -99,4 +99,8 @@ export enum CatalogType {
   SPECIAL_CATEGORY = 'SPECIAL_CATEGORY', // categorías de "gestión especial" en campo (RT-6)
   COLLATERAL_TYPE = 'COLLATERAL_TYPE', // qué clase de bien es una garantía (vehículo, inmueble…)
   CREDIT_TYPE = 'CREDIT_TYPE', // qué clase de crédito es (consumo, microcrédito, vivienda…)
+  INCOME_SOURCE = 'INCOME_SOURCE', // de qué vive el deudor (F4/13)
+  OCCUPATION = 'OCCUPATION', // rubro: transportista, funcionario público, comerciante… (F4/13)
+  NO_PAYMENT_REASON = 'NO_PAYMENT_REASON', // por qué no pagó (F4/13)
+  COLLECTION_MODALITY = 'COLLECTION_MODALITY', // cómo conviene cobrarle (F4/13)
 }

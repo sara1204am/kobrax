@@ -24,6 +24,13 @@ export const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   MAIL_FROM: z.string().optional(),
+  // Push remoto (FCM HTTP v1, Android). Opcionales: sin credenciales el envío queda apagado y todo lo demás sigue igual.
+  // Una de las dos: el JSON de la cuenta de servicio en base64 (un .env no soporta multilínea) o la ruta a un archivo FUERA
+  // del repo. Nunca se registran en logs.
+  FCM_SERVICE_ACCOUNT_JSON_B64: z.string().optional(),
+  FCM_SERVICE_ACCOUNT_FILE: z.string().optional(),
+  // Hasta cuándo un rol crítico sin MFA puede postergar el enrolamiento (fecha ISO). Sin valor = obligatorio ya.
+  MFA_CRITICAL_GRACE_UNTIL: z.string().optional(),
   // Versión mínima de la app móvil (semver). Sin valor = sin corte; ver AppVersionGuard.
   MIN_APP_VERSION: z.string().optional(),
 });
