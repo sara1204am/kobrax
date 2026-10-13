@@ -174,3 +174,84 @@ describe('E5 · plantilla elegida', () => {
     assert.equal(fila.templateCode, null);
   });
 });
+
+/**
+ * Alineación F4/13 (D-55): la visita de ruta lleva el mismo contexto que la ficha de mora y la agenda.
+ * Por la vía real (`POST /visits`), con el cobrador que atiende el crédito: una visita suelta sobre un crédito solo la
+ * registra quien ejecuta rutas.
+ */
+describe('Alineación · visita de ruta con contexto (D-55)', () => {
+  let collector: string;
+  let visitCreditId: string;
+  const base = { lat: -16.5, lng: -68.15, outcome: 'NO_CONTACT', details: { channel: 'DOOR' } };
+
+  before(async () => {
+    collector = await login('collector@kobrax.demo');
+    const list = await call<MoraRow[]>(collector, 'GET', '/mora?limit=1');
+    assert.equal(list.status, 200, JSON.stringify(list.error));
+    assert.ok(list.data && list.data.length > 0, 'el cobrador de la demo tiene al menos un crédito');
+    visitCreditId = list.data[0]!.creditId;
+  });
+
+  it('🔴 la visita guarda el motivo, la fecha esperada y quién responde en la gestión del crédito', async () => {
+    const id = randomUUID();
+    const r = await call(collector, 'POST', '/visits', {
+      ...base,
+      id,
+      creditId: visitCreditId,
+      reasonCode: 'LATE_INCOME',
+      expectedIncomeDate: future(5),
+      payerParty: 'HOLDER',
+    });
+    assert.ok(r.status === 200 || r.status === 201, JSON.stringify(r.error));
+    const fila = await prisma.creditActivity.findFirst({
+      where: { creditId: visitCreditId, type: 'VISIT', reasonCode: 'LATE_INCOME', expectedIncomeDate: new Date(`${future(5)}T00:00:00.000Z`) },
+      orderBy: { createdAt: 'desc' },
+    });
+    assert.ok(fila, 'la gestión de la visita lleva el contexto');
+    assert.equal(fila!.payerParty, 'HOLDER');
+    assert.equal(fila!.result, 'NO_CONTACT');
+  });
+
+  it('🔴 una visita sin contexto (anterior a estos campos) sigue válida y su gestión queda en NULL', async () => {
+    const id = randomUUID();
+    const antes = await prisma.creditActivity.count({ where: { creditId: visitCreditId, type: 'VISIT' } });
+    const r = await call(collector, 'POST', '/visits', { ...base, id, creditId: visitCreditId });
+    assert.ok(r.status === 200 || r.status === 201, JSON.stringify(r.error));
+    assert.equal(await prisma.creditActivity.count({ where: { creditId: visitCreditId, type: 'VISIT' } }), antes + 1);
+    const ultima = await prisma.creditActivity.findFirstOrThrow({ where: { creditId: visitCreditId, type: 'VISIT' }, orderBy: { createdAt: 'desc' } });
+    assert.equal(ultima.reasonCode, null);
+    assert.equal(ultima.expectedIncomeDate, null);
+    assert.equal(ultima.payerParty, null);
+  });
+
+  it('🔴 reintentar con el mismo id no duplica la visita ni su gestión (cola offline)', async () => {
+    const id = randomUUID();
+    const body = { ...base, id, creditId: visitCreditId, reasonCode: 'FORGOT' };
+    const primera = await call(collector, 'POST', '/visits', body);
+    assert.ok(primera.status === 200 || primera.status === 201, JSON.stringify(primera.error));
+    const gestiones = await prisma.creditActivity.count({ where: { creditId: visitCreditId, type: 'VISIT' } });
+    const reintento = await call(collector, 'POST', '/visits', body);
+    assert.ok(reintento.status === 200 || reintento.status === 201, JSON.stringify(reintento.error));
+    assert.equal(await prisma.fieldVisit.count({ where: { id } }), 1);
+    assert.equal(await prisma.creditActivity.count({ where: { creditId: visitCreditId, type: 'VISIT' } }), gestiones);
+  });
+
+  const invalidos: [string, Record<string, unknown>][] = [
+    ['motivo con formato inválido', { reasonCode: 'perdió el empleo' }],
+    ['fecha esperada sin motivo', { expectedIncomeDate: future(3) }],
+    ['fecha esperada pasada', { reasonCode: 'LATE_INCOME', expectedIncomeDate: '2020-01-01' }],
+    ['quién responde inventado', { payerParty: 'VECINO' }],
+    ['plantilla en una visita', { reasonCode: 'FORGOT', templateCode: 'LAST_NOTICE' }],
+  ];
+  for (const [label, extra] of invalidos) {
+    it(`${label} → 400 y no escribe nada`, async () => {
+      const visitas = await prisma.fieldVisit.count({ where: { creditId: visitCreditId } });
+      const gestiones = await prisma.creditActivity.count({ where: { creditId: visitCreditId } });
+      const r = await call(collector, 'POST', '/visits', { ...base, id: randomUUID(), creditId: visitCreditId, ...extra });
+      assert.equal(r.status, 400, JSON.stringify(r.error));
+      assert.equal(await prisma.fieldVisit.count({ where: { creditId: visitCreditId } }), visitas, 'no guarda la visita');
+      assert.equal(await prisma.creditActivity.count({ where: { creditId: visitCreditId } }), gestiones, 'no guarda la gestión');
+    });
+  }
+});
