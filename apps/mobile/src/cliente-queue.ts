@@ -76,6 +76,8 @@ export function queueableOps(ops: ClienteOps, clientId = '_'): boolean {
 export function opsToActions(clientId: string, ops: ClienteOps): QueuedAction[] {
   const actions: QueuedAction[] = [];
   if (ops.client) actions.push({ kind: 'client.update', clientId, patch: ops.client });
+  // F4/13 · E3: valor fijo, idempotente: encolable. `null` = quedó vacío y hay que borrarlo.
+  if (ops.income !== undefined) actions.push({ kind: 'client.income', clientId, profile: ops.income });
   for (const contactId of ops.contacts.removeIds) actions.push({ kind: 'client.contact', clientId, op: 'remove', contactId });
   for (const locationId of ops.locations.removeIds) actions.push({ kind: 'client.location', clientId, op: 'remove', locationId });
   for (const c of ops.contacts.update) {

@@ -55,7 +55,7 @@ import {
   VisitOutcome,
   CollectionPriority,
 } from '@prisma/client';
-import { DEFAULT_ARREAR_CATEGORIES, ROLE_PERMISSIONS, RoleType, validateAgendaDetails } from '@kobrax/shared';
+import { CATALOG_DEFAULTS, DEFAULT_ARREAR_CATEGORIES, ROLE_PERMISSIONS, RoleType, validateAgendaDetails } from '@kobrax/shared';
 import bcrypt from 'bcryptjs';
 import { blindHash, encryptPII } from './pii';
 
@@ -163,70 +163,8 @@ const json = (v: unknown): Prisma.InputJsonValue => v as Prisma.InputJsonValue;
 // Catálogos de la cuenta (idempotente por el unique (account, catalog, code))
 // ═══════════════════════════════════════════════════════════════════════════════
 
-type CatalogSeed = { catalog: CatalogType; code: string; label: string; sortOrder: number; metadata?: object };
-const CATALOGS: CatalogSeed[] = [
-  { catalog: CatalogType.PAYMENT_METHOD, code: 'CASH', label: 'Efectivo', sortOrder: 1 },
-  { catalog: CatalogType.PAYMENT_METHOD, code: 'DEPOSIT', label: 'Depósito', sortOrder: 2, metadata: { requiresBank: true } },
-  { catalog: CatalogType.PAYMENT_METHOD, code: 'TRANSFER', label: 'Transferencia', sortOrder: 3, metadata: { requiresBank: true } },
-  { catalog: CatalogType.PAYMENT_METHOD, code: 'QR', label: 'QR', sortOrder: 4 },
-  { catalog: CatalogType.PAYMENT_METHOD, code: 'CHECK', label: 'Cheque', sortOrder: 5, metadata: { requiresBank: true } },
-  { catalog: CatalogType.PAYMENT_METHOD, code: 'MOBILE', label: 'Pago móvil', sortOrder: 6 },
-  { catalog: CatalogType.PAYMENT_METHOD, code: 'AGENCY', label: 'Agencia', sortOrder: 7 },
-  { catalog: CatalogType.PAYMENT_METHOD, code: 'COLLECTOR', label: 'Cobrador', sortOrder: 8 },
-  { catalog: CatalogType.BANK, code: 'BNB', label: 'Banco Nacional de Bolivia', sortOrder: 1 },
-  { catalog: CatalogType.BANK, code: 'BCP', label: 'BCP', sortOrder: 2 },
-  { catalog: CatalogType.BANK, code: 'BMSC', label: 'Banco Mercantil Santa Cruz', sortOrder: 3 },
-  { catalog: CatalogType.BANK, code: 'BISA', label: 'Banco BISA', sortOrder: 4 },
-  { catalog: CatalogType.BANK, code: 'UNION', label: 'Banco Unión', sortOrder: 5 },
-  { catalog: CatalogType.BANK, code: 'FIE', label: 'Banco FIE', sortOrder: 6 },
-  { catalog: CatalogType.BANK, code: 'SOL', label: 'Banco Sol', sortOrder: 7 },
-  { catalog: CatalogType.BANK, code: 'ECOFUTURO', label: 'EcoFuturo', sortOrder: 8 },
-  { catalog: CatalogType.PRIORITY, code: 'VERY_HIGH', label: 'Muy alta', sortOrder: 1 },
-  { catalog: CatalogType.PRIORITY, code: 'HIGH', label: 'Alta', sortOrder: 2 },
-  { catalog: CatalogType.PRIORITY, code: 'MEDIUM', label: 'Media', sortOrder: 3 },
-  { catalog: CatalogType.PRIORITY, code: 'LOW', label: 'Baja', sortOrder: 4 },
-  { catalog: CatalogType.EXPECTED_RESULT, code: 'COLLECT', label: 'Cobrar', sortOrder: 1 },
-  { catalog: CatalogType.EXPECTED_RESULT, code: 'REMIND', label: 'Recordar', sortOrder: 2 },
-  { catalog: CatalogType.EXPECTED_RESULT, code: 'CONFIRM_VISIT', label: 'Confirmar visita', sortOrder: 3 },
-  { catalog: CatalogType.EXPECTED_RESULT, code: 'CONFIRM_PAYMENT', label: 'Confirmar pago', sortOrder: 4 },
-  { catalog: CatalogType.EXPECTED_RESULT, code: 'NEGOTIATE', label: 'Negociar', sortOrder: 5 },
-  { catalog: CatalogType.PHONE_TYPE, code: 'MOBILE', label: 'Celular', sortOrder: 1 },
-  { catalog: CatalogType.PHONE_TYPE, code: 'OFFICE', label: 'Oficina', sortOrder: 2 },
-  { catalog: CatalogType.PHONE_TYPE, code: 'HOME', label: 'Casa', sortOrder: 3 },
-  { catalog: CatalogType.PHONE_TYPE, code: 'REFERENCE', label: 'Referencia', sortOrder: 4 },
-  { catalog: CatalogType.ADDRESS_TYPE, code: 'HOME', label: 'Casa', sortOrder: 1 },
-  { catalog: CatalogType.ADDRESS_TYPE, code: 'WORK', label: 'Trabajo', sortOrder: 2 },
-  { catalog: CatalogType.ADDRESS_TYPE, code: 'BUSINESS', label: 'Negocio', sortOrder: 3 },
-  { catalog: CatalogType.REMINDER_CATEGORY, code: 'PAYMENT', label: 'Pago', sortOrder: 1 },
-  { catalog: CatalogType.REMINDER_CATEGORY, code: 'DOCUMENT', label: 'Documento', sortOrder: 2 },
-  { catalog: CatalogType.REMINDER_CATEGORY, code: 'FOLLOWUP', label: 'Seguimiento', sortOrder: 3 },
-  { catalog: CatalogType.CANCEL_REASON, code: 'CLIENT_UNAVAILABLE', label: 'Cliente no disponible', sortOrder: 1 },
-  { catalog: CatalogType.CANCEL_REASON, code: 'WRONG_DATA', label: 'Datos incorrectos', sortOrder: 2 },
-  { catalog: CatalogType.RESCHEDULE_REASON, code: 'CLIENT_REQUEST', label: 'A pedido del cliente', sortOrder: 1 },
-  { catalog: CatalogType.RESCHEDULE_REASON, code: 'NO_ANSWER', label: 'Sin respuesta', sortOrder: 2 },
-  { catalog: CatalogType.CURRENCY, code: 'BOB', label: 'Boliviano', sortOrder: 1 },
-  { catalog: CatalogType.CURRENCY, code: 'USD', label: 'Dólar', sortOrder: 2 },
-  // Clases de crédito y de garantía: cada empresa las edita, pero el catálogo no arranca vacío.
-  { catalog: CatalogType.CREDIT_TYPE, code: 'CONSUMER', label: 'Crédito de consumo', sortOrder: 1 },
-  { catalog: CatalogType.CREDIT_TYPE, code: 'PERSONAL', label: 'Préstamo personal', sortOrder: 2 },
-  { catalog: CatalogType.CREDIT_TYPE, code: 'MICRO', label: 'Microcrédito', sortOrder: 3 },
-  { catalog: CatalogType.CREDIT_TYPE, code: 'HOUSING', label: 'Vivienda', sortOrder: 4 },
-  { catalog: CatalogType.COLLATERAL_TYPE, code: 'VEHICLE', label: 'Vehículo', sortOrder: 1 },
-  { catalog: CatalogType.COLLATERAL_TYPE, code: 'PROPERTY', label: 'Inmueble', sortOrder: 2 },
-  { catalog: CatalogType.COLLATERAL_TYPE, code: 'MACHINERY', label: 'Maquinaria', sortOrder: 3 },
-  { catalog: CatalogType.COLLATERAL_TYPE, code: 'APPLIANCE', label: 'Electrodoméstico', sortOrder: 4 },
-  { catalog: CatalogType.COLLATERAL_TYPE, code: 'OTHER', label: 'Otro', sortOrder: 5 },
-  // Plantillas de WhatsApp (S4): el cuerpo va en `metadata.body` con variables {{cliente}}/{{saldo}}.
-  { catalog: CatalogType.WHATSAPP_TEMPLATE, code: 'INITIAL', label: 'Cobro inicial', sortOrder: 1, metadata: { body: 'Hola {{cliente}}, le escribimos de Kobrax para recordarle su saldo pendiente de {{saldo}}. Puede coordinar su pago con nosotros.' } },
-  { catalog: CatalogType.WHATSAPP_TEMPLATE, code: 'REMINDER', label: 'Recordatorio', sortOrder: 2, metadata: { body: 'Hola {{cliente}}, le recordamos que su pago de {{saldo}} vence pronto. Quedamos atentos.' } },
-  { catalog: CatalogType.WHATSAPP_TEMPLATE, code: 'LAST_NOTICE', label: 'Último aviso', sortOrder: 3, metadata: { body: 'Hola {{cliente}}, su deuda de {{saldo}} se encuentra vencida. Le pedimos regularizar su pago a la brevedad para evitar cargos adicionales.' } },
-  // Gestión especial en campo (S5 · RT-6).
-  { catalog: CatalogType.SPECIAL_CATEGORY, code: 'DECEASED', label: 'Fallecimiento', sortOrder: 1 },
-  { catalog: CatalogType.SPECIAL_CATEGORY, code: 'SERIOUS_ILLNESS', label: 'Enfermedad grave', sortOrder: 2 },
-  { catalog: CatalogType.SPECIAL_CATEGORY, code: 'LONG_TRIP', label: 'Viaje prolongado', sortOrder: 3 },
-  { catalog: CatalogType.SPECIAL_CATEGORY, code: 'LEGAL_DISPUTE', label: 'Conflicto legal', sortOrder: 4 },
-  { catalog: CatalogType.SPECIAL_CATEGORY, code: 'OTHER', label: 'Otro', sortOrder: 5 },
-];
+/** Los catálogos por defecto viven en `@kobrax/shared` (los usa también el registro de cuentas). */
+const CATALOGS = CATALOG_DEFAULTS;
 
 /**
  * Configuración de importación de PSF de la cuenta demo (la forma de los reportes de `docs/flows/psf-diario`).
@@ -346,6 +284,31 @@ interface PersonSpec {
   meta?: Record<string, unknown>;
   linkReviewPending?: boolean;
 }
+
+/**
+ * Perfil de ingreso y de cobro de la demo (F4/13). Opcionales, como en el producto: la mayoría de los clientes de la demo
+ * no los tiene, y una pantalla tiene que verse bien sin ellos. Se derivan del negocio cuando lo hay.
+ */
+interface IncomeSpec {
+  source: 'EMPLOYEE' | 'BUSINESS' | 'OTHER';
+  occupation: string;
+  cycle: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'SEASONAL' | 'IRREGULAR';
+  day?: number;
+  notes?: string;
+}
+const INCOME_BY_KEY: Record<string, IncomeSpec> = {
+  // Funcionario que cobra cada tres meses: no es «moroso», tiene un ciclo.
+  c04: { source: 'EMPLOYEE', occupation: 'PUBLIC_SERVANT', cycle: 'QUARTERLY', day: 15, notes: 'Cobra en la alcaldía cada tres meses' },
+  // Transportista al que le atrasan el flete.
+  c06: { source: 'BUSINESS', occupation: 'TRANSPORT', cycle: 'WEEKLY', day: 5, notes: 'Le atrasan el pago del flete' },
+  c08: { source: 'EMPLOYEE', occupation: 'PROFESSIONAL', cycle: 'MONTHLY', day: 28 },
+  c10: { source: 'BUSINESS', occupation: 'MERCHANT', cycle: 'DAILY', notes: 'Puesto en la feria 16 de Julio' },
+};
+/** Cobrar todos los días en el negocio, antes de que abra: lo que hoy vive en la memoria del cobrador. */
+const COLLECTION_AT_BUSINESS = { modality: 'AT_BUSINESS', frequency: 'DAILY', window: { from: '08:00', to: '10:00' }, days: [1, 2, 3, 4, 5, 6], handoverBy: 'HOLDER' };
+const COLLECTION_BY_KEY: Record<string, Record<string, unknown>> = {
+  c10: { modality: 'PICK_UP', frequency: 'DAILY', handoverBy: 'FAMILY', note: 'No tiene tiempo: recoger la cuota con su hijo' },
+};
 
 let jitterSeq = 0;
 const jitter = (): number => ((jitterSeq++ * 37) % 17) / 3000 - 0.0028;
@@ -565,6 +528,7 @@ async function createPeople(ctx: Ctx, specs: PersonSpec[]): Promise<void> {
   const clients: Prisma.ClientCreateManyInput[] = [];
   const contacts: Prisma.ClientContactCreateManyInput[] = [];
   const locations: Prisma.ClientLocationCreateManyInput[] = [];
+  const incomes: Prisma.ClientIncomeProfileCreateManyInput[] = [];
   for (const s of specs) {
     const id = randomUUID();
     const z = ZONES[s.zone] ?? ZONES['Centro']!;
@@ -602,6 +566,20 @@ async function createPeople(ctx: Ctx, specs: PersonSpec[]): Promise<void> {
       ...(s.noCoords ? {} : { latitude: lat, longitude: lng }),
       referenceNotes: s.ref,
     });
+    // Perfil de ingreso: el explícito, o —si tiene negocio— comerciante con ingreso diario.
+    const inc: IncomeSpec | undefined = INCOME_BY_KEY[s.key] ?? (s.business ? { source: 'BUSINESS', occupation: 'MERCHANT', cycle: 'DAILY' } : undefined);
+    if (inc) {
+      incomes.push({
+        accountId: ctx.acc,
+        clientId: id,
+        incomeSourceCode: inc.source,
+        occupationCode: inc.occupation,
+        incomeCycle: inc.cycle,
+        incomeDay: inc.day ?? null,
+        notes: inc.notes ?? null,
+        origin: 'MANUAL',
+      });
+    }
     if (s.business) {
       ref.businessId = randomUUID();
       const bz = ZONES[s.business.zone] ?? z;
@@ -615,6 +593,8 @@ async function createPeople(ctx: Ctx, specs: PersonSpec[]): Promise<void> {
         latitude: round6(bz.lat + jitter()),
         longitude: round6(bz.lng + jitter()),
         referenceNotes: s.business.ref,
+        // Cobro por lugar: en el negocio, todos los días antes de abrir (o lo que diga el perfil explícito).
+        visitSchedule: json(COLLECTION_BY_KEY[s.key] ?? COLLECTION_AT_BUSINESS),
       });
     }
     ctx.people[s.key] = ref;
@@ -622,6 +602,7 @@ async function createPeople(ctx: Ctx, specs: PersonSpec[]): Promise<void> {
   await prisma.client.createMany({ data: clients });
   await prisma.clientContact.createMany({ data: contacts });
   await prisma.clientLocation.createMany({ data: locations });
+  if (incomes.length > 0) await prisma.clientIncomeProfile.createMany({ data: incomes });
 }
 
 const round6 = (n: number): number => Math.round(n * 1e6) / 1e6;
@@ -916,12 +897,38 @@ function addItem(ctx: Ctx, ds: DataSets, o: ItemOpts): string {
 function addActivity(
   ctx: Ctx,
   ds: DataSets,
-  a: { key: string; day: number; hh?: number; mm?: number; type: CreditActivityType; result?: string; notes?: string; by: string; id?: string },
+  a: {
+    key: string;
+    day: number;
+    hh?: number;
+    mm?: number;
+    type: CreditActivityType;
+    result?: string;
+    notes?: string;
+    by: string;
+    id?: string;
+    /** F4/13 — contexto de la gestión (opcional, como en el producto). */
+    reasonCode?: string;
+    /** Días desde hoy en que espera cobrar. */
+    incomeInDays?: number;
+    payerParty?: 'HOLDER' | 'GUARANTOR' | 'CODEBTOR' | 'BENEFICIARY' | 'NOT_LOCATED';
+    origin?: 'MANUAL' | 'DICTATION';
+    templateCode?: string;
+  },
 ): string {
   const credit = ctx.credits[a.key]!;
   const id = a.id ?? randomUUID();
   const when = at(a.day, a.hh ?? 10, a.mm ?? 0);
-  ds.activities.push({ id, accountId: ctx.acc, creditId: credit.id, clientId: credit.clientId, episodeId: episodeAt(ctx, credit.id, a.day), userId: ctx.users[a.by], type: a.type, result: a.result, notes: a.notes, createdAt: when });
+  ds.activities.push({ id, accountId: ctx.acc, creditId: credit.id, clientId: credit.clientId, episodeId: episodeAt(ctx, credit.id, a.day), userId: ctx.users[a.by], type: a.type,
+    result: a.result,
+    notes: a.notes,
+    reasonCode: a.reasonCode ?? null,
+    expectedIncomeDate: a.incomeInDays !== undefined ? D(a.incomeInDays) : null,
+    payerParty: a.payerParty ?? null,
+    origin: a.origin ?? null,
+    templateCode: a.templateCode ?? null,
+    createdAt: when,
+  });
   touch(ctx, credit.id, when);
   return id;
 }
@@ -989,6 +996,7 @@ async function seedDemo(ctx: Ctx, branchIds: Record<'CEN' | 'ALT', string>): Pro
   // 5 · Bitácora, promesas y agenda de la estrella.
   const hand = { from: U['carlos']!, assignmentId: temporalId };
   seedStarActivity(ctx, ds, hand);
+  seedContextActivities(ctx, ds);
 
   // 6 · Agenda del resto de la cartera (historial, hoy, próximos días y SEMANA SIGUIENTE).
   seedAgenda(ctx, ds);
@@ -1161,6 +1169,33 @@ async function seedStarPerson(ctx: Ctx, star: CreditRef): Promise<void> {
   await prisma.collateralCredit.createMany({ data: collaterals.map((c) => ({ accountId: acc, collateralId: c.id, creditId: c.creditId })) });
 }
 
+// ── Gestiones con contexto (F4/13) ─────────────────────────────────────────────────
+
+/**
+ * Gestiones que dicen **por qué no pagó**, cuándo espera cobrar y quién responde: lo que la capa de reglas usa para no
+ * insistir antes de que le llegue el dinero. Son pocas a propósito (en el producto es opcional y la mayoría de las
+ * gestiones no lo trae) y cubren los casos que la fundadora describió: ingreso atrasado, sobreendeudamiento, crédito para
+ * otra persona, cambio de domicilio y un mensaje con plantilla. Solo donde el crédito existe.
+ */
+function seedContextActivities(ctx: Ctx, ds: DataSets): void {
+  const T = CreditActivityType;
+  const gestion = (a: Parameters<typeof addActivity>[2]): void => {
+    if (ctx.credits[a.key]) addActivity(ctx, ds, a);
+  };
+  // Funcionario que cobra cada tres meses: «ingreso atrasado», con la fecha en que espera cobrar.
+  gestion({ key: 'c04', day: -4, hh: 11, type: T.CALL, result: 'CONTACTED', notes: 'Dice que recién cobra en la alcaldía el 15.', by: 'carlos', reasonCode: 'LATE_INCOME', incomeInDays: 9, payerParty: 'HOLDER', origin: 'MANUAL' });
+  // Transportista al que le atrasan el flete.
+  gestion({ key: 'c06', day: -2, hh: 15, type: T.VISIT, result: 'CONTACTED', notes: 'La empresa le debe dos fletes.', by: 'carlos', reasonCode: 'LATE_INCOME', incomeInDays: 4, payerParty: 'HOLDER', origin: 'DICTATION' });
+  // Sobreendeudado: se conversa un plan realista, no se insiste.
+  gestion({ key: 'c08', day: -5, hh: 10, type: T.CALL, result: 'REFUSAL', notes: 'Tiene otros dos créditos y no le alcanza.', by: 'carlos', reasonCode: 'OVER_INDEBTED', payerParty: 'HOLDER', origin: 'MANUAL' });
+  // El crédito era para otra persona: cambia a quién hay que cobrar.
+  gestion({ key: 'c11', day: -3, hh: 16, type: T.VISIT, result: 'CONTACTED', notes: 'Dice que lo sacó para su hermano.', by: 'carlos', reasonCode: 'CREDIT_FOR_OTHER', payerParty: 'BENEFICIARY', origin: 'MANUAL' });
+  // Cambió de domicilio: hay que ubicarlo de nuevo; atiende el garante.
+  gestion({ key: 'c12', day: -6, hh: 9, type: T.VISIT, result: 'NOT_FOUND', notes: 'Se mudó; su padre dio un teléfono nuevo.', by: 'carlos', reasonCode: 'MOVED_OR_PHONE_CHANGED', payerParty: 'GUARANTOR', origin: 'MANUAL' });
+  // Un mensaje con plantilla (la elegida, no la enviada).
+  gestion({ key: 'c05', day: -1, hh: 12, type: T.MESSAGE, result: 'NO_ANSWER', notes: 'Recordatorio por WhatsApp.', by: 'carlos', reasonCode: 'FORGOT', templateCode: 'REMINDER', origin: 'MANUAL' });
+}
+
 // ── Bitácora, promesas y agenda de la estrella ───────────────────────────────────
 
 function seedStarActivity(ctx: Ctx, ds: DataSets, hand: { from: string; assignmentId: string }): void {
@@ -1168,6 +1203,7 @@ function seedStarActivity(ctx: Ctx, ds: DataSets, hand: { from: string; assignme
   const A = (day: number, hh: number, type: CreditActivityType, by: string, result?: string, notes?: string, id?: string, mm = 0): string =>
     addActivity(ctx, ds, { key: 'star', day, hh, mm, type, result, notes, by, id });
 
+  // F4/13: lo que explica por qué no pagó (se agrega en el cuerpo de abajo, tras las gestiones de siempre).
   // Episodio anterior (cerrado el día -52): lo ve el historial de mora.
   A(-60, 9, T.ASSIGNMENT, 'sandra', undefined, 'Crédito asignado a Carlos Collector (responsable principal).');
   A(-59, 10, T.NOTE, 'carlos', undefined, 'La cliente avisa que viaja por trabajo; regresa en una semana.');
@@ -1789,7 +1825,7 @@ async function wipeDataset(accountIds: string[]): Promise<void> {
     'payment_requests', 'payments', 'credit_guarantors', 'collateral_credits', 'collaterals',
     'credit_installments', 'arrears', 'credit_external_snapshots', 'credit_arrear_episodes', 'credit_assignments',
     'client_import_run_items', 'client_import_runs', 'client_external_keys', 'client_contacts', 'client_locations', 'client_relations',
-    'client_attachments', 'credits', 'clients',
+    'client_attachments', 'client_income_profiles', 'credits', 'clients',
   ];
   for (const t of tables) {
     if (!(await exists(t))) continue;

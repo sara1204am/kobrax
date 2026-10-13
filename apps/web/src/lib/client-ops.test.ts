@@ -152,3 +152,29 @@ describe('opsRequests', () => {
     expect(requests(after)).toEqual([]);
   });
 });
+
+describe('opsRequests · perfil de ingreso (F4/13 · E3)', () => {
+  it('cargar el perfil es un PUT idempotente al recurso propio', () => {
+    const after = { ...base(), income: { incomeSourceCode: 'EMPLOYEE', occupationCode: 'PUBLIC_SERVANT', incomeCycle: 'QUARTERLY', incomeDay: '15', notes: '' } };
+    expect(requests(after)).toEqual([
+      { path: '/clients/cl-1/income-profile', method: 'PUT', body: { incomeSourceCode: 'EMPLOYEE', occupationCode: 'PUBLIC_SERVANT', incomeCycle: 'QUARTERLY', incomeDay: 15 } },
+    ]);
+  });
+
+  it('🔴 vaciar un perfil que existía manda un cuerpo vacío: es la forma de borrarlo', () => {
+    const conPerfil = hydrateCliente({ ...DETALLE, incomeProfile: { incomeCycle: 'DAILY' } });
+    const sin = { ...conPerfil, income: { incomeSourceCode: '', occupationCode: '', incomeCycle: '', incomeDay: '', notes: '' } };
+    expect(opsRequests('cl-1', diffCliente(conPerfil, sin))).toEqual([{ path: '/clients/cl-1/income-profile', method: 'PUT', body: {} }]);
+  });
+
+  it('el perfil va después del PATCH del cliente y antes de lo demás', () => {
+    const after = { ...base(), riskSegment: 'ALTO', income: { incomeSourceCode: '', occupationCode: 'TRANSPORT', incomeCycle: '', incomeDay: '', notes: '' } };
+    const r = requests(after);
+    expect(r[0]!.method).toBe('PATCH');
+    expect(r[1]).toMatchObject({ path: '/clients/cl-1/income-profile', method: 'PUT' });
+  });
+
+  it('sin tocar el perfil no hay llamada', () => {
+    expect(requests({ ...base(), riskSegment: 'ALTO' }).some((r) => r.path.endsWith('income-profile'))).toBe(false);
+  });
+});

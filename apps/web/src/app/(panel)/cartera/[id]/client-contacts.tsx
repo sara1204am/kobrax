@@ -103,7 +103,8 @@ export function LocationList({
   busy,
   canWrite,
   onEdit,
-}: Común & { rows: ClientLocationDetail[]; onEdit: () => void }) {
+  modalities = [],
+}: Común & { rows: ClientLocationDetail[]; onEdit: () => void; modalities?: { code: string; label: string }[] }) {
   const t = useTranslations('portfolio');
   const [viendo, setViendo] = useState<ClientLocationDetail | null>(null);
   const actual = viendo && (rows.find((l) => l.id === viendo.id) ?? viendo);
@@ -120,7 +121,7 @@ export function LocationList({
                 key={l.id}
                 icon="routes"
                 value={l.address ?? '—'}
-                hint={[t(`locationType.${l.locationType}`), l.zone].filter(Boolean).join(' · ')}
+                hint={[t(`locationType.${l.locationType}`), l.zone, collectionSummary(t, l.visitSchedule, modalities)].filter(Boolean).join(' · ')}
                 action={
                   <span className="flex shrink-0 items-center gap-2">
                     {/* La foto principal, chica: es lo que permite reconocer la casa sin abrir el detalle. */}
@@ -334,3 +335,21 @@ function Fila({
  * del cliente, así que un teléfono cargado desde acá y uno cargado desde el alta ya no pueden
  * validarse distinto. Era el caso: aquél no pedía forma de teléfono ni ofrecía marcar WhatsApp.
  */
+
+/**
+ * «Cómo cobrarle» en una línea para la lista de direcciones (F4/13 · E2): «Recoger la cuota · Todos los días · 08:00–10:00».
+ * Vacío si el lugar no tiene perfil: una dirección antigua no muestra nada de más.
+ */
+function collectionSummary(
+  t: (key: string) => string,
+  profile: ClientLocationDetail['visitSchedule'],
+  modalities: { code: string; label: string }[],
+): string {
+  if (!profile) return '';
+  const parts: string[] = [];
+  if (profile.modality) parts.push(modalities.find((m) => m.code === profile.modality)?.label ?? profile.modality);
+  if (profile.frequency) parts.push(t(`collection.frequencyOptions.${profile.frequency}`));
+  if (profile.window) parts.push(`${profile.window.from}–${profile.window.to}`);
+  if (profile.handoverBy) parts.push(t(`collection.handoverOptions.${profile.handoverBy}`));
+  return parts.join(' · ');
+}

@@ -132,6 +132,8 @@ export type QueueKind =
   | 'photo.lost'
   /** Ediciones de la ficha del cliente: valores fijos (PATCH) o altas con búsqueda previa, repetibles sin duplicar. */
   | 'client.update'
+  /** Perfil de ingreso del cliente (F4/13 · E3): valor fijo, PUT idempotente. */
+  | 'client.income'
   | 'client.contact'
   | 'client.location';
 

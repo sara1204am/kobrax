@@ -43,6 +43,7 @@ import {
   getClient,
   removeContact,
   removeLocation,
+  saveIncomeProfile,
   updateClient,
   updateContact,
   updateLocation,
@@ -51,6 +52,7 @@ import {
   type NewLocationInput,
   type UpdateClientPatch,
 } from '../clients.service';
+import type { IncomeProfile } from '@kobrax/shared';
 import { clearArrears, createCredit, markArrears, type ClearArrearsInput, type NewCreditInput } from '../credits.service';
 import {
   addClientContact,
@@ -147,7 +149,7 @@ export type QueuedAction =
   | { kind: 'arrears.mark'; creditId: string; days?: number }
   | { kind: 'arrears.clear'; creditId: string; input: ClearArrearsInput }
   /** Idempotente en el server: completar una gestión ya ejecutada devuelve la misma gestión. */
-  | { kind: 'agenda.complete'; id: string; outcome: AgendaOutcome; notes?: string }
+  | { kind: 'agenda.complete'; id: string; outcome: AgendaOutcome; notes?: string; reasonCode?: string; expectedIncomeDate?: string; payerParty?: string; templateCode?: string }
   /**
    * `AgendaPostponeStep` y no `number`: posponer es en pasos fijos, y el tipo del dominio ya lo dice.
    *
@@ -194,6 +196,8 @@ export type QueuedAction =
    * Edición de los datos sueltos del cliente: `PATCH` con valores fijos → idempotente por naturaleza.
    */
   | { kind: 'client.update'; clientId: string; patch: UpdateClientPatch }
+  /** F4/13 · E3. Valor fijo (PUT idempotente): `null` = borrar el perfil. */
+  | { kind: 'client.income'; clientId: string; profile: IncomeProfile | null }
   /**
    * Teléfonos del cliente.
    *  · `add` (desde «agendar», endpoint de agenda): **el endpoint no acepta id**, así que no es repetible a
@@ -258,6 +262,7 @@ export const ACTION_LABEL: Record<QueuedAction['kind'], string> = {
   'visit.evidence': 'Foto de la visita',
   'photo.lost': 'Foto que no se pudo adjuntar',
   'client.update': 'Datos del cliente',
+  'client.income': 'Perfil de ingreso del cliente',
   'client.contact': 'Teléfono del cliente',
   'client.location': 'Dirección del cliente',
 };
@@ -483,7 +488,13 @@ export async function send(action: PendingAction): Promise<SendResult> {
     // Las cuatro acciones sobre una gestión existente pueden chocar con lo que otra persona hizo mientras no había señal: si el
     // servidor las rechaza, la hoja de pendientes explica QUÉ pasó (`agenda-conflicts.ts`) en vez de repetir el mensaje crudo.
     case 'agenda.complete': {
-      const res = await completeItem(action.id, action.outcome, action.notes);
+      // F4/13 · E4: los campos de contexto son opcionales: una acción encolada antes de ellos no los trae y sale igual.
+      const res = await completeItem(action.id, action.outcome, action.notes, {
+        reasonCode: action.reasonCode,
+        expectedIncomeDate: action.expectedIncomeDate,
+        payerParty: action.payerParty,
+        templateCode: action.templateCode,
+      });
       return withAgendaExplanation(mapMutate(res), httpStatusOf(res));
     }
     case 'agenda.postpone': {
@@ -516,6 +527,8 @@ export async function send(action: PendingAction): Promise<SendResult> {
       return mapMutate(await addMoraNote(action.creditId, action.input));
     case 'client.update':
       return mapMutate(await updateClient(action.clientId, action.patch));
+    case 'client.income':
+      return mapMutate(await saveIncomeProfile(action.clientId, action.profile));
     case 'client.contact':
       return sendClientContact(action);
     case 'client.location':

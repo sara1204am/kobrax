@@ -73,7 +73,10 @@ jest.mock('../agenda.service', () => ({
     mockDetail.push(`createItem:id=${input.id}:contact=${input.details?.contactId}`);
     return mockApi.item;
   }),
-  completeItem: jest.fn(async () => ({ status: 'ok', data: {} })),
+  completeItem: jest.fn(async (id: string, outcome: string, _notes?: string, ctx?: Record<string, unknown>) => {
+    mockCalls.push(`completeItem:${id}:${outcome}:${JSON.stringify(ctx ?? {})}`);
+    return { status: 'ok', data: {} };
+  }),
   postponeItem: jest.fn(async (id: string, minutes: number, toTime?: string) => {
     mockCalls.push(`postponeItem:${id}:${minutes}:${toTime}`);
     return { status: 'ok', data: {} };
@@ -126,6 +129,10 @@ jest.mock('../clients.service', () => ({
   getClient: jest.fn(async () => ({ status: 'ok', data: { attachments: mockApi.existingAttachments } })),
   updateClient: jest.fn(async (id: string, patch: Record<string, unknown>) => {
     mockCalls.push(`updateClient:${id}:${JSON.stringify(patch)}`);
+    return { status: 'ok', data: {} };
+  }),
+  saveIncomeProfile: jest.fn(async (id: string, profile: Record<string, unknown> | null) => {
+    mockCalls.push(`saveIncomeProfile:${id}:${JSON.stringify(profile)}`);
     return { status: 'ok', data: {} };
   }),
   updateContact: jest.fn(async (cid: string, id: string) => {
@@ -226,6 +233,26 @@ describe('send · visita compuesta', () => {
   });
 
   // Si la visita no salió, NADA de lo que cuelga de ella puede salir: sin id no hay a qué colgarlo.
+  // F4/13 · alineación: el motivo es parte de la visita y viaja igual por la cola; una acción vieja no lo trae y sale igual.
+  it('el motivo de no pago viaja con la visita encolada', async () => {
+    const { createVisit } = jest.requireMock('../field.service') as { createVisit: jest.Mock };
+    const input = { ...(visitInput as object), outcome: 'NO_CONTACT', reasonCode: 'LATE_INCOME', expectedIncomeDate: '2026-10-20', payerParty: 'HOLDER' };
+    const r = await send({ kind: 'visit', input: input as never });
+    expect(r.status).toBe('ok');
+    expect(createVisit).toHaveBeenLastCalledWith(
+      expect.objectContaining({ reasonCode: 'LATE_INCOME', expectedIncomeDate: '2026-10-20', payerParty: 'HOLDER' }),
+    );
+  });
+
+  it('🔴 una visita encolada antes de este cambio (sin motivo) sale igual y sin esos campos', async () => {
+    const { createVisit } = jest.requireMock('../field.service') as { createVisit: jest.Mock };
+    const r = await send({ kind: 'visit', input: visitInput });
+    expect(r.status).toBe('ok');
+    const sent = createVisit.mock.calls[createVisit.mock.calls.length - 1]![0] as Record<string, unknown>;
+    expect(sent).not.toHaveProperty('reasonCode');
+    expect(sent).not.toHaveProperty('payerParty');
+  });
+
   it('si la visita falla, no intenta el resto', async () => {
     mockState.visit = { status: 'error', message: 'boom' };
     const r = await send({
@@ -536,7 +563,7 @@ describe('parseAction · cola robusta', () => {
   it('las etiquetas tienen un respaldo para tipos desconocidos', () => {
     expect(actionLabel('cosa.nueva')).toBe('Acción pendiente (no soportada)');
     expect(actionLabel('visit')).toBe('Visita registrada');
-    for (const k of ['visit.evidence', 'photo.lost', 'client.update', 'client.contact', 'client.location']) {
+    for (const k of ['visit.evidence', 'photo.lost', 'client.update', 'client.income', 'client.contact', 'client.location']) {
       expect(ACTION_LABEL[k as keyof typeof ACTION_LABEL]).toBeTruthy();
     }
   });
@@ -666,10 +693,35 @@ describe('send · editar y eliminar una gestión (A1)', () => {
   });
 });
 
+describe('send · contexto de la gestión agendada (F4/13 · E4)', () => {
+  it('🔴 una acción encolada ANTES de estos campos sale igual, sin contexto', async () => {
+    mockCalls.length = 0;
+    const r = await send({ kind: 'agenda.complete', id: 'a1', outcome: 'CONTACTED', notes: 'ok' } as never);
+    expect(r.status).toBe('ok');
+    expect(mockCalls.some((x) => x.startsWith('completeItem:a1'))).toBe(true);
+  });
+
+  it('el motivo, la fecha y quién responde viajan con la gestión', async () => {
+    mockCalls.length = 0;
+    await send({ kind: 'agenda.complete', id: 'a2', outcome: 'CONTACTED', reasonCode: 'LATE_INCOME', expectedIncomeDate: '2026-10-20', payerParty: 'HOLDER' } as never);
+    expect(mockCalls.some((x) => x.includes('completeItem:a2') && x.includes('LATE_INCOME') && x.includes('2026-10-20') && x.includes('HOLDER'))).toBe(true);
+  });
+});
+
 describe('send · edición de la ficha del cliente', () => {
   it('client.update manda el PATCH con los valores fijos', async () => {
     await send({ kind: 'client.update', clientId: 'cl1', patch: { firstName: 'Ana' } });
     expect(mockCalls).toContain('updateClient:cl1:{"firstName":"Ana"}');
+  });
+
+  it('client.income manda el PUT del perfil (valor fijo, repetible)', async () => {
+    await send({ kind: 'client.income', clientId: 'cl1', profile: { occupationCode: 'TRANSPORT', incomeCycle: 'WEEKLY', incomeDay: 5 } });
+    expect(mockCalls).toContain('saveIncomeProfile:cl1:{"occupationCode":"TRANSPORT","incomeCycle":"WEEKLY","incomeDay":5}');
+  });
+
+  it('client.income con null borra el perfil', async () => {
+    await send({ kind: 'client.income', clientId: 'cl1', profile: null });
+    expect(mockCalls).toContain('saveIncomeProfile:cl1:null');
   });
 
   it('borrar un teléfono que ya no existe (404) cuenta como hecho', async () => {
@@ -742,5 +794,13 @@ describe('send · altas offline confirman su fila provisional', () => {
   it('al subir el préstamo, también', async () => {
     await send({ kind: 'credit.create', input: { id: 'cre-9', clientId: 'cli-9' } as never });
     expect(mockDetail).toContain('confirm:credit:cre-9');
+  });
+});
+
+describe('send · plantilla elegida de una gestión agendada (F4/13 · E5)', () => {
+  it('el código de la plantilla viaja con la gestión', async () => {
+    mockCalls.length = 0;
+    await send({ kind: 'agenda.complete', id: 'a9', outcome: 'CONTACTED', templateCode: 'LAST_NOTICE' } as never);
+    expect(mockCalls.some((x) => x.includes('completeItem:a9') && x.includes('LAST_NOTICE'))).toBe(true);
   });
 });

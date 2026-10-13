@@ -147,6 +147,16 @@ export class RescheduleAgendaItemDto {
 export class CompleteAgendaItemDto {
   @IsEnum(AgendaOutcome) outcome!: AgendaOutcome;
   @IsOptional() @IsString() @MaxLength(1000) notes?: string;
+  /**
+   * Contexto de la gestión (F4/13 · E4), el mismo que en `POST /mora/:id/activities`. Todo opcional. La regla de fondo es
+   * `validateActivityContext` de shared.
+   */
+  @IsOptional() @IsString() @MaxLength(40) reasonCode?: string;
+  @IsOptional() @IsString() @MaxLength(10) expectedIncomeDate?: string;
+  @IsOptional() @IsString() @MaxLength(20) payerParty?: string;
+  @IsOptional() @IsString() @MaxLength(20) origin?: string;
+  /** Plantilla de mensaje elegida (F4/13 · E5). Solo en una gestión de WhatsApp. */
+  @IsOptional() @IsString() @MaxLength(40) templateCode?: string;
 }
 
 /** Posponer una gestión en pasos fijos (Figma: +15 / +30 / +1h). */

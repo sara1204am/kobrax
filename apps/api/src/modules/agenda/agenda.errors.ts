@@ -26,6 +26,10 @@ export const agendaInvalidReference = (message: string) =>
   new BadRequestException({ code: 'AGENDA_006', message });
 
 /** El desenlace elegido no corresponde al tipo de gestión (p.ej. "pagó" en una llamada). */
+/** El contexto de la gestión (motivo, fecha esperada, quién responde) no es válido. `reason` es el código de `validateActivityContext`. */
+export const agendaInvalidContext = (reason: string) =>
+  new BadRequestException({ code: 'AGENDA_INVALID_CONTEXT', message: 'El motivo o los datos de quién responde no son válidos.', details: { reason } });
+
 export const agendaInvalidOutcome = () =>
   new BadRequestException({ code: 'AGENDA_007', message: 'El resultado no corresponde al tipo de gestión' });
 

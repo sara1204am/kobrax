@@ -26,9 +26,15 @@ interface Calls {
   agenda: Record<string, unknown>[];
 }
 
-function mockApi(over: { visitError?: boolean; payError?: boolean } = {}): Calls {
+const REASONS = [
+  { code: 'LATE_PAY', label: 'Le pagan tarde', metadata: { asksExpectedIncomeDate: true } },
+  { code: 'NO_MONEY', label: 'No tiene dinero', metadata: {} },
+];
+
+function mockApi(over: { visitError?: boolean; payError?: boolean; reasons?: typeof REASONS } = {}): Calls {
   const calls: Calls = { visit: [], evidence: [], payment: [], agenda: [] };
   server.use(
+    http.get('*/api/catalogs/NO_PAYMENT_REASON', () => HttpResponse.json({ data: over.reasons ?? [] })),
     http.get('*/api/catalogs/PAYMENT_METHOD', () => HttpResponse.json({ data: [{ code: 'CASH', label: 'Efectivo' }] })),
     http.get('*/api/catalogs/SPECIAL_CATEGORY', () => HttpResponse.json({ data: [{ code: 'DECEASED', label: 'Fallecimiento' }] })),
     http.post('*/api/visits', async ({ request }) => {
@@ -301,5 +307,48 @@ describe('RecordVisitDialog · la cuota que correspondía pagar', () => {
     await choose('Cobrado');
     expect(screen.queryByText(/Cuota a pagar/)).toBeNull();
     expect(screen.getByText(/Hasta/)).toBeInTheDocument();
+  });
+});
+
+describe('RecordVisitDialog · motivo de no pago (F4/13 · E4, alineación web ↔ móvil)', () => {
+  it('con un motivo, la fecha esperada y quién responde: la visita viaja con el contexto', async () => {
+    const calls = mockApi({ reasons: REASONS });
+    setup();
+    await choose('No contesta');
+    await userEvent.selectOptions(await screen.findByLabelText('Motivo de no pago'), 'LATE_PAY');
+    fireEvent.change(await screen.findByLabelText('Cuándo espera cobrar'), { target: { value: '2026-10-20' } });
+    await userEvent.selectOptions(screen.getByLabelText('Quién responde por el crédito'), 'GUARANTOR');
+    await submit();
+    await vi.waitFor(() => expect(calls.visit).toHaveLength(1));
+    expect(calls.visit[0]).toMatchObject({ reasonCode: 'LATE_PAY', expectedIncomeDate: '2026-10-20', payerParty: 'GUARANTOR' });
+  });
+
+  it('sin elegir nada, la visita sale sin los campos del contexto (es opcional)', async () => {
+    const calls = mockApi({ reasons: REASONS });
+    setup();
+    await choose('No contesta');
+    await screen.findByLabelText('Motivo de no pago');
+    await submit();
+    await vi.waitFor(() => expect(calls.visit).toHaveLength(1));
+    for (const k of ['reasonCode', 'expectedIncomeDate', 'payerParty', 'templateCode']) expect(calls.visit[0]).not.toHaveProperty(k);
+  });
+
+  it('un cobro completo no ofrece motivo de no pago', async () => {
+    mockApi({ reasons: REASONS });
+    setup();
+    await choose('No contesta');
+    await screen.findByLabelText('Motivo de no pago');
+    await choose('Cobrado');
+    expect(screen.queryByLabelText('Motivo de no pago')).toBeNull();
+  });
+
+  it('una corrección es una nota: no ofrece ni manda el contexto', async () => {
+    const calls = mockApi({ reasons: REASONS });
+    setup({ correctsVisitId: 'v0' });
+    await choose('No contesta');
+    expect(screen.queryByLabelText('Motivo de no pago')).toBeNull();
+    await submit('Guardar la corrección');
+    await vi.waitFor(() => expect(calls.visit).toHaveLength(1));
+    expect(calls.visit[0]).not.toHaveProperty('reasonCode');
   });
 });

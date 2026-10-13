@@ -13,6 +13,8 @@ import { queueForLater } from '@/sync/sync.service';
 import { nuevoId } from '@/ids';
 import { money, todayISO } from '@/agenda-form';
 import { listCatalogCached, type CatalogOption } from '@/catalogs.service';
+import { ReasonBlock, contextPayload, emptyReasonContext, useReasons, visitAcceptsContext } from '@/reason-block';
+import { prettyDate } from '@/gestion-sheet';
 import { createItem } from '@/agenda.service';
 import { createPayment, type PaymentMethod } from '@/payments.service';
 import { getRoute, type RouteStopItem } from '@/routes.service';
@@ -45,6 +47,9 @@ export default function ResultadoScreen() {
   const [form, setForm] = useState<ResultForm>(() => initialResult(todayISO()));
   const [categories, setCategories] = useState<CatalogOption[]>([]);
   const [showDate, setShowDate] = useState(false);
+  // F4/13 · E4: motivo de no pago, opcional. Sin catálogo de motivos el bloque no se dibuja.
+  const reasons = useReasons(true);
+  const [reasonCtx, setReasonCtx] = useState(emptyReasonContext());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /**
@@ -78,6 +83,9 @@ export default function ResultadoScreen() {
   const external = !!stop?.externalSource;
   const cuota = installmentHint(stop);
   const valid = useMemo(() => canSubmitResult(key, form, cap), [key, form, cap]);
+  // El resultado que se va a registrar: con «Cobrado» depende del monto (total o parcial) y de él depende si se ofrece el motivo.
+  const outcomeNow = key === 'PAID' ? paymentOutcome(Number(form.amount), outstanding) : meta.outcome;
+  const withContext = visitAcceptsContext(outcomeNow) && reasons.length > 0;
 
   const onDate = useCallback(
     (e: DateTimePickerEvent, d?: Date) => {
@@ -129,6 +137,8 @@ export default function ResultadoScreen() {
       outcome,
       notes: form.notes.trim() || undefined,
       details: buildDetails(key, form),
+      // Solo lo que se eligió; un cobro total no lleva contexto. Es parte de la visita: viaja igual por la cola offline.
+      ...contextPayload(reasonCtx, reasons, visitAcceptsContext(outcome) && reasons.length > 0),
     };
     const promesaInput =
       key === 'PROMISE' && stop.creditId
@@ -242,7 +252,7 @@ export default function ResultadoScreen() {
       return;
     }
     router.replace(`/rutas/mapa?routeId=${routeId}`);
-  }, [stop, key, form, outstanding, meta, routeId, currency]);
+  }, [stop, key, form, outstanding, meta, routeId, currency, reasonCtx, reasons]);
 
   return (
     <View style={styles.screen}>
@@ -372,6 +382,8 @@ export default function ResultadoScreen() {
             </View>
           </>
         )}
+
+        {withContext && <ReasonBlock reasons={reasons} value={reasonCtx} onChange={setReasonCtx} prettyDate={prettyDate} />}
 
         <SectionLabel>{key === 'WRONG_ADDRESS' ? 'Observación (obligatoria)' : 'Observación'}</SectionLabel>
         <TextInput

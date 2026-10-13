@@ -16,6 +16,7 @@ import { completeItem, postponeItem, postponeTarget, whatsappLink, type AgendaIt
 import { syncAgendaReminders } from './agenda-notifications';
 import { todayISO } from './agenda-form';
 import { listCatalogCached, type CatalogOption } from './catalogs.service';
+import { ReasonBlock, contextPayload, emptyReasonContext, useReasons } from './reason-block';
 import { queueForLater } from './sync/sync.service';
 import { patchAgendaItemLocal } from './sync/agenda-optimistic';
 import type { QueuedAction } from './sync/queue';
@@ -39,8 +40,16 @@ export function RegisterSheet({
 }) {
   const { item, client, credit } = detail;
   const outcomes = AGENDA_OUTCOMES_BY_TYPE[item.type];
+  // Un recordatorio o una promesa dejan una nota en la bitácora, y una nota no lleva contexto.
+  const hasContext = item.type === AgendaItemType.CALL || item.type === AgendaItemType.VISIT || item.type === AgendaItemType.WHATSAPP;
+  const reasons = useReasons(visible && hasContext);
+  const withContext = hasContext && reasons.length > 0;
   const [outcome, setOutcome] = useState<AgendaOutcome | null>(null);
   const [notes, setNotes] = useState('');
+  // F4/13 · E4: motivo, cuándo espera cobrar y quién responde. Solo para llamadas, visitas y mensajes.
+  const [ctx, setCtx] = useState(emptyReasonContext());
+  // F4/13 · E5: la plantilla que se eligió (no la que se envió: `wa.me` no lo confirma).
+  const [templateCode, setTemplateCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,6 +59,8 @@ export function RegisterSheet({
     if (!visible) {
       setOutcome(null);
       setNotes('');
+      setCtx(emptyReasonContext());
+      setTemplateCode('');
       setError(null);
     }
   }, [visible]);
@@ -125,7 +136,7 @@ export function RegisterSheet({
     <BottomSheet visible={visible} onClose={onClose} title="Registrar gestión">
       <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 480 }}>
         {item.type === AgendaItemType.WHATSAPP && (
-          <WhatsAppBlock vars={vars} phone={detail.target?.phone} onSend={onOpenLink} />
+          <WhatsAppBlock vars={vars} phone={detail.target?.phone} onSend={onOpenLink} onPickTemplate={setTemplateCode} />
         )}
 
         <SectionLabel>Resultado</SectionLabel>
@@ -146,6 +157,8 @@ export function RegisterSheet({
             );
           })}
         </View>
+
+        {withContext && <ReasonBlock reasons={reasons} value={ctx} onChange={setCtx} prettyDate={prettyIso} />}
 
         <SectionLabel>Nota (opcional)</SectionLabel>
         <TextInput
@@ -199,11 +212,13 @@ export function RegisterSheet({
             disabled={!outcome}
             onPress={() =>
               outcome &&
-              submit(() => completeItem(item.id, outcome, notes.trim() || undefined), {
+              submit(() => completeItem(item.id, outcome, notes.trim() || undefined, { ...contextPayload(ctx, reasons, withContext), ...(templateCode ? { templateCode } : {}) }), {
                 kind: 'agenda.complete',
                 id: item.id,
                 outcome,
                 notes: notes.trim() || undefined,
+                ...contextPayload(ctx, reasons, withContext),
+                ...(templateCode ? { templateCode } : {}),
               })
             }
           />
@@ -218,10 +233,13 @@ function WhatsAppBlock({
   vars,
   phone,
   onSend,
+  onPickTemplate,
 }: {
   vars: Record<string, string>;
   phone?: string;
   onSend: (url: string) => void;
+  /** Avisa qué plantilla se eligió (su código), para dejarla en la gestión. */
+  onPickTemplate?: (code: string) => void;
 }) {
   const [templates, setTemplates] = useState<CatalogOption[]>([]);
   const [body, setBody] = useState('');
@@ -233,7 +251,13 @@ function WhatsAppBlock({
     })();
   }, []);
 
-  const pick = useCallback((t: CatalogOption) => setBody(renderTemplate(t.metadata?.body ?? '', vars)), [vars]);
+  const pick = useCallback(
+    (t: CatalogOption) => {
+      setBody(renderTemplate(t.metadata?.body ?? '', vars));
+      onPickTemplate?.(t.code);
+    },
+    [vars, onPickTemplate],
+  );
 
   return (
     <>
@@ -285,3 +309,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
   },
 });
+
+/** `YYYY-MM-DD` → «15 oct». Sin zona horaria: es un día civil, no un instante. */
+function prettyIso(iso: string): string {
+  const [, m, d] = iso.split('-').map(Number);
+  const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  return `${d} ${MONTHS[(m ?? 1) - 1]}`;
+}

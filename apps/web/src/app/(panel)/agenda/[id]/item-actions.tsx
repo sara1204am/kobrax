@@ -3,8 +3,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { AGENDA_OUTCOMES_BY_TYPE, ScheduleTimeMode, type AgendaItemType, type AgendaListItem } from '@kobrax/shared';
+import { AGENDA_OUTCOMES_BY_TYPE, AgendaItemType, ScheduleTimeMode, validateActivityContext, type AgendaListItem } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
+import { ActivityContextFields, activityContextPayload, emptyActivityContext } from '@/components/activity-context-fields';
+import type { CatalogOption as ReasonOption } from '@/components/client-form';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
 import { shiftDay } from '@/lib/agenda';
@@ -14,6 +16,12 @@ import { NewTaskModal } from '../new-task-modal';
 import type { CatalogOption } from './page';
 
 type Action = 'complete' | 'cancel' | 'reschedule' | 'delete' | null;
+
+/**
+ * Las gestiones cuya ejecución puede llevar el motivo de no pago (F4/13 · E4): llamada, visita y mensaje. Una promesa o un
+ * recordatorio dejan una **nota** en la bitácora, y una nota no lleva contexto (misma regla que el móvil).
+ */
+const TYPES_WITH_CONTEXT: readonly AgendaItemType[] = [AgendaItemType.CALL, AgendaItemType.VISIT, AgendaItemType.WHATSAPP];
 
 /**
  * Lo que se puede hacer con una gestión pendiente.
@@ -34,6 +42,9 @@ export function ItemActions({
   editable,
   schedule,
   assign,
+  reasons = [],
+  incomeSource,
+  templates = [],
 }: {
   itemId: string;
   type: AgendaItemType;
@@ -56,8 +67,15 @@ export function ItemActions({
   schedule: { timeMode: ScheduleTimeMode; scheduledTime?: string; timeSlot?: string };
   /** Quien puede asignar (`agenda:assign`) ve el campo «Responsable» al editar y puede reasignar. */
   assign?: { meId: string };
+  /** Catálogo `NO_PAYMENT_REASON` (F4/13 · E4). Vacío = no se ofrece el bloque de motivo. */
+  reasons?: ReasonOption[];
+  /** Fuente de ingreso del cliente: filtra qué motivos se ofrecen. Desconocida = se ofrecen todos. */
+  incomeSource?: string;
+  /** Catálogo `WHATSAPP_TEMPLATE` (F4/13 · E5): las mismas plantillas del teléfono. Vacío = no se ofrece el campo. */
+  templates?: ReasonOption[];
 }) {
   const t = useTranslations('panel.agenda');
+  const tCtx = useTranslations('panel.mora.ficha.activity');
   const locale = useLocale();
   const router = useRouter();
   const toast = useToast();
@@ -67,6 +85,9 @@ export function ItemActions({
   const [outcome, setOutcome] = useState('');
   const [notes, setNotes] = useState('');
   const [reasonCode, setReasonCode] = useState('');
+  // F4/13 · E4/E5: contexto de la gestión que se completa y la plantilla que se usó. Todo opcional.
+  const [ctx, setCtx] = useState(emptyActivityContext());
+  const [templateCode, setTemplateCode] = useState('');
   /*
    * Mañana, contado desde HOY y no desde el día del ítem. Con el día del ítem, reagendar una
    * gestión vencida proponía una fecha ya pasada y la API la rechazaba siempre (`AGENDA_003`) —
@@ -84,6 +105,17 @@ export function ItemActions({
   // Los desenlaces válidos dependen del TIPO, y la API rechaza los demás con AGENDA_007: una
   // visita no puede terminar en «el número no es del deudor».
   const outcomes = AGENDA_OUTCOMES_BY_TYPE[type] ?? [];
+  const withContext = TYPES_WITH_CONTEXT.includes(type) && reasons.length > 0;
+  const withTemplate = type === AgendaItemType.WHATSAPP && templates.length > 0;
+  // Solo viaja lo que se eligió; la misma regla compartida que aplica la API (`validateActivityContext`).
+  const contextBody = {
+    ...(withContext ? activityContextPayload(ctx, reasons) : {}),
+    ...(withTemplate && templateCode ? { templateCode } : {}),
+  };
+  const contextInvalid =
+    Object.keys(contextBody).length > 0
+      ? validateActivityContext(contextBody, type === AgendaItemType.WHATSAPP ? 'MESSAGE' : type, today)
+      : null;
 
   function close() {
     setAction(null);
@@ -91,6 +123,8 @@ export function ItemActions({
     setOutcome('');
     setNotes('');
     setReasonCode('');
+    setCtx(emptyActivityContext());
+    setTemplateCode('');
   }
 
   /** Eliminar quita la gestión: el detalle ya no existe, así que se vuelve a la agenda (no se refresca un 404). */
@@ -197,10 +231,10 @@ export function ItemActions({
             </Button>
             <Button
               onClick={() =>
-                send(`/api/agenda/${itemId}/complete`, { outcome, notes: notes.trim() || undefined }, t('complete.done'))
+                send(`/api/agenda/${itemId}/complete`, { outcome, notes: notes.trim() || undefined, ...contextBody }, t('complete.done'))
               }
               loading={busy}
-              disabled={!outcome}
+              disabled={!outcome || contextInvalid !== null}
               className="sm:w-auto sm:px-5"
             >
               {t('complete.confirm')}
@@ -220,9 +254,23 @@ export function ItemActions({
               ))}
             </Select>
           </Field>
+          {withContext && <ActivityContextFields reasons={reasons} incomeSource={incomeSource} value={ctx} onChange={setCtx} disabled={busy} />}
+          {withTemplate && (
+            <Field label={t('complete.template')}>
+              <Select value={templateCode} onChange={(e) => setTemplateCode(e.target.value)} disabled={busy}>
+                <option value="">{t('complete.templatePlaceholder')}</option>
+                {templates.map((tpl) => (
+                  <option key={tpl.code} value={tpl.code}>
+                    {tpl.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
           <Field label={t('complete.notes')}>
             <Input value={notes} onChange={(e) => setNotes(e.target.value)} disabled={busy} maxLength={1000} />
           </Field>
+          {contextInvalid && <ErrorBanner message={tCtx(`errors.${contextInvalid}`)} />}
         </div>
       </Modal>
 

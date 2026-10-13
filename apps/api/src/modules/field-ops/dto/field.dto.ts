@@ -12,6 +12,7 @@ import {
   IsString,
   IsUUID,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import { EvidenceType, VisitOutcome } from '@prisma/client';
@@ -28,6 +29,15 @@ export class CreateVisitDto {
   @IsEnum(VisitOutcome) outcome!: VisitOutcome;
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsDateString() capturedAt?: string;
+
+  /**
+   * Contexto de la gestión (F4/13 · E4), el mismo que en `POST /mora/:id/activities` y `POST /agenda/:id/complete`.
+   * Todo opcional; la regla de fondo es `validateActivityContext` de shared. Una visita no lleva plantilla.
+   */
+  @IsOptional() @IsString() @MaxLength(40) reasonCode?: string;
+  @IsOptional() @IsString() @MaxLength(10) expectedIncomeDate?: string;
+  @IsOptional() @IsString() @MaxLength(20) payerParty?: string;
+  @IsOptional() @IsString() @MaxLength(20) origin?: string;
 
   /**
    * Campos propios de la variante (S5 · RT-6). La forma la decide `validateVisitDetails` de shared

@@ -17,6 +17,8 @@ function makeService(
     clients?: Record<string, unknown>[];
     /** Los permisos de quien mira. Sin esto, puede todo. */
     permissions?: string[];
+    /** El perfil de ingreso que ya tiene el cliente (F4/13 · E3). */
+    incomeProfile?: Record<string, unknown> | null;
     /** Lo que lee el PDF del legajo (F4/08: créditos en mora en vez de casos). */
     pdf?: {
       credits?: Record<string, unknown>[];
@@ -30,6 +32,11 @@ function makeService(
     update: [] as { where: { id: string }; data: Record<string, unknown> }[],
     contact: [] as Record<string, unknown>[],
     location: [] as Record<string, unknown>[],
+    locationUpdate: [] as { where: { id: string }; data: Record<string, unknown> }[],
+    income: [] as Record<string, unknown>[],
+    incomeUpdate: [] as Record<string, unknown>[],
+    incomeDelete: [] as string[],
+    auditFull: [] as Record<string, unknown>[],
     relation: [] as Record<string, unknown>[],
     audit: [] as { entity: string; action: string }[],
     sql: [] as { sql: string; values: unknown[] }[],
@@ -71,6 +78,26 @@ function makeService(
         calls.location.push(args.data);
         return { id: 'lo1', ...args.data };
       },
+      findFirst: async () => ({ id: 'lo1' }),
+      update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+        calls.locationUpdate.push(args);
+        return { id: args.where.id, ...args.data };
+      },
+    },
+    clientIncomeProfile: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        calls.income.push(args.data);
+        return { id: 'ip1', ...args.data };
+      },
+      findFirst: async () => (opts.incomeProfile === undefined ? null : opts.incomeProfile),
+      update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+        calls.incomeUpdate.push(args.data);
+        return { id: args.where.id, ...(opts.incomeProfile ?? {}), ...args.data };
+      },
+      delete: async (args: { where: { id: string } }) => {
+        calls.incomeDelete.push(args.where.id);
+        return {};
+      },
     },
     clientRelation: {
       create: async (args: { data: Record<string, unknown> }) => {
@@ -101,7 +128,12 @@ function makeService(
     },
   };
   const blind = { hash: (v?: string | null) => (v ? `h(${v.trim().toUpperCase()})` : null) };
-  const audit = { record: async (e: { entity: string; action: string }) => void calls.audit.push(e) };
+  const audit = {
+    record: async (e: { entity: string; action: string }) => {
+      calls.audit.push(e);
+      calls.auditFull.push(e as unknown as Record<string, unknown>);
+    },
+  };
 
   const service = new ClientsService(
     prisma as never,
@@ -650,5 +682,156 @@ describe('ClientsService.duplicateCheck — avisar antes del alta', () => {
     });
     const res = await service.duplicateCheck({ clientType: 'COMPANY', businessName: 'comercial andina srl' } as never);
     assert.equal(res.names[0]?.id, 'e');
+  });
+});
+
+describe('ClientsService · perfil de cobro de la ubicación (F4/13 · E2)', () => {
+  const PERFIL = { modality: 'AT_BUSINESS', frequency: 'DAILY', window: { from: '08:00', to: '10:00' } };
+
+  it('🔴 el alta atómica conserva el perfil de cobro y el nivel de riesgo (antes los descartaba)', async () => {
+    const { service, calls } = makeService();
+    await service.create({ ...(PERSON as object), locations: [{ address: 'Mercado 12', visitSchedule: PERFIL, riskLevel: 'HIGH' }] } as never);
+    assert.deepEqual(calls.location[0]!.visitSchedule, PERFIL);
+    assert.equal(calls.location[0]!.riskLevel, 'HIGH');
+  });
+
+  it('una ubicación sin perfil no escribe nada en la columna', async () => {
+    const { service, calls } = makeService();
+    await service.create({ ...(PERSON as object), locations: [{ address: 'Calle 1' }] } as never);
+    assert.equal(calls.location[0]!.visitSchedule, undefined);
+  });
+
+  it('🔴 un perfil con una franja al revés se rechaza antes de tocar la base', async () => {
+    const { service, calls } = makeService();
+    await rejectsWithCode(
+      service.create({ ...(PERSON as object), locations: [{ visitSchedule: { window: { from: '18:00', to: '08:00' } } }] } as never),
+      'CLIENT_COLLECTION_PROFILE_INVALID',
+    );
+    assert.equal(calls.create.length, 0);
+  });
+
+  it('un campo inventado en el perfil se rechaza', async () => {
+    const { service } = makeService();
+    await rejectsWithCode(
+      service.addLocation('c1', { address: 'x', visitSchedule: { color: 'rojo' } } as never),
+      'CLIENT_COLLECTION_PROFILE_INVALID',
+    );
+  });
+
+  it('agregar una ubicación suelta guarda el perfil', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.addLocation('c1', { address: 'Calle 2', visitSchedule: PERFIL } as never);
+    assert.deepEqual(calls.location.at(-1)!.visitSchedule, PERFIL);
+  });
+
+  it('🔴 editar una ubicación puede corregir el perfil (antes la edición no lo aceptaba)', async () => {
+    const { service, calls } = makeService();
+    await service.updateLocation('c1', 'lo1', { visitSchedule: { modality: 'PICK_UP' } } as never);
+    assert.deepEqual(calls.locationUpdate[0]!.data.visitSchedule, { modality: 'PICK_UP' });
+  });
+
+  it('null borra el perfil (DbNull en la columna JSON) y ausente no lo toca', async () => {
+    const { service, calls } = makeService();
+    await service.updateLocation('c1', 'lo1', { visitSchedule: null } as never);
+    assert.notEqual(calls.locationUpdate[0]!.data.visitSchedule, undefined);
+    assert.notEqual(calls.locationUpdate[0]!.data.visitSchedule, null); // no es el null de JS: es Prisma.DbNull
+    await service.updateLocation('c1', 'lo1', { zone: 'Sur' } as never);
+    assert.equal('visitSchedule' in calls.locationUpdate[1]!.data, false);
+  });
+
+  it('editar una ubicación valida el perfil igual que el alta', async () => {
+    const { service } = makeService();
+    await rejectsWithCode(service.updateLocation('c1', 'lo1', { visitSchedule: { days: [9] } } as never), 'CLIENT_COLLECTION_PROFILE_INVALID');
+  });
+});
+
+describe('ClientsService · perfil de ingreso (F4/13 · E3)', () => {
+  const PERFIL = { incomeSourceCode: 'EMPLOYEE', occupationCode: 'PUBLIC_SERVANT', incomeCycle: 'QUARTERLY', incomeDay: 15 };
+
+  it('el alta lo guarda en la misma transacción y lo audita', async () => {
+    const { service, calls } = makeService();
+    await service.create({ ...(PERSON as object), incomeProfile: PERFIL } as never);
+    assert.equal(calls.income.length, 1);
+    assert.equal(calls.income[0]!.clientId, 'c1');
+    assert.equal(calls.income[0]!.occupationCode, 'PUBLIC_SERVANT');
+    assert.ok(calls.audit.some((a) => a.entity === 'client_income_profile' && a.action === 'CREATE'));
+  });
+
+  it('un alta sin perfil (o con uno vacío) no crea la fila', async () => {
+    const { service, calls } = makeService();
+    await service.create({ ...(PERSON as object), incomeProfile: {} } as never);
+    await service.create(PERSON);
+    assert.equal(calls.income.length, 0);
+  });
+
+  it('🔴 un día en un ciclo que no lo tiene se rechaza antes de abrir la transacción', async () => {
+    const { service, calls } = makeService();
+    await rejectsWithCode(
+      service.create({ ...(PERSON as object), incomeProfile: { incomeCycle: 'DAILY', incomeDay: 5 } } as never),
+      'CLIENT_INCOME_PROFILE_INVALID',
+    );
+    assert.equal(calls.create.length, 0);
+  });
+
+  it('PUT crea el perfil si no existía', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    const out = await service.putIncomeProfile('c1', PERFIL as never);
+    assert.equal(calls.income.length, 1);
+    assert.equal(out?.occupationCode, 'PUBLIC_SERVANT');
+    assert.equal(calls.audit.at(-1)!.action, 'CREATE');
+  });
+
+  it('PUT actualiza el perfil si ya existía y es el estado final: lo que no viene se limpia', async () => {
+    const existing = { id: 'ip1', incomeSourceCode: 'EMPLOYEE', occupationCode: 'PUBLIC_SERVANT', incomeCycle: 'QUARTERLY', incomeDay: 15, notes: 'vieja', origin: 'MANUAL' };
+    const { service, calls } = makeService({ client: { id: 'c1' }, incomeProfile: existing });
+    await service.putIncomeProfile('c1', { incomeCycle: 'MONTHLY', incomeDay: 5 } as never);
+    assert.equal(calls.incomeUpdate.length, 1);
+    assert.equal(calls.incomeUpdate[0]!.incomeCycle, 'MONTHLY');
+    assert.equal(calls.incomeUpdate[0]!.occupationCode, null);
+    assert.equal(calls.incomeUpdate[0]!.notes, null);
+    assert.equal(calls.audit.at(-1)!.action, 'UPDATE');
+  });
+
+  it('🔴 repetir el mismo PUT no llena la bitácora: es lo que hace la cola al reintentar', async () => {
+    const existing = { id: 'ip1', incomeSourceCode: 'EMPLOYEE', occupationCode: 'PUBLIC_SERVANT', incomeCycle: 'QUARTERLY', incomeDay: 15, notes: null, origin: 'MANUAL' };
+    const { service, calls } = makeService({ client: { id: 'c1' }, incomeProfile: existing });
+    await service.putIncomeProfile('c1', PERFIL as never);
+    assert.equal(calls.audit.filter((a) => a.entity === 'client_income_profile').length, 0);
+  });
+
+  it('🔴 un cuerpo vacío borra el perfil y audita el antes', async () => {
+    const existing = { id: 'ip1', occupationCode: 'TRANSPORT', origin: 'MANUAL' };
+    const { service, calls } = makeService({ client: { id: 'c1' }, incomeProfile: existing });
+    const out = await service.putIncomeProfile('c1', {} as never);
+    assert.deepEqual(out, {});
+    assert.deepEqual(calls.incomeDelete, ['ip1']);
+    const a = calls.auditFull.at(-1)!;
+    assert.equal(a.action, 'DELETE');
+    assert.equal((a.before as { occupationCode?: string }).occupationCode, 'TRANSPORT');
+  });
+
+  it('borrar lo que no existe no falla ni audita', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    assert.deepEqual(await service.putIncomeProfile('c1', {} as never), {});
+    assert.equal(calls.incomeDelete.length, 0);
+    assert.equal(calls.audit.filter((a) => a.entity === 'client_income_profile').length, 0);
+  });
+
+  it('un cliente que no existe es 404', async () => {
+    const { service } = makeService({ client: null });
+    await rejectsWithCode(service.putIncomeProfile('nope', PERFIL as never), 'RESOURCE_NOT_FOUND');
+    await rejectsWithCode(service.getIncomeProfile('nope'), 'RESOURCE_NOT_FOUND');
+  });
+
+  it('el día se valida con la regla del ciclo también en el PUT', async () => {
+    const { service } = makeService({ client: { id: 'c1' } });
+    await rejectsWithCode(service.putIncomeProfile('c1', { incomeCycle: 'WEEKLY', incomeDay: 9 } as never), 'CLIENT_INCOME_PROFILE_INVALID');
+  });
+
+  it('GET devuelve null si no tiene perfil y el perfil si lo tiene', async () => {
+    const sin = makeService({ client: { id: 'c1' } });
+    assert.equal(await sin.service.getIncomeProfile('c1'), null);
+    const con = makeService({ client: { id: 'c1' }, incomeProfile: { id: 'ip1', occupationCode: 'TRANSPORT', origin: 'MANUAL', declaredAt: new Date() } });
+    assert.equal((await con.service.getIncomeProfile('c1'))?.occupationCode, 'TRANSPORT');
   });
 });

@@ -9,7 +9,9 @@
  * nada no dispara ni una llamada. Hermano de `diffAccount` (`patch.ts`), que W2 promovió: allá son
  * campos escalares, acá son filas con altas y bajas.
  */
-import type { ClienteForm, CollateralRow, ContactRow, LocationRow, RelationRow } from '../types/client.types.js';
+import type { ClienteForm, CollateralRow, ContactRow, IncomeProfile, LocationRow, RelationRow } from '../types/client.types.js';
+import { sameCollection } from './collection-profile.js';
+import { incomeProfileFromForm, sameIncome } from './income-profile.js';
 import { hasCollateralData, hasLocationData } from './client-form.js';
 
 export interface RowOps<T> {
@@ -22,8 +24,13 @@ export interface RowOps<T> {
 export interface ClienteOps {
   /** Campos del cliente que cambiaron. Ausente si no cambió ninguno. */
   client?: Partial<
-    Pick<ClienteForm, 'clientType' | 'firstName' | 'lastName' | 'businessName' | 'nationalId' | 'gender' | 'riskSegment' | 'status'>
+    Pick<ClienteForm, 'clientType' | 'firstName' | 'lastName' | 'businessName' | 'nationalId' | 'gender' | 'riskSegment' | 'preferredContactChannel' | 'status'>
   >;
+  /**
+   * Perfil de ingreso (F4/13 · E3). **Ausente = no cambió**; `null` = quedó vacío y hay que borrarlo; un perfil = guardar
+   * ese. Es un valor fijo (idempotente), así que también puede encolarse sin señal.
+   */
+  income?: IncomeProfile | null;
   contacts: RowOps<ContactRow>;
   locations: RowOps<LocationRow>;
   relations: RowOps<RelationRow>;
@@ -45,6 +52,7 @@ export function hasClientChanges(ops: ClienteOps): boolean {
   const some = <T>(r: RowOps<T>) => r.add.length > 0 || r.update.length > 0 || r.removeIds.length > 0;
   return (
     !!ops.client ||
+    ops.income !== undefined ||
     some(ops.contacts) ||
     some(ops.locations) ||
     some(ops.relations) ||
@@ -89,7 +97,8 @@ const sameLocation = (a: LocationRow, b: LocationRow) =>
   a.latitude.trim() === b.latitude.trim() &&
   a.longitude.trim() === b.longitude.trim() &&
   a.referenceNotes.trim() === b.referenceNotes.trim() &&
-  a.photoUrls.join('|') === b.photoUrls.join('|');
+  a.photoUrls.join('|') === b.photoUrls.join('|') &&
+  sameCollection(a.collection, b.collection);
 
 /** Una fila nueva sin nada escrito no es un alta. Espejo de lo que filtra `buildClientePayload`. */
 const hasContactData = (c: ContactRow) => c.value.trim().length > 0;
@@ -143,6 +152,7 @@ function diffClient(before: ClienteForm, after: ClienteForm): ClienteOps['client
   if (after.nationalId.trim() !== before.nationalId.trim()) patch.nationalId = after.nationalId.trim();
   if (after.gender !== before.gender) patch.gender = after.gender;
   if (after.riskSegment !== before.riskSegment) patch.riskSegment = after.riskSegment;
+  if (after.preferredContactChannel.trim() !== before.preferredContactChannel.trim()) patch.preferredContactChannel = after.preferredContactChannel.trim();
   if (after.status !== before.status) patch.status = after.status;
   return Object.keys(patch).length > 0 ? patch : undefined;
 }
@@ -169,6 +179,7 @@ export function diffCliente(before: ClienteForm, after: ClienteForm): ClienteOps
 
   return {
     client: diffClient(before, after),
+    ...(sameIncome(before.income, after.income) ? {} : { income: incomeProfileFromForm(after.income) ?? null }),
     contacts: diffRows(before.contacts, after.contacts, sameContact, hasContactData),
     locations: diffRows(before.locations, after.locations, sameLocation, hasLocationData),
     relations: diffRows(before.relations, after.relations, sameRelation, hasRelationData),

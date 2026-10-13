@@ -393,6 +393,50 @@ describe('FieldService.createVisit por crédito (F4/08)', () => {
   });
 });
 
+/** F4/13 · E4 — el motivo de no pago también se captura en la visita de ruta (D-48). */
+describe('FieldService.createVisit · contexto de la gestión', () => {
+  const base = { routeStopId: 's1', lat: -16.5, lng: -68.15, outcome: 'NO_CONTACT', details: { channel: 'DOOR' } };
+  const stop = { id: 's1', creditId: 'cr1' };
+  const mañana = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+
+  it('el motivo, la fecha esperada y quién responde llegan a la gestión del crédito', async () => {
+    const { service, calls } = makeService({ stop });
+    await service.createVisit({ ...base, reasonCode: 'PAID_LATE', expectedIncomeDate: mañana, payerParty: 'GUARANTOR' } as never);
+    assert.equal(calls.activityData[0]!.reasonCode, 'PAID_LATE');
+    assert.equal(calls.activityData[0]!.payerParty, 'GUARANTOR');
+    assert.ok(calls.activityData[0]!.expectedIncomeDate instanceof Date);
+  });
+
+  it('sin contexto la gestión sale igual, con los campos en null (una acción anterior a F4/13)', async () => {
+    const { service, calls } = makeService({ stop });
+    await service.createVisit(base as never);
+    assert.equal(calls.activityData[0]!.reasonCode, null);
+    assert.equal(calls.activityData[0]!.payerParty, null);
+    assert.equal(calls.activityData[0]!.expectedIncomeDate, null);
+  });
+
+  it('un motivo con formato inválido se rechaza y no se escribe nada', async () => {
+    const { service, calls } = makeService({ stop });
+    await rejectsWithCode(service.createVisit({ ...base, reasonCode: 'no valido!' } as never), 'VISIT_INVALID_CONTEXT');
+    assert.equal(calls.visitCreate.length, 0);
+    assert.equal(calls.activities, 0);
+  });
+
+  it('la fecha esperada sin motivo se rechaza', async () => {
+    const { service } = makeService({ stop });
+    await rejectsWithCode(service.createVisit({ ...base, expectedIncomeDate: mañana } as never), 'VISIT_INVALID_CONTEXT');
+  });
+
+  it('una corrección es una nota: no lleva contexto', async () => {
+    const { service, calls } = makeService({ stop, existingVisits: 1 });
+    await rejectsWithCode(
+      service.createVisit({ ...base, correctsVisitId: 'v1', reasonCode: 'PAID_LATE' } as never),
+      'VISIT_INVALID_CONTEXT',
+    );
+    assert.equal(calls.visitCreate.length, 0);
+  });
+});
+
 describe('FieldService.createVisit idempotente por id (cola offline)', () => {
   const BASE = { creditId: 'cr1', lat: -16.5, lng: -68.15, outcome: 'CONTACTED' };
   const prior = { id: 'dup-id', creditId: 'cr1', routeStopId: null, collectorId: 'collector-1', outcome: 'CONTACTED', capturedAt: new Date('2026-08-01T10:00:00Z') };

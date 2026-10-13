@@ -1001,6 +1001,20 @@
           "confirm": "Registrar",
           "cancel": "Cancelar",
           "done": "Gestión registrada",
+          "context": "Motivo y quién responde (opcional)",
+          "contextHint": "Por qué no pagó y a quién hay que cobrarle. Ayuda a no insistir en vano.",
+          "reason": "Motivo de no pago",
+          "reasonPlaceholder": "Sin motivo",
+          "expectedIncome": "Cuándo espera cobrar",
+          "payer": "Quién responde por el crédito",
+          "payerPlaceholder": "Sin definir",
+          "payers": {
+            "HOLDER": "El titular",
+            "GUARANTOR": "El garante",
+            "CODEBTOR": "El codeudor",
+            "BENEFICIARY": "La persona para quien se sacó",
+            "NOT_LOCATED": "No se lo ubica"
+          },
           "results": {
             "CONTACTED": "Habló con el deudor",
             "NO_ANSWER": "No respondió",
@@ -1021,7 +1035,16 @@
             "PROMISE_AMOUNT_INVALID": "El monto prometido tiene que ser mayor a cero.",
             "PROMISE_DATE_INVALID": "Elegí la fecha prometida.",
             "PROMISE_DATE_PAST": "La fecha prometida no puede ser anterior a hoy.",
-            "PROMISE_METHOD_REQUIRED": "Elegí el medio de pago de la promesa."
+            "PROMISE_METHOD_REQUIRED": "Elegí el medio de pago de la promesa.",
+            "REASON_INVALID": "El motivo de no pago no es válido.",
+            "CONTEXT_NOT_ALLOWED": "Una nota no lleva motivo ni datos de quién responde.",
+            "EXPECTED_INCOME_DATE_INVALID": "La fecha en que espera cobrar no es válida.",
+            "EXPECTED_INCOME_DATE_PAST": "La fecha en que espera cobrar no puede ser anterior a hoy.",
+            "EXPECTED_INCOME_DATE_NEEDS_REASON": "Elegí el motivo antes de indicar cuándo espera cobrar.",
+            "PAYER_INVALID": "Quién responde por el crédito no es válido.",
+            "ORIGIN_INVALID": "El origen de la gestión no es válido.",
+            "TEMPLATE_INVALID": "La plantilla de mensaje no es válida.",
+            "TEMPLATE_NOT_ALLOWED": "Solo un mensaje lleva plantilla."
           }
         },
         "person": {
@@ -1199,7 +1222,9 @@
         "notes": "Nota (opcional)",
         "confirm": "Registrar",
         "cancel": "Cancelar",
-        "done": "Gestión registrada"
+        "done": "Gestión registrada",
+        "template": "Plantilla usada (opcional)",
+        "templatePlaceholder": "Sin plantilla"
       },
       "cancelItem": {
         "title": "Cancelar la gestión",
@@ -1291,7 +1316,8 @@
       "errors": {
         "generic": "No se pudo completar la acción.",
         "AGENDA_006": "Falta el banco de la promesa.",
-        "AGENDA_007": "Ese desenlace no corresponde a este tipo de gestión."
+        "AGENDA_007": "Ese desenlace no corresponde a este tipo de gestión.",
+        "AGENDA_INVALID_CONTEXT": "El motivo o los datos de quién responde no son válidos."
       },
       "subtitleTeam": "Lo agendado por tu equipo, día por día.",
       "view": "Como se ve la agenda",
@@ -2264,6 +2290,46 @@
     "upgradeHow": "El cambio de plan lo hacemos nosotros: escríbenos y queda activo el mismo día."
   },
   "portfolio": {
+    "income": {
+      "empty": "Sin cargar. Es opcional.",
+      "hint": "Opcional. De qué vive y cuándo le llega el dinero: con eso no se le insiste antes de que cobre.",
+      "unset": "Sin definir",
+      "source": "Fuente de ingreso",
+      "sourceDefault": { "EMPLOYEE": "Asalariado o profesional", "BUSINESS": "Comerciante o productivo", "OTHER": "Otro" },
+      "occupation": "Rubro",
+      "cycle": "Cada cuánto le llega el dinero",
+      "cycleOptions": { "DAILY": "Todos los días", "WEEKLY": "Cada semana", "BIWEEKLY": "Cada quincena", "MONTHLY": "Cada mes", "QUARTERLY": "Cada tres meses", "SEASONAL": "Por temporada", "IRREGULAR": "Sin ritmo fijo" },
+      "dayOfWeek": "Día de la semana",
+      "dayOfMonth": "Día del mes",
+      "weekdays": { "1": "Lunes", "2": "Martes", "3": "Miércoles", "4": "Jueves", "5": "Viernes", "6": "Sábado", "7": "Domingo" },
+      "notes": "Detalle",
+      "notesPlaceholder": "Ej.: cobra en la alcaldía, le atrasan el flete",
+      "errors": { "day": "El día no corresponde al ciclo elegido." }
+    },
+    "collection": {
+      "title": "Cómo cobrarle",
+      "hint": "Opcional. Lo que el cobrador necesita saber antes de llegar.",
+      "unset": "Sin definir",
+      "modality": "Modalidad",
+      "frequency": "Frecuencia",
+      "frequencyOptions": { "DAILY": "Todos los días", "WEEKLY": "Una vez por semana", "PER_INSTALLMENT": "Según el calendario de cuotas" },
+      "windowFrom": "Desde (hora)",
+      "windowTo": "Hasta (hora)",
+      "handoverBy": "Quién entrega",
+      "handoverOptions": { "HOLDER": "El titular", "FAMILY": "Un familiar", "EMPLOYEE": "Un empleado" },
+      "days": "Días",
+      "dayShort": { "1": "L", "2": "M", "3": "X", "4": "J", "5": "V", "6": "S", "7": "D" },
+      "note": "Indicación",
+      "notePlaceholder": "Ej.: tocar el portón verde, antes de abrir el local",
+      "summary": "Cómo cobrarle",
+      "errors": { "window": "La franja necesita las dos horas, y «hasta» tiene que ser después de «desde»." }
+    },
+    "channel": {
+      "unset": "Sin definir",
+      "PHONE": "Llamada",
+      "WHATSAPP": "WhatsApp",
+      "VISIT": "Visita"
+    },
     "title": "Cartera",
     "subtitle": "Quién te debe, cuánto y hace cuántos días.",
     "noAccess": "No tienes acceso a la cartera",
@@ -2324,6 +2390,7 @@
     "saved": "Guardado",
     "saveError": "No se pudo guardar",
     "sections": {
+      "income": "Perfil de ingreso",
       "identity": "Identificación",
       "data": "Datos",
       "credits": "Créditos",
@@ -2406,6 +2473,7 @@
       "paid": "Pagado"
     },
     "form": {
+      "preferredChannel": "Canal de contacto preferido",
       "clientType": "Tipo",
       "documentPlaceholder": "CI o NIT",
       "firstName": "Nombre",

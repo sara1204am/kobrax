@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   StreamableFile,
   UseGuards,
@@ -27,6 +28,7 @@ import {
   CreateContactDto,
   CreateLocationDto,
   CreateRelationDto,
+  IncomeProfileDto,
   ListClientsQueryDto,
   TimelineQueryDto,
   UpdateAttachmentDto,
@@ -128,6 +130,20 @@ export class ClientsController {
     @Param('cid', ParseUUIDPipe) cid: string,
   ): Promise<void> {
     await this.clients.removeSub(id, 'contact', cid);
+  }
+
+  /** Perfil de ingreso (F4/13 · E3): de qué vive y cuándo le llega el dinero. `null` si no tiene. */
+  @Get(':id/income-profile')
+  @Roles(Permission.CLIENT_READ)
+  getIncomeProfile(@Param('id', ParseUUIDPipe) id: string) {
+    return this.clients.getIncomeProfile(id);
+  }
+
+  /** Guarda el perfil completo (idempotente). Un cuerpo vacío lo borra. */
+  @Put(':id/income-profile')
+  @Roles(Permission.CLIENT_WRITE)
+  putIncomeProfile(@Param('id', ParseUUIDPipe) id: string, @Body() dto: IncomeProfileDto) {
+    return this.clients.putIncomeProfile(id, dto);
   }
 
   @Post(':id/locations')

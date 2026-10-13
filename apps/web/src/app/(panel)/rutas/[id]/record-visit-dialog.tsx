@@ -14,9 +14,12 @@ import {
   initialVisitResult,
   paymentCap,
   paymentOutcome,
+  validateActivityContext,
   type VariantKey,
   type VisitResultForm,
 } from '@kobrax/shared';
+import { ActivityContextFields, activityContextPayload, emptyActivityContext } from '@/components/activity-context-fields';
+import type { CatalogOption } from '@/components/client-form';
 import { Modal } from '@/components/modal';
 import { dayDate, money } from '@/lib/format';
 import { postJson } from '@/lib/client';
@@ -93,6 +96,7 @@ export function RecordVisitDialog({
   correctsVisitId?: string;
 }) {
   const t = useTranslations('panel.routes.record');
+  const tCtx = useTranslations('panel.mora.ficha.activity');
   const tMethod = useTranslations('panel.payments.method');
   const router = useRouter();
 
@@ -109,6 +113,9 @@ export function RecordVisitDialog({
   const [revisitSlot, setRevisitSlot] = useState<AgendaTimeSlot>(AgendaTimeSlot.AFTERNOON);
   const [categories, setCategories] = useState<{ code: string; label: string }[]>([]);
   const [promiseMethods, setPromiseMethods] = useState<{ code: string; label: string }[]>([]);
+  // F4/13 · E4: motivo de no pago, cuándo espera cobrar y quién responde. Opcional; si el catálogo no llega, no se ofrece.
+  const [reasons, setReasons] = useState<CatalogOption[]>([]);
+  const [ctx, setCtx] = useState(emptyActivityContext());
   // El mismo id en un reintento: la API responde con la visita que ya guardó, sin duplicarla.
   const visitId = useRef<string>('');
   const fileInput = useRef<HTMLInputElement>(null);
@@ -124,7 +131,17 @@ export function RecordVisitDialog({
     setRevisit(false);
     setRevisitDate(today);
     setRevisitSlot(AgendaTimeSlot.AFTERNOON);
+    setCtx(emptyActivityContext());
   }, [open, today]);
+
+  // El catálogo de motivos se pide al abrir y se conserva. Una corrección es una nota y no lleva contexto: ahí no hace falta.
+  useEffect(() => {
+    if (!open || correctsVisitId || reasons.length > 0) return;
+    void fetch('/api/catalogs/NO_PAYMENT_REASON')
+      .then((r) => r.json())
+      .then((b) => setReasons(Array.isArray(b?.data) ? b.data : []))
+      .catch(() => setReasons([]));
+  }, [open, correctsVisitId, reasons.length]);
 
   // Los catálogos solo hacen falta para dos variantes: se piden al elegirlas.
   useEffect(() => {
@@ -154,6 +171,11 @@ export function RecordVisitDialog({
   const canRevisit = variant !== null && REVISIT_VARIANTS.includes(variant) && !!(stop.locationId || stop.address?.trim());
   const revisitOn = canRevisit && revisit;
   const ready = variant !== null && canSubmitVisitResult(variant, form, cap) && !uploading && (!revisitOn || /^\d{4}-\d{2}-\d{2}$/.test(revisitDate));
+
+  // Un cobro completo no tiene motivo de no pago; una corrección es una nota y tampoco lleva contexto.
+  const withContext = variant !== null && variant !== 'PAID' && !correctsVisitId && reasons.length > 0;
+  const contextBody = withContext ? activityContextPayload(ctx, reasons) : {};
+  const contextInvalid = Object.keys(contextBody).length > 0 ? validateActivityContext(contextBody, 'VISIT', today) : null;
 
   const ui = useMemo(() => (variant ? VARIANT_UI[variant] : null), [variant]);
 
@@ -190,6 +212,7 @@ export function RecordVisitDialog({
       outcome,
       notes: form.notes.trim() || undefined,
       details: buildVisitDetails(variant, form),
+      ...contextBody,
       ...(correctsVisitId ? { correctsVisitId } : {}),
     });
     if (!visit.ok) {
@@ -269,7 +292,7 @@ export function RecordVisitDialog({
             <button
               type="button"
               onClick={() => void submit()}
-              disabled={!ready || busy || !stop.creditId}
+              disabled={!ready || busy || !stop.creditId || contextInvalid !== null}
               className="h-10 rounded-xl bg-k-navy px-5 text-[14px] font-semibold text-white hover:bg-k-slate disabled:opacity-50"
             >
               {busy ? t('saving') : correctsVisitId ? t('submitFix') : t('submit')}
@@ -445,6 +468,13 @@ export function RecordVisitDialog({
                     </select>
                   )}
                 </div>
+              )}
+
+              {withContext && <ActivityContextFields compact reasons={reasons} value={ctx} onChange={setCtx} disabled={busy} />}
+              {contextInvalid && (
+                <p role="alert" className="rounded-lg border border-k-danger bg-k-danger-bg px-3 py-2 text-[13px] text-k-text">
+                  {tCtx(`errors.${contextInvalid}`)}
+                </p>
               )}
 
               {canRevisit && (

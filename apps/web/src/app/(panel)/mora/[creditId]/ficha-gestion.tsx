@@ -69,7 +69,7 @@ export async function FichaGestion({
   const t = await getTranslations('panel.mora');
   const locale = await getLocale();
 
-  const [detail, episodes, metrics, promises, notes, payments, methods, banks, me, team, account] = await Promise.all([
+  const [detail, episodes, metrics, promises, notes, payments, methods, banks, reasons, me, team, account] = await Promise.all([
     apiCall<MoraCreditDetail>(`/mora/${creditId}`, { method: 'GET', auth: true }),
     apiCall<MoraEpisode[]>(`/mora/${creditId}/episodes`, { method: 'GET', auth: true }),
     apiCall<RecoveryMetrics>(`/mora/${creditId}/metrics`, { method: 'GET', auth: true }),
@@ -78,6 +78,8 @@ export async function FichaGestion({
     apiCall<PaymentItem[]>(`/payments?creditId=${creditId}&limit=50`, { method: 'GET', auth: true }),
     apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.PAYMENT_METHOD}`, { method: 'GET', auth: true }),
     apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.BANK}`, { method: 'GET', auth: true }),
+    // F4/13 · E4: motivos de no pago. Si falla o está vacío, el formulario no ofrece el bloque y sigue igual.
+    apiCall<{ code: string; label: string; metadata?: Record<string, unknown> | null }[]>(`/catalogs/${CatalogType.NO_PAYMENT_REASON}`, { method: 'GET', auth: true }),
     apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
     apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
@@ -133,6 +135,8 @@ export async function FichaGestion({
           suggestedAmount={item.suggestedPaymentAmount}
           methods={methods.body.data ?? []}
           banks={banks.body.data ?? []}
+          reasons={reasons.status === 200 ? (reasons.body.data ?? []) : []}
+          incomeSource={client?.status === 200 ? (client.body.data?.incomeProfile?.incomeSourceCode ?? undefined) : undefined}
         />
       )}
       {/* Registrar un pago es de quien puede cobrar (`payment:write`); el componente se oculta solo sin el permiso. */}

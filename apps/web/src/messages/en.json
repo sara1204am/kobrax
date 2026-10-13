@@ -1001,6 +1001,20 @@
           "confirm": "Log",
           "cancel": "Cancel",
           "done": "Action logged",
+          "context": "Reason and who answers (optional)",
+          "contextHint": "Why they did not pay and who to collect from. It helps avoid pushing in vain.",
+          "reason": "Reason for non-payment",
+          "reasonPlaceholder": "No reason",
+          "expectedIncome": "When they expect to be paid",
+          "payer": "Who answers for the credit",
+          "payerPlaceholder": "Not set",
+          "payers": {
+            "HOLDER": "The account holder",
+            "GUARANTOR": "The guarantor",
+            "CODEBTOR": "The co-debtor",
+            "BENEFICIARY": "The person it was taken for",
+            "NOT_LOCATED": "Cannot be located"
+          },
           "results": {
             "CONTACTED": "Spoke with the debtor",
             "NO_ANSWER": "No answer",
@@ -1021,7 +1035,16 @@
             "PROMISE_AMOUNT_INVALID": "The promised amount must be greater than zero.",
             "PROMISE_DATE_INVALID": "Choose the promised date.",
             "PROMISE_DATE_PAST": "The promised date cannot be before today.",
-            "PROMISE_METHOD_REQUIRED": "Choose the payment method of the promise."
+            "PROMISE_METHOD_REQUIRED": "Choose the payment method of the promise.",
+            "REASON_INVALID": "The reason for non-payment is not valid.",
+            "CONTEXT_NOT_ALLOWED": "A note does not carry a reason or who answers.",
+            "EXPECTED_INCOME_DATE_INVALID": "The date they expect to be paid is not valid.",
+            "EXPECTED_INCOME_DATE_PAST": "The date they expect to be paid cannot be before today.",
+            "EXPECTED_INCOME_DATE_NEEDS_REASON": "Choose the reason before saying when they expect to be paid.",
+            "PAYER_INVALID": "Who answers for the credit is not valid.",
+            "ORIGIN_INVALID": "The origin of the action is not valid.",
+            "TEMPLATE_INVALID": "The message template is not valid.",
+            "TEMPLATE_NOT_ALLOWED": "Only a message carries a template."
           }
         },
         "person": {
@@ -1199,7 +1222,9 @@
         "notes": "Note (optional)",
         "confirm": "Record",
         "cancel": "Cancel",
-        "done": "Item recorded"
+        "done": "Item recorded",
+        "template": "Template used (optional)",
+        "templatePlaceholder": "No template"
       },
       "cancelItem": {
         "title": "Cancel the item",
@@ -1291,7 +1316,8 @@
       "errors": {
         "generic": "The action could not be completed.",
         "AGENDA_006": "The promise is missing its bank.",
-        "AGENDA_007": "That outcome does not match this kind of item."
+        "AGENDA_007": "That outcome does not match this kind of item.",
+        "AGENDA_INVALID_CONTEXT": "The reason or the respondent details are not valid."
       },
       "subtitleTeam": "What your team has scheduled, day by day.",
       "view": "How the agenda is shown",
@@ -2264,6 +2290,46 @@
     "upgradeHow": "We change the plan for you: write to us and it is active the same day."
   },
   "portfolio": {
+    "income": {
+      "empty": "Not set. Optional.",
+      "hint": "Optional. What the client lives on and when the money arrives, so we do not push before they get paid.",
+      "unset": "Not set",
+      "source": "Source of income",
+      "sourceDefault": { "EMPLOYEE": "Employee or professional", "BUSINESS": "Merchant or producer", "OTHER": "Other" },
+      "occupation": "Occupation",
+      "cycle": "How often the money arrives",
+      "cycleOptions": { "DAILY": "Every day", "WEEKLY": "Every week", "BIWEEKLY": "Every two weeks", "MONTHLY": "Every month", "QUARTERLY": "Every three months", "SEASONAL": "Seasonal", "IRREGULAR": "No fixed rhythm" },
+      "dayOfWeek": "Day of the week",
+      "dayOfMonth": "Day of the month",
+      "weekdays": { "1": "Monday", "2": "Tuesday", "3": "Wednesday", "4": "Thursday", "5": "Friday", "6": "Saturday", "7": "Sunday" },
+      "notes": "Detail",
+      "notesPlaceholder": "E.g.: paid at city hall, freight payments are delayed",
+      "errors": { "day": "The day does not match the chosen cycle." }
+    },
+    "collection": {
+      "title": "How to collect",
+      "hint": "Optional. What the collector needs to know before arriving.",
+      "unset": "Not set",
+      "modality": "Modality",
+      "frequency": "Frequency",
+      "frequencyOptions": { "DAILY": "Every day", "WEEKLY": "Once a week", "PER_INSTALLMENT": "Following the installment calendar" },
+      "windowFrom": "From (time)",
+      "windowTo": "To (time)",
+      "handoverBy": "Who hands over",
+      "handoverOptions": { "HOLDER": "The account holder", "FAMILY": "A family member", "EMPLOYEE": "An employee" },
+      "days": "Days",
+      "dayShort": { "1": "M", "2": "T", "3": "W", "4": "T", "5": "F", "6": "S", "7": "S" },
+      "note": "Instruction",
+      "notePlaceholder": "E.g.: knock at the green gate, before the shop opens",
+      "summary": "How to collect",
+      "errors": { "window": "The time window needs both times, and \"to\" must be after \"from\"." }
+    },
+    "channel": {
+      "unset": "Not set",
+      "PHONE": "Phone call",
+      "WHATSAPP": "WhatsApp",
+      "VISIT": "Visit"
+    },
     "title": "Portfolio",
     "subtitle": "Who owes you, how much, and for how long.",
     "noAccess": "You do not have access to the portfolio",
@@ -2324,6 +2390,7 @@
     "saved": "Saved",
     "saveError": "Could not save",
     "sections": {
+      "income": "Income profile",
       "identity": "Identification",
       "data": "Details",
       "credits": "Credits",
@@ -2406,6 +2473,7 @@
       "paid": "Paid"
     },
     "form": {
+      "preferredChannel": "Preferred contact channel",
       "clientType": "Type",
       "documentPlaceholder": "ID or tax number",
       "firstName": "First name",

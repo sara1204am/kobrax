@@ -7,6 +7,8 @@
  * aparte** (en pantalla es un switch), **las filas vacías se descartan**, y **`serverId` es lo que
  * hace que editar sepa qué actualizar y qué crear**.
  */
+import { emptyIncomeForm, incomeFormFromProfile, incomeProfileFromForm } from './income-profile.js';
+import { collectionFormFromProfile, collectionProfileFromForm, emptyCollectionForm } from './collection-profile.js';
 import type {
   ClienteForm,
   CollateralRow,
@@ -62,6 +64,7 @@ export function emptyLocation(id: string): LocationRow {
     coordMode: 'manual',
     referenceNotes: '',
     photoUrls: [],
+    collection: emptyCollectionForm(),
   };
 }
 
@@ -82,6 +85,8 @@ export function initialCliente(): ClienteForm {
     gender: '',
     businessName: '',
     riskSegment: '',
+    preferredContactChannel: '',
+    income: emptyIncomeForm(),
     status: 'ACTIVE',
     contacts: [emptyContact('c0', true)], // un teléfono principal por defecto, WhatsApp marcado
     locations: [],
@@ -126,6 +131,8 @@ type ServerLocation = {
   longitude?: number;
   referenceNotes?: string;
   photoUrls?: string[];
+  /** JSON de la base: puede traer cualquier cosa de antes de que existiera el esquema (se lee con tolerancia). */
+  visitSchedule?: unknown;
 };
 
 function hydrateContacts(rows: ServerContact[]): ContactRow[] {
@@ -153,6 +160,7 @@ function hydrateLocations(rows: ServerLocation[]): LocationRow[] {
     coordMode: l.latitude != null ? 'map' : 'manual',
     referenceNotes: l.referenceNotes ?? '',
     photoUrls: l.photoUrls ?? [],
+    collection: collectionFormFromProfile(l.visitSchedule),
   }));
 }
 
@@ -172,6 +180,8 @@ export function hydrateCliente(d: {
   nationalId: string | null;
   gender?: string;
   riskSegment?: string;
+  preferredContactChannel?: string;
+  incomeProfile?: unknown;
   status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
   contacts?: ServerContact[];
   locations?: ServerLocation[];
@@ -204,6 +214,8 @@ export function hydrateCliente(d: {
     gender: d.gender ?? '',
     businessName: d.businessName ?? '',
     riskSegment: d.riskSegment ?? '',
+    preferredContactChannel: d.preferredContactChannel ?? '',
+    income: incomeFormFromProfile(d.incomeProfile),
     status: d.status,
     contacts: hydrateContacts(d.contacts ?? []),
     locations: hydrateLocations(d.locations ?? []),
@@ -308,6 +320,8 @@ export function locationPayload(l: LocationRow): NewLocationInput {
     longitude: parseNum(l.longitude),
     referenceNotes: l.referenceNotes.trim() || undefined,
     photoUrls: l.photoUrls.length > 0 ? l.photoUrls : undefined,
+    // Una fila que ya existe manda `null` si quedó sin perfil: así se borra. Una nueva sin perfil no manda nada.
+    visitSchedule: collectionProfileFromForm(l.collection) ?? (l.serverId ? null : undefined),
   };
 }
 
@@ -384,6 +398,8 @@ export function buildClientePayload(s: ClienteForm): NewClientInput {
     nationalId: s.nationalId.trim() || undefined,
     gender: s.gender || undefined,
     riskSegment: s.riskSegment || undefined,
+    preferredContactChannel: s.preferredContactChannel.trim() || undefined,
+    incomeProfile: incomeProfileFromForm(s.income),
     status: s.status,
     contacts: mapContacts(s.contacts),
     locations: mapLocations(s.locations),

@@ -4,10 +4,12 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import {
   AgendaItemStatus,
   AgendaItemType,
+  CatalogType,
   Permission,
   todayISO,
   type AgendaHistoryEntry,
   type AgendaItemDetail,
+  type ClientDetail,
   type MeInfo,
 } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
@@ -30,6 +32,8 @@ const INITIAL_ACTIONS: Record<string, 'complete' | 'reschedule' | 'cancel' | 'ed
 export interface CatalogOption {
   code: string;
   label: string;
+  /** Lo que la API manda en `catalog_items.metadata` (motivos: `asksExpectedIncomeDate`, `appliesTo`…). */
+  metadata?: Record<string, unknown> | null;
 }
 
 /** Un dato con su rótulo, en la rejilla de una tarjeta. `dark` es la tarjeta azul. */
@@ -92,6 +96,21 @@ export default async function GestionPage({
         ]
       : [],
   );
+
+  // F4/13 · E4/E5: el motivo de no pago y la plantilla usada, solo donde aplican (llamada, visita y mensaje; la plantilla,
+  // solo en un mensaje). Si el catálogo falla o está vacío, el diálogo no ofrece el bloque y sigue como siempre. La fuente
+  // de ingreso del cliente filtra los motivos; sin `client:read` (403) se ofrecen todos.
+  const withContext =
+    actions.length > 0 && (item.type === AgendaItemType.CALL || item.type === AgendaItemType.VISIT || item.type === AgendaItemType.WHATSAPP);
+  const [noPaymentReasons, templates, clientDetail] = withContext
+    ? await Promise.all([
+        apiCall<CatalogOption[]>(`/catalogs/${CatalogType.NO_PAYMENT_REASON}`, { method: 'GET', auth: true }),
+        item.type === AgendaItemType.WHATSAPP
+          ? apiCall<CatalogOption[]>(`/catalogs/${CatalogType.WHATSAPP_TEMPLATE}`, { method: 'GET', auth: true })
+          : Promise.resolve(null),
+        apiCall<ClientDetail>(`/clients/${client.id}`, { method: 'GET', auth: true }),
+      ])
+    : [null, null, null];
 
   const when = itemWhen(item, t);
   const currency = credit?.currency;
@@ -235,6 +254,9 @@ export default async function GestionPage({
               editable={canEdit ? item : undefined}
               schedule={{ timeMode: item.timeMode, scheduledTime: item.scheduledTime, timeSlot: item.timeSlot }}
               assign={me.body.data?.permissions?.includes(Permission.AGENDA_ASSIGN) ? { meId: me.body.data.userId } : undefined}
+              reasons={noPaymentReasons?.status === 200 ? (noPaymentReasons.body.data ?? []) : []}
+              incomeSource={clientDetail?.status === 200 ? (clientDetail.body.data?.incomeProfile?.incomeSourceCode ?? undefined) : undefined}
+              templates={templates?.status === 200 ? (templates.body.data ?? []) : []}
             />
           </div>
         )}

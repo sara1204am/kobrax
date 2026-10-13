@@ -1812,3 +1812,63 @@ describe('AgendaService.findOne · visita en ruta (F4/11)', () => {
     assert.equal((await service.findOne('a1')).data!.route, undefined);
   });
 });
+
+describe('AgendaService.complete — contexto de la gestión (F4/13 · E4)', () => {
+  const hoy = new Date().toISOString().slice(0, 10);
+
+  it('deja el motivo, quién responde y el origen en la actividad', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'CALL', status: 'SCHEDULED' }) });
+    await service.complete('a1', { outcome: 'CONTACTED', reasonCode: 'LATE_INCOME', expectedIncomeDate: hoy, payerParty: 'HOLDER', origin: 'DICTATION' } as never);
+    assert.equal(calls.activity!.reasonCode, 'LATE_INCOME');
+    assert.equal(calls.activity!.payerParty, 'HOLDER');
+    assert.equal(calls.activity!.origin, 'DICTATION');
+  });
+
+  it('🔴 sin contexto no cambia nada de lo de siempre', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'CALL', status: 'SCHEDULED' }) });
+    await service.complete('a1', { outcome: 'CONTACTED' } as never);
+    assert.equal(calls.activity!.reasonCode, null);
+    assert.equal(calls.activity!.payerParty, null);
+  });
+
+  it('un motivo inválido → AGENDA_INVALID_CONTEXT y no escribe nada', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'CALL', status: 'SCHEDULED' }) });
+    await assert.rejects(
+      () => service.complete('a1', { outcome: 'CONTACTED', reasonCode: 'perdio el empleo' } as never),
+      (e: { getResponse: () => { code: string } }) => e.getResponse().code === 'AGENDA_INVALID_CONTEXT',
+    );
+    assert.equal(calls.activity, undefined);
+  });
+
+  it('un recordatorio (que deja una nota) no lleva contexto', async () => {
+    const { service } = makeService({ item: row({ type: 'REMINDER', status: 'SCHEDULED' }) });
+    await assert.rejects(
+      () => service.complete('a1', { outcome: 'DONE', reasonCode: 'FORGOT' } as never),
+      (e: { getResponse: () => { code: string } }) => e.getResponse().code === 'AGENDA_INVALID_CONTEXT',
+    );
+  });
+});
+
+describe('AgendaService.complete — plantilla elegida (F4/13 · E5)', () => {
+  it('deja el código de la plantilla en la actividad de un mensaje', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'WHATSAPP', status: 'SCHEDULED' }) });
+    await service.complete('a1', { outcome: 'CONTACTED', templateCode: 'LAST_NOTICE' } as never);
+    assert.equal(calls.activity!.templateCode, 'LAST_NOTICE');
+    assert.equal(calls.activity!.type, 'MESSAGE');
+  });
+
+  it('🔴 sin plantilla queda en NULL', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'WHATSAPP', status: 'SCHEDULED' }) });
+    await service.complete('a1', { outcome: 'CONTACTED' } as never);
+    assert.equal(calls.activity!.templateCode, null);
+  });
+
+  it('una llamada no lleva plantilla → AGENDA_INVALID_CONTEXT y no escribe', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'CALL', status: 'SCHEDULED' }) });
+    await assert.rejects(
+      () => service.complete('a1', { outcome: 'CONTACTED', templateCode: 'INITIAL' } as never),
+      (e: { getResponse: () => { code: string } }) => e.getResponse().code === 'AGENDA_INVALID_CONTEXT',
+    );
+    assert.equal(calls.activity, undefined);
+  });
+});

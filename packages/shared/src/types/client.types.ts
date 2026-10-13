@@ -19,6 +19,56 @@ export interface NewContactInput {
   isPrimary?: boolean;
 }
 
+/**
+ * Perfil de cobro de un lugar: **cómo conviene cobrarle** (F4/13 · E2). Vive en `client_locations.visit_schedule`.
+ * Se valida con `validateCollectionProfile` (utils). Todo opcional.
+ */
+export interface CollectionProfile {
+  /** Código del catálogo `COLLECTION_MODALITY` (`AT_BUSINESS`, `PICK_UP`…). */
+  modality?: string;
+  frequency?: 'DAILY' | 'WEEKLY' | 'PER_INSTALLMENT';
+  /** Franja del día, «HH:mm». */
+  window?: { from: string; to: string };
+  /** Días de la semana, ISO: 1 = lunes … 7 = domingo. */
+  days?: number[];
+  handoverBy?: 'HOLDER' | 'FAMILY' | 'EMPLOYEE';
+  note?: string;
+}
+
+/** El perfil de cobro como lo edita el formulario: todo texto, igual que las coordenadas. */
+export interface CollectionProfileForm {
+  modality: string;
+  frequency: string;
+  windowFrom: string;
+  windowTo: string;
+  days: number[];
+  handoverBy: string;
+  note: string;
+}
+
+/**
+ * Perfil de ingreso del cliente (F4/13 · E3): de qué vive y cuándo le llega el dinero. Todo opcional.
+ * Se valida con `validateIncomeProfile` (utils). Los códigos son de los catálogos `INCOME_SOURCE` y `OCCUPATION`.
+ */
+export interface IncomeProfile {
+  incomeSourceCode?: 'EMPLOYEE' | 'BUSINESS' | 'OTHER';
+  occupationCode?: string;
+  incomeCycle?: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'SEASONAL' | 'IRREGULAR';
+  /** Día de la semana (1–7, ISO) o del mes (1–31), según el ciclo. */
+  incomeDay?: number;
+  notes?: string;
+  origin?: 'MANUAL' | 'DICTATION' | 'IMPORT' | 'SUGGESTION_ACCEPTED';
+}
+
+/** El perfil de ingreso como lo edita el formulario: todo texto. */
+export interface IncomeProfileForm {
+  incomeSourceCode: string;
+  occupationCode: string;
+  incomeCycle: string;
+  incomeDay: string;
+  notes: string;
+}
+
 export interface NewLocationInput {
   locationType?: 'HOME' | 'WORK' | 'GUARANTOR' | 'FAMILY' | 'OTHER';
   address?: string;
@@ -27,6 +77,8 @@ export interface NewLocationInput {
   longitude?: number;
   referenceNotes?: string;
   photoUrls?: string[];
+  /** Perfil de cobro del lugar. En una edición, `null` lo borra y ausente lo deja como está. */
+  visitSchedule?: CollectionProfile | null;
 }
 
 export interface NewRelationInput {
@@ -115,6 +167,8 @@ export interface NewClientInput {
   riskSegment?: string;
   status?: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
   preferredContactChannel?: string;
+  /** Perfil de ingreso (F4/13 · E3). Opcional: el alta atómica lo guarda junto al cliente. */
+  incomeProfile?: IncomeProfile;
   contacts?: NewContactInput[];
   locations?: NewLocationInput[];
   relations?: NewRelationInput[];
@@ -184,6 +238,8 @@ export interface ClientLocationDetail {
   referenceNotes?: string;
   photoUrls?: string[];
   riskLevel?: string;
+  /** Perfil de cobro del lugar (F4/13 · E2). Ausente si nunca se cargó. */
+  visitSchedule?: CollectionProfile | null;
 }
 
 export interface ClientRelationDetail {
@@ -291,6 +347,8 @@ export interface ClientDetail {
   status: StatusValue;
   riskSegment?: string;
   preferredContactChannel?: string;
+  /** Perfil de ingreso (F4/13 · E3). `null`/ausente = sin perfil. */
+  incomeProfile?: IncomeProfile | null;
   createdAt?: string;
   updatedAt?: string;
   /**
@@ -495,6 +553,8 @@ export interface LocationRow extends RowFromServer {
   coordMode: CoordMode;
   referenceNotes: string;
   photoUrls: string[];
+  /** Cómo conviene cobrarle en este lugar (F4/13 · E2). Vacío = sin perfil. */
+  collection: CollectionProfileForm;
 }
 
 export interface RelationRow extends RowFromServer {
@@ -536,6 +596,10 @@ export interface ClienteForm {
   gender: string;
   businessName: string;
   riskSegment: string;
+  /** Canal de contacto preferido (`PHONE`, `WHATSAPP`…). Texto libre en la base; se conserva lo que haya. */
+  preferredContactChannel: string;
+  /** Perfil de ingreso (F4/13 · E3). Vacío = sin perfil. */
+  income: IncomeProfileForm;
   status: StatusValue;
   contacts: ContactRow[];
   locations: LocationRow[];

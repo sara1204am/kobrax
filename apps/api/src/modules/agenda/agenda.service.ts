@@ -6,6 +6,7 @@ import {
   AgendaTimeSlot,
   Permission,
   resolvePagination,
+  validateActivityContext,
   validateAgendaDetails,
   type AgendaDetails,
   type ApiResponse,
@@ -17,7 +18,7 @@ import {
   type WhatsAppDetails,
   ResponseDto,
 } from '@kobrax/shared';
-import { CreditActivityType } from '@prisma/client';
+import { CreditActivityType, type DataOrigin, type PayerParty } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { TenantClockService, civilDayStartInstant } from '../../common/context/tenant-clock.service';
@@ -61,6 +62,7 @@ import {
   agendaPastDate,
   agendaVisitInRoute,
   agendaVisitNeedsLocation,
+  agendaInvalidContext,
 } from './agenda.errors';
 
 /** Al ejecutar un agendado, qué tipo de actividad queda en la bitácora del crédito. */
@@ -562,6 +564,15 @@ export class AgendaService {
     const { updated, clientName, replay } = await this.tx(async (tx) => {
       const item = await tx.agendaItem.findFirst({ where: { id, deletedAt: null, ...(await this.assigneeScope(tx)) } });
       if (!item) throw agendaItemNotFound();
+      // F4/13 · E4: el contexto (motivo, fecha esperada, quién responde) se valida con la regla compartida, igual que en la
+      // ficha de mora. Un día de margen: quien escribe en Bolivia a las 21:00 aún puede ver «hoy» cuando en UTC ya es mañana.
+      const hayContexto =
+        dto.reasonCode !== undefined || dto.expectedIncomeDate !== undefined || dto.payerParty !== undefined || dto.origin !== undefined || dto.templateCode !== undefined;
+      if (hayContexto) {
+        const ayer = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+        const motivo = validateActivityContext(dto, ACTIVITY_TYPE_BY_AGENDA[item.type], ayer);
+        if (motivo) throw agendaInvalidContext(motivo);
+      }
       // Reintento de la cola offline: ya se ejecutó con ESE mismo resultado → se responde lo hecho, sin otra
       // actividad. Con otro resultado sigue siendo un conflicto.
       if (item.status === AgendaItemStatus.EXECUTED && item.resultActivityId) {
@@ -587,6 +598,11 @@ export class AgendaService {
         type: ACTIVITY_TYPE_BY_AGENDA[item.type],
         result: dto.outcome,
         notes: dto.notes,
+        reasonCode: dto.reasonCode,
+        expectedIncomeDate: dto.expectedIncomeDate,
+        payerParty: dto.payerParty as PayerParty | undefined,
+        origin: dto.origin as DataOrigin | undefined,
+        templateCode: dto.templateCode,
       });
       const updated = await tx.agendaItem.update({
         where: { id },
@@ -802,6 +818,8 @@ export class AgendaService {
           latitude: l.latitude,
           longitude: l.longitude,
           photoUrls: l.photoUrls ?? [],
+          // F4/13 · E2: cómo conviene cobrarle en este lugar. Solo las del cliente: las de un garante no llevan perfil.
+          visitSchedule: l.visitSchedule ?? undefined,
         })),
         ...(client.relations ?? []).flatMap((r) =>
           (r.locations ?? []).map((l) => ({
