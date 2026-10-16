@@ -4,6 +4,23 @@ import { apiCall, sameOrigin } from '@/lib/bff';
 import { apiError } from '@/lib/auth-flow';
 
 /**
+ * Los créditos de un deudor, para elegir sobre cuál se registra un pago (`?clientId=`).
+ *
+ * Sólo viaja `clientId` (un uuid que el DTO valida) y un tope de filas: un parámetro de más sería un
+ * 400 y el selector quedaría vacío.
+ */
+export async function GET(req: Request): Promise<NextResponse> {
+  const clientId = new URL(req.url).searchParams.get('clientId') ?? '';
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clientId)) {
+    return NextResponse.json({ error: { code: 'VALIDATION', message: 'clientId inválido' } }, { status: 400 });
+  }
+  const { status, body } = await apiCall<CreditDetail[]>(`/credits?clientId=${clientId}&limit=50`, { method: 'GET', auth: true });
+  if (status !== 200 || !body.data) return apiError(status, body);
+
+  return NextResponse.json({ data: body.data });
+}
+
+/**
  * Alta de crédito desde la oficina.
  *
  * Una cosa la pone el servidor y no el formulario:

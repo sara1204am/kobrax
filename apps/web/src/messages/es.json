@@ -2079,7 +2079,21 @@
         "channel": "¿Quién recibió la plata?",
         "notes": "Nota (opcional)",
         "externalHint": "Este crédito viene de otra fuente: el pago queda registrado como cobro de Kobrax y no cambia el saldo ni la mora reportados. Se actualizan con el próximo reporte.",
-        "suggested": "Sugerido: lo que corresponde cobrar hoy"
+        "suggested": "Sugerido: lo que corresponde cobrar hoy",
+        "searchClient": "Buscar al deudor",
+        "searchHint": "Nombre o carnet (mín. 3 letras)",
+        "searching": "Buscando…",
+        "noClients": "No encontramos a nadie con ese nombre.",
+        "changeClient": "Cambiar deudor",
+        "changeCredit": "Elegir otro crédito",
+        "noCredits": "Este deudor no tiene un crédito al que se le pueda registrar un pago.",
+        "creditsError": "No se pudieron leer los créditos. Probá de nuevo.",
+        "noCode": "Sin código",
+        "inArrears": "{days} días de mora",
+        "current": "Al día",
+        "installmentDue": "Cuota que toca",
+        "payoff": "Saldo para liquidar",
+        "exceeds": "No puede pagar más de lo que debe: el saldo es {balance}."
       },
       "detail": {
         "title": "El pago",

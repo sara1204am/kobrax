@@ -2079,7 +2079,21 @@
         "channel": "Who received the money?",
         "notes": "Note (optional)",
         "externalHint": "This credit comes from another source: the payment is recorded as a Kobrax collection and does not change the reported balance or arrears. They update with the next report.",
-        "suggested": "Suggested: what is due today"
+        "suggested": "Suggested: what is due today",
+        "searchClient": "Find the debtor",
+        "searchHint": "Name or ID (min. 3 letters)",
+        "searching": "Searching…",
+        "noClients": "We could not find anyone with that name.",
+        "changeClient": "Change debtor",
+        "changeCredit": "Pick another credit",
+        "noCredits": "This debtor has no credit that can take a payment.",
+        "creditsError": "Could not read the credits. Try again.",
+        "noCode": "No code",
+        "inArrears": "{days} days past due",
+        "current": "Current",
+        "installmentDue": "Installment due",
+        "payoff": "Balance to pay off",
+        "exceeds": "Cannot pay more than is owed: the balance is {balance}."
       },
       "detail": {
         "title": "The payment",

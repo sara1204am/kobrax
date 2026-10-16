@@ -73,3 +73,90 @@ describe('PaymentModal — monto → confirmar (§5)', () => {
     expect(screen.getByText(/no cambia el saldo ni la mora reportados/)).toBeInTheDocument();
   });
 });
+
+describe('PaymentModal — cuota que toca y saldo para liquidar', () => {
+  const credit: PaymentCredit = { id: 'cr1', code: 'CR-1', suggestedAmount: 500, balance: 3000, currency: 'BOB' };
+
+  it('muestra las dos cifras y cada una es un atajo al campo', async () => {
+    renderModal(credit);
+    expect(screen.getByText('Cuota que toca')).toBeInTheDocument();
+    expect(screen.getByText('Saldo para liquidar')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /Saldo para liquidar/ }));
+    expect(screen.getByLabelText('Monto')).toHaveValue('3000');
+    await userEvent.click(screen.getByRole('button', { name: /Cuota que toca/ }));
+    expect(screen.getByLabelText('Monto')).toHaveValue('500');
+  });
+
+  it('🔴 no deja pagar más de lo que se debe', async () => {
+    renderModal(credit);
+    const monto = screen.getByLabelText('Monto');
+    await userEvent.clear(monto);
+    await userEvent.type(monto, '3000.01');
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/No puede pagar más de lo que debe/);
+    expect(screen.getByRole('button', { name: 'Registrar' })).toBeDisabled();
+
+    // Liquidar exacto sí se puede.
+    await userEvent.clear(monto);
+    await userEvent.type(monto, '3000');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Registrar' })).toBeEnabled();
+  });
+
+  it('un crédito PSF no se topa: su saldo es el del último reporte y puede ir atrasado', async () => {
+    renderModal({ ...credit, external: true });
+    const monto = screen.getByLabelText('Monto');
+    await userEvent.clear(monto);
+    await userEvent.type(monto, '9999');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Registrar' })).toBeEnabled();
+  });
+});
+
+describe('PaymentModal — sin crédito: primero la persona, después el préstamo', () => {
+  function renderPicker() {
+    render(
+      <ToastProvider>
+        <PaymentModal open onClose={vi.fn()} />
+      </ToastProvider>,
+    );
+  }
+
+  it('busca al deudor, lista sus créditos pagables y arranca con la cuota y el saldo', async () => {
+    const sent = capture();
+    server.use(
+      http.get('*/api/clients', () =>
+        HttpResponse.json({ data: [{ id: 'cl1', firstName: 'Teresa', lastName: 'Mamani', nationalId: '***123' }] }),
+      ),
+      http.get('*/api/credits', () =>
+        HttpResponse.json({
+          data: [
+            { id: 'cr1', code: 'CR-1', status: 'ACTIVE', outstandingBalance: 3000, currency: 'BOB', daysPastDue: 12 },
+            // Un crédito ya pagado no se ofrece: la API lo rechazaría.
+            { id: 'cr2', code: 'CR-2', status: 'PAID', outstandingBalance: 0, currency: 'BOB', daysPastDue: 0 },
+          ],
+        }),
+      ),
+      // El detalle trae el cronograma: de ahí sale la cuota que toca.
+      http.get('*/api/credits/cr1', () =>
+        HttpResponse.json({ data: { id: 'cr1', code: 'CR-1', status: 'ACTIVE', outstandingBalance: 3000, currency: 'BOB', suggestedPaymentAmount: 450 } }),
+      ),
+    );
+    renderPicker();
+
+    await userEvent.type(screen.getByLabelText('Buscar al deudor'), 'Teresa');
+    await userEvent.click(await screen.findByRole('button', { name: /Teresa Mamani/ }));
+
+    expect(await screen.findByRole('button', { name: /CR-1/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /CR-2/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /CR-1/ }));
+
+    const monto = await screen.findByLabelText('Monto');
+    expect(monto).toHaveValue('450');
+    expect(screen.getByText('Saldo para liquidar')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
+    await vi.waitFor(() => expect(sent.body).toEqual({ creditId: 'cr1', amount: 450, method: 'CASH' }));
+  });
+});

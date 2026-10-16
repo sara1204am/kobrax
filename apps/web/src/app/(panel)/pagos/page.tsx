@@ -50,7 +50,14 @@ export default async function PagosPage({ searchParams }: { searchParams: Paymen
   const creditId = searchParams.creditId && isUuid(searchParams.creditId) ? searchParams.creditId : undefined;
   const detail = creditId ? (await apiCall<CreditDetail>(`/credits/${creditId}`, { method: 'GET', auth: true })).body.data : undefined;
   const credit = creditId
-    ? { id: creditId, code: detail?.code, suggestedAmount: detail?.suggestedPaymentAmount, external: detail?.locked }
+    ? {
+        id: creditId,
+        code: detail?.code,
+        suggestedAmount: detail?.suggestedPaymentAmount,
+        external: detail?.locked,
+        balance: detail?.outstandingBalance,
+        currency: detail?.currency,
+      }
     : undefined;
 
   return (
