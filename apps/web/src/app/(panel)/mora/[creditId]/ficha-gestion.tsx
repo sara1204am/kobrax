@@ -141,7 +141,14 @@ export async function FichaGestion({
       )}
       {/* Registrar un pago es de quien puede cobrar (`payment:write`); el componente se oculta solo sin el permiso. */}
       <PaymentActions
-        credit={{ id: item.creditId, code: item.code, suggestedAmount: item.suggestedPaymentAmount, external: !!item.externalSource }}
+        credit={{
+          id: item.creditId,
+          code: item.code,
+          suggestedAmount: item.suggestedPaymentAmount,
+          external: !!item.externalSource,
+          balance: item.balance,
+          currency: item.currency,
+        }}
       />
       <WriteOffButton creditId={item.creditId} writtenOff={item.writtenOff} canWriteOff={canWriteOff} />
     </>

@@ -31,7 +31,7 @@ const PREAUTH_MAX_AGE = 5 * 60; // 5 min (token intermedio entre pasos)
 export interface ApiEnvelope<T> {
   data: T | null;
   error: { code: string; message: string; details?: unknown } | null;
-  meta: { timestamp: string; version: string; total?: number; page?: number; limit?: number; pages?: number };
+  meta: { timestamp: string; version: string; total?: number; page?: number; limit?: number; pages?: number; aggregates?: Record<string, number> };
 }
 
 /** El `x-k-session` del pedido (si lo hay) no coincide con la sesión de la cookie de acceso. */

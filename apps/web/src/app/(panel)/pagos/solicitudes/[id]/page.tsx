@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import type { AccountInfo, CreditDetail, PaymentRequestItem } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
+import { PAYMENT_REQUESTS_ENABLED } from '@/lib/features';
 import { isUuid } from '@/lib/payments';
 import { RequestView } from './request-view';
 
@@ -14,6 +15,7 @@ import { RequestView } from './request-view';
  * — `payment:approve` lo tiene el MANAGER, que no tiene `payment:write`.
  */
 export default async function SolicitudPage({ params }: { params: { id: string } }) {
+  if (!PAYMENT_REQUESTS_ENABLED) notFound(); // apagado en la primera versión: ver `lib/features.ts`
   const t = await getTranslations('panel.payments');
   if (!isUuid(params.id)) notFound();
 

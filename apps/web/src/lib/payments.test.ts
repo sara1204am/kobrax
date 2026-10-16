@@ -84,8 +84,12 @@ describe('hasPaymentFilters', () => {
 });
 
 describe('defaultPeriod', () => {
-  it('arranca el 1° del mes, en UTC', () => {
+  it('arranca el 1° del mes y termina en el día de la empresa (La Paz), no en el de UTC', () => {
     expect(defaultPeriod(new Date('2026-01-31T23:00:00.000Z'))).toEqual({ from: '2026-01-01', to: '2026-01-31' });
+    // 22:00 del 15 en La Paz ya es el 16 en UTC: el período no puede terminar «mañana».
+    expect(defaultPeriod(new Date('2026-10-16T02:00:00.000Z'))).toEqual({ from: '2026-10-01', to: '2026-10-15' });
+    // A la inversa: la 1:00 del 1° en UTC todavía es el 30 del mes anterior en La Paz.
+    expect(defaultPeriod(new Date('2026-11-01T01:00:00.000Z'))).toEqual({ from: '2026-10-01', to: '2026-10-31' });
   });
 });
 
@@ -124,5 +128,77 @@ describe('paymentQuery — fuente (D7)', () => {
     expect(paymentQuery({ source: 'KOBRAX' }).get('source')).toBe('KOBRAX');
     expect(paymentQuery({ source: 'x' }).has('source')).toBe(false);
     expect(hasPaymentFilters({ source: 'PSF' })).toBe(true);
+  });
+});
+
+describe('bandeja de cobros pedidos', () => {
+  it('abre en lo pendiente y sólo manda lo que el DTO acepta', async () => {
+    const { requestQuery, requestStatus } = await import('./payments');
+    expect(requestStatus({})).toBe('PENDING');
+    expect(requestStatus({ status: 'inventado' })).toBe('PENDING');
+    expect(requestQuery({}).get('status')).toBe('PENDING');
+    expect(requestQuery({ status: 'PAID' }).get('status')).toBe('PAID');
+    // «Todas» no es un estado de la API: no viaja.
+    expect(requestQuery({ status: 'ALL' }).has('status')).toBe(false);
+    expect(requestQuery({ page: '0', pageSize: '999' }).get('page')).toBe('1');
+    expect(requestQuery({ pageSize: '999' }).get('limit')).toBe('25');
+  });
+
+  it('una solicitud pasada de hora sigue siendo pendiente pero se marca vencida', async () => {
+    const { isRequestExpired } = await import('./payments');
+    const now = new Date('2026-10-15T12:00:00Z');
+    expect(isRequestExpired({ status: 'PENDING', expiresAt: '2026-10-14T12:00:00Z' }, now)).toBe(true);
+    expect(isRequestExpired({ status: 'PENDING', expiresAt: '2026-10-16T12:00:00Z' }, now)).toBe(false);
+    expect(isRequestExpired({ status: 'PAID', expiresAt: '2026-10-14T12:00:00Z' }, now)).toBe(false);
+  });
+});
+
+describe('filtro por cobrador', () => {
+  const USER = '3f2a6c1e-9b4d-4e57-8a10-6d2b7c9e4f11';
+
+  it('viaja sólo si es un uuid: otro valor sería un 400 y vaciaría el ledger', async () => {
+    const { paymentQuery, hasPaymentFilters } = await import('./payments');
+    expect(paymentQuery({ registeredBy: USER }).get('registeredBy')).toBe(USER);
+    expect(paymentQuery({ registeredBy: 'ana' }).has('registeredBy')).toBe(false);
+    expect(hasPaymentFilters({ registeredBy: USER })).toBe(true);
+  });
+});
+
+describe('filtros de varios y tarjetas', () => {
+  const U1 = '3f2a6c1e-9b4d-4e57-8a10-6d2b7c9e4f11';
+  const U2 = '0b7e5a3c-1d2f-4a6b-9c8d-7e6f5a4b3c2d';
+
+  it('varios oficiales viajan juntos; lo que no es uuid se descarta (sería un 400 y vaciaría el ledger)', async () => {
+    const { paymentQuery } = await import('./payments');
+    expect(paymentQuery({ registeredBy: `${U1},${U2}` }).get('registeredBy')).toBe(`${U1},${U2}`);
+    expect(paymentQuery({ registeredBy: `${U1},ana,${U1}` }).get('registeredBy')).toBe(U1);
+    expect(paymentQuery({ registeredBy: 'ana' }).has('registeredBy')).toBe(false);
+  });
+
+  it('los medios viajan sólo si son del sistema', async () => {
+    const { paymentQuery } = await import('./payments');
+    expect(paymentQuery({ method: 'CASH,QR' }).get('method')).toBe('CASH,QR');
+    expect(paymentQuery({ method: 'CASH,BITCOIN' }).get('method')).toBe('CASH');
+    expect(paymentQuery({ method: 'BITCOIN' }).has('method')).toBe(false);
+  });
+
+  it('siempre pide el resumen: las tarjetas salen del mismo pedido que la lista', async () => {
+    const { paymentQuery } = await import('./payments');
+    expect(paymentQuery({}).get('summary')).toBe('1');
+  });
+
+  it('el medio y el oficial cuentan como filtro puesto; el período por defecto no', async () => {
+    const { hasPaymentFilters } = await import('./payments');
+    expect(hasPaymentFilters({})).toBe(false);
+    expect(hasPaymentFilters({ method: 'CASH' })).toBe(true);
+    expect(hasPaymentFilters({ registeredBy: U1 })).toBe(true);
+  });
+
+  it('el período de la tarjeta es el mismo que se pide: el de la URL o el mes corriente', async () => {
+    const { effectivePeriod, paymentQuery } = await import('./payments');
+    const hoy = new Date('2026-10-15T12:00:00Z');
+    expect(effectivePeriod({}, hoy)).toEqual({ from: '2026-10-01', to: '2026-10-15' });
+    expect(effectivePeriod({ from: '2026-09-01', to: 'basura' }, hoy)).toEqual({ from: '2026-09-01', to: '2026-10-15' });
+    expect(paymentQuery({ from: '2026-09-01' }, hoy).get('from')).toBe('2026-09-01');
   });
 });

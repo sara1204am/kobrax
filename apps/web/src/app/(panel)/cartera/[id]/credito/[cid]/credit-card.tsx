@@ -206,7 +206,14 @@ export function CreditCard({
       <PaymentModal
         open={paying}
         onClose={() => setPaying(false)}
-        credit={{ id: credit.id, code: credit.code, suggestedAmount: credit.suggestedPaymentAmount, external: credit.locked }}
+        credit={{
+          id: credit.id,
+          code: credit.code,
+          suggestedAmount: credit.suggestedPaymentAmount,
+          external: credit.locked,
+          balance: credit.outstandingBalance,
+          currency: credit.currency,
+        }}
       />
     </>
   );

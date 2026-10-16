@@ -1,5 +1,7 @@
+import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import type { CreditDetail } from '@kobrax/shared';
+import { PAYMENT_REQUESTS_ENABLED } from '@/lib/features';
 import { apiCall } from '@/lib/bff';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { isUuid } from '@/lib/payments';
@@ -17,6 +19,7 @@ export default async function NuevaSolicitudPage({
 }: {
   searchParams: { creditId?: string };
 }) {
+  if (!PAYMENT_REQUESTS_ENABLED) notFound(); // apagado en la primera versión: ver `lib/features.ts`
   const t = await getTranslations('panel.payments');
   const creditId = searchParams.creditId;
 

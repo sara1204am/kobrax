@@ -1,7 +1,14 @@
-import { Type } from 'class-transformer';
-import { IsDateString, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Length, Matches, Max, Min } from 'class-validator';
-import { PaymentChannel, PaymentMethod } from '@prisma/client';
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Length, Matches, Max, Min } from 'class-validator';
+import { PaymentChannel, PaymentMethod, PaymentRequestStatus } from '@prisma/client';
 import { CREDIT_SOURCES, type CreditSource } from '@kobrax/shared';
+
+const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+/** Hasta cuántos valores admite un filtro de varios (oficiales, medios): más es una URL que nadie escribió. */
+const MAX_LIST = 50;
+const UUID_LIST = new RegExp(`^${UUID}(,${UUID}){0,${MAX_LIST - 1}}$`, 'i');
+const METHODS = Object.values(PaymentMethod).join('|');
+const METHOD_LIST = new RegExp(`^(${METHODS})(,(${METHODS})){0,${MAX_LIST - 1}}$`);
 
 /** Las columnas del ledger que se pueden ordenar. Son campos propios de `payments`, no de relaciones. */
 export const PAYMENT_SORTS = ['paymentDate', 'amount', 'method', 'receiptNumber'] as const;
@@ -16,8 +23,15 @@ export class CreatePaymentDto {
   /** Comprobante (spec §5.4). Los devuelve `POST /api/uploads`; el hash es del buffer original. */
   @IsOptional() @IsString() receiptUrl?: string;
   @IsOptional() @IsString() @Length(64, 64) receiptHash?: string;
+  /** N° del recibo o la factura en papel. Opcional; el ledger lo guarda tal cual (sin espacios de los extremos). */
+  @IsOptional() @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value)) @IsString() @Length(1, 40) receiptReference?: string;
   /** Quién recibió la plata (D3). Default `KOBRAX_COLLECTED`. */
   @IsOptional() @IsEnum(PaymentChannel) channel?: PaymentChannel;
+  /**
+   * Desde dónde se registra: el panel manda `WEB`. Sin él, la app móvil se reconoce por su cabecera `x-app-version`. Es
+   * descriptivo (lo declara el cliente), no una puerta de seguridad.
+   */
+  @IsOptional() @IsIn(['WEB', 'MOBILE']) registeredVia?: 'WEB' | 'MOBILE';
   @IsOptional() @IsString() @Length(1, 500) notes?: string;
   /**
    * Cuándo se cobró, si no es ahora: el pago guardado offline viaja con la hora del cobro. La ventana
@@ -34,6 +48,15 @@ export class ListPaymentsQueryDto {
   @IsOptional() @IsUUID() creditId?: string;
   /** Todos los pagos de una persona, de todos sus créditos. Es el historial de la ficha. */
   @IsOptional() @IsUUID() clientId?: string;
+  /** Quién registró el cobro, uno o varios (ids separados por coma): lo que pide quien concilia la jornada. */
+  @IsOptional() @Matches(UUID_LIST) registeredBy?: string;
+  /** Medio de pago, uno o varios (`CASH,QR`). */
+  @IsOptional() @Matches(METHOD_LIST) method?: string;
+  /**
+   * Pide además lo cobrado **hoy** y **este mes** (días civiles de la empresa), para las tarjetas del ledger. Aparte porque
+   * cuesta dos sumas más y el móvil, que lista por día, no las necesita.
+   */
+  @IsOptional() @Transform(({ value }) => value === true || value === 'true' || value === '1') @IsBoolean() summary?: boolean;
   /** D7: sólo los pagos imputados a créditos de esa fuente. `KOBRAX` = sin fuente externa. */
   @IsOptional() @IsIn(CREDIT_SOURCES as unknown as string[]) source?: CreditSource;
   @IsOptional() @IsDateString() from?: string;
@@ -58,6 +81,16 @@ export class ListPaymentsQueryDto {
    */
   @IsOptional() @IsIn(PAYMENT_SORTS) sort?: PaymentSort;
   @IsOptional() @IsIn(['asc', 'desc']) dir?: 'asc' | 'desc';
+}
+
+export class ListPaymentRequestsQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit?: number;
+  /** `PENDING` es la bandeja «por confirmar». */
+  @IsOptional() @IsEnum(PaymentRequestStatus) status?: PaymentRequestStatus;
+  @IsOptional() @IsUUID() creditId?: string;
+  /** Quién pidió el cobro. */
+  @IsOptional() @IsUUID() createdBy?: string;
 }
 
 export class CreatePaymentRequestDto {

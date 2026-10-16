@@ -5,13 +5,13 @@ import { CreditStatus } from '@prisma/client';
 import { isExternalOrigin, readCreditMetadata, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
-import { TenantClockService, civilDayStartInstant } from '../../common/context/tenant-clock.service';
+import { TenantClockService, civilDayStartInstant, civilMonthStartUTC, civilTodayUTC } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { applyPayment, creditPatchAfterPayment } from './payment-apply';
 import { loadNames } from '../mora/mora-names';
 import { serializePayment, serializePaymentRequest } from './payments.serializer';
-import { ConfirmPaymentRequestDto, CreatePaymentDto, CreatePaymentRequestDto, ListPaymentsQueryDto } from './dto/payment.dto';
+import { ConfirmPaymentRequestDto, CreatePaymentDto, CreatePaymentRequestDto, ListPaymentRequestsQueryDto, ListPaymentsQueryDto } from './dto/payment.dto';
 import { creditNotActive, paymentDuplicate, paymentInvalid, requestNotPending, resourceNotFound } from './payments.errors';
 
 const round2 = (x: number): number => Math.round(x * 100) / 100;
@@ -34,6 +34,10 @@ interface ApplyParams {
   /** Comprobante (§5.4). El hash lo calcula `POST /uploads` sobre el buffer original. */
   receiptUrl?: string;
   receiptHash?: string;
+  /** N° del recibo o la factura en papel (opcional). */
+  receiptReference?: string;
+  /** Desde dónde se registró (`WEB` | `MOBILE`). Ausente = no se sabe. */
+  registeredVia?: 'WEB' | 'MOBILE';
   channel?: PaymentChannel;
   notes?: string;
   /** ISO: cuándo se cobró (el pago offline). Ausente = ahora. */
@@ -57,13 +61,13 @@ export class PaymentsService {
   }
 
   // ── Registro de pago (ledger inmutable) ──────────────────────────────────────
-  async register(dto: CreatePaymentDto, idempotencyKey?: string) {
+  async register(dto: CreatePaymentDto, idempotencyKey?: string, viaHint?: 'WEB' | 'MOBILE') {
     const run = () => this.tx(async (tx) => {
       if (idempotencyKey) {
         const existing = await tx.payment.findFirst({ where: { idempotencyKey } });
         if (existing) return { payment: existing, replay: true, external: false }; // reintento → no duplica
       }
-      const { payment, external } = await this.applyCore(tx, { ...dto, idempotencyKey });
+      const { payment, external } = await this.applyCore(tx, { ...dto, registeredVia: dto.registeredVia ?? viaHint, idempotencyKey });
       return { payment, replay: false, external };
     });
     // Dos envíos con la misma clave a la vez (el intento en vivo y la cola offline) pasan los dos el chequeo y uno
@@ -86,6 +90,7 @@ export class PaymentsService {
           method: payment.method,
           channel: payment.channel,
           paymentDate: payment.paymentDate,
+          receiptReference: payment.receiptReference ?? undefined,
           visitId: payment.visitId ?? undefined,
           externalCredit: external,
         },
@@ -183,6 +188,8 @@ export class PaymentsService {
           receiptNumber,
           receiptUrl: p.receiptUrl,
           receiptHash: p.receiptHash,
+          receiptReference: p.receiptReference,
+          registeredVia: p.registeredVia,
           registeredBy: this.tenant.userId,
           visitId: p.visitId,
           channel: p.channel,
@@ -200,6 +207,9 @@ export class PaymentsService {
     const { page, limit, skip } = resolvePagination(query);
     const where: Prisma.PaymentWhereInput = {};
     if (query.creditId) where.creditId = query.creditId;
+    // Varios oficiales o medios llegan como lista separada por coma (el DTO ya validó cada valor).
+    if (query.registeredBy) where.registeredBy = { in: query.registeredBy.split(',') };
+    if (query.method) where.method = { in: query.method.split(',') as PaymentMethod[] };
     /*
      * 🔴 **El pago no tiene `client_id`, y no hace falta que lo tenga.** Cuelga del crédito, y el
      * crédito del cliente: preguntar «los pagos de esta persona» es un `JOIN`, no una llamada por
@@ -213,6 +223,11 @@ export class PaymentsService {
         ...(query.source ? { externalSource: query.source === 'KOBRAX' ? null : query.source } : {}),
       };
     }
+    /*
+     * Todo menos las fechas. Las tarjetas de «hoy» y «este mes» conservan su significado de día y mes civil, así que
+     * ignoran el rango pedido y respetan el resto (fuente, medio, oficial, crédito).
+     */
+    const base: Prisma.PaymentWhereInput = { ...where };
     if (query.day) {
       // El día es el CIVIL de la empresa (mismo criterio que las visitas): [00:00 del día, 00:00 del siguiente).
       const tz = await this.clock.timezone();
@@ -239,30 +254,81 @@ export class PaymentsService {
           { receiptNumber: { sort: dir, nulls: 'last' } }
         : { [query.sort]: dir };
 
-    const [rows, total, names] = await this.tx(async (tx) => {
-      const [found, count] = await Promise.all([
+    // Las ventanas de «hoy» y «este mes» de la empresa: [00:00 del primero, 00:00 del siguiente).
+    const windows = query.summary ? await this.summaryWindows() : undefined;
+
+    const [rows, total, names, sum, extra] = await this.tx(async (tx) => {
+      const [found, count, agg, today, month] = await Promise.all([
         // La fuente del crédito viaja con la fila (D7): el ledger dice qué cobro fue sobre un PSF.
         tx.payment.findMany({ where, orderBy, skip, take: limit, include: { credit: { select: { externalSource: true } } } }),
         tx.payment.count({ where }),
+        // Lo cobrado en TODO el filtro, no en la página: la lista no puede sumar lo que no trajo.
+        tx.payment.aggregate({ where, _sum: { amount: true } }),
+        windows ? tx.payment.aggregate({ where: { ...base, paymentDate: windows.today }, _sum: { amount: true } }) : undefined,
+        windows ? tx.payment.aggregate({ where: { ...base, paymentDate: windows.month }, _sum: { amount: true } }) : undefined,
       ]);
       // Quién registró cada pago: UNA consulta para la página, sin exigir `user:read`.
-      return [found, count, await loadNames(tx, this.tenant.accountId, found.map((p) => p.registeredBy))] as const;
+      return [found, count, await loadNames(tx, this.tenant.accountId, found.map((p) => p.registeredBy)), Number(agg._sum.amount ?? 0), { today: today?._sum.amount, month: month?._sum.amount }] as const;
     });
     return ResponseDto.paginated(
       rows.map((p) => ({ ...serializePayment(p, names), creditSource: p.credit.externalSource ?? undefined })),
       total,
       page,
       limit,
+      {
+        totalAmount: round2(sum),
+        ...(windows ? { todayAmount: round2(Number(extra.today ?? 0)), monthAmount: round2(Number(extra.month ?? 0)) } : {}),
+      },
     );
+  }
+
+  /** Hoy y este mes **civiles de la empresa**: a las 21:00 en La Paz ya es mañana en UTC, y no por eso se cobró «mañana». */
+  private async summaryWindows(): Promise<{ today: { gte: Date; lt: Date }; month: { gte: Date; lt: Date } }> {
+    const tz = await this.clock.timezone();
+    const day = (d: Date): string => d.toISOString().slice(0, 10);
+    const today = civilTodayUTC(tz);
+    const tomorrow = new Date(today.getTime() + 86_400_000);
+    const monthStart = civilMonthStartUTC(tz);
+    const nextMonth = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1));
+    return {
+      today: { gte: civilDayStartInstant(day(today), tz), lt: civilDayStartInstant(day(tomorrow), tz) },
+      month: { gte: civilDayStartInstant(day(monthStart), tz), lt: civilDayStartInstant(day(nextMonth), tz) },
+    };
   }
 
   async findOne(id: string) {
     const found = await this.tx(async (tx) => {
       const row = await tx.payment.findFirst({ where: { id } });
-      return row ? { row, names: await loadNames(tx, this.tenant.accountId, [row.registeredBy]) } : null;
+      if (!row) return null;
+      /*
+       * La visita en la que se cobró, si la hubo: de ella salen **quién cobró** —que no siempre es quien cargó el pago:
+       * desde el panel se carga una visita a nombre de un cobrador— y a qué parada lleva el enlace. Sólo ids y un nombre:
+       * nada de lo que revela el detalle de la visita (punto en el mapa, evidencia), que se audita aparte.
+       */
+      const visit = row.visitId
+        ? await tx.fieldVisit.findFirst({
+            where: { id: row.visitId },
+            select: { collectorId: true, routeStop: { select: { id: true, routeId: true } } },
+          })
+        : null;
+      const names = await loadNames(tx, this.tenant.accountId, [row.registeredBy, visit?.collectorId]);
+      return { row, names, visit };
     });
     if (!found) throw resourceNotFound();
-    return serializePayment(found.row, found.names);
+    const { row, names, visit } = found;
+    return {
+      ...serializePayment(row, names),
+      ...(visit
+        ? {
+            visit: {
+              collectorId: visit.collectorId,
+              collectorName: names.get(visit.collectorId),
+              routeId: visit.routeStop?.routeId,
+              stopId: visit.routeStop?.id,
+            },
+          }
+        : {}),
+    };
   }
 
   // ── Solicitudes de pago digital (QR / link) ──────────────────────────────────
@@ -286,6 +352,50 @@ export class PaymentsService {
     );
     await this.audit.record({ entity: 'payment_request', entityId: req.id, action: 'CREATE', after: { amount: Number(req.amount), method: req.method } });
     return serializePaymentRequest(req);
+  }
+
+  /**
+   * La bandeja de cobros pedidos. Antes sólo se podía leer uno por id, así que quien confirma no tenía
+   * dónde ver qué esperaba. Lo último pedido primero.
+   *
+   * ⚠️ `status` es el guardado: una solicitud vencida (`expiresAt` pasado) sigue `PENDING` y se puede
+   * confirmar — el deudor puede pagar pasadas las 24 h y la plata entró igual. La fila lleva `expiresAt`
+   * para que la pantalla lo diga.
+   */
+  async listRequests(query: ListPaymentRequestsQueryDto) {
+    const { page, limit, skip } = resolvePagination(query);
+    const where: Prisma.PaymentRequestWhereInput = {};
+    if (query.status) where.status = query.status;
+    if (query.creditId) where.creditId = query.creditId;
+    if (query.createdBy) where.createdBy = query.createdBy;
+
+    const [rows, total, names, credits] = await this.tx(async (tx) => {
+      const [found, count] = await Promise.all([
+        tx.paymentRequest.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
+        tx.paymentRequest.count({ where }),
+      ]);
+      // Crédito y cliente de la página: UNA consulta, sin N+1. La solicitud no tiene relación con ellos.
+      const creditIds = [...new Set(found.map((r) => r.creditId).filter((id): id is string => !!id))];
+      const creditRows = creditIds.length
+        ? await tx.credit.findMany({
+            where: { id: { in: creditIds } },
+            select: { id: true, code: true, client: { select: { firstName: true, lastName: true, businessName: true } } },
+          })
+        : [];
+      return [found, count, await loadNames(tx, this.tenant.accountId, found.map((r) => r.createdBy)), creditRows] as const;
+    });
+
+    const byCredit = new Map(credits.map((c) => [c.id, c]));
+    return ResponseDto.paginated(
+      rows.map((r) => {
+        const c = r.creditId ? byCredit.get(r.creditId) : undefined;
+        const clientName = c ? c.client.businessName ?? ([c.client.firstName, c.client.lastName].filter(Boolean).join(' ') || undefined) : undefined;
+        return serializePaymentRequest(r, { names, creditCode: c?.code ?? undefined, clientName });
+      }),
+      total,
+      page,
+      limit,
+    );
   }
 
   async getRequest(id: string) {

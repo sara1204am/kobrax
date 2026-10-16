@@ -1,16 +1,31 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { PAYMENT_CHANNELS, PAYMENT_METHODS, type PaymentChannel, type PaymentMethod } from '@kobrax/shared';
+import { PAYMENT_CHANNELS, PAYMENT_METHODS, type CreditDetail, type PaymentChannel, type PaymentMethod } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
 import { errorText } from '@/lib/api-error';
 import { sendJson } from '@/lib/client';
+import { money } from '@/lib/format';
+import { PAYMENT_REQUESTS_ENABLED } from '@/lib/features';
+import { CreditPicker } from './credit-picker';
+
+/** El crédito elegido en el momento → lo que el formulario necesita (la ficha ya trae el suyo). */
+function toPaymentCredit(c: CreditDetail): PaymentCredit {
+  return {
+    id: c.id,
+    code: c.code,
+    suggestedAmount: c.suggestedPaymentAmount,
+    external: c.locked,
+    balance: c.outstandingBalance,
+    currency: c.currency,
+  };
+}
 
 /** El crédito sobre el que se registra el pago, con lo que hace falta para arrancar el formulario lleno. */
 export interface PaymentCredit {
@@ -20,6 +35,12 @@ export interface PaymentCredit {
   suggestedAmount?: number;
   /** Operación externa (PSF): el pago no toca el saldo reportado y se avisa (D3). */
   external?: boolean;
+  /**
+   * Lo que falta para liquidar (`outstandingBalance`). Es el tope: no se puede pagar más de lo que se debe.
+   * Ausente = no se conoce, y el formulario no lo valida (la API sigue siendo el freno de verdad).
+   */
+  balance?: number;
+  currency?: string;
 }
 
 /**
@@ -39,10 +60,10 @@ export function PaymentActions({ credit }: { credit?: PaymentCredit }) {
 
   return (
     <>
-      <Button variant="ghost" onClick={() => setOpen(true)} className="sm:w-auto sm:px-5">
+      <Button variant="primary" onClick={() => setOpen(true)} className="sm:w-auto sm:px-5">
         {t('register.cta')}
       </Button>
-      {credit && (
+      {PAYMENT_REQUESTS_ENABLED && credit && (
         <Link
           href={`/pagos/solicitudes/nueva?creditId=${credit.id}`}
           className="flex h-12 items-center rounded-xl bg-k-navy px-5 text-[15px] font-semibold text-white hover:bg-k-slate"
@@ -86,43 +107,109 @@ export function PaymentModal({
   const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [channel, setChannel] = useState<PaymentChannel>('KOBRAX_COLLECTED');
   const [notes, setNotes] = useState('');
+  /** N° del recibo o la factura en papel. Opcional. */
+  const [receiptRef, setReceiptRef] = useState('');
+  /**
+   * La foto del recibo o del comprobante. Se sube al elegirla (`/api/account/upload`, el mismo camino que la foto de una visita) y
+   * viaja con el pago como `receiptUrl` + `receiptHash`: la URL ya es la ruta interna y el hash es del archivo original.
+   */
+  const [receipt, setReceipt] = useState<{ url: string; hash: string; name: string; preview: string } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [wasOpen, setWasOpen] = useState(false);
+  /** El crédito elegido dentro del modal, cuando no vino de una ficha. */
+  const [picked, setPicked] = useState<PaymentCredit | null>(null);
+  const [loadingPick, setLoadingPick] = useState(false);
 
   // Cada apertura es un formulario nuevo: clave nueva y el monto sugerido otra vez. Se hace al pasar
   // de cerrado a abierto (durante el render, no en un efecto: así el primer cuadro ya sale lleno).
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
+      setPicked(null);
       setKey(crypto.randomUUID());
       setAmount(credit?.suggestedAmount !== undefined ? String(credit.suggestedAmount) : '');
       setMethod('CASH');
       setChannel('KOBRAX_COLLECTED');
       setNotes('');
+      setReceiptRef('');
+      dropReceipt();
       setMore(false);
       setError(null);
     }
   }
 
+  /** Suelta la foto elegida y libera su vista previa (un `blob:` que nadie suelte se queda en memoria). */
+  function dropReceipt() {
+    setReceipt((r) => {
+      if (r?.preview) URL.revokeObjectURL(r.preview);
+      return null;
+    });
+  }
+
+  async function attach(file: File | undefined) {
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    const body = new FormData();
+    body.append('file', file);
+    const res = await fetch('/api/account/upload', { method: 'POST', body }).catch(() => null);
+    const data = res ? await res.json().catch(() => null) : null;
+    setUploading(false);
+    if (!res?.ok || !data?.url || !data?.hash) return setError(data?.error?.message ?? t('register.receiptError'));
+    setReceipt((old) => {
+      if (old?.preview) URL.revokeObjectURL(old.preview);
+      const preview = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : '';
+      return { url: data.url, hash: data.hash, name: file.name, preview };
+    });
+  }
+
+  /** El de la ficha, o el que se eligió acá. */
+  const active = credit ?? picked ?? undefined;
+  const currency = active?.currency ?? 'BOB';
+
   const value = Number(amount);
-  const valid = amount.trim() !== '' && Number.isFinite(value) && value > 0;
+  /**
+   * 🔴 No se puede pagar más de lo que se debe. Es la misma regla que aplica la API (`El monto excede el
+   * saldo pendiente`), dicha antes de enviar y con el número a la vista. **Un crédito externo (PSF) no
+   * se topa**: su saldo es el del último reporte y puede ir atrasado, y el pago no lo toca.
+   */
+  const over = !!active && !active.external && active.balance !== undefined && value > active.balance + 0.005;
+  const valid = amount.trim() !== '' && Number.isFinite(value) && value > 0 && !over;
+
+  /** Al elegir un crédito se vuelve a leer con su cronograma: la lista no trae las cuotas, y de ellas sale la que toca. */
+  async function pick(c: CreditDetail) {
+    setLoadingPick(true);
+    const res = await fetch(`/api/credits/${c.id}`).catch(() => null);
+    const body = res?.ok ? await res.json().catch(() => null) : null;
+    setLoadingPick(false);
+    const full: CreditDetail = body?.data ?? c;
+    const next = toPaymentCredit(full);
+    setPicked(next);
+    setAmount(next.suggestedAmount !== undefined ? String(next.suggestedAmount) : '');
+  }
 
   async function register(e?: FormEvent) {
     e?.preventDefault();
-    if (!credit || !valid || busy) return;
+    if (!active || !valid || busy || uploading) return;
     setError(null);
     setBusy(true);
     const res = await sendJson(
       '/api/payments',
       {
-        creditId: credit.id,
+        creditId: active.id,
         amount: value,
         method,
         // Sólo lo que no es el default: el cuerpo mínimo es el de siempre.
         ...(channel !== 'KOBRAX_COLLECTED' ? { channel } : {}),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
+        ...(receiptRef.trim() ? { receiptReference: receiptRef.trim() } : {}),
+        ...(receipt ? { receiptUrl: receipt.url, receiptHash: receipt.hash } : {}),
+        // El panel dice desde dónde registra; el móvil lo dice su cabecera. Se muestra en el detalle del pago.
+        registeredVia: 'WEB' as const,
       },
       'POST',
       { 'idempotency-key': key },
@@ -144,12 +231,12 @@ export function PaymentModal({
       onClose={onClose}
       title={t('register.title')}
       actions={
-        credit ? (
+        active ? (
           <>
             <Button variant="ghost" onClick={onClose} disabled={busy} className="sm:w-auto sm:px-5">
               {t('register.cancel')}
             </Button>
-            <Button onClick={() => void register()} loading={busy} disabled={!valid} className="sm:w-auto sm:px-5">
+            <Button onClick={() => void register()} loading={busy} disabled={!valid || uploading} className="sm:w-auto sm:px-5">
               {t('register.confirm')}
             </Button>
           </>
@@ -157,17 +244,56 @@ export function PaymentModal({
       }
     >
       <ErrorBanner message={error} />
-      {credit ? (
+      {active ? (
         // Un form para que Enter confirme: monto → Enter, sin buscar el botón.
         <form onSubmit={(e) => void register(e)}>
           {/* El aviso va ANTES de confirmar: es el único momento en que el error se puede evitar.
               El ledger no tiene `update` ni `delete`, y no es un olvido de la API. */}
           <p className="text-k-warning-text">{t('register.immutable')}</p>
-          {credit.external && <p className="mt-2 text-[14px] text-k-text-2">{t('register.externalHint')}</p>}
+          {active.external && <p className="mt-2 text-[14px] text-k-text-2">{t('register.externalHint')}</p>}
           <div className="mt-4 space-y-4">
             <Field label={t('register.credit')}>
-              <Input value={credit.code ?? credit.id} readOnly disabled />
+              <Input value={active.code ?? active.id} readOnly disabled />
             </Field>
+            {picked && !credit && (
+              <button
+                type="button"
+                onClick={() => setPicked(null)}
+                className="-mt-2 text-[13px] font-medium text-k-periwinkle hover:underline"
+              >
+                {t('register.changeCredit')}
+              </button>
+            )}
+
+            {/* Con qué se compara el monto: la cuota que toca y lo que falta para liquidar. Cada cifra
+                es un atajo — tocarla la pone en el campo —, así que sirve de guía y de validación a la vez. */}
+            {(active.suggestedAmount !== undefined || active.balance !== undefined) && (
+              <dl className="grid grid-cols-2 gap-3">
+                {active.suggestedAmount !== undefined && (
+                  <button
+                    type="button"
+                    onClick={() => setAmount(String(active.suggestedAmount))}
+                    disabled={busy}
+                    className="rounded-xl border border-k-border bg-k-bg px-3 py-2 text-left hover:bg-k-highlight"
+                  >
+                    <dt className="text-[11px] font-medium uppercase tracking-wide text-k-text-2">{t('register.installmentDue')}</dt>
+                    <dd className="text-[15px] font-semibold text-k-navy">{money(active.suggestedAmount, currency)}</dd>
+                  </button>
+                )}
+                {active.balance !== undefined && (
+                  <button
+                    type="button"
+                    onClick={() => setAmount(String(active.balance))}
+                    disabled={busy}
+                    className="rounded-xl border border-k-border bg-k-bg px-3 py-2 text-left hover:bg-k-highlight"
+                  >
+                    <dt className="text-[11px] font-medium uppercase tracking-wide text-k-text-2">{t('register.payoff')}</dt>
+                    <dd className="text-[15px] font-semibold text-k-navy">{money(active.balance, currency)}</dd>
+                  </button>
+                )}
+              </dl>
+            )}
+
             <Field label={t('register.amount')}>
               <Input
                 value={amount}
@@ -178,7 +304,52 @@ export function PaymentModal({
                 onFocus={(e) => e.currentTarget.select()}
               />
             </Field>
-            {credit.suggestedAmount !== undefined && Number(amount) === credit.suggestedAmount && (
+            <Field label={t('register.receiptRef')}>
+              <Input value={receiptRef} onChange={(e) => setReceiptRef(e.target.value)} disabled={busy} maxLength={40} />
+            </Field>
+            {/* La foto del recibo: en el celular el selector abre la cámara; en el escritorio, el explorador de archivos. */}
+            <div>
+              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-k-text-2">{t('register.receiptPhoto')}</span>
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(e) => {
+                  void attach(e.target.files?.[0]);
+                  e.target.value = ''; // volver a elegir el mismo archivo tiene que disparar el cambio
+                }}
+              />
+              <div className="flex flex-wrap items-center gap-3">
+                {receipt?.preview && (
+                  // eslint-disable-next-line @next/next/no-img-element -- vista previa local (blob:), no un archivo del servidor
+                  <img src={receipt.preview} alt={t('register.receiptPhoto')} className="h-12 w-12 rounded-lg border border-k-border object-cover" />
+                )}
+                <button
+                  type="button"
+                  disabled={busy || uploading}
+                  onClick={() => fileInput.current?.click()}
+                  className="h-10 rounded-xl border border-dashed border-k-border bg-k-bg px-4 text-[13px] font-medium text-k-text-2 hover:bg-white disabled:opacity-60"
+                >
+                  {uploading ? t('register.uploading') : receipt ? t('register.receiptReplace') : t('register.receiptAdd')}
+                </button>
+                {receipt && (
+                  <span className="flex items-center gap-2 text-[13px] text-k-text-2">
+                    <span className="max-w-[180px] truncate">{receipt.name}</span>
+                    <button type="button" onClick={dropReceipt} disabled={busy} className="text-k-danger hover:underline">
+                      {t('register.receiptRemove')}
+                    </button>
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-[12px] text-k-muted">{t('register.receiptHint')}</p>
+            </div>
+            {over && active.balance !== undefined && (
+              <p role="alert" className="-mt-2 text-[13px] text-k-danger">
+                {t('register.exceeds', { balance: money(active.balance, currency) })}
+              </p>
+            )}
+            {!over && active.suggestedAmount !== undefined && Number(amount) === active.suggestedAmount && (
               <p className="-mt-2 text-[12px] text-k-muted">{t('register.suggested')}</p>
             )}
 
@@ -220,8 +391,11 @@ export function PaymentModal({
           {/* Enter en un input envía el form; el botón real vive en el pie del modal. */}
           <button type="submit" hidden aria-hidden tabIndex={-1} />
         </form>
+      ) : loadingPick ? (
+        <p className="text-[13px] text-k-text-2">{t('register.searching')}</p>
       ) : (
-        <p>{t('register.noCredit')}</p>
+        // Sin crédito de una ficha: se elige acá, persona y después préstamo (como «Nueva tarea»).
+        <CreditPicker onPick={(c) => void pick(c)} />
       )}
     </Modal>
   );

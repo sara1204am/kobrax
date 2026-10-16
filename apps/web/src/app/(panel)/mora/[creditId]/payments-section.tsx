@@ -79,6 +79,7 @@ export function PaymentsSection({
                       <span>{tMethod(p.method)}</span>
                       {p.channel === 'EXTERNAL_CONFIRMED' && <Badge tone="neutral">{tChannel('EXTERNAL_CONFIRMED')}</Badge>}
                       {p.receiptNumber !== undefined && <span>{t('receipt', { n: p.receiptNumber })}</span>}
+                      {p.receiptReference && <span>{t('receiptRef', { ref: p.receiptReference })}</span>}
                       {p.registeredBy && <span>{t('by', { name: byId.get(p.registeredBy) ?? t('unknownUser') })}</span>}
                     </p>
                     {p.notes && <p className="mt-0.5 text-[13px] text-k-text">{p.notes}</p>}
