@@ -223,8 +223,8 @@ describe('PaymentsService.register', () => {
 });
 
 /** Un service que sólo sabe listar: guarda con qué `orderBy` se llamó a Prisma. */
-function makeLister(rows: unknown[] = []) {
-  const calls: { orderBy?: Record<string, unknown>; where?: Record<string, unknown> } = {};
+function makeLister(rows: unknown[] = [], aggAmount: number | null = null) {
+  const calls: { orderBy?: Record<string, unknown>; where?: Record<string, unknown>; aggWhere?: Record<string, unknown> } = {};
   const tx = {
     payment: {
       findMany: async (args: { orderBy: Record<string, unknown>; where: Record<string, unknown> }) => {
@@ -233,6 +233,10 @@ function makeLister(rows: unknown[] = []) {
         return rows;
       },
       count: async () => 0,
+      aggregate: async (a: { where: Record<string, unknown> }) => {
+        calls.aggWhere = a.where;
+        return { _sum: { amount: aggAmount } };
+      },
     },
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
@@ -415,5 +419,27 @@ describe('PaymentsService.listRequests — la bandeja', () => {
     const { service } = makeRequests([{ ...base, id: 'r1', creditId: null, expiresAt: old }]);
     const out = await service.listRequests({});
     assert.equal(out.data![0]!.status, 'PENDING');
+  });
+});
+
+describe('PaymentsService.list — total del período y cobrador', () => {
+  it('filtra por quien registró el cobro', async () => {
+    const { service, calls } = makeLister();
+    await service.list({ registeredBy: 'u7' });
+    assert.equal(calls.where!.registeredBy, 'u7');
+  });
+
+  it('🔴 el total suma TODO el filtro, no la página, y con el mismo where', async () => {
+    const { service, calls } = makeLister([], 1234.5);
+    const out = await service.list({ registeredBy: 'u7', creditId: 'cr1', limit: 5 });
+    assert.equal(out.meta.aggregates!.totalAmount, 1234.5);
+    // La suma usa el MISMO filtro que la lista: si no, el total contaría pagos que la tabla no muestra.
+    assert.deepEqual(calls.aggWhere, calls.where);
+  });
+
+  it('sin pagos el total es cero, no null', async () => {
+    const { service } = makeLister([], null);
+    const out = await service.list({});
+    assert.equal(out.meta.aggregates!.totalAmount, 0);
   });
 });

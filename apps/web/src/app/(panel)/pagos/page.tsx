@@ -22,8 +22,9 @@ import { PaymentsTable } from './payments-table';
  * `GET /payments` devuelve los de **todo el tenant**, no los de un cobrador — la lección que dejó
  * Rutas. `registeredBy` dice quién lo cargó, y **no hay parámetro para filtrar por persona**.
  *
- * El total es el de **la página**, no el del período: la API no agrega y sumar el período entero
- * exigiría traerlo entero. Por eso el rótulo dice cuántos pagos está contando.
+ * El total es el de **todo el filtro** (período, fuente, cobrador), no el de la página: lo suma la API
+ * con el mismo `where` que la lista (`meta.aggregates.totalAmount`). El rótulo dice cuántos pagos cuenta.
+ * Si el servidor no lo trae, cae al de la página.
  */
 export default async function PagosPage({ searchParams }: { searchParams: PaymentParams }) {
   const t = await getTranslations('panel.payments');
@@ -41,6 +42,9 @@ export default async function PagosPage({ searchParams }: { searchParams: Paymen
 
   const rows = list.body.data;
   const currency = account.body.data?.currencyCode ?? 'BOB';
+  const pagination = pageMeta(list.body, searchParams.page, paymentLimit(searchParams));
+  // El total y la cuenta son los de TODO el filtro (los suma la API). Si el servidor no los trae, el de la página.
+  const periodTotal = list.body.meta.aggregates?.totalAmount ?? totalOf(rows);
 
   /*
    * El crédito sólo se pide cuando se está mirando uno: es lo que hace posible registrar un pago o
@@ -72,7 +76,7 @@ export default async function PagosPage({ searchParams }: { searchParams: Paymen
               {t('requests.queue')}
             </Link>
             {rows.length > 0 && (
-              <Badge tone="neutral">{t('total', { n: rows.length, amount: money(totalOf(rows), currency) })}</Badge>
+              <Badge tone="neutral">{t('total', { n: pagination.total, amount: money(periodTotal, currency) })}</Badge>
             )}
           </div>
         }
@@ -88,7 +92,7 @@ export default async function PagosPage({ searchParams }: { searchParams: Paymen
 
       <PaymentsTable
         rows={rows}
-        meta={pageMeta(list.body, searchParams.page, paymentLimit(searchParams))}
+        meta={pagination}
         members={team.body.data ?? []}
         currency={currency}
         filtered={hasPaymentFilters(searchParams)}

@@ -34,6 +34,8 @@ export class ListPaymentsQueryDto {
   @IsOptional() @IsUUID() creditId?: string;
   /** Todos los pagos de una persona, de todos sus créditos. Es el historial de la ficha. */
   @IsOptional() @IsUUID() clientId?: string;
+  /** Quién registró el cobro: lo que pide quien concilia la jornada de un cobrador. */
+  @IsOptional() @IsUUID() registeredBy?: string;
   /** D7: sólo los pagos imputados a créditos de esa fuente. `KOBRAX` = sin fuente externa. */
   @IsOptional() @IsIn(CREDIT_SOURCES as unknown as string[]) source?: CreditSource;
   @IsOptional() @IsDateString() from?: string;

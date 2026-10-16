@@ -2051,7 +2051,9 @@
       "noResults": "No payments match these filters",
       "noResultsText": "Try a different date range.",
       "filters": {
-        "period": "Period"
+        "period": "Period",
+        "registeredBy": "Collector",
+        "allCollectors": "All collectors"
       },
       "columns": {
         "date": "Date",

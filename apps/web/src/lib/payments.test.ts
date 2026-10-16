@@ -148,3 +148,14 @@ describe('bandeja de cobros pedidos', () => {
     expect(isRequestExpired({ status: 'PAID', expiresAt: '2026-10-14T12:00:00Z' }, now)).toBe(false);
   });
 });
+
+describe('filtro por cobrador', () => {
+  const USER = '3f2a6c1e-9b4d-4e57-8a10-6d2b7c9e4f11';
+
+  it('viaja sólo si es un uuid: otro valor sería un 400 y vaciaría el ledger', async () => {
+    const { paymentQuery, hasPaymentFilters } = await import('./payments');
+    expect(paymentQuery({ registeredBy: USER }).get('registeredBy')).toBe(USER);
+    expect(paymentQuery({ registeredBy: 'ana' }).has('registeredBy')).toBe(false);
+    expect(hasPaymentFilters({ registeredBy: USER })).toBe(true);
+  });
+});

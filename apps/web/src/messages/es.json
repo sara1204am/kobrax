@@ -2051,7 +2051,9 @@
       "noResults": "No hay pagos con esos filtros",
       "noResultsText": "Probá con otro rango de fechas.",
       "filters": {
-        "period": "Período"
+        "period": "Período",
+        "registeredBy": "Cobrador",
+        "allCollectors": "Todos los cobradores"
       },
       "columns": {
         "date": "Fecha",

@@ -21,6 +21,8 @@ export interface PaymentParams {
   creditId?: string;
   /** D7: `KOBRAX` o una fuente externa. */
   source?: string;
+  /** Quién registró el cobro (uuid de usuario). */
+  registeredBy?: string;
   page?: string;
   pageSize?: string;
   sort?: string;
@@ -78,6 +80,8 @@ export function paymentQuery(params: PaymentParams, today = new Date()): URLSear
   });
   if (params.creditId && isUuid(params.creditId)) query.set('creditId', params.creditId);
   if (isCreditSource(params.source)) query.set('source', params.source);
+  // Un valor que no es uuid es un 400 del DTO y dejaría el ledger vacío: sólo viaja si lo es.
+  if (params.registeredBy && isUuid(params.registeredBy)) query.set('registeredBy', params.registeredBy);
 
   // Sin orden pedido no se manda ninguno: el default —lo último cobrado primero— lo pone la API, y
   // repetirlo acá serían dos lugares donde cambiarlo.
@@ -97,7 +101,7 @@ export function paymentQuery(params: PaymentParams, today = new Date()): URLSear
  * verdad pasó — y es una noticia distinta.
  */
 export function hasPaymentFilters(params: PaymentParams): boolean {
-  return Boolean(params.from || params.to || params.creditId || params.source);
+  return Boolean(params.from || params.to || params.creditId || params.source || params.registeredBy);
 }
 
 /** Lo cobrado en lo que se está mirando. Se suma en cliente: no hay endpoint de agregación. */

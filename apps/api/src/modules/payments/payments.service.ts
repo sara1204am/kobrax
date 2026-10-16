@@ -200,6 +200,7 @@ export class PaymentsService {
     const { page, limit, skip } = resolvePagination(query);
     const where: Prisma.PaymentWhereInput = {};
     if (query.creditId) where.creditId = query.creditId;
+    if (query.registeredBy) where.registeredBy = query.registeredBy;
     /*
      * 🔴 **El pago no tiene `client_id`, y no hace falta que lo tenga.** Cuelga del crédito, y el
      * crédito del cliente: preguntar «los pagos de esta persona» es un `JOIN`, no una llamada por
@@ -239,20 +240,23 @@ export class PaymentsService {
           { receiptNumber: { sort: dir, nulls: 'last' } }
         : { [query.sort]: dir };
 
-    const [rows, total, names] = await this.tx(async (tx) => {
-      const [found, count] = await Promise.all([
+    const [rows, total, names, sum] = await this.tx(async (tx) => {
+      const [found, count, agg] = await Promise.all([
         // La fuente del crédito viaja con la fila (D7): el ledger dice qué cobro fue sobre un PSF.
         tx.payment.findMany({ where, orderBy, skip, take: limit, include: { credit: { select: { externalSource: true } } } }),
         tx.payment.count({ where }),
+        // Lo cobrado en TODO el filtro, no en la página: la lista no puede sumar lo que no trajo.
+        tx.payment.aggregate({ where, _sum: { amount: true } }),
       ]);
       // Quién registró cada pago: UNA consulta para la página, sin exigir `user:read`.
-      return [found, count, await loadNames(tx, this.tenant.accountId, found.map((p) => p.registeredBy))] as const;
+      return [found, count, await loadNames(tx, this.tenant.accountId, found.map((p) => p.registeredBy)), Number(agg._sum.amount ?? 0)] as const;
     });
     return ResponseDto.paginated(
       rows.map((p) => ({ ...serializePayment(p, names), creditSource: p.credit.externalSource ?? undefined })),
       total,
       page,
       limit,
+      { totalAmount: round2(sum) },
     );
   }
 

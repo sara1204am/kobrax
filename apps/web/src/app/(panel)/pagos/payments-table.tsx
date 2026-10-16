@@ -104,6 +104,19 @@ export function PaymentsTable({
    */
   const filters: FilterDef[] = [
     { keys: ['from', 'to'], label: t('filters.period'), type: 'dateRange', defaults: period },
+    // Quién cobró: lo primero que pide quien concilia la jornada de un cobrador. Sin `user:read` la lista
+    // del equipo no llega, y un filtro sin opciones sería una caja vacía: no se dibuja.
+    ...(members.length > 0
+      ? [
+          {
+            keys: ['registeredBy'],
+            label: t('filters.registeredBy'),
+            type: 'select' as const,
+            allLabel: t('filters.allCollectors'),
+            options: members.map((m) => ({ value: m.userId, label: memberName(m) })),
+          },
+        ]
+      : []),
     {
       // D7: de qué fuente son los créditos. Kobrax = los que calcula el sistema; PSF = los reportados.
       keys: ['source'],
