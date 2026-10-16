@@ -1,5 +1,7 @@
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
+import { PAYMENT_REQUESTS_ENABLED } from '@/lib/features';
 import type { AccountInfo, MeInfo, PaymentRequestItem } from '@kobrax/shared';
 import { apiCall, pageMeta } from '@/lib/bff';
 import { paymentLimit, requestQuery, requestStatus, type RequestParams } from '@/lib/payments';
@@ -13,6 +15,7 @@ import { RequestsTable } from './requests-table';
  * lista: antes `/pagos/solicitudes` redirigía al ledger porque la API sólo leía una por id.
  */
 export default async function SolicitudesPage({ searchParams }: { searchParams: RequestParams }) {
+  if (!PAYMENT_REQUESTS_ENABLED) notFound(); // apagado en la primera versión: ver `lib/features.ts`
   const t = await getTranslations('panel.payments');
 
   const [list, account, me] = await Promise.all([

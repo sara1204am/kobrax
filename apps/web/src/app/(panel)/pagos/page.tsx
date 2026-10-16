@@ -13,6 +13,7 @@ import {
 } from '@/lib/payments';
 import { Badge, EmptyState, PageHeader } from '@/components/panel-ui';
 import { money } from '@/lib/format';
+import { PAYMENT_REQUESTS_ENABLED } from '@/lib/features';
 import { PaymentActions } from './payment-actions';
 import { PaymentsTable } from './payments-table';
 
@@ -72,9 +73,11 @@ export default async function PagosPage({ searchParams }: { searchParams: Paymen
         actions={
           <div className="flex flex-wrap items-center gap-3">
             {/* Quien confirma no es quien pidió el cobro: la bandeja es su entrada. */}
-            <Link href="/pagos/solicitudes" className="text-[14px] font-medium text-k-purple hover:underline">
-              {t('requests.queue')}
-            </Link>
+            {PAYMENT_REQUESTS_ENABLED && (
+              <Link href="/pagos/solicitudes" className="text-[14px] font-medium text-k-purple hover:underline">
+                {t('requests.queue')}
+              </Link>
+            )}
             {rows.length > 0 && (
               <Badge tone="neutral">{t('total', { n: pagination.total, amount: money(periodTotal, currency) })}</Badge>
             )}

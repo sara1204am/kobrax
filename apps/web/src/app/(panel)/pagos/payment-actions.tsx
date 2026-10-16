@@ -12,6 +12,7 @@ import { useToast } from '@/components/toast';
 import { errorText } from '@/lib/api-error';
 import { sendJson } from '@/lib/client';
 import { money } from '@/lib/format';
+import { PAYMENT_REQUESTS_ENABLED } from '@/lib/features';
 import { CreditPicker } from './credit-picker';
 
 /** El crédito elegido en el momento → lo que el formulario necesita (la ficha ya trae el suyo). */
@@ -62,7 +63,7 @@ export function PaymentActions({ credit }: { credit?: PaymentCredit }) {
       <Button variant="ghost" onClick={() => setOpen(true)} className="sm:w-auto sm:px-5">
         {t('register.cta')}
       </Button>
-      {credit && (
+      {PAYMENT_REQUESTS_ENABLED && credit && (
         <Link
           href={`/pagos/solicitudes/nueva?creditId=${credit.id}`}
           className="flex h-12 items-center rounded-xl bg-k-navy px-5 text-[15px] font-semibold text-white hover:bg-k-slate"
