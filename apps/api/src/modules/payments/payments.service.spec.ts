@@ -240,8 +240,8 @@ describe('PaymentsService.register', () => {
 });
 
 /** Un service que sólo sabe listar: guarda con qué `orderBy` se llamó a Prisma. */
-function makeLister(rows: unknown[] = [], aggAmount: number | null = null) {
-  const calls: { orderBy?: Record<string, unknown>; where?: Record<string, unknown>; aggWhere?: Record<string, unknown> } = {};
+function makeLister(rows: unknown[] = [], aggAmount: number | null | (number | null)[] = null) {
+  const calls: { orderBy?: Record<string, unknown>; where?: Record<string, unknown>; aggWhere?: Record<string, unknown>; aggs: Record<string, unknown>[] } = { aggs: [] };
   const tx = {
     payment: {
       findMany: async (args: { orderBy: Record<string, unknown>; where: Record<string, unknown> }) => {
@@ -251,8 +251,10 @@ function makeLister(rows: unknown[] = [], aggAmount: number | null = null) {
       },
       count: async () => 0,
       aggregate: async (a: { where: Record<string, unknown> }) => {
-        calls.aggWhere = a.where;
-        return { _sum: { amount: aggAmount } };
+        const i = calls.aggs.push(a.where) - 1;
+        calls.aggWhere = calls.aggs[0];
+        // Un número vale para todas las sumas; una lista da un valor por suma (total, hoy, mes).
+        return { _sum: { amount: Array.isArray(aggAmount) ? (aggAmount[i] ?? null) : aggAmount } };
       },
     },
   };
@@ -443,7 +445,7 @@ describe('PaymentsService.list — total del período y cobrador', () => {
   it('filtra por quien registró el cobro', async () => {
     const { service, calls } = makeLister();
     await service.list({ registeredBy: 'u7' });
-    assert.equal(calls.where!.registeredBy, 'u7');
+    assert.deepEqual(calls.where!.registeredBy, { in: ['u7'] });
   });
 
   it('🔴 el total suma TODO el filtro, no la página, y con el mismo where', async () => {
@@ -458,5 +460,75 @@ describe('PaymentsService.list — total del período y cobrador', () => {
     const { service } = makeLister([], null);
     const out = await service.list({});
     assert.equal(out.meta.aggregates!.totalAmount, 0);
+  });
+});
+
+describe('PaymentsService.list — varios oficiales y medios', () => {
+  it('uno o varios oficiales y medios llegan como lista y se filtran con IN', async () => {
+    const { service, calls } = makeLister();
+    await service.list({ registeredBy: 'u1,u2', method: 'CASH,QR' });
+    assert.deepEqual(calls.where!.registeredBy, { in: ['u1', 'u2'] });
+    assert.deepEqual(calls.where!.method, { in: ['CASH', 'QR'] });
+  });
+
+  it('los filtros se combinan entre sí (y con la fuente)', async () => {
+    const { service, calls } = makeLister();
+    await service.list({ registeredBy: 'u1', method: 'CASH', source: 'PSF' });
+    assert.deepEqual(calls.where!.registeredBy, { in: ['u1'] });
+    assert.deepEqual(calls.where!.method, { in: ['CASH'] });
+    assert.deepEqual(calls.where!.credit, { externalSource: 'PSF' });
+  });
+});
+
+describe('PaymentsService.list — tarjetas de hoy y del mes', () => {
+  const range = (w: Record<string, unknown>) => w.paymentDate as { gte: Date; lt: Date };
+
+  it('🔴 sin pedir el resumen no cuesta sumas de más (el móvil lista por día)', async () => {
+    const { service, calls } = makeLister([], 10);
+    const out = await service.list({});
+    assert.equal(calls.aggs.length, 1);
+    assert.equal(out.meta.aggregates!.todayAmount, undefined);
+    assert.equal(out.meta.aggregates!.monthAmount, undefined);
+  });
+
+  it('con el resumen devuelve total, hoy y mes por separado', async () => {
+    const { service, calls } = makeLister([], [900, 40, 300]);
+    const out = await service.list({ summary: true });
+    assert.equal(calls.aggs.length, 3);
+    assert.deepEqual(out.meta.aggregates, { totalAmount: 900, todayAmount: 40, monthAmount: 300 });
+  });
+
+  it('🔴 hoy y mes son civiles de la empresa y IGNORAN el rango pedido, pero respetan el resto de filtros', async () => {
+    const { service, calls } = makeLister([], 1);
+    await service.list({ summary: true, from: '2020-01-01', to: '2020-01-31', source: 'PSF', method: 'QR', registeredBy: 'u1' });
+    const [total, today, month] = calls.aggs as [Record<string, unknown>, Record<string, unknown>, Record<string, unknown>];
+
+    // El total sí responde al rango seleccionado.
+    assert.equal(range(total).gte.toISOString(), '2020-01-01T00:00:00.000Z');
+
+    // Hoy: un día de 24 h, cortado a medianoche de La Paz (UTC−4 → 04:00Z), no al rango del filtro.
+    const d = range(today);
+    assert.equal(d.gte.getUTCHours(), 4);
+    assert.equal(d.lt.getTime() - d.gte.getTime(), 86_400_000);
+    assert.ok(d.gte.getUTCFullYear() >= 2026, 'hoy no es el rango de 2020');
+
+    // Mes: empieza el día 1 y termina el día 1 del mes siguiente (a medianoche de La Paz).
+    const m = range(month);
+    assert.ok(m.lt.getTime() - m.gte.getTime() >= 28 * 86_400_000);
+    assert.ok(m.lt.getTime() - m.gte.getTime() <= 31 * 86_400_000);
+    assert.equal(m.gte.getUTCHours(), 4);
+
+    // El resto de filtros viaja a las tres sumas, igual.
+    for (const w of [total, today, month]) {
+      assert.deepEqual(w.registeredBy, { in: ['u1'] });
+      assert.deepEqual(w.method, { in: ['QR'] });
+      assert.deepEqual(w.credit, { externalSource: 'PSF' });
+    }
+  });
+
+  it('la suma del total usa el mismo where que la lista', async () => {
+    const { service, calls } = makeLister([], 5);
+    await service.list({ summary: true, registeredBy: 'u1' });
+    assert.deepEqual(calls.aggs[0], calls.where);
   });
 });

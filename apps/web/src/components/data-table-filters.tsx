@@ -45,6 +45,11 @@ export interface FilterDef {
    * nada lo explique, que es justo lo que el panel vino a evitar.
    */
   collapsed?: boolean;
+  /**
+   * Sólo `multiSelect`: con buscador, «seleccionar todos», «limpiar» y lo elegido como chips quitables. Para las listas largas
+   * (los oficiales de una empresa); una de cuatro opciones no lo necesita.
+   */
+  searchable?: boolean;
 }
 
 export interface FilterControlProps {
@@ -118,23 +123,72 @@ function SelectFilter({ value, onChange, def }: FilterControlProps) {
 
 /** Varios valores en una sola clave, separados por coma (`ACTIVE,PENDING`) — lo que la API sabe partir. */
 function MultiSelectFilter({ value, onChange, def }: FilterControlProps) {
+  const t = useTranslations('panel.table');
   const key = def.keys[0]!;
+  const options = def.options ?? [];
   const selected = (value[key] ?? '').split(',').filter(Boolean);
+  const [q, setQ] = useState('');
+  const set = (next: string[]) => onChange({ [key]: next.join(',') });
+  const toggle = (v: string) => set(selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]);
+
+  // La lista corta (cuatro medios de pago) se queda como siempre: casillas y nada más.
+  if (!def.searchable) {
+    return (
+      <div className="space-y-1.5">
+        {options.map((o) => (
+          <label key={o.value} className="flex cursor-pointer items-center gap-2">
+            <input type="checkbox" className="h-4 w-4 accent-k-periwinkle" checked={selected.includes(o.value)} onChange={() => toggle(o.value)} />
+            <span className="text-[13px] text-k-text">{o.label}</span>
+          </label>
+        ))}
+      </div>
+    );
+  }
+
+  // Sin tildes ni mayúsculas: «Maria» tiene que encontrar a «María».
+  const norm = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  const shown = options.filter((o) => norm(o.label).includes(norm(q.trim())));
+  const labelOf = (v: string) => options.find((o) => o.value === v)?.label ?? v;
+
   return (
-    <div className="space-y-1.5">
-      {(def.options ?? []).map((o) => (
-        <label key={o.value} className="flex cursor-pointer items-center gap-2">
-          <input
-            type="checkbox"
-            className="h-4 w-4 accent-k-periwinkle"
-            checked={selected.includes(o.value)}
-            onChange={() =>
-              onChange({ [key]: (selected.includes(o.value) ? selected.filter((v) => v !== o.value) : [...selected, o.value]).join(',') })
-            }
-          />
-          <span className="text-[13px] text-k-text">{o.label}</span>
-        </label>
-      ))}
+    <div className="space-y-2">
+      {/* Lo elegido, compacto y quitable de a uno: el panel es angosto y una lista larga no se lee. */}
+      {selected.length > 0 && (
+        <ul className="flex flex-wrap gap-1.5" aria-label={def.label}>
+          {selected.map((v) => (
+            <li key={v} className="flex items-center gap-1 rounded-full bg-k-highlight py-0.5 pl-2.5 pr-1 text-[12px] font-medium text-k-navy">
+              {labelOf(v)}
+              <button
+                type="button"
+                onClick={() => toggle(v)}
+                aria-label={t('removeOption', { name: labelOf(v) })}
+                className="grid h-4 w-4 place-items-center rounded-full text-k-text-2 hover:bg-white hover:text-k-navy"
+              >
+                <span aria-hidden>×</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <input type="search" className={INPUT} aria-label={`${def.label} — ${t('searchOptions')}`} placeholder={t('searchOptions')} value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="flex items-center justify-between text-[12px]">
+        {/* «Todos» agrega los que se ven: con una búsqueda puesta, son los que coinciden. */}
+        <button type="button" className="font-medium text-k-periwinkle hover:underline disabled:opacity-50" disabled={shown.length === 0} onClick={() => set([...new Set([...selected, ...shown.map((o) => o.value)])])}>
+          {t('optionsSelectAll')}
+        </button>
+        <button type="button" className="font-medium text-k-text-2 hover:underline disabled:opacity-50" disabled={selected.length === 0} onClick={() => set([])}>
+          {t('optionsClear')}
+        </button>
+      </div>
+      <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
+        {shown.length === 0 && <p className="text-[12px] text-k-text-2">{t('noOptions')}</p>}
+        {shown.map((o) => (
+          <label key={o.value} className="flex cursor-pointer items-center gap-2">
+            <input type="checkbox" className="h-4 w-4 accent-k-periwinkle" checked={selected.includes(o.value)} onChange={() => toggle(o.value)} />
+            <span className="text-[13px] text-k-text">{o.label}</span>
+          </label>
+        ))}
+      </div>
     </div>
   );
 }

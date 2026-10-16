@@ -265,6 +265,11 @@
       "appliedFilters": "Applied filters",
       "closeFilters": "Close filters",
       "clear": "Clear",
+      "searchOptions": "Search…",
+      "optionsSelectAll": "Select all",
+      "optionsClear": "Remove all",
+      "removeOption": "Remove {name}",
+      "noOptions": "No matches.",
       "reorderHint": "drag to reorder, or Alt + arrows",
       "showColumn": "Show",
       "hideColumn": "Hide",
@@ -2053,8 +2058,8 @@
       "noResultsText": "Try a different date range.",
       "filters": {
         "period": "Period",
-        "registeredBy": "Collector",
-        "allCollectors": "All collectors"
+        "method": "Payment method",
+        "registeredBy": "Collections officer"
       },
       "columns": {
         "date": "Date",
@@ -2063,6 +2068,18 @@
         "registeredBy": "Recorded by",
         "receiptRef": "Receipt / invoice",
         "receipt": "Receipt"
+      },
+      "summary": {
+        "title": "Payments summary",
+        "today": "Collected today",
+        "month": "Recovered this month",
+        "period": "Period total",
+        "count": "Payments recorded",
+        "countHint": "in the period and filters",
+        "range": "{from} – {to}",
+        "ruleToday": "What was collected today. Follows source, method and officer; ignores the date range.",
+        "ruleMonth": "What was recovered in the current calendar month. Follows source, method and officer; ignores the date range.",
+        "rulePeriod": "Follows the date range and every filter, over all results (not just the page)."
       },
       "unknownUser": "—",
       "total": "{n} payments · {amount}",

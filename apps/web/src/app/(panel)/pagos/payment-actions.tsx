@@ -60,7 +60,7 @@ export function PaymentActions({ credit }: { credit?: PaymentCredit }) {
 
   return (
     <>
-      <Button variant="ghost" onClick={() => setOpen(true)} className="sm:w-auto sm:px-5">
+      <Button variant="primary" onClick={() => setOpen(true)} className="sm:w-auto sm:px-5">
         {t('register.cta')}
       </Button>
       {PAYMENT_REQUESTS_ENABLED && credit && (

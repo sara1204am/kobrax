@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
-import type { AccountInfo, CreditDetail, MeInfo, Member, PaymentItem } from '@kobrax/shared';
+import type { AccountInfo, CreditDetail, MeInfo, PaymentItem } from '@kobrax/shared';
 import { apiCall, pageMeta } from '@/lib/bff';
 import {
   defaultPeriod,
+  effectivePeriod,
   hasPaymentFilters,
   isUuid,
   paymentLimit,
@@ -11,10 +12,11 @@ import {
   totalOf,
   type PaymentParams,
 } from '@/lib/payments';
-import { Badge, EmptyState, PageHeader } from '@/components/panel-ui';
-import { money } from '@/lib/format';
+import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { PAYMENT_REQUESTS_ENABLED } from '@/lib/features';
+import { loadOfficers } from './officers';
 import { PaymentActions } from './payment-actions';
+import { PaymentSummary } from './payment-summary';
 import { PaymentsTable } from './payments-table';
 
 /**
@@ -23,16 +25,17 @@ import { PaymentsTable } from './payments-table';
  * `GET /payments` devuelve los de **todo el tenant**, no los de un cobrador — la lección que dejó
  * Rutas. `registeredBy` dice quién lo cargó, y **no hay parámetro para filtrar por persona**.
  *
- * El total es el de **todo el filtro** (período, fuente, cobrador), no el de la página: lo suma la API
- * con el mismo `where` que la lista (`meta.aggregates.totalAmount`). El rótulo dice cuántos pagos cuenta.
- * Si el servidor no lo trae, cae al de la página.
+ * Las tarjetas de arriba son de **todo el filtro**, no de la página: las suma la API con el mismo `where` que la lista
+ * (`meta.aggregates`). «Hoy» y «este mes» ignoran el rango de fechas y respetan el resto (ver `PaymentSummary`).
+ *
+ * ⚠️ El alcance de lo que se ve lo pone la API, no esta pantalla. Aquí sólo se decide qué filtros se ofrecen: el de
+ * oficial se dibuja si quien mira tiene a quién consultar (`loadOfficers`), y un cobrador no lo tiene.
  */
 export default async function PagosPage({ searchParams }: { searchParams: PaymentParams }) {
   const t = await getTranslations('panel.payments');
 
-  const [list, team, account, me] = await Promise.all([
+  const [list, account, me] = await Promise.all([
     apiCall<PaymentItem[]>(`/payments?${paymentQuery(searchParams)}`, { method: 'GET', auth: true }),
-    apiCall<Member[]>('/users', { method: 'GET', auth: true }),
     apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
     apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
   ]);
@@ -44,8 +47,9 @@ export default async function PagosPage({ searchParams }: { searchParams: Paymen
   const rows = list.body.data;
   const currency = account.body.data?.currencyCode ?? 'BOB';
   const pagination = pageMeta(list.body, searchParams.page, paymentLimit(searchParams));
-  // El total y la cuenta son los de TODO el filtro (los suma la API). Si el servidor no los trae, el de la página.
-  const periodTotal = list.body.meta.aggregates?.totalAmount ?? totalOf(rows);
+  const aggregates = list.body.meta.aggregates;
+  // Los permisos salen de la sesión: según ellos se decide a quién se puede consultar.
+  const officers = await loadOfficers(me.body.data?.permissions ?? []);
 
   /*
    * El crédito sólo se pide cuando se está mirando uno: es lo que hace posible registrar un pago o
@@ -78,11 +82,20 @@ export default async function PagosPage({ searchParams }: { searchParams: Paymen
                 {t('requests.queue')}
               </Link>
             )}
-            {rows.length > 0 && (
-              <Badge tone="neutral">{t('total', { n: pagination.total, amount: money(periodTotal, currency) })}</Badge>
-            )}
           </div>
         }
+      />
+
+      <PaymentSummary
+        totals={{
+          today: aggregates?.todayAmount,
+          month: aggregates?.monthAmount,
+          // Sin el total del servidor (versión vieja) cae al de la página, no a un cero.
+          period: aggregates?.totalAmount ?? (rows.length > 0 ? totalOf(rows) : 0),
+          count: pagination.total,
+        }}
+        currency={currency}
+        period={effectivePeriod(searchParams)}
       />
 
       {/* Filtrado por un crédito la lista parece vacía sin serlo: la salida tiene que estar a la
@@ -96,7 +109,7 @@ export default async function PagosPage({ searchParams }: { searchParams: Paymen
       <PaymentsTable
         rows={rows}
         meta={pagination}
-        members={team.body.data ?? []}
+        officers={officers}
         currency={currency}
         filtered={hasPaymentFilters(searchParams)}
         userId={me.body.data?.userId}

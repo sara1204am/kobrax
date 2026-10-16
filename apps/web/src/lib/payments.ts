@@ -1,17 +1,24 @@
-import { isCreditSource, type PaymentItem } from '@kobrax/shared';
+import { isCreditSource, PAYMENT_METHODS, type PaymentItem } from '@kobrax/shared';
+import { DISPLAY_TIME_ZONE } from './format';
 import { PAGE_SIZES } from './table-prefs';
 import { isUuid } from './uuid';
 
 /**
  * El período que se está mirando, en `YYYY-MM-DD`. Por defecto, el mes corriente: un ledger se lee
  * por período, no por día — al revés que la agenda o las rutas, que son de una jornada.
+ *
+ * 🔴 **«Hoy» es el de la empresa, no el de UTC.** Con la fecha UTC, de las 20:00 a las 24:00 en Bolivia el período por
+ * defecto terminaba "mañana" y no coincidía con «Cobrado hoy», que sí es del día civil de la empresa.
  */
 export function defaultPeriod(today = new Date()): { from: string; to: string } {
-  const first = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
-  return { from: first.toISOString().slice(0, 10), to: today.toISOString().slice(0, 10) };
+  const to = new Intl.DateTimeFormat('en-CA', { timeZone: DISPLAY_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(today);
+  return { from: `${to.slice(0, 7)}-01`, to };
 }
 
 const IS_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Los valores de un filtro de varios (`a,b,c`) sin vacíos ni repetidos. */
+const csvOf = (value?: string): string[] => [...new Set((value ?? '').split(',').map((v) => v.trim()).filter(Boolean))];
 
 /** Lo que la pantalla de Pagos sabe leer de la URL. Las claves son las que escribe el `DataTable`. */
 export interface PaymentParams {
@@ -21,8 +28,10 @@ export interface PaymentParams {
   creditId?: string;
   /** D7: `KOBRAX` o una fuente externa. */
   source?: string;
-  /** Quién registró el cobro (uuid de usuario). */
+  /** Quién registró el cobro: uno o varios uuid de usuario, separados por coma. */
   registeredBy?: string;
+  /** Medio de pago: uno o varios (`CASH,QR`), separados por coma. */
+  method?: string;
   page?: string;
   pageSize?: string;
   sort?: string;
@@ -47,6 +56,15 @@ const SORTS: Record<string, string> = {
   receipt: 'receiptNumber',
 };
 
+/** El rango que de verdad se pide: el de la URL si es válido, y si no el mes corriente. Lo usan la consulta y la tarjeta del período. */
+export function effectivePeriod(params: PaymentParams, today = new Date()): { from: string; to: string } {
+  const period = defaultPeriod(today);
+  return {
+    from: params.from && IS_DAY.test(params.from) ? params.from : period.from,
+    to: params.to && IS_DAY.test(params.to) ? params.to : period.to,
+  };
+}
+
 /** Cuántos pagos por página si nadie eligió otra cosa. */
 export const DEFAULT_PAGE_SIZE = 25;
 
@@ -67,9 +85,7 @@ export function paymentLimit(params: PaymentParams): number {
  * más en la URL —o una preferencia guardada— devolvería 400 y dejaría el ledger entero vacío.
  */
 export function paymentQuery(params: PaymentParams, today = new Date()): URLSearchParams {
-  const period = defaultPeriod(today);
-  const from = params.from && IS_DAY.test(params.from) ? params.from : period.from;
-  const to = params.to && IS_DAY.test(params.to) ? params.to : period.to;
+  const { from, to } = effectivePeriod(params, today);
 
   const page = Math.max(1, Number(params.page) || 1);
   const query = new URLSearchParams({
@@ -80,8 +96,13 @@ export function paymentQuery(params: PaymentParams, today = new Date()): URLSear
   });
   if (params.creditId && isUuid(params.creditId)) query.set('creditId', params.creditId);
   if (isCreditSource(params.source)) query.set('source', params.source);
-  // Un valor que no es uuid es un 400 del DTO y dejaría el ledger vacío: sólo viaja si lo es.
-  if (params.registeredBy && isUuid(params.registeredBy)) query.set('registeredBy', params.registeredBy);
+  // Un valor que no es uuid, o un medio inventado, es un 400 del DTO y dejaría el ledger vacío: viaja sólo lo válido.
+  const officers = csvOf(params.registeredBy).filter(isUuid);
+  if (officers.length > 0) query.set('registeredBy', officers.join(','));
+  const methods = csvOf(params.method).filter((m) => (PAYMENT_METHODS as readonly string[]).includes(m));
+  if (methods.length > 0) query.set('method', methods.join(','));
+  // Las tarjetas de arriba (hoy y este mes) las suma la API aparte del total del filtro.
+  query.set('summary', '1');
 
   // Sin orden pedido no se manda ninguno: el default —lo último cobrado primero— lo pone la API, y
   // repetirlo acá serían dos lugares donde cambiarlo.
@@ -101,7 +122,7 @@ export function paymentQuery(params: PaymentParams, today = new Date()): URLSear
  * verdad pasó — y es una noticia distinta.
  */
 export function hasPaymentFilters(params: PaymentParams): boolean {
-  return Boolean(params.from || params.to || params.creditId || params.source || params.registeredBy);
+  return Boolean(params.from || params.to || params.creditId || params.source || params.registeredBy || params.method);
 }
 
 /** Lo cobrado en lo que se está mirando. Se suma en cliente: no hay endpoint de agregación. */

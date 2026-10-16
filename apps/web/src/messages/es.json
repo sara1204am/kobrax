@@ -265,6 +265,11 @@
       "appliedFilters": "Filtros aplicados",
       "closeFilters": "Cerrar filtros",
       "clear": "Limpiar",
+      "searchOptions": "Buscar…",
+      "optionsSelectAll": "Seleccionar todos",
+      "optionsClear": "Quitar todos",
+      "removeOption": "Quitar {name}",
+      "noOptions": "Sin coincidencias.",
       "reorderHint": "arrastrá para reordenar, o Alt + flechas",
       "showColumn": "Mostrar",
       "hideColumn": "Ocultar",
@@ -2053,8 +2058,8 @@
       "noResultsText": "Probá con otro rango de fechas.",
       "filters": {
         "period": "Período",
-        "registeredBy": "Cobrador",
-        "allCollectors": "Todos los cobradores"
+        "method": "Medio de pago",
+        "registeredBy": "Oficial de cobranza"
       },
       "columns": {
         "date": "Fecha",
@@ -2063,6 +2068,18 @@
         "registeredBy": "Registró",
         "receiptRef": "Recibo / factura",
         "receipt": "Comprobante"
+      },
+      "summary": {
+        "title": "Resumen de pagos",
+        "today": "Cobrado hoy",
+        "month": "Recuperado este mes",
+        "period": "Total del período",
+        "count": "Pagos registrados",
+        "countHint": "en el período y los filtros",
+        "range": "{from} – {to}",
+        "ruleToday": "Lo cobrado hoy. Respeta fuente, medio y oficial; ignora el rango de fechas.",
+        "ruleMonth": "Lo recuperado en el mes calendario actual. Respeta fuente, medio y oficial; ignora el rango de fechas.",
+        "rulePeriod": "Responde al rango de fechas y a todos los filtros, sobre el total de resultados (no sólo la página)."
       },
       "unknownUser": "—",
       "total": "{n} pagos · {amount}",

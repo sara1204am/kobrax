@@ -5,7 +5,7 @@ import { CreditStatus } from '@prisma/client';
 import { isExternalOrigin, readCreditMetadata, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
-import { TenantClockService, civilDayStartInstant } from '../../common/context/tenant-clock.service';
+import { TenantClockService, civilDayStartInstant, civilMonthStartUTC, civilTodayUTC } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { applyPayment, creditPatchAfterPayment } from './payment-apply';
@@ -204,7 +204,9 @@ export class PaymentsService {
     const { page, limit, skip } = resolvePagination(query);
     const where: Prisma.PaymentWhereInput = {};
     if (query.creditId) where.creditId = query.creditId;
-    if (query.registeredBy) where.registeredBy = query.registeredBy;
+    // Varios oficiales o medios llegan como lista separada por coma (el DTO ya validó cada valor).
+    if (query.registeredBy) where.registeredBy = { in: query.registeredBy.split(',') };
+    if (query.method) where.method = { in: query.method.split(',') as PaymentMethod[] };
     /*
      * 🔴 **El pago no tiene `client_id`, y no hace falta que lo tenga.** Cuelga del crédito, y el
      * crédito del cliente: preguntar «los pagos de esta persona» es un `JOIN`, no una llamada por
@@ -218,6 +220,11 @@ export class PaymentsService {
         ...(query.source ? { externalSource: query.source === 'KOBRAX' ? null : query.source } : {}),
       };
     }
+    /*
+     * Todo menos las fechas. Las tarjetas de «hoy» y «este mes» conservan su significado de día y mes civil, así que
+     * ignoran el rango pedido y respetan el resto (fuente, medio, oficial, crédito).
+     */
+    const base: Prisma.PaymentWhereInput = { ...where };
     if (query.day) {
       // El día es el CIVIL de la empresa (mismo criterio que las visitas): [00:00 del día, 00:00 del siguiente).
       const tz = await this.clock.timezone();
@@ -244,24 +251,46 @@ export class PaymentsService {
           { receiptNumber: { sort: dir, nulls: 'last' } }
         : { [query.sort]: dir };
 
-    const [rows, total, names, sum] = await this.tx(async (tx) => {
-      const [found, count, agg] = await Promise.all([
+    // Las ventanas de «hoy» y «este mes» de la empresa: [00:00 del primero, 00:00 del siguiente).
+    const windows = query.summary ? await this.summaryWindows() : undefined;
+
+    const [rows, total, names, sum, extra] = await this.tx(async (tx) => {
+      const [found, count, agg, today, month] = await Promise.all([
         // La fuente del crédito viaja con la fila (D7): el ledger dice qué cobro fue sobre un PSF.
         tx.payment.findMany({ where, orderBy, skip, take: limit, include: { credit: { select: { externalSource: true } } } }),
         tx.payment.count({ where }),
         // Lo cobrado en TODO el filtro, no en la página: la lista no puede sumar lo que no trajo.
         tx.payment.aggregate({ where, _sum: { amount: true } }),
+        windows ? tx.payment.aggregate({ where: { ...base, paymentDate: windows.today }, _sum: { amount: true } }) : undefined,
+        windows ? tx.payment.aggregate({ where: { ...base, paymentDate: windows.month }, _sum: { amount: true } }) : undefined,
       ]);
       // Quién registró cada pago: UNA consulta para la página, sin exigir `user:read`.
-      return [found, count, await loadNames(tx, this.tenant.accountId, found.map((p) => p.registeredBy)), Number(agg._sum.amount ?? 0)] as const;
+      return [found, count, await loadNames(tx, this.tenant.accountId, found.map((p) => p.registeredBy)), Number(agg._sum.amount ?? 0), { today: today?._sum.amount, month: month?._sum.amount }] as const;
     });
     return ResponseDto.paginated(
       rows.map((p) => ({ ...serializePayment(p, names), creditSource: p.credit.externalSource ?? undefined })),
       total,
       page,
       limit,
-      { totalAmount: round2(sum) },
+      {
+        totalAmount: round2(sum),
+        ...(windows ? { todayAmount: round2(Number(extra.today ?? 0)), monthAmount: round2(Number(extra.month ?? 0)) } : {}),
+      },
     );
+  }
+
+  /** Hoy y este mes **civiles de la empresa**: a las 21:00 en La Paz ya es mañana en UTC, y no por eso se cobró «mañana». */
+  private async summaryWindows(): Promise<{ today: { gte: Date; lt: Date }; month: { gte: Date; lt: Date } }> {
+    const tz = await this.clock.timezone();
+    const day = (d: Date): string => d.toISOString().slice(0, 10);
+    const today = civilTodayUTC(tz);
+    const tomorrow = new Date(today.getTime() + 86_400_000);
+    const monthStart = civilMonthStartUTC(tz);
+    const nextMonth = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1));
+    return {
+      today: { gte: civilDayStartInstant(day(today), tz), lt: civilDayStartInstant(day(tomorrow), tz) },
+      month: { gte: civilDayStartInstant(day(monthStart), tz), lt: civilDayStartInstant(day(nextMonth), tz) },
+    };
   }
 
   async findOne(id: string) {
