@@ -15,8 +15,9 @@ export class PaymentsController {
   // ── Pagos ────────────────────────────────────────────────────────────────────
   @Post('payments')
   @Roles(Permission.PAYMENT_WRITE)
-  register(@Body() dto: CreatePaymentDto, @Headers('idempotency-key') key?: string) {
-    return this.payments.register(dto, key);
+  register(@Body() dto: CreatePaymentDto, @Headers('idempotency-key') key?: string, @Headers('x-app-version') appVersion?: string) {
+    // La app móvil manda su versión en TODA llamada; el panel no. Sirve de pista cuando el cuerpo no dice desde dónde viene.
+    return this.payments.register(dto, key, appVersion ? 'MOBILE' : undefined);
   }
 
   @Get('payments')

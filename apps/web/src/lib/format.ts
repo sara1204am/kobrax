@@ -80,6 +80,12 @@ export function dateTime(d?: string | null, locale = 'es', timeZone = DISPLAY_TI
   return new Date(d).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short', timeZone });
 }
 
+/** «15 oct 2026, 23:00»: la fecha efectiva de un pago en su detalle, donde hay lugar para leerla entera. Misma zona que `dateTime`. */
+export function dateTimeLong(d?: string | null, locale = 'es', timeZone = DISPLAY_TIME_ZONE): string {
+  if (!d) return '—';
+  return new Date(d).toLocaleString(locale, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone });
+}
+
 /**
  * Un porcentaje que ya viene en 0-100.
  *

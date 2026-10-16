@@ -27,6 +27,11 @@ export class CreatePaymentDto {
   @IsOptional() @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value)) @IsString() @Length(1, 40) receiptReference?: string;
   /** Quién recibió la plata (D3). Default `KOBRAX_COLLECTED`. */
   @IsOptional() @IsEnum(PaymentChannel) channel?: PaymentChannel;
+  /**
+   * Desde dónde se registra: el panel manda `WEB`. Sin él, la app móvil se reconoce por su cabecera `x-app-version`. Es
+   * descriptivo (lo declara el cliente), no una puerta de seguridad.
+   */
+  @IsOptional() @IsIn(['WEB', 'MOBILE']) registeredVia?: 'WEB' | 'MOBILE';
   @IsOptional() @IsString() @Length(1, 500) notes?: string;
   /**
    * Cuándo se cobró, si no es ahora: el pago guardado offline viaja con la hora del cobro. La ventana

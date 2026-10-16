@@ -1526,6 +1526,8 @@ model Payment {
   receiptNumber         Int?           @map("receipt_number")
   /// N° impreso en el recibo o la factura del papel (texto libre, opcional). NO es `receiptNumber`, el correlativo del sistema.
   receiptReference      String?        @map("receipt_reference") @db.VarChar(40)
+  /// Desde dónde se registró: `WEB` o `MOBILE`. Null en los anteriores. Descriptivo (lo declara el cliente), no de seguridad.
+  registeredVia         String?        @map("registered_via") @db.VarChar(10)
   idempotencyKey        String?        @map("idempotency_key") // anti doble registro (header Idempotency-Key)
   receiptUrl            String?        @map("receipt_url") // foto del comprobante (opcional)
   receiptHash           String?        @map("receipt_hash") // SHA-256 del buffer original

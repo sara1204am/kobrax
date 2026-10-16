@@ -12,6 +12,8 @@ export function serializePayment(p: Payment, names?: ReadonlyMap<string, string>
     externalTransactionId: p.externalTransactionId ?? undefined,
     receiptNumber: p.receiptNumber ?? undefined,
     receiptReference: p.receiptReference ?? undefined,
+    // Sólo los dos valores que existen: una fila anterior (NULL) no sabe desde dónde se registró, y no se inventa.
+    registeredVia: p.registeredVia === 'WEB' || p.registeredVia === 'MOBILE' ? p.registeredVia : undefined,
     receiptUrl: p.receiptUrl ?? undefined, // comprobante subido (§5.4); no es PII
     paymentDate: p.paymentDate,
     registeredBy: p.registeredBy ?? undefined,

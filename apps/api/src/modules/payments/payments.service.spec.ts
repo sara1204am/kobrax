@@ -532,3 +532,88 @@ describe('PaymentsService.list — tarjetas de hoy y del mes', () => {
     assert.deepEqual(calls.aggs[0], calls.where);
   });
 });
+
+describe('PaymentsService.register — desde dónde se registró', () => {
+  it('lo que declara el cliente (el panel manda WEB) se guarda tal cual', async () => {
+    const { service, calls } = makeService({ credit: psfCredit() });
+    const out = await service.register({ ...PAY, amount: 50, registeredVia: 'WEB' });
+    assert.equal(calls.create[0]!.registeredVia, 'WEB');
+    assert.equal(out.registeredVia, 'WEB');
+  });
+
+  it('sin decirlo, la cabecera de la app móvil lo marca MOBILE', async () => {
+    const { service, calls } = makeService({ credit: psfCredit() });
+    await service.register({ ...PAY, amount: 50 }, undefined, 'MOBILE');
+    assert.equal(calls.create[0]!.registeredVia, 'MOBILE');
+  });
+
+  it('lo del cuerpo manda sobre la pista de la cabecera', async () => {
+    const { service, calls } = makeService({ credit: psfCredit() });
+    await service.register({ ...PAY, amount: 50, registeredVia: 'WEB' }, undefined, 'MOBILE');
+    assert.equal(calls.create[0]!.registeredVia, 'WEB');
+  });
+
+  it('sin ninguna de las dos no se inventa: queda sin dato', async () => {
+    const { service, calls } = makeService({ credit: psfCredit() });
+    const out = await service.register({ ...PAY, amount: 50 });
+    assert.equal(calls.create[0]!.registeredVia, undefined);
+    assert.equal(out.registeredVia, undefined);
+  });
+});
+
+describe('PaymentsService.findOne — quién cobró y la visita', () => {
+  const ANA = 'a0000000-0000-4000-8000-000000000001';
+  const LUIS = 'a0000000-0000-4000-8000-000000000002';
+  const row = (over: Record<string, unknown> = {}) => ({
+    id: 'p1', creditId: 'cr1', amount: 100, method: 'CASH', channel: 'KOBRAX_COLLECTED', registeredBy: ANA,
+    paymentDate: new Date(), createdAt: new Date(), visitId: null, registeredVia: null, ...over,
+  });
+
+  function makeFinder(payment: unknown, visit: unknown = null) {
+    const lookups: string[][] = [];
+    const tx = {
+      payment: { findFirst: async () => payment },
+      fieldVisit: { findFirst: async () => visit },
+      userAccount: {
+        findMany: async (a: { where: { userId: { in: string[] } } }) => {
+          lookups.push(a.where.userId.in);
+          return [
+            { userId: ANA, user: { profile: { firstName: 'Ana', lastName: 'Pérez' } } },
+            { userId: LUIS, user: { profile: { firstName: 'Luis', lastName: 'Rojas' } } },
+          ].filter((r) => a.where.userId.in.includes(r.userId));
+        },
+      },
+    };
+    const service = new PaymentsService({ withTenant: async (_a: string, fn: (t: unknown) => unknown) => fn(tx) } as never, { accountId: 'acc-A' } as never, {} as never, {} as never, {} as never);
+    return { service, lookups };
+  }
+
+  it('un cobro sin visita no trae `visit`', async () => {
+    const { service } = makeFinder(row());
+    const out = await service.findOne('p1');
+    assert.equal('visit' in out, false);
+    assert.equal(out.registeredByName, 'Ana Pérez');
+  });
+
+  it('con visita dice quién cobró en ella (que puede no ser quien cargó el pago) y a qué parada lleva', async () => {
+    const { service, lookups } = makeFinder(row({ visitId: 'v1', registeredVia: 'WEB' }), { collectorId: LUIS, routeStop: { id: 's1', routeId: 'r1' } });
+    const out = await service.findOne('p1');
+    assert.deepEqual(out.visit, { collectorId: LUIS, collectorName: 'Luis Rojas', routeId: 'r1', stopId: 's1' });
+    assert.equal(out.registeredByName, 'Ana Pérez');
+    assert.equal(out.registeredVia, 'WEB');
+    // Los dos nombres, en UNA consulta.
+    assert.equal(lookups.length, 1);
+  });
+
+  it('una visita que no salió de una ruta no inventa el enlace a la parada', async () => {
+    const { service } = makeFinder(row({ visitId: 'v1' }), { collectorId: LUIS, routeStop: null });
+    const out = await service.findOne('p1');
+    assert.equal(out.visit!.routeId, undefined);
+    assert.equal(out.visit!.stopId, undefined);
+  });
+
+  it('404 si el pago no existe', async () => {
+    const { service } = makeFinder(null);
+    await assert.rejects(() => service.findOne('nope'));
+  });
+});

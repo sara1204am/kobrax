@@ -25,6 +25,11 @@ export interface PaymentItem {
   registeredBy?: string;
   /** La visita en la que se cobró (F4/12). Ausente si el cobro no salió de una visita. */
   visitId?: string;
+  /**
+   * Sólo en el detalle (`GET /payments/:id`) y sólo si hubo visita: quién cobró en ella y a qué parada lleva. `routeId` y
+   * `stopId` faltan si la visita no se hizo desde una ruta.
+   */
+  visit?: { collectorId: string; collectorName?: string; routeId?: string; stopId?: string };
   /** Nombre de quien lo registró (resuelto por el servidor; no exige `user:read`). */
   registeredByName?: string;
   amount: number;
@@ -34,6 +39,8 @@ export interface PaymentItem {
   receiptNumber?: number;
   /** N° del recibo o la factura en papel, tal como lo escribió quien cobró. Distinto de `receiptNumber` (el del sistema). */
   receiptReference?: string;
+  /** Desde dónde se registró. Ausente en los anteriores a que se guardara: no se sabe. */
+  registeredVia?: 'WEB' | 'MOBILE';
   /** El comprobante subido. Es la **ruta** que devolvió `uploads`, no un nombre suelto. */
   receiptUrl?: string;
   /** Cuándo se cobró. En un pago registrado offline es la hora del teléfono, no la de la sincronización. */
@@ -53,6 +60,8 @@ export interface NewPayment {
   receiptHash?: string;
   /** N° del recibo o la factura que se entregó (opcional, hasta 40 caracteres). */
   receiptReference?: string;
+  /** Desde dónde se registra. El panel manda `WEB`; la app móvil se reconoce por su cabecera. */
+  registeredVia?: 'WEB' | 'MOBILE';
   /** La visita en la que se cobró (vincula el pago con la gestión de la parada). Debe ser del mismo crédito. */
   visitId?: string;
   /** Default `KOBRAX_COLLECTED`. */

@@ -36,6 +36,8 @@ interface ApplyParams {
   receiptHash?: string;
   /** N° del recibo o la factura en papel (opcional). */
   receiptReference?: string;
+  /** Desde dónde se registró (`WEB` | `MOBILE`). Ausente = no se sabe. */
+  registeredVia?: 'WEB' | 'MOBILE';
   channel?: PaymentChannel;
   notes?: string;
   /** ISO: cuándo se cobró (el pago offline). Ausente = ahora. */
@@ -59,13 +61,13 @@ export class PaymentsService {
   }
 
   // ── Registro de pago (ledger inmutable) ──────────────────────────────────────
-  async register(dto: CreatePaymentDto, idempotencyKey?: string) {
+  async register(dto: CreatePaymentDto, idempotencyKey?: string, viaHint?: 'WEB' | 'MOBILE') {
     const run = () => this.tx(async (tx) => {
       if (idempotencyKey) {
         const existing = await tx.payment.findFirst({ where: { idempotencyKey } });
         if (existing) return { payment: existing, replay: true, external: false }; // reintento → no duplica
       }
-      const { payment, external } = await this.applyCore(tx, { ...dto, idempotencyKey });
+      const { payment, external } = await this.applyCore(tx, { ...dto, registeredVia: dto.registeredVia ?? viaHint, idempotencyKey });
       return { payment, replay: false, external };
     });
     // Dos envíos con la misma clave a la vez (el intento en vivo y la cola offline) pasan los dos el chequeo y uno
@@ -187,6 +189,7 @@ export class PaymentsService {
           receiptUrl: p.receiptUrl,
           receiptHash: p.receiptHash,
           receiptReference: p.receiptReference,
+          registeredVia: p.registeredVia,
           registeredBy: this.tenant.userId,
           visitId: p.visitId,
           channel: p.channel,
@@ -296,10 +299,36 @@ export class PaymentsService {
   async findOne(id: string) {
     const found = await this.tx(async (tx) => {
       const row = await tx.payment.findFirst({ where: { id } });
-      return row ? { row, names: await loadNames(tx, this.tenant.accountId, [row.registeredBy]) } : null;
+      if (!row) return null;
+      /*
+       * La visita en la que se cobró, si la hubo: de ella salen **quién cobró** —que no siempre es quien cargó el pago:
+       * desde el panel se carga una visita a nombre de un cobrador— y a qué parada lleva el enlace. Sólo ids y un nombre:
+       * nada de lo que revela el detalle de la visita (punto en el mapa, evidencia), que se audita aparte.
+       */
+      const visit = row.visitId
+        ? await tx.fieldVisit.findFirst({
+            where: { id: row.visitId },
+            select: { collectorId: true, routeStop: { select: { id: true, routeId: true } } },
+          })
+        : null;
+      const names = await loadNames(tx, this.tenant.accountId, [row.registeredBy, visit?.collectorId]);
+      return { row, names, visit };
     });
     if (!found) throw resourceNotFound();
-    return serializePayment(found.row, found.names);
+    const { row, names, visit } = found;
+    return {
+      ...serializePayment(row, names),
+      ...(visit
+        ? {
+            visit: {
+              collectorId: visit.collectorId,
+              collectorName: names.get(visit.collectorId),
+              routeId: visit.routeStop?.routeId,
+              stopId: visit.routeStop?.id,
+            },
+          }
+        : {}),
+    };
   }
 
   // ── Solicitudes de pago digital (QR / link) ──────────────────────────────────

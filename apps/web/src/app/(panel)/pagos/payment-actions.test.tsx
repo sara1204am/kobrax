@@ -42,8 +42,8 @@ describe('PaymentModal — monto → confirmar (§5)', () => {
     await userEvent.type(monto, '{Enter}');
 
     await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
-    // El cuerpo mínimo: el canal por defecto y una nota vacía no viajan.
-    expect(sent.body).toEqual({ creditId: 'cr1', amount: 500, method: 'CASH' });
+    // El cuerpo mínimo: el canal por defecto y una nota vacía no viajan. Sí viaja desde dónde se registra.
+    expect(sent.body).toEqual({ creditId: 'cr1', amount: 500, method: 'CASH', registeredVia: 'WEB' });
     expect(sent.key).toMatch(/^[0-9a-f-]{36}$/);
     expect(refresh).toHaveBeenCalled();
   });
@@ -157,7 +157,7 @@ describe('PaymentModal — sin crédito: primero la persona, después el présta
     expect(screen.getByText('Saldo para liquidar')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
-    await vi.waitFor(() => expect(sent.body).toEqual({ creditId: 'cr1', amount: 450, method: 'CASH' }));
+    await vi.waitFor(() => expect(sent.body).toEqual({ creditId: 'cr1', amount: 450, method: 'CASH', registeredVia: 'WEB' }));
   });
 });
 
@@ -178,5 +178,78 @@ describe('PaymentModal — N° de recibo o factura', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
     await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(sent.body).toMatchObject({ receiptReference: 'R-004512' });
+  });
+});
+
+describe('PaymentModal — foto del comprobante', () => {
+  const HASH = 'a'.repeat(64);
+  const photo = () => new File([new Uint8Array([1, 2, 3])], 'recibo.jpg', { type: 'image/jpeg' });
+
+  function mockUpload(ok = true) {
+    const uploaded: { count: number } = { count: 0 };
+    server.use(
+      http.post('*/api/account/upload', () => {
+        uploaded.count += 1;
+        return ok
+          ? HttpResponse.json({ url: '/api/uploads/abc123.jpg', hash: HASH, size: 3, mimeType: 'image/jpeg' })
+          : HttpResponse.json({ error: { code: 'UPLOAD', message: 'La imagen es muy grande' } }, { status: 413 });
+      }),
+    );
+    return uploaded;
+  }
+
+  it('es opcional: sin foto el cuerpo no lleva comprobante', async () => {
+    const sent = capture();
+    const { onClose } = renderModal({ id: 'cr1', suggestedAmount: 100 });
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(sent.body).not.toHaveProperty('receiptUrl');
+    expect(sent.body).not.toHaveProperty('receiptHash');
+  });
+
+  it('sube la foto al elegirla y viaja con el pago como ruta interna + hash', async () => {
+    const uploaded = mockUpload();
+    const sent = capture();
+    const { onClose } = renderModal({ id: 'cr1', suggestedAmount: 100 });
+
+    // El selector de archivos va oculto: el botón lo abre, y en el celular ofrece la cámara.
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input).toHaveAttribute('accept', 'image/*');
+    await userEvent.upload(input, photo());
+
+    expect(await screen.findByText('recibo.jpg')).toBeInTheDocument();
+    expect(uploaded.count).toBe(1);
+    expect(screen.getByRole('button', { name: 'Cambiar la foto' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(sent.body).toMatchObject({ receiptUrl: '/api/uploads/abc123.jpg', receiptHash: HASH });
+  });
+
+  it('se puede quitar la foto antes de confirmar: entonces no viaja', async () => {
+    mockUpload();
+    const sent = capture();
+    const { onClose } = renderModal({ id: 'cr1', suggestedAmount: 100 });
+    await userEvent.upload(document.querySelector('input[type="file"]') as HTMLInputElement, photo());
+    await userEvent.click(await screen.findByRole('button', { name: 'Quitar' }));
+    expect(screen.queryByText('recibo.jpg')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(sent.body).not.toHaveProperty('receiptUrl');
+  });
+
+  it('si la subida falla lo dice y el pago se puede registrar igual, sin foto', async () => {
+    mockUpload(false);
+    const sent = capture();
+    const { onClose } = renderModal({ id: 'cr1', suggestedAmount: 100 });
+    await userEvent.upload(document.querySelector('input[type="file"]') as HTMLInputElement, photo());
+
+    expect(await screen.findByText('La imagen es muy grande')).toBeInTheDocument();
+    expect(screen.queryByText('recibo.jpg')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(sent.body).not.toHaveProperty('receiptUrl');
   });
 });

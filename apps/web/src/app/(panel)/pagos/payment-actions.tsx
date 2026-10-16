@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
@@ -109,6 +109,13 @@ export function PaymentModal({
   const [notes, setNotes] = useState('');
   /** N° del recibo o la factura en papel. Opcional. */
   const [receiptRef, setReceiptRef] = useState('');
+  /**
+   * La foto del recibo o del comprobante. Se sube al elegirla (`/api/account/upload`, el mismo camino que la foto de una visita) y
+   * viaja con el pago como `receiptUrl` + `receiptHash`: la URL ya es la ruta interna y el hash es del archivo original.
+   */
+  const [receipt, setReceipt] = useState<{ url: string; hash: string; name: string; preview: string } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -129,9 +136,35 @@ export function PaymentModal({
       setChannel('KOBRAX_COLLECTED');
       setNotes('');
       setReceiptRef('');
+      dropReceipt();
       setMore(false);
       setError(null);
     }
+  }
+
+  /** Suelta la foto elegida y libera su vista previa (un `blob:` que nadie suelte se queda en memoria). */
+  function dropReceipt() {
+    setReceipt((r) => {
+      if (r?.preview) URL.revokeObjectURL(r.preview);
+      return null;
+    });
+  }
+
+  async function attach(file: File | undefined) {
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    const body = new FormData();
+    body.append('file', file);
+    const res = await fetch('/api/account/upload', { method: 'POST', body }).catch(() => null);
+    const data = res ? await res.json().catch(() => null) : null;
+    setUploading(false);
+    if (!res?.ok || !data?.url || !data?.hash) return setError(data?.error?.message ?? t('register.receiptError'));
+    setReceipt((old) => {
+      if (old?.preview) URL.revokeObjectURL(old.preview);
+      const preview = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : '';
+      return { url: data.url, hash: data.hash, name: file.name, preview };
+    });
   }
 
   /** El de la ficha, o el que se eligió acá. */
@@ -161,7 +194,7 @@ export function PaymentModal({
 
   async function register(e?: FormEvent) {
     e?.preventDefault();
-    if (!active || !valid || busy) return;
+    if (!active || !valid || busy || uploading) return;
     setError(null);
     setBusy(true);
     const res = await sendJson(
@@ -174,6 +207,9 @@ export function PaymentModal({
         ...(channel !== 'KOBRAX_COLLECTED' ? { channel } : {}),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
         ...(receiptRef.trim() ? { receiptReference: receiptRef.trim() } : {}),
+        ...(receipt ? { receiptUrl: receipt.url, receiptHash: receipt.hash } : {}),
+        // El panel dice desde dónde registra; el móvil lo dice su cabecera. Se muestra en el detalle del pago.
+        registeredVia: 'WEB' as const,
       },
       'POST',
       { 'idempotency-key': key },
@@ -200,7 +236,7 @@ export function PaymentModal({
             <Button variant="ghost" onClick={onClose} disabled={busy} className="sm:w-auto sm:px-5">
               {t('register.cancel')}
             </Button>
-            <Button onClick={() => void register()} loading={busy} disabled={!valid} className="sm:w-auto sm:px-5">
+            <Button onClick={() => void register()} loading={busy} disabled={!valid || uploading} className="sm:w-auto sm:px-5">
               {t('register.confirm')}
             </Button>
           </>
@@ -271,6 +307,43 @@ export function PaymentModal({
             <Field label={t('register.receiptRef')}>
               <Input value={receiptRef} onChange={(e) => setReceiptRef(e.target.value)} disabled={busy} maxLength={40} />
             </Field>
+            {/* La foto del recibo: en el celular el selector abre la cámara; en el escritorio, el explorador de archivos. */}
+            <div>
+              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-k-text-2">{t('register.receiptPhoto')}</span>
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(e) => {
+                  void attach(e.target.files?.[0]);
+                  e.target.value = ''; // volver a elegir el mismo archivo tiene que disparar el cambio
+                }}
+              />
+              <div className="flex flex-wrap items-center gap-3">
+                {receipt?.preview && (
+                  // eslint-disable-next-line @next/next/no-img-element -- vista previa local (blob:), no un archivo del servidor
+                  <img src={receipt.preview} alt={t('register.receiptPhoto')} className="h-12 w-12 rounded-lg border border-k-border object-cover" />
+                )}
+                <button
+                  type="button"
+                  disabled={busy || uploading}
+                  onClick={() => fileInput.current?.click()}
+                  className="h-10 rounded-xl border border-dashed border-k-border bg-k-bg px-4 text-[13px] font-medium text-k-text-2 hover:bg-white disabled:opacity-60"
+                >
+                  {uploading ? t('register.uploading') : receipt ? t('register.receiptReplace') : t('register.receiptAdd')}
+                </button>
+                {receipt && (
+                  <span className="flex items-center gap-2 text-[13px] text-k-text-2">
+                    <span className="max-w-[180px] truncate">{receipt.name}</span>
+                    <button type="button" onClick={dropReceipt} disabled={busy} className="text-k-danger hover:underline">
+                      {t('register.receiptRemove')}
+                    </button>
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-[12px] text-k-muted">{t('register.receiptHint')}</p>
+            </div>
             {over && active.balance !== undefined && (
               <p role="alert" className="-mt-2 text-[13px] text-k-danger">
                 {t('register.exceeds', { balance: money(active.balance, currency) })}
