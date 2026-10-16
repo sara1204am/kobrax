@@ -361,6 +361,13 @@ export async function fetchedAt(kind: CacheKind, scope?: string): Promise<number
   return row?.t ?? null;
 }
 
+/** Cuántas entidades distintas hay guardadas de un recurso (sin contar en cuántas listas aparecen). */
+export async function countKind(kind: CacheKind): Promise<number> {
+  const db = await open();
+  const row = await db.getFirstAsync<{ n: number }>('SELECT COUNT(DISTINCT id) AS n FROM cache WHERE kind = ?', [kind]);
+  return row?.n ?? 0;
+}
+
 /** Borra una fila del caché por id (todas sus consultas). Sólo para deshacer una fila provisional. */
 export async function removeOne(kind: CacheKind, id: string): Promise<void> {
   const db = await open();
