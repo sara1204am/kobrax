@@ -36,6 +36,8 @@ jobs:
         if: env.BACKUP_TOKEN != ''
         with:
           fetch-depth: 0
+          # Sin esto el checkout deja la cabecera de auth del GITHUB_TOKEN y pisa el token del respaldo (403 como github-actions[bot]).
+          persist-credentials: false
 
       - name: Empujar al respaldo
         if: env.BACKUP_TOKEN != ''
