@@ -1,0 +1,52 @@
+# Espejo de respaldo: cada push a main/dev se copia a saraacha21/kobrax.
+#
+# Es una COPIA, no un origen: nada se trabaja allá. Sólo empuja la rama que cambió (y las etiquetas), así que
+# no borra en el respaldo lo que se borre acá. `--force` porque el respaldo debe reflejar el origen aunque se
+# reescriba historia.
+#
+# Necesita el secreto BACKUP_TOKEN: un token fine-grained de la cuenta dueña del respaldo, con acceso SÓLO a ese
+# repo y permiso «Contents: read and write». Sin el secreto el job se salta (no rompe el push).
+name: Mirror backup
+
+on:
+  push:
+    branches: [main, dev]
+    tags: ['*']
+  workflow_dispatch:
+
+concurrency:
+  group: mirror-backup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    env:
+      BACKUP_TOKEN: ${{ secrets.BACKUP_TOKEN }}
+      BACKUP_REPO: saraacha21/kobrax
+    steps:
+      - name: Sin token no hay espejo
+        if: env.BACKUP_TOKEN == ''
+        run: echo "::warning::BACKUP_TOKEN no está configurado; se omite el espejo."
+
+      - uses: actions/checkout@v4
+        if: env.BACKUP_TOKEN != ''
+        with:
+          fetch-depth: 0
+
+      - name: Empujar al respaldo
+        if: env.BACKUP_TOKEN != ''
+        run: |
+          git remote add backup "https://x-access-token:${BACKUP_TOKEN}@github.com/${BACKUP_REPO}.git"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            git push --force backup "refs/tags/${GITHUB_REF_NAME}"
+          elif [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            # Sincronización completa a mano: main, dev y etiquetas.
+            git push --force backup "refs/remotes/origin/main:refs/heads/main" "refs/remotes/origin/dev:refs/heads/dev"
+            git push --force --tags backup
+          else
+            git push --force backup "HEAD:refs/heads/${GITHUB_REF_NAME}"
+          fi
