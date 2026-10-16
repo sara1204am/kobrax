@@ -297,7 +297,7 @@ export default function MoraFichaScreen() {
         external={external}
         // Importado: el saldo es el del último reporte y el pago no lo toca (D3); topearlo rechazaría un cobro real.
         maxAmount={external ? Number.POSITIVE_INFINITY : (detail.balance ?? Number.POSITIVE_INFINITY)}
-        onSubmit={async (amount, method, receipt, idemKey, channel) => {
+        onSubmit={async (amount, method, receipt, idemKey, channel, receiptReference) => {
           const err = await submitPayment(
             {
               creditId: detail.creditId,
@@ -305,6 +305,7 @@ export default function MoraFichaScreen() {
               method,
               receiptUrl: receipt?.url,
               receiptHash: receipt?.hash,
+              ...(receiptReference ? { receiptReference } : {}),
               ...(channel !== 'KOBRAX_COLLECTED' ? { channel } : {}),
               // La hora del cobro, no la de la sincronización: si queda en la cola, viaja con ella.
               paymentDate: new Date().toISOString(),

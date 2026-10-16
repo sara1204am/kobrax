@@ -95,6 +95,12 @@ export function PaymentsTable({
       defaultDir: 'desc',
       render: (p) => (p.receiptNumber != null ? `#${p.receiptNumber}` : '—'),
     },
+    {
+      // El del papel que entregó quien cobró (opcional). No ordena: es texto libre de cada oficial.
+      key: 'receiptRef',
+      header: t('columns.receiptRef'),
+      render: (p) => p.receiptReference ?? <span className="text-k-muted">—</span>,
+    },
   ];
 
   /**

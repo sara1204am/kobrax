@@ -34,6 +34,8 @@ interface ApplyParams {
   /** Comprobante (§5.4). El hash lo calcula `POST /uploads` sobre el buffer original. */
   receiptUrl?: string;
   receiptHash?: string;
+  /** N° del recibo o la factura en papel (opcional). */
+  receiptReference?: string;
   channel?: PaymentChannel;
   notes?: string;
   /** ISO: cuándo se cobró (el pago offline). Ausente = ahora. */
@@ -86,6 +88,7 @@ export class PaymentsService {
           method: payment.method,
           channel: payment.channel,
           paymentDate: payment.paymentDate,
+          receiptReference: payment.receiptReference ?? undefined,
           visitId: payment.visitId ?? undefined,
           externalCredit: external,
         },
@@ -183,6 +186,7 @@ export class PaymentsService {
           receiptNumber,
           receiptUrl: p.receiptUrl,
           receiptHash: p.receiptHash,
+          receiptReference: p.receiptReference,
           registeredBy: this.tenant.userId,
           visitId: p.visitId,
           channel: p.channel,

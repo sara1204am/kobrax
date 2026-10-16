@@ -7,7 +7,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { choosePhoto } from '@/photo';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { AmountInput, BottomSheet, Chips, SectionLabel } from '@/ui';
-import { Button, ErrorBanner } from '@/components';
+import { Button, ErrorBanner, Field } from '@/components';
 import type { PaymentChannel, PaymentMethod } from '@/payments.service';
 import { uploadImage } from '@/uploads.service';
 import { MiQrCobro } from '@/qr-cobro';
@@ -40,12 +40,14 @@ export function PaySheet({
   /** Operación PSF: el pago no cambia el saldo reportado, y se dice (D3). */
   external?: boolean;
   /** `receipt` viaja entero: con señal trae `url`+`hash`, sin señal la ruta local de la foto. */
-  onSubmit: (amount: number, method: PaymentMethod, receipt: Comprobante | null, idemKey: string, channel: PaymentChannel) => Promise<string | null>;
+  onSubmit: (amount: number, method: PaymentMethod, receipt: Comprobante | null, idemKey: string, channel: PaymentChannel, receiptReference?: string) => Promise<string | null>;
 }) {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [channel, setChannel] = useState<PaymentChannel>('KOBRAX_COLLECTED');
   const [receipt, setReceipt] = useState<Comprobante | null>(null);
+  /** N° del recibo o la factura en papel que se entrega. Opcional. */
+  const [receiptRef, setReceiptRef] = useState('');
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +59,7 @@ export function PaySheet({
       setMethod('CASH');
       setChannel('KOBRAX_COLLECTED');
       setReceipt(null);
+      setReceiptRef('');
       setError(null);
       idemRef.current = `pay-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
     }
@@ -82,10 +85,11 @@ export function PaySheet({
   const submit = useCallback(async () => {
     setSaving(true);
     setError(null);
-    const err = await onSubmit(num, method, receipt, idemRef.current, channel);
+    const ref = receiptRef.trim();
+    const err = await onSubmit(num, method, receipt, idemRef.current, channel, ref || undefined);
     setSaving(false);
     if (err) setError(err);
-  }, [num, method, receipt, channel, onSubmit]);
+  }, [num, method, receipt, channel, receiptRef, onSubmit]);
 
   return (
     <BottomSheet visible={visible} onClose={onClose} title="Registrar pago">
@@ -100,6 +104,8 @@ export function PaySheet({
       <SectionLabel>¿Quién recibió la plata?</SectionLabel>
       <Chips options={CHANNELS} value={channel} onChange={setChannel} />
       {method === 'QR' && <MiQrCobro />}
+      <SectionLabel>N° de recibo o factura</SectionLabel>
+      <Field label="" value={receiptRef} onChangeText={setReceiptRef} placeholder="Opcional" maxLength={40} autoCapitalize="characters" />
       <Pressable style={styles.receiptBtn} onPress={capture} disabled={uploading} accessibilityRole="button">
         <Text style={styles.receiptText}>{uploading ? 'Subiendo…' : receipt ? '📷 Comprobante listo' : '📷 Foto de comprobante'}</Text>
       </Pressable>

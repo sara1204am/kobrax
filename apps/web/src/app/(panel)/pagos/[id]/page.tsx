@@ -73,6 +73,7 @@ export default async function PagoPage({ params }: { params: { id: string } }) {
               label={t('detail.receiptNumber')}
               value={payment.receiptNumber != null ? `#${payment.receiptNumber}` : '—'}
             />
+            <Fact label={t('detail.receiptRef')} value={payment.receiptReference ?? '—'} />
             <Fact label={t('detail.provider')} value={payment.provider ?? '—'} />
             <Fact label={t('detail.externalId')} value={payment.externalTransactionId ?? '—'} />
           </dl>

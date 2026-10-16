@@ -121,6 +121,23 @@ describe('PaymentsService.register — crédito PSF (D3)', () => {
     assert.equal((data.paymentDate as Date).toISOString(), cobrado);
   });
 
+  it('guarda el N° de recibo o factura en papel, aparte del correlativo del sistema', async () => {
+    const { service, calls } = makeService({ credit: psfCredit() });
+    const out = await service.register({ ...PAY, amount: 50, receiptReference: 'R-004512' });
+    const data = calls.create[0]!;
+    assert.equal(data.receiptReference, 'R-004512');
+    // El correlativo del sistema sigue siendo otro campo y se asigna igual.
+    assert.equal(typeof data.receiptNumber, 'number');
+    assert.equal(out.receiptReference, 'R-004512');
+  });
+
+  it('el N° de recibo es opcional: sin él no se inventa uno', async () => {
+    const { service, calls } = makeService({ credit: psfCredit() });
+    const out = await service.register({ ...PAY, amount: 50 });
+    assert.equal(calls.create[0]!.receiptReference, undefined);
+    assert.equal(out.receiptReference, undefined);
+  });
+
   it('sin fecha no fija `paymentDate`: la pone la base (ahora)', async () => {
     const { service, calls } = makeService({ credit: psfCredit() });
     await service.register({ ...PAY, amount: 50 });

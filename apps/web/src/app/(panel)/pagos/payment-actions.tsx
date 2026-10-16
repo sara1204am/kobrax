@@ -107,6 +107,8 @@ export function PaymentModal({
   const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [channel, setChannel] = useState<PaymentChannel>('KOBRAX_COLLECTED');
   const [notes, setNotes] = useState('');
+  /** N° del recibo o la factura en papel. Opcional. */
+  const [receiptRef, setReceiptRef] = useState('');
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -126,6 +128,7 @@ export function PaymentModal({
       setMethod('CASH');
       setChannel('KOBRAX_COLLECTED');
       setNotes('');
+      setReceiptRef('');
       setMore(false);
       setError(null);
     }
@@ -170,6 +173,7 @@ export function PaymentModal({
         // Sólo lo que no es el default: el cuerpo mínimo es el de siempre.
         ...(channel !== 'KOBRAX_COLLECTED' ? { channel } : {}),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
+        ...(receiptRef.trim() ? { receiptReference: receiptRef.trim() } : {}),
       },
       'POST',
       { 'idempotency-key': key },
@@ -263,6 +267,9 @@ export function PaymentModal({
                 autoFocus
                 onFocus={(e) => e.currentTarget.select()}
               />
+            </Field>
+            <Field label={t('register.receiptRef')}>
+              <Input value={receiptRef} onChange={(e) => setReceiptRef(e.target.value)} disabled={busy} maxLength={40} />
             </Field>
             {over && active.balance !== undefined && (
               <p role="alert" className="-mt-2 text-[13px] text-k-danger">

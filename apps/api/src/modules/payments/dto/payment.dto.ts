@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { IsDateString, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Length, Matches, Max, Min } from 'class-validator';
 import { PaymentChannel, PaymentMethod, PaymentRequestStatus } from '@prisma/client';
 import { CREDIT_SOURCES, type CreditSource } from '@kobrax/shared';
@@ -16,6 +16,8 @@ export class CreatePaymentDto {
   /** Comprobante (spec §5.4). Los devuelve `POST /api/uploads`; el hash es del buffer original. */
   @IsOptional() @IsString() receiptUrl?: string;
   @IsOptional() @IsString() @Length(64, 64) receiptHash?: string;
+  /** N° del recibo o la factura en papel. Opcional; el ledger lo guarda tal cual (sin espacios de los extremos). */
+  @IsOptional() @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value)) @IsString() @Length(1, 40) receiptReference?: string;
   /** Quién recibió la plata (D3). Default `KOBRAX_COLLECTED`. */
   @IsOptional() @IsEnum(PaymentChannel) channel?: PaymentChannel;
   @IsOptional() @IsString() @Length(1, 500) notes?: string;

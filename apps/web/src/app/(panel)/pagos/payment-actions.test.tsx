@@ -160,3 +160,23 @@ describe('PaymentModal — sin crédito: primero la persona, después el présta
     await vi.waitFor(() => expect(sent.body).toEqual({ creditId: 'cr1', amount: 450, method: 'CASH' }));
   });
 });
+
+describe('PaymentModal — N° de recibo o factura', () => {
+  it('es opcional: sin escribirlo el cuerpo no lo lleva', async () => {
+    const sent = capture();
+    const { onClose } = renderModal({ id: 'cr1', suggestedAmount: 100 });
+    expect(screen.getByLabelText('N° de recibo o factura (opcional)')).toHaveValue('');
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(sent.body).not.toHaveProperty('receiptReference');
+  });
+
+  it('viaja tal cual se escribió, sin los espacios de los extremos', async () => {
+    const sent = capture();
+    const { onClose } = renderModal({ id: 'cr1', suggestedAmount: 100 });
+    await userEvent.type(screen.getByLabelText('N° de recibo o factura (opcional)'), '  R-004512 ');
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(sent.body).toMatchObject({ receiptReference: 'R-004512' });
+  });
+});

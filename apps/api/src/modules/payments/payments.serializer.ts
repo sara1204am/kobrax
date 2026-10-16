@@ -11,6 +11,7 @@ export function serializePayment(p: Payment, names?: ReadonlyMap<string, string>
     provider: p.provider ?? undefined,
     externalTransactionId: p.externalTransactionId ?? undefined,
     receiptNumber: p.receiptNumber ?? undefined,
+    receiptReference: p.receiptReference ?? undefined,
     receiptUrl: p.receiptUrl ?? undefined, // comprobante subido (§5.4); no es PII
     paymentDate: p.paymentDate,
     registeredBy: p.registeredBy ?? undefined,

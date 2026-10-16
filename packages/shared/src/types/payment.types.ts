@@ -32,6 +32,8 @@ export interface PaymentItem {
   provider?: string;
   externalTransactionId?: string;
   receiptNumber?: number;
+  /** N° del recibo o la factura en papel, tal como lo escribió quien cobró. Distinto de `receiptNumber` (el del sistema). */
+  receiptReference?: string;
   /** El comprobante subido. Es la **ruta** que devolvió `uploads`, no un nombre suelto. */
   receiptUrl?: string;
   /** Cuándo se cobró. En un pago registrado offline es la hora del teléfono, no la de la sincronización. */
@@ -49,6 +51,8 @@ export interface NewPayment {
   method: PaymentMethod;
   receiptUrl?: string;
   receiptHash?: string;
+  /** N° del recibo o la factura que se entregó (opcional, hasta 40 caracteres). */
+  receiptReference?: string;
   /** La visita en la que se cobró (vincula el pago con la gestión de la parada). Debe ser del mismo crédito. */
   visitId?: string;
   /** Default `KOBRAX_COLLECTED`. */
