@@ -126,3 +126,25 @@ describe('paymentQuery — fuente (D7)', () => {
     expect(hasPaymentFilters({ source: 'PSF' })).toBe(true);
   });
 });
+
+describe('bandeja de cobros pedidos', () => {
+  it('abre en lo pendiente y sólo manda lo que el DTO acepta', async () => {
+    const { requestQuery, requestStatus } = await import('./payments');
+    expect(requestStatus({})).toBe('PENDING');
+    expect(requestStatus({ status: 'inventado' })).toBe('PENDING');
+    expect(requestQuery({}).get('status')).toBe('PENDING');
+    expect(requestQuery({ status: 'PAID' }).get('status')).toBe('PAID');
+    // «Todas» no es un estado de la API: no viaja.
+    expect(requestQuery({ status: 'ALL' }).has('status')).toBe(false);
+    expect(requestQuery({ page: '0', pageSize: '999' }).get('page')).toBe('1');
+    expect(requestQuery({ pageSize: '999' }).get('limit')).toBe('25');
+  });
+
+  it('una solicitud pasada de hora sigue siendo pendiente pero se marca vencida', async () => {
+    const { isRequestExpired } = await import('./payments');
+    const now = new Date('2026-10-15T12:00:00Z');
+    expect(isRequestExpired({ status: 'PENDING', expiresAt: '2026-10-14T12:00:00Z' }, now)).toBe(true);
+    expect(isRequestExpired({ status: 'PENDING', expiresAt: '2026-10-16T12:00:00Z' }, now)).toBe(false);
+    expect(isRequestExpired({ status: 'PAID', expiresAt: '2026-10-14T12:00:00Z' }, now)).toBe(false);
+  });
+});

@@ -59,9 +59,15 @@ export default async function PagosPage({ searchParams }: { searchParams: Paymen
         title={t('title')}
         subtitle={t('subtitle')}
         actions={
-          rows.length > 0 ? (
-            <Badge tone="neutral">{t('total', { n: rows.length, amount: money(totalOf(rows), currency) })}</Badge>
-          ) : undefined
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Quien confirma no es quien pidió el cobro: la bandeja es su entrada. */}
+            <Link href="/pagos/solicitudes" className="text-[14px] font-medium text-k-purple hover:underline">
+              {t('requests.queue')}
+            </Link>
+            {rows.length > 0 && (
+              <Badge tone="neutral">{t('total', { n: rows.length, amount: money(totalOf(rows), currency) })}</Badge>
+            )}
+          </div>
         }
       />
 

@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsDateString, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Length, Matches, Max, Min } from 'class-validator';
-import { PaymentChannel, PaymentMethod } from '@prisma/client';
+import { PaymentChannel, PaymentMethod, PaymentRequestStatus } from '@prisma/client';
 import { CREDIT_SOURCES, type CreditSource } from '@kobrax/shared';
 
 /** Las columnas del ledger que se pueden ordenar. Son campos propios de `payments`, no de relaciones. */
@@ -58,6 +58,16 @@ export class ListPaymentsQueryDto {
    */
   @IsOptional() @IsIn(PAYMENT_SORTS) sort?: PaymentSort;
   @IsOptional() @IsIn(['asc', 'desc']) dir?: 'asc' | 'desc';
+}
+
+export class ListPaymentRequestsQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit?: number;
+  /** `PENDING` es la bandeja «por confirmar». */
+  @IsOptional() @IsEnum(PaymentRequestStatus) status?: PaymentRequestStatus;
+  @IsOptional() @IsUUID() creditId?: string;
+  /** Quién pidió el cobro. */
+  @IsOptional() @IsUUID() createdBy?: string;
 }
 
 export class CreatePaymentRequestDto {

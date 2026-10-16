@@ -2110,6 +2110,30 @@
         "confirmed": "Request confirmed",
         "noApprove": "Your role cannot confirm requests."
       },
+      "requests": {
+        "listTitle": "Requested payments",
+        "listSubtitle": "The QR codes and links sent to debtors. Pending ones wait for you to confirm the money came in.",
+        "title": "Requested payments",
+        "entity": "requested payments",
+        "empty": "No payments to confirm",
+        "emptyText": "When someone requests a payment by QR or link, it shows up here.",
+        "noResults": "No payments with that status",
+        "noResultsText": "Try another status.",
+        "expired": "Past 24 h",
+        "columns": {
+          "createdAt": "Requested",
+          "debtor": "Debtor and credit",
+          "amount": "Amount",
+          "method": "Method",
+          "createdBy": "Requested by",
+          "status": "Status"
+        },
+        "filters": {
+          "status": "Status",
+          "all": "All"
+        },
+        "queue": "Requested payments"
+      },
       "method": {
         "CASH": "Cash",
         "TRANSFER": "Transfer",

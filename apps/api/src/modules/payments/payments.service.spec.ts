@@ -344,3 +344,76 @@ describe('PaymentsService.register · cobro dentro de una visita (F4/12)', () =>
     assert.equal(otherCredit.calls.create.length, 0);
   });
 });
+
+describe('PaymentsService.listRequests — la bandeja', () => {
+  function makeRequests(rows: unknown[], credits: unknown[] = []) {
+    const calls: { where?: Record<string, unknown>; orderBy?: unknown; creditQueries: number } = { creditQueries: 0 };
+    const tx = {
+      paymentRequest: {
+        findMany: async (a: { where: Record<string, unknown>; orderBy: unknown }) => {
+          calls.where = a.where;
+          calls.orderBy = a.orderBy;
+          return rows;
+        },
+        count: async () => rows.length,
+      },
+      credit: {
+        findMany: async () => {
+          calls.creditQueries += 1;
+          return credits;
+        },
+      },
+      userAccount: { findMany: async () => [] },
+    };
+    const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
+    const service = new PaymentsService(prisma as never, { accountId: 'acc-A' } as never, {} as never, {} as never, {} as never);
+    return { service, calls };
+  }
+
+  const base = { amount: 100, method: 'QR', status: 'PENDING', createdAt: new Date(), expiresAt: new Date(), createdBy: null, paidPaymentId: null };
+
+  it('filtra por estado, crédito y quien lo pidió; lo último pedido primero', async () => {
+    const { service, calls } = makeRequests([]);
+    await service.listRequests({ status: 'PENDING' as never, creditId: 'cr1', createdBy: 'u9' });
+    assert.deepEqual(calls.where, { status: 'PENDING', creditId: 'cr1', createdBy: 'u9' });
+    assert.deepEqual(calls.orderBy, { createdAt: 'desc' });
+  });
+
+  it('sin filtros no manda `where` de más', async () => {
+    const { service, calls } = makeRequests([]);
+    await service.listRequests({});
+    assert.deepEqual(calls.where, {});
+  });
+
+  it('🔴 resuelve crédito y deudor de la página en UNA consulta, no una por fila', async () => {
+    const rows = [
+      { ...base, id: 'r1', creditId: 'cr1' },
+      { ...base, id: 'r2', creditId: 'cr1' },
+      { ...base, id: 'r3', creditId: 'cr2' },
+    ];
+    const credits = [
+      { id: 'cr1', code: 'CR-1', client: { firstName: 'Ana', lastName: 'Rojas', businessName: null } },
+      { id: 'cr2', code: 'CR-2', client: { firstName: null, lastName: null, businessName: 'Tienda Sol' } },
+    ];
+    const { service, calls } = makeRequests(rows, credits);
+    const out = await service.listRequests({});
+    assert.equal(calls.creditQueries, 1);
+    assert.equal(out.data![0]!.creditCode, 'CR-1');
+    assert.equal(out.data![0]!.clientName, 'Ana Rojas');
+    assert.equal(out.data![2]!.clientName, 'Tienda Sol');
+  });
+
+  it('una solicitud sin crédito no rompe ni consulta créditos', async () => {
+    const { service, calls } = makeRequests([{ ...base, id: 'r1', creditId: null }]);
+    const out = await service.listRequests({});
+    assert.equal(calls.creditQueries, 0);
+    assert.equal(out.data![0]!.creditCode, undefined);
+  });
+
+  it('una solicitud vencida sigue PENDING: se puede confirmar', async () => {
+    const old = new Date(Date.now() - 3 * 86_400_000);
+    const { service } = makeRequests([{ ...base, id: 'r1', creditId: null, expiresAt: old }]);
+    const out = await service.listRequests({});
+    assert.equal(out.data![0]!.status, 'PENDING');
+  });
+});

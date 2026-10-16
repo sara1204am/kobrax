@@ -2110,6 +2110,30 @@
         "confirmed": "Cobro confirmado",
         "noApprove": "Tu rol no puede confirmar cobros."
       },
+      "requests": {
+        "listTitle": "Cobros pedidos",
+        "listSubtitle": "Los QR y links que se mandaron a los deudores. Lo pendiente espera que confirmes que la plata entró.",
+        "title": "Cobros pedidos",
+        "entity": "cobros pedidos",
+        "empty": "No hay cobros por confirmar",
+        "emptyText": "Cuando alguien pida un cobro por QR o link, aparece acá.",
+        "noResults": "No hay cobros con ese estado",
+        "noResultsText": "Probá con otro estado.",
+        "expired": "Pasó de las 24 h",
+        "columns": {
+          "createdAt": "Pedido",
+          "debtor": "Deudor y crédito",
+          "amount": "Monto",
+          "method": "Medio",
+          "createdBy": "Lo pidió",
+          "status": "Estado"
+        },
+        "filters": {
+          "status": "Estado",
+          "all": "Todos"
+        },
+        "queue": "Cobros pedidos"
+      },
       "method": {
         "CASH": "Efectivo",
         "TRANSFER": "Transferencia",

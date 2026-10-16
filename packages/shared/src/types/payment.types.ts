@@ -75,4 +75,14 @@ export interface PaymentRequestItem {
   reference?: string;
   qrPayload?: string;
   url?: string;
+  /** ISO. Pasada esa hora la solicitud sigue `PENDING` y se puede confirmar: el deudor puede pagar tarde. */
+  expiresAt?: string;
+  paidPaymentId?: string;
+  createdAt?: string;
+  /** Quién pidió el cobro, y su nombre (lo resuelve el servidor; no exige `user:read`). */
+  createdBy?: string;
+  createdByName?: string;
+  /** Código del crédito y nombre del deudor, resueltos por el servidor para la bandeja. */
+  creditCode?: string;
+  clientName?: string;
 }

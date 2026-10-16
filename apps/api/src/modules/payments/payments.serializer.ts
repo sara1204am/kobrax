@@ -24,7 +24,13 @@ export function serializePayment(p: Payment, names?: ReadonlyMap<string, string>
   };
 }
 
-export function serializePaymentRequest(r: PaymentRequest) {
+export interface PaymentRequestLabels {
+  names?: ReadonlyMap<string, string>;
+  creditCode?: string;
+  clientName?: string;
+}
+
+export function serializePaymentRequest(r: PaymentRequest, labels: PaymentRequestLabels = {}) {
   return {
     id: r.id,
     creditId: r.creditId ?? undefined,
@@ -38,5 +44,10 @@ export function serializePaymentRequest(r: PaymentRequest) {
     expiresAt: r.expiresAt ?? undefined,
     paidPaymentId: r.paidPaymentId ?? undefined,
     createdAt: r.createdAt,
+    createdBy: r.createdBy ?? undefined,
+    // Sólo el nombre: quien confirma lo lee sin tener `user:read`.
+    createdByName: r.createdBy ? labels.names?.get(r.createdBy) : undefined,
+    creditCode: labels.creditCode,
+    clientName: labels.clientName,
   };
 }

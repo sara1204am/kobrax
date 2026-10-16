@@ -47,7 +47,7 @@ Leyenda: ✅ completo · 🟡 parcial / versión simple · — no existe · 🎯
 | Registrar un pago | ✅ | ✅ | Ambos | |
 | Lista de pagos del día y detalle | ✅ | 🟡 | Web | El móvil consulta por día y por crédito |
 | Cobro con QR de la cuenta del cobrador | — | ✅ | Móvil | |
-| Solicitudes de pago | 🟡 | — | Web | En la web no se distinguió de la lista; no verificada |
+| Solicitudes de pago (bandeja «por confirmar») | ✅ | — | Web | `/pagos/solicitudes` lista lo pendiente; la API tiene `GET /payment-requests` |
 
 ## 4. Mora y gestión
 

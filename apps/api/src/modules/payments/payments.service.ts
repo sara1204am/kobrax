@@ -11,7 +11,7 @@ import { EventBusService, DomainEvent } from '../../common/events/event-bus.serv
 import { applyPayment, creditPatchAfterPayment } from './payment-apply';
 import { loadNames } from '../mora/mora-names';
 import { serializePayment, serializePaymentRequest } from './payments.serializer';
-import { ConfirmPaymentRequestDto, CreatePaymentDto, CreatePaymentRequestDto, ListPaymentsQueryDto } from './dto/payment.dto';
+import { ConfirmPaymentRequestDto, CreatePaymentDto, CreatePaymentRequestDto, ListPaymentRequestsQueryDto, ListPaymentsQueryDto } from './dto/payment.dto';
 import { creditNotActive, paymentDuplicate, paymentInvalid, requestNotPending, resourceNotFound } from './payments.errors';
 
 const round2 = (x: number): number => Math.round(x * 100) / 100;
@@ -286,6 +286,50 @@ export class PaymentsService {
     );
     await this.audit.record({ entity: 'payment_request', entityId: req.id, action: 'CREATE', after: { amount: Number(req.amount), method: req.method } });
     return serializePaymentRequest(req);
+  }
+
+  /**
+   * La bandeja de cobros pedidos. Antes sólo se podía leer uno por id, así que quien confirma no tenía
+   * dónde ver qué esperaba. Lo último pedido primero.
+   *
+   * ⚠️ `status` es el guardado: una solicitud vencida (`expiresAt` pasado) sigue `PENDING` y se puede
+   * confirmar — el deudor puede pagar pasadas las 24 h y la plata entró igual. La fila lleva `expiresAt`
+   * para que la pantalla lo diga.
+   */
+  async listRequests(query: ListPaymentRequestsQueryDto) {
+    const { page, limit, skip } = resolvePagination(query);
+    const where: Prisma.PaymentRequestWhereInput = {};
+    if (query.status) where.status = query.status;
+    if (query.creditId) where.creditId = query.creditId;
+    if (query.createdBy) where.createdBy = query.createdBy;
+
+    const [rows, total, names, credits] = await this.tx(async (tx) => {
+      const [found, count] = await Promise.all([
+        tx.paymentRequest.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
+        tx.paymentRequest.count({ where }),
+      ]);
+      // Crédito y cliente de la página: UNA consulta, sin N+1. La solicitud no tiene relación con ellos.
+      const creditIds = [...new Set(found.map((r) => r.creditId).filter((id): id is string => !!id))];
+      const creditRows = creditIds.length
+        ? await tx.credit.findMany({
+            where: { id: { in: creditIds } },
+            select: { id: true, code: true, client: { select: { firstName: true, lastName: true, businessName: true } } },
+          })
+        : [];
+      return [found, count, await loadNames(tx, this.tenant.accountId, found.map((r) => r.createdBy)), creditRows] as const;
+    });
+
+    const byCredit = new Map(credits.map((c) => [c.id, c]));
+    return ResponseDto.paginated(
+      rows.map((r) => {
+        const c = r.creditId ? byCredit.get(r.creditId) : undefined;
+        const clientName = c ? c.client.businessName ?? ([c.client.firstName, c.client.lastName].filter(Boolean).join(' ') || undefined) : undefined;
+        return serializePaymentRequest(r, { names, creditCode: c?.code ?? undefined, clientName });
+      }),
+      total,
+      page,
+      limit,
+    );
   }
 
   async getRequest(id: string) {

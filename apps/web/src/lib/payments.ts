@@ -108,3 +108,35 @@ export function totalOf(payments: PaymentItem[]): number {
 // `isUuid` se mudó a `lib/uuid.ts` cuando apareció su tercer consumidor (el dashboard). Se
 // re-exporta para no tocar las tres pantallas de pagos que ya lo importan de acá.
 export { isUuid } from './uuid';
+
+/** Lo que la bandeja de cobros pedidos sabe leer de la URL. */
+export interface RequestParams {
+  /** `PENDING` (por confirmar) si no dice otra cosa; `ALL` los trae todos. */
+  status?: string;
+  page?: string;
+  pageSize?: string;
+}
+
+const REQUEST_STATUSES = ['PENDING', 'PAID', 'EXPIRED', 'CANCELLED'] as const;
+
+/** El estado que se está mirando. La bandeja abre en lo que falta confirmar, que es para lo que existe. */
+export function requestStatus(params: RequestParams): (typeof REQUEST_STATUSES)[number] | 'ALL' {
+  if (params.status === 'ALL') return 'ALL';
+  return REQUEST_STATUSES.find((s) => s === params.status) ?? 'PENDING';
+}
+
+/** La query para `GET /payment-requests`. Sólo viaja lo que el DTO acepta: un valor de más es un 400. */
+export function requestQuery(params: RequestParams): URLSearchParams {
+  const query = new URLSearchParams({
+    page: String(Math.max(1, Number(params.page) || 1)),
+    limit: String(paymentLimit(params)),
+  });
+  const status = requestStatus(params);
+  if (status !== 'ALL') query.set('status', status);
+  return query;
+}
+
+/** ¿Venció? Sigue `PENDING` y se puede confirmar: el deudor puede pagar pasadas las 24 h. */
+export function isRequestExpired(r: { status: string; expiresAt?: string }, now = new Date()): boolean {
+  return r.status === 'PENDING' && !!r.expiresAt && new Date(r.expiresAt).getTime() < now.getTime();
+}
