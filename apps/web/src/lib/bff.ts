@@ -59,6 +59,24 @@ function sessionChangedResult(): { status: number; body: ApiEnvelope<never> } {
 }
 
 /** Llama a la API. `auth` adjunta el access token (cookie) como Bearer. */
+/**
+ * Le pasa a la API quién llama de verdad. Sin esto la API sólo ve al servidor de Next (127.0.0.1 y el
+ * user-agent de Node): el historial de conexiones de cada persona diría «Dispositivo desconocido» desde
+ * la misma IP, y el límite de intentos de login contaría a todo el mundo junto. La API sólo cree en
+ * `X-Forwarded-For` si viene de loopback (`trust proxy`), así que un cliente de internet no lo puede falsear.
+ */
+function forwardClient(out: Headers): void {
+  try {
+    const incoming = requestHeaders();
+    const ua = incoming.get('user-agent');
+    const xff = incoming.get('x-forwarded-for');
+    if (ua) out.set('user-agent', ua);
+    if (xff) out.set('x-forwarded-for', xff);
+  } catch {
+    // Fuera de un pedido (un test, un script): no hay nada que reenviar.
+  }
+}
+
 export async function apiCall<T>(
   path: string,
   init: RequestInit & { auth?: boolean } = {},
@@ -66,6 +84,7 @@ export async function apiCall<T>(
   const headers = new Headers(init.headers);
   headers.set('content-type', 'application/json');
   headers.set('x-client-type', 'web');
+  forwardClient(headers);
   if (init.auth) {
     const access = cookies().get(COOKIE.access)?.value;
     if (access) {

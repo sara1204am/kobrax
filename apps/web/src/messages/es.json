@@ -3140,7 +3140,8 @@
       "member": "Miembro",
       "role": "Rol",
       "status": "Estado",
-      "actions": "Acciones"
+      "actions": "Acciones",
+      "lastAccess": "Último acceso"
     },
     "status": {
       "active": "Activo",
@@ -3170,11 +3171,14 @@
       "error": "No se pudo invitar",
       "doneTitle": "Invitación creada",
       "done": "Listo",
-      "sentTo": "Le enviamos un correo a {email}. Este es su código:",
+      "sentTo": "También puedes compartir el código con {email} si no recibe el correo.",
       "copy": "Copiar",
       "copied": "Copiado",
       "copyFailed": "Tu navegador no dejó copiar. Selecciona el código a mano.",
-      "howTo": "Si el correo no llega, puede entrar con este código desde <link>la página de invitación</link>."
+      "howTo": "Si el correo no llega, puede entrar con este código desde <link>la página de invitación</link>.",
+      "sentTitle": "La invitación se ha enviado correctamente.",
+      "codeLabel": "Código de invitación",
+      "expires": "Este código expira en 7 días."
     },
     "confirm": {
       "deactivate": {
@@ -3185,7 +3189,11 @@
       "reactivate": {
         "title": "Reactivar a {name}",
         "text": "Vuelve a entrar con su contraseña de siempre y con el mismo rol.",
-        "ok": "Reactivar"
+        "ok": "Reactivar",
+        "lead": "Al reactivar este usuario:",
+        "access": "Volverá a tener acceso al sistema",
+        "seat": "Ocupará un asiento del plan",
+        "seatOf": "Ocupará un asiento del plan ({used} de {max})"
       },
       "remove": {
         "title": "Cancelar la invitación de {name}",
@@ -3200,15 +3208,168 @@
       "SUPERVISOR": "Supervisor",
       "COLLECTOR": "Cobrador",
       "AUDITOR": "Auditor",
-      "VIEWER": "Consulta"
+      "VIEWER": "Consulta",
+      "ACCOUNT_ADMINHint": "Administra cuenta, equipo y plan",
+      "SUPERVISORHint": "Gestiona cobranza y su agencia",
+      "COLLECTORHint": "Ejecuta rutas y registra pagos",
+      "MANAGERHint": "Supervisa la operación",
+      "AUDITORHint": "Consulta y audita",
+      "VIEWERHint": "Solo consulta",
+      "SUPER_ADMINHint": "Acceso total"
     },
     "transfer": {
-      "title": "Pasar el trabajo de {name}",
-      "text": "{name} tiene {agenda} gestiones pendientes, {credits} créditos a su cargo y {routes} rutas. Antes de desactivarla hay que pasarlos a otra persona.",
-      "target": "Pasárselos a",
+      "title": "Desactivar usuario",
+      "text": "Esta persona tiene trabajo pendiente que debe ser reasignado antes de desactivarla.",
+      "credits": "Créditos a su cargo",
+      "agenda": "Gestiones pendientes",
+      "routes": "Rutas planificadas",
+      "target": "Reasignar a",
       "pick": "Elige a una persona",
-      "confirm": "Pasar y desactivar",
-      "nobody": "No hay otro cobrador o supervisor activo a quien pasárselos."
+      "confirm": "Reasignar y desactivar",
+      "nobody": "No hay otro cobrador o supervisor activo a quien pasárselos.",
+      "ack": "Confirmo que quiero reasignar todo el trabajo pendiente y desactivar a esta persona."
+    },
+    "you": "Tú",
+    "planCard": {
+      "plan": "Plan actual",
+      "active": "usuarios activos",
+      "more": "¿Necesitas más usuarios?",
+      "link": "Ver planes"
+    },
+    "lastAccess": {
+      "invited": "Invitación enviada",
+      "never": "Nunca",
+      "today": "Hoy, {time}",
+      "yesterday": "Ayer, {time}"
+    },
+    "detail": {
+      "breadcrumb": "Ruta de navegación",
+      "sections": "Secciones del miembro",
+      "tabs": {
+        "info": "Información",
+        "activity": "Actividad",
+        "connections": "Conexiones",
+        "audit": "Auditoría"
+      },
+      "joined": "Se unió el {date}",
+      "lastAccess": "Último acceso {when}",
+      "changeRole": "Cambiar rol",
+      "dataTitle": "Datos del usuario",
+      "firstName": "Nombre",
+      "lastName": "Apellido",
+      "email": "Correo electrónico",
+      "joinedAt": "Fecha de incorporación",
+      "branch": "Oficina asignada",
+      "noBranch": "Sin oficina asignada",
+      "readOnly": "Estos datos los mantiene la propia persona. Desde aquí solo puedes cambiar su rol y su estado.",
+      "activityTitle": "Resumen de actividad",
+      "period": "Período",
+      "lastDays": "Últimos {days} días",
+      "metrics": {
+        "activities": "Gestiones",
+        "payments": "Pagos registrados",
+        "routes": "Rutas completadas",
+        "activeDays": "Días activos",
+        "actions": "Acciones en el panel",
+        "logins": "Inicios de sesión"
+      },
+      "recent": "Actividad reciente",
+      "noActivity": "Sin actividad en este período",
+      "noActivityHint": "Cuando haga gestiones, cobros o rutas aparecerán aquí.",
+      "noActivityAdminHint": "Cuando haga cambios en el panel aparecerán aquí.",
+      "client": "Cliente: {name}",
+      "events": {
+        "activity": {
+          "CALL": "Hizo una llamada",
+          "VISIT": "Visitó a un cliente",
+          "MESSAGE": "Envió un mensaje",
+          "NOTE": "Anotó una gestión",
+          "PAYMENT": "Registró un pago"
+        },
+        "payment": "Registró un pago",
+        "route": "Completó una ruta",
+        "admin": {
+          "other": "Hizo un cambio en el panel"
+        },
+        "verbs": {
+          "CREATE": "Creó {what}",
+          "UPDATE": "Actualizó {what}",
+          "DELETE": "Eliminó {what}",
+          "ASSIGN": "Asignó {what}",
+          "GENERATE": "Generó {what}"
+        },
+        "entities": {
+          "user_account": "un miembro del equipo",
+          "payment": "un pago",
+          "credit": "un crédito",
+          "credit_note": "una nota de crédito",
+          "client": "un cliente",
+          "client_contact": "un contacto",
+          "route": "una ruta",
+          "route_stop": "una parada",
+          "agenda_item": "una visita de agenda",
+          "field_visit": "una visita",
+          "dashboard": "un tablero",
+          "upload": "un archivo",
+          "other": "un registro"
+        }
+      },
+      "connectionsTitle": "Historial de conexiones",
+      "noConnections": "Todavía no hay accesos",
+      "noConnectionsHint": "Aparecerán cuando inicie sesión.",
+      "connectionsNote": "Se muestran los accesos exitosos. La ubicación es aproximada y la IP está parcialmente oculta.",
+      "unknownDevice": "Dispositivo desconocido",
+      "mobile": "móvil",
+      "success": "Exitoso",
+      "cols": {
+        "when": "Fecha y hora",
+        "device": "Dispositivo",
+        "place": "Ubicación",
+        "ip": "IP",
+        "result": "Estado",
+        "event": "Evento",
+        "detail": "Detalle",
+        "by": "Realizado por"
+      },
+      "auditTitle": "Historial de cambios",
+      "noAudit": "Sin cambios registrados",
+      "noAuditHint": "Los cambios de rol, estado e invitación aparecerán aquí.",
+      "system": "Sistema",
+      "audit": {
+        "INVITED": {
+          "title": "Invitación enviada",
+          "text": "Se invitó a la persona como {role}."
+        },
+        "INVITATION_RESENT": {
+          "title": "Invitación reenviada",
+          "text": "Se envió un código nuevo; el anterior dejó de servir."
+        },
+        "INVITATION_ACCEPTED": {
+          "title": "Invitación aceptada",
+          "text": "La persona aceptó la invitación."
+        },
+        "ROLE_CHANGED": {
+          "title": "Cambio de rol",
+          "text": "Rol cambiado de {from} a {to}."
+        },
+        "DEACTIVATED": {
+          "title": "Usuario desactivado",
+          "text": "La cuenta fue desactivada."
+        },
+        "REACTIVATED": {
+          "title": "Usuario activado",
+          "text": "La cuenta fue activada."
+        },
+        "WORK_REASSIGNED": {
+          "title": "Trabajo reasignado",
+          "text": "Se pasaron {credits} créditos, {agenda} gestiones y {routes} rutas a otra persona."
+        }
+      },
+      "table": {
+        "loading": "Cargando…",
+        "retry": "No se pudo cargar. Reintentar",
+        "end": "{count, plural, one {# registro} other {# registros}} en total"
+      }
     }
   },
   "profile": {

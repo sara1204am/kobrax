@@ -17,6 +17,7 @@ import { useTranslations } from 'next-intl';
  *   este flujo la llevan; el día que una no la quiera, ahí se agrega la prop.
  * - `primary` — navy sólido, para acciones secundarias con peso.
  * - `ghost` — borde, para lo terciario.
+ * - `danger` — rojo sólido, para confirmar lo destructivo (desactivar, eliminar).
  */
 export function Button({
   children,
@@ -25,11 +26,12 @@ export function Button({
   className = '',
   disabled,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean; variant?: 'cta' | 'primary' | 'ghost' }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean; variant?: 'cta' | 'primary' | 'ghost' | 'danger' }) {
   const styles = {
     cta: 'h-[52px] bg-k-cta text-white shadow-k-card hover:brightness-110 active:scale-[.99]',
     primary: 'h-12 bg-k-navy text-white hover:bg-k-slate active:scale-[.98]',
     ghost: 'h-12 bg-white text-k-text-2 border border-k-border hover:bg-k-bg',
+    danger: 'h-12 bg-k-danger text-white hover:brightness-110 active:scale-[.98]',
   }[variant];
 
   return (
