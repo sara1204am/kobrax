@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import { createValidationPipe } from './common/validation/validation-pipe';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module';
@@ -12,7 +13,11 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
 import { SocketIoAdapter } from './common/ws/socket-io.adapter';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // La IP del cliente llega en `X-Forwarded-For`, y sólo se le cree a quien está en el mismo equipo (el proxy y el BFF de la
+  // web viven en loopback; 3000 y 4010 están cerrados a internet). Sin esto `req.ip` era siempre 127.0.0.1: el historial de
+  // conexiones y el límite de intentos de login veían a todo el mundo como la misma persona.
+  app.set('trust proxy', 'loopback');
   const config = app.get(AppConfigService);
   const logger = new Logger('Bootstrap');
 

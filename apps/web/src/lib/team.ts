@@ -1,5 +1,6 @@
 import { RoleType, isMobileRole, memberName, memberStatus, type Member } from '@kobrax/shared';
 import { matchesText } from './portfolio';
+import { DISPLAY_TIME_ZONE } from './format';
 import { PAGE_SIZES } from './table-prefs';
 
 /**
@@ -30,8 +31,11 @@ export function teamLimit(params: TeamParams): number {
   return PAGE_SIZES.includes(Number(params.pageSize)) ? Number(params.pageSize) : DEFAULT_PAGE_SIZE;
 }
 
-/** Las columnas que esta tabla sabe ordenar. El estado no: alfabético no dice nada útil. */
-const SORTS = ['name', 'role'] as const;
+/** Las columnas que esta tabla sabe ordenar. */
+const SORTS = ['name', 'role', 'status'] as const;
+
+/** El estado se ordena por prioridad (activo → pendiente → inactivo), no alfabético: «Activo, Inactivo, Pendiente» no dice nada útil. */
+const STATUS_RANK = { active: 0, pending: 1, inactive: 2 } as const;
 
 export function hasTeamFilters(params: TeamParams): boolean {
   return Boolean(params.q?.trim() || params.role || params.status);
@@ -60,8 +64,12 @@ export function teamView(
 
   if ((SORTS as readonly string[]).includes(params.sort ?? '')) {
     const factor = params.dir === 'desc' ? -1 : 1;
-    const key = (m: Member) => (params.sort === 'role' ? m.roleName : memberName(m));
-    found = [...found].sort((a, b) => key(a).localeCompare(key(b)) * factor);
+    const text = (m: Member) => (params.sort === 'role' ? m.roleName : memberName(m));
+    const cmp =
+      params.sort === 'status'
+        ? (a: Member, b: Member) => STATUS_RANK[memberStatus(a)] - STATUS_RANK[memberStatus(b)] || memberName(a).localeCompare(memberName(b))
+        : (a: Member, b: Member) => text(a).localeCompare(text(b));
+    found = [...found].sort((a, b) => cmp(a, b) * factor);
   }
 
   const limit = teamLimit(params);
@@ -130,4 +138,16 @@ export function memberActions(
     // Reenviar pide `user:invite`, no `user:write`: es la misma acción que invitar.
     resend: !self && canInvite && pending,
   };
+}
+
+/**
+ * Cuántos días de calendario pasaron entre `iso` y `now`, en la zona del panel (no la del servidor ni
+ * la del navegador: sin eso «Hoy» y «Ayer» dependen de dónde se dibuje). 0 = hoy, 1 = ayer.
+ */
+export function daysAgo(iso: string, now: Date = new Date(), timeZone = DISPLAY_TIME_ZONE): number {
+  const day = (d: Date) => {
+    const [y, m, dd] = new Intl.DateTimeFormat('en-CA', { timeZone }).format(d).split('-').map(Number);
+    return Date.UTC(y, m - 1, dd);
+  };
+  return Math.round((day(now) - day(new Date(iso))) / 86_400_000);
 }

@@ -3140,7 +3140,8 @@
       "member": "Member",
       "role": "Role",
       "status": "Status",
-      "actions": "Actions"
+      "actions": "Actions",
+      "lastAccess": "Last access"
     },
     "status": {
       "active": "Active",
@@ -3170,11 +3171,14 @@
       "error": "Could not send the invitation",
       "doneTitle": "Invitation created",
       "done": "Done",
-      "sentTo": "We emailed {email}. This is their code:",
+      "sentTo": "You can also share the code with {email} if they do not get the email.",
       "copy": "Copy",
       "copied": "Copied",
       "copyFailed": "Your browser would not copy. Select the code by hand.",
-      "howTo": "If the email does not arrive, they can join with this code from <link>the invitation page</link>."
+      "howTo": "If the email does not arrive, they can join with this code from <link>the invitation page</link>.",
+      "sentTitle": "The invitation was sent successfully.",
+      "codeLabel": "Invitation code",
+      "expires": "This code expires in 7 days."
     },
     "confirm": {
       "deactivate": {
@@ -3185,7 +3189,11 @@
       "reactivate": {
         "title": "Reactivate {name}",
         "text": "They sign in again with their usual password and the same role.",
-        "ok": "Reactivate"
+        "ok": "Reactivate",
+        "lead": "By reactivating this user:",
+        "access": "They will regain access to the system",
+        "seat": "They will take up a plan seat",
+        "seatOf": "They will take up a plan seat ({used} of {max})"
       },
       "remove": {
         "title": "Cancel {name}'s invitation",
@@ -3200,15 +3208,168 @@
       "SUPERVISOR": "Supervisor",
       "COLLECTOR": "Collector",
       "AUDITOR": "Auditor",
-      "VIEWER": "Viewer"
+      "VIEWER": "Viewer",
+      "ACCOUNT_ADMINHint": "Manages account, team and plan",
+      "SUPERVISORHint": "Manages collections and their agency",
+      "COLLECTORHint": "Runs routes and records payments",
+      "MANAGERHint": "Oversees operations",
+      "AUDITORHint": "Views and audits",
+      "VIEWERHint": "View only",
+      "SUPER_ADMINHint": "Full access"
     },
     "transfer": {
-      "title": "Hand over {name}'s work",
-      "text": "{name} has {agenda} pending tasks, {credits} credits and {routes} routes. They must be handed to someone else before deactivating.",
-      "target": "Hand them to",
-      "pick": "Choose a person",
-      "confirm": "Hand over and deactivate",
-      "nobody": "There is no other active collector or supervisor to hand them to."
+      "title": "Deactivate user",
+      "text": "This person has pending work that must be reassigned before deactivating them.",
+      "credits": "Credits in their care",
+      "agenda": "Pending activities",
+      "routes": "Planned routes",
+      "target": "Reassign to",
+      "pick": "Pick a person",
+      "confirm": "Reassign and deactivate",
+      "nobody": "There is no other active collector or supervisor to hand it to.",
+      "ack": "I confirm I want to reassign all pending work and deactivate this person."
+    },
+    "you": "You",
+    "planCard": {
+      "plan": "Current plan",
+      "active": "active users",
+      "more": "Need more users?",
+      "link": "See plans"
+    },
+    "lastAccess": {
+      "invited": "Invitation sent",
+      "never": "Never",
+      "today": "Today, {time}",
+      "yesterday": "Yesterday, {time}"
+    },
+    "detail": {
+      "breadcrumb": "Breadcrumb",
+      "sections": "Member sections",
+      "tabs": {
+        "info": "Information",
+        "activity": "Activity",
+        "connections": "Connections",
+        "audit": "Audit"
+      },
+      "joined": "Joined on {date}",
+      "lastAccess": "Last access {when}",
+      "changeRole": "Change role",
+      "dataTitle": "User details",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "email": "Email",
+      "joinedAt": "Join date",
+      "branch": "Assigned office",
+      "noBranch": "No office assigned",
+      "readOnly": "These details are maintained by the person themselves. From here you can only change their role and status.",
+      "activityTitle": "Activity summary",
+      "period": "Period",
+      "lastDays": "Last {days} days",
+      "metrics": {
+        "activities": "Activities",
+        "payments": "Payments recorded",
+        "routes": "Routes completed",
+        "activeDays": "Active days",
+        "actions": "Actions in the panel",
+        "logins": "Sign-ins"
+      },
+      "recent": "Recent activity",
+      "noActivity": "No activity in this period",
+      "noActivityHint": "Their activities, payments and routes will show up here.",
+      "noActivityAdminHint": "Changes they make in the panel will show up here.",
+      "client": "Client: {name}",
+      "events": {
+        "activity": {
+          "CALL": "Made a call",
+          "VISIT": "Visited a client",
+          "MESSAGE": "Sent a message",
+          "NOTE": "Logged an activity",
+          "PAYMENT": "Recorded a payment"
+        },
+        "payment": "Recorded a payment",
+        "route": "Completed a route",
+        "admin": {
+          "other": "Made a change in the panel"
+        },
+        "verbs": {
+          "CREATE": "Created {what}",
+          "UPDATE": "Updated {what}",
+          "DELETE": "Deleted {what}",
+          "ASSIGN": "Assigned {what}",
+          "GENERATE": "Generated {what}"
+        },
+        "entities": {
+          "user_account": "a team member",
+          "payment": "a payment",
+          "credit": "a credit",
+          "credit_note": "a credit note",
+          "client": "a client",
+          "client_contact": "a contact",
+          "route": "a route",
+          "route_stop": "a stop",
+          "agenda_item": "an agenda visit",
+          "field_visit": "a visit",
+          "dashboard": "a dashboard",
+          "upload": "a file",
+          "other": "a record"
+        }
+      },
+      "connectionsTitle": "Connection history",
+      "noConnections": "No sign-ins yet",
+      "noConnectionsHint": "They will appear once the person signs in.",
+      "connectionsNote": "Successful sign-ins are shown. Location is approximate and the IP is partially hidden.",
+      "unknownDevice": "Unknown device",
+      "mobile": "mobile",
+      "success": "Successful",
+      "cols": {
+        "when": "Date and time",
+        "device": "Device",
+        "place": "Location",
+        "ip": "IP",
+        "result": "Status",
+        "event": "Event",
+        "detail": "Detail",
+        "by": "Done by"
+      },
+      "auditTitle": "Change history",
+      "noAudit": "No changes recorded",
+      "noAuditHint": "Role, status and invitation changes will appear here.",
+      "system": "System",
+      "audit": {
+        "INVITED": {
+          "title": "Invitation sent",
+          "text": "The person was invited as {role}."
+        },
+        "INVITATION_RESENT": {
+          "title": "Invitation resent",
+          "text": "A new code was sent; the previous one stopped working."
+        },
+        "INVITATION_ACCEPTED": {
+          "title": "Invitation accepted",
+          "text": "The person accepted the invitation."
+        },
+        "ROLE_CHANGED": {
+          "title": "Role change",
+          "text": "Role changed from {from} to {to}."
+        },
+        "DEACTIVATED": {
+          "title": "User deactivated",
+          "text": "The account was deactivated."
+        },
+        "REACTIVATED": {
+          "title": "User activated",
+          "text": "The account was activated."
+        },
+        "WORK_REASSIGNED": {
+          "title": "Work reassigned",
+          "text": "{credits} credits, {agenda} activities and {routes} routes were handed to another person."
+        }
+      },
+      "table": {
+        "loading": "Loading…",
+        "retry": "Couldn't load. Retry",
+        "end": "{count, plural, one {# record} other {# records}} in total"
+      }
     }
   },
   "profile": {
