@@ -41,6 +41,10 @@
       "pending": "{n, plural, one {# gestión pendiente} other {# gestiones pendientes}}"
     },
     "crumbs": {
+      "general": "General",
+      "plan": "Plan",
+      "cobranza": "Cobranza",
+      "mensajes": "Mensajes",
       "password": "Contraseña",
       "mfa": "Verificación en dos pasos",
       "sessions": "Sesiones activas",
@@ -2233,6 +2237,13 @@
   "account": {
     "title": "Cuenta",
     "subtitle": "Tu plan, y los datos del negocio que salen en los comprobantes y en las invitaciones.",
+    "tabs": {
+      "label": "Secciones de la cuenta",
+      "general": "General",
+      "plan": "Plan",
+      "cobranza": "Cobranza",
+      "mensajes": "Mensajes"
+    },
     "businessData": "Datos del negocio",
     "financialData": "Configuración financiera",
     "decimals": "Decimales de los montos",
@@ -2352,6 +2363,17 @@
       "PROFESSIONAL": "${perSeat, number} por miembro al mes",
       "BUSINESS": "${base, number} + ${perSeat, number} por miembro al mes",
       "ENTERPRISE": "A medida"
+    },
+    "summary": {
+      "plan": "Plan",
+      "state": "Estado",
+      "members": "Miembros",
+      "trialLeft": "{n, plural, =0 {La prueba vence hoy} one {La prueba vence mañana} other {La prueba vence en # días}}",
+      "trialUntil": "Hasta el {date}. Después pasa a Free y no se borra nada."
+    },
+    "frozen": {
+      "title": "Tu cuenta superó {n, plural, one {un tope} other {# topes}} de su plan",
+      "text": "Puedes seguir cobrando con lo que ya tienes, pero no sumar más en: {limits}."
     },
     "seats": "Miembros del equipo",
     "seatsValue": "{used, number} de {max, number}",

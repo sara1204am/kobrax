@@ -250,6 +250,21 @@ describe('AccountsService.findMine', () => {
     assert.equal('limitsOverride' in res, false, 'lo negociado con ese cliente es interno');
   });
 
+  it('trialEndsAt sale sólo mientras la cuenta está en prueba', async () => {
+    const settings = { trialEndsAt: '2026-11-20T00:00:00.000Z' };
+    const trial = makeService({ found: account({ status: 'TRIAL', settings }) });
+    assert.equal((await trial.service.findMine()).trialEndsAt, '2026-11-20T00:00:00.000Z');
+
+    // Vencida: la constancia sigue en settings, pero la pantalla no debe contar días de una prueba que ya pasó.
+    const active = makeService({ found: account({ status: 'ACTIVE', settings }) });
+    assert.equal((await active.service.findMine()).trialEndsAt, null);
+  });
+
+  it('trialEndsAt con basura en settings cae a null', async () => {
+    const { service } = makeService({ found: account({ status: 'TRIAL', settings: { trialEndsAt: 'no-es-fecha' } }) });
+    assert.equal((await service.findMine()).trialEndsAt, null);
+  });
+
   it('404 si el tenant no existe', async () => {
     const { service } = makeService({ found: null });
     await rejectsWithCode(service.findMine(), 'ACCOUNT_NOT_FOUND');

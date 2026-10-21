@@ -41,6 +41,10 @@
       "pending": "{n, plural, one {# pending task} other {# pending tasks}}"
     },
     "crumbs": {
+      "general": "General",
+      "plan": "Plan",
+      "cobranza": "Collections",
+      "mensajes": "Messages",
       "password": "Password",
       "mfa": "Two-step verification",
       "sessions": "Active sessions",
@@ -2233,6 +2237,13 @@
   "account": {
     "title": "Account",
     "subtitle": "Your plan, and the business details that show up on receipts and invitations.",
+    "tabs": {
+      "label": "Account sections",
+      "general": "General",
+      "plan": "Plan",
+      "cobranza": "Collections",
+      "mensajes": "Messages"
+    },
     "businessData": "Business details",
     "financialData": "Financial settings",
     "decimals": "Amount decimals",
@@ -2352,6 +2363,17 @@
       "PROFESSIONAL": "${perSeat, number} per member per month",
       "BUSINESS": "${base, number} + ${perSeat, number} per member per month",
       "ENTERPRISE": "Tailored to you"
+    },
+    "summary": {
+      "plan": "Plan",
+      "state": "Status",
+      "members": "Members",
+      "trialLeft": "{n, plural, =0 {Trial ends today} one {Trial ends tomorrow} other {Trial ends in # days}}",
+      "trialUntil": "Until {date}. After that it moves to Free and nothing is deleted."
+    },
+    "frozen": {
+      "title": "Your account is over {n, plural, one {one limit} other {# limits}} of its plan",
+      "text": "You can keep collecting with what you already have, but you cannot add more in: {limits}."
     },
     "seats": "Team members",
     "seatsValue": "{used, number} of {max, number}",

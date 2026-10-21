@@ -8,6 +8,18 @@ function currencyDecimalsOf(settings: unknown): number {
 }
 
 /**
+ * Cuándo termina la prueba, **sólo mientras la cuenta está en prueba**. `trialEndsAt` se queda en
+ * `settings` como constancia aun después de vencida (ver `plan-lifecycle.service`), y devolverla
+ * entonces haría decir a la pantalla «vence en 0 días» de una cuenta que ya pasó a otro estado.
+ * Un valor que no es una fecha cae a `null`.
+ */
+function trialEndsAtOf(status: string, settings: unknown): string | null {
+  if (status !== 'TRIAL') return null;
+  const raw = (settings as { trialEndsAt?: unknown } | null)?.trialEndsAt;
+  return typeof raw === 'string' && !Number.isNaN(new Date(raw).getTime()) ? raw : null;
+}
+
+/**
  * Payload público del tenant.
  *
  * Los topes viajan **ya resueltos** —el plan con su excepción encima— y no como `planCode` +
@@ -36,6 +48,7 @@ export function serializeAccount(
     accountType: a.accountType,
     status: a.status,
     planCode: a.planCode,
+    trialEndsAt: trialEndsAtOf(a.status, a.settings),
     countryCode: a.countryCode,
     currencyCode: a.currencyCode,
     timezone: a.timezone,

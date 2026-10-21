@@ -17,6 +17,11 @@ export interface AccountInfo {
   accountType: string;
   status: string;
   planCode: string;
+  /**
+   * Cuándo termina la prueba de 30 días. Sólo viene con valor mientras `status` es `TRIAL`; en cualquier otro
+   * estado es `null`. Opcional para que un cliente viejo, que no lo conoce, siga compilando.
+   */
+  trialEndsAt?: string | null;
   countryCode: string;
   currencyCode: string;
   timezone: string | null;

@@ -6,7 +6,8 @@ import { PLANS, type AccountInfo } from '@kobrax/shared';
 import { server } from '@/test/msw-server';
 import { PermissionsProvider } from '@/components/permissions';
 import { ToastProvider } from '@/components/toast';
-import { BusinessForm } from './business-form';
+import { FinancialForm } from './financial-form';
+import { GeneralForm } from './general-form';
 
 const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }));
@@ -26,11 +27,15 @@ const ACCOUNT: AccountInfo = {
   usage: { users: 3, credits: 120, clients: 90, photosPerMonth: 40, actionsPerMonth: 12 },
 };
 
-function renderForm(permissions = ['account:read', 'account:write']) {
+function renderForm(
+  permissions = ['account:read', 'account:write'],
+  which: 'general' | 'financial' = 'general',
+) {
+  const Form = which === 'general' ? GeneralForm : FinancialForm;
   return render(
     <PermissionsProvider permissions={permissions}>
       <ToastProvider>
-        <BusinessForm account={ACCOUNT} />
+        <Form account={ACCOUNT} />
       </ToastProvider>
     </PermissionsProvider>,
   );
@@ -38,7 +43,7 @@ function renderForm(permissions = ['account:read', 'account:write']) {
 
 beforeEach(() => refresh.mockClear());
 
-describe('BusinessForm — sólo se manda lo que cambió', () => {
+describe('Cuenta · formularios — sólo se manda lo que cambió', () => {
   it('sin tocar nada, guardar está apagado', () => {
     renderForm();
     expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeDisabled();
@@ -92,7 +97,7 @@ describe('BusinessForm — sólo se manda lo que cambió', () => {
       }),
     );
 
-    renderForm();
+    renderForm(undefined, 'financial');
     await userEvent.selectOptions(screen.getByLabelText('País y moneda'), 'MX');
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
@@ -140,7 +145,7 @@ describe('BusinessForm — sólo se manda lo que cambió', () => {
       }),
     );
 
-    renderForm();
+    renderForm(undefined, 'financial');
     await userEvent.selectOptions(screen.getByLabelText(/Decimales de los montos/), '0');
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
@@ -185,7 +190,7 @@ describe('BusinessForm — sólo se manda lo que cambió', () => {
   });
 });
 
-describe('BusinessForm — sin permiso de escritura', () => {
+describe('Cuenta · formularios — sin permiso de escritura', () => {
   it('se ven los datos pero no hay con qué guardarlos', () => {
     renderForm(['account:read']);
     expect(screen.getByLabelText('Nombre del negocio')).toBeDisabled();

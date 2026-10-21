@@ -31,6 +31,13 @@ const MESSAGES: [string, Record<string, string | number>?][] = [
   ['resets', { month: 'septiembre' }],
   ['upgrade', { plan: 'Professional', users: 25, credits: 1000 }],
   ['upgradeTop', { plan: 'Enterprise' }],
+  ['summary.plan'],
+  ['summary.state'],
+  ['summary.members'],
+  ['summary.trialLeft', { n: 12 }],
+  ['summary.trialUntil', { date: '20 de noviembre de 2026' }],
+  ['frozen.title', { n: 2 }],
+  ['frozen.text', { limits: 'miembros y clientes' }],
   ...PLAN_ORDER.flatMap((code): [string, Record<string, string | number>?][] => [
     [`names.${code}`],
     [`support.${code}`],
@@ -57,6 +64,13 @@ describe('los textos del plan', () => {
     const t = createTranslator({ locale, messages, namespace: 'plans' });
     expect(t('months', { n: 1 })).toBe(locale === 'es' ? '1 mes' : '1 month');
     expect(t('months', { n: 6 })).toBe(locale === 'es' ? '6 meses' : '6 months');
+  });
+
+  it.each(LOCALES)('%s: la cuenta regresiva de la prueba distingue hoy, mañana y varios días', (locale, messages) => {
+    const t = createTranslator({ locale, messages, namespace: 'plans' });
+    expect(t('summary.trialLeft', { n: 0 })).toMatch(locale === 'es' ? /hoy/ : /today/);
+    expect(t('summary.trialLeft', { n: 1 })).toMatch(locale === 'es' ? /mañana/ : /tomorrow/);
+    expect(t('summary.trialLeft', { n: 12 })).toContain('12');
   });
 });
 
