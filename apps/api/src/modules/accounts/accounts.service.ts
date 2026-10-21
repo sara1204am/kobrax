@@ -168,6 +168,12 @@ export class AccountsService {
           countryCode: dto.countryCode,
           currencyCode: dto.currencyCode,
           timezone: dto.timezone,
+          logoUrl: dto.logoUrl,
+          phone: dto.phone,
+          email: dto.email,
+          website: dto.website,
+          address: dto.address,
+          city: dto.city,
           // Los decimales viven en `settings` (jsonb, junto a trialEndsAt y planAlerts): son una
           // preferencia, no una columna. Se mezcla, no se pisa — settings guarda más cosas.
           // El método de mora por defecto (D20) también es una preferencia de `settings`.

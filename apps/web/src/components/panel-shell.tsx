@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { AuthAccountOption, NotificationPayload } from '@kobrax/shared';
 import { LocaleSwitch } from './locale-switch';
+import { useAccountBrand } from './account-brand';
 import { crumbsFor, type NavItem, type NavKey } from '@/lib/nav';
 import { postJson } from '@/lib/client';
 import { notificationHref } from '@/lib/notifications';
@@ -349,6 +350,7 @@ function Topbar({
   const t = useTranslations('panel');
   const pathname = usePathname();
   const crumbs = crumbsFor(pathname);
+  const brand = useAccountBrand();
   const current = accounts.find((a) => a.id === user.accountId);
   /*
    * El selector aparece con más de una empresa **o cuando la activa no está en la lista**.
@@ -371,6 +373,16 @@ function Topbar({
         <Icon name="menu" />
       </button>
 
+      {brand?.logoUrl && (
+        // eslint-disable-next-line @next/next/no-img-element -- lo sirve el BFF con la sesión
+        <img
+          src={brand.logoUrl}
+          alt={brand.name}
+          className="hidden h-8 max-w-[120px] shrink-0 object-contain md:block"
+          // Si el archivo no está (cuenta cambiada, borrado a mano) se esconde en vez de dejar el ícono roto.
+          onError={(e) => (e.currentTarget.style.display = 'none')}
+        />
+      )}
       <nav aria-label={t('breadcrumb')} className="min-w-0 flex-1">
         <ol className="flex items-center gap-1.5 text-[14px]">
           {crumbs.map((crumb, i) => (

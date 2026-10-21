@@ -52,6 +52,12 @@ export function serializeAccount(
     countryCode: a.countryCode,
     currencyCode: a.currencyCode,
     timezone: a.timezone,
+    logoUrl: a.logoUrl,
+    phone: a.phone,
+    email: a.email,
+    website: a.website,
+    address: a.address,
+    city: a.city,
     currencyDecimals: currencyDecimalsOf(a.settings),
     // D20: método de mora por defecto de los créditos nuevos (también vive en settings).
     arrearsMethod: arrearsMethodOf(a.settings),

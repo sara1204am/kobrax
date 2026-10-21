@@ -17,6 +17,12 @@ const formOf = (a: AccountInfo): AccountForm => ({
   timezone: a.timezone ?? '',
   currencyDecimals: String(a.currencyDecimals ?? 2),
   arrearsMethod: a.arrearsMethod ?? ArrearsMethod.OLDEST_UNPAID,
+  logoUrl: a.logoUrl ?? '',
+  phone: a.phone ?? '',
+  email: a.email ?? '',
+  website: a.website ?? '',
+  address: a.address ?? '',
+  city: a.city ?? '',
 });
 
 /**
@@ -67,5 +73,5 @@ export function useAccountForm(account: AccountInfo, sectionId: string) {
   // Dentro de la pestaña, la barra de guardado única guarda por este formulario.
   const { managed } = useSaveSection(sectionId, { dirty, saving, valid: true, save, reset });
 
-  return { form, setForm, error, saving, dirty, save, managed, editable: can('account:write') };
+  return { form, setForm, error, setError, saving, dirty, save, managed, editable: can('account:write') };
 }

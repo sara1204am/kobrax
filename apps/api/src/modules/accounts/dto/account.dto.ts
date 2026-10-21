@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, IsTimeZone, Length } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString, IsTimeZone, IsUrl, Length, Matches } from 'class-validator';
 import { ArrearsMethod, SUPPORTED_CURRENCIES } from '@kobrax/shared';
 
 const CURRENCIES = Object.keys(SUPPORTED_CURRENCIES);
@@ -25,4 +25,19 @@ export class UpdateAccountDto {
   @IsOptional() @IsIn(['0', '1', '2']) currencyDecimals?: string;
   // D20: cómo se cuenta la mora por defecto en los créditos nuevos de la cuenta.
   @IsOptional() @IsIn(Object.values(ArrearsMethod)) arrearsMethod?: string;
+
+  // Identidad y contacto del negocio. Todos opcionales y **removibles**: `@IsOptional` deja pasar el `null`, que es la
+  // forma de quitarlos (y `undefined` = no tocarlo).
+  /**
+   * Sólo una ruta que haya devuelto `/uploads` (`/api/uploads/<sha256>.<ext>`): el logo no es una URL cualquiera, no se
+   * apunta a un sitio de afuera. Una ruta de otra cuenta no sirve de nada —el archivo se busca en la carpeta de quien
+   * lo pide— y por eso alcanza con validar la forma.
+   */
+  @IsOptional() @Matches(/^\/api\/uploads\/[0-9a-f]{64}\.(jpg|png|webp)$/, { message: 'logoUrl debe ser un archivo subido' })
+  logoUrl?: string | null;
+  @IsOptional() @IsString() @Length(5, 32) phone?: string | null;
+  @IsOptional() @IsEmail() @Length(3, 160) email?: string | null;
+  @IsOptional() @IsUrl({ protocols: ['http', 'https'], require_protocol: true }) @Length(8, 200) website?: string | null;
+  @IsOptional() @IsString() @Length(1, 240) address?: string | null;
+  @IsOptional() @IsString() @Length(1, 80) city?: string | null;
 }

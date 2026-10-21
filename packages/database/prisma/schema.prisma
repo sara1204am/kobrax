@@ -85,6 +85,13 @@ model Account {
   countryCode    String        @map("country_code")
   currencyCode   String        @map("currency_code")
   timezone       String?
+  /// Identidad y contacto del negocio (F4 del refactor de Cuenta). Todo opcional; el logo es la ruta que devuelve `/uploads`.
+  logoUrl        String?       @map("logo_url")
+  phone          String?
+  email          String?
+  website        String?
+  address        String?
+  city           String?
   settings       Json          @default("{}")
   configuration  Json          @default("{}")
   createdAt      DateTime      @default(now()) @map("created_at")

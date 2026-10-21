@@ -5,6 +5,7 @@ import { Permission, type AuthAccountOption, type MeInfo } from '@kobrax/shared'
 import { apiCall } from '@/lib/bff';
 import { getAgendaSummary } from '@/lib/agenda-summary';
 import { PanelShell } from '@/components/panel-shell';
+import { AccountBrandProvider } from '@/components/account-brand';
 import { PermissionsProvider } from '@/components/permissions';
 import { ToastProvider } from '@/components/toast';
 import { visibleNav } from '@/lib/nav';
@@ -58,6 +59,7 @@ export default async function PanelLayout({ children }: { children: ReactNode })
 
   return (
     <PermissionsProvider permissions={user.permissions}>
+      <AccountBrandProvider brand={user.account ?? null}>
       <PanelShell
         user={{
           userId: user.userId,
@@ -78,6 +80,7 @@ export default async function PanelLayout({ children }: { children: ReactNode })
             disparado antes de navegar se pierda con el desmontaje. */}
         <ToastProvider>{children}</ToastProvider>
       </PanelShell>
+      </AccountBrandProvider>
     </PermissionsProvider>
   );
 }

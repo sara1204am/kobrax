@@ -25,6 +25,13 @@ export interface AccountInfo {
   countryCode: string;
   currencyCode: string;
   timezone: string | null;
+  /** Logo del negocio: la ruta que devolvió `/uploads`. Opcional en el tipo para que un cliente viejo siga compilando. */
+  logoUrl?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  website?: string | null;
+  address?: string | null;
+  city?: string | null;
   /**
    * Cuántos decimales muestran los montos (0–2, default 2). Preferencia de la cuenta: una
    * cartera que presta en enteros no quiere leer «,00» en cada renglón. Vive en `settings`.
@@ -70,6 +77,13 @@ export interface AccountPatch {
   countryCode?: string;
   currencyCode?: string;
   timezone?: string | null;
+  /** Identidad y contacto: `null` = quitarlo, ausente = no tocarlo. */
+  logoUrl?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  website?: string | null;
+  address?: string | null;
+  city?: string | null;
   /** Viaja como string ('0'|'1'|'2') porque sale de un `<select>` y el diff es de strings. */
   currencyDecimals?: string;
   /** Método de mora por defecto de los créditos nuevos (D20). */
@@ -112,6 +126,13 @@ export interface AccountForm {
   currencyDecimals: string;
   /** Método de mora por defecto (D20). La edita la web; el móvil sólo la lee. */
   arrearsMethod: string;
+  /** Identidad y contacto del negocio. `''` = no tiene; quitarlo viaja como `null`. */
+  logoUrl: string;
+  phone: string;
+  email: string;
+  website: string;
+  address: string;
+  city: string;
 }
 
 export interface ProfileForm {

@@ -41,6 +41,15 @@ export interface MeInfo {
   permissions: string[];
   mfaEnabled?: boolean;
   requiresPasswordChange?: boolean;
+  /** La marca del negocio activo, para que el panel la pinte sin pedir `account:read`. `null` si no se pudo leer. */
+  account?: AccountBrand | null;
+}
+
+/** Nombre, teléfono y logo del negocio: lo que ve cualquier miembro (encabezado, variables de las plantillas). */
+export interface AccountBrand {
+  name: string;
+  phone: string | null;
+  logoUrl: string | null;
 }
 
 /**

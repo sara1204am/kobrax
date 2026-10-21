@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { AgendaItemType, AgendaTimeSlot, renderTemplate, ScheduleTimeMode, type AgendaAssignee, type AgendaListItem } from '@kobrax/shared';
 import type { CatalogOption } from '@/components/client-form';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
+import { useAccountBrand } from '@/components/account-brand';
 import { Modal } from '@/components/modal';
 import { TONES, type Tone } from '@/components/tone-tile';
 import { useToast } from '@/components/toast';
@@ -126,6 +127,7 @@ export function NewTaskModal({
   const [metodo, setMetodo] = useState('');
   const [metodos, setMetodos] = useState<CatalogOption[]>([]);
   /** Plantillas de WhatsApp de la cuenta (catálogo `WHATSAPP_TEMPLATE`): las mismas que ofrece el teléfono. */
+  const brand = useAccountBrand();
   const [plantillas, setPlantillas] = useState<{ code: string; label: string; metadata?: { body?: string } }[]>([]);
 
   const [timeMode, setTimeMode] = useState<ScheduleTimeMode>(time ? ScheduleTimeMode.FIXED : ScheduleTimeMode.LAPSE);
@@ -482,6 +484,8 @@ export function NewTaskModal({
                             renderTemplate(p.metadata?.body ?? '', {
                               cliente: ctx.client.displayName,
                               saldo: credito ? money(credito.outstandingBalance, credito.currency) : undefined,
+                              negocio: brand?.name,
+                              telefono_negocio: brand?.phone ?? undefined,
                             }),
                           )
                         }

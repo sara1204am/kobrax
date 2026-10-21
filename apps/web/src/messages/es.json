@@ -2288,6 +2288,23 @@
         "REMINDER_CATEGORY": "Categorías de recordatorio"
       }
     },
+    "identity": {
+      "title": "Identidad y contacto",
+      "logo": "Logo del negocio",
+      "logoHint": "PNG, JPG o WebP, hasta 8 MB. Se ve en el encabezado del panel.",
+      "uploading": "Subiendo…",
+      "remove": "Quitar",
+      "uploadError": "No se pudo subir el logo",
+      "phone": "Teléfono del negocio",
+      "phoneHint": "Sale en los mensajes como '{{telefono_negocio}}'.",
+      "phonePlaceholder": "Opcional",
+      "email": "Correo del negocio",
+      "emailPlaceholder": "Opcional",
+      "website": "Sitio web",
+      "websiteHint": "Con https://, por ejemplo https://minegocio.com.",
+      "address": "Dirección",
+      "city": "Ciudad"
+    },
     "businessData": "Datos del negocio",
     "financialData": "Configuración financiera",
     "decimals": "Decimales de los montos",

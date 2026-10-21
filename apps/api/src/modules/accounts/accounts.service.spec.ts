@@ -272,18 +272,44 @@ describe('AccountsService.findMine', () => {
 });
 
 describe('AccountsService.update', () => {
-  it('escribe sólo los 5 campos configurables y audita', async () => {
+  it('escribe sólo los campos configurables y audita', async () => {
     const { service, calls } = makeService();
     await service.update({ businessName: 'Nuevo Nombre', currencyCode: 'PEN' });
     assert.deepEqual(Object.keys(calls.updated!).sort(), [
+      'address',
       'businessName',
+      'city',
       'countryCode',
       'currencyCode',
+      'email',
+      'logoUrl',
+      'phone',
       'taxId',
       'timezone',
+      'website',
     ]);
     assert.equal(calls.updated!.businessName, 'Nuevo Nombre');
     assert.deepEqual(calls.audit, ['UPDATE']);
+  });
+
+  it('identidad y contacto: se escriben tal cual y null los quita', async () => {
+    const { service, calls } = makeService();
+    await service.update({ phone: '+591 70000000', city: 'La Paz', website: null });
+    assert.equal(calls.updated!.phone, '+591 70000000');
+    assert.equal(calls.updated!.city, 'La Paz');
+    assert.equal(calls.updated!.website, null, 'null = quitarlo');
+    assert.equal(calls.updated!.email, undefined, 'ausente = no tocarlo');
+  });
+
+  it('findMine expone identidad y contacto, null si no los cargó', async () => {
+    const lleno = makeService({ found: account({ logoUrl: '/api/uploads/x.png', phone: '70000000', email: 'a@b.co', website: 'https://b.co', address: 'Calle 1', city: 'Sucre' }) });
+    const res = await lleno.service.findMine();
+    assert.equal(res.logoUrl, '/api/uploads/x.png');
+    assert.equal(res.city, 'Sucre');
+    const vacio = makeService();
+    const sin = await vacio.service.findMine();
+    assert.equal(sin.logoUrl ?? null, null);
+    assert.equal(sin.phone ?? null, null);
   });
 
   it('nunca escribe plan, topes negociados, tipo ni estado', async () => {

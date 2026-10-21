@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import type { AccountInfo } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
+import { ImageUploadField } from '@/components/image-upload-field';
 import { Section } from '@/components/panel-ui';
 import { useAccountForm } from './use-account-form';
 
@@ -46,7 +47,7 @@ function americanTimezones(pinned: (string | null)[]): { tz: string; label: stri
  */
 export function GeneralForm({ account }: { account: AccountInfo }) {
   const t = useTranslations('account');
-  const { form, setForm, error, saving, dirty, save, managed, editable } = useAccountForm(account, 'general');
+  const { form, setForm, error, setError, saving, dirty, save, managed, editable } = useAccountForm(account, 'general');
 
   const timezones = useMemo(
     () => americanTimezones([account.timezone, form.timezone]),
@@ -129,6 +130,72 @@ export function GeneralForm({ account }: { account: AccountInfo }) {
       </p>
       </Section>
 
+
+      <Section title={t('identity.title')} inner="space-y-5 p-6">
+        <ImageUploadField
+          label={t('identity.logo')}
+          hint={t('identity.logoHint')}
+          value={form.logoUrl}
+          onChange={(url) => setForm({ ...form, logoUrl: url })}
+          onError={setError}
+          disabled={!editable}
+          texts={{ uploading: t('identity.uploading'), remove: t('identity.remove'), uploadError: t('identity.uploadError') }}
+        />
+
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label={t('identity.phone')} hint={t('identity.phoneHint')}>
+            <Input
+              type="tel"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              disabled={!editable}
+              minLength={5}
+              maxLength={32}
+              placeholder={t('identity.phonePlaceholder')}
+            />
+          </Field>
+          <Field label={t('identity.email')}>
+            <Input
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              disabled={!editable}
+              maxLength={160}
+              placeholder={t('identity.emailPlaceholder')}
+            />
+          </Field>
+        </div>
+
+        <Field label={t('identity.website')} hint={t('identity.websiteHint')}>
+          <Input
+            type="url"
+            value={form.website}
+            onChange={(e) => setForm({ ...form, website: e.target.value })}
+            disabled={!editable}
+            maxLength={200}
+            placeholder="https://"
+          />
+        </Field>
+
+        <div className="grid gap-5 sm:grid-cols-[2fr_1fr]">
+          <Field label={t('identity.address')}>
+            <Input
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              disabled={!editable}
+              maxLength={240}
+            />
+          </Field>
+          <Field label={t('identity.city')}>
+            <Input
+              value={form.city}
+              onChange={(e) => setForm({ ...form, city: e.target.value })}
+              disabled={!editable}
+              maxLength={80}
+            />
+          </Field>
+        </div>
+      </Section>
 
       {editable && !managed && (
         <div className="flex justify-end">

@@ -190,6 +190,78 @@ describe('Cuenta · formularios — sólo se manda lo que cambió', () => {
   });
 });
 
+describe('Cuenta · identidad y contacto', () => {
+  it('editar un dato de contacto manda sólo ese campo', async () => {
+    let enviado: unknown;
+    server.use(
+      http.patch('*/api/account/me', async ({ request }) => {
+        enviado = await request.json();
+        return HttpResponse.json(ACCOUNT);
+      }),
+    );
+    renderForm();
+    await userEvent.type(screen.getByLabelText('Ciudad'), 'Sucre');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    expect(enviado).toEqual({ city: 'Sucre' });
+  });
+
+  it('vaciar un dato que estaba cargado lo QUITA: manda null, no cadena vacía', async () => {
+    let enviado: unknown;
+    server.use(
+      http.patch('*/api/account/me', async ({ request }) => {
+        enviado = await request.json();
+        return HttpResponse.json(ACCOUNT);
+      }),
+    );
+    render(
+      <PermissionsProvider permissions={['account:read', 'account:write']}>
+        <ToastProvider>
+          <GeneralForm account={{ ...ACCOUNT, phone: '70000000' }} />
+        </ToastProvider>
+      </PermissionsProvider>,
+    );
+    await userEvent.clear(screen.getByLabelText(/Teléfono del negocio/));
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    expect(enviado).toEqual({ phone: null });
+  });
+
+  it('subir un logo lo deja en el formulario y «Quitar» lo vacía; recién al guardar se manda', async () => {
+    let enviado: unknown;
+    server.use(
+      http.post('*/api/account/upload', () => HttpResponse.json({ url: '/api/uploads/' + 'a'.repeat(64) + '.png' })),
+      http.patch('*/api/account/me', async ({ request }) => {
+        enviado = await request.json();
+        return HttpResponse.json(ACCOUNT);
+      }),
+    );
+    renderForm();
+    const archivo = new File(['x'], 'logo.png', { type: 'image/png' });
+    await userEvent.upload(screen.getByLabelText('Logo del negocio'), archivo);
+
+    expect(await screen.findByRole('button', { name: 'Quitar' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    expect(enviado).toEqual({ logoUrl: '/api/uploads/' + 'a'.repeat(64) + '.png' });
+  });
+
+  it('si la subida falla, lo dice con el mensaje del servidor y no cambia el logo', async () => {
+    server.use(
+      http.post('*/api/account/upload', () =>
+        HttpResponse.json({ error: { code: 'X', message: 'Tipo no permitido' } }, { status: 400 }),
+      ),
+    );
+    renderForm();
+    await userEvent.upload(screen.getByLabelText('Logo del negocio'), new File(['x'], 'logo.png', { type: 'image/png' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Tipo no permitido');
+    expect(screen.queryByRole('button', { name: 'Quitar' })).not.toBeInTheDocument();
+  });
+
+  it('sin permiso de escritura no hay subida ni se puede quitar', () => {
+    renderForm(['account:read']);
+    expect(screen.queryByLabelText('Logo del negocio')).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Teléfono del negocio/)).toBeDisabled();
+  });
+});
+
 describe('Cuenta · formularios — sin permiso de escritura', () => {
   it('se ven los datos pero no hay con qué guardarlos', () => {
     renderForm(['account:read']);

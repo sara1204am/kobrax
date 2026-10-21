@@ -120,7 +120,8 @@ export function WhatsappTemplates({ items }: { items: TemplateItem[] }) {
             no haya que adivinarlas. */}
         <code className="rounded bg-k-bg px-1 text-[12px]">{'{{cliente}}'}</code>{' '}
         <code className="rounded bg-k-bg px-1 text-[12px]">{'{{saldo}}'}</code>{' '}
-        <code className="rounded bg-k-bg px-1 text-[12px]">{'{{negocio}}'}</code>
+        <code className="rounded bg-k-bg px-1 text-[12px]">{'{{negocio}}'}</code>{' '}
+        <code className="rounded bg-k-bg px-1 text-[12px]">{'{{telefono_negocio}}'}</code>
       </p>
 
       {items.length === 0 ? (
