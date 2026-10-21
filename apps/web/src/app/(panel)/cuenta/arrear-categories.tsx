@@ -9,6 +9,7 @@ import { Section } from '@/components/panel-ui';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
 import { sendJson } from '@/lib/client';
+import { useSaveSection } from './save-bar';
 import {
   blankRow,
   rowsFromCategories,
@@ -50,20 +51,33 @@ export function ArrearCategories({ categories }: { categories: ArrearCategory[] 
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...change } : r)));
   }
 
-  async function save() {
-    if (errors.length > 0) return;
+  async function save(): Promise<boolean> {
+    if (errors.length > 0) return false;
     setBusy(true);
     setError(null);
     const { ok, data } = await sendJson('/api/arrear-categories', toPayload(rows), 'PUT');
     setBusy(false);
     if (!ok) {
       setError(data.error?.message ?? t('saveError'));
-      return;
+      return false;
     }
     setSaved(rows);
     toast(t('saved'));
     router.refresh();
+    return true;
   }
+
+  // Dentro de la pestaña, la barra de guardado única guarda por esta tabla.
+  const { managed } = useSaveSection('arrear-categories', {
+    dirty,
+    saving: busy,
+    valid: errors.length === 0,
+    save,
+    reset: () => {
+      setRows(saved);
+      setError(null);
+    },
+  });
 
   return (
     <Section title={t('title')} inner="p-6">
@@ -185,11 +199,13 @@ export function ArrearCategories({ categories }: { categories: ArrearCategory[] 
             >
               {t('add')}
             </button>
-            <span className="ml-auto sm:w-48">
-              <Button loading={busy} disabled={errors.length > 0 || !dirty} onClick={() => void save()}>
-                {t('save')}
-              </Button>
-            </span>
+            {!managed && (
+              <span className="ml-auto sm:w-48">
+                <Button loading={busy} disabled={errors.length > 0 || !dirty} onClick={() => void save()}>
+                  {t('save')}
+                </Button>
+              </span>
+            )}
           </div>
         </div>
       ) : (

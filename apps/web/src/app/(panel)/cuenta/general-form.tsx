@@ -46,7 +46,7 @@ function americanTimezones(pinned: (string | null)[]): { tz: string; label: stri
  */
 export function GeneralForm({ account }: { account: AccountInfo }) {
   const t = useTranslations('account');
-  const { form, setForm, error, saving, dirty, save, editable } = useAccountForm(account);
+  const { form, setForm, error, saving, dirty, save, managed, editable } = useAccountForm(account, 'general');
 
   const timezones = useMemo(
     () => americanTimezones([account.timezone, form.timezone]),
@@ -130,7 +130,7 @@ export function GeneralForm({ account }: { account: AccountInfo }) {
       </Section>
 
 
-      {editable && (
+      {editable && !managed && (
         <div className="flex justify-end">
           <span className="w-full sm:w-56">
             <Button type="submit" loading={saving} disabled={!dirty}>

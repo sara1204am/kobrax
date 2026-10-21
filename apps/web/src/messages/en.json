@@ -2244,6 +2244,14 @@
       "cobranza": "Collections",
       "mensajes": "Messages"
     },
+    "saveBar": {
+      "label": "Unsaved changes",
+      "unsaved": "You have unsaved changes.",
+      "invalid": "Fix the marked errors to be able to save.",
+      "discard": "Discard",
+      "save": "Save changes",
+      "leave": "You have unsaved changes. If you switch tabs they are lost. Leave anyway?"
+    },
     "businessData": "Business details",
     "financialData": "Financial settings",
     "decimals": "Amount decimals",

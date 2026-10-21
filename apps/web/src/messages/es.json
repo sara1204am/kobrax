@@ -2244,6 +2244,14 @@
       "cobranza": "Cobranza",
       "mensajes": "Mensajes"
     },
+    "saveBar": {
+      "label": "Cambios sin guardar",
+      "unsaved": "Tienes cambios sin guardar.",
+      "invalid": "Corrige los errores marcados para poder guardar.",
+      "discard": "Descartar",
+      "save": "Guardar cambios",
+      "leave": "Tienes cambios sin guardar. Si cambias de pestaña se pierden. ¿Salir de todos modos?"
+    },
     "businessData": "Datos del negocio",
     "financialData": "Configuración financiera",
     "decimals": "Decimales de los montos",

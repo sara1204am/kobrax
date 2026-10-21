@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
 import { PageHeader, EmptyState, Badge } from '@/components/panel-ui';
 import { CuentaTabs } from './cuenta-tabs';
+import { SaveBarProvider } from './save-bar';
 import { getAccount } from './get-account';
 
 /** El tono de cada estado de la cuenta. Suspendida es la única que duele: nadie entra. */
@@ -41,8 +42,10 @@ export default async function CuentaLayout({ children }: { children: ReactNode }
           </Badge>
         }
       />
-      <CuentaTabs />
-      <div className="space-y-6">{children}</div>
+      <SaveBarProvider>
+        <CuentaTabs />
+        <div className="space-y-6">{children}</div>
+      </SaveBarProvider>
     </>
   );
 }

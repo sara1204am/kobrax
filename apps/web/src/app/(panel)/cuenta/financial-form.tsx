@@ -14,7 +14,7 @@ import { useAccountForm } from './use-account-form';
 export function FinancialForm({ account }: { account: AccountInfo }) {
   const locale = useLocale();
   const t = useTranslations('account');
-  const { form, setForm, error, saving, dirty, save, editable } = useAccountForm(account);
+  const { form, setForm, error, saving, dirty, save, managed, editable } = useAccountForm(account, 'financial');
 
   // El nombre del país lo pone el navegador en el idioma activo. `shared` guarda la regla
   // (qué países y con qué moneda), no cómo se escriben.
@@ -98,7 +98,7 @@ export function FinancialForm({ account }: { account: AccountInfo }) {
       </Section>
 
 
-      {editable && (
+      {editable && !managed && (
         <div className="flex justify-end">
           <span className="w-full sm:w-56">
             <Button type="submit" loading={saving} disabled={!dirty}>
