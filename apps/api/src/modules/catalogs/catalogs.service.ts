@@ -6,7 +6,7 @@ import { TenantContextService } from '../../common/context/tenant-context.servic
 import { AuditService } from '../../common/audit/audit.service';
 import { serializeCatalogItem } from './catalogs.serializer';
 import { CreateCatalogItemDto, UpdateCatalogItemDto } from './dto/catalog.dto';
-import { catalogItemNotFound, catalogMetadataInvalid } from './catalogs.errors';
+import { catalogCodeDuplicate, catalogItemNotFound, catalogMetadataInvalid } from './catalogs.errors';
 
 /** Catálogos configurables por tenant (una tabla genérica para todos los tipos). */
 @Injectable()
@@ -21,11 +21,14 @@ export class CatalogsService {
     return this.prisma.withTenant(this.tenant.accountId, fn);
   }
 
-  /** Ítems activos de un catálogo, ordenados. */
-  async list(catalog: CatalogType): Promise<ApiResponse<ReturnType<typeof serializeCatalogItem>[]>> {
+  /**
+   * Ítems de un catálogo, ordenados. Por defecto sólo los activos (lo que consumen los desplegables del móvil y la
+   * web); el editor de Cuenta pide también los desactivados para poder reactivarlos. Los borrados no salen nunca.
+   */
+  async list(catalog: CatalogType, includeInactive = false): Promise<ApiResponse<ReturnType<typeof serializeCatalogItem>[]>> {
     const rows = await this.tx((tx) =>
       tx.catalogItem.findMany({
-        where: { catalog, isActive: true, deletedAt: null },
+        where: { catalog, ...(includeInactive ? {} : { isActive: true }), deletedAt: null },
         orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
       }),
     );
@@ -43,18 +46,21 @@ export class CatalogsService {
 
   async create(catalog: CatalogType, dto: CreateCatalogItemDto): Promise<ReturnType<typeof serializeCatalogItem>> {
     this.assertMetadata(catalog, dto.metadata ?? {});
-    const created = await this.tx((tx) =>
-      tx.catalogItem.create({
-        data: {
-          accountId: this.tenant.accountId,
-          catalog,
-          code: dto.code,
-          label: dto.label,
-          sortOrder: dto.sortOrder ?? 0,
-          metadata: (dto.metadata ?? {}) as Prisma.InputJsonValue,
-        },
-      }),
-    );
+    const data = {
+      label: dto.label,
+      sortOrder: dto.sortOrder ?? 0,
+      metadata: (dto.metadata ?? {}) as Prisma.InputJsonValue,
+    };
+    const created = await this.tx(async (tx) => {
+      // El único es (cuenta, catálogo, código) e incluye a los borrados. Un código vivo es un duplicado (409 y no un
+      // 500 de la base); uno borrado se revive con lo nuevo: quien lo quitó con DELETE puede volver a crearlo.
+      const existing = await tx.catalogItem.findFirst({ where: { catalog, code: dto.code } });
+      if (existing && !existing.deletedAt) throw catalogCodeDuplicate(dto.code);
+      if (existing) {
+        return tx.catalogItem.update({ where: { id: existing.id }, data: { ...data, isActive: true, deletedAt: null } });
+      }
+      return tx.catalogItem.create({ data: { accountId: this.tenant.accountId, catalog, code: dto.code, ...data } });
+    });
     await this.audit.record({ entity: 'catalog_item', entityId: created.id, action: 'CREATE', after: created });
     return serializeCatalogItem(created);
   }

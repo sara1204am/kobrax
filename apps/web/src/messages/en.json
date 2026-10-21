@@ -41,6 +41,7 @@
       "pending": "{n, plural, one {# pending task} other {# pending tasks}}"
     },
     "crumbs": {
+      "catalogos": "Catalogs",
       "general": "General",
       "plan": "Plan",
       "cobranza": "Collections",
@@ -2242,7 +2243,8 @@
       "general": "General",
       "plan": "Plan",
       "cobranza": "Collections",
-      "mensajes": "Messages"
+      "mensajes": "Messages",
+      "catalogos": "Catalogs"
     },
     "saveBar": {
       "label": "Unsaved changes",
@@ -2251,6 +2253,40 @@
       "discard": "Discard",
       "save": "Save changes",
       "leave": "You have unsaved changes. If you switch tabs they are lost. Leave anyway?"
+    },
+    "catalogs": {
+      "title": "Business catalogs",
+      "intro": "The lists your team picks from when recording payments, follow-ups and credits. Deactivating an item removes it from the dropdowns without deleting the records that already use it. Changes are saved instantly.",
+      "catalog": "Catalog",
+      "empty": "This catalog has no items yet.",
+      "nameOf": "Name of item {code}",
+      "active": "Active",
+      "activeOf": "Active: {name}",
+      "inactive": "Deactivated",
+      "moveUp": "Move {name} up",
+      "moveDown": "Move {name} down",
+      "newLabel": "New item",
+      "newPlaceholder": "E.g.: QR transfer",
+      "add": "Add",
+      "saved": "Change saved",
+      "saveError": "The change could not be saved",
+      "moveError": "Could not reorder. Reload the page to see the real order.",
+      "readOnly": "Only an administrator can change these lists.",
+      "names": {
+        "PAYMENT_METHOD": "Payment methods",
+        "BANK": "Banks",
+        "NO_PAYMENT_REASON": "Reasons for non-payment",
+        "OCCUPATION": "Trades and occupations",
+        "CREDIT_TYPE": "Credit types",
+        "COLLATERAL_TYPE": "Collateral types",
+        "COLLECTION_MODALITY": "Collection modes",
+        "CANCEL_REASON": "Cancellation reasons",
+        "RESCHEDULE_REASON": "Rescheduling reasons",
+        "SPECIAL_CATEGORY": "Special cases",
+        "ADDRESS_TYPE": "Address types",
+        "PHONE_TYPE": "Phone types",
+        "REMINDER_CATEGORY": "Reminder categories"
+      }
     },
     "businessData": "Business details",
     "financialData": "Financial settings",

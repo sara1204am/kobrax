@@ -41,6 +41,7 @@
       "pending": "{n, plural, one {# gestión pendiente} other {# gestiones pendientes}}"
     },
     "crumbs": {
+      "catalogos": "Catálogos",
       "general": "General",
       "plan": "Plan",
       "cobranza": "Cobranza",
@@ -2242,7 +2243,8 @@
       "general": "General",
       "plan": "Plan",
       "cobranza": "Cobranza",
-      "mensajes": "Mensajes"
+      "mensajes": "Mensajes",
+      "catalogos": "Catálogos"
     },
     "saveBar": {
       "label": "Cambios sin guardar",
@@ -2251,6 +2253,40 @@
       "discard": "Descartar",
       "save": "Guardar cambios",
       "leave": "Tienes cambios sin guardar. Si cambias de pestaña se pierden. ¿Salir de todos modos?"
+    },
+    "catalogs": {
+      "title": "Catálogos del negocio",
+      "intro": "Las listas que el equipo elige al registrar pagos, gestiones y créditos. Desactivar un ítem lo quita de los desplegables sin borrar los registros que ya lo usan. Los cambios se guardan al instante.",
+      "catalog": "Catálogo",
+      "empty": "Este catálogo no tiene ítems todavía.",
+      "nameOf": "Nombre del ítem {code}",
+      "active": "Activo",
+      "activeOf": "Activo: {name}",
+      "inactive": "Desactivado",
+      "moveUp": "Subir {name}",
+      "moveDown": "Bajar {name}",
+      "newLabel": "Nuevo ítem",
+      "newPlaceholder": "Ej.: Transferencia QR",
+      "add": "Agregar",
+      "saved": "Cambio guardado",
+      "saveError": "No se pudo guardar el cambio",
+      "moveError": "No se pudo reordenar. Recarga la página para ver el orden real.",
+      "readOnly": "Sólo un administrador puede cambiar estas listas.",
+      "names": {
+        "PAYMENT_METHOD": "Medios de pago",
+        "BANK": "Bancos",
+        "NO_PAYMENT_REASON": "Motivos de no pago",
+        "OCCUPATION": "Rubros y ocupaciones",
+        "CREDIT_TYPE": "Tipos de crédito",
+        "COLLATERAL_TYPE": "Tipos de garantía",
+        "COLLECTION_MODALITY": "Modalidades de cobro",
+        "CANCEL_REASON": "Motivos de cancelación",
+        "RESCHEDULE_REASON": "Motivos de reprogramación",
+        "SPECIAL_CATEGORY": "Gestiones especiales",
+        "ADDRESS_TYPE": "Tipos de dirección",
+        "PHONE_TYPE": "Tipos de teléfono",
+        "REMINDER_CATEGORY": "Categorías de recordatorio"
+      }
     },
     "businessData": "Datos del negocio",
     "financialData": "Configuración financiera",

@@ -46,6 +46,41 @@ describe('CatalogsService.list', () => {
   });
 });
 
+describe('CatalogsService.list · includeInactive', () => {
+  it('con includeInactive no filtra por isActive, pero nunca trae borrados', async () => {
+    const { service, calls } = makeService({ rows: [] });
+    await service.list(CatalogType.BANK, true);
+    assert.equal('isActive' in calls.listWhere!, false);
+    assert.equal(calls.listWhere!.deletedAt, null);
+    assert.equal(calls.listWhere!.catalog, CatalogType.BANK);
+  });
+
+  it('expone isActive para que el editor distinga activos de desactivados', async () => {
+    const { service } = makeService({ rows: [{ id: '1', catalog: 'BANK', code: 'X', label: 'X', sortOrder: 1, isActive: false, metadata: {} }] });
+    const res = await service.list(CatalogType.BANK, true);
+    assert.equal(res.data![0]!.isActive, false);
+  });
+});
+
+describe('CatalogsService.create · código repetido', () => {
+  it('🔴 un código vivo es 409 CATALOG_CODE_DUPLICATE y no escribe nada', async () => {
+    const { service, calls } = makeService({ found: { id: 'c1', deletedAt: null } });
+    await rejectsWithCode(service.create(CatalogType.BANK, { code: 'BNB', label: 'Otro' }), 'CATALOG_CODE_DUPLICATE');
+    assert.equal(calls.created, undefined);
+    assert.deepEqual(calls.audit, []);
+  });
+
+  it('un código borrado se revive con lo nuevo, activo, en vez de chocar con el único de la base', async () => {
+    const { service, calls } = makeService({ found: { id: 'c1', deletedAt: new Date() } });
+    await service.create(CatalogType.BANK, { code: 'BNB', label: 'Banco Nuevo', sortOrder: 3 });
+    assert.equal(calls.created, undefined, 'no se crea otra fila');
+    assert.equal(calls.updated!.deletedAt, null);
+    assert.equal(calls.updated!.isActive, true);
+    assert.equal(calls.updated!.label, 'Banco Nuevo');
+    assert.deepEqual(calls.audit, ['CREATE']);
+  });
+});
+
 describe('CatalogsService.create/update/remove', () => {
   it('crea un ítem y audita CREATE', async () => {
     const { service, calls } = makeService();

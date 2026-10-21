@@ -8,6 +8,7 @@ export function serializeCatalogItem(c: CatalogItem) {
     code: c.code,
     label: c.label,
     sortOrder: c.sortOrder,
+    isActive: c.isActive,
     metadata: c.metadata,
   };
 }

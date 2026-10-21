@@ -10,15 +10,15 @@ describe('visibleCuentaTabs', () => {
   });
 
   it('el administrador ve todas', () => {
-    expect(keys(ROLE_PERMISSIONS[RoleType.ACCOUNT_ADMIN])).toEqual(['general', 'plan', 'cobranza', 'mensajes']);
+    expect(keys(ROLE_PERMISSIONS[RoleType.ACCOUNT_ADMIN])).toEqual(['general', 'plan', 'cobranza', 'mensajes', 'catalogos']);
   });
 
-  it('sin catalog:read no hay «Mensajes»', () => {
+  it('sin catalog:read no hay «Mensajes» ni «Catálogos»', () => {
     expect(keys(['account:read'])).toEqual(['general', 'plan', 'cobranza']);
   });
 
   it('sin account:read no hay ninguna que dependa de la cuenta', () => {
-    expect(keys(['catalog:read'])).toEqual(['mensajes']);
+    expect(keys(['catalog:read'])).toEqual(['mensajes', 'catalogos']);
     expect(keys([])).toEqual([]);
   });
 });
