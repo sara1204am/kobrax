@@ -17,6 +17,8 @@ export interface Member {
   isActive: boolean;
   /** `PENDING` = invitado que todavía no aceptó. */
   userStatus: string;
+  /** Último inicio de sesión (ISO); `null` si nunca entró. */
+  lastLoginAt?: string | null;
 }
 
 /** El alta devuelve además el código, **una sola vez**, para poder compartirlo. */
@@ -52,4 +54,61 @@ export interface Assignee {
   roleName: string;
   /** Quien pidió la lista: la pantalla lo muestra como «Yo» y arriba de todo. */
   isMe: boolean;
+}
+
+/** La ficha de un miembro (`GET /users/:id`): el miembro de la lista más lo que sólo la ficha muestra. */
+export type MemberDetail = Member & {
+  /** Cuándo se unió a la cuenta (ISO). */
+  joinedAt: string;
+  /** Oficina asignada. Sólo lectura: no se cambia desde la ficha de otro miembro. */
+  branchName: string | null;
+};
+
+/** `field` = opera cartera (cobrador, supervisor); `admin` = trabaja en el panel (el resto). */
+export type MemberActivityKind = 'field' | 'admin';
+
+export interface MemberActivityEvent {
+  /** `tipo:id` de la fila de origen; estable, para no repetir una fila en el borde de dos páginas. */
+  id: string;
+  type: 'ACTIVITY' | 'PAYMENT' | 'ROUTE' | 'ADMIN';
+  at: string;
+  /** Tipo de gestión (`CALL`, `VISIT`…) o `entity.action` de la acción administrativa. */
+  code: string;
+  clientName?: string | null;
+}
+
+/** `GET /users/:id/activity?days=`: los números del período. La lista va aparte (`/activity/events`). */
+export interface MemberActivity {
+  days: number;
+  kind: MemberActivityKind;
+  /** `field`: activities, payments, routes, activeDays · `admin`: actions, payments, logins, activeDays. */
+  metrics: Record<string, number>;
+}
+
+/** Una página de una lista que crece sin tope. `nextCursor` (un instante ISO) es `null` en la última. */
+export interface CursorPage<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+
+/** Una fila de `GET /users/:id/connections` (paginado). Hoy sólo hay accesos exitosos; la IP viene enmascarada. */
+export interface MemberConnection {
+  id: string;
+  loginAt: string;
+  deviceType: string | null;
+  browser: string | null;
+  os: string | null;
+  ip: string | null;
+  city: string | null;
+  country: string | null;
+  result: 'SUCCESS';
+}
+
+/** `GET /users/:id/audit`. El detalle son datos para armar la frase, no el `before`/`after` crudo. */
+export interface MemberAuditEvent {
+  id: string;
+  at: string;
+  event: string;
+  detail: Record<string, string | number | null>;
+  actorName: string | null;
 }

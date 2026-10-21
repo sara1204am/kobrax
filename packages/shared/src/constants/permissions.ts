@@ -14,7 +14,8 @@ import { RoleType } from '../enums/role.enum.js';
  */
 export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
   [RoleType.SUPER_ADMIN]: Object.values(Permission),
-  [RoleType.ACCOUNT_ADMIN]: Object.values(Permission).filter((p) => p !== Permission.AUDIT_READ),
+  // Todo, incluido `audit:read`: el administrador de la cuenta ve la auditoría de su propio equipo (ficha del miembro).
+  [RoleType.ACCOUNT_ADMIN]: Object.values(Permission),
   [RoleType.MANAGER]: [
     Permission.COLLECTION_READ,
     Permission.COLLECTION_EXPORT,

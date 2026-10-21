@@ -7,12 +7,13 @@ import { PlanModule } from '../../common/plan/plan.module';
 import { UsersController } from './users.controller';
 import { RolesController } from './roles.controller';
 import { UsersService } from './users.service';
+import { MemberDetailService } from './member-detail.service';
 
 /** Miembros del tenant, perfil propio y catálogo de roles (CUENTA · S0). */
 @Module({
   imports: [AuthModule, AuditModule, MailModule, PlanModule, AssignmentsModule],
   controllers: [UsersController, RolesController],
-  providers: [UsersService],
+  providers: [UsersService, MemberDetailService],
   exports: [UsersService],
 })
 export class UsersModule {}

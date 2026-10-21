@@ -13,6 +13,7 @@ import { apiCall } from '@/lib/bff';
 import { EmptyState, PageHeader, Badge } from '@/components/panel-ui';
 import { hasTeamFilters, teamView, type TeamParams } from '@/lib/team';
 import { MembersTable } from './members-table';
+import { SeatsBar, TeamIcon } from './team-ui';
 import { InviteButton } from './invite-button';
 
 /**
@@ -68,6 +69,38 @@ export default async function EquipoPage({ searchParams }: { searchParams: TeamP
             </Badge>
           ) : undefined
         }
+        actions={
+          seats && max !== null ? (
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-2xl border border-k-border bg-white px-5 py-3.5">
+              <span className="flex items-center gap-3">
+                <TeamIcon name="users" className="h-6 w-6 text-k-slate" />
+                <span>
+                  <span className="block text-[12px] text-k-text-2">{t('planCard.plan')}</span>
+                  <span className="block text-[15px] font-semibold text-k-navy">
+                    {plan ? tPlans(`names.${plan.code}`) : seats.planCode}
+                  </span>
+                </span>
+              </span>
+              <span className="block w-44">
+                <span className="mb-1.5 block text-[13px] text-k-text-2">
+                  <strong className="text-[15px] text-k-navy">
+                    {seats.usage.users} / {max}
+                  </strong>{' '}
+                  {t('planCard.active')}
+                </span>
+                <SeatsBar used={seats.usage.users} max={max} level={level} />
+              </span>
+              {next && (
+                <span className="border-l border-k-border pl-5">
+                  <span className="block text-[12px] text-k-text-2">{t('planCard.more')}</span>
+                  <Link href="/cuenta" className="text-[13px] font-medium text-k-periwinkle hover:underline">
+                    {t('planCard.link')} →
+                  </Link>
+                </span>
+              )}
+            </div>
+          ) : undefined
+        }
       />
 
       {/* El momento en que el tope importa. Un botón apagado que dice «llegaste al tope» deja al
@@ -107,6 +140,7 @@ export default async function EquipoPage({ searchParams }: { searchParams: TeamP
         roles={roles.body.data ?? []}
         meId={me.body.data.userId}
         filtered={hasTeamFilters(searchParams)}
+        seats={seats ? { used: seats.usage.users, max } : undefined}
         action={<InviteButton roles={roles.body.data ?? []} full={level === 'full'} />}
       />
     </>

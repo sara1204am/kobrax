@@ -10,6 +10,7 @@ import { usePermissions } from '@/components/permissions';
 import { postJson } from '@/lib/client';
 import { isKnownRole } from '@/lib/team';
 import { InvitationCode } from './invitation-code';
+import { TeamIcon } from './team-ui';
 
 const EMPTY = { firstName: '', lastName: '', email: '', roleId: '' };
 
@@ -69,12 +70,16 @@ export function InviteButton({
   }
 
   const label = (name: string) => (isKnownRole(name) ? tr(name) : name);
+  const selected = roles.find((r) => r.id === form.roleId);
 
   return (
     <>
-      <span className="w-full sm:w-52">
+      <span className="w-full sm:w-56">
         <Button onClick={() => setOpen(true)} disabled={full} title={full ? t('full') : undefined}>
-          {full ? t('full') : t('open')}
+          <span className="flex items-center gap-2">
+            <TeamIcon name="invite" />
+            {full ? t('full') : t('open')}
+          </span>
         </Button>
       </span>
 

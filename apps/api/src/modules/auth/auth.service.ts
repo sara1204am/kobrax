@@ -22,6 +22,8 @@ import {
   reuseDetected,
 } from './auth.errors';
 
+import { lookupPlace } from '../../common/geo/geo-ip';
+
 export interface SessionMeta {
   ip?: string;
   userAgent?: string;
@@ -412,6 +414,7 @@ export class AuthService implements OnModuleInit {
   ): Promise<AuthTokens> {
     const permissions = await this.permissions.forRole(roleId);
     const familyId = randomBytes(16).toString('hex');
+    const place = lookupPlace(meta.ip);
 
     return this.prisma.withTenant(accountId, async (tx) => {
       const session = await tx.userSession.create({
@@ -423,6 +426,8 @@ export class AuthService implements OnModuleInit {
           deviceType: meta.deviceType ?? 'api',
           deviceName: meta.deviceName,
           os: meta.os,
+          city: place?.city,
+          country: place?.country,
           loginAt: new Date(),
           lastSeenAt: new Date(),
           expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
