@@ -1,3 +1,4 @@
+import { mergePreferences, preferencesOf, validatePreferences, type AccountPreferences } from '@kobrax/shared';
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { hash } from 'bcryptjs';
@@ -11,7 +12,7 @@ import { weakPassword } from '../auth/auth.errors';
 import { serializeAccount } from './accounts.serializer';
 import { UpdateAccountDto } from './dto/account.dto';
 import { CreateAccountDto } from './dto/create-account.dto';
-import { accountNotFound, emailTaken, roleCatalogMissing } from './accounts.errors';
+import { accountNotFound, emailTaken, preferencesInvalid, roleCatalogMissing } from './accounts.errors';
 
 /** Mercado inicial. El registro no los pregunta (S4-D8); se cambian en la pantalla de datos. */
 const DEFAULT_COUNTRY = 'BO';
@@ -160,9 +161,19 @@ export class AccountsService {
         where: { id: this.tenant.accountId, deletedAt: null },
       });
       if (!before) throw accountNotFound();
+      // Las preferencias viven en `configuration.preferences`; el resto de `configuration` (importación, mora, prioridad)
+      // se conserva tal cual. Se valida el conjunto ya mezclado: un parche válido por campo puede dejar una jornada al revés.
+      let configuration: Record<string, unknown> | undefined;
+      if (dto.preferences) {
+        const merged = mergePreferences(preferencesOf(before.configuration), dto.preferences as Partial<AccountPreferences>);
+        const reason = validatePreferences(merged);
+        if (reason) throw preferencesInvalid(reason);
+        configuration = { ...(before.configuration as Record<string, unknown>), preferences: merged };
+      }
       const updated = await tx.account.update({
         where: { id: before.id },
         data: {
+          ...(configuration ? { configuration: configuration as Prisma.InputJsonValue } : {}),
           businessName: dto.businessName,
           taxId: dto.taxId,
           countryCode: dto.countryCode,

@@ -1,5 +1,5 @@
 import type { Account } from '@prisma/client';
-import { arrearsMethodOf, effectiveLimits } from '@kobrax/shared';
+import { arrearsMethodOf, effectiveLimits, preferencesOf } from '@kobrax/shared';
 
 /** Lo que llegue de settings es JSON de la base: cualquier cosa fuera de 0–2 cae al default 2. */
 function currencyDecimalsOf(settings: unknown): number {
@@ -58,6 +58,7 @@ export function serializeAccount(
     website: a.website,
     address: a.address,
     city: a.city,
+    preferences: preferencesOf(a.configuration),
     currencyDecimals: currencyDecimalsOf(a.settings),
     // D20: método de mora por defecto de los créditos nuevos (también vive en settings).
     arrearsMethod: arrearsMethodOf(a.settings),

@@ -61,3 +61,33 @@ describe('UpdateAccountDto — identidad y contacto del negocio', () => {
     assert.deepEqual(await errorsOf({ address: '' }), ['address']);
   });
 });
+
+describe('UpdateAccountDto — preferencias de trabajo', () => {
+  it('acepta un parche parcial y uno completo', async () => {
+    assert.deepEqual(await errorsOf({ preferences: { workEnd: '17:30' } }), []);
+    assert.deepEqual(
+      await errorsOf({ preferences: { workDays: [1, 2, 3], workStart: '07:00', workEnd: '15:00', weekStart: 'SUN', defaultLocale: 'en' } }),
+      [],
+    );
+  });
+
+  it('rechaza horas mal escritas, días fuera de 1–7 o repetidos, y valores fuera de lista', async () => {
+    for (const preferences of [
+      { workStart: '8:00' },
+      { workEnd: '25:00' },
+      { workDays: [0, 1] },
+      { workDays: [1, 8] },
+      { workDays: [1, 1] },
+      { workDays: [1, 2, 3, 4, 5, 6, 7, 1] },
+      { weekStart: 'VIE' },
+      { defaultLocale: 'fr' },
+    ]) {
+      assert.deepEqual(await errorsOf({ preferences }), ['preferences'], JSON.stringify(preferences));
+    }
+  });
+
+  it('un campo desconocido dentro de preferencias también es error (el pipe global usa forbidNonWhitelisted)', async () => {
+    const errors = await validate(plainToInstance(UpdateAccountDto, { preferences: { zona: 'x' } }), { whitelist: true, forbidNonWhitelisted: true });
+    assert.ok(errors.length > 0);
+  });
+});

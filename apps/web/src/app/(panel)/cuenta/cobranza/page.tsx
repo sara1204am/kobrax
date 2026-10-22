@@ -3,6 +3,7 @@ import { apiCall } from '@/lib/bff';
 import { ArrearCategories } from '../arrear-categories';
 import { FinancialForm } from '../financial-form';
 import { getAccount } from '../get-account';
+import { PreferencesForm } from '../preferences-form';
 
 /** Cómo cuenta el negocio la plata y la mora. */
 export default async function CuentaCobranzaPage() {
@@ -15,6 +16,7 @@ export default async function CuentaCobranzaPage() {
   return (
     <>
       <FinancialForm account={body.data} />
+      <PreferencesForm account={body.data} />
       {arrear.status === 200 && arrear.body.data && <ArrearCategories categories={arrear.body.data} />}
     </>
   );

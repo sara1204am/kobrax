@@ -312,6 +312,42 @@ describe('AccountsService.update', () => {
     assert.equal(sin.phone ?? null, null);
   });
 
+  it('preferencias: se mezclan con lo guardado y NO pisan el resto de configuration', async () => {
+    const { service, calls } = makeService({
+      found: account({ configuration: { importConfig: { staleAfterDays: 30 }, preferences: { workEnd: '17:00', weekStart: 'SUN' } } }),
+    });
+    await service.update({ preferences: { workStart: '07:30' } } as never);
+    const cfg = calls.updated!.configuration as Record<string, unknown>;
+    assert.deepEqual(cfg.importConfig, { staleAfterDays: 30 }, 'lo que ya vivía en configuration se conserva');
+    assert.deepEqual(cfg.preferences, {
+      workDays: [1, 2, 3, 4, 5, 6],
+      workStart: '07:30',
+      workEnd: '17:00',
+      weekStart: 'SUN',
+      defaultLocale: 'es',
+    });
+  });
+
+  it('🔴 un parche válido por campo pero incoherente en conjunto se rechaza y no escribe nada', async () => {
+    // Guardado: jornada 08:00–18:00. Un parche con inicio 19:00 deja el fin antes que el inicio.
+    const { service, calls } = makeService();
+    await rejectsWithCode(service.update({ preferences: { workStart: '19:00' } } as never), 'PREFERENCES_INVALID');
+    assert.equal(calls.updated, undefined);
+    assert.deepEqual(calls.audit, []);
+  });
+
+  it('sin preferencias en el parche, configuration no se toca', async () => {
+    const { service, calls } = makeService();
+    await service.update({ businessName: 'X' });
+    assert.equal('configuration' in calls.updated!, false);
+  });
+
+  it('findMine siempre entrega preferencias completas, con los valores de fábrica si nunca se configuraron', async () => {
+    const { service } = makeService();
+    const res = await service.findMine();
+    assert.deepEqual(res.preferences, { workDays: [1, 2, 3, 4, 5, 6], workStart: '08:00', workEnd: '18:00', weekStart: 'MON', defaultLocale: 'es' });
+  });
+
   it('nunca escribe plan, topes negociados, tipo ni estado', async () => {
     const { service, calls } = makeService();
     await service.update({ businessName: 'X' });

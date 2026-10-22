@@ -2305,6 +2305,30 @@
       "address": "Address",
       "city": "City"
     },
+    "preferences": {
+      "title": "Work preferences",
+      "intro": "When your team works and how the week is shown. The agenda and reminders use them as each module adopts them.",
+      "workDays": "Work days",
+      "workStart": "Start of the workday",
+      "workEnd": "End of the workday",
+      "weekStart": "The week starts on",
+      "defaultLocale": "Default language",
+      "defaultLocaleHint": "The panel opens in this language for people who have not picked one yet.",
+      "locales": {
+        "es": "Español",
+        "en": "English"
+      },
+      "problems": {
+        "NO_WORK_DAYS": "Pick at least one work day.",
+        "WORK_DAY_INVALID": "One of the work days is not valid.",
+        "TIME_INVALID": "Write times as HH:MM, for example 08:00.",
+        "END_NOT_AFTER_START": "The workday has to end after it starts."
+      },
+      "scope": "They are saved for the whole account today; each screen will start honoring them gradually.",
+      "save": "Save preferences",
+      "saved": "Preferences saved",
+      "saveError": "The preferences could not be saved"
+    },
     "businessData": "Business details",
     "financialData": "Financial settings",
     "decimals": "Amount decimals",

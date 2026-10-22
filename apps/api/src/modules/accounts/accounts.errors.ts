@@ -1,4 +1,4 @@
-import { ConflictException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 
 export const accountNotFound = () =>
   new NotFoundException({ code: 'ACCOUNT_NOT_FOUND', message: 'Cuenta no encontrada' });
@@ -16,3 +16,7 @@ export const roleCatalogMissing = () =>
     code: 'ROLE_CATALOG_MISSING',
     message: 'Catálogo de roles no inicializado',
   });
+
+/** Las preferencias, ya mezcladas con lo guardado, no forman un juego coherente (p. ej. la jornada termina antes de empezar). */
+export const preferencesInvalid = (reason: string) =>
+  new BadRequestException({ code: 'PREFERENCES_INVALID', message: 'Las preferencias de trabajo no son válidas', details: { reason } });

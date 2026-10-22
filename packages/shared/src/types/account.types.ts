@@ -1,3 +1,4 @@
+import type { AccountPreferences } from '../utils/account-preferences.js';
 import type { PlanLimits } from '../constants/plans.js';
 import type { ArrearsMethod } from '../enums/credit.enum.js';
 
@@ -32,6 +33,8 @@ export interface AccountInfo {
   website?: string | null;
   address?: string | null;
   city?: string | null;
+  /** Preferencias de trabajo (días y horario laboral, inicio de semana, idioma por defecto). Siempre completas: lo no configurado trae el valor de fábrica. */
+  preferences?: AccountPreferences;
   /**
    * Cuántos decimales muestran los montos (0–2, default 2). Preferencia de la cuenta: una
    * cartera que presta en enteros no quiere leer «,00» en cada renglón. Vive en `settings`.
@@ -84,6 +87,8 @@ export interface AccountPatch {
   website?: string | null;
   address?: string | null;
   city?: string | null;
+  /** Sólo lo que cambió de las preferencias; la API lo mezcla con lo ya guardado. */
+  preferences?: Partial<AccountPreferences>;
   /** Viaja como string ('0'|'1'|'2') porque sale de un `<select>` y el diff es de strings. */
   currencyDecimals?: string;
   /** Método de mora por defecto de los créditos nuevos (D20). */

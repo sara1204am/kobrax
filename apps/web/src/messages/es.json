@@ -2305,6 +2305,30 @@
       "address": "Dirección",
       "city": "Ciudad"
     },
+    "preferences": {
+      "title": "Preferencias de trabajo",
+      "intro": "Cuándo trabaja tu equipo y cómo se muestra la semana. Las usan la agenda y los recordatorios a medida que cada módulo las adopta.",
+      "workDays": "Días de trabajo",
+      "workStart": "Inicio de la jornada",
+      "workEnd": "Fin de la jornada",
+      "weekStart": "La semana empieza el",
+      "defaultLocale": "Idioma por defecto",
+      "defaultLocaleHint": "Con el que se abre el panel a quien todavía no eligió uno.",
+      "locales": {
+        "es": "Español",
+        "en": "English"
+      },
+      "problems": {
+        "NO_WORK_DAYS": "Elige al menos un día de trabajo.",
+        "WORK_DAY_INVALID": "Hay un día de trabajo que no es válido.",
+        "TIME_INVALID": "Escribe las horas como HH:MM, por ejemplo 08:00.",
+        "END_NOT_AFTER_START": "La jornada tiene que terminar después de empezar."
+      },
+      "scope": "Hoy se guardan para toda la cuenta; cada pantalla las irá respetando de a poco.",
+      "save": "Guardar preferencias",
+      "saved": "Preferencias guardadas",
+      "saveError": "No se pudieron guardar las preferencias"
+    },
     "businessData": "Datos del negocio",
     "financialData": "Configuración financiera",
     "decimals": "Decimales de los montos",
