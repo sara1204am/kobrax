@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { Permission } from '@kobrax/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -6,8 +6,11 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RateLimit } from '../../common/decorators/rate-limit.decorator';
+import { AccountActivityService } from './account-activity.service';
+import { AccountRequestsService } from './account-requests.service';
 import { AccountsService } from './accounts.service';
 import { UpdateAccountDto } from './dto/account.dto';
+import { CreateAccountRequestDto } from './dto/account-request.dto';
 import { CreateAccountDto } from './dto/create-account.dto';
 
 /**
@@ -16,7 +19,11 @@ import { CreateAccountDto } from './dto/create-account.dto';
  */
 @Controller('accounts')
 export class AccountsController {
-  constructor(private readonly accounts: AccountsService) {}
+  constructor(
+    private readonly accounts: AccountsService,
+    private readonly activity: AccountActivityService,
+    private readonly requests: AccountRequestsService,
+  ) {}
 
   /**
    * Registro público (S4). Sin guards a propósito; la guarda es el DTO + el rate limit.
@@ -37,6 +44,41 @@ export class AccountsController {
   @Roles(Permission.ACCOUNT_READ)
   findMine() {
     return this.accounts.findMine();
+  }
+
+  /**
+   * Qué se cambió en la cuenta y quién lo hizo. Pide `audit:read` porque el registro trae IPs y cambios de seguridad.
+   * `before` es el cursor de la página anterior; `entity` filtra por tipo de cambio.
+   */
+  @Get('me/activity')
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
+  @Roles(Permission.AUDIT_READ)
+  activityPage(@Query('before') before?: string, @Query('limit') limit?: string, @Query('entity') entity?: string, @Query('userId') userId?: string) {
+    return this.activity.activity({ before, limit: limit === undefined ? undefined : Number(limit), entity, userId });
+  }
+
+  /** Los cambios de plan y de estado que hizo Kobrax: la parte de «Facturación» que la cuenta puede leer. */
+  @Get('me/plan-history')
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
+  @Roles(Permission.ACCOUNT_READ)
+  planHistory() {
+    return this.activity.planHistory();
+  }
+
+  @Get('me/requests')
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
+  @Roles(Permission.ACCOUNT_READ)
+  listRequests() {
+    return this.requests.list();
+  }
+
+  /** Pide algo a Kobrax (cambio de plan, baja). No cambia nada por sí solo: queda registrado y se avisa al equipo. */
+  @Post('me/requests')
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
+  @Roles(Permission.ACCOUNT_WRITE)
+  @RateLimit({ limit: 10, windowSec: 3600, by: 'ip' })
+  createRequest(@Body() dto: CreateAccountRequestDto) {
+    return this.requests.create(dto);
   }
 
   @Patch('me')

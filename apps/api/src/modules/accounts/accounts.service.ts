@@ -1,4 +1,4 @@
-import { mergePreferences, preferencesOf, validatePreferences, type AccountPreferences } from '@kobrax/shared';
+import { billingOf, mergeBilling, mergePreferences, preferencesOf, validatePreferences, type AccountPreferences } from '@kobrax/shared';
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { hash } from 'bcryptjs';
@@ -164,11 +164,16 @@ export class AccountsService {
       // Las preferencias viven en `configuration.preferences`; el resto de `configuration` (importación, mora, prioridad)
       // se conserva tal cual. Se valida el conjunto ya mezclado: un parche válido por campo puede dejar una jornada al revés.
       let configuration: Record<string, unknown> | undefined;
-      if (dto.preferences) {
-        const merged = mergePreferences(preferencesOf(before.configuration), dto.preferences as Partial<AccountPreferences>);
-        const reason = validatePreferences(merged);
-        if (reason) throw preferencesInvalid(reason);
-        configuration = { ...(before.configuration as Record<string, unknown>), preferences: merged };
+      if (dto.preferences || dto.billing) {
+        configuration = { ...(before.configuration as Record<string, unknown>) };
+        if (dto.preferences) {
+          const merged = mergePreferences(preferencesOf(before.configuration), dto.preferences as Partial<AccountPreferences>);
+          const reason = validatePreferences(merged);
+          if (reason) throw preferencesInvalid(reason);
+          configuration.preferences = merged;
+        }
+        // Los datos de facturación también viven en `configuration`: se mezclan campo a campo, `null` quita el dato.
+        if (dto.billing) configuration.billing = mergeBilling(billingOf(before.configuration), dto.billing);
       }
       const updated = await tx.account.update({
         where: { id: before.id },

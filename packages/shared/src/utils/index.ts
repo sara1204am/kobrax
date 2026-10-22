@@ -36,3 +36,4 @@ export * from './catalog-metadata.js';
 export * from './collection-profile.js';
 export * from './income-profile.js';
 export * from './account-preferences.js';
+export * from './account-billing.js';

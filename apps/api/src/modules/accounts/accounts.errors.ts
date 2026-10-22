@@ -20,3 +20,18 @@ export const roleCatalogMissing = () =>
 /** Las preferencias, ya mezcladas con lo guardado, no forman un juego coherente (p. ej. la jornada termina antes de empezar). */
 export const preferencesInvalid = (reason: string) =>
   new BadRequestException({ code: 'PREFERENCES_INVALID', message: 'Las preferencias de trabajo no son válidas', details: { reason } });
+
+/** Ya hay un pedido del mismo tipo esperando respuesta de Kobrax. */
+export const requestAlreadyPending = () =>
+  new ConflictException({ code: 'REQUEST_ALREADY_PENDING', message: 'Ya hay un pedido igual esperando respuesta. Kobrax te contesta pronto.' });
+
+/** Pidió cambiar al plan que ya tiene. */
+export const requestPlanInvalid = () =>
+  new BadRequestException({ code: 'REQUEST_PLAN_INVALID', message: 'Esa cuenta ya tiene ese plan' });
+
+/** Para darse de baja hay que escribir el nombre del negocio: es el freno contra un clic equivocado. */
+export const requestConfirmMismatch = () =>
+  new BadRequestException({ code: 'REQUEST_CONFIRM_MISMATCH', message: 'El nombre escrito no coincide con el del negocio' });
+
+export const requestNotFound = () =>
+  new NotFoundException({ code: 'REQUEST_NOT_FOUND', message: 'Solicitud no encontrada o ya atendida' });

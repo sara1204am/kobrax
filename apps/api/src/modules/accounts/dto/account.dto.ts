@@ -35,6 +35,14 @@ export class PreferencesDto {
   @IsOptional() @IsIn([...PREFERENCE_LOCALES]) defaultLocale?: string;
 }
 
+/** Datos fiscales para la factura (F7). Cada campo es opcional y removible: `null` lo quita, ausente no lo toca. */
+export class BillingDto {
+  @IsOptional() @IsString() @Length(1, 160) legalName?: string | null;
+  @IsOptional() @IsString() @Length(1, 40) taxId?: string | null;
+  @IsOptional() @IsString() @Length(1, 240) address?: string | null;
+  @IsOptional() @IsEmail() @Length(3, 160) email?: string | null;
+}
+
 /**
  * Configuración editable del tenant. `planCode`, `limitsOverride`, `accountType` y `status`
  * NO están acá a propósito: no son configuración del producto.
@@ -72,4 +80,5 @@ export class UpdateAccountDto {
   @IsOptional() @IsString() @Length(1, 80) city?: string | null;
 
   @IsOptional() @ValidateNested() @Type(() => PreferencesDto) preferences?: PreferencesDto;
+  @IsOptional() @ValidateNested() @Type(() => BillingDto) billing?: BillingDto;
 }

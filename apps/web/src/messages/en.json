@@ -41,6 +41,8 @@
       "pending": "{n, plural, one {# pending task} other {# pending tasks}}"
     },
     "crumbs": {
+      "facturacion": "Billing",
+      "actividad": "Activity",
       "agencias": "Branches",
       "catalogos": "Catalogs",
       "general": "General",
@@ -2246,7 +2248,9 @@
       "cobranza": "Collections",
       "mensajes": "Messages",
       "catalogos": "Catalogs",
-      "agencias": "Branches"
+      "agencias": "Branches",
+      "facturacion": "Billing",
+      "actividad": "Activity"
     },
     "saveBar": {
       "label": "Unsaved changes",
@@ -2390,6 +2394,66 @@
       "noBranch": "no branch",
       "addPicked": "{n, plural, =0 {Add} one {Add # person} other {Add # people}}",
       "membersAdded": "Members moved to the branch"
+    },
+    "billing": {
+      "title": "Billing details",
+      "intro": "Who the invoice is issued to and where it is sent. Kobrax manages the plan: nothing is charged inside the product.",
+      "legalName": "Legal name",
+      "legalNameHint": "The one invoices are issued to, if different from the business name.",
+      "taxId": "Tax ID",
+      "email": "Invoice email",
+      "emailHint": "The invoice is sent here.",
+      "address": "Tax address",
+      "save": "Save details",
+      "saved": "Billing details saved",
+      "saveError": "The details could not be saved",
+      "historyTitle": "Plan history",
+      "historyIntro": "The plan and status changes Kobrax made to your account. To request a new one, go to the Plan tab.",
+      "historyEmpty": "There have been no plan changes yet.",
+      "planChanged": "Plan: {from} → {to}",
+      "statusChanged": "Status: {from} → {to}"
+    },
+    "planRequest": {
+      "title": "Change plan",
+      "intro": "The Kobrax team makes plan changes. Request it here and we will let you know when it is ready; until then, nothing changes in your account.",
+      "ask": "Request a plan change",
+      "modalTitle": "Request a plan change",
+      "plan": "Plan you want",
+      "note": "Anything we should know",
+      "noteHint": "Optional. For example, how many more people will use the account.",
+      "cancel": "Cancel",
+      "send": "Send request",
+      "sent": "Request sent",
+      "error": "The request could not be sent",
+      "pending": "You asked to move to {plan} on {date}. Kobrax will get back to you soon.",
+      "handled": "Your last request ({plan}) has been handled.",
+      "rejected": "Your last request ({plan}) could not be done."
+    },
+    "activity": {
+      "title": "Account activity",
+      "intro": "Who changed what in the account settings, team, branches and lists. Only people who can read the audit log see it.",
+      "filter": "Type of change",
+      "all": "All",
+      "entities": {
+        "account": "Account details",
+        "branch": "Branch",
+        "catalog_item": "Catalog item",
+        "arrear_category": "Arrears category",
+        "user_account": "Team member",
+        "account_request": "Request to Kobrax"
+      },
+      "actions": {
+        "CREATE": "Created",
+        "UPDATE": "Changed",
+        "DELETE": "Removed",
+        "REASSIGN_ON_DEACTIVATE": "Handed over the work of"
+      },
+      "byKobrax": "Kobrax ({via})",
+      "unknownActor": "Someone on the team",
+      "empty": "There is no activity to show yet.",
+      "empty_value": "empty",
+      "more": "Load more",
+      "loadError": "The activity could not be loaded"
     },
     "businessData": "Business details",
     "financialData": "Financial settings",

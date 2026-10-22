@@ -348,6 +348,28 @@ describe('AccountsService.update', () => {
     assert.deepEqual(res.preferences, { workDays: [1, 2, 3, 4, 5, 6], workStart: '08:00', workEnd: '18:00', weekStart: 'MON', defaultLocale: 'es' });
   });
 
+  it('facturación: se mezcla campo a campo, null quita, y conserva preferencias y el resto de configuration', async () => {
+    const { service, calls } = makeService({
+      found: account({
+        configuration: {
+          importConfig: { staleAfterDays: 30 },
+          preferences: { workEnd: '17:00' },
+          billing: { legalName: 'Pérez SRL', taxId: '123', address: 'Calle 1', email: 'f@pe.co' },
+        },
+      }),
+    });
+    await service.update({ billing: { taxId: null, email: 'facturas@pe.co' } } as never);
+    const cfg = calls.updated!.configuration as Record<string, unknown>;
+    assert.deepEqual(cfg.billing, { legalName: 'Pérez SRL', taxId: null, address: 'Calle 1', email: 'facturas@pe.co' });
+    assert.deepEqual(cfg.importConfig, { staleAfterDays: 30 });
+    assert.deepEqual(cfg.preferences, { workEnd: '17:00' }, 'sin parche de preferencias, no se tocan');
+  });
+
+  it('findMine entrega la facturación completa, con null en lo no cargado', async () => {
+    const { service } = makeService();
+    assert.deepEqual((await service.findMine()).billing, { legalName: null, taxId: null, address: null, email: null });
+  });
+
   it('nunca escribe plan, topes negociados, tipo ni estado', async () => {
     const { service, calls } = makeService();
     await service.update({ businessName: 'X' });

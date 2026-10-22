@@ -41,6 +41,8 @@
       "pending": "{n, plural, one {# gestión pendiente} other {# gestiones pendientes}}"
     },
     "crumbs": {
+      "facturacion": "Facturación",
+      "actividad": "Actividad",
       "agencias": "Agencias",
       "catalogos": "Catálogos",
       "general": "General",
@@ -2246,7 +2248,9 @@
       "cobranza": "Cobranza",
       "mensajes": "Mensajes",
       "catalogos": "Catálogos",
-      "agencias": "Agencias"
+      "agencias": "Agencias",
+      "facturacion": "Facturación",
+      "actividad": "Actividad"
     },
     "saveBar": {
       "label": "Cambios sin guardar",
@@ -2390,6 +2394,66 @@
       "noBranch": "sin agencia",
       "addPicked": "{n, plural, =0 {Sumar} one {Sumar # persona} other {Sumar # personas}}",
       "membersAdded": "Miembros movidos a la agencia"
+    },
+    "billing": {
+      "title": "Datos de facturación",
+      "intro": "A nombre de quién y adónde se manda la factura. El plan lo gestiona Kobrax: no se cobra dentro del producto.",
+      "legalName": "Razón social",
+      "legalNameHint": "Con la que se factura, si es distinta del nombre del negocio.",
+      "taxId": "NIT / documento fiscal",
+      "email": "Correo para facturas",
+      "emailHint": "Ahí llega la factura.",
+      "address": "Dirección fiscal",
+      "save": "Guardar datos",
+      "saved": "Datos de facturación guardados",
+      "saveError": "No se pudieron guardar los datos",
+      "historyTitle": "Historial de plan",
+      "historyIntro": "Los cambios de plan y de estado que hizo Kobrax en tu cuenta. Para pedir uno nuevo, ve a la pestaña Plan.",
+      "historyEmpty": "Todavía no hubo cambios de plan.",
+      "planChanged": "Plan: {from} → {to}",
+      "statusChanged": "Estado: {from} → {to}"
+    },
+    "planRequest": {
+      "title": "Cambiar de plan",
+      "intro": "El cambio de plan lo hace el equipo de Kobrax. Pídelo acá y te avisamos cuando esté listo; mientras tanto, nada cambia en tu cuenta.",
+      "ask": "Pedir cambio de plan",
+      "modalTitle": "Pedir cambio de plan",
+      "plan": "Plan que quieres",
+      "note": "Algo que debamos saber",
+      "noteHint": "Opcional. Por ejemplo, cuántas personas más van a usar la cuenta.",
+      "cancel": "Cancelar",
+      "send": "Enviar pedido",
+      "sent": "Pedido enviado",
+      "error": "No se pudo enviar el pedido",
+      "pending": "Pediste pasar a {plan} el {date}. Kobrax te contesta pronto.",
+      "handled": "Tu último pedido ({plan}) ya fue atendido.",
+      "rejected": "Tu último pedido ({plan}) no se pudo hacer."
+    },
+    "activity": {
+      "title": "Actividad de la cuenta",
+      "intro": "Quién cambió qué en la configuración de la cuenta, el equipo, las agencias y las listas. Sólo la ve quien puede consultar la auditoría.",
+      "filter": "Tipo de cambio",
+      "all": "Todos",
+      "entities": {
+        "account": "Datos de la cuenta",
+        "branch": "Agencia",
+        "catalog_item": "Ítem de catálogo",
+        "arrear_category": "Categoría de mora",
+        "user_account": "Miembro del equipo",
+        "account_request": "Pedido a Kobrax"
+      },
+      "actions": {
+        "CREATE": "Creó",
+        "UPDATE": "Cambió",
+        "DELETE": "Quitó",
+        "REASSIGN_ON_DEACTIVATE": "Pasó el trabajo de"
+      },
+      "byKobrax": "Kobrax ({via})",
+      "unknownActor": "Alguien del equipo",
+      "empty": "Todavía no hay actividad para mostrar.",
+      "empty_value": "vacío",
+      "more": "Cargar más",
+      "loadError": "No se pudo cargar la actividad"
     },
     "businessData": "Datos del negocio",
     "financialData": "Configuración financiera",

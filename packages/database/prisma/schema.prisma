@@ -123,6 +123,7 @@ model Account {
   creditExternalSnapshots CreditExternalSnapshot[]
   clientExternalKeys      ClientExternalKey[]
   externalAdvisorLinks    ExternalAdvisorLink[]
+  accountRequests         AccountRequest[]
 
   @@index([status])
   @@index([deletedAt])
@@ -1883,4 +1884,41 @@ model DashboardWidget {
 
   @@index([accountId, dashboardId])
   @@map("dashboard_widgets")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Solicitudes de la cuenta a Kobrax (Refactor de Cuenta · F7)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Lo que una cuenta le pide al equipo de Kobrax: cambiar de plan o darse de baja. El plan lo gestiona Kobrax (no hay cobro
+/// dentro del producto), así que esto es un aviso con estado, no una operación: Kobrax la atiende por consola.
+enum AccountRequestType {
+  PLAN_CHANGE
+  CLOSURE
+}
+
+enum AccountRequestStatus {
+  PENDING
+  HANDLED
+  REJECTED
+}
+
+model AccountRequest {
+  id          String               @id @default(uuid())
+  accountId   String               @map("account_id")
+  type        AccountRequestType
+  status      AccountRequestStatus @default(PENDING)
+  /// PLAN_CHANGE: { plan, note? } · CLOSURE: { note? }. Lo valida la API, no la base.
+  payload     Json                 @default("{}")
+  /// Quién la pidió (`users.id`; referencia suave, como `branches.manager_user_id`).
+  requestedBy String               @map("requested_by")
+  /// Lo que Kobrax le contesta a la cuenta al atenderla o rechazarla.
+  handledNote String?              @map("handled_note")
+  createdAt   DateTime             @default(now()) @map("created_at")
+  handledAt   DateTime?            @map("handled_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@index([accountId, status])
+  @@map("account_requests")
 }
