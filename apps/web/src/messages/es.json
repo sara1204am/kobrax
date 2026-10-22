@@ -2416,6 +2416,30 @@
       "statusChanged": "Estado: {from} → {to}"
     },
     "planRequest": {
+      "soloTitle": "Pasa de trabajar solo a trabajar en equipo",
+      "soloText": "Tu plan es individual: una sola persona. Con un plan de equipo invitas a cobradores y supervisores, repartes la cartera entre ellos y ves el trabajo de todos en un solo lugar.",
+      "soloGain": "Con {plan} pasas de {fromUsers, number} a {toUsers, number} miembros y de {fromCredits, number} a {toCredits, number} créditos activos.",
+      "seeTeam": "Ver planes de equipo",
+      "soloModalTitle": "Pasar a un plan de equipo",
+      "groups": {
+        "individual": "Individual",
+        "team": "Equipo"
+      },
+      "groupHint": {
+        "individual": "una sola persona",
+        "team": "varias personas trabajando juntas"
+      },
+      "features": {
+        "members": "{n, plural, one {# miembro} other {# miembros}}",
+        "membersUnlimited": "Miembros sin límite",
+        "credits": "{n, number} créditos activos",
+        "creditsUnlimited": "Créditos sin límite",
+        "clients": "{n, number} clientes",
+        "clientsUnlimited": "Clientes sin límite",
+        "photos": "{n, number} fotos al mes",
+        "photosUnlimited": "Fotos sin límite"
+      },
+      "currentIs": "Hoy tienes el plan {plan}.",
       "title": "Cambiar de plan",
       "intro": "El cambio de plan lo hace el equipo de Kobrax. Pídelo acá y te avisamos cuando esté listo; mientras tanto, nada cambia en tu cuenta.",
       "ask": "Pedir cambio de plan",

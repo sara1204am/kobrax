@@ -1,4 +1,4 @@
-import type { AccountInfo } from '@kobrax/shared';
+import { PLANS, PLAN_ORDER, type AccountInfo, type PlanCode } from '@kobrax/shared';
 
 /** Los topes que se cuentan (los mismos que dibuja la tarjeta del plan con barra). */
 export const COUNTED_LIMITS = ['users', 'credits', 'clients', 'photosPerMonth', 'actionsPerMonth'] as const;
@@ -29,4 +29,24 @@ export function exceededLimits(account: Pick<AccountInfo, 'limits' | 'usage'>): 
     const max = account.limits[key];
     return max !== null && account.usage[key] > max;
   });
+}
+
+/**
+ * ¿Es un plan para una sola persona? Sale del tope de miembros del catálogo (1) y no del nombre del plan: si mañana
+ * cambian los planes, esta distinción los sigue.
+ */
+export function isIndividualPlan(code: string): boolean {
+  return PLANS[code as PlanCode]?.limits.users === 1;
+}
+
+/**
+ * Los planes a los que se puede pasar, separados en *individual* (una persona) y *equipo* (varias), en el orden de la
+ * escalera. El plan actual no se ofrece: pedir el que ya se tiene no tiene sentido.
+ */
+export function plansByKind(current: string): { individual: PlanCode[]; team: PlanCode[] } {
+  const others = PLAN_ORDER.filter((code) => code !== current);
+  return {
+    individual: others.filter((code) => isIndividualPlan(code)),
+    team: others.filter((code) => !isIndividualPlan(code)),
+  };
 }

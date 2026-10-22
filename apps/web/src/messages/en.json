@@ -2416,6 +2416,30 @@
       "statusChanged": "Status: {from} → {to}"
     },
     "planRequest": {
+      "soloTitle": "Move from working alone to working as a team",
+      "soloText": "Your plan is individual: one person. With a team plan you invite collectors and supervisors, split the portfolio between them and see everyone's work in one place.",
+      "soloGain": "With {plan} you go from {fromUsers, number} to {toUsers, number} members and from {fromCredits, number} to {toCredits, number} active credits.",
+      "seeTeam": "See team plans",
+      "soloModalTitle": "Move to a team plan",
+      "groups": {
+        "individual": "Individual",
+        "team": "Team"
+      },
+      "groupHint": {
+        "individual": "one person",
+        "team": "several people working together"
+      },
+      "features": {
+        "members": "{n, plural, one {# member} other {# members}}",
+        "membersUnlimited": "Unlimited members",
+        "credits": "{n, number} active credits",
+        "creditsUnlimited": "Unlimited credits",
+        "clients": "{n, number} clients",
+        "clientsUnlimited": "Unlimited clients",
+        "photos": "{n, number} photos a month",
+        "photosUnlimited": "Unlimited photos"
+      },
+      "currentIs": "You are on the {plan} plan today.",
       "title": "Change plan",
       "intro": "The Kobrax team makes plan changes. Request it here and we will let you know when it is ready; until then, nothing changes in your account.",
       "ask": "Request a plan change",
