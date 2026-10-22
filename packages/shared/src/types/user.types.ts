@@ -13,6 +13,8 @@ export interface Member {
   photoUrl: string | null;
   roleId: string;
   roleName: string;
+  /** Agencia a la que pertenece; `null` = ninguna. Cambia lo que ve (el alcance del supervisor sale de ahí). */
+  branchId?: string | null;
   isOwner: boolean;
   isActive: boolean;
   /** `PENDING` = invitado que todavía no aceptó. */

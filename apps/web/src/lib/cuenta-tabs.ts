@@ -4,7 +4,7 @@ import { Permission } from '@kobrax/shared';
  * Las pestañas de `/cuenta`. `key` es la clave dentro de `account.tabs` en i18n y también el
  * último tramo de la ruta (`/cuenta/<key>`), igual que `NAV` con `panel.nav`.
  */
-export type CuentaTabKey = 'general' | 'plan' | 'cobranza' | 'mensajes' | 'catalogos';
+export type CuentaTabKey = 'general' | 'plan' | 'cobranza' | 'mensajes' | 'catalogos' | 'agencias';
 
 export interface CuentaTab {
   key: CuentaTabKey;
@@ -19,6 +19,7 @@ export const CUENTA_TABS: CuentaTab[] = [
   { key: 'cobranza', href: '/cuenta/cobranza', permission: Permission.ACCOUNT_READ },
   { key: 'mensajes', href: '/cuenta/mensajes', permission: Permission.CATALOG_READ },
   { key: 'catalogos', href: '/cuenta/catalogos', permission: Permission.CATALOG_READ },
+  { key: 'agencias', href: '/cuenta/agencias', permission: Permission.USER_READ },
 ];
 
 /**

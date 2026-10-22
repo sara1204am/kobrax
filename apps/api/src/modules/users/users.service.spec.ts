@@ -56,6 +56,8 @@ interface Opts {
   /** Rutas de la persona, y en cuáles de esas fechas el destinatario ya tiene la suya. */
   routes?: { id: string; plannedDate: Date }[];
   targetBusyDates?: string[];
+  /** La agencia a la que se mueve a la persona: lo que devuelve su búsqueda (`null` = no existe en esta cuenta). */
+  branch?: { active: boolean } | null;
 }
 
 function makeService(opts: Opts = {}) {
@@ -112,6 +114,9 @@ function makeService(opts: Opts = {}) {
         return member({ ...args.data, role: ROLES[(args.data.roleId as string) ?? ROLE_COLLECTOR] });
       },
       delete: async () => void calls.deleted.push('userAccount'),
+    },
+    branch: {
+      findFirst: async () => (opts.branch === undefined ? { active: true } : opts.branch),
     },
     // El trabajo pendiente y su traspaso.
     agendaItem: {
@@ -214,6 +219,39 @@ describe('UsersService.list — aislamiento por tenant', () => {
     const { service, calls } = makeService();
     await service.list();
     assert.equal((calls.listArgs!.where as Record<string, unknown> | undefined)?.isActive, undefined);
+  });
+});
+
+describe('UsersService.updateMember — agencia', () => {
+  const BRANCH = '3f2a6c1e-9b4d-4e57-8a10-6d2b7c9e4f11';
+
+  it('pasa a la persona a la agencia y deja la anterior en la auditoría', async () => {
+    const { service, calls } = makeService({ found: member({ branchId: 'b-vieja' }) });
+    await service.updateMember(OTHER, { branchId: BRANCH });
+    assert.equal(calls.updated!.branchId, BRANCH);
+    assert.deepEqual(calls.audit, ['UPDATE']);
+  });
+
+  it('null la saca de su agencia', async () => {
+    const { service, calls } = makeService({ found: member({ branchId: 'b-vieja' }) });
+    await service.updateMember(OTHER, { branchId: null });
+    assert.equal(calls.updated!.branchId, null);
+  });
+
+  it('sin branchId en el parche no la toca', async () => {
+    const { service, calls } = makeService();
+    await service.updateMember(OTHER, { isActive: true });
+    assert.equal(calls.updated!.branchId, undefined);
+  });
+
+  it('🔴 una agencia que no existe en esta cuenta, o está desactivada, se rechaza y no escribe', async () => {
+    const missing = makeService({ branch: null });
+    await rejectsWithCode(missing.service.updateMember(OTHER, { branchId: BRANCH }), 'BRANCH_NOT_FOUND');
+    assert.equal(missing.calls.updated, undefined);
+
+    const off = makeService({ branch: { active: false } });
+    await rejectsWithCode(off.service.updateMember(OTHER, { branchId: BRANCH }), 'BRANCH_INACTIVE');
+    assert.equal(off.calls.updated, undefined);
   });
 });
 

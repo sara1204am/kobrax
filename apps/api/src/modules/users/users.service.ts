@@ -1,3 +1,4 @@
+import { branchInactive, branchNotFound } from '../branches/branches.errors';
 import { Injectable, Logger } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { hash } from 'bcryptjs';
@@ -182,9 +183,16 @@ export class UsersService {
         }
       }
 
+      // La agencia tiene que existir en esta cuenta y estar activa (la RLS acota `branches` al tenant). `null` la quita.
+      if (dto.branchId) {
+        const branch = await tx.branch.findFirst({ where: { id: dto.branchId, deletedAt: null }, select: { active: true } });
+        if (!branch) throw branchNotFound();
+        if (!branch.active) throw branchInactive();
+      }
+
       const updated = await tx.userAccount.update({
         where: { id: before.id },
-        data: { roleId: dto.roleId, isActive: dto.isActive },
+        data: { roleId: dto.roleId, isActive: dto.isActive, branchId: dto.branchId },
         include: MEMBER_INCLUDE,
       });
       return { before, updated };
@@ -204,8 +212,8 @@ export class UsersService {
       entity: 'user_account',
       entityId: updated.id,
       action: 'UPDATE',
-      before: { roleId: before.roleId, isActive: before.isActive },
-      after: { roleId: updated.roleId, isActive: updated.isActive },
+      before: { roleId: before.roleId, isActive: before.isActive, branchId: before.branchId },
+      after: { roleId: updated.roleId, isActive: updated.isActive, branchId: updated.branchId },
     });
     return serializeMember(updated);
   }
