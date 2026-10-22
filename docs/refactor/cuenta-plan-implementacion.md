@@ -2,10 +2,26 @@
 
 > **Fecha:** 2026-10-21 · **Rama base:** `feat/cuenta-refactor` (desde `dev`)
 > **Insumo:** [`cuenta-web.md`](./cuenta-web.md) (inventario y brechas B1–B13).
-> **Estado:** plan para aprobar. Nada de esto está implementado.
+> **Estado:** F0–F8 implementadas en `feat/cuenta-refactor` (2026-10-21/22). Ver §0 para lo que cambió respecto del plan.
 > **Convención:** ✅ ya existe · 🔶 por construir · ⚠️ a verificar en el código antes de empezar la fase.
 
 ---
+
+## 0. Estado de la implementación
+
+| Fase | Estado | Commit | Diferencias con el plan |
+|---|---|---|---|
+| F0 Pestañas | ✅ | `adeefb0` | — (el commit lleva el rótulo «docs» pero incluye el código de F0 y F1) |
+| F1 Plan | ✅ | `adeefb0` | El «congelado» se calcula en la web (consumo > tope); no hay campo nuevo en la API salvo `trialEndsAt` |
+| F2 Barra de guardado | ✅ | `0fc6384` | Las plantillas de WhatsApp quedan fuera: se guardan una a una desde su ventana |
+| F3 Catálogos | ✅ | `df5a47b` | 13 catálogos editables. Quedan fuera los que la lógica usa por código (`INCOME_SOURCE`, `PRIORITY`, `EXPECTED_RESULT`, `CURRENCY`) y `CAMPAIGN`. El contenido adicional (`metadata`) no se edita |
+| F4 Identidad y contacto | ✅ | `8b243eb` | `/auth/me` suma `account { name, phone, logoUrl }` (con `withSystemTenant`, porque ese endpoint no pasa por `TenantGuard`). **Falta que el móvil use `{{telefono_negocio}}`** |
+| F5 Preferencias | 🟡 | `4d10121` | Se guardan, validan y sirven; **ningún módulo las consume todavía** (ver §9) |
+| F6 Agencias | ✅ | `564c0ac` | Sin permisos nuevos: leer = `user:read`, escribir = `account:write`. No se desactiva ni se quita una agencia con miembros activos. No se agregó el selector en la ficha del miembro: se cambia desde Cuenta → Agencias |
+| F7 Actividad, facturación, solicitudes | ✅ | `18a267b` | Facturación reducida a datos fiscales + historial (sin facturas ni pasarela). Las solicitudes se atienden por consola: `pnpm --filter @kobrax/api request:handle` |
+| F8 Avanzado | 🟡 | _este commit_ | Respaldo, baja, transferencia de propiedad ✅. **D5 (retención de fotos): solo modo simulación**, no se elimina ni archiva nada |
+
+Migraciones aplicadas: `20261021100000_account_branding`, `20261021110000_branch_code_unique`, `20261021120000_account_requests`.
 
 ## 1. Decisiones tomadas (2026-10-21)
 
@@ -237,3 +253,15 @@ Pasarela de pago, cobro automático, cambio de plan por el cliente, facturas des
 ## 8. Siguiente paso
 
 Aprobar este plan y arrancar **F0** en `feat/cuenta-refactor`. Antes de cada fase se resuelven los puntos marcados ⚠️ leyendo el código indicado.
+
+---
+
+## 9. Pendientes y deuda explícita
+
+1. **Preferencias de trabajo (F5)** — días y horario laboral, inicio de semana e idioma por defecto se guardan pero ningún módulo las lee. Consumidores previstos: calendarios de agenda (inicio de semana: `weekOf` en `lib/agenda.ts` asume lunes), recordatorios (`notifications`) y el cálculo de «hoy/horario» de la agenda. El idioma por defecto debería aplicarse al abrir el panel de alguien sin cookie `k_locale`.
+2. **Retención de fotos (D5)** — 🔴 **requiere decisión de producto/legal antes de escribir código de borrado.** Hoy solo se informa cuántas fotos pasaron el plazo (`GET /accounts/me/retention`). Decidir: ¿borrar o mover a almacenamiento frío?; ¿se conserva el hash SHA-256 y los metadatos (principio de evidencia inmutable)?; ¿qué pasa con fotos de gestiones en disputa o de pagos relacionados? Si se aprueba, entregar en dos pasos: job de simulación por cuenta y, tras revisión, aplicación por lotes con auditoría.
+3. **Móvil** — sumar `{{telefono_negocio}}` a las variables de las plantillas (`agenda-register.tsx`); mientras no esté, queda literal (es seguro). Mostrar logo y contacto en «Datos de la cuenta» si se quiere.
+4. **Ficha del miembro** — poder cambiar la agencia desde `/equipo/[userId]` (hoy se hace en Cuenta → Agencias; `PATCH /users/:id` ya acepta `branchId`).
+5. **Alcance del supervisor tras mover de agencia** — la API aplica el cambio, pero no se verificó con una prueba de integración contra la base cuánto tarda en reflejarse en la sesión ya abierta del supervisor.
+6. **Aviso de «withTenant sin contexto»** — `/auth/me` ya no lo dispara; el login sí sigue generando el aviso existente (no es de este refactor).
+7. **Historial de commits** — `adeefb0` mezcla docs y código de F0/F1 por un `git add` previo; no se reescribió porque ya está en el remoto.

@@ -9,9 +9,12 @@ import { RateLimit } from '../../common/decorators/rate-limit.decorator';
 import { AccountActivityService } from './account-activity.service';
 import { AccountRequestsService } from './account-requests.service';
 import { AccountsService } from './accounts.service';
+import { OwnershipService } from './ownership.service';
+import { RetentionService } from './retention.service';
 import { UpdateAccountDto } from './dto/account.dto';
 import { CreateAccountRequestDto } from './dto/account-request.dto';
 import { CreateAccountDto } from './dto/create-account.dto';
+import { TransferOwnershipDto } from './dto/transfer-ownership.dto';
 
 /**
  * Los guards van **por método**, no en la clase: el registro (S4) es público y
@@ -23,6 +26,8 @@ export class AccountsController {
     private readonly accounts: AccountsService,
     private readonly activity: AccountActivityService,
     private readonly requests: AccountRequestsService,
+    private readonly ownership: OwnershipService,
+    private readonly retention: RetentionService,
   ) {}
 
   /**
@@ -79,6 +84,26 @@ export class AccountsController {
   @RateLimit({ limit: 10, windowSec: 3600, by: 'ip' })
   createRequest(@Body() dto: CreateAccountRequestDto) {
     return this.requests.create(dto);
+  }
+
+  /** Cuántas fotos pasaron el plazo del plan. Sólo informa: nada se borra (ver `RetentionService`). */
+  @Get('me/retention')
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
+  @Roles(Permission.ACCOUNT_READ)
+  retentionReport() {
+    return this.retention.report();
+  }
+
+  /**
+   * Pasa la propiedad de la cuenta a otro administrador. Exige ser el dueño, la contraseña y —con MFA activo— el código.
+   * 5 por hora: es una acción rara, y cada intento fallido es una contraseña adivinada.
+   */
+  @Post('me/transfer-ownership')
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
+  @Roles(Permission.ACCOUNT_WRITE)
+  @RateLimit({ limit: 5, windowSec: 3600, by: 'ip' })
+  transferOwnership(@Body() dto: TransferOwnershipDto) {
+    return this.ownership.transfer(dto);
   }
 
   @Patch('me')

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 
 export const accountNotFound = () =>
   new NotFoundException({ code: 'ACCOUNT_NOT_FOUND', message: 'Cuenta no encontrada' });
@@ -35,3 +35,18 @@ export const requestConfirmMismatch = () =>
 
 export const requestNotFound = () =>
   new NotFoundException({ code: 'REQUEST_NOT_FOUND', message: 'Solicitud no encontrada o ya atendida' });
+
+/** Sólo el dueño actual puede transferir la propiedad. */
+export const ownerNotOwner = () =>
+  new ForbiddenException({ code: 'OWNER_NOT_OWNER', message: 'Sólo el dueño de la cuenta puede transferir la propiedad' });
+
+/** El destinatario debe ser otro administrador activo de esta cuenta. */
+export const ownerTargetInvalid = () =>
+  new BadRequestException({ code: 'OWNER_TARGET_INVALID', message: 'Elige a otro administrador activo de la cuenta' });
+
+/** 400 y no 401: un 401 haría que el panel crea que la sesión venció. */
+export const ownerPasswordInvalid = () =>
+  new BadRequestException({ code: 'OWNER_PASSWORD_INVALID', message: 'La contraseña no es correcta' });
+
+export const ownerCodeInvalid = () =>
+  new BadRequestException({ code: 'OWNER_CODE_INVALID', message: 'El código de verificación no es válido' });

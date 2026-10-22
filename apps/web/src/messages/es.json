@@ -41,6 +41,7 @@
       "pending": "{n, plural, one {# gestión pendiente} other {# gestiones pendientes}}"
     },
     "crumbs": {
+      "avanzado": "Avanzado",
       "facturacion": "Facturación",
       "actividad": "Actividad",
       "agencias": "Agencias",
@@ -2250,7 +2251,8 @@
       "catalogos": "Catálogos",
       "agencias": "Agencias",
       "facturacion": "Facturación",
-      "actividad": "Actividad"
+      "actividad": "Actividad",
+      "avanzado": "Avanzado"
     },
     "saveBar": {
       "label": "Cambios sin guardar",
@@ -2454,6 +2456,53 @@
       "empty_value": "vacío",
       "more": "Cargar más",
       "loadError": "No se pudo cargar la actividad"
+    },
+    "advanced": {
+      "backup": {
+        "title": "Respaldo completo",
+        "text": "Descarga todos los datos de tu cuenta —clientes, créditos, pagos, gestiones y rutas— en un solo archivo. La descarga queda registrada.",
+        "download": "Descargar respaldo"
+      },
+      "retention": {
+        "title": "Conservación de fotos",
+        "unlimited": "Tu plan conserva las fotos sin límite de tiempo.",
+        "months": "Tu plan conserva las fotos {n, plural, one {# mes} other {# meses}}.",
+        "older": "Fotos más antiguas que ese plazo: {older, number} de {total, number}.",
+        "noDelete": "Por ahora esto es solo un aviso: Kobrax no elimina ni archiva fotos automáticamente. Cada foto guarda su huella digital como evidencia, y no se borra nada sin avisarte antes."
+      },
+      "ownership": {
+        "title": "Transferir la propiedad",
+        "intro": "El dueño responde por la cuenta ante Kobrax. Puedes pasarle la propiedad a otro administrador activo; seguirás siendo administrador. Pedimos tu contraseña y, si tienes verificación en dos pasos, tu código.",
+        "notOwner": "Solo el dueño actual de la cuenta puede transferir la propiedad.",
+        "noCandidates": "No hay otro administrador activo a quien pasarle la cuenta. Invita o promueve a uno desde Equipo.",
+        "target": "Nuevo dueño",
+        "choose": "Elige un administrador",
+        "password": "Tu contraseña",
+        "code": "Código de verificación",
+        "codeHint": "Si tienes verificación en dos pasos activa.",
+        "submit": "Transferir propiedad",
+        "cancel": "Cancelar",
+        "confirmTitle": "¿Transferir la propiedad?",
+        "confirmText": "Vas a pasarle la propiedad de la cuenta a {name}. Después de esto no podrás deshacerlo tú: tendrá que devolvértela esa persona.",
+        "confirmOk": "Sí, transferir",
+        "done": "Propiedad transferida",
+        "error": "No se pudo transferir la propiedad"
+      },
+      "closure": {
+        "title": "Dar de baja la cuenta",
+        "intro": "Pide la baja y el equipo de Kobrax se pone en contacto contigo. Pedirla no borra nada: tus datos siguen intactos hasta que lo conversemos.",
+        "ask": "Pedir la baja",
+        "modalTitle": "Pedir la baja de la cuenta",
+        "modalText": "Esto avisa a Kobrax que quieres dar de baja la cuenta. No se borra nada ahora.",
+        "confirmLabel": "Escribe «{name}» para confirmar",
+        "note": "Motivo",
+        "noteHint": "Opcional. Nos ayuda a mejorar.",
+        "cancel": "Cancelar",
+        "send": "Pedir la baja",
+        "sent": "Pedido enviado",
+        "error": "No se pudo enviar el pedido",
+        "pending": "Ya pediste la baja el {date}. Kobrax se pondrá en contacto contigo."
+      }
     },
     "businessData": "Datos del negocio",
     "financialData": "Configuración financiera",

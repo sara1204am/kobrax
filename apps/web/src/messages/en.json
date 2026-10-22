@@ -41,6 +41,7 @@
       "pending": "{n, plural, one {# pending task} other {# pending tasks}}"
     },
     "crumbs": {
+      "avanzado": "Advanced",
       "facturacion": "Billing",
       "actividad": "Activity",
       "agencias": "Branches",
@@ -2250,7 +2251,8 @@
       "catalogos": "Catalogs",
       "agencias": "Branches",
       "facturacion": "Billing",
-      "actividad": "Activity"
+      "actividad": "Activity",
+      "avanzado": "Advanced"
     },
     "saveBar": {
       "label": "Unsaved changes",
@@ -2454,6 +2456,53 @@
       "empty_value": "empty",
       "more": "Load more",
       "loadError": "The activity could not be loaded"
+    },
+    "advanced": {
+      "backup": {
+        "title": "Full backup",
+        "text": "Download all your account data —clients, credits, payments, follow-ups and routes— in a single file. The download is recorded.",
+        "download": "Download backup"
+      },
+      "retention": {
+        "title": "Photo retention",
+        "unlimited": "Your plan keeps photos with no time limit.",
+        "months": "Your plan keeps photos for {n, plural, one {# month} other {# months}}.",
+        "older": "Photos older than that: {older, number} of {total, number}.",
+        "noDelete": "For now this is only a notice: Kobrax does not delete or archive photos automatically. Each photo stores its digital fingerprint as evidence, and nothing is deleted without telling you first."
+      },
+      "ownership": {
+        "title": "Transfer ownership",
+        "intro": "The owner answers for the account to Kobrax. You can hand ownership to another active administrator; you will remain an administrator. We ask for your password and, if you have two-step verification, your code.",
+        "notOwner": "Only the current owner of the account can transfer ownership.",
+        "noCandidates": "There is no other active administrator to hand the account to. Invite or promote one from Team.",
+        "target": "New owner",
+        "choose": "Choose an administrator",
+        "password": "Your password",
+        "code": "Verification code",
+        "codeHint": "If you have two-step verification on.",
+        "submit": "Transfer ownership",
+        "cancel": "Cancel",
+        "confirmTitle": "Transfer ownership?",
+        "confirmText": "You are about to hand the account's ownership to {name}. You will not be able to undo this yourself: that person would have to hand it back.",
+        "confirmOk": "Yes, transfer",
+        "done": "Ownership transferred",
+        "error": "Ownership could not be transferred"
+      },
+      "closure": {
+        "title": "Close the account",
+        "intro": "Request the closure and the Kobrax team will get in touch. Requesting it deletes nothing: your data stays intact until we talk.",
+        "ask": "Request closure",
+        "modalTitle": "Request account closure",
+        "modalText": "This tells Kobrax you want to close the account. Nothing is deleted now.",
+        "confirmLabel": "Type \"{name}\" to confirm",
+        "note": "Reason",
+        "noteHint": "Optional. It helps us improve.",
+        "cancel": "Cancel",
+        "send": "Request closure",
+        "sent": "Request sent",
+        "error": "The request could not be sent",
+        "pending": "You asked for the closure on {date}. Kobrax will get in touch."
+      }
     },
     "businessData": "Business details",
     "financialData": "Financial settings",
