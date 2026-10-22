@@ -258,6 +258,8 @@ describe('Cuenta · identidad y contacto', () => {
   it('sin permiso de escritura no hay subida ni se puede quitar', () => {
     renderForm(['account:read']);
     expect(screen.queryByLabelText('Logo del negocio')).not.toBeInTheDocument();
+    // El control no desaparece en silencio: el campo dice por qué no se puede subir.
+    expect(screen.getByText('Solo un administrador puede cambiar el logo.')).toBeInTheDocument();
     expect(screen.getByLabelText(/Teléfono del negocio/)).toBeDisabled();
   });
 });

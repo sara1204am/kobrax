@@ -17,6 +17,7 @@ export function ImageUploadField({
   onChange,
   onError,
   disabled,
+  readOnlyText,
   texts,
 }: {
   label: string;
@@ -25,6 +26,8 @@ export function ImageUploadField({
   onChange: (url: string) => void;
   onError: (message: string) => void;
   disabled?: boolean;
+  /** Qué decir cuando no se puede subir (p. ej. falta el permiso): sin esto el control desaparece sin explicación. */
+  readOnlyText?: string;
   texts: { uploading: string; remove: string; uploadError: string };
 }) {
   const [busy, setBusy] = useState(false);
@@ -49,6 +52,15 @@ export function ImageUploadField({
     <div className="space-y-2">
       <span className="block text-[14px] font-medium text-k-text">{label}</span>
       <div className="flex items-center gap-3">
+        {!(value && !broken) && (
+          // El lugar de la imagen se ve aunque esté vacío: así se entiende que acá va algo.
+          <span
+            aria-hidden
+            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-dashed border-k-border bg-k-bg text-[20px] text-k-muted"
+          >
+            ＋
+          </span>
+        )}
         {value && !broken && (
           // eslint-disable-next-line @next/next/no-img-element -- lo sirve el BFF con la sesión
           <img
@@ -74,7 +86,7 @@ export function ImageUploadField({
               className="block w-full text-[13px] text-k-text-2 file:mr-3 file:rounded-lg file:border file:border-k-border file:bg-white file:px-3 file:py-2 file:text-[13px] file:font-medium file:text-k-text-2 hover:file:bg-k-bg"
             />
           )}
-          <p className="text-[12px] text-k-muted">{busy ? texts.uploading : hint}</p>
+          <p className="text-[12px] text-k-muted">{busy ? texts.uploading : disabled && readOnlyText ? readOnlyText : hint}</p>
         </div>
         {value && !disabled && (
           <button

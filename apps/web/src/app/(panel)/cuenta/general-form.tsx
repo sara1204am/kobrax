@@ -139,6 +139,7 @@ export function GeneralForm({ account }: { account: AccountInfo }) {
           onChange={(url) => setForm({ ...form, logoUrl: url })}
           onError={setError}
           disabled={!editable}
+          readOnlyText={t('identity.logoReadOnly')}
           texts={{ uploading: t('identity.uploading'), remove: t('identity.remove'), uploadError: t('identity.uploadError') }}
         />
 

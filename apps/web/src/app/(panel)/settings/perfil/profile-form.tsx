@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { diffProfile, hasChanges, type MyProfile, type ProfileForm as Form } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Input } from '@/components/ui';
+import { ImageUploadField } from '@/components/image-upload-field';
 import { useToast } from '@/components/toast';
 import { sendJson } from '@/lib/client';
 import { QrViewer } from './qr-viewer';
@@ -96,7 +97,8 @@ export function ProfileForm({ profile }: { profile: MyProfile }) {
         {t('emailFixed', { email: profile.email })}
       </p>
 
-      <FilePick
+      <ImageUploadField
+        texts={{ uploading: t('uploading'), remove: t('remove'), uploadError: t('uploadError') }}
         label={t('photo')}
         hint={t('photoHint')}
         value={form.photoUrl}
@@ -104,7 +106,8 @@ export function ProfileForm({ profile }: { profile: MyProfile }) {
         onError={setError}
       />
 
-      <FilePick
+      <ImageUploadField
+        texts={{ uploading: t('uploading'), remove: t('remove'), uploadError: t('uploadError') }}
         label={t('paymentQr')}
         hint={t('paymentQrHint')}
         value={form.paymentQrUrl}
@@ -124,94 +127,5 @@ export function ProfileForm({ profile }: { profile: MyProfile }) {
         </span>
       </div>
     </form>
-  );
-}
-
-/**
- * Un archivo: `<input type="file">` nativo, sin librería.
- *
- * Sube al toque y guarda la URL en el formulario, pero **no persiste nada**: recién se ata al
- * perfil cuando se guarda. Vaciarlo es quitar la imagen, y `diffProfile` traduce ese `''` a
- * `null` para el QR.
- */
-function FilePick({
-  label,
-  hint,
-  value,
-  onChange,
-  onError,
-}: {
-  label: string;
-  hint: string;
-  value: string;
-  onChange: (url: string) => void;
-  onError: (message: string) => void;
-}) {
-  const t = useTranslations('profile');
-  const [busy, setBusy] = useState(false);
-  const [broken, setBroken] = useState(false);
-
-  async function upload(file: File) {
-    setBroken(false);
-    setBusy(true);
-    const data = new FormData();
-    data.append('file', file);
-    const res = await fetch('/api/account/upload', { method: 'POST', body: data });
-    const json = (await res.json().catch(() => ({}))) as { url?: string; error?: { message: string } };
-    setBusy(false);
-    if (!res.ok || !json.url) {
-      onError(json.error?.message ?? t('uploadError'));
-      return;
-    }
-    onChange(json.url);
-  }
-
-  return (
-    <div className="space-y-2">
-      <span className="block text-[14px] font-medium text-k-text">{label}</span>
-      <div className="flex items-center gap-3">
-        {value && !broken && (
-          // eslint-disable-next-line @next/next/no-img-element -- lo sirve el BFF con la sesión
-          <img
-            src={value}
-            alt=""
-            /*
-             * Si el archivo no está, se esconde en vez de dejar el ícono de imagen rota.
-             * Pasa de verdad: `/uploads` guarda por tenant pero `photoUrl` vive en el perfil,
-             * que es global, así que quien pertenece a dos empresas no la ve en la otra.
-             * Arreglarlo de raíz es del lado de la API (guardar el perfil fuera del tenant).
-             */
-            onError={() => setBroken(true)}
-            className="h-16 w-16 rounded-xl border border-k-border object-cover"
-          />
-        )}
-        <div className="flex-1 space-y-1">
-          <input
-            type="file"
-            accept="image/*"
-            aria-label={label}
-            disabled={busy}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              // Limpiar el valor: si no, volver a elegir EL MISMO archivo no dispara `change`
-              // y reintentar una subida que falló parece que no hace nada.
-              e.target.value = '';
-              if (file) void upload(file);
-            }}
-            className="block w-full text-[13px] text-k-text-2 file:mr-3 file:rounded-lg file:border file:border-k-border file:bg-white file:px-3 file:py-2 file:text-[13px] file:font-medium file:text-k-text-2 hover:file:bg-k-bg"
-          />
-          <p className="text-[12px] text-k-muted">{busy ? t('uploading') : hint}</p>
-        </div>
-        {value && (
-          <button
-            type="button"
-            onClick={() => onChange('')}
-            className="text-[13px] font-medium text-k-danger hover:underline"
-          >
-            {t('remove')}
-          </button>
-        )}
-      </div>
-    </div>
   );
 }

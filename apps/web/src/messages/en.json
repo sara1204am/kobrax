@@ -2300,6 +2300,7 @@
       "title": "Identity and contact",
       "logo": "Business logo",
       "logoHint": "PNG, JPG or WebP, up to 8 MB. Shown in the panel header.",
+      "logoReadOnly": "Only an administrator can change the logo.",
       "uploading": "Uploading…",
       "remove": "Remove",
       "uploadError": "The logo could not be uploaded",
