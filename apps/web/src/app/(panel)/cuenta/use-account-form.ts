@@ -33,7 +33,7 @@ const formOf = (a: AccountInfo): AccountForm => ({
  * propia instancia con el mismo `PATCH /accounts/me`; como cada una sólo edita sus campos, el
  * diff de una no pisa a la otra. `sectionId` identifica el formulario ante la barra de guardado.
  */
-export function useAccountForm(account: AccountInfo, sectionId: string) {
+export function useAccountForm(account: AccountInfo, sectionId: string, opts: { inline?: boolean } = {}) {
   const router = useRouter();
   const t = useTranslations('account');
   const toast = useToast();
@@ -71,7 +71,7 @@ export function useAccountForm(account: AccountInfo, sectionId: string) {
   }
 
   // Dentro de la pestaña, la barra de guardado única guarda por este formulario.
-  const { managed } = useSaveSection(sectionId, { dirty, saving, valid: true, save, reset });
+  const { managed } = useSaveSection(sectionId, { dirty, saving, valid: true, inline: opts.inline, save, reset });
 
-  return { form, setForm, error, setError, saving, dirty, save, managed, editable: can('account:write') };
+  return { form, setForm, error, setError, saving, dirty, save, reset, managed, editable: can('account:write') };
 }

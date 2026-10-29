@@ -19,6 +19,8 @@ interface SectionState {
   saving: boolean;
   /** `false` = tiene errores de validación: guardar queda apagado hasta corregirlos. */
   valid: boolean;
+  /** `true` = el formulario tiene sus propios botones (Cancelar/Guardar): cuenta como «sin guardar» pero no dibuja la barra. */
+  inline?: boolean;
 }
 
 interface SectionActions {
@@ -54,7 +56,7 @@ export function SaveBarProvider({ children }: { children: ReactNode }) {
     actions.current.set(id, act);
     setStates((prev) => {
       const old = prev[id];
-      if (old && old.dirty === state.dirty && old.saving === state.saving && old.valid === state.valid) return prev;
+      if (old && old.dirty === state.dirty && old.saving === state.saving && old.valid === state.valid && old.inline === state.inline) return prev;
       return { ...prev, [id]: state };
     });
   }, []);
@@ -101,7 +103,7 @@ export function SaveBarProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={value}>
       {children}
-      {hasUnsaved && (
+      {dirtyIds.some((id) => !states[id].inline) && (
         <div
           role="region"
           aria-label={t('label')}
@@ -142,10 +144,10 @@ export function useSaveSection(id: string, section: SectionState & SectionAction
   const latest = useRef(section);
   latest.current = section;
 
-  const { dirty, saving, valid } = section;
+  const { dirty, saving, valid, inline } = section;
   useEffect(() => {
-    ctx?.set(id, { dirty, saving, valid }, { save: () => latest.current.save(), reset: () => latest.current.reset() });
-  }, [ctx, id, dirty, saving, valid]);
+    ctx?.set(id, { dirty, saving, valid, inline }, { save: () => latest.current.save(), reset: () => latest.current.reset() });
+  }, [ctx, id, dirty, saving, valid, inline]);
 
   useEffect(() => () => ctx?.remove(id), [ctx, id]);
 

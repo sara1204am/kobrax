@@ -9,7 +9,7 @@ import { ToastProvider } from '@/components/toast';
 import { ArrearCategories } from './arrear-categories';
 import { FinancialForm } from './financial-form';
 import { GeneralForm } from './general-form';
-import { SaveBarProvider } from './save-bar';
+import { SaveBarProvider, useHasUnsaved } from './save-bar';
 
 const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }));
@@ -136,17 +136,24 @@ describe('barra de guardado única', () => {
     expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeDisabled();
   });
 
-  it('el formulario General también se registra', async () => {
+  it('el formulario General se registra como «sin guardar» pero usa sus propios botones, no la barra', async () => {
+    function Probe() {
+      return <output data-testid="unsaved">{String(useHasUnsaved())}</output>;
+    }
     render(
       <PermissionsProvider permissions={['account:read', 'account:write']}>
         <ToastProvider>
           <SaveBarProvider>
             <GeneralForm account={ACCOUNT} />
+            <Probe />
           </SaveBarProvider>
         </ToastProvider>
       </PermissionsProvider>,
     );
+    await userEvent.click(screen.getByRole('button', { name: 'Editar' }));
     await userEvent.type(screen.getByLabelText('NIT'), '9');
-    expect(screen.getByRole('region', { name: 'Cambios sin guardar' })).toBeInTheDocument();
+    expect(screen.getByTestId('unsaved')).toHaveTextContent('true');
+    expect(screen.queryByRole('region', { name: 'Cambios sin guardar' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeEnabled();
   });
 });

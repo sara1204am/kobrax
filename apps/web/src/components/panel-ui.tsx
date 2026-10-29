@@ -60,8 +60,11 @@ export function Section({
   collapsible,
   anchor,
   headerAction,
+  description,
 }: {
   title: string;
+  /** Con `description`, el título pasa a ser el encabezado de la tarjeta (grande, con su subtítulo) y no el rótulo chico de arriba. */
+  description?: string;
   action?: ReactNode;
   children: ReactNode;
   inner?: string;
@@ -101,6 +104,20 @@ export function Section({
           {children}
         </div>
       </details>
+    );
+  }
+  if (description) {
+    return (
+      <section aria-label={title} className="rounded-2xl border border-k-border bg-white">
+        <div className="flex items-start justify-between gap-3 px-6 pt-6">
+          <div>
+            <h2 className="text-[18px] font-semibold text-k-navy">{title}</h2>
+            <p className="mt-1 text-[14px] text-k-text-2">{description}</p>
+          </div>
+          {action}
+        </div>
+        <div className={inner}>{children}</div>
+      </section>
     );
   }
   return (

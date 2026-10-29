@@ -4,7 +4,17 @@
     "showPassword": "Show password",
     "hidePassword": "Hide password",
     "backToLogin": "Back to sign in",
-    "close": "Close"
+    "close": "Close",
+    "dictation": {
+      "start": "Dictate",
+      "stop": "Stop",
+      "privacy": "Uses your browser’s speech recognition: the audio never reaches Kobrax, but Chrome and Edge process it on their servers.",
+      "denied": "Microphone permission was denied. Enable it in your browser.",
+      "failed": "Dictation failed ({code}). Try again or type the message.",
+      "network": "The browser could not reach its speech service. Check your connection; some browsers (Brave, Opera) block it, and Chrome or Edge work best.",
+      "noMic": "No microphone found. Plug one in and check which one the browser uses.",
+      "language": "Your browser does not support dictation in this language."
+    }
   },
   "creditSource": {
     "column": "Source",
@@ -1298,7 +1308,11 @@
         "copyPhone": "Copy phone",
         "phoneCopied": "Phone copied",
         "openWhatsapp": "Open WhatsApp",
-        "viewLocation": "View location"
+        "viewLocation": "View location",
+        "copyMessage": "Copy message",
+        "messageCopied": "Message copied",
+        "messageIncomplete": "The message is missing data: {names}. Fill it in before sending.",
+        "invalidPhone": "The number is not valid for WhatsApp."
       },
       "type": {
         "CALL": "Call",
@@ -1554,7 +1568,7 @@
         "mapNextStop": "Show next stop",
         "mapBaseMap": "Map",
         "mapBaseSatellite": "Satellite",
-        "mapBig":"Enlarge the map",
+        "mapBig": "Enlarge the map",
         "mapSmall": "Shrink the map",
         "help": "Helping out",
         "routeOrder": "The run · {n} stops, in this order",
@@ -2237,6 +2251,37 @@
       "stale": "Your session changed in another tab. Reload the page to continue.",
       "reload": "Reload",
       "dismiss": "Got it"
+    },
+    "whatsapp": {
+      "title": "Send WhatsApp message",
+      "close": "Close",
+      "searchClient": "Search debtor",
+      "searchHint": "Type at least 2 letters of the name.",
+      "searchPlaceholder": "Debtor name…",
+      "client": "Debtor",
+      "pickClient": "Pick a debtor",
+      "noResults": "No results",
+      "template": "Template",
+      "credit": "Credit",
+      "noCredits": "No credits",
+      "phone": "Phone",
+      "noPhones": "No phone",
+      "message": "Message",
+      "messageHint": "With the debtor’s real data. You can adjust it before sending.",
+      "noMessage": "Pick a template or write the message.",
+      "incomplete": "The message is missing data: {names}. Fill it in or edit the text before sending.",
+      "invalidPhone": "The number is not valid for WhatsApp.",
+      "copy": "Copy text",
+      "copied": "Message copied",
+      "open": "Open WhatsApp",
+      "contextError": "Could not load the debtor’s data",
+      "send": "Send via WhatsApp",
+      "sendToClient": "Send to a debtor",
+      "pendingHint": "Opening WhatsApp leaves an activity pending its result in your agenda; you log the result later.",
+      "pendingDone": "Saved as an activity pending its result in the agenda.",
+      "pendingLink": "Log the result",
+      "pendingLogged": "Activity pending result created",
+      "pendingError": "WhatsApp opened, but the pending activity could not be saved"
     }
   },
   "account": {
@@ -2298,6 +2343,9 @@
     },
     "identity": {
       "title": "Identity and contact",
+      "subtitle": "How your business is identified and how people can reach you.",
+      "dropTitle": "Drag an image here",
+      "dropOr": "or click to upload",
       "logo": "Business logo",
       "logoHint": "PNG, JPG or WebP, up to 8 MB. Shown in the panel header.",
       "logoReadOnly": "Only an administrator can change the logo.",
@@ -2529,7 +2577,10 @@
         "pending": "You asked for the closure on {date}. Kobrax will get in touch."
       }
     },
+    "edit": "Edit",
+    "cancel": "Cancel",
     "businessData": "Business details",
+    "businessDataHint": "Basic information shown in the app, receipts and invitations.",
     "financialData": "Financial settings",
     "decimals": "Amount decimals",
     "decimalsValue": "{n, plural, =0 {No decimals} one {# decimal} other {# decimals}}",
@@ -2565,7 +2616,7 @@
     },
     "templates": {
       "title": "WhatsApp templates",
-      "intro": "The messages your team can pick when writing to a debtor from a task. These variables are filled in automatically on send:",
+      "intro": "The messages your team can pick when writing to a debtor from a task. Pick one from the list to see how it looks; variables are filled in automatically when sending.",
       "empty": "No templates yet",
       "emptyHint": "Create the first one: a payment reminder with the name and balance is enough.",
       "examples": "Or start from an example — it opens so you can adjust the tone before saving:",
@@ -2576,7 +2627,7 @@
       "label": "Name",
       "labelHint": "How the team sees it when picking.",
       "body": "Message",
-      "bodyHint": "The variables above are replaced with the debtor's data on send.",
+      "bodyHint": "Variables are replaced with the debtor’s data when sending.",
       "save": "Save",
       "cancel": "Cancel",
       "saved": "Template saved",
@@ -2585,7 +2636,56 @@
       "removeTitle": "Remove “{name}”?",
       "removeText": "The team will no longer see it when sending. Already sent messages don't change.",
       "removeOk": "Yes, remove",
-      "removed": "Template removed"
+      "removed": "Template removed",
+      "search": "Search template…",
+      "filterBy": "Filter by category",
+      "all": "All",
+      "noResults": "No template matches the search.",
+      "pickOne": "Pick a template to see its preview.",
+      "previewTitle": "Preview",
+      "previewHint": "How the message would look with sample data.",
+      "previewBubble": "Sample of the message",
+      "previewEmpty": "Write the message to see it here.",
+      "exampleTag": "Sample data",
+      "sampleTitle": "Sample data",
+      "sampleHint": "Made up, only for this preview. Not any real debtor’s.",
+      "sample": {
+        "cliente": "Debtor (sample)",
+        "saldo": "Balance (sample)",
+        "negocio": "Business (sample)",
+        "telefono_negocio": "Business phone (sample)"
+      },
+      "variable": {
+        "cliente": "Debtor name",
+        "saldo": "Outstanding balance",
+        "negocio": "Business name",
+        "telefono_negocio": "Business phone"
+      },
+      "insertVariable": "Insert variable",
+      "insertHint": "Inserted at the cursor. If a value is not available when sending, Kobrax warns you first.",
+      "categoryLabel": "Category",
+      "categoryHint": "When it is used. Optional.",
+      "noCategory": "No category",
+      "category": {
+        "INITIAL": "Initial",
+        "REMINDER": "Reminder",
+        "PROMISE": "Promise",
+        "LAST_NOTICE": "Final notice",
+        "CONFIRMATION": "Confirmation"
+      },
+      "unknownVars": "Unknown variable: {names}. It would not be replaced when sending.",
+      "unknownBlock": "Fix or remove the unknown variables before saving: {names}.",
+      "missingSample": "Missing sample value for: {names}. Shown as is.",
+      "suggestions": "Suggestions",
+      "suggestionsFor": "Suggestions for “{category}”",
+      "suggestionsPick": "Pick a category to see suggested messages.",
+      "useSuggestion": "Use",
+      "tone": "Tone",
+      "tones": {
+        "AMABLE": "Friendly",
+        "FORMAL": "Formal",
+        "FIRME": "Firm"
+      }
     },
     "timezone": "Timezone",
     "timezoneAuto": "Based on country",
@@ -2692,16 +2792,38 @@
       "hint": "Optional. What the client lives on and when the money arrives, so we do not push before they get paid.",
       "unset": "Not set",
       "source": "Source of income",
-      "sourceDefault": { "EMPLOYEE": "Employee or professional", "BUSINESS": "Merchant or producer", "OTHER": "Other" },
+      "sourceDefault": {
+        "EMPLOYEE": "Employee or professional",
+        "BUSINESS": "Merchant or producer",
+        "OTHER": "Other"
+      },
       "occupation": "Occupation",
       "cycle": "How often the money arrives",
-      "cycleOptions": { "DAILY": "Every day", "WEEKLY": "Every week", "BIWEEKLY": "Every two weeks", "MONTHLY": "Every month", "QUARTERLY": "Every three months", "SEASONAL": "Seasonal", "IRREGULAR": "No fixed rhythm" },
+      "cycleOptions": {
+        "DAILY": "Every day",
+        "WEEKLY": "Every week",
+        "BIWEEKLY": "Every two weeks",
+        "MONTHLY": "Every month",
+        "QUARTERLY": "Every three months",
+        "SEASONAL": "Seasonal",
+        "IRREGULAR": "No fixed rhythm"
+      },
       "dayOfWeek": "Day of the week",
       "dayOfMonth": "Day of the month",
-      "weekdays": { "1": "Monday", "2": "Tuesday", "3": "Wednesday", "4": "Thursday", "5": "Friday", "6": "Saturday", "7": "Sunday" },
+      "weekdays": {
+        "1": "Monday",
+        "2": "Tuesday",
+        "3": "Wednesday",
+        "4": "Thursday",
+        "5": "Friday",
+        "6": "Saturday",
+        "7": "Sunday"
+      },
       "notes": "Detail",
       "notesPlaceholder": "E.g.: paid at city hall, freight payments are delayed",
-      "errors": { "day": "The day does not match the chosen cycle." }
+      "errors": {
+        "day": "The day does not match the chosen cycle."
+      }
     },
     "collection": {
       "title": "How to collect",
@@ -2709,17 +2831,35 @@
       "unset": "Not set",
       "modality": "Modality",
       "frequency": "Frequency",
-      "frequencyOptions": { "DAILY": "Every day", "WEEKLY": "Once a week", "PER_INSTALLMENT": "Following the installment calendar" },
+      "frequencyOptions": {
+        "DAILY": "Every day",
+        "WEEKLY": "Once a week",
+        "PER_INSTALLMENT": "Following the installment calendar"
+      },
       "windowFrom": "From (time)",
       "windowTo": "To (time)",
       "handoverBy": "Who hands over",
-      "handoverOptions": { "HOLDER": "The account holder", "FAMILY": "A family member", "EMPLOYEE": "An employee" },
+      "handoverOptions": {
+        "HOLDER": "The account holder",
+        "FAMILY": "A family member",
+        "EMPLOYEE": "An employee"
+      },
       "days": "Days",
-      "dayShort": { "1": "M", "2": "T", "3": "W", "4": "T", "5": "F", "6": "S", "7": "S" },
+      "dayShort": {
+        "1": "M",
+        "2": "T",
+        "3": "W",
+        "4": "T",
+        "5": "F",
+        "6": "S",
+        "7": "S"
+      },
       "note": "Instruction",
       "notePlaceholder": "E.g.: knock at the green gate, before the shop opens",
       "summary": "How to collect",
-      "errors": { "window": "The time window needs both times, and \"to\" must be after \"from\"." }
+      "errors": {
+        "window": "The time window needs both times, and \"to\" must be after \"from\"."
+      }
     },
     "channel": {
       "unset": "Not set",
@@ -3694,6 +3834,8 @@
     "paymentQrHint": "The one you show debtors so they can pay from their bank.",
     "remove": "Remove",
     "uploading": "Uploading…",
+    "dropTitle": "Drag an image here",
+    "dropOr": "or click to upload",
     "uploadError": "Could not upload the file",
     "save": "Save changes",
     "saved": "Profile updated",

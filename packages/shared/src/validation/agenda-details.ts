@@ -17,6 +17,8 @@ export interface CallDetails {
 export interface WhatsAppDetails {
   contactId: string;
   message: string;
+  /** Plantilla **elegida** (código del catálogo `WHATSAPP_TEMPLATE`), no la enviada: `wa.me` no confirma el envío. Opcional. */
+  templateCode?: string;
 }
 export interface VisitCustomAddress {
   address: string;
@@ -125,8 +127,12 @@ export function validateAgendaDetails(type: `${AgendaItemType}`, details: unknow
     case AgendaItemType.CALL:
       return done({ contactId: e.uuid('contactId') });
 
-    case AgendaItemType.WHATSAPP:
-      return done({ contactId: e.uuid('contactId'), message: e.text('message', 1000) });
+    case AgendaItemType.WHATSAPP: {
+      const contactId = e.uuid('contactId');
+      const message = e.text('message', 1000);
+      const templateCode = e.optionalText('templateCode', 64);
+      return done({ contactId, message, ...(templateCode ? { templateCode } : {}) });
+    }
 
     case AgendaItemType.REMINDER:
       return done({ description: e.text('description', 500) });

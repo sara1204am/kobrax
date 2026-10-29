@@ -207,12 +207,13 @@ export function NewTaskModal({
 
   // Las plantillas sólo hacen falta para un WhatsApp: se piden al elegir ese tipo.
   useEffect(() => {
-    if (tipo !== AgendaItemType.WHATSAPP || plantillas.length > 0) return;
-    void fetch('/api/catalogs/WHATSAPP_TEMPLATE')
+    if (tipo !== AgendaItemType.WHATSAPP) return;
+    // Sin caché entre aperturas: una plantilla recién creada en Cuenta tiene que aparecer acá.
+    void fetch('/api/catalogs/WHATSAPP_TEMPLATE', { cache: 'no-store' })
       .then((r) => r.json())
       .then((b) => setPlantillas(Array.isArray(b?.data) ? b.data : []))
       .catch(() => setPlantillas([]));
-  }, [tipo, plantillas.length]);
+  }, [tipo]);
 
   async function elegirCliente(clientId: string, keepCreditId?: string) {
     setError(null);

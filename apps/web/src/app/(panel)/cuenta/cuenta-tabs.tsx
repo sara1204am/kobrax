@@ -34,7 +34,7 @@ export function CuentaTabs() {
             }}
             className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-[14px] font-medium ${
               active
-                ? 'border-k-purple text-k-navy'
+                ? 'border-k-periwinkle font-semibold text-k-periwinkle'
                 : 'border-transparent text-k-text-2 hover:text-k-navy'
             }`}
           >

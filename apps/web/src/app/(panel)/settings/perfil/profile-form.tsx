@@ -98,7 +98,7 @@ export function ProfileForm({ profile }: { profile: MyProfile }) {
       </p>
 
       <ImageUploadField
-        texts={{ uploading: t('uploading'), remove: t('remove'), uploadError: t('uploadError') }}
+        texts={{ uploading: t('uploading'), remove: t('remove'), uploadError: t('uploadError'), dropTitle: t('dropTitle'), dropOr: t('dropOr') }}
         label={t('photo')}
         hint={t('photoHint')}
         value={form.photoUrl}
@@ -107,7 +107,7 @@ export function ProfileForm({ profile }: { profile: MyProfile }) {
       />
 
       <ImageUploadField
-        texts={{ uploading: t('uploading'), remove: t('remove'), uploadError: t('uploadError') }}
+        texts={{ uploading: t('uploading'), remove: t('remove'), uploadError: t('uploadError'), dropTitle: t('dropTitle'), dropOr: t('dropOr') }}
         label={t('paymentQr')}
         hint={t('paymentQrHint')}
         value={form.paymentQrUrl}

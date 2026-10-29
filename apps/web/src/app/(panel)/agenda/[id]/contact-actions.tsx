@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { AgendaItemType, mapLink, whatsappLink } from '@kobrax/shared';
+import { AgendaItemType, mapLink, templateKeys, whatsappLink } from '@kobrax/shared';
 import { Button } from '@/components/ui';
 import { useToast } from '@/components/toast';
 
@@ -37,12 +37,50 @@ export function ContactActions({
   const cls = 'sm:w-auto sm:px-6';
 
   if (type === AgendaItemType.WHATSAPP && phone) {
+    // Una variable sin resolver (`{{saldo}}` literal) significa que faltó un dato: no se copia ni se abre como si estuviera listo.
+    const pending = message ? templateKeys(message) : [];
+    const incomplete = pending.length > 0 ? pending.map((k) => `{{${k}}}`).join(', ') : null;
+    const digits = phone.replace(/\D/g, '');
+    const validPhone = digits.length >= 8 && digits.length <= 15;
+    const blocked = (msg: string) => toast(msg, 'danger');
     return (
-      <a href={whatsappLink(phone, message)} target="_blank" rel="noopener noreferrer" className="contents">
-        <Button variant="ghost" className={cls} type="button">
-          {t('detail.openWhatsapp')}
-        </Button>
-      </a>
+      <>
+        {message && (
+          <Button
+            variant="ghost"
+            className={cls}
+            type="button"
+            onClick={() => {
+              if (incomplete) return blocked(t('detail.messageIncomplete', { names: incomplete }));
+              void navigator.clipboard
+                ?.writeText(message)
+                .then(() => toast(t('detail.messageCopied')))
+                .catch(() => toast(message));
+            }}
+          >
+            {t('detail.copyMessage')}
+          </Button>
+        )}
+        <a
+          href={whatsappLink(phone, message)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="contents"
+          onClick={(e) => {
+            if (!validPhone) {
+              e.preventDefault();
+              blocked(t('detail.invalidPhone'));
+            } else if (incomplete) {
+              e.preventDefault();
+              blocked(t('detail.messageIncomplete', { names: incomplete }));
+            }
+          }}
+        >
+          <Button variant="ghost" className={cls} type="button">
+            {t('detail.openWhatsapp')}
+          </Button>
+        </a>
+      </>
     );
   }
 

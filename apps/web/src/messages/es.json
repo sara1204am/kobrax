@@ -4,7 +4,17 @@
     "showPassword": "Mostrar contraseña",
     "hidePassword": "Ocultar contraseña",
     "backToLogin": "Volver a iniciar sesión",
-    "close": "Cerrar"
+    "close": "Cerrar",
+    "dictation": {
+      "start": "Dictar",
+      "stop": "Detener",
+      "privacy": "Usa el reconocimiento de voz de tu navegador: el audio no llega a Kobrax, pero Chrome y Edge lo procesan en sus servidores.",
+      "denied": "No hay permiso para usar el micrófono. Habilitalo en el navegador.",
+      "failed": "No se pudo dictar ({code}). Probá de nuevo o escribí el mensaje.",
+      "network": "El navegador no pudo conectar con su servicio de voz. Revisá la conexión; algunos navegadores (Brave, Opera) no lo permiten y funciona mejor en Chrome o Edge.",
+      "noMic": "No se encontró un micrófono. Conectá uno y revisá cuál usa el navegador.",
+      "language": "Tu navegador no soporta dictado en este idioma."
+    }
   },
   "creditSource": {
     "column": "Fuente",
@@ -1298,7 +1308,11 @@
         "copyPhone": "Copiar teléfono",
         "phoneCopied": "Teléfono copiado",
         "openWhatsapp": "Abrir WhatsApp",
-        "viewLocation": "Ver ubicación"
+        "viewLocation": "Ver ubicación",
+        "copyMessage": "Copiar mensaje",
+        "messageCopied": "Mensaje copiado",
+        "messageIncomplete": "Al mensaje le faltan datos: {names}. Completalos antes de enviarlo.",
+        "invalidPhone": "El número no es válido para WhatsApp."
       },
       "type": {
         "CALL": "Llamada",
@@ -1554,7 +1568,7 @@
         "mapNextStop": "Ver próxima parada",
         "mapBaseMap": "Mapa",
         "mapBaseSatellite": "Satélite",
-        "mapBig":"Agrandar el mapa",
+        "mapBig": "Agrandar el mapa",
         "mapSmall": "Achicar el mapa",
         "help": "Ayuda",
         "routeOrder": "El recorrido · {n} paradas, en este orden",
@@ -2237,6 +2251,37 @@
       "stale": "Tu sesión cambió en otra pestaña. Recarga la página para continuar.",
       "reload": "Recargar",
       "dismiss": "Entendido"
+    },
+    "whatsapp": {
+      "title": "Enviar mensaje por WhatsApp",
+      "close": "Cerrar",
+      "searchClient": "Buscar deudor",
+      "searchHint": "Escribí al menos 2 letras del nombre.",
+      "searchPlaceholder": "Nombre del deudor…",
+      "client": "Deudor",
+      "pickClient": "Elegí un deudor",
+      "noResults": "Sin resultados",
+      "template": "Plantilla",
+      "credit": "Crédito",
+      "noCredits": "Sin créditos",
+      "phone": "Teléfono",
+      "noPhones": "Sin teléfono",
+      "message": "Mensaje",
+      "messageHint": "Con los datos reales del deudor. Podés ajustarlo antes de enviarlo.",
+      "noMessage": "Elegí una plantilla o escribí el mensaje.",
+      "incomplete": "Al mensaje le faltan datos: {names}. Completalos o editá el texto antes de enviarlo.",
+      "invalidPhone": "El número no es válido para WhatsApp.",
+      "copy": "Copiar texto",
+      "copied": "Mensaje copiado",
+      "open": "Abrir WhatsApp",
+      "contextError": "No se pudieron cargar los datos del deudor",
+      "send": "Enviar por WhatsApp",
+      "sendToClient": "Enviar a un deudor",
+      "pendingHint": "Al abrir WhatsApp queda una gestión pendiente de resultado en tu agenda; el resultado lo registrás después.",
+      "pendingDone": "Quedó como gestión pendiente de resultado en la agenda.",
+      "pendingLink": "Registrar resultado",
+      "pendingLogged": "Gestión pendiente de resultado creada",
+      "pendingError": "WhatsApp se abrió, pero no se pudo dejar la gestión pendiente"
     }
   },
   "account": {
@@ -2298,6 +2343,9 @@
     },
     "identity": {
       "title": "Identidad y contacto",
+      "subtitle": "Cómo se identifica tu negocio y cómo pueden contactarte.",
+      "dropTitle": "Arrastra una imagen aquí",
+      "dropOr": "o haz clic para subir",
       "logo": "Logo del negocio",
       "logoHint": "PNG, JPG o WebP, hasta 8 MB. Se ve en el encabezado del panel.",
       "logoReadOnly": "Solo un administrador puede cambiar el logo.",
@@ -2529,7 +2577,10 @@
         "pending": "Ya pediste la baja el {date}. Kobrax se pondrá en contacto contigo."
       }
     },
+    "edit": "Editar",
+    "cancel": "Cancelar",
     "businessData": "Datos del negocio",
+    "businessDataHint": "Información básica que se muestra en la app, comprobantes e invitaciones.",
     "financialData": "Configuración financiera",
     "decimals": "Decimales de los montos",
     "decimalsValue": "{n, plural, =0 {Sin decimales} one {# decimal} other {# decimales}}",
@@ -2565,7 +2616,7 @@
     },
     "templates": {
       "title": "Plantillas de WhatsApp",
-      "intro": "Los mensajes que el equipo puede elegir al escribirle a un deudor desde una gestión. Estas variables se reemplazan solas al enviar:",
+      "intro": "Los mensajes que el equipo puede elegir al escribirle a un deudor desde una gestión. Elegí uno de la lista para ver cómo queda; las variables se reemplazan solas al enviar.",
       "empty": "Todavía no hay plantillas",
       "emptyHint": "Creá la primera: un recordatorio de pago con el nombre y el saldo alcanza.",
       "examples": "O empezá con un ejemplo — se abre para ajustar el tono antes de guardar:",
@@ -2576,7 +2627,7 @@
       "label": "Nombre",
       "labelHint": "Cómo la ve el equipo al elegirla.",
       "body": "Mensaje",
-      "bodyHint": "Las variables de arriba se reemplazan con los datos del deudor al enviar.",
+      "bodyHint": "Las variables se reemplazan con los datos del deudor al enviar.",
       "save": "Guardar",
       "cancel": "Cancelar",
       "saved": "Plantilla guardada",
@@ -2585,7 +2636,56 @@
       "removeTitle": "¿Quitar «{name}»?",
       "removeText": "El equipo deja de verla al enviar. Lo ya enviado no cambia.",
       "removeOk": "Sí, quitar",
-      "removed": "Plantilla quitada"
+      "removed": "Plantilla quitada",
+      "search": "Buscar plantilla…",
+      "filterBy": "Filtrar por categoría",
+      "all": "Todas",
+      "noResults": "Ninguna plantilla coincide con la búsqueda.",
+      "pickOne": "Elegí una plantilla para ver su vista previa.",
+      "previewTitle": "Vista previa",
+      "previewHint": "Así se vería el mensaje con datos de ejemplo.",
+      "previewBubble": "Ejemplo del mensaje",
+      "previewEmpty": "Escribí el mensaje para verlo acá.",
+      "exampleTag": "Datos de ejemplo",
+      "sampleTitle": "Datos de ejemplo",
+      "sampleHint": "Inventados, solo para esta vista previa. No son los de ningún deudor.",
+      "sample": {
+        "cliente": "Deudor (ejemplo)",
+        "saldo": "Saldo (ejemplo)",
+        "negocio": "Negocio (ejemplo)",
+        "telefono_negocio": "Teléfono del negocio (ejemplo)"
+      },
+      "variable": {
+        "cliente": "Nombre del deudor",
+        "saldo": "Saldo pendiente",
+        "negocio": "Nombre del negocio",
+        "telefono_negocio": "Teléfono del negocio"
+      },
+      "insertVariable": "Insertar variable",
+      "insertHint": "Se inserta donde está el cursor. Si un dato no está disponible al enviar, Kobrax te avisa antes.",
+      "categoryLabel": "Categoría",
+      "categoryHint": "Situación en la que se usa. Opcional.",
+      "noCategory": "Sin categoría",
+      "category": {
+        "INITIAL": "Inicio",
+        "REMINDER": "Recordatorio",
+        "PROMISE": "Promesa",
+        "LAST_NOTICE": "Último aviso",
+        "CONFIRMATION": "Confirmación"
+      },
+      "unknownVars": "Variable desconocida: {names}. No se reemplazaría al enviar.",
+      "unknownBlock": "Corregí o quitá las variables desconocidas antes de guardar: {names}.",
+      "missingSample": "Falta el dato de ejemplo para: {names}. Se muestra tal cual.",
+      "suggestions": "Sugerencias",
+      "suggestionsFor": "Sugerencias para «{category}»",
+      "suggestionsPick": "Elegí una categoría para ver mensajes sugeridos.",
+      "useSuggestion": "Usar",
+      "tone": "Tono",
+      "tones": {
+        "AMABLE": "Amable",
+        "FORMAL": "Formal",
+        "FIRME": "Firme"
+      }
     },
     "timezone": "Zona horaria",
     "timezoneAuto": "Según el país",
@@ -2692,16 +2792,38 @@
       "hint": "Opcional. De qué vive y cuándo le llega el dinero: con eso no se le insiste antes de que cobre.",
       "unset": "Sin definir",
       "source": "Fuente de ingreso",
-      "sourceDefault": { "EMPLOYEE": "Asalariado o profesional", "BUSINESS": "Comerciante o productivo", "OTHER": "Otro" },
+      "sourceDefault": {
+        "EMPLOYEE": "Asalariado o profesional",
+        "BUSINESS": "Comerciante o productivo",
+        "OTHER": "Otro"
+      },
       "occupation": "Rubro",
       "cycle": "Cada cuánto le llega el dinero",
-      "cycleOptions": { "DAILY": "Todos los días", "WEEKLY": "Cada semana", "BIWEEKLY": "Cada quincena", "MONTHLY": "Cada mes", "QUARTERLY": "Cada tres meses", "SEASONAL": "Por temporada", "IRREGULAR": "Sin ritmo fijo" },
+      "cycleOptions": {
+        "DAILY": "Todos los días",
+        "WEEKLY": "Cada semana",
+        "BIWEEKLY": "Cada quincena",
+        "MONTHLY": "Cada mes",
+        "QUARTERLY": "Cada tres meses",
+        "SEASONAL": "Por temporada",
+        "IRREGULAR": "Sin ritmo fijo"
+      },
       "dayOfWeek": "Día de la semana",
       "dayOfMonth": "Día del mes",
-      "weekdays": { "1": "Lunes", "2": "Martes", "3": "Miércoles", "4": "Jueves", "5": "Viernes", "6": "Sábado", "7": "Domingo" },
+      "weekdays": {
+        "1": "Lunes",
+        "2": "Martes",
+        "3": "Miércoles",
+        "4": "Jueves",
+        "5": "Viernes",
+        "6": "Sábado",
+        "7": "Domingo"
+      },
       "notes": "Detalle",
       "notesPlaceholder": "Ej.: cobra en la alcaldía, le atrasan el flete",
-      "errors": { "day": "El día no corresponde al ciclo elegido." }
+      "errors": {
+        "day": "El día no corresponde al ciclo elegido."
+      }
     },
     "collection": {
       "title": "Cómo cobrarle",
@@ -2709,17 +2831,35 @@
       "unset": "Sin definir",
       "modality": "Modalidad",
       "frequency": "Frecuencia",
-      "frequencyOptions": { "DAILY": "Todos los días", "WEEKLY": "Una vez por semana", "PER_INSTALLMENT": "Según el calendario de cuotas" },
+      "frequencyOptions": {
+        "DAILY": "Todos los días",
+        "WEEKLY": "Una vez por semana",
+        "PER_INSTALLMENT": "Según el calendario de cuotas"
+      },
       "windowFrom": "Desde (hora)",
       "windowTo": "Hasta (hora)",
       "handoverBy": "Quién entrega",
-      "handoverOptions": { "HOLDER": "El titular", "FAMILY": "Un familiar", "EMPLOYEE": "Un empleado" },
+      "handoverOptions": {
+        "HOLDER": "El titular",
+        "FAMILY": "Un familiar",
+        "EMPLOYEE": "Un empleado"
+      },
       "days": "Días",
-      "dayShort": { "1": "L", "2": "M", "3": "X", "4": "J", "5": "V", "6": "S", "7": "D" },
+      "dayShort": {
+        "1": "L",
+        "2": "M",
+        "3": "X",
+        "4": "J",
+        "5": "V",
+        "6": "S",
+        "7": "D"
+      },
       "note": "Indicación",
       "notePlaceholder": "Ej.: tocar el portón verde, antes de abrir el local",
       "summary": "Cómo cobrarle",
-      "errors": { "window": "La franja necesita las dos horas, y «hasta» tiene que ser después de «desde»." }
+      "errors": {
+        "window": "La franja necesita las dos horas, y «hasta» tiene que ser después de «desde»."
+      }
     },
     "channel": {
       "unset": "Sin definir",
@@ -3694,6 +3834,8 @@
     "paymentQrHint": "El que le muestras al deudor para que pague desde su banco.",
     "remove": "Quitar",
     "uploading": "Subiendo…",
+    "dropTitle": "Arrastra una imagen aquí",
+    "dropOr": "o haz clic para subir",
     "uploadError": "No se pudo subir el archivo",
     "save": "Guardar cambios",
     "saved": "Perfil actualizado",

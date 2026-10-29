@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderTemplate } from './template.js';
+import { missingTemplateKeys, renderTemplate, templateKeys, unknownTemplateKeys } from './template.js';
 
 describe('renderTemplate', () => {
   it('reemplaza las variables presentes', () => {
@@ -18,5 +18,23 @@ describe('renderTemplate', () => {
 
   it('un cuerpo sin variables vuelve intacto', () => {
     expect(renderTemplate('Mensaje fijo', { cliente: 'Ana' })).toBe('Mensaje fijo');
+  });
+});
+
+describe('variables de plantilla', () => {
+  it('templateKeys devuelve claves distintas en orden, con o sin espacios', () => {
+    expect(templateKeys('{{cliente}} {{ saldo }} {{cliente}}')).toEqual(['cliente', 'saldo']);
+  });
+
+  it('unknownTemplateKeys marca lo que el sistema no llena', () => {
+    expect(unknownTemplateKeys('Hola {{clinte}}, {{saldo}}')).toEqual(['clinte']);
+    expect(unknownTemplateKeys('Hola {{cliente}}')).toEqual([]);
+  });
+
+  it('missingTemplateKeys: sin valor o vacío es falta; una clave desconocida no es "falta" sino error aparte', () => {
+    expect(missingTemplateKeys('{{cliente}} {{saldo}} {{negocio}} {{x}}', { cliente: 'Ana', saldo: ' ' })).toEqual([
+      'saldo',
+      'negocio',
+    ]);
   });
 });

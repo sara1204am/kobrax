@@ -45,6 +45,7 @@ export function ItemActions({
   reasons = [],
   incomeSource,
   templates = [],
+  initialTemplateCode,
 }: {
   itemId: string;
   type: AgendaItemType;
@@ -73,6 +74,8 @@ export function ItemActions({
   incomeSource?: string;
   /** Catálogo `WHATSAPP_TEMPLATE` (F4/13 · E5): las mismas plantillas del teléfono. Vacío = no se ofrece el campo. */
   templates?: ReasonOption[];
+  /** La plantilla con la que se armó el mensaje al agendar (si la hubo): arranca elegida al registrar el resultado. */
+  initialTemplateCode?: string;
 }) {
   const t = useTranslations('panel.agenda');
   const tCtx = useTranslations('panel.mora.ficha.activity');
@@ -87,7 +90,7 @@ export function ItemActions({
   const [reasonCode, setReasonCode] = useState('');
   // F4/13 · E4/E5: contexto de la gestión que se completa y la plantilla que se usó. Todo opcional.
   const [ctx, setCtx] = useState(emptyActivityContext());
-  const [templateCode, setTemplateCode] = useState('');
+  const [templateCode, setTemplateCode] = useState(templates.some((tpl) => tpl.code === initialTemplateCode) ? (initialTemplateCode ?? '') : '');
   /*
    * Mañana, contado desde HOY y no desde el día del ítem. Con el día del ítem, reagendar una
    * gestión vencida proponía una fecha ya pasada y la API la rechazaba siempre (`AGENDA_003`) —

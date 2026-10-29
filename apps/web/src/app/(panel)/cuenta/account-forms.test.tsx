@@ -32,20 +32,66 @@ function renderForm(
   which: 'general' | 'financial' = 'general',
 ) {
   const Form = which === 'general' ? GeneralForm : FinancialForm;
-  return render(
+  const view = render(
     <PermissionsProvider permissions={permissions}>
       <ToastProvider>
         <Form account={ACCOUNT} />
       </ToastProvider>
     </PermissionsProvider>,
   );
+  return view;
+}
+
+/** General arranca en modo vista: «Editar» habilita los campos y muestra Cancelar / Guardar. */
+async function edit() {
+  await userEvent.click(screen.getByRole('button', { name: 'Editar' }));
 }
 
 beforeEach(() => refresh.mockClear());
 
-describe('Cuenta · formularios — sólo se manda lo que cambió', () => {
-  it('sin tocar nada, guardar está apagado', () => {
+describe('Cuenta · General — modo vista y edición', () => {
+  it('lo guardado se ve en modo vista: campos de lectura y sólo «Editar»', () => {
     renderForm();
+    expect(screen.getByLabelText(/Nombre del negocio/)).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Editar' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Guardar cambios' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancelar' })).not.toBeInTheDocument();
+  });
+
+  it('«Editar» habilita los campos y muestra Cancelar y Guardar', async () => {
+    renderForm();
+    await edit();
+    expect(screen.getByLabelText(/Nombre del negocio/)).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeDisabled();
+  });
+
+  it('Cancelar descarta lo escrito y vuelve a la vista', async () => {
+    renderForm();
+    await edit();
+    await userEvent.type(screen.getByLabelText(/Nombre del negocio/), ' X');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(screen.getByLabelText(/Nombre del negocio/)).toBeDisabled();
+    expect(screen.getByLabelText(/Nombre del negocio/)).toHaveValue(ACCOUNT.businessName);
+    expect(screen.getByRole('button', { name: 'Editar' })).toBeInTheDocument();
+  });
+
+  it('al guardar vuelve a la vista', async () => {
+    server.use(http.patch('*/api/account/me', () => HttpResponse.json({ ...ACCOUNT, businessName: 'Nuevo' })));
+    renderForm();
+    await edit();
+    await userEvent.clear(screen.getByLabelText(/Nombre del negocio/));
+    await userEvent.type(screen.getByLabelText(/Nombre del negocio/), 'Nuevo');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    expect(await screen.findByRole('button', { name: 'Editar' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Nombre del negocio/)).toBeDisabled();
+  });
+});
+
+describe('Cuenta · formularios — sólo se manda lo que cambió', () => {
+  it('sin tocar nada, guardar está apagado', async () => {
+    renderForm();
+    await edit();
     expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeDisabled();
   });
 
@@ -59,7 +105,8 @@ describe('Cuenta · formularios — sólo se manda lo que cambió', () => {
     );
 
     renderForm();
-    const nombre = screen.getByLabelText('Nombre del negocio');
+    await edit();
+    const nombre = screen.getByLabelText(/Nombre del negocio/);
     await userEvent.clear(nombre);
     await userEvent.type(nombre, 'Cobranzas Sara');
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
@@ -80,6 +127,7 @@ describe('Cuenta · formularios — sólo se manda lo que cambió', () => {
     );
 
     renderForm();
+    await edit();
     await userEvent.clear(screen.getByLabelText('NIT'));
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
@@ -114,6 +162,7 @@ describe('Cuenta · formularios — sólo se manda lo que cambió', () => {
     );
 
     renderForm();
+    await edit();
     await userEvent.selectOptions(screen.getByLabelText(/Zona horaria/), 'America/Bogota');
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
@@ -130,6 +179,7 @@ describe('Cuenta · formularios — sólo se manda lo que cambió', () => {
     );
 
     renderForm();
+    await edit();
     await userEvent.selectOptions(screen.getByLabelText(/Zona horaria/), '');
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
@@ -154,6 +204,7 @@ describe('Cuenta · formularios — sólo se manda lo que cambió', () => {
 
   it('el botón «usar la de este equipo» pone la zona del navegador, aunque no sea de América', async () => {
     renderForm();
+    await edit();
     await userEvent.click(screen.getByRole('button', { name: 'Usar la de este equipo' }));
 
     const select = screen.getByLabelText(/Zona horaria/) as HTMLSelectElement;
@@ -166,6 +217,7 @@ describe('Cuenta · formularios — sólo se manda lo que cambió', () => {
     server.use(http.patch('*/api/account/me', () => HttpResponse.json(ACCOUNT)));
 
     renderForm();
+    await edit();
     await userEvent.type(screen.getByLabelText('NIT'), '789');
     const guardar = screen.getByRole('button', { name: 'Guardar cambios' });
     await userEvent.click(guardar);
@@ -182,6 +234,7 @@ describe('Cuenta · formularios — sólo se manda lo que cambió', () => {
     );
 
     renderForm();
+    await edit();
     await userEvent.type(screen.getByLabelText('NIT'), '789');
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
@@ -200,6 +253,7 @@ describe('Cuenta · identidad y contacto', () => {
       }),
     );
     renderForm();
+    await edit();
     await userEvent.type(screen.getByLabelText('Ciudad'), 'Sucre');
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
     expect(enviado).toEqual({ city: 'Sucre' });
@@ -220,6 +274,7 @@ describe('Cuenta · identidad y contacto', () => {
         </ToastProvider>
       </PermissionsProvider>,
     );
+    await edit();
     await userEvent.clear(screen.getByLabelText(/Teléfono del negocio/));
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
     expect(enviado).toEqual({ phone: null });
@@ -235,6 +290,7 @@ describe('Cuenta · identidad y contacto', () => {
       }),
     );
     renderForm();
+    await edit();
     const archivo = new File(['x'], 'logo.png', { type: 'image/png' });
     await userEvent.upload(screen.getByLabelText('Logo del negocio'), archivo);
 
@@ -250,6 +306,7 @@ describe('Cuenta · identidad y contacto', () => {
       ),
     );
     renderForm();
+    await edit();
     await userEvent.upload(screen.getByLabelText('Logo del negocio'), new File(['x'], 'logo.png', { type: 'image/png' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Tipo no permitido');
     expect(screen.queryByRole('button', { name: 'Quitar' })).not.toBeInTheDocument();
@@ -267,7 +324,7 @@ describe('Cuenta · identidad y contacto', () => {
 describe('Cuenta · formularios — sin permiso de escritura', () => {
   it('se ven los datos pero no hay con qué guardarlos', () => {
     renderForm(['account:read']);
-    expect(screen.getByLabelText('Nombre del negocio')).toBeDisabled();
+    expect(screen.getByLabelText(/Nombre del negocio/)).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Guardar cambios' })).not.toBeInTheDocument();
   });
 });

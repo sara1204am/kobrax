@@ -257,6 +257,7 @@ export default async function GestionPage({
               reasons={noPaymentReasons?.status === 200 ? (noPaymentReasons.body.data ?? []) : []}
               incomeSource={clientDetail?.status === 200 ? (clientDetail.body.data?.incomeProfile?.incomeSourceCode ?? undefined) : undefined}
               templates={templates?.status === 200 ? (templates.body.data ?? []) : []}
+              initialTemplateCode={item.type === AgendaItemType.WHATSAPP ? text(d.templateCode) : undefined}
             />
           </div>
         )}
