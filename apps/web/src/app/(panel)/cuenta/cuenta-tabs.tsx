@@ -11,7 +11,7 @@ import { useHasUnsaved } from './save-bar';
  * Las pestañas de Cuenta. Son enlaces a rutas (no estado), así que cada una se puede abrir, volver
  * y compartir. Sin permiso no se dibuja; la API valida igual.
  */
-export function CuentaTabs() {
+export function CuentaTabs({ billingPending = false }: { billingPending?: boolean }) {
   const t = useTranslations('account.tabs');
   const pathname = usePathname();
   const { can } = usePermissions();
@@ -39,6 +39,9 @@ export function CuentaTabs() {
             }`}
           >
             {t(tab.key)}
+            {tab.key === 'facturacion' && billingPending && (
+              <span role="img" aria-label={t('billingPending')} className="ml-1.5 inline-block h-2 w-2 rounded-full bg-k-warning align-middle" />
+            )}
           </Link>
         );
       })}

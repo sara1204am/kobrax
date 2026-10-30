@@ -2,7 +2,9 @@
 
 import { useLocale, useTranslations } from 'next-intl';
 import type { AgendaListItem } from '@kobrax/shared';
+import { isWorkingDate } from '@kobrax/shared';
 import { longDay, shiftDay, weekOf } from '@/lib/agenda';
+import { useWorkPreferences } from '@/lib/use-work-preferences';
 import { AgendaRow } from './agenda-row';
 import type { AgendaEvents } from './agenda-screen';
 
@@ -33,7 +35,8 @@ export function WeekPanel({
 }) {
   const t = useTranslations('panel.agenda');
   const locale = useLocale();
-  const days = weekOf(day);
+  const prefs = useWorkPreferences();
+  const days = weekOf(day, prefs.weekStart);
 
   const byDay = new Map<string, AgendaListItem[]>(days.map((d) => [d, []]));
   for (const item of items) byDay.get(item.scheduledDate.slice(0, 10))?.push(item);
@@ -81,6 +84,7 @@ export function WeekPanel({
               >
                 <span>{longDay(d, locale)}</span>
                 {isToday && <span className="rounded-md bg-white px-1.5 py-0.5 text-[11px] font-medium text-k-periwinkle">{t('today')}</span>}
+                {!isWorkingDate(prefs, d) && <span className="rounded-md bg-white px-1.5 py-0.5 text-[11px] font-normal text-k-text-2">{t('nonWorkingDay')}</span>}
                 <span className="ml-auto text-[12px] font-normal text-k-text-2">{t('week.count', { n: list.length })}</span>
               </button>
               {list.length > 0 && (

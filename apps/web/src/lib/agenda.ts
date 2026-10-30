@@ -1,4 +1,4 @@
-import { AgendaItemStatus, ScheduleTimeMode } from '@kobrax/shared';
+import { AgendaItemStatus, isWithinWorkHours, ScheduleTimeMode, type AccountPreferences } from '@kobrax/shared';
 
 type Tone = 'neutral' | 'success' | 'warning' | 'danger';
 
@@ -32,32 +32,58 @@ export function dayOr(today: string, value?: string): string {
   return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : today;
 }
 
-/** Los 7 días de la semana de `iso`, de lunes a domingo. La tira de navegación del día. */
-export function weekOf(iso: string): string[] {
+/** Con qué día empieza la semana en los calendarios (preferencia de la cuenta). */
+export type WeekStart = AccountPreferences['weekStart'];
+
+/** Los 7 días de la semana de `iso`, empezando por lunes (`MON`, lo normal en la región) o por domingo (`SUN`). La tira de navegación del día. */
+export function weekOf(iso: string, weekStart: WeekStart = 'MON'): string[] {
   const d = new Date(`${iso}T00:00:00.000Z`);
-  // `getUTCDay()` da 0 el domingo; acá la semana arranca el lunes, como el calendario de la región.
-  const lunes = shiftDay(iso, -((d.getUTCDay() + 6) % 7));
-  return Array.from({ length: 7 }, (_, i) => shiftDay(lunes, i));
+  // `getUTCDay()` da 0 el domingo: con lunes de inicio se corre uno; con domingo de inicio, no.
+  const atras = weekStart === 'SUN' ? d.getUTCDay() : (d.getUTCDay() + 6) % 7;
+  const primero = shiftDay(iso, -atras);
+  return Array.from({ length: 7 }, (_, i) => shiftDay(primero, i));
 }
 
 /**
- * La grilla del mes de `iso`: siempre semanas enteras de lunes a domingo.
+ * La grilla del mes de `iso`: siempre semanas enteras (de lunes a domingo, o de domingo a sábado según `weekStart`).
  *
  * Devuelve 35 o 42 días —los del mes más los del anterior y el siguiente que completan la primera y
  * la última semana—, porque una grilla de 7 columnas con la primera fila coja se lee peor que una
  * con dos días de marzo asomando en abril.
  */
-export function monthGrid(iso: string): string[] {
+export function monthGrid(iso: string, weekStart: WeekStart = 'MON'): string[] {
   const primero = `${iso.slice(0, 7)}-01`;
   const d = new Date(`${primero}T00:00:00.000Z`);
   const díasDelMes = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
-  const desde = weekOf(primero)[0]!;
+  const desde = weekOf(primero, weekStart)[0]!;
   const último = shiftDay(primero, díasDelMes - 1);
-  const hasta = weekOf(último)[6]!;
+  const hasta = weekOf(último, weekStart)[6]!;
 
   const out: string[] = [];
   for (let day = desde; day <= hasta; day = shiftDay(day, 1)) out.push(day);
   return out;
+}
+
+/**
+ * El rango de días a pedir para pintar el mes de `iso` **con cualquiera de las dos semanas**. El servidor no sabe con qué
+ * día empieza la semana de quien mira (es una preferencia que viaja con la sesión), así que se piden los días de las dos
+ * grillas: sobran a lo más seis días y el calendario sólo usa los suyos.
+ */
+export function monthRange(iso: string): { from: string; to: string } {
+  const lunes = monthGrid(iso, 'MON');
+  const domingo = monthGrid(iso, 'SUN');
+  return {
+    from: lunes[0]! < domingo[0]! ? lunes[0]! : domingo[0]!,
+    to: lunes[lunes.length - 1]! > domingo[domingo.length - 1]! ? lunes[lunes.length - 1]! : domingo[domingo.length - 1]!,
+  };
+}
+
+/**
+ * La hora que se propone al agendar: las 09:00 de siempre, salvo que queden fuera de la jornada de la cuenta; entonces,
+ * el inicio de la jornada.
+ */
+export function defaultTime(prefs: Pick<AccountPreferences, 'workStart' | 'workEnd'>): string {
+  return isWithinWorkHours(prefs, '09:00') ? '09:00' : prefs.workStart;
 }
 
 /** Otro mes, en `YYYY-MM-DD` (día 1). Evita el desborde de `setUTCMonth` sobre un día 31. */

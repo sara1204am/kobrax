@@ -11,9 +11,12 @@ import { Modal } from '@/components/modal';
 import { TONES, type Tone } from '@/components/tone-tile';
 import { useToast } from '@/components/toast';
 import { postJson, sendJson } from '@/lib/client';
+import { defaultTime } from '@/lib/agenda';
 import { money } from '@/lib/format';
+import { useWorkPreferences } from '@/lib/use-work-preferences';
 import type { PortfolioRow } from '@/lib/portfolio';
 import { LocationPicker, type Loc } from './location-picker';
+import { ScheduleNotice } from './schedule-notice';
 
 /**
  * Los cinco tipos, en el mismo orden que el teléfono.
@@ -131,7 +134,8 @@ export function NewTaskModal({
   const [plantillas, setPlantillas] = useState<{ code: string; label: string; metadata?: { body?: string } }[]>([]);
 
   const [timeMode, setTimeMode] = useState<ScheduleTimeMode>(time ? ScheduleTimeMode.FIXED : ScheduleTimeMode.LAPSE);
-  const [hora, setHora] = useState(/^\d{2}:\d{2}$/.test(time ?? '') ? time! : '09:00');
+  const prefs = useWorkPreferences();
+  const [hora, setHora] = useState(/^\d{2}:\d{2}$/.test(time ?? '') ? time! : defaultTime(prefs));
   const [franja, setFranja] = useState<string>(AgendaTimeSlot.MORNING);
   const [scheduledDate, setScheduledDate] = useState(date);
   const [observations, setObservations] = useState('');
@@ -609,6 +613,8 @@ export function NewTaskModal({
               </Field>
             )}
           </div>
+
+          <ScheduleNotice date={scheduledDate} time={timeMode === ScheduleTimeMode.FIXED ? hora : undefined} />
 
           <Field label={t('create.observations')}>
             <textarea

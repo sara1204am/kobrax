@@ -16,7 +16,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { ArrearsMethod, PREFERENCE_LOCALES, SUPPORTED_CURRENCIES, TIME_OF_DAY, WEEK_STARTS } from '@kobrax/shared';
+import { ArrearsMethod, BILLING_MAX, PREFERENCE_LOCALES, SUPPORTED_CURRENCIES, TIME_OF_DAY, WEEK_STARTS } from '@kobrax/shared';
 
 const CURRENCIES = Object.keys(SUPPORTED_CURRENCIES);
 /** Los países donde el producto opera salen del locale de cada moneda (`es-BO` → `BO`). */
@@ -37,10 +37,10 @@ export class PreferencesDto {
 
 /** Datos fiscales para la factura (F7). Cada campo es opcional y removible: `null` lo quita, ausente no lo toca. */
 export class BillingDto {
-  @IsOptional() @IsString() @Length(1, 160) legalName?: string | null;
-  @IsOptional() @IsString() @Length(1, 40) taxId?: string | null;
-  @IsOptional() @IsString() @Length(1, 240) address?: string | null;
-  @IsOptional() @IsEmail() @Length(3, 160) email?: string | null;
+  @IsOptional() @IsString() @Length(1, BILLING_MAX.legalName) legalName?: string | null;
+  @IsOptional() @IsString() @Length(1, BILLING_MAX.taxId) taxId?: string | null;
+  @IsOptional() @IsString() @Length(1, BILLING_MAX.address) address?: string | null;
+  @IsOptional() @IsEmail() @Length(3, BILLING_MAX.email) email?: string | null;
 }
 
 /**

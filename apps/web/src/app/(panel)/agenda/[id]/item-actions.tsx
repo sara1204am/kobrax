@@ -13,6 +13,7 @@ import { shiftDay } from '@/lib/agenda';
 import { errorText } from '@/lib/api-error';
 import { sendJson } from '@/lib/client';
 import { NewTaskModal } from '../new-task-modal';
+import { ScheduleNotice } from '../schedule-notice';
 import type { CatalogOption } from './page';
 
 type Action = 'complete' | 'cancel' | 'reschedule' | 'delete' | null;
@@ -342,6 +343,7 @@ export function ItemActions({
               </Field>
             )}
           </div>
+          <ScheduleNotice date={newDate} time={rMode === ScheduleTimeMode.FIXED ? rTime : undefined} />
           <ReasonField
             label={t('reschedule.reason')}
             options={rescheduleReasons}

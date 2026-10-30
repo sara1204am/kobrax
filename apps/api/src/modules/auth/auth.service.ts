@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { compare, hash } from 'bcryptjs';
-import { KOBRAX, type AuthAccountOption, type AuthTokens, type LoginResult } from '@kobrax/shared';
+import { KOBRAX, preferencesOf, type AccountPreferences, type AuthAccountOption, type AuthTokens, type LoginResult } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { TokenService } from './token.service';
@@ -366,7 +366,7 @@ export class AuthService implements OnModuleInit {
     /** Sesión del token: el panel la compara entre pestañas (W-LOG-54). */
     sessionId?: string;
     /** La marca del negocio activo (nombre, teléfono, logo): la lee cualquier miembro, sin `account:read`. */
-    account: { name: string; phone: string | null; logoUrl: string | null } | null;
+    account: { name: string; phone: string | null; logoUrl: string | null; preferences: AccountPreferences } | null;
   }> {
     // users/profiles/roles son tablas globales (sin RLS) → acceso directo.
     const [dbUser, role] = await Promise.all([
@@ -379,12 +379,12 @@ export class AuthService implements OnModuleInit {
     // `/auth/me` no pasa por `TenantGuard` (no hay contexto de request de tenant), así que `withTenant` avisaría en
     // cada llamada. Es una lectura de tres columnas de la cuenta del propio token —la policy de `accounts` es por id,
     // no por alcance de usuario—, por eso va con `withSystemTenant` y no se amplía el acceso de nadie.
-    let account: { businessName: string; phone: string | null; logoUrl: string | null } | null = null;
+    let account: { businessName: string; phone: string | null; logoUrl: string | null; configuration?: unknown } | null = null;
     try {
       account = await this.prisma.withSystemTenant(user.accountId, (tx) =>
         tx.account.findFirst({
           where: { id: user.accountId, deletedAt: null },
-          select: { businessName: true, phone: true, logoUrl: true },
+          select: { businessName: true, phone: true, logoUrl: true, configuration: true },
         }),
       );
     } catch {
@@ -409,7 +409,9 @@ export class AuthService implements OnModuleInit {
       mfaRequired: await this.mfa.isCritical(dbUser.id),
       requiresPasswordChange: dbUser.requiresPasswordChange,
       sessionId: user.sessionId,
-      account: account ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl } : null,
+      account: account
+        ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, preferences: preferencesOf(account.configuration) }
+        : null,
     };
   }
 

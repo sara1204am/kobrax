@@ -273,6 +273,11 @@
       "title": "No pudimos conectar con el servidor",
       "text": "Vuelve a intentarlo en un momento. Si sigue así, avísale a tu administrador."
     },
+    "billingAlert": {
+      "title": "Faltan datos de facturación.",
+      "text": "Completa {fields} para que podamos emitir tu factura.",
+      "action": "Completar datos"
+    },
     "table": {
       "range": "{from}–{to} de {total}",
       "previous": "Anterior",
@@ -1206,6 +1211,11 @@
       }
     },
     "agenda": {
+      "nonWorkingDay": "Día no laborable",
+      "workNotice": {
+        "nonWorkDay": "Tu equipo no trabaja los {weekday} (Cuenta → Cobranza → Preferencias de trabajo).",
+        "outsideHours": "Las {time} quedan fuera de la jornada ({start}–{end})."
+      },
       "title": "Agenda",
       "subtitle": "Lo agendado para vos.",
       "scopedToMine": "Estás viendo sólo tus gestiones.",
@@ -2296,6 +2306,7 @@
       "catalogos": "Catálogos",
       "agencias": "Agencias",
       "facturacion": "Facturación",
+      "billingPending": "Faltan datos de facturación",
       "actividad": "Actividad",
       "avanzado": "Avanzado"
     },
@@ -2309,23 +2320,71 @@
     },
     "catalogs": {
       "title": "Catálogos del negocio",
-      "intro": "Las listas que el equipo elige al registrar pagos, gestiones y créditos. Desactivar un ítem lo quita de los desplegables sin borrar los registros que ya lo usan. Los cambios se guardan al instante.",
-      "catalog": "Catálogo",
       "empty": "Este catálogo no tiene ítems todavía.",
-      "nameOf": "Nombre del ítem {code}",
       "active": "Activo",
-      "activeOf": "Activo: {name}",
       "inactive": "Desactivado",
       "moveUp": "Subir {name}",
       "moveDown": "Bajar {name}",
-      "newLabel": "Nuevo ítem",
-      "newPlaceholder": "Ej.: Transferencia QR",
-      "add": "Agregar",
       "saved": "Cambio guardado",
       "saveError": "No se pudo guardar el cambio",
       "moveError": "No se pudo reordenar. Recarga la página para ver el orden real.",
       "readOnly": "Sólo un administrador puede cambiar estas listas.",
-      "names": {
+      "ledgerLabel": "Se registra como",
+      "ledgerHint": "El método con que se anota el pago en los reportes. Depósito o cheque, por ejemplo, se anotan como transferencia.",
+      "ledgerChoose": "Elegir…",
+      "ledgerOf": "Se registra como: {name}",
+      "add": {
+        "open": "Agregar opción",
+        "title": "Agregar opción",
+        "subtitle": "Crea una nueva opción que estará disponible para tu equipo",
+        "nameLabel": "Nombre",
+        "nameHint": "Este es el nombre que verá tu equipo en la aplicación",
+        "namePlaceholder": "Ej.: Transferencia QR",
+        "codeLabel": "Código",
+        "codeHint": "Identificador técnico único. Se genera desde el nombre: mayúsculas, números y guiones bajos.",
+        "codeFormat": "Usa solo mayúsculas, números y guiones bajos (máximo 40).",
+        "codeDuplicate": "Ya existe una opción con ese código en este catálogo.",
+        "stateHint": "Las opciones inactivas no estarán disponibles en nuevos registros, pero se mantendrán en los registros existentes.",
+        "cancel": "Cancelar",
+        "save": "Guardar",
+        "descriptionLabel": "Descripción (opcional)",
+        "descriptionPlaceholder": "Para qué se usa esta opción"
+      },
+            "intro": "Administra las opciones que utiliza tu equipo en las operaciones diarias.",
+      "count": "{count, plural, one {# catálogo} other {# catálogos}}",
+      "settings": "Configuración del negocio",
+      "searchCatalog": "Buscar catálogo…",
+      "searchOption": "Buscar opción…",
+      "filterLabel": "Filtrar por estado",
+      "options": "{count, plural, one {# opción} other {# opciones}}",
+      "panelSubtitle": "Administra las opciones disponibles.",
+      "catalogsEmpty": "Ningún catálogo coincide con la búsqueda.",
+      "emptyFiltered": "Ninguna opción coincide con la búsqueda o el filtro.",
+      "dragHint": "Arrastra las opciones para cambiar su orden.",
+      "dragOf": "Arrastrar {name} (flechas arriba y abajo para moverla)",
+      "actionsOf": "Acciones de {name}",
+      "editAction": "Editar",
+      "activeOf": "Activo: {name}",
+      "ledgerShort": "Se registra como: {method}",
+      "noLedger": "Sin método del libro: no se ofrece en Pagos",
+      "filter": {
+        "all": "Todas",
+        "active": "Activas",
+        "inactive": "Inactivas"
+      },
+      "columns": {
+        "order": "Orden",
+        "name": "Nombre",
+        "code": "Código",
+        "state": "Estado",
+        "actions": "Acciones"
+      },
+      "edit": {
+        "title": "Editar opción",
+        "subtitle": "Cambia cómo ve tu equipo esta opción",
+        "codeLocked": "El código no se puede cambiar: es lo que guardan los registros y el móvil."
+      },
+"names": {
         "PAYMENT_METHOD": "Medios de pago",
         "BANK": "Bancos",
         "NO_PAYMENT_REASON": "Motivos de no pago",
@@ -2335,10 +2394,7 @@
         "COLLECTION_MODALITY": "Modalidades de cobro",
         "CANCEL_REASON": "Motivos de cancelación",
         "RESCHEDULE_REASON": "Motivos de reprogramación",
-        "SPECIAL_CATEGORY": "Gestiones especiales",
-        "ADDRESS_TYPE": "Tipos de dirección",
-        "PHONE_TYPE": "Tipos de teléfono",
-        "REMINDER_CATEGORY": "Categorías de recordatorio"
+        "SPECIAL_CATEGORY": "Gestiones especiales"
       }
     },
     "identity": {
@@ -2364,7 +2420,7 @@
     },
     "preferences": {
       "title": "Preferencias de trabajo",
-      "intro": "Cuándo trabaja tu equipo y cómo se muestra la semana. Las usan la agenda y los recordatorios a medida que cada módulo las adopta.",
+      "intro": "Cuándo trabaja tu equipo y cómo se muestra la semana. La agenda ya las respeta: marca los días no laborables, empieza la semana donde elijas y avisa al agendar fuera de la jornada.",
       "workDays": "Días de trabajo",
       "workStart": "Inicio de la jornada",
       "workEnd": "Fin de la jornada",
@@ -2381,7 +2437,7 @@
         "TIME_INVALID": "Escribe las horas como HH:MM, por ejemplo 08:00.",
         "END_NOT_AFTER_START": "La jornada tiene que terminar después de empezar."
       },
-      "scope": "Hoy se guardan para toda la cuenta; cada pantalla las irá respetando de a poco.",
+      "scope": "Valen para toda la cuenta. La agenda ya las respeta; el resto de las pantallas las irá respetando de a poco.",
       "save": "Guardar preferencias",
       "saved": "Preferencias guardadas",
       "saveError": "No se pudieron guardar las preferencias"
@@ -2448,6 +2504,10 @@
     },
     "billing": {
       "title": "Datos de facturación",
+      "edit": "Editar",
+      "cancel": "Cancelar",
+      "missingTitle": "Faltan datos obligatorios.",
+      "missingText": "Completa {fields} para poder emitir tu factura. La dirección es opcional.",
       "intro": "A nombre de quién y adónde se manda la factura. El plan lo gestiona Kobrax: no se cobra dentro del producto.",
       "legalName": "Razón social",
       "legalNameHint": "Con la que se factura, si es distinta del nombre del negocio.",

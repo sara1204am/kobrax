@@ -47,16 +47,30 @@ function capture(sink: unknown[]) {
 beforeEach(() => refresh.mockClear());
 
 describe('BillingForm', () => {
-  it('muestra lo guardado y deja guardar apagado mientras no se toque nada', () => {
+  it('muestra lo guardado en modo vista y «Editar» lo habilita', async () => {
     renderIt();
     expect(screen.getByLabelText(/Razón social/)).toHaveValue('Pérez SRL');
+    expect(screen.getByLabelText(/Razón social/)).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Guardar datos' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    expect(screen.getByLabelText(/Razón social/)).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Guardar datos' })).toBeDisabled();
+  });
+
+  it('Cancelar descarta lo escrito y vuelve a la vista', async () => {
+    renderIt();
+    await userEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    await userEvent.type(screen.getByLabelText('Dirección fiscal'), 'x');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(screen.getByLabelText('Dirección fiscal')).toHaveValue('');
+    expect(screen.getByLabelText('Dirección fiscal')).toBeDisabled();
   });
 
   it('manda sólo el campo tocado, dentro de «billing»', async () => {
     const enviados: unknown[] = [];
     server.use(capture(enviados));
     renderIt();
+    await userEvent.click(screen.getByRole('button', { name: 'Editar' }));
     await userEvent.type(screen.getByLabelText('Dirección fiscal'), 'Av. 6 de Agosto 1234');
     await userEvent.click(screen.getByRole('button', { name: 'Guardar datos' }));
 
@@ -68,6 +82,7 @@ describe('BillingForm', () => {
     const enviados: unknown[] = [];
     server.use(capture(enviados));
     renderIt();
+    await userEvent.click(screen.getByRole('button', { name: 'Editar' }));
     await userEvent.clear(screen.getByLabelText(/Correo para facturas/));
     await userEvent.click(screen.getByRole('button', { name: 'Guardar datos' }));
 
@@ -79,6 +94,7 @@ describe('BillingForm', () => {
       http.patch('*/api/account/me', () => HttpResponse.json({ error: { code: 'VALIDATION', message: 'Correo inválido' } }, { status: 400 })),
     );
     renderIt();
+    await userEvent.click(screen.getByRole('button', { name: 'Editar' }));
     await userEvent.type(screen.getByLabelText('Dirección fiscal'), 'x');
     await userEvent.click(screen.getByRole('button', { name: 'Guardar datos' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Correo inválido');
@@ -88,5 +104,6 @@ describe('BillingForm', () => {
     renderIt(['account:read']);
     expect(screen.getByLabelText(/Razón social/)).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Guardar datos' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument();
   });
 });

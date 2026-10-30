@@ -43,7 +43,7 @@ export default async function CuentaLayout({ children }: { children: ReactNode }
         }
       />
       <SaveBarProvider>
-        <CuentaTabs />
+        <CuentaTabs billingPending={(account.billingMissing ?? []).length > 0} />
         <div className="space-y-6">{children}</div>
       </SaveBarProvider>
     </>

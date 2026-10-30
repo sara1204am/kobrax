@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CATALOG_DEFAULTS } from '../constants/catalog-defaults.js';
 import { CatalogType } from '../enums/agenda.enum.js';
-import { reasonsFor, validateCatalogMetadata } from './catalog-metadata.js';
+import { ledgerMethodOf, reasonsFor, validateCatalogMetadata } from './catalog-metadata.js';
 
 describe('validateCatalogMetadata — rubros (OCCUPATION)', () => {
   const v = (m: unknown) => validateCatalogMetadata(CatalogType.OCCUPATION, m);
@@ -89,5 +89,30 @@ describe('CATALOG_DEFAULTS — las listas por defecto', () => {
     const by = (code: string) => CATALOG_DEFAULTS.find((c) => c.catalog === 'NO_PAYMENT_REASON' && c.code === code);
     expect(by('LATE_INCOME')?.metadata?.asksExpectedIncomeDate).toBe(true);
     expect(by('MOVED_OR_PHONE_CHANGED')?.metadata?.triggersContactUpdate).toBe(true);
+  });
+});
+
+describe('medios de pago — método del libro (ledgerMethod)', () => {
+  const v = (m: unknown) => validateCatalogMetadata(CatalogType.PAYMENT_METHOD, m);
+
+  it('acepta un método del libro y rechaza uno inventado', () => {
+    expect(v({ ledgerMethod: 'TRANSFER' })).toBeNull();
+    expect(v({ requiresBank: true })).toBeNull();
+    expect(v({ ledgerMethod: 'BITCOIN' })).toBe('LEDGER_METHOD_INVALID');
+  });
+
+  it('lo elegido manda; si no, el de los sembrados; si no, el propio código; si no, null', () => {
+    expect(ledgerMethodOf({ code: 'DEPOSIT', metadata: { ledgerMethod: 'QR' } })).toBe('QR');
+    expect(ledgerMethodOf({ code: 'DEPOSIT', metadata: {} })).toBe('TRANSFER');
+    expect(ledgerMethodOf({ code: 'CARD' })).toBe('CARD');
+    expect(ledgerMethodOf({ code: 'GIRO_ESPECIAL', metadata: {} })).toBeNull();
+    expect(ledgerMethodOf({ code: 'GIRO_ESPECIAL', metadata: { ledgerMethod: 'nada' } })).toBeNull();
+  });
+
+  it('todos los medios de pago sembrados traen su método del libro', () => {
+    for (const c of CATALOG_DEFAULTS.filter((d) => d.catalog === 'PAYMENT_METHOD')) {
+      expect(ledgerMethodOf(c), c.code).not.toBeNull();
+      expect(c.metadata?.ledgerMethod, c.code).toBeDefined();
+    }
   });
 });

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { Permission, type AuthAccountOption, type MeInfo } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { getAgendaSummary } from '@/lib/agenda-summary';
+import { getAccount } from './cuenta/get-account';
 import { PanelShell } from '@/components/panel-shell';
 import { AccountBrandProvider } from '@/components/account-brand';
 import { PermissionsProvider } from '@/components/permissions';
@@ -57,6 +58,13 @@ export default async function PanelLayout({ children }: { children: ReactNode })
   const agendaCount = today ? today.overdue + today.pending : 0;
   const badges = agendaCount > 0 ? { agenda: { count: agendaCount, urgent: (today?.overdue ?? 0) > 0 } } : undefined;
 
+  /*
+   * Faltan datos fiscales: el aviso sólo le sale a quien puede completarlos. Si la cuenta no responde, el panel
+   * sigue sin el aviso (es un recordatorio, no una dependencia).
+   */
+  const account = user.permissions.includes(Permission.ACCOUNT_WRITE) ? (await getAccount()).body.data : null;
+  const billingMissing = account?.billingMissing ?? [];
+
   return (
     <PermissionsProvider permissions={user.permissions}>
       <AccountBrandProvider brand={user.account ?? null}>
@@ -75,6 +83,7 @@ export default async function PanelLayout({ children }: { children: ReactNode })
         accounts={accounts.body.data ?? []}
         nav={visibleNav(user.permissions)}
         badges={badges}
+        billingMissing={billingMissing}
       >
         {/* Los avisos se montan una sola vez acá: un provider por pantalla haría que un toast
             disparado antes de navegar se pierda con el desmontaje. */}

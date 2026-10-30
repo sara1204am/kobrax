@@ -1,3 +1,4 @@
+import type { AccountPreferences } from '../utils/account-preferences.js';
 /**
  * Miembros del tenant y roles asignables: el contrato de `/users` y `/roles`, que el móvil y
  * la web consumen igual.
@@ -52,6 +53,8 @@ export interface AccountBrand {
   name: string;
   phone: string | null;
   logoUrl: string | null;
+  /** Cuándo trabaja el equipo y cómo se muestra la semana: la agenda las respeta. Opcional para no romper a un cliente viejo. */
+  preferences?: AccountPreferences;
 }
 
 /**

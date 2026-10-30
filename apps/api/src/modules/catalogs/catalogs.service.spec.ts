@@ -90,6 +90,15 @@ describe('CatalogsService.create/update/remove', () => {
     assert.deepEqual(calls.audit, ['CREATE']);
   });
 
+  it('nace activo por defecto, y inactivo si se pide', async () => {
+    const a = makeService();
+    await a.service.create(CatalogType.BANK, { code: 'BNB', label: 'Banco Nacional' });
+    assert.equal(a.calls.created!.isActive, true);
+    const b = makeService();
+    await b.service.create(CatalogType.BANK, { code: 'BNB', label: 'Banco Nacional', isActive: false });
+    assert.equal(b.calls.created!.isActive, false);
+  });
+
   it('update 404 si no existe (CATALOG_NOT_FOUND)', async () => {
     const { service } = makeService({ found: null });
     await rejectsWithCode(service.update(CatalogType.BANK, 'x', { label: 'y' }), 'CATALOG_NOT_FOUND');

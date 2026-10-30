@@ -273,6 +273,11 @@
       "title": "We could not reach the server",
       "text": "Try again in a moment. If it keeps happening, let your administrator know."
     },
+    "billingAlert": {
+      "title": "Billing details are missing.",
+      "text": "Fill in {fields} so we can issue your invoice.",
+      "action": "Complete details"
+    },
     "table": {
       "range": "{from}–{to} of {total}",
       "previous": "Previous",
@@ -1206,6 +1211,11 @@
       }
     },
     "agenda": {
+      "nonWorkingDay": "Non-working day",
+      "workNotice": {
+        "nonWorkDay": "Your team does not work on {weekday} (Account → Collection → Work preferences).",
+        "outsideHours": "{time} is outside the working day ({start}–{end})."
+      },
       "title": "Schedule",
       "subtitle": "What is scheduled for you.",
       "scopedToMine": "You are seeing only your own items.",
@@ -2296,6 +2306,7 @@
       "catalogos": "Catalogs",
       "agencias": "Branches",
       "facturacion": "Billing",
+      "billingPending": "Billing details missing",
       "actividad": "Activity",
       "avanzado": "Advanced"
     },
@@ -2309,23 +2320,71 @@
     },
     "catalogs": {
       "title": "Business catalogs",
-      "intro": "The lists your team picks from when recording payments, follow-ups and credits. Deactivating an item removes it from the dropdowns without deleting the records that already use it. Changes are saved instantly.",
-      "catalog": "Catalog",
       "empty": "This catalog has no items yet.",
-      "nameOf": "Name of item {code}",
       "active": "Active",
-      "activeOf": "Active: {name}",
       "inactive": "Deactivated",
       "moveUp": "Move {name} up",
       "moveDown": "Move {name} down",
-      "newLabel": "New item",
-      "newPlaceholder": "E.g.: QR transfer",
-      "add": "Add",
       "saved": "Change saved",
       "saveError": "The change could not be saved",
       "moveError": "Could not reorder. Reload the page to see the real order.",
       "readOnly": "Only an administrator can change these lists.",
-      "names": {
+      "ledgerLabel": "Recorded as",
+      "ledgerHint": "The method the payment is recorded under in reports. Deposit or cheque, for example, are recorded as transfer.",
+      "ledgerChoose": "Choose…",
+      "ledgerOf": "Recorded as: {name}",
+      "add": {
+        "open": "Add option",
+        "title": "Add option",
+        "subtitle": "Create a new option that will be available to your team",
+        "nameLabel": "Name",
+        "nameHint": "This is the name your team will see in the app",
+        "namePlaceholder": "E.g.: QR transfer",
+        "codeLabel": "Code",
+        "codeHint": "Unique technical identifier. Generated from the name: capitals, numbers and underscores.",
+        "codeFormat": "Use only capitals, numbers and underscores (40 max).",
+        "codeDuplicate": "An option with that code already exists in this catalog.",
+        "stateHint": "Inactive options won't be available in new records, but they stay in existing ones.",
+        "cancel": "Cancel",
+        "save": "Save",
+        "descriptionLabel": "Description (optional)",
+        "descriptionPlaceholder": "What this option is for"
+      },
+            "intro": "Manage the options your team uses in daily operations.",
+      "count": "{count, plural, one {# catalog} other {# catalogs}}",
+      "settings": "Business settings",
+      "searchCatalog": "Search catalog…",
+      "searchOption": "Search option…",
+      "filterLabel": "Filter by status",
+      "options": "{count, plural, one {# option} other {# options}}",
+      "panelSubtitle": "Manage the available options.",
+      "catalogsEmpty": "No catalog matches the search.",
+      "emptyFiltered": "No option matches the search or filter.",
+      "dragHint": "Drag the options to change their order.",
+      "dragOf": "Drag {name} (up and down arrows to move it)",
+      "actionsOf": "Actions for {name}",
+      "editAction": "Edit",
+      "activeOf": "Active: {name}",
+      "ledgerShort": "Recorded as: {method}",
+      "noLedger": "No ledger method: not offered in Payments",
+      "filter": {
+        "all": "All",
+        "active": "Active",
+        "inactive": "Inactive"
+      },
+      "columns": {
+        "order": "Order",
+        "name": "Name",
+        "code": "Code",
+        "state": "Status",
+        "actions": "Actions"
+      },
+      "edit": {
+        "title": "Edit option",
+        "subtitle": "Change how your team sees this option",
+        "codeLocked": "The code can't be changed: records and the mobile app store it."
+      },
+"names": {
         "PAYMENT_METHOD": "Payment methods",
         "BANK": "Banks",
         "NO_PAYMENT_REASON": "Reasons for non-payment",
@@ -2335,10 +2394,7 @@
         "COLLECTION_MODALITY": "Collection modes",
         "CANCEL_REASON": "Cancellation reasons",
         "RESCHEDULE_REASON": "Rescheduling reasons",
-        "SPECIAL_CATEGORY": "Special cases",
-        "ADDRESS_TYPE": "Address types",
-        "PHONE_TYPE": "Phone types",
-        "REMINDER_CATEGORY": "Reminder categories"
+        "SPECIAL_CATEGORY": "Special cases"
       }
     },
     "identity": {
@@ -2364,7 +2420,7 @@
     },
     "preferences": {
       "title": "Work preferences",
-      "intro": "When your team works and how the week is shown. The agenda and reminders use them as each module adopts them.",
+      "intro": "When your team works and how the week is shown. The agenda already follows them: it marks non-working days, starts the week where you choose and warns when you schedule outside the workday.",
       "workDays": "Work days",
       "workStart": "Start of the workday",
       "workEnd": "End of the workday",
@@ -2381,7 +2437,7 @@
         "TIME_INVALID": "Write times as HH:MM, for example 08:00.",
         "END_NOT_AFTER_START": "The workday has to end after it starts."
       },
-      "scope": "They are saved for the whole account today; each screen will start honoring them gradually.",
+      "scope": "They apply to the whole account. The agenda already follows them; other screens will adopt them gradually.",
       "save": "Save preferences",
       "saved": "Preferences saved",
       "saveError": "The preferences could not be saved"
@@ -2448,6 +2504,10 @@
     },
     "billing": {
       "title": "Billing details",
+      "edit": "Edit",
+      "cancel": "Cancel",
+      "missingTitle": "Required details are missing.",
+      "missingText": "Fill in {fields} so we can issue your invoice. Address is optional.",
       "intro": "Who the invoice is issued to and where it is sent. Kobrax manages the plan: nothing is charged inside the product.",
       "legalName": "Legal name",
       "legalNameHint": "The one invoices are issued to, if different from the business name.",

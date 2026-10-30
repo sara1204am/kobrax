@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   DEFAULT_PREFERENCES,
   diffPreferences,
+  isoWeekday,
+  isWithinWorkHours,
+  isWorkingDate,
   mergePreferences,
   preferencesOf,
   validatePreferences,
@@ -80,5 +83,28 @@ describe('mergePreferences · diffPreferences', () => {
   it('el diff devuelve sólo lo que cambió, y vacío si nada', () => {
     assert.deepEqual(diffPreferences(OK, { ...OK }), {});
     assert.deepEqual(diffPreferences(OK, { ...OK, weekStart: 'SUN', workDays: [1, 2] }), { weekStart: 'SUN', workDays: [1, 2] });
+  });
+});
+
+describe('qué días y horas trabaja el equipo', () => {
+  it('isoWeekday: lunes = 1 … domingo = 7', () => {
+    expect(isoWeekday('2026-10-26')).toBe(1); // lunes
+    expect(isoWeekday('2026-10-31')).toBe(6); // sábado
+    expect(isoWeekday('2026-11-01')).toBe(7); // domingo
+  });
+
+  it('isWorkingDate respeta los días elegidos', () => {
+    const p = { workDays: [1, 2, 3, 4, 5] as AccountPreferences['workDays'] };
+    expect(isWorkingDate(p, '2026-10-29')).toBe(true); // jueves
+    expect(isWorkingDate(p, '2026-10-31')).toBe(false); // sábado
+    expect(isWorkingDate(DEFAULT_PREFERENCES, '2026-10-31')).toBe(true); // de fábrica trabaja sábado
+    expect(isWorkingDate(DEFAULT_PREFERENCES, '2026-11-01')).toBe(false); // domingo
+  });
+
+  it('isWithinWorkHours: el inicio entra y el fin no', () => {
+    expect(isWithinWorkHours(DEFAULT_PREFERENCES, '08:00')).toBe(true);
+    expect(isWithinWorkHours(DEFAULT_PREFERENCES, '17:59')).toBe(true);
+    expect(isWithinWorkHours(DEFAULT_PREFERENCES, '18:00')).toBe(false);
+    expect(isWithinWorkHours(DEFAULT_PREFERENCES, '07:30')).toBe(false);
   });
 });

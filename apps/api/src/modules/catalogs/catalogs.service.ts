@@ -49,6 +49,7 @@ export class CatalogsService {
     const data = {
       label: dto.label,
       sortOrder: dto.sortOrder ?? 0,
+      isActive: dto.isActive ?? true,
       metadata: (dto.metadata ?? {}) as Prisma.InputJsonValue,
     };
     const created = await this.tx(async (tx) => {
@@ -57,7 +58,7 @@ export class CatalogsService {
       const existing = await tx.catalogItem.findFirst({ where: { catalog, code: dto.code } });
       if (existing && !existing.deletedAt) throw catalogCodeDuplicate(dto.code);
       if (existing) {
-        return tx.catalogItem.update({ where: { id: existing.id }, data: { ...data, isActive: true, deletedAt: null } });
+        return tx.catalogItem.update({ where: { id: existing.id }, data: { ...data, deletedAt: null } });
       }
       return tx.catalogItem.create({ data: { accountId: this.tenant.accountId, catalog, code: dto.code, ...data } });
     });

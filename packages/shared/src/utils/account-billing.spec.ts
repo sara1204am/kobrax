@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { billingOf, EMPTY_BILLING, mergeBilling } from './account-billing.js';
+import { billingMissingOf, billingOf, EMPTY_BILLING, mergeBilling } from './account-billing.js';
 
 describe('billingOf', () => {
   it('una cuenta sin datos de facturación los trae todos en null', () => {
@@ -37,5 +37,13 @@ describe('mergeBilling', () => {
 
   it('un parche vacío no cambia nada', () => {
     expect(mergeBilling(current, {})).toEqual(current);
+  });
+});
+
+describe('billingMissingOf', () => {
+  it('pide razón social, NIT y correo, y no la dirección', () => {
+    expect(billingMissingOf(EMPTY_BILLING)).toEqual(['legalName', 'taxId', 'email']);
+    expect(billingMissingOf({ legalName: 'Pérez SRL', taxId: '123', address: null, email: 'a@b.co' })).toEqual([]);
+    expect(billingMissingOf({ ...EMPTY_BILLING, legalName: 'X', email: 'a@b.co' })).toEqual(['taxId']);
   });
 });

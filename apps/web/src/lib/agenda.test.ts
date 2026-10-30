@@ -3,6 +3,7 @@ import { AgendaItemStatus, ScheduleTimeMode, partitionDay } from '@kobrax/shared
 import {
   dayMetrics,
   dayOr,
+  defaultTime,
   daySummary,
   entrySummary,
   filterItems,
@@ -13,6 +14,7 @@ import {
   loadByDay,
   longDay,
   monthGrid,
+  monthRange,
   rowTime,
   shiftDay,
   shiftMonth,
@@ -301,5 +303,42 @@ describe('entrySummary', () => {
     expect(entrySummary({ type: 'VISIT', observations: 'Verificar domicilio' }, 'BOB', promise, fmt)).toBe('Verificar domicilio');
     expect(entrySummary({ type: 'CALL' }, 'BOB', promise, fmt)).toBeUndefined();
     expect(entrySummary({ type: 'REMINDER', details: { description: '  ' } }, 'BOB', promise, fmt)).toBeUndefined();
+  });
+});
+
+describe('inicio de semana (preferencia de la cuenta)', () => {
+  it('weekOf con domingo de inicio va de domingo a sábado', () => {
+    // 2026-10-29 es jueves.
+    expect(weekOf('2026-10-29', 'SUN')[0]).toBe('2026-10-25');
+    expect(weekOf('2026-10-29', 'SUN')[6]).toBe('2026-10-31');
+    // Sin decir nada sigue siendo lunes a domingo.
+    expect(weekOf('2026-10-29')[0]).toBe('2026-10-26');
+    // Un domingo, con domingo de inicio, abre su propia semana.
+    expect(weekOf('2026-11-01', 'SUN')[0]).toBe('2026-11-01');
+    expect(weekOf('2026-11-01', 'MON')[0]).toBe('2026-10-26');
+  });
+
+  it('monthGrid con domingo de inicio sigue siendo semanas enteras', () => {
+    const grid = monthGrid('2026-10-15', 'SUN');
+    expect(grid.length % 7).toBe(0);
+    expect(new Date(`${grid[0]}T00:00:00.000Z`).getUTCDay()).toBe(0);
+    expect(new Date(`${grid[grid.length - 1]}T00:00:00.000Z`).getUTCDay()).toBe(6);
+  });
+
+  it('monthRange cubre las dos grillas, la de lunes y la de domingo', () => {
+    for (const day of ['2026-10-15', '2026-02-10', '2026-11-30']) {
+      const { from, to } = monthRange(day);
+      for (const start of ['MON', 'SUN'] as const) {
+        const grid = monthGrid(day, start);
+        expect(from <= grid[0]!).toBe(true);
+        expect(to >= grid[grid.length - 1]!).toBe(true);
+      }
+    }
+  });
+
+  it('defaultTime propone las 09:00 salvo que queden fuera de la jornada', () => {
+    expect(defaultTime({ workStart: '08:00', workEnd: '18:00' })).toBe('09:00');
+    expect(defaultTime({ workStart: '10:00', workEnd: '18:00' })).toBe('10:00');
+    expect(defaultTime({ workStart: '06:00', workEnd: '09:00' })).toBe('06:00');
   });
 });

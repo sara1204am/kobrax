@@ -38,6 +38,8 @@ export interface AccountInfo {
   preferences?: AccountPreferences;
   /** Datos fiscales para la factura. Siempre completos: `null` en lo no cargado. */
   billing?: AccountBilling;
+  /** Datos fiscales obligatorios sin cargar (razón social, NIT, correo). Vacío = la cuenta ya puede facturarse. */
+  billingMissing?: (keyof AccountBilling)[];
   /**
    * Cuántos decimales muestran los montos (0–2, default 2). Preferencia de la cuenta: una
    * cartera que presta en enteros no quiere leer «,00» en cada renglón. Vive en `settings`.

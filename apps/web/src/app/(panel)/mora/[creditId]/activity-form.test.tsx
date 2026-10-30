@@ -76,7 +76,7 @@ describe('RegisterActivityButton — qué se ofrece', () => {
     const { unmount } = render(<RegisterActivityButton creditId="c1" methods={[]} banks={[]} />);
     await userEvent.click(screen.getByRole('button', { name: 'Registrar gestión' }));
     await userEvent.selectOptions(resultSelect(), 'PROMISE_TO_PAY');
-    expect(optionsOf(screen.getByLabelText('Medio de pago') as HTMLSelectElement)).toEqual(['CASH', 'TRANSFER', 'QR', 'CARD', 'MOBILE_PAYMENT']);
+    expect(optionsOf(screen.getByLabelText('Medio de pago') as HTMLSelectElement)).toEqual(['CASH', 'TRANSFER', 'QR']);
     unmount();
     render(<RegisterActivityButton creditId="c1" methods={[{ code: 'DEPOSITO', label: 'Depósito' }]} banks={[]} />);
     await userEvent.click(screen.getByRole('button', { name: 'Registrar gestión' }));

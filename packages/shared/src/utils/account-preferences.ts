@@ -55,6 +55,22 @@ export function validatePreferences(p: AccountPreferences): PreferencesError | n
   return null;
 }
 
+/** El día de la semana de una fecha `YYYY-MM-DD`, en ISO: 1 = lunes … 7 = domingo. */
+export function isoWeekday(iso: string): WorkDay {
+  const d = new Date(`${iso}T00:00:00.000Z`).getUTCDay();
+  return (d === 0 ? 7 : d) as WorkDay;
+}
+
+/** ¿El equipo trabaja ese día? (`iso` = `YYYY-MM-DD`.) */
+export function isWorkingDate(p: Pick<AccountPreferences, 'workDays'>, iso: string): boolean {
+  return p.workDays.includes(isoWeekday(iso));
+}
+
+/** ¿Esa hora (`HH:MM`) cae dentro de la jornada? El fin es exclusivo: a las 18:00 ya se terminó. */
+export function isWithinWorkHours(p: Pick<AccountPreferences, 'workStart' | 'workEnd'>, time: string): boolean {
+  return time >= p.workStart && time < p.workEnd;
+}
+
 /**
  * Las preferencias de una cuenta a partir de su `configuration` tal como está en la base.
  *

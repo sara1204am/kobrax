@@ -41,7 +41,7 @@ function makeAuth(opts: {
   /** La persona tiene un rol crítico (lo que dice `MfaService.isCritical`). */
   critical?: boolean;
   /** La cuenta que lee `/auth/me` para la marca del panel; sin ella el doble devuelve `null`. */
-  brand?: { businessName: string; phone: string | null; logoUrl: string | null };
+  brand?: { businessName: string; phone: string | null; logoUrl: string | null; configuration?: unknown };
   /** Leer la cuenta falla (base caída). */
   brandFails?: boolean;
 }) {
@@ -392,7 +392,26 @@ describe('AuthService.me — sesión del token (W-LOG-54)', () => {
       brand: { businessName: 'Cobranzas Pérez', phone: '70000000', logoUrl: '/api/uploads/x.png' },
     });
     const me = await service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
-    assert.deepEqual(me.account, { name: 'Cobranzas Pérez', phone: '70000000', logoUrl: '/api/uploads/x.png' });
+    assert.deepEqual(me.account, {
+      name: 'Cobranzas Pérez',
+      phone: '70000000',
+      logoUrl: '/api/uploads/x.png',
+      preferences: { workDays: [1, 2, 3, 4, 5, 6], workStart: '08:00', workEnd: '18:00', weekStart: 'MON', defaultLocale: 'es' },
+    });
+  });
+
+  it('entrega las preferencias de trabajo de la cuenta junto con la marca (la agenda las lee sin account:read)', async () => {
+    const { service } = makeAuth({
+      user: { id: 'u1', email: 'm@kobrax.demo', profile: null, mfaEnabled: false, requiresPasswordChange: false },
+      brand: {
+        businessName: 'Cobranzas Pérez',
+        phone: null,
+        logoUrl: null,
+        configuration: { preferences: { workDays: [1, 2, 3, 4, 5], workStart: '09:00', workEnd: '17:00', weekStart: 'SUN', defaultLocale: 'en' } },
+      },
+    });
+    const me = await service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
+    assert.deepEqual(me.account?.preferences, { workDays: [1, 2, 3, 4, 5], workStart: '09:00', workEnd: '17:00', weekStart: 'SUN', defaultLocale: 'en' });
   });
 
   it('si no se puede leer la marca del negocio, la identidad igual se entrega (account: null)', async () => {

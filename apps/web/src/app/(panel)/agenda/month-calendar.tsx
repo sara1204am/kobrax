@@ -2,7 +2,9 @@
 
 import { useLocale, useTranslations } from 'next-intl';
 import type { AgendaListItem } from '@kobrax/shared';
+import { isWorkingDate } from '@kobrax/shared';
 import { itemWhen, loadByDay, monthGrid, shiftMonth } from '@/lib/agenda';
+import { useWorkPreferences } from '@/lib/use-work-preferences';
 import type { AgendaEvents } from './agenda-screen';
 
 /** Cuántas gestiones se nombran en una celda antes de resumir con «+N». */
@@ -49,7 +51,8 @@ export function MonthCalendar({
 }) {
   const t = useTranslations('panel.agenda');
   const locale = useLocale();
-  const grid = monthGrid(month);
+  const prefs = useWorkPreferences();
+  const grid = monthGrid(month, prefs.weekStart);
   const load = loadByDay(items);
 
   const porDía = new Map<string, AgendaListItem[]>();
@@ -92,6 +95,7 @@ export function MonthCalendar({
               iso={iso}
               today={today}
               delMes={iso.slice(0, 7) === month.slice(0, 7)}
+              libre={!isWorkingDate(prefs, iso)}
               items={porDía.get(iso) ?? []}
               carga={load.get(iso)?.overdue ?? 0}
               onPickDay={onPickDay}
@@ -118,6 +122,7 @@ function Celda({
   iso,
   today,
   delMes,
+  libre,
   items,
   carga,
   onPickDay,
@@ -126,6 +131,8 @@ function Celda({
   iso: string;
   today: string;
   delMes: boolean;
+  /** El equipo no trabaja ese día (Preferencias de trabajo): se pinta como fondo, sin esconder lo agendado. */
+  libre: boolean;
   items: AgendaListItem[];
   carga: number;
   onPickDay: (iso: string) => void;
@@ -139,15 +146,16 @@ function Celda({
   return (
     <div
       className={`group min-h-[92px] border-b border-r border-k-border p-1.5 last:border-r-0 ${
-        sobrecargado ? 'bg-k-warning-bg' : delMes ? 'bg-white' : 'bg-k-bg'
+        sobrecargado ? 'bg-k-warning-bg' : delMes && !libre ? 'bg-white' : 'bg-k-bg'
       } ${esHoy ? 'ring-1 ring-inset ring-k-periwinkle' : ''}`}
     >
       <div className="flex items-baseline justify-between">
         <button
           type="button"
           onClick={() => onPickDay(iso)}
+          title={libre ? t('nonWorkingDay') : undefined}
           className={`rounded px-1 text-[12px] tabular-nums hover:underline ${
-            esHoy ? 'font-semibold text-k-periwinkle' : delMes ? 'text-k-text' : 'text-k-muted'
+            esHoy ? 'font-semibold text-k-periwinkle' : delMes ? (libre ? 'text-k-text-2' : 'text-k-text') : 'text-k-muted'
           }`}
         >
           {día}

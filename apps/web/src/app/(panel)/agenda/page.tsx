@@ -2,7 +2,7 @@ import { getTranslations } from 'next-intl/server';
 import { todayISO, Permission, type AgendaAssignee, type AgendaListItem, type MeInfo, type Member } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { getAgendaSummary } from '@/lib/agenda-summary';
-import { dayOr, monthGrid } from '@/lib/agenda';
+import { dayOr, monthRange } from '@/lib/agenda';
 import { EmptyState } from '@/components/panel-ui';
 import { AgendaConnector } from './agenda-connector';
 
@@ -29,11 +29,11 @@ export default async function AgendaPage({
   // «Hoy» es el día de la EMPRESA que dice el servidor, no el UTC de este proceso (en Bolivia, desde las 20:00, UTC ya es mañana).
   const today = (await getAgendaSummary())?.date ?? todayISO();
   const day = dayOr(today, searchParams.date);
-  const mes = monthGrid(day);
+  const mes = monthRange(day);
 
   const [list, month, overdue, me, team] = await Promise.all([
     apiCall<AgendaListItem[]>(`/agenda?date=${day}`, { method: 'GET', auth: true }),
-    apiCall<AgendaListItem[]>(`/agenda?from=${mes[0]}&to=${mes[mes.length - 1]}`, { method: 'GET', auth: true }),
+    apiCall<AgendaListItem[]>(`/agenda?from=${mes.from}&to=${mes.to}`, { method: 'GET', auth: true }),
     apiCall<AgendaListItem[]>(`/agenda/overdue?limit=${OVERDUE_LIMIT}`, { method: 'GET', auth: true }),
     apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
     // Cobradores y supervisores de su alcance, sin pedir `user:read` (el supervisor no lo tiene): sirve para agrupar
