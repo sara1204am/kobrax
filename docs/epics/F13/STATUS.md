@@ -11,8 +11,8 @@
 | Gate | Estado | Justificación / evidencia | Fecha |
 |---|---|---|---|
 | G0 Arnés completo y validado | **PASS** | Estructura creada; validación en `execution/VERIFICATIONS.md` (V-001…V-004): enlaces resueltos, README ≤60 líneas, sin contradicciones entre RULES/GATES/STATUS, mapa de «dónde responder» cubre el criterio de éxito. La usuaria aún no lo ha revisado. | 2026-10-29 |
-| G1 Discovery completo | **NOT STARTED** | Esperar autorización explícita. Pistas previas en `discovery/00-leads.md` (no cuentan como discovery). | — |
-| G2 Arquitectura objetivo | NOT STARTED | Depende de G1. | — |
+| G1 Discovery completo | **PASS (confirmado por la usuaria, 2026-11-02)** | Archivos `00…10` completos; `09-brechas.md` consolidado. **Salvedad registrada:** las filas de `hub/HUB.md` siguen `SEMBRADO` (el criterio de G1 pedía `VERIFICADO`); se verifican por entrada al planear cada fase (A4). Hallazgos de agentes sin recontrastar están marcados; los críticos fueron releídos (09 §1). | 2026-11-02 |
+| G2 Arquitectura objetivo | **EN CURSO (borrador)** | `target/01…09` escritos. Falta: aprobar ADR-0002 y ADR-0004 (propuestas con decisión recomendada), mapa `09-brechas` ↔ `target`, revisión de la usuaria. | 2026-11-02 |
 | G3 Roadmap y planes aprobados | NOT STARTED | Depende de G2. `ROADMAP.md` es hoy solo hipótesis. | — |
 | G4–G7 | NOT STARTED | Son por fase; no existe ninguna fase aprobada. | — |
 
@@ -30,6 +30,7 @@ Vocabulario: PASS · FAIL · BLOCKED · NOT_APPLICABLE · (NOT STARTED = aún no
 - Propuestas sin aprobar: ADR-0002 (frontera F13/F14), ADR-0003 (representación del árbol), ADR-0004 (tenant sin jerarquía).
 
 ## Bloqueos y preguntas abiertas
+- Respondidas el 2026-11-02 las 3 preguntas de niveles/pertenencia/creación (ver `decisions/DECISIONS.md`, R1–R5). 2026-11-02 (2.ª ronda): solo el super admin crea oficinas a cualquier nivel (R5); F13 es base de roles y permisos (R6); referencia UI en `C:\Tutator\gallium-10` (R2). Sin preguntas abiertas de esas tres.
 - Autorización para iniciar Discovery.
 - Estado de la alineación móvil↔web (`../F10/plans/alineacion-web/README.md`, ronda 3): F13 y F14 deben coordinarse con ella antes de tocar el móvil.
 - Los cuatro puntos del handoff anterior siguen DESCONOCIDOS: si `Role.level` se usa, si analítica se protege con `report:read`, si el JWT/sesión móvil expone `branch_id`, si hay policies RLS por alcance fuera de `prisma/rls/`.
