@@ -4,7 +4,7 @@
 > Última actualización: **2026-10-29**.
 
 ## Fase vigente
-**Construcción P1–P4 hecha en ramas locales (sin push). En revisión (G6).** Rama de integración `f13/multi-oficina` = `f13/p4-movil`. Código en el worktree `C:\Startup Kobrax\kobrax-f13-web`.
+**Construcción P1–P4 hecha y verificada en ramas locales (sin push). Cerrada con salvedades (G7).** Rama de integración `f13/multi-oficina` = `f13/p4-movil`. Código en el worktree `C:\Startup Kobrax\kobrax-f13-web`.
 
 ## Gates de la épica
 
@@ -16,8 +16,8 @@
 | G3 Roadmap y planes aprobados | **PASS por delegación (2026-11-02)** | Fases P1–P4 ejecutadas siguiendo `discovery/09-brechas.md` §10; los planes por fase se materializaron como briefings a agentes (no como `plans/*.md` T4): **desviación del marco**, ver «Desviaciones». | 2026-11-02 |
 | G4 Plan de fase | **DESVIADO** | No se escribieron `plans/P*.md` (T4) ni se corrió `/epic-fase validar`; el plan de cada fase fue el briefing al agente, basado en `target/` y `09-brechas`. La usuaria delegó la ejecución completa. | 2026-11-02 |
 | G5 Verificación | **PASS con salvedades** | Evidencia real en `execution/VERIFICATIONS.md`: API 1816/1816 (base 1732), integración 158/158, shared 465/465, móvil 977/977 (= base), web 7 fallos = los 7 preexistentes. **Salvedades:** sin navegador real, sin prueba de carga, migración sin probar sobre copia de producción. | 2026-11-03 |
-| G6 Revisión y transversal | **EN CURSO** | Revisión independiente (Fable) del diff completo; sus hallazgos se resuelven antes de cerrar. | 2026-11-03 |
-| G7 Cierre | NOT STARTED | Depende de G6. | — |
+| G6 Revisión y transversal | **PASS** | Revisión independiente (Fable) del diff completo: 0 P0; P1 (alta de crédito sin oficina, alcance de `GET /credits/:id`) y P2 corregidos o documentados como limitación conocida. Verificado de nuevo por el coordinador tras las correcciones (VERIFICATIONS). | 2026-11-03 |
+| G7 Cierre | **PASS con salvedades** | `HANDOFF`, `STATUS`, `VERIFICATIONS`, docs de producto actualizados. Salvedades: HUB/IMPACT-MAP no actualizados entrada por entrada (desviación registrada); UI no vista en navegador real; migración no probada sobre copia de producción. | 2026-11-03 |
 
 Vocabulario: PASS · FAIL · BLOCKED · NOT_APPLICABLE · (NOT STARTED = aún no se evalúa).
 

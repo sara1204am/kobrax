@@ -64,3 +64,15 @@ Formato T5. Todas las corridas son **del coordinador** (re-ejecutadas por él, n
 - **Hidratación móvil con más de 150 fichas** bajo un alcance regional: sin cambios y sin medir en dispositivo (riesgo B-M2 sigue abierto).
 - **Permisos de rol con `office:read` ausente** (supervisor, cobrador): cubiertos por tests, no por un recorrido real.
 - **Datos reales de producción:** la migración se probó sobre el seed y sobre casos construidos; no sobre una copia de producción. **Antes de desplegar, correrla sobre una copia** y revisar `verify/oficinas-arbol.sql` (créditos sin oficina, pagos huérfanos).
+
+## Verificación final tras la revisión independiente (2026-11-03, rama `f13/multi-oficina`)
+| Qué | Comando | Resultado |
+|---|---|---|
+| API type-check / database / shared | `pnpm --filter @kobrax/{api,database,shared} type-check` | OK / OK / OK |
+| API suite | `pnpm --filter @kobrax/api test` | `# tests 1821 · # pass 1821 · # fail 0` (base 1732) |
+| Integración | `REDIS_URL=redis://localhost:6379/7 pnpm --filter @kobrax/api test:integration` | `# tests 162 · # pass 162 · # fail 0` |
+| `import-assignment.it` caso 11 (antes intermitente) | 3 corridas aisladas desde `apps/api` | 11/11 · 11/11 · 11/11 tras filtrar `externalId` no nulo |
+| shared | `pnpm --filter @kobrax/shared test` | 36 archivos · **467 pass** (base 451) |
+| web | `pnpm --filter @kobrax/web test` / type-check | 7 fallan (**los 7 preexistentes**) · 1221 pasan · type-check OK |
+| móvil | `pnpm --filter @kobrax/mobile test` / type-check | 82 suites · **977 pass** (= base) · 2 errores TS = los 2 preexistentes |
+| SQL | `verify/oficinas-arbol.sql`, `oficinas-permisos.sql`, `alcance-supervisor-agencia.sql` | OK · OK · OK; informe de usuarios sin asignación en cuentas multi-oficina: 0 filas |
