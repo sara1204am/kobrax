@@ -99,6 +99,8 @@ model Account {
   deletedAt      DateTime?     @map("deleted_at")
 
   branches                Branch[]
+  branchTypes             BranchType[]
+  branchAssignments       UserBranchAssignment[]
   userAccounts            UserAccount[]
   sessions                UserSession[]
   auditLogs               AuditLog[]
@@ -130,7 +132,10 @@ model Account {
   @@map("accounts")
 }
 
-/// Unidad organizacional: sucursal, agencia, regional, oficina o tienda.
+/// Unidad organizacional: central, regional, agencia, oficina o tienda. Un NODO de un árbol por cuenta (F13 · ADR-0003).
+/// `path` = ruta materializada de ids (`/raíz/regional/agencia/`): el subárbol de un nodo es `path LIKE '<path>%'`.
+/// Hay UNA raíz viva por cuenta (`is_root`); toda cuenta la tiene (ADR-0004). Índices parciales en SQL (Prisma no los expresa):
+/// `branches_one_root_per_account_key`, `branches_account_id_external_ref_key`, `branches_account_id_code_key`.
 model Branch {
   id            String    @id @default(uuid())
   accountId     String    @map("account_id")
@@ -140,18 +145,79 @@ model Branch {
   address       String?
   managerUserId String?   @map("manager_user_id") // referencia suave a users.id
   active        Boolean   @default(true)
+  /// Padre en el árbol; `null` solo en la raíz.
+  parentId      String?   @map("parent_id")
+  /// Tipo de nodo (catálogo editable por cuenta: Central, Regional, Agencia…).
+  typeId        String    @map("type_id")
+  /// Ruta materializada. La reescribe el servicio de oficinas al crear/mover, dentro de una transacción con bloqueo de fila.
+  path          String
+  depth         Int       @default(0)
+  isRoot        Boolean   @default(false) @map("is_root")
+  /// Id de la oficina en el sistema externo del banco (reservado para la ingesta futura).
+  externalRef   String?   @map("external_ref") @db.VarChar(80)
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
   deletedAt     DateTime? @map("deleted_at")
 
-  account      Account       @relation(fields: [accountId], references: [id])
+  account      Account                @relation(fields: [accountId], references: [id])
+  parent       Branch?                @relation("BranchTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children     Branch[]               @relation("BranchTree")
+  type         BranchType             @relation(fields: [typeId], references: [id])
   userAccounts UserAccount[]
+  assignments  UserBranchAssignment[]
   credits      Credit[]
+  payments     Payment[]
   routePlans   RoutePlan[]
 
   @@index([accountId])
   @@index([accountId, active])
+  @@index([accountId, parentId])
   @@map("branches")
+}
+
+/// Tipos de oficina por cuenta (R1: niveles flexibles). Editable; sin reglas padre/hijo obligatorias en F13.
+model BranchType {
+  id        String   @id @default(uuid())
+  accountId String   @map("account_id")
+  code      String   @db.VarChar(40)
+  name      String   @db.VarChar(80)
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  account  Account  @relation(fields: [accountId], references: [id])
+  branches Branch[]
+
+  @@unique([accountId, code])
+  @@map("branch_types")
+}
+
+/// Dónde trabaja cada persona (R3: varias oficinas; R4: la asignación a un nodo cubre su subárbol).
+/// `roleId` queda SIEMPRE null en F13 (ADR-0002): el rol efectivo sigue siendo `user_accounts.role_id`; F14 lo consumirá.
+/// Índices parciales en SQL: `user_branch_assignments_active_key` (una vigente por persona y oficina) y el TEMPORAL
+/// `user_branch_assignments_one_active_per_account_tmp_key` (una sola vigente por persona y cuenta hasta que todos los
+/// consumidores del alcance dejen `LIMIT 1`; abrir la segunda = DROP INDEX de ese).
+model UserBranchAssignment {
+  id        String    @id @default(uuid())
+  accountId String    @map("account_id")
+  userId    String    @map("user_id")
+  branchId  String    @map("branch_id")
+  roleId    String?   @map("role_id")
+  isPrimary Boolean   @default(true) @map("is_primary")
+  revokedAt DateTime? @map("revoked_at")
+  createdBy String?   @map("created_by") // users.id (ref suave)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+  branch  Branch  @relation(fields: [branchId], references: [id])
+  role    Role?   @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, userId])
+  @@index([accountId, branchId])
+  @@map("user_branch_assignments")
 }
 
 /// Identidad global de acceso. Un usuario puede pertenecer a varios tenants.
@@ -176,6 +242,7 @@ model User {
 
   profile             Profile?
   userAccounts        UserAccount[]
+  branchAssignments   UserBranchAssignment[]
   sessions            UserSession[]
   overrides           UserPermissionOverride[]
   auditLogs           AuditLog[]
@@ -223,6 +290,7 @@ model Role {
 
   permissions  RolePermission[]
   userAccounts UserAccount[]
+  branchAssignments UserBranchAssignment[]
 
   @@map("roles")
 }
@@ -872,6 +940,7 @@ model Credit {
   @@index([accountId])
   @@index([accountId, status])
   @@index([accountId, clientId])
+  @@index([accountId, branchId])
   @@index([deletedAt])
   @@map("credits")
 }
@@ -1550,11 +1619,13 @@ model Payment {
 
   account Account @relation(fields: [accountId], references: [id])
   credit  Credit  @relation(fields: [creditId], references: [id])
+  branch  Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
 
   @@unique([accountId, receiptNumber])
   @@unique([accountId, externalTransactionId])
   @@unique([accountId, idempotencyKey])
   @@index([accountId, creditId])
+  @@index([accountId, branchId])
   @@index([accountId, paymentDate])
   @@index([accountId, visitId])
   @@map("payments")

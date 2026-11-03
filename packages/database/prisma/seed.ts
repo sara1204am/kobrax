@@ -1898,11 +1898,40 @@ async function main(): Promise<void> {
   console.log(`  ✓ cuentas DEMO y DEMO2 · categorías de mora A/B/C · ${CATALOGS.length} catálogos por cuenta`);
 
   // 4) Agencias, usuarios y membresías (con la agencia de supervisores y cobradores: `user_accounts.branch_id`).
-  const ensureBranch = async (accountId: string, code: string, name: string, city: string) =>
-    (await prisma.branch.findFirst({ where: { accountId, code, deletedAt: null } })) ?? prisma.branch.create({ data: { accountId, code, name, city } });
-  const cen = await ensureBranch(demo.id, 'CEN', 'Agencia Central', 'La Paz');
-  const alt = await ensureBranch(demo.id, 'ALT', 'Agencia El Alto', 'El Alto');
-  const nor = await ensureBranch(demo2.id, 'NOR', 'Agencia Norte', 'La Paz');
+  // F13 · P1: toda cuenta tiene tipos de oficina y UNA raíz con su razón social (ADR-0004); las agencias cuelgan de ella.
+  const ensureOfficeBase = async (accountId: string, businessName: string) => {
+    const types: Record<string, string> = {};
+    for (const [i, [code, name]] of (
+      [['CENTRAL', 'Central'], ['REGIONAL', 'Regional'], ['AGENCIA', 'Agencia']] as const
+    ).entries()) {
+      const t = await prisma.branchType.upsert({
+        where: { accountId_code: { accountId, code } },
+        update: {},
+        create: { accountId, code, name, sortOrder: i },
+      });
+      types[code] = t.id;
+    }
+    const root =
+      (await prisma.branch.findFirst({ where: { accountId, isRoot: true, deletedAt: null } })) ??
+      (await (async () => {
+        const id = randomUUID();
+        return prisma.branch.create({ data: { id, accountId, name: businessName, typeId: types['CENTRAL']!, path: `/${id}/`, depth: 0, isRoot: true } });
+      })());
+    return { root, types };
+  };
+  const baseDemo = await ensureOfficeBase(demo.id, demo.businessName);
+  const baseDemo2 = await ensureOfficeBase(demo2.id, demo2.businessName);
+  const ensureBranch = async (base: typeof baseDemo, accountId: string, code: string, name: string, city: string) => {
+    const found = await prisma.branch.findFirst({ where: { accountId, code, deletedAt: null } });
+    if (found) return found;
+    const id = randomUUID();
+    return prisma.branch.create({
+      data: { id, accountId, code, name, city, parentId: base.root.id, typeId: base.types['AGENCIA']!, depth: 1, path: `${base.root.path}${id}/` },
+    });
+  };
+  const cen = await ensureBranch(baseDemo, demo.id, 'CEN', 'Agencia Central', 'La Paz');
+  const alt = await ensureBranch(baseDemo, demo.id, 'ALT', 'Agencia El Alto', 'El Alto');
+  const nor = await ensureBranch(baseDemo2, demo2.id, 'NOR', 'Agencia Norte', 'La Paz');
   const branchIds = { CEN: cen.id, ALT: alt.id };
 
   const passwordHash = await bcrypt.hash('Kobrax123!', 12);
@@ -1922,6 +1951,11 @@ async function main(): Promise<void> {
       update: { roleId, branchId: o.branchId ?? null },
       create: { userId, accountId, roleId, branchId: o.branchId, isOwner: !!o.isOwner, isDefault: !!o.isDefault },
     });
+    // F13 · P1: la asignación espeja `user_accounts.branch_id` (una vigente por persona y cuenta, decisión de la usuaria).
+    await prisma.userBranchAssignment.updateMany({ where: { accountId, userId, revokedAt: null, ...(o.branchId ? { branchId: { not: o.branchId } } : {}) }, data: { revokedAt: new Date() } });
+    if (o.branchId && !(await prisma.userBranchAssignment.findFirst({ where: { accountId, userId, branchId: o.branchId, revokedAt: null } }))) {
+      await prisma.userBranchAssignment.create({ data: { accountId, userId, branchId: o.branchId } });
+    }
   };
   const users: Record<string, string> = {};
   const userBranch: Record<string, string> = {};
