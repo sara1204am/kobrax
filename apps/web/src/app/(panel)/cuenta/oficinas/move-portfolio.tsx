@@ -35,10 +35,10 @@ export function MovePortfolioDialog({ from, rows, onClose }: { from: OfficeRow |
   async function go() {
     if (!from) return;
     setMoved(null);
-    // El BFF pagina los créditos y los reasigna por lote; contesta cuántos pasaron.
+    // La API mueve TODOS los créditos vivos de la oficina de origen en lotes transaccionales y auditados (pagos intactos).
     await run(
       async () => {
-        const res = await sendJson<{ moved?: number }>(`/api/branches/${from.id}/move-portfolio`, { toBranchId: to }, 'POST');
+        const res = await sendJson<{ moved?: number }>('/api/credits/reassign-office', { fromBranchId: from.id, toBranchId: to }, 'POST');
         if (res.ok) setMoved(res.data.moved ?? 0);
         return res;
       },

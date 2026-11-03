@@ -25,6 +25,7 @@ export interface OfficeRow {
   active: boolean;
   parentId: string | null;
   typeId: string | null;
+  typeCode?: string;
   typeName: string | null;
   /** Ruta materializada: `/raíz/regional/agencia/`. */
   path: string;
@@ -36,8 +37,10 @@ export interface OfficeRow {
   managerName?: string | null;
   /** Miembros activos. */
   members: number;
-  /** Créditos que la nombran. */
+  /** Créditos vivos de ESTA oficina (no del subárbol). */
   credits: number;
+  /** Oficinas hijas vivas directas. */
+  children?: number;
 }
 
 /** Un tipo del catálogo de la cuenta (`GET /branch-types`). */
@@ -61,7 +64,9 @@ export interface OfficeHistoryEvent {
   action: string;
   at: string;
   actorName: string | null;
-  summary: string | null;
+  summary?: string | null;
+  before?: unknown;
+  after?: unknown;
 }
 
 export interface OfficeStats {

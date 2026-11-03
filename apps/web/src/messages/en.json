@@ -2908,7 +2908,19 @@
       },
       "errors": {
         "generic": "The action could not be completed",
-        "conflict": "This clashes with an organization rule. Check the data and try again."
+        "conflict": "This clashes with an organization rule. Check the data and try again.",
+        "BRANCH_PARENT_INVALID": "The parent office is not valid.",
+        "BRANCH_PARENT_INACTIVE": "The parent office is deactivated.",
+        "BRANCH_TOO_DEEP": "The tree would exceed the allowed number of levels.",
+        "BRANCH_MOVE_CYCLE": "An office cannot be moved inside its own branch.",
+        "BRANCH_ROOT_PROTECTED": "The main office cannot be moved or deactivated.",
+        "BRANCH_HAS_CHILDREN": "It has active child offices: deactivate or move them first.",
+        "BRANCH_HAS_CREDITS": "It has credits: move them to another office first.",
+        "BRANCH_HAS_MEMBERS": "It has active people: move them to another office first.",
+        "BRANCH_ASSIGNMENT_EXISTS": "The person already has an assigned office; assigning another moves them.",
+        "BRANCH_MEMBER_NOT_FOUND": "The person is not in that office.",
+        "CREDIT_OFFICE_OUT_OF_SCOPE": "You have no scope over that office.",
+        "CREDIT_REASSIGN_ARGS": "Give the source office or the credits, not both."
       }
     }
   },

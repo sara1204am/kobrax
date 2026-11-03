@@ -2908,7 +2908,19 @@
       },
       "errors": {
         "generic": "No se pudo completar la acción",
-        "conflict": "Esto choca con una regla de la organización. Revisa los datos e inténtalo de nuevo."
+        "conflict": "Esto choca con una regla de la organización. Revisa los datos e inténtalo de nuevo.",
+        "BRANCH_PARENT_INVALID": "La oficina superior no es válida.",
+        "BRANCH_PARENT_INACTIVE": "La oficina superior está desactivada.",
+        "BRANCH_TOO_DEEP": "El árbol llegaría a más niveles de los permitidos.",
+        "BRANCH_MOVE_CYCLE": "No se puede mover una oficina dentro de su propia rama.",
+        "BRANCH_ROOT_PROTECTED": "La oficina principal no se puede mover ni desactivar.",
+        "BRANCH_HAS_CHILDREN": "Tiene oficinas hijas activas: desactívalas o muévelas antes.",
+        "BRANCH_HAS_CREDITS": "Tiene créditos: muévelos a otra oficina antes.",
+        "BRANCH_HAS_MEMBERS": "Tiene personas vigentes: pásalas a otra oficina antes.",
+        "BRANCH_ASSIGNMENT_EXISTS": "La persona ya tiene una oficina asignada; asignarla a otra la mueve.",
+        "BRANCH_MEMBER_NOT_FOUND": "La persona no está en esa oficina.",
+        "CREDIT_OFFICE_OUT_OF_SCOPE": "No tienes alcance sobre esa oficina.",
+        "CREDIT_REASSIGN_ARGS": "Indica la oficina de origen o los créditos, no ambos."
       }
     }
   },
