@@ -36,8 +36,8 @@ BEGIN
   IF n > 0 THEN RAISE EXCEPTION 'FALLO: % asignación(es) a una oficina de OTRA cuenta', n; END IF;
   SELECT count(*) INTO n FROM user_branch_assignments WHERE role_id IS NOT NULL;
   IF n > 0 THEN RAISE EXCEPTION 'FALLO: % asignación(es) con role_id (en F13 debe ser NULL)', n; END IF;
-  -- Espejo: quien tiene user_accounts.branch_id tiene su asignación vigente en esa oficina.
-  SELECT count(*) INTO n FROM user_accounts ua WHERE ua.branch_id IS NOT NULL AND NOT EXISTS (
+  -- Espejo: quien tiene user_accounts.branch_id tiene su asignación vigente en esa oficina (salvo el MANAGER, que va a la raíz: R13).
+  SELECT count(*) INTO n FROM user_accounts ua JOIN roles r ON r.id = ua.role_id AND r.name <> 'MANAGER' WHERE ua.branch_id IS NOT NULL AND NOT EXISTS (
     SELECT 1 FROM user_branch_assignments a WHERE a.user_id = ua.user_id AND a.account_id = ua.account_id AND a.branch_id = ua.branch_id AND a.revoked_at IS NULL);
   IF n > 0 THEN RAISE EXCEPTION 'FALLO: % usuario(s) con user_accounts.branch_id sin su asignación vigente', n; END IF;
 

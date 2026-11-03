@@ -108,6 +108,10 @@ const PERMISSIONS: PermRow[] = [
   ['data:scope:all', 'data', 'READ', 'ACCOUNT'],
   // F4/08 · D8: el alcance del supervisor (su agencia + lo suyo). Espejo de la migración 20261004010000.
   ['data:scope:branch', 'data', 'READ', 'BRANCH'],
+  // F13 · R12/R13: permisos de oficinas y el alcance por subárbol (gerente regional). Espejo de la migración 20261102010000.
+  ['office:read', 'office', 'READ', 'ACCOUNT'],
+  ['office:write', 'office', 'UPDATE', 'ACCOUNT'],
+  ['data:scope:subtree', 'data', 'READ', 'BRANCH'],
 ];
 
 /** Roles del sistema → nivel. Los permisos NO se listan acá: salen de `ROLE_PERMISSIONS`. */
@@ -1866,7 +1870,7 @@ async function main(): Promise<void> {
       });
     }
     // F4/08 · D8: el alcance de datos se SINCRONIZA (no sólo se agrega): un rol que ya no lo lleva lo pierde.
-    const staleScopes = ['data:scope:all', 'data:scope:branch'].filter((c) => !codes.includes(c));
+    const staleScopes = ['data:scope:all', 'data:scope:branch', 'data:scope:subtree'].filter((c) => !codes.includes(c));
     await prisma.rolePermission.deleteMany({ where: { roleId: role.id, permission: { code: { in: staleScopes } } } });
   }
   console.log(`  ✓ ${Object.keys(ROLES).length} roles`);
@@ -1952,9 +1956,12 @@ async function main(): Promise<void> {
       create: { userId, accountId, roleId, branchId: o.branchId, isOwner: !!o.isOwner, isDefault: !!o.isDefault },
     });
     // F13 · P1: la asignación espeja `user_accounts.branch_id` (una vigente por persona y cuenta, decisión de la usuaria).
-    await prisma.userBranchAssignment.updateMany({ where: { accountId, userId, revokedAt: null, ...(o.branchId ? { branchId: { not: o.branchId } } : {}) }, data: { revokedAt: new Date() } });
-    if (o.branchId && !(await prisma.userBranchAssignment.findFirst({ where: { accountId, userId, branchId: o.branchId, revokedAt: null } }))) {
-      await prisma.userBranchAssignment.create({ data: { accountId, userId, branchId: o.branchId } });
+    // F13 · R13: el MANAGER (gerente regional) se asigna a la RAÍZ de la cuenta: ve todo el subárbol = lo mismo que veía con `all`.
+    const target =
+      role === RoleType.MANAGER ? (await prisma.branch.findFirst({ where: { accountId, isRoot: true, deletedAt: null } }))?.id : o.branchId;
+    await prisma.userBranchAssignment.updateMany({ where: { accountId, userId, revokedAt: null, ...(target ? { branchId: { not: target } } : {}) }, data: { revokedAt: new Date() } });
+    if (target && !(await prisma.userBranchAssignment.findFirst({ where: { accountId, userId, branchId: target, revokedAt: null } }))) {
+      await prisma.userBranchAssignment.create({ data: { accountId, userId, branchId: target } });
     }
   };
   const users: Record<string, string> = {};

@@ -9,8 +9,8 @@
  * usuarios, y lo hace con `accounts.max_users` (una columna suelta por cuenta), no con esta tabla.
  * Mostrar un tope de acá describe lo que el plan incluye; **no** significa que algo lo cuente.
  *
- * Sin `branches`: la función no existe en el producto (LIMITES §5.6) y un tope de algo que no se
- * puede usar no se muestra.
+ * `branches` (F13): oficinas por cuenta, **contando la raíz** (ADR-0004). La función existe desde el módulo
+ * de Agencias y desde F13 el servidor hace cumplir el tope al crear una oficina.
  */
 
 export type PlanCode = 'FREE' | 'PROFESSIONAL' | 'BUSINESS' | 'ENTERPRISE';
@@ -38,6 +38,8 @@ export interface PlanLimits {
    * cartera cargada sin préstamos.
    */
   clients: PlanLimit;
+  /** Oficinas de la cuenta, **la raíz incluida** (ADR-0004): FREE = 1 ⇒ sin agencias hasta subir de plan. */
+  branches: PlanLimit;
   photosPerMonth: PlanLimit;
   photoRetentionMonths: PlanLimit;
   /** Visitas y contactos. **Nunca puede bloquear**: la gestión llega de campo, sin internet, ya
@@ -60,6 +62,7 @@ export const PLANS: Record<PlanCode, Plan> = {
       users: 1,
       credits: 20,
       clients: 20,
+      branches: 1,
       photosPerMonth: 100,
       photoRetentionMonths: 6,
       actionsPerMonth: 100,
@@ -72,6 +75,7 @@ export const PLANS: Record<PlanCode, Plan> = {
       users: 25,
       credits: 1000,
       clients: 1000,
+      branches: 3,
       photosPerMonth: 5000,
       photoRetentionMonths: 24,
       actionsPerMonth: 2500,
@@ -84,6 +88,7 @@ export const PLANS: Record<PlanCode, Plan> = {
       users: 100,
       credits: 5000,
       clients: 5000,
+      branches: 10,
       photosPerMonth: 25000,
       photoRetentionMonths: 60,
       actionsPerMonth: 12500,
@@ -110,6 +115,9 @@ export const PLANS: Record<PlanCode, Plan> = {
       users: 500,
       credits: 50_000,
       clients: 50_000,
+      // ⚠️ La grilla dice «a medida» (LIMITES §4-A). 100 es un PISO PROVISIONAL para que el tope se cuente; el contrato de
+      // cada cliente lo sube en `limits_override`. A confirmar por la dueña.
+      branches: 100,
       photosPerMonth: 250_000,
       // ⚠️ 120 meses es simetría con la escalera, no normativa. El número real sale de cuánto
       // exige ASFI que guarden las entidades que lo van a comprar.
@@ -182,6 +190,7 @@ const LIMIT_KEYS: (keyof PlanLimits)[] = [
   'users',
   'credits',
   'clients',
+  'branches',
   'photosPerMonth',
   'photoRetentionMonths',
   'actionsPerMonth',

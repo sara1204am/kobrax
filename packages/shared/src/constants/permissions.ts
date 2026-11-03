@@ -43,7 +43,11 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     Permission.REPORT_EXPORT,
     Permission.ACCOUNT_READ,
     Permission.USER_READ,
-    Permission.DATA_SCOPE_ALL,
+    // F13 · R12: ve el árbol de oficinas (hoy ya tiene `user:read`, con el que se veía la pestaña de Agencias).
+    Permission.OFFICE_READ,
+    // F13 · R13: el gerente regional del banco. Ve todo el subárbol de la oficina a la que está asignado (la migración
+    // asigna a cada MANAGER existente a la raíz de su cuenta, que lo cubre todo: ve lo mismo que veía con `all`).
+    Permission.DATA_SCOPE_SUBTREE,
     Permission.ASSIGNMENT_WRITE,
   ],
   [RoleType.SUPERVISOR]: [
