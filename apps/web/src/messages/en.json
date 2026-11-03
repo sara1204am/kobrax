@@ -1194,7 +1194,7 @@
         "skip": {
           "NOT_FOUND": "The credit was not found.",
           "ALREADY_ASSIGNED": "It was already that collector's.",
-          "OUT_OF_AGENCY": "It is outside your office.",
+          "OUT_OF_AGENCY": "It is outside your agency.",
           "CONFLICT": "It changed in the meantime."
         }
       },
@@ -2719,7 +2719,7 @@
     },
     "offices": {
       "title": "Offices",
-      "intro": "Your organization's structure: head office, regionals and branches, and who works in each. A person's office decides which portfolio they see; whoever is in a regional sees everything under it.",
+      "intro": "Your organization's structure: its offices and who works in each. A person's office decides which portfolio they see; whoever is in a regional sees everything under it.",
       "add": "+ Add office",
       "planLimit": "Your plan allows {limit, plural, one {# office} other {# offices}} and you already use {used} (the root counts).",
       "seePlan": "See the plan",
@@ -2901,9 +2901,9 @@
         "title": "Your office",
         "name": "Name",
         "team": "Team",
-        "firstAgencyHint": "You work with a single office. When you open a branch, your organization's tree shows up here.",
-        "firstAgency": "Create the first branch",
-        "planBlocks": "Your plan allows {limit, plural, one {# office} other {# offices}}; opening a branch needs a plan upgrade.",
+        "firstAgencyHint": "You work with a single office. When you open another, your organization's tree shows up here.",
+        "firstAgency": "Create the first office",
+        "planBlocks": "Your plan allows {limit, plural, one {# office} other {# offices}}; opening another needs a plan upgrade.",
         "readOnly": "Read only"
       },
       "errors": {

@@ -159,3 +159,15 @@ describe('assignedTo', () => {
   });
 });
 
+
+describe('canWriteOffCredit (F13: MANAGER pasa a data:scope:subtree)', () => {
+  it('el gerente y el administrador ven el botón; el supervisor no', async () => {
+    const { RoleType, ROLE_PERMISSIONS } = await import('@kobrax/shared');
+    const { canWriteOffCredit } = await import('./mora');
+    expect(canWriteOffCredit(ROLE_PERMISSIONS[RoleType.MANAGER])).toBe(true);
+    expect(canWriteOffCredit(ROLE_PERMISSIONS[RoleType.ACCOUNT_ADMIN])).toBe(true);
+    expect(canWriteOffCredit(ROLE_PERMISSIONS[RoleType.SUPERVISOR])).toBe(false);
+    expect(canWriteOffCredit(['credit:write', 'data:scope:subtree'])).toBe(true);
+    expect(canWriteOffCredit(['data:scope:subtree'])).toBe(false);
+  });
+});

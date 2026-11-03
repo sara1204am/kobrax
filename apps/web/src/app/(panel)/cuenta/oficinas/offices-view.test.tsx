@@ -279,18 +279,18 @@ describe('SingleOffice — una sola oficina no ve jerarquía (RULES C2)', () => 
 
   it('con office:write y cupo en el plan ofrece crear la primera agencia', () => {
     renderSingle(['office:read', 'office:write'], { used: 1, limit: 3 });
-    expect(screen.getByRole('button', { name: 'Crear la primera agencia' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Crear la primera oficina' })).toBeInTheDocument();
   });
 
   it('con el plan en el tope no ofrece crear y manda al plan', () => {
     renderSingle(['office:read', 'office:write'], { used: 1, limit: 1 });
-    expect(screen.queryByRole('button', { name: 'Crear la primera agencia' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Crear la primera oficina' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Ver el plan' })).toHaveAttribute('href', '/cuenta/plan');
   });
 
   it('sin office:write no hay aviso ni botones', () => {
     renderSingle(['office:read'], { used: 1, limit: 3 });
-    expect(screen.queryByRole('button', { name: 'Crear la primera agencia' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Crear la primera oficina' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument();
   });
 });

@@ -1194,7 +1194,7 @@
         "skip": {
           "NOT_FOUND": "No se encontró el crédito.",
           "ALREADY_ASSIGNED": "Ya era de ese cobrador.",
-          "OUT_OF_AGENCY": "Está fuera de tu oficina.",
+          "OUT_OF_AGENCY": "Está fuera de tu agencia.",
           "CONFLICT": "Cambió mientras tanto."
         }
       },
@@ -2719,7 +2719,7 @@
     },
     "offices": {
       "title": "Oficinas",
-      "intro": "La estructura de tu organización: oficinas, regionales y agencias, y quién trabaja en cada una. La oficina de una persona decide qué cartera ve; quien está en una regional ve todo lo que cuelga de ella.",
+      "intro": "La estructura de tu organización: sus oficinas y quién trabaja en cada una. La oficina de una persona decide qué cartera ve; quien está en una regional ve todo lo que cuelga de ella.",
       "add": "+ Añadir oficina",
       "planLimit": "Tu plan permite {limit, plural, one {# oficina} other {# oficinas}} y ya usas {used} (la raíz cuenta).",
       "seePlan": "Ver el plan",
@@ -2901,9 +2901,9 @@
         "title": "Tu oficina",
         "name": "Nombre",
         "team": "Equipo",
-        "firstAgencyHint": "Trabajas con una sola oficina. Cuando abras una agencia, aquí aparece el árbol de tu organización.",
-        "firstAgency": "Crear la primera agencia",
-        "planBlocks": "Tu plan permite {limit, plural, one {# oficina} other {# oficinas}}; para abrir una agencia hay que subir de plan.",
+        "firstAgencyHint": "Trabajas con una sola oficina. Cuando abras otra, aquí aparece el árbol de tu organización.",
+        "firstAgency": "Crear la primera oficina",
+        "planBlocks": "Tu plan permite {limit, plural, one {# oficina} other {# oficinas}}; para abrir otra hay que subir de plan.",
         "readOnly": "Sólo lectura"
       },
       "errors": {
