@@ -4,6 +4,7 @@ import { Permission, type Assignee } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import {
   assigneeNotEligible,
   assignmentConflict,
@@ -86,6 +87,7 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
     private readonly prisma: PrismaService,
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
+    private readonly office: OfficeScopeService,
   ) {}
 
   /**
@@ -115,7 +117,9 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
     const rows = await this.prisma.withTenant(this.tenant.accountId, async (tx) => {
       const all = await this.assignableRows(tx);
       const scope = await this.assignScope(tx);
-      return scope.kind === 'ALL' ? all : all.filter((r) => scope.branchId !== null && r.branchId === scope.branchId);
+      if (scope.kind === 'ALL') return all;
+      const paths = await this.office.assignmentPaths(tx, all.map((r) => r.userId));
+      return all.filter((r) => (paths.get(r.userId) ?? []).some((p) => this.office.inScope(scope, p)));
     });
     return rows
       .map((r) => ({
@@ -139,7 +143,6 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
       select: {
         userId: true,
         isActive: true,
-        branchId: true,
         role: { select: { name: true } },
         user: { select: { email: true, profile: true } },
       },
@@ -156,13 +159,8 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
    * Hasta dónde reparte quien pide (D8): `data:scope:all` (gerente, administrador) → todo; cualquier otro con
    * `assignment:write` (el supervisor) → su agencia, la de `user_accounts.branch_id`.
    */
-  async assignScope(tx: PrismaClient): Promise<AssignScope> {
-    if (this.tenant.can(Permission.DATA_SCOPE_ALL)) return { kind: 'ALL', branchId: null };
-    const me = await tx.userAccount.findFirst({
-      where: { accountId: this.tenant.accountId, userId: this.tenant.userId, isActive: true },
-      select: { branchId: true },
-    });
-    return { kind: 'BRANCH', branchId: me?.branchId ?? null };
+  assignScope(tx: PrismaClient): Promise<AssignScope> {
+    return this.office.assignScope(tx);
   }
 
   /**
@@ -179,7 +177,7 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
         ? []
         : await tx.userAccount.findMany({
             where: { accountId: this.tenant.accountId, userId: { in: ids } },
-            select: { userId: true, isActive: true, branchId: true, role: { select: { name: true } } },
+            select: { userId: true, isActive: true, role: { select: { name: true } } },
           });
     const bad = notAssignable(
       ids,
@@ -188,11 +186,7 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
     );
     if (bad.length > 0) throw assigneeNotEligible(bad);
     if (creditIds && creditIds.length > 0) {
-      await this.assertAgency(
-        tx,
-        creditIds,
-        rows.map((r) => ({ userId: r.userId, branchId: r.branchId ?? null })),
-      );
+      await this.assertAgency(tx, creditIds, ids);
     }
   }
 
@@ -206,21 +200,20 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
     if (ids.length === 0) return;
     const scope = await this.assignScope(tx);
     if (scope.kind === 'ALL') return;
-    const rows = await tx.userAccount.findMany({ where: { accountId: this.tenant.accountId, userId: { in: ids } }, select: { userId: true, branchId: true } });
-    const known = new Map(rows.map((r) => [r.userId, r.branchId ?? null]));
-    const v = agencyViolations(scope, [], ids.map((userId) => ({ userId, branchId: known.get(userId) ?? null })));
+    const known = await this.office.assignmentPaths(tx, ids);
+    const v = agencyViolations(scope, [], ids.map((userId) => ({ userId, officePaths: known.get(userId) ?? [] })));
     if (v.userIds.length > 0) throw assignmentOutOfAgency([], v.userIds);
   }
 
   /** El límite de agencia del supervisor sobre estos créditos y estos destinatarios (ya cargados). */
-  private async assertAgency(tx: PrismaClient, creditIds: string[], assignees: { userId: string; branchId: string | null }[]): Promise<void> {
+  private async assertAgency(tx: PrismaClient, creditIds: string[], assigneeIds: string[]): Promise<void> {
     const scope = await this.assignScope(tx);
     if (scope.kind === 'ALL') return;
-    const credits = await tx.credit.findMany({ where: { id: { in: creditIds }, deletedAt: null }, select: { id: true, branchId: true } });
+    const [credits, assigneePaths] = await Promise.all([this.office.creditOfficePaths(tx, creditIds), this.office.assignmentPaths(tx, assigneeIds)]);
     const v = agencyViolations(
       scope,
-      credits.map((c) => ({ id: c.id, branchId: c.branchId ?? null })),
-      assignees,
+      [...credits].map(([id, officePath]) => ({ id, officePath })),
+      assigneeIds.map((userId) => ({ userId, officePaths: assigneePaths.get(userId) ?? [] })),
     );
     if (v.creditIds.length > 0 || v.userIds.length > 0) throw assignmentOutOfAgency(v.creditIds, v.userIds);
   }

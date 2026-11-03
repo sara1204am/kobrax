@@ -304,7 +304,7 @@ describe('MoraService.addActivity — promesa por la función única de Agenda',
     const audits: string[] = [];
     const audit = { record: async (e: { entity: string; action: string }) => void audits.push(`${e.entity}:${e.action}`) };
     const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`);
-    const agenda = new AgendaService(prisma as never, tenant as never, audit as never, {} as never, { emit: () => undefined } as never, { today: async () => today } as never);
+    const agenda = new AgendaService(prisma as never, tenant as never, audit as never, {} as never, { emit: () => undefined } as never, { today: async () => today } as never, {} as never);
     const service = new MoraService(prisma as never, tenant as never, audit as never, agenda, {} as never);
     return { service, created, audits };
   }

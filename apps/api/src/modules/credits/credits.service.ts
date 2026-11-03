@@ -39,6 +39,7 @@ import { TenantContextService } from '../../common/context/tenant-context.servic
 import { AuditService } from '../../common/audit/audit.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { AssignmentService } from '../assignments/assignment.service';
+import { moraScopeOf, visibleCredits } from '../mora/mora-query';
 import {
   buildSchedule,
   computeArrears,
@@ -586,6 +587,7 @@ export class CreditsService {
     const { before, after, changed } = await this.tx(async (tx) => {
       const prev = await tx.credit.findFirst({ where: { id, deletedAt: null } });
       if (!prev) throw resourceNotFound();
+      await this.assertInScope(tx, id);
       if (prev.writtenOffAt) return { before: prev, after: prev, changed: false };
       const next = await tx.credit.update({
         where: { id },
@@ -611,6 +613,7 @@ export class CreditsService {
     const { before, after, changed } = await this.tx(async (tx) => {
       const prev = await tx.credit.findFirst({ where: { id, deletedAt: null } });
       if (!prev) throw resourceNotFound();
+      await this.assertInScope(tx, id);
       if (!prev.writtenOffAt) return { before: prev, after: prev, changed: false };
       const next = await tx.credit.update({
         where: { id },
@@ -634,9 +637,20 @@ export class CreditsService {
     return serializeCredit(after, ...labelsOf(await this.accountConfig()));
   }
 
-  /** Gerente y administrador: escritura de créditos **y** alcance total. El supervisor (agencia) y el cobrador no. */
+  /**
+   * Gerente y administrador: escritura de créditos **y** alcance total o de subárbol (F13: el gerente regional). El supervisor
+   * (agencia) y el cobrador no. Con subárbol, además el crédito tiene que estar dentro de su alcance (`assertInScope`).
+   */
   private assertCanWriteOff(): void {
-    if (!this.tenant.can(Permission.CREDIT_WRITE) || !this.tenant.can(Permission.DATA_SCOPE_ALL)) throw writeOffForbidden();
+    const wide = this.tenant.can(Permission.DATA_SCOPE_ALL) || this.tenant.can(Permission.DATA_SCOPE_SUBTREE);
+    if (!this.tenant.can(Permission.CREDIT_WRITE) || !wide) throw writeOffForbidden();
+  }
+
+  /** Quien no es ALL sólo castiga lo que ve: un crédito fuera de su subárbol es 404, igual que en la ficha de mora. */
+  private async assertInScope(tx: PrismaClient, creditId: string): Promise<void> {
+    if (this.tenant.can(Permission.DATA_SCOPE_ALL)) return;
+    const [seen] = await visibleCredits(tx, moraScopeOf(this.tenant), { creditId });
+    if (!seen) throw resourceNotFound();
   }
 
   // ── Mora declarada a mano ──────────────────────────────────────────────────
