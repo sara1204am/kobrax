@@ -14,6 +14,7 @@ import {
   type ImportViewer,
   type ImportRunItem,
   type ImportRunSummary,
+  officeLabel,
 } from '@kobrax/shared';
 import { UploadsService } from '../uploads/uploads.service';
 import { PrismaService } from '../../database/prisma.service';
@@ -1095,10 +1096,11 @@ export class PortfolioImportService {
           where: { isActive: true },
           include: { role: { select: { name: true } }, user: { include: { profile: true } } },
         }),
+        // F13: el árbol puede repetir nombres (la raíz «Central» y la agencia «Central» de Chuquisaca). Se trae TODO el árbol
+        // de la cuenta (incl. regionales, que no son destino de una corrida pero sí ancestros) para poder rotular con la ruta.
         tx.branch.findMany({
-          where: { accountId, active: true, deletedAt: null },
-          select: { id: true, name: true },
-          orderBy: { name: 'asc' },
+          where: { accountId, deletedAt: null },
+          select: { id: true, name: true, path: true, active: true },
         }),
       ]),
     );
@@ -1128,7 +1130,11 @@ export class PortfolioImportService {
           role: m.role.name,
         }))
         .sort((a, b) => a.name.localeCompare(b.name)),
-      branches,
+      // Rotulados con su ruta sin la raíz (`Chuquisaca › Central`): en una cuenta plana queda el nombre de la agencia, como antes.
+      branches: branches
+        .filter((b) => b.active)
+        .map((b) => ({ id: b.id, name: officeLabel(branches, b.id) || b.name }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
       viewer: { userId: this.tenant.userId ?? '', canAssign: this.tenant.can(Permission.ASSIGNMENT_WRITE), canConfigure },
     };
   }

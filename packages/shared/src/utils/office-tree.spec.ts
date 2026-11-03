@@ -7,6 +7,7 @@ import {
   isInOfficeSubtree,
   officeDepth,
   officeFullName,
+  officeLabel,
   officeInScope,
   officePath,
   officePathIds,
@@ -117,5 +118,21 @@ describe('presentación', () => {
     expect(tree[0]!.children[0]!.children.map((c) => c.node.name)).toEqual(['Central', 'Mesa Verde', 'Padilla']);
     // sin la raíz en la lista, la regional queda como raíz del fragmento
     expect(buildOfficeTree(ALL.filter((x) => x.id !== 'c')).map((r) => r.node.name)).toEqual(['Chuquisaca', 'Cochabamba', 'La Paz']);
+  });
+});
+
+describe('nombre corto para selectores', () => {
+  it('🔴 sin la raíz, pero distingue la agencia Central de la raíz Central; la raíz se llama como ella', () => {
+    expect(officeLabel(ALL, 'c')).toBe('Central');
+    expect(officeLabel(ALL, 'ac')).toBe('Chuquisaca › Central');
+    expect(officeLabel(ALL, 'mv')).toBe('Chuquisaca › Mesa Verde');
+    expect(officeLabel(ALL, 'lp')).toBe('La Paz');
+  });
+
+  it('una cuenta plana (raíz + agencias) deja el nombre de la agencia, como antes', () => {
+    const raiz = n('r', 'Mi Empresa', null);
+    const ag = n('a', 'Agencia Norte', raiz);
+    expect(officeLabel([raiz, ag], 'a')).toBe('Agencia Norte');
+    expect(officeLabel([raiz, ag], 'r')).toBe('Mi Empresa');
   });
 });

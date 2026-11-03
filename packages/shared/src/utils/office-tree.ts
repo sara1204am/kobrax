@@ -128,3 +128,20 @@ export function officeFullName(
     .filter((n): n is string => !!n)
     .join(separator);
 }
+
+/**
+ * Nombre CORTO para listas y selectores (R10): la ruta sin la raíz —la raíz es la propia empresa y repetirla en cada
+ * fila es ruido—, salvo que el nodo sea la raíz. `Chuquisaca › Central` distingue la agencia Central de la raíz `Central`;
+ * en una cuenta plana (raíz + agencias) queda el nombre de la agencia, como antes.
+ */
+export function officeLabel(nodes: Pick<OfficeNodeLike, 'id' | 'name' | 'path'>[], id: string): string {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const node = byId.get(id);
+  if (!node) return '';
+  const ids = officePathIds(node.path);
+  const shown = ids.length > 1 ? ids.slice(1) : ids;
+  return shown
+    .map((pid) => byId.get(pid)?.name)
+    .filter((n): n is string => !!n)
+    .join(OFFICE_PATH_SEPARATOR);
+}
