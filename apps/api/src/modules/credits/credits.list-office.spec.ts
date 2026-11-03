@@ -66,24 +66,27 @@ describe('F13 · credits.list con branchId', () => {
 describe('F13 · reassign-office con fromBranchId (toda la cartera de una oficina)', () => {
   function makeMove(opts: { fromPath?: string | null; rows?: number; scope?: { kind: 'ALL' | 'OFFICES'; paths: string[] } } = {}) {
     const updates: string[][] = [];
+    const timeouts: (number | undefined)[] = [];
+    const order: string[] = [];
     const rows = Array.from({ length: opts.rows ?? 3 }, (_, i) => ({ id: `c${i}`, branchId: 'raiz', branch: { path: '/r/' } }));
     const tx = {
       branch: { findFirst: async () => (opts.fromPath === null ? null : { id: 'raiz', path: opts.fromPath ?? '/r/' }) },
       credit: {
-        findMany: async (a: { where: { branchId?: string } }) => (a.where.branchId === 'raiz' ? rows : []),
-        updateMany: async (a: { where: { id: { in: string[] } } }) => (updates.push(a.where.id.in), { count: a.where.id.in.length }),
+        findMany: async (a: { where: { branchId?: string; id?: unknown } }) => (a.where.branchId === 'raiz' ? rows : a.where.id ? rows.slice(0, 1) : []),
+        updateMany: async (a: { where: { id: { in: string[] } } }) => (updates.push(a.where.id.in), order.push('update'), { count: a.where.id.in.length }),
       },
+      auditLog: { createMany: async (a: { data: unknown[] }) => (audited.push(a.data), order.push('audit'), { count: a.data.length }) },
     };
-    const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
-    const tenant = { accountId: 'acc', userId: 'u1', can: () => true };
+    const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>, timeout?: number) => (timeouts.push(timeout), fn(tx)) };
+    const tenant = { accountId: 'acc', userId: 'u1', get: () => ({ ip: '1.1.1.1' }), can: () => true };
     const audited: unknown[][] = [];
     const office = {
       assignScope: async () => opts.scope ?? { kind: 'ALL', paths: [] },
       assertBranchUsable: async (_t: unknown, id: string) => ({ id, path: `/r/${id}/` }),
       inScope: new OfficeScopeService(tenant as never).inScope,
     };
-    const service = new CreditsService(prisma as never, tenant as never, { recordMany: async (e: unknown[]) => void audited.push(e) } as never, {} as never, {} as never, {} as never, office as never);
-    return { service, updates, audited };
+    const service = new CreditsService(prisma as never, tenant as never, { recordMany: async () => { throw new Error('la auditoría va DENTRO de la transacción, no por recordMany'); } } as never, {} as never, {} as never, {} as never, office as never);
+    return { service, updates, audited, timeouts, order };
   }
   const code = (c: string) => (e: { response?: { code?: string } }) => e.response?.code === c;
 
@@ -93,6 +96,16 @@ describe('F13 · reassign-office con fromBranchId (toda la cartera de una oficin
     assert.deepEqual(r, { moved: 3, unchanged: 0, toBranchId: 'hija' });
     assert.deepEqual(updates, [['c0', 'c1', 'c2']]);
     assert.equal(audited.flat().length, 3);
+  });
+
+  it('🔴 la auditoría se escribe dentro de la transacción, lote a lote, y la de «toda la cartera» pide un timeout holgado (120 s)', async () => {
+    const { service, order, timeouts } = makeMove({ rows: 600 });
+    await service.reassignOffice({ fromBranchId: 'raiz', toBranchId: 'hija' });
+    assert.deepEqual(order, ['update', 'audit', 'update', 'audit']);
+    assert.deepEqual(timeouts, [120_000]);
+    const lote = makeMove();
+    await lote.service.reassignOffice({ creditIds: ['c0'], toBranchId: 'hija' });
+    assert.deepEqual(lote.timeouts, [undefined], 'el lote explícito (≤500) usa el tope normal');
   });
 
   it('en lotes de 500 dentro de la misma transacción', async () => {

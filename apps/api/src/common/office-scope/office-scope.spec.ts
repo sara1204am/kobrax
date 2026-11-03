@@ -173,6 +173,24 @@ describe('F13 · A-6 resolveCreditBranch: la oficina del crédito la decide el s
     assert.equal(await admin().resolveCreditBranch(tx, { responsibleId: 'resp' }), 'mv');
   });
 
+  it('3 · sin oficina ni responsable: la de la ÚNICA asignación de QUIEN CREA (antes de la regla de la hoja)', async () => {
+    const tx = treeTx({ assignments: [{ userId: 'u1', branchId: 'chq' }] });
+    assert.equal(await admin().resolveCreditBranch(tx, {}), 'chq');
+    // el responsable sin oficina cae a quien crea
+    assert.equal(await admin().resolveCreditBranch(tx, { responsibleId: 'sin-oficina' }), 'chq');
+    // el orden se conserva: la oficina del responsable gana a la de quien crea
+    const dos = treeTx({ assignments: [{ userId: 'u1', branchId: 'chq' }, { userId: 'resp', branchId: 'mv' }] });
+    assert.equal(await admin().resolveCreditBranch(dos, { responsibleId: 'resp' }), 'mv');
+  });
+
+  it('3b · quien crea con DOS asignaciones o ninguna no decide: sigue la regla de la hoja o el 422', async () => {
+    const tx = {
+      branch: { findMany: async () => [{ id: 'a', parentId: 'r' }, { id: 'b', parentId: 'r' }, { id: 'r', parentId: null }] },
+      userBranchAssignment: { findMany: async () => [{ branchId: 'a', branch: { active: true, deletedAt: null } }, { branchId: 'b', branch: { active: true, deletedAt: null } }] },
+    } as never;
+    await assert.rejects(admin().resolveCreditBranch(tx, {}), (e: { response?: { code?: string; message?: string } }) => e.response?.code === 'CREDIT_BRANCH_UNRESOLVED' && /oficina/i.test(e.response.message ?? ''));
+  });
+
   it('3 · sin responsable con oficina: la raíz si no hay agencias (tenant individual)', async () => {
     assert.equal(await admin().resolveCreditBranch(treeTx({ onlyRoot: true }), {}), 'root');
   });

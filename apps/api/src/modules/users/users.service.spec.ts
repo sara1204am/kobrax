@@ -60,6 +60,8 @@ interface Opts {
   branch?: { active: boolean } | null;
   /** Asignaciones vigentes de la persona a editar (F13). */
   assignments?: { id: string; branchId: string }[];
+  /** Otra petición ganó la carrera del índice único parcial de asignaciones. */
+  assignRace?: boolean;
 }
 
 function makeService(opts: Opts = {}) {
@@ -89,6 +91,7 @@ function makeService(opts: Opts = {}) {
         return { count: a.where.id.in.length };
       },
       create: async (a: { data: Record<string, unknown> }) => {
+        if (opts.assignRace) throw Object.assign(new Error('unique'), { code: 'P2002' });
         calls.assignCreated.push(a.data);
         return a.data;
       },
@@ -257,6 +260,11 @@ describe('UsersService.updateMember — agencia', () => {
     assert.equal(calls.assignCreated[0]!.userId, OTHER);
     assert.equal(calls.assignCreated[0]!.roleId, undefined);
     assert.equal(calls.updated!.branchId, BRANCH, 'el espejo legado queda igual que la asignación');
+  });
+
+  it('🔴 F13 · si el índice único parcial gana una carrera → 409 BRANCH_ASSIGNMENT_EXISTS, no 500', async () => {
+    const { service } = makeService({ found: member({ branchId: null }), assignments: [], assignRace: true });
+    await rejectsWithCode(service.updateMember(OTHER, { branchId: BRANCH }), 'BRANCH_ASSIGNMENT_EXISTS');
   });
 
   it('F13 · quien ya está en esa oficina no genera asignación nueva', async () => {

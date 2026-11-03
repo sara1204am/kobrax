@@ -112,7 +112,11 @@ export class BranchesService {
     );
   }
 
-  /** Lista plana del árbol entero (la web arma el árbol con `parentId`/`path`). */
+  /**
+   * Lista plana del árbol entero (la web arma el árbol con `parentId`/`path`).
+   * Limitación conocida F13 (ver STATUS): devuelve TODO el árbol a quien tenga `office:read` (hoy ADMIN y MANAGER), no sólo su
+   * subárbol; decisión de producto pendiente.
+   */
   async list(): Promise<BranchView[]> {
     return this.tx(async (tx) => {
       const rows = await tx.branch.findMany({
@@ -393,6 +397,10 @@ export class BranchesService {
       await this.assertCanLeave(tx, found);
       const anyChild = await tx.branch.count({ where: { parentId: id, deletedAt: null } });
       if (anyChild > 0) throw branchHasChildren(anyChild);
+      // Las asignaciones vigentes de esta oficina (también las de usuarios inactivos, que no frenan la baja) quedan revocadas, y
+      // el espejo legado limpio: no puede quedar una persona apuntando a una oficina borrada.
+      await tx.userBranchAssignment.updateMany({ where: { branchId: id, revokedAt: null }, data: { revokedAt: new Date() } });
+      await tx.userAccount.updateMany({ where: { accountId: this.tenant.accountId, branchId: id }, data: { branchId: null } });
       return tx.branch.update({ where: { id }, data: { deletedAt: new Date(), active: false } });
     });
     await this.audit.record({ entity: 'branch', entityId: id, action: 'DELETE', before: removed });

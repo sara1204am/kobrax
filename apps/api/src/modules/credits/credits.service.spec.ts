@@ -40,6 +40,8 @@ function makeService(
   };
   const tx = {
     client: { findFirst: async () => opts.client ?? null },
+    // F13: la auditoría de `reassignOffice` se escribe en la MISMA transacción.
+    auditLog: { createMany: async (a: { data: { action: string; entity: string }[] }) => void calls.audit.push(...a.data) },
     credit: {
       create: async (args: { data: Record<string, unknown>; include?: unknown }) => {
         calls.creditCreate.push(args.data);
@@ -114,7 +116,7 @@ function makeService(
     withTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
   };
   const permissions = opts.permissions ?? [];
-  const tenant = { accountId: 'acc-A', userId: 'user-1', can: (p: string) => permissions.includes(p) };
+  const tenant = { accountId: 'acc-A', userId: 'user-1', get: () => ({ ip: '1.1.1.1' }), can: (p: string) => permissions.includes(p) };
   const audit = {
     record: async (e: { action: string; entity: string }) => void calls.audit.push(e),
     recordMany: async (es: { action: string; entity: string }[]) => void calls.audit.push(...es),
