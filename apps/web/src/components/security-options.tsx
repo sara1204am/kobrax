@@ -12,7 +12,6 @@ import { MfaManager } from './mfa-manager';
 const OPTIONS = [
   { key: 'password', href: null },
   { key: 'mfa', href: null },
-  { key: 'sessions', href: '/settings/security/sessions' },
 ] as const;
 
 type ModalKey = 'password' | 'mfa';
@@ -21,11 +20,10 @@ const CARD =
   'flex w-full items-center justify-between gap-3 rounded-2xl border border-k-border bg-white px-5 py-4 text-left shadow-k-card transition-all hover:border-k-periwinkle';
 
 /**
- * Las tres tarjetas de Seguridad. Las pinta el hub `/settings/security` y también Mi perfil,
- * que las agrupa con el resto de «lo mío» como hace el móvil.
+ * Las tarjetas de acceso (contraseña y MFA) de la pestaña Seguridad de Mi perfil.
  *
  * Contraseña y MFA abren en `Modal` en vez de navegar: son la acción, no una sección aparte.
- * Sesiones sigue siendo una página — es una lista con acciones por fila, no un formulario corto.
+ * Las sesiones se listan aparte, debajo, en `SessionsList`.
  *
  * `mfaEnabled` es el recordatorio blando que el móvil da en el Home: si no está activa, la tarjeta
  * lo dice en ámbar en vez de esperar a que alguien entre a mirar.

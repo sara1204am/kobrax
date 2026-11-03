@@ -51,6 +51,9 @@
       "pending": "{n, plural, one {# gestión pendiente} other {# gestiones pendientes}}"
     },
     "crumbs": {
+      "datos-personales": "Datos personales",
+      "preferencias": "Preferencias",
+      "seguridad": "Seguridad",
       "avanzado": "Avanzado",
       "facturacion": "Facturación",
       "actividad": "Actividad",
@@ -3881,6 +3884,18 @@
   },
   "profile": {
     "title": "Mi perfil",
+    "edit": "Editar",
+    "cancel": "Cancelar",
+    "email": "Correo electrónico",
+    "role": "Rol",
+    "personalData": "Datos personales",
+    "personalDataHint": "Cómo te ve tu equipo. El correo y el rol los define la cuenta.",
+    "imagesTitle": "Foto y cobro",
+    "imagesHint": "Tu foto y el QR con el que te pagan los deudores.",
+    "preferencesHint": "Lo que cambia solo para ti.",
+    "accountPrefsHint": "La jornada, el horario y la zona horaria son del negocio.",
+    "accountPrefsLink": "Se configuran en Cuenta → Cobranza.",
+    "tabs": { "label": "Secciones de Mi perfil", "datos-personales": "Datos personales", "preferencias": "Preferencias", "seguridad": "Seguridad" },
     "subtitle": "Cómo te ve tu equipo y cómo te cobran los deudores.",
     "firstName": "Nombre",
     "lastName": "Apellido",
@@ -3912,6 +3927,7 @@
   },
   "security": {
     "title": "Seguridad",
+    "access": "Acceso",
     "back": "Seguridad",
     "loading": "Cargando…",
     "options": {

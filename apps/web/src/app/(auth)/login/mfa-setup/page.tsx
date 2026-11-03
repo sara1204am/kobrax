@@ -145,7 +145,7 @@ export default function MfaSetupPage() {
           {t('activate')}
         </Button>
         {hasSession ? (
-          <Button variant="ghost" onClick={() => router.push('/settings/security')}>
+          <Button variant="ghost" onClick={() => router.push('/settings/perfil/seguridad')}>
             {t('back')}
           </Button>
         ) : (

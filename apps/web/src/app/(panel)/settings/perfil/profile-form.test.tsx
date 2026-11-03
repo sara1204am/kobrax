@@ -44,7 +44,35 @@ describe('ProfileForm — ver el QR en grande', () => {
 
   it('quitar el QR esconde el visor hasta guardar', async () => {
     renderForm(PROFILE);
+    await userEvent.click(screen.getByRole('button', { name: 'Editar' }));
     await userEvent.click(screen.getByRole('button', { name: 'Quitar' }));
     expect(screen.queryByRole('button', { name: 'Ver en grande' })).not.toBeInTheDocument();
+  });
+});
+
+describe('ProfileForm — editar, guardar, cancelar', () => {
+  it('arranca en lectura y «Editar» habilita los campos', async () => {
+    renderForm(PROFILE);
+    expect(screen.getByLabelText(/Nombre/)).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    expect(screen.getByLabelText(/Nombre/)).toBeEnabled();
+    // El correo nunca se edita.
+    expect(screen.getByLabelText(/^Correo electrónico/)).toBeDisabled();
+  });
+
+  it('Guardar queda apagado sin cambios y Cancelar descarta lo escrito', async () => {
+    renderForm(PROFILE);
+    await userEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeDisabled();
+
+    const nombre = screen.getByLabelText(/Nombre/);
+    await userEvent.clear(nombre);
+    await userEvent.type(nombre, 'Beatriz');
+    expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeEnabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(screen.getByLabelText(/Nombre/)).toHaveValue('Ana');
+    expect(screen.getByLabelText(/Nombre/)).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Editar' })).toBeInTheDocument();
   });
 });

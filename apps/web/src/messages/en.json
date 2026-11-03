@@ -51,6 +51,9 @@
       "pending": "{n, plural, one {# pending task} other {# pending tasks}}"
     },
     "crumbs": {
+      "datos-personales": "Personal details",
+      "preferencias": "Preferences",
+      "seguridad": "Security",
       "avanzado": "Advanced",
       "facturacion": "Billing",
       "actividad": "Activity",
@@ -3881,6 +3884,18 @@
   },
   "profile": {
     "title": "My profile",
+    "edit": "Edit",
+    "cancel": "Cancel",
+    "email": "Email",
+    "role": "Role",
+    "personalData": "Personal details",
+    "personalDataHint": "How your team sees you. Email and role are set by the account.",
+    "imagesTitle": "Photo and payments",
+    "imagesHint": "Your photo and the QR debtors use to pay you.",
+    "preferencesHint": "What changes only for you.",
+    "accountPrefsHint": "Working days, hours and time zone belong to the business.",
+    "accountPrefsLink": "They are set in Account → Collections.",
+    "tabs": { "label": "My profile sections", "datos-personales": "Personal details", "preferencias": "Preferences", "seguridad": "Security" },
     "subtitle": "How your team sees you and how debtors pay you.",
     "firstName": "First name",
     "lastName": "Last name",
@@ -3912,6 +3927,7 @@
   },
   "security": {
     "title": "Security",
+    "access": "Access",
     "back": "Security",
     "loading": "Loading…",
     "options": {
