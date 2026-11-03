@@ -60,3 +60,21 @@ GROUP BY a.business_name ORDER BY 2 DESC;
 
 SELECT count(*) AS pagos_con_oficina_huerfana
 FROM payments p WHERE p.branch_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM branches b WHERE b.id = p.branch_id);
+
+-- Informe (no falla): personas ACTIVAS sin asignación vigente en cuentas con más de una oficina hoja. Sin oficina, un supervisor
+-- no ve nada y un cobrador no puede dar de alta créditos (CREDIT_BRANCH_UNRESOLVED). Revisar ANTES de desplegar.
+WITH hojas AS (
+  SELECT b.account_id, count(*) AS n FROM branches b
+  WHERE b.deleted_at IS NULL AND b.active = true
+    AND NOT EXISTS (SELECT 1 FROM branches h WHERE h.parent_id = b.id AND h.deleted_at IS NULL AND h.active = true)
+  GROUP BY b.account_id
+)
+SELECT a.business_name AS cuenta, r.name AS rol, count(*) AS usuarios_activos_sin_asignacion
+FROM user_accounts ua
+JOIN accounts a ON a.id = ua.account_id
+JOIN roles r ON r.id = ua.role_id
+JOIN hojas h ON h.account_id = ua.account_id AND h.n > 1
+WHERE ua.is_active = true
+  AND r.name NOT IN ('ACCOUNT_ADMIN', 'SUPER_ADMIN')
+  AND NOT EXISTS (SELECT 1 FROM user_branch_assignments x WHERE x.user_id = ua.user_id AND x.account_id = ua.account_id AND x.revoked_at IS NULL)
+GROUP BY a.business_name, r.name ORDER BY 3 DESC;

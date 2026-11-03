@@ -115,14 +115,20 @@ export class OfficeScopeService {
    * LA OFICINA DE UN CRÉDITO LA DECIDE EL SERVIDOR (A-6 · P0). En este orden, sin NULL en silencio:
    *  1 · `branchId` explícito → existe, es de la cuenta, está activa y dentro del alcance del actor.
    *  2 · si no viene: la oficina de la asignación vigente del responsable (si tiene exactamente una).
-   *  3 · si no: la única oficina hoja de la cuenta (la raíz si no hay agencias).
-   *  4 · si no se resuelve → 422 CREDIT_BRANCH_UNRESOLVED.
+   *  3 · si no: la oficina de la ÚNICA asignación vigente de QUIEN CREA (un gerente regional, un cobrador sin responsable explícito).
+   *  4 · si no: la única oficina hoja de la cuenta (la raíz si no hay agencias).
+   *  5 · si no se resuelve → 422 CREDIT_BRANCH_UNRESOLVED.
    */
   async resolveCreditBranch(tx: PrismaClient, input: { branchId?: string | null; responsibleId?: string | null }): Promise<string> {
     if (input.branchId) return (await this.assertBranchUsable(tx, input.branchId)).id;
     if (input.responsibleId) {
       const own = await this.soleOfficeOf(tx, input.responsibleId);
       if (own) return own;
+    }
+    const actor = this.tenant.userId;
+    if (actor && actor !== input.responsibleId) {
+      const mine = await this.soleOfficeOf(tx, actor);
+      if (mine) return mine;
     }
     const leaf = await this.soleLeafOffice(tx);
     if (leaf) return leaf;

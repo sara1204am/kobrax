@@ -630,3 +630,39 @@ describe('POST /credits/reassign-office con fromBranchId: la raíz con cartera r
     assert.ok(Array.isArray(d.data!.history));
   });
 });
+
+describe('A-6 · quien crea decide la oficina cuando no hay oficina ni responsable explícitos', () => {
+  const nuevoCliente = async (): Promise<string> => (await prisma.client.create({ data: { accountId: banco.accountId, clientType: 'PERSON', firstName: 'Q', lastName: randomUUID().slice(0, 4) } })).id;
+
+  it('🔴 un cobrador con UNA oficina crea sin enviar branchId → queda en su oficina (el móvil no manda oficina)', async () => {
+    const r = await call<{ branchId?: string }>(tok.colMV!, 'POST', '/credits', { clientId: await nuevoCliente(), principalAmount: 300, installmentsCount: 3 });
+    assert.equal(r.status, 201, JSON.stringify(r.error));
+    assert.equal(r.data!.branchId, off.MV!.id);
+  });
+
+  it('un gerente regional sin responsable crea → la oficina de su única asignación (la regional)', async () => {
+    const r = await call<{ branchId?: string }>(tok.mgrChq!, 'POST', '/credits', { clientId: await nuevoCliente(), principalAmount: 300, installmentsCount: 3 });
+    assert.equal(r.status, 201, JSON.stringify(r.error));
+    assert.equal(r.data!.branchId, off.CHQ!.id);
+  });
+
+  it('🔴 un cobrador SIN asignación en una cuenta con varias hojas sigue recibiendo 422 CREDIT_BRANCH_UNRESOLVED, con mensaje claro', async () => {
+    await member('colSin', 'COLLECTOR', null);
+    const r = await call(tok.colSin!, 'POST', '/credits', { clientId: await nuevoCliente(), principalAmount: 300, installmentsCount: 3 });
+    assert.equal(r.status, 422);
+    assert.equal(r.error?.code, 'CREDIT_BRANCH_UNRESOLVED');
+    assert.match(r.error!.message, /oficina/i);
+  });
+});
+
+describe('Baja de oficina: las asignaciones vigentes se revocan', () => {
+  it('borrar una oficina cuyas únicas personas son inactivas revoca sus asignaciones y limpia el espejo', async () => {
+    const o = await createOffice('Para borrar', off.CBBA!, 'AGENCIA', 'DEL');
+    await member('colInact', 'COLLECTOR', o);
+    await prisma.userAccount.updateMany({ where: { userId: uid.colInact!, accountId: banco.accountId }, data: { isActive: false } });
+    const del = await call(banco.admin, 'DELETE', `/branches/${o.id}`);
+    assert.equal(del.status, 204, JSON.stringify(del.error));
+    assert.equal(await prisma.userBranchAssignment.count({ where: { branchId: o.id, revokedAt: null } }), 0);
+    assert.equal((await prisma.userAccount.findFirstOrThrow({ where: { userId: uid.colInact!, accountId: banco.accountId } })).branchId, null);
+  });
+});

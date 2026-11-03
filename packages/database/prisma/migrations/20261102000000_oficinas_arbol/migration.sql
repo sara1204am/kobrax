@@ -115,13 +115,16 @@ WHERE ua."branch_id" IS NOT NULL;
 
 -- ── 5 · Créditos: toda oficina válida (A-1, D-3) — backfill por capas, sin inventar datos ──────────────────────────────
 -- Capa 1 · la oficina de quien tiene el crédito a su cargo.
+-- Sólo cuenta quien sigue activo y una oficina viva (una persona dada de baja o una oficina borrada/apagada no decide).
 UPDATE "credits" c
-SET "branch_id" = ua."branch_id"
+SET "branch_id" = b."id"
 FROM "user_accounts" ua
+JOIN "branches" b ON b."id" = ua."branch_id" AND b."deleted_at" IS NULL AND b."active" = true
 WHERE c."branch_id" IS NULL
   AND c."assigned_manager_id" IS NOT NULL
   AND ua."user_id" = c."assigned_manager_id"
   AND ua."account_id" = c."account_id"
+  AND ua."is_active" = true
   AND ua."branch_id" IS NOT NULL;
 
 -- Capa 3 · la única oficina hoja de la cuenta (o su raíz si la cuenta no tiene agencias: tenant individual).

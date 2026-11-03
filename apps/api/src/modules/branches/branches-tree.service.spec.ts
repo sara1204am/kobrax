@@ -109,13 +109,14 @@ function makeService(w: World = {}) {
       groupBy: async () => [],
     },
     userBranchAssignment: {
-      count: async (a: { where: { branchId: string } }) => assignments.filter((x) => x.branchId === a.where.branchId && !x.revokedAt).length,
+      count: async (a: { where: { branchId: string } }) => assignments.filter((x) => x.branchId === a.where.branchId && !x.revokedAt && !x.inactiveUser).length,
       groupBy: async () => [],
       findMany: async (a: { where: Row }) => assignments.filter((x) => matches(x, { ...a.where, user: undefined }) && !x.revokedAt),
       findFirst: async (a: { where: Row }) => assignments.find((x) => matches(x, a.where)) ?? null,
-      updateMany: async (a: { where: { id: { in: string[] } }; data: Row }) => {
-        for (const x of assignments) if (a.where.id.in.includes(String(x.id))) Object.assign(x, a.data);
-        return { count: a.where.id.in.length };
+      updateMany: async (a: { where: { id?: { in: string[] }; branchId?: string }; data: Row }) => {
+        const hit = assignments.filter((x) => (a.where.id ? a.where.id.in.includes(String(x.id)) : x.branchId === a.where.branchId && !x.revokedAt));
+        for (const x of hit) Object.assign(x, a.data);
+        return { count: hit.length };
       },
       update: async (a: { where: { id: string }; data: Row }) => {
         Object.assign(assignments.find((x) => x.id === a.where.id)!, a.data);
@@ -321,6 +322,13 @@ describe('BranchesService · baja (desactivar / borrar)', () => {
     await service.remove('mv');
     assert.ok(branches.find((b) => b.id === 'mv')!.deletedAt instanceof Date);
     assert.deepEqual(audit.map((a) => a.action), ['DELETE']);
+  });
+
+  it('🔴 borrar revoca las asignaciones vigentes de la oficina (aunque sean de usuarios inactivos) y limpia el espejo', async () => {
+    const { service, assignments } = makeService({ assignments: [{ id: 'a1', accountId: 'acc-A', userId: 'inactivo', branchId: 'mv', revokedAt: null, inactiveUser: true }, { id: 'a2', accountId: 'acc-A', userId: 'otro', branchId: 'lpz', revokedAt: null }] });
+    await service.remove('mv');
+    assert.ok(assignments.find((a) => a.id === 'a1')!.revokedAt instanceof Date);
+    assert.equal(assignments.find((a) => a.id === 'a2')!.revokedAt, null, 'las de otras oficinas no se tocan');
   });
 
   it('404 si no existe', async () => {

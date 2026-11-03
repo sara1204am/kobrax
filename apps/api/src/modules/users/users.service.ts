@@ -1,4 +1,5 @@
-import { branchInactive, branchNotFound } from '../branches/branches.errors';
+import { branchAssignmentExists, branchInactive, branchNotFound } from '../branches/branches.errors';
+import { isUniqueViolation } from '../../common/unique-violation';
 import { Injectable, Logger } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { hash } from 'bcryptjs';
@@ -143,7 +144,13 @@ export class UsersService {
     const stale = current.filter((a) => a.branchId !== branchId);
     if (stale.length > 0) await tx.userBranchAssignment.updateMany({ where: { id: { in: stale.map((a) => a.id) } }, data: { revokedAt: new Date() } });
     if (branchId && !current.some((a) => a.branchId === branchId)) {
-      await tx.userBranchAssignment.create({ data: { accountId, userId, branchId, isPrimary: true, createdBy: this.tenant.userId ?? null } });
+      try {
+        await tx.userBranchAssignment.create({ data: { accountId, userId, branchId, isPrimary: true, createdBy: this.tenant.userId ?? null } });
+      } catch (e) {
+        // El índice único parcial (una vigente por persona y cuenta) ganó una carrera: 409 claro, no 500.
+        if (isUniqueViolation(e)) throw branchAssignmentExists(userId, branchId);
+        throw e;
+      }
     }
   }
 

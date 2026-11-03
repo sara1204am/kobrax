@@ -87,6 +87,9 @@ interface AccountConfig {
 /** Lo que el serializer toma de la config: etiquetas y umbral del dato viejo. */
 const labelsOf = (c: AccountConfig): [Record<string, string>, number] => [c.labels, c.staleAfterDays];
 
+/** Tiempo de la transacción de «mover toda la cartera de una oficina» (decenas de miles de créditos). */
+export const REASSIGN_ALL_TIMEOUT_MS = 120_000;
+
 @Injectable()
 export class CreditsService {
   constructor(
@@ -371,6 +374,8 @@ export class CreditsService {
     );
   }
 
+  // Limitación conocida F13 (ver STATUS, D-7): `findOne`, clientes, pagos y exportes siguen a nivel de CUENTA (RLS), igual que antes
+  // de F13; el alcance por oficina se aplica en Mora, Agenda, Reparto, Analítica y en este `list` sólo para el gerente regional.
   async findOne(id: string): Promise<ReturnType<typeof serializeCredit>> {
     const config = await this.accountConfig();
     const found = await this.tx(async (tx) => {
@@ -673,7 +678,10 @@ export class CreditsService {
     if (Boolean(dto.creditIds?.length) === Boolean(dto.fromBranchId)) throw reassignArgs();
     const ids = dto.creditIds ? [...new Set(dto.creditIds)] : null;
     const CHUNK = 500;
-    const result = await this.tx(async (tx) => {
+    const ctx = this.tenant.get();
+    // Mover la cartera entera de una oficina puede ser decenas de miles de créditos: la transacción interactiva (5 s por defecto)
+    // se queda corta. El lote explícito (≤500) usa el tope normal.
+    const result = await this.prisma.withTenant(this.tenant.accountId, async (tx) => {
       const scope = await this.office.assignScope(tx);
       const dest = await this.office.assertBranchUsable(tx, dto.toBranchId, scope);
       const select = { id: true, branchId: true, branch: { select: { path: true } } } as const;
@@ -694,21 +702,26 @@ export class CreditsService {
       const changing = rows.filter((r) => r.branchId !== dest.id);
       // En lotes de 500 DENTRO de la misma transacción: o se mueve todo o nada.
       for (let i = 0; i < changing.length; i += CHUNK) {
-        await tx.credit.updateMany({ where: { id: { in: changing.slice(i, i + CHUNK).map((r) => r.id) } }, data: { branchId: dest.id } });
+        const chunk = changing.slice(i, i + CHUNK);
+        await tx.credit.updateMany({ where: { id: { in: chunk.map((r) => r.id) } }, data: { branchId: dest.id } });
+        // La auditoría va en la MISMA transacción: si el lote se revierte no queda una bitácora de algo que no pasó, y si se confirma
+        // no puede quedar un movimiento sin su rastro. (Ids y oficinas: no hay PII que redactar.)
+        await tx.auditLog.createMany({
+          data: chunk.map((r) => ({
+            accountId: this.tenant.accountId,
+            userId: this.tenant.userId ?? '',
+            action: 'REASSIGN_OFFICE',
+            entity: 'credit',
+            entityId: r.id,
+            before: { branchId: r.branchId },
+            after: { branchId: dest.id },
+            ip: ctx?.ip,
+            userAgent: ctx?.userAgent,
+          })),
+        });
       }
       return { changing, unchanged: rows.length - changing.length };
-    });
-    for (let i = 0; i < result.changing.length; i += 500) {
-      await this.audit.recordMany(
-        result.changing.slice(i, i + 500).map((r) => ({
-          entity: 'credit',
-          entityId: r.id,
-          action: 'REASSIGN_OFFICE',
-          before: { branchId: r.branchId },
-          after: { branchId: dto.toBranchId },
-        })),
-      );
-    }
+    }, dto.fromBranchId ? REASSIGN_ALL_TIMEOUT_MS : undefined);
     return { moved: result.changing.length, unchanged: result.unchanged, toBranchId: dto.toBranchId };
   }
 
