@@ -12,8 +12,12 @@ import {
   type TrendPoint,
   type VisitMapPoint,
 } from '@kobrax/shared';
+import { officeDepth } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
+import { officeInMySubtreeSql, type OfficeScopeKind } from '../../common/office-scope/office-scope';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
+import { moraAccessConditions } from '../mora/mora-query';
 import { AnalyticsQueryDto, TrendQueryDto } from './dto/analytics.dto';
 
 /*
@@ -37,6 +41,27 @@ const money = (n: unknown): number => Math.round(Number(n ?? 0) * 100) / 100;
  * «sin filtro». Basta un `?collectorId=` en la URL para llegar con la lista vacía.
  */
 const some = <T>(list?: T[]): list is T[] => !!list?.length;
+
+/**
+ * El alcance del solicitante, resuelto UNA vez por petición (F13 · B-S7). Antes la analítica no lo aplicaba: bastaba
+ * `report:read` para ver toda la cuenta.
+ *  · `whole`   — ve toda la cuenta (ALL, o SUBTREE asignado a la raíz): ningún filtro de alcance.
+ *  · `paths`   — rutas de sus asignaciones vigentes (SUBTREE/BRANCH).
+ *  · `nodePath` — la ruta del `branchId` pedido: «ese nodo y su subárbol». Se compone con el alcance (intersección).
+ */
+interface ScopeCtx {
+  kind: OfficeScopeKind;
+  userId?: string;
+  paths: string[];
+  whole: boolean;
+  nodePath: string | null;
+}
+
+/** Los filtros del dashboard + el alcance resuelto. */
+type Q = AnalyticsQueryDto & { scope: ScopeCtx };
+
+/** Ruta que no calza con ninguna oficina: un `branchId` que no es de esta cuenta no devuelve nada (ni filtra a otra). */
+const NO_NODE = '/__sin_oficina__/';
 
 /** Los tres intervalos posibles, escritos acá y no armados con lo que llegó (ver `collectionTrend`). */
 const STEP_INTERVAL: Record<string, string> = { day: "'1 day'", week: "'1 week'", month: "'1 month'" };
@@ -78,10 +103,53 @@ export class AnalyticsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenant: TenantContextService,
+    private readonly office: OfficeScopeService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
+  }
+
+  /**
+   * Alcance del solicitante + ruta del nodo pedido. Para quien lo ve todo y no filtra por oficina no hace ninguna consulta.
+   */
+  private async scoped<T extends AnalyticsQueryDto>(query: T): Promise<T & { scope: ScopeCtx }> {
+    const kind = this.office.kind();
+    const userId = this.tenant.userId;
+    if (kind === 'ALL' && !query.branchId) {
+      return { ...query, scope: { kind, userId, paths: [], whole: true, nodePath: null } };
+    }
+    const { paths, nodePath } = await this.tx(async (tx) => ({
+      paths: kind === 'ALL' ? [] : await this.office.pathsOf(tx, userId),
+      nodePath: query.branchId
+        ? ((await tx.branch.findFirst({ where: { id: query.branchId, accountId: this.tenant.accountId, deletedAt: null }, select: { path: true } }))?.path ?? NO_NODE)
+        : null,
+    }));
+    const whole = kind === 'ALL' || (kind === 'SUBTREE' && paths.some((p) => officeDepth(p) === 0));
+    return { ...query, scope: { kind: whole ? 'ALL' : kind, userId, paths, whole, nodePath } };
+  }
+
+  /** «Ese nodo y su subárbol»: la oficina de la fila queda bajo la ruta pedida. */
+  private branchNode(branchCol: Prisma.Sql, q: Q): Prisma.Sql | null {
+    return q.scope.nodePath ? Prisma.sql`EXISTS (SELECT 1 FROM branches nb WHERE nb.id = ${branchCol} AND nb.path LIKE ${q.scope.nodePath + '%'})` : null;
+  }
+
+  /** El alcance sobre los créditos: la MISMA regla de visibilidad que Mora (una sola definición). */
+  private creditScope(q: Q): Prisma.Sql[] {
+    if (q.scope.whole) return [];
+    return moraAccessConditions({ accountId: this.tenant.accountId, userId: q.scope.userId, kind: q.scope.kind, ownOnly: q.scope.kind === 'OWN', canAssign: q.scope.kind !== 'OWN' });
+  }
+
+  /**
+   * El alcance sobre los pagos: los de créditos a su cargo, o los que se cobraron (oficina HISTÓRICA del pago, D-6) en
+   * el subárbol de sus oficinas. Así mover un crédito no le quita a una agencia lo que cobró.
+   */
+  private paymentScope(q: Q): Prisma.Sql {
+    const me = q.scope.userId ?? '';
+    const mine = Prisma.sql`EXISTS (SELECT 1 FROM credits mc WHERE mc.id = p.credit_id AND mc.assigned_manager_id = ${me})`;
+    if (q.scope.kind === 'OWN') return mine;
+    const cols = { account: Prisma.raw('p.account_id'), branch: Prisma.raw('p.branch_id') };
+    return Prisma.sql`(${mine} OR ${officeInMySubtreeSql(me, cols)})`;
   }
 
   /**
@@ -121,9 +189,11 @@ export class AnalyticsService {
    * El cobrador es el **responsable del crédito** (F4/08). La prioridad vive en el episodio abierto y va con un
    * `EXISTS` y no con un `JOIN`: así el saldo del crédito nunca se suma dos veces.
    */
-  private creditWhere(q: AnalyticsQueryDto): Prisma.Sql {
+  private creditWhere(q: Q): Prisma.Sql {
     const conds: Prisma.Sql[] = [Prisma.sql`cr.deleted_at IS NULL`, Prisma.sql`cr.status = 'ACTIVE'::"CreditStatus"`, Prisma.sql`cr.written_off_at IS NULL`];
-    if (q.branchId) conds.push(Prisma.sql`cr.branch_id = ${q.branchId}`);
+    conds.push(...this.creditScope(q));
+    const node = this.branchNode(Prisma.raw('cr.branch_id'), q);
+    if (node) conds.push(node);
     const source = this.sourceSql('cr', q);
     if (source) conds.push(source);
     if (some(q.collectorId)) conds.push(Prisma.sql`cr.assigned_manager_id IN (${Prisma.join(q.collectorId)})`);
@@ -139,9 +209,11 @@ export class AnalyticsService {
    * El `WHERE` de los episodios de mora **abiertos o históricos** (alias `e`) con su crédito (`cr`): sucursal, fuente,
    * responsable y prioridad del episodio.
    */
-  private episodeWhere(q: AnalyticsQueryDto): Prisma.Sql {
+  private episodeWhere(q: Q): Prisma.Sql {
     const conds: Prisma.Sql[] = [Prisma.sql`cr.deleted_at IS NULL`];
-    if (q.branchId) conds.push(Prisma.sql`cr.branch_id = ${q.branchId}`);
+    conds.push(...this.creditScope(q));
+    const node = this.branchNode(Prisma.raw('cr.branch_id'), q);
+    if (node) conds.push(node);
     const source = this.sourceSql('cr', q);
     if (source) conds.push(source);
     if (some(q.collectorId)) conds.push(Prisma.sql`cr.assigned_manager_id IN (${Prisma.join(q.collectorId)})`);
@@ -153,7 +225,7 @@ export class AnalyticsService {
    * D7: el crédito es de la fuente pedida. `KOBRAX` = sin fuente externa. `null` = sin filtro.
    * `alias` es un literal de este archivo (ver `sourceOf`).
    */
-  private sourceSql(alias: string, q: AnalyticsQueryDto): Prisma.Sql | null {
+  private sourceSql(alias: string, q: Q): Prisma.Sql | null {
     if (!q.source) return null;
     const column = Prisma.raw(`${alias}.external_source`);
     return q.source === 'KOBRAX' ? Prisma.sql`${column} IS NULL` : Prisma.sql`${column} = ${q.source}`;
@@ -163,13 +235,13 @@ export class AnalyticsService {
    * El mismo filtro para una tabla que apunta al crédito (pagos, agenda): un `EXISTS`, que
    * también sirve donde la referencia es suave y Prisma no tiene relación por la que filtrar.
    */
-  private creditOfSource(creditId: Prisma.Sql, q: AnalyticsQueryDto): Prisma.Sql | null {
+  private creditOfSource(creditId: Prisma.Sql, q: Q): Prisma.Sql | null {
     const source = this.sourceSql('sc', q);
     return source ? Prisma.sql`EXISTS (SELECT 1 FROM credits sc WHERE sc.id = ${creditId} AND ${source})` : null;
   }
 
   /** El filtro de fuente en Prisma, para las consultas que van por el cliente tipado. */
-  private sourceFilter(q: AnalyticsQueryDto): Prisma.CreditWhereInput {
+  private sourceFilter(q: Q): Prisma.CreditWhereInput {
     return { externalSource: q.source === 'KOBRAX' ? null : q.source };
   }
 
@@ -180,10 +252,12 @@ export class AnalyticsService {
    * carga el cobrador que cobró. Un pago que entra por transferencia y lo carga la oficina no se le
    * cuenta a nadie — y eso es correcto, no un agujero.
    */
-  private paymentWhere(q: AnalyticsQueryDto): Prisma.Sql {
+  private paymentWhere(q: Q): Prisma.Sql {
     const conds: Prisma.Sql[] = [Prisma.sql`TRUE`];
     if (some(q.collectorId)) conds.push(Prisma.sql`p.registered_by IN (${Prisma.join(q.collectorId)})`);
-    if (q.branchId) conds.push(Prisma.sql`p.branch_id = ${q.branchId}`);
+    const node = this.branchNode(Prisma.raw('p.branch_id'), q);
+    if (node) conds.push(node);
+    if (!q.scope.whole) conds.push(this.paymentScope(q));
     const source = this.creditOfSource(Prisma.sql`p.credit_id`, q);
     if (source) conds.push(source);
     return Prisma.join(conds, ' AND ');
@@ -198,16 +272,29 @@ export class AnalyticsService {
    * tienen por qué pagar el SQL crudo. Es el mismo trato que hizo la cartera de W3 con su `where`
    * espejo. El precio es tenerlos alineados; el spec compara los dos caminos.
    */
-  private paymentFilter(q: AnalyticsQueryDto): Prisma.PaymentWhereInput {
+  private paymentFilter(q: Q): Prisma.PaymentWhereInput {
+    const and: Prisma.PaymentWhereInput[] = [];
+    // F13: `branchId` = ese nodo y su subárbol, por la oficina HISTÓRICA del pago (D-6); y el alcance de quien consulta.
+    if (q.scope.nodePath) and.push({ branch: { path: { startsWith: q.scope.nodePath } } });
+    if (!q.scope.whole) {
+      const me = q.scope.userId ?? '';
+      and.push({
+        OR: [
+          { credit: { assignedManagerId: me } },
+          ...(q.scope.kind === 'OWN' ? [] : q.scope.paths.map((path) => ({ branch: { path: { startsWith: path } } }))),
+        ],
+      });
+    }
     return {
       ...(some(q.collectorId) ? { registeredBy: { in: q.collectorId } } : {}),
-      ...(q.branchId ? { branchId: q.branchId } : {}),
       ...(q.source ? { credit: this.sourceFilter(q) } : {}),
+      ...(and.length ? { AND: and } : {}),
     };
   }
 
   // ── 1 · Los cinco números del encabezado ───────────────────────────────────
-  async summary(query: AnalyticsQueryDto): Promise<AnalyticsSummary> {
+  async summary(raw: AnalyticsQueryDto): Promise<AnalyticsSummary> {
+    const query = await this.scoped(raw);
     const w = this.window(query);
     const credits = this.creditWhere(query);
     const episodes = this.episodeWhere(query);
@@ -284,7 +371,8 @@ export class AnalyticsService {
    * Los tramos salen de `AGING_BUCKETS` de `shared`: el `CASE` se arma con la constante en vez de
    * escribirlo a mano, así el corte de la API y el rótulo del gráfico **no pueden separarse**.
    */
-  async portfolioAging(query: AnalyticsQueryDto): Promise<AgingBucketRow[]> {
+  async portfolioAging(raw: AnalyticsQueryDto): Promise<AgingBucketRow[]> {
+    const query = await this.scoped(raw);
     const where = this.creditWhere(query);
     const cases = AGING_BUCKETS.map((b) =>
       b.max === null
@@ -322,7 +410,8 @@ export class AnalyticsService {
    * universo con el KPI de saldo: sólo falta la cartera sin responsable. Cambió de definición: no comparar con la
    * tabla de antes (que sólo contaba créditos con un caso abierto y su cobrador).
    */
-  async collectorPerformance(query: AnalyticsQueryDto): Promise<CollectorPerformanceRow[]> {
+  async collectorPerformance(raw: AnalyticsQueryDto): Promise<CollectorPerformanceRow[]> {
+    const query = await this.scoped(raw);
     const w = this.window(query);
     const credits = this.creditWhere(query);
     const payments = this.paymentWhere(query);
@@ -373,7 +462,8 @@ export class AnalyticsService {
    * el esquema— y Prisma no puede filtrar por la fuente del crédito. Con un `EXISTS` sí, y sin traer
    * a memoria la lista de ids de ninguna cartera.
    */
-  async agendaSummary(query: AnalyticsQueryDto): Promise<AgendaSummary> {
+  async agendaSummary(raw: AnalyticsQueryDto): Promise<AgendaSummary> {
+    const query = await this.scoped(raw);
     const w = this.window(query);
     const conds: Prisma.Sql[] = [
       Prisma.sql`a.deleted_at IS NULL`,
@@ -383,6 +473,13 @@ export class AnalyticsService {
     if (some(query.collectorId)) conds.push(Prisma.sql`a.assignee_id IN (${Prisma.join(query.collectorId)})`);
     const source = this.creditOfSource(Prisma.sql`a.credit_id`, query);
     if (source) conds.push(source);
+    const node = this.branchNode(Prisma.raw('(SELECT ac.branch_id FROM credits ac WHERE ac.id = a.credit_id)'), query);
+    if (node) conds.push(node);
+    if (!query.scope.whole) {
+      const me = query.scope.userId ?? '';
+      const visible = moraAccessConditions({ accountId: this.tenant.accountId, userId: query.scope.userId, kind: query.scope.kind, ownOnly: query.scope.kind === 'OWN', canAssign: query.scope.kind !== 'OWN' });
+      conds.push(Prisma.sql`(a.assignee_id = ${me} OR EXISTS (SELECT 1 FROM credits cr WHERE cr.id = a.credit_id AND ${Prisma.join(visible, ' AND ')}))`);
+    }
     const payments = this.paymentFilter(query);
 
     const [rows, pagosNow, pagosPrev] = await this.tx((tx) =>
@@ -440,7 +537,8 @@ export class AnalyticsService {
    * lo tiene o no tiene coordenada, el de su domicilio. Antes se tomaba cualquiera de las ubicaciones del cliente por orden
    * alfabético de tipo, y la parada de un garante caía en otro lado.
    */
-  async visitMap(query: AnalyticsQueryDto): Promise<VisitMapPoint[]> {
+  async visitMap(raw: AnalyticsQueryDto): Promise<VisitMapPoint[]> {
+    const query = await this.scoped(raw);
     const upper = query.dateTo ?? query.dateFrom ?? new Date().toISOString().slice(0, 10);
     const lower = query.dateFrom && query.dateFrom <= upper ? query.dateFrom : upper;
     const conds: Prisma.Sql[] = [
@@ -448,7 +546,13 @@ export class AnalyticsService {
       Prisma.sql`EXISTS (SELECT 1 FROM client_locations pl WHERE pl.client_id = rs.client_id AND pl.latitude IS NOT NULL AND pl.longitude IS NOT NULL)`,
     ];
     if (some(query.collectorId)) conds.push(Prisma.sql`rp.collector_id IN (${Prisma.join(query.collectorId)})`);
-    if (query.branchId) conds.push(Prisma.sql`rp.branch_id = ${query.branchId}`);
+    const node = this.branchNode(Prisma.raw('rp.branch_id'), query);
+    if (node) conds.push(node);
+    if (!query.scope.whole) {
+      const me = query.scope.userId ?? '';
+      const cols = { account: Prisma.raw('rp.account_id'), branch: Prisma.raw('rp.branch_id') };
+      conds.push(query.scope.kind === 'OWN' ? Prisma.sql`rp.collector_id = ${me}` : Prisma.sql`(rp.collector_id = ${me} OR ${officeInMySubtreeSql(me, cols)})`);
+    }
     // D7: la parada es de la fuente de su crédito. Una parada sin crédito no es de ninguna y no entra.
     const source = this.sourceSql('vc', query);
     if (source) {
@@ -539,7 +643,8 @@ export class AnalyticsService {
    * `generate_series` es lo que hace que un día sin pagos exista y valga cero; sin él, la línea
    * saltea días y el gráfico miente por omisión.
    */
-  async collectionTrend(query: TrendQueryDto): Promise<TrendPoint[]> {
+  async collectionTrend(raw: TrendQueryDto): Promise<TrendPoint[]> {
+    const query = await this.scoped(raw);
     const w = this.window(query);
     const step = query.granularity ?? 'day';
     /*

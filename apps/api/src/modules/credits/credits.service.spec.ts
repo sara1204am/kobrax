@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakePlanLimits } from '../../common/plan/plan-test-utils';
 import { CreditsService } from './credits.service';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import { AssignmentService } from '../assignments/assignment.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
@@ -113,7 +114,7 @@ function makeService(
     record: async (e: { action: string; entity: string }) => void calls.audit.push(e),
     recordMany: async (es: { action: string; entity: string }[]) => void calls.audit.push(...es),
   };
-  const assignment = new AssignmentService({} as never, tenant as never, audit as never);
+  const assignment = new AssignmentService({} as never, tenant as never, audit as never, new OfficeScopeService(tenant as never));
   // F4/08: la prioridad del episodio se recalcula con `ArrearsPriorityService`; acá sólo se registra la llamada.
   const arrearsPriority = { recomputeForCredit: async (_tx: unknown, creditId: string) => void calls.priorityRecompute.push(creditId) };
   const service = new CreditsService(prisma as never, tenant as never, audit as never, fakePlanLimits(opts.plan), assignment, arrearsPriority as never);
