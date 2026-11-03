@@ -223,6 +223,12 @@ describe('R-3 · el árbol del caso de referencia', () => {
     assert.deepEqual(await visible(banco.admin), ids('mv', 'mvSin', 'pad', 'cen', 'lyv', 'mon', 'cam', 'alt', 'sinOficina'));
   });
 
+  it('el filtro por oficina de Mora trae el nodo y su SUBÁRBOL (una regional trae sus agencias)', async () => {
+    assert.deepEqual(await visible(banco.admin, `&branchId=${off.CHQ!.id}`), ids('mv', 'mvSin', 'pad', 'cen', 'lyv', 'mon', 'cam'));
+    assert.deepEqual(await visible(banco.admin, `&branchId=${off.MV!.id}`), ids('mv', 'mvSin'));
+    assert.deepEqual(await visible(banco.admin, `&branchId=${indiv.root.id}`), [], 'una oficina de otra cuenta no trae nada');
+  });
+
   it('R-4 · el cobrador ve lo suyo, y nada más (tampoco su agencia)', async () => {
     assert.deepEqual(await visible(tok.colMV!), ids('mv', 'sinOficina'));
     assert.deepEqual(await visible(tok.colPAD!), ids('pad'));

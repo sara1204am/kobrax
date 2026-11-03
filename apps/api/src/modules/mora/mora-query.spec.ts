@@ -273,7 +273,7 @@ describe('buildMoraWhere — filtros', () => {
 
   it('oficina y saldo', () => {
     const w = where({ branchId: 'b1', balanceMin: 100, balanceMax: 900 });
-    assert.match(w.sql, /cr\.branch_id = ?/);
+    assert.match(w.sql, /cr\.branch_id IN \(SELECT nb\.id FROM branches nb WHERE nb\.account_id = cr\.account_id AND nb\.path LIKE/);
     assert.match(w.sql, /cr\.outstanding_balance >= ?/);
     assert.ok(w.values.includes('b1') && w.values.includes(100) && w.values.includes(900));
   });

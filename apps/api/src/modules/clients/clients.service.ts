@@ -460,7 +460,9 @@ export class ClientsService {
     if (query.branchId) {
       conds.push(Prisma.sql`EXISTS (
         SELECT 1 FROM credits k
-        WHERE k.client_id = c.id AND k.deleted_at IS NULL AND k.branch_id = ${query.branchId})`);
+        WHERE k.client_id = c.id AND k.deleted_at IS NULL AND k.branch_id IN (
+          SELECT nb.id FROM branches nb WHERE nb.account_id = k.account_id
+            AND nb.path LIKE (SELECT n.path FROM branches n WHERE n.id = ${query.branchId} AND n.account_id = k.account_id) || '%'))`); // F13: la oficina y su subárbol
     }
     /*
      * P7 · El RESPONSABLE es del crédito: «tiene algún crédito vivo a cargo de esta persona». Desde F4/08

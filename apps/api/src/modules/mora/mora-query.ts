@@ -201,7 +201,10 @@ export function buildMoraWhere(
   if (query.dpdMax != null) c.push(Prisma.sql`cr.days_past_due <= ${query.dpdMax}`);
   if (query.balanceMin != null) c.push(Prisma.sql`cr.outstanding_balance >= ${query.balanceMin}`);
   if (query.balanceMax != null) c.push(Prisma.sql`cr.outstanding_balance <= ${query.balanceMax}`);
-  if (query.branchId) c.push(Prisma.sql`cr.branch_id = ${query.branchId}`);
+  // F13: filtrar por una oficina es «ella y su subárbol» (una regional trae sus agencias). Con una agencia hoja es la misma de siempre.
+  if (query.branchId) {
+    c.push(Prisma.sql`cr.branch_id IN (SELECT nb.id FROM branches nb WHERE nb.account_id = cr.account_id AND nb.path LIKE (SELECT n.path FROM branches n WHERE n.id = ${query.branchId} AND n.account_id = cr.account_id) || '%')`);
+  }
 
   if (query.writtenOff === 'true') c.push(Prisma.sql`cr.written_off_at IS NOT NULL`);
   else if (query.writtenOff === 'false') c.push(Prisma.sql`cr.written_off_at IS NULL`);
