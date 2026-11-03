@@ -1,5 +1,12 @@
 import { BadRequestException, ForbiddenException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 
+/** La oficina de un crédito no se edita con PATCH: cambiarla es una reasignación auditada (A-6, D-5). */
+export const creditBranchImmutable = () =>
+  new UnprocessableEntityException({
+    code: 'CREDIT_BRANCH_IMMUTABLE',
+    message: 'La oficina de un crédito no se cambia desde la edición. Usa la reasignación de oficina (POST /credits/reassign-office).',
+  });
+
 /** Recurso inexistente o de otro tenant (genérico, anti-enumeración). */
 export const resourceNotFound = () =>
   new NotFoundException({ code: 'RESOURCE_NOT_FOUND', message: 'Recurso no encontrado' });

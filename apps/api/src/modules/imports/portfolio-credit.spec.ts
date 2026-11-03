@@ -212,3 +212,15 @@ describe('CASTIGADO del reporte PSF (D1-a)', () => {
     assert.ok(data.writtenOffAt);
   });
 });
+
+describe('F13 · la oficina del crédito importado la decide el servidor (A-6)', () => {
+  it('el alta lleva la oficina que el servidor resolvió, no la del alcance de la corrida', () => {
+    const data = creditCreateData('acc', 'cli', ROW, { kind: 'branch', ref: 'b-alcance' } as never, STAMP, { branchId: 'b-resuelta' });
+    assert.equal(data.branchId, 'b-resuelta');
+  });
+
+  it('sin oficina resuelta no inventa una: queda indefinida (el servicio nunca llega acá sin resolverla)', () => {
+    const data = creditCreateData('acc', 'cli', ROW, { kind: 'branch', ref: 'b-alcance' } as never, STAMP);
+    assert.equal(data.branchId, undefined);
+  });
+});

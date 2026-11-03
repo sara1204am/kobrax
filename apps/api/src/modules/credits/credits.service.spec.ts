@@ -17,6 +17,8 @@ function makeService(
     plan?: Parameters<typeof fakePlanLimits>[0];
     /** Permisos de quien llama. Por defecto ninguno: un cobrador sin `assignment:write`. */
     permissions?: string[];
+    /** Alcance de reparto de quien llama (F13). Por defecto, toda la cuenta. */
+    officeScope?: { kind: 'ALL' | 'OFFICES'; paths: string[] };
     /** Miembros de la cuenta, para validar a quién se asigna. */
     members?: { userId: string; isActive: boolean; role: string }[];
   } = {},
@@ -33,6 +35,8 @@ function makeService(
     priorityRecompute: [] as string[],
     assignmentCreate: [] as Record<string, unknown>[],
     columnWrites: [] as Record<string, unknown>[],
+    officeInputs: [] as { branchId?: string | null; responsibleId?: string | null }[],
+    creditManyUpdates: [] as Record<string, unknown>[],
   };
   const tx = {
     client: { findFirst: async () => opts.client ?? null },
@@ -50,8 +54,9 @@ function makeService(
       // Lo que lee y escribe `AssignmentService`.
       findMany: async (args: { where: { id: { in: string[] } } }) =>
         args.where.id.in.map((id) => ({ id, assignedManagerId: (opts.credit as { assignedManagerId?: string } | undefined)?.assignedManagerId ?? null })),
-      updateMany: async (args: { data: Record<string, unknown> }) => {
-        calls.columnWrites.push(args.data);
+      updateMany: async (args: { where: { id: { in: string[] } }; data: Record<string, unknown> }) => {
+        if ('branchId' in args.data) calls.creditManyUpdates.push({ ids: args.where.id.in, ...args.data });
+        else calls.columnWrites.push(args.data);
         return { count: 1 };
       },
     },
@@ -117,7 +122,18 @@ function makeService(
   const assignment = new AssignmentService({} as never, tenant as never, audit as never, new OfficeScopeService(tenant as never));
   // F4/08: la prioridad del episodio se recalcula con `ArrearsPriorityService`; acá sólo se registra la llamada.
   const arrearsPriority = { recomputeForCredit: async (_tx: unknown, creditId: string) => void calls.priorityRecompute.push(creditId) };
-  const service = new CreditsService(prisma as never, tenant as never, audit as never, fakePlanLimits(opts.plan), assignment, arrearsPriority as never);
+  // F13: la oficina la decide el servidor. El doble registra qué le pidieron y devuelve lo explícito o la raíz.
+  const realOffice = new OfficeScopeService(tenant as never);
+  const office = {
+    resolveCreditBranch: async (_tx: unknown, input: { branchId?: string | null; responsibleId?: string | null }) => {
+      calls.officeInputs.push(input);
+      return input.branchId ?? 'b-root';
+    },
+    assignScope: async () => opts.officeScope ?? { kind: 'ALL', paths: [] },
+    assertBranchUsable: async (_tx: unknown, id: string) => ({ id, path: `/r/${id}/` }),
+    inScope: realOffice.inScope.bind(realOffice),
+  };
+  const service = new CreditsService(prisma as never, tenant as never, audit as never, fakePlanLimits(opts.plan), assignment, arrearsPriority as never, office as never);
   return { service, calls };
 }
 
@@ -985,5 +1001,54 @@ describe('CreditsService — responsable del crédito (assignment:write)', () =>
     await service.create(BASE);
     assert.equal(calls.creditCreate[0]!.assignedManagerId, undefined);
     assert.equal(calls.assignmentCreate.length, 0);
+  });
+});
+
+describe('F13 · A-6 la oficina de un crédito la decide el servidor', () => {
+  it('el alta pide la oficina al resolvedor (con lo que mandó el cliente y el responsable) y guarda lo que él devuelve', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create(BASE);
+    assert.deepEqual(calls.officeInputs, [{ branchId: undefined, responsibleId: 'user-1' }]);
+    assert.equal(calls.creditCreate[0]!.branchId, 'b-root', 'sin oficina en el cuerpo, nunca NULL: la decide el servidor');
+  });
+
+  it('una oficina explícita se entrega al resolvedor para que la valide (no se guarda a ciegas)', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ ...(BASE as object), branchId: 'b-pedida' } as never);
+    assert.equal(calls.officeInputs[0]!.branchId, 'b-pedida');
+    assert.equal(calls.creditCreate[0]!.branchId, 'b-pedida');
+  });
+
+  it('un reintento del alta offline no vuelve a resolver nada', async () => {
+    const { service, calls } = makeService({ credit: { id: 'ya-existe', metadata: {}, installments: [] }, client: { id: 'c1' } });
+    await service.create({ ...(BASE as object), id: 'ya-existe' } as never);
+    assert.equal(calls.officeInputs.length, 0);
+  });
+
+  it('🔴 el PATCH ya no cambia la oficina: otra oficina es 422 y no escribe; la misma no es un cambio', async () => {
+    const credit = { id: 'cr1', metadata: { origin: 'manual' }, branchId: 'b-1', assignedManagerId: null };
+    const a = makeService({ credit: { ...credit, _count: { payments: 0, installments: 0 } } });
+    await rejectsWithCode(a.service.update('cr1', { branchId: 'b-2' } as never), 'CREDIT_BRANCH_IMMUTABLE');
+    assert.equal(a.calls.creditUpdate.length, 0);
+    const b2 = makeService({ credit: { ...credit, _count: { payments: 0, installments: 0 } } });
+    await b2.service.update('cr1', { branchId: 'b-1', notes: 'x' } as never);
+    assert.equal(b2.calls.creditUpdate[0]!.branchId, undefined);
+  });
+});
+
+describe('F13 · POST /credits/reassign-office (D-5 · R14)', () => {
+  it('mueve el lote atómicamente a la oficina destino y audita cada crédito con antes y después', async () => {
+    const { service, calls } = makeService({ officeScope: { kind: 'ALL', paths: [] } });
+    // el tx de este spec devuelve los créditos pedidos sin oficina: todos cambian
+    const res = await service.reassignOffice({ creditIds: ['c1', 'c2'], toBranchId: 'b-nueva' });
+    assert.deepEqual(res, { moved: 2, unchanged: 0, toBranchId: 'b-nueva' });
+    assert.deepEqual(calls.creditManyUpdates, [{ ids: ['c1', 'c2'], branchId: 'b-nueva' }]);
+    assert.deepEqual(calls.audit.map((a) => a.action), ['REASSIGN_OFFICE', 'REASSIGN_OFFICE']);
+  });
+
+  it('🔴 quien no ve todo no mueve créditos sin oficina ni de oficinas fuera de su alcance: 403 y no escribe', async () => {
+    const { service, calls } = makeService({ officeScope: { kind: 'OFFICES', paths: ['/r/chq/'] } });
+    await rejectsWithCode(service.reassignOffice({ creditIds: ['c1'], toBranchId: 'b-nueva' }), 'CREDIT_OFFICE_OUT_OF_SCOPE');
+    assert.equal(calls.creditManyUpdates.length, 0);
   });
 });

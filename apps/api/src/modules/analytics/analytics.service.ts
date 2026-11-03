@@ -551,7 +551,13 @@ export class AnalyticsService {
     if (!query.scope.whole) {
       const me = query.scope.userId ?? '';
       const cols = { account: Prisma.raw('rp.account_id'), branch: Prisma.raw('rp.branch_id') };
-      conds.push(query.scope.kind === 'OWN' ? Prisma.sql`rp.collector_id = ${me}` : Prisma.sql`(rp.collector_id = ${me} OR ${officeInMySubtreeSql(me, cols)})`);
+      // Mía, de mi subárbol por su oficina, o de un cobrador que trabaja en mi subárbol (las rutas viejas no traen oficina).
+      const collectorIn = Prisma.sql`EXISTS (SELECT 1 FROM user_branch_assignments ca WHERE ca.user_id = rp.collector_id AND ca.account_id = rp.account_id AND ca.revoked_at IS NULL AND ${officeInMySubtreeSql(me, { account: Prisma.raw('ca.account_id'), branch: Prisma.raw('ca.branch_id') })})`;
+      conds.push(
+        query.scope.kind === 'OWN'
+          ? Prisma.sql`rp.collector_id = ${me}`
+          : Prisma.sql`(rp.collector_id = ${me} OR ${officeInMySubtreeSql(me, cols)} OR ${collectorIn})`,
+      );
     }
     // D7: la parada es de la fuente de su crédito. Una parada sin crédito no es de ninguna y no entra.
     const source = this.sourceSql('vc', query);

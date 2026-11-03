@@ -11,6 +11,7 @@ import {
   ListCreditsQueryDto,
   MarkArrearsDto,
   RecalcArrearsDto,
+  ReassignOfficeDto,
   UpdateCreditDto,
   WriteOffDto,
 } from './dto/credit.dto';
@@ -19,6 +20,17 @@ import {
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class CreditsController {
   constructor(private readonly credits: CreditsService) {}
+
+  /**
+   * Cambia la OFICINA de un lote de créditos (D-5 · R14): la raíz con cartera histórica se vacía hacia las oficinas nuevas, o se
+   * corrige un error. Exige `assignment:write` y alcance sobre el origen Y el destino. Atómica por lote; no toca los pagos.
+   * (Antes de `:id` para que no se confunda con un id.)
+   */
+  @Post('reassign-office')
+  @Roles(Permission.ASSIGNMENT_WRITE)
+  reassignOffice(@Body() dto: ReassignOfficeDto) {
+    return this.credits.reassignOffice(dto);
+  }
 
   @Post()
   @Roles(Permission.CREDIT_WRITE)

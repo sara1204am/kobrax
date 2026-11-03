@@ -1,5 +1,9 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
   IsBoolean,
   IsDateString,
   IsEnum,
@@ -96,6 +100,12 @@ export class CreateCreditDto {
  *  · los campos sueltos (capital, tasa, cuota, frecuencia): la edición de siempre, sólo para créditos sin
  *    `terms` (la usa el móvil hasta la Fase 5).
  */
+/** Reasignación masiva de oficina (D-5 · R14): hasta 500 créditos a una oficina destino, en un solo lote atómico. */
+export class ReassignOfficeDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(500) @ArrayUnique() @IsUUID('all', { each: true }) creditIds!: string[];
+  @IsUUID() toBranchId!: string;
+}
+
 export class UpdateCreditDto {
   @IsOptional() @IsEnum(CreditStatus) status?: CreditStatus;
   @IsOptional() @IsUUID() assignedManagerId?: string;
