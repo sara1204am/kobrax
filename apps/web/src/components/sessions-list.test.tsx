@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { SessionInfo } from '@kobrax/shared';
 import { server } from '@/test/msw-server';
-import SessionsPage from './page';
+import { SessionsList } from './sessions-list';
 
 vi.mock('next/link', () => ({
   default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
@@ -19,10 +19,10 @@ const sessions: SessionInfo[] = [
   { id: 's2', accountName: 'DEMO', deviceType: 'web', os: 'Windows', isCurrent: true },
 ];
 
-describe('SessionsPage', () => {
+describe('SessionsList', () => {
   it('lista las sesiones y marca la actual', async () => {
     server.use(http.get('*/api/account/sessions', () => HttpResponse.json({ sessions })));
-    render(<SessionsPage />);
+    render(<SessionsList />);
 
     expect(await screen.findByText(/esta sesión/i)).toBeInTheDocument();
     expect(screen.getByText(/mobile · DEMO/i)).toBeInTheDocument();
@@ -40,7 +40,7 @@ describe('SessionsPage', () => {
         return new HttpResponse(null, { status: 204 });
       }),
     );
-    render(<SessionsPage />);
+    render(<SessionsList />);
 
     await screen.findByText(/mobile · DEMO/i);
     await userEvent.click(screen.getByRole('button', { name: /^cerrar$/i }));

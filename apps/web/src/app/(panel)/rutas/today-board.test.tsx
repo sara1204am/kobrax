@@ -68,7 +68,8 @@ describe('TodayBoard · ¿qué pasa hoy con las rutas? (F4/12)', () => {
     const plan = screen.getAllByRole('link', { name: 'Planificar' });
     expect(plan).toHaveLength(2);
     expect(plan[0]).toHaveAttribute('href', '/rutas/planificar?date=2026-10-08&collectorId=bea');
-    expect(screen.getAllByText('Sin ruta')).toHaveLength(2);
+    // El panel de filtros (abierto) también ofrece «Sin ruta»: se cuenta sólo lo de la tabla.
+    expect(within(screen.getByRole('table')).getAllByText('Sin ruta')).toHaveLength(2);
   });
 
   it('sin permiso de planificar no se ofrece «Planificar»', async () => {
