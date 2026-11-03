@@ -1,7 +1,8 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { CollectionPriority, VisitOutcome } from '@prisma/client';
-import { MORA_SORTS, Permission, searchTerms, type ArrearRange, type MoraSort } from '@kobrax/shared';
+import { MORA_SORTS, searchTerms, type ArrearRange, type MoraSort } from '@kobrax/shared';
 import type { ListMoraQueryDto } from './dto/mora.dto';
+import { officeScopeKindOf, officeVisibilitySql, type OfficeScopeKind } from '../../common/office-scope/office-scope';
 
 /**
  * El listado de Mora se arma en SQL y no con `findMany` de Prisma porque **ordena por columnas de dos
@@ -18,7 +19,7 @@ import type { ListMoraQueryDto } from './dto/mora.dto';
  */
 
 /** Hasta dónde ve quien consulta (D8). Sale del alcance de datos del rol, no de su nombre. */
-export type MoraScopeKind = 'ALL' | 'BRANCH' | 'OWN';
+export type MoraScopeKind = OfficeScopeKind;
 
 /** Quién consulta: decide el alcance. */
 export interface MoraScope {
@@ -26,7 +27,8 @@ export interface MoraScope {
   userId?: string;
   /**
    *  · `ALL`    — gerente, administrador, auditor, lector (`data:scope:all`): todo el tenant.
-   *  · `BRANCH` — supervisor (`data:scope:branch`): los créditos con responsable de SU agencia + los suyos.
+   *  · `SUBTREE` — gerente regional (`data:scope:subtree`): lo suyo + lo del subárbol de sus oficinas (con o sin responsable); asignado a la raíz, todo.
+   *  · `BRANCH` — supervisor (`data:scope:branch`): los créditos con responsable de SU agencia (subárbol de sus oficinas) + los suyos.
    *  · `OWN`    — cobrador (sin permiso de alcance): sólo lo que tiene a su cargo (responsable, temporal o apoyo).
    */
   kind: MoraScopeKind;
@@ -120,9 +122,11 @@ function assignedTo(user: string, kinds?: readonly string[]): Prisma.Sql {
  *
  *  · `ALL`: nada más.
  *  · `OWN`: los créditos a su cargo (responsable, temporal o apoyo vigentes).
- *  · `BRANCH`: los suyos **más** los de su agencia (`user_accounts.branch_id`) **que tienen responsable**.
- *    Un crédito sin responsable sólo lo ve quien tiene alcance total: nadie de la agencia lo está atendiendo.
- *    Un supervisor sin agencia asignada no ve ninguna (`branch_id = NULL` no es igual a nada): sólo lo suyo.
+ *  · `BRANCH`: los suyos **más** los de su oficina (subárbol de sus asignaciones vigentes) **que tienen responsable**.
+ *    Un crédito sin responsable sólo lo ve quien tiene alcance total o de subárbol: nadie de la agencia lo está atendiendo.
+ *    Un supervisor sin oficina asignada no ve ninguna: sólo lo suyo (A-4).
+ *  · `SUBTREE` (F13, gerente regional): los suyos más los del subárbol de sus oficinas, tengan o no responsable; asignado
+ *    a la raíz, todo (también lo que no tiene oficina). Sin asignaciones: sólo lo suyo.
  */
 export function moraAccessConditions(scope: MoraScope): Prisma.Sql[] {
   const c: Prisma.Sql[] = [Prisma.sql`cr.account_id = ${scope.accountId}`, Prisma.sql`cr.deleted_at IS NULL`];
@@ -133,21 +137,18 @@ export function moraAccessConditions(scope: MoraScope): Prisma.Sql[] {
   if (scope.kind === 'OWN') {
     c.push(mine);
   } else {
-    c.push(Prisma.sql`(${mine}
-      OR (cr.assigned_manager_id IS NOT NULL AND cr.branch_id IS NOT NULL AND cr.branch_id = (
-        SELECT ua.branch_id FROM user_accounts ua
-        WHERE ua.user_id = ${me} AND ua.account_id = cr.account_id AND ua.is_active = true
-        LIMIT 1)))`);
+    // F13: «mis oficinas» sale de las asignaciones vigentes (`user_branch_assignments`) y se expande al subárbol.
+    c.push(Prisma.sql`(${mine} OR ${officeVisibilitySql(scope.kind, me)})`);
   }
   return c;
 }
 
 /**
  * El alcance de quien consulta, por **capacidad** (no por nombre de rol). Lo comparten Mora y Agenda.
- * `data:scope:all` → todo; `data:scope:branch` → su agencia; ninguno → lo suyo (falla cerrado).
+ * `data:scope:all` → todo; `data:scope:subtree` → su subárbol; `data:scope:branch` → su agencia; ninguno → lo suyo (falla cerrado).
  */
 export function moraScopeOf(tenant: { accountId: string; userId?: string; can(permission: string): boolean }): MoraScope {
-  const kind: MoraScopeKind = tenant.can(Permission.DATA_SCOPE_ALL) ? 'ALL' : tenant.can(Permission.DATA_SCOPE_BRANCH) ? 'BRANCH' : 'OWN';
+  const kind: MoraScopeKind = officeScopeKindOf((p) => tenant.can(p));
   return { accountId: tenant.accountId, userId: tenant.userId, kind, ownOnly: kind === 'OWN', canAssign: kind !== 'OWN' };
 }
 
