@@ -527,7 +527,7 @@ describe('ClientsService.list — cartera (view=portfolio)', () => {
   it('🔴 la fuente que no se puede ver no entra en la consulta', async () => {
     // La bitácora cruza tres dominios con tres permisos. Sin esta guarda, la ficha del cliente sería
     // la puerta de atrás para leer pagos sin `payment:read`.
-    const { service, calls } = makeService({ rows: [], permissions: ['client:read', 'agenda:read'] });
+    const { service, calls } = makeService({ rows: [], permissions: ['client:read', 'agenda:read', 'data:scope:all'] });
     await service.timeline('c1', {});
 
     const sql = calls.sql[0]!.sql;
@@ -540,7 +540,7 @@ describe('ClientsService.list — cartera (view=portfolio)', () => {
   it('🔴 sin ninguno de los tres permisos no se consulta nada', async () => {
     // `UNION ALL` de cero partes no es SQL válido: sin la guarda, la ficha reventaría con un 500 en
     // vez de mostrar una bitácora vacía.
-    const { service, calls } = makeService({ rows: [], permissions: ['client:read'] });
+    const { service, calls } = makeService({ rows: [], permissions: ['client:read', 'data:scope:all'] });
     const res = await service.timeline('c1', {});
 
     assert.deepEqual(calls.sql, []);

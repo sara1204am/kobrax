@@ -6,8 +6,12 @@ import { OfficeScopeService } from '../../common/office-scope/office-scope.servi
 
 /** F13 · `GET /credits?branchId=` es «ese nodo y su subárbol», acotado por el alcance de quien pide. */
 function make(perms: string[], opts: { nodePath?: string | null; assignments?: string[] } = {}) {
-  const calls = { where: undefined as Record<string, unknown> | undefined };
+  const calls = { where: undefined as Record<string, unknown> | undefined, raw: [] as string[] };
   const tx = {
+    $queryRaw: async (q: { sql?: string; strings?: readonly string[]; values?: unknown[] }) => {
+      calls.raw.push(`${(q.strings ?? [q.sql ?? '']).join('?')} ${JSON.stringify(q.values ?? [])}`);
+      return /count\(\*\)/.test((q.strings ?? [q.sql ?? '']).join('')) ? [{ n: 0n }] : [];
+    },
     branch: { findFirst: async () => (opts.nodePath === null ? null : { path: opts.nodePath ?? '/r/chq/' }) },
     userBranchAssignment: { findMany: async () => (opts.assignments ?? []).map((path) => ({ userId: 'u1', branch: { path } })) },
     credit: {
@@ -46,17 +50,22 @@ describe('F13 · credits.list con branchId', () => {
     assert.ok(!'/r/lpz/alt/'.startsWith(prefix));
   });
 
-  it('🔴 el gerente regional queda acotado a su subárbol (y a lo suyo) aunque pida otra oficina', async () => {
+  it('🔴 D-7: quien no ve toda la cuenta pagina EN SQL con la regla de Mora (nunca trae la lista de ids a memoria)', async () => {
     const { service, calls } = make([Permission.DATA_SCOPE_SUBTREE], { nodePath: '/r/lpz/', assignments: ['/r/chq/'] });
     await service.list({ branchId: 'lpz' } as never);
-    const and = calls.where!.AND as unknown[];
-    assert.deepEqual(and[1], { OR: [{ assignedManagerId: 'u1' }, { branch: { path: { startsWith: '/r/chq/' } } }] });
+    assert.deepEqual(calls.where, { id: { in: [] } }, 'sólo hidrata la página por id: el alcance se aplicó en SQL');
+    assert.equal(calls.raw.length, 2, 'página + total');
+    assert.ok(calls.raw[0]!.includes('user_branch_assignments'), 'usa la visibilidad por asignaciones');
+    assert.ok(calls.raw[0]!.includes('/r/lpz/%'), 'y el filtro de oficina pedido, como prefijo');
   });
 
-  it('asignado a la raíz no se acota; un branchId ajeno no calza con nada', async () => {
-    const root = make([Permission.DATA_SCOPE_SUBTREE], { assignments: ['/r/'] });
-    await root.service.list({} as never);
-    assert.deepEqual(root.calls.where, { deletedAt: null });
+  it('el supervisor y el cobrador también quedan acotados; un branchId ajeno no calza con nada', async () => {
+    for (const perms of [[Permission.DATA_SCOPE_BRANCH], []]) {
+      const m = make(perms, { assignments: ['/r/chq/'] });
+      await m.service.list({} as never);
+      assert.deepEqual(m.calls.where, { id: { in: [] } });
+      assert.equal(m.calls.raw.length, 2);
+    }
     const ajena = make([Permission.DATA_SCOPE_ALL], { nodePath: null });
     await ajena.service.list({ branchId: 'x' } as never);
     assert.deepEqual(ajena.calls.where, { deletedAt: null, AND: [{ branch: { path: { startsWith: '/__sin_oficina__/' } } }] });

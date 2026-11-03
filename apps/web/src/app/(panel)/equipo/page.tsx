@@ -10,6 +10,7 @@ import {
   type Member,
 } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
+import { activeOffices, officeOptions } from '@/lib/offices';
 import { getOffices } from '@/lib/offices-server';
 import { EmptyState, PageHeader, Badge } from '@/components/panel-ui';
 import { hasTeamFilters, teamView, type TeamParams } from '@/lib/team';
@@ -145,7 +146,7 @@ export default async function EquipoPage({ searchParams }: { searchParams: TeamP
         offices={offices.multi ? offices.rows : []}
         filtered={hasTeamFilters(searchParams)}
         seats={seats ? { used: seats.usage.users, max } : undefined}
-        action={<InviteButton roles={roles.body.data ?? []} full={level === 'full'} />}
+        action={<InviteButton roles={roles.body.data ?? []} offices={officeOptions(activeOffices(offices.rows))} full={level === 'full'} />}
       />
     </>
   );

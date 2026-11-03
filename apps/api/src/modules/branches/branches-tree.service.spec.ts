@@ -142,7 +142,7 @@ function makeService(w: World = {}) {
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
   const auditSvc = { record: async (e: (typeof audit)[number]) => void audit.push(e) };
   const tenant = { accountId: 'acc-A', userId: 'admin' };
-  const service = new BranchesService(prisma as never, tenant as never, auditSvc as never, fakePlanLimits(w.plan));
+  const service = new BranchesService(prisma as never, tenant as never, auditSvc as never, fakePlanLimits(w.plan), { assignScope: async () => ({ kind: 'ALL', paths: [] }) } as never);
   return { service, branches, assignments, created, updates, assignCreated, audit };
 }
 

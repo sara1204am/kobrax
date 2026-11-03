@@ -12,6 +12,11 @@ BEGIN
   SELECT count(*) INTO n FROM permissions WHERE code IN ('office:read', 'office:write', 'data:scope:subtree');
   IF n <> 3 THEN RAISE EXCEPTION 'FALLO: faltan permisos de oficinas/subárbol (hay % de 3)', n; END IF;
 
+  -- D-7: el supervisor también lee oficinas (acotado por el servidor a las suyas).
+  SELECT count(*) INTO n FROM roles r WHERE r.name = 'SUPERVISOR' AND NOT EXISTS (
+    SELECT 1 FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id AND p.code = 'office:read' WHERE rp.role_id = r.id);
+  IF n > 0 THEN RAISE EXCEPTION 'FALLO: el SUPERVISOR no tiene office:read'; END IF;
+
   -- office:read lo tiene quien tiene user:read; office:write quien tiene account:write (equivalencia con lo que había).
   SELECT count(*) INTO n FROM role_permissions rp JOIN permissions pu ON pu.id = rp.permission_id AND pu.code = 'user:read'
     WHERE NOT EXISTS (SELECT 1 FROM role_permissions r2 JOIN permissions po ON po.id = r2.permission_id AND po.code = 'office:read' WHERE r2.role_id = rp.role_id);

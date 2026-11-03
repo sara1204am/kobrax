@@ -3828,6 +3828,8 @@
       "email": "Correo electrónico",
       "role": "¿Qué va a hacer?",
       "rolePlaceholder": "Elige un rol",
+      "office": "Oficina del gerente",
+      "officePlaceholder": "Elige una oficina",
       "cancel": "Cancelar",
       "send": "Enviar invitación",
       "error": "No se pudo invitar",

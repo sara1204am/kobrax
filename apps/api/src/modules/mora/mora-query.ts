@@ -152,6 +152,31 @@ export function moraScopeOf(tenant: { accountId: string; userId?: string; can(pe
   return { accountId: tenant.accountId, userId: tenant.userId, kind, ownOnly: kind === 'OWN', canAssign: kind !== 'OWN' };
 }
 
+/** ¿Ve toda la cuenta sin filtrar por oficina? (`data:scope:all`). Quien no, pasa por las consultas de visibilidad de abajo. */
+export function seesWholeAccount(scope: MoraScope): boolean {
+  return scope.kind === 'ALL';
+}
+
+/**
+ * D-7 (F13): la regla de visibilidad de los créditos como SUBCONSULTA de ids, para que Cartera, Clientes, Pagos y Exportes
+ * apliquen EXACTAMENTE la misma que Mora (`id IN (...)`). Una sola fuente: si cambia la regla, cambia en todas.
+ */
+export function visibleCreditIdsSql(scope: MoraScope): Prisma.Sql {
+  return Prisma.sql`SELECT cr.id FROM credits cr WHERE ${Prisma.join(moraAccessConditions(scope), ' AND ')}`;
+}
+
+/**
+ * Clientes visibles: los que tienen al menos un crédito visible, MÁS los que no tienen ningún crédito vivo (un cliente recién
+ * creado, sin cartera, no es de nadie todavía y no se esconde: sin esto, el cobrador no vería al cliente que acaba de dar de alta).
+ * Alias de la consulta que llama: `cl` = `clients`.
+ */
+export function visibleClientIdsSql(scope: MoraScope): Prisma.Sql {
+  return Prisma.sql`SELECT cr.client_id FROM credits cr WHERE ${Prisma.join(moraAccessConditions(scope), ' AND ')}
+      UNION
+      SELECT c0.id FROM clients c0 WHERE c0.account_id = ${scope.accountId} AND NOT EXISTS (
+        SELECT 1 FROM credits cx WHERE cx.client_id = c0.id AND cx.deleted_at IS NULL)`;
+}
+
 /** Sólo el crédito, para consultas de alcance que no necesitan ni el cliente ni el episodio. */
 export const MORA_ACCESS_FROM = Prisma.sql`FROM credits cr`;
 

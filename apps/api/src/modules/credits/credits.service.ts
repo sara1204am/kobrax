@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { Prisma, PrismaClient } from '@prisma/client';
-import { CreditDataOrigin, CreditStatus, InstallmentStatus } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
+import { CreditDataOrigin, CreditStatus, InstallmentStatus, Prisma } from '@prisma/client';
 import {
   addPeriods,
   arrearsByMethod,
@@ -41,7 +41,7 @@ import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import { officeInvalid, officeOutOfScope } from '../../common/office-scope/office-scope.errors';
 import { AssignmentService } from '../assignments/assignment.service';
-import { moraScopeOf, visibleCredits } from '../mora/mora-query';
+import { moraAccessConditions, moraScopeOf, seesWholeAccount, visibleCredits } from '../mora/mora-query';
 import type { ReassignOfficeResult } from '../branches/branches.dto';
 import {
   buildSchedule,
@@ -344,21 +344,33 @@ export class CreditsService {
     if (query.clientId) base.clientId = query.clientId;
     if (query.status) base.status = query.status;
 
+    const scope = moraScopeOf(this.tenant);
     const { rows, total } = await this.tx(async (tx) => {
-      const and: Prisma.CreditWhereInput[] = [];
       // F13: `branchId` es «esa oficina y su SUBÁRBOL» (una regional trae sus agencias; con una hoja, la misma de siempre).
       // Una oficina que no es de esta cuenta no calza con nada.
-      if (query.branchId) {
-        const node = await tx.branch.findFirst({ where: { id: query.branchId, accountId: this.tenant.accountId, deletedAt: null }, select: { path: true } });
-        and.push({ branch: { path: { startsWith: node?.path ?? '/__sin_oficina__/' } } });
+      const node = query.branchId
+        ? await tx.branch.findFirst({ where: { id: query.branchId, accountId: this.tenant.accountId, deletedAt: null }, select: { path: true } })
+        : undefined;
+
+      if (!seesWholeAccount(scope)) {
+        // D-7: acotado por el alcance con LA MISMA regla que Mora (una sola fuente). La página se arma en SQL: una cartera regional
+        // puede pasar de los 32 767 parámetros que admite un `IN (...)`, así que NUNCA se trae la lista de ids visibles a memoria.
+        const cond: Prisma.Sql[] = [...moraAccessConditions(scope)];
+        if (query.clientId) cond.push(Prisma.sql`cr.client_id = ${query.clientId}`);
+        if (query.status) cond.push(Prisma.sql`cr.status::text = ${query.status}`);
+        if (query.branchId) cond.push(Prisma.sql`cr.branch_id IN (SELECT nb.id FROM branches nb WHERE nb.account_id = cr.account_id AND nb.path LIKE ${(node?.path ?? '/__sin_oficina__/') + '%'})`);
+        const where = Prisma.join(cond, ' AND ');
+        const [pageIds, [count]] = await Promise.all([
+          tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT cr.id FROM credits cr WHERE ${where} ORDER BY cr.created_at DESC, cr.id DESC LIMIT ${limit} OFFSET ${skip}`),
+          tx.$queryRaw<{ n: bigint }[]>(Prisma.sql`SELECT count(*) AS n FROM credits cr WHERE ${where}`),
+        ]);
+        const found = await tx.credit.findMany({ where: { id: { in: pageIds.map((r) => r.id) } } });
+        const byId = new Map(found.map((c) => [c.id, c]));
+        return { rows: pageIds.map((r) => byId.get(r.id)).filter((c): c is NonNullable<typeof c> => !!c), total: Number(count?.n ?? 0) };
       }
-      // ...acotado por el alcance: el gerente regional (SUBTREE) sólo ve lo suyo y el subárbol de sus oficinas; asignado a la raíz, todo.
-      if (this.tenant.can(Permission.DATA_SCOPE_SUBTREE) && !this.tenant.can(Permission.DATA_SCOPE_ALL)) {
-        const scope = await this.office.assignScope(tx);
-        if (scope.kind === 'OFFICES') {
-          and.push({ OR: [{ assignedManagerId: this.tenant.userId ?? '' }, ...scope.paths.map((p) => ({ branch: { path: { startsWith: p } } }))] });
-        }
-      }
+
+      const and: Prisma.CreditWhereInput[] = [];
+      if (query.branchId) and.push({ branch: { path: { startsWith: node?.path ?? '/__sin_oficina__/' } } });
       const where: Prisma.CreditWhereInput = and.length ? { ...base, AND: and } : base;
       const [rows, total] = await Promise.all([
         tx.credit.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
@@ -374,8 +386,7 @@ export class CreditsService {
     );
   }
 
-  // Limitación conocida F13 (ver STATUS, D-7): `findOne`, clientes, pagos y exportes siguen a nivel de CUENTA (RLS), igual que antes
-  // de F13; el alcance por oficina se aplica en Mora, Agenda, Reparto, Analítica y en este `list` sólo para el gerente regional.
+  // D-7: la ficha respeta el mismo alcance que el listado: un crédito fuera de él es 404, como si no existiera.
   async findOne(id: string): Promise<ReturnType<typeof serializeCredit>> {
     const config = await this.accountConfig();
     const found = await this.tx(async (tx) => {
@@ -384,6 +395,7 @@ export class CreditsService {
         include: { installments: { orderBy: { number: 'asc' } }, arrears: true, _count: { select: { payments: true } } },
       });
       if (!credit) return null;
+      await this.assertInScope(tx, id);
       // F4/08: situación (episodio abierto) y categoría (rangos de la cuenta, UNA consulta) sólo para la ficha.
       const [open, categories] = await Promise.all([
         tx.creditArrearEpisode.count({ where: { creditId: id, endedAt: null } }),

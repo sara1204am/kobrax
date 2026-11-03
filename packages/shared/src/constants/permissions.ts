@@ -72,6 +72,8 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     // F4/08 · D8: supervisa a los cobradores de SU AGENCIA (no toda la empresa) y ve además lo que
     // tiene a su cargo. Antes tenía `data:scope:all`.
     Permission.DATA_SCOPE_BRANCH,
+    // F13 · D-7: lee el árbol de oficinas, pero SÓLO sus oficinas y lo que cuelga de ellas (el servidor lo acota).
+    Permission.OFFICE_READ,
     // Reparte la cartera y cubre bajas: es quien más usa la asignación temporal.
     Permission.ASSIGNMENT_WRITE,
   ],

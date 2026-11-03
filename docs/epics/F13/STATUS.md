@@ -32,9 +32,12 @@ Vocabulario: PASS · FAIL · BLOCKED · NOT_APPLICABLE · (NOT STARTED = aún no
 - Adoptadas por la IA sin respuesta explícita (revisables): R13 (MANAGER = `data:scope:subtree`, asignado a la raíz), D-5 (reasignación masiva), AUDITOR/VIEWER con alcance total.
 
 ## Bloqueos y preguntas abiertas (para la usuaria)
-- **El MANAGER no se puede invitar ni asignar por la API** (`isMobileRole`, `users.service.ts:146,235`): R13 («MANAGER → raíz») solo se cumple por migración/seed. Crear un gerente regional nuevo exige levantar esa restricción, que es de roles (F14). Decidir si se adelanta.
-- **ENTERPRISE `branches = 100`** es un piso provisional (la grilla dice «a medida»). Confirmar el número.
-- **Supervisor sin `office:read`:** no ve los selectores de oficina en Cartera/Dashboard (Mora tiene respaldo). Propuesta: darle `office:read` acotado a su alcance. Decidir.
+- **Resueltas por la usuaria el 2026-11-03 (rama `f13/p5-decisiones`):**
+  1. **MANAGER se asigna e invita por API**, y EXIGE oficina (`MANAGER_NEEDS_OFFICE`, 422): su alcance es esa oficina y lo que cuelga de ella. La web pide la oficina al invitar a un gerente.
+  2. **ENTERPRISE `branches = 100`** queda como está.
+  3. **El supervisor lee oficinas** (`office:read`, migración `20261103000000`), acotado por el servidor a las suyas y su subárbol (la ruta completa sí se ve; el detalle de otra oficina es 404).
+  4. **D-7 cerrado:** Cartera (lista y ficha), Clientes, Pagos y Exportes aplican la MISMA regla de visibilidad que Mora (`visibleCreditIdsSql` / `visibleClientIdsSql` en `mora-query.ts`). Un cliente sin créditos vivos es visible (si no, el cobrador no vería al que acaba de dar de alta). La copia completa (`/exports/backup`) es sólo para quien ve toda la cuenta (403 `EXPORT_BACKUP_FORBIDDEN`).
+- **Limitación nueva (D-7):** en Clientes (lista no-portfolio) y Pagos, el alcance se resuelve con `id IN (…)`; una cartera visible de más de ~32 000 registros rebasa el límite de parámetros de Postgres. Cartera ya pagina en SQL y no tiene el problema; Clientes tiene la vista `portfolio` en SQL. Pendiente: pasar Pagos y Clientes a paginación en SQL si algún tenant lo alcanza.
 - **Importación:** sin oficina deducible usa la de quien importa; si tampoco hay, 422. Confirmar.
 - **Pagos en analítica** para SUPERVISOR/SUBTREE: oficina histórica del pago en su subárbol o créditos propios. Confirmar.
 - **Antes de desplegar:** correr las migraciones sobre una copia de producción y revisar `verify/oficinas-arbol.sql`.

@@ -275,6 +275,120 @@ describe('R-8 · equivalencia: el supervisor de una agencia hoja ve lo mismo que
 });
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
+describe('D-7 · Cartera, Clientes, Pagos y Exportes respetan el mismo alcance que Mora', () => {
+  const list = async (token: string, path: string): Promise<string[]> => {
+    const r = await call<{ id: string }[]>(token, 'GET', path);
+    assert.equal(r.status, 200, JSON.stringify(r.error));
+    return r.data!.map((x) => x.id).sort();
+  };
+  const csv = async (token: string, path: string): Promise<string> => {
+    const res = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+    const text = await res.text();
+    assert.equal(res.status, 200, text);
+    return text;
+  };
+  const pay: Record<string, string> = {};
+
+  before(async () => {
+    for (const k of ['mv', 'pad', 'alt']) {
+      const c = await prisma.credit.findUniqueOrThrow({ where: { id: cr[k]! } });
+      const p = await prisma.payment.create({
+        data: { accountId: banco.accountId, creditId: c.id, branchId: c.branchId, amount: 10, paymentDate: new Date(), method: 'CASH', registeredVia: 'WEB', registeredBy: uid.colMV! },
+      });
+      pay[k] = p.id;
+    }
+  });
+
+  it('🔴 Cartera: el supervisor sólo ve lo de su agencia; el regional su regional; el administrador todo (sin cambios)', async () => {
+    assert.deepEqual(await list(tok.supMV!, '/credits?limit=100'), ids('mv'));
+    assert.deepEqual(await list(tok.mgrChq!, '/credits?limit=100'), ids('mv', 'mvSin', 'pad', 'cen', 'lyv', 'mon', 'cam'));
+    assert.deepEqual(await list(tok.mgrRaiz!, '/credits?limit=100'), ids('mv', 'mvSin', 'pad', 'cen', 'lyv', 'mon', 'cam', 'alt', 'sinOficina'));
+    assert.deepEqual(await list(banco.admin, '/credits?limit=100'), ids('mv', 'mvSin', 'pad', 'cen', 'lyv', 'mon', 'cam', 'alt', 'sinOficina'));
+    assert.deepEqual(await list(tok.colPAD!, '/credits?limit=100'), ids('pad'));
+  });
+
+  it('Cartera: la paginación y el total salen del conjunto acotado', async () => {
+    const res = await fetch(`${API}/credits?limit=3&page=2`, { headers: { Authorization: `Bearer ${tok.mgrChq!}` } });
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { data: unknown[]; meta: { total?: number; pagination?: { total?: number } } };
+    assert.equal(body.data.length, 3);
+    assert.equal(body.meta.total ?? body.meta.pagination?.total, 7);
+  });
+
+  it('🔴 la ficha del crédito fuera de alcance es 404; la propia se abre', async () => {
+    assert.equal((await call(tok.supMV!, 'GET', `/credits/${cr.pad}`)).status, 404);
+    assert.equal((await call(tok.supMV!, 'GET', `/credits/${cr.mv}`)).status, 200);
+    assert.equal((await call(tok.mgrChq!, 'GET', `/credits/${cr.alt}`)).status, 404, 'La Paz queda fuera de Chuquisaca');
+    assert.equal((await call(banco.admin, 'GET', `/credits/${cr.alt}`)).status, 200);
+  });
+
+  it('🔴 Clientes: el supervisor no lista ni abre al deudor de otra agencia', async () => {
+    const cl = async (k: string) => (await prisma.credit.findUniqueOrThrow({ where: { id: cr[k]! } })).clientId;
+    const vistos = await list(tok.supMV!, '/clients?limit=100');
+    assert.ok(vistos.includes(await cl('mv')));
+    assert.ok(!vistos.includes(await cl('pad')));
+    assert.equal((await call(tok.supMV!, 'GET', `/clients/${await cl('pad')}`)).status, 404);
+    assert.equal((await call(tok.supMV!, 'GET', `/clients/${await cl('mv')}`)).status, 200);
+    assert.equal((await call(banco.admin, 'GET', `/clients/${await cl('pad')}`)).status, 200);
+  });
+
+  it('Clientes: uno recién creado, sin cartera, no se esconde (el cobrador lo ve al darlo de alta)', async () => {
+    const r = await call<{ id: string }>(tok.colMV!, 'POST', '/clients', { clientType: 'PERSON', firstName: 'Nuevo', lastName: 'SinCartera' });
+    assert.equal(r.status, 201, JSON.stringify(r.error));
+    assert.equal((await call(tok.colMV!, 'GET', `/clients/${r.data!.id}`)).status, 200);
+  });
+
+  it('🔴 Pagos: se acotan por el crédito (no por payments.branch_id)', async () => {
+    assert.deepEqual(await list(tok.supMV!, '/payments?limit=100'), [pay.mv!]);
+    assert.deepEqual(await list(tok.mgrChq!, '/payments?limit=100'), [pay.mv!, pay.pad!].sort());
+    assert.deepEqual(await list(banco.admin, '/payments?limit=100'), [pay.mv!, pay.pad!, pay.alt!].sort());
+    assert.equal((await call(tok.supMV!, 'GET', `/payments/${pay.pad}`)).status, 404);
+  });
+
+  it('🔴 Exportes: el CSV de mora trae sólo lo visible; la copia completa es sólo para quien ve todo', async () => {
+    const mgr = await csv(tok.mgrChq!, '/exports/mora');
+    assert.ok(!mgr.includes('C-alt'), 'La Paz no sale en el CSV del regional de Chuquisaca');
+    const todo = await csv(banco.admin, '/exports/mora');
+    assert.ok(todo.includes('C-alt'));
+    assert.equal((await fetch(`${API}/exports/backup`, { headers: { Authorization: `Bearer ${tok.mgrChq!}` } })).status, 403);
+    assert.equal((await fetch(`${API}/exports/backup`, { headers: { Authorization: `Bearer ${tok.mgrRaiz!}` } })).status, 200);
+    assert.equal((await fetch(`${API}/exports/backup`, { headers: { Authorization: `Bearer ${banco.admin}` } })).status, 200);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
+describe('D-7 · el supervisor lee oficinas, acotado a las suyas; el gerente regional se da de alta por API', () => {
+  it('🔴 el supervisor ve sólo su agencia (con la ruta completa) y 404 en el detalle de las demás', async () => {
+    const mias = await offices(tok.supMV!);
+    assert.deepEqual(mias.map((o) => o.id), [off.MV!.id]);
+    assert.equal(mias[0]!.fullName, 'Banco Sur › Chuquisaca › Mesa Verde');
+    assert.equal((await call(tok.supMV!, 'GET', `/branches/${off.MV!.id}`)).status, 200);
+    assert.equal((await call(tok.supMV!, 'GET', `/branches/${off.PAD!.id}`)).status, 404);
+    assert.equal((await call(tok.supMV!, 'POST', '/branches', { name: 'X', parentId: off.CHQ!.id, typeId: banco.tipo.AGENCIA })).status, 403, 'leer no es escribir');
+  });
+
+  it('el supervisor sin oficina no ve ninguna; el regional ve su regional y sus agencias', async () => {
+    assert.deepEqual(await offices(tok.supNada!), []);
+    assert.deepEqual((await offices(tok.mgrChq!)).map((o) => o.id).sort(), [off.CHQ!, off.MV!, off.CEN!, off.LYV!, off.PAD!, off.MON!, off.CAM!].map((o) => o.id).sort());
+    assert.equal((await offices(banco.admin)).length, 10 + 1);
+  });
+
+  it('🔴 MANAGER se invita por API, pero sin oficina → 422; con oficina queda asignado a ella (no a la raíz)', async () => {
+    const roles = (await call<{ id: string; name: string }[]>(banco.admin, 'GET', '/roles')).data!;
+    const mgr = roles.find((r) => r.name === 'MANAGER');
+    assert.ok(mgr, 'MANAGER es asignable');
+    const base = { firstName: 'Reg', lastName: 'Cbba', roleId: mgr!.id };
+    const sin = await call(banco.admin, 'POST', '/users/invite', { ...base, email: `reg-sin-${suffix}@ejemplo.com` });
+    assert.equal(sin.status, 422);
+    assert.equal(sin.error?.code, 'MANAGER_NEEDS_OFFICE');
+    const con = await call<{ userId: string }>(banco.admin, 'POST', '/users/invite', { ...base, email: `reg-con-${suffix}@ejemplo.com`, branchId: off.CBBA!.id });
+    assert.equal(con.status, 201, JSON.stringify(con.error));
+    const asg = await prisma.userBranchAssignment.findMany({ where: { userId: con.data!.userId, revokedAt: null } });
+    assert.deepEqual(asg.map((a) => a.branchId), [off.CBBA!.id]);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
 describe('B-S7 · la analítica respeta el alcance (antes bastaba report:read para ver toda la cuenta)', () => {
   const outstanding = async (token: string, q = ''): Promise<number> => {
     const r = await call<Summary>(token, 'GET', `/analytics/summary${q}`);

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { AssignableRole, InvitedMember } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Input } from '@/components/ui';
+import { OfficeSelect } from '@/components/office-select';
+import type { OfficeOption } from '@/lib/offices';
 import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
 import { postJson } from '@/lib/client';
@@ -12,7 +14,7 @@ import { isKnownRole } from '@/lib/team';
 import { InvitationCode } from './invitation-code';
 import { TeamIcon } from './team-ui';
 
-const EMPTY = { firstName: '', lastName: '', email: '', roleId: '' };
+const EMPTY = { firstName: '', lastName: '', email: '', roleId: '', branchId: '' };
 
 /**
  * Invitar a alguien al equipo.
@@ -23,9 +25,12 @@ const EMPTY = { firstName: '', lastName: '', email: '', roleId: '' };
  */
 export function InviteButton({
   roles,
+  offices,
   full,
 }: {
   roles: AssignableRole[];
+  /** Oficinas activas: el gerente regional (MANAGER) necesita una; su alcance es esa oficina y lo que cuelga de ella. */
+  offices: OfficeOption[];
   /** Ya no quedan asientos en el plan. */
   full: boolean;
 }) {
@@ -52,12 +57,16 @@ export function InviteButton({
     if (invited) router.refresh();
   }
 
+  const selected = roles.find((r) => r.id === form.roleId);
+  const needsOffice = selected?.name === 'MANAGER';
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
     const { ok, data } = await postJson<InvitedMember>('/api/users', {
       ...form,
+      branchId: needsOffice ? form.branchId : undefined,
       email: form.email.trim().toLowerCase(),
     });
     setBusy(false);
@@ -70,7 +79,6 @@ export function InviteButton({
   }
 
   const label = (name: string) => (isKnownRole(name) ? tr(name) : name);
-  const selected = roles.find((r) => r.id === form.roleId);
 
   return (
     <>
@@ -146,6 +154,18 @@ export function InviteButton({
                 ))}
               </select>
             </Field>
+
+            {needsOffice && (
+              <Field label={t('office')}>
+                <OfficeSelect
+                  options={offices}
+                  emptyLabel={t('officePlaceholder')}
+                  value={form.branchId}
+                  onChange={(e) => setForm({ ...form, branchId: e.target.value })}
+                  required
+                />
+              </Field>
+            )}
 
             <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
               <span className="sm:w-36">

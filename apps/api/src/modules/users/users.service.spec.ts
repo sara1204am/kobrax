@@ -9,12 +9,14 @@ const OTHER = '22222222-2222-4222-8222-222222222222';
 const ROLE_ADMIN = 'role-admin';
 const ROLE_COLLECTOR = 'role-collector';
 const ROLE_MANAGER = 'role-manager';
+const ROLE_AUDITOR = 'role-auditor';
 const TARGET = '33333333-3333-4333-8333-333333333333';
 
 const ROLES: Record<string, { id: string; name: string; level: number }> = {
   [ROLE_ADMIN]: { id: ROLE_ADMIN, name: 'ACCOUNT_ADMIN', level: 90 },
   [ROLE_COLLECTOR]: { id: ROLE_COLLECTOR, name: 'COLLECTOR', level: 30 },
   [ROLE_MANAGER]: { id: ROLE_MANAGER, name: 'MANAGER', level: 70 },
+  [ROLE_AUDITOR]: { id: ROLE_AUDITOR, name: 'AUDITOR', level: 40 },
 };
 
 function member(over: Record<string, unknown> = {}) {
@@ -350,9 +352,15 @@ describe('UsersService.updateMember — guardas', () => {
     assert.deepEqual(calls.countWhere!.user, { status: 'ACTIVE' });
   });
 
-  it('rechaza un rol que el móvil no administra (MANAGER es de la web)', async () => {
+  it('rechaza un rol que no se asigna por aquí (AUDITOR es de la web)', async () => {
     const { service } = makeService();
-    await rejectsWithCode(service.updateMember(OTHER, { roleId: ROLE_MANAGER }), 'USER_ROLE_NOT_ALLOWED');
+    await rejectsWithCode(service.updateMember(OTHER, { roleId: ROLE_AUDITOR }), 'USER_ROLE_NOT_ALLOWED');
+  });
+
+  it('F13: MANAGER se puede asignar, pero SIN oficina se rechaza (MANAGER_NEEDS_OFFICE)', async () => {
+    const { service, calls } = makeService();
+    await rejectsWithCode(service.updateMember(OTHER, { roleId: ROLE_MANAGER }), 'MANAGER_NEEDS_OFFICE');
+    assert.equal(calls.updated, undefined);
   });
 
   it('acepta un rol de MOBILE_ROLES y audita', async () => {
@@ -442,9 +450,14 @@ describe('UsersService.invite — alta por invitación (S2)', () => {
     assert.equal(calls.mail.length, 0);
   });
 
-  it('rechaza un rol que el móvil no administra', async () => {
+  it('rechaza un rol que no se asigna por aquí', async () => {
     const { service } = makeService({ seats: 0 });
-    await rejectsWithCode(service.invite({ ...INVITE, roleId: ROLE_MANAGER }), 'USER_ROLE_NOT_ALLOWED');
+    await rejectsWithCode(service.invite({ ...INVITE, roleId: ROLE_AUDITOR }), 'USER_ROLE_NOT_ALLOWED');
+  });
+
+  it('F13: invitar a un MANAGER exige oficina', async () => {
+    const { service } = makeService({ seats: 0 });
+    await rejectsWithCode(service.invite({ ...INVITE, roleId: ROLE_MANAGER }), 'MANAGER_NEEDS_OFFICE');
   });
 
   it('correo ya registrado → 409 (lo caza el @unique, no un chequeo previo)', async () => {
@@ -492,11 +505,11 @@ describe('UsersService.remove — cancelar la invitación (S2-D5)', () => {
 });
 
 describe('UsersService.listRoles', () => {
-  it('sólo ofrece los 3 roles del móvil, de mayor a menor nivel', async () => {
+  it('ofrece los roles asignables (con el gerente regional), de mayor a menor nivel', async () => {
     const { service, calls } = makeService();
     const roles = await service.listRoles();
     assert.deepEqual(calls.rolesWhere!.name, {
-      in: ['ACCOUNT_ADMIN', 'SUPERVISOR', 'COLLECTOR'],
+      in: ['ACCOUNT_ADMIN', 'MANAGER', 'SUPERVISOR', 'COLLECTOR'],
     });
     assert.equal(roles[0]!.name, 'ACCOUNT_ADMIN');
   });

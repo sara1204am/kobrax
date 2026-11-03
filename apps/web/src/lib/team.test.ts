@@ -136,9 +136,9 @@ describe('memberActions', () => {
   });
 
   it('un rol que la web no puede volver a asignar no se toca', () => {
-    // GET /roles sólo devuelve ACCOUNT_ADMIN, SUPERVISOR y COLLECTOR: sacar a alguien de
-    // MANAGER sería una puerta de una sola dirección.
-    const a = memberActions(member({ roleName: 'MANAGER' }), YO, TODO);
+    // GET /roles devuelve ACCOUNT_ADMIN, MANAGER, SUPERVISOR y COLLECTOR (F13): sacar a alguien de
+    // AUDITOR sería una puerta de una sola dirección.
+    const a = memberActions(member({ roleName: 'AUDITOR' }), YO, TODO);
     expect(a.changeRole).toBe(false);
     // Pero desactivarlo sí se puede: eso no depende del catálogo de roles.
     expect(a.deactivate).toBe(true);

@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { Prisma, type Branch, type PrismaClient } from '@prisma/client';
-import { MAX_OFFICE_DEPTH, checkOfficeMove, officeDepth, officePath, officePathIds, rebaseOfficePath } from '@kobrax/shared';
+import { MAX_OFFICE_DEPTH, checkOfficeMove, officeInScope, officeDepth, officePath, officePathIds, rebaseOfficePath } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { isUniqueViolation } from '../../common/unique-violation';
 import { serializeBranch, serializeBranchType, type BranchStats, type BranchWithType } from './branches.serializer';
@@ -70,6 +71,7 @@ export class BranchesService {
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
     private readonly plan: PlanLimitsService,
+    private readonly office: OfficeScopeService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -113,9 +115,18 @@ export class BranchesService {
   }
 
   /**
-   * Lista plana del árbol entero (la web arma el árbol con `parentId`/`path`).
-   * Limitación conocida F13 (ver STATUS): devuelve TODO el árbol a quien tenga `office:read` (hoy ADMIN y MANAGER), no sólo su
-   * subárbol; decisión de producto pendiente.
+   * Hasta dónde ve quien lee oficinas: el alcance total (o el gerente asignado a la raíz) ve el árbol entero; el resto, sólo las
+   * oficinas de SUS asignaciones y lo que cuelga de ellas (D-7). Sin asignaciones no ve ninguna (falla cerrado).
+   * `null` = sin restricción.
+   */
+  private async visiblePaths(tx: PrismaClient): Promise<string[] | null> {
+    const scope = await this.office.assignScope(tx);
+    return scope.kind === 'ALL' ? null : scope.paths;
+  }
+
+  /**
+   * Lista plana del árbol (la web arma el árbol con `parentId`/`path`). La ruta completa de cada oficina se calcula con TODOS sus
+   * ancestros aunque quien lee no los vea como filas: «Chuquisaca › Agencia Central» sigue siendo legible para un supervisor.
    */
   async list(): Promise<BranchView[]> {
     return this.tx(async (tx) => {
@@ -124,8 +135,10 @@ export class BranchesService {
         include: { type: { select: { id: true, code: true, name: true } } },
         orderBy: [{ depth: 'asc' }, { active: 'desc' }, { name: 'asc' }],
       });
-      const stats = await this.statsFor(tx, rows);
-      return rows.map((b) => serializeBranch(b, stats.get(b.id)!, rows));
+      const paths = await this.visiblePaths(tx);
+      const visible = paths === null ? rows : rows.filter((b) => officeInScope(b.path, paths));
+      const stats = await this.statsFor(tx, visible);
+      return visible.map((b) => serializeBranch(b, stats.get(b.id)!, rows));
     });
   }
 
@@ -144,6 +157,8 @@ export class BranchesService {
   async detail(id: string): Promise<BranchDetailView> {
     return this.tx(async (tx) => {
       const branch = await this.one(tx, id);
+      const paths = await this.visiblePaths(tx);
+      if (paths !== null && !officeInScope(branch.path, paths)) throw branchNotFound();
       const accountId = this.tenant.accountId;
       const assignments = await tx.userBranchAssignment.findMany({
         where: { branchId: id, revokedAt: null, user: { userAccounts: { some: { accountId, isActive: true } } } },

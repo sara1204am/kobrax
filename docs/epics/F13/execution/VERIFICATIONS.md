@@ -76,3 +76,9 @@ Formato T5. Todas las corridas son **del coordinador** (re-ejecutadas por él, n
 | web | `pnpm --filter @kobrax/web test` / type-check | 7 fallan (**los 7 preexistentes**) · 1221 pasan · type-check OK |
 | móvil | `pnpm --filter @kobrax/mobile test` / type-check | 82 suites · **977 pass** (= base) · 2 errores TS = los 2 preexistentes |
 | SQL | `verify/oficinas-arbol.sql`, `oficinas-permisos.sql`, `alcance-supervisor-agencia.sql` | OK · OK · OK; informe de usuarios sin asignación en cuentas multi-oficina: 0 filas |
+
+## P5 · decisiones de la usuaria (2026-11-03, rama `f13/p5-decisiones`)
+- API unitarias 1847/1847 · integración 172/172 (`REDIS_URL=redis://localhost:6379/7`; si el limitador agota Redis: `docker exec kobrax-redis redis-cli -n 7 flushdb`) · `tsc` api y web limpios · shared build.
+- Web: sólo los 7 fallos preexistentes (arrears-table ×6, today-board ×1); `team.test.ts` actualizado (MANAGER ya es asignable).
+- SQL: `oficinas-arbol`, `oficinas-permisos` (con `office:read` del supervisor) y `alcance-supervisor-agencia` OK sobre `kobrax_it`.
+- Integración nueva con datos reales (`office-scope.it.ts`): Cartera/Clientes/Pagos/Exportes acotados, ficha 404, backup 403, supervisor lee sólo su oficina, MANAGER invitado con y sin oficina.

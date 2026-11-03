@@ -3828,6 +3828,8 @@
       "email": "Email",
       "role": "What will they do?",
       "rolePlaceholder": "Pick a role",
+      "office": "Manager office",
+      "officePlaceholder": "Choose an office",
       "cancel": "Cancel",
       "send": "Send invitation",
       "error": "Could not send the invitation",

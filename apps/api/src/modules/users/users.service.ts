@@ -20,6 +20,7 @@ import { InviteMemberDto, UpdateMemberDto, UpdateProfileDto } from './dto/user.d
 import {
   cannotEditSelf,
   lastAdmin,
+  managerNeedsOffice,
   memberNotFound,
   notPending,
   profileNotFound,
@@ -212,6 +213,14 @@ export class UsersService {
         if (!branch.active) throw branchInactive();
       }
 
+      // Un gerente regional sin oficina no tendría alcance: el rol resultante MANAGER exige una oficina (la que se manda o la vigente).
+      const resultingRoleId = dto.roleId ?? before.roleId;
+      if (dto.roleId !== undefined || dto.branchId !== undefined) {
+        const resulting = changesRole ? await tx.role.findUnique({ where: { id: resultingRoleId }, select: { name: true } }) : before.role;
+        const resultingBranch = dto.branchId !== undefined ? dto.branchId : before.branchId;
+        if (resulting?.name === RoleType.MANAGER && !resultingBranch) throw managerNeedsOffice();
+      }
+
       // F13: la oficina de la persona vive en `user_branch_assignments` (fuente del alcance) y se espeja en `user_accounts.branch_id`.
       if (dto.branchId !== undefined) await this.syncAssignment(tx, userId, dto.branchId);
 
@@ -259,6 +268,8 @@ export class UsersService {
     const role = await this.prisma.role.findUnique({ where: { id: dto.roleId } });
     if (!role || !isMobileRole(role.name)) throw roleNotAllowed();
 
+    if (role.name === RoleType.MANAGER && !dto.branchId) throw managerNeedsOffice();
+
     const code = newInvitationCode();
     // Hash real de un secreto que nadie conoce: el pendiente no puede entrar ni por
     // accidente. `login()` además corta antes por `status !== 'ACTIVE'`.
@@ -286,8 +297,14 @@ export class UsersService {
             profile: { create: { firstName: dto.firstName, lastName: dto.lastName } },
           },
         });
+        if (dto.branchId) {
+          const branch = await tx.branch.findFirst({ where: { id: dto.branchId, deletedAt: null }, select: { active: true } });
+          if (!branch) throw branchNotFound();
+          if (!branch.active) throw branchInactive();
+          await this.syncAssignment(tx, user.id, dto.branchId);
+        }
         const member = await tx.userAccount.create({
-          data: { userId: user.id, accountId, roleId: role.id, isDefault: true },
+          data: { userId: user.id, accountId, roleId: role.id, isDefault: true, branchId: dto.branchId ?? null },
           include: MEMBER_INCLUDE,
         });
         await tx.passwordResetToken.create({
