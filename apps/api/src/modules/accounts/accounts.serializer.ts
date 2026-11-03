@@ -1,10 +1,22 @@
 import type { Account } from '@prisma/client';
-import { arrearsMethodOf, effectiveLimits } from '@kobrax/shared';
+import { arrearsMethodOf, billingMissingOf, billingOf, effectiveLimits, preferencesOf } from '@kobrax/shared';
 
 /** Lo que llegue de settings es JSON de la base: cualquier cosa fuera de 0–2 cae al default 2. */
 function currencyDecimalsOf(settings: unknown): number {
   const raw = (settings as { currencyDecimals?: unknown } | null)?.currencyDecimals;
   return typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 && raw <= 2 ? raw : 2;
+}
+
+/**
+ * Cuándo termina la prueba, **sólo mientras la cuenta está en prueba**. `trialEndsAt` se queda en
+ * `settings` como constancia aun después de vencida (ver `plan-lifecycle.service`), y devolverla
+ * entonces haría decir a la pantalla «vence en 0 días» de una cuenta que ya pasó a otro estado.
+ * Un valor que no es una fecha cae a `null`.
+ */
+function trialEndsAtOf(status: string, settings: unknown): string | null {
+  if (status !== 'TRIAL') return null;
+  const raw = (settings as { trialEndsAt?: unknown } | null)?.trialEndsAt;
+  return typeof raw === 'string' && !Number.isNaN(new Date(raw).getTime()) ? raw : null;
 }
 
 /**
@@ -29,6 +41,7 @@ export function serializeAccount(
     actionsPerMonth: number;
   },
 ) {
+  const billing = billingOf(a.configuration);
   return {
     id: a.id,
     businessName: a.businessName,
@@ -36,9 +49,19 @@ export function serializeAccount(
     accountType: a.accountType,
     status: a.status,
     planCode: a.planCode,
+    trialEndsAt: trialEndsAtOf(a.status, a.settings),
     countryCode: a.countryCode,
     currencyCode: a.currencyCode,
     timezone: a.timezone,
+    logoUrl: a.logoUrl,
+    phone: a.phone,
+    email: a.email,
+    website: a.website,
+    address: a.address,
+    city: a.city,
+    preferences: preferencesOf(a.configuration),
+    billing,
+    billingMissing: billingMissingOf(billing),
     currencyDecimals: currencyDecimalsOf(a.settings),
     // D20: método de mora por defecto de los créditos nuevos (también vive en settings).
     arrearsMethod: arrearsMethodOf(a.settings),

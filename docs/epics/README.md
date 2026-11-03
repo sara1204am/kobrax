@@ -16,7 +16,7 @@ alcance cerrado. Esta carpeta es la fuente de verdad operativa de cada fase.
 | [EPIC-F2a](./EPIC-F2a-nucleo-auth.md) | Núcleo Auth + Multi-tenant + Bootstrap API | ✅ Completado | CU-01, RF-01/03, RNF-01/04 |
 | [EPIC-F2b](./EPIC-F2b-gestion-cuenta.md) | Gestión de cuenta, MFA avanzado, offline | ✅ Completado | CU-01, RNF-01/05 |
 | [EPIC-F4](./EPIC-F4-core-financiero.md) | **Core Financiero (clientes/créditos)** — adelantado · fases en [`F4/`](./F4/) | 📋 Listo para iniciar | RF-04/05, CU-02 |
-| EPIC-F3 | Identidad y Organización + **administración RBAC** | ⏳ Diferido a fin de proyecto | RF-01/02/03 |
+| EPIC-F3 | Identidad y Organización + **administración RBAC** | ⏳ Diferido · **organización absorbida por [F13](./EPIC-F13-organizacion-multi-oficina.md)** ([ADR-0001](./F13/decisions/ADR-0001-f13-absorbe-f3.md)); la administración de roles se reserva en [F14](./F14/README.md) | RF-01/02/03 |
 | [EPIC-F5](./EPIC-F5-casos-cobranza.md) | Casos de cobranza (v2 enterprise) | 🚧 Base de Fase 1 (subset) implementada | RF-06, CU-03 |
 | [EPIC-F6](./EPIC-F6-rutas-campo-evidencia.md) | Rutas + campo + evidencia | ✅ Base completada | RF-07/08, CU-04 |
 | [EPIC-F7](./EPIC-F7-pagos.md) | Pagos | ✅ Base completada | RF-09, CU-05 |
@@ -25,6 +25,8 @@ alcance cerrado. Esta carpeta es la fuente de verdad operativa de cada fase.
 | [EPIC-F10](./EPIC-F10-app-mobile.md) | App Mobile | 📋 Listo para iniciar | CU-04, RNF-05 |
 | EPIC-F11 | Analítica y reportes | ⏳ Pendiente | RF-10, RNF-04 |
 | EPIC-F12 | Hardening y cumplimiento | ⏳ Pendiente | RNF-01/02/03/04 |
+| [EPIC-F13](./EPIC-F13-organizacion-multi-oficina.md) | **Organización multi-oficina** (Nacional → Regional → Agencia) — arnés en [`F13/`](./F13/README.md) | 🚧 Arnés creado (G0); Discovery sin autorizar | A trazar en G1 |
+| [EPIC-F14](./F14/README.md) | **Roles y permisos** (web lista; móvil por alinear) | ⏳ Reservado; arranca tras F13/G2 | A trazar |
 
 Estados: 📋 Listo para iniciar · 🚧 En curso · ✅ Completado · ⏳ Pendiente (esqueleto)
 
@@ -53,6 +55,12 @@ Todo epic sigue esta estructura (copiar de un epic existente):
 8. **Estrategia de tests** — unit / integration / e2e y cobertura objetivo.
 9. **Observabilidad & métricas** — logs, auditoría, métricas clave.
 10. **Riesgos y mitigaciones**.
+
+## Épicas grandes con arnés
+
+Las épicas que cruzan DB, API, web y móvil y duran varias sesiones (F13, luego F14) usan el marco de
+**[`_framework/`](./_framework/README.md)**: clases de evidencia, gates G0–G7, protocolo de contexto, HUB y ADR, operado con
+el skill `/epic-fase`. No reemplaza a los skills de F10 (`f10-etapa`, `f10-validar-plan`), que siguen siendo del móvil.
 
 ## Checklist de seguridad transversal (aplica a TODA fase)
 

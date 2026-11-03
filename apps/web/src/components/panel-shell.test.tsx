@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/msw-server';
+import { AccountBrandProvider } from './account-brand';
 import { PanelShell } from './panel-shell';
 import { visibleNav } from '@/lib/nav';
 
@@ -178,5 +179,26 @@ describe('PanelShell · campanita y contador de la agenda (F4/11)', () => {
       </PanelShell>,
     );
     expect(screen.getAllByLabelText('2 gestiones pendientes')[0]!.className).not.toContain('bg-k-danger');
+  });
+});
+
+describe('PanelShell — logo del negocio', () => {
+  const renderWith = (brand: { name: string; phone: string | null; logoUrl: string | null } | null) =>
+    render(
+      <AccountBrandProvider brand={brand}>
+        <PanelShell user={USER} accounts={ACCOUNTS} nav={visibleNav(['client:read'])}>
+          <p>contenido</p>
+        </PanelShell>
+      </AccountBrandProvider>,
+    );
+
+  it('con logo cargado lo muestra en la barra superior, con el nombre del negocio como texto alternativo', () => {
+    renderWith({ name: 'Cobranzas Pérez', phone: null, logoUrl: '/api/uploads/abc.png' });
+    expect(screen.getByRole('img', { name: 'Cobranzas Pérez' })).toHaveAttribute('src', '/api/uploads/abc.png');
+  });
+
+  it('sin logo, o sin marca, no dibuja ninguna imagen del negocio', () => {
+    renderWith({ name: 'Cobranzas Pérez', phone: null, logoUrl: null });
+    expect(screen.queryByRole('img', { name: 'Cobranzas Pérez' })).not.toBeInTheDocument();
   });
 });

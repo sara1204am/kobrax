@@ -27,6 +27,7 @@ import { isKnownRole } from '@/lib/team';
 import { PaymentActions } from '../../pagos/payment-actions';
 import { ActivityCard } from './activity-card';
 import { ActivityResult } from './activity-result';
+import { SendWhatsappButton } from '@/components/send-whatsapp-dialog';
 import { RegisterActivityButton } from './activity-form';
 import { ArrearsHistory } from './arrears-history';
 import { FichaSummary } from './ficha-summary';
@@ -69,7 +70,7 @@ export async function FichaGestion({
   const t = await getTranslations('panel.mora');
   const locale = await getLocale();
 
-  const [detail, episodes, metrics, promises, notes, payments, methods, banks, reasons, me, team, account] = await Promise.all([
+  const [detail, episodes, metrics, promises, notes, payments, methods, banks, reasons, me, team, account, templates] = await Promise.all([
     apiCall<MoraCreditDetail>(`/mora/${creditId}`, { method: 'GET', auth: true }),
     apiCall<MoraEpisode[]>(`/mora/${creditId}/episodes`, { method: 'GET', auth: true }),
     apiCall<RecoveryMetrics>(`/mora/${creditId}/metrics`, { method: 'GET', auth: true }),
@@ -83,6 +84,8 @@ export async function FichaGestion({
     apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
     apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
+    // Las plantillas que el equipo armó en Cuenta → Mensajes: las mismas que ofrece la agenda y el teléfono.
+    apiCall<{ code: string; label: string; metadata?: { body?: string } | null }[]>(`/catalogs/${CatalogType.WHATSAPP_TEMPLATE}`, { method: 'GET', auth: true }),
   ]);
 
   if (detail.status === 404) notFound();
@@ -137,6 +140,14 @@ export async function FichaGestion({
           banks={banks.body.data ?? []}
           reasons={reasons.status === 200 ? (reasons.body.data ?? []) : []}
           incomeSource={client?.status === 200 ? (client.body.data?.incomeProfile?.incomeSourceCode ?? undefined) : undefined}
+        />
+      )}
+      {/* Escribirle por WhatsApp con una plantilla; se registra como gestión de mensaje. */}
+      {canWrite && (
+        <SendWhatsappButton
+          templates={templates.status === 200 ? (templates.body.data ?? []) : []}
+          clientId={item.clientId}
+          creditId={item.creditId}
         />
       )}
       {/* Registrar un pago es de quien puede cobrar (`payment:write`); el componente se oculta solo sin el permiso. */}

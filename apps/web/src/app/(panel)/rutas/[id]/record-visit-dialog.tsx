@@ -23,6 +23,7 @@ import type { CatalogOption } from '@/components/client-form';
 import { Modal } from '@/components/modal';
 import { dayDate, money } from '@/lib/format';
 import { postJson } from '@/lib/client';
+import { usePaymentMethods } from '@/lib/use-payment-methods';
 
 /** La parada sobre la que se registra: lo que el formulario necesita saber de ella. */
 export interface RecordStop {
@@ -57,7 +58,6 @@ const VARIANT_UI: Record<VariantKey, { tile: string; ring: string; path: string 
 const REVISIT_VARIANTS: readonly VariantKey[] = ['NO_ANSWER', 'NO_CONTACT_VISIT'];
 const REVISIT_SLOTS = [AgendaTimeSlot.MORNING, AgendaTimeSlot.AFTERNOON, AgendaTimeSlot.NIGHT] as const;
 
-const METHODS = ['CASH', 'QR', 'TRANSFER'] as const;
 
 /**
  * **Registrar una gestión desde el panel** (F4/12 · decisión 2): el cobrador se olvidó, no tenía señal o se quedó sin
@@ -97,7 +97,6 @@ export function RecordVisitDialog({
 }) {
   const t = useTranslations('panel.routes.record');
   const tCtx = useTranslations('panel.mora.ficha.activity');
-  const tMethod = useTranslations('panel.payments.method');
   const router = useRouter();
 
   const [variant, setVariant] = useState<VariantKey | null>(null);
@@ -112,7 +111,8 @@ export function RecordVisitDialog({
   const [revisitDate, setRevisitDate] = useState(today);
   const [revisitSlot, setRevisitSlot] = useState<AgendaTimeSlot>(AgendaTimeSlot.AFTERNOON);
   const [categories, setCategories] = useState<{ code: string; label: string }[]>([]);
-  const [promiseMethods, setPromiseMethods] = useState<{ code: string; label: string }[]>([]);
+  const methods = usePaymentMethods(variant === 'PAID' || variant === 'PROMISE');
+  const promiseMethods = methods.catalogOptions;
   // F4/13 · E4: motivo de no pago, cuándo espera cobrar y quién responde. Opcional; si el catálogo no llega, no se ofrece.
   const [reasons, setReasons] = useState<CatalogOption[]>([]);
   const [ctx, setCtx] = useState(emptyActivityContext());
@@ -151,17 +151,11 @@ export function RecordVisitDialog({
       .then((b) => setCategories(Array.isArray(b?.data) ? b.data : []))
       .catch(() => setCategories([]));
   }, [variant, categories.length]);
+  // La promesa se valida contra el catálogo: si el código elegido no está en él, se pasa al primero.
   useEffect(() => {
-    if (variant !== 'PROMISE' || promiseMethods.length > 0) return;
-    void fetch('/api/catalogs/PAYMENT_METHOD')
-      .then((r) => r.json())
-      .then((b) => {
-        const list: { code: string; label: string }[] = Array.isArray(b?.data) ? b.data : [];
-        setPromiseMethods(list);
-        if (list.length > 0) setForm((f) => (list.some((m) => m.code === f.paymentMethodCode) ? f : { ...f, paymentMethodCode: list[0]!.code }));
-      })
-      .catch(() => setPromiseMethods([]));
-  }, [variant, promiseMethods.length]);
+    if (variant !== 'PROMISE' || promiseMethods.length === 0) return;
+    setForm((f) => (promiseMethods.some((m) => m.code === f.paymentMethodCode) ? f : { ...f, paymentMethodCode: promiseMethods[0]!.code }));
+  }, [variant, promiseMethods]);
 
   const cap = paymentCap(stop);
   const currency = stop.currency ?? 'BOB';
@@ -230,7 +224,7 @@ export function RecordVisitDialog({
       const r = await fetch('/api/payments', {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'idempotency-key': `visit-${visitId.current}` },
-        body: JSON.stringify({ creditId: stop.creditId, amount, method: form.paymentMethodCode, visitId: visitId.current, notes: form.notes.trim() || undefined }),
+        body: JSON.stringify({ creditId: stop.creditId, amount, method: methods.ledgerOf(form.paymentMethodCode) ?? 'CASH', visitId: visitId.current, notes: form.notes.trim() || undefined }),
       }).catch(() => null);
       if (!r?.ok) failed.push(t('payFailed'));
     }
@@ -392,9 +386,9 @@ export function RecordVisitDialog({
                         {t('method')}
                       </label>
                       <select id="rv-method" value={form.paymentMethodCode} onChange={(e) => set('paymentMethodCode', e.target.value)} className={input}>
-                        {METHODS.map((m) => (
-                          <option key={m} value={m}>
-                            {tMethod(m)}
+                        {methods.options.map((m) => (
+                          <option key={m.code} value={m.code}>
+                            {m.label}
                           </option>
                         ))}
                       </select>

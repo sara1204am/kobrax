@@ -7,6 +7,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import type { ClientDetail, CreditOption } from '@kobrax/shared';
 import type { CatalogOption } from '@/components/client-form';
 import { Badge, PageHeader, Section } from '@/components/panel-ui';
+import { SendWhatsappDialog } from '@/components/send-whatsapp-dialog';
 import { Button } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
@@ -71,6 +72,7 @@ export function ClientCard({
   hasActiveCredits?: boolean;
 }) {
   const t = useTranslations('portfolio');
+  const tw = useTranslations('panel.whatsapp');
   const locale = useLocale();
   const router = useRouter();
   const toast = useToast();
@@ -79,6 +81,7 @@ export function ClientCard({
   const [revealed, setRevealed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmBaja, setConfirmBaja] = useState(false);
+  const [writing, setWriting] = useState(false);
   const [editando, setEditando] = useState<SectionKey | null>(null);
 
   const canWrite = can('client:write');
@@ -171,6 +174,16 @@ export function ClientCard({
             {/* Navegación llana, no `fetch`: así el navegador maneja la descarga solo, con el
                 `Content-Disposition` que manda el backend. Revela PII (igual que «Mostrar») y
                 la API lo audita como `client/PII_REVEAL`. */}
+            {/* Escribirle con una plantilla de la cuenta; queda como gestión pendiente de resultado. */}
+            {can('collection:write') && (
+              <button
+                type="button"
+                onClick={() => setWriting(true)}
+                className="text-[13px] font-medium text-k-periwinkle hover:underline"
+              >
+                {tw('send')}
+              </button>
+            )}
             <a href={`/api/clients/${client.id}/pdf`} className="text-[13px] font-medium text-k-purple hover:underline">
               {t('downloadPdf')}
             </a>
@@ -188,6 +201,8 @@ export function ClientCard({
           </>
         }
       />
+
+      <SendWhatsappDialog open={writing} onClose={() => setWriting(false)} clientId={client.id} />
 
       {/*
        * Dos columnas: a la izquierda lo que se trabaja —quién es, los créditos, con quién hablar,

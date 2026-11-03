@@ -19,6 +19,13 @@ describe('validateAgendaDetails', () => {
     expect(errorsOf(AgendaItemType.CALL, { contactId: '78012345' })).toHaveLength(1);
   });
 
+  it('WHATSAPP conserva la plantilla elegida (opcional) y sigue sin ella', () => {
+    const con = validateAgendaDetails(AgendaItemType.WHATSAPP, { contactId: UUID, message: 'Hola', templateCode: ' REM ' });
+    expect(con).toEqual({ ok: true, value: { contactId: UUID, message: 'Hola', templateCode: 'REM' } });
+    const sin = validateAgendaDetails(AgendaItemType.WHATSAPP, { contactId: UUID, message: 'Hola' });
+    expect(sin).toEqual({ ok: true, value: { contactId: UUID, message: 'Hola' } });
+  });
+
   it('WHATSAPP exige contacto y mensaje no vacío (≤ 1000)', () => {
     const res = validateAgendaDetails(AgendaItemType.WHATSAPP, { contactId: UUID, message: '  Hola  ' });
     expect(res).toEqual({ ok: true, value: { contactId: UUID, message: 'Hola' } });

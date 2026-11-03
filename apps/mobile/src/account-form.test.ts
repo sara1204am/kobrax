@@ -77,9 +77,9 @@ describe('validateSignup', () => {
 });
 
 describe('COUNTRY_OPTIONS', () => {
-  it('sale de SUPPORTED_CURRENCIES: 6 países, uno por moneda', () => {
-    expect(COUNTRY_OPTIONS).toHaveLength(6);
-    expect(COUNTRY_OPTIONS.map((c) => c.code).sort()).toEqual(['AR', 'BO', 'CO', 'MX', 'PE', 'US']);
+  it('sale de SUPPORTED_CURRENCIES: 7 países, uno por moneda', () => {
+    expect(COUNTRY_OPTIONS).toHaveLength(7);
+    expect(COUNTRY_OPTIONS.map((c) => c.code).sort()).toEqual(['AR', 'BO', 'CL', 'CO', 'MX', 'PE', 'US']);
   });
 
   it('cada país trae su moneda acoplada (S1-D1: no se pueden combinar mal)', () => {

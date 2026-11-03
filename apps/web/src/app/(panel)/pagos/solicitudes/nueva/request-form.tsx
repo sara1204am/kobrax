@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { PAYMENT_METHODS, type PaymentMethod, type PaymentRequestItem } from '@kobrax/shared';
+import type { PaymentRequestItem } from '@kobrax/shared';
+import { usePaymentMethods } from '@/lib/use-payment-methods';
 import { Card, EmptyState } from '@/components/panel-ui';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
 import { usePermissions } from '@/components/permissions';
@@ -27,7 +28,8 @@ export function RequestForm({ creditId, creditCode }: { creditId: string; credit
   const { can } = usePermissions();
 
   const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState<PaymentMethod>('QR');
+  const methods = usePaymentMethods();
+  const [methodCode, setMethodCode] = useState('QR');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,7 +49,7 @@ export function RequestForm({ creditId, creditCode }: { creditId: string; credit
     const res = await sendJson<PaymentRequestItem>('/api/payment-requests', {
       creditId,
       amount: value,
-      method,
+      method: methods.ledgerOf(methodCode) ?? 'QR',
     });
     if (!res.ok) {
       setBusy(false);
@@ -70,10 +72,10 @@ export function RequestForm({ creditId, creditCode }: { creditId: string; credit
           <Input value={amount} onChange={(e) => setAmount(e.target.value)} disabled={busy} inputMode="decimal" />
         </Field>
         <Field label={t('request.method')}>
-          <Select value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)} disabled={busy}>
-            {PAYMENT_METHODS.map((m) => (
-              <option key={m} value={m}>
-                {t(`method.${m}`)}
+          <Select value={methodCode} onChange={(e) => setMethodCode(e.target.value)} disabled={busy}>
+            {methods.options.map((m) => (
+              <option key={m.code} value={m.code}>
+                {m.label}
               </option>
             ))}
           </Select>

@@ -6,11 +6,13 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { AuthAccountOption, NotificationPayload } from '@kobrax/shared';
 import { LocaleSwitch } from './locale-switch';
+import { useAccountBrand } from './account-brand';
 import { crumbsFor, type NavItem, type NavKey } from '@/lib/nav';
 import { postJson } from '@/lib/client';
 import { notificationHref } from '@/lib/notifications';
 import { publishSessionEvent } from '@/lib/session-sync';
 import { SessionWatcher } from './session-watcher';
+import { BillingAlert } from './billing-alert';
 
 /** Fila de cualquiera de los dos menús de la topbar: 44 px de toque, ancho completo. */
 const MENU_ITEM =
@@ -43,6 +45,7 @@ export function PanelShell({
   accounts,
   nav,
   badges,
+  billingMissing,
   children,
 }: {
   user: ShellUser;
@@ -50,6 +53,8 @@ export function PanelShell({
   nav: NavItem[];
   /** Contadores del menú por rótulo (hoy sólo `agenda`). `urgent` = hay algo vencido: el contador va en rojo. */
   badges?: Record<string, { count: number; urgent?: boolean }>;
+  /** Datos fiscales obligatorios sin cargar; con alguno, el panel muestra el aviso de facturación. */
+  billingMissing?: string[];
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -128,6 +133,7 @@ export function PanelShell({
         />
         <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-5 sm:px-5 md:px-6 lg:px-8">
           <SessionWatcher session={{ userId: user.userId, accountId: user.accountId, sessionId: user.sessionId }} />
+          <BillingAlert missing={billingMissing ?? []} />
           {children}
         </main>
       </div>
@@ -349,6 +355,7 @@ function Topbar({
   const t = useTranslations('panel');
   const pathname = usePathname();
   const crumbs = crumbsFor(pathname);
+  const brand = useAccountBrand();
   const current = accounts.find((a) => a.id === user.accountId);
   /*
    * El selector aparece con más de una empresa **o cuando la activa no está en la lista**.
@@ -371,6 +378,16 @@ function Topbar({
         <Icon name="menu" />
       </button>
 
+      {brand?.logoUrl && (
+        // eslint-disable-next-line @next/next/no-img-element -- lo sirve el BFF con la sesión
+        <img
+          src={brand.logoUrl}
+          alt={brand.name}
+          className="hidden h-8 max-w-[120px] shrink-0 object-contain md:block"
+          // Si el archivo no está (cuenta cambiada, borrado a mano) se esconde en vez de dejar el ícono roto.
+          onError={(e) => (e.currentTarget.style.display = 'none')}
+        />
+      )}
       <nav aria-label={t('breadcrumb')} className="min-w-0 flex-1">
         <ol className="flex items-center gap-1.5 text-[14px]">
           {crumbs.map((crumb, i) => (
@@ -449,11 +466,14 @@ function Topbar({
 export function Dropdown({
   label,
   children,
+  chevron = true,
   summaryClass = 'flex min-h-[44px] cursor-pointer list-none items-center gap-2 rounded-xl px-2 text-[14px] text-k-text-2 hover:bg-k-bg [&::-webkit-details-marker]:hidden',
   panelClass = 'absolute right-0 z-20 mt-1 w-[260px] overflow-hidden rounded-xl border border-k-border bg-white shadow-k-card',
 }: {
   label: ReactNode;
   children: ReactNode;
+  /** `false` para un disparador que es sólo un ícono (el menú de tres puntos de una fila). */
+  chevron?: boolean;
   summaryClass?: string;
   panelClass?: string;
 }) {
@@ -484,7 +504,7 @@ export function Dropdown({
     <details ref={ref} className="relative">
       <summary className={summaryClass}>
         {label}
-        <Icon name="chevron" className="h-4 w-4 text-k-muted" />
+        {chevron && <Icon name="chevron" className="h-4 w-4 text-k-muted" />}
       </summary>
       <div className={panelClass}>{children}</div>
     </details>
@@ -654,7 +674,19 @@ const ICONS: Record<
   | 'mail'
   | 'file'
   | 'upload'
-  | 'bell',
+  | 'bell'
+  | 'search'
+  | 'filter'
+  | 'plus'
+  | 'info'
+  | 'dots'
+  | 'bank'
+  | 'ban'
+  | 'briefcase'
+  | 'swap'
+  | 'xcircle'
+  | 'tag'
+  | 'database',
   string
 > = {
   home: 'M4 10.5 12 4l8 6.5M6.5 9.5V20h11V9.5',
@@ -687,13 +719,29 @@ const ICONS: Record<
   upload: 'M7 16.5a3.5 3.5 0 0 1-.4-7A5 5 0 0 1 16.5 9a3.5 3.5 0 0 1 .5 7M12 20v-8m0 0-2.5 2.5M12 12l2.5 2.5',
   // La campana: cuerpo + badajo, nada más.
   bell: 'M6 10.5a6 6 0 0 1 12 0c0 3.4 1 5 2 6H4c1-1 2-2.6 2-6zM10 19a2 2 0 0 0 4 0',
+  // Controles de listado: buscar, filtrar, agregar, avisar y el menú de tres puntos de una fila.
+  search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
+  filter: 'M4 5h16l-6 7.5V19l-4 1.5v-8z',
+  plus: 'M12 5v14M5 12h14',
+  info: 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM12 11v5M12 8h.01',
+  dots: 'M12 5h.01M12 12h.01M12 19h.01',
+  // Vocabularios del negocio (Cuenta → Catálogos).
+  bank: 'M3.5 9.5 12 4l8.5 5.5zM6 11v6M10 11v6M14 11v6M18 11v6M4 19.5h16',
+  ban: 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM6 6l12 12',
+  briefcase: 'M4 8h16v11H4zM9 8V6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M4 13h16',
+  swap: 'M4 8h13m0 0-3-3m3 3-3 3M20 16H7m0 0 3-3m-3 3 3 3',
+  xcircle: 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM9 9l6 6M15 9l-6 6',
+  tag: 'M3.5 12.5V4.5h8l9 9-8 8zM8 8.5h.01',
+  database: 'M5 6c0-1.4 3.1-2.5 7-2.5s7 1.1 7 2.5-3.1 2.5-7 2.5S5 7.4 5 6zM5 6v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6M5 12v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-6',
 };
+
+export type IconName = keyof typeof ICONS;
 
 export function Icon({
   name,
   className = 'h-[19px] w-[19px] shrink-0',
 }: {
-  name: keyof typeof ICONS;
+  name: IconName;
   className?: string;
 }) {
   return (

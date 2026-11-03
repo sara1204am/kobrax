@@ -250,6 +250,21 @@ describe('AccountsService.findMine', () => {
     assert.equal('limitsOverride' in res, false, 'lo negociado con ese cliente es interno');
   });
 
+  it('trialEndsAt sale sólo mientras la cuenta está en prueba', async () => {
+    const settings = { trialEndsAt: '2026-11-20T00:00:00.000Z' };
+    const trial = makeService({ found: account({ status: 'TRIAL', settings }) });
+    assert.equal((await trial.service.findMine()).trialEndsAt, '2026-11-20T00:00:00.000Z');
+
+    // Vencida: la constancia sigue en settings, pero la pantalla no debe contar días de una prueba que ya pasó.
+    const active = makeService({ found: account({ status: 'ACTIVE', settings }) });
+    assert.equal((await active.service.findMine()).trialEndsAt, null);
+  });
+
+  it('trialEndsAt con basura en settings cae a null', async () => {
+    const { service } = makeService({ found: account({ status: 'TRIAL', settings: { trialEndsAt: 'no-es-fecha' } }) });
+    assert.equal((await service.findMine()).trialEndsAt, null);
+  });
+
   it('404 si el tenant no existe', async () => {
     const { service } = makeService({ found: null });
     await rejectsWithCode(service.findMine(), 'ACCOUNT_NOT_FOUND');
@@ -257,18 +272,102 @@ describe('AccountsService.findMine', () => {
 });
 
 describe('AccountsService.update', () => {
-  it('escribe sólo los 5 campos configurables y audita', async () => {
+  it('escribe sólo los campos configurables y audita', async () => {
     const { service, calls } = makeService();
     await service.update({ businessName: 'Nuevo Nombre', currencyCode: 'PEN' });
     assert.deepEqual(Object.keys(calls.updated!).sort(), [
+      'address',
       'businessName',
+      'city',
       'countryCode',
       'currencyCode',
+      'email',
+      'logoUrl',
+      'phone',
       'taxId',
       'timezone',
+      'website',
     ]);
     assert.equal(calls.updated!.businessName, 'Nuevo Nombre');
     assert.deepEqual(calls.audit, ['UPDATE']);
+  });
+
+  it('identidad y contacto: se escriben tal cual y null los quita', async () => {
+    const { service, calls } = makeService();
+    await service.update({ phone: '+591 70000000', city: 'La Paz', website: null });
+    assert.equal(calls.updated!.phone, '+591 70000000');
+    assert.equal(calls.updated!.city, 'La Paz');
+    assert.equal(calls.updated!.website, null, 'null = quitarlo');
+    assert.equal(calls.updated!.email, undefined, 'ausente = no tocarlo');
+  });
+
+  it('findMine expone identidad y contacto, null si no los cargó', async () => {
+    const lleno = makeService({ found: account({ logoUrl: '/api/uploads/x.png', phone: '70000000', email: 'a@b.co', website: 'https://b.co', address: 'Calle 1', city: 'Sucre' }) });
+    const res = await lleno.service.findMine();
+    assert.equal(res.logoUrl, '/api/uploads/x.png');
+    assert.equal(res.city, 'Sucre');
+    const vacio = makeService();
+    const sin = await vacio.service.findMine();
+    assert.equal(sin.logoUrl ?? null, null);
+    assert.equal(sin.phone ?? null, null);
+  });
+
+  it('preferencias: se mezclan con lo guardado y NO pisan el resto de configuration', async () => {
+    const { service, calls } = makeService({
+      found: account({ configuration: { importConfig: { staleAfterDays: 30 }, preferences: { workEnd: '17:00', weekStart: 'SUN' } } }),
+    });
+    await service.update({ preferences: { workStart: '07:30' } } as never);
+    const cfg = calls.updated!.configuration as Record<string, unknown>;
+    assert.deepEqual(cfg.importConfig, { staleAfterDays: 30 }, 'lo que ya vivía en configuration se conserva');
+    assert.deepEqual(cfg.preferences, {
+      workDays: [1, 2, 3, 4, 5, 6],
+      workStart: '07:30',
+      workEnd: '17:00',
+      weekStart: 'SUN',
+      defaultLocale: 'es',
+    });
+  });
+
+  it('🔴 un parche válido por campo pero incoherente en conjunto se rechaza y no escribe nada', async () => {
+    // Guardado: jornada 08:00–18:00. Un parche con inicio 19:00 deja el fin antes que el inicio.
+    const { service, calls } = makeService();
+    await rejectsWithCode(service.update({ preferences: { workStart: '19:00' } } as never), 'PREFERENCES_INVALID');
+    assert.equal(calls.updated, undefined);
+    assert.deepEqual(calls.audit, []);
+  });
+
+  it('sin preferencias en el parche, configuration no se toca', async () => {
+    const { service, calls } = makeService();
+    await service.update({ businessName: 'X' });
+    assert.equal('configuration' in calls.updated!, false);
+  });
+
+  it('findMine siempre entrega preferencias completas, con los valores de fábrica si nunca se configuraron', async () => {
+    const { service } = makeService();
+    const res = await service.findMine();
+    assert.deepEqual(res.preferences, { workDays: [1, 2, 3, 4, 5, 6], workStart: '08:00', workEnd: '18:00', weekStart: 'MON', defaultLocale: 'es' });
+  });
+
+  it('facturación: se mezcla campo a campo, null quita, y conserva preferencias y el resto de configuration', async () => {
+    const { service, calls } = makeService({
+      found: account({
+        configuration: {
+          importConfig: { staleAfterDays: 30 },
+          preferences: { workEnd: '17:00' },
+          billing: { legalName: 'Pérez SRL', taxId: '123', address: 'Calle 1', email: 'f@pe.co' },
+        },
+      }),
+    });
+    await service.update({ billing: { taxId: null, email: 'facturas@pe.co' } } as never);
+    const cfg = calls.updated!.configuration as Record<string, unknown>;
+    assert.deepEqual(cfg.billing, { legalName: 'Pérez SRL', taxId: null, address: 'Calle 1', email: 'facturas@pe.co' });
+    assert.deepEqual(cfg.importConfig, { staleAfterDays: 30 });
+    assert.deepEqual(cfg.preferences, { workEnd: '17:00' }, 'sin parche de preferencias, no se tocan');
+  });
+
+  it('findMine entrega la facturación completa, con null en lo no cargado', async () => {
+    const { service } = makeService();
+    assert.deepEqual((await service.findMine()).billing, { legalName: null, taxId: null, address: null, email: null });
   });
 
   it('nunca escribe plan, topes negociados, tipo ni estado', async () => {

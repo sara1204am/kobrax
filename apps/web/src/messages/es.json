@@ -4,7 +4,17 @@
     "showPassword": "Mostrar contraseña",
     "hidePassword": "Ocultar contraseña",
     "backToLogin": "Volver a iniciar sesión",
-    "close": "Cerrar"
+    "close": "Cerrar",
+    "dictation": {
+      "start": "Dictar",
+      "stop": "Detener",
+      "privacy": "Usa el reconocimiento de voz de tu navegador: el audio no llega a Kobrax, pero Chrome y Edge lo procesan en sus servidores.",
+      "denied": "No hay permiso para usar el micrófono. Habilitalo en el navegador.",
+      "failed": "No se pudo dictar ({code}). Probá de nuevo o escribí el mensaje.",
+      "network": "El navegador no pudo conectar con su servicio de voz. Revisá la conexión; algunos navegadores (Brave, Opera) no lo permiten y funciona mejor en Chrome o Edge.",
+      "noMic": "No se encontró un micrófono. Conectá uno y revisá cuál usa el navegador.",
+      "language": "Tu navegador no soporta dictado en este idioma."
+    }
   },
   "creditSource": {
     "column": "Fuente",
@@ -41,6 +51,15 @@
       "pending": "{n, plural, one {# gestión pendiente} other {# gestiones pendientes}}"
     },
     "crumbs": {
+      "avanzado": "Avanzado",
+      "facturacion": "Facturación",
+      "actividad": "Actividad",
+      "agencias": "Agencias",
+      "catalogos": "Catálogos",
+      "general": "General",
+      "plan": "Plan",
+      "cobranza": "Cobranza",
+      "mensajes": "Mensajes",
       "password": "Contraseña",
       "mfa": "Verificación en dos pasos",
       "sessions": "Sesiones activas",
@@ -253,6 +272,11 @@
     "offline": {
       "title": "No pudimos conectar con el servidor",
       "text": "Vuelve a intentarlo en un momento. Si sigue así, avísale a tu administrador."
+    },
+    "billingAlert": {
+      "title": "Faltan datos de facturación.",
+      "text": "Completa {fields} para que podamos emitir tu factura.",
+      "action": "Completar datos"
     },
     "table": {
       "range": "{from}–{to} de {total}",
@@ -1187,6 +1211,11 @@
       }
     },
     "agenda": {
+      "nonWorkingDay": "Día no laborable",
+      "workNotice": {
+        "nonWorkDay": "Tu equipo no trabaja los {weekday} (Cuenta → Cobranza → Preferencias de trabajo).",
+        "outsideHours": "Las {time} quedan fuera de la jornada ({start}–{end})."
+      },
       "title": "Agenda",
       "subtitle": "Lo agendado para vos.",
       "scopedToMine": "Estás viendo sólo tus gestiones.",
@@ -1289,7 +1318,11 @@
         "copyPhone": "Copiar teléfono",
         "phoneCopied": "Teléfono copiado",
         "openWhatsapp": "Abrir WhatsApp",
-        "viewLocation": "Ver ubicación"
+        "viewLocation": "Ver ubicación",
+        "copyMessage": "Copiar mensaje",
+        "messageCopied": "Mensaje copiado",
+        "messageIncomplete": "Al mensaje le faltan datos: {names}. Completalos antes de enviarlo.",
+        "invalidPhone": "El número no es válido para WhatsApp."
       },
       "type": {
         "CALL": "Llamada",
@@ -1545,7 +1578,7 @@
         "mapNextStop": "Ver próxima parada",
         "mapBaseMap": "Mapa",
         "mapBaseSatellite": "Satélite",
-        "mapBig":"Agrandar el mapa",
+        "mapBig": "Agrandar el mapa",
         "mapSmall": "Achicar el mapa",
         "help": "Ayuda",
         "routeOrder": "El recorrido · {n} paradas, en este orden",
@@ -2228,12 +2261,386 @@
       "stale": "Tu sesión cambió en otra pestaña. Recarga la página para continuar.",
       "reload": "Recargar",
       "dismiss": "Entendido"
+    },
+    "whatsapp": {
+      "title": "Enviar mensaje por WhatsApp",
+      "close": "Cerrar",
+      "searchClient": "Buscar deudor",
+      "searchHint": "Escribí al menos 2 letras del nombre.",
+      "searchPlaceholder": "Nombre del deudor…",
+      "client": "Deudor",
+      "pickClient": "Elegí un deudor",
+      "noResults": "Sin resultados",
+      "template": "Plantilla",
+      "credit": "Crédito",
+      "noCredits": "Sin créditos",
+      "phone": "Teléfono",
+      "noPhones": "Sin teléfono",
+      "message": "Mensaje",
+      "messageHint": "Con los datos reales del deudor. Podés ajustarlo antes de enviarlo.",
+      "noMessage": "Elegí una plantilla o escribí el mensaje.",
+      "incomplete": "Al mensaje le faltan datos: {names}. Completalos o editá el texto antes de enviarlo.",
+      "invalidPhone": "El número no es válido para WhatsApp.",
+      "copy": "Copiar texto",
+      "copied": "Mensaje copiado",
+      "open": "Abrir WhatsApp",
+      "contextError": "No se pudieron cargar los datos del deudor",
+      "send": "Enviar por WhatsApp",
+      "sendToClient": "Enviar a un deudor",
+      "pendingHint": "Al abrir WhatsApp queda una gestión pendiente de resultado en tu agenda; el resultado lo registrás después.",
+      "pendingDone": "Quedó como gestión pendiente de resultado en la agenda.",
+      "pendingLink": "Registrar resultado",
+      "pendingLogged": "Gestión pendiente de resultado creada",
+      "pendingError": "WhatsApp se abrió, pero no se pudo dejar la gestión pendiente"
     }
   },
   "account": {
     "title": "Cuenta",
     "subtitle": "Tu plan, y los datos del negocio que salen en los comprobantes y en las invitaciones.",
+    "tabs": {
+      "label": "Secciones de la cuenta",
+      "general": "General",
+      "plan": "Plan",
+      "cobranza": "Cobranza",
+      "mensajes": "Mensajes",
+      "catalogos": "Catálogos",
+      "agencias": "Agencias",
+      "facturacion": "Facturación",
+      "billingPending": "Faltan datos de facturación",
+      "actividad": "Actividad",
+      "avanzado": "Avanzado"
+    },
+    "saveBar": {
+      "label": "Cambios sin guardar",
+      "unsaved": "Tienes cambios sin guardar.",
+      "invalid": "Corrige los errores marcados para poder guardar.",
+      "discard": "Descartar",
+      "save": "Guardar cambios",
+      "leave": "Tienes cambios sin guardar. Si cambias de pestaña se pierden. ¿Salir de todos modos?"
+    },
+    "catalogs": {
+      "title": "Catálogos del negocio",
+      "empty": "Este catálogo no tiene ítems todavía.",
+      "active": "Activo",
+      "inactive": "Desactivado",
+      "moveUp": "Subir {name}",
+      "moveDown": "Bajar {name}",
+      "saved": "Cambio guardado",
+      "saveError": "No se pudo guardar el cambio",
+      "moveError": "No se pudo reordenar. Recarga la página para ver el orden real.",
+      "readOnly": "Sólo un administrador puede cambiar estas listas.",
+      "ledgerLabel": "Se registra como",
+      "ledgerHint": "El método con que se anota el pago en los reportes. Depósito o cheque, por ejemplo, se anotan como transferencia.",
+      "ledgerChoose": "Elegir…",
+      "ledgerOf": "Se registra como: {name}",
+      "add": {
+        "open": "Agregar opción",
+        "title": "Agregar opción",
+        "subtitle": "Crea una nueva opción que estará disponible para tu equipo",
+        "nameLabel": "Nombre",
+        "nameHint": "Este es el nombre que verá tu equipo en la aplicación",
+        "namePlaceholder": "Ej.: Transferencia QR",
+        "codeLabel": "Código",
+        "codeHint": "Identificador técnico único. Se genera desde el nombre: mayúsculas, números y guiones bajos.",
+        "codeFormat": "Usa solo mayúsculas, números y guiones bajos (máximo 40).",
+        "codeDuplicate": "Ya existe una opción con ese código en este catálogo.",
+        "stateHint": "Las opciones inactivas no estarán disponibles en nuevos registros, pero se mantendrán en los registros existentes.",
+        "cancel": "Cancelar",
+        "save": "Guardar",
+        "descriptionLabel": "Descripción (opcional)",
+        "descriptionPlaceholder": "Para qué se usa esta opción"
+      },
+            "intro": "Administra las opciones que utiliza tu equipo en las operaciones diarias.",
+      "count": "{count, plural, one {# catálogo} other {# catálogos}}",
+      "settings": "Configuración del negocio",
+      "searchCatalog": "Buscar catálogo…",
+      "searchOption": "Buscar opción…",
+      "filterLabel": "Filtrar por estado",
+      "options": "{count, plural, one {# opción} other {# opciones}}",
+      "panelSubtitle": "Administra las opciones disponibles.",
+      "catalogsEmpty": "Ningún catálogo coincide con la búsqueda.",
+      "emptyFiltered": "Ninguna opción coincide con la búsqueda o el filtro.",
+      "dragHint": "Arrastra las opciones para cambiar su orden.",
+      "dragOf": "Arrastrar {name} (flechas arriba y abajo para moverla)",
+      "actionsOf": "Acciones de {name}",
+      "editAction": "Editar",
+      "activeOf": "Activo: {name}",
+      "ledgerShort": "Se registra como: {method}",
+      "noLedger": "Sin método del libro: no se ofrece en Pagos",
+      "filter": {
+        "all": "Todas",
+        "active": "Activas",
+        "inactive": "Inactivas"
+      },
+      "columns": {
+        "order": "Orden",
+        "name": "Nombre",
+        "code": "Código",
+        "state": "Estado",
+        "actions": "Acciones"
+      },
+      "edit": {
+        "title": "Editar opción",
+        "subtitle": "Cambia cómo ve tu equipo esta opción",
+        "codeLocked": "El código no se puede cambiar: es lo que guardan los registros y el móvil."
+      },
+"names": {
+        "PAYMENT_METHOD": "Medios de pago",
+        "BANK": "Bancos",
+        "NO_PAYMENT_REASON": "Motivos de no pago",
+        "OCCUPATION": "Rubros y ocupaciones",
+        "CREDIT_TYPE": "Tipos de crédito",
+        "COLLATERAL_TYPE": "Tipos de garantía",
+        "COLLECTION_MODALITY": "Modalidades de cobro",
+        "CANCEL_REASON": "Motivos de cancelación",
+        "RESCHEDULE_REASON": "Motivos de reprogramación",
+        "SPECIAL_CATEGORY": "Gestiones especiales"
+      }
+    },
+    "identity": {
+      "title": "Identidad y contacto",
+      "subtitle": "Cómo se identifica tu negocio y cómo pueden contactarte.",
+      "dropTitle": "Arrastra una imagen aquí",
+      "dropOr": "o haz clic para subir",
+      "logo": "Logo del negocio",
+      "logoHint": "PNG, JPG o WebP, hasta 8 MB. Se ve en el encabezado del panel.",
+      "logoReadOnly": "Solo un administrador puede cambiar el logo.",
+      "uploading": "Subiendo…",
+      "remove": "Quitar",
+      "uploadError": "No se pudo subir el logo",
+      "phone": "Teléfono del negocio",
+      "phoneHint": "Sale en los mensajes como '{{telefono_negocio}}'.",
+      "phonePlaceholder": "Opcional",
+      "email": "Correo del negocio",
+      "emailPlaceholder": "Opcional",
+      "website": "Sitio web",
+      "websiteHint": "Con https://, por ejemplo https://minegocio.com.",
+      "address": "Dirección",
+      "city": "Ciudad"
+    },
+    "preferences": {
+      "title": "Preferencias de trabajo",
+      "intro": "Cuándo trabaja tu equipo y cómo se muestra la semana. La agenda ya las respeta: marca los días no laborables, empieza la semana donde elijas y avisa al agendar fuera de la jornada.",
+      "workDays": "Días de trabajo",
+      "workStart": "Inicio de la jornada",
+      "workEnd": "Fin de la jornada",
+      "weekStart": "La semana empieza el",
+      "defaultLocale": "Idioma por defecto",
+      "defaultLocaleHint": "Con el que se abre el panel a quien todavía no eligió uno.",
+      "locales": {
+        "es": "Español",
+        "en": "English"
+      },
+      "problems": {
+        "NO_WORK_DAYS": "Elige al menos un día de trabajo.",
+        "WORK_DAY_INVALID": "Hay un día de trabajo que no es válido.",
+        "TIME_INVALID": "Escribe las horas como HH:MM, por ejemplo 08:00.",
+        "END_NOT_AFTER_START": "La jornada tiene que terminar después de empezar."
+      },
+      "scope": "Valen para toda la cuenta. La agenda ya las respeta; el resto de las pantallas las irá respetando de a poco.",
+      "save": "Guardar preferencias",
+      "saved": "Preferencias guardadas",
+      "saveError": "No se pudieron guardar las preferencias"
+    },
+    "branches": {
+      "title": "Agencias",
+      "intro": "Las sucursales de tu negocio y quién trabaja en cada una. La agencia de una persona decide qué cartera ve: un supervisor ve la de su agencia.",
+      "add": "+ Nueva agencia",
+      "empty": "Todavía no hay agencias",
+      "emptyHint": "Si trabajas con una sola oficina no hace falta. Crea una por cada sucursal para repartir la cartera y el equipo.",
+      "columns": {
+        "name": "Agencia",
+        "city": "Ciudad",
+        "manager": "Responsable",
+        "members": "Miembros",
+        "credits": "Créditos",
+        "status": "Estado",
+        "actions": "Acciones"
+      },
+      "active": "Activa",
+      "inactive": "Desactivada",
+      "manage": "Miembros",
+      "manageOf": "Miembros de {name}",
+      "edit": "Editar",
+      "editOf": "Editar {name}",
+      "addTitle": "Nueva agencia",
+      "editTitle": "Editar agencia",
+      "fields": {
+        "name": "Nombre",
+        "code": "Código",
+        "codeHint": "Corto, ej. CEN. Se guarda en mayúsculas.",
+        "city": "Ciudad",
+        "address": "Dirección",
+        "manager": "Responsable",
+        "noManager": "Sin responsable",
+        "active": "Agencia activa",
+        "activeHint": "Para desactivarla, primero pasa a sus miembros a otra agencia."
+      },
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "close": "Cerrar",
+      "remove": "Quitar agencia",
+      "saved": "Agencia guardada",
+      "created": "Agencia creada",
+      "removed": "Agencia quitada",
+      "saveError": "No se pudo guardar el cambio",
+      "removeTitle": "¿Quitar {name}?",
+      "removeText": "La agencia deja de aparecer, pero los créditos y rutas que la nombran conservan su historial.",
+      "removeBlocked": "Tiene {n, plural, one {# miembro activo} other {# miembros activos}}. Pásalos a otra agencia antes de quitarla.",
+      "removeOk": "Quitar",
+      "membersTitle": "Miembros de {name}",
+      "currentMembers": "En esta agencia",
+      "noMembers": "Todavía no hay nadie en esta agencia.",
+      "takeOut": "Sacar",
+      "takeOutOf": "Sacar a {name} de la agencia",
+      "memberRemoved": "Miembro sacado de la agencia",
+      "addMembers": "Sumar personas",
+      "scopeWarning": "Cambiar la agencia de alguien cambia la cartera que ve.",
+      "noCandidates": "No hay más personas activas para sumar.",
+      "comesFrom": "viene de {name}",
+      "noBranch": "sin agencia",
+      "addPicked": "{n, plural, =0 {Sumar} one {Sumar # persona} other {Sumar # personas}}",
+      "membersAdded": "Miembros movidos a la agencia"
+    },
+    "billing": {
+      "title": "Datos de facturación",
+      "edit": "Editar",
+      "cancel": "Cancelar",
+      "missingTitle": "Faltan datos obligatorios.",
+      "missingText": "Completa {fields} para poder emitir tu factura. La dirección es opcional.",
+      "intro": "A nombre de quién y adónde se manda la factura. El plan lo gestiona Kobrax: no se cobra dentro del producto.",
+      "legalName": "Razón social",
+      "legalNameHint": "Con la que se factura, si es distinta del nombre del negocio.",
+      "taxId": "NIT / documento fiscal",
+      "email": "Correo para facturas",
+      "emailHint": "Ahí llega la factura.",
+      "address": "Dirección fiscal",
+      "save": "Guardar datos",
+      "saved": "Datos de facturación guardados",
+      "saveError": "No se pudieron guardar los datos",
+      "historyTitle": "Historial de plan",
+      "historyIntro": "Los cambios de plan y de estado que hizo Kobrax en tu cuenta. Para pedir uno nuevo, ve a la pestaña Plan.",
+      "historyEmpty": "Todavía no hubo cambios de plan.",
+      "planChanged": "Plan: {from} → {to}",
+      "statusChanged": "Estado: {from} → {to}"
+    },
+    "planRequest": {
+      "soloTitle": "Pasa de trabajar solo a trabajar en equipo",
+      "soloText": "Tu plan es individual: una sola persona. Con un plan de equipo invitas a cobradores y supervisores, repartes la cartera entre ellos y ves el trabajo de todos en un solo lugar.",
+      "soloGain": "Con {plan} pasas de {fromUsers, number} a {toUsers, number} miembros y de {fromCredits, number} a {toCredits, number} créditos activos.",
+      "seeTeam": "Ver planes de equipo",
+      "soloModalTitle": "Pasar a un plan de equipo",
+      "groups": {
+        "individual": "Individual",
+        "team": "Equipo"
+      },
+      "groupHint": {
+        "individual": "una sola persona",
+        "team": "varias personas trabajando juntas"
+      },
+      "features": {
+        "members": "{n, plural, one {# miembro} other {# miembros}}",
+        "membersUnlimited": "Miembros sin límite",
+        "credits": "{n, number} créditos activos",
+        "creditsUnlimited": "Créditos sin límite",
+        "clients": "{n, number} clientes",
+        "clientsUnlimited": "Clientes sin límite",
+        "photos": "{n, number} fotos al mes",
+        "photosUnlimited": "Fotos sin límite"
+      },
+      "currentIs": "Hoy tienes el plan {plan}.",
+      "title": "Cambiar de plan",
+      "intro": "El cambio de plan lo hace el equipo de Kobrax. Pídelo acá y te avisamos cuando esté listo; mientras tanto, nada cambia en tu cuenta.",
+      "ask": "Pedir cambio de plan",
+      "modalTitle": "Pedir cambio de plan",
+      "plan": "Plan que quieres",
+      "note": "Algo que debamos saber",
+      "noteHint": "Opcional. Por ejemplo, cuántas personas más van a usar la cuenta.",
+      "cancel": "Cancelar",
+      "send": "Enviar pedido",
+      "sent": "Pedido enviado",
+      "error": "No se pudo enviar el pedido",
+      "pending": "Pediste pasar a {plan} el {date}. Kobrax te contesta pronto.",
+      "handled": "Tu último pedido ({plan}) ya fue atendido.",
+      "rejected": "Tu último pedido ({plan}) no se pudo hacer."
+    },
+    "activity": {
+      "title": "Actividad de la cuenta",
+      "intro": "Quién cambió qué en la configuración de la cuenta, el equipo, las agencias y las listas. Sólo la ve quien puede consultar la auditoría.",
+      "filter": "Tipo de cambio",
+      "all": "Todos",
+      "entities": {
+        "account": "Datos de la cuenta",
+        "branch": "Agencia",
+        "catalog_item": "Ítem de catálogo",
+        "arrear_category": "Categoría de mora",
+        "user_account": "Miembro del equipo",
+        "account_request": "Pedido a Kobrax"
+      },
+      "actions": {
+        "CREATE": "Creó",
+        "UPDATE": "Cambió",
+        "DELETE": "Quitó",
+        "REASSIGN_ON_DEACTIVATE": "Pasó el trabajo de"
+      },
+      "byKobrax": "Kobrax ({via})",
+      "unknownActor": "Alguien del equipo",
+      "empty": "Todavía no hay actividad para mostrar.",
+      "empty_value": "vacío",
+      "more": "Cargar más",
+      "loadError": "No se pudo cargar la actividad"
+    },
+    "advanced": {
+      "backup": {
+        "title": "Respaldo completo",
+        "text": "Descarga todos los datos de tu cuenta —clientes, créditos, pagos, gestiones y rutas— en un solo archivo. La descarga queda registrada.",
+        "download": "Descargar respaldo"
+      },
+      "retention": {
+        "title": "Conservación de fotos",
+        "unlimited": "Tu plan conserva las fotos sin límite de tiempo.",
+        "months": "Tu plan conserva las fotos {n, plural, one {# mes} other {# meses}}.",
+        "older": "Fotos más antiguas que ese plazo: {older, number} de {total, number}.",
+        "noDelete": "Por ahora esto es solo un aviso: Kobrax no elimina ni archiva fotos automáticamente. Cada foto guarda su huella digital como evidencia, y no se borra nada sin avisarte antes."
+      },
+      "ownership": {
+        "title": "Transferir la propiedad",
+        "intro": "El dueño responde por la cuenta ante Kobrax. Puedes pasarle la propiedad a otro administrador activo; seguirás siendo administrador. Pedimos tu contraseña y, si tienes verificación en dos pasos, tu código.",
+        "notOwner": "Solo el dueño actual de la cuenta puede transferir la propiedad.",
+        "noCandidates": "No hay otro administrador activo a quien pasarle la cuenta. Invita o promueve a uno desde Equipo.",
+        "target": "Nuevo dueño",
+        "choose": "Elige un administrador",
+        "password": "Tu contraseña",
+        "code": "Código de verificación",
+        "codeHint": "Si tienes verificación en dos pasos activa.",
+        "submit": "Transferir propiedad",
+        "cancel": "Cancelar",
+        "confirmTitle": "¿Transferir la propiedad?",
+        "confirmText": "Vas a pasarle la propiedad de la cuenta a {name}. Después de esto no podrás deshacerlo tú: tendrá que devolvértela esa persona.",
+        "confirmOk": "Sí, transferir",
+        "done": "Propiedad transferida",
+        "error": "No se pudo transferir la propiedad"
+      },
+      "closure": {
+        "title": "Dar de baja la cuenta",
+        "intro": "Pide la baja y el equipo de Kobrax se pone en contacto contigo. Pedirla no borra nada: tus datos siguen intactos hasta que lo conversemos.",
+        "ask": "Pedir la baja",
+        "modalTitle": "Pedir la baja de la cuenta",
+        "modalText": "Esto avisa a Kobrax que quieres dar de baja la cuenta. No se borra nada ahora.",
+        "confirmLabel": "Escribe «{name}» para confirmar",
+        "note": "Motivo",
+        "noteHint": "Opcional. Nos ayuda a mejorar.",
+        "cancel": "Cancelar",
+        "send": "Pedir la baja",
+        "sent": "Pedido enviado",
+        "error": "No se pudo enviar el pedido",
+        "pending": "Ya pediste la baja el {date}. Kobrax se pondrá en contacto contigo."
+      }
+    },
+    "edit": "Editar",
+    "cancel": "Cancelar",
     "businessData": "Datos del negocio",
+    "businessDataHint": "Información básica que se muestra en la app, comprobantes e invitaciones.",
     "financialData": "Configuración financiera",
     "decimals": "Decimales de los montos",
     "decimalsValue": "{n, plural, =0 {Sin decimales} one {# decimal} other {# decimales}}",
@@ -2269,7 +2676,7 @@
     },
     "templates": {
       "title": "Plantillas de WhatsApp",
-      "intro": "Los mensajes que el equipo puede elegir al escribirle a un deudor desde una gestión. Estas variables se reemplazan solas al enviar:",
+      "intro": "Los mensajes que el equipo puede elegir al escribirle a un deudor desde una gestión. Elegí uno de la lista para ver cómo queda; las variables se reemplazan solas al enviar.",
       "empty": "Todavía no hay plantillas",
       "emptyHint": "Creá la primera: un recordatorio de pago con el nombre y el saldo alcanza.",
       "examples": "O empezá con un ejemplo — se abre para ajustar el tono antes de guardar:",
@@ -2280,7 +2687,7 @@
       "label": "Nombre",
       "labelHint": "Cómo la ve el equipo al elegirla.",
       "body": "Mensaje",
-      "bodyHint": "Las variables de arriba se reemplazan con los datos del deudor al enviar.",
+      "bodyHint": "Las variables se reemplazan con los datos del deudor al enviar.",
       "save": "Guardar",
       "cancel": "Cancelar",
       "saved": "Plantilla guardada",
@@ -2289,7 +2696,56 @@
       "removeTitle": "¿Quitar «{name}»?",
       "removeText": "El equipo deja de verla al enviar. Lo ya enviado no cambia.",
       "removeOk": "Sí, quitar",
-      "removed": "Plantilla quitada"
+      "removed": "Plantilla quitada",
+      "search": "Buscar plantilla…",
+      "filterBy": "Filtrar por categoría",
+      "all": "Todas",
+      "noResults": "Ninguna plantilla coincide con la búsqueda.",
+      "pickOne": "Elegí una plantilla para ver su vista previa.",
+      "previewTitle": "Vista previa",
+      "previewHint": "Así se vería el mensaje con datos de ejemplo.",
+      "previewBubble": "Ejemplo del mensaje",
+      "previewEmpty": "Escribí el mensaje para verlo acá.",
+      "exampleTag": "Datos de ejemplo",
+      "sampleTitle": "Datos de ejemplo",
+      "sampleHint": "Inventados, solo para esta vista previa. No son los de ningún deudor.",
+      "sample": {
+        "cliente": "Deudor (ejemplo)",
+        "saldo": "Saldo (ejemplo)",
+        "negocio": "Negocio (ejemplo)",
+        "telefono_negocio": "Teléfono del negocio (ejemplo)"
+      },
+      "variable": {
+        "cliente": "Nombre del deudor",
+        "saldo": "Saldo pendiente",
+        "negocio": "Nombre del negocio",
+        "telefono_negocio": "Teléfono del negocio"
+      },
+      "insertVariable": "Insertar variable",
+      "insertHint": "Se inserta donde está el cursor. Si un dato no está disponible al enviar, Kobrax te avisa antes.",
+      "categoryLabel": "Categoría",
+      "categoryHint": "Situación en la que se usa. Opcional.",
+      "noCategory": "Sin categoría",
+      "category": {
+        "INITIAL": "Inicio",
+        "REMINDER": "Recordatorio",
+        "PROMISE": "Promesa",
+        "LAST_NOTICE": "Último aviso",
+        "CONFIRMATION": "Confirmación"
+      },
+      "unknownVars": "Variable desconocida: {names}. No se reemplazaría al enviar.",
+      "unknownBlock": "Corregí o quitá las variables desconocidas antes de guardar: {names}.",
+      "missingSample": "Falta el dato de ejemplo para: {names}. Se muestra tal cual.",
+      "suggestions": "Sugerencias",
+      "suggestionsFor": "Sugerencias para «{category}»",
+      "suggestionsPick": "Elegí una categoría para ver mensajes sugeridos.",
+      "useSuggestion": "Usar",
+      "tone": "Tono",
+      "tones": {
+        "AMABLE": "Amable",
+        "FORMAL": "Formal",
+        "FIRME": "Firme"
+      }
     },
     "timezone": "Zona horaria",
     "timezoneAuto": "Según el país",
@@ -2353,6 +2809,17 @@
       "BUSINESS": "${base, number} + ${perSeat, number} por miembro al mes",
       "ENTERPRISE": "A medida"
     },
+    "summary": {
+      "plan": "Plan",
+      "state": "Estado",
+      "members": "Miembros",
+      "trialLeft": "{n, plural, =0 {La prueba vence hoy} one {La prueba vence mañana} other {La prueba vence en # días}}",
+      "trialUntil": "Hasta el {date}. Después pasa a Free y no se borra nada."
+    },
+    "frozen": {
+      "title": "Tu cuenta superó {n, plural, one {un tope} other {# topes}} de su plan",
+      "text": "Puedes seguir cobrando con lo que ya tienes, pero no sumar más en: {limits}."
+    },
     "seats": "Miembros del equipo",
     "seatsValue": "{used, number} de {max, number}",
     "seatsCustom": "Tu cuenta tiene un ajuste a medida: {max, number} miembros en vez de {plan, number}.",
@@ -2385,16 +2852,38 @@
       "hint": "Opcional. De qué vive y cuándo le llega el dinero: con eso no se le insiste antes de que cobre.",
       "unset": "Sin definir",
       "source": "Fuente de ingreso",
-      "sourceDefault": { "EMPLOYEE": "Asalariado o profesional", "BUSINESS": "Comerciante o productivo", "OTHER": "Otro" },
+      "sourceDefault": {
+        "EMPLOYEE": "Asalariado o profesional",
+        "BUSINESS": "Comerciante o productivo",
+        "OTHER": "Otro"
+      },
       "occupation": "Rubro",
       "cycle": "Cada cuánto le llega el dinero",
-      "cycleOptions": { "DAILY": "Todos los días", "WEEKLY": "Cada semana", "BIWEEKLY": "Cada quincena", "MONTHLY": "Cada mes", "QUARTERLY": "Cada tres meses", "SEASONAL": "Por temporada", "IRREGULAR": "Sin ritmo fijo" },
+      "cycleOptions": {
+        "DAILY": "Todos los días",
+        "WEEKLY": "Cada semana",
+        "BIWEEKLY": "Cada quincena",
+        "MONTHLY": "Cada mes",
+        "QUARTERLY": "Cada tres meses",
+        "SEASONAL": "Por temporada",
+        "IRREGULAR": "Sin ritmo fijo"
+      },
       "dayOfWeek": "Día de la semana",
       "dayOfMonth": "Día del mes",
-      "weekdays": { "1": "Lunes", "2": "Martes", "3": "Miércoles", "4": "Jueves", "5": "Viernes", "6": "Sábado", "7": "Domingo" },
+      "weekdays": {
+        "1": "Lunes",
+        "2": "Martes",
+        "3": "Miércoles",
+        "4": "Jueves",
+        "5": "Viernes",
+        "6": "Sábado",
+        "7": "Domingo"
+      },
       "notes": "Detalle",
       "notesPlaceholder": "Ej.: cobra en la alcaldía, le atrasan el flete",
-      "errors": { "day": "El día no corresponde al ciclo elegido." }
+      "errors": {
+        "day": "El día no corresponde al ciclo elegido."
+      }
     },
     "collection": {
       "title": "Cómo cobrarle",
@@ -2402,17 +2891,35 @@
       "unset": "Sin definir",
       "modality": "Modalidad",
       "frequency": "Frecuencia",
-      "frequencyOptions": { "DAILY": "Todos los días", "WEEKLY": "Una vez por semana", "PER_INSTALLMENT": "Según el calendario de cuotas" },
+      "frequencyOptions": {
+        "DAILY": "Todos los días",
+        "WEEKLY": "Una vez por semana",
+        "PER_INSTALLMENT": "Según el calendario de cuotas"
+      },
       "windowFrom": "Desde (hora)",
       "windowTo": "Hasta (hora)",
       "handoverBy": "Quién entrega",
-      "handoverOptions": { "HOLDER": "El titular", "FAMILY": "Un familiar", "EMPLOYEE": "Un empleado" },
+      "handoverOptions": {
+        "HOLDER": "El titular",
+        "FAMILY": "Un familiar",
+        "EMPLOYEE": "Un empleado"
+      },
       "days": "Días",
-      "dayShort": { "1": "L", "2": "M", "3": "X", "4": "J", "5": "V", "6": "S", "7": "D" },
+      "dayShort": {
+        "1": "L",
+        "2": "M",
+        "3": "X",
+        "4": "J",
+        "5": "V",
+        "6": "S",
+        "7": "D"
+      },
       "note": "Indicación",
       "notePlaceholder": "Ej.: tocar el portón verde, antes de abrir el local",
       "summary": "Cómo cobrarle",
-      "errors": { "window": "La franja necesita las dos horas, y «hasta» tiene que ser después de «desde»." }
+      "errors": {
+        "window": "La franja necesita las dos horas, y «hasta» tiene que ser después de «desde»."
+      }
     },
     "channel": {
       "unset": "Sin definir",
@@ -3387,6 +3894,8 @@
     "paymentQrHint": "El que le muestras al deudor para que pague desde su banco.",
     "remove": "Quitar",
     "uploading": "Subiendo…",
+    "dropTitle": "Arrastra una imagen aquí",
+    "dropOr": "o haz clic para subir",
     "uploadError": "No se pudo subir el archivo",
     "save": "Guardar cambios",
     "saved": "Perfil actualizado",

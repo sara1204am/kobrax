@@ -1,3 +1,4 @@
+import type { AccountPreferences } from '../utils/account-preferences.js';
 /**
  * Miembros del tenant y roles asignables: el contrato de `/users` y `/roles`, que el móvil y
  * la web consumen igual.
@@ -13,6 +14,8 @@ export interface Member {
   photoUrl: string | null;
   roleId: string;
   roleName: string;
+  /** Agencia a la que pertenece; `null` = ninguna. Cambia lo que ve (el alcance del supervisor sale de ahí). */
+  branchId?: string | null;
   isOwner: boolean;
   isActive: boolean;
   /** `PENDING` = invitado que todavía no aceptó. */
@@ -41,6 +44,17 @@ export interface MeInfo {
   permissions: string[];
   mfaEnabled?: boolean;
   requiresPasswordChange?: boolean;
+  /** La marca del negocio activo, para que el panel la pinte sin pedir `account:read`. `null` si no se pudo leer. */
+  account?: AccountBrand | null;
+}
+
+/** Nombre, teléfono y logo del negocio: lo que ve cualquier miembro (encabezado, variables de las plantillas). */
+export interface AccountBrand {
+  name: string;
+  phone: string | null;
+  logoUrl: string | null;
+  /** Cuándo trabaja el equipo y cómo se muestra la semana: la agenda las respeta. Opcional para no romper a un cliente viejo. */
+  preferences?: AccountPreferences;
 }
 
 /**

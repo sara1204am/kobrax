@@ -4,7 +4,8 @@ import { useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { PAYMENT_CHANNELS, PAYMENT_METHODS, type CreditDetail, type PaymentChannel, type PaymentMethod } from '@kobrax/shared';
+import { PAYMENT_CHANNELS, type CreditDetail, type PaymentChannel } from '@kobrax/shared';
+import { usePaymentMethods } from '@/lib/use-payment-methods';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
@@ -104,7 +105,8 @@ export function PaymentModal({
    */
   const [key, setKey] = useState('');
   const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState<PaymentMethod>('CASH');
+  const methods = usePaymentMethods(open);
+  const [methodCode, setMethodCode] = useState('CASH');
   const [channel, setChannel] = useState<PaymentChannel>('KOBRAX_COLLECTED');
   const [notes, setNotes] = useState('');
   /** N° del recibo o la factura en papel. Opcional. */
@@ -132,7 +134,7 @@ export function PaymentModal({
       setPicked(null);
       setKey(crypto.randomUUID());
       setAmount(credit?.suggestedAmount !== undefined ? String(credit.suggestedAmount) : '');
-      setMethod('CASH');
+      setMethodCode('CASH');
       setChannel('KOBRAX_COLLECTED');
       setNotes('');
       setReceiptRef('');
@@ -202,7 +204,7 @@ export function PaymentModal({
       {
         creditId: active.id,
         amount: value,
-        method,
+        method: methods.ledgerOf(methodCode) ?? 'CASH',
         // Sólo lo que no es el default: el cuerpo mínimo es el de siempre.
         ...(channel !== 'KOBRAX_COLLECTED' ? { channel } : {}),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
@@ -365,10 +367,10 @@ export function PaymentModal({
             {more && (
               <>
                 <Field label={t('register.method')}>
-                  <Select value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)} disabled={busy}>
-                    {PAYMENT_METHODS.map((m) => (
-                      <option key={m} value={m}>
-                        {t(`method.${m}`)}
+                  <Select value={methodCode} onChange={(e) => setMethodCode(e.target.value)} disabled={busy}>
+                    {methods.options.map((m) => (
+                      <option key={m.code} value={m.code}>
+                        {m.label}
                       </option>
                     ))}
                   </Select>

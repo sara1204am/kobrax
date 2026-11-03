@@ -4,7 +4,17 @@
     "showPassword": "Show password",
     "hidePassword": "Hide password",
     "backToLogin": "Back to sign in",
-    "close": "Close"
+    "close": "Close",
+    "dictation": {
+      "start": "Dictate",
+      "stop": "Stop",
+      "privacy": "Uses your browser’s speech recognition: the audio never reaches Kobrax, but Chrome and Edge process it on their servers.",
+      "denied": "Microphone permission was denied. Enable it in your browser.",
+      "failed": "Dictation failed ({code}). Try again or type the message.",
+      "network": "The browser could not reach its speech service. Check your connection; some browsers (Brave, Opera) block it, and Chrome or Edge work best.",
+      "noMic": "No microphone found. Plug one in and check which one the browser uses.",
+      "language": "Your browser does not support dictation in this language."
+    }
   },
   "creditSource": {
     "column": "Source",
@@ -41,6 +51,15 @@
       "pending": "{n, plural, one {# pending task} other {# pending tasks}}"
     },
     "crumbs": {
+      "avanzado": "Advanced",
+      "facturacion": "Billing",
+      "actividad": "Activity",
+      "agencias": "Branches",
+      "catalogos": "Catalogs",
+      "general": "General",
+      "plan": "Plan",
+      "cobranza": "Collections",
+      "mensajes": "Messages",
       "password": "Password",
       "mfa": "Two-step verification",
       "sessions": "Active sessions",
@@ -253,6 +272,11 @@
     "offline": {
       "title": "We could not reach the server",
       "text": "Try again in a moment. If it keeps happening, let your administrator know."
+    },
+    "billingAlert": {
+      "title": "Billing details are missing.",
+      "text": "Fill in {fields} so we can issue your invoice.",
+      "action": "Complete details"
     },
     "table": {
       "range": "{from}–{to} of {total}",
@@ -1187,6 +1211,11 @@
       }
     },
     "agenda": {
+      "nonWorkingDay": "Non-working day",
+      "workNotice": {
+        "nonWorkDay": "Your team does not work on {weekday} (Account → Collection → Work preferences).",
+        "outsideHours": "{time} is outside the working day ({start}–{end})."
+      },
       "title": "Schedule",
       "subtitle": "What is scheduled for you.",
       "scopedToMine": "You are seeing only your own items.",
@@ -1289,7 +1318,11 @@
         "copyPhone": "Copy phone",
         "phoneCopied": "Phone copied",
         "openWhatsapp": "Open WhatsApp",
-        "viewLocation": "View location"
+        "viewLocation": "View location",
+        "copyMessage": "Copy message",
+        "messageCopied": "Message copied",
+        "messageIncomplete": "The message is missing data: {names}. Fill it in before sending.",
+        "invalidPhone": "The number is not valid for WhatsApp."
       },
       "type": {
         "CALL": "Call",
@@ -1545,7 +1578,7 @@
         "mapNextStop": "Show next stop",
         "mapBaseMap": "Map",
         "mapBaseSatellite": "Satellite",
-        "mapBig":"Enlarge the map",
+        "mapBig": "Enlarge the map",
         "mapSmall": "Shrink the map",
         "help": "Helping out",
         "routeOrder": "The run · {n} stops, in this order",
@@ -2228,12 +2261,386 @@
       "stale": "Your session changed in another tab. Reload the page to continue.",
       "reload": "Reload",
       "dismiss": "Got it"
+    },
+    "whatsapp": {
+      "title": "Send WhatsApp message",
+      "close": "Close",
+      "searchClient": "Search debtor",
+      "searchHint": "Type at least 2 letters of the name.",
+      "searchPlaceholder": "Debtor name…",
+      "client": "Debtor",
+      "pickClient": "Pick a debtor",
+      "noResults": "No results",
+      "template": "Template",
+      "credit": "Credit",
+      "noCredits": "No credits",
+      "phone": "Phone",
+      "noPhones": "No phone",
+      "message": "Message",
+      "messageHint": "With the debtor’s real data. You can adjust it before sending.",
+      "noMessage": "Pick a template or write the message.",
+      "incomplete": "The message is missing data: {names}. Fill it in or edit the text before sending.",
+      "invalidPhone": "The number is not valid for WhatsApp.",
+      "copy": "Copy text",
+      "copied": "Message copied",
+      "open": "Open WhatsApp",
+      "contextError": "Could not load the debtor’s data",
+      "send": "Send via WhatsApp",
+      "sendToClient": "Send to a debtor",
+      "pendingHint": "Opening WhatsApp leaves an activity pending its result in your agenda; you log the result later.",
+      "pendingDone": "Saved as an activity pending its result in the agenda.",
+      "pendingLink": "Log the result",
+      "pendingLogged": "Activity pending result created",
+      "pendingError": "WhatsApp opened, but the pending activity could not be saved"
     }
   },
   "account": {
     "title": "Account",
     "subtitle": "Your plan, and the business details that show up on receipts and invitations.",
+    "tabs": {
+      "label": "Account sections",
+      "general": "General",
+      "plan": "Plan",
+      "cobranza": "Collections",
+      "mensajes": "Messages",
+      "catalogos": "Catalogs",
+      "agencias": "Branches",
+      "facturacion": "Billing",
+      "billingPending": "Billing details missing",
+      "actividad": "Activity",
+      "avanzado": "Advanced"
+    },
+    "saveBar": {
+      "label": "Unsaved changes",
+      "unsaved": "You have unsaved changes.",
+      "invalid": "Fix the marked errors to be able to save.",
+      "discard": "Discard",
+      "save": "Save changes",
+      "leave": "You have unsaved changes. If you switch tabs they are lost. Leave anyway?"
+    },
+    "catalogs": {
+      "title": "Business catalogs",
+      "empty": "This catalog has no items yet.",
+      "active": "Active",
+      "inactive": "Deactivated",
+      "moveUp": "Move {name} up",
+      "moveDown": "Move {name} down",
+      "saved": "Change saved",
+      "saveError": "The change could not be saved",
+      "moveError": "Could not reorder. Reload the page to see the real order.",
+      "readOnly": "Only an administrator can change these lists.",
+      "ledgerLabel": "Recorded as",
+      "ledgerHint": "The method the payment is recorded under in reports. Deposit or cheque, for example, are recorded as transfer.",
+      "ledgerChoose": "Choose…",
+      "ledgerOf": "Recorded as: {name}",
+      "add": {
+        "open": "Add option",
+        "title": "Add option",
+        "subtitle": "Create a new option that will be available to your team",
+        "nameLabel": "Name",
+        "nameHint": "This is the name your team will see in the app",
+        "namePlaceholder": "E.g.: QR transfer",
+        "codeLabel": "Code",
+        "codeHint": "Unique technical identifier. Generated from the name: capitals, numbers and underscores.",
+        "codeFormat": "Use only capitals, numbers and underscores (40 max).",
+        "codeDuplicate": "An option with that code already exists in this catalog.",
+        "stateHint": "Inactive options won't be available in new records, but they stay in existing ones.",
+        "cancel": "Cancel",
+        "save": "Save",
+        "descriptionLabel": "Description (optional)",
+        "descriptionPlaceholder": "What this option is for"
+      },
+            "intro": "Manage the options your team uses in daily operations.",
+      "count": "{count, plural, one {# catalog} other {# catalogs}}",
+      "settings": "Business settings",
+      "searchCatalog": "Search catalog…",
+      "searchOption": "Search option…",
+      "filterLabel": "Filter by status",
+      "options": "{count, plural, one {# option} other {# options}}",
+      "panelSubtitle": "Manage the available options.",
+      "catalogsEmpty": "No catalog matches the search.",
+      "emptyFiltered": "No option matches the search or filter.",
+      "dragHint": "Drag the options to change their order.",
+      "dragOf": "Drag {name} (up and down arrows to move it)",
+      "actionsOf": "Actions for {name}",
+      "editAction": "Edit",
+      "activeOf": "Active: {name}",
+      "ledgerShort": "Recorded as: {method}",
+      "noLedger": "No ledger method: not offered in Payments",
+      "filter": {
+        "all": "All",
+        "active": "Active",
+        "inactive": "Inactive"
+      },
+      "columns": {
+        "order": "Order",
+        "name": "Name",
+        "code": "Code",
+        "state": "Status",
+        "actions": "Actions"
+      },
+      "edit": {
+        "title": "Edit option",
+        "subtitle": "Change how your team sees this option",
+        "codeLocked": "The code can't be changed: records and the mobile app store it."
+      },
+"names": {
+        "PAYMENT_METHOD": "Payment methods",
+        "BANK": "Banks",
+        "NO_PAYMENT_REASON": "Reasons for non-payment",
+        "OCCUPATION": "Trades and occupations",
+        "CREDIT_TYPE": "Credit types",
+        "COLLATERAL_TYPE": "Collateral types",
+        "COLLECTION_MODALITY": "Collection modes",
+        "CANCEL_REASON": "Cancellation reasons",
+        "RESCHEDULE_REASON": "Rescheduling reasons",
+        "SPECIAL_CATEGORY": "Special cases"
+      }
+    },
+    "identity": {
+      "title": "Identity and contact",
+      "subtitle": "How your business is identified and how people can reach you.",
+      "dropTitle": "Drag an image here",
+      "dropOr": "or click to upload",
+      "logo": "Business logo",
+      "logoHint": "PNG, JPG or WebP, up to 8 MB. Shown in the panel header.",
+      "logoReadOnly": "Only an administrator can change the logo.",
+      "uploading": "Uploading…",
+      "remove": "Remove",
+      "uploadError": "The logo could not be uploaded",
+      "phone": "Business phone",
+      "phoneHint": "Shows up in messages as '{{telefono_negocio}}'.",
+      "phonePlaceholder": "Optional",
+      "email": "Business email",
+      "emailPlaceholder": "Optional",
+      "website": "Website",
+      "websiteHint": "Including https://, for example https://mybusiness.com.",
+      "address": "Address",
+      "city": "City"
+    },
+    "preferences": {
+      "title": "Work preferences",
+      "intro": "When your team works and how the week is shown. The agenda already follows them: it marks non-working days, starts the week where you choose and warns when you schedule outside the workday.",
+      "workDays": "Work days",
+      "workStart": "Start of the workday",
+      "workEnd": "End of the workday",
+      "weekStart": "The week starts on",
+      "defaultLocale": "Default language",
+      "defaultLocaleHint": "The panel opens in this language for people who have not picked one yet.",
+      "locales": {
+        "es": "Español",
+        "en": "English"
+      },
+      "problems": {
+        "NO_WORK_DAYS": "Pick at least one work day.",
+        "WORK_DAY_INVALID": "One of the work days is not valid.",
+        "TIME_INVALID": "Write times as HH:MM, for example 08:00.",
+        "END_NOT_AFTER_START": "The workday has to end after it starts."
+      },
+      "scope": "They apply to the whole account. The agenda already follows them; other screens will adopt them gradually.",
+      "save": "Save preferences",
+      "saved": "Preferences saved",
+      "saveError": "The preferences could not be saved"
+    },
+    "branches": {
+      "title": "Branches",
+      "intro": "Your business locations and who works in each one. A person's branch decides which portfolio they see: a supervisor sees their own branch.",
+      "add": "+ New branch",
+      "empty": "There are no branches yet",
+      "emptyHint": "Not needed if you work from a single office. Create one per location to split the portfolio and the team.",
+      "columns": {
+        "name": "Branch",
+        "city": "City",
+        "manager": "Manager",
+        "members": "Members",
+        "credits": "Credits",
+        "status": "Status",
+        "actions": "Actions"
+      },
+      "active": "Active",
+      "inactive": "Deactivated",
+      "manage": "Members",
+      "manageOf": "Members of {name}",
+      "edit": "Edit",
+      "editOf": "Edit {name}",
+      "addTitle": "New branch",
+      "editTitle": "Edit branch",
+      "fields": {
+        "name": "Name",
+        "code": "Code",
+        "codeHint": "Short, e.g. CEN. Saved in uppercase.",
+        "city": "City",
+        "address": "Address",
+        "manager": "Manager",
+        "noManager": "No manager",
+        "active": "Active branch",
+        "activeHint": "To deactivate it, first move its members to another branch."
+      },
+      "save": "Save",
+      "cancel": "Cancel",
+      "close": "Close",
+      "remove": "Remove branch",
+      "saved": "Branch saved",
+      "created": "Branch created",
+      "removed": "Branch removed",
+      "saveError": "The change could not be saved",
+      "removeTitle": "Remove {name}?",
+      "removeText": "The branch stops showing, but the credits and routes that name it keep their history.",
+      "removeBlocked": "It has {n, plural, one {# active member} other {# active members}}. Move them to another branch before removing it.",
+      "removeOk": "Remove",
+      "membersTitle": "Members of {name}",
+      "currentMembers": "In this branch",
+      "noMembers": "Nobody is in this branch yet.",
+      "takeOut": "Remove",
+      "takeOutOf": "Remove {name} from the branch",
+      "memberRemoved": "Member removed from the branch",
+      "addMembers": "Add people",
+      "scopeWarning": "Changing someone's branch changes the portfolio they see.",
+      "noCandidates": "There are no more active people to add.",
+      "comesFrom": "from {name}",
+      "noBranch": "no branch",
+      "addPicked": "{n, plural, =0 {Add} one {Add # person} other {Add # people}}",
+      "membersAdded": "Members moved to the branch"
+    },
+    "billing": {
+      "title": "Billing details",
+      "edit": "Edit",
+      "cancel": "Cancel",
+      "missingTitle": "Required details are missing.",
+      "missingText": "Fill in {fields} so we can issue your invoice. Address is optional.",
+      "intro": "Who the invoice is issued to and where it is sent. Kobrax manages the plan: nothing is charged inside the product.",
+      "legalName": "Legal name",
+      "legalNameHint": "The one invoices are issued to, if different from the business name.",
+      "taxId": "Tax ID",
+      "email": "Invoice email",
+      "emailHint": "The invoice is sent here.",
+      "address": "Tax address",
+      "save": "Save details",
+      "saved": "Billing details saved",
+      "saveError": "The details could not be saved",
+      "historyTitle": "Plan history",
+      "historyIntro": "The plan and status changes Kobrax made to your account. To request a new one, go to the Plan tab.",
+      "historyEmpty": "There have been no plan changes yet.",
+      "planChanged": "Plan: {from} → {to}",
+      "statusChanged": "Status: {from} → {to}"
+    },
+    "planRequest": {
+      "soloTitle": "Move from working alone to working as a team",
+      "soloText": "Your plan is individual: one person. With a team plan you invite collectors and supervisors, split the portfolio between them and see everyone's work in one place.",
+      "soloGain": "With {plan} you go from {fromUsers, number} to {toUsers, number} members and from {fromCredits, number} to {toCredits, number} active credits.",
+      "seeTeam": "See team plans",
+      "soloModalTitle": "Move to a team plan",
+      "groups": {
+        "individual": "Individual",
+        "team": "Team"
+      },
+      "groupHint": {
+        "individual": "one person",
+        "team": "several people working together"
+      },
+      "features": {
+        "members": "{n, plural, one {# member} other {# members}}",
+        "membersUnlimited": "Unlimited members",
+        "credits": "{n, number} active credits",
+        "creditsUnlimited": "Unlimited credits",
+        "clients": "{n, number} clients",
+        "clientsUnlimited": "Unlimited clients",
+        "photos": "{n, number} photos a month",
+        "photosUnlimited": "Unlimited photos"
+      },
+      "currentIs": "You are on the {plan} plan today.",
+      "title": "Change plan",
+      "intro": "The Kobrax team makes plan changes. Request it here and we will let you know when it is ready; until then, nothing changes in your account.",
+      "ask": "Request a plan change",
+      "modalTitle": "Request a plan change",
+      "plan": "Plan you want",
+      "note": "Anything we should know",
+      "noteHint": "Optional. For example, how many more people will use the account.",
+      "cancel": "Cancel",
+      "send": "Send request",
+      "sent": "Request sent",
+      "error": "The request could not be sent",
+      "pending": "You asked to move to {plan} on {date}. Kobrax will get back to you soon.",
+      "handled": "Your last request ({plan}) has been handled.",
+      "rejected": "Your last request ({plan}) could not be done."
+    },
+    "activity": {
+      "title": "Account activity",
+      "intro": "Who changed what in the account settings, team, branches and lists. Only people who can read the audit log see it.",
+      "filter": "Type of change",
+      "all": "All",
+      "entities": {
+        "account": "Account details",
+        "branch": "Branch",
+        "catalog_item": "Catalog item",
+        "arrear_category": "Arrears category",
+        "user_account": "Team member",
+        "account_request": "Request to Kobrax"
+      },
+      "actions": {
+        "CREATE": "Created",
+        "UPDATE": "Changed",
+        "DELETE": "Removed",
+        "REASSIGN_ON_DEACTIVATE": "Handed over the work of"
+      },
+      "byKobrax": "Kobrax ({via})",
+      "unknownActor": "Someone on the team",
+      "empty": "There is no activity to show yet.",
+      "empty_value": "empty",
+      "more": "Load more",
+      "loadError": "The activity could not be loaded"
+    },
+    "advanced": {
+      "backup": {
+        "title": "Full backup",
+        "text": "Download all your account data —clients, credits, payments, follow-ups and routes— in a single file. The download is recorded.",
+        "download": "Download backup"
+      },
+      "retention": {
+        "title": "Photo retention",
+        "unlimited": "Your plan keeps photos with no time limit.",
+        "months": "Your plan keeps photos for {n, plural, one {# month} other {# months}}.",
+        "older": "Photos older than that: {older, number} of {total, number}.",
+        "noDelete": "For now this is only a notice: Kobrax does not delete or archive photos automatically. Each photo stores its digital fingerprint as evidence, and nothing is deleted without telling you first."
+      },
+      "ownership": {
+        "title": "Transfer ownership",
+        "intro": "The owner answers for the account to Kobrax. You can hand ownership to another active administrator; you will remain an administrator. We ask for your password and, if you have two-step verification, your code.",
+        "notOwner": "Only the current owner of the account can transfer ownership.",
+        "noCandidates": "There is no other active administrator to hand the account to. Invite or promote one from Team.",
+        "target": "New owner",
+        "choose": "Choose an administrator",
+        "password": "Your password",
+        "code": "Verification code",
+        "codeHint": "If you have two-step verification on.",
+        "submit": "Transfer ownership",
+        "cancel": "Cancel",
+        "confirmTitle": "Transfer ownership?",
+        "confirmText": "You are about to hand the account's ownership to {name}. You will not be able to undo this yourself: that person would have to hand it back.",
+        "confirmOk": "Yes, transfer",
+        "done": "Ownership transferred",
+        "error": "Ownership could not be transferred"
+      },
+      "closure": {
+        "title": "Close the account",
+        "intro": "Request the closure and the Kobrax team will get in touch. Requesting it deletes nothing: your data stays intact until we talk.",
+        "ask": "Request closure",
+        "modalTitle": "Request account closure",
+        "modalText": "This tells Kobrax you want to close the account. Nothing is deleted now.",
+        "confirmLabel": "Type \"{name}\" to confirm",
+        "note": "Reason",
+        "noteHint": "Optional. It helps us improve.",
+        "cancel": "Cancel",
+        "send": "Request closure",
+        "sent": "Request sent",
+        "error": "The request could not be sent",
+        "pending": "You asked for the closure on {date}. Kobrax will get in touch."
+      }
+    },
+    "edit": "Edit",
+    "cancel": "Cancel",
     "businessData": "Business details",
+    "businessDataHint": "Basic information shown in the app, receipts and invitations.",
     "financialData": "Financial settings",
     "decimals": "Amount decimals",
     "decimalsValue": "{n, plural, =0 {No decimals} one {# decimal} other {# decimals}}",
@@ -2269,7 +2676,7 @@
     },
     "templates": {
       "title": "WhatsApp templates",
-      "intro": "The messages your team can pick when writing to a debtor from a task. These variables are filled in automatically on send:",
+      "intro": "The messages your team can pick when writing to a debtor from a task. Pick one from the list to see how it looks; variables are filled in automatically when sending.",
       "empty": "No templates yet",
       "emptyHint": "Create the first one: a payment reminder with the name and balance is enough.",
       "examples": "Or start from an example — it opens so you can adjust the tone before saving:",
@@ -2280,7 +2687,7 @@
       "label": "Name",
       "labelHint": "How the team sees it when picking.",
       "body": "Message",
-      "bodyHint": "The variables above are replaced with the debtor's data on send.",
+      "bodyHint": "Variables are replaced with the debtor’s data when sending.",
       "save": "Save",
       "cancel": "Cancel",
       "saved": "Template saved",
@@ -2289,7 +2696,56 @@
       "removeTitle": "Remove “{name}”?",
       "removeText": "The team will no longer see it when sending. Already sent messages don't change.",
       "removeOk": "Yes, remove",
-      "removed": "Template removed"
+      "removed": "Template removed",
+      "search": "Search template…",
+      "filterBy": "Filter by category",
+      "all": "All",
+      "noResults": "No template matches the search.",
+      "pickOne": "Pick a template to see its preview.",
+      "previewTitle": "Preview",
+      "previewHint": "How the message would look with sample data.",
+      "previewBubble": "Sample of the message",
+      "previewEmpty": "Write the message to see it here.",
+      "exampleTag": "Sample data",
+      "sampleTitle": "Sample data",
+      "sampleHint": "Made up, only for this preview. Not any real debtor’s.",
+      "sample": {
+        "cliente": "Debtor (sample)",
+        "saldo": "Balance (sample)",
+        "negocio": "Business (sample)",
+        "telefono_negocio": "Business phone (sample)"
+      },
+      "variable": {
+        "cliente": "Debtor name",
+        "saldo": "Outstanding balance",
+        "negocio": "Business name",
+        "telefono_negocio": "Business phone"
+      },
+      "insertVariable": "Insert variable",
+      "insertHint": "Inserted at the cursor. If a value is not available when sending, Kobrax warns you first.",
+      "categoryLabel": "Category",
+      "categoryHint": "When it is used. Optional.",
+      "noCategory": "No category",
+      "category": {
+        "INITIAL": "Initial",
+        "REMINDER": "Reminder",
+        "PROMISE": "Promise",
+        "LAST_NOTICE": "Final notice",
+        "CONFIRMATION": "Confirmation"
+      },
+      "unknownVars": "Unknown variable: {names}. It would not be replaced when sending.",
+      "unknownBlock": "Fix or remove the unknown variables before saving: {names}.",
+      "missingSample": "Missing sample value for: {names}. Shown as is.",
+      "suggestions": "Suggestions",
+      "suggestionsFor": "Suggestions for “{category}”",
+      "suggestionsPick": "Pick a category to see suggested messages.",
+      "useSuggestion": "Use",
+      "tone": "Tone",
+      "tones": {
+        "AMABLE": "Friendly",
+        "FORMAL": "Formal",
+        "FIRME": "Firm"
+      }
     },
     "timezone": "Timezone",
     "timezoneAuto": "Based on country",
@@ -2353,6 +2809,17 @@
       "BUSINESS": "${base, number} + ${perSeat, number} per member per month",
       "ENTERPRISE": "Tailored to you"
     },
+    "summary": {
+      "plan": "Plan",
+      "state": "Status",
+      "members": "Members",
+      "trialLeft": "{n, plural, =0 {Trial ends today} one {Trial ends tomorrow} other {Trial ends in # days}}",
+      "trialUntil": "Until {date}. After that it moves to Free and nothing is deleted."
+    },
+    "frozen": {
+      "title": "Your account is over {n, plural, one {one limit} other {# limits}} of its plan",
+      "text": "You can keep collecting with what you already have, but you cannot add more in: {limits}."
+    },
     "seats": "Team members",
     "seatsValue": "{used, number} of {max, number}",
     "seatsCustom": "Your account has a custom limit: {max, number} members instead of {plan, number}.",
@@ -2385,16 +2852,38 @@
       "hint": "Optional. What the client lives on and when the money arrives, so we do not push before they get paid.",
       "unset": "Not set",
       "source": "Source of income",
-      "sourceDefault": { "EMPLOYEE": "Employee or professional", "BUSINESS": "Merchant or producer", "OTHER": "Other" },
+      "sourceDefault": {
+        "EMPLOYEE": "Employee or professional",
+        "BUSINESS": "Merchant or producer",
+        "OTHER": "Other"
+      },
       "occupation": "Occupation",
       "cycle": "How often the money arrives",
-      "cycleOptions": { "DAILY": "Every day", "WEEKLY": "Every week", "BIWEEKLY": "Every two weeks", "MONTHLY": "Every month", "QUARTERLY": "Every three months", "SEASONAL": "Seasonal", "IRREGULAR": "No fixed rhythm" },
+      "cycleOptions": {
+        "DAILY": "Every day",
+        "WEEKLY": "Every week",
+        "BIWEEKLY": "Every two weeks",
+        "MONTHLY": "Every month",
+        "QUARTERLY": "Every three months",
+        "SEASONAL": "Seasonal",
+        "IRREGULAR": "No fixed rhythm"
+      },
       "dayOfWeek": "Day of the week",
       "dayOfMonth": "Day of the month",
-      "weekdays": { "1": "Monday", "2": "Tuesday", "3": "Wednesday", "4": "Thursday", "5": "Friday", "6": "Saturday", "7": "Sunday" },
+      "weekdays": {
+        "1": "Monday",
+        "2": "Tuesday",
+        "3": "Wednesday",
+        "4": "Thursday",
+        "5": "Friday",
+        "6": "Saturday",
+        "7": "Sunday"
+      },
       "notes": "Detail",
       "notesPlaceholder": "E.g.: paid at city hall, freight payments are delayed",
-      "errors": { "day": "The day does not match the chosen cycle." }
+      "errors": {
+        "day": "The day does not match the chosen cycle."
+      }
     },
     "collection": {
       "title": "How to collect",
@@ -2402,17 +2891,35 @@
       "unset": "Not set",
       "modality": "Modality",
       "frequency": "Frequency",
-      "frequencyOptions": { "DAILY": "Every day", "WEEKLY": "Once a week", "PER_INSTALLMENT": "Following the installment calendar" },
+      "frequencyOptions": {
+        "DAILY": "Every day",
+        "WEEKLY": "Once a week",
+        "PER_INSTALLMENT": "Following the installment calendar"
+      },
       "windowFrom": "From (time)",
       "windowTo": "To (time)",
       "handoverBy": "Who hands over",
-      "handoverOptions": { "HOLDER": "The account holder", "FAMILY": "A family member", "EMPLOYEE": "An employee" },
+      "handoverOptions": {
+        "HOLDER": "The account holder",
+        "FAMILY": "A family member",
+        "EMPLOYEE": "An employee"
+      },
       "days": "Days",
-      "dayShort": { "1": "M", "2": "T", "3": "W", "4": "T", "5": "F", "6": "S", "7": "S" },
+      "dayShort": {
+        "1": "M",
+        "2": "T",
+        "3": "W",
+        "4": "T",
+        "5": "F",
+        "6": "S",
+        "7": "S"
+      },
       "note": "Instruction",
       "notePlaceholder": "E.g.: knock at the green gate, before the shop opens",
       "summary": "How to collect",
-      "errors": { "window": "The time window needs both times, and \"to\" must be after \"from\"." }
+      "errors": {
+        "window": "The time window needs both times, and \"to\" must be after \"from\"."
+      }
     },
     "channel": {
       "unset": "Not set",
@@ -3387,6 +3894,8 @@
     "paymentQrHint": "The one you show debtors so they can pay from their bank.",
     "remove": "Remove",
     "uploading": "Uploading…",
+    "dropTitle": "Drag an image here",
+    "dropOr": "or click to upload",
     "uploadError": "Could not upload the file",
     "save": "Save changes",
     "saved": "Profile updated",

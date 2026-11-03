@@ -40,6 +40,10 @@ function makeAuth(opts: {
   revokeFails?: boolean;
   /** La persona tiene un rol crítico (lo que dice `MfaService.isCritical`). */
   critical?: boolean;
+  /** La cuenta que lee `/auth/me` para la marca del panel; sin ella el doble devuelve `null`. */
+  brand?: { businessName: string; phone: string | null; logoUrl: string | null; configuration?: unknown };
+  /** Leer la cuenta falla (base caída). */
+  brandFails?: boolean;
 }) {
   const calls = {
     userUpdate: [] as { where: { id: string }; data: Record<string, unknown> }[],
@@ -62,6 +66,11 @@ function makeAuth(opts: {
         userSession: { create: async () => ({ id: 'sess-nueva' }) },
         refreshToken: { create: async () => ({}) },
       }),
+    // `/auth/me` lee la marca del negocio por acá (no pasa por TenantGuard).
+    withSystemTenant: async <T>(_accountId: string, fn: (tx: unknown) => Promise<T>): Promise<T> => {
+      if (opts.brandFails) throw new Error('base caída');
+      return fn({ account: { findFirst: async () => opts.brand ?? null } });
+    },
   };
   const permissions = {
     forRole: async (roleId: string) => {
@@ -375,5 +384,44 @@ describe('AuthService.me — sesión del token (W-LOG-54)', () => {
     const me = await service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [], sessionId: 'sess-1' });
     assert.equal(me.sessionId, 'sess-1');
     assert.equal(me.accountId, 'a1');
+  });
+
+  it('entrega la marca del negocio activo: nombre, teléfono y logo', async () => {
+    const { service } = makeAuth({
+      user: { id: 'u1', email: 'm@kobrax.demo', profile: null, mfaEnabled: false, requiresPasswordChange: false },
+      brand: { businessName: 'Cobranzas Pérez', phone: '70000000', logoUrl: '/api/uploads/x.png' },
+    });
+    const me = await service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
+    assert.deepEqual(me.account, {
+      name: 'Cobranzas Pérez',
+      phone: '70000000',
+      logoUrl: '/api/uploads/x.png',
+      preferences: { workDays: [1, 2, 3, 4, 5, 6], workStart: '08:00', workEnd: '18:00', weekStart: 'MON', defaultLocale: 'es' },
+    });
+  });
+
+  it('entrega las preferencias de trabajo de la cuenta junto con la marca (la agenda las lee sin account:read)', async () => {
+    const { service } = makeAuth({
+      user: { id: 'u1', email: 'm@kobrax.demo', profile: null, mfaEnabled: false, requiresPasswordChange: false },
+      brand: {
+        businessName: 'Cobranzas Pérez',
+        phone: null,
+        logoUrl: null,
+        configuration: { preferences: { workDays: [1, 2, 3, 4, 5], workStart: '09:00', workEnd: '17:00', weekStart: 'SUN', defaultLocale: 'en' } },
+      },
+    });
+    const me = await service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
+    assert.deepEqual(me.account?.preferences, { workDays: [1, 2, 3, 4, 5], workStart: '09:00', workEnd: '17:00', weekStart: 'SUN', defaultLocale: 'en' });
+  });
+
+  it('si no se puede leer la marca del negocio, la identidad igual se entrega (account: null)', async () => {
+    // Leer la cuenta falla (base caída): eso no puede tumbar `/auth/me`.
+    const { service } = makeAuth({
+      user: { id: 'u1', email: 'm@kobrax.demo', profile: null, mfaEnabled: false, requiresPasswordChange: false },
+      brandFails: true,
+    });
+    const me = await service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
+    assert.equal(me.account, null);
+    assert.equal(me.userId, 'u1');
   });
 });

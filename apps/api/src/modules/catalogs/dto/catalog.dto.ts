@@ -5,6 +5,8 @@ export class CreateCatalogItemDto {
   @IsString() code!: string;
   @IsString() label!: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) sortOrder?: number;
+  /** Nace activo si no se dice otra cosa. */
+  @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @IsObject() metadata?: Record<string, unknown>;
 }
 

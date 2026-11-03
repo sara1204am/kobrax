@@ -156,9 +156,9 @@ export function DataTable<T>({
   const [visible, setVisible] = useState<string[]>(() =>
     columns.filter((c) => c.visibleByDefault !== false).map((c) => c.key),
   );
-  // El panel abre solo si ya hay un filtro puesto: si no, un filtro activo quedaría escondido y la
-  // lista saldría corta sin que nada lo explique.
-  const [panelOpen, setPanelOpen] = useState(Boolean(filtered));
+  // El panel arranca abierto en toda tabla que tenga filtros: se puede cerrar con el botón, pero
+  // nadie tiene que buscarlo para filtrar (y un filtro activo nunca queda escondido).
+  const [panelOpen, setPanelOpen] = useState(Boolean(filters?.length) || Boolean(filtered));
   const restored = useRef(false);
 
   const filterKeys = useMemo(() => (filters ?? []).flatMap((f) => f.keys), [filters]);

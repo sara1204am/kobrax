@@ -183,6 +183,13 @@ export const DUE_SOON_DAYS = 3;
 export const CREDIT_STATUSES = ['ACTIVE', 'PAID', 'DEFAULTED', 'RESTRUCTURED', 'WRITTEN_OFF', 'CANCELLED'] as const;
 
 /**
+ * Los estados que se pueden **elegir** al editar un crédito. `WRITTEN_OFF` queda fuera: el castigo ya no es un estado
+ * (D1-a, `written_off_at`) y la API rechaza escribirlo; se pide por su endpoint. Sigue en `CREDIT_STATUSES` porque el
+ * import lo usa para marcar «castigado» en su mapa de etiquetas.
+ */
+export const EDITABLE_CREDIT_STATUSES = CREDIT_STATUSES.filter((s) => s !== 'WRITTEN_OFF');
+
+/**
  * De dónde salen los días de mora de un crédito. **Una mora, tres orígenes.**
  *
  * 🔴 **Cada origen tiene un solo dueño, y esa es toda la regla**: el trabajo diario nunca decide la

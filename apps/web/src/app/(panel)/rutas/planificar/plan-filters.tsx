@@ -78,7 +78,6 @@ export function planFilterDefs(
             type: 'multiSelect' as const,
             // Plegado: las categorías y las prioridades desplegadas empujan fuera de la pantalla a
             // los filtros que se usan todos los días.
-            collapsed: true,
             options: categories.map((c) => ({ value: c.code, label: `${c.code} · ${c.name}` })),
           },
         ]
@@ -88,7 +87,6 @@ export function planFilterDefs(
       label: t('priority'),
       type: 'multiSelect',
       // La prioridad es la del EPISODIO de mora abierto.
-      collapsed: true,
       options: COLLECTION_PRIORITIES.map((p) => ({ value: p, label: t(`priorities.${p}`) })),
     },
     {
@@ -96,7 +94,6 @@ export function planFilterDefs(
       label: t('outcome'),
       type: 'multiSelect',
       // Plegado: prioridades y diez resultados desplegados empujan fuera de la pantalla a los de uso diario.
-      collapsed: true,
       options: Object.values(VisitOutcome).map((o) => ({ value: o, label: tOutcome(o) })),
     },
   ];

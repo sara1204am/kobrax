@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseEnumPipe, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseEnumPipe, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { CatalogType } from '@prisma/client';
 import { Permission } from '@kobrax/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -15,8 +15,12 @@ export class CatalogsController {
 
   @Get(':catalog')
   @Roles(Permission.CATALOG_READ)
-  list(@Param('catalog', new ParseEnumPipe(CatalogType)) catalog: CatalogType) {
-    return this.catalogs.list(catalog);
+  list(
+    @Param('catalog', new ParseEnumPipe(CatalogType)) catalog: CatalogType,
+    // `?includeInactive=true`: el editor de Cuenta ve también los desactivados. Sin él, sólo los activos.
+    @Query('includeInactive') includeInactive?: string,
+  ) {
+    return this.catalogs.list(catalog, includeInactive === 'true');
   }
 
   @Post(':catalog')

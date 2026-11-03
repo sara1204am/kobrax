@@ -6,6 +6,7 @@ import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AccountsModule } from './modules/accounts/accounts.module';
+import { BranchesModule } from './modules/branches/branches.module';
 import { UsersModule } from './modules/users/users.module';
 import { ClientsModule } from './modules/clients/clients.module';
 import { ImportsModule } from './modules/imports/imports.module';
@@ -46,6 +47,7 @@ import { AppVersionGuard } from './common/guards/app-version.guard';
     HealthModule,
     AuthModule,
     AccountsModule,
+    BranchesModule,
     UsersModule,
     ClientsModule,
     ImportsModule,

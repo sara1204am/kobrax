@@ -6,13 +6,17 @@ import { useTranslations } from 'next-intl';
 import { AgendaItemType, AgendaTimeSlot, renderTemplate, ScheduleTimeMode, type AgendaAssignee, type AgendaListItem } from '@kobrax/shared';
 import type { CatalogOption } from '@/components/client-form';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
+import { useAccountBrand } from '@/components/account-brand';
 import { Modal } from '@/components/modal';
 import { TONES, type Tone } from '@/components/tone-tile';
 import { useToast } from '@/components/toast';
 import { postJson, sendJson } from '@/lib/client';
+import { defaultTime } from '@/lib/agenda';
 import { money } from '@/lib/format';
+import { useWorkPreferences } from '@/lib/use-work-preferences';
 import type { PortfolioRow } from '@/lib/portfolio';
 import { LocationPicker, type Loc } from './location-picker';
+import { ScheduleNotice } from './schedule-notice';
 
 /**
  * Los cinco tipos, en el mismo orden que el teléfono.
@@ -126,10 +130,12 @@ export function NewTaskModal({
   const [metodo, setMetodo] = useState('');
   const [metodos, setMetodos] = useState<CatalogOption[]>([]);
   /** Plantillas de WhatsApp de la cuenta (catálogo `WHATSAPP_TEMPLATE`): las mismas que ofrece el teléfono. */
+  const brand = useAccountBrand();
   const [plantillas, setPlantillas] = useState<{ code: string; label: string; metadata?: { body?: string } }[]>([]);
 
   const [timeMode, setTimeMode] = useState<ScheduleTimeMode>(time ? ScheduleTimeMode.FIXED : ScheduleTimeMode.LAPSE);
-  const [hora, setHora] = useState(/^\d{2}:\d{2}$/.test(time ?? '') ? time! : '09:00');
+  const prefs = useWorkPreferences();
+  const [hora, setHora] = useState(/^\d{2}:\d{2}$/.test(time ?? '') ? time! : defaultTime(prefs));
   const [franja, setFranja] = useState<string>(AgendaTimeSlot.MORNING);
   const [scheduledDate, setScheduledDate] = useState(date);
   const [observations, setObservations] = useState('');
@@ -205,12 +211,13 @@ export function NewTaskModal({
 
   // Las plantillas sólo hacen falta para un WhatsApp: se piden al elegir ese tipo.
   useEffect(() => {
-    if (tipo !== AgendaItemType.WHATSAPP || plantillas.length > 0) return;
-    void fetch('/api/catalogs/WHATSAPP_TEMPLATE')
+    if (tipo !== AgendaItemType.WHATSAPP) return;
+    // Sin caché entre aperturas: una plantilla recién creada en Cuenta tiene que aparecer acá.
+    void fetch('/api/catalogs/WHATSAPP_TEMPLATE', { cache: 'no-store' })
       .then((r) => r.json())
       .then((b) => setPlantillas(Array.isArray(b?.data) ? b.data : []))
       .catch(() => setPlantillas([]));
-  }, [tipo, plantillas.length]);
+  }, [tipo]);
 
   async function elegirCliente(clientId: string, keepCreditId?: string) {
     setError(null);
@@ -482,6 +489,8 @@ export function NewTaskModal({
                             renderTemplate(p.metadata?.body ?? '', {
                               cliente: ctx.client.displayName,
                               saldo: credito ? money(credito.outstandingBalance, credito.currency) : undefined,
+                              negocio: brand?.name,
+                              telefono_negocio: brand?.phone ?? undefined,
                             }),
                           )
                         }
@@ -604,6 +613,8 @@ export function NewTaskModal({
               </Field>
             )}
           </div>
+
+          <ScheduleNotice date={scheduledDate} time={timeMode === ScheduleTimeMode.FIXED ? hora : undefined} />
 
           <Field label={t('create.observations')}>
             <textarea

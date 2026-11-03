@@ -31,6 +31,8 @@ DECLARE
     -- Corridas de importación (clientes y cartera). Llevan account_id desde
     -- 20260618160000 y quedaron fuera de esta lista hasta 2026-07-29.
     'client_import_runs',
+    -- Solicitudes de la cuenta a Kobrax (Refactor de Cuenta · F7).
+    'account_requests',
     -- Pilar 3
     'route_plans', 'route_stops',
     'field_visits', 'field_evidences',

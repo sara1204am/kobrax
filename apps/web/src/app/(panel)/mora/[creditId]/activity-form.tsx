@@ -22,7 +22,7 @@ import { postJson } from '@/lib/client';
 import { todayIso } from '@/lib/format';
 
 /** Si el tenant no cargó el catálogo de medios de pago, estos son los de siempre (los mismos del cobro). */
-const FALLBACK_METHODS = ['CASH', 'TRANSFER', 'QR', 'CARD', 'MOBILE_PAYMENT'];
+const FALLBACK_METHODS = ['CASH', 'TRANSFER', 'QR'];
 
 /**
  * Registrar una gestión: **qué se hizo, cómo terminó y, si prometió pagar, la promesa**.

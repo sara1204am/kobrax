@@ -1,3 +1,5 @@
+import type { AccountBilling } from '../utils/account-billing.js';
+import type { AccountPreferences } from '../utils/account-preferences.js';
 import type { PlanLimits } from '../constants/plans.js';
 import type { ArrearsMethod } from '../enums/credit.enum.js';
 
@@ -17,9 +19,27 @@ export interface AccountInfo {
   accountType: string;
   status: string;
   planCode: string;
+  /**
+   * Cuándo termina la prueba de 30 días. Sólo viene con valor mientras `status` es `TRIAL`; en cualquier otro
+   * estado es `null`. Opcional para que un cliente viejo, que no lo conoce, siga compilando.
+   */
+  trialEndsAt?: string | null;
   countryCode: string;
   currencyCode: string;
   timezone: string | null;
+  /** Logo del negocio: la ruta que devolvió `/uploads`. Opcional en el tipo para que un cliente viejo siga compilando. */
+  logoUrl?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  website?: string | null;
+  address?: string | null;
+  city?: string | null;
+  /** Preferencias de trabajo (días y horario laboral, inicio de semana, idioma por defecto). Siempre completas: lo no configurado trae el valor de fábrica. */
+  preferences?: AccountPreferences;
+  /** Datos fiscales para la factura. Siempre completos: `null` en lo no cargado. */
+  billing?: AccountBilling;
+  /** Datos fiscales obligatorios sin cargar (razón social, NIT, correo). Vacío = la cuenta ya puede facturarse. */
+  billingMissing?: (keyof AccountBilling)[];
   /**
    * Cuántos decimales muestran los montos (0–2, default 2). Preferencia de la cuenta: una
    * cartera que presta en enteros no quiere leer «,00» en cada renglón. Vive en `settings`.
@@ -65,6 +85,17 @@ export interface AccountPatch {
   countryCode?: string;
   currencyCode?: string;
   timezone?: string | null;
+  /** Identidad y contacto: `null` = quitarlo, ausente = no tocarlo. */
+  logoUrl?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  website?: string | null;
+  address?: string | null;
+  city?: string | null;
+  /** Sólo lo que cambió de las preferencias; la API lo mezcla con lo ya guardado. */
+  preferences?: Partial<AccountPreferences>;
+  /** Sólo lo que cambió de la facturación; `null` quita el dato. */
+  billing?: Partial<Record<keyof AccountBilling, string | null>>;
   /** Viaja como string ('0'|'1'|'2') porque sale de un `<select>` y el diff es de strings. */
   currencyDecimals?: string;
   /** Método de mora por defecto de los créditos nuevos (D20). */
@@ -107,6 +138,13 @@ export interface AccountForm {
   currencyDecimals: string;
   /** Método de mora por defecto (D20). La edita la web; el móvil sólo la lee. */
   arrearsMethod: string;
+  /** Identidad y contacto del negocio. `''` = no tiene; quitarlo viaja como `null`. */
+  logoUrl: string;
+  phone: string;
+  email: string;
+  website: string;
+  address: string;
+  city: string;
 }
 
 export interface ProfileForm {
@@ -116,4 +154,53 @@ export interface ProfileForm {
   photoUrl: string;
   /** `''` = no tiene. Quitarlo se traduce a `null` en `diffProfile`. */
   paymentQrUrl: string;
+}
+
+/** Lo que una cuenta le pide a Kobrax. El plan lo gestiona Kobrax: esto es un aviso con estado. */
+export type AccountRequestType = 'PLAN_CHANGE' | 'CLOSURE';
+export type AccountRequestStatus = 'PENDING' | 'HANDLED' | 'REJECTED';
+
+export interface AccountRequestInfo {
+  id: string;
+  type: AccountRequestType;
+  status: AccountRequestStatus;
+  /** PLAN_CHANGE: `plan` (lo que pidió) y `note`. CLOSURE: `note`. */
+  plan: string | null;
+  note: string | null;
+  /** Lo que Kobrax contestó al atenderla o rechazarla. */
+  handledNote: string | null;
+  createdAt: string;
+  handledAt: string | null;
+}
+
+/** Un renglón de la actividad de la cuenta: quién cambió qué, cuándo y desde dónde. */
+export interface AccountActivityEvent {
+  id: string;
+  at: string;
+  /** `account`, `branch`, `catalog_item`, `arrear_category`, `user_account`, `account_request`. */
+  entity: string;
+  action: string;
+  actorName: string | null;
+  ip: string | null;
+  /** Qué campos cambiaron, ya recortados y sin secretos. Vacío = no hay detalle que mostrar. */
+  changes: { field: string; from: string | null; to: string | null }[];
+  /** Si lo hizo Kobrax por consola (`plan:set`, `account:suspend`…) en vez de una persona de la cuenta. */
+  via: string | null;
+}
+
+export interface AccountActivityPage {
+  items: AccountActivityEvent[];
+  /** Pásalo como `before` para la página siguiente; `null` = no hay más. */
+  next: string | null;
+}
+
+/** Un cambio de plan o de estado hecho por Kobrax, para el historial de la pestaña Facturación. */
+export interface PlanHistoryEntry {
+  id: string;
+  at: string;
+  via: string;
+  fromPlan: string | null;
+  toPlan: string | null;
+  fromStatus: string | null;
+  toStatus: string | null;
 }
