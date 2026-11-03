@@ -179,7 +179,7 @@ export class PortfolioImportService {
   /**
    * La oficina de cada crédito nuevo (A-6 · B-A6), en este orden: la columna «Agencia» del archivo, resuelta por el CÓDIGO de la
    * oficina (y validada contra el alcance de quien importa); el alcance `branch` de la corrida; la oficina del responsable; la
-   * única hoja de la cuenta. Si nada la decide, 422 y la corrida entera se deshace: nunca un crédito sin oficina.
+   * de quien importa; la única hoja de la cuenta. Si nada la decide, 422 y la corrida entera se deshace: nunca un crédito sin oficina.
    * Una etiqueta que no coincide con ningún código se ignora (es texto libre del banco), no inventa una oficina.
    */
   private async officesForCreates(
@@ -213,7 +213,13 @@ export class PortfolioImportService {
         continue;
       }
       const responsibleId = assignees.get(row.code)?.userId ?? '';
-      if (!derived.has(responsibleId)) derived.set(responsibleId, await this.office.resolveCreditBranch(tx, { responsibleId: responsibleId || null }));
+      if (!derived.has(responsibleId)) {
+        // La oficina del responsable; si no tiene, la de quien importa (un gerente que reparte a un cobrador sin oficina no debe tirar
+        // abajo toda la corrida); si tampoco, la única hoja de la cuenta; si no se puede decidir, 422 y la corrida se deshace.
+        const own = responsibleId ? await this.office.soleOfficeOf(tx, responsibleId) : null;
+        const byImporter = own ?? (this.tenant.userId ? await this.office.soleOfficeOf(tx, this.tenant.userId) : null);
+        derived.set(responsibleId, byImporter ?? (await this.office.resolveCreditBranch(tx, { responsibleId: null })));
+      }
       out.set(row.code, derived.get(responsibleId)!);
     }
     return out;

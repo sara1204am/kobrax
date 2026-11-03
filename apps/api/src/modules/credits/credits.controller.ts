@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -27,6 +27,7 @@ export class CreditsController {
    * (Antes de `:id` para que no se confunda con un id.)
    */
   @Post('reassign-office')
+  @HttpCode(HttpStatus.OK)
   @Roles(Permission.ASSIGNMENT_WRITE)
   reassignOffice(@Body() dto: ReassignOfficeDto) {
     return this.credits.reassignOffice(dto);
