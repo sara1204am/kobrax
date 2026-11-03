@@ -3621,7 +3621,11 @@
         "days": "{count} días",
         "since": "desde {date}",
         "oldestUnpaid": "Cuota impaga más antigua: {number} (venció {date})"
-      }
+      },
+      "office": "Oficina del crédito",
+      "officeHint": "El crédito pertenece a una oficina; define quién lo ve.",
+      "officePick": "Elige la oficina",
+      "officeRequired": "Elige la oficina del crédito: tu cuenta tiene varias oficinas y debe quedar en una a la que tengas alcance."
     },
     "creditDetail": {
       "management": {

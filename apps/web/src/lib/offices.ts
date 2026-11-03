@@ -291,3 +291,15 @@ export function officePlan(
     limit: (account?.limits as { branches?: number | null } | undefined)?.branches ?? null,
   };
 }
+
+/** Los errores del alta de crédito que se arreglan ELIGIENDO la oficina del crédito (F13). */
+export const CREDIT_OFFICE_ERROR_CODES = ['CREDIT_BRANCH_UNRESOLVED', 'CREDIT_BRANCH_INVALID', 'CREDIT_OFFICE_OUT_OF_SCOPE'] as const;
+export const isCreditOfficeError = (code?: string | null): boolean => !!code && (CREDIT_OFFICE_ERROR_CODES as readonly string[]).includes(code);
+
+/**
+ * La oficina con la que arranca el alta de un crédito: la de la persona si hay una sola oficina elegible y es la suya;
+ * si no, ninguna (que elija). Con una sola oficina en la cuenta no hay selector y no se manda nada.
+ */
+export function defaultCreditOffice(options: { id: string }[], personBranchId: string | null | undefined): string {
+  return personBranchId && options.some((o) => o.id === personBranchId) ? personBranchId : '';
+}

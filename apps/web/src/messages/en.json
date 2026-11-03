@@ -3621,7 +3621,11 @@
         "days": "{count} days",
         "since": "since {date}",
         "oldestUnpaid": "Oldest unpaid instalment: {number} (due {date})"
-      }
+      },
+      "office": "Credit office",
+      "officeHint": "The credit belongs to one office; it decides who sees it.",
+      "officePick": "Pick the office",
+      "officeRequired": "Pick the credit's office: your account has several offices and it must land in one you have scope over."
     },
     "creditDetail": {
       "management": {

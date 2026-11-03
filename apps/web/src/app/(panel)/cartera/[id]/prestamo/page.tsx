@@ -1,9 +1,11 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import type { AccountInfo, Assignee, ClientDetail } from '@kobrax/shared';
+import type { AccountInfo, Assignee, ClientDetail, MeInfo, Member } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { EmptyState } from '@/components/panel-ui';
 import { fullName } from '@/lib/format';
+import { getOffices } from '@/lib/offices-server';
+import { defaultCreditOffice } from '@/lib/offices';
 import { LoanForm } from './loan-form';
 
 /**
@@ -16,11 +18,15 @@ import { LoanForm } from './loan-form';
 export default async function PrestamoPage({ params }: { params: { id: string } }) {
   const t = await getTranslations('portfolio');
 
-  const [client, assignees, account] = await Promise.all([
+  const [client, assignees, account, offices, me, team] = await Promise.all([
     apiCall<ClientDetail>(`/clients/${params.id}`, { method: 'GET', auth: true }),
     // Sólo con `assignment:write`: sin él, el préstamo queda a cargo de quien lo da de alta (P4).
     apiCall<Assignee[]>('/assignments/assignees', { method: 'GET', auth: true }),
     apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
+    // F13: con más de una oficina el crédito lleva la suya. Con una sola no hay selector.
+    getOffices(),
+    apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
+    apiCall<Member[]>('/users', { method: 'GET', auth: true }),
   ]);
 
   if (client.status === 404) notFound();
@@ -35,6 +41,11 @@ export default async function PrestamoPage({ params }: { params: { id: string } 
       assignees={assignees.body.data ?? []}
       currency={account.body.data?.currencyCode ?? 'BOB'}
       defaultArrearsMethod={account.body.data?.arrearsMethod}
+      offices={offices.options}
+      defaultOfficeId={defaultCreditOffice(
+        offices.options,
+        (team.body.data ?? []).find((m) => m.userId === me.body.data?.userId)?.branchId,
+      )}
     />
   );
 }
