@@ -5,6 +5,7 @@ const NOMBRE: Record<string, string> = {
   users: 'miembros activos',
   credits: 'créditos activos',
   clients: 'clientes',
+  branches: 'oficinas (la central incluida)',
 };
 
 /**

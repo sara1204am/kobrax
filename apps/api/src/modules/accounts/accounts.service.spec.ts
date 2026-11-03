@@ -59,8 +59,12 @@ function makeSignupService(opts: { role?: { id: string } | null; failWith?: unkn
     audit: undefined as Record<string, unknown> | undefined,
     categories: undefined as Record<string, unknown>[] | undefined,
     catalogs: undefined as Record<string, unknown>[] | undefined,
+    types: undefined as Record<string, unknown>[] | undefined,
+    branch: undefined as Record<string, unknown> | undefined,
   };
   const tx = {
+    branchType: { createMany: async (a: { data: Record<string, unknown>[] }) => void (calls.types = a.data) },
+    branch: { create: async (a: { data: Record<string, unknown> }) => void (calls.branch = a.data) },
     catalogItem: {
       createMany: async (a: { data: Record<string, unknown>[] }) => void (calls.catalogs = a.data),
     },
@@ -129,6 +133,23 @@ describe('AccountsService.create (registro público · S4)', () => {
     assert.equal(calls.audit!.userId, 'u-new');
     assert.equal(calls.audit!.ip, '1.2.3.4');
     assert.equal(res.accountId, calls.account!.id);
+  });
+
+  it('F13 · la cuenta nace con sus tipos de oficina y la RAÍZ con la razón social, en la misma transacción; el dueño queda sin asignación', async () => {
+    const { service, calls } = makeSignupService();
+    await service.create({ businessName: 'Banco Sur', firstName: 'A', lastName: 'B', email: 'a@b.com', password: 'Kobrax123!' } as never, {});
+    assert.deepEqual(calls.types!.map((t) => t.code), ['CENTRAL', 'REGIONAL', 'AGENCIA']);
+    assert.ok(calls.types!.every((t) => t.accountId === calls.account!.id));
+    const root = calls.branch!;
+    assert.equal(root.name, 'Banco Sur');
+    assert.equal(root.isRoot, true);
+    assert.equal(root.depth, 0);
+    assert.equal(root.accountId, calls.account!.id);
+    assert.equal(root.path, `/${root.id}/`);
+    assert.equal(root.typeId, calls.types!.find((t) => t.code === 'CENTRAL')!.id);
+    assert.equal(root.parentId, undefined);
+    // El dueño es ACCOUNT_ADMIN: sin asignación de oficina (ve todo por capacidad).
+    assert.equal(calls.membership!.branchId, undefined);
   });
 
   it('F4/08 · D1-b: la cuenta nace con las categorías de mora A 1–30, B 31–60, C 61+, de SU cuenta', async () => {

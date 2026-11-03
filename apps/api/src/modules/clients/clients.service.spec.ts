@@ -416,7 +416,7 @@ describe('ClientsService.list — cartera (view=portfolio)', () => {
     const sql = pageSql(calls).sql;
     assert.doesNotMatch(sql, /collection_cases/, 'F4/08: el cobrador ya no es el del caso');
     assert.match(sql, /EXISTS \(\s*SELECT 1 FROM credits k\s*WHERE k\.client_id = c\.id AND k\.deleted_at IS NULL AND k\.assigned_manager_id = \?/);
-    assert.match(sql, /k\.branch_id = \?/);
+    assert.match(sql, /k\.branch_id IN \(\s*SELECT nb\.id FROM branches nb/);
     assert.doesNotMatch(sql, /\bJOIN\b/);
   });
 

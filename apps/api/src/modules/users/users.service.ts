@@ -132,6 +132,21 @@ export class UsersService {
     return { changes, routesMoved, routesCancelled };
   }
 
+  /**
+   * Deja la asignación vigente de la persona en `branchId` (o ninguna con `null`). UNA sola vigente por persona y cuenta (índice
+   * temporal): se revoca la anterior y se crea la nueva en la misma transacción. Quien ya estaba ahí no se toca. El espejo
+   * `user_accounts.branch_id` lo escribe quien llama (mismo `UPDATE` que el rol y el estado) para que queden siempre iguales.
+   */
+  private async syncAssignment(tx: PrismaClient, userId: string, branchId: string | null): Promise<void> {
+    const accountId = this.tenant.accountId;
+    const current = await tx.userBranchAssignment.findMany({ where: { accountId, userId, revokedAt: null }, select: { id: true, branchId: true } });
+    const stale = current.filter((a) => a.branchId !== branchId);
+    if (stale.length > 0) await tx.userBranchAssignment.updateMany({ where: { id: { in: stale.map((a) => a.id) } }, data: { revokedAt: new Date() } });
+    if (branchId && !current.some((a) => a.branchId === branchId)) {
+      await tx.userBranchAssignment.create({ data: { accountId, userId, branchId, isPrimary: true, createdBy: this.tenant.userId ?? null } });
+    }
+  }
+
   async updateMember(userId: string, dto: UpdateMemberDto) {
     if (userId === this.selfId) throw cannotEditSelf();
 
@@ -189,6 +204,9 @@ export class UsersService {
         if (!branch) throw branchNotFound();
         if (!branch.active) throw branchInactive();
       }
+
+      // F13: la oficina de la persona vive en `user_branch_assignments` (fuente del alcance) y se espeja en `user_accounts.branch_id`.
+      if (dto.branchId !== undefined) await this.syncAssignment(tx, userId, dto.branchId);
 
       const updated = await tx.userAccount.update({
         where: { id: before.id },

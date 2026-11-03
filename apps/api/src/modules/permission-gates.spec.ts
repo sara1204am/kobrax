@@ -270,8 +270,10 @@ describe('D8 · repartir, cubrir y castigar', () => {
     assert.ok(!perms(RoleType.COLLECTOR).includes(Permission.ASSIGNMENT_WRITE));
   });
 
-  it('alcance: gerente y administrador = todo; supervisor = su agencia (y NO todo); cobrador = lo suyo', () => {
-    for (const rol of [RoleType.MANAGER, RoleType.ACCOUNT_ADMIN]) assert.ok(perms(rol).includes(Permission.DATA_SCOPE_ALL), rol);
+  it('alcance: administrador = todo; gerente = su subárbol (F13, y NO todo); supervisor = su agencia (y NO todo); cobrador = lo suyo', () => {
+    assert.ok(perms(RoleType.ACCOUNT_ADMIN).includes(Permission.DATA_SCOPE_ALL));
+    assert.ok(perms(RoleType.MANAGER).includes(Permission.DATA_SCOPE_SUBTREE));
+    assert.ok(!perms(RoleType.MANAGER).includes(Permission.DATA_SCOPE_ALL), 'el gerente (regional) ya no ve toda la cuenta por capacidad: se asigna a la raíz');
     assert.ok(perms(RoleType.SUPERVISOR).includes(Permission.DATA_SCOPE_BRANCH));
     assert.ok(!perms(RoleType.SUPERVISOR).includes(Permission.DATA_SCOPE_ALL));
     assert.ok(!perms(RoleType.COLLECTOR).includes(Permission.DATA_SCOPE_ALL) && !perms(RoleType.COLLECTOR).includes(Permission.DATA_SCOPE_BRANCH));
@@ -280,7 +282,9 @@ describe('D8 · repartir, cubrir y castigar', () => {
   it('castigar: credit:write en la puerta y alcance total en el service → sólo gerente y administrador', () => {
     assert.deepEqual(puerta(CreditsController, 'writeOff'), [Permission.CREDIT_WRITE]);
     assert.deepEqual(puerta(CreditsController, 'unWriteOff'), [Permission.CREDIT_WRITE]);
-    const pueden = Object.values(RoleType).filter((r) => perms(r).includes(Permission.CREDIT_WRITE) && perms(r).includes(Permission.DATA_SCOPE_ALL));
+    const pueden = Object.values(RoleType).filter(
+      (r) => perms(r).includes(Permission.CREDIT_WRITE) && (perms(r).includes(Permission.DATA_SCOPE_ALL) || perms(r).includes(Permission.DATA_SCOPE_SUBTREE)),
+    );
     assert.deepEqual(
       [...pueden].sort(),
       [RoleType.ACCOUNT_ADMIN, RoleType.MANAGER, RoleType.SUPER_ADMIN].sort(),

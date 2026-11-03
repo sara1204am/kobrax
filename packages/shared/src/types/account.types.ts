@@ -66,6 +66,8 @@ export interface AccountInfo {
     users: number;
     credits: number;
     clients: number;
+    /** Oficinas no borradas, la raíz incluida (F13). Opcional hasta que la web (P3) la lea: no rompe a quien arma `usage` a mano. */
+    branches?: number;
     photosPerMonth: number;
     actionsPerMonth: number;
   };

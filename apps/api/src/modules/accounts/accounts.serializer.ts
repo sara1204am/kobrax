@@ -37,6 +37,7 @@ export function serializeAccount(
     users: number;
     credits: number;
     clients: number;
+    branches: number;
     photosPerMonth: number;
     actionsPerMonth: number;
   },

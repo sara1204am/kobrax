@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client';
 import { collapseOfficePaths, officeDepth, officeInScope } from '@kobrax/shared';
 import { TenantContextService } from '../context/tenant-context.service';
 import { officeScopeKindOf, type AssignScope, type OfficeScopeKind } from './office-scope';
+import { officeInvalid, officeUnresolved } from './office-scope.errors';
 
 /**
  * El servicio ÚNICO que responde «en qué oficinas trabaja esta persona» y «en qué oficina está este crédito». Ningún
@@ -78,6 +79,54 @@ export class OfficeScopeService {
       },
     });
     return n > 0;
+  }
+
+  /**
+   * Una oficina que el actor PIDIÓ por su id (A-6: el servidor nunca confía en la del cliente): existe en esta cuenta, está
+   * activa y cae dentro del alcance de quien la pide (ALL = cualquiera de la cuenta).
+   */
+  async assertBranchUsable(tx: PrismaClient, branchId: string, scope?: AssignScope): Promise<{ id: string; path: string }> {
+    const b = await tx.branch.findFirst({ where: { id: branchId, accountId: this.tenant.accountId, deletedAt: null }, select: { id: true, path: true, active: true } });
+    if (!b) throw officeInvalid('NOT_FOUND');
+    if (!b.active) throw officeInvalid('INACTIVE');
+    if (!this.inScope(scope ?? (await this.assignScope(tx)), b.path)) throw officeInvalid('OUT_OF_SCOPE');
+    return { id: b.id, path: b.path };
+  }
+
+  /** La oficina de la ÚNICA asignación vigente de una persona, o `null` si no tiene ninguna o tiene varias. */
+  async soleOfficeOf(tx: PrismaClient, userId: string): Promise<string | null> {
+    const rows = await tx.userBranchAssignment.findMany({
+      where: { accountId: this.tenant.accountId, userId, revokedAt: null, user: { userAccounts: { some: { accountId: this.tenant.accountId, isActive: true } } } },
+      select: { branchId: true, branch: { select: { active: true, deletedAt: true } } },
+    });
+    const live = rows.filter((r) => r.branch.active && r.branch.deletedAt === null);
+    return live.length === 1 ? live[0]!.branchId : null;
+  }
+
+  /** La única oficina HOJA viva de la cuenta (la raíz cuando no hay agencias); `null` si hay varias. */
+  async soleLeafOffice(tx: PrismaClient): Promise<string | null> {
+    const live = await tx.branch.findMany({ where: { accountId: this.tenant.accountId, deletedAt: null, active: true }, select: { id: true, parentId: true } });
+    const parents = new Set(live.map((b) => b.parentId).filter((x): x is string => !!x));
+    const leaves = live.filter((b) => !parents.has(b.id));
+    return leaves.length === 1 ? leaves[0]!.id : null;
+  }
+
+  /**
+   * LA OFICINA DE UN CRÉDITO LA DECIDE EL SERVIDOR (A-6 · P0). En este orden, sin NULL en silencio:
+   *  1 · `branchId` explícito → existe, es de la cuenta, está activa y dentro del alcance del actor.
+   *  2 · si no viene: la oficina de la asignación vigente del responsable (si tiene exactamente una).
+   *  3 · si no: la única oficina hoja de la cuenta (la raíz si no hay agencias).
+   *  4 · si no se resuelve → 422 CREDIT_BRANCH_UNRESOLVED.
+   */
+  async resolveCreditBranch(tx: PrismaClient, input: { branchId?: string | null; responsibleId?: string | null }): Promise<string> {
+    if (input.branchId) return (await this.assertBranchUsable(tx, input.branchId)).id;
+    if (input.responsibleId) {
+      const own = await this.soleOfficeOf(tx, input.responsibleId);
+      if (own) return own;
+    }
+    const leaf = await this.soleLeafOffice(tx);
+    if (leaf) return leaf;
+    throw officeUnresolved();
   }
 
   /** ¿La oficina (por su ruta) queda dentro del alcance de reparto? */

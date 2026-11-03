@@ -55,6 +55,8 @@ export interface RowContext {
   prevStatus?: CreditStatus;
   /** Sólo al actualizar: desde cuándo está castigado, si lo está (D1-a). El castigo ya marcado no se pisa. */
   prevWrittenOffAt?: Date | null;
+  /** Sólo al crear: la oficina que el servidor resolvió para este crédito (F13 · A-6). */
+  branchId?: string;
   /**
    * Sólo al crear: a quién queda asignado. Lo decide `planAssignments` (quien importa, lo elegido o la
    * sugerencia del asesor) y la fila permanente la escribe `AssignmentService`: la columna nace igual.
@@ -106,7 +108,9 @@ export function creditCreateData(
     // D1-a: «castigado» es una condición aparte; la mora sigue corriendo y el job lo procesa igual.
     ...(isWrittenOffLabel(b.status, ctx.statusMap) ? writtenOffFields(stamp) : {}),
     daysPastDue: b.daysPastDue ?? 0,
-    branchId: scope.kind === 'branch' ? scope.ref : undefined,
+    // F13 · A-6: la oficina la decide el SERVIDOR (etiqueta «Agencia» por código → alcance de la corrida → oficina del responsable →
+    // única hoja) y llega resuelta en `ctx.branchId`. Ya no se deriva sólo del alcance `branch`. Un existente NO se toca (creditUpdateData).
+    branchId: ctx.branchId,
     assignedManagerId: ctx.assignedManagerId,
     disbursedAt: b.disbursedAt ? new Date(b.disbursedAt) : undefined,
     metadata: stripUndefined({

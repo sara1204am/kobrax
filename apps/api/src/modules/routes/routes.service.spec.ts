@@ -221,6 +221,8 @@ function makeService(
     { decrypt: (v: string) => v } as never,
     osrm as never,
     { today: async () => new Date(`${opts.today ?? '2026-06-20'}T00:00:00.000Z`), timezone: async () => 'UTC' } as never,
+    // F13: la oficina de la ruta se valida (si viene) o sale de la única asignación del cobrador (aquí: ninguna).
+    { assertBranchUsable: async (_tx: unknown, id: string) => ({ id, path: `/${id}/` }), soleOfficeOf: async () => null } as never,
   );
   /** El orden real del recorrido, para asertar contra él. */
   const order = () => stops.slice().sort((a, b) => a.sequenceOrder - b.sequenceOrder).map((s) => s.id);

@@ -22,11 +22,18 @@ describe('presets de alcance (shared)', () => {
     assert.equal(has(RoleType.SUPERVISOR, Permission.DATA_SCOPE_ALL), false);
   });
 
-  it('gerente, administradores, auditor y lector ven todo; ninguno es sólo de agencia', () => {
-    for (const r of [RoleType.MANAGER, RoleType.ACCOUNT_ADMIN, RoleType.SUPER_ADMIN, RoleType.AUDITOR, RoleType.VIEWER]) {
+  it('administradores, auditor y lector ven todo; ninguno es sólo de agencia', () => {
+    for (const r of [RoleType.ACCOUNT_ADMIN, RoleType.SUPER_ADMIN, RoleType.AUDITOR, RoleType.VIEWER]) {
       assert.equal(has(r, Permission.DATA_SCOPE_ALL), true, r);
     }
     for (const r of [RoleType.MANAGER, RoleType.AUDITOR, RoleType.VIEWER]) assert.equal(has(r, Permission.DATA_SCOPE_BRANCH), false, r);
+  });
+
+  it('F13 · el gerente (regional) ve su subárbol y ya NO toda la cuenta por capacidad: se asigna a la raíz (R13)', () => {
+    assert.equal(has(RoleType.MANAGER, Permission.DATA_SCOPE_SUBTREE), true);
+    assert.equal(has(RoleType.MANAGER, Permission.DATA_SCOPE_ALL), false);
+    assert.equal(has(RoleType.SUPERVISOR, Permission.DATA_SCOPE_SUBTREE), false);
+    assert.equal(has(RoleType.COLLECTOR, Permission.DATA_SCOPE_SUBTREE), false);
   });
 
   it('cobrador: ningún permiso de alcance (sólo lo suyo)', () => {
@@ -67,7 +74,7 @@ describe('seed y verificación', () => {
 
   it('el seed SINCRONIZA el alcance: quita el que el rol ya no lleva', () => {
     assert.match(SEED, /staleScopes/);
-    assert.match(SEED, /\['data:scope:all', 'data:scope:branch'\]\.filter\(\(c\) => !codes\.includes\(c\)\)/);
+    assert.match(SEED, /\['data:scope:all', 'data:scope:branch', 'data:scope:subtree'\]\.filter\(\(c\) => !codes\.includes\(c\)\)/);
   });
 
   it('el script de verificación comprueba supervisor = branch (no all), gerencia = all, cobrador = ninguno', () => {

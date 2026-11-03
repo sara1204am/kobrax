@@ -58,6 +58,8 @@ interface Opts {
   targetBusyDates?: string[];
   /** La agencia a la que se mueve a la persona: lo que devuelve su búsqueda (`null` = no existe en esta cuenta). */
   branch?: { active: boolean } | null;
+  /** Asignaciones vigentes de la persona a editar (F13). */
+  assignments?: { id: string; branchId: string }[];
 }
 
 function makeService(opts: Opts = {}) {
@@ -73,10 +75,24 @@ function makeService(opts: Opts = {}) {
     deleted: [] as string[],
     mail: [] as { to: string; text: string }[],
     handover: [] as string[],
+    assignRevoked: [] as string[],
+    assignCreated: [] as Record<string, unknown>[],
     applied: [] as { creditId: string; to: string | null }[],
     reason: undefined as string | undefined,
   };
   const tx = {
+    // F13: la asignación vigente de la persona (fuente del alcance) que `updateMember` mantiene junto al espejo `branch_id`.
+    userBranchAssignment: {
+      findMany: async () => opts.assignments ?? [],
+      updateMany: async (a: { where: { id: { in: string[] } } }) => {
+        calls.assignRevoked.push(...a.where.id.in);
+        return { count: a.where.id.in.length };
+      },
+      create: async (a: { data: Record<string, unknown> }) => {
+        calls.assignCreated.push(a.data);
+        return a.data;
+      },
+    },
     account: {
       findFirst: async () => ({
         id: 'acc-A',
@@ -230,6 +246,39 @@ describe('UsersService.updateMember — agencia', () => {
     await service.updateMember(OTHER, { branchId: BRANCH });
     assert.equal(calls.updated!.branchId, BRANCH);
     assert.deepEqual(calls.audit, ['UPDATE']);
+  });
+
+  it('F13 · espeja en user_branch_assignments: revoca la vigente anterior y crea la nueva (rol siempre null)', async () => {
+    const { service, calls } = makeService({ found: member({ branchId: 'b-vieja' }), assignments: [{ id: 'as-vieja', branchId: 'b-vieja' }] });
+    await service.updateMember(OTHER, { branchId: BRANCH });
+    assert.deepEqual(calls.assignRevoked, ['as-vieja']);
+    assert.equal(calls.assignCreated.length, 1);
+    assert.equal(calls.assignCreated[0]!.branchId, BRANCH);
+    assert.equal(calls.assignCreated[0]!.userId, OTHER);
+    assert.equal(calls.assignCreated[0]!.roleId, undefined);
+    assert.equal(calls.updated!.branchId, BRANCH, 'el espejo legado queda igual que la asignación');
+  });
+
+  it('F13 · quien ya está en esa oficina no genera asignación nueva', async () => {
+    const { service, calls } = makeService({ found: member({ branchId: BRANCH }), assignments: [{ id: 'as-1', branchId: BRANCH }] });
+    await service.updateMember(OTHER, { branchId: BRANCH });
+    assert.deepEqual(calls.assignRevoked, []);
+    assert.deepEqual(calls.assignCreated, []);
+  });
+
+  it('F13 · null revoca la asignación y limpia el espejo', async () => {
+    const { service, calls } = makeService({ found: member({ branchId: 'b-vieja' }), assignments: [{ id: 'as-vieja', branchId: 'b-vieja' }] });
+    await service.updateMember(OTHER, { branchId: null });
+    assert.deepEqual(calls.assignRevoked, ['as-vieja']);
+    assert.deepEqual(calls.assignCreated, []);
+    assert.equal(calls.updated!.branchId, null);
+  });
+
+  it('F13 · sin branchId en el parche no toca las asignaciones', async () => {
+    const { service, calls } = makeService({ assignments: [{ id: 'as-1', branchId: 'x' }] });
+    await service.updateMember(OTHER, { isActive: true });
+    assert.deepEqual(calls.assignRevoked, []);
+    assert.deepEqual(calls.assignCreated, []);
   });
 
   it('null la saca de su agencia', async () => {

@@ -123,3 +123,69 @@ describe('F13 · OfficeScopeService', () => {
     assert.equal(m.has('c3'), false);
   });
 });
+
+/** Un tx con el árbol: Central (raíz) › Chuquisaca › Mesa Verde, y Central › La Paz (desactivada). */
+function treeTx(opts: { assignments?: { userId: string; branchId: string }[]; onlyRoot?: boolean } = {}) {
+  const all = [
+    { id: 'root', path: '/root/', parentId: null, active: true, deletedAt: null, accountId: 'acc' },
+    { id: 'chq', path: '/root/chq/', parentId: 'root', active: true, deletedAt: null, accountId: 'acc' },
+    { id: 'mv', path: '/root/chq/mv/', parentId: 'chq', active: true, deletedAt: null, accountId: 'acc' },
+    { id: 'lpz', path: '/root/lpz/', parentId: 'root', active: false, deletedAt: null, accountId: 'acc' },
+    { id: 'otra', path: '/o/', parentId: null, active: true, deletedAt: null, accountId: 'OTRA' },
+  ].filter((b) => !opts.onlyRoot || b.id === 'root');
+  return {
+    branch: {
+      findFirst: async (a: { where: { id: string; accountId: string } }) => all.find((b) => b.id === a.where.id && b.accountId === a.where.accountId) ?? null,
+      findMany: async () => all.filter((b) => b.accountId === 'acc' && b.active),
+    },
+    userBranchAssignment: {
+      findMany: async (a: { where: { userId: string | { in: string[] } } }) =>
+        (opts.assignments ?? [])
+          .filter((x) => (typeof a.where.userId === 'string' ? x.userId === a.where.userId : a.where.userId.in.includes(x.userId)))
+          .map((x) => ({ branchId: x.branchId, userId: x.userId, branch: { active: true, deletedAt: null, path: all.find((b) => b.id === x.branchId)!.path } })),
+    },
+  } as never;
+}
+
+describe('F13 · A-6 resolveCreditBranch: la oficina del crédito la decide el servidor', () => {
+  const admin = () => service([Permission.DATA_SCOPE_ALL]);
+  const supervisor = () => service([Permission.DATA_SCOPE_BRANCH]);
+
+  it('1 · explícita: debe existir, ser de la cuenta, estar activa y en el alcance', async () => {
+    const tx = treeTx({ assignments: [{ userId: 'u1', branchId: 'mv' }] });
+    assert.equal(await admin().resolveCreditBranch(tx, { branchId: 'chq' }), 'chq');
+    await assert.rejects(admin().resolveCreditBranch(tx, { branchId: 'otra' }), (e: { response?: { code?: string; details?: { reason: string } } }) => e.response?.code === 'CREDIT_BRANCH_INVALID' && e.response.details?.reason === 'NOT_FOUND');
+    await assert.rejects(admin().resolveCreditBranch(tx, { branchId: 'nada' }), (e: { response?: { code?: string } }) => e.response?.code === 'CREDIT_BRANCH_INVALID');
+    await assert.rejects(admin().resolveCreditBranch(tx, { branchId: 'lpz' }), (e: { response?: { details?: { reason: string } } }) => e.response?.details?.reason === 'INACTIVE');
+    // El supervisor de Mesa Verde no puede poner un crédito en Chuquisaca (fuera de su subárbol), sí en su agencia.
+    assert.equal(await supervisor().resolveCreditBranch(tx, { branchId: 'mv' }), 'mv');
+    await assert.rejects(supervisor().resolveCreditBranch(tx, { branchId: 'chq' }), (e: { response?: { details?: { reason: string } } }) => e.response?.details?.reason === 'OUT_OF_SCOPE');
+  });
+
+  it('2 · sin oficina: la de la ÚNICA asignación vigente del responsable', async () => {
+    const tx = treeTx({ assignments: [{ userId: 'resp', branchId: 'mv' }] });
+    assert.equal(await admin().resolveCreditBranch(tx, { responsibleId: 'resp' }), 'mv');
+  });
+
+  it('2b · un responsable con DOS asignaciones no decide: cae a la regla 3 y, con varias hojas, a 422', async () => {
+    const tx = treeTx({ assignments: [{ userId: 'resp', branchId: 'mv' }, { userId: 'resp', branchId: 'chq' }] });
+    // hojas activas: mv y (lpz está desactivada) → una sola hoja viva: mv
+    assert.equal(await admin().resolveCreditBranch(tx, { responsibleId: 'resp' }), 'mv');
+  });
+
+  it('3 · sin responsable con oficina: la raíz si no hay agencias (tenant individual)', async () => {
+    assert.equal(await admin().resolveCreditBranch(treeTx({ onlyRoot: true }), {}), 'root');
+  });
+
+  it('3b · con una sola agencia viva, esa agencia', async () => {
+    assert.equal(await admin().resolveCreditBranch(treeTx(), {}), 'mv');
+  });
+
+  it('4 · si no se resuelve (varias hojas y nada que decida) → 422 CREDIT_BRANCH_UNRESOLVED, nunca NULL', async () => {
+    const tx = {
+      branch: { findMany: async () => [{ id: 'a', parentId: 'r' }, { id: 'b', parentId: 'r' }, { id: 'r', parentId: null }] },
+      userBranchAssignment: { findMany: async () => [] },
+    } as never;
+    await assert.rejects(admin().resolveCreditBranch(tx, { responsibleId: 'sin-oficina' }), (e: { response?: { code?: string } }) => e.response?.code === 'CREDIT_BRANCH_UNRESOLVED');
+  });
+});

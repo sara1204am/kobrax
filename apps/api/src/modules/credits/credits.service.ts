@@ -38,8 +38,11 @@ import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
+import { officeInvalid, officeOutOfScope } from '../../common/office-scope/office-scope.errors';
 import { AssignmentService } from '../assignments/assignment.service';
 import { moraScopeOf, visibleCredits } from '../mora/mora-query';
+import type { ReassignOfficeResult } from '../branches/branches.dto';
 import {
   buildSchedule,
   computeArrears,
@@ -48,12 +51,14 @@ import {
   type ArrearParams,
 } from './credit-math';
 import { serializeCredit, type CreditMoraContext } from './credits.serializer';
-import { ClearArrearsDto, CreateCreditDto, ListCreditsQueryDto, UpdateCreditDto } from './dto/credit.dto';
+import { ClearArrearsDto, CreateCreditDto, ListCreditsQueryDto, ReassignOfficeDto, UpdateCreditDto } from './dto/credit.dto';
 import {
   arrearsDateNotFuture,
   creditHasPayments,
   creditHasSchedule,
   creditInitialStateInvalid,
+  creditBranchImmutable,
+  reassignArgs,
   creditInstallmentMismatch,
   creditLocked,
   creditNotActive,
@@ -91,6 +96,7 @@ export class CreditsService {
     private readonly plan: PlanLimitsService,
     private readonly assignment: AssignmentService,
     private readonly arrearsPriority: ArrearsPriorityService,
+    private readonly office: OfficeScopeService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -279,6 +285,9 @@ export class CreditsService {
       // El aviso va donde la persona todavía puede hacer algo: en el teléfono, antes de encolar.
       await this.plan.assertRoom('credits', tx, { soft: Boolean(dto.id) });
 
+      // A-6 (P0): la oficina la decide el servidor. Lo que mande el cliente se valida (cuenta, activa, alcance), no se confía.
+      const branchId = await this.office.resolveCreditBranch(tx, { branchId: dto.branchId, responsibleId: responsible });
+
       const credit = await tx.credit.create({
         data: {
           // Sólo si el móvil lo propuso: mandar `id: undefined` haría que el default del schema
@@ -286,7 +295,7 @@ export class CreditsService {
           ...(dto.id ? { id: dto.id } : {}),
           accountId,
           clientId: dto.clientId,
-          branchId: dto.branchId,
+          branchId,
           code: dto.code,
           typeCode: dto.typeCode,
           // Espejo en columna de `metadata.origin` (D1). El alta sólo admite los de Kobrax.
@@ -328,17 +337,32 @@ export class CreditsService {
   async list(query: ListCreditsQueryDto): Promise<ApiResponse<ReturnType<typeof serializeCredit>[]>> {
     const { page, limit, skip } = resolvePagination(query);
     const config = await this.accountConfig();
-    const where: Prisma.CreditWhereInput = { deletedAt: null };
-    if (query.clientId) where.clientId = query.clientId;
-    if (query.branchId) where.branchId = query.branchId;
-    if (query.status) where.status = query.status;
+    const base: Prisma.CreditWhereInput = { deletedAt: null };
+    if (query.clientId) base.clientId = query.clientId;
+    if (query.status) base.status = query.status;
 
-    const [rows, total] = await this.tx((tx) =>
-      Promise.all([
+    const { rows, total } = await this.tx(async (tx) => {
+      const and: Prisma.CreditWhereInput[] = [];
+      // F13: `branchId` es «esa oficina y su SUBÁRBOL» (una regional trae sus agencias; con una hoja, la misma de siempre).
+      // Una oficina que no es de esta cuenta no calza con nada.
+      if (query.branchId) {
+        const node = await tx.branch.findFirst({ where: { id: query.branchId, accountId: this.tenant.accountId, deletedAt: null }, select: { path: true } });
+        and.push({ branch: { path: { startsWith: node?.path ?? '/__sin_oficina__/' } } });
+      }
+      // ...acotado por el alcance: el gerente regional (SUBTREE) sólo ve lo suyo y el subárbol de sus oficinas; asignado a la raíz, todo.
+      if (this.tenant.can(Permission.DATA_SCOPE_SUBTREE) && !this.tenant.can(Permission.DATA_SCOPE_ALL)) {
+        const scope = await this.office.assignScope(tx);
+        if (scope.kind === 'OFFICES') {
+          and.push({ OR: [{ assignedManagerId: this.tenant.userId ?? '' }, ...scope.paths.map((p) => ({ branch: { path: { startsWith: p } } }))] });
+        }
+      }
+      const where: Prisma.CreditWhereInput = and.length ? { ...base, AND: and } : base;
+      const [rows, total] = await Promise.all([
         tx.credit.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
         tx.credit.count({ where }),
-      ]),
-    );
+      ]);
+      return { rows, total };
+    });
     return ResponseDto.paginated(
       rows.map((c) => serializeCredit(c, config.labels, config.staleAfterDays)),
       total,
@@ -409,6 +433,8 @@ export class CreditsService {
         include: { _count: { select: { payments: true, installments: true } }, client: { select: { riskSegment: true } } },
       });
       if (!prev) throw resourceNotFound();
+      // La oficina ya no se edita acá: mandar la que ya tiene no es un cambio; cambiarla es `reassignOffice`.
+      if (dto.branchId !== undefined && dto.branchId !== prev.branchId) throw creditBranchImmutable();
 
       /*
        * 🔴 Cambiar el responsable exige `assignment:write`, y se revisa ACÁ y no con `@Roles`: este
@@ -460,8 +486,7 @@ export class CreditsService {
       };
       const data: Prisma.CreditUncheckedUpdateInput = {
         status: dto.status,
-        // El responsable NO va acá: lo escribió `AssignmentService` arriba (tabla + columna).
-        branchId: dto.branchId,
+        // El responsable NO va acá: lo escribió `AssignmentService` arriba (tabla + columna). La oficina tampoco (A-6).
         code: dto.code,
         typeCode: dto.typeCode,
         principalAmount: dto.principalAmount,
@@ -635,6 +660,56 @@ export class CreditsService {
       });
     }
     return serializeCredit(after, ...labelsOf(await this.accountConfig()));
+  }
+
+  /**
+   * Reasignación masiva de OFICINA (D-5 · R14). Con `assignment:write` (en la puerta) y alcance sobre el ORIGEN de cada crédito y
+   * sobre el DESTINO. Atómica por lote: o se mueven todos o ninguno. Audita cada crédito con antes y después.
+   *
+   * 🔴 NO toca `payments.branch_id`: es la oficina HISTÓRICA del pago (A-2, A-7). Mover un crédito no reescribe quién cobró qué.
+   */
+  async reassignOffice(dto: ReassignOfficeDto): Promise<ReassignOfficeResult> {
+    // Exactamente una de las dos formas: un lote explícito, o toda la cartera de una oficina.
+    if (Boolean(dto.creditIds?.length) === Boolean(dto.fromBranchId)) throw reassignArgs();
+    const ids = dto.creditIds ? [...new Set(dto.creditIds)] : null;
+    const CHUNK = 500;
+    const result = await this.tx(async (tx) => {
+      const scope = await this.office.assignScope(tx);
+      const dest = await this.office.assertBranchUsable(tx, dto.toBranchId, scope);
+      const select = { id: true, branchId: true, branch: { select: { path: true } } } as const;
+      let rows: { id: string; branchId: string | null; branch: { path: string } | null }[];
+      if (ids) {
+        rows = await tx.credit.findMany({ where: { id: { in: ids }, deletedAt: null }, select });
+        if (rows.length !== ids.length) throw resourceNotFound();
+      } else {
+        // Origen: existe en esta cuenta (aunque esté desactivada: justo se la vacía) y está en el alcance de quien mueve.
+        const from = await tx.branch.findFirst({ where: { id: dto.fromBranchId!, accountId: this.tenant.accountId, deletedAt: null }, select: { id: true, path: true } });
+        if (!from) throw officeInvalid('NOT_FOUND');
+        if (!this.office.inScope(scope, from.path)) throw officeOutOfScope([]);
+        rows = await tx.credit.findMany({ where: { branchId: from.id, deletedAt: null }, select });
+      }
+      // Alcance sobre el ORIGEN: un crédito sin oficina sólo lo mueve quien lo ve todo.
+      const outside = rows.filter((r) => !this.office.inScope(scope, r.branch?.path ?? null)).map((r) => r.id);
+      if (outside.length > 0) throw officeOutOfScope(outside);
+      const changing = rows.filter((r) => r.branchId !== dest.id);
+      // En lotes de 500 DENTRO de la misma transacción: o se mueve todo o nada.
+      for (let i = 0; i < changing.length; i += CHUNK) {
+        await tx.credit.updateMany({ where: { id: { in: changing.slice(i, i + CHUNK).map((r) => r.id) } }, data: { branchId: dest.id } });
+      }
+      return { changing, unchanged: rows.length - changing.length };
+    });
+    for (let i = 0; i < result.changing.length; i += 500) {
+      await this.audit.recordMany(
+        result.changing.slice(i, i + 500).map((r) => ({
+          entity: 'credit',
+          entityId: r.id,
+          action: 'REASSIGN_OFFICE',
+          before: { branchId: r.branchId },
+          after: { branchId: dto.toBranchId },
+        })),
+      );
+    }
+    return { moved: result.changing.length, unchanged: result.unchanged, toBranchId: dto.toBranchId };
   }
 
   /**
