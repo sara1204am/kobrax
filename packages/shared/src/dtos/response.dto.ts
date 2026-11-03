@@ -7,6 +7,11 @@ export interface ResponseMeta {
   page?: number;
   limit?: number;
   pages?: number;
+  /**
+   * Sumas sobre TODO el filtro, no sobre la página (p. ej. `totalAmount` de los pagos). Una lista paginada
+   * no puede sumar lo que no trajo: lo agrega el servidor.
+   */
+  aggregates?: Record<string, number>;
 }
 
 export interface ApiResponse<T> {
@@ -27,7 +32,7 @@ export const ResponseDto = {
     };
   },
 
-  paginated<T>(data: T[], total: number, page: number, limit: number): ApiResponse<T[]> {
+  paginated<T>(data: T[], total: number, page: number, limit: number, aggregates?: Record<string, number>): ApiResponse<T[]> {
     return {
       data,
       error: null,
@@ -38,6 +43,7 @@ export const ResponseDto = {
         page,
         limit,
         pages: Math.ceil(total / limit),
+        ...(aggregates ? { aggregates } : {}),
       },
     };
   },

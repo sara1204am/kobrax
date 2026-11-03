@@ -51,6 +51,19 @@ const CATALOGOS: CatalogType[] = [
   CatalogType.COLLECTION_MODALITY,
 ];
 
+/** Un paso de la bajada, para que la pantalla de «Datos sin conexión» muestre qué va y qué quedó. */
+export interface HydrateStep {
+  name: string;
+  state: 'running' | 'ok' | 'offline' | 'error';
+  /** Para los pasos que bajan de a uno (gestiones, fichas): cuántos van de cuántos. */
+  done?: number;
+  total?: number;
+}
+
+export interface HydrateOptions {
+  onProgress?: (step: HydrateStep) => void;
+}
+
 export interface HydrateResult {
   /** Qué se bajó bien, para el mensaje de la pantalla. */
   ok: string[];
@@ -58,16 +71,35 @@ export interface HydrateResult {
   failed: string[];
   /** `true` si no había red — el caller distingue "sin señal" de "el server falló". */
   offline: boolean;
+  /** El estado final de cada paso, en orden, con sus conteos. */
+  steps: HydrateStep[];
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Un fallo de red en medio de una cola de 60 no debe tirar las otras 59: se reintenta una vez antes de rendirse. */
+async function conReintento<T extends { status: string }>(fn: () => Promise<T>): Promise<T> {
+  const r = await fn();
+  if (r.status !== 'offline') return r;
+  await sleep(700);
+  return fn();
 }
 
 /**
  * Baja la jornada. Cada recurso es independiente: si la agenda falla, la ruta igual queda guardada.
  * Un dato viejo sirve más que ninguno, así que **nada se borra si la bajada falla**.
  */
-export async function hydrate(collectorId: string): Promise<HydrateResult> {
+export async function hydrate(collectorId: string, opts: HydrateOptions = {}): Promise<HydrateResult> {
   const ok: string[] = [];
   const failed: string[] = [];
+  const steps: HydrateStep[] = [];
+  const conteos = new Map<string, { done: number; total: number }>();
   let offline = false;
+  /** Avance de un paso que baja de a uno. No es un resultado: sólo se informa. */
+  const avance = (name: string, done: number, total: number): void => {
+    conteos.set(name, { done, total });
+    opts.onProgress?.({ name, state: 'running', done, total });
+  };
   // Primero qué día es para la empresa: todo lo que sigue se pide con ESE «hoy» (a las 20:00 en Bolivia el UTC ya es mañana).
   await refreshTenantToday();
   const hoy = todayISO();
@@ -81,7 +113,12 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
   };
 
   const paso = async (nombre: string, fn: () => Promise<'ok' | 'offline' | 'error'>): Promise<void> => {
+    opts.onProgress?.({ name: nombre, state: 'running' });
     const r = await fn();
+    const c = conteos.get(nombre);
+    const step: HydrateStep = { name: nombre, state: r, ...(c ? { done: c.done, total: c.total } : {}) };
+    steps.push(step);
+    opts.onProgress?.(step);
     if (r === 'ok') ok.push(nombre);
     else {
       failed.push(nombre);
@@ -134,10 +171,16 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
   // ver ni registrar en la calle — el `GET /agenda/:id` es lo único que trae a dónde llamar o ir.
   await paso('detalle de las gestiones', async () => {
     let hubo = false;
-    for (const id of agendaDetailIds(gestiones, hoy)) {
-      const r = await getItem(id);
+    const ids = agendaDetailIds(gestiones, hoy);
+    let n = 0;
+    for (const id of ids) {
+      const r = await conReintento(() => getItem(id));
       if (r.status === 'offline') return 'offline';
-      if (r.status === 'ok') hubo = true;
+      if (r.status === 'ok') {
+        hubo = true;
+        n++;
+      }
+      avance('detalle de las gestiones', n, ids.length);
     }
     return hubo || gestiones.length === 0 ? 'ok' : 'error';
   });
@@ -196,8 +239,10 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
     const enMora = await db.getMany<MoraRow>('mora');
     const clientIds = [...new Set([...cartera, ...enMora].map((c) => c.clientId).filter(Boolean))].slice(0, MAX_FICHAS);
     if (clientIds.length === 0) return 'ok';
+    let hechas = 0;
     for (const id of clientIds) {
-      const ficha = await getClient(id);
+      avance('fichas de la cartera', hechas, clientIds.length);
+      const ficha = await conReintento(() => getClient(id));
       if (ficha.status === 'offline') return 'offline';
       if (ficha.status === 'ok') await db.putAll<ClientDetail>('client', [ficha.data]);
       // El contexto es lo que consume el alta de gestión (créditos + contactos + ubicaciones).
@@ -222,13 +267,15 @@ export async function hydrate(collectorId: string): Promise<HydrateResult> {
           if (pagos.status === 'offline') return 'offline';
         }
       }
+      hechas++;
     }
+    avance('fichas de la cartera', hechas, clientIds.length);
     return 'ok';
   });
 
   // Con datos recién bajados se poda lo vencido o lo que pasa del tope; sin señal NO se poda (no hay con qué reemplazarlo).
   if (ok.length > 0) await db.purgeCache(CACHE_TTL_DAYS * 86_400_000, CACHE_MAX_BYTES);
-  return { ok, failed, offline };
+  return { ok, failed, offline, steps };
 }
 
 /** Cuándo se hidrató por última vez (para el "datos de las 08:15" del riesgo R4). */

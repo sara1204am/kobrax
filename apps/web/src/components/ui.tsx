@@ -5,6 +5,7 @@ import {
   type InputHTMLAttributes,
   type ReactNode,
   type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
   forwardRef,
   useState,
 } from 'react';
@@ -17,6 +18,7 @@ import { useTranslations } from 'next-intl';
  *   este flujo la llevan; el día que una no la quiera, ahí se agrega la prop.
  * - `primary` — navy sólido, para acciones secundarias con peso.
  * - `ghost` — borde, para lo terciario.
+ * - `danger` — rojo sólido, para confirmar lo destructivo (desactivar, eliminar).
  */
 export function Button({
   children,
@@ -25,11 +27,12 @@ export function Button({
   className = '',
   disabled,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean; variant?: 'cta' | 'primary' | 'ghost' }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean; variant?: 'cta' | 'primary' | 'ghost' | 'danger' }) {
   const styles = {
     cta: 'h-[52px] bg-k-cta text-white shadow-k-card hover:brightness-110 active:scale-[.99]',
     primary: 'h-12 bg-k-navy text-white hover:bg-k-slate active:scale-[.98]',
     ghost: 'h-12 bg-white text-k-text-2 border border-k-border hover:bg-k-bg',
+    danger: 'h-12 bg-k-danger text-white hover:brightness-110 active:scale-[.98]',
   }[variant];
 
   return (
@@ -167,6 +170,60 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
     );
   },
 );
+
+/** `<textarea>` con la misma caja que el `Input` (las demás pantallas lo escriben suelto con estas mismas clases). */
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement> & { error?: boolean }>(
+  function Textarea({ error, className = '', ...props }, ref) {
+    return (
+      <textarea
+        ref={ref}
+        {...props}
+        className={`w-full rounded-xl border-[1.5px] bg-white px-3.5 py-2.5 text-[15px] text-k-text outline-none transition-all placeholder:text-k-muted disabled:opacity-60 ${
+          error
+            ? 'border-k-danger focus:shadow-k-focus-error'
+            : 'border-k-light-bg focus:border-k-periwinkle focus:shadow-k-focus'
+        } ${className}`}
+      />
+    );
+  },
+);
+
+/**
+ * Interruptor encendido/apagado. Es un botón con `role="switch"`: teclado (Espacio/Enter), foco y lector de pantalla
+ * vienen del elemento. Se nombra con `aria-label` o `aria-labelledby` (el texto lo pone quien lo usa) y no va dentro de un `<label>`.
+ */
+export function Switch({
+  checked,
+  onChange,
+  disabled,
+  ...aria
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  disabled?: boolean;
+  'aria-label'?: string;
+  'aria-labelledby'?: string;
+  'aria-describedby'?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      {...aria}
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full outline-none transition-colors focus-visible:shadow-k-focus disabled:opacity-50 ${
+        checked ? 'bg-k-periwinkle' : 'bg-k-light-bg'
+      }`}
+    >
+      <span
+        aria-hidden
+        className={`inline-block h-5 w-5 rounded-full bg-white transition-transform ${checked ? 'translate-x-[22px]' : 'translate-x-0.5'}`}
+      />
+    </button>
+  );
+}
 
 /** Campo con su label arriba (14px, sentence case — §3 tipografía del diseño nuevo). */
 export function Field({

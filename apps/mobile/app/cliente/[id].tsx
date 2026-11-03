@@ -503,13 +503,14 @@ export default function ClienteFichaScreen() {
         // Importado (PSF): el saldo es el del último reporte y el pago no lo toca (D3). Topearlo
         // rechazaría un cobro real cuando el reporte va atrasado.
         maxAmount={detail?.locked ? Number.POSITIVE_INFINITY : selected.outstandingBalance}
-        onSubmit={async (amount, method, receipt, idemKey, channel) => {
+        onSubmit={async (amount, method, receipt, idemKey, channel, receiptReference) => {
           const input = {
             creditId: selected.creditId,
             amount,
             method,
             receiptUrl: receipt?.url,
             receiptHash: receipt?.hash,
+            ...(receiptReference ? { receiptReference } : {}),
             ...(channel !== 'KOBRAX_COLLECTED' ? { channel } : {}),
             // La hora del cobro, no la de la sincronización: si queda en la cola, viaja con ella.
             paymentDate: new Date().toISOString(),

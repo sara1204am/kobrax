@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { TeamIcon } from './team-ui';
 
 /**
  * El código de una invitación, para copiarlo y mandarlo por donde sea.
@@ -31,22 +32,34 @@ export function InvitationCode({ code, email }: { code: string; email: string })
   }
 
   return (
-    <div className="space-y-3">
-      <p className="text-[14px] text-k-text-2">{t('sentTo', { email })}</p>
-
-      <div className="flex items-center gap-2 rounded-xl border border-k-border bg-k-bg p-3">
-        <code className="flex-1 select-all break-all font-mono text-[16px] font-semibold tracking-wider text-k-navy">
-          {code}
-        </code>
-        <button
-          type="button"
-          onClick={() => void copy()}
-          className="shrink-0 rounded-lg border border-k-border bg-white px-3 py-2 text-[13px] font-medium text-k-text-2 hover:bg-k-bg"
-        >
-          {copied ? t('copied') : t('copy')}
-        </button>
+    <div className="space-y-4">
+      <div className="flex flex-col items-center gap-3 text-center">
+        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-k-success-bg text-k-success">
+          <TeamIcon name="check" className="h-8 w-8" />
+        </span>
+        <div>
+          <p className="text-[15px] font-semibold text-k-text">{t('sentTitle')}</p>
+          <p className="mt-1 text-[14px] text-k-text-2">{t('sentTo', { email })}</p>
+        </div>
       </div>
-      {failed && <p className="text-[12px] text-k-text-2">{t('copyFailed')}</p>}
+
+      <div className="rounded-xl border border-k-border bg-k-bg p-4">
+        <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-k-text-2">{t('codeLabel')}</p>
+        <div className="flex items-center gap-2 rounded-xl border border-k-border bg-white p-2 pl-3">
+          <code className="flex-1 select-all break-all font-mono text-[16px] font-semibold tracking-wider text-k-navy">
+            {code}
+          </code>
+          <button
+            type="button"
+            onClick={() => void copy()}
+            className="shrink-0 rounded-lg border border-k-border bg-white px-3 py-2 text-[13px] font-medium text-k-text-2 hover:bg-k-bg"
+          >
+            {copied ? t('copied') : t('copy')}
+          </button>
+        </div>
+        <p className="mt-2 text-[12px] text-k-text-2">{t('expires')}</p>
+        {failed && <p className="mt-1 text-[12px] text-k-text-2">{t('copyFailed')}</p>}
+      </div>
 
       <p className="text-[13px] text-k-text-2">
         {t.rich('howTo', {

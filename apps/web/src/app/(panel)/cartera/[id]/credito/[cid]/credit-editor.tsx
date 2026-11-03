@@ -2,7 +2,7 @@
 
 import { useLocale, useTranslations } from 'next-intl';
 import {
-  CREDIT_STATUSES,
+  EDITABLE_CREDIT_STATUSES,
   memberName,
   registrationSituation,
   type CreditDetail,
@@ -208,7 +208,7 @@ export function CreditEditor({
               onChange={(e) => setExtra({ status: e.target.value })}
               disabled={block === 'locked'}
             >
-              {CREDIT_STATUSES.map((s) => (
+              {EDITABLE_CREDIT_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {tp(`creditStatus.${s}`)}
                 </option>

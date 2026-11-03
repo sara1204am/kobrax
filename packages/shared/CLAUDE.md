@@ -96,6 +96,7 @@ export const SUPPORTED_CURRENCIES = {
   MXN: { name: 'Peso Mexicano', symbol: '$', locale: 'es-MX' },
   PEN: { name: 'Sol Peruano', symbol: 'S/', locale: 'es-PE' },
   ARS: { name: 'Peso Argentino', symbol: '$', locale: 'es-AR' },
+  CLP: { name: 'Peso Chileno', symbol: '$', locale: 'es-CL' },
   USD: { name: 'Dólar', symbol: '$', locale: 'en-US' },
 } as const;
 

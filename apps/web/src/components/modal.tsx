@@ -23,6 +23,8 @@ export interface DialogProps {
   title: string;
   children: ReactNode;
   actions?: ReactNode;
+  /** Mientras es `true` no se puede cerrar (ni con Esc ni con la X): hay un guardado en curso. */
+  locked?: boolean;
 }
 
 function Dialog({
@@ -31,6 +33,7 @@ function Dialog({
   title,
   children,
   actions,
+  locked,
   shell,
   body,
 }: DialogProps & { shell: string; body: string }) {
@@ -62,6 +65,10 @@ function Dialog({
     <dialog
       ref={ref}
       aria-labelledby={titleId}
+      // Esc: el navegador dispara `cancel` antes de cerrar; con un guardado en curso se frena acá.
+      onCancel={(e) => {
+        if (locked) e.preventDefault();
+      }}
       // Por acá entra la tecla Esc, que cierra el diálogo sin pasar por ningún handler nuestro.
       onClose={() => {
         if (closingByCode.current) {
@@ -82,6 +89,7 @@ function Dialog({
         <button
           type="button"
           onClick={onClose}
+          disabled={locked}
           aria-label={t('close')}
           className="-mr-2 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-k-muted hover:bg-k-bg hover:text-k-text-2"
         >

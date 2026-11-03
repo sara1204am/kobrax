@@ -22,9 +22,11 @@ export function serializeMember(m: MemberRow) {
     photoUrl: m.user.profile?.photoUrl ?? null,
     roleId: m.roleId,
     roleName: m.role.name,
+    branchId: m.branchId,
     isOwner: m.isOwner,
     isActive: m.isActive,
     userStatus: m.user.status,
+    lastLoginAt: m.user.lastLoginAt?.toISOString() ?? null,
   };
 }
 

@@ -260,3 +260,31 @@ describe('hydrate · tolerancia a fallos', () => {
     expect(llamada('getRoute')).toBeUndefined();
   });
 });
+
+describe('hydrate · progreso y reintento (pantalla «Datos sin conexión»)', () => {
+  it('informa cada paso: primero «running» y luego su estado final', async () => {
+    const vistos: { name: string; state: string }[] = [];
+    const r = await hydrate('u1', { onProgress: (s) => vistos.push({ name: s.name, state: s.state }) });
+    const idx = (state: string) => vistos.findIndex((v) => v.name === 'cartera' && v.state === state);
+    expect(idx('running')).toBeGreaterThanOrEqual(0);
+    expect(idx('ok')).toBeGreaterThan(idx('running'));
+    // El resultado trae los mismos pasos, en orden, ya finales.
+    expect(r.steps.map((s) => s.name)).toEqual(expect.arrayContaining(['cartera', 'agenda', 'catálogos']));
+    expect(r.steps.every((s) => s.state !== 'running')).toBe(true);
+  });
+
+  it('el paso de fichas informa «hechas de total»', async () => {
+    const r = await hydrate('u1');
+    const fichas = r.steps.find((s) => s.name === 'fichas de la cartera');
+    expect(fichas).toMatchObject({ state: 'ok', done: 1, total: 1 });
+  });
+
+  it('un fallo de red en un detalle se reintenta una vez antes de rendirse', async () => {
+    const agenda = jest.requireMock('../agenda.service') as { getItem: jest.Mock };
+    mockRes.agenda = ok([{ id: 'g1', status: 'SCHEDULED', scheduledDate: '2099-01-01', scheduledTime: null }]);
+    agenda.getItem.mockImplementationOnce(async () => ({ status: 'offline' }));
+    const r = await hydrate('u1');
+    expect(r.ok).toContain('detalle de las gestiones');
+    expect(mockLlamadas.filter((l) => l.fn === 'getItem' && l.params === 'g1').length).toBeGreaterThanOrEqual(1);
+  });
+});

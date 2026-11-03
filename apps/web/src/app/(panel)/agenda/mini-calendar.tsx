@@ -1,7 +1,9 @@
 'use client';
 
 import { useLocale, useTranslations } from 'next-intl';
+import { isWorkingDate } from '@kobrax/shared';
 import { monthGrid, shiftMonth } from '@/lib/agenda';
+import { useWorkPreferences } from '@/lib/use-work-preferences';
 
 /**
  * El mes chico de la izquierda: navega entre días y avisa **qué días tienen algo agendado** con un punto.
@@ -24,7 +26,8 @@ export function MiniCalendar({
 }) {
   const t = useTranslations('panel.agenda');
   const locale = useLocale();
-  const grid = monthGrid(day);
+  const prefs = useWorkPreferences();
+  const grid = monthGrid(day, prefs.weekStart);
   const fmt = (o: Intl.DateTimeFormatOptions, iso: string) =>
     new Intl.DateTimeFormat(locale, { ...o, timeZone: 'UTC' }).format(new Date(`${iso}T00:00:00.000Z`));
 
@@ -47,6 +50,7 @@ export function MiniCalendar({
           const selected = iso === day;
           const esHoy = iso === today;
           const delMes = iso.slice(0, 7) === day.slice(0, 7);
+          const libre = !isWorkingDate(prefs, iso);
           return (
             <button
               key={iso}
@@ -55,10 +59,11 @@ export function MiniCalendar({
               aria-label={fmt({ weekday: 'long', day: 'numeric', month: 'long' }, iso)}
               aria-current={esHoy ? 'date' : undefined}
               aria-pressed={selected}
+              title={libre ? t('nonWorkingDay') : undefined}
               className={`relative mx-auto flex h-9 w-9 items-center justify-center rounded-lg text-[13px] tabular-nums transition-colors ${
                 selected
                   ? 'bg-k-navy font-semibold text-white'
-                  : `${delMes ? 'text-k-text' : 'text-k-muted'} hover:bg-k-info-bg ${esHoy ? 'font-semibold ring-1 ring-inset ring-k-periwinkle' : ''}`
+                  : `${delMes ? (libre ? 'text-k-text-2' : 'text-k-text') : 'text-k-muted'} hover:bg-k-info-bg ${esHoy ? 'font-semibold ring-1 ring-inset ring-k-periwinkle' : ''}`
               }`}
             >
               {Number(iso.slice(8, 10))}

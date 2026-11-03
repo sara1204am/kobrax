@@ -24,14 +24,14 @@ export function catalogDefaultRows(accountId: string): { accountId: string; cata
 }
 
 export const CATALOG_DEFAULTS: readonly CatalogDefault[] = [
-  { catalog: 'PAYMENT_METHOD', code: 'CASH', label: 'Efectivo', sortOrder: 1 },
-  { catalog: 'PAYMENT_METHOD', code: 'DEPOSIT', label: 'Depósito', sortOrder: 2, metadata: { requiresBank: true } },
-  { catalog: 'PAYMENT_METHOD', code: 'TRANSFER', label: 'Transferencia', sortOrder: 3, metadata: { requiresBank: true } },
-  { catalog: 'PAYMENT_METHOD', code: 'QR', label: 'QR', sortOrder: 4 },
-  { catalog: 'PAYMENT_METHOD', code: 'CHECK', label: 'Cheque', sortOrder: 5, metadata: { requiresBank: true } },
-  { catalog: 'PAYMENT_METHOD', code: 'MOBILE', label: 'Pago móvil', sortOrder: 6 },
-  { catalog: 'PAYMENT_METHOD', code: 'AGENCY', label: 'Agencia', sortOrder: 7 },
-  { catalog: 'PAYMENT_METHOD', code: 'COLLECTOR', label: 'Cobrador', sortOrder: 8 },
+  { catalog: 'PAYMENT_METHOD', code: 'CASH', label: 'Efectivo', sortOrder: 1, metadata: { ledgerMethod: 'CASH' } },
+  { catalog: 'PAYMENT_METHOD', code: 'DEPOSIT', label: 'Depósito', sortOrder: 2, metadata: { requiresBank: true, ledgerMethod: 'TRANSFER' } },
+  { catalog: 'PAYMENT_METHOD', code: 'TRANSFER', label: 'Transferencia', sortOrder: 3, metadata: { requiresBank: true, ledgerMethod: 'TRANSFER' } },
+  { catalog: 'PAYMENT_METHOD', code: 'QR', label: 'QR', sortOrder: 4, metadata: { ledgerMethod: 'QR' } },
+  { catalog: 'PAYMENT_METHOD', code: 'CHECK', label: 'Cheque', sortOrder: 5, metadata: { requiresBank: true, ledgerMethod: 'TRANSFER' } },
+  { catalog: 'PAYMENT_METHOD', code: 'MOBILE', label: 'Pago móvil', sortOrder: 6, metadata: { ledgerMethod: 'MOBILE_PAYMENT' } },
+  { catalog: 'PAYMENT_METHOD', code: 'AGENCY', label: 'Agencia', sortOrder: 7, metadata: { ledgerMethod: 'CASH' } },
+  { catalog: 'PAYMENT_METHOD', code: 'COLLECTOR', label: 'Cobrador', sortOrder: 8, metadata: { ledgerMethod: 'CASH' } },
   { catalog: 'BANK', code: 'BNB', label: 'Banco Nacional de Bolivia', sortOrder: 1 },
   { catalog: 'BANK', code: 'BCP', label: 'BCP', sortOrder: 2 },
   { catalog: 'BANK', code: 'BMSC', label: 'Banco Mercantil Santa Cruz', sortOrder: 3 },

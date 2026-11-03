@@ -8,6 +8,17 @@ interface Ctx {
 }
 
 /**
+ * El crédito con su cronograma: de acá salen la cuota que toca pagar y el saldo para liquidar que
+ * muestra el formulario de pago cuando el crédito se elige en el momento (no viene de una ficha).
+ */
+export async function GET(_req: Request, { params }: Ctx): Promise<NextResponse> {
+  const { status, body } = await apiCall<CreditDetail>(`/credits/${params.id}`, { method: 'GET', auth: true });
+  if (status !== 200 || !body.data) return apiError(status, body);
+
+  return NextResponse.json({ data: body.data });
+}
+
+/**
  * Editar un crédito: redefinir sus condiciones y el estado al registrar (F4/06 · Fase 3), el
  * próximo cobro, estado, código, tipo, responsable y notas — todo lo que acepta `UpdateCreditDto`.
  *

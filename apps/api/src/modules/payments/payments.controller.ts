@@ -5,7 +5,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PaymentsService } from './payments.service';
-import { ConfirmPaymentRequestDto, CreatePaymentDto, CreatePaymentRequestDto, ListPaymentsQueryDto } from './dto/payment.dto';
+import { ConfirmPaymentRequestDto, CreatePaymentDto, CreatePaymentRequestDto, ListPaymentRequestsQueryDto, ListPaymentsQueryDto } from './dto/payment.dto';
 
 @Controller()
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
@@ -15,8 +15,9 @@ export class PaymentsController {
   // ── Pagos ────────────────────────────────────────────────────────────────────
   @Post('payments')
   @Roles(Permission.PAYMENT_WRITE)
-  register(@Body() dto: CreatePaymentDto, @Headers('idempotency-key') key?: string) {
-    return this.payments.register(dto, key);
+  register(@Body() dto: CreatePaymentDto, @Headers('idempotency-key') key?: string, @Headers('x-app-version') appVersion?: string) {
+    // La app móvil manda su versión en TODA llamada; el panel no. Sirve de pista cuando el cuerpo no dice desde dónde viene.
+    return this.payments.register(dto, key, appVersion ? 'MOBILE' : undefined);
   }
 
   @Get('payments')
@@ -36,6 +37,12 @@ export class PaymentsController {
   @Roles(Permission.PAYMENT_WRITE)
   createRequest(@Body() dto: CreatePaymentRequestDto) {
     return this.payments.createRequest(dto);
+  }
+
+  @Get('payment-requests')
+  @Roles(Permission.PAYMENT_READ)
+  listRequests(@Query() query: ListPaymentRequestsQueryDto) {
+    return this.payments.listRequests(query);
   }
 
   @Get('payment-requests/:id')

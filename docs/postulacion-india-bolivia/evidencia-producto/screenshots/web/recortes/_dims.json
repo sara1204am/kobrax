@@ -1,0 +1,46 @@
+{
+ "r01_hero_dashboard": {
+  "w": 1206,
+  "h": 886
+ },
+ "r02_cartera_filtros": {
+  "w": 1206,
+  "h": 566
+ },
+ "r03_cliente_detalle": {
+  "w": 1206,
+  "h": 786
+ },
+ "r04_mora_ficha": {
+  "w": 1206,
+  "h": 869
+ },
+ "r05_modal_gestion": {
+  "w": 470,
+  "h": 646
+ },
+ "r06_agenda": {
+  "w": 1206,
+  "h": 606
+ },
+ "r07_ruta_mapa": {
+  "w": 1206,
+  "h": 946
+ },
+ "r08_parada_historial": {
+  "w": 1206,
+  "h": 646
+ },
+ "r09_huella": {
+  "w": 566,
+  "h": 91
+ },
+ "r10_pagos_credito": {
+  "w": 1206,
+  "h": 486
+ },
+ "r11_import_historial": {
+  "w": 1206,
+  "h": 616
+ }
+}

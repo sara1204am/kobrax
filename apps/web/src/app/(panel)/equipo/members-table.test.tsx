@@ -73,18 +73,23 @@ describe('MembersTable · desactivar con trabajo a su nombre (F4/11 · D1)', () 
     await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Desactivar' }));
 
     // La segunda ventana dice cuánto tiene y ofrece solo a quien puede recibirlo.
-    const dialog = await screen.findByText(/tiene 4 gestiones pendientes, 2 créditos a su cargo y 1 rutas/);
-    expect(dialog).toBeInTheDocument();
-    const select = screen.getByRole('combobox', { name: /Pasárselos a/ });
+    const dialog = await screen.findByText('Gestiones pendientes');
+    expect(dialog.closest('li')).toHaveTextContent('4');
+    expect(screen.getByText('Créditos a su cargo').closest('li')).toHaveTextContent('2');
+    expect(screen.getByText('Rutas planificadas').closest('li')).toHaveTextContent('1');
+    const select = screen.getByRole('combobox', { name: /Reasignar a/ });
     const options = within(select).getAllByRole('option').map((o) => o.textContent);
     expect(options).toContain('Marco Prueba');
     expect(options).not.toContain('Rosa Prueba'); // no se lo pasa a sí misma
     expect(options).not.toContain('Mónica Prueba'); // un gerente no recibe cartera
     expect(options).not.toContain('Elena Prueba'); // ni una persona inactiva
 
-    const confirm = screen.getByRole('button', { name: 'Pasar y desactivar' });
+    const confirm = screen.getByRole('button', { name: 'Reasignar y desactivar' });
     expect(confirm).toBeDisabled();
     await userEvent.selectOptions(select, 'u-marco');
+    // Con persona elegida todavía falta el «confirmo»: el pase es masivo.
+    expect(confirm).toBeDisabled();
+    await userEvent.click(screen.getByRole('checkbox', { name: /Confirmo que quiero reasignar/ }));
     await userEvent.click(confirm);
 
     await vi.waitFor(() => expect(bodies).toHaveLength(2));
@@ -99,6 +104,6 @@ describe('MembersTable · desactivar con trabajo a su nombre (F4/11 · D1)', () 
     await userEvent.click(screen.getByRole('button', { name: 'Desactivar' }));
     await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Desactivar' }));
     await vi.waitFor(() => expect(refresh).toHaveBeenCalled());
-    expect(screen.queryByRole('button', { name: 'Pasar y desactivar' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reasignar y desactivar' })).toBeNull();
   });
 });

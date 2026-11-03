@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
@@ -17,12 +18,16 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UsersService } from './users.service';
+import { MemberDetailService, decodeCursor } from './member-detail.service';
 import { InviteMemberDto, UpdateMemberDto, UpdateProfileDto } from './dto/user.dto';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class UsersController {
-  constructor(private readonly users: UsersService) {}
+  constructor(
+    private readonly users: UsersService,
+    private readonly detail: MemberDetailService,
+  ) {}
 
   // `me/profile` va antes que `:id` por claridad; no colisionan (2 segmentos vs 1).
   // Sin @Roles: es el propio perfil. Exigir un permiso dejaría al COLLECTOR sin
@@ -41,6 +46,46 @@ export class UsersController {
   @Roles(Permission.USER_READ)
   list() {
     return this.users.list();
+  }
+
+  /**
+   * La ficha de un miembro. Los cuatro `GET :id/…` validan en el servidor que la persona sea de ESTA cuenta (404 si no)
+   * y cada uno pide su propio permiso: la lista de accesos y la auditoría son más sensibles que el nombre.
+   */
+  @Get(':id')
+  @Roles(Permission.USER_READ)
+  getMember(@Param('id', ParseUUIDPipe) id: string) {
+    return this.detail.detail(id);
+  }
+
+  @Get(':id/activity')
+  @Roles(Permission.USER_READ)
+  activity(@Param('id', ParseUUIDPipe) id: string, @Query('days') days?: string) {
+    return this.detail.activity(id, Number(days));
+  }
+
+  /** Los dos listados que crecen sin tope paginan por cursor (instante e id del último elemento): `?before=<ISO>|<id>&limit=`. */
+  @Get(':id/activity/events')
+  @Roles(Permission.USER_READ)
+  activityEvents(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('days') days?: string,
+    @Query('before') before?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.detail.activityEvents(id, Number(days), decodeCursor(before), Number(limit));
+  }
+
+  @Get(':id/connections')
+  @Roles(Permission.USER_WRITE)
+  connections(@Param('id', ParseUUIDPipe) id: string, @Query('before') before?: string, @Query('limit') limit?: string) {
+    return this.detail.connections(id, decodeCursor(before), Number(limit));
+  }
+
+  @Get(':id/audit')
+  @Roles(Permission.AUDIT_READ)
+  audit(@Param('id', ParseUUIDPipe) id: string) {
+    return this.detail.audit(id);
   }
 
   // `invite` va antes que `:id` por claridad; no colisionan (POST vs PATCH/DELETE).

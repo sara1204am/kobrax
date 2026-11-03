@@ -1,40 +1,20 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
-import {
-  memberName,
-  memberStatus,
-  type AssignableRole,
-  type InvitedMember,
-  type Member,
-} from '@kobrax/shared';
+import type { ReactNode } from 'react';
+import Link from 'next/link';
+import { useLocale, useTranslations } from 'next-intl';
+import { memberName, memberStatus, type AssignableRole, type Member } from '@kobrax/shared';
 import { Badge, EmptyState } from '@/components/panel-ui';
-import { Button } from '@/components/ui';
 import { DataTable, type Column, type PageMeta } from '@/components/data-table';
 import type { FilterDef } from '@/components/data-table-filters';
 import { SearchBox } from '@/components/search-box';
-import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
-import { useToast } from '@/components/toast';
-import { postJson, sendJson } from '@/lib/client';
-import { isKnownRole, memberActions } from '@/lib/team';
-import { InvitationCode } from './invitation-code';
+import { date, time } from '@/lib/format';
+import { daysAgo, isKnownRole, memberActions } from '@/lib/team';
+import { useMemberDialogs } from './member-dialogs';
+import { Avatar, IconAction } from './team-ui';
 
-const TONE = { active: 'success', pending: 'warning', inactive: 'neutral' } as const;
-
-/** Confirmación pendiente: qué se le va a hacer a quién. */
-type Pending =
-  | { kind: 'deactivate' | 'reactivate' | 'remove'; member: Member }
-  | null;
-
-/** Lo que una persona tiene a su nombre y hay que pasar antes de desactivarla (lo informa la API). */
-interface PendingWork {
-  agenda: number;
-  credits: number;
-  routes: number;
-}
+const TONE = { active: 'success', pending: 'warning', inactive: 'danger' } as const;
 
 export function MembersTable({
   members,
@@ -46,6 +26,7 @@ export function MembersTable({
   filtered,
   userId,
   action,
+  seats,
 }: {
   members: Member[];
   /** El equipo completo (sin paginar ni filtrar): de acá se elige a quién pasarle el trabajo. */
@@ -61,78 +42,26 @@ export function MembersTable({
   userId?: string;
   /** «Invitar a alguien». Va en la barra de la tabla, no en el encabezado. */
   action?: ReactNode;
+  /** Asientos del plan, para decir cuántos ocupará reactivar a alguien. Sin permiso de cuenta no viene. */
+  seats?: { used: number; max: number | null };
 }) {
   const t = useTranslations('team');
   // Los rótulos de rol salen de i18n y no de `ROLE_LABEL` de `shared`, que está en español.
   const tRoles = useTranslations('team.roles');
-  const router = useRouter();
-  const toast = useToast();
+  const locale = useLocale();
   const { can } = usePermissions();
   const perms = { canWrite: can('user:write'), canInvite: can('user:invite') };
-  const [pending, setPending] = useState<Pending>(null);
-  const [resent, setResent] = useState<InvitedMember | null>(null);
-  const [busy, setBusy] = useState(false);
-  /** Quien se quiere desactivar tiene trabajo a su nombre: se pide a quién pasarlo. */
-  const [transfer, setTransfer] = useState<{ member: Member; work: PendingWork } | null>(null);
-  const [target, setTarget] = useState('');
+  const { busy, ask, resend, changeRole, dialogs } = useMemberDialogs({ team, seats });
 
-  async function resend(member: Member) {
-    setBusy(true);
-    const { ok, data } = await postJson<InvitedMember>(`/api/users/${member.userId}/resend`, {});
-    setBusy(false);
-    if (!ok) {
-      toast(data.error?.message ?? t('actionError'), 'danger');
-      return;
-    }
-    setResent(data);
+  /** «Hoy, 14:30» · «Ayer, 18:20» · «12 oct 2026». El pendiente no entró nunca: se dice cómo está. */
+  function lastAccess(m: Member): ReactNode {
+    if (memberStatus(m) === 'pending') return <span className="text-k-warning-text">{t('lastAccess.invited')}</span>;
+    if (!m.lastLoginAt) return <span className="text-k-muted">{t('lastAccess.never')}</span>;
+    const days = daysAgo(m.lastLoginAt);
+    if (days === 0) return t('lastAccess.today', { time: time(m.lastLoginAt, locale) });
+    if (days === 1) return t('lastAccess.yesterday', { time: time(m.lastLoginAt, locale) });
+    return date(m.lastLoginAt, locale);
   }
-
-  async function run(path: string, body: unknown, method: 'PATCH' | 'DELETE', okMessage: string) {
-    setBusy(true);
-    const { ok, data } = await sendJson(path, body, method);
-    setBusy(false);
-    setPending(null);
-    if (!ok) {
-      // El mensaje del servidor es el que sabe por qué: último administrador, no es tuyo,
-      // ya aceptó la invitación. Re-escribirlo acá sería adivinar.
-      toast(data.error?.message ?? t('actionError'), 'danger');
-      return;
-    }
-    toast(okMessage);
-    router.refresh();
-  }
-
-  /**
-   * Desactivar. 🔴 La API no desactiva a quien tiene gestiones, créditos o rutas a su nombre (quedarían a nombre de alguien
-   * que ya no entra): contesta `USER_HAS_PENDING_WORK` con cuántos de cada uno, y acá se pide a quién pasarlos. Con
-   * `reassignToUserId` la API pasa todo y desactiva en un solo paso.
-   */
-  async function deactivate(member: Member, reassignToUserId?: string) {
-    setBusy(true);
-    const { ok, data } = await sendJson(
-      `/api/users/${member.userId}`,
-      { isActive: false, ...(reassignToUserId ? { reassignToUserId } : {}) },
-      'PATCH',
-    );
-    setBusy(false);
-    setPending(null);
-    if (!ok && data.error?.code === 'USER_HAS_PENDING_WORK') {
-      setTarget('');
-      setTransfer({ member, work: data.error.details as PendingWork });
-      return;
-    }
-    setTransfer(null);
-    if (!ok) {
-      toast(data.error?.message ?? t('actionError'), 'danger');
-      return;
-    }
-    toast(t('deactivated'));
-    router.refresh();
-  }
-
-  /** A quién se le puede pasar el trabajo: cobradores y supervisores activos, no la misma persona. */
-  const candidates = (member: Member): Member[] =>
-    team.filter((m) => m.userId !== member.userId && m.isActive && ['COLLECTOR', 'SUPERVISOR'].includes(m.roleName));
 
   const columns: Column<Member>[] = [
     {
@@ -140,9 +69,24 @@ export function MembersTable({
       header: t('columns.member'),
       sortable: true,
       render: (m) => (
-        <span className="block">
-          <span className="block font-medium text-k-text">{memberName(m)}</span>
-          <span className="block text-[13px] text-k-text-2">{m.email}</span>
+        <span className="flex items-center gap-3">
+          <Avatar member={m} muted={!m.isActive} />
+          <span className="block min-w-0">
+            <span className="flex items-center gap-2">
+              <Link
+                href={`/equipo/${m.userId}`}
+                className={`truncate font-medium hover:text-k-periwinkle hover:underline ${m.isActive ? 'text-k-text' : 'text-k-text-2'}`}
+              >
+                {memberName(m)}
+              </Link>
+              {m.userId === meId && (
+                <span className="rounded-md bg-k-highlight px-1.5 py-0.5 text-[11px] font-medium text-k-purple">
+                  {t('you')}
+                </span>
+              )}
+            </span>
+            <span className="block truncate text-[13px] text-k-text-2">{m.email}</span>
+          </span>
         </span>
       ),
     },
@@ -155,7 +99,7 @@ export function MembersTable({
           member={m}
           roles={roles}
           editable={memberActions(m, meId, perms).changeRole}
-          onPick={(roleId) => run(`/api/users/${m.userId}`, { roleId }, 'PATCH', t('roleChanged'))}
+          onPick={(roleId) => void changeRole(m, roleId)}
           busy={busy}
         />
       ),
@@ -163,10 +107,20 @@ export function MembersTable({
     {
       key: 'status',
       header: t('columns.status'),
+      sortable: true,
       render: (m) => {
         const status = memberStatus(m);
-        return <Badge tone={TONE[status]}>{t(`status.${status}`)}</Badge>;
+        return (
+          <Badge dot tone={TONE[status]}>
+            {t(`status.${status}`)}
+          </Badge>
+        );
       },
+    },
+    {
+      key: 'lastAccess',
+      header: t('columns.lastAccess'),
+      render: (m) => <span className="text-[13px] text-k-text-2">{lastAccess(m)}</span>,
     },
     {
       key: 'actions',
@@ -174,25 +128,41 @@ export function MembersTable({
       numeric: true,
       render: (m) => {
         const a = memberActions(m, meId, perms);
+        const none = !a.deactivate && !a.reactivate && !a.resend && !a.remove;
+        if (none) return <span className="text-k-muted">—</span>;
         return (
-          <span className="flex justify-end gap-3 whitespace-nowrap">
+          <span className="flex justify-end gap-2 whitespace-nowrap">
+            {a.resend && (
+              <IconAction
+                icon={memberStatus(m) === 'pending' ? 'send' : 'mail'}
+                label={t('actions.resend')}
+                onClick={() => void resend(m)}
+                disabled={busy}
+              />
+            )}
             {a.deactivate && (
-              <RowAction onClick={() => setPending({ kind: 'deactivate', member: m })}>
-                {t('actions.deactivate')}
-              </RowAction>
+              <IconAction
+                icon="ban"
+                tone="danger"
+                label={t('actions.deactivate')}
+                onClick={() => ask('deactivate', m)}
+              />
             )}
             {a.reactivate && (
-              <RowAction onClick={() => setPending({ kind: 'reactivate', member: m })}>
-                {t('actions.reactivate')}
-              </RowAction>
-            )}
-            {a.resend && (
-              <RowAction onClick={() => void resend(m)}>{t('actions.resend')}</RowAction>
+              <IconAction
+                icon="restore"
+                tone="primary"
+                label={t('actions.reactivate')}
+                onClick={() => ask('reactivate', m)}
+              />
             )}
             {a.remove && (
-              <RowAction danger onClick={() => setPending({ kind: 'remove', member: m })}>
-                {t('actions.remove')}
-              </RowAction>
+              <IconAction
+                icon="trash"
+                tone="danger"
+                label={t('actions.remove')}
+                onClick={() => ask('remove', m)}
+              />
             )}
           </span>
         );
@@ -238,138 +208,13 @@ export function MembersTable({
         noResults={<EmptyState title={t('noResults')} text={t('noResultsHint')} />}
       />
 
-      <Modal
-        open={pending !== null}
-        onClose={() => setPending(null)}
-        // El `{name}` va también en el título: sin los valores, next-intl no puede formatear
-        // y pinta la ruta cruda de la clave.
-        title={pending ? t(`confirm.${pending.kind}.title`, { name: memberName(pending.member) }) : ''}
-        actions={
-          <>
-            <span className="sm:w-40">
-              <Button variant="ghost" onClick={() => setPending(null)}>
-                {t('cancel')}
-              </Button>
-            </span>
-            <span className="sm:w-48">
-              <Button
-                loading={busy}
-                onClick={() => {
-                  if (!pending) return;
-                  const { kind, member } = pending;
-                  if (kind === 'remove') {
-                    void run(`/api/users/${member.userId}`, null, 'DELETE', t('removed'));
-                  } else if (kind === 'deactivate') {
-                    void deactivate(member);
-                  } else {
-                    void run(
-                      `/api/users/${member.userId}`,
-                      { isActive: kind === 'reactivate' },
-                      'PATCH',
-                      t(kind === 'reactivate' ? 'reactivated' : 'deactivated'),
-                    );
-                  }
-                }}
-              >
-                {pending ? t(`confirm.${pending.kind}.ok`) : ''}
-              </Button>
-            </span>
-          </>
-        }
-      >
-        {pending ? t(`confirm.${pending.kind}.text`, { name: memberName(pending.member) }) : ''}
-      </Modal>
-
-      <Modal
-        open={transfer !== null}
-        onClose={() => setTransfer(null)}
-        title={transfer ? t('transfer.title', { name: memberName(transfer.member) }) : ''}
-        actions={
-          <>
-            <span className="sm:w-40">
-              <Button variant="ghost" onClick={() => setTransfer(null)} disabled={busy}>
-                {t('cancel')}
-              </Button>
-            </span>
-            <span className="sm:w-56">
-              <Button loading={busy} disabled={!target} onClick={() => transfer && void deactivate(transfer.member, target)}>
-                {t('transfer.confirm')}
-              </Button>
-            </span>
-          </>
-        }
-      >
-        {transfer && (
-          <div className="space-y-4">
-            <p className="text-[14px] text-k-text">
-              {t('transfer.text', { name: memberName(transfer.member), agenda: transfer.work.agenda, credits: transfer.work.credits, routes: transfer.work.routes })}
-            </p>
-            <label className="block">
-              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-k-text-2">{t('transfer.target')}</span>
-              <select
-                value={target}
-                onChange={(e) => setTarget(e.target.value)}
-                disabled={busy}
-                className="w-full rounded-xl border-[1.5px] border-k-border bg-white px-3 py-3 text-[14px] text-k-text outline-none focus:border-k-periwinkle"
-              >
-                <option value="">{t('transfer.pick')}</option>
-                {candidates(transfer.member).map((m) => (
-                  <option key={m.userId} value={m.userId}>
-                    {memberName(m)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {candidates(transfer.member).length === 0 && <p className="text-[13px] text-k-danger">{t('transfer.nobody')}</p>}
-          </div>
-        )}
-      </Modal>
-
-      {/* El reenvío devuelve un código NUEVO y mata el anterior: hay que decirlo, o se
-          terminan mandando dos y el primero ya no sirve. */}
-      <Modal
-        open={resent !== null}
-        onClose={() => setResent(null)}
-        title={t('resentTitle')}
-        actions={
-          <span className="sm:w-40">
-            <Button onClick={() => setResent(null)}>{t('close')}</Button>
-          </span>
-        }
-      >
-        {resent && (
-          <div className="space-y-3">
-            <p className="text-[14px] text-k-warning-text">{t('resentWarning')}</p>
-            <InvitationCode code={resent.invitationCode} email={resent.email} />
-          </div>
-        )}
-      </Modal>
+      {dialogs}
     </>
   );
 }
 
-function RowAction({
-  children,
-  danger,
-  onClick,
-}: {
-  children: React.ReactNode;
-  danger?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`text-[13px] font-medium hover:underline ${danger ? 'text-k-danger' : 'text-k-purple'}`}
-    >
-      {children}
-    </button>
-  );
-}
-
 /**
- * El rol: un `<select>` cuando se puede cambiar, y texto cuando no.
+ * El rol: un `<select>` cuando se puede cambiar, y una pastilla apagada cuando no.
  *
  * Los rótulos salen de i18n y no de `ROLE_LABEL` de `shared`, que está en español: el panel
  * se muestra en dos idiomas. La **regla** —qué roles son asignables— sigue siendo del
@@ -391,7 +236,13 @@ function RoleCell({
   const t = useTranslations('team.roles');
   const label = (name: string) => (isKnownRole(name) ? t(name) : name);
 
-  if (!editable) return <span className="text-k-text-2">{label(member.roleName)}</span>;
+  if (!editable) {
+    return (
+      <span className="inline-flex h-10 min-w-[8.5rem] items-center rounded-lg bg-k-bg px-3 text-[14px] text-k-muted">
+        {label(member.roleName)}
+      </span>
+    );
+  }
 
   return (
     <select
@@ -399,7 +250,7 @@ function RoleCell({
       disabled={busy}
       onChange={(e) => onPick(e.target.value)}
       aria-label={label(member.roleName)}
-      className="rounded-lg border border-k-border bg-white px-2 py-1.5 text-[14px] text-k-text outline-none focus:border-k-periwinkle disabled:opacity-60"
+      className="h-10 min-w-[8.5rem] rounded-lg border border-k-border bg-white px-2.5 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus disabled:opacity-60"
     >
       {roles.map((r) => (
         <option key={r.id} value={r.id}>

@@ -121,6 +121,23 @@ describe('PaymentsService.register — crédito PSF (D3)', () => {
     assert.equal((data.paymentDate as Date).toISOString(), cobrado);
   });
 
+  it('guarda el N° de recibo o factura en papel, aparte del correlativo del sistema', async () => {
+    const { service, calls } = makeService({ credit: psfCredit() });
+    const out = await service.register({ ...PAY, amount: 50, receiptReference: 'R-004512' });
+    const data = calls.create[0]!;
+    assert.equal(data.receiptReference, 'R-004512');
+    // El correlativo del sistema sigue siendo otro campo y se asigna igual.
+    assert.equal(typeof data.receiptNumber, 'number');
+    assert.equal(out.receiptReference, 'R-004512');
+  });
+
+  it('el N° de recibo es opcional: sin él no se inventa uno', async () => {
+    const { service, calls } = makeService({ credit: psfCredit() });
+    const out = await service.register({ ...PAY, amount: 50 });
+    assert.equal(calls.create[0]!.receiptReference, undefined);
+    assert.equal(out.receiptReference, undefined);
+  });
+
   it('sin fecha no fija `paymentDate`: la pone la base (ahora)', async () => {
     const { service, calls } = makeService({ credit: psfCredit() });
     await service.register({ ...PAY, amount: 50 });
@@ -223,8 +240,8 @@ describe('PaymentsService.register', () => {
 });
 
 /** Un service que sólo sabe listar: guarda con qué `orderBy` se llamó a Prisma. */
-function makeLister(rows: unknown[] = []) {
-  const calls: { orderBy?: Record<string, unknown>; where?: Record<string, unknown> } = {};
+function makeLister(rows: unknown[] = [], aggAmount: number | null | (number | null)[] = null) {
+  const calls: { orderBy?: Record<string, unknown>; where?: Record<string, unknown>; aggWhere?: Record<string, unknown>; aggs: Record<string, unknown>[] } = { aggs: [] };
   const tx = {
     payment: {
       findMany: async (args: { orderBy: Record<string, unknown>; where: Record<string, unknown> }) => {
@@ -233,6 +250,12 @@ function makeLister(rows: unknown[] = []) {
         return rows;
       },
       count: async () => 0,
+      aggregate: async (a: { where: Record<string, unknown> }) => {
+        const i = calls.aggs.push(a.where) - 1;
+        calls.aggWhere = calls.aggs[0];
+        // Un número vale para todas las sumas; una lista da un valor por suma (total, hoy, mes).
+        return { _sum: { amount: Array.isArray(aggAmount) ? (aggAmount[i] ?? null) : aggAmount } };
+      },
     },
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
@@ -342,5 +365,255 @@ describe('PaymentsService.register · cobro dentro de una visita (F4/12)', () =>
     const missing = makeService({ visit: null });
     await rejectsWithCode(missing.service.register({ ...PAY, amount: 100, visitId: 'v-fantasma' } as never), 'PAYMENT_001');
     assert.equal(otherCredit.calls.create.length, 0);
+  });
+});
+
+describe('PaymentsService.listRequests — la bandeja', () => {
+  function makeRequests(rows: unknown[], credits: unknown[] = []) {
+    const calls: { where?: Record<string, unknown>; orderBy?: unknown; creditQueries: number } = { creditQueries: 0 };
+    const tx = {
+      paymentRequest: {
+        findMany: async (a: { where: Record<string, unknown>; orderBy: unknown }) => {
+          calls.where = a.where;
+          calls.orderBy = a.orderBy;
+          return rows;
+        },
+        count: async () => rows.length,
+      },
+      credit: {
+        findMany: async () => {
+          calls.creditQueries += 1;
+          return credits;
+        },
+      },
+      userAccount: { findMany: async () => [] },
+    };
+    const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
+    const service = new PaymentsService(prisma as never, { accountId: 'acc-A' } as never, {} as never, {} as never, {} as never);
+    return { service, calls };
+  }
+
+  const base = { amount: 100, method: 'QR', status: 'PENDING', createdAt: new Date(), expiresAt: new Date(), createdBy: null, paidPaymentId: null };
+
+  it('filtra por estado, crédito y quien lo pidió; lo último pedido primero', async () => {
+    const { service, calls } = makeRequests([]);
+    await service.listRequests({ status: 'PENDING' as never, creditId: 'cr1', createdBy: 'u9' });
+    assert.deepEqual(calls.where, { status: 'PENDING', creditId: 'cr1', createdBy: 'u9' });
+    assert.deepEqual(calls.orderBy, { createdAt: 'desc' });
+  });
+
+  it('sin filtros no manda `where` de más', async () => {
+    const { service, calls } = makeRequests([]);
+    await service.listRequests({});
+    assert.deepEqual(calls.where, {});
+  });
+
+  it('🔴 resuelve crédito y deudor de la página en UNA consulta, no una por fila', async () => {
+    const rows = [
+      { ...base, id: 'r1', creditId: 'cr1' },
+      { ...base, id: 'r2', creditId: 'cr1' },
+      { ...base, id: 'r3', creditId: 'cr2' },
+    ];
+    const credits = [
+      { id: 'cr1', code: 'CR-1', client: { firstName: 'Ana', lastName: 'Rojas', businessName: null } },
+      { id: 'cr2', code: 'CR-2', client: { firstName: null, lastName: null, businessName: 'Tienda Sol' } },
+    ];
+    const { service, calls } = makeRequests(rows, credits);
+    const out = await service.listRequests({});
+    assert.equal(calls.creditQueries, 1);
+    assert.equal(out.data![0]!.creditCode, 'CR-1');
+    assert.equal(out.data![0]!.clientName, 'Ana Rojas');
+    assert.equal(out.data![2]!.clientName, 'Tienda Sol');
+  });
+
+  it('una solicitud sin crédito no rompe ni consulta créditos', async () => {
+    const { service, calls } = makeRequests([{ ...base, id: 'r1', creditId: null }]);
+    const out = await service.listRequests({});
+    assert.equal(calls.creditQueries, 0);
+    assert.equal(out.data![0]!.creditCode, undefined);
+  });
+
+  it('una solicitud vencida sigue PENDING: se puede confirmar', async () => {
+    const old = new Date(Date.now() - 3 * 86_400_000);
+    const { service } = makeRequests([{ ...base, id: 'r1', creditId: null, expiresAt: old }]);
+    const out = await service.listRequests({});
+    assert.equal(out.data![0]!.status, 'PENDING');
+  });
+});
+
+describe('PaymentsService.list — total del período y cobrador', () => {
+  it('filtra por quien registró el cobro', async () => {
+    const { service, calls } = makeLister();
+    await service.list({ registeredBy: 'u7' });
+    assert.deepEqual(calls.where!.registeredBy, { in: ['u7'] });
+  });
+
+  it('🔴 el total suma TODO el filtro, no la página, y con el mismo where', async () => {
+    const { service, calls } = makeLister([], 1234.5);
+    const out = await service.list({ registeredBy: 'u7', creditId: 'cr1', limit: 5 });
+    assert.equal(out.meta.aggregates!.totalAmount, 1234.5);
+    // La suma usa el MISMO filtro que la lista: si no, el total contaría pagos que la tabla no muestra.
+    assert.deepEqual(calls.aggWhere, calls.where);
+  });
+
+  it('sin pagos el total es cero, no null', async () => {
+    const { service } = makeLister([], null);
+    const out = await service.list({});
+    assert.equal(out.meta.aggregates!.totalAmount, 0);
+  });
+});
+
+describe('PaymentsService.list — varios oficiales y medios', () => {
+  it('uno o varios oficiales y medios llegan como lista y se filtran con IN', async () => {
+    const { service, calls } = makeLister();
+    await service.list({ registeredBy: 'u1,u2', method: 'CASH,QR' });
+    assert.deepEqual(calls.where!.registeredBy, { in: ['u1', 'u2'] });
+    assert.deepEqual(calls.where!.method, { in: ['CASH', 'QR'] });
+  });
+
+  it('los filtros se combinan entre sí (y con la fuente)', async () => {
+    const { service, calls } = makeLister();
+    await service.list({ registeredBy: 'u1', method: 'CASH', source: 'PSF' });
+    assert.deepEqual(calls.where!.registeredBy, { in: ['u1'] });
+    assert.deepEqual(calls.where!.method, { in: ['CASH'] });
+    assert.deepEqual(calls.where!.credit, { externalSource: 'PSF' });
+  });
+});
+
+describe('PaymentsService.list — tarjetas de hoy y del mes', () => {
+  const range = (w: Record<string, unknown>) => w.paymentDate as { gte: Date; lt: Date };
+
+  it('🔴 sin pedir el resumen no cuesta sumas de más (el móvil lista por día)', async () => {
+    const { service, calls } = makeLister([], 10);
+    const out = await service.list({});
+    assert.equal(calls.aggs.length, 1);
+    assert.equal(out.meta.aggregates!.todayAmount, undefined);
+    assert.equal(out.meta.aggregates!.monthAmount, undefined);
+  });
+
+  it('con el resumen devuelve total, hoy y mes por separado', async () => {
+    const { service, calls } = makeLister([], [900, 40, 300]);
+    const out = await service.list({ summary: true });
+    assert.equal(calls.aggs.length, 3);
+    assert.deepEqual(out.meta.aggregates, { totalAmount: 900, todayAmount: 40, monthAmount: 300 });
+  });
+
+  it('🔴 hoy y mes son civiles de la empresa y IGNORAN el rango pedido, pero respetan el resto de filtros', async () => {
+    const { service, calls } = makeLister([], 1);
+    await service.list({ summary: true, from: '2020-01-01', to: '2020-01-31', source: 'PSF', method: 'QR', registeredBy: 'u1' });
+    const [total, today, month] = calls.aggs as [Record<string, unknown>, Record<string, unknown>, Record<string, unknown>];
+
+    // El total sí responde al rango seleccionado.
+    assert.equal(range(total).gte.toISOString(), '2020-01-01T00:00:00.000Z');
+
+    // Hoy: un día de 24 h, cortado a medianoche de La Paz (UTC−4 → 04:00Z), no al rango del filtro.
+    const d = range(today);
+    assert.equal(d.gte.getUTCHours(), 4);
+    assert.equal(d.lt.getTime() - d.gte.getTime(), 86_400_000);
+    assert.ok(d.gte.getUTCFullYear() >= 2026, 'hoy no es el rango de 2020');
+
+    // Mes: empieza el día 1 y termina el día 1 del mes siguiente (a medianoche de La Paz).
+    const m = range(month);
+    assert.ok(m.lt.getTime() - m.gte.getTime() >= 28 * 86_400_000);
+    assert.ok(m.lt.getTime() - m.gte.getTime() <= 31 * 86_400_000);
+    assert.equal(m.gte.getUTCHours(), 4);
+
+    // El resto de filtros viaja a las tres sumas, igual.
+    for (const w of [total, today, month]) {
+      assert.deepEqual(w.registeredBy, { in: ['u1'] });
+      assert.deepEqual(w.method, { in: ['QR'] });
+      assert.deepEqual(w.credit, { externalSource: 'PSF' });
+    }
+  });
+
+  it('la suma del total usa el mismo where que la lista', async () => {
+    const { service, calls } = makeLister([], 5);
+    await service.list({ summary: true, registeredBy: 'u1' });
+    assert.deepEqual(calls.aggs[0], calls.where);
+  });
+});
+
+describe('PaymentsService.register — desde dónde se registró', () => {
+  it('lo que declara el cliente (el panel manda WEB) se guarda tal cual', async () => {
+    const { service, calls } = makeService({ credit: psfCredit() });
+    const out = await service.register({ ...PAY, amount: 50, registeredVia: 'WEB' });
+    assert.equal(calls.create[0]!.registeredVia, 'WEB');
+    assert.equal(out.registeredVia, 'WEB');
+  });
+
+  it('sin decirlo, la cabecera de la app móvil lo marca MOBILE', async () => {
+    const { service, calls } = makeService({ credit: psfCredit() });
+    await service.register({ ...PAY, amount: 50 }, undefined, 'MOBILE');
+    assert.equal(calls.create[0]!.registeredVia, 'MOBILE');
+  });
+
+  it('lo del cuerpo manda sobre la pista de la cabecera', async () => {
+    const { service, calls } = makeService({ credit: psfCredit() });
+    await service.register({ ...PAY, amount: 50, registeredVia: 'WEB' }, undefined, 'MOBILE');
+    assert.equal(calls.create[0]!.registeredVia, 'WEB');
+  });
+
+  it('sin ninguna de las dos no se inventa: queda sin dato', async () => {
+    const { service, calls } = makeService({ credit: psfCredit() });
+    const out = await service.register({ ...PAY, amount: 50 });
+    assert.equal(calls.create[0]!.registeredVia, undefined);
+    assert.equal(out.registeredVia, undefined);
+  });
+});
+
+describe('PaymentsService.findOne — quién cobró y la visita', () => {
+  const ANA = 'a0000000-0000-4000-8000-000000000001';
+  const LUIS = 'a0000000-0000-4000-8000-000000000002';
+  const row = (over: Record<string, unknown> = {}) => ({
+    id: 'p1', creditId: 'cr1', amount: 100, method: 'CASH', channel: 'KOBRAX_COLLECTED', registeredBy: ANA,
+    paymentDate: new Date(), createdAt: new Date(), visitId: null, registeredVia: null, ...over,
+  });
+
+  function makeFinder(payment: unknown, visit: unknown = null) {
+    const lookups: string[][] = [];
+    const tx = {
+      payment: { findFirst: async () => payment },
+      fieldVisit: { findFirst: async () => visit },
+      userAccount: {
+        findMany: async (a: { where: { userId: { in: string[] } } }) => {
+          lookups.push(a.where.userId.in);
+          return [
+            { userId: ANA, user: { profile: { firstName: 'Ana', lastName: 'Pérez' } } },
+            { userId: LUIS, user: { profile: { firstName: 'Luis', lastName: 'Rojas' } } },
+          ].filter((r) => a.where.userId.in.includes(r.userId));
+        },
+      },
+    };
+    const service = new PaymentsService({ withTenant: async (_a: string, fn: (t: unknown) => unknown) => fn(tx) } as never, { accountId: 'acc-A' } as never, {} as never, {} as never, {} as never);
+    return { service, lookups };
+  }
+
+  it('un cobro sin visita no trae `visit`', async () => {
+    const { service } = makeFinder(row());
+    const out = await service.findOne('p1');
+    assert.equal('visit' in out, false);
+    assert.equal(out.registeredByName, 'Ana Pérez');
+  });
+
+  it('con visita dice quién cobró en ella (que puede no ser quien cargó el pago) y a qué parada lleva', async () => {
+    const { service, lookups } = makeFinder(row({ visitId: 'v1', registeredVia: 'WEB' }), { collectorId: LUIS, routeStop: { id: 's1', routeId: 'r1' } });
+    const out = await service.findOne('p1');
+    assert.deepEqual(out.visit, { collectorId: LUIS, collectorName: 'Luis Rojas', routeId: 'r1', stopId: 's1' });
+    assert.equal(out.registeredByName, 'Ana Pérez');
+    assert.equal(out.registeredVia, 'WEB');
+    // Los dos nombres, en UNA consulta.
+    assert.equal(lookups.length, 1);
+  });
+
+  it('una visita que no salió de una ruta no inventa el enlace a la parada', async () => {
+    const { service } = makeFinder(row({ visitId: 'v1' }), { collectorId: LUIS, routeStop: null });
+    const out = await service.findOne('p1');
+    assert.equal(out.visit!.routeId, undefined);
+    assert.equal(out.visit!.stopId, undefined);
+  });
+
+  it('404 si el pago no existe', async () => {
+    const { service } = makeFinder(null);
+    await assert.rejects(() => service.findOne('nope'));
   });
 });

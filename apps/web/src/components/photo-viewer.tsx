@@ -25,6 +25,7 @@ export function PhotoViewer({
   photos,
   evidence,
   initialIndex = 0,
+  caption,
 }: {
   open: boolean;
   onClose: () => void;
@@ -38,6 +39,11 @@ export function PhotoViewer({
   evidence?: string;
   /** Con cuál abre: tocar la tercera miniatura abre la tercera. */
   initialIndex?: number;
+  /**
+   * Para una sola imagen que no es «la foto principal» de nada —el comprobante de un pago—: sin la etiqueta «Principal» y con
+   * este texto en lugar de «Foto principal / Foto n». Sin esto, el visor sigue siendo el de las fotos de una casa.
+   */
+  caption?: string;
 }) {
   const t = useTranslations('portfolio.photos');
   const tc = useTranslations('common');
@@ -145,7 +151,7 @@ export function PhotoViewer({
             />
           )}
 
-          {current === 0 && (
+          {current === 0 && !caption && (
             <span className="absolute left-3 top-3 rounded-md bg-k-purple px-2.5 py-1 text-[12px] font-semibold text-white shadow">
               {t('main')}
             </span>
@@ -184,7 +190,7 @@ export function PhotoViewer({
             </svg>
           </span>
           <div className="min-w-0">
-            <p className="text-[14px] font-semibold text-k-text">{current === 0 ? t('viewer.mainPhoto') : t('viewer.photoN', { n: current + 1 })}</p>
+            <p className="text-[14px] font-semibold text-k-text">{caption ?? (current === 0 ? t('viewer.mainPhoto') : t('viewer.photoN', { n: current + 1 }))}</p>
             <p className="truncate text-[13px] text-k-text-2">{evidence ?? t('viewer.evidenceClient')}</p>
           </div>
         </div>

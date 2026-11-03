@@ -226,6 +226,14 @@ export default function InicioScreen() {
           />
         )}
 
+        {/* Bajar la jornada a mano y ver que se bajó: la hidratación del arranque corre callada y, si falla, nadie lo sabe. */}
+        <ListRow
+          icon="cloud-download-outline"
+          title="Datos sin conexión"
+          subtitle="Descarga lo que necesitas para trabajar sin señal"
+          onPress={() => router.push('/datos-sin-conexion')}
+        />
+
         <View style={styles.seccionHead}>
           <SectionLabel>AGENDA DE HOY</SectionLabel>
           <Pressable onPress={() => router.push('/(tabs)/agenda')} hitSlop={8} accessibilityRole="button">

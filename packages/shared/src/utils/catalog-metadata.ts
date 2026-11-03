@@ -1,4 +1,5 @@
 import { CatalogType } from '../enums/agenda.enum.js';
+import { PAYMENT_METHODS, type PaymentMethod } from '../constants/kobrax.constants.js';
 import { INCOME_CYCLES, INCOME_SOURCE_CODES } from '../enums/income.enum.js';
 
 /**
@@ -17,7 +18,8 @@ export type CatalogMetadataError =
   | 'SYNONYMS_INVALID'
   | 'APPLIES_TO_INVALID'
   | 'SUGGESTION_INVALID'
-  | 'FLAG_INVALID';
+  | 'FLAG_INVALID'
+  | 'LEDGER_METHOD_INVALID';
 
 export const CATALOG_SYNONYMS_MAX = 40;
 export const CATALOG_SYNONYM_MAX_LENGTH = 60;
@@ -53,7 +55,40 @@ export function validateCatalogMetadata(catalog: string, metadata: unknown): Cat
     return null;
   }
 
+  if (catalog === CatalogType.PAYMENT_METHOD) {
+    if (m.ledgerMethod !== undefined && !(PAYMENT_METHODS as readonly string[]).includes(String(m.ledgerMethod))) return 'LEDGER_METHOD_INVALID';
+    return null;
+  }
+
   return null;
+}
+
+/**
+ * Con qué método del libro de pagos se registra cada medio de pago del catálogo. El libro (`payments.method`) es un
+ * enum cerrado que alimenta los reportes; el catálogo es el vocabulario del negocio. Esta tabla es el respaldo para los
+ * ítems sembrados que todavía no traen `metadata.ledgerMethod`.
+ */
+export const DEFAULT_LEDGER_METHOD_BY_CODE: Record<string, PaymentMethod> = {
+  CASH: 'CASH',
+  DEPOSIT: 'TRANSFER',
+  TRANSFER: 'TRANSFER',
+  QR: 'QR',
+  CHECK: 'TRANSFER',
+  MOBILE: 'MOBILE_PAYMENT',
+  AGENCY: 'CASH',
+  COLLECTOR: 'CASH',
+};
+
+/**
+ * El método del libro de un medio de pago del catálogo: el que se eligió (`metadata.ledgerMethod`), si no el de los
+ * sembrados, si no el propio código cuando ya es un método del libro. `null` = falta decidirlo (no se adivina).
+ */
+export function ledgerMethodOf(item: { code: string; metadata?: object | null }): PaymentMethod | null {
+  const chosen = (item.metadata as Record<string, unknown> | null | undefined)?.ledgerMethod;
+  if (typeof chosen === 'string' && (PAYMENT_METHODS as readonly string[]).includes(chosen)) return chosen as PaymentMethod;
+  const byCode = DEFAULT_LEDGER_METHOD_BY_CODE[item.code];
+  if (byCode) return byCode;
+  return (PAYMENT_METHODS as readonly string[]).includes(item.code) ? (item.code as PaymentMethod) : null;
 }
 
 /**

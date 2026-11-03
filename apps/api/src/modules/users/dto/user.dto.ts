@@ -16,6 +16,8 @@ export class InviteMemberDto {
 export class UpdateMemberDto {
   @IsOptional() @IsUUID() roleId?: string;
   @IsOptional() @IsBoolean() isActive?: boolean;
+  /** A qué agencia pertenece. `null` la quita. Cambia lo que ve la persona: el alcance del supervisor sale de su agencia. */
+  @IsOptional() @IsUUID() branchId?: string | null;
   /**
    * A quién se le pasa lo que esta persona tiene pendiente (gestiones, créditos y rutas) al desactivarla. Sin él, desactivar
    * a alguien con trabajo se rechaza (`USER_HAS_PENDING_WORK`); con él se pasa todo y se desactiva en un solo paso.

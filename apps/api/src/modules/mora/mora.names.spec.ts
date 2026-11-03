@@ -189,7 +189,7 @@ describe('PaymentsService — registeredByName', () => {
     const { userAccount, lookups } = nameTable();
     const pay = (id: string, by: string | null) => ({ id, creditId: CREDIT, amount: 10, method: 'CASH', channel: 'KOBRAX_COLLECTED', registeredBy: by, paymentDate: new Date(), createdAt: new Date(), credit: { externalSource: null } });
     const tx = {
-      payment: { findMany: async () => [pay('p1', ANA), pay('p2', LUIS), pay('p3', null), pay('p4', ANA)], count: async () => 4 },
+      payment: { findMany: async () => [pay('p1', ANA), pay('p2', LUIS), pay('p3', null), pay('p4', ANA)], count: async () => 4, aggregate: async () => ({ _sum: { amount: 40 } }) },
       userAccount,
     };
     const service = new PaymentsService({ withTenant: async (_a: string, fn: (t: unknown) => unknown) => fn(tx) } as never, { accountId: 'acc' } as never, {} as never, {} as never, {} as never);

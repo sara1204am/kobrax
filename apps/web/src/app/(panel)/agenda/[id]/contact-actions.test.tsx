@@ -21,6 +21,31 @@ describe('ContactActions (F4/11)', () => {
     expect(link.getAttribute('rel')).toContain('noopener');
   });
 
+  it('WhatsApp copia el mensaje final; con una variable sin resolver avisa y no copia ni abre', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const { unmount } = draw({ type: AgendaItemType.WHATSAPP, phone: '78012345', message: 'Hola Ana, debe Bs 5' });
+    await userEvent.click(screen.getByRole('button', { name: 'Copiar mensaje' }));
+    expect(writeText).toHaveBeenCalledWith('Hola Ana, debe Bs 5');
+    unmount();
+
+    writeText.mockClear();
+    draw({ type: AgendaItemType.WHATSAPP, phone: '78012345', message: 'Hola Ana, debe {{saldo}}' });
+    await userEvent.click(screen.getByRole('button', { name: 'Copiar mensaje' }));
+    expect(writeText).not.toHaveBeenCalled();
+    expect(await screen.findByText(/le faltan datos: \{\{saldo\}\}/)).toBeInTheDocument();
+    const clic = new MouseEvent('click', { bubbles: true, cancelable: true });
+    screen.getByRole('link', { name: 'Abrir WhatsApp' }).dispatchEvent(clic);
+    expect(clic.defaultPrevented).toBe(true);
+  });
+
+  it('WhatsApp con un número inválido no abre nada', () => {
+    draw({ type: AgendaItemType.WHATSAPP, phone: '123', message: 'Hola' });
+    const clic = new MouseEvent('click', { bubbles: true, cancelable: true });
+    screen.getByRole('link', { name: 'Abrir WhatsApp' }).dispatchEvent(clic);
+    expect(clic.defaultPrevented).toBe(true);
+  });
+
   it('Llamada copia el teléfono: no registra nada ni abre `tel:`', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });

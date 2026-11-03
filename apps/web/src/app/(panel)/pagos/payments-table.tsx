@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { CREDIT_SOURCES, memberName, type Member, type PaymentItem } from '@kobrax/shared';
+import { CREDIT_SOURCES, PAYMENT_METHODS, type PaymentItem } from '@kobrax/shared';
 import { SourceBadge } from '@/components/source-badge';
 import { EmptyState } from '@/components/panel-ui';
 import { DataTable, type Column, type PageMeta } from '@/components/data-table';
@@ -29,7 +29,7 @@ import { dateTime, money } from '@/lib/format';
 export function PaymentsTable({
   rows,
   meta,
-  members,
+  officers,
   currency,
   filtered,
   userId,
@@ -38,7 +38,11 @@ export function PaymentsTable({
 }: {
   rows: PaymentItem[];
   meta: PageMeta;
-  members: Member[];
+  /**
+   * Los oficiales que quien mira puede elegir. Vacío = el filtro no se dibuja (un cobrador no tiene a quién consultar).
+   * La lista la arma la pantalla según el permiso; esto sólo la pinta.
+   */
+  officers: { userId: string; name: string }[];
   currency: string;
   filtered: boolean;
   userId?: string;
@@ -50,7 +54,7 @@ export function PaymentsTable({
   const t = useTranslations('panel.payments');
   const tsrc = useTranslations('creditSource');
   const locale = useLocale();
-  const byId = new Map(members.map((m) => [m.userId, memberName(m)]));
+  const byId = new Map(officers.map((o) => [o.userId, o.name]));
 
   const columns: Column<PaymentItem>[] = [
     {
@@ -85,7 +89,8 @@ export function PaymentsTable({
       key: 'registeredBy',
       header: t('columns.registeredBy'),
       // Sin nombre no es «nadie»: `/users` da 403 sin `user:read`, y todo pago tiene quien lo cargó.
-      render: (p) => byId.get(p.registeredBy ?? '') ?? <span className="text-k-muted">{t('unknownUser')}</span>,
+      // El nombre viene resuelto en la fila (no exige `user:read`); la lista de oficiales es el respaldo.
+      render: (p) => p.registeredByName ?? byId.get(p.registeredBy ?? '') ?? <span className="text-k-muted">{t('unknownUser')}</span>,
     },
     {
       key: 'receipt',
@@ -94,6 +99,12 @@ export function PaymentsTable({
       sortable: true,
       defaultDir: 'desc',
       render: (p) => (p.receiptNumber != null ? `#${p.receiptNumber}` : '—'),
+    },
+    {
+      // El del papel que entregó quien cobró (opcional). No ordena: es texto libre de cada oficial.
+      key: 'receiptRef',
+      header: t('columns.receiptRef'),
+      render: (p) => p.receiptReference ?? <span className="text-k-muted">—</span>,
     },
   ];
 
@@ -104,6 +115,25 @@ export function PaymentsTable({
    */
   const filters: FilterDef[] = [
     { keys: ['from', 'to'], label: t('filters.period'), type: 'dateRange', defaults: period },
+    // Medio de pago: uno o varios. Los valores son los que soporta el sistema, no una lista aparte.
+    {
+      keys: ['method'],
+      label: t('filters.method'),
+      type: 'multiSelect',
+      options: PAYMENT_METHODS.map((m) => ({ value: m, label: t(`method.${m}`) })),
+    },
+    // Quién cobró: uno o varios, con buscador. Sin oficiales a elegir (un cobrador) no se dibuja: una caja vacía no sirve.
+    ...(officers.length > 0
+      ? [
+          {
+            keys: ['registeredBy'],
+            label: t('filters.registeredBy'),
+            type: 'multiSelect' as const,
+            searchable: true,
+            options: officers.map((o) => ({ value: o.userId, label: o.name })),
+          },
+        ]
+      : []),
     {
       // D7: de qué fuente son los créditos. Kobrax = los que calcula el sistema; PSF = los reportados.
       keys: ['source'],

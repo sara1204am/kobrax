@@ -1,24 +1,38 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
+import { server } from '@/test/msw-server';
+import { ToastProvider } from '@/components/toast';
 import { WhatsAppButton } from './whatsapp-button';
 
-const CONTEXT = { contacts: [{ id: 'c1', contactType: 'PHONE', value: '+591 71234567', isPrimary: true }] };
-
-beforeEach(() => {
-  vi.restoreAllMocks();
-  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(CONTEXT), { status: 200 }));
-});
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
 describe('WhatsAppButton', () => {
-  it('🔴 abre WhatsApp en OTRA pestaña, sin tocar la ventana de la ruta', async () => {
-    const tab = { location: { href: '' }, opener: 'x', close: vi.fn() };
-    const open = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
-    render(<WhatsAppButton clientId="cl1" clientName="Ana Ruiz" />);
-    await userEvent.click(screen.getByRole('button'));
-    await waitFor(() => expect(tab.location.href).toContain('wa.me/'));
-    // Sin `'noopener'` como feature: con él `window.open` devuelve null y se perdía la pestaña.
-    expect(open).toHaveBeenCalledWith('', '_blank');
-    expect(tab.opener).toBeNull();
+  it('🔴 no pide el teléfono hasta que se hace clic, y entonces ofrece las plantillas de la cuenta', async () => {
+    let contextPedido = false;
+    server.use(
+      http.get('*/api/agenda/context/cl1', () => {
+        contextPedido = true;
+        return HttpResponse.json({
+          client: { id: 'cl1', displayName: 'Ana Ruiz' },
+          credits: [{ creditId: '11111111-1111-4111-8111-111111111111', code: 'CR-1', outstandingBalance: 500, currency: 'BOB' }],
+          contacts: [{ id: 'k1', contactType: 'PHONE', value: '+591 71234567', isPrimary: true }],
+        });
+      }),
+      http.get('*/api/catalogs/WHATSAPP_TEMPLATE', () =>
+        HttpResponse.json({ data: [{ code: 'REM', label: 'Recordatorio', metadata: { body: 'Hola {{cliente}}' } }] }),
+      ),
+    );
+    render(
+      <ToastProvider>
+        <WhatsAppButton clientId="cl1" clientName="Ana Ruiz" />
+      </ToastProvider>,
+    );
+    expect(contextPedido).toBe(false);
+    await userEvent.click(screen.getByRole('button', { name: 'WhatsApp' }));
+    expect(await screen.findByRole('option', { name: 'Recordatorio' })).toBeInTheDocument();
+    await vi.waitFor(() => expect((screen.getByLabelText(/^Mensaje/) as HTMLTextAreaElement).value).toBe('Hola Ana Ruiz'));
+    expect(contextPedido).toBe(true);
   });
 });
