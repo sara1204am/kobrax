@@ -4023,7 +4023,8 @@
       "officeOne": "Each person is in a single office: assigning them to another moves them and changes the portfolio they see.",
       "officeMoved": "Office assigned",
       "officeRemove": "Remove from the office",
-      "officeRemoved": "Person removed from the office"
+      "officeRemoved": "Person removed from the office",
+      "officeError": "The office could not be assigned"
     }
   },
   "profile": {

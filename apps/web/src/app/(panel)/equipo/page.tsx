@@ -10,6 +10,7 @@ import {
   type Member,
 } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
+import { getOffices } from '@/lib/offices-server';
 import { EmptyState, PageHeader, Badge } from '@/components/panel-ui';
 import { hasTeamFilters, teamView, type TeamParams } from '@/lib/team';
 import { MembersTable } from './members-table';
@@ -32,18 +33,20 @@ export default async function EquipoPage({ searchParams }: { searchParams: TeamP
   const t = await getTranslations('team');
   const tPlans = await getTranslations('plans');
 
-  const [me, list, roles, account] = await Promise.all([
+  const [me, list, roles, account, offices] = await Promise.all([
     apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
     apiCall<AssignableRole[]>('/roles', { method: 'GET', auth: true }),
     apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
+    // F13: oficinas de su alcance. Con una sola no hay columna ni filtro de oficina.
+    getOffices(),
   ]);
 
   if (list.status !== 200 || !list.body.data || !me.body.data) {
     return <EmptyState title={t('noAccess')} text={list.body.error?.message} />;
   }
 
-  const { rows, meta } = teamView(list.body.data, searchParams);
+  const { rows, meta } = teamView(list.body.data, searchParams, offices.rows);
   // Puede faltar: sin `account:read` la API devuelve 403 y la lista tiene que seguir siendo
   // legible. Sin asientos no hay tope que mostrar ni cartel que dar.
   const seats = account.body.data;
@@ -139,6 +142,7 @@ export default async function EquipoPage({ searchParams }: { searchParams: TeamP
         roleNames={[...new Set(list.body.data.map((m) => m.roleName))].sort()}
         roles={roles.body.data ?? []}
         meId={me.body.data.userId}
+        offices={offices.multi ? offices.rows : []}
         filtered={hasTeamFilters(searchParams)}
         seats={seats ? { used: seats.usage.users, max } : undefined}
         action={<InviteButton roles={roles.body.data ?? []} full={level === 'full'} />}

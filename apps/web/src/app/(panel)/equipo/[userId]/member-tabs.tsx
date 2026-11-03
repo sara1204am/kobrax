@@ -15,6 +15,8 @@ import { isKnownRole } from '@/lib/team';
 import { TeamIcon } from '../team-ui';
 import { ActivityTable, ConnectionsTable } from './history-tables';
 import { whenLabel } from '../when';
+import { MemberOffice } from './member-office';
+import type { OfficeRow } from '@/lib/offices';
 
 const STATUS_TONE = { active: 'success', pending: 'warning', inactive: 'danger' } as const;
 
@@ -41,7 +43,7 @@ function Th({ children }: { children: React.ReactNode }) {
 
 // ── Información ───────────────────────────────────────────────────────────────
 
-export async function InfoTab({ member }: { member: MemberDetail }) {
+export async function InfoTab({ member, offices = [] }: { member: MemberDetail; offices?: OfficeRow[] }) {
   const t = await getTranslations('team');
   const tr = await getTranslations('team.roles');
   const locale = await getLocale();
@@ -53,7 +55,15 @@ export async function InfoTab({ member }: { member: MemberDetail }) {
     [t('columns.role'), isKnownRole(member.roleName) ? tr(member.roleName) : member.roleName],
     [t('columns.status'), <Badge key="s" dot tone={STATUS_TONE[status]}>{t(`status.${status}`)}</Badge>],
     [t('detail.joinedAt'), date(member.joinedAt, locale)],
-    [t('detail.branch'), member.branchName ?? <span key="b" className="text-k-muted">{t('detail.noBranch')}</span>],
+    // F13: con más de una oficina, la asignación se ve con ruta completa y se cambia aquí (si hay `office:write`).
+    [
+      t('detail.branch'),
+      offices.length > 0 ? (
+        <MemberOffice key="b" userId={member.userId} branchId={member.branchId ?? null} offices={offices} />
+      ) : (
+        (member.branchName ?? <span key="b" className="text-k-muted">{t('detail.noBranch')}</span>)
+      ),
+    ],
   ];
   return (
     <Panel title={t('detail.dataTitle')}>
@@ -65,7 +75,7 @@ export async function InfoTab({ member }: { member: MemberDetail }) {
           </div>
         ))}
       </dl>
-      <p className="mt-6 text-[12px] text-k-text-2">{t('detail.readOnly')}</p>
+      {offices.length === 0 && <p className="mt-6 text-[12px] text-k-text-2">{t('detail.readOnly')}</p>}
     </Panel>
   );
 }

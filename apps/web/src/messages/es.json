@@ -4023,7 +4023,8 @@
       "officeOne": "Cada persona está en una sola oficina: asignarla a otra la mueve y cambia la cartera que ve.",
       "officeMoved": "Oficina asignada",
       "officeRemove": "Quitar de la oficina",
-      "officeRemoved": "Persona sacada de la oficina"
+      "officeRemoved": "Persona sacada de la oficina",
+      "officeError": "No se pudo asignar la oficina"
     }
   },
   "profile": {

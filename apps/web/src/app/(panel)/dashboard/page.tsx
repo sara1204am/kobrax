@@ -19,6 +19,7 @@ import { DEFAULT_WIDGETS } from '@/lib/widget-registry';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { MfaReminder } from '@/components/mfa-reminder';
 import { DashboardFilters } from '@/components/dashboard/dashboard-filters';
+import { getOffices } from '@/lib/offices-server';
 import { DashboardGrid } from '@/components/dashboard/dashboard-grid';
 import { DashboardToolbar } from '@/components/dashboard/dashboard-toolbar';
 import { WidgetActions } from '@/components/dashboard/widget-actions';
@@ -56,7 +57,7 @@ export default async function DashboardPage({
   /*
    * Todo en paralelo, no encadenado: la pantalla tarda lo que el más lento y no la suma de los ocho.
    */
-  const [summary, aging, collectors, agenda, visits, trend, boards, me, team, today] = await Promise.all([
+  const [summary, aging, collectors, agenda, visits, trend, boards, me, team, today, offices] = await Promise.all([
     apiCall<AnalyticsSummary>(`/analytics/summary?${query}`, { method: 'GET', auth: true }),
     apiCall<AgingBucketRow[]>(`/analytics/portfolio-aging?${query}`, { method: 'GET', auth: true }),
     apiCall<CollectorPerformanceRow[]>(`/analytics/collector-performance?${query}`, { method: 'GET', auth: true }),
@@ -68,6 +69,8 @@ export default async function DashboardPage({
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
     // «Agenda de hoy» (widget `calendar`): sin `agenda:read` vuelve null y el widget lo dice.
     getAgendaSummary(),
+    // F13: las oficinas de su alcance para el selector; con una sola no hay selector.
+    getOffices(),
   ]);
 
   // Sin `report:read` no hay tablero, y decirlo es mejor que dibujar doce cajas vacías.
@@ -132,6 +135,7 @@ export default async function DashboardPage({
       <DashboardFilters
         collectors={team.body.data ?? []}
         sources={sources}
+        offices={offices.options}
         today={companyDay}
         actions={<DashboardToolbar dashboards={dashboards} current={current} widgets={widgets} editable={editable} />}
       />
