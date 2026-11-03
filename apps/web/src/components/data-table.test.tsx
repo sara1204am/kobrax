@@ -172,8 +172,9 @@ function renderFiltrable(extra: Partial<Parameters<typeof DataTable<Row>>[0]> = 
   );
 }
 
-/** El panel arranca cerrado salvo que ya haya un filtro puesto: hay que abrirlo para filtrar. */
+/** El panel arranca abierto; sólo se toca el botón si alguien lo cerró. */
 async function abrirFiltros() {
+  if (screen.queryByRole('complementary', { name: 'Filtros' })) return;
   await userEvent.click(screen.getByRole('button', { name: 'Filtros aplicados' }));
 }
 
@@ -183,12 +184,11 @@ async function abrirFiltros() {
  * un test que nunca termina, no uno que falla—. Son 350 ms; `waitFor` espera hasta un segundo.
  */
 describe('DataTable — panel de filtros', () => {
-  it('el panel arranca cerrado, y abre solo si ya venía un filtro puesto', () => {
+  it('el panel arranca abierto, con o sin filtro puesto', () => {
     const { unmount } = renderFiltrable();
-    expect(screen.queryByRole('complementary', { name: 'Filtros' })).not.toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'Filtros' })).toBeInTheDocument();
     unmount();
 
-    // Con un filtro puesto tiene que estar a la vista: escondido, la lista sale corta y nada lo explica.
     renderFiltrable({ filtered: true });
     expect(screen.getByRole('complementary', { name: 'Filtros' })).toBeInTheDocument();
   });
