@@ -54,7 +54,8 @@
       "avanzado": "Advanced",
       "facturacion": "Billing",
       "actividad": "Activity",
-      "agencias": "Branches",
+      "oficinas": "Offices",
+      "papelera": "Trash",
       "catalogos": "Catalogs",
       "general": "General",
       "plan": "Plan",
@@ -113,7 +114,9 @@
         "selected": "{count} selected",
         "clear": "Clear filters",
         "source": "Source",
-        "allSources": "All"
+        "allSources": "All",
+        "office": "Office",
+        "allOffices": "All offices"
       },
       "priorities": {
         "LOW": "Low",
@@ -549,9 +552,9 @@
           "refTitle": "Loan officer"
         },
         "branch": {
-          "label": "One branch",
-          "hint": "The file carries a branch's portfolio. Only that branch is reconciled.",
-          "refTitle": "Branch"
+          "label": "One office",
+          "hint": "The file carries an office's portfolio and everything under it. Only that part of the tree is reconciled.",
+          "refTitle": "Office"
         },
         "account": {
           "label": "The whole company",
@@ -765,7 +768,7 @@
         "scopeKinds": {
           "account": "Whole company",
           "official": "{name}'s portfolio",
-          "branch": "Branch {name}"
+          "branch": "Office {name}"
         }
       }
     },
@@ -805,7 +808,7 @@
         "code": "Credit no.",
         "overdue": "Overdue",
         "lastAction": "Last action",
-        "branch": "Branch",
+        "branch": "Office",
         "originStatus": "Status at source",
         "principal": "Original amount",
         "installment": "Installment",
@@ -1191,7 +1194,7 @@
         "skip": {
           "NOT_FOUND": "The credit was not found.",
           "ALREADY_ASSIGNED": "It was already that collector's.",
-          "OUT_OF_AGENCY": "It is outside your agency.",
+          "OUT_OF_AGENCY": "It is outside your office.",
           "CONFLICT": "It changed in the meantime."
         }
       },
@@ -2304,7 +2307,7 @@
       "cobranza": "Collections",
       "mensajes": "Messages",
       "catalogos": "Catalogs",
-      "agencias": "Branches",
+      "oficinas": "Offices",
       "facturacion": "Billing",
       "billingPending": "Billing details missing",
       "actividad": "Activity",
@@ -2350,7 +2353,7 @@
         "descriptionLabel": "Description (optional)",
         "descriptionPlaceholder": "What this option is for"
       },
-            "intro": "Manage the options your team uses in daily operations.",
+      "intro": "Manage the options your team uses in daily operations.",
       "count": "{count, plural, one {# catalog} other {# catalogs}}",
       "settings": "Business settings",
       "searchCatalog": "Search catalog…",
@@ -2384,7 +2387,7 @@
         "subtitle": "Change how your team sees this option",
         "codeLocked": "The code can't be changed: records and the mobile app store it."
       },
-"names": {
+      "names": {
         "PAYMENT_METHOD": "Payment methods",
         "BANK": "Banks",
         "NO_PAYMENT_REASON": "Reasons for non-payment",
@@ -2441,66 +2444,6 @@
       "save": "Save preferences",
       "saved": "Preferences saved",
       "saveError": "The preferences could not be saved"
-    },
-    "branches": {
-      "title": "Branches",
-      "intro": "Your business locations and who works in each one. A person's branch decides which portfolio they see: a supervisor sees their own branch.",
-      "add": "+ New branch",
-      "empty": "There are no branches yet",
-      "emptyHint": "Not needed if you work from a single office. Create one per location to split the portfolio and the team.",
-      "columns": {
-        "name": "Branch",
-        "city": "City",
-        "manager": "Manager",
-        "members": "Members",
-        "credits": "Credits",
-        "status": "Status",
-        "actions": "Actions"
-      },
-      "active": "Active",
-      "inactive": "Deactivated",
-      "manage": "Members",
-      "manageOf": "Members of {name}",
-      "edit": "Edit",
-      "editOf": "Edit {name}",
-      "addTitle": "New branch",
-      "editTitle": "Edit branch",
-      "fields": {
-        "name": "Name",
-        "code": "Code",
-        "codeHint": "Short, e.g. CEN. Saved in uppercase.",
-        "city": "City",
-        "address": "Address",
-        "manager": "Manager",
-        "noManager": "No manager",
-        "active": "Active branch",
-        "activeHint": "To deactivate it, first move its members to another branch."
-      },
-      "save": "Save",
-      "cancel": "Cancel",
-      "close": "Close",
-      "remove": "Remove branch",
-      "saved": "Branch saved",
-      "created": "Branch created",
-      "removed": "Branch removed",
-      "saveError": "The change could not be saved",
-      "removeTitle": "Remove {name}?",
-      "removeText": "The branch stops showing, but the credits and routes that name it keep their history.",
-      "removeBlocked": "It has {n, plural, one {# active member} other {# active members}}. Move them to another branch before removing it.",
-      "removeOk": "Remove",
-      "membersTitle": "Members of {name}",
-      "currentMembers": "In this branch",
-      "noMembers": "Nobody is in this branch yet.",
-      "takeOut": "Remove",
-      "takeOutOf": "Remove {name} from the branch",
-      "memberRemoved": "Member removed from the branch",
-      "addMembers": "Add people",
-      "scopeWarning": "Changing someone's branch changes the portfolio they see.",
-      "noCandidates": "There are no more active people to add.",
-      "comesFrom": "from {name}",
-      "noBranch": "no branch",
-      "addPicked": "{n, plural, =0 {Add} one {Add # person} other {Add # people}}",
-      "membersAdded": "Members moved to the branch"
     },
     "billing": {
       "title": "Billing details",
@@ -2566,12 +2509,12 @@
     },
     "activity": {
       "title": "Account activity",
-      "intro": "Who changed what in the account settings, team, branches and lists. Only people who can read the audit log see it.",
+      "intro": "Who changed what in the account settings, team, offices and lists. Only people who can read the audit log see it.",
       "filter": "Type of change",
       "all": "All",
       "entities": {
         "account": "Account details",
-        "branch": "Branch",
+        "branch": "Office",
         "catalog_item": "Catalog item",
         "arrear_category": "Arrears category",
         "user_account": "Team member",
@@ -2773,6 +2716,200 @@
     "arrearsMethods": {
       "oldest_unpaid": "From the oldest unpaid instalment",
       "first_default": "From the first default until caught up (as banks do)"
+    },
+    "offices": {
+      "title": "Offices",
+      "intro": "Your organization's structure: head office, regionals and branches, and who works in each. A person's office decides which portfolio they see; whoever is in a regional sees everything under it.",
+      "add": "+ Add office",
+      "planLimit": "Your plan allows {limit, plural, one {# office} other {# offices}} and you already use {used} (the root counts).",
+      "seePlan": "See the plan",
+      "menu": {
+        "edit": "Edit",
+        "addChild": "Add child",
+        "quickAdd": "Quick add",
+        "detail": "View detail",
+        "move": "Move to…",
+        "deactivate": "Deactivate",
+        "of": "Actions for {name}"
+      },
+      "tree": {
+        "root": "Main office",
+        "collapse": "Collapse {name}",
+        "expand": "Expand {name}",
+        "children": "{n, plural, one {# child office} other {# child offices}}",
+        "members": "{n, plural, one {# person} other {# people}}",
+        "showMore": "Show {n} more"
+      },
+      "toolbar": {
+        "search": "Search by name, code, city or type",
+        "count": "{n, plural, one {# office} other {# offices}}",
+        "level": "Visible levels",
+        "collapseAll": "Collapse all",
+        "expandAll": "Expand all",
+        "less": "One level less",
+        "more": "One level more",
+        "levelNow": "Visible levels: {n}",
+        "shortcuts": "Shortcuts: \"/\" searches · 1-9 sets how many levels show · 0 leaves only the root · Alt+click on the arrow opens the whole branch · arrow keys walk the tree.",
+        "noResults": "No results for \"{q}\".",
+        "results": "{n, plural, one {# result} other {# results}} for \"{q}\".",
+        "clear": "Clear"
+      },
+      "status": {
+        "active": "Active",
+        "inactive": "Deactivated"
+      },
+      "preview": {
+        "parent": "Parent office",
+        "city": "City",
+        "address": "Address",
+        "manager": "Manager",
+        "full": "Full details",
+        "members": "{n, plural, one {# person} other {# people}}",
+        "credits": "{n, plural, one {# credit} other {# credits}}",
+        "children": "{n, plural, one {# child office} other {# child offices}}"
+      },
+      "form": {
+        "close": "Close",
+        "cancel": "Cancel",
+        "save": "Save",
+        "created": "Office created",
+        "saved": "Office saved",
+        "addTitle": "New office",
+        "editTitle": "Edit {name}",
+        "tabsLabel": "Office sections",
+        "tabs": {
+          "data": "Details",
+          "contact": "Contact and location",
+          "team": "Team"
+        },
+        "tabHasErrors": "Missing data",
+        "teamAfterSave": "Save the office to add people.",
+        "fields": {
+          "name": "Name",
+          "code": "Code",
+          "codeHint": "Short, e.g. CEN. Saved in uppercase.",
+          "type": "Type",
+          "pickType": "Pick a type",
+          "parent": "Parent office",
+          "manager": "Manager",
+          "noManager": "No manager",
+          "city": "City",
+          "address": "Address"
+        },
+        "branchingWarning": "This office holds a portfolio. When you open its first child, the portfolio moves to the new offices: after creating it we take you to \"Move portfolio\"."
+      },
+      "quick": {
+        "title": "Quick add under {name}",
+        "under": "Created inside: {path}",
+        "dupCode": "There is already an office with that code."
+      },
+      "move": {
+        "title": "Move {name}",
+        "to": "New parent office",
+        "pick": "Pick where to move it",
+        "confirm": "Move \"{name}\" under \"{to}\"?",
+        "impact": "The whole branch moves: {offices, plural, one {# office} other {# offices}}, with {people, plural, one {# person} other {# people}} and {credits, plural, one {# credit} other {# credits}}. What each person sees changes.",
+        "ok": "Move",
+        "done": "Office moved"
+      },
+      "deactivate": {
+        "title": "Deactivate {name}?",
+        "text": "The office goes to the trash and stops showing; its credits and routes keep their history. It can be restored.",
+        "ok": "Deactivate",
+        "done": "Office deactivated",
+        "root": "The main office cannot be deactivated.",
+        "children": "{n, plural, one {It has # active child office} other {It has # active child offices}}: deactivate or move them first.",
+        "members": "{n, plural, one {It has # active person} other {It has # active people}}: move them to another office first.",
+        "credits": "{n, plural, one {It has # credit} other {It has # credits}}: move them to another office first."
+      },
+      "portfolio": {
+        "pending": "\"{name}\" still holds {n, plural, one {# credit} other {# credits}} and already has child offices. The main office's portfolio moves to the new ones.",
+        "open": "Move portfolio",
+        "askAdmin": "Ask whoever assigns the portfolio to move it.",
+        "title": "Move portfolio",
+        "text": "You are about to move the {n, plural, one {# credit} other {# credits}} of \"{name}\" to another office.",
+        "to": "Destination office",
+        "pick": "Pick the office",
+        "ok": "Move the portfolio",
+        "done": "Portfolio moved",
+        "moved": "{n, plural, one {# credit was moved} other {# credits were moved}}.",
+        "paymentsNote": "Payments already recorded keep the office where they were collected."
+      },
+      "trash": {
+        "link": "{n, plural, =0 {Trash} other {Trash (#)}}",
+        "title": "Office trash",
+        "intro": "Deactivated offices. Restoring one puts it back in the tree, under its parent office.",
+        "empty": "The trash is empty",
+        "emptyHint": "Offices you deactivate show up here.",
+        "name": "Office",
+        "actions": "Actions",
+        "restore": "Restore",
+        "restoreOf": "Restore {name}",
+        "restored": "Office restored"
+      },
+      "types": {
+        "link": "Office types",
+        "title": "Office types",
+        "intro": "The type is a label (Regional, Branch…), not a rule: you can put any type under any office. A type in use is deactivated, not deleted.",
+        "empty": "There are no types yet.",
+        "code": "Code",
+        "name": "Name",
+        "add": "Add type",
+        "created": "Type created",
+        "saved": "Type saved",
+        "active": "Active",
+        "activeOf": "Type {code} active",
+        "nameOf": "Name of type {code}"
+      },
+      "team": {
+        "current": "In this office",
+        "none": "Nobody is in this office yet.",
+        "takeOut": "Remove",
+        "takeOutOf": "Remove {name} from the office",
+        "removed": "Person removed from the office",
+        "add": "Add people",
+        "oneOffice": "Each person is in a single office: adding someone who is already in another moves them. Changing the office changes the portfolio they see.",
+        "noCandidates": "There are no more active people to add.",
+        "person": "Person",
+        "pick": "Pick who to add",
+        "comesFrom": "now in {name}",
+        "willMove": "{name} is now in \"{from}\" and will move to this office.",
+        "assign": "Assign",
+        "added": "Person assigned to the office"
+      },
+      "detail": {
+        "back": "Back to offices",
+        "noAccess": "The office could not be opened",
+        "path": "Office path",
+        "parent": "Parent office:",
+        "general": "General information",
+        "statsTitle": "Statistics",
+        "stats": {
+          "members": "People",
+          "credits": "Credits",
+          "arrears": "Overdue",
+          "children": "Child offices"
+        },
+        "children": "Child offices",
+        "noChildren": "It has no child offices.",
+        "andMore": "and {n} more",
+        "team": "Team",
+        "history": "History",
+        "noHistory": "No changes recorded."
+      },
+      "single": {
+        "title": "Your office",
+        "name": "Name",
+        "team": "Team",
+        "firstAgencyHint": "You work with a single office. When you open a branch, your organization's tree shows up here.",
+        "firstAgency": "Create the first branch",
+        "planBlocks": "Your plan allows {limit, plural, one {# office} other {# offices}}; opening a branch needs a plan upgrade.",
+        "readOnly": "Read only"
+      },
+      "errors": {
+        "generic": "The action could not be completed",
+        "conflict": "This clashes with an organization rule. Check the data and try again."
+      }
     }
   },
   "exports": {
@@ -2948,8 +3085,8 @@
     "filters": {
       "manager": "Owner",
       "allManagers": "All owners",
-      "branch": "Branch",
-      "allBranches": "All branches",
+      "branch": "Office",
+      "allBranches": "All offices",
       "arrearsRange": "Arrears range",
       "debtRange": "Debt range"
     },
@@ -3631,7 +3768,8 @@
     },
     "entity": "members",
     "filters": {
-      "allRoles": "All roles"
+      "allRoles": "All roles",
+      "allOffices": "All offices"
     },
     "noResults": "Nobody matches that search",
     "noResultsHint": "Try another name, the email, or removing a filter.",
@@ -3648,7 +3786,8 @@
       "role": "Role",
       "status": "Status",
       "actions": "Actions",
-      "lastAccess": "Last access"
+      "lastAccess": "Last access",
+      "office": "Office"
     },
     "status": {
       "active": "Active",
@@ -3717,7 +3856,7 @@
       "AUDITOR": "Auditor",
       "VIEWER": "Viewer",
       "ACCOUNT_ADMINHint": "Manages account, team and plan",
-      "SUPERVISORHint": "Manages collections and their agency",
+      "SUPERVISORHint": "Manages collections and their office",
       "COLLECTORHint": "Runs routes and records payments",
       "MANAGERHint": "Oversees operations",
       "AUDITORHint": "Views and audits",
@@ -3876,7 +4015,15 @@
         "loading": "Loading…",
         "retry": "Couldn't load. Retry",
         "end": "{count, plural, one {# record} other {# records}} in total"
-      }
+      },
+      "officeTitle": "Office",
+      "changeOffice": "Change office",
+      "officePick": "Pick the office",
+      "officeSave": "Assign",
+      "officeOne": "Each person is in a single office: assigning them to another moves them and changes the portfolio they see.",
+      "officeMoved": "Office assigned",
+      "officeRemove": "Remove from the office",
+      "officeRemoved": "Person removed from the office"
     }
   },
   "profile": {
