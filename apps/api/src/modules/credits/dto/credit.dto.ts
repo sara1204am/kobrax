@@ -102,7 +102,13 @@ export class CreateCreditDto {
  */
 /** Reasignación masiva de oficina (D-5 · R14): hasta 500 créditos a una oficina destino, en un solo lote atómico. */
 export class ReassignOfficeDto {
-  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(500) @ArrayUnique() @IsUUID('all', { each: true }) creditIds!: string[];
+  /** Un lote explícito (hasta 500). Excluyente con `fromBranchId`. */
+  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(500) @ArrayUnique() @IsUUID('all', { each: true }) creditIds?: string[];
+  /**
+   * «Mover toda la cartera de una oficina»: todos los créditos vivos cuya oficina es EXACTAMENTE ésta (no su subárbol), en lotes de 500
+   * dentro de una sola transacción. Excluyente con `creditIds`. Pensado para la raíz que recibe su primera hija (R14).
+   */
+  @IsOptional() @IsUUID() fromBranchId?: string;
   @IsUUID() toBranchId!: string;
 }
 

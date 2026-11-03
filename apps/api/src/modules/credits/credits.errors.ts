@@ -1,5 +1,9 @@
 import { BadRequestException, ForbiddenException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 
+/** `reassign-office` pide un lote (`creditIds`) O toda la cartera de una oficina (`fromBranchId`), no las dos ni ninguna. */
+export const reassignArgs = () =>
+  new BadRequestException({ code: 'CREDIT_REASSIGN_ARGS', message: 'Indica creditIds o fromBranchId (exactamente uno de los dos)' });
+
 /** La oficina de un crédito no se edita con PATCH: cambiarla es una reasignación auditada (A-6, D-5). */
 export const creditBranchImmutable = () =>
   new UnprocessableEntityException({

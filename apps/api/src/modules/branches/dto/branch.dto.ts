@@ -37,7 +37,10 @@ export class MoveBranchDto {
  * pasa a ésta. Con `mode: 'ADD'` pide una asignación ADICIONAL, que hoy se rechaza (409): una persona, una oficina.
  */
 export class AssignMembersDto {
-  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ArrayUnique() @IsUUID('all', { each: true }) userIds!: string[];
+  /** Varias personas (1–100). Alternativa a `userId`. */
+  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ArrayUnique() @IsUUID('all', { each: true }) userIds?: string[];
+  /** Una sola persona (forma singular). Alternativa a `userIds`; si vienen las dos se suman. */
+  @IsOptional() @IsUUID() userId?: string;
   @IsOptional() @IsIn(['MOVE', 'ADD']) mode?: 'MOVE' | 'ADD';
 }
 

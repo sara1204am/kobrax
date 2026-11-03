@@ -39,9 +39,10 @@ import { TenantContextService } from '../../common/context/tenant-context.servic
 import { AuditService } from '../../common/audit/audit.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
-import { officeOutOfScope } from '../../common/office-scope/office-scope.errors';
+import { officeInvalid, officeOutOfScope } from '../../common/office-scope/office-scope.errors';
 import { AssignmentService } from '../assignments/assignment.service';
 import { moraScopeOf, visibleCredits } from '../mora/mora-query';
+import type { ReassignOfficeResult } from '../branches/branches.dto';
 import {
   buildSchedule,
   computeArrears,
@@ -57,6 +58,7 @@ import {
   creditHasSchedule,
   creditInitialStateInvalid,
   creditBranchImmutable,
+  reassignArgs,
   creditInstallmentMismatch,
   creditLocked,
   creditNotActive,
@@ -335,17 +337,32 @@ export class CreditsService {
   async list(query: ListCreditsQueryDto): Promise<ApiResponse<ReturnType<typeof serializeCredit>[]>> {
     const { page, limit, skip } = resolvePagination(query);
     const config = await this.accountConfig();
-    const where: Prisma.CreditWhereInput = { deletedAt: null };
-    if (query.clientId) where.clientId = query.clientId;
-    if (query.branchId) where.branchId = query.branchId;
-    if (query.status) where.status = query.status;
+    const base: Prisma.CreditWhereInput = { deletedAt: null };
+    if (query.clientId) base.clientId = query.clientId;
+    if (query.status) base.status = query.status;
 
-    const [rows, total] = await this.tx((tx) =>
-      Promise.all([
+    const { rows, total } = await this.tx(async (tx) => {
+      const and: Prisma.CreditWhereInput[] = [];
+      // F13: `branchId` es «esa oficina y su SUBÁRBOL» (una regional trae sus agencias; con una hoja, la misma de siempre).
+      // Una oficina que no es de esta cuenta no calza con nada.
+      if (query.branchId) {
+        const node = await tx.branch.findFirst({ where: { id: query.branchId, accountId: this.tenant.accountId, deletedAt: null }, select: { path: true } });
+        and.push({ branch: { path: { startsWith: node?.path ?? '/__sin_oficina__/' } } });
+      }
+      // ...acotado por el alcance: el gerente regional (SUBTREE) sólo ve lo suyo y el subárbol de sus oficinas; asignado a la raíz, todo.
+      if (this.tenant.can(Permission.DATA_SCOPE_SUBTREE) && !this.tenant.can(Permission.DATA_SCOPE_ALL)) {
+        const scope = await this.office.assignScope(tx);
+        if (scope.kind === 'OFFICES') {
+          and.push({ OR: [{ assignedManagerId: this.tenant.userId ?? '' }, ...scope.paths.map((p) => ({ branch: { path: { startsWith: p } } }))] });
+        }
+      }
+      const where: Prisma.CreditWhereInput = and.length ? { ...base, AND: and } : base;
+      const [rows, total] = await Promise.all([
         tx.credit.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
         tx.credit.count({ where }),
-      ]),
-    );
+      ]);
+      return { rows, total };
+    });
     return ResponseDto.paginated(
       rows.map((c) => serializeCredit(c, config.labels, config.staleAfterDays)),
       total,
@@ -651,25 +668,39 @@ export class CreditsService {
    *
    * 🔴 NO toca `payments.branch_id`: es la oficina HISTÓRICA del pago (A-2, A-7). Mover un crédito no reescribe quién cobró qué.
    */
-  async reassignOffice(dto: ReassignOfficeDto): Promise<{ moved: number; unchanged: number; toBranchId: string }> {
-    const ids = [...new Set(dto.creditIds)];
+  async reassignOffice(dto: ReassignOfficeDto): Promise<ReassignOfficeResult> {
+    // Exactamente una de las dos formas: un lote explícito, o toda la cartera de una oficina.
+    if (Boolean(dto.creditIds?.length) === Boolean(dto.fromBranchId)) throw reassignArgs();
+    const ids = dto.creditIds ? [...new Set(dto.creditIds)] : null;
+    const CHUNK = 500;
     const result = await this.tx(async (tx) => {
       const scope = await this.office.assignScope(tx);
       const dest = await this.office.assertBranchUsable(tx, dto.toBranchId, scope);
-      const rows = await tx.credit.findMany({ where: { id: { in: ids }, deletedAt: null }, select: { id: true, branchId: true, branch: { select: { path: true } } } });
-      if (rows.length !== ids.length) throw resourceNotFound();
+      const select = { id: true, branchId: true, branch: { select: { path: true } } } as const;
+      let rows: { id: string; branchId: string | null; branch: { path: string } | null }[];
+      if (ids) {
+        rows = await tx.credit.findMany({ where: { id: { in: ids }, deletedAt: null }, select });
+        if (rows.length !== ids.length) throw resourceNotFound();
+      } else {
+        // Origen: existe en esta cuenta (aunque esté desactivada: justo se la vacía) y está en el alcance de quien mueve.
+        const from = await tx.branch.findFirst({ where: { id: dto.fromBranchId!, accountId: this.tenant.accountId, deletedAt: null }, select: { id: true, path: true } });
+        if (!from) throw officeInvalid('NOT_FOUND');
+        if (!this.office.inScope(scope, from.path)) throw officeOutOfScope([]);
+        rows = await tx.credit.findMany({ where: { branchId: from.id, deletedAt: null }, select });
+      }
       // Alcance sobre el ORIGEN: un crédito sin oficina sólo lo mueve quien lo ve todo.
       const outside = rows.filter((r) => !this.office.inScope(scope, r.branch?.path ?? null)).map((r) => r.id);
       if (outside.length > 0) throw officeOutOfScope(outside);
       const changing = rows.filter((r) => r.branchId !== dest.id);
-      if (changing.length > 0) {
-        await tx.credit.updateMany({ where: { id: { in: changing.map((r) => r.id) } }, data: { branchId: dest.id } });
+      // En lotes de 500 DENTRO de la misma transacción: o se mueve todo o nada.
+      for (let i = 0; i < changing.length; i += CHUNK) {
+        await tx.credit.updateMany({ where: { id: { in: changing.slice(i, i + CHUNK).map((r) => r.id) } }, data: { branchId: dest.id } });
       }
       return { changing, unchanged: rows.length - changing.length };
     });
-    if (result.changing.length > 0) {
+    for (let i = 0; i < result.changing.length; i += 500) {
       await this.audit.recordMany(
-        result.changing.map((r) => ({
+        result.changing.slice(i, i + 500).map((r) => ({
           entity: 'credit',
           entityId: r.id,
           action: 'REASSIGN_OFFICE',

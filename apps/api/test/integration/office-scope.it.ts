@@ -578,3 +578,55 @@ describe('B7 · el espejo legado y las asignaciones no se separan', () => {
     assert.equal(huerfanos[0]!.n, 0);
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
+describe('GET /credits?branchId= = ese nodo y su subárbol, acotado por el alcance', () => {
+  const listed = async (token: string, q: string): Promise<string[]> => {
+    const r = await call<{ id: string }[]>(token, 'GET', `/credits?limit=100${q}`);
+    assert.equal(r.status, 200, JSON.stringify(r.error));
+    return r.data!.map((c) => c.id).sort();
+  };
+  const dbSubtree = async (office: Office): Promise<string[]> =>
+    (await prisma.credit.findMany({ where: { accountId: banco.accountId, deletedAt: null, branch: { path: { startsWith: office.path } } }, select: { id: true } })).map((c) => c.id).sort();
+
+  it('equivalencia con una oficina hoja: lo mismo que la igualdad de antes', async () => {
+    const igualdad = (await prisma.credit.findMany({ where: { accountId: banco.accountId, deletedAt: null, branchId: off.MV!.id }, select: { id: true } })).map((c) => c.id).sort();
+    assert.deepEqual(await listed(banco.admin, `&branchId=${off.MV!.id}`), igualdad);
+    assert.ok(igualdad.length >= 2);
+  });
+
+  it('una regional (Chuquisaca) trae sus 6 agencias; el gerente regional lo mismo; La Paz no le trae nada', async () => {
+    const chq = await dbSubtree(off.CHQ!);
+    assert.ok(chq.length >= 7);
+    assert.deepEqual(await listed(banco.admin, `&branchId=${off.CHQ!.id}`), chq);
+    assert.deepEqual(await listed(tok.mgrChq!, `&branchId=${off.CHQ!.id}`), chq);
+    assert.deepEqual(await listed(tok.mgrChq!, `&branchId=${off.LPZ!.id}`), []);
+    assert.ok((await listed(tok.mgrChq!, '')).every((id) => chq.includes(id)), 'sin filtro tampoco ve fuera de su subárbol');
+  });
+});
+
+describe('POST /credits/reassign-office con fromBranchId: la raíz con cartera recibe su primera hija', () => {
+  it('mueve toda la cartera de una oficina, la audita y no toca los pagos; el supervisor ajeno no puede', async () => {
+    const antes = await prisma.credit.findMany({ where: { accountId: banco.accountId, branchId: off.LYV!.id, deletedAt: null }, select: { id: true } });
+    assert.ok(antes.length > 0);
+    const pagosAntes = await prisma.payment.count({ where: { accountId: banco.accountId, branchId: off.LYV!.id } });
+    assert.equal((await call(tok.supMV!, 'POST', '/credits/reassign-office', { fromBranchId: off.LYV!.id, toBranchId: off.MV!.id })).error?.code, 'CREDIT_OFFICE_OUT_OF_SCOPE');
+    assert.equal((await call(banco.admin, 'POST', '/credits/reassign-office', { toBranchId: off.MV!.id })).error?.code, 'CREDIT_REASSIGN_ARGS');
+    const r = await call<{ moved: number }>(banco.admin, 'POST', '/credits/reassign-office', { fromBranchId: off.LYV!.id, toBranchId: off.CEN!.id });
+    assert.equal(r.status, 200, JSON.stringify(r.error));
+    assert.equal(r.data!.moved, antes.length);
+    assert.equal(await prisma.credit.count({ where: { accountId: banco.accountId, branchId: off.LYV!.id, deletedAt: null } }), 0);
+    assert.equal(await prisma.payment.count({ where: { accountId: banco.accountId, branchId: off.LYV!.id } }), pagosAntes);
+    assert.equal(await prisma.auditLog.count({ where: { entity: 'credit', action: 'REASSIGN_OFFICE', entityId: { in: antes.map((c) => c.id) } } }), antes.length);
+  });
+
+  it('POST /branches/:id/members acepta la forma singular {userId}; el detalle trae stats, membersList e history', async () => {
+    const r = await call<Office>(banco.admin, 'POST', `/branches/${off.CAM!.id}/members`, { userId: uid.supNada });
+    assert.equal(r.status, 200, JSON.stringify(r.error));
+    assert.equal(r.data!.members, 1);
+    const d = await call<{ stats: { members: number }; membersList: unknown[]; history: unknown[] }>(banco.admin, 'GET', `/branches/${off.CAM!.id}`);
+    assert.equal(d.data!.stats.members, 1);
+    assert.equal(d.data!.membersList.length, 1);
+    assert.ok(Array.isArray(d.data!.history));
+  });
+});

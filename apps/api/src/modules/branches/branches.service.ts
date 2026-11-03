@@ -9,6 +9,7 @@ import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { isUniqueViolation } from '../../common/unique-violation';
 import { serializeBranch, serializeBranchType, type BranchStats, type BranchWithType } from './branches.serializer';
 import { deactivationBlock } from './branch-rules';
+import type { BranchDetailView, BranchTypeView, BranchView } from './branches.dto';
 import {
   AssignMembersDto,
   CreateBranchDto,
@@ -112,7 +113,7 @@ export class BranchesService {
   }
 
   /** Lista plana del árbol entero (la web arma el árbol con `parentId`/`path`). */
-  async list() {
+  async list(): Promise<BranchView[]> {
     return this.tx(async (tx) => {
       const rows = await tx.branch.findMany({
         where: { deletedAt: null },
@@ -136,7 +137,7 @@ export class BranchesService {
   }
 
   /** Detalle: la oficina, quién trabaja en ella y su historial (auditoría de la entidad). */
-  async detail(id: string) {
+  async detail(id: string): Promise<BranchDetailView> {
     return this.tx(async (tx) => {
       const branch = await this.one(tx, id);
       const accountId = this.tenant.accountId;
@@ -161,6 +162,7 @@ export class BranchesService {
       const actorName = new Map(actors.map((p) => [p.userId, `${p.firstName} ${p.lastName}`.trim()]));
       return {
         ...branch,
+        stats: { members: branch.members, credits: branch.credits, children: branch.children },
         // Sin correo ni teléfono: quien lee oficinas (`office:read`) no es necesariamente quien lee usuarios.
         membersList: assignments.map((a) => ({
           userId: a.userId,
@@ -407,6 +409,8 @@ export class BranchesService {
    */
   async assignMembers(id: string, dto: AssignMembersDto) {
     const actor = this.tenant.userId ?? null;
+    const userIds = [...new Set([...(dto.userIds ?? []), ...(dto.userId ? [dto.userId] : [])])];
+    if (userIds.length === 0) throw branchMembersInvalid();
     const moved = await this.tx(async (tx) => {
       const branch = await tx.branch.findFirst({ where: { id, deletedAt: null } });
       if (!branch) throw branchNotFound();
@@ -414,12 +418,12 @@ export class BranchesService {
 
       const accountId = this.tenant.accountId;
       const members = await tx.userAccount.findMany({
-        where: { accountId, userId: { in: dto.userIds }, isActive: true },
+        where: { accountId, userId: { in: userIds }, isActive: true },
         select: { id: true, userId: true, branchId: true },
       });
-      if (members.length !== dto.userIds.length) throw branchMembersInvalid();
+      if (members.length !== userIds.length) throw branchMembersInvalid();
 
-      const current = await tx.userBranchAssignment.findMany({ where: { accountId, userId: { in: dto.userIds }, revokedAt: null }, select: { id: true, userId: true, branchId: true } });
+      const current = await tx.userBranchAssignment.findMany({ where: { accountId, userId: { in: userIds }, revokedAt: null }, select: { id: true, userId: true, branchId: true } });
       const here = new Set(current.filter((a) => a.branchId === id).map((a) => a.userId));
       const elsewhere = current.filter((a) => a.branchId !== id);
       if ((dto.mode ?? 'MOVE') === 'ADD') {
@@ -481,7 +485,7 @@ export class BranchesService {
 
   // ── Tipos de oficina (catálogo por cuenta · R1) ───────────────────────────────────────────────────────────────
 
-  async listTypes() {
+  async listTypes(): Promise<BranchTypeView[]> {
     return this.tx(async (tx) => {
       const rows = await tx.branchType.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] });
       return rows.map(serializeBranchType);
