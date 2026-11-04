@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { buildOfficeTree, type Member } from '@kobrax/shared';
 import { Button } from '@/components/ui';
-import { Section } from '@/components/panel-ui';
 import { Icon } from '@/components/panel-shell';
 import { usePermissions } from '@/components/permissions';
 import {
@@ -155,31 +154,30 @@ export function OfficesView({
   const formDialog = dialog?.kind === 'form' ? dialog : null;
 
   return (
-    <Section
-      title={t('title')}
-      inner="space-y-4 p-4 sm:p-6"
-      action={
-        <span className="flex flex-wrap items-center justify-end gap-2">
-          {(trash > 0 || editable) && (
-            <span className="w-full sm:w-auto">
-              <Button type="button" variant="ghost" className="sm:px-5" onClick={() => router.push('/cuenta/oficinas/papelera')}>
-                {t('trash.link', { n: trash })}
-              </Button>
-            </span>
-          )}
-          {editable && root && (
-            <span className="w-full sm:w-auto">
-              <Button type="button" className="sm:px-5" disabled={atLimit} onClick={() => setDialog({ kind: 'form', id: null, parentId: root.id })}>
-                <span className="flex items-center gap-2">
-                  <Icon name="plus" className="h-4 w-4" />
-                  {t('add')}
-                </span>
-              </Button>
-            </span>
-          )}
-        </span>
-      }
-    >
+    // Sin título propio: la pestaña «Oficinas» ya lo dice. Sólo la tarjeta, con las acciones arriba a la derecha.
+    <section aria-label={t('title')} className="space-y-4 rounded-2xl border border-k-border bg-white p-4 sm:p-6">
+      <div className="flex justify-end">
+          <span className="flex flex-wrap items-center justify-end gap-2">
+            {(trash > 0 || editable) && (
+              <span className="w-full sm:w-auto">
+                <Button type="button" variant="ghost" className="sm:px-5" onClick={() => router.push('/cuenta/oficinas/papelera')}>
+                  {t('trash.link', { n: trash })}
+                </Button>
+              </span>
+            )}
+            {editable && root && (
+              <span className="w-full sm:w-auto">
+                <Button type="button" className="sm:px-5" disabled={atLimit} onClick={() => setDialog({ kind: 'form', id: null, parentId: root.id })}>
+                  <span className="flex items-center gap-2">
+                    <Icon name="plus" className="h-4 w-4" />
+                    {t('add')}
+                  </span>
+                </Button>
+              </span>
+            )}
+          </span>
+      </div>
+
       <p className="text-[13px] leading-relaxed text-k-text-2">{t('intro')}</p>
 
       {atLimit && editable && (
@@ -286,6 +284,6 @@ export function OfficesView({
       {dialog?.kind === 'move' && <MoveDialog move={{ id: dialog.id, to: dialog.to }} rows={rows} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'deactivate' && byId(dialog.id) && <DeactivateDialog office={byId(dialog.id)} rows={rows} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'portfolio' && <MovePortfolioDialog from={pending ?? root ?? null} rows={rows} onClose={() => setDialog(null)} />}
-    </Section>
+    </section>
   );
 }
