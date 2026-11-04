@@ -82,3 +82,10 @@ Formato T5. Todas las corridas son **del coordinador** (re-ejecutadas por él, n
 - Web: sólo los 7 fallos preexistentes (arrears-table ×6, today-board ×1); `team.test.ts` actualizado (MANAGER ya es asignable).
 - SQL: `oficinas-arbol`, `oficinas-permisos` (con `office:read` del supervisor) y `alcance-supervisor-agencia` OK sobre `kobrax_it`.
 - Integración nueva con datos reales (`office-scope.it.ts`): Cartera/Clientes/Pagos/Exportes acotados, ficha 404, backup 403, supervisor lee sólo su oficina, MANAGER invitado con y sin oficina.
+
+## P6 · pantallas y cableado (2026-11-04, rama `f13/p6-oficina-ubicacion`)
+- API unitarias 1849/1849 · web 120 archivos / 1239 pruebas sin fallos · shared 467 · `tsc` api y web limpios.
+- SQL: `verify/oficinas-permisos.sql` ampliado (MANAGER con asignación a *alguna* oficina, COLLECTOR con `report:read` y sin alcance mayor, CHECK de ubicación) y OK sobre `kobrax`.
+- Por la API (cuenta DEMO, `kobrax`): el cobrador de Padilla ve 1 crédito (el suyo) y 404 al abrir uno de Mesa Verde o de Cercado; su tablero (`/analytics/*`) trae sólo su crédito; el gerente de Chuquisaca ve 7 créditos y la ficha de su oficina trae la cartera (7 créditos, Bs 16.300,00) y a 5 personas del subárbol.
+- Cableado revisado: rutas BFF de todo lo que llama la UI de oficinas (se encontró y se creó la que faltaba, `GET /api/roles`), claves de i18n sin uso borradas, `officeCandidates` (código muerto) borrada, matcher del middleware.
+- **No verificado:** la UI en un navegador real (sigue sin verse por quien la construyó).

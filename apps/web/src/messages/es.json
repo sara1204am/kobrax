@@ -2739,7 +2739,6 @@
         "root": "Oficina principal",
         "collapse": "Contraer {name}",
         "expand": "Expandir {name}",
-        "children": "{n, plural, one {# oficina hija} other {# oficinas hijas}}",
         "credits": "{n, plural, one {# crédito} other {# créditos}}",
         "members": "{n, plural, one {# persona} other {# personas}}",
         "showMore": "Mostrar {n} más"
@@ -2862,7 +2861,6 @@
         "restored": "Oficina restaurada"
       },
       "types": {
-        "link": "Tipos de oficina",
         "title": "Tipos de oficina",
         "intro": "El tipo es una etiqueta (Regional, Agencia…), no una regla: puedes poner cualquier tipo bajo cualquier oficina. Un tipo en uso se desactiva, no se borra.",
         "empty": "Todavía no hay tipos.",
@@ -2885,7 +2883,6 @@
         "oneOffice": "Cada persona está en una sola oficina: sumar a alguien que ya está en otra lo mueve. Cambiar la oficina cambia la cartera que ve.",
         "noCandidates": "No hay más personas activas para sumar.",
         "person": "Persona",
-        "pick": "Elige a quién sumar",
         "comesFrom": "hoy en {name}",
         "willMove": "{name} está hoy en «{from}» y pasará a esta oficina.",
         "assign": "Asignar",
@@ -2913,14 +2910,8 @@
         "back": "Volver a oficinas",
         "noAccess": "No se pudo abrir la oficina",
         "path": "Ruta de la oficina",
-        "parent": "Oficina superior:",
         "general": "Información general",
-        "statsTitle": "Estadísticas",
         "stats": {
-          "members": "Personas",
-          "credits": "Créditos",
-          "arrears": "Cartera en mora",
-          "children": "Oficinas hijas",
           "title": "Cartera de la oficina",
           "assigned": "Créditos asignados",
           "scopeHint": "Incluye las oficinas que cuelgan de ésta",
@@ -2932,7 +2923,6 @@
         },
         "children": "Oficinas hijas",
         "noChildren": "No tiene oficinas hijas.",
-        "andMore": "y {n} más",
         "team": "Equipo",
         "history": "Historial",
         "noHistory": "Sin cambios registrados.",

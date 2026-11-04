@@ -288,13 +288,6 @@ export function canAddFirstOffice(opts: { canWrite: boolean; used: number; limit
   return opts.canWrite && (opts.limit === null || opts.used < opts.limit);
 }
 
-/** Las personas que se pueden sumar a una oficina: activas y que todavía no están en ella; las de otra oficina se ofrecen igual (mover es el punto). */
-export function officeCandidates(members: Member[], officeId: string): Member[] {
-  return members
-    .filter((m) => m.isActive && m.branchId !== officeId)
-    .sort((a, b) => memberName(a).localeCompare(memberName(b)));
-}
-
 /** Las personas activas de una oficina, por nombre. */
 export function officeMembers(members: Member[], officeId: string): Member[] {
   return members

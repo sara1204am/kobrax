@@ -14,6 +14,11 @@
 - **Verificaciones no corridas:** UI en navegador real, carga, copia de producción.
 - **Siguiente paso autorizado:** **ninguno hasta que la usuaria lo ordene.** Opciones que ella puede pedir: (a) probar en navegador y ajustar, (b) preparar el PR / merge de `f13/multi-oficina`, (c) F14 (roles: asignar MANAGER por API, delegación), (d) fase de seguridad (JWT/RLS), (e) fase de plataforma (`SUPER_ADMIN`).
 
+## Sesión 2026-11-04 (P6)
+- **Dónde quedó:** rama local `f13/p6-oficina-ubicacion` (sobre `integracion/f13-dev` = `origin/dev` + F13, sin push). La carpeta de la usuaria (`C:\Startup Kobrax\kobrax`) corre ESTA rama con su base `kobrax` ya migrada y sembrada; la copia aparte (3100/4110) se apagó.
+- **Hecho:** ver STATUS «P6». Revisión de cableado hecha (ver VERIFICATIONS «P6»).
+- **Lo primero que sigue, si lo ordena:** decidir el alcance de `GET /users` y de «añadir persona» (hoy un gerente regional ve a todo el personal de la cuenta) y los clientes sin crédito vivo.
+
 ## Antes de continuar, cualquier sesión debe
 1. Releer `STATUS.md` y confirmar que el «siguiente paso autorizado» sigue vigente.
 2. `git -C "C:/Startup Kobrax/kobrax-f13-web" status` y confirmar la rama; no mezclar con `feat/perfil-refactor`.
