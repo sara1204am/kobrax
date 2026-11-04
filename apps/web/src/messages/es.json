@@ -2904,7 +2904,10 @@
           "searchPlaceholder": "Buscar por nombre, correo o rol",
           "noResults": "Nadie coincide con la búsqueda",
           "noResultsHint": "Prueba con otro nombre, correo o rol."
-        }
+        },
+        "office": "Oficina donde se registra",
+        "officeHint": "Esta oficina o alguna de las que cuelgan de ella.",
+        "search": "Busca por nombre o correo"
       },
       "detail": {
         "back": "Volver a oficinas",

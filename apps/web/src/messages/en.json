@@ -2904,7 +2904,10 @@
           "searchPlaceholder": "Search by name, email or role",
           "noResults": "Nobody matches your search",
           "noResultsHint": "Try another name, email or role."
-        }
+        },
+        "office": "Office to register in",
+        "officeHint": "This office or any office under it.",
+        "search": "Search by name or email"
       },
       "detail": {
         "back": "Back to offices",
