@@ -54,6 +54,9 @@ export interface BranchMemberView {
   isPrimary: boolean;
   /** ISO 8601. */
   since: string;
+  /** La oficina a la que está asignada (puede ser una hija: el equipo de una regional incluye a todo lo que cuelga de ella). */
+  branchId: string;
+  branchName: string;
   /** Lo que esta persona tiene a su cargo dentro de la oficina (y de lo que cuelga de ella). Mismos criterios que `portfolio`. */
   portfolio: BranchPortfolioView;
 }

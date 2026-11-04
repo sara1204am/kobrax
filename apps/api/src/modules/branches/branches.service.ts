@@ -232,8 +232,13 @@ export class BranchesService {
       if (paths !== null && !officeInScope(branch.path, paths)) throw branchNotFound();
       const accountId = this.tenant.accountId;
       const assignments = await tx.userBranchAssignment.findMany({
-        where: { branchId: id, revokedAt: null, user: { userAccounts: { some: { accountId, isActive: true } } } },
-        select: { userId: true, isPrimary: true, createdAt: true, user: { select: { profile: { select: { firstName: true, lastName: true } } } } },
+        // El equipo de una oficina es el de TODO su subárbol: una regional no tiene personal propio, lo tienen sus agencias.
+        where: {
+          branch: { accountId, deletedAt: null, path: { startsWith: branch.path } },
+          revokedAt: null,
+          user: { userAccounts: { some: { accountId, isActive: true } } },
+        },
+        select: { userId: true, branchId: true, isPrimary: true, createdAt: true, branch: { select: { name: true } }, user: { select: { profile: { select: { firstName: true, lastName: true } } } } },
         orderBy: { createdAt: 'asc' },
       });
       const roles = assignments.length
@@ -261,6 +266,8 @@ export class BranchesService {
           userId: a.userId,
           name: `${a.user.profile?.firstName ?? ''} ${a.user.profile?.lastName ?? ''}`.trim() || null,
           roleName: roleOf.get(a.userId) ?? null,
+          branchId: a.branchId,
+          branchName: a.branch.name,
           isPrimary: a.isPrimary,
           since: a.createdAt.toISOString(),
         })),

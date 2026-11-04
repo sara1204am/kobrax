@@ -53,7 +53,7 @@ export function OfficeTeam({
               searching={table.searching}
               editable={editable}
               busy={busy}
-              onTakeOut={(userId) => void run(() => sendJson(`/api/branches/${office.id}/members/${userId}`, null, 'DELETE'), t('team.removed'))}
+              onTakeOut={(r) => void run(() => sendJson(`/api/branches/${r.officeId ?? office.id}/members/${r.userId}`, null, 'DELETE'), t('team.removed'))}
             />
           ) : (
             <TeamList members={current} editable={editable} busy={busy} onTakeOut={(m) => void run(() => sendJson(`/api/branches/${office.id}/members/${m.userId}`, null, 'DELETE'), t('team.removed'))} />

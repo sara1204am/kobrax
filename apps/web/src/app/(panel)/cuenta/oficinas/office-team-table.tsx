@@ -35,7 +35,8 @@ export function OfficeTeamTable({
   searching: boolean;
   editable: boolean;
   busy: boolean;
-  onTakeOut: (userId: string) => void;
+  /** Sacar a alguien de SU oficina (no de la que se está mirando: en una regional casi nunca es la misma). */
+  onTakeOut: (row: OfficeTeamRow) => void;
 }) {
   const { t } = useOfficeApi();
   const tr = useTranslations('team.roles');
@@ -53,6 +54,7 @@ export function OfficeTeamTable({
         </span>
       ),
     },
+    { key: 'office', header: t('team.stats.office'), sortable: true, render: (r) => <span className="block truncate text-k-text">{r.officeName || '—'}</span> },
     { key: 'credits', header: t('team.stats.credits'), sortable: true, defaultDir: 'desc', numeric: true, render: (r) => r.portfolio.credits },
     {
       key: 'arrearsCredits',
@@ -79,7 +81,7 @@ export function OfficeTeamTable({
             numeric: true,
             render: (r: OfficeTeamRow) => (
               <span className="inline-block w-24">
-                <Button type="button" variant="ghost" disabled={busy} aria-label={t('team.takeOutOf', { name: r.name })} className="!h-9 !text-[13px] !text-k-danger" onClick={() => onTakeOut(r.userId)}>
+                <Button type="button" variant="ghost" disabled={busy} aria-label={t('team.takeOutOf', { name: r.name })} className="!h-9 !text-[13px] !text-k-danger" onClick={() => onTakeOut(r)}>
                   {t('team.takeOut')}
                 </Button>
               </span>

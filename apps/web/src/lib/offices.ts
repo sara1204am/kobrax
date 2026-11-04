@@ -62,6 +62,9 @@ export interface OfficeMemberRow {
   roleName?: string | null;
   /** Lo que esta persona tiene a su cargo en la oficina (y lo que cuelga de ella). */
   portfolio?: OfficePortfolio;
+  /** La oficina en la que está asignada (en una regional, la de su agencia). */
+  branchId?: string;
+  branchName?: string;
 }
 
 export interface OfficeHistoryEvent {
@@ -124,7 +127,8 @@ export function parseOfficeDetail(raw: Record<string, unknown>): OfficeDetail {
     portfolio: parsePortfolio((m as { portfolio?: unknown }).portfolio),
   }));
   const rawStats = (raw.stats ?? {}) as Record<string, unknown>;
-  const membersCount = typeof raw.members === 'number' ? raw.members : list.length;
+  // El equipo es el del subárbol (la lista); el conteo plano de la oficina sólo es el de sus asignaciones directas.
+  const membersCount = list.length > 0 ? list.length : typeof raw.members === 'number' ? raw.members : 0;
   return {
     ...base,
     membersCount,

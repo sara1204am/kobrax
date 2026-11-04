@@ -1,6 +1,6 @@
 import { memberName, type Member } from '@kobrax/shared';
 import { matchesText } from './portfolio';
-import type { OfficePortfolio } from './offices';
+import type { OfficePortfolio, OfficeRow } from './offices';
 import { PAGE_SIZES } from './table-prefs';
 
 /** Una fila de la tabla de equipo de una oficina: la persona y lo que tiene a su cargo. */
@@ -9,6 +9,9 @@ export interface OfficeTeamRow {
   name: string;
   email: string;
   roleName: string;
+  /** La oficina donde está asignada: en una regional el equipo es el de todo su subárbol, y esto dice de qué agencia es cada quien. */
+  officeId: string | null;
+  officeName: string;
   portfolio: OfficePortfolio;
 }
 
@@ -24,18 +27,21 @@ export interface OfficeTeamParams {
 export const OFFICE_TEAM_PAGE_SIZE = 10;
 
 /** Las columnas que esta tabla sabe ordenar. */
-export const OFFICE_TEAM_SORTS = ['name', 'credits', 'arrearsCredits', 'balance', 'arrearsBalance'] as const;
+export const OFFICE_TEAM_SORTS = ['name', 'office', 'credits', 'arrearsCredits', 'balance', 'arrearsBalance'] as const;
 type Sort = (typeof OFFICE_TEAM_SORTS)[number];
 
 const EMPTY: OfficePortfolio = { credits: 0, arrearsCredits: 0, byCurrency: [] };
 
 /** El equipo de la oficina con su cartera, listo para la tabla. */
-export function officeTeamRows(members: Member[], portfolios: Record<string, OfficePortfolio>): OfficeTeamRow[] {
+export function officeTeamRows(members: Member[], portfolios: Record<string, OfficePortfolio>, offices: OfficeRow[] = []): OfficeTeamRow[] {
+  const nameOf = new Map(offices.map((o) => [o.id, o.name]));
   return members.map((m) => ({
     userId: m.userId,
     name: memberName(m),
     email: m.email,
     roleName: m.roleName,
+    officeId: m.branchId ?? null,
+    officeName: (m.branchId && nameOf.get(m.branchId)) || '',
     portfolio: portfolios[m.userId] ?? EMPTY,
   }));
 }
@@ -46,7 +52,7 @@ export function officeTeamRows(members: Member[], portfolios: Record<string, Off
  */
 const total = (r: OfficeTeamRow, pick: 'balance' | 'arrearsBalance'): number => r.portfolio.byCurrency.reduce((n, c) => n + c[pick], 0);
 
-const VALUE: Record<Exclude<Sort, 'name'>, (r: OfficeTeamRow) => number> = {
+const VALUE: Record<Exclude<Sort, 'name' | 'office'>, (r: OfficeTeamRow) => number> = {
   credits: (r) => r.portfolio.credits,
   arrearsCredits: (r) => r.portfolio.arrearsCredits,
   balance: (r) => total(r, 'balance'),
@@ -68,12 +74,16 @@ export function officeTeamView(
   params: OfficeTeamParams,
 ): { rows: OfficeTeamRow[]; meta: { total: number; page: number; limit: number; pages: number } } {
   const q = params.q?.trim() ?? '';
-  let found = q ? rows.filter((r) => matchesText(r.name, q) || matchesText(r.email, q) || matchesText(r.roleName, q)) : rows;
+  let found = q ? rows.filter((r) => matchesText(r.name, q) || matchesText(r.email, q) || matchesText(r.roleName, q) || matchesText(r.officeName, q)) : rows;
 
   const sort = (OFFICE_TEAM_SORTS as readonly string[]).includes(params.sort ?? '') ? (params.sort as Sort) : 'name';
   const factor = params.dir === 'desc' ? -1 : 1;
   found = [...found].sort((a, b) =>
-    sort === 'name' ? a.name.localeCompare(b.name) * factor : (VALUE[sort](a) - VALUE[sort](b)) * factor || a.name.localeCompare(b.name),
+    sort === 'name'
+      ? a.name.localeCompare(b.name) * factor
+      : sort === 'office'
+        ? a.officeName.localeCompare(b.officeName) * factor || a.name.localeCompare(b.name)
+        : (VALUE[sort](a) - VALUE[sort](b)) * factor || a.name.localeCompare(b.name),
   );
 
   const limit = PAGE_SIZES.includes(Number(params.pageSize)) ? Number(params.pageSize) : OFFICE_TEAM_PAGE_SIZE;

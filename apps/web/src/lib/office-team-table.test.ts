@@ -6,6 +6,8 @@ const row = (name: string, credits: number, arrearsCredits: number, balance: num
   name,
   email: `${name.toLowerCase()}@kobrax.demo`,
   roleName: 'COLLECTOR',
+  officeId: 'o1',
+  officeName: 'Agencia Mesa Verde',
   portfolio: { credits, arrearsCredits, byCurrency: balance || arrearsBalance ? [{ currency: 'BOB', credits, arrearsCredits, balance, arrearsBalance }] : [] },
   ...over,
 });
@@ -47,6 +49,13 @@ describe('officeTeamView', () => {
     expect(p3.meta).toEqual({ total: 25, page: 3, limit: 10, pages: 3 });
     expect(p3.rows).toHaveLength(5);
     expect(officeTeamView(muchos, { page: '3', q: 'P01' }).meta.page).toBe(1);
+  });
+
+  it('en una regional cada fila trae su agencia: se busca y se ordena por oficina', () => {
+    const e = [row('Ana', 1, 0, 1, 0, { officeName: 'Agencia Padilla' }), row('Beto', 1, 0, 1, 0, { officeName: 'Agencia Camargo' }), row('Carla', 1, 0, 1, 0, { officeName: 'Agencia Padilla' })];
+    expect(names(officeTeamView(e, { q: 'padilla' }).rows)).toEqual(['Ana', 'Carla']);
+    expect(names(officeTeamView(e, { sort: 'office' }).rows)).toEqual(['Beto', 'Ana', 'Carla']);
+    expect(names(officeTeamView(e, { sort: 'office', dir: 'desc' }).rows)).toEqual(['Ana', 'Carla', 'Beto']);
   });
 
   it('una persona sin créditos muestra ceros y no se rompe al ordenar por saldo', () => {

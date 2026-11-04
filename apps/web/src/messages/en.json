@@ -2895,7 +2895,8 @@
           "portfolio": "Portfolio",
           "arrears": "Portfolio in arrears",
           "person": "Person",
-          "arrearsCredits": "Loans in arrears"
+          "arrearsCredits": "Loans in arrears",
+          "office": "Office"
         },
         "table": {
           "entity": "people",

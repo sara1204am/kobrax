@@ -2895,7 +2895,8 @@
           "portfolio": "Cartera",
           "arrears": "Cartera en mora",
           "person": "Persona",
-          "arrearsCredits": "Créditos en mora"
+          "arrearsCredits": "Créditos en mora",
+          "office": "Oficina"
         },
         "table": {
           "entity": "personas",
