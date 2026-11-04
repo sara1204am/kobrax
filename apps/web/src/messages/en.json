@@ -2740,6 +2740,7 @@
         "collapse": "Collapse {name}",
         "expand": "Expand {name}",
         "children": "{n, plural, one {# child office} other {# child offices}}",
+        "credits": "{n, plural, one {# loan} other {# loans}}",
         "members": "{n, plural, one {# person} other {# people}}",
         "showMore": "Show {n} more"
       },

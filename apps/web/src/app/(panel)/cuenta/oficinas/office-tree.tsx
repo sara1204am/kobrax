@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import type { OfficeTreeItem } from '@kobrax/shared';
-import { Badge } from '@/components/panel-ui';
-import { childCount, moveVerdict, type OfficeRow } from '@/lib/offices';
+import { Icon } from '@/components/panel-shell';
+import { moveVerdict, type OfficeRow } from '@/lib/offices';
 
 /** Cuántas hijas se dibujan de una vez: un nodo con cientos de hijas no clava el navegador. */
 export const CHILDREN_PAGE = 50;
@@ -79,9 +79,9 @@ function RowMenu({ row, ctx }: { row: OfficeRow; ctx: TreeCtx }) {
         aria-expanded={open}
         aria-label={t('of', { name: row.name })}
         onClick={() => setOpen((v) => !v)}
-        className="flex h-9 w-9 items-center justify-center rounded-lg text-k-text-2 hover:bg-k-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-k-periwinkle"
+        className="flex h-9 w-9 items-center justify-center rounded-lg text-k-text-2 hover:bg-k-light-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-k-periwinkle"
       >
-        <span aria-hidden>⋮</span>
+        <Icon name="dots" className="h-5 w-5" />
       </button>
       {open && (
         <div role="menu" className="absolute right-0 top-full z-20 mt-1 min-w-[11rem] rounded-xl border border-k-border bg-white py-1 shadow-k-card">
@@ -105,7 +105,11 @@ function RowMenu({ row, ctx }: { row: OfficeRow; ctx: TreeCtx }) {
   );
 }
 
-function TreeNode({ item, ctx, level }: { item: OfficeTreeItem<OfficeRow>; ctx: TreeCtx; level: number }) {
+/** Cuánto se sangra cada nivel (px) y hasta cuántos: más allá de seis niveles la fila deja de ganar ancho. */
+const INDENT = 44;
+const MAX_INDENT_LEVELS = 6;
+
+function TreeNode({ item, ctx, level, last = true }: { item: OfficeTreeItem<OfficeRow>; ctx: TreeCtx; level: number; last?: boolean }) {
   const t = useTranslations('account.offices');
   const { node } = item;
   const [shown, setShown] = useState(CHILDREN_PAGE);
@@ -118,10 +122,19 @@ function TreeNode({ item, ctx, level }: { item: OfficeTreeItem<OfficeRow>; ctx: 
   const dragging = ctx.dragId === node.id;
   const canDrop = ctx.dragId !== null && ctx.dragId !== node.id && moveVerdict(ctx.rows, ctx.dragId, node.id) === 'OK';
   const isOver = ctx.overId === node.id && canDrop;
-  const direct = childCount(ctx.rows.filter((r) => r.active), node.id);
+
+  const depth = Math.min(level - 1, MAX_INDENT_LEVELS);
+  const nameTone = ctx.matched.has(node.id) ? 'text-k-purple' : 'text-k-navy';
 
   return (
-    <li role="treeitem" aria-level={level} aria-expanded={hasKids ? open : undefined} aria-selected={ctx.selectedId === node.id}>
+    <li role="treeitem" aria-level={level} aria-expanded={hasKids ? open : undefined} aria-selected={ctx.selectedId === node.id} className="relative">
+      {/* Conectores: el codo hacia esta fila y, si le siguen hermanas, la línea que baja. */}
+      {level > 1 && (
+        <>
+          <span aria-hidden className="pointer-events-none absolute rounded-bl-xl border-b border-l border-k-border" style={{ left: 18 + (depth - 1) * INDENT, top: 0, height: '50%', width: INDENT - 8 }} />
+          {!last && <span aria-hidden className="pointer-events-none absolute border-l border-k-border" style={{ left: 18 + (depth - 1) * INDENT, top: '50%', bottom: 0 }} />}
+        </>
+      )}
       <div
         data-office-row={node.id}
         draggable={ctx.editable && !node.isRoot}
@@ -143,25 +156,27 @@ function TreeNode({ item, ctx, level }: { item: OfficeTreeItem<OfficeRow>; ctx: 
           e.preventDefault();
           ctx.onDrop(node);
         }}
-        className={`group flex items-center gap-1 rounded-xl border px-1 py-1 ${
-          isOver ? 'border-k-periwinkle bg-k-highlight' : 'border-transparent hover:bg-k-bg'
+        className={`group flex items-center gap-3 border-b border-k-border py-3 pr-3 ${
+          isOver ? 'bg-k-highlight' : level === 1 ? 'bg-k-info-bg' : 'bg-white hover:bg-k-bg'
         } ${dragging ? 'opacity-40' : ''}`}
-        style={{ marginLeft: Math.min(level - 1, 6) * 14 }}
+        style={{ paddingLeft: 12 + depth * INDENT }}
       >
         {hasKids ? (
           <button
             type="button"
             aria-label={open ? t('tree.collapse', { name: node.name }) : t('tree.expand', { name: node.name })}
             onClick={(e) => ctx.onToggle(node.id, e.altKey || e.shiftKey)}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-k-text-2 hover:bg-white"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-k-light-bg/70 text-k-navy hover:bg-k-light-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-k-periwinkle"
           >
-            <span aria-hidden className={`transition-transform ${open ? 'rotate-90' : ''}`}>
-              ›
-            </span>
+            <Icon name="chevron" className={`h-5 w-5 transition-transform ${open ? '' : '-rotate-90'}`} />
           </button>
         ) : (
           <span aria-hidden className="h-9 w-9 shrink-0" />
         )}
+
+        <span aria-hidden className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-k-light-bg/70 text-k-periwinkle">
+          <Icon name="account" className="h-6 w-6" />
+        </span>
 
         <button
           type="button"
@@ -181,29 +196,29 @@ function TreeNode({ item, ctx, level }: { item: OfficeTreeItem<OfficeRow>; ctx: 
               }
             }
           }}
-          className="min-w-0 flex-1 rounded-lg px-2 py-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-k-periwinkle"
+          className="min-w-0 flex-1 rounded-lg px-1 py-0.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-k-periwinkle"
           title={[node.fullName, node.address].filter(Boolean).join(' — ')}
         >
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className={`truncate text-[14px] font-medium ${ctx.matched.has(node.id) ? 'text-k-purple' : 'text-k-text'}`}>{node.name}</span>
-            {node.typeName && <Badge>{node.typeName}</Badge>}
-            {node.code && <span className="rounded-md bg-k-light-bg px-1.5 py-0.5 font-mono text-[11px] text-k-text-2">{node.code}</span>}
+            <span className={`truncate text-[16px] font-semibold ${nameTone}`}>{node.name}</span>
+            {node.typeName && <span className="rounded-lg bg-k-light-bg px-2.5 py-0.5 text-[13px] font-medium text-k-slate">{node.typeName}</span>}
+            {node.code && <span className="rounded-lg bg-k-light-bg/60 px-2.5 py-0.5 text-[13px] font-medium text-k-slate">{node.code}</span>}
           </span>
           {/* La ruta completa SIEMPRE visible (R10): «Central › Chuquisaca › Central» no se confunde con otra «Central». */}
-          <span className="mt-0.5 block truncate text-[12px] text-k-muted">
+          <span className="mt-0.5 block truncate text-[13px] text-k-text-2">
             {node.isRoot ? t('tree.root') : node.fullName}
             {node.city ? ` · ${node.city}` : ''}
           </span>
         </button>
 
-        <span className="hidden shrink-0 items-center gap-3 pr-1 text-[12px] text-k-text-2 sm:flex">
-          {direct > 0 && (
-            <span title={t('tree.children', { n: direct })} aria-label={t('tree.children', { n: direct })}>
-              ⑂ {direct}
-            </span>
-          )}
-          <span title={t('tree.members', { n: node.members })} aria-label={t('tree.members', { n: node.members })}>
-            ☺ {node.members}
+        <span className="hidden shrink-0 items-center gap-6 self-stretch border-l border-k-border pl-5 pr-2 text-[15px] text-k-navy sm:flex">
+          <span className="flex min-w-[3.25rem] items-center gap-2" title={t('tree.members', { n: node.members })} aria-label={t('tree.members', { n: node.members })}>
+            <Icon name="team" className="h-[18px] w-[18px] text-k-text-2" />
+            {node.members}
+          </span>
+          <span className="flex min-w-[3.25rem] items-center gap-2" title={t('tree.credits', { n: node.credits })} aria-label={t('tree.credits', { n: node.credits })}>
+            <Icon name="briefcase" className="h-[18px] w-[18px] text-k-text-2" />
+            {node.credits}
           </span>
         </span>
         <RowMenu row={node} ctx={ctx} />
@@ -211,15 +226,15 @@ function TreeNode({ item, ctx, level }: { item: OfficeTreeItem<OfficeRow>; ctx: 
 
       {open && (
         <ul role="group">
-          {kids.slice(0, shown).map((c) => (
-            <TreeNode key={c.node.id} item={c} ctx={ctx} level={level + 1} />
+          {kids.slice(0, shown).map((c, i, arr) => (
+            <TreeNode key={c.node.id} item={c} ctx={ctx} level={level + 1} last={i === arr.length - 1 && kids.length <= shown} />
           ))}
           {kids.length > shown && (
-            <li style={{ marginLeft: Math.min(level, 6) * 14 }}>
+            <li className="border-b border-k-border py-2" style={{ paddingLeft: 12 + Math.min(level, MAX_INDENT_LEVELS) * INDENT }}>
               <button
                 type="button"
                 onClick={() => setShown((n) => n + CHILDREN_PAGE)}
-                className="ml-10 rounded-lg px-2 py-1.5 text-[13px] font-medium text-k-purple hover:underline"
+                className="rounded-lg px-2 py-1.5 text-[13px] font-medium text-k-purple hover:underline"
               >
                 {t('tree.showMore', { n: kids.length - shown })}
               </button>
@@ -233,10 +248,13 @@ function TreeNode({ item, ctx, level }: { item: OfficeTreeItem<OfficeRow>; ctx: 
 
 export function OfficeTree({ items, ctx, label }: { items: OfficeTreeItem<OfficeRow>[]; ctx: TreeCtx; label: string }) {
   return (
-    <ul role="tree" aria-label={label} className="space-y-0.5">
+    <div className="overflow-hidden rounded-2xl border border-k-border bg-white">
+      {/* `-mb-px`: la última fila trae su propia línea de abajo y el borde de la tarjeta ya la pone. */}
+      <ul role="tree" aria-label={label} className="-mb-px">
       {items.map((i) => (
         <TreeNode key={i.node.id} item={i} ctx={ctx} level={1} />
       ))}
     </ul>
+    </div>
   );
 }

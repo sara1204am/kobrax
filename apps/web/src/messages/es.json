@@ -2740,6 +2740,7 @@
         "collapse": "Contraer {name}",
         "expand": "Expandir {name}",
         "children": "{n, plural, one {# oficina hija} other {# oficinas hijas}}",
+        "credits": "{n, plural, one {# crédito} other {# créditos}}",
         "members": "{n, plural, one {# persona} other {# personas}}",
         "showMore": "Mostrar {n} más"
       },
