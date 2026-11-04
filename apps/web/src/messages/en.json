@@ -2893,8 +2893,9 @@
         "stats": {
           "credits": "Loans",
           "portfolio": "Portfolio",
-          "arrears": "In arrears",
-          "inArrears": "{n} in arrears"
+          "arrears": "Portfolio in arrears",
+          "person": "Person",
+          "arrearsCredits": "Loans in arrears"
         }
       },
       "detail": {

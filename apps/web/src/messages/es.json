@@ -2893,8 +2893,9 @@
         "stats": {
           "credits": "Créditos",
           "portfolio": "Cartera",
-          "arrears": "En mora",
-          "inArrears": "{n} en mora"
+          "arrears": "Cartera en mora",
+          "person": "Persona",
+          "arrearsCredits": "Créditos en mora"
         }
       },
       "detail": {
@@ -2907,7 +2908,7 @@
         "stats": {
           "members": "Personas",
           "credits": "Créditos",
-          "arrears": "En mora",
+          "arrears": "Cartera en mora",
           "children": "Oficinas hijas",
           "title": "Cartera de la oficina",
           "assigned": "Créditos asignados",

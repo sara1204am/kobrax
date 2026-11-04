@@ -44,28 +44,13 @@ export function OfficeTeam({
         {current.length === 0 ? (
           <p className="mt-2 text-[13px] text-k-text-2">{t('team.none')}</p>
         ) : (
-          <ul className="mt-2 divide-y divide-k-border rounded-xl border border-k-border">
-            {current.map((m) => (
-              <li key={m.userId} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-3 py-2.5">
-                <span className="min-w-0 flex-1 basis-48">
-                  <span className="block truncate text-[14px] text-k-text">{memberLabel(m)}</span>
-                  <span className="block truncate text-[12px] text-k-text-2">{m.roleName}</span>
-                </span>
-                {portfolios && <MemberPortfolio portfolio={portfolios[m.userId]} />}
-                {editable && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    aria-label={t('team.takeOutOf', { name: memberLabel(m) })}
-                    onClick={() => void run(() => sendJson(`/api/branches/${office.id}/members/${m.userId}`, null, 'DELETE'), t('team.removed'))}
-                    className="shrink-0 text-[13px] font-medium text-k-danger hover:underline disabled:opacity-50"
-                  >
-                    {t('team.takeOut')}
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
+          <TeamList
+            members={current}
+            portfolios={portfolios}
+            editable={editable}
+            busy={busy}
+            onTakeOut={(m) => void run(() => sendJson(`/api/branches/${office.id}/members/${m.userId}`, null, 'DELETE'), t('team.removed'))}
+          />
         )}
       </div>
 
@@ -116,26 +101,104 @@ export function OfficeTeam({
   );
 }
 
-/** Créditos, cartera y mora de una persona: tres cifras chicas con su rótulo. La mora es el saldo adeudado, no la cuota. */
-function MemberPortfolio({ portfolio }: { portfolio?: OfficePortfolio }) {
+type Portfolio = OfficePortfolio | undefined;
+
+/** Las cifras de una persona, ya sumadas por moneda: «Bs 11.000,00» (o «Bs 1.000,00 · $us 200,00» con dos monedas). */
+function sumBy(p: Portfolio, pick: (c: OfficePortfolio['byCurrency'][number]) => number): string {
+  return !p || p.byCurrency.length === 0 ? money(0) : p.byCurrency.map((c) => money(pick(c), c.currency)).join(' · ');
+}
+
+/**
+ * El equipo de la oficina. Con cartera (`portfolios`) es una tabla de columnas fijas —persona, créditos, créditos en mora,
+ * cartera y cartera en mora— con las cifras en peso normal y la mora en rojo (token `k-danger`) sólo si la hay; sin cartera
+ * (el formulario de editar), una lista de nombres. «Sacar» es un botón, no un enlace.
+ *
+ * La mora es el saldo adeudado de los créditos atrasados, no la cuota.
+ */
+function TeamList({
+  members,
+  portfolios,
+  editable,
+  busy,
+  onTakeOut,
+}: {
+  members: Member[];
+  portfolios?: Record<string, OfficePortfolio>;
+  editable: boolean;
+  busy: boolean;
+  onTakeOut: (m: Member) => void;
+}) {
   const { t } = useOfficeApi();
-  const p = portfolio ?? { credits: 0, arrearsCredits: 0, byCurrency: [] };
-  const sum = (pick: (c: OfficePortfolio['byCurrency'][number]) => number) =>
-    p.byCurrency.length === 0 ? money(0) : p.byCurrency.map((c) => money(pick(c), c.currency)).join(' · ');
-  const cells: { label: string; value: string; danger?: boolean; sub?: string }[] = [
-    { label: t('team.stats.credits'), value: String(p.credits), sub: p.arrearsCredits > 0 ? t('team.stats.inArrears', { n: p.arrearsCredits }) : undefined },
-    { label: t('team.stats.portfolio'), value: sum((c) => c.balance) },
-    { label: t('team.stats.arrears'), value: sum((c) => c.arrearsBalance), danger: p.arrearsCredits > 0 },
-  ];
+  const takeOut = (m: Member) => (
+    <span className="inline-block w-24">
+      <Button type="button" variant="ghost" disabled={busy} aria-label={t('team.takeOutOf', { name: memberLabel(m) })} className="!h-9 !text-[13px] !text-k-danger" onClick={() => onTakeOut(m)}>
+        {t('team.takeOut')}
+      </Button>
+    </span>
+  );
+
+  if (!portfolios) {
+    return (
+      <ul className="mt-2 divide-y divide-k-border rounded-xl border border-k-border">
+        {members.map((m) => (
+          <li key={m.userId} className="flex items-center justify-between gap-3 px-3 py-2">
+            <span className="min-w-0">
+              <span className="block truncate text-[14px] text-k-text">{memberLabel(m)}</span>
+              <span className="block truncate text-[12px] text-k-text-2">{m.roleName}</span>
+            </span>
+            {editable && takeOut(m)}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  const Th = ({ children, right }: { children: React.ReactNode; right?: boolean }) => (
+    <th scope="col" className={`px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-k-text-2 ${right ? 'text-right' : 'text-left'}`}>
+      {children}
+    </th>
+  );
   return (
-    <dl className="flex shrink-0 items-start gap-6">
-      {cells.map((c) => (
-        <div key={c.label} className="min-w-[5.5rem]">
-          <dt className="text-[11px] font-semibold uppercase tracking-wide text-k-slate">{c.label}</dt>
-          <dd className={`mt-0.5 text-[14px] font-semibold tabular-nums ${c.danger ? 'text-k-danger' : 'text-k-navy'}`}>{c.value}</dd>
-          {c.sub && <dd className="text-[11px] text-k-danger">{c.sub}</dd>}
-        </div>
-      ))}
-    </dl>
+    <div className="mt-2 overflow-x-auto rounded-xl border border-k-border">
+      <table className="w-full min-w-[44rem] table-fixed text-[14px]">
+        <colgroup>
+          <col className="w-[30%]" />
+          <col className="w-[10%]" />
+          <col className="w-[13%]" />
+          <col className="w-[17%]" />
+          <col className="w-[17%]" />
+          {editable && <col className="w-[13%]" />}
+        </colgroup>
+        <thead>
+          <tr className="border-b border-k-border bg-k-bg">
+            <Th>{t('team.stats.person')}</Th>
+            <Th right>{t('team.stats.credits')}</Th>
+            <Th right>{t('team.stats.arrearsCredits')}</Th>
+            <Th right>{t('team.stats.portfolio')}</Th>
+            <Th right>{t('team.stats.arrears')}</Th>
+            {editable && <th scope="col" className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-k-text-2"><span className="sr-only">{t('team.takeOut')}</span></th>}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-k-border">
+          {members.map((m) => {
+            const p = portfolios[m.userId];
+            const late = (p?.arrearsCredits ?? 0) > 0;
+            return (
+              <tr key={m.userId}>
+                <td className="px-3 py-3">
+                  <span className="block truncate text-k-text">{memberLabel(m)}</span>
+                  <span className="block truncate text-[12px] text-k-text-2">{m.roleName}</span>
+                </td>
+                <td className="px-3 py-3 text-right tabular-nums text-k-text">{p?.credits ?? 0}</td>
+                <td className={`px-3 py-3 text-right tabular-nums ${late ? 'text-k-danger' : 'text-k-text'}`}>{p?.arrearsCredits ?? 0}</td>
+                <td className="px-3 py-3 text-right tabular-nums text-k-text">{sumBy(p, (c) => c.balance)}</td>
+                <td className={`px-3 py-3 text-right tabular-nums ${late ? 'text-k-danger' : 'text-k-text'}`}>{sumBy(p, (c) => c.arrearsBalance)}</td>
+                {editable && <td className="px-3 py-3 text-right">{takeOut(m)}</td>}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
