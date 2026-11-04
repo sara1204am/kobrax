@@ -2896,6 +2896,13 @@
           "arrears": "Cartera en mora",
           "person": "Persona",
           "arrearsCredits": "Créditos en mora"
+        },
+        "table": {
+          "entity": "personas",
+          "searchLabel": "Buscar en el equipo",
+          "searchPlaceholder": "Buscar por nombre, correo o rol",
+          "noResults": "Nadie coincide con la búsqueda",
+          "noResultsHint": "Prueba con otro nombre, correo o rol."
         }
       },
       "detail": {

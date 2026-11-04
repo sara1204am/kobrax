@@ -6,7 +6,9 @@ import type { Member } from '@kobrax/shared';
 import { Button } from '@/components/ui';
 import { usePermissions } from '@/components/permissions';
 import { sendJson } from '@/lib/client';
-import type { OfficeDetail, OfficePortfolio, OfficeRow, OfficeType } from '@/lib/offices';
+import type { OfficeDetail, OfficeRow, OfficeType } from '@/lib/offices';
+import type { PageMeta } from '@/components/data-table';
+import type { OfficeTeamRow } from '@/lib/office-team-table';
 import { OfficeFormDialog } from '../office-form';
 import { OfficeTeam } from '../office-team';
 import { useOfficeApi } from '../use-office-api';
@@ -63,13 +65,20 @@ export function DetailActions({
   );
 }
 
-/** El equipo de la oficina, con sumar/sacar si hay `office:write`. */
-export function DetailTeam({ office, rows, members }: { office: OfficeDetail; rows: OfficeRow[]; members: Member[] }) {
+/** El equipo de la oficina, con sumar/sacar si hay `office:write`. La tabla (búsqueda y orden) la resuelve el servidor desde la URL. */
+export function DetailTeam({
+  office,
+  rows,
+  members,
+  table,
+}: {
+  office: OfficeDetail;
+  rows: OfficeRow[];
+  members: Member[];
+  table: { rows: OfficeTeamRow[]; meta: PageMeta; searching: boolean };
+}) {
   const { can } = usePermissions();
   const row = rows.find((r) => r.id === office.id);
   if (!row) return null;
-  const portfolios: Record<string, OfficePortfolio> = Object.fromEntries(
-    office.membersList.flatMap((m) => (m.portfolio ? [[m.userId, m.portfolio] as const] : [])),
-  );
-  return <OfficeTeam office={row} rows={rows} members={members} editable={can('office:write')} portfolios={portfolios} />;
+  return <OfficeTeam office={row} rows={rows} members={members} editable={can('office:write')} table={table} />;
 }

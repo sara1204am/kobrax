@@ -7,7 +7,8 @@ import { Badge, EmptyState } from '@/components/panel-ui';
 import { Icon } from '@/components/panel-shell';
 import { MapPicker } from '@/components/map-picker';
 import { dateTime } from '@/lib/format';
-import { parseOfficeDetail, type OfficeRow, type OfficeType } from '@/lib/offices';
+import { officeMembers, parseOfficeDetail, type OfficePortfolio, type OfficeRow, type OfficeType } from '@/lib/offices';
+import { hasOfficeTeamSearch, officeTeamRows, officeTeamView, type OfficeTeamParams } from '@/lib/office-team-table';
 import { DetailActions, DetailTeam } from './detail-actions';
 import { OfficeStats } from './office-stats';
 
@@ -40,7 +41,7 @@ function Th({ children }: { children: React.ReactNode }) {
  * La pestaña vive en la URL (`?tab=`) y la lee el servidor: el enlace se comparte y «atrás» funciona. La API recorta lo que
  * cada persona puede ver; acá sólo se dibuja.
  */
-export default async function OfficeDetailPage({ params, searchParams }: { params: { id: string }; searchParams: { tab?: string } }) {
+export default async function OfficeDetailPage({ params, searchParams }: { params: { id: string }; searchParams: { tab?: string } & OfficeTeamParams }) {
   const t = await getTranslations('account.offices');
   const locale = await getLocale();
   const [found, list, members, types] = await Promise.all([
@@ -93,6 +94,11 @@ export default async function OfficeDetailPage({ params, searchParams }: { param
   ];
   const hasPoint = typeof o.latitude === 'number' && typeof o.longitude === 'number';
 
+  // El equipo con su cartera: búsqueda global y orden salen de la URL (sin filtros), como la tabla de Equipo.
+  const portfolios: Record<string, OfficePortfolio> = Object.fromEntries(o.membersList.flatMap((m) => (m.portfolio ? [[m.userId, m.portfolio] as const] : [])));
+  const teamPage = officeTeamView(officeTeamRows(officeMembers(members.body.data ?? [], o.id), portfolios), searchParams);
+  const teamTable = { ...teamPage, searching: hasOfficeTeamSearch(searchParams) };
+
   let body: React.ReactNode;
   if (tab === 'offices') {
     body = (
@@ -137,7 +143,7 @@ export default async function OfficeDetailPage({ params, searchParams }: { param
   } else if (tab === 'team') {
     body = (
       <Panel title={t('detail.team')}>
-        <DetailTeam office={o} rows={rows} members={members.body.data ?? []} />
+        <DetailTeam office={o} rows={rows} members={members.body.data ?? []} table={teamTable} />
       </Panel>
     );
   } else if (tab === 'history') {

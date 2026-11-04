@@ -2896,6 +2896,13 @@
           "arrears": "Portfolio in arrears",
           "person": "Person",
           "arrearsCredits": "Loans in arrears"
+        },
+        "table": {
+          "entity": "people",
+          "searchLabel": "Search the team",
+          "searchPlaceholder": "Search by name, email or role",
+          "noResults": "Nobody matches your search",
+          "noResultsHint": "Try another name, email or role."
         }
       },
       "detail": {
