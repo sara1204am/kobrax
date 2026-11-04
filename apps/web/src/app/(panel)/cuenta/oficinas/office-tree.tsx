@@ -156,7 +156,7 @@ function TreeNode({ item, ctx, level, last = true }: { item: OfficeTreeItem<Offi
           e.preventDefault();
           ctx.onDrop(node);
         }}
-        className={`group flex items-center gap-3 border-b border-k-border py-3 pr-3 ${
+        className={`group flex items-center gap-3 py-3 pr-3 ${
           isOver ? 'bg-k-highlight' : level === 1 ? 'bg-k-info-bg' : 'bg-white hover:bg-k-bg'
         } ${dragging ? 'opacity-40' : ''}`}
         style={{ paddingLeft: 12 + depth * INDENT }}
@@ -230,7 +230,7 @@ function TreeNode({ item, ctx, level, last = true }: { item: OfficeTreeItem<Offi
             <TreeNode key={c.node.id} item={c} ctx={ctx} level={level + 1} last={i === arr.length - 1 && kids.length <= shown} />
           ))}
           {kids.length > shown && (
-            <li className="border-b border-k-border py-2" style={{ paddingLeft: 12 + Math.min(level, MAX_INDENT_LEVELS) * INDENT }}>
+            <li className="py-2" style={{ paddingLeft: 12 + Math.min(level, MAX_INDENT_LEVELS) * INDENT }}>
               <button
                 type="button"
                 onClick={() => setShown((n) => n + CHILDREN_PAGE)}
@@ -249,8 +249,7 @@ function TreeNode({ item, ctx, level, last = true }: { item: OfficeTreeItem<Offi
 export function OfficeTree({ items, ctx, label }: { items: OfficeTreeItem<OfficeRow>[]; ctx: TreeCtx; label: string }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-k-border bg-white">
-      {/* `-mb-px`: la última fila trae su propia línea de abajo y el borde de la tarjeta ya la pone. */}
-      <ul role="tree" aria-label={label} className="-mb-px">
+      <ul role="tree" aria-label={label}>
       {items.map((i) => (
         <TreeNode key={i.node.id} item={i} ctx={ctx} level={1} />
       ))}
