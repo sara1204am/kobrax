@@ -238,7 +238,8 @@ describe('Oficina asignada a una persona — una sola por cuenta', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: 'Editar' }));
     const dialog = await screen.findByRole('dialog');
     await userEvent.click(within(dialog).getByRole('tab', { name: 'Equipo' }));
-    await userEvent.selectOptions(within(dialog).getByLabelText('Persona'), 'u1');
+    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Persona' }));
+    await userEvent.click(within(dialog).getByRole('option', { name: /Ana Cobra/ }));
     expect(within(dialog).getByText(/está hoy en «Central › Chuquisaca» y pasará a esta oficina/)).toBeInTheDocument();
     expect(within(dialog).getByText(/Cada persona está en una sola oficina/)).toBeInTheDocument();
   });
@@ -254,7 +255,8 @@ describe('Oficina asignada a una persona — una sola por cuenta', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: 'Editar' }));
     const dialog = await screen.findByRole('dialog');
     await userEvent.click(within(dialog).getByRole('tab', { name: 'Equipo' }));
-    await userEvent.selectOptions(within(dialog).getByLabelText('Persona'), 'u2');
+    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Persona' }));
+    await userEvent.click(within(dialog).getByRole('option', { name: /Beto Sup/ }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Asignar' }));
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('La persona ya tiene una oficina asignada');
   });
