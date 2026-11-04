@@ -57,7 +57,8 @@
       "avanzado": "Avanzado",
       "facturacion": "Facturación",
       "actividad": "Actividad",
-      "agencias": "Agencias",
+      "oficinas": "Oficinas",
+      "papelera": "Papelera",
       "catalogos": "Catálogos",
       "general": "General",
       "plan": "Plan",
@@ -116,7 +117,9 @@
         "selected": "{count} seleccionados",
         "clear": "Limpiar filtros",
         "source": "Fuente",
-        "allSources": "Todas"
+        "allSources": "Todas",
+        "office": "Oficina",
+        "allOffices": "Todas las oficinas"
       },
       "priorities": {
         "LOW": "Baja",
@@ -552,9 +555,9 @@
           "refTitle": "Oficial de crédito"
         },
         "branch": {
-          "label": "Una agencia o sucursal",
-          "hint": "El archivo trae la cartera de una agencia. Sólo se reconcilia esa agencia.",
-          "refTitle": "Agencia o sucursal"
+          "label": "Una oficina",
+          "hint": "El archivo trae la cartera de una oficina y todo lo que cuelga de ella. Sólo se reconcilia ese tramo del árbol.",
+          "refTitle": "Oficina"
         },
         "account": {
           "label": "Toda la empresa",
@@ -768,7 +771,7 @@
         "scopeKinds": {
           "account": "Toda la empresa",
           "official": "Cartera de {name}",
-          "branch": "Sucursal {name}"
+          "branch": "Oficina {name}"
         }
       }
     },
@@ -2307,7 +2310,7 @@
       "cobranza": "Cobranza",
       "mensajes": "Mensajes",
       "catalogos": "Catálogos",
-      "agencias": "Agencias",
+      "oficinas": "Oficinas",
       "facturacion": "Facturación",
       "billingPending": "Faltan datos de facturación",
       "actividad": "Actividad",
@@ -2353,7 +2356,7 @@
         "descriptionLabel": "Descripción (opcional)",
         "descriptionPlaceholder": "Para qué se usa esta opción"
       },
-            "intro": "Administra las opciones que utiliza tu equipo en las operaciones diarias.",
+      "intro": "Administra las opciones que utiliza tu equipo en las operaciones diarias.",
       "count": "{count, plural, one {# catálogo} other {# catálogos}}",
       "settings": "Configuración del negocio",
       "searchCatalog": "Buscar catálogo…",
@@ -2387,7 +2390,7 @@
         "subtitle": "Cambia cómo ve tu equipo esta opción",
         "codeLocked": "El código no se puede cambiar: es lo que guardan los registros y el móvil."
       },
-"names": {
+      "names": {
         "PAYMENT_METHOD": "Medios de pago",
         "BANK": "Bancos",
         "NO_PAYMENT_REASON": "Motivos de no pago",
@@ -2444,66 +2447,6 @@
       "save": "Guardar preferencias",
       "saved": "Preferencias guardadas",
       "saveError": "No se pudieron guardar las preferencias"
-    },
-    "branches": {
-      "title": "Agencias",
-      "intro": "Las sucursales de tu negocio y quién trabaja en cada una. La agencia de una persona decide qué cartera ve: un supervisor ve la de su agencia.",
-      "add": "+ Nueva agencia",
-      "empty": "Todavía no hay agencias",
-      "emptyHint": "Si trabajas con una sola oficina no hace falta. Crea una por cada sucursal para repartir la cartera y el equipo.",
-      "columns": {
-        "name": "Agencia",
-        "city": "Ciudad",
-        "manager": "Responsable",
-        "members": "Miembros",
-        "credits": "Créditos",
-        "status": "Estado",
-        "actions": "Acciones"
-      },
-      "active": "Activa",
-      "inactive": "Desactivada",
-      "manage": "Miembros",
-      "manageOf": "Miembros de {name}",
-      "edit": "Editar",
-      "editOf": "Editar {name}",
-      "addTitle": "Nueva agencia",
-      "editTitle": "Editar agencia",
-      "fields": {
-        "name": "Nombre",
-        "code": "Código",
-        "codeHint": "Corto, ej. CEN. Se guarda en mayúsculas.",
-        "city": "Ciudad",
-        "address": "Dirección",
-        "manager": "Responsable",
-        "noManager": "Sin responsable",
-        "active": "Agencia activa",
-        "activeHint": "Para desactivarla, primero pasa a sus miembros a otra agencia."
-      },
-      "save": "Guardar",
-      "cancel": "Cancelar",
-      "close": "Cerrar",
-      "remove": "Quitar agencia",
-      "saved": "Agencia guardada",
-      "created": "Agencia creada",
-      "removed": "Agencia quitada",
-      "saveError": "No se pudo guardar el cambio",
-      "removeTitle": "¿Quitar {name}?",
-      "removeText": "La agencia deja de aparecer, pero los créditos y rutas que la nombran conservan su historial.",
-      "removeBlocked": "Tiene {n, plural, one {# miembro activo} other {# miembros activos}}. Pásalos a otra agencia antes de quitarla.",
-      "removeOk": "Quitar",
-      "membersTitle": "Miembros de {name}",
-      "currentMembers": "En esta agencia",
-      "noMembers": "Todavía no hay nadie en esta agencia.",
-      "takeOut": "Sacar",
-      "takeOutOf": "Sacar a {name} de la agencia",
-      "memberRemoved": "Miembro sacado de la agencia",
-      "addMembers": "Sumar personas",
-      "scopeWarning": "Cambiar la agencia de alguien cambia la cartera que ve.",
-      "noCandidates": "No hay más personas activas para sumar.",
-      "comesFrom": "viene de {name}",
-      "noBranch": "sin agencia",
-      "addPicked": "{n, plural, =0 {Sumar} one {Sumar # persona} other {Sumar # personas}}",
-      "membersAdded": "Miembros movidos a la agencia"
     },
     "billing": {
       "title": "Datos de facturación",
@@ -2569,12 +2512,12 @@
     },
     "activity": {
       "title": "Actividad de la cuenta",
-      "intro": "Quién cambió qué en la configuración de la cuenta, el equipo, las agencias y las listas. Sólo la ve quien puede consultar la auditoría.",
+      "intro": "Quién cambió qué en la configuración de la cuenta, el equipo, las oficinas y las listas. Sólo la ve quien puede consultar la auditoría.",
       "filter": "Tipo de cambio",
       "all": "Todos",
       "entities": {
         "account": "Datos de la cuenta",
-        "branch": "Agencia",
+        "branch": "Oficina",
         "catalog_item": "Ítem de catálogo",
         "arrear_category": "Categoría de mora",
         "user_account": "Miembro del equipo",
@@ -2776,6 +2719,255 @@
     "arrearsMethods": {
       "oldest_unpaid": "Desde la cuota impaga más antigua",
       "first_default": "Desde el primer atraso, hasta quedar al día (como los bancos)"
+    },
+    "offices": {
+      "title": "Oficinas",
+      "intro": "La estructura de tu organización: sus oficinas y quién trabaja en cada una. La oficina de una persona decide qué cartera ve; quien está en una regional ve todo lo que cuelga de ella.",
+      "add": "Añadir oficina",
+      "planLimit": "Tu plan permite {limit, plural, one {# oficina} other {# oficinas}} y ya usas {used} (la raíz cuenta).",
+      "seePlan": "Ver el plan",
+      "menu": {
+        "edit": "Editar",
+        "addChild": "Añadir hija",
+        "quickAdd": "Alta rápida",
+        "detail": "Ver detalle",
+        "move": "Mover a…",
+        "deactivate": "Desactivar",
+        "of": "Acciones de {name}"
+      },
+      "tree": {
+        "root": "Oficina principal",
+        "collapse": "Contraer {name}",
+        "expand": "Expandir {name}",
+        "credits": "{n, plural, one {# crédito} other {# créditos}}",
+        "members": "{n, plural, one {# persona} other {# personas}}",
+        "showMore": "Mostrar {n} más"
+      },
+      "toolbar": {
+        "search": "Buscar por nombre, código, ciudad o tipo",
+        "count": "{n, plural, one {# oficina} other {# oficinas}}",
+        "level": "Niveles visibles",
+        "collapseAll": "Contraer todo",
+        "expandAll": "Expandir todo",
+        "less": "Un nivel menos",
+        "more": "Un nivel más",
+        "levelNow": "Niveles visibles: {n}",
+        "shortcuts": "Atajos: «/» busca · 1-9 fija cuántos niveles se ven · 0 deja sólo la raíz · Alt+clic en la flecha abre toda la rama · flechas recorren el árbol.",
+        "noResults": "Sin resultados para «{q}».",
+        "results": "{n, plural, one {# resultado} other {# resultados}} para «{q}».",
+        "clear": "Limpiar"
+      },
+      "status": {
+        "active": "Activa",
+        "inactive": "Desactivada"
+      },
+      "preview": {
+        "parent": "Oficina superior",
+        "city": "Ciudad",
+        "address": "Dirección",
+        "manager": "Responsable",
+        "full": "Detalles completos",
+        "members": "{n, plural, one {# persona} other {# personas}}",
+        "credits": "{n, plural, one {# crédito} other {# créditos}}",
+        "children": "{n, plural, one {# oficina hija} other {# oficinas hijas}}"
+      },
+      "form": {
+        "close": "Cerrar",
+        "cancel": "Cancelar",
+        "save": "Guardar",
+        "created": "Oficina creada",
+        "saved": "Oficina guardada",
+        "addTitle": "Nueva oficina",
+        "editTitle": "Editar {name}",
+        "tabsLabel": "Secciones de la oficina",
+        "tabs": {
+          "data": "Datos",
+          "contact": "Contacto y ubicación",
+          "team": "Equipo"
+        },
+        "tabHasErrors": "Faltan datos",
+        "teamAfterSave": "Guarda la oficina para sumar gente.",
+        "fields": {
+          "name": "Nombre",
+          "code": "Código",
+          "codeHint": "Corto, ej. CEN. Se guarda en mayúsculas.",
+          "type": "Tipo",
+          "pickType": "Elige un tipo",
+          "parent": "Oficina superior",
+          "manager": "Responsable",
+          "noManager": "Sin responsable",
+          "managerSearch": "Busca por nombre o correo",
+          "managerNone": "Nadie coincide con la búsqueda",
+          "addUser": "Agregar usuario",
+          "location": "Ubicación en el mapa",
+          "locationHint": "Toca el mapa o arrastra el pin para marcar dónde está la oficina.",
+          "locationMap": "Mapa para marcar la ubicación de la oficina",
+          "locationTap": "Toca el mapa para marcar la oficina",
+          "latitude": "Latitud",
+          "longitude": "Longitud",
+          "clearPoint": "Quitar punto",
+          "city": "Ciudad",
+          "address": "Dirección"
+        },
+        "branchingWarning": "Esta oficina tiene cartera. Al abrir su primera hija, la cartera se mueve a las oficinas nuevas: después de crearla te llevamos a «Mover cartera»."
+      },
+      "quick": {
+        "title": "Alta rápida bajo {name}",
+        "under": "Se crea dentro de: {path}",
+        "dupCode": "Ya hay una oficina con ese código."
+      },
+      "move": {
+        "title": "Mover {name}",
+        "to": "Nueva oficina superior",
+        "pick": "Elige a dónde mover",
+        "confirm": "¿Mover «{name}» bajo «{to}»?",
+        "impact": "Se mueve toda la rama: {offices, plural, one {# oficina} other {# oficinas}}, con {people, plural, one {# persona} other {# personas}} y {credits, plural, one {# crédito} other {# créditos}}. Cambia lo que ve cada una.",
+        "ok": "Mover",
+        "done": "Oficina movida"
+      },
+      "deactivate": {
+        "title": "¿Desactivar {name}?",
+        "text": "La oficina pasa a la papelera y deja de aparecer; sus créditos y rutas conservan el historial. Se puede restaurar.",
+        "ok": "Desactivar",
+        "done": "Oficina desactivada",
+        "root": "La oficina principal no se puede desactivar.",
+        "children": "{n, plural, one {Tiene # oficina hija activa} other {Tiene # oficinas hijas activas}}: desactívalas o muévelas antes.",
+        "members": "{n, plural, one {Tiene # persona activa} other {Tiene # personas activas}}: pásalas a otra oficina antes.",
+        "credits": "{n, plural, one {Tiene # crédito} other {Tiene # créditos}}: muévelos a otra oficina antes."
+      },
+      "portfolio": {
+        "pending": "«{name}» sigue con {n, plural, one {# crédito} other {# créditos}} y ya tiene oficinas hijas. La cartera de la oficina principal se mueve a las nuevas.",
+        "open": "Mover cartera",
+        "askAdmin": "Pídele a quien reparte la cartera que la mueva.",
+        "title": "Mover cartera",
+        "text": "Vas a pasar los {n, plural, one {# crédito} other {# créditos}} de «{name}» a otra oficina.",
+        "to": "Oficina de destino",
+        "pick": "Elige la oficina",
+        "ok": "Mover la cartera",
+        "done": "Cartera movida",
+        "moved": "{n, plural, one {Se movió # crédito} other {Se movieron # créditos}}.",
+        "paymentsNote": "Los pagos ya registrados conservan la oficina en la que se cobraron."
+      },
+      "trash": {
+        "link": "{n, plural, =0 {Papelera} other {Papelera (#)}}",
+        "title": "Papelera de oficinas",
+        "intro": "Las oficinas desactivadas. Restaurar una la devuelve al árbol, bajo su oficina superior.",
+        "empty": "La papelera está vacía",
+        "emptyHint": "Las oficinas que desactives aparecen aquí.",
+        "name": "Oficina",
+        "actions": "Acciones",
+        "restore": "Restaurar",
+        "restoreOf": "Restaurar {name}",
+        "restored": "Oficina restaurada"
+      },
+      "types": {
+        "title": "Tipos de oficina",
+        "intro": "El tipo es una etiqueta (Regional, Agencia…), no una regla: puedes poner cualquier tipo bajo cualquier oficina. Un tipo en uso se desactiva, no se borra.",
+        "empty": "Todavía no hay tipos.",
+        "code": "Código",
+        "name": "Nombre",
+        "add": "Añadir tipo",
+        "created": "Tipo creado",
+        "saved": "Tipo guardado",
+        "active": "Activo",
+        "activeOf": "Tipo {code} activo",
+        "nameOf": "Nombre del tipo {code}"
+      },
+      "team": {
+        "current": "En esta oficina",
+        "none": "Todavía no hay nadie en esta oficina.",
+        "takeOut": "Sacar",
+        "takeOutOf": "Sacar a {name} de la oficina",
+        "removed": "Persona sacada de la oficina",
+        "add": "Sumar personas",
+        "oneOffice": "Cada persona está en una sola oficina: sumar a alguien que ya está en otra lo mueve. Cambiar la oficina cambia la cartera que ve.",
+        "noCandidates": "No hay más personas activas para sumar.",
+        "person": "Persona",
+        "comesFrom": "hoy en {name}",
+        "willMove": "{name} está hoy en «{from}» y pasará a esta oficina.",
+        "assign": "Asignar",
+        "added": "Persona asignada a la oficina",
+        "stats": {
+          "credits": "Créditos",
+          "portfolio": "Cartera",
+          "arrears": "Cartera en mora",
+          "person": "Persona",
+          "arrearsCredits": "Créditos en mora",
+          "office": "Oficina"
+        },
+        "table": {
+          "entity": "personas",
+          "searchLabel": "Buscar en el equipo",
+          "searchPlaceholder": "Buscar por nombre, correo o rol",
+          "noResults": "Nadie coincide con la búsqueda",
+          "noResultsHint": "Prueba con otro nombre, correo o rol."
+        },
+        "office": "Oficina donde se registra",
+        "officeHint": "Esta oficina o alguna de las que cuelgan de ella.",
+        "search": "Busca por nombre o correo"
+      },
+      "detail": {
+        "back": "Volver a oficinas",
+        "noAccess": "No se pudo abrir la oficina",
+        "path": "Ruta de la oficina",
+        "general": "Información general",
+        "stats": {
+          "title": "Cartera de la oficina",
+          "assigned": "Créditos asignados",
+          "scopeHint": "Incluye las oficinas que cuelgan de ésta",
+          "arrearsCredits": "Créditos en mora",
+          "portfolio": "Cartera total",
+          "arrearsPortfolio": "Cartera en mora",
+          "balanceHint": "Saldo adeudado, no la cuota",
+          "share": "{pct} de la cartera"
+        },
+        "children": "Oficinas hijas",
+        "noChildren": "No tiene oficinas hijas.",
+        "team": "Equipo",
+        "history": "Historial",
+        "noHistory": "Sin cambios registrados.",
+        "tabs": {
+          "info": "Información general",
+          "offices": "Oficinas",
+          "team": "Equipo",
+          "history": "Historial"
+        },
+        "sections": "Secciones de la oficina",
+        "parentLabel": "Oficina superior",
+        "columns": {
+          "name": "Oficina",
+          "type": "Tipo",
+          "city": "Ciudad",
+          "manager": "Responsable",
+          "members": "Personas",
+          "credits": "Créditos"
+        }
+      },
+      "single": {
+        "title": "Tu oficina",
+        "name": "Nombre",
+        "team": "Equipo",
+        "firstAgencyHint": "Trabajas con una sola oficina. Cuando abras otra, aquí aparece el árbol de tu organización.",
+        "firstAgency": "Crear la primera oficina",
+        "planBlocks": "Tu plan permite {limit, plural, one {# oficina} other {# oficinas}}; para abrir otra hay que subir de plan.",
+        "readOnly": "Sólo lectura"
+      },
+      "errors": {
+        "generic": "No se pudo completar la acción",
+        "conflict": "Esto choca con una regla de la organización. Revisa los datos e inténtalo de nuevo.",
+        "BRANCH_PARENT_INVALID": "La oficina superior no es válida.",
+        "BRANCH_PARENT_INACTIVE": "La oficina superior está desactivada.",
+        "BRANCH_TOO_DEEP": "El árbol llegaría a más niveles de los permitidos.",
+        "BRANCH_MOVE_CYCLE": "No se puede mover una oficina dentro de su propia rama.",
+        "BRANCH_ROOT_PROTECTED": "La oficina principal no se puede mover ni desactivar.",
+        "BRANCH_HAS_CHILDREN": "Tiene oficinas hijas activas: desactívalas o muévelas antes.",
+        "BRANCH_HAS_CREDITS": "Tiene créditos: muévelos a otra oficina antes.",
+        "BRANCH_HAS_MEMBERS": "Tiene personas vigentes: pásalas a otra oficina antes.",
+        "BRANCH_ASSIGNMENT_EXISTS": "La persona ya tiene una oficina asignada; asignarla a otra la mueve.",
+        "BRANCH_MEMBER_NOT_FOUND": "La persona no está en esa oficina.",
+        "CREDIT_OFFICE_OUT_OF_SCOPE": "No tienes alcance sobre esa oficina.",
+        "CREDIT_REASSIGN_ARGS": "Indica la oficina de origen o los créditos, no ambos."
+      }
     }
   },
   "exports": {
@@ -2951,8 +3143,8 @@
     "filters": {
       "manager": "Responsable",
       "allManagers": "Todos los responsables",
-      "branch": "Sucursal",
-      "allBranches": "Todas las sucursales",
+      "branch": "Oficina",
+      "allBranches": "Todas las oficinas",
       "arrearsRange": "Rango de mora",
       "debtRange": "Rango de deuda"
     },
@@ -3475,7 +3667,11 @@
         "days": "{count} días",
         "since": "desde {date}",
         "oldestUnpaid": "Cuota impaga más antigua: {number} (venció {date})"
-      }
+      },
+      "office": "Oficina del crédito",
+      "officeHint": "El crédito pertenece a una oficina; define quién lo ve.",
+      "officePick": "Elige la oficina",
+      "officeRequired": "Elige la oficina del crédito: tu cuenta tiene varias oficinas y debe quedar en una a la que tengas alcance."
     },
     "creditDetail": {
       "management": {
@@ -3634,7 +3830,8 @@
     },
     "entity": "miembros",
     "filters": {
-      "allRoles": "Todos los roles"
+      "allRoles": "Todos los roles",
+      "allOffices": "Todas las oficinas"
     },
     "noResults": "Nadie coincide con esa búsqueda",
     "noResultsHint": "Probá con otro nombre, con el correo o quitando un filtro.",
@@ -3651,7 +3848,8 @@
       "role": "Rol",
       "status": "Estado",
       "actions": "Acciones",
-      "lastAccess": "Último acceso"
+      "lastAccess": "Último acceso",
+      "office": "Oficina"
     },
     "status": {
       "active": "Activo",
@@ -3676,6 +3874,8 @@
       "email": "Correo electrónico",
       "role": "¿Qué va a hacer?",
       "rolePlaceholder": "Elige un rol",
+      "office": "Oficina del gerente",
+      "officePlaceholder": "Elige una oficina",
       "cancel": "Cancelar",
       "send": "Enviar invitación",
       "error": "No se pudo invitar",
@@ -3720,7 +3920,7 @@
       "AUDITOR": "Auditor",
       "VIEWER": "Consulta",
       "ACCOUNT_ADMINHint": "Administra cuenta, equipo y plan",
-      "SUPERVISORHint": "Gestiona cobranza y su agencia",
+      "SUPERVISORHint": "Gestiona cobranza y su oficina",
       "COLLECTORHint": "Ejecuta rutas y registra pagos",
       "MANAGERHint": "Supervisa la operación",
       "AUDITORHint": "Consulta y audita",
@@ -3879,7 +4079,16 @@
         "loading": "Cargando…",
         "retry": "No se pudo cargar. Reintentar",
         "end": "{count, plural, one {# registro} other {# registros}} en total"
-      }
+      },
+      "officeTitle": "Oficina",
+      "changeOffice": "Cambiar de oficina",
+      "officePick": "Elige la oficina",
+      "officeSave": "Asignar",
+      "officeOne": "Cada persona está en una sola oficina: asignarla a otra la mueve y cambia la cartera que ve.",
+      "officeMoved": "Oficina asignada",
+      "officeRemove": "Quitar de la oficina",
+      "officeRemoved": "Persona sacada de la oficina",
+      "officeError": "No se pudo asignar la oficina"
     }
   },
   "profile": {
@@ -3895,7 +4104,12 @@
     "preferencesHint": "Lo que cambia solo para ti.",
     "accountPrefsHint": "La jornada, el horario y la zona horaria son del negocio.",
     "accountPrefsLink": "Se configuran en Cuenta → Cobranza.",
-    "tabs": { "label": "Secciones de Mi perfil", "datos-personales": "Datos personales", "preferencias": "Preferencias", "seguridad": "Seguridad" },
+    "tabs": {
+      "label": "Secciones de Mi perfil",
+      "datos-personales": "Datos personales",
+      "preferencias": "Preferencias",
+      "seguridad": "Seguridad"
+    },
     "subtitle": "Cómo te ve tu equipo y cómo te cobran los deudores.",
     "firstName": "Nombre",
     "lastName": "Apellido",

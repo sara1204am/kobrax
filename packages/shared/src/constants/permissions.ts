@@ -43,7 +43,11 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     Permission.REPORT_EXPORT,
     Permission.ACCOUNT_READ,
     Permission.USER_READ,
-    Permission.DATA_SCOPE_ALL,
+    // F13 · R12: ve el árbol de oficinas (hoy ya tiene `user:read`, con el que se veía la pestaña de Agencias).
+    Permission.OFFICE_READ,
+    // F13 · R13: el gerente regional del banco. Ve todo el subárbol de la oficina a la que está asignado (la migración
+    // asigna a cada MANAGER existente a la raíz de su cuenta, que lo cubre todo: ve lo mismo que veía con `all`).
+    Permission.DATA_SCOPE_SUBTREE,
     Permission.ASSIGNMENT_WRITE,
   ],
   [RoleType.SUPERVISOR]: [
@@ -68,6 +72,8 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     // F4/08 · D8: supervisa a los cobradores de SU AGENCIA (no toda la empresa) y ve además lo que
     // tiene a su cargo. Antes tenía `data:scope:all`.
     Permission.DATA_SCOPE_BRANCH,
+    // F13 · D-7: lee el árbol de oficinas, pero SÓLO sus oficinas y lo que cuelga de ellas (el servidor lo acota).
+    Permission.OFFICE_READ,
     // Reparte la cartera y cubre bajas: es quien más usa la asignación temporal.
     Permission.ASSIGNMENT_WRITE,
   ],
@@ -92,6 +98,8 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     // La misma alta, pero desde archivo — el módulo Import del móvil, donde COLLECTOR es el único
     // rol que entra. Sin esto el módulo es 403 para su propio dueño (el cobrador independiente).
     Permission.CLIENT_IMPORT,
+    // Su tablero de Inicio: los mismos widgets, pero la API los acota a SUS créditos (alcance propio). Sin esto Inicio lo mandaba a Agenda.
+    Permission.REPORT_READ,
     Permission.CREDIT_READ,
     // Da de alta el préstamo junto con el cliente (Cartera S2), no sólo lo consulta.
     Permission.CREDIT_WRITE,

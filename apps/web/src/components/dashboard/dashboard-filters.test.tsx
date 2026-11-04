@@ -26,3 +26,26 @@ describe('DashboardFilters · acciones del tablero', () => {
     expect(container.querySelector('.ml-auto')).toBeNull();
   });
 });
+
+describe('DashboardFilters · selector de oficina (F13)', () => {
+  it('con una sola oficina (sin opciones) no se dibuja', () => {
+    render(<DashboardFilters collectors={[]} sources={[]} />);
+    expect(screen.queryByLabelText('Oficina')).not.toBeInTheDocument();
+  });
+
+  it('con varias se ofrece con la ruta completa', () => {
+    render(
+      <DashboardFilters
+        collectors={[]}
+        sources={[]}
+        offices={[
+          { id: 'c', name: 'Central' },
+          { id: 'mv', name: 'Central › Chuquisaca › Mesa Verde' },
+        ]}
+      />,
+    );
+    const select = screen.getByLabelText('Oficina');
+    expect(within(select).getByRole('option', { name: 'Central › Chuquisaca › Mesa Verde' })).toBeInTheDocument();
+    expect(within(select).getByRole('option', { name: 'Todas las oficinas' })).toBeInTheDocument();
+  });
+});

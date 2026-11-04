@@ -140,9 +140,9 @@ describe('Exportar Mora (collection:export)', () => {
  * `getAllAndOverride([handler, class])`, así que protege igual — pero un spec que mirara sólo el
  * método daría verde sobre un controlador completamente abierto.
  *
- * Verifica las dos mitades: que la gerencia entre y que el cobrador no. Un tablero con la cartera
+ * Verifica las dos mitades: que la gerencia entre y que el cobrador entre **sólo a lo suyo**. Un tablero con la cartera
  * entera del tenant, el ranking de sus compañeros y lo recaudado por cada uno **no es una pantalla
- * de campo**.
+ * de campo**: el cobrador no tiene alcance mayor que el propio, así que no lo ve.
  */
 describe('Puerta del dashboard', () => {
   const requeridos = (Reflect.getMetadata(ROLES_KEY, AnalyticsController) as string[] | undefined) ?? [];
@@ -151,8 +151,13 @@ describe('Puerta del dashboard', () => {
     assert.deepEqual(requeridos, ['report:read']);
   });
 
-  it('el cobrador NO entra al tablero de la gerencia', () => {
-    assert.ok(!(ROLE_PERMISSIONS[RoleType.COLLECTOR] as string[]).includes('report:read'));
+  it('el cobrador entra a SU tablero, pero acotado a lo suyo (alcance propio)', () => {
+    // Decisión 2026-11-04: Inicio del cobrador es un tablero propio y no un salto a Agenda. Lo que ve lo recorta la API por
+    // alcance: sin `data:scope:all` ni `data:scope:branch`, la analítica sólo cuenta SUS créditos. Si un día alguien le da un
+    // alcance mayor, deja de ser «su» tablero y pasa a ser el de la gerencia: por eso se verifica acá.
+    const permisos = ROLE_PERMISSIONS[RoleType.COLLECTOR] as string[];
+    assert.ok(permisos.includes('report:read'));
+    for (const mayor of ['data:scope:all', 'data:scope:branch', 'data:scope:subtree']) assert.ok(!permisos.includes(mayor), mayor);
   });
 
   for (const rol of [RoleType.MANAGER, RoleType.SUPERVISOR, RoleType.AUDITOR, RoleType.VIEWER]) {
@@ -270,8 +275,10 @@ describe('D8 · repartir, cubrir y castigar', () => {
     assert.ok(!perms(RoleType.COLLECTOR).includes(Permission.ASSIGNMENT_WRITE));
   });
 
-  it('alcance: gerente y administrador = todo; supervisor = su agencia (y NO todo); cobrador = lo suyo', () => {
-    for (const rol of [RoleType.MANAGER, RoleType.ACCOUNT_ADMIN]) assert.ok(perms(rol).includes(Permission.DATA_SCOPE_ALL), rol);
+  it('alcance: administrador = todo; gerente = su subárbol (F13, y NO todo); supervisor = su agencia (y NO todo); cobrador = lo suyo', () => {
+    assert.ok(perms(RoleType.ACCOUNT_ADMIN).includes(Permission.DATA_SCOPE_ALL));
+    assert.ok(perms(RoleType.MANAGER).includes(Permission.DATA_SCOPE_SUBTREE));
+    assert.ok(!perms(RoleType.MANAGER).includes(Permission.DATA_SCOPE_ALL), 'el gerente (regional) ya no ve toda la cuenta por capacidad: se asigna a la raíz');
     assert.ok(perms(RoleType.SUPERVISOR).includes(Permission.DATA_SCOPE_BRANCH));
     assert.ok(!perms(RoleType.SUPERVISOR).includes(Permission.DATA_SCOPE_ALL));
     assert.ok(!perms(RoleType.COLLECTOR).includes(Permission.DATA_SCOPE_ALL) && !perms(RoleType.COLLECTOR).includes(Permission.DATA_SCOPE_BRANCH));
@@ -280,7 +287,9 @@ describe('D8 · repartir, cubrir y castigar', () => {
   it('castigar: credit:write en la puerta y alcance total en el service → sólo gerente y administrador', () => {
     assert.deepEqual(puerta(CreditsController, 'writeOff'), [Permission.CREDIT_WRITE]);
     assert.deepEqual(puerta(CreditsController, 'unWriteOff'), [Permission.CREDIT_WRITE]);
-    const pueden = Object.values(RoleType).filter((r) => perms(r).includes(Permission.CREDIT_WRITE) && perms(r).includes(Permission.DATA_SCOPE_ALL));
+    const pueden = Object.values(RoleType).filter(
+      (r) => perms(r).includes(Permission.CREDIT_WRITE) && (perms(r).includes(Permission.DATA_SCOPE_ALL) || perms(r).includes(Permission.DATA_SCOPE_SUBTREE)),
+    );
     assert.deepEqual(
       [...pueden].sort(),
       [RoleType.ACCOUNT_ADMIN, RoleType.MANAGER, RoleType.SUPER_ADMIN].sort(),

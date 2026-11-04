@@ -1,7 +1,7 @@
 # F13 · Arquitectura objetivo
 
-> **Estado: NO INICIADO.** Estos documentos **no se llenan** hasta que G1 sea PASS y la usuaria autorice G2.
-> Hoy solo existe la estructura y la pregunta que cada uno debe responder. **No contienen decisiones.**
+> **Estado: BORRADOR G2 (2026-11-02).** G1 confirmado por la usuaria. Los 9 documentos están escritos; G2 sigue abierto hasta aprobar ADR-0002 y ADR-0004 y revisar la arquitectura.
+> ADR-0003 está APROBADA; lo que depende de ADR-0002/0004 está marcado como PROPUESTA en cada documento.
 
 ## Reglas
 1. Cada decisión de diseño referencia un ADR **APROBADO** (`../decisions/DECISIONS.md`). Una propuesta no basta.

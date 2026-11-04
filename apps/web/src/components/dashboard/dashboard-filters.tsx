@@ -19,13 +19,14 @@ interface Option {
  *
  * 🔴 **Un filtro que no discrimina nada no se dibuja.** Con un solo cobrador —o con ninguno— el
  * selector sobra: ocupa lugar, sugiere que hay algo que elegir y siempre devuelve lo mismo. Lo
- * mismo con las sucursales, que hoy son cero.
+ * mismo con las oficinas (F13): con una sola, el selector de oficina no se dibuja.
  *
  * Todo viaja en la URL: el tablero se comparte por link y recargar no pierde nada.
  */
 export function DashboardFilters({
   collectors,
   sources,
+  offices = [],
   actions,
   today,
 }: {
@@ -39,6 +40,8 @@ export function DashboardFilters({
   collectors: Member[];
   /** Las fuentes que tiene la cartera (D7). Con una sola, el selector no discrimina nada y no se dibuja. */
   sources: CreditSource[];
+  /** Las oficinas de su alcance, en orden de árbol y con la ruta completa. Vacío = una sola oficina: no hay selector. */
+  offices?: { id: string; name: string }[];
 }) {
   const t = useTranslations('panel.dashboard');
   const router = useRouter();
@@ -70,7 +73,8 @@ export function DashboardFilters({
     params.get('collectorId') ||
     params.get('priority') ||
     params.get('from') ||
-    params.get('source');
+    params.get('source') ||
+    params.get('branchId');
 
   return (
     <div className="mb-5 flex flex-wrap items-end gap-3 rounded-2xl border border-k-border bg-white px-4 py-3">
@@ -111,6 +115,20 @@ export function DashboardFilters({
           allLabel={t('filters.all')}
           countLabel={(count) => t('filters.selected', { count })}
         />
+      )}
+
+      {/* F13: el alcance por oficina (incluye lo que cuelga de la elegida). Se sigue mostrando si ya hay una elegida en la URL. */}
+      {(offices.length > 0 || params.get('branchId')) && (
+        <Field label={t('filters.office')}>
+          <select value={params.get('branchId') ?? ''} onChange={(e) => set({ branchId: e.target.value })} className={SELECT}>
+            <option value="">{t('filters.allOffices')}</option>
+            {offices.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        </Field>
       )}
 
       {/* D7: con la fuente elegida, los seis widgets miran sólo esa. Se sigue mostrando si ya hay una

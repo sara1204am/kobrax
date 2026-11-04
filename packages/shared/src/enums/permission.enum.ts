@@ -62,6 +62,17 @@ export enum Permission {
   AUDIT_READ = 'audit:read',
 
   /**
+   * F13 · R12: ver el árbol de oficinas, su detalle y sus miembros. Lo traen los roles que hoy ya tienen `user:read`
+   * (la pestaña de Agencias se veía con ese permiso): nadie pierde ni gana vista al migrar.
+   */
+  OFFICE_READ = 'office:read',
+  /**
+   * F13 · R12: crear, renombrar, mover y desactivar oficinas, editar sus tipos y asignar personas. Lo trae quien hoy
+   * tiene `account:write` (el administrador de la cuenta). La delegación a otros roles es de F14.
+   */
+  OFFICE_WRITE = 'office:write',
+
+  /**
    * Asignar un crédito a alguien: permanente o temporal (cobertura).
    *
    * Es lo que impide que un cobrador se otorgue acceso a sí mismo — no lo hace un constraint de la
@@ -91,4 +102,12 @@ export enum Permission {
    * Hoy ninguna policy de RLS lo lee: lo aplica `moraAccessConditions` (Mora y Agenda).
    */
   DATA_SCOPE_BRANCH = 'data:scope:branch',
+
+  /**
+   * F13 · R13: ve **todo el subárbol** de las oficinas a las que está asignado —incluidos los créditos que todavía no
+   * tienen responsable—, a diferencia de `data:scope:branch` (supervisor), que exige responsable. Es el alcance del
+   * gerente regional (`MANAGER`). Sin asignación no ve nada ajeno: solo lo suyo (A-4). Si además tiene
+   * `DATA_SCOPE_ALL`, manda el total.
+   */
+  DATA_SCOPE_SUBTREE = 'data:scope:subtree',
 }

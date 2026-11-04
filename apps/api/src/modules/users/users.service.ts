@@ -1,4 +1,5 @@
-import { branchInactive, branchNotFound } from '../branches/branches.errors';
+import { branchAssignmentExists, branchInactive, branchNotFound } from '../branches/branches.errors';
+import { isUniqueViolation } from '../../common/unique-violation';
 import { Injectable, Logger } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { hash } from 'bcryptjs';
@@ -19,6 +20,7 @@ import { InviteMemberDto, UpdateMemberDto, UpdateProfileDto } from './dto/user.d
 import {
   cannotEditSelf,
   lastAdmin,
+  managerNeedsOffice,
   memberNotFound,
   notPending,
   profileNotFound,
@@ -132,6 +134,27 @@ export class UsersService {
     return { changes, routesMoved, routesCancelled };
   }
 
+  /**
+   * Deja la asignación vigente de la persona en `branchId` (o ninguna con `null`). UNA sola vigente por persona y cuenta (índice
+   * temporal): se revoca la anterior y se crea la nueva en la misma transacción. Quien ya estaba ahí no se toca. El espejo
+   * `user_accounts.branch_id` lo escribe quien llama (mismo `UPDATE` que el rol y el estado) para que queden siempre iguales.
+   */
+  private async syncAssignment(tx: PrismaClient, userId: string, branchId: string | null): Promise<void> {
+    const accountId = this.tenant.accountId;
+    const current = await tx.userBranchAssignment.findMany({ where: { accountId, userId, revokedAt: null }, select: { id: true, branchId: true } });
+    const stale = current.filter((a) => a.branchId !== branchId);
+    if (stale.length > 0) await tx.userBranchAssignment.updateMany({ where: { id: { in: stale.map((a) => a.id) } }, data: { revokedAt: new Date() } });
+    if (branchId && !current.some((a) => a.branchId === branchId)) {
+      try {
+        await tx.userBranchAssignment.create({ data: { accountId, userId, branchId, isPrimary: true, createdBy: this.tenant.userId ?? null } });
+      } catch (e) {
+        // El índice único parcial (una vigente por persona y cuenta) ganó una carrera: 409 claro, no 500.
+        if (isUniqueViolation(e)) throw branchAssignmentExists(userId, branchId);
+        throw e;
+      }
+    }
+  }
+
   async updateMember(userId: string, dto: UpdateMemberDto) {
     if (userId === this.selfId) throw cannotEditSelf();
 
@@ -190,6 +213,17 @@ export class UsersService {
         if (!branch.active) throw branchInactive();
       }
 
+      // Un gerente regional sin oficina no tendría alcance: el rol resultante MANAGER exige una oficina (la que se manda o la vigente).
+      const resultingRoleId = dto.roleId ?? before.roleId;
+      if (dto.roleId !== undefined || dto.branchId !== undefined) {
+        const resulting = changesRole ? await tx.role.findUnique({ where: { id: resultingRoleId }, select: { name: true } }) : before.role;
+        const resultingBranch = dto.branchId !== undefined ? dto.branchId : before.branchId;
+        if (resulting?.name === RoleType.MANAGER && !resultingBranch) throw managerNeedsOffice();
+      }
+
+      // F13: la oficina de la persona vive en `user_branch_assignments` (fuente del alcance) y se espeja en `user_accounts.branch_id`.
+      if (dto.branchId !== undefined) await this.syncAssignment(tx, userId, dto.branchId);
+
       const updated = await tx.userAccount.update({
         where: { id: before.id },
         data: { roleId: dto.roleId, isActive: dto.isActive, branchId: dto.branchId },
@@ -234,6 +268,8 @@ export class UsersService {
     const role = await this.prisma.role.findUnique({ where: { id: dto.roleId } });
     if (!role || !isMobileRole(role.name)) throw roleNotAllowed();
 
+    if (role.name === RoleType.MANAGER && !dto.branchId) throw managerNeedsOffice();
+
     const code = newInvitationCode();
     // Hash real de un secreto que nadie conoce: el pendiente no puede entrar ni por
     // accidente. `login()` además corta antes por `status !== 'ACTIVE'`.
@@ -261,8 +297,14 @@ export class UsersService {
             profile: { create: { firstName: dto.firstName, lastName: dto.lastName } },
           },
         });
+        if (dto.branchId) {
+          const branch = await tx.branch.findFirst({ where: { id: dto.branchId, deletedAt: null }, select: { active: true } });
+          if (!branch) throw branchNotFound();
+          if (!branch.active) throw branchInactive();
+          await this.syncAssignment(tx, user.id, dto.branchId);
+        }
         const member = await tx.userAccount.create({
-          data: { userId: user.id, accountId, roleId: role.id, isDefault: true },
+          data: { userId: user.id, accountId, roleId: role.id, isDefault: true, branchId: dto.branchId ?? null },
           include: MEMBER_INCLUDE,
         });
         await tx.passwordResetToken.create({

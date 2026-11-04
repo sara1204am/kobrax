@@ -44,7 +44,7 @@ const PREVIEW_ROWS = 10;
  * Acá el dueño del estado es uno solo, y por eso el archivo se sube primero y sigue disponible
  * cuando se cambia la forma, se fija un ancla o se prueba la corrida.
  */
-export function ImportSetup({ screen }: { screen: ConfigScreen }) {
+export function ImportSetup({ screen, officeScope = true }: { screen: ConfigScreen; officeScope?: boolean }) {
   const t = useTranslations('panel.import');
   const locale = useLocale();
 
@@ -193,7 +193,7 @@ export function ImportSetup({ screen }: { screen: ConfigScreen }) {
               </Step>
 
               <Step n={2} title={t('setup.step2')} hint={t('setup.step2Hint')}>
-                <ScopeStep screen={screen} config={config} busy={busy} onSave={save} />
+                <ScopeStep screen={screen} config={config} busy={busy} onSave={save} officeScope={officeScope} />
               </Step>
 
               <Step

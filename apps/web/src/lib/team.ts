@@ -2,6 +2,7 @@ import { RoleType, isMobileRole, memberName, memberStatus, type Member } from '@
 import { matchesText } from './portfolio';
 import { DISPLAY_TIME_ZONE } from './format';
 import { PAGE_SIZES } from './table-prefs';
+import { branchIds, type OfficeRow } from './offices';
 
 /**
  * ¿El rótulo de este rol sale de i18n, o hay que mostrar el nombre crudo?
@@ -19,6 +20,8 @@ export interface TeamParams {
   q?: string;
   role?: string;
   status?: string;
+  /** F13: una oficina; incluye a las personas de lo que cuelga de ella. */
+  office?: string;
   sort?: string;
   dir?: string;
   page?: string;
@@ -38,7 +41,7 @@ const SORTS = ['name', 'role', 'status'] as const;
 const STATUS_RANK = { active: 0, pending: 1, inactive: 2 } as const;
 
 export function hasTeamFilters(params: TeamParams): boolean {
-  return Boolean(params.q?.trim() || params.role || params.status);
+  return Boolean(params.q?.trim() || params.role || params.status || params.office);
 }
 
 /**
@@ -55,12 +58,19 @@ export function hasTeamFilters(params: TeamParams): boolean {
 export function teamView(
   members: Member[],
   params: TeamParams,
+  /** Las oficinas de la cuenta: hacen falta para que filtrar por una regional incluya a su subárbol. */
+  offices: OfficeRow[] = [],
 ): { rows: Member[]; meta: { total: number; page: number; limit: number; pages: number } } {
   const q = params.q?.trim() ?? '';
   let found = members;
   if (q) found = found.filter((m) => matchesText(memberName(m), q) || matchesText(m.email, q));
   if (params.role) found = found.filter((m) => m.roleName === params.role);
   if (params.status) found = found.filter((m) => memberStatus(m) === params.status);
+  if (params.office) {
+    // La regional cubre lo que cuelga de ella (R4): se filtra por el subárbol, no por la oficina exacta.
+    const ids = new Set(branchIds(offices, params.office));
+    found = found.filter((m) => !!m.branchId && ids.has(m.branchId));
+  }
 
   if ((SORTS as readonly string[]).includes(params.sort ?? '')) {
     const factor = params.dir === 'desc' ? -1 : 1;

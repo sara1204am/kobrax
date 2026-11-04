@@ -35,6 +35,10 @@ describe('parseOverride (entrada de teclado del operador)', () => {
     assert.equal(parseOverride('null'), null);
   });
 
+  it('F13 · `branches` es una clave válida: el operador puede negociar un tope de oficinas propio', () => {
+    assert.deepEqual(parseOverride('{"branches":25}'), { branches: 25 });
+  });
+
   it('🔴 una clave con typo rebota: si effectiveLimits la ignorara en silencio, el operador creería que negoció 40 usuarios', () => {
     assert.throws(() => parseOverride('{"user":40}'), /clave desconocida/);
   });

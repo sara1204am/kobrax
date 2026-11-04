@@ -146,13 +146,18 @@ export function PortfolioTable({
       allLabel: t('filters.allManagers'),
       options: collectors.map((m) => ({ value: m.userId, label: memberName(m) })),
     },
-    {
-      keys: ['branchId'],
-      label: t('filters.branch'),
-      type: 'select',
-      allLabel: t('filters.allBranches'),
-      options: branches.map((b) => ({ value: b.id, label: b.name })),
-    },
+    // F13: el filtro de oficina sólo se dibuja si hay más de una (RULES C2). La API incluye lo que cuelga de la elegida.
+    ...(branches.length > 0
+      ? [
+          {
+            keys: ['branchId'],
+            label: t('filters.branch'),
+            type: 'select' as const,
+            allLabel: t('filters.allBranches'),
+            options: branches.map((b) => ({ value: b.id, label: b.name })),
+          },
+        ]
+      : []),
     { keys: ['dpdMin', 'dpdMax'], label: t('filters.arrearsRange'), type: 'numberRange' },
     {
       keys: ['estado'],

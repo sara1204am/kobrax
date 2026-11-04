@@ -108,6 +108,10 @@ const PERMISSIONS: PermRow[] = [
   ['data:scope:all', 'data', 'READ', 'ACCOUNT'],
   // F4/08 · D8: el alcance del supervisor (su agencia + lo suyo). Espejo de la migración 20261004010000.
   ['data:scope:branch', 'data', 'READ', 'BRANCH'],
+  // F13 · R12/R13: permisos de oficinas y el alcance por subárbol (gerente regional). Espejo de la migración 20261102010000.
+  ['office:read', 'office', 'READ', 'ACCOUNT'],
+  ['office:write', 'office', 'UPDATE', 'ACCOUNT'],
+  ['data:scope:subtree', 'data', 'READ', 'BRANCH'],
 ];
 
 /** Roles del sistema → nivel. Los permisos NO se listan acá: salen de `ROLE_PERMISSIONS`. */
@@ -1866,7 +1870,7 @@ async function main(): Promise<void> {
       });
     }
     // F4/08 · D8: el alcance de datos se SINCRONIZA (no sólo se agrega): un rol que ya no lo lleva lo pierde.
-    const staleScopes = ['data:scope:all', 'data:scope:branch'].filter((c) => !codes.includes(c));
+    const staleScopes = ['data:scope:all', 'data:scope:branch', 'data:scope:subtree'].filter((c) => !codes.includes(c));
     await prisma.rolePermission.deleteMany({ where: { roleId: role.id, permission: { code: { in: staleScopes } } } });
   }
   console.log(`  ✓ ${Object.keys(ROLES).length} roles`);
@@ -1898,11 +1902,40 @@ async function main(): Promise<void> {
   console.log(`  ✓ cuentas DEMO y DEMO2 · categorías de mora A/B/C · ${CATALOGS.length} catálogos por cuenta`);
 
   // 4) Agencias, usuarios y membresías (con la agencia de supervisores y cobradores: `user_accounts.branch_id`).
-  const ensureBranch = async (accountId: string, code: string, name: string, city: string) =>
-    (await prisma.branch.findFirst({ where: { accountId, code, deletedAt: null } })) ?? prisma.branch.create({ data: { accountId, code, name, city } });
-  const cen = await ensureBranch(demo.id, 'CEN', 'Agencia Central', 'La Paz');
-  const alt = await ensureBranch(demo.id, 'ALT', 'Agencia El Alto', 'El Alto');
-  const nor = await ensureBranch(demo2.id, 'NOR', 'Agencia Norte', 'La Paz');
+  // F13 · P1: toda cuenta tiene tipos de oficina y UNA raíz con su razón social (ADR-0004); las agencias cuelgan de ella.
+  const ensureOfficeBase = async (accountId: string, businessName: string) => {
+    const types: Record<string, string> = {};
+    for (const [i, [code, name]] of (
+      [['CENTRAL', 'Central'], ['REGIONAL', 'Regional'], ['AGENCIA', 'Agencia']] as const
+    ).entries()) {
+      const t = await prisma.branchType.upsert({
+        where: { accountId_code: { accountId, code } },
+        update: {},
+        create: { accountId, code, name, sortOrder: i },
+      });
+      types[code] = t.id;
+    }
+    const root =
+      (await prisma.branch.findFirst({ where: { accountId, isRoot: true, deletedAt: null } })) ??
+      (await (async () => {
+        const id = randomUUID();
+        return prisma.branch.create({ data: { id, accountId, name: businessName, typeId: types['CENTRAL']!, path: `/${id}/`, depth: 0, isRoot: true } });
+      })());
+    return { root, types };
+  };
+  const baseDemo = await ensureOfficeBase(demo.id, demo.businessName);
+  const baseDemo2 = await ensureOfficeBase(demo2.id, demo2.businessName);
+  const ensureBranch = async (base: typeof baseDemo, accountId: string, code: string, name: string, city: string) => {
+    const found = await prisma.branch.findFirst({ where: { accountId, code, deletedAt: null } });
+    if (found) return found;
+    const id = randomUUID();
+    return prisma.branch.create({
+      data: { id, accountId, code, name, city, parentId: base.root.id, typeId: base.types['AGENCIA']!, depth: 1, path: `${base.root.path}${id}/` },
+    });
+  };
+  const cen = await ensureBranch(baseDemo, demo.id, 'CEN', 'Agencia Central', 'La Paz');
+  const alt = await ensureBranch(baseDemo, demo.id, 'ALT', 'Agencia El Alto', 'El Alto');
+  const nor = await ensureBranch(baseDemo2, demo2.id, 'NOR', 'Agencia Norte', 'La Paz');
   const branchIds = { CEN: cen.id, ALT: alt.id };
 
   const passwordHash = await bcrypt.hash('Kobrax123!', 12);
@@ -1922,6 +1955,14 @@ async function main(): Promise<void> {
       update: { roleId, branchId: o.branchId ?? null },
       create: { userId, accountId, roleId, branchId: o.branchId, isOwner: !!o.isOwner, isDefault: !!o.isDefault },
     });
+    // F13 · P1: la asignación espeja `user_accounts.branch_id` (una vigente por persona y cuenta, decisión de la usuaria).
+    // F13 · R13: el MANAGER (gerente regional) se asigna a la RAÍZ de la cuenta: ve todo el subárbol = lo mismo que veía con `all`.
+    const target =
+      role === RoleType.MANAGER && !o.branchId ? (await prisma.branch.findFirst({ where: { accountId, isRoot: true, deletedAt: null } }))?.id : o.branchId;
+    await prisma.userBranchAssignment.updateMany({ where: { accountId, userId, revokedAt: null, ...(target ? { branchId: { not: target } } : {}) }, data: { revokedAt: new Date() } });
+    if (target && !(await prisma.userBranchAssignment.findFirst({ where: { accountId, userId, branchId: target, revokedAt: null } }))) {
+      await prisma.userBranchAssignment.create({ data: { accountId, userId, branchId: target } });
+    }
   };
   const users: Record<string, string> = {};
   const userBranch: Record<string, string> = {};
@@ -1943,6 +1984,96 @@ async function main(): Promise<void> {
   await member(users['norte']!, demo2.id, RoleType.COLLECTOR, { branchId: nor.id });
   console.log(`  ✓ ${TEAM.length + 1} usuarios · 2 agencias en DEMO (supervisores y cobradores con agencia) · pass: Kobrax123!`);
 
+  // F13 · P5 — el caso de referencia del banco en DEMO: Central › {La Paz, Cochabamba, Chuquisaca}, y Chuquisaca con 6 agencias
+  // (3 en Sucre y 3 en provincia). «Agencia Central» existe en La Paz y en Sucre a propósito: la ruta completa las distingue.
+  // Idempotente: se puede correr N veces. `CEN` y `ALT` (las agencias de siempre) pasan a colgar de La Paz.
+  {
+    const cur = await prisma.account.findUniqueOrThrow({ where: { id: demo.id }, select: { limitsOverride: true } });
+    await prisma.account.update({ where: { id: demo.id }, data: { limitsOverride: { ...((cur.limitsOverride as Record<string, number> | null) ?? {}), branches: 30, users: 60 } } });
+  }
+  const officeNode = async (code: string, name: string, city: string, parent: { id: string; path: string; depth: number }, typeCode: 'REGIONAL' | 'AGENCIA') => {
+    const found = await prisma.branch.findFirst({ where: { accountId: demo.id, code, deletedAt: null } });
+    const id = found?.id ?? randomUUID();
+    const data = { name, city, parentId: parent.id, typeId: baseDemo.types[typeCode]!, depth: parent.depth + 1, path: `${parent.path}${id}/` };
+    return found ? prisma.branch.update({ where: { id }, data }) : prisma.branch.create({ data: { id, accountId: demo.id, code, ...data } });
+  };
+  const lpz = await officeNode('LPZ', 'La Paz', 'La Paz', baseDemo.root, 'REGIONAL');
+  const cbba = await officeNode('CBBA', 'Cochabamba', 'Cochabamba', baseDemo.root, 'REGIONAL');
+  const chq = await officeNode('CHQ', 'Chuquisaca', 'Sucre', baseDemo.root, 'REGIONAL');
+  await officeNode('CEN', 'Agencia Central', 'La Paz', lpz, 'AGENCIA');
+  await officeNode('ALT', 'Agencia El Alto', 'El Alto', lpz, 'AGENCIA');
+  const cer = await officeNode('CER', 'Agencia Cercado', 'Cochabamba', cbba, 'AGENCIA');
+  const mv = await officeNode('MV', 'Agencia Mesa Verde', 'Sucre', chq, 'AGENCIA');
+  const sce = await officeNode('SCE', 'Agencia Central', 'Sucre', chq, 'AGENCIA');
+  const lyv = await officeNode('LYV', 'Agencia Luz y Verdad', 'Sucre', chq, 'AGENCIA');
+  const pad = await officeNode('PAD', 'Agencia Padilla', 'Padilla', chq, 'AGENCIA');
+  const mon = await officeNode('MON', 'Agencia Monteagudo', 'Monteagudo', chq, 'AGENCIA');
+  const cam = await officeNode('CAM', 'Agencia Camargo', 'Camargo', chq, 'AGENCIA');
+  const f13Team: { key: string; email: string; first: string; last: string; role: RoleType; branch: { id: string } }[] = [
+    { key: 'gerChq', email: 'gerente.chuquisaca@kobrax.demo', first: 'Gabriela', last: 'Chuquisaca', role: RoleType.MANAGER, branch: chq },
+    { key: 'gerLpz', email: 'gerente.lapaz@kobrax.demo', first: 'Gonzalo', last: 'La Paz', role: RoleType.MANAGER, branch: lpz },
+    { key: 'norm', email: 'normalizador@kobrax.demo', first: 'Nilda', last: 'Normalizadora', role: RoleType.SUPERVISOR, branch: chq },
+    { key: 'supMv', email: 'sup.mesaverde@kobrax.demo', first: 'Sergio', last: 'Mesa Verde', role: RoleType.SUPERVISOR, branch: mv },
+    { key: 'colMv', email: 'cob.mesaverde@kobrax.demo', first: 'Camila', last: 'Mesa Verde', role: RoleType.COLLECTOR, branch: mv },
+    { key: 'colPad', email: 'cob.padilla@kobrax.demo', first: 'Pedro', last: 'Padilla', role: RoleType.COLLECTOR, branch: pad },
+    // Todas las agencias con gente propia: cada crédito lo lleva alguien de SU agencia (salvo el de Sucre Central, que lleva la normalizadora regional).
+    { key: 'colCam', email: 'cob.camargo@kobrax.demo', first: 'Carmen', last: 'Camargo', role: RoleType.COLLECTOR, branch: cam },
+    { key: 'colMon', email: 'cob.monteagudo@kobrax.demo', first: 'Mario', last: 'Monteagudo', role: RoleType.COLLECTOR, branch: mon },
+    { key: 'colLyv', email: 'cob.luzyverdad@kobrax.demo', first: 'Lidia', last: 'Luz y Verdad', role: RoleType.COLLECTOR, branch: lyv },
+    { key: 'colCer', email: 'cob.cercado@kobrax.demo', first: 'Cecilia', last: 'Cercado', role: RoleType.COLLECTOR, branch: cer },
+  ];
+  for (const t of f13Team) {
+    users[t.key] = await ensureUser(t.email, t.first, t.last);
+    await member(users[t.key]!, demo.id, t.role, { branchId: t.branch.id });
+  }
+  await prisma.branch.update({ where: { id: chq.id }, data: { managerUserId: users['gerChq'] } });
+  await prisma.branch.update({ where: { id: lpz.id }, data: { managerUserId: users['gerLpz'] } });
+  await prisma.branch.update({ where: { id: mv.id }, data: { managerUserId: users['supMv'] } });
+  console.log('  ✓ árbol de oficinas de DEMO: Central › La Paz · Cochabamba · Chuquisaca (6 agencias) + usuarios por nivel y por agencia');
+
+  // Una cartera chica por agencia de Chuquisaca para ver los alcances en Cartera, Mora, Clientes y Pagos.
+  // La columna `assigned_manager_id` y la asignación PRINCIPAL vigente dicen lo mismo (lo comprueba `db:audit:assignments` y la
+  // suite de integración): quien se la lleva a mano la crea con su fila, igual que lo hace la aplicación.
+  const ensurePrincipal = async (creditId: string, userId: string) => {
+    const live = { creditId, kind: 'PRINCIPAL' as const, revokedAt: null, expiresAt: null };
+    const current = await prisma.creditAssignment.findFirst({ where: live, select: { id: true, userId: true } });
+    if (current?.userId === userId) return;
+    if (current) await prisma.creditAssignment.update({ where: { id: current.id }, data: { revokedAt: new Date() } });
+    await prisma.creditAssignment.create({ data: { accountId: demo.id, creditId, userId, kind: 'PRINCIPAL' } });
+  };
+
+  const seedOfficeCredits = async () => {
+    const plan: { code: string; name: string; office: { id: string }; responsible: string; dpd: number; amount: number }[] = [
+      { code: 'CRD-F13-MV1', name: 'Mesa Verde Uno', office: mv, responsible: 'colMv', dpd: 12, amount: 1800 },
+      { code: 'CRD-F13-MV2', name: 'Mesa Verde Dos', office: mv, responsible: 'supMv', dpd: 40, amount: 2600 },
+      { code: 'CRD-F13-PAD1', name: 'Padilla Uno', office: pad, responsible: 'colPad', dpd: 8, amount: 900 },
+      { code: 'CRD-F13-SCE1', name: 'Sucre Central Uno', office: sce, responsible: 'norm', dpd: 25, amount: 3100 },
+      { code: 'CRD-F13-LYV1', name: 'Luz y Verdad Uno', office: lyv, responsible: 'colLyv', dpd: 55, amount: 4200 },
+      { code: 'CRD-F13-MON1', name: 'Monteagudo Uno', office: mon, responsible: 'colMon', dpd: 18, amount: 1500 },
+      { code: 'CRD-F13-CAM1', name: 'Camargo Uno', office: cam, responsible: 'colCam', dpd: 70, amount: 2200 },
+      { code: 'CRD-F13-CER1', name: 'Cercado Uno', office: cer, responsible: 'colCer', dpd: 33, amount: 1250 },
+    ];
+    for (const c of plan) {
+      const exists = await prisma.credit.findFirst({ where: { accountId: demo.id, code: c.code }, select: { id: true } });
+      if (exists) {
+        // Re-sembrar corrige el responsable y la oficina de lo que ya estaba: la base queda igual que el plan.
+        await prisma.credit.update({ where: { id: exists.id }, data: { branchId: c.office.id, assignedManagerId: users[c.responsible]! } });
+        await ensurePrincipal(exists.id, users[c.responsible]!);
+        continue;
+      }
+      const client = await prisma.client.create({ data: { accountId: demo.id, clientType: 'PERSON', firstName: c.name, lastName: 'Deudor' } });
+      const created = await prisma.credit.create({
+        data: {
+          accountId: demo.id, clientId: client.id, branchId: c.office.id, code: c.code,
+          principalAmount: c.amount, outstandingBalance: c.amount, currency: 'BOB', daysPastDue: c.dpd,
+          assignedManagerId: users[c.responsible]!,
+        },
+      });
+      await ensurePrincipal(created.id, users[c.responsible]!);
+    }
+    console.log('  ✓ 8 créditos de ejemplo (Chuquisaca y Cochabamba), todos con responsable de su agencia');
+  };
+
   // 5) Dataset demo. Si ya está sembrado no se toca (las fechas son de cuando se sembró): `--refresh` lo renueva.
   const refresh = process.argv.includes('--refresh');
   if (refresh) {
@@ -1950,6 +2081,7 @@ async function main(): Promise<void> {
     console.log('  ⌫ dataset demo anterior borrado (--refresh)');
   } else if (await prisma.credit.findFirst({ where: { accountId: demo.id, code: 'CRD-DEMO-0001' }, select: { id: true } })) {
     console.log('  ↺ el dataset demo ya está sembrado; no se toca. Para renovar las fechas: `pnpm db:seed:refresh`.');
+    await seedOfficeCredits();
     console.log('✅ Seed completo.');
     return;
   }
@@ -1957,6 +2089,7 @@ async function main(): Promise<void> {
   await seedDemo(newCtx(demo.id, users, userBranch), branchIds);
   const users2 = { norte: users['norte']!, maria: users['maria']!, multi2: users['multi2']! };
   await seedDemo2(newCtx(demo2.id, users2, { norte: nor.id }));
+  await seedOfficeCredits();
 
   console.log('✅ Seed completo.');
 }

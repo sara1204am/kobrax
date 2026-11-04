@@ -14,6 +14,7 @@ import {
   type ImportViewer,
   type ImportRunItem,
   type ImportRunSummary,
+  officeLabel,
 } from '@kobrax/shared';
 import { UploadsService } from '../uploads/uploads.service';
 import { PrismaService } from '../../database/prisma.service';
@@ -21,6 +22,7 @@ import { TenantContextService } from '../../common/context/tenant-context.servic
 import { TenantClockService, civilDayStartInstant } from '../../common/context/tenant-clock.service';
 import type { ListImportRunsQueryDto } from './dto/import-runs.dto';
 import { AssignmentService, type AssignmentRequest } from '../assignments/assignment.service';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import { assertImportAgency } from './import-agency';
 import type { AssignmentChange, AssignmentReason } from '../assignments/assignment-rules';
 import { assigneeNotEligible, assignmentForbidden } from '../assignments/assignment.errors';
@@ -172,7 +174,57 @@ export class PortfolioImportService {
     private readonly uploads: UploadsService,
     private readonly clock: TenantClockService,
     private readonly assignment: AssignmentService,
+    private readonly office: OfficeScopeService,
   ) {}
+
+  /**
+   * La oficina de cada crédito nuevo (A-6 · B-A6), en este orden: la columna «Agencia» del archivo, resuelta por el CÓDIGO de la
+   * oficina (y validada contra el alcance de quien importa); el alcance `branch` de la corrida; la oficina del responsable; la
+   * de quien importa; la única hoja de la cuenta. Si nada la decide, 422 y la corrida entera se deshace: nunca un crédito sin oficina.
+   * Una etiqueta que no coincide con ningún código se ignora (es texto libre del banco), no inventa una oficina.
+   */
+  private async officesForCreates(
+    tx: PrismaClient,
+    creates: { row: { code: string }; b: NormalizedRecord }[],
+    assignees: Map<string, { userId: string }>,
+    scope: ImportConfig['scope'],
+  ): Promise<Map<string, string>> {
+    const actorScope = await this.office.assignScope(tx);
+    const labels = [...new Set(creates.map((c) => c.b.branchLabel?.trim().toUpperCase()).filter((l): l is string => !!l))];
+    const byCode = new Map<string, string>();
+    if (labels.length > 0) {
+      const rows = await tx.branch.findMany({ where: { accountId: this.tenant.accountId, deletedAt: null, code: { in: labels } }, select: { id: true, code: true } });
+      for (const r of rows) if (r.code) byCode.set(r.code.toUpperCase(), r.id);
+    }
+    const usable = new Map<string, string>();
+    const checked = async (id: string): Promise<string> => {
+      if (!usable.has(id)) usable.set(id, (await this.office.assertBranchUsable(tx, id, actorScope)).id);
+      return usable.get(id)!;
+    };
+    const derived = new Map<string, string>(); // por responsable ('' = sin)
+    const out = new Map<string, string>();
+    for (const { row, b } of creates) {
+      const label = b.branchLabel?.trim().toUpperCase();
+      if (label && byCode.has(label)) {
+        out.set(row.code, await checked(byCode.get(label)!));
+        continue;
+      }
+      if (scope.kind === 'branch' && scope.ref) {
+        out.set(row.code, await checked(scope.ref));
+        continue;
+      }
+      const responsibleId = assignees.get(row.code)?.userId ?? '';
+      if (!derived.has(responsibleId)) {
+        // La oficina del responsable; si no tiene, la de quien importa (un gerente que reparte a un cobrador sin oficina no debe tirar
+        // abajo toda la corrida); si tampoco, la única hoja de la cuenta; si no se puede decidir, 422 y la corrida se deshace.
+        const own = responsibleId ? await this.office.soleOfficeOf(tx, responsibleId) : null;
+        const byImporter = own ?? (this.tenant.userId ? await this.office.soleOfficeOf(tx, this.tenant.userId) : null);
+        derived.set(responsibleId, byImporter ?? (await this.office.resolveCreditBranch(tx, { responsibleId: null })));
+      }
+      out.set(row.code, derived.get(responsibleId)!);
+    }
+    return out;
+  }
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
@@ -306,8 +358,14 @@ export class PortfolioImportService {
 
       // Todas las operaciones externas de la cuenta (incl. borradas y de otros alcances): la identidad
       // es única en toda la cuenta, así que el match tiene que verlas a todas (ver `portfolio-plan`).
-      const inScope = (c: { branchId: string | null; assignedManagerId: string | null }): boolean =>
-        scope.kind === 'account' ? true : scope.kind === 'official' ? c.assignedManagerId === scope.ref : c.branchId === scope.ref;
+      // F13: una corrida de alcance `branch` cubre la cartera de esa oficina y de su SUBÁRBOL (con una agencia hoja, la misma de siempre).
+      const scopeBranchPath = scope.kind === 'branch' && scope.ref ? ((await tx.branch.findFirst({ where: { id: scope.ref }, select: { path: true } }))?.path ?? null) : null;
+      const inScope = (c: { branch: { path: string } | null; assignedManagerId: string | null }): boolean =>
+        scope.kind === 'account'
+          ? true
+          : scope.kind === 'official'
+            ? c.assignedManagerId === scope.ref
+            : scopeBranchPath !== null && c.branch !== null && c.branch.path.startsWith(scopeBranchPath);
       const existing = await tx.credit.findMany({
         where: { accountId, externalSource: FILE_SOURCE },
         select: {
@@ -316,7 +374,7 @@ export class PortfolioImportService {
           externalId: true,
           clientId: true,
           deletedAt: true,
-          branchId: true,
+          branch: { select: { path: true } },
           assignedManagerId: true,
           status: true,
           writtenOffAt: true,
@@ -541,6 +599,8 @@ export class PortfolioImportService {
       const statusMap = config.statusMap as Record<string, CreditStatus> | undefined;
 
       if (creates.length > 0) {
+        // A-6: la oficina de cada crédito NUEVO la decide el servidor (los existentes no se tocan: una re-importación es estable).
+        const officeOf = await this.officesForCreates(tx, creates, assignPlan.create, scope);
         const clientByGroup = new Map<string, string>();
         const clientsData: Prisma.ClientCreateManyInput[] = [];
         const creditsData: Prisma.CreditCreateManyInput[] = [];
@@ -573,7 +633,7 @@ export class PortfolioImportService {
           }
           const creditId = randomUUID();
           creditsData.push(
-            creditCreateData(accountId, clientId, b, scope, stamp, { ...rowCtx, id: creditId, assignedManagerId: assignPlan.create.get(row.code)!.userId }),
+            creditCreateData(accountId, clientId, b, scope, stamp, { ...rowCtx, id: creditId, assignedManagerId: assignPlan.create.get(row.code)!.userId, branchId: officeOf.get(row.code) }),
           );
           snapshots.push(snapshotData(accountId, creditId, row.code, stamp.runId, reportAsOf, b));
           transitions.push({ creditId, action: 'EXTERNAL_APPEARED', externalId: row.code, after: reported(b) });
@@ -1036,10 +1096,11 @@ export class PortfolioImportService {
           where: { isActive: true },
           include: { role: { select: { name: true } }, user: { include: { profile: true } } },
         }),
+        // F13: el árbol puede repetir nombres (la raíz «Central» y la agencia «Central» de Chuquisaca). Se trae TODO el árbol
+        // de la cuenta (incl. regionales, que no son destino de una corrida pero sí ancestros) para poder rotular con la ruta.
         tx.branch.findMany({
-          where: { accountId, active: true, deletedAt: null },
-          select: { id: true, name: true },
-          orderBy: { name: 'asc' },
+          where: { accountId, deletedAt: null },
+          select: { id: true, name: true, path: true, active: true },
         }),
       ]),
     );
@@ -1069,7 +1130,11 @@ export class PortfolioImportService {
           role: m.role.name,
         }))
         .sort((a, b) => a.name.localeCompare(b.name)),
-      branches,
+      // Rotulados con su ruta sin la raíz (`Chuquisaca › Central`): en una cuenta plana queda el nombre de la agencia, como antes.
+      branches: branches
+        .filter((b) => b.active)
+        .map((b) => ({ id: b.id, name: officeLabel(branches, b.id) || b.name }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
       viewer: { userId: this.tenant.userId ?? '', canAssign: this.tenant.can(Permission.ASSIGNMENT_WRITE), canConfigure },
     };
   }

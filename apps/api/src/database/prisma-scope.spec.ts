@@ -52,6 +52,17 @@ function contextOf(calls: Captured[]): unknown[] {
   return calls[0].values;
 }
 
+describe('PrismaService · F13 gerente regional', () => {
+  it('data:scope:subtree abre la cuenta para RLS (la API acota por oficina); sin ninguna capacidad sigue siendo own', async () => {
+    const { prisma, tc, calls } = harness();
+    await tc.run({ accountId: ACCOUNT, userId: USER, permissions: [Permission.DATA_SCOPE_SUBTREE] }, () => prisma.withTenant(ACCOUNT, async () => null));
+    assert.deepEqual(contextOf(calls), [ACCOUNT, USER, DataScope.ACCOUNT]);
+    const h2 = harness();
+    await h2.tc.run({ accountId: ACCOUNT, userId: USER, permissions: [Permission.DATA_SCOPE_BRANCH] }, () => h2.prisma.withTenant(ACCOUNT, async () => null));
+    assert.deepEqual(contextOf(h2.calls), [ACCOUNT, USER, DataScope.OWN]);
+  });
+});
+
 describe('PrismaService · contexto de seguridad (F1)', () => {
   it('liga los valores como PARÁMETROS, nunca interpolados en la sentencia', async () => {
     const { prisma, tc, calls } = harness();

@@ -11,7 +11,7 @@ import { rejectsWithCode } from '../auth/auth-test-utils';
 
 type Credit = Record<string, unknown> & { id: string };
 
-function make(opts: { permissions?: string[]; credit?: Credit | null } = {}) {
+function make(opts: { permissions?: string[]; credit?: Credit | null; visible?: boolean } = {}) {
   const credit: Credit | null = opts.credit === undefined ? { id: 'cr1', status: 'ACTIVE', daysPastDue: 240, metadata: {}, writtenOffAt: null, writtenOffBy: null, writtenOffReason: null } : opts.credit;
   const updates: Record<string, unknown>[] = [];
   const touched = { episodes: 0 };
@@ -26,6 +26,8 @@ function make(opts: { permissions?: string[]; credit?: Credit | null } = {}) {
         return { ...credit! };
       },
     },
+    // `visibleCredits` (alcance por oficina): por defecto el crédito está dentro del alcance.
+    $queryRaw: async () => (opts.visible === false ? [] : [{ id: 'cr1', client_id: 'cl1' }]),
     account: { findUnique: async () => ({ currencyCode: 'BOB', configuration: {}, settings: {} }) },
     // Cualquier toque a estas tablas rompe el spec: castigar no cierra la mora.
     creditArrearEpisode: new Proxy({}, { get: () => () => void touched.episodes++ }),
@@ -34,7 +36,7 @@ function make(opts: { permissions?: string[]; credit?: Credit | null } = {}) {
   const permissions = opts.permissions ?? [];
   const tenant = { accountId: 'acc-A', userId: 'gerente-1', can: (p: string) => permissions.includes(p) };
   const audit = { record: async (e: (typeof audited)[number]) => void audited.push(e), recordMany: async () => undefined };
-  const service = new CreditsService(prisma as never, tenant as never, audit as never, {} as never, {} as never, {} as never);
+  const service = new CreditsService(prisma as never, tenant as never, audit as never, {} as never, {} as never, {} as never, {} as never);
   return { service, credit, updates, audited, touched };
 }
 
@@ -98,6 +100,34 @@ describe('POST /credits/:id/write-off', () => {
     const lector = make({ permissions: [Permission.CREDIT_READ, Permission.DATA_SCOPE_ALL] });
     await rejectsWithCode(lector.service.writeOff('cr1'), 'WRITE_OFF_FORBIDDEN');
     assert.equal(supervisor.updates.length + cobrador.updates.length + lector.updates.length, 0);
+  });
+});
+
+describe('F13 · castigo del gerente regional (data:scope:subtree)', () => {
+  const REGIONAL = [Permission.CREDIT_WRITE, Permission.DATA_SCOPE_SUBTREE];
+
+  it('puede castigar un crédito de su subárbol', async () => {
+    const { service, credit } = make({ permissions: REGIONAL });
+    await service.writeOff('cr1', 'incobrable');
+    assert.ok(credit!.writtenOffAt instanceof Date);
+  });
+
+  it('🔴 un crédito fuera de su subárbol no existe para él: 404 y no escribe nada', async () => {
+    const { service, updates } = make({ permissions: REGIONAL, visible: false });
+    await rejectsWithCode(service.writeOff('cr1'), 'RESOURCE_NOT_FOUND');
+    await rejectsWithCode(service.unWriteOff('cr1'), 'RESOURCE_NOT_FOUND');
+    assert.equal(updates.length, 0);
+  });
+
+  it('el alcance total (ALL) no consulta la visibilidad: castiga igual que antes', async () => {
+    const { service, credit } = make({ permissions: MANAGER, visible: false });
+    await service.writeOff('cr1');
+    assert.ok(credit!.writtenOffAt instanceof Date);
+  });
+
+  it('sin permiso de escritura de créditos, subtree solo no alcanza', async () => {
+    const { service } = make({ permissions: [Permission.DATA_SCOPE_SUBTREE] });
+    await rejectsWithCode(service.writeOff('cr1'), 'WRITE_OFF_FORBIDDEN');
   });
 });
 

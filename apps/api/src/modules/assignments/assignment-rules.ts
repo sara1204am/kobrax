@@ -1,4 +1,7 @@
-import { RoleType } from '@kobrax/shared';
+import { RoleType, officeInScope } from '@kobrax/shared';
+import type { AssignScope } from '../../common/office-scope/office-scope';
+
+export type { AssignScope };
 
 /**
  * Por qué se asignó. Viaja en la auditoría, no en la base: `credit_assignments` guarda quién, a
@@ -23,8 +26,8 @@ export interface MemberForAssignment {
   userId: string;
   role: string;
   isActive: boolean;
-  /** `user_accounts.branch_id`. Sólo lo mira la regla de agencia. */
-  branchId?: string | null;
+  /** Rutas de las oficinas donde está asignado (F13). Sólo las mira la regla de agencia. */
+  officePaths?: string[];
 }
 
 /** Los roles que pueden tener créditos a su cargo (D8): el cobrador y el supervisor (que también cobra). */
@@ -47,28 +50,23 @@ export function notAssignable(userIds: string[], members: MemberForAssignment[],
 }
 
 /**
- * Hasta dónde reparte quien tiene `assignment:write` (D8):
- *  · `ALL`    — gerente y administrador (`data:scope:all`): cualquier crédito, a cualquier asignable.
- *  · `BRANCH` — supervisor: sólo créditos de SU agencia y sólo a gente de la misma agencia (él incluido).
- *    Sin agencia asignada no puede repartir nada (`null` no es igual a ninguna agencia): falla cerrado.
+ * Hasta dónde reparte quien tiene `assignment:write` (D8, F13):
+ *  · `ALL`     — gerente y administrador (`data:scope:all`), o gerente asignado a la raíz: cualquier crédito, a cualquier asignable.
+ *  · `OFFICES` — supervisor o gerente regional: sólo créditos cuya oficina cae en el SUBÁRBOL de alguna de sus asignaciones
+ *    y sólo a gente asignada dentro de ese subárbol (él incluido). Sin asignaciones no puede repartir nada: falla cerrado.
+ * (El tipo vive en `common/office-scope`: es el único lugar que decide el alcance.)
  */
-export interface AssignScope {
-  kind: 'ALL' | 'BRANCH';
-  /** La agencia de quien reparte. Sólo importa en `BRANCH`. */
-  branchId: string | null;
-}
 
-/** Los créditos y destinatarios que se salen de la agencia de quien reparte. Vacío = todo dentro (o sin límite). */
+/** Los créditos y destinatarios que se salen del alcance de quien reparte. Vacío = todo dentro (o sin límite). */
 export function agencyViolations(
   scope: AssignScope,
-  credits: { id: string; branchId: string | null }[],
-  assignees: { userId: string; branchId: string | null }[],
+  credits: { id: string; officePath: string | null }[],
+  assignees: { userId: string; officePaths: string[] }[],
 ): { creditIds: string[]; userIds: string[] } {
   if (scope.kind === 'ALL') return { creditIds: [], userIds: [] };
-  const inside = (branchId: string | null): boolean => scope.branchId !== null && branchId === scope.branchId;
   return {
-    creditIds: [...new Set(credits.filter((c) => !inside(c.branchId)).map((c) => c.id))],
-    userIds: [...new Set(assignees.filter((a) => !inside(a.branchId)).map((a) => a.userId))],
+    creditIds: [...new Set(credits.filter((c) => c.officePath === null || !officeInScope(c.officePath, scope.paths)).map((c) => c.id))],
+    userIds: [...new Set(assignees.filter((a) => !a.officePaths.some((p) => officeInScope(p, scope.paths))).map((a) => a.userId))],
   };
 }
 

@@ -11,6 +11,7 @@ import { SearchBox } from '@/components/search-box';
 import { usePermissions } from '@/components/permissions';
 import { date, time } from '@/lib/format';
 import { daysAgo, isKnownRole, memberActions } from '@/lib/team';
+import { officeLabelOf, officeOptions, type OfficeRow } from '@/lib/offices';
 import { useMemberDialogs } from './member-dialogs';
 import { Avatar, IconAction } from './team-ui';
 
@@ -23,6 +24,7 @@ export function MembersTable({
   roles,
   roleNames,
   meId,
+  offices = [],
   filtered,
   userId,
   action,
@@ -37,6 +39,8 @@ export function MembersTable({
   /** Los que de verdad hay en el equipo, para el filtro. Incluye los que no se pueden asignar. */
   roleNames: string[];
   meId: string;
+  /** F13: las oficinas de la cuenta, SOLO si hay más de una (con una sola no hay columna ni filtro). */
+  offices?: OfficeRow[];
   /** Hay una búsqueda o un filtro puesto: «no hay nadie» y «nadie coincide» no se arreglan igual. */
   filtered?: boolean;
   userId?: string;
@@ -104,6 +108,19 @@ export function MembersTable({
         />
       ),
     },
+    // F13: columna de oficina con la ruta completa. Con una sola oficina no existe (RULES C2).
+    ...(offices.length > 0
+      ? [
+          {
+            key: 'office',
+            header: t('columns.office'),
+            render: (m: Member) => {
+              const label = officeLabelOf(offices, m.branchId);
+              return label ? <span className="text-[13px] text-k-text">{label}</span> : <span className="text-k-muted">—</span>;
+            },
+          },
+        ]
+      : []),
     {
       key: 'status',
       header: t('columns.status'),
@@ -182,6 +199,17 @@ export function MembersTable({
       allLabel: t('filters.allRoles'),
       options: roleNames.map((name) => ({ value: name, label: isKnownRole(name) ? tRoles(name) : name })),
     },
+    ...(offices.length > 0
+      ? [
+          {
+            keys: ['office'],
+            label: t('columns.office'),
+            type: 'select' as const,
+            allLabel: t('filters.allOffices'),
+            options: officeOptions(offices).map((o) => ({ value: o.id, label: o.name })),
+          },
+        ]
+      : []),
     {
       keys: ['status'],
       label: t('columns.status'),

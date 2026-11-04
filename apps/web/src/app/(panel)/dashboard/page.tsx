@@ -19,6 +19,7 @@ import { DEFAULT_WIDGETS } from '@/lib/widget-registry';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { MfaReminder } from '@/components/mfa-reminder';
 import { DashboardFilters } from '@/components/dashboard/dashboard-filters';
+import { getOffices } from '@/lib/offices-server';
 import { DashboardGrid } from '@/components/dashboard/dashboard-grid';
 import { DashboardToolbar } from '@/components/dashboard/dashboard-toolbar';
 import { WidgetActions } from '@/components/dashboard/widget-actions';
@@ -56,7 +57,7 @@ export default async function DashboardPage({
   /*
    * Todo en paralelo, no encadenado: la pantalla tarda lo que el más lento y no la suma de los ocho.
    */
-  const [summary, aging, collectors, agenda, visits, trend, boards, me, team, today] = await Promise.all([
+  const [summary, aging, collectors, agenda, visits, trend, boards, me, team, today, offices] = await Promise.all([
     apiCall<AnalyticsSummary>(`/analytics/summary?${query}`, { method: 'GET', auth: true }),
     apiCall<AgingBucketRow[]>(`/analytics/portfolio-aging?${query}`, { method: 'GET', auth: true }),
     apiCall<CollectorPerformanceRow[]>(`/analytics/collector-performance?${query}`, { method: 'GET', auth: true }),
@@ -68,6 +69,8 @@ export default async function DashboardPage({
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
     // «Agenda de hoy» (widget `calendar`): sin `agenda:read` vuelve null y el widget lo dice.
     getAgendaSummary(),
+    // F13: las oficinas de su alcance para el selector; con una sola no hay selector.
+    getOffices(),
   ]);
 
   // Sin `report:read` no hay tablero, y decirlo es mejor que dibujar doce cajas vacías.
@@ -94,6 +97,18 @@ export default async function DashboardPage({
    */
   const widgets = current ? current.widgets : DEFAULT_WIDGETS;
 
+  /*
+   * El filtro de cobrador sólo ofrece a quien corresponde al alcance de esta persona: con alcance total, todos; con alcance de
+   * oficina (supervisor, gerente regional), los de SUS oficinas y lo que cuelga de ellas —`offices.rows` ya viene acotado por la
+   * API—; sin ninguno (cobrador), nadie más que ella. Antes un supervisor de Padilla veía a los cobradores de toda la cuenta.
+   */
+  const seesAll = permissions.includes(Permission.DATA_SCOPE_ALL);
+  const inScope = new Set(offices.rows.map((r) => r.id));
+  const myId = me.body.data?.userId;
+  const scopedTeam = (team.body.data ?? []).filter((m) =>
+    seesAll ? true : m.userId === myId || (!!m.branchId && inScope.has(m.branchId)),
+  );
+
   const bySource = summary.body.data?.bySource ?? [];
   const sources = bySource.map((s) => s.source);
   const external = bySource.filter((s) => s.source !== 'KOBRAX' && s.credits > 0);
@@ -106,7 +121,7 @@ export default async function DashboardPage({
     today: today ?? undefined,
     visits: visits.body.data ?? undefined,
     trend: trend.body.data ?? undefined,
-    members: team.body.data ?? [],
+    members: scopedTeam,
     currency: summary.body.data?.currency ?? 'BOB',
     // El mapa mira UN día —el último del período con paradas—, no el período: hay que decir cuál.
     day: visits.body.data?.[0]?.plannedDate ?? filters.dateTo ?? '',
@@ -130,8 +145,9 @@ export default async function DashboardPage({
       {/* Los filtros van ANTES de los números: primero se elige qué se mira. «Editar» y las acciones del tablero van adentro
           de la misma tarjeta, a la derecha: una fila aparte dejaba un hueco con un solo botón. */}
       <DashboardFilters
-        collectors={team.body.data ?? []}
+        collectors={scopedTeam}
         sources={sources}
+        offices={offices.options}
         today={companyDay}
         actions={<DashboardToolbar dashboards={dashboards} current={current} widgets={widgets} editable={editable} />}
       />

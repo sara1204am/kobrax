@@ -25,6 +25,8 @@ DECLARE
   operational text[] := ARRAY[
     -- Pilar 1
     'branches', 'user_accounts', 'user_sessions', 'audit_logs',
+    -- F13 · P1: tipos de oficina y asignaciones usuario↔oficina.
+    'branch_types', 'user_branch_assignments',
     -- Pilar 2
     'clients', 'client_contacts', 'client_locations', 'client_relations',
     'client_attachments', 'credits', 'credit_installments', 'arrears',

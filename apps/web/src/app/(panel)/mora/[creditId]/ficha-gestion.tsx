@@ -17,6 +17,7 @@ import {
   type RecoveryMetrics,
   CatalogType,
 } from '@kobrax/shared';
+import { canWriteOffCredit } from '@/lib/mora';
 import { apiCall } from '@/lib/bff';
 import { Badge, EmptyState, PageHeader, Section } from '@/components/panel-ui';
 import { SourceBadge } from '@/components/source-badge';
@@ -112,8 +113,8 @@ export async function FichaGestion({
   // Registrar una acción es de `collection:write`, sobre cualquier crédito que se vea (al día o en mora).
   const canWrite = permissions.includes(Permission.COLLECTION_WRITE);
   const canAssign = permissions.includes(Permission.ASSIGNMENT_WRITE);
-  // Castigar: `credit:write` y alcance total (gerente, administrador). La API lo exige igual.
-  const canWriteOff = permissions.includes(Permission.CREDIT_WRITE) && permissions.includes(Permission.DATA_SCOPE_ALL);
+  // Castigar: `credit:write` y alcance total o de subárbol (gerente regional, administrador). La API lo exige igual.
+  const canWriteOff = canWriteOffCredit(permissions);
   const collectors = (assignees?.status === 200 ? (assignees.body.data ?? []) : []).map((a) => ({ userId: a.userId, name: a.name }));
   const people = [...members.map((m) => ({ userId: m.userId, name: memberName(m) })), ...collectors];
   const principalId = item.responsibleId ?? item.assignments.find((a) => a.kind === 'PRINCIPAL')?.userId;

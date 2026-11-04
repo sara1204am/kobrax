@@ -7,7 +7,7 @@ import { TenantClockService } from '../context/tenant-clock.service';
 import { planLimitReached } from './plan.errors';
 
 /** Los topes que hoy se cuentan de verdad. Cada fase que agrega un contador agrega su clave acá. */
-export type CountedLimit = 'users' | 'credits' | 'clients';
+export type CountedLimit = 'users' | 'credits' | 'clients' | 'branches';
 
 /**
  * Los topes mensuales (L2). Tipo aparte a propósito: **nunca frenan** (R1 — la foto y la visita
@@ -80,6 +80,10 @@ export class PlanLimitsService {
         });
       case 'clients':
         return tx.client.count({ where: { deletedAt: null } });
+      case 'branches':
+        // F13 (ADR-0004): oficinas de la cuenta no borradas, **la raíz incluida** (FREE = 1 ⇒ sin agencias hasta subir de plan).
+        // Las dadas de baja (`deleted_at`) liberan lugar; las desactivadas todavía ocupan hasta que se borren.
+        return tx.branch.count({ where: { deletedAt: null } });
     }
   }
 
@@ -97,14 +101,15 @@ export class PlanLimitsService {
 
   /** Lo usado de cada tope contable, para la pantalla. Una consulta por tope, todas indexadas. */
   async usageAll(tx: PrismaClient): Promise<Record<CountedLimit | MonthlyCounter, number>> {
-    const [users, credits, clients, photosPerMonth, actionsPerMonth] = await Promise.all([
+    const [users, credits, clients, branches, photosPerMonth, actionsPerMonth] = await Promise.all([
       this.usage('users', tx),
       this.usage('credits', tx),
       this.usage('clients', tx),
+      this.usage('branches', tx),
       this.monthlyUsage('photosPerMonth', tx),
       this.monthlyUsage('actionsPerMonth', tx),
     ]);
-    return { users, credits, clients, photosPerMonth, actionsPerMonth };
+    return { users, credits, clients, branches, photosPerMonth, actionsPerMonth };
   }
 
   /**

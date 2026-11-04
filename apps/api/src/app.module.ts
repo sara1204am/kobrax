@@ -28,6 +28,7 @@ import { CryptoModule } from './common/crypto/crypto.module';
 import { BackupModule } from './common/backup/backup.module';
 import { PlanLifecycleModule } from './common/plan/plan-lifecycle.module';
 import { TenantContextModule } from './common/context/tenant-context.module';
+import { OfficeScopeModule } from './common/office-scope/office-scope.module';
 import { AuditModule } from './common/audit/audit.module';
 import { EventBusModule } from './common/events/event-bus.module';
 import { RateLimitGuard } from './common/guards/rate-limit.guard';
@@ -42,6 +43,7 @@ import { AppVersionGuard } from './common/guards/app-version.guard';
     // TenantContext antes que Audit: el interceptor de tenant debe ser el más externo
     // para que el contexto (AsyncLocalStorage) esté activo cuando el AuditInterceptor lo lee.
     TenantContextModule,
+    OfficeScopeModule,
     AuditModule,
     EventBusModule,
     HealthModule,

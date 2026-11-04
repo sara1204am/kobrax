@@ -1,15 +1,23 @@
 import { Injectable } from '@nestjs/common';
 import { gzipSync } from 'node:zlib';
+import { Prisma } from '@prisma/client';
 import type { PrismaClient } from '@kobrax/database';
+import { ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
+import { moraScopeOf, seesWholeAccount, visibleClientIdsSql, visibleCreditIdsSql } from '../mora/mora-query';
 import { staleAfterDaysOf } from '@kobrax/shared';
 import { safeDecrypt, clientDisplayName } from '../clients/clients.serializer';
 import { moraCsvRow, MORA_CSV_COLUMNS } from '../mora/mora-export';
 import { serializeMoraCredit, type MoraCreditRow } from '../mora/mora.serializer';
 import { toCsv } from './csv';
+
+/** El backup es de toda la cuenta: quien no ve toda la cuenta no lo puede bajar. */
+const exportBackupForbidden = () =>
+  new ForbiddenException({ code: 'EXPORT_BACKUP_FORBIDDEN', message: 'El backup completo es de toda la cuenta y tu alcance es una parte de ella' });
 
 export interface ExportFile {
   filename: string;
@@ -30,24 +38,39 @@ export class ExportsService {
     private readonly tenant: TenantContextService,
     private readonly crypto: CryptoService,
     private readonly audit: AuditService,
+    private readonly officeScope: OfficeScopeService,
   ) {}
+
+  /**
+   * D-7 (F13): mismo alcance que Mora. `null` = toda la cuenta (kind ALL: sin filtro, mismo código de siempre). Decisión: el
+   * `where` de Prisma no admite SQL crudo, así que los ids visibles se resuelven con `$queryRaw` y se filtra con `IN (...)`.
+   */
+  private async visibleIds(tx: PrismaClient, what: 'credits' | 'clients'): Promise<string[] | null> {
+    const scope = moraScopeOf(this.tenant);
+    if (seesWholeAccount(scope)) return null;
+    const q = what === 'credits'
+      ? Prisma.sql`SELECT v.id AS id FROM (${visibleCreditIdsSql(scope)}) v`
+      : Prisma.sql`SELECT v.client_id AS id FROM (${visibleClientIdsSql(scope)}) v`;
+    return (await tx.$queryRaw<{ id: string }[]>(q)).map((r) => r.id);
+  }
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
   }
 
   private async logExport(kind: string): Promise<void> {
-    await this.audit.record({ entity: `export:${kind}`, entityId: this.tenant.accountId, action: 'EXPORT' });
+    await this.audit.record({ entity: `export:${kind}`, entityId: this.tenant.accountId, action: 'EXPORT', after: { scope: moraScopeOf(this.tenant).kind } });
   }
 
   async clientsCsv(): Promise<ExportFile> {
-    const clients = await this.tx((tx) =>
-      tx.client.findMany({
-        where: { accountId: this.tenant.accountId, deletedAt: null },
+    const clients = await this.tx(async (tx) => {
+      const ids = await this.visibleIds(tx, 'clients');
+      return tx.client.findMany({
+        where: { accountId: this.tenant.accountId, deletedAt: null, ...(ids ? { id: { in: ids } } : {}) },
         include: { contacts: { where: { relationId: null, isPrimary: true }, take: 1 } },
         orderBy: { createdAt: 'asc' },
-      }),
-    );
+      });
+    });
     await this.logExport('clients');
 
     const rows = clients.map((c) => ({
@@ -80,13 +103,14 @@ export class ExportsService {
   }
 
   async locationsCsv(): Promise<ExportFile> {
-    const locations = await this.tx((tx) =>
-      tx.clientLocation.findMany({
-        where: { accountId: this.tenant.accountId },
+    const locations = await this.tx(async (tx) => {
+      const ids = await this.visibleIds(tx, 'clients');
+      return tx.clientLocation.findMany({
+        where: { accountId: this.tenant.accountId, ...(ids ? { clientId: { in: ids } } : {}) },
         include: { client: true },
         orderBy: { createdAt: 'asc' },
-      }),
-    );
+      });
+    });
     await this.logExport('locations');
 
     const rows = locations.map((l) => ({
@@ -108,8 +132,7 @@ export class ExportsService {
    * exportación de la Central de Mora (Responsable, Categoría, Situación, Castigado, Prioridad, Días de mora,
    * Monto vencido, Última gestión…).
    *
-   * Es la exportación **de la cuenta entera** (permiso `report:export`), sin el alcance por agencia que sí tiene la
-   * de la Central de Mora. Sale sin «Promesa vigente»: calcularla pide otra consulta que este archivo no necesita.
+   * D-7 (F13): acotada por oficina con la misma regla de la Central de Mora (quien ve toda la cuenta, la cuenta entera). Sale sin «Promesa vigente»: calcularla pide otra consulta que este archivo no necesita.
    */
   async moraCsv(): Promise<ExportFile> {
     const accountId = this.tenant.accountId;
@@ -121,11 +144,12 @@ export class ExportsService {
       const cfg = (account?.configuration ?? {}) as { importConfig?: { staleAfterDays?: unknown } };
       const staleAfterDays = staleAfterDaysOf(cfg.importConfig?.staleAfterDays);
       const now = new Date();
+      const visible = await this.visibleIds(tx, 'credits');
 
       const items: ReturnType<typeof serializeMoraCredit>[] = [];
       for (let cursor: string | undefined; ; ) {
         const batch = await tx.credit.findMany({
-          where: { accountId, deletedAt: null, arrearEpisodes: { some: { endedAt: null } } },
+          where: { accountId, deletedAt: null, arrearEpisodes: { some: { endedAt: null } }, ...(visible ? { id: { in: visible } } : {}) },
           select: {
             id: true,
             code: true,
@@ -182,8 +206,9 @@ export class ExportsService {
   /** `AgendaItem.clientId` es ref suave (sin relación de Prisma) — se resuelve con una segunda consulta. */
   async agendaCsv(): Promise<ExportFile> {
     const { items, clientById } = await this.tx(async (tx) => {
+      const visible = await this.visibleIds(tx, 'credits');
       const items = await tx.agendaItem.findMany({
-        where: { accountId: this.tenant.accountId, deletedAt: null },
+        where: { accountId: this.tenant.accountId, deletedAt: null, ...(visible ? { creditId: { in: visible } } : {}) },
         orderBy: { scheduledDate: 'asc' },
       });
       const clients = await tx.client.findMany({ where: { id: { in: [...new Set(items.map((a) => a.clientId))] } } });
@@ -219,6 +244,8 @@ export class ExportsService {
   async fullBackup(): Promise<ExportFile> {
     const accountId = this.tenant.accountId;
     const data = await this.tx(async (tx) => {
+      // D-7: es de TODA la cuenta. Sólo kind ALL o un SUBTREE asignado a la raíz (que `assignScope` ya resuelve como ALL).
+      if ((await this.officeScope.assignScope(tx)).kind !== 'ALL') throw exportBackupForbidden();
       const [clients, credits, activities, arrearEpisodes, payments, agendaItems] = await Promise.all([
         tx.client.findMany({
           where: { accountId, deletedAt: null },

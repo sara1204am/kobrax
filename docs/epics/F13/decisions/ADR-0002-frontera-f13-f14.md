@@ -20,7 +20,8 @@ La usuaria indicó (2026-10-29) que la épica siguiente a F13 es la de **roles**
 - Documentación de producto dice que `MANAGER`, `AUDITOR` y `VIEWER` existen pero no se asignan por API (`docs/producto/README.md`) — INFERIDO, a contrastar con código.
 
 ## Decisión
-— (pendiente de la usuaria; se decide en G2, tras Discovery).
+**REVISADA (Fable, 2026-11-02):** (1) `role_id` de la asignación queda **siempre NULL** en F13, con FK a `roles`; no es espejo de `user_accounts.role_id` (F14 no debe reconciliar datos). (2) Corrección: la vista de oficinas (`target/04`, R7) es de **F13 (P3)**, no de F14; F14 recibe solo la adaptación por rol. (3) F13 deja sí o sí: `OfficeScopeService` que recibe capacidades por interfaz y no lee `role.name`; asignaciones con `revoked_at`, `is_primary` y auditoría; `office:*` en enum, `ROLE_PERMISSIONS` y `permission-gates.spec.ts`; ningún consumidor nuevo con `LIMIT 1`/`findFirst` sobre asignaciones.
+**PROPUESTA (sin aprobar): alternativa A.** F13 = árbol de oficinas + asignaciones + servicio único de alcance + permisos `office:*` + tope por plan. F14 = catálogo de roles, delegación y administración de roles por oficina, y la adaptación de web/móvil por rol. F13 guarda `role_id` en la asignación pero **no lo consume** (R8; el rol efectivo sigue siendo `user_accounts.role_id`, JWT sin tocar, A-5). Para validar F13 bastan los 7 roles actuales.
 
 ## Consecuencias
 Define qué documentos de `target/` son de F13 (01, 03, 06, 07, 08, 09) y cuáles se entregan a F14 (02, 04, 05).

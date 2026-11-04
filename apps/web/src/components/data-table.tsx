@@ -64,6 +64,7 @@ export function DataTable<T>({
   error,
   filters,
   filtered,
+  filtersOpen = true,
   search,
   entityLabel,
   actions,
@@ -87,6 +88,11 @@ export function DataTable<T>({
   filters?: FilterDef[];
   /** ¿Hay algún filtro puesto? Lo sabe la pantalla, que es la que conoce sus claves. */
   filtered?: boolean;
+  /**
+   * ¿El panel de filtros arranca abierto? Por defecto sí (toda tabla con filtros). Con `false` arranca cerrado, pero **un filtro
+   * puesto lo abre igual**: nunca queda uno activo escondido. Es lo que usa Mora, igual que Rutas.
+   */
+  filtersOpen?: boolean;
   /** La barra de búsqueda ancha de arriba (`SearchBox`). */
   search?: ReactNode;
   /** El nombre de lo que se lista, en plural: «clientes», «casos». Va en el pie y en la selección. */
@@ -158,7 +164,7 @@ export function DataTable<T>({
   );
   // El panel arranca abierto en toda tabla que tenga filtros: se puede cerrar con el botón, pero
   // nadie tiene que buscarlo para filtrar (y un filtro activo nunca queda escondido).
-  const [panelOpen, setPanelOpen] = useState(Boolean(filters?.length) || Boolean(filtered));
+  const [panelOpen, setPanelOpen] = useState((filtersOpen && Boolean(filters?.length)) || Boolean(filtered));
   const restored = useRef(false);
 
   const filterKeys = useMemo(() => (filters ?? []).flatMap((f) => f.keys), [filters]);

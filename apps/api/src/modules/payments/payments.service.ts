@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
-import type { Payment, PaymentChannel, PaymentMethod, Prisma, PrismaClient } from '@prisma/client';
-import { CreditStatus } from '@prisma/client';
+import type { Payment, PaymentChannel, PaymentMethod, PrismaClient } from '@prisma/client';
+import { CreditStatus, Prisma } from '@prisma/client';
 import { isExternalOrigin, readCreditMetadata, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
@@ -10,6 +10,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { applyPayment, creditPatchAfterPayment } from './payment-apply';
 import { loadNames } from '../mora/mora-names';
+import { moraScopeOf, seesWholeAccount, visibleCreditIdsSql } from '../mora/mora-query';
 import { serializePayment, serializePaymentRequest } from './payments.serializer';
 import { ConfirmPaymentRequestDto, CreatePaymentDto, CreatePaymentRequestDto, ListPaymentRequestsQueryDto, ListPaymentsQueryDto } from './dto/payment.dto';
 import { creditNotActive, paymentDuplicate, paymentInvalid, requestNotPending, resourceNotFound } from './payments.errors';
@@ -58,6 +59,18 @@ export class PaymentsService {
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
+  }
+
+  /**
+   * D-7 (F13): ids de los créditos que quien consulta puede ver, con LA regla de Mora; `null` = toda la cuenta (kind ALL, sin
+   * filtro alguno). Decisión: Prisma `where` no admite SQL crudo, así que se resuelven los ids con `$queryRaw` (una consulta
+   * acotada por oficina) y se filtra con `creditId IN (...)`; el alcance sale del crédito, nunca de `payments.branch_id` (histórico).
+   */
+  private async visibleCreditIds(tx: PrismaClient): Promise<string[] | null> {
+    const scope = moraScopeOf(this.tenant);
+    if (seesWholeAccount(scope)) return null;
+    const rows = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT v.id FROM (${visibleCreditIdsSql(scope)}) v`);
+    return rows.map((r) => r.id);
   }
 
   // ── Registro de pago (ledger inmutable) ──────────────────────────────────────
@@ -258,14 +271,16 @@ export class PaymentsService {
     const windows = query.summary ? await this.summaryWindows() : undefined;
 
     const [rows, total, names, sum, extra] = await this.tx(async (tx) => {
+      const ids = await this.visibleCreditIds(tx);
+      const scoped = (w: Prisma.PaymentWhereInput): Prisma.PaymentWhereInput => (ids ? { ...w, AND: [{ creditId: { in: ids } }] } : w);
       const [found, count, agg, today, month] = await Promise.all([
         // La fuente del crédito viaja con la fila (D7): el ledger dice qué cobro fue sobre un PSF.
-        tx.payment.findMany({ where, orderBy, skip, take: limit, include: { credit: { select: { externalSource: true } } } }),
-        tx.payment.count({ where }),
+        tx.payment.findMany({ where: scoped(where), orderBy, skip, take: limit, include: { credit: { select: { externalSource: true } } } }),
+        tx.payment.count({ where: scoped(where) }),
         // Lo cobrado en TODO el filtro, no en la página: la lista no puede sumar lo que no trajo.
-        tx.payment.aggregate({ where, _sum: { amount: true } }),
-        windows ? tx.payment.aggregate({ where: { ...base, paymentDate: windows.today }, _sum: { amount: true } }) : undefined,
-        windows ? tx.payment.aggregate({ where: { ...base, paymentDate: windows.month }, _sum: { amount: true } }) : undefined,
+        tx.payment.aggregate({ where: scoped(where), _sum: { amount: true } }),
+        windows ? tx.payment.aggregate({ where: scoped({ ...base, paymentDate: windows.today }), _sum: { amount: true } }) : undefined,
+        windows ? tx.payment.aggregate({ where: scoped({ ...base, paymentDate: windows.month }), _sum: { amount: true } }) : undefined,
       ]);
       // Quién registró cada pago: UNA consulta para la página, sin exigir `user:read`.
       return [found, count, await loadNames(tx, this.tenant.accountId, found.map((p) => p.registeredBy)), Number(agg._sum.amount ?? 0), { today: today?._sum.amount, month: month?._sum.amount }] as const;
@@ -298,7 +313,8 @@ export class PaymentsService {
 
   async findOne(id: string) {
     const found = await this.tx(async (tx) => {
-      const row = await tx.payment.findFirst({ where: { id } });
+      const ids = await this.visibleCreditIds(tx);
+      const row = await tx.payment.findFirst({ where: ids ? { id, creditId: { in: ids } } : { id } });
       if (!row) return null;
       /*
        * La visita en la que se cobró, si la hubo: de ella salen **quién cobró** —que no siempre es quien cargó el pago:
@@ -370,9 +386,11 @@ export class PaymentsService {
     if (query.createdBy) where.createdBy = query.createdBy;
 
     const [rows, total, names, credits] = await this.tx(async (tx) => {
+      const ids = await this.visibleCreditIds(tx);
+      const scoped: Prisma.PaymentRequestWhereInput = ids ? { ...where, AND: [{ creditId: { in: ids } }] } : where;
       const [found, count] = await Promise.all([
-        tx.paymentRequest.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
-        tx.paymentRequest.count({ where }),
+        tx.paymentRequest.findMany({ where: scoped, orderBy: { createdAt: 'desc' }, skip, take: limit }),
+        tx.paymentRequest.count({ where: scoped }),
       ]);
       // Crédito y cliente de la página: UNA consulta, sin N+1. La solicitud no tiene relación con ellos.
       const creditIds = [...new Set(found.map((r) => r.creditId).filter((id): id is string => !!id))];
@@ -399,7 +417,10 @@ export class PaymentsService {
   }
 
   async getRequest(id: string) {
-    const req = await this.tx((tx) => tx.paymentRequest.findFirst({ where: { id } }));
+    const req = await this.tx(async (tx) => {
+      const ids = await this.visibleCreditIds(tx);
+      return tx.paymentRequest.findFirst({ where: ids ? { id, creditId: { in: ids } } : { id } });
+    });
     if (!req) throw resourceNotFound();
     return serializePaymentRequest(req);
   }
