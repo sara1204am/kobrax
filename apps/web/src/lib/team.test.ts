@@ -136,9 +136,9 @@ describe('memberActions', () => {
   });
 
   it('un rol que la web no puede volver a asignar no se toca', () => {
-    // GET /roles sólo devuelve ACCOUNT_ADMIN, SUPERVISOR y COLLECTOR: sacar a alguien de
-    // MANAGER sería una puerta de una sola dirección.
-    const a = memberActions(member({ roleName: 'MANAGER' }), YO, TODO);
+    // GET /roles devuelve ACCOUNT_ADMIN, MANAGER, SUPERVISOR y COLLECTOR (F13): sacar a alguien de
+    // AUDITOR sería una puerta de una sola dirección.
+    const a = memberActions(member({ roleName: 'AUDITOR' }), YO, TODO);
     expect(a.changeRole).toBe(false);
     // Pero desactivarlo sí se puede: eso no depende del catálogo de roles.
     expect(a.deactivate).toBe(true);
@@ -146,5 +146,29 @@ describe('memberActions', () => {
 
   it('un administrador sí se puede cambiar de rol: el freno del último admin es del servidor', () => {
     expect(memberActions(member({ roleName: 'ACCOUNT_ADMIN' }), YO, TODO).changeRole).toBe(true);
+  });
+});
+
+describe('teamView · oficina (F13)', () => {
+  // Central ⊃ Chuquisaca ⊃ Mesa Verde; La Paz aparte.
+  const ofi = (id: string, parentId: string | null, path: string) =>
+    ({ id, name: id, parentId, path, depth: 0, active: true, isRoot: !parentId }) as never;
+  const offices = [ofi('c', null, '/c/'), ofi('ch', 'c', '/c/ch/'), ofi('mv', 'ch', '/c/ch/mv/'), ofi('lp', 'c', '/c/lp/')];
+  const equipo = [
+    member({ userId: 'a', branchId: 'mv' }),
+    member({ userId: 'b', branchId: 'lp' }),
+    member({ userId: 'c', branchId: 'ch' }),
+    member({ userId: 'd', branchId: null }),
+  ];
+
+  it('filtrar por una regional incluye a quienes están en lo que cuelga de ella', () => {
+    expect(teamView(equipo, { office: 'ch' }, offices).rows.map((m) => m.userId)).toEqual(['a', 'c']);
+    expect(teamView(equipo, { office: 'c' }, offices).rows.map((m) => m.userId)).toEqual(['a', 'b', 'c']);
+  });
+  it('una hoja sólo trae a los suyos y nadie sin oficina', () => {
+    expect(teamView(equipo, { office: 'lp' }, offices).rows.map((m) => m.userId)).toEqual(['b']);
+  });
+  it('cuenta como filtro puesto', () => {
+    expect(hasTeamFilters({ office: 'c' })).toBe(true);
   });
 });

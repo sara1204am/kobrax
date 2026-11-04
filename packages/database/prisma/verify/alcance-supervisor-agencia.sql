@@ -29,7 +29,8 @@ BEGIN
     AND NOT EXISTS (SELECT 1 FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id WHERE rp.role_id = r.id AND p.code = 'data:scope:branch');
   IF n > 0 THEN RAISE EXCEPTION 'FALLO: el SUPERVISOR no tiene data:scope:branch'; END IF;
 
-  SELECT count(*) INTO n FROM roles r WHERE r.name IN ('SUPER_ADMIN', 'ACCOUNT_ADMIN', 'MANAGER')
+  -- F13 (migracion 20261102010000): el MANAGER ya NO tiene data:scope:all; ver verify/oficinas-permisos.sql.
+  SELECT count(*) INTO n FROM roles r WHERE r.name IN ('SUPER_ADMIN', 'ACCOUNT_ADMIN')
     AND NOT EXISTS (SELECT 1 FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id WHERE rp.role_id = r.id AND p.code = 'data:scope:all');
   IF n > 0 THEN RAISE EXCEPTION 'FALLO: % rol(es) de gerencia/administración sin data:scope:all', n; END IF;
 

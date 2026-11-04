@@ -23,6 +23,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { TenantClockService, civilDayStartInstant } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import { DomainEvent, EventBusService, type AgendaEventPayload } from '../../common/events/event-bus.service';
 import { ClientsService } from '../clients/clients.service';
 import { UpdateLocationDto } from '../clients/dto/client.dto';
@@ -32,7 +33,7 @@ import { recordCreditActivity } from '../mora/credit-activity';
 import { serializeAgendaItem, type AgendaRowExtra } from './agenda.serializer';
 import { attachVisitToPlannedRoute, detachVisitFromRoute } from './agenda-route-link';
 import { loadNames } from '../mora/mora-names';
-import { agencyViolations, ASSIGNABLE_ROLES, isAssignable } from '../assignments/assignment-rules';
+import { agencyViolations, ASSIGNABLE_ROLES, isAssignable, type AssignScope } from '../assignments/assignment-rules';
 import { recommendedSlot, type ContactHint } from './recommended-slot';
 import {
   AddClientContactDto,
@@ -90,6 +91,7 @@ export class AgendaService {
     private readonly clients: ClientsService,
     private readonly events: EventBusService,
     private readonly clock: TenantClockService,
+    private readonly office: OfficeScopeService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -171,14 +173,9 @@ export class AgendaService {
     if (!this.isOwner(item)) throw agendaNotOwner();
   }
 
-  /** Hasta dónde puede asignar quien pide: todo (gerente, administrador) o su agencia (supervisor). */
-  private async assignBranch(tx: PrismaClient): Promise<{ kind: 'ALL' | 'BRANCH'; branchId: string | null }> {
-    if (this.tenant.can(Permission.DATA_SCOPE_ALL)) return { kind: 'ALL', branchId: null };
-    const me = await tx.userAccount.findFirst({
-      where: { accountId: this.tenant.accountId, userId: this.tenant.userId, isActive: true },
-      select: { branchId: true },
-    });
-    return { kind: 'BRANCH', branchId: me?.branchId ?? null };
+  /** Hasta dónde puede asignar quien pide: todo (gerente, administrador) o el subárbol de sus oficinas (supervisor, gerente regional). */
+  private assignBranch(tx: PrismaClient): Promise<AssignScope> {
+    return this.office.assignScope(tx);
   }
 
   /**
@@ -193,13 +190,14 @@ export class AgendaService {
 
     const member = await tx.userAccount.findFirst({
       where: { accountId: this.tenant.accountId, userId: requested },
-      select: { userId: true, isActive: true, branchId: true, role: { select: { name: true } } },
+      select: { userId: true, isActive: true, role: { select: { name: true } } },
     });
     if (!member || !isAssignable({ userId: member.userId, isActive: member.isActive, role: member.role.name }, this.tenant.userId)) {
       throw agendaAssigneeNotEligible();
     }
     const scope = await this.assignBranch(tx);
-    const out = agencyViolations(scope, [], [{ userId: member.userId, branchId: member.branchId ?? null }]);
+    const paths = scope.kind === 'ALL' ? [] : await this.office.pathsOf(tx, member.userId);
+    const out = agencyViolations(scope, [], [{ userId: member.userId, officePaths: paths }]);
     if (out.userIds.length > 0) throw agendaAssigneeNotEligible();
     return requested;
   }
@@ -212,14 +210,11 @@ export class AgendaService {
   async listAssignees(): Promise<ApiResponse<{ userId: string; firstName: string | null; lastName: string | null; roleName: string; branchId: string | null }[]>> {
     const rows = await this.tx(async (tx) => {
       const scope = await this.assignBranch(tx);
-      const members = await tx.userAccount.findMany({
+      const found = await tx.userAccount.findMany({
         where: {
           accountId: this.tenant.accountId,
           isActive: true,
-          OR: [
-            { userId: this.tenant.userId },
-            { role: { name: { in: [...ASSIGNABLE_ROLES] } }, ...(scope.kind === 'ALL' ? {} : { branchId: scope.branchId ?? '__sin_agencia__' }) },
-          ],
+          OR: [{ userId: this.tenant.userId }, { role: { name: { in: [...ASSIGNABLE_ROLES] } } }],
         },
         select: {
           userId: true,
@@ -228,7 +223,10 @@ export class AgendaService {
           user: { select: { profile: { select: { firstName: true, lastName: true } } } },
         },
       });
-      return members;
+      if (scope.kind === 'ALL') return found;
+      // Fuera del alcance de oficinas sólo queda uno mismo (los demás se filtran por la ruta de sus asignaciones).
+      const paths = await this.office.assignmentPaths(tx, found.map((m) => m.userId));
+      return found.filter((m) => m.userId === this.tenant.userId || (paths.get(m.userId) ?? []).some((p) => this.office.inScope(scope, p)));
     });
     return ResponseDto.ok(
       rows

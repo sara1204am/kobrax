@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import { AgendaService } from './agenda.service';
 
 const UUID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
@@ -220,6 +221,13 @@ function makeService(opts: Opts = {}) {
       findFirst: async (args: { where?: { userId?: string } }) =>
         args.where?.userId === 'u1' ? (opts.me ?? { branchId: null }) : ((opts.members ?? []).find((m) => m.userId === args.where?.userId) ?? null),
     },
+    // F13: el alcance de oficinas sale de las asignaciones; el spec las deriva de `me` (u1) y `members`.
+    userBranchAssignment: {
+      findMany: async (args: { where: { userId: { in: string[] } } }) =>
+        [{ userId: 'u1', branchId: opts.me?.branchId ?? null }, ...(opts.members ?? []), ...((opts.userAccounts ?? []) as { userId: string; branchId?: string | null }[])]
+          .filter((m) => m.branchId && args.where.userId.in.includes(m.userId))
+          .map((m) => ({ userId: m.userId, branch: { path: `/${m.branchId}/` } })),
+    },
     clientContact: { findFirst: async () => first(opts.contacts as unknown[]) },
     clientLocation: { findFirst: async () => first(opts.locations as unknown[]) },
     catalogItem: {
@@ -308,6 +316,7 @@ function makeService(opts: Opts = {}) {
     clientsService as never,
     events as never,
     clock as never,
+    new OfficeScopeService(tenant as never),
   );
   return { service, calls };
 }
@@ -1419,6 +1428,7 @@ describe('AgendaService.listAssignees (F4/09)', () => {
   it('devuelve nombre y rol, ordenados, sin correo ni teléfono', async () => {
     const { service } = makeService({
       permissions: ['agenda:assign'],
+      me: { branchId: 'b1' },
       userAccounts: [
         { userId: 'u7', branchId: 'b1', role: { name: 'COLLECTOR' }, user: { profile: { firstName: 'Rosa', lastName: 'Aliaga' }, email: 'r@x.com' } },
         { userId: 'u1', branchId: 'b1', role: { name: 'SUPERVISOR' }, user: { profile: { firstName: 'Ana', lastName: 'Zeta' }, email: 'a@x.com' } },

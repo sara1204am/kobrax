@@ -18,6 +18,7 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { nameTerms } from '../../common/name-search';
 import { nameKey } from '../../common/name-key';
+import { moraScopeOf, seesWholeAccount, visibleClientIdsSql } from '../mora/mora-query';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { BlindIndexService } from '../../common/crypto/blind-index.service';
@@ -128,6 +129,25 @@ export class ClientsService {
   /** Ejecuta `fn` en el contexto RLS del tenant actual (del TenantContextService). */
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
+  }
+
+  /**
+   * D-7 (F13): los clientes que esta persona ve, con LA MISMA regla que Mora (`visibleClientIdsSql`). `null` = toda la
+   * cuenta (kind ALL): no se filtra nada y el código de ese camino queda como estaba.
+   */
+  private visibleScope() {
+    const scope = moraScopeOf(this.tenant);
+    return seesWholeAccount(scope) ? null : scope;
+  }
+
+  /** Un cliente fuera del alcance responde 404, igual que si no existiera. Quien ve toda la cuenta no paga ni una consulta. */
+  private async assertClientVisible(tx: PrismaClient, clientId: string): Promise<void> {
+    const scope = this.visibleScope();
+    if (!scope) return;
+    const rows = await tx.$queryRaw<{ ok: number }[]>(
+      Prisma.sql`SELECT 1 AS ok FROM (${visibleClientIdsSql(scope)}) v(id) WHERE v.id = ${clientId} LIMIT 1`,
+    );
+    if (rows.length === 0) throw resourceNotFound();
   }
 
   private enc(value?: string | null): string | null {
@@ -348,12 +368,23 @@ export class ClientsService {
       ];
     }
 
-    const [rows, total] = await this.tx((tx) =>
-      Promise.all([
+    const scope = this.visibleScope();
+    const [rows, total] = await this.tx(async (tx) => {
+      if (scope) {
+        /*
+         * D-7: Prisma no admite SQL crudo en un `where`, así que para quien no ve toda la cuenta se resuelven los ids
+         * visibles (`visibleClientIdsSql`) y se acotan con `id IN`. Es el camino simple del listado (sin orden por
+         * agregados); el volumen grande pasa por `view=portfolio`, que usa la subconsulta directa sin traer ids a memoria.
+         * Quien ve toda la cuenta (ALL) no entra acá: misma consulta de siempre.
+         */
+        const visible = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT v.id FROM (${visibleClientIdsSql(scope)}) v(id)`);
+        where.id = { in: visible.map((r) => r.id) };
+      }
+      return Promise.all([
         tx.client.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
         tx.client.count({ where }),
-      ]),
-    );
+      ]);
+    });
 
     const data = rows.map((c) => serializeClient(c, { crypto: this.crypto, reveal: false }));
     return ResponseDto.paginated(data, total, page, limit);
@@ -392,6 +423,8 @@ export class ClientsService {
     skip: number,
   ): Promise<ApiResponse<PortfolioClient[]>> {
     const where = this.portfolioWhere(query);
+    const scope = this.visibleScope();
+    const whereScoped = scope ? Prisma.sql`${where} AND c.id IN (${visibleClientIdsSql(scope)})` : where; // D-7
     const página = Prisma.sql`
       SELECT c.id,
              c.total_debt::float8  AS total_debt,
@@ -400,10 +433,10 @@ export class ClientsService {
              c.total_debt_external::float8 AS total_debt_external,
              c.max_days_past_due_external  AS max_days_past_due_external
       FROM clients c
-      WHERE ${where}
+      WHERE ${whereScoped}
       ORDER BY ${this.portfolioOrder(query)}
       LIMIT ${limit} OFFSET ${skip}`;
-    const cuenta = Prisma.sql`SELECT COUNT(*)::int AS total FROM clients c WHERE ${where}`;
+    const cuenta = Prisma.sql`SELECT COUNT(*)::int AS total FROM clients c WHERE ${whereScoped}`;
 
     const [rows, totals] = await this.tx((tx) =>
       Promise.all([tx.$queryRaw<PortfolioRow[]>(página), tx.$queryRaw<{ total: number }[]>(cuenta)]),
@@ -460,7 +493,9 @@ export class ClientsService {
     if (query.branchId) {
       conds.push(Prisma.sql`EXISTS (
         SELECT 1 FROM credits k
-        WHERE k.client_id = c.id AND k.deleted_at IS NULL AND k.branch_id = ${query.branchId})`);
+        WHERE k.client_id = c.id AND k.deleted_at IS NULL AND k.branch_id IN (
+          SELECT nb.id FROM branches nb WHERE nb.account_id = k.account_id
+            AND nb.path LIKE (SELECT n.path FROM branches n WHERE n.id = ${query.branchId} AND n.account_id = k.account_id) || '%'))`); // F13: la oficina y su subárbol
     }
     /*
      * P7 · El RESPONSABLE es del crédito: «tiene algún crédito vivo a cargo de esta persona». Desde F4/08
@@ -543,8 +578,9 @@ export class ClientsService {
   }
 
   async findOne(id: string, reveal: boolean): Promise<ReturnType<typeof serializeClient> & { linkSuggestions?: { id: string; displayName: string; creditCount: number }[] }> {
-    const client = await this.tx((tx) =>
-      tx.client.findFirst({
+    const client = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, id);
+      return tx.client.findFirst({
         where: { id, deletedAt: null },
         include: {
           // Los teléfonos/ubicaciones del cliente = los que NO cuelgan de una relación (relationId null).
@@ -556,8 +592,8 @@ export class ClientsService {
           attachments: true,
           incomeProfile: true,
         },
-      }),
-    );
+      });
+    });
     if (!client) throw resourceNotFound();
 
     if (reveal) {
@@ -677,16 +713,17 @@ export class ClientsService {
     if (partes.length === 0) return ResponseDto.paginated([], 0, page, limit);
 
     const union = Prisma.join(partes, ' UNION ALL ');
-    const [rows, totals] = await this.tx((tx) =>
-      Promise.all([
+    const [rows, totals] = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId); // D-7
+      return Promise.all([
         tx.$queryRaw<TimelineRow[]>(
           // El desempate por `id` es el mismo cuidado que en la cartera: dos gestiones del mismo
           // segundo se intercambiarían entre páginas, y con `LIMIT/OFFSET` eso repite o saltea.
           Prisma.sql`SELECT * FROM (${union}) t ORDER BY t.at DESC, t.id LIMIT ${limit} OFFSET ${skip}`,
         ),
         tx.$queryRaw<{ total: number }[]>(Prisma.sql`SELECT COUNT(*)::int AS total FROM (${union}) t`),
-      ]),
-    );
+      ]);
+    });
 
     const data = rows.map((r) => ({
       kind: r.kind,
@@ -705,6 +742,7 @@ export class ClientsService {
 
   async update(id: string, dto: UpdateClientDto): Promise<ReturnType<typeof serializeClient>> {
     const { before, after } = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, id);
       const prev = await tx.client.findFirst({ where: { id, deletedAt: null } });
       if (!prev) throw resourceNotFound();
 
@@ -754,6 +792,7 @@ export class ClientsService {
 
   async remove(id: string): Promise<void> {
     await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, id);
       const client = await tx.client.findFirst({ where: { id, deletedAt: null } });
       if (!client) throw resourceNotFound();
       const activeCredits = await tx.credit.count({ where: { clientId: id, status: 'ACTIVE', deletedAt: null } });
@@ -795,6 +834,7 @@ export class ClientsService {
   /** Edita los datos de un garante (nombre, tipo de relación, notas…). */
   async updateRelation(clientId: string, relationId: string, dto: UpdateRelationDto) {
     const updated = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId);
       const existing = await tx.clientRelation.findFirst({ where: { id: relationId, clientId }, select: { id: true } });
       if (!existing) throw resourceNotFound();
       // El vínculo con los créditos va en la MISMA transacción que el resto del garante: si el
@@ -817,6 +857,7 @@ export class ClientsService {
 
   async updateContact(clientId: string, contactId: string, dto: UpdateContactDto) {
     const updated = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId);
       const existing = await tx.clientContact.findFirst({ where: { id: contactId, clientId } });
       if (!existing) throw resourceNotFound();
       return tx.clientContact.update({
@@ -854,6 +895,7 @@ export class ClientsService {
 
   async getIncomeProfile(clientId: string) {
     return this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId);
       const client = await tx.client.findFirst({ where: { id: clientId, deletedAt: null }, select: { id: true } });
       if (!client) throw resourceNotFound();
       const row = await tx.clientIncomeProfile.findFirst({ where: { clientId } });
@@ -868,6 +910,7 @@ export class ClientsService {
   async putIncomeProfile(clientId: string, dto: IncomeProfileDto) {
     const data = this.incomeData(dto);
     const { before, after } = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId);
       const client = await tx.client.findFirst({ where: { id: clientId, deletedAt: null }, select: { id: true } });
       if (!client) throw resourceNotFound();
       const existing = await tx.clientIncomeProfile.findFirst({ where: { clientId } });
@@ -949,6 +992,7 @@ export class ClientsService {
   async updateLocation(clientId: string, locationId: string, dto: UpdateLocationDto) {
     this.assertCollectionProfile(dto.visitSchedule);
     const updated = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId);
       const found = await tx.clientLocation.findFirst({ where: { id: locationId, clientId }, select: { id: true } });
       if (!found) throw resourceNotFound();
       return tx.clientLocation.update({
@@ -1060,6 +1104,7 @@ export class ClientsService {
 
   async updateCollateral(clientId: string, collateralId: string, dto: UpdateCollateralDto) {
     const updated = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId);
       const found = await tx.collateral.findFirst({ where: { id: collateralId, clientId }, select: { id: true } });
       if (!found) throw resourceNotFound();
       await this.linkCollateral(tx, clientId, collateralId, dto.creditIds);
@@ -1096,6 +1141,7 @@ export class ClientsService {
   /** Reclasificar un adjunto. El archivo no se toca: su hash es la prueba de que no cambió. */
   async updateAttachment(clientId: string, attachmentId: string, dto: UpdateAttachmentDto) {
     const updated = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId);
       const found = await tx.clientAttachment.findFirst({ where: { id: attachmentId, clientId }, select: { id: true } });
       if (!found) throw resourceNotFound();
       return tx.clientAttachment.update({ where: { id: attachmentId }, data: { fileType: dto.fileType } });
@@ -1110,7 +1156,8 @@ export class ClientsService {
     kind: 'contact' | 'location' | 'relation' | 'collateral' | 'attachment',
     subId: string,
   ): Promise<void> {
-    const res = await this.tx((tx) => {
+    const res = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId);
       const where = { id: subId, clientId };
       switch (kind) {
         case 'contact':
@@ -1137,6 +1184,7 @@ export class ClientsService {
     create: (tx: PrismaClient) => Promise<T>,
   ): Promise<T> {
     const result = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId);
       const client = await tx.client.findFirst({ where: { id: clientId, deletedAt: null }, select: { id: true } });
       if (!client) throw resourceNotFound();
       return create(tx);

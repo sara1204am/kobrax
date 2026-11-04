@@ -20,6 +20,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { TenantClockService, civilDayStartInstant } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import { ROUTE_CLOSE_REASON_MIN_APP_VERSION, legacyClientReason, type LegacyClientReason } from '../../common/app-version';
 import { EventBusService, DomainEvent, type RouteNoticePayload } from '../../common/events/event-bus.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
@@ -130,10 +131,20 @@ export class RoutesService {
     private readonly crypto: CryptoService,
     private readonly osrm: OsrmService,
     private readonly clock: TenantClockService,
+    private readonly office: OfficeScopeService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
+  }
+
+  /**
+   * La oficina de la ruta (A-6): la que se pide se VALIDA (de esta cuenta, activa, dentro del alcance de quien la pide); si no se
+   * pide, la de la ÚNICA asignación vigente del cobrador, o ninguna. Antes se guardaba el `branchId` del cuerpo sin mirarlo.
+   */
+  private async routeBranch(tx: PrismaClient, requested: string | undefined, collectorId: string): Promise<string | undefined> {
+    if (requested) return (await this.office.assertBranchUsable(tx, requested)).id;
+    return (await this.office.soleOfficeOf(tx, collectorId)) ?? undefined;
   }
 
   private get actor() {
@@ -297,13 +308,14 @@ export class RoutesService {
       await this.assertCollector(tx, collectorId);
       const already = await this.routeOfDay(tx, collectorId, dayAnchor(dto.plannedDate));
       if (already) throw routeAlreadyForDay(already.id);
+      const branchId = await this.routeBranch(tx, dto.branchId, collectorId);
       const created = await tx.routePlan.create({
         data: {
           ...(dto.id ? { id: dto.id } : {}),
           accountId: this.tenant.accountId,
           collectorId,
           createdBy: this.tenant.userId,
-          branchId: dto.branchId,
+          branchId,
           plannedDate: dayAnchor(dto.plannedDate),
           status: RouteStatus.PLANNED,
         },
@@ -367,13 +379,14 @@ export class RoutesService {
       // La ubicación concreta de cada parada (F4/12): la elegida, o la principal del cliente.
       const locationOf = await this.resolveLocations(tx, credits, dto.locations ?? {}, dto.requirePoints === true);
 
+      const branchId = await this.routeBranch(tx, dto.branchId, collectorId);
       const created = await tx.routePlan.create({
         data: {
           ...(dto.id ? { id: dto.id } : {}),
           accountId: this.tenant.accountId,
           collectorId,
           createdBy: this.tenant.userId,
-          branchId: dto.branchId,
+          branchId,
           plannedDate,
           status: RouteStatus.PLANNED,
           totalCases: credits.length, // nombre legado de la columna: cuenta paradas

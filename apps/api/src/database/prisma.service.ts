@@ -92,7 +92,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     }
     const scope = !ctx
       ? NO_SCOPE
-      : ctx.permissions.includes(Permission.DATA_SCOPE_ALL)
+      : // F13: el gerente regional (`data:scope:subtree`) también abre la cuenta para RLS; lo que ve dentro lo acota la API por oficina.
+        ctx.permissions.includes(Permission.DATA_SCOPE_ALL) || ctx.permissions.includes(Permission.DATA_SCOPE_SUBTREE)
         ? DataScope.ACCOUNT
         : DataScope.OWN;
 

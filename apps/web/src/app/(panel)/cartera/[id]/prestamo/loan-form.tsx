@@ -22,6 +22,8 @@ import { PaidInstallmentsSelect } from '@/components/paid-installments-select';
 import { useToast } from '@/components/toast';
 import { postJson } from '@/lib/client';
 import { todayIso } from '@/lib/format';
+import { OfficeSelect } from '@/components/office-select';
+import { isCreditOfficeError, type OfficeOption } from '@/lib/offices';
 
 /**
  * Nuevo crédito (F4/06 · Fase 2): cómo se define, sus condiciones, la cotización en vivo y el plan de
@@ -41,6 +43,8 @@ export function LoanForm({
   assignees,
   currency,
   defaultArrearsMethod,
+  offices = [],
+  defaultOfficeId = '',
 }: {
   clientId: string;
   clientName: string;
@@ -49,6 +53,10 @@ export function LoanForm({
   currency: string;
   /** El método de mora por defecto de la cuenta (D20). */
   defaultArrearsMethod?: ArrearsMethod;
+  /** F13: las oficinas elegibles, en orden de árbol y con ruta completa. Vacío = una sola oficina: no hay selector ni se envía nada. */
+  offices?: OfficeOption[];
+  /** La oficina de la persona, si es una sola y está entre las elegibles. */
+  defaultOfficeId?: string;
 }) {
   const t = useTranslations('portfolio');
   const tc = useTranslations('portfolio.creditForm');
@@ -62,6 +70,8 @@ export function LoanForm({
   /** Cuántas de las primeras cuotas ya estaban pagadas al registrarlo. 0 = crédito nuevo. */
   const [paid, setPaid] = useState(0);
   const [manager, setManager] = useState('');
+  const [office, setOffice] = useState(defaultOfficeId);
+  const needsOffice = offices.length > 0;
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -92,10 +102,12 @@ export function LoanForm({
       ...payload,
       // En la oficina, quien carga el crédito y quien lo cobra no son la misma persona.
       ...(manager ? { assignedManagerId: manager } : {}),
+      // F13: con varias oficinas el crédito necesita la suya; la API valida alcance y que exista.
+      ...(needsOffice && office ? { branchId: office } : {}),
     });
     setSaving(false);
     if (!ok) {
-      setError(data.error?.message ?? t('saveError'));
+      setError(isCreditOfficeError(data.error?.code) ? tc('officeRequired') : (data.error?.message ?? t('saveError')));
       return;
     }
     toast(tc('created'));
@@ -116,7 +128,7 @@ export function LoanForm({
               </Button>
             </span>
             <span className="w-44">
-              <Button type="submit" loading={saving} disabled={!state.canSubmit}>
+              <Button type="submit" loading={saving} disabled={!state.canSubmit || (needsOffice && !office)}>
                 {tc('save')}
               </Button>
             </span>
@@ -125,6 +137,15 @@ export function LoanForm({
       />
 
       <ErrorBanner message={error} />
+
+      {/* F13: con más de una oficina, el crédito pertenece a una. Con una sola no se muestra (RULES C2). */}
+      {needsOffice && (
+        <section className="rounded-2xl border border-k-border bg-white p-5">
+          <Field label={tc('office')} hint={tc('officeHint')}>
+            <OfficeSelect options={offices} emptyLabel={tc('officePick')} value={office} onChange={(e) => setOffice(e.target.value)} />
+          </Field>
+        </section>
+      )}
 
       {/* En pantalla ancha: los datos en 3/4 y la cuota en 1/4, fija mientras se baja. En angosta se
           apila, con la cuota justo después de los datos. */}

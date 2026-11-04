@@ -132,7 +132,7 @@ export class MoraExportService {
       currency: account?.currencyCode ?? undefined,
       generatedBy: full(me),
       ownOnly: scope.ownOnly,
-      branchScope: scope.kind === 'BRANCH',
+      branchScope: scope.kind === 'BRANCH' || scope.kind === 'SUBTREE',
       filters: describeFilters(query, { assignee: full(assignee), branch: branch?.name }),
       sort: describeSort(query.sort, query.dir),
       names,

@@ -5,43 +5,108 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { BranchesService } from './branches.service';
-import { AssignMembersDto, CreateBranchDto, UpdateBranchDto } from './dto/branch.dto';
+import { AssignMembersDto, CreateBranchDto, CreateBranchTypeDto, MoveBranchDto, UpdateBranchDto, UpdateBranchTypeDto } from './dto/branch.dto';
 
-/** Agencias de la cuenta. Leer: quien ve el equipo (`user:read`). Escribir: quien administra la cuenta (`account:write`). */
+/**
+ * Oficinas de la cuenta, en árbol (F13). Leer: `office:read`. Escribir: `office:write` (ya no `account:write` ni `user:read`:
+ * la administración de oficinas es un permiso propio que F14 podrá delegar por rol).
+ */
 @Controller('branches')
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class BranchesController {
   constructor(private readonly branches: BranchesService) {}
 
+  /** Lista plana del árbol (con `parentId`, `path`, `depth`, `fullName`…). */
   @Get()
-  @Roles(Permission.USER_READ)
+  @Roles(Permission.OFFICE_READ)
   list() {
     return this.branches.list();
   }
 
+  @Get(':id')
+  @Roles(Permission.OFFICE_READ)
+  detail(@Param('id', ParseUUIDPipe) id: string) {
+    return this.branches.detail(id);
+  }
+
   @Post()
-  @Roles(Permission.ACCOUNT_WRITE)
+  @Roles(Permission.OFFICE_WRITE)
   create(@Body() dto: CreateBranchDto) {
     return this.branches.create(dto);
   }
 
   @Patch(':id')
-  @Roles(Permission.ACCOUNT_WRITE)
+  @Roles(Permission.OFFICE_WRITE)
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateBranchDto) {
     return this.branches.update(id, dto);
   }
 
+  /** Cambia la oficina de lugar en el árbol (con su subárbol). */
+  @Post(':id/move')
+  @HttpCode(HttpStatus.OK)
+  @Roles(Permission.OFFICE_WRITE)
+  move(@Param('id', ParseUUIDPipe) id: string, @Body() dto: MoveBranchDto) {
+    return this.branches.move(id, dto);
+  }
+
+  @Post(':id/deactivate')
+  @HttpCode(HttpStatus.OK)
+  @Roles(Permission.OFFICE_WRITE)
+  deactivate(@Param('id', ParseUUIDPipe) id: string) {
+    return this.branches.deactivate(id);
+  }
+
+  @Post(':id/restore')
+  @HttpCode(HttpStatus.OK)
+  @Roles(Permission.OFFICE_WRITE)
+  restore(@Param('id', ParseUUIDPipe) id: string) {
+    return this.branches.restore(id);
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @Roles(Permission.ACCOUNT_WRITE)
+  @Roles(Permission.OFFICE_WRITE)
   async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.branches.remove(id);
   }
 
-  /** Pasa a estas personas a la agencia. Quitar a alguien de una agencia es `PATCH /users/:id` con `branchId: null`. */
+  /** Asigna personas a la oficina (por defecto las MUEVE si estaban en otra). */
   @Post(':id/members')
-  @Roles(Permission.ACCOUNT_WRITE)
+  @HttpCode(HttpStatus.OK)
+  @Roles(Permission.OFFICE_WRITE)
   assignMembers(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AssignMembersDto) {
     return this.branches.assignMembers(id, dto);
+  }
+
+  /** Quita a la persona de la oficina. */
+  @Delete(':id/members/:userId')
+  @Roles(Permission.OFFICE_WRITE)
+  unassignMember(@Param('id', ParseUUIDPipe) id: string, @Param('userId', ParseUUIDPipe) userId: string) {
+    return this.branches.unassignMember(id, userId);
+  }
+}
+
+/** Catálogo de tipos de oficina por cuenta (Central, Regional, Agencia… editable: R1). */
+@Controller('branch-types')
+@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
+export class BranchTypesController {
+  constructor(private readonly branches: BranchesService) {}
+
+  @Get()
+  @Roles(Permission.OFFICE_READ)
+  list() {
+    return this.branches.listTypes();
+  }
+
+  @Post()
+  @Roles(Permission.OFFICE_WRITE)
+  create(@Body() dto: CreateBranchTypeDto) {
+    return this.branches.createType(dto);
+  }
+
+  @Patch(':id')
+  @Roles(Permission.OFFICE_WRITE)
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateBranchTypeDto) {
+    return this.branches.updateType(id, dto);
   }
 }

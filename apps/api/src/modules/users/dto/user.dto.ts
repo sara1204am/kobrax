@@ -10,6 +10,8 @@ export class InviteMemberDto {
   @IsString() @Length(1, 80) lastName!: string;
   @IsEmail() email!: string;
   @IsUUID() roleId!: string;
+  /** Oficina de la persona. Obligatoria para el rol MANAGER (su alcance es el subárbol de esa oficina). */
+  @IsOptional() @IsUUID() branchId?: string;
 }
 
 /** Lo único que el móvil administra de una membresía: su rol y si está activa. */

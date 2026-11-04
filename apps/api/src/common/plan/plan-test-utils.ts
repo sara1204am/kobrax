@@ -16,7 +16,7 @@ export function fakePlanLimits(
   opts: { limits?: Partial<PlanLimits>; usage?: Partial<Record<CountedLimit, number>> } = {},
 ): PlanLimitsService {
   const limits: PlanLimits = { ...PLANS.ENTERPRISE.limits, ...opts.limits };
-  const usage = { users: 0, credits: 0, clients: 0, ...opts.usage };
+  const usage = { users: 0, credits: 0, clients: 0, branches: 0, ...opts.usage };
 
   const doble = {
     limitsOf: async () => limits,

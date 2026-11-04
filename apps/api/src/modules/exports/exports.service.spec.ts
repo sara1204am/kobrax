@@ -58,9 +58,9 @@ function make() {
     agendaItem: { findMany: async () => [] },
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
-  const tenant = { accountId: 'acc-A' };
+  const tenant = { accountId: 'acc-A', userId: 'u1', can: () => true };
   const audit = { record: async (e: { entity: string; action: string }) => void audited.push(e) };
-  const service = new ExportsService(prisma as never, tenant as never, {} as never, audit as never);
+  const service = new ExportsService(prisma as never, tenant as never, {} as never, audit as never, { assignScope: async () => ({ kind: 'ALL', paths: [] }) } as never);
   return { service, audited, queries, tx };
 }
 
@@ -113,5 +113,71 @@ describe('ExportsService.fullBackup', () => {
     assert.deepEqual(json.activities, [{ id: 'a1', creditId: 'cr1', type: 'CALL' }]);
     assert.equal(json.arrearEpisodes!.length, 1);
     assert.equal('cases' in json, false, 'el caso ya no existe'); 
+  });
+});
+
+/** D-7 (F13): los exportes se acotan por oficina; el backup es sólo de toda la cuenta. */
+describe('ExportsService — alcance por oficina (D-7)', () => {
+  function makeScoped(can: (p: string) => boolean, assign: 'ALL' | 'OFFICES') {
+    const wheres: Record<string, Record<string, unknown>> = {};
+    let raw = 0;
+    const rec = (k: string) => async (a: { where: Record<string, unknown> }) => {
+      wheres[k] ??= a.where; // la primera consulta de cada tabla (agendaCsv hace otra a clients)
+      return [];
+    };
+    const tx = {
+      $queryRaw: async () => {
+        raw += 1;
+        return [{ id: 'v1' }];
+      },
+      account: { findUnique: async () => ({ configuration: {} }) },
+      arrearCategory: { findMany: async () => [] },
+      credit: { findMany: rec('credit') },
+      client: { findMany: rec('client') },
+      clientLocation: { findMany: rec('location') },
+      agendaItem: { findMany: rec('agenda') },
+      profile: { findMany: async () => [] },
+      creditActivity: { findMany: async () => [] },
+      creditArrearEpisode: { findMany: async () => [] },
+      payment: { findMany: async () => [] },
+    };
+    const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
+    const audit = { record: async () => undefined };
+    const office = { assignScope: async () => ({ kind: assign, paths: [] }) };
+    const service = new ExportsService(prisma as never, { accountId: 'acc-A', userId: 'u1', can } as never, {} as never, audit as never, office as never);
+    return { service, wheres, raw: () => raw };
+  }
+  const branch = (p: string) => p === 'data:scope:branch';
+  const all = (p: string) => p === 'data:scope:all';
+
+  it('ALL: ningún CSV filtra por ids y no corre SQL crudo', async () => {
+    const { service, wheres, raw } = makeScoped(all, 'ALL');
+    await service.clientsCsv();
+    await service.locationsCsv();
+    await service.moraCsv();
+    await service.agendaCsv();
+    assert.equal(raw(), 0);
+    assert.equal('id' in wheres.client!, false);
+    assert.equal('clientId' in wheres.location!, false);
+    assert.equal('id' in wheres.credit!, false);
+    assert.equal('creditId' in wheres.agenda!, false);
+  });
+
+  it('no-ALL: clientes, ubicaciones, mora y agenda se acotan a lo visible', async () => {
+    const { service, wheres } = makeScoped(branch, 'OFFICES');
+    await service.clientsCsv();
+    await service.locationsCsv();
+    await service.moraCsv();
+    await service.agendaCsv();
+    assert.deepEqual(wheres.client!.id, { in: ['v1'] });
+    assert.deepEqual(wheres.location!.clientId, { in: ['v1'] });
+    assert.deepEqual(wheres.credit!.id, { in: ['v1'] });
+    assert.deepEqual(wheres.agenda!.creditId, { in: ['v1'] });
+  });
+
+  it('backup: 403 EXPORT_BACKUP_FORBIDDEN fuera de «toda la cuenta»; ALL (o subárbol en la raíz) sí', async () => {
+    await assert.rejects(makeScoped(branch, 'OFFICES').service.fullBackup(), (e: unknown) => (e as { response?: { code?: string } }).response?.code === 'EXPORT_BACKUP_FORBIDDEN');
+    const ok = await makeScoped(all, 'ALL').service.fullBackup();
+    assert.equal(ok.filename, 'backup-cuenta.json.gz');
   });
 });

@@ -1,14 +1,14 @@
 import { RoleType } from '../enums/role.enum.js';
 
 /**
- * Roles que el móvil ofrece asignar (módulo CUENTA · D2). Los demás
- * (`MANAGER`, `AUDITOR`, `VIEWER`, `SUPER_ADMIN`) se administran desde la web:
+ * Roles que se pueden asignar por API/web/móvil (módulo CUENTA · D2). `MANAGER` (gerente regional) entra con F13: exige una oficina.
+ * Los demás (`AUDITOR`, `VIEWER`, `SUPER_ADMIN`) se administran desde la web:
  * el móvil los muestra en lectura y no los pisa.
  *
  * Es una regla de **servidor**, no de UI: `PATCH /api/users/:id` rechaza un
  * `roleId` que no esté acá aunque el cliente lo mande a mano.
  */
-export const MOBILE_ROLES = [RoleType.ACCOUNT_ADMIN, RoleType.SUPERVISOR, RoleType.COLLECTOR] as const;
+export const MOBILE_ROLES = [RoleType.ACCOUNT_ADMIN, RoleType.MANAGER, RoleType.SUPERVISOR, RoleType.COLLECTOR] as const;
 
 export type MobileRole = (typeof MOBILE_ROLES)[number];
 

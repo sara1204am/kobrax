@@ -115,11 +115,11 @@ export async function addMember(prisma: PrismaClient, accountId: string, email: 
 let api: ChildProcess | null = null;
 
 /** La API compilada contra la base de prueba. Resuelve cuando escucha. */
-export async function startApi(): Promise<void> {
+export async function startApi(extraEnv: Record<string, string> = {}): Promise<void> {
   const uploads = mkdtempSync(join(tmpdir(), 'kobrax-it-'));
   api = spawn('node', ['dist/main.js'], {
     cwd: API_DIR,
-    env: { ...ENV, NODE_ENV: 'test', API_PORT: String(PORT), APP_DATABASE_URL: APP_URL, DATABASE_URL: SUPER_URL, UPLOADS_DIR: uploads },
+    env: { ...ENV, NODE_ENV: 'test', API_PORT: String(PORT), APP_DATABASE_URL: APP_URL, DATABASE_URL: SUPER_URL, UPLOADS_DIR: uploads, ...extraEnv },
   });
   let log = '';
   await new Promise<void>((ok, fail) => {
@@ -164,6 +164,23 @@ export async function login(email: string): Promise<string> {
   const body = (await res.json()) as { data?: { step: string; accessToken?: string } };
   if (body.data?.step !== 'done' || !body.data.accessToken) throw new Error(`login de ${email}: ${JSON.stringify(body)}`);
   return body.data.accessToken;
+}
+
+/**
+ * Login de un rol CRÍTICO (ACCOUNT_ADMIN) sin enrolar TOTP: exige que la API haya arrancado con `MFA_CRITICAL_GRACE_UNTIL`
+ * en el futuro (`startApi({ MFA_CRITICAL_GRACE_UNTIL: '2099-01-01' })`). Lo que se prueba no es el segundo factor.
+ */
+export async function loginSkippingMfa(email: string): Promise<string> {
+  const post = async (path: string, body: unknown) =>
+    (await (await fetch(`${API}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json()) as {
+      data?: { step: string; accessToken?: string; preAuthToken?: string };
+    };
+  const first = await post('/auth/login', { email, password: PASSWORD });
+  if (first.data?.step === 'done' && first.data.accessToken) return first.data.accessToken;
+  if (first.data?.step !== 'mfa_setup' || !first.data.preAuthToken) throw new Error(`login de ${email}: ${JSON.stringify(first)}`);
+  const skipped = await post('/auth/mfa/setup/skip', { preAuthToken: first.data.preAuthToken });
+  if (skipped.data?.step !== 'done' || !skipped.data.accessToken) throw new Error(`mfa/setup/skip de ${email}: ${JSON.stringify(skipped)}`);
+  return skipped.data.accessToken;
 }
 
 export async function call<T>(token: string, method: string, path: string, body?: unknown): Promise<Envelope<T>> {

@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 import { Permission, type AccountInfo, type ArrearCategory, type Assignee, type MeInfo, type Member, type MoraCreditListItem } from '@kobrax/shared';
+import { getOffices } from '@/lib/offices-server';
 import { apiCall, pageMeta } from '@/lib/bff';
 import { hasMoraFilters, moraLimit, moraListQuery, type MoraParams } from '@/lib/mora';
 import { EmptyState } from '@/components/panel-ui';
@@ -24,12 +25,14 @@ export default async function MoraPage({ searchParams }: { searchParams: MoraPar
   const t = await getTranslations('panel.mora');
   const query = moraListQuery(searchParams);
 
-  const [list, me, team, account, branchList] = await Promise.all([
+  const [list, me, team, account, branchList, offices] = await Promise.all([
     apiCall<MoraCreditListItem[]>(`/mora?${query}`, { method: 'GET', auth: true }),
     apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
     apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
     apiCall<{ id: string; name: string }[]>('/mora/branches', { method: 'GET', auth: true }),
+    // F13: el árbol de oficinas de su alcance, con la ruta completa.
+    getOffices(),
   ]);
 
   if (list.status !== 200 || !list.body.data) {
@@ -73,7 +76,8 @@ export default async function MoraPage({ searchParams }: { searchParams: MoraPar
         members={members}
         collectors={collectors}
         categories={categories.status === 200 ? (categories.body.data ?? []) : []}
-        branches={branchList.body.data ?? []}
+        // Con árbol, el selector común (ruta completa); si el rol no lee oficinas, la lista plana de siempre.
+        branches={offices.options.length > 0 ? offices.options : (branchList.body.data ?? [])}
         currency={account.body.data?.currencyCode ?? 'BOB'}
         filtered={hasMoraFilters(searchParams)}
         userId={me.body.data?.userId}
