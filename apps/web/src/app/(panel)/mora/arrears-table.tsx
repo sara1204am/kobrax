@@ -344,6 +344,8 @@ export function ArrearsTable({
       rowKey={(c) => c.creditId}
       meta={meta}
       filters={filters}
+      // Los filtros de Mora arrancan ocultos (como Rutas); si hay uno puesto, se abren solos.
+      filtersOpen={false}
       filtered={filtered}
       entityLabel={t('entity')}
       actions={canExport ? <ExportButtons /> : undefined}

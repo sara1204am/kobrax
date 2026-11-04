@@ -98,6 +98,8 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     // La misma alta, pero desde archivo — el módulo Import del móvil, donde COLLECTOR es el único
     // rol que entra. Sin esto el módulo es 403 para su propio dueño (el cobrador independiente).
     Permission.CLIENT_IMPORT,
+    // Su tablero de Inicio: los mismos widgets, pero la API los acota a SUS créditos (alcance propio). Sin esto Inicio lo mandaba a Agenda.
+    Permission.REPORT_READ,
     Permission.CREDIT_READ,
     // Da de alta el préstamo junto con el cliente (Cartera S2), no sólo lo consulta.
     Permission.CREDIT_WRITE,

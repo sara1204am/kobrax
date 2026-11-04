@@ -97,6 +97,18 @@ export default async function DashboardPage({
    */
   const widgets = current ? current.widgets : DEFAULT_WIDGETS;
 
+  /*
+   * El filtro de cobrador sólo ofrece a quien corresponde al alcance de esta persona: con alcance total, todos; con alcance de
+   * oficina (supervisor, gerente regional), los de SUS oficinas y lo que cuelga de ellas —`offices.rows` ya viene acotado por la
+   * API—; sin ninguno (cobrador), nadie más que ella. Antes un supervisor de Padilla veía a los cobradores de toda la cuenta.
+   */
+  const seesAll = permissions.includes(Permission.DATA_SCOPE_ALL);
+  const inScope = new Set(offices.rows.map((r) => r.id));
+  const myId = me.body.data?.userId;
+  const scopedTeam = (team.body.data ?? []).filter((m) =>
+    seesAll ? true : m.userId === myId || (!!m.branchId && inScope.has(m.branchId)),
+  );
+
   const bySource = summary.body.data?.bySource ?? [];
   const sources = bySource.map((s) => s.source);
   const external = bySource.filter((s) => s.source !== 'KOBRAX' && s.credits > 0);
@@ -109,7 +121,7 @@ export default async function DashboardPage({
     today: today ?? undefined,
     visits: visits.body.data ?? undefined,
     trend: trend.body.data ?? undefined,
-    members: team.body.data ?? [],
+    members: scopedTeam,
     currency: summary.body.data?.currency ?? 'BOB',
     // El mapa mira UN día —el último del período con paradas—, no el período: hay que decir cuál.
     day: visits.body.data?.[0]?.plannedDate ?? filters.dateTo ?? '',
@@ -133,7 +145,7 @@ export default async function DashboardPage({
       {/* Los filtros van ANTES de los números: primero se elige qué se mira. «Editar» y las acciones del tablero van adentro
           de la misma tarjeta, a la derecha: una fila aparte dejaba un hueco con un solo botón. */}
       <DashboardFilters
-        collectors={team.body.data ?? []}
+        collectors={scopedTeam}
         sources={sources}
         offices={offices.options}
         today={companyDay}
