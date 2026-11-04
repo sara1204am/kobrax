@@ -2002,7 +2002,7 @@ async function main(): Promise<void> {
   const chq = await officeNode('CHQ', 'Chuquisaca', 'Sucre', baseDemo.root, 'REGIONAL');
   await officeNode('CEN', 'Agencia Central', 'La Paz', lpz, 'AGENCIA');
   await officeNode('ALT', 'Agencia El Alto', 'El Alto', lpz, 'AGENCIA');
-  await officeNode('CER', 'Agencia Cercado', 'Cochabamba', cbba, 'AGENCIA');
+  const cer = await officeNode('CER', 'Agencia Cercado', 'Cochabamba', cbba, 'AGENCIA');
   const mv = await officeNode('MV', 'Agencia Mesa Verde', 'Sucre', chq, 'AGENCIA');
   const sce = await officeNode('SCE', 'Agencia Central', 'Sucre', chq, 'AGENCIA');
   const lyv = await officeNode('LYV', 'Agencia Luz y Verdad', 'Sucre', chq, 'AGENCIA');
@@ -2016,6 +2016,11 @@ async function main(): Promise<void> {
     { key: 'supMv', email: 'sup.mesaverde@kobrax.demo', first: 'Sergio', last: 'Mesa Verde', role: RoleType.SUPERVISOR, branch: mv },
     { key: 'colMv', email: 'cob.mesaverde@kobrax.demo', first: 'Camila', last: 'Mesa Verde', role: RoleType.COLLECTOR, branch: mv },
     { key: 'colPad', email: 'cob.padilla@kobrax.demo', first: 'Pedro', last: 'Padilla', role: RoleType.COLLECTOR, branch: pad },
+    // Todas las agencias con gente propia: cada crédito lo lleva alguien de SU agencia (salvo el de Sucre Central, que lleva la normalizadora regional).
+    { key: 'colCam', email: 'cob.camargo@kobrax.demo', first: 'Carmen', last: 'Camargo', role: RoleType.COLLECTOR, branch: cam },
+    { key: 'colMon', email: 'cob.monteagudo@kobrax.demo', first: 'Mario', last: 'Monteagudo', role: RoleType.COLLECTOR, branch: mon },
+    { key: 'colLyv', email: 'cob.luzyverdad@kobrax.demo', first: 'Lidia', last: 'Luz y Verdad', role: RoleType.COLLECTOR, branch: lyv },
+    { key: 'colCer', email: 'cob.cercado@kobrax.demo', first: 'Cecilia', last: 'Cercado', role: RoleType.COLLECTOR, branch: cer },
   ];
   for (const t of f13Team) {
     users[t.key] = await ensureUser(t.email, t.first, t.last);
@@ -2024,31 +2029,37 @@ async function main(): Promise<void> {
   await prisma.branch.update({ where: { id: chq.id }, data: { managerUserId: users['gerChq'] } });
   await prisma.branch.update({ where: { id: lpz.id }, data: { managerUserId: users['gerLpz'] } });
   await prisma.branch.update({ where: { id: mv.id }, data: { managerUserId: users['supMv'] } });
-  console.log('  ✓ árbol de oficinas de DEMO: Central › La Paz · Cochabamba · Chuquisaca (6 agencias) + 6 usuarios por nivel');
+  console.log('  ✓ árbol de oficinas de DEMO: Central › La Paz · Cochabamba · Chuquisaca (6 agencias) + usuarios por nivel y por agencia');
 
   // Una cartera chica por agencia de Chuquisaca para ver los alcances en Cartera, Mora, Clientes y Pagos.
   const seedOfficeCredits = async () => {
-    const plan: { code: string; name: string; office: { id: string }; responsible?: string; dpd: number; amount: number }[] = [
+    const plan: { code: string; name: string; office: { id: string }; responsible: string; dpd: number; amount: number }[] = [
       { code: 'CRD-F13-MV1', name: 'Mesa Verde Uno', office: mv, responsible: 'colMv', dpd: 12, amount: 1800 },
-      { code: 'CRD-F13-MV2', name: 'Mesa Verde Dos', office: mv, dpd: 40, amount: 2600 },
+      { code: 'CRD-F13-MV2', name: 'Mesa Verde Dos', office: mv, responsible: 'supMv', dpd: 40, amount: 2600 },
       { code: 'CRD-F13-PAD1', name: 'Padilla Uno', office: pad, responsible: 'colPad', dpd: 8, amount: 900 },
       { code: 'CRD-F13-SCE1', name: 'Sucre Central Uno', office: sce, responsible: 'norm', dpd: 25, amount: 3100 },
-      { code: 'CRD-F13-LYV1', name: 'Luz y Verdad Uno', office: lyv, responsible: 'norm', dpd: 55, amount: 4200 },
-      { code: 'CRD-F13-MON1', name: 'Monteagudo Uno', office: mon, responsible: 'norm', dpd: 18, amount: 1500 },
-      { code: 'CRD-F13-CAM1', name: 'Camargo Uno', office: cam, responsible: 'norm', dpd: 70, amount: 2200 },
+      { code: 'CRD-F13-LYV1', name: 'Luz y Verdad Uno', office: lyv, responsible: 'colLyv', dpd: 55, amount: 4200 },
+      { code: 'CRD-F13-MON1', name: 'Monteagudo Uno', office: mon, responsible: 'colMon', dpd: 18, amount: 1500 },
+      { code: 'CRD-F13-CAM1', name: 'Camargo Uno', office: cam, responsible: 'colCam', dpd: 70, amount: 2200 },
+      { code: 'CRD-F13-CER1', name: 'Cercado Uno', office: cer, responsible: 'colCer', dpd: 33, amount: 1250 },
     ];
     for (const c of plan) {
-      if (await prisma.credit.findFirst({ where: { accountId: demo.id, code: c.code }, select: { id: true } })) continue;
+      const exists = await prisma.credit.findFirst({ where: { accountId: demo.id, code: c.code }, select: { id: true } });
+      if (exists) {
+        // Re-sembrar corrige el responsable y la oficina de lo que ya estaba: la base queda igual que el plan.
+        await prisma.credit.update({ where: { id: exists.id }, data: { branchId: c.office.id, assignedManagerId: users[c.responsible]! } });
+        continue;
+      }
       const client = await prisma.client.create({ data: { accountId: demo.id, clientType: 'PERSON', firstName: c.name, lastName: 'Deudor' } });
       await prisma.credit.create({
         data: {
           accountId: demo.id, clientId: client.id, branchId: c.office.id, code: c.code,
           principalAmount: c.amount, outstandingBalance: c.amount, currency: 'BOB', daysPastDue: c.dpd,
-          assignedManagerId: c.responsible ? users[c.responsible]! : null,
+          assignedManagerId: users[c.responsible]!,
         },
       });
     }
-    console.log('  ✓ 7 créditos de ejemplo en las agencias de Chuquisaca');
+    console.log('  ✓ 8 créditos de ejemplo (Chuquisaca y Cochabamba), todos con responsable de su agencia');
   };
 
   // 5) Dataset demo. Si ya está sembrado no se toca (las fechas son de cuando se sembró): `--refresh` lo renueva.
