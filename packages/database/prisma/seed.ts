@@ -2032,6 +2032,16 @@ async function main(): Promise<void> {
   console.log('  ✓ árbol de oficinas de DEMO: Central › La Paz · Cochabamba · Chuquisaca (6 agencias) + usuarios por nivel y por agencia');
 
   // Una cartera chica por agencia de Chuquisaca para ver los alcances en Cartera, Mora, Clientes y Pagos.
+  // La columna `assigned_manager_id` y la asignación PRINCIPAL vigente dicen lo mismo (lo comprueba `db:audit:assignments` y la
+  // suite de integración): quien se la lleva a mano la crea con su fila, igual que lo hace la aplicación.
+  const ensurePrincipal = async (creditId: string, userId: string) => {
+    const live = { creditId, kind: 'PRINCIPAL' as const, revokedAt: null, expiresAt: null };
+    const current = await prisma.creditAssignment.findFirst({ where: live, select: { id: true, userId: true } });
+    if (current?.userId === userId) return;
+    if (current) await prisma.creditAssignment.update({ where: { id: current.id }, data: { revokedAt: new Date() } });
+    await prisma.creditAssignment.create({ data: { accountId: demo.id, creditId, userId, kind: 'PRINCIPAL' } });
+  };
+
   const seedOfficeCredits = async () => {
     const plan: { code: string; name: string; office: { id: string }; responsible: string; dpd: number; amount: number }[] = [
       { code: 'CRD-F13-MV1', name: 'Mesa Verde Uno', office: mv, responsible: 'colMv', dpd: 12, amount: 1800 },
@@ -2048,16 +2058,18 @@ async function main(): Promise<void> {
       if (exists) {
         // Re-sembrar corrige el responsable y la oficina de lo que ya estaba: la base queda igual que el plan.
         await prisma.credit.update({ where: { id: exists.id }, data: { branchId: c.office.id, assignedManagerId: users[c.responsible]! } });
+        await ensurePrincipal(exists.id, users[c.responsible]!);
         continue;
       }
       const client = await prisma.client.create({ data: { accountId: demo.id, clientType: 'PERSON', firstName: c.name, lastName: 'Deudor' } });
-      await prisma.credit.create({
+      const created = await prisma.credit.create({
         data: {
           accountId: demo.id, clientId: client.id, branchId: c.office.id, code: c.code,
           principalAmount: c.amount, outstandingBalance: c.amount, currency: 'BOB', daysPastDue: c.dpd,
           assignedManagerId: users[c.responsible]!,
         },
       });
+      await ensurePrincipal(created.id, users[c.responsible]!);
     }
     console.log('  ✓ 8 créditos de ejemplo (Chuquisaca y Cochabamba), todos con responsable de su agencia');
   };
