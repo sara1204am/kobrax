@@ -3,11 +3,11 @@ import { money, percent } from '@/lib/format';
 import type { OfficePortfolio } from '@/lib/offices';
 
 /** Una celda de la banda: rótulo chico arriba, cifra debajo. Los avisos largos van en `title` para no ocupar sitio. */
-function Cell({ label, hint, title, tone = 'neutral', children }: { label: string; hint?: string; title?: string; tone?: 'neutral' | 'danger'; children: React.ReactNode }) {
+function Cell({ label, hint, title, tone = 'neutral', children }: { label: string; hint?: string; title?: string; tone?: 'neutral' | 'danger' | 'navy'; children: React.ReactNode }) {
   return (
-    <div title={title} className="px-5 py-3.5">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-k-slate">{label}</p>
-      <div className={`mt-1 space-y-0.5 text-[20px] font-semibold leading-tight tabular-nums ${tone === 'danger' ? 'text-k-danger' : 'text-k-navy'}`}>{children}</div>
+    <div title={title} className={`px-5 py-3.5 ${tone === 'navy' ? 'bg-k-navy' : ''}`}>
+      <p className={`text-[11px] font-semibold uppercase tracking-wide ${tone === 'navy' ? 'text-white/70' : 'text-k-slate'}`}>{label}</p>
+      <div className={`mt-1 space-y-0.5 text-[20px] font-semibold leading-tight tabular-nums ${tone === 'danger' ? 'text-k-danger' : tone === 'navy' ? 'text-white' : 'text-k-navy'}`}>{children}</div>
       {hint && <p className="mt-0.5 text-[12px] text-k-text-2">{hint}</p>}
     </div>
   );
@@ -33,13 +33,13 @@ export async function OfficeStats({ portfolio }: { portfolio: OfficePortfolio })
   return (
     <section aria-label={t('title')} className="mb-6 overflow-hidden rounded-2xl border border-k-border bg-white">
       <div className="grid grid-cols-2 divide-x divide-k-border lg:grid-cols-4 [&>*:nth-child(n+3)]:border-t [&>*:nth-child(n+3)]:border-k-border lg:[&>*:nth-child(n+3)]:border-t-0">
-        <Cell label={t('assigned')} title={t('scopeHint')}>
+        <Cell label={t('assigned')} tone="navy" title={t('scopeHint')}>
           <p>{portfolio.credits.toLocaleString(locale)}</p>
         </Cell>
         <Cell label={t('arrearsCredits')} tone={danger}>
           <p>{portfolio.arrearsCredits.toLocaleString(locale)}</p>
         </Cell>
-        <Cell label={t('portfolio')}>{lines((c) => c.balance)}</Cell>
+        <Cell label={t('portfolio')} tone="navy">{lines((c) => c.balance)}</Cell>
         <Cell label={t('arrearsPortfolio')} tone={danger} title={t('balanceHint')} hint={share === null ? undefined : t('share', { pct: percent(share * 100) })}>
           {lines((c) => c.arrearsBalance)}
         </Cell>
