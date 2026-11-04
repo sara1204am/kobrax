@@ -109,7 +109,7 @@ function RowMenu({ row, ctx }: { row: OfficeRow; ctx: TreeCtx }) {
 const INDENT = 44;
 const MAX_INDENT_LEVELS = 6;
 
-function TreeNode({ item, ctx, level, last = true }: { item: OfficeTreeItem<OfficeRow>; ctx: TreeCtx; level: number; last?: boolean }) {
+function TreeNode({ item, ctx, level }: { item: OfficeTreeItem<OfficeRow>; ctx: TreeCtx; level: number }) {
   const t = useTranslations('account.offices');
   const { node } = item;
   const [shown, setShown] = useState(CHILDREN_PAGE);
@@ -127,14 +127,7 @@ function TreeNode({ item, ctx, level, last = true }: { item: OfficeTreeItem<Offi
   const nameTone = ctx.matched.has(node.id) ? 'text-k-purple' : 'text-k-navy';
 
   return (
-    <li role="treeitem" aria-level={level} aria-expanded={hasKids ? open : undefined} aria-selected={ctx.selectedId === node.id} className="relative">
-      {/* Conectores: el codo hacia esta fila y, si le siguen hermanas, la línea que baja. */}
-      {level > 1 && (
-        <>
-          <span aria-hidden className="pointer-events-none absolute rounded-bl-xl border-b border-l border-k-border" style={{ left: 18 + (depth - 1) * INDENT, top: 0, height: '50%', width: INDENT - 8 }} />
-          {!last && <span aria-hidden className="pointer-events-none absolute border-l border-k-border" style={{ left: 18 + (depth - 1) * INDENT, top: '50%', bottom: 0 }} />}
-        </>
-      )}
+    <li role="treeitem" aria-level={level} aria-expanded={hasKids ? open : undefined} aria-selected={ctx.selectedId === node.id}>
       <div
         data-office-row={node.id}
         draggable={ctx.editable && !node.isRoot}
@@ -156,7 +149,7 @@ function TreeNode({ item, ctx, level, last = true }: { item: OfficeTreeItem<Offi
           e.preventDefault();
           ctx.onDrop(node);
         }}
-        className={`group flex items-center gap-3 py-3 pr-3 ${
+        className={`group flex items-center gap-3 border-b border-k-border py-3 pr-3 ${
           isOver ? 'bg-k-highlight' : level === 1 ? 'bg-k-info-bg' : 'bg-white hover:bg-k-bg'
         } ${dragging ? 'opacity-40' : ''}`}
         style={{ paddingLeft: 12 + depth * INDENT }}
@@ -226,11 +219,11 @@ function TreeNode({ item, ctx, level, last = true }: { item: OfficeTreeItem<Offi
 
       {open && (
         <ul role="group">
-          {kids.slice(0, shown).map((c, i, arr) => (
-            <TreeNode key={c.node.id} item={c} ctx={ctx} level={level + 1} last={i === arr.length - 1 && kids.length <= shown} />
+          {kids.slice(0, shown).map((c) => (
+            <TreeNode key={c.node.id} item={c} ctx={ctx} level={level + 1} />
           ))}
           {kids.length > shown && (
-            <li className="py-2" style={{ paddingLeft: 12 + Math.min(level, MAX_INDENT_LEVELS) * INDENT }}>
+            <li className="border-b border-k-border py-2" style={{ paddingLeft: 12 + Math.min(level, MAX_INDENT_LEVELS) * INDENT }}>
               <button
                 type="button"
                 onClick={() => setShown((n) => n + CHILDREN_PAGE)}
@@ -249,7 +242,8 @@ function TreeNode({ item, ctx, level, last = true }: { item: OfficeTreeItem<Offi
 export function OfficeTree({ items, ctx, label }: { items: OfficeTreeItem<OfficeRow>[]; ctx: TreeCtx; label: string }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-k-border bg-white">
-      <ul role="tree" aria-label={label}>
+      {/* `-mb-px`: la última fila trae su propia línea de abajo y el borde de la tarjeta ya la pone. */}
+      <ul role="tree" aria-label={label} className="-mb-px">
       {items.map((i) => (
         <TreeNode key={i.node.id} item={i} ctx={ctx} level={1} />
       ))}
