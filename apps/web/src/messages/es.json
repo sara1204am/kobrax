@@ -2889,7 +2889,13 @@
         "comesFrom": "hoy en {name}",
         "willMove": "{name} está hoy en «{from}» y pasará a esta oficina.",
         "assign": "Asignar",
-        "added": "Persona asignada a la oficina"
+        "added": "Persona asignada a la oficina",
+        "stats": {
+          "credits": "Créditos",
+          "portfolio": "Cartera",
+          "arrears": "En mora",
+          "inArrears": "{n} en mora"
+        }
       },
       "detail": {
         "back": "Volver a oficinas",

@@ -6,7 +6,7 @@ import type { Member } from '@kobrax/shared';
 import { Button } from '@/components/ui';
 import { usePermissions } from '@/components/permissions';
 import { sendJson } from '@/lib/client';
-import type { OfficeDetail, OfficeRow, OfficeType } from '@/lib/offices';
+import type { OfficeDetail, OfficePortfolio, OfficeRow, OfficeType } from '@/lib/offices';
 import { OfficeFormDialog } from '../office-form';
 import { OfficeTeam } from '../office-team';
 import { useOfficeApi } from '../use-office-api';
@@ -68,5 +68,8 @@ export function DetailTeam({ office, rows, members }: { office: OfficeDetail; ro
   const { can } = usePermissions();
   const row = rows.find((r) => r.id === office.id);
   if (!row) return null;
-  return <OfficeTeam office={row} rows={rows} members={members} editable={can('office:write')} />;
+  const portfolios: Record<string, OfficePortfolio> = Object.fromEntries(
+    office.membersList.flatMap((m) => (m.portfolio ? [[m.userId, m.portfolio] as const] : [])),
+  );
+  return <OfficeTeam office={row} rows={rows} members={members} editable={can('office:write')} portfolios={portfolios} />;
 }

@@ -164,6 +164,25 @@ export class BranchesService {
   }
 
   /** Detalle: la oficina, quién trabaja en ella y su historial (auditoría de la entidad). */
+  /** Lo que se suma de cada crédito vivo: la misma regla para la oficina y para cada persona de su equipo. */
+  private static readonly LIVE_CREDIT = Prisma.sql`cr.deleted_at IS NULL AND cr.written_off_at IS NULL
+        AND (cr.status::text = 'ACTIVE' OR (cr.status::text = 'DEFAULTED' AND cr.external_source IS NOT NULL))`;
+
+  private static portfolioView(rows: { currency: string; credits: bigint; arrears_credits: bigint; balance: Prisma.Decimal; arrears_balance: Prisma.Decimal }[]): BranchPortfolioView {
+    const byCurrency = rows.map((r) => ({
+      currency: r.currency,
+      credits: Number(r.credits),
+      arrearsCredits: Number(r.arrears_credits),
+      balance: Number(r.balance),
+      arrearsBalance: Number(r.arrears_balance),
+    }));
+    return {
+      credits: byCurrency.reduce((n, r) => n + r.credits, 0),
+      arrearsCredits: byCurrency.reduce((n, r) => n + r.arrearsCredits, 0),
+      byCurrency,
+    };
+  }
+
   /** La cartera viva de la oficina y su subárbol, por moneda. Una sola consulta agregada (no trae filas). */
   private async portfolioOf(tx: PrismaClient, path: string): Promise<BranchPortfolioView> {
     const rows = await tx.$queryRaw<
@@ -177,22 +196,33 @@ export class BranchesService {
       FROM credits cr
       JOIN branches b ON b.id = cr.branch_id
       WHERE b.account_id = ${this.tenant.accountId} AND b.path LIKE ${`${path}%`} AND b.deleted_at IS NULL
-        AND cr.deleted_at IS NULL AND cr.written_off_at IS NULL
-        AND (cr.status::text = 'ACTIVE' OR (cr.status::text = 'DEFAULTED' AND cr.external_source IS NOT NULL))
+        AND ${BranchesService.LIVE_CREDIT}
       GROUP BY cr.currency
       ORDER BY cr.currency`);
-    const byCurrency = rows.map((r) => ({
-      currency: r.currency,
-      credits: Number(r.credits),
-      arrearsCredits: Number(r.arrears_credits),
-      balance: Number(r.balance),
-      arrearsBalance: Number(r.arrears_balance),
-    }));
-    return {
-      credits: byCurrency.reduce((n, r) => n + r.credits, 0),
-      arrearsCredits: byCurrency.reduce((n, r) => n + r.arrearsCredits, 0),
-      byCurrency,
-    };
+    return BranchesService.portfolioView(rows);
+  }
+
+  /** La cartera a cargo de cada persona del equipo (`assigned_manager_id`), dentro de la oficina y su subárbol. Una consulta para todas. */
+  private async memberPortfolios(tx: PrismaClient, path: string, userIds: string[]): Promise<Map<string, BranchPortfolioView>> {
+    if (userIds.length === 0) return new Map();
+    const rows = await tx.$queryRaw<
+      { user_id: string; currency: string; credits: bigint; arrears_credits: bigint; balance: Prisma.Decimal; arrears_balance: Prisma.Decimal }[]
+    >(Prisma.sql`
+      SELECT cr.assigned_manager_id AS user_id, cr.currency,
+             COUNT(*) AS credits,
+             COUNT(*) FILTER (WHERE cr.days_past_due > 0) AS arrears_credits,
+             COALESCE(SUM(cr.outstanding_balance), 0) AS balance,
+             COALESCE(SUM(cr.outstanding_balance) FILTER (WHERE cr.days_past_due > 0), 0) AS arrears_balance
+      FROM credits cr
+      JOIN branches b ON b.id = cr.branch_id
+      WHERE b.account_id = ${this.tenant.accountId} AND b.path LIKE ${`${path}%`} AND b.deleted_at IS NULL
+        AND cr.assigned_manager_id IN (${Prisma.join(userIds)})
+        AND ${BranchesService.LIVE_CREDIT}
+      GROUP BY cr.assigned_manager_id, cr.currency
+      ORDER BY cr.currency`);
+    const byUser = new Map<string, typeof rows>();
+    for (const r of rows) byUser.set(r.user_id, [...(byUser.get(r.user_id) ?? []), r]);
+    return new Map([...byUser].map(([id, list]) => [id, BranchesService.portfolioView(list)]));
   }
 
   async detail(id: string): Promise<BranchDetailView> {
@@ -210,6 +240,7 @@ export class BranchesService {
         ? await tx.userAccount.findMany({ where: { accountId, userId: { in: assignments.map((a) => a.userId) } }, select: { userId: true, role: { select: { name: true } } } })
         : [];
       const roleOf = new Map(roles.map((r) => [r.userId, r.role.name]));
+      const memberPortfolio = await this.memberPortfolios(tx, branch.path, assignments.map((a) => a.userId));
       const logs = await tx.auditLog.findMany({
         where: { entity: 'branch', entityId: id },
         orderBy: { createdAt: 'desc' },
@@ -226,6 +257,7 @@ export class BranchesService {
         portfolio: await this.portfolioOf(tx, branch.path),
         // Sin correo ni teléfono: quien lee oficinas (`office:read`) no es necesariamente quien lee usuarios.
         membersList: assignments.map((a) => ({
+          portfolio: memberPortfolio.get(a.userId) ?? BranchesService.portfolioView([]),
           userId: a.userId,
           name: `${a.user.profile?.firstName ?? ''} ${a.user.profile?.lastName ?? ''}`.trim() || null,
           roleName: roleOf.get(a.userId) ?? null,

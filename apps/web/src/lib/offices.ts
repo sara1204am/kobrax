@@ -60,6 +60,8 @@ export interface OfficeMemberRow {
   name: string;
   email?: string | null;
   roleName?: string | null;
+  /** Lo que esta persona tiene a su cargo en la oficina (y lo que cuelga de ella). */
+  portfolio?: OfficePortfolio;
 }
 
 export interface OfficeHistoryEvent {
@@ -117,7 +119,10 @@ function parsePortfolio(raw: unknown): OfficePortfolio {
  */
 export function parseOfficeDetail(raw: Record<string, unknown>): OfficeDetail {
   const base = raw as unknown as OfficeRow;
-  const list = asArray<OfficeMemberRow>(Array.isArray(raw.members) ? raw.members : raw.membersList);
+  const list = asArray<OfficeMemberRow>(Array.isArray(raw.members) ? raw.members : raw.membersList).map((m) => ({
+    ...m,
+    portfolio: parsePortfolio((m as { portfolio?: unknown }).portfolio),
+  }));
   const rawStats = (raw.stats ?? {}) as Record<string, unknown>;
   const membersCount = typeof raw.members === 'number' ? raw.members : list.length;
   return {

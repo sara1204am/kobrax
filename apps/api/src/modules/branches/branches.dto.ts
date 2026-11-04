@@ -54,6 +54,8 @@ export interface BranchMemberView {
   isPrimary: boolean;
   /** ISO 8601. */
   since: string;
+  /** Lo que esta persona tiene a su cargo dentro de la oficina (y de lo que cuelga de ella). Mismos criterios que `portfolio`. */
+  portfolio: BranchPortfolioView;
 }
 
 export interface BranchHistoryView {

@@ -2889,7 +2889,13 @@
         "comesFrom": "now in {name}",
         "willMove": "{name} is now in \"{from}\" and will move to this office.",
         "assign": "Assign",
-        "added": "Person assigned to the office"
+        "added": "Person assigned to the office",
+        "stats": {
+          "credits": "Loans",
+          "portfolio": "Portfolio",
+          "arrears": "In arrears",
+          "inArrears": "{n} in arrears"
+        }
       },
       "detail": {
         "back": "Back to offices",
