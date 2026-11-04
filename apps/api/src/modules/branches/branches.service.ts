@@ -10,7 +10,7 @@ import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { isUniqueViolation } from '../../common/unique-violation';
 import { serializeBranch, serializeBranchType, type BranchStats, type BranchWithType } from './branches.serializer';
 import { deactivationBlock } from './branch-rules';
-import type { BranchDetailView, BranchTypeView, BranchView } from './branches.dto';
+import type { BranchDetailView, BranchPortfolioView, BranchTypeView, BranchView } from './branches.dto';
 import {
   AssignMembersDto,
   CreateBranchDto,
@@ -164,6 +164,37 @@ export class BranchesService {
   }
 
   /** Detalle: la oficina, quién trabaja en ella y su historial (auditoría de la entidad). */
+  /** La cartera viva de la oficina y su subárbol, por moneda. Una sola consulta agregada (no trae filas). */
+  private async portfolioOf(tx: PrismaClient, path: string): Promise<BranchPortfolioView> {
+    const rows = await tx.$queryRaw<
+      { currency: string; credits: bigint; arrears_credits: bigint; balance: Prisma.Decimal; arrears_balance: Prisma.Decimal }[]
+    >(Prisma.sql`
+      SELECT cr.currency,
+             COUNT(*) AS credits,
+             COUNT(*) FILTER (WHERE cr.days_past_due > 0) AS arrears_credits,
+             COALESCE(SUM(cr.outstanding_balance), 0) AS balance,
+             COALESCE(SUM(cr.outstanding_balance) FILTER (WHERE cr.days_past_due > 0), 0) AS arrears_balance
+      FROM credits cr
+      JOIN branches b ON b.id = cr.branch_id
+      WHERE b.account_id = ${this.tenant.accountId} AND b.path LIKE ${`${path}%`} AND b.deleted_at IS NULL
+        AND cr.deleted_at IS NULL AND cr.written_off_at IS NULL
+        AND (cr.status::text = 'ACTIVE' OR (cr.status::text = 'DEFAULTED' AND cr.external_source IS NOT NULL))
+      GROUP BY cr.currency
+      ORDER BY cr.currency`);
+    const byCurrency = rows.map((r) => ({
+      currency: r.currency,
+      credits: Number(r.credits),
+      arrearsCredits: Number(r.arrears_credits),
+      balance: Number(r.balance),
+      arrearsBalance: Number(r.arrears_balance),
+    }));
+    return {
+      credits: byCurrency.reduce((n, r) => n + r.credits, 0),
+      arrearsCredits: byCurrency.reduce((n, r) => n + r.arrearsCredits, 0),
+      byCurrency,
+    };
+  }
+
   async detail(id: string): Promise<BranchDetailView> {
     return this.tx(async (tx) => {
       const branch = await this.one(tx, id);
@@ -192,6 +223,7 @@ export class BranchesService {
       return {
         ...branch,
         stats: { members: branch.members, credits: branch.credits, children: branch.children },
+        portfolio: await this.portfolioOf(tx, branch.path),
         // Sin correo ni teléfono: quien lee oficinas (`office:read`) no es necesariamente quien lee usuarios.
         membersList: assignments.map((a) => ({
           userId: a.userId,

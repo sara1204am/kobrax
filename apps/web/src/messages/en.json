@@ -2902,14 +2902,38 @@
           "members": "People",
           "credits": "Credits",
           "arrears": "Overdue",
-          "children": "Child offices"
+          "children": "Child offices",
+          "title": "Office portfolio",
+          "assigned": "Assigned loans",
+          "scopeHint": "Includes the offices under this one",
+          "arrearsCredits": "Loans in arrears",
+          "portfolio": "Total portfolio",
+          "arrearsPortfolio": "Portfolio in arrears",
+          "balanceHint": "Outstanding balance, not the installment",
+          "share": "{pct} of the portfolio"
         },
         "children": "Child offices",
         "noChildren": "It has no child offices.",
         "andMore": "and {n} more",
         "team": "Team",
         "history": "History",
-        "noHistory": "No changes recorded."
+        "noHistory": "No changes recorded.",
+        "tabs": {
+          "info": "General information",
+          "offices": "Offices",
+          "team": "Team",
+          "history": "History"
+        },
+        "sections": "Office sections",
+        "parentLabel": "Parent office",
+        "columns": {
+          "name": "Office",
+          "type": "Type",
+          "city": "City",
+          "manager": "Manager",
+          "members": "People",
+          "credits": "Loans"
+        }
       },
       "single": {
         "title": "Your office",
@@ -4072,7 +4096,12 @@
     "preferencesHint": "What changes only for you.",
     "accountPrefsHint": "Working days, hours and time zone belong to the business.",
     "accountPrefsLink": "They are set in Account → Collections.",
-    "tabs": { "label": "My profile sections", "datos-personales": "Personal details", "preferencias": "Preferences", "seguridad": "Security" },
+    "tabs": {
+      "label": "My profile sections",
+      "datos-personales": "Personal details",
+      "preferencias": "Preferences",
+      "seguridad": "Security"
+    },
     "subtitle": "How your team sees you and how debtors pay you.",
     "firstName": "First name",
     "lastName": "Last name",

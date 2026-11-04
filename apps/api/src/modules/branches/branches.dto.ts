@@ -68,9 +68,24 @@ export interface BranchHistoryView {
   after: unknown;
 }
 
+/**
+ * La cartera de una oficina **incluidas sus hijas** (una regional no tiene créditos propios: los tienen sus agencias). Sólo
+ * créditos vivos (activos; en fuente externa también los vencidos), sin castigados ni borrados.
+ *
+ * «En mora» es el crédito con días de atraso, y lo que se suma es su **saldo adeudado** (`outstanding_balance`), no la cuota.
+ * Un total por moneda: sumar bolivianos con dólares no significa nada.
+ */
+export interface BranchPortfolioView {
+  credits: number;
+  arrearsCredits: number;
+  byCurrency: { currency: string; credits: number; arrearsCredits: number; balance: number; arrearsBalance: number }[];
+}
+
 /** `GET /branches/:id`: la oficina + conteos (`stats`, igual a los campos planos) + personas + historial (hasta 50, el más nuevo primero). */
 export interface BranchDetailView extends BranchView {
   stats: { members: number; credits: number; children: number };
+  /** La cartera viva de la oficina y de todo lo que cuelga de ella. */
+  portfolio: BranchPortfolioView;
   membersList: BranchMemberView[];
   history: BranchHistoryView[];
 }

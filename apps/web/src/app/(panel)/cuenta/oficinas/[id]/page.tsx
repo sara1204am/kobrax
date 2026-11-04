@@ -3,16 +3,44 @@ import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import type { Member } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
-import { Badge, EmptyState, Section } from '@/components/panel-ui';
+import { Badge, EmptyState } from '@/components/panel-ui';
+import { Icon } from '@/components/panel-shell';
+import { MapPicker } from '@/components/map-picker';
 import { dateTime } from '@/lib/format';
 import { parseOfficeDetail, type OfficeRow, type OfficeType } from '@/lib/offices';
 import { DetailActions, DetailTeam } from './detail-actions';
+import { OfficeStats } from './office-stats';
+
+type TabKey = 'info' | 'offices' | 'team' | 'history';
+
+/** La caja blanca de cada pestaña: un título y su contenido, igual que la ficha de un miembro de Equipo. */
+function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-k-border bg-white">
+      <div className="px-6 pt-5">
+        <h2 className="text-[18px] font-semibold text-k-navy">{title}</h2>
+      </div>
+      <div className="px-6 pb-6 pt-4">{children}</div>
+    </section>
+  );
+}
+
+function Th({ children }: { children: React.ReactNode }) {
+  return (
+    <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
+      {children}
+    </th>
+  );
+}
 
 /**
- * Detalle de una oficina: ruta completa, datos, estadísticas (personas, créditos, mora, hijas), sub-oficinas, equipo e
- * historial de auditoría. Lo que Gallium llama «Relaciones» (beneficiarios, documentos) acá son personas y créditos.
+ * La ficha de una oficina: cabecera con la cartera siempre a la vista y, debajo, pestañas —Información general, Oficinas,
+ * Equipo e Historial— como la ficha de un miembro de Equipo.
+ *
+ * La pestaña vive en la URL (`?tab=`) y la lee el servidor: el enlace se comparte y «atrás» funciona. La API recorta lo que
+ * cada persona puede ver; acá sólo se dibuja.
  */
-export default async function OfficeDetailPage({ params }: { params: { id: string } }) {
+export default async function OfficeDetailPage({ params, searchParams }: { params: { id: string }; searchParams: { tab?: string } }) {
   const t = await getTranslations('account.offices');
   const locale = await getLocale();
   const [found, list, members, types] = await Promise.all([
@@ -46,115 +74,81 @@ export default async function OfficeDetailPage({ params }: { params: { id: strin
     .slice(0, -1)
     .map((id) => byId.get(id))
     .filter((x): x is OfficeRow => !!x);
-  const facts: [string, string | null][] = [
+
+  const tabs: { key: TabKey; label: string; count?: number }[] = [
+    { key: 'info', label: t('detail.tabs.info') },
+    { key: 'offices', label: t('detail.tabs.offices'), count: children.length },
+    { key: 'team', label: t('detail.tabs.team'), count: o.membersCount },
+    { key: 'history', label: t('detail.tabs.history') },
+  ];
+  const tab: TabKey = tabs.some((x) => x.key === searchParams.tab) ? (searchParams.tab as TabKey) : 'info';
+
+  const facts: [string, React.ReactNode][] = [
     [t('form.fields.code'), o.code],
     [t('form.fields.type'), o.typeName],
     [t('form.fields.city'), o.city],
     [t('form.fields.address'), o.address],
     [t('form.fields.manager'), o.managerName ?? null],
+    [t('detail.parentLabel'), parent ? <Link key="p" href={`/cuenta/oficinas/${parent.id}`} className="font-medium text-k-purple hover:underline">{parent.fullName || parent.name}</Link> : null],
   ];
-  const stats: [string, number | null][] = [
-    [t('detail.stats.members'), o.stats.members],
-    [t('detail.stats.credits'), o.stats.credits],
-    [t('detail.stats.arrears'), o.stats.arrears],
-    [t('detail.stats.children'), o.stats.children || children.length],
-  ];
+  const hasPoint = typeof o.latitude === 'number' && typeof o.longitude === 'number';
 
-  return (
-    <div className="space-y-6">
-      <nav aria-label={t('detail.path')} className="flex flex-wrap items-center gap-1 text-[13px] text-k-text-2">
-        <Link href="/cuenta/oficinas" className="font-medium text-k-purple hover:underline">
-          {t('title')}
-        </Link>
-        {ancestors.map((a) => (
-          <span key={a.id} className="flex items-center gap-1">
-            <span aria-hidden>›</span>
-            <Link href={`/cuenta/oficinas/${a.id}`} className="hover:underline">
-              {a.name}
-            </Link>
-          </span>
-        ))}
-        <span aria-hidden>›</span>
-        <span aria-current="page" className="font-medium text-k-text">
-          {o.name}
-        </span>
-      </nav>
-
-      <header className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-k-border bg-white p-5">
-        <div className="min-w-0">
-          <h2 className="truncate text-[22px] font-semibold text-k-navy">{o.name}</h2>
-          <p className="mt-1 text-[13px] text-k-text-2">{o.isRoot ? t('tree.root') : o.fullName}</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Badge dot tone={o.active ? 'success' : 'neutral'}>
-              {o.active ? t('status.active') : t('status.inactive')}
-            </Badge>
-            {o.typeName && <Badge>{o.typeName}</Badge>}
-            {o.code && <Badge>{o.code}</Badge>}
-          </div>
-          {parent && (
-            <p className="mt-3 text-[13px] text-k-text-2">
-              {t('detail.parent')}{' '}
-              <Link href={`/cuenta/oficinas/${parent.id}`} className="font-medium text-k-purple hover:underline">
-                {parent.fullName || parent.name}
-              </Link>
-            </p>
-          )}
-        </div>
-        <DetailActions office={o} rows={rows} types={types.body.data ?? []} members={members.body.data ?? []} />
-      </header>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Section title={t('detail.general')} inner="p-5">
-          <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
-            {facts.map(([k, v]) => (
-              <div key={k}>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{k}</dt>
-                <dd className="mt-1 break-words text-[14px] text-k-text">{v || <span className="text-k-muted">—</span>}</dd>
-              </div>
-            ))}
-          </dl>
-        </Section>
-        <div className="space-y-6">
-          <Section title={t('detail.statsTitle')} inner="p-5">
-            <dl className="grid grid-cols-2 gap-4">
-              {stats.map(([k, v]) => (
-                <div key={k} className="rounded-xl bg-k-bg px-4 py-3">
-                  <dt className="text-[12px] text-k-text-2">{k}</dt>
-                  <dd className="mt-1 text-[22px] font-semibold tabular-nums text-k-navy">{v ?? '—'}</dd>
-                </div>
-              ))}
-            </dl>
-          </Section>
-          <Section title={t('detail.children')} inner="p-5">
-            {children.length === 0 ? (
-              <p className="text-[13px] text-k-text-2">{t('detail.noChildren')}</p>
-            ) : (
-              <ul className="space-y-1">
-                {children.slice(0, 6).map((c) => (
-                  <li key={c.id}>
-                    <Link href={`/cuenta/oficinas/${c.id}`} className="text-[14px] text-k-purple hover:underline">
-                      {c.name}
-                    </Link>
-                  </li>
+  let body: React.ReactNode;
+  if (tab === 'offices') {
+    body = (
+      <Panel title={t('detail.children')}>
+        {children.length === 0 ? (
+          <p className="text-[13px] text-k-text-2">{t('detail.noChildren')}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[40rem] text-[14px]">
+              <thead>
+                <tr className="border-b border-k-border">
+                  <Th>{t('detail.columns.name')}</Th>
+                  <Th>{t('detail.columns.type')}</Th>
+                  <Th>{t('detail.columns.city')}</Th>
+                  <Th>{t('detail.columns.manager')}</Th>
+                  <Th>{t('detail.columns.members')}</Th>
+                  <Th>{t('detail.columns.credits')}</Th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-k-border">
+                {children.map((c) => (
+                  <tr key={c.id}>
+                    <td className="px-3 py-3">
+                      <Link href={`/cuenta/oficinas/${c.id}`} className="font-medium text-k-navy hover:underline">
+                        {c.name}
+                      </Link>
+                      {c.code && <span className="ml-2 rounded-md bg-k-light-bg/60 px-1.5 py-0.5 text-[12px] text-k-slate">{c.code}</span>}
+                    </td>
+                    <td className="px-3 py-3 text-k-text-2">{c.typeName ?? '—'}</td>
+                    <td className="px-3 py-3 text-k-text-2">{c.city ?? '—'}</td>
+                    <td className="px-3 py-3 text-k-text-2">{c.managerName ?? '—'}</td>
+                    <td className="px-3 py-3 tabular-nums text-k-text">{c.members}</td>
+                    <td className="px-3 py-3 tabular-nums text-k-text">{c.credits}</td>
+                  </tr>
                 ))}
-                {children.length > 6 && <li className="text-[13px] text-k-text-2">{t('detail.andMore', { n: children.length - 6 })}</li>}
-              </ul>
-            )}
-          </Section>
-        </div>
-      </div>
-
-      <Section title={t('detail.team')} inner="p-5">
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+    );
+  } else if (tab === 'team') {
+    body = (
+      <Panel title={t('detail.team')}>
         <DetailTeam office={o} rows={rows} members={members.body.data ?? []} />
-      </Section>
-
-      <Section title={t('detail.history')} inner="p-5">
+      </Panel>
+    );
+  } else if (tab === 'history') {
+    body = (
+      <Panel title={t('detail.history')}>
         {o.history.length === 0 ? (
           <p className="text-[13px] text-k-text-2">{t('detail.noHistory')}</p>
         ) : (
           <ol className="divide-y divide-k-border">
             {o.history.map((h) => (
-              <li key={h.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2 text-[13px]">
+              <li key={h.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2.5 text-[13px]">
                 <span className="text-k-text">
                   <span className="font-medium">{h.action}</span>
                   {h.summary ? ` — ${h.summary}` : ''}
@@ -167,7 +161,96 @@ export default async function OfficeDetailPage({ params }: { params: { id: strin
             ))}
           </ol>
         )}
-      </Section>
-    </div>
+      </Panel>
+    );
+  } else {
+    body = (
+      <Panel title={t('detail.general')}>
+        <dl className="grid gap-x-10 gap-y-4 sm:grid-cols-2">
+          {facts.map(([k, v]) => (
+            <div key={k}>
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{k}</dt>
+              <dd className="mt-1 break-words text-[15px] text-k-text">{v || <span className="text-k-muted">—</span>}</dd>
+            </div>
+          ))}
+        </dl>
+        {hasPoint && (
+          <div className="mt-6">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{t('form.fields.location')}</p>
+            <MapPicker label={t('form.fields.locationMap')} height={260} latitude={o.latitude ?? undefined} longitude={o.longitude ?? undefined} />
+            <p className="mt-2 text-[12px] text-k-text-2">
+              {o.latitude}, {o.longitude}
+            </p>
+          </div>
+        )}
+      </Panel>
+    );
+  }
+
+  return (
+    <>
+      <nav aria-label={t('detail.path')} className="mb-4 flex flex-wrap items-center gap-1 text-[13px] text-k-text-2">
+        <Link href="/cuenta/oficinas" className="font-medium text-k-periwinkle hover:underline">
+          ← {t('title')}
+        </Link>
+        {ancestors.map((a) => (
+          <span key={a.id} className="flex items-center gap-1">
+            <span aria-hidden>/</span>
+            <Link href={`/cuenta/oficinas/${a.id}`} className="hover:underline">
+              {a.name}
+            </Link>
+          </span>
+        ))}
+        <span aria-hidden>/</span>
+        <span aria-current="page" className="text-k-text">
+          {o.name}
+        </span>
+      </nav>
+
+      <header className="mb-5 flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-5">
+          <span aria-hidden className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-k-light-bg/70 text-k-periwinkle">
+            <Icon name="account" className="h-8 w-8" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="truncate text-[26px] font-semibold tracking-tight text-k-navy">{o.name}</h1>
+              <Badge dot tone={o.active ? 'success' : 'neutral'}>
+                {o.active ? t('status.active') : t('status.inactive')}
+              </Badge>
+              {o.typeName && <Badge>{o.typeName}</Badge>}
+              {o.code && <Badge>{o.code}</Badge>}
+            </div>
+            <p className="mt-1 text-[14px] text-k-text-2">{o.isRoot ? t('tree.root') : o.fullName}</p>
+            {o.managerName && (
+              <p className="mt-1 text-[13px] text-k-text-2">
+                {t('form.fields.manager')}: <span className="font-medium text-k-text">{o.managerName}</span>
+              </p>
+            )}
+          </div>
+        </div>
+        <DetailActions office={o} rows={rows} types={types.body.data ?? []} members={members.body.data ?? []} />
+      </header>
+
+      <OfficeStats portfolio={o.portfolio} />
+
+      <nav aria-label={t('detail.sections')} className="mb-5 flex gap-1 overflow-x-auto border-b border-k-border">
+        {tabs.map((x) => (
+          <Link
+            key={x.key}
+            href={x.key === 'info' ? `/cuenta/oficinas/${o.id}` : `/cuenta/oficinas/${o.id}?tab=${x.key}`}
+            aria-current={tab === x.key ? 'page' : undefined}
+            className={`-mb-px whitespace-nowrap border-b-2 px-4 py-3 text-[14px] font-medium ${
+              tab === x.key ? 'border-k-periwinkle text-k-navy' : 'border-transparent text-k-text-2 hover:text-k-text'
+            }`}
+          >
+            {x.label}
+            {x.count !== undefined && <span className="ml-1.5 text-k-muted">{x.count}</span>}
+          </Link>
+        ))}
+      </nav>
+
+      {body}
+    </>
   );
 }

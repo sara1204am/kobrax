@@ -2902,14 +2902,38 @@
           "members": "Personas",
           "credits": "Créditos",
           "arrears": "En mora",
-          "children": "Oficinas hijas"
+          "children": "Oficinas hijas",
+          "title": "Cartera de la oficina",
+          "assigned": "Créditos asignados",
+          "scopeHint": "Incluye las oficinas que cuelgan de ésta",
+          "arrearsCredits": "Créditos en mora",
+          "portfolio": "Cartera total",
+          "arrearsPortfolio": "Cartera en mora",
+          "balanceHint": "Saldo adeudado, no la cuota",
+          "share": "{pct} de la cartera"
         },
         "children": "Oficinas hijas",
         "noChildren": "No tiene oficinas hijas.",
         "andMore": "y {n} más",
         "team": "Equipo",
         "history": "Historial",
-        "noHistory": "Sin cambios registrados."
+        "noHistory": "Sin cambios registrados.",
+        "tabs": {
+          "info": "Información general",
+          "offices": "Oficinas",
+          "team": "Equipo",
+          "history": "Historial"
+        },
+        "sections": "Secciones de la oficina",
+        "parentLabel": "Oficina superior",
+        "columns": {
+          "name": "Oficina",
+          "type": "Tipo",
+          "city": "Ciudad",
+          "manager": "Responsable",
+          "members": "Personas",
+          "credits": "Créditos"
+        }
       },
       "single": {
         "title": "Tu oficina",
@@ -4072,7 +4096,12 @@
     "preferencesHint": "Lo que cambia solo para ti.",
     "accountPrefsHint": "La jornada, el horario y la zona horaria son del negocio.",
     "accountPrefsLink": "Se configuran en Cuenta → Cobranza.",
-    "tabs": { "label": "Secciones de Mi perfil", "datos-personales": "Datos personales", "preferencias": "Preferencias", "seguridad": "Seguridad" },
+    "tabs": {
+      "label": "Secciones de Mi perfil",
+      "datos-personales": "Datos personales",
+      "preferencias": "Preferencias",
+      "seguridad": "Seguridad"
+    },
     "subtitle": "Cómo te ve tu equipo y cómo te cobran los deudores.",
     "firstName": "Nombre",
     "lastName": "Apellido",

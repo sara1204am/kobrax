@@ -80,15 +80,36 @@ export interface OfficeStats {
   arrears: number | null;
 }
 
+/** La cartera viva de una oficina y de lo que cuelga de ella, por moneda. «En mora» suma el saldo adeudado, no la cuota. */
+export interface OfficePortfolio {
+  credits: number;
+  arrearsCredits: number;
+  byCurrency: { currency: string; credits: number; arrearsCredits: number; balance: number; arrearsBalance: number }[];
+}
+
 export interface OfficeDetail extends Omit<OfficeRow, 'members'> {
   membersCount: number;
   membersList: OfficeMemberRow[];
   stats: OfficeStats;
+  portfolio: OfficePortfolio;
   history: OfficeHistoryEvent[];
 }
 
 const asArray = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const asNumber = (v: unknown, fallback = 0): number => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+
+/** Sin cartera (o un servidor que todavía no la manda) es cartera vacía, no un error. */
+function parsePortfolio(raw: unknown): OfficePortfolio {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const byCurrency = asArray<Record<string, unknown>>(r.byCurrency).map((c) => ({
+    currency: typeof c.currency === 'string' ? c.currency : 'BOB',
+    credits: asNumber(c.credits),
+    arrearsCredits: asNumber(c.arrearsCredits),
+    balance: asNumber(c.balance),
+    arrearsBalance: asNumber(c.arrearsBalance),
+  }));
+  return { credits: asNumber(r.credits), arrearsCredits: asNumber(r.arrearsCredits), byCurrency };
+}
 
 /**
  * `GET /branches/:id` trae la fila más los miembros, las estadísticas y el historial. Se lee con tolerancia: `members`
@@ -109,6 +130,7 @@ export function parseOfficeDetail(raw: Record<string, unknown>): OfficeDetail {
       children: asNumber(rawStats.children),
       arrears: typeof rawStats.arrears === 'number' ? rawStats.arrears : null,
     },
+    portfolio: parsePortfolio(raw.portfolio),
     history: asArray<OfficeHistoryEvent>(raw.history ?? raw.audit),
   };
 }
