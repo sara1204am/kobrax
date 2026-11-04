@@ -5,7 +5,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { buildOfficeTree, type Member } from '@kobrax/shared';
+import { Button } from '@/components/ui';
 import { Section } from '@/components/panel-ui';
+import { Icon } from '@/components/panel-shell';
 import { usePermissions } from '@/components/permissions';
 import {
   activeOffices,
@@ -21,7 +23,6 @@ import { OfficeTree, type RowAction, type TreeCtx } from './office-tree';
 import { OfficeFormDialog } from './office-form';
 import { DeactivateDialog, MoveDialog, PreviewDialog, QuickAddDialog } from './office-dialogs';
 import { MovePortfolioDialog } from './move-portfolio';
-import { TypesEditor } from './types-editor';
 
 type Dialog =
   | { kind: 'preview'; id: string }
@@ -30,7 +31,6 @@ type Dialog =
   | { kind: 'move'; id: string; to: string | null }
   | { kind: 'deactivate'; id: string }
   | { kind: 'portfolio' }
-  | { kind: 'types' }
   | null;
 
 /** Escribir en el árbol (crear, mover, desactivar): `office:write`. Leerlo: `office:read` (la API valida los dos). */
@@ -159,26 +159,23 @@ export function OfficesView({
       title={t('title')}
       inner="space-y-4 p-4 sm:p-6"
       action={
-        <span className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-[13px] font-medium">
+        <span className="flex flex-wrap items-center justify-end gap-2">
           {(trash > 0 || editable) && (
-            <Link href="/cuenta/oficinas/papelera" className="text-k-purple hover:underline">
-              {t('trash.link', { n: trash })}
-            </Link>
-          )}
-          {editable && (
-            <button type="button" onClick={() => setDialog({ kind: 'types' })} className="text-k-purple hover:underline">
-              {t('types.link')}
-            </button>
+            <span className="w-full sm:w-auto">
+              <Button type="button" variant="ghost" className="sm:px-5" onClick={() => router.push('/cuenta/oficinas/papelera')}>
+                {t('trash.link', { n: trash })}
+              </Button>
+            </span>
           )}
           {editable && root && (
-            <button
-              type="button"
-              disabled={atLimit}
-              onClick={() => setDialog({ kind: 'form', id: null, parentId: root.id })}
-              className="text-k-purple hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline"
-            >
-              {t('add')}
-            </button>
+            <span className="w-full sm:w-auto">
+              <Button type="button" className="sm:px-5" disabled={atLimit} onClick={() => setDialog({ kind: 'form', id: null, parentId: root.id })}>
+                <span className="flex items-center gap-2">
+                  <Icon name="plus" className="h-4 w-4" />
+                  {t('add')}
+                </span>
+              </Button>
+            </span>
           )}
         </span>
       }
@@ -198,9 +195,11 @@ export function OfficesView({
         <div role="note" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text">
           <span>{t('portfolio.pending', { name: pending.name, n: pending.credits })}</span>
           {canMoveCartera ? (
-            <button type="button" onClick={() => setDialog({ kind: 'portfolio' })} className="font-semibold underline">
-              {t('portfolio.open')}
-            </button>
+            <span className="sm:w-48">
+              <Button type="button" variant="ghost" onClick={() => setDialog({ kind: 'portfolio' })}>
+                {t('portfolio.open')}
+              </Button>
+            </span>
           ) : (
             <span>{t('portfolio.askAdmin')}</span>
           )}
@@ -287,7 +286,6 @@ export function OfficesView({
       {dialog?.kind === 'move' && <MoveDialog move={{ id: dialog.id, to: dialog.to }} rows={rows} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'deactivate' && byId(dialog.id) && <DeactivateDialog office={byId(dialog.id)} rows={rows} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'portfolio' && <MovePortfolioDialog from={pending ?? root ?? null} rows={rows} onClose={() => setDialog(null)} />}
-      {dialog?.kind === 'types' && <TypesEditor open onClose={() => setDialog(null)} types={types} />}
     </Section>
   );
 }

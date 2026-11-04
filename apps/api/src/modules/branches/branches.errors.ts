@@ -89,3 +89,7 @@ export const branchMoveInvalid = (reason: Exclude<MoveCheck, 'OK' | 'SAME_PARENT
     details: { reason },
   });
 };
+
+/** El punto del mapa va completo (latitud y longitud) o no va. */
+export const branchLocationIncomplete = () =>
+  new UnprocessableEntityException({ code: 'BRANCH_LOCATION_INCOMPLETE', message: 'La ubicación necesita latitud y longitud juntas' });

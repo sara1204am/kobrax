@@ -110,14 +110,16 @@ describe('OfficesView — el árbol', () => {
     expect(within(dialog).getByText('Central › Chuquisaca › Mesa Verde')).toBeInTheDocument();
     expect(within(dialog).getByText('3 personas')).toBeInTheDocument();
     expect(within(dialog).getByText('12 créditos')).toBeInTheDocument();
-    expect(within(dialog).getByRole('link', { name: 'Detalles completos' })).toHaveAttribute('href', '/cuenta/oficinas/mv');
+    // Es un botón (no un enlace): lleva a la ficha con el router.
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Detalles completos' }));
+    expect(push).toHaveBeenCalledWith('/cuenta/oficinas/mv');
   });
 });
 
 describe('OfficesView — permisos (sólo oculta; la API valida)', () => {
   it('con office:read es de lectura: sin añadir, sin tipos, sin arrastre y el menú sólo trae «Ver detalle»', async () => {
     renderIt(['office:read']);
-    expect(screen.queryByText('+ Añadir oficina')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Añadir oficina' })).not.toBeInTheDocument();
     expect(screen.queryByText('Tipos de oficina')).not.toBeInTheDocument();
     expect(document.querySelector('[draggable="true"]')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Acciones de La Paz' }));
@@ -155,7 +157,7 @@ describe('OfficesView — permisos (sólo oculta; la API valida)', () => {
 
   it('el tope del plan apaga «Añadir» y lo explica', () => {
     renderIt(['office:read', 'office:write'], ROWS, { used: 5, limit: 5 });
-    expect(screen.getByText('+ Añadir oficina')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Añadir oficina' })).toBeDisabled();
     expect(screen.getByText(/Tu plan permite 5 oficinas/)).toBeInTheDocument();
   });
 });

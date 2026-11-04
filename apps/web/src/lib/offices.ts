@@ -22,6 +22,9 @@ export interface OfficeRow {
   code: string | null;
   city: string | null;
   address: string | null;
+  /** Punto en el mapa; van las dos o ninguna. */
+  latitude?: number | null;
+  longitude?: number | null;
   active: boolean;
   parentId: string | null;
   typeId: string | null;

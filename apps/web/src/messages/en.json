@@ -2723,7 +2723,7 @@
     "offices": {
       "title": "Offices",
       "intro": "Your organization's structure: its offices and who works in each. A person's office decides which portfolio they see; whoever is in a regional sees everything under it.",
-      "add": "+ Add office",
+      "add": "Add office",
       "planLimit": "Your plan allows {limit, plural, one {# office} other {# offices}} and you already use {used} (the root counts).",
       "seePlan": "See the plan",
       "menu": {
@@ -2796,6 +2796,16 @@
           "parent": "Parent office",
           "manager": "Manager",
           "noManager": "No manager",
+          "managerSearch": "Search by name or email",
+          "managerNone": "Nobody matches your search",
+          "addUser": "Add user",
+          "location": "Location on the map",
+          "locationHint": "Tap the map or drag the pin to mark where the office is.",
+          "locationMap": "Map to mark the office location",
+          "locationTap": "Tap the map to mark the office",
+          "latitude": "Latitude",
+          "longitude": "Longitude",
+          "clearPoint": "Remove point",
           "city": "City",
           "address": "Address"
         },

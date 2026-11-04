@@ -143,6 +143,9 @@ model Branch {
   code          String?
   city          String?
   address       String?
+  /// Punto en el mapa (opcional). Van las dos o ninguna: lo garantiza un CHECK.
+  latitude      Decimal?  @db.Decimal(10, 8)
+  longitude     Decimal?  @db.Decimal(11, 8)
   managerUserId String?   @map("manager_user_id") // referencia suave a users.id
   active        Boolean   @default(true)
   /// Padre en el árbol; `null` solo en la raíz.

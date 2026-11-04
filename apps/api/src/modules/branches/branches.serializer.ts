@@ -25,6 +25,8 @@ export function serializeBranch(b: BranchWithType, stats: BranchStats, nodes: Pi
     code: b.code,
     city: b.city,
     address: b.address,
+    latitude: b.latitude === null ? null : Number(b.latitude),
+    longitude: b.longitude === null ? null : Number(b.longitude),
     managerUserId: b.managerUserId,
     managerName: stats.managerName,
     active: b.active,

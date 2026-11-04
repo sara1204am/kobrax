@@ -2723,7 +2723,7 @@
     "offices": {
       "title": "Oficinas",
       "intro": "La estructura de tu organización: sus oficinas y quién trabaja en cada una. La oficina de una persona decide qué cartera ve; quien está en una regional ve todo lo que cuelga de ella.",
-      "add": "+ Añadir oficina",
+      "add": "Añadir oficina",
       "planLimit": "Tu plan permite {limit, plural, one {# oficina} other {# oficinas}} y ya usas {used} (la raíz cuenta).",
       "seePlan": "Ver el plan",
       "menu": {
@@ -2796,6 +2796,16 @@
           "parent": "Oficina superior",
           "manager": "Responsable",
           "noManager": "Sin responsable",
+          "managerSearch": "Busca por nombre o correo",
+          "managerNone": "Nadie coincide con la búsqueda",
+          "addUser": "Agregar usuario",
+          "location": "Ubicación en el mapa",
+          "locationHint": "Toca el mapa o arrastra el pin para marcar dónde está la oficina.",
+          "locationMap": "Mapa para marcar la ubicación de la oficina",
+          "locationTap": "Toca el mapa para marcar la oficina",
+          "latitude": "Latitud",
+          "longitude": "Longitud",
+          "clearPoint": "Quitar punto",
           "city": "Ciudad",
           "address": "Dirección"
         },

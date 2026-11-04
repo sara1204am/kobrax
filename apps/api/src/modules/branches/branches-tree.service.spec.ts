@@ -171,6 +171,23 @@ describe('BranchesService.create · el alta calcula la ruta en la misma transacc
     assert.equal(created[0]!.depth, 2);
   });
 
+  it('la ubicación en el mapa se guarda completa; con una sola coordenada se rechaza (BRANCH_LOCATION_INCOMPLETE)', async () => {
+    const { service, created } = makeService();
+    await service.create({ name: 'Con mapa', latitude: -19.0196, longitude: -65.2619 });
+    assert.equal(created[0]!.latitude, -19.0196);
+    assert.equal(created[0]!.longitude, -65.2619);
+    await rejectsWithCode(service.create({ name: 'Media ubicación', latitude: -19.0196 }), 'BRANCH_LOCATION_INCOMPLETE');
+    await rejectsWithCode(service.update('lpz', { latitude: null }), 'BRANCH_LOCATION_INCOMPLETE');
+    await service.update('lpz', { latitude: null, longitude: null });
+  });
+
+  it('la validación acota la latitud a ±90 y la longitud a ±180', async () => {
+    const errs = async (body: object) => (await validate(plainToInstance(CreateBranchDto, { name: 'Oficina X', ...body }))).map((e) => e.property);
+    assert.deepEqual(await errs({ latitude: -19.5, longitude: -65.2 }), []);
+    assert.deepEqual(await errs({ latitude: 91, longitude: 0 }), ['latitude']);
+    assert.deepEqual(await errs({ latitude: 0, longitude: 181 }), ['longitude']);
+  });
+
   it('🔴 un padre que no es de esta cuenta (o no existe) se rechaza: BRANCH_PARENT_INVALID', async () => {
     const { service, created } = makeService();
     await rejectsWithCode(service.create({ name: 'Intrusa', parentId: 'de-otra-cuenta' }), 'BRANCH_PARENT_INVALID');

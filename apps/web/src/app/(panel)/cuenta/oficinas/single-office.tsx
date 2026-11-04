@@ -2,9 +2,12 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { Member } from '@kobrax/shared';
+import { Button } from '@/components/ui';
 import { Section, Badge } from '@/components/panel-ui';
+import { Icon } from '@/components/panel-shell';
 import { usePermissions } from '@/components/permissions';
 import { canAddFirstOffice, activeOffices, type OfficeRow, type OfficeType } from '@/lib/offices';
 import { OfficeFormDialog } from './office-form';
@@ -26,6 +29,7 @@ export function SingleOffice({
 }) {
   const t = useTranslations('account.offices');
   const { can } = usePermissions();
+  const router = useRouter();
   const writable = can('office:write');
   const office = activeOffices(rows)[0] ?? rows[0];
   const [dialog, setDialog] = useState<'edit' | 'add' | null>(null);
@@ -49,9 +53,11 @@ export function SingleOffice({
       inner="space-y-5 p-4 sm:p-6"
       action={
         writable ? (
-          <button type="button" onClick={() => setDialog('edit')} className="text-[13px] font-medium text-k-purple hover:underline">
-            {t('menu.edit')}
-          </button>
+          <span className="block w-full sm:w-auto">
+            <Button type="button" variant="ghost" className="sm:px-5" onClick={() => setDialog('edit')}>
+              {t('menu.edit')}
+            </Button>
+          </span>
         ) : undefined
       }
     >
@@ -71,9 +77,14 @@ export function SingleOffice({
       {mayAdd && (
         <div role="note" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-k-bg px-4 py-3 text-[13px] text-k-text-2">
           <span>{t('single.firstAgencyHint')}</span>
-          <button type="button" onClick={() => setDialog('add')} className="font-semibold text-k-purple hover:underline">
-            {t('single.firstAgency')}
-          </button>
+          <span className="sm:w-56">
+            <Button type="button" onClick={() => setDialog('add')}>
+              <span className="flex items-center gap-2">
+                <Icon name="plus" className="h-4 w-4" />
+                {t('single.firstAgency')}
+              </span>
+            </Button>
+          </span>
         </div>
       )}
       {planBlocks && (
@@ -85,9 +96,11 @@ export function SingleOffice({
         </p>
       )}
       {writable && trash > 0 && (
-        <Link href="/cuenta/oficinas/papelera" className="inline-block text-[13px] font-medium text-k-purple hover:underline">
-          {t('trash.link', { n: trash })}
-        </Link>
+        <span className="block sm:w-56">
+          <Button type="button" variant="ghost" onClick={() => router.push('/cuenta/oficinas/papelera')}>
+            {t('trash.link', { n: trash })}
+          </Button>
+        </span>
       )}
       {!writable && <Badge>{t('single.readOnly')}</Badge>}
 

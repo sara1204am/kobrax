@@ -3,11 +3,16 @@
 import { useEffect, useState } from 'react';
 import type { Member } from '@kobrax/shared';
 import { Button, Field, Input, Select, ErrorBanner } from '@/components/ui';
+import { MapPicker } from '@/components/map-picker';
+import { SearchCombobox } from '@/components/user-combobox';
+import { InviteDialog } from '../../equipo/invite-dialog';
 import { Modal } from '@/components/modal';
 import { OfficeSelect } from '@/components/office-select';
+import { Icon } from '@/components/panel-shell';
+import { usePermissions } from '@/components/permissions';
 import { sendJson } from '@/lib/client';
 import { memberLabel } from '@/lib/branches';
-import { activeOffices, flattenTree, moveVerdict, willBranchRootWithPortfolio, type OfficeRow, type OfficeType } from '@/lib/offices';
+import { activeOffices, officeOptions as officeOptionsOf, flattenTree, moveVerdict, willBranchRootWithPortfolio, type OfficeRow, type OfficeType } from '@/lib/offices';
 import { buildOfficeTree } from '@kobrax/shared';
 import { OfficeTeam } from './office-team';
 import { useOfficeApi } from './use-office-api';
@@ -22,6 +27,8 @@ interface Draft {
   managerUserId: string;
   city: string;
   address: string;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 const draftOf = (row: OfficeRow | null, parentId: string, typeId: string): Draft => ({
@@ -32,6 +39,8 @@ const draftOf = (row: OfficeRow | null, parentId: string, typeId: string): Draft
   managerUserId: row?.managerUserId ?? '',
   city: row?.city ?? '',
   address: row?.address ?? '',
+  latitude: row?.latitude ?? null,
+  longitude: row?.longitude ?? null,
 });
 
 /** Vaciar un dato opcional es quitarlo: viaja como `null` (un `''` chocaría con el `@Length` de la API). */
@@ -65,8 +74,10 @@ export function OfficeFormDialog({
   initialTab?: Tab;
 }) {
   const { busy, error, setError, run, t } = useOfficeApi();
+  const { can } = usePermissions();
   const activeTypes = types.filter((x) => x.isActive).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
   const [tab, setTab] = useState<Tab>(initialTab);
+  const [inviting, setInviting] = useState(false);
   const [draft, setDraft] = useState<Draft>(() => draftOf(office, defaultParentId, activeTypes[0]?.id ?? ''));
 
   // Cada vez que se abre, se parte de los datos vigentes.
@@ -91,7 +102,12 @@ export function OfficeFormDialog({
   const parentInvalid = !lockedParent && !draft.parentId;
   const dataInvalid = nameInvalid || typeInvalid || parentInvalid;
   const branching = !editing && willBranchRootWithPortfolio(rows, draft.parentId);
-  const eligibleManagers = members.filter((m) => m.isActive && m.userStatus === 'ACTIVE');
+  // Cualquier miembro vigente de la cuenta, con o sin oficina; también quien tiene la invitación pendiente.
+  const eligibleManagers = members
+    .filter((m) => m.isActive && m.userStatus !== 'INACTIVE' && m.userStatus !== 'SUSPENDED')
+    .map((m) => ({ id: m.userId, label: memberLabel(m), detail: m.email }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  const hasPoint = draft.latitude !== null && draft.longitude !== null;
 
   async function save() {
     const base = {
@@ -101,6 +117,9 @@ export function OfficeFormDialog({
       address: orNull(draft.address),
       typeId: draft.typeId,
       managerUserId: draft.managerUserId || null,
+      // El punto viaja completo: las dos coordenadas, o `null` en las dos para quitarlo.
+      latitude: hasPoint ? draft.latitude : null,
+      longitude: hasPoint ? draft.longitude : null,
     };
     if (!editing) {
       // En el alta un dato vacío se omite: `null` no es un valor válido de creación.
@@ -124,6 +143,7 @@ export function OfficeFormDialog({
   ];
 
   return (
+    <>
     <Modal
       wide
       open={open}
@@ -207,14 +227,32 @@ export function OfficeFormDialog({
               </p>
             )}
             <Field label={t('form.fields.manager')}>
-              <Select value={draft.managerUserId} onChange={(e) => setDraft({ ...draft, managerUserId: e.target.value })}>
-                <option value="">{t('form.fields.noManager')}</option>
-                {eligibleManagers.map((m) => (
-                  <option key={m.userId} value={m.userId}>
-                    {memberLabel(m)}
-                  </option>
-                ))}
-              </Select>
+              <SearchCombobox
+                label={t('form.fields.manager')}
+                options={eligibleManagers}
+                value={draft.managerUserId}
+                onChange={(id) => setDraft({ ...draft, managerUserId: id })}
+                emptyLabel={t('form.fields.noManager')}
+                placeholder={t('form.fields.managerSearch')}
+                noResults={t('form.fields.managerNone')}
+                footer={(close) =>
+                  can('user:invite') ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        close();
+                        setInviting(true);
+                      }}
+                    >
+                      <span className="flex items-center gap-2">
+                        <Icon name="plus" className="h-4 w-4" />
+                        {t('form.fields.addUser')}
+                      </span>
+                    </Button>
+                  ) : null
+                }
+              />
             </Field>
           </div>
         )}
@@ -227,6 +265,29 @@ export function OfficeFormDialog({
             <Field label={t('form.fields.address')}>
               <Input value={draft.address} maxLength={240} onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
             </Field>
+            <Field label={t('form.fields.location')} hint={t('form.fields.locationHint')}>
+              <MapPicker
+                label={t('form.fields.locationMap')}
+                hint={t('form.fields.locationTap')}
+                height={260}
+                latitude={draft.latitude ?? undefined}
+                longitude={draft.longitude ?? undefined}
+                onChange={(c) => setDraft((d) => ({ ...d, latitude: Number(c.latitude.toFixed(6)), longitude: Number(c.longitude.toFixed(6)) }))}
+              />
+            </Field>
+            <div className="grid items-end gap-3 sm:grid-cols-[1fr_1fr_auto]">
+              <Field label={t('form.fields.latitude')}>
+                <Input readOnly value={draft.latitude ?? ''} placeholder="—" />
+              </Field>
+              <Field label={t('form.fields.longitude')}>
+                <Input readOnly value={draft.longitude ?? ''} placeholder="—" />
+              </Field>
+              <span className="sm:w-40">
+                <Button type="button" variant="ghost" disabled={!hasPoint} onClick={() => setDraft({ ...draft, latitude: null, longitude: null })}>
+                  {t('form.fields.clearPoint')}
+                </Button>
+              </span>
+            </div>
           </div>
         )}
 
@@ -237,5 +298,13 @@ export function OfficeFormDialog({
         )}
       </div>
     </Modal>
+    <InviteDialog
+      open={inviting}
+      onClose={() => setInviting(false)}
+      offices={officeOptionsOf(rows)}
+      defaultOfficeId={office?.id ?? draft.parentId}
+      onInvited={(m) => setDraft((d) => ({ ...d, managerUserId: m.userId }))}
+    />
+    </>
   );
 }

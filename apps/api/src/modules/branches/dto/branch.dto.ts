@@ -1,4 +1,4 @@
-import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Matches, Max, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Length, Matches, Max, Min } from 'class-validator';
 
 /** Códigos cortos y legibles: `CEN`, `ALTO-2`. Se guardan en mayúsculas. */
 const CODE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,19}$/;
@@ -12,6 +12,8 @@ export class CreateBranchDto {
   @IsOptional() @Matches(CODE, { message: 'code debe tener hasta 20 letras, números, guion o guion bajo' }) code?: string;
   @IsOptional() @IsString() @Length(1, 80) city?: string;
   @IsOptional() @IsString() @Length(1, 240) address?: string;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 8 }) @Min(-90) @Max(90) latitude?: number;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 8 }) @Min(-180) @Max(180) longitude?: number;
   @IsOptional() @IsUUID() managerUserId?: string;
   @IsOptional() @IsUUID() parentId?: string;
   @IsOptional() @IsUUID() typeId?: string;
@@ -23,6 +25,9 @@ export class UpdateBranchDto {
   @IsOptional() @Matches(CODE, { message: 'code debe tener hasta 20 letras, números, guion o guion bajo' }) code?: string | null;
   @IsOptional() @IsString() @Length(1, 80) city?: string | null;
   @IsOptional() @IsString() @Length(1, 240) address?: string | null;
+  /** El punto va completo o no va: `null` en las dos lo quita. */
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 8 }) @Min(-90) @Max(90) latitude?: number | null;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 8 }) @Min(-180) @Max(180) longitude?: number | null;
   @IsOptional() @IsUUID() managerUserId?: string | null;
   @IsOptional() @IsUUID() typeId?: string;
   @IsOptional() @IsBoolean() active?: boolean;

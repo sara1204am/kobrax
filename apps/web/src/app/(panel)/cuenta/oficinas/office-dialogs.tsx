@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
 import { Badge } from '@/components/panel-ui';
 import { Modal } from '@/components/modal';
@@ -34,6 +34,7 @@ export function PreviewDialog({
   onEdit: (row: OfficeRow) => void;
 }) {
   const { t } = useOfficeApi();
+  const router = useRouter();
   const parent = row?.parentId ? rows.find((r) => r.id === row.parentId) : null;
   const kids = row ? rows.filter((r) => r.parentId === row.id && r.active).length : 0;
   const facts: [string, string | null][] = row
@@ -57,12 +58,11 @@ export function PreviewDialog({
             </Button>
           </span>
           {row && (
-            <Link
-              href={`/cuenta/oficinas/${row.id}`}
-              className="flex h-12 items-center justify-center rounded-xl border border-k-border px-4 text-[14px] font-semibold text-k-text-2 hover:bg-k-bg sm:w-48"
-            >
-              {t('preview.full')}
-            </Link>
+            <span className="sm:w-48">
+              <Button variant="ghost" onClick={() => router.push(`/cuenta/oficinas/${row.id}`)}>
+                {t('preview.full')}
+              </Button>
+            </span>
           )}
           {row && editable && row.active && (
             <span className="sm:w-32">

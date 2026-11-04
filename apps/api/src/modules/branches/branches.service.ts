@@ -26,6 +26,7 @@ import {
   branchHasCredits,
   branchHasMembers,
   branchInactive,
+  branchLocationIncomplete,
   branchManagerInvalid,
   branchMemberNotFound,
   branchMembersInvalid,
@@ -39,6 +40,15 @@ import {
   branchTypeInvalid,
   branchTypeNotFound,
 } from './branches.errors';
+
+/** El punto del mapa: las dos coordenadas juntas (número = poner, `null` = quitar) o ninguna (no se toca). */
+const locationData = (dto: { latitude?: number | null; longitude?: number | null }): { latitude?: number | null; longitude?: number | null } => {
+  if (dto.latitude === undefined && dto.longitude === undefined) return {};
+  const bothNull = dto.latitude === null && dto.longitude === null;
+  const bothNumber = typeof dto.latitude === 'number' && typeof dto.longitude === 'number';
+  if (!bothNull && !bothNumber) throw branchLocationIncomplete();
+  return { latitude: dto.latitude, longitude: dto.longitude };
+};
 
 const normalizeCode = (code: string | null | undefined): string | null | undefined =>
   code === undefined || code === null ? code : code.toUpperCase();
@@ -285,6 +295,7 @@ export class BranchesService {
           code,
           city: dto.city ?? null,
           address: dto.address ?? null,
+          ...locationData(dto),
           managerUserId: dto.managerUserId ?? null,
           parentId: parent.id,
           typeId,
@@ -318,6 +329,7 @@ export class BranchesService {
           code,
           city: dto.city,
           address: dto.address,
+          ...locationData(dto),
           managerUserId: dto.managerUserId,
           active: dto.active,
           typeId,
