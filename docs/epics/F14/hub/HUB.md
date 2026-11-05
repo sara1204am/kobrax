@@ -23,8 +23,16 @@
 | H14-016 | `packages/shared` permisos y códigos | `user:sessions:revoke`, `AUTHZ_STALE` | api, web, móvil | Medio | F1 | `permission-gates.spec.ts` | VERIFICADO 2026-11-04 |
 | H14-017 | `apps/web/src/lib/bff.ts:80-125` `apiCall`; `src/middleware.ts:70-72`; `app/api/auth/renew` (nuevo) | Reintento ante `AUTHZ_STALE` | 14 archivos con `apiCall` | Alto | F1 | `bff.test.ts` | VERIFICADO 2026-11-04 |
 | H14-018 | `apps/mobile/src/api-client.ts:62-76` `authedFetch` | 401 ⇒ refresh + 1 reintento | todo el móvil | Medio | F1 | test de api-client | VERIFICADO 2026-11-04 |
+| H14-019 | `apps/api/src/app.module.ts:76-77` (`APP_GUARD`) | Registro de guards globales: hoy sólo `RateLimit` y `AppVersion`; F3 añade `JwtAuthGuard`, `TenantGuard`, `AuthzGuard` (orden explícito) | **todos** los controladores, `health`, pruebas que levantan la app | Alto | F3 | `authz-coverage.spec.ts`, integración completa | PLANEADO 2026-11-05 |
+| H14-020 | `auth/decorators/authz.decorator.ts`, `auth/guards/authz.guard.ts` (nuevos) | Metadato único de acceso + guard con negación por defecto (`log`/`enforce`) | 41 controladores | Alto | F3 | `authz.guard.spec.ts` | PLANEADO |
+| H14-021 | `common/authz/*` (nuevo) | `AuthorizationService`, `PolicyService`, `FactsLoader` | los 13 servicios con `tenant.can`, F2/F4/F7 | Alto | F3 | `authorization.service.spec.ts`, `policy.service.spec.ts` | PLANEADO |
+| H14-022 | `modules/**/*.controller.ts` (41) y `health/health.controller.ts` | Retirar `@UseGuards` por controlador; declarar públicos/autenticados | todo el API | Alto | F3 | `authz-coverage.spec.ts` | PLANEADO |
+| H14-023 | `routes.controller.ts`, `agenda.controller.ts`, `credits.controller.ts`, `dashboards.controller.ts` (+ F13 HUB-012, 017, 020) | Puertas «sólo en el servicio» de R-05 declaradas en el guard, sin cambiar quién puede | web y móvil (rutas, agenda, castigo, dashboards) | Medio | F3 | `permission-gates.spec.ts` + snapshot | PLANEADO |
+| H14-024 | `permission-gates.spec.ts`, `authz-coverage.spec.ts` (nuevo), `docs/epics/F14/authz-snapshot.json` (nuevo) | Cobertura total y snapshot aprobado | CI | Medio | F3 | el propio spec | PLANEADO |
 
 ## IMPACT-MAP (F1)
+- **(F3) Cambiar quién registra los guards (H14-019/022)** ⇒ todos los controladores, `health`, `main.ts` (versionado), rutas públicas (`auth`, `accounts`, `health`), pruebas de integración que levantan la app, `permission-gates.spec.ts`, `uploads.access.spec.ts` (usa `RolesGuard`).
+- **(F3) Migrar `tenant.can` (H14-021)** ⇒ F13 HUB-012 (agenda), 013 (asignaciones), 015 (importación), 017 (créditos), 019 (clientes), 020 (rutas), H14-009/012 (users, office-scope); `dashboards`, `field-ops`, `mora` no tienen entrada F13: se cubren con H14-021.
 - **Cambiar claims / guard (H14-004/005)** ⇒ revisar H14-008 (emisión), H14-017/018 (clientes), tests de token, cualquier mock de `AuthenticatedUser`.
 - **Cambiar `visibleClientIdsSql` (H14-013)** ⇒ Cartera, Clientes, Pagos, Exportes (consumen la subconsulta), F13 HUB-011/019.
 - **Cambiar visibilidad de Personas (H14-009/012)** ⇒ «añadir persona», reparto (`assignableRows`), Equipo web.

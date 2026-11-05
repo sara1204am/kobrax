@@ -1,4 +1,4 @@
-> ESTADO: BORRADOR (2026-11-05) — pendiente `validar` (G4) y aprobación de D-1…D-5
+> ESTADO: VALIDADO (PASS 2026-11-05) — D-1…D-5 APROBADAS por la usuaria el 2026-11-05. Sin ejecutar: la usuaria aún no ordenó empezar la construcción
 
 # Plan F3 · Arquitectura central de autorización
 
@@ -46,10 +46,10 @@ Hallazgos del plan maestro que resuelve: **R-05, N-08 (API), N-09, N-13**.
 
 ## 5. Dependencias
 - F1 cerrada (G7 PASS 2026-11-05): `av/pv`, `AUTHZ_STALE`, `@RolesAny`.
-- Decisiones aprobadas que sustentan: **H-2** (permisos en el JWT), **H-3/H-13** (sólo contexto, no se implementan aquí), ADR-F14-03 (decoradores y deny-by-default, `ROLES-PERMISOS-PLAN.md` §C.2). Las decisiones **propias de esta fase** (D-1…D-5, §9) están en **PROPUESTA**: sin su aprobación el plan no pasa G4.
+- Decisiones aprobadas que sustentan: **H-2** (permisos en el JWT), **H-3/H-13** (sólo contexto, no se implementan aquí), ADR-F14-03 (decoradores y deny-by-default, `ROLES-PERMISOS-PLAN.md` §C.2). Las decisiones **propias de esta fase** (D-1…D-5, §9) fueron **APROBADAS por la usuaria el 2026-11-05**, tal como están redactadas en §9.
 - Gates: G0–G3 PASS, G4 de F1 y G5–G7 de F1 PASS.
 
-## 6. Archivos afectados (HUB consultado; entradas nuevas H14-019…H14-024 a crear en el HUB)
+## 6. Archivos afectados (HUB consultado; entradas H14-019…H14-024 creadas en `hub/HUB.md` en estado PLANEADO)
 
 | Archivo / zona | HUB | Cambio |
 |---|---|---|
@@ -59,7 +59,7 @@ Hallazgos del plan maestro que resuelve: **R-05, N-08 (API), N-09, N-13**.
 | `auth/decorators/authz.decorator.ts` (nuevo), `auth/guards/authz.guard.ts` (nuevo) | nuevo H14-020 | Metadato y guard con modo `log`/`enforce` |
 | `common/authz/*` (nuevo: servicio, políticas, cargador de hechos, módulo) | nuevo H14-021 | `AuthorizationService`, `PolicyService`, `FactsLoader` |
 | 41 controladores en `modules/**` + `health/` | nuevo H14-022 | Quitar `@UseGuards` por controlador; añadir el metadato donde falte (≈17 autenticados, públicos de `auth`/`accounts`/`health`) |
-| 13 archivos con `tenant.can` (E6) | H14-009/012/013 y entradas de F13 (agenda, rutas, créditos) | Sustituir por `AuthorizationService`, mismo comportamiento |
+| 13 archivos con `tenant.can` (E6) | H14-021 más F13 HUB-012 (agenda), 013 (asignaciones), 015 (importación), 017 (créditos), 019 (clientes), 020 (rutas); H14-009/012 (users, office-scope). `dashboards`, `field-ops` y `mora` no tienen entrada F13 y se cubren con H14-021 | Sustituir por `AuthorizationService`, mismo comportamiento |
 | `routes.controller.ts`, `agenda.controller.ts`, `credits.controller.ts`, `dashboards.controller.ts` | nuevo H14-023 | Declarar la puerta real (R-05) |
 | `permission-gates.spec.ts`; nuevo `authz-coverage.spec.ts`; `docs/epics/F14/authz-snapshot.json` | nuevo H14-024 | Cobertura total y snapshot |
 | `apps/api/package.json` (`test`), `config/env.validation.ts`, `app-config.service.ts` | H14-015 | Registrar specs nuevos; `AUTHZ_DENY_BY_DEFAULT` |
@@ -76,7 +76,7 @@ RULES F14-A: **H-2** (el guard sigue verificando `av/pv` y revocación; no se to
 - **Tenants con oficinas (banco)**: sin cambio de permisos; los 34 `tenant.can` migrados conservan su resultado (se prueba con los specs de servicio existentes).
 - **Soporte/SUPER_ADMIN**: sin cambio.
 
-## 9. Riesgos y decisiones propias (todas en PROPUESTA hasta que la usuaria apruebe)
+## 9. Riesgos y decisiones propias (D-1…D-5 APROBADAS 2026-11-05)
 
 | ID | Riesgo / decisión | Propuesta |
 |---|---|---|
@@ -124,7 +124,7 @@ RULES F14-A: **H-2** (el guard sigue verificando `av/pv` y revocación; no se to
 9. Reescribir `auth/CLAUDE.md` (N-09) y crear las entradas H14-019…024 en el HUB y el IMPACT-MAP.
 
 **Web:** sin cambios de código; correr la suite completa (los contratos 401/403 no cambian).
-**Móvil:** sin cambios de código; correr la suite completa.
+**Móvil:** sin cambios de código; correr la suite completa. *Cruce RULES D1:* la alineación móvil↔web (F10, ronda 3, EN EJECUCIÓN) no se toca; el móvil ya maneja 401 (F1) y no depende de 403 distintos, así que no hay solape. Si la tarea 5 cambiara un código de error visible al móvil, se vuelve a consultar.
 
 ## 13. Criterios de cierre (evidencia exigida)
 - **G5:** salida pegada en `execution/VERIFICATIONS.md` de: unitarias de la API; `authz-coverage.spec.ts` (100 % de handlers con contrato); snapshot generado y **aprobado por la usuaria**; integración completa **sola**; web y móvil; `tsc` en api/web/database/mobile; regresión del gratuito individual; `grep tenant.can` fuera de `common/authz` = sólo la lista blanca justificada.
