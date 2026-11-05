@@ -11,5 +11,11 @@
 - **Decisiones aprobadas:** H-1…H-13; D-1, D-2, D-5. **Pendientes:** ninguna de F1.
 - **Verificaciones:** `execution/VERIFICATIONS.md` (V-001…V-014). Incidentes: `execution/INCIDENTS.md` (todos resueltos o nota).
 - **Después del cierre:** la usuaria pidió «plan de F2»; como F2 depende de F3 (orden F1→F3→F2), eligió escribir primero **`plans/F3-authz-core.md`** (BORRADOR, rama `f14/p3-authz-core`).
-- **F3:** D-1…D-5 aprobadas y plan **VALIDADO (G4 PASS 2026-11-05)**.
-- **Siguiente paso autorizado:** ninguno por iniciativa propia; esperar la orden de la usuaria para ejecutar F3 (tareas 1–9 del plan). Sin push/PR hasta que lo pida.
+- **F3 construida (2026-11-05, rama `f14/p3-authz-core`, commit `1937fa9`):** contrato de acceso por handler + `AuthzGuard` con negación por defecto; `JwtAuthGuard`/`TenantGuard`/`AuthzGuard` globales (registrados en `AuthModule`, orden verificado en integración); `@UseGuards` retirado de los 24 controladores; `RolesGuard` eliminado; `common/authz/` (`AuthorizationService`, `PolicyService`, `FactsLoader`, política `credit.writeOff`); 10 servicios migrados de `tenant.can`; puertas any-of de rutas/visitas (R-05); N-13 y N-09 hechos. Verificaciones V-015…V-019 en verde (API 1923, integración 201, web 1244, móvil 979).
+- **Para la usuaria (leer):**
+  1. **Snapshot de puertas** `docs/epics/F14/authz-snapshot.json` (203 handlers: 168 con permisos, 20 autenticados, 15 públicos): hay que **aprobarlo** para cerrar G5.
+  2. Cambios visibles: `POST /routes`, `/routes/generate`, `/routes/plan-preview`, `/routes/leg`, `POST /visits` y `POST /visits/:id/evidence` ahora exigen en el guard «ejecutar, escribir o asignar ruta» (antes `route:read` + chequeo en el servicio). Un AUDITOR/VIEWER recibe `403 AUTH_002` en vez del código de ruta anterior.
+  3. Rollback de un release: `AUTHZ_DENY_BY_DEFAULT=log`.
+  4. Los `nest start --watch`/`next dev` siguen detenidos por tu orden anterior.
+- **Falta:** G5 (aprobación del snapshot), G6 (`/code-review`), G7. No se abrió F2.
+- **Siguiente paso autorizado:** ninguno por iniciativa propia; esperar la orden de la usuaria (aprobar snapshot → G6 → G7). Sin push/PR.
