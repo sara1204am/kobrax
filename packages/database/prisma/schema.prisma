@@ -363,6 +363,8 @@ model UserAccount {
   isOwner   Boolean  @default(false) @map("is_owner")
   isDefault Boolean  @default(false) @map("is_default")
   isActive  Boolean  @default(true) @map("is_active")
+  /// F14 · F1: sube con cada cambio de rol / oficina / estado de esta membresía; viaja en el JWT como `av` (H-2).
+  authzVersion Int    @default(1) @map("authz_version")
   joinedAt  DateTime @default(now()) @map("joined_at")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -376,6 +378,29 @@ model UserAccount {
   @@index([accountId])
   @@index([accountId, roleId])
   @@map("user_accounts")
+}
+
+/// F14 · F1: ajustes globales de la plataforma (una sola fila, `id = 1`). Sin `account_id` a propósito: es un catálogo global
+/// como `roles`/`permissions`. `policy_version` sube cuando cambia algo que afecta a todos los tenants (catálogo, plantillas).
+model PlatformSetting {
+  id            Int      @id @default(1)
+  policyVersion Int      @default(1) @map("policy_version")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
+}
+
+/// F14 · F1: outbox transaccional DB→Redis de `authz_version`. Se inserta en la MISMA transacción que el cambio; un job la vacía.
+model AuthzVersionOutbox {
+  id          String    @id @default(uuid())
+  accountId   String    @map("account_id")
+  userId      String    @map("user_id")
+  version     Int
+  createdAt   DateTime  @default(now()) @map("created_at")
+  processedAt DateTime? @map("processed_at")
+
+  @@index([accountId, userId])
+  @@map("authz_version_outbox")
 }
 
 /// Sesiones de usuario para control de acceso, monitoreo y seguridad.
@@ -693,6 +718,8 @@ model Client {
   linkReviewPending       Boolean      @default(false) @map("link_review_pending")
   createdAt               DateTime     @default(now()) @map("created_at")
   updatedAt               DateTime     @updatedAt @map("updated_at")
+  /// F14 · F1: quién dio de alta al cliente (trazabilidad; NO es «dueño», la responsabilidad vive en el crédito — H-7).
+  createdBy               String?      @map("created_by")
   deletedAt               DateTime?    @map("deleted_at")
 
   account          Account             @relation(fields: [accountId], references: [id])

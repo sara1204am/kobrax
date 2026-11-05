@@ -69,7 +69,9 @@ DECLARE
     -- Pedidos de cambio sobre rutas ajenas (F4/12).
     'route_change_requests',
     -- Tokens de push remoto (F10): a qué teléfonos avisarle a cada usuario.
-    'device_push_tokens', 'client_income_profiles'
+    'device_push_tokens', 'client_income_profiles',
+    -- F14 · F1: outbox transaccional de versiones de autorización.
+    'authz_version_outbox'
   ];
 BEGIN
   FOREACH t IN ARRAY operational LOOP
@@ -105,3 +107,5 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON user_permission_overrides TO kobrax_app;
 -- role_permissions. No llevan RLS por tenant; su acceso se controla en la
 -- capa de aplicación (un usuario es global y puede pertenecer a varios tenants).
 GRANT SELECT, INSERT, UPDATE, DELETE ON users, profiles, roles, permissions, role_permissions, mfa_backup_codes TO kobrax_app;
+-- F14 · F1: ajustes globales (una fila, sin account_id: catálogo global como `roles`).
+GRANT SELECT, UPDATE ON platform_settings TO kobrax_app;

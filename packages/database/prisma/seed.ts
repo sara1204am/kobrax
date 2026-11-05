@@ -99,6 +99,7 @@ const PERMISSIONS: PermRow[] = [
   ['user:read', 'users', 'READ', 'ACCOUNT'],
   ['user:write', 'users', 'UPDATE', 'ACCOUNT'],
   ['user:invite', 'users', 'CREATE', 'ACCOUNT'],
+  ['user:sessions:revoke', 'users', 'EXECUTE', 'ACCOUNT'],
   ['role:read', 'roles', 'READ', 'ACCOUNT'],
   ['role:write', 'roles', 'UPDATE', 'ACCOUNT'],
   ['audit:read', 'audit', 'READ', 'ACCOUNT'],

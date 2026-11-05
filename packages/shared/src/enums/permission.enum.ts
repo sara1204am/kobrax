@@ -55,6 +55,8 @@ export enum Permission {
   USER_READ = 'user:read',
   USER_WRITE = 'user:write',
   USER_INVITE = 'user:invite',
+  /** F14 · F1: cerrar las sesiones abiertas de un miembro (cambia nada del rol; fuerza a volver a entrar). */
+  USER_SESSIONS_REVOKE = 'user:sessions:revoke',
 
   ROLE_READ = 'role:read',
   ROLE_WRITE = 'role:write',
