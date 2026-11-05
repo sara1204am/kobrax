@@ -67,9 +67,16 @@ async function guestOnly(req: NextRequest): Promise<NextResponse> {
   }
 }
 
+/** La ruta que se está pidiendo, para que una pantalla de servidor pueda volver a ella tras renovar la sesión (`AUTHZ_STALE`). */
+function withPath(req: NextRequest): Headers {
+  const headers = new Headers(req.headers);
+  headers.set('x-k-path', req.nextUrl.pathname + req.nextUrl.search);
+  return headers;
+}
+
 export async function middleware(req: NextRequest): Promise<NextResponse> {
   if (GUEST_ONLY.has(req.nextUrl.pathname)) return guestOnly(req);
-  if (req.cookies.get(ACCESS)?.value) return NextResponse.next();
+  if (req.cookies.get(ACCESS)?.value) return NextResponse.next({ request: { headers: withPath(req) } });
 
   const refresh = req.cookies.get(REFRESH)?.value;
   /** El servidor dijo que ese refresh ya no vale. Distinto de «no pude preguntarle». */
@@ -98,7 +105,7 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
           const jar = new Map(req.cookies.getAll().map((c) => [c.name, c.value]));
           jar.set(ACCESS, json.data.accessToken);
           jar.set(REFRESH, json.data.refreshToken);
-          const headers = new Headers(req.headers);
+          const headers = withPath(req);
           headers.set(
             'cookie',
             [...jar].map(([name, value]) => `${name}=${value}`).join('; '),
