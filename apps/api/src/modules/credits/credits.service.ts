@@ -69,7 +69,6 @@ import {
   currencyMismatch,
   resourceNotFound,
   scheduleInvalid,
-  writeOffForbidden,
   writeOffUseEndpoint,
 } from './credits.errors';
 import { ArrearsPriorityService } from '../arrears/arrears-priority.service';

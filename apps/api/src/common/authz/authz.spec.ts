@@ -79,3 +79,11 @@ describe('PolicyService: carga hechos y decide con una función pura', () => {
     }
   });
 });
+
+describe('AuthorizationService — lista vacía niega', () => {
+  it('canAll() / assert() sin permisos no abren la puerta', () => {
+    const svc = new AuthorizationService({ can: () => true } as never);
+    assert.equal(svc.canAll(), false);
+    assert.throws(() => svc.assert());
+  });
+});

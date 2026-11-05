@@ -13,7 +13,17 @@ export type Access =
  * `@Public/@Authenticated/@Authz` del handler → `@Roles/@RolesAny` (handler, si no clase) → `@Public/@Authenticated/@Authz` de la clase.
  * Lo usan el guard y la prueba de cobertura: una sola definición de «qué exige este handler».
  */
+const CACHE = new WeakMap<object, Access | undefined>();
+
 export function resolveAccess(reflector: Pick<Reflector, 'get' | 'getAllAndOverride'>, handler: object, cls: object): Access | undefined {
+  // El contrato de un handler no cambia en vida del proceso y los 3 guards globales lo piden en cada request.
+  if (CACHE.has(handler)) return CACHE.get(handler);
+  const access = compute(reflector, handler, cls);
+  CACHE.set(handler, access);
+  return access;
+}
+
+function compute(reflector: Pick<Reflector, 'get' | 'getAllAndOverride'>, handler: object, cls: object): Access | undefined {
   const own = reflector.get<AuthzDeclaration | undefined>(AUTHZ_KEY, handler as never);
   if (own?.kind === 'public' || own?.kind === 'authenticated') return { kind: own.kind };
 

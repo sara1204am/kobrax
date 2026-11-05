@@ -24,8 +24,7 @@ export interface AuthenticatedUser {
  * → revocación instantánea (logout / cierre de sesión / cambio de contraseña).
  * Adjunta la identidad en `request.user`.
  *
- * (Slice 4 de F2a añadirá RolesGuard/TenantGuard; este guard cubre la autenticación
- * y la revocación instantánea que F2b necesita en sus endpoints Bearer.)
+ * Es GLOBAL (F14 · F3): corre antes de `TenantGuard` y `AuthzGuard`; lo `@Public` no se autentica.
  */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {

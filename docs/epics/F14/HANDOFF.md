@@ -17,5 +17,6 @@
   2. Cambios visibles: `POST /routes`, `/routes/generate`, `/routes/plan-preview`, `/routes/leg`, `POST /visits` y `POST /visits/:id/evidence` ahora exigen en el guard «ejecutar, escribir o asignar ruta» (antes `route:read` + chequeo en el servicio). Un AUDITOR/VIEWER recibe `403 AUTH_002` en vez del código de ruta anterior.
   3. Rollback de un release: `AUTHZ_DENY_BY_DEFAULT=log`.
   4. Los `nest start --watch`/`next dev` siguen detenidos por tu orden anterior.
-- **Falta:** G5 (aprobación del snapshot), G6 (`/code-review`), G7. No se abrió F2.
-- **Siguiente paso autorizado:** ninguno por iniciativa propia; esperar la orden de la usuaria (aprobar snapshot → G6 → G7). Sin push/PR.
+- **F3 cerrada (G5·G6·G7 PASS, V-020/V-021):** el code-review corrigió 7 puntos; el más relevante: `TenantGuard` vuelve a exigir tenant también a lo «sólo autenticado» (notificaciones, dispositivos, perfil, descargas). Snapshot aprobado.
+- **Falta:** nada de F3. **F2** (permisos finos por fila: `credit.assign`, `client.create`, `member.invite`…, sobre `PolicyService`/`FactsLoader`) no se abrió.
+- **Siguiente paso autorizado:** ninguno por iniciativa propia; esperar la orden de la usuaria (`plan de F2`). Sin push/PR.

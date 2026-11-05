@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { AuthzVersionService, membershipKey, POLICY_KEY } from './authz-version.service';
+import { AuthzVersionService, membershipKey, POLICY_VERSION_KEY } from './authz-version.service';
 
 /** Redis en memoria con lo justo: MGET y el EVAL de «set si es mayor». */
 function fakeRedis() {
@@ -53,19 +53,19 @@ describe('AuthzVersionService.check', () => {
   it('versiones al día → ok', async () => {
     const { service, redis } = makeService();
     redis.store.set(membershipKey('u1', 'a1'), '4');
-    redis.store.set(POLICY_KEY, '2');
+    redis.store.set(POLICY_VERSION_KEY, '2');
     assert.equal(await service.check({ ...claims, av: 4, pv: 2 }), 'ok');
   });
   it('av distinto (rol/oficina cambiaron) → stale', async () => {
     const { service, redis } = makeService();
     redis.store.set(membershipKey('u1', 'a1'), '5');
-    redis.store.set(POLICY_KEY, '2');
+    redis.store.set(POLICY_VERSION_KEY, '2');
     assert.equal(await service.check({ ...claims, av: 4, pv: 2 }), 'stale');
   });
   it('pv distinto (política global cambió) → stale', async () => {
     const { service, redis } = makeService();
     redis.store.set(membershipKey('u1', 'a1'), '4');
-    redis.store.set(POLICY_KEY, '3');
+    redis.store.set(POLICY_VERSION_KEY, '3');
     assert.equal(await service.check({ ...claims, av: 4, pv: 2 }), 'stale');
   });
   it('token anterior a F1 (sin av/pv) → stale una vez', async () => {
@@ -81,7 +81,7 @@ describe('AuthzVersionService.check', () => {
     const { service, redis } = makeService({ dbVersion: 6, policy: 3 });
     assert.equal(await service.check({ ...claims, av: 6, pv: 3 }), 'ok');
     assert.equal(redis.store.get(membershipKey('u1', 'a1')), '6');
-    assert.equal(redis.store.get(POLICY_KEY), '3');
+    assert.equal(redis.store.get(POLICY_VERSION_KEY), '3');
   });
   it('la membresía ya no existe → stale (el refresh la rechazará)', async () => {
     const { service } = makeService({ dbVersion: null });
@@ -125,9 +125,9 @@ describe('AuthzVersionService.publish / reconcile', () => {
 describe('AuthzVersionService — la versión de política sube por migración', () => {
   it('reconcile lleva policy_version a Redis aunque no haya nada en la outbox (un token nuevo con pv=3 no puede quedar obsoleto)', async () => {
     const { service, redis } = makeService({ policy: 3 });
-    redis.store.set(POLICY_KEY, '2');
+    redis.store.set(POLICY_VERSION_KEY, '2');
     await service.reconcile();
-    assert.equal(redis.store.get(POLICY_KEY), '3');
+    assert.equal(redis.store.get(POLICY_VERSION_KEY), '3');
   });
   it('si Redis cae, sincronizar la política no rompe el ciclo', async () => {
     const { service, redis } = makeService({ policy: 3 });

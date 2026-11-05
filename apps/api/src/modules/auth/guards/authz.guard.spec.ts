@@ -89,14 +89,17 @@ describe('resolveAccess — precedencia handler > clase', () => {
   });
 });
 
-describe('TenantGuard global — sólo exige tenant a los handlers con permisos', () => {
+describe('TenantGuard global — exige tenant a todo handler con sesión (no a lo público)', () => {
   const tenant = new TenantGuard(new Reflector());
   it('permisos sin accountId → 403 TENANT_001', () => {
     const c = { switchToHttp: () => ({ getRequest: () => ({ user: { permissions: [] } }) }), getHandler: () => Open.prototype.all, getClass: () => Open } as unknown as ExecutionContext;
     assert.equal(codeOf(() => tenant.canActivate(c)), 'TENANT_001');
   });
-  it('público y autenticado no lo exigen', () => {
+  it('autenticado sin accountId → 403 TENANT_001 (regresión: antes lo cubría el guard del controlador)', () => {
+    const c = { switchToHttp: () => ({ getRequest: () => ({ user: { permissions: [] } }) }), getHandler: () => Open.prototype.mine, getClass: () => Open } as unknown as ExecutionContext;
+    assert.equal(codeOf(() => tenant.canActivate(c)), 'TENANT_001');
+  });
+  it('lo público no lo exige', () => {
     assert.equal(tenant.canActivate(ctx(Open as never, 'open', null)), true);
-    assert.equal(tenant.canActivate(ctx(Open as never, 'mine', null)), true);
   });
 });

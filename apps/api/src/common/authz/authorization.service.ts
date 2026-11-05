@@ -21,7 +21,8 @@ export class AuthorizationService {
   }
 
   canAll(...permissions: string[]): boolean {
-    return permissions.every((p) => this.tenant.can(p));
+    // Lista vacía = denegar (nunca abrir por defecto ante un arreglo armado dinámicamente).
+    return permissions.length > 0 && permissions.every((p) => this.tenant.can(p));
   }
 
   /** Lanza 403 `AUTH_002` si falta alguno. Para los casos que no tienen un error de dominio propio. */

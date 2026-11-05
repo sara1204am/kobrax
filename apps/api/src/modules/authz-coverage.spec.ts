@@ -6,6 +6,7 @@ import { join, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Reflector } from '@nestjs/core';
 import { resolveAccess } from './auth/authz-access';
+import { POLICIES } from '../common/authz/policies';
 
 /**
  * F14 · F3 — cobertura TOTAL del contrato de acceso (ADR-F14-03).
@@ -78,11 +79,18 @@ describe('F14·F3 — cobertura del contrato de acceso', () => {
 
   it('el snapshot de puertas coincide (cambiar una puerta = cambiar docs/epics/F14/authz-snapshot.json)', async () => {
     const { rows } = await collect();
-    if (process.env.UPDATE_AUTHZ_SNAPSHOT === '1' || !existsSync(SNAPSHOT)) {
+    if (process.env.UPDATE_AUTHZ_SNAPSHOT === '1') {
       writeFileSync(SNAPSHOT, JSON.stringify(rows, null, 2) + '\n', 'utf-8');
     }
+    assert.ok(existsSync(SNAPSHOT), `Falta ${SNAPSHOT}: no se regenera sola (UPDATE_AUTHZ_SNAPSHOT=1 para crearlo)`);
     const expected = JSON.parse(readFileSync(SNAPSHOT, 'utf-8')) as Row[];
     assert.deepEqual(rows, expected, 'Una puerta cambió: revisa el diff y actualiza el snapshot (UPDATE_AUTHZ_SNAPSHOT=1) en el mismo commit');
+  });
+
+  it('toda @Policy declarada existe en el registro de políticas (un nombre mal escrito no pasa en silencio)', async () => {
+    const { rows } = await collect();
+    const names = new Set(POLICIES.map((p) => p.name));
+    for (const r of rows) if (r.policy) assert.ok(names.has(r.policy), `${r.route} declara @Policy('${r.policy}') que no existe`);
   });
 
   it('las rutas públicas son una lista cerrada (login, alta de cuenta, invitaciones, salud…)', async () => {

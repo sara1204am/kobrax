@@ -14,7 +14,7 @@ export interface PendingVersion {
 
 export type AuthzCheck = 'ok' | 'revoked' | 'stale';
 
-export const POLICY_KEY = 'authz:policy_version';
+export const POLICY_VERSION_KEY = 'authz:policy_version';
 export const RECONCILE_INTERVAL_MS = 30_000;
 const RECONCILE_BATCH = 200;
 
@@ -69,7 +69,7 @@ export class AuthzVersionService implements OnApplicationBootstrap, OnModuleDest
     const [revoked, avRaw, pvRaw] = await this.redis.mget(
       revokedKey(claims.sessionId),
       membershipKey(claims.sub, claims.accountId),
-      POLICY_KEY,
+      POLICY_VERSION_KEY,
     );
     if (revoked !== null) return 'revoked';
 
@@ -93,7 +93,7 @@ export class AuthzVersionService implements OnApplicationBootstrap, OnModuleDest
   private async fillPolicy(): Promise<number> {
     const row = await this.prisma.platformSetting.findUnique({ where: { id: 1 }, select: { policyVersion: true } });
     const v = row?.policyVersion ?? 1;
-    await this.setMax(POLICY_KEY, v);
+    await this.setMax(POLICY_VERSION_KEY, v);
     return v;
   }
 
@@ -144,7 +144,7 @@ export class AuthzVersionService implements OnApplicationBootstrap, OnModuleDest
   async warm(userId: string, accountId: string, av: number, pv: number): Promise<void> {
     try {
       await this.setMax(membershipKey(userId, accountId), av);
-      await this.setMax(POLICY_KEY, pv);
+      await this.setMax(POLICY_VERSION_KEY, pv);
     } catch (err) {
       this.logger.warn(`No se pudo calentar la versión de autorización: ${err instanceof Error ? err.message : String(err)}`);
     }

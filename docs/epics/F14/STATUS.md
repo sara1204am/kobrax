@@ -11,7 +11,9 @@
 | G4 Plan de F1 | **PASS 2026-11-05** | `plans/F1-sesiones-aislamiento.md` validado (11/11); D-1, D-2, D-5 aprobadas por la usuaria. Primer intento: FAIL en ítem 4 por esas tres decisiones. |
 
 | G4 Plan de F3 | **PASS 2026-11-05** | `plans/F3-authz-core.md` validado 11/11; D-1…D-5 aprobadas por la usuaria; HUB H14-019…024 y IMPACT-MAP creados. Advertencias: conteo de handlers aproximado (lo fija la tarea 1); E9 (orden de guards) es INFERIDO y se prueba en la tarea 4. |
-| G5 Verificación de F3 | **PARCIAL** | V-015…V-019: API 1923/1923, integración 201/201, web 1244, móvil 979, `tsc` limpio. Falta la aprobación del snapshot de puertas por la usuaria (criterio de cierre). |
+| G5 Verificación de F3 | **PASS 2026-11-05** | V-015…V-021: API 1926/1926, integración 201/201, web 1244, móvil 979, `tsc` limpio. Snapshot `authz-snapshot.json` (203 handlers) aprobado por la usuaria («continúa» tras pedírselo). |
+| G6 `/code-review` de F3 | **PASS 2026-11-05** | V-020: 10 hallazgos, 7 corregidos, 3 descartados/aceptados con motivo. Recorrido de IMPACT-MAP por H14-019…024 hecho (sin dependientes sin cubrir). |
+| G7 Cierre de F3 | **PASS 2026-11-05** | HUB, STATUS, HANDOFF, VERIFICATIONS y `docs/producto/roles-permisos-planes.md` actualizados. **F2 no se abre.** |
 | G5 Verificación de F1 | **PASS 2026-11-05** | V-001…V-014: API 1896/1896, integración 178/178, web 1244/1244, móvil 979/979, `tsc` limpio en api/web/database/mobile. Las dos fallas ajenas (`route-lifecycle`, `tsc` móvil) se resolvieron (V-010, V-011). |
 | G6 `/code-review` | **PASS 2026-11-05** | V-014: 9 hallazgos, 5 corregidos, 2 descartados con motivo, 2 aceptados y documentados. Recorrido de IMPACT-MAP por las entradas HUB H14-001…018 hecho en `hub/HUB.md`. |
 | G7 Cierre de F1 | **PASS 2026-11-05** | HUB, STATUS, HANDOFF, VERIFICATIONS, INCIDENTS y `docs/producto/roles-permisos-planes.md` actualizados. Registro de fases: esta tabla (F14 no tiene PHASES-LOG propio). **F2 no se abre.** |
@@ -22,4 +24,4 @@
 - No usar el modelo Fable en agentes nuevos.
 
 ## Fase vigente
-**F3 · Arquitectura central de autorización** (rama `f14/p3-authz-core`). Plan `plans/F3-authz-core.md` (G4 PASS). **Construida 2026-11-05** (tareas 1–9). G5: V-015…V-019 en verde; falta que la usuaria **apruebe el snapshot** (`authz-snapshot.json`). G6/G7 pendientes. Orden aprobado F1 → F3 → F2 (F2 depende de F3). F1 cerrada 2026-11-05.
+**F3 · Arquitectura central de autorización** (rama `f14/p3-authz-core`). Plan `plans/F3-authz-core.md` (G4 PASS). **Construida y CERRADA 2026-11-05** (G4–G7 PASS). Orden aprobado F1 → F3 → F2 (F2 depende de F3). F1 cerrada 2026-11-05.
