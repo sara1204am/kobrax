@@ -20,4 +20,4 @@
 - No usar el modelo Fable en agentes nuevos.
 
 ## Fase vigente
-**F1 · Sesiones y aislamiento** (rama `f14/p1-sesiones-aislamiento`, en ejecución desde 2026-11-05). Resuelve R-01, R-02, N-04, N-12, R-06 (mínimo).
+**F3 · Arquitectura central de autorización** (rama `f14/p3-authz-core`). Plan en `plans/F3-authz-core.md`, **BORRADOR**; falta `validar` (G4) y que la usuaria apruebe D-1…D-5. Orden aprobado F1 → F3 → F2 (F2 depende de F3). F1 cerrada 2026-11-05.

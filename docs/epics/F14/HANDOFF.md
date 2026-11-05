@@ -10,4 +10,5 @@
   4. No correr `test:integration` en paralelo con otras suites que usen la misma DB/Redis (da fallas falsas).
 - **Decisiones aprobadas:** H-1…H-13; D-1, D-2, D-5. **Pendientes:** ninguna de F1.
 - **Verificaciones:** `execution/VERIFICATIONS.md` (V-001…V-014). Incidentes: `execution/INCIDENTS.md` (todos resueltos o nota).
-- **Siguiente paso autorizado:** ninguno por iniciativa propia. **Esperar la orden de la usuaria** para abrir F2 (plan) o para push/PR de la rama.
+- **Después del cierre:** la usuaria pidió «plan de F2»; como F2 depende de F3 (orden F1→F3→F2), eligió escribir primero **`plans/F3-authz-core.md`** (BORRADOR, rama `f14/p3-authz-core`).
+- **Siguiente paso autorizado:** revisar el plan con la usuaria y aprobar D-1…D-5; luego `validar F3` (G4). Sin G4 PASS no se toca código. Sin push/PR hasta que lo pida.
