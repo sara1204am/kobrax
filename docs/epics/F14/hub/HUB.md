@@ -29,6 +29,13 @@
 | H14-022 | `modules/**/*.controller.ts` (24 controladores) y `health/health.controller.ts` | Retirar `@UseGuards` por controlador; declarar públicos/autenticados | todo el API | Alto | F3 | `authz-coverage.spec.ts` | **HECHO 2026-11-05** |
 | H14-023 | `routes.controller.ts`, `agenda.controller.ts`, `credits.controller.ts`, `dashboards.controller.ts` (+ F13 HUB-012, 017, 020) | Puertas «sólo en el servicio» de R-05 declaradas en el guard, sin cambiar quién puede | web y móvil (rutas, agenda, castigo, dashboards) | Medio | F3 | `permission-gates.spec.ts` + snapshot | **HECHO 2026-11-05** |
 | H14-024 | `permission-gates.spec.ts`, `authz-coverage.spec.ts` (nuevo), `docs/epics/F14/authz-snapshot.json` (nuevo) | Cobertura total y snapshot aprobado | CI | Medio | F3 | el propio spec | **HECHO 2026-11-05** |
+| H14-025 | `schema.prisma` (Client), migración `f14_04`, `verify/f14-cliente-registro.sql` | `registered_branch_id` + backfill | seed, importación, exportes | Medio | F2 | `verify` SQL + integración | PLANEADO |
+| H14-026 | `mora/mora-query.ts:173-190` `visibleClientIdsSql` | Visibilidad del cliente derivada de créditos y oficina de registro | clientes, exportes, uploads, mora, pagos | Alto | F2 | `client-visibility.spec.ts` ampliado | PLANEADO |
+| H14-027 | `clients/clients.service.ts`, `clients.controller.ts` | `client.create`, `otherCredits`, `client:create`/`client:delete` | importación, móvil (alta offline), web fichas | Alto | F2 | `other-credits.spec.ts`, `client-create.spec.ts` | PLANEADO |
+| H14-028 | `credits/credits.service.ts`, `assignments/assignment-rules.ts`, `assignment.service.ts` | `credit.create`, `credit.assign` (tier, par en oficina hija) | importación, reparto masivo, agenda, rutas | Alto | F2 | `credit-create.spec.ts`, `credit-assign.spec.ts` | PLANEADO |
+| H14-029 | `users/users.service.ts`, `users.controller.ts`, `common/office-scope/*` | `member.invite`/`member.assignRole` por tier y subárbol; `ACCOUNT_ADMIN` no se asigna por invitación | Equipo web, invitaciones | Alto | F2 | `member-invite.spec.ts` | PLANEADO |
+| H14-030 | `common/authz/policies/*`, `facts-loader.ts`, `authz-snapshot.json` | 5 políticas, `tierOf`, puertas nuevas | servicios que usan `assertPolicy` | Medio | F2 | specs de políticas + snapshot | PLANEADO |
+| H14-031 | `shared/constants/permissions.ts`, seed, migración de catálogo | `client:create`, `credit:create`, `client:delete` + `policy_version` | todas las sesiones (`AUTHZ_STALE` único), web, móvil | Medio | F2 | `permission-gates.spec.ts`, integración | PLANEADO |
 
 ## IMPACT-MAP (F1)
 - **(F3) Cambiar quién registra los guards (H14-019/022)** ⇒ todos los controladores, `health`, `main.ts` (versionado), rutas públicas (`auth`, `accounts`, `health`), pruebas de integración que levantan la app, `permission-gates.spec.ts`, `uploads.access.spec.ts` (usa `RolesGuard`).
@@ -37,6 +44,10 @@
 - **Cambiar `visibleClientIdsSql` (H14-013)** ⇒ Cartera, Clientes, Pagos, Exportes (consumen la subconsulta), F13 HUB-011/019.
 - **Cambiar visibilidad de Personas (H14-009/012)** ⇒ «añadir persona», reparto (`assignableRows`), Equipo web.
 - **Cambiar uploads (H14-014)** ⇒ adjuntos de cliente, comprobante de pago, foto/QR de perfil, evidencias, PDF/exportes que incrustan imágenes (`clients/:id/pdf`, `routes/:id/pdf`).
+
+- **(F2) Cambiar `visibleClientIdsSql` (H14-026)** ⇒ Clientes, Exportes, Uploads (`UploadAccessService`), Mora, Pagos; F13 HUB-011/019.
+- **(F2) Políticas de creación/asignación/invitación (H14-027…030)** ⇒ importación de cartera (`IMPORT_OWN`), reparto masivo, Equipo web, alta de cliente/crédito del móvil (offline), F13 HUB-013/017.
+- **(F2) Permisos nuevos (H14-031)** ⇒ plantillas de rol, seed, JWT de todas las sesiones, web/móvil que ocultan acciones.
 
 ## Estado tras F1 (2026-11-05, commits locales en `f14/p1-sesiones-aislamiento`)
 H14-001…018 pasan a **MODIFICADO F1** y probados (ver `../execution/VERIFICATIONS.md`). Archivos nuevos: `auth/authz-version.service.ts`, `uploads/upload-access.service.ts`, `rls/005_authz_functions.sql`, `web/app/api/auth/renew/route.ts`, migración `20261105000000_f14_01_authz_versions`.
