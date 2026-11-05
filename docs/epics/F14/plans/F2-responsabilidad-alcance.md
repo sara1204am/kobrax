@@ -1,4 +1,4 @@
-> ESTADO: BORRADOR (2026-11-05) — D-1…D-6 APROBADAS por la usuaria; falta el gate G4 (`validar`)
+> ESTADO: VALIDADO (G4 PASS 2026-11-05, 2.º intento) — D-1…D-6 APROBADAS por la usuaria; espera la orden `ejecuta F2`
 
 # Plan F2 · Modelo organizacional, responsabilidad del crédito y alcance
 

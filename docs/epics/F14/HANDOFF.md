@@ -19,5 +19,5 @@
   4. Los `nest start --watch`/`next dev` siguen detenidos por tu orden anterior.
 - **F3 cerrada (G5·G6·G7 PASS, V-020/V-021):** el code-review corrigió 7 puntos; el más relevante: `TenantGuard` vuelve a exigir tenant también a lo «sólo autenticado» (notificaciones, dispositivos, perfil, descargas). Snapshot aprobado.
 - **Falta:** nada de F3. **F2** (permisos finos por fila: `credit.assign`, `client.create`, `member.invite`…, sobre `PolicyService`/`FactsLoader`) no se abrió.
-- **F2 (plan):** `plans/F2-responsabilidad-alcance.md` escrito en la rama `f14/p2-responsabilidad-alcance` (HUB H14-025…031 PLANEADO). La usuaria aprobó D-1…D-6 (RLS de alcance → fase propia F2b). Estado: BORRADOR.
-- **Siguiente paso autorizado:** `validar F2` (G4) cuando la usuaria lo ordene; no se toca código antes. Sin push/PR.
+- **F2 (plan):** `plans/F2-responsabilidad-alcance.md` escrito en la rama `f14/p2-responsabilidad-alcance` (HUB H14-025…031 PLANEADO). La usuaria aprobó D-1…D-6 (RLS de alcance → fase propia F2b). Estado: VALIDADO (G4 PASS, 2.º intento).
+- **Siguiente paso autorizado:** `ejecuta F2` cuando la usuaria lo ordene (plan validado, rama `f14/p2-responsabilidad-alcance`). Sin push/PR.

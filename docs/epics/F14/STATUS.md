@@ -18,7 +18,7 @@
 | G6 `/code-review` | **PASS 2026-11-05** | V-014: 9 hallazgos, 5 corregidos, 2 descartados con motivo, 2 aceptados y documentados. Recorrido de IMPACT-MAP por las entradas HUB H14-001…018 hecho en `hub/HUB.md`. |
 | G7 Cierre de F1 | **PASS 2026-11-05** | HUB, STATUS, HANDOFF, VERIFICATIONS, INCIDENTS y `docs/producto/roles-permisos-planes.md` actualizados. Registro de fases: esta tabla (F14 no tiene PHASES-LOG propio). **F2 no se abre.** |
 
-| G4 Plan de F2 | **PENDIENTE de revalidar** | 1.er intento FAIL (ítem 10, cruce móvil). Corregido el 2026-11-05: §8.1 registra el cruce con la alineación F10 (ronda 3/4), gating web en §6/tarea 8 y el nombre de la migración. Falta `validar F2` de nuevo. |
+| G4 Plan de F2 | **PASS 2026-11-05 (2.º intento)** | `plans/F2-responsabilidad-alcance.md` validado 11/11; D-1…D-6 aprobadas; HUB H14-025…031 (+027b) e IMPACT-MAP. 1.er intento FAIL por el cruce móvil (ítem 10), corregido en §8.1. Advertencias: el comentario `agenda.service.ts:291` dice que el cobrador no tiene `client:write` y `permissions.ts` se lo da (CONTRADICTORIO: manda el catálogo; comentario viejo); «`otherCredits` lo ignora el móvil» es INFERIDO y se prueba en la tarea 9. |
 
 ## Autorizaciones de la usuaria (2026-11-04)
 - Avanzar entre fases sin esperarla; `prisma migrate reset` permitido (su DB dev es de prueba).
