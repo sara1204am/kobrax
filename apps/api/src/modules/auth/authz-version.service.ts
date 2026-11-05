@@ -49,6 +49,8 @@ export class AuthzVersionService implements OnApplicationBootstrap, OnModuleDest
   ) {}
 
   onApplicationBootstrap(): void {
+    // La versión de política sube por migración (no pasa por la outbox): al arrancar, y luego en cada ciclo, se lleva a Redis.
+    void this.syncPolicy();
     this.timer = setInterval(() => void this.reconcile(), RECONCILE_INTERVAL_MS);
     if (typeof this.timer.unref === 'function') this.timer.unref();
   }
@@ -150,6 +152,7 @@ export class AuthzVersionService implements OnApplicationBootstrap, OnModuleDest
 
   /** Vacía la outbox pendiente. Público para las pruebas; lo llama el temporizador. */
   async reconcile(): Promise<number> {
+    await this.syncPolicy();
     try {
       const rows = await this.prisma.$queryRaw<{ id: string; account_id: string; user_id: string; version: number }[]>`
         SELECT * FROM authz_outbox_pending(${RECONCILE_BATCH})`;
@@ -161,6 +164,15 @@ export class AuthzVersionService implements OnApplicationBootstrap, OnModuleDest
     } catch (err) {
       this.logger.error('Falló la reconciliación de versiones de autorización', err instanceof Error ? err.stack : String(err));
       return 0;
+    }
+  }
+
+  /** Lleva `platform_settings.policy_version` a Redis (sólo sube). Si Redis o la DB fallan, el próximo ciclo lo reintenta. */
+  private async syncPolicy(): Promise<void> {
+    try {
+      await this.fillPolicy();
+    } catch (err) {
+      this.logger.error('No se pudo sincronizar la versión de política', err instanceof Error ? err.stack : String(err));
     }
   }
 

@@ -43,6 +43,8 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     Permission.REPORT_EXPORT,
     Permission.ACCOUNT_READ,
     Permission.USER_READ,
+    // F14 · F1: cierra las sesiones de las personas de SU oficina (el servidor acota por alcance: otra regional da 404).
+    Permission.USER_SESSIONS_REVOKE,
     // F13 · R12: ve el árbol de oficinas (hoy ya tiene `user:read`, con el que se veía la pestaña de Agencias).
     Permission.OFFICE_READ,
     // F13 · R13: el gerente regional del banco. Ve todo el subárbol de la oficina a la que está asignado (la migración

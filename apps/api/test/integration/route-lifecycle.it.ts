@@ -40,6 +40,15 @@ before(async () => {
   const credits = await prisma.credit.findMany({ where: { code: { in: ['CRD-DEMO-0003', 'CRD-DEMO-0004'] } }, orderBy: { code: 'asc' } });
   credit1 = credits[0]!.id;
   credit2 = credits[1]!.id;
+  /*
+   * `generate` suma SOLAS las visitas agendadas del cobrador para el día de la ruta (F4/11 · D3) y el seed deja visitas de Carlos con
+   * fechas relativas a hoy: según el día de la semana una cae justo en `hoy+5` y la ruta sale con una parada de más. Esta suite prueba
+   * el ciclo de vida de la ruta, no esa fusión (la cubre agenda-route.it.ts), así que parte de una agenda sin visitas futuras.
+   */
+  await prisma.agendaItem.updateMany({
+    where: { assigneeId: collectorId, type: 'VISIT', status: 'SCHEDULED', scheduledDate: { gte: new Date(day(0)) } },
+    data: { status: 'CANCELLED' },
+  });
 });
 
 after(async () => {

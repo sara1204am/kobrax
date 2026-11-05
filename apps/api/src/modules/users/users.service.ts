@@ -5,7 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { hash } from 'bcryptjs';
 import type { PrismaClient } from '@prisma/client';
 import { AgendaItemStatus, CreditAssignmentKind, CreditStatus, RouteStatus } from '@prisma/client';
-import { KOBRAX, MOBILE_ROLES, RoleType, isMobileRole } from '@kobrax/shared';
+import { KOBRAX, MOBILE_ROLES, Permission, RoleType, isMobileRole } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -24,6 +24,7 @@ import {
   cannotEditSelf,
   lastAdmin,
   managerNeedsOffice,
+  cannotRevokeSuperior,
   memberNotFound,
   notPending,
   profileNotFound,
@@ -168,10 +169,14 @@ export class UsersService {
   async revokeMemberSessions(userId: string): Promise<{ sessions: number }> {
     if (userId === this.selfId) throw cannotEditSelf();
     await this.tx(async (tx) => {
-      const member = await tx.userAccount.findFirst({ where: { userId }, select: { userId: true } });
+      const member = await tx.userAccount.findFirst({ where: { userId }, select: { userId: true, role: { select: { name: true } } } });
       if (!member) throw memberNotFound();
       const visible = await this.office.visibleMemberIds(tx, [userId]);
       if (!visible.has(userId)) throw memberNotFound();
+      // Ver a alguien no es tener autoridad sobre él: quien no administra la cuenta (el gerente regional) sólo cierra las sesiones
+      // de quienes están por debajo de él, nunca las de un administrador ni las de otro gerente de su subárbol.
+      const superior: string[] = [RoleType.SUPER_ADMIN, RoleType.ACCOUNT_ADMIN, RoleType.MANAGER];
+      if (!this.tenant.can(Permission.USER_WRITE) && superior.includes(member.role.name)) throw cannotRevokeSuperior();
     });
     const sessions = await this.sessions.revokeAccountSessions(userId, this.tenant.accountId);
     await this.audit.record({
@@ -268,13 +273,18 @@ export class UsersService {
     await this.authz.publish(authzPending);
     if (dto.isActive === false && before.isActive) {
       // Desactivar la membresía cierra sus sesiones EN ESTA CUENTA (las de otros tenants no se tocan).
-      const closed = await this.sessions.revokeAccountSessions(userId, this.tenant.accountId);
-      await this.audit.record({
-        entity: 'user_account',
-        entityId: updated.id,
-        action: 'SESSION_REVOKE',
-        after: { reason: 'MEMBERSHIP_DEACTIVATED', sessions: closed },
-      });
+      // Ya está commiteado y la versión de autorización protege el token aunque esto falle: no se convierte en un 500.
+      try {
+        const closed = await this.sessions.revokeAccountSessions(userId, this.tenant.accountId);
+        await this.audit.record({
+          entity: 'user_account',
+          entityId: updated.id,
+          action: 'SESSION_REVOKE',
+          after: { reason: 'MEMBERSHIP_DEACTIVATED', sessions: closed },
+        });
+      } catch (e) {
+        this.logger.error(`Desactivada la membresía ${updated.id} pero no se cerraron sus sesiones: ${(e as Error).message}`);
+      }
     }
 
     if (handover) {

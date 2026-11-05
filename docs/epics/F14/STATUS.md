@@ -10,9 +10,9 @@
 | G3 Roadmap | PASS por equivalencia | `ROLES-PERMISOS-PLAN.md` §E (fases 0–9). La usuaria ordenó «empieza F1» y autorizó avanzar entre fases (2026-11-04). |
 | G4 Plan de F1 | **PASS 2026-11-05** | `plans/F1-sesiones-aislamiento.md` validado (11/11); D-1, D-2, D-5 aprobadas por la usuaria. Primer intento: FAIL en ítem 4 por esas tres decisiones. |
 
-| G5 Verificación de F1 | **PARCIAL** | V-001…V-009 en `execution/VERIFICATIONS.md`: API 1892/1892, integración nueva 6/6, web 1244/1244, móvil 13/13. FAIL ajeno: `route-lifecycle.it.ts` (INCIDENTS) y `tsc` del móvil. Decidir si se tratan antes de cerrar. |
-| G6 `/code-review` | PENDIENTE | No corrido. |
-| G7 Cierre de F1 | PENDIENTE | HUB actualizado; falta PHASES-LOG y docs de producto. |
+| G5 Verificación de F1 | **PASS 2026-11-05** | V-001…V-014: API 1896/1896, integración 178/178, web 1244/1244, móvil 979/979, `tsc` limpio en api/web/database/mobile. Las dos fallas ajenas (`route-lifecycle`, `tsc` móvil) se resolvieron (V-010, V-011). |
+| G6 `/code-review` | **PASS 2026-11-05** | V-014: 9 hallazgos, 5 corregidos, 2 descartados con motivo, 2 aceptados y documentados. Recorrido de IMPACT-MAP por las entradas HUB H14-001…018 hecho en `hub/HUB.md`. |
+| G7 Cierre de F1 | **PASS 2026-11-05** | HUB, STATUS, HANDOFF, VERIFICATIONS, INCIDENTS y `docs/producto/roles-permisos-planes.md` actualizados. Registro de fases: esta tabla (F14 no tiene PHASES-LOG propio). **F2 no se abre.** |
 
 ## Autorizaciones de la usuaria (2026-11-04)
 - Avanzar entre fases sin esperarla; `prisma migrate reset` permitido (su DB dev es de prueba).

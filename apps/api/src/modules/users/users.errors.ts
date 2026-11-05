@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   ConflictException,
   NotFoundException,
   UnprocessableEntityException,
@@ -65,4 +66,10 @@ export const managerNeedsOffice = () =>
   new UnprocessableEntityException({
     code: 'MANAGER_NEEDS_OFFICE',
     message: 'El gerente regional necesita una oficina: su alcance es esa oficina y todo lo que cuelga de ella',
+  });
+
+export const cannotRevokeSuperior = () =>
+  new ForbiddenException({
+    code: 'USER_SESSIONS_REVOKE_FORBIDDEN',
+    message: 'No podés cerrar las sesiones de un administrador ni de otro gerente',
   });

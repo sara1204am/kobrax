@@ -121,3 +121,17 @@ describe('AuthzVersionService.publish / reconcile', () => {
     assert.equal(outbox[0]!.processed, true);
   });
 });
+
+describe('AuthzVersionService — la versión de política sube por migración', () => {
+  it('reconcile lleva policy_version a Redis aunque no haya nada en la outbox (un token nuevo con pv=3 no puede quedar obsoleto)', async () => {
+    const { service, redis } = makeService({ policy: 3 });
+    redis.store.set(POLICY_KEY, '2');
+    await service.reconcile();
+    assert.equal(redis.store.get(POLICY_KEY), '3');
+  });
+  it('si Redis cae, sincronizar la política no rompe el ciclo', async () => {
+    const { service, redis } = makeService({ policy: 3 });
+    redis.state.down = true;
+    assert.equal(await service.reconcile(), 0);
+  });
+});

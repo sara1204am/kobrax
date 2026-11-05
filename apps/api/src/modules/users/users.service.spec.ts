@@ -42,6 +42,8 @@ function member(over: Record<string, unknown> = {}) {
 interface Opts {
   /** F14 · F1 (R-02): ids de miembros que el actor ve; por defecto, todos. */
   visible?: string[];
+  /** `false` = quien actúa no administra la cuenta (sin `user:write`), como el gerente regional. Por defecto sí. */
+  canWrite?: boolean;
   /** Miembro que resuelve el scope de `updateMember` (`null` → 404). */
   found?: Record<string, unknown> | null;
   /** Otros ACCOUNT_ADMIN activos que quedan en el tenant. */
@@ -198,7 +200,7 @@ function makeService(opts: Opts = {}) {
     role: { findUnique: async (args: { where: { id: string } }) => ROLES[args.where.id] ?? null },
     user: tx.user,
   };
-  const tenant = { accountId: 'acc-A', userId: SELF };
+  const tenant = { accountId: 'acc-A', userId: SELF, can: () => opts.canWrite !== false };
   const audit = { record: async (e: { action: string }) => void calls.audit.push(e.action) };
   const mail = { send: async (to: string, _s: string, text: string) => void calls.mail.push({ to, text }) };
   // El servicio de topes va DE VERDAD, no como doble: es el que decide si entra uno más, y con un
@@ -652,6 +654,20 @@ describe('UsersService — alcance de Personas y cierre de sesiones (F14 · F1, 
     assert.deepEqual(await service.revokeMemberSessions(OTHER), { sessions: 2 });
     assert.deepEqual(calls.revoked, [{ userId: OTHER, accountId: 'acc-A' }]);
     assert.deepEqual(calls.audit, ['SESSION_REVOKE']);
+  });
+
+  it('🔴 el gerente (sin user:write) no cierra las sesiones de un administrador ni de otro gerente aunque los vea', async () => {
+    for (const name of ['ACCOUNT_ADMIN', 'MANAGER']) {
+      const { service, calls } = makeService({ canWrite: false, found: member({ role: { ...ROLES[ROLE_COLLECTOR], name } }) });
+      await rejectsWithCode(service.revokeMemberSessions(OTHER), 'USER_SESSIONS_REVOKE_FORBIDDEN');
+      assert.deepEqual(calls.revoked, []);
+    }
+  });
+
+  it('el gerente sí cierra las sesiones de un cobrador de su oficina', async () => {
+    const { service, calls } = makeService({ canWrite: false, found: member() });
+    assert.deepEqual(await service.revokeMemberSessions(OTHER), { sessions: 2 });
+    assert.equal(calls.revoked.length, 1);
   });
 
   it('no se cierran las propias sesiones por este camino', async () => {
