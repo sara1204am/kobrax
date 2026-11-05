@@ -18,10 +18,13 @@
 | G6 `/code-review` | **PASS 2026-11-05** | V-014: 9 hallazgos, 5 corregidos, 2 descartados con motivo, 2 aceptados y documentados. Recorrido de IMPACT-MAP por las entradas HUB H14-001…018 hecho en `hub/HUB.md`. |
 | G7 Cierre de F1 | **PASS 2026-11-05** | HUB, STATUS, HANDOFF, VERIFICATIONS, INCIDENTS y `docs/producto/roles-permisos-planes.md` actualizados. Registro de fases: esta tabla (F14 no tiene PHASES-LOG propio). **F2 no se abre.** |
 
+| G4 Plan de F2 | **PENDIENTE** | `plans/F2-responsabilidad-alcance.md` en BORRADOR; D-1…D-6 aprobadas 2026-11-05; falta `validar F2`. |
+
 ## Autorizaciones de la usuaria (2026-11-04)
 - Avanzar entre fases sin esperarla; `prisma migrate reset` permitido (su DB dev es de prueba).
 - Commits locales por fase; **sin push/PR** hasta que lo pida.
 - No usar el modelo Fable en agentes nuevos.
 
 ## Fase vigente
-**F3 · Arquitectura central de autorización** (rama `f14/p3-authz-core`). Plan `plans/F3-authz-core.md` (G4 PASS). **Construida y CERRADA 2026-11-05** (G4–G7 PASS). Orden aprobado F1 → F3 → F2 (F2 depende de F3). F1 cerrada 2026-11-05.
+**F2 · Plan en borrador** (rama `f14/p2-responsabilidad-alcance`, commit `18c4f44`), D-1…D-6 aprobadas; la barrera RLS pasó a F2b. Sin código. F3 cerrada.  
+(Lo siguiente es el texto previo de F3, ya cerrada:) **F3 · Arquitectura central de autorización** (rama `f14/p3-authz-core`). Plan `plans/F3-authz-core.md` (G4 PASS). **Construida y CERRADA 2026-11-05** (G4–G7 PASS). Orden aprobado F1 → F3 → F2 (F2 depende de F3). F1 cerrada 2026-11-05.

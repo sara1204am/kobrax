@@ -1,4 +1,4 @@
-> ESTADO: BORRADOR (2026-11-05) — decisiones D-1…D-6 en PROPUESTA, esperan a la usuaria
+> ESTADO: BORRADOR (2026-11-05) — D-1…D-6 APROBADAS por la usuaria; falta el gate G4 (`validar`)
 
 # Plan F2 · Modelo organizacional, responsabilidad del crédito y alcance
 
@@ -47,7 +47,7 @@ Resuelve: **R-03 (redefinido), R-12/R-13 (H-3, H-8), N-01 (barrera RLS; ver D-2)
 
 ## 5. Dependencias
 - F1 y F3 cerradas (G7 PASS 2026-11-05).
-- Decisiones aprobadas que sustenta: **H-3, H-7, H-8, H-12, H-13** (`ROLES-PERMISOS-PLAN.md` §H). Las propias de la fase (D-1…D-6, §9) están **PROPUESTAS**: bloquean G4 hasta que la usuaria las apruebe.
+- Decisiones aprobadas que sustenta: **H-3, H-7, H-8, H-12, H-13** (`ROLES-PERMISOS-PLAN.md` §H). Las propias de la fase (D-1…D-6, §9) fueron **APROBADAS por la usuaria el 2026-11-05**, con la recomendación de cada fila (D-2: la barrera RLS pasa a una fase propia **F2b**).
 - Gates: G0–G3 PASS; F1 y F3 cerradas.
 
 ## 6. Archivos afectados (HUB consultado; entradas H14-025…H14-031 creadas en `hub/HUB.md` en estado PLANEADO)
@@ -70,7 +70,7 @@ RULES F13 §A–§D (heredadas); F14-A: H-3, H-7, H-12, H-13. Multi-tenant (`acc
 - **Multi-oficina:** cobrador sólo ve clientes de su cartera y los que creó; supervisor, los de su agencia; gerente regional, los de su subárbol; gerente en la raíz de una cuenta multi-oficina **no puede crear cliente** sin elegir oficina (`CLIENT_CREATE_AT_ROOT`).
 - **Cambia de comportamiento (avisar):** (a) un cobrador deja de ver a un cliente cuando pierde su último crédito vigente; (b) sólo ACCOUNT_ADMIN borra clientes (D-3); (c) nadie invita o promueve a `ACCOUNT_ADMIN` (H-13); (d) un gerente invita (primera vez) a roles de tier inferior dentro de su subárbol.
 
-## 9. Riesgos y decisiones propias (D-1…D-6 en PROPUESTA)
+## 9. Riesgos y decisiones propias (D-1…D-6 APROBADAS 2026-11-05)
 
 | # | Decisión | Opciones | Recomendación |
 |---|---|---|---|
