@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
+import type { PrismaClient } from '@prisma/client';
 import { compare, hash } from 'bcryptjs';
 import { KOBRAX, preferencesOf, type AccountPreferences, type AuthAccountOption, type AuthTokens, type LoginResult } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
@@ -7,6 +8,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { TokenService } from './token.service';
 import { PermissionsService } from './permissions.service';
 import { SessionService } from './session.service';
+import { AuthzVersionService } from './authz-version.service';
 import { MfaService } from './mfa.service';
 import { CRITICAL_ROLES, canPostponeEnrollment } from './mfa-policy';
 import {
@@ -62,6 +64,7 @@ export class AuthService implements OnModuleInit {
     private readonly sessions: SessionService,
     private readonly mfa: MfaService,
     private readonly audit: AuditService,
+    private readonly authz: AuthzVersionService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -426,6 +429,12 @@ export class AuthService implements OnModuleInit {
     await this.prisma.user.update({ where: { id: userId }, data });
   }
 
+  /** `av` de la membresía y `pv` global, leídos de la DB dentro de la transacción del tenant. */
+  private async versionsOf(tx: PrismaClient, userId: string, accountId: string): Promise<{ av: number; pv: number }> {
+    const ua = await tx.userAccount.findFirst({ where: { userId, accountId }, select: { authzVersion: true } });
+    return { av: ua?.authzVersion ?? 1, pv: await this.authz.currentPolicyVersion(tx) };
+  }
+
   /** Crea sesión + refresh y firma el access, dentro del contexto RLS del tenant. */
   private async issueTokens(
     userId: string,
@@ -473,13 +482,18 @@ export class AuthService implements OnModuleInit {
         },
       });
 
+      // F14 · F1 (H-2): las versiones salen de la DB en ESTA transacción (la fuente), nunca de un token anterior.
+      const versions = await this.versionsOf(tx, userId, accountId);
       const accessToken = this.token.signAccess({
         sub: userId,
         accountId,
         roleId,
         permissions,
         sessionId: session.id,
+        av: versions.av,
+        pv: versions.pv,
       });
+      void this.authz.warm(userId, accountId, versions.av, versions.pv);
       return { accessToken, refreshToken: refresh.token };
     });
   }
@@ -558,13 +572,17 @@ export class AuthService implements OnModuleInit {
         data: { lastSeenAt: new Date() },
       });
 
+      const pv = await this.authz.currentPolicyVersion(tx);
       const accessToken = this.token.signAccess({
         sub: claims.sub,
         accountId: claims.accountId,
         roleId: ua.roleId,
         permissions,
         sessionId: claims.sessionId,
+        av: ua.authzVersion,
+        pv,
       });
+      void this.authz.warm(claims.sub, claims.accountId, ua.authzVersion, pv);
       return { kind: 'ok', tokens: { accessToken, refreshToken: newRefresh.token } };
     });
 

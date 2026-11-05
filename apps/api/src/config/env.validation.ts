@@ -11,6 +11,8 @@ export const envSchema = z.object({
   JWT_SECRET: z.string().min(16, 'JWT_SECRET debe tener ≥ 16 caracteres'),
   JWT_REFRESH_SECRET: z.string().min(16, 'JWT_REFRESH_SECRET debe tener ≥ 16 caracteres'),
   JWT_EXPIRES_IN: z.string().default('15m'),
+  // F14 · F1: compara las versiones `av`/`pv` del JWT en cada petición. `off` deja el guard como antes (sólo denylist de sesión).
+  AUTHZ_VERSION_CHECK: z.enum(['on', 'off']).default('on'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
   APP_URL: z.string().url().default('http://localhost:3000'),
   SOCKET_CORS_ORIGIN: z.string().url().default('http://localhost:3000'),

@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
-import { ROLES_KEY } from '../decorators/roles.decorator';
+import { ROLES_ANY_KEY, ROLES_KEY } from '../decorators/roles.decorator';
 import type { AuthenticatedUser } from './jwt-auth.guard';
 
 /**
@@ -18,11 +18,18 @@ export class RolesGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
-    if (!required || required.length === 0) return true;
+    const anyOf = this.reflector.getAllAndOverride<string[]>(ROLES_ANY_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    const noAll = !required || required.length === 0;
+    const noAny = !anyOf || anyOf.length === 0;
+    if (noAll && noAny) return true;
 
     const req = context.switchToHttp().getRequest<Request & { user?: AuthenticatedUser }>();
     const permissions = req.user?.permissions ?? [];
-    const ok = required.every((p) => permissions.includes(p));
+    const ok =
+      (noAll || required.every((p) => permissions.includes(p))) && (noAny || anyOf.some((p) => permissions.includes(p)));
     if (!ok) {
       throw new ForbiddenException({
         code: 'AUTH_002',

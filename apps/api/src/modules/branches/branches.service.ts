@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { AuthzVersionService, type PendingVersion } from '../auth/authz-version.service';
 import { randomUUID } from 'node:crypto';
 import { Prisma, type Branch, type PrismaClient } from '@prisma/client';
 import { MAX_OFFICE_DEPTH, checkOfficeMove, officeInScope, officeDepth, officePath, officePathIds, rebaseOfficePath } from '@kobrax/shared';
@@ -82,6 +83,7 @@ export class BranchesService {
     private readonly audit: AuditService,
     private readonly plan: PlanLimitsService,
     private readonly office: OfficeScopeService,
+    private readonly authz: AuthzVersionService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -488,6 +490,7 @@ export class BranchesService {
 
   /** Baja lógica (libera el código y el lugar del plan). Mismas condiciones que desactivar, y sin hijas vivas de ningún tipo. */
   async remove(id: string): Promise<void> {
+    let authzPending: PendingVersion[] = [];
     const removed = await this.tx(async (tx) => {
       await this.lockStructure(tx);
       const found = await tx.branch.findFirst({ where: { id, deletedAt: null } });
@@ -497,10 +500,15 @@ export class BranchesService {
       if (anyChild > 0) throw branchHasChildren(anyChild);
       // Las asignaciones vigentes de esta oficina (también las de usuarios inactivos, que no frenan la baja) quedan revocadas, y
       // el espejo legado limpio: no puede quedar una persona apuntando a una oficina borrada.
+      const affected = await tx.userBranchAssignment.findMany({ where: { branchId: id, revokedAt: null }, select: { userId: true } });
       await tx.userBranchAssignment.updateMany({ where: { branchId: id, revokedAt: null }, data: { revokedAt: new Date() } });
       await tx.userAccount.updateMany({ where: { accountId: this.tenant.accountId, branchId: id }, data: { branchId: null } });
+      // F14 · F1: su alcance cambió → versión nueva para quienes estaban asignados a esta oficina.
+      const members = await tx.userAccount.findMany({ where: { accountId: this.tenant.accountId, userId: { in: affected.map((a) => a.userId) } }, select: { id: true } });
+      authzPending = await this.authz.bumpInTx(tx, this.tenant.accountId, members.map((m) => m.id));
       return tx.branch.update({ where: { id }, data: { deletedAt: new Date(), active: false } });
     });
+    await this.authz.publish(authzPending);
     await this.audit.record({ entity: 'branch', entityId: id, action: 'DELETE', before: removed });
   }
 
@@ -517,6 +525,7 @@ export class BranchesService {
     const actor = this.tenant.userId ?? null;
     const userIds = [...new Set([...(dto.userIds ?? []), ...(dto.userId ? [dto.userId] : [])])];
     if (userIds.length === 0) throw branchMembersInvalid();
+    let authzPending: PendingVersion[] = [];
     const moved = await this.tx(async (tx) => {
       const branch = await tx.branch.findFirst({ where: { id, deletedAt: null } });
       if (!branch) throw branchNotFound();
@@ -551,10 +560,13 @@ export class BranchesService {
         throw e;
       }
       await tx.userAccount.updateMany({ where: { id: { in: members.map((m) => m.id) } }, data: { branchId: id } });
+      // F14 · F1: cambió la oficina (y con ella el alcance) de estas personas → versión nueva.
+      authzPending = await this.authz.bumpInTx(tx, accountId, toCreate.map((m) => m.id));
 
       const previous = new Map(elsewhere.map((a) => [a.userId, a.branchId]));
       return toCreate.map((m) => ({ ...m, from: previous.get(m.userId) ?? m.branchId ?? null }));
     });
+    await this.authz.publish(authzPending);
     for (const m of moved) {
       await this.audit.record({
         entity: 'user_account',
@@ -569,6 +581,7 @@ export class BranchesService {
 
   /** Quita a la persona de esta oficina: revoca su asignación vigente y limpia el espejo legado. */
   async unassignMember(id: string, userId: string) {
+    let authzPending: PendingVersion[] = [];
     const removed = await this.tx(async (tx) => {
       const accountId = this.tenant.accountId;
       const branch = await tx.branch.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
@@ -577,8 +590,11 @@ export class BranchesService {
       if (!assignment) throw branchMemberNotFound();
       await tx.userBranchAssignment.update({ where: { id: assignment.id }, data: { revokedAt: new Date() } });
       await tx.userAccount.updateMany({ where: { accountId, userId, branchId: id }, data: { branchId: null } });
+      const membership = await tx.userAccount.findFirst({ where: { accountId, userId }, select: { id: true } });
+      authzPending = await this.authz.bumpInTx(tx, accountId, membership ? [membership.id] : []);
       return assignment.id;
     });
+    await this.authz.publish(authzPending);
     await this.audit.record({
       entity: 'user_branch_assignment',
       entityId: removed,

@@ -79,6 +79,9 @@ function makeService(opts: Opts = {}) {
     deleted: [] as string[],
     mail: [] as { to: string; text: string }[],
     handover: [] as string[],
+    bumps: [] as { accountId: string; ids: string[] }[],
+    published: [] as number[],
+    revoked: [] as { userId: string; accountId: string }[],
     assignRevoked: [] as string[],
     assignCreated: [] as Record<string, unknown>[],
     applied: [] as { creditId: string; to: string | null }[],
@@ -215,6 +218,20 @@ function makeService(opts: Opts = {}) {
     mail as never,
     plan,
     assignments as never,
+    // F14 · F1: dobles que registran el bump de versión y el cierre de sesiones de la cuenta.
+    {
+      bumpInTx: async (_tx: unknown, accountId: string, ids: string[]) => {
+        calls.bumps.push({ accountId, ids });
+        return ids.map((id) => ({ outboxId: `o-${id}`, accountId, userId: 'u', version: 2 }));
+      },
+      publish: async (p: unknown[]) => void calls.published.push(p.length),
+    } as never,
+    {
+      revokeAccountSessions: async (userId: string, accountId: string) => {
+        calls.revoked.push({ userId, accountId });
+        return 2;
+      },
+    } as never,
   );
   return { service, calls };
 }
@@ -335,7 +352,7 @@ describe('UsersService.updateMember — guardas', () => {
     });
     await service.updateMember(OTHER, { isActive: false });
     assert.equal(calls.updated!.isActive, false);
-    assert.deepEqual(calls.audit, ['UPDATE']);
+    assert.deepEqual(calls.audit, ['SESSION_REVOKE', 'UPDATE']);
     // El conteo excluye al propio usuario que se está editando.
     assert.deepEqual(calls.countWhere!.userId, { not: OTHER });
   });
@@ -580,5 +597,36 @@ describe('UsersService.updateMember · desactivar con trabajo a su nombre (F4/11
     await service.updateMember(OTHER, { isActive: true } as never);
     assert.equal(calls.updated!.isActive, true);
     assert.equal(calls.applied.length, 0);
+  });
+});
+
+describe('UsersService.updateMember — versión de autorización y sesiones (F14 · F1, R-01)', () => {
+  it('cambio de rol: sube la versión de ESA membresía y NO cierra sesiones (renueva con AUTHZ_STALE)', async () => {
+    const { service, calls } = makeService({ found: member() });
+    await service.updateMember(OTHER, { roleId: ROLE_ADMIN });
+    assert.deepEqual(calls.bumps, [{ accountId: 'acc-A', ids: ['ua1'] }]);
+    assert.deepEqual(calls.published, [1]);
+    assert.deepEqual(calls.revoked, []);
+  });
+
+  it('desactivar la membresía: sube la versión y cierra las sesiones SOLO de esta cuenta', async () => {
+    const { service, calls } = makeService({ found: member() });
+    await service.updateMember(OTHER, { isActive: false });
+    assert.equal(calls.bumps.length, 1);
+    assert.deepEqual(calls.revoked, [{ userId: OTHER, accountId: 'acc-A' }]);
+  });
+
+  it('reactivar: sube la versión, no hay sesiones que cerrar', async () => {
+    const { service, calls } = makeService({ found: member({ isActive: false }), seats: 1, maxUsers: 5 });
+    await service.updateMember(OTHER, { isActive: true });
+    assert.equal(calls.bumps.length, 1);
+    assert.deepEqual(calls.revoked, []);
+  });
+
+  it('un parche que no toca rol, oficina ni estado no sube nada', async () => {
+    const { service, calls } = makeService({ found: member() });
+    await service.updateMember(OTHER, {});
+    assert.deepEqual(calls.bumps, []);
+    assert.deepEqual(calls.published, [0]);
   });
 });

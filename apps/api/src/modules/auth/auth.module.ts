@@ -7,6 +7,7 @@ import { AuthService } from './auth.service';
 import { TokenService } from './token.service';
 import { PermissionsService } from './permissions.service';
 import { SessionService } from './session.service';
+import { AuthzVersionService } from './authz-version.service';
 import { MfaService } from './mfa.service';
 import { PasswordService } from './password.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -21,6 +22,7 @@ import { TenantGuard } from './guards/tenant.guard';
     TokenService,
     PermissionsService,
     SessionService,
+    AuthzVersionService,
     MfaService,
     PasswordService,
     JwtAuthGuard,
@@ -32,6 +34,7 @@ import { TenantGuard } from './guards/tenant.guard';
   exports: [
     TokenService,
     SessionService,
+    AuthzVersionService,
     PermissionsService,
     MfaService,
     JwtAuthGuard,

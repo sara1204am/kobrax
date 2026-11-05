@@ -14,6 +14,8 @@ import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { formatInvitationCode, newInvitationCode, sha256hex } from '../auth/invitation-code';
 import { emailTaken } from '../accounts/accounts.errors';
 import { AssignmentService } from '../assignments/assignment.service';
+import { AuthzVersionService, type PendingVersion } from '../auth/authz-version.service';
+import { SessionService } from '../auth/session.service';
 import { isAssignable, type AssignmentChange } from '../assignments/assignment-rules';
 import { serializeMember, serializeProfile, serializeRole } from './users.serializer';
 import { InviteMemberDto, UpdateMemberDto, UpdateProfileDto } from './dto/user.dto';
@@ -53,6 +55,8 @@ export class UsersService {
     private readonly mail: MailService,
     private readonly plan: PlanLimitsService,
     private readonly assignments: AssignmentService,
+    private readonly authz: AuthzVersionService,
+    private readonly sessions: SessionService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -158,6 +162,7 @@ export class UsersService {
   async updateMember(userId: string, dto: UpdateMemberDto) {
     if (userId === this.selfId) throw cannotEditSelf();
 
+    let authzPending: PendingVersion[] = [];
     let handover: { changes: AssignmentChange[]; routesMoved: number; routesCancelled: number; work: { agenda: number; credits: number; routes: number } } | undefined;
     const { before, updated } = await this.tx(async (tx) => {
       const before = await tx.userAccount.findFirst({ where: { userId }, include: MEMBER_INCLUDE });
@@ -229,8 +234,24 @@ export class UsersService {
         data: { roleId: dto.roleId, isActive: dto.isActive, branchId: dto.branchId },
         include: MEMBER_INCLUDE,
       });
+      // F14 · F1 (H-2): un cambio de rol, de oficina o de estado sube la versión de ESTA membresía en la misma transacción; el
+      // próximo request con el token viejo recibe AUTHZ_STALE y renueva con lo nuevo.
+      const authzChanged = changesRole || dto.isActive !== undefined && dto.isActive !== before.isActive || dto.branchId !== undefined && dto.branchId !== before.branchId;
+      if (authzChanged) authzPending = await this.authz.bumpInTx(tx, this.tenant.accountId, [before.id]);
       return { before, updated };
     });
+
+    await this.authz.publish(authzPending);
+    if (dto.isActive === false && before.isActive) {
+      // Desactivar la membresía cierra sus sesiones EN ESTA CUENTA (las de otros tenants no se tocan).
+      const closed = await this.sessions.revokeAccountSessions(userId, this.tenant.accountId);
+      await this.audit.record({
+        entity: 'user_account',
+        entityId: updated.id,
+        action: 'SESSION_REVOKE',
+        after: { reason: 'MEMBERSHIP_DEACTIVATED', sessions: closed },
+      });
+    }
 
     if (handover) {
       await this.assignments.auditChanges(handover.changes, { reason: 'DEACTIVATED_MEMBER', from: userId });

@@ -36,6 +36,9 @@ export class AppConfigService {
   get jwtRefreshSecret() {
     return this.get('JWT_REFRESH_SECRET');
   }
+  get authzVersionCheck(): boolean {
+    return this.get('AUTHZ_VERSION_CHECK') !== 'off';
+  }
   get jwtExpiresIn() {
     return this.get('JWT_EXPIRES_IN');
   }

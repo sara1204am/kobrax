@@ -65,6 +65,8 @@ function makeAuth(opts: {
       fn({
         userSession: { create: async () => ({ id: 'sess-nueva' }) },
         refreshToken: { create: async () => ({}) },
+        // F14 · F1: `av` sale de la membresía en la DB (aquí: versión 3).
+        userAccount: { findFirst: async () => ({ authzVersion: 3 }) },
       }),
     // `/auth/me` lee la marca del negocio por acá (no pasa por TenantGuard).
     withSystemTenant: async <T>(_accountId: string, fn: (tx: unknown) => Promise<T>): Promise<T> => {
@@ -100,6 +102,8 @@ function makeAuth(opts: {
     sessions as never,
     mfa as never,
     audit as never,
+    // F14 · F1: `pv` global = 7; `warm` no hace nada (no hay Redis en esta prueba).
+    { currentPolicyVersion: async () => 7, warm: async () => {} } as never,
   );
   return { service, calls, audited };
 }
@@ -248,6 +252,14 @@ describe('AuthService — cambio de empresa con la sesión ya iniciada (W1)', ()
       service.switchAccount('u9', 'sess-vieja', 'a2', META),
       AUTH_ERR.ACCOUNT_LOCKED,
     );
+  });
+
+  it('F14·F1: el access emitido lleva av y pv leídos de la DB (H-2)', async () => {
+    const { service } = makeAuth({ user, memberships: [memb('SUPERVISOR', 'a1'), memb('COLLECTOR', 'a2')] });
+    const res = await service.switchAccount('u9', 'sess-vieja', 'a2', META);
+    const claims = token.verifyAccess(res.accessToken!);
+    assert.equal(claims.av, 3);
+    assert.equal(claims.pv, 7);
   });
 
   it('lista sólo las empresas donde el usuario puede operar', async () => {
