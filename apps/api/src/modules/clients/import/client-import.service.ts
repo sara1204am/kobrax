@@ -170,6 +170,7 @@ export class ClientImportService {
     await tx.client.create({
       data: {
         accountId,
+        createdBy: this.tenant.userId ?? null,
         clientType: d.clientType as ClientType,
         firstName: d.firstName as string | undefined,
         lastName: d.lastName as string | undefined,

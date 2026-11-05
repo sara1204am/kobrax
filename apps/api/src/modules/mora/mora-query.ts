@@ -171,9 +171,19 @@ export function visibleCreditIdsSql(scope: MoraScope): Prisma.Sql {
  * Alias de la consulta que llama: `cl` = `clients`.
  */
 export function visibleClientIdsSql(scope: MoraScope): Prisma.Sql {
+  // F14 · F1 (N-12, interino hasta F2): un cliente SIN crédito vivo no es de nadie todavía, y ya no se abre a toda la cuenta. Lo ven
+  // quienes tienen alcance sobre toda la cuenta o su subárbol, y — sea cual sea su alcance — quien lo dio de alta (`created_by`),
+  // para que el cobrador no pierda de vista al cliente que acaba de crear. Los clientes históricos sin crédito y sin `created_by`
+  // quedan sólo para ALL/SUBTREE.
+  const withoutCredit =
+    scope.kind === 'ALL' || scope.kind === 'SUBTREE'
+      ? Prisma.sql`TRUE`
+      : scope.userId
+        ? Prisma.sql`c0.created_by = ${scope.userId}`
+        : Prisma.sql`FALSE`;
   return Prisma.sql`SELECT cr.client_id FROM credits cr WHERE ${Prisma.join(moraAccessConditions(scope), ' AND ')}
       UNION
-      SELECT c0.id FROM clients c0 WHERE c0.account_id = ${scope.accountId} AND NOT EXISTS (
+      SELECT c0.id FROM clients c0 WHERE c0.account_id = ${scope.accountId} AND ${withoutCredit} AND NOT EXISTS (
         SELECT 1 FROM credits cx WHERE cx.client_id = c0.id AND cx.deleted_at IS NULL)`;
 }
 

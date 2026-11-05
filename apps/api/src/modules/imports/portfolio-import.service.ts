@@ -619,6 +619,7 @@ export class PortfolioImportService {
             clientsData.push({
               id: clientId,
               accountId,
+              createdBy: this.tenant.userId ?? null,
               clientType: ClientType.PERSON,
               lastName: b.clientLastName ?? 'SIN NOMBRE',
               firstName: b.clientFirstName ?? undefined,

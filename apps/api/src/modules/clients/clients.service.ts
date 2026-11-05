@@ -191,6 +191,8 @@ export class ClientsService {
             // Sólo si el móvil lo propuso (ver `CreateClientDto.id`).
             ...(dto.id ? { id: dto.id } : {}),
             accountId: this.tenant.accountId,
+            // F14 · F1: trazabilidad (NO es dueño: la responsabilidad vive en el crédito, H-7). Hace visible al cliente a su creador.
+            createdBy: this.tenant.userId ?? null,
             clientType: dto.clientType,
             firstName: dto.firstName,
             lastName: dto.lastName,
