@@ -76,6 +76,13 @@ export class UsersController {
     return this.detail.activityEvents(id, Number(days), decodeCursor(before), Number(limit));
   }
 
+  /** F14 · F1: cerrar las sesiones abiertas de un miembro de esta cuenta. */
+  @Post(':id/sessions/revoke')
+  @Roles(Permission.USER_SESSIONS_REVOKE)
+  revokeSessions(@Param('id', ParseUUIDPipe) id: string) {
+    return this.users.revokeMemberSessions(id);
+  }
+
   @Get(':id/connections')
   @Roles(Permission.USER_WRITE)
   connections(@Param('id', ParseUUIDPipe) id: string, @Query('before') before?: string, @Query('limit') limit?: string) {

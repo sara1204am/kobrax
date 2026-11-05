@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { Permission } from '@kobrax/shared';
+import { Permission, officeInScope } from '@kobrax/shared';
 
 /**
  * Alcance por oficina (F13 · P2). Lógica PURA: decide el tipo de alcance por **capacidad** y arma los fragmentos SQL
@@ -68,6 +68,19 @@ export function officeVisibilitySql(kind: 'SUBTREE' | 'BRANCH', me: string, cols
     return Prisma.sql`(cr.assigned_manager_id IS NOT NULL AND ${cols.branch} IS NOT NULL AND ${officeInMySubtreeSql(me, cols)})`;
   }
   return Prisma.sql`(${officeInMySubtreeSql(me, cols)} OR ${assignedToRootSql(me, cols)})`;
+}
+
+/**
+ * F14 · F1 (R-02): ¿el actor ve a este miembro en Personas? Lógica PURA.
+ *  · a sí mismo, siempre;
+ *  · alcance `ALL` (administrador, auditor, lector, gerente en la raíz): toda la cuenta, también quien no tiene oficina;
+ *  · alcance por oficinas: sólo a quien tiene una asignación vigente dentro del subárbol de las del actor. Quien no tiene
+ *    oficina NO se ve (lo gestiona alguien con alcance `ALL`); un actor sin asignaciones sólo se ve a sí mismo (falla cerrado).
+ */
+export function memberVisibleTo(scope: AssignScope, actorId: string | undefined, memberUserId: string, memberPaths: string[]): boolean {
+  if (actorId && memberUserId === actorId) return true;
+  if (scope.kind === 'ALL') return true;
+  return memberPaths.some((p) => officeInScope(p, scope.paths));
 }
 
 /** Cómo se reparte (alcance de asignación): todo, o sólo estas rutas. Sin rutas no se reparte nada (falla cerrado). */

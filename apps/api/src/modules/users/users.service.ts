@@ -16,6 +16,7 @@ import { emailTaken } from '../accounts/accounts.errors';
 import { AssignmentService } from '../assignments/assignment.service';
 import { AuthzVersionService, type PendingVersion } from '../auth/authz-version.service';
 import { SessionService } from '../auth/session.service';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import { isAssignable, type AssignmentChange } from '../assignments/assignment-rules';
 import { serializeMember, serializeProfile, serializeRole } from './users.serializer';
 import { InviteMemberDto, UpdateMemberDto, UpdateProfileDto } from './dto/user.dto';
@@ -57,6 +58,7 @@ export class UsersService {
     private readonly assignments: AssignmentService,
     private readonly authz: AuthzVersionService,
     private readonly sessions: SessionService,
+    private readonly office: OfficeScopeService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -71,10 +73,13 @@ export class UsersService {
 
   /** Miembros del tenant, activos e inactivos (la lista deja reactivar al desactivado). */
   async list() {
-    const rows = await this.tx((tx) =>
+    const rows = await this.tx(async (tx) => {
       // Sin `where` de tenant: lo pone la RLS. `user_accounts` no tiene deletedAt.
-      tx.userAccount.findMany({ include: MEMBER_INCLUDE, orderBy: { joinedAt: 'asc' } }),
-    );
+      const all = await tx.userAccount.findMany({ include: MEMBER_INCLUDE, orderBy: { joinedAt: 'asc' } });
+      // F14 · F1 (R-02): sólo a quien el actor ve según su alcance por oficina.
+      const visible = await this.office.visibleMemberIds(tx, all.map((m) => m.userId));
+      return all.filter((m) => visible.has(m.userId));
+    });
     return rows.map(serializeMember);
   }
 
@@ -157,6 +162,25 @@ export class UsersService {
         throw e;
       }
     }
+  }
+
+  /** F14 · F1: cierra las sesiones abiertas de un miembro EN ESTA cuenta (no cambia su rol; tiene que volver a entrar). */
+  async revokeMemberSessions(userId: string): Promise<{ sessions: number }> {
+    if (userId === this.selfId) throw cannotEditSelf();
+    await this.tx(async (tx) => {
+      const member = await tx.userAccount.findFirst({ where: { userId }, select: { userId: true } });
+      if (!member) throw memberNotFound();
+      const visible = await this.office.visibleMemberIds(tx, [userId]);
+      if (!visible.has(userId)) throw memberNotFound();
+    });
+    const sessions = await this.sessions.revokeAccountSessions(userId, this.tenant.accountId);
+    await this.audit.record({
+      entity: 'user_account',
+      entityId: userId,
+      action: 'SESSION_REVOKE',
+      after: { reason: 'ADMIN_REQUEST', sessions },
+    });
+    return { sessions };
   }
 
   async updateMember(userId: string, dto: UpdateMemberDto) {

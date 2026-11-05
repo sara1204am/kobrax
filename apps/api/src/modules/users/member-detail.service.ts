@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import type { PrismaClient } from '@prisma/client';
 import { CreditActivityType, RouteStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
@@ -149,6 +150,7 @@ export class MemberDetailService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenant: TenantContextService,
+    private readonly office: OfficeScopeService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -162,6 +164,8 @@ export class MemberDetailService {
       include: MEMBER_DETAIL_INCLUDE,
     });
     if (!member) throw memberNotFound();
+    // F14 · F1 (R-02): fuera del alcance del actor = 404, como si no existiera.
+    if (!(await this.office.visibleMemberIds(tx, [userId])).has(userId)) throw memberNotFound();
     return member;
   }
 

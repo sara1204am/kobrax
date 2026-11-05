@@ -40,6 +40,8 @@ function member(over: Record<string, unknown> = {}) {
 }
 
 interface Opts {
+  /** F14 · F1 (R-02): ids de miembros que el actor ve; por defecto, todos. */
+  visible?: string[];
   /** Miembro que resuelve el scope de `updateMember` (`null` → 404). */
   found?: Record<string, unknown> | null;
   /** Otros ACCOUNT_ADMIN activos que quedan en el tenant. */
@@ -232,6 +234,8 @@ function makeService(opts: Opts = {}) {
         return 2;
       },
     } as never,
+    // F14 · F1 (R-02): por defecto el actor ve a todos (alcance ALL); una prueba puede acotar con `visible`.
+    { visibleMemberIds: async (_tx: unknown, ids: string[]) => new Set(opts.visible ?? ids) } as never,
   );
   return { service, calls };
 }
@@ -628,5 +632,30 @@ describe('UsersService.updateMember — versión de autorización y sesiones (F1
     await service.updateMember(OTHER, {});
     assert.deepEqual(calls.bumps, []);
     assert.deepEqual(calls.published, [0]);
+  });
+});
+
+describe('UsersService — alcance de Personas y cierre de sesiones (F14 · F1, R-02)', () => {
+  it('list: sólo devuelve a los miembros que el actor ve según su alcance por oficina', async () => {
+    const { service } = makeService({ visible: [] });
+    assert.deepEqual(await service.list(), []);
+  });
+
+  it('cerrar sesiones de alguien fuera de mi alcance → 404 y no se revoca nada', async () => {
+    const { service, calls } = makeService({ found: member(), visible: [] });
+    await rejectsWithCode(service.revokeMemberSessions(OTHER), 'USER_NOT_FOUND');
+    assert.deepEqual(calls.revoked, []);
+  });
+
+  it('cerrar sesiones de un miembro visible: revoca las de ESTA cuenta y audita SESSION_REVOKE', async () => {
+    const { service, calls } = makeService({ found: member() });
+    assert.deepEqual(await service.revokeMemberSessions(OTHER), { sessions: 2 });
+    assert.deepEqual(calls.revoked, [{ userId: OTHER, accountId: 'acc-A' }]);
+    assert.deepEqual(calls.audit, ['SESSION_REVOKE']);
+  });
+
+  it('no se cierran las propias sesiones por este camino', async () => {
+    const { service } = makeService({ found: member() });
+    await rejectsWithCode(service.revokeMemberSessions(SELF), 'USER_CANNOT_EDIT_SELF');
   });
 });
