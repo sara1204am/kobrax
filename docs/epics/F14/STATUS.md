@@ -18,7 +18,7 @@
 | G6 `/code-review` | **PASS 2026-11-05** | V-014: 9 hallazgos, 5 corregidos, 2 descartados con motivo, 2 aceptados y documentados. Recorrido de IMPACT-MAP por las entradas HUB H14-001…018 hecho en `hub/HUB.md`. |
 | G7 Cierre de F1 | **PASS 2026-11-05** | HUB, STATUS, HANDOFF, VERIFICATIONS, INCIDENTS y `docs/producto/roles-permisos-planes.md` actualizados. Registro de fases: esta tabla (F14 no tiene PHASES-LOG propio). **F2 no se abre.** |
 
-| G4 Plan de F2 | **PENDIENTE** | `plans/F2-responsabilidad-alcance.md` en BORRADOR; D-1…D-6 aprobadas 2026-11-05; falta `validar F2`. |
+| G4 Plan de F2 | **FAIL (1.er intento) 2026-11-05** | 10/11 ítems PASS. Bloqueante: ítem 10, falta registrar el cruce con la alineación móvil↔web (F10 ronda 3) y el efecto en el móvil de la visibilidad derivada. Advertencias: gating web de `client:write`/`credit:write` no listado en §6/tareas; nombre de la migración `f14_04` difiere del plan maestro. |
 
 ## Autorizaciones de la usuaria (2026-11-04)
 - Avanzar entre fases sin esperarla; `prisma migrate reset` permitido (su DB dev es de prueba).
