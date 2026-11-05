@@ -97,3 +97,21 @@ describe('SessionService.revokeAll', () => {
     assert.equal(await service.isRevoked('s2'), true);
   });
 });
+
+describe('SessionService.revokeAccountSessions (F14 · F1)', () => {
+  it('🔴 desactivar la membresía en a1 cierra SOLO las sesiones de a1; las de otro tenant siguen vivas', async () => {
+    const { service, calls } = makeDeps([row('s1', 'a1'), row('s2', 'a2'), row('s3', 'a1')]);
+    const count = await service.revokeAccountSessions('u1', 'a1');
+    assert.equal(count, 2);
+    assert.deepEqual(calls.withTenant, ['a1', 'a1']);
+    assert.equal(await service.isRevoked('s1'), true);
+    assert.equal(await service.isRevoked('s3'), true);
+    assert.equal(await service.isRevoked('s2'), false);
+  });
+
+  it('sin sesiones en esa cuenta no toca nada', async () => {
+    const { service, calls } = makeDeps([row('s2', 'a2')]);
+    assert.equal(await service.revokeAccountSessions('u1', 'a1'), 0);
+    assert.deepEqual(calls.withTenant, []);
+  });
+});

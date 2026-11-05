@@ -29,3 +29,8 @@
 - **Cambiar `visibleClientIdsSql` (H14-013)** ⇒ Cartera, Clientes, Pagos, Exportes (consumen la subconsulta), F13 HUB-011/019.
 - **Cambiar visibilidad de Personas (H14-009/012)** ⇒ «añadir persona», reparto (`assignableRows`), Equipo web.
 - **Cambiar uploads (H14-014)** ⇒ adjuntos de cliente, comprobante de pago, foto/QR de perfil, evidencias, PDF/exportes que incrustan imágenes (`clients/:id/pdf`, `routes/:id/pdf`).
+
+## Estado tras F1 (2026-11-05, commits locales en `f14/p1-sesiones-aislamiento`)
+H14-001…018 pasan a **MODIFICADO F1** y probados (ver `../execution/VERIFICATIONS.md`). Archivos nuevos: `auth/authz-version.service.ts`, `uploads/upload-access.service.ts`, `rls/005_authz_functions.sql`, `web/app/api/auth/renew/route.ts`, migración `20261105000000_f14_01_authz_versions`.
+Cambios respecto del plan: `user:sessions:revoke` lo tienen ACCOUNT_ADMIN y SUPER_ADMIN (MANAGER no: no tiene `user:write`); outbox transaccional (D-3); `AUTHZ_UNAVAILABLE` (D-4); `created_by` adelantado (D-1).
+**Despliegue:** `migrate deploy` NO basta: hay que re-aplicar `rls/001_enable_rls.sql` (policy de la outbox, grant de `platform_settings`) y `rls/005_authz_functions.sql` (funciones `authz_outbox_*`, `authz_membership_version`).

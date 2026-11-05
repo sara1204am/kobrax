@@ -1,4 +1,4 @@
-> ESTADO: VALIDADO (PASS 2026-11-05) — G4: 11/11 ítems; D-1, D-2 y D-5 APROBADAS por la usuaria el 2026-11-05 (D-3 y D-4 son detalles de implementación dentro de H-2). Advertencia: el rollback incluye una sentencia DDL de una línea (no es código de producto).
+> ESTADO: EN EJECUCIÓN — tareas 1–15 hechas (2026-11-05); G5 corrido con una falla ajena abierta; G6/G7 pendientes. Validado (PASS 2026-11-05) — G4: 11/11 ítems; D-1, D-2 y D-5 APROBADAS por la usuaria el 2026-11-05 (D-3 y D-4 son detalles de implementación dentro de H-2). Advertencia: el rollback incluye una sentencia DDL de una línea (no es código de producto).
 
 # Plan F1 · Sesiones y aislamiento
 
