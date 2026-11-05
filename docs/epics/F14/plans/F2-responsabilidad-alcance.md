@@ -30,7 +30,7 @@ Resuelve: **R-03 (redefinido), R-12/R-13 (H-3, H-8), N-01 (barrera RLS; ver D-2)
 ## 4. Alcance / fuera de alcance
 
 **Dentro**
-- Migración aditiva `f14_04_client_registration`: `clients.registered_branch_id` (FK `branches`, nullable) + índice; backfill idempotente (oficina del único crédito vivo o de sus créditos si todos coinciden; si no, NULL) y `verify/f14-cliente-registro.sql` que lista los NULL.
+- Migración aditiva `f14_04_client_registration` (el plan maestro la llamaba `f14_02_client_registration`; ese número ya lo usó F1 para el permiso de MANAGER, por eso F2 usa `f14_04`): `clients.registered_branch_id` (FK `branches`, nullable) + índice; backfill idempotente (oficina del único crédito vivo o de sus créditos si todos coinciden; si no, NULL) y `verify/f14-cliente-registro.sql` que lista los NULL.
 - Visibilidad del cliente derivada de créditos (reemplaza el `UNION` de `mora-query.ts:173-190`): cobrador = créditos vigentes a su cargo (responsable, temporal o apoyo) ∪ sin crédito vivo que él creó; supervisor/gerente = algún crédito visible ∪ registrado en su subárbol; ALL = todos. Sin accesos residuales (nada se guarda en el cliente).
 - `GET /clients/:id` devuelve `otherCredits { count, totalOutstanding, responsibles[] }`: sólo agregados (D-6).
 - Políticas: `client.create`, `credit.create`, `credit.assign`, `member.invite`, `member.assignRole` (registradas en `policies/`; `FactsLoader` gana los hechos de oficina/tier).
@@ -60,6 +60,7 @@ Resuelve: **R-03 (redefinido), R-12/R-13 (H-3, H-8), N-01 (barrera RLS; ver D-2)
 | H14-028 | `modules/credits/credits.service.ts`, `assignments/assignment-rules.ts`, `assignment.service.ts` | `credit.create`, `credit.assign` (tier + par en oficina hija) | importación (`IMPORT_OWN`), reparto masivo, agenda, rutas, F13 HUB-013/017 |
 | H14-029 | `modules/users/users.service.ts` (`invite`, `updateMember`), `users.controller.ts`, `common/office-scope/*` | `member.invite`/`member.assignRole` por tier y subárbol; `ACCOUNT_ADMIN` no se asigna por estas vías | Equipo web, invitaciones, F1 H14-009/012 |
 | H14-030 | `common/authz/policies/*`, `facts-loader.ts`, `authz-snapshot.json` | 5 políticas nuevas; `tierOf`; puertas nuevas | todos los servicios que llaman `assertPolicy` |
+| H14-027b | web: `cartera/new-client-button.tsx:52`, `cartera/[id]/client-card.tsx:87, 256`, `credito/[cid]/credit-card.tsx:63`, `cartera/[id]/link-review.tsx:32` | Los controles que hoy usan `client:write`/`credit:write` pasan a `client:create`, `credit:create` y `client:delete` donde corresponda (editar sigue con `*:write`); aviso `otherCredits` | usuarios sin esos permisos (AUDITOR/VIEWER no cambian) | Medio | F2 | pruebas web del botón y la ficha | PLANEADO (bajo H14-027) |
 | H14-031 | `packages/shared/src/constants/permissions.ts`, seed, migración de catálogo (`policy_version`) | `client:create`, `credit:create`, `client:delete` y plantillas | JWT de todas las sesiones (un `AUTHZ_STALE` único), web `permissions`, móvil |
 
 ## 7. Invariantes que aplican
@@ -69,6 +70,13 @@ RULES F13 §A–§D (heredadas); F14-A: H-3, H-7, H-12, H-13. Multi-tenant (`acc
 - **Gratuito individual** (un solo `ACCOUNT_ADMIN`, sin oficinas, `soleLeafOffice` = la raíz): `client.create` registra el cliente en la única oficina hoja sin pedir nada; `credit.create` y `credit.assign` lo dejan crearse y asignarse a sí mismo (el actor siempre es destino válido); `member.invite` no aplica (no invita) y, si invitara, el tier del destino es inferior. Visibilidad: ALL, ve todo. **Regresión obligatoria:** `authz-coverage.it.ts` ampliado con crear cliente → crear crédito → registrar pago → ver ficha en una cuenta FREE individual, sin 403/404 de más.
 - **Multi-oficina:** cobrador sólo ve clientes de su cartera y los que creó; supervisor, los de su agencia; gerente regional, los de su subárbol; gerente en la raíz de una cuenta multi-oficina **no puede crear cliente** sin elegir oficina (`CLIENT_CREATE_AT_ROOT`).
 - **Cambia de comportamiento (avisar):** (a) un cobrador deja de ver a un cliente cuando pierde su último crédito vigente; (b) sólo ACCOUNT_ADMIN borra clientes (D-3); (c) nadie invita o promueve a `ACCOUNT_ADMIN` (H-13); (d) un gerente invita (primera vez) a roles de tier inferior dentro de su subárbol.
+
+### 8.1 Cruce con la alineación móvil↔web (RULES D1) — leído 2026-11-05
+- **Estado de la alineación:** `F10/plans/alineacion-web/README.md` está **EN EJECUCIÓN, ronda 3/4**: pendientes 0.2, 0.4, 0.5, 0.7, 0.8 y las fases 1–6; bloqueados externamente push y mapas offline. F2 **no toca ninguno de esos ítems ni escribe código móvil** (D-6a).
+- **Principios F10 que F2 respeta:** P-3 (el API es la autoridad de permisos; el móvil ofrece según `capabilities` y deja que el servidor valide), P-7 (el cobrador independiente sigue creando y administrando lo suyo) y «sin casos» (todo cuelga del crédito, coherente con H-7).
+- **Dependencia de permisos:** el móvil no decide por `client:write`/`credit:write` (sólo aparecen en comentarios de `agenda.service.ts:291` y `cliente-queue.ts:20`). El COLLECTOR conserva ambos y recibe `client:create` y `credit:create` (D-3), así que el alta de cliente y de crédito (`client.create`, `credit.create` en `sync/queue.ts:137-138`) sigue igual. El móvil no tiene «eliminar cliente».
+- **Efecto real (sin cambiar código móvil):** (a) la caché de clientes se reemplaza entera al sincronizar (`db.ts` `replaceAll`) y se purga por TTL (`purgeCache`): un cliente que el cobrador deja de ver **desaparece en la siguiente sincronización** sin lógica nueva; (b) acciones **ya encoladas** sobre ese cliente (`client.update`, `client.contact`, `credit.create`… en `sync/queue.ts`) recibirán 404 del servidor; el móvil trata un 404 como «ya no existe» sólo para borrados (`queue.ts:515, 708`), así que para el resto hay que **verificarlo** (tarea 9) y, si queda como error reintentable, registrarlo como pendiente de F8; (c) el nuevo campo `otherCredits` es aditivo en el JSON: el móvil lo ignora.
+- **Prueba de este cruce (tarea 9):** correr la suite móvil completa y una prueba de contrato que confirme que `GET /clients/:id` con `otherCredits` no rompe el parseo del móvil; revisar el manejo de 404 de las acciones de cliente en cola y dejar el resultado en `VERIFICATIONS`. Si el 404 queda mal tratado, **no se arregla en F2**: se anota en el HUB para F8 y se avisa a la usuaria.
 
 ## 9. Riesgos y decisiones propias (D-1…D-6 APROBADAS 2026-11-05)
 
@@ -98,8 +106,8 @@ Columna nullable inofensiva (no se borra). Migración de catálogo reversible (q
 5. **API · créditos:** `credit.create` y `credit.assign` (tier + par en oficina hija); importación sigue con `IMPORT_OWN`.
 6. **API · personas:** `member.invite`/`member.assignRole`; `ACCOUNT_ADMIN` fuera de ambos caminos; permisos de MANAGER/SUPERVISOR.
 7. **Pruebas:** specs y la integración nueva; snapshot de puertas actualizado (lo aprueba la usuaria).
-8. **Web:** aviso «tiene otros créditos» en la ficha; «Eliminar» sólo con `client:delete`; Equipo muestra las acciones por permiso. Con `Button`/tokens/`DataTable`.
-9. **Móvil:** sin cambios de código (D-6a); correr la suite. Cruce RULES D1 anotado.
+8. **Web:** aviso «tiene otros créditos» en la ficha; «Nuevo cliente» con `client:create`, «Nuevo crédito» con `credit:create`, «Eliminar» sólo con `client:delete` (editar y decidir vínculos siguen con `client:write`/`credit:write`: `new-client-button.tsx`, `client-card.tsx`, `credit-card.tsx`, `link-review.tsx`); Equipo muestra las acciones por permiso. Con `Button`/tokens/`DataTable`.
+9. **Móvil:** sin cambios de código (D-6a). Cruce RULES D1 registrado en §8.1: correr la suite completa, la prueba de contrato de `otherCredits` y revisar el 404 de las acciones de cliente en cola; resultado en `VERIFICATIONS`.
 10. **Docs:** HUB, VERIFICATIONS, STATUS, HANDOFF, `docs/producto/roles-permisos-planes.md`.
 
 ## 13. Criterios de cierre (evidencia exigida)
