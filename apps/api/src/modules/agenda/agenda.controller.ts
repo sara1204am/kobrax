@@ -1,9 +1,6 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { UpdateLocationDto } from '../clients/dto/client.dto';
 import { Permission } from '@kobrax/shared';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AgendaService } from './agenda.service';
 import {
@@ -20,7 +17,6 @@ import {
 } from './dto/agenda.dto';
 
 @Controller('agenda')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class AgendaController {
   constructor(private readonly agenda: AgendaService) {}
 

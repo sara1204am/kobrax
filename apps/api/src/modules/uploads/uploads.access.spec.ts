@@ -4,8 +4,8 @@ import { Permission } from '@kobrax/shared';
 import { Reflector } from '@nestjs/core';
 import type { ExecutionContext } from '@nestjs/common';
 import { UploadAccessService } from './upload-access.service';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { ROLES_ANY_KEY } from '../auth/decorators/roles.decorator';
+import { AuthzGuard } from '../auth/guards/authz.guard';
+import { RolesAny } from '../auth/decorators/roles.decorator';
 
 const NAME = 'a'.repeat(64) + '.jpg';
 
@@ -54,22 +54,24 @@ describe('UploadAccessService — lectura de archivos (F14 · F1, R-06)', () => 
   });
 });
 
-describe('RolesGuard — @RolesAny (F14 · F1)', () => {
-  function guard(any: string[], perms: string[]) {
-    const reflector = new Reflector();
-    reflector.getAllAndOverride = ((key: string) => (key === ROLES_ANY_KEY ? any : undefined)) as never;
+describe('AuthzGuard — @RolesAny (F14 · F1/F3)', () => {
+  class Ctl {
+    @RolesAny(Permission.CLIENT_WRITE, Permission.PAYMENT_WRITE)
+    upload() {}
+  }
+  function guard(perms: string[]) {
     const ctx = {
-      getHandler: () => ({}),
-      getClass: () => ({}),
+      getHandler: () => Ctl.prototype.upload,
+      getClass: () => Ctl,
       switchToHttp: () => ({ getRequest: () => ({ user: { permissions: perms } }) }),
     } as unknown as ExecutionContext;
-    return () => new RolesGuard(reflector).canActivate(ctx);
+    return () => new AuthzGuard(new Reflector(), { authzDenyByDefault: true } as never).canActivate(ctx);
   }
 
   it('basta UNO de los permisos', () => {
-    assert.equal(guard([Permission.CLIENT_WRITE, Permission.PAYMENT_WRITE], [Permission.PAYMENT_WRITE])(), true);
+    assert.equal(guard([Permission.PAYMENT_WRITE])(), true);
   });
   it('ninguno → 403', () => {
-    assert.throws(guard([Permission.CLIENT_WRITE, Permission.PAYMENT_WRITE], [Permission.CLIENT_READ]));
+    assert.throws(guard([Permission.CLIENT_READ]));
   });
 });

@@ -11,12 +11,8 @@ import {
   Put,
   Query,
   StreamableFile,
-  UseGuards,
 } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ClientsService } from './clients.service';
 import { buildClientPdf } from './client-pdf';
@@ -40,7 +36,6 @@ import {
 } from './dto/client.dto';
 
 @Controller('clients')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class ClientsController {
   constructor(private readonly clients: ClientsService) {}
 

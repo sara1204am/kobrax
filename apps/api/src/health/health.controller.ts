@@ -2,6 +2,7 @@ import { Controller, Get, Inject } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { PrismaService } from '../database/prisma.service';
 import { REDIS } from '../redis/redis.module';
+import { Public } from '../modules/auth/decorators/authz.decorator';
 
 @Controller('health')
 export class HealthController {
@@ -12,12 +13,14 @@ export class HealthController {
 
   /** Liveness: el proceso responde. */
   @Get('live')
+  @Public()
   live(): { status: string } {
     return { status: 'ok' };
   }
 
   /** Readiness: dependencias (DB + Redis) operativas. */
   @Get()
+  @Public()
   async ready(): Promise<{ db: 'up' | 'down'; redis: 'up' | 'down' }> {
     const db = await this.prisma
       .$queryRaw`SELECT 1`.then(() => 'up' as const)

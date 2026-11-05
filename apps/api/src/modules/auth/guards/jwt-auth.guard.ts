@@ -1,5 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
+import { resolveAccess } from '../authz-access';
 import { TokenService } from '../token.service';
 import { SessionService } from '../session.service';
 import { AuthzVersionService } from '../authz-version.service';
@@ -32,9 +34,12 @@ export class JwtAuthGuard implements CanActivate {
     private readonly sessions: SessionService,
     private readonly authz: AuthzVersionService,
     private readonly config: AppConfigService,
+    private readonly reflector: Reflector,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    // F14 · F3: guard GLOBAL. Lo que se declaró `@Public()` no pide sesión; todo lo demás (incluido lo sin declarar) sí.
+    if (resolveAccess(this.reflector, context.getHandler(), context.getClass())?.kind === 'public') return true;
     const req = context.switchToHttp().getRequest<Request>();
     const header = req.headers['authorization'];
     if (!header?.startsWith('Bearer ')) throw invalidToken();

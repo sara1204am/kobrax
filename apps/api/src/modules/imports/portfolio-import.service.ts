@@ -61,6 +61,7 @@ import {
 } from './portfolio-credit';
 import { documentLines, readReportMeta, type ReportMeta } from './report-meta';
 import { nameKey, resolveClients, searchWords } from './client-match';
+import { AuthorizationService } from '../../common/authz/authorization.service';
 
 /** La config del tenant + lo derivado que necesita una corrida. */
 interface RunConfig extends ImportConfig {
@@ -175,6 +176,7 @@ export class PortfolioImportService {
     private readonly clock: TenantClockService,
     private readonly assignment: AssignmentService,
     private readonly office: OfficeScopeService,
+    private readonly authz: AuthorizationService = new AuthorizationService(tenant),
   ) {}
 
   /**
@@ -1136,7 +1138,7 @@ export class PortfolioImportService {
         .filter((b) => b.active)
         .map((b) => ({ id: b.id, name: officeLabel(branches, b.id) || b.name }))
         .sort((a, b) => a.name.localeCompare(b.name)),
-      viewer: { userId: this.tenant.userId ?? '', canAssign: this.tenant.can(Permission.ASSIGNMENT_WRITE), canConfigure },
+      viewer: { userId: this.tenant.userId ?? '', canAssign: this.authz.can(Permission.ASSIGNMENT_WRITE), canConfigure },
     };
   }
 
@@ -1150,7 +1152,7 @@ export class PortfolioImportService {
    * entra igual porque el cobrador independiente es COLLECTOR y dueño a la vez, y configura lo suyo.
    */
   private async canConfigure(): Promise<boolean> {
-    if (this.tenant.can(Permission.ASSIGNMENT_WRITE)) return true;
+    if (this.authz.can(Permission.ASSIGNMENT_WRITE)) return true;
     const userId = this.tenant.userId;
     if (!userId) return false;
     const owner = await this.tx((tx) =>

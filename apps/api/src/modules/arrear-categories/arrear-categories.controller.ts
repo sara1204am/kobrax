@@ -1,14 +1,10 @@
-import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Put } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ArrearCategoriesService } from './arrear-categories.service';
 import { ReplaceArrearCategoriesDto } from './dto/arrear-categories.dto';
 
 @Controller('arrear-categories')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class ArrearCategoriesController {
   constructor(private readonly categories: ArrearCategoriesService) {}
 

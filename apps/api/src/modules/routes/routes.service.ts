@@ -52,6 +52,7 @@ import {
   stopStatusNotAllowed,
   stopsWithoutPoint,
 } from './routes.errors';
+import { AuthorizationService } from '../../common/authz/authorization.service';
 
 /**
  * Lo que la parada necesita del cliente para poder pintarse: nombre, dirección y **el punto en el
@@ -132,6 +133,7 @@ export class RoutesService {
     private readonly osrm: OsrmService,
     private readonly clock: TenantClockService,
     private readonly office: OfficeScopeService,
+    private readonly authz: AuthorizationService = new AuthorizationService(tenant),
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -148,7 +150,7 @@ export class RoutesService {
   }
 
   private get actor() {
-    return { userId: this.tenant.userId, can: (p: string) => this.tenant.can(p) };
+    return { userId: this.tenant.userId, can: (p: string) => this.authz.can(p) };
   }
 
   /** Adjunta a cada parada los datos de su crédito (`creditInfo`): la parada guarda `credit_id` sin relación. */
@@ -183,8 +185,8 @@ export class RoutesService {
    * `collectorId` del body); quien no hace ninguna de las dos, no arma nada.
    */
   private collectorFor(requested: string, action: string): string {
-    if (this.tenant.can(Permission.ROUTE_ASSIGN) || this.tenant.can(Permission.ROUTE_WRITE)) return requested;
-    if (!this.tenant.can(Permission.ROUTE_EXECUTE)) throw routeForbidden(action);
+    if (this.authz.can(Permission.ROUTE_ASSIGN) || this.authz.can(Permission.ROUTE_WRITE)) return requested;
+    if (!this.authz.can(Permission.ROUTE_EXECUTE)) throw routeForbidden(action);
     return this.tenant.userId!;
   }
 
@@ -198,7 +200,7 @@ export class RoutesService {
     if (!route) throw resourceNotFound();
     const roles = routeRoles(this.actor, route);
     if (!roles.manager) {
-      if (!this.tenant.can(Permission.ROUTE_EXECUTE)) throw routeForbidden(action);
+      if (!this.authz.can(Permission.ROUTE_EXECUTE)) throw routeForbidden(action);
       if (!roles.isCollector) throw resourceNotFound();
     }
     return { route, roles };
@@ -522,7 +524,7 @@ export class RoutesService {
    * ve las suyas. Un rol read-only de cuenta (auditor/viewer: ROUTE_READ sin execute) NO cae acá.
    */
   private scopedToOwnRoutes(): boolean {
-    return this.tenant.can(Permission.ROUTE_EXECUTE) && !this.tenant.can(Permission.ROUTE_ASSIGN);
+    return this.authz.can(Permission.ROUTE_EXECUTE) && !this.authz.can(Permission.ROUTE_ASSIGN);
   }
 
   async list(query: ListRoutesQueryDto): Promise<ApiResponse<ReturnType<typeof serializeRoute>[]>> {
@@ -533,7 +535,7 @@ export class RoutesService {
     //  - ROUTE_ASSIGN (supervisor/manager): ve todo, filtra por cualquier collectorId.
     //  - ejecutor de campo (ROUTE_EXECUTE sin ROUTE_ASSIGN = cobrador): acotado a sus rutas.
     //  - observador de cuenta (ROUTE_READ sin execute ni assign = auditor/viewer): ve toda la cuenta.
-    if (this.tenant.can(Permission.ROUTE_ASSIGN)) {
+    if (this.authz.can(Permission.ROUTE_ASSIGN)) {
       if (query.collectorId) where.collectorId = query.collectorId;
     } else if (this.scopedToOwnRoutes()) {
       where.collectorId = this.tenant.userId;
@@ -1098,7 +1100,7 @@ export class RoutesService {
    * Sin motor de ruteo devuelve `null`: el mapa sigue mostrando la ubicación, solo que sin camino.
    */
   async leg(dto: LegDto): Promise<{ geometry: { latitude: number; longitude: number }[]; distanceKm: number; minutes: number } | null> {
-    if (!this.tenant.can(Permission.ROUTE_ASSIGN) && !this.tenant.can(Permission.ROUTE_WRITE) && !this.tenant.can(Permission.ROUTE_EXECUTE)) {
+    if (!this.authz.can(Permission.ROUTE_ASSIGN) && !this.authz.can(Permission.ROUTE_WRITE) && !this.authz.can(Permission.ROUTE_EXECUTE)) {
       throw routeForbidden('calcular un camino');
     }
     const path = await this.osrm.route([dto.from, dto.to]);
@@ -1115,7 +1117,7 @@ export class RoutesService {
    * Sin datos personales: llegan puntos y ids que quien pregunta ya conoce, y no sale ninguna dirección ni nombre.
    */
   async previewPoints(dto: PlanPreviewDto): Promise<RoutePreview> {
-    if (!this.tenant.can(Permission.ROUTE_ASSIGN) && !this.tenant.can(Permission.ROUTE_WRITE) && !this.tenant.can(Permission.ROUTE_EXECUTE)) {
+    if (!this.authz.can(Permission.ROUTE_ASSIGN) && !this.authz.can(Permission.ROUTE_WRITE) && !this.authz.can(Permission.ROUTE_EXECUTE)) {
       throw routeForbidden('previsualizar rutas');
     }
     const points: PlanPoint[] = dto.points.map((p, i) => ({ id: p.id, sequenceOrder: i + 1, latitude: p.latitude, longitude: p.longitude, scheduledTime: p.scheduledTime }));

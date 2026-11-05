@@ -10,19 +10,15 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UsersService } from './users.service';
 import { MemberDetailService, decodeCursor } from './member-detail.service';
 import { InviteMemberDto, UpdateMemberDto, UpdateProfileDto } from './dto/user.dto';
+import { Authenticated } from '../auth/decorators/authz.decorator';
 
 @Controller('users')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class UsersController {
   constructor(
     private readonly users: UsersService,
@@ -33,11 +29,13 @@ export class UsersController {
   // Sin @Roles: es el propio perfil. Exigir un permiso dejaría al COLLECTOR sin
   // poder corregirse el teléfono.
   @Get('me/profile')
+  @Authenticated()
   getMyProfile() {
     return this.users.getMyProfile();
   }
 
   @Patch('me/profile')
+  @Authenticated()
   updateMyProfile(@Body() dto: UpdateProfileDto) {
     return this.users.updateMyProfile(dto);
   }

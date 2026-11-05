@@ -13,6 +13,8 @@ export const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default('15m'),
   // F14 · F1: compara las versiones `av`/`pv` del JWT en cada petición. `off` deja el guard como antes (sólo denylist de sesión).
   AUTHZ_VERSION_CHECK: z.enum(['on', 'off']).default('on'),
+  /** F14 · F3: `enforce` = handler sin contrato → 403 AUTHZ_000; `log` = pasa y lo registra (válvula de rollback de un release). */
+  AUTHZ_DENY_BY_DEFAULT: z.enum(['enforce', 'log']).default('enforce'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
   APP_URL: z.string().url().default('http://localhost:3000'),
   SOCKET_CORS_ORIGIN: z.string().url().default('http://localhost:3000'),

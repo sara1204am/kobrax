@@ -1,8 +1,5 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { DashboardsService } from './dashboards.service';
 import { CreateDashboardDto, UpdateDashboardDto } from './dto/dashboard.dto';
@@ -15,7 +12,6 @@ import { CreateDashboardDto, UpdateDashboardDto } from './dto/dashboard.dto';
  * sería otro concepto que administrar por una regla que se explica en una línea.
  */
 @Controller('dashboards')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 @Roles(Permission.REPORT_READ)
 export class DashboardsController {
   constructor(private readonly dashboards: DashboardsService) {}

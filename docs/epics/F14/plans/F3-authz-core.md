@@ -1,4 +1,4 @@
-> ESTADO: VALIDADO (PASS 2026-11-05) — D-1…D-5 APROBADAS por la usuaria el 2026-11-05. Sin ejecutar: la usuaria aún no ordenó empezar la construcción
+> ESTADO: EN EJECUCIÓN — tareas 1–9 hechas (2026-11-05); G5 con la salida pegada en `execution/VERIFICATIONS.md`, falta la **aprobación del snapshot** por la usuaria y G6/G7. Validado (PASS 2026-11-05); D-1…D-5 APROBADAS
 
 # Plan F3 · Arquitectura central de autorización
 
@@ -58,7 +58,7 @@ Hallazgos del plan maestro que resuelve: **R-05, N-08 (API), N-09, N-13**.
 | `auth/guards/roles.guard.ts`, `decorators/roles.decorator.ts` | H14-006 | `RolesGuard` se retira (lo reemplaza `AuthzGuard`); `@Roles`/`@RolesAny` pasan a alias del metadato nuevo |
 | `auth/decorators/authz.decorator.ts` (nuevo), `auth/guards/authz.guard.ts` (nuevo) | nuevo H14-020 | Metadato y guard con modo `log`/`enforce` |
 | `common/authz/*` (nuevo: servicio, políticas, cargador de hechos, módulo) | nuevo H14-021 | `AuthorizationService`, `PolicyService`, `FactsLoader` |
-| 41 controladores en `modules/**` + `health/` | nuevo H14-022 | Quitar `@UseGuards` por controlador; añadir el metadato donde falte (≈17 autenticados, públicos de `auth`/`accounts`/`health`) |
+| 24 controladores (23 en `modules/**` + `health/`) | nuevo H14-022 | Quitar `@UseGuards` por controlador; añadir el metadato donde falte (20 autenticados y 15 públicos en el snapshot) |
 | 13 archivos con `tenant.can` (E6) | H14-021 más F13 HUB-012 (agenda), 013 (asignaciones), 015 (importación), 017 (créditos), 019 (clientes), 020 (rutas); H14-009/012 (users, office-scope). `dashboards`, `field-ops` y `mora` no tienen entrada F13 y se cubren con H14-021 | Sustituir por `AuthorizationService`, mismo comportamiento |
 | `routes.controller.ts`, `agenda.controller.ts`, `credits.controller.ts`, `dashboards.controller.ts` | nuevo H14-023 | Declarar la puerta real (R-05) |
 | `permission-gates.spec.ts`; nuevo `authz-coverage.spec.ts`; `docs/epics/F14/authz-snapshot.json` | nuevo H14-024 | Cobertura total y snapshot |

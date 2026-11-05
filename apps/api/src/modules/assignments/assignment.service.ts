@@ -20,6 +20,7 @@ import {
 } from './assignment.errors';
 import { agencyViolations, isAssignable, notAssignable, type AssignScope, type AssignmentChange, type AssignmentReason } from './assignment-rules';
 import { handoffFrom, isHandedOffBy, withHandoff, withoutHandoff } from './assignment-handoff';
+import { AuthorizationService } from '../../common/authz/authorization.service';
 
 /** Cada cuánto barre los vencimientos. Un reemplazo se pide por horas o días: 15 min alcanza y no pesa. */
 export const ASSIGNMENT_EXPIRY_INTERVAL_MS = 15 * 60 * 1000;
@@ -88,6 +89,7 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
     private readonly office: OfficeScopeService,
+    private readonly authz: AuthorizationService = new AuthorizationService(tenant),
   ) {}
 
   /**
@@ -105,7 +107,7 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
 
   /** ¿Quien pide puede elegir el responsable de un crédito? */
   canAssign(): boolean {
-    return this.tenant.can(Permission.ASSIGNMENT_WRITE);
+    return this.authz.can(Permission.ASSIGNMENT_WRITE);
   }
 
   /**

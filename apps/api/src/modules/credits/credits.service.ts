@@ -73,6 +73,7 @@ import {
   writeOffUseEndpoint,
 } from './credits.errors';
 import { ArrearsPriorityService } from '../arrears/arrears-priority.service';
+import { AuthorizationService } from '../../common/authz/authorization.service';
 
 interface AccountConfig {
   currencyCode: string;
@@ -100,6 +101,7 @@ export class CreditsService {
     private readonly assignment: AssignmentService,
     private readonly arrearsPriority: ArrearsPriorityService,
     private readonly office: OfficeScopeService,
+    private readonly authz: AuthorizationService = new AuthorizationService(tenant),
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -742,13 +744,12 @@ export class CreditsService {
    * (agencia) y el cobrador no. Con subárbol, además el crédito tiene que estar dentro de su alcance (`assertInScope`).
    */
   private assertCanWriteOff(): void {
-    const wide = this.tenant.can(Permission.DATA_SCOPE_ALL) || this.tenant.can(Permission.DATA_SCOPE_SUBTREE);
-    if (!this.tenant.can(Permission.CREDIT_WRITE) || !wide) throw writeOffForbidden();
+    this.authz.assertPolicy('credit.writeOff');
   }
 
   /** Quien no es ALL sólo castiga lo que ve: un crédito fuera de su subárbol es 404, igual que en la ficha de mora. */
   private async assertInScope(tx: PrismaClient, creditId: string): Promise<void> {
-    if (this.tenant.can(Permission.DATA_SCOPE_ALL)) return;
+    if (this.authz.can(Permission.DATA_SCOPE_ALL)) return;
     const [seen] = await visibleCredits(tx, moraScopeOf(this.tenant), { creditId });
     if (!seen) throw resourceNotFound();
   }

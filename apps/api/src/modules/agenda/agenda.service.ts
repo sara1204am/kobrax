@@ -65,6 +65,7 @@ import {
   agendaVisitNeedsLocation,
   agendaInvalidContext,
 } from './agenda.errors';
+import { AuthorizationService } from '../../common/authz/authorization.service';
 
 /** Al ejecutar un agendado, qué tipo de actividad queda en la bitácora del crédito. */
 const ACTIVITY_TYPE_BY_AGENDA: Record<AgendaItemType, CreditActivityType> = {
@@ -92,6 +93,7 @@ export class AgendaService {
     private readonly events: EventBusService,
     private readonly clock: TenantClockService,
     private readonly office: OfficeScopeService,
+    private readonly authz: AuthorizationService = new AuthorizationService(tenant),
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -186,7 +188,7 @@ export class AgendaService {
   private async resolveAssignee(tx: PrismaClient, requested?: string): Promise<string | undefined> {
     if (!requested) return undefined;
     if (requested === this.tenant.userId) return requested;
-    if (!this.tenant.can(Permission.AGENDA_ASSIGN)) throw agendaAssignForbidden();
+    if (!this.authz.can(Permission.AGENDA_ASSIGN)) throw agendaAssignForbidden();
 
     const member = await tx.userAccount.findFirst({
       where: { accountId: this.tenant.accountId, userId: requested },
@@ -247,7 +249,7 @@ export class AgendaService {
    * total), todo el tenant. Es el mismo alcance que la ficha de mora, no uno propio de la agenda.
    */
   private async assigneeScope(tx: PrismaClient): Promise<Prisma.AgendaItemWhereInput> {
-    if (!this.tenant.can(Permission.AGENDA_ASSIGN)) return { assigneeId: this.tenant.userId };
+    if (!this.authz.can(Permission.AGENDA_ASSIGN)) return { assigneeId: this.tenant.userId };
     const scope = this.creditScope();
     if (scope.kind === 'ALL') return {};
     const visible = await visibleCredits(tx, scope, {});
@@ -398,7 +400,7 @@ export class AgendaService {
         tx.agendaItem.findMany({ where: { ...where, scheduledDate: today }, orderBy: [{ scheduledTime: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }], take: 5 }),
       ]);
       let load: { assigneeId: string; name?: string; pending: number; overdue: number }[] | undefined;
-      if (this.tenant.can(Permission.AGENDA_ASSIGN)) {
+      if (this.authz.can(Permission.AGENDA_ASSIGN)) {
         const [todayBy, overdueBy] = await Promise.all([
           tx.agendaItem.groupBy({ by: ['assigneeId'], where: { ...where, scheduledDate: today }, _count: { _all: true } }),
           tx.agendaItem.groupBy({ by: ['assigneeId'], where: { ...where, scheduledDate: { lt: today } }, _count: { _all: true } }),

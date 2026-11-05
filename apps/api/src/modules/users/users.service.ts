@@ -32,6 +32,7 @@ import {
   roleNotAllowed,
   userHasPendingWork,
 } from './users.errors';
+import { AuthorizationService } from '../../common/authz/authorization.service';
 
 const MEMBER_INCLUDE = { user: { include: { profile: true } }, role: true } as const;
 
@@ -60,6 +61,7 @@ export class UsersService {
     private readonly authz: AuthzVersionService,
     private readonly sessions: SessionService,
     private readonly office: OfficeScopeService,
+    private readonly access: AuthorizationService = new AuthorizationService(tenant),
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -176,7 +178,7 @@ export class UsersService {
       // Ver a alguien no es tener autoridad sobre él: quien no administra la cuenta (el gerente regional) sólo cierra las sesiones
       // de quienes están por debajo de él, nunca las de un administrador ni las de otro gerente de su subárbol.
       const superior: string[] = [RoleType.SUPER_ADMIN, RoleType.ACCOUNT_ADMIN, RoleType.MANAGER];
-      if (!this.tenant.can(Permission.USER_WRITE) && superior.includes(member.role.name)) throw cannotRevokeSuperior();
+      if (!this.access.can(Permission.USER_WRITE) && superior.includes(member.role.name)) throw cannotRevokeSuperior();
     });
     const sessions = await this.sessions.revokeAccountSessions(userId, this.tenant.accountId);
     await this.audit.record({

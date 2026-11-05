@@ -36,6 +36,11 @@ export class AppConfigService {
   get jwtRefreshSecret() {
     return this.get('JWT_REFRESH_SECRET');
   }
+  /** F14 · F3 (D-1): `true` = un handler sin contrato de acceso se niega. */
+  get authzDenyByDefault(): boolean {
+    return this.get('AUTHZ_DENY_BY_DEFAULT') !== 'log';
+  }
+
   get authzVersionCheck(): boolean {
     return this.get('AUTHZ_VERSION_CHECK') !== 'off';
   }

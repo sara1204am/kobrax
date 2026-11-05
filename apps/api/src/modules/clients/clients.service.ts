@@ -52,6 +52,7 @@ import {
   invalidIncomeProfile,
   resourceNotFound,
 } from './clients.errors';
+import { AuthorizationService } from '../../common/authz/authorization.service';
 
 /** PII del cliente que se redacta en los snapshots de auditoría. */
 const CLIENT_REDACT = ['nationalId', 'taxId', 'value', 'address', 'phone'];
@@ -124,6 +125,7 @@ export class ClientsService {
     private readonly blind: BlindIndexService,
     private readonly audit: AuditService,
     private readonly plan: PlanLimitsService,
+    private readonly authz: AuthorizationService = new AuthorizationService(tenant),
   ) {}
 
   /** Ejecuta `fn` en el contexto RLS del tenant actual (del TenantContextService). */
@@ -686,7 +688,7 @@ export class ClientsService {
     const { page, limit, skip } = resolvePagination(query);
     const partes: Prisma.Sql[] = [];
 
-    if (this.tenant.can(Permission.PAYMENT_READ)) {
+    if (this.authz.can(Permission.PAYMENT_READ)) {
       partes.push(Prisma.sql`
         SELECT 'PAYMENT' AS kind, p.id, p.payment_date AS at, p.method::text AS code, NULL AS status,
                p.amount::float8 AS amount, cr.currency AS currency, NULL AS notes,
@@ -695,7 +697,7 @@ export class ClientsService {
         JOIN credits cr ON cr.id = p.credit_id
         WHERE cr.client_id = ${clientId}`);
     }
-    if (this.tenant.can(Permission.AGENDA_READ)) {
+    if (this.authz.can(Permission.AGENDA_READ)) {
       partes.push(Prisma.sql`
         SELECT 'AGENDA' AS kind, a.id, a.updated_at AS at, a.type::text AS code, a.status::text AS status,
                NULL AS amount, NULL AS currency, a.observations AS notes,
@@ -703,7 +705,7 @@ export class ClientsService {
         FROM agenda_items a
         WHERE a.client_id = ${clientId} AND a.deleted_at IS NULL`);
     }
-    if (this.tenant.can(Permission.COLLECTION_READ)) {
+    if (this.authz.can(Permission.COLLECTION_READ)) {
       partes.push(Prisma.sql`
         SELECT 'ACTIVITY' AS kind, ac.id, ac.created_at AS at, ac.type::text AS code, ac.result AS status,
                NULL AS amount, NULL AS currency, ac.notes AS notes,
