@@ -1,4 +1,4 @@
-> ESTADO: VALIDADO (G4 PASS 2026-11-05) — D-1…D-5 APROBADAS por la usuaria con las recomendaciones; espera la orden `ejecuta F2b`
+> ESTADO: EN EJECUCIÓN (tarea 1 hecha; el inventario sumó D-6 y dos tareas: se vuelve a la usuaria antes de seguir). G4 PASS 2026-11-05 con D-1…D-5 aprobadas.
 
 # Plan F2b · Barrera RLS de alcance (segunda barrera en PostgreSQL)
 
@@ -24,6 +24,24 @@ Que PostgreSQL, y no sólo cada consulta de la API, niegue las filas que el alca
 | E8 | La tabla `files` **no existe todavía** (`f14_03_files` es de F4): la policy `scope_files` del plan maestro queda fuera de esta fase. | `ROLES-PERMISOS-PLAN.md` §E (migraciones), `schema.prisma` | VERIFICADO |
 | E9 | `verify_isolation.sql` prueba sólo el aislamiento **entre tenants** (superuser / `kobrax_app` con DEMO / con tenant B / sin contexto). | `rls/verify_isolation.sql:1-54` | VERIFICADO |
 | E10 | Columnas que sostienen la regla: `credits.branch_id`, `credits.assigned_manager_id`, `credit_assignments`, `clients.registered_branch_id`/`created_by`, `payments.branch_id`, `route_plans.branch_id`/`collector_id`, `agenda_items.credit_id`. La regla exacta de **pagos, agenda y rutas** (cuáles filas ve cada alcance) se lee en la tarea 1; hoy sólo se sabe que usan los helpers de E4. | `schema.prisma:727, 913, 1437-1438, 1634, 1887` | VERIFICADO (columnas) / DESCONOCIDO (reglas por tabla) |
+
+## 3b. Resultado del inventario (tarea 1, 2026-11-05) — ESTADO: EN EJECUCIÓN
+
+El inventario de sólo lectura encontró cuatro cosas. Las dos primeras cambian el alcance y se suman al plan.
+
+| # | Hallazgo | Evidencia | Clase |
+|---|---|---|---|
+| I-1 | **Seis trabajos de fondo** abren transacciones con `withTenant` **sin contexto de request** (hoy quedan con alcance vacío, sin efecto porque no hay policies de alcance): `plan-lifecycle`, `agenda-overdue`, `installment-reminders`, `arrears-job`, `promise-due` y el barrido de vencimientos de `AssignmentService`. Con `enforce` verían cero filas. Todos descubren las cuentas con la función `promise_due_account_ids()`. | `common/plan/plan-lifecycle.service.ts:93`; `agenda/agenda-overdue.service.ts:84`; `agenda/installment-reminders.service.ts:90`; `arrears/arrears-job.service.ts:130,135`; `notifications/promise-due.service.ts:90`; `assignments/assignment.service.ts:554`. `withSystemTenant` hoy sólo lo usan `auth.service.ts:387` y `account-requests.service.ts:139` | VERIFICADO |
+| I-2 | **Hay lecturas de la API que necesitan ver TODA la cuenta aunque quien pide tenga un alcance menor**, sobre tablas protegidas: (a) los **topes del plan** cuentan `credit` y `client` (`plan-limits.service.ts:77,82`): con `enforce` un cobrador contaría sólo lo suyo y **podría superar el tope**; (b) la **detección de duplicados** busca por `nationalIdHash` en `clients` sin alcance (`clients.service.ts:187, 317, 380, 817`) y existe `@@unique([accountId, nationalIdHash])` (`schema.prisma:745`): con `enforce` un usuario de otra oficina no vería el duplicado y el alta fallaría con un error de unicidad en vez de `CLIENT_DUP`; (c) la importación de clientes y la de cartera emparejan contra todos los clientes (`client-import.service.ts:86`, `imports/client-match.ts:53`). | archivos citados | VERIFICADO (lecturas) / INFERIDO (efecto bajo `enforce`) |
+| I-3 | **Rutas:** la API **no acota por oficina** a quien asigna rutas: con `ROUTE_ASSIGN` (supervisor, gerente) lista **todas** las rutas de la cuenta; sólo el ejecutor de campo ve las suyas (`collector_id`). Una policy por oficina sería **más estricta que la API** y cambiaría resultados. La policy de `route_plans` replica la regla real: sólo `own` queda acotado a sus rutas (`collector_id` o `created_by`). Que un supervisor vea las rutas de otras oficinas es un hallazgo aparte (no se corrige aquí). | `routes/routes.service.ts:530-540` | VERIFICADO |
+| I-4 | **Reglas por tabla:** `payments` = visible si lo es su crédito (`payments.service.ts:63-74`; no usa `payments.branch_id`); `agenda_items` = `assignee_id` es yo si no tengo `AGENDA_ASSIGN`, o su crédito es visible (`agenda.service.ts:243-254`); `credits` y `clients` = `moraAccessConditions` y `visibleClientIdsSql`. **Principio de diseño:** la regla en SQL debe ser un **superconjunto** de la de la API (nunca más estricta), porque su trabajo es atrapar el olvido de un filtro, no cambiar resultados legítimos. | archivos citados | VERIFICADO |
+| I-5 | **Dueño de las funciones `SECURITY DEFINER`** (`portfolio_totals_recalc`, `credits_track_arrear_episode`, etc.) en la DB de desarrollo: `postgres`, superusuario con `bypassrls`; `kobrax_app` es `NOBYPASSRLS`. Los agregados del cliente no se corrompen. En otros entornos hay que verificarlo al desplegar. | consulta a `pg_proc`/`pg_roles` en `kobrax` | VERIFICADO (dev) / DESCONOCIDO (otros entornos) |
+
+**Cambios al plan por el inventario**
+- **Tarea nueva (API):** un ayudante explícito `elevado(tx, fn)` en `PrismaService` que sube a alcance `system` **sólo dentro de la transacción actual y sólo para una lectura nombrada**, y vuelve al alcance original. `grep` lista todos los usos. Se aplica a: topes del plan (conteos), detección de duplicados, y emparejamiento de las importaciones.
+- **Tarea nueva (API):** los seis trabajos de fondo pasan a `withSystemTenant` (ya estaba como H14-035; ahora con la lista exacta).
+- **D-6 (PROPUESTA):** qué ve quien da de alta cuando el documento ya existe **en una oficina que no ve**. Hoy la API le muestra los datos del cliente existente (nombre incluido). Opciones: (a) mantenerlo tal cual vía `elevado`; (b) sólo avisar «ese documento ya está registrado» sin datos si el cliente no es visible para quien pregunta. **Recomendación: (b)**, coherente con F2 (`otherCredits` sólo agregados); cambia el aviso para quien duplica entre oficinas.
+- `route_plans` se acota como en I-3 (no por oficina).
 
 ## 4. Alcance / fuera de alcance
 
@@ -97,7 +115,7 @@ RULES F13 §A–§D (heredadas); F14-A: N-01, H-7. Multi-tenant (`account_id` + 
 ## 12. Tareas ordenadas (datos → API → web → móvil)
 1. **Inventario (sólo lectura):** llamadores de `withTenant` sin contexto de request y consultas crudas sobre las tablas de la ola 1; regla exacta de pagos, agenda y rutas por alcance; rol dueño de las funciones `SECURITY DEFINER` en cada entorno. Resultado a `VERIFICATIONS`. Si el inventario cambia el alcance de este plan, se vuelve a la usuaria antes de seguir.
 2. **Datos:** `rls/002_scope.sql` (comentario de cinco valores) y `rls/005_scope_policies.sql` con las funciones y las policies `RESTRICTIVE FOR SELECT` de las cinco tablas, en `off`/`log`/`enforce` (se construye y prueba una tabla a la vez, empezando por `credits` y `clients`); `db:rls` las aplica.
-3. **API:** `PrismaService` fija `app.scope` de cinco valores y `app.scope_mode`; los llamadores del inventario pasan a `withSystemTenant`.
+3. **API:** `PrismaService` fija `app.scope` de cinco valores y `app.scope_mode`; los seis trabajos de fondo (I-1) pasan a `withSystemTenant`; ayudante `elevado(tx, fn)` aplicado a los topes del plan, a la detección de duplicados (según D-6) y al emparejamiento de las importaciones (I-2).
 4. **Pruebas:** specs, integración cruda en los tres modos, paridad app↔SQL, `verify_scope.sql`, registro en los scripts de `package.json`.
 5. **Rendimiento:** medición contra D-4 y ajuste de las funciones (puede volver a la tarea 2).
 6. **Web y móvil:** sin cambios.
