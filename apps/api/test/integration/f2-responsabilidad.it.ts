@@ -344,3 +344,74 @@ describe('F2 · regresión del tenant gratuito individual (RULES §C)', () => {
     assert.equal((await call(indiv.admin, 'DELETE', `/clients/${c.data!.id}`)).status, 204);
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
+describe('F2 · el cobrador C crea SU crédito sobre un cliente que lleva el cobrador B', () => {
+  const CI = `F2-LINK-${suffix}`;
+  let clientId: string;
+  let creditB: string;
+  let creditC: string;
+
+  before(async () => {
+    // B (Padilla) da de alta al cliente y le crea su crédito.
+    const c = await call<ClientOut>(tok.colPAD!, 'POST', '/clients', { clientType: 'PERSON', firstName: 'Compartida', lastName: `Persona${suffix}`, nationalId: CI });
+    assert.equal(c.status, 201, JSON.stringify(c.error));
+    clientId = c.data!.id;
+    const cr = await call<{ id: string }>(tok.colPAD!, 'POST', '/credits', { clientId, principalAmount: 900, installmentsCount: 9 });
+    assert.equal(cr.status, 201, JSON.stringify(cr.error));
+    creditB = cr.data!.id;
+  });
+
+  it('el alta con el mismo carnet avisa que el cliente YA existe, con su nombre y el id para crear el propio crédito (sin cantidad de créditos)', async () => {
+    const r = await call<{ document: { id: string; displayName: string; hidden?: boolean; creditCount: number } | null }>(tok.colMV!, 'POST', '/clients/duplicate-check', { clientType: 'PERSON', nationalId: CI });
+    assert.equal(r.status, 200, JSON.stringify(r.error));
+    assert.equal(r.data!.document?.id, clientId);
+    assert.equal(r.data!.document?.hidden, true);
+    assert.match(r.data!.document!.displayName, /Compartida/);
+    assert.equal(r.data!.document?.creditCount, 0);
+    // Y crear un segundo cliente con ese carnet sigue rechazado.
+    const dup = await call(tok.colMV!, 'POST', '/clients', { clientType: 'PERSON', firstName: 'Otra', lastName: 'Copia', nationalId: CI });
+    assert.equal(dup.status, 409);
+    assert.equal(dup.error?.code, 'CLIENT_DUP');
+  });
+
+  it('🔴 C todavía NO ve la ficha (404), pero sí la vista mínima: nombre, carnet enmascarado y agregados', async () => {
+    assert.equal((await getClient(tok.colMV!, clientId)).status, 404);
+    const pv = await call<{ displayName: string; visible: boolean; otherCredits: { count: number; totalOutstanding: number } | null }>(tok.colMV!, 'GET', `/clients/${clientId}/preview`);
+    assert.equal(pv.status, 200, JSON.stringify(pv.error));
+    assert.equal(pv.data!.visible, false);
+    assert.equal(pv.data!.otherCredits?.count, 1);
+    assert.equal(pv.data!.otherCredits?.totalOutstanding, 900);
+  });
+
+  it('C crea SU crédito sobre ese cliente y recién entonces lo ve; el crédito de B sigue siendo de B', async () => {
+    const cr = await call<{ id: string }>(tok.colMV!, 'POST', '/credits', { clientId, principalAmount: 400, installmentsCount: 4 });
+    assert.equal(cr.status, 201, JSON.stringify(cr.error));
+    creditC = cr.data!.id;
+    const ficha = await getClient(tok.colMV!, clientId);
+    assert.equal(ficha.status, 200);
+    assert.equal(ficha.data!.otherCredits?.count, 1);
+    assert.equal((await call(tok.colMV!, 'GET', `/credits/${creditB}`)).status, 404, 'el crédito de B no se ve');
+    assert.equal((await call(tok.colMV!, 'GET', `/credits/${creditC}`)).status, 200);
+  });
+
+  it('B ve el mismo cliente con el aviso del crédito de C, y tampoco puede abrir el de C', async () => {
+    const ficha = await getClient(tok.colPAD!, clientId);
+    assert.equal(ficha.status, 200);
+    assert.equal(ficha.data!.otherCredits?.count, 1);
+    assert.equal((await call(tok.colPAD!, 'GET', `/credits/${creditC}`)).status, 404);
+  });
+
+  it('los dos pueden corregir los datos del cliente; un gerente de la regional también', async () => {
+    assert.equal((await call(tok.colMV!, 'PATCH', `/clients/${clientId}`, { riskSegment: 'MEDIUM' })).status, 200);
+    assert.equal((await call(tok.colPAD!, 'PATCH', `/clients/${clientId}`, { riskSegment: 'LOW' })).status, 200);
+    assert.equal((await call(tok.mgrChq!, 'PATCH', `/clients/${clientId}`, { riskSegment: 'HIGH' })).status, 200);
+  });
+
+  it('🔴 la vista mínima exige credit:create: un auditor/viewer recibe 403', async () => {
+    const email = `viewer-${suffix}@ejemplo.com`;
+    await addMember(prisma, banco.accountId, email, 'Viewer', 'VIEWER');
+    const t = await login(email);
+    assert.equal((await call(t, 'GET', `/clients/${clientId}/preview`)).status, 403);
+  });
+});

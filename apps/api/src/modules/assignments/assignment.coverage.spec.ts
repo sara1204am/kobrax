@@ -137,6 +137,8 @@ function make(opts: Opts = {}) {
 
   const prisma = {
     withTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
+    // F14 · F2b: el barrido de vencimientos es trabajo de sistema.
+    withSystemTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
     $queryRaw: async () => [{ account_id: 'acc-A' }],
   };
   const permissions = opts.permissions ?? [];

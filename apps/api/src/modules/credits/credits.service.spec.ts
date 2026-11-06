@@ -115,6 +115,7 @@ function makeService(
   };
   const prisma = {
     withTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
+    elevated: async (_tx: unknown, fn: () => Promise<unknown>) => fn(),
   };
   // F14 · F2: crear un crédito exige `credit:create`; estas pruebas hablan de otra cosa, así que todas lo tienen.
   const permissions = ['credit:create', ...(opts.permissions ?? [])];

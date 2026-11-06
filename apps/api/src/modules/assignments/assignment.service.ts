@@ -551,7 +551,8 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
 
   /** Un tenant. Sin contexto de request: la auditoría se escribe en la misma transacción. */
   async expireAccount(accountId: string, now: Date = new Date()): Promise<ExpireResult> {
-    return this.prisma.withTenant(accountId, async (tx) => {
+    // F14 · F2b: trabajo de sistema (sin request): alcance `system`, no el vacío de `withTenant` sin contexto.
+    return this.prisma.withSystemTenant(accountId, async (tx) => {
       const due = await tx.creditAssignment.findMany({
         where: {
           accountId,

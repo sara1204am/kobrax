@@ -83,8 +83,11 @@ export class ClientImportService {
         }
       }
 
-      const existing = await tx.client.findMany({ where: { deletedAt: null }, select: { id: true, nationalIdHash: true } });
-      const activeCredits = await tx.credit.findMany({ where: { status: 'ACTIVE', deletedAt: null }, select: { clientId: true }, distinct: ['clientId'] });
+      // F14 · F2b: el emparejamiento es contra TODA la cuenta, no sólo contra lo que ve quien importa.
+      const existing = await this.prisma.elevated(tx, () => tx.client.findMany({ where: { deletedAt: null }, select: { id: true, nationalIdHash: true } }));
+      const activeCredits = await this.prisma.elevated(tx, () =>
+        tx.credit.findMany({ where: { status: 'ACTIVE', deletedAt: null }, select: { clientId: true }, distinct: ['clientId'] }),
+      );
       const plan = planImport(rows, existing, {
         mode: dto.mode,
         activeObligationIds: new Set(activeCredits.map((c) => c.clientId)),

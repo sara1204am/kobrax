@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@kobrax/database';
-import { Permission, PermissionScope } from '@kobrax/shared';
+import { PermissionScope } from '@kobrax/shared';
+import { officeScopeKindOf } from '../common/office-scope/office-scope';
 import { AppConfigService } from '../config/app-config.service';
 import { TenantContextService } from '../common/context/tenant-context.service';
 
@@ -8,7 +9,7 @@ import { TenantContextService } from '../common/context/tenant-context.service';
  * Alcance de datos con el que corre una transacción. Viaja a PostgreSQL en `app.scope` y lo leen
  * las policies de RLS con `app_current_scope()`.
  *
- * **Son exactamente tres valores. No hay un cuarto.** La ausencia de scope no es un valor del
+ * **Son exactamente cinco valores. No hay un sexto.** La ausencia de scope no es un valor del
  * contrato: es la falta de uno, y se representa con la variable vacía → `app_current_scope()`
  * devuelve NULL → toda policy escrita contra ella niega. Fail-closed por construcción.
  *
@@ -20,8 +21,12 @@ import { TenantContextService } from '../common/context/tenant-context.service';
  * son el mismo concepto visto desde la base.
  */
 export const DataScope = {
-  /** Toda la cartera del tenant. Admin y supervisión. No depende del canal. */
+  /** Toda la cartera del tenant (`data:scope:all`: administrador, auditor, lector). No depende del canal. */
   ACCOUNT: PermissionScope.ACCOUNT,
+  /** F14 · F2b: el subárbol de las oficinas de la persona (`data:scope:subtree`, gerente regional); asignada a la raíz, todo. */
+  SUBTREE: 'subtree',
+  /** F14 · F2b: lo suyo más lo de su(s) oficina(s) (`data:scope:branch`, supervisor). */
+  BRANCH: 'branch',
   /**
    * Sólo la **asignación efectiva** del usuario del contexto: su asignación permanente más las
    * temporales vigentes. Hoy: el cobrador, en web y en móvil por igual.
@@ -34,6 +39,14 @@ export const DataScope = {
 
 export type DataScopeValue = (typeof DataScope)[keyof typeof DataScope];
 
+/** El alcance por capacidad (API) → el valor que entiende PostgreSQL. */
+const SCOPE_OF_KIND = {
+  ALL: DataScope.ACCOUNT,
+  SUBTREE: DataScope.SUBTREE,
+  BRANCH: DataScope.BRANCH,
+  OWN: DataScope.OWN,
+} as const;
+
 /** Ausencia de scope: variable vacía → NULL en la base → DENY. No es un valor del contrato. */
 const NO_SCOPE = '';
 
@@ -45,6 +58,9 @@ const NO_SCOPE = '';
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
 
+  /** F14 · F2b: `off` | `log` | `enforce`. Viaja a PostgreSQL en `app.scope_mode`. */
+  private readonly scopeMode: 'off' | 'log' | 'enforce';
+
   constructor(
     config: AppConfigService,
     private readonly tenantContext: TenantContextService,
@@ -53,6 +69,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       datasourceUrl: config.appDatabaseUrl,
       log: config.isProduction ? ['warn', 'error'] : ['warn', 'error'],
     });
+    this.scopeMode = config.scopeRlsMode;
   }
 
   async onModuleInit(): Promise<void> {
@@ -90,14 +107,30 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           'Si es un trabajo de sistema o un flujo pre-sesión, usar withSystemTenant().',
       );
     }
-    const scope = !ctx
-      ? NO_SCOPE
-      : // F13: el gerente regional (`data:scope:subtree`) también abre la cuenta para RLS; lo que ve dentro lo acota la API por oficina.
-        ctx.permissions.includes(Permission.DATA_SCOPE_ALL) || ctx.permissions.includes(Permission.DATA_SCOPE_SUBTREE)
-        ? DataScope.ACCOUNT
-        : DataScope.OWN;
+    // F14 · F2b: el alcance llega a la base con sus cuatro valores reales, calculados con la MISMA función que usa la API
+    // (`officeScopeKindOf`, por capacidad). Antes `subtree` se colapsaba en `account` y `branch` en `own`: nada leía `app.scope`.
+    const scope = !ctx ? NO_SCOPE : SCOPE_OF_KIND[officeScopeKindOf((p) => ctx.permissions.includes(p))];
 
     return this.runScoped(accountId, ctx?.userId ?? '', scope, fn, timeout);
+  }
+
+  /**
+   * F14 · F2b: sube a alcance `system` **dentro de la transacción en curso** para UNA lectura que necesita ver toda la cuenta aunque
+   * quien pide tenga un alcance menor (los topes del plan, la detección de duplicados, el emparejamiento de las importaciones), y
+   * vuelve al alcance original. No cambia de transacción ni de usuario: sólo el alcance de lectura, y sólo mientras corre `fn`.
+   *
+   * 🔴 **Uso explícito y mínimo.** `grep "\.elevated("` lista todos los lugares; cada uno debe poder justificar en una línea por qué
+   * necesita la cuenta entera. Nunca para devolverle datos ajenos a quien pregunta: sólo para contar o para detectar existencia.
+   */
+  async elevated<T>(tx: PrismaClient, fn: () => Promise<T>): Promise<T> {
+    const rows = await tx.$queryRaw<{ s: string | null }[]>`SELECT current_setting('app.scope', true) AS s`;
+    const previous = rows[0]?.s ?? NO_SCOPE;
+    await tx.$queryRaw`SELECT set_config('app.scope', ${DataScope.SYSTEM}, true)`;
+    try {
+      return await fn();
+    } finally {
+      await tx.$queryRaw`SELECT set_config('app.scope', ${previous}, true)`;
+    }
   }
 
   /**
@@ -138,7 +171,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       async (tx) => {
         await tx.$queryRaw`SELECT set_config('app.current_account_id', ${accountId}, true),
                                   set_config('app.current_user_id', ${userId}, true),
-                                  set_config('app.scope', ${scope}, true)`;
+                                  set_config('app.scope', ${scope}, true),
+                                  set_config('app.scope_mode', ${this.scopeMode}, true)`;
         return fn(tx as unknown as PrismaClient);
       },
       timeout ? { timeout, maxWait: timeout } : undefined,

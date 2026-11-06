@@ -31,7 +31,7 @@ function makeService(opts: { existing?: { id: string; nationalIdHash: string | n
     },
     credit: { findMany: async () => opts.activeCredits ?? [] },
   };
-  const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
+  const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx), elevated: async (_tx: unknown, fn: () => Promise<unknown>) => fn() };
   const tenant = { accountId: 'acc-A', userId: 'u1' };
   const crypto = { encrypt: (v: string) => `enc(${v})` };
   const blind = { hash: (v?: string | null) => (v ? `h(${v})` : null) };

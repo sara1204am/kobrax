@@ -127,12 +127,12 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
    * que cruce dos créditos, así que un lote a medias no deja nada inconsistente.
    */
   async scanAccount(accountId: string, asOf: Date = new Date()): Promise<ArrearsRunResult> {
-    const params = await this.prisma.withTenant(accountId, (tx) => this.config(tx));
+    const params = await this.prisma.withSystemTenant(accountId, (tx) => this.config(tx));
     const out = { ...EMPTY };
     let cursor: string | undefined;
 
     for (;;) {
-      const batch = await this.prisma.withTenant(
+      const batch = await this.prisma.withSystemTenant(
         accountId,
         (tx) => this.scanBatch(tx, asOf, params, cursor),
         ARREARS_TX_TIMEOUT_MS,

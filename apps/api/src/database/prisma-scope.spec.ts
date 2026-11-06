@@ -18,11 +18,12 @@ import type { AppConfigService } from '../config/app-config.service';
 const ACCOUNT = 'acc-1';
 const USER = 'user-sara';
 
-function harness(): { prisma: PrismaService; tc: TenantContextService; calls: Captured[] } {
+function harness(scopeRlsMode: 'off' | 'log' | 'enforce' = 'off'): { prisma: PrismaService; tc: TenantContextService; calls: Captured[] } {
   const tc = new TenantContextService();
   const config = {
     appDatabaseUrl: 'postgresql://u:p@localhost:5432/db',
     isProduction: false,
+    scopeRlsMode,
   } as AppConfigService;
 
   const prisma = new PrismaService(config, tc);
@@ -46,20 +47,58 @@ interface Captured {
   values: unknown[];
 }
 
-/** [accountId, userId, scope] — el orden en que `runScoped` los liga. */
+/** [accountId, userId, scope, scopeMode] — el orden en que `runScoped` los liga. */
 function contextOf(calls: Captured[]): unknown[] {
   assert.equal(calls.length, 1, 'se esperaba exactamente una sentencia de contexto');
   return calls[0].values;
 }
 
-describe('PrismaService · F13 gerente regional', () => {
-  it('data:scope:subtree abre la cuenta para RLS (la API acota por oficina); sin ninguna capacidad sigue siendo own', async () => {
+describe('PrismaService · alcance de cuatro valores (F14 · F2b)', () => {
+  const scopeOf = async (permissions: string[]) => {
     const { prisma, tc, calls } = harness();
-    await tc.run({ accountId: ACCOUNT, userId: USER, permissions: [Permission.DATA_SCOPE_SUBTREE] }, () => prisma.withTenant(ACCOUNT, async () => null));
-    assert.deepEqual(contextOf(calls), [ACCOUNT, USER, DataScope.ACCOUNT]);
-    const h2 = harness();
-    await h2.tc.run({ accountId: ACCOUNT, userId: USER, permissions: [Permission.DATA_SCOPE_BRANCH] }, () => h2.prisma.withTenant(ACCOUNT, async () => null));
-    assert.deepEqual(contextOf(h2.calls), [ACCOUNT, USER, DataScope.OWN]);
+    await tc.run({ accountId: ACCOUNT, userId: USER, permissions }, () => prisma.withTenant(ACCOUNT, async () => null));
+    return contextOf(calls)[2];
+  };
+
+  it('cada capacidad llega a PostgreSQL con su propio valor (antes subtree→account y branch→own)', async () => {
+    assert.equal(await scopeOf([Permission.DATA_SCOPE_ALL]), DataScope.ACCOUNT);
+    assert.equal(await scopeOf([Permission.DATA_SCOPE_SUBTREE]), DataScope.SUBTREE);
+    assert.equal(await scopeOf([Permission.DATA_SCOPE_BRANCH]), DataScope.BRANCH);
+    assert.equal(await scopeOf([]), DataScope.OWN);
+  });
+
+  it('gana el alcance más amplio, como en la API (la misma función por capacidad)', async () => {
+    assert.equal(await scopeOf([Permission.DATA_SCOPE_BRANCH, Permission.DATA_SCOPE_SUBTREE]), DataScope.SUBTREE);
+    assert.equal(await scopeOf([Permission.DATA_SCOPE_SUBTREE, Permission.DATA_SCOPE_ALL]), DataScope.ACCOUNT);
+  });
+
+  it('el modo de la barrera viaja como parámetro: off por omisión, log y enforce cuando se piden', async () => {
+    for (const mode of ['off', 'log', 'enforce'] as const) {
+      const { prisma, tc, calls } = harness(mode);
+      await tc.run({ accountId: ACCOUNT, userId: USER, permissions: [] }, () => prisma.withTenant(ACCOUNT, async () => null));
+      assert.equal(contextOf(calls)[3], mode);
+      assert.ok(calls[0]!.sql.includes('app.scope_mode'));
+    }
+  });
+});
+
+describe('PrismaService.elevated (F14 · F2b)', () => {
+  it('sube a system sólo mientras corre la lectura y restaura el alcance anterior, aun si falla', async () => {
+    const seen: string[] = [];
+    const tx = {
+      $queryRaw: (strings: TemplateStringsArray, ...values: unknown[]) => {
+        const sql = strings.join('?');
+        if (sql.includes('current_setting')) return Promise.resolve([{ s: 'branch' }]);
+        seen.push(String(values[0]));
+        return Promise.resolve([]);
+      },
+    };
+    const { prisma } = harness();
+    assert.equal(await prisma.elevated(tx as never, async () => 'ok'), 'ok');
+    assert.deepEqual(seen, [DataScope.SYSTEM, 'branch']);
+    seen.length = 0;
+    await assert.rejects(prisma.elevated(tx as never, async () => Promise.reject(new Error('boom'))), /boom/);
+    assert.deepEqual(seen, [DataScope.SYSTEM, 'branch'], 'restaura aunque la lectura falle');
   });
 });
 
@@ -75,17 +114,17 @@ describe('PrismaService · contexto de seguridad (F1)', () => {
     assert.ok(!sql.includes(ACCOUNT), 'el accountId quedó interpolado dentro del SQL');
     assert.ok(!sql.includes(USER), 'el userId quedó interpolado dentro del SQL');
     assert.ok(sql.includes('set_config'), 'debe usar set_config(), no SET LOCAL');
-    assert.deepEqual(values, [ACCOUNT, USER, DataScope.OWN]);
+    assert.deepEqual(values, [ACCOUNT, USER, DataScope.OWN, 'off']);
   });
 
-  it('fija las tres variables que leen las policies', async () => {
+  it('fija las variables que leen las policies', async () => {
     const { prisma, tc, calls } = harness();
     await tc.run({ accountId: ACCOUNT, userId: USER, permissions: [] }, () =>
       prisma.withTenant(ACCOUNT, async () => null),
     );
 
     const { sql } = calls[0];
-    for (const v of ['app.current_account_id', 'app.current_user_id', 'app.scope']) {
+    for (const v of ['app.current_account_id', 'app.current_user_id', 'app.scope', 'app.scope_mode']) {
       assert.ok(sql.includes(v), `falta la variable ${v}`);
     }
   });
@@ -96,7 +135,7 @@ describe('PrismaService · contexto de seguridad (F1)', () => {
       { accountId: ACCOUNT, userId: 'user-supervisor', permissions: [Permission.DATA_SCOPE_ALL] },
       () => prisma.withTenant(ACCOUNT, async () => null),
     );
-    assert.deepEqual(contextOf(calls), [ACCOUNT, 'user-supervisor', DataScope.ACCOUNT]);
+    assert.deepEqual(contextOf(calls), [ACCOUNT, 'user-supervisor', DataScope.ACCOUNT, 'off']);
   });
 
   it('scope=own para el cobrador — y es el MISMO en web y en móvil', async () => {
@@ -108,7 +147,7 @@ describe('PrismaService · contexto de seguridad (F1)', () => {
       { accountId: ACCOUNT, userId: USER, permissions: [Permission.COLLECTION_READ, Permission.CLIENT_READ] },
       () => prisma.withTenant(ACCOUNT, async () => null),
     );
-    assert.deepEqual(contextOf(calls), [ACCOUNT, USER, DataScope.OWN]);
+    assert.deepEqual(contextOf(calls), [ACCOUNT, USER, DataScope.OWN, 'off']);
   });
 
   it('sin contexto de request → scope vacío (DENY), nunca account', async () => {
@@ -124,10 +163,10 @@ describe('PrismaService · contexto de seguridad (F1)', () => {
   it('system es explícito: sólo por withSystemTenant()', async () => {
     const { prisma, calls } = harness();
     await prisma.withSystemTenant(ACCOUNT, async () => null);
-    assert.deepEqual(contextOf(calls), [ACCOUNT, '', DataScope.SYSTEM]);
+    assert.deepEqual(contextOf(calls), [ACCOUNT, '', DataScope.SYSTEM, 'off']);
   });
 
-  it('el contrato tiene exactamente tres scopes: el canal no es un scope', () => {
-    assert.deepEqual(Object.values(DataScope).sort(), ['account', 'own', 'system']);
+  it('el contrato tiene exactamente cinco scopes: el canal no es un scope', () => {
+    assert.deepEqual(Object.values(DataScope).sort(), ['account', 'branch', 'own', 'subtree', 'system']);
   });
 });

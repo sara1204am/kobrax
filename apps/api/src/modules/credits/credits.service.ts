@@ -273,10 +273,14 @@ export class CreditsService {
         if (previo) return { credit: previo, reintento: true, assigned: [] };
       }
 
-      const client = await tx.client.findFirst({
-        where: { id: dto.clientId, deletedAt: null },
-        select: { id: true },
-      });
+      // F14 · F2b: el crédito puede ser el PRIMERO de quien lo crea sobre un cliente que lleva otra persona (el cliente no tiene dueño):
+      // basta con que exista en la cuenta. Recién con este crédito el cliente pasa a verse.
+      const client = await this.prisma.elevated(tx, () =>
+        tx.client.findFirst({
+          where: { id: dto.clientId, deletedAt: null },
+          select: { id: true },
+        }),
+      );
       if (!client) throw resourceNotFound(); // cliente inexistente o de otro tenant
       if (dto.assignedManagerId) await this.assignment.assertAssignable(tx, [dto.assignedManagerId]);
 
@@ -771,7 +775,8 @@ export class CreditsService {
       if (!credit) throw resourceNotFound();
       const [from, to] = await Promise.all([
         tx.client.findFirst({ where: { id: credit.clientId } }),
-        tx.client.findFirst({ where: { id: targetClientId, deletedAt: null } }),
+        // F14 · F2b: vincular a un cliente que lleva otra persona está permitido sin verlo (el vínculo no revela nada más).
+        this.prisma.elevated(tx, () => tx.client.findFirst({ where: { id: targetClientId, deletedAt: null } })),
       ]);
       if (!to || !from) throw resourceNotFound();
       if (from.id === to.id) return { credit, fromId: from.id, keySaved: false, retired: false };

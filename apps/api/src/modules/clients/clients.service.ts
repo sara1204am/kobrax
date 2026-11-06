@@ -10,6 +10,7 @@ import {
   type ApiResponse,
   type ClientDuplicateCheck,
   type ClientDuplicateMatch,
+  ClientPreview,
   type ClientTimelineEntry,
   ResponseDto,
   validateCollectionProfile,
@@ -147,14 +148,19 @@ export class ClientsService {
     return seesWholeAccount(scope) ? null : scope;
   }
 
-  /** Un cliente fuera del alcance responde 404, igual que si no existiera. Quien ve toda la cuenta no paga ni una consulta. */
-  private async assertClientVisible(tx: PrismaClient, clientId: string): Promise<void> {
+  /** ¿Este cliente entra en el alcance de quien pregunta? Quien ve toda la cuenta no paga ni una consulta. */
+  private async isClientVisible(tx: PrismaClient, clientId: string): Promise<boolean> {
     const scope = this.visibleScope();
-    if (!scope) return;
+    if (!scope) return true;
     const rows = await tx.$queryRaw<{ ok: number }[]>(
       Prisma.sql`SELECT 1 AS ok FROM (${visibleClientIdsSql(scope)}) v(id) WHERE v.id = ${clientId} LIMIT 1`,
     );
-    if (rows.length === 0) throw resourceNotFound();
+    return rows.length > 0;
+  }
+
+  /** Un cliente fuera del alcance responde 404, igual que si no existiera. */
+  private async assertClientVisible(tx: PrismaClient, clientId: string): Promise<void> {
+    if (!(await this.isClientVisible(tx, clientId))) throw resourceNotFound();
   }
 
   private enc(value?: string | null): string | null {
@@ -184,7 +190,8 @@ export class ClientsService {
       const registration = await this.policies.assert('client.create', { branchId: dto.branchId }, tx);
       const registeredBranchId = (registration?.registeredBranchId as string | undefined) ?? null;
       if (nationalIdHash) {
-        const dup = await tx.client.findFirst({ where: { nationalIdHash } });
+        // F14 · F2b: el documento es único en TODA la cuenta; se busca sin el recorte de alcance (sólo se responde que existe).
+        const dup = await this.prisma.elevated(tx, () => tx.client.findFirst({ where: { nationalIdHash }, select: { id: true } }));
         if (dup) throw clientDuplicate();
       }
 
@@ -314,7 +321,10 @@ export class ClientsService {
     const word = key?.split(' ').sort((a, b) => b.length - a.length)[0] ?? null;
 
     return this.tx(async (tx) => {
-      const byDoc = docHash ? await tx.client.findFirst({ where: { nationalIdHash: docHash }, select: DUP_SELECT }) : null;
+      // F14 · F2b (D-6): el documento se busca en TODA la cuenta (bloquea el alta), pero si ese cliente no es visible para quien
+      // pregunta, sólo se le avisa que ya está registrado: sin nombre, carnet, estado ni cantidad de créditos.
+      const byDoc = docHash ? await this.prisma.elevated(tx, () => tx.client.findFirst({ where: { nationalIdHash: docHash }, select: DUP_SELECT })) : null;
+      const docVisible = byDoc ? await this.isClientVisible(tx, byDoc.id) : true;
 
       let byName: DupRow[] = [];
       if (nameReady && key && word) {
@@ -337,10 +347,32 @@ export class ClientsService {
       }
 
       return {
-        document: byDoc ? this.dupMatch(byDoc, docHash) : null,
+        document: byDoc ? (docVisible ? this.dupMatch(byDoc, docHash) : this.hiddenMatch(byDoc, docHash)) : null,
         names: byName.map((c) => this.dupMatch(c, docHash)),
       };
     });
+  }
+
+  /**
+   * El duplicado de un cliente que no se ve (D-6 revisada): el nombre y el carnet enmascarado —para que se sepa de quién se trata— y
+   * el `id` para crear el crédito propio sobre él. Sin cantidad de créditos.
+   */
+  private hiddenMatch(c: DupRow, docHash: string | null): ClientDuplicateMatch {
+    return { ...this.dupMatch(c, docHash), creditCount: 0, hidden: true };
+  }
+
+  /**
+   * Lo mínimo para crearle MI crédito a un cliente que todavía no veo (F14 · F2b): nombre, carnet enmascarado y agregados de los
+   * créditos de otras personas. Exige `credit:create`; quien ya lo ve recibe `visible: true`.
+   */
+  async preview(id: string): Promise<ClientPreview> {
+    const c = await this.tx((tx) =>
+      this.prisma.elevated(tx, () => tx.client.findFirst({ where: { id, deletedAt: null }, select: DUP_SELECT })),
+    );
+    if (!c) throw resourceNotFound();
+    const visible = await this.tx((tx) => this.isClientVisible(tx, id));
+    const m = this.dupMatch(c, null);
+    return { id: c.id, displayName: m.displayName, maskedDocument: m.maskedDocument, status: m.status, visible, otherCredits: await this.otherCredits(id) };
   }
 
   private dupMatch(c: DupRow, docHash: string | null): ClientDuplicateMatch {
@@ -625,10 +657,14 @@ export class ClientsService {
     const suggested =
       suggestionIds.length > 0
         ? await this.tx((tx) =>
-            tx.client.findMany({
-              where: { id: { in: suggestionIds }, deletedAt: null },
-              select: { id: true, firstName: true, lastName: true, businessName: true, creditCount: true },
-            }),
+            // F14 · F2b: las sugerencias son homónimos del propio archivo (el nombre ya lo trae quien importa): se leen sin el recorte
+            // de alcance para poder vincular al cliente que lleva otra persona (el vínculo no revela nada más).
+            this.prisma.elevated(tx, () =>
+              tx.client.findMany({
+                where: { id: { in: suggestionIds }, deletedAt: null },
+                select: { id: true, firstName: true, lastName: true, businessName: true, creditCount: true },
+              }),
+            ),
           )
         : [];
     return {
@@ -646,7 +682,10 @@ export class ClientsService {
     if (!scope) return null;
     return this.tx(async (tx) => {
       const visible = new Set((await visibleCredits(tx, scope, { clientId })).map((c) => c.id));
-      const all = await tx.credit.findMany({ where: { clientId, deletedAt: null }, select: { id: true, outstandingBalance: true, assignedManagerId: true } });
+      // F14 · F2b: aquí hace falta la lista COMPLETA de créditos del cliente (para restar los que sí se ven y resumir el resto en agregados).
+      const all = await this.prisma.elevated(tx, () =>
+        tx.credit.findMany({ where: { clientId, deletedAt: null }, select: { id: true, outstandingBalance: true, assignedManagerId: true } }),
+      );
       const hidden = all.filter((c) => !visible.has(c.id));
       if (hidden.length === 0) return null;
       const now = new Date();
@@ -814,7 +853,7 @@ export class ClientsService {
       if (dto.nationalId !== undefined) {
         const hash = this.blind.hash(dto.nationalId);
         if (hash) {
-          const dup = await tx.client.findFirst({ where: { nationalIdHash: hash, id: { not: id } } });
+          const dup = await this.prisma.elevated(tx, () => tx.client.findFirst({ where: { nationalIdHash: hash, id: { not: id } }, select: { id: true } }));
           if (dup) throw clientDuplicate();
         }
         data.nationalId = this.enc(dto.nationalId);

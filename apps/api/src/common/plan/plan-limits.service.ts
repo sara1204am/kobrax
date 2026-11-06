@@ -73,13 +73,16 @@ export class PlanLimitsService {
         // Un invitado que todavía no aceptó YA ocupa asiento (LIMITES §5.1, Pregunta 6): si no
         // ocupara, alguien invita a 50 personas para reservarse los cupos.
         return tx.userAccount.count({ where: { isActive: true } });
+      // F14 · F2b: el tope es de la CUENTA, no de lo que ve quien pide; si no, con la barrera de alcance un cobrador contaría sólo lo suyo.
       case 'credits':
-        return tx.credit.count({
-          // El castigado (D1-a: `written_off_at`, el estado ya no cambia) tampoco cuenta: es lo que era WRITTEN_OFF.
-          where: { deletedAt: null, writtenOffAt: null, status: { in: [...CREDITOS_ACTIVOS] } },
-        });
+        return this.prisma.elevated(tx, () =>
+          tx.credit.count({
+            // El castigado (D1-a: `written_off_at`, el estado ya no cambia) tampoco cuenta: es lo que era WRITTEN_OFF.
+            where: { deletedAt: null, writtenOffAt: null, status: { in: [...CREDITOS_ACTIVOS] } },
+          }),
+        );
       case 'clients':
-        return tx.client.count({ where: { deletedAt: null } });
+        return this.prisma.elevated(tx, () => tx.client.count({ where: { deletedAt: null } }));
       case 'branches':
         // F13 (ADR-0004): oficinas de la cuenta no borradas, **la raíz incluida** (FREE = 1 ⇒ sin agencias hasta subir de plan).
         // Las dadas de baja (`deleted_at`) liberan lugar; las desactivadas todavía ocupan hasta que se borren.

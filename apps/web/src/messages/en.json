@@ -3195,6 +3195,7 @@
       "summary": "Account summary",
       "timeline": "Activity log"
     },
+    "previewNotice": "{count, plural, =0 {This client has no credits yet.} one {This client already has # credit handled by someone else ({names}).} other {This client already has # credits handled by other people ({names}).}} Creating yours lets you see and edit the client record; the other person's credit stays theirs.",
     "newLoan": "New credit",
     "registerOffice": {
       "label": "Office where registered",
@@ -3812,6 +3813,8 @@
     "duplicate": {
       "checking": "Checking whether they already exist…",
       "documentTaken": "This ID already belongs to {name}.",
+      "documentTakenHidden": "This client is already registered: {name}.",
+      "createMyCredit": "Create my credit for this client",
       "documentTakenDeleted": "This ID belongs to {name}, who was removed. It cannot be used for a new client.",
       "documentHint": "If it is the same person, open their profile instead of creating them again.",
       "openClient": "View client",

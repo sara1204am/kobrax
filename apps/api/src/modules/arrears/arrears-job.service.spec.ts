@@ -49,7 +49,7 @@ function makeJob(
     },
     creditArrearEpisode: { findMany: async () => openEpisodes },
   };
-  const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
+  const prisma = { withSystemTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
   const priority = {
     recomputeForCredit: async (_t: unknown, creditId: string) => {
       calls.recompute.push(creditId);

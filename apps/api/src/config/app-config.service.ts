@@ -41,6 +41,15 @@ export class AppConfigService {
     return this.get('AUTHZ_DENY_BY_DEFAULT') !== 'log';
   }
 
+  /**
+   * F14 · F2b (D-1): la segunda barrera de RLS por alcance. `off` (por omisión) = las policies no evalúan nada; `log` = registran lo que
+   * habrían negado; `enforce` = niegan. Cualquier otro valor cuenta como `off` (falla hacia lo que ya funcionaba).
+   */
+  get scopeRlsMode(): 'off' | 'log' | 'enforce' {
+    const v = this.get('SCOPE_RLS_MODE');
+    return v === 'log' || v === 'enforce' ? v : 'off';
+  }
+
   get authzVersionCheck(): boolean {
     return this.get('AUTHZ_VERSION_CHECK') !== 'off';
   }

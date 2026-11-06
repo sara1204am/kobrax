@@ -67,7 +67,7 @@ function makeService(
       },
     },
   };
-  const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
+  const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx), elevated: async (_tx: unknown, fn: () => Promise<unknown>) => fn() };
   const clock = { monthStart: async () => INICIO_DE_MES };
   const service = new PlanLimitsService(prisma as never, { accountId: 'acc-A' } as never, clock as never);
   return { service, tx: tx as never, espia };

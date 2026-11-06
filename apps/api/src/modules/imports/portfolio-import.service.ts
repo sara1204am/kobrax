@@ -368,7 +368,9 @@ export class PortfolioImportService {
           : scope.kind === 'official'
             ? c.assignedManagerId === scope.ref
             : scopeBranchPath !== null && c.branch !== null && c.branch.path.startsWith(scopeBranchPath);
-      const existing = await tx.credit.findMany({
+      // F14 · F2b: el match es contra TODAS las operaciones de la cuenta, no sólo contra las que ve quien importa; si no, un crédito de
+      // otra oficina se tomaría por nuevo y se duplicaría. Lo que cae fuera del alcance de la corrida lo marca `eligible` más abajo.
+      const existing = await this.prisma.elevated(tx, () => tx.credit.findMany({
         where: { accountId, externalSource: FILE_SOURCE },
         select: {
           id: true,
@@ -387,7 +389,7 @@ export class PortfolioImportService {
           // El nombre va al historial: una ausente no trae fila, así que su deudor sale de acá.
           client: { select: { firstName: true, lastName: true, businessName: true } },
         },
-      });
+      }));
       const byId = new Map(existing.map((c) => [c.id, c]));
       // Con asesor en el reporte, sus operaciones se reconocen por el asesor que ya tienen guardado;
       // las importadas antes de guardarlo, por el alcance.
@@ -446,21 +448,24 @@ export class PortfolioImportService {
             })
           : [],
         words.length > 0 || hashes.length > 0
-          ? tx.client.findMany({
-              where: {
-                accountId,
-                deletedAt: null,
-                OR: [
-                  ...words.flatMap((w) => [
-                    { lastName: { contains: w, mode: 'insensitive' as const } },
-                    { firstName: { contains: w, mode: 'insensitive' as const } },
-                  ]),
-                  ...(hashes.length > 0 ? [{ nationalIdHash: { in: hashes } }] : []),
-                ],
-              },
-              select: { id: true, firstName: true, lastName: true, businessName: true, nationalIdHash: true },
-              take: MAX_CANDIDATES,
-            })
+          ? // F14 · F2b: los candidatos son de TODA la cuenta (si no, quien importa duplicaría clientes de otra oficina).
+            this.prisma.elevated(tx, () =>
+              tx.client.findMany({
+                where: {
+                  accountId,
+                  deletedAt: null,
+                  OR: [
+                    ...words.flatMap((w) => [
+                      { lastName: { contains: w, mode: 'insensitive' as const } },
+                      { firstName: { contains: w, mode: 'insensitive' as const } },
+                    ]),
+                    ...(hashes.length > 0 ? [{ nationalIdHash: { in: hashes } }] : []),
+                  ],
+                },
+                select: { id: true, firstName: true, lastName: true, businessName: true, nationalIdHash: true },
+                take: MAX_CANDIDATES,
+              }),
+            )
           : [],
       ]);
       const resolution = resolveClients(

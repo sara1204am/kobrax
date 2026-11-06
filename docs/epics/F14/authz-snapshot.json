@@ -430,6 +430,15 @@
     "any": []
   },
   {
+    "route": "GET /clients/:id/preview",
+    "handler": "ClientsController.preview",
+    "kind": "permissions",
+    "all": [
+      "credit:create"
+    ],
+    "any": []
+  },
+  {
     "route": "GET /clients/:id/timeline",
     "handler": "ClientsController.timeline",
     "kind": "permissions",

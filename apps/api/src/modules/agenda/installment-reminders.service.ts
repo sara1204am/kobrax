@@ -87,7 +87,7 @@ export class InstallmentReminderService implements OnApplicationBootstrap, OnMod
 
   /** Un tenant. Devuelve cuántos recordatorios NUEVOS se crearon (los ya existentes no cuentan). */
   async scanAccount(accountId: string, now: Date = new Date()): Promise<number> {
-    return this.prisma.withTenant(accountId, async (tx) => {
+    return this.prisma.withSystemTenant(accountId, async (tx) => {
       const account = await tx.account.findUnique({ where: { id: accountId } });
       // «Hoy» es el día civil de la EMPRESA, no el UTC del servidor: en Bolivia, desde las 20:00 el UTC ya es mañana y el
       // recordatorio de una cuota saltaba un día.

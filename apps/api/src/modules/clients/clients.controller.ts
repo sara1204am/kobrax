@@ -65,6 +65,16 @@ export class ClientsController {
     return this.clients.list(query);
   }
 
+  /**
+   * Lo mínimo de un cliente que todavía no ves, para crearle TU crédito (F14 · F2b): nombre, carnet enmascarado y agregados.
+   * Quien lo ve por sus créditos recibe `visible: true`. El detalle completo sigue en `GET :id`, que da 404 sin crédito propio.
+   */
+  @Get(':id/preview')
+  @Roles(Permission.CREDIT_CREATE)
+  preview(@Param('id', ParseUUIDPipe) id: string) {
+    return this.clients.preview(id);
+  }
+
   @Get(':id')
   @Roles(Permission.CLIENT_READ)
   /**

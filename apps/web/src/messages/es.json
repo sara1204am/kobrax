@@ -3195,6 +3195,7 @@
       "summary": "Resumen de cuenta",
       "timeline": "Bitácora de actividad"
     },
+    "previewNotice": "{count, plural, =0 {Este cliente todavía no tiene créditos.} one {Este cliente ya tiene # crédito a cargo de otra persona ({names}).} other {Este cliente ya tiene # créditos a cargo de otras personas ({names}).}} Al crear el tuyo podrás ver y corregir su ficha; el crédito de la otra persona sigue siendo suyo.",
     "newLoan": "Nuevo crédito",
     "registerOffice": {
       "label": "Oficina donde se registra",
@@ -3812,6 +3813,8 @@
     "duplicate": {
       "checking": "Buscando si ya existe…",
       "documentTaken": "Este carnet ya es de {name}.",
+      "documentTakenHidden": "Este cliente ya está registrado: {name}.",
+      "createMyCredit": "Crear mi crédito sobre este cliente",
       "documentTakenDeleted": "Este carnet es de {name}, que está dado de baja. No se puede usar para un cliente nuevo.",
       "documentHint": "Si es la misma persona, abrí su ficha en vez de crearla de nuevo.",
       "openClient": "Ver cliente",

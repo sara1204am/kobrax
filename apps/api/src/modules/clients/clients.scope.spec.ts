@@ -31,7 +31,7 @@ function makeService(permissions: string[], visibleIds: string[]) {
     // F14 · F2: `otherCredits` mira los créditos del cliente; acá no hay ninguno que esconder.
     credit: { findMany: async () => [] },
   };
-  const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
+  const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx), elevated: async (_tx: unknown, fn: () => Promise<unknown>) => fn() };
   const tenant = { accountId: 'acc-A', userId: 'u1', can: (p: string) => permissions.includes(p) };
   const crypto = { encrypt: (v: string) => v, decrypt: (v: string) => v };
   const service = new ClientsService(

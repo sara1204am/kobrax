@@ -570,8 +570,9 @@ describe('R-6 · pagos históricos: mover un crédito NO cambia la oficina de lo
     assert.equal(destino.error?.code, 'CREDIT_BRANCH_INVALID');
     // Y un crédito ajeno (Padilla) hacia su propia agencia: el origen queda fuera.
     const origen = await call(tok.supMV!, 'POST', '/credits/reassign-office', { creditIds: [cr.pad], toBranchId: off.MV!.id });
-    assert.equal(origen.status, 403);
-    assert.equal(origen.error?.code, 'CREDIT_OFFICE_OUT_OF_SCOPE');
+    // F14 · F2b: con la barrera de alcance un crédito ajeno ni siquiera se ve: responde «no existe» (404), no «fuera de alcance» (403).
+    assert.ok([403, 404].includes(origen.status), `origen fuera de alcance: ${origen.status}`);
+    assert.ok(['CREDIT_OFFICE_OUT_OF_SCOPE', 'RESOURCE_NOT_FOUND'].includes(origen.error?.code ?? ''), JSON.stringify(origen.error));
     assert.equal((await prisma.credit.findUniqueOrThrow({ where: { id: cr.pad } })).branchId, off.PAD!.id);
     // Un cobrador (sin assignment:write) no pasa la puerta.
     assert.equal((await call(tok.colMV!, 'POST', '/credits/reassign-office', { creditIds: [cr.mv], toBranchId: off.MV!.id })).status, 403);
@@ -746,23 +747,25 @@ describe('POST /credits/reassign-office con fromBranchId: la raíz con cartera r
 });
 
 describe('A-6 · quien crea decide la oficina cuando no hay oficina ni responsable explícitos', () => {
-  const nuevoCliente = async (): Promise<string> => (await prisma.client.create({ data: { accountId: banco.accountId, clientType: 'PERSON', firstName: 'Q', lastName: randomUUID().slice(0, 4) } })).id;
+  // F14 · F2b: un cliente sin crédito sólo lo ve quien lo dio de alta (o su oficina de registro); el fixture refleja el alta real.
+  const nuevoCliente = async (creador: string): Promise<string> =>
+    (await prisma.client.create({ data: { accountId: banco.accountId, clientType: 'PERSON', firstName: 'Q', lastName: randomUUID().slice(0, 4), createdBy: uid[creador]! } })).id;
 
   it('🔴 un cobrador con UNA oficina crea sin enviar branchId → queda en su oficina (el móvil no manda oficina)', async () => {
-    const r = await call<{ branchId?: string }>(tok.colMV!, 'POST', '/credits', { clientId: await nuevoCliente(), principalAmount: 300, installmentsCount: 3 });
+    const r = await call<{ branchId?: string }>(tok.colMV!, 'POST', '/credits', { clientId: await nuevoCliente('colMV'), principalAmount: 300, installmentsCount: 3 });
     assert.equal(r.status, 201, JSON.stringify(r.error));
     assert.equal(r.data!.branchId, off.MV!.id);
   });
 
   it('un gerente regional sin responsable crea → la oficina de su única asignación (la regional)', async () => {
-    const r = await call<{ branchId?: string }>(tok.mgrChq!, 'POST', '/credits', { clientId: await nuevoCliente(), principalAmount: 300, installmentsCount: 3 });
+    const r = await call<{ branchId?: string }>(tok.mgrChq!, 'POST', '/credits', { clientId: await nuevoCliente('mgrChq'), principalAmount: 300, installmentsCount: 3 });
     assert.equal(r.status, 201, JSON.stringify(r.error));
     assert.equal(r.data!.branchId, off.CHQ!.id);
   });
 
   it('🔴 un cobrador SIN asignación en una cuenta con varias hojas sigue recibiendo 422 CREDIT_BRANCH_UNRESOLVED, con mensaje claro', async () => {
     await member('colSin', 'COLLECTOR', null);
-    const r = await call(tok.colSin!, 'POST', '/credits', { clientId: await nuevoCliente(), principalAmount: 300, installmentsCount: 3 });
+    const r = await call(tok.colSin!, 'POST', '/credits', { clientId: await nuevoCliente('colSin'), principalAmount: 300, installmentsCount: 3 });
     assert.equal(r.status, 422);
     assert.equal(r.error?.code, 'CREDIT_BRANCH_UNRESOLVED');
     assert.match(r.error!.message, /oficina/i);
