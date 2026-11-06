@@ -1,4 +1,4 @@
-> ESTADO: BORRADOR (2026-11-05) — D-1…D-5 son PROPUESTAS, esperan a la usuaria; falta `validar` (G4). Sin código de producto.
+> ESTADO: VALIDADO (G4 PASS 2026-11-05) — D-1…D-5 APROBADAS por la usuaria con las recomendaciones; espera la orden `ejecuta F2b`
 
 # Plan F2b · Barrera RLS de alcance (segunda barrera en PostgreSQL)
 
@@ -45,10 +45,10 @@ Que PostgreSQL, y no sólo cada consulta de la API, niegue las filas que el alca
 
 ## 5. Dependencias
 - F1, F2 y F3 cerradas (G7 PASS 2026-11-05). F2 aporta `clients.registered_branch_id`, necesario para la regla de clientes.
-- Decisiones del plan maestro que sustenta: **N-01** y §C.8 (RLS de segunda barrera con `log-only` → `ENFORCE`). Las propias de la fase (D-1…D-5, §9) están en **PROPUESTA**.
+- Decisiones del plan maestro que sustenta: **N-01** y §C.8 (RLS de segunda barrera con `log-only` → `ENFORCE`). Las propias de la fase (D-1…D-5, §9) fueron **APROBADAS por la usuaria el 2026-11-05** con la recomendación de cada fila.
 - Gates: G0–G3 PASS; F2 cerrada.
 
-## 6. Archivos afectados (HUB consultado; las entradas H14-032…H14-036 se crean en `hub/HUB.md` al validar)
+## 6. Archivos afectados (HUB consultado; entradas H14-032…H14-036 creadas en `hub/HUB.md` en estado PLANEADO)
 
 | HUB | Archivo | Cambio | Dependientes (IMPACT-MAP) |
 |---|---|---|---|
@@ -66,7 +66,7 @@ RULES F13 §A–§D (heredadas); F14-A: N-01, H-7. Multi-tenant (`account_id` + 
 - **Multi-oficina:** supervisor (`branch`), gerente regional (`subtree`) y cobrador (`own`) pasan a quedar acotados también en la base. Una consulta que hoy filtra bien no cambia de resultado; una que olvida el filtro empieza a devolver menos filas (eso es el objetivo, y en `log` se ve antes de que ocurra).
 - **Cambia de comportamiento (avisar):** (a) en `enforce`, un `withTenant` sin contexto de request deja de ver filas de las tablas protegidas (hoy ya queda sin alcance, pero ninguna policy lo usaba); (b) las consultas de ALL/SUBTREE-raíz no cambian.
 
-## 9. Riesgos y decisiones propias (D-1…D-5 son PROPUESTAS)
+## 9. Riesgos y decisiones propias (D-1…D-5 APROBADAS 2026-11-05)
 
 | # | Decisión | Opciones | Recomendación |
 |---|---|---|---|
@@ -95,14 +95,13 @@ RULES F13 §A–§D (heredadas); F14-A: N-01, H-7. Multi-tenant (`account_id` + 
 `SCOPE_RLS_MODE=off` (o `log`) apaga el efecto al instante, sin migración ni despliegue de código. Las policies y funciones se quitan con `DROP POLICY`/`DROP FUNCTION` (el script es reaplicable). Sin migración destructiva; no hay cambios de datos.
 
 ## 12. Tareas ordenadas (datos → API → web → móvil)
-1. **Inventario (sólo lectura):** llamadores de `withTenant` sin contexto de request y consultas crudas sobre las tablas de la ola 1; regla exacta de pagos, agenda y rutas por alcance; rol dueño de las funciones `SECURITY DEFINER` en cada entorno. Resultado a `VERIFICATIONS`.
-2. **Datos:** `rls/002_scope.sql` (comentario de cinco valores) y `rls/005_scope_policies.sql` con las funciones y las policies de `credits` y `clients`, en `off`/`log`/`enforce`; `db:rls` las aplica.
-3. **API · base:** `PrismaService` fija `app.scope` de cinco valores y `app.scope_mode`; los llamadores del inventario pasan a `withSystemTenant`.
-4. **Datos · resto de la ola:** `payments`, `agenda_items`, `route_plans`.
-5. **Pruebas:** specs, integración cruda, paridad, `verify_scope.sql`, registro en los scripts de `package.json`.
-6. **Rendimiento:** medición contra D-4 y ajuste de las funciones.
-7. **Web y móvil:** sin cambios.
-8. **Docs:** HUB, VERIFICATIONS, STATUS, HANDOFF, `docs/producto/roles-permisos-planes.md`.
+1. **Inventario (sólo lectura):** llamadores de `withTenant` sin contexto de request y consultas crudas sobre las tablas de la ola 1; regla exacta de pagos, agenda y rutas por alcance; rol dueño de las funciones `SECURITY DEFINER` en cada entorno. Resultado a `VERIFICATIONS`. Si el inventario cambia el alcance de este plan, se vuelve a la usuaria antes de seguir.
+2. **Datos:** `rls/002_scope.sql` (comentario de cinco valores) y `rls/005_scope_policies.sql` con las funciones y las policies `RESTRICTIVE FOR SELECT` de las cinco tablas, en `off`/`log`/`enforce` (se construye y prueba una tabla a la vez, empezando por `credits` y `clients`); `db:rls` las aplica.
+3. **API:** `PrismaService` fija `app.scope` de cinco valores y `app.scope_mode`; los llamadores del inventario pasan a `withSystemTenant`.
+4. **Pruebas:** specs, integración cruda en los tres modos, paridad app↔SQL, `verify_scope.sql`, registro en los scripts de `package.json`.
+5. **Rendimiento:** medición contra D-4 y ajuste de las funciones (puede volver a la tarea 2).
+6. **Web y móvil:** sin cambios.
+7. **Docs:** HUB, VERIFICATIONS, STATUS, HANDOFF, `docs/producto/roles-permisos-planes.md`.
 
 ## 13. Criterios de cierre (evidencia exigida)
 - **G5:** salida pegada de: unitarias de la API; integración completa (por tandas si hace falta, ver V-024) + `f2b-rls-alcance.it.ts` en los **tres modos**; regresión de la cuenta gratuita individual en `enforce`; `verify_scope.sql`; medición de rendimiento dentro de D-4; `tsc` en api/web/database/mobile; el inventario de la tarea 1.

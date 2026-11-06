@@ -28,5 +28,5 @@
   4. **Móvil: pendiente por orden de la usuaria** (se refactorizará). Para F8: selector de oficina en el alta de cliente, aviso `otherCredits` y mensaje claro del 404 en acciones encoladas. Hoy un cobrador sin oficina o con varias, o un gerente de la raíz, recibe 422 al crear un cliente desde el móvil.
   5. `credit-card.tsx` y `link-review.tsx` siguen con `credit:write` (son edición, no alta).
 - **Decisiones aprobadas:** H-1…H-13; F1 D-1, D-2, D-5; F3 D-1…D-5; F2 D-1…D-6. **Pendiente:** ninguna de F2.
-- **F2b (plan):** `plans/F2b-barrera-rls-alcance.md` en BORRADOR (rama `f14/p2b-barrera-rls-alcance`); la usuaria eligió F2b como siguiente fase. D-1…D-5 esperan su aprobación.
-- **Siguiente paso autorizado:** cerrar el borrador con la usuaria y pasar `validar F2b` (G4). Sin código de producto antes del PASS. Sin push/PR.
+- **F2b (plan):** `plans/F2b-barrera-rls-alcance.md` **VALIDADO** (G4 PASS 2026-11-05), rama `f14/p2b-barrera-rls-alcance`. D-1…D-5 aprobadas por la usuaria: modos `off|log|enforce` por `SCOPE_RLS_MODE` (por defecto `off`), cinco tablas (créditos, clientes, pagos, agenda, rutas), policy `RESTRICTIVE FOR SELECT`, presupuesto de rendimiento +20 % con ≥50 000 créditos, `enforce` lo ordena ella. Riesgos: triggers `SECURITY DEFINER` de totales (verificar el rol dueño), trabajos sin contexto, rendimiento.
+- **Siguiente paso autorizado:** `ejecuta F2b` cuando la usuaria lo ordene (plan validado). La tarea 1 es un inventario de sólo lectura y puede cambiar el alcance. Sin push/PR.

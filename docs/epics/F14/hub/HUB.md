@@ -37,6 +37,11 @@
 | H14-030 | `common/authz/policies/*`, `facts-loader.ts`, `authz-snapshot.json` | 5 políticas, `tierOf`, puertas nuevas | servicios que usan `assertPolicy` | Medio | F2 | specs de políticas + snapshot | **HECHO 2026-11-05** |
 | H14-027b | web: `cartera/new-client-button.tsx`, `cartera/page.tsx`, `cartera/[id]/client-card.tsx` | `client:create`/`credit:create`/`client:delete` en los controles, aviso `otherCredits`, selector de oficina de registro (el alta ya no cae en la central) | usuarios sin esos permisos | Medio | F2 | `client-card.test.tsx`, `new-client-button.test.tsx` | **HECHO 2026-11-05** (`credit-card.tsx` y `link-review.tsx` siguen con `credit:write`: son edición) |
 | H14-031 | `shared/constants/permissions.ts`, seed, migración de catálogo | `client:create`, `credit:create`, `client:delete` + `policy_version` | todas las sesiones (`AUTHZ_STALE` único), web, móvil | Medio | F2 | `permission-gates.spec.ts`, integración | **HECHO 2026-11-05** |
+| H14-032 | `database/prisma.service.ts` (`withTenant`, `runScoped`) | `app.scope` de 5 valores desde `officeScopeKindOf`; `app.scope_mode` desde `SCOPE_RLS_MODE` | las ~63 llamadas a `withTenant`, trabajos de sistema | Alto | F2b | specs del cálculo + integración cruda | PLANEADO |
+| H14-033 | `rls/002_scope.sql`, `rls/005_scope_policies.sql` (nuevo) | funciones por tabla + policies `RESTRICTIVE FOR SELECT` (off/log/enforce) | `db:rls`, `verify_isolation.sql`, seed | Alto | F2b | `verify_scope.sql` + integración en 3 modos | PLANEADO |
+| H14-034 | `common/office-scope/office-scope.ts`, `mora/mora-query.ts` | sin cambio de regla; spec de paridad TS↔SQL | clientes, créditos, mora, pagos, exportes, uploads, agenda, rutas, analítica | Medio | F2b | spec de paridad | PLANEADO |
+| H14-035 | llamadores de `withTenant` sin contexto (lista de la tarea 1) | pasan a `withSystemTenant` | arrears, planes, ciclo de vida, notificaciones | Alto | F2b | integración + modo `log` | PLANEADO |
+| H14-036 | `test/integration/f2b-rls-alcance.it.ts`, `rls/verify_scope.sql`, `apps/api/package.json` | pruebas crudas por alcance, paridad, modos y rendimiento | CI | Medio | F2b | el propio test | PLANEADO |
 
 ## IMPACT-MAP (F1)
 - **(F3) Cambiar quién registra los guards (H14-019/022)** ⇒ todos los controladores, `health`, `main.ts` (versionado), rutas públicas (`auth`, `accounts`, `health`), pruebas de integración que levantan la app, `permission-gates.spec.ts`, `uploads.access.spec.ts` (usa `RolesGuard`).
@@ -49,6 +54,9 @@
 - **(F2) Cambiar `visibleClientIdsSql` (H14-026)** ⇒ Clientes, Exportes, Uploads (`UploadAccessService`), Mora, Pagos; F13 HUB-011/019.
 - **(F2) Políticas de creación/asignación/invitación (H14-027…030)** ⇒ importación de cartera (`IMPORT_OWN`), reparto masivo, Equipo web, alta de cliente/crédito del móvil (offline), F13 HUB-013/017.
 - **(F2) Permisos nuevos (H14-031)** ⇒ plantillas de rol, seed, JWT de todas las sesiones, web/móvil que ocultan acciones.
+- **(F2b) Cambiar `PrismaService.withTenant`/`runScoped` (H14-032)** ⇒ las ~63 llamadas a `withTenant`; todo trabajo sin contexto de request (H14-035); `AUTHZ`/sesiones que abren transacción propia.
+- **(F2b) Policies de alcance (H14-033)** ⇒ `db:rls` en cada despliegue; todo `SELECT` sobre `credits`, `clients`, `payments`, `agenda_items`, `route_plans`; los triggers `SECURITY DEFINER` de totales y episodios (deben seguir viendo todo); `verify_isolation.sql`.
+- **(F2b) Cambiar la regla de visibilidad en TS (H14-034)** ⇒ se cambia también la función SQL y se corre el spec de paridad; sin eso la fase queda inconsistente.
 
 ## Estado tras F1 (2026-11-05, commits locales en `f14/p1-sesiones-aislamiento`)
 H14-001…018 pasan a **MODIFICADO F1** y probados (ver `../execution/VERIFICATIONS.md`). Archivos nuevos: `auth/authz-version.service.ts`, `uploads/upload-access.service.ts`, `rls/005_authz_functions.sql`, `web/app/api/auth/renew/route.ts`, migración `20261105000000_f14_01_authz_versions`.
