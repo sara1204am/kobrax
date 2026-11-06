@@ -28,4 +28,5 @@
   4. **Móvil: pendiente por orden de la usuaria** (se refactorizará). Para F8: selector de oficina en el alta de cliente, aviso `otherCredits` y mensaje claro del 404 en acciones encoladas. Hoy un cobrador sin oficina o con varias, o un gerente de la raíz, recibe 422 al crear un cliente desde el móvil.
   5. `credit-card.tsx` y `link-review.tsx` siguen con `credit:write` (son edición, no alta).
 - **Decisiones aprobadas:** H-1…H-13; F1 D-1, D-2, D-5; F3 D-1…D-5; F2 D-1…D-6. **Pendiente:** ninguna de F2.
-- **Siguiente paso autorizado:** ninguno. F2b (barrera RLS de alcance) o F4 sólo cuando la usuaria lo ordene. Sin push/PR.
+- **F2b (plan):** `plans/F2b-barrera-rls-alcance.md` en BORRADOR (rama `f14/p2b-barrera-rls-alcance`); la usuaria eligió F2b como siguiente fase. D-1…D-5 esperan su aprobación.
+- **Siguiente paso autorizado:** cerrar el borrador con la usuaria y pasar `validar F2b` (G4). Sin código de producto antes del PASS. Sin push/PR.

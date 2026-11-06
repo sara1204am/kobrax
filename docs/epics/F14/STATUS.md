@@ -30,6 +30,7 @@
 - No usar el modelo Fable en agentes nuevos.
 
 ## Fase vigente
-**F2 · CERRADA 2026-11-05** (rama `f14/p2-responsabilidad-alcance`, commit local, sin push/PR). Ninguna fase abierta: F2b (barrera RLS de alcance) y F4 esperan la orden de la usuaria. El móvil queda pendiente (se refactorizará).  
+**F2b · Plan en borrador** (rama `f14/p2b-barrera-rls-alcance`, `plans/F2b-barrera-rls-alcance.md`), D-1…D-5 en PROPUESTA; falta `validar` (G4). Sin código. F2 cerrada.  
+(Texto previo:) **F2 · CERRADA 2026-11-05** (rama `f14/p2-responsabilidad-alcance`, commit local, sin push/PR). Ninguna fase abierta: F2b (barrera RLS de alcance) y F4 esperan la orden de la usuaria. El móvil queda pendiente (se refactorizará).  
 (Texto previo:) **F2 · Plan en borrador** (rama `f14/p2-responsabilidad-alcance`, commit `18c4f44`), D-1…D-6 aprobadas; la barrera RLS pasó a F2b. Sin código. F3 cerrada.  
 (Lo siguiente es el texto previo de F3, ya cerrada:) **F3 · Arquitectura central de autorización** (rama `f14/p3-authz-core`). Plan `plans/F3-authz-core.md` (G4 PASS). **Construida y CERRADA 2026-11-05** (G4–G7 PASS). Orden aprobado F1 → F3 → F2 (F2 depende de F3). F1 cerrada 2026-11-05.
