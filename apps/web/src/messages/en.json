@@ -3196,6 +3196,15 @@
       "timeline": "Activity log"
     },
     "newLoan": "New credit",
+    "registerOffice": {
+      "label": "Office where registered",
+      "hint": "This office or any below it. The head office does not register clients.",
+      "pick": "Pick an office"
+    },
+    "otherCredits": {
+      "notice": "{count, plural, one {This client has # more credit} other {This client has # more credits}} you can't see, with a balance of {total}. Handled by: {names}.",
+      "nobody": "no owner"
+    },
     "loanMode": {
       "A": "I know the instalment",
       "B": "Work out the instalment"

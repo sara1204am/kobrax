@@ -36,12 +36,18 @@ export enum Permission {
 
   CLIENT_READ = 'client:read',
   CLIENT_WRITE = 'client:write',
+  /** F14 · F2: dar de alta un cliente (la política `client.create` resuelve la oficina de registro). */
+  CLIENT_CREATE = 'client:create',
+  /** F14 · F2 (H-12): borrado lógico de un cliente; destructivo, sólo ACCOUNT_ADMIN por defecto. */
+  CLIENT_DELETE = 'client:delete',
   CLIENT_PII_READ = 'client:pii:read', // revelar PII en claro (documento/teléfono/dirección)
   CLIENT_IMPORT = 'client:import', // importación masiva (RECONCILE / UPSERT_ONLY)
   CLIENT_IMPORT_REPLACE = 'client:import:replace', // modo destructivo REPLACE
 
   CREDIT_READ = 'credit:read',
   CREDIT_WRITE = 'credit:write',
+  /** F14 · F2: dar de alta un crédito (la política `credit.create` decide el responsable). */
+  CREDIT_CREATE = 'credit:create',
   CREDIT_PII_READ = 'credit:pii:read',
 
   REPORT_READ = 'report:read',

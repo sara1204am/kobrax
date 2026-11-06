@@ -11,11 +11,13 @@ import {
   type ClienteForm,
 } from '@kobrax/shared';
 import { ClientFormFields, type CatalogOption } from '@/components/client-form';
-import { Button, ErrorBanner } from '@/components/ui';
+import { OfficeSelect } from '@/components/office-select';
+import { Button, ErrorBanner, Field } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
 import { postJson } from '@/lib/client';
+import type { OfficeOption } from '@/lib/offices';
 import { duplicateBlocks, nameSignature, useDuplicateCheck } from '@/lib/duplicate-check';
 import { DocumentTaken, NamesTaken } from './duplicate-notice';
 
@@ -36,6 +38,8 @@ export function NewClientButton({
   collectionModalities = [],
   incomeSources = [],
   occupations = [],
+  offices = [],
+  defaultOfficeId = '',
 }: {
   /** La moneda de la cuenta (Configuración): con la que arranca el valor de una garantía. */
   currency: string;
@@ -45,11 +49,16 @@ export function NewClientButton({
   /** Catálogos `INCOME_SOURCE` y `OCCUPATION` (F4/13 · E3). */
   incomeSources?: CatalogOption[];
   occupations?: CatalogOption[];
+  /** F14 · F2: las oficinas donde puede registrar (sin la central: el servidor no registra clientes ahí). Una sola = se manda sola. */
+  offices?: OfficeOption[];
+  /** La oficina de quien da de alta, si es una de las elegibles. */
+  defaultOfficeId?: string;
 }) {
   const t = useTranslations('portfolio');
   const { can } = usePermissions();
   const [abierto, setAbierto] = useState(false);
-  if (!can('client:write')) return null;
+  // F14 · F2: dar de alta es `client:create` (editar sigue siendo `client:write`).
+  if (!can('client:create')) return null;
 
   return (
     <>
@@ -70,6 +79,8 @@ export function NewClientButton({
           collectionModalities={collectionModalities}
           incomeSources={incomeSources}
           occupations={occupations}
+          offices={offices}
+          defaultOfficeId={defaultOfficeId}
           onClose={() => setAbierto(false)}
         />
       )}
@@ -95,6 +106,8 @@ function NewClientModal({
   collectionModalities,
   incomeSources,
   occupations,
+  offices,
+  defaultOfficeId,
   onClose,
 }: {
   currency: string;
@@ -102,6 +115,8 @@ function NewClientModal({
   collectionModalities: CatalogOption[];
   incomeSources: CatalogOption[];
   occupations: CatalogOption[];
+  offices: OfficeOption[];
+  defaultOfficeId: string;
   onClose: () => void;
 }) {
   const t = useTranslations('portfolio');
@@ -110,6 +125,13 @@ function NewClientModal({
   const [form, setForm] = useState<ClienteForm>(initialCliente);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /*
+   * F14 · F2 (H-7): la oficina donde se registra el cliente. Con una sola elegible se manda sola y no hay selector; con varias, quien
+   * da de alta elige (arranca en la suya si es una de ellas). El servidor la valida contra el alcance igual: esto sólo la ofrece.
+   */
+  const [office, setOffice] = useState(offices.length === 1 ? offices[0]!.id : defaultOfficeId);
+  const chooseOffice = offices.length > 1;
+  const officeMissing = offices.length > 0 && !office;
   /*
    * Posibles duplicados, preguntados mientras se escribe: mejor enterarse en el campo que con un
    * error después de haber cargado teléfonos, direcciones y garantes.
@@ -134,7 +156,7 @@ function NewClientModal({
       setSaving(false);
       return;
     }
-    const res = await postJson<ClientDetail>('/api/clients', buildClientePayload(form));
+    const res = await postJson<ClientDetail>('/api/clients', { ...buildClientePayload(form), ...(office ? { branchId: office } : {}) });
     setSaving(false);
 
     if (!res.ok) {
@@ -176,7 +198,7 @@ function NewClientModal({
               </Button>
             </span>
             <span className="sm:w-44">
-              <Button type="submit" loading={saving} disabled={!valid || blocked !== null}>
+              <Button type="submit" loading={saving} disabled={!valid || blocked !== null || officeMissing}>
                 {t('save')}
               </Button>
             </span>
@@ -199,6 +221,14 @@ function NewClientModal({
             onAccept={(v) => setAcceptedFor(v ? nameSignature(form) : null)}
             disabled={saving}
           />
+        )}
+
+        {chooseOffice && (
+          <div className="mb-4">
+            <Field label={t('registerOffice.label')} hint={t('registerOffice.hint')}>
+              <OfficeSelect options={offices} emptyLabel={t('registerOffice.pick')} value={office} onChange={(e) => setOffice(e.target.value)} disabled={saving} />
+            </Field>
+          </div>
         )}
 
         {/* Sin créditos: el préstamo se carga después, desde la ficha. El garante se guarda igual y

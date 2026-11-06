@@ -1,4 +1,5 @@
 import { describe, it } from 'node:test';
+import { fakePolicy } from '../../common/authz/testing';
 import assert from 'node:assert/strict';
 import { fakePlanLimits } from '../../common/plan/plan-test-utils';
 import { ClientsService } from './clients.service';
@@ -142,6 +143,8 @@ function makeService(
     blind as never,
     audit as never,
     fakePlanLimits(),
+    undefined,
+    fakePolicy().service,
   );
   return { service, calls };
 }

@@ -33,6 +33,8 @@ import {
   userHasPendingWork,
 } from './users.errors';
 import { AuthorizationService } from '../../common/authz/authorization.service';
+import { PolicyService } from '../../common/authz/policy.service';
+import { isReservedRole, tierOf } from '../../common/authz/tier';
 
 const MEMBER_INCLUDE = { user: { include: { profile: true } }, role: true } as const;
 
@@ -62,6 +64,8 @@ export class UsersService {
     private readonly sessions: SessionService,
     private readonly office: OfficeScopeService,
     private readonly access: AuthorizationService = new AuthorizationService(tenant),
+    /** F14 · F2: `member.invite` / `member.assignRole`. Lo inyecta Nest; los specs que no invitan ni cambian roles no lo necesitan. */
+    private readonly policies: PolicyService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -223,6 +227,13 @@ export class UsersService {
         if (otherAdmins === 0) throw lastAdmin();
       }
 
+      // F14 · F2 (H-3, H-13): quien edita está por encima de la persona; el rol y la oficina nuevos caen en su jerarquía y alcance.
+      // Sólo si cambia algo de verdad: el formulario reenvía la oficina actual junto con otros campos y eso no es un movimiento jerárquico.
+      const changesBranch = dto.branchId !== undefined && dto.branchId !== before.branchId;
+      if (changesRole || changesBranch) {
+        await this.policies.assert('member.assignRole', { userId, roleId: changesRole ? dto.roleId : undefined, branchId: changesBranch ? dto.branchId : undefined }, tx);
+      }
+
       // Reactivar es la otra puerta al techo del plan: `invite()` frena, pero desactivar y volver
       // a activar entraba sin contar asientos. Mismo criterio que allá y dentro de la transacción,
       // por la misma carrera (S2-D6).
@@ -345,6 +356,8 @@ export class UsersService {
         // El conteo va DENTRO de la transacción: contar afuera y crear después es una
         // carrera que dos invitaciones simultáneas ganan (S2-D6, README R4).
         await this.plan.assertRoom('users', tx);
+        // F14 · F2 (H-3, H-13): rol de tier estrictamente inferior, oficina dentro del alcance y nunca un rol reservado.
+        await this.policies.assert('member.invite', { roleId: role.id, branchId: dto.branchId }, tx);
 
         const user = await tx.user.create({
           data: {
@@ -522,11 +535,16 @@ export class UsersService {
     return serializeProfile(user);
   }
 
-  /** Sólo los roles que el móvil administra (D2); el selector necesita los ids reales. */
+  /**
+   * Los roles que quien pregunta puede OFRECER al invitar o cambiar un rol (F14 · F2, H-3/H-13): de `tier` estrictamente inferior al suyo y
+   * ninguno reservado (el ACCOUNT_ADMIN no se otorga por esta vía). El servidor lo vuelve a exigir en `member.invite`/`member.assignRole`.
+   */
   async listRoles() {
-    const roles = await this.tx((tx) =>
-      tx.role.findMany({ where: { name: { in: [...MOBILE_ROLES] } }, orderBy: { level: 'desc' } }),
-    );
-    return roles.map(serializeRole);
+    const { roles, mine } = await this.tx(async (tx) => ({
+      roles: await tx.role.findMany({ where: { name: { in: [...MOBILE_ROLES] } }, orderBy: { level: 'desc' } }),
+      mine: await tx.userAccount.findFirst({ where: { userId: this.selfId, accountId: this.tenant.accountId }, select: { role: { select: { name: true, level: true } } } }),
+    }));
+    const myTier = mine ? tierOf(mine.role) : -1;
+    return roles.filter((r) => !isReservedRole(r) && tierOf(r) < myTier).map(serializeRole);
   }
 }

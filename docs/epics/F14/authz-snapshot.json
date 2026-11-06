@@ -108,9 +108,10 @@
     "handler": "ClientsController.remove",
     "kind": "permissions",
     "all": [
-      "client:write"
+      "client:delete"
     ],
-    "any": []
+    "any": [],
+    "destructive": true
   },
   {
     "route": "DELETE /credits/:id/write-off",
@@ -1449,7 +1450,7 @@
     "handler": "ClientsController.create",
     "kind": "permissions",
     "all": [
-      "client:write"
+      "client:create"
     ],
     "any": []
   },
@@ -1523,7 +1524,7 @@
     "handler": "CreditsController.create",
     "kind": "permissions",
     "all": [
-      "credit:write"
+      "credit:create"
     ],
     "any": []
   },

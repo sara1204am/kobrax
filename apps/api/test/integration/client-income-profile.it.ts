@@ -32,11 +32,14 @@ let manager: string;
 let otraCuenta: string;
 let prisma: PrismaClient;
 let clientId: string;
+/** F14 · F2: el gerente del seed cuelga de la raíz de una cuenta con varias oficinas; el alta ya no se registra en la central. */
+let oficina: string;
 
 const PERFIL: Perfil = { incomeSourceCode: 'EMPLOYEE', occupationCode: 'PUBLIC_SERVANT', incomeCycle: 'QUARTERLY', incomeDay: 15, notes: 'Cobra en la alcaldía cada 3 meses' };
 
 const nuevo = (extra: Record<string, unknown> = {}) => ({
   clientType: 'PERSON',
+  branchId: oficina,
   firstName: 'Rosa',
   lastName: `Mamani-${randomUUID().slice(0, 6)}`,
   contacts: [{ contactType: 'PHONE', value: '70000002', isPrimary: true }],
@@ -48,6 +51,7 @@ before(async () => {
   await startApi();
   prisma = db();
   manager = await login('manager@kobrax.demo');
+  oficina = ((await call<{ id: string; isRoot: boolean }[]>(manager, 'GET', '/branches')).data ?? []).find((o) => !o.isRoot)!.id;
   otraCuenta = await login('cobrador.norte@kobrax.demo');
 });
 

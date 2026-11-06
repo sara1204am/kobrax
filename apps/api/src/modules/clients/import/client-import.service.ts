@@ -11,6 +11,7 @@ import { PlanLimitsService } from '../../../common/plan/plan-limits.service';
 import { parseCsv } from './csv';
 import { planImport, type ImportRow } from './import-plan';
 import { ImportClientsDto } from './import.dto';
+import { PolicyService } from '../../../common/authz/policy.service';
 
 /** Campos canónicos del cliente que la importación puede mapear. */
 const FIELDS = ['firstName', 'lastName', 'businessName', 'nationalId', 'taxId', 'riskSegment', 'clientType', 'gender'] as const;
@@ -45,6 +46,7 @@ export class ClientImportService {
     private readonly blind: BlindIndexService,
     private readonly audit: AuditService,
     private readonly plan: PlanLimitsService,
+    private readonly policy: PolicyService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -97,7 +99,11 @@ export class ClientImportService {
       // Aplicar (atómico dentro del tenant). El tope de clientes del plan primero: un archivo que
       // se pasa se rechaza entero, no a medias (LIMITES §5.2, Pregunta 10).
       await this.plan.assertRoom('clients', tx, { cuantos: plan.toCreate.length });
-      for (const row of plan.toCreate) await this.createClient(tx, accountId, row);
+      // F14 · F2: la oficina de registro la decide la política `client.create` UNA vez para toda la carga. Si se niega (p. ej. la central de una
+      // cuenta con varias oficinas) los clientes quedan sin oficina de registro, como antes: la importación no falla por eso.
+      const registered = plan.toCreate.length > 0 ? await this.policy.check('client.create', {}, tx) : undefined;
+      const registeredBranchId = registered?.allow ? ((registered.data?.registeredBranchId as string | undefined) ?? null) : null;
+      for (const row of plan.toCreate) await this.createClient(tx, accountId, row, registeredBranchId);
       for (const u of plan.toUpdate) await this.updateClient(tx, u.id, u.row);
       if (plan.toSoftDelete.length > 0) {
         await tx.client.updateMany({
@@ -165,12 +171,13 @@ export class ClientImportService {
     return m.firstName && m.lastName ? null : 'PERSON_NEEDS_NAME';
   }
 
-  private async createClient(tx: PrismaClient, accountId: string, row: ImportRow): Promise<void> {
+  private async createClient(tx: PrismaClient, accountId: string, row: ImportRow, registeredBranchId: string | null): Promise<void> {
     const d = row.data;
     await tx.client.create({
       data: {
         accountId,
         createdBy: this.tenant.userId ?? null,
+        registeredBranchId,
         clientType: d.clientType as ClientType,
         firstName: d.firstName as string | undefined,
         lastName: d.lastName as string | undefined,

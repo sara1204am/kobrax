@@ -3196,6 +3196,15 @@
       "timeline": "Bitácora de actividad"
     },
     "newLoan": "Nuevo crédito",
+    "registerOffice": {
+      "label": "Oficina donde se registra",
+      "hint": "Esta oficina o alguna de las que cuelgan de ella. La central no registra clientes.",
+      "pick": "Elige la oficina"
+    },
+    "otherCredits": {
+      "notice": "{count, plural, one {Este cliente tiene # crédito más} other {Este cliente tiene # créditos más}} que no ves, por un saldo de {total}. A cargo de: {names}.",
+      "nobody": "sin responsable"
+    },
     "loanMode": {
       "A": "Ya sé la cuota",
       "B": "Calcular la cuota"

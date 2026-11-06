@@ -257,10 +257,10 @@ export class CreditsService {
      * asignar queda como responsable de lo que da de alta (P4) — el préstamo que el cobrador acuerda
      * en la calle es suyo. Quien sí puede asignar y no elige lo deja sin responsable, como antes.
      */
-    const me = this.tenant.userId;
-    if (dto.assignedManagerId && dto.assignedManagerId !== me) this.assignment.authorize();
-    const responsible = dto.assignedManagerId ?? (this.assignment.canAssign() ? undefined : me);
-    const assignReason = dto.assignedManagerId && dto.assignedManagerId !== me ? 'CREATE_MANUAL' : 'CREATE_OWN';
+    // F14 · F2: la política `credit.create` decide el responsable (permiso `credit:create`; elegir a otra persona exige `assignment:write`).
+    const decision = this.authz.assertPolicy('credit.create', { assignedManagerId: dto.assignedManagerId });
+    const responsible = decision?.responsibleId as string | undefined;
+    const assignReason = decision?.needsAssign ? 'CREATE_MANUAL' : 'CREATE_OWN';
 
     const accountId = this.tenant.accountId;
     const created = await this.tx(async (tx) => {

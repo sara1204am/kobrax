@@ -173,3 +173,30 @@ describe('ClientCard — se corrige por secciones, sin salir de la ficha', () =>
     expect(within(encabezado).getByText('Activo')).toBeInTheDocument();
   });
 });
+
+describe('ClientCard — responsabilidad y alcance (F14 · F2)', () => {
+  const OTROS: ClientDetail = { ...TAPADO, otherCredits: { count: 2, totalOutstanding: 1500, responsibles: [{ userId: 'u1', name: 'Ana Rojas' }, { userId: 'u2', name: 'Luis Paz' }] } };
+
+  it('avisa que tiene otros créditos con SÓLO agregados: cuántos, el saldo y quién los lleva', () => {
+    renderCard(OTROS);
+    const aviso = screen.getByRole('note');
+    expect(aviso).toHaveTextContent('2 créditos más');
+    expect(aviso).toHaveTextContent('Ana Rojas, Luis Paz');
+    expect(aviso).toHaveTextContent(/1[.,\s]?500/);
+  });
+
+  it('sin otros créditos no hay aviso', () => {
+    renderCard(TAPADO);
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+    renderCard({ ...TAPADO, otherCredits: null });
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+  });
+
+  it('🔴 «Dar de baja» sólo con client:delete; client:write alcanza para editar pero no para borrar', () => {
+    const { unmount } = renderCard(TAPADO, ['client:read', 'client:write']);
+    expect(screen.queryByRole('button', { name: 'Dar de baja' })).not.toBeInTheDocument();
+    unmount();
+    renderCard(TAPADO, ['client:read', 'client:write', 'client:delete']);
+    expect(screen.getByRole('button', { name: 'Dar de baja' })).toBeInTheDocument();
+  });
+});

@@ -34,15 +34,20 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     Permission.CATALOG_WRITE,
     Permission.CLIENT_READ,
     Permission.CLIENT_WRITE,
+    Permission.CLIENT_CREATE, // F14 · F2: quien hoy puede escribir clientes puede darlos de alta
     Permission.CLIENT_PII_READ,
     Permission.CLIENT_IMPORT,
     Permission.CREDIT_READ,
     Permission.CREDIT_WRITE,
+    Permission.CREDIT_CREATE, // F14 · F2
     Permission.CREDIT_PII_READ,
     Permission.REPORT_READ,
     Permission.REPORT_EXPORT,
     Permission.ACCOUNT_READ,
     Permission.USER_READ,
+    // F14 · F2 (H-3): invita a personas de rol inferior dentro de su subárbol (la política `member.invite` lo acota) y lee los roles que puede ofrecer.
+    Permission.USER_INVITE,
+    Permission.ROLE_READ,
     // F14 · F1: cierra las sesiones de las personas de SU oficina (el servidor acota por alcance: otra regional da 404).
     Permission.USER_SESSIONS_REVOKE,
     // F13 · R12: ve el árbol de oficinas (hoy ya tiene `user:read`, con el que se veía la pestaña de Agencias).
@@ -77,6 +82,8 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     // F13 · D-7: lee el árbol de oficinas, pero SÓLO sus oficinas y lo que cuelga de ellas (el servidor lo acota).
     Permission.OFFICE_READ,
     // Reparte la cartera y cubre bajas: es quien más usa la asignación temporal.
+    // F14 · F2 (H-3): ve a las personas de SU oficina (el servidor acota por alcance).
+    Permission.USER_READ,
     Permission.ASSIGNMENT_WRITE,
   ],
   [RoleType.COLLECTOR]: [
@@ -97,6 +104,7 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     // punto, un teléfono viejo). Sin esto, el formulario de edición se ve pero no guarda.
     // Toda mutación queda auditada; los permisos finos son F3/P10.
     Permission.CLIENT_WRITE,
+    Permission.CLIENT_CREATE, // F14 · F2: quien hoy puede escribir clientes puede darlos de alta
     // La misma alta, pero desde archivo — el módulo Import del móvil, donde COLLECTOR es el único
     // rol que entra. Sin esto el módulo es 403 para su propio dueño (el cobrador independiente).
     Permission.CLIENT_IMPORT,
@@ -105,6 +113,7 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     Permission.CREDIT_READ,
     // Da de alta el préstamo junto con el cliente (Cartera S2), no sólo lo consulta.
     Permission.CREDIT_WRITE,
+    Permission.CREDIT_CREATE, // F14 · F2
   ],
   [RoleType.AUDITOR]: [
     Permission.COLLECTION_READ,

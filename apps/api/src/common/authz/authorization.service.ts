@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { TenantContextService } from '../context/tenant-context.service';
 import type { Actor, Decision } from './authz.types';
 import { POLICIES } from './policies';
@@ -42,13 +42,17 @@ export class AuthorizationService {
     return (def.decide as (a: Actor, f: undefined, i: unknown) => Decision)(this.actor(), undefined, input);
   }
 
-  assertPolicy(name: string, input?: unknown): void {
-    throwIfDenied(this.decide(name, input));
+  /** Lanza si se niega; si se permite devuelve los datos que la política resolvió (si los hay). */
+  assertPolicy(name: string, input?: unknown): Record<string, unknown> | undefined {
+    const d = this.decide(name, input);
+    throwIfDenied(d);
+    return d.allow ? d.data : undefined;
   }
 }
 
 export function throwIfDenied(d: Decision): void {
   if (d.allow) return;
   const body = { code: d.code, message: d.message };
-  throw d.status === 404 ? new NotFoundException(body) : new ForbiddenException(body);
+  if (d.status === 404) throw new NotFoundException(body);
+  throw d.status === 422 ? new UnprocessableEntityException(body) : new ForbiddenException(body);
 }

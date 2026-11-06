@@ -171,6 +171,8 @@ model Branch {
   credits      Credit[]
   payments     Payment[]
   routePlans   RoutePlan[]
+  /// F14 · F2: clientes registrados en esta oficina.
+  registeredClients Client[] @relation("ClientRegisteredBranch")
 
   @@index([accountId])
   @@index([accountId, active])
@@ -720,9 +722,13 @@ model Client {
   updatedAt               DateTime     @updatedAt @map("updated_at")
   /// F14 · F1: quién dio de alta al cliente (trazabilidad; NO es «dueño», la responsabilidad vive en el crédito — H-7).
   createdBy               String?      @map("created_by")
+  /// F14 · F2: oficina donde se registró el cliente (trazabilidad y visibilidad por oficina; NO es dueño, H-7). Nullable: los
+  /// históricos ambiguos quedan sin oficina (ver verify/f14-cliente-registro.sql); las altas nuevas la llevan siempre.
+  registeredBranchId      String?      @map("registered_branch_id")
   deletedAt               DateTime?    @map("deleted_at")
 
   account          Account             @relation(fields: [accountId], references: [id])
+  registeredBranch Branch?             @relation("ClientRegisteredBranch", fields: [registeredBranchId], references: [id])
   contacts         ClientContact[]
   locations        ClientLocation[]
   relations        ClientRelation[]
@@ -740,6 +746,7 @@ model Client {
   @@index([accountId])
   @@index([accountId, status])
   @@index([accountId, linkReviewPending])
+  @@index([accountId, registeredBranchId])
   @@index([deletedAt])
   // Los dos órdenes con los que abre la cartera. El desempate por `id` va en el índice porque va en
   // el `ORDER BY`: sin él, `LIMIT/OFFSET` repite o saltea filas entre página y página.

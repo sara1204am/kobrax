@@ -387,6 +387,16 @@ La UI muestra un checklist en tiempo real con las cuatro reglas (`checkPassword`
 - **Avisos de plan:** contadores y cartel «cerca del tope» (80 %) en Equipo/Cuenta; notificaciones de topes mensuales y de fin de prueba al administrador.
 - **Datos sensibles:** PII cifrada en reposo (AES-256-GCM) con revelado auditado (`client/PII_REVEAL`); toda mutación queda en la bitácora (quién/cuándo/qué/IP), pero **no hay pantalla ni API para consultarla** (3.4).
 
+### F14 · F2 — responsabilidad y alcance (2026-11-05)
+
+- **El cliente no tiene dueño.** Lo ve quien ve alguno de sus créditos (responsable, reemplazo o apoyo vigentes) o quien está en la oficina donde se registró (gerente o supervisor del subárbol). El cobrador ve además al cliente sin créditos que él mismo dio de alta. Al perder el último crédito visible el cliente deja de verse; nada queda guardado a su nombre.
+- **«Tiene otros créditos».** La ficha avisa cuántos créditos del cliente no ves, su saldo total y quién los lleva. Nunca muestra el detalle; el crédito ajeno sigue dando 404.
+- **Dar de alta un cliente** exige `client:create` y se registra en una oficina: la única de la cuenta, la tuya, o la que elijas dentro de tu alcance (selector en «Nuevo cliente»). **Nunca en la central de una cuenta con varias oficinas.** Crear un crédito exige `credit:create`.
+- **Borrar un cliente** exige `client:delete`: sólo el administrador de la cuenta.
+- **Asignar créditos:** a una persona de nivel igual o inferior al tuyo; a un par de tu misma oficina, no (sí a uno de una oficina hija).
+- **Personas:** el gerente invita a roles de nivel inferior dentro de su alcance; el supervisor ve las personas de su oficina. **El rol ACCOUNT_ADMIN no se otorga por invitación ni por cambio de rol** (lo asigna la plataforma).
+- **Móvil:** sin cambios en esta fase (se refactorizará).
+
 ---
 
 ## 8. Brechas y puntos no verificados

@@ -13,6 +13,7 @@ import {
   StreamableFile,
 } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
+import { Destructive } from '../auth/decorators/authz.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ClientsService } from './clients.service';
 import { buildClientPdf } from './client-pdf';
@@ -41,7 +42,7 @@ export class ClientsController {
 
   // ── Cliente ────────────────────────────────────────────────────────────────
   @Post()
-  @Roles(Permission.CLIENT_WRITE)
+  @Roles(Permission.CLIENT_CREATE)
   create(@Body() dto: CreateClientDto) {
     return this.clients.create(dto);
   }
@@ -75,7 +76,7 @@ export class ClientsController {
    * cablea al final; no se ramifica por rol ahora.
    */
   findOne(@Param('id', ParseUUIDPipe) id: string, @Query('reveal') reveal?: string) {
-    return this.clients.findOne(id, reveal === 'true');
+    return this.clients.findOne(id, reveal === 'true', true);
   }
 
   /** El legajo del cliente en PDF: mismo revelado auditado que `findOne(id, true)`, para imprimir. */
@@ -94,7 +95,8 @@ export class ClientsController {
   }
 
   @Delete(':id')
-  @Roles(Permission.CLIENT_WRITE)
+  @Roles(Permission.CLIENT_DELETE)
+  @Destructive()
   @HttpCode(204)
   async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.clients.remove(id);

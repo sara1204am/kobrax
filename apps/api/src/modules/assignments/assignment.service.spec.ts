@@ -1,4 +1,5 @@
 import { describe, it } from 'node:test';
+import { fakePolicy } from '../../common/authz/testing';
 import assert from 'node:assert/strict';
 import { Prisma } from '@prisma/client';
 import { Permission, RoleType } from '@kobrax/shared';
@@ -72,7 +73,7 @@ function makeService(opts: {
   const permissions = opts.permissions ?? [];
   const tenant = { accountId: 'acc-A', userId: opts.userId ?? 'boss', can: (p: string) => permissions.includes(p) };
   const audit = { recordMany: async (e: typeof audited) => void audited.push(...e) };
-  const service = new AssignmentService({} as never, tenant as never, audit as never, new OfficeScopeService(tenant as never));
+  const service = new AssignmentService({} as never, tenant as never, audit as never, new OfficeScopeService(tenant as never), undefined, fakePolicy().service);
   const active = (creditId: string) => rows.filter((r) => r.creditId === creditId && !r.revokedAt).map((r) => r.userId);
   return { service, tx: tx as never, credits, rows, audited, active };
 }

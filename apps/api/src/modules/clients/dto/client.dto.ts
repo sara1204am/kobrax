@@ -160,6 +160,12 @@ export class CreateClientDto {
    */
   @IsOptional() @IsUUID() id?: string;
 
+  /**
+   * Oficina donde se registra el cliente. Opcional: sin ella la resuelve el servidor (política `client.create`: la única oficina de la
+   * cuenta o la del actor). Se valida contra el alcance de quien la pide; no es el id de una persona (N-13).
+   */
+  @IsOptional() @IsUUID() branchId?: string;
+
   @IsEnum(ClientType)
   clientType!: ClientType;
 

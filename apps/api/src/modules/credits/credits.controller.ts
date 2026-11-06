@@ -31,7 +31,7 @@ export class CreditsController {
   }
 
   @Post()
-  @Roles(Permission.CREDIT_WRITE)
+  @Roles(Permission.CREDIT_CREATE)
   create(@Body() dto: CreateCreditDto) {
     return this.credits.create(dto);
   }

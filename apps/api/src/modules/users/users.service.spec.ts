@@ -1,4 +1,5 @@
 import { describe, it } from 'node:test';
+import { fakePolicy } from '../../common/authz/testing';
 import assert from 'node:assert/strict';
 import { UsersService } from './users.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
@@ -71,6 +72,7 @@ interface Opts {
 }
 
 function makeService(opts: Opts = {}) {
+  const policy = fakePolicy();
   const calls = {
     listArgs: undefined as Record<string, unknown> | undefined,
     updated: undefined as Record<string, unknown> | undefined,
@@ -238,8 +240,10 @@ function makeService(opts: Opts = {}) {
     } as never,
     // F14 · F1 (R-02): por defecto el actor ve a todos (alcance ALL); una prueba puede acotar con `visible`.
     { visibleMemberIds: async (_tx: unknown, ids: string[]) => new Set(opts.visible ?? ids) } as never,
+    undefined,
+    policy.service,
   );
-  return { service, calls };
+  return { service, calls, asked: policy.asked };
 }
 
 describe('UsersService.list — aislamiento por tenant', () => {
@@ -293,8 +297,10 @@ describe('UsersService.updateMember — agencia', () => {
   });
 
   it('F13 · quien ya está en esa oficina no genera asignación nueva', async () => {
-    const { service, calls } = makeService({ found: member({ branchId: BRANCH }), assignments: [{ id: 'as-1', branchId: BRANCH }] });
+    const { service, calls, asked } = makeService({ found: member({ branchId: BRANCH }), assignments: [{ id: 'as-1', branchId: BRANCH }] });
     await service.updateMember(OTHER, { branchId: BRANCH });
+    // F14 · F2: reenviar la oficina actual no es un movimiento jerárquico: la política `member.assignRole` no se consulta.
+    assert.equal(asked.some((a) => a.name === 'member.assignRole'), false);
     assert.deepEqual(calls.assignRevoked, []);
     assert.deepEqual(calls.assignCreated, []);
   });
@@ -528,13 +534,26 @@ describe('UsersService.remove — cancelar la invitación (S2-D5)', () => {
 });
 
 describe('UsersService.listRoles', () => {
-  it('ofrece los roles asignables (con el gerente regional), de mayor a menor nivel', async () => {
-    const { service, calls } = makeService();
-    const roles = await service.listRoles();
-    assert.deepEqual(calls.rolesWhere!.name, {
-      in: ['ACCOUNT_ADMIN', 'MANAGER', 'SUPERVISOR', 'COLLECTOR'],
-    });
-    assert.equal(roles[0]!.name, 'ACCOUNT_ADMIN');
+  const ALL_ROLES = [ROLES[ROLE_ADMIN]!, ROLES[ROLE_MANAGER]!, ROLES[ROLE_COLLECTOR]!];
+
+  it('consulta sólo los roles que la app administra, de mayor a menor nivel', async () => {
+    const { service, calls } = makeService({ roles: ALL_ROLES, found: member({ role: ROLES[ROLE_ADMIN] }) });
+    await service.listRoles();
+    assert.deepEqual(calls.rolesWhere!.name, { in: ['ACCOUNT_ADMIN', 'MANAGER', 'SUPERVISOR', 'COLLECTOR'] });
+  });
+
+  it('F14 · F2 (H-3, H-13): sólo ofrece roles de nivel ESTRICTAMENTE inferior al de quien pregunta y nunca el reservado', async () => {
+    const asManager = makeService({ roles: ALL_ROLES, found: member({ role: ROLES[ROLE_MANAGER] }) });
+    assert.deepEqual((await asManager.service.listRoles()).map((r) => r.name), ['COLLECTOR']);
+
+    // Ni siquiera el administrador se ofrece el rol reservado (ACCOUNT_ADMIN): lo otorga la plataforma.
+    const asAdmin = makeService({ roles: ALL_ROLES, found: member({ role: ROLES[ROLE_ADMIN] }) });
+    assert.deepEqual((await asAdmin.service.listRoles()).map((r) => r.name), ['MANAGER', 'COLLECTOR']);
+  });
+
+  it('quien no tiene rol en la cuenta no recibe ninguno', async () => {
+    const { service } = makeService({ roles: ALL_ROLES, found: null });
+    assert.deepEqual(await service.listRoles(), []);
   });
 });
 

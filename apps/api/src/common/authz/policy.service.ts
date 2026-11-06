@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { PrismaClient } from '@prisma/client';
 import { TenantContextService } from '../context/tenant-context.service';
 import { throwIfDenied } from './authorization.service';
 import type { Actor, Decision, PolicyDefinition } from './authz.types';
@@ -20,15 +21,18 @@ export class PolicyService {
     return POLICIES.some((p) => p.name === name);
   }
 
-  async check(name: string, input?: unknown): Promise<Decision> {
+  async check(name: string, input?: unknown, tx?: PrismaClient): Promise<Decision> {
     const def = POLICIES.find((p) => p.name === name) as unknown as PolicyDefinition<unknown, unknown> | undefined;
     if (!def) throw new Error(`Política desconocida: ${name}`);
     const actor: Actor = { userId: this.tenant.userId, accountId: this.tenant.accountId, can: (p) => this.tenant.can(p) };
-    const facts = def.loadFacts ? await def.loadFacts(this.facts, input) : undefined;
+    const facts = def.loadFacts ? await def.loadFacts(this.facts, input, tx) : undefined;
     return def.decide(actor, facts, input);
   }
 
-  async assert(name: string, input?: unknown): Promise<void> {
-    throwIfDenied(await this.check(name, input));
+  /** Lanza el error del dominio si se niega; si se permite devuelve los datos que la política resolvió (si los hay). */
+  async assert(name: string, input?: unknown, tx?: PrismaClient): Promise<Record<string, unknown> | undefined> {
+    const d = await this.check(name, input, tx);
+    throwIfDenied(d);
+    return d.allow ? d.data : undefined;
   }
 }

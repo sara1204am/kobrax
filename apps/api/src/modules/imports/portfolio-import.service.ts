@@ -622,6 +622,8 @@ export class PortfolioImportService {
               id: clientId,
               accountId,
               createdBy: this.tenant.userId ?? null,
+              // F14 · F2: la oficina de registro del cliente importado es la de su crédito (el servidor la decidió arriba).
+              registeredBranchId: officeOf.get(row.code) ?? null,
               clientType: ClientType.PERSON,
               lastName: b.clientLastName ?? 'SIN NOMBRE',
               firstName: b.clientFirstName ?? undefined,

@@ -158,6 +158,8 @@ export interface NewClientInput {
    * subió. El server lo respeta; si no viene, genera el suyo. **La web no lo manda**: no tiene cola.
    */
   id?: string;
+  /** F14 · F2: la oficina donde se registra el cliente. Opcional: sin ella la decide el servidor (única oficina de la cuenta o la de quien da de alta); nunca la central de una cuenta con varias.  */
+  branchId?: string;
   clientType: 'PERSON' | 'COMPANY';
   firstName?: string;
   lastName?: string;
@@ -372,6 +374,18 @@ export interface ClientDetail {
   relations?: ClientRelationDetail[];
   collaterals?: CollateralDetail[];
   attachments?: ClientAttachmentDetail[];
+  /**
+   * F14 · F2 (H-7): créditos de este cliente que quien mira NO ve (otro responsable u otra oficina), sólo como agregados: cuántos, cuánto
+   * suman y quiénes los llevan. Nunca el detalle. `null`/ausente = ve todos.
+   */
+  otherCredits?: OtherCreditsSummary | null;
+}
+
+/** El aviso «tiene otros créditos» de la ficha del cliente (F14 · F2). */
+export interface OtherCreditsSummary {
+  count: number;
+  totalOutstanding: number;
+  responsibles: { userId: string; name: string }[];
 }
 
 export interface CreditInstallmentDetail {

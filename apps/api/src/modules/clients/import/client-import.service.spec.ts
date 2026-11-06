@@ -1,4 +1,5 @@
 import { describe, it } from 'node:test';
+import { fakePolicy } from '../../../common/authz/testing';
 import assert from 'node:assert/strict';
 import { fakePlanLimits } from '../../../common/plan/plan-test-utils';
 import { ClientImportService } from './client-import.service';
@@ -35,7 +36,7 @@ function makeService(opts: { existing?: { id: string; nationalIdHash: string | n
   const crypto = { encrypt: (v: string) => `enc(${v})` };
   const blind = { hash: (v?: string | null) => (v ? `h(${v})` : null) };
   const audit = { record: async (e: { action: string }) => void calls.audit.push(e) };
-  const service = new ClientImportService(prisma as never, tenant as never, crypto as never, blind as never, audit as never, fakePlanLimits());
+  const service = new ClientImportService(prisma as never, tenant as never, crypto as never, blind as never, audit as never, fakePlanLimits(), fakePolicy({ 'client.create': () => ({ registeredBranchId: 'b1' }) }).service);
   return { service, calls };
 }
 
@@ -48,6 +49,8 @@ describe('ClientImportService.run', () => {
     assert.equal(r.created, 1);
     assert.equal(calls.create[0]!.nationalId, 'enc(D1)');
     assert.equal(calls.create[0]!.nationalIdHash, 'h(D1)');
+    // F14 · F2: el cliente importado queda registrado en la oficina que decide la política (sin esto sólo lo vería ALL).
+    assert.equal(calls.create[0]!.registeredBranchId, 'b1');
     assert.equal(calls.runCreate.length, 1);
     assert.deepEqual(calls.audit.map((a) => a.action), ['IMPORT']);
   });

@@ -13,7 +13,7 @@ import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
 import { postJson, sendJson } from '@/lib/client';
-import { date, fullName } from '@/lib/format';
+import { date, fullName, money } from '@/lib/format';
 import { ContactList, LocationList } from './client-contacts';
 import { CollateralsSection, GuarantorsSection } from './backing-sections';
 import { AttachmentsSection } from './attachments-section';
@@ -85,6 +85,8 @@ export function ClientCard({
   const [editando, setEditando] = useState<SectionKey | null>(null);
 
   const canWrite = can('client:write');
+  // F14 · F2 (H-12): borrar un cliente es de quien administra la cuenta, no de quien puede editarlo.
+  const canDelete = can('client:delete');
 
   async function darDeBaja() {
     setBusy(true);
@@ -189,7 +191,7 @@ export function ClientCard({
             </a>
             {/* La baja no se ofrece si hay plata en la calle: la API la rechaza igual, pero un
                 botón que siempre falla enseña a desconfiar de la pantalla. */}
-            {canWrite && !hasActiveCredits && shown.status !== 'INACTIVE' && (
+            {canDelete && !hasActiveCredits && shown.status !== 'INACTIVE' && (
               <button
                 type="button"
                 onClick={() => setConfirmBaja(true)}
@@ -201,6 +203,17 @@ export function ClientCard({
           </>
         }
       />
+
+      {/* F14 · F2 (H-7): el cliente no tiene dueño. Si tiene créditos que yo no veo, un aviso con SÓLO agregados (nunca su detalle). */}
+      {shown.otherCredits && (
+        <p role="note" className="mb-4 rounded-lg bg-k-highlight px-4 py-3 text-[13px] text-k-periwinkle">
+          {t('otherCredits.notice', {
+            count: shown.otherCredits.count,
+            total: money(shown.otherCredits.totalOutstanding, currency),
+            names: shown.otherCredits.responsibles.map((p) => p.name).join(', ') || t('otherCredits.nobody'),
+          })}
+        </p>
+      )}
 
       <SendWhatsappDialog open={writing} onClose={() => setWriting(false)} clientId={client.id} />
 
@@ -253,7 +266,7 @@ export function ClientCard({
             <Section
               title={t('sections.credits')}
               action={
-                can('credit:write') && (
+                can('credit:create') && (
                   <Link
                     href={`/cartera/${client.id}/prestamo`}
                     className="inline-flex min-h-[32px] items-center rounded-lg bg-k-highlight px-3 text-[13px] font-medium text-k-periwinkle hover:bg-k-light-bg"

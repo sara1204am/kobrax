@@ -1,4 +1,5 @@
 import { describe, it } from 'node:test';
+import { fakePolicy } from '../../common/authz/testing';
 import assert from 'node:assert/strict';
 import { Permission, RoleType } from '@kobrax/shared';
 import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
@@ -145,7 +146,7 @@ function make(opts: Opts = {}) {
     record: async (e: (typeof audited)[number]) => void audited.push(e),
     recordMany: async (es: typeof audited) => void audited.push(...es),
   };
-  const service = new AssignmentService(prisma as never, tenant as never, audit as never, new OfficeScopeService(tenant as never));
+  const service = new AssignmentService(prisma as never, tenant as never, audit as never, new OfficeScopeService(tenant as never), undefined, fakePolicy().service);
   const agendaOf = (id: string) => agenda.find((a) => a.id === id)!;
   return { service, credits, assignments, agenda, agendaOf, audited, auditLogs, tx: tx as never };
 }

@@ -7,6 +7,7 @@ import type { PortfolioRow } from '@/lib/portfolio';
 import { carteraQuery, DEFAULT_PAGE_SIZE, hasCarteraFilters } from '@/lib/cartera-query';
 import { PortfolioTable } from './portfolio-table';
 import { NewClientButton } from './new-client-button';
+import { defaultCreditOffice } from '@/lib/offices';
 
 /**
  * La cartera del negocio.
@@ -58,6 +59,9 @@ export default async function CarteraPage({
     );
   }
 
+  const rootIds = new Set(offices.rows.filter((r) => r.isRoot).map((r) => r.id));
+  const registerOffices = offices.options.filter((o) => !rootIds.has(o.id));
+
   return (
     <>
       {/* Sin título: la pantalla ya se llama «Cartera» en el menú de la izquierda, y repetirlo en
@@ -78,6 +82,9 @@ export default async function CarteraPage({
             collectionModalities={collectionModalities.body.data ?? []}
             incomeSources={incomeSources.body.data ?? []}
             occupations={occupations.body.data ?? []}
+            // F14 · F2: el cliente se registra en una oficina que NO es la central. Se ofrece sólo lo elegible.
+            offices={registerOffices}
+            defaultOfficeId={defaultCreditOffice(registerOffices, (team.body.data ?? []).find((m) => m.userId === me.body.data?.userId)?.branchId)}
           />
         }
         // F13: el selector de oficina (árbol, con ruta completa). Sólo existe si la cuenta tiene más de una.

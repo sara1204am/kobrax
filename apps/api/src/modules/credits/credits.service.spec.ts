@@ -1,4 +1,5 @@
 import { describe, it } from 'node:test';
+import { fakePolicy } from '../../common/authz/testing';
 import assert from 'node:assert/strict';
 import { fakePlanLimits } from '../../common/plan/plan-test-utils';
 import { CreditsService } from './credits.service';
@@ -115,13 +116,14 @@ function makeService(
   const prisma = {
     withTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
   };
-  const permissions = opts.permissions ?? [];
+  // F14 · F2: crear un crédito exige `credit:create`; estas pruebas hablan de otra cosa, así que todas lo tienen.
+  const permissions = ['credit:create', ...(opts.permissions ?? [])];
   const tenant = { accountId: 'acc-A', userId: 'user-1', get: () => ({ ip: '1.1.1.1' }), can: (p: string) => permissions.includes(p) };
   const audit = {
     record: async (e: { action: string; entity: string }) => void calls.audit.push(e),
     recordMany: async (es: { action: string; entity: string }[]) => void calls.audit.push(...es),
   };
-  const assignment = new AssignmentService({} as never, tenant as never, audit as never, new OfficeScopeService(tenant as never));
+  const assignment = new AssignmentService({} as never, tenant as never, audit as never, new OfficeScopeService(tenant as never), undefined, fakePolicy().service);
   // F4/08: la prioridad del episodio se recalcula con `ArrearsPriorityService`; acá sólo se registra la llamada.
   const arrearsPriority = { recomputeForCredit: async (_tx: unknown, creditId: string) => void calls.priorityRecompute.push(creditId) };
   // F13: la oficina la decide el servidor. El doble registra qué le pidieron y devuelve lo explícito o la raíz.

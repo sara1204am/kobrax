@@ -18,7 +18,9 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { nameTerms } from '../../common/name-search';
 import { nameKey } from '../../common/name-key';
-import { moraScopeOf, seesWholeAccount, visibleClientIdsSql } from '../mora/mora-query';
+import { moraScopeOf, seesWholeAccount, visibleClientIdsSql, visibleCredits } from '../mora/mora-query';
+import { loadNames } from '../mora/mora-names';
+import { summarizeOtherCredits, type OtherCredits } from './other-credits';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { BlindIndexService } from '../../common/crypto/blind-index.service';
@@ -53,6 +55,7 @@ import {
   resourceNotFound,
 } from './clients.errors';
 import { AuthorizationService } from '../../common/authz/authorization.service';
+import { PolicyService } from '../../common/authz/policy.service';
 
 /** PII del cliente que se redacta en los snapshots de auditoría. */
 const CLIENT_REDACT = ['nationalId', 'taxId', 'value', 'address', 'phone'];
@@ -126,6 +129,8 @@ export class ClientsService {
     private readonly audit: AuditService,
     private readonly plan: PlanLimitsService,
     private readonly authz: AuthorizationService = new AuthorizationService(tenant),
+    /** F14 · F2: políticas con hechos de la DB (`client.create`). Lo inyecta Nest; los specs que no pasan por el alta no lo necesitan. */
+    private readonly policies: PolicyService,
   ) {}
 
   /** Ejecuta `fn` en el contexto RLS del tenant actual (del TenantContextService). */
@@ -174,6 +179,10 @@ export class ClientsService {
         const previo = await tx.client.findFirst({ where: { id: dto.id, deletedAt: null } });
         if (previo) return { created: previo, subs: [], yaExistia: true };
       }
+      // F14 · F2 (H-7): la oficina de registro la decide el servidor con la política `client.create` (cuenta de una oficina → esa; si no,
+      // la pedida dentro del alcance o la del actor; nunca la raíz de una cuenta con varias). Antes del chequeo de duplicados.
+      const registration = await this.policies.assert('client.create', { branchId: dto.branchId }, tx);
+      const registeredBranchId = (registration?.registeredBranchId as string | undefined) ?? null;
       if (nationalIdHash) {
         const dup = await tx.client.findFirst({ where: { nationalIdHash } });
         if (dup) throw clientDuplicate();
@@ -195,6 +204,7 @@ export class ClientsService {
             accountId: this.tenant.accountId,
             // F14 · F1: trazabilidad (NO es dueño: la responsabilidad vive en el crédito, H-7). Hace visible al cliente a su creador.
             createdBy: this.tenant.userId ?? null,
+            registeredBranchId,
             clientType: dto.clientType,
             firstName: dto.firstName,
             lastName: dto.lastName,
@@ -581,7 +591,7 @@ export class ClientsService {
     }
   }
 
-  async findOne(id: string, reveal: boolean): Promise<ReturnType<typeof serializeClient> & { linkSuggestions?: { id: string; displayName: string; creditCount: number }[] }> {
+  async findOne(id: string, reveal: boolean, withOtherCredits = false): Promise<ReturnType<typeof serializeClient> & { linkSuggestions?: { id: string; displayName: string; creditCount: number }[] }> {
     const client = await this.tx(async (tx) => {
       await this.assertClientVisible(tx, id);
       return tx.client.findFirst({
@@ -604,7 +614,9 @@ export class ClientsService {
       // Acceso a PII en claro → queda auditado (data_access_log detallado llega en F12).
       await this.audit.record({ entity: 'client', entityId: id, action: 'PII_REVEAL' });
     }
-    const serialized = serializeClient(client, { crypto: this.crypto, reveal });
+    // F14 · F2 (H-7): si hay créditos del cliente que quien mira no ve, un aviso con SÓLO agregados.
+    // Sólo lo pide la ficha (GET /clients/:id): el PDF y los demás llamadores internos no pagan esas consultas.
+    const serialized = { ...serializeClient(client, { crypto: this.crypto, reveal }), ...(withOtherCredits ? { otherCredits: await this.otherCredits(id) } : {}) };
     if (!client.linkReviewPending) return serialized;
 
     // Las sugerencias con su nombre: la pantalla de revisión no puede mostrar uuids.
@@ -623,6 +635,30 @@ export class ClientsService {
       ...serialized,
       linkSuggestions: suggested.map((c) => ({ id: c.id, displayName: clientDisplayName(c) ?? '—', creditCount: c.creditCount })),
     };
+  }
+
+  /**
+   * Los créditos del cliente que el actor NO ve (otro responsable, otra oficina), resumidos: cantidad, saldo y responsables. Quien ve toda la
+   * cuenta no paga la consulta. Nunca devuelve el detalle del crédito ajeno (esos endpoints siguen dando 404).
+   */
+  private async otherCredits(clientId: string): Promise<OtherCredits | null> {
+    const scope = this.visibleScope();
+    if (!scope) return null;
+    return this.tx(async (tx) => {
+      const visible = new Set((await visibleCredits(tx, scope, { clientId })).map((c) => c.id));
+      const all = await tx.credit.findMany({ where: { clientId, deletedAt: null }, select: { id: true, outstandingBalance: true, assignedManagerId: true } });
+      const hidden = all.filter((c) => !visible.has(c.id));
+      if (hidden.length === 0) return null;
+      const now = new Date();
+      const assigned = await tx.creditAssignment.findMany({
+        where: { creditId: { in: hidden.map((c) => c.id) }, revokedAt: null, startsAt: { lte: now }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+        select: { creditId: true, userId: true },
+      });
+      const people = (id: string, manager: string | null): string[] => [...new Set([...(manager ? [manager] : []), ...assigned.filter((a) => a.creditId === id).map((a) => a.userId)])];
+      const rows = hidden.map((c) => ({ outstandingBalance: Number(c.outstandingBalance), responsibleIds: people(c.id, c.assignedManagerId) }));
+      const names = await loadNames(tx, this.tenant.accountId, rows.flatMap((r) => r.responsibleIds));
+      return summarizeOtherCredits(rows, names);
+    });
   }
 
   /** Lo que pide el PDF del legajo: el cliente completo (ya audita su propio revelado) + créditos y créditos en mora. */
