@@ -4,7 +4,7 @@
 -- qué filas ve cada persona DENTRO de su empresa. Un cobrador debe ver su cartera asignada,
 -- no la de la agencia entera.
 --
--- ⚠️ **F1 sólo define los helpers. Las policies llegan en F2.**
+-- ⚠️ **Este script sólo define los helpers. Las policies de alcance están en `006_scope_policies.sql` (F14 · F2b).**
 -- Es deliberado: `PrismaService.runScoped()` ya setea las tres variables, así que este script
 -- se puede aplicar hoy sin cambiar el comportamiento de nada. Cuando F2 agregue los `USING`,
 -- la fontanería ya va a estar corriendo y probada en producción.
@@ -20,14 +20,16 @@ CREATE FUNCTION app_current_user() RETURNS text AS $$
 $$ LANGUAGE sql STABLE;
 
 /*
- * Con qué alcance corre la transacción. Son EXACTAMENTE tres valores, los fija `PrismaService`:
+ * Con qué alcance corre la transacción. Son EXACTAMENTE cinco valores (F14 · F2b), los fija `PrismaService`:
  *
  *   'account' → toda la cartera del tenant. Admin y supervisión. No depende del canal.
+ *   'subtree' → el subárbol de las oficinas de la persona (gerente regional); asignada a la raíz, todo.
+ *   'branch'  → lo suyo más lo de su(s) oficina(s) (supervisor).
  *   'own'     → sólo la ASIGNACIÓN EFECTIVA de `app_current_user()` (permanente + temporales
  *               vigentes). Hoy: el cobrador, en web y en móvil por igual.
  *   'system'  → trabajos de sistema y flujos pre-sesión. Se pide con `withSystemTenant()`.
  *
- * No hay un cuarto valor. La ausencia de scope se representa con la variable vacía → NULL acá,
+ * No hay un sexto valor. La ausencia de scope se representa con la variable vacía → NULL acá,
  * y NULL nunca es igual a nada: una policy escrita contra esta función **niega por omisión**.
  * Una conexión que no pasó por `withTenant` no debe entregar filas — no debe entregarlas todas.
  * Por eso NO se pone un DEFAULT 'account', por conveniente que parezca al depurar.

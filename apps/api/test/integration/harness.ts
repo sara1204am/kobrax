@@ -96,6 +96,18 @@ function psql(sql: string): void {
 /** Cliente superusuario de la base de prueba: para preparar datos y mirar lo que quedó. */
 export const db = () => new PrismaClient({ datasources: { db: { url: SUPER_URL } } });
 
+/**
+ * Cliente con el rol de la API (`kobrax_app`, NOBYPASSRLS) sobre la base de prueba: para consultar CRUDO, sin pasar por ningún helper
+ * de la app, y ver lo que la base niega por sí sola (F14 · F2b).
+ */
+export const appDb = () => new PrismaClient({ datasources: { db: { url: APP_URL } } });
+
+/** Lo que el servidor de Postgres de la prueba escribió en su log desde `since` (ISO): para ver los `RAISE LOG` del modo `log`. */
+export function postgresLogSince(since: string): string {
+  const r = spawnSync('docker', ['logs', '--since', since, CONTAINER], { encoding: 'utf8' });
+  return `${r.stdout}\n${r.stderr}`;
+}
+
 /** Un usuario más en la cuenta de la demo, con el rol pedido. */
 export async function addMember(prisma: PrismaClient, accountId: string, email: string, firstName: string, roleName: string): Promise<string> {
   const role = await prisma.role.findUniqueOrThrow({ where: { name: roleName } });
