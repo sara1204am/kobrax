@@ -75,6 +75,33 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   async onModuleInit(): Promise<void> {
     await this.$connect();
     this.logger.log('Prisma conectado como kobrax_app (RLS activa)');
+    await this.assertScopeBarrierInstalled();
+  }
+
+  /**
+   * F14·F2b — con `SCOPE_RLS_MODE` en `log` o `enforce` la segunda barrera TIENE que existir en la base. Si las policies no están
+   * (falta aplicar `pnpm db:rls`), la API correría "protegida" sin estarlo: falla abierto sin que nada lo avise. Mejor no arrancar.
+   * Con `off` no se pregunta nada (la base puede estar sin las policies).
+   */
+  private async assertScopeBarrierInstalled(): Promise<void> {
+    if (this.scopeMode === 'off') return;
+    const rows = await this.$queryRaw<{ policies: bigint; member: boolean; inherits: boolean; gaps: bigint }[]>`
+      SELECT (SELECT count(*) FROM pg_policies WHERE policyname LIKE 'scope\_%' AND permissive = 'RESTRICTIVE' AND roles = '{kobrax_scoped}') AS policies,
+             COALESCE((SELECT pg_has_role('kobrax_app', 'kobrax_scoped', 'MEMBER') FROM pg_roles WHERE rolname = 'kobrax_scoped'), false) AS member,
+             COALESCE((SELECT pg_has_role('kobrax_app', 'kobrax_scoped', 'USAGE') FROM pg_roles WHERE rolname = 'kobrax_scoped'), false) AS inherits,
+             (SELECT count(*) FROM information_schema.role_table_grants g
+               WHERE g.grantee = 'kobrax_app' AND g.table_schema = 'public'
+                 AND NOT has_table_privilege('kobrax_scoped', format('%I.%I', g.table_schema, g.table_name), g.privilege_type)) AS gaps`;
+    const { policies, member, inherits, gaps } = rows[0] ?? { policies: 0n, member: false, inherits: false, gaps: 0n };
+    const problems: string[] = [];
+    if (Number(policies) < 5) problems.push(`hay ${Number(policies)} de 5 policies de alcance para kobrax_scoped`);
+    if (!member) problems.push('kobrax_app no puede cambiar al rol kobrax_scoped (¿falta el rol o el GRANT?)');
+    if (inherits) problems.push('kobrax_app hereda kobrax_scoped, así que las policies de alcance le aplicarían a TODOS (falta ALTER ROLE kobrax_app NOINHERIT)');
+    if (Number(gaps) > 0) problems.push(`a kobrax_scoped le faltan ${Number(gaps)} permisos de tabla que sí tiene kobrax_app (el usuario con alcance restringido recibiría "permission denied")`);
+    if (problems.length > 0) {
+      throw new Error(`SCOPE_RLS_MODE=${this.scopeMode} pero la barrera no está bien instalada: ${problems.join('; ')}. Aplicá "pnpm db:rls" (rls/006_scope_policies.sql) o poné SCOPE_RLS_MODE=off.`);
+    }
+    this.logger.log(`Barrera RLS de alcance: modo ${this.scopeMode} (5 policies, rol kobrax_scoped y permisos al día)`);
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -173,6 +200,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
                                   set_config('app.current_user_id', ${userId}, true),
                                   set_config('app.scope', ${scope}, true),
                                   set_config('app.scope_mode', ${this.scopeMode}, true)`;
+        /*
+         * F14·F2b — las policies de alcance sólo existen para el rol `kobrax_scoped`. Quien tiene alcance de TODA la cuenta (o el sistema)
+         * sigue como `kobrax_app`, sin policy alguna: así su costo es cero (con la policy, aunque no filtrara nada, el planificador perdía
+         * los index-only scans de los conteos: ×1,3 a ×3 en los listados del administrador). El alcance vacío (sin contexto) SÍ cambia de
+         * rol: es fail-closed. Con el modo `off` nadie cambia de rol: la barrera está apagada y no cuesta nada.
+         */
+        if (this.scopeMode !== 'off' && scope !== DataScope.ACCOUNT && scope !== DataScope.SYSTEM) {
+          await tx.$executeRaw`SET LOCAL ROLE kobrax_scoped`;
+        }
         return fn(tx as unknown as PrismaClient);
       },
       timeout ? { timeout, maxWait: timeout } : undefined,

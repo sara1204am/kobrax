@@ -37,4 +37,7 @@
 (Texto previo:) **F2 · Plan en borrador** (rama `f14/p2-responsabilidad-alcance`, commit `18c4f44`), D-1…D-6 aprobadas; la barrera RLS pasó a F2b. Sin código. F3 cerrada.  
 (Lo siguiente es el texto previo de F3, ya cerrada:) **F3 · Arquitectura central de autorización** (rama `f14/p3-authz-core`). Plan `plans/F3-authz-core.md` (G4 PASS). **Construida y CERRADA 2026-11-05** (G4–G7 PASS). Orden aprobado F1 → F3 → F2 (F2 depende de F3). F1 cerrada 2026-11-05.
 
-| G5 Verificación de F2b | **PENDIENTE (D-4 FAIL)** 2026-11-06 | V-031…V-033 PASS (barrera instalada y probada: 14/14 crudas + toda la integración existente en `enforce` + `verify_scope.sql`). **V-034 FAIL:** el presupuesto +20 % de D-4 no se cumple en 6 de 14 consultas con filtro (peor: conteo del subárbol ×5,1 p95). Por D-4, `enforce` no se activa; modo por defecto `off`. Decisión de la usuaria pendiente (ver HANDOFF). G6/G7 sin abrir. |
+| G5 Verificación de F2b | **PASS 2026-11-06** | V-031…V-037. Barrera instalada y probada (integración 250/250 en `off` y en `enforce`; suite de la barrera 21/21; `verify_scope.sql` 6/6; unitarias 1986/1986; web 1252/1252). **D-4 (V-035) contra la línea base real —policies NO instaladas—:** escenario realista (180 000 créditos, ≈150 cobradores) **dentro del presupuesto** (HTTP ×0,34–0,94, un solo ruido ×1,29; SQL +0…+7 ms); `off` sin costo. **Peor caso (un cobrador con la tercera parte de la cartera): ×1,5–1,7** en sus dos listados principales — documentado. Por la decisión de la usuaria (2026-11-06) `SCOPE_RLS_MODE=off` sigue por defecto; `enforce` NO se activa hasta nueva orden. |
+
+| G6 `/code-review` de F2b | **PENDIENTE** | Se pide tras el commit de G5. |
+| G7 Cierre de F2b | **PENDIENTE** | Falta G6. F4 no se abre sin la orden de la usuaria. |

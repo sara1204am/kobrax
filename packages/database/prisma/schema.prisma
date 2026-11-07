@@ -718,6 +718,10 @@ model Client {
   /// Cliente creado por la importación con coincidencias sin confirmar (D2 · opción B): hay que
   /// revisar si es una persona que ya existía. «Vincular a otro cliente» lo resuelve.
   linkReviewPending       Boolean      @default(false) @map("link_review_pending")
+  /// F14·F2b — responsables y oficinas de sus créditos VIVOS, para la barrera RLS de alcance (`rls/006`). 🔴 No los escribas desde el
+  /// código: los mantiene el mismo trigger de los totales (`portfolio_totals_recalc`).
+  scopeManagerIds         String[]     @default([]) @map("scope_manager_ids")
+  scopeBranchIds          String[]     @default([]) @map("scope_branch_ids")
   createdAt               DateTime     @default(now()) @map("created_at")
   updatedAt               DateTime     @updatedAt @map("updated_at")
   /// F14 · F1: quién dio de alta al cliente (trazabilidad; NO es «dueño», la responsabilidad vive en el crédito — H-7).
@@ -1632,6 +1636,9 @@ model Payment {
   accountId             String         @map("account_id")
   creditId              String         @map("credit_id")
   branchId              String?        @map("branch_id")
+  /// F14·F2b — oficina y responsable DEL CRÉDITO (no del pago), copiados por trigger para la barrera RLS. 🔴 No los escribas desde el código.
+  creditBranchId        String?        @map("credit_branch_id")
+  creditManagerId       String?        @map("credit_manager_id")
   installmentId         String?        @map("installment_id") // credit_installments.id (ref suave)
   amount                Decimal        @db.Decimal(14, 2)
   method                PaymentMethod
@@ -1886,6 +1893,9 @@ model AgendaItem {
   clientId           String           @map("client_id") // ref suave
   creditId           String           @map("credit_id") // ref suave (cliente puede tener varios)
   assigneeId         String           @map("assignee_id") // cobrador (users.id, ref suave)
+  /// F14·F2b — oficina y responsable DEL CRÉDITO, copiados por trigger para la barrera RLS. 🔴 No los escribas desde el código.
+  creditBranchId     String?          @map("credit_branch_id")
+  creditManagerId    String?          @map("credit_manager_id")
   type               AgendaItemType
   status             AgendaItemStatus @default(SCHEDULED)
   priorityCode       String?          @map("priority_code") // → catalog_items.code (PRIORITY)

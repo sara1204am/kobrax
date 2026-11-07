@@ -18,7 +18,7 @@ import type { AppConfigService } from '../config/app-config.service';
 const ACCOUNT = 'acc-1';
 const USER = 'user-sara';
 
-function harness(scopeRlsMode: 'off' | 'log' | 'enforce' = 'off'): { prisma: PrismaService; tc: TenantContextService; calls: Captured[] } {
+function harness(scopeRlsMode: 'off' | 'log' | 'enforce' = 'off'): { prisma: PrismaService; tc: TenantContextService; calls: Captured[]; roles: string[] } {
   const tc = new TenantContextService();
   const config = {
     appDatabaseUrl: 'postgresql://u:p@localhost:5432/db',
@@ -28,6 +28,8 @@ function harness(scopeRlsMode: 'off' | 'log' | 'enforce' = 'off'): { prisma: Pri
 
   const prisma = new PrismaService(config, tc);
   const calls: Captured[] = [];
+  /** Cada `SET LOCAL ROLE …` que se emitió (F2b: las policies de alcance son del rol `kobrax_scoped`). */
+  const roles: string[] = [];
 
   // Reemplaza la transacción real por una que corre `fn` con un `tx` de mentira.
   mock.method(prisma, '$transaction', async (fn: (tx: unknown) => Promise<unknown>) =>
@@ -36,10 +38,14 @@ function harness(scopeRlsMode: 'off' | 'log' | 'enforce' = 'off'): { prisma: Pri
         calls.push({ sql: strings.join('?'), values });
         return Promise.resolve([]);
       },
+      $executeRaw: (strings: TemplateStringsArray) => {
+        roles.push(strings.join('?'));
+        return Promise.resolve(0);
+      },
     }),
   );
 
-  return { prisma, tc, calls };
+  return { prisma, tc, calls, roles };
 }
 
 interface Captured {
@@ -79,6 +85,36 @@ describe('PrismaService · alcance de cuatro valores (F14 · F2b)', () => {
       assert.equal(contextOf(calls)[3], mode);
       assert.ok(calls[0]!.sql.includes('app.scope_mode'));
     }
+  });
+});
+
+describe('PrismaService · el rol de la barrera (F14 · F2b)', () => {
+  const rolesFor = async (mode: 'off' | 'log' | 'enforce', permissions: string[], system = false) => {
+    const { prisma, tc, roles } = harness(mode);
+    if (system) await prisma.withSystemTenant(ACCOUNT, async () => null);
+    else await tc.run({ accountId: ACCOUNT, userId: USER, permissions }, () => prisma.withTenant(ACCOUNT, async () => null));
+    return roles;
+  };
+
+  it('🔴 con alcance restringido y barrera encendida cambia a kobrax_scoped (log y enforce)', async () => {
+    for (const mode of ['log', 'enforce'] as const) {
+      for (const perms of [[], [Permission.DATA_SCOPE_BRANCH], [Permission.DATA_SCOPE_SUBTREE]]) {
+        assert.deepEqual(await rolesFor(mode, perms), ['SET LOCAL ROLE kobrax_scoped'], `${mode} / ${perms.join()}`);
+      }
+    }
+  });
+
+  it('🔴 sin contexto de request (alcance vacío) también cambia de rol: fail-closed', async () => {
+    const { prisma, roles } = harness('enforce');
+    await prisma.withTenant(ACCOUNT, async () => null);
+    assert.deepEqual(roles, ['SET LOCAL ROLE kobrax_scoped']);
+  });
+
+  it('alcance de toda la cuenta, trabajos de sistema y modo `off` NO cambian de rol (costo cero)', async () => {
+    assert.deepEqual(await rolesFor('enforce', [Permission.DATA_SCOPE_ALL]), []);
+    assert.deepEqual(await rolesFor('enforce', [], true), []);
+    assert.deepEqual(await rolesFor('off', []), []);
+    assert.deepEqual(await rolesFor('off', [Permission.DATA_SCOPE_BRANCH]), []);
   });
 });
 

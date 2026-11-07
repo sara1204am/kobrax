@@ -792,7 +792,7 @@ describe('CreditsService.markArrears', () => {
   });
 
   it('guarda la FECHA desde la que corre, no los días', async () => {
-    const { service, calls } = makeService({ credit: activo() });
+    const { service, calls } = makeService({ credit: activo(), permissions: ['data:scope:all'] });
     await service.markArrears('cr1', 15);
     const meta = calls.creditUpdate[0]!.metadata as { moraSince?: string };
     assert.ok(meta.moraSince, 'se guarda `moraSince`');
@@ -804,25 +804,25 @@ describe('CreditsService.markArrears', () => {
    * servicio sólo calcula su prioridad en el acto (el crédito aparece en Mora ya, ordenado, sin esperar al job).
    */
   it('no abre caso: recalcula la prioridad del episodio ahí mismo', async () => {
-    const { service, calls } = makeService({ credit: activo() });
+    const { service, calls } = makeService({ credit: activo(), permissions: ['data:scope:all'] });
     await service.markArrears('cr1', 15);
     assert.deepEqual(calls.priorityRecompute, ['cr1']);
   });
 
   it('la auditoría ya no habla de casos', async () => {
-    const { service, calls } = makeService({ credit: activo() });
+    const { service, calls } = makeService({ credit: activo(), permissions: ['data:scope:all'] });
     await service.markArrears('cr1', 15);
     assert.ok(calls.audit.some((e) => e.action === 'ARREARS_MARK' && e.entity === 'credit'));
   });
 
   /** Su mora la manda el archivo: la marca se guardaría y no haría nada. Mejor rebotar que mentir. */
   it('el importado no se puede marcar a mano', async () => {
-    const { service } = makeService({ credit: activo({ metadata: { origin: 'import' } }) });
+    const { service } = makeService({ credit: activo({ metadata: { origin: 'import' } }), permissions: ['data:scope:all'] });
     await rejectsWithCode(service.markArrears('cr1'), 'CREDIT_LOCKED');
   });
 
   it('un crédito que ya no está activo tampoco', async () => {
-    const { service } = makeService({ credit: activo({ status: 'PAID' }) });
+    const { service } = makeService({ credit: activo({ status: 'PAID' }), permissions: ['data:scope:all'] });
     await rejectsWithCode(service.markArrears('cr1'), 'CREDIT_NOT_ACTIVE');
   });
 });
@@ -843,7 +843,7 @@ describe('CreditsService.clearArrears', () => {
   });
 
   it('«siguiente período» avanza la fecha y (el trigger cierra el episodio)', async () => {
-    const { service, calls } = makeService({ credit: enMora() });
+    const { service, calls } = makeService({ credit: enMora(), permissions: ['data:scope:all'] });
     await service.clearArrears('cr1', { mode: 'next_period' });
     const meta = calls.creditUpdate[0]!.metadata as { nextDueDate?: string };
     assert.ok(meta.nextDueDate! > new Date().toISOString().slice(0, 10), 'la nueva fecha es futura');
@@ -852,7 +852,7 @@ describe('CreditsService.clearArrears', () => {
   });
 
   it('«sin fecha» deja el préstamo abierto: sin vencimiento no hay mora que contar', async () => {
-    const { service, calls } = makeService({ credit: enMora() });
+    const { service, calls } = makeService({ credit: enMora(), permissions: ['data:scope:all'] });
     await service.clearArrears('cr1', { mode: 'none' });
     const meta = calls.creditUpdate[0]!.metadata as { nextDueDate?: string };
     assert.equal(meta.nextDueDate, undefined);
@@ -860,13 +860,13 @@ describe('CreditsService.clearArrears', () => {
   });
 
   it('una fecha pasada se rechaza: dejaría el crédito en mora igual', async () => {
-    const { service } = makeService({ credit: enMora() });
+    const { service } = makeService({ credit: enMora(), permissions: ['data:scope:all'] });
     await rejectsWithCode(service.clearArrears('cr1', { mode: 'date', date: '2020-01-01' }), 'ARREARS_DATE_PAST');
   });
 
   it('poner al día también saca la marca manual: quien la puso es quien la saca', async () => {
     const credit = enMora({ metadata: { origin: 'manual', frequency: 'MONTHLY', moraSince: '2026-01-01' } });
-    const { service, calls } = makeService({ credit });
+    const { service, calls } = makeService({ credit, permissions: ['data:scope:all'] });
     await service.clearArrears('cr1', { mode: 'next_period' });
     const meta = calls.creditUpdate[0]!.metadata as { moraSince?: string };
     assert.equal(meta.moraSince, undefined);

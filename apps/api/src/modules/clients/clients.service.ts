@@ -415,22 +415,32 @@ export class ClientsService {
     }
 
     const scope = this.visibleScope();
-    const [rows, total] = await this.tx(async (tx) => {
-      if (scope) {
-        /*
-         * D-7: Prisma no admite SQL crudo en un `where`, así que para quien no ve toda la cuenta se resuelven los ids
-         * visibles (`visibleClientIdsSql`) y se acotan con `id IN`. Es el camino simple del listado (sin orden por
-         * agregados); el volumen grande pasa por `view=portfolio`, que usa la subconsulta directa sin traer ids a memoria.
-         * Quien ve toda la cuenta (ALL) no entra acá: misma consulta de siempre.
-         */
-        const visible = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT v.id FROM (${visibleClientIdsSql(scope)}) v(id)`);
-        where.id = { in: visible.map((r) => r.id) };
-      }
-      return Promise.all([
+    if (scope) {
+      /*
+       * D-7: Prisma no admite SQL crudo en un `where`. Antes se traían TODOS los ids visibles y se acotaba con `id IN (…)`: con más
+       * de 32 767 clientes visibles el `IN` revienta el tope de parámetros de Postgres (500). Ahora la página y el total salen de
+       * SQL con la subconsulta de visibilidad —nunca una lista de ids en memoria— y sólo los ≤ `limit` ids de la página vuelven
+       * a Prisma. Los filtros (estado, riesgo, búsqueda) son los mismos de `view=portfolio` (`portfolioWhere`).
+       */
+      const whereScoped = Prisma.sql`${this.portfolioWhere(query)} AND c.id IN (${visibleClientIdsSql(scope)})`;
+      const [ids, counted] = await this.tx((tx) =>
+        Promise.all([
+          tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT c.id FROM clients c WHERE ${whereScoped} ORDER BY c.created_at DESC, c.id LIMIT ${limit} OFFSET ${skip}`),
+          tx.$queryRaw<{ total: number }[]>(Prisma.sql`SELECT COUNT(*)::int AS total FROM clients c WHERE ${whereScoped}`),
+        ]),
+      );
+      const found = await this.tx((tx) => tx.client.findMany({ where: { id: { in: ids.map((r) => r.id) } } }));
+      const byId = new Map(found.map((c) => [c.id, c]));
+      const ordered = ids.flatMap((r) => (byId.has(r.id) ? [byId.get(r.id)!] : [])); // el orden es el de la consulta, no el del IN
+      const data = ordered.map((c) => serializeClient(c, { crypto: this.crypto, reveal: false }));
+      return ResponseDto.paginated(data, counted[0]?.total ?? 0, page, limit);
+    }
+    const [rows, total] = await this.tx((tx) =>
+      Promise.all([
         tx.client.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
         tx.client.count({ where }),
-      ]);
-    });
+      ]),
+    );
 
     const data = rows.map((c) => serializeClient(c, { crypto: this.crypto, reveal: false }));
     return ResponseDto.paginated(data, total, page, limit);

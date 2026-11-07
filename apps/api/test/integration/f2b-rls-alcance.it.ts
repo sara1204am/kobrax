@@ -95,6 +95,9 @@ async function asScope<T>(accountId: string, userId: string, scope: string, mode
   return app.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT set_config('app.current_account_id', ${accountId}, true), set_config('app.current_user_id', ${userId}, true),
                               set_config('app.scope', ${scope}, true), set_config('app.scope_mode', ${mode}, true)`;
+    // Igual que `PrismaService.runScoped`: las policies de alcance son del rol `kobrax_scoped`, al que sólo cambia quien tiene alcance
+    // restringido (o vacío) y la barrera no está apagada. `account` / `system` / `off` siguen como `kobrax_app`, sin policy.
+    if (mode !== 'off' && scope !== 'account' && scope !== 'system') await tx.$executeRaw`SET LOCAL ROLE kobrax_scoped`;
     return fn(tx as unknown as PrismaClient);
   });
 }
@@ -318,5 +321,124 @@ describe('F2b · la API con SCOPE_RLS_MODE=enforce no cambia lo legítimo', () =
     const r = await call<{ id: string }>(tok.colMV!, 'POST', '/credits', { clientId: seed.MV!.clientId, principalAmount: 500, installmentsCount: 5 });
     assert.ok(r.status >= 400, `el tope de la cuenta debe frenar el alta (status ${r.status})`);
     await prisma.account.update({ where: { id: banco.accountId }, data: { limitsOverride: { branches: 30, users: 60, credits: 500, clients: 500 } } });
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
+describe('F2b · las copias de oficina y responsable del crédito (triggers) y lo que la barrera hace con ellas', () => {
+  interface Copy {
+    credit_branch_id: string | null;
+    credit_manager_id: string | null;
+  }
+  const payCopy = async (id: string): Promise<Copy> => (await prisma.$queryRaw<Copy[]>`SELECT credit_branch_id, credit_manager_id FROM payments WHERE id = ${id}`)[0]!;
+  const agendaCopy = async (id: string): Promise<Copy> => (await prisma.$queryRaw<Copy[]>`SELECT credit_branch_id, credit_manager_id FROM agenda_items WHERE id = ${id}`)[0]!;
+  const clientCopy = async (id: string) =>
+    (await prisma.$queryRaw<{ m: string[]; b: string[]; n: number }[]>`SELECT scope_manager_ids m, scope_branch_ids b, credit_count n FROM clients WHERE id = ${id}`)[0]!;
+
+  it('al nacer, el pago y la agenda copian la oficina y el responsable de su crédito (aunque el INSERT traiga otra cosa)', async () => {
+    assert.deepEqual(await payCopy(paymentOf.MV!), { credit_branch_id: off.MV!.id, credit_manager_id: uid.colMV! });
+    assert.deepEqual(await agendaCopy(agendaOf.MV!), { credit_branch_id: off.MV!.id, credit_manager_id: uid.colMV! });
+    const p = await prisma.payment.create({
+      data: { accountId: banco.accountId, creditId: seed.MV!.creditId, branchId: off.PAD!.id, amount: 5, method: 'CASH', registeredBy: uid.colMV!, creditBranchId: 'trucho', creditManagerId: 'trucho' },
+    });
+    assert.deepEqual(await payCopy(p.id), { credit_branch_id: off.MV!.id, credit_manager_id: uid.colMV! }, 'el trigger pisa lo que traiga el INSERT: la copia no se puede falsear');
+    await prisma.payment.delete({ where: { id: p.id } });
+  });
+
+  it('🔴 al reasignar el crédito (oficina y responsable), se mueven sus pagos, su agenda y el cliente, y la barrera lo refleja', async () => {
+    assert.deepEqual(await clientCopy(seed.MV!.clientId), { m: [uid.colMV!], b: [off.MV!.id], n: 1 });
+    await prisma.credit.update({ where: { id: seed.MV!.creditId }, data: { branchId: off.PAD!.id, assignedManagerId: uid.colPAD! } });
+    try {
+      assert.deepEqual(await payCopy(paymentOf.MV!), { credit_branch_id: off.PAD!.id, credit_manager_id: uid.colPAD! });
+      assert.deepEqual(await agendaCopy(agendaOf.MV!), { credit_branch_id: off.PAD!.id, credit_manager_id: uid.colPAD! });
+      assert.deepEqual(await clientCopy(seed.MV!.clientId), { m: [uid.colPAD!], b: [off.PAD!.id], n: 1 });
+      // La barrera (enforce, cruda): colPAD (own) ahora ve ese pago y ese cliente; colMV (own) ya no.
+      const pad = await seen('colPAD', 'own', 'enforce');
+      const mv = await seen('colMV', 'own', 'enforce');
+      assert.ok(pad.payments.includes(paymentOf.MV!) && pad.clients.includes(seed.MV!.clientId) && pad.agenda.includes(agendaOf.MV!));
+      assert.ok(!mv.payments.includes(paymentOf.MV!) && !mv.clients.includes(seed.MV!.clientId));
+      assert.ok(mv.agenda.includes(agendaOf.MV!), 'la tarea sigue ASIGNADA a colMV: se ve por eso, no por el crédito (igual que la API)');
+      // El supervisor de Mesa Verde (branch) pierde el crédito, su pago y su agenda; sigue viendo al cliente por su oficina de registro.
+      const sup = await seen('supMV', 'branch', 'enforce');
+      assert.ok(!sup.credits.includes(seed.MV!.creditId) && !sup.payments.includes(paymentOf.MV!) && !sup.agenda.includes(agendaOf.MV!));
+      assert.ok(sup.clients.includes(seed.MV!.clientId), 'el cliente sigue registrado en Mesa Verde');
+    } finally {
+      await prisma.credit.update({ where: { id: seed.MV!.creditId }, data: { branchId: off.MV!.id, assignedManagerId: uid.colMV! } });
+    }
+    assert.deepEqual(await payCopy(paymentOf.MV!), { credit_branch_id: off.MV!.id, credit_manager_id: uid.colMV! }, 'y al volver, vuelve');
+    assert.deepEqual(await clientCopy(seed.MV!.clientId), { m: [uid.colMV!], b: [off.MV!.id], n: 1 });
+  });
+
+  it('dar de baja el crédito saca al cliente de las copias (y de la vista del cobrador); restaurarlo lo devuelve', async () => {
+    await prisma.credit.update({ where: { id: seed.PAD!.creditId }, data: { deletedAt: new Date() } });
+    try {
+      assert.deepEqual(await clientCopy(seed.PAD!.clientId), { m: [], b: [], n: 0 });
+      const pad = await seen('colPAD', 'own', 'enforce');
+      assert.ok(!pad.clients.includes(seed.PAD!.clientId), 'sin crédito vivo y sin ser quien lo dio de alta, el cobrador ya no lo ve');
+    } finally {
+      await prisma.credit.update({ where: { id: seed.PAD!.creditId }, data: { deletedAt: null } });
+    }
+    assert.deepEqual(await clientCopy(seed.PAD!.clientId), { m: [uid.colPAD!], b: [off.PAD!.id], n: 1 });
+  });
+
+  it('🔴 R-2: si un SUPERVISOR reasigna un crédito de su oficina, las copias del cliente cuentan también los créditos que él NO ve (SECURITY DEFINER)', async () => {
+    // Un segundo crédito del mismo cliente, a cargo de colPAD en Padilla: colMV (own) no lo ve.
+    const extra = await prisma.credit.create({
+      data: {
+        accountId: banco.accountId, clientId: seed.MV!.clientId, branchId: off.PAD!.id, code: `X-${suffix}`, principalAmount: 50, outstandingBalance: 50, currency: 'BOB', assignedManagerId: uid.colPAD!,
+      },
+    });
+    try {
+      assert.deepEqual((await clientCopy(seed.MV!.clientId)).m, sorted([uid.colMV!, uid.colPAD!]));
+      // supMV (alcance branch, enforce) pasa el crédito de su oficina a colALT: el UPDATE corre con su alcance chico y no ve el crédito de Padilla.
+      // (Reasignar a alguien fuera del propio alcance sería rechazado por la base: la fila nueva tampoco sería visible. Es lo esperado.)
+      await asScope(banco.accountId, uid.supMV!, 'branch', 'enforce', (tx) => tx.credit.update({ where: { id: seed.MV!.creditId }, data: { assignedManagerId: uid.colALT! } }));
+      const c = await clientCopy(seed.MV!.clientId);
+      assert.deepEqual(c.m, sorted([uid.colALT!, uid.colPAD!]), 'el recálculo vio el crédito de colPAD aunque quien disparó el trigger no lo ve');
+      assert.equal(c.n, 2);
+    } finally {
+      await prisma.credit.update({ where: { id: seed.MV!.creditId }, data: { assignedManagerId: uid.colMV! } });
+      await prisma.credit.delete({ where: { id: extra.id } });
+    }
+    assert.deepEqual(await clientCopy(seed.MV!.clientId), { m: [uid.colMV!], b: [off.MV!.id], n: 1 });
+  });
+
+  it('las copias coinciden con la verdad en toda la base (lo mismo que comprueba `verify_scope.sql`)', async () => {
+    const bad = await prisma.$queryRaw<{ t: string; n: bigint }[]>`
+      SELECT 'payments' t, count(*) n FROM payments p JOIN credits c ON c.id = p.credit_id
+        WHERE p.credit_branch_id IS DISTINCT FROM c.branch_id OR p.credit_manager_id IS DISTINCT FROM c.assigned_manager_id
+      UNION ALL
+      SELECT 'agenda_items', count(*) FROM agenda_items a JOIN credits c ON c.id = a.credit_id
+        WHERE a.credit_branch_id IS DISTINCT FROM c.branch_id OR a.credit_manager_id IS DISTINCT FROM c.assigned_manager_id
+      UNION ALL
+      SELECT 'clients', count(*) FROM clients cl
+        WHERE cl.scope_manager_ids IS DISTINCT FROM COALESCE((SELECT array_agg(DISTINCT assigned_manager_id ORDER BY assigned_manager_id) FROM credits c WHERE c.client_id = cl.id AND c.deleted_at IS NULL AND c.assigned_manager_id IS NOT NULL), '{}')
+           OR cl.scope_branch_ids IS DISTINCT FROM COALESCE((SELECT array_agg(DISTINCT branch_id ORDER BY branch_id) FROM credits c WHERE c.client_id = cl.id AND c.deleted_at IS NULL AND c.branch_id IS NOT NULL), '{}')`;
+    for (const r of bad) assert.equal(Number(r.n), 0, `${r.t}: copias desalineadas`);
+  });
+});
+
+describe('F2b · mora a mano: un cobrador sólo marca / pone al día lo que ve (F2b-H1)', () => {
+  it('🔴 el cobrador de Padilla no puede marcar ni poner al día un crédito de Mesa Verde (404)', async () => {
+    const mark = await call(tok.colPAD!, 'POST', `/credits/${seed.MV!.creditId}/arrears`, { days: 5 });
+    assert.equal(mark.status, 404, JSON.stringify(mark.error));
+    const clear = await call(tok.colPAD!, 'POST', `/credits/${seed.MV!.creditId}/arrears/clear`, { mode: 'none' });
+    assert.equal(clear.status, 404, JSON.stringify(clear.error));
+  });
+});
+
+describe('F2b · la barrera vive en el rol `kobrax_scoped`', () => {
+  it('🔴 `kobrax_app` NO hereda el rol: sin cambiar de rol no hay policy de alcance (costo cero para cuenta / sistema / off); con SET ROLE sí', async () => {
+    const count = (role: boolean) =>
+      app.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT set_config('app.current_account_id', ${banco.accountId}, true), set_config('app.current_user_id', ${uid.colMV!}, true),
+                                  set_config('app.scope', 'own', true), set_config('app.scope_mode', 'enforce', true)`;
+        if (role) await tx.$executeRaw`SET LOCAL ROLE kobrax_scoped`;
+        return Number((await tx.$queryRaw<{ n: bigint }[]>`SELECT count(*) n FROM credits`)[0]!.n);
+      });
+    assert.equal(await count(false), 3, 'sin SET ROLE, kobrax_app ve toda la cuenta aunque la variable diga own: la policy no le aplica');
+    assert.equal(await count(true), 1, 'con SET ROLE kobrax_scoped, sólo lo suyo');
+    const inherits = await prisma.$queryRaw<{ i: boolean }[]>`SELECT pg_has_role('kobrax_app', 'kobrax_scoped', 'USAGE') AS i`;
+    assert.equal(inherits[0]!.i, false, 'kobrax_app debe ser NOINHERIT respecto de kobrax_scoped');
   });
 });

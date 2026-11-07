@@ -869,6 +869,8 @@ export class CreditsService {
     const { credit } = await this.tx(async (tx) => {
       const found = await tx.credit.findFirst({ where: { id, deletedAt: null } });
       if (!found) throw resourceNotFound();
+      // F2b-H1: quien no ve todo sólo marca / pone al día lo que ve (antes lo frenaba únicamente la barrera de la base).
+      await this.assertInScope(tx, id);
       if (found.status !== CreditStatus.ACTIVE) throw creditNotActive();
       const meta = readCreditMetadata(found.metadata, found.origin);
       if (isExternalOrigin(meta.origin)) throw creditLocked();
@@ -907,6 +909,8 @@ export class CreditsService {
     const { credit } = await this.tx(async (tx) => {
       const found = await tx.credit.findFirst({ where: { id, deletedAt: null } });
       if (!found) throw resourceNotFound();
+      // F2b-H1: quien no ve todo sólo marca / pone al día lo que ve (antes lo frenaba únicamente la barrera de la base).
+      await this.assertInScope(tx, id);
       if (found.status !== CreditStatus.ACTIVE) throw creditNotActive();
       const meta = readCreditMetadata(found.metadata, found.origin);
       if (isExternalOrigin(meta.origin)) throw creditLocked();

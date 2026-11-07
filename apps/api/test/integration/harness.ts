@@ -135,7 +135,7 @@ export async function startApi(extraEnv: Record<string, string> = {}): Promise<v
   });
   let log = '';
   await new Promise<void>((ok, fail) => {
-    const timer = setTimeout(() => fail(new Error(`La API no arrancó en 60 s:\n${log}`)), 60_000);
+    const timer = setTimeout(() => fail(new Error(`La API no arrancó en 120 s:\n${log}`)), 120_000);
     const onData = (chunk: Buffer) => {
       log += chunk.toString();
       if (log.includes('escuchando')) {

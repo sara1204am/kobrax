@@ -8,7 +8,10 @@
  * Carga 60 000 clientes y ~180 000 créditos (más ~90 000 pagos) en una cuenta con oficinas, y mide por HTTP —API real, rol real—
  * cada listado con la barrera en `off` y en `enforce`. Imprime una tabla y falla (exit 1) si algún p95 pasa del presupuesto.
  */
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import type { PrismaClient } from '@prisma/client';
 import { addMember, API, call, db, freshDatabase, login, loginSkippingMfa, startApi, stopApi } from './harness';
@@ -74,7 +77,22 @@ async function main(): Promise<void> {
   // ── Carga masiva (triggers apagados: son 450 000 filas; los agregados del cliente no entran en lo que se mide) ───────────────
   const t0 = performance.now();
   const o = offices.map((x) => x.id);
-  const m = [uid.colMV!, uid.colPAD!, uid.colALT!];
+  // PERF_COLLECTORS = cobradores POR OFICINA (por omisión 1: el peor caso, un solo cobrador con la tercera parte de la cartera = 60 000 créditos).
+  // Con 50 (≈ 150 cobradores, ≈ 1 200 créditos cada uno) es la distribución realista de una cuenta de 180 000 créditos.
+  const K = Number(process.env.PERF_COLLECTORS ?? 1);
+  const pool: string[] = [];
+  const firsts = [uid.colMV!, uid.colPAD!, uid.colALT!];
+  const collectorRole = await prisma.role.findUniqueOrThrow({ where: { name: 'COLLECTOR' } });
+  for (let g = 0; g < 3; g++) {
+    pool.push(firsts[g]!);
+    for (let j = 1; j < K; j++) {
+      const u = await prisma.user.create({ data: { email: `extra-${g}-${j}-${suffix}@ejemplo.com`, passwordHash: 'x', status: 'ACTIVE', requiresPasswordChange: false } });
+      await prisma.userAccount.create({ data: { userId: u.id, accountId, roleId: collectorRole.id } });
+      pool.push(u.id);
+    }
+  }
+  const poolSql = `(ARRAY[${pool.map((x) => `'${x}'`).join(',')}])`;
+  const pick = `${poolSql}[1 + (i % 3) * ${K} + ((i / 3)::int % ${K})]`;
   await prisma.$transaction(
     async (tx) => {
       await tx.$executeRawUnsafe(`SET LOCAL session_replication_role = replica`);
@@ -89,7 +107,7 @@ async function main(): Promise<void> {
       await tx.$executeRawUnsafe(
         `INSERT INTO credits (id, account_id, client_id, branch_id, assigned_manager_id, principal_amount, outstanding_balance, currency, installments_count, status, days_past_due, created_at, updated_at)
          SELECT 'pk-' || i || '-' || n, '${accountId}', 'pc-' || i, (ARRAY['${o[0]}','${o[1]}','${o[2]}'])[1 + (i % 3)],
-                (ARRAY['${m[0]}','${m[1]}','${m[2]}'])[1 + (i % 3)], 1000 + (i % 40) * 500, 100 + ((i * 7 + n) % 900) * 50, 'BOB', 12,
+                ${pick}, 1000 + (i % 40) * 500, 100 + ((i * 7 + n) % 900) * 50, 'BOB', 12,
                 'ACTIVE'::"CreditStatus", CASE WHEN (i + n) % 3 = 0 THEN 0 ELSE (i * 13 + n * 7) % 460 END, now(), now()
          FROM generate_series(1, 60000) i, LATERAL generate_series(1, 1 + (i % 5)) n`,
       );
@@ -101,11 +119,28 @@ async function main(): Promise<void> {
     },
     { timeout: 600_000, maxWait: 60_000 },
   );
+  // La carga apaga los triggers (session_replication_role = replica): las copias de F2b se rellenan acá, igual que el backfill de la migración.
+  await prisma.$executeRawUnsafe(`UPDATE payments p SET credit_branch_id = c.branch_id, credit_manager_id = c.assigned_manager_id FROM credits c WHERE c.id = p.credit_id`);
+  await prisma.$executeRawUnsafe(
+    `UPDATE clients cl SET scope_manager_ids = s.m, scope_branch_ids = s.b
+     FROM (SELECT client_id, COALESCE(array_agg(DISTINCT assigned_manager_id) FILTER (WHERE assigned_manager_id IS NOT NULL), '{}') m,
+                  COALESCE(array_agg(DISTINCT branch_id) FILTER (WHERE branch_id IS NOT NULL), '{}') b FROM credits WHERE deleted_at IS NULL GROUP BY client_id) s
+     WHERE cl.id = s.client_id`,
+  );
+  await prisma.$executeRawUnsafe(`UPDATE clients cl SET credit_count = s.n FROM (SELECT client_id, count(*)::int n FROM credits WHERE deleted_at IS NULL GROUP BY client_id) s WHERE cl.id = s.client_id`);
   await prisma.$executeRawUnsafe('ANALYZE clients');
   await prisma.$executeRawUnsafe('ANALYZE credits');
   await prisma.$executeRawUnsafe('ANALYZE payments');
+  await prisma.$executeRawUnsafe('VACUUM (ANALYZE) credits');
   const n = await prisma.credit.count({ where: { accountId } });
   console.log(`Carga lista en ${Math.round((performance.now() - t0) / 1000)} s: ${n} créditos`);
+
+  if (process.env.PERF_LOAD_ONLY) {
+    // Sólo deja los datos en `kobrax_it` para `f2b-rendimiento-sql.perf.ts` (no mide por HTTP).
+    stopApi();
+    await prisma.$disconnect();
+    process.exit(0);
+  }
 
   const roles = ['colMV', 'supMV', 'mgrChq', 'admin'];
   const lists = ['/credits?limit=50', '/credits?limit=50&page=200', '/clients?limit=50', '/payments?limit=50'];
@@ -135,7 +170,15 @@ async function main(): Promise<void> {
     return out;
   };
 
+  // Línea base de D-4: el sistema SIN las policies de F2b (como estaba antes de esta fase). Después se instalan y se mide con `enforce`.
+  const psql = (sql: string): void => {
+    execFileSync('docker', ['exec', '-i', 'kobrax-postgres', 'psql', '-U', 'postgres', '-d', 'kobrax_it', '-v', 'ON_ERROR_STOP=1', '-q'], { input: sql, stdio: ['pipe', 'ignore', 'ignore'] });
+  };
+  psql(['credits', 'clients', 'payments', 'agenda_items', 'route_plans'].map((t) => `DROP POLICY IF EXISTS scope_${t} ON ${t};`).join(' '));
+  console.log('Línea base: policies de F2b NO instaladas');
   const off = await measure();
+  psql(readFileSync(join(__dirname, '../../../../packages/database/prisma/rls/006_scope_policies.sql'), 'utf8'));
+  console.log('Policies de F2b instaladas; API en enforce');
   // Mismo conjunto de datos, la API reiniciada con la barrera activa.
   stopApi();
   await startApi({ MFA_CRITICAL_GRACE_UNTIL: '2099-01-01', SCOPE_RLS_MODE: 'enforce' });
@@ -145,14 +188,14 @@ async function main(): Promise<void> {
   const enf = await measure();
 
   let worst = 0;
-  console.log('\nrol y listado'.padEnd(36) + 'p95 off (ms)'.padStart(14) + 'p95 enforce'.padStart(14) + '  ratio');
+  console.log('\nrol y listado'.padEnd(36) + 'p95 sin F2b (ms)'.padStart(14) + 'p95 enforce'.padStart(14) + '  ratio');
   for (const key of Object.keys(off)) {
     const ratio = enf[key]! / off[key]!;
     if (!Number.isNaN(ratio)) worst = Math.max(worst, ratio);
     const f = failures[key] ? `  (${failures[key]} respuestas no-200 descartadas)` : '';
     console.log(key.padEnd(36) + off[key]!.toFixed(1).padStart(14) + enf[key]!.toFixed(1).padStart(14) + `  x${ratio.toFixed(2)}${ratio > BUDGET ? '  ⛔' : ''}${f}`);
   }
-  console.log(`\nPeor ratio: x${worst.toFixed(2)} (presupuesto D-4: x${BUDGET.toFixed(2)})`);
+  console.log(`\nPeor ratio enforce/sin-F2b: x${worst.toFixed(2)} (presupuesto D-4: x${BUDGET.toFixed(2)})`);
   stopApi();
   await prisma.$disconnect();
   process.exit(worst > BUDGET ? 1 : 0);
