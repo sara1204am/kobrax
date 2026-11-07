@@ -44,11 +44,19 @@ BEGIN
     CREATE ROLE kobrax_scoped NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
   END IF;
 END $$;
-GRANT kobrax_scoped TO kobrax_app;
 -- 🔴 NOINHERIT: una policy `TO kobrax_scoped` se aplica también a quien HEREDA ese rol. kobrax_app es miembro (hace falta para el SET ROLE),
 -- así que sin esto la policy le tocaría igual y el rol separado no serviría de nada (medido: el administrador seguía pagando ×1,4–2).
 -- Con NOINHERIT conserva el SET ROLE pero no hereda privilegios ni policies. kobrax_app no tiene ninguna otra membresía de la que dependa.
+-- Va ANTES del GRANT: en PostgreSQL 16+ la opción INHERIT de la membresía se fija al otorgarla, y para entonces ya se pide explícita.
 ALTER ROLE kobrax_app NOINHERIT;
+DO $$
+BEGIN
+  IF current_setting('server_version_num')::int >= 160000 THEN
+    EXECUTE 'GRANT kobrax_scoped TO kobrax_app WITH INHERIT FALSE, SET TRUE';
+  ELSE
+    EXECUTE 'GRANT kobrax_scoped TO kobrax_app';
+  END IF;
+END $$;
 
 -- Funciones de versiones anteriores de este script (la regla por fila): se retiran junto con las policies que las usaban.
 DROP POLICY IF EXISTS scope_credits ON credits;
@@ -152,7 +160,7 @@ CREATE POLICY scope_credits ON credits AS RESTRICTIVE FOR SELECT TO kobrax_scope
 
 -- Pagos y agenda: se ven si se ve su crédito. La regla NO consulta `credits` por fila (esa subconsulta volvía a pasar por las policies
 -- de `credits` y duplicaba el costo): usa la oficina y el responsable del crédito COPIADOS en la propia fila (`credit_branch_id`,
--- `credit_manager_id`, ver la migración `…_scope_denormalized_credit_owner`, que los mantiene con triggers). La oficina del PAGO
+-- `credit_manager_id`, ver la migración `20261106000000_f14_f2b_scope_copies` y `…010000_…_live_only`, que los mantienen con triggers). La oficina del PAGO
 -- (`branch_id`) es histórica y no decide nada.
 CREATE POLICY scope_payments ON payments AS RESTRICTIVE FOR SELECT TO kobrax_scoped USING (
   (SELECT app_scope_open())
@@ -239,6 +247,11 @@ CREATE POLICY scope_route_plans ON route_plans AS RESTRICTIVE FOR SELECT TO kobr
 -- dejaría, el día que alguien agregue una tabla, a los usuarios con alcance restringido con «permission denied» y a los demás sin
 -- problema. Por eso se copian al final de este script (db:rls lo corre último, después de cada migración). `verify_scope.sql` y el
 -- arranque de la API comprueban que no falte nada.
+-- Tablas y secuencias FUTURAS: mismos privilegios por omisión que `rebuild.ts` da a kobrax_app, para que una migración que cree una tabla no deje
+-- a los usuarios con alcance restringido con «permission denied» hasta la próxima corrida de db:rls.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO kobrax_scoped;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO kobrax_scoped;
+
 DO $$
 DECLARE r record; app_oid oid := (SELECT oid FROM pg_roles WHERE rolname = 'kobrax_app');
 BEGIN

@@ -213,3 +213,20 @@ export async function importReport<T>(token: string, file: string, opts: { dryRu
   const res = await fetch(`${API}/imports/portfolio`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
   return envelope<T>(res);
 }
+
+/** Las tablas con policy de alcance de F2b (`rls/006_scope_policies.sql`). */
+export const SCOPE_TABLES = ['credits', 'clients', 'payments', 'agenda_items', 'route_plans'] as const;
+
+/** Ejecuta SQL como superusuario sobre la base de pruebas, vía psql dentro del contenedor. Falla (lanza) si el SQL falla. */
+export function psqlTest(sql: string): void {
+  const r = spawnSync('docker', ['exec', '-i', CONTAINER, 'psql', '-U', 'postgres', '-d', TEST_DB, '-v', 'ON_ERROR_STOP=1', '-q'], { input: sql, encoding: 'utf8' });
+  if (r.status !== 0) throw new Error(`psql falló (${r.status}): ${r.stderr}`);
+}
+
+/** Instala (re-aplica `rls/006`) o quita las policies de alcance: para medir contra la línea base «sin F2b». */
+export function installScopePolicies(): void {
+  psqlTest(readFileSync(join(__dirname, '../../../../packages/database/prisma/rls/006_scope_policies.sql'), 'utf8'));
+}
+export function uninstallScopePolicies(): void {
+  psqlTest(SCOPE_TABLES.map((t) => `DROP POLICY IF EXISTS scope_${t} ON ${t};`).join(' '));
+}

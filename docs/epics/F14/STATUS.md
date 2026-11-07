@@ -39,5 +39,5 @@
 
 | G5 Verificación de F2b | **PASS 2026-11-06** | V-031…V-037. Barrera instalada y probada (integración 250/250 en `off` y en `enforce`; suite de la barrera 21/21; `verify_scope.sql` 6/6; unitarias 1986/1986; web 1252/1252). **D-4 (V-035) contra la línea base real —policies NO instaladas—:** escenario realista (180 000 créditos, ≈150 cobradores) **dentro del presupuesto** (HTTP ×0,34–0,94, un solo ruido ×1,29; SQL +0…+7 ms); `off` sin costo. **Peor caso (un cobrador con la tercera parte de la cartera): ×1,5–1,7** en sus dos listados principales — documentado. Por la decisión de la usuaria (2026-11-06) `SCOPE_RLS_MODE=off` sigue por defecto; `enforce` NO se activa hasta nueva orden. |
 
-| G6 `/code-review` de F2b | **PENDIENTE** | Se pide tras el commit de G5. |
-| G7 Cierre de F2b | **PENDIENTE** | Falta G6. F4 no se abre sin la orden de la usuaria. |
+| G6 `/code-review` de F2b | **PASS 2026-11-06** | V-038: 10 hallazgos, 9 corregidos, 1 aceptado con motivo (backfill sin lotes: aún sin datos de producción). Recorrido de IMPACT-MAP por H14-032…036 hecho. |
+| G7 Cierre de F2b | **PASS 2026-11-06** | HUB H14-032…036 HECHO (H14-034 PARCIAL: la paridad TS↔SQL la cubre la integración), VERIFICATIONS V-031…V-038, INCIDENTS, HANDOFF y `docs/producto/roles-permisos-planes.md` al día. **`enforce` NO se activa** (decisión de la usuaria: `SCOPE_RLS_MODE=off` por defecto hasta nueva orden). **F4 no se abre** sin su orden. |

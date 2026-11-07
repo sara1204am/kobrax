@@ -8,13 +8,10 @@
  * Carga 60 000 clientes y ~180 000 créditos (más ~90 000 pagos) en una cuenta con oficinas, y mide por HTTP —API real, rol real—
  * cada listado con la barrera en `off` y en `enforce`. Imprime una tabla y falla (exit 1) si algún p95 pasa del presupuesto.
  */
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import type { PrismaClient } from '@prisma/client';
-import { addMember, API, call, db, freshDatabase, login, loginSkippingMfa, startApi, stopApi } from './harness';
+import { addMember, API, call, db, freshDatabase, installScopePolicies, login, loginSkippingMfa, startApi, stopApi, uninstallScopePolicies } from './harness';
 
 interface Office {
   id: string;
@@ -171,13 +168,10 @@ async function main(): Promise<void> {
   };
 
   // Línea base de D-4: el sistema SIN las policies de F2b (como estaba antes de esta fase). Después se instalan y se mide con `enforce`.
-  const psql = (sql: string): void => {
-    execFileSync('docker', ['exec', '-i', 'kobrax-postgres', 'psql', '-U', 'postgres', '-d', 'kobrax_it', '-v', 'ON_ERROR_STOP=1', '-q'], { input: sql, stdio: ['pipe', 'ignore', 'ignore'] });
-  };
-  psql(['credits', 'clients', 'payments', 'agenda_items', 'route_plans'].map((t) => `DROP POLICY IF EXISTS scope_${t} ON ${t};`).join(' '));
+  uninstallScopePolicies();
   console.log('Línea base: policies de F2b NO instaladas');
   const off = await measure();
-  psql(readFileSync(join(__dirname, '../../../../packages/database/prisma/rls/006_scope_policies.sql'), 'utf8'));
+  installScopePolicies();
   console.log('Policies de F2b instaladas; API en enforce');
   // Mismo conjunto de datos, la API reiniciada con la barrera activa.
   stopApi();

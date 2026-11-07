@@ -10,15 +10,14 @@
  *
  *   node --import tsx test/integration/f2b-rendimiento-sql.perf.ts
  */
-import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { appDb, db } from './harness';
+import { appDb, db, installScopePolicies, uninstallScopePolicies } from './harness';
 
 const BUDGET = 1.2;
 /** Por debajo de esto, un cambio relativo grande en una consulta de pocos ms es ruido de medición, no un costo. */
 const ABS_NOISE_MS = 5;
+/** Para la COLA (p95) el piso de ruido es el doble: una sola repetición lenta mueve el p95 más que la mediana. */
+const ABS_NOISE_P95_MS = 10;
 const REPS = Number(process.env.PERF_REPS ?? 25);
 const min = (xs: number[]): number => Math.min(...xs);
 const p95 = (xs: number[]): number => [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.ceil(xs.length * 0.95) - 1)]!;
@@ -69,16 +68,14 @@ async function main(): Promise<void> {
   // Tres estados de la base: `none` = SIN las policies de F2b (el sistema de hoy: la línea base de D-4); `off` = instaladas pero apagadas;
   // `enforce` = instaladas y activas. Cambiar de estado = (re)aplicar el 006 o borrar las policies, así que se mide contra el mismo dato.
   type State = 'none' | 'off' | 'enforce';
-  const psql = (sql: string): void => {
-    execFileSync('docker', ['exec', '-i', 'kobrax-postgres', 'psql', '-U', 'postgres', '-d', 'kobrax_it', '-v', 'ON_ERROR_STOP=1', '-q'], { input: sql, stdio: ['pipe', 'ignore', 'inherit'] });
-  };
-  const install = readFileSync(join(__dirname, '../../../../packages/database/prisma/rls/006_scope_policies.sql'), 'utf8');
-  const uninstall = ['credits', 'clients', 'payments', 'agenda_items', 'route_plans'].map((t) => `DROP POLICY IF EXISTS scope_${t} ON ${t};`).join('\n');
   let current: State | null = null;
   const setState = (st: State): void => {
     if (current === st) return;
     // off ⇄ enforce no cambia la base (sólo la variable de la transacción); lo demás sí.
-    if (!(current && current !== 'none' && st !== 'none')) psql(st === 'none' ? uninstall : install);
+    if (!(current && current !== 'none' && st !== 'none')) {
+      if (st === 'none') uninstallScopePolicies();
+      else installScopePolicies();
+    }
     current = st;
   };
 
@@ -120,7 +117,9 @@ async function main(): Promise<void> {
     const rMed = median(samples.enforce) / median(samples.none);
     const rOff = median(samples.off) / median(samples.none);
     const addMs = median(samples.enforce) - median(samples.none);
-    const over = q.gated && rMed > BUDGET && addMs > ABS_NOISE_MS;
+    const add95 = p95(samples.enforce) - p95(samples.none);
+    // Fuera de presupuesto si lo está la MEDIANA (±5 ms de ruido) o la COLA p95 (±10 ms): el cambio de plan o el JIT se ven en la cola.
+    const over = q.gated && ((rMed > BUDGET && addMs > ABS_NOISE_MS) || (r95 > BUDGET && add95 > ABS_NOISE_P95_MS));
     if (q.gated) {
       worst = Math.max(worst, r95);
       worstMed = Math.max(worstMed, rMed);
@@ -134,7 +133,7 @@ async function main(): Promise<void> {
   }
   setState('off'); // la base queda con las policies instaladas (como en el entorno de desarrollo)
   console.log(`\nPeor p95 enforce/none: x${worst.toFixed(2)} · peor mediana: x${worstMed.toFixed(2)} (+${worstAbs.toFixed(1)} ms máx.) · consultas fuera de presupuesto: ${failing}`);
-  console.log(`Presupuesto D-4: mediana enforce/none ≤ x${BUDGET.toFixed(2)}; ⛔ = lo supera Y agrega más de ${ABS_NOISE_MS} ms (por debajo es ruido de medición).`);
+  console.log(`Presupuesto D-4: ≤ x${BUDGET.toFixed(2)} en la mediana y en el p95, contra «sin policies»; ⛔ = lo supera Y agrega más de ${ABS_NOISE_MS} ms (mediana) / ${ABS_NOISE_P95_MS} ms (p95): por debajo es ruido de medición.`);
   await su.$disconnect();
   await app.$disconnect();
   process.exit(failing > 0 ? 1 : 0);

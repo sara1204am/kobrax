@@ -54,6 +54,9 @@ const NO_SCOPE = '';
  * Cliente Prisma del runtime de la API. Conecta como `kobrax_app`
  * (APP_DATABASE_URL, NOBYPASSRLS) → toda query queda sujeta a RLS.
  */
+/** Las tablas con policy de alcance (`rls/006_scope_policies.sql`: `scope_<tabla>`). Una sola lista para el chequeo de arranque. */
+export const SCOPE_POLICY_TABLES = ['credits', 'clients', 'payments', 'agenda_items', 'route_plans'] as const;
+
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
@@ -85,8 +88,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
    */
   private async assertScopeBarrierInstalled(): Promise<void> {
     if (this.scopeMode === 'off') return;
+    const expected = SCOPE_POLICY_TABLES.map((t) => `scope_${t}`);
     const rows = await this.$queryRaw<{ policies: bigint; member: boolean; inherits: boolean; gaps: bigint }[]>`
-      SELECT (SELECT count(*) FROM pg_policies WHERE policyname LIKE 'scope\_%' AND permissive = 'RESTRICTIVE' AND roles = '{kobrax_scoped}') AS policies,
+      SELECT (SELECT count(*) FROM pg_policies WHERE policyname = ANY(${expected}::text[]) AND permissive = 'RESTRICTIVE' AND roles = '{kobrax_scoped}') AS policies,
              COALESCE((SELECT pg_has_role('kobrax_app', 'kobrax_scoped', 'MEMBER') FROM pg_roles WHERE rolname = 'kobrax_scoped'), false) AS member,
              COALESCE((SELECT pg_has_role('kobrax_app', 'kobrax_scoped', 'USAGE') FROM pg_roles WHERE rolname = 'kobrax_scoped'), false) AS inherits,
              (SELECT count(*) FROM information_schema.role_table_grants g
@@ -94,14 +98,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
                  AND NOT has_table_privilege('kobrax_scoped', format('%I.%I', g.table_schema, g.table_name), g.privilege_type)) AS gaps`;
     const { policies, member, inherits, gaps } = rows[0] ?? { policies: 0n, member: false, inherits: false, gaps: 0n };
     const problems: string[] = [];
-    if (Number(policies) < 5) problems.push(`hay ${Number(policies)} de 5 policies de alcance para kobrax_scoped`);
+    if (Number(policies) < expected.length) problems.push(`hay ${Number(policies)} de ${expected.length} policies de alcance para kobrax_scoped (${expected.join(', ')})`);
     if (!member) problems.push('kobrax_app no puede cambiar al rol kobrax_scoped (¿falta el rol o el GRANT?)');
     if (inherits) problems.push('kobrax_app hereda kobrax_scoped, así que las policies de alcance le aplicarían a TODOS (falta ALTER ROLE kobrax_app NOINHERIT)');
     if (Number(gaps) > 0) problems.push(`a kobrax_scoped le faltan ${Number(gaps)} permisos de tabla que sí tiene kobrax_app (el usuario con alcance restringido recibiría "permission denied")`);
     if (problems.length > 0) {
       throw new Error(`SCOPE_RLS_MODE=${this.scopeMode} pero la barrera no está bien instalada: ${problems.join('; ')}. Aplicá "pnpm db:rls" (rls/006_scope_policies.sql) o poné SCOPE_RLS_MODE=off.`);
     }
-    this.logger.log(`Barrera RLS de alcance: modo ${this.scopeMode} (5 policies, rol kobrax_scoped y permisos al día)`);
+    this.logger.log(`Barrera RLS de alcance: modo ${this.scopeMode} (${SCOPE_POLICY_TABLES.length} policies, rol kobrax_scoped y permisos al día)`);
   }
 
   async onModuleDestroy(): Promise<void> {

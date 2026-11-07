@@ -70,10 +70,13 @@ DECLARE n_pay bigint; n_ag bigint; n_cli bigint; trg int;
 BEGIN
   SELECT count(*) INTO trg FROM pg_trigger WHERE NOT tgisinternal AND tgname IN ('payments_scope_copy', 'agenda_items_scope_copy', 'credits_scope_push', 'credits_totals_upd');
   IF trg <> 4 THEN RAISE EXCEPTION 'faltan triggers de las copias (hay % de 4)', trg; END IF;
+  -- La copia vale lo que el crédito si está VIVO, y NULL si está dado de baja.
   SELECT count(*) INTO n_pay FROM payments p JOIN credits c ON c.id = p.credit_id
-    WHERE p.credit_branch_id IS DISTINCT FROM c.branch_id OR p.credit_manager_id IS DISTINCT FROM c.assigned_manager_id;
+    WHERE p.credit_branch_id IS DISTINCT FROM (CASE WHEN c.deleted_at IS NULL THEN c.branch_id END)
+       OR p.credit_manager_id IS DISTINCT FROM (CASE WHEN c.deleted_at IS NULL THEN c.assigned_manager_id END);
   SELECT count(*) INTO n_ag FROM agenda_items a JOIN credits c ON c.id = a.credit_id
-    WHERE a.credit_branch_id IS DISTINCT FROM c.branch_id OR a.credit_manager_id IS DISTINCT FROM c.assigned_manager_id;
+    WHERE a.credit_branch_id IS DISTINCT FROM (CASE WHEN c.deleted_at IS NULL THEN c.branch_id END)
+       OR a.credit_manager_id IS DISTINCT FROM (CASE WHEN c.deleted_at IS NULL THEN c.assigned_manager_id END);
   SELECT count(*) INTO n_cli FROM clients cl
     LEFT JOIN (SELECT client_id, array_agg(DISTINCT assigned_manager_id ORDER BY assigned_manager_id) FILTER (WHERE assigned_manager_id IS NOT NULL) m,
                       array_agg(DISTINCT branch_id ORDER BY branch_id) FILTER (WHERE branch_id IS NOT NULL) b

@@ -373,12 +373,20 @@ describe('F2b · las copias de oficina y responsable del crédito (triggers) y l
     await prisma.credit.update({ where: { id: seed.PAD!.creditId }, data: { deletedAt: new Date() } });
     try {
       assert.deepEqual(await clientCopy(seed.PAD!.clientId), { m: [], b: [], n: 0 });
+      // Los pagos y la agenda de un crédito dado de baja quedan sin copia: dejan de verse por el crédito (como con la barrera anterior).
+      assert.deepEqual(await payCopy(paymentOf.PAD!), { credit_branch_id: null, credit_manager_id: null });
+      assert.deepEqual(await agendaCopy(agendaOf.PAD!), { credit_branch_id: null, credit_manager_id: null });
       const pad = await seen('colPAD', 'own', 'enforce');
       assert.ok(!pad.clients.includes(seed.PAD!.clientId), 'sin crédito vivo y sin ser quien lo dio de alta, el cobrador ya no lo ve');
+      assert.ok(!pad.payments.includes(paymentOf.PAD!), 'el pago de un crédito dado de baja deja de verse');
+      const supPad = await seen('mgrChq', 'subtree', 'enforce');
+      assert.ok(!supPad.payments.includes(paymentOf.PAD!), 'tampoco por oficina / subárbol');
     } finally {
       await prisma.credit.update({ where: { id: seed.PAD!.creditId }, data: { deletedAt: null } });
     }
     assert.deepEqual(await clientCopy(seed.PAD!.clientId), { m: [uid.colPAD!], b: [off.PAD!.id], n: 1 });
+    assert.deepEqual(await payCopy(paymentOf.PAD!), { credit_branch_id: off.PAD!.id, credit_manager_id: uid.colPAD! }, 'al restaurar, vuelve la copia');
+    assert.ok((await seen('colPAD', 'own', 'enforce')).payments.includes(paymentOf.PAD!));
   });
 
   it('🔴 R-2: si un SUPERVISOR reasigna un crédito de su oficina, las copias del cliente cuentan también los créditos que él NO ve (SECURITY DEFINER)', async () => {
@@ -406,10 +414,12 @@ describe('F2b · las copias de oficina y responsable del crédito (triggers) y l
   it('las copias coinciden con la verdad en toda la base (lo mismo que comprueba `verify_scope.sql`)', async () => {
     const bad = await prisma.$queryRaw<{ t: string; n: bigint }[]>`
       SELECT 'payments' t, count(*) n FROM payments p JOIN credits c ON c.id = p.credit_id
-        WHERE p.credit_branch_id IS DISTINCT FROM c.branch_id OR p.credit_manager_id IS DISTINCT FROM c.assigned_manager_id
+        WHERE p.credit_branch_id IS DISTINCT FROM (CASE WHEN c.deleted_at IS NULL THEN c.branch_id END)
+           OR p.credit_manager_id IS DISTINCT FROM (CASE WHEN c.deleted_at IS NULL THEN c.assigned_manager_id END)
       UNION ALL
       SELECT 'agenda_items', count(*) FROM agenda_items a JOIN credits c ON c.id = a.credit_id
-        WHERE a.credit_branch_id IS DISTINCT FROM c.branch_id OR a.credit_manager_id IS DISTINCT FROM c.assigned_manager_id
+        WHERE a.credit_branch_id IS DISTINCT FROM (CASE WHEN c.deleted_at IS NULL THEN c.branch_id END)
+           OR a.credit_manager_id IS DISTINCT FROM (CASE WHEN c.deleted_at IS NULL THEN c.assigned_manager_id END)
       UNION ALL
       SELECT 'clients', count(*) FROM clients cl
         WHERE cl.scope_manager_ids IS DISTINCT FROM COALESCE((SELECT array_agg(DISTINCT assigned_manager_id ORDER BY assigned_manager_id) FROM credits c WHERE c.client_id = cl.id AND c.deleted_at IS NULL AND c.assigned_manager_id IS NOT NULL), '{}')

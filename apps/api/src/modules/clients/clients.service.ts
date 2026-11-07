@@ -422,14 +422,19 @@ export class ClientsService {
        * SQL con la subconsulta de visibilidad —nunca una lista de ids en memoria— y sólo los ≤ `limit` ids de la página vuelven
        * a Prisma. Los filtros (estado, riesgo, búsqueda) son los mismos de `view=portfolio` (`portfolioWhere`).
        */
-      const whereScoped = Prisma.sql`${this.portfolioWhere(query)} AND c.id IN (${visibleClientIdsSql(scope)})`;
-      const [ids, counted] = await this.tx((tx) =>
-        Promise.all([
+      // Sólo los filtros de ESTE listado (estado, riesgo, búsqueda): `portfolioWhere` también sabe de responsable, oficina, fuente y rangos de
+      // deuda / mora, que el listado simple no aplica para quien ve toda la cuenta. Mismos filtros = mismo resultado para todos los roles.
+      const simple = { status: query.status, risk: query.risk, q: query.q } as ListClientsQueryDto;
+      const whereScoped = Prisma.sql`${this.portfolioWhere(simple)} AND c.id IN (${visibleClientIdsSql(scope)})`;
+      // Una sola transacción: página, total y lectura de las filas ven el mismo estado (y se abre un solo SET LOCAL ROLE).
+      const { ids, counted, found } = await this.tx(async (tx) => {
+        const [pageIds, count] = await Promise.all([
           tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT c.id FROM clients c WHERE ${whereScoped} ORDER BY c.created_at DESC, c.id LIMIT ${limit} OFFSET ${skip}`),
           tx.$queryRaw<{ total: number }[]>(Prisma.sql`SELECT COUNT(*)::int AS total FROM clients c WHERE ${whereScoped}`),
-        ]),
-      );
-      const found = await this.tx((tx) => tx.client.findMany({ where: { id: { in: ids.map((r) => r.id) } } }));
+        ]);
+        const rowsFound = await tx.client.findMany({ where: { id: { in: pageIds.map((r) => r.id) } } });
+        return { ids: pageIds, counted: count, found: rowsFound };
+      });
       const byId = new Map(found.map((c) => [c.id, c]));
       const ordered = ids.flatMap((r) => (byId.has(r.id) ? [byId.get(r.id)!] : [])); // el orden es el de la consulta, no el del IN
       const data = ordered.map((c) => serializeClient(c, { crypto: this.crypto, reveal: false }));
