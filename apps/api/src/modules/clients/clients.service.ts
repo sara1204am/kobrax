@@ -652,6 +652,11 @@ export class ClientsService {
    * cobrar— y el documento en claro sólo si `documentInClearByDefault` (administrador, gerente, auditor; el cobrador sobre su cartera).
    * Al supervisor el documento le llega enmascarado: lo revela con la acción explícita. Audita igual que un revelado.
    */
+  /** ¿Esta persona puede ver datos personales en claro ahora mismo? (para que otros módulos no auditen un revelado que no ocurrió). */
+  canRevealNow(): boolean {
+    return this.pii.canSeeContact() || this.pii.canReveal();
+  }
+
   findOneForWork(id: string) {
     return this.findOne(id, true, false, { documentClear: this.pii.documentInClearByDefault() });
   }
@@ -681,20 +686,27 @@ export class ClientsService {
      * se revela aparte (D-3): las pantallas de trabajo piden `documentClear` según `documentInClearByDefault()`.
      */
     if (reveal && how.explicit) this.pii.assertCanReveal();
-    const effReveal = reveal && this.pii.canReveal();
-    const effDocument = effReveal && (how.documentClear ?? true);
-    if (effReveal) {
-      // Acceso a PII en claro → queda auditado, con las categorías reveladas y el canal (nunca los valores).
+    /*
+     * Los contactos y el documento se deciden APARTE (D-2/D-3): los contactos y direcciones van en claro si la persona los ve (`client:contact:read`);
+     * el documento sólo si además puede revelar (`canReveal`: no VIEWER, y no el canal móvil con `PII_MOBILE_MASK` encendido) y, cuando el
+     * llamador no pidió el revelado explícito, si su rol lo ve en claro por defecto (el supervisor, no). Así el interruptor del móvil tapa el
+     * documento pero no el teléfono que el cobrador necesita para cobrar.
+     */
+    const effContacts = reveal && this.pii.canSeeContact();
+    const documentDefault = how.documentClear ?? (how.explicit ? true : this.pii.documentInClearByDefault());
+    const effDocument = reveal && this.pii.canReveal() && documentDefault;
+    if (effContacts || effDocument) {
+      // Acceso a PII en claro → queda auditado, con las categorías REALMENTE reveladas y el canal (nunca los valores).
       await this.audit.record({
         entity: 'client',
         entityId: id,
         action: 'PII_REVEAL',
-        after: this.pii.auditAfter('client', this.pii.revealedCategories(effDocument)),
+        after: this.pii.auditAfter('client', this.pii.revealedCategories(effDocument, effContacts)),
       });
     }
     // F14 · F2 (H-7): si hay créditos del cliente que quien mira no ve, un aviso con SÓLO agregados.
     // Sólo lo pide la ficha (GET /clients/:id): el PDF y los demás llamadores internos no pagan esas consultas.
-    const serialized = { ...serializeClient(client, this.opts(effReveal, effDocument)), ...(withOtherCredits ? { otherCredits: await this.otherCredits(id) } : {}) };
+    const serialized = { ...serializeClient(client, this.opts(effContacts, effDocument)), ...(withOtherCredits ? { otherCredits: await this.otherCredits(id) } : {}) };
     if (!client.linkReviewPending) return serialized;
 
     // Las sugerencias con su nombre: la pantalla de revisión no puede mostrar uuids.

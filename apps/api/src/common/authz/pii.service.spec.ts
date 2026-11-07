@@ -58,5 +58,6 @@ describe('PiiService · política pii.reveal (F14 · F4)', () => {
     const pii = piiFor(RoleType.MANAGER, { channel: 'web' });
     assert.deepEqual(pii.auditAfter('client', pii.revealedCategories(true)), { entity: 'client', categories: ['DOCUMENT', 'CONTACT', 'ECONOMIC'], channel: 'web' });
     assert.deepEqual(pii.revealedCategories(false), ['CONTACT', 'ECONOMIC']); // el supervisor en una pantalla de trabajo: sin documento
+    assert.deepEqual(pii.revealedCategories(true, false), ['DOCUMENT']); // móvil con la máscara: el documento aparte de los contactos
   });
 });

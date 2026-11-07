@@ -26,9 +26,12 @@ export class UploadsController {
   @RolesAny(Permission.CLIENT_WRITE, Permission.COLLECTION_WRITE, Permission.PAYMENT_WRITE, Permission.ROUTE_EXECUTE)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES } }))
   async upload(@UploadedFile() file: UploadedFileLike) {
-    const stored = await this.uploads.store(file);
-    // F14 · F4: queda registrado como PENDING hasta que algo lo ate (los triggers lo pasan a ATTACHED). `fileId` es aditivo: el móvil lo ignora.
-    const fileId = await this.files.registerUpload(stored);
+    // F14 · F4: queda registrado como PENDING hasta que algo lo ate (los triggers lo pasan a ATTACHED). El registro va ANTES de escribir los bytes
+    // (ver `UploadsService.store`). `fileId` es aditivo: el móvil lo ignora.
+    let fileId = '';
+    const stored = await this.uploads.store(file, async (info) => {
+      fileId = await this.files.registerUpload(info);
+    });
     return ResponseDto.ok({ ...stored, fileId });
   }
 

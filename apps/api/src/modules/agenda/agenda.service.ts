@@ -503,7 +503,7 @@ export class AgendaService {
 
     const client = await this.clients.findOneForWork(item.clientId); // audita `client/PII_REVEAL` (D-3: el documento va según el rol)
     // Segundo rastro, propio del módulo: distingue esta puerta de las del módulo de clientes.
-    await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'PII_REVEAL' });
+    if (this.clients.canRevealNow()) await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'PII_REVEAL' }); // sólo si se reveló algo
 
     return ResponseDto.ok({
       item: serializeAgendaItem(item, displayName(client), today, extras.get(item.id)),
@@ -783,7 +783,7 @@ export class AgendaService {
     // Segundo rastro, propio del módulo: el cobrador NO tiene `client:pii:read` — esta es la única
     // puerta por la que ve teléfonos y direcciones en claro, y sólo para un cliente con crédito suyo.
     // Sin esto, una auditoría no puede distinguir esta revelación de las del módulo de clientes.
-    await this.audit.record({ entity: 'agenda_client_context', entityId: clientId, action: 'PII_REVEAL' });
+    if (this.clients.canRevealNow()) await this.audit.record({ entity: 'agenda_client_context', entityId: clientId, action: 'PII_REVEAL' });
 
     return ResponseDto.ok({
       client: { id: client.id, displayName: displayName(client), nationalId: client.nationalId },

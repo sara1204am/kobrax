@@ -363,3 +363,31 @@ describe('F4 · regresión del perfil gratuito individual (plan §8)', () => {
     assert.equal((await get(solo, `/files/${me.data.fileId}`)).status, 200);
   });
 });
+
+describe('F4 · correcciones del code-review', () => {
+  it('🔴 volver a referenciar un archivo que la limpieza había marcado como borrado lo revive (deleted_at vuelve a nulo) y el dueño apunta a un archivo vivo', async () => {
+    const f = await upload('colMV');
+    await prisma.clientLocation.update({ where: { id: locationMV }, data: { photoUrls: [f.url] } });
+    await prisma.clientLocation.update({ where: { id: locationMV }, data: { photoUrls: [] } });
+    await prisma.file.update({ where: { id: f.fileId }, data: { deletedAt: new Date() } }); // lo que hace la limpieza a los 7 días
+    await prisma.clientLocation.update({ where: { id: locationMV }, data: { photoUrls: [f.url] } });
+    const row = await prisma.file.findUniqueOrThrow({ where: { id: f.fileId }, include: { owners: true } });
+    assert.equal(row.deletedAt, null);
+    assert.equal(row.status, 'ATTACHED');
+    assert.equal(row.owners.length, 1);
+    await prisma.clientLocation.update({ where: { id: locationMV }, data: { photoUrls: [] } });
+  });
+
+  it('🔴 el PDF del legajo del SUPERVISOR no revela el documento por defecto (D-3); el del gerente sí', async () => {
+    const reveal = async (who: string) => {
+      const before = new Date();
+      assert.equal((await get(tok[who]!, `/clients/${clientMV}/pdf`)).status, 200, who);
+      const row = await prisma.auditLog.findFirst({ where: { entity: 'client', entityId: clientMV, action: 'PII_REVEAL', userId: uid[who], createdAt: { gte: before } }, orderBy: { createdAt: 'desc' } });
+      return (row?.after as { categories?: string[] } | null)?.categories ?? [];
+    };
+    const sup = await reveal('supMV');
+    assert.ok(sup.includes('CONTACT') && !sup.includes('DOCUMENT'), `supervisor: ${JSON.stringify(sup)}`);
+    const mgr = await reveal('mgr');
+    assert.ok(mgr.includes('DOCUMENT') && mgr.includes('CONTACT'), `gerente: ${JSON.stringify(mgr)}`);
+  });
+});

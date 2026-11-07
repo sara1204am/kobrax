@@ -15,9 +15,13 @@ export const envSchema = z.object({
   AUTHZ_VERSION_CHECK: z.enum(['on', 'off']).default('on'),
   /** F14 · F2b: segunda barrera de RLS por alcance (`off` | `log` | `enforce`). */
   SCOPE_RLS_MODE: z.enum(['off', 'log', 'enforce']).default('off'),
-  /** F14 · F4 (D-2): `on` = el documento va siempre enmascarado y sin revelar en el canal móvil. Apagado hasta que el móvil se refactorice (F8). */
   /** F14 · F4: secreto de los enlaces firmados de archivos (opcional: si falta se deriva de JWT_SECRET). */
   FILE_LINK_SECRET: z.string().min(16).optional(),
+  /**
+   * F14 · F4 (D-2): `on` = el documento va siempre enmascarado y sin revelar en el canal móvil. Apagado hasta que el móvil se refactorice (F8).
+   * ⚠️ El canal hoy sale del encabezado `x-client-type`, que manda el cliente: sirve para esta regla de UX/cumplimiento mientras esté apagada, pero
+   * NO es una barrera contra quien tenga un token robado. Al encenderla en F8 el canal debe salir de la sesión (`user_sessions.device_type`).
+   */
   PII_MOBILE_MASK: z.enum(['on', 'off']).default('off'),
   /** F14 · F3: `enforce` = handler sin contrato → 403 AUTHZ_000; `log` = pasa y lo registra (válvula de rollback de un release). */
   AUTHZ_DENY_BY_DEFAULT: z.enum(['enforce', 'log']).default('enforce'),

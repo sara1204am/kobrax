@@ -74,7 +74,14 @@ function withPath(req: NextRequest): Headers {
   return headers;
 }
 
+/**
+ * F14 · F4: la lectura de un archivo por ENLACE FIRMADO no lleva sesión (la credencial es la firma que valida la API), así que el panel no la
+ * exige. `/api/files/<id>/raw?acc=&exp=&sig=` es lo único del proxy de archivos que pasa sin cookie.
+ */
+const SIGNED_FILE_LINK = /^\/api\/files\/[^/]+\/raw$/;
+
 export async function middleware(req: NextRequest): Promise<NextResponse> {
+  if (SIGNED_FILE_LINK.test(req.nextUrl.pathname)) return NextResponse.next();
   if (GUEST_ONLY.has(req.nextUrl.pathname)) return guestOnly(req);
   if (req.cookies.get(ACCESS)?.value) return NextResponse.next({ request: { headers: withPath(req) } });
 

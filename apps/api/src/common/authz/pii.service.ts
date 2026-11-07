@@ -67,12 +67,12 @@ export class PiiService {
     return documentInClearByDefault(this.actor());
   }
 
-  /** Lo que se escribe en la auditoría de un revelado: categorías, nunca valores. */
-  revealedCategories(documentToo = true): PiiCategory[] {
+  /** Lo que se escribe en la auditoría de un revelado: las categorías que SALIERON en claro, nunca valores. */
+  revealedCategories(documentToo = true, contactsToo = true): PiiCategory[] {
     const out: PiiCategory[] = [];
     if (documentToo) out.push(PiiCategory.DOCUMENT);
-    if (this.canSeeContact()) out.push(PiiCategory.CONTACT);
-    if (this.canSeeEconomic()) out.push(PiiCategory.ECONOMIC);
+    if (contactsToo && this.canSeeContact()) out.push(PiiCategory.CONTACT);
+    if (contactsToo && this.canSeeEconomic()) out.push(PiiCategory.ECONOMIC);
     return out;
   }
 

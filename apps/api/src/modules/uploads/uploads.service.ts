@@ -85,7 +85,12 @@ export class UploadsService {
     private readonly audit: AuditService,
   ) {}
 
-  async store(file: UploadedFileLike | undefined): Promise<StoredFile> {
+  /**
+   * `beforeWrite` (F14 · F4): se llama con los datos del archivo ANTES de escribir los bytes en disco. El registro de archivos lo usa para dejar
+   * constancia (y revivir un archivo huérfano) primero: así la limpieza, que borra el físico bajo un bloqueo de fila, nunca puede borrar los
+   * bytes de una subida que ya está en curso.
+   */
+  async store(file: UploadedFileLike | undefined, beforeWrite?: (info: StoredFile) => Promise<void>): Promise<StoredFile> {
     if (!file?.buffer?.length) throw fileRejected('No se recibió ningún archivo');
     const ext = ALLOWED[file.mimetype];
     if (!ext) throw fileRejected(`Tipo no permitido: ${file.mimetype}. Solo JPEG, PNG o WebP.`);
@@ -97,10 +102,12 @@ export class UploadsService {
     const dir = join(this.root, this.tenant.accountId);
     await mkdir(dir, { recursive: true });
     const name = `${hash}.${ext}`;
+    const info: StoredFile = { url: `/api/uploads/${name}`, hash, size: file.size, mimeType: file.mimetype };
+    if (beforeWrite) await beforeWrite(info);
     await writeFile(join(dir, name), file.buffer);
 
     await this.audit.record({ entity: 'upload', entityId: hash, action: 'CREATE', after: { size: file.size, mimeType: file.mimetype } });
-    return { url: `/api/uploads/${name}`, hash, size: file.size, mimeType: file.mimetype };
+    return info;
   }
 
   /**

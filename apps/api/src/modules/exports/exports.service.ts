@@ -68,7 +68,9 @@ export class ExportsService {
     });
   }
 
-  private readonly can = (p: Permission): boolean => this.tenant.can(p);
+  private can(p: Permission): boolean {
+    return this.tenant.can(p);
+  }
 
   async clientsCsv(): Promise<ExportFile> {
     const clients = await this.tx(async (tx) => {
@@ -82,13 +84,14 @@ export class ExportsService {
     // F14 · F4: el documento sale en claro sólo con `client:pii:read`; el contacto principal sólo con `client:contact:read`.
     const docClear = this.can(Permission.CLIENT_PII_READ);
     const withContact = this.can(Permission.CLIENT_CONTACT_READ);
+    const documentOf = (d: string | null): string => (d == null ? '' : docClear ? d : maskDocument(d));
     await this.logExport('clients', [...(docClear ? [PiiCategory.DOCUMENT] : []), ...(withContact ? [PiiCategory.CONTACT] : [])]);
 
     const rows = clients.map((c) => ({
       id: c.id,
       nombre: clientDisplayName(c) ?? '',
       tipo: c.clientType,
-      documento: docClear ? (safeDecrypt(this.crypto, c.nationalId) ?? '') : (() => { const d = safeDecrypt(this.crypto, c.nationalId); return d ? maskDocument(d) : ''; })(),
+      documento: documentOf(safeDecrypt(this.crypto, c.nationalId)),
       contactoPrincipal: withContact && c.contacts[0] ? safeDecrypt(this.crypto, c.contacts[0].value) : '',
       estado: c.status,
       segmento: c.riskSegment ?? '',

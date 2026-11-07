@@ -414,3 +414,19 @@ La UI muestra un checklist en tiempo real con las cuatro reglas (`checkPassword`
 | 9 | Móvil sin gating de pestañas por rol. | Verificado. |
 | 10 | Uso real de `SUPER_ADMIN`; uso de `isDefault` para preseleccionar cuenta; guard por pantalla web no listada; `requiresPasswordChange` en la web (no hay manejo). | **No verificado** / no existe. |
 | 11 | `docs/security/PLAN-SEGURIDAD.md` (2026-08-26) está parcialmente desactualizado: cita `CASE_READ` para el cobrador y un `SET LOCAL` concatenado en `prisma.service.ts`; hoy los permisos son `collection:*` y se usa `set_config` con parámetros ligados. | Verificado contra el código actual. |
+
+## F14 · F4 — datos personales y archivos (2026-11-07)
+
+**Quién ve qué de un cliente.** Hay tres categorías de dato, y la regla es una sola para listados, ficha, agenda, mora, rutas, exportes y PDF (`packages/shared/src/utils/pii-fields.ts`, aplicada por `PiiService`):
+
+| Categoría | Qué incluye | Quién la ve |
+|---|---|---|
+| Documento | carnet y NIT (siempre enmascarados salvo revelado) | Se revela con una acción explícita auditada (`pii.reveal`) quien puede leer clientes y tiene `client:contact:read` (todos los roles menos VIEWER). **En pantallas de trabajo** (Agenda, Mora, Rutas, PDF) va en claro por defecto sólo para quien tiene `client:pii:read` (administrador, gerente, auditor) y para el cobrador sobre su cartera; el supervisor lo ve enmascarado hasta que lo revela. |
+| Contacto | teléfonos, correos, direcciones, GPS, zona, notas y fotos de ubicación, personas relacionadas, adjuntos | `client:contact:read`: todos los roles menos VIEWER. El alcance sigue recortando a qué clientes. |
+| Económico | perfil de ingresos y garantías | Igual que contacto. |
+
+El nombre de la persona lo ve todo el que ve al cliente. Cada revelado queda auditado con las categorías reveladas y el canal, nunca con los valores. Los exportes (`report:export`: administrador, gerente, auditor) llevan el documento en claro sólo con `client:pii:read` y el contacto sólo con `client:contact:read`.
+
+**Móvil.** La regla «el documento va siempre enmascarado y sin revelar en móvil» está implementada pero **apagada** (`PII_MOBILE_MASK=off`) hasta que el móvil se refactorice (F8): su edición de cliente todavía necesita el revelado.
+
+**Archivos.** Cada archivo subido queda registrado (`files`) con sus dueños (`file_owners`), que mantienen triggers de la base a partir de las columnas que guardan la URL. Se lee por identificador (`GET /files/:id`) o por nombre (`/uploads/<hash>`, la ruta que usa el móvil) con la misma política: el archivo cuelga de algo que la persona ve (un cliente, un pago, una evidencia, su perfil, el logo de la cuenta) y tiene el permiso de esa categoría; lo recién subido lo abre sólo quien lo subió. `POST /files/:id/link` da un enlace temporal de 5 minutos que abre el archivo sin sesión. La lectura de documentos y evidencias se audita (`FILE_READ`). Lo subido que nadie ata en 24 horas pasa a huérfano y se borra a los 7 días.

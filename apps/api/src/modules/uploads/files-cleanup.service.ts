@@ -5,7 +5,7 @@ import { UploadsService } from './uploads.service';
 
 /** Cada cuánto corre. Es idempotente: un reinicio no la saltea. */
 export const FILES_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
-/** D-6: lo subido que no se ató en 24 h pasa a huérfano. */
+/** D-6: lo subido que no se ató en 24 h (desde la ÚLTIMA subida del mismo contenido) pasa a huérfano. */
 export const PENDING_TTL_MS = 24 * 60 * 60 * 1000;
 /** D-6: el archivo físico de un huérfano se borra a los 7 días, si sigue sin dueño. */
 export const ORPHAN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -67,7 +67,7 @@ export class FilesCleanupService implements OnApplicationBootstrap, OnModuleDest
     const orphanBefore = new Date(now.getTime() - ORPHAN_TTL_MS);
     const toDelete = await this.prisma.withSystemTenant(accountId, async (tx) => {
       const orphaned = await tx.file.updateMany({
-        where: { accountId, status: FileStatus.PENDING, createdAt: { lt: pendingBefore }, owners: { none: {} }, deletedAt: null },
+        where: { accountId, status: FileStatus.PENDING, updatedAt: { lt: pendingBefore }, owners: { none: {} }, deletedAt: null },
         data: { status: FileStatus.ORPHAN, orphanedAt: now },
       });
       const old = await tx.file.findMany({
@@ -76,18 +76,24 @@ export class FilesCleanupService implements OnApplicationBootstrap, OnModuleDest
       });
       return { orphaned: orphaned.count, old };
     });
-    // La marca de borrado PRIMERO y con la condición «sigue huérfano y sin dueños»; el archivo físico sólo se borra si esa marca se aplicó. Así un
-    // archivo que se ató justo ahora (el trigger lo pasó a ATTACHED) nunca pierde su contenido. Si el borrado del disco falla, sólo queda un archivo
-    // suelto (inofensivo), nunca un dueño apuntando a un archivo que no está.
+    // Cada archivo en su propia transacción y BAJO BLOQUEO DE FILA: se confirma que sigue huérfano y sin dueños, se marca borrado y se borra el
+    // archivo físico antes de soltar el bloqueo. Una subida del mismo contenido registra el archivo ANTES de escribir los bytes
+    // (`UploadsService.store`) y su `upsert` espera este bloqueo: o la limpieza gana y la subida revive el registro y escribe después, o la subida
+    // gana y la limpieza ve el archivo ya PENDING y lo deja. Si el borrado del disco falla, la transacción se revierte.
     let deleted = 0;
     for (const f of toDelete.old) {
-      const marked = await this.prisma.withSystemTenant(accountId, (tx) =>
-        tx.file.updateMany({ where: { id: f.id, accountId, status: FileStatus.ORPHAN, owners: { none: {} }, deletedAt: null }, data: { deletedAt: now } }),
-      );
-      if (marked.count === 1) {
+      const removed = await this.prisma.withSystemTenant(accountId, async (tx) => {
+        const locked = await tx.$queryRaw<{ id: string }[]>`
+          SELECT f.id FROM files f
+          WHERE f.id = ${f.id} AND f.account_id = ${accountId} AND f.status = 'ORPHAN' AND f.deleted_at IS NULL
+            AND NOT EXISTS (SELECT 1 FROM file_owners o WHERE o.file_id = f.id)
+          FOR UPDATE`;
+        if (locked.length === 0) return false;
+        await tx.file.update({ where: { id: f.id }, data: { deletedAt: now } });
         await this.uploads.removeForAccount(accountId, f.storageKey);
-        deleted += 1;
-      }
+        return true;
+      });
+      if (removed) deleted += 1;
     }
     return { orphaned: toDelete.orphaned, deleted };
   }
