@@ -1,4 +1,4 @@
-> ESTADO: BORRADOR (2026-11-06). D-1 aprobada por la usuaria; D-2…D-7 derivan de H-1, H-4, H-5, H-9, H-11, H-13 y ADR-F14-01/08/10 (aprobados 2026-11-04). Falta pasar `validar`.
+> ESTADO: VALIDADO (G4 PASS 2026-11-07, 11/11). D-1 aprobada por la usuaria; D-2…D-7 derivan de H-1, H-4, H-5, H-9, H-11, H-13 y ADR-F14-01/08/10 (aprobados 2026-11-04). Advertencias: D-2…D-7 no fueron aprobadas una por una; el diseño de plataforma (sesiones de soporte, consentimiento) es amplio y se construye por etapas dentro de la fase.
 
 # Plan F5 · Roles por cuenta y plataforma
 
@@ -56,6 +56,9 @@ F1, F3, F2, F2b y F4 (rama anterior). ADR-F14-01, 08, 10; H-1, H-4, H-5, H-9, H-
 | D-5 | Un solo `ACCOUNT_ADMIN` por cuenta se mantiene (H-13); los demás roles de plantilla pueden tener varias personas. | Aprobada (H-13) |
 | D-6 | El *rollout* de un permiso nuevo a las cuentas es un comando de plataforma explícito, con *dry-run*, que sólo inserta filas `source='TEMPLATE'` en roles sin divergencia y sube las versiones de las membresías afectadas. | Derivada de ADR-F14-01 |
 | D-7 | `SUPPORT_WRITE_ENABLED` y `PLATFORM_ACCESS_ENABLED` se leen del entorno del servidor, apagados por omisión; los cambios se registran en el log del proceso. | Aprobada (H-11) |
+
+### Cruce con la alineación móvil en curso (regla D1)
+Leído `../F10/plans/alineacion-web/README.md` (ronda 4, 2026-10-10). F5 **no cambia código del móvil ni los contratos que consume**: `GET /roles` conserva su forma (`id`, nombre legible, nivel) y el token conserva `roleId` y `permissions`; `roleKey` es un campo nuevo que el móvil ignora; `/auth/me` sigue devolviendo el nombre del rol. Lo que F8 debe adoptar queda en la tarea 11.
 
 ## 6. Archivos afectados (IDs HUB; los nuevos se crean al cerrar la fase)
 
