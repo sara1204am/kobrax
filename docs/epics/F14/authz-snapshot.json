@@ -773,6 +773,15 @@
     "any": []
   },
   {
+    "route": "GET /platform/accounts/:accountId/support-sessions",
+    "handler": "PlatformController.list",
+    "kind": "permissions",
+    "all": [
+      "platform:accounts:read"
+    ],
+    "any": []
+  },
+  {
     "route": "GET /roles",
     "handler": "RolesController.list",
     "kind": "permissions",
@@ -823,6 +832,22 @@
     "kind": "permissions",
     "all": [
       "route:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /support-access/current",
+    "handler": "SupportAccessController.current",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /support-access",
+    "handler": "SupportAccessController.list",
+    "kind": "permissions",
+    "all": [
+      "support:consent"
     ],
     "any": []
   },
@@ -1655,6 +1680,38 @@
     "any": []
   },
   {
+    "route": "POST /platform/accounts/:accountId/support-sessions/:id/token",
+    "handler": "PlatformController.token",
+    "kind": "permissions",
+    "all": [
+      "platform:support:open"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /platform/auth/login",
+    "handler": "PlatformAuthController.login",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /platform/auth/mfa/confirm",
+    "handler": "PlatformAuthController.confirm",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /platform/support-sessions",
+    "handler": "PlatformController.open",
+    "kind": "permissions",
+    "all": [
+      "platform:support:open"
+    ],
+    "any": []
+  },
+  {
     "route": "POST /routes/:id/change-requests",
     "handler": "RoutesController.requestChange",
     "kind": "permissions",
@@ -1724,6 +1781,33 @@
       "route:execute",
       "route:write"
     ]
+  },
+  {
+    "route": "POST /support-access/:id/deny",
+    "handler": "SupportAccessController.deny",
+    "kind": "permissions",
+    "all": [
+      "support:consent"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /support-access/:id/grant",
+    "handler": "SupportAccessController.grant",
+    "kind": "permissions",
+    "all": [
+      "support:consent"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /support-access/:id/revoke",
+    "handler": "SupportAccessController.revoke",
+    "kind": "permissions",
+    "all": [
+      "support:consent"
+    ],
+    "any": []
   },
   {
     "route": "POST /uploads",

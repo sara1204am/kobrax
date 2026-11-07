@@ -2314,7 +2314,8 @@
       "facturacion": "Billing",
       "billingPending": "Billing details missing",
       "actividad": "Activity",
-      "avanzado": "Advanced"
+      "avanzado": "Advanced",
+      "soporte": "Support access"
     },
     "saveBar": {
       "label": "Unsaved changes",
@@ -2968,6 +2969,30 @@
         "CREDIT_OFFICE_OUT_OF_SCOPE": "You have no scope over that office.",
         "CREDIT_REASSIGN_ARGS": "Give the source office or the credits, not both."
       }
+    },
+    "support": {
+      "title": "Support access",
+      "intro": "When the Kobrax team needs to help you with a problem, they open temporary access to your account. Here you can see each access, what it allows and until when, and accept it, reject it or cut it off at any time. Everything they do is recorded in the account activity.",
+      "empty": "Nobody from the Kobrax team has asked for access to your account.",
+      "reason": "Reason",
+      "ticket": "Ticket",
+      "expires": "Expires",
+      "permissions": "Can",
+      "readOnly": "View only",
+      "writes": "Can change account settings",
+      "status": {
+        "ACTIVE": "Active",
+        "AWAITING_CONSENT": "Waiting for your approval",
+        "EXPIRED": "Expired",
+        "REVOKED": "Revoked"
+      },
+      "grant": "Accept",
+      "deny": "Reject",
+      "revoke": "Cut access",
+      "working": "One moment…",
+      "error": "The action could not be completed",
+      "consentNote": "They asked to be able to change account settings. Without your approval they can only view.",
+      "banner": "Support session · expires at {time}"
     }
   },
   "exports": {

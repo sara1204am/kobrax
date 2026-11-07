@@ -21,6 +21,16 @@ export interface AuditEntry {
  * del `TenantContextService`. Redacta PII en los snapshots `before/after`.
  * Si no hay contexto de tenant (request no autenticado) → no audita (la tabla exige `account_id`).
  */
+/**
+ * Quién actuó. Un usuario de la cuenta va por `userId`; la persona de plataforma (sesión de soporte) NO es un usuario de empresa: `userId` queda nulo y el
+ * rastro lleva `actorType = PLATFORM`, su id y la sesión de soporte (F14 · F5).
+ */
+function actorOf(ctx: { userId: string; actorType?: 'PLATFORM'; supportSessionId?: string }) {
+  return ctx.actorType === 'PLATFORM'
+    ? { userId: null, actorType: 'PLATFORM', actorId: ctx.userId, supportSessionId: ctx.supportSessionId ?? null }
+    : { userId: ctx.userId };
+}
+
 @Injectable()
 export class AuditService {
   private readonly logger = new Logger(AuditService.name);
@@ -42,7 +52,7 @@ export class AuditService {
         tx.auditLog.create({
           data: {
             accountId: ctx.accountId,
-            userId: ctx.userId,
+            ...actorOf(ctx),
             action: entry.action,
             entity: entry.entity,
             entityId: entry.entityId,
@@ -71,7 +81,7 @@ export class AuditService {
 
     const data = entries.map((entry) => ({
       accountId: ctx.accountId,
-      userId: ctx.userId,
+      ...actorOf(ctx),
       action: entry.action,
       entity: entry.entity,
       entityId: entry.entityId,

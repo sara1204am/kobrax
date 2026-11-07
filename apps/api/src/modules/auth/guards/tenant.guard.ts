@@ -17,6 +17,12 @@ export class TenantGuard implements CanActivate {
     const kind = resolveAccess(this.reflector, context.getHandler(), context.getClass())?.kind;
     if (kind !== 'permissions' && kind !== 'authenticated') return true;
     const req = context.switchToHttp().getRequest<Request & { user?: AuthenticatedUser }>();
+    // F14 · F5: la persona de plataforma sin sesión de soporte (login de plataforma) no tiene empresa; sólo puede llamar a handlers que exigen
+    // EXCLUSIVAMENTE permisos `platform:*` (que ningún usuario de empresa tiene). Cualquier otro handler sigue exigiendo empresa.
+    if (req.user?.actorType === 'PLATFORM' && !req.user.accountId && !req.user.supportSessionId) {
+      const access = resolveAccess(this.reflector, context.getHandler(), context.getClass());
+      if (access?.kind === 'permissions' && access.all.length > 0 && access.all.every((p) => p.startsWith('platform:'))) return true;
+    }
     if (!req.user?.accountId) {
       throw new ForbiddenException({ code: 'TENANT_001', message: 'Sin contexto de empresa' });
     }

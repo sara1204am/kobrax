@@ -71,6 +71,11 @@ export enum Permission {
 
   ROLE_READ = 'role:read',
   ROLE_WRITE = 'role:write',
+  /**
+   * F14 · F5 (H-11): aceptar, rechazar o revocar los accesos de soporte de la plataforma a esta cuenta (y el consentimiento de escritura sensible).
+   * Sólo el administrador de la cuenta.
+   */
+  SUPPORT_CONSENT = 'support:consent',
 
   AUDIT_READ = 'audit:read',
 

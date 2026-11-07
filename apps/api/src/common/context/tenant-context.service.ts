@@ -9,6 +9,9 @@ export interface RequestContext {
   permissions: string[];
   /** F14 · F5: clave del rol de la cuenta (`account_roles.key`), si el token la trae. */
   roleKey?: string;
+  /** F14 · F5: `PLATFORM` cuando la petición es de la persona de plataforma por una sesión de soporte; la auditoría lo marca. */
+  actorType?: 'PLATFORM';
+  supportSessionId?: string;
   sessionId?: string;
   requestId?: string;
   ip?: string;

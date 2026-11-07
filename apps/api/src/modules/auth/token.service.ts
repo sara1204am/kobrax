@@ -10,6 +10,10 @@ export interface AccessClaims {
   roleId: string;
   /** F14 · F5: clave del rol de la CUENTA (`account_roles.key`). Adicional a `roleId`, que se conserva; los clientes viejos la ignoran. */
   roleKey?: string;
+  /** F14 · F5: `PLATFORM` = la persona de plataforma (login de plataforma o sesión de soporte). Ausente = usuario de empresa. */
+  actorType?: 'PLATFORM';
+  /** F14 · F5: la sesión de soporte con la que se entró a una cuenta (sólo con `actorType = PLATFORM`). */
+  supportSessionId?: string;
   permissions: string[];
   sessionId: string;
   /** F14 · F1 (H-2): versión de autorización de la membresía al emitir el token. */

@@ -2314,7 +2314,8 @@
       "facturacion": "Facturación",
       "billingPending": "Faltan datos de facturación",
       "actividad": "Actividad",
-      "avanzado": "Avanzado"
+      "avanzado": "Avanzado",
+      "soporte": "Accesos de soporte"
     },
     "saveBar": {
       "label": "Cambios sin guardar",
@@ -2968,6 +2969,30 @@
         "CREDIT_OFFICE_OUT_OF_SCOPE": "No tienes alcance sobre esa oficina.",
         "CREDIT_REASSIGN_ARGS": "Indica la oficina de origen o los créditos, no ambos."
       }
+    },
+    "support": {
+      "title": "Accesos de soporte",
+      "intro": "Cuando el equipo de Kobrax necesita ayudarte con un problema, abre un acceso temporal a tu cuenta. Aquí ves cada acceso, qué puede hacer y hasta cuándo, y lo aceptas, lo rechazas o lo cortas cuando quieras. Todo lo que hacen queda registrado en la actividad de la cuenta.",
+      "empty": "Nadie del equipo de Kobrax ha pedido acceso a tu cuenta.",
+      "reason": "Motivo",
+      "ticket": "Ticket",
+      "expires": "Vence",
+      "permissions": "Puede",
+      "readOnly": "Solo ver",
+      "writes": "Puede modificar ajustes de la cuenta",
+      "status": {
+        "ACTIVE": "Vigente",
+        "AWAITING_CONSENT": "Espera tu aceptación",
+        "EXPIRED": "Vencido",
+        "REVOKED": "Revocado"
+      },
+      "grant": "Aceptar",
+      "deny": "Rechazar",
+      "revoke": "Cortar acceso",
+      "working": "Un momento…",
+      "error": "No se pudo completar la acción",
+      "consentNote": "Pidieron poder modificar ajustes de la cuenta. Sin tu aceptación solo pueden ver.",
+      "banner": "Sesión de soporte · vence a las {time}"
     }
   },
   "exports": {

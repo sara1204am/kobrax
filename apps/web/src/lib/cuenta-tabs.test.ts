@@ -10,7 +10,7 @@ describe('visibleCuentaTabs', () => {
   });
 
   it('el administrador ve todas', () => {
-    expect(keys(ROLE_PERMISSIONS[RoleType.ACCOUNT_ADMIN])).toEqual(['general', 'plan', 'cobranza', 'mensajes', 'catalogos', 'oficinas', 'facturacion', 'actividad', 'avanzado']);
+    expect(keys(ROLE_PERMISSIONS[RoleType.ACCOUNT_ADMIN])).toEqual(['general', 'plan', 'cobranza', 'mensajes', 'catalogos', 'oficinas', 'facturacion', 'actividad', 'soporte', 'avanzado']);
   });
 
   it('sin catalog:read no hay «Mensajes» ni «Catálogos»; sin user:read, tampoco «Agencias»', () => {

@@ -90,6 +90,7 @@ const PERMISSIONS: PermRow[] = [
   ['client:delete', 'clients', 'DELETE', 'ACCOUNT'],
   ['client:pii:read', 'clients', 'READ', 'ACCOUNT'],
   ['client:contact:read', 'clients', 'READ', 'ACCOUNT'],
+  ['support:consent', 'account', 'UPDATE', 'ACCOUNT'],
   ['client:import', 'clients', 'CREATE', 'ACCOUNT'],
   ['client:import:replace', 'clients', 'DELETE', 'ACCOUNT'],
   ['credit:read', 'credits', 'READ', 'ACCOUNT'],
@@ -1905,6 +1906,16 @@ async function main(): Promise<void> {
     await prisma.roleTemplatePermission.deleteMany({ where: { templateKey: name, permissionId: { notIn: perms.map((p) => p.id) } } });
   }
   console.log('  ✓ plantillas de rol');
+
+  // 2c) F14 · F5 (H-11): la ÚNICA persona de plataforma. Se aprovisiona SOLO acá (infraestructura): no hay API ni pantalla que cree, edite o promueva a
+  // nadie a plataforma, y la base admite una sola fila. Sin `PLATFORM_ADMIN_EMAIL` / `PLATFORM_ADMIN_PASSWORD` no se crea (la plataforma queda inactiva).
+  // El MFA se enrola en el primer inicio de sesión; mientras tanto no puede entrar. Va ANTES del corte del catálogo: producción también la necesita.
+  if (process.env.PLATFORM_ADMIN_EMAIL && process.env.PLATFORM_ADMIN_PASSWORD && (await prisma.platformUser.count()) === 0) {
+    await prisma.platformUser.create({
+      data: { email: process.env.PLATFORM_ADMIN_EMAIL.trim().toLowerCase(), passwordHash: await bcrypt.hash(process.env.PLATFORM_ADMIN_PASSWORD, 12) },
+    });
+    console.log('  ✓ persona de plataforma (MFA pendiente de enrolar)');
+  }
 
   // Corte para PRODUCCIÓN: `pnpm db:seed:catalog` carga sólo permisos y roles. Sin el catálogo el registro público
   // falla con ROLE_CATALOG_MISSING; con el seed completo entrarían datos de prueba a la base real. Es un corte en

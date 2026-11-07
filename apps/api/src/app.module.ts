@@ -5,6 +5,7 @@ import { PrismaModule } from './database/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { PlatformModule } from './modules/platform/platform.module';
 import { AuthzModule } from './common/authz/authz.module';
 import { AccountsModule } from './modules/accounts/accounts.module';
 import { BranchesModule } from './modules/branches/branches.module';
@@ -49,6 +50,7 @@ import { AppVersionGuard } from './common/guards/app-version.guard';
     EventBusModule,
     HealthModule,
     AuthModule,
+    PlatformModule,
     AuthzModule,
     AccountsModule,
     BranchesModule,

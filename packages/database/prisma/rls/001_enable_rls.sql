@@ -75,7 +75,9 @@ DECLARE
     -- F14 · F4: registro de archivos y de sus dueños (quién puede leer cada uno).
     'files', 'file_owners',
     -- F14 · F5: roles de la cuenta y sus permisos.
-    'account_roles', 'account_role_permissions'
+    'account_roles', 'account_role_permissions',
+    -- F14 · F5: accesos de soporte de plataforma a la cuenta (el administrador los ve y los acepta).
+    'support_sessions'
   ];
 BEGIN
   FOREACH t IN ARRAY operational LOOP
@@ -106,5 +108,7 @@ GRANT SELECT, INSERT, UPDATE ON accounts TO kobrax_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON users, profiles, roles, permissions, role_permissions, mfa_backup_codes TO kobrax_app;
 -- F14 · F5: las plantillas son globales (como `roles`); la API sólo las lee, las escribe el rol de migraciones / la CLI de plataforma.
 GRANT SELECT ON role_templates, role_template_permissions TO kobrax_app;
+-- F14 · F5: la persona de plataforma es global (sin cuenta): la API sólo la lee y actualiza su MFA / último ingreso; nadie la crea por la API.
+GRANT SELECT, UPDATE ON platform_users TO kobrax_app;
 -- F14 · F1: ajustes globales (una fila, sin account_id: catálogo global como `roles`).
 GRANT SELECT, UPDATE ON platform_settings TO kobrax_app;

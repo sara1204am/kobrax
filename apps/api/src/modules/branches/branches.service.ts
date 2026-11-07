@@ -252,10 +252,10 @@ export class BranchesService {
         where: { entity: 'branch', entityId: id },
         orderBy: { createdAt: 'desc' },
         take: 50,
-        select: { id: true, action: true, userId: true, before: true, after: true, createdAt: true },
+        select: { id: true, action: true, userId: true, actorType: true, before: true, after: true, createdAt: true },
       });
       const actors = logs.length
-        ? await tx.profile.findMany({ where: { userId: { in: [...new Set(logs.map((l) => l.userId))] } }, select: { userId: true, firstName: true, lastName: true } })
+        ? await tx.profile.findMany({ where: { userId: { in: [...new Set(logs.map((l) => l.userId).filter((x): x is string => x != null))] } }, select: { userId: true, firstName: true, lastName: true } })
         : [];
       const actorName = new Map(actors.map((p) => [p.userId, `${p.firstName} ${p.lastName}`.trim()]));
       return {
@@ -277,8 +277,8 @@ export class BranchesService {
           id: l.id,
           action: l.action,
           at: l.createdAt.toISOString(),
-          actorId: l.userId,
-          actorName: actorName.get(l.userId) ?? null,
+          actorId: l.userId ?? '',
+          actorName: l.actorType === 'PLATFORM' ? 'Soporte de Kobrax' : (l.userId ? (actorName.get(l.userId) ?? null) : null),
           before: l.before,
           after: l.after,
         })),
