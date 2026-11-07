@@ -8,6 +8,8 @@ export interface AccessClaims {
   sub: string; // userId
   accountId: string;
   roleId: string;
+  /** F14 · F5: clave del rol de la CUENTA (`account_roles.key`). Adicional a `roleId`, que se conserva; los clientes viejos la ignoran. */
+  roleKey?: string;
   permissions: string[];
   sessionId: string;
   /** F14 · F1 (H-2): versión de autorización de la membresía al emitir el token. */

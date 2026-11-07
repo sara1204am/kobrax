@@ -7,6 +7,8 @@ export interface RequestContext {
   userId: string;
   /** Permisos efectivos del JWT; habilitan el scoping por capacidad en los servicios. */
   permissions: string[];
+  /** F14 · F5: clave del rol de la cuenta (`account_roles.key`), si el token la trae. */
+  roleKey?: string;
   sessionId?: string;
   requestId?: string;
   ip?: string;

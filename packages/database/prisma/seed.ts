@@ -1880,6 +1880,32 @@ async function main(): Promise<void> {
   }
   console.log(`  ✓ ${Object.keys(ROLES).length} roles`);
 
+  // 2b) F14 · F5: las PLANTILLAS de rol de empresa (las seis; SUPER_ADMIN no es plantilla de cuenta) y sus permisos. Cada cuenta que se crea recibe
+  // una copia por trigger (`accounts_create_roles`), así que las plantillas tienen que existir ANTES de las cuentas. `data:scope:*` es excluyente: la
+  // plantilla conserva sólo el más amplio (all > subtree > branch), que es el que ya manda en todo el código.
+  const SCOPE_ORDER = ['data:scope:all', 'data:scope:subtree', 'data:scope:branch'];
+  for (const [name, def] of Object.entries(ROLES)) {
+    if (name === 'SUPER_ADMIN') continue;
+    await prisma.roleTemplate.upsert({
+      where: { key: name },
+      update: { tier: def.level, tenantAssignable: name !== 'ACCOUNT_ADMIN' },
+      create: { key: name, tier: def.level, tenantAssignable: name !== 'ACCOUNT_ADMIN' },
+    });
+    const codes = [...(ROLE_PERMISSIONS[name as RoleType] as string[])];
+    const widest = SCOPE_ORDER.find((c) => codes.includes(c));
+    const wanted = codes.filter((c) => !SCOPE_ORDER.includes(c) || c === widest);
+    const perms = await prisma.permission.findMany({ where: { code: { in: wanted } } });
+    for (const perm of perms) {
+      await prisma.roleTemplatePermission.upsert({
+        where: { templateKey_permissionId: { templateKey: name, permissionId: perm.id } },
+        update: {},
+        create: { templateKey: name, permissionId: perm.id },
+      });
+    }
+    await prisma.roleTemplatePermission.deleteMany({ where: { templateKey: name, permissionId: { notIn: perms.map((p) => p.id) } } });
+  }
+  console.log('  ✓ plantillas de rol');
+
   // Corte para PRODUCCIÓN: `pnpm db:seed:catalog` carga sólo permisos y roles. Sin el catálogo el registro público
   // falla con ROLE_CATALOG_MISSING; con el seed completo entrarían datos de prueba a la base real. Es un corte en
   // ESTE archivo (y no un seed aparte) porque la lista de permisos vive acá. Se lee de argv y no de una variable de

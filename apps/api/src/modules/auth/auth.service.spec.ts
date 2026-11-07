@@ -79,6 +79,15 @@ function makeAuth(opts: {
       calls.forRole.push(roleId);
       return ['collection:read'];
     },
+    // F14 · F5: la membresía resuelve sus permisos por el rol de la cuenta; estos dobles no tienen rol de cuenta → cae al rol global (mismo resultado).
+    forMembership: async (_accountId: string, _userId: string, roleId: string) => {
+      calls.forRole.push(roleId);
+      return { permissions: ['collection:read'], source: 'global' as const };
+    },
+    forMembershipIn: async (_tx: unknown, ua: { roleId: string }) => {
+      calls.forRole.push(ua.roleId);
+      return { permissions: ['collection:read'], source: 'global' as const };
+    },
   };
   const sessions = {
     denylist: async () => {},

@@ -73,7 +73,9 @@ DECLARE
     -- F14 · F1: outbox transaccional de versiones de autorización.
     'authz_version_outbox',
     -- F14 · F4: registro de archivos y de sus dueños (quién puede leer cada uno).
-    'files', 'file_owners'
+    'files', 'file_owners',
+    -- F14 · F5: roles de la cuenta y sus permisos.
+    'account_roles', 'account_role_permissions'
   ];
 BEGIN
   FOREACH t IN ARRAY operational LOOP
@@ -97,17 +99,12 @@ CREATE POLICY tenant_self ON accounts
   WITH CHECK (id = app_current_account());
 GRANT SELECT, INSERT, UPDATE ON accounts TO kobrax_app;
 
--- user_permission_overrides: account_id es opcional (overrides globales).
-ALTER TABLE user_permission_overrides ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_permission_overrides FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation ON user_permission_overrides;
-CREATE POLICY tenant_isolation ON user_permission_overrides
-  USING (account_id IS NULL OR account_id = app_current_account());
-GRANT SELECT, INSERT, UPDATE, DELETE ON user_permission_overrides TO kobrax_app;
-
+-- F14 · F5 (H-4): `user_permission_overrides` se retiró (sin consumidores; ver la migración 20261107020000).
 -- Tablas GLOBALES (sin account_id): users, profiles, roles, permissions,
 -- role_permissions. No llevan RLS por tenant; su acceso se controla en la
 -- capa de aplicación (un usuario es global y puede pertenecer a varios tenants).
 GRANT SELECT, INSERT, UPDATE, DELETE ON users, profiles, roles, permissions, role_permissions, mfa_backup_codes TO kobrax_app;
+-- F14 · F5: las plantillas son globales (como `roles`); la API sólo las lee, las escribe el rol de migraciones / la CLI de plataforma.
+GRANT SELECT ON role_templates, role_template_permissions TO kobrax_app;
 -- F14 · F1: ajustes globales (una fila, sin account_id: catálogo global como `roles`).
 GRANT SELECT, UPDATE ON platform_settings TO kobrax_app;

@@ -442,7 +442,7 @@ export class AuthService implements OnModuleInit {
     roleId: string,
     meta: SessionMeta,
   ): Promise<AuthTokens> {
-    const permissions = await this.permissions.forRole(roleId);
+    const { permissions, roleKey } = await this.permissions.forMembership(accountId, userId, roleId);
     const familyId = randomBytes(16).toString('hex');
     const place = lookupPlace(meta.ip);
 
@@ -488,6 +488,7 @@ export class AuthService implements OnModuleInit {
         sub: userId,
         accountId,
         roleId,
+        roleKey,
         permissions,
         sessionId: session.id,
         av: versions.av,
@@ -548,7 +549,7 @@ export class AuthService implements OnModuleInit {
         where: { userId: claims.sub, accountId: claims.accountId, isActive: true },
       });
       if (!ua) return { kind: 'invalid' };
-      const permissions = await this.permissions.forRole(ua.roleId);
+      const { permissions, roleKey } = await this.permissions.forMembershipIn(tx, ua);
 
       const newRefresh = this.token.signRefresh({
         sub: claims.sub,
@@ -577,6 +578,7 @@ export class AuthService implements OnModuleInit {
         sub: claims.sub,
         accountId: claims.accountId,
         roleId: ua.roleId,
+        roleKey,
         permissions,
         sessionId: claims.sessionId,
         av: ua.authzVersion,

@@ -13,6 +13,8 @@ export interface AuthenticatedUser {
   userId: string;
   accountId: string;
   roleId: string;
+  /** F14 · F5: clave del rol de la cuenta (adicional a `roleId`). */
+  roleKey?: string;
   permissions: string[];
   sessionId: string;
   av?: number;
@@ -69,6 +71,7 @@ export class JwtAuthGuard implements CanActivate {
       userId: claims.sub,
       accountId: claims.accountId,
       roleId: claims.roleId,
+      roleKey: claims.roleKey,
       permissions: claims.permissions,
       sessionId: claims.sessionId,
       av: claims.av,

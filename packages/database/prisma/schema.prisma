@@ -104,7 +104,6 @@ model Account {
   userAccounts            UserAccount[]
   sessions                UserSession[]
   auditLogs               AuditLog[]
-  overrides               UserPermissionOverride[]
   clients                 Client[]
   credits                 Credit[]
   routePlans              RoutePlan[]
@@ -162,17 +161,17 @@ model Branch {
   updatedAt     DateTime  @updatedAt @map("updated_at")
   deletedAt     DateTime? @map("deleted_at")
 
-  account      Account                @relation(fields: [accountId], references: [id])
-  parent       Branch?                @relation("BranchTree", fields: [parentId], references: [id], onDelete: Restrict)
-  children     Branch[]               @relation("BranchTree")
-  type         BranchType             @relation(fields: [typeId], references: [id])
-  userAccounts UserAccount[]
-  assignments  UserBranchAssignment[]
-  credits      Credit[]
-  payments     Payment[]
-  routePlans   RoutePlan[]
+  account           Account                @relation(fields: [accountId], references: [id])
+  parent            Branch?                @relation("BranchTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children          Branch[]               @relation("BranchTree")
+  type              BranchType             @relation(fields: [typeId], references: [id])
+  userAccounts      UserAccount[]
+  assignments       UserBranchAssignment[]
+  credits           Credit[]
+  payments          Payment[]
+  routePlans        RoutePlan[]
   /// F14 · F2: clientes registrados en esta oficina.
-  registeredClients Client[] @relation("ClientRegisteredBranch")
+  registeredClients Client[]               @relation("ClientRegisteredBranch")
 
   @@index([accountId])
   @@index([accountId, active])
@@ -249,7 +248,6 @@ model User {
   userAccounts        UserAccount[]
   branchAssignments   UserBranchAssignment[]
   sessions            UserSession[]
-  overrides           UserPermissionOverride[]
   auditLogs           AuditLog[]
   mfaBackupCodes      MfaBackupCode[]
   passwordResetTokens PasswordResetToken[]
@@ -293,8 +291,8 @@ model Role {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  permissions  RolePermission[]
-  userAccounts UserAccount[]
+  permissions       RolePermission[]
+  userAccounts      UserAccount[]
   branchAssignments UserBranchAssignment[]
 
   @@map("roles")
@@ -311,11 +309,18 @@ model Permission {
   resource    String?
   scope       PermissionScope  @default(GLOBAL)
   active      Boolean          @default(true)
+  /// F14·F5: LOW | MEDIUM | HIGH | CRITICAL. Lo usa el editor de roles (F7) para pedir confirmación.
+  risk        String           @default("LOW")
+  /// F14·F5: NULL | PLATFORM (nunca concedible a un rol de cuenta) | ADMIN_CORE (el ACCOUNT_ADMIN no puede perderlo).
+  reserved    String?
+  /// F14·F5: permisos de los que éste depende (arreglo JSON de códigos).
+  requires    Json             @default("[]")
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @updatedAt @map("updated_at")
 
-  roles     RolePermission[]
-  overrides UserPermissionOverride[]
+  roles        RolePermission[]
+  templates    RoleTemplatePermission[]
+  accountRoles AccountRolePermission[]
 
   @@map("permissions")
 }
@@ -335,46 +340,29 @@ model RolePermission {
   @@map("role_permissions")
 }
 
-/// Excepciones individuales sobre permisos heredados del rol (temporales).
-model UserPermissionOverride {
-  id           String    @id @default(uuid())
-  userId       String    @map("user_id")
-  accountId    String?   @map("account_id")
-  permissionId String    @map("permission_id")
-  granted      Boolean // true concede / false niega
-  reason       String?
-  expiresAt    DateTime? @map("expires_at")
-  grantedBy    String?   @map("granted_by")
-  createdAt    DateTime  @default(now()) @map("created_at")
-
-  user       User       @relation(fields: [userId], references: [id])
-  account    Account?   @relation(fields: [accountId], references: [id])
-  permission Permission @relation(fields: [permissionId], references: [id])
-
-  @@index([userId])
-  @@map("user_permission_overrides")
-}
-
 /// Tabla central del modelo multi-tenant: usuario ↔ empresa ↔ rol ↔ sucursal.
 model UserAccount {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  accountId String   @map("account_id")
-  roleId    String   @map("role_id")
-  branchId  String?  @map("branch_id")
-  isOwner   Boolean  @default(false) @map("is_owner")
-  isDefault Boolean  @default(false) @map("is_default")
-  isActive  Boolean  @default(true) @map("is_active")
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  accountId     String   @map("account_id")
+  roleId        String   @map("role_id")
+  /// F14·F5: el rol de la CUENTA (copia de una plantilla). Convive con `roleId` un release; un trigger los mantiene sincronizados.
+  accountRoleId String?  @map("account_role_id")
+  branchId      String?  @map("branch_id")
+  isOwner       Boolean  @default(false) @map("is_owner")
+  isDefault     Boolean  @default(false) @map("is_default")
+  isActive      Boolean  @default(true) @map("is_active")
   /// F14 · F1: sube con cada cambio de rol / oficina / estado de esta membresía; viaja en el JWT como `av` (H-2).
-  authzVersion Int    @default(1) @map("authz_version")
-  joinedAt  DateTime @default(now()) @map("joined_at")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  authzVersion  Int      @default(1) @map("authz_version")
+  joinedAt      DateTime @default(now()) @map("joined_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  user    User    @relation(fields: [userId], references: [id])
-  account Account @relation(fields: [accountId], references: [id])
-  role    Role    @relation(fields: [roleId], references: [id])
-  branch  Branch? @relation(fields: [branchId], references: [id])
+  user        User         @relation(fields: [userId], references: [id])
+  account     Account      @relation(fields: [accountId], references: [id])
+  role        Role         @relation(fields: [roleId], references: [id])
+  accountRole AccountRole? @relation(fields: [accountRoleId], references: [id])
+  branch      Branch?      @relation(fields: [branchId], references: [id])
 
   @@unique([userId, accountId])
   @@index([accountId])
@@ -393,6 +381,73 @@ model PlatformSetting {
 }
 
 /// F14 · F1: outbox transaccional DB→Redis de `authz_version`. Se inserta en la MISMA transacción que el cambio; un job la vacía.
+/// F14·F5 (ADR-F14-01) — plantilla GLOBAL de un rol de empresa. Sólo se consulta al crear una cuenta y en un *rollout* explícito.
+model RoleTemplate {
+  key              String   @id
+  tier             Int
+  tenantAssignable Boolean  @default(true) @map("tenant_assignable")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  permissions  RoleTemplatePermission[]
+  accountRoles AccountRole[]
+
+  @@map("role_templates")
+}
+
+model RoleTemplatePermission {
+  templateKey  String @map("template_key")
+  permissionId String @map("permission_id")
+
+  template   RoleTemplate @relation(fields: [templateKey], references: [key], onDelete: Cascade)
+  permission Permission   @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([templateKey, permissionId])
+  @@index([permissionId])
+  @@map("role_template_permissions")
+}
+
+/// F14·F5 — el rol de UNA cuenta. Sus permisos son los que valen en tiempo de ejecución; `templateKey` es el linaje (nulo = personalizado).
+model AccountRole {
+  id          String    @id @default(uuid())
+  accountId   String    @map("account_id")
+  key         String
+  templateKey String?   @map("template_key")
+  tier        Int
+  isSystem    Boolean   @default(true) @map("is_system")
+  version     Int       @default(1)
+  divergedAt  DateTime? @map("diverged_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  template    RoleTemplate?           @relation(fields: [templateKey], references: [key], onDelete: SetNull)
+  permissions AccountRolePermission[]
+  memberships UserAccount[]
+
+  @@unique([accountId, key])
+  @@index([accountId])
+  @@map("account_roles")
+}
+
+model AccountRolePermission {
+  accountRoleId String   @map("account_role_id")
+  permissionId  String   @map("permission_id")
+  accountId     String   @map("account_id")
+  /// TEMPLATE | CUSTOM
+  source        String   @default("TEMPLATE")
+  grantedBy     String?  @map("granted_by")
+  grantedAt     DateTime @default(now()) @map("granted_at")
+
+  accountRole AccountRole @relation(fields: [accountRoleId], references: [id], onDelete: Cascade)
+  permission  Permission  @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([accountRoleId, permissionId])
+  @@index([accountId])
+  @@index([permissionId])
+  @@map("account_role_permissions")
+}
+
 model AuthzVersionOutbox {
   id          String    @id @default(uuid())
   accountId   String    @map("account_id")
@@ -408,21 +463,21 @@ model AuthzVersionOutbox {
 /// F14 · F4 (ADR-F14-07) — un archivo subido (una fila por contenido: el nombre en disco es su SHA-256). Quién puede leerlo lo dice
 /// `FileOwner` (de qué cuelga). Las columnas de URL de las demás tablas se conservan: esta tabla es el REGISTRO de dueños, no las reemplaza.
 model File {
-  id          String     @id @default(uuid())
-  accountId   String     @map("account_id")
+  id         String     @id @default(uuid())
+  accountId  String     @map("account_id")
   /// Ruta relativa dentro de la carpeta de la cuenta: `<sha256>.<ext>` (imágenes) o `imports/<sha256>.<ext>` (documentos de importación).
-  storageKey  String     @map("storage_key")
-  sha256      String
-  mime        String
+  storageKey String     @map("storage_key")
+  sha256     String
+  mime       String
   /// Bytes. Nulo en lo rellenado desde datos anteriores (no se leyó el disco).
-  size        Int?
-  status      FileStatus @default(PENDING)
-  uploadedBy  String?    @map("uploaded_by")
-  attachedAt  DateTime?  @map("attached_at")
-  orphanedAt  DateTime?  @map("orphaned_at")
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
-  deletedAt   DateTime?  @map("deleted_at")
+  size       Int?
+  status     FileStatus @default(PENDING)
+  uploadedBy String?    @map("uploaded_by")
+  attachedAt DateTime?  @map("attached_at")
+  orphanedAt DateTime?  @map("orphaned_at")
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+  deletedAt  DateTime?  @map("deleted_at")
 
   owners FileOwner[]
 
@@ -794,8 +849,8 @@ model Client {
   registeredBranchId      String?      @map("registered_branch_id")
   deletedAt               DateTime?    @map("deleted_at")
 
-  account          Account             @relation(fields: [accountId], references: [id])
-  registeredBranch Branch?             @relation("ClientRegisteredBranch", fields: [registeredBranchId], references: [id])
+  account          Account              @relation(fields: [accountId], references: [id])
+  registeredBranch Branch?              @relation("ClientRegisteredBranch", fields: [registeredBranchId], references: [id])
   contacts         ClientContact[]
   locations        ClientLocation[]
   relations        ClientRelation[]
@@ -1287,28 +1342,28 @@ enum CreditActivityType {
 /// preventiva. El cliente no lo manda: lo resuelve el servidor. Append-only: sin `updated_at`/`deleted_at`.
 /// El `id` lo puede traer quien la crea (móvil offline): el mismo id no duplica.
 model CreditActivity {
-  id        String             @id @default(uuid())
-  accountId String             @map("account_id")
-  creditId  String             @map("credit_id")
-  clientId  String             @map("client_id")
-  episodeId String?            @map("episode_id")
+  id                 String             @id @default(uuid())
+  accountId          String             @map("account_id")
+  creditId           String             @map("credit_id")
+  clientId           String             @map("client_id")
+  episodeId          String?            @map("episode_id")
   /// Autor (users.id, ref suave).
-  userId    String?            @map("user_id")
-  type      CreditActivityType
-  result    String?
-  notes     String?
+  userId             String?            @map("user_id")
+  type               CreditActivityType
+  result             String?
+  notes              String?
   /// F4/13 · E4 — contexto de la gestión (todo opcional; `null` en lo anterior). Por qué no pagó: código del catálogo
   /// `NO_PAYMENT_REASON` (ref suave: la cuenta puede editarlo).
-  reasonCode         String?     @map("reason_code")
+  reasonCode         String?            @map("reason_code")
   /// Cuándo espera cobrar, si el motivo lo dijo.
-  expectedIncomeDate DateTime?   @map("expected_income_date") @db.Date
+  expectedIncomeDate DateTime?          @map("expected_income_date") @db.Date
   /// Quién responde realmente por el crédito según esta gestión.
-  payerParty         PayerParty? @map("payer_party")
+  payerParty         PayerParty?        @map("payer_party")
   /// De dónde salió: a mano o dictada. `null` = a mano (lo anterior).
   origin             DataOrigin?
   /// F4/13 · E5 — plantilla de mensaje ELEGIDA (código de `WHATSAPP_TEMPLATE`). No dice que se envió: `wa.me` no lo confirma.
-  templateCode       String?     @map("template_code")
-  createdAt DateTime           @default(now()) @map("created_at")
+  templateCode       String?            @map("template_code")
+  createdAt          DateTime           @default(now()) @map("created_at")
 
   account Account              @relation(fields: [accountId], references: [id])
   credit  Credit               @relation(fields: [creditId], references: [id])
