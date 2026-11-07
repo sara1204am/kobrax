@@ -41,3 +41,5 @@
 
 | G6 `/code-review` de F2b | **PASS 2026-11-06** | V-038: 10 hallazgos, 9 corregidos, 1 aceptado con motivo (backfill sin lotes: aún sin datos de producción). Recorrido de IMPACT-MAP por H14-032…036 hecho. |
 | G7 Cierre de F2b | **PASS 2026-11-06** | HUB H14-032…036 HECHO (H14-034 PARCIAL: la paridad TS↔SQL la cubre la integración), VERIFICATIONS V-031…V-038, INCIDENTS, HANDOFF y `docs/producto/roles-permisos-planes.md` al día. **`enforce` NO se activa** (decisión de la usuaria: `SCOPE_RLS_MODE=off` por defecto hasta nueva orden). **F4 no se abre** sin su orden. |
+
+| G4 Plan de F4 | **PASS 2026-11-06** | `plans/F4-pii-archivos.md` validado 11/11; D-1…D-3 aprobadas por la usuaria (tabla `files` + enlaces firmados ahora; CI en móvil tras interruptor apagado hasta F8; supervisor con CI enmascarado por defecto); D-4…D-6 derivadas de H-5/H-6 y ADR-F14-06/07; HUB H14-037…045 e IMPACT-MAP creados. La usuaria ordenó seguir F4→F5→F6→F7 «hasta el final». |
