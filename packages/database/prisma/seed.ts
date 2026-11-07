@@ -89,6 +89,7 @@ const PERMISSIONS: PermRow[] = [
   ['client:create', 'clients', 'CREATE', 'ACCOUNT'],
   ['client:delete', 'clients', 'DELETE', 'ACCOUNT'],
   ['client:pii:read', 'clients', 'READ', 'ACCOUNT'],
+  ['client:contact:read', 'clients', 'READ', 'ACCOUNT'],
   ['client:import', 'clients', 'CREATE', 'ACCOUNT'],
   ['client:import:replace', 'clients', 'DELETE', 'ACCOUNT'],
   ['credit:read', 'credits', 'READ', 'ACCOUNT'],

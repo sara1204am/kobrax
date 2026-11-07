@@ -55,6 +55,14 @@ export class AppConfigService {
     return this.get('PII_MOBILE_MASK') === 'on';
   }
 
+  /**
+   * F14 · F4: secreto con el que se firman los enlaces temporales de archivos. Si no se define `FILE_LINK_SECRET` se deriva del secreto del JWT
+   * (un secreto distinto por propósito: un enlace firmado no sirve como token de sesión ni al revés).
+   */
+  get fileLinkSecret(): string {
+    return this.get('FILE_LINK_SECRET') || `${this.get('JWT_SECRET')}:file-link`;
+  }
+
   get authzVersionCheck(): boolean {
     return this.get('AUTHZ_VERSION_CHECK') !== 'off';
   }

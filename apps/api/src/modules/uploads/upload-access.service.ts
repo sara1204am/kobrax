@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { moraScopeOf, seesWholeAccount, visibleClientIdsSql, visibleCreditIdsSql } from '../mora/mora-query';
+import { FilesService } from './files.service';
 
 /** Nombre de archivo válido: `<sha256>.<ext>`. Es lo único que llega a `GET /uploads/:name`. */
 export const UPLOAD_NAME = /^[0-9a-f]{64}\.(jpg|png|webp)$/;
@@ -20,10 +21,25 @@ export class UploadAccessService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenant: TenantContextService,
+    /** F14 · F4: el registro de archivos y su política. Sin él (specs anteriores) rige sólo la regla de abajo. */
+    private readonly files?: FilesService,
   ) {}
 
   async canRead(name: string): Promise<boolean> {
     if (!UPLOAD_NAME.test(name)) return false;
+    // F14 · F4: si el archivo está en el registro y tiene dueños, la política de `FilesService` es la que manda (VIEWER no abre adjuntos de
+    // clientes aunque vea toda la cuenta). La regla de abajo queda como respaldo para lo anterior al registro y para lo recién subido.
+    if (this.files) {
+      const file = await this.files.findByStorageKey(name);
+      if (file) {
+        const access = await this.files.accessFor(file);
+        if (access.owners.length > 0) {
+          if (access.allowed) await this.files.auditRead(access, 'api');
+          return access.allowed;
+        }
+        if (access.allowed) return true; // lo subió esta persona y todavía no lo ató
+      }
+    }
     const scope = moraScopeOf(this.tenant);
     if (seesWholeAccount(scope)) return true;
 

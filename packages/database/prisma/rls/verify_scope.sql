@@ -55,7 +55,7 @@ DECLARE bad text;
 BEGIN
   SELECT string_agg(p.proname || ' (dueño ' || r.rolname || ')', ', ') INTO bad
   FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
-  WHERE p.prosecdef AND p.proname IN ('portfolio_totals_recalc', 'credits_track_arrear_episode', 'scope_copy_credit_owner', 'credits_push_scope_owner', 'app_my_assigned_client_arr') AND NOT (r.rolsuper OR r.rolbypassrls);
+  WHERE p.prosecdef AND p.proname IN ('portfolio_totals_recalc', 'credits_track_arrear_episode', 'scope_copy_credit_owner', 'credits_push_scope_owner', 'app_my_assigned_client_arr', 'files_sync_owner') AND NOT (r.rolsuper OR r.rolbypassrls);
   IF bad IS NOT NULL THEN
     RAISE EXCEPTION 'funciones SECURITY DEFINER cuyo dueño NO ignora RLS: %', bad;
   END IF;

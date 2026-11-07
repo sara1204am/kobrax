@@ -127,7 +127,17 @@ export async function addMember(prisma: PrismaClient, accountId: string, email: 
 let api: ChildProcess | null = null;
 
 /** La API compilada contra la base de prueba. Resuelve cuando escucha. */
+/**
+ * Borra los contadores de límite de peticiones (`rl:*`) de Redis. El alta de cuenta admite 10 por hora y por IP, y la suite completa crea más
+ * que eso; cada suite empieza con el contador en cero. Solo toca claves `rl:*` del Redis de pruebas.
+ */
+export function resetRateLimits(): void {
+  const container = process.env.IT_REDIS_CONTAINER ?? 'kobrax-redis';
+  spawnSync('docker', ['exec', container, 'sh', '-c', "redis-cli --scan --pattern 'rl:*' | xargs -r redis-cli del"], { encoding: 'utf8' });
+}
+
 export async function startApi(extraEnv: Record<string, string> = {}): Promise<void> {
+  resetRateLimits();
   const uploads = mkdtempSync(join(tmpdir(), 'kobrax-it-'));
   api = spawn('node', ['dist/main.js'], {
     cwd: API_DIR,

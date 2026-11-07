@@ -199,5 +199,6 @@ export const config = {
     '/api/payments/:path*',
     '/api/payment-requests/:path*',
     '/api/uploads/:path*',
+    '/api/files/:path*', // F14 · F4: archivos por identificador y enlaces firmados
   ],
 };

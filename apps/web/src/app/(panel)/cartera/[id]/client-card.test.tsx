@@ -29,7 +29,8 @@ const EN_CLARO: ClientDetail = {
   locations: [{ id: 'lo-1', locationType: 'HOME', address: 'Calle Falsa 123' }],
 };
 
-function renderCard(client = TAPADO, permissions = ['client:read', 'client:write']) {
+// F14 · F4: todos los roles menos VIEWER tienen `client:contact:read` (contactos, ubicaciones y adjuntos).
+function renderCard(client = TAPADO, permissions = ['client:read', 'client:write', 'client:contact:read']) {
   return render(
     <PermissionsProvider permissions={permissions}>
       <ToastProvider>
@@ -193,10 +194,21 @@ describe('ClientCard — responsabilidad y alcance (F14 · F2)', () => {
   });
 
   it('🔴 «Dar de baja» sólo con client:delete; client:write alcanza para editar pero no para borrar', () => {
-    const { unmount } = renderCard(TAPADO, ['client:read', 'client:write']);
+    const { unmount } = renderCard(TAPADO, ['client:read', 'client:write', 'client:contact:read']);
     expect(screen.queryByRole('button', { name: 'Dar de baja' })).not.toBeInTheDocument();
     unmount();
-    renderCard(TAPADO, ['client:read', 'client:write', 'client:delete']);
+    renderCard(TAPADO, ['client:read', 'client:write', 'client:contact:read', 'client:delete']);
     expect(screen.getByRole('button', { name: 'Dar de baja' })).toBeInTheDocument();
+  });
+});
+
+describe('ClientCard — quien no tiene client:contact:read (VIEWER, F14 · F4)', () => {
+  it('🔴 no ve las listas de teléfonos y direcciones ni el botón «Mostrar», y los adjuntos tampoco', () => {
+    // La API no manda contactos, ubicaciones ni adjuntos a esa persona: la pantalla no ofrece secciones vacías ni un revelado que daría 403.
+    renderCard({ ...TAPADO, contacts: undefined, locations: undefined, attachments: undefined }, ['client:read']);
+    expect(mostrar()).toHaveLength(0);
+    expect(screen.queryByText('Calle ****')).not.toBeInTheDocument();
+    expect(screen.queryByText('7****23')).not.toBeInTheDocument();
+    expect(screen.getByText('1234***')).toBeInTheDocument(); // el documento sigue tapado
   });
 });

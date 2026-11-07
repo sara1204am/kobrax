@@ -87,6 +87,9 @@ export function ClientCard({
   const canWrite = can('client:write');
   // F14 · F2 (H-12): borrar un cliente es de quien administra la cuenta, no de quien puede editarlo.
   const canDelete = can('client:delete');
+  // F14 · F4 (H-5): quien no tiene `client:contact:read` (VIEWER) no recibe contactos, ubicaciones ni adjuntos; la API no los manda y la
+  // pantalla no ofrece secciones vacías ni el botón de revelar (que la API negaría con 403).
+  const canSeeContact = can('client:contact:read');
 
   async function darDeBaja() {
     setBusy(true);
@@ -287,6 +290,7 @@ export function ClientCard({
            * 🔴 El «Mostrar» de cada fila **revela la ficha entera** —una sola entrada de auditoría,
            * que es la verdad de lo que pasó—; por eso las dos listas comparten el mismo `reveal`.
            */}
+          {canSeeContact && (
           <div className="grid gap-5 sm:grid-cols-2">
             <ContactList
               rows={shown.contacts ?? []}
@@ -306,11 +310,12 @@ export function ClientCard({
               modalities={collectionModalities}
             />
           </div>
+          )}
 
           {/* 🔴 Con `client`, no con `shown`: los adjuntos no llevan máscara, y `shown` es una copia
               congelada del primer render — el `router.refresh()` de la subida traía el adjunto
               nuevo y no se veía hasta recargar la página. */}
-          <AttachmentsSection clientId={client.id} rows={client.attachments ?? []} canWrite={canWrite} />
+          {canSeeContact && <AttachmentsSection clientId={client.id} rows={client.attachments ?? []} canWrite={canWrite} />}
         </div>
 
         {/* La columna de consulta: cuánto debe, qué se hizo, y quién responde si no paga. */}

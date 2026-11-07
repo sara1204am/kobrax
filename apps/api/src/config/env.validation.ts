@@ -16,6 +16,8 @@ export const envSchema = z.object({
   /** F14 · F2b: segunda barrera de RLS por alcance (`off` | `log` | `enforce`). */
   SCOPE_RLS_MODE: z.enum(['off', 'log', 'enforce']).default('off'),
   /** F14 · F4 (D-2): `on` = el documento va siempre enmascarado y sin revelar en el canal móvil. Apagado hasta que el móvil se refactorice (F8). */
+  /** F14 · F4: secreto de los enlaces firmados de archivos (opcional: si falta se deriva de JWT_SECRET). */
+  FILE_LINK_SECRET: z.string().min(16).optional(),
   PII_MOBILE_MASK: z.enum(['on', 'off']).default('off'),
   /** F14 · F3: `enforce` = handler sin contrato → 403 AUTHZ_000; `log` = pasa y lo registra (válvula de rollback de un release). */
   AUTHZ_DENY_BY_DEFAULT: z.enum(['enforce', 'log']).default('enforce'),

@@ -325,6 +325,7 @@
     "handler": "AnalyticsController.visits",
     "kind": "permissions",
     "all": [
+      "client:contact:read",
       "report:read"
     ],
     "any": []
@@ -553,6 +554,20 @@
     "all": [
       "report:export"
     ],
+    "any": []
+  },
+  {
+    "route": "GET /files/:id/raw",
+    "handler": "FilesController.raw",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /files/:id",
+    "handler": "FilesController.read",
+    "kind": "authenticated",
+    "all": [],
     "any": []
   },
   {
@@ -884,6 +899,7 @@
     "handler": "FieldController.findOne",
     "kind": "permissions",
     "all": [
+      "client:contact:read",
       "route:read"
     ],
     "any": []
@@ -893,6 +909,7 @@
     "handler": "FieldController.list",
     "kind": "permissions",
     "all": [
+      "client:contact:read",
       "route:read"
     ],
     "any": []
@@ -1553,6 +1570,13 @@
     "all": [
       "report:read"
     ],
+    "any": []
+  },
+  {
+    "route": "POST /files/:id/link",
+    "handler": "FilesController.link",
+    "kind": "authenticated",
+    "all": [],
     "any": []
   },
   {

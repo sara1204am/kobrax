@@ -97,7 +97,9 @@ describe('F14·F3 — cobertura del contrato de acceso', () => {
     const { rows } = await collect();
     const publics = rows.filter((r) => r.kind === 'public').map((r) => r.route);
     assert.ok(publics.length > 0 && publics.length <= 25, `públicos: ${publics.length}`);
-    for (const r of publics) assert.match(r, /\/(auth|accounts|health)\b/, `ruta pública fuera de auth/accounts/health: ${r}`);
+    // F14 · F4: la ÚNICA ruta pública fuera de esas tres es la lectura por enlace firmado (`GET /files/:id/raw`): la credencial es la firma HMAC
+    // (cuenta + archivo + vencimiento de 5 minutos), con límite de peticiones; ver `FilesController.raw`.
+    for (const r of publics) assert.match(r, /\/(auth|accounts|health)\b|^GET \/files\/:id\/raw$/, `ruta pública fuera de auth/accounts/health: ${r}`);
   });
 
   it('ninguna ruta crea, edita o promueve a un usuario de plataforma (H-11)', async () => {
