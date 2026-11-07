@@ -71,7 +71,9 @@ DECLARE
     -- Tokens de push remoto (F10): a qué teléfonos avisarle a cada usuario.
     'device_push_tokens', 'client_income_profiles',
     -- F14 · F1: outbox transaccional de versiones de autorización.
-    'authz_version_outbox'
+    'authz_version_outbox',
+    -- F14 · F4: registro de archivos y de sus dueños (quién puede leer cada uno).
+    'files', 'file_owners'
   ];
 BEGIN
   FOREACH t IN ARRAY operational LOOP

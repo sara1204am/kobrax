@@ -36,6 +36,7 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     Permission.CLIENT_WRITE,
     Permission.CLIENT_CREATE, // F14 · F2: quien hoy puede escribir clientes puede darlos de alta
     Permission.CLIENT_PII_READ,
+    Permission.CLIENT_CONTACT_READ, // F14 · F4
     Permission.CLIENT_IMPORT,
     Permission.CREDIT_READ,
     Permission.CREDIT_WRITE,
@@ -71,6 +72,7 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     Permission.AGENDA_ASSIGN,
     Permission.CATALOG_READ,
     Permission.CLIENT_READ,
+    Permission.CLIENT_CONTACT_READ, // F14 · F4
     Permission.CREDIT_READ,
     Permission.REPORT_READ,
     // Importa la cartera y la reparte en el mismo paso (tiene `assignment:write`): decisión de
@@ -100,6 +102,7 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     // Medios de pago y bancos: los lee para registrar un pago, no los administra (CATALOG_WRITE no).
     Permission.CATALOG_READ,
     Permission.CLIENT_READ,
+    Permission.CLIENT_CONTACT_READ, // F14 · F4
     // El cobrador da de alta clientes en campo y corrige lo que encuentra mal (una dirección sin
     // punto, un teléfono viejo). Sin esto, el formulario de edición se ve pero no guarda.
     // Toda mutación queda auditada; los permisos finos son F3/P10.
@@ -122,6 +125,7 @@ export const ROLE_PERMISSIONS: Record<RoleType, Permission[]> = {
     Permission.ROUTE_READ,
     Permission.CLIENT_READ,
     Permission.CLIENT_PII_READ,
+    Permission.CLIENT_CONTACT_READ, // F14 · F4
     Permission.CREDIT_READ,
     Permission.CREDIT_PII_READ,
     Permission.REPORT_READ,

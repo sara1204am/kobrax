@@ -1,6 +1,7 @@
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import type { Request } from 'express';
+import { piiChannelOf } from '@kobrax/shared';
 import type { AuthenticatedUser } from '../../modules/auth/guards/jwt-auth.guard';
 import { TenantContextService } from './tenant-context.service';
 
@@ -42,6 +43,7 @@ export class TenantContextInterceptor implements NestInterceptor {
           ip: req.ip,
           userAgent: req.headers['user-agent'],
           appVersion: clientVersionOf(req.headers['x-app-version']),
+          channel: piiChannelOf(Array.isArray(req.headers['x-client-type']) ? req.headers['x-client-type'][0] : req.headers['x-client-type']),
         },
         () => {
           next.handle().subscribe(subscriber);

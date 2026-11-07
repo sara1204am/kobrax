@@ -41,6 +41,11 @@ export enum Permission {
   /** F14 · F2 (H-12): borrado lógico de un cliente; destructivo, sólo ACCOUNT_ADMIN por defecto. */
   CLIENT_DELETE = 'client:delete',
   CLIENT_PII_READ = 'client:pii:read', // revelar PII en claro (documento/teléfono/dirección)
+  /**
+   * F14 · F4 (ADR-F14-06): ver los datos de contacto y ubicación de un cliente (teléfonos, direcciones, GPS, fotos de ubicación, relaciones,
+   * perfil económico) y pedir el revelado del documento. Todos los roles lo tienen salvo VIEWER; el alcance sigue recortando a qué clientes.
+   */
+  CLIENT_CONTACT_READ = 'client:contact:read',
   CLIENT_IMPORT = 'client:import', // importación masiva (RECONCILE / UPSERT_ONLY)
   CLIENT_IMPORT_REPLACE = 'client:import:replace', // modo destructivo REPLACE
 

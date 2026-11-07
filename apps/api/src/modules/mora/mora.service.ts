@@ -726,13 +726,15 @@ export class MoraService {
         },
       },
     });
+    // F14 · F4 (H-5): quien no tiene `client:contact:read` (VIEWER) no recibe zona, direcciones, GPS ni fotos de ubicación.
+    const withContact = this.tenant.can(Permission.CLIENT_CONTACT_READ);
     for (const c of clients) {
       const doc = this.safeDecrypt(c.nationalId);
       const own = c.locations.filter((l) => l.relationId == null);
       const primary = own.find((l) => l.locationType === 'HOME') ?? own[0];
       out.set(c.id, {
-        zone: primary?.zone ?? undefined,
-        locations: c.locations
+        zone: withContact ? (primary?.zone ?? undefined) : undefined,
+        locations: (withContact ? c.locations : [])
           .filter((l) => l.latitude != null && l.longitude != null)
           .map((l) => ({
             id: l.id,

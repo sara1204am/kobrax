@@ -501,7 +501,7 @@ export class AgendaService {
     const activityById = new Map(activities.map((a) => [a.id, a]));
     const done = item.resultActivityId ? activityById.get(item.resultActivityId) : undefined;
 
-    const client = await this.clients.findOne(item.clientId, true); // audita `client/PII_REVEAL`
+    const client = await this.clients.findOneForWork(item.clientId); // audita `client/PII_REVEAL` (D-3: el documento va según el rol)
     // Segundo rastro, propio del módulo: distingue esta puerta de las del módulo de clientes.
     await this.audit.record({ entity: 'agenda_item', entityId: id, action: 'PII_REVEAL' });
 
@@ -778,7 +778,7 @@ export class AgendaService {
     const overdue = await this.overdueByCredit(agendable.map((c) => c.id));
     const contactHint = await this.contactHint(clientId);
 
-    const client = await this.clients.findOne(clientId, true); // registra `PII_REVEAL` sobre `client`
+    const client = await this.clients.findOneForWork(clientId); // registra `PII_REVEAL` sobre `client` (D-3: el documento va según el rol)
 
     // Segundo rastro, propio del módulo: el cobrador NO tiene `client:pii:read` — esta es la única
     // puerta por la que ve teléfonos y direcciones en claro, y sólo para un cliente con crédito suyo.

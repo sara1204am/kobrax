@@ -16,6 +16,8 @@ export interface RequestContext {
    * funcional de compatibilidad aplica a un cliente móvil viejo (ver `legacyClientReason`).
    */
   appVersion?: string;
+  /** Canal de la petición (`x-client-type`: web | mobile | api). Sólo decide la proyección de PII (F14·F4, D-2); NO es autorización. */
+  channel?: 'web' | 'mobile' | 'api';
 }
 
 /**

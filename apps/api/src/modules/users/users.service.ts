@@ -493,7 +493,7 @@ export class UsersService {
       : (inviter?.email ?? 'Tu equipo');
     const { subject, text } = invitationBody({ businessName, invitedBy, code });
     void this.mail.send(email, subject, text).catch((err: Error) => {
-      this.logger.error(`No se pudo enviar la invitación a ${email}: ${err.message}`);
+      this.logger.error(`No se pudo enviar una invitación de la cuenta ${this.tenant.accountId}: ${err.message}`); // F14 · F4: sin correo en los registros
     });
   }
 

@@ -27,7 +27,7 @@ import { CryptoService } from '../../common/crypto/crypto.service';
 import { BlindIndexService } from '../../common/crypto/blind-index.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
-import { clientDisplayName, serializeClient, serializeIncomeProfile, type PortfolioClient, type PortfolioTotals } from './clients.serializer';
+import { clientDisplayName, serializeClient, serializeIncomeProfile, type PortfolioClient, type PortfolioTotals, type SerializeOpts } from './clients.serializer';
 import type { ClientPdfBundle, ClientPdfContext } from './client-pdf';
 import {
   ClientDuplicateCheckDto,
@@ -57,6 +57,8 @@ import {
 } from './clients.errors';
 import { AuthorizationService } from '../../common/authz/authorization.service';
 import { PolicyService } from '../../common/authz/policy.service';
+import { PiiService } from '../../common/authz/pii.service';
+import type { AppConfigService } from '../../config/app-config.service';
 
 /** PII del cliente que se redacta en los snapshots de auditoría. */
 const CLIENT_REDACT = ['nationalId', 'taxId', 'value', 'address', 'phone'];
@@ -132,7 +134,14 @@ export class ClientsService {
     private readonly authz: AuthorizationService = new AuthorizationService(tenant),
     /** F14 · F2: políticas con hechos de la DB (`client.create`). Lo inyecta Nest; los specs que no pasan por el alta no lo necesitan. */
     private readonly policies: PolicyService,
+    /** F14 · F4: qué categorías de PII ve quien pregunta. Lo inyecta Nest; los specs anteriores a F4 usan el valor por omisión. */
+    private readonly pii: PiiService = new PiiService(tenant, { piiMobileMask: false } as AppConfigService),
   ) {}
+
+  /** Opciones de serialización según lo que ve quien pregunta (F14 · F4). `reveal` ya viene resuelto por la política. */
+  private opts(reveal: boolean, revealDocument?: boolean): SerializeOpts {
+    return { crypto: this.crypto, reveal, revealDocument, contact: this.pii.canSeeContact(), economic: this.pii.canSeeEconomic() };
+  }
 
   /** Ejecuta `fn` en el contexto RLS del tenant actual (del TenantContextService). */
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -288,14 +297,14 @@ export class ClientsService {
     });
 
     // Un reintento no vuelve a auditar: el alta ya quedó registrada la primera vez.
-    if (yaExistia) return serializeClient(created, { crypto: this.crypto, reveal: false });
+    if (yaExistia) return serializeClient(created, this.opts(false));
 
     // Audit fuera del tx (audit.record abre su propio withTenant), como en update().
     await this.audit.record({ entity: 'client', entityId: created.id, action: 'CREATE', after: created, redactKeys: CLIENT_REDACT });
     for (const s of subs) {
       await this.audit.record({ entity: `client_${s.kind}`, entityId: s.id, action: 'CREATE', after: s.after, redactKeys: CLIENT_REDACT });
     }
-    return serializeClient(created, { crypto: this.crypto, reveal: false });
+    return serializeClient(created, this.opts(false));
   }
 
   /**
@@ -437,7 +446,7 @@ export class ClientsService {
       });
       const byId = new Map(found.map((c) => [c.id, c]));
       const ordered = ids.flatMap((r) => (byId.has(r.id) ? [byId.get(r.id)!] : [])); // el orden es el de la consulta, no el del IN
-      const data = ordered.map((c) => serializeClient(c, { crypto: this.crypto, reveal: false }));
+      const data = ordered.map((c) => serializeClient(c, this.opts(false)));
       return ResponseDto.paginated(data, counted[0]?.total ?? 0, page, limit);
     }
     const [rows, total] = await this.tx((tx) =>
@@ -447,7 +456,7 @@ export class ClientsService {
       ]),
     );
 
-    const data = rows.map((c) => serializeClient(c, { crypto: this.crypto, reveal: false }));
+    const data = rows.map((c) => serializeClient(c, this.opts(false)));
     return ResponseDto.paginated(data, total, page, limit);
   }
 
@@ -512,7 +521,7 @@ export class ClientsService {
       if (!client) return []; // borrado entre las dos consultas
       return [
         {
-          ...serializeClient(client, { crypto: this.crypto, reveal: false }),
+          ...serializeClient(client, this.opts(false)),
           totalDebt: Math.round(r.total_debt * 100) / 100,
           maxDaysPastDue: r.max_days_past_due,
           creditCount: r.credit_count,
@@ -638,7 +647,16 @@ export class ClientsService {
     }
   }
 
-  async findOne(id: string, reveal: boolean, withOtherCredits = false): Promise<ReturnType<typeof serializeClient> & { linkSuggestions?: { id: string; displayName: string; creditCount: number }[] }> {
+  /**
+   * F14 · F4 (D-3): el cliente para una PANTALLA DE TRABAJO (Agenda, Mora, Rutas): contactos y direcciones en claro —se necesitan para
+   * cobrar— y el documento en claro sólo si `documentInClearByDefault` (administrador, gerente, auditor; el cobrador sobre su cartera).
+   * Al supervisor el documento le llega enmascarado: lo revela con la acción explícita. Audita igual que un revelado.
+   */
+  findOneForWork(id: string) {
+    return this.findOne(id, true, false, { documentClear: this.pii.documentInClearByDefault() });
+  }
+
+  async findOne(id: string, reveal: boolean, withOtherCredits = false, how: { explicit?: boolean; documentClear?: boolean } = {}): Promise<ReturnType<typeof serializeClient> & { linkSuggestions?: { id: string; displayName: string; creditCount: number }[] }> {
     const client = await this.tx(async (tx) => {
       await this.assertClientVisible(tx, id);
       return tx.client.findFirst({
@@ -657,13 +675,26 @@ export class ClientsService {
     });
     if (!client) throw resourceNotFound();
 
-    if (reveal) {
-      // Acceso a PII en claro → queda auditado (data_access_log detallado llega en F12).
-      await this.audit.record({ entity: 'client', entityId: id, action: 'PII_REVEAL' });
+    /*
+     * F14 · F4: política `pii.reveal`. Quien no puede revelar (VIEWER; el canal móvil con `PII_MOBILE_MASK` encendido) recibe un 403 si lo pidió
+     * EXPLÍCITAMENTE (`?reveal=true`) y la versión enmascarada si fue un llamador interno que sólo quería «lo más que se pueda». El documento
+     * se revela aparte (D-3): las pantallas de trabajo piden `documentClear` según `documentInClearByDefault()`.
+     */
+    if (reveal && how.explicit) this.pii.assertCanReveal();
+    const effReveal = reveal && this.pii.canReveal();
+    const effDocument = effReveal && (how.documentClear ?? true);
+    if (effReveal) {
+      // Acceso a PII en claro → queda auditado, con las categorías reveladas y el canal (nunca los valores).
+      await this.audit.record({
+        entity: 'client',
+        entityId: id,
+        action: 'PII_REVEAL',
+        after: this.pii.auditAfter('client', this.pii.revealedCategories(effDocument)),
+      });
     }
     // F14 · F2 (H-7): si hay créditos del cliente que quien mira no ve, un aviso con SÓLO agregados.
     // Sólo lo pide la ficha (GET /clients/:id): el PDF y los demás llamadores internos no pagan esas consultas.
-    const serialized = { ...serializeClient(client, { crypto: this.crypto, reveal }), ...(withOtherCredits ? { otherCredits: await this.otherCredits(id) } : {}) };
+    const serialized = { ...serializeClient(client, this.opts(effReveal, effDocument)), ...(withOtherCredits ? { otherCredits: await this.otherCredits(id) } : {}) };
     if (!client.linkReviewPending) return serialized;
 
     // Las sugerencias con su nombre: la pantalla de revisión no puede mostrar uuids.
@@ -881,7 +912,7 @@ export class ClientsService {
     });
     // Audit fuera del tx para no anidar transacciones (audit.record abre su propio withTenant).
     await this.audit.record({ entity: 'client', entityId: after.id, action: 'UPDATE', before, after, redactKeys: CLIENT_REDACT });
-    return serializeClient(after, { crypto: this.crypto, reveal: false });
+    return serializeClient(after, this.opts(false));
   }
 
   async remove(id: string): Promise<void> {

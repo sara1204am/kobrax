@@ -114,8 +114,10 @@ export function serializeStop(
     scheduledTime?: string | null;
   },
   crypto?: CryptoService,
+  /** F14 · F4: sin `client:contact:read` (VIEWER) la parada no lleva dirección, GPS, fotos ni de quién es la ubicación. */
+  contact = true,
 ) {
-  const loc = s.client ? stopLocation(s.client, s.locationId) : undefined;
+  const loc = contact && s.client ? stopLocation(s.client, s.locationId) : undefined;
   const credit = s.creditInfo ?? undefined;
   return {
     id: s.id,
@@ -169,7 +171,7 @@ type RouteWithStops = RoutePlan & {
   })[];
 };
 
-export function serializeRoute(r: RouteWithStops, crypto?: CryptoService) {
+export function serializeRoute(r: RouteWithStops, crypto?: CryptoService, contact = true) {
   return {
     id: r.id,
     collectorId: r.collectorId,
@@ -186,6 +188,6 @@ export function serializeRoute(r: RouteWithStops, crypto?: CryptoService) {
     completedAt: r.completedAt ?? undefined,
     cancelledAt: r.cancelledAt ?? undefined,
     statusReason: r.statusReason ?? undefined,
-    stops: r.stops?.map((s) => serializeStop(s, crypto)),
+    stops: r.stops?.map((s) => serializeStop(s, crypto, contact)),
   };
 }

@@ -36,7 +36,9 @@ export class AnalyticsController {
     return this.analytics.agendaSummary(query);
   }
 
+  // F14 · F4: el mapa lleva el punto GPS de cada parada (dónde está el deudor) → también `client:contact:read` (VIEWER no).
   @Get('visit-map')
+  @Roles(Permission.REPORT_READ, Permission.CLIENT_CONTACT_READ)
   visits(@Query() query: AnalyticsQueryDto) {
     return this.analytics.visitMap(query);
   }

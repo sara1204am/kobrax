@@ -14,14 +14,15 @@ export class FieldController {
    * propio— lo decide el service por capacidad, como en rutas.
    */
   @Get()
-  @Roles(Permission.ROUTE_READ)
+  // F14 · F4: las visitas llevan el punto GPS donde está el deudor → hace falta también `client:contact:read` (VIEWER no).
+  @Roles(Permission.ROUTE_READ, Permission.CLIENT_CONTACT_READ)
   list(@Query() query: ListVisitsQueryDto) {
     return this.field.list(query);
   }
 
   /** Una visita con sus evidencias: la foto, el punto y el hash que la sellan. */
   @Get(':id')
-  @Roles(Permission.ROUTE_READ)
+  @Roles(Permission.ROUTE_READ, Permission.CLIENT_CONTACT_READ)
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.field.findOne(id);
   }

@@ -196,7 +196,8 @@ function makeService(
     };
   }
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
-  const perms = opts.permissions ?? [];
+  // F14 · F4: todos los roles menos VIEWER tienen `client:contact:read` (direcciones y GPS de las paradas); estas pruebas hablan de otra cosa.
+  const perms = ['client:contact:read', ...(opts.permissions ?? [])];
   const tenant = {
     accountId: 'acc-A',
     userId: 'u1',

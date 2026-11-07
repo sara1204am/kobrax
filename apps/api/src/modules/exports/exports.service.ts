@@ -9,7 +9,7 @@ import { CryptoService } from '../../common/crypto/crypto.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import { moraScopeOf, seesWholeAccount, visibleClientIdsSql, visibleCreditIdsSql } from '../mora/mora-query';
-import { staleAfterDaysOf } from '@kobrax/shared';
+import { maskDocument, Permission, PiiCategory, staleAfterDaysOf } from '@kobrax/shared';
 import { safeDecrypt, clientDisplayName } from '../clients/clients.serializer';
 import { moraCsvRow, MORA_CSV_COLUMNS } from '../mora/mora-export';
 import { serializeMoraCredit, type MoraCreditRow } from '../mora/mora.serializer';
@@ -28,8 +28,9 @@ export interface ExportFile {
 /**
  * Exportar los datos de la cuenta: los cuatro CSV que pide el negocio (clientes, ubicaciones,
  * mora, agenda) más el backup completo. Ninguno pasa por `serializeClient` con `reveal: false`
- * —esto es un export, no una pantalla—, así que la PII sale en claro y cada llamada queda
- * auditada como `client/PII_REVEAL`, igual que «Mostrar» en la ficha.
+ * —esto es un export, no una pantalla—, así que la PII sale en claro **a quien tiene las categorías que la abren** (F14 · F4):
+ * el documento en claro con `client:pii:read` (si no, enmascarado), el contacto principal y las direcciones con `client:contact:read`
+ * (si no, vacío / 403). Cada llamada queda auditada como `EXPORT` con las categorías que salieron (nunca los valores).
  */
 @Injectable()
 export class ExportsService {
@@ -58,9 +59,16 @@ export class ExportsService {
     return this.prisma.withTenant(this.tenant.accountId, fn);
   }
 
-  private async logExport(kind: string): Promise<void> {
-    await this.audit.record({ entity: `export:${kind}`, entityId: this.tenant.accountId, action: 'EXPORT', after: { scope: moraScopeOf(this.tenant).kind } });
+  private async logExport(kind: string, categories: PiiCategory[] = []): Promise<void> {
+    await this.audit.record({
+      entity: `export:${kind}`,
+      entityId: this.tenant.accountId,
+      action: 'EXPORT',
+      after: { scope: moraScopeOf(this.tenant).kind, categories, channel: this.tenant.get?.()?.channel ?? 'api' },
+    });
   }
+
+  private readonly can = (p: Permission): boolean => this.tenant.can(p);
 
   async clientsCsv(): Promise<ExportFile> {
     const clients = await this.tx(async (tx) => {
@@ -71,14 +79,17 @@ export class ExportsService {
         orderBy: { createdAt: 'asc' },
       });
     });
-    await this.logExport('clients');
+    // F14 · F4: el documento sale en claro sólo con `client:pii:read`; el contacto principal sólo con `client:contact:read`.
+    const docClear = this.can(Permission.CLIENT_PII_READ);
+    const withContact = this.can(Permission.CLIENT_CONTACT_READ);
+    await this.logExport('clients', [...(docClear ? [PiiCategory.DOCUMENT] : []), ...(withContact ? [PiiCategory.CONTACT] : [])]);
 
     const rows = clients.map((c) => ({
       id: c.id,
       nombre: clientDisplayName(c) ?? '',
       tipo: c.clientType,
-      documento: safeDecrypt(this.crypto, c.nationalId) ?? '',
-      contactoPrincipal: c.contacts[0] ? safeDecrypt(this.crypto, c.contacts[0].value) : '',
+      documento: docClear ? (safeDecrypt(this.crypto, c.nationalId) ?? '') : (() => { const d = safeDecrypt(this.crypto, c.nationalId); return d ? maskDocument(d) : ''; })(),
+      contactoPrincipal: withContact && c.contacts[0] ? safeDecrypt(this.crypto, c.contacts[0].value) : '',
       estado: c.status,
       segmento: c.riskSegment ?? '',
       saldoTotal: Number(c.totalDebt),
@@ -103,6 +114,10 @@ export class ExportsService {
   }
 
   async locationsCsv(): Promise<ExportFile> {
+    // F14 · F4: direcciones y GPS son la categoría CONTACT; sin `client:contact:read` no hay nada que exportar.
+    if (!this.can(Permission.CLIENT_CONTACT_READ)) {
+      throw new ForbiddenException({ code: 'PII_REVEAL_DENIED', message: 'No tienes permiso para exportar direcciones ni ubicaciones' });
+    }
     const locations = await this.tx(async (tx) => {
       const ids = await this.visibleIds(tx, 'clients');
       return tx.clientLocation.findMany({
@@ -111,7 +126,7 @@ export class ExportsService {
         orderBy: { createdAt: 'asc' },
       });
     });
-    await this.logExport('locations');
+    await this.logExport('locations', [PiiCategory.CONTACT]);
 
     const rows = locations.map((l) => ({
       id: l.id,

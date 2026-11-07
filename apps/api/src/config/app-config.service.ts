@@ -50,6 +50,11 @@ export class AppConfigService {
     return v === 'log' || v === 'enforce' ? v : 'off';
   }
 
+  /** F14 · F4 (D-2): regla «documento enmascarado y sin revelar en móvil». Apagada por omisión (la edición de cliente del móvil aún revela). */
+  get piiMobileMask(): boolean {
+    return this.get('PII_MOBILE_MASK') === 'on';
+  }
+
   get authzVersionCheck(): boolean {
     return this.get('AUTHZ_VERSION_CHECK') !== 'off';
   }

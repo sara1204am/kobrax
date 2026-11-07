@@ -405,6 +405,69 @@ model AuthzVersionOutbox {
   @@map("authz_version_outbox")
 }
 
+/// F14 · F4 (ADR-F14-07) — un archivo subido (una fila por contenido: el nombre en disco es su SHA-256). Quién puede leerlo lo dice
+/// `FileOwner` (de qué cuelga). Las columnas de URL de las demás tablas se conservan: esta tabla es el REGISTRO de dueños, no las reemplaza.
+model File {
+  id          String     @id @default(uuid())
+  accountId   String     @map("account_id")
+  /// Ruta relativa dentro de la carpeta de la cuenta: `<sha256>.<ext>` (imágenes) o `imports/<sha256>.<ext>` (documentos de importación).
+  storageKey  String     @map("storage_key")
+  sha256      String
+  mime        String
+  /// Bytes. Nulo en lo rellenado desde datos anteriores (no se leyó el disco).
+  size        Int?
+  status      FileStatus @default(PENDING)
+  uploadedBy  String?    @map("uploaded_by")
+  attachedAt  DateTime?  @map("attached_at")
+  orphanedAt  DateTime?  @map("orphaned_at")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+  deletedAt   DateTime?  @map("deleted_at")
+
+  owners FileOwner[]
+
+  @@unique([accountId, storageKey])
+  @@index([accountId, status, createdAt])
+  @@index([status, orphanedAt])
+  @@map("files")
+}
+
+/// De qué cuelga un archivo (un mismo archivo puede colgar de varios dueños: el nombre es el hash del contenido).
+model FileOwner {
+  id          String          @id @default(uuid())
+  accountId   String          @map("account_id")
+  fileId      String          @map("file_id")
+  ownerEntity FileOwnerEntity @map("owner_entity")
+  /// Id del dueño (cliente, ubicación, pago, usuario, cuenta, evidencia, corrida…) según `ownerEntity`.
+  ownerId     String          @map("owner_id")
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([fileId, ownerEntity, ownerId])
+  @@index([accountId, ownerEntity, ownerId])
+  @@map("file_owners")
+}
+
+enum FileStatus {
+  PENDING
+  ATTACHED
+  ORPHAN
+}
+
+enum FileOwnerEntity {
+  CLIENT_ATTACHMENT
+  CLIENT_LOCATION
+  CLIENT_RELATION
+  COLLATERAL
+  PAYMENT_RECEIPT
+  PROFILE_PHOTO
+  PROFILE_QR
+  ACCOUNT_LOGO
+  FIELD_EVIDENCE
+  IMPORT_RUN
+}
+
 /// Sesiones de usuario para control de acceso, monitoreo y seguridad.
 model UserSession {
   id         String    @id @default(uuid())

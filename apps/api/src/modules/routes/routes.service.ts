@@ -300,7 +300,7 @@ export class RoutesService {
       await this.audit.record({ entity: 'route', entityId: route.id, action: 'CREATE', after: { collectorId: route.collectorId } });
       this.notice({ kind: 'ASSIGNED', routeId: route.id, recipientId: route.collectorId, plannedDate: dto.plannedDate });
     }
-    return serializeRoute(route);
+    return serializeRoute(route, undefined, this.contactAllowed());
   }
 
   private createOnce(dto: CreateRouteDto, collectorId: string) {
@@ -345,7 +345,7 @@ export class RoutesService {
       await this.audit.record({ entity: 'route', entityId: route.id, action: 'GENERATE', after: { collectorId: route.collectorId, totalStops: route.totalCases } });
       this.notice({ kind: 'ASSIGNED', routeId: route.id, recipientId: route.collectorId, plannedDate: dto.plannedDate, stops: route.totalCases });
     }
-    return serializeRoute(route);
+    return serializeRoute(route, undefined, this.contactAllowed());
   }
 
   private generateOnce(dto: GenerateRouteDto, collectorId: string) {
@@ -587,7 +587,7 @@ export class RoutesService {
     ]);
     return ResponseDto.paginated(
       rows.map((r) => ({
-        ...serializeRoute(r),
+        ...serializeRoute(r, undefined, this.contactAllowed()),
         visitedCount: visited.get(r.id) ?? 0,
         ...(query.date ? { nextStop: next.get(r.id), collected: collected.get(r.collectorId) ?? 0 } : {}),
       })),
@@ -708,6 +708,11 @@ export class RoutesService {
     return new Map(grouped.flatMap((g) => (g.registeredBy ? [[g.registeredBy, Number(g._sum.amount ?? 0)] as const] : [])));
   }
 
+  /** F14 · F4 (H-5): ¿ve direcciones, GPS y fotos de ubicación? (`client:contact:read`; VIEWER no). */
+  private contactAllowed(): boolean {
+    return this.authz.can(Permission.CLIENT_CONTACT_READ);
+  }
+
   /**
    * Detalle con paradas. Cada parada trae el nombre del deudor y su dirección **en claro**: sin eso
    * la lista dice `Cliente a1b2c3…` y el cobrador no sabe adónde ir. Se audita el revelado, igual que
@@ -746,7 +751,7 @@ export class RoutesService {
       hasVisits: loaded.visitCount > 0,
     });
     return {
-      ...serializeRoute(route, this.crypto),
+      ...serializeRoute(route, this.crypto, this.contactAllowed()),
       capabilities,
       // Los pedidos los resuelve quien arma la ruta: a los demás no les sirve el número.
       pendingRequests: capabilities.isOwner ? loaded.pending : 0,
@@ -840,7 +845,7 @@ export class RoutesService {
       return { route: updated, previous: route, changed: true as const, skipped: skipOpen ? open.length : 0, reason, legacyCompat };
     });
 
-    if (!outcome.changed) return serializeRoute(outcome.route);
+    if (!outcome.changed) return serializeRoute(outcome.route, undefined, this.contactAllowed());
     const { route, skipped } = outcome;
     await this.audit.record({
       entity: 'route',
@@ -864,7 +869,7 @@ export class RoutesService {
         this.notice({ kind: 'CANCELLED', routeId: id, recipientId: route.createdBy, plannedDate: route.plannedDate.toISOString().slice(0, 10), reason: outcome.reason });
       }
     }
-    return serializeRoute(route);
+    return serializeRoute(route, undefined, this.contactAllowed());
   }
 
   /**
@@ -920,7 +925,7 @@ export class RoutesService {
       return withCredit!;
     });
     await this.audit.record({ entity: 'route_stop', entityId: stop.id, action: 'CREATE', after: { routeId, clientId: stop.clientId, locationId: stop.locationId } });
-    return serializeStop(stop, this.crypto);
+    return serializeStop(stop, this.crypto, this.contactAllowed());
   }
 
   /**
@@ -1053,7 +1058,7 @@ export class RoutesService {
       await this.audit.record({ entity: 'route', entityId: routeId, action: 'PII_REVEAL' });
     }
 
-    const stops = route.stops.map((s) => serializeStop(s, this.crypto));
+    const stops = route.stops.map((s) => serializeStop(s, this.crypto, this.contactAllowed()));
     const drawable = stops.filter(hasPoint);
     // En paralelo y no en serie: son dos llamadas independientes de 5 s de timeout cada una, y
     // encadenadas dejaban la pantalla colgada hasta 10 s con OSRM lento. `trip` sólo necesita los

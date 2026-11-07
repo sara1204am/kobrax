@@ -86,7 +86,7 @@ export class ClientsController {
    * cablea al final; no se ramifica por rol ahora.
    */
   findOne(@Param('id', ParseUUIDPipe) id: string, @Query('reveal') reveal?: string) {
-    return this.clients.findOne(id, reveal === 'true', true);
+    return this.clients.findOne(id, reveal === 'true', true, { explicit: true });
   }
 
   /** El legajo del cliente en PDF: mismo revelado auditado que `findOne(id, true)`, para imprimir. */
