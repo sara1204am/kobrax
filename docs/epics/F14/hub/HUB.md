@@ -59,6 +59,14 @@
 | H14-051 | `platform/` (nuevo), `jwt-auth.guard.ts` (actor), `audit` (`actor_type`, `support_session_id`), `config` | Login de plataforma, interruptores, sesiones de soporte, consentimientos, *rollout* | auditoría, guard global | Alto | F5 | specs + integración de plataforma | HECHO 2026-11-07 |
 | H14-052 | web: «Accesos de soporte», aviso de sesión de soporte, selector de roles, filtros `roleName` | Interfaz de F5 | administradores | Medio | F5 | pruebas de componentes | HECHO 2026-11-07 |
 | H14-053 | `test/integration/harness.ts` y pruebas que crean miembros por nombre de rol | Siguen funcionando con roles por cuenta | CI | Medio | F5 | toda la integración | HECHO 2026-11-07 |
+| H14-054 | `apps/web/src/lib/authz.ts` (nuevo), `components/no-access.tsx` (nuevo), `app/(panel)/layout.tsx` | `getMe()` cacheado, `requirePermission`, `<NoAccess/>` | todas las pantallas privadas | Medio | F6 | `authz.test.ts` | PLANEADO 2026-11-08 |
+| H14-055 | `lib/nav.ts`, `components/panel-shell.tsx`, `messages/es.json`, `messages/en.json` | Secciones Organización / Seguridad / Actividad, permiso «cualquiera de», migas | menú, migas | Medio | F6 | `nav.test.ts` por plantilla, `panel-shell.test.tsx` | PLANEADO 2026-11-08 |
+| H14-056 | `app/(panel)/cuenta/**` (layout, page, tabs), `lib/cuenta-tabs.ts` | Cuenta sin bloqueo por `account:read`; pestañas restantes | Cuenta | Medio | F6 | `cuenta-tabs.test.ts` | PLANEADO 2026-11-08 |
+| H14-057 | `app/(panel)/cuenta/oficinas/**` → `organizacion/**`, enlaces internos, `lib/offices*.ts` | Mover Oficinas | árbol, ficha, papelera, equipo | Alto | F6 | `offices-view.test.tsx`, redirecciones | PLANEADO 2026-11-08 |
+| H14-058 | `cuenta/actividad/**` → `actividad/**`; `cuenta/soporte/**` → `seguridad/soporte/**`; `seguridad/page.tsx` (nuevo) | Mover Actividad y Accesos de soporte; índice de Seguridad | menú, migas | Medio | F6 | `support-access-view.test.tsx` | PLANEADO 2026-11-08 |
+| H14-059 | `apps/web/next.config.*`, `middleware.ts` (`matcher`) | Redirecciones permanentes y rutas nuevas con sesión | toda la web | Alto | F6 | `middleware.test.ts` (cobertura del matcher) | PLANEADO 2026-11-08 |
+| H14-060 | `auth.service.ts` (`me`), `MeInfo`, `panel-shell.tsx` | `supportSession` en `/auth/me` y banner | web, móvil (campo opcional) | Bajo | F6 | `auth.service.spec.ts`, panel-shell | PLANEADO 2026-11-08 |
+| H14-061 | páginas con `noAccess` a mano (20 usos) | Puerta uniforme | Cuenta, Equipo, Cartera… | Medio | F6 | vitest web completo | PLANEADO 2026-11-08 |
 
 ## IMPACT-MAP (F1)
 - **(F3) Cambiar quién registra los guards (H14-019/022)** ⇒ todos los controladores, `health`, `main.ts` (versionado), rutas públicas (`auth`, `accounts`, `health`), pruebas de integración que levantan la app, `permission-gates.spec.ts`, `uploads.access.spec.ts` (usa `RolesGuard`).
