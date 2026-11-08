@@ -2984,7 +2984,8 @@
         "ACTIVE": "Active",
         "AWAITING_CONSENT": "Waiting for your approval",
         "EXPIRED": "Expired",
-        "REVOKED": "Revoked"
+        "REVOKED": "Revoked",
+        "DENIED": "Rejected"
       },
       "grant": "Accept",
       "deny": "Reject",

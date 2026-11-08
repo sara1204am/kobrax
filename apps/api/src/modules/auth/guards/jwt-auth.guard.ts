@@ -45,6 +45,11 @@ export class JwtAuthGuard implements CanActivate {
     private readonly prisma?: PrismaService,
   ) {}
 
+  private async platformUserActive(id: string): Promise<boolean> {
+    if (!this.prisma) return false;
+    return (await this.prisma.platformUser.count({ where: { id, isActive: true } })) > 0;
+  }
+
   /** ¿La sesión de soporte sigue vigente? No vencida, no revocada, de ESTA cuenta, y —si pidió escritura sensible— con consentimiento no retirado. */
   private async supportSessionActive(id: string, accountId: string): Promise<boolean> {
     if (!this.prisma) return false;
@@ -73,6 +78,8 @@ export class JwtAuthGuard implements CanActivate {
       // F14 · F5 (H-11): la plataforma entra sólo con el interruptor EXTERNO encendido; cada petición de una sesión de soporte revalida que siga vigente, y
       // la escritura de soporte necesita además su propio interruptor. Los interruptores se leen del entorno en cada petición, apagados por omisión.
       if (!platformAccessEnabled()) throw new ForbiddenException({ code: 'PLATFORM_DISABLED', message: 'El acceso de plataforma está deshabilitado' });
+      // Una persona de plataforma desactivada deja de entrar YA, con el token que tuviera.
+      if (!(await this.platformUserActive(claims.sub))) throw invalidToken();
       if (claims.supportSessionId) {
         if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS' && !supportWriteEnabled()) {
           throw new ForbiddenException({ code: 'SUPPORT_WRITE_DISABLED', message: 'La escritura de soporte está deshabilitada' });

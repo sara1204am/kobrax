@@ -310,9 +310,9 @@ model Permission {
   scope       PermissionScope  @default(GLOBAL)
   active      Boolean          @default(true)
   /// F14·F5: LOW | MEDIUM | HIGH | CRITICAL. Lo usa el editor de roles (F7) para pedir confirmación.
-  risk        String           @default("LOW")
+  risk        PermissionRisk           @default(LOW)
   /// F14·F5: NULL | PLATFORM (nunca concedible a un rol de cuenta) | ADMIN_CORE (el ACCOUNT_ADMIN no puede perderlo).
-  reserved    String?
+  reserved    PermissionReserved?
   /// F14·F5: permisos de los que éste depende (arreglo JSON de códigos).
   requires    Json             @default("[]")
   createdAt   DateTime         @default(now()) @map("created_at")
@@ -435,7 +435,7 @@ model AccountRolePermission {
   permissionId  String   @map("permission_id")
   accountId     String   @map("account_id")
   /// TEMPLATE | CUSTOM
-  source        String   @default("TEMPLATE")
+  source        RolePermissionSource   @default(TEMPLATE)
   grantedBy     String?  @map("granted_by")
   grantedAt     DateTime @default(now()) @map("granted_at")
 
@@ -457,6 +457,11 @@ model PlatformUser {
   mfaSecret    String?  @map("mfa_secret")
   mfaEnabled   Boolean  @default(false) @map("mfa_enabled")
   isActive     Boolean  @default(true) @map("is_active")
+  /// Intentos fallidos seguidos; al llegar al tope se bloquea hasta `lockedUntil`.
+  failedAttempts Int     @default(0) @map("failed_attempts")
+  lockedUntil  DateTime? @map("locked_until")
+  /// Último tramo TOTP aceptado: un código ya usado no vuelve a valer.
+  mfaLastStep  BigInt?  @map("mfa_last_step")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -476,7 +481,7 @@ model SupportSession {
   permissions    String[]
   sensitive      Boolean   @default(false)
   /// NOT_REQUIRED | PENDING | GRANTED | DENIED | REVOKED
-  consentStatus  String    @default("NOT_REQUIRED") @map("consent_status")
+  consentStatus  ConsentStatus    @default(NOT_REQUIRED) @map("consent_status")
   consentBy      String?   @map("consent_by")
   consentAt      DateTime? @map("consent_at")
   expiresAt      DateTime  @map("expires_at")
@@ -653,7 +658,7 @@ model AuditLog {
   /// Nulo cuando actuó plataforma (`actorType = PLATFORM`): la persona de plataforma no es un usuario de empresa.
   userId    String?  @map("user_id")
   /// F14·F5: USER | PLATFORM.
-  actorType String   @default("USER") @map("actor_type")
+  actorType AuditActorType   @default(USER) @map("actor_type")
   /// Quién actuó cuando no es un usuario de empresa (id de `platform_users`).
   actorId   String?  @map("actor_id")
   supportSessionId String? @map("support_session_id")
@@ -2207,4 +2212,34 @@ model AccountRequest {
 
   @@index([accountId, status])
   @@map("account_requests")
+}
+
+enum ConsentStatus {
+  NOT_REQUIRED
+  PENDING
+  GRANTED
+  DENIED
+  REVOKED
+}
+
+enum AuditActorType {
+  USER
+  PLATFORM
+}
+
+enum RolePermissionSource {
+  TEMPLATE
+  CUSTOM
+}
+
+enum PermissionRisk {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum PermissionReserved {
+  PLATFORM
+  ADMIN_CORE
 }

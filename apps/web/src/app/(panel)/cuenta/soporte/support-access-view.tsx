@@ -17,7 +17,7 @@ export interface SupportSessionRow {
   createdAt: string;
   revokedAt?: string;
   /** ACTIVE | AWAITING_CONSENT | EXPIRED | REVOKED (calculado por la API). */
-  status: 'ACTIVE' | 'AWAITING_CONSENT' | 'EXPIRED' | 'REVOKED';
+  status: 'ACTIVE' | 'AWAITING_CONSENT' | 'EXPIRED' | 'REVOKED' | 'DENIED';
 }
 
 type Action = 'grant' | 'deny' | 'revoke';

@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { SUPPORT_MAX_TTL_MINUTES, SUPPORT_SENSITIVE_PERMISSIONS, needsSupportConsent, supportMaxPermissions } from '@kobrax/shared';
+import { SUPPORT_MAX_TTL_MINUTES, SUPPORT_SENSITIVE_PERMISSIONS, SUPPORT_SENSITIVE_READ_PERMISSIONS, needsSupportConsent, supportMaxPermissions } from '@kobrax/shared';
 import type { SupportSession } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
@@ -29,8 +29,8 @@ function viewOf(s: SupportSession, now = new Date()) {
     expiresAt: s.expiresAt.toISOString(),
     createdAt: s.createdAt.toISOString(),
     revokedAt: s.revokedAt?.toISOString(),
-    /** ACTIVE (vigente) | EXPIRED | REVOKED | AWAITING_CONSENT. Calculado, no guardado. */
-    status: s.revokedAt ? 'REVOKED' : s.expiresAt <= now ? 'EXPIRED' : s.consentStatus === 'PENDING' ? 'AWAITING_CONSENT' : 'ACTIVE',
+    /** ACTIVE (vigente) | EXPIRED | REVOKED | DENIED | AWAITING_CONSENT. Calculado, no guardado. */
+    status: s.revokedAt ? 'REVOKED' : s.consentStatus === 'DENIED' ? 'DENIED' : s.expiresAt <= now ? 'EXPIRED' : s.consentStatus === 'PENDING' ? 'AWAITING_CONSENT' : 'ACTIVE',
   };
 }
 
@@ -95,14 +95,25 @@ export class SupportSessionsService {
     });
   }
 
-  /** El token de acceso de una sesión vigente. La escritura sensible sólo entra con consentimiento Y con el interruptor de escritura encendido. */
+  /**
+   * El token de acceso de una sesión vigente. Lo sensible entra sólo con consentimiento: la LECTURA de datos personales con el consentimiento
+   * dado; la ESCRITURA sensible, además, con el interruptor `SUPPORT_WRITE_ENABLED` encendido. Una sesión rechazada o cuyo consentimiento se retiró
+   * no da token. El vencimiento que se informa es el del TOKEN (el menor entre la sesión y la vida del acceso), no el de la sesión.
+   */
   async issueToken(platformUserId: string, accountId: string, id: string): Promise<{ accessToken: string; expiresAt: string; permissions: string[] }> {
     const session = await this.prisma.withSystemTenant(accountId, (tx) => tx.supportSession.findFirst({ where: { id, accountId, platformUserId } }));
     if (!session) throw notFound();
     const now = new Date();
-    if (session.revokedAt || session.expiresAt <= now) throw new ConflictException({ code: 'SUPPORT_004', message: 'La sesión de soporte ya no está vigente' });
-    const sensitiveOk = session.sensitive && session.consentStatus === 'GRANTED' && supportWriteEnabled();
-    const permissions = session.permissions.filter((p) => sensitiveOk || !SUPPORT_SENSITIVE_PERMISSIONS.includes(p));
+    if (session.revokedAt || session.expiresAt <= now || session.consentStatus === 'DENIED' || session.consentStatus === 'REVOKED') {
+      throw new ConflictException({ code: 'SUPPORT_004', message: 'La sesión de soporte ya no está vigente' });
+    }
+    const consented = session.consentStatus === 'GRANTED';
+    const writeOk = consented && supportWriteEnabled();
+    const permissions = session.permissions.filter((p) => {
+      if (SUPPORT_SENSITIVE_PERMISSIONS.includes(p)) return writeOk;
+      if (SUPPORT_SENSITIVE_READ_PERMISSIONS.includes(p)) return consented;
+      return true;
+    });
     const accessToken = this.token.signAccess({
       sub: platformUserId,
       accountId,
@@ -114,7 +125,9 @@ export class SupportSessionsService {
       actorType: 'PLATFORM',
       supportSessionId: session.id,
     });
-    return { accessToken, expiresAt: session.expiresAt.toISOString(), permissions };
+    const exp = (JSON.parse(Buffer.from(accessToken.split('.')[1] ?? '', 'base64url').toString('utf8')) as { exp?: number }).exp;
+    const tokenExpiry = exp ? new Date(Math.min(exp * 1000, session.expiresAt.getTime())) : session.expiresAt;
+    return { accessToken, expiresAt: tokenExpiry.toISOString(), permissions };
   }
 
   listForAccount(accountId: string) {
@@ -143,30 +156,37 @@ export class SupportSessionsService {
     return row ? viewOf(row) : null;
   }
 
-  /** Acepta o rechaza una sesión PENDIENTE que pidió escritura sensible. */
+  /** Acepta o rechaza una sesión PENDIENTE que pidió algo sensible. Atómico: si dos personas deciden a la vez, gana una y la otra recibe 409. */
   async decide(id: string, decision: 'GRANTED' | 'DENIED'): Promise<SupportSessionView> {
     const userId = this.tenant.userId ?? '';
+    const accountId = this.tenant.accountId;
     const row = await this.tx(async (tx) => {
-      const s = await tx.supportSession.findFirst({ where: { id, accountId: this.tenant.accountId } });
+      const s = await tx.supportSession.findFirst({ where: { id, accountId } });
       if (!s) throw notFound();
       if (s.revokedAt || s.expiresAt <= new Date()) throw new ConflictException({ code: 'SUPPORT_004', message: 'La sesión de soporte ya no está vigente' });
-      if (s.consentStatus !== 'PENDING') throw new ConflictException({ code: 'SUPPORT_005', message: 'Esta sesión no espera consentimiento' });
-      return tx.supportSession.update({ where: { id }, data: { consentStatus: decision, consentBy: userId, consentAt: new Date() } });
+      const won = await tx.supportSession.updateMany({
+        where: { id, accountId, consentStatus: 'PENDING', revokedAt: null },
+        data: { consentStatus: decision, consentBy: userId, consentAt: new Date() },
+      });
+      if (won.count === 0) throw new ConflictException({ code: 'SUPPORT_005', message: 'Esta sesión no espera consentimiento' });
+      return tx.supportSession.findFirstOrThrow({ where: { id, accountId } });
     });
     await this.audit.record({ entity: 'support_session', entityId: id, action: decision === 'GRANTED' ? 'SUPPORT_CONSENT_GRANTED' : 'SUPPORT_CONSENT_DENIED' });
     return viewOf(row);
   }
 
-  /** Corta el acceso de soporte YA (también lo puede hacer la cuenta en cualquier momento). */
+  /** Corta el acceso de soporte YA (también lo puede hacer la cuenta en cualquier momento). Idempotente; conserva el primer revocador. */
   async revoke(id: string): Promise<SupportSessionView> {
     const userId = this.tenant.userId ?? '';
+    const accountId = this.tenant.accountId;
     const row = await this.tx(async (tx) => {
-      const s = await tx.supportSession.findFirst({ where: { id, accountId: this.tenant.accountId } });
+      const s = await tx.supportSession.findFirst({ where: { id, accountId } });
       if (!s) throw notFound();
-      return tx.supportSession.update({
-        where: { id },
-        data: { revokedAt: s.revokedAt ?? new Date(), revokedBy: s.revokedBy ?? userId, ...(s.sensitive && s.consentStatus === 'GRANTED' ? { consentStatus: 'REVOKED' } : {}) },
-      });
+      const now = new Date();
+      await tx.supportSession.updateMany({ where: { id, accountId, revokedAt: null }, data: { revokedAt: now, revokedBy: userId } });
+      // Si ya había consentido, el consentimiento queda retirado (sin tocar uno rechazado ni pendiente).
+      await tx.supportSession.updateMany({ where: { id, accountId, consentStatus: 'GRANTED' }, data: { consentStatus: 'REVOKED' } });
+      return tx.supportSession.findFirstOrThrow({ where: { id, accountId } });
     });
     await this.audit.record({ entity: 'support_session', entityId: id, action: 'SUPPORT_SESSION_REVOKED' });
     return viewOf(row);

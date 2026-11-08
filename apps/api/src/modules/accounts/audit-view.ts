@@ -11,6 +11,8 @@ export const ACCOUNT_ACTIVITY_ENTITIES = [
   'arrear_category',
   'user_account',
   'account_request',
+  // F14 · F5: los accesos de soporte de la plataforma (abrir, consentir, rechazar, revocar) son parte de la actividad de la cuenta.
+  'support_session',
 ] as const;
 
 /** Columnas que cambian solas o no dicen nada al leerlas. */

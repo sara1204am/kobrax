@@ -15,6 +15,7 @@ import { totpNow } from '../../src/modules/auth/totp';
 import { API, call, db, freshDatabase, loginSkippingMfa, startApi, stopApi } from './harness';
 
 const suffix = randomUUID().slice(0, 8);
+const ENROLL_KEY = `it-enroll-${suffix}-0123456789`;
 let prisma: PrismaClient;
 const acc: Record<string, { id: string; admin: string; email: string }> = {};
 const decode = (jwt: string): Record<string, unknown> => JSON.parse(Buffer.from(jwt.split('.')[1]!, 'base64url').toString('utf8'));
@@ -33,7 +34,7 @@ async function signup(label: string): Promise<{ id: string; admin: string; email
 
 before(async () => {
   await freshDatabase();
-  await startApi({ MFA_CRITICAL_GRACE_UNTIL: '2099-01-01', PLATFORM_ACCESS_ENABLED: 'true', SUPPORT_WRITE_ENABLED: 'true' });
+  await startApi({ MFA_CRITICAL_GRACE_UNTIL: '2099-01-01', PLATFORM_ACCESS_ENABLED: 'true', SUPPORT_WRITE_ENABLED: 'true', PLATFORM_ENROLLMENT_KEY: ENROLL_KEY });
   prisma = db();
   acc.A = await signup('a');
   acc.B = await signup('b');
@@ -135,12 +136,16 @@ describe('F5 · plataforma', () => {
     const bad = await post('/platform/auth/login', null, { email: EMAIL, password: 'mala' });
     assert.equal(bad.status, 401);
     assert.equal(bad.error?.code, 'PLATFORM_AUTH_INVALID');
-    const first = await post('/platform/auth/login', null, { email: EMAIL, password: PASSWORD });
+    // conocer la contraseña NO alcanza para enrolar el propio autenticador: hace falta la clave de enrolamiento del servidor
+    const noKey = await post('/platform/auth/login', null, { email: EMAIL, password: PASSWORD });
+    assert.equal(noKey.status, 401);
+    assert.equal(noKey.data?.secret, undefined);
+    const first = await post('/platform/auth/login', null, { email: EMAIL, password: PASSWORD, enrollmentKey: ENROLL_KEY });
     assert.equal(first.status, 200);
     assert.equal(first.data?.step, 'mfa_setup');
     assert.equal(first.data?.accessToken, undefined);
     secret = String(first.data?.secret);
-    const done = await post('/platform/auth/mfa/confirm', null, { email: EMAIL, password: PASSWORD, code: totpNow(secret) });
+    const done = await post('/platform/auth/mfa/confirm', null, { email: EMAIL, password: PASSWORD, code: totpNow(secret), enrollmentKey: ENROLL_KEY });
     assert.equal(done.status, 200, JSON.stringify(done.error));
     platform = String(done.data?.accessToken);
     const claims = decode(platform);
@@ -149,7 +154,10 @@ describe('F5 · plataforma', () => {
     assert.ok((claims.permissions as string[]).every((p) => p.startsWith('platform:')));
     // y a partir de ahí el código es obligatorio
     assert.equal((await post('/platform/auth/login', null, { email: EMAIL, password: PASSWORD })).status, 401);
-    assert.equal((await post('/platform/auth/login', null, { email: EMAIL, password: PASSWORD, code: totpNow(secret) })).data?.step, 'done');
+    // el código con el que se confirmó el enrolamiento ya se usó: no vuelve a valer (anti-repetición); el del tramo siguiente sí
+    const nextCode = totpNow(secret, Date.now() + 30_000);
+    assert.equal((await post('/platform/auth/login', null, { email: EMAIL, password: PASSWORD, code: totpNow(secret) })).status, 401);
+    assert.equal((await post('/platform/auth/login', null, { email: EMAIL, password: PASSWORD, code: nextCode })).data?.step, 'done');
   });
 
   it('🔴 el token de plataforma no sirve para ninguna ruta de empresa; y un administrador de empresa no entra a las de plataforma', async () => {
@@ -188,6 +196,24 @@ describe('F5 · plataforma', () => {
     assert.equal((await call(acc.A!.admin, 'POST', `/support-access/${sessionId}/grant`)).status, 200);
   });
 
+  it('🔴 un acceso «de lectura» que pide datos personales también queda pendiente de consentimiento, y su token no los trae hasta que se acepta', async () => {
+    const open = await post('/platform/support-sessions', platform, {
+      accountId: acc.A!.id,
+      reason: 'ticket 400: revisar un cliente puntual',
+      ttlMinutes: 20,
+      permissions: ['client:read', 'client:contact:read', 'client:pii:read', 'data:scope:all'],
+    });
+    assert.equal(open.status, 201, JSON.stringify(open.error));
+    assert.equal(open.data?.consentStatus, 'PENDING');
+    const t = await post(`/platform/accounts/${acc.A!.id}/support-sessions/${String(open.data?.id)}/token`, platform);
+    assert.ok(!(t.data?.permissions as string[]).includes('client:pii:read'), 'sin consentimiento no hay PII');
+    // la cuenta lo RECHAZA: el estado que ve es «Rechazado», el token se niega y no se puede aceptar después
+    const denied = await call<{ status: string }>(acc.A!.admin, 'POST', `/support-access/${String(open.data?.id)}/deny`);
+    assert.equal(denied.data?.status, 'DENIED');
+    assert.equal((await post(`/platform/accounts/${acc.A!.id}/support-sessions/${String(open.data?.id)}/token`, platform)).status, 409);
+    assert.equal((await call(acc.A!.admin, 'POST', `/support-access/${String(open.data?.id)}/grant`)).status, 409);
+  });
+
   it('🔴 con el consentimiento, la escritura sensible funciona y queda auditada como PLATAFORMA (sin usuario de la cuenta)', async () => {
     const t2 = await post(`/platform/accounts/${acc.A!.id}/support-sessions/${sessionId}/token`, platform);
     assert.ok((t2.data?.permissions as string[]).includes('office:write'));
@@ -215,6 +241,13 @@ describe('F5 · plataforma', () => {
     assert.equal((await call(support, 'GET', '/clients?limit=1')).status, 401);
     const again = await post(`/platform/accounts/${acc.A!.id}/support-sessions/${sessionId}/token`, platform);
     assert.equal(again.status, 409);
+  });
+
+  it('la cuenta ve en su Actividad que soporte pidió acceso y que el administrador consintió', async () => {
+    const r = await call<{ items: { entity: string; action: string; actorName: string | null }[] }>(acc.A!.admin, 'GET', '/accounts/me/activity?limit=100');
+    assert.equal(r.status, 200, JSON.stringify(r.error));
+    const acts = (r.data?.items ?? []).filter((i) => i.entity === 'support_session').map((i) => i.action);
+    assert.ok(acts.includes('SUPPORT_SESSION_OPEN') && acts.includes('SUPPORT_CONSENT_GRANTED'), JSON.stringify(acts));
   });
 
   it('el aviso del panel: `GET /support-access/current` es nulo para un usuario de la empresa', async () => {

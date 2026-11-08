@@ -27,7 +27,7 @@ export interface AuditEntry {
  */
 function actorOf(ctx: { userId: string; actorType?: 'PLATFORM'; supportSessionId?: string }) {
   return ctx.actorType === 'PLATFORM'
-    ? { userId: null, actorType: 'PLATFORM', actorId: ctx.userId, supportSessionId: ctx.supportSessionId ?? null }
+    ? { userId: null, actorType: 'PLATFORM' as const, actorId: ctx.userId, supportSessionId: ctx.supportSessionId ?? null }
     : { userId: ctx.userId };
 }
 

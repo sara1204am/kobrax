@@ -13,7 +13,7 @@ export interface ResolvedPermissions {
  * Resuelve los permisos efectivos de una membresía.
  *
  * F14 · F5 (ADR-F14-01): salen del ROL DE LA CUENTA (`account_role_permissions`, copia de una plantilla), no de una constante igual para todas las
- * empresas. Si la membresía todavía no tiene rol de cuenta (`account_role_id` nulo: sólo el SUPER_ADMIN histórico) se usa el rol global, como hasta ahora.
+ * empresas. Si la membresía todavía no tiene rol de cuenta (`account_role_id` nulo: sólo el SUPER_ADMIN histórico) se usa el rol global, como hasta ahora; si apunta a un rol de cuenta que ya no existe, no tiene ningún permiso (falla cerrado).
  * No hay caché: sólo se consulta al emitir y al renovar el token; en cada petición los permisos vienen del token y su vigencia la controlan `av`/`pv`.
  */
 @Injectable()
@@ -37,6 +37,9 @@ export class PermissionsService {
         select: { key: true, permissions: { select: { permission: { select: { code: true } } } } },
       });
       if (role) return { permissions: role.permissions.map((p) => p.permission.code), roleKey: role.key, source: 'account' };
+      // La membresía APUNTA a un rol de cuenta que ya no existe (se dio de baja): se niega todo. Volver al rol global le devolvería a esa persona un conjunto
+      // más amplio que el que su administrador le dejó.
+      return { permissions: [], source: 'account' };
     }
     return { permissions: await this.forRole(ua.roleId), source: 'global' };
   }

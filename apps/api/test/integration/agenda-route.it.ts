@@ -157,9 +157,14 @@ describe('desactivar a quien tiene trabajo a su nombre (F4/11 · D1)', () => {
   before(async () => {
     // El administrador de la demo exige configurar el segundo factor para entrar; un gerente no. Se le presta el permiso de
     // administrar miembros (solo en esta base de prueba) para llamar a la API real sin armar el flujo de MFA.
-    const role = await prisma.role.findUniqueOrThrow({ where: { name: 'MANAGER' } });
+    // F14 · F5: los permisos del token salen del rol DE LA CUENTA, no del rol global.
+    const mgr = await prisma.user.findUniqueOrThrow({ where: { email: 'manager@kobrax.demo' } });
+    const membership = await prisma.userAccount.findFirstOrThrow({ where: { userId: mgr.id }, include: { accountRole: true } });
     const perms = await prisma.permission.findMany({ where: { code: { in: ['user:write', 'user:read'] } } });
-    await prisma.rolePermission.createMany({ data: perms.map((p) => ({ roleId: role.id, permissionId: p.id })), skipDuplicates: true });
+    await prisma.accountRolePermission.createMany({
+      data: perms.map((p) => ({ accountRoleId: membership.accountRoleId!, permissionId: p.id, accountId: membership.accountId, source: 'CUSTOM' as const })),
+      skipDuplicates: true,
+    });
     admin = await login('manager@kobrax.demo');
     rosa = (await prisma.user.findUniqueOrThrow({ where: { email: 'cobrador1@kobrax.demo' } })).id;
     marco = (await prisma.user.findUniqueOrThrow({ where: { email: 'cobrador2@kobrax.demo' } })).id;

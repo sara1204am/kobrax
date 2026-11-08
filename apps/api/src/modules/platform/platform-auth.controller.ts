@@ -19,7 +19,7 @@ export class PlatformAuthController {
   @HttpCode(200)
   @RateLimit({ limit: 10, windowSec: 300, by: 'ip' })
   async login(@Body() dto: PlatformLoginDto) {
-    return ResponseDto.ok(await this.auth.login(dto.email, dto.password, dto.code));
+    return ResponseDto.ok(await this.auth.login(dto.email, dto.password, dto.code, dto.enrollmentKey));
   }
 
   @Post('mfa/confirm')
@@ -27,6 +27,6 @@ export class PlatformAuthController {
   @HttpCode(200)
   @RateLimit({ limit: 10, windowSec: 300, by: 'ip' })
   async confirm(@Body() dto: PlatformMfaConfirmDto) {
-    return ResponseDto.ok(await this.auth.confirmMfa(dto.email, dto.password, dto.code));
+    return ResponseDto.ok(await this.auth.confirmMfa(dto.email, dto.password, dto.code, dto.enrollmentKey));
   }
 }
