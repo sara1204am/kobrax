@@ -41,8 +41,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Cliente de Prisma
         run: pnpm db:generate
-      - name: Compilar shared (lo consumen API, web y móvil)
-        run: pnpm --filter @kobrax/shared build
+      - name: Compilar shared y database (la API los importa desde dist/, que no está en el repositorio)
+        run: |
+          pnpm --filter @kobrax/shared build
+          pnpm --filter @kobrax/database build
       - name: Tipos y pruebas · shared
         run: |
           pnpm --filter @kobrax/shared exec tsc --noEmit
@@ -82,22 +84,28 @@ jobs:
         # Del .env.example, más las dos claves de cifrado que el ejemplo deja vacías (32 bytes hex, distintas entre sí). Son de usar y tirar.
         run: |
           cp .env.example .env
-          sed -i "s|^APP_ENCRYPTION_KEY=.*|APP_ENCRYPTION_KEY=\"$(openssl rand -hex 32)\"|" .env
-          sed -i "s|^APP_BLIND_INDEX_KEY=.*|APP_BLIND_INDEX_KEY=\"$(openssl rand -hex 32)\"|" .env
-          echo "FILE_LINK_SECRET=\"$(openssl rand -hex 32)\"" >> .env
+          # Se quita la línea (si existe) y se añade la definitiva: no depende de que el ejemplo la traiga vacía, ni queda duplicada.
+          for k in APP_ENCRYPTION_KEY APP_BLIND_INDEX_KEY FILE_LINK_SECRET; do
+            sed -i "/^$k=/d" .env
+            echo "$k=\"$(openssl rand -hex 32)\"" >> .env
+          done
+          for k in APP_ENCRYPTION_KEY APP_BLIND_INDEX_KEY FILE_LINK_SECRET; do test "$(grep -c "^$k=" .env)" = 1; done
       - name: Postgres y Redis (docker compose; los contenedores se llaman como el arnés espera)
         run: |
           docker compose up -d postgres redis
+          ready=0
           for i in $(seq 1 30); do
-            docker exec kobrax-postgres pg_isready -U postgres -d kobrax && break
+            if docker exec kobrax-postgres pg_isready -U postgres -d kobrax; then ready=1; break; fi
             sleep 2
           done
+          test "$ready" = 1 || { echo "Postgres no arrancó"; exit 1; }
           docker exec kobrax-redis redis-cli ping
       - run: pnpm install --frozen-lockfile
       - name: Cliente de Prisma y paquetes compartidos
         run: |
           pnpm db:generate
           pnpm --filter @kobrax/shared build
+          pnpm --filter @kobrax/database build
       - name: Integración de la API (base kobrax_it recreada de cero; SCOPE_RLS_MODE apagado, como el valor por omisión)
         working-directory: apps/api
         run: npm run test:integration

@@ -37,7 +37,11 @@ function psql(sql: string) {
   if (local) {
     const url = process.env.DATABASE_URL;
     if (!url) throw new Error('--local necesita DATABASE_URL');
-    return spawnSync('psql', [url, '-v', 'ON_ERROR_STOP=1', '-q'], { input: sql, encoding: 'utf8' });
+    // libpq no acepta `?schema=public` (es de Prisma) y `--db` también vale aquí.
+    const u = new URL(url);
+    u.search = '';
+    if (arg('db')) u.pathname = `/${db}`;
+    return spawnSync('psql', [u.toString(), '-v', 'ON_ERROR_STOP=1', '-q'], { input: sql, encoding: 'utf8' });
   }
   return spawnSync('docker', ['exec', '-i', container, 'sh', '-c', `psql -U "$POSTGRES_USER" -d ${db} -v ON_ERROR_STOP=1 -q`], { input: sql, encoding: 'utf8' });
 }

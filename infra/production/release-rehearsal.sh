@@ -38,6 +38,8 @@ while [ $# -gt 0 ]; do
     *) DUMP="$1"; shift ;;
   esac
 done
+# Guardia: el ensayo hace DROP DATABASE ... (FORCE) sobre $DB. Solo se acepta un nombre de ensayo, nunca una base real.
+case "$DB" in *rehearsal*) ;; *) echo "--db debe contener «rehearsal» (recibió «$DB»): este script borra esa base" >&2; exit 2 ;; esac
 if [ "$EMPTY" = 0 ] && [ -z "$DUMP" ]; then echo "uso: release-rehearsal.sh <respaldo.sql[.gz]> | --empty" >&2; exit 2; fi
 if [ "$EMPTY" = 0 ] && [ ! -f "$DUMP" ]; then echo "no existe el respaldo: $DUMP" >&2; exit 2; fi
 

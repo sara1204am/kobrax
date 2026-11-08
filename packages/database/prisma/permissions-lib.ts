@@ -39,6 +39,13 @@ export interface SnapshotDiff {
   appeared: string[];
 }
 
+/** Lo que una persona gana y pierde de un volcado a otro, sobre lo que PUEDE hacer (alcances normalizados). Única fuente para `diffSnapshots` y `summarizeByRole`. */
+function deltaOf(mb: MembershipPermissions, ma: MembershipPermissions): { added: string[]; removed: string[] } {
+  const sb = new Set(normalizeScopes(mb.permissions));
+  const sa = new Set(normalizeScopes(ma.permissions));
+  return { added: [...sa].filter((p) => !sb.has(p)).sort(), removed: [...sb].filter((p) => !sa.has(p)).sort() };
+}
+
 export function diffSnapshots(before: PermissionsSnapshot, after: PermissionsSnapshot): SnapshotDiff {
   const b = new Map(before.memberships.map((m) => [keyOf(m), m]));
   const a = new Map(after.memberships.map((m) => [keyOf(m), m]));
@@ -46,11 +53,7 @@ export function diffSnapshots(before: PermissionsSnapshot, after: PermissionsSna
   for (const [key, mb] of b) {
     const ma = a.get(key);
     if (!ma) continue;
-    // Lo que importa es lo que la persona PUEDE hacer: los alcances angostos no suman si hay `data:scope:all` (ver `normalizeScopes`).
-    const sb = new Set(normalizeScopes(mb.permissions));
-    const sa = new Set(normalizeScopes(ma.permissions));
-    const added = [...sa].filter((p) => !sb.has(p)).sort();
-    const removed = [...sb].filter((p) => !sa.has(p)).sort();
+    const { added, removed } = deltaOf(mb, ma);
     if (added.length || removed.length) changed.push({ accountId: ma.accountId, userId: ma.userId, added, removed });
   }
   return {
@@ -118,10 +121,7 @@ export function summarizeByRole(before: PermissionsSnapshot, after: PermissionsS
   for (const mb of before.memberships) {
     const ma = a.get(keyOf(mb));
     if (!ma) continue;
-    const sb = new Set(normalizeScopes(mb.permissions));
-    const sa = new Set(normalizeScopes(ma.permissions));
-    const added = [...sa].filter((p) => !sb.has(p)).sort();
-    const removed = [...sb].filter((p) => !sa.has(p)).sort();
+    const { added, removed } = deltaOf(mb, ma);
     if (!added.length && !removed.length) continue;
     const key = `${mb.role}|${added.join(',')}|${removed.join(',')}`;
     const g = groups.get(key) ?? { role: mb.role, people: 0, added, removed };

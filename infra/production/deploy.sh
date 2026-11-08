@@ -106,13 +106,13 @@ for sql in "$APP"/packages/database/prisma/rls/verify_*.sql; do
 ' "$salida" | grep -c 'NOTICE:  OK ' || true)
   if [ "$estado" -ne 0 ] || [ "$comprobaciones" -eq 0 ]; then
     echo "    FALLO: $nombre" >&2
-    printf '%s
-' "$salida" | grep -E 'ERROR|AVISO' | head -5 | sed 's/^/      /' >&2
+    { printf '%s
+' "$salida" | grep -E 'ERROR|AVISO' | head -5 | sed 's/^/      /' >&2; } || true
     VERIFICACIONES_FALLARON=1
   else
     echo "    $nombre ($comprobaciones comprobaciones)"
-    printf '%s
-' "$salida" | grep 'AVISO' | sed 's/^/      /' || true
+    { printf '%s
+' "$salida" | grep 'AVISO' | sed 's/^/      /'; } || true
   fi
 done
 if [ "$VERIFICACIONES_FALLARON" -ne 0 ]; then

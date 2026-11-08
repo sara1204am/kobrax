@@ -26,11 +26,11 @@ END $$;
 DO $$
 DECLARE mal text;
 BEGIN
+  IF EXISTS (SELECT 1 FROM permissions WHERE jsonb_typeof(requires) <> 'array') THEN RAISE EXCEPTION 'hay permisos cuyo requires no es una lista'; END IF;
   SELECT string_agg(p.code || ' → ' || r, '; ') INTO mal
     FROM permissions p, jsonb_array_elements_text(p.requires) r
-    WHERE jsonb_typeof(p.requires) = 'array' AND (r = p.code OR NOT EXISTS (SELECT 1 FROM permissions q WHERE q.code = r));
+    WHERE (r = p.code OR NOT EXISTS (SELECT 1 FROM permissions q WHERE q.code = r));
   IF mal IS NOT NULL THEN RAISE EXCEPTION 'dependencias inválidas: %', mal; END IF;
-  IF EXISTS (SELECT 1 FROM permissions WHERE jsonb_typeof(requires) <> 'array') THEN RAISE EXCEPTION 'hay permisos cuyo requires no es una lista'; END IF;
   RAISE NOTICE 'OK 2/7 · % permisos con dependencias, todas válidas', (SELECT count(*) FROM permissions WHERE jsonb_array_length(requires) > 0);
 END $$;
 

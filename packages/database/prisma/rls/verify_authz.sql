@@ -42,8 +42,9 @@ DECLARE atascadas bigint;
 BEGIN
   SELECT count(*) INTO atascadas FROM authz_version_outbox
     WHERE processed_at IS NULL AND created_at < now() - interval '10 minutes';
-  IF atascadas > 0 THEN RAISE EXCEPTION '% versiones sin publicar a Redis hace más de 10 min (reconciliador caído: reiniciar la API reconcilia)', atascadas; END IF;
-  RAISE NOTICE 'OK 3/5 · la outbox no tiene versiones atascadas';
+  -- AVISO y no error: lo arregla reiniciar la API, y el despliegue corre esta verificación ANTES de reiniciar; si fuera error, nunca se llegaría a reiniciar.
+  IF atascadas > 0 THEN RAISE NOTICE 'AVISO · % versiones sin publicar a Redis hace más de 10 min (reconciliador caído: reiniciar la API reconcilia)', atascadas; END IF;
+  RAISE NOTICE 'OK 3/5 · outbox de versiones revisada (% atascadas)', atascadas;
 END $$;
 
 -- 4. El dispositivo de la sesión (de él sale el canal del token, F14 · F8): la columna existe y las sesiones vigentes lo tienen.

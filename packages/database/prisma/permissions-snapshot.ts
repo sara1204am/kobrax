@@ -85,7 +85,15 @@ async function loadLegacy(): Promise<MembershipPermissions[]> {
 }
 
 async function main(): Promise<void> {
-  const [cmd, a, b] = process.argv.slice(2);
+  // Posicionales = lo que no es una opción ni el valor de una opción (así `diff --by-role antes.json despues.json` también sirve).
+  const withValue = new Set(['--out', '--allow-added', '--allow-removed']);
+  const positional: string[] = [];
+  const rest = process.argv.slice(2);
+  for (let i = 0; i < rest.length; i++) {
+    if (withValue.has(rest[i]!)) i += 1;
+    else if (!rest[i]!.startsWith('--')) positional.push(rest[i]!);
+  }
+  const [cmd, a, b] = positional;
   if (cmd === 'dump') {
     const effective = process.argv.includes('--legacy') ? await loadLegacy() : (await load()).effective;
     const snap: PermissionsSnapshot = { takenAt: new Date().toISOString(), memberships: effective };
@@ -101,7 +109,9 @@ async function main(): Promise<void> {
 
   if (cmd === 'diff') {
     if (!a || !b) throw new Error('uso: diff <antes.json> <despues.json>');
-    const diff = diffSnapshots(JSON.parse(readFileSync(a, 'utf8')) as PermissionsSnapshot, JSON.parse(readFileSync(b, 'utf8')) as PermissionsSnapshot);
+    const before = JSON.parse(readFileSync(a, 'utf8')) as PermissionsSnapshot;
+    const after = JSON.parse(readFileSync(b, 'utf8')) as PermissionsSnapshot;
+    const diff = diffSnapshots(before, after);
     const bad = unplanned(diff, {
       allowAdded: list(arg('allow-added')),
       allowAnyAdded: process.argv.includes('--allow-any-added'),
@@ -110,7 +120,7 @@ async function main(): Promise<void> {
     });
     console.log(`Cambios: ${diff.changed.length} membresías con permisos distintos · ${diff.gone.length} que ya no están · ${diff.appeared.length} nuevas`);
     if (process.argv.includes('--by-role')) {
-      const groups = summarizeByRole(JSON.parse(readFileSync(a, 'utf8')) as PermissionsSnapshot, JSON.parse(readFileSync(b, 'utf8')) as PermissionsSnapshot);
+      const groups = summarizeByRole(before, after);
       for (const g of groups) console.log(`  ${g.role} (${g.people} ${g.people === 1 ? 'persona' : 'personas'})  +[${g.added.join(', ')}]  −[${g.removed.join(', ')}]${g.removed.length ? '   ← REVISAR: se quita algo' : ''}`);
       if (groups.length === 0) console.log('  (ningún rol cambió)');
     }

@@ -152,4 +152,13 @@ describe('permissions-lib · permisos efectivos por membresía (F14 · F9)', () 
     const after = snap(m('u1', ['data:scope:all'], { role: 'ACCOUNT_ADMIN' }));
     assert.deepEqual(summarizeByRole(before, after), []);
   });
+
+  it('el resumen por rol y el diff dicen lo mismo (una sola fuente del cálculo)', () => {
+    const b = snap(m('u1', ['a', 'z']), m('u2', ['a']));
+    const a = snap(m('u1', ['a', 'n']), m('u2', ['a']));
+    const changed = diffSnapshots(b, a).changed;
+    const groups = summarizeByRole(b, a);
+    assert.equal(changed.length, groups.reduce((n, g) => n + g.people, 0));
+    assert.deepEqual([changed[0]!.added, changed[0]!.removed], [groups[0]!.added, groups[0]!.removed]);
+  });
 });
