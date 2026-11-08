@@ -65,3 +65,9 @@
   2. Los permisos se leen de la cuenta; consumidores por nombre de rol siguen válidos hasta F7 (INCIDENTS).
   3. `docs/epics/F15/` es de otra sesión y no está commiteado.
 - **Siguiente paso autorizado:** F6 (navegación web: guardas `requirePermission`, secciones Cuenta/Organización/Equipo/Seguridad/Actividad) con `/epic-fase F14 plan F6`; luego F7 (editor de roles).
+
+## Sesión 2026-11-08 (cierre de F6)
+- **Dónde quedó:** F6 **CERRADA** (G4…G7 PASS) en la rama `f14/p6-web-nav` (desde `f14/p5-roles-por-cuenta`; commits `cfec5de`, `b2b7631`, `d3a5892`, más docs), **sin push/PR**. Decisiones D-1…D-6 aprobadas por la usuaria (camino 1: Seguridad sin Roles hasta F7).
+- **Hecho:** menú por secciones (Organización, Seguridad, Actividad), `requirePermission`/`getMe`/`<NoAccess/>`, Oficinas→`/organizacion`, Actividad→`/actividad`, Accesos de soporte→`/seguridad/soporte` (308 desde las rutas viejas), Cuenta sin bloqueo por `account:read`, banner «Sesión de soporte», `/auth/me` para la plataforma y `timezone` en la marca.
+- **Para la usuaria (leer):** (1) sin migraciones; desplegar web y API. (2) Las URLs viejas redirigen solas. (3) Un gerente ve «Seguridad» con un índice vacío hasta F7. (4) `docs/epics/F15/` sigue sin commitear.
+- **Siguiente paso autorizado:** F7, editor de roles y permisos (API `GET/PUT /roles…`, restaurar plantilla, historial, comparar; web vistas A–F). `/epic-fase F14 plan F7`. Toda pantalla nueva con `requirePermission`.

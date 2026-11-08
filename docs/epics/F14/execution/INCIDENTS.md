@@ -23,3 +23,7 @@
 | 2026-11-07 | Los consumidores por NOMBRE de rol no se reescribieron: `key` == nombre global hasta que existan roles personalizados (H-9). | **ACEPTADO** — revisar en F7 cuando se puedan crear roles propios. |
 | 2026-11-07 | El aviso «Sesión de soporte» del panel todavía no tiene consumidor en el layout. | **ABIERTO** — entra con F6 (navegación). |
 | 2026-11-07 | Un test de integración antiguo (`agenda-route.it.ts`) concedía permisos al rol global y dejó de surtir efecto con roles por cuenta. | **RESUELTO** — V-044. |
+| 2026-11-08 | `GET /auth/me` fallaba para la persona de plataforma (buscaba un usuario de empresa): el panel no abría con un token de soporte. | **RESUELTO** en F6 (`meOfPlatform`, V-047). Cierra también el pendiente del aviso «Sesión de soporte». |
+| 2026-11-08 | La sección Seguridad es visible con `role:read` o `user:sessions:revoke` pero hasta F7 solo contiene «Accesos de soporte» (`support:consent`). Un gerente ve el ítem con un índice vacío. | **ACEPTADO** (D-2 aprobada); se llena con F7. |
+| 2026-11-08 | En el App Router el layout y la página se renderizan en paralelo: el layout de Cuenta bloquea la vista, pero la página sigue ejecutando sus llamadas a la API (que validan igual). Cada pantalla nueva debe llevar su propia `requirePermission`. | **ACEPTADO con motivo**; regla para F7: toda pantalla nueva con `requirePermission`. |
+| 2026-11-08 | `git add docs` incluyó `docs/epics/F15/` (de otra sesión) en un commit local; se deshizo antes de continuar. | **RESUELTO** (sin push). Usar siempre rutas explícitas. |

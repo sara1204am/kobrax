@@ -437,3 +437,10 @@ El nombre de la persona lo ve todo el que ve al cliente. Cada revelado queda aud
 - Los permisos `data:scope:*` no se pueden conceder fuera de lo que permite el alcance del rol; los permisos de plataforma nunca se conceden a un rol de cuenta.
 - La persona de plataforma entra por un login único con MFA (bloqueo tras 5 fallos, código TOTP no reutilizable) y solo si el interruptor externo está encendido.
 - El soporte accede mediante sesiones con vencimiento: leer datos personales exige el consentimiento de la cuenta; escribir exige además `SUPPORT_WRITE_ENABLED`. Una sesión rechazada o revocada no da token. La cuenta ve y revoca estos accesos en «Accesos de soporte» y aparecen en su Actividad.
+
+## F14 · F6 — navegación por permisos (2026-11-08)
+
+- El menú tiene cinco secciones con permiso propio: **Organización** (`office:read`), **Equipo** (`user:read`), **Seguridad** (`role:read`, `user:sessions:revoke` o `support:consent`), **Actividad** (`audit:read`) y **Cuenta** (`account:read`). Ninguna depende de `account:read` salvo Cuenta: el supervisor ve Organización y el auditor ve Actividad.
+- Oficinas, Actividad y Accesos de soporte salieron de Cuenta a `/organizacion`, `/actividad` y `/seguridad/soporte`; las rutas viejas redirigen.
+- Cada pantalla se protege en el servidor (`requirePermission`): sin permiso muestra «No tienes acceso a esta pantalla»; si la API falla muestra «reintentar» y no «sin acceso». La API sigue siendo quien autoriza.
+- Mientras la plataforma está en una sesión de soporte, el panel muestra «Sesión de soporte · vence HH:MM».
