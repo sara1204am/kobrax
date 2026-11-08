@@ -5,7 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { hash } from 'bcryptjs';
 import type { PrismaClient } from '@prisma/client';
 import { AgendaItemStatus, CreditAssignmentKind, CreditStatus, RouteStatus } from '@prisma/client';
-import { KOBRAX, MOBILE_ROLES, Permission, RoleType, isMobileRole } from '@kobrax/shared';
+import { KOBRAX, Permission, RoleType, isMobileRole } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -18,7 +18,7 @@ import { AuthzVersionService, type PendingVersion } from '../auth/authz-version.
 import { SessionService } from '../auth/session.service';
 import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import { isAssignable, type AssignmentChange } from '../assignments/assignment-rules';
-import { serializeMember, serializeProfile, serializeRole } from './users.serializer';
+import { serializeMember, serializeProfile } from './users.serializer';
 import { InviteMemberDto, UpdateMemberDto, UpdateProfileDto } from './dto/user.dto';
 import {
   cannotEditSelf,
@@ -34,7 +34,6 @@ import {
 } from './users.errors';
 import { AuthorizationService } from '../../common/authz/authorization.service';
 import { PolicyService } from '../../common/authz/policy.service';
-import { isReservedRole, tierOf } from '../../common/authz/tier';
 
 const MEMBER_INCLUDE = { user: { include: { profile: true } }, role: true } as const;
 
@@ -533,18 +532,5 @@ export class UsersService {
       redactKeys: ['phone', 'documentNumber'],
     });
     return serializeProfile(user);
-  }
-
-  /**
-   * Los roles que quien pregunta puede OFRECER al invitar o cambiar un rol (F14 · F2, H-3/H-13): de `tier` estrictamente inferior al suyo y
-   * ninguno reservado (el ACCOUNT_ADMIN no se otorga por esta vía). El servidor lo vuelve a exigir en `member.invite`/`member.assignRole`.
-   */
-  async listRoles() {
-    const { roles, mine } = await this.tx(async (tx) => ({
-      roles: await tx.role.findMany({ where: { name: { in: [...MOBILE_ROLES] } }, orderBy: { level: 'desc' } }),
-      mine: await tx.userAccount.findFirst({ where: { userId: this.selfId, accountId: this.tenant.accountId }, select: { role: { select: { name: true, level: true } } } }),
-    }));
-    const myTier = mine ? tierOf(mine.role) : -1;
-    return roles.filter((r) => !isReservedRole(r) && tierOf(r) < myTier).map(serializeRole);
   }
 }

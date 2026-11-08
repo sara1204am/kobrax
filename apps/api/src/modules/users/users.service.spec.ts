@@ -533,30 +533,6 @@ describe('UsersService.remove — cancelar la invitación (S2-D5)', () => {
   });
 });
 
-describe('UsersService.listRoles', () => {
-  const ALL_ROLES = [ROLES[ROLE_ADMIN]!, ROLES[ROLE_MANAGER]!, ROLES[ROLE_COLLECTOR]!];
-
-  it('consulta sólo los roles que la app administra, de mayor a menor nivel', async () => {
-    const { service, calls } = makeService({ roles: ALL_ROLES, found: member({ role: ROLES[ROLE_ADMIN] }) });
-    await service.listRoles();
-    assert.deepEqual(calls.rolesWhere!.name, { in: ['ACCOUNT_ADMIN', 'MANAGER', 'SUPERVISOR', 'COLLECTOR'] });
-  });
-
-  it('F14 · F2 (H-3, H-13): sólo ofrece roles de nivel ESTRICTAMENTE inferior al de quien pregunta y nunca el reservado', async () => {
-    const asManager = makeService({ roles: ALL_ROLES, found: member({ role: ROLES[ROLE_MANAGER] }) });
-    assert.deepEqual((await asManager.service.listRoles()).map((r) => r.name), ['COLLECTOR']);
-
-    // Ni siquiera el administrador se ofrece el rol reservado (ACCOUNT_ADMIN): lo otorga la plataforma.
-    const asAdmin = makeService({ roles: ALL_ROLES, found: member({ role: ROLES[ROLE_ADMIN] }) });
-    assert.deepEqual((await asAdmin.service.listRoles()).map((r) => r.name), ['MANAGER', 'COLLECTOR']);
-  });
-
-  it('quien no tiene rol en la cuenta no recibe ninguno', async () => {
-    const { service } = makeService({ roles: ALL_ROLES, found: null });
-    assert.deepEqual(await service.listRoles(), []);
-  });
-});
-
 describe('UsersService.updateMember · desactivar con trabajo a su nombre (F4/11 · D1)', () => {
   const off = (over: Record<string, unknown> = {}) => ({ isActive: false, ...over }) as never;
 

@@ -55,7 +55,7 @@ import {
   VisitOutcome,
   CollectionPriority,
 } from '@prisma/client';
-import { CATALOG_DEFAULTS, DEFAULT_ARREAR_CATEGORIES, ROLE_PERMISSIONS, RoleType, validateAgendaDetails } from '@kobrax/shared';
+import { CATALOG_DEFAULTS, DEFAULT_ARREAR_CATEGORIES, PERMISSION_META, ROLE_PERMISSIONS, RoleType, validateAgendaDetails, type Permission } from '@kobrax/shared';
 import bcrypt from 'bcryptjs';
 import { blindHash, encryptPII } from './pii';
 
@@ -1852,10 +1852,13 @@ async function main(): Promise<void> {
 
   // 1) Permisos
   for (const [code, module, action, scope] of PERMISSIONS) {
+    // F14 · F7: riesgo, reservado y dependencias salen de `PERMISSION_META` (fuente única); sin esto una base nueva quedaba sin ellos.
+    const meta = PERMISSION_META[code as Permission];
+    const catalogMeta = { risk: meta.risk, reserved: meta.reserved ?? null, requires: [...(meta.requires ?? [])].sort() };
     await prisma.permission.upsert({
       where: { code },
-      update: { module, action: action as never, scope: scope as never },
-      create: { code, name: code, module, action: action as never, scope: scope as never },
+      update: { module, action: action as never, scope: scope as never, ...catalogMeta },
+      create: { code, name: code, module, action: action as never, scope: scope as never, ...catalogMeta },
     });
   }
   console.log(`  ✓ ${PERMISSIONS.length} permisos`);

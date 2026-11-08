@@ -52,7 +52,7 @@ export class AuthorizationService {
 
 export function throwIfDenied(d: Decision): void {
   if (d.allow) return;
-  const body = { code: d.code, message: d.message };
+  const body = d.details ? { code: d.code, message: d.message, details: d.details } : { code: d.code, message: d.message };
   if (d.status === 404) throw new NotFoundException(body);
   throw d.status === 422 ? new UnprocessableEntityException(body) : new ForbiddenException(body);
 }

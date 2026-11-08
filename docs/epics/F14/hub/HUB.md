@@ -74,7 +74,7 @@
 | H14-066 | `app/(panel)/seguridad/roles/**` (lista, detalle, historial), `seguridad/page.tsx` | Vistas A, B, E | administrador, gerente (lectura) | Medio | F7 | vitest | PLANEADO 2026-11-08 |
 | H14-067 | `seguridad/roles/[key]/editar/**` y componentes del editor | Editor C y modal F | administrador | Alto | F7 | vitest | PLANEADO 2026-11-08 |
 | H14-068 | `seguridad/roles/comparar/**` | Comparación D | administrador, gerente | Bajo | F7 | vitest | PLANEADO 2026-11-08 |
-| H14-069 | `messages/es.json`, `messages/en.json` (`permissions.*`, `roles.*`) | Textos de los 49 permisos | web | Bajo | F7 | test de completitud | PLANEADO 2026-11-08 |
+| H14-069 | `messages/es.json`, `messages/en.json` (`permissions.*`, `roles.*`) | Textos de los 45 permisos | web | Bajo | F7 | test de completitud | PLANEADO 2026-11-08 |
 | H14-070 | `authz-snapshot.json`, `apps/api/package.json`, `f7-editor-roles.it.ts` | Cobertura de puertas y pruebas | CI | Medio | F7 | `authz-coverage` | PLANEADO 2026-11-08 |
 
 ## IMPACT-MAP (F1)

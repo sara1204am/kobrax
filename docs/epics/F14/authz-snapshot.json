@@ -782,6 +782,42 @@
     "any": []
   },
   {
+    "route": "GET /roles/:key/history",
+    "handler": "RolesController.history",
+    "kind": "permissions",
+    "all": [
+      "role:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /roles/:key",
+    "handler": "RolesController.detail",
+    "kind": "permissions",
+    "all": [
+      "role:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /roles/compare",
+    "handler": "RolesController.compare",
+    "kind": "permissions",
+    "all": [
+      "role:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /roles/permissions",
+    "handler": "RolesController.catalog",
+    "kind": "permissions",
+    "all": [
+      "role:read"
+    ],
+    "any": []
+  },
+  {
     "route": "GET /roles",
     "handler": "RolesController.list",
     "kind": "permissions",
@@ -1712,6 +1748,15 @@
     "any": []
   },
   {
+    "route": "POST /roles/:key/restore-template",
+    "handler": "RolesController.restore",
+    "kind": "permissions",
+    "all": [
+      "role:write"
+    ],
+    "any": []
+  },
+  {
     "route": "POST /routes/:id/change-requests",
     "handler": "RoutesController.requestChange",
     "kind": "permissions",
@@ -1894,6 +1939,15 @@
     "kind": "permissions",
     "all": [
       "client:import"
+    ],
+    "any": []
+  },
+  {
+    "route": "PUT /roles/:key/permissions",
+    "handler": "RolesController.update",
+    "kind": "permissions",
+    "all": [
+      "role:write"
     ],
     "any": []
   }

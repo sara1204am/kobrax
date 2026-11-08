@@ -10,6 +10,7 @@ import { AuthzModule } from './common/authz/authz.module';
 import { AccountsModule } from './modules/accounts/accounts.module';
 import { BranchesModule } from './modules/branches/branches.module';
 import { UsersModule } from './modules/users/users.module';
+import { RolesModule } from './modules/roles/roles.module';
 import { ClientsModule } from './modules/clients/clients.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { CreditsModule } from './modules/credits/credits.module';
@@ -55,6 +56,7 @@ import { AppVersionGuard } from './common/guards/app-version.guard';
     AccountsModule,
     BranchesModule,
     UsersModule,
+    RolesModule,
     ClientsModule,
     ImportsModule,
     CreditsModule,

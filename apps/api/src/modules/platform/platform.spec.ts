@@ -2,7 +2,7 @@ import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { hashSync } from 'bcryptjs';
 import { Reflector } from '@nestjs/core';
-import { PLATFORM_PERMISSIONS, Permission, ROLE_PERMISSIONS, RoleType } from '@kobrax/shared';
+import { PLATFORM_PERMISSIONS, Permission, ROLE_PERMISSIONS, RoleType, SUPPORT_SENSITIVE_PERMISSIONS, needsSupportConsent } from '@kobrax/shared';
 import { PlatformAuthService } from './platform-auth.service';
 import { SupportSessionsService } from './support-sessions.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -259,5 +259,13 @@ describe('Invariante: nada de plataforma llega a un rol de empresa (F14 · F5)',
 
   it('la lista de permisos de plataforma es cerrada y todos llevan el prefijo `platform:`', () => {
     assert.deepEqual([...PLATFORM_PERMISSIONS].sort(), ['platform:accounts:read', 'platform:audit:read', 'platform:roles:rollout', 'platform:roles:write', 'platform:support:open']);
+  });
+});
+
+describe('F14 · F7 (D-8) · editar roles desde una sesión de soporte', () => {
+  it('🔴 `role:write` es escritura SENSIBLE: sin consentimiento y sin el interruptor no entra al token, y pedirlo exige consentimiento', () => {
+    assert.ok(SUPPORT_SENSITIVE_PERMISSIONS.includes(Permission.ROLE_WRITE));
+    assert.equal(needsSupportConsent([Permission.ROLE_WRITE]), true);
+    assert.equal(needsSupportConsent([Permission.ROLE_READ]), false, 'leer los roles no exige consentimiento');
   });
 });

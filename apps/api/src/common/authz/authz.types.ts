@@ -9,10 +9,13 @@ export interface Actor {
 }
 
 /** `allow` puede traer datos resueltos por la política (p. ej. la oficina de registro); `deny` lleva el código del dominio. */
-export type Decision = { allow: true; data?: Record<string, unknown> } | { allow: false; code: string; message: string; status?: 403 | 404 | 422 };
+export type Decision =
+  | { allow: true; data?: Record<string, unknown> }
+  | { allow: false; code: string; message: string; status?: 403 | 404 | 422; /** Datos para el cliente (p. ej. qué permisos causan el rechazo). */ details?: Record<string, unknown> };
 
 export const allow = (data?: Record<string, unknown>): Decision => (data ? { allow: true, data } : { allow: true });
-export const deny = (code: string, message: string, status: 403 | 404 | 422 = 403): Decision => ({ allow: false, code, message, status });
+export const deny = (code: string, message: string, status: 403 | 404 | 422 = 403, details?: Record<string, unknown>): Decision =>
+  details ? { allow: false, code, message, status, details } : { allow: false, code, message, status };
 
 /**
  * Una política contextual (F14 · F3, ADR-F14-03): función PURA `(actor, hechos, entrada) → Allow | Deny(código)`.

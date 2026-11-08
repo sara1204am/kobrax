@@ -71,6 +71,29 @@ export class AuditService {
   }
 
   /**
+   * Escribe la entrada DENTRO de la transacción del cambio (F14 · F7, D-5): si la auditoría falla, el cambio NO queda. Para lo que no puede
+   * existir sin su rastro (permisos de un rol). Sin contexto de tenant lanza: un cambio sensible sin quién ni cuándo no se hace.
+   * Mismas reglas de PII que `record`.
+   */
+  async recordInTx(tx: Prisma.TransactionClient, entry: AuditEntry): Promise<void> {
+    const ctx = this.tenantContext.get();
+    if (!ctx) throw new Error('recordInTx requiere un request autenticado');
+    await tx.auditLog.create({
+      data: {
+        accountId: ctx.accountId,
+        ...actorOf(ctx),
+        action: entry.action,
+        entity: entry.entity,
+        entityId: entry.entityId,
+        before: (entry.before === undefined ? undefined : redactPII(entry.before, entry.redactKeys)) as Prisma.InputJsonValue | undefined,
+        after: (entry.after === undefined ? undefined : redactPII(entry.after, entry.redactKeys)) as Prisma.InputJsonValue | undefined,
+        ip: ctx.ip,
+        userAgent: ctx.userAgent,
+      },
+    });
+  }
+
+  /**
    * Muchas entradas en una sola escritura. Para lo que genera una importación: un evento por crédito
    * que apareció, faltó o volvió, que en un reporte de miles de filas serían miles de inserts sueltos.
    * Mismas reglas que `record`: contexto del tenant, PII redactada, y un fallo no rompe la operación.

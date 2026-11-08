@@ -27,12 +27,7 @@ export interface Member {
 /** El alta devuelve además el código, **una sola vez**, para poder compartirlo. */
 export type InvitedMember = Member & { invitationCode: string };
 
-/** Una fila de `GET /roles`. Ojo: el servidor sólo devuelve los roles asignables. */
-export interface AssignableRole {
-  id: string;
-  name: string;
-  level: number;
-}
+/** `AssignableRole` (una fila de `GET /roles` sin parámetros) vive ahora en `role.types.ts` como subconjunto obligatorio de `RoleSummary`. */
 
 /** Lo que devuelve `GET /auth/me`: la identidad de la sesión activa. */
 export interface MeInfo {

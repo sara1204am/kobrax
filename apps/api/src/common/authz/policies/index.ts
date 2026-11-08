@@ -5,6 +5,7 @@ import { creditCreate } from './credit-create.policy';
 import { creditWriteOff } from './credit-write-off.policy';
 import { memberAssignRole } from './member-assign-role.policy';
 import { memberInvite } from './member-invite.policy';
+import { roleEditPermissions } from './role-edit-permissions.policy';
 
 const erased = <T>(p: T) => p as unknown as PolicyDefinition<never, unknown>;
 
@@ -16,6 +17,7 @@ export const POLICIES: readonly PolicyDefinition<never, unknown>[] = [
   erased(creditAssign),
   erased(memberInvite),
   erased(memberAssignRole),
+  erased(roleEditPermissions),
 ];
 
 export const POLICY_NAMES: string[] = POLICIES.map((p) => p.name);

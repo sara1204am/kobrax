@@ -23,6 +23,14 @@ export interface BranchFact {
   inScope: boolean;
 }
 
+/** Lo que la política `role.editPermissions` necesita saber del rol que se edita y del catálogo (F14 · F7). */
+export interface RoleEditFacts {
+  role: { id: string; key: string; version: number; permissions: string[] } | null;
+  catalog: { code: string; reserved: 'PLATFORM' | 'ADMIN_CORE' | null; requires: string[] }[];
+  /** ¿Quien edita pertenece (con membresía activa) al rol que edita? */
+  actorInTargetRole: boolean;
+}
+
 /**
  * Carga los HECHOS que las políticas necesitan (oficinas de una persona, oficina de un crédito, rol y nivel…) en consultas acotadas al
  * tenant. Es la única puerta de las políticas a la DB: la política en sí queda pura y se prueba sin base de datos.
@@ -95,6 +103,28 @@ export class FactsLoader {
       });
       const paths = await this.office.assignmentPaths(t, ids);
       return rows.map((r) => ({ userId: r.userId, active: r.isActive, role: { name: r.role.name, level: r.role.level }, paths: paths.get(r.userId) ?? [] }));
+    });
+  }
+
+  /** El rol de la cuenta que se edita (por clave), el catálogo de permisos y si quien edita pertenece a ese rol. */
+  async roleEditFacts(key: string, tx?: PrismaClient): Promise<RoleEditFacts> {
+    return this.run(tx, async (t) => {
+      const accountId = this.tenant.accountId;
+      const [role, catalog, mine] = await Promise.all([
+        t.accountRole.findFirst({
+          where: { accountId, key, deletedAt: null },
+          select: { id: true, key: true, version: true, permissions: { select: { permission: { select: { code: true } } } } },
+        }),
+        t.permission.findMany({ where: { active: true }, select: { code: true, reserved: true, requires: true } }),
+        this.tenant.userId
+          ? t.userAccount.findFirst({ where: { userId: this.tenant.userId, accountId, isActive: true }, select: { accountRole: { select: { key: true } } } })
+          : Promise.resolve(null),
+      ]);
+      return {
+        role: role ? { id: role.id, key: role.key, version: role.version, permissions: role.permissions.map((p) => p.permission.code).sort() } : null,
+        catalog: catalog.map((c) => ({ code: c.code, reserved: c.reserved, requires: Array.isArray(c.requires) ? (c.requires as string[]) : [] })),
+        actorInTargetRole: mine?.accountRole?.key === key,
+      };
     });
   }
 
