@@ -1,7 +1,7 @@
-import { requirePermission } from '@/lib/authz';
 import { Permission } from '@kobrax/shared';
 import { getAccount } from '../get-account';
 import { GeneralForm } from '../general-form';
+import { requirePermission } from '@/lib/authz';
 
 /** Quién es el negocio. La cuenta ya la validó el layout. */
 export default async function CuentaGeneralPage() {

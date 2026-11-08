@@ -1,7 +1,7 @@
-import { requirePermission } from '@/lib/authz';
 import { Permission } from '@kobrax/shared';
 import { getTranslations } from 'next-intl/server';
 import type { AccountRequestInfo, MeInfo, Member } from '@kobrax/shared';
+import { requirePermission } from '@/lib/authz';
 import { apiCall } from '@/lib/bff';
 import { Section } from '@/components/panel-ui';
 import { getAccount } from '../get-account';

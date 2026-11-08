@@ -1,4 +1,3 @@
-import { requirePermission } from '@/lib/authz';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
@@ -17,6 +16,7 @@ import {
   type MemberConnection,
   type MemberDetail,
 } from '@kobrax/shared';
+import { requirePermission } from '@/lib/authz';
 import { apiCall } from '@/lib/bff';
 import { getOffices } from '@/lib/offices-server';
 import { Badge, EmptyState } from '@/components/panel-ui';

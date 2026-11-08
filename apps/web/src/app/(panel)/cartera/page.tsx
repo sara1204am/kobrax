@@ -1,7 +1,6 @@
-import { requirePermission } from '@/lib/authz';
-import { Permission } from '@kobrax/shared';
 import { getTranslations } from 'next-intl/server';
-import { CatalogType, type AccountInfo, type MeInfo, type Member } from '@kobrax/shared';
+import { Permission, CatalogType, type AccountInfo, type MeInfo, type Member } from '@kobrax/shared';
+import { requirePermission } from '@/lib/authz';
 import { apiCall, pageMeta } from '@/lib/bff';
 import { getOffices } from '@/lib/offices-server';
 import { RetryState } from '@/components/retry-state';

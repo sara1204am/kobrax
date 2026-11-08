@@ -1,6 +1,6 @@
-import { requirePermission } from '@/lib/authz';
 import { Permission } from '@kobrax/shared';
 import type { ArrearCategory } from '@kobrax/shared';
+import { requirePermission } from '@/lib/authz';
 import { apiCall } from '@/lib/bff';
 import { ArrearCategories } from '../arrear-categories';
 import { FinancialForm } from '../financial-form';

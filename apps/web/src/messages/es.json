@@ -3032,7 +3032,9 @@
       "error": "No se pudo completar la acción",
       "consentNote": "Pidieron poder modificar ajustes de la cuenta. Sin tu aceptación solo pueden ver.",
       "banner": "Sesión de soporte · vence a las {time}"
-    }
+    },
+    "loadErrorTitle": "No se pudo cargar la cuenta",
+    "loadErrorText": "Hubo un problema al consultar los datos. Inténtalo de nuevo."
   },
   "exports": {
     "title": "Exportar",

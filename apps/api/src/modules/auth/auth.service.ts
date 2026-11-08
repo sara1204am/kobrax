@@ -372,7 +372,7 @@ export class AuthService implements OnModuleInit {
     /** Sesión del token: el panel la compara entre pestañas (W-LOG-54). */
     sessionId?: string;
     /** La marca del negocio activo (nombre, teléfono, logo): la lee cualquier miembro, sin `account:read`. */
-    account: { name: string; phone: string | null; logoUrl: string | null; preferences: AccountPreferences } | null;
+    account: { name: string; phone: string | null; logoUrl: string | null; timezone: string | null; preferences: AccountPreferences } | null;
     /** F14 · F6: sólo si quien navega es la plataforma en una sesión de soporte: el panel avisa «Sesión de soporte · vence HH:MM». */
     supportSession?: { id: string; expiresAt: string };
   }> {
@@ -388,12 +388,12 @@ export class AuthService implements OnModuleInit {
     // `/auth/me` no pasa por `TenantGuard` (no hay contexto de request de tenant), así que `withTenant` avisaría en
     // cada llamada. Es una lectura de tres columnas de la cuenta del propio token —la policy de `accounts` es por id,
     // no por alcance de usuario—, por eso va con `withSystemTenant` y no se amplía el acceso de nadie.
-    let account: { businessName: string; phone: string | null; logoUrl: string | null; configuration?: unknown } | null = null;
+    let account: { businessName: string; phone: string | null; logoUrl: string | null; timezone?: string | null; configuration?: unknown } | null = null;
     try {
       account = await this.prisma.withSystemTenant(user.accountId, (tx) =>
         tx.account.findFirst({
           where: { id: user.accountId, deletedAt: null },
-          select: { businessName: true, phone: true, logoUrl: true, configuration: true },
+          select: { businessName: true, phone: true, logoUrl: true, timezone: true, configuration: true },
         }),
       );
     } catch {
@@ -419,7 +419,7 @@ export class AuthService implements OnModuleInit {
       requiresPasswordChange: dbUser.requiresPasswordChange,
       sessionId: user.sessionId,
       account: account
-        ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, preferences: preferencesOf(account.configuration) }
+        ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, timezone: account.timezone ?? null, preferences: preferencesOf(account.configuration) }
         : null,
     };
   }
@@ -432,20 +432,33 @@ export class AuthService implements OnModuleInit {
     const person = await this.prisma.platformUser.findUnique({ where: { id: user.userId }, select: { id: true, email: true, isActive: true } });
     if (!person || !person.isActive) throw invalidToken();
     let supportSession: { id: string; expiresAt: string } | undefined;
-    if (user.supportSessionId && user.accountId) {
-      const row = await this.prisma.withSystemTenant(user.accountId, (tx) =>
-        tx.supportSession.findFirst({ where: { id: user.supportSessionId, accountId: user.accountId }, select: { id: true, expiresAt: true } }),
-      );
-      if (row) supportSession = { id: row.id, expiresAt: row.expiresAt.toISOString() };
-    }
-    let account: { businessName: string; phone: string | null; logoUrl: string | null; configuration?: unknown } | null = null;
+    let account: { businessName: string; phone: string | null; logoUrl: string | null; timezone?: string | null; configuration?: unknown } | null = null;
     if (user.accountId) {
       try {
-        account = await this.prisma.withSystemTenant(user.accountId, (tx) =>
-          tx.account.findFirst({ where: { id: user.accountId, deletedAt: null }, select: { businessName: true, phone: true, logoUrl: true, configuration: true } }),
-        );
+        // Una sola transacción de sistema para las dos lecturas.
+        const found = await this.prisma.withSystemTenant(user.accountId, async (tx) => {
+          const [session, acc] = await Promise.all([
+            user.supportSessionId
+              ? tx.supportSession.findFirst({
+                  where: { id: user.supportSessionId, accountId: user.accountId },
+                  select: { id: true, expiresAt: true, revokedAt: true, consentStatus: true },
+                })
+              : null,
+            tx.account.findFirst({
+              where: { id: user.accountId, deletedAt: null },
+              select: { businessName: true, phone: true, logoUrl: true, timezone: true, configuration: true },
+            }),
+          ]);
+          return { session, acc };
+        });
+        account = found.acc;
+        // Sólo se informa una sesión VIGENTE: revocada, vencida o con el consentimiento rechazado/retirado no es un acceso que mostrar.
+        const s = found.session;
+        if (s && !s.revokedAt && s.expiresAt.getTime() > Date.now() && s.consentStatus !== 'DENIED' && s.consentStatus !== 'REVOKED') {
+          supportSession = { id: s.id, expiresAt: s.expiresAt.toISOString() };
+        }
       } catch {
-        // sin marca
+        // sin marca ni aviso: la identidad igual se entrega
       }
     }
     return {
@@ -459,7 +472,7 @@ export class AuthService implements OnModuleInit {
       mfaRequired: false,
       requiresPasswordChange: false,
       sessionId: user.sessionId,
-      account: account ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, preferences: preferencesOf(account.configuration) } : null,
+      account: account ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, timezone: account.timezone ?? null, preferences: preferencesOf(account.configuration) } : null,
       supportSession,
     };
   }

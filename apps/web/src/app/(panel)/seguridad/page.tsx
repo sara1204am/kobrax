@@ -1,8 +1,8 @@
+import { Permission } from '@kobrax/shared';
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
-import { Permission } from '@kobrax/shared';
-import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { getMe, requirePermission } from '@/lib/authz';
+import { EmptyState, PageHeader } from '@/components/panel-ui';
 
 /**
  * Índice de Seguridad (F14 · F6): lista sólo las pantallas de la sección que esta persona puede abrir.

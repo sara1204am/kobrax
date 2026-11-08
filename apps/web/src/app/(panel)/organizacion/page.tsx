@@ -1,7 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 import type { AccountInfo, Member } from '@kobrax/shared';
-import { apiCall } from '@/lib/bff';
 import { requirePermission } from '@/lib/authz';
+import { apiCall } from '@/lib/bff';
 import { Permission } from '@kobrax/shared';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { isMultiOffice, officePlan, type OfficeRow, type OfficeType } from '@/lib/offices';

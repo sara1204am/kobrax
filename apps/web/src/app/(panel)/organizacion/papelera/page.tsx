@@ -1,8 +1,8 @@
+import { Permission } from '@kobrax/shared';
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
-import { apiCall } from '@/lib/bff';
 import { requirePermission } from '@/lib/authz';
-import { Permission } from '@kobrax/shared';
+import { apiCall } from '@/lib/bff';
 import { EmptyState } from '@/components/panel-ui';
 import type { OfficeRow } from '@/lib/offices';
 import { TrashList } from './trash-list';

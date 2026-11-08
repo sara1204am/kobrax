@@ -1,6 +1,6 @@
-import { requirePermission } from '@/lib/authz';
 import { Permission } from '@kobrax/shared';
 import { getTranslations } from 'next-intl/server';
+import { requirePermission } from '@/lib/authz';
 import { apiCall } from '@/lib/bff';
 import { EmptyState } from '@/components/panel-ui';
 import { EDITABLE_CATALOGS, isEditableCatalog, type CatalogRow, type EditableCatalog } from '@/lib/catalog-editor';

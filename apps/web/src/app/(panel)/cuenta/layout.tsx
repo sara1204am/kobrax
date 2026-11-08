@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
+import { Permission } from '@kobrax/shared';
+import { getMe, requirePermission } from '@/lib/authz';
+import { RetryState } from '@/components/retry-state';
 import { PageHeader, Badge } from '@/components/panel-ui';
 import { CuentaTabs } from './cuenta-tabs';
 import { SaveBarProvider } from './save-bar';
 import { getAccount } from './get-account';
-import { requirePermission } from '@/lib/authz';
 import { CUENTA_TABS } from '@/lib/cuenta-tabs';
 
 /** El tono de cada estado de la cuenta. Suspendida es la única que duele: nadie entra. */
@@ -27,9 +29,14 @@ export default async function CuentaLayout({ children }: { children: ReactNode }
   const blocked = await requirePermission({ anyOf: CUENTA_TABS.map((tab) => tab.permission) });
   if (blocked) return blocked;
   const t = await getTranslations('account');
-  const { status, body } = await getAccount();
-  // Sin `account:read` no hay estado que mostrar: se pinta el marco sin la etiqueta.
-  const account = status === 200 ? body.data : null;
+  // Sin `account:read` ni se pide la cuenta (respondería 403 en cada navegación): se pinta el marco sin la etiqueta.
+  const canReadAccount = ((await getMe()).body.data?.permissions ?? []).includes(Permission.ACCOUNT_READ);
+  const loaded = canReadAccount ? await getAccount() : null;
+  // La API tropezó (red, 5xx): no se deja una pantalla en blanco, se ofrece reintentar.
+  if (loaded && (loaded.status === 0 || loaded.status >= 500)) {
+    return <RetryState title={t('loadErrorTitle')} text={t('loadErrorText')} />;
+  }
+  const account = loaded && loaded.status === 200 ? loaded.body.data : null;
   const known = account ? account.status in STATUS_TONE : false;
 
   return (

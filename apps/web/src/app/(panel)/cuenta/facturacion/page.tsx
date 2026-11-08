@@ -1,6 +1,6 @@
-import { requirePermission } from '@/lib/authz';
 import { Permission } from '@kobrax/shared';
 import type { PlanHistoryEntry } from '@kobrax/shared';
+import { requirePermission } from '@/lib/authz';
 import { apiCall } from '@/lib/bff';
 import { getAccount } from '../get-account';
 import { BillingForm } from './billing-form';

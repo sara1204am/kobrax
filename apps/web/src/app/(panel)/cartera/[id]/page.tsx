@@ -1,8 +1,7 @@
-import { requirePermission } from '@/lib/authz';
-import { Permission } from '@kobrax/shared';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { CatalogType, type AccountInfo, type ClientDetail, type ClientTimelineEntry, type CreditDetail, type Member } from '@kobrax/shared';
+import { Permission, CatalogType, type AccountInfo, type ClientDetail, type ClientTimelineEntry, type CreditDetail, type Member } from '@kobrax/shared';
+import { requirePermission } from '@/lib/authz';
 import { apiCall } from '@/lib/bff';
 import { isUuid } from '@/lib/uuid';
 import { EmptyState } from '@/components/panel-ui';

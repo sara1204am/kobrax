@@ -3032,7 +3032,9 @@
       "error": "The action could not be completed",
       "consentNote": "They asked to be able to change account settings. Without your approval they can only view.",
       "banner": "Support session · expires at {time}"
-    }
+    },
+    "loadErrorTitle": "The account couldn't be loaded",
+    "loadErrorText": "There was a problem fetching the data. Please try again."
   },
   "exports": {
     "title": "Export",

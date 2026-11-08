@@ -55,6 +55,8 @@ export interface AccountBrand {
   name: string;
   phone: string | null;
   logoUrl: string | null;
+  /** Zona horaria de la empresa: las pantallas que no leen la cuenta (Actividad, Accesos de soporte) pintan las horas con ella. */
+  timezone?: string | null;
   /** Cuándo trabaja el equipo y cómo se muestra la semana: la agenda las respeta. Opcional para no romper a un cliente viejo. */
   preferences?: AccountPreferences;
 }

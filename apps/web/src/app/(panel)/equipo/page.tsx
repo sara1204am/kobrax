@@ -1,5 +1,3 @@
-import { requirePermission } from '@/lib/authz';
-import { Permission } from '@kobrax/shared';
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import {
@@ -10,7 +8,9 @@ import {
   type AssignableRole,
   type MeInfo,
   type Member,
+  Permission,
 } from '@kobrax/shared';
+import { requirePermission } from '@/lib/authz';
 import { apiCall } from '@/lib/bff';
 import { activeOffices, officeOptions } from '@/lib/offices';
 import { getOffices } from '@/lib/offices-server';
