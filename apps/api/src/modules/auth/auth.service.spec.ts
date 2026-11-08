@@ -554,6 +554,15 @@ describe('AuthService — canal móvil y roles de campo (F14 · F8, D-3 y D-5)',
     assert.equal(res.step, 'done');
   });
 
+  it('🔴 el encabezado no se burla cambiando mayúsculas: «Mobile» y «MOBILE» también son el canal móvil', async () => {
+    for (const device of ['Mobile', 'MOBILE']) {
+      await rejectsWithCode(login([memb('AUDITOR')], device), 'MOBILE_ROLE_NOT_ALLOWED');
+    }
+    await rejectsWithCode(login([memb('VIEWER')], 'Mobile'), 'MOBILE_ROLE_NOT_ALLOWED');
+    // …y la sesión queda con el canal normalizado.
+    assert.equal(token.verifyAccess((await login([memb('COLLECTOR')], 'MOBILE')).accessToken!).ch, 'mobile');
+  });
+
   it('los cuatro roles de campo entran por el móvil', async () => {
     for (const role of ['SUPERVISOR', 'COLLECTOR', 'MANAGER']) assert.equal((await login([memb(role)], 'mobile')).step, 'done', role);
   });

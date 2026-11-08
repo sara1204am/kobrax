@@ -180,7 +180,7 @@ export class ClientsService {
 
   // ── Clientes ────────────────────────────────────────────────────────────────
   /**
-   * F14 · F8 (D-4): un documento ENMASCARADO (`12345***`) nunca es un valor para guardar. Una app que lo prellenó con la máscara y lo reenvía tal
+   * F14 · F8 (D-4): un documento ENMASCARADO (`12345***`: el CI/NIT y también el RUC) nunca es un valor para guardar. Una app que lo prellenó con la máscara y lo reenvía tal
    * cual pisaría el documento real; se rechaza y la persona debe escribir el documento completo (o no tocarlo).
    */
   private assertDocumentNotMasked(nationalId: string | null | undefined): void {
@@ -190,6 +190,7 @@ export class ClientsService {
   async create(dto: CreateClientDto): Promise<ReturnType<typeof serializeClient>> {
     this.assertIdentity(dto.clientType, dto.firstName, dto.lastName, dto.businessName);
     this.assertDocumentNotMasked(dto.nationalId);
+    this.assertDocumentNotMasked(dto.taxId);
     // F4/13 · E2: los perfiles de cobro se validan ANTES de abrir la transacción (los del cliente y los de sus garantes).
     for (const l of dto.locations ?? []) this.assertCollectionProfile(l.visitSchedule);
     for (const r of dto.relations ?? []) for (const l of r.locations ?? []) this.assertCollectionProfile(l.visitSchedule);
@@ -930,7 +931,10 @@ export class ClientsService {
         data.nationalId = this.enc(dto.nationalId);
         data.nationalIdHash = hash;
       }
-      if (dto.taxId !== undefined) data.taxId = this.enc(dto.taxId);
+      if (dto.taxId !== undefined) {
+        this.assertDocumentNotMasked(dto.taxId);
+        data.taxId = this.enc(dto.taxId);
+      }
 
       const next = await tx.client.update({ where: { id }, data });
       return { before: prev, after: next };

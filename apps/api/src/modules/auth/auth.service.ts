@@ -271,7 +271,7 @@ export class AuthService implements OnModuleInit {
   ): Promise<LoginResult> {
     let active = activeAll;
     // F14 · F8 (D-3): desde el móvil sólo se ofrecen las empresas donde la persona tiene un rol de campo.
-    if (meta.deviceType === 'mobile') {
+    if (piiChannelOf(meta.deviceType) === 'mobile') {
       active = active.filter((m) => isMobileRole(m.role_name));
       if (active.length === 0) throw mobileRoleNotAllowed();
     }
@@ -400,32 +400,29 @@ export class AuthService implements OnModuleInit {
     // `/auth/me` no pasa por `TenantGuard` (no hay contexto de request de tenant), así que `withTenant` avisaría en
     // cada llamada. Es una lectura de tres columnas de la cuenta del propio token —la policy de `accounts` es por id,
     // no por alcance de usuario—, por eso va con `withSystemTenant` y no se amplía el acceso de nadie.
-    let account: { businessName: string; phone: string | null; logoUrl: string | null; timezone?: string | null; configuration?: unknown } | null = null;
+    // (`as`: se asigna dentro del callback de la transacción; sin él TypeScript lo da por `null` para siempre)
+    let account = null as { businessName: string; phone: string | null; logoUrl: string | null; timezone?: string | null; configuration?: unknown } | null;
     let offices: MeOffice[] = [];
     let soloUser = false;
     try {
-      const read = await this.prisma.withSystemTenant(user.accountId, async (tx) => {
-        const [acc, assigned, members] = await Promise.all([
-          tx.account.findFirst({
-            where: { id: user.accountId, deletedAt: null },
-            select: { businessName: true, phone: true, logoUrl: true, timezone: true, configuration: true },
-          }),
-          // F14 · F8 (D-7): las oficinas vigentes de la persona. Lectura de lo SUYO (su propia asignación), por eso va con el contexto de sistema como la marca.
-          tx.userBranchAssignment.findMany({
-            where: { accountId: user.accountId, userId: user.userId, revokedAt: null, branch: { active: true, deletedAt: null } },
-            select: { branch: { select: { id: true, name: true, isRoot: true } } },
-            orderBy: { createdAt: 'asc' },
-          }),
-          // F14 · F8 (D-2): ¿la cuenta tiene una sola persona activa? (el cobrador independiente)
-          tx.userAccount.count({ where: { accountId: user.accountId, isActive: true } }),
-        ]);
-        return { acc, assigned, members };
+      await this.prisma.withSystemTenant(user.accountId, async (tx) => {
+        // La marca primero y en su variable: si lo que sigue (lo nuevo de F14 · F8) fallara, la marca que el panel ya usaba NO se pierde.
+        account = await tx.account.findFirst({
+          where: { id: user.accountId, deletedAt: null },
+          select: { businessName: true, phone: true, logoUrl: true, timezone: true, configuration: true },
+        });
+        // F14 · F8 (D-7): las oficinas vigentes de la persona. Lectura de lo SUYO (su propia asignación), por eso va con el contexto de sistema como la marca.
+        const assigned = await tx.userBranchAssignment.findMany({
+          where: { accountId: user.accountId, userId: user.userId, revokedAt: null, branch: { active: true, deletedAt: null } },
+          select: { branch: { select: { id: true, name: true, isRoot: true } } },
+          orderBy: { createdAt: 'asc' },
+        });
+        offices = assigned.map((a) => ({ id: a.branch.id, name: a.branch.name, isRoot: a.branch.isRoot }));
+        // F14 · F8 (D-2): ¿la cuenta tiene una sola persona activa? (el cobrador independiente)
+        soloUser = (await tx.userAccount.count({ where: { accountId: user.accountId, isActive: true } })) === 1;
       });
-      account = read.acc;
-      offices = read.assigned.map((a) => ({ id: a.branch.id, name: a.branch.name, isRoot: a.branch.isRoot }));
-      soloUser = read.members === 1;
     } catch {
-      // sin marca: el panel sale sin logo
+      // sin marca (o sin lo nuevo): lo que ya se leyó se entrega; el panel sale sin logo si faltó la marca
     }
 
     return {
@@ -538,7 +535,7 @@ export class AuthService implements OnModuleInit {
 
   /** F14 · F8 (D-3, H-5): el canal móvil es de los roles de campo (administrador, gerente, supervisor, cobrador). */
   private async assertMobileRole(deviceType: string | undefined, roleKey: string | undefined, roleId: string): Promise<void> {
-    if (deviceType !== 'mobile') return;
+    if (piiChannelOf(deviceType) !== 'mobile') return;
     if (!(await this.isMobileMember(roleKey, roleId))) throw mobileRoleNotAllowed();
   }
 

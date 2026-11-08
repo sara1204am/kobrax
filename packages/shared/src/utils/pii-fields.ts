@@ -55,7 +55,7 @@ export function canSeeEconomic(a: PiiActor): boolean {
  * (si no, 404) lo resuelve la API con el alcance, no esta función.
  */
 export function canReveal(a: PiiActor): boolean {
-  if (!has(a, Permission.CLIENT_READ) || !has(a, Permission.CLIENT_CONTACT_READ)) return false;
+  if (!canRevealContacts(a)) return false;
   if (a.mobileMask === true && a.channel === 'mobile') return false;
   return true;
 }

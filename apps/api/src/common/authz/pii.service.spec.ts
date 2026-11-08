@@ -23,7 +23,7 @@ describe('PiiService · política pii.reveal (F14 · F4)', () => {
     assert.equal(pii.canSeeContact(), false);
     assert.equal(pii.canSeeEconomic(), false);
     assert.throws(
-      () => pii.assertCanReveal(),
+      () => pii.assertCanRevealContacts(),
       (e: { getResponse?: () => { code?: string } }) => e.getResponse?.().code === 'PII_REVEAL_DENIED',
     );
   });
@@ -33,7 +33,7 @@ describe('PiiService · política pii.reveal (F14 · F4)', () => {
       const pii = piiFor(r);
       assert.equal(pii.canReveal(), true, r);
       assert.equal(pii.canSeeContact(), true, r);
-      assert.doesNotThrow(() => pii.assertCanReveal(), r);
+      assert.doesNotThrow(() => pii.assertCanRevealContacts(), r);
     }
   });
 
@@ -69,7 +69,6 @@ describe('PiiService · revelado de CONTACTOS en el móvil (F14 · F8, D-4)', ()
     assert.equal(pii.canReveal(), false, 'el documento sigue tapado');
     assert.equal(pii.canRevealContacts(), true);
     assert.doesNotThrow(() => pii.assertCanRevealContacts());
-    assert.throws(() => pii.assertCanReveal(), (e: { getResponse?: () => { code?: string } }) => e.getResponse?.().code === 'PII_REVEAL_DENIED');
   });
 
   it('el mismo cobrador por la web, o con la máscara apagada, revela todo como antes', () => {

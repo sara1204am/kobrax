@@ -85,6 +85,14 @@ describe('F8 · roles de campo y el canal móvil (D-3)', () => {
     }
   });
 
+  it('🔴 «Mobile» o «MOBILE» en el encabezado tampoco abre la puerta al auditor', async () => {
+    for (const device of ['Mobile', 'MOBILE'] as const) {
+      const s = await loginAs('auditor', device as never);
+      assert.equal(s.status, 403, device);
+      assert.equal(s.code, 'MOBILE_ROLE_NOT_ALLOWED', device);
+    }
+  });
+
   it('los mismos roles entran por la web con normalidad', async () => {
     for (const who of ['auditor', 'consulta']) assert.equal((await loginAs(who, 'web')).status, 200, who);
   });
@@ -191,6 +199,12 @@ describe('F8 · contactos en claro, documento enmascarado (D-4)', () => {
     assert.equal(create.status, 422);
     assert.equal(create.error?.code, 'CLIENT_DOCUMENT_MASKED');
     assert.equal((await view(adminWeb)).data?.nationalId, '5551234', 'el documento real no cambió');
+  });
+
+  it('🔴 el RUC (taxId) enmascarado tampoco se guarda: 422', async () => {
+    const patch = await call(admin, 'PATCH', `/clients/${clientId}`, { taxId: '12345***' });
+    assert.equal(patch.status, 422);
+    assert.equal(patch.error?.code, 'CLIENT_DOCUMENT_MASKED');
   });
 
   it('editar otros campos desde el móvil sin tocar el documento funciona', async () => {
