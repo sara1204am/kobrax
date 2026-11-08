@@ -1,4 +1,4 @@
-> ESTADO: BORRADOR (2026-11-08). Pendiente `validar F7` (G4). **D-1…D-9 son propuestas: la usuaria debe aprobarlas antes de construir** (D-3 y D-4 son las que cambian lo que se ve y lo que se puede romper). Ninguna línea de producto se toca antes del PASS de G4.
+> ESTADO: BORRADOR (2026-11-08; D-1 revisada ese mismo día por el principio de unificación Web/Mobile). Pendiente `validar F7` (G4). **D-1…D-9 son propuestas: la usuaria debe aprobarlas antes de construir** (D-3 y D-4 son las que cambian lo que se ve y lo que se puede romper). Ninguna línea de producto se toca antes del PASS de G4.
 
 # Plan F7 · Editor de roles y permisos
 
@@ -14,7 +14,7 @@ Que el administrador de una cuenta pueda **ver, comparar y cambiar los permisos 
 
 | # | Hallazgo | Evidencia | Clase |
 |---|---|---|---|
-| E1 | `GET /roles` existe pero es **otra cosa**: la lista de roles que quien pregunta puede *ofrecer al invitar o cambiar un rol* (globales, de `tier` inferior, sin reservados). La consumen el diálogo de invitar de la web y el formulario del móvil. No sirve ni puede cambiar de forma para el editor. | `apps/api/src/modules/users/roles.controller.ts:7-15`; `users.service.ts:542-551`; web `equipo/invite-dialog.tsx`; móvil `src/account-form.ts` | VERIFICADO |
+| E1 | `/roles` tiene **un solo endpoint**, `GET /roles` (`role:read`): los roles que quien pregunta puede *ofrecer al invitar o cambiar un rol* (globales, de `tier` inferior, sin reservados), con la forma `{ id, name, level }` (`AssignableRole`, `packages/shared`). **Web y móvil lo consumen igual** (web: `equipo/page.tsx`, `equipo/[userId]/page.tsx`, `invite-dialog.tsx` vía el proxy `app/api/roles/route.ts`; móvil: `users.service.ts:37`, `account-form.ts`) con el mismo tipo compartido; el recorte por nivel lo hace el servidor y ninguna de las dos plataformas lo recalcula. El canal (`x-client-type`) sólo afecta la proyección de datos personales, no a los roles. | `apps/api/src/modules/users/roles.controller.ts:7-15`; `users.service.ts:542-551`; web `equipo/invite-dialog.tsx`; móvil `src/account-form.ts` | VERIFICADO |
 | E2 | **No hay ningún camino** (API ni web) para cambiar los permisos de un rol de una cuenta. El único escritor de `account_role_permissions` fuera del alta de cuenta es el *rollout* de plataforma, que además **salta** los roles con `diverged_at` no nulo. | `modules/platform/*` (sin endpoints de roles de empresa); `migrations/20261107030000_f14_f5_platform/migration.sql:102` | VERIFICADO |
 | E3 | `AccountRole` ya guarda `version`, `diverged_at`, `template_key`, `tier`, `is_system`; `AccountRolePermission` guarda `source` (`TEMPLATE`/`CUSTOM`), `granted_by`, `granted_at`. **Ningún código de la aplicación escribe `diverged_at` ni `version`**: hoy la divergencia no se registra. | `schema.prisma:411-449`; `grep divergedAt apps/api/src` (sin coincidencias fuera de specs) | VERIFICADO |
 | E4 | El catálogo de permisos ya trae `risk` (LOW/MEDIUM/HIGH/CRITICAL), `reserved` (`PLATFORM` / `ADMIN_CORE`) y `requires` (JSON de códigos). `ADMIN_CORE` son exactamente `role:write`, `user:write`, `account:write`, `office:write`. Los permisos de plataforma no están en el enum de empresa. Hay 49 permisos. | `schema.prisma:301-326`; `migrations/20261107010000_f14_f5_account_roles/migration.sql:21-27`; `packages/shared/src/enums/permission.enum.ts` | VERIFICADO |
@@ -31,14 +31,14 @@ Que el administrador de una cuenta pueda **ver, comparar y cambiar los permisos 
 ## 4. Alcance / fuera de alcance
 
 **Dentro**
-- **API nueva `/account-roles`** (módulo propio), con permiso `role:read` para leer y `role:write` para escribir:
-  - `GET /account-roles` — roles de la cuenta con origen (plantilla / personalizado), si **difiere** de la plantilla, personas, alcance de datos, cantidad de permisos y última modificación.
-  - `GET /account-roles/permissions` — catálogo de permisos agrupado por módulo (código, acción, alcance, riesgo, reservado, dependencias).
-  - `GET /account-roles/:key` — detalle: permisos concedidos, diferencia contra la plantilla (añadidos / quitados) y personas.
-  - `PUT /account-roles/:key/permissions` — reemplaza el conjunto de permisos (con `expectedVersion` y motivo).
-  - `POST /account-roles/:key/restore-template` — vuelve a los permisos de la plantilla (con motivo).
-  - `GET /account-roles/:key/history` — historial paginado desde la auditoría.
-  - `GET /account-roles/compare?a=&b=` — comparación de dos roles.
+- **Extensión del recurso `/roles`** (módulo `roles`, que absorbe el controlador y `listRoles` hoy en `users`), con permiso `role:read` para leer y `role:write` para escribir:
+  - `GET /roles?assignable=false` — roles de la cuenta con origen (plantilla / personalizado), si **difiere** de la plantilla, personas, alcance de datos, cantidad de permisos y última modificación (sin el parámetro, el comportamiento actual intacto).
+  - `GET /roles/permissions` — catálogo de permisos agrupado por módulo (código, acción, alcance, riesgo, reservado, dependencias).
+  - `GET /roles/:key` — detalle: permisos concedidos, diferencia contra la plantilla (añadidos / quitados) y personas.
+  - `PUT /roles/:key/permissions` — reemplaza el conjunto de permisos (con `expectedVersion` y motivo).
+  - `POST /roles/:key/restore-template` — vuelve a los permisos de la plantilla (con motivo).
+  - `GET /roles/:key/history` — historial paginado desde la auditoría.
+  - `GET /roles/compare?a=&b=` — comparación de dos roles.
 - **Política `role.editPermissions`** (en `POLICIES`) con las reglas de la sección 5 / D-3.
 - **Auditoría atómica** (`AuditService.recordInTx`) y **renovación inmediata** de las sesiones de las personas del rol (`bumpInTx` + `publish`).
 - **Registro de la divergencia** (`diverged_at`, `version`) al editar y al restaurar.
@@ -46,7 +46,7 @@ Que el administrador de una cuenta pueda **ver, comparar y cambiar los permisos 
 - Pruebas unitarias, de integración y de componentes (sección 10); snapshot de puertas regenerado.
 
 **Fuera**
-- **Crear y borrar roles** (H-9: operación de plataforma en una fase posterior). Sin `POST /account-roles` ni `DELETE`.
+- **Crear y borrar roles** (H-9: operación de plataforma en una fase posterior). Sin `POST /roles` ni `DELETE /roles/:key`.
 - **Editar `ACCOUNT_ADMIN`** (inmutable, ADR/H-13) y cambiar `tier`, `key` o `template_key` de cualquier rol.
 - Editar las **plantillas globales** y el *rollout* (siguen siendo de plataforma, F5).
 - Cambiar el rol de **una persona** (ya lo hace Equipo, F2).
@@ -60,7 +60,7 @@ F1 (versiones de autorización), F3 (políticas), F5 (roles por cuenta, atributo
 ### Decisiones de la fase (todas **PROPUESTA**, esperan a la usuaria)
 | ID | Decisión | Estado |
 |---|---|---|
-| D-1 | La API del editor vive en **`/account-roles`**, no en `/roles`: `GET /roles` conserva su forma (lista de asignables, E1) para no romper el diálogo de invitar ni el móvil. (El plan maestro decía `/roles…`; esta es la única desviación.) | PROPUESTA |
+| D-1 | **Opción B: un solo recurso `/roles`** (como decía el plan maestro). `GET /roles` sin parámetros **no cambia** (roles asignables, `{ id, name, level }`); las filas pasan a ser un superconjunto aditivo (campos opcionales `key`, `source`, `diverged`, `members`, `permissions`, `scopeKind`, `version`, `updatedAt`) y un filtro `?assignable=false` (por omisión `true`) devuelve todos los roles de la cuenta para el administrador. Las operaciones nuevas cuelgan del mismo recurso: `GET /roles/permissions`, `GET /roles/compare`, `GET /roles/:key`, `PUT /roles/:key/permissions`, `POST /roles/:key/restore-template`, `GET /roles/:key/history`. Un solo `RolesService` (que absorbe `listRoles`) y un solo controlador `roles`; no hay `/account-roles`. La diferencia web/móvil NO se modela en la API: el editor es sólo-web por decisión de producto, pero los endpoints no distinguen plataforma (se gobiernan por permisos). Análisis en §5b. | PROPUESTA (revisada por el principio de unificación) |
 | D-2 | La divergencia se **calcula** comparando con la plantilla (fuente de verdad para la pantalla) y además se **registra** en `diverged_at` al primer cambio efectivo; `restore-template` la limpia. Así el *rollout* de plataforma sigue saltando los roles tocados (E2). | PROPUESTA |
 | D-3 | **Reglas de la política `role.editPermissions`:** (a) actor con `role:write`; (b) el rol destino no es `ACCOUNT_ADMIN`; (c) los permisos reservados (`ADMIN_CORE`, `PLATFORM`) **no se añaden ni se quitan** en ningún rol; (d) cada permiso añadido debe tenerlo el actor («no concede más de lo que posee»); (e) las dependencias (`requires`) deben quedar satisfechas y no se puede quitar un permiso del que otro concedido depende; (f) a lo sumo un `data:scope:*`, y siempre uno; (g) si el actor pertenece al rol que edita, el cambio sólo puede **quitar** (`ROLE_SELF_ELEVATION`); (h) `expectedVersion` desfasada → 409 `ROLE_VERSION_CONFLICT`. | PROPUESTA |
 | D-4 | **Motivo obligatorio** (mínimo 5 caracteres) en **todo** guardado y en restaurar plantilla, no sólo en los de riesgo alto; el modal F lista el riesgo alto añadido, a cuántas personas afecta y avisa que sus sesiones se renuevan. | PROPUESTA |
@@ -70,14 +70,27 @@ F1 (versiones de autorización), F3 (políticas), F5 (roles por cuenta, atributo
 | D-8 | Una sesión de soporte sólo puede editar roles con el consentimiento y el interruptor ya existentes (E12); no se agrega nada, se prueba. | PROPUESTA |
 | D-9 | Cualquier persona con `role:read` ve la lista, el detalle, la comparación y el historial (sólo lectura); los botones de editar / restaurar sólo se dibujan con `role:write`. En una cuenta de una sola persona (gratuito individual) el módulo existe pero no cambia nada de lo que usa. | PROPUESTA |
 
+### 5b. Análisis de D-1: ¿`/roles` y `/account-roles` separados, o un solo recurso?
+
+**Inventario (hoy).** `/roles`: sólo `GET /roles`. Web y móvil lo consumen igual y con el mismo tipo compartido (E1). No hay operaciones equivalentes en endpoints distintos: invitar y cambiar rol van por `POST /users/invite` y `PATCH /users/:id` con `roleId`, idénticos para ambas plataformas; las validaciones `@IsUUID() roleId` y las políticas `member.invite` / `member.assignRole` viven una sola vez, en el servidor. La plataforma tiene su propio *rollout* de roles, pero es otra autoridad (persona de plataforma, ADR-F14-08), no un duplicado. No existe duplicación web/móvil que unificar: **ya están unificados**.
+
+**¿`/account-roles` es otro recurso?** No. Es el mismo recurso (el rol de la cuenta) con otras operaciones: la lista de asignables es una *vista filtrada* (por el nivel de quien pregunta) de la colección de roles de la cuenta, y el editor opera sobre esa misma colección. Un `/account-roles` duplicaría la colección y obligaría a mantener dos servicios que calculan nivel, reservados y hechos del rol. Además, al retirar la columna `user_accounts.role_id` (release posterior, D-3 de F5), el `id` de `/roles` pasará a ser el del rol de cuenta: con dos recursos, web y móvil tendrían que migrar de uno a otro; con uno, el cambio es transparente.
+
+**Alternativas.**
+- **A. Separados (`/roles` + `/account-roles`).** Cero riesgo para consumidores, pero parte un recurso en dos, duplica la lógica de nivel / reservados / serialización y deja dos contratos para «un rol». Rechazada.
+- **B. Unificar bajo `/roles`, compatible (elegida).** Sin parámetros, `GET /roles` es idéntico (misma ruta, mismo permiso, mismas filas filtradas, mismos campos obligatorios); se agregan campos opcionales (los clientes que no los conocen los ignoran) y el filtro `assignable` (por omisión `true`). Las operaciones nuevas están en rutas que hoy no existen (`/roles/:key…`), así que no chocan con nada. Un `RolesService` único con las reglas de nivel y reservados, reutilizadas por la política del editor.
+- **C. Reemplazar el contrato de `GET /roles` por la colección completa y mover «asignables» a otra ruta.** Es lo conceptualmente más limpio, pero **rompe** a los móviles ya instalados (no se pueden forzar actualizaciones) y a la web desplegada a medias. Rechazada por compatibilidad.
+
+**Consecuencias de B.** (1) Compatibilidad: un test de contrato fija que `GET /roles` sin parámetros conserva ruta, permiso y forma, y que web y móvil leen sólo `{ id, name, level }`. (2) Orden de rutas: `compare` y `permissions` se declaran antes de `:key`; ninguna clave de rol coincide con esas palabras (las claves son `MANAGER`, `COLLECTOR`…, en mayúsculas). (3) `?assignable=false` exige `role:read` como hoy; la regla de visibilidad no cambia. (4) El tipo compartido pasa de `AssignableRole` a `RoleSummary` (con `AssignableRole` como alias del subconjunto obligatorio): un único contrato en `packages/shared` para web y móvil. (5) El servicio absorbe `listRoles` de `UsersService`. (6) Si el móvil necesitara algún día el editor, usa las mismas rutas y reglas sin cambios en la API; que hoy sea sólo-web es una decisión de producto (H-5, F8), no de la API.
+
 ### Cruce con la alineación móvil en curso (regla D1)
-El móvil no se toca (decisión de la usuaria, `mobile-refactor-pendiente-f14`). Los permisos que cambie el editor le llegan por el mecanismo existente de versiones (`AUTHZ_STALE` → refresco); `GET /roles` no cambia (D-1). No hay endpoints nuevos que el móvil consuma.
+El móvil no se toca (decisión de la usuaria, `mobile-refactor-pendiente-f14`). Los permisos que cambie el editor le llegan por el mecanismo existente de versiones (`AUTHZ_STALE` → refresco); `GET /roles` sin parámetros no cambia (D-1, opción B) y sigue siendo el que usa el móvil; los endpoints nuevos son del mismo recurso y no distinguen plataforma, pero el móvil no los consume en esta fase.
 
 ## 6. Archivos afectados (IDs HUB; los nuevos se crean al cerrar la fase)
 
 | ID HUB | Archivo / símbolo | Cambio |
 |---|---|---|
-| H14-062 (nuevo) | `apps/api/src/modules/account-roles/` (nuevo: controller, service, dto, serializer, spec) + registro en el módulo de la app | API del editor |
+| H14-062 (nuevo) | `apps/api/src/modules/roles/` (nuevo: controller, service, dto, serializer, spec; absorbe `users/roles.controller.ts` y `UsersService.listRoles`) + `users.module.ts` + registro en el módulo de la app | Recurso `/roles`: lista (filtro `assignable`) y editor |
 | H14-063 (nuevo) | `common/authz/policies/role-edit-permissions.policy.ts` (nuevo) + `policies/index.ts` + spec | Política `role.editPermissions` |
 | H14-064 (nuevo) | `common/audit/audit.service.ts` (`recordInTx`) | Auditoría dentro de la transacción |
 | H14-065 (nuevo) | `packages/shared` (tipos `AccountRoleSummary`, `AccountRoleDetail`, `PermissionCatalogEntry`, `RoleDiff`; códigos de error de roles) | Contratos compartidos |
@@ -107,18 +120,19 @@ B1 (RLS: las lecturas y escrituras van por `withTenant`), B3/B4 (el servidor dec
 | Cambios de un rol que no se reflejan en las sesiones abiertas. | `bumpInTx` + `publish`; prueba de integración: el token del cobrador deja de traer el permiso tras el cambio. |
 | El *rollout* de plataforma pisa lo que el administrador personalizó. | `diverged_at` registrado (D-2); prueba de que el *rollout* salta el rol editado. |
 | Textos de 49 permisos incompletos en un idioma. | D-7: test de completitud es/en. |
-| Mezclar `/roles` (asignables) con el editor. | D-1: rutas separadas; test de que `GET /roles` conserva su forma. |
+| Romper a los consumidores de `GET /roles` (móviles ya instalados, web). | D-1 opción B: sin parámetros no cambia; campos nuevos sólo opcionales; test de contrato de ruta, permiso y forma. |
 
 ## 10. Pruebas
-**Existentes que deben seguir verdes:** API `npm test` (2029), `authz-coverage` (con snapshot regenerado), `permission-gates.spec`, `f5-roles-plataforma.it.ts`, `users.service.spec` (rol/oficina), web `vitest` (1283), `tsc` en api, web y shared.
+**Existentes que deben seguir verdes:** API `npm test` (2029), `authz-coverage` (con snapshot regenerado), `permission-gates.spec`, `f5-roles-plataforma.it.ts`, `users.service.spec` (rol/oficina), contrato de `GET /roles`, web `vitest` (1283), `tsc` en api, web y shared.
 
 **Nuevas (registradas en `test` / `test:integration` de la API; vitest recoge las de la web):**
 - Política `role.editPermissions`: una prueba por regla de D-3 (a…h) y una positiva; no edita `ACCOUNT_ADMIN`; no añade ni quita reservados; no concede lo que el actor no tiene; dependencias; un solo alcance; auto-elevación; conflicto de versión.
 - Servicio: cálculo de divergencia y diferencia contra la plantilla; `restore-template`; comparación; historial paginado; el cambio y la auditoría son atómicos (si la auditoría falla, el cambio no queda); `diverged_at` y `version`.
-- Integración `f7-editor-roles.it.ts`: el administrador cambia el rol de UNA cuenta y la otra no cambia; el token del cobrador renovado ya no trae el permiso quitado y su petición siguiente es rechazada con el contrato nuevo; un supervisor / gerente sin `role:write` recibe 403 al editar y 200 al leer; sesión de soporte sin consentimiento 403 (D-8); *rollout* de plataforma salta el rol editado; `GET /roles` conserva su forma; RLS entre cuentas.
+- Contrato de `GET /roles` (unitaria + integración): sin parámetros devuelve sólo los asignables con `{ id, name, level }` obligatorios, igual que antes; `?assignable=false` devuelve todos los roles de la cuenta; web y móvil leen sólo el subconjunto obligatorio.
+- Integración `f7-editor-roles.it.ts`: el administrador cambia el rol de UNA cuenta y la otra no cambia; el token del cobrador renovado ya no trae el permiso quitado y su petición siguiente es rechazada con el contrato nuevo; un supervisor / gerente sin `role:write` recibe 403 al editar y 200 al leer; sesión de soporte sin consentimiento 403 (D-8); *rollout* de plataforma salta el rol editado; RLS entre cuentas.
 - Shared: tipos y códigos; completitud de i18n de los 49 permisos en es/en.
 - Web: lista (A), detalle (B), editor (C: marcar con dependencia, alcance único, reservados bloqueados, barra de cambios), modal (F: motivo obligatorio y errores del servidor sin cerrar), comparación (D), historial (E), `<NoAccess/>` sin `role:read`, botones ocultos sin `role:write`.
-- **Snapshot de puertas:** 7 endpoints nuevos cambian `authz-snapshot.json`; se regenera y se pide la aprobación al cerrar G5.
+- **Snapshot de puertas:** 6 endpoints nuevos (`/roles/permissions`, `/roles/compare`, `/roles/:key`, `PUT …/permissions`, `POST …/restore-template`, `GET …/history`) cambian `authz-snapshot.json`; se regenera y se pide la aprobación al cerrar G5.
 
 ## 11. Rollback
 Sin migraciones: sólo código y endpoints nuevos. Revertir la rama quita el editor sin tocar datos; los roles que ya se hubieran editado conservan sus permisos (siguen siendo válidos para el token). Si hiciera falta frenar el editor sin desplegar, quitar `role:write` de la plantilla (ya es `ADMIN_CORE`, sólo del administrador).
@@ -128,10 +142,10 @@ Sin migraciones: sólo código y endpoints nuevos. Revertir la rama quita el edi
 1. Verificar que no hace falta migración (índice de auditoría existente, E13; columnas `version`/`diverged_at` existentes, E3). Si la verificación contradice esto, registrarlo en INCIDENTS antes de seguir.
 
 **API**
-2. Tipos y códigos de error compartidos (`packages/shared`).
+2. Tipos y códigos de error compartidos (`packages/shared`): `RoleSummary` (superconjunto) con `AssignableRole` como alias del subconjunto obligatorio.
 3. `AuditService.recordInTx` + spec.
 4. Política `role.editPermissions` + spec (una por regla) y registro en `POLICIES`.
-5. Módulo `account-roles`: lectura (lista, catálogo, detalle, comparar, historial), escritura (`PUT permissions`, `restore-template`) con `bumpInTx` y `publish`; DTO con validación y Swagger.
+5. Módulo `roles` (mueve el controlador y `listRoles` desde `users`; `GET /roles` idéntico sin parámetros): filtro `assignable`, lectura (catálogo, detalle, comparar, historial), escritura (`PUT permissions`, `restore-template`) con `bumpInTx` y `publish`; DTO con validación y Swagger.
 6. Specs del servicio; registro en el script `test`.
 7. Integración `f7-editor-roles.it.ts`; registro en `test:integration`; snapshot de puertas regenerado.
 

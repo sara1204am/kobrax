@@ -67,9 +67,9 @@
 | H14-059 | `apps/web/next.config.*`, `middleware.ts` (`matcher`) | Redirecciones permanentes y rutas nuevas con sesión | toda la web | Alto | F6 | `middleware.test.ts` (cobertura del matcher) | HECHO 2026-11-08 |
 | H14-060 | `auth.service.ts` (`me`), `MeInfo`, `panel-shell.tsx` | `supportSession` en `/auth/me` y banner | web, móvil (campo opcional) | Bajo | F6 | `auth.service.spec.ts`, panel-shell | HECHO 2026-11-08 |
 | H14-061 | páginas con `noAccess` a mano (20 usos) | Puerta uniforme | Cuenta, Equipo, Cartera… | Medio | F6 | vitest web completo | HECHO 2026-11-08 |
-| H14-062 | `apps/api/src/modules/account-roles/` (nuevo) | API del editor de roles (`/account-roles`) | web Seguridad | Alto | F7 | specs del servicio, `f7-editor-roles.it.ts` | PLANEADO 2026-11-08 |
-| H14-063 | `common/authz/policies/role-edit-permissions.policy.ts` (nuevo), `policies/index.ts` | Política `role.editPermissions` | `account-roles` | Alto | F7 | spec por regla | PLANEADO 2026-11-08 |
-| H14-064 | `common/audit/audit.service.ts` (`recordInTx`) | Auditoría dentro de la transacción de negocio | `account-roles` (y futuros) | Medio | F7 | `audit.service.spec` | PLANEADO 2026-11-08 |
+| H14-062 | `apps/api/src/modules/roles/` (nuevo; absorbe `users/roles.controller.ts` y `listRoles`) | Recurso `/roles`: lista (filtro `assignable`) y editor | web Seguridad | Alto | F7 | specs del servicio, `f7-editor-roles.it.ts` | PLANEADO 2026-11-08 |
+| H14-063 | `common/authz/policies/role-edit-permissions.policy.ts` (nuevo), `policies/index.ts` | Política `role.editPermissions` | `roles` | Alto | F7 | spec por regla | PLANEADO 2026-11-08 |
+| H14-064 | `common/audit/audit.service.ts` (`recordInTx`) | Auditoría dentro de la transacción de negocio | `roles` (y futuros) | Medio | F7 | `audit.service.spec` | PLANEADO 2026-11-08 |
 | H14-065 | `packages/shared` (tipos y códigos de roles) | Contratos compartidos | api, web | Bajo | F7 | `tsc` + specs | PLANEADO 2026-11-08 |
 | H14-066 | `app/(panel)/seguridad/roles/**` (lista, detalle, historial), `seguridad/page.tsx` | Vistas A, B, E | administrador, gerente (lectura) | Medio | F7 | vitest | PLANEADO 2026-11-08 |
 | H14-067 | `seguridad/roles/[key]/editar/**` y componentes del editor | Editor C y modal F | administrador | Alto | F7 | vitest | PLANEADO 2026-11-08 |
@@ -108,5 +108,5 @@ Cambios respecto del plan: `user:sessions:revoke` lo tienen ACCOUNT_ADMIN y SUPE
 - **(F6) Mover Oficinas / Actividad / Accesos de soporte (H14-057/058/059)** ⇒ ≈30 enlaces internos a `/cuenta/oficinas…`, migas (`panel.crumbs`), `NAV`, `matcher` del middleware (rutas nuevas sin entrada no tienen sesión ni refresco), redirecciones permanentes, pruebas con rutas fijas (`offices-view.test.tsx`), marcadores guardados de los usuarios.
 - **(F6) Puerta de ruta uniforme y `getMe()` (H14-054/061)** ⇒ las 20 pantallas con `noAccess` a mano, `PanelLayout`, `PermissionsProvider`; un 5xx no debe verse como «sin acceso».
 - **(F6) `supportSession` en `/auth/me` (H14-060)** ⇒ `MeInfo` compartido con el móvil (campo opcional), `PanelShell` (banner).
-- **(F7) Editar permisos de un rol de cuenta (H14-062/063)** ⇒ `authz_version` de las membresías del rol (`bumpInTx`/`publish`), tokens y menú de esas personas, *rollout* de plataforma (`diverged_at`), `GET /roles` (no debe cambiar), consumidores por nombre de rol, sesiones de soporte (`role:write` sensible), snapshot de puertas.
+- **(F7) Editar permisos de un rol de cuenta (H14-062/063)** ⇒ `authz_version` de las membresías del rol (`bumpInTx`/`publish`), tokens y menú de esas personas, *rollout* de plataforma (`diverged_at`), `GET /roles` sin parámetros (contrato intacto: web `equipo/*`, móvil `users.service.ts`), consumidores por nombre de rol, sesiones de soporte (`role:write` sensible), snapshot de puertas.
 - **(F7) `AuditService.recordInTx` (H14-064)** ⇒ cualquier flujo que hoy use `record` y quiera atomicidad; no cambia el comportamiento de `record`.
