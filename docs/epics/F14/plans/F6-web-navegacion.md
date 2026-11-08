@@ -1,4 +1,4 @@
-> ESTADO: BORRADOR (2026-11-08). Pendiente `validar F6` (G4). D-1 y D-2 derivan del plan maestro (ADR-F14-09, H-5, H-11) pero NO fueron aprobadas una por una por la usuaria; D-3…D-6 son decisiones de diseño propuestas. Ninguna línea de producto se toca antes del PASS de G4.
+> ESTADO: VALIDADO (G4 PASS 2026-11-08, 11/11). D-1…D-6 aprobadas por la usuaria el 2026-11-08 (camino 1: Seguridad sin Roles hasta F7).
 
 # Plan F6 · Navegación web por permisos
 
@@ -51,11 +51,11 @@ F1 (reintento `AUTHZ_STALE`), F3 (contrato de permisos por endpoint), F5 (permis
 | ID | Decisión | Estado |
 |---|---|---|
 | D-1 | Las cinco secciones del ADR-F14-09 con el permiso del plan maestro; ninguna depende de `account:read` salvo Cuenta. | Derivada de ADR-F14-09 (aprobado) |
-| D-2 | En F6 **Seguridad** contiene sólo Accesos de soporte; Roles y permisos llega con F7. La sección aparece si la persona tiene cualquiera de `role:read`, `user:sessions:revoke` o `support:consent` (hoy: administrador, y gerente por `role:read`/sesiones), y su índice lista sólo lo que puede abrir. | Derivada del plan maestro (Anexo 1); **a confirmar** |
-| D-3 | URLs nuevas: `/organizacion`, `/actividad`, `/seguridad/soporte`, con 308 permanente desde las viejas (el «301» del plan maestro se implementa como redirección permanente de Next.js). | Propuesta |
-| D-4 | `requirePermission` valida **en el servidor** con el `permissions` de `/auth/me`, por encima de lo que diga la API de la pantalla; la API sigue siendo la autoridad (si el permiso del token estuviera viejo, la API responde 403 y la pantalla muestra `<NoAccess/>`). | Propuesta |
-| D-5 | El banner de soporte sale de `/auth/me.supportSession`; no se infiere del token en el navegador. | Propuesta |
-| D-6 | Una sola oficina (RULES C2): «Organización» sigue mostrando la ficha simple (`SingleOffice`), sin árbol; el administrador de una cuenta de una oficina no ve pantallas nuevas salvo que el ítem del menú cambie de lugar. | Propuesta |
+| D-2 | En F6 **Seguridad** contiene sólo Accesos de soporte; Roles y permisos llega con F7. La sección aparece si la persona tiene cualquiera de `role:read`, `user:sessions:revoke` o `support:consent` (hoy: administrador, y gerente por `role:read`/sesiones), y su índice lista sólo lo que puede abrir. | **APROBADA** (2026-11-08) |
+| D-3 | URLs nuevas: `/organizacion`, `/actividad`, `/seguridad/soporte`, con 308 permanente desde las viejas (el «301» del plan maestro se implementa como redirección permanente de Next.js). | **APROBADA** (2026-11-08) |
+| D-4 | `requirePermission` valida **en el servidor** con el `permissions` de `/auth/me`, por encima de lo que diga la API de la pantalla; la API sigue siendo la autoridad (si el permiso del token estuviera viejo, la API responde 403 y la pantalla muestra `<NoAccess/>`). | **APROBADA** (2026-11-08) |
+| D-5 | El banner de soporte sale de `/auth/me.supportSession`; no se infiere del token en el navegador. | **APROBADA** (2026-11-08) |
+| D-6 | Una sola oficina (RULES C2): «Organización» sigue mostrando la ficha simple (`SingleOffice`), sin árbol; el administrador de una cuenta de una oficina no ve pantallas nuevas salvo que el ítem del menú cambie de lugar. | **APROBADA** (2026-11-08) |
 
 ### Cruce con la alineación móvil en curso (regla D1)
 El móvil no se toca (decisión de la usuaria, `mobile-refactor-pendiente-f14`). El único cambio compartido es la **adición** de `supportSession` a `/auth/me`: campo opcional, ignorado por el móvil actual.
