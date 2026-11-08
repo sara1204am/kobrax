@@ -660,7 +660,7 @@ Formato T4 abreviado; el plan completo de cada fase se escribe **just-in-time** 
 - Entregables: `pii-fields.ts` (shared), `projectPii` + interceptor, `client:contact:read`, redefinición `credit:pii:read`, `PII_REVEAL` por categorías, proyección en exportes/PDF/agenda context/rutas; tabla `files` + backfill + `GET /files/:id` + enlaces firmados; purga de PENDING; lint `no-pii-in-logger`.
 - Web/móvil: reemplazar `url` de imágenes por `fileId` + enlace firmado (móvil: `photo-uri.ts`, `image-cache.ts`).
 - Criterio: tests F.4 (cada rol × categoría × canal: API lista/detalle/export/PDF/búsqueda).
-- Rollback: `GET /uploads/:name` legacy un release; proyección desactivable por flag (`PII_PROJECTION=off` sólo en staging).
+- Rollback: *(el plan decía «`GET /uploads/:name` legacy un release; proyección desactivable por `PII_PROJECTION=off`»; no se construyó así: el interruptor real es `PII_MOBILE_MASK` y no hay endpoint legacy; ver `RELEASE-CHECKLIST.md` §7).*
 
 ### Fase 5 · Modelo de permisos por tenant — depende de F1 (bump) y F3
 - Rama `f14/p5-roles-por-tenant`. Resuelve **R-07 (modelo), R-11 (plataforma), N-02, N-03, N-05, R-09**.
@@ -722,7 +722,7 @@ En paralelo: F4-diseño con F3; F6 con F2; F8-análisis con F5.
 ## G · Migración y despliegue progresivo
 
 1. **Orden**: F1 (sin cambio de modelo) → F3 (flags) → F2 (columnas nullable + backfill + RLS log-only) → F4 (files con legacy) → F5 (doble columna de rol) → F6/F7 → F8 (requiere versión móvil con `AUTHZ_STALE`; la API mantiene compatibilidad con la app vieja: un cliente que no entiende `AUTHZ_STALE` recibe 401 y refresca igual — `api-client.ts:68-74` ya lo hace) → F9.
-2. **Flags**: `AUTHZ_VERSION_CHECK`, `AUTHZ_DENY_BY_DEFAULT`, `RLS_SCOPE_MODE=log|enforce`, `PII_PROJECTION`, `FILES_LEGACY_UPLOADS`.
+2. **Flags**: `AUTHZ_VERSION_CHECK`, `AUTHZ_DENY_BY_DEFAULT`, `SCOPE_RLS_MODE=off|log|enforce`, `PII_MOBILE_MASK`, `FILE_LINK_SECRET`. *(Corregido en F9, 2026-11-08: el plan decía `RLS_SCOPE_MODE`, `PII_PROJECTION` y `FILES_LEGACY_UPLOADS`, nombres que nunca llegaron al código. La lista real, con valores iniciales y criterios, está en `RELEASE-CHECKLIST.md`.)*
 3. **Antes de cada release**: migraciones sobre copia de producción; `verify/*.sql`; comparación de permisos efectivos antes/después por membresía (script que vuelca `userAccountId → permisos` y hace diff: cero diferencias salvo las planificadas).
 4. **Rollback por fase**: F1 flag off + drop columna; F3 flag off; F2 drop policies, columnas quedan (inofensivas); F4 legacy endpoint + flag; F5 reapuntar `role_id` a plantillas (script inverso, conserva `account_roles` para no perder la edición); F7 sólo UI.
 5. **Comunicación**: al desplegar F1, toda sesión activa recibe un `AUTHZ_STALE` único (bump global de `authz_version`) → refresh transparente.
