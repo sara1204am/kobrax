@@ -76,6 +76,15 @@
 | H14-068 | `seguridad/roles/comparar/**` | Comparación D | administrador, gerente | Bajo | F7 | vitest | HECHO 2026-11-08 |
 | H14-069 | `messages/es.json`, `messages/en.json` (`permissions.*`, `roles.*`) | Textos de los 45 permisos | web | Bajo | F7 | test de completitud | HECHO 2026-11-08 |
 | H14-070 | `authz-snapshot.json`, `apps/api/package.json`, `f7-editor-roles.it.ts` | Cobertura de puertas y pruebas | CI | Medio | F7 | `authz-coverage` | HECHO 2026-11-08 |
+| H14-071 | `auth.service.ts` (login/refresh/me), `token.service.ts`, `jwt-auth.guard.ts`, `tenant-context.*` | Roles fuera del móvil, dispositivo fijo en la sesión y claim `ch`, `me` con `offices` y `soloUser` | web, móvil | Alto | F8 | specs + `f8-movil.it.ts` | PLANEADO 2026-11-08 |
+| H14-072 | `clients.service.ts` (get/update), `pii.service.ts`, `shared/utils/pii-fields.ts` | Revelado de contactos para el canal móvil sin 403; documento enmascarado siempre; rechazo de máscara | móvil, web | Alto | F8 | specs + integración | PLANEADO 2026-11-08 |
+| H14-073 | `mobile/src/session.ts`, `auth-service.ts`, `api-client.ts`, `store/me.ts`, `permissions.ts` | Ventana por permisos, `AUTHZ_STALE`, almacén de `me` | toda la app | Alto | F8 | jest | PLANEADO 2026-11-08 |
+| H14-074 | `mobile/app/(tabs)/_layout.tsx`, `mas.tsx`, pantallas con acciones | Tabs y acciones por permiso | app | Medio | F8 | jest | PLANEADO 2026-11-08 |
+| H14-075 | `mobile/src/sync/queue.ts`, `sync.service.ts`, `app/pendientes.tsx` | Motivos claros de rechazo; `me` antes de drenar | cola | Alto | F8 | jest | PLANEADO 2026-11-08 |
+| H14-076 | `mobile/app/cliente/editar.tsx`, `clients.service.ts`, `cliente-form-view.tsx`, `cliente-diff.ts` | Edición con documento enmascarado | edición de cliente | Medio | F8 | jest | PLANEADO 2026-11-08 |
+| H14-077 | `mobile/src/photo-uri.ts`, `image-cache.ts`, `uploads.service.ts`, `cliente-legajo.ts` | `fileId` y caché por `fileId` (si D-6) | fotos | Medio | F8 | jest | PLANEADO 2026-11-08 |
+| H14-078 | alta de cliente móvil, selector de oficina, ficha (`otherCredits`), `cuenta/index.tsx` | Oficina en el alta, aviso de otros créditos, rol y oficinas en Cuenta | alta/ficha | Medio | F8 | jest | PLANEADO 2026-11-08 |
+| H14-079 | `mobile/app/(auth)/login.tsx`, `post-login.ts` | Mensaje de rol fuera del móvil | login | Bajo | F8 | jest | PLANEADO 2026-11-08 |
 
 ## IMPACT-MAP (F1)
 - **(F3) Cambiar quién registra los guards (H14-019/022)** ⇒ todos los controladores, `health`, `main.ts` (versionado), rutas públicas (`auth`, `accounts`, `health`), pruebas de integración que levantan la app, `permission-gates.spec.ts`, `uploads.access.spec.ts` (usa `RolesGuard`).
@@ -110,3 +119,5 @@ Cambios respecto del plan: `user:sessions:revoke` lo tienen ACCOUNT_ADMIN y SUPE
 - **(F6) `supportSession` en `/auth/me` (H14-060)** ⇒ `MeInfo` compartido con el móvil (campo opcional), `PanelShell` (banner).
 - **(F7) Editar permisos de un rol de cuenta (H14-062/063)** ⇒ `authz_version` de las membresías del rol (`bumpInTx`/`publish`), tokens y menú de esas personas, *rollout* de plataforma (`diverged_at`), `GET /roles` sin parámetros (contrato intacto: web `equipo/*`, móvil `users.service.ts`), consumidores por nombre de rol, sesiones de soporte (`role:write` sensible), snapshot de puertas.
 - **(F7) `AuditService.recordInTx` (H14-064)** ⇒ cualquier flujo que hoy use `record` y quiera atomicidad; no cambia el comportamiento de `record`.
+- **(F8) Canal por sesión y roles fuera del móvil (H14-071)** ⇒ login y refresh de web y móvil, `PiiService`, exportes/PDF (`channel`), sesiones ya abiertas (sin dispositivo guardado), apps instaladas (versión mínima), `GET /auth/me` (campo aditivo que lee el móvil y la web).
+- **(F8) Revelado de contactos en el móvil (H14-072)** ⇒ `GET /clients/:id?reveal=true`, edición móvil, auditoría `PII_REVEAL`, `PII_MOBILE_MASK`; app vieja que reenvía un documento enmascarado.
