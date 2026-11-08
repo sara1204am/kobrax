@@ -47,6 +47,9 @@ function makeAuth(opts: {
   /** F14 · F6: la persona de plataforma y su sesión de soporte (lo que lee `/auth/me` para actor de plataforma). */
   platform?: { id: string; email: string; isActive: boolean } | null;
   support?: { id: string; expiresAt: Date; revokedAt?: Date | null; consentStatus?: string } | null;
+  /** F14 · F8: las oficinas de la persona y cuántas personas activas tiene la cuenta (lo que lee `/auth/me`). */
+  offices?: { id: string; name: string; isRoot: boolean }[];
+  members?: number;
 }) {
   const calls = {
     userUpdate: [] as { where: { id: string }; data: Record<string, unknown> }[],
@@ -61,7 +64,8 @@ function makeAuth(opts: {
         return {};
       },
     },
-    role: { findUnique: async () => ({ name: 'MANAGER' }) },
+    // `memb()` arma `role_id = role-<NOMBRE>`: así el rol que se busca por id es el de la membresía (F14 · F8).
+    role: { findUnique: async (a?: { where?: { id?: string } }) => ({ name: a?.where?.id?.startsWith('role-') ? a.where.id.slice(5) : 'MANAGER' }) },
     platformUser: { findUnique: async () => opts.platform ?? null },
     $queryRaw: async () => opts.memberships ?? [],
     // `issueTokens` escribe la sesión y el refresh dentro del tenant destino.
@@ -75,7 +79,12 @@ function makeAuth(opts: {
     // `/auth/me` lee la marca del negocio por acá (no pasa por TenantGuard).
     withSystemTenant: async <T>(_accountId: string, fn: (tx: unknown) => Promise<T>): Promise<T> => {
       if (opts.brandFails) throw new Error('base caída');
-      return fn({ account: { findFirst: async () => opts.brand ?? null }, supportSession: { findFirst: async () => opts.support ?? null } });
+      return fn({
+        account: { findFirst: async () => opts.brand ?? null },
+        supportSession: { findFirst: async () => opts.support ?? null },
+        userBranchAssignment: { findMany: async () => (opts.offices ?? []).map((branch) => ({ branch })) },
+        userAccount: { count: async () => opts.members ?? 3 },
+      });
     },
   };
   const permissions = {
@@ -422,6 +431,7 @@ describe('AuthService.me — sesión del token (W-LOG-54)', () => {
       phone: '70000000',
       logoUrl: '/api/uploads/x.png',
       timezone: null,
+      soloUser: false,
       preferences: { workDays: [1, 2, 3, 4, 5, 6], workStart: '08:00', workEnd: '18:00', weekStart: 'MON', defaultLocale: 'es' },
     });
   });
@@ -491,5 +501,85 @@ describe('AuthService.me — persona de plataforma en sesión de soporte (F14 ·
     const { service } = makeAuth({ user: { id: 'u1', email: 'm@kobrax.demo', profile: null, mfaEnabled: false, requiresPasswordChange: false } });
     const me = await service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
     assert.equal(me.supportSession, undefined);
+  });
+});
+
+
+describe('AuthService.me — oficinas y cuenta de una persona (F14 · F8, D-2 y D-7)', () => {
+  const base = { id: 'u1', email: 'c@kobrax.demo', profile: null, mfaEnabled: false, requiresPasswordChange: false };
+  const brand = { businessName: 'Cobranzas', phone: null, logoUrl: null };
+
+  it('informa las oficinas de la persona y marca la central (sin padre)', async () => {
+    const { service } = makeAuth({
+      user: base,
+      brand,
+      offices: [{ id: 'b-root', name: 'Central', isRoot: true }, { id: 'b-1', name: 'Agencia Sur', isRoot: false }],
+    });
+    const me = await service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [], roleKey: 'COLLECTOR' });
+    assert.deepEqual(me.offices, [{ id: 'b-root', name: 'Central', isRoot: true }, { id: 'b-1', name: 'Agencia Sur', isRoot: false }]);
+    assert.equal(me.roleKey, 'COLLECTOR');
+  });
+
+  it('🔴 `soloUser` es verdadero sólo si la cuenta tiene UNA persona activa (el cobrador independiente)', async () => {
+    const solo = await makeAuth({ user: base, brand, members: 1 }).service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
+    assert.equal(solo.account?.soloUser, true);
+    const equipo = await makeAuth({ user: base, brand, members: 4 }).service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
+    assert.equal(equipo.account?.soloUser, false);
+  });
+
+  it('sin oficina asignada entrega una lista vacía (no falla)', async () => {
+    const me = await makeAuth({ user: base, brand }).service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
+    assert.deepEqual(me.offices, []);
+  });
+});
+
+describe('AuthService — canal móvil y roles de campo (F14 · F8, D-3 y D-5)', () => {
+  const user = { id: 'u7', email: 'a@kobrax.demo', status: 'ACTIVE', mfaEnabled: false, failedLoginAttempts: 0 };
+  const login = async (memberships: ReturnType<typeof memb>[], deviceType: string) => {
+    const passwordHash = await hash('Right1!', KOBRAX.BCRYPT_WORK_FACTOR);
+    const { service } = makeAuth({ user: { ...user, passwordHash }, memberships });
+    return service.login('a@kobrax.demo', 'Right1!', { ip: '1.2.3.4', deviceType });
+  };
+
+  it('🔴 un auditor NO inicia sesión desde la app: MOBILE_ROLE_NOT_ALLOWED', async () => {
+    await rejectsWithCode(login([memb('AUDITOR')], 'mobile'), 'MOBILE_ROLE_NOT_ALLOWED');
+  });
+
+  it('🔴 una persona de consulta tampoco', async () => {
+    await rejectsWithCode(login([memb('VIEWER')], 'mobile'), 'MOBILE_ROLE_NOT_ALLOWED');
+  });
+
+  it('el mismo auditor SÍ entra por la web', async () => {
+    const res = await login([memb('AUDITOR')], 'web');
+    assert.equal(res.step, 'done');
+  });
+
+  it('los cuatro roles de campo entran por el móvil', async () => {
+    for (const role of ['SUPERVISOR', 'COLLECTOR', 'MANAGER']) assert.equal((await login([memb(role)], 'mobile')).step, 'done', role);
+  });
+
+  it('desde el móvil sólo se ofrecen las empresas donde tiene un rol de campo', async () => {
+    const res = await login([memb('AUDITOR', 'a1'), memb('SUPERVISOR', 'a2'), memb('COLLECTOR', 'a3')], 'mobile');
+    assert.equal(res.step, 'select_account');
+    assert.deepEqual(res.accounts?.map((a) => a.id), ['a2', 'a3']);
+  });
+
+  it('si sólo queda una empresa de campo, entra directo a ella', async () => {
+    const res = await login([memb('VIEWER', 'a1'), memb('COLLECTOR', 'a2')], 'mobile');
+    assert.equal(res.step, 'done');
+  });
+
+  it('🔴 elegir una empresa donde es auditor, con el canal móvil, también se rechaza', async () => {
+    const { service } = makeAuth({ user: { id: 'u7', status: 'ACTIVE' }, memberships: [memb('SUPERVISOR', 'a1'), memb('AUDITOR', 'a2')] });
+    await rejectsWithCode(service.switchAccount('u7', 'sess-vieja', 'a2', { ip: '1.2.3.4', deviceType: 'mobile' }), 'MOBILE_ROLE_NOT_ALLOWED');
+  });
+
+  it('🔴 el token queda con el canal de la SESIÓN (ch): móvil o web, según lo declarado al iniciar', async () => {
+    const mobile = await login([memb('COLLECTOR')], 'mobile');
+    assert.equal(token.verifyAccess(mobile.accessToken!).ch, 'mobile');
+    const web = await login([memb('COLLECTOR')], 'web');
+    assert.equal(token.verifyAccess(web.accessToken!).ch, 'web');
+    const raro = await login([memb('COLLECTOR')], 'otra-cosa');
+    assert.equal(token.verifyAccess(raro.accessToken!).ch, 'api');
   });
 });

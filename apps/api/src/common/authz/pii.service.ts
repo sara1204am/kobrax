@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import {
   canReveal,
+  canRevealContacts,
   canSeeContact,
   canSeeEconomic,
   documentInClearByDefault,
@@ -46,6 +47,16 @@ export class PiiService {
   /** Política `pii.reveal`: ¿puede pedir el documento y los contactos en claro? (el alcance —¿ve a ese cliente?— lo resuelve el llamador). */
   canReveal(): boolean {
     return canReveal(this.actor());
+  }
+
+  /** F14 · F8 (D-4): ¿puede pedir los CONTACTOS en claro? El canal móvil con la máscara SÍ (el documento sigue tapado: `canReveal`). */
+  canRevealContacts(): boolean {
+    return canRevealContacts(this.actor());
+  }
+
+  /** Lanza 403 `PII_REVEAL_DENIED` si no puede revelar los contactos. Para el pedido EXPLÍCITO (`?reveal=true`). */
+  assertCanRevealContacts(): void {
+    if (!this.canRevealContacts()) throw new ForbiddenException({ code: 'PII_REVEAL_DENIED', message: 'No tienes permiso para ver estos datos en claro' });
   }
 
   /** Lanza 403 `PII_REVEAL_DENIED` si no puede revelar. Para el pedido EXPLÍCITO de revelado. */

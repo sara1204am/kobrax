@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 
 /** Documento ya registrado en el tenant (mensaje genérico, sin revelar el cliente). */
 export const clientDuplicate = () =>
@@ -36,3 +36,7 @@ export const insufficientPiiPermission = () =>
 /** Identificación incoherente con el tipo de cliente. */
 export const invalidClientIdentity = (message: string) =>
   new BadRequestException({ code: 'CLIENT_INVALID', message });
+
+/** F14 · F8 (D-4): el documento llegó enmascarado (`12345***`): no es un valor para guardar. */
+export const documentMasked = () =>
+  new UnprocessableEntityException({ code: 'CLIENT_DOCUMENT_MASKED', message: 'El documento llegó enmascarado: escribe el documento completo o no lo modifiques' });

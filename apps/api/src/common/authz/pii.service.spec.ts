@@ -61,3 +61,30 @@ describe('PiiService · política pii.reveal (F14 · F4)', () => {
     assert.deepEqual(pii.revealedCategories(true, false), ['DOCUMENT']); // móvil con la máscara: el documento aparte de los contactos
   });
 });
+
+
+describe('PiiService · revelado de CONTACTOS en el móvil (F14 · F8, D-4)', () => {
+  it('🔴 con la máscara encendida el canal móvil NO revela el documento, pero SÍ los contactos (el cobrador los necesita para cobrar y editar)', () => {
+    const pii = piiFor(RoleType.COLLECTOR, { channel: 'mobile', mask: true });
+    assert.equal(pii.canReveal(), false, 'el documento sigue tapado');
+    assert.equal(pii.canRevealContacts(), true);
+    assert.doesNotThrow(() => pii.assertCanRevealContacts());
+    assert.throws(() => pii.assertCanReveal(), (e: { getResponse?: () => { code?: string } }) => e.getResponse?.().code === 'PII_REVEAL_DENIED');
+  });
+
+  it('el mismo cobrador por la web, o con la máscara apagada, revela todo como antes', () => {
+    for (const opts of [{ channel: 'web' as const, mask: true }, { channel: 'mobile' as const, mask: false }]) {
+      const pii = piiFor(RoleType.COLLECTOR, opts);
+      assert.equal(pii.canReveal(), true);
+      assert.equal(pii.canRevealContacts(), true);
+    }
+  });
+
+  it('🔴 la persona de consulta (VIEWER) no revela contactos en ningún canal: 403 PII_REVEAL_DENIED', () => {
+    for (const channel of ['web', 'mobile'] as const) {
+      const pii = piiFor(RoleType.VIEWER, { channel, mask: true });
+      assert.equal(pii.canRevealContacts(), false);
+      assert.throws(() => pii.assertCanRevealContacts(), (e: { getResponse?: () => { code?: string } }) => e.getResponse?.().code === 'PII_REVEAL_DENIED');
+    }
+  });
+});

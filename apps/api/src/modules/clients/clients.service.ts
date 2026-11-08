@@ -4,6 +4,7 @@ import type { PrismaClient } from '@prisma/client';
 import { ClientType, Prisma } from '@prisma/client';
 import {
   Permission,
+  looksMasked,
   maskDocument,
   resolvePagination,
   searchTerms,
@@ -50,6 +51,7 @@ import {
 import {
   clientDuplicate,
   clientHasActiveCredits,
+  documentMasked,
   invalidClientIdentity,
   invalidCollectionProfile,
   invalidIncomeProfile,
@@ -177,8 +179,17 @@ export class ClientsService {
   }
 
   // ── Clientes ────────────────────────────────────────────────────────────────
+  /**
+   * F14 · F8 (D-4): un documento ENMASCARADO (`12345***`) nunca es un valor para guardar. Una app que lo prellenó con la máscara y lo reenvía tal
+   * cual pisaría el documento real; se rechaza y la persona debe escribir el documento completo (o no tocarlo).
+   */
+  private assertDocumentNotMasked(nationalId: string | null | undefined): void {
+    if (looksMasked(nationalId)) throw documentMasked();
+  }
+
   async create(dto: CreateClientDto): Promise<ReturnType<typeof serializeClient>> {
     this.assertIdentity(dto.clientType, dto.firstName, dto.lastName, dto.businessName);
+    this.assertDocumentNotMasked(dto.nationalId);
     // F4/13 · E2: los perfiles de cobro se validan ANTES de abrir la transacción (los del cliente y los de sus garantes).
     for (const l of dto.locations ?? []) this.assertCollectionProfile(l.visitSchedule);
     for (const r of dto.relations ?? []) for (const l of r.locations ?? []) this.assertCollectionProfile(l.visitSchedule);
@@ -685,7 +696,8 @@ export class ClientsService {
      * EXPLÍCITAMENTE (`?reveal=true`) y la versión enmascarada si fue un llamador interno que sólo quería «lo más que se pueda». El documento
      * se revela aparte (D-3): las pantallas de trabajo piden `documentClear` según `documentInClearByDefault()`.
      */
-    if (reveal && how.explicit) this.pii.assertCanReveal();
+    // F14 · F8 (D-4): el pedido explícito exige poder ver CONTACTOS; el documento se decide aparte (`canReveal`: el móvil con la máscara no lo recibe).
+    if (reveal && how.explicit) this.pii.assertCanRevealContacts();
     /*
      * Los contactos y el documento se deciden APARTE (D-2/D-3): los contactos y direcciones van en claro si la persona los ve (`client:contact:read`);
      * el documento sólo si además puede revelar (`canReveal`: no VIEWER, y no el canal móvil con `PII_MOBILE_MASK` encendido) y, cuando el
@@ -909,6 +921,7 @@ export class ClientsService {
         metadata: dto.metadata as Prisma.InputJsonValue | undefined,
       };
       if (dto.nationalId !== undefined) {
+        this.assertDocumentNotMasked(dto.nationalId);
         const hash = this.blind.hash(dto.nationalId);
         if (hash) {
           const dup = await this.prisma.elevated(tx, () => tx.client.findFirst({ where: { nationalIdHash: hash, id: { not: id } }, select: { id: true } }));

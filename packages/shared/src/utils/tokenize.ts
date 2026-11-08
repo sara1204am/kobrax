@@ -40,3 +40,11 @@ export function maskEmail(value: string | null | undefined): string {
   const host = tld ? domain.slice(0, domain.lastIndexOf('.')) : domain;
   return `${maskTail(user, 2)}@${maskTail(host, 2)}${tld}`;
 }
+
+/**
+ * ¿Parece un valor ENMASCARADO (`12345***`)? Un documento enmascarado nunca es un valor para guardar: si una app lo reenvía tal cual, pisaría el
+ * documento real. Las máscaras de este archivo usan `*`; ningún CI/NIT real lo lleva.
+ */
+export function looksMasked(value: string | null | undefined): boolean {
+  return !!value && value.includes('*');
+}

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { createHash, randomBytes } from 'node:crypto';
-import type { PreAuthPayload, PreAuthPurpose } from '@kobrax/shared';
+import type { PiiChannel, PreAuthPayload, PreAuthPurpose } from '@kobrax/shared';
 import { AppConfigService } from '../../config/app-config.service';
 
 export interface AccessClaims {
@@ -16,6 +16,8 @@ export interface AccessClaims {
   supportSessionId?: string;
   permissions: string[];
   sessionId: string;
+  /** F14 · F8 (D-5): canal de la SESIÓN (`web|mobile|api`), fijado al iniciar sesión. El refresco lo conserva: el encabezado ya no lo decide. Ausente en tokens anteriores. */
+  ch?: PiiChannel;
   /** F14 · F1 (H-2): versión de autorización de la membresía al emitir el token. */
   av: number;
   /** F14 · F1 (H-2): versión de la política global al emitir el token. */

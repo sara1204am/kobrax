@@ -146,3 +146,7 @@ export const mfaAlreadyEnabled = () =>
     code: AUTH_ERR.MFA_ALREADY_ENABLED,
     message: 'La verificación en dos pasos ya está activa.',
   });
+
+/** F14 · F8 (D-3, H-5): los roles que no son de campo (auditor, consulta) no usan la app móvil. */
+export const mobileRoleNotAllowed = () =>
+  new ForbiddenException({ code: 'MOBILE_ROLE_NOT_ALLOWED', message: 'Tu rol se usa desde la web: entra desde el navegador' });

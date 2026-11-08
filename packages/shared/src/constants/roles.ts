@@ -12,6 +12,9 @@ export const MOBILE_ROLES = [RoleType.ACCOUNT_ADMIN, RoleType.MANAGER, RoleType.
 
 export type MobileRole = (typeof MOBILE_ROLES)[number];
 
+/** Código con el que la API rechaza el login/refresh del canal móvil a un rol que no es de campo (H-5, F14 · F8 D-3). */
+export const MOBILE_ROLE_NOT_ALLOWED = 'MOBILE_ROLE_NOT_ALLOWED';
+
 export function isMobileRole(roleName: string): roleName is MobileRole {
   return (MOBILE_ROLES as readonly string[]).includes(roleName);
 }
