@@ -1,4 +1,4 @@
-> ESTADO: BORRADOR (2026-11-08). Pendiente `validar F9` (G4). **D-2 y D-3 (lo que corre en GitHub y en producción) las resolvió la usuaria el 2026-11-08** (D-2 = opción B, unitarias + integración; D-3 = sí, arreglar `deploy.sh`); D-1 y D-4…D-7 siguen como propuesta y falta su visto bueno. Ninguna línea de producto se toca antes del PASS de G4.
+> ESTADO: VALIDADO (G4 PASS 2026-11-08, 11/11). D-1…D-7 aprobadas por la usuaria el 2026-11-08 (D-2 = CI con unitarias e integración; D-3 = arreglar `deploy.sh`).
 
 # Plan F9 · Auditoría integral, pruebas y despliegue
 
@@ -48,16 +48,16 @@ Que, al terminar F14, se pueda contestar con evidencia «¿cada hallazgo del dia
 ## 5. Dependencias
 F1–F8 (todas cerradas; F8 con la excepción de la prueba en dispositivo). No depende de decisiones ADR nuevas.
 
-### Decisiones de la fase (todas PROPUESTA, esperan a la usuaria)
+### Decisiones de la fase (todas APROBADAS por la usuaria, 2026-11-08)
 | ID | Decisión | Estado |
 |---|---|---|
-| D-1 | F9 es **solo verificación y puesta a punto**: informe de trazabilidad, verificaciones SQL, herramienta de permisos, ensayo, checklist y corrección de documentos. Nada de funcionalidad. | PROPUESTA |
+| D-1 | F9 es **solo verificación y puesta a punto**: informe de trazabilidad, verificaciones SQL, herramienta de permisos, ensayo, checklist y corrección de documentos. Nada de funcionalidad. | **APROBADA** (2026-11-08) |
 | D-2 | **CI en GitHub, opción B:** `ci.yml` en cada pull request y en los push a `dev`: `tsc` + pruebas unitarias de shared, API, web y móvil **y la integración completa con Postgres y Redis** (levantados con el `docker-compose.yml` del repo y un `.env` armado desde `.env.example`; el arnés ya usa los contenedores `kobrax-postgres` y `kobrax-redis`). Dura ≈30–60 min. **No la puedo validar sin correrla en GitHub: puede fallar la primera vez** (rutas, variables, tiempos); se ajusta con lo que muestre el primer resultado. | **APROBADA** por la usuaria (2026-11-08): opción B |
 | D-3 | **Arreglo de `deploy.sh`:** excluir todos los `verify*` del paso 8 (como ya hace `apply-rls.ts`) y correr las verificaciones como un paso propio, después de las políticas y antes de reiniciar. Si una falla, el script lo dice claro y termina con error **antes** de reiniciar (la versión vieja sigue corriendo), el mismo punto donde hoy se detiene una migración fallida. | **APROBADA** por la usuaria (2026-11-08): sí |
-| D-4 | `permissions-snapshot` vive en `packages/database/scripts/` (usa Prisma, sin servidor de la API) y su lógica de comparación es una función pura con pruebas. El volcado no incluye datos personales (ids y códigos de permiso). | PROPUESTA |
-| D-5 | El ensayo de actualización se hace **aquí** sobre la base de desarrollo y una base vacía, y se deja el script y el procedimiento para que la usuaria lo repita sobre una copia real de producción. En el informe consta que **no se ensayó con datos de producción**. | PROPUESTA |
-| D-6 | `PII_MOBILE_MASK=on` y `SCOPE_RLS_MODE=enforce` **no se encienden** en F9; el checklist deja los criterios (versión mínima de la app; una semana en `log` sin discrepancias). | PROPUESTA |
-| D-7 | El informe de trazabilidad distingue tres estados por hallazgo: **probado** (con archivo y caso), **cubierto por una verificación SQL** y **sin prueba**. Un hueco que se pueda cerrar con una prueba corta se cierra; el resto queda en INCIDENTS con su dueño. | PROPUESTA |
+| D-4 | `permissions-snapshot` vive en `packages/database/scripts/` (usa Prisma, sin servidor de la API) y su lógica de comparación es una función pura con pruebas. El volcado no incluye datos personales (ids y códigos de permiso). | **APROBADA** (2026-11-08) |
+| D-5 | El ensayo de actualización se hace **aquí** sobre la base de desarrollo y una base vacía, y se deja el script y el procedimiento para que la usuaria lo repita sobre una copia real de producción. En el informe consta que **no se ensayó con datos de producción**. | **APROBADA** (2026-11-08) |
+| D-6 | `PII_MOBILE_MASK=on` y `SCOPE_RLS_MODE=enforce` **no se encienden** en F9; el checklist deja los criterios (versión mínima de la app; una semana en `log` sin discrepancias). | **APROBADA** (2026-11-08) |
+| D-7 | El informe de trazabilidad distingue tres estados por hallazgo: **probado** (con archivo y caso), **cubierto por una verificación SQL** y **sin prueba**. Un hueco que se pueda cerrar con una prueba corta se cierra; el resto queda en INCIDENTS con su dueño. | **APROBADA** (2026-11-08) |
 
 ### Cruce con la alineación móvil en curso (regla D1)
 F9 no toca `apps/mobile`. El checklist depende de que la versión mínima de la app sea la de F8 para encender `PII_MOBILE_MASK`.
