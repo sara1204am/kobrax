@@ -39,7 +39,7 @@ export function TrashList({ rows }: { rows: OfficeRow[] }) {
               {rows.map((r) => (
                 <tr key={r.id}>
                   <td className="py-3 pr-3">
-                    <Link href={`/cuenta/oficinas/${r.id}`} className="font-medium text-k-text hover:underline">
+                    <Link href={`/organizacion/${r.id}`} className="font-medium text-k-text hover:underline">
                       {r.name}
                     </Link>
                     <p className="text-[12px] text-k-muted">{r.fullName}</p>

@@ -5,7 +5,7 @@ import type { Member } from '@kobrax/shared';
 import { Button, Field, Input, Select, ErrorBanner } from '@/components/ui';
 import { MapPicker } from '@/components/map-picker';
 import { SearchCombobox } from '@/components/user-combobox';
-import { InviteDialog } from '../../equipo/invite-dialog';
+import { InviteDialog } from '../equipo/invite-dialog';
 import { Modal } from '@/components/modal';
 import { OfficeSelect } from '@/components/office-select';
 import { Icon } from '@/components/panel-shell';

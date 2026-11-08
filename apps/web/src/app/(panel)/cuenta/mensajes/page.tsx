@@ -1,3 +1,5 @@
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 import { getTranslations } from 'next-intl/server';
 import { apiCall } from '@/lib/bff';
 import { EmptyState } from '@/components/panel-ui';
@@ -6,6 +8,8 @@ import { WhatsappTemplates, type TemplateItem } from '../whatsapp-templates';
 
 /** Los mensajes que el equipo manda a los deudores. Piden `catalog:read`. */
 export default async function CuentaMensajesPage() {
+  const blocked = await requirePermission(Permission.CATALOG_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('account');
   const [templates, account] = await Promise.all([
     apiCall<TemplateItem[]>('/catalogs/WHATSAPP_TEMPLATE', { method: 'GET', auth: true }),

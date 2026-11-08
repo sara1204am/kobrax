@@ -7,7 +7,7 @@ import { Icon } from '@/components/panel-shell';
 import { OfficeSelect } from '@/components/office-select';
 import { SearchCombobox } from '@/components/user-combobox';
 import { usePermissions } from '@/components/permissions';
-import { InviteDialog } from '../../equipo/invite-dialog';
+import { InviteDialog } from '../equipo/invite-dialog';
 import { buildOfficeTree } from '@kobrax/shared';
 import { sendJson } from '@/lib/client';
 import { memberLabel } from '@/lib/branches';

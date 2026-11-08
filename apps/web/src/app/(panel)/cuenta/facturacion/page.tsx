@@ -1,3 +1,5 @@
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 import type { PlanHistoryEntry } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { getAccount } from '../get-account';
@@ -9,6 +11,8 @@ import { PlanHistory } from './plan-history';
  * plan lo gestiona Kobrax.
  */
 export default async function CuentaFacturacionPage() {
+  const blocked = await requirePermission(Permission.ACCOUNT_READ);
+  if (blocked) return blocked;
   const { body } = await getAccount();
   if (!body.data) return null;
   const history = await apiCall<PlanHistoryEntry[]>('/accounts/me/plan-history', { method: 'GET', auth: true });

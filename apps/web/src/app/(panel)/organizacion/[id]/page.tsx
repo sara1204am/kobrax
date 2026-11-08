@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import type { Member } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 import { Badge, EmptyState } from '@/components/panel-ui';
 import { Icon } from '@/components/panel-shell';
 import { MapPicker } from '@/components/map-picker';
@@ -42,6 +44,8 @@ function Th({ children }: { children: React.ReactNode }) {
  * cada persona puede ver; acá sólo se dibuja.
  */
 export default async function OfficeDetailPage({ params, searchParams }: { params: { id: string }; searchParams: { tab?: string } & OfficeTeamParams }) {
+  const blocked = await requirePermission(Permission.OFFICE_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('account.offices');
   const locale = await getLocale();
   const [found, list, members, types] = await Promise.all([
@@ -55,7 +59,7 @@ export default async function OfficeDetailPage({ params, searchParams }: { param
   if (found.status !== 200 || !found.body.data || !list.body.data) {
     return (
       <>
-        <Link href="/cuenta/oficinas" className="mb-3 inline-block text-[13px] font-medium text-k-purple hover:underline">
+        <Link href="/organizacion" className="mb-3 inline-block text-[13px] font-medium text-k-purple hover:underline">
           ← {t('detail.back')}
         </Link>
         <EmptyState title={t('detail.noAccess')} text={found.body.error?.message} />
@@ -90,7 +94,7 @@ export default async function OfficeDetailPage({ params, searchParams }: { param
     [t('form.fields.city'), o.city],
     [t('form.fields.address'), o.address],
     [t('form.fields.manager'), o.managerName ?? null],
-    [t('detail.parentLabel'), parent ? <Link key="p" href={`/cuenta/oficinas/${parent.id}`} className="font-medium text-k-purple hover:underline">{parent.fullName || parent.name}</Link> : null],
+    [t('detail.parentLabel'), parent ? <Link key="p" href={`/organizacion/${parent.id}`} className="font-medium text-k-purple hover:underline">{parent.fullName || parent.name}</Link> : null],
   ];
   const hasPoint = typeof o.latitude === 'number' && typeof o.longitude === 'number';
 
@@ -125,7 +129,7 @@ export default async function OfficeDetailPage({ params, searchParams }: { param
                 {children.map((c) => (
                   <tr key={c.id}>
                     <td className="px-3 py-3">
-                      <Link href={`/cuenta/oficinas/${c.id}`} className="font-medium text-k-navy hover:underline">
+                      <Link href={`/organizacion/${c.id}`} className="font-medium text-k-navy hover:underline">
                         {c.name}
                       </Link>
                       {c.code && <span className="ml-2 rounded-md bg-k-light-bg/60 px-1.5 py-0.5 text-[12px] text-k-slate">{c.code}</span>}
@@ -199,13 +203,13 @@ export default async function OfficeDetailPage({ params, searchParams }: { param
   return (
     <>
       <nav aria-label={t('detail.path')} className="mb-4 flex flex-wrap items-center gap-1 text-[13px] text-k-text-2">
-        <Link href="/cuenta/oficinas" className="font-medium text-k-periwinkle hover:underline">
+        <Link href="/organizacion" className="font-medium text-k-periwinkle hover:underline">
           ← {t('title')}
         </Link>
         {ancestors.map((a) => (
           <span key={a.id} className="flex items-center gap-1">
             <span aria-hidden>/</span>
-            <Link href={`/cuenta/oficinas/${a.id}`} className="hover:underline">
+            <Link href={`/organizacion/${a.id}`} className="hover:underline">
               {a.name}
             </Link>
           </span>
@@ -247,7 +251,7 @@ export default async function OfficeDetailPage({ params, searchParams }: { param
         {tabs.map((x) => (
           <Link
             key={x.key}
-            href={x.key === 'info' ? `/cuenta/oficinas/${o.id}` : `/cuenta/oficinas/${o.id}?tab=${x.key}`}
+            href={x.key === 'info' ? `/organizacion/${o.id}` : `/organizacion/${o.id}?tab=${x.key}`}
             aria-current={tab === x.key ? 'page' : undefined}
             className={`-mb-px whitespace-nowrap border-b-2 px-4 py-3 text-[14px] font-medium ${
               tab === x.key ? 'border-k-periwinkle text-k-navy' : 'border-transparent text-k-text-2 hover:text-k-text'

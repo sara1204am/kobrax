@@ -1,7 +1,9 @@
 import { getTranslations } from 'next-intl/server';
 import type { AccountInfo, Member } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
-import { EmptyState } from '@/components/panel-ui';
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
+import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { isMultiOffice, officePlan, type OfficeRow, type OfficeType } from '@/lib/offices';
 import { OfficesView } from './offices-view';
 import { SingleOffice } from './single-office';
@@ -14,7 +16,10 @@ import { SingleOffice } from './single-office';
  * y el plan lo permite, el aviso para abrir la primera agencia.
  */
 export default async function CuentaOficinasPage() {
+  const blocked = await requirePermission(Permission.OFFICE_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('account');
+  const tp = await getTranslations('panel.pages.organization');
   const [branches, members, types, account] = await Promise.all([
     apiCall<OfficeRow[]>('/branches', { method: 'GET', auth: true }),
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
@@ -33,5 +38,10 @@ export default async function CuentaOficinasPage() {
     members: members.body.data ?? [],
     plan: officePlan(account.body.data, rows),
   };
-  return isMultiOffice(rows) ? <OfficesView {...props} /> : <SingleOffice {...props} />;
+  return (
+    <>
+      <PageHeader title={tp('title')} subtitle={tp('subtitle')} />
+      {isMultiOffice(rows) ? <OfficesView {...props} /> : <SingleOffice {...props} />}
+    </>
+  );
 }

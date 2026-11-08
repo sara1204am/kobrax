@@ -1,3 +1,5 @@
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import {
@@ -31,6 +33,8 @@ import { InviteButton } from './invite-button';
  * de una cuenta nueva, no un error.
  */
 export default async function EquipoPage({ searchParams }: { searchParams: TeamParams }) {
+  const blocked = await requirePermission(Permission.USER_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('team');
   const tPlans = await getTranslations('plans');
 

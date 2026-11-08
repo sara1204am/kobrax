@@ -46,6 +46,8 @@ export interface MeInfo {
   requiresPasswordChange?: boolean;
   /** La marca del negocio activo, para que el panel la pinte sin pedir `account:read`. `null` si no se pudo leer. */
   account?: AccountBrand | null;
+  /** F14 · F6: sólo en una sesión de soporte de la plataforma; el panel muestra «Sesión de soporte · vence HH:MM». */
+  supportSession?: { id: string; expiresAt: string };
 }
 
 /** Nombre, teléfono y logo del negocio: lo que ve cualquier miembro (encabezado, variables de las plantillas). */

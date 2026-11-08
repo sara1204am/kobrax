@@ -1,3 +1,5 @@
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 import type { ArrearCategory } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { ArrearCategories } from '../arrear-categories';
@@ -7,6 +9,8 @@ import { PreferencesForm } from '../preferences-form';
 
 /** Cómo cuenta el negocio la plata y la mora. */
 export default async function CuentaCobranzaPage() {
+  const blocked = await requirePermission(Permission.ACCOUNT_READ);
+  if (blocked) return blocked;
   const { body } = await getAccount();
   if (!body.data) return null;
 

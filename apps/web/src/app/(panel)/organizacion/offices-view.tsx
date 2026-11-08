@@ -135,7 +135,7 @@ export function OfficesView({
       else if (action === 'quickAdd') setDialog({ kind: 'quick', parentId: row.id });
       else if (action === 'move') setDialog({ kind: 'move', id: row.id, to: null });
       else if (action === 'deactivate') setDialog({ kind: 'deactivate', id: row.id });
-      else router.push(`/cuenta/oficinas/${row.id}`);
+      else router.push(`/organizacion/${row.id}`);
     },
     onDragStart: (row) => setDragId(row.id),
     onDragEnd: () => {
@@ -160,7 +160,7 @@ export function OfficesView({
           <span className="flex flex-wrap items-center justify-end gap-2">
             {(trash > 0 || editable) && (
               <span className="w-full sm:w-auto">
-                <Button type="button" variant="ghost" className="sm:px-5" onClick={() => router.push('/cuenta/oficinas/papelera')}>
+                <Button type="button" variant="ghost" className="sm:px-5" onClick={() => router.push('/organizacion/papelera')}>
                   {t('trash.link', { n: trash })}
                 </Button>
               </span>

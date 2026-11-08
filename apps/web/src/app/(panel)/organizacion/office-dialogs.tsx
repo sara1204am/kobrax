@@ -59,7 +59,7 @@ export function PreviewDialog({
           </span>
           {row && (
             <span className="sm:w-48">
-              <Button variant="ghost" onClick={() => router.push(`/cuenta/oficinas/${row.id}`)}>
+              <Button variant="ghost" onClick={() => router.push(`/organizacion/${row.id}`)}>
                 {t('preview.full')}
               </Button>
             </span>

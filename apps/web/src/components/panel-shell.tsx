@@ -13,6 +13,7 @@ import { notificationHref } from '@/lib/notifications';
 import { publishSessionEvent } from '@/lib/session-sync';
 import { SessionWatcher } from './session-watcher';
 import { BillingAlert } from './billing-alert';
+import { SupportBanner } from './support-banner';
 
 /** Fila de cualquiera de los dos menús de la topbar: 44 px de toque, ancho completo. */
 const MENU_ITEM =
@@ -46,6 +47,7 @@ export function PanelShell({
   nav,
   badges,
   billingMissing,
+  supportSession,
   children,
 }: {
   user: ShellUser;
@@ -55,6 +57,8 @@ export function PanelShell({
   badges?: Record<string, { count: number; urgent?: boolean }>;
   /** Datos fiscales obligatorios sin cargar; con alguno, el panel muestra el aviso de facturación. */
   billingMissing?: string[];
+  /** F14 · F6: la plataforma está dentro de esta cuenta con una sesión de soporte; muestra el aviso con su vencimiento. */
+  supportSession?: { id: string; expiresAt: string };
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -133,6 +137,7 @@ export function PanelShell({
         />
         <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-5 sm:px-5 md:px-6 lg:px-8">
           <SessionWatcher session={{ userId: user.userId, accountId: user.accountId, sessionId: user.sessionId }} />
+          {supportSession && <SupportBanner expiresAt={supportSession.expiresAt} />}
           <BillingAlert missing={billingMissing ?? []} />
           {children}
         </main>
@@ -701,6 +706,9 @@ const ICONS: Record<
   // Flecha hacia abajo a una bandeja: lo opuesto de `upload`, a propósito.
   export: 'M12 4v11m0 0-3.5-3.5M12 15l3.5-3.5M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2',
   profile: 'M12 12.2a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2zM4.8 20.5c0-3.7 3.2-5.8 7.2-5.8s7.2 2.1 7.2 5.8',
+  organization: 'M12 4.5v4m0 0H6.5v3.5M12 8.5h5.5v3.5M4.5 12h4v4h-4zM15.5 12h4v4h-4zM10 16.5h4V20h-4z',
+  activity: 'M4 12h3.5l2.5-6 4 12 2.5-6H20',
+  accessSecurity: 'M12 3.5l7 2.8v5.4c0 3.9-2.9 6.8-7 8.6-4.1-1.8-7-4.7-7-8.6V6.3zM9.2 11.8l2 2 3.6-3.6',
   security: 'M12 3.5l7 2.8v5.4c0 3.9-2.9 6.8-7 8.6-4.1-1.8-7-4.7-7-8.6V6.3zM9.2 11.8l2 2 3.6-3.6',
   menu: 'M4 7h16M4 12h16M4 17h16',
   chevron: 'M7 10l5 5 5-5',

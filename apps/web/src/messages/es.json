@@ -48,7 +48,10 @@
       "export": "Exportar",
       "profile": "Mi perfil",
       "security": "Seguridad",
-      "pending": "{n, plural, one {# gestión pendiente} other {# gestiones pendientes}}"
+      "pending": "{n, plural, one {# gestión pendiente} other {# gestiones pendientes}}",
+      "organization": "Organización",
+      "activity": "Actividad",
+      "accessSecurity": "Seguridad"
     },
     "crumbs": {
       "datos-personales": "Datos personales",
@@ -77,7 +80,9 @@
       "credito": "Crédito",
       "solicitudes": "Cobros pedidos",
       "nueva": "Nueva",
-      "bitacora": "Bitácora"
+      "bitacora": "Bitácora",
+      "soporte": "Soporte",
+      "organizacion": "Organización"
     },
     "soon": "Pronto",
     "openMenu": "Abrir el menú",
@@ -2298,6 +2303,39 @@
       "pendingLink": "Registrar resultado",
       "pendingLogged": "Gestión pendiente de resultado creada",
       "pendingError": "WhatsApp se abrió, pero no se pudo dejar la gestión pendiente"
+    },
+    "noAccess": {
+      "title": "No tienes acceso a esta pantalla",
+      "text": "Si crees que deberías tenerlo, pídeselo al administrador de tu cuenta.",
+      "errorTitle": "No se pudo comprobar tu acceso",
+      "errorText": "Hubo un problema al cargar tus permisos. Inténtalo de nuevo.",
+      "changedTitle": "Tus permisos cambiaron",
+      "changedText": "Ya no tienes acceso a esta pantalla."
+    },
+    "supportBanner": {
+      "title": "Sesión de soporte.",
+      "expires": "Vence a las {time}.",
+      "active": "Acceso vigente."
+    },
+    "pages": {
+      "organization": {
+        "title": "Organización",
+        "subtitle": "Las oficinas de la cuenta y quién trabaja en cada una."
+      },
+      "activity": {
+        "title": "Actividad",
+        "subtitle": "Quién cambió qué en la cuenta."
+      },
+      "support": {
+        "title": "Accesos de soporte",
+        "subtitle": "Quién del equipo de Kobrax entró a esta cuenta, por qué y hasta cuándo."
+      },
+      "security": {
+        "title": "Seguridad",
+        "subtitle": "Accesos y permisos de la cuenta.",
+        "supportText": "Quién de la plataforma entró a tu cuenta, y la autorización para que escriba.",
+        "empty": "Por ahora no hay nada que administrar aquí. Los roles y permisos llegarán pronto."
+      }
     }
   },
   "account": {

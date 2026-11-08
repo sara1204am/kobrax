@@ -186,6 +186,14 @@ describe('F5 · plataforma', () => {
     assert.ok(!(t1.data?.permissions as string[]).includes('office:write'), 'sin consentimiento no hay escritura sensible');
     const read = await call(String(t1.data?.accessToken), 'GET', '/clients?limit=5');
     assert.equal(read.status, 200, 'lee con el token de soporte');
+    // F14 · F6: el panel abre con este token; `/auth/me` informa la sesión de soporte y su vencimiento (antes fallaba: no es un usuario de empresa).
+    const me = await call<{ email: string; accountId: string; supportSession?: { id: string; expiresAt: string } }>(String(t1.data?.accessToken), 'GET', '/auth/me');
+    assert.equal(me.status, 200, JSON.stringify(me.error));
+    assert.equal(me.data?.supportSession?.id, sessionId);
+    assert.equal(me.data?.accountId, acc.A!.id);
+    assert.ok(me.data?.supportSession?.expiresAt && new Date(me.data.supportSession.expiresAt).getTime() > Date.now());
+    const adminMe = await call<{ supportSession?: unknown }>(acc.A!.admin, 'GET', '/auth/me');
+    assert.equal(adminMe.data?.supportSession, undefined, 'un usuario de la empresa nunca trae sesión de soporte');
     const w = await call(String(t1.data?.accessToken), 'POST', '/clients', { clientType: 'PERSON', firstName: 'No', lastName: 'Debe' });
     assert.ok(w.status >= 400, 'no escribe lo que no tiene');
 

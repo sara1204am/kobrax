@@ -97,7 +97,7 @@ export function SingleOffice({
       )}
       {writable && trash > 0 && (
         <span className="block sm:w-56">
-          <Button type="button" variant="ghost" onClick={() => router.push('/cuenta/oficinas/papelera')}>
+          <Button type="button" variant="ghost" onClick={() => router.push('/organizacion/papelera')}>
             {t('trash.link', { n: trash })}
           </Button>
         </span>

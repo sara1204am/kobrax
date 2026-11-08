@@ -356,6 +356,9 @@ export class AuthService implements OnModuleInit {
     roleId: string;
     permissions: string[];
     sessionId?: string;
+    /** F14 · F6: la persona de plataforma (sesión de soporte). Su `userId` es de `platform_users`, no de `users`. */
+    actorType?: 'PLATFORM';
+    supportSessionId?: string;
   }): Promise<{
     userId: string;
     email: string;
@@ -370,7 +373,10 @@ export class AuthService implements OnModuleInit {
     sessionId?: string;
     /** La marca del negocio activo (nombre, teléfono, logo): la lee cualquier miembro, sin `account:read`. */
     account: { name: string; phone: string | null; logoUrl: string | null; preferences: AccountPreferences } | null;
+    /** F14 · F6: sólo si quien navega es la plataforma en una sesión de soporte: el panel avisa «Sesión de soporte · vence HH:MM». */
+    supportSession?: { id: string; expiresAt: string };
   }> {
+    if (user.actorType === 'PLATFORM') return this.meOfPlatform(user);
     // users/profiles/roles son tablas globales (sin RLS) → acceso directo.
     const [dbUser, role] = await Promise.all([
       this.prisma.user.findUnique({ where: { id: user.userId }, include: { profile: true } }),
@@ -415,6 +421,46 @@ export class AuthService implements OnModuleInit {
       account: account
         ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, preferences: preferencesOf(account.configuration) }
         : null,
+    };
+  }
+
+  /**
+   * `/auth/me` de la persona de plataforma. No es un usuario de la empresa: no tiene perfil ni `users` propio; lo que ve el
+   * panel es su correo, los permisos del token (ya recortados a la sesión de soporte) y cuándo vence el acceso.
+   */
+  private async meOfPlatform(user: { userId: string; accountId: string; permissions: string[]; sessionId?: string; supportSessionId?: string }) {
+    const person = await this.prisma.platformUser.findUnique({ where: { id: user.userId }, select: { id: true, email: true, isActive: true } });
+    if (!person || !person.isActive) throw invalidToken();
+    let supportSession: { id: string; expiresAt: string } | undefined;
+    if (user.supportSessionId && user.accountId) {
+      const row = await this.prisma.withSystemTenant(user.accountId, (tx) =>
+        tx.supportSession.findFirst({ where: { id: user.supportSessionId, accountId: user.accountId }, select: { id: true, expiresAt: true } }),
+      );
+      if (row) supportSession = { id: row.id, expiresAt: row.expiresAt.toISOString() };
+    }
+    let account: { businessName: string; phone: string | null; logoUrl: string | null; configuration?: unknown } | null = null;
+    if (user.accountId) {
+      try {
+        account = await this.prisma.withSystemTenant(user.accountId, (tx) =>
+          tx.account.findFirst({ where: { id: user.accountId, deletedAt: null }, select: { businessName: true, phone: true, logoUrl: true, configuration: true } }),
+        );
+      } catch {
+        // sin marca
+      }
+    }
+    return {
+      userId: person.id,
+      email: person.email,
+      profile: null,
+      accountId: user.accountId,
+      role: 'PLATFORM_SUPPORT',
+      permissions: user.permissions,
+      mfaEnabled: true,
+      mfaRequired: false,
+      requiresPasswordChange: false,
+      sessionId: user.sessionId,
+      account: account ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, preferences: preferencesOf(account.configuration) } : null,
+      supportSession,
     };
   }
 

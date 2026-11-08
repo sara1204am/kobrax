@@ -1,3 +1,4 @@
+import { requirePermission } from '@/lib/authz';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
@@ -44,6 +45,8 @@ export default async function MemberPage({
   params: { userId: string };
   searchParams: { tab?: string; days?: string };
 }) {
+  const blocked = await requirePermission(Permission.USER_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('team');
   const tr = await getTranslations('team.roles');
   const tw = await getTranslations('team.lastAccess');

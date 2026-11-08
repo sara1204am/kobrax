@@ -44,6 +44,9 @@ function makeAuth(opts: {
   brand?: { businessName: string; phone: string | null; logoUrl: string | null; configuration?: unknown };
   /** Leer la cuenta falla (base caída). */
   brandFails?: boolean;
+  /** F14 · F6: la persona de plataforma y su sesión de soporte (lo que lee `/auth/me` para actor de plataforma). */
+  platform?: { id: string; email: string; isActive: boolean } | null;
+  support?: { id: string; expiresAt: Date } | null;
 }) {
   const calls = {
     userUpdate: [] as { where: { id: string }; data: Record<string, unknown> }[],
@@ -59,6 +62,7 @@ function makeAuth(opts: {
       },
     },
     role: { findUnique: async () => ({ name: 'MANAGER' }) },
+    platformUser: { findUnique: async () => opts.platform ?? null },
     $queryRaw: async () => opts.memberships ?? [],
     // `issueTokens` escribe la sesión y el refresh dentro del tenant destino.
     withTenant: async <T>(_accountId: string, fn: (tx: unknown) => Promise<T>): Promise<T> =>
@@ -71,7 +75,7 @@ function makeAuth(opts: {
     // `/auth/me` lee la marca del negocio por acá (no pasa por TenantGuard).
     withSystemTenant: async <T>(_accountId: string, fn: (tx: unknown) => Promise<T>): Promise<T> => {
       if (opts.brandFails) throw new Error('base caída');
-      return fn({ account: { findFirst: async () => opts.brand ?? null } });
+      return fn({ account: { findFirst: async () => opts.brand ?? null }, supportSession: { findFirst: async () => opts.support ?? null } });
     },
   };
   const permissions = {
@@ -444,5 +448,33 @@ describe('AuthService.me — sesión del token (W-LOG-54)', () => {
     const me = await service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
     assert.equal(me.account, null);
     assert.equal(me.userId, 'u1');
+  });
+});
+
+describe('AuthService.me — persona de plataforma en sesión de soporte (F14 · F6)', () => {
+  const claims = { userId: 'p1', accountId: 'a1', roleId: 'platform-support', permissions: ['client:read'], sessionId: 'support:ss1', actorType: 'PLATFORM' as const, supportSessionId: 'ss1' };
+
+  it('informa la sesión de soporte y cuándo vence, sin buscar un usuario de empresa', async () => {
+    const expiresAt = new Date('2026-11-08T20:00:00.000Z');
+    const { service } = makeAuth({ user: {}, platform: { id: 'p1', email: 'soporte@kobrax.test', isActive: true }, support: { id: 'ss1', expiresAt } });
+    const me = await service.me(claims);
+    assert.deepEqual(me.supportSession, { id: 'ss1', expiresAt: expiresAt.toISOString() });
+    assert.equal(me.email, 'soporte@kobrax.test');
+    assert.equal(me.accountId, 'a1');
+    assert.deepEqual(me.permissions, ['client:read']);
+    assert.equal(me.profile, null);
+  });
+
+  it('una persona de plataforma desactivada o inexistente no obtiene identidad', async () => {
+    const { service } = makeAuth({ user: {}, platform: { id: 'p1', email: 'soporte@kobrax.test', isActive: false } });
+    await assert.rejects(() => service.me(claims));
+    const { service: s2 } = makeAuth({ user: {}, platform: null });
+    await assert.rejects(() => s2.me(claims));
+  });
+
+  it('un usuario de empresa nunca trae supportSession', async () => {
+    const { service } = makeAuth({ user: { id: 'u1', email: 'm@kobrax.demo', profile: null, mfaEnabled: false, requiresPasswordChange: false } });
+    const me = await service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
+    assert.equal(me.supportSession, undefined);
   });
 });

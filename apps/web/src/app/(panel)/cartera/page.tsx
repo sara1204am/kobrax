@@ -1,3 +1,5 @@
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 import { getTranslations } from 'next-intl/server';
 import { CatalogType, type AccountInfo, type MeInfo, type Member } from '@kobrax/shared';
 import { apiCall, pageMeta } from '@/lib/bff';
@@ -24,6 +26,8 @@ export default async function CarteraPage({
 }: {
   searchParams: Record<string, string | undefined>;
 }) {
+  const blocked = await requirePermission(Permission.CLIENT_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('portfolio');
   const query = carteraQuery(searchParams);
 

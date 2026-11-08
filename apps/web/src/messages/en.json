@@ -48,7 +48,10 @@
       "export": "Export",
       "profile": "My profile",
       "security": "Security",
-      "pending": "{n, plural, one {# pending task} other {# pending tasks}}"
+      "pending": "{n, plural, one {# pending task} other {# pending tasks}}",
+      "organization": "Organization",
+      "activity": "Activity",
+      "accessSecurity": "Security"
     },
     "crumbs": {
       "datos-personales": "Personal details",
@@ -77,7 +80,9 @@
       "credito": "Credit",
       "solicitudes": "Payment requests",
       "nueva": "New",
-      "bitacora": "Activity log"
+      "bitacora": "Activity log",
+      "soporte": "Support",
+      "organizacion": "Organization"
     },
     "soon": "Soon",
     "openMenu": "Open menu",
@@ -2298,6 +2303,39 @@
       "pendingLink": "Log the result",
       "pendingLogged": "Activity pending result created",
       "pendingError": "WhatsApp opened, but the pending activity could not be saved"
+    },
+    "noAccess": {
+      "title": "You don't have access to this page",
+      "text": "If you think you should, ask your account administrator.",
+      "errorTitle": "We couldn't check your access",
+      "errorText": "There was a problem loading your permissions. Please try again.",
+      "changedTitle": "Your permissions changed",
+      "changedText": "You no longer have access to this page."
+    },
+    "supportBanner": {
+      "title": "Support session.",
+      "expires": "Expires at {time}.",
+      "active": "Access active."
+    },
+    "pages": {
+      "organization": {
+        "title": "Organization",
+        "subtitle": "The account's offices and who works in each one."
+      },
+      "activity": {
+        "title": "Activity",
+        "subtitle": "Who changed what in the account."
+      },
+      "support": {
+        "title": "Support access",
+        "subtitle": "Who from the Kobrax team entered this account, why and until when."
+      },
+      "security": {
+        "title": "Security",
+        "subtitle": "Account access and permissions.",
+        "supportText": "Who from the platform entered your account, and the authorization for them to write.",
+        "empty": "There is nothing to manage here yet. Roles and permissions are coming soon."
+      }
     }
   },
   "account": {

@@ -112,7 +112,7 @@ describe('OfficesView — el árbol', () => {
     expect(within(dialog).getByText('12 créditos')).toBeInTheDocument();
     // Es un botón (no un enlace): lleva a la ficha con el router.
     await userEvent.click(within(dialog).getByRole('button', { name: 'Detalles completos' }));
-    expect(push).toHaveBeenCalledWith('/cuenta/oficinas/mv');
+    expect(push).toHaveBeenCalledWith('/organizacion/mv');
   });
 });
 
