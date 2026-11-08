@@ -197,6 +197,7 @@ export const config = {
     '/api/auth/switch-account',
     '/api/account/:path*',
     '/api/users/:path*',
+    '/api/roles/:path*', // F14 · F7: roles de la cuenta (el listado de asignables y el editor)
     '/api/clients/:path*',
     '/api/routes/:path*',
     '/api/credits/:path*',

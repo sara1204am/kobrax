@@ -82,7 +82,10 @@
       "nueva": "Nueva",
       "bitacora": "Bitácora",
       "soporte": "Soporte",
-      "organizacion": "Organización"
+      "organizacion": "Organización",
+      "roles": "Roles y permisos",
+      "comparar": "Comparar",
+      "historial": "Historial"
     },
     "soon": "Pronto",
     "openMenu": "Abrir el menú",
@@ -2334,7 +2337,13 @@
         "title": "Seguridad",
         "subtitle": "Accesos y permisos de la cuenta.",
         "supportText": "Quién de la plataforma entró a tu cuenta, y la autorización para que escriba.",
-        "empty": "Por ahora no hay nada que administrar aquí. Los roles y permisos llegarán pronto."
+        "empty": "Por ahora no hay nada que administrar aquí.",
+        "rolesText": "Qué puede hacer cada rol, compararlos y cambiar sus permisos.",
+        "rolesTitle": "Roles y permisos"
+      },
+      "roles": {
+        "title": "Roles y permisos",
+        "subtitle": "Qué puede hacer cada rol en tu cuenta."
       }
     }
   },
@@ -4442,5 +4451,360 @@
     "doneTitle": "Contraseña actualizada",
     "doneSubtitle": "Ya puedes iniciar sesión con tu nueva contraseña.",
     "doneLink": "Ir a iniciar sesión"
+  },
+  "roles": {
+    "title": "Roles y permisos",
+    "subtitle": "Qué puede hacer cada rol en tu cuenta.",
+    "back": "Roles",
+    "compare": "Comparar",
+    "legend": "● = difiere de la plantilla. Crear roles propios llegará más adelante.",
+    "empty": "Esta cuenta todavía no tiene roles. Escribe a soporte.",
+    "columns": {
+      "role": "Rol",
+      "origin": "Origen",
+      "people": "Personas",
+      "scope": "Alcance",
+      "permissions": "Permisos",
+      "modified": "Modificado",
+      "state": "Estado"
+    },
+    "origin": {
+      "TEMPLATE": "Plantilla",
+      "CUSTOM": "Personalizado"
+    },
+    "state": {
+      "system": "Del sistema",
+      "custom": "Personalizado",
+      "locked": "No editable"
+    },
+    "diverged": "Difiere de la plantilla",
+    "scope": {
+      "ALL": "Toda la cuenta",
+      "SUBTREE": "Sus oficinas y las de abajo",
+      "BRANCH": "Su oficina",
+      "OWN": "Lo propio"
+    },
+    "unmodified": "Sin cambios",
+    "detail": {
+      "tabs": {
+        "label": "Secciones del rol",
+        "permissions": "Permisos",
+        "people": "Personas",
+        "history": "Historial"
+      },
+      "summary": "{granted} concedidos · {added} añadidos sobre la plantilla · {removed} quitados",
+      "summaryNoTemplate": "{granted} concedidos",
+      "template": "Plantilla: {name}",
+      "peopleCount": "{n, plural, one {# persona} other {# personas}}",
+      "edit": "Editar permisos",
+      "restore": "Restaurar plantilla",
+      "locked": "Este rol no se puede editar.",
+      "noPeople": "Nadie tiene este rol todavía.",
+      "inactive": "Inactiva",
+      "granted": "Concedido",
+      "notGranted": "No concedido",
+      "addedBadge": "Añadido",
+      "removedBadge": "Quitado",
+      "removedList": "Quitados respecto a la plantilla",
+      "restoreTitle": "Restaurar la plantilla de «{name}»",
+      "restoreText": "El rol volverá a los permisos de su plantilla.",
+      "restoreConfirm": "Restaurar"
+    },
+    "editor": {
+      "title": "Editar permisos · {name}",
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "scopeTitle": "Alcance de los datos",
+      "scopeHelp": "Qué datos ve este rol. Solo uno.",
+      "changes": "{n, plural, one {# cambio} other {# cambios}}",
+      "highRisk": "{n, plural, one {# de riesgo alto} other {# de riesgo alto}}",
+      "noChanges": "Sin cambios",
+      "review": "Ver cambios",
+      "requires": "Requiere: {list}",
+      "locked": "Reservado: solo el administrador de la cuenta",
+      "origin": {
+        "inherited": "De la plantilla",
+        "custom": "Personalizado"
+      },
+      "granted": "Concedido",
+      "denied": "Denegado",
+      "autoAdded": "También se marcó lo que necesita: {list}.",
+      "autoRemoved": "También se quitó lo que dependía de él: {list}.",
+      "moduleCount": "{granted} de {total}",
+      "selfNote": "Perteneces a este rol: solo puedes quitarle permisos.",
+      "saved": "Permisos guardados. {n, plural, one {# persona renovará} other {# personas renovarán}} su sesión.",
+      "reservedShort": "Reservado"
+    },
+    "confirm": {
+      "title": "Confirmar cambios en «{name}»",
+      "affects": "{n, plural, one {Afecta a # persona} other {Afecta a # personas}}; sus sesiones se renovarán de inmediato.",
+      "affectsNone": "Nadie tiene este rol todavía.",
+      "added": "Se añaden",
+      "removed": "Se quitan",
+      "highRisk": "Riesgo alto: {list}",
+      "reasonLabel": "Motivo (obligatorio)",
+      "reasonPlaceholder": "Por qué haces este cambio",
+      "reasonHint": "Mínimo {n} caracteres. Queda en el historial del rol.",
+      "confirm": "Confirmar cambios",
+      "cancel": "Cancelar",
+      "safe": "Este cambio no puede dejar la cuenta sin administrador."
+    },
+    "compareView": {
+      "title": "Comparar roles",
+      "with": "con",
+      "onlyDiff": "Mostrar solo las diferencias",
+      "permission": "Permiso",
+      "difference": "Diferencia",
+      "same": "Igual",
+      "onlyA": "Solo {name}",
+      "onlyB": "Solo {name}",
+      "pick": "Elige dos roles para compararlos.",
+      "scope": "Alcance",
+      "noDifferences": "Los dos roles tienen los mismos permisos."
+    },
+    "history": {
+      "empty": "Este rol todavía no tiene cambios.",
+      "byPlatform": "Plataforma",
+      "unknown": "Alguien",
+      "added": "Añadió",
+      "removed": "Quitó",
+      "reason": "Motivo: {reason}",
+      "loadMore": "Ver más",
+      "actions": {
+        "ROLE_PERMISSIONS_UPDATED": "Cambió los permisos",
+        "ROLE_RESTORED_TEMPLATE": "Restauró la plantilla"
+      },
+      "noDetail": "Sin cambios de permisos registrados."
+    },
+    "errors": {
+      "generic": "No se pudo guardar el cambio. Inténtalo de nuevo.",
+      "ROLE_PROTECTED": "El rol de administrador no se puede editar.",
+      "ROLE_RESERVED": "Hay permisos reservados que no se pueden añadir ni quitar.",
+      "ROLE_UNKNOWN_PERMISSION": "Hay permisos que no existen.",
+      "ROLE_GRANT_EXCEEDS_ACTOR": "No puedes conceder permisos que tú no tienes.",
+      "ROLE_DEPENDENCY": "Falta un permiso del que otro depende.",
+      "ROLE_SCOPE": "Un rol no puede tener más de un alcance de datos.",
+      "ROLE_SELF_ELEVATION": "No puedes ampliar los permisos de tu propio rol.",
+      "ROLE_VERSION_CONFLICT": "Otra persona cambió este rol mientras lo editabas. Recarga para ver los cambios.",
+      "ROLE_REASON_REQUIRED": "Indica el motivo del cambio.",
+      "ROLE_NOT_FOUND": "El rol no existe.",
+      "ROLE_NO_TEMPLATE": "Este rol no viene de una plantilla.",
+      "ROLE_WRITE_FORBIDDEN": "No tienes permiso para editar roles.",
+      "reload": "Recargar"
+    },
+    "risk": {
+      "label": "Riesgo",
+      "LOW": "Bajo",
+      "MEDIUM": "Medio",
+      "HIGH": "Alto",
+      "CRITICAL": "Crítico"
+    },
+    "modules": {
+      "client": "Clientes",
+      "credit": "Créditos",
+      "assignment": "Asignación",
+      "collection": "Mora",
+      "payment": "Pagos",
+      "route": "Rutas",
+      "agenda": "Agenda",
+      "report": "Reportes",
+      "catalog": "Catálogos",
+      "office": "Organización",
+      "user": "Equipo",
+      "role": "Roles",
+      "account": "Cuenta",
+      "audit": "Actividad",
+      "support": "Soporte"
+    },
+    "roleNames": {
+      "ACCOUNT_ADMIN": "Administrador",
+      "MANAGER": "Gerente",
+      "SUPERVISOR": "Supervisor",
+      "COLLECTOR": "Cobrador",
+      "AUDITOR": "Auditor",
+      "VIEWER": "Consulta"
+    }
+  },
+  "permissions": {
+    "collection_read": {
+      "name": "Ver la Central de mora",
+      "description": "Consultar los créditos en mora y sus gestiones."
+    },
+    "collection_write": {
+      "name": "Gestionar mora",
+      "description": "Registrar gestiones, promesas y notas sobre un crédito en mora."
+    },
+    "collection_export": {
+      "name": "Descargar la lista de mora",
+      "description": "Exportar la lista de mora en CSV o PDF."
+    },
+    "payment_read": {
+      "name": "Ver pagos",
+      "description": "Consultar los pagos registrados."
+    },
+    "payment_write": {
+      "name": "Registrar pagos",
+      "description": "Registrar pagos y pedir cambios sobre ellos."
+    },
+    "payment_approve": {
+      "name": "Aprobar pagos",
+      "description": "Aprobar o rechazar las solicitudes sobre pagos."
+    },
+    "route_read": {
+      "name": "Ver rutas",
+      "description": "Consultar las rutas y sus paradas."
+    },
+    "route_write": {
+      "name": "Armar rutas",
+      "description": "Crear y editar rutas de campo."
+    },
+    "route_assign": {
+      "name": "Asignar rutas",
+      "description": "Asignar rutas a otras personas del equipo."
+    },
+    "route_execute": {
+      "name": "Recorrer rutas",
+      "description": "Ejecutar las paradas de una ruta y registrar las visitas."
+    },
+    "agenda_read": {
+      "name": "Ver la agenda",
+      "description": "Consultar las gestiones agendadas."
+    },
+    "agenda_write": {
+      "name": "Gestionar la agenda",
+      "description": "Crear y cerrar las gestiones propias."
+    },
+    "agenda_assign": {
+      "name": "Agendar para otros",
+      "description": "Agendar gestiones a otras personas del equipo."
+    },
+    "catalog_read": {
+      "name": "Ver catálogos",
+      "description": "Leer los catálogos de la cuenta (métodos de pago, tipos, etc.)."
+    },
+    "catalog_write": {
+      "name": "Editar catálogos",
+      "description": "Crear y cambiar las opciones de los catálogos."
+    },
+    "client_read": {
+      "name": "Ver clientes",
+      "description": "Consultar los clientes y sus datos básicos."
+    },
+    "client_write": {
+      "name": "Editar clientes",
+      "description": "Editar datos, contactos, ubicaciones y adjuntos de un cliente."
+    },
+    "client_create": {
+      "name": "Dar de alta clientes",
+      "description": "Registrar clientes nuevos."
+    },
+    "client_delete": {
+      "name": "Eliminar clientes",
+      "description": "Eliminar un cliente (no se puede si tiene créditos vigentes)."
+    },
+    "client_pii_read": {
+      "name": "Ver documentos en claro",
+      "description": "Ver el documento de identidad y los datos económicos sin enmascarar."
+    },
+    "client_contact_read": {
+      "name": "Ver teléfonos y direcciones",
+      "description": "Ver los teléfonos y las direcciones exactas de un cliente."
+    },
+    "client_import": {
+      "name": "Importar cartera",
+      "description": "Importar clientes y créditos desde un archivo."
+    },
+    "client_import_replace": {
+      "name": "Importar reemplazando",
+      "description": "Importar en modo reemplazo: sustituye la cartera existente."
+    },
+    "credit_read": {
+      "name": "Ver créditos",
+      "description": "Consultar los créditos y su estado."
+    },
+    "credit_write": {
+      "name": "Editar créditos",
+      "description": "Editar un crédito, marcar mora manual y vincularlo a un cliente."
+    },
+    "credit_create": {
+      "name": "Dar de alta créditos",
+      "description": "Registrar créditos nuevos."
+    },
+    "credit_pii_read": {
+      "name": "Ver datos bancarios y de garantes",
+      "description": "Ver los datos bancarios y de los garantes de un crédito."
+    },
+    "report_read": {
+      "name": "Ver reportes",
+      "description": "Ver los tableros y la analítica."
+    },
+    "report_export": {
+      "name": "Exportar reportes",
+      "description": "Descargar exportes de la cuenta."
+    },
+    "account_read": {
+      "name": "Ver la cuenta",
+      "description": "Consultar los datos de la cuenta y su plan."
+    },
+    "account_write": {
+      "name": "Administrar la cuenta",
+      "description": "Editar la cuenta, pedir cambios de plan y transferir la propiedad."
+    },
+    "user_read": {
+      "name": "Ver el equipo",
+      "description": "Consultar las personas del equipo."
+    },
+    "user_invite": {
+      "name": "Invitar personas",
+      "description": "Invitar personas nuevas a la cuenta."
+    },
+    "user_write": {
+      "name": "Administrar personas",
+      "description": "Cambiar el rol, el estado y la oficina de una persona."
+    },
+    "user_sessions_revoke": {
+      "name": "Cerrar sesiones",
+      "description": "Cerrar las sesiones abiertas de una persona."
+    },
+    "role_read": {
+      "name": "Ver roles y permisos",
+      "description": "Consultar los roles de la cuenta y sus permisos."
+    },
+    "role_write": {
+      "name": "Editar roles",
+      "description": "Cambiar los permisos de los roles de la cuenta."
+    },
+    "support_consent": {
+      "name": "Autorizar accesos de soporte",
+      "description": "Aceptar, rechazar o cortar los accesos del equipo de soporte a la cuenta."
+    },
+    "audit_read": {
+      "name": "Ver la actividad",
+      "description": "Consultar el registro de actividad de la cuenta."
+    },
+    "office_read": {
+      "name": "Ver oficinas",
+      "description": "Consultar el árbol de oficinas."
+    },
+    "office_write": {
+      "name": "Administrar oficinas",
+      "description": "Crear, mover y desactivar oficinas y sus tipos."
+    },
+    "assignment_write": {
+      "name": "Asignar responsables",
+      "description": "Elegir quién se encarga de cada crédito y repartir la cartera."
+    },
+    "data_scope_all": {
+      "name": "Toda la cuenta",
+      "description": "Ve los datos de toda la cuenta."
+    },
+    "data_scope_subtree": {
+      "name": "Sus oficinas y las de abajo",
+      "description": "Ve los datos de las oficinas a las que está asignado y de las que cuelgan de ellas."
+    },
+    "data_scope_branch": {
+      "name": "Su oficina",
+      "description": "Ve los datos de su oficina, con responsable."
+    }
   }
 }

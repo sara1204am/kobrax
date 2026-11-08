@@ -6,7 +6,7 @@ import { EmptyState, PageHeader } from '@/components/panel-ui';
 
 /**
  * Índice de Seguridad (F14 · F6): lista sólo las pantallas de la sección que esta persona puede abrir.
- * Hoy es «Accesos de soporte»; «Roles y permisos» se suma en F7 sin cambiar el menú ni este índice de lugar.
+ * «Roles y permisos» (`role:read`, F7) y «Accesos de soporte» (`support:consent`, F5).
  */
 export default async function SecurityHubPage() {
   const blocked = await requirePermission({ anyOf: [Permission.ROLE_READ, Permission.USER_SESSIONS_REVOKE, Permission.SUPPORT_CONSENT] });
@@ -16,6 +16,7 @@ export default async function SecurityHubPage() {
   const granted = new Set((await getMe()).body.data?.permissions ?? []);
 
   const sections = [
+    granted.has(Permission.ROLE_READ) && { href: '/seguridad/roles', title: t('rolesTitle'), text: t('rolesText') },
     granted.has(Permission.SUPPORT_CONSENT) && { href: '/seguridad/soporte', title: tSupport('title'), text: t('supportText') },
   ].filter((s): s is { href: string; title: string; text: string } => Boolean(s));
 

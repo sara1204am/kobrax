@@ -82,7 +82,10 @@
       "nueva": "New",
       "bitacora": "Activity log",
       "soporte": "Support",
-      "organizacion": "Organization"
+      "organizacion": "Organization",
+      "roles": "Roles and permissions",
+      "comparar": "Compare",
+      "historial": "History"
     },
     "soon": "Soon",
     "openMenu": "Open menu",
@@ -2334,7 +2337,13 @@
         "title": "Security",
         "subtitle": "Account access and permissions.",
         "supportText": "Who from the platform entered your account, and the authorization for them to write.",
-        "empty": "There is nothing to manage here yet. Roles and permissions are coming soon."
+        "empty": "There is nothing to manage here yet.",
+        "rolesText": "What each role can do, compare them and change their permissions.",
+        "rolesTitle": "Roles and permissions"
+      },
+      "roles": {
+        "title": "Roles and permissions",
+        "subtitle": "What each role can do in your account."
       }
     }
   },
@@ -4442,5 +4451,360 @@
     "doneTitle": "Password updated",
     "doneSubtitle": "You can now sign in with your new password.",
     "doneLink": "Go to sign in"
+  },
+  "roles": {
+    "title": "Roles and permissions",
+    "subtitle": "What each role can do in your account.",
+    "back": "Roles",
+    "compare": "Compare",
+    "legend": "● = differs from the template. Creating custom roles will come later.",
+    "empty": "This account has no roles yet. Contact support.",
+    "columns": {
+      "role": "Role",
+      "origin": "Origin",
+      "people": "People",
+      "scope": "Scope",
+      "permissions": "Permissions",
+      "modified": "Modified",
+      "state": "Status"
+    },
+    "origin": {
+      "TEMPLATE": "Template",
+      "CUSTOM": "Custom"
+    },
+    "state": {
+      "system": "System",
+      "custom": "Custom",
+      "locked": "Not editable"
+    },
+    "diverged": "Differs from the template",
+    "scope": {
+      "ALL": "Whole account",
+      "SUBTREE": "Its offices and those below",
+      "BRANCH": "Its office",
+      "OWN": "Own only"
+    },
+    "unmodified": "Unchanged",
+    "detail": {
+      "tabs": {
+        "label": "Role sections",
+        "permissions": "Permissions",
+        "people": "People",
+        "history": "History"
+      },
+      "summary": "{granted} granted · {added} added over the template · {removed} removed",
+      "summaryNoTemplate": "{granted} granted",
+      "template": "Template: {name}",
+      "peopleCount": "{n, plural, one {# person} other {# people}}",
+      "edit": "Edit permissions",
+      "restore": "Restore template",
+      "locked": "This role cannot be edited.",
+      "noPeople": "Nobody has this role yet.",
+      "inactive": "Inactive",
+      "granted": "Granted",
+      "notGranted": "Not granted",
+      "addedBadge": "Added",
+      "removedBadge": "Removed",
+      "removedList": "Removed compared to the template",
+      "restoreTitle": "Restore the template of «{name}»",
+      "restoreText": "The role will go back to its template permissions.",
+      "restoreConfirm": "Restore"
+    },
+    "editor": {
+      "title": "Edit permissions · {name}",
+      "cancel": "Cancel",
+      "save": "Save",
+      "scopeTitle": "Data scope",
+      "scopeHelp": "Which data this role sees. Only one.",
+      "changes": "{n, plural, one {# change} other {# changes}}",
+      "highRisk": "{n} high risk",
+      "noChanges": "No changes",
+      "review": "Review changes",
+      "requires": "Requires: {list}",
+      "locked": "Reserved: account administrator only",
+      "origin": {
+        "inherited": "From the template",
+        "custom": "Custom"
+      },
+      "granted": "Granted",
+      "denied": "Denied",
+      "autoAdded": "What it needs was also checked: {list}.",
+      "autoRemoved": "What depended on it was also removed: {list}.",
+      "moduleCount": "{granted} of {total}",
+      "selfNote": "You belong to this role: you can only remove permissions from it.",
+      "saved": "Permissions saved. {n, plural, one {# person will renew} other {# people will renew}} their session.",
+      "reservedShort": "Reserved"
+    },
+    "confirm": {
+      "title": "Confirm changes to «{name}»",
+      "affects": "{n, plural, one {Affects # person} other {Affects # people}}; their sessions will renew immediately.",
+      "affectsNone": "Nobody has this role yet.",
+      "added": "Added",
+      "removed": "Removed",
+      "highRisk": "High risk: {list}",
+      "reasonLabel": "Reason (required)",
+      "reasonPlaceholder": "Why you are making this change",
+      "reasonHint": "At least {n} characters. It is kept in the role history.",
+      "confirm": "Confirm changes",
+      "cancel": "Cancel",
+      "safe": "This change cannot leave the account without an administrator."
+    },
+    "compareView": {
+      "title": "Compare roles",
+      "with": "with",
+      "onlyDiff": "Show differences only",
+      "permission": "Permission",
+      "difference": "Difference",
+      "same": "Same",
+      "onlyA": "Only {name}",
+      "onlyB": "Only {name}",
+      "pick": "Pick two roles to compare them.",
+      "scope": "Scope",
+      "noDifferences": "Both roles have the same permissions."
+    },
+    "history": {
+      "empty": "This role has no changes yet.",
+      "byPlatform": "Platform",
+      "unknown": "Someone",
+      "added": "Added",
+      "removed": "Removed",
+      "reason": "Reason: {reason}",
+      "loadMore": "Show more",
+      "actions": {
+        "ROLE_PERMISSIONS_UPDATED": "Changed the permissions",
+        "ROLE_RESTORED_TEMPLATE": "Restored the template"
+      },
+      "noDetail": "No permission changes recorded."
+    },
+    "errors": {
+      "generic": "The change could not be saved. Please try again.",
+      "ROLE_PROTECTED": "The administrator role cannot be edited.",
+      "ROLE_RESERVED": "Some reserved permissions cannot be added or removed.",
+      "ROLE_UNKNOWN_PERMISSION": "Some permissions do not exist.",
+      "ROLE_GRANT_EXCEEDS_ACTOR": "You cannot grant permissions you do not have.",
+      "ROLE_DEPENDENCY": "A permission that another one depends on is missing.",
+      "ROLE_SCOPE": "A role cannot have more than one data scope.",
+      "ROLE_SELF_ELEVATION": "You cannot expand the permissions of your own role.",
+      "ROLE_VERSION_CONFLICT": "Someone else changed this role while you were editing. Reload to see the changes.",
+      "ROLE_REASON_REQUIRED": "Give a reason for the change.",
+      "ROLE_NOT_FOUND": "The role does not exist.",
+      "ROLE_NO_TEMPLATE": "This role does not come from a template.",
+      "ROLE_WRITE_FORBIDDEN": "You do not have permission to edit roles.",
+      "reload": "Reload"
+    },
+    "risk": {
+      "label": "Risk",
+      "LOW": "Low",
+      "MEDIUM": "Medium",
+      "HIGH": "High",
+      "CRITICAL": "Critical"
+    },
+    "modules": {
+      "client": "Clients",
+      "credit": "Credits",
+      "assignment": "Assignment",
+      "collection": "Overdue",
+      "payment": "Payments",
+      "route": "Routes",
+      "agenda": "Schedule",
+      "report": "Reports",
+      "catalog": "Catalogs",
+      "office": "Organization",
+      "user": "Team",
+      "role": "Roles",
+      "account": "Account",
+      "audit": "Activity",
+      "support": "Support"
+    },
+    "roleNames": {
+      "ACCOUNT_ADMIN": "Administrator",
+      "MANAGER": "Manager",
+      "SUPERVISOR": "Supervisor",
+      "COLLECTOR": "Collector",
+      "AUDITOR": "Auditor",
+      "VIEWER": "Viewer"
+    }
+  },
+  "permissions": {
+    "collection_read": {
+      "name": "See the overdue center",
+      "description": "View overdue credits and their follow-ups."
+    },
+    "collection_write": {
+      "name": "Manage overdue accounts",
+      "description": "Record follow-ups, promises and notes on an overdue credit."
+    },
+    "collection_export": {
+      "name": "Download the overdue list",
+      "description": "Export the overdue list as CSV or PDF."
+    },
+    "payment_read": {
+      "name": "View payments",
+      "description": "View recorded payments."
+    },
+    "payment_write": {
+      "name": "Record payments",
+      "description": "Record payments and request changes to them."
+    },
+    "payment_approve": {
+      "name": "Approve payments",
+      "description": "Approve or reject payment requests."
+    },
+    "route_read": {
+      "name": "View routes",
+      "description": "View routes and their stops."
+    },
+    "route_write": {
+      "name": "Build routes",
+      "description": "Create and edit field routes."
+    },
+    "route_assign": {
+      "name": "Assign routes",
+      "description": "Assign routes to other team members."
+    },
+    "route_execute": {
+      "name": "Run routes",
+      "description": "Run the stops of a route and record visits."
+    },
+    "agenda_read": {
+      "name": "View the schedule",
+      "description": "View scheduled follow-ups."
+    },
+    "agenda_write": {
+      "name": "Manage the schedule",
+      "description": "Create and close your own follow-ups."
+    },
+    "agenda_assign": {
+      "name": "Schedule for others",
+      "description": "Schedule follow-ups for other team members."
+    },
+    "catalog_read": {
+      "name": "View catalogs",
+      "description": "Read the account catalogs (payment methods, types, etc.)."
+    },
+    "catalog_write": {
+      "name": "Edit catalogs",
+      "description": "Create and change catalog options."
+    },
+    "client_read": {
+      "name": "View clients",
+      "description": "View clients and their basic details."
+    },
+    "client_write": {
+      "name": "Edit clients",
+      "description": "Edit a client details, contacts, locations and attachments."
+    },
+    "client_create": {
+      "name": "Create clients",
+      "description": "Register new clients."
+    },
+    "client_delete": {
+      "name": "Delete clients",
+      "description": "Delete a client (not allowed with active credits)."
+    },
+    "client_pii_read": {
+      "name": "View documents unmasked",
+      "description": "See the ID document and financial data without masking."
+    },
+    "client_contact_read": {
+      "name": "View phones and addresses",
+      "description": "See the exact phone numbers and addresses of a client."
+    },
+    "client_import": {
+      "name": "Import portfolio",
+      "description": "Import clients and credits from a file."
+    },
+    "client_import_replace": {
+      "name": "Import replacing",
+      "description": "Import in replace mode: overwrites the existing portfolio."
+    },
+    "credit_read": {
+      "name": "View credits",
+      "description": "View credits and their status."
+    },
+    "credit_write": {
+      "name": "Edit credits",
+      "description": "Edit a credit, mark arrears manually and link it to a client."
+    },
+    "credit_create": {
+      "name": "Create credits",
+      "description": "Register new credits."
+    },
+    "credit_pii_read": {
+      "name": "View banking and guarantor data",
+      "description": "See the banking details and guarantors of a credit."
+    },
+    "report_read": {
+      "name": "View reports",
+      "description": "View dashboards and analytics."
+    },
+    "report_export": {
+      "name": "Export reports",
+      "description": "Download account exports."
+    },
+    "account_read": {
+      "name": "View the account",
+      "description": "View the account details and plan."
+    },
+    "account_write": {
+      "name": "Manage the account",
+      "description": "Edit the account, request plan changes and transfer ownership."
+    },
+    "user_read": {
+      "name": "View the team",
+      "description": "View the people on the team."
+    },
+    "user_invite": {
+      "name": "Invite people",
+      "description": "Invite new people to the account."
+    },
+    "user_write": {
+      "name": "Manage people",
+      "description": "Change the role, status and office of a person."
+    },
+    "user_sessions_revoke": {
+      "name": "Close sessions",
+      "description": "Close the open sessions of a person."
+    },
+    "role_read": {
+      "name": "View roles and permissions",
+      "description": "View the account roles and their permissions."
+    },
+    "role_write": {
+      "name": "Edit roles",
+      "description": "Change the permissions of the account roles."
+    },
+    "support_consent": {
+      "name": "Authorize support access",
+      "description": "Accept, reject or cut support team access to the account."
+    },
+    "audit_read": {
+      "name": "View activity",
+      "description": "View the account activity log."
+    },
+    "office_read": {
+      "name": "View offices",
+      "description": "View the office tree."
+    },
+    "office_write": {
+      "name": "Manage offices",
+      "description": "Create, move and deactivate offices and their types."
+    },
+    "assignment_write": {
+      "name": "Assign owners",
+      "description": "Choose who handles each credit and distribute the portfolio."
+    },
+    "data_scope_all": {
+      "name": "Whole account",
+      "description": "Sees the data of the whole account."
+    },
+    "data_scope_subtree": {
+      "name": "Its offices and those below",
+      "description": "Sees the data of the offices it is assigned to and those under them."
+    },
+    "data_scope_branch": {
+      "name": "Its office",
+      "description": "Sees the data of its office, with an owner."
+    }
   }
 }
