@@ -90,6 +90,22 @@ describe('RoleEditor — editar los permisos de un rol (F14 · F7)', () => {
     expect(screen.getByText(/1 de riesgo alto/)).toBeInTheDocument();
   });
 
+  it('🔴 quien pertenece al rol puede volver a marcar lo que apagó por error (no es una ampliación)', async () => {
+    renderEditor(role({ granted: ['client:read', 'report:read', 'data:scope:subtree'] }), true);
+    await userEvent.click(checkbox('report:read'));
+    expect(checkbox('report:read')).not.toBeChecked();
+    expect(checkbox('report:read')).not.toBeDisabled();
+    await userEvent.click(checkbox('report:read'));
+    expect(checkbox('report:read')).toBeChecked();
+  });
+
+  it('🔴 no se apaga un permiso del que depende uno reservado: se avisa y la casilla no cambia', async () => {
+    renderEditor(role({ granted: ['user:read', 'user:write', 'data:scope:subtree'] }));
+    await userEvent.click(checkbox('user:read'));
+    expect(checkbox('user:read')).toBeChecked();
+    expect(screen.getByRole('status')).toHaveTextContent('lo necesita un permiso reservado');
+  });
+
   it('quien pertenece al rol sólo puede quitar: no puede marcar los que faltan', () => {
     renderEditor(role(), true);
     expect(screen.getByText(/solo puedes quitarle permisos/)).toBeInTheDocument();

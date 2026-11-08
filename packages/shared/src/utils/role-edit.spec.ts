@@ -84,6 +84,21 @@ describe('checkRoleEdit · reglas de edición de un rol (F14 · F7, D-3)', () =>
   });
 });
 
+describe('checkRoleEdit · sólo juzga lo que el cambio toca (revisión de código de F7)', () => {
+  const legacy = { ...base, current: ['client:write', 'viejo:retirado', 'data:scope:all', 'data:scope:branch'], desired: ['client:write', 'viejo:retirado', 'data:scope:all', 'data:scope:branch'] };
+  it('🔴 un rol que ya traía algo fuera de regla (código retirado, dependencia rota, dos alcances) no queda atascado por un cambio ajeno', () => {
+    expect(checkRoleEdit({ ...legacy, desired: [...legacy.desired, 'report:export'] })).toEqual([]);
+    expect(checkRoleEdit({ ...legacy, desired: legacy.desired.filter((c) => c !== 'data:scope:branch') })).toEqual([]);
+  });
+
+  it('pero lo que el cambio introduce sí se juzga: añadir un código inexistente, o un segundo alcance, o romper una dependencia', () => {
+    const codes2 = (desired: string[]) => checkRoleEdit({ ...legacy, desired }).map((v) => v.code);
+    expect(codes2([...legacy.desired, 'inventado:todo'])).toContain(ROLE_ERROR.UNKNOWN_PERMISSION);
+    expect(codes2([...legacy.desired, 'data:scope:subtree'])).toContain(ROLE_ERROR.SCOPE);
+    expect(checkRoleEdit({ ...base, current: ['client:read', 'client:write', 'data:scope:subtree'], desired: ['client:write', 'data:scope:subtree'] }).map((v) => v.code)).toContain(ROLE_ERROR.DEPENDENCY);
+  });
+});
+
 describe('diffPermissions / withDependencies', () => {
   it('la diferencia sale ordenada', () => {
     expect(diffPermissions(['b', 'a'], ['c', 'a'])).toEqual({ added: ['c'], removed: ['b'] });

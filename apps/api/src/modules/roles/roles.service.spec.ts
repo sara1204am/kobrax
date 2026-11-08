@@ -59,6 +59,10 @@ function makeService(opts: { w?: World; permissions?: string[]; auditFails?: boo
         const r = byKey(a.where.key);
         return r ? { id: r.id, key: r.key, templateKey: r.templateKey } : null;
       },
+      findFirstOrThrow: async (a: { where: { id: string } }) => {
+        const r = byId(a.where.id);
+        return { id: r.id, templateKey: r.templateKey, version: r.version, divergedAt: r.divergedAt };
+      },
       findMany: async (a: { where: { key?: string } }) =>
         [...w.roles.values()]
           .filter((r) => !a.where.key || r.key === a.where.key)
@@ -96,6 +100,8 @@ function makeService(opts: { w?: World; permissions?: string[]; auditFails?: boo
         const ms = w.members.filter((m) => m.accountRoleId === a.where.accountRoleId && (a.where.isActive === undefined || m.isActive === a.where.isActive));
         return a.select.user ? ms.map((m) => ({ userId: m.userId, isActive: m.isActive, user: { email: `${m.userId}@x.test`, profile: { firstName: m.userId, lastName: 'X' } } })) : ms.map((m) => ({ id: m.id }));
       },
+      count: async (a: { where: { accountRoleId: string; isActive?: boolean } }) =>
+        w.members.filter((m) => m.accountRoleId === a.where.accountRoleId && (a.where.isActive === undefined || m.isActive === a.where.isActive)).length,
       groupBy: async () => {
         const counts = new Map<string, number>();
         for (const m of w.members.filter((x) => x.isActive)) counts.set(m.accountRoleId, (counts.get(m.accountRoleId) ?? 0) + 1);
@@ -334,5 +340,39 @@ describe('RolesService.assignable — el contrato histórico de GET /roles (F14 
 
   it('quien no tiene rol en la cuenta no recibe ninguno', async () => {
     assert.deepEqual(await svc(null).service.assignable(), []);
+  });
+});
+
+
+describe('RolesService.updatePermissions · correcciones de la revisión de código de F7', () => {
+  const ok = { permissions: ['client:read', 'client:write', 'data:scope:subtree'], expectedVersion: 3, reason: 'Pidieron editar' };
+
+  it('🔴 la versión vieja da 409 aunque el conjunto pedido ya no sea válido (la persona debe poder recargar, no ver un 403/422 confuso)', async () => {
+    const { service } = makeService();
+    // Conjunto inválido (reservado) + versión vieja: gana el conflicto de versión.
+    await reject(service.updatePermissions('MANAGER', { permissions: ['client:read', 'role:write', 'data:scope:subtree'], expectedVersion: 1, reason: 'Foto vieja' }), 'ROLE_VERSION_CONFLICT');
+  });
+
+  it('🔴 `diverged_at` guarda CUÁNDO empezó a diferir: una segunda edición que sigue diferente no lo pisa', async () => {
+    const w = world();
+    const first = new Date('2026-11-01T10:00:00Z');
+    w.roles.get('MANAGER')!.divergedAt = first;
+    w.roles.get('MANAGER')!.perms = new Set(['client:read', 'report:export', 'data:scope:subtree']);
+    const { service } = makeService({ w });
+    await service.updatePermissions('MANAGER', { permissions: ['client:read', 'report:export', 'client:write', 'data:scope:subtree'], expectedVersion: 3, reason: 'Una más' });
+    assert.equal(w.roles.get('MANAGER')!.divergedAt, first);
+  });
+
+  it('el primer cambio que hace diferir sí lo marca ahora', async () => {
+    const { service, w } = makeService();
+    assert.equal(w.roles.get('MANAGER')!.divergedAt, null);
+    await service.updatePermissions('MANAGER', ok);
+    assert.ok(w.roles.get('MANAGER')!.divergedAt instanceof Date);
+  });
+
+  it('un cursor de historial mal formado se rechaza (no devuelve la primera página otra vez)', async () => {
+    const { service } = makeService();
+    await reject(service.history('MANAGER', 'basura', 10), 'ROLE_HISTORY_CURSOR_INVALID');
+    await reject(service.history('MANAGER', 'no-es-fecha|abc', 10), 'ROLE_HISTORY_CURSOR_INVALID');
   });
 });

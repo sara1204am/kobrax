@@ -68,7 +68,7 @@ export function diffPermissions(base: readonly string[], next: readonly string[]
 }
 
 /**
- * Valida el cambio de permisos de un rol. Devuelve TODOS los incumplimientos (vacío = válido), en el orden de gravedad:
+ * Valida el cambio de permisos de un rol. Devuelve TODOS los incumplimientos (vacío = válido) que EL CAMBIO provoca, en el orden de gravedad:
  * protegido → desconocido → reservado → lo que el actor no tiene → auto-elevación → dependencias → alcance (a lo sumo uno).
  */
 export function checkRoleEdit(input: RoleEditInput): RoleEditViolation[] {
@@ -81,7 +81,9 @@ export function checkRoleEdit(input: RoleEditInput): RoleEditViolation[] {
   const desired = new Set(input.desired);
   const { added, removed } = diffPermissions(input.current, [...desired]);
 
-  const unknown = [...desired].filter((c) => !byCode.has(c));
+  // Las reglas de contenido miran sólo lo que el cambio TOCA: un rol que ya traía algo fuera de regla (un permiso retirado del catálogo, una
+  // dependencia rota) no puede quedar atascado sin poder guardarse por un cambio que no tiene que ver.
+  const unknown = added.filter((c) => !byCode.has(c));
   if (unknown.length) out.push({ code: ROLE_ERROR.UNKNOWN_PERMISSION, permissions: unknown, message: 'Hay permisos que no existen', status: 422 });
 
   const reserved = [...added, ...removed].filter((c) => byCode.get(c)?.reserved);
@@ -96,9 +98,19 @@ export function checkRoleEdit(input: RoleEditInput): RoleEditViolation[] {
 
   const missing = new Set<string>();
   const dependents = new Set<string>();
-  for (const code of desired) {
+  // Lo que se AÑADE necesita sus dependencias…
+  for (const code of added) {
     for (const req of byCode.get(code)?.requires ?? []) {
       if (!desired.has(req)) {
+        missing.add(req);
+        dependents.add(code);
+      }
+    }
+  }
+  // …y lo que se QUITA no puede dejar sin base a lo que se conserva.
+  for (const code of desired) {
+    for (const req of byCode.get(code)?.requires ?? []) {
+      if (removed.includes(req) && !desired.has(req)) {
         missing.add(req);
         dependents.add(code);
       }
@@ -109,7 +121,7 @@ export function checkRoleEdit(input: RoleEditInput): RoleEditViolation[] {
   }
 
   const scopes = [...desired].filter((c) => DATA_SCOPE_PERMISSIONS.includes(c));
-  if (scopes.length > 1) {
+  if (scopes.length > 1 && added.some((c) => DATA_SCOPE_PERMISSIONS.includes(c))) {
     out.push({ code: ROLE_ERROR.SCOPE, permissions: scopes, message: 'Un rol no puede tener más de un alcance de datos', status: 422 });
   }
   return out;

@@ -1,4 +1,9 @@
-import { RoleType, diffPermissions, type RoleScopeKind, type RoleSummary } from '@kobrax/shared';
+import { RoleType, diffPermissions, type AssignableRole, type RoleScopeKind, type RoleSummary } from '@kobrax/shared';
+
+/** Una fila de `GET /roles` sin parámetros: EXACTAMENTE `{ id, name, level }` (el contrato que ya leen la web y los móviles instalados). */
+export function serializeAssignableRole(role: { id: string; name: string; level: number }): AssignableRole {
+  return { id: role.id, name: role.name, level: role.level };
+}
 
 /** Un rol de la cuenta tal como lo lee el servicio: sus permisos concedidos y los de su plantilla. */
 export interface AccountRoleRow {
@@ -29,6 +34,8 @@ export function scopeKindOf(granted: readonly string[]): RoleScopeKind {
 export function summarizeRole(row: AccountRoleRow, ctx: { roleIdByName: ReadonlyMap<string, string>; members: number; permissionsTotal: number }): RoleSummary {
   const diff = row.templateGranted ? diffPermissions(row.templateGranted, row.granted) : { added: [], removed: [] };
   return {
+    // Hoy cada rol de plantilla tiene su rol global de igual nombre. Si algún día un rol no lo tiene (roles propios, H-9), `id` pasa a ser el del
+    // rol de la cuenta: es lo que ocurrirá de todos modos cuando se retire `user_accounts.role_id` (F5 D-3), y el cliente lo trata como opaco.
     id: ctx.roleIdByName.get(row.key) ?? row.id,
     name: row.key,
     level: row.tier,

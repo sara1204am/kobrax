@@ -40,7 +40,7 @@ export function RoleEditor({ role, catalog, roleName, selfInRole }: { role: Role
     const r = togglePermission(desired, code, on, catalog);
     setDesired(r.next);
     setFlagged(new Set());
-    setNotice(r.autoAdded.length ? t('editor.autoAdded', { list: names(r.autoAdded) }) : r.autoRemoved.length ? t('editor.autoRemoved', { list: names(r.autoRemoved) }) : null);
+    setNotice(r.blockedBy?.length ? t('editor.blocked', { list: names(r.blockedBy) }) : r.autoAdded.length ? t('editor.autoAdded', { list: names(r.autoAdded) }) : r.autoRemoved.length ? t('editor.autoRemoved', { list: names(r.autoRemoved) }) : null);
   }
 
   function onSaved(result: RoleUpdateResult) {
@@ -90,8 +90,8 @@ export function RoleEditor({ role, catalog, roleName, selfInRole }: { role: Role
                     fromTemplate={templateSet.has(p.code)}
                     flagged={flagged.has(p.code)}
                     onChange={(v) => toggle(p.code, v)}
-                    // Quien pertenece al rol sólo puede quitar: encender se rechazaría.
-                    disabled={selfInRole && !granted.has(p.code)}
+                    // Quien pertenece al rol sólo puede quitar: no se enciende lo que el rol NO tenía (lo que apagó por error sí se puede volver a marcar).
+                    disabled={selfInRole && !original.includes(p.code)}
                   />
                 ))}
               </div>

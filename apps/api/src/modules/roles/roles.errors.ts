@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { ROLE_ERROR, ROLE_REASON_MIN_LENGTH } from '@kobrax/shared';
 
 export const roleNotFound = () => new NotFoundException({ code: ROLE_ERROR.NOT_FOUND, message: 'El rol no existe en tu cuenta' });
@@ -15,3 +15,5 @@ export const versionConflict = (currentVersion: number) =>
 
 export const noTemplate = () =>
   new UnprocessableEntityException({ code: 'ROLE_NO_TEMPLATE', message: 'Este rol no viene de una plantilla: no hay a qué restaurarlo' });
+
+export const invalidCursor = () => new BadRequestException({ code: 'ROLE_HISTORY_CURSOR_INVALID', message: 'El cursor del historial no es válido' });

@@ -61,6 +61,8 @@ export interface ToggleResult {
   autoAdded: string[];
   /** Permisos que dependían de éste y se apagaron solos al apagar. */
   autoRemoved: string[];
+  /** Si no se pudo apagar porque algo RESERVADO depende de él (no se puede quitar), cuáles. El conjunto queda igual. */
+  blockedBy?: string[];
 }
 
 /**
@@ -75,6 +77,10 @@ export function togglePermission(desired: readonly string[], code: string, on: b
     return { next: [...closed].sort(), autoAdded: autoAdded.sort(), autoRemoved: [] };
   }
   const autoRemoved = dependentsOf(code, [...current], catalog);
+  // Un reservado (núcleo del administrador) no se puede quitar: si depende de éste, éste tampoco se apaga (no dejar la casilla sin salida).
+  const reserved = new Set(catalog.filter((c) => c.reserved).map((c) => c.code));
+  const blockedBy = autoRemoved.filter((c) => reserved.has(c));
+  if (blockedBy.length) return { next: [...current].sort(), autoAdded: [], autoRemoved: [], blockedBy: blockedBy.sort() };
   const gone = new Set([code, ...autoRemoved]);
   return { next: [...current].filter((c) => !gone.has(c)).sort(), autoAdded: [], autoRemoved: autoRemoved.sort() };
 }

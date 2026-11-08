@@ -4533,7 +4533,8 @@
       "moduleCount": "{granted} de {total}",
       "selfNote": "Perteneces a este rol: solo puedes quitarle permisos.",
       "saved": "Permisos guardados. {n, plural, one {# persona renovará} other {# personas renovarán}} su sesión.",
-      "reservedShort": "Reservado"
+      "reservedShort": "Reservado",
+      "blocked": "No se puede quitar: lo necesita un permiso reservado ({list})."
     },
     "confirm": {
       "title": "Confirmar cambios en «{name}»",

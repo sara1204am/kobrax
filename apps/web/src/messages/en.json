@@ -4533,7 +4533,8 @@
       "moduleCount": "{granted} of {total}",
       "selfNote": "You belong to this role: you can only remove permissions from it.",
       "saved": "Permissions saved. {n, plural, one {# person will renew} other {# people will renew}} their session.",
-      "reservedShort": "Reserved"
+      "reservedShort": "Reserved",
+      "blocked": "It cannot be removed: a reserved permission needs it ({list})."
     },
     "confirm": {
       "title": "Confirm changes to «{name}»",

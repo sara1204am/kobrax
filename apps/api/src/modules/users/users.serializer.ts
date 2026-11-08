@@ -41,7 +41,3 @@ export function serializeProfile(user: User & { profile: Profile | null }) {
     paymentQrUrl: user.profile?.paymentQrUrl ?? null,
   };
 }
-
-export function serializeRole(role: Role) {
-  return { id: role.id, name: role.name, level: role.level };
-}

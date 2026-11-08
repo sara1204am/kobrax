@@ -20,9 +20,8 @@ import { AuditService } from '../../common/audit/audit.service';
 import { PolicyService } from '../../common/authz/policy.service';
 import { isReservedRole, tierOf } from '../../common/authz/tier';
 import { AuthzVersionService } from '../auth/authz-version.service';
-import { serializeRole } from '../users/users.serializer';
-import { noTemplate, reasonRequired, roleNotFound, versionConflict } from './roles.errors';
-import { compareGranted, summarizeRole, type AccountRoleRow } from './roles.serializer';
+import { invalidCursor, noTemplate, reasonRequired, roleNotFound, versionConflict } from './roles.errors';
+import { compareGranted, serializeAssignableRole, summarizeRole, type AccountRoleRow } from './roles.serializer';
 
 const ENTITY = 'account_role';
 
@@ -63,7 +62,7 @@ export class RolesService {
       mine: await tx.userAccount.findFirst({ where: { userId: this.actorId, accountId: this.tenant.accountId }, select: { role: { select: { name: true, level: true } } } }),
     }));
     const myTier = mine ? tierOf(mine.role) : -1;
-    return roles.filter((r) => !isReservedRole(r) && tierOf(r) < myTier).map(serializeRole);
+    return roles.filter((r) => !isReservedRole(r) && tierOf(r) < myTier).map(serializeAssignableRole);
   }
 
   /** Todos los roles de la cuenta, con su detalle (vista del administrador). */
@@ -112,7 +111,9 @@ export class RolesService {
       const role = await tx.accountRole.findFirst({ where: { accountId: this.tenant.accountId, key, deletedAt: null }, select: { id: true } });
       if (!role) throw roleNotFound();
       const [at, id] = (cursor ?? '').split('|');
-      const before = at && id && !Number.isNaN(new Date(at).getTime()) ? { at: new Date(at), id } : null;
+      // Un cursor mal formado NO se ignora: devolvería la primera página otra vez y la lista se duplicaría.
+      if (cursor && (!at || !id || Number.isNaN(new Date(at).getTime()))) throw invalidCursor();
+      const before = cursor ? { at: new Date(at!), id: id! } : null;
       const rows = await tx.auditLog.findMany({
         where: {
           accountId: this.tenant.accountId,
@@ -151,14 +152,14 @@ export class RolesService {
 
   /** Reemplaza el conjunto de permisos de un rol (con motivo y versión esperada). */
   updatePermissions(key: string, input: { permissions: string[]; expectedVersion: number; reason: string }): Promise<RoleUpdateResult> {
-    return this.change(key, input.expectedVersion, input.reason, 'ROLE_PERMISSIONS_UPDATED', async () => [...new Set(input.permissions)]);
+    return this.change(key, input.expectedVersion, input.reason, 'ROLE_PERMISSIONS_UPDATED', () => [...new Set(input.permissions)]);
   }
 
   /** Devuelve el rol a los permisos de su plantilla. */
   restoreTemplate(key: string, input: { expectedVersion: number; reason: string }): Promise<RoleUpdateResult> {
-    return this.change(key, input.expectedVersion, input.reason, 'ROLE_RESTORED_TEMPLATE', async (tx, role) => {
-      if (!role.templateKey) throw noTemplate();
-      return this.templateCodes(tx, role.templateKey);
+    return this.change(key, input.expectedVersion, input.reason, 'ROLE_RESTORED_TEMPLATE', (templateCodes) => {
+      if (!templateCodes) throw noTemplate();
+      return templateCodes;
     });
   }
 
@@ -171,7 +172,8 @@ export class RolesService {
     expectedVersion: number,
     reason: string,
     action: 'ROLE_PERMISSIONS_UPDATED' | 'ROLE_RESTORED_TEMPLATE',
-    desiredOf: (tx: PrismaClient, role: { id: string; templateKey: string | null }) => Promise<string[]>,
+    /** Los permisos que el rol tendrá; recibe los de su plantilla (`null` si no tiene) para no pedirlos dos veces. */
+    desiredOf: (templateCodes: string[] | null) => string[],
   ): Promise<RoleUpdateResult> {
     const motive = (reason ?? '').trim();
     if (motive.length < ROLE_REASON_MIN_LENGTH) throw reasonRequired();
@@ -180,14 +182,19 @@ export class RolesService {
 
     let pending: Awaited<ReturnType<AuthzVersionService['bumpInTx']>> = [];
     const result = await this.tx(async (tx) => {
-      const role = await tx.accountRole.findFirst({ where: { accountId, key, deletedAt: null }, select: { id: true, templateKey: true } });
-      if (!role) throw roleNotFound();
+      const found = await tx.accountRole.findFirst({ where: { accountId, key, deletedAt: null }, select: { id: true } });
+      if (!found) throw roleNotFound();
       // Bloqueo de la fila: dos administradores que guardan a la vez se serializan y el segundo ve la versión nueva.
-      await tx.$queryRaw`SELECT id FROM account_roles WHERE id = ${role.id} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM account_roles WHERE id = ${found.id} FOR UPDATE`;
+      // Se lee DESPUÉS del bloqueo: es la foto que vale.
+      const role = await tx.accountRole.findFirstOrThrow({ where: { id: found.id }, select: { id: true, templateKey: true, version: true, divergedAt: true } });
+      // La versión se compara ANTES de juzgar el contenido: quien tiene una foto vieja debe recibir el 409 (y la opción de recargar),
+      // no un 403/422 sobre un conjunto que ya no es el que está en la base.
+      if (role.version !== expectedVersion) throw versionConflict(role.version);
 
-      const desired = await desiredOf(tx, role);
-      const decision = (await this.policies.assert('role.editPermissions', { key, permissions: desired }, tx)) as { version: number; current: string[] };
-      if (decision.version !== expectedVersion) throw versionConflict(decision.version);
+      const templateCodes = role.templateKey ? await this.templateCodes(tx, role.templateKey) : null;
+      const desired = desiredOf(templateCodes);
+      const decision = (await this.policies.assert('role.editPermissions', { key, permissions: desired }, tx)) as { current: string[] };
 
       const { added, removed } = diffPermissions(decision.current, desired);
       if (added.length === 0 && removed.length === 0) return { detail: await this.detailIn(tx, key), affected: 0 };
@@ -195,7 +202,7 @@ export class RolesService {
       const codes = [...added, ...removed];
       const perms = await tx.permission.findMany({ where: { code: { in: codes } }, select: { id: true, code: true } });
       const idOf = new Map(perms.map((p) => [p.code, p.id]));
-      const templateSet = new Set(role.templateKey ? await this.templateCodes(tx, role.templateKey) : []);
+      const templateSet = new Set(templateCodes ?? []);
 
       if (removed.length) {
         await tx.accountRolePermission.deleteMany({ where: { accountRoleId: role.id, permissionId: { in: removed.map((c) => idOf.get(c)!) } } });
@@ -214,7 +221,7 @@ export class RolesService {
       }
 
       const diverges = role.templateKey ? (() => { const d = diffPermissions([...templateSet], desired); return d.added.length > 0 || d.removed.length > 0; })() : false;
-      await tx.accountRole.update({ where: { id: role.id }, data: { version: { increment: 1 }, divergedAt: diverges ? new Date() : null } });
+      await tx.accountRole.update({ where: { id: role.id }, data: { version: { increment: 1 }, divergedAt: diverges ? (role.divergedAt ?? new Date()) : null } });
 
       const members = await tx.userAccount.findMany({ where: { accountId, accountRoleId: role.id, isActive: true }, select: { id: true } });
       pending = await this.authz.bumpInTx(tx, accountId, members.map((m) => m.id));
@@ -274,11 +281,13 @@ export class RolesService {
   }
 
   private async detailIn(tx: PrismaClient, key: string): Promise<RoleDetail> {
-    const [rows, total, counts, globals] = await Promise.all([this.loadRows(tx, key), this.catalogSize(tx), this.memberCounts(tx), tx.role.findMany({ select: { id: true, name: true } })]);
+    const [rows, total, globals] = await Promise.all([this.loadRows(tx, key), this.catalogSize(tx), tx.role.findMany({ select: { id: true, name: true } })]);
     const row = rows[0];
     if (!row) throw roleNotFound();
     const roleIdByName = new Map(globals.map((g) => [g.name, g.id]));
-    const summary = summarizeRole(row, { roleIdByName, members: counts.get(row.id) ?? 0, permissionsTotal: total });
+    // Sólo se cuentan las personas de ESTE rol (no las de todos los roles de la cuenta).
+    const members = await tx.userAccount.count({ where: { accountId: this.tenant.accountId, accountRoleId: row.id, isActive: true } });
+    const summary = summarizeRole(row, { roleIdByName, members, permissionsTotal: total });
     const people = await tx.userAccount.findMany({
       where: { accountId: this.tenant.accountId, accountRoleId: row.id },
       select: { userId: true, isActive: true, user: { select: { email: true, profile: { select: { firstName: true, lastName: true } } } } },

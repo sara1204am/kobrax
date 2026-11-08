@@ -260,6 +260,12 @@ describe('F7 · restaurar la plantilla y el historial', () => {
     assert.equal(p2.nextCursor, null);
   });
 
+  it('un cursor de historial mal formado se rechaza con 400 (no repite la primera página)', async () => {
+    const res = await call(acc.A!.admin, 'GET', '/roles/COLLECTOR/history?cursor=basura');
+    assert.equal(res.status, 400);
+    assert.equal(res.error?.code, 'ROLE_HISTORY_CURSOR_INVALID');
+  });
+
   it('restaurar exige motivo y versión como cualquier cambio', async () => {
     const d = (await call<RoleDetail>(acc.A!.admin, 'GET', '/roles/COLLECTOR')).data!;
     assert.equal((await call(acc.A!.admin, 'POST', '/roles/COLLECTOR/restore-template', { expectedVersion: d.version, reason: '' })).status, 422);

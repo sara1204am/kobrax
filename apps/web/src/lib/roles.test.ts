@@ -38,6 +38,13 @@ describe('lib/roles · el editor de roles (F14 · F7)', () => {
     expect(r.autoRemoved).toEqual(['client:delete', 'client:write']);
   });
 
+  it('🔴 no se apaga un permiso del que depende uno reservado (quedaría sin salida): el conjunto no cambia y se dice cuál lo retiene', () => {
+    const r = togglePermission(['user:read', 'user:write', 'data:scope:subtree'], 'user:read', false, catalog);
+    expect(r.next).toEqual(['data:scope:subtree', 'user:read', 'user:write']);
+    expect(r.blockedBy).toEqual(['user:write']);
+    expect(r.autoRemoved).toEqual([]);
+  });
+
   it('dependentsOf sólo mira lo concedido', () => {
     expect(dependentsOf('client:read', ['client:read', 'client:write'], catalog)).toEqual(['client:write']);
     expect(dependentsOf('client:read', ['client:read'], catalog)).toEqual([]);
