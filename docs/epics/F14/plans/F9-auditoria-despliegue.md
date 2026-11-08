@@ -1,4 +1,4 @@
-> ESTADO: BORRADOR (2026-11-08). Pendiente `validar F9` (G4). **D-1…D-7 son propuestas: la usuaria debe aprobarlas antes de construir.** Hay **2 bifurcaciones que tocan lo que corre en GitHub y en producción** (D-2 y D-3); el resto es verificación y documentación. Ninguna línea de producto se toca antes del PASS de G4.
+> ESTADO: BORRADOR (2026-11-08). Pendiente `validar F9` (G4). **D-2 y D-3 (lo que corre en GitHub y en producción) las resolvió la usuaria el 2026-11-08** (D-2 = opción B, unitarias + integración; D-3 = sí, arreglar `deploy.sh`); D-1 y D-4…D-7 siguen como propuesta y falta su visto bueno. Ninguna línea de producto se toca antes del PASS de G4.
 
 # Plan F9 · Auditoría integral, pruebas y despliegue
 
@@ -35,8 +35,8 @@ Que, al terminar F14, se pueda contestar con evidencia «¿cada hallazgo del dia
 4. **Ensayo de actualización:** script `release-rehearsal` que restaura un respaldo en una base de prueba, aplica `migrate deploy` + `rls` + verificaciones + comparación de permisos, y escribe un informe. Se ensaya aquí con la base de desarrollo y con una base vacía; **lo vuelve a correr la usuaria sobre una copia real de producción** antes de desplegar.
 5. **`RELEASE-CHECKLIST.md`:** orden de despliegue, interruptores con sus nombres reales, qué comprobar antes y después, criterios para pasar `SCOPE_RLS_MODE` de `off` a `log` y a `enforce`, cuándo encender `PII_MOBILE_MASK`, **rollback real por fase**, y la comunicación a las personas (el `AUTHZ_STALE` único al desplegar).
 6. **Corrección del plan maestro §G** (nombres reales de los interruptores) y cierre de la épica: STATUS, HANDOFF, `roles-permisos-planes.md` y la lista de pendientes.
-7. **(D-3, a aprobar)** Arreglo de `infra/production/deploy.sh`: excluir todos los `verify*` del paso 8 (como ya hace `apply-rls.ts`) y agregar un paso explícito de comprobación después de aplicar las políticas.
-8. **(D-2, a aprobar)** `.github/workflows/ci.yml`: pruebas en cada pull request.
+7. **(D-3, aprobada)** Arreglo de `infra/production/deploy.sh`: excluir todos los `verify*` del paso 8 (como ya hace `apply-rls.ts`) y agregar un paso explícito de comprobación después de aplicar las políticas.
+8. **(D-2, aprobada: opción B)** `.github/workflows/ci.yml`: unitarias e integración en cada pull request.
 
 **Fuera**
 - Ejecutar nada en producción ni tocar `/opt/kobrax` del servidor; encender interruptores (`SCOPE_RLS_MODE=enforce`, `PII_MOBILE_MASK`, `PLATFORM_*`).
@@ -52,8 +52,8 @@ F1–F8 (todas cerradas; F8 con la excepción de la prueba en dispositivo). No d
 | ID | Decisión | Estado |
 |---|---|---|
 | D-1 | F9 es **solo verificación y puesta a punto**: informe de trazabilidad, verificaciones SQL, herramienta de permisos, ensayo, checklist y corrección de documentos. Nada de funcionalidad. | PROPUESTA |
-| D-2 | ⚠ **CI en GitHub** (`ci.yml` en cada pull request y en los push a `dev`): `tsc` + pruebas unitarias de shared, API, web y móvil. Opción A (recomendada): solo unitarias (rápidas, sin servicios). Opción B: además la integración con Postgres y Redis como servicios (≈30–60 min; **no la puedo validar sin correrla en GitHub**). Opción C: no agregar CI. **Es configuración que corre en tu GitHub** y que el próximo push activa. | PROPUESTA (elegir) |
-| D-3 | ⚠ **Arreglo de `deploy.sh`** (producción): excluir `verify*` del paso 8 y correr las verificaciones como un paso propio, después de las políticas y antes de reiniciar. Si una verificación falla, el script lo dice claro y termina con error **antes** de reiniciar, que es el mismo punto donde hoy se detiene una migración fallida (la versión vieja sigue corriendo). Es lo que hoy ocurriría de todos modos con los tres `verify_*` de F14, pero a propósito y con un mensaje que explica qué falló. Es un cambio a lo que ejecuta producción en el próximo merge a `main`; el problema que corrige (E2) existe tal cual si no se toca. | PROPUESTA (elegir) |
+| D-2 | **CI en GitHub, opción B:** `ci.yml` en cada pull request y en los push a `dev`: `tsc` + pruebas unitarias de shared, API, web y móvil **y la integración completa con Postgres y Redis** (levantados con el `docker-compose.yml` del repo y un `.env` armado desde `.env.example`; el arnés ya usa los contenedores `kobrax-postgres` y `kobrax-redis`). Dura ≈30–60 min. **No la puedo validar sin correrla en GitHub: puede fallar la primera vez** (rutas, variables, tiempos); se ajusta con lo que muestre el primer resultado. | **APROBADA** por la usuaria (2026-11-08): opción B |
+| D-3 | **Arreglo de `deploy.sh`:** excluir todos los `verify*` del paso 8 (como ya hace `apply-rls.ts`) y correr las verificaciones como un paso propio, después de las políticas y antes de reiniciar. Si una falla, el script lo dice claro y termina con error **antes** de reiniciar (la versión vieja sigue corriendo), el mismo punto donde hoy se detiene una migración fallida. | **APROBADA** por la usuaria (2026-11-08): sí |
 | D-4 | `permissions-snapshot` vive en `packages/database/scripts/` (usa Prisma, sin servidor de la API) y su lógica de comparación es una función pura con pruebas. El volcado no incluye datos personales (ids y códigos de permiso). | PROPUESTA |
 | D-5 | El ensayo de actualización se hace **aquí** sobre la base de desarrollo y una base vacía, y se deja el script y el procedimiento para que la usuaria lo repita sobre una copia real de producción. En el informe consta que **no se ensayó con datos de producción**. | PROPUESTA |
 | D-6 | `PII_MOBILE_MASK=on` y `SCOPE_RLS_MODE=enforce` **no se encienden** en F9; el checklist deja los criterios (versión mínima de la app; una semana en `log` sin discrepancias). | PROPUESTA |
@@ -70,8 +70,8 @@ F9 no toca `apps/mobile`. El checklist depende de que la versión mínima de la 
 | H14-081 (nuevo) | `packages/database/prisma/run-verify.ts` (nuevo), `packages/database/package.json` (`db:verify`) | Un comando que corre todas |
 | H14-082 (nuevo) | `packages/database/scripts/permissions-snapshot.ts` (nuevo) y su prueba | Volcado y comparación de permisos efectivos |
 | H14-083 (nuevo) | `infra/production/release-rehearsal.sh` (nuevo) | Ensayo de actualización sobre un respaldo |
-| H14-084 (nuevo) | `infra/production/deploy.sh` (paso 8 y paso nuevo) — **D-3** | Excluir `verify*`; comprobación explícita |
-| H14-085 (nuevo) | `.github/workflows/ci.yml` (nuevo) — **D-2** | Pruebas en cada pull request |
+| H14-084 (nuevo) | `infra/production/deploy.sh` (paso 8 y paso nuevo) — **D-3 aprobada** | Excluir `verify*`; comprobación explícita |
+| H14-085 (nuevo) | `.github/workflows/ci.yml` (nuevo; unitarias + integración) — **D-2 aprobada** | Pruebas en cada pull request |
 | H14-086 (nuevo) | `docs/epics/F14/RELEASE-CHECKLIST.md`, `F9-AUDITORIA.md` (nuevos); `ROLES-PERMISOS-PLAN.md` §G | Checklist, informe y nombres reales |
 | H14-001…079 (existen) | todo lo de F1–F8 | consultados en la auditoría; ver IMPACT-MAP |
 
