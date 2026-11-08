@@ -150,7 +150,7 @@ export async function clearSession(): Promise<void> {
     clearCache(),
   ]);
   // Los permisos de quien salió no se le quedan al próximo (F14 · F8).
-  useMeStore.getState().setMe(null);
+  useMeStore.getState().clearMe();
 }
 
 /** True si la sesión offline aún es válida (no expiró la ventana de inactividad). */

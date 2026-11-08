@@ -95,7 +95,7 @@ describe('authService.me — distingue offline de no autenticado (historia 14)',
 
   it('cada `me` leído deja los permisos en el almacén de la app (los tabs y botones los leen de ahí)', async () => {
     mockGetSession.mockResolvedValue(SESSION);
-    useMeStore.getState().setMe(null);
+    useMeStore.setState({ me: null, known: false });
     mockFetch.mockResolvedValue({ status: 200, data: { ...ME, permissions: ['agenda:read'] }, error: null });
     await authService.me();
     expect(useMeStore.getState().me?.permissions).toEqual(['agenda:read']);
@@ -106,7 +106,7 @@ describe('authService.me — distingue offline de no autenticado (historia 14)',
     mockGetSession.mockResolvedValue(SESSION);
     (getOne as jest.Mock).mockResolvedValue({ ...ME, permissions: ['route:read'] });
     mockFetch.mockResolvedValue({ status: 0, data: null, error: null });
-    useMeStore.getState().setMe(null);
+    useMeStore.setState({ me: null, known: false });
     await authService.me();
     expect(useMeStore.getState().me?.permissions).toEqual(['route:read']);
   });

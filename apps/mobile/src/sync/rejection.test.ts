@@ -12,9 +12,15 @@ describe('explainRejection · por qué el servidor rechazó lo que se hizo sin s
   });
 
   it('🔴 un alta sin oficina (422 de oficina) dice qué hacer', () => {
-    for (const code of ['CLIENT_BRANCH_UNRESOLVED', 'CLIENT_CREATE_AT_ROOT', 'CLIENT_BRANCH_INVALID', 'CLIENT_BRANCH_OUT_OF_SCOPE']) {
+    for (const code of ['CLIENT_BRANCH_UNRESOLVED', 'CLIENT_CREATE_AT_ROOT', 'CLIENT_BRANCH_INVALID']) {
       expect(`${code}: ${explainRejection({ httpStatus: 422, code, message: 'x' })}`).toContain('elegir en qué oficina');
     }
+  });
+
+  it('🔴 elegir una oficina que no le corresponde NO se explica como «falta elegir»: dice que no puede registrar ahí', () => {
+    const m = explainRejection({ httpStatus: 403, code: 'CLIENT_BRANCH_OUT_OF_SCOPE', message: 'x' });
+    expect(m).toContain('No puedes registrar clientes en esa oficina');
+    expect(m).not.toContain('Falta elegir');
   });
 
   it('un documento repetido sugiere «Crear mi préstamo» sobre ese cliente', () => {

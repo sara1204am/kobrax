@@ -129,7 +129,7 @@ describe('store de `me` y permisos (F14 · F8, D-9)', () => {
   const me = (permissions: string[]) => ({ userId: 'u1', email: 'a@b.c', profile: null, accountId: 'a1', role: 'COLLECTOR', permissions, mfaEnabled: false, requiresPasswordChange: false });
 
   it('mientras `me` no se leyó NO se esconde nada (la API rechaza lo que no corresponda)', () => {
-    useMeStore.getState().setMe(null);
+    useMeStore.setState({ me: null, known: false });
     expect(canNow('agenda:read')).toBe(true);
   });
 
@@ -143,5 +143,14 @@ describe('store de `me` y permisos (F14 · F8, D-9)', () => {
     useMeStore.getState().setMe(me(['agenda:read']));
     await clearSession();
     expect(useMeStore.getState().me).toBeNull();
+  });
+
+  it('🔴 tras cerrar sesión se falla CERRADO: no se ofrece nada hasta que haya una identidad nueva', async () => {
+    useMeStore.getState().setMe(me(['agenda:read']));
+    await clearSession();
+    expect(canNow('agenda:read')).toBe(false);
+    expect(canNow('route:read')).toBe(false);
+    useMeStore.getState().setMe(me(['route:read']));
+    expect(canNow('route:read')).toBe(true);
   });
 });

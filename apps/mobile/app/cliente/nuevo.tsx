@@ -10,7 +10,7 @@ import { createClient } from '@/clients.service';
 import { listOffices } from '@/offices.service';
 import { officeChoices, type OfficeOption } from '@/office-choice';
 import { OfficePicker } from '@/office-picker';
-import { useMe, canNow } from '@/store/me';
+import { useMe, useCan, canNow } from '@/store/me';
 import { explainRejection } from '@/sync/rejection';
 import { checkDuplicates, duplicateBlocks, duplicateCheckInput, nameSignature, type DuplicateAnswer } from '@/duplicate-check';
 import { DuplicateNotice } from '@/duplicate-notice';
@@ -39,13 +39,15 @@ export default function NuevoClienteScreen() {
 
   // F14 · F8 (D-7): la oficina donde se registra. Solo se pide cuando hay más de una opción; con una el servidor la resuelve.
   const me = useMe();
+  const canSeeOffices = useCan('office:read');
   const [visibleOffices, setVisibleOffices] = useState<OfficeOption[] | null>(null);
   const [branchId, setBranchId] = useState<string | null>(null);
   useEffect(() => {
     // Con `office:read` se ofrecen las oficinas que ve en la cuenta; sin él (el cobrador), las suyas de `/auth/me`.
-    if (!canNow('office:read') || (me?.offices?.length ?? 0) === 1) return;
+    // `me === null`: todavía no se sabe qué puede ver; no se pide a ciegas (daría 403 a quien no tiene `office:read`).
+    if (me === null || !canSeeOffices || (me.offices?.length ?? 0) === 1) return setVisibleOffices(null);
     void listOffices().then((r) => setVisibleOffices(r.status === 'ok' ? r.data : null));
-  }, [me?.offices?.length]);
+  }, [me, canSeeOffices]);
   const choice = officeChoices({ own: me?.offices ?? null, visible: visibleOffices });
 
   /** Pregunta por duplicados (servidor con señal, teléfono sin ella). `null` = nada que preguntar o no se pudo saber. */
@@ -106,7 +108,8 @@ export default function NuevoClienteScreen() {
       }
       if (res.status === 'unauthenticated') return setError('Tu sesión venció. Volvé a iniciar sesión.');
       // Un 422 de oficina o un documento repetido se explican en claro (los mismos textos de la hoja de pendientes).
-      setError(explainRejection({ httpStatus: res.httpStatus, code: res.code, message: res.message }));
+      // (sin el estado HTTP: acá el servidor contesta en línea con su propio mensaje; solo los códigos de oficina y de documento repetido se explican)
+      setError(explainRejection({ code: res.code, message: res.message }));
     },
     [form, accepted, runCheck, choice.needsChoice, branchId],
   );

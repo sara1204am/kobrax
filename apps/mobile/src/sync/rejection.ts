@@ -10,12 +10,17 @@
  * El resto de los errores conserva el mensaje del servidor: ya es específico y está en español.
  */
 
-const OFFICE_CODES = new Set(['CLIENT_BRANCH_UNRESOLVED', 'CLIENT_CREATE_AT_ROOT', 'CLIENT_BRANCH_INVALID', 'CLIENT_BRANCH_OUT_OF_SCOPE']);
+/** El alta no dice en qué oficina se registra (o dice una que no sirve): hay que elegir. */
+const OFFICE_MISSING = new Set(['CLIENT_BRANCH_UNRESOLVED', 'CLIENT_CREATE_AT_ROOT', 'CLIENT_BRANCH_INVALID']);
 
 export function explainRejection(opts: { httpStatus?: number; code?: string; message: string }): string {
   const { httpStatus, code, message } = opts;
-  if (code && OFFICE_CODES.has(code)) {
+  if (code && OFFICE_MISSING.has(code)) {
     return 'Falta elegir en qué oficina se registra el cliente. Lo que hiciste acá no se aplicó: descártalo y vuelve a crear el cliente eligiendo la oficina.';
+  }
+  // Eligió una oficina, pero no puede registrar clientes en ella: se explica distinto (y el servidor ya dice cuál).
+  if (code === 'CLIENT_BRANCH_OUT_OF_SCOPE') {
+    return 'No puedes registrar clientes en esa oficina. Lo que hiciste acá no se aplicó: descártalo y créalo de nuevo eligiendo otra oficina.';
   }
   if (code === 'CLIENT_DUP') {
     return 'Ya existe un cliente con ese documento. Lo que hiciste acá no se aplicó: búscalo, o si lo llevan otras personas usa «Crear mi préstamo» sobre ese cliente.';
