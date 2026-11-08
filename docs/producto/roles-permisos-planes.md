@@ -430,3 +430,10 @@ El nombre de la persona lo ve todo el que ve al cliente. Cada revelado queda aud
 **Móvil.** La regla «el documento va siempre enmascarado y sin revelar en móvil» está implementada pero **apagada** (`PII_MOBILE_MASK=off`) hasta que el móvil se refactorice (F8): su edición de cliente todavía necesita el revelado.
 
 **Archivos.** Cada archivo subido queda registrado (`files`) con sus dueños (`file_owners`), que mantienen triggers de la base a partir de las columnas que guardan la URL. Se lee por identificador (`GET /files/:id`) o por nombre (`/uploads/<hash>`, la ruta que usa el móvil) con la misma política: el archivo cuelga de algo que la persona ve (un cliente, un pago, una evidencia, su perfil, el logo de la cuenta) y tiene el permiso de esa categoría; lo recién subido lo abre sólo quien lo subió. `POST /files/:id/link` da un enlace temporal de 5 minutos que abre el archivo sin sesión. La lectura de documentos y evidencias se audita (`FILE_READ`). Lo subido que nadie ata en 24 horas pasa a huérfano y se borra a los 7 días.
+
+## F14 · F5 — roles por cuenta y plataforma (2026-11-07)
+
+- Cada cuenta tiene sus propios roles (copias de las plantillas, con linaje `template_key`); los permisos del token salen del rol de la cuenta y, si ese rol no existe, la petición se niega (falla cerrado).
+- Los permisos `data:scope:*` no se pueden conceder fuera de lo que permite el alcance del rol; los permisos de plataforma nunca se conceden a un rol de cuenta.
+- La persona de plataforma entra por un login único con MFA (bloqueo tras 5 fallos, código TOTP no reutilizable) y solo si el interruptor externo está encendido.
+- El soporte accede mediante sesiones con vencimiento: leer datos personales exige el consentimiento de la cuenta; escribir exige además `SUPPORT_WRITE_ENABLED`. Una sesión rechazada o revocada no da token. La cuenta ve y revoca estos accesos en «Accesos de soporte» y aparecen en su Actividad.

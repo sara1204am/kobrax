@@ -57,3 +57,11 @@
   3. **Para F8 (móvil):** encender `PII_MOBILE_MASK` solo cuando la edición de cliente deje de usar el revelado, y hacer que el canal salga de la sesión y no del encabezado; adoptar `fileId` y los enlaces firmados y ajustar el caché de imágenes (`/uploads/<hash>` sigue funcionando).
   4. **Sin cifrado en reposo del contenido de los archivos** y sin anonimización de clientes: quedan fuera de F14.
 - **Siguiente paso autorizado:** F5 (roles por cuenta y plataforma), por la orden de la usuaria de seguir F4→F7. Plan en `plans/F5-roles-por-cuenta.md` (BORRADOR; falta `validar`).
+
+## Sesión 2026-11-07 (cierre de F5)
+- **Dónde quedó:** F5 **CERRADA** (G4…G7 PASS) en la rama `f14/p5-roles-por-cuenta` (commits `2e07aed`, `28d2efe`, `94eae2f`), **sin push/PR**. Roles por cuenta (plantillas + copias con linaje), permisos del token desde la cuenta, `user_permission_overrides` retirada, plataforma (login único con MFA, interruptores externos, sesiones de soporte con consentimiento, auditoría `actor_type`) y web «Accesos de soporte».
+- **Para la usuaria (leer):**
+  1. **Despliegue:** `migrate deploy` (incluye `…040000`, enums nativos y columnas de bloqueo/TOTP) + `pnpm --filter @kobrax/database db:rls`. Variables nuevas de plataforma: `PLATFORM_ACCESS_ENABLED`, `SUPPORT_WRITE_ENABLED` (apagadas por omisión) y `PLATFORM_ENROLLMENT_KEY`.
+  2. Los permisos se leen de la cuenta; consumidores por nombre de rol siguen válidos hasta F7 (INCIDENTS).
+  3. `docs/epics/F15/` es de otra sesión y no está commiteado.
+- **Siguiente paso autorizado:** F6 (navegación web: guardas `requirePermission`, secciones Cuenta/Organización/Equipo/Seguridad/Actividad) con `/epic-fase F14 plan F6`; luego F7 (editor de roles).
