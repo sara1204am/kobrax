@@ -67,15 +67,15 @@
 | H14-059 | `apps/web/next.config.*`, `middleware.ts` (`matcher`) | Redirecciones permanentes y rutas nuevas con sesión | toda la web | Alto | F6 | `middleware.test.ts` (cobertura del matcher) | HECHO 2026-11-08 |
 | H14-060 | `auth.service.ts` (`me`), `MeInfo`, `panel-shell.tsx` | `supportSession` en `/auth/me` y banner | web, móvil (campo opcional) | Bajo | F6 | `auth.service.spec.ts`, panel-shell | HECHO 2026-11-08 |
 | H14-061 | páginas con `noAccess` a mano (20 usos) | Puerta uniforme | Cuenta, Equipo, Cartera… | Medio | F6 | vitest web completo | HECHO 2026-11-08 |
-| H14-062 | `apps/api/src/modules/roles/` (nuevo; absorbe `users/roles.controller.ts` y `listRoles`) | Recurso `/roles`: lista (filtro `assignable`) y editor | web Seguridad | Alto | F7 | specs del servicio, `f7-editor-roles.it.ts` | PLANEADO 2026-11-08 |
-| H14-063 | `common/authz/policies/role-edit-permissions.policy.ts` (nuevo), `policies/index.ts` | Política `role.editPermissions` | `roles` | Alto | F7 | spec por regla | PLANEADO 2026-11-08 |
-| H14-064 | `common/audit/audit.service.ts` (`recordInTx`) | Auditoría dentro de la transacción de negocio | `roles` (y futuros) | Medio | F7 | `audit.service.spec` | PLANEADO 2026-11-08 |
-| H14-065 | `packages/shared` (tipos y códigos de roles) | Contratos compartidos | api, web | Bajo | F7 | `tsc` + specs | PLANEADO 2026-11-08 |
-| H14-066 | `app/(panel)/seguridad/roles/**` (lista, detalle, historial), `seguridad/page.tsx` | Vistas A, B, E | administrador, gerente (lectura) | Medio | F7 | vitest | PLANEADO 2026-11-08 |
-| H14-067 | `seguridad/roles/[key]/editar/**` y componentes del editor | Editor C y modal F | administrador | Alto | F7 | vitest | PLANEADO 2026-11-08 |
-| H14-068 | `seguridad/roles/comparar/**` | Comparación D | administrador, gerente | Bajo | F7 | vitest | PLANEADO 2026-11-08 |
-| H14-069 | `messages/es.json`, `messages/en.json` (`permissions.*`, `roles.*`) | Textos de los 45 permisos | web | Bajo | F7 | test de completitud | PLANEADO 2026-11-08 |
-| H14-070 | `authz-snapshot.json`, `apps/api/package.json`, `f7-editor-roles.it.ts` | Cobertura de puertas y pruebas | CI | Medio | F7 | `authz-coverage` | PLANEADO 2026-11-08 |
+| H14-062 | `apps/api/src/modules/roles/` (nuevo; absorbe `users/roles.controller.ts` y `listRoles`) | Recurso `/roles`: lista (filtro `assignable`) y editor | web Seguridad | Alto | F7 | specs del servicio, `f7-editor-roles.it.ts` | HECHO 2026-11-08 |
+| H14-063 | `common/authz/policies/role-edit-permissions.policy.ts` (nuevo), `policies/index.ts` | Política `role.editPermissions` | `roles` | Alto | F7 | spec por regla | HECHO 2026-11-08 |
+| H14-064 | `common/audit/audit.service.ts` (`recordInTx`) | Auditoría dentro de la transacción de negocio | `roles` (y futuros) | Medio | F7 | `audit.service.spec` | HECHO 2026-11-08 |
+| H14-065 | `packages/shared` (tipos y códigos de roles) | Contratos compartidos | api, web | Bajo | F7 | `tsc` + specs | HECHO 2026-11-08 |
+| H14-066 | `app/(panel)/seguridad/roles/**` (lista, detalle, historial), `seguridad/page.tsx` | Vistas A, B, E | administrador, gerente (lectura) | Medio | F7 | vitest | HECHO 2026-11-08 |
+| H14-067 | `seguridad/roles/[key]/editar/**` y componentes del editor | Editor C y modal F | administrador | Alto | F7 | vitest | HECHO 2026-11-08 |
+| H14-068 | `seguridad/roles/comparar/**` | Comparación D | administrador, gerente | Bajo | F7 | vitest | HECHO 2026-11-08 |
+| H14-069 | `messages/es.json`, `messages/en.json` (`permissions.*`, `roles.*`) | Textos de los 45 permisos | web | Bajo | F7 | test de completitud | HECHO 2026-11-08 |
+| H14-070 | `authz-snapshot.json`, `apps/api/package.json`, `f7-editor-roles.it.ts` | Cobertura de puertas y pruebas | CI | Medio | F7 | `authz-coverage` | HECHO 2026-11-08 |
 
 ## IMPACT-MAP (F1)
 - **(F3) Cambiar quién registra los guards (H14-019/022)** ⇒ todos los controladores, `health`, `main.ts` (versionado), rutas públicas (`auth`, `accounts`, `health`), pruebas de integración que levantan la app, `permission-gates.spec.ts`, `uploads.access.spec.ts` (usa `RolesGuard`).

@@ -71,3 +71,13 @@
 - **Hecho:** menú por secciones (Organización, Seguridad, Actividad), `requirePermission`/`getMe`/`<NoAccess/>`, Oficinas→`/organizacion`, Actividad→`/actividad`, Accesos de soporte→`/seguridad/soporte` (308 desde las rutas viejas), Cuenta sin bloqueo por `account:read`, banner «Sesión de soporte», `/auth/me` para la plataforma y `timezone` en la marca.
 - **Para la usuaria (leer):** (1) sin migraciones; desplegar web y API. (2) Las URLs viejas redirigen solas. (3) Un gerente ve «Seguridad» con un índice vacío hasta F7. (4) `docs/epics/F15/` sigue sin commitear.
 - **Siguiente paso autorizado:** F7, editor de roles y permisos (API `GET/PUT /roles…`, restaurar plantilla, historial, comparar; web vistas A–F). `/epic-fase F14 plan F7`. Toda pantalla nueva con `requirePermission`.
+
+## Sesión 2026-11-08 (cierre de F7 · fin de la orden F4→F7)
+- **Dónde quedó:** F7 **CERRADA** (G4…G7 PASS) en la rama `f14/p7-editor-roles` (desde `f14/p6-web-nav`; commits `72ced51` API, `0723103` web, `259cfe9` code-review, más docs), **sin push/PR**. Decisiones D-1…D-9 aprobadas por la usuaria (D-1: un solo recurso `/roles`, compatible).
+- **Hecho:** API `/roles` (lista de asignables intacta; `?assignable=false`; `permissions`, `compare`, `:key`, `PUT :key/permissions`, `POST :key/restore-template`, `GET :key/history`), política `role.editPermissions`, `AuditService.recordInTx`, `version`/`diverged_at`, renovación de sesiones del rol, `PERMISSION_META` + migración del catálogo, reglas puras en `shared` (`checkRoleEdit`), y la web: lista, detalle (permisos/personas/historial), editor con confirmación y motivo, comparación.
+- **Para la usuaria (leer):**
+  1. **Despliegue:** `migrate deploy` (incluye `…20261108010000_f14_f7_permission_catalog_meta`) + `pnpm --filter @kobrax/database db:rls`. Sin cambios de variables de entorno.
+  2. **Snapshot de puertas** (`docs/epics/F14/authz-snapshot.json`): 6 endpoints nuevos de `/roles`; revisarlo.
+  3. Quien edita un rol renueva las sesiones de sus personas al instante (`AUTHZ_STALE`, un solo reintento). El administrador (`ACCOUNT_ADMIN`) y los permisos reservados no se editan.
+  4. Las ramas F4, F5, F6 y F7 están **encadenadas y sin push**; `docs/epics/F15/` sigue sin commitear.
+- **Siguiente paso autorizado:** **ninguno: esperar la orden de la usuaria.** F8 (móvil/offline) y F9 (auditoría integral y despliegue) solo con su orden; antes, decidir si se suben las ramas y se abre PR.

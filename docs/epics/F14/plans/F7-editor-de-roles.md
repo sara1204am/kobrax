@@ -1,4 +1,4 @@
-> ESTADO: VALIDADO (G4 PASS 2026-11-08, 11/11). D-1…D-9 aprobadas por la usuaria el 2026-11-08, con D-1 en la opción B (un solo recurso `/roles`, principio de unificación Web/Mobile).
+> ESTADO: CERRADO (G7 PASS 2026-11-08; G4 PASS 11/11). D-1…D-9 aprobadas por la usuaria el 2026-11-08, con D-1 en la opción B (un solo recurso `/roles`, principio de unificación Web/Mobile).
 
 # Plan F7 · Editor de roles y permisos
 

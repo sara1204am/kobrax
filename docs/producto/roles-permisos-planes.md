@@ -444,3 +444,11 @@ El nombre de la persona lo ve todo el que ve al cliente. Cada revelado queda aud
 - Oficinas, Actividad y Accesos de soporte salieron de Cuenta a `/organizacion`, `/actividad` y `/seguridad/soporte`; las rutas viejas redirigen.
 - Cada pantalla se protege en el servidor (`requirePermission`): sin permiso muestra «No tienes acceso a esta pantalla»; si la API falla muestra «reintentar» y no «sin acceso». La API sigue siendo quien autoriza.
 - Mientras la plataforma está en una sesión de soporte, el panel muestra «Sesión de soporte · vence HH:MM».
+
+## F14 · F7 — editor de roles y permisos (2026-11-08)
+
+- Seguridad › **Roles y permisos** muestra los roles de la cuenta (origen, si difieren de la plantilla, personas, alcance), el detalle de cada uno, su historial y una comparación entre dos roles. Leer pide `role:read`; cambiar, `role:write`.
+- El administrador puede añadir o quitar permisos a Gerente, Supervisor, Cobrador, Auditor y Consulta. **No** se edita el rol de administrador ni los permisos reservados (`role:write`, `user:write`, `account:write`, `office:write`); no se concede lo que quien edita no tiene; las dependencias entre permisos deben quedar satisfechas; un rol tiene a lo sumo un alcance de datos (ninguno = solo lo propio); quien pertenece al rol que edita solo puede quitarle permisos.
+- Todo cambio exige un **motivo** (mínimo 5 caracteres), queda en el historial del rol y renueva al instante la sesión de las personas que lo tienen. Si dos administradores editan a la vez, el segundo recibe un aviso para recargar.
+- «Restaurar plantilla» devuelve el rol a los permisos con los que nació. Un rol editado deja de recibir los cambios masivos de plantilla de la plataforma.
+- Crear o borrar roles propios queda para una fase posterior (H-9). El móvil no edita roles; recibe los permisos nuevos en su próximo refresco.
