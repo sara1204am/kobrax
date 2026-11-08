@@ -1,0 +1,109 @@
+name: CI
+
+# F14 · F9. Hasta ahora NO había ninguna comprobación automática: deploy.yml despliega a producción cada vez que algo llega a main, sin correr una sola
+# prueba. Este flujo corre en cada pull request y en cada push a main, y es lo que debería exigirse (protección de rama) antes de poder mergear.
+#
+# Dos trabajos:
+#   unitarias     tipos + pruebas unitarias de shared, API, web y móvil. Rápido (minutos). No necesita servicios.
+#   integracion   las pruebas de integración de la API contra Postgres y Redis REALES (levantados con docker compose, con los nombres de contenedor que el
+#                 arnés espera: kobrax-postgres / kobrax-redis). Lento (~30 min): la API compilada, migraciones + RLS + seed de cero y cada rol real.
+#
+# ⚠ Este archivo NO se pudo ejecutar fuera de GitHub: se escribió contra los comandos que sí se corrieron a mano (los mismos de docs/epics/F14/RELEASE-CHECKLIST.md).
+#   La primera corrida puede pedir ajustes (versiones, tiempos); está anotado en la verificación de F9.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Una corrida nueva sobre la misma rama cancela la anterior (no así en main: cada merge se verifica completo).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  unitarias:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Cliente de Prisma
+        run: pnpm db:generate
+      - name: Compilar shared (lo consumen API, web y móvil)
+        run: pnpm --filter @kobrax/shared build
+      - name: Tipos y pruebas · shared
+        run: |
+          pnpm --filter @kobrax/shared exec tsc --noEmit
+          pnpm --filter @kobrax/shared test
+      - name: Tipos y pruebas · base de datos (herramientas de despliegue)
+        run: pnpm --filter @kobrax/database test
+      - name: Tipos y pruebas · API
+        working-directory: apps/api
+        run: |
+          npx tsc --noEmit -p tsconfig.json
+          npm test
+      - name: Tipos y pruebas · web
+        working-directory: apps/web
+        run: |
+          npx tsc --noEmit
+          npx vitest run
+      - name: Tipos y pruebas · móvil
+        working-directory: apps/mobile
+        run: |
+          npx tsc --noEmit
+          npx jest
+
+  integracion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    # No bloquea la corrida de las unitarias: se ve en paralelo.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Variables de entorno de prueba
+        # Del .env.example, más las dos claves de cifrado que el ejemplo deja vacías (32 bytes hex, distintas entre sí). Son de usar y tirar.
+        run: |
+          cp .env.example .env
+          sed -i "s|^APP_ENCRYPTION_KEY=.*|APP_ENCRYPTION_KEY=\"$(openssl rand -hex 32)\"|" .env
+          sed -i "s|^APP_BLIND_INDEX_KEY=.*|APP_BLIND_INDEX_KEY=\"$(openssl rand -hex 32)\"|" .env
+          echo "FILE_LINK_SECRET=\"$(openssl rand -hex 32)\"" >> .env
+      - name: Postgres y Redis (docker compose; los contenedores se llaman como el arnés espera)
+        run: |
+          docker compose up -d postgres redis
+          for i in $(seq 1 30); do
+            docker exec kobrax-postgres pg_isready -U postgres -d kobrax && break
+            sleep 2
+          done
+          docker exec kobrax-redis redis-cli ping
+      - run: pnpm install --frozen-lockfile
+      - name: Cliente de Prisma y paquetes compartidos
+        run: |
+          pnpm db:generate
+          pnpm --filter @kobrax/shared build
+      - name: Integración de la API (base kobrax_it recreada de cero; SCOPE_RLS_MODE apagado, como el valor por omisión)
+        working-directory: apps/api
+        run: npm run test:integration
+      - name: Verificaciones de la base sobre la base de las pruebas
+        # La base que dejaron las pruebas es la de un entorno nuevo: tiene que pasar TODAS las verificaciones de solo lectura.
+        run: pnpm --filter @kobrax/database db:verify -- --db kobrax_it
+      - name: Si falla, los registros de los contenedores
+        if: failure()
+        run: docker compose logs --tail=200 postgres redis

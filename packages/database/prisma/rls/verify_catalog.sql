@@ -19,7 +19,7 @@ BEGIN
     RAISE EXCEPTION 'los permisos reservados son [%] y deberían ser [%] (correr la migración f14_f7_permission_catalog_meta o `db:seed`)', reservados, esperados;
   END IF;
   IF EXISTS (SELECT 1 FROM permissions WHERE reserved = 'PLATFORM') THEN RAISE EXCEPTION 'hay permisos de plataforma dentro del catálogo de empresa'; END IF;
-  RAISE NOTICE 'OK 1/6 · todo permiso tiene riesgo; los reservados son [%]', reservados;
+  RAISE NOTICE 'OK 1/7 · todo permiso tiene riesgo; los reservados son [%]', reservados;
 END $$;
 
 -- 2. Las dependencias (`requires`): son una lista de códigos que existen y nadie depende de sí mismo.
@@ -31,7 +31,7 @@ BEGIN
     WHERE jsonb_typeof(p.requires) = 'array' AND (r = p.code OR NOT EXISTS (SELECT 1 FROM permissions q WHERE q.code = r));
   IF mal IS NOT NULL THEN RAISE EXCEPTION 'dependencias inválidas: %', mal; END IF;
   IF EXISTS (SELECT 1 FROM permissions WHERE jsonb_typeof(requires) <> 'array') THEN RAISE EXCEPTION 'hay permisos cuyo requires no es una lista'; END IF;
-  RAISE NOTICE 'OK 2/6 · % permisos con dependencias, todas válidas', (SELECT count(*) FROM permissions WHERE jsonb_array_length(requires) > 0);
+  RAISE NOTICE 'OK 2/7 · % permisos con dependencias, todas válidas', (SELECT count(*) FROM permissions WHERE jsonb_array_length(requires) > 0);
 END $$;
 
 -- 3. Las plantillas están CERRADAS bajo sus dependencias (si no, las copias de las cuentas no se podrían guardar) y cada una tiene a lo sumo un alcance de datos.
@@ -47,7 +47,7 @@ BEGIN
     SELECT t.template_key FROM role_template_permissions t JOIN permissions p ON p.id = t.permission_id
     WHERE p.code LIKE 'data:scope:%' GROUP BY t.template_key HAVING count(*) > 1) x;
   IF varios IS NOT NULL THEN RAISE EXCEPTION 'plantillas con más de un alcance de datos: %', varios; END IF;
-  RAISE NOTICE 'OK 3/6 · las plantillas cumplen sus dependencias y tienen a lo sumo un alcance de datos';
+  RAISE NOTICE 'OK 3/7 · las plantillas cumplen sus dependencias y tienen a lo sumo un alcance de datos';
 END $$;
 
 -- 4. Roles de las cuentas: a lo sumo un alcance de datos, ningún permiso reservado fuera de ACCOUNT_ADMIN y ningún permiso de plataforma.
@@ -65,7 +65,7 @@ BEGIN
   IF EXISTS (SELECT 1 FROM account_role_permissions arp JOIN permissions p ON p.id = arp.permission_id WHERE p.code LIKE 'platform:%') THEN
     RAISE EXCEPTION 'un rol de cuenta tiene un permiso de plataforma';
   END IF;
-  RAISE NOTICE 'OK 4/6 · roles de cuenta: a lo sumo un alcance, sin reservados fuera del administrador, sin permisos de plataforma';
+  RAISE NOTICE 'OK 4/7 · roles de cuenta: a lo sumo un alcance, sin reservados fuera del administrador, sin permisos de plataforma';
 END $$;
 
 -- 5. El administrador de cada cuenta conserva el núcleo (no se puede quedar sin poder editar roles ni personas).
@@ -77,10 +77,19 @@ BEGIN
       SELECT 1 FROM permissions p WHERE p.reserved = 'ADMIN_CORE'
         AND NOT EXISTS (SELECT 1 FROM account_role_permissions arp WHERE arp.account_role_id = ar.id AND arp.permission_id = p.id));
   IF sin_nucleo > 0 THEN RAISE EXCEPTION '% roles de administrador sin alguno de los permisos reservados', sin_nucleo; END IF;
-  RAISE NOTICE 'OK 5/6 · todo administrador de cuenta conserva el núcleo reservado';
+  RAISE NOTICE 'OK 5/7 · todo administrador de cuenta conserva el núcleo reservado';
 END $$;
 
--- 6. Roles de cuenta que incumplen una dependencia (informativo: el editor no deja AGRAVAR un caso así, pero no lo arregla solo).
+-- 6. N-02 (F14 · F5): la columna `permissions.scope` significa algo. Antes todas las filas valían GLOBAL por defecto; ahora ningún permiso activo lo es.
+DO $$
+DECLARE global_ bigint;
+BEGIN
+  SELECT count(*) INTO global_ FROM permissions WHERE active AND scope::text = 'GLOBAL';
+  IF global_ > 0 THEN RAISE EXCEPTION '% permisos activos con scope GLOBAL (el alcance de cada permiso lo fija la migración de F5 o `db:seed`)', global_; END IF;
+  RAISE NOTICE 'OK 6/7 · ningún permiso activo con scope GLOBAL';
+END $$;
+
+-- 7. Roles de cuenta que incumplen una dependencia (informativo: el editor no deja AGRAVAR un caso así, pero no lo arregla solo).
 DO $$
 DECLARE n bigint;
 BEGIN
@@ -89,5 +98,5 @@ BEGIN
     JOIN permissions p ON p.id = arp.permission_id, jsonb_array_elements_text(p.requires) r
     WHERE NOT EXISTS (SELECT 1 FROM account_role_permissions a2 JOIN permissions p2 ON p2.id = a2.permission_id WHERE a2.account_role_id = arp.account_role_id AND p2.code = r)) x;
   IF n > 0 THEN RAISE NOTICE 'AVISO · % roles de cuenta incumplen alguna dependencia (permitido: viene de antes del editor)', n; END IF;
-  RAISE NOTICE 'OK 6/6 · roles de cuenta con dependencias incumplidas: %', n;
+  RAISE NOTICE 'OK 7/7 · roles de cuenta con dependencias incumplidas: %', n;
 END $$;
