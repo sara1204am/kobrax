@@ -1,4 +1,4 @@
-> ESTADO: BORRADOR (2026-11-08). Pendiente `validar F8` (G4). **D-1…D-11 son propuestas: la usuaria debe aprobarlas antes de construir.** Hay **3 bifurcaciones reales** (D-2, D-4, D-8) que cambian lo que se construye; el resto deriva de decisiones ya aprobadas (H-5, H-6, H-10, ADR-F14-06/11). Ninguna línea de producto se toca antes del PASS de G4.
+> ESTADO: BORRADOR (2026-11-08). Pendiente `validar F8` (G4). **Las 3 bifurcaciones (D-2, D-4, D-8) las resolvió la usuaria el 2026-11-08**; D-1, D-3, D-5, D-6, D-7, D-9, D-10 y D-11 siguen como propuesta y derivan de decisiones ya aprobadas (H-5, H-6, H-10, ADR-F14-06/11): falta su visto bueno. Ninguna línea de producto se toca antes del PASS de G4.
 
 # Plan F8 · Móvil y offline
 
@@ -39,7 +39,7 @@ Que la app del cobrador respete el modelo de permisos que ya existe en la API y 
 5. **Datos personales (F4):** la API deja de negar el revelado de CONTACTOS al canal móvil y sigue tapando siempre el DOCUMENTO (D-4); el canal sale de la sesión y no del encabezado (D-5); la edición del cliente funciona con el documento enmascarado (no lo prellena, no lo reenvía); la API rechaza una máscara como valor de documento al guardar.
 6. **Archivos (F4):** subir y mostrar fotos con `fileId`/`GET /files/:id` y el caché de imágenes indexado por `fileId` (D-6).
 7. **Alta de cliente (F2):** `GET /auth/me` informa las oficinas de la persona (campo aditivo); el formulario ofrece elegir oficina sólo cuando hace falta (RULES C2: con una sola oficina no hay selector) y explica los 422 de oficina (D-7).
-8. **Ficha:** aviso `otherCredits` (D-8).
+8. **Ficha y alta (D-8 b):** aviso `otherCredits`; «Crear mi préstamo sobre este cliente» cuando el documento ya está registrado y la persona no lo ve.
 9. **Más › Cuenta:** rol y oficinas de la persona.
 10. Pruebas del móvil y de los cambios de API que lo sostienen; coordinación de versión mínima de la app para encender `PII_MOBILE_MASK` (D-5/D-10).
 
@@ -48,7 +48,6 @@ Que la app del cobrador respete el modelo de permisos que ya existe en la API y 
 - AUDITOR y VIEWER en el móvil (H-5: fuera).
 - Editar roles desde el móvil (F7 es sólo-web, D-1 de F7).
 - Plantillas de WhatsApp del móvil (pendiente aparte).
-- El flujo «crear MI crédito sobre un cliente que no veo» (F2b D-6) en el móvil, salvo que la usuaria elija incluirlo (D-8).
 - Retirar la ruta antigua `/uploads/<hash>` (queda para F9 cuando la app mínima ya use `fileId`).
 - Pruebas en un dispositivo real: las hace la usuaria (ver §13).
 
@@ -59,13 +58,13 @@ F1 (versiones, `AUTHZ_STALE`), F2 (oficina de registro, `otherCredits`), F4 (PII
 | ID | Decisión | Estado |
 |---|---|---|
 | D-1 | F8 **adapta la app actual**; no la rehace. Sustituye la etapa **P10** de F10 (se anota en el `BUILD-PLAN`). | PROPUESTA |
-| D-2 | **Ventana sin conexión** (⚠ bifurcación): 8 h para el cobrador y **2 h para quien tiene `assignment:write` o `user:write`** (H-10, aprobada), se recalcula con cada `me()` leído con red. **Excepción propuesta: una cuenta de una sola persona** (el cobrador independiente, que es su propio administrador) conserva 8 h, porque no tiene a quién asignar y RULES C exige no degradarla. Para saberlo, `GET /auth/me` informa `account.soloUser` (campo aditivo). Alternativas: (a) 2 h literal para todos los que tengan esos permisos, incluido el independiente; (b) 2 h sólo para gerente y supervisor, 8 h para el administrador. | PROPUESTA (elegir) |
+| D-2 | **Ventana sin conexión:** 8 h para el cobrador y **2 h para quien tiene `assignment:write` o `user:write`** (H-10), se recalcula con cada `me()` leído con red. **Excepción: una cuenta de una sola persona** (el cobrador independiente, que es su propio administrador) conserva 8 h, porque no tiene a quién asignar y RULES C exige no degradarla. Para saberlo, `GET /auth/me` informa `account.soloUser` (campo aditivo). | **APROBADA** por la usuaria (2026-11-08): cuenta de 1 persona conserva 8 h |
 | D-3 | La API rechaza **login y refresh** del canal móvil para roles que no son de campo con `403 MOBILE_ROLE_NOT_ALLOWED`. Una sesión ya abierta de alguien que pasa a AUDITOR/VIEWER cae en su próximo refresh. La app lo explica («Tu rol se usa desde la web») y cierra la sesión local. No es seguridad (esa persona tiene los mismos permisos en la web): es la regla de producto de H-5. | PROPUESTA |
-| D-4 | **Revelado en el móvil** (⚠ bifurcación). **A (recomendada):** con `PII_MOBILE_MASK` encendido, `?reveal=true` desde el móvil devuelve los CONTACTOS en claro (auditado) y el DOCUMENTO siempre enmascarado, sin 403; la edición sigue prellenando teléfonos y direcciones. **B:** el móvil nunca revela: la edición muestra los contactos enmascarados y sólo se pueden reemplazar (más cambios de pantalla, y el cobrador no ve el teléfono completo al editarlo). En ambas el documento va enmascarado y no se reenvía si no cambió. | PROPUESTA (elegir) |
+| D-4 | **Revelado en el móvil, opción A:** con `PII_MOBILE_MASK` encendido, `?reveal=true` desde el móvil devuelve los CONTACTOS en claro (auditado, con categorías y canal) y el DOCUMENTO siempre enmascarado, **sin 403**; la edición sigue prellenando teléfonos y direcciones y no prellena ni reenvía el documento. `PII_REVEAL_DENIED` queda para VIEWER. | **APROBADA** por la usuaria (2026-11-08): opción A |
 | D-5 | El **canal sale de la sesión**: la API fija el dispositivo en la sesión al iniciar sesión (el encabezado sólo cuenta entonces), el refresco lo conserva ignorando el encabezado, y el token lleva `ch`. `PII_MOBILE_MASK` sigue **apagado por omisión**: se enciende como paso de operación cuando la versión mínima de la app sea la de F8 (la puerta de versión ya existe). Mientras tanto una app vieja sigue funcionando. | PROPUESTA |
 | D-6 | **Archivos:** la app usa `fileId` y `GET /files/:id` para subir y mostrar fotos; el caché se indexa por `fileId`; la ruta antigua queda un release más (se retira en F9). Se puede **diferir a después del refactor** si la usuaria prefiere (no bloquea al resto). | PROPUESTA |
 | D-7 | **Oficinas en el alta:** `GET /auth/me` agrega `offices: [{ id, name, isRoot }]` (las de la membresía). El selector aparece sólo si hay más de una opción (las propias; y, con `office:read`, las del alcance vía `GET /branches`). Un 422 de oficina se explica con texto propio. | PROPUESTA |
-| D-8 | **Ficha del cliente** (⚠ bifurcación): (a) sólo el aviso `otherCredits` («este cliente tiene N créditos más fuera de tu alcance», sin datos); (b) además, el flujo de la web para un duplicado que no veo (nombre y documento enmascarados + «crear mi crédito sobre este cliente», `GET /clients/:id/preview`). | PROPUESTA (elegir; recomiendo (a) ahora) |
+| D-8 | **Ficha del cliente, opción (b):** (1) aviso `otherCredits` en la ficha («este cliente tiene N créditos más fuera de tu alcance», sin datos); (2) en el alta, cuando la verificación de duplicados devuelve un documento ya registrado que la persona no ve (`hidden`), con `credit:create` se ofrece **«Crear mi préstamo sobre este cliente»**, que abre el formulario de préstamo con ese `clientId` (el servidor ya lo permite y recién entonces lo ve). Reutiliza `POST /clients/duplicate-check` y `app/prestamo/nuevo`; sin señal no se ofrece (el servidor es quien sabe que existe). | **APROBADA** por la usuaria (2026-11-08): opción (b) |
 | D-9 | **Tabs y acciones por permiso** con un almacén pequeño de `me` (`useMe`/`useCan`), alimentado por `authService.me()`. Un tab sin permiso no se dibuja; la pantalla igual maneja el 403 de la API. | PROPUESTA |
 | D-10 | **Compatibilidad con apps instaladas:** todo cambio de API es aditivo o está detrás de un interruptor apagado; la regla de roles (D-3) afecta sólo al canal móvil de roles no-campo; el cambio de D-4/D-5 se enciende con la versión mínima. | PROPUESTA |
 | D-11 | **Verificación:** pruebas unitarias del móvil (jest) y de la API; la prueba en un dispositivo real la hace la usuaria con una lista de casos que se le entrega al cerrar (no se afirma «probado en el teléfono»). | PROPUESTA |
@@ -84,7 +83,7 @@ Releído `../F10/BUILD-PLAN.md`: P10 (gating por capacidad) coincide con el punt
 | H14-075 (nuevo) | `apps/mobile/src/sync/queue.ts`, `sync/sync.service.ts`, `app/pendientes.tsx` | Motivos claros de rechazo; `me` antes de drenar (N-06) |
 | H14-076 (nuevo) | `apps/mobile/app/cliente/editar.tsx`, `src/clients.service.ts`, `cliente-form-view.tsx`, `cliente-diff.ts` | Edición con documento enmascarado (D-4) |
 | H14-077 (nuevo) | `apps/mobile/src/photo-uri.ts`, `image-cache.ts`, `uploads.service.ts`, `cliente-legajo.ts` | `fileId` y caché por `fileId` (D-6) |
-| H14-078 (nuevo) | alta de cliente (`app/cliente/nuevo*`, `clients.service.ts`), selector de oficina, `app/cliente/[id].tsx` (`otherCredits`), `app/cuenta/index.tsx` | Oficina en el alta, aviso de otros créditos, rol y oficinas en Cuenta (D-7, D-8) |
+| H14-078 (nuevo) | alta de cliente (`app/cliente/nuevo.tsx`, `clients.service.ts`), `duplicate-notice.tsx`, selector de oficina, `app/cliente/[id].tsx` (`otherCredits`), `app/prestamo/nuevo.tsx`, `app/cuenta/index.tsx` | Oficina en el alta, aviso de otros créditos, «crear mi préstamo» sobre un cliente que no veo, rol y oficinas en Cuenta (D-7, D-8) |
 | H14-079 (nuevo) | `apps/mobile/app/(auth)/login.tsx`, `post-login.ts` | Mensaje de rol fuera del móvil (D-3) |
 | H14-020…024, H14-041…045, H14-046…049 (existen) | uploads/archivos, PII, roles por cuenta | consultados: ver IMPACT-MAP |
 
@@ -100,6 +99,7 @@ B3/B4 (ocultar no es autorizar: la API valida siempre), B5 (todo revelado de con
 | Riesgo | Mitigación |
 |---|---|
 | Encender `PII_MOBILE_MASK` antes de que la app nueva esté instalada rompe la edición de clientes de la app vieja. | D-5/D-10: apagado por omisión; se enciende con la versión mínima; con D-4 (A) la app vieja sigue editando contactos. |
+| Sin señal el duplicado oculto no se detecta (la verificación local no ve lo que no tiene). | El servidor vuelve a frenar el alta al subir (`CLIENT_DUP`); la cola muestra el rechazo con un motivo claro (4) y la persona usa «crear mi préstamo» cuando haya señal. |
 | Una app vieja reenvía el documento enmascarado como si fuera un valor nuevo y lo pisa. | La API rechaza una máscara como documento al guardar (prueba); la app solo manda campos cambiados. |
 | El rechazo de roles no-campo deja a alguien sin entrar a una cuenta pequeña (p. ej. un VIEWER invitado). | Mensaje claro («entra desde la web»); sólo afecta al canal móvil. |
 | Ventana de 2 h en gerente/supervisor interrumpe una jornada larga sin señal. | Es la decisión H-10; se renueva con cada `me()` con red; se avisa antes de vencer (propuesta de implementación: aviso a 15 min). |
@@ -112,7 +112,7 @@ B3/B4 (ocultar no es autorizar: la API valida siempre), B5 (todo revelado de con
 **Línea base:** `apps/mobile` `jest` y `tsc --noEmit` se miden antes de la primera línea (se pega en VERIFICATIONS); API `npm test` 2070, web 1328, shared 495, integración 306/306 en `off` y `enforce`.
 
 **Nuevas (registradas en `jest` del móvil y en `test`/`test:integration` de la API):**
-- **Móvil:** ventana por permisos (8 h / 2 h / `soloUser`) y su renovación; `AUTHZ_STALE` (un reintento, el segundo cierra); `useMe/useCan`; tabs por permiso; motivos de rechazo de la cola (404/403/422 → texto claro) y que lo rechazado no se reintenta ni se pierde; que `me` se lee antes de drenar; edición con documento enmascarado (no se prellena, no se reenvía); selector de oficina (una opción = sin selector; varias = selector; 422 explicado); aviso `otherCredits`; mensaje de rol fuera del móvil; caché de imágenes por `fileId`.
+- **Móvil:** ventana por permisos (8 h / 2 h / `soloUser`) y su renovación; `AUTHZ_STALE` (un reintento, el segundo cierra); `useMe/useCan`; tabs por permiso; motivos de rechazo de la cola (404/403/422 → texto claro) y que lo rechazado no se reintenta ni se pierde; que `me` se lee antes de drenar; edición con documento enmascarado (no se prellena, no se reenvía); selector de oficina (una opción = sin selector; varias = selector; 422 explicado); aviso `otherCredits`; «crear mi préstamo» sólo con documento oculto + `credit:create` + red, y que abre `prestamo/nuevo` con ese `clientId`; mensaje de rol fuera del móvil; caché de imágenes por `fileId`.
 - **API:** login y refresh móviles de AUDITOR/VIEWER → 403; el mismo rol por web → 200; dispositivo fijo en la sesión y `ch` en el token (cambiar el encabezado después no cambia el canal); `me` con `offices` y `soloUser`; `?reveal=true` desde el canal móvil con la máscara encendida → contactos sí, documento enmascarado, auditado, sin 403; PATCH con una máscara como documento → 422; con el interruptor apagado, comportamiento idéntico al actual.
 - **Contrato:** `GET /clients/:id` con `otherCredits` y `GET /auth/me` con campos nuevos no rompen el parseo del móvil.
 - **Snapshot de puertas:** sin cambios (no hay endpoints nuevos).
@@ -136,7 +136,7 @@ Cambios de API aditivos o detrás de interruptor: revertir la rama devuelve el c
 6. Almacén `me` y `useCan`; ventana por permisos; `AUTHZ_STALE` explícito.
 7. Tabs y acciones por permiso; mensaje de rol fuera del móvil.
 8. Cola: motivos de rechazo; `me` antes de drenar.
-9. Edición con documento enmascarado; oficina en el alta; `otherCredits`; Más › Cuenta.
+9. Edición con documento enmascarado; oficina en el alta; `otherCredits`; «crear mi préstamo» sobre un cliente que no veo; Más › Cuenta.
 10. Archivos con `fileId` y caché (si D-6 se mantiene).
 11. Lista de casos manuales para la usuaria.
 
