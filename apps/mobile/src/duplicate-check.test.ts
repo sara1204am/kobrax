@@ -77,3 +77,15 @@ describe('checkDuplicates', () => {
     expect(r?.check).toEqual({ document: null, names: [] });
   });
 });
+
+describe('documento enmascarado (F14 · F8, D-4)', () => {
+  it('🔴 un documento enmascarado (el que trae la edición) NO se pregunta por duplicados; el nombre sí', () => {
+    const base = { clientType: 'PERSON', firstName: 'Ana', lastName: 'Ruiz', businessName: '', nationalId: '88219***' } as never;
+    expect(duplicateCheckInput(base)).toEqual({ clientType: 'PERSON', firstName: 'Ana', lastName: 'Ruiz' });
+  });
+
+  it('un documento completo sí se pregunta', () => {
+    const base = { clientType: 'PERSON', firstName: '', lastName: '', businessName: '', nationalId: '8821903' } as never;
+    expect(duplicateCheckInput(base)).toEqual({ clientType: 'PERSON', nationalId: '8821903' });
+  });
+});

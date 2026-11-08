@@ -7,6 +7,7 @@
 import type { AuthTokens } from '@kobrax/shared';
 import { apiFetch, type ApiResult, type NetworkReason } from './api';
 import { clearSession, getSession, saveSession } from './session';
+import { setSessionNotice } from './session-notice';
 
 export type AuthedFetchResult<T> = ApiResult<T> | { status: 'unauthenticated'; data: null; error: null };
 
@@ -37,6 +38,8 @@ async function doRefresh(): Promise<AuthTokens | null> {
     body: { refreshToken: session.refreshToken },
   });
   if (res.status !== 200 || !res.data) {
+    // F14 · F8 (D-3): si el rol de la persona pasó a uno que no usa la app, se le explica al volver al ingreso.
+    if (res.error?.code === 'MOBILE_ROLE_NOT_ALLOWED') setSessionNotice(res.error.message ?? 'Tu rol se usa desde la web.');
     if (res.status !== 0) await clearSession();
     return null;
   }

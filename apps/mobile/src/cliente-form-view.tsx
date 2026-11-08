@@ -11,6 +11,7 @@
  */
 import { useCallback, useState, type ReactNode } from 'react';
 import { LayoutAnimation, Platform, Pressable, StyleSheet, Switch, Text, UIManager, View } from 'react-native';
+import { looksMasked } from '@kobrax/shared';
 import { currentLocation } from './location';
 import { COLORS, RADIUS, SPACING, TYPE } from './theme';
 import { Chips, SectionLabel } from './ui';
@@ -105,6 +106,11 @@ export function ClienteFormView({
         <Field label={isCompany ? 'Razón social' : 'Nombre'} value={isCompany ? form.businessName : form.firstName} onChangeText={(t) => set(isCompany ? { businessName: t } : { firstName: t })} autoCapitalize="words" onBlur={onIdentityBlur} placeholder={isCompany ? 'Nombre del negocio' : 'Juan'} />
         <Field label="Apellido" value={form.lastName} onChangeText={(t) => set({ lastName: t })} autoCapitalize="words" onBlur={onIdentityBlur} placeholder="Pérez" />
         <Field label="Documento (CI/RUC)" value={form.nationalId} onChangeText={(t) => set({ nationalId: t })} onBlur={onIdentityBlur} placeholder="Opcional" />
+        {looksMasked(form.nationalId) && (
+          <Text style={styles.protectedDoc} accessibilityRole="text">
+            Documento protegido: escribe el documento completo solo si necesitas cambiarlo; si no, déjalo como está.
+          </Text>
+        )}
         {identityNotice}
         <SectionLabel>Género</SectionLabel>
         <Chips options={GENDER} value={form.gender} onChange={(v) => set({ gender: v })} />
@@ -398,6 +404,7 @@ function CreditPicker({
 }
 
 const styles = StyleSheet.create({
+  protectedDoc: { ...TYPE.secondary, color: COLORS.muted, marginTop: -SPACING.xs, marginBottom: SPACING.sm },
   acc: { borderRadius: RADIUS.card, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.white, overflow: 'hidden' },
   chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs },
   creditChip: { paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md, borderRadius: RADIUS.input, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white },

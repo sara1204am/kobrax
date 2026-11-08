@@ -8,13 +8,16 @@ jest.mock('./session', () => ({
   saveUserId: jest.fn(),
   // Desde P6, sin red `me()` responde con la identidad guardada si la ventana sigue vigente.
   isSessionValid: jest.fn(() => false),
+  // F14 · F8: la ventana sin conexión según los permisos (la regla vive en `session.ts` y se prueba ahí).
+  offlineWindowMs: jest.fn(() => 12345),
 }));
 
 /** La base local. Por defecto vacía: sin `me` guardado, sin red se sigue cayendo a offline. */
 jest.mock('./db', () => ({ putOne: jest.fn(), getOne: jest.fn(async () => null) }));
 
 import { apiFetch } from './api';
-import { clearSession, getSession, isSessionValid, touchSession } from './session';
+import { clearSession, getSession, isSessionValid, offlineWindowMs, touchSession } from './session';
+import { useMeStore } from './store/me';
 import { getOne } from './db';
 import { authService, type Me } from './auth-service';
 
@@ -74,6 +77,38 @@ describe('authService.me — distingue offline de no autenticado (historia 14)',
     mockFetch.mockResolvedValue({ status: 200, data: ME, error: null });
     expect(await authService.me()).toEqual({ status: 'ok', me: ME });
     expect(touchSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('🔴 la ventana sin conexión se calcula con los permisos y la cuenta de ESTA persona (F14 · F8, D-2)', async () => {
+    mockGetSession.mockResolvedValue(SESSION);
+    const supervisor: Me = { ...ME, permissions: ['collection:read', 'assignment:write'], account: { name: 'Empresa', phone: null, logoUrl: null, soloUser: false } };
+    mockFetch.mockResolvedValue({ status: 200, data: supervisor, error: null });
+    await authService.me();
+    expect(offlineWindowMs).toHaveBeenLastCalledWith({ permissions: ['collection:read', 'assignment:write'], soloUser: false });
+    expect(touchSession).toHaveBeenLastCalledWith(12345);
+
+    const solo: Me = { ...ME, permissions: ['assignment:write', 'user:write'], account: { name: 'Don Pedro', phone: null, logoUrl: null, soloUser: true } };
+    mockFetch.mockResolvedValue({ status: 200, data: solo, error: null });
+    await authService.me();
+    expect(offlineWindowMs).toHaveBeenLastCalledWith({ permissions: ['assignment:write', 'user:write'], soloUser: true });
+  });
+
+  it('cada `me` leído deja los permisos en el almacén de la app (los tabs y botones los leen de ahí)', async () => {
+    mockGetSession.mockResolvedValue(SESSION);
+    useMeStore.getState().setMe(null);
+    mockFetch.mockResolvedValue({ status: 200, data: { ...ME, permissions: ['agenda:read'] }, error: null });
+    await authService.me();
+    expect(useMeStore.getState().me?.permissions).toEqual(['agenda:read']);
+  });
+
+  it('sin red, con la sesión vigente, los permisos del almacén salen del `me` guardado', async () => {
+    (isSessionValid as unknown as jest.Mock).mockReturnValue(true);
+    mockGetSession.mockResolvedValue(SESSION);
+    (getOne as jest.Mock).mockResolvedValue({ ...ME, permissions: ['route:read'] });
+    mockFetch.mockResolvedValue({ status: 0, data: null, error: null });
+    useMeStore.getState().setMe(null);
+    await authService.me();
+    expect(useMeStore.getState().me?.permissions).toEqual(['route:read']);
   });
 
   it('access expirado (401) → refresca y reintenta → ok', async () => {

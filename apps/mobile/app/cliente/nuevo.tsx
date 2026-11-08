@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { COLORS, SPACING } from '@/theme';
@@ -7,6 +7,11 @@ import { Button, ErrorBanner } from '@/components';
 import { ClienteFormView } from '@/cliente-form-view';
 import { buildClientePayload, canSubmitCliente, clienteEnPunto, initialCliente, type ClienteForm } from '@kobrax/shared';
 import { createClient } from '@/clients.service';
+import { listOffices } from '@/offices.service';
+import { officeChoices, type OfficeOption } from '@/office-choice';
+import { OfficePicker } from '@/office-picker';
+import { useMe, canNow } from '@/store/me';
+import { explainRejection } from '@/sync/rejection';
 import { checkDuplicates, duplicateBlocks, duplicateCheckInput, nameSignature, type DuplicateAnswer } from '@/duplicate-check';
 import { DuplicateNotice } from '@/duplicate-notice';
 import { hayLugar } from '@/account.service';
@@ -31,6 +36,17 @@ export default function NuevoClienteScreen() {
   const [accepted, setAccepted] = useState<string | null>(null);
   const formRef = useRef(form);
   formRef.current = form;
+
+  // F14 · F8 (D-7): la oficina donde se registra. Solo se pide cuando hay más de una opción; con una el servidor la resuelve.
+  const me = useMe();
+  const [visibleOffices, setVisibleOffices] = useState<OfficeOption[] | null>(null);
+  const [branchId, setBranchId] = useState<string | null>(null);
+  useEffect(() => {
+    // Con `office:read` se ofrecen las oficinas que ve en la cuenta; sin él (el cobrador), las suyas de `/auth/me`.
+    if (!canNow('office:read') || (me?.offices?.length ?? 0) === 1) return;
+    void listOffices().then((r) => setVisibleOffices(r.status === 'ok' ? r.data : null));
+  }, [me?.offices?.length]);
+  const choice = officeChoices({ own: me?.offices ?? null, visible: visibleOffices });
 
   /** Pregunta por duplicados (servidor con señal, teléfono sin ella). `null` = nada que preguntar o no se pudo saber. */
   const runCheck = useCallback(async (f: ClienteForm): Promise<DuplicateAnswer | null> => {
@@ -73,7 +89,7 @@ export default function NuevoClienteScreen() {
       // esperar respuesta, y lo que hace que reintentar el alta desde la cola no cree dos clientes.
       const id = nuevoId();
       const name = [form.firstName, form.lastName].filter(Boolean).join(' ').trim();
-      const input = { id, ...buildClientePayload(form) };
+      const input = { id, ...buildClientePayload(form), ...(choice.needsChoice && branchId ? { branchId } : {}) };
       const res = await createClient(input);
       setSaving(false);
 
@@ -89,18 +105,21 @@ export default function NuevoClienteScreen() {
         return;
       }
       if (res.status === 'unauthenticated') return setError('Tu sesión venció. Volvé a iniciar sesión.');
-      setError(res.message); // "Ya existe un cliente con ese documento" en duplicado (§5.1)
+      // Un 422 de oficina o un documento repetido se explican en claro (los mismos textos de la hoja de pendientes).
+      setError(explainRejection({ httpStatus: res.httpStatus, code: res.code, message: res.message }));
     },
-    [form, accepted, runCheck],
+    [form, accepted, runCheck, choice.needsChoice, branchId],
   );
 
-  const disabled = saving || !canSubmitCliente(form) || !!dup?.check.document;
+  // Con varias oficinas posibles hay que elegir una antes de guardar; con un documento ya registrado no se puede crear otro.
+  const disabled = saving || !canSubmitCliente(form) || !!dup?.check.document || (choice.needsChoice && branchId === null);
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <Header title="Nuevo cliente" onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <ErrorBanner message={error} />
+        <OfficePicker options={choice.options} value={branchId} onChange={setBranchId} />
         <ClienteFormView
           form={form}
           setForm={setForm}
@@ -112,6 +131,8 @@ export default function NuevoClienteScreen() {
               local={dup?.source === 'local'}
               accepted={confirmed}
               onAccept={() => setAccepted(nameSignature(form))}
+              // F14 · F8 (D-8 b): un documento que ya existe y no veo → crear MI préstamo sobre ese cliente (necesita `credit:create`).
+              onCreateMine={canNow('credit:create') ? (m) => router.replace({ pathname: '/prestamo/nuevo', params: { clientId: m.id, name: m.displayName } }) : undefined}
             />
           }
         />

@@ -28,6 +28,7 @@ import { GestionSheet, prettyDate } from '@/gestion-sheet';
 import { nuevoId } from '@/ids';
 import { AttachmentsBlock, GarantesBlock, LinkReviewBanner } from '@/cliente-legajo-view';
 import { maskDocument } from '@/duplicate-check';
+import { otherCreditsNotice } from '@/other-credits';
 import { ARREARS_METHOD_LABEL } from '@/credit-labels';
 
 /** Las dos acciones de mora, ya en la forma en la que viajan por la cola. */
@@ -258,6 +259,12 @@ export default function ClienteFichaScreen() {
             <StatusBadge label={meta.label} tone={meta.tone} />
           </View>
           <Text style={styles.sub}>{[ctx.client.nationalId, zone].filter(Boolean).join(' · ') || '—'}</Text>
+          {/* F14 · F8 (D-8): créditos del cliente que no veo, SOLO agregados (cuántos, saldo y a cargo de quién). */}
+          {otherCreditsNotice(client?.otherCredits, (v) => money(v, currency)) && (
+            <Text style={styles.otherCredits} accessibilityRole="text">
+              {otherCreditsNotice(client?.otherCredits, (v) => money(v, currency))}
+            </Text>
+          )}
           {/* Situación, categoría y castigo: condiciones separadas del crédito (F4/08 · D1), no un estado único. */}
           {(detail?.writtenOff || detail?.category) && (
             <View style={styles.tags}>
@@ -669,6 +676,7 @@ function TimelineRow({ e, currency }: { e: TimelineEntry; currency: string }) {
 }
 
 const styles = StyleSheet.create({
+  otherCredits: { ...TYPE.secondary, color: COLORS.purple, backgroundColor: COLORS.highlight, borderRadius: RADIUS.input, padding: SPACING.sm, marginTop: SPACING.xs },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   name: { ...TYPE.h2, color: COLORS.navy, flex: 1 },

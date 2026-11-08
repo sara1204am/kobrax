@@ -10,6 +10,7 @@ import { getSession, isSessionValid } from '@/session';
 import { API_BASE } from '@/api';
 import { clearLoginEmail, loadForgotDraft, loadLoginEmail, saveLoginEmail } from '@/auth-draft';
 import { validateLogin, type LoginFieldErrors } from '@/auth-validation';
+import { takeSessionNotice } from '@/session-notice';
 
 export default function LoginScreen() {
   const passwordRef = useRef<TextInput>(null);
@@ -38,6 +39,12 @@ export default function LoginScreen() {
     return () => {
       alive = false;
     };
+  }, []);
+
+  // Si la sesión terminó porque el rol ya no usa la app (F14 · F8), se dice acá, una vez.
+  useEffect(() => {
+    const notice = takeSessionNotice();
+    if (notice) setError(notice);
   }, []);
 
   useEffect(() => {

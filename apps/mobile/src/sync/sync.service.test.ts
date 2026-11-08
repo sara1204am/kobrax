@@ -55,7 +55,8 @@ jest.mock('../route-draft', () => ({
   }),
 }));
 
-import { drain, queueForLater } from './sync.service';
+import { drain, queueForLater, startSync } from './sync.service';
+import { useNetStore } from '../store/net';
 
 const item = (id: number, kind = 'payment', attempts = 0) => ({
   id,
@@ -214,5 +215,88 @@ describe('queueForLater · altas offline visibles', () => {
     expect(await queueForLater({ kind: 'client.create', input: { id: 'cli-1', clientType: 'PERSON', firstName: 'Ana' } })).toBe(true);
     expect(await queueForLater({ kind: 'credit.create', input: { id: 'cre-1', clientId: 'cli-1' } as never })).toBe(true);
     expect(mockOps).toEqual(['provisionalClient:cli-1', 'provisionalCredit:cre-1']);
+  });
+});
+
+describe('rechazos explicados (F14 · F8, N-06)', () => {
+  beforeEach(() => {
+    mockCola.length = 0;
+    mockOps.length = 0;
+    delete mockSendBehavior.throws;
+  });
+
+  it('🔴 un 404 definitivo se guarda con el motivo claro, no con el texto técnico', async () => {
+    mockCola.push(item(1, 'payment'));
+    mockSend.result = { status: 'error', message: 'Cliente no encontrado', permanent: true, httpStatus: 404 };
+    await drain('u1');
+    const op = mockOps.find((o) => o.startsWith('markRejected:1:'))!;
+    expect(op).toContain('Ya no tienes acceso a este cliente o crédito');
+    expect(op).not.toContain('Cliente no encontrado');
+  });
+
+  it('un 403 definitivo dice que su rol o su oficina ya no lo permiten', async () => {
+    mockCola.push(item(2, 'client.update'));
+    mockSend.result = { status: 'error', message: 'Forbidden', permanent: true, httpStatus: 403 };
+    await drain('u1');
+    expect(mockOps.find((o) => o.startsWith('markRejected:2:'))).toContain('Tu rol o tu oficina ya no permiten');
+  });
+
+  it('la agenda conserva SU explicación (no se pisa con la general)', async () => {
+    mockCola.push(item(3, 'agenda.complete'));
+    mockSend.result = { status: 'error', message: 'Esta gestión ya no está disponible para ti: la eliminaron.', permanent: true, httpStatus: 404 };
+    await drain('u1');
+    expect(mockOps.find((o) => o.startsWith('markRejected:3:'))).toBe('markRejected:3:Esta gestión ya no está disponible para ti: la eliminaron.');
+  });
+
+  it('un rechazo sin código ni estado conserva el mensaje del servidor', async () => {
+    mockCola.push(item(4, 'payment'));
+    mockSend.result = { status: 'error', message: 'El monto no puede ser negativo', permanent: true, httpStatus: 422 };
+    await drain('u1');
+    expect(mockOps.find((o) => o.startsWith('markRejected:4:'))).toBe('markRejected:4:El monto no puede ser negativo');
+  });
+});
+
+describe('startSync · al reconectar lee de nuevo quién es la persona (F14 · F8, N-06)', () => {
+  beforeEach(() => {
+    mockCola.length = 0;
+    mockOps.length = 0;
+    mockSend.result = { status: 'ok' };
+    useNetStore.setState({ isConnected: true });
+  });
+
+  const reconectar = async () => {
+    useNetStore.setState({ isConnected: false });
+    mockOps.length = 0;
+    useNetStore.setState({ isConnected: true });
+    await new Promise((r) => setTimeout(r, 10));
+  };
+
+  it('🔴 `me` se lee ANTES de subir lo pendiente', async () => {
+    const orden: string[] = [];
+    const stop = startSync('u1', { beforeReconnectDrain: async () => (orden.push('me'), true) });
+    await new Promise((r) => setTimeout(r, 10));
+    mockCola.push(item(1, 'payment'));
+    await reconectar();
+    expect(orden).toEqual(['me']);
+    expect(mockOps).toContain('send:payment');
+    stop();
+  });
+
+  it('🔴 si la sesión ya no vale, no se sube nada', async () => {
+    const stop = startSync('u1', { beforeReconnectDrain: async () => false });
+    await new Promise((r) => setTimeout(r, 10));
+    mockCola.push(item(1, 'payment'));
+    await reconectar();
+    expect(mockOps).not.toContain('send:payment');
+    stop();
+  });
+
+  it('si leer `me` falla, igual se intenta subir (la cola no se queda parada por eso)', async () => {
+    const stop = startSync('u1', { beforeReconnectDrain: async () => { throw new Error('sin red a medias'); } });
+    await new Promise((r) => setTimeout(r, 10));
+    mockCola.push(item(1, 'payment'));
+    await reconectar();
+    expect(mockOps).toContain('send:payment');
+    stop();
   });
 });

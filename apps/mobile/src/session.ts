@@ -3,6 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import type { AuthTokens } from '@kobrax/shared';
 import { clearCache } from './db';
 import { cancelAllAgendaReminders } from './agenda-notifications';
+import { useMeStore } from './store/me';
 
 /**
  * Almacenamiento seguro de la sesión (SecureStore, hardware-backed; nunca AsyncStorage).
@@ -15,6 +16,8 @@ const KEY = {
   refresh: 'k_refresh',
   validUntil: 'k_session_valid_until',
   userId: 'k_user_id',
+  /** F14 · F8: cuánto dura la ventana sin conexión de ESTA persona (ms), según sus permisos. */
+  window: 'k_offline_window_ms',
 } as const;
 
 /**
@@ -33,6 +36,32 @@ export async function clearRouteDrafts(userId?: string | null): Promise<void> {
 
 const INACTIVITY_MS = 8 * 60 * 60 * 1000; // 8h
 const REFRESH_MS = 7 * 24 * 60 * 60 * 1000; // 7d
+/** F14 · F8 (H-10, ADR-F14-11): quien asigna trabajo o administra personas tiene una ventana sin conexión más corta. */
+export const SUPERVISION_WINDOW_MS = 2 * 60 * 60 * 1000; // 2h
+export const FIELD_WINDOW_MS = INACTIVITY_MS;
+
+/**
+ * F14 · F8 (D-2): cuánto vale la sesión sin poder preguntarle al servidor.
+ *
+ *  · 8 h para el cobrador;
+ *  · 2 h para quien tiene `assignment:write` o `user:write` (reparte cartera o administra personas): un teléfono perdido de esa persona
+ *    deja más a la vista;
+ *  · **8 h para la cuenta de UNA sola persona** (el cobrador independiente es su propio administrador, no tiene a quién asignar, y
+ *    degradarlo no daría ninguna seguridad: RULES C).
+ *
+ * Sin permisos conocidos (todavía no se leyó `me`) se usa la de campo; `me()` la corrige en cuanto responde.
+ */
+export function offlineWindowMs(opts: { permissions?: readonly string[] | null; soloUser?: boolean | null }): number {
+  if (opts.soloUser) return FIELD_WINDOW_MS;
+  const perms = opts.permissions ?? [];
+  return perms.includes('assignment:write') || perms.includes('user:write') ? SUPERVISION_WINDOW_MS : FIELD_WINDOW_MS;
+}
+
+/** La ventana guardada (la última que fijó `me()`); sin una válida, la de campo. */
+async function storedWindowMs(): Promise<number> {
+  const raw = Number(await SecureStore.getItemAsync(KEY.window));
+  return Number.isFinite(raw) && raw >= 60_000 && raw <= INACTIVITY_MS ? raw : INACTIVITY_MS;
+}
 
 export interface StoredSession {
   accessToken: string;
@@ -42,7 +71,8 @@ export interface StoredSession {
 
 /** Persiste la sesión y (re)calcula la ventana de validez offline. */
 export async function saveSession(tokens: AuthTokens): Promise<void> {
-  const validUntil = Date.now() + Math.min(REFRESH_MS, INACTIVITY_MS);
+  // La ventana de quien ya está identificado se conserva al renovar el token (un refresh no la alarga de 2 h a 8 h).
+  const validUntil = Date.now() + Math.min(REFRESH_MS, await storedWindowMs());
   await Promise.all([
     SecureStore.setItemAsync(KEY.access, tokens.accessToken),
     SecureStore.setItemAsync(KEY.refresh, tokens.refreshToken),
@@ -65,10 +95,12 @@ export async function getSession(): Promise<StoredSession | null> {
  * actividad con red (p.ej. un `me()` exitoso) — endurecimiento F2b historia 15:
  * timeout de inactividad. La ventana nunca se extiende si no hay sesión.
  */
-export async function touchSession(): Promise<void> {
+export async function touchSession(windowMs?: number): Promise<void> {
   const access = await SecureStore.getItemAsync(KEY.access);
   if (!access) return;
-  const validUntil = Date.now() + Math.min(REFRESH_MS, INACTIVITY_MS);
+  // `windowMs` lo pasa `me()` con la ventana que le corresponde a esta persona (F14 · F8); sin él, la última guardada.
+  if (windowMs !== undefined) await SecureStore.setItemAsync(KEY.window, String(windowMs));
+  const validUntil = Date.now() + Math.min(REFRESH_MS, windowMs ?? (await storedWindowMs()));
   await SecureStore.setItemAsync(KEY.validUntil, String(validUntil));
 }
 
@@ -114,8 +146,11 @@ export async function clearSession(): Promise<void> {
     SecureStore.deleteItemAsync(KEY.refresh),
     SecureStore.deleteItemAsync(KEY.validUntil),
     SecureStore.deleteItemAsync(KEY.userId),
+    SecureStore.deleteItemAsync(KEY.window),
     clearCache(),
   ]);
+  // Los permisos de quien salió no se le quedan al próximo (F14 · F8).
+  useMeStore.getState().setMe(null);
 }
 
 /** True si la sesión offline aún es válida (no expiró la ventana de inactividad). */

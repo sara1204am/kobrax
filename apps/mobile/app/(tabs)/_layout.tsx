@@ -8,6 +8,8 @@ import { refreshTenantToday } from '@/agenda.service';
 import { hydrate } from '@/sync/hydrate';
 import { startSync } from '@/sync/sync.service';
 import { COLORS } from '@/theme';
+import { useMe } from '@/store/me';
+import { tabAllowed } from '@/tabs';
 
 /**
  * Shell de campo (F10 Slice 0, H0.3). 5 tabs tal cual Figma `42:3069`:
@@ -22,6 +24,8 @@ function tab(name: IconName) {
 
 export default function TabsLayout() {
   useEffect(subscribeConnectivity, []);
+  // F14 · F8 (D-9): un tab sin permiso no se dibuja (la API igual rechaza lo que no corresponda).
+  const permissions = useMe()?.permissions ?? null;
 
   // Qué día es para la EMPRESA (no el UTC ni solo el reloj del teléfono): las pantallas lo usan para pedir «hoy». Sin red no hace nada.
   useEffect(() => {
@@ -40,7 +44,10 @@ export default function TabsLayout() {
       // El motor de sync arranca ANTES de hidratar: lo que el cobrador hizo ayer sin señal sube
       // primero, y recién después se baja lo nuevo. Al revés, una hidratación lenta retrasaría
       // un pago que ya está esperando.
-      stopSync = startSync(me.me.userId);
+      stopSync = startSync(me.me.userId, {
+        // Al reconectar se lee de nuevo quién es la persona y qué puede hacer ANTES de subir lo guardado (F14 · F8, N-06).
+        beforeReconnectDrain: async () => (await authService.me()).status !== 'unauthenticated',
+      });
       await hydrate(me.me.userId);
     })();
     return () => stopSync?.();
@@ -60,9 +67,9 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Inicio', tabBarIcon: tab('grid-outline') }} />
-      <Tabs.Screen name="agenda" options={{ title: 'Agenda', tabBarIcon: tab('calendar-outline') }} />
-      <Tabs.Screen name="rutas" options={{ title: 'Rutas', tabBarIcon: tab('map-outline') }} />
-      <Tabs.Screen name="cobranza" options={{ title: 'Cobranza', tabBarIcon: tab('document-text-outline') }} />
+      <Tabs.Screen name="agenda" options={{ title: 'Agenda', tabBarIcon: tab('calendar-outline'), ...(tabAllowed('agenda', permissions) ? {} : { href: null }) }} />
+      <Tabs.Screen name="rutas" options={{ title: 'Rutas', tabBarIcon: tab('map-outline'), ...(tabAllowed('rutas', permissions) ? {} : { href: null }) }} />
+      <Tabs.Screen name="cobranza" options={{ title: 'Cobranza', tabBarIcon: tab('document-text-outline'), ...(tabAllowed('cobranza', permissions) ? {} : { href: null }) }} />
       <Tabs.Screen name="mas" options={{ title: 'Más', tabBarIcon: tab('ellipsis-horizontal') }} />
       </Tabs>
     </View>

@@ -4,7 +4,8 @@ import { router, useFocusEffect } from 'expo-router';
 import { Permission, ROLE_LABEL, type RoleType } from '@kobrax/shared';
 import { can } from '@/permissions';
 import { COLORS, SPACING } from '@/theme';
-import { Header, ListRow, OfflineIndicator, SectionLabel } from '@/ui';
+import { DataRow, Header, ListRow, OfflineIndicator, SectionLabel } from '@/ui';
+import { officesLine } from '@/office-choice';
 import { ErrorBanner } from '@/components';
 import { authService, type Me } from '@/auth-service';
 import { getAccount, type AccountInfo } from '@/account.service';
@@ -68,6 +69,8 @@ export default function CuentaScreen() {
           icon="person-circle-outline"
           onPress={() => router.push('/cuenta/perfil')}
         />
+        {me && <DataRow label="Mi rol" value={rol ?? '—'} />}
+        {me && <DataRow label="Mis oficinas" value={officesLine(me.offices)} />}
         <ListRow
           title="Seguridad"
           subtitle="Contraseña, verificación en dos pasos y sesiones"

@@ -1,7 +1,8 @@
 import type { AuthAccountOption, AuthTokens, LoginResult } from '@kobrax/shared';
 import { apiFetch, type ApiResult } from './api';
 import { authedFetch } from './api-client';
-import { clearRouteDrafts, clearSession, getSession, isSessionValid, saveSession, saveUserId, touchSession } from './session';
+import { clearRouteDrafts, clearSession, getSession, isSessionValid, offlineWindowMs, saveSession, saveUserId, touchSession } from './session';
+import { useMeStore } from './store/me';
 import * as db from './db';
 import { fieldErrorsFromDetails, type LoginFieldErrors } from './auth-validation';
 import { revokePushDevice } from './push.service';
@@ -21,6 +22,12 @@ export interface Me {
   mfaRequired?: boolean;
   /** El backend exige cambiar la contraseña antes de operar (cambio forzado). */
   requiresPasswordChange: boolean;
+  /** F14 · F5: clave del rol de la cuenta (`COLLECTOR`…). */
+  roleKey?: string;
+  /** F14 · F8 (D-7): las oficinas de la persona; vacío = sin oficina. */
+  offices?: { id: string; name: string; isRoot: boolean }[];
+  /** La marca del negocio; `soloUser` = la cuenta tiene UNA sola persona (F14 · F8, D-2). */
+  account?: { name: string; phone: string | null; logoUrl: string | null; soloUser?: boolean } | null;
 }
 
 /**
@@ -80,6 +87,7 @@ function errMessage(res: ApiResult<unknown>): string {
 async function meLocal(): Promise<MeResult | null> {
   if (!isSessionValid(await getSession())) return null;
   const me = await db.getOne<Me>('session', 'me');
+  if (me) useMeStore.getState().setMe(me);
   return me ? { status: 'ok', me } : null;
 }
 
@@ -211,7 +219,9 @@ export const authService = {
     // guardada — que es el caso normal del cobrador que sale a la calle.
     if (res.status === 0) return (await meLocal()) ?? { status: 'offline' };
     if (res.status === 200 && res.data) {
-      await touchSession(); // actividad → extiende la ventana de inactividad (8h)
+      // actividad → extiende la ventana sin conexión, que según los permisos es de 8 h (campo) o 2 h (quien asigna o administra); una cuenta de una
+      // sola persona conserva 8 h (F14 · F8, D-2).
+      await touchSession(offlineWindowMs({ permissions: res.data.permissions, soloUser: res.data.account?.soloUser }));
       // **Cambió la persona o el tenant** → el caché de antes no es suyo y se tira. Segunda barrera
       // del mismo problema que resuelve `clearSession`: si una sesión murió sin pasar por ahí, el
       // que entra no puede heredar la cartera del anterior. Cuesta una comparación por arranque.
@@ -223,6 +233,7 @@ export const authService = {
       // Quién es, para poder encolar acciones cuando no haya red y no se le pueda preguntar (P6).
       await saveUserId(res.data.userId);
       await db.putOne('session', 'me', res.data);
+      useMeStore.getState().setMe(res.data);
       return { status: 'ok', me: res.data };
     }
     // Solo un 401 puede venir de "se cayó la red durante el refresh" (sesión intacta) → offline.
