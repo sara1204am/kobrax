@@ -452,3 +452,11 @@ El nombre de la persona lo ve todo el que ve al cliente. Cada revelado queda aud
 - Todo cambio exige un **motivo** (mínimo 5 caracteres), queda en el historial del rol y renueva al instante la sesión de las personas que lo tienen. Si dos administradores editan a la vez, el segundo recibe un aviso para recargar.
 - «Restaurar plantilla» devuelve el rol a los permisos con los que nació. Un rol editado deja de recibir los cambios masivos de plantilla de la plataforma.
 - Crear o borrar roles propios queda para una fase posterior (H-9). El móvil no edita roles; recibe los permisos nuevos en su próximo refresco.
+
+## F14 · F8 — la app móvil (2026-11-08)
+
+- **Quién usa la app:** administrador, gerente, supervisor y cobrador. El auditor y la persona de consulta entran solo por la web; si a alguien le cambian el rol a uno de esos mientras usa la app, su sesión móvil termina en el próximo refresco con un aviso.
+- **Sin conexión:** el cobrador puede trabajar hasta 8 h; quien asigna cartera o administra personas, 2 h. El cobrador independiente (cuenta de una sola persona) conserva 8 h.
+- **Datos personales:** en el móvil el documento de identidad va siempre protegido; teléfonos y direcciones se ven en claro (queda registrado cada acceso). Un documento o RUC protegido nunca se guarda como si fuera un valor real.
+- **Menú y acciones:** la app solo ofrece lo que el rol permite (la API valida siempre). Al reconectar, primero se renuevan los permisos y después se sube lo guardado; lo que el servidor rechaza queda visible en «Pendientes» con el motivo en claro y la opción de descartarlo.
+- **Alta de cliente:** con una sola oficina posible no se pide nada; con varias, hay que elegirla. Si el documento ya está registrado y lo llevan otras personas, se puede crear el propio préstamo sobre ese cliente. La ficha avisa (sin datos) cuando el cliente tiene créditos que la persona no ve.

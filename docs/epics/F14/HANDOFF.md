@@ -81,3 +81,14 @@
   3. Quien edita un rol renueva las sesiones de sus personas al instante (`AUTHZ_STALE`, un solo reintento). El administrador (`ACCOUNT_ADMIN`) y los permisos reservados no se editan.
   4. Las ramas F4, F5, F6 y F7 están **encadenadas y sin push**; `docs/epics/F15/` sigue sin commitear.
 - **Siguiente paso autorizado:** **ninguno: esperar la orden de la usuaria.** F8 (móvil/offline) y F9 (auditoría integral y despliegue) solo con su orden; antes, decidir si se suben las ramas y se abre PR.
+
+## Sesión 2026-11-08 (cierre de F8 · móvil y offline)
+- **Dónde quedó:** F8 **CERRADA** (G4…G7 PASS; G5 con la excepción de la prueba en dispositivo) en la rama `f14/p8-movil` (desde `f14/p7-editor-roles`; commits `cf1c7ff` API, `0c6bf51` móvil, `451001d` y el de arreglos de API, más docs), **sin push/PR**. D-1…D-11 aprobadas por la usuaria (D-2, D-4, D-8 resueltas por ella).
+- **Hecho:** roles de campo y canal móvil en la API (403 `MOBILE_ROLE_NOT_ALLOWED`, `ch` en el token, conservado en el refresco), contactos en claro y documento siempre enmascarado para el canal móvil, documento/RUC enmascarados no se guardan, `/auth/me` con `offices`/`roleKey`/`soloUser`; en la app: ventana 8 h / 2 h (la cuenta de una persona conserva 8 h), tabs y acciones por permiso, rechazos explicados, `me` antes de subir al reconectar, edición con documento protegido, oficina en el alta, aviso de créditos ajenos y «Crear mi préstamo sobre este cliente», rol y oficinas en Más › Cuenta.
+- **Para la usuaria (leer):**
+  1. **Probar en un teléfono real** con `execution/F8-casos-dispositivo.md` (grupos A a H). Es lo único de F8 que no se pudo verificar.
+  2. **Despliegue:** sin migraciones nuevas. `PII_MOBILE_MASK` sigue **apagado por omisión**: encenderlo (paso de operación) solo cuando la versión mínima de la app sea la de F8; mientras tanto una app vieja sigue funcionando (con la máscara encendida, su edición recibe los contactos en claro y el documento protegido, y la API rechaza reenviar una máscara).
+  3. Los auditores y las personas de consulta ya no inician sesión desde la app (sí desde la web).
+  4. Cambios aditivos en `GET /auth/me` (`offices`, `roleKey`, `account.soloUser`).
+  5. Las ramas F4–F7 están en el PR #27; `f14/p8-movil` está **local** y encadenada sobre F7.
+- **Siguiente paso autorizado:** **ninguno: esperar la orden de la usuaria.** F9 (auditoría integral y despliegue) solo con su orden; antes, decidir si se sube `f14/p8-movil` (al mismo PR #27 o a uno aparte) y cuándo se enciende `PII_MOBILE_MASK`.

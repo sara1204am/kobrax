@@ -25,7 +25,7 @@ Racional (confirmado en [ui-screen-map §7](./ui-screen-map.md)): **leer antes d
 | **P7** | `plans/P7-mapas.md` | 🔵 | MapLibre online+offline (packs región); vistas de mapa de Rutas | P3, P6 |
 | **P8** | `plans/P8-evidencia.md` | 🔵 | Cámara + GPS + firma + **SHA-256 sobre buffer original**; `evidence.service`. **Reusa el módulo `uploads` que construye Cartera** (subida + hash); le agrega GPS y el vínculo a `field_evidences` | P6, Cartera |
 | **P9** | `plans/P9-push-pinning.md` | 🔵 | Push (asignaciones) + `collector.location` + **SSL pinning con pins reales** | P6 |
-| **P10** | `plans/P10-rbac-gating.md` | 🔵 | Gating por capacidad/rol (F3): cobrador vs supervisor; capacidad `clients.import` | F3 |
+| **P10** | `plans/P10-rbac-gating.md` | ⚪ **absorbida por F14·F8** (2026-11-08): tabs y acciones por permiso, ventana offline por rol, roles de campo | Gating por capacidad/rol (F3): cobrador vs supervisor; capacidad `clients.import` | F3 |
 
 > **Convención de planes:** un archivo `plans/PN-*.md` por etapa, **creado just-in-time al empezarla** (no se scaffoldean los 11 de una: las etapas tardías se afinan con lo aprendido). Cada plan lleva: objetivo, pantallas Figma que cubre (node-ids del ui-screen-map), endpoints/tablas que toca, auditoría de reuso, checklist de tareas, reglas de fase, DoD y **rama**.
 > **Cómo se crea/valida (skills):** `/f10-etapa P#` redacta el plan **iterando con el usuario** (modificar, confirmar pantallas) hasta darlo por completo, reusando `BASE-INVENTORY.md` para no duplicar. Antes de tocar código pasa por `/f10-validar-plan P#` (gate **PASS/FAIL**). **Sin PASS no arranca el desarrollo.**
