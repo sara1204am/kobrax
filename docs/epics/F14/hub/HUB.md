@@ -85,13 +85,13 @@
 | H14-077 | `mobile/src/photo-uri.ts`, `image-cache.ts`, `uploads.service.ts`, `cliente-legajo.ts` | `fileId` y caché por `fileId` (si D-6) | fotos | Medio | F8 | jest | NO NECESARIO 2026-11-08 (la API no expone fileId; ver INCIDENTS) |
 | H14-078 | alta de cliente móvil, selector de oficina, ficha (`otherCredits`), `cuenta/index.tsx` | Oficina en el alta, aviso de otros créditos, rol y oficinas en Cuenta | alta/ficha | Medio | F8 | jest | HECHO 2026-11-08 |
 | H14-079 | `mobile/app/(auth)/login.tsx`, `post-login.ts` | Mensaje de rol fuera del móvil | login | Bajo | F8 | jest | HECHO 2026-11-08 |
-| H14-080 | `rls/verify_authz.sql`, `verify_platform.sql`, `verify_catalog.sql` (nuevos) | Verificaciones de F1, F5 y F7 | `db:verify`, `deploy.sh` | Bajo | F9 | corrida en dos bases + una rota a propósito | PLANEADO 2026-11-08 |
-| H14-081 | `prisma/run-verify.ts` (nuevo), `packages/database/package.json` (`db:verify`) | Un comando que corre todas las verificaciones | CI, despliegue | Bajo | F9 | idem | PLANEADO 2026-11-08 |
-| H14-082 | `packages/database/scripts/permissions-snapshot.ts` (nuevo) | Volcado y comparación de permisos efectivos por membresía | despliegue | Medio | F9 | prueba de la función pura + corrida real | PLANEADO 2026-11-08 |
-| H14-083 | `infra/production/release-rehearsal.sh` (nuevo) | Ensayo de actualización sobre un respaldo | despliegue | Medio | F9 | ensayo en dos bases | PLANEADO 2026-11-08 |
-| H14-084 | `infra/production/deploy.sh` (paso 8 + paso nuevo) — **D-3, a aprobar** | Excluir `verify*`; comprobación explícita antes de reiniciar | **producción (cada merge a `main`)** | Alto | F9 | `bash -n` + lista real del paso 8 | PLANEADO 2026-11-08 |
-| H14-085 | `.github/workflows/ci.yml` (nuevo) — **D-2, a aprobar** | Pruebas en cada pull request | GitHub Actions | Medio | F9 | comandos corridos en local | PLANEADO 2026-11-08 |
-| H14-086 | `docs/epics/F14/RELEASE-CHECKLIST.md`, `F9-AUDITORIA.md` (nuevos), `ROLES-PERMISOS-PLAN.md` §G | Checklist de despliegue, informe de trazabilidad, nombres reales de los interruptores | usuaria, despliegue | Bajo | F9 | revisión | PLANEADO 2026-11-08 |
+| H14-080 | `rls/verify_authz.sql`, `verify_platform.sql`, `verify_catalog.sql` (nuevos) | Verificaciones de F1, F5 y F7 | `db:verify`, `deploy.sh` | Bajo | F9 | corrida en dos bases + una rota a propósito | HECHO 2026-11-08 |
+| H14-081 | `prisma/run-verify.ts` (nuevo), `packages/database/package.json` (`db:verify`) | Un comando que corre todas las verificaciones | CI, despliegue | Bajo | F9 | idem | HECHO 2026-11-08 |
+| H14-082 | `packages/database/prisma/permissions-snapshot.ts` + `permissions-lib.ts` (nuevos; `db:permissions`) | Volcado y comparación de permisos efectivos por membresía | despliegue | Medio | F9 | prueba de la función pura + corrida real | HECHO 2026-11-08 |
+| H14-083 | `infra/production/release-rehearsal.sh` (nuevo) | Ensayo de actualización sobre un respaldo | despliegue | Medio | F9 | ensayo en dos bases | HECHO 2026-11-08 |
+| H14-084 | `infra/production/deploy.sh` (paso 8 + paso nuevo) (D-3 aprobada) | Excluir `verify*`; comprobación explícita antes de reiniciar | **producción (cada merge a `main`)** | Alto | F9 | `bash -n` + lista real del paso 8 | HECHO 2026-11-08 |
+| H14-085 | `.github/workflows/ci.yml` (nuevo) (D-2 aprobada) | Pruebas en cada pull request | GitHub Actions | Medio | F9 | comandos corridos en local | HECHO 2026-11-08 |
+| H14-086 | `docs/epics/F14/RELEASE-CHECKLIST.md`, `F9-AUDITORIA.md` (nuevos), `ROLES-PERMISOS-PLAN.md` §G | Checklist de despliegue, informe de trazabilidad, nombres reales de los interruptores | usuaria, despliegue | Bajo | F9 | revisión | HECHO 2026-11-08 |
 
 ## IMPACT-MAP (F1)
 - **(F3) Cambiar quién registra los guards (H14-019/022)** ⇒ todos los controladores, `health`, `main.ts` (versionado), rutas públicas (`auth`, `accounts`, `health`), pruebas de integración que levantan la app, `permission-gates.spec.ts`, `uploads.access.spec.ts` (usa `RolesGuard`).

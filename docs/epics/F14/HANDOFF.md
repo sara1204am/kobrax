@@ -92,3 +92,23 @@
   4. Cambios aditivos en `GET /auth/me` (`offices`, `roleKey`, `account.soloUser`).
   5. Las ramas F4–F7 están en el PR #27; `f14/p8-movil` está **local** y encadenada sobre F7.
 - **Siguiente paso autorizado:** **ninguno: esperar la orden de la usuaria.** F9 (auditoría integral y despliegue) solo con su orden; antes, decidir si se sube `f14/p8-movil` (al mismo PR #27 o a uno aparte) y cuándo se enciende `PII_MOBILE_MASK`.
+
+## Sesión 2026-11-08 · F9 CERRADA (auditoría integral, pruebas y despliegue)
+- **Dónde quedó:** rama local `f14/p9-cierre` (sobre `f14/p8-movil`, que está sobre el PR #27). G4·G5·G6·G7 PASS. **Sin push.** `docs/epics/F15/` sigue sin versionar (no commitear).
+- **Hecho (solo verificación y puesta a punto, ninguna funcionalidad):**
+  - Verificaciones SQL nuevas (`verify_authz`, `verify_platform`, `verify_catalog`) y `pnpm --filter @kobrax/database db:verify` (corre todas; sale con 1 si una falla o no comprueba nada).
+  - `db:permissions` (`dump [--legacy]`, `diff [--by-role] [--allow-any-added]`, `check`): permisos efectivos por membresía, sin datos personales.
+  - `infra/production/release-rehearsal.sh`: ensayo sobre un respaldo (o base vacía) en una base aparte; se niega a tocar una base cuyo nombre no contenga «rehearsal».
+  - `infra/production/deploy.sh`: el paso 8 ya no aplica los `verify_*` como políticas y el paso 8b las corre **antes de reiniciar** (un fallo deja corriendo la versión vieja).
+  - `.github/workflows/ci.yml`: tipos + unitarias + integración en cada pull request. **Nunca se ejecutó en GitHub.**
+  - `F9-AUDITORIA.md`: los 27 hallazgos con su prueba; `RELEASE-CHECKLIST.md`: orden, interruptores reales, criterios y vuelta atrás; plan maestro §G con los nombres reales.
+- **Para la usuaria (leer, en este orden):**
+  1. **Ensayo con datos reales**: `bash infra/production/release-rehearsal.sh <pg_dump de producción>.sql.gz` en una máquina con Docker (no en el servidor). Si termina con ✗, no mergear. Es lo más importante que falta: lo corrido aquí fue con desarrollo y base vacía.
+  2. **Probar F8 en un teléfono** (`execution/F8-casos-dispositivo.md`); nadie lo ha hecho.
+  3. **Subir ramas**: PR #27 tiene F1–F7. Faltan `f14/p8-movil` y `f14/p9-cierre` (locales). Recuerda: **mergear a `main` despliega a producción**. Conviene exigir `ci.yml` con protección de rama, pero esperar a que corra bien una vez.
+  4. **Interruptores**: `SCOPE_RLS_MODE` queda en `off` (pasos a `log` y `enforce` en el checklist; el modo `log` escribe en el log de Postgres y trae falsos positivos por diseño); `PII_MOBILE_MASK` queda `off` hasta que la versión mínima de la app sea la de F8.
+  5. Antes de desplegar: contar filas de `user_permission_overrides` (si tiene, la migración que la retira se detiene a propósito).
+- **Abierto (menor):** `db:verify --local` sin probar (no hay `psql` aquí); no hay script inverso de F5 escrito (rollback de roles por cuenta); `ci.yml` y `deploy.sh` completos sin ejecutar.
+- **Decisiones:** D-1…D-7 de F9 aprobadas. **Pendientes:** ninguna.
+- **Siguiente paso autorizado:** **ninguno: esperar la orden de la usuaria.**
+

@@ -460,3 +460,10 @@ El nombre de la persona lo ve todo el que ve al cliente. Cada revelado queda aud
 - **Datos personales:** en el móvil el documento de identidad va siempre protegido; teléfonos y direcciones se ven en claro (queda registrado cada acceso). Un documento o RUC protegido nunca se guarda como si fuera un valor real.
 - **Menú y acciones:** la app solo ofrece lo que el rol permite (la API valida siempre). Al reconectar, primero se renuevan los permisos y después se sube lo guardado; lo que el servidor rechaza queda visible en «Pendientes» con el motivo en claro y la opción de descartarlo.
 - **Alta de cliente:** con una sola oficina posible no se pide nada; con varias, hay que elegirla. Si el documento ya está registrado y lo llevan otras personas, se puede crear el propio préstamo sobre ese cliente. La ficha avisa (sin datos) cuando el cliente tiene créditos que la persona no ve.
+
+## F14 · F9 — verificación y despliegue (2026-11-08)
+- No cambia lo que ve ni lo que puede hacer ninguna persona: es la comprobación de todo lo anterior y la preparación del despliegue.
+- **Antes de desplegar**, se ensaya la actualización sobre una copia de la base (restaura, migra, aplica las reglas de seguridad, comprueba que nadie pierda permisos y que las copias de roles por cuenta digan lo mismo que el rol de origen).
+- **Al desplegar**, el sistema comprueba la base (aislamiento por cuenta, roles, versiones de autorización, plataforma, catálogo de permisos, archivos) **antes de reiniciar**; si algo no está como debe, el despliegue se detiene y sigue corriendo la versión anterior.
+- Las dos barreras opcionales (alcance por oficina en la base y documento protegido en el móvil) se encienden de forma gradual y por decisión de la persona que opera; los pasos y criterios están en `docs/epics/F14/RELEASE-CHECKLIST.md`.
+

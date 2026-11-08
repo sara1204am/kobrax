@@ -42,7 +42,7 @@ No existen `RLS_SCOPE_MODE`, `PII_PROJECTION` ni `FILES_LEGACY_UPLOADS`: eran no
 3. **Contar `user_permission_overrides` en producción** (el ensayo lo hace sobre la copia; conviene confirmarlo en vivo justo antes):
    `SELECT count(*) FROM user_permission_overrides;` (si la tabla ya no existe, no hay nada que hacer).
 4. **Comunicar**: al desplegar, **toda sesión abierta recibe `AUTHZ_STALE` una vez** y se renueva sola (web y móvil). La persona que está escribiendo un formulario no pierde lo que escribió, pero conviene avisar que puede ver una recarga breve.
-5. **CI**: `.github/workflows/ci.yml` corre en cada pull request. Antes de mergear tiene que estar en verde, y conviene activar la protección de rama de `main` para exigirlo. *(El flujo nunca se ha ejecutado en GitHub: la primera corrida puede pedir ajustes; ver `VERIFICATIONS.md`, V-058.)*
+5. **CI**: `.github/workflows/ci.yml` corre en cada pull request. Antes de mergear tiene que estar en verde, y conviene activar la protección de rama de `main` para exigirlo. *(El flujo nunca se ha ejecutado en GitHub: la primera corrida puede pedir ajustes; ver `execution/VERIFICATIONS.md`, V-064.)*
 
 ## 3. El despliegue en sí
 
