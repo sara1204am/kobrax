@@ -85,6 +85,13 @@
 | H14-077 | `mobile/src/photo-uri.ts`, `image-cache.ts`, `uploads.service.ts`, `cliente-legajo.ts` | `fileId` y caché por `fileId` (si D-6) | fotos | Medio | F8 | jest | NO NECESARIO 2026-11-08 (la API no expone fileId; ver INCIDENTS) |
 | H14-078 | alta de cliente móvil, selector de oficina, ficha (`otherCredits`), `cuenta/index.tsx` | Oficina en el alta, aviso de otros créditos, rol y oficinas en Cuenta | alta/ficha | Medio | F8 | jest | HECHO 2026-11-08 |
 | H14-079 | `mobile/app/(auth)/login.tsx`, `post-login.ts` | Mensaje de rol fuera del móvil | login | Bajo | F8 | jest | HECHO 2026-11-08 |
+| H14-080 | `rls/verify_authz.sql`, `verify_platform.sql`, `verify_catalog.sql` (nuevos) | Verificaciones de F1, F5 y F7 | `db:verify`, `deploy.sh` | Bajo | F9 | corrida en dos bases + una rota a propósito | PLANEADO 2026-11-08 |
+| H14-081 | `prisma/run-verify.ts` (nuevo), `packages/database/package.json` (`db:verify`) | Un comando que corre todas las verificaciones | CI, despliegue | Bajo | F9 | idem | PLANEADO 2026-11-08 |
+| H14-082 | `packages/database/scripts/permissions-snapshot.ts` (nuevo) | Volcado y comparación de permisos efectivos por membresía | despliegue | Medio | F9 | prueba de la función pura + corrida real | PLANEADO 2026-11-08 |
+| H14-083 | `infra/production/release-rehearsal.sh` (nuevo) | Ensayo de actualización sobre un respaldo | despliegue | Medio | F9 | ensayo en dos bases | PLANEADO 2026-11-08 |
+| H14-084 | `infra/production/deploy.sh` (paso 8 + paso nuevo) — **D-3, a aprobar** | Excluir `verify*`; comprobación explícita antes de reiniciar | **producción (cada merge a `main`)** | Alto | F9 | `bash -n` + lista real del paso 8 | PLANEADO 2026-11-08 |
+| H14-085 | `.github/workflows/ci.yml` (nuevo) — **D-2, a aprobar** | Pruebas en cada pull request | GitHub Actions | Medio | F9 | comandos corridos en local | PLANEADO 2026-11-08 |
+| H14-086 | `docs/epics/F14/RELEASE-CHECKLIST.md`, `F9-AUDITORIA.md` (nuevos), `ROLES-PERMISOS-PLAN.md` §G | Checklist de despliegue, informe de trazabilidad, nombres reales de los interruptores | usuaria, despliegue | Bajo | F9 | revisión | PLANEADO 2026-11-08 |
 
 ## IMPACT-MAP (F1)
 - **(F3) Cambiar quién registra los guards (H14-019/022)** ⇒ todos los controladores, `health`, `main.ts` (versionado), rutas públicas (`auth`, `accounts`, `health`), pruebas de integración que levantan la app, `permission-gates.spec.ts`, `uploads.access.spec.ts` (usa `RolesGuard`).
@@ -121,3 +128,4 @@ Cambios respecto del plan: `user:sessions:revoke` lo tienen ACCOUNT_ADMIN y SUPE
 - **(F7) `AuditService.recordInTx` (H14-064)** ⇒ cualquier flujo que hoy use `record` y quiera atomicidad; no cambia el comportamiento de `record`.
 - **(F8) Canal por sesión y roles fuera del móvil (H14-071)** ⇒ login y refresh de web y móvil, `PiiService`, exportes/PDF (`channel`), sesiones ya abiertas (sin dispositivo guardado), apps instaladas (versión mínima), `GET /auth/me` (campo aditivo que lee el móvil y la web).
 - **(F8) Revelado de contactos en el móvil (H14-072)** ⇒ `GET /clients/:id?reveal=true`, edición móvil, auditoría `PII_REVEAL`, `PII_MOBILE_MASK`; app vieja que reenvía un documento enmascarado.
+- **(F9) Cambiar `deploy.sh` (H14-084)** ⇒ cada merge a `main` despliega: orden de pasos, `rls/*.sql` aplicados, respaldo previo, reinicio y guardia del firewall; cualquier cambio se prueba con `bash -n` y contra una base de prueba antes de mergear.
