@@ -7,3 +7,4 @@ export * from './offline-budget.js';
 export * from './catalog-defaults.js';
 export * from './platform.js';
 export * from './permission-meta.js';
+export * from './dashboard-samples.js';

@@ -2134,8 +2134,11 @@ model Dashboard {
   description String?
   /// El que abre por defecto. Uno solo por cuenta: marcarlo apaga al anterior (lo hace el service).
   isDefault   Boolean   @default(false) @map("is_default")
-  /// Quién lo armó (users.id, ref suave). Decide quién puede editarlo.
+  /// Quién lo armó (users.id, ref suave).
   createdBy   String?   @map("created_by")
+  /// De quién es (users.id, ref suave). Cada persona tiene SUS tableros: sólo ella los ve y los edita. `null` = tablero
+  /// antiguo de la cuenta, que quedó sin dueño y ya no se muestra.
+  ownerUserId String?   @map("owner_user_id")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
   deletedAt   DateTime? @map("deleted_at")
@@ -2144,6 +2147,7 @@ model Dashboard {
   widgets DashboardWidget[]
 
   @@index([accountId])
+  @@index([accountId, ownerUserId])
   @@index([deletedAt])
   @@map("dashboards")
 }
